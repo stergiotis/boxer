@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stergiotis/boxer/public/gov/datacatalog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -85,6 +86,91 @@ func TestPreflight_SharedDisk(t *testing.T) {
 	out = Preflight(tables, &rep, 1)
 	assert.True(t, out[0].OK, "60 + 40 fit on default")
 	assert.True(t, out[1].OK)
+}
+
+func TestPreflight_MultiDiskGroup(t *testing.T) {
+	// One group over two disks no other group uses: its headroom is set
+	// against their free space together, not charged whole to each.
+	rep := DiskReport{
+		Disks: []DiskInfo{
+			{Name: "d1", FreeSpace: 100, TotalSpace: 1000},
+			{Name: "d2", FreeSpace: 100, TotalSpace: 1000},
+		},
+		Tables: []TableFootprint{{Ref: ref("d", "a"), Policy: "jbod", Disks: []string{"d1", "d2"}}},
+	}
+	tables := []*PlanTable{{Target: ref("d", "a"), Bytes: 150, Sync: &TableSync{Mode: SyncModeFull}}}
+	out := Preflight(tables, &rep, 1)
+	require.Len(t, out, 1)
+	assert.Equal(t, uint64(200), out[0].Free)
+	assert.Equal(t, uint64(150), out[0].Headroom)
+	assert.True(t, out[0].OK)
+
+	tables[0].Bytes = 250
+	out = Preflight(tables, &rep, 1)
+	assert.False(t, out[0].OK)
+}
+
+func TestPreflight_Filter(t *testing.T) {
+	rep := DiskReport{
+		Disks:  []DiskInfo{{Name: "default", FreeSpace: 1000, TotalSpace: 1000}},
+		Tables: []TableFootprint{{Ref: ref("d", "a"), Disks: []string{"default"}, BytesOnDisk: 100, Rows: 50}},
+	}
+	// The slice is 25 of the source's 100 rows, 10 of the target's 50.
+	diff := &TableDiff{SrcRows: 25, DstRows: 10, Differing: []ChunkDiff{{Leaves: []LeafDiff{{SrcRows: 5, DstRows: 4}}}}}
+	pt := &PlanTable{Target: ref("d", "a"), Bytes: 400, Rows: 100, Filter: "x > 0", Diff: diff,
+		Sync: &TableSync{Mode: SyncModeFull, Existing: ExistingPolicyReplace}}
+	out := Preflight([]*PlanTable{pt}, &rep, 1)
+	require.Len(t, out, 1)
+	assert.Equal(t, uint64(100), out[0].Need, "a quarter of the source")
+	assert.Equal(t, uint64(20), out[0].Held, "the slice's 10 of 50 target rows")
+	assert.Empty(t, out[0].Overstated)
+
+	// Repair: bytes per row come from the target's own rows, not the slice's.
+	pt.Sync = &TableSync{Mode: SyncModeRepair}
+	out = Preflight([]*PlanTable{pt}, &rep, 1)
+	assert.Equal(t, uint64(20), out[0].Need, "5 of 100 source rows")
+	assert.Equal(t, uint64(8), out[0].Held, "4 of 50 target rows")
+	assert.Empty(t, out[0].Overstated)
+
+	// Without the target's row count, the slice's stands in and overstates.
+	rep.Tables[0].Rows = 0
+	out = Preflight([]*PlanTable{pt}, &rep, 1)
+	assert.Equal(t, uint64(40), out[0].Held, "4 of the slice's 10 rows")
+	assert.Equal(t, []datacatalog.TableRef{ref("d", "a")}, out[0].Overstated)
+
+	// No diff has counted the slice: the whole table, said to overstate.
+	pt.Diff = nil
+	pt.Sync = &TableSync{Mode: SyncModeSample, SampleNum: 1, SampleDen: 2, Existing: ExistingPolicyReplace}
+	out = Preflight([]*PlanTable{pt}, &rep, 1)
+	assert.Equal(t, uint64(200), out[0].Need)
+	assert.Equal(t, uint64(100), out[0].Held)
+	assert.Equal(t, []datacatalog.TableRef{ref("d", "a")}, out[0].Overstated)
+
+	// Unfiltered tables are never overstated.
+	pt.Filter = ""
+	out = Preflight([]*PlanTable{pt}, &rep, 1)
+	assert.Empty(t, out[0].Overstated)
+}
+
+func TestExpectedCopy_Filter(t *testing.T) {
+	diff := &TableDiff{SrcRows: 25, Differing: []ChunkDiff{{AbsentOnTarget: true, SrcRows: 5}}}
+	pt := &PlanTable{Rows: 100, Filter: "x > 0", Diff: diff, Sync: &TableSync{Mode: SyncModeFull}}
+	assert.InDelta(t, 0.25, ExpectedCopyFraction(pt), 1e-9, "the slice")
+	pt.Sync = &TableSync{Mode: SyncModeSample, SampleNum: 1, SampleDen: 5}
+	assert.InDelta(t, 0.05, ExpectedCopyFraction(pt), 1e-9, "a fifth of the slice")
+	pt.Sync = &TableSync{Mode: SyncModeRepair}
+	assert.InDelta(t, 0.05, ExpectedCopyFraction(pt), 1e-9, "repair counts rows, not shares")
+	pt.Sync = nil
+	assert.InDelta(t, 0.25, ExpectedCopyFraction(pt), 1e-9)
+	assert.Equal(t, int64(25), ExpectedRows([]*PlanTable{pt}), "progress counts towards the slice")
+
+	pt.Diff = nil
+	f, known := expectedCopy(pt)
+	assert.InDelta(t, 1, f, 1e-9)
+	assert.False(t, known, "no diff has counted the slice")
+	pt.Filter = ""
+	_, known = expectedCopy(pt)
+	assert.True(t, known)
 }
 
 func TestFreeFloor(t *testing.T) {

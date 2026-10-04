@@ -20,7 +20,8 @@ import (
 )
 
 // The coordinator (ADR-0269 M5): with Apps on, a turn is a tool loop over
-// the host's runtime.agent services. The model works only in windows the
+// the host's runtime.agent services; with Questions on, the loop offers
+// ask_user as well, or alone (chat_ask.go). The model works only in windows the
 // person shares in the host's dialog, every call is checked by the host's
 // dispatcher, and what comes back from an app reaches the model delimited
 // and attributed, as data. Nothing here touches the UI.
@@ -77,11 +78,17 @@ type coordinator struct {
 	ceiling  agent.Ceiling
 	told     agent.Ceiling
 	toldOnce bool
+	// ask carries ask_user's questions to the form and the answers back.
+	ask *asker
 
-	mu       sync.Mutex
-	grant    agent.Grant
-	tainted  bool
-	confined bool
+	mu sync.Mutex
+	// apps and questions are what the conversation offers the model, fixed
+	// at its first send: the window tools, and ask_user.
+	apps      bool
+	questions bool
+	grant     agent.Grant
+	tainted   bool
+	confined  bool
 	// refused holds the calls refused since the last call that was not, by
 	// tool and arguments; refusal is the current call's, set while it runs.
 	refused map[string]string
@@ -93,7 +100,7 @@ type coordinator struct {
 }
 
 func newCoordinator(cli *agent.Client, kq *keelsonquery.Client, conversation string) (inst *coordinator) {
-	return &coordinator{cli: cli, kq: kq, conversation: conversation, opTools: OperationToolsSeed.Get(),
+	return &coordinator{cli: cli, kq: kq, conversation: conversation, opTools: OperationToolsSeed.Get(), ask: &asker{},
 		ceiling: defaultPermissions().ceiling(true),
 		refused: make(map[string]string), typed: make(map[string]typedOp), opCache: make(map[string][]agent.Operation)}
 }
@@ -119,7 +126,9 @@ func (inst *coordinator) ceilingNow() (c agent.Ceiling) {
 func (inst *coordinator) ceilingNote() (note string) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	if inst.toldOnce && inst.told == inst.ceiling {
+	// Without Apps the model has no window tools to limit: a conversation
+	// that only asks questions is told nothing about them.
+	if !inst.apps || inst.toldOnce && inst.told == inst.ceiling {
 		return ""
 	}
 	inst.told, inst.toldOnce = inst.ceiling, true
@@ -215,11 +224,32 @@ func (inst *coordinator) peekTitle(call openaichat.ToolCall) (title string) {
 	return inst.callTitle(call.Name, args)
 }
 
-// tools are the fixed tools the model is given, and with operation tools on
-// a typed tool per operation of the task's windows; otherwise operation
-// schemas load on demand through describe_app (ADR-0269 §SD3).
+// offer sets what the conversation offers the model.
+func (inst *coordinator) offer(apps bool, questions bool) {
+	inst.mu.Lock()
+	inst.apps, inst.questions = apps, questions
+	inst.mu.Unlock()
+}
+
+func (inst *coordinator) offers() (apps bool, questions bool) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	return inst.apps, inst.questions
+}
+
+// tools are what the model is given: ask_user with Questions on; with Apps
+// on the fixed tools, and with operation tools on a typed tool per operation
+// of the task's windows; otherwise operation schemas load on demand through
+// describe_app (ADR-0269 §SD3).
 func (inst *coordinator) tools(ctx context.Context) (out []openaichat.Tool) {
-	out = inst.fixedTools()
+	apps, questions := inst.offers()
+	if questions {
+		out = append(out, askTool())
+	}
+	if !apps {
+		return
+	}
+	out = append(out, inst.fixedTools()...)
 	inst.mu.Lock()
 	typed := inst.opTools
 	inst.mu.Unlock()
@@ -359,6 +389,13 @@ func (inst *coordinator) refuse(reason string) {
 
 func (inst *coordinator) dispatch(ctx context.Context, o toolOrigin, call openaichat.ToolCall, args map[string]any) (content string, activity string) {
 	str := func(k string) (s string) { s, _ = args[k].(string); return }
+	apps, questions := inst.offers()
+	if call.Name == "ask_user" && questions {
+		return inst.askUser(ctx, args)
+	}
+	if !apps {
+		return "error: no tool " + call.Name, "unknown tool " + call.Name
+	}
 	inst.mu.Lock()
 	t, isTyped := inst.typed[call.Name]
 	inst.mu.Unlock()
@@ -708,7 +745,7 @@ type turnResult struct {
 	stoppedErr error
 }
 
-// runTurn is one turn with Apps on: the changes note, then model calls and
+// runTurn is one turn with Apps or Questions on: the changes note, then model calls and
 // tool calls until the model answers without a tool or the rounds run out;
 // the last round offers no tools, so the model answers with what it has.
 // progress, when set, hears each round as it starts and each tool call, by

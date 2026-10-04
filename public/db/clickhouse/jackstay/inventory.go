@@ -71,6 +71,10 @@ type TableInfo struct {
 	// Filter is set on a pack's inventory only: the row filter the table was
 	// exported under, which is all the pack holds of it (ADR-0271 §SD3).
 	Filter string
+	// Dependents are the tables that read from this one as it is written,
+	// materialized views above all: system.tables' dependencies_database
+	// and dependencies_table.
+	Dependents []datacatalog.TableRef
 }
 
 func (inst *TableInfo) ColumnNames() (names []string) {
@@ -127,7 +131,13 @@ func (inst *Inventory) UserDatabases() (names []string) {
 
 // jsonSettings makes 64-bit integers plain JSON numbers rather than quoted
 // strings, so they decode into uint64 fields.
-const jsonSettings = " SETTINGS output_format_json_quote_64bit_integers = 0 FORMAT JSONEachRow"
+// jsonSettings close every query whose rows are read as JSON.
+// prefer_column_name_to_alias makes a table's column win over an alias of
+// the same name in the same SELECT: the queries alias their outputs (chunk,
+// pid, kh, rh, sample, type, …), and a table may have a column of that name,
+// which the hashes, the chunk expression and the filter must read as the
+// column (ADR-0259 §SD5).
+const jsonSettings = " SETTINGS output_format_json_quote_64bit_integers = 0, prefer_column_name_to_alias = 1 FORMAT JSONEachRow"
 
 func systemExclusion(column string) (clause string) {
 	quoted := make([]string, 0, len(datacatalog.SystemDatabases))
@@ -149,7 +159,8 @@ func DatabasesQuery() (sql string) {
 // be reached by a sync.
 func TablesQuery() (sql string) {
 	return "SELECT database, name, engine, sorting_key, partition_key, " +
-		"ifNull(total_rows, 0) AS total_rows, ifNull(total_bytes, 0) AS total_bytes, create_table_query " +
+		"ifNull(total_rows, 0) AS total_rows, ifNull(total_bytes, 0) AS total_bytes, create_table_query, " +
+		"dependencies_database, dependencies_table " +
 		"FROM system.tables WHERE " + systemExclusion("database") + " AND NOT is_temporary " +
 		"ORDER BY database, name" + jsonSettings
 }
@@ -175,6 +186,9 @@ type tableRow struct {
 	TotalRows    uint64 `json:"total_rows"`
 	TotalBytes   uint64 `json:"total_bytes"`
 	CreateQuery  string `json:"create_table_query"`
+	// DependenciesDatabase and DependenciesTable are parallel arrays.
+	DependenciesDatabase []string `json:"dependencies_database"`
+	DependenciesTable    []string `json:"dependencies_table"`
 }
 
 type columnRow struct {
@@ -186,7 +200,8 @@ type columnRow struct {
 // Discover reads a server's inventory: four queries over system tables, none
 // of which touches table data (ADR-0259 §SD2). The table and column queries are
 // not atomic; a column whose table appeared between them is dropped, and a
-// table whose columns vanished between them is kept with none.
+// table whose columns vanished between them is kept with none, which [Judge]
+// refuses.
 func Discover(ctx context.Context, q QueryI) (inv Inventory, err error) {
 	var servers []serverRow
 	servers, err = queryRows[serverRow](ctx, q, ServerQuery())
@@ -223,7 +238,12 @@ func Discover(ctx context.Context, q QueryI) (inv Inventory, err error) {
 	for _, t := range tables {
 		ref := datacatalog.TableRef{Database: t.Database, Name: t.Name}
 		byRef[ref] = len(inv.Tables)
+		var dependents []datacatalog.TableRef
+		for i := range min(len(t.DependenciesDatabase), len(t.DependenciesTable)) {
+			dependents = append(dependents, datacatalog.TableRef{Database: t.DependenciesDatabase[i], Name: t.DependenciesTable[i]})
+		}
 		inv.Tables = append(inv.Tables, TableInfo{
+			Dependents:   dependents,
 			Ref:          ref,
 			Engine:       t.Engine,
 			SortingKey:   t.SortingKey,

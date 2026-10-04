@@ -81,11 +81,11 @@ func TestFilterAndPack_LiveServer(t *testing.T) {
 		return fresh
 	}
 	sync := func(src SourceI, plan *Plan, ts TableSync, planPath string, only ...datacatalog.TableRef) SyncOutcome {
-		prep, err := PrepareSyncStep(ctx, src, client, plan, SyncRequest{TableSync: ts, Chunking: chunkOpts, Only: only})
+		prep, err := PrepareSyncStep(ctx, src, client, plan, SyncRequest{TableSync: ts, Chunking: chunkOpts, Only: only, Restart: true}, time.Now())
 		require.NoError(t, err)
 		require.Empty(t, prep.Stale)
 		require.Empty(t, prep.Skipped)
-		out, err := RunSync(ctx, src, client, &prep, planPath, true, DefaultSyncOptions(), time.Now)
+		out, err := RunSync(ctx, src, client, &prep, planPath, DefaultSyncOptions(), time.Now)
 		require.NoError(t, err)
 		*plan = prep.Plan
 		return out
@@ -203,9 +203,9 @@ func TestFilterAndPack_LiveServer(t *testing.T) {
 		damaged, err := OpenPack(dir)
 		require.NoError(t, err)
 		before := count("SELECT count() AS n FROM " + itPackTarget + ".rng")
-		prep, err := PrepareSyncStep(ctx, damaged, client, &plan, SyncRequest{TableSync: TableSync{Mode: SyncModeFull, Existing: ExistingPolicyReplace}, Only: []datacatalog.TableRef{pt.Source}, Chunking: chunkOpts})
+		prep, err := PrepareSyncStep(ctx, damaged, client, &plan, SyncRequest{TableSync: TableSync{Mode: SyncModeFull, Existing: ExistingPolicyReplace}, Only: []datacatalog.TableRef{pt.Source}, Chunking: chunkOpts, Restart: true}, time.Now())
 		require.NoError(t, err)
-		res, err = RunSync(ctx, damaged, client, &prep, planPath, true, DefaultSyncOptions(), time.Now)
+		res, err = RunSync(ctx, damaged, client, &prep, planPath, DefaultSyncOptions(), time.Now)
 		require.NoError(t, err)
 		assert.Equal(t, 1, res.Failed)
 		assert.Contains(t, findTable(&prep.Plan, pt.Source).SyncReport.Problems[0], "damaged")

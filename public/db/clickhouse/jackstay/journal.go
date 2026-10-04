@@ -1,7 +1,6 @@
 package jackstay
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json/v2"
 	"errors"
@@ -13,11 +12,11 @@ import (
 )
 
 // JournalEntry is one line of the sync journal. A "start" entry records, once
-// per table and run, the mode and existing-rows policy the table was begun
-// under and whether the run owns the target table's rows; a "chunk" entry
-// records a chunk whose copy was verified, with the source digest it was
-// copied at; an "attempt" entry records a copy begun into rows the run does
-// not own, which a resumed run must not repeat.
+// per table and run, the settings the table was begun under and whether the
+// run owns the target table's rows; a "chunk" entry records a chunk whose
+// copy was verified, with the source digest it was copied at; an "attempt"
+// entry records a copy begun into rows the run does not own, which a resumed
+// run must not repeat.
 type JournalEntry struct {
 	Run   string    `json:"run"`
 	Table string    `json:"table"`
@@ -36,10 +35,19 @@ type JournalEntry struct {
 	// Filter (start): the row filter the table was begun under
 	// (ADR-0271 §SD1).
 	Filter string `json:"filter,omitempty"`
+	// SampleNum, SampleDen (start): the sample fraction of a sample sync.
+	// Absent from start entries written before they were recorded.
+	SampleNum uint32 `json:"sampleNum,omitempty"`
+	SampleDen uint32 `json:"sampleDen,omitempty"`
 	// N, Kd, Rd (chunk): the source chunk's digest totals when copied.
 	N  uint64 `json:"n,omitempty"`
 	Kd uint64 `json:"kd,omitempty"`
 	Rd uint64 `json:"rd,omitempty"`
+}
+
+// isAt reports whether a chunk entry was copied at the source digest d.
+func (inst JournalEntry) isAt(d leafDigest) (at bool) {
+	return inst.N == d.n && inst.Kd == d.kd && inst.Rd == d.rd
 }
 
 type journalKey struct {
@@ -67,10 +75,24 @@ func OpenJournal(path string, run string) (j *Journal, err error) {
 	return OpenJournalIn(OsFiles{}, path, run)
 }
 
-// OpenJournalIn is [OpenJournal] over files.
+// OpenJournalIn is [OpenJournal] over files. A last line a crash cut short
+// is repaired before the first append, so the next entry starts a line of
+// its own: a torn line that does not decode is cut off, and one that decodes
+// but lacks its newline gets it.
 func OpenJournalIn(files FilesI, name string, run string) (j *Journal, err error) {
-	j, err = ReadJournalIn(files, name, run)
+	var tail journalTail
+	j, tail, err = readJournal(files, name, run)
 	if err != nil {
+		return
+	}
+	switch {
+	case tail.torn:
+		err = files.WriteFile(name, tail.data[:tail.at])
+	case tail.unterminated:
+		err = files.AppendFile(name, []byte{'\n'})
+	}
+	if err != nil {
+		err = eb.Build().Str("name", name).Errorf("unable to repair the journal's last line: %w", err)
 		return
 	}
 	j.writable = true
@@ -85,6 +107,21 @@ func ReadJournal(path string, run string) (j *Journal, err error) {
 
 // ReadJournalIn is [ReadJournal] over files.
 func ReadJournalIn(files FilesI, name string, run string) (j *Journal, err error) {
+	j, _, err = readJournal(files, name, run)
+	return
+}
+
+// journalTail describes the end of a journal file: a last line that does not
+// decode (torn, starting at offset at), or one that decodes without its
+// newline (unterminated).
+type journalTail struct {
+	data         []byte
+	at           int
+	torn         bool
+	unterminated bool
+}
+
+func readJournal(files FilesI, name string, run string) (j *Journal, tail journalTail, err error) {
 	j = &Journal{files: files, name: name, run: run, start: make(map[string]JournalEntry, 8), done: make(map[journalKey]JournalEntry, 64), attempted: make(map[journalKey]bool, 8)}
 	var data []byte
 	data, err = files.ReadFile(name)
@@ -96,21 +133,30 @@ func ReadJournalIn(files FilesI, name string, run string) (j *Journal, err error
 		err = eb.Build().Str("name", name).Errorf("unable to open journal: %w", err)
 		return
 	}
-	sc := bufio.NewScanner(bytes.NewReader(data))
-	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	tail.data = data
 	line := 0
-	for sc.Scan() {
+	for at := 0; at < len(data); {
+		end := bytes.IndexByte(data[at:], '\n')
+		last := end < 0
+		if last {
+			end = len(data)
+		} else {
+			end += at
+		}
 		line++
 		var e JournalEntry
-		if uerr := json.Unmarshal(sc.Bytes(), &e); uerr != nil {
+		if uerr := json.Unmarshal(data[at:end], &e); uerr != nil {
 			// A line cut short by a crash is the last line; anything
 			// else is not a journal this code wrote.
-			if !sc.Scan() {
-				break
+			if last || end+1 == len(data) {
+				tail.at, tail.torn = at, true
+				return
 			}
 			err = eb.Build().Str("name", name).Int("line", line).Errorf("unable to decode journal line: %w", uerr)
 			return
 		}
+		tail.unterminated = last
+		at = end + 1
 		if e.Run != run {
 			continue
 		}
@@ -122,10 +168,6 @@ func ReadJournalIn(files FilesI, name string, run string) (j *Journal, err error
 		case "attempt":
 			j.attempted[journalKey{e.Table, e.Chunk}] = true
 		}
-	}
-	err = sc.Err()
-	if err != nil {
-		err = eb.Build().Str("name", name).Errorf("unable to read journal: %w", err)
 	}
 	return
 }
@@ -176,6 +218,9 @@ func (inst *Journal) Started(table string) (e JournalEntry, started bool) {
 // owning the target's rows (its slice, under a filter) or not.
 func (inst *Journal) RecordStart(table string, owned bool, ts TableSync, filter string, now time.Time) (err error) {
 	e := JournalEntry{Table: table, Event: "start", Owned: owned, Mode: ts.Mode.String(), Existing: ts.Existing.String(), Filter: filter, At: now.UTC()}
+	if ts.Mode == SyncModeSample {
+		e.SampleNum, e.SampleDen = ts.SampleNum, ts.SampleDen
+	}
 	err = inst.write(e)
 	if err == nil {
 		inst.start[table] = e

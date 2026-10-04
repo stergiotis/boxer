@@ -251,6 +251,27 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
                 }
 				self.r7_push({{Id}}.value(), resp2);
 `)).Build())
+	// modal draws its body in an egui::Modal: an Area of the Foreground
+	// order, centred, over a backdrop that dims the viewport and takes every
+	// press outside the body, so nothing else can be clicked until the
+	// caller stops emitting it. Like window it is shown on the context, not
+	// in the parent Ui. The body sizes the modal; set its width inside the
+	// body (uiSetMinWidth / uiSetMaxWidth). egui's should_close (Escape, a
+	// press on the backdrop) is not reported: the callers are decisions the
+	// person makes with the body's own buttons.
+	blocks = append(blocks, idl.NewBuilderFactoryNode("modal").
+		WithIdentityId(true).
+		WithSettingImmediate(true).
+		WithSettingBlockIterator(true).
+		WithConstructionCodeClientRust(rustClientCode("egui::Modal::new({{Id}});\n")).
+		WithApplyCodeClientRust(rustClientCode(`
+				let shown = {{Instance}}.show({{EguiContext}}, |ui| {
+					let _ = self.interpret_outer_logged({{EguiContext}}, &mut Some(ui));
+				});
+				let mut resp = ResponseFlags::empty();
+				resp.populate(&shown.response);
+				self.r7_push({{Id}}.value(), resp);
+`)).Build())
 	blocks = append(blocks, idl.NewBuilderFactoryNode("collapsingHeader").
 		WithIdentityId(true).
 		AddArguments(idl.NewArgumentsBuilder().EvaluatedArg("label", structWidgetText()).Build()).

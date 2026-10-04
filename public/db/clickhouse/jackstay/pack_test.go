@@ -35,7 +35,7 @@ func writeTestPack(t *testing.T, body string, n uint64, kd uint64, rd uint64) (d
 			CreateQuery: "CREATE TABLE s.t (`k` UInt64, `v` String) ENGINE = MergeTree ORDER BY k",
 			Columns:     []ColumnInfo{{Name: "k", Type: "UInt64", Position: 1}, {Name: "v", Type: "String", Position: 2}},
 			Filter:      "k > 1", CopyColumns: []string{"k", "v"},
-			Chunking: Chunking{Kind: ChunkingSingle, Leaves: 1}, Done: true,
+			Chunking: Chunking{Kind: ChunkingSingle, Leaves: 1},
 			Chunks: []PackChunk{{Id: "", File: file, Bytes: uint64(len(body)), Sha256: hex.EncodeToString(sum[:]), Encoding: "zstd",
 				Rows: n, Leaves: []PackLeaf{{Leaf: 0, N: n, Kd: kd, Rd: rd}}}},
 		}},

@@ -1011,6 +1011,26 @@ placed or arranged — until a set time after the previous one
 A coordinator that sends no ceiling is bounded by its grant alone and is not
 paced, as before.
 
+### 2026-10-04 — the person's dialogs are modals
+
+The task request and the confirmation of a change outside the app were
+windows, which an app window could cover; a model's turn then waited on a
+dialog nobody saw. Both are now drawn as modals (`c.Modal`, egui's
+`Modal`, new in the egui2 IDL): centred above every window, over a backdrop
+that dims the host and takes pointer presses until the person decides. The
+fs Powerbox file dialog, whose pick grants a handle, is drawn the same way
+(`filepicker.Options.Modal`, set by the Powerbox bridge only). A modal is
+sized by its body, so the list of windows to share scrolls past a bounded
+height. Escape and a press on the backdrop do nothing: the decision is
+made with the dialog's buttons.
+
+The backdrop blocks the pointer, and focus cannot move behind it; a widget
+that held focus when the modal opened keeps it. It does not block AccessKit
+actions:
+egui turns an AccessKit click into a click without consulting the modal
+layer, so the headless driver's default `click` reaches widgets behind a
+modal, and a check that a modal blocks clicks uses `"pointer":true`.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — the subject taxonomy SD3 extends; the threat model SD6 keeps.

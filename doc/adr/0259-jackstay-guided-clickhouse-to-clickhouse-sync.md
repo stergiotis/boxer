@@ -636,6 +636,76 @@ the plan, drawn as a chip with a one-line summary and offered to agents as
 `plan_state` and `plan_machine`. The chip takes the left edge of the bar, as
 a status bar carries it; Back and Next move together to the right edge.
 
+### 2026-10-03 — Review fixes: structure, chunking, the run, and the wizard's plan
+
+A review of the package, the CLI and the wizard found these, now changed:
+
+- **Structure (§SD3).** A `Replicated*` create whose Keeper path names no
+  `{uuid}` is refused: retargeted as it stands, the target would join the
+  source's replication group. A table that materialized views read from
+  gets a note, since a sync's inserts fire them and its clears do not undo
+  them. Merge engines whose parameters differ (`ReplacingMergeTree(ver)`
+  against another version column) get a note, since FINAL then means
+  different things on the two sides. A table whose columns vanished between
+  discovery queries is refused. Two mappings on one server that make a table
+  both a target and a source are refused. Applying the DDL keeps the diffs,
+  choices and reports of the tables it did not alter, and the run.
+- **Chunking (§SD4).** Range chunking is limited to key types whose bound
+  text orders as the values do: integers, decimals, floats, dates and times,
+  and byte strings. NaN is left out of the sample, strings are sampled as
+  hex, and a layout whose bounds do not strictly ascend falls back to one
+  chunk; otherwise a row could be assigned a chunk whose predicate selects
+  nothing, and both sides would digest that chunk empty. A saved plan whose
+  range layout cannot be ordered opens without that layout and the
+  comparison over it, with a note; the next comparison derives it again.
+  Chunk ids order by
+  the layout's kind. A target engine without `_partition_id` reads its chunks
+  through the expression form.
+- **The run (§SD5).** Repair clears a whole chunk only when the differing
+  leaves cover all of the target's and the source still holds nothing there.
+  The row-binary settings the digests pin also close the relay's select and
+  the clearing `DELETE`. A journal line cut short by a crash is truncated
+  before the next append, and a sample run resumes only at its own fraction.
+  A run takes a lock file beside the plan, refused while another process on
+  any host holds it, and taken over only from a dead process on this host.
+  The engine credits chunks an earlier call verified to the progress
+  counter, and waits on the free-space floor itself.
+- **The wizard (§SD7).** A sync that stops or is cancelled reloads the plan
+  its worker saved, so the next start resumes the same run. One busy check
+  gates every action that reads or writes the plan. Opening a plan resets
+  what belonged to the previous one and seeds the databases, targets and
+  filters from it, so planning it again keeps its slice. A step's result is
+  dropped when another plan was opened meanwhile. A plan named at start that
+  exists and cannot be read is not overwritten, as in the CLI. Planning
+  against other servers starts a new plan file.
+
+Deferred: the wizard's windows do not take the run lock. The fs broker that
+holds their plans offers no exclusive create, so two windows, or a window and
+the CLI on the window's data area, can still run one plan at once.
+
+### 2026-10-03 — What the live server showed
+
+Two of the fixes above rested on server behaviour, and a live server
+contradicted one and exposed a second fault:
+
+- **A DELETE does not take the settings it carries into its WHERE.** A
+  lightweight `DELETE` and an `ALTER TABLE … DELETE` alike evaluate the
+  predicate under the server's defaults. A JSON column's RowBinary depends on
+  `output_format_binary_write_json_as_string`, so a keyless table's leaf
+  predicate selected other rows in the repair's DELETE than in the diff. The
+  row hash now reads a JSON column through `toJSONString`, whose bytes equal
+  the pinned form, so digests already taken stay valid and no setting moves
+  the predicate. The plan records those columns (`hashAsText`).
+- **An alias could stand in for a column.** The digest queries alias their
+  outputs (`chunk`, `pid`, `kh`, `rh`, …) in the SELECT that reads the table,
+  and ClickHouse resolves a name to the alias first. A table with a column
+  named `kh` was hashed without that column's values, so a difference in it
+  went unseen by the diff and by the sync's verification. Every query the
+  engine reads as JSON now sets `prefer_column_name_to_alias = 1`.
+
+The Replicated refusal is not yet run against a server: the test lane's
+server has no Keeper, and its test skips.
+
 ## References
 
 - [ADR-0170](./0170-data-catalog-competence.md) — the data catalog: classification, restoration, shape relation.

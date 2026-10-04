@@ -12,14 +12,17 @@ import (
 // the row digest and the partition chunk id both hash, so a server profile
 // cannot change the bytes (ADR-0259 §SD4). JSON is written as its string
 // form: with paths in canonical order, logically equal documents give equal
-// bytes, which the native RowBinary form does not.
-const rowBinarySettings = ", output_format_binary_encode_types_in_binary_format = 0" +
+// bytes, which the native RowBinary form does not. Every statement whose
+// WHERE may hold such an expression must carry them too
+// ([DigestSpec.SelectNative], [deleteQuery]): a keyless table's leaf and
+// sample predicates hash the row.
+const rowBinarySettings = "output_format_binary_encode_types_in_binary_format = 0" +
 	", output_format_binary_write_json_as_string = 1"
 
 // digestSettings close every query that evaluates [Chunking.ChunkExpr] or a
 // row hash, [DigestSpec.ChunkListQuery] included, so chunk ids and digests
 // from any two such queries are comparable by construction.
-const digestSettings = " SETTINGS output_format_json_quote_64bit_integers = 0" + rowBinarySettings + " FORMAT JSONEachRow"
+const digestSettings = " SETTINGS output_format_json_quote_64bit_integers = 0, prefer_column_name_to_alias = 1, " + rowBinarySettings + " FORMAT JSONEachRow"
 
 // DigestSpec is what one side's digest queries read: the table, its key, the
 // columns the row digest covers and the chunk layout. Source and target specs
@@ -28,10 +31,16 @@ type DigestSpec struct {
 	Ref         datacatalog.TableRef
 	KeyExprs    []string
 	CopyColumns []string
-	Chunking    Chunking
+	// HashAsText are the copy columns the row hash reads as JSON text.
+	HashAsText []string
+	Chunking   Chunking
 	// Final reads the table with FINAL, so merge-semantics engines are
 	// compared on their merged rows.
 	Final bool
+	// NoPartitionIds is set for a table outside the MergeTree family, which
+	// has no `_partition_id`: its partition chunks are read by the chunk
+	// expression, and it reports no partition ids.
+	NoPartitionIds bool
 	// Filter is the table's row filter (ADR-0271 §SD1): every query reads
 	// only the slice it selects, on either side. Empty reads every row.
 	Filter string
@@ -59,25 +68,48 @@ type specSel struct {
 
 // RowHashExpr hashes the copied columns' RowBinary bytes. The list is
 // explicit and in plan order, never `*`.
+//
+// A JSON column's RowBinary depends on output_format_binary_write_json_as_string,
+// which a SELECT can pin but a DELETE's mutation does not take: it evaluates
+// its WHERE under the server's defaults. So the hash reads a JSON column
+// ([DigestSpec.HashAsText]) as toJSONString, which is the bytes the pinned
+// setting writes and depends on no setting, so the repair's DELETE removes
+// the rows the diff's leaves named.
 func (inst *DigestSpec) RowHashExpr() (sql string) {
-	return "cityHash64(formatRowNoNewline('RowBinary', " + inst.columnList() + "))"
+	cols := make([]string, 0, len(inst.CopyColumns))
+	for _, c := range inst.CopyColumns {
+		if slices.Contains(inst.HashAsText, c) {
+			cols = append(cols, "toJSONString("+QuoteIdent(c)+")")
+			continue
+		}
+		cols = append(cols, QuoteIdent(c))
+	}
+	return "cityHash64(formatRowNoNewline('RowBinary', " + strings.Join(cols, ", ") + "))"
 }
 
-// KeyHashExpr hashes the sorting key. A table with no sorting key (Log,
-// Memory, ORDER BY tuple()) is keyed by the whole row: its rows can then only
-// be missing or extra, never changed.
-func (inst *DigestSpec) KeyHashExpr() (sql string) {
+// identity is what names a row: the sorting key, or, for a table with none
+// (Log, Memory, ORDER BY tuple()), the whole row, whose rows can then only be
+// missing or extra, never changed. key is the tuple of those expressions;
+// hash is the key hash, which for a keyless table is the row hash itself.
+// The hash forms differ by keyedness because digests and sample predicates
+// are kept in journals and packs, so they stay as they were first written.
+func (inst *DigestSpec) identity() (key string, hash string, keyed bool) {
 	if len(inst.KeyExprs) == 0 {
-		return inst.RowHashExpr()
+		return "tuple(" + inst.columnList() + ")", inst.RowHashExpr(), false
 	}
-	return "cityHash64(tuple(" + strings.Join(inst.KeyExprs, ", ") + "))"
+	key = "tuple(" + strings.Join(inst.KeyExprs, ", ") + ")"
+	return key, "cityHash64(" + key + ")", true
+}
+
+// KeyHashExpr hashes the row's identity ([DigestSpec.identity]).
+func (inst *DigestSpec) KeyHashExpr() (sql string) {
+	_, sql, _ = inst.identity()
+	return
 }
 
 func (inst *DigestSpec) keyTextExpr() (sql string) {
-	if len(inst.KeyExprs) == 0 {
-		return "substring(toString(tuple(" + inst.columnList() + ")), 1, 200)"
-	}
-	return "substring(toString(tuple(" + strings.Join(inst.KeyExprs, ", ") + ")), 1, 200)"
+	key, _, _ := inst.identity()
+	return "substring(toString(" + key + "), 1, 200)"
 }
 
 func (inst *DigestSpec) from() (sql string) {
@@ -110,8 +142,12 @@ func (inst DigestSpec) With(pred string) (out DigestSpec) {
 }
 
 // ForChunk restricts the spec to one chunk. pid, when known, is the chunk's
-// partition id on the side the spec reads.
+// partition id on the side the spec reads; a table without partition ids
+// ignores it.
 func (inst DigestSpec) ForChunk(id string, pid string) (out DigestSpec) {
+	if inst.NoPartitionIds {
+		pid = ""
+	}
 	out = inst.with(inst.Chunking.ChunkPredicate(id, pid))
 	out.sel.chunked, out.sel.chunk = true, id
 	return
@@ -149,9 +185,10 @@ func (inst DigestSpec) with(pred string) (out DigestSpec) {
 }
 
 // pidExpr is the partition id a chunk of partition chunking lives in, so a
-// chunk can be read by `_partition_id` (pruned) and dropped by partition.
+// chunk can be read by `_partition_id` (pruned) and dropped by partition. A
+// table without partition ids reports none.
 func (inst *DigestSpec) pidExpr() (sql string) {
-	if inst.Chunking.Kind == ChunkingPartition {
+	if inst.Chunking.Kind == ChunkingPartition && !inst.NoPartitionIds {
 		return "_partition_id"
 	}
 	return "''"
@@ -166,10 +203,15 @@ func (inst *DigestSpec) columnList() (sql string) {
 	return strings.Join(cols, ", ")
 }
 
+// leafOf is the leaf of a row whose key hash is kh.
+func (inst *DigestSpec) leafOf(kh string) (sql string) {
+	return kh + " % " + strconv.FormatUint(uint64(max(inst.Chunking.Leaves, 1)), 10)
+}
+
 // LeafPredicate selects the rows of the given leaves.
 func (inst *DigestSpec) LeafPredicate(leaves []uint32) (sql string) {
 	var b strings.Builder
-	b.WriteString("(" + inst.KeyHashExpr() + ") % " + strconv.FormatUint(uint64(max(inst.Chunking.Leaves, 1)), 10) + " IN (")
+	b.WriteString(inst.leafOf("("+inst.KeyHashExpr()+")") + " IN (")
 	for i, l := range leaves {
 		if i > 0 {
 			b.WriteString(", ")
@@ -184,11 +226,11 @@ func (inst *DigestSpec) LeafPredicate(leaves []uint32) (sql string) {
 // salt, so the sample is independent of the leaf layout, and whole keys are
 // in or out together.
 func (inst *DigestSpec) SamplePredicate(num uint32, den uint32) (sql string) {
-	keys := "tuple(" + strings.Join(inst.KeyExprs, ", ") + ")"
-	if len(inst.KeyExprs) == 0 {
-		keys = inst.RowHashExpr()
+	key, hash, keyed := inst.identity()
+	if !keyed {
+		key = hash
 	}
-	return "cityHash64('jackstay-sample', " + keys + ") % " + strconv.FormatUint(uint64(max(den, 1)), 10) + " < " + strconv.FormatUint(uint64(num), 10)
+	return "cityHash64('jackstay-sample', " + key + ") % " + strconv.FormatUint(uint64(max(den, 1)), 10) + " < " + strconv.FormatUint(uint64(num), 10)
 }
 
 // ChunkListQuery lists the chunks with their partition ids and display text.
@@ -199,9 +241,18 @@ func (inst *DigestSpec) ChunkListQuery() (sql string) {
 		inst.from() + ") GROUP BY chunk ORDER BY chunk" + digestSettings
 }
 
-// SelectNative streams the copy columns of the spec's rows as Native.
+// SelectNative streams the copy columns of the spec's rows as Native. Its
+// WHERE may hash rows (a keyless table's leaves, a sample), so it pins the
+// RowBinary settings the digests were computed under.
 func (inst *DigestSpec) SelectNative() (sql string) {
-	return "SELECT " + inst.columnList() + inst.from() + " FORMAT Native"
+	return "SELECT " + inst.columnList() + inst.from() + " SETTINGS " + rowBinarySettings + " FORMAT Native"
+}
+
+// deleteQuery is the lightweight DELETE that removes the target rows pred
+// selects, waiting for it to apply, under the RowBinary settings the leaf
+// predicates were computed under.
+func deleteQuery(target datacatalog.TableRef, pred string) (sql string) {
+	return "DELETE FROM " + QuoteRef(target) + " WHERE " + pred + " SETTINGS lightweight_deletes_sync = 2, " + rowBinarySettings
 }
 
 // InsertNative is the insert a Native stream of SelectNative lands in. Block
@@ -212,7 +263,7 @@ func (inst *DigestSpec) InsertNative() (sql string) {
 }
 
 func (inst *DigestSpec) leafExpr() (sql string) {
-	return "kh % " + strconv.FormatUint(uint64(max(inst.Chunking.Leaves, 1)), 10)
+	return inst.leafOf("kh")
 }
 
 // LeafDigestQuery is the one scan of §SD4: per (chunk, leaf), the row count and
@@ -263,19 +314,4 @@ type pairRow struct {
 	Kh      uint64 `json:"kh"`
 	Rh      uint64 `json:"rh"`
 	KeyText string `json:"keytext"`
-}
-
-// IsMergeEngine reports whether an engine collapses rows during merges, so
-// that two tables with the same logical content can hold different rows until
-// both are fully merged.
-func IsMergeEngine(engine string) (ok bool) {
-	if !strings.HasSuffix(engine, "MergeTree") {
-		return false
-	}
-	for _, p := range []string{"Replacing", "Collapsing", "Summing", "Aggregating", "Graphite", "Coalescing"} {
-		if strings.Contains(engine, p) {
-			return true
-		}
-	}
-	return false
 }

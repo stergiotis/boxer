@@ -166,14 +166,22 @@ func (inst *discovered) same() (same bool) {
 	return jk.IsSameServer(inst.srcEp, inst.dstEp, inst.src.Server, inst.dst.Server)
 }
 
-// stepResult is what a plan-producing step hands back to the frame.
+// stepResult is what a plan-producing step hands back to the frame. epoch is
+// the plan the step began on (App.planEpoch); a result for a plan the window
+// no longer holds is dropped. fresh marks a plan of its own, under a new
+// identity: the first plan, or one for other servers. replanned marks a
+// structure step planned anew, which leaves no comparison and no sync
+// behind; applying the DDL is not one.
 type stepResult struct {
-	plan    jk.Plan
-	stale   []string
-	applied []string
-	skipped []string
-	note    string
-	saved   planSaved
+	plan      jk.Plan
+	stale     []string
+	applied   []string
+	skipped   []string
+	note      string
+	saved     planSaved
+	epoch     uint64
+	fresh     bool
+	replanned bool
 }
 
 // planSaved is what a worker's save of the plan left: the name it chose for
@@ -191,6 +199,9 @@ const (
 	fileOpOpen fileOpE = iota
 	fileOpImport
 	fileOpExport
+	// fileOpReload re-reads the window's own plan after a sync that ended
+	// without a result.
+	fileOpReload
 )
 
 // fileResult is what a file gesture hands back to the frame.
@@ -201,6 +212,11 @@ type fileResult struct {
 	cancelled bool
 	// exported is the name the user saved an exported copy under.
 	exported string
+	// create is the [PlanEnv] name whose file does not exist yet: the plan
+	// still to be written under it.
+	create string
+	// epoch is the plan a reload re-reads.
+	epoch uint64
 }
 
 // preflightResult is what the Sync page shows before the operator starts:
@@ -246,14 +262,20 @@ type App struct {
 	filters map[string]*string
 
 	// The plan and its file. planRev counts plan replacements, so a page
-	// can tell a new plan from the one it last read. planName is the file in
-	// the data area; planLocation is its host path, for display only.
+	// can tell a new plan from the one it last read; planEpoch counts the
+	// plans adopted, so a step can tell the plan it began on from another.
+	// planName is the file in the data area; planLocation is its host path,
+	// for display only. fileOp is the gesture fileJob runs; reloadJob
+	// re-reads the plan after a sync that ended without a result.
 	plan         *jk.Plan
 	planRev      uint64
+	planEpoch    uint64
 	planName     string
 	planLocation string
 	savedAt      time.Time
 	fileJob      bgjob.Runner[fileResult]
+	fileOp       fileOpE
+	reloadJob    bgjob.Runner[fileResult]
 
 	// Structure and its confirmation.
 	structureJob bgjob.Runner[stepResult]
@@ -265,11 +287,16 @@ type App struct {
 	final   bool
 
 	// Sync. syncModeChosen is set once the operator picks a mode; until
-	// then the page follows the recommendation.
+	// then the page follows the recommendation. The pre-flight runs for
+	// preflightKey; pendingKey is the choices as last seen, and pendingSince
+	// when they last changed, so typing does not start one per keystroke.
+	// syncArmedKey is the choices the confirmation was armed for.
 	syncJob        bgjob.Runner[stepResult]
 	previewJob     bgjob.Runner[preflightResult]
 	preflight      *preflightResult
 	preflightKey   string
+	pendingKey     string
+	pendingSince   time.Time
 	syncMode       jk.SyncModeE
 	syncModeChosen bool
 	existing       jk.ExistingPolicyE
@@ -277,11 +304,16 @@ type App struct {
 	compression    string
 	restart        bool
 	syncArmed      bool
+	syncArmedKey   string
 	rows, bytes    atomic.Int64
 
-	// Run: the last run's timing, kept on the frame goroutine.
+	// Run: the last run's timing, kept on the frame goroutine. syncEpoch is
+	// the plan the sync began on; syncStopped is set when it ended without
+	// a result, failed or cancelled, and the plan was re-read from its file.
 	syncStarted, syncFinished time.Time
 	syncWasRunning            bool
+	syncEpoch                 uint64
+	syncStopped               bool
 
 	logMu    sync.Mutex
 	chunkLog []jk.ChunkResult
@@ -351,9 +383,9 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 			inst.lastError = "BOXER_JACKSTAY_PLAN is not a plan file name: " + name
 			return
 		}
-		// Named before it is read, so a missing plan is created on the
-		// first save under the name the scene gave.
-		inst.planName = name
+		// Named once the open finds no file, so a missing plan is created
+		// on the first save under the name the scene gave; a plan that
+		// exists and cannot be read is not overwritten unread.
 		inst.startOpen(name, true)
 	}
 	return
@@ -368,12 +400,17 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	inst.syncJob.Cancel()
 	inst.previewJob.Cancel()
 	inst.fileJob.Cancel()
+	inst.reloadJob.Cancel()
 	inst.disks.Close()
 	return
 }
 
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	inst.takeResults()
+	inst.keepArmed()
+	if wait := inst.schedulePreflight(time.Now()); wait > 0 {
+		c.RequestRepaintAfter(wait.Seconds())
+	}
 	inst.mirrorPhase()
 	inst.render()
 	if inst.anyRunning() {
@@ -383,8 +420,17 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 }
 
 func (inst *App) anyRunning() (running bool) {
+	return inst.planBusy() || inst.previewJob.Running()
+}
+
+// planBusy reports whether a job runs that reads or writes the plan, its
+// file, or the servers it is planned against. Every action that starts such
+// a job is disabled while one runs, so two steps never race on one plan.
+// The pre-flight is not among them: it only reads a copy, and the Sync page
+// does not start while it runs.
+func (inst *App) planBusy() (busy bool) {
 	return inst.discoverJob.Running() || inst.structureJob.Running() || inst.diffJob.Running() ||
-		inst.syncJob.Running() || inst.previewJob.Running() || inst.fileJob.Running()
+		inst.syncJob.Running() || inst.fileJob.Running() || inst.reloadJob.Running()
 }
 
 // --- endpoints and clients -------------------------------------------------
@@ -430,18 +476,99 @@ func fileToken(s string) (t string) {
 
 // --- the plan file and the recent list ----------------------------------------
 
-// adoptPlan makes p the window's plan: the endpoints follow it, the pages
-// re-read it, and the file it came from is remembered.
+// adoptPlan makes p the window's plan, under a new identity: the endpoints
+// and the Databases and Structure choices follow it, what the window held
+// about the previous plan is dropped, and the file it came from is
+// remembered. The status line is the caller's.
 func (inst *App) adoptPlan(p *jk.Plan, saved planSaved) {
-	inst.plan = p
-	inst.planRev++
+	inst.planEpoch++
 	inst.srcURL, inst.srcUser = p.Source.URL, p.Source.User
 	inst.dstURL, inst.dstUser = p.Target.URL, p.Target.User
+	inst.seedChoices(p)
+	inst.stale, inst.skipped = nil, nil
+	inst.selected = datacatalog.TableRef{}
+	inst.resetSyncSession()
+	inst.lastDisks = nil
+	inst.preflight, inst.preflightKey, inst.pendingKey = nil, "", ""
 	inst.syncModeChosen = false
-	inst.applyArmed, inst.syncArmed = false, false
-	inst.preflight, inst.preflightKey = nil, ""
+	inst.existing = jk.ExistingPolicyRefuse
+	inst.restart = false
+	inst.installPlan(p)
 	inst.planName = saved.name
 	inst.noteSaved(saved)
+}
+
+// installPlan replaces the plan with a later state of it: the pages re-read
+// it, a confirmation armed for the earlier state is withdrawn, and the
+// target's footprint is read again.
+func (inst *App) installPlan(p *jk.Plan) {
+	inst.plan = p
+	inst.planRev++
+	inst.applyArmed, inst.syncArmed = false, false
+	if !inst.syncModeChosen {
+		inst.syncMode, _ = inst.recommendMode()
+	}
+	inst.disks.Invalidate()
+}
+
+// resetSyncSession forgets the sync this window ran: a new plan, or a plan
+// whose structure was planned again, has none.
+func (inst *App) resetSyncSession() {
+	inst.syncStopped = false
+	inst.syncStarted, inst.syncFinished = time.Time{}, time.Time{}
+	inst.rows.Store(0)
+	inst.bytes.Store(0)
+	inst.logMu.Lock()
+	inst.chunkLog = inst.chunkLog[:0]
+	inst.logMu.Unlock()
+}
+
+// seedChoices sets the Databases and Structure choices to what p was planned
+// with, so planning it again keeps its databases, their targets and its row
+// filters. Databases the discovery adds later start unticked (seedDatabases).
+func (inst *App) seedChoices(p *jk.Plan) {
+	sel := &p.Selection
+	clear(inst.dbPick)
+	clear(inst.dbTarget)
+	clear(inst.filters)
+	inst.leewayOnly = sel.LeewayOnly
+	dbs := sel.Databases
+	if len(dbs) == 0 {
+		// An empty selection chose every database; the tables name them.
+		for _, t := range p.Tables {
+			if !slices.Contains(dbs, t.Source.Database) {
+				dbs = append(dbs, t.Source.Database)
+			}
+		}
+	}
+	for _, db := range dbs {
+		pick, target := true, sel.TargetDatabase(db)
+		inst.dbPick[db], inst.dbTarget[db] = &pick, &target
+	}
+	for ref, f := range sel.Filters {
+		inst.filters[ref] = &f
+	}
+	for _, t := range p.Tables {
+		if t.Filter != "" {
+			f := t.Filter
+			inst.filters[t.Source.String()] = &f
+		}
+	}
+	if inst.disc != nil {
+		inst.seedDatabases()
+	}
+}
+
+// planServes reports whether the open plan is between the servers src and
+// dst; a plan for other servers is not overwritten by planning theirs.
+func (inst *App) planServes(src jk.Endpoint, dst jk.Endpoint) (serves bool) {
+	p := inst.plan
+	return p != nil && sameEndpoint(p.Source, src) && sameEndpoint(p.Target, dst)
+}
+
+func sameEndpoint(a jk.Endpoint, b jk.Endpoint) (same bool) {
+	return a.Pack == b.Pack && jk.NormalizeEndpointURL(a.URL) == jk.NormalizeEndpointURL(b.URL) &&
+		strings.TrimSpace(a.User) == strings.TrimSpace(b.User)
 }
 
 // noteSaved takes what a save left: the plan's name and place, the time, and
@@ -612,20 +739,52 @@ var errPackPlan = errors.New("this plan's source is a pack; run it with `boxer j
 // the plan still to be written, not an error.
 func (inst *App) startOpen(name string, seed bool) {
 	files := inst.files
+	inst.fileOp = fileOpOpen
 	inst.fileJob.Start(nil, bgjob.Spec{Kind: "jackstay.open", Title: "open the plan"},
 		func(ctx context.Context) (*fileResult, error) {
 			p, err := jk.LoadPlanIn(files, name)
-			switch {
-			case errors.Is(err, fs.ErrNotExist) && seed:
-				return &fileResult{op: fileOpOpen, cancelled: true}, nil
-			case errors.Is(err, fs.ErrNotExist):
-				return &fileResult{op: fileOpOpen, saved: planSaved{name: name, err: errPlanGone}}, nil
-			case err != nil:
+			r, err := openOutcome(name, seed, p, err)
+			if err != nil {
 				return nil, err
-			case p.Source.Pack != "":
-				return nil, errPackPlan
 			}
-			return &fileResult{op: fileOpOpen, plan: p, saved: statPlan(files, name)}, nil
+			if r.create == "" && r.saved.err == nil {
+				r.saved = statPlan(files, name)
+			}
+			return r, nil
+		})
+}
+
+// openOutcome is what the open of name answers, given what reading it gave.
+// Only a seed's missing file names the plan still to be written; a plan that
+// exists and cannot be read is an error, and the window keeps no name for it,
+// so no later save overwrites it unread.
+func openOutcome(name string, seed bool, p jk.Plan, err error) (r *fileResult, rerr error) {
+	switch {
+	case errors.Is(err, fs.ErrNotExist) && seed:
+		return &fileResult{op: fileOpOpen, create: name}, nil
+	case errors.Is(err, fs.ErrNotExist):
+		return &fileResult{op: fileOpOpen, saved: planSaved{name: name, err: errPlanGone}}, nil
+	case err != nil:
+		return nil, err
+	case p.Source.Pack != "":
+		return nil, errPackPlan
+	}
+	return &fileResult{op: fileOpOpen, plan: p}, nil
+}
+
+// startReload re-reads the window's plan from its file after a sync that
+// ended without a result: the sync saved its run and the reports of the
+// tables it finished there, and the next start resumes that run only if the
+// window holds it.
+func (inst *App) startReload() {
+	files, name, epoch := inst.files, inst.planName, inst.planEpoch
+	inst.reloadJob.Start(nil, bgjob.Spec{Kind: "jackstay.reload", Title: "re-read the plan"},
+		func(ctx context.Context) (*fileResult, error) {
+			p, err := jk.LoadPlanIn(files, name)
+			if err != nil {
+				return nil, err
+			}
+			return &fileResult{op: fileOpReload, plan: p, saved: statPlan(files, name), epoch: epoch}, nil
 		})
 }
 
@@ -633,6 +792,7 @@ func (inst *App) startOpen(name string, seed bool) {
 // and copies it into the data area under the name it had, made free.
 func (inst *App) startImport() {
 	bus, files := inst.bus, inst.files
+	inst.fileOp = fileOpImport
 	inst.fileJob.Start(nil, bgjob.Spec{Kind: "jackstay.import", Title: "import a plan"},
 		func(ctx context.Context) (*fileResult, error) {
 			reply, err := bus.RequestWithTimeout(fsbroker.SubjectDialogRead, nil, fsbroker.DialogTimeout)
@@ -707,6 +867,7 @@ func (inst *App) startExport() {
 		suggested = "plan.json"
 	}
 	bus := inst.bus
+	inst.fileOp = fileOpExport
 	inst.fileJob.Start(nil, bgjob.Spec{Kind: "jackstay.export", Title: "export the plan"},
 		func(ctx context.Context) (*fileResult, error) {
 			req, err := fsbroker.MarshalDialogRequest(fsbroker.DialogRequest{SuggestedName: suggested})
@@ -742,20 +903,29 @@ func (inst *App) startExport() {
 
 // takeFileResult lands a finished file gesture.
 func (inst *App) takeFileResult() {
+	if r, _, ok := inst.reloadJob.TakeResult(); ok && r.epoch == inst.planEpoch {
+		p := r.plan
+		inst.installPlan(&p)
+		inst.noteSaved(r.saved)
+	}
 	r, _, ok := inst.fileJob.TakeResult()
 	if !ok || r.cancelled {
 		return
 	}
 	switch r.op {
 	case fileOpOpen, fileOpImport:
+		if r.create != "" {
+			inst.planName = r.create
+			return
+		}
 		if errors.Is(r.saved.err, errPlanGone) {
 			inst.lastError = "unable to open the plan: " + r.saved.name + " is no longer in the plan store"
 			inst.forgetRecent(r.saved.name)
 			return
 		}
 		p := r.plan
-		inst.adoptPlan(&p, r.saved)
 		inst.disc = nil
+		inst.adoptPlan(&p, r.saved)
 		inst.note, inst.lastError = "plan opened", ""
 		if r.op == fileOpImport {
 			inst.note = "plan imported as " + r.saved.name
@@ -775,37 +945,70 @@ func (inst *App) takeResults() {
 		inst.seedDatabases()
 		inst.note, inst.lastError = "", ""
 	}
+	syncLanded := false
 	for _, job := range []*bgjob.Runner[stepResult]{&inst.structureJob, &inst.diffJob, &inst.syncJob} {
 		r, _, ok := job.TakeResult()
 		if !ok {
 			continue
 		}
-		inst.stale = r.stale
-		if len(r.stale) > 0 {
-			inst.lastError = "the plan no longer matches the servers; plan the structure again"
-			continue
-		}
-		p := r.plan
-		inst.plan = &p
-		inst.planRev++
-		inst.note, inst.lastError = r.note, ""
-		inst.skipped = r.skipped
-		inst.noteSaved(r.saved)
-		if !inst.syncModeChosen {
-			inst.syncMode, _ = inst.recommendMode()
-		}
-		// The footprint a step leaves behind is worth reading now, not at
-		// the next tick.
-		inst.disks.Invalidate()
+		syncLanded = syncLanded || job == &inst.syncJob
+		inst.takeStepResult(r)
 	}
-	if r, _, ok := inst.previewJob.TakeResult(); ok {
+	// A pre-flight for choices since changed describes nothing on the page.
+	if r, tag, ok := inst.previewJob.TakeResult(); ok && tag == inst.settingsKey() {
 		inst.preflight = r
 	}
-	running := inst.syncJob.Running()
-	if inst.syncWasRunning && !running {
-		inst.syncFinished = time.Now()
+	inst.noteSyncEnd(inst.syncJob.Snapshot().State, syncLanded)
+}
+
+// takeStepResult lands a step's result on the plan it began on.
+func (inst *App) takeStepResult(r *stepResult) {
+	if r.epoch != inst.planEpoch {
+		inst.note = "a step begun on the previous plan finished after another was opened; its result was dropped"
+		return
 	}
-	inst.syncWasRunning = running
+	inst.applyArmed, inst.syncArmed = false, false
+	inst.stale = r.stale
+	if len(r.stale) > 0 {
+		inst.lastError = "the plan no longer matches the servers; plan the structure again"
+		return
+	}
+	p := r.plan
+	inst.note, inst.lastError = r.note, ""
+	if r.fresh {
+		inst.adoptPlan(&p, r.saved)
+	} else {
+		if r.replanned {
+			inst.resetSyncSession()
+		}
+		// installPlan reads the footprint the step left behind now, not at
+		// the next tick.
+		inst.installPlan(&p)
+		inst.noteSaved(r.saved)
+	}
+	inst.skipped = r.skipped
+}
+
+// noteSyncEnd follows the sync job from frame to frame: state is its state
+// after this frame's take, landed whether a result was taken. A sync that ends
+// without one failed or was cancelled; what it did is in the plan file, which
+// is read back. A result that arrived after the take waits for the next frame.
+func (inst *App) noteSyncEnd(state bgjob.StateE, landed bool) {
+	switch {
+	case state == bgjob.StateRunning:
+		inst.syncWasRunning = true
+	case state == bgjob.StateDone, !inst.syncWasRunning:
+	default:
+		inst.syncWasRunning = false
+		if inst.syncEpoch != inst.planEpoch {
+			return
+		}
+		inst.syncFinished = time.Now()
+		if !landed {
+			inst.syncStopped = true
+			inst.startReload()
+		}
+	}
 }
 
 // seedDatabases gives every source database a checkbox and a target name. When
@@ -1016,8 +1219,10 @@ func (inst *App) selection() (sel jk.Selection) {
 		}
 	}
 	for ref, f := range inst.filters {
-		db, _, _ := strings.Cut(ref, ".")
-		if fs := strings.TrimSpace(*f); fs != "" && slices.Contains(sel.Databases, db) {
+		// A database name may hold a dot, so the key is matched against the
+		// selected databases rather than cut at its first dot.
+		inSelected := slices.ContainsFunc(sel.Databases, func(db string) bool { return strings.HasPrefix(ref, db+".") })
+		if fs := strings.TrimSpace(*f); fs != "" && inSelected {
 			if sel.Filters == nil {
 				sel.Filters = make(map[string]string, 4)
 			}
@@ -1063,7 +1268,8 @@ func (inst *App) startStructure() {
 	if p, ok := inst.clonePlan(); ok {
 		old = &p
 	}
-	files, name := inst.files, inst.planName
+	files, epoch := inst.files, inst.planEpoch
+	name, fresh := structurePlanName(inst.plan != nil, inst.planServes(srcEp, dstEp), inst.planName)
 	src, dst := clients(srcEp, dstEp, false)
 	inst.applyArmed = false
 	inst.structureJob.StartReporting(nil, bgjob.Spec{Kind: "jackstay.structure", Title: "plan the structure"},
@@ -1073,9 +1279,25 @@ func (inst *App) startStructure() {
 			if err != nil {
 				return nil, err
 			}
-			return &stepResult{plan: p, note: "structure planned", saved: savePlan(files, name, &p)}, nil
+			return &stepResult{plan: p, note: "structure planned", saved: savePlan(files, name, &p),
+				epoch: epoch, fresh: fresh, replanned: true}, nil
 		})
 	inst.step = stepStructure
+}
+
+// structurePlanName is the file a structure step saves to, and whether its
+// plan is a new one: the open plan's file when the plan is between the same
+// servers, a name chosen afresh when it is for others, so their plan does not
+// overwrite it. With no plan open, the name is the one [PlanEnv] gave, if
+// any.
+func structurePlanName(open bool, serves bool, planName string) (name string, fresh bool) {
+	switch {
+	case !open:
+		return planName, true
+	case !serves:
+		return "", true
+	}
+	return planName, false
 }
 
 func (inst *App) startApply() {
@@ -1085,7 +1307,7 @@ func (inst *App) startApply() {
 	}
 	src, dst := clients(p.Source, p.Target, false)
 	dstCfg := jk.TargetClientConfig(p.Target)
-	files, name := inst.files, inst.planName
+	files, name, epoch := inst.files, inst.planName, inst.planEpoch
 	inst.applyArmed = false
 	inst.structureJob.StartReporting(nil, bgjob.Spec{Kind: "jackstay.apply", Title: "apply the DDL"},
 		func(ctx context.Context, report bgjob.Reporter) (*stepResult, error) {
@@ -1099,7 +1321,11 @@ func (inst *App) startApply() {
 			if err != nil {
 				return nil, err
 			}
-			r := &stepResult{plan: after, stale: stale, applied: applied, note: plural(len(applied), "statement") + " ran on the target"}
+			// The structure is judged again after the DDL. The tables it did
+			// not alter keep their comparisons and reports, and the plan
+			// keeps its run, so the window keeps its sync session too.
+			r := &stepResult{plan: after, stale: stale, applied: applied, note: plural(len(applied), "statement") + " ran on the target",
+				epoch: epoch}
 			if len(stale) == 0 {
 				r.saved = savePlan(files, name, &r.plan)
 			}
@@ -1114,7 +1340,7 @@ func (inst *App) startDiff() {
 	}
 	scanS, scanD := clients(p.Source, p.Target, true)
 	final := inst.final
-	files, name := inst.files, inst.planName
+	files, name, epoch := inst.files, inst.planName, inst.planEpoch
 	inst.diffJob.StartReporting(nil, bgjob.Spec{Kind: "jackstay.diff", Title: "compare content"},
 		func(ctx context.Context, report bgjob.Reporter) (*stepResult, error) {
 			report(0, 0, "rechecking the plan")
@@ -1128,9 +1354,9 @@ func (inst *App) startDiff() {
 				}}
 			fresh, skipped, stale, err := jk.DiffStep(ctx, jk.ServerSource(scanS), scanD, &p, opts, time.Now)
 			if err != nil || len(stale) > 0 {
-				return &stepResult{stale: stale}, err
+				return &stepResult{stale: stale, epoch: epoch}, err
 			}
-			return &stepResult{plan: fresh, skipped: skipped, note: "content compared", saved: savePlan(files, name, &fresh)}, nil
+			return &stepResult{plan: fresh, skipped: skipped, note: "content compared", saved: savePlan(files, name, &fresh), epoch: epoch}, nil
 		})
 }
 
@@ -1138,16 +1364,69 @@ func (inst *App) startDiff() {
 func (inst *App) syncRequest() (req jk.SyncRequest, err error) {
 	req = jk.SyncRequest{TableSync: jk.TableSync{Mode: inst.syncMode, Existing: inst.existing},
 		Restart: inst.restart, Chunking: jk.DefaultChunkingOptions(), Headroom: 1.5}
-	if req.Mode == jk.SyncModeSample {
-		req.SampleNum, req.SampleDen, err = parseFraction(inst.sampleText)
+	switch req.Mode {
+	case jk.SyncModeSample:
+		req.SampleNum, req.SampleDen, err = jk.ParseFraction(inst.sampleText)
+	case jk.SyncModeRepair:
+		// The page offers no existing-rows choice for a repair, and a run
+		// resumes only under the policy it began with: take the CLI's default.
+		req.Existing = jk.ExistingPolicyRefuse
 	}
 	return
 }
 
-// settingsKey names the Sync page's choices, so a change re-runs the
-// pre-flight once and a repeat does not.
+// settingsKey names the Sync page's choices the pre-flight depends on, so a
+// change re-runs it once and a repeat does not.
 func (inst *App) settingsKey() (key string) {
 	return inst.syncMode.String() + "|" + inst.existing.String() + "|" + inst.sampleText + "|" + strconv.FormatUint(inst.planRev, 10)
+}
+
+// armKey names every choice the sync's confirmation states or acts on.
+func (inst *App) armKey() (key string) {
+	return inst.settingsKey() + "|" + inst.compression + "|" + strconv.FormatBool(inst.restart)
+}
+
+// keepArmed withdraws the sync's confirmation once the choices it was armed
+// for change: the second click confirms what the first one saw.
+func (inst *App) keepArmed() {
+	if inst.syncArmed && inst.armKey() != inst.syncArmedKey {
+		inst.syncArmed = false
+	}
+}
+
+// preflightSettle is how long the Sync page's choices must stay put before the
+// pre-flight, which rediscovers both servers, runs for them.
+const preflightSettle = 500 * time.Millisecond
+
+// schedulePreflight starts the pre-flight on the Sync page once its choices
+// have settled, cancelling one running for choices since changed. wait is how
+// long until the choices count as settled, for the frame's repaint; zero when
+// nothing waits.
+func (inst *App) schedulePreflight(now time.Time) (wait time.Duration) {
+	if inst.step != stepSync || inst.plan == nil || len(inst.stale) > 0 {
+		return 0
+	}
+	key := inst.settingsKey()
+	if key != inst.pendingKey {
+		inst.pendingKey, inst.pendingSince = key, now
+	}
+	if key == inst.preflightKey {
+		return 0
+	}
+	if inst.previewJob.Running() {
+		inst.previewJob.Cancel()
+		return preflightSettle
+	}
+	if inst.planBusy() {
+		return 0
+	}
+	if left := preflightSettle - now.Sub(inst.pendingSince); left > 0 {
+		return left
+	}
+	inst.preflightKey = key
+	inst.preflight = nil
+	inst.startPreview()
+	return 0
 }
 
 func (inst *App) startPreview() {
@@ -1162,10 +1441,10 @@ func (inst *App) startPreview() {
 	}
 	inst.lastError = ""
 	src, dst := clients(p.Source, p.Target, false)
-	inst.previewJob.StartReporting(nil, bgjob.Spec{Kind: "jackstay.preflight", Title: "pre-flight"},
+	inst.previewJob.StartReporting(nil, bgjob.Spec{Kind: "jackstay.preflight", Title: "pre-flight", Tag: inst.settingsKey()},
 		func(ctx context.Context, report bgjob.Reporter) (*preflightResult, error) {
 			report(0, 0, "rechecking the plan, reading the target's disks")
-			prep, err := jk.PrepareSyncStep(ctx, jk.ServerSource(src), dst, &p, req)
+			prep, err := jk.PrepareSyncStep(ctx, jk.ServerSource(src), dst, &p, req, time.Now())
 			if err != nil {
 				return nil, err
 			}
@@ -1191,24 +1470,20 @@ func (inst *App) startSync() {
 		inst.lastError = err.Error()
 		return
 	}
-	files, planName, compression := inst.files, inst.planName, inst.compression
+	files, planName, compression, epoch := inst.files, inst.planName, inst.compression, inst.planEpoch
 	scanS, scanD := clients(p.Source, p.Target, true)
-	inst.rows.Store(0)
-	inst.bytes.Store(0)
-	inst.logMu.Lock()
-	inst.chunkLog = inst.chunkLog[:0]
-	inst.logMu.Unlock()
+	inst.resetSyncSession()
 	inst.syncArmed = false
-	inst.syncStarted, inst.syncFinished = time.Now(), time.Time{}
-	inst.syncJob.StartReporting(nil, bgjob.Spec{Kind: "jackstay.sync", Title: "sync"},
+	inst.syncStarted, inst.syncEpoch = time.Now(), epoch
+	started := inst.syncJob.StartReporting(nil, bgjob.Spec{Kind: "jackstay.sync", Title: "sync"},
 		func(ctx context.Context, report bgjob.Reporter) (*stepResult, error) {
 			report(0, 0, "rechecking the plan")
-			prep, err := jk.PrepareSyncStep(ctx, jk.ServerSource(scanS), scanD, &p, req)
+			prep, err := jk.PrepareSyncStep(ctx, jk.ServerSource(scanS), scanD, &p, req, time.Now())
 			if err != nil || len(prep.Stale) > 0 {
-				return &stepResult{stale: prep.Stale}, err
+				return &stepResult{stale: prep.Stale, epoch: epoch}, err
 			}
 			if len(prep.Chosen) == 0 {
-				return &stepResult{plan: prep.Plan, skipped: prep.Skipped, note: "nothing to sync", saved: savePlan(files, planName, &prep.Plan)}, nil
+				return &stepResult{plan: prep.Plan, skipped: prep.Skipped, note: "nothing to sync", saved: savePlan(files, planName, &prep.Plan), epoch: epoch}, nil
 			}
 
 			expected := uint64(prep.ExpectedRows)
@@ -1235,24 +1510,18 @@ func (inst *App) startSync() {
 			opts := jk.DefaultSyncOptions()
 			opts.Compression = compression
 			opts.Rows, opts.Bytes = &inst.rows, &inst.bytes
-			opts.Progress = func(r jk.ChunkResult) {
-				if r.Status == jk.ChunkStatusDone {
-					inst.rows.Add(int64(r.Rows))
-				}
-				inst.logChunk(r)
-			}
+			opts.Progress = inst.logChunk
 			floor := jk.DefaultFreeFloor()
-			opts.BeforeChunk = func(ctx context.Context, pt *jk.PlanTable) error {
-				return floor.WaitForFree(ctx, scanD, pt.Target, func(low []jk.DiskInfo) {
-					s := "waiting: a target disk is below the free-space floor"
-					current.Store(&s)
-				})
+			opts.FreeFloor = &floor
+			opts.OnLowDisk = func(low []jk.DiskInfo) {
+				s := "waiting: a target disk is below the free-space floor"
+				current.Store(&s)
 			}
 			opts.BeforeTable = func(pt *jk.PlanTable) {
 				s := pt.Source.String()
 				current.Store(&s)
 			}
-			out, err := jk.RunSyncIn(ctx, jk.ServerSource(scanS), scanD, &prep, files, planName, req.Restart, opts, time.Now)
+			out, err := jk.RunSyncIn(ctx, jk.ServerSource(scanS), scanD, &prep, files, planName, opts, time.Now)
 			if err != nil {
 				return nil, err
 			}
@@ -1261,8 +1530,11 @@ func (inst *App) startSync() {
 				note = plural(out.Failed, "chunk") + " not synced; see the tables' problems"
 			}
 			// RunSyncIn saved the plan; what is left to learn is where.
-			return &stepResult{plan: prep.Plan, skipped: prep.Skipped, note: note, saved: statPlan(files, planName)}, nil
+			return &stepResult{plan: prep.Plan, skipped: prep.Skipped, note: note, saved: statPlan(files, planName), epoch: epoch}, nil
 		})
+	// Seen running from here, so a sync that ends before the next frame
+	// still ends in noteSyncEnd.
+	inst.syncWasRunning = inst.syncWasRunning || started
 	inst.step = stepRun
 }
 
@@ -1283,6 +1555,9 @@ func (inst *App) chunkLogSnapshot() (out []jk.ChunkResult) {
 	return append(out, inst.chunkLog...)
 }
 
+// diskEvery is how often the Run page reads the target's disks again.
+const diskEvery = 5 * time.Second
+
 // demandDisks reads the target's disks and the footprint of the plan's
 // tables, again every five seconds while the Run page is shown, and keeps
 // the last good read in lastDisks.
@@ -1297,7 +1572,8 @@ func (inst *App) demandDisks() (err error) {
 			refs = append(refs, t.Target)
 		}
 	}
-	key := target.URL + "|" + time.Now().Truncate(5*time.Second).Format(time.RFC3339)
+	now := time.Now()
+	key := target.URL + "|" + now.Truncate(diskEvery).Format(time.RFC3339)
 	rep, done, err, busy := inst.disks.Demand(key, func(ctx context.Context) (jk.DiskReport, error) {
 		return jk.ReadDisks(ctx, chclient.New(jk.TargetClientConfig(target), nil), refs)
 	})
@@ -1306,6 +1582,9 @@ func (inst *App) demandDisks() (err error) {
 	}
 	if busy {
 		c.RequestRepaint()
+	} else {
+		// The key changes with the clock, but only a frame reads it.
+		c.RequestRepaintAfter(time.Until(now.Truncate(diskEvery).Add(diskEvery)).Seconds())
 	}
 	return
 }

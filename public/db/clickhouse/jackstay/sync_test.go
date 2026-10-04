@@ -81,6 +81,6 @@ func TestPredicates(t *testing.T) {
 	assert.Equal(t, "cityHash64('jackstay-sample', tuple(k)) % 100 < 3", spec.SamplePredicate(3, 100))
 	w := spec.With("a = 1").With("b = 2").With("1")
 	assert.Equal(t, "(a = 1) AND (b = 2)", w.Where)
-	assert.Equal(t, "SELECT `k`, `v` FROM `d`.`t` WHERE (a = 1) AND (b = 2) FORMAT Native", w.SelectNative())
+	assert.Equal(t, "SELECT `k`, `v` FROM `d`.`t` WHERE (a = 1) AND (b = 2) SETTINGS output_format_binary_encode_types_in_binary_format = 0, output_format_binary_write_json_as_string = 1 FORMAT Native", w.SelectNative())
 	assert.Equal(t, "INSERT INTO `d`.`t` (`k`, `v`) SETTINGS insert_deduplicate = 0 FORMAT Native", spec.InsertNative())
 }

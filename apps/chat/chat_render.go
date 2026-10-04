@@ -45,6 +45,8 @@ const (
 	tipNoApps  = "This conversation was started without Apps: its model has no tools and cannot open, read or drive windows, and will say so if asked. Apps is chosen before the first message — New conversation, turn Apps on in Settings, and ask again."
 	hintDraft  = "Message the model — Ctrl+Enter sends"
 
+	tipQuestions = "The model may ask you questions with options, drawn as a form in the conversation; the turn waits for your answer. Needs a model that calls tools. Fixed at the first send."
+
 	tipCopy       = "Copy this message's markdown"
 	tipRetry      = "Send this message again"
 	tipEditFailed = "Put this message back in the composer to change it"
@@ -151,6 +153,9 @@ func (inst *App) renderBar() {
 				badge.New(inst.ids.PrepareStr("apps-state"), "apps").Tone(badge.ToneNeutral).Variant(badge.VariantSoft).Size(badge.SizeSm).Tooltip(tipApps).Send()
 			} else if inst.coord != nil {
 				badge.New(inst.ids.PrepareStr("apps-state"), "no apps").Tone(badge.ToneNeutral).Variant(badge.VariantSoft).Size(badge.SizeSm).Tooltip(tipNoApps).Send()
+			}
+			if conv.questions {
+				badge.New(inst.ids.PrepareStr("questions-state"), "questions").Tone(badge.ToneNeutral).Variant(badge.VariantSoft).Size(badge.SizeSm).Tooltip(tipQuestions).Send()
 			}
 		}
 		inst.renderContext()
@@ -341,6 +346,9 @@ func (inst *App) renderEmpty() {
 			case inst.coord != nil:
 				lines = append(lines, "Apps off: the model gets no tools and cannot open or drive windows — turn Apps on in Settings before the first message")
 			}
+			if inst.questions && inst.coord != nil {
+				lines = append(lines, "Questions on: the model may ask you with a form of options")
+			}
 			lines = append(lines, "Ctrl+Enter sends · Esc cancels a running answer")
 			for _, l := range lines {
 				for rt := range c.RichTextLabel(l) {
@@ -502,6 +510,9 @@ func (inst *App) renderTranscript() {
 			k := kinds[ord]
 			switch {
 			case k.pending:
+				if o := inst.openAsk(); o != nil {
+					return chatview.Block{Render: func() { inst.renderAsk(o) }}, true
+				}
 				return chatview.Block{Render: inst.renderWaiting}, true
 			case k.entry >= 0:
 				e := &conv.entries[k.entry]
@@ -737,6 +748,15 @@ func transcriptModel(conv *conversation, pending bool, nowMs int64) (m *chatview
 // elapsed is a wait as seconds.
 func elapsed(since time.Time) (s string) {
 	return strconv.Itoa(int(time.Since(since).Seconds())) + " s"
+}
+
+// openAsk is the ask_user waiting for the person in the turn in flight,
+// nil when none is.
+func (inst *App) openAsk() (o *openAsk) {
+	if inst.pending == nil || inst.coord == nil {
+		return nil
+	}
+	return inst.coord.ask.current()
 }
 
 // renderTask is the coordinator's row (ADR-0269) while it holds a task:

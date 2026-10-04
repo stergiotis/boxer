@@ -100,7 +100,9 @@ var ErrStale = eh.Errorf("the plan no longer matches the servers")
 // ApplyDDLStep is the confirmation of the Structure step: recheck, run the
 // pending DDL through ddl (a client carrying [DDLClientConfig]), and judge
 // again. It returns the statements that ran and the plan afterwards; a stale
-// plan runs nothing.
+// plan runs nothing. A table the DDL altered loses its diff and sync state,
+// which describe the table before; every other table, and the sync run, keep
+// theirs.
 func ApplyDDLStep(ctx context.Context, src SourceI, dst QueryI, ddl ExecI, plan *Plan, now time.Time) (applied []string, after Plan, stale []string, err error) {
 	var pending Plan
 	pending, stale, err = Recheck(ctx, src, dst, plan, now)
@@ -111,7 +113,26 @@ func ApplyDDLStep(ctx context.Context, src SourceI, dst QueryI, ddl ExecI, plan 
 	if err != nil {
 		return
 	}
-	after, err = PlanStructure(ctx, src, dst, plan.Source, plan.Target, plan.Selection, plan, now)
+	after, err = PlanStructure(ctx, src, dst, plan.Source, plan.Target, plan.Selection, nil, now)
+	if err != nil {
+		return
+	}
+	if plan.Source != after.Source || plan.Target != after.Target {
+		return
+	}
+	// CarryOver keeps a diff whose copied columns and filter are unchanged,
+	// which a created table's are; the DDL that ran is what makes it stale.
+	after.CarryOver(plan, true)
+	for i := range pending.Tables {
+		if len(pending.Tables[i].DDL) == 0 {
+			continue
+		}
+		for j := range after.Tables {
+			if t := &after.Tables[j]; t.Source == pending.Tables[i].Source {
+				t.Diff, t.Sync, t.SyncReport = nil, nil, nil
+			}
+		}
+	}
 	return
 }
 
@@ -195,8 +216,10 @@ type SyncRequest struct {
 // the tables chosen with their chunk layout and settings, the tables left
 // out with the reason, and the target's disks against what would land.
 type SyncPrepared struct {
-	Plan  Plan
-	Stale []string
+	// Request is what the step was asked; [RunSync] takes Restart from it.
+	Request SyncRequest
+	Plan    Plan
+	Stale   []string
 	// Chosen points into Plan.Tables.
 	Chosen  []*PlanTable
 	Skipped []string
@@ -209,8 +232,9 @@ type SyncPrepared struct {
 // PrepareSyncStep rechecks the plan, chooses the tables req can take, derives
 // the chunk layout of any that lacks one, and reads the target's disks for
 // the pre-flight (§SD5, §SD6). Nothing is written to either server.
-func PrepareSyncStep(ctx context.Context, src SourceI, dst QueryI, plan *Plan, req SyncRequest) (prep SyncPrepared, err error) {
-	prep.Plan, prep.Stale, err = Recheck(ctx, src, dst, plan, time.Now())
+func PrepareSyncStep(ctx context.Context, src SourceI, dst QueryI, plan *Plan, req SyncRequest, now time.Time) (prep SyncPrepared, err error) {
+	prep.Request = req
+	prep.Plan, prep.Stale, err = Recheck(ctx, src, dst, plan, now)
 	if err != nil || len(prep.Stale) > 0 {
 		return
 	}
@@ -310,19 +334,20 @@ type SyncOutcome struct {
 	Failed int
 }
 
-// RunSync runs the sync a [PrepareSyncStep] prepared: it names the run, saves
-// the plan at planPath (the journal lives beside it), copies each chosen
-// table, and saves the plan again after each table and at the end, so a run
-// stopped part-way resumes from what it recorded. Chunk failures are in the
-// tables' reports; err is a table-level failure, after which the plan is
-// still saved.
-func RunSync(ctx context.Context, src SourceI, dst ClientI, prep *SyncPrepared, planPath string, restart bool, opts SyncOptions, now func() time.Time) (out SyncOutcome, err error) {
-	return RunSyncIn(ctx, src, dst, prep, OsFiles{}, planPath, restart, opts, now)
+// RunSync runs the sync a [PrepareSyncStep] prepared: it names the run (a new
+// one when the prepared request asks for a restart), saves the plan at
+// planPath (the journal lives beside it), copies each chosen table, and saves
+// the plan again after each table and at the end, so a run stopped part-way
+// resumes from what it recorded. Chunk failures are in the tables' reports;
+// err is a table-level failure, after which the plan is still saved.
+func RunSync(ctx context.Context, src SourceI, dst ClientI, prep *SyncPrepared, planPath string, opts SyncOptions, now func() time.Time) (out SyncOutcome, err error) {
+	return RunSyncIn(ctx, src, dst, prep, OsFiles{}, planPath, opts, now)
 }
 
 // RunSyncIn is [RunSync] with the plan and its journal kept in files under
-// planName.
-func RunSyncIn(ctx context.Context, src SourceI, dst ClientI, prep *SyncPrepared, files FilesI, planName string, restart bool, opts SyncOptions, now func() time.Time) (out SyncOutcome, err error) {
+// planName. When files is a [LockerI], the plan is locked for the run, and a
+// second run of it is refused while the first holds it.
+func RunSyncIn(ctx context.Context, src SourceI, dst ClientI, prep *SyncPrepared, files FilesI, planName string, opts SyncOptions, now func() time.Time) (out SyncOutcome, err error) {
 	if len(prep.Stale) > 0 {
 		err = eb.Build().Int("stale", len(prep.Stale)).Errorf("plan is stale: %w", ErrStale)
 		return
@@ -330,8 +355,20 @@ func RunSyncIn(ctx context.Context, src SourceI, dst ClientI, prep *SyncPrepared
 	if len(prep.Chosen) == 0 {
 		return
 	}
+	if l, ok := files.(LockerI); ok {
+		var unlock func() error
+		unlock, err = l.Lock(planName)
+		if err != nil {
+			return
+		}
+		defer func() {
+			if uerr := unlock(); err == nil {
+				err = uerr
+			}
+		}()
+	}
 	plan := &prep.Plan
-	out.Run, out.Resumed, err = BeginRun(plan, restart, now())
+	out.Run, out.Resumed, err = BeginRun(plan, prep.Request.Restart, now())
 	if err != nil {
 		return
 	}

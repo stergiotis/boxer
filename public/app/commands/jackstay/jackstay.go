@@ -36,7 +36,6 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -278,12 +277,15 @@ func scanClient(cfg chclient.Config) (q *chclient.Client) {
 }
 
 // parseRefs reads database.name references; the first dot separates, since a
-// table name may hold dots and a database name rarely does.
-func parseRefs(entries []string) (refs []datacatalog.TableRef) {
+// table name may hold dots and a database name rarely does. A reference
+// without both parts names no table, so it is refused rather than matching
+// nothing.
+func parseRefs(entries []string) (refs []datacatalog.TableRef, err error) {
 	for _, e := range entries {
-		db, name, found := strings.Cut(e, ".")
-		if !found {
-			db, name = "", e
+		db, name, found := strings.Cut(strings.TrimSpace(e), ".")
+		if !found || db == "" || name == "" {
+			err = eb.Build().Str("table", e).Errorf("expected database.name")
+			return
 		}
 		refs = append(refs, datacatalog.TableRef{Database: db, Name: name})
 	}
@@ -485,6 +487,11 @@ func newDiffCommand() *cli.Command {
 			ctx := c.Context
 			w := os.Stdout
 			path := c.Path("plan")
+			var only []datacatalog.TableRef
+			only, err = parseRefs(c.StringSlice("table"))
+			if err != nil {
+				return
+			}
 			var plan jk.Plan
 			plan, err = jk.LoadPlan(path)
 			if err != nil {
@@ -502,7 +509,7 @@ func newDiffCommand() *cli.Command {
 				Final:    c.Bool("final"),
 				Chunking: jk.DefaultChunkingOptions(),
 				Diff:     jk.DiffOptions{PairThreshold: c.Uint64("pair-threshold"), PairBudget: c.Uint64("pair-budget"), MaxExamples: def.MaxExamples},
-				Only:     parseRefs(c.StringSlice("table")),
+				Only:     only,
 				Progress: func(i int, n int, pt *jk.PlanTable) {
 					if prev != nil {
 						printDiff(w, prev, time.Since(started))
@@ -580,22 +587,6 @@ func printDiff(w io.Writer, pt *jk.PlanTable, took time.Duration) {
 	}
 }
 
-func parseFraction(s string) (num uint32, den uint32, err error) {
-	a, b, found := strings.Cut(s, "/")
-	var n, d uint64
-	if found {
-		n, err = strconv.ParseUint(strings.TrimSpace(a), 10, 32)
-		if err == nil {
-			d, err = strconv.ParseUint(strings.TrimSpace(b), 10, 32)
-		}
-	}
-	if !found || err != nil || n == 0 || d == 0 || n > d {
-		err = eb.Build().Str("sample", s).Errorf("expected a fraction num/den with 0 < num <= den")
-		return
-	}
-	return uint32(n), uint32(d), nil
-}
-
 func newSyncCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "sync",
@@ -641,7 +632,7 @@ func newSyncCommand() *cli.Command {
 			}
 			dstC := scanClient(jk.TargetClientConfig(plan.Target))
 			var prep jk.SyncPrepared
-			prep, err = jk.PrepareSyncStep(ctx, srcC, dstC, &plan, req)
+			prep, err = jk.PrepareSyncStep(ctx, srcC, dstC, &plan, req, time.Now())
 			if err != nil {
 				return
 			}
@@ -669,13 +660,12 @@ func newSyncCommand() *cli.Command {
 			mon.attach(&opts)
 			w = mon.bar.LogWriter()
 			floor := jk.FreeFloor{MinFreeBytes: c.Uint64("min-free-bytes"), MinFreeFraction: c.Float64("min-free-fraction"), Poll: jk.DefaultFreeFloor().Poll}
-			opts.BeforeChunk = func(ctx context.Context, pt *jk.PlanTable) error {
-				return floor.WaitForFree(ctx, dstC, pt.Target, func(low []jk.DiskInfo) {
-					for _, d := range low {
-						mon.bar.Printf("  waiting: target disk %s has %s free, below the floor; free space or Ctrl-C (the run resumes later)\n",
-							d.Name, progressest.FormatBytes(int64(d.FreeSpace)))
-					}
-				})
+			opts.FreeFloor = &floor
+			opts.OnLowDisk = func(low []jk.DiskInfo) {
+				for _, d := range low {
+					mon.bar.Printf("  waiting: target disk %s has %s free, below the floor; free space or Ctrl-C (the run resumes later)\n",
+						d.Name, progressest.FormatBytes(int64(d.FreeSpace)))
+				}
 			}
 			opts.BeforeTable = func(pt *jk.PlanTable) {
 				mon.beginTable(pt)
@@ -688,11 +678,10 @@ func newSyncCommand() *cli.Command {
 					progressest.FormatDuration(mon.tableTook()))
 			}
 			opts.Progress = func(r jk.ChunkResult) {
-				mon.chunk(r)
 				_, _ = fmt.Fprintln(w, chunkLine(r))
 			}
 			var out jk.SyncOutcome
-			out, err = jk.RunSync(ctx, srcC, dstC, &prep, path, req.Restart, opts, time.Now)
+			out, err = jk.RunSync(ctx, srcC, dstC, &prep, path, opts, time.Now)
 			mon.stop()
 			if out.Run.RunId != "" {
 				verb := "began"
@@ -731,23 +720,19 @@ func parseSyncRequest(c *cli.Context) (req jk.SyncRequest, compression string, e
 		return
 	}
 	if req.Mode == jk.SyncModeSample {
-		req.SampleNum, req.SampleDen, err = parseFraction(c.String("sample"))
+		req.SampleNum, req.SampleDen, err = jk.ParseFraction(c.String("sample"))
 		if err != nil {
 			return
 		}
 	}
-	req.Only = parseRefs(c.StringSlice("table"))
+	req.Only, err = parseRefs(c.StringSlice("table"))
+	if err != nil {
+		return
+	}
 	req.Restart = c.Bool("restart")
 	req.Chunking = jk.DefaultChunkingOptions()
 	req.Headroom = c.Float64("headroom")
-	compression = c.String("compression")
-	switch compression {
-	case "zstd", "gzip":
-	case "none":
-		compression = ""
-	default:
-		err = eb.Build().Str("compression", compression).Errorf("expected zstd, gzip or none")
-	}
+	compression, err = jk.ParseCompression(c.String("compression"))
 	return
 }
 
@@ -855,14 +840,6 @@ func (inst *syncMonitor) beginTable(pt *jk.PlanTable) {
 
 func (inst *syncMonitor) tableTook() (d time.Duration) {
 	return time.Since(inst.tableStart)
-}
-
-// chunk credits a chunk an earlier call of the run verified, which the relay
-// never counted.
-func (inst *syncMonitor) chunk(r jk.ChunkResult) {
-	if r.Status == jk.ChunkStatusDone {
-		inst.rows.Add(int64(r.Rows))
-	}
 }
 
 func printSyncPreview(w io.Writer, tables []*jk.PlanTable) {

@@ -51,6 +51,9 @@ type App struct {
 	// kq reads the window tables the coordinator queries (ADR-0276 §SD2).
 	kq    *keelsonquery.Client
 	coord *coordinator
+	// questions lets the model ask the person with a form (ask_user); the
+	// turn is the coordinator's tool loop then too, with or without Apps.
+	questions bool
 
 	conv *conversation
 	// keep is the Keep toggle; a conversation takes it at its first send.
@@ -123,7 +126,8 @@ var _ app.AppI = (*App)(nil)
 
 func newApp() (inst *App) {
 	inst = &App{ids: c.NewWidgetIdStack(), keep: true, draft: DraftSeed.Get(), conv: newConversation(), apps: AppsSeed.Get() || registeredCoordinator(),
-		advanced: AdvancedSeed.Get(), pubs: newStatsPublishers(), perms: defaultPermissions(), opTools: OperationToolsSeed.Get()}
+		questions: QuestionsSeed.Get(), advanced: AdvancedSeed.Get(), pubs: newStatsPublishers(), perms: defaultPermissions(),
+		opTools: OperationToolsSeed.Get()}
 	return
 }
 
@@ -257,15 +261,16 @@ func (inst *App) startTurn(text string) (started bool) {
 	}
 	conv := inst.conv
 	if !conv.started {
-		conv.keep, conv.apps = inst.keep, inst.apps
+		conv.keep, conv.apps, conv.questions = inst.keep, inst.apps, inst.questions
 	}
 	req := conv.request(text)
 	cli := inst.cli
 	var coord *coordinator
-	if conv.apps && inst.coord != nil {
+	if (conv.apps || conv.questions) && inst.coord != nil {
 		coord = inst.coord
+		coord.offer(conv.apps, conv.questions)
 		if req.Messages[0].Role != openaichat.ChatRoleSystem {
-			req.Messages = append([]openaichat.Message{{Role: openaichat.ChatRoleSystem, Content: coordinatorPrompt}}, req.Messages...)
+			req.Messages = append([]openaichat.Message{{Role: openaichat.ChatRoleSystem, Content: systemPrompt(conv.apps, conv.questions)}}, req.Messages...)
 		}
 	}
 	ok := inst.turn.StartReporting(nil, bgjob.Spec{Kind: "chat-turn", Title: "answer"},

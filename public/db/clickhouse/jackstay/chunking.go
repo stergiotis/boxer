@@ -1,11 +1,16 @@
 package jackstay
 
 import (
+	"bytes"
+	"cmp"
 	"context"
+	"encoding/hex"
 	"math"
+	"math/big"
 	"math/bits"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/stergiotis/boxer/public/gov/datacatalog"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -109,15 +114,18 @@ func DefaultChunkingOptions() (opts ChunkingOptions) {
 }
 
 // leavesFor picks a power-of-two leaf count so that a chunk of chunkRows rows
-// has leaves of about TargetLeafRows rows.
+// has leaves of about TargetLeafRows rows, at most the largest power of two
+// not above MaxLeaves.
 func leavesFor(chunkRows uint64, opts ChunkingOptions) (leaves uint32) {
 	if opts.TargetLeafRows == 0 || chunkRows <= opts.TargetLeafRows {
 		return 1
 	}
+	limit := uint32(1) << (31 - bits.LeadingZeros32(max(opts.MaxLeaves, 1)))
 	want := (chunkRows + opts.TargetLeafRows - 1) / opts.TargetLeafRows
-	leaves = uint32(1) << (64 - bits.LeadingZeros64(want-1))
-	leaves = min(leaves, max(opts.MaxLeaves, 1))
-	return
+	if want >= uint64(limit) {
+		return limit
+	}
+	return uint32(1) << (64 - bits.LeadingZeros64(want-1))
 }
 
 // leavesPerChunk sizes the leaves of a table of rows rows cut into chunks
@@ -148,16 +156,88 @@ func rangeIndex(id string) (i int, ok bool) {
 	return i, true
 }
 
-// orderableType reports whether a range of values of a column of this type
-// can be written as `lo <= x AND x < hi` with literal bounds.
-func orderableType(typ string) (ok bool) {
-	t := stripLowCardinality(typ)
-	for _, p := range []string{"Int", "UInt", "Float", "Decimal", "Date", "DateTime", "String", "FixedString", "UUID", "IPv4", "IPv6", "Enum8", "Enum16", "Bool"} {
-		if strings.HasPrefix(t, p) {
-			return true
-		}
+// boundOrderE is how the text of a range bound orders, in the way ClickHouse
+// orders the values it stands for. Only types whose order the text gives back
+// exactly are range-chunked: a bound out of order in the column's own order
+// sends rows to a chunk whose predicate selects none of them (ADR-0259 §SD4).
+// IPv4, IPv6, UUID and Enum values compare by a number their text does not
+// order by, so they are left out.
+//
+//codelint:enum-prefix=boundOrder
+type boundOrderE uint8
+
+const (
+	// boundOrderNone: the type is not range-chunked.
+	boundOrderNone boundOrderE = iota
+	// boundOrderInt: decimal integers of any width.
+	boundOrderInt
+	// boundOrderFloat: Float32/Float64 text; NaN is never a bound.
+	boundOrderFloat
+	// boundOrderDecimal: decimal fractions.
+	boundOrderDecimal
+	// boundOrderText: fixed-width text whose bytes order as the values do —
+	// dates, date-times in UTC, Bool.
+	boundOrderText
+	// boundOrderBytes: String and FixedString, compared byte by byte. The
+	// sample is read as hex, so bytes JSON cannot carry are seen as they are.
+	boundOrderBytes
+)
+
+// boundOrderOf classifies a column type for range chunking.
+func boundOrderOf(typ string) (o boundOrderE) {
+	name, _, _ := strings.Cut(stripLowCardinality(typ), "(")
+	switch strings.TrimSpace(name) {
+	case "Int8", "Int16", "Int32", "Int64", "Int128", "Int256",
+		"UInt8", "UInt16", "UInt32", "UInt64", "UInt128", "UInt256":
+		return boundOrderInt
+	case "Float32", "Float64":
+		return boundOrderFloat
+	case "Decimal", "Decimal32", "Decimal64", "Decimal128", "Decimal256":
+		return boundOrderDecimal
+	case "Date", "Date32", "DateTime", "DateTime64", "Bool":
+		return boundOrderText
+	case "String", "FixedString":
+		return boundOrderBytes
 	}
-	return false
+	return boundOrderNone
+}
+
+// orderableType reports whether a range of values of a column of this type
+// can be written as `lo <= x AND x < hi` with literal bounds whose order the
+// bound text gives back exactly.
+func orderableType(typ string) (ok bool) {
+	return boundOrderOf(typ) != boundOrderNone
+}
+
+// compareBounds orders two bound texts as ClickHouse orders the values. err
+// is set when a text is not a value of the order, or is NaN.
+func compareBounds(o boundOrderE, a string, b string) (r int, err error) {
+	switch o {
+	case boundOrderInt:
+		x, okx := new(big.Int).SetString(a, 10)
+		y, oky := new(big.Int).SetString(b, 10)
+		if !okx || !oky {
+			return 0, eb.Build().Str("bound", a).Str("next", b).Errorf("range bound is not an integer")
+		}
+		return x.Cmp(y), nil
+	case boundOrderFloat:
+		x, ex := strconv.ParseFloat(a, 64)
+		y, ey := strconv.ParseFloat(b, 64)
+		if ex != nil || ey != nil || math.IsNaN(x) || math.IsNaN(y) {
+			return 0, eb.Build().Str("bound", a).Str("next", b).Errorf("range bound is not a number")
+		}
+		return cmp.Compare(x, y), nil
+	case boundOrderDecimal:
+		x, okx := new(big.Rat).SetString(a)
+		y, oky := new(big.Rat).SetString(b)
+		if !okx || !oky {
+			return 0, eb.Build().Str("bound", a).Str("next", b).Errorf("range bound is not a decimal")
+		}
+		return x.Cmp(y), nil
+	case boundOrderText, boundOrderBytes:
+		return strings.Compare(a, b), nil
+	}
+	return 0, eh.Errorf("type is not range-chunked")
 }
 
 func stripLowCardinality(typ string) (t string) {
@@ -193,26 +273,10 @@ func boundType(typ string) (t string) {
 	return
 }
 
-// QuoteString renders s as a single-quoted ClickHouse string literal.
-func QuoteString(s string) (quoted string) {
-	var b strings.Builder
-	b.Grow(len(s) + 2)
-	b.WriteByte('\'')
-	for i := 0; i < len(s); i++ {
-		ch := s[i]
-		if ch == '\'' || ch == '\\' {
-			b.WriteByte('\\')
-		}
-		b.WriteByte(ch)
-	}
-	b.WriteByte('\'')
-	return b.String()
-}
-
-// validate checks a layout read back from a plan file: the kind is known, a
-// partition or range layout names its expressions, a range layout has a bound
-// type and distinct bounds, and Leaves is a power of two. Bounds are text of
-// a typed sort, so their order is not checked.
+// validate checks a layout read back from a plan file or derived from a
+// sample: the kind is known, a partition or range layout names its
+// expressions, a range layout has a range-chunked bound type and bounds that
+// strictly ascend in that type's order, and Leaves is a power of two.
 func (inst *Chunking) validate() (err error) {
 	switch inst.Kind {
 	case ChunkingSingle:
@@ -230,32 +294,24 @@ func (inst *Chunking) validate() (err error) {
 		if len(inst.Bounds) == 0 {
 			return eh.Errorf("range chunking has no bounds")
 		}
-		seen := make(map[string]struct{}, len(inst.Bounds))
-		for _, b := range inst.Bounds {
-			if _, dup := seen[b]; dup {
-				return eb.Build().Str("bound", b).Errorf("range chunking repeats a bound")
-			}
-			seen[b] = struct{}{}
+		o := boundOrderOf(inst.BoundType)
+		if o == boundOrderNone {
+			return eb.Build().Str("boundType", inst.BoundType).Errorf("range chunking does not order this bound type")
 		}
-		// Bounds out of order make chunk predicates overlap or leave gaps.
-		// Numeric bounds compare as numbers; the other types' text sorts
-		// as the values do.
-		numeric := false
-		for _, p := range []string{"Int", "UInt", "Float", "Decimal"} {
-			numeric = numeric || strings.HasPrefix(inst.BoundType, p)
-		}
-		for i := 1; i < len(inst.Bounds); i++ {
-			a, b := inst.Bounds[i-1], inst.Bounds[i]
-			ascending := a < b
-			if numeric {
-				fa, ea := strconv.ParseFloat(a, 64)
-				fb, eb2 := strconv.ParseFloat(b, 64)
-				if ea == nil && eb2 == nil {
-					ascending = fa < fb
-				}
+		// Bounds out of order, or equal, make chunk predicates disagree with
+		// the chunk expression.
+		for i := range inst.Bounds {
+			b := inst.Bounds[i]
+			a := b
+			if i > 0 {
+				a = inst.Bounds[i-1]
 			}
-			if !ascending {
-				return eb.Build().Str("bound", a).Str("next", b).Errorf("range bounds are not ascending")
+			r, e := compareBounds(o, a, b)
+			switch {
+			case e != nil:
+				return e
+			case i > 0 && r >= 0:
+				return eb.Build().Str("bound", a).Str("next", b).Errorf("range bounds are not strictly ascending")
 			}
 		}
 	default:
@@ -372,11 +428,12 @@ type partitionsRow struct {
 
 // DeriveChunking chooses the chunk layout of a source table (ADR-0259 §SD4):
 // partitions when the table has a partition key, else ranges of the first
-// sorting-key expression when its type is orderable and the table is large
-// enough to need more than one chunk, else a single chunk. Leaves are sized
-// for the rows of one chunk: a partitioned table's active partitions are
-// counted from system.parts first. Range bounds come from a sorted reservoir
-// sample of the source, one scan of that expression.
+// sorting-key expression when its type is orderable ([boundOrderE]) and the
+// table is large enough to need more than one chunk, else a single chunk.
+// Leaves are sized for the rows of one chunk: a partitioned table's active
+// partitions are counted from system.parts first. Range bounds come from a
+// sorted reservoir sample of the source, one scan of that expression; a
+// sample whose bounds do not pass [Chunking.validate] leaves one chunk.
 func DeriveChunking(ctx context.Context, q QueryI, ref datacatalog.TableRef, sortingKey string, partitionKey string, rows uint64, opts ChunkingOptions) (c Chunking, err error) {
 	if pk := SplitKeyExprs(partitionKey); len(pk) > 0 {
 		var parts []partitionsRow
@@ -405,16 +462,27 @@ func DeriveChunking(ctx context.Context, q QueryI, ref datacatalog.TableRef, sor
 		err = eb.Build().Str("table", ref.String()).Errorf("unable to read the chunking key type: %w", err)
 		return
 	}
-	if len(types) == 0 || !orderableType(types[0].Type) {
+	if len(types) == 0 {
+		return
+	}
+	o := boundOrderOf(types[0].Type)
+	if o == boundOrderNone {
 		return
 	}
 	bt := boundType(types[0].Type)
-	text := "toString(v)"
-	if isDateTimeType(bt) {
+	text, where := "toString(v)", ""
+	switch {
+	case isDateTimeType(bt):
 		text = "toString(v, 'UTC')"
+	case o == boundOrderBytes:
+		text = "hex(v)"
+	case o == boundOrderFloat:
+		// NaN sorts last and compares false against every bound, so it
+		// must not become one.
+		where = " WHERE NOT isNaN(" + x + ")"
 	}
 	var samples []sampleRow
-	samples, err = queryRows[sampleRow](ctx, q, "SELECT arrayMap(v -> "+text+", arraySort(groupArraySample("+strconv.Itoa(opts.SampleSize)+", 1)("+x+"))) AS sample FROM "+QuoteRef(ref)+jsonSettings)
+	samples, err = queryRows[sampleRow](ctx, q, "SELECT arrayMap(v -> "+text+", arraySort(groupArraySample("+strconv.Itoa(opts.SampleSize)+", 1)("+x+"))) AS sample FROM "+QuoteRef(ref)+where+jsonSettings)
 	if err != nil {
 		err = eb.Build().Str("table", ref.String()).Errorf("unable to sample the chunking key: %w", err)
 		return
@@ -423,31 +491,76 @@ func DeriveChunking(ctx context.Context, q QueryI, ref datacatalog.TableRef, sor
 		return
 	}
 	nChunks := int(min((rows+opts.TargetChunkRows-1)/opts.TargetChunkRows, uint64(max(opts.MaxRangeChunks, 1))))
-	bounds := pickBounds(samples[0].Sample, nChunks)
-	if len(bounds) == 0 {
-		return
-	}
-	c = Chunking{
-		Kind:      ChunkingRange,
-		Exprs:     []string{x},
-		BoundType: bt,
-		Bounds:    bounds,
-		Leaves:    leavesPerChunk(rows, uint64(len(bounds)+1), opts),
+	if r, ok := rangeChunking(x, bt, samples[0].Sample, nChunks); ok {
+		r.Leaves = leavesPerChunk(rows, uint64(len(r.Bounds)+1), opts)
+		c = r
 	}
 	return
 }
 
+// rangeChunking turns a sorted sample of the key expression x into a range
+// layout of about nChunks chunks. ok is false when the sample yields no
+// bounds, or bounds that a plan could not carry as they are or that do not
+// strictly ascend in the type's order; the table is then one chunk.
+func rangeChunking(x string, bt string, sample []string, nChunks int) (c Chunking, ok bool) {
+	o := boundOrderOf(bt)
+	values := make([]string, 0, len(sample))
+	for _, s := range sample {
+		v, valid := sampleValue(o, bt, s)
+		if !valid {
+			return
+		}
+		values = append(values, v)
+	}
+	bounds := pickBounds(values, nChunks, o)
+	if len(bounds) == 0 {
+		return
+	}
+	c = Chunking{Kind: ChunkingRange, Exprs: []string{x}, BoundType: bt, Bounds: bounds, Leaves: 1}
+	ok = c.validate() == nil
+	return
+}
+
+// sampleValue turns one sampled value into bound text. A String sample is
+// hex: valid is false for bytes a plan file cannot hold as text (invalid
+// UTF-8, NUL), and a FixedString loses the zero padding CAST adds back. A
+// Float zero loses its sign, so -0 and 0 are one bound.
+func sampleValue(o boundOrderE, bt string, s string) (v string, valid bool) {
+	switch o {
+	case boundOrderBytes:
+		b, err := hex.DecodeString(s)
+		if err != nil {
+			return "", false
+		}
+		if strings.HasPrefix(bt, "FixedString") {
+			b = bytes.TrimRight(b, "\x00")
+		}
+		if !utf8.Valid(b) || bytes.IndexByte(b, 0) >= 0 {
+			return "", false
+		}
+		return string(b), true
+	case boundOrderFloat:
+		if s == "-0" {
+			return "0", true
+		}
+	}
+	return s, true
+}
+
 // pickBounds takes nChunks-1 bounds at equal ranks of a sorted sample and drops
-// repeats, which a skewed key produces.
-func pickBounds(sorted []string, nChunks int) (bounds []string) {
+// repeats, which a skewed key produces; repeats are judged in the type's own
+// order.
+func pickBounds(sorted []string, nChunks int, o boundOrderE) (bounds []string) {
 	if nChunks < 2 || len(sorted) < 2 {
 		return
 	}
 	bounds = make([]string, 0, nChunks-1)
 	for i := 1; i < nChunks; i++ {
 		b := sorted[i*len(sorted)/nChunks]
-		if len(bounds) > 0 && bounds[len(bounds)-1] == b {
-			continue
+		if len(bounds) > 0 {
+			if r, err := compareBounds(o, bounds[len(bounds)-1], b); err == nil && r == 0 {
+				continue
+			}
 		}
 		bounds = append(bounds, b)
 	}

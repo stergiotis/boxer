@@ -347,11 +347,21 @@ func (inst *App) renderConversationSection() {
 		for range c.HoverText(tipKeep).KeepIter() {
 			c.Label("Keep: " + label).Selectable(false).Send()
 		}
-		weak("Keep and Apps are fixed at a conversation's first message; New conversation takes the settings above.")
+		if conv.questions {
+			for range c.HoverText(tipQuestions).KeepIter() {
+				c.Label("Questions: on for this conversation").Selectable(false).Send()
+			}
+		}
+		weak("Keep, Apps and Questions are fixed at a conversation's first message; New conversation takes the settings above.")
 		return
 	}
 	for range c.HoverText(tipKeep).KeepIter() {
 		c.Checkbox(inst.ids.PrepareStr("keep"), inst.keep, "Keep this conversation").SendRespVal(&inst.keep)
+	}
+	if inst.coord != nil {
+		for range c.HoverText(tipQuestions).KeepIter() {
+			c.Checkbox(inst.ids.PrepareStr("questions"), inst.questions, "Questions — let the model ask you with a form").SendRespVal(&inst.questions)
+		}
 	}
 }
 

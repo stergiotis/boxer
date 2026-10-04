@@ -2,6 +2,8 @@ package jackstay
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -11,7 +13,6 @@ import (
 	"github.com/stergiotis/boxer/public/hmi/progressest"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/bgjobrow"
@@ -158,14 +159,13 @@ func (inst *App) renderPlanRow() {
 				small(s)
 			}
 		}
-		// A click while a gesture runs is dropped rather than hiding the
-		// buttons mid-gesture.
-		busy := inst.fileJob.Running()
-		if c.Button(inst.ids.PrepareStr("import"), c.Atoms().Text("Import…").Keep()).Small().SendResp().HasPrimaryClicked() && !busy {
+		// Import replaces the plan, so it waits for every step; Export only
+		// copies it, and waits for another file gesture.
+		if inst.smallButton("import", "Import…", inst.planBusy()) {
 			inst.startImport()
 		}
 		if inst.plan != nil {
-			if c.Button(inst.ids.PrepareStr("export"), c.Atoms().Text("Export…").Keep()).Small().SendResp().HasPrimaryClicked() && !busy {
+			if inst.smallButton("export", "Export…", inst.fileJob.Running()) {
 				inst.startExport()
 			}
 		}
@@ -224,14 +224,13 @@ func (inst *App) stepAction(st stepE) (action func()) {
 	switch st {
 	case stepConnect:
 		return func() {
-			if inst.actionButton("discover", "Discover the servers", inst.discoverJob.Running()) {
+			if inst.actionButton("discover", "Discover the servers", inst.planBusy()) {
 				inst.startDiscover()
 			}
 		}
 	case stepDatabases:
 		return func() {
-			busy := inst.structureJob.Running() || inst.disc == nil
-			if inst.actionButton("plan-structure", "Plan the structure", busy) {
+			if inst.actionButton("plan-structure", "Plan the structure", inst.planBusy() || inst.disc == nil) {
 				inst.startStructure()
 			}
 		}
@@ -239,7 +238,7 @@ func (inst *App) stepAction(st stepE) (action func()) {
 		return inst.renderApplyControls
 	case stepDifferences:
 		return func() {
-			if inst.actionButton("diff", "Compare content", inst.plan == nil || inst.diffJob.Running() || inst.syncJob.Running()) {
+			if inst.actionButton("diff", "Compare content", !inst.canCompare()) {
 				inst.startDiff()
 			}
 		}
@@ -247,13 +246,33 @@ func (inst *App) stepAction(st stepE) (action func()) {
 		return inst.renderStartControls
 	case stepRun:
 		return func() {
-			if inst.actionButton("compare-again", "Compare content again", inst.plan == nil || inst.syncJob.Running() || inst.diffJob.Running()) {
+			if inst.actionButton("compare-again", "Compare content again", !inst.canCompare()) {
 				inst.step = stepDifferences
 				inst.startDiff()
 			}
 		}
 	}
 	return nil
+}
+
+// canCompare reports whether Compare can start: a plan that is not stale,
+// with a table to compare, and no other step running.
+func (inst *App) canCompare() (ok bool) {
+	return inst.plan != nil && !inst.planBusy() && len(inst.stale) == 0 && inst.diffableCount() > 0
+}
+
+// diffableCount counts the plan's tables whose content can be compared and
+// synced now, with no DDL pending.
+func (inst *App) diffableCount() (n int) {
+	if inst.plan == nil {
+		return
+	}
+	for i := range inst.plan.Tables {
+		if inst.plan.Tables[i].IsDiffable() {
+			n++
+		}
+	}
+	return
 }
 
 // renderFooter is the wizard bar: the plan's phase at the left edge, as a
@@ -348,21 +367,6 @@ func plural(n int, word string) (s string) {
 	return
 }
 
-func parseFraction(s string) (num uint32, den uint32, err error) {
-	a, b, found := strings.Cut(s, "/")
-	var n, d uint64
-	if found {
-		n, err = strconv.ParseUint(strings.TrimSpace(a), 10, 32)
-		if err == nil {
-			d, err = strconv.ParseUint(strings.TrimSpace(b), 10, 32)
-		}
-	}
-	if !found || err != nil || n == 0 || d == 0 || n > d {
-		return 0, 0, eh.Errorf("the sample must be a fraction num/den with 0 < num <= den")
-	}
-	return uint32(n), uint32(d), nil
-}
-
 // actionButton draws a button that is disabled while busy; disabled, it
 // still takes its place in the layout.
 func (inst *App) actionButton(key string, label string, busy bool) (clicked bool) {
@@ -371,6 +375,35 @@ func (inst *App) actionButton(key string, label string, busy bool) (clicked bool
 			c.UiDisable()
 		}
 		clicked = c.Button(inst.ids.PrepareStr(key), c.Atoms().Text(label).Keep()).SendResp().HasPrimaryClicked() && !busy
+	}
+	return
+}
+
+// smallButton is actionButton in the small size.
+func (inst *App) smallButton(key string, label string, busy bool) (clicked bool) {
+	for range c.HorizontalTop().KeepIter() {
+		if busy {
+			c.UiDisable()
+		}
+		clicked = c.Button(inst.ids.PrepareStr(key), c.Atoms().Text(label).Keep()).Small().SendResp().HasPrimaryClicked() && !busy
+	}
+	return
+}
+
+// confirmControls draws an action behind a second click: armLabel arms it,
+// then question names what the click will do, beside confirmLabel and a
+// Cancel. confirmed is the second click; key prefixes the controls' ids.
+func (inst *App) confirmControls(key string, armed *bool, armLabel string, question string, confirmLabel string, busy bool) (confirmed bool) {
+	if !*armed {
+		if inst.actionButton(key+"-arm", armLabel, busy) {
+			*armed = true
+		}
+		return
+	}
+	badge.New(inst.ids.PrepareStr(key+"-armed"), question).Tone(badge.ToneWarning).Variant(badge.VariantSoft).Send()
+	confirmed = inst.actionButton(key, confirmLabel, busy)
+	if c.Button(inst.ids.PrepareStr(key+"-disarm"), c.Atoms().Text("Cancel").Keep()).SendResp().HasPrimaryClicked() {
+		*armed = false
 	}
 	return
 }
@@ -524,7 +557,7 @@ func (inst *App) renderConnect() {
 		}
 		return true
 	})
-	inst.cliHint("discover --plan {plan}")
+	inst.cliHint("discover" + inst.endpointArgs())
 }
 
 // renderRecent lists the plans this window used before, newest first.
@@ -534,7 +567,7 @@ func (inst *App) renderRecent() {
 	for range c.Grid(inst.ids.PrepareStr("recent")).NumColumns(4).Striped(true).KeepIter() {
 		for i, r := range inst.recent {
 			for range c.IdScope(inst.ids.PrepareSeq(uint64(i))) {
-				if c.Button(inst.ids.PrepareStr("open"), c.Atoms().Text(r.Name).Keep()).Frame(false).SendResp().HasPrimaryClicked() && !inst.fileJob.Running() {
+				if c.Button(inst.ids.PrepareStr("open"), c.Atoms().Text(r.Name).Keep()).Frame(false).SendResp().HasPrimaryClicked() && !inst.planBusy() {
 					inst.startOpen(r.Name, false)
 				}
 				c.Label(r.Source + " → " + r.Target).Send()
@@ -622,23 +655,49 @@ func (inst *App) renderDatabases() {
 		c.Checkbox(inst.ids.PrepareStr("leeway-only"), inst.leewayOnly, "only tables that classify as leeway").SendRespVal(&inst.leewayOnly)
 	}
 	note("Planning the structure judges every table of the chosen databases against the target and writes the plan file. It changes nothing on either server.")
+	if inst.plan != nil && !inst.planServes(inst.disc.srcEp, inst.disc.dstEp) {
+		note("The open plan is between other servers; planning these writes a new plan file and leaves that one as it is.")
+	}
 	inst.cliHint(inst.structureCommand())
+}
+
+// endpointArgs is the CLI spelling of the two servers on the Connect page.
+func (inst *App) endpointArgs() (args string) {
+	src, dst := inst.endpoints()
+	return " --source " + shellQuote(src.URL) + " --source-user " + shellQuote(src.User) +
+		" --target " + shellQuote(dst.URL) + " --target-user " + shellQuote(dst.User)
 }
 
 // structureCommand is the CLI spelling of the Databases page's choices.
 func (inst *App) structureCommand() (cmd string) {
-	cmd = "structure --plan {plan}"
+	cmd = "structure" + inst.endpointArgs() + " --plan {plan}"
 	sel := inst.selection()
 	for _, db := range sel.Databases {
-		cmd += " --database " + db
+		cmd += " --database " + shellQuote(db)
 		if t, has := sel.DatabaseMap[db]; has {
-			cmd += " --map " + db + "=" + t
+			cmd += " --map " + shellQuote(db+"="+t)
 		}
 	}
 	if sel.LeewayOnly {
 		cmd += " --leeway-only"
 	}
+	refs := slices.Sorted(maps.Keys(sel.Filters))
+	for _, ref := range refs {
+		cmd += " --filter " + shellQuote(ref+"="+sel.Filters[ref])
+	}
 	return
+}
+
+// shellQuote quotes s for a POSIX shell when it holds anything but the
+// characters a word needs no quoting for.
+func shellQuote(s string) (q string) {
+	plain := s != "" && strings.IndexFunc(s, func(r rune) bool {
+		return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("-_./:=@,+", r))
+	}) < 0
+	if plain {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // --- 3 Structure -----------------------------------------------------------------
@@ -741,39 +800,20 @@ func (inst *App) renderStructure() {
 	inst.cliHint("apply-ddl --plan {plan} --confirm")
 }
 
-func (inst *App) pendingStatements() (n int) {
-	n = len(inst.plan.DatabaseDDL)
-	for _, t := range inst.plan.Tables {
-		n += len(t.DDL)
-	}
-	return
-}
-
 // renderApplyControls is the Structure page's action: apply the DDL,
 // behind a second click that names the target.
 func (inst *App) renderApplyControls() {
 	if inst.plan == nil {
 		return
 	}
-	n := inst.pendingStatements()
+	n, _ := inst.ddlSummary()
 	if n == 0 {
 		small("the target's structure is in line")
 		return
 	}
-	busy := inst.structureJob.Running()
-	if !inst.applyArmed {
-		if inst.actionButton("arm-apply", "Apply the DDL…", busy) {
-			inst.applyArmed = true
-		}
-		return
-	}
-	badge.New(inst.ids.PrepareStr("armed"), "Run "+plural(n, "statement")+" on "+hostLabel(inst.plan.Target.URL)+"?").
-		Tone(badge.ToneWarning).Variant(badge.VariantSoft).Send()
-	if inst.actionButton("apply", "Run on the target", busy) {
+	question := "Run " + plural(n, "statement") + " on " + hostLabel(inst.plan.Target.URL) + "?"
+	if inst.confirmControls("apply", &inst.applyArmed, "Apply the DDL…", question, "Run on the target", inst.planBusy()) {
 		inst.startApply()
-	}
-	if c.Button(inst.ids.PrepareStr("disarm"), c.Atoms().Text("Cancel").Keep()).SendResp().HasPrimaryClicked() {
-		inst.applyArmed = false
 	}
 }
 
@@ -850,7 +890,7 @@ func (inst *App) renderFilter(pt *jk.PlanTable) {
 			small("connect to the servers to plan with this filter")
 		}
 	case changed:
-		if inst.actionButton("apply-filter", "Plan with this filter", inst.structureJob.Running()) {
+		if inst.actionButton("apply-filter", "Plan with this filter", inst.planBusy()) {
 			inst.startStructure()
 		}
 	}

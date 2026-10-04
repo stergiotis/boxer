@@ -146,10 +146,13 @@ func (inst *Bridge) startPicker(ids *c.WidgetIdStack, req *fsbroker.PendingReque
 	mode, title := pickerOptionsFor(req.Op, inst.cfg.TitleOverride)
 	title = attributedTitle(title, req.AppId)
 	inst.picker = filepicker.New(ids, "fs-picker", filepicker.Options{
-		Mode:         mode,
-		FS:           inst.fsys,
-		StartDir:     inst.cfg.StartDir,
-		Title:        title,
+		Mode:     mode,
+		FS:       inst.fsys,
+		StartDir: inst.cfg.StartDir,
+		Title:    title,
+		// The pick grants the requesting app a handle: a modal, so no
+		// window can cover the dialog that asks for it.
+		Modal:        true,
 		ColumnWidths: inst.cfg.ColumnWidths,
 		Tasks:        inst.cfg.Tasks,
 		// Pre-fill the "Save as" filename when the requesting app suggested one.

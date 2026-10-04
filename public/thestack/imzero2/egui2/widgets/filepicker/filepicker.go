@@ -184,6 +184,11 @@ type Options struct {
 	// Title is the window title; empty uses the mode's default ("Open",
 	// "Save", "Pick folder").
 	Title string
+	// Modal draws the dialog as a modal instead of a window: centred over a
+	// backdrop that blocks the rest of the viewport until the person picks
+	// or cancels, at the mode's default size, with the title as a heading.
+	// For a pick that grants something, so no window can cover it.
+	Modal bool
 	// StartDir is the initial cwd, an io/fs path — forward slashes only, no
 	// leading "/", "." for the FS root. Empty means the FS root. Read on the
 	// first Show.
@@ -550,6 +555,30 @@ func (inst *Dialog) Render() (ev Events) {
 		winId = c.MakeAbsoluteIdHighEntropy(ids.PrepareStr("window").Derive())
 	}
 
+	if inst.Opts.Modal {
+		for range c.Modal(winId).KeepIter() {
+			// A modal is sized by its body and cannot be resized: the
+			// body gets the window's default size as a fixed box.
+			c.UiSetMinWidth(defaultW)
+			c.UiSetMaxWidth(defaultW)
+			c.UiSetMinHeight(defaultH)
+			c.UiSetMaxHeight(defaultH)
+			// The title a window carries in its bar, as a panel of its
+			// own: the body is laid out in panels, which would otherwise
+			// take the whole box and draw over it.
+			var titleId c.WidgetIdCreatorI
+			for range c.IdScope(ids.PrepareStr(inst.scopeKey)) {
+				titleId = c.MakeAbsoluteIdHighEntropy(ids.PrepareStr("modal-title").Derive())
+			}
+			for range c.PanelTopInside(titleId).Resizable(false).KeepIter() {
+				for rt := range c.RichTextLabel(inst.title()) {
+					rt.Heading()
+				}
+			}
+			ev = inst.renderScoped(ids)
+		}
+		return
+	}
 	label := c.WidgetText().Text(inst.title()).Keep()
 	for range c.Window(winId, label).
 		Resizable(true).
@@ -560,21 +589,27 @@ func (inst *Dialog) Render() (ev Events) {
 		MinWidth(420).
 		MinHeight(320).
 		KeepIter() {
+		ev = inst.renderScoped(ids)
+	}
+	return
+}
 
-		for range c.IdScope(ids.PrepareStr(inst.scopeKey)) {
-			ev.Action, ev.Paths = inst.renderBody(ids)
-			if ev.Action != ActionNone {
-				inst.open = false
-				// Commit consumes the user's intent — wipe the
-				// selection so a subsequent Show doesn't re-highlight
-				// the prior pick. Cancel leaves state intact so an
-				// accidental Cancel + re-Show resumes where the user
-				// was. commitPaths has already been pulled into paths.
-				if ev.Action != ActionCancel {
-					inst.clearSelection()
-				}
-				inst.st.StopSearch()
+// renderScoped is the dialog's body under its scope, and what the person
+// did; a commit or a cancel closes the dialog.
+func (inst *Dialog) renderScoped(ids *c.WidgetIdStack) (ev Events) {
+	for range c.IdScope(ids.PrepareStr(inst.scopeKey)) {
+		ev.Action, ev.Paths = inst.renderBody(ids)
+		if ev.Action != ActionNone {
+			inst.open = false
+			// Commit consumes the user's intent — wipe the
+			// selection so a subsequent Show doesn't re-highlight
+			// the prior pick. Cancel leaves state intact so an
+			// accidental Cancel + re-Show resumes where the user
+			// was. commitPaths has already been pulled into paths.
+			if ev.Action != ActionCancel {
+				inst.clearSelection()
 			}
+			inst.st.StopSearch()
 		}
 	}
 	return

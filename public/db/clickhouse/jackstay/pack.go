@@ -66,12 +66,10 @@ type PackTable struct {
 	Columns     []ColumnInfo `json:"columns"`
 	// Filter is the effective row filter: the operator's, and the sample
 	// predicate when the export sampled. The pack holds that slice only.
-	Filter      string   `json:"filter,omitempty"`
-	CopyColumns []string `json:"copyColumns"`
-	Chunking    Chunking `json:"chunking"`
-	// Done is set once the table's chunk list matched the source's.
-	Done   bool        `json:"done"`
-	Chunks []PackChunk `json:"chunks"`
+	Filter      string      `json:"filter,omitempty"`
+	CopyColumns []string    `json:"copyColumns"`
+	Chunking    Chunking    `json:"chunking"`
+	Chunks      []PackChunk `json:"chunks"`
 }
 
 // PackChunk is one chunk file and the digest of the rows it holds.

@@ -5,109 +5,12 @@ import (
 	"io"
 	"slices"
 	"strconv"
-	"strings"
 	"sync/atomic"
 	"time"
 
-	gonanoid "github.com/matoous/go-nanoid/v2"
-
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
-
-// SyncModeE is what a sync copies of a table (ADR-0259 §SD5).
-type SyncModeE uint8
-
-const (
-	// SyncModeFull copies every chunk.
-	SyncModeFull SyncModeE = iota
-	// SyncModeRepair makes the target's differing leaves equal to the
-	// source's, and only those the plan's diff showed.
-	SyncModeRepair
-	// SyncModeSample copies SampleNum of every SampleDen keys.
-	SyncModeSample
-)
-
-var AllSyncModes = []SyncModeE{SyncModeFull, SyncModeRepair, SyncModeSample}
-
-func (inst SyncModeE) String() (s string) {
-	switch inst {
-	case SyncModeFull:
-		return "full"
-	case SyncModeRepair:
-		return "repair"
-	case SyncModeSample:
-		return "sample"
-	}
-	return "invalid"
-}
-
-func (inst SyncModeE) MarshalText() (text []byte, err error) {
-	s := inst.String()
-	if s == "invalid" {
-		err = eb.Build().Uint8("mode", uint8(inst)).Errorf("invalid sync mode")
-		return
-	}
-	return []byte(s), nil
-}
-
-func (inst *SyncModeE) UnmarshalText(text []byte) (err error) {
-	for _, m := range AllSyncModes {
-		if m.String() == string(text) {
-			*inst = m
-			return
-		}
-	}
-	return eb.Build().Str("mode", string(text)).Errorf("unknown sync mode")
-}
-
-// ExistingPolicyE is what a full or sample sync does with a target table that
-// already holds rows when the run begins.
-type ExistingPolicyE uint8
-
-const (
-	// ExistingPolicyRefuse stops before copying anything.
-	ExistingPolicyRefuse ExistingPolicyE = iota
-	// ExistingPolicyAppend inserts beside the existing rows. The run does not
-	// own them, so a chunk that fails verification cannot be retried.
-	ExistingPolicyAppend
-	// ExistingPolicyReplace clears each target chunk before copying it.
-	ExistingPolicyReplace
-)
-
-var AllExistingPolicies = []ExistingPolicyE{ExistingPolicyRefuse, ExistingPolicyAppend, ExistingPolicyReplace}
-
-func (inst ExistingPolicyE) String() (s string) {
-	switch inst {
-	case ExistingPolicyRefuse:
-		return "refuse"
-	case ExistingPolicyAppend:
-		return "append"
-	case ExistingPolicyReplace:
-		return "replace"
-	}
-	return "invalid"
-}
-
-func (inst ExistingPolicyE) MarshalText() (text []byte, err error) {
-	s := inst.String()
-	if s == "invalid" {
-		err = eb.Build().Uint8("policy", uint8(inst)).Errorf("invalid existing-rows policy")
-		return
-	}
-	return []byte(s), nil
-}
-
-func (inst *ExistingPolicyE) UnmarshalText(text []byte) (err error) {
-	for _, p := range AllExistingPolicies {
-		if p.String() == string(text) {
-			*inst = p
-			return
-		}
-	}
-	return eb.Build().Str("policy", string(text)).Errorf("unknown existing-rows policy")
-}
 
 // TableSync is the operator's choice for one table on the Sync step.
 type TableSync struct {
@@ -121,61 +24,6 @@ type TableSync struct {
 type SyncRun struct {
 	RunId     string    `json:"runId"`
 	StartedAt time.Time `json:"startedAt"`
-}
-
-// ChunkStatusE is the outcome of one chunk.
-type ChunkStatusE uint8
-
-const (
-	// ChunkStatusCopied: copied and verified in this call.
-	ChunkStatusCopied ChunkStatusE = iota
-	// ChunkStatusDone: verified by an earlier call of the same run, and the
-	// source has not moved since.
-	ChunkStatusDone
-	// ChunkStatusIdentical: repair found nothing to do.
-	ChunkStatusIdentical
-	// ChunkStatusStale: repair found the target no longer as the plan's diff
-	// showed it, and touched nothing.
-	ChunkStatusStale
-	// ChunkStatusFailed: the chunk could not be copied and verified.
-	ChunkStatusFailed
-)
-
-var AllChunkStatuses = []ChunkStatusE{ChunkStatusCopied, ChunkStatusDone, ChunkStatusIdentical, ChunkStatusStale, ChunkStatusFailed}
-
-func (inst ChunkStatusE) MarshalText() (text []byte, err error) {
-	s := inst.String()
-	if s == "invalid" {
-		err = eb.Build().Uint8("status", uint8(inst)).Errorf("invalid chunk status")
-		return
-	}
-	return []byte(s), nil
-}
-
-func (inst *ChunkStatusE) UnmarshalText(text []byte) (err error) {
-	for _, st := range AllChunkStatuses {
-		if st.String() == string(text) {
-			*inst = st
-			return
-		}
-	}
-	return eb.Build().Str("status", string(text)).Errorf("unknown chunk status")
-}
-
-func (inst ChunkStatusE) String() (s string) {
-	switch inst {
-	case ChunkStatusCopied:
-		return "copied"
-	case ChunkStatusDone:
-		return "done"
-	case ChunkStatusIdentical:
-		return "identical"
-	case ChunkStatusStale:
-		return "stale"
-	case ChunkStatusFailed:
-		return "failed"
-	}
-	return "invalid"
 }
 
 // ChunkResult reports one chunk.
@@ -254,16 +102,23 @@ type SyncOptions struct {
 	Bytes *atomic.Int64
 	// Rows, when set, is advanced as rows land on the target, read from the
 	// INSERT's written_rows while it runs, and wound back when a copy fails
-	// verification (ADR-0259 §SD6).
+	// verification (ADR-0259 §SD6). A chunk an earlier call of the run
+	// verified is credited with its rows when it is skipped.
 	Rows *atomic.Int64
+	// FreeFloor, when set, is waited for before each chunk, ahead of
+	// BeforeChunk: the sync pauses while a target disk is below it
+	// (ADR-0259 §SD6). OnLowDisk, when set, is told of the low disks on each
+	// look.
+	FreeFloor *FreeFloor
+	OnLowDisk func(low []DiskInfo)
 	// PollPeriod is how often Rows is refreshed.
 	PollPeriod time.Duration
 	// Compression is the HTTP content encoding the relay asks the source
 	// for ("zstd", "gzip"; empty for none). The compressed bytes are passed
 	// to the target as they are, never decoded in between.
 	Compression string
-	// BeforeChunk, when set, runs before each chunk; the disk floor wait
-	// lives here. An error stops the table's sync.
+	// BeforeChunk, when set, runs before each chunk. An error stops the
+	// table's sync.
 	BeforeChunk func(ctx context.Context, pt *PlanTable) (err error)
 	// BeforeTable and AfterTable, when set, bracket each table of a run;
 	// AfterTable runs once the table's report is stored in the plan.
@@ -360,66 +215,6 @@ func leafSetOf(chunks map[string]*chunkDigests) (ls leafSet) {
 	return
 }
 
-type countingReader struct {
-	r     io.Reader
-	n     int64
-	total *atomic.Int64
-}
-
-func (inst *countingReader) Read(p []byte) (n int, err error) {
-	n, err = inst.r.Read(p)
-	inst.n += int64(n)
-	if inst.total != nil {
-		inst.total.Add(int64(n))
-	}
-	return
-}
-
-// relay streams the Native rows of srcSpec from src into dstSpec's table on
-// dst, undecoded and, when the source compressed them, still compressed. It
-// returns the bytes that crossed and the rows it counted into opts.Rows, so a
-// caller whose verification fails can wind them back.
-func relay(ctx context.Context, src SourceI, dst ClientI, srcSpec *DigestSpec, dstSpec *DigestSpec, opts *SyncOptions, expectedRows uint64) (bytes uint64, counted int64, err error) {
-	var queryId string
-	queryId, err = gonanoid.New()
-	if err != nil {
-		err = eh.Errorf("unable to mint a query id: %w", err)
-		return
-	}
-	queryId = "jackstay-" + queryId
-	var body io.ReadCloser
-	var encoding string
-	body, encoding, err = src.stream(ctx, srcSpec, opts.Compression)
-	if err != nil {
-		err = eh.Errorf("unable to read source rows: %w", err)
-		return
-	}
-	defer func() { _ = body.Close() }()
-	stop := make(chan struct{})
-	seenCh := make(chan int64, 1)
-	go func() {
-		seenCh <- pollWrittenRows(ctx, dst, queryId, max(opts.PollPeriod, 100*time.Millisecond), opts.Rows, stop)
-	}()
-	cr := &countingReader{r: body, total: opts.Bytes}
-	err = dst.InsertStream(ctx, dstSpec.InsertNative(), cr, chclient.StreamOptions{QueryId: queryId, ContentEncoding: encoding})
-	close(stop)
-	counted = <-seenCh
-	bytes = uint64(cr.n)
-	if err != nil {
-		if opts.Rows != nil {
-			opts.Rows.Add(-counted)
-		}
-		counted = 0
-		err = eh.Errorf("unable to insert rows on the target: %w", err)
-		return
-	}
-	if opts.Rows != nil {
-		opts.Rows.Add(int64(expectedRows) - counted)
-	}
-	counted = int64(expectedRows)
-	return
-}
-
 func (inst *tableSyncer) unwind(counted int64) {
 	if inst.opts.Rows != nil && counted != 0 {
 		inst.opts.Rows.Add(-counted)
@@ -427,21 +222,25 @@ func (inst *tableSyncer) unwind(counted int64) {
 }
 
 // checkStart refuses to resume a table under settings other than those the
-// run began it under: the mode, the existing-rows policy and the row filter.
+// run began it under: the mode, the existing-rows policy, the sample fraction
+// and the row filter. A start entry without a fraction predates its recording
+// and is taken as matching.
 func checkStart(e JournalEntry, pt *PlanTable) (err error) {
 	if e.Mode != pt.Sync.Mode.String() || e.Existing != pt.Sync.Existing.String() {
 		return eb.Build().Str("table", pt.Source.String()).Str("begun", e.Mode+"/"+e.Existing).Str("now", pt.Sync.Mode.String()+"/"+pt.Sync.Existing.String()).
 			Errorf("the run began this table under other settings; keep them, or restart the run")
+	}
+	if pt.Sync.Mode == SyncModeSample && e.SampleDen != 0 && (e.SampleNum != pt.Sync.SampleNum || e.SampleDen != pt.Sync.SampleDen) {
+		return eb.Build().Str("table", pt.Source.String()).
+			Str("begun", strconv.FormatUint(uint64(e.SampleNum), 10)+"/"+strconv.FormatUint(uint64(e.SampleDen), 10)).
+			Str("now", strconv.FormatUint(uint64(pt.Sync.SampleNum), 10)+"/"+strconv.FormatUint(uint64(pt.Sync.SampleDen), 10)).
+			Errorf("the run began this table under another sample; keep it, or restart the run")
 	}
 	if e.Filter != pt.Filter {
 		return eb.Build().Str("table", pt.Source.String()).Str("begun", e.Filter).Str("now", pt.Filter).
 			Errorf("the run began this table under another row filter; keep it, or restart the run")
 	}
 	return
-}
-
-func isMergeTreeEngine(engine string) (ok bool) {
-	return strings.HasSuffix(engine, "MergeTree")
 }
 
 // tableSyncer carries one table's sync state across its chunks.
@@ -545,12 +344,21 @@ func SyncTable(ctx context.Context, src SourceI, dst ClientI, pt *PlanTable, j *
 		if err = ctx.Err(); err != nil {
 			return
 		}
+		if opts.FreeFloor != nil {
+			if err = opts.FreeFloor.WaitForFree(ctx, dst, pt.Target, opts.OnLowDisk); err != nil {
+				return
+			}
+		}
 		if opts.BeforeChunk != nil {
 			if err = opts.BeforeChunk(ctx, pt); err != nil {
 				return
 			}
 		}
 		r := chunk()
+		if r.Status == ChunkStatusDone && opts.Rows != nil {
+			// The relay never counted a chunk an earlier call verified.
+			opts.Rows.Add(int64(doneRows(pt, r)))
+		}
 		rep.add(r)
 		if opts.Progress != nil {
 			opts.Progress(r)
@@ -605,11 +413,17 @@ func (inst *tableSyncer) claim(ctx context.Context) (owned bool, err error) {
 	return empty, err
 }
 
-func (inst *tableSyncer) targetPid(srcPid string) (pid string) {
-	if inst.sameKey {
-		return srcPid
+// targetPid is the target partition id of a chunk: dstPid when known, else
+// the source's. A partition id names the same rows on both sides only when
+// both tables partition by the same key; otherwise there is none.
+func (inst *tableSyncer) targetPid(srcPid string, dstPid string) (pid string) {
+	switch {
+	case !inst.sameKey:
+		return ""
+	case dstPid != "":
+		return dstPid
 	}
-	return ""
+	return srcPid
 }
 
 // targetOnlyChunks lists the target's chunks that the source's list lacks.
@@ -645,14 +459,14 @@ func (inst *tableSyncer) clearChunk(ctx context.Context, c chunkListRow) (r Chun
 		r.Status, r.Note = ChunkStatusDone, "target-only chunk cleared earlier"
 		return
 	}
-	dstSpec := inst.dstSpec.ForChunk(c.Chunk, inst.targetPid(c.Pid))
+	dstSpec := inst.dstSpec.ForChunk(c.Chunk, inst.targetPid(c.Pid, ""))
 	before, err := readLeafSet(ctx, inst.dst, &dstSpec)
 	if err != nil {
 		r.Status, r.Note = ChunkStatusFailed, err.Error()
 		return
 	}
 	if n := before.total().n; n > 0 {
-		if err = inst.clear(ctx, c.Chunk, inst.targetPid(c.Pid), nil); err != nil {
+		if err = inst.clear(ctx, c.Chunk, inst.targetPid(c.Pid, ""), nil); err != nil {
 			r.Status, r.Note = ChunkStatusFailed, "unable to clear the target chunk: "+err.Error()
 			return
 		}
@@ -687,7 +501,7 @@ func (inst *tableSyncer) clear(ctx context.Context, chunk string, pid string, le
 	if !filtered && leaves == nil && inst.pt.Chunking.Kind == ChunkingSingle {
 		return inst.dst.Exec(ctx, "TRUNCATE TABLE "+target)
 	}
-	return inst.dst.Exec(ctx, "DELETE FROM "+target+" WHERE "+clearPredicate(&inst.dstSpec, chunk, leaves)+" SETTINGS lightweight_deletes_sync = 2")
+	return inst.dst.Exec(ctx, deleteQuery(inst.pt.Target, clearPredicate(&inst.dstSpec, chunk, leaves)))
 }
 
 // clearPredicate selects the target rows a DELETE of a chunk (or of its
@@ -756,7 +570,8 @@ func (inst *tableSyncer) copyChunk(ctx context.Context, c chunkListRow) (r Chunk
 	if inst.pt.Sync.Mode == SyncModeSample {
 		srcSpec = srcSpec.ForSample(inst.pt.Sync.SampleNum, inst.pt.Sync.SampleDen)
 	}
-	dstSpec := inst.dstSpec.ForChunk(c.Chunk, inst.targetPid(c.Pid))
+	dstPid := inst.targetPid(c.Pid, "")
+	dstSpec := inst.dstSpec.ForChunk(c.Chunk, dstPid)
 
 	srcSet, err := sourceLeafSet(ctx, inst.src, &srcSpec)
 	if err != nil {
@@ -765,7 +580,7 @@ func (inst *tableSyncer) copyChunk(ctx context.Context, c chunkListRow) (r Chunk
 	}
 	srcTotal := srcSet.total()
 	if e, done := inst.journal.Done(table, c.Chunk); done {
-		if e.N == srcTotal.n && e.Kd == srcTotal.kd && e.Rd == srcTotal.rd {
+		if e.isAt(srcTotal) {
 			r.Status, r.Rows = ChunkStatusDone, srcTotal.n
 			return
 		}
@@ -802,7 +617,7 @@ func (inst *tableSyncer) copyChunk(ctx context.Context, c chunkListRow) (r Chunk
 			return
 		}
 		if inst.owned && before.total().n > 0 {
-			err = inst.clear(ctx, c.Chunk, c.Pid, nil)
+			err = inst.clear(ctx, c.Chunk, dstPid, nil)
 			if err != nil {
 				r.Status, r.Note = ChunkStatusFailed, "unable to clear the target chunk: "+err.Error()
 				return
@@ -833,23 +648,7 @@ func (inst *tableSyncer) copyChunk(ctx context.Context, c chunkListRow) (r Chunk
 				continue
 			}
 		}
-		var ok bool
-		ok, r.Note, err = inst.verify(ctx, &srcSpec, &dstSpec, before.plus(srcSet), before.total().n == 0)
-		if err != nil || !ok {
-			inst.unwind(counted)
-			counted = 0
-		}
-		if err != nil {
-			r.Status, r.Note = ChunkStatusFailed, err.Error()
-			return
-		}
-		if ok {
-			err = inst.journal.RecordChunk(table, c.Chunk, inst.pt.Sync.Mode, srcTotal, inst.now())
-			if err != nil {
-				r.Status, r.Note = ChunkStatusFailed, err.Error()
-				return
-			}
-			r.Status, r.Rows = ChunkStatusCopied, srcTotal.n
+		if inst.settle(ctx, &r, c.Chunk, &srcSpec, &dstSpec, before.plus(srcSet), before.total().n == 0, counted, srcTotal, srcTotal.n) {
 			return
 		}
 		if !inst.owned {
@@ -861,6 +660,32 @@ func (inst *tableSyncer) copyChunk(ctx context.Context, c chunkListRow) (r Chunk
 	return
 }
 
+// settle verifies an attempt's copy against expected and, when it holds,
+// journals the chunk at srcTotal and reports rows copied. A copy that fails
+// verification has the rows it counted wound back. final reports that r is
+// the chunk's result; otherwise r.Note says why the attempt failed.
+func (inst *tableSyncer) settle(ctx context.Context, r *ChunkResult, chunk string, srcSpec *DigestSpec, dstSpec *DigestSpec, expected leafSet, exclusive bool, counted int64, srcTotal leafDigest, rows uint64) (final bool) {
+	ok, note, err := inst.verify(ctx, srcSpec, dstSpec, expected, exclusive)
+	r.Note = note
+	if err != nil || !ok {
+		inst.unwind(counted)
+	}
+	switch {
+	case err != nil:
+		r.Status, r.Note = ChunkStatusFailed, err.Error()
+		return true
+	case !ok:
+		return false
+	}
+	err = inst.journal.RecordChunk(r.Table, chunk, inst.pt.Sync.Mode, srcTotal, inst.now())
+	if err != nil {
+		r.Status, r.Note = ChunkStatusFailed, err.Error()
+		return true
+	}
+	r.Status, r.Rows = ChunkStatusCopied, rows
+	return true
+}
+
 // repairChunk makes a target chunk's differing leaves equal to the source's.
 // It first checks the target against the plan's diff: every leaf it would
 // clear must be one the diff listed, holding the row count the diff showed.
@@ -869,15 +694,7 @@ func (inst *tableSyncer) repairChunk(ctx context.Context, cd *ChunkDiff) (r Chun
 	table := inst.pt.Source.String()
 	r = ChunkResult{Table: table, Chunk: cd.Id, Display: cd.Display}
 	srcSpec := inst.srcSpec.ForChunk(cd.Id, cd.SrcPid)
-	// A target partition id names the same rows as the source's chunk only
-	// when both tables partition by the same key.
-	dstPid := ""
-	if inst.sameKey {
-		dstPid = cd.DstPid
-		if dstPid == "" {
-			dstPid = cd.SrcPid
-		}
-	}
+	dstPid := inst.targetPid(cd.SrcPid, cd.DstPid)
 	dstSpec := inst.dstSpec.ForChunk(cd.Id, dstPid)
 
 	s, d, err := both(ctx, func(ctx context.Context, side int) (leafSet, error) {
@@ -891,7 +708,7 @@ func (inst *tableSyncer) repairChunk(ctx context.Context, cd *ChunkDiff) (r Chun
 		return
 	}
 	srcTotal := s.total()
-	if e, done := inst.journal.Done(table, cd.Id); done && e.N == srcTotal.n && e.Kd == srcTotal.kd && e.Rd == srcTotal.rd && s.equal(d) {
+	if e, done := inst.journal.Done(table, cd.Id); done && e.isAt(srcTotal) && s.equal(d) {
 		r.Status, r.Rows = ChunkStatusDone, srcTotal.n
 		return
 	}
@@ -925,7 +742,7 @@ func (inst *tableSyncer) repairChunk(ctx context.Context, cd *ChunkDiff) (r Chun
 		dstRows := d.restrict(leaves).total().n
 		if dstRows > 0 {
 			var clearLeaves []uint32
-			if !cd.AbsentOnSource || len(leaves) < len(d) {
+			if !clearsWholeChunk(cd, leaves, s, d) {
 				clearLeaves = leaves
 			}
 			err = inst.clear(ctx, cd.Id, dstPid, clearLeaves)
@@ -957,23 +774,7 @@ func (inst *tableSyncer) repairChunk(ctx context.Context, cd *ChunkDiff) (r Chun
 				continue
 			}
 		}
-		var ok bool
-		ok, r.Note, err = inst.verify(ctx, &srcSpec, &dstSpec, s, true)
-		if err != nil || !ok {
-			inst.unwind(counted)
-			counted = 0
-		}
-		if err != nil {
-			r.Status, r.Note = ChunkStatusFailed, err.Error()
-			return
-		}
-		if ok {
-			err = inst.journal.RecordChunk(table, cd.Id, SyncModeRepair, srcTotal, inst.now())
-			if err != nil {
-				r.Status, r.Note = ChunkStatusFailed, err.Error()
-				return
-			}
-			r.Status, r.Rows = ChunkStatusCopied, copied
+		if inst.settle(ctx, &r, cd.Id, &srcSpec, &dstSpec, s, true, counted, srcTotal, copied) {
 			return
 		}
 		d, err = readLeafSet(ctx, inst.dst, &dstSpec)
@@ -984,6 +785,16 @@ func (inst *tableSyncer) repairChunk(ctx context.Context, cd *ChunkDiff) (r Chun
 	}
 	r.Status = ChunkStatusFailed
 	return
+}
+
+// clearsWholeChunk reports whether repair may clear the chunk whole rather
+// than by leaf: the diff showed it absent on the source, the source still
+// holds none of it, and the leaves to clear cover every leaf the target holds
+// rows in. A whole chunk can be dropped as a partition or truncated; a leaf
+// left out of the clear would be lost, since only the listed leaves are
+// copied back.
+func clearsWholeChunk(cd *ChunkDiff, leaves []uint32, s leafSet, d leafSet) (whole bool) {
+	return cd.AbsentOnSource && s.total().n == 0 && coversAll(leaves, s, d)
 }
 
 // coversAll reports whether leaves holds every leaf either side has rows in, so
@@ -1003,9 +814,11 @@ func coversAll(leaves []uint32, s leafSet, d leafSet) (all bool) {
 }
 
 // differingAllowed returns the leaves repair may clear in a chunk, or nil when
-// the target is not as the diff showed it. A chunk absent on either side in
-// the diff allows every leaf; otherwise each currently differing leaf must be
-// a listed one with the target row count the diff recorded.
+// the chunk is not as the diff showed it. A chunk the diff showed absent on
+// the target allows every leaf while the target still holds none of it; one
+// shown absent on the source, while the source still holds none and the
+// target the row count the diff recorded. Otherwise each currently differing
+// leaf must be a listed one with the target row count the diff recorded.
 func (inst *tableSyncer) differingAllowed(cd *ChunkDiff, shown map[uint32]uint64, s leafSet, d leafSet) (allowed []uint32) {
 	leaves := d.differing(s)
 	if len(leaves) == 0 {
@@ -1018,7 +831,7 @@ func (inst *tableSyncer) differingAllowed(cd *ChunkDiff, shown map[uint32]uint64
 		}
 		return leaves
 	case cd.AbsentOnSource:
-		if d.total().n != cd.DstRows {
+		if s.total().n != 0 || d.total().n != cd.DstRows {
 			return nil
 		}
 		return leaves
@@ -1030,4 +843,19 @@ func (inst *tableSyncer) differingAllowed(cd *ChunkDiff, shown map[uint32]uint64
 		}
 	}
 	return leaves
+}
+
+// doneRows is what a chunk an earlier call verified adds to the progress
+// count, in the measure [ExpectedRows] counts: a repair expects only the
+// rows of the differing leaves, not the whole chunk the result reports.
+func doneRows(pt *PlanTable, r ChunkResult) (rows uint64) {
+	if pt.Sync == nil || pt.Sync.Mode != SyncModeRepair || pt.Diff == nil {
+		return r.Rows
+	}
+	for i := range pt.Diff.Differing {
+		if cd := &pt.Diff.Differing[i]; cd.Id == r.Chunk {
+			return cd.repairCopyRows()
+		}
+	}
+	return 0
 }

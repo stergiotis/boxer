@@ -121,8 +121,11 @@ type conversation struct {
 	// apps runs the turns as the coordinator's tool loop (ADR-0265 §SD6);
 	// set at the first send, since the coordinator's system prompt is the
 	// conversation's first message.
-	apps    bool
-	started bool
+	apps bool
+	// questions offers the model ask_user; set at the first send, for the
+	// same reason.
+	questions bool
+	started   bool
 	// kept says a turn's verdict was kept; notKept is the first reason one
 	// was not. Neither set means no verdict yet.
 	kept    bool

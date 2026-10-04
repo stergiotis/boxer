@@ -3,6 +3,7 @@ package jackstay
 import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -30,7 +31,9 @@ type Selection struct {
 	LeewayOnly  bool              `json:"leewayOnly"`
 	// Filters are row filters by source table ("database.name"): each is a
 	// boolean expression over the copied columns, and the table is planned,
-	// diffed and synced as the slice it selects (ADR-0271 §SD1).
+	// diffed and synced as the slice it selects (ADR-0271 §SD1). A key is
+	// matched against the source's tables, not split at a dot, so dotted
+	// names resolve.
 	Filters map[string]string `json:"filters,omitempty"`
 }
 
@@ -165,6 +168,7 @@ func BuildPlan(ops *common.TableOperations, srcEp Endpoint, dstEp Endpoint, src 
 			err = eb.Build().Str("table", st.Ref.String()).Errorf("unable to judge table: %w", err)
 			return
 		}
+		v.HashAsText = jsonColumns(st, v.CopyColumns)
 		if sel.LeewayOnly && !v.Leeway {
 			continue
 		}
@@ -196,6 +200,17 @@ func BuildPlan(ops *common.TableOperations, srcEp Endpoint, dstEp Endpoint, src 
 			TableVerdict:       v,
 		})
 	}
+	if sameServer {
+		// A chain (a.t → b.t and b.t → c.t) writes a table the same plan
+		// reads, so no diff or sync of either step would hold still.
+		for i := range plan.Tables {
+			if j := slices.IndexFunc(plan.Tables, func(t PlanTable) bool { return t.Source == plan.Tables[i].Target }); j >= 0 {
+				err = eb.Build().Str("table", plan.Tables[i].Source.String()).Str("target", plan.Tables[i].Target.String()).
+					Errorf("the target table is also a source of this plan; map the databases so no table is both")
+				return
+			}
+		}
+	}
 	for _, db := range needDatabase {
 		plan.DatabaseDDL = append(plan.DatabaseDDL, CreateDatabaseDDL(db))
 	}
@@ -217,9 +232,10 @@ func BuildPlan(ops *common.TableOperations, srcEp Endpoint, dstEp Endpoint, src 
 
 // tableFilter is the row filter a table is planned with. A pack source holds
 // only the slice it was exported under ([TableInfo.Filter]); the operator may
-// repeat that filter but not choose another. The filter is validated against
-// the copy column list when the table can be synced at all, and its notes
-// join the verdict's.
+// repeat that filter but not choose another. Either filter is validated
+// against the copy column list when the table can be synced at all, since a
+// pack's manifest is as open to editing as a plan, and its notes join the
+// verdict's.
 func tableFilter(st *TableInfo, sel Selection, v *TableVerdict) (filter string, err error) {
 	filter = strings.TrimSpace(sel.Filters[st.Ref.String()])
 	if st.Filter != "" {
@@ -230,13 +246,16 @@ func tableFilter(st *TableInfo, sel Selection, v *TableVerdict) (filter string, 
 		}
 		filter = st.Filter
 		v.Notes = append(v.Notes, "rows as exported under the filter "+filter)
-		return
 	}
 	if filter == "" || !v.Verdict.IsSyncable() {
 		return
 	}
+	columns := v.CopyColumns
+	if st.Filter != "" {
+		columns = packFilterColumns(columns, st.SortingKey)
+	}
 	var notes []string
-	notes, err = ValidateFilter(filter, v.CopyColumns)
+	notes, err = ValidateFilter(filter, columns)
 	if err != nil {
 		err = eb.Build().Str("table", st.Ref.String()).Errorf("invalid filter: %w", err)
 		return
@@ -310,20 +329,6 @@ func (inst *Plan) CarryOver(old *Plan, withDiffs bool) {
 
 func resolveSelection(src *Inventory, sel Selection) (out Selection, err error) {
 	out = Selection{LeewayOnly: sel.LeewayOnly}
-	for ref, f := range sel.Filters {
-		if strings.TrimSpace(f) == "" {
-			continue
-		}
-		db, _, _ := strings.Cut(ref, ".")
-		if len(sel.Databases) > 0 && !slices.Contains(sel.Databases, db) {
-			err = eb.Build().Str("table", ref).Errorf("a filter names a table outside the selected databases")
-			return
-		}
-		if out.Filters == nil {
-			out.Filters = make(map[string]string, len(sel.Filters))
-		}
-		out.Filters[ref] = strings.TrimSpace(f)
-	}
 	if len(sel.Databases) == 0 {
 		out.Databases = src.UserDatabases()
 	} else {
@@ -356,6 +361,58 @@ func resolveSelection(src *Inventory, sel Selection) (out Selection, err error) 
 			}
 			out.DatabaseMap[from] = to
 		}
+	}
+	for key, f := range sel.Filters {
+		if strings.TrimSpace(f) == "" {
+			continue
+		}
+		var tbl datacatalog.TableRef
+		tbl, err = filterTable(src, out.Databases, key)
+		if err != nil {
+			return
+		}
+		if !slices.Contains(out.Databases, tbl.Database) {
+			err = eb.Build().Str("table", key).Errorf("a filter names a table outside the selected databases")
+			return
+		}
+		if out.Filters == nil {
+			out.Filters = make(map[string]string, len(sel.Filters))
+		}
+		out.Filters[key] = strings.TrimSpace(f)
+	}
+	return
+}
+
+// filterTable resolves a [Selection.Filters] key. The key is
+// [datacatalog.TableRef.String], database and name joined by a dot, which
+// cannot be split back when either holds a dot; it is matched against the
+// source's tables instead, those of the selected databases first. A key two
+// selected tables share is refused. A key no table matches is resolved by
+// its first dot, so the caller can say where it points.
+func filterTable(src *Inventory, databases []string, key string) (tbl datacatalog.TableRef, err error) {
+	var selected, other []datacatalog.TableRef
+	for i := range src.Tables {
+		r := src.Tables[i].Ref
+		if r.String() != key {
+			continue
+		}
+		if slices.Contains(databases, r.Database) {
+			selected = append(selected, r)
+		} else {
+			other = append(other, r)
+		}
+	}
+	switch {
+	case len(selected) == 1:
+		tbl = selected[0]
+	case len(selected) > 1:
+		err = eb.Build().Str("table", key).Str("one", selected[0].Database+" / "+selected[0].Name).Str("other", selected[1].Database+" / "+selected[1].Name).
+			Errorf("a filter key names two selected tables, their database and table names joined by a dot read alike")
+	case len(other) > 0:
+		tbl = other[0]
+	default:
+		db, name, _ := strings.Cut(key, ".")
+		tbl = datacatalog.TableRef{Database: db, Name: name}
 	}
 	return
 }
@@ -436,6 +493,7 @@ func ParsePlan(data []byte) (plan Plan, err error) {
 		err = eh.Errorf("unable to decode plan: %w", err)
 		return
 	}
+	plan.dropUnorderedRanges()
 	err = plan.Validate()
 	if err != nil {
 		err = eh.Errorf("invalid plan: %w", err)
@@ -443,9 +501,27 @@ func ParsePlan(data []byte) (plan Plan, err error) {
 	return
 }
 
+// dropUnorderedRanges forgets a range layout this version cannot order: a
+// plan written before range chunking was limited to the key types whose
+// bound text orders as the values do (a UUID, an IP address, an Enum) or
+// sampled bounds that do not strictly ascend. Such a layout could assign a
+// row to a chunk whose predicate selects nothing. The layout is derived again
+// by the next comparison, and the comparison it described goes with it.
+func (inst *Plan) dropUnorderedRanges() {
+	for i := range inst.Tables {
+		t := &inst.Tables[i]
+		if t.Chunking == nil || t.Chunking.Kind != ChunkingRange || t.Chunking.validate() == nil {
+			continue
+		}
+		t.Chunking, t.Diff = nil, nil
+		inst.Notes = append(inst.Notes, t.Source.String()+": its range chunk layout cannot be ordered and was dropped; compare the content again")
+	}
+}
+
 // Validate checks what a hand-edited or foreign plan could get wrong and the
 // steps would otherwise act on silently: the format version, the endpoints,
-// every table's references, and each chunk layout's bounds and leaf count.
+// every table's references and row filter, and each chunk layout's bounds
+// and leaf count.
 func (inst *Plan) Validate() (err error) {
 	if inst.FormatVersion != PlanFormatVersion {
 		return eb.Build().Uint64("formatVersion", uint64(inst.FormatVersion)).Uint64("supported", uint64(PlanFormatVersion)).
@@ -467,6 +543,15 @@ func (inst *Plan) Validate() (err error) {
 		if f := inst.Selection.Filters[t.Source.String()]; f != "" && f != t.Filter {
 			return eb.Build().Str("table", t.Source.String()).Errorf("table's filter differs from the selection's")
 		}
+		if t.Filter != "" && t.Verdict.IsSyncable() {
+			columns := t.CopyColumns
+			if inst.Source.Pack != "" {
+				columns = packFilterColumns(columns, t.SortingKey)
+			}
+			if _, e := ValidateFilter(t.Filter, columns); e != nil {
+				return eb.Build().Str("table", t.Source.String()).Errorf("invalid filter: %w", e)
+			}
+		}
 		if t.Sync != nil && t.Sync.Mode == SyncModeSample && (t.Sync.SampleDen == 0 || t.Sync.SampleNum == 0 || t.Sync.SampleNum > t.Sync.SampleDen) {
 			return eb.Build().Str("table", t.Source.String()).Errorf("invalid sample fraction")
 		}
@@ -486,6 +571,20 @@ func (inst *Plan) Clone() (out Plan, err error) {
 	err = json.Unmarshal(data, &out)
 	if err != nil {
 		err = eh.Errorf("unable to copy plan: %w", err)
+	}
+	return
+}
+
+// jsonType matches a column type that is or holds a JSON value.
+var jsonType = regexp.MustCompile(`\bJSON\b|\bObject\(`)
+
+// jsonColumns are the copy columns whose type is or holds JSON
+// ([TableVerdict.HashAsText]).
+func jsonColumns(src *TableInfo, copyColumns []string) (cols []string) {
+	for _, name := range copyColumns {
+		if c, has := src.Column(name); has && jsonType.MatchString(c.Type) {
+			cols = append(cols, name)
+		}
 	}
 	return
 }
