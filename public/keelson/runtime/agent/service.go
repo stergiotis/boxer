@@ -48,6 +48,9 @@ type Config struct {
 	// Deadline is how long a task runs, and how much more time an approved
 	// widening of a late task gives; zero is DefaultDeadline (DeadlineEnv).
 	Deadline time.Duration
+	// Pace is the least time between two visible changes of a paced task
+	// (ADR-0280 §SD6); zero is DefaultPace (PaceEnv).
+	Pace time.Duration
 	// ActionsLog, when set, receives every action record as one JSON line,
 	// for a trial's scorer (ActionsFileEnv); the headless host sets it.
 	ActionsLog io.Writer
@@ -191,6 +194,8 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 		inst.reply(msg.Reply, inst.turn(msg))
 	case SubjectLaunch:
 		inst.reply(msg.Reply, inst.launch(msg))
+	case SubjectAuthority:
+		inst.reply(msg.Reply, inst.authority(msg))
 	case SubjectArrange, SubjectRaise, SubjectPlace:
 		inst.reply(msg.Reply, inst.windowAct(msg))
 	default:

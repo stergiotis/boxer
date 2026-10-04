@@ -143,6 +143,8 @@ func (inst *Service) launch(msg *app.Msg) (rep wireLaunchReply) {
 		inst.record(t, rec, "final", phaseOutcome(phase, rep.Reason))
 	}()
 	switch {
+	case t.ceiling.refuseLaunch() != "":
+		rep.Reason = t.ceiling.refuseLaunch()
 	case !known:
 		rep.Reason = inst.unknownAppReason(req.App)
 	case le == nil:
@@ -157,6 +159,8 @@ func (inst *Service) launch(msg *app.Msg) (rep wireLaunchReply) {
 	le.used++
 	mode := le.mode
 	inst.mu.Unlock()
+	// A window opening is a change the person sees, paced like the rest.
+	inst.pace(t)
 	key, err := inst.cfg.Host.OpsOpen(id, req.Kind, req.Config)
 	if err != nil {
 		inst.mu.Lock()

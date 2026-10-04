@@ -168,6 +168,11 @@ type GrantRequest struct {
 	// task arrange every window (ADR-0276 §SD4). ModeUnspecified asks for
 	// none.
 	Desktop ModeE
+	// Ceiling is the most the person's settings let the model ask for
+	// (ADR-0280): the dispatcher refuses a request above it before the
+	// person is asked, and every later call, launch and destination above
+	// it. Nil sets none.
+	Ceiling *Ceiling
 }
 
 // GrantLaunch lets a task open up to Count windows of App (an id or a
@@ -205,6 +210,10 @@ func (inst *Client) Request(ctx context.Context, r GrantRequest) (g Grant, err e
 func (inst *Client) RequestKey(ctx context.Context, r GrantRequest) (key string, g Grant, err error) {
 	req := wireGrantRequest{V: wireVersion, Handle: r.Handle, Conversation: r.Conversation, Plan: r.Plan, Destinations: r.Destinations, Calls: r.Calls,
 		DeadlineSecs: uint32(r.Deadline / time.Second)}
+	if r.Ceiling != nil {
+		w := wireOfCeiling(*r.Ceiling)
+		req.Ceiling = &w
+	}
 	for _, e := range r.Entries {
 		req.Entries = append(req.Entries, wireGrantEntry{Instance: e.Instance, Mode: e.Mode.String(), Operations: e.Operations})
 	}

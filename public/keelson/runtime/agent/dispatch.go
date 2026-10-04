@@ -199,6 +199,11 @@ type task struct {
 	// desktop is the task's mode over the desktop as a whole; act lets it
 	// arrange every window (ADR-0276 §SD4).
 	desktop ModeE
+	// ceiling is the most the coordinator's settings let the model do
+	// (ADR-0280); nil is a coordinator that set none. nextChange is the
+	// earliest a paced task's next visible change may land.
+	ceiling    *Ceiling
+	nextChange time.Time
 }
 
 // launchEntry is one app a task may open windows of (ADR-0269 §SD6).
@@ -324,6 +329,10 @@ func (inst *Service) testGrant(msg *app.Msg, req wireGrantRequest) (rep wireGran
 	}
 	t := inst.newTask(msg.Sender, msg.SenderInstance, req.Conversation, req.Plan, req.Destinations, req.Calls,
 		time.Duration(req.DeadlineSecs)*time.Second, true)
+	if req.Ceiling != nil {
+		c := ceilingOfWire(*req.Ceiling).normal()
+		t.ceiling = &c
+	}
 	inst.addLaunches(t, req.Launches)
 	if req.Desktop != "" {
 		t.desktop = ParseMode(req.Desktop)
@@ -439,6 +448,11 @@ func (inst *Service) call(msg *app.Msg) (rep wireCallReply) {
 	}
 	t.callsUsed++
 	inst.mu.Unlock()
+	if spec.Effect != app.OperationEffectNone {
+		// A change the person can see: spaced, unless the settings let the
+		// model work faster than a person can follow.
+		inst.pace(t)
+	}
 	inst.route(t, rec, req, spec, e)
 	inst.mu.Lock()
 	rep.Outcome = inst.outcomeOf(t, rec, 0)
@@ -536,11 +550,21 @@ func (inst *Service) check(t *task, req wireCall) (out opwire.Outcome, spec app.
 	if ok && spec.Effect != app.OperationEffectNone {
 		mode = ModeAct
 	}
+	// What a widening may ask of the person is bounded by the ceiling too.
+	defer func() {
+		if need != 0 && t.ceiling != nil {
+			mode = min(mode, t.ceiling.normal().Mode)
+		}
+	}()
 	switch {
 	case !ok:
 		out = phaseOutcome(opwire.PhaseRefused, "no such operation")
 	case !spec.Agents:
 		out = phaseOutcome(opwire.PhaseDenied, "the operation is not exposed to agents")
+	case t.ceiling.refuseEffect(spec.Effect) != "":
+		// Above the ceiling the person set in the coordinator (ADR-0280):
+		// refused whatever the grant holds, and not a widening to ask for.
+		out = phaseOutcome(opwire.PhaseRefused, t.ceiling.refuseEffect(spec.Effect))
 	case e == nil:
 		out, need = phaseOutcome(opwire.PhaseInputRequired, "the grant does not cover this instance; the person is asked"), needInstance
 	case !e.covers(spec.Name):
@@ -558,7 +582,7 @@ func (inst *Service) check(t *task, req wireCall) (out opwire.Outcome, spec app.
 		out = phaseOutcome(opwire.PhaseInputRequired, "a consequential command needs the person's confirmation")
 	case spec.Effect == app.OperationEffectConsequential:
 		out = phaseOutcome(opwire.PhaseProposed, "a consequential command: the person confirms it")
-	case spec.Effect != app.OperationEffectNone && e.mode == ModeSuggest:
+	case spec.Effect != app.OperationEffectNone && t.modeOf(e) == ModeSuggest:
 		out = phaseOutcome(opwire.PhaseProposed, "suggest mode: the person accepts or rejects it")
 	}
 	if t.test {

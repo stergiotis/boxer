@@ -61,6 +61,8 @@ func (inst *Service) windowAct(msg *app.Msg) (rep wireCallReply) {
 	}
 	inst.mu.Unlock()
 	if out.Phase == opwire.PhaseUnspecified {
+		// Moving windows is a change the person sees, paced like the rest.
+		inst.pace(t)
 		switch verb {
 		case verbArrange:
 			err = inst.cfg.Host.OpsArrange(req.Command, req.Instances)
@@ -88,6 +90,8 @@ func windowCheck(t *task, verb string, req wireWindowAct) (out opwire.Outcome) {
 	switch {
 	case t.callsUsed >= t.callsBudget:
 		out = phaseOutcome(opwire.PhaseInputRequired, "the task's call budget is spent; request more")
+	case verb == verbArrange && t.ceiling.refuseDesktop() != "":
+		out = phaseOutcome(opwire.PhaseRefused, t.ceiling.refuseDesktop())
 	case verb == verbArrange:
 		if t.desktop != ModeAct {
 			out = phaseOutcome(opwire.PhaseInputRequired, "arranging windows needs the desktop in act mode; request it with desktop act")
@@ -97,6 +101,8 @@ func windowCheck(t *task, verb string, req wireWindowAct) (out opwire.Outcome) {
 		switch {
 		case e == nil:
 			out = phaseOutcome(opwire.PhaseInputRequired, "the grant does not cover this instance")
+		case e.mode == ModeAct && t.modeOf(e) != ModeAct:
+			out = phaseOutcome(opwire.PhaseRefused, t.ceiling.refuseMode(ModeAct))
 		case e.mode != ModeAct:
 			out = phaseOutcome(opwire.PhaseInputRequired, verb+" needs act mode on this window; request it")
 		}

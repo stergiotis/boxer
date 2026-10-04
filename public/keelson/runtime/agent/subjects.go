@@ -57,6 +57,9 @@ const (
 	SubjectRaise = SubjectPrefix + "raise"
 	// SubjectPlace sets the outer rect of one of the task's windows.
 	SubjectPlace = SubjectPrefix + "place"
+	// SubjectAuthority reads a task's ceiling and what its grant allows
+	// under it, and moves the ceiling (ADR-0280).
+	SubjectAuthority = SubjectPrefix + "authority"
 	// SubjectTurn starts a model turn: the changes by other writers since
 	// the previous one, and the task's pauses lifted.
 	SubjectTurn = SubjectPrefix + "turn"
@@ -96,6 +99,15 @@ var DeadlineEnv = env.NewDuration(env.Spec{
 	Name:        "BOXER_AGENT_DEADLINE",
 	Default:     "30m",
 	Description: "how long a runtime.agent task runs before its calls wait for the person to give it more time, and how much more an approval gives",
+	Category:    env.CategoryDev,
+})
+
+// PaceEnv is the least time between two changes of a paced task that the
+// person can see.
+var PaceEnv = env.NewDuration(env.Spec{
+	Name:        "BOXER_AGENT_PACE",
+	Default:     "750ms",
+	Description: "the least time between two visible changes — a change to a window, a window opened, an arrangement — of a runtime.agent task whose coordinator's ceiling does not let the model work unpaced",
 	Category:    env.CategoryDev,
 })
 

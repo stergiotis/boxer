@@ -49,6 +49,9 @@ const (
 	GrantEventDeclined = "declined"
 	// GrantEventMode is the person changing a task's mode in a window.
 	GrantEventMode = "mode-changed"
+	// GrantEventCeiling is the coordinator's settings setting or moving the
+	// most the model may ask for (ADR-0280).
+	GrantEventCeiling = "ceiling"
 	// GrantEventEnded is a task's end: stopped, closed or revoked.
 	GrantEventEnded = "ended"
 )

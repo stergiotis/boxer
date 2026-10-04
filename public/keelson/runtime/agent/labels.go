@@ -107,6 +107,8 @@ func (inst *Service) AllowDestination(taskId string, epoch uint64, destination s
 		reason = "the task ended: " + t.revoked
 	case t.epoch != epoch:
 		reason = "the task's epoch moved; the work belongs to a stopped turn"
+	case t.ceiling.refuseDestination(destination) != "":
+		reason = t.ceiling.refuseDestination(destination)
 	case !slices.Contains(t.destinations, destination):
 		reason = "the task's grant does not list " + destination
 	default:

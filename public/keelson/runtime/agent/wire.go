@@ -98,6 +98,10 @@ type wireGrantRequest struct {
 	// Desktop asks for a mode over the desktop as a whole: "act" lets the
 	// task arrange every window (ADR-0276 §SD4).
 	Desktop string `json:"desktop,omitempty"`
+	// Ceiling is the most the coordinator's settings let the model ask for
+	// (ADR-0280); absent, the task has none. A request above it is refused
+	// before the person is asked.
+	Ceiling *wireCeiling `json:"ceiling,omitempty"`
 }
 
 // wireLaunchEntry names an app the task may open windows of.

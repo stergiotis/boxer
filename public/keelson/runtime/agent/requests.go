@@ -110,6 +110,8 @@ type request struct {
 	share     map[uint64]bool
 	shareFlag map[uint64]*bool
 	mode      map[uint64]ModeE
+	// ceiling is the ceiling the request brought, nil when none.
+	ceiling *Ceiling
 	// desktop is the desktop mode asked for, ModeUnspecified when none;
 	// desktopShare the person's choice, desktopFlag its checkbox binding.
 	desktop      ModeE
@@ -144,6 +146,19 @@ func (inst *Service) requestGrant(msg *app.Msg) (rep wireGrantReply) {
 			return
 		}
 	}
+	var ceiling *Ceiling
+	if req.Ceiling != nil {
+		c := ceilingOfWire(*req.Ceiling).normal()
+		ceiling = &c
+	}
+	if why := overCeiling(ceiling, req); why != "" {
+		// Above what the person's settings allow: refused here, so the
+		// person is never asked for it (ADR-0280).
+		rep.Reason = why
+		inst.recordGrantRefusal(msg, req, why)
+		inst.grantEvent(trail.GrantEventRefused, "host", why, nil, asked(msg, req))
+		return
+	}
 	if inst.cfg.TestGrants && req.Handle == "" {
 		return inst.testGrant(msg, req)
 	}
@@ -159,6 +174,17 @@ func (inst *Service) requestGrant(msg *app.Msg) (rep wireGrantReply) {
 			rep.Reason = out.Reason
 			return
 		}
+		inst.mu.Lock()
+		if ceiling != nil {
+			inst.setCeiling(t, *ceiling)
+		}
+		why := overCeiling(t.ceiling, req)
+		inst.mu.Unlock()
+		if why != "" {
+			rep.Reason = why
+			inst.grantEvent(trail.GrantEventRefused, "host", why, nil, asked(msg, req))
+			return
+		}
 	} else if !inst.isCoordinator(msg.Sender) {
 		rep.Reason = "this app is not registered as a coordinator (BOXER_AGENT_COORDINATORS)"
 		inst.grantEvent(trail.GrantEventRefused, "host", rep.Reason, nil, asked(msg, req))
@@ -167,8 +193,8 @@ func (inst *Service) requestGrant(msg *app.Msg) (rep wireGrantReply) {
 	r := &request{key: "req-" + randomHex(8), actor: msg.Sender, actorInstance: msg.SenderInstance, conversation: req.Conversation, task: t,
 		plan: req.Plan, wanted: make(map[uint64]ModeE), wantedOps: make(map[uint64][]string),
 		destinations: req.Destinations, calls: req.Calls, deadline: time.Duration(req.DeadlineSecs) * time.Second,
-		launches: req.Launches,
-		created:  time.Now(), share: make(map[uint64]bool), shareFlag: make(map[uint64]*bool), mode: make(map[uint64]ModeE),
+		launches: req.Launches, ceiling: ceiling,
+		created: time.Now(), share: make(map[uint64]bool), shareFlag: make(map[uint64]*bool), mode: make(map[uint64]ModeE),
 		desktop: ParseMode(req.Desktop)}
 	r.desktopShare = r.desktop != ModeUnspecified
 	for _, e := range req.Entries {
@@ -290,6 +316,9 @@ func (inst *Service) approve(r *request) (route *held) {
 		r.task = t
 		inst.tasks[t.handle] = t
 		event = trail.GrantEventApproved
+		if r.ceiling != nil {
+			t.ceiling = r.ceiling
+		}
 	}
 	t := r.task
 	// A widening's destinations join the task's.
@@ -541,4 +570,24 @@ func asked(msg *app.Msg, req wireGrantRequest) (r *request) {
 		r.wanted[e.Instance] = ParseMode(e.Mode)
 	}
 	return
+}
+
+// overCeiling is why a grant request asks for more than ceiling allows, ""
+// when it does not or there is no ceiling.
+func overCeiling(ceiling *Ceiling, req wireGrantRequest) (why string) {
+	if ceiling == nil {
+		return ""
+	}
+	modes := make([]ModeE, 0, len(req.Entries)+len(req.Launches))
+	for _, e := range req.Entries {
+		m := ParseMode(e.Mode)
+		if m == ModeUnspecified {
+			m = ModeObserve
+		}
+		modes = append(modes, m)
+	}
+	for _, l := range req.Launches {
+		modes = append(modes, ParseMode(l.Mode))
+	}
+	return ceiling.refuseRequest(modes, len(req.Launches) > 0, ParseMode(req.Desktop), req.Destinations)
 }
