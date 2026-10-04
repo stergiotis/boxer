@@ -486,3 +486,4 @@ extended by `request_access` instead (ADR-0269, update of this date).
 - [ADR-0239](./0239-play-chat-panel-and-chatview-widget.md) — the transcript widget and play's pane as the reader.
 - [LLM chat app requirements survey](../adr-background-work/llm-chat-app-requirements-survey.md) — the requirements, and which touch the storage model.
 - [ADR-0253](./0253-introspection-table-reads-as-a-bus-capability.md) — the grant a resume would read under.
+- [ADR-0282](./0282-chat-artefact-one-markdown-document-per-conversation.md) — the artefact: a markdown document per conversation, a fourth option fixed at the first send.

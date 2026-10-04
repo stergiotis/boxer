@@ -80,6 +80,13 @@ type coordinator struct {
 	toldOnce bool
 	// ask carries ask_user's questions to the form and the answers back.
 	ask *asker
+	// art is the conversation's artefact when it has one (ADR-0282), nil
+	// otherwise; artTold is the revision the model was last told of.
+	art      *artefact
+	artTold  int
+	artToldN bool
+	// curTitle is the running call's title, for the revision it makes.
+	curTitle string
 	// stage is what the running tool loop is doing, and waiting how many of
 	// its calls wait on the person; the window reads both for the turn's
 	// state (chat_turnstate.go).
@@ -180,6 +187,9 @@ func (inst *coordinator) awaitPerson() (done func()) {
 // is open or a call waits on their decision, else the stage it reported.
 func (inst *coordinator) stageNow() (s stageE) {
 	if inst.ask != nil && inst.ask.current() != nil {
+		return stagePerson
+	}
+	if art := inst.artefactOf(); art != nil && art.pending() != nil {
 		return stagePerson
 	}
 	inst.mu.Lock()
@@ -284,6 +294,9 @@ func (inst *coordinator) tools(ctx context.Context) (out []openaichat.Tool) {
 	if questions {
 		out = append(out, askTool())
 	}
+	if art := inst.artefactOf(); art != nil {
+		out = append(out, artefactTools(art.policyNow().write)...)
+	}
 	if !apps {
 		return
 	}
@@ -384,6 +397,7 @@ func (inst *coordinator) exec(ctx context.Context, o toolOrigin, call openaichat
 	inst.mu.Lock()
 	prev, repeated := inst.refused[sig]
 	inst.refusal = ""
+	inst.curTitle = title
 	inst.mu.Unlock()
 	if repeated {
 		return "error: this is the same call that was just refused, and nothing has changed since; change it as the refusal says. The refusal was: " + prev,
@@ -430,6 +444,9 @@ func (inst *coordinator) dispatch(ctx context.Context, o toolOrigin, call openai
 	apps, questions := inst.offers()
 	if call.Name == "ask_user" && questions {
 		return inst.askUser(ctx, args)
+	}
+	if art := inst.artefactOf(); art != nil && isArtefactTool(call.Name) {
+		return inst.artefactCall(ctx, o, call.Name, args, art)
 	}
 	if !apps {
 		return "error: no tool " + call.Name, "unknown tool " + call.Name
@@ -803,6 +820,11 @@ func runTurn(ctx context.Context, cli *llm.Client, coord *coordinator, req llm.R
 	msgs := append([]openaichat.Message(nil), req.Messages...)
 	if note := coord.ceilingNote(); note != "" {
 		// What the person's settings allow, when it is news to the model.
+		last := msgs[len(msgs)-1]
+		msgs = append(msgs[:len(msgs)-1], openaichat.Message{Role: openaichat.ChatRoleSystem, Content: note}, last)
+	}
+	if note := coord.artefactNote(); note != "" {
+		// Where the artefact stands, when it moved since the model was told.
 		last := msgs[len(msgs)-1]
 		msgs = append(msgs[:len(msgs)-1], openaichat.Message{Role: openaichat.ChatRoleSystem, Content: note}, last)
 	}

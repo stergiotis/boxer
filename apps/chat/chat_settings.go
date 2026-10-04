@@ -93,6 +93,50 @@ func (inst permissions) ceiling(apps bool) (ceil agent.Ceiling) {
 	return
 }
 
+// artPolicy is what the settings let the model do to the artefact
+// (ADR-0282 §SD3): Edit and above write, Ask first makes each write a
+// proposal. The chat enforces it; the host never sees an artefact call.
+func (inst permissions) artPolicy() (p artPolicy) {
+	return artPolicy{write: inst.allow >= allowEdit, ask: inst.changes == changesAsk}
+}
+
+// artCeiling is the artefact's place on the ladder: edit when it may be
+// written, read when it may only be read.
+func (inst permissions) artCeiling() (ceil agent.Ceiling) {
+	p := inst.artPolicy()
+	if !p.write {
+		return agent.Ceiling{Mode: agent.ModeObserve, Effect: app.OperationEffectNone}
+	}
+	ceil = agent.Ceiling{Mode: agent.ModeAct, Effect: app.OperationEffectDocument}
+	if p.ask {
+		ceil.Mode = agent.ModeSuggest
+	}
+	return
+}
+
+// withArtefact raises a ceiling to what the artefact allows, for the scale;
+// what goes to the host stays the windows' ceiling alone.
+func withArtefact(ceil agent.Ceiling, art agent.Ceiling) (out agent.Ceiling) {
+	out = ceil
+	if art.Level() <= ceil.Level() {
+		return
+	}
+	out.Mode, out.Effect = max(out.Mode, art.Mode), max(out.Effect, art.Effect)
+	return
+}
+
+// artefactOn says whether the conversation at hand has an artefact: its own
+// choice once it started, the setting before.
+func (inst *App) artefactOn() (on bool) {
+	if inst.coord == nil {
+		return false
+	}
+	if inst.conv.started {
+		return inst.conv.artefact
+	}
+	return inst.artefact
+}
+
 // authorityAsk is what the last question to the host was about; a change in
 // any part asks again.
 type authorityAsk struct {
@@ -115,6 +159,7 @@ const (
 	tipDesktop  = "Let the model ask to arrange every window on the desktop."
 	tipReach    = "How far the model's work may reach beyond the windows: this host's own tables, the data endpoints the apps query, or the network."
 	tipPace     = "At a pace I can follow: the host spaces the model's changes — an edit, a run, a window opened or moved — so you can see each one and stop the task. As fast as it can: they land as the model makes them, faster than you can read or intervene."
+	tipArtefact = "Give this conversation one markdown document the model reads and edits through tools, shown in the Artefact panel. At most and Changes above decide whether it may write and whether each change waits for you."
 	tipTyped    = "Offer each operation of the task's windows to the model as a tool of its own, instead of one call_operation tool. More tools in every request; some models call them more reliably."
 )
 
@@ -154,6 +199,7 @@ func (inst *App) remoteModel() (remote bool) {
 // changes. Asking is also what moves the task's ceiling in the host.
 func (inst *App) syncAuthority() {
 	ceil := inst.perms.ceiling(inst.appsOn())
+	inst.conv.art.setPolicy(inst.perms.artPolicy())
 	if inst.coord == nil {
 		inst.authority = agent.Authority{Limited: true}
 		return
@@ -196,7 +242,11 @@ func (inst *App) syncAuthority() {
 // scores are the two markers' places.
 func (inst *App) scores() (may agent.Score, now agent.Score) {
 	remote := inst.remoteModel()
-	return inst.authority.Ceiling.Score(remote), inst.authority.Granted.Score(remote)
+	ceil := inst.authority.Ceiling
+	if inst.artefactOn() {
+		ceil = withArtefact(ceil, inst.perms.artCeiling())
+	}
+	return ceil.Score(remote), inst.authority.Granted.Score(remote)
 }
 
 func markers(may agent.Score, now agent.Score) (ms []bandscale.Marker) {
@@ -281,6 +331,8 @@ func (inst *App) renderMaySection() {
 	switch task, _, _ := inst.coord.stateOrNone(); {
 	case inst.coord == nil:
 		weak("This host offers the chat no app windows: the model only talks.")
+	case !inst.appsOn() && inst.artefactOn():
+		weak("Apps is off: the model works only in the artefact.")
 	case !inst.appsOn():
 		weak("Apps is off: the model only talks.")
 	case task == "":
@@ -356,7 +408,12 @@ func (inst *App) renderConversationSection() {
 				c.Label("Questions: on for this conversation").Selectable(false).Send()
 			}
 		}
-		weak("Keep, Apps and Questions are fixed at a conversation's first message; New conversation takes the settings above.")
+		if conv.artefact {
+			for range c.HoverText(tipArtefact).KeepIter() {
+				c.Label("Artefact: on for this conversation").Selectable(false).Send()
+			}
+		}
+		weak("Keep, Apps, Questions and Artefact are fixed at a conversation's first message; New conversation takes the settings above.")
 		return
 	}
 	for range c.HoverText(tipKeep).KeepIter() {
@@ -365,6 +422,9 @@ func (inst *App) renderConversationSection() {
 	if inst.coord != nil {
 		for range c.HoverText(tipQuestions).KeepIter() {
 			c.Checkbox(inst.ids.PrepareStr("questions"), inst.questions, "Questions — let the model ask you with a form").SendRespVal(&inst.questions)
+		}
+		for range c.HoverText(tipArtefact).KeepIter() {
+			c.Checkbox(inst.ids.PrepareStr("artefact"), inst.artefact, "Artefact — a markdown document the model edits").SendRespVal(&inst.artefact)
 		}
 	}
 }

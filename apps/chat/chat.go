@@ -56,6 +56,12 @@ type App struct {
 	// questions lets the model ask the person with a form (ask_user); the
 	// turn is the coordinator's tool loop then too, with or without Apps.
 	questions bool
+	// artefact gives the conversation a markdown document the model edits
+	// (ADR-0282); showArtefact opens its panel (chat_artefact_render.go),
+	// and artView is the panel's state.
+	artefact     bool
+	showArtefact bool
+	artView      artefactView
 
 	conv *conversation
 	// turnMachine is where the turn stands, observed and mirrored each
@@ -135,7 +141,7 @@ var _ app.AppI = (*App)(nil)
 
 func newApp() (inst *App) {
 	inst = &App{turnMachine: newTurnMachine(), log: zerolog.Nop(), ids: c.NewWidgetIdStack(), keep: true, draft: DraftSeed.Get(), conv: newConversation(), apps: AppsSeed.Get() || registeredCoordinator(),
-		questions: QuestionsSeed.Get(), advanced: AdvancedSeed.Get(), pubs: newStatsPublishers(), perms: defaultPermissions(),
+		questions: QuestionsSeed.Get(), artefact: ArtefactSeed.Get(), showArtefact: ArtefactSeed.Get(), advanced: AdvancedSeed.Get(), pubs: newStatsPublishers(), perms: defaultPermissions(),
 		opTools: OperationToolsSeed.Get()}
 	return
 }
@@ -275,16 +281,19 @@ func (inst *App) startTurn(text string) (started bool) {
 	}
 	conv := inst.conv
 	if !conv.started {
-		conv.keep, conv.apps, conv.questions = inst.keep, inst.apps, inst.questions
+		conv.keep, conv.apps, conv.questions, conv.artefact = inst.keep, inst.apps, inst.questions, inst.artefact
 	}
 	req := conv.request(text)
 	cli := inst.cli
 	var coord *coordinator
-	if (conv.apps || conv.questions) && inst.coord != nil {
+	if (conv.apps || conv.questions || conv.artefact) && inst.coord != nil {
 		coord = inst.coord
 		coord.offer(conv.apps, conv.questions)
+		if conv.artefact {
+			coord.offerArtefact(conv.art)
+		}
 		if req.Messages[0].Role != openaichat.ChatRoleSystem {
-			req.Messages = append([]openaichat.Message{{Role: openaichat.ChatRoleSystem, Content: systemPrompt(conv.apps, conv.questions)}}, req.Messages...)
+			req.Messages = append([]openaichat.Message{{Role: openaichat.ChatRoleSystem, Content: systemPromptOf(conv.apps, conv.questions, conv.artefact)}}, req.Messages...)
 		}
 	}
 	ok := inst.turn.StartReporting(nil, bgjob.Spec{Kind: "chat-turn", Title: "answer"},
@@ -341,4 +350,5 @@ func (inst *App) newConversation() {
 		inst.coord = newCoordinator(inst.agentCli, inst.kq, inst.conv.id)
 	}
 	inst.view = chatview.State{}
+	inst.artView = artefactView{}
 }

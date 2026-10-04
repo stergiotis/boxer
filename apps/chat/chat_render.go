@@ -114,6 +114,7 @@ func (inst *App) render() {
 	}
 	inst.renderStatsPanel()
 	inst.renderSettingsPanel()
+	inst.renderArtefactPanel()
 	for range c.PanelCentralInside().KeepIter() {
 		if len(inst.conv.entries) == 0 && inst.pending == nil {
 			inst.renderEmpty()
@@ -140,6 +141,7 @@ func (inst *App) renderBar() {
 		}
 		inst.renderSettingsToggle()
 		inst.renderStatsToggle()
+		inst.renderArtefactToggle()
 		inst.renderTurnState()
 	}
 	// A row of its own for what the conversation is: the controls above
@@ -160,6 +162,9 @@ func (inst *App) renderBar() {
 			}
 			if conv.questions {
 				badge.New(inst.ids.PrepareStr("questions-state"), "questions").Tone(badge.ToneNeutral).Variant(badge.VariantSoft).Size(badge.SizeSm).Tooltip(tipQuestions).Send()
+			}
+			if conv.artefact {
+				badge.New(inst.ids.PrepareStr("artefact-state"), "artefact").Tone(badge.ToneNeutral).Variant(badge.VariantSoft).Size(badge.SizeSm).Tooltip(tipArtefact).Send()
 			}
 		}
 		inst.renderContext()
