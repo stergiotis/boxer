@@ -231,8 +231,29 @@ func (inst *Service) setMode(t *task, key uint64, m ModeE) {
 	}
 }
 
+const (
+	requestWidth float32 = 520
+	confirmWidth float32 = 480
+	// shareListHeight bounds the list of windows to share: a modal is sized
+	// by its body, so a long list would push the decision off screen.
+	shareListHeight float32 = 240
+)
+
+// dialogHeading starts a decision's modal: a fixed width, since a modal is
+// sized by its body, and the title a window would carry as a heading.
+func dialogHeading(title string, width float32) {
+	c.UiSetMinWidth(width)
+	c.UiSetMaxWidth(width)
+	for rt := range c.RichTextLabel(icons.PhRobot + " " + title) {
+		rt.Heading()
+	}
+	c.Separator().Send()
+}
+
 // RenderDialogs draws the oldest request the person has not decided, then
-// the oldest consequential command awaiting confirmation.
+// the oldest consequential command awaiting confirmation. Both are modals
+// (a grant is decided before anything else is clicked, and no window can
+// cover the dialog asking for it).
 func (inst *Chrome) RenderDialogs(ids *c.WidgetIdStack) {
 	svc := inst.svc
 	svc.mu.Lock()
@@ -259,10 +280,9 @@ func (inst *Chrome) RenderDialogs(ids *c.WidgetIdStack) {
 	if r.task != nil {
 		title = "Widen an agent task"
 	}
-	win := c.Window(ids.PrepareStr("agent-request-"+r.key), c.WidgetText().Text(icons.PhRobot+" "+title).Keep()).
-		Resizable(true).Collapsible(false).DefaultSize(520, 360).DefaultPos(200, 120)
 	var approve, decline bool
-	for range win.KeepIter() {
+	for range c.Modal(ids.PrepareStr("agent-request-" + r.key)).KeepIter() {
+		dialogHeading(title, requestWidth)
 		approve, decline = inst.renderRequest(r, windows, len(open), ids)
 	}
 	if !approve && !decline {
@@ -287,10 +307,9 @@ func (inst *Chrome) renderConfirmation(p proposalRef, waiting int, ids *c.Widget
 	svc := inst.svc
 	rec := p.rec
 	who := svc.display(p.t.actor) + " (window " + strconv.FormatUint(p.t.actorInstance, 10) + ")"
-	win := c.Window(ids.PrepareStr("agent-confirm-"+p.t.id+"-"+rec.key), c.WidgetText().Text(icons.PhRobot+" Confirm a change outside the app").Keep()).
-		Resizable(true).Collapsible(false).DefaultSize(480, 220).DefaultPos(240, 160)
 	var confirm, decline bool
-	for range win.KeepIter() {
+	for range c.Modal(ids.PrepareStr("agent-confirm-" + p.t.id + "-" + rec.key)).KeepIter() {
+		dialogHeading("Confirm a change outside the app", confirmWidth)
 		c.Label(who + " asks to " + rec.spec.Summary + " (" + rec.spec.Name + ") in window " +
 			strconv.FormatUint(rec.instance, 10) + ".").Wrap().Send()
 		c.Label("This writes outside the app and cannot be undone from here.").Wrap().Send()
@@ -351,10 +370,12 @@ func (inst *Chrome) renderRequest(r *request, windows []windowRow, waiting int, 
 		}
 		// One row per window: whether it is shared, the mode, and what the
 		// mode lets the task do — the columns aligned across windows.
-		for range c.Grid(ids.PrepareStr("agent-share-grid-" + r.key)).NumColumns(3).KeepIter() {
-			for _, w := range windows {
-				inst.renderShareRow(r, w, ids)
-				c.EndRow()
+		for range c.ScrollArea().Vscroll(true).MaxHeight(shareListHeight).KeepIter() {
+			for range c.Grid(ids.PrepareStr("agent-share-grid-" + r.key)).NumColumns(3).KeepIter() {
+				for _, w := range windows {
+					inst.renderShareRow(r, w, ids)
+					c.EndRow()
+				}
 			}
 		}
 	}

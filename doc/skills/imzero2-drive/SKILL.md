@@ -146,6 +146,10 @@ step, or before it for `capture` and `tree`. `modifiers` is a bitmask: 1 alt,
 - **No dump directory.** A `capture` against a host started without
   `IMZERO2_HEADLESS_DUMP_DIR` is ignored and the step times out. The PNG lands
   on the host's filesystem; the driver reports the path.
+- **Clicking through a modal.** A `click` without `pointer` is an AccessKit
+  action, and egui honours it on a widget behind a modal's backdrop, where
+  a person's press is blocked. To check that a modal blocks, press with
+  `"pointer":true`.
 - **Typing into the wrong widget.** `key` goes to whatever holds focus. `type`
   focuses its anchor first; `key` after a `click` elsewhere does not.
 - **A stale headless client.** If the host log shows `unable to convert from
