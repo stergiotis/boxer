@@ -200,6 +200,7 @@ func (inst *App) remoteModel() (remote bool) {
 func (inst *App) syncAuthority() {
 	ceil := inst.perms.ceiling(inst.appsOn())
 	inst.conv.art.setPolicy(inst.perms.artPolicy())
+	inst.conv.art.setMeta(inst.artMeta())
 	if inst.coord == nil {
 		inst.authority = agent.Authority{Limited: true}
 		return

@@ -62,6 +62,10 @@ type App struct {
 	artefact     bool
 	showArtefact bool
 	artView      artefactView
+	// runId and window are the host's run and this window's instance, for
+	// the artefact's chat properties (chat_artefact_meta.go).
+	runId  string
+	window uint64
 
 	conv *conversation
 	// turnMachine is where the turn stands, observed and mirrored each
@@ -153,6 +157,7 @@ func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.log = ctx.Log()
+	inst.runId, inst.window = ctx.RunId(), ctx.InstanceKey()
 	inst.turnChip = inst.newTurnChip()
 	bus := ctx.Bus()
 	if bus == nil {

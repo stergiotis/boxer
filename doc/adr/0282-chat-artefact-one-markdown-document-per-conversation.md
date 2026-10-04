@@ -77,6 +77,17 @@ primitives.
   the meantime, in which case the turn stays taken back. A turn that failed
   or stopped keeps the revisions its calls made, as it keeps its calls. A
   revision number taken back is not handed out again.
+- **The chat's properties.** The frontmatter carries `chat_*` properties
+  the chat keeps: the conversation id, title, start time, model and
+  endpoint, the host's run id, the app and window, the agent task when
+  there is one, and Keep. They make a copy of the document traceable to
+  the session and to the host's records keyed by the same ids. The chat
+  stamps them into every write before it is proposed or committed, so they
+  follow a rename at the next write; the model cannot set or delete them,
+  and an edit of one is undone by the stamp. A write whose frontmatter is
+  not valid YAML is refused, since the properties have nowhere to go.
+  Flat keys rather than one nested map, because Obsidian's properties view
+  shows nested maps as raw text.
 - **Attachments, empty.** The artefact's shape is a document plus a set of
   attachments addressed by content hash. No verb adds one (SD7); the shape
   exists so that adding images later changes no tool's result.
@@ -209,6 +220,7 @@ A right panel beside Settings and Statistics, toggled from the bar.
 | `markdown/mdlint` | new |
 | `markdown/mdspan` | new |
 | chat tools | `artefact_*`, ten |
+| artefact frontmatter | `chat_*` properties, kept by the chat |
 | chat settings | Artefact option; Allow and Changes read without Apps |
 | chat panel | new Artefact panel |
 

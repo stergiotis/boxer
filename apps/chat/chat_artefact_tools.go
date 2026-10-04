@@ -27,6 +27,7 @@ const artefactPrompt = `This conversation has an artefact: one markdown document
 - Read before you write: artefact_read gives numbered lines and the revision, artefact_outline the headings with their line spans. Every write names base_revision, the revision you read; a write against an older one is refused — read again.
 - Prefer small writes: artefact_edit replaces a text that occurs exactly once, artefact_replace_section a section's body by heading path, artefact_insert adds lines; artefact_write replaces everything and suits a first draft.
 - Each write returns the lint findings for the lines it changed; fix what they report. artefact_lint checks the whole document and artefact_inspect lists its links, tags, callouts, code blocks and footnotes.
+- The frontmatter's chat_* properties (conversation, run, model, start time and more) are the chat's: it writes them into every revision; leave them as they are, keep the frontmatter valid YAML, and add your own properties beside them.
 - The person's settings decide whether you may write and whether each write waits for them; a rejected change is theirs to explain — ask, do not repeat it.`
 
 // maxReadLines bounds one artefact_read; maxFindMatches one artefact_find.
@@ -156,6 +157,12 @@ func (inst *coordinator) artefactCall(ctx context.Context, o toolOrigin, name st
 	if reason != "" {
 		return "error: " + reason, name + ": " + reason
 	}
+	// The chat's properties go into every write, so the diff the person
+	// reviews and the revision both carry them.
+	if ch.text, reason = stampChat(ch.text, art.metaNow()); reason != "" {
+		return "error: " + reason, name + ": " + reason
+	}
+	ch.changed = changedLines(text, ch.text)
 	if ch.text == text {
 		return marshal(writeView{Revision: n, Lines: lineCount(text), Unchanged: true}), name + " · no change"
 	}
@@ -611,6 +618,16 @@ func editSection(text string, heading []string, body string, withHeading bool) (
 func editFrontmatter(text string, set map[string]any, del []string) (ch artChange, reason string) {
 	if len(set) == 0 && len(del) == 0 {
 		return ch, "nothing to set or delete"
+	}
+	for k := range set {
+		if isChatProperty(k) {
+			return ch, "the chat keeps the " + chatPropertyPrefix + "* properties; " + k + " cannot be set"
+		}
+	}
+	for _, k := range del {
+		if isChatProperty(k) {
+			return ch, "the chat keeps the " + chatPropertyPrefix + "* properties; " + k + " cannot be deleted"
+		}
 	}
 	out, changed, err := mdspan.SetFrontmatter([]byte(text), set, del)
 	if err != nil {

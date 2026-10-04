@@ -254,3 +254,62 @@ func TestAskFirstWriteWaitsForThePerson(t *testing.T) {
 	}
 	assert.True(t, found)
 }
+
+func testMeta() artMeta {
+	return artMeta{conversation: "chat-x-1", title: "A plan", started: time.Date(2026, 10, 4, 19, 30, 5, 123, time.UTC),
+		model: "m", endpoint: "127.0.0.1", run: "run-1", app: "chat", window: 7, keep: true}
+}
+
+// Every write carries the chat's properties; the model cannot change or
+// remove them, and its own properties stay beside them.
+func TestChatPropertiesAreStampedIntoEveryWrite(t *testing.T) {
+	coord := newCoordinator(nil, nil, "conv")
+	art := newArtefact()
+	art.setPolicy(artPolicy{write: true})
+	art.setMeta(testMeta())
+	coord.offerArtefact(art)
+	ctx := context.Background()
+	write := func(name string, args map[string]any) string {
+		content, _ := coord.dispatch(ctx, toolOrigin{}, openaichat.ToolCall{Name: name}, args)
+		return content
+	}
+
+	write("artefact_write", map[string]any{"base_revision": 0.0, "text": "---\nstatus: draft\n---\n# Plan\n"})
+	_, text := art.head()
+	for _, want := range []string{"status: draft\n", "chat_conversation: chat-x-1\n", "chat_title: A plan\n", "chat_started: 2026-10-04T19:30:05Z\n",
+		"chat_model: m\n", "chat_endpoint: 127.0.0.1\n", "chat_run: run-1\n", "chat_app: chat\n", "chat_window: 7\n", "chat_keep: true\n"} {
+		assert.Contains(t, text, want)
+	}
+	assert.NotContains(t, text, "chat_task", "an empty property is left out")
+	assert.True(t, strings.HasSuffix(text, "---\n# Plan\n"))
+
+	// An edit of a chat property is undone by the stamp: no change at all.
+	content := write("artefact_edit", map[string]any{"base_revision": 1.0, "old_text": "chat_run: run-1", "new_text": "chat_run: forged"})
+	assert.Contains(t, content, `"unchanged":true`)
+
+	content = write("artefact_set_frontmatter", map[string]any{"base_revision": 1.0, "delete": []any{"chat_run"}})
+	assert.Contains(t, content, "cannot be deleted")
+	content = write("artefact_set_frontmatter", map[string]any{"base_revision": 1.0, "set": map[string]any{"chat_model": "x"}})
+	assert.Contains(t, content, "cannot be set")
+
+	// A rename lands with the next write; the changed lines cover it.
+	m := testMeta()
+	m.title = "The plan"
+	art.setMeta(m)
+	content = write("artefact_edit", map[string]any{"base_revision": 1.0, "old_text": "# Plan", "new_text": "# The plan"})
+	var w writeView
+	require.NoError(t, json.Unmarshal([]byte(content), &w))
+	require.NotNil(t, w.Changed)
+	_, text = art.head()
+	assert.Contains(t, text, "chat_title: The plan\n")
+	assert.Less(t, w.Changed.First, w.Changed.Last)
+
+	content = write("artefact_write", map[string]any{"base_revision": 2.0, "text": "---\nbad: [\n---\nx\n"})
+	assert.Contains(t, content, "not valid YAML")
+}
+
+func TestChangedLines(t *testing.T) {
+	assert.Equal(t, mdspan.LineSpan{First: 2, Last: 3}, changedLines("a\nb\nc\n", "a\nB\nX\nc\n"))
+	assert.Equal(t, mdspan.LineSpan{First: 2, Last: 2}, changedLines("a\nb\nc\n", "a\nc\n"))
+	assert.Equal(t, mdspan.LineSpan{First: 1, Last: 1}, changedLines("", "x\n"))
+}

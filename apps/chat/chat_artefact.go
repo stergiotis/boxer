@@ -86,9 +86,22 @@ type artefact struct {
 	// by a rewind is not handed out again.
 	lastN  int
 	policy artPolicy
+	meta   artMeta
 }
 
 func newArtefact() *artefact { return &artefact{} }
+
+func (inst *artefact) setMeta(m artMeta) {
+	inst.mu.Lock()
+	inst.meta = m
+	inst.mu.Unlock()
+}
+
+func (inst *artefact) metaNow() (m artMeta) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	return inst.meta
+}
 
 // head is the current revision's number and text.
 func (inst *artefact) head() (n int, text string) {
