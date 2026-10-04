@@ -51,6 +51,12 @@ const (
 	SubjectStop = SubjectPrefix + "stop"
 	// SubjectLaunch opens a window of an app the grant names.
 	SubjectLaunch = SubjectPrefix + "launch"
+	// SubjectArrange arranges windows on the desktop (ADR-0276 §SD3).
+	SubjectArrange = SubjectPrefix + "arrange"
+	// SubjectRaise brings one of the task's windows to the front.
+	SubjectRaise = SubjectPrefix + "raise"
+	// SubjectPlace sets the outer rect of one of the task's windows.
+	SubjectPlace = SubjectPrefix + "place"
 	// SubjectTurn starts a model turn: the changes by other writers since
 	// the previous one, and the task's pauses lifted.
 	SubjectTurn = SubjectPrefix + "turn"

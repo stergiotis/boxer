@@ -40,6 +40,11 @@ type HostI interface {
 	OpsUndoStatus(key uint64, callId string) (status string, ok bool)
 	OpsLogSince(key uint64, seq uint64) (entries []opengine.LogEntry, latest uint64, ok bool)
 	OpsOpen(appId app.AppIdT, kind string, cfg []byte) (key uint64, err error)
+	// OpsArrange, OpsRaise and OpsPlace queue a change to the desktop for
+	// the next frame (ADR-0276 §SD5).
+	OpsArrange(command string, keys []uint64) (err error)
+	OpsRaise(key uint64) (err error)
+	OpsPlace(key uint64, x, y, w, h float32) (err error)
 }
 
 // ModeE is how far a task may act in one instance (ADR-0269 §SD5).
@@ -191,6 +196,9 @@ type task struct {
 	// windows it opened, which pass to the person when it ends.
 	launches map[app.AppIdT]*launchEntry
 	launched map[uint64]bool
+	// desktop is the task's mode over the desktop as a whole; act lets it
+	// arrange every window (ADR-0276 §SD4).
+	desktop ModeE
 }
 
 // launchEntry is one app a task may open windows of (ADR-0269 §SD6).
@@ -308,8 +316,8 @@ func (inst *Service) testGrant(msg *app.Msg, req wireGrantRequest) (rep wireGran
 		rep.Reason = "no window host"
 		return
 	}
-	if len(req.Entries) == 0 && len(req.Launches) == 0 {
-		rep.Reason = "a grant names at least one instance or an app to open"
+	if len(req.Entries) == 0 && len(req.Launches) == 0 && req.Desktop == "" {
+		rep.Reason = "a grant names at least one instance, an app to open or the desktop"
 		inst.recordGrantRefusal(msg, req, rep.Reason)
 		inst.grantEvent(trail.GrantEventRefused, "host", rep.Reason, nil, asked(msg, req))
 		return
@@ -317,6 +325,13 @@ func (inst *Service) testGrant(msg *app.Msg, req wireGrantRequest) (rep wireGran
 	t := inst.newTask(msg.Sender, msg.SenderInstance, req.Conversation, req.Plan, req.Destinations, req.Calls,
 		time.Duration(req.DeadlineSecs)*time.Second, true)
 	inst.addLaunches(t, req.Launches)
+	if req.Desktop != "" {
+		t.desktop = ParseMode(req.Desktop)
+		if t.desktop != ModeObserve && t.desktop != ModeAct {
+			rep.Reason = "a test grant takes observe or act for the desktop"
+			return
+		}
+	}
 	for _, e := range req.Entries {
 		info, isOpen := inst.openInstance(e.Instance)
 		if !isOpen {

@@ -110,6 +110,11 @@ type request struct {
 	share     map[uint64]bool
 	shareFlag map[uint64]*bool
 	mode      map[uint64]ModeE
+	// desktop is the desktop mode asked for, ModeUnspecified when none;
+	// desktopShare the person's choice, desktopFlag its checkbox binding.
+	desktop      ModeE
+	desktopShare bool
+	desktopFlag  *bool
 }
 
 func (inst *Service) isCoordinator(id app.AppIdT) (ok bool) {
@@ -163,7 +168,9 @@ func (inst *Service) requestGrant(msg *app.Msg) (rep wireGrantReply) {
 		plan: req.Plan, wanted: make(map[uint64]ModeE), wantedOps: make(map[uint64][]string),
 		destinations: req.Destinations, calls: req.Calls, deadline: time.Duration(req.DeadlineSecs) * time.Second,
 		launches: req.Launches,
-		created:  time.Now(), share: make(map[uint64]bool), shareFlag: make(map[uint64]*bool), mode: make(map[uint64]ModeE)}
+		created:  time.Now(), share: make(map[uint64]bool), shareFlag: make(map[uint64]*bool), mode: make(map[uint64]ModeE),
+		desktop: ParseMode(req.Desktop)}
+	r.desktopShare = r.desktop != ModeUnspecified
 	for _, e := range req.Entries {
 		m := ParseMode(e.Mode)
 		if m == ModeUnspecified {
@@ -324,6 +331,9 @@ func (inst *Service) approve(r *request) (route *held) {
 		t.callsBudget += DefaultCallBudget / 4
 	}
 	inst.addLaunches(t, r.launches)
+	if r.desktopShare && r.desktop > t.desktop {
+		t.desktop = r.desktop
+	}
 	r.state = reqStateApproved
 	inst.grantEvent(event, inst.decider(), "", t, nil)
 	route = r.held
@@ -526,7 +536,7 @@ func (inst *Client) AwaitGrant(ctx context.Context, key string) (g Grant, err er
 // host refuses before it becomes one the person sees.
 func asked(msg *app.Msg, req wireGrantRequest) (r *request) {
 	r = &request{actor: msg.Sender, actorInstance: msg.SenderInstance, conversation: req.Conversation, plan: req.Plan,
-		destinations: req.Destinations, launches: req.Launches, wanted: make(map[uint64]ModeE)}
+		destinations: req.Destinations, launches: req.Launches, wanted: make(map[uint64]ModeE), desktop: ParseMode(req.Desktop)}
 	for _, e := range req.Entries {
 		r.wanted[e.Instance] = ParseMode(e.Mode)
 	}

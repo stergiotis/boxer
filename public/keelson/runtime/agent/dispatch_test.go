@@ -89,6 +89,8 @@ type fakeHost struct {
 	openAs     opwire.LoadE
 	openReason string
 	loads      map[uint64]opwire.InstanceInfo
+	// windowActs are the window verbs the host was asked to queue.
+	windowActs []string
 }
 
 func (inst *fakeHost) OpsInstances() (out []opwire.InstanceInfo) {
@@ -124,6 +126,24 @@ func (inst *fakeHost) OpsAttach(k uint64, a bool) bool {
 	return false
 }
 func (inst *fakeHost) OpsCapture(k uint64) (string, error) { return "cap-1", nil }
+func (inst *fakeHost) OpsArrange(command string, keys []uint64) error {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	inst.windowActs = append(inst.windowActs, "arrange:"+command)
+	return nil
+}
+func (inst *fakeHost) OpsRaise(k uint64) error {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	inst.windowActs = append(inst.windowActs, "raise")
+	return nil
+}
+func (inst *fakeHost) OpsPlace(k uint64, x, y, w, h float32) error {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	inst.windowActs = append(inst.windowActs, "place")
+	return nil
+}
 func (inst *fakeHost) OpsRevisions(k uint64) (map[string]uint64, bool) {
 	revs, _ := inst.eng(k).SnapshotRevisions()
 	return revs, true

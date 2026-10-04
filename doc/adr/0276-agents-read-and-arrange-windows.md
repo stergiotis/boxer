@@ -34,7 +34,7 @@ Window state becomes keelson data that any app can read under ADR-0253's per-tab
   - `need_w` and `need_h` (ADR-0275 §SD4);
   - `stack` (the stacking rank: larger is further front, 0 unknown);
   - `collapsed`, `maximized`, `active` (the shell's active window), and `shown` (whether the window reported geometry last frame; a window opened this frame has not);
-  - `agent_task` (the task whose grant holds the window, empty when none), filled by the agent service (M3).
+  - `agent_tasks` (the tasks whose grant holds the window: a window can sit in several tasks' grants, observers included).
 
   A one-row `keelson('desktop')` holds:
   - the work area `work_x`, `work_y`, `work_w`, `work_h`, and `work_shown` (false until a frame has shown a window);
@@ -69,7 +69,7 @@ Window state becomes keelson data that any app can read under ADR-0253's per-tab
 | `keelson('windows')` schema | Columns added (SD1) | Readers selecting `*` (play's catalog, the app center) see more columns |
 | `keelson('desktop')` | Added | Introspection catalog; `keelson.query` subject for it |
 | `runtime.agent.arrange`, `.raise`, `.place` | Added | `agent.Service` dispatch, wire types, `HostI`, `agent.Client`, the dispatch test host and the chat's test host |
-| Grant request | Desktop mode added (SD4) | Request dialog in host chrome; grant records |
+| Grant request | Desktop mode added (SD4) | Request dialog in host chrome; grant records; `keelson('agent_grants')` `desktop` column |
 | Chat manifest | `keelson.query` grants for `windows`, `desktop` | `query_windows` tool, coordinator prompt |
 | Exported Go API (`windowhost`) | Subset arrange, `Place`, `Raise`, the geometry snapshot | — |
 
@@ -107,8 +107,8 @@ Window state becomes keelson data that any app can read under ADR-0253's per-tab
 
 Proposed 2026-10-04.
 
-- **M1 — The keelson tables (SD1).** ✓ Without `agent_task`, which needs the agent service and comes with M3. The viewport size is not in `keelson('desktop')`: no host report carries it, and the work area is what arrangements use.
+- **M1 — The keelson tables (SD1).** ✓ Without `agent_tasks`, which needs the agent service and comes with M3. The viewport size is not in `keelson('desktop')`: no host report carries it, and the work area is what arrangements use.
 - **M2 — The windowhost API (SD5).**
-- **M3 — The agent verbs and desktop mode (SD3, SD4), and `agent_task`.**
+- **M3 — The agent verbs and desktop mode (SD3, SD4), and `agent_tasks`.** ✓ `keelson('agent_grants')` gains a `desktop` column.
 - **M4 — The chat's `query_windows` tool and grants (SD2).**
 - **M5 — The scripted chat scene.**

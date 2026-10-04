@@ -164,6 +164,10 @@ type GrantRequest struct {
 	Deadline time.Duration
 	// Launches are the apps the task may open windows of.
 	Launches []GrantLaunch
+	// Desktop asks for a mode over the desktop as a whole; act lets the
+	// task arrange every window (ADR-0276 §SD4). ModeUnspecified asks for
+	// none.
+	Desktop ModeE
 }
 
 // GrantLaunch lets a task open up to Count windows of App (an id or a
@@ -206,6 +210,9 @@ func (inst *Client) RequestKey(ctx context.Context, r GrantRequest) (key string,
 	}
 	for _, l := range r.Launches {
 		req.Launches = append(req.Launches, wireLaunchEntry{App: l.App, Mode: l.Mode.String(), Count: l.Count})
+	}
+	if r.Desktop != ModeUnspecified {
+		req.Desktop = r.Desktop.String()
 	}
 	rep, err := roundTrip[wireGrantRequest, wireGrantReply](ctx, inst, SubjectRequest, req)
 	if err != nil {
@@ -332,6 +339,28 @@ func (inst *Client) Cancel(ctx context.Context, handle string, key string) (out 
 func (inst *Client) Capture(ctx context.Context, handle string, instance uint64, key string) (out Outcome, err error) {
 	return callReply(roundTrip[wireCapture, wireCallReply](ctx, inst, SubjectCapture,
 		wireCapture{V: wireVersion, Handle: handle, Instance: instance, Key: key}))
+}
+
+// Arrange arranges windows with an ADR-0275 arrangement named by its ident
+// ("cascade", "tile", "columns", "rows", "gather"): instances, or every
+// window when instances is empty. It needs the grant's desktop mode act.
+func (inst *Client) Arrange(ctx context.Context, handle string, key string, command string, instances []uint64) (out Outcome, err error) {
+	return callReply(roundTrip[wireWindowAct, wireCallReply](ctx, inst, SubjectArrange,
+		wireWindowAct{V: wireVersion, Handle: handle, Key: key, Command: command, Instances: instances}))
+}
+
+// Raise brings one of the task's windows to the front. It needs act mode on
+// the window.
+func (inst *Client) Raise(ctx context.Context, handle string, key string, instance uint64) (out Outcome, err error) {
+	return callReply(roundTrip[wireWindowAct, wireCallReply](ctx, inst, SubjectRaise,
+		wireWindowAct{V: wireVersion, Handle: handle, Key: key, Instance: instance}))
+}
+
+// Place sets the outer rect of one of the task's windows, in logical
+// points. It needs act mode on the window.
+func (inst *Client) Place(ctx context.Context, handle string, key string, instance uint64, x, y, w, h float32) (out Outcome, err error) {
+	return callReply(roundTrip[wireWindowAct, wireCallReply](ctx, inst, SubjectPlace,
+		wireWindowAct{V: wireVersion, Handle: handle, Key: key, Instance: instance, X: x, Y: y, W: w, H: h}))
 }
 
 // ReadResult is a result as JSON, or an artifact by media type and path.

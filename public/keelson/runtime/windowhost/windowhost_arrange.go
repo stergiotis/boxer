@@ -54,6 +54,34 @@ func (inst ArrangeE) String() (s string) {
 	return
 }
 
+// Ident is the command's stable name for callers that name it in text — an
+// agent's tool call (ADR-0276 §SD3); String is its menu label.
+func (inst ArrangeE) Ident() (s string) {
+	switch inst {
+	case ArrangeCascade:
+		s = "cascade"
+	case ArrangeTile:
+		s = "tile"
+	case ArrangeColumns:
+		s = "columns"
+	case ArrangeRows:
+		s = "rows"
+	case ArrangeGather:
+		s = "gather"
+	}
+	return
+}
+
+// ParseArrange is the command Ident names, ArrangeNone for any other name.
+func ParseArrange(ident string) (cmd ArrangeE) {
+	for _, c := range ArrangeCommands {
+		if c.Ident() == ident {
+			return c
+		}
+	}
+	return ArrangeNone
+}
+
 // Rect is an axis-aligned rectangle in egui logical points, viewport
 // top-left origin.
 type Rect struct {

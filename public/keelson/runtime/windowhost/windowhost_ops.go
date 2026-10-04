@@ -18,6 +18,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
@@ -434,4 +435,31 @@ func (inst *OpsService) reply(subject string, v opwire.CallReply) {
 	if err := buscodec.Reply(inst.busClient.Publish, subject, v); err != nil {
 		inst.log.Warn().Err(err).Msg("windowhost: ops reply failed")
 	}
+}
+
+// OpsArrange is ArrangeWindows for the agent service, the command named by
+// its Ident (ADR-0276 §SD3).
+func (inst *Inst) OpsArrange(command string, keys []uint64) (err error) {
+	cmd := ParseArrange(command)
+	if cmd == ArrangeNone {
+		err = eb.Build().Str("command", command).Errorf("windowhost: unknown arrangement")
+		return
+	}
+	ks := make([]WindowKeyT, 0, len(keys))
+	for _, k := range keys {
+		ks = append(ks, WindowKeyT(k))
+	}
+	err = inst.ArrangeWindows(cmd, ks)
+	return
+}
+
+// OpsRaise is Raise for the agent service.
+func (inst *Inst) OpsRaise(key uint64) (err error) {
+	return inst.Raise(WindowKeyT(key))
+}
+
+// OpsPlace is Place for the agent service: an outer rect by its top-left
+// corner and size, in logical points.
+func (inst *Inst) OpsPlace(key uint64, x, y, w, h float32) (err error) {
+	return inst.Place(WindowKeyT(key), rectAt(x, y, w, h))
 }

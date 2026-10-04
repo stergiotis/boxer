@@ -69,6 +69,12 @@ type GrantRow struct {
 	Revoked       string
 	Created       time.Time
 	Test          bool
+	// Desktop is the task's mode over the desktop as a whole, empty when
+	// the grant does not name it (ADR-0276 §SD4).
+	Desktop string
+	// Instances are the window keys the task's entries name, ascending:
+	// Entries as numbers, for joining against keelson('windows').
+	Instances []uint64
 }
 
 // RecordsI is the service as a read side.
@@ -302,6 +308,13 @@ func (inst *Service) Grants() (rows []GrantRow) {
 			Destinations: t.destinations, CallsUsed: int32(t.callsUsed), CallsBudget: int32(t.callsBudget),
 			Deadline: t.deadline, Epoch: t.epoch, Revoked: t.revoked, Created: t.created, Test: t.test}
 		g.Entries = t.entryStrings()
+		for k := range t.entries {
+			g.Instances = append(g.Instances, k)
+		}
+		slices.Sort(g.Instances)
+		if t.desktop != ModeUnspecified {
+			g.Desktop = t.desktop.String()
+		}
 		rows = append(rows, g)
 	}
 	slices.SortFunc(rows, func(a, b GrantRow) int { return a.Created.Compare(b.Created) })
@@ -359,7 +372,8 @@ func grantsTable(rows []GrantRow) *introspect.Table {
 		Uint64("epoch", func(i int) uint64 { return r(i).Epoch }).
 		String("revoked", func(i int) string { return r(i).Revoked }).
 		Int64("created_unix_ms", func(i int) int64 { return r(i).Created.UnixMilli() }).
-		Bool("test", func(i int) bool { return r(i).Test })
+		Bool("test", func(i int) bool { return r(i).Test }).
+		String("desktop", func(i int) string { return r(i).Desktop })
 }
 
 type actionsProvider struct{ svc RecordsI }

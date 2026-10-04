@@ -363,6 +363,21 @@ func (inst *Chrome) renderRequest(r *request, windows []windowRow, waiting int, 
 	for _, l := range r.launches {
 		c.Label("the task may " + launchText(l, svc.display(app.AppIdT(l.App)))).Wrap().Send()
 	}
+	if r.desktop == ModeAct {
+		// The desktop as a whole (ADR-0276 §SD4): arranging moves every
+		// window, the person's own included.
+		svc.mu.Lock()
+		if r.desktopFlag == nil {
+			r.desktopFlag = new(bool)
+			*r.desktopFlag = r.desktopShare
+		}
+		flag := r.desktopFlag
+		svc.mu.Unlock()
+		c.Checkbox(ids.PrepareStr("agent-desktop-"+r.key), *flag, "let the task arrange every window on the desktop").SendRespVal(flag)
+		svc.mu.Lock()
+		r.desktopShare = *flag
+		svc.mu.Unlock()
+	}
 	if len(r.destinations) > 0 {
 		c.Label("destinations: " + joinComma(r.destinations)).Wrap().Send()
 	}

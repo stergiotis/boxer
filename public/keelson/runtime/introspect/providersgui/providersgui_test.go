@@ -30,7 +30,7 @@ func TestWindowsTableRendersLaunchProvenance(t *testing.T) {
 			ConfigKind: "testLaunch", ConfigBytes: 34, SharesInstance: true,
 		},
 	}
-	rec := windowsTable(ws).Build(introspect.AllColumns(), len(ws))
+	rec := windowsTable(ws, nil).Build(introspect.AllColumns(), len(ws))
 	defer rec.Release()
 	require.EqualValues(t, 3, rec.NumRows())
 
@@ -116,7 +116,7 @@ func TestWindowsTableRendersGeometry(t *testing.T) {
 		}},
 		{Key: 2, AppId: "test.b"},
 	}
-	rec := windowsTable(ws).Build(introspect.AllColumns(), len(ws))
+	rec := windowsTable(ws, nil).Build(introspect.AllColumns(), len(ws))
 	defer rec.Release()
 	f := func(col string, row int) float64 {
 		return rec.Column(colIndex(t, rec, col)).(*array.Float64).Value(row)
@@ -160,4 +160,21 @@ func TestDesktopTable(t *testing.T) {
 	require.NoError(t, err)
 	defer empty.Release()
 	assert.Zero(t, empty.NumRows())
+}
+
+// agent_tasks lists the tasks holding each window, empty for the rest.
+func TestWindowsTableNamesHoldingTasks(t *testing.T) {
+	ws := []windowhost.WindowInfo{{Key: 1}, {Key: 2}}
+	rec := windowsTable(ws, map[uint64][]string{2: {"task-a", "task-b"}}).Build(introspect.AllColumns(), len(ws))
+	defer rec.Release()
+	col := rec.Column(colIndex(t, rec, "agent_tasks")).(*array.List)
+	vals := col.ListValues().(*array.String)
+	start, end := col.ValueOffsets(0)
+	assert.Equal(t, start, end, "window 1 is held by no task")
+	start, end = col.ValueOffsets(1)
+	var got []string
+	for i := start; i < end; i++ {
+		got = append(got, vals.Value(int(i)))
+	}
+	assert.Equal(t, []string{"task-a", "task-b"}, got)
 }

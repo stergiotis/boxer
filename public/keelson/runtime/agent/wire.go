@@ -95,6 +95,9 @@ type wireGrantRequest struct {
 	Calls        uint32            `json:"calls,omitempty"`
 	DeadlineSecs uint32            `json:"deadline_secs,omitempty"`
 	Launches     []wireLaunchEntry `json:"launches,omitempty"`
+	// Desktop asks for a mode over the desktop as a whole: "act" lets the
+	// task arrange every window (ADR-0276 §SD4).
+	Desktop string `json:"desktop,omitempty"`
 }
 
 // wireLaunchEntry names an app the task may open windows of.
@@ -235,6 +238,22 @@ type wireCapture struct {
 	Handle   string `json:"handle"`
 	Instance uint64 `json:"instance"`
 	Key      string `json:"key"`
+}
+
+// wireWindowAct is arrange, raise or place (ADR-0276 §SD3). Command and
+// Instances are arrange's; Instance is raise's and place's; X, Y, W, H is
+// place's outer rect in logical points.
+type wireWindowAct struct {
+	V         uint8    `json:"v"`
+	Handle    string   `json:"handle"`
+	Key       string   `json:"key"`
+	Command   string   `json:"command,omitempty"`
+	Instances []uint64 `json:"instances,omitempty"`
+	Instance  uint64   `json:"instance,omitempty"`
+	X         float32  `json:"x,omitempty"`
+	Y         float32  `json:"y,omitempty"`
+	W         float32  `json:"w,omitempty"`
+	H         float32  `json:"h,omitempty"`
 }
 
 type wireHandle struct {

@@ -19,9 +19,14 @@ import (
 // RegisterDemos registers the demos provider into r.
 func RegisterDemos(r *introspect.Registry) error { return r.Register(demosProvider{}) }
 
+// TasksOfI says which agent tasks hold each window (ADR-0276 §SD1): window
+// key to task ids. The agent service's read side answers it.
+type TasksOfI func() (tasks map[uint64][]string)
+
 // RegisterWindows registers a windows provider bound to host into r.
-func RegisterWindows(r *introspect.Registry, host *windowhost.Inst) error {
-	return r.Register(windowsProvider{host: host})
+// tasksOf may be nil: every window then reads as held by no task.
+func RegisterWindows(r *introspect.Registry, host *windowhost.Inst, tasksOf TasksOfI) error {
+	return r.Register(windowsProvider{host: host, tasksOf: tasksOf})
 }
 
 // RegisterDesktop registers a desktop provider bound to host into r.
@@ -39,12 +44,12 @@ func RegisterFrameTimes(r *introspect.Registry, host *windowhost.Inst) error {
 // RegisterAll registers the GUI-coupled providers: demos (a process
 // global) and, when host is non-nil, windows, the desktop and frame times
 // (bound to that host).
-func RegisterAll(r *introspect.Registry, host *windowhost.Inst) (err error) {
+func RegisterAll(r *introspect.Registry, host *windowhost.Inst, tasksOf TasksOfI) (err error) {
 	if err = RegisterDemos(r); err != nil {
 		return
 	}
 	if host != nil {
-		if err = RegisterWindows(r, host); err != nil {
+		if err = RegisterWindows(r, host, tasksOf); err != nil {
 			return
 		}
 		if err = RegisterDesktop(r, host); err != nil {
@@ -101,21 +106,28 @@ func demosTable(ds []demoreg.Demo) *introspect.Table {
 
 // --- windows (window host) ---------------------------------------------------
 
-type windowsProvider struct{ host *windowhost.Inst }
+type windowsProvider struct {
+	host    *windowhost.Inst
+	tasksOf TasksOfI
+}
 
 func (windowsProvider) Name() string                         { return "windows" }
 func (windowsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
-func (p windowsProvider) Schema() *arrow.Schema              { return windowsTable(nil).Schema() }
+func (p windowsProvider) Schema() *arrow.Schema              { return windowsTable(nil, nil).Schema() }
 
 func (p windowsProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
 	var infos []windowhost.WindowInfo
 	if p.host != nil {
 		infos = p.host.WindowInfos()
 	}
-	return windowsTable(infos).Build(proj, len(infos)), nil
+	var tasks map[uint64][]string
+	if p.tasksOf != nil {
+		tasks = p.tasksOf()
+	}
+	return windowsTable(infos, tasks).Build(proj, len(infos)), nil
 }
 
-func windowsTable(ws []windowhost.WindowInfo) *introspect.Table {
+func windowsTable(ws []windowhost.WindowInfo, tasks map[uint64][]string) *introspect.Table {
 	return introspect.NewTable().
 		Int64("key", func(i int) int64 { return int64(ws[i].Key) }).
 		String("app_id", func(i int) string { return string(ws[i].AppId) }).
@@ -161,7 +173,10 @@ func windowsTable(ws []windowhost.WindowInfo) *introspect.Table {
 		Bool("collapsed", func(i int) bool { return ws[i].Geom.Collapsed }).
 		Bool("maximized", func(i int) bool { return ws[i].Geom.Maximized }).
 		// The shell's active window: the one process-global input goes to.
-		Bool("active", func(i int) bool { return ws[i].Geom.Active })
+		Bool("active", func(i int) bool { return ws[i].Geom.Active }).
+		// The agent tasks whose grant holds the window (ADR-0269), the
+		// task column of keelson('agent_grants'); empty when none.
+		StringList("agent_tasks", func(i int) []string { return tasks[uint64(ws[i].Key)] })
 }
 
 // --- desktop (window host) ---------------------------------------------------

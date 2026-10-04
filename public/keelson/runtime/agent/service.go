@@ -191,6 +191,8 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 		inst.reply(msg.Reply, inst.turn(msg))
 	case SubjectLaunch:
 		inst.reply(msg.Reply, inst.launch(msg))
+	case SubjectArrange, SubjectRaise, SubjectPlace:
+		inst.reply(msg.Reply, inst.windowAct(msg))
 	default:
 		inst.reply(msg.Reply, wireAck{V: wireVersion, Reason: "no such service"})
 	}

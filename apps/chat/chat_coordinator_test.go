@@ -80,8 +80,11 @@ func (inst *noteHost) OpsCancel(k uint64, id string) (opwire.Outcome, bool) {
 func (inst *noteHost) OpsExpire(k uint64, ids []string, reason string) {
 	inst.eng(k).Expire(ids, reason)
 }
-func (inst *noteHost) OpsAttach(k uint64, a bool) bool     { inst.eng(k).SetAttached(a); return true }
-func (inst *noteHost) OpsCapture(k uint64) (string, error) { return "", nil }
+func (inst *noteHost) OpsAttach(k uint64, a bool) bool                           { inst.eng(k).SetAttached(a); return true }
+func (inst *noteHost) OpsCapture(k uint64) (string, error)                       { return "", nil }
+func (inst *noteHost) OpsArrange(string, []uint64) error                         { return nil }
+func (inst *noteHost) OpsRaise(uint64) error                                     { return nil }
+func (inst *noteHost) OpsPlace(uint64, float32, float32, float32, float32) error { return nil }
 func (inst *noteHost) OpsCaptureStatus(string) (opwire.CaptureStatus, bool) {
 	return opwire.CaptureStatus{}, false
 }

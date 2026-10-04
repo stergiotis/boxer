@@ -139,6 +139,26 @@ type Deps struct {
 	Log zerolog.Logger
 }
 
+// tasksOf maps each window key to the tasks whose grant holds it, read from
+// the agent service's grants; nil without one. A revoked grant holds nothing.
+func tasksOf(svc agent.RecordsI) introspectprovidersgui.TasksOfI {
+	if svc == nil {
+		return nil
+	}
+	return func() (tasks map[uint64][]string) {
+		tasks = make(map[uint64][]string)
+		for _, g := range svc.Grants() {
+			if g.Revoked != "" {
+				continue
+			}
+			for _, k := range g.Instances {
+				tasks[k] = append(tasks[k], g.Task)
+			}
+		}
+		return
+	}
+}
+
 // noopStop is returned whenever there is nothing to shut down, so callers can
 // always `defer stop(ctx)` unconditionally.
 func noopStop(context.Context) error { return nil }
@@ -163,7 +183,7 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	if e := introspectproviders.RegisterStatic(reg); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: static provider registration failed")
 	}
-	if e := introspectprovidersgui.RegisterAll(reg, deps.WindowHost); e != nil {
+	if e := introspectprovidersgui.RegisterAll(reg, deps.WindowHost, tasksOf(deps.Agent)); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: GUI provider registration failed")
 	}
 	// ADR-0148 §SD7: the stored workingset records, read through the facts
