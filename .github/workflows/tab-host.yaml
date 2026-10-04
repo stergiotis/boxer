@@ -56,7 +56,7 @@ jobs:
           got=$(sha256sum "$HOST" | cut -d' ' -f1)
           echo "built $got, recorded $want"
           if [ "$got" != "$want" ]; then
-            echo "::error file=$SUM::the browser host this tree builds ($got) is not the one browserhost.sum records ($want); run 'go run ./public/thestack/cmd/imzero2tab hostdigest --write' and commit the file"
+            echo "::error file=$SUM::the browser host this tree builds ($got) is not the one browserhost.sum records ($want). A commit changed rust/imzero2 (or regenerated the bindings) without refreshing the file; the build is reproducible, so this is the tree moving, not CI. Run 'go run ./public/thestack/cmd/imzero2tab hostdigest --write' on the commit being pushed and commit the file (AGENTS.md, Browser host digest)."
             exit 1
           fi
       - name: Assemble the site

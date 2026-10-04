@@ -233,6 +233,13 @@ need:
   ([ADR-0267](./doc/adr/0267-imzero2-go-widget-api-contract-immediate-and-semi-retained.md),
   written out in the imzero2 skill §21); `widgets/conformance` checks the
   mechanical rules over every package, with an empty allowlist.
+- **Browser host digest** — any change under `rust/imzero2/` (or a bindings
+  regeneration) changes the browser tab's Rust host, whose SHA-256 is recorded
+  in `tabhost/browserhost.sum` and checked by the `tab-host` workflow on push.
+  In the commit that changes it, refresh the file:
+  `go run ./public/thestack/cmd/imzero2tab hostdigest --write`. Compute it from
+  the commit being pushed — another session's Rust change in between makes it
+  stale again ([ADR-0278](./doc/adr/0278-tab-mode-for-downstream-apps.md) SD5).
 - **nanopass / dsl** — the SQL pipeline. Fix downstream passes for the canonical
   (function-call) form; if a shape isn't canonicalised, fix the canonicalize
   pass, not the consumer.
