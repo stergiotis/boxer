@@ -4,7 +4,7 @@ audience: contributor
 status: draft
 generated: true
 generator: public/app env gen-docs
-generated-at: 2026-10-04T17:28:05Z
+generated-at: 2026-10-04T18:23:40Z
 ---
 
 > **Status: draft — pre-human-review.** Machine-generated registry snapshot;
@@ -35,7 +35,7 @@ generated-at: 2026-10-04T17:28:05Z
 
 | Name | Type | Default | CLI flag | Sensitive | Description |
 |------|------|---------|----------|-----------|-------------|
-| `BOXER_CHAT_ADVANCED` | bool | `true` | — |  | show the chat app's Statistics panel — token and answer statistics of the window's conversations, and Open in play on them as ad-hoc datasets; false hides it |
+| `BOXER_CHAT_ADVANCED` | bool | `true` | — |  | show the chat app's Analytics panel — token and answer statistics of the window's conversations, the conversation's agent surface, and Open in play on them as ad-hoc datasets; false hides it |
 | `BOXER_CHAT_APPS` | bool | `false` | — |  | turn on Apps in a new chat window: the model may ask the person for windows to work in (ADR-0269); a chat listed in BOXER_AGENT_COORDINATORS starts with Apps on anyway |
 | `BOXER_CHAT_ARTEFACT` | bool | `false` | — |  | turn on the Artefact in a new chat window: one markdown document per conversation that the model edits through tools (ADR-0282); for scenes and demos |
 | `BOXER_CHAT_DRAFT` | string | — | — |  | text in the chat app's composer when a window opens; for scenes and demos |

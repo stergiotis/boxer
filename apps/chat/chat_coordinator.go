@@ -99,8 +99,11 @@ type coordinator struct {
 	apps      bool
 	questions bool
 	grant     agent.Grant
-	tainted   bool
-	confined  bool
+	// tasks are the tasks the conversation held, in order: a stopped task
+	// stays, so the Analytics panel counts its calls (ADR-0283 §SD2).
+	tasks    []string
+	tainted  bool
+	confined bool
 	// refused holds the calls refused since the last call that was not, by
 	// tool and arguments; refusal is the current call's, set while it runs.
 	refused map[string]string
@@ -205,6 +208,13 @@ func (inst *coordinator) state() (task string, tainted bool, confined bool) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	return inst.grant.Task, inst.tainted, inst.confined
+}
+
+// heldTasks are the tasks the conversation held.
+func (inst *coordinator) heldTasks() (tasks []string) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	return slices.Clone(inst.tasks)
 }
 
 func (inst *coordinator) handle() (h string) {
@@ -601,6 +611,9 @@ func (inst *coordinator) requestAccess(ctx context.Context, plan string, args ma
 	inst.mu.Lock()
 	if g.Task != "" {
 		inst.grant = g
+		if !slices.Contains(inst.tasks, g.Task) {
+			inst.tasks = append(inst.tasks, g.Task)
+		}
 	}
 	inst.mu.Unlock()
 	listing, _ := inst.listWindows(ctx)

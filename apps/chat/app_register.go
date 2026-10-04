@@ -50,9 +50,12 @@ var manifest = app.Manifest{
 		// The desktop as data (ADR-0276 §SD2): every window's state and the
 		// work area, for the coordinator's query_windows.
 		keelsonquery.ClientCaps(providersgui.TableWindows, providersgui.TableDesktop),
+		// The conversation's grants and calls, for the Analytics panel's
+		// agent surface (ADR-0283 §SD2).
+		keelsonquery.ClientCaps(agent.TableGrants, agent.TableActions),
 		[]app.SubjectFilter{
 			{Pattern: adhocdata.SubjectPublish, Direction: app.CapDirectionPub,
-				Reason: "chat: publish the window's token and answer statistics as ad-hoc datasets for Open in play (ADR-0240)"},
+				Reason: "chat: publish the window's token and answer statistics and its agent surface as ad-hoc datasets for Open in play (ADR-0240)"},
 			{Pattern: windowhost.OpenSubject, Direction: app.CapDirectionPub,
 				Reason: "chat: Open in play — a play window on the statistics, a reply's SQL or a failed call's record — and Open in mdedit on the conversation (ADR-0135)"},
 			{Pattern: clipboardbroker.SubjectWrite, Direction: app.CapDirectionPub,

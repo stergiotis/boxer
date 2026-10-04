@@ -12,20 +12,20 @@ import (
 )
 
 const (
-	// statsPanelW is the Statistics panel's width; the plots fill it.
+	// statsPanelW is the Analytics panel's width; the plots fill it.
 	statsPanelW float32 = 380
 	statsPlotH  float32 = 150
 
-	tipStats     = "Token and answer statistics of this window's conversations, kept while the window is open."
-	tipOpenStats = "Publish the statistics as the ad-hoc datasets chat_turns and chat_calls, and open play on them. A later press republishes."
+	tipStats     = "Analytics: token and answer statistics of this window's conversations, kept while the window is open, and the agent surface of this conversation."
+	tipOpenStats = "Publish the statistics as the ad-hoc datasets chat_turns and chat_calls, the agent surface as chat_surface, and open play on them. A later press republishes."
 )
 
 var (
-	atomsStats     = c.Atoms().Text(icons.PhChartLine + " Statistics").Keep()
+	atomsStats     = c.Atoms().Text(icons.PhChartLine + " Analytics").Keep()
 	atomsOpenStats = c.Atoms().Text(icons.PhTable + " Open in play").Keep()
 )
 
-// renderStatsToggle is the bar's Statistics button.
+// renderStatsToggle is the bar's Analytics button.
 func (inst *App) renderStatsToggle() {
 	if !inst.advanced {
 		return
@@ -40,7 +40,7 @@ func (inst *App) renderStatsToggle() {
 	}
 }
 
-// renderStatsPanel is the Statistics panel, beside the transcript.
+// renderStatsPanel is the Analytics panel, beside the transcript (ADR-0283).
 func (inst *App) renderStatsPanel() {
 	if !inst.advanced || !inst.showStats {
 		return
@@ -53,23 +53,10 @@ func (inst *App) renderStatsPanel() {
 }
 
 func (inst *App) renderStats() {
-	s := &inst.stats
-	turns, answered, calls, in, out := s.totals()
-	for rt := range c.RichTextLabel("Statistics") {
-		rt.Heading()
-	}
-	if turns == 0 {
-		for rt := range c.RichTextLabel("No turn yet: the statistics fill in as the model answers.") {
-			rt.Weak()
-		}
-		return
-	}
-	c.Label(strconv.Itoa(turns) + " turns · " + strconv.Itoa(answered) + " answered · " + strconv.Itoa(calls) + " model calls").Send()
-	c.Label("tokens: " + strconv.FormatInt(in, 10) + " in · " + strconv.FormatInt(out, 10) + " out").Send()
+	heading("Analytics")
 	w := statsPanelW - 30
-	inst.renderEcdf(0, "answer time", "seconds from send to answer", s.answerSeconds(), w)
-	inst.renderEcdf(1, "output tokens", "output tokens per model call", s.callTokens(true), w)
-	inst.renderEcdf(2, "input tokens", "input tokens per model call", s.callTokens(false), w)
+	inst.renderSurface(w)
+	inst.renderTokenStats(w)
 	c.Separator().Send()
 	busy := inst.handover.Snapshot().State == bgjob.StateRunning
 	for range c.HoverText(tipOpenStats).KeepIter() {
@@ -84,6 +71,22 @@ func (inst *App) renderStats() {
 			rt.Small().Weak()
 		}
 	}
+}
+
+// renderTokenStats is the section of turns, calls and tokens.
+func (inst *App) renderTokenStats(w float32) {
+	section("Answers and tokens")
+	s := &inst.stats
+	turns, answered, calls, in, out := s.totals()
+	if turns == 0 {
+		weak("No turn yet: the statistics fill in as the model answers.")
+		return
+	}
+	c.Label(strconv.Itoa(turns) + " turns · " + strconv.Itoa(answered) + " answered · " + strconv.Itoa(calls) + " model calls").Send()
+	c.Label("tokens: " + strconv.FormatInt(in, 10) + " in · " + strconv.FormatInt(out, 10) + " out").Send()
+	inst.renderEcdf(0, "answer time", "seconds from send to answer", s.answerSeconds(), w)
+	inst.renderEcdf(1, "output tokens", "output tokens per model call", s.callTokens(true), w)
+	inst.renderEcdf(2, "input tokens", "input tokens per model call", s.callTokens(false), w)
 }
 
 // renderEcdf draws one empirical distribution with its confidence band
@@ -122,6 +125,10 @@ func (inst *App) renderEcdf(i int, name string, xLabel string, sorted []float64,
 // the render thread.
 func (inst *App) openStats() {
 	bus, pubs, snap := inst.bus, inst.pubs, inst.stats.clone()
+	var cells []surfaceCell
+	if m := inst.surface.model; m != nil && m.conv == inst.conv.id {
+		cells = m.cells
+	}
 	if bus == nil {
 		inst.handoverNote = "no bus: Open in play needs the app runtime"
 		return
@@ -129,7 +136,7 @@ func (inst *App) openStats() {
 	inst.handoverNote = ""
 	inst.handover.Start(nil, bgjob.Spec{Kind: "chat-stats-handover", Title: "open the chat statistics in play"},
 		func(ctx context.Context) (note *string, err error) {
-			n, err := openStatsInPlay(bus, pubs, snap)
+			n, err := openStatsInPlay(bus, pubs, snap, cells)
 			if err != nil {
 				return
 			}

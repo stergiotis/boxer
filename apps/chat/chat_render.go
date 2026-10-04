@@ -125,7 +125,7 @@ func (inst *App) render() {
 }
 
 // renderBar is a row of controls — New conversation, Settings with the scale
-// of what the model may do (ADR-0280), Statistics — and a row of what the
+// of what the model may do (ADR-0280), Analytics — and a row of what the
 // conversation is: what it was started with, the context used and the model
 // (ADR-0265 §SD4). Then the task while Apps is on, then at most one notice.
 // The options themselves are in the Settings panel.

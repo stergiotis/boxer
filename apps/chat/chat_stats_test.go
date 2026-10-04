@@ -100,7 +100,7 @@ func TestTheStatisticsTablesPassThePublishGate(t *testing.T) {
 }
 
 func TestNothingIsHandedOverBeforeATurn(t *testing.T) {
-	_, err := openStatsInPlay(nil, newStatsPublishers(), chatStats{})
+	_, err := openStatsInPlay(nil, newStatsPublishers(), chatStats{}, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no turn")
 }

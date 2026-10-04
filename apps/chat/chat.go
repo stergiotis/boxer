@@ -122,7 +122,7 @@ type App struct {
 	renameDraft string
 	renameId    uint64
 
-	// advanced shows the Statistics panel (AdvancedSeed); stats are the
+	// advanced shows the Analytics panel (AdvancedSeed); stats are the
 	// window's records, across its conversations, and showStats whether
 	// the panel is open. handover publishes them and opens play.
 	advanced     bool
@@ -133,6 +133,8 @@ type App struct {
 	handover     bgjob.Runner[string]
 	handoverNote string
 	bandKeys     [3]ecdf.BandJobKey
+	// surface is the panel's agent surface of the conversation (ADR-0283).
+	surface surfaceView
 }
 
 // pendingTurn is a turn in flight.

@@ -26,12 +26,13 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-// AdvancedSeed shows the Statistics panel: token and answer statistics of
-// the window's conversations, and Open in play on them.
+// AdvancedSeed shows the Analytics panel: token and answer statistics of
+// the window's conversations, the conversation's agent surface
+// (ADR-0283), and Open in play on them.
 var AdvancedSeed = env.NewBool(env.Spec{
 	Name:        "BOXER_CHAT_ADVANCED",
 	Default:     "true",
-	Description: "show the chat app's Statistics panel — token and answer statistics of the window's conversations, and Open in play on them as ad-hoc datasets; false hides it",
+	Description: "show the chat app's Analytics panel — token and answer statistics of the window's conversations, the conversation's agent surface, and Open in play on them as ad-hoc datasets; false hides it",
 	Category:    env.CategoryE("boxer-chat"),
 })
 
@@ -249,7 +250,9 @@ func turnsArrow(turns []turnStat) (stream []byte, err error) {
 
 // statsSql is the buffer the play window opens with.
 const statsSql = `-- This chat window's turns, from the person's send to the answer.
--- keelson('chat_calls') holds one row per model call.
+-- keelson('chat_calls') holds one row per model call, and
+-- keelson('chat_surface') the agent surface: one row per window operation,
+-- launchable app and desktop verb, with its status and calls.
 SELECT
     conversation,
     turn,
@@ -265,20 +268,36 @@ ORDER BY at`
 // statsPublishers hold one window's two datasets; each republishes onto
 // the handle it holds.
 type statsPublishers struct {
-	calls *adhocdata.Publisher
-	turns *adhocdata.Publisher
+	calls   *adhocdata.Publisher
+	turns   *adhocdata.Publisher
+	surface *adhocdata.Publisher
 }
 
 func newStatsPublishers() (p statsPublishers) {
-	return statsPublishers{calls: adhocdata.NewPublisher(aliasCalls, false), turns: adhocdata.NewPublisher(aliasTurns, false)}
+	return statsPublishers{calls: adhocdata.NewPublisher(aliasCalls, false), turns: adhocdata.NewPublisher(aliasTurns, false),
+		surface: adhocdata.NewPublisher(aliasSurface, false)}
 }
 
-// openStatsInPlay publishes s and opens a play window on it. It makes bus
-// round trips, so it runs off the render thread.
-func openStatsInPlay(bus app.BusI, pubs statsPublishers, s chatStats) (note string, err error) {
+// openStatsInPlay publishes s, and the surface's cells when there are any,
+// and opens a play window on them. It makes bus round trips, so it runs off
+// the render thread.
+func openStatsInPlay(bus app.BusI, pubs statsPublishers, s chatStats, cells []surfaceCell) (note string, err error) {
 	if len(s.turns) == 0 {
 		err = eh.Errorf("no turn to show yet")
 		return
+	}
+	datasets := []string{aliasTurns, aliasCalls}
+	if len(cells) > 0 {
+		var surface []byte
+		surface, err = surfaceArrow(cells)
+		if err != nil {
+			return
+		}
+		if _, err = pubs.surface.Publish(bus, surface); err != nil {
+			err = eh.Errorf("publish %s: %w", aliasSurface, err)
+			return
+		}
+		datasets = append(datasets, aliasSurface)
 	}
 	calls, err := callsArrow(s.calls)
 	if err != nil {
@@ -297,7 +316,7 @@ func openStatsInPlay(bus app.BusI, pubs statsPublishers, s chatStats) (note stri
 		return
 	}
 	cfg, err := buscodec.Encode(launchcfg.PlayLaunch{Sql: statsSql, AutoRun: true, Endpoint: launchcfg.EndpointIntrospection,
-		Datasets: []string{aliasTurns, aliasCalls}})
+		Datasets: datasets})
 	if err != nil {
 		err = eh.Errorf("encode the play launch config: %w", err)
 		return
@@ -307,5 +326,8 @@ func openStatsInPlay(bus app.BusI, pubs statsPublishers, s chatStats) (note stri
 		return
 	}
 	note = fmt.Sprintf("opened in play: %d turns as %s, %d calls as %s", len(s.turns), aliasTurns, len(s.calls), aliasCalls)
+	if len(cells) > 0 {
+		note += fmt.Sprintf(", %d surface cells as %s", len(cells), aliasSurface)
+	}
 	return
 }
