@@ -362,23 +362,23 @@ func (inst *App) renderMaySection() {
 	for range c.HoverText(tipAllow).KeepIter() {
 		c.Label("At most").Selectable(false).Send()
 	}
-	selector.Segmented(inst.ids, "allow", &inst.perms.allow).
+	selector.Segmented(inst.ids, "allow", &inst.perms.allow).Style(selector.StyleRadio).
 		Option(allowRead, "Read").Option(allowView, "View").Option(allowEdit, "Edit").
 		Option(allowRun, "Run").Option(allowOutside, "Outside").Send()
 	for range c.HoverText(tipChanges).KeepIter() {
 		c.Label("Changes").Selectable(false).Send()
 	}
-	selector.Segmented(inst.ids, "changes", &inst.perms.changes).
+	selector.Segmented(inst.ids, "changes", &inst.perms.changes).Style(selector.StyleRadio).
 		Option(changesAsk, "Ask first").Option(changesApply, "Apply directly").Send()
 	for range c.HoverText(tipReach).KeepIter() {
 		c.Label("Reach").Selectable(false).Send()
 	}
-	selector.Segmented(inst.ids, "reach", &inst.perms.reach).
+	selector.Segmented(inst.ids, "reach", &inst.perms.reach).Style(selector.StyleRadio).
 		Option(agent.ReachHost, "This host").Option(agent.ReachData, "Data endpoints").Option(agent.ReachNetwork, "Network").Send()
 	for range c.HoverText(tipPace).KeepIter() {
 		c.Label("Pace").Selectable(false).Send()
 	}
-	selector.Segmented(inst.ids, "pace", &inst.perms.unpaced).
+	selector.Segmented(inst.ids, "pace", &inst.perms.unpaced).Style(selector.StyleRadio).Vertical().
 		Option(false, "At a pace I can follow").Option(true, "As fast as it can").Send()
 	c.AddSpace(4)
 	for range c.HoverText(tipLaunch).KeepIter() {

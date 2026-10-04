@@ -33,7 +33,7 @@ panel as a diff.
 {"do":"wait","valueContains":"→ scripted","role":"label"}
 {"do":"wait","valueContains":"revision 0","role":"label","comment":"the Artefact panel, empty"}
 {"do":"click","contains":"Settings","role":"button"}
-{"do":"click","name":"Ask first","role":"button","comment":"Changes: each write waits"}
+{"do":"click","name":"Ask first","role":"radio_button","comment":"Changes: each write waits"}
 {"do":"wait","valueContains":"may edit","role":"label","comment":"Apps is off: the scale is the artefact's"}
 {"do":"click","contains":"Settings","role":"button","comment":"close Settings"}
 {"do":"click","contains":"Send","role":"button","comment":"the seeded draft"}

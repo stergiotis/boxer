@@ -43,7 +43,7 @@ stands in for the person's approval.
 {"do":"click","contains":"Settings","role":"button"}
 {"do":"wait","valueContains":"What the model may do","role":"label"}
 {"do":"capture","text":"chat-settings"}
-{"do":"click","name":"Read","role":"button","comment":"At most: read"}
+{"do":"click","name":"Read","role":"radio_button","comment":"At most: read"}
 {"do":"wait","valueContains":"now read · may read","role":"label","settleMs":500}
 {"do":"capture","text":"chat-settings-read"}
 {"do":"focus","id":13282790709624229129,"comment":"the chat's composer"}
