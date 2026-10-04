@@ -34,6 +34,7 @@ const (
 	artTabSource
 	artTabRevisions
 	artTabLint
+	artTabImages
 )
 
 const (
@@ -75,6 +76,8 @@ type artefactView struct {
 	// diff caches the selected revision's or the proposal's diff, keyed.
 	diffKey string
 	diff    []diffLine
+	// thumbs records which screenshot thumbnails the host holds.
+	thumbs *c.ImageVersionTracker[uint64]
 }
 
 // ensure builds the views of revision n.
@@ -162,9 +165,13 @@ func (inst *App) renderArtefact() {
 	if len(v.findings) > 0 {
 		lintLabel += " (" + strconv.Itoa(len(v.findings)) + ")"
 	}
+	imagesLabel := "Images"
+	if k := len(art.headImages()); k > 0 {
+		imagesLabel += " (" + strconv.Itoa(k) + ")"
+	}
 	selector.Segmented(inst.ids, "art-tab", &v.tab).
 		Option(artTabDocument, "Document").Option(artTabSource, "Source").
-		Option(artTabRevisions, "Revisions").Option(artTabLint, lintLabel).Send()
+		Option(artTabRevisions, "Revisions").Option(artTabLint, lintLabel).Option(artTabImages, imagesLabel).Send()
 	c.Separator().Horizontal().Send()
 	for range c.ScrollArea().Vscroll(true).Hscroll(false).AutoShrink(false, false).KeepIter() {
 		switch v.tab {
@@ -184,6 +191,8 @@ func (inst *App) renderArtefact() {
 			inst.renderRevisions(art, n)
 		case artTabLint:
 			inst.renderFindings(v.findings)
+		case artTabImages:
+			inst.renderImages(art)
 		}
 	}
 }
@@ -195,6 +204,10 @@ func (inst *App) renderProposal(p *artProposal, head int, text string) {
 	what := p.tool
 	if p.title != "" {
 		what = p.title + " · " + p.tool
+	}
+	if p.ownImages {
+		inst.renderImageProposal(p, what, head)
+		return
 	}
 	d := inst.artView.diffOf("proposal-"+strconv.FormatUint(p.seq, 10), text, p.text)
 	add, del := diffCounts(d)
@@ -249,8 +262,11 @@ func (inst *App) renderRevisions(art *artefact, head int) {
 		if i > 0 {
 			prev = revs[i-1].text
 		}
-		d := v.diffOf("rev-"+strconv.Itoa(r.n), prev, r.text)
-		renderDiff(d)
+		if r.imageNote != "" && prev == r.text {
+			weak("screenshots: " + r.imageNote + "; the text is unchanged")
+		} else {
+			renderDiff(v.diffOf("rev-"+strconv.Itoa(r.n), prev, r.text))
+		}
 		if r.n != head {
 			for range c.HoverText(tipRevert).KeepIter() {
 				if c.Button(inst.ids.PrepareStr("rev-revert"), atomsRevert).SendResp().HasPrimaryClicked() {
@@ -268,8 +284,11 @@ func (inst *App) renderRevisions(art *artefact, head int) {
 
 // revLabel says what made a revision.
 func revLabel(r artRevision) string {
-	if r.source == revSourceRevert {
+	switch r.source {
+	case revSourceRevert:
 		return "reverted to r" + strconv.Itoa(r.revertedTo)
+	case revSourcePerson:
+		return "you · " + r.imageNote
 	}
 	what := strings.TrimPrefix(r.tool, "artefact_")
 	if r.title != "" {
@@ -277,6 +296,9 @@ func revLabel(r artRevision) string {
 	}
 	if r.changedFirst > 0 {
 		what += " · " + lineRangeOf(r.changedFirst, r.changedLast)
+	}
+	if r.imageNote != "" {
+		what += " · " + r.imageNote
 	}
 	return what
 }

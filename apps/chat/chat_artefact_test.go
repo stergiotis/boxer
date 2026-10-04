@@ -149,9 +149,9 @@ func TestArtefactToolsFollowThePolicy(t *testing.T) {
 	coord := newCoordinator(nil, nil, "conv")
 	art := newArtefact()
 	coord.offerArtefact(art)
-	assert.Len(t, coord.tools(context.Background()), 5)
+	assert.Len(t, coord.tools(context.Background()), 6, "the five reads and artefact_images")
 	art.setPolicy(artPolicy{write: true})
-	assert.Len(t, coord.tools(context.Background()), 10)
+	assert.Len(t, coord.tools(context.Background()), 14, "and the writes; no capture without Apps")
 
 	ctx := context.Background()
 	art.setPolicy(artPolicy{})

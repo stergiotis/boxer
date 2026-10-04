@@ -257,7 +257,7 @@ func systemPromptOf(apps bool, questions bool, artefact bool) (s string) {
 		parts = append(parts, questionsPrompt)
 	}
 	if artefact {
-		parts = append(parts, artefactPrompt)
+		parts = append(parts, artefactPrompt+"\n"+imagePrompt)
 	}
 	return strings.Join(parts, "\n\n")
 }

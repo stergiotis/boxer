@@ -1,0 +1,9 @@
+# The scripted model of chat-artefact-images.scene.md (ADR-0284): one reply
+# per line, picked by the conversation's position.
+# Turn 1: ask for the demo app, open it, capture its window into the
+# artefact's screenshots, crop the capture, answer.
+{"tool":"request_access","args":{"plan":"capture the demo app for the artefact","open":[{"app":"opsdemo"}]}}
+{"tool":"open_window","args":{"app":"opsdemo"}}
+{"tool":"artefact_capture","args":{"title":"Capturing the demo","base_revision":0,"windows":["$window"]}}
+{"tool":"artefact_crop_image","args":{"title":"Cropping the corner","base_revision":"$revision","from":"screenshot-1.png","x":0,"y":0,"w":240,"h":120,"name":"corner.png"}}
+{"content":"Captured the demo window and cropped its corner."}

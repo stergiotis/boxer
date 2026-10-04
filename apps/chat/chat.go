@@ -195,6 +195,7 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	inst.action.Cancel()
 	inst.titleJob.Cancel()
 	inst.authJob.Cancel()
+	inst.conv.art.close()
 	for _, k := range inst.bandKeys {
 		ecdf.CancelBandJob(k)
 	}
@@ -351,6 +352,7 @@ func (inst *App) newConversation() {
 			}()
 		}
 	}
+	inst.conv.art.close()
 	inst.conv = newConversation()
 	inst.editing, inst.editedNext = nil, false
 	if inst.agentCli != nil {

@@ -65,6 +65,8 @@ const (
 // coordinator is one conversation's side of the contract.
 type coordinator struct {
 	cli *agent.Client
+	// captureHook stands in for the host's capture service in tests.
+	captureHook func(ctx context.Context, windows []uint64, crop *[4]float32) (data []byte, reason string)
 	// kq reads keelson('windows') and keelson('desktop') (ADR-0276 §SD2);
 	// nil leaves query_windows unanswered.
 	kq           *keelsonquery.Client
@@ -305,7 +307,9 @@ func (inst *coordinator) tools(ctx context.Context) (out []openaichat.Tool) {
 		out = append(out, askTool())
 	}
 	if art := inst.artefactOf(); art != nil {
-		out = append(out, artefactTools(art.policyNow().write)...)
+		write := art.policyNow().write
+		out = append(out, artefactTools(write)...)
+		out = append(out, imageTools(write, apps)...)
 	}
 	if !apps {
 		return
@@ -454,6 +458,9 @@ func (inst *coordinator) dispatch(ctx context.Context, o toolOrigin, call openai
 	apps, questions := inst.offers()
 	if call.Name == "ask_user" && questions {
 		return inst.askUser(ctx, args)
+	}
+	if art := inst.artefactOf(); art != nil && isImageTool(call.Name) {
+		return inst.imageCall(ctx, o, call.Name, args, art)
 	}
 	if art := inst.artefactOf(); art != nil && isArtefactTool(call.Name) {
 		return inst.artefactCall(ctx, o, call.Name, args, art)

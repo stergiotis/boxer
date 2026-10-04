@@ -35,6 +35,8 @@ const (
 	revSourceModel revSourceE = iota
 	// revSourceRevert is the person making an earlier revision current.
 	revSourceRevert
+	// revSourcePerson is the person removing a screenshot in the panel.
+	revSourcePerson
 )
 
 // artRevision is one state of the document. Revision 0 is the empty
@@ -54,6 +56,13 @@ type artRevision struct {
 	changedFirst int
 	changedLast  int
 	atMs         int64
+	// images is the screenshot set of this revision (ADR-0284 §SD2). A
+	// commit with ownImages false takes the head's: a text write leaves the
+	// set as it was.
+	images    []artImage
+	ownImages bool
+	// imageNote says what a change of the set did, e.g. "+ screenshot-1.png".
+	imageNote string
 }
 
 // artPolicy is what the settings let the model do to the artefact
@@ -70,6 +79,12 @@ type artProposal struct {
 	text  string
 	tool  string
 	title string
+	// images, for a change of the screenshot set, is the set it proposes,
+	// and image the entry it adds or removes, for the panel to show.
+	images    []artImage
+	ownImages bool
+	image     *artImage
+	removes   bool
 	// reply carries the verdict to the waiting tool call; decided keeps a
 	// second click from sending twice. decided is the render goroutine's.
 	reply   chan bool
@@ -87,9 +102,112 @@ type artefact struct {
 	lastN  int
 	policy artPolicy
 	meta   artMeta
+	// store holds the screenshots' bytes (ADR-0284).
+	store *imageStore
 }
 
-func newArtefact() *artefact { return &artefact{} }
+func newArtefact() *artefact { return &artefact{store: newImageStore(imageLimitsNow())} }
+
+// close frees the screenshots; the conversation is over.
+func (inst *artefact) close() { inst.store.close() }
+
+// headImages is a copy of the current revision's screenshot set.
+func (inst *artefact) headImages() (out []artImage) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	return append(out, inst.headImagesLocked()...)
+}
+
+func (inst *artefact) headImagesLocked() []artImage {
+	if len(inst.revs) == 0 {
+		return nil
+	}
+	return inst.revs[len(inst.revs)-1].images
+}
+
+// gcLocked frees the bytes no revision and no waiting proposal names. It
+// runs where the head moves: after that, a rewound turn's revisions can no
+// longer be reinstated (reinstate needs the head where truncate left it).
+func (inst *artefact) gcLocked() {
+	keep := make(map[string]bool)
+	for _, r := range inst.revs {
+		for _, e := range r.images {
+			keep[e.hash] = true
+		}
+	}
+	if p := inst.proposal; p != nil {
+		for _, e := range p.images {
+			keep[e.hash] = true
+		}
+	}
+	inst.store.retain(keep)
+}
+
+// releaseUnreferenced frees what a rejected or withdrawn proposal sealed.
+func (inst *artefact) releaseUnreferenced() {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	inst.gcLocked()
+}
+
+// purge frees a hash's bytes and marks every entry naming it, in every
+// revision, as purged (ADR-0284 §SD2).
+func (inst *artefact) purge(hash string) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	for i := range inst.revs {
+		imgs := inst.revs[i].images
+		for j := range imgs {
+			if imgs[j].hash == hash && !imgs[j].purged {
+				// Revisions share no backing arrays (commit copies), so the
+				// mark lands in this revision only.
+				imgs[j].purged = true
+			}
+		}
+	}
+	inst.store.purge(hash)
+}
+
+// removeImage is the person removing a screenshot in the panel, as a
+// revision of its own; purge frees the bytes too. Like a revert, it waits
+// for no proposal: one that is waiting is decided first.
+func (inst *artefact) removeImage(name string, purge bool) (n int, err error) {
+	inst.mu.Lock()
+	if inst.proposal != nil {
+		inst.mu.Unlock()
+		return 0, eb.Build().Errorf("a proposed change is waiting: accept or reject it first")
+	}
+	set := inst.headImagesLocked()
+	i := findImage(set, name)
+	if i < 0 {
+		inst.mu.Unlock()
+		return 0, eb.Build().Str("name", name).Errorf("no such screenshot")
+	}
+	e := set[i]
+	if purge {
+		for j, o := range set {
+			if j != i && o.hash == e.hash && !o.purged {
+				inst.mu.Unlock()
+				return 0, errSharedBytes{other: o.name}
+			}
+		}
+	}
+	next := append(append([]artImage(nil), set[:i]...), set[i+1:]...)
+	_, text := inst.headLocked()
+	n = inst.nextLocked()
+	note := "− " + name
+	if purge {
+		note += ", purged"
+	}
+	inst.revs = append(inst.revs, artRevision{n: n, text: text, source: revSourcePerson, atMs: time.Now().UnixMilli(),
+		images: next, ownImages: true, imageNote: note})
+	inst.gcLocked()
+	inst.mu.Unlock()
+	if purge {
+		inst.purge(e.hash)
+	}
+	return
+}
 
 func (inst *artefact) setMeta(m artMeta) {
 	inst.mu.Lock()
@@ -172,11 +290,17 @@ func (inst *artefact) commit(base int, rev artRevision) (n int, err error) {
 		err = errStale{base: base, head: head}
 		return
 	}
+	if rev.ownImages {
+		rev.images = append([]artImage(nil), rev.images...)
+	} else {
+		rev.images = append([]artImage(nil), inst.headImagesLocked()...)
+	}
 	rev.n = inst.nextLocked()
 	if rev.atMs == 0 {
 		rev.atMs = time.Now().UnixMilli()
 	}
 	inst.revs = append(inst.revs, rev)
+	inst.gcLocked()
 	return rev.n, nil
 }
 
@@ -204,8 +328,20 @@ func (inst *artefact) revert(to int) (n int, err error) {
 		return head, nil
 	}
 	n = inst.nextLocked()
-	inst.revs = append(inst.revs, artRevision{n: n, text: text, source: revSourceRevert, revertedTo: to, atMs: time.Now().UnixMilli()})
+	inst.revs = append(inst.revs, artRevision{n: n, text: text, source: revSourceRevert, revertedTo: to, atMs: time.Now().UnixMilli(),
+		images: append([]artImage(nil), inst.imagesLocked(to)...), ownImages: true})
+	inst.gcLocked()
 	return
+}
+
+// imagesLocked is revision n's screenshot set.
+func (inst *artefact) imagesLocked(n int) []artImage {
+	for _, r := range inst.revs {
+		if r.n == n {
+			return r.images
+		}
+	}
+	return nil
 }
 
 // truncate takes back every revision made after revision n and returns
