@@ -296,52 +296,6 @@ impl Soft {
     }
 }
 
-/// The capture rasterizer of ADR-0281 §SD5: a second software rasterizer,
-/// separate from the one that paints the live frame, made on the first
-/// capture. Textures a capture does not set again are freed before the next.
-#[derive(Default)]
-pub struct SoftCaptureRaster {
-    soft: Option<Soft>,
-    held: std::collections::HashSet<egui::TextureId>,
-}
-
-impl crate::imzero2::interpreter::capture_replay::CaptureRasterI for SoftCaptureRaster {
-    fn rasterize(
-        &mut self,
-        clipped: &[egui::ClippedPrimitive],
-        textures: &egui::TexturesDelta,
-        width_px: u32,
-        height_px: u32,
-        pixels_per_point: f32,
-    ) -> Result<Vec<u8>, String> {
-        let soft = match &mut self.soft {
-            Some(s) => {
-                s.resize(width_px, height_px, pixels_per_point);
-                s
-            }
-            None => self.soft.insert(
-                Soft::new(width_px, height_px, pixels_per_point).map_err(|e| e.to_string())?,
-            ),
-        };
-        let now: std::collections::HashSet<egui::TextureId> =
-            textures.set.iter().map(|(id, _)| *id).collect();
-        let stale: Vec<egui::TextureId> = self.held.difference(&now).copied().collect();
-        if !stale.is_empty() {
-            soft.apply_textures_only(&egui::TexturesDelta {
-                set: Vec::new(),
-                free: stale,
-            });
-        }
-        self.held = now;
-        let mut frame = Vec::new();
-        soft.render_and_readback(clipped, textures, &mut frame).map_err(|e| e.to_string())?;
-        for px in frame.chunks_exact_mut(4) {
-            px.swap(0, 2);
-        }
-        Ok(frame)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

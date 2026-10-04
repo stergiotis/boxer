@@ -56,7 +56,7 @@ default = ["desktop", "inspection"]
 # mapping the `-vsync` flag onto the wgpu swapchain (eframe 0.35 dropped the
 # `NativeOptions::vsync` field). headless already enables it; headless_svg does
 # not, keeping that host GPU-less.
-desktop = ["dep:eframe", "dep:egui-wgpu"]
+desktop = ["dep:eframe", "dep:egui-wgpu", "capture_raster"]
 # ADR-0128 M3 — the appliance-host split. `headless` is the carrier + FFFI2
 # host with NO wgpu and NO ffmpeg: the mesh draw-stream lane only (SD6), which
 # is the lean appliance build. `headless_wgpu` adds the offscreen wgpu renderer
@@ -66,6 +66,7 @@ desktop = ["dep:eframe", "dep:egui-wgpu"]
 # exactly what the lean `headless` build serves. `cargo tree --features headless`
 # carries no wgpu — the hard guarantee the appliance target needs.
 headless = [
+    "capture_raster",
     "dep:tokio",
     "dep:tokio-tungstenite",
     "dep:prost",
@@ -88,6 +89,12 @@ headless_wgpu = ["headless_raster", "dep:wgpu", "dep:egui-wgpu", "dep:pollster"]
 # `not(feature = "headless_wgpu")`). ffmpeg is still reachable, since the
 # encoder takes BGRA from host memory either way. See
 # doc/adr-background-work/egui-software-backend-survey.md.
+# The capture rasterizer (ADR-0281 §SD5, captureraster.rs): the software
+# backend alone, so every native host can rasterize a window capture apart
+# from what paints its live frame — the mesh-only host included, which grows
+# by this crate and nothing GPU. The browser host does not take it and
+# refuses pixel captures.
+capture_raster = ["dep:egui_software_backend", "dep:bytemuck"]
 headless_soft = [
     "headless_raster",
     "dep:egui_software_backend",
