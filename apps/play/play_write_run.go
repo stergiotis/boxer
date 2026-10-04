@@ -127,7 +127,7 @@ func (inst *Client) ExecuteWrite(ctx context.Context, sql string, signals map[st
 		Sensitivity: dec.sensitivity,
 		RunID:       opts.QueryID,
 	}
-	if lc := inst.composeLogComment(sql, q, params, signals, opts); lc != "" {
+	if lc := inst.composeLogComment(sql, q, params, signals, opts, inst.agentMark.Load()); lc != "" {
 		req.Settings["log_comment"] = lc
 	}
 	st, res, err := eng.Deliver(ctx, req)

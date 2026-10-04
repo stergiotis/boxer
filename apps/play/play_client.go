@@ -1102,7 +1102,7 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 	// fingerprints} as compact JSON, so the server's query_log row is
 	// attributable and the capture pipeline lifts the identity. Endpoints
 	// that don't know the setting ignore the parameter, like query_id.
-	if lc := inst.composeLogComment(sql, q, params, signals, opts); lc != "" {
+	if lc := inst.composeLogComment(sql, q, params, signals, opts, agent); lc != "" {
 		req.Settings["log_comment"] = lc
 	}
 	// A server holding this user read-only refuses some of the above; what
