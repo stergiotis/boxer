@@ -1,4 +1,4 @@
-package llmfacts
+package trail
 
 import "github.com/stergiotis/boxer/public/packageprops"
 
@@ -12,5 +12,5 @@ var PackageProps = packageprops.Props{
 }
 
 func init() {
-	packageprops.Register("github.com/stergiotis/boxer/public/keelson/runtime/llm/llmfacts", PackageProps)
+	packageprops.Register("github.com/stergiotis/boxer/public/keelson/runtime/trail", PackageProps)
 }

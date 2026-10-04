@@ -1,31 +1,40 @@
 package agent
 
 import (
-	"context"
 	"encoding/json/v2"
 	"slices"
 	"strconv"
 	"time"
 
-	"github.com/zeebo/xxh3"
-
 	"github.com/apache/arrow-go/v18/arrow"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/agent/agentfacts"
+	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 )
 
 // ActionRecord is one row of the action record (ADR-0269 §SD9): one when
 // the dispatcher decides a call, one when the call reaches its final phase.
 type ActionRecord struct {
-	At            time.Time
-	Task          string
+	At   time.Time
+	Task string
+	// Epoch is the task's epoch at the row; Conversation and Turn what the
+	// coordinator said the call belongs to.
+	Epoch         uint64
+	Conversation  string
+	Turn          string
 	Actor         app.AppIdT
 	ActorInstance uint64
-	// Key is the caller's key for the call: its tool-call id.
+	// Key is the caller's key for the call. ModelCall, ToolCallId and
+	// ToolIndex are the model call whose reply asked for it, the provider's
+	// id for the tool call and its index in that reply, as the coordinator
+	// stated them (ADR-0277 §SD1).
 	Key        string
+	ModelCall  string
+	ToolCallId string
+	ToolIndex  uint32
 	CallId     string
 	Instance   uint64
 	App        app.AppIdT
@@ -73,10 +82,15 @@ func (inst *Service) record(t *task, rec *callRec, decision string, out opwire.O
 		At: time.Now(), Key: rec.key, CallId: rec.callId, Instance: rec.instance, App: rec.app,
 		Operation: rec.spec.Name, Effect: rec.spec.Effect.String(), ArgsDigest: rec.argsDigest,
 		Decision: decision, Phase: out.Phase.String(), Reason: out.Reason, Confined: out.Confined,
+		Turn: rec.turn, Actor: rec.actor, ActorInstance: rec.actorInstance,
+	}
+	if c := rec.cause; c.Has {
+		r.ModelCall, r.ToolCallId, r.ToolIndex = c.Val.ModelCall, c.Val.ToolCall.Val, c.Val.ToolIndex
 	}
 	if t != nil {
 		inst.mu.Lock()
 		r.Task, r.Actor, r.ActorInstance, r.Test = t.id, t.actor, t.actorInstance, t.test
+		r.Epoch, r.Conversation = t.epoch, t.conversation
 		r.BudgetLeft = int32(t.callsBudget - t.callsUsed)
 		r.Tainted = inst.tainted(t)
 		inst.mu.Unlock()
@@ -120,70 +134,49 @@ func (inst *Service) recordGrantRefusal(msg *app.Msg, req wireGrantRequest, reas
 	}
 }
 
-// persist buffers the row for boxer.facts and wakes the flusher. A failed
-// buffer is logged; the in-process record keeps the row either way.
+// persist buffers the row for the trail and wakes its flusher, so a call
+// never waits on the store. A failed buffer is logged; the in-process
+// record keeps the row either way.
 func (inst *Service) persist(r ActionRecord) {
-	inst.factsMu.Lock()
-	defer inst.factsMu.Unlock()
-	if inst.facts == nil {
-		return
-	}
-	row := RowOf(r)
-	if err := inst.facts.Begin(row.Id, row.Ts, agentfacts.ActionEnvelope{NaturalKey: row.NaturalKey}).AddAgentAction(row).Commit(); err != nil {
+	c, cause, row := TrailRowOf(inst.cfg.Trail, r)
+	if err := inst.cfg.Trail.AgentAction(r.At, c, cause, row); err != nil {
 		inst.log.Warn().Err(err).Str("task", r.Task).Str("key", r.Key).Msg("agent: buffer action row")
 		return
 	}
-	select {
-	case inst.flushCh <- struct{}{}:
-	default:
-	}
-}
-
-// factsFlushTimeout bounds one flush of the action record.
-const factsFlushTimeout = 5 * time.Second
-
-// flusher lands buffered rows, once per wake-up and at shutdown.
-func (inst *Service) flusher() {
-	defer close(inst.flushDone)
-	flush := func() {
-		ctx, cancel := context.WithTimeout(context.Background(), factsFlushTimeout)
-		defer cancel()
-		inst.factsMu.Lock()
-		defer inst.factsMu.Unlock()
-		if inst.facts == nil {
-			return
-		}
-		if _, err := inst.facts.Flush(ctx); err != nil {
-			inst.log.Warn().Err(err).Msg("agent: flush the action record (rows stay buffered for the next flush)")
-		}
-	}
-	for {
-		select {
-		case <-inst.flushCh:
-			flush()
-		case <-inst.stopFlush:
-			flush()
-			return
-		}
-	}
+	inst.cfg.Trail.FlushSoon()
 }
 
 // Durable reports whether the action record is also kept on boxer.facts.
-func (inst *Service) Durable() (durable bool) {
-	inst.factsMu.Lock()
-	defer inst.factsMu.Unlock()
-	return inst.facts != nil
-}
+func (inst *Service) Durable() (durable bool) { return inst.cfg.Trail.Durable() }
 
-// RowOf is the action record row of r. Its natural key is task, key,
-// decision and time, so the dispatcher's row and the final row of one call
-// are two rows.
-func RowOf(r ActionRecord) (row agentfacts.AgentAction) {
-	nk := r.Task + "|" + r.Key + "|" + r.Decision + "|" + strconv.FormatInt(r.At.UnixNano(), 10)
-	row = agentfacts.AgentAction{
-		Id: xxh3.HashString(nk), NaturalKey: []byte(nk), Ts: r.At.UTC(), Kind: actionKindLabel,
-		Task: r.Task, Actor: string(r.Actor), ActorInstance: r.ActorInstance, ToolCallId: r.Key, CallId: r.CallId,
-		Instance: r.Instance, App: string(r.App), Operation: r.Operation, Effect: r.Effect, ArgsDigest: r.ArgsDigest,
+// TrailRowOf is the trail row of r and the context components it composes
+// (ADR-0277 §SD2): the coordinator window as origin, the conversation and
+// turn, the task with the dispatcher's call, and the model call that asked.
+func TrailRowOf(rec *trail.Recorder, r ActionRecord) (c trail.Context, cause option.Option[trail.Cause], row trail.AgentAction) {
+	c.Origin = rec.OriginOf(r.Actor, r.ActorInstance)
+	if r.Conversation != "" {
+		conv := trail.Conversation{Conversation: r.Conversation}
+		if r.Turn != "" {
+			conv.Turn = option.Some(r.Turn)
+		}
+		c.Conversation = option.Some(conv)
+	}
+	if r.Task != "" {
+		d := trail.Delegation{Task: r.Task, Epoch: r.Epoch}
+		if r.CallId != "" {
+			d.Call = option.Some(r.CallId)
+		}
+		c.Delegation = option.Some(d)
+	}
+	if r.ModelCall != "" {
+		cs := trail.Cause{ModelCall: r.ModelCall, ToolIndex: r.ToolIndex}
+		if r.ToolCallId != "" {
+			cs.ToolCall = option.Some(r.ToolCallId)
+		}
+		cause = option.Some(cs)
+	}
+	row = trail.AgentAction{
+		Key: r.Key, Instance: r.Instance, App: string(r.App), Operation: r.Operation, Effect: r.Effect, ArgsDigest: r.ArgsDigest,
 		Decision: r.Decision, Phase: r.Phase, BudgetLeft: uint32(max(r.BudgetLeft, 0)), Test: r.Test,
 		Tainted: r.Tainted, Confined: r.Confined,
 	}
@@ -193,8 +186,102 @@ func RowOf(r ActionRecord) (row agentfacts.AgentAction) {
 	return
 }
 
-// actionKindLabel is the value of the row's kind column.
-const actionKindLabel = "agentAction"
+// grantEvent buffers one event in the life of a grant (ADR-0277 §SD2):
+// what was asked, what the person decided, how the task ended. r is the
+// request the event is about, t the task; either may be nil. A request
+// names what was asked for; without one the row carries the grant as it
+// stands. The caller holds mu when t is set.
+func (inst *Service) grantEvent(event string, decidedBy string, reason string, t *task, r *request) {
+	if !inst.cfg.Trail.Durable() {
+		return
+	}
+	var c trail.Context
+	row := trail.AgentGrant{Event: event, DecidedBy: decidedBy}
+	conversation := ""
+	switch {
+	case r != nil:
+		c.Origin, conversation = inst.cfg.Trail.OriginOf(r.actor, r.actorInstance), r.conversation
+	case t != nil:
+		c.Origin, conversation = inst.cfg.Trail.OriginOf(t.actor, t.actorInstance), t.conversation
+	}
+	if t == nil && r != nil {
+		t = r.task
+	}
+	if t != nil {
+		c.Delegation = option.Some(trail.Delegation{Task: t.id, Epoch: t.epoch})
+		if conversation == "" {
+			conversation = t.conversation
+		}
+		row.Plan, row.Entries, row.Launches, row.Destinations = t.plan, t.entryStrings(), t.launchStrings(), slices.Clone(t.destinations)
+		row.CallsBudget, row.DeadlineMs = uint32(max(t.callsBudget, 0)), t.deadline.UnixMilli()
+	}
+	if r != nil {
+		// What was asked for: not yet decided, or declined.
+		row.Plan, row.Entries, row.Launches, row.Destinations = r.plan, r.wantedStrings(), nil, slices.Clone(r.destinations)
+		for _, l := range r.launches {
+			row.Launches = append(row.Launches, l.App+":"+l.Mode+":"+strconv.FormatUint(uint64(l.Count), 10))
+		}
+	}
+	if conversation != "" {
+		c.Conversation = option.Some(trail.Conversation{Conversation: conversation})
+	}
+	row.PlanDigest = trail.ContentDigest(row.Plan)
+	if reason != "" {
+		row.Reason = []string{reason}
+	}
+	if err := inst.cfg.Trail.AgentGrant(time.Now(), c, row); err != nil {
+		inst.log.Warn().Err(err).Str("event", event).Msg("agent: buffer grant event")
+		return
+	}
+	inst.cfg.Trail.FlushSoon()
+}
+
+// decider is who stands in for the person's decision: the host under test
+// grants, the person otherwise.
+func (inst *Service) decider() (who string) {
+	if inst.cfg.TestGrants {
+		return "host"
+	}
+	return "person"
+}
+
+// entryStrings are the task's entries, "instance:app:mode[:operations]"
+// each, sorted.
+func (inst *task) entryStrings() (out []string) {
+	for _, e := range inst.entries {
+		s := strconv.FormatUint(e.instance, 10) + ":" + string(e.app) + ":" + e.mode.String()
+		if len(e.ops) > 0 {
+			s += ":" + joinComma(e.ops)
+		}
+		out = append(out, s)
+	}
+	slices.Sort(out)
+	return
+}
+
+// launchStrings are the apps the task may open, "app:mode:count" each,
+// sorted.
+func (inst *task) launchStrings() (out []string) {
+	for id, l := range inst.launches {
+		out = append(out, string(id)+":"+l.mode.String()+":"+strconv.Itoa(l.count))
+	}
+	slices.Sort(out)
+	return
+}
+
+// wantedStrings are the windows a request asks for, "instance::mode
+// [:operations]" each, sorted; the app is not known until it is granted.
+func (inst *request) wantedStrings() (out []string) {
+	for k, m := range inst.wanted {
+		s := strconv.FormatUint(k, 10) + "::" + m.String()
+		if ops := inst.wantedOps[k]; len(ops) > 0 {
+			s += ":" + joinComma(ops)
+		}
+		out = append(out, s)
+	}
+	slices.Sort(out)
+	return
+}
 
 // Actions returns the action record, oldest first.
 func (inst *Service) Actions() (rows []ActionRecord) {
@@ -214,14 +301,7 @@ func (inst *Service) Grants() (rows []GrantRow) {
 		g := GrantRow{Task: t.id, Actor: t.actor, ActorInstance: t.actorInstance, Plan: t.plan,
 			Destinations: t.destinations, CallsUsed: int32(t.callsUsed), CallsBudget: int32(t.callsBudget),
 			Deadline: t.deadline, Epoch: t.epoch, Revoked: t.revoked, Created: t.created, Test: t.test}
-		for _, e := range t.entries {
-			s := strconv.FormatUint(e.instance, 10) + ":" + string(e.app) + ":" + e.mode.String()
-			if len(e.ops) > 0 {
-				s += ":" + joinComma(e.ops)
-			}
-			g.Entries = append(g.Entries, s)
-		}
-		slices.Sort(g.Entries)
+		g.Entries = t.entryStrings()
 		rows = append(rows, g)
 	}
 	slices.SortFunc(rows, func(a, b GrantRow) int { return a.Created.Compare(b.Created) })
@@ -302,8 +382,14 @@ func actionsTable(rows []ActionRecord) *introspect.Table {
 		String("task", func(i int) string { return r(i).Task }).
 		String("actor", func(i int) string { return string(r(i).Actor) }).
 		Uint64("actor_instance", func(i int) uint64 { return r(i).ActorInstance }).
-		// The caller's key: the tool-call id (OpenTelemetry gen_ai.tool.call.id).
-		String("tool_call_id", func(i int) string { return r(i).Key }).
+		String("conversation", func(i int) string { return r(i).Conversation }).
+		String("turn", func(i int) string { return r(i).Turn }).
+		// The caller's key for the call, and what the coordinator said asked
+		// for it: the model call and the provider's tool-call id
+		// (OpenTelemetry gen_ai.tool.call.id).
+		String("key", func(i int) string { return r(i).Key }).
+		String("model_call", func(i int) string { return r(i).ModelCall }).
+		String("tool_call_id", func(i int) string { return r(i).ToolCallId }).
 		String("call_id", func(i int) string { return r(i).CallId }).
 		Uint64("instance", func(i int) uint64 { return r(i).Instance }).
 		String("app", func(i int) string { return string(r(i).App) }).

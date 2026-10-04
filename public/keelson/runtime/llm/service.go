@@ -17,12 +17,11 @@ import (
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
-	"github.com/stergiotis/boxer/public/keelson/runtime/llm/llmfacts"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
 // Config is the host's one provider (ADR-0254 §SD2).
@@ -55,11 +54,11 @@ type Config struct {
 	// Endpoint and ApiKey — a test's fake. Endpoint and Model still say
 	// whether a model is configured.
 	Client openaichat.ClientI
-	// Exec, when set, reaches the server that holds boxer.facts, and every
-	// call lands there as a row of the llmfacts store (ADR-0254 §SD4)
-	// beside the in-process record; nil keeps the record alone, the
-	// in-memory host's case. chstore has provisioned the table.
-	Exec recordstore.ExecutorI
+	// Trail is the host's audit trail (ADR-0277): every call and each of its
+	// new messages lands there as a row, beside the in-process record. Nil,
+	// or a recorder without a backend, keeps the record alone — the
+	// in-memory host's case.
+	Trail *trail.Recorder
 }
 
 // ConfigFromEnv resolves the config from the ADR-0009 registry.
@@ -117,9 +116,6 @@ type Service struct {
 	mu    sync.Mutex
 	calls []CallRecord
 	next  uint64
-	// facts is the durable half, nil without an executor; the mutex above
-	// confines it, since a generated store is single-goroutine.
-	facts *llmfacts.CallStore
 	// minted salts the call ids this process mints.
 	minted uint64
 	// closed refuses completions that arrive once Close has begun, so
@@ -128,12 +124,12 @@ type Service struct {
 	// running holds the cancel of each completion in flight, by its
 	// sender's cancel key (llm.cancel).
 	running map[cancelKey]context.CancelFunc
-	// kept remembers the calls whose messages landed, by call id, so a
-	// continuing turn keeps only what is new (ADR-0264 §SD3); keptOrder
+	// seen remembers the calls whose rows landed, by call id, so a
+	// continuing call writes only what is new (ADR-0264 §SD3); seenOrder
 	// bounds it to KeepCalls. In-process: after a restart the first turn
 	// of a conversation keeps its whole history again.
-	kept      map[string]kept
-	keptOrder []string
+	seen      map[string]seen
+	seenOrder []string
 }
 
 // NewService constructs and subscribes a Service. The caller MUST invoke
@@ -149,7 +145,7 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 	if cfg.Timeout <= 0 {
 		cfg.Timeout = DefaultTimeout
 	}
-	s = &Service{cfg: cfg, log: log.With().Str("app", string(ServiceAppId)).Logger(), kept: map[string]kept{}, running: map[cancelKey]context.CancelFunc{}}
+	s = &Service{cfg: cfg, log: log.With().Str("app", string(ServiceAppId)).Logger(), seen: map[string]seen{}, running: map[cancelKey]context.CancelFunc{}}
 	s.base, s.cancelBase = context.WithCancel(context.Background())
 	if cfg.Configured() {
 		s.host = EndpointHost(cfg.Endpoint)
@@ -177,9 +173,6 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 		case cfg.Client == nil:
 			go s.probeContext()
 		}
-	}
-	if cfg.Exec != nil {
-		s.facts = llmfacts.NewCallStore(cfg.Exec, nil, llmfacts.CallStoreConfig{})
 	}
 	s.busClient = bus.NewClient(ServiceAppId, ServiceCaps())
 	for _, pattern := range []string{SubjectAll, SubjectRetainAll} {
@@ -218,19 +211,11 @@ func (inst *Service) Close() {
 		_ = inst.client.Close()
 		inst.client = nil
 	}
-	inst.mu.Lock()
-	if inst.facts != nil {
-		inst.facts.Close()
-		inst.facts = nil
-	}
-	inst.mu.Unlock()
 }
 
 // Durable says the calls land on boxer.facts as well as in the record.
 func (inst *Service) Durable() (yes bool) {
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
-	return inst.facts != nil
+	return inst.cfg.Trail.Durable()
 }
 
 // Describe is the describe reply as a Go value, for the host's own use.
@@ -322,19 +307,18 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 		CallId: inst.mintCallId(), At: time.Now().UTC(), Sender: msg.Sender, SenderInstance: msg.SenderInstance,
 		Purpose: req.Purpose, Sensitivity: queryengine.SensitivityE(req.Sensitivity),
 		Model: inst.cfg.Model, EndpointHost: inst.host, Messages: len(req.Messages), Tools: len(req.Tools),
+		ToolsDigest:  toolsDigest(req.Tools),
+		Conversation: req.Conversation, Turn: req.Turn, Round: int(req.Round), ParentCallId: req.ParentCallId,
+		Task: req.OnBehalfTask, TaskEpoch: req.OnBehalfEpoch, TaskCall: req.OnBehalfCall,
+		OmitFrom: int(req.OmitFrom), OmitTo: int(req.OmitTo), RetainAsked: retained,
 	}
-	// A retained turn (ADR-0264): its messages are kept even when the call
-	// is refused or fails (§SD4), so the chat shows the turn that did.
-	var t *turn
-	if retained {
-		rec.Conversation, rec.ParentCallId = req.Conversation, req.ParentCallId
-		rec.OmitFrom, rec.OmitTo = int(req.OmitFrom), int(req.OmitTo)
-		t = &turn{conversation: req.Conversation, parent: req.ParentCallId, messages: req.Messages,
-			omitFrom: int(req.OmitFrom), omitTo: int(req.OmitTo)}
-		if req.Conversation == "" {
-			inst.refuse(msg, "a retained request names its conversation", rec, nil)
-			return
-		}
+	// The call's messages reach the trail whether it is answered, refused or
+	// fails (ADR-0277 §SD3); a retained request adds their text (ADR-0264).
+	t := &turn{conversation: req.Conversation, parent: req.ParentCallId, messages: req.Messages,
+		omitFrom: int(req.OmitFrom), omitTo: int(req.OmitTo)}
+	if retained && req.Conversation == "" {
+		inst.refuse(msg, "a retained request names its conversation", rec, t)
+		return
 	}
 	for _, m := range req.Messages {
 		rec.PromptBytes += len(m.Content)
@@ -375,6 +359,15 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 	if maxTokens <= 0 {
 		maxTokens = inst.cfg.MaxTokens
 	}
+	rec.MaxTokens = maxTokens
+	// Written ahead: what the request adds to the conversation is on the
+	// trail before the request leaves the machine, so a process that dies
+	// mid-call leaves "sent, outcome unknown" rather than nothing.
+	inst.writeRequest(&rec, t)
+	if _, refuse := inst.cfg.Trail.WriteAhead(inst.base); refuse != nil {
+		inst.refuse(msg, refuse.Error(), rec, t)
+		return
+	}
 	ctx, cancel := context.WithTimeout(inst.base, inst.cfg.Timeout)
 	defer cancel()
 	if req.CancelKey != "" {
@@ -406,6 +399,7 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 	rec.CompletionBytes = len(resp.Content)
 	rec.ToolCalls = len(resp.ToolCalls)
 	rec.FinishReason = resp.FinishReason
+	rec.ProviderId, rec.ReportedModel = resp.Id, resp.Model
 	if inst.cfg.Retain.atLeast(RetainRing) {
 		rec.Completion = resp.Content
 	}
@@ -427,7 +421,7 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 			rec.Error = rep.Reason
 		}
 	}
-	if t != nil && rep.Ok {
+	if rep.Ok {
 		// The reply as the app will echo it back: what the next turn's
 		// prefix is hashed against.
 		t.reply = option.Some(openaichat.Message{Role: openaichat.ChatRoleAssistant, Content: resp.Content, ToolCalls: resp.ToolCalls})

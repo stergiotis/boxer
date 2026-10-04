@@ -14,6 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 )
 
@@ -210,10 +211,29 @@ func (inst *coordinator) changesNote(ctx context.Context) (note string) {
 	return b.String()
 }
 
+// toolOrigin says where a tool call came from: the turn, the model call
+// whose reply asked for it, and its index in that reply. The host records
+// it with the call (ADR-0277 §SD1) and the call is keyed by it.
+type toolOrigin struct {
+	turn      string
+	modelCall string
+	index     int
+}
+
+// key is the call's key at the dispatcher: the model call and the index,
+// never the provider's own id for the tool call, which nothing obliges to
+// differ across replies (ADR-0277 §SD6).
+func (inst toolOrigin) key() (k string) {
+	if inst.modelCall == "" {
+		return "call-" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	}
+	return trail.ToolKey(inst.modelCall, inst.index)
+}
+
 // exec runs one tool call; it returns what the model reads and a line for
 // the transcript. A call identical to one refused since the last call that
 // was not is answered without being made again.
-func (inst *coordinator) exec(ctx context.Context, call openaichat.ToolCall) (content string, activity string) {
+func (inst *coordinator) exec(ctx context.Context, o toolOrigin, call openaichat.ToolCall) (content string, activity string) {
 	var args map[string]any
 	if call.Arguments != "" {
 		if err := json.Unmarshal([]byte(call.Arguments), &args); err != nil {
@@ -233,7 +253,7 @@ func (inst *coordinator) exec(ctx context.Context, call openaichat.ToolCall) (co
 		return "error: this is the same call that was just refused, and nothing has changed since; change it as the refusal says. The refusal was: " + prev,
 			call.Name + ": repeated a refused call"
 	}
-	content, activity = inst.dispatch(ctx, call, args)
+	content, activity = inst.dispatch(ctx, o, call, args)
 	if call.Name != "request_access" && agent.TaskGone(content) && inst.dropGrant() {
 		// The task is gone; the conversation is not. The next request_access
 		// starts a new one instead of presenting the dead handle again.
@@ -269,7 +289,7 @@ func (inst *coordinator) refuse(reason string) {
 	inst.mu.Unlock()
 }
 
-func (inst *coordinator) dispatch(ctx context.Context, call openaichat.ToolCall, args map[string]any) (content string, activity string) {
+func (inst *coordinator) dispatch(ctx context.Context, o toolOrigin, call openaichat.ToolCall, args map[string]any) (content string, activity string) {
 	str := func(k string) (s string) { s, _ = args[k].(string); return }
 	inst.mu.Lock()
 	t, isTyped := inst.typed[call.Name]
@@ -282,7 +302,7 @@ func (inst *coordinator) dispatch(ctx context.Context, call openaichat.ToolCall,
 				opArgs[k] = v
 			}
 		}
-		return inst.call(ctx, call.Id, map[string]any{"window": float64(t.window), "operation": t.op, "args": opArgs, "reason": reason})
+		return inst.call(ctx, o, call.Id, map[string]any{"window": float64(t.window), "operation": t.op, "args": opArgs, "reason": reason})
 	}
 	switch call.Name {
 	case "request_access":
@@ -299,13 +319,14 @@ func (inst *coordinator) dispatch(ctx context.Context, call openaichat.ToolCall,
 	case "read_help":
 		return inst.readHelp(ctx, agent.HelpRequest{App: str("app"), Doc: str("doc"), Section: str("section"), Search: str("search")})
 	case "call_operation":
-		return inst.call(ctx, call.Id, args)
+		return inst.call(ctx, o, call.Id, args)
 	case "open_window":
 		h := inst.handle()
 		if h == "" {
 			return "error: no task yet; call request_access first", "open_window: no task"
 		}
-		got, err := inst.cli.Launch(ctx, h, str("app"), "", nil)
+		got, err := inst.cli.LaunchFrom(ctx, agent.CallRequest{Handle: h, Key: o.key(), Turn: o.turn, ModelCall: o.modelCall,
+			ToolCall: call.Id, ToolIndex: uint32(max(o.index, 0))}, str("app"), "", nil)
 		if err != nil {
 			inst.refuse(err.Error())
 			return "error: " + err.Error() + openNext(str("app"), err.Error()), "open " + str("app") + ": " + err.Error()
@@ -505,7 +526,7 @@ type callOutcome struct {
 	Next *nextStep `json:"next,omitempty"`
 }
 
-func (inst *coordinator) call(ctx context.Context, key string, args map[string]any) (content string, activity string) {
+func (inst *coordinator) call(ctx context.Context, o toolOrigin, toolCall string, args map[string]any) (content string, activity string) {
 	h := inst.handle()
 	if h == "" {
 		return "error: no task yet; call request_access first", "call_operation: no task"
@@ -534,11 +555,10 @@ func (inst *coordinator) call(ctx context.Context, key string, args map[string]a
 			opArgs = string(b)
 		}
 	}
-	if key == "" {
-		key = "call-" + strconv.FormatInt(time.Now().UnixNano(), 36)
-	}
+	key := o.key()
 	instance := uint64(window)
-	out, err := inst.cli.Call(ctx, agent.CallRequest{Handle: h, Instance: instance, Operation: op, Args: opArgs, Key: key, Reason: reason})
+	out, err := inst.cli.Call(ctx, agent.CallRequest{Handle: h, Instance: instance, Operation: op, Args: opArgs, Key: key, Reason: reason,
+		Turn: o.turn, ModelCall: o.modelCall, ToolCall: toolCall, ToolIndex: uint32(max(o.index, 0))})
 	where := op + " in window " + strconv.FormatUint(instance, 10)
 	if err != nil {
 		return "error: " + err.Error(), where + ": " + err.Error()
@@ -629,7 +649,7 @@ func runTurn(ctx context.Context, cli *llm.Client, coord *coordinator, req llm.R
 			progress(round, "")
 		}
 		r := req
-		r.Messages, r.Tools, r.Sensitivity, r.ParentCallId = msgs, coord.tools(ctx), coord.sensitivity(), parent
+		r.Messages, r.Tools, r.Sensitivity, r.ParentCallId, r.Round = msgs, coord.tools(ctx), coord.sensitivity(), parent, uint32(round)
 		if round == maxRounds-1 {
 			// The note is for this call only: it does not join the history
 			// the next turn resends.
@@ -651,11 +671,11 @@ func runTurn(ctx context.Context, cli *llm.Client, coord *coordinator, req llm.R
 		if len(res.ToolCalls) == 0 {
 			break
 		}
-		for _, tc := range res.ToolCalls {
+		for i, tc := range res.ToolCalls {
 			if progress != nil {
 				progress(round, coord.peekTitle(tc))
 			}
-			content, activity := coord.exec(ctx, tc)
+			content, activity := coord.exec(ctx, toolOrigin{turn: req.Turn, modelCall: res.CallId, index: i}, tc)
 			out.activity = append(out.activity, activity)
 			msgs = append(msgs, openaichat.Message{Role: openaichat.ChatRoleTool, ToolCallId: tc.Id, Content: content})
 		}

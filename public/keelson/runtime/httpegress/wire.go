@@ -24,6 +24,7 @@ type wireRequest struct {
 	// OnBehalfTask and OnBehalfEpoch name the agent task whose work this
 	// fetch is (ADR-0269 §SD6); empty for the app's own.
 	OnBehalfTask  string `json:"obo_task,omitempty"`
+	OnBehalfCall  string `json:"obo_call,omitempty"`
 	OnBehalfEpoch uint64 `json:"obo_epoch,omitempty"`
 }
 

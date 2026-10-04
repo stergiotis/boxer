@@ -48,7 +48,7 @@ func TestATitleFromTheFirstLineThenTheModel(t *testing.T) {
 
 // The title call is not kept and declares what the conversation holds.
 func TestTheTitleCallIsNotKept(t *testing.T) {
-	r := titleRequest("q", strings.Repeat("x", titleExcerptRunes+10), queryengine.SensitivityConfined)
+	r := titleRequest("chat-1", "q", strings.Repeat("x", titleExcerptRunes+10), queryengine.SensitivityConfined)
 	assert.False(t, r.Retain)
 	assert.Equal(t, titlePurpose, r.Purpose)
 	assert.Equal(t, queryengine.SensitivityConfined, r.Sensitivity)

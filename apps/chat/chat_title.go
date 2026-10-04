@@ -76,11 +76,11 @@ func modelTitle(content string) (t string) {
 // titleRequest is the title call for a conversation's first exchange. It
 // declares the sensitivity the conversation holds, so a confined one is
 // titled only where its content may go.
-func titleRequest(question string, answer string, sensitivity queryengine.SensitivityE) (r llm.Request) {
+func titleRequest(conversation string, question string, answer string, sensitivity queryengine.SensitivityE) (r llm.Request) {
 	if a := []rune(answer); len(a) > titleExcerptRunes {
 		answer = string(a[:titleExcerptRunes]) + "…"
 	}
-	return llm.Request{Purpose: titlePurpose, Sensitivity: sensitivity, Messages: []openaichat.Message{
+	return llm.Request{Purpose: titlePurpose, Conversation: conversation, Sensitivity: sensitivity, Messages: []openaichat.Message{
 		{Role: openaichat.ChatRoleSystem, Content: titlePrompt},
 		{Role: openaichat.ChatRoleUser, Content: "The person asked:\n" + question + "\n\nThe answer began:\n" + answer},
 	}}
@@ -120,7 +120,7 @@ func (inst *App) maybeTitle() {
 		sensitivity = inst.coord.sensitivity()
 	}
 	conv.titleAsked = true
-	req, cli, id := titleRequest(question, answer, sensitivity), inst.cli, conv.id
+	req, cli, id := titleRequest(conv.id, question, answer, sensitivity), inst.cli, conv.id
 	inst.titleJob.Start(nil, bgjob.Spec{Kind: "chat-title", Title: "title the conversation"},
 		func(ctx context.Context) (out *titled, err error) {
 			res, err := cli.Complete(ctx, req)

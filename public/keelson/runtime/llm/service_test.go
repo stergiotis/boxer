@@ -12,12 +12,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 	"github.com/stergiotis/boxer/public/storage/recordstore/chexec"
 )
@@ -29,10 +31,15 @@ type fakeProvider struct {
 	resp openaichat.CompletionResponse
 	err  error
 	seen openaichat.CompletionRequest
+	// during, when set, runs while the provider "answers".
+	during func()
 }
 
 func (f *fakeProvider) Complete(_ context.Context, req openaichat.CompletionRequest) (openaichat.CompletionResponse, error) {
 	f.seen = req
+	if f.during != nil {
+		f.during()
+	}
 	return f.resp, f.err
 }
 func (f *fakeProvider) Close() (err error) { return }
@@ -280,16 +287,25 @@ func TestRowRoundTrip(t *testing.T) {
 		FinishReason: "stop", Elapsed: 1500 * time.Millisecond, Incomplete: true, Error: "boom",
 		Prompt: "secret prompt", Completion: "secret answer",
 	}
-	row := RowOf(rec)
-	assert.Equal(t, kindLabel, row.Kind)
-	assert.Equal(t, []byte("llm-x-1"), row.NaturalKey)
+	rec.Durable = true
+	ent := entityOf(rec, false)
+	row := ent.LlmCall.Val
 	assert.Equal(t, "confined", row.Sensitivity)
 	assert.Equal(t, []string{"boom"}, row.Error)
+	assert.Equal(t, string(appId), ent.Origin.Val.App, "who asked is the row's origin")
 
-	back := RecordOf(row)
+	back := RecordOf(ent)
 	rec.Id, rec.Prompt, rec.Completion = 0, "", ""
 	assert.Equal(t, rec, back, "everything but the id and the bodies survives the row")
-	assert.Empty(t, RowOf(CallRecord{CallId: "c"}).Error, "no error, no element")
+	assert.Empty(t, RowOf(CallRecord{CallId: "c"}, false).Error, "no error, no element")
+}
+
+// entityOf is the trail entity a record lands as: its call row and the
+// context components the record names.
+func entityOf(rec CallRecord, kept bool) (ent *trail.TrailEntity) {
+	c := (&Service{}).contextOf(rec)
+	return &trail.TrailEntity{Ts: rec.At, Origin: option.Some(c.Origin), Conversation: c.Conversation, Delegation: c.Delegation,
+		LlmCall: option.Some(RowOf(rec, kept))}
 }
 
 // A service without an executor is not durable and scans nothing; with
@@ -321,7 +337,8 @@ func TestCallsLandOnTheFactsTable(t *testing.T) {
 
 	p := &fakeProvider{resp: openaichat.CompletionResponse{Content: "out", FinishReason: "stop", InputTokens: 10, OutputTokens: 20}}
 	cfg := localCfg(p)
-	cfg.Exec = exec
+	cfg.Trail = trail.NewRecorder(exec, "run-test", zerolog.Nop())
+	t.Cleanup(cfg.Trail.Close)
 	cli, svc, _ := serve(t, cfg)
 	require.True(t, svc.Durable())
 	_, err = cli.Complete(ctx, Request{Purpose: "test/ask", Messages: []openaichat.Message{{Role: openaichat.ChatRoleUser, Content: "hi"}}})

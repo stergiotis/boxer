@@ -5,9 +5,11 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 
+	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 )
 
 // CallRecord is one fetch the service answered or refused (ADR-0262 §SD5).
@@ -26,10 +28,13 @@ type CallRecord struct {
 	Bytes   int
 	Elapsed time.Duration
 	// Task is the agent task whose work the fetch was, empty for the
-	// app's own (ADR-0269 §SD6).
-	Task    string
-	Refused bool
-	Error   string
+	// app's own (ADR-0269 §SD6); TaskEpoch its epoch and TaskCall the
+	// dispatcher's call that caused the fetch.
+	Task      string
+	TaskEpoch uint64
+	TaskCall  string
+	Refused   bool
+	Error     string
 }
 
 // DestinationRecord is one registered destination as the host resolved it.
@@ -51,6 +56,7 @@ type DestinationRecord struct {
 // full: a screenful of tiles is dozens of calls, so the ring must not copy
 // itself per call.
 func (inst *Service) record(rec CallRecord) {
+	inst.persist(rec)
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	inst.next++
@@ -176,4 +182,35 @@ func sensitivityName(s queryengine.SensitivityE) (name string) {
 		return "confined"
 	}
 	return "ordinary"
+}
+
+// persist buffers the fetch for the trail and wakes its flusher (ADR-0277
+// §SD2): a fetch never waits on the store, and a screenful of tiles lands
+// in a few flushes. A failed buffer is logged; the in-process record keeps
+// the row either way.
+func (inst *Service) persist(rec CallRecord) {
+	if !inst.cfg.Trail.Durable() {
+		return
+	}
+	c := trail.Context{Origin: inst.cfg.Trail.OriginOf(rec.Sender, rec.SenderInstance)}
+	if rec.Task != "" {
+		d := trail.Delegation{Task: rec.Task, Epoch: rec.TaskEpoch}
+		if rec.TaskCall != "" {
+			d.Call = option.Some(rec.TaskCall)
+		}
+		c.Delegation = option.Some(d)
+	}
+	row := trail.HttpFetch{
+		Destination: rec.Destination, Purpose: rec.Purpose, Sensitivity: sensitivityName(rec.Sensitivity), Method: rec.Method,
+		Url: rec.URL, Status: uint32(max(rec.Status, 0)), Bytes: uint64(max(rec.Bytes, 0)),
+		ElapsedMs: uint64(max(rec.Elapsed.Milliseconds(), 0)), Refused: rec.Refused,
+	}
+	if rec.Error != "" {
+		row.Error = []string{rec.Error}
+	}
+	if err := inst.cfg.Trail.HttpFetch(rec.At, c, row); err != nil {
+		inst.log.Warn().Err(err).Str("destination", rec.Destination).Msg("httpegress: buffer fetch row")
+		return
+	}
+	inst.cfg.Trail.FlushSoon()
 }

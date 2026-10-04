@@ -48,6 +48,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	tasksupervisor "github.com/stergiotis/boxer/public/keelson/runtime/task/supervisor"
 	"github.com/stergiotis/boxer/public/keelson/runtime/topo"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
@@ -229,6 +230,10 @@ type Runtime struct {
 	// PersistExec the executor behind a store backend, nil otherwise.
 	PersistBackend string
 	PersistExec    recordstore.ExecutorI
+	// Trail is the audit trail's one writer (ADR-0277): the model service,
+	// the dispatcher and the egress service record through it. Durable where
+	// PersistExec is set; never nil once the services have booted.
+	Trail *trail.Recorder
 	// AppState is the app-state manager's delete seam (ADR-0185 §SD3); nil
 	// when the service is off or failed to start.
 	AppState *appstate.Service
@@ -459,6 +464,18 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 			rt.cleanups = append(rt.cleanups, persistSvc.Close)
 		}
 	}
+	// The audit trail (ADR-0277), durable where the persist backend is the
+	// server that holds boxer.facts. It closes after the services that write
+	// through it and before the backend they share.
+	runId := ""
+	if rt.RunInfo != nil {
+		runId = rt.RunInfo.RunId
+	}
+	rt.Trail = trail.NewRecorder(rt.PersistExec, runId, logger)
+	rt.cleanups = append(rt.cleanups, rt.Trail.Close)
+	if trail.RequiredEnv.Get() && !rt.Trail.Durable() {
+		logger.Warn().Msg("trail: BOXER_TRAIL_REQUIRED is set and this host has no durable backend; model calls and egress fetches will be refused")
+	}
 	if svc.AppState {
 		// Only the durable backend can clear what another run could see;
 		// the in-memory fallbacks leave the service refusing with the
@@ -477,11 +494,10 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 		}
 	}
 	if svc.LLM {
-		// Durable where the persist backend is the server that holds
-		// boxer.facts (ADR-0254 §SD4); the in-memory fallback keeps the
-		// service's own record.
+		// Durable where the trail is (ADR-0254 §SD4); the in-memory fallback
+		// keeps the service's own record.
 		llmCfg := llm.ConfigFromEnv()
-		llmCfg.Exec = rt.PersistExec
+		llmCfg.Trail = rt.Trail
 		if path := llm.ScriptEnv.Get(); path != "" {
 			// A scripted model, for scenes (ADR-0269 M6): on the headless
 			// host only, where no person reads its answers as a model's.
@@ -508,7 +524,7 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 		}
 	}
 	if svc.HTTP {
-		httpSvc, hErr := httpegress.NewService(rt.Bus, logger, httpegress.Config{})
+		httpSvc, hErr := httpegress.NewService(rt.Bus, logger, httpegress.Config{Trail: rt.Trail})
 		if hErr != nil {
 			logger.Warn().Err(hErr).Msg("httpegress: service start failed; net.http.fetch.* will be unbound")
 		} else {
@@ -760,11 +776,10 @@ func (rt *Runtime) bootAgent() {
 		return
 	}
 	logger := rt.opts.Log
-	// Durable where the persist backend is the server holding boxer.facts
-	// (ADR-0269 §SD9), as for llm_calls.
+	// Durable where the trail is (ADR-0269 §SD9), as for llm_calls.
 	headless := imzero2env.HeadlessListen.Get() != ""
 	cfg := agent.Config{TestGrants: headlessOnly(agent.TestGrantsEnv.Get(), headless),
-		Exec: rt.PersistExec, Coordinators: agent.ParseCoordinators(agent.CoordinatorsEnv.Get()), Deadline: agent.DeadlineEnv.Get()}
+		Trail: rt.Trail, Coordinators: agent.ParseCoordinators(agent.CoordinatorsEnv.Get()), Deadline: agent.DeadlineEnv.Get()}
 	if rt.LLM != nil {
 		// Confined content reaches a coordinator's model only where the host's
 		// endpoint is local (ADR-0254 §SD3, ADR-0269 §SD7).

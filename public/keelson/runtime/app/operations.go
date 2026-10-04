@@ -368,6 +368,10 @@ type OperationCall struct {
 type OnBehalfOf struct {
 	Task  string
 	Epoch uint64
+	// Call is the dispatcher's id for the call, which the callee stamps on
+	// what the call causes — a query run, a fetch, a completion — so that
+	// work joins the action record on (Task, Call) (ADR-0277 §SD7).
+	Call string
 	// Principal is whose authority the task holds: the person.
 	Principal string
 	// Act is the chain the call came through: the person, the coordinator

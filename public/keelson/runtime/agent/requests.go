@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/instanceclosed"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 )
 
 // The person's side of a grant (ADR-0269 §SD5, §SD6): a coordinator's
@@ -134,6 +135,7 @@ func (inst *Service) requestGrant(msg *app.Msg) (rep wireGrantReply) {
 		if req.Launches, reason = inst.resolveLaunches(req.Launches); reason != "" {
 			rep.Reason = reason
 			inst.recordGrantRefusal(msg, req, reason)
+			inst.grantEvent(trail.GrantEventRefused, "host", reason, nil, asked(msg, req))
 			return
 		}
 	}
@@ -154,6 +156,7 @@ func (inst *Service) requestGrant(msg *app.Msg) (rep wireGrantReply) {
 		}
 	} else if !inst.isCoordinator(msg.Sender) {
 		rep.Reason = "this app is not registered as a coordinator (BOXER_AGENT_COORDINATORS)"
+		inst.grantEvent(trail.GrantEventRefused, "host", rep.Reason, nil, asked(msg, req))
 		return
 	}
 	r := &request{key: "req-" + randomHex(8), actor: msg.Sender, actorInstance: msg.SenderInstance, conversation: req.Conversation, task: t,
@@ -169,6 +172,9 @@ func (inst *Service) requestGrant(msg *app.Msg) (rep wireGrantReply) {
 		r.wanted[e.Instance], r.wantedOps[e.Instance] = m, e.Operations
 		r.share[e.Instance], r.mode[e.Instance] = true, m
 	}
+	inst.mu.Lock()
+	inst.grantEvent(trail.GrantEventRequested, "coordinator", "", nil, r)
+	inst.mu.Unlock()
 	if inst.cfg.TestGrants {
 		// A widening under test grants: the test grant stands in for the
 		// person here too, since nobody answers the dialog (ADR-0269 §SD6).
@@ -208,6 +214,7 @@ func (inst *Service) expireRequest(r *request) {
 		return
 	}
 	r.state, r.why = reqStateExpired, "the person did not decide in time"
+	inst.grantEvent(trail.GrantEventRefused, "host", r.why, nil, r)
 	if r.held != nil {
 		r.held.rec.outcome = phaseOutcome(opwire.PhaseExpired, r.why)
 	}
@@ -226,6 +233,7 @@ func (inst *Service) holdForWidening(t *task, rec *callRec, req wireCall, need n
 		r.wantedOps[req.Instance] = []string{req.Operation}
 	}
 	rec.heldBy = r
+	inst.grantEvent(trail.GrantEventRequested, "coordinator", "a call outside the grant: "+req.Operation, nil, r)
 	inst.requests[r.key] = r
 	inst.requestOrder = append(inst.requestOrder, r.key)
 }
@@ -269,10 +277,12 @@ func (inst *Service) approve(r *request) (route *held) {
 	if r.state != reqStatePending {
 		return
 	}
+	event := trail.GrantEventWidened
 	if r.task == nil {
 		t := inst.newTask(r.actor, r.actorInstance, r.conversation, r.plan, r.destinations, r.calls, r.deadline, false)
 		r.task = t
 		inst.tasks[t.handle] = t
+		event = trail.GrantEventApproved
 	}
 	t := r.task
 	// A widening's destinations join the task's.
@@ -315,6 +325,7 @@ func (inst *Service) approve(r *request) (route *held) {
 	}
 	inst.addLaunches(t, r.launches)
 	r.state = reqStateApproved
+	inst.grantEvent(event, inst.decider(), "", t, nil)
 	route = r.held
 	return
 }
@@ -325,6 +336,7 @@ func (inst *Service) reject(r *request) {
 		return
 	}
 	r.state, r.why = reqStateRejected, "the person declined"
+	inst.grantEvent(trail.GrantEventRefused, "person", r.why, nil, r)
 	if r.held != nil {
 		r.held.rec.outcome = phaseOutcome(opwire.PhaseRejected, "the person declined the widening")
 		r.held.rec.heldBy = nil
@@ -404,14 +416,16 @@ func (inst *Service) holder(key uint64, t *task) (other *task) {
 }
 
 // endTask revokes a task: the epoch moves, its queued calls expire, its
-// windows detach. Instances are told after mu is released.
-func (inst *Service) endTask(t *task, why string) {
+// windows detach. Instances are told after mu is released. by is who ended
+// it — "person", "coordinator" or "host" — for the grant's record.
+func (inst *Service) endTask(t *task, why string, by string) {
 	inst.mu.Lock()
 	if t.revoked != "" {
 		inst.mu.Unlock()
 		return
 	}
 	t.revoked = why
+	inst.grantEvent(trail.GrantEventEnded, by, why, t, nil)
 	t.epoch++
 	queued := make(map[uint64][]string)
 	for k := range t.entries {
@@ -477,7 +491,7 @@ func (inst *Service) instanceClosed(msg *app.Msg) {
 	}
 	inst.mu.Unlock()
 	for _, t := range ends {
-		inst.endTask(t, "the coordinator closed")
+		inst.endTask(t, "the coordinator closed", "host")
 	}
 	for _, t := range detaches {
 		inst.detachEntry(t, ev.InstanceKey, "the window closed")
@@ -506,4 +520,15 @@ func (inst *Client) AwaitGrant(ctx context.Context, key string) (g Grant, err er
 			return
 		}
 	}
+}
+
+// asked is a grant request as the event record takes it, for a request the
+// host refuses before it becomes one the person sees.
+func asked(msg *app.Msg, req wireGrantRequest) (r *request) {
+	r = &request{actor: msg.Sender, actorInstance: msg.SenderInstance, conversation: req.Conversation, plan: req.Plan,
+		destinations: req.Destinations, launches: req.Launches, wanted: make(map[uint64]ModeE)}
+	for _, e := range req.Entries {
+		r.wanted[e.Instance] = ParseMode(e.Mode)
+	}
+	return
 }

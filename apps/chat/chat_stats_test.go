@@ -28,13 +28,13 @@ func answered(content string, calls ...llm.Response) *turnResult {
 func TestTheStatisticsRecordTurnsAndTheirCalls(t *testing.T) {
 	var s chatStats
 	t0 := time.Unix(1700000000, 0)
-	s.addTurn("c1", t0, t0.Add(2*time.Second).UnixMilli(), answered("hello",
+	s.addTurn("c1", "turn-x", t0, t0.Add(2*time.Second).UnixMilli(), answered("hello",
 		llm.Response{InputTokens: 100, OutputTokens: 20, ToolCalls: []openaichat.ToolCall{{Id: "x"}}},
 		llm.Response{InputTokens: 140, OutputTokens: 30, FinishReason: "stop"}), nil)
-	s.addTurn("c1", t0, t0.Add(500*time.Millisecond).UnixMilli(), nil, errors.New("boom"))
-	s.addTurn("c1", t0, t0.UnixMilli(), nil, context.Canceled)
-	s.addTurn("c2", t0, t0.Add(time.Second).UnixMilli(), &turnResult{stopped: "rounds"}, nil)
-	s.addTurn("c2", t0, t0.Add(3*time.Second).UnixMilli(), answered("ok", llm.Response{InputTokens: 10, OutputTokens: 5}), nil)
+	s.addTurn("c1", "turn-x", t0, t0.Add(500*time.Millisecond).UnixMilli(), nil, errors.New("boom"))
+	s.addTurn("c1", "turn-x", t0, t0.UnixMilli(), nil, context.Canceled)
+	s.addTurn("c2", "turn-x", t0, t0.Add(time.Second).UnixMilli(), &turnResult{stopped: "rounds"}, nil)
+	s.addTurn("c2", "turn-x", t0, t0.Add(3*time.Second).UnixMilli(), answered("ok", llm.Response{InputTokens: 10, OutputTokens: 5}), nil)
 
 	require.Len(t, s.turns, 5)
 	first := s.turns[0]
@@ -84,17 +84,19 @@ func TestTheStatisticsTablesPassThePublishGate(t *testing.T) {
 	}
 	var s chatStats
 	t0 := time.Unix(1700000000, 0)
-	s.addTurn("c1", t0, t0.Add(time.Second).UnixMilli(), answered("hi", llm.Response{InputTokens: 7, OutputTokens: 3, FinishReason: "stop"}), nil)
+	s.addTurn("c1", "turn-x", t0, t0.Add(time.Second).UnixMilli(), answered("hi", llm.Response{InputTokens: 7, OutputTokens: 3, FinishReason: "stop"}), nil)
 	calls, err := callsArrow(s.calls)
 	require.NoError(t, err)
 	rec := decodeStream(t, calls)
 	assert.Equal(t, int64(1), rec.NumRows())
-	assert.Equal(t, "input_tokens", rec.ColumnName(4))
+	assert.Equal(t, "call_id", rec.ColumnName(2), "what joins a row to keelson('llm_calls')")
+	assert.Equal(t, "input_tokens", rec.ColumnName(6))
 	turns, err := turnsArrow(s.turns)
 	require.NoError(t, err)
 	rec = decodeStream(t, turns)
 	assert.Equal(t, int64(1), rec.NumRows())
-	assert.Equal(t, "outcome", rec.ColumnName(3))
+	assert.Equal(t, "turn_id", rec.ColumnName(1))
+	assert.Equal(t, "outcome", rec.ColumnName(4))
 }
 
 func TestNothingIsHandedOverBeforeATurn(t *testing.T) {

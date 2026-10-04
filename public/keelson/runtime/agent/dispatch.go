@@ -11,11 +11,13 @@ import (
 
 	"lukechampine.com/blake3"
 
+	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opjson"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 )
 
 // The dispatcher (ADR-0269 §SD6): every call is checked against the task's
@@ -117,7 +119,15 @@ type callRec struct {
 	callId   string
 	instance uint64
 	app      app.AppIdT
-	spec     app.OperationSpec
+	// turn and cause are what the coordinator said the call belongs to and
+	// was asked for by (ADR-0277 §SD1).
+	turn  string
+	cause option.Option[trail.Cause]
+	// actor and actorInstance are the caller of a call that resolved to no
+	// task, which has no other record of who asked.
+	actor         app.AppIdT
+	actorInstance uint64
+	spec          app.OperationSpec
 	// routed is true once the call reached the instance; until then, or
 	// when the dispatcher decided it, outcome is all there is.
 	routed  bool
@@ -194,6 +204,18 @@ func randomHex(n int) (s string) {
 	b := make([]byte, n)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+// causeOf is the cause a call states, none when it names no model call.
+func causeOf(req wireCall) (cause option.Option[trail.Cause]) {
+	if req.ModelCall == "" {
+		return
+	}
+	c := trail.Cause{ModelCall: req.ModelCall, ToolIndex: req.ToolIndex}
+	if req.ToolCall != "" {
+		c.ToolCall = option.Some(req.ToolCall)
+	}
+	return option.Some(c)
 }
 
 func digest(s string) (d string) {
@@ -289,6 +311,7 @@ func (inst *Service) testGrant(msg *app.Msg, req wireGrantRequest) (rep wireGran
 	if len(req.Entries) == 0 && len(req.Launches) == 0 {
 		rep.Reason = "a grant names at least one instance or an app to open"
 		inst.recordGrantRefusal(msg, req, rep.Reason)
+		inst.grantEvent(trail.GrantEventRefused, "host", rep.Reason, nil, asked(msg, req))
 		return
 	}
 	t := inst.newTask(msg.Sender, msg.SenderInstance, req.Conversation, req.Plan, req.Destinations, req.Calls,
@@ -312,6 +335,7 @@ func (inst *Service) testGrant(msg *app.Msg, req wireGrantRequest) (rep wireGran
 	for k := range t.entries {
 		inst.startTurnAt(t, k)
 	}
+	inst.grantEvent(trail.GrantEventApproved, "host", "a test grant", t, nil)
 	inst.mu.Unlock()
 	for k := range t.entries {
 		inst.attach(k)
@@ -338,7 +362,8 @@ func (inst *Service) call(msg *app.Msg) (rep wireCallReply) {
 	t, out, ok, late := inst.resolveLate(req.Handle, msg, true)
 	if !ok {
 		inst.mu.Unlock()
-		inst.record(nil, &callRec{key: req.Key, instance: req.Instance}, "dispatch", out)
+		inst.record(nil, &callRec{key: req.Key, instance: req.Instance, turn: req.Turn, cause: causeOf(req),
+			actor: msg.Sender, actorInstance: msg.SenderInstance}, "dispatch", out)
 		rep.Outcome = wireOutcomeOf(out, "", "")
 		return
 	}
@@ -347,7 +372,8 @@ func (inst *Service) call(msg *app.Msg) (rep wireCallReply) {
 		rep.Outcome = inst.outcomeOf(t, prev, 0)
 		return
 	}
-	rec := &callRec{key: req.Key, instance: req.Instance, argsDigest: digest(req.Args), created: time.Now()}
+	rec := &callRec{key: req.Key, instance: req.Instance, argsDigest: digest(req.Args), created: time.Now(),
+		turn: req.Turn, cause: causeOf(req)}
 	if t.test {
 		rec.args = req.Args
 	}
@@ -445,7 +471,7 @@ func (inst *Service) route(t *task, rec *callRec, req wireCall, spec app.Operati
 		return
 	}
 	creq := opwire.CallRequest{V: opwire.WireVersion, CallId: rec.callId, Args: args, Expects: expects,
-		Writer: opwire.WriterTask(t.id), Key: req.Key, Reason: req.Reason, RefData: refData, OnBehalfOf: inst.onBehalfOf(t, e)}
+		Writer: opwire.WriterTask(t.id), Key: req.Key, Reason: req.Reason, RefData: refData, OnBehalfOf: inst.onBehalfOf(t, e, rec.callId)}
 	payload, err := buscodec.Encode(creq)
 	if err != nil {
 		out := phaseOutcome(opwire.PhaseFailed, "encode: "+err.Error())
@@ -911,7 +937,7 @@ func (inst *Service) stop(msg *app.Msg) (rep wireAck) {
 		rep.Reason = out.Reason
 		return
 	}
-	inst.endTask(t, "stopped")
+	inst.endTask(t, "stopped", "coordinator")
 	rep.Ok = true
 	return
 }

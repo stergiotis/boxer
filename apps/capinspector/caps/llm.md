@@ -72,11 +72,13 @@ res, err := inst.model.Complete(ctx, llm.Request{
   above, and only here; the same row without the text lands on
   `boxer.facts` as the `llmCall` kind wherever the host's persist backend
   reaches it.
-- `boxer.facts`, kind `llmMessage` — the messages of retained requests, one
-  row per message, only what is new since the call's parent, at
-  `BOXER_LLM_RETAIN=durable`. Read with SQL; no verb reads it back. The
-  text is kept until removed by hand: `llmfacts.DitchMessagesSQL` removes
-  all of it, or one app's, and leaves the `llmCall` rows — the way to check
-  an app does not rely on it.
+- `boxer.facts`, kind `llmMessage` — one row per message of every call,
+  only what is new since the call's parent: who spoke, how much, a digest,
+  and the tool calls it issued or answers, never the text (ADR-0277). The
+  request's rows are written before the request leaves the machine. At
+  `BOXER_LLM_RETAIN=durable` a retained request's rows also carry the text.
+  Read with SQL; no verb reads it back. The text is kept until removed by
+  hand: `trail.DitchBodiesSQL` empties it for every row, or for one app's,
+  and leaves the rows — the way to check an app does not rely on it.
 - `keelson('llm_prompts')` — every registered prompt document: what a
   model may be asked to do here. `purpose` is `book/slug` on both tables.

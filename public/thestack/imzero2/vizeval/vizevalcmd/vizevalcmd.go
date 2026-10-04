@@ -20,6 +20,8 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
+	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/scene"
@@ -246,19 +248,27 @@ func openJudge(ctx *cli.Context, out string) (j *judge.Judge, closeFn func(), er
 		return nil, nil, eh.Errorf("--" + flagJudge + " needs a model: set BOXER_LLM_ENDPOINT and BOXER_LLM_MODEL")
 	}
 	if ctx.Bool(flagFacts) {
-		if cfg.Exec, err = storeexec.New(chclient.New(chclient.ConfigFromEnv(), nil), nil); err != nil {
-			return nil, nil, err
+		exec, eerr := storeexec.New(chclient.New(chclient.ConfigFromEnv(), nil), nil)
+		if eerr != nil {
+			return nil, nil, eerr
 		}
+		// The harness's own run names the rows' origin (ADR-0277 §SD1).
+		run := ""
+		if inst, rerr := runinfo.Init(); rerr == nil {
+			run = inst.RunId
+		}
+		cfg.Trail = trail.NewRecorder(exec, run, log.Logger)
 	}
 	bus := inprocbus.NewInst(log.Logger)
 	svc, err := llm.NewService(bus, log.Logger, cfg)
 	if err != nil {
+		cfg.Trail.Close()
 		return nil, nil, eh.Errorf("unable to start the llm service: %w", err)
 	}
 	client := llm.NewClient(bus.NewClient(appId, llm.ClientCaps("vizeval: answer scenario questions from renderings")))
 	client.Timeout = cfg.Timeout
 	j = &judge.Judge{Client: client, Model: cfg.Model, CacheDir: filepath.Join(out, "judge-cache")}
-	return j, svc.Close, nil
+	return j, func() { svc.Close(); cfg.Trail.Close() }, nil
 }
 
 func readCandidates(path string) (cands []vizeval.Candidate, err error) {

@@ -78,10 +78,10 @@ func (inst *Service) resolveRefs(t *task, spec app.OperationSpec, req wireCall) 
 }
 
 // onBehalfOf is the context stamped on a routed call (ADR-0269 §SD6).
-func (inst *Service) onBehalfOf(t *task, e *entry) (obo *app.OnBehalfOf) {
+func (inst *Service) onBehalfOf(t *task, e *entry, callId string) (obo *app.OnBehalfOf) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	obo = &app.OnBehalfOf{Task: t.id, Epoch: t.epoch, Principal: "person",
+	obo = &app.OnBehalfOf{Task: t.id, Epoch: t.epoch, Call: callId, Principal: "person",
 		Act: []string{"person", string(t.actor) + "#" + strconv.FormatUint(t.actorInstance, 10),
 			string(e.app) + "#" + strconv.FormatUint(e.instance, 10)},
 		Destinations: slices.Clone(t.destinations)}

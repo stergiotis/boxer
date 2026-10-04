@@ -2,8 +2,10 @@ package agent
 
 import (
 	"slices"
+	"strconv"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 )
 
 // Proposals (ADR-0269 §SD5): in suggest mode a command waits for the person
@@ -71,6 +73,7 @@ func (inst *Service) accept(p proposalRef) {
 	req.Expects = rec.proposal.expects
 	rec.proposal.taken = true
 	e := rec.entry
+	inst.grantEvent(trail.GrantEventConfirmed, "person", proposalReason(rec), p.t, nil)
 	inst.mu.Unlock()
 	go inst.route(p.t, rec, req, rec.spec, e)
 }
@@ -81,7 +84,14 @@ func (inst *Service) rejectProposal(p proposalRef) {
 	defer inst.mu.Unlock()
 	if p.rec.outcome.Phase == opwire.PhaseProposed {
 		p.rec.outcome = phaseOutcome(opwire.PhaseRejected, "rejected by the person")
+		inst.grantEvent(trail.GrantEventDeclined, "person", proposalReason(p.rec), p.t, nil)
 	}
+}
+
+// proposalReason names the proposal a confirmation or a decline was about:
+// the operation, the window and the call's key.
+func proposalReason(rec *callRec) (s string) {
+	return rec.spec.Name + " in window " + strconv.FormatUint(rec.instance, 10) + ", call " + rec.key
 }
 
 // discardProposals ends a task's pending proposals in window key, or in

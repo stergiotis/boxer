@@ -2,7 +2,10 @@ package llm
 
 import (
 	"context"
+	"errors"
+	"iter"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -16,8 +19,8 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
-	"github.com/stergiotis/boxer/public/keelson/runtime/llm/llmfacts"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/chexec"
@@ -103,7 +106,7 @@ func TestRetentionVerdictShapes(t *testing.T) {
 // with a declared omission taken out; anything else keeps it all.
 func TestContinuationFollowsTheParent(t *testing.T) {
 	first := []openaichat.Message{{Role: openaichat.ChatRoleSystem, Content: "s"}, user("q1"), {Role: openaichat.ChatRoleAssistant, Content: "a1"}}
-	parent := option.Some(kept{conversation: "c", hashes: messageHashes(first)})
+	parent := option.Some(seen{conversation: "c", hashes: messageHashes(first)})
 
 	next := append(append([]openaichat.Message(nil), first...), user("q2"))
 	covered, ok := continuation(parent, "c", messageHashes(next), 0, 0)
@@ -111,7 +114,7 @@ func TestContinuationFollowsTheParent(t *testing.T) {
 	assert.Equal(t, 3, covered)
 	_, ok = continuation(parent, "other", messageHashes(next), 0, 0)
 	assert.False(t, ok, "another conversation")
-	_, ok = continuation(option.None[kept](), "c", messageHashes(next), 0, 0)
+	_, ok = continuation(option.None[seen](), "c", messageHashes(next), 0, 0)
 	assert.False(t, ok, "unknown parent")
 
 	rewritten := append([]openaichat.Message(nil), next...)
@@ -138,77 +141,152 @@ func TestContinuationFollowsTheParent(t *testing.T) {
 	assert.NotEqual(t, messageHashes(first)[2], messageHashes(withCall)[2], "tool calls are part of a message")
 }
 
-// keep places a window's new messages after the parent's whole
+// plan places a window's new messages after the parent's whole
 // conversation, and the logical conversation grows by what is new.
-func TestKeepContinuesTheLogicalConversation(t *testing.T) {
+func TestPlanContinuesTheLogicalConversation(t *testing.T) {
 	first := []openaichat.Message{{Role: openaichat.ChatRoleSystem, Content: "s"}, user("q1"), {Role: openaichat.ChatRoleAssistant, Content: "a1"}}
-	parent := option.Some(kept{conversation: "c", hashes: messageHashes(first)})
-	rec := CallRecord{CallId: "llm-2", Sender: appId}
+	parent := option.Some(seen{conversation: "c", hashes: messageHashes(first)})
 	tr := turn{conversation: "c", messages: []openaichat.Message{first[0], user("q2")}, omitFrom: 1, omitTo: 3,
 		reply: option.Some(openaichat.Message{Role: openaichat.ChatRoleAssistant, Content: "a2"})}
-	rows, from, logical := keep(rec, tr, parent)
-	assert.Equal(t, 3, from)
-	require.Len(t, rows, 2)
-	assert.EqualValues(t, 3, rows[0].Ordinal)
-	assert.Equal(t, "q2", rows[0].Content)
-	assert.EqualValues(t, 4, rows[1].Ordinal)
+	tr.plan(parent)
+	assert.Equal(t, 3, tr.from)
+	assert.Equal(t, 1, tr.covered, "the system message is the parent's")
+	logical := tr.logical()
 	assert.Len(t, logical, 5, "s, q1, a1 from the parent; q2, a2 new")
 	assert.Equal(t, messageHashes(first), logical[:3])
+
+	whole := turn{conversation: "c", messages: first[:2]}
+	whole.plan(option.None[seen]())
+	assert.Zero(t, whole.from)
+	assert.Zero(t, whole.covered, "no parent seen: the whole request is new")
 }
 
-// The reply is the last row and alone carries the reasoning; images keep
-// their digest, not their bytes.
+// The audit row never carries text; the body does, and the last row alone
+// the reasoning. Images keep their digest, not their bytes.
 func TestMessageRows(t *testing.T) {
 	rec := CallRecord{CallId: "llm-1", At: time.Unix(1700000000, 0), Sender: appId, Sensitivity: queryengine.SensitivityConfined}
-	tr := turn{conversation: "c", messages: []openaichat.Message{
+	ms := []openaichat.Message{
 		{Role: openaichat.ChatRoleUser, Content: "q", Images: []openaichat.Image{{MediaType: "image/png", Data: []byte{1, 2, 3}}}},
-	}, reply: option.Some(openaichat.Message{Role: openaichat.ChatRoleAssistant, Content: "a", ToolCalls: []openaichat.ToolCall{{Id: "t1", Name: "n", Arguments: `{"x":1}`}}}), reasoning: "because"}
-	rows := messageRows(rec, tr, tr.sent(), 0, true)
+		{Role: openaichat.ChatRoleAssistant, Content: "a", ToolCalls: []openaichat.ToolCall{{Id: "t1", Name: "n", Arguments: `{"x":1}`}}},
+		{Role: openaichat.ChatRoleTool, Content: "42", ToolCallId: "t1"},
+	}
+	rows := messageRows(rec, ms[:2], 0, "because")
 	require.Len(t, rows, 2)
-	assert.Equal(t, "user", rows[0].Role)
-	assert.Empty(t, rows[0].Reasoning)
-	require.Len(t, rows[0].Images, 1)
-	assert.True(t, strings.HasPrefix(rows[0].Images[0], "image/png ") && strings.HasSuffix(rows[0].Images[0], " 3"))
-	assert.EqualValues(t, 1, rows[1].Ordinal)
-	assert.Equal(t, "because", rows[1].Reasoning)
-	assert.Equal(t, []string{`{"id":"t1","name":"n","arguments":"{\"x\":1}"}`}, rows[1].ToolCalls)
-	assert.Equal(t, "confined", rows[1].Sensitivity, "the call's label on every row")
-	assert.Equal(t, "llm-1/1", string(rows[1].NaturalKey))
-	assert.EqualValues(t, 7, messageRows(rec, tr, tr.sent()[1:], 7, true)[0].Ordinal, "ordinals continue from first")
+	assert.Equal(t, "user", rows[0].audit.Role)
+	assert.EqualValues(t, 1, rows[0].audit.Bytes)
+	assert.Equal(t, trail.ContentDigest("q"), rows[0].audit.Digest)
+	assert.Empty(t, rows[0].body.Reasoning)
+	require.Len(t, rows[0].audit.Images, 1)
+	assert.True(t, strings.HasPrefix(rows[0].audit.Images[0], "image/png ") && strings.HasSuffix(rows[0].audit.Images[0], " 3"))
+	assert.EqualValues(t, 1, rows[1].audit.Ordinal)
+	assert.Equal(t, "because", rows[1].body.Reasoning)
+	assert.Equal(t, []string{"t1"}, rows[1].audit.ToolCallIds, "the audit follows a tool call without the text")
+	assert.Equal(t, []string{"n"}, rows[1].audit.ToolNames)
+	assert.Equal(t, []string{`{"id":"t1","name":"n","arguments":"{\"x\":1}"}`}, rows[1].body.ToolCalls)
+	assert.Equal(t, "confined", rows[1].audit.Sensitivity, "the call's label on every row")
+	tool := messageRows(rec, ms[2:], 7, "")
+	assert.EqualValues(t, 7, tool[0].audit.Ordinal, "ordinals continue from first")
+	assert.Equal(t, "t1", tool[0].audit.ToolCallId.Val)
 }
 
-// The retained fields survive the call row.
-func TestRetainedRowRoundTrip(t *testing.T) {
-	rec := CallRecord{CallId: "llm-x-2", At: time.Unix(1700000000, 0).UTC(), Sender: appId,
-		Conversation: "c", ParentCallId: "llm-x-1", Kept: true, RetainedFrom: 3, HistoryHash: "ab", OmitFrom: 1, OmitTo: 3}
-	back := RecordOf(RowOf(rec))
-	rec.Id = 0
-	assert.Equal(t, rec, back)
-	row := RowOf(CallRecord{CallId: "c"})
-	assert.False(t, row.Conversation.Has || row.Parent.Has || row.RetainedFrom.Has || row.OmitTo.Has)
-	assert.Empty(t, row.HistoryHash)
+// What a call belongs to survives its row and context components.
+func TestCallRowRoundTrip(t *testing.T) {
+	rec := CallRecord{CallId: "llm-x-2", At: time.Unix(1700000000, 0).UTC(), Sender: appId, SenderInstance: 7,
+		Conversation: "c", Turn: "t1", Round: 2, ParentCallId: "llm-x-1", Task: "task-1", TaskEpoch: 3, TaskCall: "task-1-9",
+		ProviderId: "chatcmpl-1", ReportedModel: "m-2026", ToolsDigest: "d", MaxTokens: 512,
+		Durable: true, RetainAsked: true, Kept: true, MessagesFrom: 3, HistoryHash: "ab", OmitFrom: 1, OmitTo: 3}
+	assert.Equal(t, rec, RecordOf(entityOf(rec, true)))
+
+	bare := entityOf(CallRecord{CallId: "c"}, false)
+	assert.False(t, bare.Conversation.Has || bare.Delegation.Has)
+	row := bare.LlmCall.Val
+	assert.False(t, row.Parent.Has || row.ProviderId.Has || row.OmitTo.Has)
+	assert.Equal(t, "not-asked", row.Retention)
+	assert.Equal(t, "not-kept", RowOf(CallRecord{CallId: "c", RetainAsked: true}, false).Retention)
+}
+
+// Over clickhouse-local, without Keep: the call and each of its messages
+// land as audit rows before the provider is asked, with the conversation,
+// turn and round the request named, and no text anywhere.
+func TestTrailIsWrittenAheadWithoutKeep(t *testing.T) {
+	exec := localFacts(t)
+	ctx := context.Background()
+	p := &fakeProvider{resp: openaichat.CompletionResponse{Content: "a1", FinishReason: "stop", Id: "chatcmpl-9", Model: "m-reported"}}
+	cfg := localCfg(p)
+	cfg.Trail = trail.NewRecorder(exec, "run-test", zerolog.Nop())
+	t.Cleanup(cfg.Trail.Close)
+	cli, svc, _ := serve(t, cfg)
+	var ahead []*trail.TrailEntity
+	p.during = func() { ahead = scanMessages(t, svc) }
+
+	res, err := cli.Complete(ctx, Request{Purpose: "test/ask", Conversation: "c1", Turn: "t1", Round: 1,
+		Messages: []openaichat.Message{{Role: openaichat.ChatRoleSystem, Content: "s"}, user("q1")},
+		Tools:    []openaichat.Tool{{Name: "n", Description: "d"}}})
+	require.NoError(t, err)
+	assert.Equal(t, RetentionNotAsked, res.Retention)
+	require.Len(t, ahead, 2, "the request's messages were durable while the provider answered")
+
+	ms := scanMessages(t, svc)
+	require.Len(t, ms, 3, "system, user, reply")
+	for _, m := range ms {
+		assert.False(t, m.LlmMessageBody.Has, "no text without Keep")
+		require.True(t, m.Origin.Has)
+		assert.Equal(t, "run-test", m.Origin.Val.Run)
+		assert.Equal(t, string(appId), m.Origin.Val.App)
+		require.True(t, m.Conversation.Has)
+		assert.Equal(t, "t1", m.Conversation.Val.Turn.Val)
+	}
+	calls, err := svc.ScanCalls(ctx, time.Now().Add(-time.Hour), 10)
+	require.NoError(t, err)
+	require.Len(t, calls, 1)
+	c := calls[0]
+	assert.Equal(t, "c1", c.Conversation)
+	assert.Equal(t, "t1", c.Turn)
+	assert.Equal(t, 1, c.Round)
+	assert.Equal(t, "chatcmpl-9", c.ProviderId)
+	assert.Equal(t, "m-reported", c.ReportedModel)
+	assert.NotEmpty(t, c.ToolsDigest)
+	assert.False(t, c.RetainAsked || c.Kept)
+	ring := svc.Calls()
+	require.Len(t, ring, 1)
+	assert.True(t, ring[0].Durable)
+}
+
+// BOXER_TRAIL_REQUIRED: a call whose trail row cannot be written does not
+// leave the machine; without it the call proceeds and says it is not durable.
+func TestTrailRequiredRefusesWithoutABackend(t *testing.T) {
+	for _, required := range []bool{false, true} {
+		trail.RequiredEnv.SetForTest(t, strconv.FormatBool(required))
+		p := &fakeProvider{resp: openaichat.CompletionResponse{Content: "a", FinishReason: "stop"}}
+		cfg := localCfg(p)
+		cfg.Trail = trail.NewRecorder(nil, "run-test", zerolog.Nop())
+		cli, svc, _ := serve(t, cfg)
+		p.seen = openaichat.CompletionRequest{}
+		_, err := cli.Complete(context.Background(), Request{Purpose: "test/ask", Messages: []openaichat.Message{user("hi")}})
+		var refused *RefusedError
+		if required {
+			require.True(t, errors.As(err, &refused), "%v", err)
+			assert.Contains(t, refused.Reason, "BOXER_TRAIL_REQUIRED")
+			assert.Empty(t, p.seen.Messages, "the provider was not asked")
+		} else {
+			require.NoError(t, err)
+			assert.False(t, svc.Calls()[0].Durable)
+		}
+		cfg.Trail.Close()
+	}
 }
 
 // Over clickhouse-local: two turns and a branch land as llmMessage rows,
 // each turn keeping only what is new; then the SD6 ditch removes the text
 // — one app's, then all — while every llmCall row stays.
 func TestRetainedConversationLandsAndDitches(t *testing.T) {
-	exec, err := chexec.NewLocalExecutor(t.TempDir(), nil)
-	if err != nil {
-		t.Skipf("clickhouse unavailable: %v", err)
-	}
+	exec := localFacts(t)
 	ctx := context.Background()
-	setup, err := chstore.ComposeSetupSQL(chstore.Config{Database: factsschema.DatabaseName, Table: factsschema.TableName}, "")
-	require.NoError(t, err)
-	for stmt := range strings.SplitSeq(setup, ";") {
-		if stmt = strings.TrimSpace(stmt); stmt != "" {
-			require.NoError(t, exec.Exec(ctx, stmt))
-		}
-	}
 
 	p := &fakeProvider{resp: openaichat.CompletionResponse{Content: "a1", Reasoning: "r1", FinishReason: "stop"}}
 	cfg := localCfg(p)
-	cfg.Exec, cfg.Retain = exec, RetainDurable
+	cfg.Trail, cfg.Retain = trail.NewRecorder(exec, "run-test", zerolog.Nop()), RetainDurable
+	t.Cleanup(cfg.Trail.Close)
 	bus := inprocbus.NewInst(zerolog.Nop())
 	cli, svc := serveRetaining(t, bus, cfg, appId)
 
@@ -249,28 +327,44 @@ func TestRetainedConversationLandsAndDitches(t *testing.T) {
 	_, err = other.Complete(ctx, Request{Retain: true, Conversation: "o1", Messages: []openaichat.Message{user("hello")}})
 	require.NoError(t, err)
 
-	byCall := map[string][]llmfacts.LlmMessage{}
-	for _, m := range scanMessages(t, svc) {
-		byCall[m.CallId] = append(byCall[m.CallId], m)
+	type kept struct {
+		trail.LlmMessage
+		body trail.LlmMessageBody
+		app  string
 	}
-	for _, ms := range byCall {
-		// The scan orders by (ts, id); a call's rows share ts, so order
-		// them by their place in the conversation.
-		slices.SortFunc(ms, func(a, b llmfacts.LlmMessage) int { return int(a.Ordinal) - int(b.Ordinal) })
+	messages := func() (byCall map[string][]kept, n int, withText int) {
+		byCall = map[string][]kept{}
+		for _, ent := range scanMessages(t, svc) {
+			m := kept{LlmMessage: ent.LlmMessage.Val, body: ent.LlmMessageBody.Val, app: ent.Origin.Val.App}
+			byCall[m.CallId] = append(byCall[m.CallId], m)
+			n++
+			if ent.LlmMessageBody.Has {
+				withText++
+			}
+		}
+		for _, ms := range byCall {
+			// The scan orders by (ts, id); a call's rows share ts, so order
+			// them by their place in the conversation.
+			slices.SortFunc(ms, func(a, b kept) int { return int(a.Ordinal) - int(b.Ordinal) })
+		}
+		return
 	}
+	byCall, n, withText := messages()
+	assert.Equal(t, 16, n, "fourteen of this app's, two of the other's")
+	assert.Equal(t, 16, withText, "every kept message carries its text on the audit row")
 	require.Len(t, byCall[r1.CallId], 3, "system, user, reply")
-	assert.Equal(t, "r1", byCall[r1.CallId][2].Reasoning)
+	assert.Equal(t, "r1", byCall[r1.CallId][2].body.Reasoning)
 	assert.Equal(t, "confined", byCall[r1.CallId][0].Sensitivity)
 	require.Len(t, byCall[r2.CallId], 2, "only what is new: q2 and its reply")
 	assert.EqualValues(t, 3, byCall[r2.CallId][0].Ordinal)
-	assert.Equal(t, "q2", byCall[r2.CallId][0].Content)
-	assert.Len(t, byCall[r3.CallId], 5, "a rewritten prefix keeps the whole history")
-	require.Len(t, byCall[r4.CallId], 2, "a declared window keeps only what is new")
+	assert.Equal(t, "q2", byCall[r2.CallId][0].body.Content)
+	assert.Len(t, byCall[r3.CallId], 5, "a rewritten prefix writes the whole history")
+	require.Len(t, byCall[r4.CallId], 2, "a declared window writes only what is new")
 	assert.EqualValues(t, 5, byCall[r4.CallId][0].Ordinal, "after s, q1, a1, q2, a2")
-	assert.Equal(t, "q3", byCall[r4.CallId][0].Content)
-	require.Len(t, byCall[r5.CallId], 2, "the window slid and still only the new is kept")
+	assert.Equal(t, "q3", byCall[r4.CallId][0].body.Content)
+	require.Len(t, byCall[r5.CallId], 2, "the window slid and still only the new is written")
 	assert.EqualValues(t, 7, byCall[r5.CallId][0].Ordinal)
-	assert.Equal(t, "a4", byCall[r5.CallId][1].Content)
+	assert.Equal(t, "a4", byCall[r5.CallId][1].body.Content)
 
 	calls, err := svc.ScanCalls(ctx, time.Now().Add(-time.Hour), 100)
 	require.NoError(t, err)
@@ -278,41 +372,61 @@ func TestRetainedConversationLandsAndDitches(t *testing.T) {
 	for _, c := range calls {
 		if c.CallId == r2.CallId {
 			assert.Equal(t, r1.CallId, c.ParentCallId)
-			assert.Equal(t, 3, c.RetainedFrom)
+			assert.Equal(t, 3, c.MessagesFrom)
 			assert.True(t, c.Kept)
 		}
 		if c.CallId == r3.CallId {
-			assert.Equal(t, 0, c.RetainedFrom, "marked: a parent, yet kept from 0")
+			assert.Equal(t, 0, c.MessagesFrom, "marked: a parent, yet written from 0")
 		}
 		if c.CallId == r5.CallId {
 			assert.Equal(t, 1, c.OmitFrom)
 			assert.Equal(t, 5, c.OmitTo)
-			assert.Equal(t, 7, c.RetainedFrom)
+			assert.Equal(t, 7, c.MessagesFrom)
 		}
 	}
 
-	require.NoError(t, exec.Exec(ctx, llmfacts.DitchMessagesSQL("", "test.llm.other")))
-	left := scanMessages(t, svc)
-	assert.Len(t, left, 14, "the other app's text is gone, this app's stays")
-	for _, m := range left {
-		assert.Equal(t, string(appId), m.App)
-	}
-	require.NoError(t, exec.Exec(ctx, llmfacts.DitchMessagesSQL("", "")))
-	assert.Empty(t, scanMessages(t, svc), "every llmMessage row is gone")
+	// The ditch empties the text and leaves the audit: every message row
+	// stays, with its size, digest and place.
+	require.NoError(t, exec.Exec(ctx, trail.DitchBodiesSQL("", "test.llm.other")))
+	_, n, withText = messages()
+	assert.Equal(t, 16, n, "no row is removed")
+	assert.Equal(t, 14, withText, "the other app's text is gone, this app's stays")
+	require.NoError(t, exec.Exec(ctx, trail.DitchBodiesSQL("", "")))
+	byCall, n, withText = messages()
+	assert.Equal(t, 16, n)
+	assert.Zero(t, withText, "no text is left")
+	assert.EqualValues(t, 2, byCall[r2.CallId][0].Bytes, "the audit survives the ditch")
+	assert.Equal(t, trail.ContentDigest("q2"), byCall[r2.CallId][0].Digest)
 	calls, err = svc.ScanCalls(ctx, time.Now().Add(-time.Hour), 100)
 	require.NoError(t, err)
 	assert.Len(t, calls, 6, "the counts survive the ditch")
 }
 
-func scanMessages(t *testing.T, svc *Service) (ms []llmfacts.LlmMessage) {
+// localFacts is a clickhouse-local executor holding an empty boxer.facts;
+// the test is skipped where there is no clickhouse.
+func localFacts(t *testing.T) (exec recordstore.ExecutorI) {
 	t.Helper()
-	svc.mu.Lock()
-	defer svc.mu.Unlock()
-	for ent, err := range svc.facts.ScanLlmMessage(context.Background(), recordstore.ScanOpts{}) {
-		require.NoError(t, err)
-		if ent != nil && ent.LlmMessage.Has {
-			ms = append(ms, ent.LlmMessage.Val)
+	exec, err := chexec.NewLocalExecutor(t.TempDir(), nil)
+	if err != nil {
+		t.Skipf("clickhouse unavailable: %v", err)
+	}
+	setup, err := chstore.ComposeSetupSQL(chstore.Config{Database: factsschema.DatabaseName, Table: factsschema.TableName}, "")
+	require.NoError(t, err)
+	for stmt := range strings.SplitSeq(setup, ";") {
+		if stmt = strings.TrimSpace(stmt); stmt != "" {
+			require.NoError(t, exec.Exec(context.Background(), stmt))
 		}
 	}
+	return
+}
+
+// scanMessages are the message rows on the trail, each with every component
+// its row carries.
+func scanMessages(t *testing.T, svc *Service) (ents []*trail.TrailEntity) {
+	t.Helper()
+	ents, err := svc.cfg.Trail.Scan(func(st *trail.TrailStore) iter.Seq2[*trail.TrailEntity, error] {
+		return st.ScanLlmMessage(context.Background(), recordstore.ScanOpts{})
+	})
+	require.NoError(t, err)
 	return
 }

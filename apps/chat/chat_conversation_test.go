@@ -17,6 +17,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 	"github.com/stergiotis/boxer/public/storage/recordstore/chexec"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/chatview"
@@ -117,14 +118,18 @@ func TestFailedTurnIsNotAParent(t *testing.T) {
 	assert.Equal(t, "cancelled", failureReason(context.Canceled))
 }
 
-// Keep off sends on llm.complete: the call carries no conversation.
+// Keep off sends on llm.complete: the text is not asked to be kept, and the
+// call still says which conversation and turn it belongs to (ADR-0277 §SD5).
 func TestKeepOffIsNotRetained(t *testing.T) {
 	cli, svc, _ := host(t, llm.Config{Retain: llm.RetainDurable})
 	conv := newConversation()
 	res := turn(t, cli, conv, "q1")
 	assert.Equal(t, llm.RetentionNotAsked, res.Retention)
 	require.Len(t, svc.Calls(), 1)
-	assert.Empty(t, svc.Calls()[0].Conversation)
+	call := svc.Calls()[0]
+	assert.False(t, call.RetainAsked)
+	assert.Equal(t, conv.id, call.Conversation)
+	assert.True(t, strings.HasPrefix(call.Turn, "turn-"), call.Turn)
 	assert.Empty(t, conv.notKept)
 }
 
@@ -260,7 +265,9 @@ func TestKeptTurnsStoreOnlyWhatIsNew(t *testing.T) {
 			require.NoError(t, exec.Exec(ctx, stmt))
 		}
 	}
-	cli, svc, _ := host(t, llm.Config{Retain: llm.RetainDurable, Exec: exec})
+	rec := trail.NewRecorder(exec, "run-test", zerolog.Nop())
+	t.Cleanup(rec.Close)
+	cli, svc, _ := host(t, llm.Config{Retain: llm.RetainDurable, Trail: rec})
 	conv := keeping()
 	r1 := turn(t, cli, conv, "q1")
 	require.Equal(t, llm.RetentionKept, r1.Retention, r1.RetentionReason)
@@ -270,8 +277,11 @@ func TestKeptTurnsStoreOnlyWhatIsNew(t *testing.T) {
 
 	calls := svc.Calls()
 	require.Len(t, calls, 2)
-	assert.Equal(t, 0, calls[0].RetainedFrom)
-	assert.Equal(t, 2, calls[1].RetainedFrom, "q1 and a1 were kept by the first turn")
+	assert.Equal(t, 0, calls[0].MessagesFrom)
+	assert.Equal(t, 2, calls[1].MessagesFrom, "q1 and a1 were kept by the first turn")
+	assert.Equal(t, conv.id, calls[1].Conversation)
+	assert.NotEmpty(t, calls[1].Turn)
+	assert.NotEqual(t, calls[0].Turn, calls[1].Turn, "each message the person sends is a turn of its own")
 }
 
 // appOn is the app mounted on a host whose model is fm, without a frame:

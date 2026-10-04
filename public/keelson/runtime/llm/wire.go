@@ -36,9 +36,13 @@ type wireRequest struct {
 	// DeadlineUnixNanos carries the caller's ctx deadline, since the
 	// handler has no ctx of its own. 0 means none.
 	DeadlineUnixNanos int64 `json:"deadline_ns,omitempty"`
-	// Conversation and ParentCallId tie a retained turn into its
-	// conversation (ADR-0264 §SD2); ignored on llm.complete.
+	// Conversation, Turn and Round say what the call belongs to, and
+	// ParentCallId which call it continues (ADR-0264 §SD2); recorded on
+	// either subject (ADR-0277 §SD5). Round counts from 0 and is read only
+	// beside a Turn.
 	Conversation string `json:"conversation,omitempty"`
+	Turn         string `json:"turn,omitempty"`
+	Round        uint32 `json:"round,omitempty"`
 	ParentCallId string `json:"parent_call_id,omitempty"`
 	// OmitFrom and OmitTo declare the range of the logical conversation
 	// the request left out (ADR-0264 §SD3); OmitTo 0 is none.
@@ -47,10 +51,12 @@ type wireRequest struct {
 	// CancelKey is the requester's handle for llm.cancel; empty is a
 	// request that cannot be stopped early.
 	CancelKey string `json:"cancel_key,omitempty"`
-	// OnBehalfTask and OnBehalfEpoch name the agent task whose work this
-	// completion is (ADR-0269 §SD6); empty for the app's own.
+	// OnBehalfTask, OnBehalfEpoch and OnBehalfCall name the agent task
+	// whose work this completion is, and the dispatcher's call that caused
+	// it (ADR-0269 §SD6); empty for the app's own.
 	OnBehalfTask  string `json:"obo_task,omitempty"`
 	OnBehalfEpoch uint64 `json:"obo_epoch,omitempty"`
+	OnBehalfCall  string `json:"obo_call,omitempty"`
 }
 
 // wireCancel is the message on llm.cancel: stop the sender's completion

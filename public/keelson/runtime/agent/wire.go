@@ -111,6 +111,13 @@ type wireLaunch struct {
 	App    string `json:"app"`
 	Kind   string `json:"kind,omitempty"`
 	Config []byte `json:"config,omitempty"`
+	// Key, Turn, ModelCall, ToolCall and ToolIndex are a call's (wireCall):
+	// the launch leaves an action row under them (ADR-0277 §SD7).
+	Key       string `json:"key,omitempty"`
+	Turn      string `json:"turn,omitempty"`
+	ModelCall string `json:"model_call,omitempty"`
+	ToolCall  string `json:"tool_call,omitempty"`
+	ToolIndex uint32 `json:"tool_index,omitempty"`
 }
 
 type wireLaunchReply struct {
@@ -146,6 +153,14 @@ type wireCall struct {
 	Expects   map[string]uint64 `json:"expects,omitempty"`
 	Key       string            `json:"key"`
 	Reason    string            `json:"reason,omitempty"`
+	// Turn is the conversation's turn the call belongs to; ModelCall,
+	// ToolCall and ToolIndex name the model call whose reply asked for it,
+	// the provider's id for the tool call and its index in that reply
+	// (ADR-0277 §SD1). Recorded as the coordinator states them.
+	Turn      string `json:"turn,omitempty"`
+	ModelCall string `json:"model_call,omitempty"`
+	ToolCall  string `json:"tool_call,omitempty"`
+	ToolIndex uint32 `json:"tool_index,omitempty"`
 }
 
 type wireOutcome struct {

@@ -18,6 +18,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -29,6 +30,10 @@ type Config struct {
 	// KeepCalls bounds the in-process call record; zero is
 	// DefaultKeepCalls.
 	KeepCalls int
+	// Trail is the host's audit trail (ADR-0277): every fetch lands there
+	// as a row, beside the in-process record. Nil, or a recorder without a
+	// backend, keeps the record alone.
+	Trail *trail.Recorder
 }
 
 // DefaultKeepCalls bounds the in-process call record. A screenful of tiles
@@ -210,7 +215,7 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 		return
 	}
 	if req.OnBehalfTask != "" {
-		rec.Task = req.OnBehalfTask
+		rec.Task, rec.TaskEpoch, rec.TaskCall = req.OnBehalfTask, req.OnBehalfEpoch, req.OnBehalfCall
 		ref := inst.delegation.Load()
 		if ref == nil {
 			inst.refuse(msg, "agent-caused work, and no dispatcher to check its grant", rec)
@@ -236,6 +241,10 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	// nowhere else.
 	if rec.Sensitivity == queryengine.SensitivityConfined && !r.local {
 		inst.refuse(msg, "the request derives from sealed data that must not leave this box, and destination "+name+" is not loopback", rec)
+		return
+	}
+	if refuse := inst.cfg.Trail.Admit(); refuse != nil {
+		inst.refuse(msg, refuse.Error(), rec)
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), r.dest.Timeout)

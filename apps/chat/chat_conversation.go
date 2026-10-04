@@ -153,7 +153,7 @@ type conversation struct {
 	startedAt int64
 }
 
-// minted salts conversation ids minted in this process.
+// minted salts the conversation and turn ids minted in this process.
 var minted atomic.Uint64
 
 // newConversation starts an empty conversation with a fresh id.
@@ -163,17 +163,23 @@ func newConversation() (inst *conversation) {
 	return
 }
 
+// newTurn mints the id of a turn: one message the person sends and all that
+// answering it takes. Every model call and tool call of the turn carries it
+// (ADR-0277 §SD5).
+func newTurn() (id string) {
+	return "turn-" + strconv.FormatInt(time.Now().UTC().UnixNano(), 36) + "-" + strconv.FormatUint(minted.Add(1), 36)
+}
+
 // request is the call for a new user message: the history, then the
-// message; on the retained subject with this conversation's id and the
-// last reply as parent when keep is on.
+// message, under this conversation's id, a fresh turn and the last reply as
+// parent — which the host records whether or not the text is kept; on the
+// retained subject when keep is on.
 func (inst *conversation) request(text string) (r llm.Request) {
 	msgs := make([]openaichat.Message, 0, len(inst.history)+1)
 	msgs = append(msgs, inst.history...)
 	msgs = append(msgs, openaichat.Message{Role: openaichat.ChatRoleUser, Content: text})
-	r = llm.Request{Purpose: purpose, Messages: msgs}
-	if inst.keep {
-		r.Retain, r.Conversation, r.ParentCallId = true, inst.id, inst.parent
-	}
+	r = llm.Request{Purpose: purpose, Messages: msgs, Retain: inst.keep,
+		Conversation: inst.id, Turn: newTurn(), ParentCallId: inst.parent}
 	return
 }
 

@@ -270,8 +270,18 @@ type CallRequest struct {
 	Operation string
 	Args      string
 	Expects   map[string]uint64
-	Key       string
-	Reason    string
+	// Key is the caller's key for the call: a repeat under one task returns
+	// the first outcome. A coordinator keys a model's tool call with
+	// trail.ToolKey, never with the provider's id (ADR-0277 §SD6).
+	Key    string
+	Reason string
+	// Turn is the conversation's turn the call belongs to; ModelCall,
+	// ToolCall and ToolIndex the model call whose reply asked for it, the
+	// provider's id for the tool call and its index in that reply.
+	Turn      string
+	ModelCall string
+	ToolCall  string
+	ToolIndex uint32
 }
 
 func outcomeOfWire(w wireOutcome) (out Outcome) {
@@ -299,7 +309,8 @@ func callReply(rep wireCallReply, err error) (out Outcome, rerr error) {
 // Call calls one command or query.
 func (inst *Client) Call(ctx context.Context, r CallRequest) (out Outcome, err error) {
 	return callReply(roundTrip[wireCall, wireCallReply](ctx, inst, SubjectCall, wireCall{V: wireVersion, Handle: r.Handle,
-		Instance: r.Instance, Operation: r.Operation, Args: r.Args, Expects: r.Expects, Key: r.Key, Reason: r.Reason}))
+		Instance: r.Instance, Operation: r.Operation, Args: r.Args, Expects: r.Expects, Key: r.Key, Reason: r.Reason,
+		Turn: r.Turn, ModelCall: r.ModelCall, ToolCall: r.ToolCall, ToolIndex: r.ToolIndex}))
 }
 
 // Status reads a call's or a capture's phase by key, waiting up to wait

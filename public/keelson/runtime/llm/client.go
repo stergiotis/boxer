@@ -90,9 +90,15 @@ type Request struct {
 	// Needs [RetainCaps] beside [ClientCaps]; the bus refuses it otherwise.
 	Retain bool
 	// Conversation is the app's id for the conversation, required with
-	// Retain. ParentCallId is the CallId of the reply this turn continues,
-	// empty on the first turn; the host then keeps only what is new.
+	// Retain and recorded on either subject (ADR-0277 §SD5). Turn is the
+	// app's id for the turn — one message the person sent and all that
+	// answering it took — and Round the call's place in the turn's tool
+	// loop, from 0; Round is read only beside a Turn. ParentCallId is the
+	// CallId of the reply this call continues, empty on the first; the host
+	// then writes only the messages that are new.
 	Conversation string
+	Turn         string
+	Round        uint32
 	ParentCallId string
 	// OmitFrom and OmitTo declare that the request leaves out messages
 	// [OmitFrom, OmitTo) of the conversation — positions in the whole
@@ -236,13 +242,13 @@ func (inst *Client) Complete(ctx context.Context, r Request) (res Response, err 
 		CancelKey: strconv.FormatUint(rand.Uint64(), 36),
 	}
 	if r.OnBehalfOf != nil {
-		req.OnBehalfTask, req.OnBehalfEpoch = r.OnBehalfOf.Task, r.OnBehalfOf.Epoch
+		req.OnBehalfTask, req.OnBehalfEpoch, req.OnBehalfCall = r.OnBehalfOf.Task, r.OnBehalfOf.Epoch, r.OnBehalfOf.Call
 	}
+	req.Conversation, req.Turn, req.Round, req.ParentCallId = r.Conversation, r.Turn, r.Round, r.ParentCallId
+	req.OmitFrom, req.OmitTo = uint32(max(r.OmitFrom, 0)), uint32(max(r.OmitTo, 0))
 	subject := SubjectComplete
 	if r.Retain {
 		subject = SubjectRetainComplete
-		req.Conversation, req.ParentCallId = r.Conversation, r.ParentCallId
-		req.OmitFrom, req.OmitTo = uint32(max(r.OmitFrom, 0)), uint32(max(r.OmitTo, 0))
 	}
 	if deadline, ok := ctx.Deadline(); ok {
 		req.DeadlineUnixNanos = deadline.UnixNano()

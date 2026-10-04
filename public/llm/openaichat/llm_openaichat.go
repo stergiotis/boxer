@@ -199,6 +199,11 @@ type CompletionResponse struct {
 	ToolCalls    []ToolCall // function calls the model requested, if any
 	InputTokens  int32
 	OutputTokens int32 // includes reasoning tokens for reasoning models
+	// Id is the provider's id for the completion and Model the model name it
+	// answered with — the keys into the provider's own records. Either is
+	// empty when the provider sent none.
+	Id    string
+	Model string
 }
 
 // Error sentinels for errors.Is branching. Complete wraps the matching one
@@ -470,6 +475,7 @@ type wireUsage struct {
 
 type wireResponse struct {
 	Id      string       `json:"id"`
+	Model   string       `json:"model"`
 	Object  string       `json:"object"`
 	Choices []wireChoice `json:"choices"`
 	Usage   wireUsage    `json:"usage"`
@@ -570,6 +576,8 @@ func (inst *Client) Complete(ctx context.Context, req CompletionRequest) (resp C
 		ToolCalls:    fromWireToolCalls(choice.Message.ToolCalls),
 		InputTokens:  wresp.Usage.PromptTokens,
 		OutputTokens: wresp.Usage.CompletionTokens,
+		Id:           wresp.Id,
+		Model:        wresp.Model,
 	}
 
 	// A truncated or content-filtered answer must not masquerade as a complete

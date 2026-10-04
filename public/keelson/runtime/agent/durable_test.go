@@ -2,23 +2,26 @@ package agent
 
 import (
 	"context"
+	"iter"
 	"strings"
 	"testing"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/agent/agentfacts"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/chexec"
 )
 
 // Over clickhouse-local: every decision and every final phase lands as an
-// agentAction row on boxer.facts (ADR-0269 §SD9), flushed off the call's
-// path and at shutdown.
-func TestActionRecordLandsOnFacts(t *testing.T) {
+// agentAction row on the trail (ADR-0269 §SD9), flushed off the call's
+// path and at shutdown, each with the context components that join it to
+// the rest (ADR-0277 §SD1); and the grant leaves its events.
+func TestActionRecordLandsOnTheTrail(t *testing.T) {
 	exec, err := chexec.NewLocalExecutor(t.TempDir(), nil)
 	if err != nil {
 		t.Skipf("clickhouse unavailable: %v", err)
@@ -31,35 +34,103 @@ func TestActionRecordLandsOnFacts(t *testing.T) {
 			require.NoError(t, exec.Exec(ctx, stmt))
 		}
 	}
-	r := newRigWith(t, func(cfg *Config) { cfg.TestGrants, cfg.Exec = true, exec })
+	rec := trail.NewRecorder(exec, "run-test", zerolog.Nop())
+	defer rec.Close()
+	r := newRigWith(t, func(cfg *Config) { cfg.TestGrants, cfg.Trail = true, rec })
 	require.True(t, r.svc.Durable())
-	g := r.grant(ModeAct)
-	r.call(g, "q", "get_text", "{}")
-	r.call(g, "w", "set_text", `{"text":"agent"}`)
-	r.host.frame(7)
-	r.host.frame(7)
-	_, err = r.cli.Status(ctx, g.Handle, "w", 0)
+	g, err := r.cli.Request(ctx, GrantRequest{Plan: "edit the doc", Conversation: "chat-1",
+		Entries: []GrantEntry{{Instance: r.docKey, Mode: ModeAct}}})
 	require.NoError(t, err)
+	r.call(g, "q", "get_text", "{}")
+	// A model's tool call: keyed by the coordinator, with the model call
+	// that asked for it and the provider's own id beside the key.
+	key := trail.ToolKey("llm-1", 0)
+	_, err = r.cli.Call(ctx, CallRequest{Handle: g.Handle, Instance: r.docKey, Operation: "set_text", Args: `{"text":"agent"}`,
+		Key: key, Turn: "turn-1", ModelCall: "llm-1", ToolCall: "call_0", ToolIndex: 0})
+	require.NoError(t, err)
+	r.host.frame(7)
+	r.host.frame(7)
+	_, err = r.cli.Status(ctx, g.Handle, key, 0)
+	require.NoError(t, err)
+	require.NoError(t, r.cli.Stop(ctx, g.Handle))
 	want := len(r.svc.Actions())
 	r.svc.Close() // flushes what is buffered
 
-	store := agentfacts.NewActionStore(exec, nil, agentfacts.ActionStoreConfig{})
-	defer store.Close()
-	var rows []agentfacts.AgentAction
-	for ent, serr := range store.ScanAgentAction(ctx, recordstore.ScanOpts{}) {
-		require.NoError(t, serr)
-		if ent != nil && ent.AgentAction.Has {
-			rows = append(rows, ent.AgentAction.Val)
-		}
-	}
+	rows, err := rec.Scan(func(st *trail.TrailStore) iter.Seq2[*trail.TrailEntity, error] {
+		return st.ScanAgentAction(ctx, recordstore.ScanOpts{})
+	})
+	require.NoError(t, err)
 	assert.Len(t, rows, want)
-	var finals int
-	for _, row := range rows {
+	var finals, caused int
+	for _, ent := range rows {
+		row := ent.AgentAction.Val
 		assert.Equal(t, "agentAction", row.Kind)
 		assert.True(t, row.Test)
+		require.True(t, ent.Origin.Has)
+		assert.Equal(t, "run-test", ent.Origin.Val.Run, "the run is on every row")
+		assert.NotEmpty(t, ent.Origin.Val.App, "the coordinator is the row's origin")
+		require.True(t, ent.Delegation.Has)
+		assert.Equal(t, g.Task, ent.Delegation.Val.Task)
+		require.True(t, ent.Conversation.Has)
+		assert.Equal(t, "chat-1", ent.Conversation.Val.Conversation)
 		if row.Decision == "final" {
 			finals++
+			assert.True(t, ent.Delegation.Val.Call.Has, "a routed call names the dispatcher's call id")
+		}
+		if row.Key == key {
+			caused++
+			require.True(t, ent.Cause.Has)
+			assert.Equal(t, "llm-1", ent.Cause.Val.ModelCall)
+			assert.Equal(t, "call_0", ent.Cause.Val.ToolCall.Val)
+			assert.Equal(t, "turn-1", ent.Conversation.Val.Turn.Val)
+		} else {
+			assert.False(t, ent.Cause.Has)
 		}
 	}
 	assert.Equal(t, 2, finals, "the query and the command each reached a final phase")
+	assert.Equal(t, 2, caused, "the tool call's dispatch row and its final row")
+
+	grants, err := rec.Scan(func(st *trail.TrailStore) iter.Seq2[*trail.TrailEntity, error] {
+		return st.ScanAgentGrant(ctx, recordstore.ScanOpts{})
+	})
+	require.NoError(t, err)
+	var events []string
+	for _, ent := range grants {
+		row := ent.AgentGrant.Val
+		events = append(events, row.Event)
+		assert.Equal(t, "edit the doc", row.Plan)
+		assert.Equal(t, trail.ContentDigest("edit the doc"), row.PlanDigest)
+		assert.Equal(t, "chat-1", ent.Conversation.Val.Conversation)
+		assert.Equal(t, g.Task, ent.Delegation.Val.Task)
+		if row.Event == trail.GrantEventApproved {
+			assert.Equal(t, "host", row.DecidedBy, "a test grant stands in for the person")
+			assert.Len(t, row.Entries, 1)
+		}
+	}
+	assert.ElementsMatch(t, []string{trail.GrantEventApproved, trail.GrantEventEnded}, events)
+}
+
+// A repeated key returns the first outcome, so a coordinator keys a tool
+// call by the model call and its index: two replies that carry the same
+// provider id are still two calls (ADR-0277 §SD6).
+func TestToolKeysDifferAcrossReplies(t *testing.T) {
+	r := newRig(t, true)
+	g := r.grant(ModeAct)
+	ctx := context.Background()
+	call := func(modelCall string) Outcome {
+		out, err := r.cli.Call(ctx, CallRequest{Handle: g.Handle, Instance: r.docKey, Operation: "get_text", Args: "{}",
+			Key: trail.ToolKey(modelCall, 0), ModelCall: modelCall, ToolCall: "call_0"})
+		require.NoError(t, err)
+		return out
+	}
+	call("llm-1")
+	call("llm-2")
+	var keys []string
+	for _, a := range r.svc.Actions() {
+		if a.Decision == "dispatch" {
+			keys = append(keys, a.Key)
+			assert.Equal(t, "call_0", a.ToolCallId)
+		}
+	}
+	assert.Equal(t, []string{"llm-1#0", "llm-2#0"}, keys, "the same provider id, two dispatches")
 }

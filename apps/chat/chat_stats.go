@@ -54,6 +54,10 @@ const (
 // Apps one per round of its tool loop.
 type callStat struct {
 	conversation string
+	// turnId is the turn's id and callId the call's, as the host's call
+	// record names them: what joins a row here to keelson('llm_calls').
+	turnId       string
+	callId       string
 	turn         int
 	round        int
 	atMs         int64
@@ -67,13 +71,14 @@ type callStat struct {
 
 // callStatOf is the record of one answered call.
 func callStatOf(round int, res llm.Response) (s callStat) {
-	return callStat{round: round, atMs: time.Now().UnixMilli(), inputTokens: res.InputTokens, outputTokens: res.OutputTokens,
+	return callStat{round: round, callId: res.CallId, atMs: time.Now().UnixMilli(), inputTokens: res.InputTokens, outputTokens: res.OutputTokens,
 		elapsedMs: res.Elapsed.Milliseconds(), finish: res.FinishReason, toolCalls: len(res.ToolCalls), incomplete: res.Incomplete}
 }
 
 // turnStat is one turn, from the person's send to its landing.
 type turnStat struct {
 	conversation string
+	turnId       string
 	turn         int
 	atMs         int64
 	rounds       int
@@ -93,8 +98,8 @@ type chatStats struct {
 
 // addTurn records a landed turn and its calls. res is nil when the turn
 // failed or was cancelled; err says which.
-func (inst *chatStats) addTurn(conversation string, started time.Time, landedMs int64, res *turnResult, err error) {
-	t := turnStat{conversation: conversation, atMs: started.UnixMilli(), elapsedMs: landedMs - started.UnixMilli(), outcome: outcomeAnswered}
+func (inst *chatStats) addTurn(conversation string, turnId string, started time.Time, landedMs int64, res *turnResult, err error) {
+	t := turnStat{conversation: conversation, turnId: turnId, atMs: started.UnixMilli(), elapsedMs: landedMs - started.UnixMilli(), outcome: outcomeAnswered}
 	for _, prev := range inst.turns {
 		if prev.conversation == conversation {
 			t.turn = prev.turn + 1
@@ -112,7 +117,7 @@ func (inst *chatStats) addTurn(conversation string, started time.Time, landedMs 
 	}
 	if res != nil {
 		for _, cs := range res.calls {
-			cs.conversation, cs.turn = conversation, t.turn
+			cs.conversation, cs.turnId, cs.turn = conversation, turnId, t.turn
 			inst.calls = append(inst.calls, cs)
 			t.rounds++
 			t.toolCalls += cs.toolCalls
@@ -170,6 +175,8 @@ var tsType = &arrow.TimestampType{Unit: arrow.Microsecond, TimeZone: "UTC"}
 
 var callsSchema = arrow.NewSchema([]arrow.Field{
 	{Name: "conversation", Type: arrow.BinaryTypes.String},
+	{Name: "turn_id", Type: arrow.BinaryTypes.String},
+	{Name: "call_id", Type: arrow.BinaryTypes.String},
 	{Name: "turn", Type: arrow.PrimitiveTypes.Uint32},
 	{Name: "round", Type: arrow.PrimitiveTypes.Uint32},
 	{Name: "at", Type: tsType},
@@ -183,6 +190,7 @@ var callsSchema = arrow.NewSchema([]arrow.Field{
 
 var turnsSchema = arrow.NewSchema([]arrow.Field{
 	{Name: "conversation", Type: arrow.BinaryTypes.String},
+	{Name: "turn_id", Type: arrow.BinaryTypes.String},
 	{Name: "turn", Type: arrow.PrimitiveTypes.Uint32},
 	{Name: "at", Type: tsType},
 	{Name: "outcome", Type: arrow.BinaryTypes.String},
@@ -200,15 +208,17 @@ func callsArrow(calls []callStat) (stream []byte, err error) {
 	defer rb.Release()
 	for _, cs := range calls {
 		rb.Field(0).(*array.StringBuilder).Append(cs.conversation)
-		rb.Field(1).(*array.Uint32Builder).Append(uint32(cs.turn))
-		rb.Field(2).(*array.Uint32Builder).Append(uint32(cs.round))
-		rb.Field(3).(*array.TimestampBuilder).Append(arrow.Timestamp(cs.atMs * 1000))
-		rb.Field(4).(*array.Int32Builder).Append(cs.inputTokens)
-		rb.Field(5).(*array.Int32Builder).Append(cs.outputTokens)
-		rb.Field(6).(*array.Int64Builder).Append(cs.elapsedMs)
-		rb.Field(7).(*array.StringBuilder).Append(cs.finish)
-		rb.Field(8).(*array.Uint32Builder).Append(uint32(cs.toolCalls))
-		rb.Field(9).(*array.BooleanBuilder).Append(cs.incomplete)
+		rb.Field(1).(*array.StringBuilder).Append(cs.turnId)
+		rb.Field(2).(*array.StringBuilder).Append(cs.callId)
+		rb.Field(3).(*array.Uint32Builder).Append(uint32(cs.turn))
+		rb.Field(4).(*array.Uint32Builder).Append(uint32(cs.round))
+		rb.Field(5).(*array.TimestampBuilder).Append(arrow.Timestamp(cs.atMs * 1000))
+		rb.Field(6).(*array.Int32Builder).Append(cs.inputTokens)
+		rb.Field(7).(*array.Int32Builder).Append(cs.outputTokens)
+		rb.Field(8).(*array.Int64Builder).Append(cs.elapsedMs)
+		rb.Field(9).(*array.StringBuilder).Append(cs.finish)
+		rb.Field(10).(*array.Uint32Builder).Append(uint32(cs.toolCalls))
+		rb.Field(11).(*array.BooleanBuilder).Append(cs.incomplete)
 	}
 	rec := rb.NewRecordBatch()
 	defer rec.Release()
@@ -221,15 +231,16 @@ func turnsArrow(turns []turnStat) (stream []byte, err error) {
 	defer rb.Release()
 	for _, t := range turns {
 		rb.Field(0).(*array.StringBuilder).Append(t.conversation)
-		rb.Field(1).(*array.Uint32Builder).Append(uint32(t.turn))
-		rb.Field(2).(*array.TimestampBuilder).Append(arrow.Timestamp(t.atMs * 1000))
-		rb.Field(3).(*array.StringBuilder).Append(t.outcome)
-		rb.Field(4).(*array.Uint32Builder).Append(uint32(t.rounds))
-		rb.Field(5).(*array.Uint32Builder).Append(uint32(t.toolCalls))
-		rb.Field(6).(*array.Int64Builder).Append(t.inputTokens)
-		rb.Field(7).(*array.Int64Builder).Append(t.outputTokens)
-		rb.Field(8).(*array.Int64Builder).Append(t.elapsedMs)
-		rb.Field(9).(*array.Uint32Builder).Append(uint32(t.answerChars))
+		rb.Field(1).(*array.StringBuilder).Append(t.turnId)
+		rb.Field(2).(*array.Uint32Builder).Append(uint32(t.turn))
+		rb.Field(3).(*array.TimestampBuilder).Append(arrow.Timestamp(t.atMs * 1000))
+		rb.Field(4).(*array.StringBuilder).Append(t.outcome)
+		rb.Field(5).(*array.Uint32Builder).Append(uint32(t.rounds))
+		rb.Field(6).(*array.Uint32Builder).Append(uint32(t.toolCalls))
+		rb.Field(7).(*array.Int64Builder).Append(t.inputTokens)
+		rb.Field(8).(*array.Int64Builder).Append(t.outputTokens)
+		rb.Field(9).(*array.Int64Builder).Append(t.elapsedMs)
+		rb.Field(10).(*array.Uint32Builder).Append(uint32(t.answerChars))
 	}
 	rec := rb.NewRecordBatch()
 	defer rec.Release()

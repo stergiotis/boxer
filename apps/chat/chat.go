@@ -193,7 +193,7 @@ func (inst *App) drain() {
 	// view, then the answer — a long answer is not entered at its end.
 	asked := int32(inst.conv.lastUser())
 	if res, _, ok := inst.turn.TakeResult(); ok {
-		inst.stats.addTurn(inst.conv.id, p.started, now, res, nil)
+		inst.stats.addTurn(inst.conv.id, p.req.Turn, p.started, now, res, nil)
 		inst.conv.landTurn(p.req, res, nil, now)
 		inst.pending = nil
 		inst.view.ScrollToStart(asked)
@@ -212,13 +212,13 @@ func (inst *App) drain() {
 		if err == nil {
 			err = errors.New("the turn failed")
 		}
-		inst.stats.addTurn(inst.conv.id, p.started, now, nil, err)
+		inst.stats.addTurn(inst.conv.id, p.req.Turn, p.started, now, nil, err)
 		inst.conv.land(p.req, nil, err, now)
 		inst.pending = nil
 	case bgjob.StateIdle:
 		// A cancelled run resets to idle without a result or an error
 		// (bgjob's contract), so idle with a turn pending is the cancel.
-		inst.stats.addTurn(inst.conv.id, p.started, now, nil, context.Canceled)
+		inst.stats.addTurn(inst.conv.id, p.req.Turn, p.started, now, nil, context.Canceled)
 		inst.conv.land(p.req, nil, context.Canceled, now)
 		inst.pending = nil
 	}

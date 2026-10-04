@@ -83,7 +83,7 @@ func (inst *Client) Fetch(ctx context.Context, destination string, r Request) (r
 	}
 	req := wireRequest{V: wireVersion, Method: r.Method, URL: r.URL, Purpose: r.Purpose, Sensitivity: uint8(r.Sensitivity)}
 	if r.OnBehalfOf != nil {
-		req.OnBehalfTask, req.OnBehalfEpoch = r.OnBehalfOf.Task, r.OnBehalfOf.Epoch
+		req.OnBehalfTask, req.OnBehalfEpoch, req.OnBehalfCall = r.OnBehalfOf.Task, r.OnBehalfOf.Epoch, r.OnBehalfOf.Call
 	}
 	if deadline, ok := ctx.Deadline(); ok {
 		req.DeadlineUnixNanos = deadline.UnixNano()

@@ -7,6 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
@@ -125,7 +126,7 @@ func (inst *Chrome) renderTaskMenu(key uint64, wt windowTask, ids *c.WidgetIdSta
 		}
 		if c.Button(ids.PrepareStr("agent-stop-"+t.id+"-"+strconv.FormatUint(key, 10)),
 			c.Atoms().Text("Stop the task").Keep()).SendResp().HasPrimaryClicked() {
-			svc.endTask(t, "the person stopped it")
+			svc.endTask(t, "the person stopped it", "person")
 		}
 	}
 	c.Separator().Send()
@@ -217,6 +218,7 @@ func (inst *Service) setMode(t *task, key uint64, m ModeE) {
 	}
 	lowered := m < e.mode
 	e.mode = m
+	inst.grantEvent(trail.GrantEventMode, "person", "window "+strconv.FormatUint(key, 10)+": "+m.String(), t, nil)
 	var ids []string
 	if lowered && m == ModeObserve {
 		ids = t.queuedOn(key)

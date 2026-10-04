@@ -124,6 +124,24 @@ func (inst *Service) launch(msg *app.Msg) (rep wireLaunchReply) {
 	}
 	id, known := inst.resolveApp(req.App)
 	le := t.launches[id]
+	// The launch leaves an action row naming the window it opened, so which
+	// task opened a window is a join on the window's key (ADR-0277 §SD7).
+	inst.nextCall++
+	rec := &callRec{key: req.Key, callId: t.id + "-" + strconv.FormatUint(inst.nextCall, 10), app: id,
+		spec: app.OperationSpec{Name: launchOperation}, turn: req.Turn,
+		cause: causeOf(wireCall{ModelCall: req.ModelCall, ToolCall: req.ToolCall, ToolIndex: req.ToolIndex}), created: time.Now()}
+	defer func() {
+		phase := opwire.PhaseCompleted
+		switch {
+		case rep.Ok:
+			rec.instance = rep.Instance
+		case rec.outcome.Phase == opwire.PhaseFailed:
+			phase = opwire.PhaseFailed
+		default:
+			phase = opwire.PhaseRefused
+		}
+		inst.record(t, rec, "final", phaseOutcome(phase, rep.Reason))
+	}()
 	switch {
 	case !known:
 		rep.Reason = inst.unknownAppReason(req.App)
@@ -145,6 +163,7 @@ func (inst *Service) launch(msg *app.Msg) (rep wireLaunchReply) {
 		le.used--
 		inst.mu.Unlock()
 		rep.Reason = "the host did not open it: " + err.Error()
+		rec.outcome = phaseOutcome(opwire.PhaseFailed, rep.Reason)
 		return
 	}
 	load, loadReason := inst.waitLoaded(key)
@@ -162,6 +181,10 @@ func (inst *Service) launch(msg *app.Msg) (rep wireLaunchReply) {
 	rep.Load, rep.LoadReason = load.String(), loadReason
 	return
 }
+
+// launchOperation is the operation name a launch's action row carries: the
+// coordinator's tool, since a launch is the dispatcher's own and no app's.
+const launchOperation = "open_window"
 
 // launchSettle bounds how long launch waits for a new window to load.
 const launchSettle = 3 * time.Second
@@ -237,8 +260,16 @@ type Launched struct {
 // alias), with an optional launch config in the app's LaunchKind; the
 // window joins the task.
 func (inst *Client) Launch(ctx context.Context, handle string, appName string, kind string, config []byte) (out Launched, err error) {
+	return inst.LaunchFrom(ctx, CallRequest{Handle: handle}, appName, kind, config)
+}
+
+// LaunchFrom is Launch for a model's tool call: from names the task's
+// handle and, as for a call, the key, the turn and the model call that
+// asked — what the launch's action row records.
+func (inst *Client) LaunchFrom(ctx context.Context, from CallRequest, appName string, kind string, config []byte) (out Launched, err error) {
 	rep, err := roundTrip[wireLaunch, wireLaunchReply](ctx, inst, SubjectLaunch,
-		wireLaunch{V: wireVersion, Handle: handle, App: appName, Kind: kind, Config: config})
+		wireLaunch{V: wireVersion, Handle: from.Handle, App: appName, Kind: kind, Config: config,
+			Key: from.Key, Turn: from.Turn, ModelCall: from.ModelCall, ToolCall: from.ToolCall, ToolIndex: from.ToolIndex})
 	if err != nil {
 		return
 	}
