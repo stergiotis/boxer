@@ -239,7 +239,7 @@ func coordRig(t *testing.T, bus *inprocbus.Inst, model *scriptedModel, opTools b
 		_ = buscodec.Reply(hostClient.Publish, msg.Reply, opwire.CallReply{V: opwire.WireVersion, Outcome: host.eng(key).Submit(op, req)})
 	})
 	require.NoError(t, err)
-	asvc, err := agent.NewService(bus, zerolog.Nop(), agent.Config{Registry: reg, Host: host, TestGrants: true})
+	asvc, err := agent.NewService(bus, zerolog.Nop(), agent.Config{Registry: reg, Host: host, TestGrants: true, Pace: time.Millisecond})
 	require.NoError(t, err)
 	t.Cleanup(asvc.Close)
 
@@ -544,4 +544,53 @@ func TestArrangeWindowsAsksForTheDesktop(t *testing.T) {
 	assert.Contains(t, replies["r2"], "access granted")
 	assert.Contains(t, replies["a2"], "completed")
 	assert.Contains(t, replies["x1"], "does not cover", "a window outside the task is not raised")
+}
+
+// The settings are a ceiling the host enforces (ADR-0280): a model asking
+// for more than they allow is refused before anyone is asked, and is told
+// what they allow on the turn they change.
+func TestTheSettingsCeilingBindsTheModel(t *testing.T) {
+	bus := inprocbus.NewInst(zerolog.Nop())
+	model := &scriptedModel{replies: []openaichat.CompletionResponse{
+		toolCall("r1", "request_access", `{"plan":"tidy the note","open":[{"app":"notes"}]}`),
+		{Content: "I may only read.", FinishReason: "stop"},
+	}}
+	_, coord, cli, req, ctx := coordRig(t, bus, model, false)
+	read := permissions{allow: allowRead}
+	coord.setOptions(read.ceiling(true), false)
+	res, err := runTurn(ctx, cli, coord, req, nil)
+	require.NoError(t, err)
+
+	assert.Contains(t, toolReplies(res.messages)["r1"], "open windows", "the host refuses the launch the settings do not allow")
+	assert.Empty(t, coord.handle(), "no task was started")
+	var told string
+	for _, m := range res.messages {
+		if m.Role == openaichat.ChatRoleSystem && strings.Contains(m.Content, "settings let you at most") {
+			told = m.Content
+		}
+	}
+	assert.Contains(t, told, "at most: read")
+	assert.Empty(t, coord.ceilingNote(), "told once, until the settings move")
+	coord.setOptions(defaultPermissions().ceiling(true), false)
+	assert.Contains(t, coord.ceilingNote(), "at most: run")
+}
+
+// The settings map onto the ladder: without Apps the model only talks, and
+// Ask first keeps every change a proposal.
+func TestPermissionsBecomeACeiling(t *testing.T) {
+	assert.Equal(t, agent.LevelTalk, defaultPermissions().ceiling(false).Level())
+	def := defaultPermissions().ceiling(true)
+	assert.Equal(t, agent.LevelRun, def.Level())
+	assert.Equal(t, agent.ModeAct, def.Mode)
+	assert.Equal(t, agent.ModeObserve, permissions{allow: allowRead}.ceiling(true).Mode)
+	ask := permissions{allow: allowEdit, changes: changesAsk}.ceiling(true)
+	assert.Equal(t, agent.ModeSuggest, ask.Mode)
+	assert.Equal(t, agent.LevelEdit, ask.Level())
+	assert.Equal(t, agent.LevelOutside, permissions{allow: allowOutside, changes: changesApply}.ceiling(true).Level())
+	assert.Greater(t, def.Score(true).Position, def.Score(false).Position, "a model off this machine sits higher in its band")
+	assert.False(t, def.Unpaced, "paced unless the person lifts it")
+	fast := defaultPermissions()
+	fast.unpaced = true
+	assert.Greater(t, fast.ceiling(true).Score(false).Position, def.Score(false).Position, "speed moves the position, not the level")
+	assert.Equal(t, def.Level(), fast.ceiling(true).Level())
 }

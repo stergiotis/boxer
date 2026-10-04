@@ -69,8 +69,14 @@ type coordinator struct {
 	kq           *keelsonquery.Client
 	conversation string
 
-	// opTools offers each operation of the task's windows as a typed tool.
-	opTools bool
+	// opTools offers each operation of the task's windows as a typed tool;
+	// ceiling is the most the person's settings let the model do (ADR-0280),
+	// sent with every request for access, and told is the one the model was
+	// last told of. All three are the settings', guarded by mu.
+	opTools  bool
+	ceiling  agent.Ceiling
+	told     agent.Ceiling
+	toldOnce bool
 
 	mu       sync.Mutex
 	grant    agent.Grant
@@ -88,7 +94,53 @@ type coordinator struct {
 
 func newCoordinator(cli *agent.Client, kq *keelsonquery.Client, conversation string) (inst *coordinator) {
 	return &coordinator{cli: cli, kq: kq, conversation: conversation, opTools: OperationToolsSeed.Get(),
+		ceiling: defaultPermissions().ceiling(true),
 		refused: make(map[string]string), typed: make(map[string]typedOp), opCache: make(map[string][]agent.Operation)}
+}
+
+// setOptions takes the window's settings: the ceiling and whether each
+// operation is offered as a tool of its own.
+func (inst *coordinator) setOptions(ceiling agent.Ceiling, opTools bool) {
+	inst.mu.Lock()
+	inst.ceiling, inst.opTools = ceiling, opTools
+	inst.mu.Unlock()
+}
+
+func (inst *coordinator) ceilingNow() (c agent.Ceiling) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	return inst.ceiling
+}
+
+// ceilingNote tells the model what the person's settings let it do, on the
+// first turn and whenever they moved since it was last told: a model that
+// knows the limit does not spend calls finding it. The host enforces the
+// limit either way (ADR-0280).
+func (inst *coordinator) ceilingNote() (note string) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if inst.toldOnce && inst.told == inst.ceiling {
+		return ""
+	}
+	inst.told, inst.toldOnce = inst.ceiling, true
+	s := inst.ceiling.Score(false)
+	note = "The person's settings let you at most: " + s.Level.String() + "."
+	if len(s.Factors) > 0 {
+		note += " Within that: " + strings.Join(s.Factors, "; ") + "."
+	}
+	note += " The host refuses anything above it; do not ask for more than this in request_access."
+	if !inst.ceiling.Unpaced && s.Level >= agent.LevelView {
+		note += " The host spaces your changes so the person can follow them: a call that changes a window may take a moment to return."
+	}
+	return
+}
+
+// stateOrNone is state for a window that may have no coordinator.
+func (inst *coordinator) stateOrNone() (task string, tainted bool, confined bool) {
+	if inst == nil {
+		return
+	}
+	return inst.state()
 }
 
 // state is what the bar shows.
@@ -168,7 +220,10 @@ func (inst *coordinator) peekTitle(call openaichat.ToolCall) (title string) {
 // schemas load on demand through describe_app (ADR-0269 §SD3).
 func (inst *coordinator) tools(ctx context.Context) (out []openaichat.Tool) {
 	out = inst.fixedTools()
-	if inst.opTools {
+	inst.mu.Lock()
+	typed := inst.opTools
+	inst.mu.Unlock()
+	if typed {
 		out = append(out, inst.operationTools(ctx)...)
 	}
 	return
@@ -407,7 +462,8 @@ func (inst *coordinator) launched(appName string, got agent.Launched) (content s
 }
 
 func (inst *coordinator) requestAccess(ctx context.Context, plan string, args map[string]any) (content string, activity string) {
-	req := agent.GrantRequest{Plan: plan, Conversation: inst.conversation, Handle: inst.handle()}
+	ceiling := inst.ceilingNow()
+	req := agent.GrantRequest{Plan: plan, Conversation: inst.conversation, Handle: inst.handle(), Ceiling: &ceiling}
 	launches, bad := openArg(args["open"])
 	if bad != "" {
 		// Nothing is asked of the person for a request it cannot read.
@@ -415,7 +471,9 @@ func (inst *coordinator) requestAccess(ctx context.Context, plan string, args ma
 		return "error: " + bad, "access not asked: " + bad
 	}
 	for _, l := range launches {
-		req.Launches = append(req.Launches, agent.GrantLaunch{App: l.app, Mode: agent.ModeAct, Count: l.count})
+		// A window the model opens is its to work in, as far as the
+		// settings let it work in any.
+		req.Launches = append(req.Launches, agent.GrantLaunch{App: l.app, Mode: max(min(agent.ModeAct, ceiling.Mode), agent.ModeObserve), Count: l.count})
 	}
 	if desktop, _ := args["desktop"].(bool); desktop {
 		req.Desktop = agent.ModeAct
@@ -657,6 +715,11 @@ type turnResult struct {
 // its title, as it runs.
 func runTurn(ctx context.Context, cli *llm.Client, coord *coordinator, req llm.Request, progress func(round int, doing string)) (out *turnResult, err error) {
 	msgs := append([]openaichat.Message(nil), req.Messages...)
+	if note := coord.ceilingNote(); note != "" {
+		// What the person's settings allow, when it is news to the model.
+		last := msgs[len(msgs)-1]
+		msgs = append(msgs[:len(msgs)-1], openaichat.Message{Role: openaichat.ChatRoleSystem, Content: note}, last)
+	}
 	if note := coord.changesNote(ctx); note != "" {
 		// The host's account goes before the person's message.
 		last := msgs[len(msgs)-1]

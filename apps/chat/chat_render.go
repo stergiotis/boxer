@@ -42,7 +42,7 @@ const (
 	tipContext = "Tokens the last answered call used, prompt and answer. The whole conversation is resent each turn, so this grows until the model's context is full, and then the turn fails."
 	tipPast    = "This window holds one conversation for as long as it is open. A kept conversation is read afterwards in play, over SQL on the llmMessage kind."
 	tipApps    = "The model may ask you to share windows with it and work in them through their operations (ADR-0269). Fixed at the first send. The host answers only a chat listed in BOXER_AGENT_COORDINATORS."
-	tipNoApps  = "This conversation was started without Apps: its model has no tools and cannot open, read or drive windows, and will say so if asked. Apps is chosen before the first message — New conversation, tick Apps, and ask again."
+	tipNoApps  = "This conversation was started without Apps: its model has no tools and cannot open, read or drive windows, and will say so if asked. Apps is chosen before the first message — New conversation, turn Apps on in Settings, and ask again."
 	hintDraft  = "Message the model — Ctrl+Enter sends"
 
 	tipCopy       = "Copy this message's markdown"
@@ -109,6 +109,7 @@ func (inst *App) render() {
 		inst.renderComposer()
 	}
 	inst.renderStatsPanel()
+	inst.renderSettingsPanel()
 	for range c.PanelCentralInside().KeepIter() {
 		if len(inst.conv.entries) == 0 && inst.pending == nil {
 			inst.renderEmpty()
@@ -118,9 +119,11 @@ func (inst *App) render() {
 	}
 }
 
-// renderBar is one row — New conversation, Statistics, Keep, Apps, the
-// context used and the model (ADR-0265 §SD4) — then the task while Apps
-// is on, then at most one notice.
+// renderBar is a row of controls — New conversation, Settings with the scale
+// of what the model may do (ADR-0280), Statistics — and a row of what the
+// conversation is: what it was started with, the context used and the model
+// (ADR-0265 §SD4). Then the task while Apps is on, then at most one notice.
+// The options themselves are in the Settings panel.
 func (inst *App) renderBar() {
 	conv := inst.conv
 	if conv.started {
@@ -131,7 +134,12 @@ func (inst *App) renderBar() {
 			inst.newConversation()
 			conv = inst.conv
 		}
+		inst.renderSettingsToggle()
 		inst.renderStatsToggle()
+	}
+	// A row of its own for what the conversation is: the controls above
+	// already fill a narrow window.
+	for range c.HorizontalTop().KeepIter() {
 		if conv.started {
 			label, tone := keepBadge(conv)
 			tip := tipKeep
@@ -143,15 +151,6 @@ func (inst *App) renderBar() {
 				badge.New(inst.ids.PrepareStr("apps-state"), "apps").Tone(badge.ToneNeutral).Variant(badge.VariantSoft).Size(badge.SizeSm).Tooltip(tipApps).Send()
 			} else if inst.coord != nil {
 				badge.New(inst.ids.PrepareStr("apps-state"), "no apps").Tone(badge.ToneNeutral).Variant(badge.VariantSoft).Size(badge.SizeSm).Tooltip(tipNoApps).Send()
-			}
-		} else {
-			for range c.HoverText(tipKeep).KeepIter() {
-				c.Checkbox(inst.ids.PrepareStr("keep"), inst.keep, "Keep").SendRespVal(&inst.keep)
-			}
-			if inst.coord != nil {
-				for range c.HoverText(tipApps).KeepIter() {
-					c.Checkbox(inst.ids.PrepareStr("apps"), inst.apps, "Apps").SendRespVal(&inst.apps)
-				}
 			}
 		}
 		inst.renderContext()
@@ -340,7 +339,7 @@ func (inst *App) renderEmpty() {
 			case inst.apps:
 				lines = append(lines, "Apps on: the model may ask you to share windows with it")
 			case inst.coord != nil:
-				lines = append(lines, "Apps off: the model gets no tools and cannot open or drive windows — tick Apps before the first message")
+				lines = append(lines, "Apps off: the model gets no tools and cannot open or drive windows — turn Apps on in Settings before the first message")
 			}
 			lines = append(lines, "Ctrl+Enter sends · Esc cancels a running answer")
 			for _, l := range lines {

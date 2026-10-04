@@ -33,6 +33,9 @@ func (inst *App) renderStatsToggle() {
 	for range c.HoverText(tipStats).KeepIter() {
 		if c.Button(inst.ids.PrepareStr("stats-toggle"), atomsStats).Selected(inst.showStats).SendResp().HasPrimaryClicked() {
 			inst.showStats = !inst.showStats
+			if inst.showStats {
+				inst.showSettings = false
+			}
 		}
 	}
 }

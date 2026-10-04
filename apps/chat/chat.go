@@ -55,6 +55,16 @@ type App struct {
 	conv *conversation
 	// keep is the Keep toggle; a conversation takes it at its first send.
 	keep bool
+	// showSettings opens the Settings panel (chat_settings.go). perms are
+	// what the person lets the model do and opTools whether each operation
+	// is a tool of its own; authority is the host's account of the task's
+	// two bounds, asked for by authJob.
+	showSettings bool
+	perms        permissions
+	opTools      bool
+	authority    agent.Authority
+	authJob      bgjob.Runner[agent.Authority]
+	authAsked    authorityAsk
 	// draft is the composer's text, bound to the text input; hlJob colours
 	// it as markdown, rebuilt only when hlSrc no longer equals it.
 	draft string
@@ -113,7 +123,7 @@ var _ app.AppI = (*App)(nil)
 
 func newApp() (inst *App) {
 	inst = &App{ids: c.NewWidgetIdStack(), keep: true, draft: DraftSeed.Get(), conv: newConversation(), apps: AppsSeed.Get() || registeredCoordinator(),
-		advanced: AdvancedSeed.Get(), pubs: newStatsPublishers()}
+		advanced: AdvancedSeed.Get(), pubs: newStatsPublishers(), perms: defaultPermissions(), opTools: OperationToolsSeed.Get()}
 	return
 }
 
@@ -156,6 +166,7 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	inst.handover.Cancel()
 	inst.action.Cancel()
 	inst.titleJob.Cancel()
+	inst.authJob.Cancel()
 	for _, k := range inst.bandKeys {
 		ecdf.CancelBandJob(k)
 	}
@@ -178,6 +189,7 @@ func (inst *App) drain() {
 	inst.drainHandover()
 	inst.drainAction()
 	inst.drainTitle()
+	inst.syncAuthority()
 	if d, _, ok := inst.describe.TakeResult(); ok {
 		inst.model, inst.answered = *d, true
 	} else if snap := inst.describe.Snapshot(); snap.State == bgjob.StateFailed {
