@@ -53,6 +53,9 @@ type runsHistoryDriver struct {
 	// fetch is the injected data path (nil = no endpoint: the section
 	// stays hidden). Tests substitute it.
 	fetch func(ctx context.Context) ([]queryrunfacts.HistoryRow, error)
+	// status reads the capture view's refresh state beside each fetch
+	// (nil = not asked). Tests substitute it.
+	status func(ctx context.Context) queryrunfacts.CaptureStatus
 
 	mu       sync.Mutex
 	gen      uint64
@@ -61,6 +64,7 @@ type runsHistoryDriver struct {
 	asOf     time.Time
 	rows     []queryrunfacts.HistoryRow
 	err      error
+	capture  queryrunfacts.CaptureStatus
 
 	// selected is the chosen run's fact id (0 = none). Render-thread-only.
 	selected uint64
@@ -94,6 +98,15 @@ func newRunsHistoryDriver(client *Client) (d *runsHistoryDriver) {
 			rows, err = queryrunfacts.ParseHistoryRows(raw)
 			return
 		}
+		d.status = func(ctx context.Context) (st queryrunfacts.CaptureStatus) {
+			database, _, _ := strings.Cut(runsHistoryFactsTable, ".")
+			raw, qErr := client.rawTsvQuery(ctx, queryrunfacts.CaptureStatusSql(database))
+			st, pErr := queryrunfacts.ParseCaptureStatus(raw, qErr)
+			if pErr != nil {
+				st = queryrunfacts.CaptureStatus{State: queryrunfacts.CaptureUnknown}
+			}
+			return
+		}
 	}
 	return
 }
@@ -112,15 +125,19 @@ func (inst *runsHistoryDriver) refresh() {
 	inst.inFlight = true
 	inst.gen++
 	gen := inst.gen
-	fetch := inst.fetch
+	fetch, status := inst.fetch, inst.status
 	inst.mu.Unlock()
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), runsHistoryTimeout)
 		defer cancel()
 		rows, err := fetch(ctx)
+		var capture queryrunfacts.CaptureStatus
+		if status != nil {
+			capture = status(ctx)
+		}
 		inst.mu.Lock()
 		if gen == inst.gen {
-			inst.rows, inst.err = rows, err
+			inst.rows, inst.err, inst.capture = rows, err, capture
 			inst.fetched = true
 			inst.asOf = time.Now()
 			inst.inFlight = false
@@ -145,10 +162,35 @@ func (inst *runsHistoryDriver) maybeRefreshOnReveal() {
 
 // snapshot returns the render-thread view. The rows slice is replaced,
 // never mutated, by refresh — reading it without copying is safe.
-func (inst *runsHistoryDriver) snapshot() (rows []queryrunfacts.HistoryRow, err error, inFlight bool, fetched bool, asOf time.Time) {
+func (inst *runsHistoryDriver) snapshot() (rows []queryrunfacts.HistoryRow, err error, inFlight bool, fetched bool, asOf time.Time, capture queryrunfacts.CaptureStatus) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	return inst.rows, inst.err, inst.inFlight, inst.fetched, inst.asOf
+	return inst.rows, inst.err, inst.inFlight, inst.fetched, inst.asOf, inst.capture
+}
+
+// captureLine says what the server reports about the capture pipeline, so
+// an empty list can be told apart from a pipeline that is not running.
+// Empty when nothing was learned.
+func captureLine(st queryrunfacts.CaptureStatus, now time.Time) (line string) {
+	switch st.State {
+	case queryrunfacts.CaptureAbsent:
+		return "Capture not running here: no " + queryrunfacts.MvBaseName + " view on this server — start queryrunsd (ADR-0115) against it."
+	case queryrunfacts.CaptureFailing:
+		line = "Capture failing — queryrunsd is likely not running"
+		if !st.LastSuccess.IsZero() {
+			line += "; last capture " + humanize.RelTime(st.LastSuccess, now, "ago", "from now")
+		}
+		if st.Exception != "" {
+			line += ": " + truncateRunes(st.Exception, 160)
+		}
+		return line
+	case queryrunfacts.CaptureRunning:
+		if st.LastSuccess.IsZero() {
+			return "Captured by queryrunsd."
+		}
+		return "Captured by queryrunsd · last refresh " + humanize.RelTime(st.LastSuccess, now, "ago", "from now")
+	}
+	return ""
 }
 
 // rawTsvQuery POSTs sql (its own FORMAT clause included) to the live
@@ -204,8 +246,13 @@ func runRowLabel(row queryrunfacts.HistoryRow) (label string) {
 	if kind == "" {
 		kind = "?"
 	}
-	label = fmt.Sprintf("%s%s  %d ms  %s  %s",
-		status, row.Ts.Local().Format("15:04:05"), row.DurationMs, kind, text)
+	// The agent's runs are marked; the person's are not (ADR-0277 §SD7).
+	who := ""
+	if row.Delegated() {
+		who = "agent  "
+	}
+	label = fmt.Sprintf("%s%s  %d ms  %s  %s%s",
+		status, row.Ts.Local().Format("15:04:05"), row.DurationMs, kind, who, text)
 	label = truncateRunes(label, historyLabelChar)
 	return
 }
@@ -221,7 +268,7 @@ func (inst *PlayApp) renderRecordedRuns() {
 	ids := inst.ids
 	for range c.IdScope(ids.PrepareStr("recorded-runs")) {
 		c.Separator().Send()
-		rows, fetchErr, inFlight, fetched, asOf := d.snapshot()
+		rows, fetchErr, inFlight, fetched, asOf, capture := d.snapshot()
 		for range c.Horizontal().KeepIter() {
 			for rt := range c.RichTextLabel("Recorded runs") {
 				rt.Strong()
@@ -231,16 +278,25 @@ func (inst *PlayApp) renderRecordedRuns() {
 				d.refresh()
 			}
 		}
+		if fetched {
+			if line := captureLine(capture, time.Now()); line != "" {
+				diagWeak(line)
+			}
+		}
 		switch {
 		case !fetched && inFlight:
 			diagWeak("Fetching captured runs…")
 			return
 		case fetchErr != nil:
 			c.Label(firstErrorLine(fetchErr)).Wrap().Selectable(true).Send()
-			diagWeak("Captured runs live in " + runsHistoryFactsTable + " — the queryrunsd service (ADR-0115) records them against this server.")
+			if capture.State == queryrunfacts.CaptureUnknown {
+				diagWeak("Captured runs live in " + runsHistoryFactsTable + " — the queryrunsd service (ADR-0115) records them against this server.")
+			}
 			return
 		case len(rows) == 0:
-			diagWeak("No captured runs yet — the capture pipeline lands terminal queries within its refresh cadence.")
+			if capture.State == queryrunfacts.CaptureRunning || capture.State == queryrunfacts.CaptureUnknown {
+				diagWeak("No captured runs yet — the capture pipeline lands terminal queries within its refresh cadence.")
+			}
 			return
 		}
 		diagWeak(fmt.Sprintf("%d runs · fetched %s", len(rows), humanizeAgo(asOf)))
@@ -293,7 +349,7 @@ func (inst *PlayApp) renderRunDetail(row queryrunfacts.HistoryRow) {
 	}
 	diagWeak(line)
 	diagWeak(fmt.Sprintf("normalized hash %016x", row.NormalizedHash))
-	if row.App != "" || row.RunId != "" || row.Lane != "" {
+	if row.App != "" || row.RunId != "" || row.Lane != "" || row.Instance != 0 {
 		parts := make([]string, 0, 3)
 		if row.App != "" {
 			parts = append(parts, "app "+row.App)
@@ -304,7 +360,22 @@ func (inst *PlayApp) renderRunDetail(row queryrunfacts.HistoryRow) {
 		if row.RunId != "" {
 			parts = append(parts, "run "+row.RunId)
 		}
+		if row.Instance != 0 {
+			parts = append(parts, fmt.Sprintf("window %d", row.Instance))
+		}
 		diagWeak(strings.Join(parts, " · "))
+	}
+	if row.Delegated() {
+		line := "agent task " + row.Task
+		if row.TaskEpoch != 0 {
+			line += fmt.Sprintf(" (epoch %d)", row.TaskEpoch)
+		}
+		if row.TaskCall != "" {
+			line += " · call " + row.TaskCall
+		}
+		diagWeak(line)
+	} else {
+		diagWeak("no agent task: not caused by an agent call")
 	}
 	if row.ExceptionCode != 0 || row.Exception != "" {
 		c.Label(fmt.Sprintf("exception %d: %s", row.ExceptionCode, row.Exception)).

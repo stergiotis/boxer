@@ -145,7 +145,22 @@ Reading the runs back is a leeway-shred pivot, not a flat `SELECT`: the
 projection over the symbol/u64/i64/string sections is machine-generated
 (`queryrunfacts.ComposeHistorySql`) — play's History tab runs it, and its
 "Open as query" / "Profile events as query" affordances hand the exact
-SQL to the editor. Every `QueryRun` fact is selected by one membership
+SQL to the editor. Besides the accounting, a read-back row carries the
+window the query ran from and, when an agent task's call caused the run,
+the task, its epoch and the dispatcher call
+([ADR-0277](../adr/0277-one-audit-trail-for-model-calls-and-agent-work.md)
+§SD7) — so the History tab marks the agent's runs, and
+`queryrunfacts.ComposeHistorySqlFiltered` narrows a read to one task or
+one run. A run with no task was not caused by an agent call; that alone
+does not say a person ran it, since other clients' runs carry no task
+either.
+
+Because the daemon is optional, an empty History tab is ambiguous on its
+own. The tab therefore also reads the capture view's refresh state from
+`system.view_refreshes` (`queryrunfacts.CaptureStatusSql`) and says
+whether the view is absent, whether its last refresh failed (the usual
+cause is that `queryrunsd` is not running, so ClickHouse's pull is
+refused), or when it last succeeded. Every `QueryRun` fact is selected by one membership
 test on the symbol section's label-reference array, so a hand check that
 capture is flowing needs no pivot:
 
