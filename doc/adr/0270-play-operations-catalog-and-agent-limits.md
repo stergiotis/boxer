@@ -413,6 +413,23 @@ features come off the leeway card — so `list_panes` says so before a run
 would fail, and a run builds the card driver for its own result instead of
 relying on the Table or Detail pane to have built it.
 
+
+### 2026-10-04 — the Diagnostics pane, for an agent
+
+`get_diagnostics` (query) returns the Diagnostics pane's seven sections as
+fields, read from what the pane reads on the render goroutine: the
+statement's status — parses, outside boxer's grammar, rejected with
+ClickHouse's own diagnostic, still being checked, unverified — with the
+parser's error; the client-side rewrite's skipped and declined steps with
+their errors; the leeway handles that do not resolve, with candidates; the
+security class with its witnesses and the tables returned as stored; the
+query graph split of the last run; dropped signal emits; and the last run's
+full error or summary. It starts nothing the frame would not: the rewrite
+trace is demand-driven for the two lazy panes that draw it, so the query
+reports it only once one has measured this buffer, and says so;
+`validate_sql` reports a statement's failed rewrites without it. Marked
+untrusted: server diagnostics quote the statement and its data.
+
 ## References
 
 - [ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md) — the contract this catalog serves.

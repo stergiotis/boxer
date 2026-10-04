@@ -1316,6 +1316,13 @@ split status of the last Run. **Signal emits** reports panel signal writes the
 store dropped. **Last run** carries the full execution error — the status bar
 shows only its first line — or the usual result summary.
 
+An agent reads the same seven sections with `get_diagnostics`: the statement's
+status with ClickHouse's own diagnostic when the grammar rejects it, the skipped
+rewrites once the pane has measured them, the unresolved handles with candidates,
+the security class with its witnesses and the tables returned as stored, the split,
+the dropped emits, and the last run's full error. `validate_sql` checks a statement
+before it is set; `get_diagnostics` reads the buffer as it stands.
+
 ### Passes
 
 The pre-execute rewrite pipeline (ADR-0108, ADR-0119) over the statement Run

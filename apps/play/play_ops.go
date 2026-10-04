@@ -180,6 +180,8 @@ type opsSnap struct {
 	client *Client
 	// projection is the Projection pane's run (play_ops_projection.go).
 	projection projectionOpsSnap
+	// diagnostics is the Diagnostics pane's sections (play_ops_diagnostics.go).
+	diagnostics DiagnosticsState
 }
 
 var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
@@ -337,6 +339,7 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 	addRewriteOps(s)
 	addDatasetOps(s)
 	addProjectionOps(s)
+	addDiagnosticsOps(s)
 	return
 }()
 
@@ -420,6 +423,7 @@ func snapshotPlay(inst *PlayLauncher) (sn opsSnap) {
 		sn.panes.Nodes = append(sn.panes.Nodes, string(n.ID))
 	}
 	sn.projection = snapshotProjection(p, sn.panes)
+	sn.diagnostics = snapshotDiagnostics(p)
 	return
 }
 
