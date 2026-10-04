@@ -451,6 +451,26 @@ export async function runArm({ target, goBytes, stub, argv, log, GoCtor }) {
 // returns; `frame()` then runs one frame per call, so the caller owns the
 // cadence and yields between frames — the worker receives input then. The
 // result's `frame` returns 0 while the loop runs and 1 once it stopped.
+// idlFingerprint reads a module's IDL fingerprint export (ADR-0278 SD6): the
+// value the code generator wrote into both halves' enums, or undefined for a
+// module built before the export existed.
+export function idlFingerprint(exports, name) {
+  return typeof exports[name] === 'function' ? BigInt.asUintN(64, BigInt(exports[name]())) : undefined;
+}
+
+// checkIdl refuses a Go module and a browser host generated from different
+// IDLs, before either runs a frame: the opcodes and reply shapes would not
+// line up, and nothing downstream would say so. Two modules that both predate
+// the export are let through; one that has it beside one that does not is
+// a mixed pair and refused.
+export function checkIdl(goFp, hostFp) {
+  if (goFp === undefined && hostFp === undefined) return;
+  if (goFp !== hostFp) {
+    const hex = (v) => (v === undefined ? 'none' : '0x' + v.toString(16).padStart(16, '0'));
+    throw new Error(`the Go module (IDL ${hex(goFp)}) and the browser host (IDL ${hex(hostFp)}) come from different generations of the bindings; rebuild the bundle from one tree`);
+  }
+}
+
 export async function startReactor({ goBytes, stub, argv, log, env }) {
   const lines = []; let partial = '';
   const stderr = (b) => {
@@ -469,6 +489,7 @@ export async function startReactor({ goBytes, stub, argv, log, env }) {
   const instance = await WebAssembly.instantiate(module, wasiImportsFor(module, wasi));
   wasi.setMemory(instance.exports.memory);
   instance.exports._initialize();
+  if (stub.ex) checkIdl(idlFingerprint(instance.exports, 'idl_fingerprint'), idlFingerprint(stub.ex, 'host_idl_fingerprint'));
   const args = new TextEncoder().encode(argv.join('\0'));
   if (args.length > instance.exports.argcap()) throw new Error('reactor: arguments exceed the module\'s buffer');
   new Uint8Array(instance.exports.memory.buffer).set(args, instance.exports.argbuf());
