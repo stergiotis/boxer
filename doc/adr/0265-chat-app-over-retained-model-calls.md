@@ -41,7 +41,8 @@ in memory for the length of its window session, sends its turns on
 `llm.retain.complete` unless the user turned keeping off for that
 conversation, and reads nothing back. With Apps on, a turn is a tool loop
 over the host's `runtime.agent` services, and the app is the conversation's
-coordinator under ADR-0269 (SD6).
+coordinator under ADR-0269 (SD6). With Questions on, the model may ask the
+person structured questions through a tool of the app's own (SD7).
 
 ### SD1 — A standalone app, not a play pane
 
@@ -172,8 +173,46 @@ through the host:
   conversation stops the task, and the app's row shows the task, whether it
   read untrusted content and whether it holds confined content, with Stop.
 
+### SD7 — Questions: the model asks the person with a form
+
+With Questions on, the model is offered `ask_user`: one to four questions,
+each with an optional short header, two to six options with an optional
+one-line description, and whether several options may be chosen. The app
+draws them as a form in the pending bubble — radio buttons for a single
+choice, check boxes for several — with a note field under each chosen
+option, a line per question for an answer of the person's own, and Answer
+and Skip. The shape follows the question tool of Claude Code.
+
+- **No grant.** The tool reaches nothing outside the chat window: what it
+  shows is the model's text, and what it returns is what the person
+  typed. It is not a `runtime.agent` call and needs no registration.
+- **Its own toggle**, beside Apps, fixed at the first send with Keep and
+  Apps for the same reason: the system prompt is ordinal 0 (SD5). Either
+  toggle makes the turn the tool loop of SD6; with Questions alone,
+  `ask_user` is the only tool and the window tools answer that there is
+  no such tool. A separate toggle keeps a conversation with neither a plain
+  completion, which an endpoint without tool calls still serves.
+- **The call waits inside the turn.** The tool call blocks until the person
+  answers or skips; the answer, as JSON, is the call's result, and the same
+  turn continues. Cancel and New conversation withdraw the question with
+  the turn. Answer is refused until every question has a chosen option or
+  an answer of the person's own; Skip tells the model to go on and say what
+  it assumed.
+- **What stays.** The transcript's tool line for the call names each
+  question by its header and what was chosen, with the notes. The
+  questions and answers are tool messages in the history like any other.
+
 ## Alternatives
 
+- **A question that ends the turn** (SD7), its answer starting the next.
+  Rejected: the history would hold a turn that begins with a tool message
+  rather than the person's, and text typed in the composer while a question
+  is open would need its own meaning. A blocking call is what
+  `request_access` already does with the host's dialog.
+- **`ask_user` always offered, or only with Apps** (SD7). Rejected: always
+  would send `tools` on every turn and fail every turn on an endpoint
+  without tool calls; only with Apps would tie a tool that needs no grant
+  to the one that does.
 - **A play pane** (SD1). Rejected for the grant it would add to play.
 - **Resume in v1** (SD2). Rejected for now: it needs a read surface
   ADR-0264 chose not to add to the capability, and a session-only chat
@@ -243,6 +282,10 @@ to the text above:
   "not kept", beside the reason, and one with no verdict yet "keep asked".
 - While a turn runs, Cancel takes Send's place — a button cannot be
   disabled here.
+
+Revised in place on 2026-10-04 for SD7, built and tested against a scripted
+model: the form's validation and reply, and a turn that waits for the form,
+is skipped, or is cancelled while it waits.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

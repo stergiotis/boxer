@@ -248,6 +248,7 @@ func coordRig(t *testing.T, bus *inprocbus.Inst, model *scriptedModel, opTools b
 	req = conv.request("please tidy my note")
 	req.Messages = append([]openaichat.Message{{Role: openaichat.ChatRoleSystem, Content: coordinatorPrompt}}, req.Messages...)
 	coord.opTools = opTools
+	coord.offer(true, false)
 	return
 }
 

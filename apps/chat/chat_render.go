@@ -30,6 +30,8 @@ const (
 	tipContext = "Tokens the last answered call used, prompt and answer. The whole conversation is resent each turn, so this grows until the model's context is full, and then the turn fails."
 	tipPast    = "This window holds one conversation for as long as it is open. A kept conversation is read afterwards in play, over SQL on the llmMessage kind."
 	hintDraft  = "Message the model — Ctrl+Enter sends"
+
+	tipQuestions = "The model may ask you questions with options, drawn as a form in the conversation; the turn waits for your answer. Needs a model that calls tools. Fixed at the first send."
 )
 
 var (
@@ -149,7 +151,9 @@ func (inst *App) renderComposer() {
 			}
 			c.Spinner().Send()
 			line := "waiting for the model · "
-			if note := inst.turn.Snapshot().Note; note != "" {
+			if inst.openAsk() != nil {
+				line = "waiting for your answer above · "
+			} else if note := inst.turn.Snapshot().Note; note != "" {
 				// The tool loop's round, so a long turn reads as working.
 				line += note + " · "
 			}
@@ -196,6 +200,9 @@ func (inst *App) renderTranscript() {
 			k := kinds[ord]
 			switch {
 			case k.pending:
+				if o := inst.openAsk(); o != nil {
+					return chatview.Block{Render: func() { inst.renderAsk(o) }}, true
+				}
 				return chatview.Block{Render: func() {
 					for range c.HorizontalTop().KeepIter() {
 						c.Spinner().Send()
@@ -291,9 +298,19 @@ func elapsed(since time.Time) (s string) {
 	return strconv.Itoa(int(time.Since(since).Seconds())) + " s"
 }
 
+// openAsk is the ask_user waiting for the person in the turn in flight,
+// nil when none is.
+func (inst *App) openAsk() (o *openAsk) {
+	if inst.pending == nil || inst.coord == nil {
+		return nil
+	}
+	return inst.coord.ask.current()
+}
+
 // renderApps is the coordinator's row (ADR-0269): whether the model may ask
-// for windows to work in, and the task it holds — with whether its
-// conversation read untrusted content and holds confined content.
+// for windows to work in, and whether it may ask the person questions; then
+// the task it holds — with whether its conversation read untrusted content
+// and holds confined content.
 func (inst *App) renderApps() {
 	if inst.coord == nil {
 		return
@@ -301,8 +318,16 @@ func (inst *App) renderApps() {
 	for range c.HorizontalTop().KeepIter() {
 		if !inst.conv.started {
 			c.Checkbox(inst.ids.PrepareStr("apps"), inst.apps, "Apps: let the model ask to work in windows").SendRespVal(&inst.apps)
-		} else if inst.conv.apps {
-			c.Label("Apps on").Selectable(false).Send()
+			for range c.HoverText(tipQuestions).KeepIter() {
+				c.Checkbox(inst.ids.PrepareStr("questions"), inst.questions, "Questions: let the model ask with a form").SendRespVal(&inst.questions)
+			}
+		} else {
+			if inst.conv.apps {
+				c.Label("Apps on").Selectable(false).Send()
+			}
+			if inst.conv.questions {
+				c.Label("Questions on").Selectable(false).Send()
+			}
 		}
 		task, tainted, confined := inst.coord.state()
 		if task == "" {
