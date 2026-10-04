@@ -15,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/capture"
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
@@ -58,7 +59,10 @@ type Config struct {
 
 // Service answers `runtime.agent.*` (ADR-0269 §SD3).
 type Service struct {
-	cfg       Config
+	cfg Config
+	// captures is the capture service, the PEP every capture passes
+	// through (ADR-0281).
+	captures  *capture.Service
 	busClient *inprocbus.Client
 	unsub     func()
 	closeOnce sync.Once
@@ -105,6 +109,9 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 	s = &Service{cfg: cfg, log: log.With().Str("app", string(ServiceAppId)).Logger(), tasks: make(map[string]*task),
 		requests: make(map[string]*request), taints: make(map[string]bool), leftBy: make(map[uint64]string),
 		helpCache: make(map[app.AppIdT]help.BookI)}
+	if cfg.Host != nil {
+		s.captures = capture.NewService(capture.GrantPolicy{}, capture.NewRegistry(), cfg.Host)
+	}
 	s.events, s.eventsDone = make(chan wireEvent, eventQueueLen), make(chan struct{})
 	s.busClient = bus.NewClient(ServiceAppId, ServiceCaps())
 	go s.publishEvents()

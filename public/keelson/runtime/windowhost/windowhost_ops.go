@@ -15,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/capture"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -262,6 +263,25 @@ type captureJob struct {
 	status    opwire.CaptureStatus
 	// pixel is set for a pixel capture (ADR-0281); nil for an SVG export.
 	pixel *pixelJob
+	// result is a completed pixel capture's render.
+	result capture.SourceResult
+}
+
+// SourceStatus reports a render to the capture service (ADR-0281).
+func (inst *Inst) SourceStatus(job string) (r capture.SourceResult, ok bool) {
+	st, ok := inst.captureStatus(job)
+	if !ok {
+		return
+	}
+	inst.caps.mu.Lock()
+	j := inst.caps.jobs[job]
+	inst.caps.mu.Unlock()
+	if st.Phase == opwire.PhaseCompleted && j.pixel != nil {
+		r = j.result
+	} else {
+		r = capture.SourceResult{Phase: st.Phase, Reason: st.Reason, SvgPath: st.Path}
+	}
+	return
 }
 
 type captures struct {
@@ -294,7 +314,7 @@ func (inst *captures) ensureDirLocked() (err error) {
 // OpsCapture queues a capture of a window's content as SVG; the export runs
 // in the next frame and Status follows the file. Only an open window can be
 // captured (ADR-0269 §SD11).
-func (inst *Inst) OpsCapture(key uint64) (job string, err error) {
+func (inst *Inst) RenderSvg(key uint64) (job string, err error) {
 	if _, w := inst.engineOf("", key); w == nil {
 		err = eh.Errorf("windowhost: no open window by that key")
 		return
@@ -315,7 +335,7 @@ func (inst *Inst) OpsCapture(key uint64) (job string, err error) {
 }
 
 // OpsCaptureStatus reports a capture by job id.
-func (inst *Inst) OpsCaptureStatus(job string) (st opwire.CaptureStatus, ok bool) {
+func (inst *Inst) captureStatus(job string) (st opwire.CaptureStatus, ok bool) {
 	inst.caps.mu.Lock()
 	defer inst.caps.mu.Unlock()
 	j, ok := inst.caps.jobs[job]

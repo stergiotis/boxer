@@ -20,6 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/capture"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
@@ -80,14 +81,16 @@ func (inst *noteHost) OpsCancel(k uint64, id string) (opwire.Outcome, bool) {
 func (inst *noteHost) OpsExpire(k uint64, ids []string, reason string) {
 	inst.eng(k).Expire(ids, reason)
 }
-func (inst *noteHost) OpsAttach(k uint64, a bool) bool                           { inst.eng(k).SetAttached(a); return true }
-func (inst *noteHost) OpsCapture(k uint64) (string, error)                       { return "", nil }
-func (inst *noteHost) OpsCapturePixels(k []uint64) (string, error)               { return "", nil }
+func (inst *noteHost) OpsAttach(k uint64, a bool) bool    { inst.eng(k).SetAttached(a); return true }
+func (inst *noteHost) RenderSvg(k uint64) (string, error) { return "", nil }
+func (inst *noteHost) RenderPixels(k []uint64, recheck func() bool) (string, error) {
+	return "", nil
+}
 func (inst *noteHost) OpsArrange(string, []uint64) error                         { return nil }
 func (inst *noteHost) OpsRaise(uint64) error                                     { return nil }
 func (inst *noteHost) OpsPlace(uint64, float32, float32, float32, float32) error { return nil }
-func (inst *noteHost) OpsCaptureStatus(string) (opwire.CaptureStatus, bool) {
-	return opwire.CaptureStatus{}, false
+func (inst *noteHost) SourceStatus(string) (capture.SourceResult, bool) {
+	return capture.SourceResult{}, false
 }
 func (inst *noteHost) OpsRevisions(k uint64) (map[string]uint64, bool) {
 	r, _ := inst.eng(k).SnapshotRevisions()

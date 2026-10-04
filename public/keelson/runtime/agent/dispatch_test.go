@@ -1,9 +1,12 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"image/png"
 	"maps"
+	"os"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -19,6 +22,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/capture"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 )
@@ -125,8 +129,10 @@ func (inst *fakeHost) OpsAttach(k uint64, a bool) bool {
 	}
 	return false
 }
-func (inst *fakeHost) OpsCapture(k uint64) (string, error)         { return "cap-1", nil }
-func (inst *fakeHost) OpsCapturePixels(k []uint64) (string, error) { return "cap-2", nil }
+func (inst *fakeHost) RenderSvg(k uint64) (string, error) { return "cap-1", nil }
+func (inst *fakeHost) RenderPixels(k []uint64, recheck func() bool) (string, error) {
+	return "cap-2", nil
+}
 func (inst *fakeHost) OpsArrange(command string, keys []uint64) error {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
@@ -172,8 +178,11 @@ func (inst *fakeHost) OpsLogSince(k uint64, seq uint64) ([]opengine.LogEntry, ui
 func (inst *fakeHost) OpsUndoStatus(k uint64, id string) (string, bool) {
 	return inst.eng(k).UndoStatus(id)
 }
-func (inst *fakeHost) OpsCaptureStatus(job string) (opwire.CaptureStatus, bool) {
-	return opwire.CaptureStatus{Phase: opwire.PhaseCompleted, Path: "/dev/null", MediaType: "image/svg+xml"}, true
+func (inst *fakeHost) SourceStatus(job string) (capture.SourceResult, bool) {
+	if job == "cap-2" {
+		return capture.SourceResult{Phase: opwire.PhaseCompleted, Rgba: make([]byte, 2*2*4), Width: 2, Height: 2, PixelsPerPoint: 1}, true
+	}
+	return capture.SourceResult{Phase: opwire.PhaseCompleted, SvgPath: "/dev/null"}, true
 }
 
 // frame runs one frame of instance k; person runs where the write-back
@@ -440,6 +449,30 @@ func TestRequestFromTheRenderGoroutineIsRefused(t *testing.T) {
 	var refused *RefusedError
 	require.True(t, errors.As(err, &refused))
 	assert.Contains(t, refused.Reason, "render goroutine")
+}
+
+// A PNG capture goes through the capture service: the host renders pixels,
+// and the service encodes the PNG the read hands out (ADR-0281).
+func TestAPngCaptureIsEncodedByTheCaptureService(t *testing.T) {
+	r := newRig(t, true)
+	ctx := context.Background()
+	g := r.grant(ModeObserve)
+	out, err := r.cli.CaptureAs(ctx, g.Handle, 7, "png", CaptureFormatPng)
+	require.NoError(t, err)
+	require.Equal(t, "completed", out.Phase, out.Reason)
+	res, err := r.cli.Read(ctx, g.Handle, out.Job)
+	require.NoError(t, err)
+	assert.Equal(t, "image/png", res.MediaType)
+	b, err := os.ReadFile(res.Path)
+	require.NoError(t, err)
+	img, err := png.Decode(bytes.NewReader(b))
+	require.NoError(t, err)
+	assert.Equal(t, 2, img.Bounds().Dx())
+
+	out, err = r.cli.CaptureAs(ctx, g.Handle, 7, "gif", "gif")
+	require.NoError(t, err)
+	assert.Equal(t, "refused", out.Phase)
+	assert.Contains(t, out.Reason, "svg or png")
 }
 
 func TestCaptureAndRecords(t *testing.T) {

@@ -17,6 +17,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opjson"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/capture"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
@@ -34,9 +35,8 @@ type HostI interface {
 	OpsCancel(key uint64, callId string) (out opwire.Outcome, ok bool)
 	OpsExpire(key uint64, ids []string, reason string)
 	OpsAttach(key uint64, attached bool) (ok bool)
-	OpsCapture(key uint64) (job string, err error)
-	OpsCapturePixels(keys []uint64) (job string, err error)
-	OpsCaptureStatus(job string) (st opwire.CaptureStatus, ok bool)
+	// The host renders captures for the capture service (ADR-0281).
+	capture.SourceI
 	OpsRevisions(key uint64) (revs map[string]uint64, ok bool)
 	OpsUndo(key uint64, callId string) (ok bool)
 	OpsUndoStatus(key uint64, callId string) (status string, ok bool)
@@ -670,7 +670,7 @@ func (inst *Service) outcomeOf(t *task, rec *callRec, wait time.Duration) (w wir
 	deadline := time.Now().Add(wait)
 	for {
 		if rec.job != "" && rec.outcome.Phase == opwire.PhaseRunning && inst.cfg.Host != nil {
-			if st, ok := inst.cfg.Host.OpsCaptureStatus(rec.job); ok {
+			if st, ok := inst.captures.Status(rec.job); ok {
 				confined := rec.outcome.Confined
 				rec.outcome = phaseOutcome(st.Phase, st.Reason)
 				rec.outcome.Confined = confined
@@ -826,7 +826,7 @@ func (inst *Service) read(msg *app.Msg) (rep wireReadReply) {
 			inst.taint(t)
 		}
 	case job != nil && inst.cfg.Host != nil:
-		st, found := inst.cfg.Host.OpsCaptureStatus(job.job)
+		st, found := inst.captures.Status(job.job)
 		if !found || st.Phase != opwire.PhaseCompleted {
 			rep.Reason = "the capture is not complete"
 			return
@@ -881,14 +881,30 @@ func (inst *Service) capture(msg *app.Msg) (rep wireCallReply) {
 		return
 	}
 	rec.app = e.app
-	var job string
-	switch req.Format {
-	case "", CaptureFormatSvg:
-		job, err = inst.cfg.Host.OpsCapture(req.Instance)
-	case CaptureFormatPng:
-		job, err = inst.cfg.Host.OpsCapturePixels([]uint64{req.Instance})
-	default:
-		err = eh.Errorf("a capture is svg or png, not %q", req.Format)
+	if inst.captures == nil {
+		out = phaseOutcome(opwire.PhaseRefused, "no window host renders captures")
+		inst.settle(t, rec, out, false)
+		rep.Outcome = wireOutcomeOf(out, "", "")
+		return
+	}
+	// The capture service decides and enforces (ADR-0281): the window
+	// must still be in the task when its spans are chosen, a frame later.
+	format := capture.FormatE(req.Format)
+	if format == "" {
+		format = capture.FormatSvg
+	}
+	inst.mu.Lock()
+	epoch := t.epoch
+	inst.mu.Unlock()
+	covered := func(w uint64) bool {
+		inst.mu.Lock()
+		defer inst.mu.Unlock()
+		return t.revoked == "" && t.epoch == epoch && t.entries[w] != nil
+	}
+	job, decision, err := inst.captures.Capture(capture.Request{Windows: []uint64{req.Instance}, Format: format},
+		capture.Facts{Covered: covered}, func() bool { return covered(req.Instance) })
+	if err == nil && decision.Effect != capture.EffectPermit {
+		err = eh.Errorf("%s", decision.Reason)
 	}
 	if err != nil {
 		out = phaseOutcome(opwire.PhaseRefused, err.Error())

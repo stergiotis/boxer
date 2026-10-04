@@ -286,7 +286,7 @@ labelled artifact handle, recording the whole on the audit trail.
 | egui2 IDL | added: a capture-replay opcode taking spans and returning pixels or SVG as a fetch; an effect mark on opcodes, with a generator check | `app egui2gen generate`; both sides of the FFFI boundary rebuilt |
 | Interpreter (Rust) | added: capture-replay mode — writes refused, registers cleared, caches read-only, marked opcodes skipped | the image and scrolling-texture caches |
 | Mesh-only `headless` Rust build | added: the software rasterizer, for capture | the cargo features of the headless builds; the license gate's crate tree |
-| `windowhost.Inst.OpsCapture` | reshaped: span marking and the source for the PEP, no longer the policy | the agent dispatcher's host interface and its fakes |
+| `windowhost.Inst.OpsCapture` | replaced: the window host implements `capture.SourceI` (`RenderSvg`, `RenderPixels`, `SourceStatus`) — span marking and rendering, no longer the policy or the encoding | the agent dispatcher's host interface and its fakes |
 | `RequestScreenshot*` opcodes | narrowed: refused without a development flag | the screenshot tour, play's capture knobs |
 | Trail kinds (`boxer.facts`) | added: the capture record | the runtime vocabulary cohort and its golden |
 | ADR-0269 §SD7, §SD11 | amended: the capture label is the replayed windows'; capture goes through this ADR's PEP | dated Updates on ADR-0269 |
@@ -380,6 +380,10 @@ Milestones:
   agent can ask for `png` before the PEP exists. Built 2026-10-04,
   uncommitted.
 - **M3 — The PEP, PDP and `scope` handler**; SVG moved behind it (SD1–SD4).
+  Built 2026-10-04, uncommitted: `runtime/capture`, the window host as its
+  source, the agent's capture, status and read through it. Open from SD1:
+  the host does not yet refuse the `RequestScreenshot*` opcodes without a
+  development flag.
 - **M4 — Records and labels** (SD6), and the wire fields.
 - **M5 — The mesh-only and desktop hosts.**
 
