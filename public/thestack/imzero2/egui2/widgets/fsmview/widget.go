@@ -668,15 +668,20 @@ func (inst *View[T]) buildIDToState() map[string]T {
 }
 
 // graphCanvasSize is the space the popup leaves for the graph: the window's
-// remaining rect, as last frame measured it, less the padding the popup adds
-// below the body. The canvas filling it is what lets the window be resized:
-// a fixed-size body holds egui's window to that size. The probe runs before
-// the canvas, so the canvas never sizes itself against its own output.
+// remaining rect, as last frame measured it, less what the popup adds below
+// the body — the item gap egui leaves after the canvas, then the padding.
+// The canvas filling it is what lets the window be resized: a fixed-size body
+// holds egui's window to that size. The probe runs before the canvas, so the
+// canvas never sizes itself against its own output. The subtraction has to
+// cover everything below the canvas: a resizable egui window grows to its
+// content, so any shortfall is added to the window each frame and the window
+// creeps taller without end.
 func (inst *View[T]) graphCanvasSize() (w, h float32) {
 	aw, ah, ok := c.CapturePaneSize(inst.ids.PrepareStr("graph-canvas").Derive())
 	if ok && aw > 0 && ah > 0 {
+		below := styletokens.GapItems(inst.density) + styletokens.PaddingInner(inst.density) + fsmGraphCanvasSlack
 		inst.graphCanvasW = max(aw, fsmGraphCanvasMinW)
-		inst.graphCanvasH = max(ah-styletokens.PaddingInner(inst.density)-fsmGraphCanvasSlack, fsmGraphCanvasMinH)
+		inst.graphCanvasH = max(ah-below, fsmGraphCanvasMinH)
 	}
 	if inst.graphCanvasW <= 0 || inst.graphCanvasH <= 0 {
 		return fsmGraphCanvasFallbackW, fsmGraphCanvasFallbackH
