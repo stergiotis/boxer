@@ -24,6 +24,12 @@ func RegisterWindows(r *introspect.Registry, host *windowhost.Inst) error {
 	return r.Register(windowsProvider{host: host})
 }
 
+// RegisterDesktop registers a desktop provider bound to host into r.
+// A nil host answers with an empty table.
+func RegisterDesktop(r *introspect.Registry, host *windowhost.Inst) error {
+	return r.Register(desktopProvider{host: host})
+}
+
 // RegisterFrameTimes registers a frame-time provider bound to host into r.
 // A nil host answers with an empty table.
 func RegisterFrameTimes(r *introspect.Registry, host *windowhost.Inst) error {
@@ -31,14 +37,17 @@ func RegisterFrameTimes(r *introspect.Registry, host *windowhost.Inst) error {
 }
 
 // RegisterAll registers the GUI-coupled providers: demos (a process
-// global) and, when host is non-nil, windows and frame times (bound to
-// that host).
+// global) and, when host is non-nil, windows, the desktop and frame times
+// (bound to that host).
 func RegisterAll(r *introspect.Registry, host *windowhost.Inst) (err error) {
 	if err = RegisterDemos(r); err != nil {
 		return
 	}
 	if host != nil {
 		if err = RegisterWindows(r, host); err != nil {
+			return
+		}
+		if err = RegisterDesktop(r, host); err != nil {
 			return
 		}
 		err = RegisterFrameTimes(r, host)
@@ -133,7 +142,68 @@ func windowsTable(ws []windowhost.WindowInfo) *introspect.Table {
 		// True when another open window shares this one's app instance
 		// (a singleton-registered app shown twice): such a window takes no
 		// config and saves no workingset.
-		Bool("shares_instance", func(i int) bool { return ws[i].SharesInstance })
+		Bool("shares_instance", func(i int) bool { return ws[i].SharesInstance }).
+		// The window's state as of the last completed frame (ADR-0276 §SD1).
+		// shown is false for a window that has not drawn yet; its geometry
+		// columns are zero then. Coordinates are logical points, viewport
+		// top-left origin; x, y, w, h is the outer rect.
+		Bool("shown", func(i int) bool { return ws[i].Geom.Shown }).
+		Float64("x", func(i int) float64 { return float64(ws[i].Geom.Rect.MinX) }).
+		Float64("y", func(i int) float64 { return float64(ws[i].Geom.Rect.MinY) }).
+		Float64("w", func(i int) float64 { return float64(ws[i].Geom.Rect.W()) }).
+		Float64("h", func(i int) float64 { return float64(ws[i].Geom.Rect.H()) }).
+		// The outer size the content needed as laid out (ADR-0275 §SD4):
+		// larger than w, h where the content overflowed the window.
+		Float64("need_w", func(i int) float64 { return float64(ws[i].Geom.NeedW) }).
+		Float64("need_h", func(i int) float64 { return float64(ws[i].Geom.NeedH) }).
+		// Stacking rank: larger is further front, 0 unknown.
+		Uint64("stack", func(i int) uint64 { return uint64(ws[i].Geom.Stack) }).
+		Bool("collapsed", func(i int) bool { return ws[i].Geom.Collapsed }).
+		Bool("maximized", func(i int) bool { return ws[i].Geom.Maximized }).
+		// The shell's active window: the one process-global input goes to.
+		Bool("active", func(i int) bool { return ws[i].Geom.Active })
+}
+
+// --- desktop (window host) ---------------------------------------------------
+
+// TableDesktop is the table's name, keelson('desktop').
+const TableDesktop = "desktop"
+
+type desktopProvider struct{ host *windowhost.Inst }
+
+func (desktopProvider) Name() string                         { return TableDesktop }
+func (desktopProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
+func (desktopProvider) Schema() *arrow.Schema                { return desktopTable(nil).Schema() }
+
+func (p desktopProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+	var rows []windowhost.DesktopInfo
+	if p.host != nil {
+		rows = append(rows, p.host.DesktopInfo())
+	}
+	return desktopTable(rows).Build(proj, len(rows)), nil
+}
+
+// desktopTable is one row: the desktop as of the last completed frame
+// (ADR-0276 §SD1).
+func desktopTable(rows []windowhost.DesktopInfo) *introspect.Table {
+	return introspect.NewTable().
+		// The work area: what the shell's panels leave free, what a
+		// maximized window fills and arrangements lay out into. work_shown
+		// is false until a frame has shown a window; the rect is zero then.
+		Bool("work_shown", func(i int) bool { return rows[i].WorkShown }).
+		Float64("work_x", func(i int) float64 { return float64(rows[i].Work.MinX) }).
+		Float64("work_y", func(i int) float64 { return float64(rows[i].Work.MinY) }).
+		Float64("work_w", func(i int) float64 { return float64(rows[i].Work.W()) }).
+		Float64("work_h", func(i int) float64 { return float64(rows[i].Work.H()) }).
+		// The active window's key in keelson('windows'), 0 when none.
+		Int64("active_key", func(i int) int64 { return int64(rows[i].ActiveKey) }).
+		// The arrangement in progress ("Tile", "Cascade", …), empty when none.
+		String("arranging", func(i int) string {
+			if rows[i].Arranging == windowhost.ArrangeNone {
+				return ""
+			}
+			return rows[i].Arranging.String()
+		})
 }
 
 // --- frame times (ADR-0261) --------------------------------------------------

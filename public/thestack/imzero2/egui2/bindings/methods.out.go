@@ -1495,6 +1495,13 @@ func (inst FrameFluid) CaptureKeys(mask uint64) FrameFluid {
 	return inst
 }
 
+func (inst FrameFluid) CaptureKeyEdges() FrameFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(FrameMethodIdCaptureKeyEdges))
+
+	return inst
+}
+
 func (inst FrameFluid) HoverCursorPointer() FrameFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(FrameMethodIdHoverCursorPointer))

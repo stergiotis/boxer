@@ -686,7 +686,7 @@ if std::mem::take(&mut self.text_edit_pending_capture_tab) {
                 hit = inp.events.len() != before;
             });
             if hit {
-                self.r26_key_capture_push({{Id}}.value(), crate::imzero2::keycodes::imzero_key_code(egui::Key::Tab), mods_byte);
+                self.r26_key_capture_push({{Id}}.value(), crate::imzero2::keycodes::imzero_key_code(egui::Key::Tab), mods_byte, 1);
                 // R26 is read at the END of this frame, so Go acts on the
                 // capture while building the NEXT one — and the keypress that
                 // would have asked for that frame has just been eaten here.
@@ -711,15 +711,17 @@ if self.text_edit_pending_capture_keys != 0 {
                 | ((mods_now.ctrl as u8) << 1)
                 | ((mods_now.alt as u8) << 2)
                 | ((mods_now.command as u8) << 3);
-            let mut hits: Vec<u8> = Vec::new();
+            let mut hits: Vec<(u8, u8)> = Vec::new();
             ctx.input_mut(|inp| {
                 inp.events.retain(|ev| {
-                    if let egui::Event::Key { key, pressed: true, .. } = ev {
+                    if let egui::Event::Key { key, pressed: true, repeat, .. } = ev {
                         let code = crate::imzero2::keycodes::imzero_key_code(*key);
                         // Code 0 is the reserved unknown; a key the vocabulary
                         // cannot name is a key no mask can have asked for.
                         if code != 0 && (mask & (1u64 << code)) != 0 {
-                            hits.push(code);
+                            // Presses only: the edge byte says down, and
+                            // whether it repeats (ADR-0279 §SD1).
+                            hits.push((code, 1 | ((*repeat as u8) << 1)));
                             return false;
                         }
                     }
@@ -727,8 +729,8 @@ if self.text_edit_pending_capture_keys != 0 {
                 });
             });
             if !hits.is_empty() {
-                for code in hits {
-                    self.r26_key_capture_push({{Id}}.value(), code, mods_byte);
+                for (code, edges) in hits {
+                    self.r26_key_capture_push({{Id}}.value(), code, mods_byte, edges);
                 }
                 ctx.request_repaint();
             }

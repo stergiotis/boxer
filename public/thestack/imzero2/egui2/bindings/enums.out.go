@@ -410,15 +410,16 @@ const (
 	FrameMethodIdSenseDrag           FrameMethodIdE = 12
 	FrameMethodIdFocusable           FrameMethodIdE = 13
 	FrameMethodIdCaptureKeys         FrameMethodIdE = 14
-	FrameMethodIdHoverCursorPointer  FrameMethodIdE = 15
-	FrameMethodIdPresetGroup         FrameMethodIdE = 16
-	FrameMethodIdPresetWindow        FrameMethodIdE = 17
-	FrameMethodIdPresetPopup         FrameMethodIdE = 18
-	FrameMethodIdPresetMenu          FrameMethodIdE = 19
-	FrameMethodIdPresetCanvas        FrameMethodIdE = 20
-	FrameMethodIdPresetDarkCanvas    FrameMethodIdE = 21
-	FrameMethodIdPresetSideTopPanel  FrameMethodIdE = 22
-	FrameMethodIdPresetCentralPanel  FrameMethodIdE = 23
+	FrameMethodIdCaptureKeyEdges     FrameMethodIdE = 15
+	FrameMethodIdHoverCursorPointer  FrameMethodIdE = 16
+	FrameMethodIdPresetGroup         FrameMethodIdE = 17
+	FrameMethodIdPresetWindow        FrameMethodIdE = 18
+	FrameMethodIdPresetPopup         FrameMethodIdE = 19
+	FrameMethodIdPresetMenu          FrameMethodIdE = 20
+	FrameMethodIdPresetCanvas        FrameMethodIdE = 21
+	FrameMethodIdPresetDarkCanvas    FrameMethodIdE = 22
+	FrameMethodIdPresetSideTopPanel  FrameMethodIdE = 23
+	FrameMethodIdPresetCentralPanel  FrameMethodIdE = 24
 )
 
 const (

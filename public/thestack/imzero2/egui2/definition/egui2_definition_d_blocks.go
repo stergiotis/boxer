@@ -162,15 +162,22 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
 				// Top of the content area; the band above it is the title
 				// bar. NaN when the body did not run (collapsed).
 				let mut content_top = f32::NAN;
+				// How far the content, as laid out this frame, claims more
+				// than the body was given. egui grows the window by that much
+				// on the next frame, so after a windowPlace it is what the
+				// placed size fell short by.
+				let mut content_overflow = egui::Vec2::ZERO;
 				let retr = if open_binding_id != 0 {
 					{{Instance}}.open(&mut window_open).show(c, |ui| {
 						content_top = ui.max_rect().top();
 						let _ = self.interpret_outer_logged({{EguiContext}}, &mut Some(ui));
+						content_overflow = (ui.min_rect().size() - ui.max_rect().size()).max(egui::Vec2::ZERO);
 					})
 				} else {
 					{{Instance}}.show(c, |ui| {
 						content_top = ui.max_rect().top();
 						let _ = self.interpret_outer_logged({{EguiContext}}, &mut Some(ui));
+						content_overflow = (ui.min_rect().size() - ui.max_rect().size()).max(egui::Vec2::ZERO);
 					})
 				};
 				if open_binding_id != 0 && was_open != window_open {
@@ -232,6 +239,7 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
                         id: {{Id}}.value(),
                         rect: wrect,
                         collapsed: inner.inner.is_none(),
+                        need: wrect.size() + content_overflow,
                     });
                     if inner.inner.is_none() {
                         // collapsed
@@ -345,6 +353,12 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
 			// takes focus by calling requestFocus when one of them is hit.
 			BeginMethod("captureKeys").Arg("mask", ctabb.U64).
 			CodeClientRust(rustClientCode("capture_keys_mask = mask;\n")).EndMethod().
+			// captureKeyEdges — ADR-0279 §SD1. The capture also takes the
+			// releases of the masked keys, and every event carries an edge
+			// byte (down, repeat). Opt-in, because an adopter that acts on
+			// each captured event would act twice per keystroke.
+			BeginMethod("captureKeyEdges").
+			CodeClientRust(rustClientCode("capture_key_edges = true;\n")).EndMethod().
 			// hoverCursorPointer changes the OS cursor to a pointing
 			// hand whenever the pointer is over this Frame — the
 			// universal "this is clickable" cue. Only meaningful when
@@ -378,7 +392,7 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
 		WithSettingBlockIterator(true).
 		WithSettingImmediate(true).
 		WithSettingRetained(true).
-		WithConstructionCodeClientRust(rustClientCode("egui::Frame::new();\nlet mut sense_click = false;\nlet mut sense_drag = false;\nlet mut hover_cursor_pointer = false;\nlet mut focusable = false;\nlet mut capture_keys_mask: u64 = 0;\n")).
+		WithConstructionCodeClientRust(rustClientCode("egui::Frame::new();\nlet mut sense_click = false;\nlet mut sense_drag = false;\nlet mut hover_cursor_pointer = false;\nlet mut focusable = false;\nlet mut capture_keys_mask: u64 = 0;\nlet mut capture_key_edges = false;\n")).
 		WithApplyCodeClientRust(rustClientCode(`
 					if {{EguiUiOptionalOuter}}.is_some() {
 						let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();

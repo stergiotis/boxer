@@ -1,6 +1,7 @@
 // Package keycodes is the key vocabulary imzero2 widgets capture over the FFI
-// (ADR-0177 SD4). It is deliberately a SUBSET — the navigation and activation
-// keys a widget needs — rather than a transcription of `egui::Key`: a subset is
+// (ADR-0177 SD4, extended by ADR-0279 §SD2). It is deliberately a SUBSET — the
+// navigation and activation keys a widget needs, and the digits, letters and
+// punctuation typed into one — rather than a transcription of `egui::Key`: a subset is
 // a registry to extend on demand, a full mirror is a standing obligation
 // against an upstream enum for keys nobody has asked for.
 //
@@ -53,6 +54,56 @@ const (
 	Tab       Code = 12
 	Backspace Code = 13
 	Delete    Code = 14
+	// Printable keys (ADR-0279 §SD2): digits, letters and the punctuation a
+	// calculator or an editor wants, as physical keys — a shifted character
+	// such as "*" arrives as its key with Shift in the modifier byte. Codes
+	// 61–63 are free; past them the mask has to widen.
+	Digit0       Code = 15
+	Digit1       Code = 16
+	Digit2       Code = 17
+	Digit3       Code = 18
+	Digit4       Code = 19
+	Digit5       Code = 20
+	Digit6       Code = 21
+	Digit7       Code = 22
+	Digit8       Code = 23
+	Digit9       Code = 24
+	KeyA         Code = 25
+	KeyB         Code = 26
+	KeyC         Code = 27
+	KeyD         Code = 28
+	KeyE         Code = 29
+	KeyF         Code = 30
+	KeyG         Code = 31
+	KeyH         Code = 32
+	KeyI         Code = 33
+	KeyJ         Code = 34
+	KeyK         Code = 35
+	KeyL         Code = 36
+	KeyM         Code = 37
+	KeyN         Code = 38
+	KeyO         Code = 39
+	KeyP         Code = 40
+	KeyQ         Code = 41
+	KeyR         Code = 42
+	KeyS         Code = 43
+	KeyT         Code = 44
+	KeyU         Code = 45
+	KeyV         Code = 46
+	KeyW         Code = 47
+	KeyX         Code = 48
+	KeyY         Code = 49
+	KeyZ         Code = 50
+	Plus         Code = 51
+	Minus        Code = 52
+	Equals       Code = 53
+	Period       Code = 54
+	Comma        Code = 55
+	Slash        Code = 56
+	Colon        Code = 57
+	Quote        Code = 58
+	OpenBracket  Code = 59
+	CloseBracket Code = 60
 )
 
 // Entry is one row of the vocabulary: the wire code, the Go constant's name,
@@ -79,6 +130,52 @@ var Table = []Entry{
 	{Tab, "Tab", "Tab"},
 	{Backspace, "Backspace", "Backspace"},
 	{Delete, "Delete", "Delete"},
+	{Digit0, "Digit0", "Num0"},
+	{Digit1, "Digit1", "Num1"},
+	{Digit2, "Digit2", "Num2"},
+	{Digit3, "Digit3", "Num3"},
+	{Digit4, "Digit4", "Num4"},
+	{Digit5, "Digit5", "Num5"},
+	{Digit6, "Digit6", "Num6"},
+	{Digit7, "Digit7", "Num7"},
+	{Digit8, "Digit8", "Num8"},
+	{Digit9, "Digit9", "Num9"},
+	{KeyA, "KeyA", "A"},
+	{KeyB, "KeyB", "B"},
+	{KeyC, "KeyC", "C"},
+	{KeyD, "KeyD", "D"},
+	{KeyE, "KeyE", "E"},
+	{KeyF, "KeyF", "F"},
+	{KeyG, "KeyG", "G"},
+	{KeyH, "KeyH", "H"},
+	{KeyI, "KeyI", "I"},
+	{KeyJ, "KeyJ", "J"},
+	{KeyK, "KeyK", "K"},
+	{KeyL, "KeyL", "L"},
+	{KeyM, "KeyM", "M"},
+	{KeyN, "KeyN", "N"},
+	{KeyO, "KeyO", "O"},
+	{KeyP, "KeyP", "P"},
+	{KeyQ, "KeyQ", "Q"},
+	{KeyR, "KeyR", "R"},
+	{KeyS, "KeyS", "S"},
+	{KeyT, "KeyT", "T"},
+	{KeyU, "KeyU", "U"},
+	{KeyV, "KeyV", "V"},
+	{KeyW, "KeyW", "W"},
+	{KeyX, "KeyX", "X"},
+	{KeyY, "KeyY", "Y"},
+	{KeyZ, "KeyZ", "Z"},
+	{Plus, "Plus", "Plus"},
+	{Minus, "Minus", "Minus"},
+	{Equals, "Equals", "Equals"},
+	{Period, "Period", "Period"},
+	{Comma, "Comma", "Comma"},
+	{Slash, "Slash", "Slash"},
+	{Colon, "Colon", "Colon"},
+	{Quote, "Quote", "Quote"},
+	{OpenBracket, "OpenBracket", "OpenBracket"},
+	{CloseBracket, "CloseBracket", "CloseBracket"},
 }
 
 // Mask is the set of keys a widget declares it captures (ADR-0177 SD3). A

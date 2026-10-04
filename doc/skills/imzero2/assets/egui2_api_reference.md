@@ -77,7 +77,7 @@ status: draft
 | FetchR9U64 | Fetcher | No | 0 | 0 | - | - |
 | FetchVideoCapabilities | Fetcher | No | 0 | 0 | - | - |
 | FetchVideoStreamInfo | Fetcher | No | 0 | 0 | - | - |
-| Frame | BuilderFactory | Yes | 0 | 0 | 23 | Immediate, Retained, BlockIterator |
+| Frame | BuilderFactory | Yes | 0 | 0 | 24 | Immediate, Retained, BlockIterator |
 | Grid | BuilderFactory | Yes | 0 | 0 | 6 | Immediate, BlockIterator |
 | Group | BuilderFactory | No | 0 | 0 | 0 | Immediate, BlockIterator |
 | GuiZoomZoomMenuButtons | Procedural | No | 0 | 0 | - | - |
@@ -803,6 +803,7 @@ EtHeaderText
 - **SenseDrag**()
 - **Focusable**()
 - **CaptureKeys**(mask: u64)
+- **CaptureKeyEdges**()
 - **HoverCursorPointer**()
 - **PresetGroup**()
 - **PresetWindow**()
@@ -3312,6 +3313,7 @@ Block
 | ids | u64h |
 | codes | u8h |
 | mods | u8h |
+| edges | u8h |
 
 ---
 
@@ -3330,6 +3332,8 @@ Block
 | maxY | f32h |
 | z | u32h |
 | collapsed | u8h |
+| needW | f32h |
+| needH | f32h |
 | workMinX | f32 |
 | workMinY | f32 |
 | workMaxX | f32 |

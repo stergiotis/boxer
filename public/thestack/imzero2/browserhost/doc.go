@@ -12,14 +12,17 @@
 //     neither main nor sees argv; the worker writes the arguments into the
 //     buffer the module exports, calls setup, and then frame per tick.
 //     [StepLoop] is the frame function an [application.Application] yields.
-//   - [InstallHostTransport] routes net/http through a host import on
-//     wasip1, where there are no sockets; the worker answers it with a
-//     synchronous request against the page's origin.
+//   - [InstallHostTransport] routes net/http through host imports on
+//     wasip1, where there are no sockets; the worker performs the request
+//     against the page's origin, asynchronously unless it was made on the
+//     goroutine running the current export.
 //
 // [Serve] serves such a directory during development: its files, `/ch/`
 // proxied to ClickHouse so the data plane stays same-origin, and the sinks
-// the worker posts to. The web/ directory holds the worker and the WASI
-// shim the page loads, and scripts/dev/build_tab_bundle.sh assembles a
-// servable directory from all of it. public/thestack/cmd/imzero2tab is the
-// binary that links apps in and carries `serve`.
+// the worker posts to; files the directory lacks may come from assets the
+// serving binary embeds. Package web embeds the worker, the WASI shim and
+// the viewer page; package tabhost is a tab binary's body as a library
+// (ADR-0278, proposed), and public/thestack/cmd/imzero2tab is boxer's tab
+// binary over it. scripts/dev/build_tab_bundle.sh assembles a servable
+// directory.
 package browserhost

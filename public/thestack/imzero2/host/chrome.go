@@ -30,7 +30,7 @@ const idleRepaintIntervalSecs = 1.0
 // (no extra menus, no status line, no video-output control, no F1 help).
 type ChromeConfig struct {
 	// ExtraMenus, when non-nil, is invoked inside the top MenuBar scope
-	// after the built-in File / Layout menus (used by the dock host to
+	// after the built-in File / Layout / Window menus (used by the dock host to
 	// inject its "Apps" menu). May be nil.
 	ExtraMenus func()
 	// Status, when non-nil, renders the runtime status line in the bottom
@@ -54,7 +54,7 @@ type ChromeConfig struct {
 }
 
 // DecorateRenderer wraps an inner renderer in the shared host chrome:
-// top PanelTop with the File / Layout menus + an optional ExtraMenus
+// top PanelTop with the File / Layout / Window menus + an optional ExtraMenus
 // callback (used by the dock host to inject its "Apps" menu), bottom
 // PanelBottom with a runtime status line + the metrics overlay.
 // cc.ExtraMenus may be nil — the screenshot tour path uses nil since
@@ -175,21 +175,6 @@ func DecorateRenderer(inner func() error, cc ChromeConfig) func() error {
 					}
 				}
 				for range c.MenuButton(c.Atoms().Text("Layout").Keep()).KeepIter() {
-					// Whole-desktop arrangements over the windowhost's windows,
-					// computed in Go from the geometry the host reports.
-					if cc.Host != nil {
-						for _, cmd := range windowhost.ArrangeCommands {
-							if c.Button(ids.PrepareStr("arrange-"+cmd.String()), c.Atoms().Text(cmd.String()).Keep()).SendResp().HasPrimaryClicked() {
-								cc.Host.Arrange(cmd)
-							}
-						}
-					}
-					// Forgets every window's position and size; egui then
-					// re-places each one from its defaults.
-					if c.Button(ids.PrepareStr("arrangeWindows"), c.Atoms().Text("Reset window positions").Keep()).SendResp().HasPrimaryClicked() {
-						c.MemoryResetAreas()
-					}
-					c.Separator().Horizontal().Send()
 					c.GuiZoomZoomMenuButtons()
 					// IDS density preset (ADR-0032 §SD1). The switch has to
 					// land on both sides of the FFFI boundary: the Go token
@@ -211,6 +196,23 @@ func DecorateRenderer(inner func() error, cc ChromeConfig) func() error {
 							styletokens.SetActiveDensity(selected)
 							c.SetIdsDensity(uint32(selected))
 						}
+					}
+				}
+				for range c.MenuButton(c.Atoms().Text("Window").Keep()).KeepIter() {
+					// Whole-desktop arrangements over the windowhost's windows,
+					// computed in Go from the geometry the host reports.
+					if cc.Host != nil {
+						for _, cmd := range windowhost.ArrangeCommands {
+							if c.Button(ids.PrepareStr("arrange-"+cmd.String()), c.Atoms().Text(cmd.String()).Keep()).SendResp().HasPrimaryClicked() {
+								cc.Host.Arrange(cmd)
+							}
+						}
+						c.Separator().Horizontal().Send()
+					}
+					// Forgets every window's position and size; egui then
+					// re-places each one from its defaults.
+					if c.Button(ids.PrepareStr("arrangeWindows"), c.Atoms().Text("Reset window positions").Keep()).SendResp().HasPrimaryClicked() {
+						c.MemoryResetAreas()
 					}
 				}
 				if cc.ExtraMenus != nil {

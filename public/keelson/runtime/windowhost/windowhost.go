@@ -114,6 +114,10 @@ type window struct {
 	place        Rect
 	placePending bool
 
+	// geom is the window's state as of the last completed frame, copied by
+	// Frame under inst.mu for readers off the render thread (WindowInfos).
+	geom WindowGeom
+
 	// maximized pins the window to the desktop rect left free by the
 	// shell's panels. A title-bar double-click toggles it, read off
 	// focusHandle one frame late; egui keeps the rect to restore to.
@@ -239,6 +243,15 @@ type Inst struct {
 	// pendingArrange queues one whole-desktop arrangement (Arrange) for the
 	// next Frame. Written under mu, consumed by Frame like pendingRaise.
 	pendingArrange ArrangeE
+	// pendingArrangeKeys limits pendingArrange to these windows; empty is
+	// every window (ArrangeWindows).
+	pendingArrangeKeys []WindowKeyT
+	// pendingPlaces queues one-frame placements by window key (Place).
+	// Written under mu, consumed by Frame.
+	pendingPlaces map[WindowKeyT]Rect
+	// arranging is the arrangement in progress across frames (stepArrange);
+	// nil when none. Render-thread only.
+	arranging *arrangeRun
 
 	// mountState shares Mount/Unmount lifecycle across windows that point at
 	// the same AppI instance (singleton-registered apps). Keyed by the AppI
@@ -276,6 +289,10 @@ type Inst struct {
 	// WINDOW_TOPMOST reports; zero while no window is open. Mutated
 	// only inside Frame: render-thread only, like searchText below.
 	activeKey WindowKeyT
+
+	// desktop is the desktop's state as of the last completed frame,
+	// copied by Frame under mu (DesktopInfo).
+	desktop DesktopInfo
 
 	// launcher renders every launcher surface: the empty-state pane and the
 	// Apps ▾ menu (ADR-0214 §SD2). The query, the facet filters and the
@@ -952,6 +969,9 @@ type WindowInfo struct {
 	// neither be handed a config nor have its workingset saved, because
 	// the state is not this window's alone.
 	SharesInstance bool
+	// Geom is the window's geometry and shell state as of the last
+	// completed frame (ADR-0276 §SD1).
+	Geom WindowGeom
 }
 
 // WindowInfos returns a metadata snapshot of the currently open windows
@@ -988,6 +1008,7 @@ func (inst *Inst) WindowInfos() (out []WindowInfo) {
 			ConfigKind:     kind,
 			ConfigBytes:    len(cfg),
 			SharesInstance: w.mount != nil && w.mount.refs > 1,
+			Geom:           w.geom,
 		})
 	}
 	return
@@ -1095,8 +1116,10 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 	copy(snapshot, inst.windows)
 	raiseKey := inst.pendingRaise
 	inst.pendingRaise = 0
-	arrangeCmd := inst.pendingArrange
-	inst.pendingArrange = ArrangeNone
+	arrangeCmd, arrangeKeys := inst.pendingArrange, inst.pendingArrangeKeys
+	inst.pendingArrange, inst.pendingArrangeKeys = ArrangeNone, nil
+	places := inst.pendingPlaces
+	inst.pendingPlaces = nil
 	inst.mu.Unlock()
 
 	if len(snapshot) == 0 {
@@ -1108,6 +1131,9 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 		for range c.PanelCentral().KeepIter() {
 			inst.renderEmptyState(ids)
 		}
+		inst.activeKey = 0
+		inst.arranging = nil
+		inst.snapshotGeometry(nil)
 		inst.reapClosed()
 		return
 	}
@@ -1131,9 +1157,9 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 		}
 		inst.activeKey = pickActiveWindow(inst.activeKey, facts)
 	}
-	if arrangeCmd != ArrangeNone {
-		inst.planArrange(arrangeCmd, snapshot)
-	}
+	inst.stepArrange(arrangeCmd, arrangeKeys, snapshot)
+	inst.applyPlaces(places, snapshot)
+	inst.snapshotGeometry(snapshot)
 	for _, w := range snapshot {
 		title := w.manifest.WindowTitle()
 		if title == "" {

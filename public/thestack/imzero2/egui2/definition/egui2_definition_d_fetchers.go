@@ -231,7 +231,10 @@ self.io.write_plain_f32h(len, self.r21_ui_rect_max_y.drain(..))?;
 		Build())
 
 	// Drains the per-frame window geometry: one row per egui::Window shown
-	// this frame — id, outer rect, stacking rank and collapsed flag — plus
+	// this frame — id, outer rect, stacking rank, collapsed flag and the
+	// outer size its content needed as laid out (needW/needH: larger than
+	// the rect where the content overflowed the body, as after a
+	// windowPlace that was too small; see WindowGeomRow) — plus
 	// the desktop rect the shell's panels left free. The rank is the
 	// window layer's index in egui's back-to-front layer order, read here
 	// after every window of the frame ran, plus one; larger is further
@@ -253,6 +256,8 @@ self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.rect.max.x))?;
 self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.rect.max.y))?;
 self.io.write_plain_u32h(len, z)?;
 self.io.write_plain_u8h(len, self.r27_windows.iter().map(|r| u8::from(r.collapsed)))?;
+self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.need.x))?;
+self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.need.y))?;
 self.r27_windows.clear();
 let w = self.r27_work_rect;
 self.io.write_plain_f32(w.min.x)?;
@@ -268,6 +273,8 @@ self.io.write_plain_f32(w.max.y)?;
 		AddReturnValue("maxY", ctabb.F32h).
 		AddReturnValue("z", ctabb.U32h).
 		AddReturnValue("collapsed", ctabb.U8h).
+		AddReturnValue("needW", ctabb.F32h).
+		AddReturnValue("needH", ctabb.F32h).
 		AddReturnValue("workMinX", ctabb.F32).
 		AddReturnValue("workMinY", ctabb.F32).
 		AddReturnValue("workMaxX", ctabb.F32).

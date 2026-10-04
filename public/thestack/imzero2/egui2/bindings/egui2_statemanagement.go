@@ -114,8 +114,10 @@ func (v CanvasCursorValue) Command() bool { return v.Mods&8 != 0 }
 // An event, not a state. A widget can see several in one frame (key repeat, or
 // a fast typist), which is why GetCapturedKeys returns a slice rather than the
 // single value the other per-id registers hold. The slice is empty on any frame
-// with no presses — there is no "still held" reading here, and a widget that
-// wants held-key behaviour should count repeats rather than look for one.
+// with no key events — there is no "still held" reading here. A widget that
+// wants held-key behaviour asks for releases with `.CaptureKeyEdges()` and
+// folds the edges (ADR-0279 §SD1); a key released after the widget lost focus
+// is not reported, so losing focus is the widget's cue that every key is up.
 type CapturedKey struct {
 	Code keycodes.Code
 	// Mods is the modifier state at the moment of the press (bit0 shift,
@@ -123,7 +125,16 @@ type CapturedKey struct {
 	// (SD5), so Shift+Down arrives as Down with Shift set rather than being
 	// missed — read this to tell the two apart.
 	Mods uint8
+	// Edges is the event's edge byte (ADR-0279 §SD1): bit 0 set for a press,
+	// clear for a release, bit 1 set for an auto-repeat press. Releases arrive
+	// only for a Frame that called .CaptureKeyEdges().
+	Edges uint8
 }
+
+// CapturedKey edge accessors.
+func (v CapturedKey) Down() bool   { return v.Edges&1 != 0 }
+func (v CapturedKey) Up() bool     { return v.Edges&1 == 0 }
+func (v CapturedKey) Repeat() bool { return v.Edges&2 != 0 }
 
 // CapturedKey modifier accessors.
 func (v CapturedKey) Shift() bool   { return v.Mods&1 != 0 }
@@ -189,10 +200,15 @@ type UiRectValue struct {
 
 // WindowGeomValue is one row of the R27 window drain: an egui::Window's
 // outer rect as laid out last frame, in logical points with a viewport
-// top-left origin, its stacking rank (larger is further front, 0 unknown)
-// and whether its body was collapsed.
+// top-left origin, its stacking rank (larger is further front, 0 unknown),
+// whether its body was collapsed, and the outer size its content needed as
+// laid out (NeedW/NeedH). Need exceeds the rect where the content overflowed
+// the body — after a WindowPlace, by how much the placed size fell short.
+// It is not an intrinsic minimum: content that stretches to fill the body
+// needs exactly what it was given.
 type WindowGeomValue struct {
 	MinX, MinY, MaxX, MaxY float32
+	NeedW, NeedH           float32
 	Z                      uint32
 	Collapsed              bool
 }
@@ -860,11 +876,12 @@ func (inst *StateManager) Sync() {
 		}
 	}
 	{
-		ids, minX, minY, maxX, maxY, z, collapsed, wMinX, wMinY, wMaxX, wMaxY := fetcher.CollectFetchR27Windows()
+		ids, minX, minY, maxX, maxY, z, collapsed, needW, needH, wMinX, wMinY, wMaxX, wMaxY := fetcher.CollectFetchR27Windows()
 		clear(inst.r27Windows)
 		for i, id := range ids {
 			inst.r27Windows[id] = WindowGeomValue{
 				MinX: minX[i], MinY: minY[i], MaxX: maxX[i], MaxY: maxY[i],
+				NeedW: needW[i], NeedH: needH[i],
 				Z: z[i], Collapsed: collapsed[i] != 0,
 			}
 		}
@@ -913,26 +930,27 @@ func (inst *StateManager) Sync() {
 	{
 		// One row per captured EVENT, so a widget appears as many times as it
 		// captured. Re-grouped by id here rather than in Rust because the wire
-		// shape is three flat arrays and the grouping is what callers want.
+		// shape is four flat arrays and the grouping is what callers want.
 		//
 		// Slices are truncated and refilled instead of reallocated: a tree
 		// under held ArrowDown captures every frame, and a fresh slice per
 		// widget per frame is garbage for no benefit. The map keeps its
 		// entries for the same reason — a widget that captured once will
 		// likely capture again.
-		ids, codes, modsSeq := fetcher.CollectFetchR26KeyCaptures()
+		ids, codes, mods, edgesSeq := fetcher.CollectFetchR26KeyCaptures()
 		for k, v := range inst.r26KeyCaptures {
 			inst.r26KeyCaptures[k] = v[:0]
 		}
 		i := 0
-		for mods := range modsSeq {
-			if i >= len(ids) || i >= len(codes) {
+		for edges := range edgesSeq {
+			if i >= len(ids) || i >= len(codes) || i >= len(mods) {
 				break
 			}
 			id := ids[i]
 			inst.r26KeyCaptures[id] = append(inst.r26KeyCaptures[id], CapturedKey{
-				Code: keycodes.Code(codes[i]),
-				Mods: mods,
+				Code:  keycodes.Code(codes[i]),
+				Mods:  mods[i],
+				Edges: edges,
 			})
 			i++
 		}

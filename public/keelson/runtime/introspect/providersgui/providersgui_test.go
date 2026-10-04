@@ -103,3 +103,61 @@ func TestFrameTimesProviderNilHost(t *testing.T) {
 	assert.Zero(t, rec.NumRows())
 	assert.EqualValues(t, p.Schema().NumFields(), rec.NumCols())
 }
+
+// The windows table carries each window's geometry and shell state
+// (ADR-0276 §SD1): a drawn window's outer rect as x, y, w, h, and a window
+// that has not drawn yet reads as not shown with zero geometry.
+func TestWindowsTableRendersGeometry(t *testing.T) {
+	ws := []windowhost.WindowInfo{
+		{Key: 1, AppId: "test.a", Geom: windowhost.WindowGeom{
+			Shown: true,
+			Rect:  windowhost.Rect{MinX: 10, MinY: 30, MaxX: 410, MaxY: 330},
+			NeedW: 400, NeedH: 520, Stack: 7, Active: true,
+		}},
+		{Key: 2, AppId: "test.b"},
+	}
+	rec := windowsTable(ws).Build(introspect.AllColumns(), len(ws))
+	defer rec.Release()
+	f := func(col string, row int) float64 {
+		return rec.Column(colIndex(t, rec, col)).(*array.Float64).Value(row)
+	}
+	b := func(col string, row int) bool {
+		return rec.Column(colIndex(t, rec, col)).(*array.Boolean).Value(row)
+	}
+	assert.True(t, b("shown", 0))
+	assert.Equal(t, []float64{10, 30, 400, 300}, []float64{f("x", 0), f("y", 0), f("w", 0), f("h", 0)})
+	assert.InDelta(t, 520, f("need_h", 0), 1e-9, "need exceeds h where the content overflowed")
+	assert.EqualValues(t, 7, rec.Column(colIndex(t, rec, "stack")).(*array.Uint64).Value(0))
+	assert.True(t, b("active", 0))
+	assert.False(t, b("maximized", 0))
+
+	assert.False(t, b("shown", 1))
+	assert.Zero(t, f("w", 1))
+	assert.False(t, b("active", 1))
+}
+
+// The desktop table is one row from a host and none without one.
+func TestDesktopTable(t *testing.T) {
+	rows := []windowhost.DesktopInfo{{
+		WorkShown: true,
+		Work:      windowhost.Rect{MinX: 0, MinY: 22, MaxX: 1400, MaxY: 870},
+		ActiveKey: 3,
+		Arranging: windowhost.ArrangeTile,
+	}}
+	rec := desktopTable(rows).Build(introspect.AllColumns(), len(rows))
+	defer rec.Release()
+	require.EqualValues(t, 1, rec.NumRows())
+	f := func(col string) float64 { return rec.Column(colIndex(t, rec, col)).(*array.Float64).Value(0) }
+	assert.Equal(t, []float64{0, 22, 1400, 848}, []float64{f("work_x"), f("work_y"), f("work_w"), f("work_h")})
+	assert.EqualValues(t, 3, rec.Column(colIndex(t, rec, "active_key")).(*array.Int64).Value(0))
+	assert.Equal(t, []string{"Tile"}, stringColumn(t, rec, "arranging"))
+
+	idle := desktopTable([]windowhost.DesktopInfo{{}}).Build(introspect.AllColumns(), 1)
+	defer idle.Release()
+	assert.Equal(t, []string{""}, stringColumn(t, idle, "arranging"), "no arrangement reads as empty")
+
+	empty, err := desktopProvider{}.Snapshot(introspect.AllColumns())
+	require.NoError(t, err)
+	defer empty.Release()
+	assert.Zero(t, empty.NumRows())
+}

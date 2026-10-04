@@ -413,6 +413,36 @@ features come off the leeway card — so `list_panes` says so before a run
 would fail, and a run builds the card driver for its own result instead of
 relying on the Table or Detail pane to have built it.
 
+
+### 2026-10-04 — the Diagnostics pane, for an agent
+
+`get_diagnostics` (query) returns the Diagnostics pane's seven sections as
+fields, read from what the pane reads on the render goroutine: the
+statement's status — parses, outside boxer's grammar, rejected with
+ClickHouse's own diagnostic, still being checked, unverified — with the
+parser's error; the client-side rewrite's skipped and declined steps with
+their errors; the leeway handles that do not resolve, with candidates; the
+security class with its witnesses and the tables returned as stored; the
+query graph split of the last run; dropped signal emits; and the last run's
+full error or summary. It starts nothing the frame would not: the rewrite
+trace is demand-driven for the two lazy panes that draw it, so the query
+reports it only once one has measured this buffer, and says so;
+`validate_sql` reports a statement's failed rewrites without it. Marked
+untrusted: server diagnostics quote the statement and its data.
+
+
+### 2026-10-04 — the documentation lookup is not bound by the mark
+
+SD2 checks every lane of a window that carries a task's mark, because
+those lanes run SQL derived from the task's input. The Docs pane's lookup
+does not: its statement is play's own and the looked-up name enters only as
+a bound parameter. Checked anyway, it failed under any grant that did not
+list the endpoint — an agent working over `keelson('…')` tables lost the
+Docs pane. A lane may now declare its statement its own
+(`ExecOptions.OwnStatement`); under a mark it is sent without the grant
+check and with `readonly = 2`, and an explicit on-behalf-of context is
+still checked. The documentation lookup is the one lane that declares it.
+
 ## References
 
 - [ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md) — the contract this catalog serves.
