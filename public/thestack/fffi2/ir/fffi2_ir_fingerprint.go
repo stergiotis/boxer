@@ -1,11 +1,12 @@
 package ir
 
 import (
-	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
 	"io"
 	"strconv"
+
+	"lukechampine.com/blake3"
 )
 
 // Fingerprint digests what the two ends of an FFFI2 pipe must agree on: the
@@ -19,7 +20,7 @@ import (
 // halves built from one generation carry the same number and halves from
 // different IDLs almost surely do not (ADR-0278 SD6, proposed).
 func Fingerprint(tls []NodeI) (fp uint64) {
-	h := sha256.New()
+	h := blake3.New(32, nil)
 	for _, tl := range tls {
 		switch n := tl.(type) {
 		case *BuilderFactoryNode:

@@ -243,14 +243,23 @@ func plural(n int, noun string) (s string) {
 // systemPrompt is the first message of a conversation with Apps or
 // Questions on.
 func systemPrompt(apps bool, questions bool) (s string) {
-	switch {
-	case apps && questions:
-		return coordinatorPrompt + "\n\n" + questionsPrompt
-	case apps:
-		return coordinatorPrompt
-	default:
-		return questionsPrompt
+	return systemPromptOf(apps, questions, false)
+}
+
+// systemPromptOf is the first message of a conversation with Apps,
+// Questions or the artefact on: each one's part, in that order.
+func systemPromptOf(apps bool, questions bool, artefact bool) (s string) {
+	parts := make([]string, 0, 3)
+	if apps {
+		parts = append(parts, coordinatorPrompt)
 	}
+	if questions {
+		parts = append(parts, questionsPrompt)
+	}
+	if artefact {
+		parts = append(parts, artefactPrompt)
+	}
+	return strings.Join(parts, "\n\n")
 }
 
 // askForm is the person's side of an open question: per question, which

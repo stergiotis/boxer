@@ -57,6 +57,13 @@ func (inst *ProceduralNodeBuilder) WithIdentityIdReference() *ProceduralNodeBuil
 	inst.node.IdentityArguments.IsReference = true
 	return inst
 }
+
+// WithEffect declares what the node's client apply code reaches (ADR-0281
+// §SD5). Every procedural node declares one.
+func (inst *ProceduralNodeBuilder) WithEffect(v ir.EffectE) *ProceduralNodeBuilder {
+	inst.node.Effect = v
+	return inst
+}
 func (inst *ProceduralNodeBuilder) WithSettingBlockIterator(v bool) *ProceduralNodeBuilder {
 	inst.node.Settings.BlockIterator = v
 	return inst

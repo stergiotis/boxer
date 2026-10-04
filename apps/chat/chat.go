@@ -11,6 +11,7 @@ package chat
 import (
 	"context"
 	"errors"
+	"github.com/rs/zerolog"
 	"strconv"
 	"strings"
 	"time"
@@ -25,6 +26,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/chatview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/ecdf"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
 )
 
 // App is one chat window.
@@ -54,8 +56,21 @@ type App struct {
 	// questions lets the model ask the person with a form (ask_user); the
 	// turn is the coordinator's tool loop then too, with or without Apps.
 	questions bool
+	// artefact gives the conversation a markdown document the model edits
+	// (ADR-0282); showArtefact opens its panel (chat_artefact_render.go),
+	// and artView is the panel's state.
+	artefact     bool
+	showArtefact bool
+	artView      artefactView
 
 	conv *conversation
+	// turnMachine is where the turn stands, observed and mirrored each
+	// frame (chat_turnstate.go); turnChip draws it in the bar.
+	turnMachine *fsmview.Machine[turnStateE]
+	turnChip    *fsmview.View[turnStateE]
+	// turnOffGraph counts the moves the declared graph could not reach.
+	turnOffGraph int
+	log          zerolog.Logger
 	// keep is the Keep toggle; a conversation takes it at its first send.
 	keep bool
 	// showSettings opens the Settings panel (chat_settings.go). perms are
@@ -125,8 +140,8 @@ type pendingTurn struct {
 var _ app.AppI = (*App)(nil)
 
 func newApp() (inst *App) {
-	inst = &App{ids: c.NewWidgetIdStack(), keep: true, draft: DraftSeed.Get(), conv: newConversation(), apps: AppsSeed.Get() || registeredCoordinator(),
-		questions: QuestionsSeed.Get(), advanced: AdvancedSeed.Get(), pubs: newStatsPublishers(), perms: defaultPermissions(),
+	inst = &App{turnMachine: newTurnMachine(), log: zerolog.Nop(), ids: c.NewWidgetIdStack(), keep: true, draft: DraftSeed.Get(), conv: newConversation(), apps: AppsSeed.Get() || registeredCoordinator(),
+		questions: QuestionsSeed.Get(), artefact: ArtefactSeed.Get(), showArtefact: ArtefactSeed.Get(), advanced: AdvancedSeed.Get(), pubs: newStatsPublishers(), perms: defaultPermissions(),
 		opTools: OperationToolsSeed.Get()}
 	return
 }
@@ -137,6 +152,8 @@ func (inst *App) Manifest() (m app.Manifest) { m = manifest; return }
 // a model is offered.
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
+	inst.log = ctx.Log()
+	inst.turnChip = inst.newTurnChip()
 	bus := ctx.Bus()
 	if bus == nil {
 		inst.model, inst.answered = llm.Description{Reason: "this host gives the app no bus"}, true
@@ -194,6 +211,9 @@ func (inst *App) drain() {
 	inst.drainAction()
 	inst.drainTitle()
 	inst.syncAuthority()
+	// Mirrored at the end, whatever path drain leaves by: the state is what
+	// this frame's landing made of the turn.
+	defer inst.mirrorTurn()
 	if d, _, ok := inst.describe.TakeResult(); ok {
 		inst.model, inst.answered = *d, true
 	} else if snap := inst.describe.Snapshot(); snap.State == bgjob.StateFailed {
@@ -261,16 +281,19 @@ func (inst *App) startTurn(text string) (started bool) {
 	}
 	conv := inst.conv
 	if !conv.started {
-		conv.keep, conv.apps, conv.questions = inst.keep, inst.apps, inst.questions
+		conv.keep, conv.apps, conv.questions, conv.artefact = inst.keep, inst.apps, inst.questions, inst.artefact
 	}
 	req := conv.request(text)
 	cli := inst.cli
 	var coord *coordinator
-	if (conv.apps || conv.questions) && inst.coord != nil {
+	if (conv.apps || conv.questions || conv.artefact) && inst.coord != nil {
 		coord = inst.coord
 		coord.offer(conv.apps, conv.questions)
+		if conv.artefact {
+			coord.offerArtefact(conv.art)
+		}
 		if req.Messages[0].Role != openaichat.ChatRoleSystem {
-			req.Messages = append([]openaichat.Message{{Role: openaichat.ChatRoleSystem, Content: systemPrompt(conv.apps, conv.questions)}}, req.Messages...)
+			req.Messages = append([]openaichat.Message{{Role: openaichat.ChatRoleSystem, Content: systemPromptOf(conv.apps, conv.questions, conv.artefact)}}, req.Messages...)
 		}
 	}
 	ok := inst.turn.StartReporting(nil, bgjob.Spec{Kind: "chat-turn", Title: "answer"},
@@ -327,4 +350,5 @@ func (inst *App) newConversation() {
 		inst.coord = newCoordinator(inst.agentCli, inst.kq, inst.conv.id)
 	}
 	inst.view = chatview.State{}
+	inst.artView = artefactView{}
 }

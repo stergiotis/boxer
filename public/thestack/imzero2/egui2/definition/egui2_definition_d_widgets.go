@@ -12,7 +12,7 @@ import (
 
 func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 	widgets = make([]*ir.ProceduralNode, 0, 8)
-	widgets = append(widgets, idl.NewProceduralNode("addSpace").
+	widgets = append(widgets, idl.NewProceduralNode("addSpace").WithEffect(ir.EffectLocal).
 		AddArguments(idl.NewArgumentsBuilder().PlainArg("amount", ctabb.F32).
 			Build()).
 		WithApplyCodeClientRust(rustClientCode(`
@@ -41,7 +41,7 @@ func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 	// Generally useful beyond that: control rows and badge clusters that
 	// want to sit tighter than the global density without every widget
 	// growing a knob. Carries no widget id.
-	widgets = append(widgets, idl.NewProceduralNode("uiSetItemSpacing").
+	widgets = append(widgets, idl.NewProceduralNode("uiSetItemSpacing").WithEffect(ir.EffectLocal).
 		AddArguments(idl.NewArgumentsBuilder().
 			PlainArg("sx", ctabb.F32).
 			PlainArg("sy", ctabb.F32).
@@ -53,7 +53,7 @@ func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 					}
 `)).
 		Build())
-	widgets = append(widgets, idl.NewProceduralNode("endRow").
+	widgets = append(widgets, idl.NewProceduralNode("endRow").WithEffect(ir.EffectLocal).
 		WithApplyCodeClientRust(rustClientCode(`
 					if {{EguiUiOptionalOuter}}.is_some() {
 						{{EguiUiOptionalOuter}}.as_mut().unwrap().end_row();
@@ -70,7 +70,7 @@ func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 	//
 	// Outside a ScrollArea the op is a no-op — egui silently drops the
 	// request when there is no parent that can apply it.
-	widgets = append(widgets, idl.NewProceduralNode("scrollToCursor").
+	widgets = append(widgets, idl.NewProceduralNode("scrollToCursor").WithEffect(ir.EffectLocal).
 		AddArguments(idl.NewArgumentsBuilder().PlainArg("align", ctabb.U8).Build()).
 		WithApplyCodeClientRust(rustClientCode(`
 					if {{EguiUiOptionalOuter}}.is_some() {
@@ -99,11 +99,11 @@ func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 	// requirement: the host can drain and emit after its panels have closed.
 	// The FFFI2 string arg arrives as an owned String, which copy_text consumes
 	// directly.
-	widgets = append(widgets, idl.NewProceduralNode("copyTextToClipboard").
+	widgets = append(widgets, idl.NewProceduralNode("copyTextToClipboard").WithEffect(ir.EffectHost).
 		AddArguments(idl.NewArgumentsBuilder().PlainArg("text", ctabb.S).Build()).
 		WithApplyCodeClientRust(rustClientCode("c.copy_text(text);\n")).
 		Build())
-	widgets = append(widgets, idl.NewProceduralNode("uiSetMinWidth").
+	widgets = append(widgets, idl.NewProceduralNode("uiSetMinWidth").WithEffect(ir.EffectLocal).
 		AddArguments(idl.NewArgumentsBuilder().PlainArg("width", ctabb.F32).Build()).
 		WithApplyCodeClientRust(rustClientCode(`
 					if {{EguiUiOptionalOuter}}.is_some() {
@@ -121,7 +121,7 @@ func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 	// background or click sense drawn from Go covered only its own text.
 	// Nothing consumes the existing ScalarSize().AvailableWidth() holder, so
 	// there was no way to say "as wide as the row" at all.
-	widgets = append(widgets, idl.NewProceduralNode("uiSetMinWidthAvailable").
+	widgets = append(widgets, idl.NewProceduralNode("uiSetMinWidthAvailable").WithEffect(ir.EffectLocal).
 		WithApplyCodeClientRust(rustClientCode(`
 					if {{EguiUiOptionalOuter}}.is_some() {
 						let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
@@ -130,7 +130,7 @@ func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 					}
 `)).
 		Build())
-	widgets = append(widgets, idl.NewProceduralNode("uiSetMinHeight").
+	widgets = append(widgets, idl.NewProceduralNode("uiSetMinHeight").WithEffect(ir.EffectLocal).
 		AddArguments(idl.NewArgumentsBuilder().PlainArg("height", ctabb.F32).Build()).
 		WithApplyCodeClientRust(rustClientCode(`
 					if {{EguiUiOptionalOuter}}.is_some() {
@@ -138,7 +138,7 @@ func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 					}
 `)).
 		Build())
-	widgets = append(widgets, idl.NewProceduralNode("uiSetMaxWidth").
+	widgets = append(widgets, idl.NewProceduralNode("uiSetMaxWidth").WithEffect(ir.EffectLocal).
 		AddArguments(idl.NewArgumentsBuilder().PlainArg("width", ctabb.F32).Build()).
 		WithApplyCodeClientRust(rustClientCode(`
 					if {{EguiUiOptionalOuter}}.is_some() {
@@ -146,7 +146,7 @@ func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 					}
 `)).
 		Build())
-	widgets = append(widgets, idl.NewProceduralNode("uiSetMaxHeight").
+	widgets = append(widgets, idl.NewProceduralNode("uiSetMaxHeight").WithEffect(ir.EffectLocal).
 		AddArguments(idl.NewArgumentsBuilder().PlainArg("height", ctabb.F32).Build()).
 		WithApplyCodeClientRust(rustClientCode(`
 					if {{EguiUiOptionalOuter}}.is_some() {
@@ -164,7 +164,7 @@ func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 	// clipping as before; this can only tighten, never widen. Layout is
 	// unaffected — min_rect growth (and the parent-size ratchet it feeds)
 	// is an allocation property, not a paint property.
-	widgets = append(widgets, idl.NewProceduralNode("uiClipToMaxRect").
+	widgets = append(widgets, idl.NewProceduralNode("uiClipToMaxRect").WithEffect(ir.EffectLocal).
 		WithApplyCodeClientRust(rustClientCode(`
 					if {{EguiUiOptionalOuter}}.is_some() {
 						let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
@@ -173,7 +173,7 @@ func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 					}
 `)).
 		Build())
-	widgets = append(widgets, idl.NewProceduralNode("uiSetWidth").
+	widgets = append(widgets, idl.NewProceduralNode("uiSetWidth").WithEffect(ir.EffectLocal).
 		AddArguments(idl.NewArgumentsBuilder().PlainArg("width", ctabb.F32).Build()).
 		WithApplyCodeClientRust(rustClientCode(`
 					if {{EguiUiOptionalOuter}}.is_some() {
@@ -181,7 +181,7 @@ func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 					}
 `)).
 		Build())
-	widgets = append(widgets, idl.NewProceduralNode("uiSetHeight").
+	widgets = append(widgets, idl.NewProceduralNode("uiSetHeight").WithEffect(ir.EffectLocal).
 		AddArguments(idl.NewArgumentsBuilder().PlainArg("height", ctabb.F32).Build()).
 		WithApplyCodeClientRust(rustClientCode(`
 					if {{EguiUiOptionalOuter}}.is_some() {
@@ -189,7 +189,7 @@ func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 					}
 `)).
 		Build())
-	widgets = append(widgets, idl.NewProceduralNode("uiDisable").
+	widgets = append(widgets, idl.NewProceduralNode("uiDisable").WithEffect(ir.EffectLocal).
 		WithApplyCodeClientRust(rustClientCode(`
 					if {{EguiUiOptionalOuter}}.is_some() {
 						{{EguiUiOptionalOuter}}.as_mut().unwrap().disable();

@@ -143,14 +143,33 @@ assets so that its output stays servable by any static host.
 
 ### SD5 — The browser host is content-addressed
 
-The tree carries a small text file beside `browserhost` with the SHA-256 of the
-browser host built from the same tree by `build_rust_browser.sh` under
-`rust-repro-env.sh`. A CI workflow builds it on every change to its inputs and
-publishes it under its digest when not yet published. `bundle` resolves the
-host in this order: a path given on the command line; a local cache keyed by
-digest; a fetch by digest from the published location; a build from the
-module's own `rust/imzero2` sources when cargo and the target are present. Every
-path but the first is checked against the digest, and a mismatch is an error.
+`tabhost/browserhost.sum` records the SHA-256 of the browser host that
+`build_rust_browser.sh` builds from the same tree under the pinned toolchain
+and `rust-repro-env.sh`, and the IDL fingerprint (SD6) it was generated for.
+`tabhost` embeds the file. A test fails when the bindings' fingerprint differs
+from the recorded one, which catches the common way the file goes stale — a
+regeneration — without building Rust; `hostdigest --write` refreshes it.
+
+The `tab-host` workflow builds the host on every push to `main` that touches
+its inputs, fails when the digest differs from the recorded one, and publishes
+the file on GitHub Pages as `tabhost/<sha256>.wasm` with `tabhost/index.txt`
+listing every published digest. Nothing published is removed, since a consumer
+pinned to an older commit needs an older digest: each deployment is assembled
+from everything the live site lists plus the new file, and a run that cannot
+read back the whole of it fails instead of deploying a smaller site. A two-path
+build of one commit on one machine gave the same digest when this was built;
+the workflow is what checks it across machines.
+
+`bundle` obtains the host per `--hostFrom`: `auto`, the default, builds from
+source when the module being bundled is boxer itself — a developer changing the
+host wants that build, not the published one — and otherwise fetches it by the
+recorded digest, from a cache keyed by digest or from `BOXER_TAB_HOST_URL`
+(the Pages site unless set; a mirror for an offline build), building from
+source when the fetch fails; `fetch` and `source` force one way. A fetched host
+that does not match the digest is refused. A host built from source that
+differs from it is used and reported: the tree may be ahead of its recorded
+digest, and SD6 still refuses a host for another IDL. `--host` names a file to
+use as given.
 
 ### SD6 — The two halves prove they match
 
@@ -268,8 +287,9 @@ their layout is unchanged.
   shape of regenerating only one side; an `ir` test pins that the fingerprint
   follows opcode order, method order and reply shapes. The worker's refusal of
   a mixed pair was observed in a browser when M2 was built.
-- **Reproducibility** — the SD5 workflow rebuilds the host and fails when the
-  digest it computes differs from the committed one.
+- **Reproducibility** — the `tab-host` workflow rebuilds the host and fails
+  when the digest it computes differs from the committed one; a tabhost test
+  fails when the recorded IDL fingerprint is not the bindings'.
 - **Consumer path** — an integration test builds a minimal tab binary from a
   temporary module that imports `tabhost` and one app, bundles it with a source
   build of the host, and serves it.

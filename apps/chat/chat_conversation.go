@@ -40,6 +40,9 @@ type entry struct {
 	// edited marks a message sent again after Edit, in place of the turn it
 	// replaced.
 	edited bool
+	// stopped marks a user message whose turn called tools and then ended
+	// without an answer: its calls happened, unlike a failed turn's.
+	stopped bool
 	// doc is the reply parsed as markdown, built on first draw.
 	doc *markdown.Doc
 }
@@ -100,13 +103,18 @@ type turnMark struct {
 	parent  string
 	lastIn  int32
 	lastOut int32
+	// artRev is the artefact's revision before the turn (ADR-0282 §SD1).
+	artRev int
 }
 
 // rewound is a turn taken back for an edit, kept so the edit can be
-// abandoned and the turn put back as it was.
+// abandoned and the turn put back as it was. artDropped are the artefact
+// revisions the turn made, and artAt the revision rewind left current.
 type rewound struct {
-	mark    turnMark
-	entries []entry
+	mark       turnMark
+	entries    []entry
+	artDropped []artRevision
+	artAt      int
 }
 
 // conversation is the app's state for one conversation (ADR-0265 §SD2):
@@ -125,6 +133,12 @@ type conversation struct {
 	// questions offers the model ask_user; set at the first send, for the
 	// same reason.
 	questions bool
+	// artefact offers the model the artefact tools (ADR-0282), set at the
+	// first send like questions; art is the document, there either way, and
+	// artBefore its revision when the turn in flight began.
+	artefact  bool
+	art       *artefact
+	artBefore int
 	started   bool
 	// kept says a turn's verdict was kept; notKept is the first reason one
 	// was not. Neither set means no verdict yet.
@@ -162,7 +176,7 @@ var minted atomic.Uint64
 // newConversation starts an empty conversation with a fresh id.
 func newConversation() (inst *conversation) {
 	id := "chat-" + strconv.FormatInt(time.Now().UTC().UnixNano(), 36) + "-" + strconv.FormatUint(minted.Add(1), 36)
-	inst = &conversation{id: id}
+	inst = &conversation{id: id, art: newArtefact()}
 	return
 }
 
@@ -196,6 +210,7 @@ func (inst *conversation) begin(text string, atMs int64, edited bool) {
 		inst.title, inst.titleSource = firstLineTitle(text), titleFirstLine
 	}
 	inst.started = true
+	inst.artBefore, _ = inst.art.head()
 	inst.entries = append(inst.entries, entry{speaker: speakerUser, text: text, atMs: atMs, edited: edited})
 }
 
@@ -225,6 +240,8 @@ func (inst *conversation) rewind() (text string, undo *rewound, ok bool) {
 	text = inst.entries[m.user].text
 	undo = &rewound{mark: turnMark{user: m.user, history: inst.history, parent: inst.parent, lastIn: inst.lastIn, lastOut: inst.lastOut},
 		entries: append([]entry(nil), inst.entries[m.user:]...)}
+	// The turn's artefact revisions go with it.
+	undo.artDropped, undo.artAt = inst.art.truncate(m.artRev), m.artRev
 	inst.entries = inst.entries[:m.user:m.user]
 	inst.history, inst.parent, inst.lastIn, inst.lastOut = m.history, m.parent, m.lastIn, m.lastOut
 	inst.mark = nil
@@ -236,7 +253,12 @@ func (inst *conversation) restore(undo *rewound) (ok bool) {
 	if undo == nil || len(inst.entries) != undo.mark.user {
 		return false
 	}
-	before := turnMark{user: undo.mark.user, history: inst.history, parent: inst.parent, lastIn: inst.lastIn, lastOut: inst.lastOut}
+	if len(undo.artDropped) > 0 && !inst.art.reinstate(undo.artAt, undo.artDropped) {
+		// The artefact moved since — a revert in the panel: the turn's
+		// revisions cannot go back on top of it.
+		return false
+	}
+	before := turnMark{user: undo.mark.user, history: inst.history, parent: inst.parent, lastIn: inst.lastIn, lastOut: inst.lastOut, artRev: undo.artAt}
 	inst.entries = append(inst.entries, undo.entries...)
 	inst.history, inst.parent, inst.lastIn, inst.lastOut = undo.mark.history, undo.mark.parent, undo.mark.lastIn, undo.mark.lastOut
 	inst.mark = &before
@@ -264,7 +286,7 @@ func (inst *conversation) land(req llm.Request, res *llm.Response, err error, at
 		inst.fail(asked, failureReason(err), failureOf(err))
 		return
 	}
-	inst.mark = &turnMark{user: asked, history: inst.history, parent: inst.parent, lastIn: inst.lastIn, lastOut: inst.lastOut}
+	inst.mark = &turnMark{user: asked, history: inst.history, parent: inst.parent, lastIn: inst.lastIn, lastOut: inst.lastOut, artRev: inst.artBefore}
 	reply := openaichat.Message{Role: openaichat.ChatRoleAssistant, Content: res.Content, ToolCalls: res.ToolCalls}
 	inst.history = append(append(inst.history[:0:0], req.Messages...), reply)
 	inst.parent = res.CallId
@@ -302,6 +324,9 @@ func (inst *conversation) landTurn(req llm.Request, res *turnResult, err error, 
 			f = failure{kind: "stopped", detail: res.stopped}
 		}
 		inst.fail(asked, res.stopped, f)
+		if asked >= 0 {
+			inst.entries[asked].stopped = true
+		}
 		return
 	}
 	inst.land(req, &res.final, nil, atMs)

@@ -3,6 +3,8 @@
 use crate::fffi::common::{FffiError, FffiResult};
 use crate::fffi::io::ImZeroFffiIo;
 
+pub mod capture_replay;
+
 // Errors produced by the interpreter dispatch. Boundary between FFFI I/O
 // (typed-error already) and the previously-panicking interpreter loop:
 // graceful EOF (peer closed the pipe) is now distinguishable from a genuine
@@ -876,6 +878,9 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     // with one-frame display lag. Reported in microseconds; saturates at
     // u32::MAX (~71 minutes per frame, well past anything we want to see).
     pub last_interpret_us: u32,
+    /// Set while a capture replay runs (ADR-0281 §SD5); the generated apply
+    /// code of host-effect nodes and fetchers is skipped then.
+    pub(crate) capture_replay: bool,
     pub last_pass_nr: u64,
 
     // Nanoseconds this pass spent BLOCKED waiting for Go to emit the next
@@ -1070,6 +1075,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             image_cache: ImageCache::new(),
             paint_image_cache: ImageCache::new(),
             last_interpret_us: 0,
+            capture_replay: false,
             last_pass_nr: 0,
             read_blocked_ns: 0,
             export_state: std::sync::Arc::new(std::sync::Mutex::new(ExportState::default())),
@@ -3042,8 +3048,10 @@ egui::ComboBox::new(i,label).selected_text(selected_text);
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
-                c.send_viewport_cmd(egui::ViewportCommand::Close);
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                    c.send_viewport_cmd(egui::ViewportCommand::Close);
+                }
             }
             FuncProcId::CopyTextToClipboard => {
                 #[cfg(feature = "puffin")]
@@ -3054,7 +3062,9 @@ egui::ComboBox::new(i,label).selected_text(selected_text);
                     self.end_consume_message()?;
                 }
                 // apply
-                c.copy_text(text);
+                if !self.capture_replay {
+                    c.copy_text(text);
+                }
             }
             FuncProcId::DatePickerButton => {
                 #[cfg(feature = "puffin")]
@@ -4275,24 +4285,25 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-
-                let bg = if (bg_rgba & 0xff) == 0 {
-                    None
-                } else {
-                    Some(egui::Color32::from_rgba_unmultiplied(
-                        ((bg_rgba >> 24) & 0xff) as u8,
-                        ((bg_rgba >> 16) & 0xff) as u8,
-                        ((bg_rgba >> 8) & 0xff) as u8,
-                        (bg_rgba & 0xff) as u8,
-                    ))
-                };
-                self.export_state.lock().expect("svg_export state poisoned").pending =
-                    Some(crate::imzero2::svgexport::ExportRequest {
-                        path: std::path::PathBuf::from(path),
-                        embed_fonts,
-                        scope: crate::imzero2::svgexport::ExportScope::Viewport,
-                        bg,
-                    });
+                if !self.capture_replay {
+                    let bg = if (bg_rgba & 0xff) == 0 {
+                        None
+                    } else {
+                        Some(egui::Color32::from_rgba_unmultiplied(
+                            ((bg_rgba >> 24) & 0xff) as u8,
+                            ((bg_rgba >> 16) & 0xff) as u8,
+                            ((bg_rgba >> 8) & 0xff) as u8,
+                            (bg_rgba & 0xff) as u8,
+                        ))
+                    };
+                    self.export_state.lock().expect("svg_export state poisoned").pending =
+                        Some(crate::imzero2::svgexport::ExportRequest {
+                            path: std::path::PathBuf::from(path),
+                            embed_fonts,
+                            scope: crate::imzero2::svgexport::ExportScope::Viewport,
+                            bg,
+                        });
+                }
             }
             FuncProcId::ExportSvgWindow => {
                 #[cfg(feature = "puffin")]
@@ -4307,33 +4318,35 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let window_mode = if mode == 1 {
-                    crate::imzero2::svgexport::WindowMode::ContentOnly
-                } else {
-                    crate::imzero2::svgexport::WindowMode::Faithful
-                };
-                let bg = if (bg_rgba & 0xff) == 0 {
-                    None
-                } else {
-                    Some(egui::Color32::from_rgba_unmultiplied(
-                        ((bg_rgba >> 24) & 0xff) as u8,
-                        ((bg_rgba >> 16) & 0xff) as u8,
-                        ((bg_rgba >> 8) & 0xff) as u8,
-                        (bg_rgba & 0xff) as u8,
-                    ))
-                };
-                self.export_state.lock().expect("svg_export state poisoned").pending =
-                    Some(crate::imzero2::svgexport::ExportRequest {
-                        path: std::path::PathBuf::from(path),
-                        embed_fonts,
-                        scope: crate::imzero2::svgexport::ExportScope::Window {
-                            id: i,
-                            mode: window_mode,
-                        },
-                        bg,
-                    });
+                    let window_mode = if mode == 1 {
+                        crate::imzero2::svgexport::WindowMode::ContentOnly
+                    } else {
+                        crate::imzero2::svgexport::WindowMode::Faithful
+                    };
+                    let bg = if (bg_rgba & 0xff) == 0 {
+                        None
+                    } else {
+                        Some(egui::Color32::from_rgba_unmultiplied(
+                            ((bg_rgba >> 24) & 0xff) as u8,
+                            ((bg_rgba >> 16) & 0xff) as u8,
+                            ((bg_rgba >> 8) & 0xff) as u8,
+                            (bg_rgba & 0xff) as u8,
+                        ))
+                    };
+                    self.export_state.lock().expect("svg_export state poisoned").pending =
+                        Some(crate::imzero2::svgexport::ExportRequest {
+                            path: std::path::PathBuf::from(path),
+                            embed_fonts,
+                            scope: crate::imzero2::svgexport::ExportScope::Window {
+                                id: i,
+                                mode: window_mode,
+                            },
+                            bg,
+                        });
+                }
             }
             FuncProcId::FetchCommandEnterPressed => {
                 #[cfg(feature = "puffin")]
@@ -4342,19 +4355,21 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let shift = c.input_mut(|i| {
-                    i.consume_key(
-                        egui::Modifiers::COMMAND | egui::Modifiers::SHIFT,
-                        egui::Key::Enter,
-                    )
-                });
-                let plain =
-                    c.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Enter));
-                self.io.write_plain_b(plain)?;
-                self.io.write_plain_b(shift)?;
-                self.io.flush()?;
+                    let shift = c.input_mut(|i| {
+                        i.consume_key(
+                            egui::Modifiers::COMMAND | egui::Modifiers::SHIFT,
+                            egui::Key::Enter,
+                        )
+                    });
+                    let plain =
+                        c.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Enter));
+                    self.io.write_plain_b(plain)?;
+                    self.io.write_plain_b(shift)?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchF1KeyPressed => {
                 #[cfg(feature = "puffin")]
@@ -4363,11 +4378,14 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let pressed = c.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F1));
-                self.io.write_plain_b(pressed)?;
-                self.io.flush()?;
+                    let pressed =
+                        c.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F1));
+                    self.io.write_plain_b(pressed)?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchF2KeyPressed => {
                 #[cfg(feature = "puffin")]
@@ -4376,11 +4394,14 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let pressed = c.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F2));
-                self.io.write_plain_b(pressed)?;
-                self.io.flush()?;
+                    let pressed =
+                        c.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F2));
+                    self.io.write_plain_b(pressed)?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchFrameMetrics => {
                 #[cfg(feature = "puffin")]
@@ -4389,11 +4410,13 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                self.io.write_plain_u64(self.last_interpret_us as u64)?;
-                self.io.write_plain_u64(self.last_pass_nr)?;
-                self.io.flush()?;
+                    self.io.write_plain_u64(self.last_interpret_us as u64)?;
+                    self.io.write_plain_u64(self.last_pass_nr)?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchPixelsPerPoint => {
                 #[cfg(feature = "puffin")]
@@ -4402,10 +4425,12 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                self.io.write_plain_f32(c.pixels_per_point())?;
-                self.io.flush()?;
+                    self.io.write_plain_f32(c.pixels_per_point())?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR10 => {
                 #[cfg(feature = "puffin")]
@@ -4414,11 +4439,15 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                self.io.write_plain_u64h(self.r10_true_ids.len(), self.r10_true_ids.drain(..))?;
-                self.io.write_plain_u64h(self.r10_false_ids.len(), self.r10_false_ids.drain(..))?;
-                self.io.flush()?;
+                    self.io
+                        .write_plain_u64h(self.r10_true_ids.len(), self.r10_true_ids.drain(..))?;
+                    self.io
+                        .write_plain_u64h(self.r10_false_ids.len(), self.r10_false_ids.drain(..))?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR16ScrollDelta => {
                 #[cfg(feature = "puffin")]
@@ -4427,12 +4456,14 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let d = c.input(|i| i.smooth_scroll_delta);
-                self.io.write_plain_f32(d.x)?;
-                self.io.write_plain_f32(d.y)?;
-                self.io.flush()?;
+                    let d = c.input(|i| i.smooth_scroll_delta);
+                    self.io.write_plain_f32(d.x)?;
+                    self.io.write_plain_f32(d.y)?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR17Modifiers => {
                 #[cfg(feature = "puffin")]
@@ -4441,15 +4472,17 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let m = c.input(|i| i.modifiers);
-                self.io.write_plain_b(m.alt)?;
-                self.io.write_plain_b(m.ctrl)?;
-                self.io.write_plain_b(m.shift)?;
-                self.io.write_plain_b(m.mac_cmd)?;
-                self.io.write_plain_b(m.command)?;
-                self.io.flush()?;
+                    let m = c.input(|i| i.modifiers);
+                    self.io.write_plain_b(m.alt)?;
+                    self.io.write_plain_b(m.ctrl)?;
+                    self.io.write_plain_b(m.shift)?;
+                    self.io.write_plain_b(m.mac_cmd)?;
+                    self.io.write_plain_b(m.command)?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR18AvailableSize => {
                 #[cfg(feature = "puffin")]
@@ -4458,11 +4491,13 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                self.io.write_plain_f32(self.r18_avail_w)?;
-                self.io.write_plain_f32(self.r18_avail_h)?;
-                self.io.flush()?;
+                    self.io.write_plain_f32(self.r18_avail_w)?;
+                    self.io.write_plain_f32(self.r18_avail_h)?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR19ZoomDelta => {
                 #[cfg(feature = "puffin")]
@@ -4471,11 +4506,13 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let z = c.input(|i| i.zoom_delta());
-                self.io.write_plain_f32(z)?;
-                self.io.flush()?;
+                    let z = c.input(|i| i.zoom_delta());
+                    self.io.write_plain_f32(z)?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR20Pointer => {
                 #[cfg(feature = "puffin")]
@@ -4484,17 +4521,19 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let pos = c.input(|i| i.pointer.latest_pos());
-                let (px, py, valid) = match pos {
-                    Some(p) => (p.x, p.y, true),
-                    None => (f32::NAN, f32::NAN, false),
-                };
-                self.io.write_plain_f32(px)?;
-                self.io.write_plain_f32(py)?;
-                self.io.write_plain_b(valid)?;
-                self.io.flush()?;
+                    let pos = c.input(|i| i.pointer.latest_pos());
+                    let (px, py, valid) = match pos {
+                        Some(p) => (p.x, p.y, true),
+                        None => (f32::NAN, f32::NAN, false),
+                    };
+                    self.io.write_plain_f32(px)?;
+                    self.io.write_plain_f32(py)?;
+                    self.io.write_plain_b(valid)?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR21UiRects => {
                 #[cfg(feature = "puffin")]
@@ -4503,19 +4542,21 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let len = self.r21_ui_rect_seqs.len();
-                debug_assert_eq!(len, self.r21_ui_rect_min_x.len());
-                debug_assert_eq!(len, self.r21_ui_rect_min_y.len());
-                debug_assert_eq!(len, self.r21_ui_rect_max_x.len());
-                debug_assert_eq!(len, self.r21_ui_rect_max_y.len());
-                self.io.write_plain_u64h(len, self.r21_ui_rect_seqs.drain(..))?;
-                self.io.write_plain_f32h(len, self.r21_ui_rect_min_x.drain(..))?;
-                self.io.write_plain_f32h(len, self.r21_ui_rect_min_y.drain(..))?;
-                self.io.write_plain_f32h(len, self.r21_ui_rect_max_x.drain(..))?;
-                self.io.write_plain_f32h(len, self.r21_ui_rect_max_y.drain(..))?;
-                self.io.flush()?;
+                    let len = self.r21_ui_rect_seqs.len();
+                    debug_assert_eq!(len, self.r21_ui_rect_min_x.len());
+                    debug_assert_eq!(len, self.r21_ui_rect_min_y.len());
+                    debug_assert_eq!(len, self.r21_ui_rect_max_x.len());
+                    debug_assert_eq!(len, self.r21_ui_rect_max_y.len());
+                    self.io.write_plain_u64h(len, self.r21_ui_rect_seqs.drain(..))?;
+                    self.io.write_plain_f32h(len, self.r21_ui_rect_min_x.drain(..))?;
+                    self.io.write_plain_f32h(len, self.r21_ui_rect_min_y.drain(..))?;
+                    self.io.write_plain_f32h(len, self.r21_ui_rect_max_x.drain(..))?;
+                    self.io.write_plain_f32h(len, self.r21_ui_rect_max_y.drain(..))?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR22StarvedTextures => {
                 #[cfg(feature = "puffin")]
@@ -4524,11 +4565,13 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let len = self.r22_starved_texture_ids.len();
-                self.io.write_plain_u64h(len, self.r22_starved_texture_ids.drain(..))?;
-                self.io.flush()?;
+                    let len = self.r22_starved_texture_ids.len();
+                    self.io.write_plain_u64h(len, self.r22_starved_texture_ids.drain(..))?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR23CanvasWheel => {
                 #[cfg(feature = "puffin")]
@@ -4537,21 +4580,23 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let len = self.r23_canvas_wheel_ids.len();
-                debug_assert_eq!(len, self.r23_canvas_wheel_scroll_x.len());
-                debug_assert_eq!(len, self.r23_canvas_wheel_scroll_y.len());
-                debug_assert_eq!(len, self.r23_canvas_wheel_zoom.len());
-                debug_assert_eq!(len, self.r23_canvas_wheel_hover_x.len());
-                debug_assert_eq!(len, self.r23_canvas_wheel_hover_y.len());
-                self.io.write_plain_u64h(len, self.r23_canvas_wheel_ids.drain(..))?;
-                self.io.write_plain_f32h(len, self.r23_canvas_wheel_scroll_x.drain(..))?;
-                self.io.write_plain_f32h(len, self.r23_canvas_wheel_scroll_y.drain(..))?;
-                self.io.write_plain_f32h(len, self.r23_canvas_wheel_zoom.drain(..))?;
-                self.io.write_plain_f32h(len, self.r23_canvas_wheel_hover_x.drain(..))?;
-                self.io.write_plain_f32h(len, self.r23_canvas_wheel_hover_y.drain(..))?;
-                self.io.flush()?;
+                    let len = self.r23_canvas_wheel_ids.len();
+                    debug_assert_eq!(len, self.r23_canvas_wheel_scroll_x.len());
+                    debug_assert_eq!(len, self.r23_canvas_wheel_scroll_y.len());
+                    debug_assert_eq!(len, self.r23_canvas_wheel_zoom.len());
+                    debug_assert_eq!(len, self.r23_canvas_wheel_hover_x.len());
+                    debug_assert_eq!(len, self.r23_canvas_wheel_hover_y.len());
+                    self.io.write_plain_u64h(len, self.r23_canvas_wheel_ids.drain(..))?;
+                    self.io.write_plain_f32h(len, self.r23_canvas_wheel_scroll_x.drain(..))?;
+                    self.io.write_plain_f32h(len, self.r23_canvas_wheel_scroll_y.drain(..))?;
+                    self.io.write_plain_f32h(len, self.r23_canvas_wheel_zoom.drain(..))?;
+                    self.io.write_plain_f32h(len, self.r23_canvas_wheel_hover_x.drain(..))?;
+                    self.io.write_plain_f32h(len, self.r23_canvas_wheel_hover_y.drain(..))?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR24CanvasPointers => {
                 #[cfg(feature = "puffin")]
@@ -4560,21 +4605,23 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let len = self.r24_canvas_pointer_ids.len();
-                debug_assert_eq!(len, self.r24_canvas_pointer_origin_x.len());
-                debug_assert_eq!(len, self.r24_canvas_pointer_origin_y.len());
-                debug_assert_eq!(len, self.r24_canvas_pointer_pos_x.len());
-                debug_assert_eq!(len, self.r24_canvas_pointer_pos_y.len());
-                debug_assert_eq!(len, self.r24_canvas_pointer_mods.len());
-                self.io.write_plain_u64h(len, self.r24_canvas_pointer_ids.drain(..))?;
-                self.io.write_plain_f32h(len, self.r24_canvas_pointer_origin_x.drain(..))?;
-                self.io.write_plain_f32h(len, self.r24_canvas_pointer_origin_y.drain(..))?;
-                self.io.write_plain_f32h(len, self.r24_canvas_pointer_pos_x.drain(..))?;
-                self.io.write_plain_f32h(len, self.r24_canvas_pointer_pos_y.drain(..))?;
-                self.io.write_plain_u8h(len, self.r24_canvas_pointer_mods.drain(..))?;
-                self.io.flush()?;
+                    let len = self.r24_canvas_pointer_ids.len();
+                    debug_assert_eq!(len, self.r24_canvas_pointer_origin_x.len());
+                    debug_assert_eq!(len, self.r24_canvas_pointer_origin_y.len());
+                    debug_assert_eq!(len, self.r24_canvas_pointer_pos_x.len());
+                    debug_assert_eq!(len, self.r24_canvas_pointer_pos_y.len());
+                    debug_assert_eq!(len, self.r24_canvas_pointer_mods.len());
+                    self.io.write_plain_u64h(len, self.r24_canvas_pointer_ids.drain(..))?;
+                    self.io.write_plain_f32h(len, self.r24_canvas_pointer_origin_x.drain(..))?;
+                    self.io.write_plain_f32h(len, self.r24_canvas_pointer_origin_y.drain(..))?;
+                    self.io.write_plain_f32h(len, self.r24_canvas_pointer_pos_x.drain(..))?;
+                    self.io.write_plain_f32h(len, self.r24_canvas_pointer_pos_y.drain(..))?;
+                    self.io.write_plain_u8h(len, self.r24_canvas_pointer_mods.drain(..))?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR25EtColWidths => {
                 #[cfg(feature = "puffin")]
@@ -4583,14 +4630,16 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let len = self.r25_et_colwidth_ids.len();
-                let vlen = self.r25_et_colwidth_values.len();
-                self.io.write_plain_u64h(len, self.r25_et_colwidth_ids.drain(..))?;
-                self.io.write_plain_u64h(len, self.r25_et_colwidth_counts.drain(..))?;
-                self.io.write_plain_f32h(vlen, self.r25_et_colwidth_values.drain(..))?;
-                self.io.flush()?;
+                    let len = self.r25_et_colwidth_ids.len();
+                    let vlen = self.r25_et_colwidth_values.len();
+                    self.io.write_plain_u64h(len, self.r25_et_colwidth_ids.drain(..))?;
+                    self.io.write_plain_u64h(len, self.r25_et_colwidth_counts.drain(..))?;
+                    self.io.write_plain_f32h(vlen, self.r25_et_colwidth_values.drain(..))?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR26KeyCaptures => {
                 #[cfg(feature = "puffin")]
@@ -4599,17 +4648,19 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let len = self.r26_key_capture_ids.len();
-                debug_assert_eq!(len, self.r26_key_capture_codes.len());
-                debug_assert_eq!(len, self.r26_key_capture_mods.len());
-                debug_assert_eq!(len, self.r26_key_capture_edges.len());
-                self.io.write_plain_u64h(len, self.r26_key_capture_ids.drain(..))?;
-                self.io.write_plain_u8h(len, self.r26_key_capture_codes.drain(..))?;
-                self.io.write_plain_u8h(len, self.r26_key_capture_mods.drain(..))?;
-                self.io.write_plain_u8h(len, self.r26_key_capture_edges.drain(..))?;
-                self.io.flush()?;
+                    let len = self.r26_key_capture_ids.len();
+                    debug_assert_eq!(len, self.r26_key_capture_codes.len());
+                    debug_assert_eq!(len, self.r26_key_capture_mods.len());
+                    debug_assert_eq!(len, self.r26_key_capture_edges.len());
+                    self.io.write_plain_u64h(len, self.r26_key_capture_ids.drain(..))?;
+                    self.io.write_plain_u8h(len, self.r26_key_capture_codes.drain(..))?;
+                    self.io.write_plain_u8h(len, self.r26_key_capture_mods.drain(..))?;
+                    self.io.write_plain_u8h(len, self.r26_key_capture_edges.drain(..))?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR27Windows => {
                 #[cfg(feature = "puffin")]
@@ -4618,34 +4669,41 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let len = self.r27_windows.len();
-                let order: Vec<egui::Id> = c.memory(|m| m.layer_ids().map(|l| l.id).collect());
-                let z: Vec<u32> = self
-                    .r27_windows
-                    .iter()
-                    .map(|r| {
-                        order.iter().rposition(|id| id.value() == r.id).map_or(0, |p| p as u32 + 1)
-                    })
-                    .collect();
-                self.io.write_plain_u64h(len, self.r27_windows.iter().map(|r| r.id))?;
-                self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.rect.min.x))?;
-                self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.rect.min.y))?;
-                self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.rect.max.x))?;
-                self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.rect.max.y))?;
-                self.io.write_plain_u32h(len, z)?;
-                self.io
-                    .write_plain_u8h(len, self.r27_windows.iter().map(|r| u8::from(r.collapsed)))?;
-                self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.need.x))?;
-                self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.need.y))?;
-                self.r27_windows.clear();
-                let w = self.r27_work_rect;
-                self.io.write_plain_f32(w.min.x)?;
-                self.io.write_plain_f32(w.min.y)?;
-                self.io.write_plain_f32(w.max.x)?;
-                self.io.write_plain_f32(w.max.y)?;
-                self.io.flush()?;
+                    let len = self.r27_windows.len();
+                    let order: Vec<egui::Id> = c.memory(|m| m.layer_ids().map(|l| l.id).collect());
+                    let z: Vec<u32> = self
+                        .r27_windows
+                        .iter()
+                        .map(|r| {
+                            order
+                                .iter()
+                                .rposition(|id| id.value() == r.id)
+                                .map_or(0, |p| p as u32 + 1)
+                        })
+                        .collect();
+                    self.io.write_plain_u64h(len, self.r27_windows.iter().map(|r| r.id))?;
+                    self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.rect.min.x))?;
+                    self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.rect.min.y))?;
+                    self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.rect.max.x))?;
+                    self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.rect.max.y))?;
+                    self.io.write_plain_u32h(len, z)?;
+                    self.io.write_plain_u8h(
+                        len,
+                        self.r27_windows.iter().map(|r| u8::from(r.collapsed)),
+                    )?;
+                    self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.need.x))?;
+                    self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.need.y))?;
+                    self.r27_windows.clear();
+                    let w = self.r27_work_rect;
+                    self.io.write_plain_f32(w.min.x)?;
+                    self.io.write_plain_f32(w.min.y)?;
+                    self.io.write_plain_f32(w.max.x)?;
+                    self.io.write_plain_f32(w.max.y)?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR7 => {
                 #[cfg(feature = "puffin")]
@@ -4654,12 +4712,14 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let len = self.r7_ids.len();
-                self.io.write_plain_u64h(len, self.r7_ids.drain(..))?;
-                self.io.write_plain_u32h(len, self.r7_responses.drain(..).map(|c| c.bits()))?;
-                self.io.flush()?;
+                    let len = self.r7_ids.len();
+                    self.io.write_plain_u64h(len, self.r7_ids.drain(..))?;
+                    self.io.write_plain_u32h(len, self.r7_responses.drain(..).map(|c| c.bits()))?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR9EtPrefetch => {
                 #[cfg(feature = "puffin")]
@@ -4668,12 +4728,14 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let len = self.r9_et_prefetch_ids.len();
-                self.io.write_plain_u64h(len, self.r9_et_prefetch_ids.drain(..))?;
-                self.io.write_plain_u64h(len * 5, self.r9_et_prefetch_values.drain(..))?;
-                self.io.flush()?;
+                    let len = self.r9_et_prefetch_ids.len();
+                    self.io.write_plain_u64h(len, self.r9_et_prefetch_ids.drain(..))?;
+                    self.io.write_plain_u64h(len * 5, self.r9_et_prefetch_values.drain(..))?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR9F64 => {
                 #[cfg(feature = "puffin")]
@@ -4682,12 +4744,14 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let len = self.r9_f64_ids.len();
-                self.io.write_plain_u64h(len, self.r9_f64_ids.drain(..))?;
-                self.io.write_plain_f64h(len, self.r9_f64_values.drain(..))?;
-                self.io.flush()?;
+                    let len = self.r9_f64_ids.len();
+                    self.io.write_plain_u64h(len, self.r9_f64_ids.drain(..))?;
+                    self.io.write_plain_f64h(len, self.r9_f64_values.drain(..))?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR9I64 => {
                 #[cfg(feature = "puffin")]
@@ -4696,12 +4760,14 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let len = self.r9_i64_ids.len();
-                self.io.write_plain_u64h(len, self.r9_i64_ids.drain(..))?;
-                self.io.write_plain_i64h(len, self.r9_i64_values.drain(..))?;
-                self.io.flush()?;
+                    let len = self.r9_i64_ids.len();
+                    self.io.write_plain_u64h(len, self.r9_i64_ids.drain(..))?;
+                    self.io.write_plain_i64h(len, self.r9_i64_values.drain(..))?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR9S => {
                 #[cfg(feature = "puffin")]
@@ -4710,12 +4776,14 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let len = self.r9_s_ids.len();
-                self.io.write_plain_u64h(len, self.r9_s_ids.drain(..))?;
-                self.io.write_plain_sh(len, self.r9_s_values.drain(..))?;
-                self.io.flush()?;
+                    let len = self.r9_s_ids.len();
+                    self.io.write_plain_u64h(len, self.r9_s_ids.drain(..))?;
+                    self.io.write_plain_sh(len, self.r9_s_values.drain(..))?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR9U64 => {
                 #[cfg(feature = "puffin")]
@@ -4724,12 +4792,14 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let len = self.r9_u64_ids.len();
-                self.io.write_plain_u64h(len, self.r9_u64_ids.drain(..))?;
-                self.io.write_plain_u64h(len, self.r9_u64_values.drain(..))?;
-                self.io.flush()?;
+                    let len = self.r9_u64_ids.len();
+                    self.io.write_plain_u64h(len, self.r9_u64_ids.drain(..))?;
+                    self.io.write_plain_u64h(len, self.r9_u64_values.drain(..))?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchVideoCapabilities => {
                 #[cfg(feature = "puffin")]
@@ -4738,12 +4808,14 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let len = self.video_cap_ids.len();
-                self.io.write_plain_u64h(len, self.video_cap_ids.drain(..))?;
-                self.io.write_plain_u32h(len, self.video_cap_flags.drain(..))?;
-                self.io.flush()?;
+                    let len = self.video_cap_ids.len();
+                    self.io.write_plain_u64h(len, self.video_cap_ids.drain(..))?;
+                    self.io.write_plain_u32h(len, self.video_cap_flags.drain(..))?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchVideoStreamInfo => {
                 #[cfg(feature = "puffin")]
@@ -4752,11 +4824,13 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let len = self.video_stream_info.len();
-                self.io.write_plain_u64h(len, self.video_stream_info.drain(..))?;
-                self.io.flush()?;
+                    let len = self.video_stream_info.len();
+                    self.io.write_plain_u64h(len, self.video_stream_info.drain(..))?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::Frame => {
                 #[cfg(feature = "puffin")]
@@ -7352,7 +7426,9 @@ egui::Panel::top(i);
                     self.end_consume_message()?;
                 }
                 // apply
-                self.prepare_next_frame();
+                if !self.capture_replay {
+                    self.prepare_next_frame();
+                }
             }
             FuncProcId::ProgressBar => {
                 #[cfg(feature = "puffin")]
@@ -7541,9 +7617,13 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                c.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::new(path)));
+                    c.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::new(
+                        path,
+                    )));
+                }
             }
             FuncProcId::RequestScreenshotRect => {
                 #[cfg(feature = "puffin")]
@@ -7558,16 +7638,20 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let req = crate::imzero2::interpreter::ScreenshotRequest {
-                    path,
-                    rect: Some(egui::Rect::from_min_size(
-                        egui::pos2(rect_x, rect_y),
-                        egui::vec2(rect_w, rect_h),
-                    )),
-                };
-                c.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::new(req)));
+                    let req = crate::imzero2::interpreter::ScreenshotRequest {
+                        path,
+                        rect: Some(egui::Rect::from_min_size(
+                            egui::pos2(rect_x, rect_y),
+                            egui::vec2(rect_w, rect_h),
+                        )),
+                    };
+                    c.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::new(
+                        req,
+                    )));
+                }
             }
             FuncProcId::ScalarSize => {
                 #[cfg(feature = "puffin")]
@@ -7912,8 +7996,9 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-
-                self.animation_freeze = freeze;
+                if !self.capture_replay {
+                    self.animation_freeze = freeze;
+                }
             }
             FuncProcId::SetIdsDensity => {
                 #[cfg(feature = "puffin")]
@@ -7945,7 +8030,9 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                self.video_pipeline_request = Some(codec as u8);
+                if !self.capture_replay {
+                    self.video_pipeline_request = Some(codec as u8);
+                }
             }
             FuncProcId::SetWindowCollapsed => {
                 #[cfg(feature = "puffin")]
@@ -10112,12 +10199,17 @@ egui::Window::new(label).id(i);
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                self.pending_window_place.insert(
-                    i.value(),
-                    egui::Rect::from_min_size(egui::pos2(pos_x, pos_y), egui::vec2(width, height)),
-                );
+                    self.pending_window_place.insert(
+                        i.value(),
+                        egui::Rect::from_min_size(
+                            egui::pos2(pos_x, pos_y),
+                            egui::vec2(width, height),
+                        ),
+                    );
+                }
             }
 
             #[allow(unreachable_patterns)]

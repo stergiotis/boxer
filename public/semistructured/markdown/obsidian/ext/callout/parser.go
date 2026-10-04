@@ -70,6 +70,11 @@ func (inst *transformer) tryConvert(bq *ast.Blockquote, source []byte) {
 		Foldable:    foldable,
 		DefaultOpen: defaultOpen,
 	}
+	// The callout stands where the blockquote stood; carry its position so
+	// a consumer mapping nodes to source (mdspan) finds the `> [!type]` line.
+	if p := bq.Pos(); p >= 0 {
+		callout.SetPos(p)
+	}
 
 	// Move all children from the blockquote to the callout.
 	// Skip the first text segment of the first paragraph (the [!type] line).

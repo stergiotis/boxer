@@ -47,6 +47,35 @@ type ProcedureFeaturesSpec struct {
 	BlockIterator bool
 }
 
+// EffectE classifies what a node's client apply code reaches beyond the UI
+// it is given (ADR-0281 §SD5). A capture replay re-runs recorded opcodes
+// into a separate context; host-effect apply code must not run then.
+type EffectE uint8
+
+const (
+	// EffectUnset is the zero value. A procedural node must not keep it; a
+	// builder factory with it draws (EffectLocal), by its kind.
+	EffectUnset EffectE = 0
+	// EffectLocal reaches only the egui context and Ui it is given and the
+	// interpreter's per-frame registers.
+	EffectLocal EffectE = 1
+	// EffectHost reaches anything else: files, the host's viewport or
+	// clipboard, the video pipeline, interpreter state that outlives a frame,
+	// or the pipe back to the server. Fetchers are host-effect by their kind.
+	EffectHost EffectE = 2
+)
+
+func (inst EffectE) String() string {
+	switch inst {
+	case EffectLocal:
+		return "local"
+	case EffectHost:
+		return "host"
+	default:
+		return "unset"
+	}
+}
+
 // ColorArgKindE marks whether an argument is to be surfaced as a unified
 // color type in generated Go signatures. Parallel-slice entries on the
 // argument specs carry one value per argument position; the zero value
@@ -135,6 +164,7 @@ type BuilderFactoryNode struct {
 	ApplyCode         CodeHolder
 	ReturnType        TypeI
 	DeferredBlockMaps []DeferredBlockMapSpec
+	Effect            EffectE
 }
 
 var _ NodeI = (*BuilderFactoryNode)(nil)
@@ -146,6 +176,7 @@ type ProceduralNode struct {
 	Settings          ProcedureFeaturesSpec
 	ApplyCode         CodeHolder
 	ReturnType        TypeI
+	Effect            EffectE
 }
 
 var _ NodeI = (*ProceduralNode)(nil)
@@ -163,18 +194,22 @@ type NodeI interface {
 }
 
 type BuilderFactoryCodeGenExprs struct {
-	InterpreterLifetime           string
-	Id                            string
-	Instance                      string
-	SendMessage                   string
-	MarkReturn                    string
-	FuncProcIdOuter               string
-	FuncProcIdInner               string
-	MethodProcId                  string
-	EguiContext                   string
-	EguiUiOptionalOuter           string
-	EguiUiOptionalInner           string
-	EndConsumeFrameIfNecessary    string
+	InterpreterLifetime        string
+	Id                         string
+	Instance                   string
+	SendMessage                string
+	MarkReturn                 string
+	FuncProcIdOuter            string
+	FuncProcIdInner            string
+	MethodProcId               string
+	EguiContext                string
+	EguiUiOptionalOuter        string
+	EguiUiOptionalInner        string
+	EndConsumeFrameIfNecessary string
+	// HostEffectsSuppressed is a boolean expression, true while a capture
+	// replay runs; host-effect apply code is guarded by its negation
+	// (ADR-0281 §SD5).
+	HostEffectsSuppressed         string
 	InterpreterDepth              string
 	InvokeInterpreterInner        string
 	AtomsRegister0Transfer        string

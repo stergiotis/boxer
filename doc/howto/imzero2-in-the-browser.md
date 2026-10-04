@@ -46,9 +46,20 @@ trial, not this page.
    WASI shim and the viewer page beside them. Fonts follow
    `rust/imzero2/font-resolve.sh`; set `MAIN_FONT` and friends to pin faces,
    or pass `--fonts <dir>` to `bundle`. A slot with no file is left to egui's
-   default face. Building the Rust host needs cargo and the
-   `wasm32-unknown-unknown` target; `bundle --host <file>` takes a prebuilt
-   one instead.
+   default face. Inside boxer the Rust host is built from source, which
+   needs cargo and the `wasm32-unknown-unknown` target; `bundle --host
+   <file>` takes a prebuilt one instead. From a module that depends on boxer,
+   `bundle` fetches the host published for its pin by the digest in
+   `browserhost.sum` (`--hostFrom` chooses; `BOXER_TAB_HOST_URL` points at a
+   mirror).
+
+   After changing the browser host's sources or regenerating the bindings,
+   refresh the recorded digest, or the `tab-host` workflow and a tabhost test
+   fail:
+
+   ```bash
+   go run ./public/thestack/cmd/imzero2tab hostdigest --write
+   ```
 
    ```bash
    scripts/dev/build_tab_bundle.sh /tmp/tab

@@ -4,11 +4,15 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256" //boxer:lint disable=CS009 reason="the published browser host is addressed by SHA-256 so that CI and anyone fetching it can check it with stock sha256sum"
+	"encoding/hex"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime/debug"
 	"strings"
+	"time"
 
 	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v2"
@@ -49,7 +53,8 @@ func bundleCommand() (cmd *cli.Command) {
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "out", Required: true, Usage: "the bundle directory to write"},
 			&cli.StringFlag{Name: "pkg", Usage: "the main package to build for the tab; empty is this binary's own"},
-			&cli.StringFlag{Name: "host", Usage: "a prebuilt imzero2_browser.wasm; empty builds it from the boxer module's sources (needs cargo and the wasm32-unknown-unknown target)"},
+			&cli.StringFlag{Name: "host", Usage: "a prebuilt imzero2_browser.wasm, used as given; empty obtains it per --hostFrom"},
+			&cli.StringFlag{Name: "hostFrom", Value: hostFromAuto, Usage: "auto: build from source inside boxer, fetch by the recorded digest from any other module (building when the fetch fails); fetch; source (needs cargo and the wasm32-unknown-unknown target)"},
 			&cli.StringFlag{Name: "fonts", Usage: "a directory holding main.ttf, mono.ttf, phosphor.ttf and fallback.ttf (each optional); empty resolves them as boxer's launchers do"},
 			&cli.BoolFlag{Name: "withAssets", Usage: "also write the page, worker and shim, for serving the bundle with something other than this binary"},
 		},
@@ -81,7 +86,7 @@ func bundle(ctx *cli.Context) (err error) {
 	if err = buildGoModule(mainDir, pkg, filepath.Join(out, "imzero2tab.wasm")); err != nil {
 		return
 	}
-	if err = placeHost(ctx.String("host"), boxerDir, mainDir, filepath.Join(out, "imzero2_browser.wasm")); err != nil {
+	if err = placeHost(ctx.String("host"), ctx.String("hostFrom"), boxerDir, mainDir, filepath.Join(out, "imzero2_browser.wasm")); err != nil {
 		return
 	}
 	placeFonts(ctx.String("fonts"), boxerDir, filepath.Join(out, "fonts"))
@@ -155,15 +160,64 @@ func buildGoModule(mainDir string, pkg string, dst string) (err error) {
 	return
 }
 
-// placeHost copies a prebuilt browser host, or builds one from the boxer
-// module's sources. Building inside boxer itself keeps the script's own
-// target directory; from another module, boxer's directory is the read-only
-// module cache, so the build goes to the user's cache. A target directory the
-// caller set in IMZERO2_BROWSER_TARGET_DIR wins over both.
-func placeHost(prebuilt string, boxerDir string, mainDir string, dst string) (err error) {
+// The ways bundle obtains the browser host (--hostFrom).
+const (
+	hostFromAuto   = "auto"
+	hostFromFetch  = "fetch"
+	hostFromSource = "source"
+)
+
+// placeHost puts the browser host at dst (ADR-0278 SD5, proposed): the file
+// --host names, as given; else fetched by the digest browserhost.sum records,
+// or built from the boxer module's sources. auto builds when the module being
+// bundled is boxer itself — a developer changing the host wants that build,
+// not the published one — and fetches otherwise, building when the fetch
+// fails. A fetched host is always checked against the digest; a built one
+// that differs from it is reported, since the tree may be ahead of its
+// recorded digest.
+func placeHost(prebuilt string, from string, boxerDir string, mainDir string, dst string) (err error) {
 	if prebuilt != "" {
 		return copyFile(prebuilt, dst)
 	}
+	sum, err := recordedHostSum()
+	if err != nil {
+		return
+	}
+	insideBoxer := filepath.Clean(boxerDir) == filepath.Clean(mainDir)
+	switch from {
+	case hostFromSource:
+	case hostFromAuto, hostFromFetch:
+		if from == hostFromFetch || !insideBoxer {
+			cache, cErr := os.UserCacheDir()
+			if cErr != nil {
+				return eh.Errorf("bundle: no cache directory for the browser host: %w", cErr)
+			}
+			fErr := fetchHost(HostURL.Get(), sum.sha256, filepath.Join(cache, "boxer", "tabhost", "hosts"), dst)
+			if fErr == nil || from == hostFromFetch {
+				return fErr
+			}
+			log.Warn().Err(fErr).Msg("bundle: the published browser host could not be fetched; building it from source")
+		}
+	default:
+		return eb.Build().Str("hostFrom", from).Errorf("bundle: --hostFrom is auto, fetch or source")
+	}
+	built, err := buildHost(boxerDir, mainDir)
+	if err != nil {
+		return
+	}
+	if got, dErr := fileSha256(built); dErr == nil && got != sum.sha256 {
+		log.Warn().Str("built", got).Str("recorded", sum.sha256).
+			Msg("bundle: the browser host built from this tree differs from browserhost.sum; after changing its sources, refresh the file with `hostdigest --write`")
+	}
+	return copyFile(built, dst)
+}
+
+// buildHost builds the browser host from the boxer module's sources and
+// returns the built file. Inside boxer it keeps the script's own target
+// directory; from another module boxer's directory is the read-only module
+// cache, so the build goes to the user's cache. A target directory the caller
+// set in IMZERO2_BROWSER_TARGET_DIR wins over both.
+func buildHost(boxerDir string, mainDir string) (path string, err error) {
 	script := filepath.Join(boxerDir, "rust", "imzero2", "build_rust_browser.sh")
 	targetDir := filepath.Join(boxerDir, "rust", "imzero2", "target", "browser")
 	env := os.Environ() //boxer:lint disable=CS011 reason="forwards the ambient process environment into the cargo build of the browser host"
@@ -172,21 +226,77 @@ func placeHost(prebuilt string, boxerDir string, mainDir string, dst string) (er
 	} else if filepath.Clean(boxerDir) != filepath.Clean(mainDir) {
 		cache, cErr := os.UserCacheDir()
 		if cErr != nil {
-			return eh.Errorf("bundle: no cache directory for the Rust build: %w", cErr)
+			return "", eh.Errorf("bundle: no cache directory for the Rust build: %w", cErr)
 		}
 		targetDir = filepath.Join(cache, "boxer", "tabhost", "rust-target")
 		env = append(env, "IMZERO2_BROWSER_TARGET_DIR="+targetDir)
 	}
 	cmd, err := extbin.Bash.Command(context.Background(), extbin.Opts{Env: env}, script)
 	if err != nil {
-		return eh.Errorf("bundle: bash: %w", err)
+		return "", eh.Errorf("bundle: bash: %w", err)
 	}
 	cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
 	log.Info().Str("targetDir", targetDir).Msg("bundle: the Rust browser host (wasm32 cdylib), from source")
 	if err = cmd.Run(); err != nil {
-		return eh.Errorf("bundle: build the browser host (or pass --host): %w", err)
+		return "", eh.Errorf("bundle: build the browser host (or pass --host): %w", err)
 	}
-	return copyFile(filepath.Join(targetDir, "wasm32-unknown-unknown", "release", "imzero2_browser.wasm"), dst)
+	return filepath.Join(targetDir, "wasm32-unknown-unknown", "release", "imzero2_browser.wasm"), nil
+}
+
+// maxHostBytes bounds a fetched host; the real one is about 8 MB.
+const maxHostBytes = 64 << 20
+
+// fetchHost places the host with digest sha at dst: from cacheDir when a file
+// there still matches, else from base+sha+".wasm", checked and then cached.
+func fetchHost(base string, sha string, cacheDir string, dst string) (err error) {
+	cached := filepath.Join(cacheDir, sha+".wasm")
+	if got, cErr := fileSha256(cached); cErr == nil && got == sha {
+		log.Info().Str("sha256", sha).Msg("bundle: the Rust browser host, from the cache")
+		return copyFile(cached, dst)
+	}
+	url := strings.TrimSuffix(base, "/") + "/" + sha + ".wasm"
+	log.Info().Str("url", url).Msg("bundle: the Rust browser host, fetched by digest")
+	client := &http.Client{Timeout: 5 * time.Minute}
+	resp, err := client.Get(url) //nolint:gosec // the URL is the configured base plus a hex digest
+	if err != nil {
+		return eb.Build().Str("url", url).Errorf("bundle: fetch the browser host: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return eb.Build().Str("url", url).Int("status", resp.StatusCode).Errorf("bundle: fetch the browser host: not published")
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxHostBytes+1))
+	if err != nil {
+		return eb.Build().Str("url", url).Errorf("bundle: fetch the browser host: %w", err)
+	}
+	if len(body) > maxHostBytes {
+		return eb.Build().Str("url", url).Errorf("bundle: fetch the browser host: larger than any host")
+	}
+	h := sha256.Sum256(body)
+	if got := hex.EncodeToString(h[:]); got != sha {
+		return eb.Build().Str("url", url).Str("got", got).Str("want", sha).Errorf("bundle: the fetched browser host does not match its digest")
+	}
+	if mErr := os.MkdirAll(cacheDir, 0o755); mErr == nil {
+		tmp := cached + ".tmp"
+		if wErr := os.WriteFile(tmp, body, 0o644); wErr == nil {
+			_ = os.Rename(tmp, cached)
+		}
+	}
+	return os.WriteFile(dst, body, 0o644)
+}
+
+// fileSha256 is the hex SHA-256 of a file's contents.
+func fileSha256(path string) (sum string, err error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	defer func() { _ = f.Close() }()
+	h := sha256.New()
+	if _, err = io.Copy(h, f); err != nil {
+		return
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // placeFonts copies the four faces from dir, or from what boxer's resolver

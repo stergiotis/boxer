@@ -87,7 +87,7 @@ func New(opts Options, cliApp *cli.App) (inst *Program) {
 			&cli.BoolFlag{Name: "exitOnReport", Usage: "end after the first POST /report (the trial's browser arms)"},
 		},
 		Action: serve,
-	}, bundleCommand())
+	}, bundleCommand(), hostDigestCommand())
 	registerReactor(inst)
 	return
 }
