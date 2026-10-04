@@ -169,7 +169,12 @@ type ExecOptions struct {
 	// and it goes with readonly = 2 whatever BOXER_PLAY_ALLOW_WRITES says.
 	// A run without it is checked against the window's mark instead
 	// (Client.SetAgentMark).
-	Agent               *app.OnBehalfOf
+	Agent *app.OnBehalfOf
+	// OwnStatement exempts the lane from the window's agent mark: its SQL is
+	// play's own and a looked-up value enters only as a bound parameter,
+	// never as SQL — the Docs pane's documentation lookup. Under a mark it
+	// is still sent read-only; an explicit Agent is still checked.
+	OwnStatement        bool
 	QueryID             string
 	ReplaceRunningQuery bool
 	// Label is the human lane name ("main", "map", "diagnostics", …) the
@@ -1057,6 +1062,13 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 		req.Settings["readonly"] = "2"
 	}
 	agent := inst.agentMark.Load()
+	if agent != nil && opts != nil && opts.OwnStatement {
+		// Nothing the task wrote reaches this statement as SQL (ADR-0270,
+		// update of 2026-10-04), so the grant does not bound it; it still
+		// cannot write.
+		agent = nil
+		req.Settings["readonly"] = "2"
+	}
 	if opts != nil && opts.Agent != nil {
 		agent = opts.Agent
 	}

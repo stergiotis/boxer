@@ -430,6 +430,19 @@ reports it only once one has measured this buffer, and says so;
 `validate_sql` reports a statement's failed rewrites without it. Marked
 untrusted: server diagnostics quote the statement and its data.
 
+
+### 2026-10-04 — the documentation lookup is not bound by the mark
+
+SD2 checks every lane of a window that carries a task's mark, because
+those lanes run SQL derived from the task's input. The Docs pane's lookup
+does not: its statement is play's own and the looked-up name enters only as
+a bound parameter. Checked anyway, it failed under any grant that did not
+list the endpoint — an agent working over `keelson('…')` tables lost the
+Docs pane. A lane may now declare its statement its own
+(`ExecOptions.OwnStatement`); under a mark it is sent without the grant
+check and with `readonly = 2`, and an explicit on-behalf-of context is
+still checked. The documentation lookup is the one lane that declares it.
+
 ## References
 
 - [ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md) — the contract this catalog serves.

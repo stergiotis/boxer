@@ -2,6 +2,7 @@ package play
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -77,4 +78,32 @@ func TestAPaneLaneRunsUnderTheWindowsMark(t *testing.T) {
 	client.SetAgentMark(nil)
 	require.Error(t, run(), "the stub answers 500")
 	assert.Equal(t, int32(1), hits.Load(), "the person's run is sent")
+}
+
+// The Docs pane's lookup is play's own statement with the name bound as a
+// parameter: under a task's mark it is sent, read-only, while a pane lane
+// deriving from the window's input is still refused.
+func TestTheDocsLookupIsNotBoundByTheMark(t *testing.T) {
+	var hits atomic.Int32
+	var readonly atomic.Value
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		readonly.Store(r.URL.Query().Get("readonly"))
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	client := NewClient(ClientConfig{URL: srv.URL, AllowWrites: true}, srv.Client())
+	client.SetAgentMark(&app.OnBehalfOf{Task: "t", Destinations: []string{DestinationKeelson("apps")}})
+
+	docs := NewClickHouseDocsSource(client)
+	defer docs.Close()
+	_, _, _, err := docs.lane.exec.execute(context.Background(), compiledNode{SQL: docs.Query, Params: map[string]string{"n": "count"}}, memory.NewGoAllocator())
+	var limit *AgentLimitError
+	require.False(t, errors.As(err, &limit), "the lookup is not refused: %v", err)
+	assert.Equal(t, int32(1), hits.Load(), "the lookup is sent")
+	assert.Equal(t, "2", readonly.Load(), "under a mark it is read-only even where writes are allowed")
+
+	pane := clientExecutor{client: client, opts: newExecOptions("map")}
+	_, _, _, err = pane.execute(context.Background(), compiledNode{SQL: "SELECT 1"}, memory.NewGoAllocator())
+	require.ErrorAs(t, err, &limit, "a pane lane is still bound by the mark")
 }
