@@ -21,6 +21,16 @@ func TestTableCodesAreStableWireValues(t *testing.T) {
 		"Home": 5, "End": 6, "PageUp": 7, "PageDown": 8,
 		"Enter": 9, "Space": 10, "Escape": 11, "Tab": 12,
 		"Backspace": 13, "Delete": 14,
+		"Digit0": 15, "Digit9": 24, "KeyA": 25, "KeyZ": 50,
+		"Plus": 51, "Minus": 52, "Equals": 53, "Period": 54, "Comma": 55,
+		"Slash": 56, "Colon": 57, "Quote": 58, "OpenBracket": 59, "CloseBracket": 60,
+	}
+	// Digits and letters run in order between their pinned ends.
+	for d := range 10 {
+		want["Digit"+string(rune('0'+d))] = Code(15 + d)
+	}
+	for c := 'A'; c <= 'Z'; c++ {
+		want["Key"+string(c)] = Code(25 + c - 'A')
 	}
 	require.Len(t, Table, len(want), "a key was added or removed; extend the pinned map deliberately")
 	for _, e := range Table {

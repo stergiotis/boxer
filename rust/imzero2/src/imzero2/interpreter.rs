@@ -810,6 +810,8 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     r26_key_capture_ids: Vec<u64>,
     r26_key_capture_codes: Vec<u8>,
     r26_key_capture_mods: Vec<u8>,
+    // Edge byte per captured event (ADR-0279 §SD1): bit 0 down, bit 1 repeat.
+    r26_key_capture_edges: Vec<u8>,
 
     // Ui::available_size snapshot — set by the captureAvailableSize
     // procedural op when called inside a Ui scope, read by Go via
@@ -1047,6 +1049,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             r26_key_capture_ids: Vec::with_capacity(8),
             r26_key_capture_codes: Vec::with_capacity(8),
             r26_key_capture_mods: Vec::with_capacity(8),
+            r26_key_capture_edges: Vec::with_capacity(8),
             r18_avail_w: f32::NAN,
             r18_avail_h: f32::NAN,
             r21_ui_rect_seqs: Vec::with_capacity(8),
@@ -1153,6 +1156,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             self.r26_key_capture_ids.clear();
             self.r26_key_capture_codes.clear();
             self.r26_key_capture_mods.clear();
+            self.r26_key_capture_edges.clear();
         }
 
         // Hyperlink zones — cleared so a removed link doesn't carry into
@@ -4600,9 +4604,11 @@ self.apply_widget(w,u,f,Some(i));
                 let len = self.r26_key_capture_ids.len();
                 debug_assert_eq!(len, self.r26_key_capture_codes.len());
                 debug_assert_eq!(len, self.r26_key_capture_mods.len());
+                debug_assert_eq!(len, self.r26_key_capture_edges.len());
                 self.io.write_plain_u64h(len, self.r26_key_capture_ids.drain(..))?;
                 self.io.write_plain_u8h(len, self.r26_key_capture_codes.drain(..))?;
                 self.io.write_plain_u8h(len, self.r26_key_capture_mods.drain(..))?;
+                self.io.write_plain_u8h(len, self.r26_key_capture_edges.drain(..))?;
                 self.io.flush()?;
             }
             FuncProcId::FetchR27Windows => {
@@ -4765,6 +4771,7 @@ self.apply_widget(w,u,f,Some(i));
                 let mut hover_cursor_pointer = false;
                 let mut focusable = false;
                 let mut capture_keys_mask: u64 = 0;
+                let mut capture_key_edges = false;
                 // methods
                 loop {
                     let (m, _) = self.read_from_repr(FrameBuilderMethodId::from_repr)?;
@@ -4922,6 +4929,11 @@ self.apply_widget(w,u,f,Some(i));
                             puffin::profile_scope!("match FrameBuilderMethodId::CaptureKeys");
                             let mut mask = self.io.read_plain_u64()?;
                             capture_keys_mask = mask;
+                        }
+                        FrameBuilderMethodId::CaptureKeyEdges => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match FrameBuilderMethodId::CaptureKeyEdges");
+                            capture_key_edges = true;
                         }
                         FrameBuilderMethodId::HoverCursorPointer => {
                             #[cfg(feature = "puffin")]
@@ -5098,30 +5110,41 @@ self.apply_widget(w,u,f,Some(i));
                                 | ((mods_now.command as u8) << 3);
                             // Collect first, mutate after: consuming inside the read closure would
                             // borrow the input state twice.
-                            let mut hits: Vec<(egui::Key, u8)> = Vec::new();
+                            //
+                            // A release is taken only by a widget that asked for edges (ADR-0279
+                            // §SD1); every event carries its edge byte, bit 0 down and bit 1 an
+                            // auto-repeat press.
+                            let mut hits: Vec<(egui::Key, bool, u8, u8)> = Vec::new();
                             ui.input(|inp| {
                                 for ev in &inp.events {
                                     if let egui::Event::Key {
-                                        key, pressed: true, ..
+                                        key,
+                                        pressed,
+                                        repeat,
+                                        ..
                                     } = ev
                                     {
+                                        if !*pressed && !capture_key_edges {
+                                            continue;
+                                        }
                                         let code = crate::imzero2::keycodes::imzero_key_code(*key);
                                         if code != 0 && (capture_keys_mask & (1u64 << code)) != 0 {
-                                            hits.push((*key, code));
+                                            let edges = (*pressed as u8) | ((*repeat as u8) << 1);
+                                            hits.push((*key, *pressed, code, edges));
                                         }
                                     }
                                 }
                             });
                             let captured_any = !hits.is_empty();
-                            for (key, code) in hits {
+                            for (key, pressed, code, edges) in hits {
                                 // Remove it from the queue so nothing downstream also acts on it.
                                 ui.input_mut(|inp| {
                                     inp.events.retain(|ev| {
                                         !matches!(ev,
-                egui::Event::Key { key: k, pressed: true, .. } if *k == key)
+                egui::Event::Key { key: k, pressed: p, .. } if *k == key && *p == pressed)
                                     });
                                 });
-                                self.r26_key_capture_push(i.value(), code, mods_byte);
+                                self.r26_key_capture_push(i.value(), code, mods_byte, edges);
                             }
                             if captured_any {
                                 // A capture is only half a keypress. R26 is read back at the END of
@@ -9037,6 +9060,7 @@ if multiline { egui::TextEdit::multiline(&mut text).id(i) } else { egui::TextEdi
                                     i.value(),
                                     crate::imzero2::keycodes::imzero_key_code(egui::Key::Tab),
                                     mods_byte,
+                                    1,
                                 );
                                 // R26 is read at the END of this frame, so Go acts on the
                                 // capture while building the NEXT one — and the keypress that
@@ -9062,18 +9086,23 @@ if multiline { egui::TextEdit::multiline(&mut text).id(i) } else { egui::TextEdi
                                 | ((mods_now.ctrl as u8) << 1)
                                 | ((mods_now.alt as u8) << 2)
                                 | ((mods_now.command as u8) << 3);
-                            let mut hits: Vec<u8> = Vec::new();
+                            let mut hits: Vec<(u8, u8)> = Vec::new();
                             ctx.input_mut(|inp| {
                                 inp.events.retain(|ev| {
                                     if let egui::Event::Key {
-                                        key, pressed: true, ..
+                                        key,
+                                        pressed: true,
+                                        repeat,
+                                        ..
                                     } = ev
                                     {
                                         let code = crate::imzero2::keycodes::imzero_key_code(*key);
                                         // Code 0 is the reserved unknown; a key the vocabulary
                                         // cannot name is a key no mask can have asked for.
                                         if code != 0 && (mask & (1u64 << code)) != 0 {
-                                            hits.push(code);
+                                            // Presses only: the edge byte says down, and
+                                            // whether it repeats (ADR-0279 §SD1).
+                                            hits.push((code, 1 | ((*repeat as u8) << 1)));
                                             return false;
                                         }
                                     }
@@ -9081,8 +9110,8 @@ if multiline { egui::TextEdit::multiline(&mut text).id(i) } else { egui::TextEdi
                                 });
                             });
                             if !hits.is_empty() {
-                                for code in hits {
-                                    self.r26_key_capture_push(i.value(), code, mods_byte);
+                                for (code, edges) in hits {
+                                    self.r26_key_capture_push(i.value(), code, mods_byte, edges);
                                 }
                                 ctx.request_repaint();
                             }
@@ -10157,10 +10186,11 @@ egui::Window::new(label).id(i);
     }
     /// One captured key event for a widget (ADR-0177 SD6). Called from the
     /// capturing widget's own apply code, so `i` is that widget's id.
-    pub fn r26_key_capture_push(&mut self, i: u64, code: u8, mods: u8) {
+    pub fn r26_key_capture_push(&mut self, i: u64, code: u8, mods: u8, edges: u8) {
         self.r26_key_capture_ids.push(i);
         self.r26_key_capture_codes.push(code);
         self.r26_key_capture_mods.push(mods);
+        self.r26_key_capture_edges.push(edges);
     }
     pub fn r24_canvas_pointer_push(
         &mut self,

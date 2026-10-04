@@ -252,20 +252,22 @@ func (inst *Fetcher) CollectFetchR25EtColWidths() (ids []uint64, counts []uint64
 	widths = inst.iterateF32h()
 	return
 }
-func (inst *Fetcher) FetchR26KeyCaptures() (ids []uint64, codes []uint8, mods iter.Seq[uint8]) {
+func (inst *Fetcher) FetchR26KeyCaptures() (ids []uint64, codes []uint8, mods []uint8, edges iter.Seq[uint8]) {
 	inst.invoke(FuncProcIdFetchR26KeyCaptures)
 	ids = inst.readU64h()
 	codes = inst.readU8h()
-	mods = inst.iterateU8h()
+	mods = inst.readU8h()
+	edges = inst.iterateU8h()
 	return
 }
 func (inst *Fetcher) IssueFetchR26KeyCaptures() {
 	inst.invoke(FuncProcIdFetchR26KeyCaptures)
 }
-func (inst *Fetcher) CollectFetchR26KeyCaptures() (ids []uint64, codes []uint8, mods iter.Seq[uint8]) {
+func (inst *Fetcher) CollectFetchR26KeyCaptures() (ids []uint64, codes []uint8, mods []uint8, edges iter.Seq[uint8]) {
 	ids = inst.readU64h()
 	codes = inst.readU8h()
-	mods = inst.iterateU8h()
+	mods = inst.readU8h()
+	edges = inst.iterateU8h()
 	return
 }
 func (inst *Fetcher) FetchR27Windows() (ids []uint64, minX []float32, minY []float32, maxX []float32, maxY []float32, z []uint32, collapsed []uint8, needW []float32, needH []float32, workMinX float32, workMinY float32, workMaxX float32, workMaxY float32) {

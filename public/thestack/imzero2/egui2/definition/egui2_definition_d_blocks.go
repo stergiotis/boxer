@@ -332,6 +332,12 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
 			// takes focus by calling requestFocus when one of them is hit.
 			BeginMethod("captureKeys").Arg("mask", ctabb.U64).
 			CodeClientRust(rustClientCode("capture_keys_mask = mask;\n")).EndMethod().
+			// captureKeyEdges — ADR-0279 §SD1. The capture also takes the
+			// releases of the masked keys, and every event carries an edge
+			// byte (down, repeat). Opt-in, because an adopter that acts on
+			// each captured event would act twice per keystroke.
+			BeginMethod("captureKeyEdges").
+			CodeClientRust(rustClientCode("capture_key_edges = true;\n")).EndMethod().
 			// hoverCursorPointer changes the OS cursor to a pointing
 			// hand whenever the pointer is over this Frame — the
 			// universal "this is clickable" cue. Only meaningful when
@@ -365,7 +371,7 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
 		WithSettingBlockIterator(true).
 		WithSettingImmediate(true).
 		WithSettingRetained(true).
-		WithConstructionCodeClientRust(rustClientCode("egui::Frame::new();\nlet mut sense_click = false;\nlet mut sense_drag = false;\nlet mut hover_cursor_pointer = false;\nlet mut focusable = false;\nlet mut capture_keys_mask: u64 = 0;\n")).
+		WithConstructionCodeClientRust(rustClientCode("egui::Frame::new();\nlet mut sense_click = false;\nlet mut sense_drag = false;\nlet mut hover_cursor_pointer = false;\nlet mut focusable = false;\nlet mut capture_keys_mask: u64 = 0;\nlet mut capture_key_edges = false;\n")).
 		WithApplyCodeClientRust(rustClientCode(`
 					if {{EguiUiOptionalOuter}}.is_some() {
 						let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
