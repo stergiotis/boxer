@@ -829,6 +829,9 @@ type turnResult struct {
 	// calls are the turn's model calls, for the statistics.
 	calls    []callStat
 	messages []openaichat.Message
+	// omitTo is one past where the last call carried lastRoundNote, which
+	// messages leave out; 0 when it carried none.
+	omitTo   int
 	final    llm.Response
 	activity []string
 	stopped  string
@@ -872,6 +875,9 @@ func runTurn(ctx context.Context, cli *llm.Client, coord *coordinator, req llm.R
 			// the next turn resends.
 			r.Messages = append(slices.Clip(msgs), openaichat.Message{Role: openaichat.ChatRoleSystem, Content: lastRoundNote})
 			r.ToolChoice = "none"
+			// The host saw it, so the next turn declares it left out
+			// (ADR-0264 §SD3) and the host still keeps only what is new.
+			out.omitTo = len(msgs) + 1
 		}
 		coord.setStage(stageModel)
 		var res llm.Response
