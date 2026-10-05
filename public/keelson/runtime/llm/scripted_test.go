@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -67,4 +68,19 @@ func TestScriptedPlaceholders(t *testing.T) {
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"destinations":["clickhouse:ch.example:8123"],"n":1,"x":"$unknown"}`, r.ToolCalls[0].Arguments)
 	assert.Equal(t, int32(2), r.InputTokens)
+}
+
+func TestAScriptedReplyWaitsItsDelay(t *testing.T) {
+	cli, err := NewScriptedClient([]byte(`{"content":"slow","delayMs":50}`))
+	require.NoError(t, err)
+	start := time.Now()
+	resp, err := cli.Complete(context.Background(), openaichat.CompletionRequest{})
+	require.NoError(t, err)
+	assert.Equal(t, "slow", resp.Content)
+	assert.GreaterOrEqual(t, time.Since(start), 50*time.Millisecond)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err = cli.Complete(ctx, openaichat.CompletionRequest{})
+	assert.ErrorIs(t, err, context.Canceled, "a cancelled request stops waiting")
 }

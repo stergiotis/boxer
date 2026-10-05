@@ -9,6 +9,7 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"time"
 
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -34,10 +35,14 @@ const ScriptedEndpoint = "http://127.0.0.1/scripted"
 // In Args, a string "$name" stands for the last value a tool result gave
 // "name" — "$window" for the window a launch reported, "$destination" for
 // what play's get_state names — since a scene cannot know them in advance.
+//
+// DelayMs holds the reply back that long, as a slow model would, so a scene
+// can look at a turn while it runs; a cancelled request stops waiting.
 type ScriptReply struct {
 	Content string         `json:"content,omitempty"`
 	Tool    string         `json:"tool,omitempty"`
 	Args    jsontext.Value `json:"args,omitempty"`
+	DelayMs uint32         `json:"delayMs,omitempty"`
 }
 
 // ScriptedClient answers the n-th reply of its script to a request that
@@ -119,7 +124,7 @@ func lastValue(msgs []openaichat.Message, name string) (tok string, ok bool) {
 }
 
 // Complete answers the reply at the request's position.
-func (inst *ScriptedClient) Complete(_ context.Context, req openaichat.CompletionRequest) (resp openaichat.CompletionResponse, err error) {
+func (inst *ScriptedClient) Complete(ctx context.Context, req openaichat.CompletionRequest) (resp openaichat.CompletionResponse, err error) {
 	n := 0
 	for _, m := range req.Messages {
 		if m.Role == openaichat.ChatRoleAssistant {
@@ -132,6 +137,16 @@ func (inst *ScriptedClient) Complete(_ context.Context, req openaichat.Completio
 		return
 	}
 	r := inst.replies[n]
+	if r.DelayMs > 0 {
+		t := time.NewTimer(time.Duration(r.DelayMs) * time.Millisecond)
+		select {
+		case <-t.C:
+		case <-ctx.Done():
+			t.Stop()
+			err = eh.Errorf("llm script: %w", ctx.Err())
+			return
+		}
+	}
 	if r.Tool == "" {
 		resp.Content, resp.FinishReason = r.Content, "stop"
 		return
