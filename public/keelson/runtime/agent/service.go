@@ -52,6 +52,11 @@ type Config struct {
 	// Pace is the least time between two visible changes of a paced task
 	// (ADR-0280 §SD6); zero is DefaultPace (PaceEnv).
 	Pace time.Duration
+	// CallsMin and CallsMax bound a new task's call budget, the range of
+	// the dialog's slider; zero is DefaultCallsMin and DefaultCallsMax
+	// (CallsMinEnv, CallsMaxEnv).
+	CallsMin int
+	CallsMax int
 	// ActionsLog, when set, receives every action record as one JSON line,
 	// for a trial's scorer (ActionsFileEnv); the headless host sets it.
 	ActionsLog io.Writer

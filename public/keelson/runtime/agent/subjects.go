@@ -102,6 +102,23 @@ var DeadlineEnv = env.NewDuration(env.Spec{
 	Category:    env.CategoryDev,
 })
 
+// CallsMinEnv and CallsMaxEnv bound the call budget the person picks for a
+// new task in the host's dialog; a budget a coordinator asks for is clamped
+// into the range.
+var CallsMinEnv = env.NewInt(env.Spec{
+	Name:        "BOXER_AGENT_CALLS_MIN",
+	Default:     "20",
+	Description: "the least call budget the person can give a new runtime.agent task in the host's approval dialog; a budget a coordinator asks for below it is raised to it",
+	Category:    env.CategoryDev,
+})
+
+var CallsMaxEnv = env.NewInt(env.Spec{
+	Name:        "BOXER_AGENT_CALLS_MAX",
+	Default:     "1000",
+	Description: "the largest call budget the person can give a new runtime.agent task in the host's approval dialog; a budget a coordinator asks for above it is lowered to it",
+	Category:    env.CategoryDev,
+})
+
 // PaceEnv is the least time between two changes of a paced task that the
 // person can see.
 var PaceEnv = env.NewDuration(env.Spec{

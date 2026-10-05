@@ -1048,6 +1048,16 @@ the person saw.
   applied, the format and windows, and digests of the replayed stream and
   of the bytes handed out.
 
+### 2026-10-05 — the person picks a new task's call budget
+
+The approval dialog of a new task carries a slider for its call budget in
+place of the fixed figure. Its range is the host's, `BOXER_AGENT_CALLS_MIN`
+to `BOXER_AGENT_CALLS_MAX` (20 to 1000), and it starts at what the
+coordinator asked for, `DefaultCallBudget` when it asked for none, brought
+into the range; a budget asked for outside the range is clamped there on
+every path, test grants included. What a spent budget's approval adds is
+unchanged.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — the subject taxonomy SD3 extends; the threat model SD6 keeps.

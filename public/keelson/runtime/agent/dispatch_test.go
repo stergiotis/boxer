@@ -385,11 +385,24 @@ func TestTheDispatcherDecides(t *testing.T) {
 }
 
 func TestBudget(t *testing.T) {
-	r := newRig(t, true)
+	r := newRigWith(t, func(cfg *Config) { cfg.TestGrants, cfg.CallsMin = true, 1 })
 	g, err := r.cli.Request(context.Background(), GrantRequest{Calls: 1, Entries: []GrantEntry{{Instance: 7, Mode: ModeAct}}})
 	require.NoError(t, err)
 	assert.Equal(t, "completed", r.call(g, "a", "get_text", "{}").Phase)
 	assert.Equal(t, "input_required", r.call(g, "b", "get_text", "{}").Phase)
+}
+
+func TestBudgetRange(t *testing.T) {
+	inst := &Service{cfg: Config{CallsMin: 10, CallsMax: 50}}
+	assert.Equal(t, 10, inst.clampCalls(1), "a budget below the range is raised to it")
+	assert.Equal(t, 50, inst.clampCalls(DefaultCallBudget), "the default lies above this range")
+	assert.Equal(t, 30, inst.clampCalls(30))
+	assert.Equal(t, 50, inst.clampCalls(5000))
+	inst = &Service{cfg: Config{CallsMin: 300, CallsMax: 100}}
+	lo, hi := inst.callRange()
+	assert.Equal(t, [2]int{300, 300}, [2]int{lo, hi}, "a maximum under the minimum is the minimum")
+	inst = &Service{}
+	assert.Equal(t, DefaultCallBudget, inst.clampCalls(0))
 }
 
 func TestCancelStopAndDetach(t *testing.T) {

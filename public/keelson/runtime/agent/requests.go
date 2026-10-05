@@ -117,6 +117,9 @@ type request struct {
 	desktop      ModeE
 	desktopShare bool
 	desktopFlag  *bool
+	// callsFlag is the budget slider's binding, set on the dialog's first
+	// frame from what the coordinator asked for.
+	callsFlag *float64
 	// asked is the turn and the model call that asked for the request, as
 	// the coordinator states them; its grant events carry them.
 	asked wireCause

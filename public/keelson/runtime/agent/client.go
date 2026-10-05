@@ -180,7 +180,9 @@ type GrantRequest struct {
 	Plan         string
 	Entries      []GrantEntry
 	Destinations []string
-	// Calls is the call budget; zero is DefaultCallBudget.
+	// Calls is the call budget asked for; zero is DefaultCallBudget. The
+	// host clamps it into its range (CallsMinEnv, CallsMaxEnv) and the
+	// person picks the budget in the dialog.
 	Calls uint32
 	// Deadline is how long the task may run; zero is DefaultDeadline.
 	Deadline time.Duration

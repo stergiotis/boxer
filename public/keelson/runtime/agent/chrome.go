@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"math"
 	"slices"
 	"strconv"
 
@@ -428,11 +429,7 @@ func (inst *Chrome) renderRequest(r *request, windows []windowRow, waiting int, 
 		})
 	}
 	if r.task == nil {
-		calls := r.calls
-		if calls == 0 {
-			calls = DefaultCallBudget
-		}
-		c.Label("budget: " + strconv.FormatUint(uint64(calls), 10) + " calls").Send()
+		inst.renderBudget(r, ids)
 	}
 	if r.held != nil && r.held.req.Reason != "" {
 		bounded(ids.PrepareStr("agent-reason-"+r.key), modelTextHeight, func() {
@@ -459,6 +456,32 @@ func (inst *Chrome) renderRequest(r *request, windows []windowRow, waiting int, 
 		decline = c.Button(ids.PrepareStr("agent-decline-"+r.key), c.Atoms().Text("Decline").Keep()).SendResp().HasPrimaryClicked()
 	}
 	return
+}
+
+// renderBudget is the new task's call budget: a slider over the host's
+// range, starting at what the coordinator asked for.
+func (inst *Chrome) renderBudget(r *request, ids *c.WidgetIdStack) {
+	svc := inst.svc
+	lo, hi := svc.callRange()
+	svc.mu.Lock()
+	if r.callsFlag == nil {
+		r.callsFlag = new(float64)
+		*r.callsFlag = float64(svc.clampCalls(r.calls))
+	}
+	flag := r.callsFlag
+	svc.mu.Unlock()
+	for range c.HorizontalTop().KeepIter() {
+		for range c.HoverText("Every operation the task calls in a window counts against its budget. When it is spent, the next call waits for you to give more.").KeepIter() {
+			c.SliderF64(ids.PrepareStr("agent-calls-"+r.key), *flag, float64(lo), float64(hi)).
+				Integer().Logarithmic(true).Suffix(" calls").Text("call budget").SendRespVal(flag)
+		}
+		for rt := range c.RichTextLabel("(" + strconv.Itoa(lo) + "–" + strconv.Itoa(hi) + ")") {
+			rt.Small().Weak()
+		}
+	}
+	svc.mu.Lock()
+	r.calls = uint32(min(max(int(math.Round(*flag)), lo), hi))
+	svc.mu.Unlock()
 }
 
 // modeLook is how the dialog shows a mode: its glyph, what it lets the

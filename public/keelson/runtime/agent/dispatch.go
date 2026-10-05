@@ -92,6 +92,8 @@ func ParseMode(s string) (m ModeE) {
 // Defaults for a grant that names none.
 const (
 	DefaultCallBudget = 200
+	DefaultCallsMin   = 20
+	DefaultCallsMax   = 1000
 	DefaultDeadline   = 30 * time.Minute
 	// MaxStatusWait bounds how long status waits for a final phase.
 	MaxStatusWait = 5 * time.Second
@@ -345,6 +347,29 @@ func (inst *Service) deadline() (d time.Duration) {
 	return
 }
 
+// callRange is the range a new task's call budget lies in.
+func (inst *Service) callRange() (lo int, hi int) {
+	if lo = inst.cfg.CallsMin; lo <= 0 {
+		lo = DefaultCallsMin
+	}
+	if hi = inst.cfg.CallsMax; hi <= 0 {
+		hi = DefaultCallsMax
+	}
+	hi = max(hi, lo)
+	return
+}
+
+// clampCalls is the budget a new task gets for calls: zero is
+// DefaultCallBudget, and either lies in callRange.
+func (inst *Service) clampCalls(calls uint32) (n int) {
+	lo, hi := inst.callRange()
+	n = int(calls)
+	if n == 0 {
+		n = DefaultCallBudget
+	}
+	return min(max(n, lo), hi)
+}
+
 // newTask builds a task. The caller registers it.
 func (inst *Service) newTask(actor app.AppIdT, actorInstance uint64, conversation string, plan string, destinations []string,
 	calls uint32, deadline time.Duration, test bool) (t *task) {
@@ -356,9 +381,7 @@ func (inst *Service) newTask(actor app.AppIdT, actorInstance uint64, conversatio
 		turnSeq: make(map[uint64]uint64), readSinceTurn: make(map[uint64]map[string]uint64),
 		launches: make(map[app.AppIdT]*launchEntry), launched: make(map[uint64]bool),
 	}
-	if t.callsBudget == 0 {
-		t.callsBudget = DefaultCallBudget
-	}
+	t.callsBudget = inst.clampCalls(calls)
 	if deadline > 0 {
 		t.deadline = time.Now().Add(deadline)
 	}
