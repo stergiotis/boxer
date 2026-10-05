@@ -943,6 +943,17 @@ engine joins it with the window's label, and the dispatcher's wall treats it
 as any confined result. Play's `list_datasets` (ADR-0270, update of this
 date) is the first.
 
+### 2026-10-02 — the trial protocol leaves the tree
+
+The agent-operations-play protocol and its first runs were withdrawn from
+[doc/trials](../trials/README.md). M6 is now the stub model service and
+the actions file (`BOXER_AGENT_ACTIONS_FILE`), which a scorer reads after
+the headless host exits. The protocol and the **Lane: trial** verification
+are deferred. The Gap therefore stands: how well a model uses the contract
+is not measured in this tree. §SD12's "first trial run" is the first such
+measurement, wherever it is run. Where an update of this date says a trial
+found something, the decision rests on the behaviour it describes and not
+on evidence the tree holds.
 
 ### 2026-10-03 — a launch is asked for by the name a model writes
 

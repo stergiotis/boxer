@@ -71,8 +71,8 @@ const (
 	// to 0 when motion is disabled.
 	// animDoneEps lives in machine.go alongside animMachine.
 
-	// Cell seqs step by 2 per cell under the container Frame's own scope, so
-	// a hatch canvas can take the odd seq beside its cell's even one.
+	// Cell seqs count one per cell under the container Frame's own scope; a
+	// hatch canvas reuses its cell's seq under a "hatch" scope.
 
 	// maxPreviewRecursion safety-caps "unlimited" preview nesting
 	// (Options.MaxNestingDepth < 0); real trees terminate far sooner via the
@@ -382,7 +382,7 @@ func New(ids *c.WidgetIdStack, scopeKey string, root *layout.Node, opts Options)
 	if root == nil {
 		panic("treemap: New requires a non-nil root")
 	}
-	t := &Treemap{
+	inst := &Treemap{
 		Opts:       opts,
 		ids:        ids,
 		scopeKey:   scopeKey,
@@ -397,18 +397,18 @@ func New(ids *c.WidgetIdStack, scopeKey string, root *layout.Node, opts Options)
 	// the IDS neutral spine (ADR-0031 §SD4). Per-cell *content* coloring
 	// still flows through the ColoringI strategy (DepthColoring,
 	// CategoricalColoring, …) so the treemap stays palette-pluggable.
-	t.colorBreadcrumbBg = color.Hex(styletokens.NeutralBgSurface.AsHex()).Keep()
-	t.colorFrameStroke = color.Hex(styletokens.NeutralBorderFaint.AsHex()).Keep()
-	t.colorBreadcrumbFg = color.Hex(styletokens.NeutralTextExtreme.AsHex()).Keep()
-	t.colorBreadcrumbSep = color.Hex(styletokens.NeutralTextDisabled.AsHex()).Keep()
-	t.colorTransparentBg = color.Transparent.Keep()
-	t.colorLeafText = color.Hex(styletokens.NeutralTextPrimary.AsHex()).Keep()
-	t.colorContainerBg = color.Hex(styletokens.NeutralBgPanel.AsHex()).Keep()
-	t.colorLeafBg = color.Hex(styletokens.NeutralBgSurface.AsHex()).Keep()
+	inst.colorBreadcrumbBg = color.Hex(styletokens.NeutralBgSurface.AsHex()).Keep()
+	inst.colorFrameStroke = color.Hex(styletokens.NeutralBorderFaint.AsHex()).Keep()
+	inst.colorBreadcrumbFg = color.Hex(styletokens.NeutralTextExtreme.AsHex()).Keep()
+	inst.colorBreadcrumbSep = color.Hex(styletokens.NeutralTextDisabled.AsHex()).Keep()
+	inst.colorTransparentBg = color.Transparent.Keep()
+	inst.colorLeafText = color.Hex(styletokens.NeutralTextPrimary.AsHex()).Keep()
+	inst.colorContainerBg = color.Hex(styletokens.NeutralBgPanel.AsHex()).Keep()
+	inst.colorLeafBg = color.Hex(styletokens.NeutralBgSurface.AsHex()).Keep()
 
 	if len(opts.InitialPath) > 0 {
-		if t.validPath(opts.InitialPath) {
-			t.breadcrumb = append(t.breadcrumb[:0], opts.InitialPath...)
+		if inst.validPath(opts.InitialPath) {
+			inst.breadcrumb = append(inst.breadcrumb[:0], opts.InitialPath...)
 		} else {
 			log.Warn().
 				Str("pkg", "treemap").
@@ -416,43 +416,43 @@ func New(ids *c.WidgetIdStack, scopeKey string, root *layout.Node, opts Options)
 				Msg("Options.InitialPath: invalid path, falling back to root")
 		}
 	}
-	t.applyOpts()
-	t.metrics.init(t.density)
-	return t
+	inst.applyOpts()
+	inst.metrics.init(inst.density)
+	return inst
 }
 
 // applyOpts resolves Opts into the fields the renderer reads. Called from
 // New and at the top of every Render.
-func (t *Treemap) applyOpts() {
-	o := &t.Opts
-	t.maxNestingDepth = o.MaxNestingDepth
+func (inst *Treemap) applyOpts() {
+	o := &inst.Opts
+	inst.maxNestingDepth = o.MaxNestingDepth
 	switch {
-	case t.maxNestingDepth == 0:
-		t.maxNestingDepth = 1
-	case t.maxNestingDepth < 0:
-		t.maxNestingDepth = 0 // the renderer's "all"
+	case inst.maxNestingDepth == 0:
+		inst.maxNestingDepth = 1
+	case inst.maxNestingDepth < 0:
+		inst.maxNestingDepth = 0 // the renderer's "all"
 	}
 	switch {
 	case o.AnimationDuration == 0:
-		t.animDurSecs = styletokens.MotionSlowSecs()
+		inst.animDurSecs = styletokens.MotionSlowSecs()
 	case o.AnimationDuration < 0:
-		t.animDurSecs = 0
+		inst.animDurSecs = 0
 	default:
-		t.animDurSecs = o.AnimationDuration
+		inst.animDurSecs = o.AnimationDuration
 	}
-	t.coloring = o.Coloring
-	if t.coloring == nil {
-		t.coloring = DepthColoring(DefaultDepthColors)
+	inst.coloring = o.Coloring
+	if inst.coloring == nil {
+		inst.coloring = DepthColoring(DefaultDepthColors)
 	}
-	t.style = o.Style
-	if t.style == nil {
-		t.style = DefaultStyle()
+	inst.style = o.Style
+	if inst.style == nil {
+		inst.style = DefaultStyle()
 	}
-	t.cellLabelFn = o.CellLabel
-	t.selfCellLabelFn = o.SelfCellLabel
-	t.leafClickSensing = o.LeafClickSensing
-	t.statusLineHidden = o.HideStatusLine
-	t.filterSiblings = o.FilterSiblings
+	inst.cellLabelFn = o.CellLabel
+	inst.selfCellLabelFn = o.SelfCellLabel
+	inst.leafClickSensing = o.LeafClickSensing
+	inst.statusLineHidden = o.HideStatusLine
+	inst.filterSiblings = o.FilterSiblings
 }
 
 // SetRoot replaces the tree and resets the view to the root.
@@ -469,26 +469,26 @@ func (t *Treemap) applyOpts() {
 // survive.
 //
 // Validation tier: panic — a nil root is a programmer error, as it is in New.
-func (t *Treemap) SetRoot(root *layout.Node) {
+func (inst *Treemap) SetRoot(root *layout.Node) {
 	if root == nil {
 		panic("treemap: SetRoot requires a non-nil root")
 	}
-	t.root = root
-	t.breadcrumb = []*layout.Node{root}
+	inst.root = root
+	inst.breadcrumb = []*layout.Node{root}
 	// A zoom in flight is interpolating from a rect in the tree just replaced.
-	t.anim.Cancel()
+	inst.anim.Cancel()
 }
 
 // Focused returns the current tail of the breadcrumb.
-func (t *Treemap) Focused() *layout.Node { return t.breadcrumb[len(t.breadcrumb)-1] }
+func (inst *Treemap) Focused() *layout.Node { return inst.breadcrumb[len(inst.breadcrumb)-1] }
 
 // Depth returns how deep the user has drilled (0 = root).
-func (t *Treemap) Depth() int { return len(t.breadcrumb) - 1 }
+func (inst *Treemap) Depth() int { return len(inst.breadcrumb) - 1 }
 
 // Breadcrumb returns a copy of the path from root to the current focus.
-func (t *Treemap) Breadcrumb() []*layout.Node {
-	out := make([]*layout.Node, len(t.breadcrumb))
-	copy(out, t.breadcrumb)
+func (inst *Treemap) Breadcrumb() []*layout.Node {
+	out := make([]*layout.Node, len(inst.breadcrumb))
+	copy(out, inst.breadcrumb)
 	return out
 }
 
@@ -497,7 +497,7 @@ func (t *Treemap) Breadcrumb() []*layout.Node {
 // color tracks whichever fill slot is selected so WCAG-picked contrast
 // stays consistent under dim/hover transitions. Kept as a method so test
 // code can exercise it with arbitrary (colors, visuals, state) triples.
-func (t *Treemap) resolveColors(colors CellColors, visuals CellVisuals, state CellStateE) (fill, border, text color.Color) {
+func (inst *Treemap) resolveColors(colors CellColors, visuals CellVisuals, state CellStateE) (fill, border, text color.Color) {
 	fill = colors.Fill
 	text = colors.Text
 	if visuals.UseDimFill {
@@ -527,8 +527,8 @@ func (t *Treemap) resolveColors(colors CellColors, visuals CellVisuals, state Ce
 // height upward every frame, since the Frame would request the full available
 // height while the breadcrumb bar and status label still need room above and
 // below it, so such hosts pass a fixed size.
-func (t *Treemap) containerRect() layout.Rect {
-	return layout.Rect{W: float64(t.containerW), H: float64(t.containerH)}
+func (inst *Treemap) containerRect() layout.Rect {
+	return layout.Rect{W: float64(inst.containerW), H: float64(inst.containerH)}
 }
 
 // innerRect computes the interior rect of a cell for recursive rendering.
@@ -599,8 +599,8 @@ func computePreviewState(hasChildren, hovered bool) CellStateE {
 // The id is derived relative to the container's scope and then held as an
 // absolute creator, so a cell Frame pushes nothing onto the stack: nested
 // cells keep numbering under the container's scope, not their parent cell's.
-func (t *Treemap) cellIds(seq uint64) (frameCreator c.WidgetIdCreatorI, handle widgethandle.WidgetHandle) {
-	id := c.MakeAbsoluteIdHighEntropy(t.ids.PrepareSeq(seq).Derive())
+func (inst *Treemap) cellIds(seq uint64) (frameCreator c.WidgetIdCreatorI, handle widgethandle.WidgetHandle) {
+	id := c.MakeAbsoluteIdHighEntropy(inst.ids.PrepareSeq(seq).Derive())
 	return id, widgethandle.Make(id.Derive())
 }
 
@@ -617,7 +617,7 @@ func (t *Treemap) cellIds(seq uint64) (frameCreator c.WidgetIdCreatorI, handle w
 //
 // Currently only ±45° angles are supported; other AngleDeg values fall back
 // to -45°. (Generalizing to arbitrary angles is straightforward but unused.)
-func (t *Treemap) paintHatch(r layout.Rect, seq uint64, spec HatchSpec, cornerRadius float32) {
+func (inst *Treemap) paintHatch(r layout.Rect, seq uint64, spec HatchSpec, cornerRadius float32) {
 	if spec.IsZero() {
 		return
 	}
@@ -635,9 +635,11 @@ func (t *Treemap) paintHatch(r layout.Rect, seq uint64, spec HatchSpec, cornerRa
 				float32(s.X1), float32(s.Y1),
 				color.Hex(spec.Color), spec.Width).Send()
 		}
-		// Cell seqs are even (stepped by 2); |1 gives a collision-free odd seq
-		// for the hatch canvas id.
-		c.PaintCanvas(t.ids.PrepareSeq(seq|1), float32(r.W), float32(r.H)).Send()
+		// The hatch canvas is keyed by its cell's seq under a scope of its
+		// own, so it cannot meet a cell id.
+		for range c.IdScope(inst.ids.PrepareStr("hatch")) {
+			c.PaintCanvas(inst.ids.PrepareSeq(seq), float32(r.W), float32(r.H)).Send()
+		}
 	}
 }
 
@@ -650,14 +652,14 @@ func (t *Treemap) paintHatch(r layout.Rect, seq uint64, spec HatchSpec, cornerRa
 // no Frame, fill, or widget id, so it adds nothing to hit-testing and the
 // labels land exactly where the in-frame ones would. Clipped like the cell
 // body; valueGate is the caller's measured two-line threshold.
-func (t *Treemap) paintLabelsAboveHatch(node *layout.Node, r layout.Rect, textColor color.Color, rendersInner bool, mX, mY, valueGate float64) {
+func (inst *Treemap) paintLabelsAboveHatch(node *layout.Node, r layout.Rect, textColor color.Color, rendersInner bool, mX, mY, valueGate float64) {
 	for range c.AllocateUiAtRect(float32(r.X+mX), float32(r.Y+mY), float32(r.X+r.W-mX), float32(r.Y+r.H-mY)).KeepIter() {
 		c.UiClipToMaxRect()
 		c.LabelAtoms(c.Atoms().
-			BeginRichTextColored(textColor, t.colorTransparentBg, node.Name).
+			BeginRichTextColored(textColor, inst.colorTransparentBg, node.Name).
 			End().Keep()).
 			Truncate().Send()
-		t.paintCellValue(node, r, textColor, rendersInner, valueGate)
+		inst.paintCellValue(node, r, textColor, rendersInner, valueGate)
 	}
 }
 
@@ -672,31 +674,31 @@ func (t *Treemap) paintLabelsAboveHatch(node *layout.Node, r layout.Rect, textCo
 // holds; Small + Weak de-emphasizes the value relative to the name. Must be
 // called inside the cell's Frame body, after the name label, so the value
 // flows directly below it.
-func (t *Treemap) paintCellValue(node *layout.Node, r layout.Rect, textColor color.Color, rendersInner bool, minH float64) {
-	if t.cellLabelFn == nil || rendersInner || r.H <= minH {
+func (inst *Treemap) paintCellValue(node *layout.Node, r layout.Rect, textColor color.Color, rendersInner bool, minH float64) {
+	if inst.cellLabelFn == nil || rendersInner || r.H <= minH {
 		return
 	}
-	sub := t.cellLabelFn(node)
+	sub := inst.cellLabelFn(node)
 	if sub == "" {
 		return
 	}
 	c.LabelAtoms(c.Atoms().
-		BeginRichTextColored(textColor, t.colorTransparentBg, sub).
+		BeginRichTextColored(textColor, inst.colorTransparentBg, sub).
 		Small().Weak().End().Keep()).
 		Truncate().Send()
 }
 
 // renderZoom recursively paints cells following the breadcrumb path.
-func (t *Treemap) renderZoom(node *layout.Node, bounds layout.Rect, depth, bcLevel int, cellSeq *uint64) {
+func (inst *Treemap) renderZoom(node *layout.Node, bounds layout.Rect, depth, bcLevel int, cellSeq *uint64) {
 	if len(node.Children) == 0 {
 		return
 	}
 
 	var activeChild *layout.Node
-	if bcLevel+1 < len(t.breadcrumb) {
-		activeChild = t.breadcrumb[bcLevel+1]
+	if bcLevel+1 < len(inst.breadcrumb) {
+		activeChild = inst.breadcrumb[bcLevel+1]
 	}
-	atFrontier := bcLevel+1 >= len(t.breadcrumb)
+	atFrontier := bcLevel+1 >= len(inst.breadcrumb)
 
 	// When filterSiblings is enabled and we have an active breadcrumb child,
 	// lay out all siblings to find the active child's rect, then replace
@@ -704,7 +706,7 @@ func (t *Treemap) renderZoom(node *layout.Node, bounds layout.Rect, depth, bcLev
 	// and fills the entire available space.
 	children := node.Children
 	var lay *layout.Layout
-	if t.filterSiblings && activeChild != nil {
+	if inst.filterSiblings && activeChild != nil {
 		// Temporarily swap node.Children so ComputeLayoutAt lays out
 		// only the active child, filling the entire available space.
 		// node.Size goes with them: a self rect would take a share of the
@@ -719,7 +721,7 @@ func (t *Treemap) renderZoom(node *layout.Node, bounds layout.Rect, depth, bcLev
 		lay = layout.ComputeLayoutAt(node, bounds)
 		// The container's own quantity, when it has one. Painted before the
 		// children so a nested recursion draws over it rather than under.
-		t.paintSelfCell(node, lay, bounds, depth, cellSeq, 6, zoomCellVSlack, 3, 2)
+		inst.paintSelfCell(node, lay, bounds, depth, cellSeq, 6, zoomCellVSlack, 3, 2)
 	}
 
 	for _, child := range children {
@@ -728,8 +730,8 @@ func (t *Treemap) renderZoom(node *layout.Node, bounds layout.Rect, depth, bcLev
 			continue
 		}
 
-		*cellSeq += 2
-		frameCreator, cellHandle := t.cellIds(*cellSeq)
+		*cellSeq++
+		frameCreator, cellHandle := inst.cellIds(*cellSeq)
 
 		resp := c.CurrentApplicationState.StateManager.GetResponse(cellHandle)
 		hovered := resp.HasHovered()
@@ -739,18 +741,18 @@ func (t *Treemap) renderZoom(node *layout.Node, bounds layout.Rect, depth, bcLev
 
 		drillable := atFrontier && hasChildren
 		drillUpTo := 0
-		if isActive && bcLevel+2 < len(t.breadcrumb) {
+		if isActive && bcLevel+2 < len(inst.breadcrumb) {
 			drillUpTo = bcLevel + 2
 		}
 
-		state := computeZoomState(isActive, atFrontier, hasChildren, drillable, drillUpTo > 0, hovered, bcLevel, len(t.breadcrumb))
+		state := computeZoomState(isActive, atFrontier, hasChildren, drillable, drillUpTo > 0, hovered, bcLevel, len(inst.breadcrumb))
 		info := CellInfo{Node: child, Depth: depth, State: state}
-		visuals := t.style.Visuals(info)
-		colors, _ := t.coloring.Colors(info)
+		visuals := inst.style.Visuals(info)
+		colors, _ := inst.coloring.Colors(info)
 
-		fill, strokeColor, textColor := t.resolveColors(colors, visuals, state)
+		fill, strokeColor, textColor := inst.resolveColors(colors, visuals, state)
 
-		t.cells = append(t.cells, cellDesc{
+		inst.cells = append(inst.cells, cellDesc{
 			node: child, handle: cellHandle,
 			drillable: drillable, drillUpTo: drillUpTo, rect: r,
 			state: state, depth: depth,
@@ -767,7 +769,7 @@ func (t *Treemap) renderZoom(node *layout.Node, bounds layout.Rect, depth, bcLev
 		// so a label taller than the content box (cellH - zoomCellVSlack)
 		// would grow it past the cell rect and paint over the neighbors
 		// below (metrics.go).
-		showName := r.W > 40 && r.H > t.metrics.nameMinH(zoomCellVSlack)
+		showName := r.W > 40 && r.H > inst.metrics.nameMinH(zoomCellVSlack)
 		// Hatch is a StyleI decision — zero spec = no hatch. Callers who want
 		// "colored cells never hatched" can wrap DefaultStyle in their own
 		// StyleI that zeros Hatch when their own ColoringI applied. Hatched
@@ -783,7 +785,7 @@ func (t *Treemap) renderZoom(node *layout.Node, bounds layout.Rect, depth, bcLev
 				CornerRadius(visuals.CornerRadius).
 				Stroke(visuals.BorderWidth, strokeColor).
 				InnerMarginSides(3, 3, 2, 2)
-			if drillable || drillUpTo > 0 || (t.leafClickSensing && atFrontier) {
+			if drillable || drillUpTo > 0 || (inst.leafClickSensing && atFrontier) {
 				frame = frame.SenseClick()
 			}
 			// A cell shows its own children inside it when it's the drilled-in
@@ -803,19 +805,19 @@ func (t *Treemap) renderZoom(node *layout.Node, bounds layout.Rect, depth, bcLev
 					// against the resolved fill so labels stay readable across
 					// arbitrary palettes.
 					c.LabelAtoms(c.Atoms().
-						BeginRichTextColored(textColor, t.colorTransparentBg, child.Name).
+						BeginRichTextColored(textColor, inst.colorTransparentBg, child.Name).
 						End().Keep()).
 						Truncate().Send()
-					t.paintCellValue(child, r, textColor, rendersInner, t.metrics.valueMinH(zoomCellVSlack))
+					inst.paintCellValue(child, r, textColor, rendersInner, inst.metrics.valueMinH(zoomCellVSlack))
 				}
 			}
 		}
 
 		if hatched {
-			t.paintHatch(r, *cellSeq, visuals.Hatch, visuals.CornerRadius)
+			inst.paintHatch(r, *cellSeq, visuals.Hatch, visuals.CornerRadius)
 			if showName {
 				// Inner margins (3, 3, 2, 2) — keep in sync with the Frame above.
-				t.paintLabelsAboveHatch(child, r, textColor, rendersInner, 3, 2, t.metrics.valueMinH(zoomCellVSlack))
+				inst.paintLabelsAboveHatch(child, r, textColor, rendersInner, 3, 2, inst.metrics.valueMinH(zoomCellVSlack))
 			}
 		}
 
@@ -830,12 +832,12 @@ func (t *Treemap) renderZoom(node *layout.Node, bounds layout.Rect, depth, bcLev
 			// off-path sibling cells painted later in this loop.
 			inner := innerRect(r)
 			if inner.W > 8 && inner.H > 8 {
-				t.renderZoom(child, inner, depth+1, bcLevel+1, cellSeq)
+				inst.renderZoom(child, inner, depth+1, bcLevel+1, cellSeq)
 			}
 		} else if atFrontier && len(child.Children) > 0 {
 			inner := innerRect(r)
 			if inner.W > 8 && inner.H > 8 {
-				t.renderLeafChildren(child, inner, depth+1, t.previewDepth(), cellSeq)
+				inst.renderLeafChildren(child, inner, depth+1, inst.previewDepth(), cellSeq)
 			}
 		}
 	}
@@ -851,10 +853,10 @@ func (t *Treemap) renderZoom(node *layout.Node, bounds layout.Rect, depth, bcLev
 // would make the container's own area a dead zone in a picture where every
 // other rectangle navigates.
 //
-// It is still appended to t.cells, so Events.Hovered reports the CONTAINER when
+// It is still appended to inst.cells, so Events.Hovered reports the CONTAINER when
 // the pointer is over its own cell — the honest answer, and the one a host
 // reading a hover into a status line wants.
-func (t *Treemap) paintSelfCell(node *layout.Node, lay *layout.Layout, bounds layout.Rect, depth int, cellSeq *uint64, minPx, vSlack float64, marginX, marginY float32) {
+func (inst *Treemap) paintSelfCell(node *layout.Node, lay *layout.Layout, bounds layout.Rect, depth int, cellSeq *uint64, minPx, vSlack float64, marginX, marginY float32) {
 	r := lay.SelfRectOf(node)
 	if r.W < minPx || r.H < minPx {
 		return
@@ -866,8 +868,8 @@ func (t *Treemap) paintSelfCell(node *layout.Node, lay *layout.Layout, bounds la
 		return
 	}
 
-	*cellSeq += 2
-	frameCreator, cellHandle := t.cellIds(*cellSeq)
+	*cellSeq++
+	frameCreator, cellHandle := inst.cellIds(*cellSeq)
 
 	resp := c.CurrentApplicationState.StateManager.GetResponse(cellHandle)
 	state := CellStateSelf | CellStateLeaf
@@ -875,17 +877,17 @@ func (t *Treemap) paintSelfCell(node *layout.Node, lay *layout.Layout, bounds la
 		state |= CellStateHovered
 	}
 	info := CellInfo{Node: node, Depth: depth, State: state}
-	visuals := t.style.Visuals(info)
-	colors, _ := t.coloring.Colors(info)
-	fill, strokeColor, textColor := t.resolveColors(colors, visuals, state)
+	visuals := inst.style.Visuals(info)
+	colors, _ := inst.coloring.Colors(info)
+	fill, strokeColor, textColor := inst.resolveColors(colors, visuals, state)
 
-	t.cells = append(t.cells, cellDesc{
+	inst.cells = append(inst.cells, cellDesc{
 		node: node, handle: cellHandle, rect: r, state: state, depth: depth,
 	})
 
 	cellW := float32(r.W)
 	cellH := float32(r.H)
-	showName := r.W > 35 && r.H > t.metrics.nameMinH(vSlack)
+	showName := r.W > 35 && r.H > inst.metrics.nameMinH(vSlack)
 	for range c.AllocateUiAtRect(float32(r.X), float32(r.Y), float32(r.X+r.W), float32(r.Y+r.H)).KeepIter() {
 		c.UiClipToMaxRect()
 		frame := c.Frame(frameCreator).
@@ -902,15 +904,15 @@ func (t *Treemap) paintSelfCell(node *layout.Node, lay *layout.Layout, bounds la
 				continue
 			}
 			c.LabelAtoms(c.Atoms().
-				BeginRichTextColored(textColor, t.colorTransparentBg, node.Name).
+				BeginRichTextColored(textColor, inst.colorTransparentBg, node.Name).
 				End().Keep()).
 				Truncate().Send()
 			// rendersInner is false by construction: a self cell has no children
 			// to nest, which is the whole reason it exists as a separate cell.
-			if t.selfCellLabelFn != nil && r.H > t.metrics.valueMinH(vSlack) {
-				if sub := t.selfCellLabelFn(node); sub != "" {
+			if inst.selfCellLabelFn != nil && r.H > inst.metrics.valueMinH(vSlack) {
+				if sub := inst.selfCellLabelFn(node); sub != "" {
 					c.LabelAtoms(c.Atoms().
-						BeginRichTextColored(textColor, t.colorTransparentBg, sub).
+						BeginRichTextColored(textColor, inst.colorTransparentBg, sub).
 						Small().Weak().End().Keep()).
 						Truncate().Send()
 				}
@@ -922,11 +924,11 @@ func (t *Treemap) paintSelfCell(node *layout.Node, lay *layout.Layout, bounds la
 // previewDepth resolves the effective number of preview levels to render
 // below the frontier: maxNestingDepth when positive, else the "show all"
 // safety cap (Options.MaxNestingDepth documents NestingAll as unlimited).
-func (t *Treemap) previewDepth() (n int) {
-	if t.maxNestingDepth <= 0 {
+func (inst *Treemap) previewDepth() (n int) {
+	if inst.maxNestingDepth <= 0 {
 		return maxPreviewRecursion
 	}
-	return t.maxNestingDepth
+	return inst.maxNestingDepth
 }
 
 // renderLeafChildren paints a non-interactive preview of node's descendants,
@@ -934,12 +936,12 @@ func (t *Treemap) previewDepth() (n int) {
 // behavior). Deeper levels nest inside their parent's inner rect, which is
 // what lets the whole subtree show at once (see Options.MaxNestingDepth). These
 // cells are display-only; interactivity stays on the frontier in renderZoom.
-func (t *Treemap) renderLeafChildren(node *layout.Node, bounds layout.Rect, depth, remaining int, cellSeq *uint64) {
+func (inst *Treemap) renderLeafChildren(node *layout.Node, bounds layout.Rect, depth, remaining int, cellSeq *uint64) {
 	if remaining <= 0 || len(node.Children) == 0 {
 		return
 	}
 	lay := layout.ComputeLayoutAt(node, bounds)
-	t.paintSelfCell(node, lay, bounds, depth, cellSeq, 4, previewCellVSlack, 2, 1)
+	inst.paintSelfCell(node, lay, bounds, depth, cellSeq, 4, previewCellVSlack, 2, 1)
 
 	for _, child := range node.Children {
 		r := lay.RectOf(child)
@@ -947,17 +949,17 @@ func (t *Treemap) renderLeafChildren(node *layout.Node, bounds layout.Rect, dept
 			continue
 		}
 
-		*cellSeq += 2
-		frameCreator, cellHandle := t.cellIds(*cellSeq)
+		*cellSeq++
+		frameCreator, cellHandle := inst.cellIds(*cellSeq)
 
 		resp := c.CurrentApplicationState.StateManager.GetResponse(cellHandle)
 		state := computePreviewState(len(child.Children) > 0, resp.HasHovered())
 		info := CellInfo{Node: child, Depth: depth, State: state}
-		visuals := t.style.Visuals(info)
-		colors, _ := t.coloring.Colors(info)
-		fill, strokeColor, textColor := t.resolveColors(colors, visuals, state)
+		visuals := inst.style.Visuals(info)
+		colors, _ := inst.coloring.Colors(info)
+		fill, strokeColor, textColor := inst.resolveColors(colors, visuals, state)
 
-		t.cells = append(t.cells, cellDesc{
+		inst.cells = append(inst.cells, cellDesc{
 			node: child, handle: cellHandle, rect: r,
 			state: state, depth: depth, drillable: len(child.Children) > 0,
 		})
@@ -970,7 +972,7 @@ func (t *Treemap) renderLeafChildren(node *layout.Node, bounds layout.Rect, dept
 		rendersInner := remaining > 1 && len(child.Children) > 0
 		// Same measured height gate as renderZoom, at the preview
 		// cells' tighter vertical chrome (metrics.go).
-		showName := r.W > 35 && r.H > t.metrics.nameMinH(previewCellVSlack)
+		showName := r.W > 35 && r.H > inst.metrics.nameMinH(previewCellVSlack)
 		// StyleI is responsible for deciding whether preview cells are hatched.
 		// DefaultStyle returns no hatch for CellStatePreview; custom styles can
 		// override that policy. As in renderZoom, hatched cells defer their
@@ -984,7 +986,7 @@ func (t *Treemap) renderLeafChildren(node *layout.Node, bounds layout.Rect, dept
 				CornerRadius(visuals.CornerRadius).
 				Stroke(visuals.BorderWidth, strokeColor).
 				InnerMarginSides(2, 2, 1, 1)
-			if t.leafClickSensing {
+			if inst.leafClickSensing {
 				frame = frame.SenseClick()
 			}
 			for range frame.KeepIter() {
@@ -994,18 +996,18 @@ func (t *Treemap) renderLeafChildren(node *layout.Node, bounds layout.Rect, dept
 
 				if showName && !hatched {
 					c.LabelAtoms(c.Atoms().
-						BeginRichTextColored(textColor, t.colorTransparentBg, child.Name).
+						BeginRichTextColored(textColor, inst.colorTransparentBg, child.Name).
 						End().Keep()).
 						Truncate().Send()
-					t.paintCellValue(child, r, textColor, rendersInner, t.metrics.valueMinH(previewCellVSlack))
+					inst.paintCellValue(child, r, textColor, rendersInner, inst.metrics.valueMinH(previewCellVSlack))
 				}
 			}
 		}
 		if hatched {
-			t.paintHatch(r, *cellSeq, visuals.Hatch, visuals.CornerRadius)
+			inst.paintHatch(r, *cellSeq, visuals.Hatch, visuals.CornerRadius)
 			if showName {
 				// Inner margins (2, 2, 1, 1) — keep in sync with the Frame above.
-				t.paintLabelsAboveHatch(child, r, textColor, rendersInner, 2, 1, t.metrics.valueMinH(previewCellVSlack))
+				inst.paintLabelsAboveHatch(child, r, textColor, rendersInner, 2, 1, inst.metrics.valueMinH(previewCellVSlack))
 			}
 		}
 
@@ -1015,7 +1017,7 @@ func (t *Treemap) renderLeafChildren(node *layout.Node, bounds layout.Rect, dept
 		if remaining > 1 && len(child.Children) > 0 {
 			inner := innerRect(r)
 			if inner.W > 8 && inner.H > 8 {
-				t.renderLeafChildren(child, inner, depth+1, remaining-1, cellSeq)
+				inst.renderLeafChildren(child, inner, depth+1, remaining-1, cellSeq)
 			}
 		}
 	}
@@ -1027,34 +1029,34 @@ func (t *Treemap) renderLeafChildren(node *layout.Node, bounds layout.Rect, dept
 // the last one (700 × 450 before the first). Wraps its body in
 // c.IdScope(scopeKey) so multiple instances sharing the same WidgetIdStack
 // don't collide, and returns what the frame produced.
-func (t *Treemap) Render(w, h float32) (ev Events) {
+func (inst *Treemap) Render(w, h float32) (ev Events) {
 	if w > 0 && h > 0 {
-		t.containerW, t.containerH = w, h
+		inst.containerW, inst.containerH = w, h
 	}
 	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
-	t.density = styletokens.ActiveDensity()
-	t.applyOpts()
-	t.leafClicked = nil
-	for range c.IdScope(t.ids.PrepareStr(t.scopeKey)) {
-		t.renderBody()
-		ev.Hovered = t.hovered()
+	inst.density = styletokens.ActiveDensity()
+	inst.applyOpts()
+	inst.leafClicked = nil
+	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
+		inst.renderBody()
+		ev.Hovered = inst.hovered()
 	}
-	ev.ClickedLeaf = t.leafClicked
-	ev.Nav, t.pendingNav = t.pendingNav, nil
+	ev.ClickedLeaf = inst.leafClicked
+	ev.Nav, inst.pendingNav = inst.pendingNav, nil
 	return
 }
 
 // RenderFill is Render sized to the pane: the room left in the enclosing Ui
 // last frame, less the breadcrumb bar and the status line, with fallbackW ×
 // fallbackH until the probe answers.
-func (t *Treemap) RenderFill(fallbackW, fallbackH float32) (ev Events) {
+func (inst *Treemap) RenderFill(fallbackW, fallbackH float32) (ev Events) {
 	w, h := fallbackW, fallbackH
-	for range c.IdScope(t.ids.PrepareStr(t.scopeKey)) {
-		if pw, ph, ok := c.CapturePaneSize(t.ids.ProbeSeq("pane")); ok && pw > 0 && ph > fillChromeH {
+	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
+		if pw, ph, ok := c.CapturePaneSize(inst.ids.ProbeSeq("pane")); ok && pw > 0 && ph > fillChromeH {
 			w, h = pw, ph-fillChromeH
 		}
 	}
-	return t.Render(w, h)
+	return inst.Render(w, h)
 }
 
 // fillChromeH is what RenderFill holds back from the pane height for the
@@ -1063,23 +1065,23 @@ const fillChromeH float32 = 64
 
 // hovered returns the node whose cell is under the pointer this frame,
 // innermost first (matching the status-label readout).
-func (t *Treemap) hovered() (node *layout.Node) {
+func (inst *Treemap) hovered() (node *layout.Node) {
 	sm := c.CurrentApplicationState.StateManager
-	for i := len(t.cells) - 1; i >= 0; i-- {
-		if sm.GetResponse(t.cells[i].handle).HasHovered() {
-			return t.cells[i].node
+	for i := len(inst.cells) - 1; i >= 0; i-- {
+		if sm.GetResponse(inst.cells[i].handle).HasHovered() {
+			return inst.cells[i].node
 		}
 	}
 	return nil
 }
 
-func (t *Treemap) renderBody() {
-	cur := t.Focused()
+func (inst *Treemap) renderBody() {
+	cur := inst.Focused()
 
 	// Keep the measured label gates current across Sync's databind reset;
 	// the real row heights land one frame after the first call (metrics.go).
-	t.metrics.bindIds(t.ids)
-	t.metrics.renewBindings()
+	inst.metrics.bindIds(inst.ids)
+	inst.metrics.renewBindings()
 
 	// --- Breadcrumb bar ---
 	// Per-segment pills: ancestors are framed buttons; the tail is a
@@ -1088,55 +1090,55 @@ func (t *Treemap) renderBody() {
 	// sit directly on the window background so their shapes read as
 	// individual clickable units rather than text inside a single bar.
 	for range c.Horizontal().KeepIter() {
-		for level, node := range t.breadcrumb {
+		for level, node := range inst.breadcrumb {
 			if level > 0 {
 				c.LabelAtoms(c.Atoms().
-					BeginRichTextColored(t.colorBreadcrumbSep, t.colorTransparentBg, " › ").
+					BeginRichTextColored(inst.colorBreadcrumbSep, inst.colorTransparentBg, " › ").
 					End().Keep()).Send()
 			}
-			if level < len(t.breadcrumb)-1 {
-				if c.Button(t.ids.PrepareSeq(uint64(level)),
-					c.Atoms().BeginRichTextColored(t.colorBreadcrumbFg, t.colorTransparentBg, node.Name).End().Keep()).
+			if level < len(inst.breadcrumb)-1 {
+				if c.Button(inst.ids.PrepareSeq(uint64(level)),
+					c.Atoms().BeginRichTextColored(inst.colorBreadcrumbFg, inst.colorTransparentBg, node.Name).End().Keep()).
 					Frame(true).
 					SendResp().HasPrimaryClicked() {
-					newPath := append([]*layout.Node(nil), t.breadcrumb[:level+1]...)
-					t.applyNavigation(newPath, NavTriggerBreadcrumbClick)
+					newPath := append([]*layout.Node(nil), inst.breadcrumb[:level+1]...)
+					inst.applyNavigation(newPath, NavTriggerBreadcrumbClick)
 					return
 				}
 			} else {
 				// Tail chip: non-interactive, white-bordered so "you are here" reads at a glance.
-				for range c.Frame(t.ids.PrepareStr("bc-tail")).
-					Fill(t.colorBreadcrumbBg).
+				for range c.Frame(inst.ids.PrepareStr("bc-tail")).
+					Fill(inst.colorBreadcrumbBg).
 					CornerRadius(styletokens.RoundingSm).
-					Stroke(styletokens.StrokeRegular, t.colorBreadcrumbFg).
+					Stroke(styletokens.StrokeRegular, inst.colorBreadcrumbFg).
 					InnerMarginSides(8, 8, 3, 3).
 					KeepIter() {
 					c.LabelAtoms(c.Atoms().
-						BeginRichTextColored(t.colorLeafText, t.colorTransparentBg, node.Name).
+						BeginRichTextColored(inst.colorLeafText, inst.colorTransparentBg, node.Name).
 						Strong().End().Keep()).Send()
 				}
 			}
 		}
 	}
 
-	c.AddSpace(styletokens.PaddingInner(t.density))
+	c.AddSpace(styletokens.PaddingInner(inst.density))
 
 	// --- Treemap area ---
-	if len(cur.Children) > 0 || len(t.breadcrumb) > 1 {
-		t.cells = t.cells[:0]
+	if len(cur.Children) > 0 || len(inst.breadcrumb) > 1 {
+		inst.cells = inst.cells[:0]
 
 		// Animated render bounds: during a transition the treemap content
 		// is painted inside a rect that expands from anim.FromRect() to
 		// the full container. animMachine.Tick returns the effective
 		// progress (always 0→1) and transitions itself to AnimStateIdle when
 		// done — the renderer just consumes the value.
-		renderBounds := t.containerRect()
-		if effT, running := t.anim.Tick(); running {
-			renderBounds = lerpRect(t.anim.FromRect(), renderBounds, effT)
+		renderBounds := inst.containerRect()
+		if effT, running := inst.anim.Tick(); running {
+			renderBounds = lerpRect(inst.anim.FromRect(), renderBounds, effT)
 		}
 
-		for range c.Frame(t.ids.PrepareStr("container")).
-			Fill(t.colorContainerBg).
+		for range c.Frame(inst.ids.PrepareStr("container")).
+			Fill(inst.colorContainerBg).
 			CornerRadius(styletokens.RoundingMd).
 			InnerMargin(0).
 			KeepIter() {
@@ -1148,16 +1150,16 @@ func (t *Treemap) renderBody() {
 			// label below — and the host's layout — jump every animation
 			// frame. The fixed minimum keeps the container background and
 			// downstream layout stable.
-			c.UiSetMinWidth(t.containerW)
-			c.UiSetMinHeight(t.containerH)
+			c.UiSetMinWidth(inst.containerW)
+			c.UiSetMinHeight(inst.containerH)
 
 			var cellSeq uint64
-			t.renderZoom(t.root, renderBounds, 0, 0, &cellSeq)
+			inst.renderZoom(inst.root, renderBounds, 0, 0, &cellSeq)
 		}
 
 		// Drive the tween every frame to keep egui's AnimationManager primed.
-		animId := t.ids.PrepareStr("anim").Derive()
-		c.AnimateBoolWithTimeBind(animId, t.anim.Target(), t.animDurSecs, t.anim.TPtr())
+		animId := inst.ids.PrepareStr("anim").Derive()
+		c.AnimateBoolWithTimeBind(animId, inst.anim.Target(), inst.animDurSecs, inst.anim.TPtr())
 
 		// --- Interaction pass ---
 		sm := c.CurrentApplicationState.StateManager
@@ -1166,27 +1168,27 @@ func (t *Treemap) renderBody() {
 		drillUpToLen := 0
 		var drillUpTarget *layout.Node
 
-		for i := len(t.cells) - 1; i >= 0; i-- {
-			resp := sm.GetResponse(t.cells[i].handle)
+		for i := len(inst.cells) - 1; i >= 0; i-- {
+			resp := sm.GetResponse(inst.cells[i].handle)
 			if resp.HasHovered() && hoverInfo == "" {
-				hoverInfo = fmt.Sprintf("%s  |  size: %s", t.cells[i].node.Name, formatBytes(t.cells[i].node.TotalSize()))
+				hoverInfo = fmt.Sprintf("%s  |  size: %s", inst.cells[i].node.Name, formatBytes(inst.cells[i].node.TotalSize()))
 			}
 			if resp.HasPrimaryClicked() && drillTarget == nil && drillUpTarget == nil {
 				switch {
-				case t.cells[i].drillable:
-					drillTarget = t.cells[i].node
-				case t.cells[i].drillUpTo > 0:
-					drillUpTarget = t.cells[i].node
-					drillUpToLen = t.cells[i].drillUpTo
-				case t.leafClickSensing && t.cells[i].state.Has(CellStateFrontier) && t.cells[i].state.Has(CellStateLeaf):
-					t.leafClicked = t.cells[i].node
-				case t.leafClickSensing && t.cells[i].state.Has(CellStatePreview) && t.cells[i].state.Has(CellStateLeaf):
-					t.leafClicked = t.cells[i].node
+				case inst.cells[i].drillable:
+					drillTarget = inst.cells[i].node
+				case inst.cells[i].drillUpTo > 0:
+					drillUpTarget = inst.cells[i].node
+					drillUpToLen = inst.cells[i].drillUpTo
+				case inst.leafClickSensing && inst.cells[i].state.Has(CellStateFrontier) && inst.cells[i].state.Has(CellStateLeaf):
+					inst.leafClicked = inst.cells[i].node
+				case inst.leafClickSensing && inst.cells[i].state.Has(CellStatePreview) && inst.cells[i].state.Has(CellStateLeaf):
+					inst.leafClicked = inst.cells[i].node
 				}
 			}
 		}
 
-		if !t.statusLineHidden {
+		if !inst.statusLineHidden {
 			if hoverInfo != "" {
 				c.Label(hoverInfo).Send()
 			} else {
@@ -1204,18 +1206,18 @@ func (t *Treemap) renderBody() {
 			// depth: inserting a single ancestor by hand skipped levels for
 			// previews deeper than one, and applyNavigation does not re-validate,
 			// so the resulting gap would corrupt the drill state.
-			if newPath := findPath(t.root, drillTarget, nil); newPath != nil {
-				t.applyNavigation(newPath, NavTriggerCellClick)
+			if newPath := findPath(inst.root, drillTarget, nil); newPath != nil {
+				inst.applyNavigation(newPath, NavTriggerCellClick)
 			}
 		case drillUpTarget != nil:
-			newPath := append([]*layout.Node(nil), t.breadcrumb[:drillUpToLen]...)
-			t.applyNavigation(newPath, NavTriggerDrillUpCellClick)
+			newPath := append([]*layout.Node(nil), inst.breadcrumb[:drillUpToLen]...)
+			inst.applyNavigation(newPath, NavTriggerDrillUpCellClick)
 		}
 	} else {
 		c.Label(fmt.Sprintf("leaf: %s  |  size: %s", cur.Name, formatBytes(cur.TotalSize()))).Send()
-		for range c.Frame(t.ids.PrepareStr("leaf")).
-			Fill(t.colorLeafBg).
-			InnerMargin(styletokens.PaddingLoose(t.density)).
+		for range c.Frame(inst.ids.PrepareStr("leaf")).
+			Fill(inst.colorLeafBg).
+			InnerMargin(styletokens.PaddingLoose(inst.density)).
 			CornerRadius(styletokens.RoundingLg).
 			KeepIter() {
 			c.Label(fmt.Sprintf("File: %s", cur.Name)).Send()

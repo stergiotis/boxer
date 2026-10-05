@@ -481,7 +481,7 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 ### M5 — The jackstay app wizard and its scene ✓
 
-### M6 — Pack-file target (`export` / `import`) — superseded by ADR-0271
+### M6 — Pack-file target (`export` / `import`)
 
 Deferred:
 

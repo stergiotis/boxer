@@ -402,7 +402,7 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 		}
 		for _, a := range opts.LaunchApps {
 			if id := a.Manifest().Id; !reg.Launchable(id) {
-				err = eb.Build().Str("id", string(id)).Errorf("hostboot: screenshot mode: app is not launchable under %s", launchlimit.Where.Spec().Name)
+				err = eb.Build().Str("id", string(id)).Errorf("hostboot: screenshot mode: app is not launchable under %s", launchlimit.Where.Spec().Name) //boxer:lint disable=CS013 reason="shape 3: the variable's name is what the reader changes"
 				return
 			}
 		}

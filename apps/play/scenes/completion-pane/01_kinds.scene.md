@@ -34,7 +34,7 @@ SELECT LW_COMPONENT('Sys
 {"do":"note","text":"ADR-0190 M1 — the component-kind domain, rendered"}
 {"do":"sleep","settleMs":2500,"comment":"play mounts a dock, restores a layout and runs its pass pipeline before the pane has anything to draw"}
 {"do":"wait","valueContains":"component kind","role":"label","settleMs":600,"comment":"the heading names the position: which call, which argument, which domain"}
-{"do":"wait","value":"SysMem","role":"label","comment":"a registered kind reached a row"}
+{"do":"wait","value":"SysBattery","role":"label","comment":"a registered kind reached a row — the first Sys* kind: the pane lists the whole domain, and a virtualised row below the pane's edge is not in the accessibility tree"}
 {"do":"wait","value":"SysCpu","role":"label","comment":"and so did a second one — the pane shows the whole domain, not only the row the caret matches"}
 {"do":"wait","value":"components","role":"label","nth":0,"comment":"the provenance column: SD1 asks every candidate to carry where it came from"}
 ```

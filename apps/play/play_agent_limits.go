@@ -7,6 +7,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
+	"github.com/stergiotis/boxer/public/keelson/data/passreg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
 )
@@ -77,13 +78,49 @@ func (inst *PlayApp) refuseAgentRun(obo *app.OnBehalfOf) (err error) {
 	if inst.client == nil {
 		return
 	}
-	residual, _ := inst.client.buildResidual(inst.sql)
-	lerr := checkAgentLimits(residual, inst.client.Dispatch(inst.sql, ""), obo, inst.client.datasetAliasOf())
+	residual, _, _ := inst.client.rewriteFor(obo, inst.sql, nil)
+	lerr := checkAgentLimits(residual, inst.client.previewDispatch(residual, ""), obo, inst.client.datasetAliasOf())
 	if limit, ok := lerr.(*AgentLimitError); ok {
 		if limit.Destination != "" {
 			return app.RefuseForDestinations(lerr.Error(), limit.Destination)
 		}
 		return app.RefuseOperation(lerr.Error())
+	}
+	return
+}
+
+// rewriteFor is the client-side rewrite an agent's work may make: the whole
+// rewrite for the person (obo nil) or under a grant that lists the endpoint,
+// and otherwise [Client.buildResidualOffline]. catalog says which was made. validate_sql, trace_rewrite and the run's checks all
+// take the rewrite from here, so an agent's work reaches the endpoint only
+// under the grant (ADR-0270 §SD2) and what they report is what the run sends.
+func (inst *Client) rewriteFor(obo *app.OnBehalfOf, sql string, observe func(passreg.ApplyObservation)) (residual string, params map[string]string, catalog bool) {
+	catalog = obo == nil || slices.Contains(obo.Destinations, endpointDestination(inst))
+	if catalog {
+		residual, params = inst.buildResidualObserved(sql, observe)
+	} else {
+		residual, params = inst.buildResidualOffline(sql, observe)
+	}
+	return
+}
+
+// dispatchFor is [Client.Dispatch] resolved from the rewrite rewriteFor makes
+// for obo, so the decision of an agent's run sends no probe its grant does not
+// cover either. A nil obo is Dispatch.
+func (inst *Client) dispatchFor(obo *app.OnBehalfOf, sql string, affinity string) (dec dispatchDecision) {
+	residual, _, _ := inst.rewriteFor(obo, sql, nil)
+	dec = inst.dispatchResidual(residual, affinity)
+	return
+}
+
+// statementBounds refuses a statement validate_sql and trace_rewrite do not
+// take: an empty one, or one past the 16 KiB bound.
+func statementBounds(stmt string) (err error) {
+	switch {
+	case strings.TrimSpace(stmt) == "":
+		return app.RefuseOperation("the buffer is empty; pass sql")
+	case len(stmt) > schemaMaxStatement:
+		return app.RefuseOperation("the statement is longer than 16 KiB")
 	}
 	return
 }

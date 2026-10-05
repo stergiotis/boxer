@@ -380,6 +380,13 @@ Three gaps in the entry above:
   refuses. A statement dispatch sends to the introspection plane does not
   ask for the endpoint at all.
 
+### 2026-10-02 — the trial cited above left the tree
+
+Two updates of this date cite what the agent-operations-play trial's models
+did. The protocol and its runs were withdrawn from the tree (ADR-0269,
+update of this date). Both decisions stand on the behaviour they describe:
+a run refused in the status line went unseen, and schema probes ran through
+the person's buffer.
 
 ### 2026-10-03 — the Projection pane, for an agent
 

@@ -428,10 +428,11 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 ### 2026-10-02 — refusals the model can act on, and typed operation tools
 
-The agent-operations-play trial (GLM-4.6 and GPT-6.1 Sol, two tasks in
-play) found every examined failure at a refusal that said what was wrong
-but not what to do: a `call` with no `args`, a run whose destination the
-grant lacked, a grant asking for nothing. The coordinator changed:
+Runs of a trial protocol over play (GLM-4.6, two tasks; the protocol has
+since left the tree, ADR-0269 update of this date) found every examined
+failure at a refusal that said what was wrong but not what to do: a
+`call` with no `args`, a run whose destination the grant lacked, a grant
+asking for nothing. The coordinator changed:
 
 - **`call` is `call_operation`,** and it refuses keys beside `window` and
   `operation` by name instead of dropping them; a refusal of a call with no
@@ -447,7 +448,7 @@ grant lacked, a grant asking for nothing. The coordinator changed:
   JSON.
 - **Operation tools** (`BOXER_CHAT_OPERATION_TOOLS`, off by default): each
   operation of a window in the task is also a typed tool,
-  `w<window>_<operation>`, beside the fixed tools. It is a trial arm, not a
+  `w<window>_<operation>`, beside the fixed tools. It is an experiment, not a
   default: the tool list then changes from call to call.
 - **`read_help`** reads the apps' help over `runtime.agent.help`
   (ADR-0269, update of this date): a search across the apps, an app's

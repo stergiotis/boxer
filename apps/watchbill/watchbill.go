@@ -89,6 +89,9 @@ type App struct {
 	monitor *taskmonitor.Monitor
 	machine *fsmview.Machine[string]
 	chip    *fsmview.View[string]
+	// mirrored is the job machine mirrors; the selection can move before
+	// the frame that mirrors the new job.
+	mirrored string
 
 	appCtx    context.Context
 	cancelApp context.CancelFunc

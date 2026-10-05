@@ -392,11 +392,15 @@ func TestTheSelectedJobsMachineIsMounted(t *testing.T) {
 	}
 	assert.Empty(t, read().Current, "no job selected")
 	inst.select_("j1")
-	inst.machine.Mirror(watchbillstore.StateFailed)
+	inst.mirror(watchbillstore.Job{ID: "j1", State: watchbillstore.StateFailed})
 	st := read()
 	assert.Equal(t, watchbillstore.StateFailed, st.Current)
 	require.Len(t, st.Next, 1)
 	assert.Equal(t, opfsm.Edge{From: watchbillstore.StateFailed, To: watchbillstore.StateQueued, Label: "policy"}, st.Next[0])
 	assert.Empty(t, st.History, "the machine mirrors whichever job is selected, so its steps are left out")
 	assert.Equal(t, watchbillstore.StateFailed, h.ResourceValue("job_state"))
+
+	inst.select_("j2")
+	assert.Empty(t, read().Current, "the machine still mirrors j1, so j2 reports no state")
+	assert.Equal(t, "", h.ResourceValue("job_state"))
 }

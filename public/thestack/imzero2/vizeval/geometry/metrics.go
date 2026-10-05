@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"lukechampine.com/blake3"
 )
@@ -30,6 +32,9 @@ const (
 	// sink wrote an ellipsis into the text itself (the box-drawn tables cut
 	// wide cells that way, and egui never sees a cut).
 	MetricTextElided = "text.elided"
+	// MetricTextElidedShare is text.elided over text.runs: how much of what is
+	// written was shortened. Absent when no run is visible.
+	MetricTextElidedShare = "text.elided_share"
 	// MetricTextMinSize is the smallest font size among visible runs, points.
 	MetricTextMinSize = "text.min_size"
 	// MetricTextMinContrast is the lowest WCAG contrast ratio of a visible
@@ -154,6 +159,7 @@ func measureText(d Drawing, runs []TextRun, area Rect, m map[string]float64) {
 	m[MetricTextElided] = float64(elided)
 	m[MetricTextLowContrast] = float64(lowContrast)
 	if len(runs) > 0 {
+		m[MetricTextElidedShare] = float64(elided) / float64(len(runs))
 		m[MetricTextMinSize] = minSize
 		m[MetricTextMinContrast] = minContrast
 	}
@@ -379,6 +385,71 @@ func inkRatio(img image.Image, viewport Rect, area Rect) (ratio float64, ok bool
 		}
 	}
 	return float64(ink) / float64(px.Dx()*px.Dy()), true
+}
+
+// KeysLabelled counts the keys written in a visible, unelided text run inside
+// area, as a delimited token: the characters either side of it, if any, are
+// neither letters, digits nor one of "-_.", so host-1 is not found in host-10
+// but is in "host-1 +2", "│ host-1 │" and "\"host-1\"". An elided run names no
+// key, since the reader cannot finish it; halo copies of one label count once
+// because keys, not runs, are counted. A key short enough to occur as a word
+// of unrelated text is found there too.
+//
+// A run of several lines — a code view is one run for the whole document —
+// is searched only in the lines inside its visible box, each line taken as an
+// equal share of the run's height; a scrolled view's hidden lines are not
+// written for the reader.
+func KeysLabelled(d Drawing, area Rect, keys []string) (labelled int) {
+	found := make(map[string]bool, len(keys))
+	for _, r := range d.Runs {
+		vb := visibleBox(r, area)
+		if r.Elided || vb.Empty() {
+			continue
+		}
+		text := visibleLines(r, vb)
+		for _, k := range keys {
+			if k != "" && !found[k] && containsToken(text, k) {
+				found[k] = true
+				labelled++
+			}
+		}
+	}
+	return labelled
+}
+
+// visibleLines is the part of a run's text whose lines fall in vb.
+func visibleLines(r TextRun, vb Rect) string {
+	n := strings.Count(r.Text, "\n") + 1
+	if n == 1 || r.Box.H() <= 0 {
+		return r.Text
+	}
+	pitch := r.Box.H() / float64(n)
+	first := max(0, int((vb.Y0-r.Box.Y0)/pitch))
+	last := min(n-1, int(math.Ceil((vb.Y1-r.Box.Y0)/pitch))-1)
+	if last < first {
+		return ""
+	}
+	return strings.Join(strings.Split(r.Text, "\n")[first:last+1], "\n")
+}
+
+func containsToken(text string, tok string) bool {
+	for off := 0; ; {
+		i := strings.Index(text[off:], tok)
+		if i < 0 {
+			return false
+		}
+		start, end := off+i, off+i+len(tok)
+		before, _ := utf8.DecodeLastRuneInString(text[:start])
+		after, _ := utf8.DecodeRuneInString(text[end:])
+		if (start == 0 || !tokenRune(before)) && (end == len(text) || !tokenRune(after)) {
+			return true
+		}
+		off = start + 1
+	}
+}
+
+func tokenRune(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_' || r == '.'
 }
 
 func absInt(v int) int {

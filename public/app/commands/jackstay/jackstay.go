@@ -176,7 +176,7 @@ func newStructureCommand() *cli.Command {
 			if err != nil {
 				return
 			}
-			sel.Filters, err = parseFilters(c.StringSlice("filter"))
+			sel.Filters, err = parseFilters(filterValues(c))
 			if err != nil {
 				return
 			}
@@ -244,7 +244,28 @@ func openSource(ep jk.Endpoint, scan bool) (src jk.SourceI, err error) {
 }
 
 func filterFlag() cli.Flag {
-	return &cli.StringSliceFlag{Name: "filter", Usage: "sync only the rows of a table that satisfy a ClickHouse boolean expression over its columns, as database.table=expr (repeatable)"}
+	return &cli.GenericFlag{Name: "filter", Value: &filterEntries{}, Usage: "sync only the rows of a table that satisfy a ClickHouse boolean expression over its columns, as database.table=expr (repeatable)"}
+}
+
+// filterEntries collects --filter values whole: a StringSliceFlag splits each
+// value on commas, and an expression holds them (IN lists, function arguments).
+type filterEntries []string
+
+func (inst *filterEntries) Set(v string) error {
+	*inst = append(*inst, v)
+	return nil
+}
+
+func (inst *filterEntries) String() string {
+	return strings.Join(*inst, " ")
+}
+
+// filterValues is what --filter collected.
+func filterValues(c *cli.Context) (entries []string) {
+	if f, ok := c.Generic("filter").(*filterEntries); ok && f != nil {
+		entries = *f
+	}
+	return
 }
 
 // parseFilters reads database.table=expr entries; the first '=' separates,

@@ -31,12 +31,6 @@ const (
 	// tailRadius is the sender-side corner on a cluster's last bubble; the
 	// other three corners take RoundingLg.
 	tailRadius uint8 = 1
-	// dayIdBase keeps day rows' ids clear of message ordinals under one
-	// scope.
-	dayIdBase uint64 = 1 << 40
-	// reactionIdBase likewise keeps a bubble's reaction pills clear of its
-	// other widgets.
-	reactionIdBase uint64 = 0x100
 	// fitSlack keeps a measured body from wrapping its widest line again at
 	// exactly its own width.
 	fitSlack float32 = 1
@@ -170,14 +164,16 @@ func renderRow(in Input, m *Model, st *State, r row, layout LayoutE, bubbleW flo
 	ids := in.Ids
 	switch r.kind {
 	case rowDay:
-		for range c.IdScope(ids.PrepareSeq(dayIdBase + uint64(r.msg))) {
-			c.AddSpace(styletokens.GapItems(dens))
-			for range c.VerticalCentered().KeepIter() {
-				for rt := range c.RichTextLabel(time.UnixMilli(r.dayMS).In(loc).Format("Monday, 2 January 2006")) {
-					rt.Small().Weak()
+		for range c.IdScope(ids.PrepareStr("day")) {
+			for range c.IdScope(ids.PrepareSeq(uint64(r.msg))) {
+				c.AddSpace(styletokens.GapItems(dens))
+				for range c.VerticalCentered().KeepIter() {
+					for rt := range c.RichTextLabel(time.UnixMilli(r.dayMS).In(loc).Format("Monday, 2 January 2006")) {
+						rt.Small().Weak()
+					}
 				}
+				c.AddSpace(styletokens.GapInline(dens))
 			}
-			c.AddSpace(styletokens.GapInline(dens))
 		}
 	case rowSystem:
 		i := int(r.msg)
@@ -243,13 +239,15 @@ func renderBubbleColumn(in Input, m *Model, st *State, i int, r row, layout Layo
 		keys, counts, who := m.Reactions(i)
 		if len(keys) > 0 {
 			for range hrow(mine) {
-				for j := range ordered(len(keys), mine) {
-					b := badge.New(ids.PrepareSeq(reactionIdBase+uint64(j)), keys[j]+" "+strconv.Itoa(int(counts[j]))).
-						Tone(badge.ToneNeutral).Variant(badge.VariantSoft).Size(badge.SizeSm).Pill()
-					if who[j] != "" {
-						b = b.Tooltip(who[j])
+				for range c.IdScope(ids.PrepareStr("reactions")) {
+					for j := range ordered(len(keys), mine) {
+						b := badge.New(ids.PrepareSeq(uint64(j)), keys[j]+" "+strconv.Itoa(int(counts[j]))).
+							Tone(badge.ToneNeutral).Variant(badge.VariantSoft).Size(badge.SizeSm).Pill()
+						if who[j] != "" {
+							b = b.Tooltip(who[j])
+						}
+						b.Send()
 					}
-					b.Send()
 				}
 			}
 		}

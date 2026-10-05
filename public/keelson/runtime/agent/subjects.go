@@ -81,11 +81,8 @@ const TableActions = "agent_actions"
 // (ADR-0269 §SD2).
 const TableOperations = "app_operations"
 
-// TestGrantsEnv asks the host to issue task grants without the person's
-// approval, for scenes and tests (ADR-0269 §SD6). The host honours it only
-// on the headless host.
 // ActionsFileEnv names a file the headless host appends the action record
-// to, one JSON line per row, so a trial scores runs after the host exits
+// to, one JSON line per row, so a run can be scored after the host exits
 // (ADR-0269 M6). Honoured only on the headless host.
 var ActionsFileEnv = env.NewString(env.Spec{
 	Name:        "BOXER_AGENT_ACTIONS_FILE",
@@ -128,6 +125,9 @@ var PaceEnv = env.NewDuration(env.Spec{
 	Category:    env.CategoryDev,
 })
 
+// TestGrantsEnv asks the host to issue task grants without the person's
+// approval, for scenes and tests (ADR-0269 §SD6). The host honours it only
+// on the headless host.
 var TestGrantsEnv = env.NewBool(env.Spec{
 	Name:        "BOXER_AGENT_TEST_GRANTS",
 	Default:     "false",

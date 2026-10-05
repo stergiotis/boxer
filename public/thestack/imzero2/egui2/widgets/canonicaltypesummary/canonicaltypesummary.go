@@ -214,7 +214,7 @@ func (in Input) render() (res Result) {
 
 	// The tether infrastructure keys its rect captures by a string; it is
 	// derived from this scope's id so two summaries never share a slot.
-	tether := inspector.NewAnchorTether(strconv.FormatUint(ids.PrepareStr("tether").Derive(), 16))
+	tether := inspector.NewAnchorTether(ids.PrepareStr("tether").Derive())
 	for range c.Horizontal().KeepIter() {
 		in.renderLevel1(ok, valid, fixedBytes, anyVar, count)
 		res.Toggled = inspector.AnchorToggle(ids.PrepareStr("anchor-toggle"), &st.Pinned)

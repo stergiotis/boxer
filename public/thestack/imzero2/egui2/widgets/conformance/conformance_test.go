@@ -359,9 +359,14 @@ func checkW5ChildIds(p *pkg) (out []string) {
 		}
 		arg := call.Args[0]
 		switch sel.Sel.Name {
-		case "PrepareSeq":
-			if _, ok := arg.(*ast.BasicLit); ok {
+		case "PrepareSeq", "PrepareHighEntropy":
+			if _, ok := arg.(*ast.BasicLit); ok && sel.Sel.Name == "PrepareSeq" {
 				out = append(out, fmt.Sprintf("%s PrepareSeq(constant)", p.at(call)))
+			}
+			// A constant base added to an ordinal packs two namespaces into
+			// one integer; nested scopes say the same without the seed.
+			if hasOffsetBase(arg) {
+				out = append(out, fmt.Sprintf("%s %s(base + ordinal)", p.at(call), sel.Sel.Name))
 			}
 		case "PrepareStr":
 			switch a := arg.(type) {
@@ -658,4 +663,28 @@ func isStructThenError(res *ast.FieldList) bool {
 		return true
 	}
 	return false
+}
+
+// hasOffsetBase reports an additive expression with a constant operand: a
+// literal, or an identifier named like a seed (…Base, …Seed, …Salt).
+func hasOffsetBase(e ast.Expr) (found bool) {
+	ast.Inspect(e, func(n ast.Node) bool {
+		b, ok := n.(*ast.BinaryExpr)
+		if !ok || (b.Op != token.ADD && b.Op != token.OR) {
+			return true
+		}
+		for _, side := range []ast.Expr{b.X, b.Y} {
+			switch t := side.(type) {
+			case *ast.BasicLit:
+				found = true
+			case *ast.Ident:
+				l := strings.ToLower(t.Name)
+				if strings.HasSuffix(l, "base") || strings.HasSuffix(l, "seed") || strings.HasSuffix(l, "salt") {
+					found = true
+				}
+			}
+		}
+		return !found
+	})
+	return
 }

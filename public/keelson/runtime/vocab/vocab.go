@@ -362,6 +362,10 @@ var (
 	MembVizevalMetricValue = NkRegistry.MustBegin("vizevalMetricValue", 135).End()
 	MembVizevalGatePassed  = NkRegistry.MustBegin("vizevalGatePassed", 136).End()
 	MembVizevalGateFailed  = NkRegistry.MustBegin("vizevalGateFailed", 137).End()
+	// MembVizevalTaskJudge names who answered the scenario's questions — a
+	// model id or a reader (ADR-0266 §SD10); accuracies of two judges are two
+	// measurements.
+	MembVizevalTaskJudge = NkRegistry.MustBegin("vizevalTaskJudge", 243).End()
 
 	// vizeval pairwise judgements (ADR-0266 §SD6, §SD8) — one boxer.facts
 	// row per pair of candidates a model compared, both orders merged: which
@@ -546,7 +550,7 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembKindVizevalScore, MembVizevalScenario, MembVizevalCandidateId, MembVizevalSink, MembVizevalCandidate,
 	MembVizevalBuild, MembVizevalBatchDigest, MembVizevalRows, MembVizevalStatus, MembVizevalReason,
 	MembVizevalDir, MembVizevalArea, MembVizevalMetricName, MembVizevalMetricValue,
-	MembVizevalGatePassed, MembVizevalGateFailed,
+	MembVizevalGatePassed, MembVizevalGateFailed, MembVizevalTaskJudge,
 	MembKindVizevalJudgement, MembVizevalJudgementScenario, MembVizevalJudgementDigest, MembVizevalJudgeModel,
 	MembVizevalJudgePrompt, MembVizevalPairA, MembVizevalPairB, MembVizevalDrawingA, MembVizevalDrawingB,
 	MembVizevalCriterion, MembVizevalPreference, MembVizevalWhy,

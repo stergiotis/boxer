@@ -67,10 +67,12 @@ func (inst *Scrubber) renderTransportRow(steps []Step) (moved bool) {
 		for range c.ComboBox(inst.ids.PrepareStr("rate"),
 			c.WidgetText().Text("").Keep(),
 			c.WidgetText().Text(formatRate(rate)).Keep()).KeepIter() {
-			for i, r := range rates {
-				if c.Button(inst.ids.PrepareSeq(uint64(0x7200+i)), c.Atoms().Text(formatRate(r)).Keep()).
-					Frame(false).Selected(r == rate).SendResp().HasPrimaryClicked() {
-					t.Rate = r
+			for range c.IdScope(inst.ids.PrepareStr("rates")) {
+				for i, r := range rates {
+					if c.Button(inst.ids.PrepareSeq(uint64(i)), c.Atoms().Text(formatRate(r)).Keep()).
+						Frame(false).Selected(r == rate).SendResp().HasPrimaryClicked() {
+						t.Rate = r
+					}
 				}
 			}
 		}

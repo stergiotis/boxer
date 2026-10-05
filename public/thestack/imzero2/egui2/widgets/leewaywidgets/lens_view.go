@@ -150,6 +150,10 @@ type lensPainter struct {
 	// sectionTone is each section's colour, by its index in the model.
 	sectionTone []color.Color
 	full        bool
+	// reserve is the height kept at the bottom for the stubs of the bands
+	// not yet drawn, so running out of room leaves each a line rather than
+	// dropping it (reserveFor).
+	reserve float32
 	// short is each slot's member name less the prefix it shares with a
 	// sibling in its section; one name per slot everywhere it is drawn.
 	short []string
@@ -278,9 +282,56 @@ func (inst *lensPainter) paint() {
 	}
 	for bi := range inst.p.Bands {
 		if inst.full {
+			inst.reserve = 0
+			inst.paintBandStubs(inst.p.Bands[bi:])
 			break
 		}
+		inst.reserveFor(len(inst.p.Bands) - bi - 1)
 		inst.paintBand(&inst.p.Bands[bi])
+	}
+}
+
+const (
+	// lensStubH is the height of a band drawn as one line.
+	lensStubH float32 = 20
+	// lensMaxStubs bounds the stubs room is kept for; past it the last
+	// line counts the clusters left.
+	lensMaxStubs = 6
+)
+
+// reserveFor keeps room at the bottom for n bands' stubs.
+func (inst *lensPainter) reserveFor(n int) {
+	inst.reserve = lensStubH * float32(min(n, lensMaxStubs))
+}
+
+// paintBandStubs draws bands there was no room for as one line each — name,
+// row count, rule — so a cluster is never absent from the picture, only
+// undrawn; past the room left, one line counts the rest.
+func (inst *lensPainter) paintBandStubs(rest []lwlens.PlanBand) {
+	pri := lensTok(styletokens.NeutralTextPrimary)
+	sec := lensTok(styletokens.NeutralTextSecondary)
+	for i := range rest {
+		if inst.y+2*lensStubH > inst.h-lensPad && i < len(rest)-1 {
+			inst.text(lensPad, inst.y+8, fmt.Sprintf("… %d more clusters, not drawn", len(rest)-i), lensSmallFont, sec)
+			inst.y += lensStubH
+			return
+		}
+		b := &inst.a.Bands[rest[i].Band]
+		y := inst.y + 8
+		c.PaintRectFilled(lensPad, y-7, lensPad+3, y+7, 0, sec).Send()
+		x := lensPad + 8
+		head := fmt.Sprintf("%s  %d rows", lensBandName(b, rest[i].Band), len(b.Rows))
+		if b.Cluster < 0 {
+			head = fmt.Sprintf("unclustered  %d rows", len(b.Rows))
+		}
+		inst.text(x, y, head, lensFont, pri)
+		x += lensTextW(head, lensFont) + 12
+		note := "not drawn: no room"
+		if rule := inst.ruleText(b); rule != "" {
+			note = rule + " · " + note
+		}
+		inst.text(x, y, lensFit(note, int((inst.w-x-lensPad)/lensAdvance)), lensFont, sec)
+		inst.y += lensStubH
 	}
 }
 
@@ -620,7 +671,7 @@ func (inst *lensPainter) paintBand(pb *lwlens.PlanBand) {
 	}
 	rh := lensRowHeight(inst.p.Detail)
 	for i := range pb.Rows {
-		if inst.y+2*rh > inst.h-lensPad && i < len(pb.Rows)-1 {
+		if inst.y+2*rh > inst.h-lensPad-inst.reserve && i < len(pb.Rows)-1 {
 			inst.text(lensPad, inst.y+rh/2, fmt.Sprintf("… %d more rows", len(pb.Rows)-i), lensSmallFont,
 				lensTok(styletokens.NeutralTextSecondary))
 			inst.y += rh

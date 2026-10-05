@@ -145,12 +145,11 @@ func Command[A any, S any, In any, Out any](set *Set[A, S], spec app.OperationSp
 	}
 }
 
-// Query declares a query or an external read and its handler. Class
-// defaults to query and Effect to none.
+// Query declares a query and its handler. Class is always query, since the
+// engine routes by class and an external read is served only from what
+// [ExternalRead] declares; Effect defaults to none.
 func Query[A any, S any, In any, Out any](set *Set[A, S], spec app.OperationSpec, fn func(snap S, in In) (out Out, err error)) {
-	if spec.Class == app.OperationClassUnspecified {
-		spec.Class = app.OperationClassQuery
-	}
+	spec.Class = app.OperationClassQuery
 	if spec.Effect == app.OperationEffectUnspecified {
 		spec.Effect = app.OperationEffectNone
 	}
@@ -216,11 +215,10 @@ func (inst *Set[A, S]) Mount(key string, capture func(inst A) any) *Set[A, S] {
 }
 
 // MountedQuery declares a query over the value a mounted component
-// captured under key. Class defaults to query and Effect to none.
+// captured under key. Class is always query, as with [Query]; Effect
+// defaults to none.
 func MountedQuery[A any, S any, In any, Out any](set *Set[A, S], key string, spec app.OperationSpec, fn func(v any, in In) (out Out, err error)) {
-	if spec.Class == app.OperationClassUnspecified {
-		spec.Class = app.OperationClassQuery
-	}
+	spec.Class = app.OperationClassQuery
 	if spec.Effect == app.OperationEffectUnspecified {
 		spec.Effect = app.OperationEffectNone
 	}

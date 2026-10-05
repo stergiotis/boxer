@@ -112,7 +112,7 @@ func TestLiveTraceRewrite(t *testing.T) {
 	if err != nil || !desc.Leeway {
 		t.Skip("no leeway table anchor.facts on the endpoint")
 	}
-	tr := traceRewrite(c, "SELECT `id:id`, LW_GET('symbol', 22, 'chan:low-card-ref') AS x FROM anchor.facts LIMIT 3", true, true)
+	tr := traceRewrite(c, nil, "SELECT `id:id`, LW_GET('symbol', 22, 'chan:low-card-ref') AS x FROM anchor.facts LIMIT 3", true)
 	byName := map[string]TraceStep{}
 	for _, s := range tr.Steps {
 		byName[s.Name] = s

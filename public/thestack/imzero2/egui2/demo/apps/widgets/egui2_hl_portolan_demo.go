@@ -417,13 +417,11 @@ func (st *portolanDemoState) choropleth(ids *c.WidgetIdStack) {
 		c.Label("(h3 runtime not ready)").Send()
 		return
 	}
-	for range c.IdScope(ids.PrepareStr("choropleth-map")) {
-		if st.choro == nil {
-			st.choro = portolan.New(ids, "choropleth", portolan.Options{
-				NoTiles: true, HideAttribution: true,
-				Center: portolan.LL(demoMapCenterLat, demoMapCenterLon), Zoom: 11,
-			})
-		}
+	if st.choro == nil {
+		st.choro = portolan.New(ids, "choropleth", portolan.Options{
+			NoTiles: true, HideAttribution: true,
+			Center: portolan.LL(demoMapCenterLat, demoMapCenterLon), Zoom: 11,
+		})
 		n := len(cells)
 		fills := make([]color.Color, n)
 		for i := range n {

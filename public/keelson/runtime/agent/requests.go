@@ -135,9 +135,16 @@ func (inst *Service) isCoordinator(id app.AppIdT) (ok bool) {
 }
 
 // requestGrant answers runtime.agent.request: a test grant at once where
-// those are on, otherwise a pending request the person decides.
+// those are on, otherwise a pending request the person decides. Every
+// refusal is a row of the actions file.
 func (inst *Service) requestGrant(msg *app.Msg) (rep wireGrantReply) {
 	rep.V = wireVersion
+	var req wireGrantRequest
+	defer func() {
+		if !rep.Ok {
+			inst.recordGrantRefusal(msg, req, rep.Reason)
+		}
+	}()
 	req, err := decode[wireGrantRequest](msg.Payload)
 	if err != nil {
 		rep.Reason = err.Error()
@@ -147,7 +154,6 @@ func (inst *Service) requestGrant(msg *app.Msg) (rep wireGrantReply) {
 		var reason string
 		if req.Launches, reason = inst.resolveLaunches(req.Launches); reason != "" {
 			rep.Reason = reason
-			inst.recordGrantRefusal(msg, req, reason)
 			inst.grantEvent(trail.GrantEventRefused, "host", reason, nil, asked(msg, req))
 			return
 		}
@@ -161,7 +167,6 @@ func (inst *Service) requestGrant(msg *app.Msg) (rep wireGrantReply) {
 		// Above what the person's settings allow: refused here, so the
 		// person is never asked for it (ADR-0280).
 		rep.Reason = why
-		inst.recordGrantRefusal(msg, req, why)
 		inst.grantEvent(trail.GrantEventRefused, "host", why, nil, asked(msg, req))
 		return
 	}

@@ -58,7 +58,8 @@ type Config struct {
 	CallsMin int
 	CallsMax int
 	// ActionsLog, when set, receives every action record as one JSON line,
-	// for a trial's scorer (ActionsFileEnv); the headless host sets it.
+	// for scoring a run after the host exits (ActionsFileEnv); the headless
+	// host sets it.
 	ActionsLog io.Writer
 }
 

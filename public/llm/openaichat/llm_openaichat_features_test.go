@@ -129,6 +129,55 @@ func TestEncodeToolConversation(t *testing.T) {
 	assert.Contains(t, s, `"tool_call_id":"call_1"`)
 }
 
+func TestFoldLateSystemMessages(t *testing.T) {
+	sys := func(c string) Message { return Message{Role: ChatRoleSystem, Content: c} }
+	usr := func(c string) Message { return Message{Role: ChatRoleUser, Content: c} }
+	asst := func(c string) Message { return Message{Role: ChatRoleAssistant, Content: c} }
+
+	// Nothing to fold: the slice goes through as it is.
+	plain := []Message{sys("s"), usr("u"), asst("a"), usr("v")}
+	assert.Equal(t, plain, foldLateSystemMessages(plain))
+
+	// Notes before the person's message join that message, in order; the
+	// leading system messages become one; the caller's slice is untouched.
+	in := []Message{sys("s1"), sys("s2"), usr("u1"), asst("a1"), sys("n1"), sys("n2"), usr("u2")}
+	orig := append([]Message(nil), in...)
+	assert.Equal(t, []Message{
+		sys("s1\n\ns2"), usr("u1"), asst("a1"),
+		usr("System note:\nn1\n\nSystem note:\nn2\n\nu2"),
+	}, foldLateSystemMessages(in))
+	assert.Equal(t, orig, in)
+
+	// A trailing note, or one before a tool or assistant turn, is a user turn
+	// of its own; images stay on the user turn they came with.
+	img := []Image{{MediaType: "image/png", Data: []byte{1}}}
+	got := foldLateSystemMessages([]Message{
+		sys("s"), {Role: ChatRoleUser, Content: "look", Images: img}, sys("n1"), asst("a"),
+		{Role: ChatRoleTool, ToolCallId: "c", Content: "r"}, sys("last"),
+	})
+	assert.Equal(t, []Message{
+		sys("s"), {Role: ChatRoleUser, Content: "look", Images: img}, usr("System note:\nn1"), asst("a"),
+		{Role: ChatRoleTool, ToolCallId: "c", Content: "r"}, usr("System note:\nlast"),
+	}, got)
+}
+
+func TestEncodeRequestSendsNoLateSystemRole(t *testing.T) {
+	inst, err := NewClient("https://example.com/v1/", "")
+	require.NoError(t, err)
+	r := CompletionRequest{ModelId: "m", Messages: []Message{
+		{Role: ChatRoleSystem, Content: "be brief"},
+		{Role: ChatRoleUser, Content: "hi"},
+		{Role: ChatRoleAssistant, Content: "hello"},
+		{Role: ChatRoleSystem, Content: "the artefact moved"},
+		{Role: ChatRoleUser, Content: "and now?"},
+	}}
+	b, err := inst.encodeRequest(r)
+	require.NoError(t, err)
+	s := string(b)
+	assert.Equal(t, 1, strings.Count(s, `"role":"system"`))
+	assert.Contains(t, s, `"content":"System note:\nthe artefact moved\n\nand now?"`)
+}
+
 func TestCompleteRejectsToolMessageWithoutId(t *testing.T) {
 	c, err := NewClient("https://example.com/v1/", "")
 	require.NoError(t, err)

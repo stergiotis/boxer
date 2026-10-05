@@ -94,7 +94,7 @@ var (
 
 	ExperimentsSeed = env.NewString(env.Spec{
 		Name:        "BOXER_PLAY_EXPERIMENTS",
-		Description: "seed the Experiments pane with one vizeval candidate as JSON, {\"source\":\"fixture|result\",\"sink\":…,\"options\":{…}} (ADR-0266); a seed that does not resolve against the sink catalogue fails the mount",
+		Description: "seed the Experiments pane with one vizeval candidate as JSON, {\"source\":\"fixture|result\",\"sink\":…,\"options\":{…},\"box\":[w,h]} (ADR-0266); box, optional, fixes the artifact's size in points whatever room the pane has; a seed that does not resolve against the sink catalogue fails the mount",
 		Category:    env.CategoryE("boxer-play"),
 	})
 

@@ -22,10 +22,24 @@ const kindLabel = "vizevalScore"
 
 // ScoreKey is the identity of one measurement: the same candidate over the
 // same data at the same build is the same measurement, and is filed under the
-// same key (ADR-0266 §SD8).
-func ScoreKey(scenario string, candidateID string, build string, digest string) (id uint64, nk string) {
+// same key (ADR-0266 §SD8). A scenario that declares an artifact box adds its
+// frame, so a card measured in another box is not taken for this one; one
+// that does not keeps the key it always had.
+func ScoreKey(scenario string, candidateID string, build string, digest string, frame string) (id uint64, nk string) {
 	nk = "vizeval/" + scenario + "/" + candidateID + "/" + build + "/" + digest
+	if frame != "" {
+		nk += "/" + frame
+	}
 	return xxh3.HashString(nk), nk
+}
+
+// frameOfKey recovers the frame from a natural key ScoreKey made.
+func frameOfKey(nk string) string {
+	parts := strings.SplitN(nk, "/", 6)
+	if len(parts) < 6 {
+		return ""
+	}
+	return parts[5]
 }
 
 // reusable reports whether a stored scorecard may stand in for rendering
@@ -39,7 +53,7 @@ func reusable(card Scorecard) bool {
 
 // RowOf is a scorecard as a facts row.
 func RowOf(card Scorecard) (row vizevalfacts.VizevalScore) {
-	id, nk := ScoreKey(card.Scenario, card.CandidateID, card.Build, card.BatchDigest)
+	id, nk := ScoreKey(card.Scenario, card.CandidateID, card.Build, card.BatchDigest, card.Frame)
 	at, err := time.Parse(time.RFC3339, card.At)
 	if err != nil {
 		at = time.Now()
@@ -54,6 +68,9 @@ func RowOf(card Scorecard) (row vizevalfacts.VizevalScore) {
 	}
 	if card.Reason != "" {
 		row.Reason = []string{card.Reason}
+	}
+	if card.TaskJudge != "" {
+		row.TaskJudge = []string{card.TaskJudge}
 	}
 	if card.Dir != "" {
 		row.Dir = []string{card.Dir}
@@ -88,7 +105,7 @@ func CardOf(row vizevalfacts.VizevalScore) (card Scorecard, err error) {
 	card = Scorecard{
 		Scenario: row.Scenario, CandidateID: row.CandidateId, Build: row.Build,
 		BatchDigest: row.BatchDigest, Rows: int64(row.Rows), Status: StatusE(row.Status),
-		At: row.Ts.UTC().Format(time.RFC3339),
+		At: row.Ts.UTC().Format(time.RFC3339), Frame: frameOfKey(string(row.NaturalKey)),
 	}
 	if len(row.Candidate) > 0 {
 		if card.Candidate, err = vizeval.UnmarshalCandidate([]byte(row.Candidate[0])); err != nil {
@@ -97,6 +114,9 @@ func CardOf(row vizevalfacts.VizevalScore) (card Scorecard, err error) {
 	}
 	if len(row.Reason) > 0 {
 		card.Reason = row.Reason[0]
+	}
+	if len(row.TaskJudge) > 0 {
+		card.TaskJudge = row.TaskJudge[0]
 	}
 	if len(row.Dir) > 0 {
 		card.Dir = row.Dir[0]
@@ -150,7 +170,7 @@ func OpenFacts(ctx context.Context) (store *vizevalfacts.VizevalStore, err error
 // lookupStored returns the newest stored scorecard for the measurement, if
 // one may be reused.
 func lookupStored(ctx context.Context, store *vizevalfacts.VizevalStore, card Scorecard) (stored Scorecard, found bool, err error) {
-	id, _ := ScoreKey(card.Scenario, card.CandidateID, card.Build, card.BatchDigest)
+	id, _ := ScoreKey(card.Scenario, card.CandidateID, card.Build, card.BatchDigest, card.Frame)
 	ent, found, err := store.Latest(ctx, id)
 	if err != nil || !found || ent == nil || !ent.VizevalScore.Has {
 		return Scorecard{}, false, err

@@ -1,6 +1,7 @@
 package jackstay
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -88,4 +89,22 @@ func TestParseSyncRequest(t *testing.T) {
 		_, _, err = syncRequest(t, bad...)
 		assert.Error(t, err, bad)
 	}
+}
+
+// A filter's commas belong to its expression, never separate entries.
+func TestFilterFlagKeepsCommas(t *testing.T) {
+	var got map[string]string
+	app := &cli.App{
+		Flags: []cli.Flag{filterFlag()},
+		Action: func(c *cli.Context) (err error) {
+			got, err = parseFilters(filterValues(c))
+			return
+		},
+	}
+	err := app.RunContext(context.Background(), []string{"jackstay",
+		"--filter", "db.a=x IN (1, 2)",
+		"--filter", "db.b=has(tags, 'a')",
+	})
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"db.a": "x IN (1, 2)", "db.b": "has(tags, 'a')"}, got)
 }

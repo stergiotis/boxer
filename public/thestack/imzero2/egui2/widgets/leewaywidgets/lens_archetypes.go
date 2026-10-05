@@ -1,6 +1,7 @@
 package leewaywidgets
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -25,6 +26,24 @@ const (
 	lensOutlierAt = 0.9
 	// lensExceptionLines bounds the exception lines drawn per band.
 	lensExceptionLines = 6
+	// lensRareShare is the most of a band a label value may hold and still
+	// be an exception: rare against a slot whose band has a typical value.
+	lensRareShare = 0.1
+)
+
+// exceptionClassE ranks what an exception line says, most telling first:
+// the row budget cuts from the end, so a missing slot is never lost to a
+// numeric outlier (the judged round in the lens exploration found it was).
+type exceptionClassE uint8
+
+const (
+	// exceptionStructural: a slot missing that the band has, or present
+	// that it lacks.
+	exceptionStructural exceptionClassE = iota
+	// exceptionRareLabel: a label value few of the band's rows hold.
+	exceptionRareLabel
+	// exceptionOutlier: numeric values in the outer ends of their slot.
+	exceptionOutlier
 )
 
 // bandValues is a band's values in slot s.
@@ -192,22 +211,71 @@ func (inst *lensPainter) paintDistribution(x0, x1, cy float32, s int32, b *lwlen
 	}
 }
 
-// exception is one row's departures from its band, as drawn text.
+// exception is one row's departures from its band, as drawn text, and the
+// most telling class among them.
 type exception struct {
 	rows  []int32
 	parts []string
-	bad   bool
+	class exceptionClassE
+	// surprise is the most extreme value surprise among its outliers,
+	// which orders lines within a class: the budget cuts the mildest.
+	surprise float64
 }
 
-// exceptions lists a band's rows that break its pattern: missing and unusual
-// slots, and above the shape detail extreme values. Rows with the same
-// departures share a line.
+// rareLabels finds, per label slot the band mostly has, the values rare
+// enough to be exceptions, with how many of the band's rows hold each: the
+// slot must have a typical value in the band (one held by half its rows or
+// more), and the value is held by at most lensRareShare of them, one row at
+// least.
+func (inst *lensPainter) rareLabels(b *lwlens.Band) (rare map[int32]map[string]int) {
+	rare = map[int32]map[string]int{}
+	m := inst.a.Model
+	for s := range m.Slots {
+		sl := int32(s)
+		if m.Slots[s].Kind == lwlens.ValueKindNumeric || b.Support[sl] < lensTemplateAt {
+			continue
+		}
+		_, texts := inst.bandValues(b, sl)
+		typical, share, _ := mode(texts)
+		if share < 0.5 {
+			continue
+		}
+		counts := map[string]int{}
+		for _, t := range texts {
+			counts[t]++
+		}
+		limit := max(1, int(lensRareShare*float64(len(texts))))
+		for t, n := range counts {
+			if t != typical && n <= limit {
+				if rare[sl] == nil {
+					rare[sl] = map[string]int{}
+				}
+				rare[sl][t] = n
+			}
+		}
+	}
+	return rare
+}
+
+// exceptions lists a band's rows that break its pattern — missing and unusual
+// slots, and above the shape detail rare labels and extreme values — most
+// telling first (exceptionClassE), and within a class most extreme first, so
+// the row budget cuts outliers before structure and mild outliers before
+// extreme ones. Rows with the same departures share a line.
 func (inst *lensPainter) exceptions(pb *lwlens.PlanBand, b *lwlens.Band) (out []exception) {
 	idx := map[string]int{}
 	m := inst.a.Model
+	var rare map[int32]map[string]int
+	if inst.p.Detail >= lwlens.DetailGist {
+		rare = inst.rareLabels(b)
+	}
 	for _, pr := range pb.Rows {
 		var parts []string
-		bad := len(pr.Missing) > 0
+		var surprise float64
+		class := exceptionOutlier
+		if len(pr.Missing)+len(pr.Unexpected) > 0 {
+			class = exceptionStructural
+		}
 		for _, s := range pr.Missing {
 			parts = append(parts, "−"+m.Slots[s].Label())
 		}
@@ -217,13 +285,26 @@ func (inst *lensPainter) exceptions(pb *lwlens.PlanBand, b *lwlens.Band) (out []
 		if inst.p.Detail >= lwlens.DetailGist {
 			row := &m.Rows[pr.Row]
 			for _, cell := range row.Cells {
+				if n := rare[cell.Slot][cell.Text]; n > 0 {
+					// The count says whether the list is complete: a reader
+					// who sees every one of the n rows needs no "more rows"
+					// line to conclude none was cut (the fourth judged round's
+					// readers could only infer it).
+					parts = append(parts, fmt.Sprintf("%s %s (%d of %d rows)", inst.memberName(cell.Slot),
+						lensFit(cell.Text, 24), n, len(b.Rows)))
+					class = min(class, exceptionRareLabel)
+				}
+			}
+			for _, cell := range row.Cells {
 				s := cell.Slot
 				if m.Slots[s].Kind != lwlens.ValueKindNumeric || !cell.HasNum || b.Support[s] < lensTemplateAt {
 					continue
 				}
-				if lwlens.ValueSurprise(inst.a, s, &cell) < lensOutlierAt {
+				vs := lwlens.ValueSurprise(inst.a, s, &cell)
+				if vs < lensOutlierAt {
 					continue
 				}
+				surprise = max(surprise, vs)
 				dir := "↑"
 				if inst.a.Stats[s].Percentile(cell.Num) < 0.5 {
 					dir = "↓"
@@ -241,8 +322,14 @@ func (inst *lensPainter) exceptions(pb *lwlens.PlanBand, b *lwlens.Band) (out []
 			continue
 		}
 		idx[key] = len(out)
-		out = append(out, exception{rows: rows, parts: parts, bad: bad})
+		out = append(out, exception{rows: rows, parts: parts, class: class, surprise: surprise})
 	}
+	slices.SortStableFunc(out, func(x, y exception) int {
+		if x.class != y.class {
+			return int(x.class) - int(y.class)
+		}
+		return cmp.Compare(y.surprise, x.surprise)
+	})
 	return
 }
 
@@ -262,9 +349,10 @@ func (inst *lensPainter) paintArchetypes() {
 	for bi := range inst.p.Bands {
 		pb := &inst.p.Bands[bi]
 		b := &inst.a.Bands[pb.Band]
-		if inst.y+3*rh > inst.h-lensPad {
-			inst.text(lensPad, inst.y+rh/2, fmt.Sprintf("… %d more clusters", len(inst.p.Bands)-bi), lensSmallFont, sec)
-			inst.y += rh
+		inst.reserveFor(len(inst.p.Bands) - bi - 1)
+		if inst.y+3*rh > inst.h-lensPad-inst.reserve {
+			inst.reserve = 0
+			inst.paintBandStubs(inst.p.Bands[bi:])
 			return
 		}
 		if bi > 0 {
@@ -275,7 +363,7 @@ func (inst *lensPainter) paintArchetypes() {
 			// Rows no cluster took have no template to break: each is drawn
 			// on its own terms.
 			for i := range pb.Rows {
-				if inst.y+rh > inst.h-lensPad {
+				if inst.y+rh > inst.h-lensPad-inst.reserve {
 					inst.text(lensPad, inst.y+rh/2, fmt.Sprintf("… %d more rows", len(pb.Rows)-i), lensSmallFont, sec)
 					inst.y += rh
 					break
@@ -322,9 +410,12 @@ func (inst *lensPainter) paintArchetypes() {
 			inst.paintTemplateCell(xs[i], cy, s, b)
 		}
 		inst.y += rh + 2
+		if inst.p.Detail >= lwlens.DetailGist && inst.y+rh <= inst.h-lensPad-inst.reserve {
+			inst.paintExtremes(inst.extremes(frame, b), rh)
+		}
 		exc := inst.exceptions(pb, b)
 		for i, e := range exc {
-			if i == lensExceptionLines || inst.y+rh > inst.h-lensPad {
+			if i == lensExceptionLines || inst.y+rh > inst.h-lensPad-inst.reserve {
 				rest := 0
 				for _, e := range exc[i:] {
 					rest += len(e.rows)
@@ -337,6 +428,66 @@ func (inst *lensPainter) paintArchetypes() {
 		}
 
 	}
+}
+
+// lensExtremesMin is the fewest values a band needs in a slot for its
+// extremes to be named: with two, the lowest and highest are the band.
+const lensExtremesMin = 3
+
+// extremes names, per numeric slot of the frame the band mostly has, the rows
+// holding the band's lowest and highest value — what a reader asking for a
+// band's maximum needs named, whether or not it is the batch's strangest
+// value, which is what the exception lines rank by (the lens exploration's
+// third judged round found the two differ).
+func (inst *lensPainter) extremes(frame []int32, b *lwlens.Band) (parts []string) {
+	m := inst.a.Model
+	for _, s := range frame {
+		if m.Slots[s].Kind != lwlens.ValueKindNumeric || b.Support[s] < lensTemplateAt {
+			continue
+		}
+		lo, hi := int32(-1), int32(-1)
+		var vlo, vhi float64
+		n := 0
+		for _, r := range b.Rows {
+			cell, ok := m.Rows[r].Cell(s)
+			if !ok || !cell.HasNum {
+				continue
+			}
+			n++
+			if lo < 0 || cell.Num < vlo {
+				lo, vlo = r, cell.Num
+			}
+			if hi < 0 || cell.Num > vhi {
+				hi, vhi = r, cell.Num
+			}
+		}
+		if n < lensExtremesMin || vlo == vhi {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s ↓%s %s ↑%s %s", inst.memberName(s),
+			inst.rowLabel(lo), inst.numText(s, vlo), inst.rowLabel(hi), inst.numText(s, vhi)))
+	}
+	return parts
+}
+
+// paintExtremes draws the band's extremes as one line under its template.
+func (inst *lensPainter) paintExtremes(parts []string, rh float32) {
+	if len(parts) == 0 {
+		return
+	}
+	cy := inst.y + rh/2
+	sec := lensTok(styletokens.NeutralTextSecondary)
+	inst.text(lensPad, cy, "extremes", lensFont, sec)
+	x := lensPad + inst.labelW
+	for _, part := range parts {
+		if x+lensTextW(part, lensSmallFont) > inst.w-lensPad {
+			inst.text(x, cy, "…", lensSmallFont, sec)
+			break
+		}
+		inst.text(x, cy, part, lensSmallFont, lensTok(styletokens.NeutralTextPrimary))
+		x += lensTextW(part, lensSmallFont) + 14
+	}
+	inst.y += rh
 }
 
 // paintException draws one exception line: its rows, then its departures.

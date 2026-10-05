@@ -492,7 +492,13 @@ func (inst *coordinator) exec(ctx context.Context, o toolOrigin, call openaichat
 			call.Name + ": repeated a refused call"
 	}
 	content, activity = inst.dispatch(ctx, o, call, args)
-	if call.Name != "request_access" && agent.TaskGone(content) && inst.dropGrant() {
+	inst.mu.Lock()
+	refusal := inst.refusal
+	inst.mu.Unlock()
+	// Only the host's own words can say the task is gone: a result's text is
+	// the app's, and an app could write "the task ended" into it.
+	gone := agent.TaskGone(refusal) || (strings.HasPrefix(content, "error:") && agent.TaskGone(content))
+	if call.Name != "request_access" && gone && inst.dropGrant() {
 		// The task is gone; the conversation is not. The next request_access
 		// starts a new one instead of presenting the dead handle again.
 		content += "\nnext: the task ended; request_access starts a new one"
@@ -981,6 +987,12 @@ func runTurn(ctx context.Context, cli *llm.Client, coord *coordinator, req llm.R
 		if len(res.ToolCalls) == 0 {
 			break
 		}
+		if round == limit-1 {
+			// Only a model that ignores tool_choice gets here. It was told
+			// no tool can be called, so the calls it asks for are not made.
+			out.stopped = "the model kept calling tools past " + strconv.Itoa(limit) + " rounds"
+			return
+		}
 		for i, tc := range res.ToolCalls {
 			if progress != nil {
 				progress(round, coord.peekTitle(tc))
@@ -993,11 +1005,6 @@ func runTurn(ctx context.Context, cli *llm.Client, coord *coordinator, req llm.R
 			})
 			out.activity = append(out.activity, activity)
 			msgs = append(msgs, openaichat.Message{Role: openaichat.ChatRoleTool, ToolCallId: tc.Id, Content: content})
-		}
-		if round == limit-1 {
-			// Only a model that ignores tool_choice gets here.
-			out.stopped = "the model kept calling tools past " + strconv.Itoa(limit) + " rounds"
-			return
 		}
 	}
 	out.messages = msgs

@@ -666,7 +666,8 @@ func (inst *Client) buildResidualObserved(sql string, observe func(passreg.Apply
 // the endpoint's catalog: the late-bound passes see no binding and decline,
 // and the selection-condition rewrite is reported declined rather than run.
 // It is the rewrite an agent's work may make without the endpoint among its
-// grant's destinations (ADR-0270 §SD2).
+// grant's destinations (ADR-0270 §SD2); [Client.rewriteFor] decides which an
+// agent's work gets.
 func (inst *Client) buildResidualOffline(sql string, observe func(passreg.ApplyObservation)) (residual string, params map[string]string) {
 	return inst.buildResidualWith(sql, observe, false)
 }
@@ -1011,8 +1012,22 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 	if err != nil {
 		return
 	}
+	// An agent's run gets the rewrite its grant allows (ADR-0270 §SD2): one
+	// the agent limits below check as it ships, with no catalog probe sent to
+	// an endpoint the grant does not list.
+	agent := inst.agentMark.Load()
+	ownStatement := agent != nil && opts != nil && opts.OwnStatement
+	if ownStatement {
+		// Nothing the task wrote reaches this statement as SQL (ADR-0270,
+		// update of 2026-10-04), so the grant does not bound it; it still
+		// cannot write.
+		agent = nil
+	}
+	if opts != nil && opts.Agent != nil {
+		agent = opts.Agent
+	}
+	residual, params, _ := inst.rewriteFor(agent, sql, nil)
 	var q string
-	var params map[string]string
 	rowCap := readResultRowCap(sql)
 	if opts != nil && opts.WrapStatement != nil {
 		// Wire-body wrap (see ExecOptions.WrapStatement): the rewrites and
@@ -1021,12 +1036,10 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 		// and one inside the parens would bind to the inner statement. The
 		// row cap is the wire statement's own declaration — the inner LIMIT
 		// bounds the query being explained, not the wrapper's result.
-		var residual string
-		residual, params = inst.buildResidualObserved(sql, nil)
 		q = opts.WrapStatement(residual) + " FORMAT ArrowStream"
 		rowCap = readResultRowCap(q)
 	} else {
-		q, params = inst.BuildStatement(sql)
+		q = finishStatementObserved(residual, nil)
 	}
 	req := queryengine.Request{
 		SQL: q,
@@ -1061,19 +1074,10 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 	if !inst.cfg.AllowWrites {
 		req.Settings["readonly"] = "2"
 	}
-	agent := inst.agentMark.Load()
-	if agent != nil && opts != nil && opts.OwnStatement {
-		// Nothing the task wrote reaches this statement as SQL (ADR-0270,
-		// update of 2026-10-04), so the grant does not bound it; it still
-		// cannot write.
-		agent = nil
+	if ownStatement {
 		req.Settings["readonly"] = "2"
 	}
-	if opts != nil && opts.Agent != nil {
-		agent = opts.Agent
-	}
 	if agent != nil {
-		residual, _ := inst.buildResidualObserved(sql, nil)
 		if err = checkAgentLimits(residual, dec, agent, inst.datasetAliasOf()); err != nil {
 			return
 		}

@@ -30,8 +30,14 @@ trap 'rm -f -- "$build"' EXIT
 find "$cache" -maxdepth 1 -name 'build.*' -mmin +60 -delete 2>/dev/null || true
 
 tags="${BOXER_GO_TAGS:+$BOXER_GO_TAGS,}binary_log"
+# Whether a tracked file differs from HEAD, for the scorecards' build id:
+# Go's vcs.modified also counts untracked files, and a build it calls dirty is
+# never reused from boxer.facts (ADR-0257 §SD8).
+tracked=1
+if git -C "$root" diff --quiet HEAD -- 2>/dev/null; then tracked=0; fi
 # shellcheck disable=SC2086 # deliberate word splitting of the flag list
 ( cd "$root" && CGO_ENABLED=0 go build $BOXER_GO_FLAGS -tags "$tags" \
+	-ldflags "-X github.com/stergiotis/boxer/public/thestack/imzero2/vizeval/harness.trackedChanges=$tracked" \
 	-o "$build" ./public/thestack/cmd/imzero2/ ) 1>&2
 mv -f -- "$build" "$app"
 exec "$app" --logFormat=console --logLevel="${SCENE_LOG_LEVEL:-warn}" imzero2 vizeval "$@"

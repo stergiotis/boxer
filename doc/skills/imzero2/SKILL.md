@@ -1970,13 +1970,16 @@ its knobs as a `Style` embedded in its `Input` (`boxenplot`, `ecdf`,
 - **Child ids from the vocabulary:** `PrepareStr("literal")` for a
   singleton, `IdScope(PrepareSeq(uint64(i)))` for a row, `PrepareStr(key)`
   of a stable key when ordinals shift. Never `PrepareStr(a + b)`, a
-  `Sprintf` key, a hex seed or `idBase + n` arithmetic. An id that must
+  `Sprintf` key, a hex seed, or a namespace constant added to an ordinal
+  (`rowBase + n`): nest a scope per namespace instead. An id that must
   survive an edit above it is keyed on content, not position (`markdown`
   keys code blocks on a hash of language and text).
 - **Absolute ids** only for a floating window, popup or tether the widget
   owns, derived from the scope:
-  `c.MakeAbsoluteIdHighEntropy(ids.PrepareStr("window").Derive())`. Where
-  infrastructure takes a string, hand it that derived id in hex.
+  `c.MakeAbsoluteIdHighEntropy(ids.PrepareStr("window").Derive())`. A
+  tethered inspector keys its tether the same way:
+  `inspector.NewAnchorTether(ids.PrepareStr("tether").Derive())`, derived
+  once and handed to both the toggle and the window.
 - **Probe seqs** (`CapturePaneSize`, `CaptureUiRect`, measure ids) are
   `ids.ProbeSeq("role")` called inside the scope. A step that runs before
   `Render` (a `RenderFill` probe, a `Bind`) opens the scope for the

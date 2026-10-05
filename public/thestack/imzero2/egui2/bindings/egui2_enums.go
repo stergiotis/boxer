@@ -38,8 +38,10 @@ const (
 	WindowTopmostResponseFlags ResponseFlagsE = 1 << 21
 	// TitleDoubleClickedResponseFlags: the window's title bar was
 	// double-clicked (fenums.rs TITLE_DOUBLE_CLICKED). Set only by the
-	// Window apply arm; needs a title-bar widget, i.e. a collapsible window
-	// or one built with DragFromTitleBar(true).
+	// Window apply arm, from either of two sources: egui's title-bar widget
+	// (a collapsible window, or one built with DragFromTitleBar(true)), or
+	// a primary double-click in the band above the content on the window's
+	// own layer, which any titled window has, a pinned one included.
 	TitleDoubleClickedResponseFlags ResponseFlagsE = 1 << 22
 
 	// Bit 30 is free. It was NodelikeSelectedFlags, the egui_ltreeview

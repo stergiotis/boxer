@@ -96,7 +96,7 @@ func tsVerdictFromString(s string) tsVerdictE {
 }
 
 // tsLabelRow is one written adjudication. The JSON tags are the insert's
-// column names — the write goes in as JSONEachRow, like the pin metadata.
+// column names — the write goes in as JSONEachRow.
 type tsLabelRow struct {
 	InputHash string `json:"input_hash"`
 	SpanFrom  string `json:"span_from"`
@@ -127,9 +127,9 @@ func tsInputHash(c compiledNode) (hash string) {
 }
 
 // tsLabelsWriter performs the adjudication writes. Single-flight and
-// off-thread, mirroring the pin driver: a click while a write is in flight is
-// dropped rather than queued, because the affordance is one button per span
-// and a person cannot meaningfully mean two things at once.
+// off-thread: a click while a write is in flight is dropped rather than
+// queued, because the affordance is one button per span and a person cannot
+// meaningfully mean two things at once.
 type tsLabelsWriter struct {
 	client *Client
 	// confined reports the window's label, which the verdicts carry: they

@@ -18,6 +18,7 @@ import (
 	"image"
 	"image/png"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -75,25 +76,31 @@ type Answer struct {
 
 // Scorecard is one candidate scored over one scenario at one build.
 type Scorecard struct {
-	Scenario    string             `json:"scenario"`
-	Candidate   vizeval.Candidate  `json:"candidate"`
-	CandidateID string             `json:"candidateId"`
-	Build       string             `json:"build"`
-	BatchDigest string             `json:"batchDigest"`
-	Rows        int64              `json:"rows"`
-	Status      StatusE            `json:"status"`
-	Reason      string             `json:"reason,omitempty"`
-	Dir         string             `json:"dir,omitempty"`
-	Area        [4]float64         `json:"area,omitempty"`
-	Metrics     map[string]float64 `json:"metrics,omitempty"`
-	Gates       map[string]bool    `json:"gates,omitempty"`
-	At          string             `json:"at"`
+	Scenario    string            `json:"scenario"`
+	Candidate   vizeval.Candidate `json:"candidate"`
+	CandidateID string            `json:"candidateId"`
+	Build       string            `json:"build"`
+	BatchDigest string            `json:"batchDigest"`
+	// Frame is the scenario's artifact box and viewport (Scenario.Frame),
+	// empty when it declares no box; cards of two frames do not compare.
+	Frame   string             `json:"frame,omitempty"`
+	Rows    int64              `json:"rows"`
+	Status  StatusE            `json:"status"`
+	Reason  string             `json:"reason,omitempty"`
+	Dir     string             `json:"dir,omitempty"`
+	Area    [4]float64         `json:"area,omitempty"`
+	Metrics map[string]float64 `json:"metrics,omitempty"`
+	Gates   map[string]bool    `json:"gates,omitempty"`
+	At      string             `json:"at"`
 	// DrawingDigest identifies what was drawn in the area (geometry.Digest):
 	// equal digests are equal drawings, whatever the candidates' options.
 	DrawingDigest string `json:"drawingDigest,omitempty"`
 	// Verdicts are the judge's answers to the scenario's questions, when a
 	// judge ran; the facts row keeps only the task metrics.
 	Verdicts []judge.Verdict `json:"verdicts,omitempty"`
+	// TaskJudge names who answered them: `model:<id>` or `reader:<label>`
+	// (ADR-0266 §SD10). Accuracies of two judges are two measurements.
+	TaskJudge string `json:"taskJudge,omitempty"`
 	// ReusedFrom is set when the card was read back from boxer.facts rather
 	// than rendered: the same candidate over the same data at the same clean
 	// build was already measured then. Its Dir is that run's.
@@ -122,14 +129,23 @@ type Options struct {
 	Rescore bool
 	// Judge, when set, asks the scenario's questions of a model about every
 	// candidate that passed its geometry gates (§SD6, second layer).
-	Judge  *judge.Judge
-	Logger zerolog.Logger
+	Judge *judge.Judge
+	// JudgeSheets writes a judge sheet per drawing of a candidate that passed
+	// its gates, and a control, for a reader to answer (§SD10).
+	JudgeSheets bool
+	// Replies are a reader's answers to judge sheets, scored onto the
+	// candidates whose drawings the sheets show (§SD10).
+	Replies []judge.ReaderReply
+	Logger  zerolog.Logger
 }
 
 // Dataset is a scenario's batch as the harness sees it.
 type Dataset struct {
 	Rows   int64
 	Digest string
+	// Keys are the batch's distinct natural keys in row order; nil when the
+	// batch has no natural-key column.
+	Keys []string
 }
 
 // DefaultCandidates is every sink the scenario admits, at its defaults.
@@ -165,7 +181,7 @@ func Score(sc *vizeval.Scenario, cands []vizeval.Candidate, opts Options) (cards
 	for _, cand := range cands {
 		card := Scorecard{
 			Scenario: sc.Name, Candidate: cand, CandidateID: cand.ID(), Build: build,
-			BatchDigest: ds.Digest, Rows: ds.Rows,
+			BatchDigest: ds.Digest, Rows: ds.Rows, Frame: sc.Frame(),
 		}
 		if opts.Facts != nil && !opts.Rescore {
 			stored, found, e := lookupStored(context.Background(), opts.Facts, card)
@@ -186,6 +202,16 @@ func Score(sc *vizeval.Scenario, cands []vizeval.Candidate, opts Options) (cards
 			Str("status", string(card.Status)).Str("reason", card.Reason).Msg("candidate scored")
 		cards = append(cards, card)
 	}
+	if len(opts.Replies) > 0 {
+		if err = applyReaderReplies(sc, dir, answers, opts.Replies, cards); err != nil {
+			return cards, answers, err
+		}
+	}
+	if opts.JudgeSheets {
+		if _, err = writeJudgeSheets(opts.OutDir, dir, sc, answers, cards); err != nil {
+			return cards, answers, err
+		}
+	}
 	if err = writeScorecards(opts.OutDir, dir, cards); err != nil {
 		return cards, answers, err
 	}
@@ -194,7 +220,11 @@ func Score(sc *vizeval.Scenario, cands []vizeval.Candidate, opts Options) (cards
 			return cards, answers, err
 		}
 	}
-	if err = writeGallery(opts.OutDir, dir, sc, ds, answers, cards); err != nil {
+	sheets, err := writeContactSheets(opts.OutDir, dir, cards)
+	if err != nil {
+		return cards, answers, err
+	}
+	if err = writeGallery(opts.OutDir, dir, sc, ds, answers, cards, sheets); err != nil {
 		return cards, answers, err
 	}
 	return cards, answers, nil
@@ -226,13 +256,17 @@ func scoreOne(sc *vizeval.Scenario, card *Scorecard, ds Dataset, answers []Answe
 		}
 		return
 	}
-	area, metrics, digest, err := measureCapture(cdir, card.Candidate.Sink == vizeval.SinkGraph)
+	area, metrics, digest, err := measureCapture(cdir, card.Candidate.Sink == vizeval.SinkGraph, ds.Keys)
 	if err != nil {
 		card.Status, card.Reason = StatusFailed, err.Error()
 		return
 	}
 	card.DrawingDigest = digest
 	card.Area = [4]float64{area.X0, area.Y0, area.X1, area.Y1}
+	if reason := checkBox(sc, area); reason != "" {
+		card.Status, card.Reason = StatusFailed, reason
+		return
+	}
 	card.Metrics = metrics
 	card.Status = StatusScored
 	card.Gates = make(map[string]bool, len(sc.Spec.Gates))
@@ -248,24 +282,10 @@ func scoreOne(sc *vizeval.Scenario, card *Scorecard, ds Dataset, answers []Answe
 		return
 	}
 	card.Verdicts = opts.Judge.Ask(context.Background(), png, card.DrawingDigest, sc.Spec.Intent, questionsOf(answers))
-	var correct, unreadable, failed int
-	for _, v := range card.Verdicts {
-		switch {
-		case v.Error != "":
-			failed++
-		case v.Correct:
-			correct++
-		case v.Unreadable:
-			unreadable++
-		}
-	}
+	card.TaskJudge = "model:" + opts.Judge.Model
 	// Accuracy is only a measurement when every question got an answer; a
 	// spent budget or a failed call leaves the count, not a fraction of it.
-	metrics[MetricTaskErrors] = float64(failed)
-	if failed == 0 {
-		metrics[MetricTaskAccuracy] = float64(correct) / float64(len(card.Verdicts))
-		metrics[MetricTaskUnreadable] = float64(unreadable)
-	}
+	taskMetrics(card, MetricTaskAccuracy, MetricTaskUnreadable, MetricTaskErrors)
 	applyGates(sc, card, true)
 }
 
@@ -280,6 +300,36 @@ const (
 	// MetricTaskErrors counts questions that got no answer at all.
 	MetricTaskErrors = "task.errors"
 )
+
+// Metrics measured against the batch rather than the drawing alone.
+const (
+	// MetricRowsLabelled counts the batch's distinct natural keys written in
+	// the artifact as a visible, unelided text run (geometry.KeysLabelled).
+	MetricRowsLabelled = "rows.labelled"
+	// MetricRowsLabelledShare is rows.labelled over the batch's distinct
+	// natural keys. It is a floor on how many rows a reader can name, not a
+	// count of rows drawn: a row drawn as an unlabelled mark, or labelled by a
+	// part of its key, counts as missing. Absent when the batch has no
+	// natural-key column.
+	MetricRowsLabelledShare = "rows.labelled_share"
+)
+
+// boxTolerance absorbs the sub-point rounding of egui's layout.
+const boxTolerance = 1.0
+
+// checkBox refuses a measurement whose artifact is not the scenario's
+// declared box: a viewport too short for play's chrome shows only part of
+// it, and a sink that drew past its box measured more than was asked for.
+// Either way the card would not compare with its neighbours.
+func checkBox(sc *vizeval.Scenario, area geometry.Rect) (reason string) {
+	w, h, ok := sc.ArtifactBox()
+	if !ok || (math.Abs(area.W()-float64(w)) <= boxTolerance && math.Abs(area.H()-float64(h)) <= boxTolerance) {
+		return ""
+	}
+	return "the artifact measured " + strconv.FormatFloat(area.W(), 'f', 0, 64) + "x" +
+		strconv.FormatFloat(area.H(), 'f', 0, 64) + " against the declared box of " + sc.Spec.Artifact +
+		"; a smaller one is cut by the viewport (raise size), a larger one drew past its box"
+}
 
 // applyGates evaluates the scenario's gates, the geometry ones or, with task,
 // those over the judge's metrics. A task gate is not evaluated without a
@@ -317,21 +367,27 @@ func questionsOf(answers []Answer) (qs []judge.Question) {
 // in one leaf and Experiments raised, the dataset as the buffer, run on mount,
 // and the pane seeded with the candidate over the result.
 func candidateScene(sc *vizeval.Scenario, cand vizeval.Candidate) *scene.Doc {
-	seed, _ := json.Marshal(struct {
+	type seedT struct {
 		Source  string         `json:"source"`
 		Sink    string         `json:"sink"`
 		Options vizeval.Values `json:"options"`
-	}{"result", cand.Sink, cand.Options}, json.Deterministic(true))
+		Box     []int          `json:"box,omitempty"`
+	}
+	sd := seedT{Source: "result", Sink: cand.Sink, Options: cand.Options}
+	if bw, bh, ok := sc.ArtifactBox(); ok {
+		sd.Box = []int{bw, bh}
+	}
+	seed, _ := json.Marshal(sd, json.Deterministic(true))
 	settle := sc.Spec.SettleMs
 	if settle <= 0 {
 		settle = vizeval.DefaultSettleMs
 	}
-	w, h, _ := (scene.Spec{Size: sc.Spec.Size}).Dimensions()
+	w, h, _ := sc.Viewport()
 	return &scene.Doc{
 		Name: captureName,
 		Spec: scene.Spec{
 			Launch:   "play",
-			Size:     sc.Spec.Size,
+			Size:     strconv.Itoa(w) + "x" + strconv.Itoa(h),
 			Requires: []string{scene.RequireClickHouse},
 			Env: map[string]string{
 				// The window a little inside the viewport, as the tour's
@@ -354,7 +410,7 @@ func candidateScene(sc *vizeval.Scenario, cand vizeval.Candidate) *scene.Doc {
 
 // measureCapture finds the artifact in the tree, reads the SVG, measures, and
 // writes the artifact's crop of the PNG beside the capture.
-func measureCapture(dir string, graph bool) (area geometry.Rect, m map[string]float64, digest string, err error) {
+func measureCapture(dir string, graph bool, keys []string) (area geometry.Rect, m map[string]float64, digest string, err error) {
 	node, err := findNode(filepath.Join(dir, carrierclient.SidecarFile(captureName, carrierclient.SidecarTree)), ArtifactNode)
 	if err != nil {
 		return area, nil, "", err
@@ -379,6 +435,11 @@ func measureCapture(dir string, graph bool) (area geometry.Rect, m map[string]fl
 	m = geometry.Measure(d, area, img)
 	if graph {
 		geometry.MeasureGraph(d, area, m)
+	}
+	if len(keys) > 0 {
+		n := geometry.KeysLabelled(d, area, keys)
+		m[MetricRowsLabelled] = float64(n)
+		m[MetricRowsLabelledShare] = float64(n) / float64(len(keys))
 	}
 	if err = writeCrop(img, d.Viewport, area, filepath.Join(dir, "artifact.png")); err != nil {
 		return area, nil, "", err
@@ -466,7 +527,49 @@ func RunDataset(sc *vizeval.Scenario, opts Options) (ds Dataset, err error) {
 	ds.Digest = hex.EncodeToString(sum[:16])
 	lines := bytes.Count(body, []byte("\n"))
 	ds.Rows = int64(max(lines-2, 0))
+	ds.Keys = naturalKeys(body)
 	return ds, nil
+}
+
+// naturalKeyPrefix begins the name of the column LW_PLAIN(…, 'natural-key',
+// …) expands to; every sink labels an entity by it.
+const naturalKeyPrefix = "id:natural-key:"
+
+// naturalKeys reads the distinct values of the natural-key column from a
+// TSVWithNamesAndTypes body, in row order; nil without such a column.
+func naturalKeys(body []byte) (keys []string) {
+	lines := strings.Split(strings.TrimRight(string(body), "\n"), "\n")
+	if len(lines) < 3 {
+		return nil
+	}
+	col := slices.IndexFunc(strings.Split(lines[0], "\t"), func(n string) bool {
+		return strings.HasPrefix(n, naturalKeyPrefix)
+	})
+	if col < 0 {
+		return nil
+	}
+	seen := make(map[string]bool, len(lines)-2)
+	for _, l := range lines[2:] {
+		f := strings.Split(l, "\t")
+		if col >= len(f) {
+			continue
+		}
+		k := unescapeTSV(f[col])
+		if !seen[k] {
+			seen[k] = true
+			keys = append(keys, k)
+		}
+	}
+	return keys
+}
+
+var tsvUnescaper = strings.NewReplacer(`\\`, `\`, `\t`, "\t", `\n`, "\n", `\r`, "\r", `\'`, "'", `\0`, "\x00")
+
+func unescapeTSV(s string) string {
+	if !strings.Contains(s, `\`) {
+		return s
+	}
+	return tsvUnescaper.Replace(s)
 }
 
 // RunAnswers computes every question's answer from its SQL.
@@ -518,6 +621,13 @@ func query(opts Options, sql string, format string) (body []byte, err error) {
 // unknownBuild is the build of a binary with no VCS stamp.
 const unknownBuild = "unknown"
 
+// trackedChanges is stamped by scripts/dev/vizeval.sh at link time: "0" when
+// no tracked file differed from HEAD, "1" when one did. Go's own vcs.modified
+// also counts untracked files, so a stray scratch directory in the checkout
+// marked every build dirty and no measurement was ever reused. Unstamped (any
+// other build of the binary), vcs.modified is taken as it is.
+var trackedChanges string
+
 // buildID is the revision this binary was built from, marked when the tree was
 // dirty; scorecards from different builds are different measurements.
 func buildID() string {
@@ -525,13 +635,17 @@ func buildID() string {
 	if !ok {
 		return unknownBuild
 	}
+	return buildIDOf(info.Settings, trackedChanges)
+}
+
+func buildIDOf(settings []debug.BuildSetting, tracked string) string {
 	var rev, dirty string
-	for _, s := range info.Settings {
+	for _, s := range settings {
 		switch s.Key {
 		case "vcs.revision":
 			rev = s.Value
 		case "vcs.modified":
-			if s.Value == "true" {
+			if s.Value == "true" && tracked != "0" {
 				dirty = "+dirty"
 			}
 		}
@@ -576,17 +690,18 @@ func writeScorecards(outDir string, scenarioDir string, cards []Scorecard) (err 
 // metricOrder is the gallery's column order: the gate-worthy counts first.
 var metricOrder = []string{
 	geometry.MetricTextOverlapPairs, geometry.MetricTextClipped, geometry.MetricTextElided,
-	geometry.MetricTextCutAtEdge, geometry.MetricTextLowContrast, geometry.MetricTextMinContrast,
+	geometry.MetricTextElidedShare, MetricRowsLabelled, MetricRowsLabelledShare, geometry.MetricTextCutAtEdge, geometry.MetricTextLowContrast, geometry.MetricTextMinContrast,
 	geometry.MetricTextMinSize, geometry.MetricTextRuns, geometry.MetricInkRatio,
 	geometry.MetricColorDistinct, geometry.MetricColorMinDeltaE,
 	geometry.MetricTableNumericColumns, geometry.MetricTableNumericRightAligned,
 	geometry.MetricTextRowPitchCV, geometry.MetricMarks,
 	MetricTaskAccuracy, MetricTaskUnreadable, MetricTaskErrors,
+	MetricTaskInformedAccuracy, MetricTaskInformedUnreadable, MetricTaskInformedErrors,
 }
 
 // writeGallery writes the scenario's contact sheet: the scenario, its data and
 // answers, and each candidate's artifact beside its gates and metrics.
-func writeGallery(outDir string, dir string, sc *vizeval.Scenario, ds Dataset, answers []Answer, cards []Scorecard) (err error) {
+func writeGallery(outDir string, dir string, sc *vizeval.Scenario, ds Dataset, answers []Answer, cards []Scorecard, sheets []string) (err error) {
 	var b strings.Builder
 	b.WriteString("# " + sc.Name + "\n\nGenerated by `imzero2 vizeval score` (ADR-0266) — " +
 		time.Now().Format(time.RFC3339) + ".\n\n")
@@ -605,8 +720,14 @@ func writeGallery(outDir string, dir string, sc *vizeval.Scenario, ds Dataset, a
 		}
 		b.WriteString("\n")
 	}
-	for _, c := range cards {
-		b.WriteString("## " + c.Candidate.Sink + " — " + string(c.Status) + "\n\n")
+	if len(sheets) > 0 {
+		b.WriteString("Contact sheet: every candidate below in one image, numbered in this order.\n\n")
+		for _, p := range sheets {
+			b.WriteString("![contact sheet](" + filepath.Base(p) + ")\n\n")
+		}
+	}
+	for i, c := range cards {
+		b.WriteString("## #" + strconv.Itoa(i+1) + " " + c.Candidate.Sink + " — " + string(c.Status) + "\n\n")
 		b.WriteString("`" + string(c.Candidate.Canonical()) + "` · id `" + c.CandidateID + "`\n\n")
 		if c.Reason != "" {
 			b.WriteString("_" + c.Reason + "_\n\n")
@@ -645,6 +766,9 @@ func writeGallery(outDir string, dir string, sc *vizeval.Scenario, ds Dataset, a
 			b.WriteString("\n")
 		}
 		if len(c.Verdicts) > 0 {
+			if c.TaskJudge != "" {
+				b.WriteString("Answered by `" + c.TaskJudge + "`.\n\n")
+			}
 			b.WriteString("| question | answered | expected | |\n| --- | --- | --- | --- |\n")
 			for _, v := range c.Verdicts {
 				mark := "wrong"

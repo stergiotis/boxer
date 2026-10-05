@@ -44,13 +44,14 @@ type PackManifest struct {
 	Source    Endpoint       `json:"source"`
 	Server    ServerInfo     `json:"server"`
 	Databases []DatabaseInfo `json:"databases"`
-	// Selection, SampleNum/SampleDen and Compression are what the export
-	// was asked for; a resumed export must be asked for the same.
-	Selection   Selection   `json:"selection"`
-	SampleNum   uint32      `json:"sampleNum,omitempty"`
-	SampleDen   uint32      `json:"sampleDen,omitempty"`
-	Compression string      `json:"compression,omitempty"`
-	Tables      []PackTable `json:"tables"`
+	// Selection, SampleNum/SampleDen, Compression and Chunking are what the
+	// export was asked for; a resumed export must be asked for the same.
+	Selection   Selection       `json:"selection"`
+	SampleNum   uint32          `json:"sampleNum,omitempty"`
+	SampleDen   uint32          `json:"sampleDen,omitempty"`
+	Compression string          `json:"compression,omitempty"`
+	Chunking    ChunkingOptions `json:"chunking"`
+	Tables      []PackTable     `json:"tables"`
 }
 
 // PackTable is one exported table: the source's description of it, the

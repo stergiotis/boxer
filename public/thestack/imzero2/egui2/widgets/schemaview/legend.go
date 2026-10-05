@@ -36,7 +36,7 @@ var legendEntries = []legendEntry{
 // inspector.AnchorToggle's click-capture grammar but carries a help glyph
 // (PhQuestion) rather than the pop-out arrow, since this opens a key, not a
 // value inspector.
-func renderLegendToggle(ids *c.WidgetIdStack, m *view, scope string) {
+func renderLegendToggle(ids *c.WidgetIdStack, m *view, scope uint64) {
 	accent := color.Hex(styletokens.AccentDefault.AsHex())
 	transparent := color.Transparent
 	fill := transparent
@@ -71,10 +71,10 @@ func renderLegendToggle(ids *c.WidgetIdStack, m *view, scope string) {
 // renderLegendWindow draws the tethered glyph-legend window when pinned. It is
 // rendered OUTSIDE the dock area (after the DockArea block): there is no
 // precedent for spawning a floating window from inside a dock tab body, and the
-// tether links toggle ↔ window purely by scope, so the two need not be nested.
+// tether links toggle ↔ window purely by its key, so the two need not be nested.
 // The native title-bar X is wired back to m.legendOpen via OpenBound + an R10
 // databinding (the canonicaltypesummary / distsummary pattern).
-func renderLegendWindow(ids *c.WidgetIdStack, m *view, scope string) {
+func renderLegendWindow(ids *c.WidgetIdStack, m *view, scope uint64) {
 	if !m.legendOpen {
 		return
 	}

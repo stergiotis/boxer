@@ -127,8 +127,8 @@ and Map runs its own query. A pane binding does not retarget those private input
 ### 2.5 Pins, writes and persistence
 
 "Pin" names three operations: a parameter (§2.2), the base endpoint, and a
-result. A result pin ([play_pin.go](../../apps/play/play_pin.go), ADR-0115 S4)
-writes the Arrow batch into a content-addressed `boxer.pin_<fingerprint>`
+result. A result pin (ADR-0115 S4; removed 2026-10-02 by ADR-0270)
+wrote the Arrow batch into a content-addressed `boxer.pin_<fingerprint>`
 table plus a row in `boxer.resultsets` — a database write, not a frozen
 screenshot. Persistence has separate scopes: session history restores SQL and
 the signal values a run shipped; the workingset

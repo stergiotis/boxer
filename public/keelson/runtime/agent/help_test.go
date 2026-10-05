@@ -46,6 +46,8 @@ func TestHelpListsSearchesAndReadsAnAppsDocuments(t *testing.T) {
 
 	sec, err := r.cli.Help(ctx, HelpRequest{App: string(docAppId), Doc: "overview", Section: "editing"})
 	require.NoError(t, err)
+	assert.True(t, strings.HasPrefix(sec.Text, "## Editing"), "a section opens with its own heading line")
+	assert.False(t, strings.HasSuffix(strings.TrimSpace(sec.Text), "##"), "and does not carry the next heading's marker")
 	assert.Contains(t, sec.Text, "Replace the text")
 	assert.Contains(t, sec.Text, "undoes in the UI", "a section holds its subsections")
 	assert.NotContains(t, sec.Text, "export copies", "and stops at the next section of its level")

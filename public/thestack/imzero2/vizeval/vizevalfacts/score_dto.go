@@ -43,4 +43,7 @@ type VizevalScore struct {
 	// GatePassed and GateFailed name the scenario's gates by outcome.
 	GatePassed []string `lw:"vizevalGatePassed,symbolArray"`
 	GateFailed []string `lw:"vizevalGateFailed,symbolArray"`
+	// TaskJudge names who answered the task questions — `model:<id>` or
+	// `reader:<label>` — one element when anyone did (ADR-0266 §SD10).
+	TaskJudge []string `lw:"vizevalTaskJudge,symbolArray"`
 }

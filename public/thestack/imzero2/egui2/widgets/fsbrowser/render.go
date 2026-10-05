@@ -22,12 +22,6 @@ const (
 	defaultColumnWidth float32 = 120
 	filterWidth        float32 = 180
 	searchBarWidth     float32 = 120
-
-	// Widget-id seeds, one namespace per id kind (ADR-0200 in the prefix).
-	seqRowBase    uint64 = 0x0200_0100_0000_0000
-	seqCellBase   uint64 = 0x0200_0200_0000_0000
-	seqHeaderBase uint64 = 0x0200_0300_0000_0000
-	seqCrumbBase  uint64 = 0x0200_0400_0000_0000
 )
 
 var (
@@ -125,7 +119,7 @@ func (in Input) renderBreadcrumb(st *State, density styletokens.DensityE) (navig
 		root = "/"
 	}
 	for range c.Horizontal().KeepIter() {
-		up := c.Button(in.Ids.PrepareSeq(seqCrumbBase), c.Atoms().Text(icons.PhArrowUp).Keep()).
+		up := c.Button(in.Ids.PrepareStr("up"), c.Atoms().Text(icons.PhArrowUp).Keep()).
 			Frame(false).Small()
 		if up.SendResp().HasPrimaryClicked() && st.Up() {
 			navigated = true
@@ -452,11 +446,11 @@ func (in Input) widthMenu(plan widthPlan, col uint32) {
 	if !plan.on || int(col) >= len(plan.cols) {
 		return
 	}
-	if c.Button(in.Ids.PrepareSeq(seqHeaderBase+0x200+uint64(col)), c.Atoms().Text("Reset column width").Keep()).
+	if c.Button(in.Ids.PrepareStr("reset"), c.Atoms().Text("Reset column width").Keep()).
 		SendResp().HasPrimaryClicked() {
 		_ = in.Widths.Clear(plan.tag, plan.cols[col])
 	}
-	if c.Button(in.Ids.PrepareSeq(seqHeaderBase+0x300+uint64(col)), c.Atoms().Text("Reset all column widths").Keep()).
+	if c.Button(in.Ids.PrepareStr("reset-all"), c.Atoms().Text("Reset all column widths").Keep()).
 		SendResp().HasPrimaryClicked() {
 		_ = in.Widths.ClearAll(plan.tag, plan.cols)
 	}
@@ -470,17 +464,24 @@ func (in Input) renderHeaders(et c.EndETableFluid, st *State, density styletoken
 	// withWidthMenu wraps a header in the reset gesture when widths persist.
 	// ContextMenu senses hover only, so the sort click underneath keeps
 	// working.
+	// Each header takes a "header" scope and its column ordinal, under which
+	// the frame, the sort button and the width menu take literal ids
+	// (ADR-0267 W5).
 	withWidthMenu := func(col uint32, body func()) {
-		if !plan.on || int(col) >= len(plan.cols) {
-			body()
-			return
+		for range c.IdScope(in.Ids.PrepareStr("header")) {
+			for range c.IdScope(in.Ids.PrepareSeq(uint64(col))) {
+				if !plan.on || int(col) >= len(plan.cols) {
+					body()
+					continue
+				}
+				c.ContextMenu().Render(func() { in.widthMenu(plan, col) }, body)
+			}
 		}
-		c.ContextMenu().Render(func() { in.widthMenu(plan, col) }, body)
 	}
 	sortable := func(col uint32, text string, by SortByE) {
 		for range et.Headers(0, col) {
 			withWidthMenu(col, func() {
-				for range c.Frame(in.Ids.PrepareSeq(seqHeaderBase+uint64(col))).
+				for range c.Frame(in.Ids.PrepareStr("frame")).
 					OuterMargin(0).
 					InnerMarginSides(pad, pad, 0, 0).
 					KeepIter() {
@@ -492,7 +493,7 @@ func (in Input) renderHeaders(et c.EndETableFluid, st *State, density styletoken
 							label += " " + icons.PhCaretUp
 						}
 					}
-					if c.Button(in.Ids.PrepareSeq(seqHeaderBase+0x100+uint64(col)),
+					if c.Button(in.Ids.PrepareStr("sort"),
 						c.Atoms().BeginRichText(label).Strong().End().Keep()).
 						Frame(false).Small().SendResp().HasPrimaryClicked() {
 						if st.sortBy == by {
@@ -513,7 +514,7 @@ func (in Input) renderHeaders(et c.EndETableFluid, st *State, density styletoken
 		text := in.Columns[i].Header
 		for range et.Headers(0, col) {
 			withWidthMenu(col, func() {
-				for range c.Frame(in.Ids.PrepareSeq(seqHeaderBase+uint64(col))).
+				for range c.Frame(in.Ids.PrepareStr("frame")).
 					OuterMargin(0).
 					InnerMarginSides(pad, pad, 0, 0).
 					KeepIter() {
@@ -539,32 +540,37 @@ func (in Input) rowChrome(et c.EndETableFluid, rowIdx int, e Entry, rowH float32
 	}
 	var fr c.FrameFluid
 	for range et.Rows(uint64(rowIdx)) {
-		fr = c.Frame(in.Ids.PrepareSeq(seqRowBase+uint64(e.Ord))).
-			Fill(fill).
-			Stroke(strokeWidth, stroke).
-			OuterMargin(0).
-			InnerMargin(0).
-			SenseClick().
-			HoverCursorPointer()
-		for range fr.KeepIter() {
-			c.UiSetMinWidthAvailable()
-			// Both strokes, not one: a Frame paints its content rect grown by
-			// the stroke width on every side, so this is what makes the
-			// painted rect exactly the row. See tree.rowChrome.
-			c.UiSetMinHeight(rowH - 2*strokeWidth)
+		for range c.IdScope(in.Ids.PrepareStr("row")) {
+			fr = c.Frame(in.Ids.PrepareSeq(uint64(e.Ord))).
+				Fill(fill).
+				Stroke(strokeWidth, stroke).
+				OuterMargin(0).
+				InnerMargin(0).
+				SenseClick().
+				HoverCursorPointer()
+			for range fr.KeepIter() {
+				c.UiSetMinWidthAvailable()
+				// Both strokes, not one: a Frame paints its content rect grown by
+				// the stroke width on every side, so this is what makes the
+				// painted rect exactly the row. See tree.rowChrome.
+				c.UiSetMinHeight(rowH - 2*strokeWidth)
+			}
 		}
 	}
 	return c.CurrentApplicationState.StateManager.GetResponseByIdRaw(fr.Id())
 }
 
 func (in Input) paddedCell(e Entry, col int, density styletokens.DensityE, body func(e Entry)) {
-	ncols := uint64(builtinColumns + len(in.Columns))
 	pad := cellInset(density)
-	for range c.Frame(in.Ids.PrepareSeq(seqCellBase+uint64(e.Ord)*ncols+uint64(col))).
-		OuterMargin(0).
-		InnerMarginSides(pad, pad, 0, 0).
-		KeepIter() {
-		body(e)
+	for range c.IdScope(in.Ids.PrepareStr("cell")) {
+		for range c.IdScope(in.Ids.PrepareSeq(uint64(e.Ord))) {
+			for range c.Frame(in.Ids.PrepareSeq(uint64(col))).
+				OuterMargin(0).
+				InnerMarginSides(pad, pad, 0, 0).
+				KeepIter() {
+				body(e)
+			}
+		}
 	}
 }
 

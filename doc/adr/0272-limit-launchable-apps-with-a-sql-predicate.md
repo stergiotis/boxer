@@ -80,7 +80,7 @@ ordinary query.
 - The expression is spliced into the statement. It has the trust of any
   other environment variable the process reads.
 
-## Rejected options
+## Alternatives
 
 - **Evaluate on each launch.** That would put a SQL round trip on the open
   path, which the render goroutine and agent calls wait on. Evaluating once
@@ -91,3 +91,11 @@ ordinary query.
 - **Exempt the shell apps.** That would hide a policy inside the host that
   the operator can't see or change. A label keeps the choice in the
   expression.
+
+## Status
+
+Accepted 2026-10-02.
+
+Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
+See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
+for the edit-policy tiers.

@@ -3,7 +3,7 @@ type: reference
 audience: contributor
 status: draft
 vizeval:
-  size: 1600x1000
+  artifact: 1500x900
   intent: "See what kinds of records the batch holds, which records break their kind's pattern, and how their values compare."
   sinks: [lens, card, unicode, topo]
   questions:

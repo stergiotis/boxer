@@ -125,6 +125,22 @@ func TestAnExternalReadReceivesTheCall(t *testing.T) {
 	require.Error(t, err, "a query is not an external read")
 }
 
+// Query declares a query whatever class the spec carries: the engine routes
+// an external read only to what ExternalRead declared, so a query declared
+// as one would fail on every call.
+func TestQueryAlwaysDeclaresAQuery(t *testing.T) {
+	s := testSet()
+	Query(s, app.OperationSpec{Name: "read_more", Version: 1, Summary: "read the text",
+		Class: app.OperationClassExternalRead},
+		func(sn docSnap, in None) (textResult, error) { return textResult{Text: sn.text}, nil })
+	c := s.Catalog()
+	require.NoError(t, c.Validate())
+	spec, _ := c.Lookup("read_more")
+	assert.Equal(t, app.OperationClassQuery, spec.Class)
+	_, err := s.Bind(&doc{text: "a"}).Snapshot().Query("read_more", nil)
+	require.NoError(t, err)
+}
+
 type sealedResult struct{ Sealed bool }
 
 func (inst sealedResult) ResultConfined() (confined bool) { return inst.Sealed }

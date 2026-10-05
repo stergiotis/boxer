@@ -121,8 +121,8 @@ func (inst *Judge) Ask(ctx context.Context, png []byte, drawing string, context 
 			vs = append(vs, v)
 			continue
 		}
-		v.Given, v.Unreadable, v.Cached = r.Answer, r.Unreadable, cached
-		v.Correct = !r.Unreadable && Matches(q, r.Answer)
+		v = VerdictOf(q, r.Answer, r.Unreadable)
+		v.Cached = cached
 		vs = append(vs, v)
 	}
 	return vs
@@ -235,6 +235,13 @@ func scalarString(x any) string {
 	}
 	b, _ := json.Marshal(x)
 	return string(b)
+}
+
+// VerdictOf is one reply to q checked against its expected answer — the one
+// rule a model's reply and a reader's (sheet.go) are both held to.
+func VerdictOf(q Question, given []string, unreadable bool) Verdict {
+	return Verdict{ID: q.ID, Given: given, Expected: q.Expected, Unreadable: unreadable,
+		Correct: !unreadable && Matches(q, given)}
 }
 
 // Matches compares an answer with the expected values under the question's

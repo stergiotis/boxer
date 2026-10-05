@@ -101,4 +101,10 @@ func TestARefusedTestGrantLandsInTheActionsFile(t *testing.T) {
 	assert.Equal(t, "grant", rows[0].Decision)
 	assert.Equal(t, "refused", rows[0].Phase)
 	assert.Contains(t, rows[0].Args, "look around")
+
+	_, err = r.cli.Request(context.Background(), GrantRequest{Plan: "edit window 42", Entries: []GrantEntry{{Instance: 42, Mode: ModeAct}}})
+	require.Error(t, err)
+	rows = log.actionLines()
+	require.Len(t, rows, 2, "every refusal is a row, not only an empty request")
+	assert.Contains(t, rows[1].Reason, "no open window")
 }

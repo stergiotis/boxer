@@ -3,6 +3,9 @@ package eh
 import (
 	"bytes"
 	"fmt"
+	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/rs/zerolog"
@@ -168,6 +171,16 @@ func ConsoleFormatErrorExtra(useColor bool) func(map[string]any, *bytes.Buffer) 
 				// Simple error string — just show it inline, no need for the block
 				return nil
 			}
+		case map[string]any:
+			// The structured shape MarshalError emits. It reaches a console
+			// writer whenever something has installed MarshalError as the
+			// process-wide ErrorMarshalFunc — logbridge.InstallGlobal does,
+			// for the facts capture — and the writer excludes the field, so
+			// returning nil here drops the error from the line entirely.
+			var ok bool
+			if formatted, ok = formatMarshaledError(v); !ok {
+				return nil
+			}
 		default:
 			// Not a string — let the default handler deal with it
 			return nil
@@ -214,4 +227,89 @@ func SetupConsoleLogger(out *bytes.Buffer) zerolog.Logger {
 	}
 
 	return zerolog.New(writer).With().Timestamp().Logger()
+}
+
+// formatMarshaledError renders the event-map form of MarshalError's
+// output — {streams:[{<name>:[fact…]}]}, where a fact carrying "msg" is one
+// error of the chain (its "id" orders the chain from the outermost, 0) and
+// the facts before it in the same stream are its stack frames — as the
+// Error / cause lines FormatErrorPlainS produces, each with the frame it
+// was created at. ok is false for any other shape.
+func formatMarshaledError(m map[string]any) (s string, ok bool) {
+	streams, isArr := m["streams"].([]any)
+	if !isArr {
+		return
+	}
+	type entry struct {
+		id    int
+		msg   string
+		frame string
+	}
+	byId := map[int]entry{}
+	for _, sRaw := range streams {
+		st, isMap := sRaw.(map[string]any)
+		if !isMap {
+			continue
+		}
+		for _, factsRaw := range st {
+			facts, isFacts := factsRaw.([]any)
+			if !isFacts {
+				continue
+			}
+			var lastFrame string
+			for _, fRaw := range facts {
+				f, isFact := fRaw.(map[string]any)
+				if !isFact {
+					continue
+				}
+				if msg, hasMsg := f["msg"].(string); hasMsg {
+					id, idErr := strconv.Atoi(fmt.Sprint(f["id"]))
+					if idErr != nil {
+						continue
+					}
+					if _, seen := byId[id]; !seen {
+						byId[id] = entry{id: id, msg: msg, frame: lastFrame}
+					}
+					continue
+				}
+				if fn, hasFn := f["func"].(string); hasFn {
+					lastFrame = fmt.Sprintf("%s (%s:%v)", fn, filepath.Base(fmt.Sprint(f["source"])), f["line"])
+				}
+			}
+		}
+	}
+	if len(byId) == 0 {
+		return
+	}
+	chain := make([]entry, 0, len(byId))
+	for _, e := range byId {
+		chain = append(chain, e)
+	}
+	sort.Slice(chain, func(i, j int) bool { return chain[i].id < chain[j].id })
+	var b strings.Builder
+	for i, e := range chain {
+		msg := e.msg
+		// A wrapping error's text ends with its cause's; show only its own
+		// part, as FormatErrorPlainS does.
+		if i+1 < len(chain) {
+			msg = strings.TrimSuffix(msg, ": "+chain[i+1].msg)
+		}
+		switch {
+		case i == 0:
+			b.WriteString("Error: ")
+		case i == len(chain)-1:
+			b.WriteString("\n└── cause: ")
+		default:
+			b.WriteString("\n├── cause: ")
+		}
+		b.WriteString(msg)
+		if e.frame != "" {
+			if i == len(chain)-1 && i > 0 {
+				b.WriteString("\n    at " + e.frame)
+			} else {
+				b.WriteString("\n│   at " + e.frame)
+			}
+		}
+	}
+	return b.String(), true
 }

@@ -41,6 +41,12 @@ const (
 	flagRescore    = "rescore"
 	flagJudge      = "judge"
 	flagJudgeCalls = "judgeCalls"
+	flagScenario   = "scenario"
+	flagMetrics    = "metrics"
+	flagSort       = "sort"
+	flagAll        = "all"
+	flagJudgeSheet = "judgeSheet"
+	flagAnswers    = "answers"
 )
 
 // appId is how the harness appears on its bus and in the llm call table.
@@ -62,9 +68,26 @@ func NewCommand() *cli.Command {
 				Name:  "facts",
 				Usage: "print the scorecards filed in boxer.facts as JSON lines, oldest first",
 				Flags: []cli.Flag{
-					&cli.StringFlag{Name: "scenario", Usage: "only this scenario's scorecards"},
+					&cli.StringFlag{Name: flagScenario, Usage: "only this scenario's scorecards"},
 				},
 				Action: runFacts,
+			},
+			{
+				Name:  "table",
+				Usage: "print one aligned line per scorecard — id, sink, options, status, chosen metrics — grouped by scenario and batch",
+				Description: "Reads --" + flagOut + "/scorecards.jsonl, or boxer.facts with --" + flagFacts + ". A candidate scored\n" +
+					"more than once over one batch shows its latest card unless --" + flagAll + ". A metric a card\n" +
+					"does not have prints as '-'.\n\n" +
+					"   imzero2 vizeval table --out tmp/vz --metrics text.elided_share,rows.labelled_share --sort -rows.labelled_share",
+				Flags: []cli.Flag{
+					&cli.PathFlag{Name: flagOut, Value: "tmp/vizeval", Usage: "the score run's output directory"},
+					&cli.BoolFlag{Name: flagFacts, Usage: "read the scorecards filed in boxer.facts instead of --" + flagOut},
+					&cli.StringFlag{Name: flagScenario, Usage: "only this scenario's scorecards"},
+					&cli.StringFlag{Name: flagMetrics, Value: strings.Join(harness.DefaultTableMetrics, ","), Usage: "comma-separated metric columns"},
+					&cli.StringFlag{Name: flagSort, Usage: "order each group by this metric, ascending; prefix '-' to descend"},
+					&cli.BoolFlag{Name: flagAll, Usage: "print every card, not only each candidate's latest"},
+				},
+				Action: runTable,
 			},
 			{
 				Name:      "rank",
@@ -92,8 +115,8 @@ func NewCommand() *cli.Command {
 					"   imzero2 vizeval score --candidates c.jsonl apps/play/vizeval/10_hosts.vizeval.md\n\n" +
 					"A candidates file holds one {\"sink\":…,\"options\":{…}} per line; a scenario\n" +
 					"that does not admit a candidate's sink records it as inadmissible.\n" +
-					"Output: <out>/<scenario>/index.md per scenario, a directory per candidate,\n" +
-					"and every scorecard appended to <out>/scorecards.jsonl.",
+					"Output: <out>/<scenario>/index.md and contact.png per scenario, a directory\n" +
+					"per candidate, and every scorecard appended to <out>/scorecards.jsonl.",
 				Flags: []cli.Flag{
 					&cli.PathFlag{Name: flagOut, Value: "tmp/vizeval", Usage: "output directory"},
 					&cli.PathFlag{Name: flagCandidates, Usage: "JSONL file of candidates; default: each admitted sink at its defaults"},
@@ -104,6 +127,8 @@ func NewCommand() *cli.Command {
 					&cli.BoolFlag{Name: flagRescore, Usage: "with --" + flagFacts + ", render every candidate even when a measurement can be reused"},
 					&cli.BoolFlag{Name: flagJudge, Usage: "ask the scenario's questions of the configured vision model (BOXER_LLM_*) about every candidate that passed its gates"},
 					&cli.IntFlag{Name: flagJudgeCalls, Value: 200, Usage: "with --" + flagJudge + ", the most model calls the run makes; cached answers are free"},
+					&cli.BoolFlag{Name: flagJudgeSheet, Usage: "write a judge sheet per drawing of a candidate that passed its gates, and a control, under <out>/<scenario>/" + harness.JudgeDirName + "/, for a reader to answer (ADR-0266 §SD10)"},
+					&cli.PathFlag{Name: flagAnswers, Usage: "score a reader's replies to judge sheets (JSONL) onto the candidates whose drawings the sheets show"},
 				},
 				Action: runScore,
 			},
@@ -218,6 +243,34 @@ func runRank(ctx *cli.Context) (err error) {
 	return nil
 }
 
+func runTable(ctx *cli.Context) (err error) {
+	var cards []harness.Scorecard
+	if ctx.Bool(flagFacts) {
+		store, e := harness.OpenFacts(ctx.Context)
+		if e != nil {
+			return e
+		}
+		defer store.Close()
+		for card, e := range harness.ReadFacts(ctx.Context, store, ctx.String(flagScenario)) {
+			if e != nil {
+				return e
+			}
+			cards = append(cards, card)
+		}
+	} else if cards, err = harness.ReadScorecards(ctx.Path(flagOut)); err != nil {
+		return err
+	}
+	var metrics []string
+	for m := range strings.SplitSeq(ctx.String(flagMetrics), ",") {
+		if m = strings.TrimSpace(m); m != "" {
+			metrics = append(metrics, m)
+		}
+	}
+	return harness.WriteTable(ctx.App.Writer, cards, harness.TableOptions{
+		Metrics: metrics, Scenario: ctx.String(flagScenario), All: ctx.Bool(flagAll), Sort: ctx.String(flagSort),
+	})
+}
+
 func runFacts(ctx *cli.Context) (err error) {
 	store, err := harness.OpenFacts(ctx.Context)
 	if err != nil {
@@ -225,7 +278,7 @@ func runFacts(ctx *cli.Context) (err error) {
 	}
 	defer store.Close()
 	w := ctx.App.Writer
-	for card, e := range harness.ReadFacts(ctx.Context, store, ctx.String("scenario")) {
+	for card, e := range harness.ReadFacts(ctx.Context, store, ctx.String(flagScenario)) {
 		if e != nil {
 			return e
 		}
@@ -329,6 +382,15 @@ func runScore(ctx *cli.Context) (err error) {
 		defer opts.Facts.Close()
 		opts.Rescore = ctx.Bool(flagRescore)
 	}
+	opts.JudgeSheets = ctx.Bool(flagJudgeSheet)
+	if p := ctx.Path(flagAnswers); p != "" {
+		if ctx.Bool(flagJudge) {
+			return eh.Errorf("--" + flagJudge + " and --" + flagAnswers + " both judge the task questions; a card records one judge, so pass one")
+		}
+		if opts.Replies, err = judge.ReadReplies(p); err != nil {
+			return err
+		}
+	}
 	if ctx.Bool(flagJudge) {
 		var closeJudge func()
 		if opts.Judge, closeJudge, err = openJudge(ctx, out); err != nil {
@@ -366,6 +428,9 @@ func runScore(ctx *cli.Context) (err error) {
 			}
 		}
 		_, _ = fmt.Fprintln(w, "  → "+filepath.Join(out, sc.Name, "index.md"))
+		if opts.JudgeSheets {
+			_, _ = fmt.Fprintln(w, "  → judge sheets: "+filepath.Join(out, sc.Name, harness.JudgeDirName)+" (one reader per sheet; see the vizeval skill)")
+		}
 	}
 	if failed > 0 {
 		return eb.Build().Int("failed", failed).Errorf("some candidates or scenarios failed")

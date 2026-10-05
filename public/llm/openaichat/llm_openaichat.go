@@ -24,6 +24,12 @@
 // shape — Ollama's native top-level "format" field is out of scope. Extra
 // merges provider-specific members (llama.cpp sampler knobs and the like)
 // verbatim into the top-level request object for backends that accept them.
+// System messages after the conversation's first non-system turn are not sent
+// as role=system: many chat templates (Qwen's among them) accept a system
+// message only at the start and the provider answers HTTP 400. Each such
+// message travels as a note at the head of the next user turn, or as a user
+// turn of its own when no user turn follows; the leading system messages are
+// joined into one. The caller's Messages are not modified.
 // Message.Images attaches images to a turn; such a message is sent in the
 // multi-part content form (a text part, then one image_url part per image as
 // a base64 data URL), which vision models on these endpoints read and text-only
@@ -905,7 +911,7 @@ func (inst *Client) encodeRequest(req CompletionRequest) (body []byte, err error
 		}
 		wreq.ToolChoice = toWireToolChoice(req.ToolChoice)
 	}
-	for _, m := range req.Messages {
+	for _, m := range foldLateSystemMessages(req.Messages) {
 		var wm wireOutMessage
 		if wm, err = toWireMessage(m); err != nil {
 			return
@@ -917,6 +923,62 @@ func (inst *Client) encodeRequest(req CompletionRequest) (body []byte, err error
 		err = eh.Errorf("marshal: %w", err)
 		return
 	}
+	return
+}
+
+// lateSystemNotePrefix marks a system message that is sent inside a user turn.
+const lateSystemNotePrefix = "System note:\n"
+
+// foldLateSystemMessages returns the messages as the wire carries them: the
+// leading system messages joined into one, and every later system message
+// moved into the next user turn as a marked note (several in a row join in
+// order), or sent as a user turn of its own when no user turn follows before
+// another role does. msgs is not modified.
+func foldLateSystemMessages(msgs []Message) (out []Message) {
+	lead := 0
+	for lead < len(msgs) && msgs[lead].Role == ChatRoleSystem {
+		lead++
+	}
+	late := false
+	for _, m := range msgs[lead:] {
+		if m.Role == ChatRoleSystem {
+			late = true
+			break
+		}
+	}
+	if lead <= 1 && !late {
+		out = msgs
+		return
+	}
+	out = make([]Message, 0, len(msgs))
+	if lead > 0 {
+		parts := make([]string, 0, lead)
+		for _, m := range msgs[:lead] {
+			parts = append(parts, m.Content)
+		}
+		out = append(out, Message{Role: ChatRoleSystem, Content: strings.Join(parts, "\n\n")})
+	}
+	var pending []string
+	flush := func() {
+		if len(pending) > 0 {
+			out = append(out, Message{Role: ChatRoleUser, Content: strings.Join(pending, "\n\n")})
+			pending = nil
+		}
+	}
+	for _, m := range msgs[lead:] {
+		switch {
+		case m.Role == ChatRoleSystem:
+			pending = append(pending, lateSystemNotePrefix+m.Content)
+		case m.Role == ChatRoleUser && len(pending) > 0:
+			m.Content = strings.Join(append(pending, m.Content), "\n\n")
+			pending = nil
+			out = append(out, m)
+		default:
+			flush()
+			out = append(out, m)
+		}
+	}
+	flush()
 	return
 }
 
