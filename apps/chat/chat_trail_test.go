@@ -115,3 +115,34 @@ func TestAChatsRoundLimitBoundsTheTurn(t *testing.T) {
 	coord.setRounds(100000)
 	assert.Equal(t, hi, coord.roundLimit())
 }
+
+// A tool call waiting on the person says so while it waits, and keeps how
+// long it waited once it is done.
+func TestATrailStepWaitsOnThePerson(t *testing.T) {
+	tr := &turnTrail{}
+	tr.begin(trailStep{kind: stepModel})
+	i := tr.begin(trailStep{kind: stepTool, name: "call_operation"})
+	tr.personWait(true)
+	steps, _, _ := tr.snapshot(0)
+	assert.True(t, steps[i].waitingOnPerson())
+	assert.False(t, steps[0].waitingOnPerson(), "a model call never waits on the person")
+	assert.Contains(t, stepLine(&steps[i]), "waiting for you")
+	time.Sleep(5 * time.Millisecond)
+	tr.personWait(false)
+	steps, _, _ = tr.snapshot(0)
+	assert.False(t, steps[i].waitingOnPerson())
+	assert.GreaterOrEqual(t, steps[i].waited, 5*time.Millisecond)
+	tr.personWait(true)
+	tr.finish(i, func(*trailStep) {})
+	steps, _, _ = tr.snapshot(0)
+	assert.False(t, steps[i].waitingOnPerson(), "a finished step waits no more")
+	assert.NotContains(t, stepLine(&steps[i]), "waited", "a wait under a second is no decision")
+	steps[i].waited = 3 * time.Second
+	assert.Contains(t, stepLine(&steps[i]), "waited 3.0 s for you")
+}
+
+// A step with nothing to show has nothing to copy.
+func TestAStepWithoutDetailHasNone(t *testing.T) {
+	assert.False(t, (&trailStep{kind: stepModel, tools: 1}).hasDetail())
+	assert.True(t, (&trailStep{kind: stepModel, reasoning: "x"}).hasDetail())
+}

@@ -18,9 +18,14 @@ const (
 	// trailTextH bounds a step's arguments, result or reasoning; each
 	// scrolls on its own.
 	trailTextH float32 = 160
+	// waitShown is the least wait on the person a finished step names: a
+	// shorter one was no decision of theirs, a grant issued without asking.
+	waitShown = time.Second
 
 	tipTrail = "What the model did this turn, as it happens: each model call and each tool call, with how long it took. Open a step for its arguments and what came back."
 	tipStep  = "Open for what was sent and what came back."
+
+	tipWaitingForYou = "The call waits on your decision — in the host's dialog, or as a proposal in the window — and the turn goes on once you decide."
 )
 
 var atomsCopyStep = c.Atoms().Text(icons.PhCopy + " Copy step").Keep()
@@ -93,6 +98,23 @@ func trailSummary(steps []trailStep) (s string) {
 // sent and what came back.
 func (inst *App) renderStep(i int, s *trailStep) {
 	for range c.IdScope(inst.ids.PrepareSeq(uint64(i))) {
+		if s.waitingOnPerson() {
+			// Not working: waiting on a decision of the person's, in the
+			// host's dialog or in the window.
+			for range c.HoverText(tipWaitingForYou).KeepIter() {
+				for rt := range c.RichTextLabelColored(color.Hex(styletokens.WarningDefault.AsHex()), color.Transparent, stepLine(s)) {
+					rt.Small()
+				}
+			}
+			if s.args != "" {
+				// What the decision is about, as the model sent it.
+				for range c.CollapsingHeader(inst.ids.PrepareStr("asks"), c.WidgetText().Text("what it sent").Keep()).KeepIter() {
+					inst.stepText("args", "arguments", s.args)
+				}
+			}
+			c.RequestRepaint()
+			return
+		}
 		if !s.done {
 			for range c.HorizontalTop().KeepIter() {
 				c.Spinner().Send()
@@ -156,12 +178,18 @@ func stepLine(s *trailStep) (line string) {
 		if s.title != "" {
 			name = s.title + " (" + s.name + ")"
 		}
+		if s.waitingOnPerson() {
+			return icons.PhHourglassMedium + " " + name + " · waiting for you · " + duration(time.Since(s.waitSince))
+		}
 		line = icons.PhGear + " " + name + " · " + duration(took)
 		switch {
 		case !s.done:
 			line += " · running"
 		case s.refused:
 			line += " · refused"
+		}
+		if s.waited >= waitShown {
+			line += " · waited " + duration(s.waited) + " for you"
 		}
 	}
 	return
@@ -178,7 +206,7 @@ func (inst *App) renderStepDetail(s *trailStep) {
 	inst.stepText("reasoning", "reasoned", s.reasoning)
 	inst.stepText("args", "arguments", s.args)
 	inst.stepText("result", "came back", s.result)
-	if c.Button(inst.ids.PrepareStr("copy-step"), atomsCopyStep).Small().SendResp().HasPrimaryClicked() {
+	if s.hasDetail() && c.Button(inst.ids.PrepareStr("copy-step"), atomsCopyStep).Small().SendResp().HasPrimaryClicked() {
 		inst.copyText("the step", stepCopy(s))
 	}
 }

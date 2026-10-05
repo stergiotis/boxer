@@ -57,6 +57,11 @@ type trailStep struct {
 	started   time.Time
 	took      time.Duration
 	done      bool
+	// waitSince is when a tool call began waiting on the person — a
+	// widening to decide, a proposal to accept, a request for access —
+	// zero while it does not; waited is how long it waited in all.
+	waitSince time.Time
+	waited    time.Duration
 	// refused marks a tool call the host or the coordinator refused, and
 	// failed a model call that did not answer.
 	refused bool
@@ -109,7 +114,41 @@ func (inst *turnTrail) finish(i int, f func(s *trailStep)) {
 	s := &inst.steps[i]
 	f(s)
 	s.took, s.done = time.Since(s.started), true
+	if !s.waitSince.IsZero() {
+		s.waited += time.Since(s.waitSince)
+		s.waitSince = time.Time{}
+	}
 	inst.ver++
+}
+
+// personWait marks the running tool call as waiting on the person, or as
+// no longer waiting, adding the wait to what it waited.
+func (inst *turnTrail) personWait(on bool) {
+	if inst == nil {
+		return
+	}
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	for i := len(inst.steps) - 1; i >= 0; i-- {
+		s := &inst.steps[i]
+		if s.kind != stepTool || s.done {
+			continue
+		}
+		switch {
+		case on && s.waitSince.IsZero():
+			s.waitSince = time.Now()
+		case !on && !s.waitSince.IsZero():
+			s.waited += time.Since(s.waitSince)
+			s.waitSince = time.Time{}
+		}
+		inst.ver++
+		return
+	}
+}
+
+// waitingOnPerson says the step waits on the person now.
+func (inst *trailStep) waitingOnPerson() bool {
+	return !inst.done && !inst.waitSince.IsZero()
 }
 
 // snapshot copies the steps when they moved past ver; changed says whether

@@ -39,6 +39,7 @@ panel as a diff.
 {"do":"click","contains":"Send","role":"button","comment":"the seeded draft"}
 {"do":"wait","valueContains":"Proposed change","role":"label","settleMs":500}
 {"do":"wait","valueContains":"Drafting the plan · artefact_write","role":"label"}
+{"do":"wait","valueContains":"Drafting the plan (artefact_write) · waiting for you","role":"label","comment":"the trail says the write waits on the person"}
 {"do":"wait","valueContains":"+ chat_conversation: chat-","role":"label","comment":"the chat's properties, in the diff"}
 {"do":"capture","text":"chat-artefact-proposal"}
 {"do":"click","contains":"Accept","role":"button"}

@@ -237,9 +237,12 @@ through the host:
   as they happen — each model call with its tokens and the tools it asked
   for, each tool call with its title and time, the running one with how
   long it has run — the latest eight one by one and the earlier folded.
+  A call that waits on the person — a request for access, a widening, a
+  proposal — says "waiting for you" with how long, and what it sent folds
+  under it; once done, a wait of a second or more stays on its line.
   A finished step opens to what the model wrote beside its calls, the end
   of its reasoning, the call's arguments and what came back, each bounded
-  and selectable, with Copy step. Once the turn lands, each tool line in
+  and selectable, with Copy step where there is something to copy. Once the turn lands, each tool line in
   the transcript keeps its steps under Details: the model call that asked
   for it, on a round's first tool, and the call itself. Steps live with
   the conversation in memory, as the transcript does; the model's answer

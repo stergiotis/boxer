@@ -237,13 +237,20 @@ func (inst *coordinator) setStage(s stageE) {
 }
 
 // awaitPerson marks a call as waiting on the person until done is called.
+// The running call's step in the trail says so while it waits.
 func (inst *coordinator) awaitPerson() (done func()) {
 	inst.mu.Lock()
 	inst.waiting++
+	if inst.waiting == 1 {
+		inst.trail.personWait(true)
+	}
 	inst.mu.Unlock()
 	return func() {
 		inst.mu.Lock()
 		inst.waiting--
+		if inst.waiting == 0 {
+			inst.trail.personWait(false)
+		}
 		inst.mu.Unlock()
 	}
 }
