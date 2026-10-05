@@ -45,6 +45,9 @@ type entry struct {
 	stopped bool
 	// doc is the reply parsed as markdown, built on first draw.
 	doc *markdown.Doc
+	// steps are a tool entry's steps of the trail: the model call that
+	// asked for it, on a round's first tool, and the tool call itself.
+	steps []trailStep
 }
 
 // failure is what a failed turn leaves to inspect: the error's whole text,
@@ -327,8 +330,13 @@ func (inst *conversation) landTurn(req llm.Request, res *turnResult, err error, 
 		return
 	}
 	asked := inst.lastUser()
-	for _, a := range res.activity {
-		inst.entries = append(inst.entries, entry{speaker: speakerTool, text: a, atMs: atMs})
+	steps := stepsOfTools(res.steps)
+	for i, a := range res.activity {
+		e := entry{speaker: speakerTool, text: a, atMs: atMs}
+		if i < len(steps) {
+			e.steps = steps[i]
+		}
+		inst.entries = append(inst.entries, e)
 	}
 	if res.stopped != "" {
 		// Not answered, so not resent (§SD3); the calls it made stay shown.

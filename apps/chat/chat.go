@@ -141,6 +141,9 @@ type App struct {
 type pendingTurn struct {
 	req     llm.Request
 	started time.Time
+	// trail is the coordinator's trail as last copied, at trailVer.
+	trail    []trailStep
+	trailVer uint64
 }
 
 var _ app.AppI = (*App)(nil)
@@ -296,6 +299,8 @@ func (inst *App) startTurn(text string) (started bool) {
 	var coord *coordinator
 	if (conv.apps || conv.questions || conv.artefact) && inst.coord != nil {
 		coord = inst.coord
+		// The last turn's steps are not this one's.
+		coord.trail.reset()
 		coord.offer(conv.apps, conv.questions)
 		if conv.artefact {
 			coord.offerArtefact(conv.art)

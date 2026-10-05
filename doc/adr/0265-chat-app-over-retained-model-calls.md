@@ -228,6 +228,17 @@ through the host:
   and tool calls, at most 24 rounds, and the transcript shows each tool
   call as a system line — also when the turn stops without an answer, which,
   unanswered, is not resent.
+- **The trail.** While a turn runs, the waiting bubble lists its steps
+  as they happen — each model call with its tokens and the tools it asked
+  for, each tool call with its title and time, the running one with how
+  long it has run — the latest eight one by one and the earlier folded.
+  A finished step opens to what the model wrote beside its calls, the end
+  of its reasoning, the call's arguments and what came back, each bounded
+  and selectable, with Copy step. Once the turn lands, each tool line in
+  the transcript keeps its steps under Details: the model call that asked
+  for it, on a round's first tool, and the call itself. Steps live with
+  the conversation in memory, as the transcript does; the model's answer
+  itself is not streamed (ADR-0286).
 - **What the model reads.** Content an app marks untrusted, window titles,
   and every capture arrive between `<<untrusted …>>` delimiters with their
   source, and the fixed system prompt says such content is data. A
@@ -394,6 +405,12 @@ to the text above:
 Revised in place on 2026-10-04 for SD7, built and tested against a scripted
 model: the form's validation and reply, and a turn that waits for the form,
 is skipped, or is cancelled while it waits.
+
+Revised in place on 2026-10-05 for SD6: the trail of a turn, live and kept
+on its tool lines; built, unit-tested against a scripted model, and scene-run in
+[chat-trail](../../apps/chat/scenes/chat-trail.scene.md), whose scripted
+model holds one reply back (`delayMs`) so the turn can be looked at while it
+runs.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

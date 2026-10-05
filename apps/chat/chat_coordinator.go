@@ -94,6 +94,8 @@ type coordinator struct {
 	// state (chat_turnstate.go).
 	stage   stageE
 	waiting int
+	// trail is the running turn's steps (chat_trail.go), for the window.
+	trail *turnTrail
 
 	mu sync.Mutex
 	// apps and questions are what the conversation offers the model, fixed
@@ -117,7 +119,7 @@ type coordinator struct {
 }
 
 func newCoordinator(cli *agent.Client, kq *keelsonquery.Client, conversation string) (inst *coordinator) {
-	return &coordinator{cli: cli, kq: kq, conversation: conversation, opTools: OperationToolsSeed.Get(), ask: &asker{},
+	return &coordinator{cli: cli, kq: kq, conversation: conversation, opTools: OperationToolsSeed.Get(), ask: &asker{}, trail: &turnTrail{},
 		ceiling: defaultPermissions().ceiling(true),
 		refused: make(map[string]string), typed: make(map[string]typedOp), opCache: make(map[string][]agent.Operation)}
 }
@@ -841,7 +843,9 @@ type turnResult struct {
 	omitTo   int
 	final    llm.Response
 	activity []string
-	stopped  string
+	// steps is the turn's trail, every model and tool call in order.
+	steps   []trailStep
+	stopped string
 	// stoppedErr is the model call's error behind stopped, nil when the
 	// rounds ran out.
 	stoppedErr error
@@ -870,6 +874,10 @@ func runTurn(ctx context.Context, cli *llm.Client, coord *coordinator, req llm.R
 		msgs = append(msgs[:len(msgs)-1], openaichat.Message{Role: openaichat.ChatRoleSystem, Content: note}, last)
 	}
 	out = &turnResult{}
+	coord.trail.reset()
+	defer func() {
+		out.steps, _, _ = coord.trail.snapshot(0)
+	}()
 	parent := req.ParentCallId
 	for round := 0; round < maxRounds; round++ {
 		if progress != nil {
@@ -887,8 +895,13 @@ func runTurn(ctx context.Context, cli *llm.Client, coord *coordinator, req llm.R
 			out.omitTo = len(msgs) + 1
 		}
 		coord.setStage(stageModel)
+		step := coord.trail.begin(trailStep{kind: stepModel, round: round})
 		var res llm.Response
 		res, err = cli.Complete(ctx, r)
+		coord.trail.finish(step, func(s *trailStep) {
+			s.content, s.reasoning = clip(res.Content, trailContentMax), clipTail(res.Reasoning, trailReasoningMax)
+			s.tools, s.inTokens, s.outTokens, s.failed = len(res.ToolCalls), res.InputTokens, res.OutputTokens, err != nil
+		})
 		if err != nil {
 			if len(out.activity) > 0 && !errors.Is(err, context.Canceled) {
 				out.stopped, out.stoppedErr, err = failureReason(err), err, nil
@@ -907,7 +920,11 @@ func runTurn(ctx context.Context, cli *llm.Client, coord *coordinator, req llm.R
 				progress(round, coord.peekTitle(tc))
 			}
 			coord.setStage(stageTool)
+			step := coord.trail.begin(trailStep{kind: stepTool, round: round, name: tc.Name, title: coord.peekTitle(tc), args: indentArgs(tc.Arguments)})
 			content, activity := coord.exec(ctx, toolOrigin{turn: req.Turn, modelCall: res.CallId, index: i}, tc)
+			coord.trail.finish(step, func(s *trailStep) {
+				s.result, s.activity, s.refused = clip(content, trailResultMax), activity, strings.HasPrefix(content, "error:")
+			})
 			out.activity = append(out.activity, activity)
 			msgs = append(msgs, openaichat.Message{Role: openaichat.ChatRoleTool, ToolCallId: tc.Id, Content: content})
 		}

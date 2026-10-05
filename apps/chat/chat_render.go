@@ -535,7 +535,7 @@ func (inst *App) renderTranscript() {
 	chatview.Render(chatview.Input{
 		Ids: inst.ids, ScopeKey: "transcript", Model: m, State: &inst.view,
 		Viewer: 0, Layout: chatview.LayoutDialogue, Location: time.Local, FillHost: true,
-		InteractiveBlocks: true,
+		InteractiveBlocks: true, SystemBlocks: true,
 		Block: func(ord int) (chatview.Block, bool) {
 			k := kinds[ord]
 			switch {
@@ -544,6 +544,9 @@ func (inst *App) renderTranscript() {
 					return chatview.Block{Render: func() { inst.renderAsk(o) }}, true
 				}
 				return chatview.Block{Render: inst.renderWaiting}, true
+			case k.entry >= 0 && conv.entries[k.entry].speaker == speakerTool:
+				e := &conv.entries[k.entry]
+				return chatview.Block{Render: func() { inst.renderToolEntry(e) }}, true
 			case k.entry >= 0:
 				e := &conv.entries[k.entry]
 				if e.doc == nil {
@@ -581,6 +584,7 @@ func (inst *App) renderWaiting() {
 		}
 		c.Label(line).Selectable(false).Send()
 	}
+	inst.renderTrail()
 	c.RequestRepaint()
 }
 

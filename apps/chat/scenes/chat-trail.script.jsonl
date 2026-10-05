@@ -1,0 +1,6 @@
+# The scripted model of chat-trail.scene.md: two quick tool calls, then a
+# slow model call, so the scene can look at the trail while the turn runs.
+{"tool":"query_windows","args":{"table":"windows","sql":"SELECT key, display FROM keelson('windows') ORDER BY key","title":"Reading the desktop"}}
+{"tool":"request_access","args":{"plan":"look at the desktop","desktop":true}}
+{"tool":"query_windows","args":{"table":"desktop","sql":"SELECT work_w, work_h FROM keelson('desktop')","title":"Reading the work area"},"delayMs":8000}
+{"content":"One window is open, on a work area of the size the host reports."}
