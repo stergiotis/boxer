@@ -80,7 +80,7 @@ func CreateSchemaWidgetTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1493
 
 type InEntityWidgetTable struct {
 	errs               []error
@@ -144,8 +144,11 @@ func NewInEntityWidgetTable(allocator memory.Allocator, estimatedNumberOfRecords
 
 // SetActiveSections marks which section indices BeginEntity should
 // initialise (skipping beginSection for the rest). Pass nil to clear.
-// The hint is a performance optimisation; sending BeginAttribute to
-// an unmarked section produces empty-list bytes at TransferRecords.
+// The hint is a performance optimisation for shim builders, paired
+// with the builder's SetActiveFields over the marked sections'
+// columns; BeginAttribute on an unmarked section is an invalid state
+// transition. On the arrow RecordBuilder the hint has no effect:
+// every section starts, so its list columns stay row-aligned.
 func (inst *InEntityWidgetTable) setActiveSections(idxs []int) {
 	if idxs == nil {
 		inst.activeSections = nil
@@ -174,7 +177,7 @@ var InEntityWidgetTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
 
 func (inst *InEntityWidgetTable) setId(id0 uint64, alt1 uint64) *InEntityWidgetTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -190,7 +193,7 @@ func (inst *InEntityWidgetTable) setId(id0 uint64, alt1 uint64) *InEntityWidgetT
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
 
 func (inst *InEntityWidgetTable) setTimestamp(ts2 time.Time) *InEntityWidgetTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -205,7 +208,7 @@ func (inst *InEntityWidgetTable) setTimestamp(ts2 time.Time) *InEntityWidgetTabl
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
 
 func (inst *InEntityWidgetTable) setRouting(region3 uint64, tags4 []string) *InEntityWidgetTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -221,7 +224,7 @@ func (inst *InEntityWidgetTable) setRouting(region3 uint64, tags4 []string) *InE
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
 
 func (inst *InEntityWidgetTable) setLifecycle(lifecycle5 uint8) *InEntityWidgetTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -296,21 +299,6 @@ func (inst *InEntityWidgetTable) initSections(builder *array.RecordBuilder) {
 	inst.section03Inst = NewInEntityWidgetTableSectionU64Array(builder, inst)
 }
 func (inst *InEntityWidgetTable) beginSections() {
-	if mask := inst.activeSections; mask != nil {
-		if mask[0] {
-			inst.section00Inst.beginSection()
-		}
-		if mask[1] {
-			inst.section01Inst.beginSection()
-		}
-		if mask[2] {
-			inst.section02Inst.beginSection()
-		}
-		if mask[3] {
-			inst.section03Inst.beginSection()
-		}
-		return
-	}
 	inst.section00Inst.beginSection()
 	inst.section01Inst.beginSection()
 	inst.section02Inst.beginSection()
@@ -813,6 +801,7 @@ func (inst *InEntityWidgetTableSectionGeoPointInAttr) EndSection() *InEntityWidg
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1138,6 +1127,7 @@ func (inst *InEntityWidgetTableSectionSymbolInAttr) EndSection() *InEntityWidget
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1491,6 +1481,7 @@ func (inst *InEntityWidgetTableSectionSymbolArrayInAttr) EndSection() *InEntityW
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1844,6 +1835,7 @@ func (inst *InEntityWidgetTableSectionU64ArrayInAttr) EndSection() *InEntityWidg
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }

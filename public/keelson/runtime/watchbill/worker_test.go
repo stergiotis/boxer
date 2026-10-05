@@ -3,6 +3,7 @@ package watchbill
 import (
 	"context"
 	"errors"
+	"math"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -347,4 +348,147 @@ func TestWorkerDrainsOnlyItsQueues(t *testing.T) {
 	every.w.cfg.Store = f.store
 	every.tick(t)
 	assert.Equal(t, watchbillstore.StateSucceeded, every.job(t, other).State)
+}
+
+// A run interrupted by Stop, or by Start's context ending, records no
+// outcome: the row stays running for the sweep, with its attempt unspent.
+// Repeated, since the run and the loop race to see the context end.
+func TestStopLeavesRunsForTheSweep(t *testing.T) {
+	for _, viaCtx := range []bool{false, true} {
+		for i := 0; i < 50; i++ {
+			f := newFixture(t, "run-a", func(c *Config) { c.Poll = time.Millisecond })
+			f.blocking.Store(true)
+			id := f.enqueue(t, Request{MaxAttempts: 1})
+			ctx, cancel := context.WithCancel(context.Background())
+			require.NoError(t, f.w.Start(ctx))
+			require.Eventually(t, func() bool { return f.running.Load() == 1 }, time.Second, time.Millisecond)
+			if viaCtx {
+				cancel()
+				<-f.w.done
+			} else {
+				f.w.Stop()
+			}
+			cancel()
+			j := f.job(t, id)
+			require.Equal(t, watchbillstore.StateRunning, j.State, "viaCtx=%v iteration %d: %q", viaCtx, i, j.LastError)
+			require.Equal(t, []string{watchbillstore.StateRunning}, states(f.store.Events(id)))
+		}
+	}
+}
+
+// A job whose cancel was requested while its run died is cancelled by the
+// sweep, not re-queued: the user's cancel outlives the holder.
+func TestSweepHonoursCancelOfDeadRun(t *testing.T) {
+	f := newFixture(t, "run-a", func(c *Config) { c.Liveness = MemLiveness{Live: map[string]bool{}} })
+	id := f.enqueue(t, Request{MaxAttempts: 3})
+	_, won, err := f.store.Claim(context.Background(), id, "run-dead", t0)
+	require.NoError(t, err)
+	require.True(t, won)
+	ok, err := RequestCancel(context.Background(), f.store, id, "someone", "", t0)
+	require.NoError(t, err)
+	require.True(t, ok)
+	f.tick(t)
+	assert.Empty(t, f.ran, "the cancelled job does not run again")
+	assert.Equal(t, watchbillstore.StateCancelled, f.job(t, id).State)
+	assert.Equal(t, []string{"cancel", "cancelled"}, states(f.store.Events(id)))
+}
+
+// flakyStore fails the next Claim after its update landed, or the next
+// Transition before it lands, as a transient server error would.
+type flakyStore struct {
+	*MemStore
+	failClaim      atomic.Bool
+	failTransition atomic.Bool
+}
+
+func (inst *flakyStore) Claim(ctx context.Context, id string, workerRun string, now time.Time) (job watchbillstore.Job, won bool, err error) {
+	job, won, err = inst.MemStore.Claim(ctx, id, workerRun, now)
+	if err == nil && inst.failClaim.CompareAndSwap(true, false) {
+		return watchbillstore.Job{}, false, errors.New("read-back lost")
+	}
+	return
+}
+
+func (inst *flakyStore) Transition(ctx context.Context, t Transition) (job watchbillstore.Job, ok bool, err error) {
+	if inst.failTransition.CompareAndSwap(true, false) {
+		return watchbillstore.Job{}, false, errors.New("transition lost")
+	}
+	return inst.MemStore.Transition(ctx, t)
+}
+
+// A row this run holds with no run in flight is settled at the next poll
+// rather than left running until the process restarts.
+func TestOrphanedClaimIsSettled(t *testing.T) {
+	var fs *flakyStore
+	f := newFixture(t, "run-a", func(c *Config) {
+		fs = &flakyStore{MemStore: c.Store.(*MemStore)}
+		c.Store = fs
+	})
+	id := f.enqueue(t, Request{MaxAttempts: 2})
+	fs.failClaim.Store(true)
+	assert.Error(t, f.w.Tick(context.Background(), nil))
+	require.Equal(t, watchbillstore.StateRunning, f.job(t, id).State, "the update landed")
+	require.Empty(t, f.ran)
+
+	f.tick(t)
+	j := f.job(t, id)
+	assert.Equal(t, watchbillstore.StateSucceeded, j.State, "failed as an orphan, then re-queued and run")
+	assert.EqualValues(t, 2, j.Attempt)
+	assert.Equal(t, []string{"failed", "running", "succeeded"}, states(f.store.Events(id)))
+}
+
+// A settle whose transition failed leaves the row held; the next poll
+// settles it, and a cancel requested meanwhile is honoured.
+func TestOrphanedSettleIsSettled(t *testing.T) {
+	var fs *flakyStore
+	f := newFixture(t, "run-a", func(c *Config) {
+		fs = &flakyStore{MemStore: c.Store.(*MemStore)}
+		c.Store = fs
+	})
+	id := f.enqueue(t, Request{MaxAttempts: 1})
+	fs.failTransition.Store(true)
+	f.tick(t)
+	require.Equal(t, watchbillstore.StateRunning, f.job(t, id).State, "the settle was lost")
+	ok, err := RequestCancel(context.Background(), f.store, id, "someone", "", t0)
+	require.NoError(t, err)
+	require.True(t, ok)
+
+	f.tick(t)
+	assert.Equal(t, watchbillstore.StateCancelled, f.job(t, id).State)
+	assert.Equal(t, []string{"running", "cancel", "cancelled"}, states(f.store.Events(id)))
+}
+
+// Policy durations from the row saturate rather than wrap: a huge base or
+// attempt count waits the longest backoff, never a negative one.
+func TestBackoffSaturates(t *testing.T) {
+	hour := uint64(time.Hour / time.Millisecond)
+	for _, c := range []struct {
+		name string
+		job  watchbillstore.Job
+		want time.Duration
+	}{
+		{"exponential small", watchbillstore.Job{Backoff: watchbillstore.BackoffExponential, BackoffBaseMs: 1000, Attempt: 3}, 4 * time.Second},
+		{"exponential 1h at attempt 25", watchbillstore.Job{Backoff: watchbillstore.BackoffExponential, BackoffBaseMs: hour, Attempt: 25}, maxBackoff},
+		{"exponential huge base", watchbillstore.Job{Backoff: watchbillstore.BackoffExponential, BackoffBaseMs: 1 << 62, Attempt: 1}, maxBackoff},
+		{"linear huge attempt", watchbillstore.Job{Backoff: watchbillstore.BackoffLinear, BackoffBaseMs: hour, Attempt: 1 << 31}, maxBackoff},
+		{"linear small", watchbillstore.Job{Backoff: watchbillstore.BackoffLinear, BackoffBaseMs: 1000, Attempt: 3}, 3 * time.Second},
+	} {
+		assert.Equal(t, c.want, backoffOf(c.job), c.name)
+	}
+	assert.Equal(t, time.Duration(math.MaxInt64), msDuration(1<<54))
+}
+
+// A timeout too large for a duration is the longest one, not an instant
+// failure.
+func TestHugeTimeoutDoesNotFireAtOnce(t *testing.T) {
+	f := newFixture(t, "run-a")
+	f.blocking.Store(true)
+	time.AfterFunc(50*time.Millisecond, func() { close(f.release) })
+	id := "huge-timeout"
+	require.NoError(t, f.store.Enqueue(context.Background(), watchbillstore.Job{
+		ID: id, Kind: "test.kind", Queue: "default", MaxAttempts: 1, Backoff: watchbillstore.BackoffNone,
+		TimeoutMs: uint64(math.MaxInt64/int64(time.Millisecond)) + 1, State: watchbillstore.StateQueued, RunAfter: t0,
+	}))
+	f.tick(t)
+	assert.Equal(t, watchbillstore.StateSucceeded, f.job(t, id).State)
 }

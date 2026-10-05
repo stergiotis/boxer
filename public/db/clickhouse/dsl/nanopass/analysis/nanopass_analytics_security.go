@@ -27,12 +27,14 @@ const (
 	// contract on [ClassifyQuerySecurity].
 	QuerySecurityMutating QuerySecurityClassE = iota
 	// QuerySecurityReadEgress — retrieval-only, but it reaches beyond the
-	// endpoint it is sent to: an egress table function (`url`, `s3`,
-	// `remote`, …) or an egress scalar (`file`).
+	// endpoint it is sent to: a table function that reads elsewhere (`url`,
+	// `s3`, `remote`, `file`, `eval`, …) or one the vocabulary does not know,
+	// or a scalar that does (`file`, the `ai*` functions).
 	QuerySecurityReadEgress
-	// QuerySecurityRead — provably retrieval-only against the endpoint's own
-	// data: no settings change, no egress construct. The class a `readonly`
-	// setting can enforce on the wire.
+	// QuerySecurityRead — retrieval-only against the endpoint's own data as
+	// far as the text shows: no settings change, no state-changing call, no
+	// construct that reaches out. The class a `readonly` setting can enforce
+	// on the wire.
 	QuerySecurityRead
 )
 
@@ -56,15 +58,19 @@ const (
 	// non-`param_*` setting (a `param_*`-only SET is the parameter prelude,
 	// shipped on the URL param channel, and witnesses nothing).
 	SecurityWitnessSettingsChange SecurityWitnessKindE = iota
-	// SecurityWitnessEgressTableFunction — a table-position function call
-	// not on the local allowlist.
+	// SecurityWitnessEgressTableFunction — a table function read as a table
+	// that reaches beyond the endpoint, or that the vocabulary does not
+	// know; Reach says which.
 	SecurityWitnessEgressTableFunction
-	// SecurityWitnessEgressFunction — a scalar call on the egress denylist
-	// (`file`).
+	// SecurityWitnessEgressFunction — a scalar call that reaches beyond the
+	// query's own data; Reach says how.
 	SecurityWitnessEgressFunction
 	// SecurityWitnessInsertWrapper — the statement is an
 	// `INSERT INTO … SELECT` (ADR-0181 §SD8); Name carries the target.
 	SecurityWitnessInsertWrapper
+	// SecurityWitnessStateChangingFunction — a scalar call that changes
+	// persistent server state from inside a SELECT (`generateSerialID`).
+	SecurityWitnessStateChangingFunction
 )
 
 func (inst SecurityWitnessKindE) String() (s string) {
@@ -75,6 +81,8 @@ func (inst SecurityWitnessKindE) String() (s string) {
 		s = "egress table function"
 	case SecurityWitnessInsertWrapper:
 		s = "insert wrapper"
+	case SecurityWitnessStateChangingFunction:
+		s = "state-changing function"
 	default:
 		s = "egress function"
 	}
@@ -83,67 +91,24 @@ func (inst SecurityWitnessKindE) String() (s string) {
 
 // SecurityWitness is one construct that forced a class below
 // [QuerySecurityRead]: the kind, the name as written (decoded), the class it
-// forces, and where it sits in the source.
+// forces, how far it reaches (egress witnesses), and where it sits in the
+// source.
 type SecurityWitness struct {
 	Class QuerySecurityClassE
 	Kind  SecurityWitnessKindE
 	Name  string
+	Reach SecurityReachE
 	Src   nanopass.SourceRange
 }
 
-// localTableFunctions is the allowlist of table-position functions that read
-// only the endpoint's own data (folded to lower case; ClickHouse resolves
-// table functions case-insensitively). Everything *not* listed classifies as
-// egress — the conservative direction for the small table-function
-// vocabulary, where an allowlist is tractable. Additions belong here as
-// ClickHouse grows local generators.
-var localTableFunctions = map[string]struct{}{
-	// Row generators and inline literals.
-	"numbers":         {},
-	"numbers_mt":      {},
-	"zeros":           {},
-	"zeros_mt":        {},
-	"generaterandom":  {},
-	"generate_series": {},
-	"generateseries":  {},
-	"values":          {},
-	"format":          {},
-	"null":            {},
-	// Server-local relation wrappers.
-	"merge":           {},
-	"view":            {},
-	"viewifpermitted": {},
-	// A dictionary is a server-local object; whether *its* source reaches out
-	// is server configuration the text cannot see — the recorded ADR-0132
-	// static-analysis limit, shared with views and table engines.
-	"dictionary": {},
-	// boxer's introspection macro (ADR-0094), classified pre-expansion as a
-	// local read: the `url()` it later expands to is pass-generated machinery,
-	// not authored egress (ADR-0132 §SD5).
-	"keelson": {},
-	// boxer's documentation-search macro (ADR-0164 §SD5), the same
-	// reasoning one level up: it expands to SELECTs over keelson(...)
-	// and system.documentation — local reads throughout, no authored
-	// egress can hide inside a quoted query string.
-	"docsearch": {},
-	// The lading store's three macros (ADR-0198 §SD7), classified
-	// pre-expansion for the same reason as keelson's: both expand to a
-	// SELECT over a local MergeTree table in the server's own database,
-	// and their arguments are a mount id and a snapshot — neither can
-	// name a remote. Which mounts a caller may read is a separate
-	// question, answered by a capability check at expansion rather than
-	// by this classifier.
-	"fs":     {},
-	"fsdata": {},
-	"fssnap": {},
-}
-
-// egressScalarFunctions is the denylist of scalar calls that reach outside
-// the query's own data (folded to lower case). The scalar vocabulary is far
-// too large to allowlist, so — unlike table position — an unlisted scalar is
-// presumed pure; this asymmetry is part of the recorded ADR-0132 limit.
-var egressScalarFunctions = map[string]struct{}{
-	"file": {},
+// Describe is the witness as a reader sees it: the kind, and how far it
+// reaches when it reaches out.
+func (inst SecurityWitness) Describe() (s string) {
+	s = inst.Kind.String()
+	if r := inst.Reach.String(); r != "" {
+		s += " (" + r + ")"
+	}
+	return
 }
 
 // ClassifyQuerySecurity assigns a parsed buffer its ADR-0132 §SD5 security
@@ -167,14 +132,24 @@ var egressScalarFunctions = map[string]struct{}{
 //     witness: it is a per-query execution knob, not a state change (whether
 //     it constrains the `readonly` enforcement value is the SD5
 //     implementation question, decided against the pinned server);
-//   - a table-position function call off the local allowlist witnesses
-//     [QuerySecurityReadEgress] (unknown table functions are presumed to
-//     reach out); a scalar call on the egress denylist likewise;
+//   - a table function read as a table witnesses [QuerySecurityReadEgress]
+//     when the vocabulary says it reaches beyond the endpoint or does not
+//     know it (presumed to reach out);
+//   - a call in a table function's arguments is read as ClickHouse reads
+//     it — an expression, except a table function among the arguments of
+//     one that takes a table (`loop`, `remote`, …) — so a tuple, `concat`
+//     or `currentDatabase()` there is not a table function, and the class
+//     is the same before and after canonicalisation;
+//   - a scalar call that reaches out (`file`, `catboostEvaluate`, the
+//     `ai*` functions) witnesses [QuerySecurityReadEgress]; one that changes
+//     persistent server state (`generateSerialID`) witnesses
+//     [QuerySecurityMutating];
 //   - otherwise the buffer classifies [QuerySecurityRead].
 //
 // The guarantee stops at what the text shows: views, dictionaries, table
 // engines, and UDFs can reach further than any static reading of the buffer
-// (the honesty clause of ADR-0132). err is non-nil only for a tree not
+// (the honesty clause of ADR-0132), and a scalar the vocabulary does not name
+// is presumed pure. err is non-nil only for a tree not
 // produced by [nanopass.Parse]; class is then the zero value (mutating).
 func ClassifyQuerySecurity(pr *nanopass.ParseResult) (class QuerySecurityClassE, witnesses []SecurityWitness, err error) {
 	if pr == nil || pr.Tree == nil {
@@ -215,31 +190,29 @@ func ClassifyQuerySecurity(pr *nanopass.ParseResult) (class QuerySecurityClassE,
 			witnesses = appendSetStmtWitnesses(pr, ctx, witnesses)
 		case *grammar1.TableFunctionExprContext:
 			name, ok := identifierName(ctx.Identifier())
-			if !ok {
-				// A table function without a readable name cannot be proven
-				// local — witness it as egress (fail closed).
-				name = ctx.GetText()
-			}
-			if _, local := localTableFunctions[strings.ToLower(name)]; !ok || !local {
-				witnesses = append(witnesses, SecurityWitness{
-					Class: QuerySecurityReadEgress,
-					Kind:  SecurityWitnessEgressTableFunction,
-					Name:  name,
-					Src:   pr.SourceRangeOf(ctx),
-				})
-			}
-		case *grammar1.ColumnExprFunctionContext:
-			name, ok := identifierName(ctx.Identifier())
-			if !ok {
+			if !readAsTable(ctx) {
+				if ok {
+					witnesses = appendScalarWitness(pr, ctx, name, witnesses)
+				}
 				continue
 			}
-			if _, egress := egressScalarFunctions[strings.ToLower(name)]; egress {
-				witnesses = append(witnesses, SecurityWitness{
-					Class: QuerySecurityReadEgress,
-					Kind:  SecurityWitnessEgressFunction,
-					Name:  name,
-					Src:   pr.SourceRangeOf(ctx),
-				})
+			info, known := lookupTableFunction(name)
+			switch {
+			case !ok:
+				// A table function without a readable name cannot be
+				// proven local (fail closed).
+				witnesses = append(witnesses, SecurityWitness{Class: QuerySecurityReadEgress, Kind: SecurityWitnessEgressTableFunction,
+					Name: ctx.GetText(), Reach: SecurityReachUnknown, Src: pr.SourceRangeOf(ctx)})
+			case !known:
+				witnesses = append(witnesses, SecurityWitness{Class: QuerySecurityReadEgress, Kind: SecurityWitnessEgressTableFunction,
+					Name: name, Reach: SecurityReachUnknown, Src: pr.SourceRangeOf(ctx)})
+			case info.reach != SecurityReachNone:
+				witnesses = append(witnesses, SecurityWitness{Class: QuerySecurityReadEgress, Kind: SecurityWitnessEgressTableFunction,
+					Name: name, Reach: info.reach, Src: pr.SourceRangeOf(ctx)})
+			}
+		case *grammar1.ColumnExprFunctionContext:
+			if name, ok := identifierName(ctx.Identifier()); ok {
+				witnesses = appendScalarWitness(pr, ctx, name, witnesses)
 			}
 		}
 	}
@@ -256,6 +229,66 @@ func ClassifyQuerySecurity(pr *nanopass.ParseResult) (class QuerySecurityClassE,
 		}
 	}
 	return
+}
+
+// readAsTable reports whether ClickHouse reads a table-function node as a
+// table. The grammar keeps every call in a table function's argument list
+// as a table-function node — and canonicalisation turns `(…)` and `[…]`
+// there into `tuple(…)` and `array(…)` calls — but the server evaluates
+// those arguments as expressions. Only a table function that takes a table
+// (`loop`, `viewIfPermitted`, `remote`, `cluster`, …) reads a table function
+// among its arguments as a table. Under a local one, an argument the
+// vocabulary does not know is read as a table too (fail closed); under one
+// that reaches out it cannot lower the class further.
+func readAsTable(tf *grammar1.TableFunctionExprContext) (table bool) {
+	arg, isArg := tf.GetParent().(*grammar1.TableArgExprContext)
+	if !isArg {
+		// The FROM/JOIN position, or a shape the grammar may grow: a table.
+		return true
+	}
+	owner := owningTableFunction(arg)
+	if owner == nil {
+		return true // fail closed
+	}
+	if !readAsTable(owner) {
+		// An argument of an expression is an expression.
+		return false
+	}
+	ownerName, named := identifierName(owner.Identifier())
+	info, known := lookupTableFunction(ownerName)
+	if !named || !known || !info.takesTable {
+		return false
+	}
+	name, ok := identifierName(tf.Identifier())
+	if _, isTableFunction := lookupTableFunction(name); ok && isTableFunction {
+		return true
+	}
+	return info.reach == SecurityReachNone
+}
+
+// owningTableFunction is the table function whose argument list holds arg.
+func owningTableFunction(arg *grammar1.TableArgExprContext) (owner *grammar1.TableFunctionExprContext) {
+	list, ok := arg.GetParent().(*grammar1.TableArgListContext)
+	if !ok {
+		return nil
+	}
+	owner, _ = list.GetParent().(*grammar1.TableFunctionExprContext)
+	return
+}
+
+// appendScalarWitness witnesses a scalar call that reaches out or changes
+// state; any other scalar is presumed pure.
+func appendScalarWitness(pr *nanopass.ParseResult, ctx antlr.ParserRuleContext, name string, witnesses []SecurityWitness) []SecurityWitness {
+	lname := strings.ToLower(name)
+	if reach, egress := egressScalarFunctions[lname]; egress {
+		witnesses = append(witnesses, SecurityWitness{Class: QuerySecurityReadEgress, Kind: SecurityWitnessEgressFunction,
+			Name: name, Reach: reach, Src: pr.SourceRangeOf(ctx)})
+	}
+	if _, changes := stateChangingScalarFunctions[lname]; changes {
+		witnesses = append(witnesses, SecurityWitness{Class: QuerySecurityMutating, Kind: SecurityWitnessStateChangingFunction,
+			Name: name, Src: pr.SourceRangeOf(ctx)})
+	}
+	return witnesses
 }
 
 // appendSetStmtWitnesses adds one settings-change witness per non-`param_*`

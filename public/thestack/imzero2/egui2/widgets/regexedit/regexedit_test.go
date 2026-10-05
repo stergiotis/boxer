@@ -14,7 +14,7 @@ import (
 // so the assertion counts rebuilds through the test seam.
 func TestJobForCacheKeying(t *testing.T) {
 	builds := 0
-	e := Edit{buildFn: func(text string, mode ModeE) (job typed.RetainedFffiHolderTyped[c.CodeViewJobS]) {
+	e := Cache{buildFn: func(text string, mode ModeE) (job typed.RetainedFffiHolderTyped[c.CodeViewJobS]) {
 		builds++
 		return
 	}}

@@ -11,7 +11,7 @@ import (
 )
 
 // NewCliCommand returns the `wasmsurvey` subcommand (registered under
-// `golang`, sibling to llmuse/stubber). Bare, it surveys which packages are
+// `golang`). Bare, it surveys which packages are
 // amenable to TinyGo/wasm compilation and prints a per-package, per-target
 // verdict with transitive blame (ADR-0078). The `props` subcommand group
 // (ADR-0080) seeds/harvests/verifies co-located PackageProps declarations.

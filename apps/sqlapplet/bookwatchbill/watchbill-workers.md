@@ -5,7 +5,7 @@ status: stable
 reviewed-by: "p@stergiotis"
 reviewed-date: 2026-09-15
 title: Watchbill workers
-summary: "Every worker run seen on the cell, what it drains, and whether it is alive"
+summary: "Every worker run on the cell, what it drains, and whether it is alive"
 icon: "🧑‍✈️"
 endpoint: introspection
 tabs: [table]

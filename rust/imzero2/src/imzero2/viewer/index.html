@@ -95,6 +95,14 @@ function defaultWsUrl() {
   return u.href;
 }
 const WS_URL = new URLSearchParams(location.search).get("ws") || defaultWsUrl();
+// ?worker=<module url>: the mesh comes from a Web Worker on this page instead
+// of a socket — the worker runs the Go application and the Rust host as wasm
+// modules (ADR-0077; the keelson-wasm-frame-cost trial's M2 demonstrator)
+// and posts each wire message as the carrier would send it (ADR-0263). The
+// painter, the hello and the input path are the same; the roster is this
+// one viewer. Input reaches the worker between its ticks, so it must yield
+// (the reactor build does; a module that loops in main never does).
+const WORKER_URL = new URLSearchParams(location.search).get("worker");
 
 const statusBar = document.getElementById("status");
 const statusEl = document.getElementById("statusmsg");
@@ -967,7 +975,37 @@ canvas.addEventListener("webglcontextrestored", () => {
 
 // ---- connection ----
 let reconnectDelay = 1000;
+function connectWorker() {
+  const worker = new Worker(WORKER_URL, { type: "module" });
+  // The socket's shape, so sendFramed and the readyState checks need not know.
+  ws = { readyState: WebSocket.OPEN, binaryType: "arraybuffer",
+         send(bytes) { worker.postMessage({ kind: "input", bytes: bytes.buffer }, [bytes.buffer]); } };
+  statusEl.textContent = "worker — loading the application";
+  worker.onmessage = (e) => {
+    const m = e.data;
+    if (m.kind === "hello") {
+      myRole = "active";
+      renderRoster();
+      onHello(m.hello);
+    } else if (m.kind === "mesh") {
+      // one wire message, dispatched by prefix as a socket's would be
+      const data = new Uint8Array(m.bytes);
+      if (data.length < 1) return;
+      if (data[0] === PREFIX_MESH) onMesh(data.subarray(1));
+      else if (data[0] === PREFIX_SESSION) {
+        const ctl = parseSessionControl(data.subarray(1));
+        if (ctl && ctl.kind === "clipboard") onClipboard(ctl.text);
+        else if (ctl && ctl.kind === "cursor") applyCursor(ctl.shape);
+      }
+    } else if (m.kind === "log") {
+      statusEl.textContent = m.line;
+    }
+  };
+  worker.onerror = (e) => { statusEl.textContent = "worker error: " + e.message; };
+}
+
 function connect() {
+  if (WORKER_URL) { connectWorker(); return; }
   if (contextLost || (ws && ws.readyState !== WebSocket.CLOSED)) return;
   ws = new WebSocket(WS_URL);
   ws.binaryType = "arraybuffer";

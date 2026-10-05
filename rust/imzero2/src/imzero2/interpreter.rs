@@ -3,6 +3,8 @@
 use crate::fffi::common::{FffiError, FffiResult};
 use crate::fffi::io::ImZeroFffiIo;
 
+pub mod capture_replay;
+
 // Errors produced by the interpreter dispatch. Boundary between FFFI I/O
 // (typed-error already) and the previously-panicking interpreter loop:
 // graceful EOF (peer closed the pipe) is now distinguishable from a genuine
@@ -34,20 +36,19 @@ use crate::imzero2::enums_out::{
     ComboBoxBuilderMethodId, DatePickerButtonBuilderMethodId, DateTimePickerButtonBuilderMethodId,
     DragValueF64BuilderMethodId, DragValueI64BuilderMethodId, DragValueU64BuilderMethodId,
     EndETableBuilderMethodId, EtColumnBuilderMethodId, FrameBuilderMethodId, FuncProcId,
-    GraphBuilderMethodId, GraphEdgeBuilderMethodId, GraphNodeBuilderMethodId, GridBuilderMethodId,
-    HyperlinkBuilderMethodId, HyperlinkToBuilderMethodId, LabelAtomsBuilderMethodId,
-    LabelBuilderMethodId, NewTableBuilderMethodId, NewTableColumnBuilderMethodId,
-    PaintCanvasBuilderMethodId, PaintImageBuilderMethodId, PaintPolygonFilledBuilderMethodId,
-    PaintSegmentsBuilderMethodId, PaintTextBuilderMethodId, PanelBottomBuilderMethodId,
-    PanelBottomInsideBuilderMethodId, PanelLeftBuilderMethodId, PanelLeftInsideBuilderMethodId,
-    PanelRightBuilderMethodId, PanelRightInsideBuilderMethodId, PanelTopBuilderMethodId,
-    PanelTopInsideBuilderMethodId, ProgressBarBuilderMethodId, ScalarSizeBuilderMethodId,
-    ScrollAreaBuilderMethodId, ScrollingTextureBuilderMethodId, SeparatorBuilderMethodId,
-    SliderF64BuilderMethodId, SliderI64BuilderMethodId, SliderU64BuilderMethodId,
-    SpinnerBuilderMethodId, StyledSectionsBuilderMethodId, TableBuilderMethodId,
-    TableColumnBuilderMethodId, TextEditBuilderMethodId, TimeRangePickerBuilderMethodId,
-    TintedScopeBuilderMethodId, UiWithLayoutBuilderMethodId, VectorSizeBuilderMethodId,
-    WidgetTextBuilderMethodId, WindowBuilderMethodId,
+    GridBuilderMethodId, HyperlinkBuilderMethodId, HyperlinkToBuilderMethodId,
+    LabelAtomsBuilderMethodId, LabelBuilderMethodId, NewTableBuilderMethodId,
+    NewTableColumnBuilderMethodId, PaintCanvasBuilderMethodId, PaintImageBuilderMethodId,
+    PaintPolygonFilledBuilderMethodId, PaintSegmentsBuilderMethodId, PaintTextBuilderMethodId,
+    PanelBottomBuilderMethodId, PanelBottomInsideBuilderMethodId, PanelLeftBuilderMethodId,
+    PanelLeftInsideBuilderMethodId, PanelRightBuilderMethodId, PanelRightInsideBuilderMethodId,
+    PanelTopBuilderMethodId, PanelTopInsideBuilderMethodId, ProgressBarBuilderMethodId,
+    ScalarSizeBuilderMethodId, ScrollAreaBuilderMethodId, ScrollingTextureBuilderMethodId,
+    SeparatorBuilderMethodId, SliderF64BuilderMethodId, SliderI64BuilderMethodId,
+    SliderU64BuilderMethodId, SpinnerBuilderMethodId, StyledSectionsBuilderMethodId,
+    TableBuilderMethodId, TableColumnBuilderMethodId, TextEditBuilderMethodId,
+    TimeRangePickerBuilderMethodId, TintedScopeBuilderMethodId, UiWithLayoutBuilderMethodId,
+    VectorSizeBuilderMethodId, WidgetTextBuilderMethodId, WindowBuilderMethodId,
 };
 use crate::imzero2::fenums::ResponseFlags;
 use crate::imzero2::image::ImageCache;
@@ -132,815 +133,6 @@ fn color32_from_rgba_u32(v: u32) -> egui::Color32 {
     let b = ((v >> 8) & 0xff) as u8;
     let a = (v & 0xff) as u8;
     egui::Color32::from_rgba_unmultiplied(r, g, b, a)
-}
-
-// ---------------------------------------------------------------------------
-// egui_graphs: per-frame pending lists + retained layout state
-// ---------------------------------------------------------------------------
-// Go sends the full node/edge set every frame; the `graph` opcode drains
-// these pending Vecs and reconciles against the persistent GraphState
-// (keyed by widget id in ImZeroFffi.graph_states). Reconciliation adds
-// new entries, removes entries that vanished from Go's declaration,
-// and updates labels/colors of existing entries in place so the
-// egui_graphs library keeps its per-node layout positions.
-
-pub struct GraphNodeData {
-    pub id: u64,
-    pub label: String,
-    pub color: Option<egui::Color32>,
-}
-
-pub struct GraphEdgeData {
-    pub from: u64,
-    pub to: u64,
-    pub label: Option<String>,
-    pub color: Option<egui::Color32>,
-}
-
-// Payload types stored inside the egui_graphs Graph. Node color is also
-// mirrored into the egui_graphs Node's own color slot by
-// reconcile_graph_state (DefaultNodeShape reads node_props.color(), not the
-// payload — see doc/howto/imzero2-graph-node-color.md); edge color is read
-// from the payload by PayloadColorEdgeShape.
-#[derive(Clone, Debug)]
-pub struct GraphNodeUserData {
-    pub key: u64,
-    pub label: String,
-    pub color: Option<egui::Color32>,
-}
-
-#[derive(Clone, Debug)]
-pub struct GraphEdgeUserData {
-    pub label: Option<String>,
-    pub color: Option<egui::Color32>,
-}
-
-/// One row in the events register — flat representation of
-/// `egui_graphs::events::Event` translated from internal petgraph indices
-/// to Go's u64 node/edge keys. `kind` is the discriminator defined by
-/// the `GRAPH_EV`_* constants (1..=11 in v1; Pan/Zoom/NodeMove intentionally
-/// skipped — continuous high-volume streams, not the useful subset).
-#[derive(Debug, Clone, Copy)]
-pub struct GraphEventRecord {
-    pub graph_id: u64,
-    pub kind: u8,
-    pub key_a: u64,
-    pub key_b: u64,
-}
-
-pub const GRAPH_EV_NODE_CLICK: u8 = 1;
-pub const GRAPH_EV_NODE_DOUBLE_CLICK: u8 = 2;
-pub const GRAPH_EV_NODE_SELECT: u8 = 3;
-pub const GRAPH_EV_NODE_DESELECT: u8 = 4;
-pub const GRAPH_EV_NODE_DRAG_START: u8 = 5;
-pub const GRAPH_EV_NODE_DRAG_END: u8 = 6;
-pub const GRAPH_EV_NODE_HOVER_ENTER: u8 = 7;
-pub const GRAPH_EV_NODE_HOVER_LEAVE: u8 = 8;
-pub const GRAPH_EV_EDGE_CLICK: u8 = 9;
-pub const GRAPH_EV_EDGE_SELECT: u8 = 10;
-pub const GRAPH_EV_EDGE_DESELECT: u8 = 11;
-
-// Retained per-widget graph. `graph` owns the egui_graphs Graph (with
-// layout positions, drag state, selection). The two HashMaps reverse-
-// lookup petgraph indices from Go's stable u64 keys so reconciliation
-// avoids scanning. Edges are keyed by (from_u64, to_u64) — multigraphs
-// (parallel edges) are not supported in v1.
-pub struct GraphState {
-    pub graph: egui_graphs::Graph<
-        GraphNodeUserData,
-        GraphEdgeUserData,
-        petgraph::Directed,
-        petgraph::stable_graph::DefaultIx,
-        egui_graphs::DefaultNodeShape,
-        PayloadColorEdgeShape,
-    >,
-    pub node_idx: std::collections::HashMap<u64, petgraph::stable_graph::NodeIndex>,
-    pub edge_idx: std::collections::HashMap<(u64, u64), petgraph::stable_graph::EdgeIndex>,
-    /// One-shot fit-to-screen latch. While true the `GraphView` renders with
-    /// fit-to-screen enabled; it latches off once the layout settles so
-    /// manual pan/zoom sticks and the view stops rescaling every frame.
-    /// Armed on creation and re-armed by resetLayout / `fitNow()`. See
-    /// `graph_fit_this_frame`.
-    pub fit_pending: bool,
-    /// Frames fitted since the latch was last armed. `egui_graphs` only knows
-    /// the node bounds after it has rendered a frame, so we fit a few
-    /// frames before trusting the settle signal — otherwise a deterministic
-    /// layout fits once against empty bounds and latches off mis-framed.
-    pub fit_frames: u32,
-}
-
-pub fn new_graph_state() -> GraphState {
-    let sg: petgraph::stable_graph::StableGraph<GraphNodeUserData, GraphEdgeUserData> =
-        petgraph::stable_graph::StableGraph::default();
-    GraphState {
-        graph: egui_graphs::Graph::from(&sg),
-        node_idx: std::collections::HashMap::new(),
-        edge_idx: std::collections::HashMap::new(),
-        // Fit the freshly created graph, then latch off once it settles.
-        fit_pending: true,
-        fit_frames: 0,
-    }
-}
-
-// Custom edge shape that respects the per-edge `payload.color` set by
-// Go callers via `c.GraphEdge(...).Color(col)`. Wraps egui_graphs'
-// `DefaultEdgeShape` for layout/labels and post-processes the returned
-// shapes, replacing solid stroke colors and fills with the payload
-// color when one is set. Falls back to the default's `current_color`
-// (selected vs. inactive widget visuals) when the payload has no
-// color, so unstyled edges still pick up the egui theme.
-//
-// `egui_graphs::DefaultEdgeShape` ignores the edge payload entirely:
-// its `current_color` reads `style.fg_stroke.color` from the global
-// visuals, so without this wrapper every edge renders in the same
-// theme color regardless of what Go set on the payload.
-#[derive(Clone, Debug)]
-pub struct PayloadColorEdgeShape {
-    inner: egui_graphs::DefaultEdgeShape,
-    payload_color: Option<egui::Color32>,
-}
-
-impl From<egui_graphs::EdgeProps<GraphEdgeUserData>> for PayloadColorEdgeShape {
-    fn from(edge: egui_graphs::EdgeProps<GraphEdgeUserData>) -> Self {
-        let payload_color = edge.payload.color;
-        Self {
-            payload_color,
-            inner: egui_graphs::DefaultEdgeShape::from(edge),
-        }
-    }
-}
-
-impl<N, Ty, Ix, D> egui_graphs::DisplayEdge<N, GraphEdgeUserData, Ty, Ix, D>
-    for PayloadColorEdgeShape
-where
-    N: Clone,
-    Ty: petgraph::EdgeType,
-    Ix: petgraph::stable_graph::IndexType,
-    D: egui_graphs::DisplayNode<N, GraphEdgeUserData, Ty, Ix>,
-{
-    fn shapes(
-        &mut self,
-        start: &egui_graphs::Node<N, GraphEdgeUserData, Ty, Ix, D>,
-        end: &egui_graphs::Node<N, GraphEdgeUserData, Ty, Ix, D>,
-        ctx: &egui_graphs::DrawContext<'_>,
-    ) -> Vec<egui::Shape> {
-        let mut shapes = self.inner.shapes(start, end, ctx);
-        if let Some(c) = self.payload_color {
-            for s in &mut shapes {
-                recolor_edge_shape(s, c);
-            }
-        }
-        shapes
-    }
-    fn update(&mut self, state: &egui_graphs::EdgeProps<GraphEdgeUserData>) {
-        self.payload_color = state.payload.color;
-        <egui_graphs::DefaultEdgeShape as egui_graphs::DisplayEdge<
-            N,
-            GraphEdgeUserData,
-            Ty,
-            Ix,
-            D,
-        >>::update(&mut self.inner, state);
-    }
-    fn is_inside(
-        &self,
-        start: &egui_graphs::Node<N, GraphEdgeUserData, Ty, Ix, D>,
-        end: &egui_graphs::Node<N, GraphEdgeUserData, Ty, Ix, D>,
-        pos: egui::Pos2,
-    ) -> bool {
-        <egui_graphs::DefaultEdgeShape as egui_graphs::DisplayEdge<
-            N,
-            GraphEdgeUserData,
-            Ty,
-            Ix,
-            D,
-        >>::is_inside(&self.inner, start, end, pos)
-    }
-    fn extra_bounds(
-        &self,
-        start: &egui_graphs::Node<N, GraphEdgeUserData, Ty, Ix, D>,
-        end: &egui_graphs::Node<N, GraphEdgeUserData, Ty, Ix, D>,
-    ) -> Option<(egui::Pos2, egui::Pos2)> {
-        <egui_graphs::DefaultEdgeShape as egui_graphs::DisplayEdge<
-            N,
-            GraphEdgeUserData,
-            Ty,
-            Ix,
-            D,
-        >>::extra_bounds(&self.inner, start, end)
-    }
-}
-
-// Walk an `egui::Shape` returned by `DefaultEdgeShape` and overwrite
-// stroke / fill / text colors with `c`. The default's
-// `EdgeShapeBuilder` produces:
-//   - LineSegment       → straight body, color in stroke.color
-//   - CubicBezier       → curved/looped body, color in stroke.color
-//                         (fill is Color32::default(), transparent)
-//   - Path (closed)     → arrow tip via Shape::convex_polygon — color
-//                         lives in `fill`; the stroke is default-zero
-//   - Text              → label, color baked into the galley
-// Recoloring all fills + strokes + override_text_color covers the
-// full set without us re-implementing the layout.
-fn recolor_edge_shape(s: &mut egui::Shape, c: egui::Color32) {
-    use egui::Shape;
-    use egui::epaint::ColorMode;
-    match s {
-        Shape::Vec(v) => {
-            for inner in v.iter_mut() {
-                recolor_edge_shape(inner, c);
-            }
-        }
-        Shape::LineSegment { stroke, .. } => {
-            stroke.color = c;
-        }
-        Shape::Path(p) => {
-            p.stroke.color = ColorMode::Solid(c);
-            if p.fill != egui::Color32::TRANSPARENT {
-                p.fill = c;
-            }
-        }
-        Shape::CubicBezier(b) => {
-            b.stroke.color = ColorMode::Solid(c);
-            if b.fill != egui::Color32::TRANSPARENT {
-                b.fill = c;
-            }
-        }
-        Shape::QuadraticBezier(b) => {
-            b.stroke.color = ColorMode::Solid(c);
-            if b.fill != egui::Color32::TRANSPARENT {
-                b.fill = c;
-            }
-        }
-        Shape::Circle(circle) => {
-            circle.stroke.color = c;
-        }
-        Shape::Ellipse(e) => {
-            e.stroke.color = c;
-        }
-        Shape::Rect(r) => {
-            r.stroke.color = c;
-        }
-        Shape::Text(t) => {
-            t.override_text_color = Some(c);
-        }
-        Shape::Mesh(_) | Shape::Callback(_) | Shape::Noop => {}
-    }
-}
-
-// Layout discriminator (matches Go-side GraphLayout* constants):
-//   0 = LayoutRandom (default; fast, stable positions, no convergence)
-//   1 = LayoutForceDirected<FruchtermanReingold>
-//   2 = LayoutForceDirected<FruchtermanReingoldWithCenterGravity>
-//   3 = LayoutHierarchical
-// Switching at runtime discards the previous layout's state because each
-// variant stores a different state type under the same egui id slot.
-pub const GRAPH_LAYOUT_RANDOM: u8 = 0;
-pub const GRAPH_LAYOUT_FORCE_DIRECTED: u8 = 1;
-pub const GRAPH_LAYOUT_FORCE_DIRECTED_CG: u8 = 2;
-pub const GRAPH_LAYOUT_HIERARCHICAL: u8 = 3;
-
-/// Overlay any user-supplied `FruchtermanReingold` parameters onto the
-/// persisted layout state in egui ctx memory. Each field only gets
-/// written if its matching `_set` flag is true, so callers can tune one
-/// parameter at a time without clobbering the simulation's running
-/// values for the others. No-op unless `layout_kind` is FR or FR+CG.
-#[allow(clippy::too_many_arguments)]
-pub fn apply_fr_overrides(
-    ui: &mut egui::Ui,
-    gid: u64,
-    layout_kind: u8,
-    dt: f32,
-    dt_set: bool,
-    damping: f32,
-    damping_set: bool,
-    epsilon: f32,
-    epsilon_set: bool,
-    max_step: f32,
-    max_step_set: bool,
-    k_scale: f32,
-    k_scale_set: bool,
-    c_attract: f32,
-    c_attract_set: bool,
-    c_repulse: f32,
-    c_repulse_set: bool,
-    is_running: bool,
-    is_running_set: bool,
-) {
-    let any_set = dt_set
-        || damping_set
-        || epsilon_set
-        || max_step_set
-        || k_scale_set
-        || c_attract_set
-        || c_repulse_set
-        || is_running_set;
-    if !any_set {
-        return;
-    }
-    let id = Some(gid.to_string());
-    match layout_kind {
-        GRAPH_LAYOUT_FORCE_DIRECTED => {
-            let mut s: egui_graphs::FruchtermanReingoldState =
-                egui_graphs::get_layout_state(ui, id.clone());
-            if dt_set {
-                s.dt = dt;
-            }
-            if damping_set {
-                s.damping = damping;
-            }
-            if epsilon_set {
-                s.epsilon = epsilon;
-            }
-            if max_step_set {
-                s.max_step = max_step;
-            }
-            if k_scale_set {
-                s.k_scale = k_scale;
-            }
-            if c_attract_set {
-                s.c_attract = c_attract;
-            }
-            if c_repulse_set {
-                s.c_repulse = c_repulse;
-            }
-            if is_running_set {
-                s.is_running = is_running;
-            }
-            egui_graphs::set_layout_state(ui, s, id);
-        }
-        GRAPH_LAYOUT_FORCE_DIRECTED_CG => {
-            // The center-gravity variant wraps a base FruchtermanReingoldState
-            // inside FruchtermanReingoldWithExtrasState; reach it via `.base`.
-            let mut s: egui_graphs::FruchtermanReingoldWithCenterGravityState =
-                egui_graphs::get_layout_state(ui, id.clone());
-            if dt_set {
-                s.base.dt = dt;
-            }
-            if damping_set {
-                s.base.damping = damping;
-            }
-            if epsilon_set {
-                s.base.epsilon = epsilon;
-            }
-            if max_step_set {
-                s.base.max_step = max_step;
-            }
-            if k_scale_set {
-                s.base.k_scale = k_scale;
-            }
-            if c_attract_set {
-                s.base.c_attract = c_attract;
-            }
-            if c_repulse_set {
-                s.base.c_repulse = c_repulse;
-            }
-            if is_running_set {
-                s.base.is_running = is_running;
-            }
-            egui_graphs::set_layout_state(ui, s, id);
-        }
-        _ => {}
-    }
-}
-
-/// Overlay any user-supplied Hierarchical parameters onto the persisted
-/// hierarchical layout state. Orientation: 0 = `TopDown` (default), 1 =
-/// `LeftRight`. No-op unless `layout_kind` is Hierarchical.
-#[allow(clippy::too_many_arguments)]
-pub fn apply_hierarchical_overrides(
-    ui: &mut egui::Ui,
-    gid: u64,
-    layout_kind: u8,
-    row_dist: f32,
-    row_dist_set: bool,
-    col_dist: f32,
-    col_dist_set: bool,
-    center_parent: bool,
-    center_parent_set: bool,
-    orientation: u8,
-    orientation_set: bool,
-) {
-    if layout_kind != GRAPH_LAYOUT_HIERARCHICAL {
-        return;
-    }
-    let any_set = row_dist_set || col_dist_set || center_parent_set || orientation_set;
-    if !any_set {
-        return;
-    }
-    let id = Some(gid.to_string());
-    let mut s: egui_graphs::LayoutStateHierarchical = egui_graphs::get_layout_state(ui, id.clone());
-    if row_dist_set {
-        s.row_dist = row_dist;
-    }
-    if col_dist_set {
-        s.col_dist = col_dist;
-    }
-    if center_parent_set {
-        s.center_parent = center_parent;
-    }
-    if orientation_set {
-        s.orientation = match orientation {
-            1 => egui_graphs::LayoutHierarchicalOrientation::LeftRight,
-            _ => egui_graphs::LayoutHierarchicalOrientation::TopDown,
-        };
-    }
-    egui_graphs::set_layout_state(ui, s, id);
-}
-
-/// Append every currently-selected node and edge in `state` onto the
-/// shared snapshot vectors on the interpreter, tagged with `gid`. Nodes
-/// surface as (kind=0, `keyA=node_id`, keyB=0); edges as (kind=1,
-/// keyA=from, keyB=to). Called once per graph per frame.
-pub fn snapshot_graph_selection(
-    graph_id: u64,
-    state: &GraphState,
-    out_graph_ids: &mut Vec<u64>,
-    out_kind: &mut Vec<u8>,
-    out_key_a: &mut Vec<u64>,
-    out_key_b: &mut Vec<u64>,
-) {
-    for (_, node) in state.graph.nodes_iter() {
-        if node.selected() {
-            out_graph_ids.push(graph_id);
-            out_kind.push(0);
-            out_key_a.push(node.payload().key);
-            out_key_b.push(0);
-        }
-    }
-    for (ei, edge) in state.graph.edges_iter() {
-        if edge.selected()
-            && let Some((a, b)) = state.graph.edge_endpoints(ei)
-        {
-            let ka = state.graph.node(a).map(|n| n.payload().key).unwrap_or(0);
-            let kb = state.graph.node(b).map(|n| n.payload().key).unwrap_or(0);
-            out_graph_ids.push(graph_id);
-            out_kind.push(1);
-            out_key_a.push(ka);
-            out_key_b.push(kb);
-        }
-    }
-}
-
-/// Append one metrics row for `state` onto the shared snapshot vectors.
-/// `fr_steps` and `fr_last_disp` are meaningful only when the layout
-/// stored in egui memory is an FR variant; otherwise they're 0 / NaN.
-// One row of metrics is one call; the columns are the arguments.
-#[allow(clippy::too_many_arguments)]
-pub fn snapshot_graph_metrics(
-    graph_id: u64,
-    layout_kind: u8,
-    state: &GraphState,
-    ui: &egui::Ui,
-    out_graph_ids: &mut Vec<u64>,
-    out_node_count: &mut Vec<u32>,
-    out_edge_count: &mut Vec<u32>,
-    out_fr_steps: &mut Vec<u64>,
-    out_fr_last_disp: &mut Vec<f32>,
-) {
-    let id = Some(graph_id.to_string());
-    let (fr_steps, fr_last_disp) = match layout_kind {
-        GRAPH_LAYOUT_FORCE_DIRECTED => {
-            let s: egui_graphs::FruchtermanReingoldState = egui_graphs::get_layout_state(ui, id);
-            (s.step_count, s.last_avg_displacement.unwrap_or(f32::NAN))
-        }
-        GRAPH_LAYOUT_FORCE_DIRECTED_CG => {
-            let s: egui_graphs::FruchtermanReingoldWithCenterGravityState =
-                egui_graphs::get_layout_state(ui, id);
-            (
-                s.base.step_count,
-                s.base.last_avg_displacement.unwrap_or(f32::NAN),
-            )
-        }
-        _ => (0, f32::NAN),
-    };
-    out_graph_ids.push(graph_id);
-    out_node_count.push(state.graph.g().node_count() as u32);
-    out_edge_count.push(state.graph.g().edge_count() as u32);
-    out_fr_steps.push(fr_steps);
-    out_fr_last_disp.push(fr_last_disp);
-}
-
-/// True once the graph's layout has stopped moving enough to latch the
-/// one-shot fit off. Deterministic layouts (random / hierarchical) are
-/// settled immediately; force-directed layouts settle once they have
-/// taken at least one step and their average per-step displacement has
-/// fallen to/under the convergence epsilon. Reads the layout state that
-/// `egui_graphs` persists in `ui` memory, so it reflects the previous
-/// frame's progress — exactly what we need to decide this frame's fit.
-pub fn graph_layout_settled(ui: &egui::Ui, graph_id: u64, layout_kind: u8) -> bool {
-    let id = Some(graph_id.to_string());
-    match layout_kind {
-        GRAPH_LAYOUT_FORCE_DIRECTED => {
-            let s: egui_graphs::FruchtermanReingoldState = egui_graphs::get_layout_state(ui, id);
-            s.step_count > 0 && s.last_avg_displacement.is_some_and(|d| d <= s.epsilon)
-        }
-        GRAPH_LAYOUT_FORCE_DIRECTED_CG => {
-            let s: egui_graphs::FruchtermanReingoldWithCenterGravityState =
-                egui_graphs::get_layout_state(ui, id);
-            s.base.step_count > 0
-                && s.base.last_avg_displacement.is_some_and(|d| d <= s.base.epsilon)
-        }
-        _ => true,
-    }
-}
-
-/// Decide whether to fit-to-screen this frame and advance the one-shot
-/// fit latch on `state`. `continuous` forces the legacy always-fit
-/// behaviour. `refit` (creation / resetLayout / fitNow) re-arms the latch
-/// and resets the frame counter, so a stale pre-reset settle signal can't
-/// latch us off early. Otherwise we keep fitting while the latch is pending
-/// until the layout has both `settled` and been fitted for a floor of
-/// frames, then latch off.
-pub fn graph_fit_this_frame(
-    state: &mut GraphState,
-    continuous: bool,
-    refit: bool,
-    settled: bool,
-) -> bool {
-    // egui_graphs only knows the node bounds after it has rendered a frame,
-    // so a fit applied on the very first frame frames against empty bounds
-    // and — because we latch off — never corrects. Fit for a floor of
-    // frames before trusting `settled`. Deterministic layouts (random /
-    // hierarchical) report settled immediately, so this floor is what
-    // actually frames them; force-directed layouts stay unsettled well
-    // past it, so it never shortens their settle.
-    const GRAPH_FIT_MIN_FRAMES: u32 = 8;
-    if continuous {
-        return true;
-    }
-    if refit {
-        state.fit_pending = true;
-        state.fit_frames = 0;
-    }
-    if !state.fit_pending {
-        return false;
-    }
-    state.fit_frames = state.fit_frames.saturating_add(1);
-    if settled && state.fit_frames >= GRAPH_FIT_MIN_FRAMES {
-        state.fit_pending = false;
-    }
-    true
-}
-
-/// Render a `GraphView` with the layout variant picked by `layout_kind`.
-/// Extracted from the `graph` apply code so the match-over-kind stays
-/// co-located with the other graph helpers. All generic bounds are
-/// instantiated here — the caller passes only runtime values.
-// The generic bounds are instantiated here, so every runtime value the
-// layouts need arrives as an argument.
-#[allow(clippy::too_many_arguments)]
-pub fn render_graph_with_layout(
-    state: &mut GraphState,
-    ui: &mut egui::Ui,
-    size: egui::Vec2,
-    gid: u64,
-    layout_kind: u8,
-    reset_layout_flag: bool,
-    fast_forward_steps: u32,
-    interaction: &egui_graphs::SettingsInteraction,
-    navigation: &egui_graphs::SettingsNavigation,
-    style: &egui_graphs::SettingsStyle,
-    sink: &dyn egui_graphs::events::EventSink,
-) -> egui::Response {
-    // Each arm: (optional) reset_layout → (optional) fast_forward → add_sized.
-    // The final `add_sized` is the tail expression of every arm, so the match
-    // (and this function) yields the GraphView's Response — the caller reads
-    // its `contains_pointer()` to decide whether to swallow the wheel.
-    // The inner GraphView generic alias keeps each arm readable; macros were
-    // an option but hide the type params that matter for maintenance here.
-    let id = Some(gid.to_string());
-    macro_rules! render_variant {
-        ($S:ty, $L:ty) => {{
-            if reset_layout_flag {
-                egui_graphs::reset_layout::<$S>(ui, id.clone());
-            }
-            if fast_forward_steps > 0 {
-                egui_graphs::GraphView::<
-                    GraphNodeUserData,
-                    GraphEdgeUserData,
-                    petgraph::Directed,
-                    petgraph::stable_graph::DefaultIx,
-                    egui_graphs::DefaultNodeShape,
-                    PayloadColorEdgeShape,
-                    $S,
-                    $L,
-                >::fast_forward(ui, &mut state.graph, fast_forward_steps, id.clone());
-            }
-            let mut view: egui_graphs::GraphView<
-                '_,
-                GraphNodeUserData,
-                GraphEdgeUserData,
-                petgraph::Directed,
-                petgraph::stable_graph::DefaultIx,
-                egui_graphs::DefaultNodeShape,
-                PayloadColorEdgeShape,
-                $S,
-                $L,
-            > = egui_graphs::GraphView::new(&mut state.graph)
-                .with_id(id.clone())
-                .with_interactions(interaction)
-                .with_navigations(navigation)
-                .with_styles(style)
-                .with_event_sink(sink);
-            ui.add_sized(size, &mut view)
-        }};
-    }
-    match layout_kind {
-        GRAPH_LAYOUT_FORCE_DIRECTED => render_variant!(
-            egui_graphs::FruchtermanReingoldState,
-            egui_graphs::LayoutForceDirected<egui_graphs::FruchtermanReingold>
-        ),
-        GRAPH_LAYOUT_FORCE_DIRECTED_CG => render_variant!(
-            egui_graphs::FruchtermanReingoldWithCenterGravityState,
-            egui_graphs::LayoutForceDirected<egui_graphs::FruchtermanReingoldWithCenterGravity>
-        ),
-        GRAPH_LAYOUT_HIERARCHICAL => render_variant!(
-            egui_graphs::LayoutStateHierarchical,
-            egui_graphs::LayoutHierarchical
-        ),
-        _ /* GRAPH_LAYOUT_RANDOM */ => render_variant!(
-            egui_graphs::LayoutStateRandom,
-            egui_graphs::LayoutRandom
-        ),
-    }
-}
-
-/// Translate an `egui_graphs::events::Event` into the flat `GraphEventRecord`
-/// that the FFFI register expects. Returns `None` for variants we don't
-/// surface to Go in v1 (Pan, Zoom, `NodeMove` — continuous streams). Node
-/// index → u64 key goes through the Node's user-data payload; edge index
-/// → (from, to) goes through `StableGraph::edge_endpoints`.
-pub fn translate_graph_event(
-    graph_id: u64,
-    state: &GraphState,
-    e: &egui_graphs::events::Event,
-) -> Option<GraphEventRecord> {
-    use egui_graphs::events::Event as E;
-    let node_key = |idx: usize| -> Option<u64> {
-        let ni = petgraph::stable_graph::NodeIndex::new(idx);
-        state.graph.node(ni).map(|n| n.payload().key)
-    };
-    let edge_pair = |idx: usize| -> Option<(u64, u64)> {
-        let ei = petgraph::stable_graph::EdgeIndex::new(idx);
-        let (a, b) = state.graph.edge_endpoints(ei)?;
-        let ka = state.graph.node(a)?.payload().key;
-        let kb = state.graph.node(b)?.payload().key;
-        Some((ka, kb))
-    };
-    let mk_node = |kind: u8, idx: usize| -> Option<GraphEventRecord> {
-        node_key(idx).map(|k| GraphEventRecord {
-            graph_id,
-            kind,
-            key_a: k,
-            key_b: 0,
-        })
-    };
-    let mk_edge = |kind: u8, idx: usize| -> Option<GraphEventRecord> {
-        edge_pair(idx).map(|(a, b)| GraphEventRecord {
-            graph_id,
-            kind,
-            key_a: a,
-            key_b: b,
-        })
-    };
-    match e {
-        E::NodeClick(p) => mk_node(GRAPH_EV_NODE_CLICK, p.id),
-        E::NodeDoubleClick(p) => mk_node(GRAPH_EV_NODE_DOUBLE_CLICK, p.id),
-        E::NodeSelect(p) => mk_node(GRAPH_EV_NODE_SELECT, p.id),
-        E::NodeDeselect(p) => mk_node(GRAPH_EV_NODE_DESELECT, p.id),
-        E::NodeDragStart(p) => mk_node(GRAPH_EV_NODE_DRAG_START, p.id),
-        E::NodeDragEnd(p) => mk_node(GRAPH_EV_NODE_DRAG_END, p.id),
-        E::NodeHoverEnter(p) => mk_node(GRAPH_EV_NODE_HOVER_ENTER, p.id),
-        E::NodeHoverLeave(p) => mk_node(GRAPH_EV_NODE_HOVER_LEAVE, p.id),
-        E::EdgeClick(p) => mk_edge(GRAPH_EV_EDGE_CLICK, p.id),
-        E::EdgeSelect(p) => mk_edge(GRAPH_EV_EDGE_SELECT, p.id),
-        E::EdgeDeselect(p) => mk_edge(GRAPH_EV_EDGE_DESELECT, p.id),
-        // Pan, Zoom, NodeMove — continuous; intentionally not surfaced in v1.
-        _ => None,
-    }
-}
-
-/// Deterministic spawn location for a newly declared graph node. The default
-/// add path (`add_node_with_label` → `Node::new`) places every new node at
-/// `Pos2::default()`, i.e. exactly (0,0), and FR repulsion between exactly
-/// coincident nodes is zero (`dir = delta/distance` with `delta == 0`) — so
-/// nodes with identical neighbour sets receive identical net forces every step
-/// and stay stacked forever. Scattering spawns over a disc breaks the tie;
-/// hashing the Go-side key keeps the position stable across frames and
-/// sessions instead of depending on insertion order. See
-/// doc/howto/imzero2-graph-coincident-spawn.md for the full analysis.
-fn graph_spawn_location(key: u64) -> egui::Pos2 {
-    // splitmix64 finalizer — cheap, well distributed, no rand dependency.
-    let mut z = key.wrapping_add(0x9e37_79b9_7f4a_7c15);
-    z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-    z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-    z ^= z >> 31;
-    let angle = ((z as u32) as f32 / u32::MAX as f32) * std::f32::consts::TAU;
-    let radius = 30.0 + (((z >> 32) as u32) as f32 / u32::MAX as f32) * 120.0;
-    egui::Pos2::new(radius * angle.cos(), radius * angle.sin())
-}
-
-pub fn reconcile_graph_state(
-    state: &mut GraphState,
-    pending_nodes: &[GraphNodeData],
-    pending_edges: &[GraphEdgeData],
-) {
-    use std::collections::HashSet;
-
-    // Remove nodes Go no longer declares + their incident edges.
-    let wanted_nodes: HashSet<u64> = pending_nodes.iter().map(|n| n.id).collect();
-    let stale_nodes: Vec<u64> =
-        state.node_idx.keys().copied().filter(|k| !wanted_nodes.contains(k)).collect();
-    for k in &stale_nodes {
-        if let Some(idx) = state.node_idx.remove(k) {
-            // petgraph::StableGraph::remove_node also drops all edges
-            // incident to the removed node, so the EdgeIndex entries
-            // in state.edge_idx for those edges become stale — we
-            // filter them out below.
-            state.graph.remove_node(idx);
-        }
-    }
-    if !stale_nodes.is_empty() {
-        let stale_set: HashSet<u64> = stale_nodes.into_iter().collect();
-        state.edge_idx.retain(|(f, t), _| !stale_set.contains(f) && !stale_set.contains(t));
-    }
-
-    // Add new nodes / update existing. The Go-side color must be mirrored
-    // into the egui_graphs Node's own color slot: DefaultNodeShape renders
-    // node_props.color(), not the payload, so a payload-only color is
-    // silently dropped and every node falls back to the theme stroke color
-    // (doc/howto/imzero2-graph-node-color.md). A declaration without a color
-    // leaves the previous slot value — Go apps either always or never color
-    // a given graph's nodes.
-    for n in pending_nodes {
-        if let Some(&idx) = state.node_idx.get(&n.id) {
-            if let Some(node) = state.graph.node_mut(idx) {
-                let p = node.payload_mut();
-                p.label = n.label.clone();
-                p.color = n.color;
-                if let Some(col) = n.color {
-                    node.set_color(col);
-                }
-            }
-        } else {
-            let payload = GraphNodeUserData {
-                key: n.id,
-                label: n.label.clone(),
-                color: n.color,
-            };
-            let idx = state.graph.add_node_with_label_and_location(
-                payload,
-                n.label.clone(),
-                graph_spawn_location(n.id),
-            );
-            if let Some(col) = n.color
-                && let Some(node) = state.graph.node_mut(idx)
-            {
-                node.set_color(col);
-            }
-            state.node_idx.insert(n.id, idx);
-        }
-    }
-
-    // Remove edges Go no longer declares.
-    let wanted_edges: HashSet<(u64, u64)> = pending_edges.iter().map(|e| (e.from, e.to)).collect();
-    let stale_edges: Vec<(u64, u64)> =
-        state.edge_idx.keys().copied().filter(|k| !wanted_edges.contains(k)).collect();
-    for k in stale_edges {
-        if let Some(idx) = state.edge_idx.remove(&k) {
-            state.graph.remove_edge(idx);
-        }
-    }
-
-    // Add new edges / update existing.
-    for e in pending_edges {
-        if let Some(&idx) = state.edge_idx.get(&(e.from, e.to)) {
-            if let Some(edge) = state.graph.edge_mut(idx) {
-                let p = edge.payload_mut();
-                p.label = e.label.clone();
-                p.color = e.color;
-            }
-            continue;
-        }
-        let a = match state.node_idx.get(&e.from) {
-            Some(x) => *x,
-            None => continue,
-        };
-        let b = match state.node_idx.get(&e.to) {
-            Some(x) => *x,
-            None => continue,
-        };
-        let payload = GraphEdgeUserData {
-            label: e.label.clone(),
-            color: e.color,
-        };
-        let idx = match e.label.as_ref() {
-            Some(lbl) => state.graph.add_edge_with_label(a, b, payload, lbl.clone()),
-            None => state.graph.add_edge(a, b, payload),
-        };
-        state.edge_idx.insert((e.from, e.to), idx);
-    }
 }
 
 // Painter drawing commands (accumulated via register-drain pattern)
@@ -1387,8 +579,22 @@ impl<R: std::io::BufRead, W: std::io::Write> egui_table::TableDelegate
     }
 }
 
+/// One row of the fetchR27Windows drain: a window's outer rect as egui
+/// laid it out this frame, whether its body was collapsed, and the outer
+/// size its content needed at that layout (`need`). `need` exceeds the
+/// rect where the content overflowed the body — after a windowPlace, by
+/// how much the placed size fell short. It is not an intrinsic minimum:
+/// content that stretches to fill the body needs exactly what it got.
+#[derive(Clone, Copy, Debug)]
+pub struct WindowGeomRow {
+    pub id: u64,
+    pub rect: egui::Rect,
+    pub collapsed: bool,
+    pub need: egui::Vec2,
+}
+
 pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
-    io: ImZeroFffiIo<R, W>,
+    pub(crate) io: ImZeroFffiIo<R, W>,
 
     r0_atoms: egui::Atoms<'a>,
     r1_widget_text: egui::WidgetText,
@@ -1491,6 +697,20 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     // builder method writes here and the Window apply block drains it
     // with std::mem::take so each invocation starts from zero.
     scratch_open_binding_id: u64,
+    // Scratch slot for the Window arm's `maximized` method, drained the
+    // same way as scratch_open_binding_id.
+    scratch_window_maximized: bool,
+    // One-frame window placements queued by the windowPlace procedural op,
+    // keyed by window id; the Window apply block consumes its entry (as a
+    // fixed rect for that frame), and prepare_next_frame drops any left
+    // over from a window that was not emitted.
+    pending_window_place: std::collections::HashMap<u64, egui::Rect>,
+    // Window geometry reported to Go (fetchR27Windows): one row per
+    // egui::Window shown this frame, plus the desktop rect the shell's
+    // panels left free (NaN until a window has been shown). Z-order is
+    // read at fetch time, after every window of the frame has run.
+    pub r27_windows: Vec<WindowGeomRow>,
+    pub r27_work_rect: egui::Rect,
 
     r11_color32: egui::Color32,
 
@@ -1592,6 +812,8 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     r26_key_capture_ids: Vec<u64>,
     r26_key_capture_codes: Vec<u8>,
     r26_key_capture_mods: Vec<u8>,
+    // Edge byte per captured event (ADR-0279 §SD1): bit 0 down, bit 1 repeat.
+    r26_key_capture_edges: Vec<u8>,
 
     // Ui::available_size snapshot — set by the captureAvailableSize
     // procedural op when called inside a Ui scope, read by Go via
@@ -1637,33 +859,6 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     // stored DockState via retain_tabs + push_to_first_leaf.
     pub dock_states: std::collections::HashMap<u64, egui_dock::DockState<u64>>,
 
-    // egui_graphs — per-frame pending lists (drained by the `graph` opcode)
-    // and retained layout state (one egui_graphs::Graph per widget id,
-    // preserving node positions / drag state across frames).
-    pub graph_pending_nodes: Vec<GraphNodeData>,
-    pub graph_pending_edges: Vec<GraphEdgeData>,
-    pub graph_states: std::collections::HashMap<u64, GraphState>,
-    // Accumulated per-frame graph interaction events. Drained by the
-    // fetchGraphEvents fetcher into Go; cleared in prepare_next_frame as
-    // a safety net if Go doesn't fetch.
-    pub graph_events_pending: Vec<GraphEventRecord>,
-    // Per-frame snapshot of the current selection; rebuilt in the graph
-    // apply code from Node/Edge::selected(). Parallel arrays with equal
-    // length; `kind` = 0 for nodes (keyA=node id, keyB=0), 1 for edges
-    // (keyA=from, keyB=to).
-    pub graph_selection_graph_ids: Vec<u64>,
-    pub graph_selection_kind: Vec<u8>,
-    pub graph_selection_key_a: Vec<u64>,
-    pub graph_selection_key_b: Vec<u64>,
-    // Per-frame snapshot of per-graph metrics: one entry per graph widget
-    // that rendered this frame. fr_step_count / fr_last_disp are 0/NaN
-    // for non-FR layouts.
-    pub graph_metrics_graph_ids: Vec<u64>,
-    pub graph_metrics_node_count: Vec<u32>,
-    pub graph_metrics_edge_count: Vec<u32>,
-    pub graph_metrics_fr_steps: Vec<u64>,
-    pub graph_metrics_fr_last_disp: Vec<f32>,
-
     // scrollingTexture (ADR-0009) — ring-buffer pixel widget; texture cache
     // keyed by widget id, caller-owned scroll head. Module: scrolling_texture.
     pub scrolling_texture: ScrollingTextureCache,
@@ -1683,6 +878,16 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     // with one-frame display lag. Reported in microseconds; saturates at
     // u32::MAX (~71 minutes per frame, well past anything we want to see).
     pub last_interpret_us: u32,
+    /// Set while a capture replay runs (ADR-0281 §SD5); the generated apply
+    /// code of host-effect nodes and fetchers is skipped then.
+    pub(crate) capture_replay: bool,
+    /// The host's rasterizer for captures; `None` on a host without one,
+    /// which answers a capture as unsupported (ADR-0281 §SD5).
+    pub(crate) capture_raster: Option<Box<dyn capture_replay::CaptureRasterI>>,
+    /// The last capture's result, until `fetchCaptureResult` takes it.
+    pub(crate) capture_result: Option<capture_replay::CaptureResult>,
+    /// The fonts an SVG capture embeds: the export plugin's resolver.
+    pub(crate) capture_fonts: Option<std::sync::Arc<crate::imzero2::svgexport::FontResolver>>,
     pub last_pass_nr: u64,
 
     // Nanoseconds this pass spent BLOCKED waiting for Go to emit the next
@@ -1812,6 +1017,10 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             r10_false_ids: Vec::with_capacity(1024),
             window_open_bindings: std::collections::HashMap::with_capacity(32),
             scratch_open_binding_id: 0,
+            scratch_window_maximized: false,
+            pending_window_place: std::collections::HashMap::with_capacity(8),
+            r27_windows: Vec::with_capacity(16),
+            r27_work_rect: egui::Rect::NAN,
             debug_tools: DebugTools::new(),
             animation_freeze: false,
             message_offsets: vec![],
@@ -1852,6 +1061,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             r26_key_capture_ids: Vec::with_capacity(8),
             r26_key_capture_codes: Vec::with_capacity(8),
             r26_key_capture_mods: Vec::with_capacity(8),
+            r26_key_capture_edges: Vec::with_capacity(8),
             r18_avail_w: f32::NAN,
             r18_avail_h: f32::NAN,
             r21_ui_rect_seqs: Vec::with_capacity(8),
@@ -1868,23 +1078,14 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             video_cap_ids: Vec::new(),
             video_cap_flags: Vec::new(),
             video_stream_info: Vec::new(),
-            graph_pending_nodes: Vec::with_capacity(64),
-            graph_pending_edges: Vec::with_capacity(64),
-            graph_states: std::collections::HashMap::new(),
-            graph_events_pending: Vec::with_capacity(32),
-            graph_selection_graph_ids: Vec::with_capacity(32),
-            graph_selection_kind: Vec::with_capacity(32),
-            graph_selection_key_a: Vec::with_capacity(32),
-            graph_selection_key_b: Vec::with_capacity(32),
-            graph_metrics_graph_ids: Vec::with_capacity(8),
-            graph_metrics_node_count: Vec::with_capacity(8),
-            graph_metrics_edge_count: Vec::with_capacity(8),
-            graph_metrics_fr_steps: Vec::with_capacity(8),
-            graph_metrics_fr_last_disp: Vec::with_capacity(8),
             scrolling_texture: ScrollingTextureCache::new(),
             image_cache: ImageCache::new(),
             paint_image_cache: ImageCache::new(),
             last_interpret_us: 0,
+            capture_replay: false,
+            capture_raster: None,
+            capture_result: None,
+            capture_fonts: None,
             last_pass_nr: 0,
             read_blocked_ns: 0,
             export_state: std::sync::Arc::new(std::sync::Mutex::new(ExportState::default())),
@@ -1971,6 +1172,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             self.r26_key_capture_ids.clear();
             self.r26_key_capture_codes.clear();
             self.r26_key_capture_mods.clear();
+            self.r26_key_capture_edges.clear();
         }
 
         // Hyperlink zones — cleared so a removed link doesn't carry into
@@ -1989,6 +1191,8 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
         self.new_table_row_heights.clear();
         self.paint_cmds.clear();
         self.r21_ui_rect_seqs.clear();
+        self.r27_windows.clear();
+        self.pending_window_place.clear();
         self.r21_ui_rect_min_x.clear();
         self.r21_ui_rect_min_y.clear();
         self.r21_ui_rect_max_x.clear();
@@ -1996,31 +1200,9 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
         self.r12_code_view_job.text.clear();
         self.r12_code_view_job.sections.clear();
         self.r24_styled_sections.clear();
-        self.graph_pending_nodes.clear();
-        self.graph_pending_edges.clear();
-        // graph_states NOT cleared — persists layout positions across frames
-        if !self.graph_events_pending.is_empty() {
-            tracing::debug!(
-                len = self.graph_events_pending.len(),
-                "graph_events_pending is not empty (unfetched graph events), clearing"
-            );
-            self.graph_events_pending.clear();
-        }
-        // Selection + metrics snapshots are per-frame — repopulated by the
-        // next graph apply pass. Cleared here so a stale frame's snapshot
-        // is never returned by a late fetcher call.
-        self.graph_selection_graph_ids.clear();
-        self.graph_selection_kind.clear();
-        self.graph_selection_key_a.clear();
-        self.graph_selection_key_b.clear();
-        self.graph_metrics_graph_ids.clear();
-        self.graph_metrics_node_count.clear();
-        self.graph_metrics_edge_count.clear();
-        self.graph_metrics_fr_steps.clear();
-        self.graph_metrics_fr_last_disp.clear();
     }
     pub fn interpret_commands_outer(&mut self, ctx: &egui::Context) -> InterpretResult<()> {
-        let t0 = std::time::Instant::now();
+        let t0 = crate::imzero2::clock::Instant::now();
         self.read_blocked_ns = 0;
         Self::handle_screenshot_event(ctx);
         // Advance per-frame state for widgets that need it. Must run exactly
@@ -2050,6 +1232,12 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
         );
         let mut root = Some(&mut root_ui);
         let result = self.interpret_outer(ctx, &mut root);
+        // The export plugin runs at the end of this pass. Bring the ring
+        // textures' mirror up to date only when it will read it: the copy
+        // is the whole texture, too much to repeat on every push.
+        if self.export_state.lock().is_ok_and(|s| s.pending.is_some()) {
+            self.scrolling_texture.sync_export_mirror();
+        }
         // Capture even on error so the overlay keeps reporting the time spent
         // before the failure rather than freezing on a stale value. The span is
         // net of the time spent blocked on Go's stream (see `read_blocked_ns`),
@@ -2164,7 +1352,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
         let header = if self.io.is_replaying() {
             self.io.read_plain_u32()
         } else {
-            let t_wait = std::time::Instant::now();
+            let t_wait = crate::imzero2::clock::Instant::now();
             let r = self.io.read_plain_u32();
             self.read_blocked_ns =
                 self.read_blocked_ns.saturating_add(t_wait.elapsed().as_nanos() as u64);
@@ -2242,6 +1430,10 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                 // Peer closed the pipe — graceful shutdown signal, not a panic.
                 Err(InterpretError::PeerClosed)
             }
+            // A reader that holds whole messages and has none left (the
+            // browser host's inbox) says so at a message boundary; that is
+            // the end of what can be interpreted now, not of the peer.
+            Err(FffiError::Io(ref e)) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
             Err(e) => Err(InterpretError::Fffi(e)),
         }
     }
@@ -2258,7 +1450,9 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             .message_offsets
             .pop()
             .ok_or(InterpretError::FrameStackUnderflow("frame_offset"))?;
-        let consumed = after - frame_offset;
+        let consumed = after.checked_sub(frame_offset).ok_or(
+            InterpretError::FrameStackUnderflow("frame_offset past cursor"),
+        )?;
         if consumed != frame_len {
             let func_proc_id = FuncProcId::from_repr(func_proc_id_raw);
             if consumed < frame_len {
@@ -2460,11 +1654,22 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
         if block.is_empty() {
             return Ok(());
         }
+        let depth = self.message_offsets.len();
         self.io.begin_replay(block);
         // Capture so end_replay() runs even on Err — the replay overlay state
         // must be cleaned up regardless of whether dispatch propagated an error.
         let r = self.interpret_outer(ctx, &mut Some(ui));
         self.io.end_replay();
+        if r.is_err() {
+            // A message that errored mid-block leaves its begin_consume_message
+            // entry on the frame stacks. The block is length-bounded and the
+            // pipe cursor was restored by end_replay, so drop those entries;
+            // otherwise the enclosing message's end_consume_message would pop
+            // a replay-relative offset and fail a pipe that is in sync.
+            self.message_offsets.truncate(depth);
+            self.message_lengths.truncate(depth);
+            self.message_func_proc_ids_raw.truncate(depth);
+        }
         r
     }
     /// Logged variant of `replay_deferred_block` — same wrapping rationale
@@ -3075,6 +2280,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                 // construct
 
                 let mut w = egui::Button::new(atoms);
+                let mut ids_kind: u8 = 0;
                 // methods
                 loop {
                     let (m, _) = self.read_from_repr(ButtonBuilderMethodId::from_repr)?;
@@ -3129,6 +2335,12 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                             let mut text = self.io.read_plain_s()?;
                             w = w.shortcut_text(text);
                         }
+                        ButtonBuilderMethodId::Kind => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match ButtonBuilderMethodId::Kind");
+                            let mut ki = self.io.read_plain_u8()?;
+                            ids_kind = ki;
+                        }
                     }
                 }
                 if d == 0 {
@@ -3136,7 +2348,12 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                 }
                 // apply
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
-                self.apply_widget(w, u, f, Some(i));
+                self.apply_widget(
+                    imzero2_egui::style::button::IdsButton(w, ids_kind),
+                    u,
+                    f,
+                    Some(i),
+                );
             }
             FuncProcId::CaptureAvailableSize => {
                 #[cfg(feature = "puffin")]
@@ -3156,6 +2373,23 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                 } else {
                     self.r18_avail_w = f32::NAN;
                     self.r18_avail_h = f32::NAN;
+                }
+            }
+            FuncProcId::CaptureReplay => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::CaptureReplay");
+                // arguments
+                let mut request_id = self.io.read_plain_u64()?;
+                let mut format = self.io.read_plain_u8()?;
+                let mut stream = self.io.read_plain_u8h()?;
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                    self.capture_render(c, request_id, format, &stream);
                 }
             }
             FuncProcId::CaptureUiAvailableRect => {
@@ -3841,8 +3075,10 @@ egui::ComboBox::new(i,label).selected_text(selected_text);
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
-                c.send_viewport_cmd(egui::ViewportCommand::Close);
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                    c.send_viewport_cmd(egui::ViewportCommand::Close);
+                }
             }
             FuncProcId::CopyTextToClipboard => {
                 #[cfg(feature = "puffin")]
@@ -3853,7 +3089,9 @@ egui::ComboBox::new(i,label).selected_text(selected_text);
                     self.end_consume_message()?;
                 }
                 // apply
-                c.copy_text(text);
+                if !self.capture_replay {
+                    c.copy_text(text);
+                }
             }
             FuncProcId::DatePickerButton => {
                 #[cfg(feature = "puffin")]
@@ -5074,24 +4312,25 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-
-                let bg = if (bg_rgba & 0xff) == 0 {
-                    None
-                } else {
-                    Some(egui::Color32::from_rgba_unmultiplied(
-                        ((bg_rgba >> 24) & 0xff) as u8,
-                        ((bg_rgba >> 16) & 0xff) as u8,
-                        ((bg_rgba >> 8) & 0xff) as u8,
-                        (bg_rgba & 0xff) as u8,
-                    ))
-                };
-                self.export_state.lock().expect("svg_export state poisoned").pending =
-                    Some(crate::imzero2::svgexport::ExportRequest {
-                        path: std::path::PathBuf::from(path),
-                        embed_fonts,
-                        scope: crate::imzero2::svgexport::ExportScope::Viewport,
-                        bg,
-                    });
+                if !self.capture_replay {
+                    let bg = if (bg_rgba & 0xff) == 0 {
+                        None
+                    } else {
+                        Some(egui::Color32::from_rgba_unmultiplied(
+                            ((bg_rgba >> 24) & 0xff) as u8,
+                            ((bg_rgba >> 16) & 0xff) as u8,
+                            ((bg_rgba >> 8) & 0xff) as u8,
+                            (bg_rgba & 0xff) as u8,
+                        ))
+                    };
+                    self.export_state.lock().expect("svg_export state poisoned").pending =
+                        Some(crate::imzero2::svgexport::ExportRequest {
+                            path: std::path::PathBuf::from(path),
+                            embed_fonts,
+                            scope: crate::imzero2::svgexport::ExportScope::Viewport,
+                            bg,
+                        });
+                }
             }
             FuncProcId::ExportSvgWindow => {
                 #[cfg(feature = "puffin")]
@@ -5106,33 +4345,49 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let window_mode = if mode == 1 {
-                    crate::imzero2::svgexport::WindowMode::ContentOnly
-                } else {
-                    crate::imzero2::svgexport::WindowMode::Faithful
-                };
-                let bg = if (bg_rgba & 0xff) == 0 {
-                    None
-                } else {
-                    Some(egui::Color32::from_rgba_unmultiplied(
-                        ((bg_rgba >> 24) & 0xff) as u8,
-                        ((bg_rgba >> 16) & 0xff) as u8,
-                        ((bg_rgba >> 8) & 0xff) as u8,
-                        (bg_rgba & 0xff) as u8,
-                    ))
-                };
-                self.export_state.lock().expect("svg_export state poisoned").pending =
-                    Some(crate::imzero2::svgexport::ExportRequest {
-                        path: std::path::PathBuf::from(path),
-                        embed_fonts,
-                        scope: crate::imzero2::svgexport::ExportScope::Window {
-                            id: i,
-                            mode: window_mode,
-                        },
-                        bg,
-                    });
+                    let window_mode = if mode == 1 {
+                        crate::imzero2::svgexport::WindowMode::ContentOnly
+                    } else {
+                        crate::imzero2::svgexport::WindowMode::Faithful
+                    };
+                    let bg = if (bg_rgba & 0xff) == 0 {
+                        None
+                    } else {
+                        Some(egui::Color32::from_rgba_unmultiplied(
+                            ((bg_rgba >> 24) & 0xff) as u8,
+                            ((bg_rgba >> 16) & 0xff) as u8,
+                            ((bg_rgba >> 8) & 0xff) as u8,
+                            (bg_rgba & 0xff) as u8,
+                        ))
+                    };
+                    self.export_state.lock().expect("svg_export state poisoned").pending =
+                        Some(crate::imzero2::svgexport::ExportRequest {
+                            path: std::path::PathBuf::from(path),
+                            embed_fonts,
+                            scope: crate::imzero2::svgexport::ExportScope::Window {
+                                id: i,
+                                mode: window_mode,
+                            },
+                            bg,
+                        });
+                }
+            }
+            FuncProcId::FetchCaptureResult => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::FetchCaptureResult");
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                    self.write_capture_result()?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchCommandEnterPressed => {
                 #[cfg(feature = "puffin")]
@@ -5141,19 +4396,21 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let shift = c.input_mut(|i| {
-                    i.consume_key(
-                        egui::Modifiers::COMMAND | egui::Modifiers::SHIFT,
-                        egui::Key::Enter,
-                    )
-                });
-                let plain =
-                    c.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Enter));
-                self.io.write_plain_b(plain)?;
-                self.io.write_plain_b(shift)?;
-                self.io.flush()?;
+                    let shift = c.input_mut(|i| {
+                        i.consume_key(
+                            egui::Modifiers::COMMAND | egui::Modifiers::SHIFT,
+                            egui::Key::Enter,
+                        )
+                    });
+                    let plain =
+                        c.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Enter));
+                    self.io.write_plain_b(plain)?;
+                    self.io.write_plain_b(shift)?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchF1KeyPressed => {
                 #[cfg(feature = "puffin")]
@@ -5162,11 +4419,14 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let pressed = c.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F1));
-                self.io.write_plain_b(pressed)?;
-                self.io.flush()?;
+                    let pressed =
+                        c.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F1));
+                    self.io.write_plain_b(pressed)?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchF2KeyPressed => {
                 #[cfg(feature = "puffin")]
@@ -5175,11 +4435,14 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let pressed = c.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F2));
-                self.io.write_plain_b(pressed)?;
-                self.io.flush()?;
+                    let pressed =
+                        c.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F2));
+                    self.io.write_plain_b(pressed)?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchFrameMetrics => {
                 #[cfg(feature = "puffin")]
@@ -5188,72 +4451,27 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                self.io.write_plain_u64(self.last_interpret_us as u64)?;
-                self.io.write_plain_u64(self.last_pass_nr)?;
-                self.io.flush()?;
+                    self.io.write_plain_u64(self.last_interpret_us as u64)?;
+                    self.io.write_plain_u64(self.last_pass_nr)?;
+                    self.io.flush()?;
+                }
             }
-            FuncProcId::FetchGraphEvents => {
+            FuncProcId::FetchPixelsPerPoint => {
                 #[cfg(feature = "puffin")]
-                puffin::profile_scope!("match FuncProcId::FetchGraphEvents");
+                puffin::profile_scope!("match FuncProcId::FetchPixelsPerPoint");
                 if d == 0 {
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let len = self.graph_events_pending.len();
-                let graph_ids: Vec<u64> =
-                    self.graph_events_pending.iter().map(|r| r.graph_id).collect();
-                let kinds: Vec<u32> =
-                    self.graph_events_pending.iter().map(|r| r.kind as u32).collect();
-                let key_a: Vec<u64> = self.graph_events_pending.iter().map(|r| r.key_a).collect();
-                let key_b: Vec<u64> = self.graph_events_pending.iter().map(|r| r.key_b).collect();
-                self.graph_events_pending.clear();
-                self.io.write_plain_u64h(len, graph_ids)?;
-                self.io.write_plain_u32h(len, kinds)?;
-                self.io.write_plain_u64h(len, key_a)?;
-                self.io.write_plain_u64h(len, key_b)?;
-                self.io.flush()?;
-            }
-            FuncProcId::FetchGraphMetrics => {
-                #[cfg(feature = "puffin")]
-                puffin::profile_scope!("match FuncProcId::FetchGraphMetrics");
-                if d == 0 {
-                    self.end_consume_message()?;
+                    self.io.write_plain_f32(c.pixels_per_point())?;
+                    self.io.flush()?;
                 }
-                // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
-
-                let len = self.graph_metrics_graph_ids.len();
-                self.io.write_plain_u64h(len, self.graph_metrics_graph_ids.drain(..))?;
-                self.io.write_plain_u32h(len, self.graph_metrics_node_count.drain(..))?;
-                self.io.write_plain_u32h(len, self.graph_metrics_edge_count.drain(..))?;
-                self.io.write_plain_u64h(len, self.graph_metrics_fr_steps.drain(..))?;
-                let last_disp_count = self.graph_metrics_fr_last_disp.len();
-                self.io.write_plain_u32(last_disp_count as u32)?;
-                for v in self.graph_metrics_fr_last_disp.drain(..) {
-                    self.io.write_plain_f32(v)?;
-                }
-                self.io.flush()?;
-            }
-            FuncProcId::FetchGraphSelection => {
-                #[cfg(feature = "puffin")]
-                puffin::profile_scope!("match FuncProcId::FetchGraphSelection");
-                if d == 0 {
-                    self.end_consume_message()?;
-                }
-                // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
-
-                let len = self.graph_selection_graph_ids.len();
-                self.io.write_plain_u64h(len, self.graph_selection_graph_ids.drain(..))?;
-                self.io
-                    .write_plain_u32h(len, self.graph_selection_kind.drain(..).map(|k| k as u32))?;
-                self.io.write_plain_u64h(len, self.graph_selection_key_a.drain(..))?;
-                self.io.write_plain_u64h(len, self.graph_selection_key_b.drain(..))?;
-                self.io.flush()?;
             }
             FuncProcId::FetchR10 => {
                 #[cfg(feature = "puffin")]
@@ -5262,11 +4480,15 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                self.io.write_plain_u64h(self.r10_true_ids.len(), self.r10_true_ids.drain(..))?;
-                self.io.write_plain_u64h(self.r10_false_ids.len(), self.r10_false_ids.drain(..))?;
-                self.io.flush()?;
+                    self.io
+                        .write_plain_u64h(self.r10_true_ids.len(), self.r10_true_ids.drain(..))?;
+                    self.io
+                        .write_plain_u64h(self.r10_false_ids.len(), self.r10_false_ids.drain(..))?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR16ScrollDelta => {
                 #[cfg(feature = "puffin")]
@@ -5275,12 +4497,14 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let d = c.input(|i| i.smooth_scroll_delta);
-                self.io.write_plain_f32(d.x)?;
-                self.io.write_plain_f32(d.y)?;
-                self.io.flush()?;
+                    let d = c.input(|i| i.smooth_scroll_delta);
+                    self.io.write_plain_f32(d.x)?;
+                    self.io.write_plain_f32(d.y)?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR17Modifiers => {
                 #[cfg(feature = "puffin")]
@@ -5289,15 +4513,17 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let m = c.input(|i| i.modifiers);
-                self.io.write_plain_b(m.alt)?;
-                self.io.write_plain_b(m.ctrl)?;
-                self.io.write_plain_b(m.shift)?;
-                self.io.write_plain_b(m.mac_cmd)?;
-                self.io.write_plain_b(m.command)?;
-                self.io.flush()?;
+                    let m = c.input(|i| i.modifiers);
+                    self.io.write_plain_b(m.alt)?;
+                    self.io.write_plain_b(m.ctrl)?;
+                    self.io.write_plain_b(m.shift)?;
+                    self.io.write_plain_b(m.mac_cmd)?;
+                    self.io.write_plain_b(m.command)?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR18AvailableSize => {
                 #[cfg(feature = "puffin")]
@@ -5306,11 +4532,13 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                self.io.write_plain_f32(self.r18_avail_w)?;
-                self.io.write_plain_f32(self.r18_avail_h)?;
-                self.io.flush()?;
+                    self.io.write_plain_f32(self.r18_avail_w)?;
+                    self.io.write_plain_f32(self.r18_avail_h)?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR19ZoomDelta => {
                 #[cfg(feature = "puffin")]
@@ -5319,11 +4547,13 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let z = c.input(|i| i.zoom_delta());
-                self.io.write_plain_f32(z)?;
-                self.io.flush()?;
+                    let z = c.input(|i| i.zoom_delta());
+                    self.io.write_plain_f32(z)?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR20Pointer => {
                 #[cfg(feature = "puffin")]
@@ -5332,17 +4562,19 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let pos = c.input(|i| i.pointer.latest_pos());
-                let (px, py, valid) = match pos {
-                    Some(p) => (p.x, p.y, true),
-                    None => (f32::NAN, f32::NAN, false),
-                };
-                self.io.write_plain_f32(px)?;
-                self.io.write_plain_f32(py)?;
-                self.io.write_plain_b(valid)?;
-                self.io.flush()?;
+                    let pos = c.input(|i| i.pointer.latest_pos());
+                    let (px, py, valid) = match pos {
+                        Some(p) => (p.x, p.y, true),
+                        None => (f32::NAN, f32::NAN, false),
+                    };
+                    self.io.write_plain_f32(px)?;
+                    self.io.write_plain_f32(py)?;
+                    self.io.write_plain_b(valid)?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR21UiRects => {
                 #[cfg(feature = "puffin")]
@@ -5351,19 +4583,21 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let len = self.r21_ui_rect_seqs.len();
-                debug_assert_eq!(len, self.r21_ui_rect_min_x.len());
-                debug_assert_eq!(len, self.r21_ui_rect_min_y.len());
-                debug_assert_eq!(len, self.r21_ui_rect_max_x.len());
-                debug_assert_eq!(len, self.r21_ui_rect_max_y.len());
-                self.io.write_plain_u64h(len, self.r21_ui_rect_seqs.drain(..))?;
-                self.io.write_plain_f32h(len, self.r21_ui_rect_min_x.drain(..))?;
-                self.io.write_plain_f32h(len, self.r21_ui_rect_min_y.drain(..))?;
-                self.io.write_plain_f32h(len, self.r21_ui_rect_max_x.drain(..))?;
-                self.io.write_plain_f32h(len, self.r21_ui_rect_max_y.drain(..))?;
-                self.io.flush()?;
+                    let len = self.r21_ui_rect_seqs.len();
+                    debug_assert_eq!(len, self.r21_ui_rect_min_x.len());
+                    debug_assert_eq!(len, self.r21_ui_rect_min_y.len());
+                    debug_assert_eq!(len, self.r21_ui_rect_max_x.len());
+                    debug_assert_eq!(len, self.r21_ui_rect_max_y.len());
+                    self.io.write_plain_u64h(len, self.r21_ui_rect_seqs.drain(..))?;
+                    self.io.write_plain_f32h(len, self.r21_ui_rect_min_x.drain(..))?;
+                    self.io.write_plain_f32h(len, self.r21_ui_rect_min_y.drain(..))?;
+                    self.io.write_plain_f32h(len, self.r21_ui_rect_max_x.drain(..))?;
+                    self.io.write_plain_f32h(len, self.r21_ui_rect_max_y.drain(..))?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR22StarvedTextures => {
                 #[cfg(feature = "puffin")]
@@ -5372,11 +4606,13 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let len = self.r22_starved_texture_ids.len();
-                self.io.write_plain_u64h(len, self.r22_starved_texture_ids.drain(..))?;
-                self.io.flush()?;
+                    let len = self.r22_starved_texture_ids.len();
+                    self.io.write_plain_u64h(len, self.r22_starved_texture_ids.drain(..))?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR23CanvasWheel => {
                 #[cfg(feature = "puffin")]
@@ -5385,21 +4621,23 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let len = self.r23_canvas_wheel_ids.len();
-                debug_assert_eq!(len, self.r23_canvas_wheel_scroll_x.len());
-                debug_assert_eq!(len, self.r23_canvas_wheel_scroll_y.len());
-                debug_assert_eq!(len, self.r23_canvas_wheel_zoom.len());
-                debug_assert_eq!(len, self.r23_canvas_wheel_hover_x.len());
-                debug_assert_eq!(len, self.r23_canvas_wheel_hover_y.len());
-                self.io.write_plain_u64h(len, self.r23_canvas_wheel_ids.drain(..))?;
-                self.io.write_plain_f32h(len, self.r23_canvas_wheel_scroll_x.drain(..))?;
-                self.io.write_plain_f32h(len, self.r23_canvas_wheel_scroll_y.drain(..))?;
-                self.io.write_plain_f32h(len, self.r23_canvas_wheel_zoom.drain(..))?;
-                self.io.write_plain_f32h(len, self.r23_canvas_wheel_hover_x.drain(..))?;
-                self.io.write_plain_f32h(len, self.r23_canvas_wheel_hover_y.drain(..))?;
-                self.io.flush()?;
+                    let len = self.r23_canvas_wheel_ids.len();
+                    debug_assert_eq!(len, self.r23_canvas_wheel_scroll_x.len());
+                    debug_assert_eq!(len, self.r23_canvas_wheel_scroll_y.len());
+                    debug_assert_eq!(len, self.r23_canvas_wheel_zoom.len());
+                    debug_assert_eq!(len, self.r23_canvas_wheel_hover_x.len());
+                    debug_assert_eq!(len, self.r23_canvas_wheel_hover_y.len());
+                    self.io.write_plain_u64h(len, self.r23_canvas_wheel_ids.drain(..))?;
+                    self.io.write_plain_f32h(len, self.r23_canvas_wheel_scroll_x.drain(..))?;
+                    self.io.write_plain_f32h(len, self.r23_canvas_wheel_scroll_y.drain(..))?;
+                    self.io.write_plain_f32h(len, self.r23_canvas_wheel_zoom.drain(..))?;
+                    self.io.write_plain_f32h(len, self.r23_canvas_wheel_hover_x.drain(..))?;
+                    self.io.write_plain_f32h(len, self.r23_canvas_wheel_hover_y.drain(..))?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR24CanvasPointers => {
                 #[cfg(feature = "puffin")]
@@ -5408,21 +4646,23 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let len = self.r24_canvas_pointer_ids.len();
-                debug_assert_eq!(len, self.r24_canvas_pointer_origin_x.len());
-                debug_assert_eq!(len, self.r24_canvas_pointer_origin_y.len());
-                debug_assert_eq!(len, self.r24_canvas_pointer_pos_x.len());
-                debug_assert_eq!(len, self.r24_canvas_pointer_pos_y.len());
-                debug_assert_eq!(len, self.r24_canvas_pointer_mods.len());
-                self.io.write_plain_u64h(len, self.r24_canvas_pointer_ids.drain(..))?;
-                self.io.write_plain_f32h(len, self.r24_canvas_pointer_origin_x.drain(..))?;
-                self.io.write_plain_f32h(len, self.r24_canvas_pointer_origin_y.drain(..))?;
-                self.io.write_plain_f32h(len, self.r24_canvas_pointer_pos_x.drain(..))?;
-                self.io.write_plain_f32h(len, self.r24_canvas_pointer_pos_y.drain(..))?;
-                self.io.write_plain_u8h(len, self.r24_canvas_pointer_mods.drain(..))?;
-                self.io.flush()?;
+                    let len = self.r24_canvas_pointer_ids.len();
+                    debug_assert_eq!(len, self.r24_canvas_pointer_origin_x.len());
+                    debug_assert_eq!(len, self.r24_canvas_pointer_origin_y.len());
+                    debug_assert_eq!(len, self.r24_canvas_pointer_pos_x.len());
+                    debug_assert_eq!(len, self.r24_canvas_pointer_pos_y.len());
+                    debug_assert_eq!(len, self.r24_canvas_pointer_mods.len());
+                    self.io.write_plain_u64h(len, self.r24_canvas_pointer_ids.drain(..))?;
+                    self.io.write_plain_f32h(len, self.r24_canvas_pointer_origin_x.drain(..))?;
+                    self.io.write_plain_f32h(len, self.r24_canvas_pointer_origin_y.drain(..))?;
+                    self.io.write_plain_f32h(len, self.r24_canvas_pointer_pos_x.drain(..))?;
+                    self.io.write_plain_f32h(len, self.r24_canvas_pointer_pos_y.drain(..))?;
+                    self.io.write_plain_u8h(len, self.r24_canvas_pointer_mods.drain(..))?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR25EtColWidths => {
                 #[cfg(feature = "puffin")]
@@ -5431,14 +4671,16 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let len = self.r25_et_colwidth_ids.len();
-                let vlen = self.r25_et_colwidth_values.len();
-                self.io.write_plain_u64h(len, self.r25_et_colwidth_ids.drain(..))?;
-                self.io.write_plain_u64h(len, self.r25_et_colwidth_counts.drain(..))?;
-                self.io.write_plain_f32h(vlen, self.r25_et_colwidth_values.drain(..))?;
-                self.io.flush()?;
+                    let len = self.r25_et_colwidth_ids.len();
+                    let vlen = self.r25_et_colwidth_values.len();
+                    self.io.write_plain_u64h(len, self.r25_et_colwidth_ids.drain(..))?;
+                    self.io.write_plain_u64h(len, self.r25_et_colwidth_counts.drain(..))?;
+                    self.io.write_plain_f32h(vlen, self.r25_et_colwidth_values.drain(..))?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR26KeyCaptures => {
                 #[cfg(feature = "puffin")]
@@ -5447,15 +4689,62 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let len = self.r26_key_capture_ids.len();
-                debug_assert_eq!(len, self.r26_key_capture_codes.len());
-                debug_assert_eq!(len, self.r26_key_capture_mods.len());
-                self.io.write_plain_u64h(len, self.r26_key_capture_ids.drain(..))?;
-                self.io.write_plain_u8h(len, self.r26_key_capture_codes.drain(..))?;
-                self.io.write_plain_u8h(len, self.r26_key_capture_mods.drain(..))?;
-                self.io.flush()?;
+                    let len = self.r26_key_capture_ids.len();
+                    debug_assert_eq!(len, self.r26_key_capture_codes.len());
+                    debug_assert_eq!(len, self.r26_key_capture_mods.len());
+                    debug_assert_eq!(len, self.r26_key_capture_edges.len());
+                    self.io.write_plain_u64h(len, self.r26_key_capture_ids.drain(..))?;
+                    self.io.write_plain_u8h(len, self.r26_key_capture_codes.drain(..))?;
+                    self.io.write_plain_u8h(len, self.r26_key_capture_mods.drain(..))?;
+                    self.io.write_plain_u8h(len, self.r26_key_capture_edges.drain(..))?;
+                    self.io.flush()?;
+                }
+            }
+            FuncProcId::FetchR27Windows => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::FetchR27Windows");
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                    let len = self.r27_windows.len();
+                    let order: Vec<egui::Id> = c.memory(|m| m.layer_ids().map(|l| l.id).collect());
+                    let z: Vec<u32> = self
+                        .r27_windows
+                        .iter()
+                        .map(|r| {
+                            order
+                                .iter()
+                                .rposition(|id| id.value() == r.id)
+                                .map_or(0, |p| p as u32 + 1)
+                        })
+                        .collect();
+                    self.io.write_plain_u64h(len, self.r27_windows.iter().map(|r| r.id))?;
+                    self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.rect.min.x))?;
+                    self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.rect.min.y))?;
+                    self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.rect.max.x))?;
+                    self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.rect.max.y))?;
+                    self.io.write_plain_u32h(len, z)?;
+                    self.io.write_plain_u8h(
+                        len,
+                        self.r27_windows.iter().map(|r| u8::from(r.collapsed)),
+                    )?;
+                    self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.need.x))?;
+                    self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.need.y))?;
+                    self.r27_windows.clear();
+                    let w = self.r27_work_rect;
+                    self.io.write_plain_f32(w.min.x)?;
+                    self.io.write_plain_f32(w.min.y)?;
+                    self.io.write_plain_f32(w.max.x)?;
+                    self.io.write_plain_f32(w.max.y)?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR7 => {
                 #[cfg(feature = "puffin")]
@@ -5464,12 +4753,14 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let len = self.r7_ids.len();
-                self.io.write_plain_u64h(len, self.r7_ids.drain(..))?;
-                self.io.write_plain_u32h(len, self.r7_responses.drain(..).map(|c| c.bits()))?;
-                self.io.flush()?;
+                    let len = self.r7_ids.len();
+                    self.io.write_plain_u64h(len, self.r7_ids.drain(..))?;
+                    self.io.write_plain_u32h(len, self.r7_responses.drain(..).map(|c| c.bits()))?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR9EtPrefetch => {
                 #[cfg(feature = "puffin")]
@@ -5478,12 +4769,14 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let len = self.r9_et_prefetch_ids.len();
-                self.io.write_plain_u64h(len, self.r9_et_prefetch_ids.drain(..))?;
-                self.io.write_plain_u64h(len * 5, self.r9_et_prefetch_values.drain(..))?;
-                self.io.flush()?;
+                    let len = self.r9_et_prefetch_ids.len();
+                    self.io.write_plain_u64h(len, self.r9_et_prefetch_ids.drain(..))?;
+                    self.io.write_plain_u64h(len * 5, self.r9_et_prefetch_values.drain(..))?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR9F64 => {
                 #[cfg(feature = "puffin")]
@@ -5492,12 +4785,14 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let len = self.r9_f64_ids.len();
-                self.io.write_plain_u64h(len, self.r9_f64_ids.drain(..))?;
-                self.io.write_plain_f64h(len, self.r9_f64_values.drain(..))?;
-                self.io.flush()?;
+                    let len = self.r9_f64_ids.len();
+                    self.io.write_plain_u64h(len, self.r9_f64_ids.drain(..))?;
+                    self.io.write_plain_f64h(len, self.r9_f64_values.drain(..))?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR9I64 => {
                 #[cfg(feature = "puffin")]
@@ -5506,12 +4801,14 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let len = self.r9_i64_ids.len();
-                self.io.write_plain_u64h(len, self.r9_i64_ids.drain(..))?;
-                self.io.write_plain_i64h(len, self.r9_i64_values.drain(..))?;
-                self.io.flush()?;
+                    let len = self.r9_i64_ids.len();
+                    self.io.write_plain_u64h(len, self.r9_i64_ids.drain(..))?;
+                    self.io.write_plain_i64h(len, self.r9_i64_values.drain(..))?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR9S => {
                 #[cfg(feature = "puffin")]
@@ -5520,12 +4817,14 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let len = self.r9_s_ids.len();
-                self.io.write_plain_u64h(len, self.r9_s_ids.drain(..))?;
-                self.io.write_plain_sh(len, self.r9_s_values.drain(..))?;
-                self.io.flush()?;
+                    let len = self.r9_s_ids.len();
+                    self.io.write_plain_u64h(len, self.r9_s_ids.drain(..))?;
+                    self.io.write_plain_sh(len, self.r9_s_values.drain(..))?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchR9U64 => {
                 #[cfg(feature = "puffin")]
@@ -5534,12 +4833,14 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let len = self.r9_u64_ids.len();
-                self.io.write_plain_u64h(len, self.r9_u64_ids.drain(..))?;
-                self.io.write_plain_u64h(len, self.r9_u64_values.drain(..))?;
-                self.io.flush()?;
+                    let len = self.r9_u64_ids.len();
+                    self.io.write_plain_u64h(len, self.r9_u64_ids.drain(..))?;
+                    self.io.write_plain_u64h(len, self.r9_u64_values.drain(..))?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchVideoCapabilities => {
                 #[cfg(feature = "puffin")]
@@ -5548,12 +4849,14 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let len = self.video_cap_ids.len();
-                self.io.write_plain_u64h(len, self.video_cap_ids.drain(..))?;
-                self.io.write_plain_u32h(len, self.video_cap_flags.drain(..))?;
-                self.io.flush()?;
+                    let len = self.video_cap_ids.len();
+                    self.io.write_plain_u64h(len, self.video_cap_ids.drain(..))?;
+                    self.io.write_plain_u32h(len, self.video_cap_flags.drain(..))?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::FetchVideoStreamInfo => {
                 #[cfg(feature = "puffin")]
@@ -5562,11 +4865,13 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let len = self.video_stream_info.len();
-                self.io.write_plain_u64h(len, self.video_stream_info.drain(..))?;
-                self.io.flush()?;
+                    let len = self.video_stream_info.len();
+                    self.io.write_plain_u64h(len, self.video_stream_info.drain(..))?;
+                    self.io.flush()?;
+                }
             }
             FuncProcId::Frame => {
                 #[cfg(feature = "puffin")]
@@ -5581,6 +4886,7 @@ self.apply_widget(w,u,f,Some(i));
                 let mut hover_cursor_pointer = false;
                 let mut focusable = false;
                 let mut capture_keys_mask: u64 = 0;
+                let mut capture_key_edges = false;
                 // methods
                 loop {
                     let (m, _) = self.read_from_repr(FrameBuilderMethodId::from_repr)?;
@@ -5738,6 +5044,11 @@ self.apply_widget(w,u,f,Some(i));
                             puffin::profile_scope!("match FrameBuilderMethodId::CaptureKeys");
                             let mut mask = self.io.read_plain_u64()?;
                             capture_keys_mask = mask;
+                        }
+                        FrameBuilderMethodId::CaptureKeyEdges => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match FrameBuilderMethodId::CaptureKeyEdges");
+                            capture_key_edges = true;
                         }
                         FrameBuilderMethodId::HoverCursorPointer => {
                             #[cfg(feature = "puffin")]
@@ -5914,30 +5225,41 @@ self.apply_widget(w,u,f,Some(i));
                                 | ((mods_now.command as u8) << 3);
                             // Collect first, mutate after: consuming inside the read closure would
                             // borrow the input state twice.
-                            let mut hits: Vec<(egui::Key, u8)> = Vec::new();
+                            //
+                            // A release is taken only by a widget that asked for edges (ADR-0279
+                            // §SD1); every event carries its edge byte, bit 0 down and bit 1 an
+                            // auto-repeat press.
+                            let mut hits: Vec<(egui::Key, bool, u8, u8)> = Vec::new();
                             ui.input(|inp| {
                                 for ev in &inp.events {
                                     if let egui::Event::Key {
-                                        key, pressed: true, ..
+                                        key,
+                                        pressed,
+                                        repeat,
+                                        ..
                                     } = ev
                                     {
+                                        if !*pressed && !capture_key_edges {
+                                            continue;
+                                        }
                                         let code = crate::imzero2::keycodes::imzero_key_code(*key);
                                         if code != 0 && (capture_keys_mask & (1u64 << code)) != 0 {
-                                            hits.push((*key, code));
+                                            let edges = (*pressed as u8) | ((*repeat as u8) << 1);
+                                            hits.push((*key, *pressed, code, edges));
                                         }
                                     }
                                 }
                             });
                             let captured_any = !hits.is_empty();
-                            for (key, code) in hits {
+                            for (key, pressed, code, edges) in hits {
                                 // Remove it from the queue so nothing downstream also acts on it.
                                 ui.input_mut(|inp| {
                                     inp.events.retain(|ev| {
                                         !matches!(ev,
-                egui::Event::Key { key: k, pressed: true, .. } if *k == key)
+                egui::Event::Key { key: k, pressed: p, .. } if *k == key && *p == pressed)
                                     });
                                 });
-                                self.r26_key_capture_push(i.value(), code, mods_byte);
+                                self.r26_key_capture_push(i.value(), code, mods_byte, edges);
                             }
                             if captured_any {
                                 // A capture is only half a keypress. R26 is read back at the END of
@@ -5966,523 +5288,6 @@ self.apply_widget(w,u,f,Some(i));
                 } else {
                     self.interpret_outer(c, &mut None)?;
                 }
-            }
-            FuncProcId::Graph => {
-                #[cfg(feature = "puffin")]
-                puffin::profile_scope!("match FuncProcId::Graph");
-                // arguments
-                let i = self.read_id()?;
-                // construct
-
-                let mut w = 0u8;
-                // Dimensions: 0 (unset) = fill available space on that axis; any
-                // positive value = fixed pixel size. With both axes left at 0 the
-                // graph flows with its container on window resizes, which is the
-                // natural default for a canvas widget.
-                let mut gv_width: f32 = 0.0;
-                let mut gv_height: f32 = 0.0;
-                let mut dragging_enabled = true;
-                let mut hover_enabled = true;
-                let mut node_clicking_enabled = false;
-                let mut node_selection_enabled = false;
-                let mut node_selection_multi_enabled = false;
-                let mut edge_clicking_enabled = false;
-                let mut edge_selection_enabled = false;
-                let mut edge_selection_multi_enabled = false;
-                // fit_to_screen here means *continuous* fit — re-fit every frame. Off by
-                // default; the one-shot fit latch (GraphState.fit_pending) handles the
-                // initial framing and fitNow()/resetLayout re-fit on demand. Set true
-                // only to force the legacy always-fit behaviour.
-                let mut fit_to_screen = false;
-                let mut fit_now_flag: bool = false;
-                let mut zoom_and_pan = true;
-                let mut fit_padding: f32 = 0.1;
-                let mut zoom_speed: f32 = 0.1;
-                let mut labels_always = false;
-                let mut layout_kind: u8 = 0;
-                let mut reset_layout_flag: bool = false;
-                let mut fast_forward_steps: u32 = 0;
-                // FR tunables (layout kinds 1 and 2) — twin _set flags so only fields
-                // the user actually touched this frame get overlaid onto the persisted
-                // state.
-                let mut fr_dt: f32 = 0.0;
-                let mut fr_dt_set = false;
-                let mut fr_damping: f32 = 0.0;
-                let mut fr_damping_set = false;
-                let mut fr_epsilon: f32 = 0.0;
-                let mut fr_epsilon_set = false;
-                let mut fr_max_step: f32 = 0.0;
-                let mut fr_max_step_set = false;
-                let mut fr_k_scale: f32 = 0.0;
-                let mut fr_k_scale_set = false;
-                let mut fr_c_attract: f32 = 0.0;
-                let mut fr_c_attract_set = false;
-                let mut fr_c_repulse: f32 = 0.0;
-                let mut fr_c_repulse_set = false;
-                let mut fr_is_running: bool = false;
-                let mut fr_is_running_set = false;
-                // Hierarchical tunables (layout kind 3).
-                let mut hi_row_dist: f32 = 0.0;
-                let mut hi_row_dist_set = false;
-                let mut hi_col_dist: f32 = 0.0;
-                let mut hi_col_dist_set = false;
-                let mut hi_center_parent: bool = false;
-                let mut hi_center_parent_set = false;
-                let mut hi_orientation: u8 = 0;
-                let mut hi_orientation_set = false;
-                // methods
-                loop {
-                    let (m, _) = self.read_from_repr(GraphBuilderMethodId::from_repr)?;
-                    match m {
-                        GraphBuilderMethodId::Build => {
-                            break;
-                        }
-                        GraphBuilderMethodId::Width => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!("match GraphBuilderMethodId::Width");
-                            let mut wi = self.io.read_plain_f32()?;
-                            gv_width = wi;
-                        }
-                        GraphBuilderMethodId::Height => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!("match GraphBuilderMethodId::Height");
-                            let mut he = self.io.read_plain_f32()?;
-                            gv_height = he;
-                        }
-                        GraphBuilderMethodId::DraggingEnabled => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!("match GraphBuilderMethodId::DraggingEnabled");
-                            let mut vl = self.io.read_plain_b()?;
-                            dragging_enabled = vl;
-                        }
-                        GraphBuilderMethodId::HoverEnabled => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!("match GraphBuilderMethodId::HoverEnabled");
-                            let mut vl = self.io.read_plain_b()?;
-                            hover_enabled = vl;
-                        }
-                        GraphBuilderMethodId::NodeClickingEnabled => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!(
-                                "match GraphBuilderMethodId::NodeClickingEnabled"
-                            );
-                            let mut vl = self.io.read_plain_b()?;
-                            node_clicking_enabled = vl;
-                        }
-                        GraphBuilderMethodId::NodeSelectionEnabled => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!(
-                                "match GraphBuilderMethodId::NodeSelectionEnabled"
-                            );
-                            let mut vl = self.io.read_plain_b()?;
-                            node_selection_enabled = vl;
-                        }
-                        GraphBuilderMethodId::NodeSelectionMultiEnabled => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!(
-                                "match GraphBuilderMethodId::NodeSelectionMultiEnabled"
-                            );
-                            let mut vl = self.io.read_plain_b()?;
-                            node_selection_multi_enabled = vl;
-                        }
-                        GraphBuilderMethodId::EdgeClickingEnabled => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!(
-                                "match GraphBuilderMethodId::EdgeClickingEnabled"
-                            );
-                            let mut vl = self.io.read_plain_b()?;
-                            edge_clicking_enabled = vl;
-                        }
-                        GraphBuilderMethodId::EdgeSelectionEnabled => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!(
-                                "match GraphBuilderMethodId::EdgeSelectionEnabled"
-                            );
-                            let mut vl = self.io.read_plain_b()?;
-                            edge_selection_enabled = vl;
-                        }
-                        GraphBuilderMethodId::EdgeSelectionMultiEnabled => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!(
-                                "match GraphBuilderMethodId::EdgeSelectionMultiEnabled"
-                            );
-                            let mut vl = self.io.read_plain_b()?;
-                            edge_selection_multi_enabled = vl;
-                        }
-                        GraphBuilderMethodId::FitToScreen => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!("match GraphBuilderMethodId::FitToScreen");
-                            let mut vl = self.io.read_plain_b()?;
-                            fit_to_screen = vl;
-                        }
-                        GraphBuilderMethodId::FitNow => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!("match GraphBuilderMethodId::FitNow");
-                            fit_now_flag = true;
-                        }
-                        GraphBuilderMethodId::ZoomAndPan => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!("match GraphBuilderMethodId::ZoomAndPan");
-                            let mut vl = self.io.read_plain_b()?;
-                            zoom_and_pan = vl;
-                        }
-                        GraphBuilderMethodId::FitPadding => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!("match GraphBuilderMethodId::FitPadding");
-                            let mut pd = self.io.read_plain_f32()?;
-                            fit_padding = pd;
-                        }
-                        GraphBuilderMethodId::ZoomSpeed => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!("match GraphBuilderMethodId::ZoomSpeed");
-                            let mut sp = self.io.read_plain_f32()?;
-                            zoom_speed = sp;
-                        }
-                        GraphBuilderMethodId::LabelsAlways => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!("match GraphBuilderMethodId::LabelsAlways");
-                            let mut vl = self.io.read_plain_b()?;
-                            labels_always = vl;
-                        }
-                        GraphBuilderMethodId::Layout => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!("match GraphBuilderMethodId::Layout");
-                            let mut kind = self.io.read_plain_u8()?;
-                            layout_kind = kind;
-                        }
-                        GraphBuilderMethodId::ResetLayout => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!("match GraphBuilderMethodId::ResetLayout");
-                            reset_layout_flag = true;
-                        }
-                        GraphBuilderMethodId::FastForwardSteps => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!("match GraphBuilderMethodId::FastForwardSteps");
-                            let mut st = self.io.read_plain_u32()?;
-                            fast_forward_steps = st;
-                        }
-                        GraphBuilderMethodId::LayoutDt => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!("match GraphBuilderMethodId::LayoutDt");
-                            let mut dt = self.io.read_plain_f32()?;
-                            fr_dt = dt;
-                            fr_dt_set = true;
-                        }
-                        GraphBuilderMethodId::LayoutDamping => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!("match GraphBuilderMethodId::LayoutDamping");
-                            let mut dp = self.io.read_plain_f32()?;
-                            fr_damping = dp;
-                            fr_damping_set = true;
-                        }
-                        GraphBuilderMethodId::LayoutEpsilon => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!("match GraphBuilderMethodId::LayoutEpsilon");
-                            let mut ep = self.io.read_plain_f32()?;
-                            fr_epsilon = ep;
-                            fr_epsilon_set = true;
-                        }
-                        GraphBuilderMethodId::LayoutMaxStep => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!("match GraphBuilderMethodId::LayoutMaxStep");
-                            let mut ms = self.io.read_plain_f32()?;
-                            fr_max_step = ms;
-                            fr_max_step_set = true;
-                        }
-                        GraphBuilderMethodId::LayoutKScale => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!("match GraphBuilderMethodId::LayoutKScale");
-                            let mut ks = self.io.read_plain_f32()?;
-                            fr_k_scale = ks;
-                            fr_k_scale_set = true;
-                        }
-                        GraphBuilderMethodId::LayoutCAttract => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!("match GraphBuilderMethodId::LayoutCAttract");
-                            let mut ca = self.io.read_plain_f32()?;
-                            fr_c_attract = ca;
-                            fr_c_attract_set = true;
-                        }
-                        GraphBuilderMethodId::LayoutCRepulse => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!("match GraphBuilderMethodId::LayoutCRepulse");
-                            let mut cr = self.io.read_plain_f32()?;
-                            fr_c_repulse = cr;
-                            fr_c_repulse_set = true;
-                        }
-                        GraphBuilderMethodId::LayoutRunning => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!("match GraphBuilderMethodId::LayoutRunning");
-                            let mut vl = self.io.read_plain_b()?;
-                            fr_is_running = vl;
-                            fr_is_running_set = true;
-                        }
-                        GraphBuilderMethodId::LayoutRowDist => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!("match GraphBuilderMethodId::LayoutRowDist");
-                            let mut rd = self.io.read_plain_f32()?;
-                            hi_row_dist = rd;
-                            hi_row_dist_set = true;
-                        }
-                        GraphBuilderMethodId::LayoutColDist => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!("match GraphBuilderMethodId::LayoutColDist");
-                            let mut cd = self.io.read_plain_f32()?;
-                            hi_col_dist = cd;
-                            hi_col_dist_set = true;
-                        }
-                        GraphBuilderMethodId::LayoutCenterParent => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!(
-                                "match GraphBuilderMethodId::LayoutCenterParent"
-                            );
-                            let mut vl = self.io.read_plain_b()?;
-                            hi_center_parent = vl;
-                            hi_center_parent_set = true;
-                        }
-                        GraphBuilderMethodId::LayoutOrientation => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!("match GraphBuilderMethodId::LayoutOrientation");
-                            let mut or = self.io.read_plain_u8()?;
-                            hi_orientation = or;
-                            hi_orientation_set = true;
-                        }
-                    }
-                }
-                if d == 0 {
-                    self.end_consume_message()?;
-                }
-                // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
-
-                if u.is_some() {
-                    let ui = u.as_mut().unwrap();
-                    let pending_nodes: Vec<GraphNodeData> =
-                        self.graph_pending_nodes.drain(..).collect();
-                    let pending_edges: Vec<GraphEdgeData> =
-                        self.graph_pending_edges.drain(..).collect();
-
-                    let gid = i.value();
-                    let state = self.graph_states.entry(gid).or_insert_with(new_graph_state);
-                    reconcile_graph_state(state, &pending_nodes, &pending_edges);
-
-                    let interaction = egui_graphs::SettingsInteraction::default()
-                        .with_dragging_enabled(dragging_enabled)
-                        .with_hover_enabled(hover_enabled)
-                        .with_node_clicking_enabled(node_clicking_enabled)
-                        .with_node_selection_enabled(node_selection_enabled)
-                        .with_node_selection_multi_enabled(node_selection_multi_enabled)
-                        .with_edge_clicking_enabled(edge_clicking_enabled)
-                        .with_edge_selection_enabled(edge_selection_enabled)
-                        .with_edge_selection_multi_enabled(edge_selection_multi_enabled);
-                    // One-shot fit: fit only while a freshly (re)laid-out graph settles,
-                    // then latch off so manual pan/zoom sticks and the view stops
-                    // rescaling every frame. fit_to_screen forces legacy continuous
-                    // fit; fitNow()/resetLayout re-arm the latch. See graph_fit_this_frame.
-                    let layout_settled = graph_layout_settled(ui, gid, layout_kind);
-                    let do_fit = graph_fit_this_frame(
-                        state,
-                        fit_to_screen,
-                        fit_now_flag || reset_layout_flag,
-                        layout_settled,
-                    );
-                    let navigation = egui_graphs::SettingsNavigation::default()
-                        .with_fit_to_screen_enabled(do_fit)
-                        .with_zoom_and_pan_enabled(zoom_and_pan)
-                        .with_fit_to_screen_padding(fit_padding)
-                        .with_zoom_speed(zoom_speed);
-                    let style =
-                        egui_graphs::SettingsStyle::default().with_labels_always(labels_always);
-
-                    // Zero along either axis → fill the container's available space for
-                    // that axis; non-zero → use the caller-supplied fixed dimension.
-                    let avail = ui.available_size();
-                    let size = egui::vec2(
-                        if gv_width > 0.0 { gv_width } else { avail.x },
-                        if gv_height > 0.0 { gv_height } else { avail.y },
-                    );
-                    // Collect interaction events via a local sink so the borrow stays
-                    // scoped to this frame; after the GraphView drops we translate
-                    // petgraph indices back to Go's u64 keys and push to the global
-                    // graph_events_pending register for fetchGraphEvents to drain.
-                    let frame_events: std::cell::RefCell<Vec<egui_graphs::events::Event>> =
-                        std::cell::RefCell::new(Vec::new());
-                    let sink = |e: egui_graphs::events::Event| {
-                        frame_events.borrow_mut().push(e);
-                    };
-                    // Overlay any user-set layout tunables onto the persisted state,
-                    // before the render call uses it.
-                    apply_fr_overrides(
-                        ui,
-                        gid,
-                        layout_kind,
-                        fr_dt,
-                        fr_dt_set,
-                        fr_damping,
-                        fr_damping_set,
-                        fr_epsilon,
-                        fr_epsilon_set,
-                        fr_max_step,
-                        fr_max_step_set,
-                        fr_k_scale,
-                        fr_k_scale_set,
-                        fr_c_attract,
-                        fr_c_attract_set,
-                        fr_c_repulse,
-                        fr_c_repulse_set,
-                        fr_is_running,
-                        fr_is_running_set,
-                    );
-                    apply_hierarchical_overrides(
-                        ui,
-                        gid,
-                        layout_kind,
-                        hi_row_dist,
-                        hi_row_dist_set,
-                        hi_col_dist,
-                        hi_col_dist_set,
-                        hi_center_parent,
-                        hi_center_parent_set,
-                        hi_orientation,
-                        hi_orientation_set,
-                    );
-                    let graph_resp = render_graph_with_layout(
-                        state,
-                        ui,
-                        size,
-                        gid,
-                        layout_kind,
-                        reset_layout_flag,
-                        fast_forward_steps,
-                        &interaction,
-                        &navigation,
-                        &style,
-                        &sink,
-                    );
-                    // Capture-scroll (widget-gallery composition): a navigable
-                    // graph owns the wheel while the pointer is over it. Swallow
-                    // any plain scroll delta so a parent ScrollArea — the gallery
-                    // stacks every demo in one Vscroll — does not also scroll the
-                    // page out from under the cursor. egui routes the wheel to
-                    // zoom XOR scroll, so Ctrl/Cmd+scroll zoom already leaves
-                    // smooth_scroll_delta at zero and is unaffected; a static
-                    // graph (zoom_and_pan == false) lets the wheel pass through so
-                    // it can still be scrolled into view.
-                    if zoom_and_pan && graph_resp.contains_pointer() {
-                        ui.input_mut(|i| i.smooth_scroll_delta = egui::Vec2::ZERO);
-                    }
-                    // Snapshot selection + metrics AFTER the render so they reflect
-                    // anything egui_graphs did this frame (drag, click-select, layout
-                    // step increment). Fetchers drain these vecs on the Go side.
-                    snapshot_graph_selection(
-                        gid,
-                        state,
-                        &mut self.graph_selection_graph_ids,
-                        &mut self.graph_selection_kind,
-                        &mut self.graph_selection_key_a,
-                        &mut self.graph_selection_key_b,
-                    );
-                    snapshot_graph_metrics(
-                        gid,
-                        layout_kind,
-                        state,
-                        ui,
-                        &mut self.graph_metrics_graph_ids,
-                        &mut self.graph_metrics_node_count,
-                        &mut self.graph_metrics_edge_count,
-                        &mut self.graph_metrics_fr_steps,
-                        &mut self.graph_metrics_fr_last_disp,
-                    );
-                    let evs = frame_events.into_inner();
-                    if !evs.is_empty() {
-                        for e in evs {
-                            if let Some(rec) = translate_graph_event(gid, state, &e) {
-                                self.graph_events_pending.push(rec);
-                            }
-                        }
-                    }
-                } else {
-                    self.graph_pending_nodes.clear();
-                    self.graph_pending_edges.clear();
-                }
-            }
-            FuncProcId::GraphEdge => {
-                #[cfg(feature = "puffin")]
-                puffin::profile_scope!("match FuncProcId::GraphEdge");
-                // arguments
-                let mut from_id = self.io.read_plain_u64()?;
-                let mut to_id = self.io.read_plain_u64()?;
-                // construct
-
-                let mut w = 0u8;
-                let mut color: Option<egui::Color32> = None;
-                let mut label: Option<String> = None;
-                // methods
-                loop {
-                    let (m, _) = self.read_from_repr(GraphEdgeBuilderMethodId::from_repr)?;
-                    match m {
-                        GraphEdgeBuilderMethodId::Build => {
-                            break;
-                        }
-                        GraphEdgeBuilderMethodId::Color => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!("match GraphEdgeBuilderMethodId::Color");
-                            let mut col = self.io.read_plain_u32()?;
-                            color = Some(color32_from_rgba_u32(col));
-                        }
-                        GraphEdgeBuilderMethodId::Label => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!("match GraphEdgeBuilderMethodId::Label");
-                            let mut text = self.io.read_plain_s()?;
-                            label = Some(text);
-                        }
-                    }
-                }
-                if d == 0 {
-                    self.end_consume_message()?;
-                }
-                // apply
-                self.graph_pending_edges.push(GraphEdgeData {
-                    from: from_id,
-                    to: to_id,
-                    label,
-                    color,
-                });
-            }
-            FuncProcId::GraphNode => {
-                #[cfg(feature = "puffin")]
-                puffin::profile_scope!("match FuncProcId::GraphNode");
-                // arguments
-                let mut node_id = self.io.read_plain_u64()?;
-                let mut label = self.io.read_plain_s()?;
-                // construct
-
-                let mut w = 0u8;
-                let mut color: Option<egui::Color32> = None;
-                // methods
-                loop {
-                    let (m, _) = self.read_from_repr(GraphNodeBuilderMethodId::from_repr)?;
-                    match m {
-                        GraphNodeBuilderMethodId::Build => {
-                            break;
-                        }
-                        GraphNodeBuilderMethodId::Color => {
-                            #[cfg(feature = "puffin")]
-                            puffin::profile_scope!("match GraphNodeBuilderMethodId::Color");
-                            let mut col = self.io.read_plain_u32()?;
-                            color = Some(color32_from_rgba_u32(col));
-                        }
-                    }
-                }
-                if d == 0 {
-                    self.end_consume_message()?;
-                }
-                // apply
-                self.graph_pending_nodes.push(GraphNodeData {
-                    id: node_id,
-                    label,
-                    color,
-                });
             }
             FuncProcId::Grid => {
                 #[cfg(feature = "puffin")]
@@ -7192,6 +5997,28 @@ egui::Grid::new(i);
                 } else {
                     self.interpret_outer(c, &mut None)?;
                 }
+            }
+            FuncProcId::Modal => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::Modal");
+                // arguments
+                let i = self.read_id()?;
+                // construct
+
+                let mut w = // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+egui::Modal::new(i);
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                let shown = w.show(c, |ui| {
+                    let _ = self.interpret_outer_logged(c, &mut Some(ui));
+                });
+                let mut resp = ResponseFlags::empty();
+                resp.populate(&shown.response);
+                self.r7_push(i.value(), resp);
             }
             FuncProcId::MoveWindowToTop => {
                 #[cfg(feature = "puffin")]
@@ -8640,7 +7467,9 @@ egui::Panel::top(i);
                     self.end_consume_message()?;
                 }
                 // apply
-                self.prepare_next_frame();
+                if !self.capture_replay {
+                    self.prepare_next_frame();
+                }
             }
             FuncProcId::ProgressBar => {
                 #[cfg(feature = "puffin")]
@@ -8829,9 +7658,13 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                c.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::new(path)));
+                    c.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::new(
+                        path,
+                    )));
+                }
             }
             FuncProcId::RequestScreenshotRect => {
                 #[cfg(feature = "puffin")]
@@ -8846,16 +7679,20 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
-                let req = crate::imzero2::interpreter::ScreenshotRequest {
-                    path,
-                    rect: Some(egui::Rect::from_min_size(
-                        egui::pos2(rect_x, rect_y),
-                        egui::vec2(rect_w, rect_h),
-                    )),
-                };
-                c.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::new(req)));
+                    let req = crate::imzero2::interpreter::ScreenshotRequest {
+                        path,
+                        rect: Some(egui::Rect::from_min_size(
+                            egui::pos2(rect_x, rect_y),
+                            egui::vec2(rect_w, rect_h),
+                        )),
+                    };
+                    c.send_viewport_cmd(egui::ViewportCommand::Screenshot(egui::UserData::new(
+                        req,
+                    )));
+                }
             }
             FuncProcId::ScalarSize => {
                 #[cfg(feature = "puffin")]
@@ -9200,8 +8037,9 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-
-                self.animation_freeze = freeze;
+                if !self.capture_replay {
+                    self.animation_freeze = freeze;
+                }
             }
             FuncProcId::SetIdsDensity => {
                 #[cfg(feature = "puffin")]
@@ -9233,7 +8071,9 @@ self.apply_widget(w,u,f,Some(i));
                     self.end_consume_message()?;
                 }
                 // apply
-                self.video_pipeline_request = Some(codec as u8);
+                if !self.capture_replay {
+                    self.video_pipeline_request = Some(codec as u8);
+                }
             }
             FuncProcId::SetWindowCollapsed => {
                 #[cfg(feature = "puffin")]
@@ -10370,6 +9210,7 @@ if multiline { egui::TextEdit::multiline(&mut text).id(i) } else { egui::TextEdi
                                     i.value(),
                                     crate::imzero2::keycodes::imzero_key_code(egui::Key::Tab),
                                     mods_byte,
+                                    1,
                                 );
                                 // R26 is read at the END of this frame, so Go acts on the
                                 // capture while building the NEXT one — and the keypress that
@@ -10395,18 +9236,23 @@ if multiline { egui::TextEdit::multiline(&mut text).id(i) } else { egui::TextEdi
                                 | ((mods_now.ctrl as u8) << 1)
                                 | ((mods_now.alt as u8) << 2)
                                 | ((mods_now.command as u8) << 3);
-                            let mut hits: Vec<u8> = Vec::new();
+                            let mut hits: Vec<(u8, u8)> = Vec::new();
                             ctx.input_mut(|inp| {
                                 inp.events.retain(|ev| {
                                     if let egui::Event::Key {
-                                        key, pressed: true, ..
+                                        key,
+                                        pressed: true,
+                                        repeat,
+                                        ..
                                     } = ev
                                     {
                                         let code = crate::imzero2::keycodes::imzero_key_code(*key);
                                         // Code 0 is the reserved unknown; a key the vocabulary
                                         // cannot name is a key no mask can have asked for.
                                         if code != 0 && (mask & (1u64 << code)) != 0 {
-                                            hits.push(code);
+                                            // Presses only: the edge byte says down, and
+                                            // whether it repeats (ADR-0279 §SD1).
+                                            hits.push((code, 1 | ((*repeat as u8) << 1)));
                                             return false;
                                         }
                                     }
@@ -10414,8 +9260,8 @@ if multiline { egui::TextEdit::multiline(&mut text).id(i) } else { egui::TextEdi
                                 });
                             });
                             if !hits.is_empty() {
-                                for code in hits {
-                                    self.r26_key_capture_push(i.value(), code, mods_byte);
+                                for (code, edges) in hits {
+                                    self.r26_key_capture_push(i.value(), code, mods_byte, edges);
                                 }
                                 ctx.request_repaint();
                             }
@@ -11207,6 +10053,21 @@ egui::Window::new(label).id(i);
                             let mut binding_id = self.io.read_plain_u64()?;
                             self.scratch_open_binding_id = binding_id;
                         }
+                        WindowBuilderMethodId::DragFromTitleBar => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match WindowBuilderMethodId::DragFromTitleBar");
+                            let mut val = self.io.read_plain_b()?;
+                            // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+                            if val {
+                                w = w.drag_area(egui::WindowDrag::TitleBar);
+                            }
+                        }
+                        WindowBuilderMethodId::Maximized => {
+                            #[cfg(feature = "puffin")]
+                            puffin::profile_scope!("match WindowBuilderMethodId::Maximized");
+                            let mut val = self.io.read_plain_b()?;
+                            self.scratch_window_maximized = val;
+                        }
                     }
                 }
                 if d == 0 {
@@ -11216,6 +10077,51 @@ egui::Window::new(label).id(i);
                 // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
 
                 let open_binding_id = std::mem::take(&mut self.scratch_open_binding_id);
+                // maximized: save the outer rect on the first maximized
+                // frame, pin to the free rect while the flag holds, and on
+                // the first frame without it re-seed position and size from
+                // the saved rect once (pinning for a single frame writes the
+                // Area and Resize state back; the next frame is movable and
+                // resizable again).
+                let maximized = std::mem::take(&mut self.scratch_window_maximized);
+                let restore_id = i.with("__imzero2_restore_rect");
+                // The rect left free by the shell's panels — what maximized
+                // fills, and the work area reported to Go (fetchR27Windows).
+                let free = u
+                    .as_ref()
+                    .map(|u| u.available_rect_before_wrap())
+                    .unwrap_or_else(|| c.content_rect());
+                self.r27_work_rect = free;
+                // windowPlace: a one-frame placement from Go wins over the
+                // maximized pin and over a pending restore, whose saved rect
+                // it supersedes. Pinned the same way as the restore below.
+                if let Some(r) = self.pending_window_place.remove(&i.value()) {
+                    c.data_mut(|d| d.remove::<egui::Rect>(restore_id));
+                    w = w.fixed_pos(r.min).fixed_size(r.size()).constrain(false);
+                } else if maximized {
+                    let saved = c.data(|d| d.get_temp::<egui::Rect>(restore_id)).is_some();
+                    if !saved {
+                        if let Some(r) = c.memory(|m| m.area_rect(i)) {
+                            c.data_mut(|d| d.insert_temp(restore_id, r));
+                        }
+                    }
+                    // fixed_rect makes the Area unmovable, and egui then
+                    // places no title-bar widget; the double-click that
+                    // restores the window is read off the pointer below.
+                    // (current_pos would keep it movable, but in title-drag
+                    // mode egui re-applies the stored pivot after
+                    // Area::begin and the position is lost.)
+                    w = w.fixed_rect(free);
+                } else if let Some(r) = c.data(|d| d.get_temp::<egui::Rect>(restore_id)) {
+                    c.data_mut(|d| d.remove::<egui::Rect>(restore_id));
+                    // fixed_pos rather than current_pos for the same
+                    // reason as above: only an unmovable Area keeps the
+                    // position it is given. Not constrained: the Area still
+                    // carries the maximized size this frame, and fitting
+                    // that to the screen would shove the window into the
+                    // corner. One frame, then movable again.
+                    w = w.fixed_pos(r.min).fixed_size(r.size()).constrain(false);
+                }
                 // window_open always defaults to true: Go re-emitting this
                 // opcode IS the "I want to be open" signal. egui itself
                 // doesn't persist window visibility across frames (only
@@ -11231,13 +10137,27 @@ egui::Window::new(label).id(i);
                 // silently returned None on every subsequent emit.
                 let mut window_open: bool = true;
                 let was_open = window_open;
+                // Top of the content area; the band above it is the title
+                // bar. NaN when the body did not run (collapsed).
+                let mut content_top = f32::NAN;
+                // How far the content, as laid out this frame, claims more
+                // than the body was given. egui grows the window by that much
+                // on the next frame, so after a windowPlace it is what the
+                // placed size fell short by.
+                let mut content_overflow = egui::Vec2::ZERO;
                 let retr = if open_binding_id != 0 {
                     w.open(&mut window_open).show(c, |ui| {
+                        content_top = ui.max_rect().top();
                         let _ = self.interpret_outer_logged(c, &mut Some(ui));
+                        content_overflow =
+                            (ui.min_rect().size() - ui.max_rect().size()).max(egui::Vec2::ZERO);
                     })
                 } else {
                     w.show(c, |ui| {
+                        content_top = ui.max_rect().top();
                         let _ = self.interpret_outer_logged(c, &mut Some(ui));
+                        content_overflow =
+                            (ui.min_rect().size() - ui.max_rect().size()).max(egui::Vec2::ZERO);
                     })
                 };
                 if open_binding_id != 0 && was_open != window_open {
@@ -11265,6 +10185,38 @@ egui::Window::new(label).id(i);
                         m.areas().top_layer_id(egui::Order::Middle) == Some(inner.response.layer_id)
                     });
                     resp2.set(ResponseFlags::WINDOW_TOPMOST, topmost);
+                    // TITLE_DOUBLE_CLICKED: egui's own title-bar widget,
+                    // present when the window is collapsible or dragged by
+                    // its title bar (dragFromTitleBar) — on a collapsible
+                    // window egui has already toggled collapse on it. A
+                    // window egui made unmovable (fixed_rect, as while
+                    // maximized) has no such widget, so a primary
+                    // double-click in the band above the content, on this
+                    // window's layer, counts too.
+                    let wrect = inner.response.rect;
+                    let layer = inner.response.layer_id;
+                    let in_band = content_top.is_finite()
+                        && c.input(|i| {
+                            i.pointer.button_double_clicked(egui::PointerButton::Primary)
+                                && i.pointer.interact_pos().is_some_and(|p| {
+                                    p.y >= wrect.top()
+                                        && p.y < content_top
+                                        && p.x >= wrect.left()
+                                        && p.x <= wrect.right()
+                                })
+                        })
+                        && c.input(|i| i.pointer.interact_pos()).and_then(|p| c.layer_id_at(p))
+                            == Some(layer);
+                    let title_dbl = in_band
+                        || c.read_response(i.with("__title_click"))
+                            .is_some_and(|r| r.double_clicked());
+                    resp2.set(ResponseFlags::TITLE_DOUBLE_CLICKED, title_dbl);
+                    self.r27_windows.push(WindowGeomRow {
+                        id: i.value(),
+                        rect: wrect,
+                        collapsed: inner.inner.is_none(),
+                        need: wrect.size() + content_overflow,
+                    });
                     if inner.inner.is_none() {
                         // collapsed
                         resp2.insert(ResponseFlags::BLOCK_SKIPPED);
@@ -11274,6 +10226,31 @@ egui::Window::new(label).id(i);
                     }
                 }
                 self.r7_push(i.value(), resp2);
+            }
+            FuncProcId::WindowPlace => {
+                #[cfg(feature = "puffin")]
+                puffin::profile_scope!("match FuncProcId::WindowPlace");
+                // arguments
+                let i = self.read_id()?;
+                let mut pos_x = self.io.read_plain_f32()?;
+                let mut pos_y = self.io.read_plain_f32()?;
+                let mut width = self.io.read_plain_f32()?;
+                let mut height = self.io.read_plain_f32()?;
+                if d == 0 {
+                    self.end_consume_message()?;
+                }
+                // apply
+                if !self.capture_replay {
+                    // generating location: egui2_definition_templating.go:67 github.com/stergiotis/boxer/public/thestack/imzero2/egui2/definition.rustClientCode(...)
+
+                    self.pending_window_place.insert(
+                        i.value(),
+                        egui::Rect::from_min_size(
+                            egui::pos2(pos_x, pos_y),
+                            egui::vec2(width, height),
+                        ),
+                    );
+                }
             }
 
             #[allow(unreachable_patterns)]
@@ -11364,10 +10341,11 @@ egui::Window::new(label).id(i);
     }
     /// One captured key event for a widget (ADR-0177 SD6). Called from the
     /// capturing widget's own apply code, so `i` is that widget's id.
-    pub fn r26_key_capture_push(&mut self, i: u64, code: u8, mods: u8) {
+    pub fn r26_key_capture_push(&mut self, i: u64, code: u8, mods: u8, edges: u8) {
         self.r26_key_capture_ids.push(i);
         self.r26_key_capture_codes.push(code);
         self.r26_key_capture_mods.push(mods);
+        self.r26_key_capture_edges.push(edges);
     }
     pub fn r24_canvas_pointer_push(
         &mut self,
@@ -12306,6 +11284,42 @@ fn new_table_render_body_builder<R: std::io::BufRead, W: std::io::Write>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A deferred block whose message errors mid-apply must not leave that
+    /// message's entry on the frame stacks: the enclosing pipe message's
+    /// `end_consume_message` would otherwise pop the stale replay entry.
+    #[test]
+    fn replay_error_leaves_frame_stacks_balanced() {
+        let mut interp = ImZeroFffi::new(std::io::Cursor::new(Vec::<u8>::new()), Vec::<u8>::new());
+        // AddSpace declares 4 argument bytes, but the block ends before them.
+        let mut block = Vec::new();
+        block.extend_from_slice(&8u32.to_le_bytes());
+        block.extend_from_slice(&(FuncProcId::AddSpace as u32).to_le_bytes());
+        let ctx = egui::Context::default();
+        let mut replay_result = None;
+        let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let ctx = ui.ctx().clone();
+            replay_result = Some(interp.replay_deferred_block(&ctx, ui, &block));
+        });
+        assert!(matches!(replay_result, Some(Err(_))));
+        assert!(interp.message_offsets.is_empty());
+        assert!(interp.message_lengths.is_empty());
+        assert!(interp.message_func_proc_ids_raw.is_empty());
+    }
+
+    /// An offset above the live cursor is a stack inconsistency, reported as
+    /// an error rather than an integer underflow.
+    #[test]
+    fn end_consume_message_offset_past_cursor_is_an_error() {
+        let mut interp = ImZeroFffi::new(std::io::Cursor::new(Vec::<u8>::new()), Vec::<u8>::new());
+        interp.message_offsets.push(16);
+        interp.message_lengths.push(4);
+        interp.message_func_proc_ids_raw.push(FuncProcId::AddSpace as u32);
+        assert!(matches!(
+            interp.end_consume_message(),
+            Err(InterpretError::FrameStackUnderflow(_))
+        ));
+    }
 
     #[test]
     fn test_write_png_creates_valid_file() {

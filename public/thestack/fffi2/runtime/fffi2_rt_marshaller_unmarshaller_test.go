@@ -268,3 +268,13 @@ func TestRoundtrip_WrittenBytesCounter(t *testing.T) {
 	m.ResetWrittenBytes()
 	require.Equal(t, 0, m.GetWrittenBytes())
 }
+
+// TestWrittenBytesCounter_String pins that the string length prefix is
+// counted once: WriteString("ab") puts 6 bytes on the wire.
+func TestWrittenBytesCounter_String(t *testing.T) {
+	buf := &bytes.Buffer{}
+	m := NewMarshaller(buf, binary.LittleEndian, func(err error) { panic(err) })
+	m.WriteString("ab")
+	require.Equal(t, 6, buf.Len())
+	require.Equal(t, buf.Len(), m.GetWrittenBytes())
+}

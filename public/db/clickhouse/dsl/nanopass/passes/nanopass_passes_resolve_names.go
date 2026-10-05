@@ -193,6 +193,11 @@ func scopeOfFirstSelect(withParent antlr.Tree, byNode map[*grammar1.SelectStmtCo
 		if scope != nil {
 			return false
 		}
+		if _, isCtes := ctx.(*grammar1.CtesContext); isCtes {
+			// A CTE body is not the SELECT the clause binds to, even though
+			// pre-order reaches it first.
+			return false
+		}
 		stmt, ok := ctx.(*grammar1.SelectStmtContext)
 		if !ok {
 			return true

@@ -4,8 +4,10 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/httpegress"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
 )
@@ -33,7 +35,13 @@ var manifest = app.Manifest{
 	},
 		// Demos that run background jobs as keelson tasks (ADR-0038): the
 		// waveform player's peaks build, the distsummary band warm-up.
-		task.ProducerCaps()...),
+		append(task.ProducerCaps(),
+			// The map demos' tiles, through the host's egress service
+			// (ADR-0262): the registry's basemap, and the portolan demo's
+			// tile-server switch.
+			basemap.ClientCaps("gallery: basemap tiles under the map demos")[0],
+			httpegress.ClientCaps(galleryTilesDestination, "gallery: the portolan demo's alternative tile servers")[0],
+		)...),
 }
 
 // init registers the widget-showcase app. Interactive mode hands back

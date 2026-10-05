@@ -144,16 +144,24 @@ step. A drift on either side fails the Go suite.
 ## Running
 
 ```sh
-npm install         # pins quint locally
+npm ci              # pins quint locally (package-lock.json is tracked)
 npm run check       # typecheck + witness runs + randomized Safety sweeps
-npm run findings    # prints the counterexample traces (lww, nopin, ttl)
+npm run findings    # the counterexamples (lww, nopin, ttl): exit 0 only if every one is found
 npm run verify      # Apalache bounded proofs of Safety (depth 6 / 10)
 npm run traces      # regenerate the ITF conformance traces (Go testdata)
 
-# liveness needs TLC (one-time): grab tla2tools.jar to ~/.tlaplus/ (or set $TLA_TOOLS)
+# liveness needs TLC (one-time): grab tla2tools.jar to ~/.tlaplus/ (or set $TLA_TOOLS);
+# use the version and digest formal-pushout.yaml pins, see ../algebraicarch/pushout/README.md
 npm run liveness             # TLC: Quiescence holds under negative caching
-npm run liveness:nonegcache  # TLC: the absent-key livelock lasso without it
+npm run liveness:nonegcache  # TLC: the absent-key livelock lasso without it (exit 0 only if found)
+npm run liveness:all         # both TLC runs
 ```
+
+The CI lane
+[`formal-pushout.yaml`](../../../.github/workflows/formal-pushout.yaml) has a
+`caching` job that runs `check`, `verify`, `liveness:all` and `findings`.
+`findings` and `liveness:nonegcache` go through the pushout directory's
+[`expect_violation.sh`](../algebraicarch/pushout/expect_violation.sh).
 
 Per spec, e.g.:
 

@@ -57,14 +57,14 @@ func (inst *App) initProcMap() {
 		treemap.DepthColoring(topoDepthPalette()),
 		treemap.ContinuousColoring(cpuHeatmapPalette(), loadFn, 0, 100),
 	)
-	// No WithContainerSize: sized per-frame to fill the dock pane.
-	// WithMaxNestingDepth(0) renders the whole forest at once (lstopo-style);
-	// drilling into a top-level box still works.
-	inst.procTreemap = treemap.New(inst.ids, "imztop-procmap", inst.procRoot,
-		treemap.WithMaxNestingDepth(0),
-		treemap.WithColoring(coloring),
-		treemap.WithCellLabel(inst.procMapCellLabel),
-	)
+	// Sized per-frame to fill the dock pane. NestingAll renders the whole
+	// forest at once (lstopo-style); drilling into a top-level box still
+	// works.
+	inst.procTreemap = treemap.New(inst.ids, "imztop-procmap", inst.procRoot, treemap.Options{
+		MaxNestingDepth: treemap.NestingAll,
+		Coloring:        coloring,
+		CellLabel:       inst.procMapCellLabel,
+	})
 }
 
 // procMapCellLabel is the treemap's optional secondary line: the humanized area
@@ -152,10 +152,11 @@ func (inst *App) renderProcMapPanel(snap *PublishedSnapshot) {
 	// Size the treemap to the pane, reserving room below for the hover line.
 	// One-frame lag on the seq-keyed pane probe — the CPU-heatmap / topology
 	// idiom.
+	var w, h float32 // zero keeps the treemap's last size
 	availW, availH, _ := inst.capturePane("procmap")
 	if availW > 0 && availH > 0 &&
 		!math.IsNaN(float64(availW)) && !math.IsNaN(float64(availH)) {
-		w, h := availW, availH-procMapReservedBelowPx
+		w, h = availW, availH-procMapReservedBelowPx
 		if h < procMapMinH {
 			h = procMapMinH
 			w -= procMapScrollbarAllowPx // vertical scrollbar is showing
@@ -163,9 +164,8 @@ func (inst *App) renderProcMapPanel(snap *PublishedSnapshot) {
 		if w < procMapMinW {
 			w = procMapMinW
 		}
-		inst.procTreemap.SetContainerSize(w, h)
 	}
-	inst.procTreemap.Render()
+	inst.procEvents = inst.procTreemap.Render(w, h)
 
 	c.AddSpace(inst.spaceTight())
 	inst.renderProcMapHoverDetail()
@@ -174,7 +174,7 @@ func (inst *App) renderProcMapPanel(snap *PublishedSnapshot) {
 // renderProcMapHoverDetail prints a one-line readout for the hovered process:
 // PID, name, user, smoothed CPU%, RSS, and the command line.
 func (inst *App) renderProcMapHoverDetail() {
-	n := inst.procTreemap.HoveredNode()
+	n := inst.procEvents.Hovered
 	if n == nil {
 		c.Label("Hover a box for details.").Send()
 		return

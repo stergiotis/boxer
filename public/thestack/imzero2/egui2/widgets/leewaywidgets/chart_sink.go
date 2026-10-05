@@ -18,7 +18,7 @@ import (
 // ChartModel is a leeway batch projected onto a chart: one category per
 // entity, one series per membership of the charted section, one value per
 // (series, entity). It is the projection a chart of a leeway batch is drawn
-// from (ADR-0257, proposed, §SD1): the mapping, not the drawing.
+// from (ADR-0266, proposed, §SD1): the mapping, not the drawing.
 //
 // The charted section is the first tagged section, in batch order, with a
 // numeric scalar value column; its first such column is the value. An

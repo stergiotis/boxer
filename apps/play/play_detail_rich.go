@@ -309,7 +309,7 @@ func buildRichEntry(d gloss.Declaration, raw string, thumbSide uint32) *richEntr
 	}
 	switch mt {
 	case gloss.MediaTypeMarkdown:
-		e.doc = markdown.Parse([]byte(raw), markdown.WithFeatures(richMarkdownFeatures))
+		e.doc = markdown.ParseWith([]byte(raw), markdown.ParseOptions{Features: richMarkdownFeatures})
 	case gloss.MediaTypePlain:
 		// EnsureUTF8 for the same reason formatCell does it: a ClickHouse
 		// String is byte-arbitrary, and shipping invalid UTF-8 through
@@ -614,11 +614,9 @@ func (inst *richCellCache) renderBody(key richKey, d gloss.Declaration, e *richE
 		if e.doc == nil {
 			return
 		}
-		// Doc.Render derives its embedded widgets' ids from PrepareSeq(0), 1,
-		// … in document order and does NOT open its own scope, so two docs
-		// under one parent would collide. Scope per cell.
-		for range c.IdScope(inst.ids.PrepareStr("play-detail-md-" + key.String())) {
-			e.doc.Render(inst.ids)
+		// One scope per cell, so two cells' documents cannot collide.
+		for range c.IdScope(inst.ids.PrepareStr(key.String())) {
+			markdown.Render(markdown.Input{Ids: inst.ids, ScopeKey: "play-detail-md", Doc: e.doc})
 		}
 	case gloss.MediaTypePlain:
 		c.Label(e.text).Wrap().Send()
@@ -688,10 +686,23 @@ const regexpAnchorHeight = 24.0
 // explorer. pattern must be a string of our own, not a cell's raw view of
 // the Arrow buffer — the widget retains what it is seeded with.
 func (inst *PlayApp) renderRegexpAnchor(scope string, label string, pattern string) {
-	regexsummary.New(label).
-		Bus(inst.bus).
-		ShowPattern(false).
-		Render(inst.ids.PrepareStr("play-regexp-"+scope), pattern)
+	if inst.regexAnchors == nil {
+		inst.regexAnchors = map[string]*regexsummary.State{}
+	}
+	st := inst.regexAnchors[scope]
+	if st == nil {
+		st = &regexsummary.State{}
+		inst.regexAnchors[scope] = st
+	}
+	regexsummary.Render(regexsummary.Input{
+		Ids:         inst.ids,
+		ScopeKey:    "regexp-" + scope,
+		Pattern:     pattern,
+		State:       st,
+		Bus:         inst.bus,
+		Title:       "regex: " + label,
+		HidePattern: true,
+	})
 }
 
 // firstLineOf is the fallback rendering for text that could not be rendered

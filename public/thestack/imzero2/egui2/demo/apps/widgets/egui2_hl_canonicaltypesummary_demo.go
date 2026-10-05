@@ -26,21 +26,24 @@ type ctSumDemoRow struct {
 	name      string
 	canonical string
 	subject   string
-	// idPrefix scopes the per-row Renderer so each row owns its toggle /
-	// window / tether identities and pinned-state slot.
-	idPrefix string
 	// open starts this row's inspector pinned so the tour shows level-2.
 	open bool
 }
 
 var ctSumDemoRows = []ctSumDemoRow{
-	{name: "little-endian u32", canonical: "u32l", subject: "leeway.type.col.count", idPrefix: "cts-demo-0"},
-	{name: "IEEE double", canonical: "f64", subject: "leeway.type.col.score", idPrefix: "cts-demo-1"},
-	{name: "fixed utf8 (128b)", canonical: "sx128", subject: "leeway.type.col.code", idPrefix: "cts-demo-2"},
-	{name: "variable utf8", canonical: "s", subject: "leeway.type.col.name", idPrefix: "cts-demo-3"},
-	{name: "ipv4 + CIDR", canonical: "vc", subject: "leeway.type.col.cidr", idPrefix: "cts-demo-4"},
-	{name: "ipv6 CIDR set", canonical: "wcm", subject: "leeway.type.col.subnets", idPrefix: "cts-demo-5"},
-	{name: "signature u32-s_vc", canonical: "u32-s_vc", subject: "leeway.type.row.key", idPrefix: "cts-demo-6", open: true},
+	{name: "little-endian u32", canonical: "u32l", subject: "leeway.type.col.count"},
+	{name: "IEEE double", canonical: "f64", subject: "leeway.type.col.score"},
+	{name: "fixed utf8 (128b)", canonical: "sx128", subject: "leeway.type.col.code"},
+	{name: "variable utf8", canonical: "s", subject: "leeway.type.col.name"},
+	{name: "ipv4 + CIDR", canonical: "vc", subject: "leeway.type.col.cidr"},
+	{name: "ipv6 CIDR set", canonical: "wcm", subject: "leeway.type.col.subnets"},
+	{name: "signature u32-s_vc", canonical: "u32-s_vc", subject: "leeway.type.row.key", open: true},
+}
+
+// ctSumDemoState holds one summary State per row: each row is its own
+// widget instance, drawn under a per-row id scope.
+type ctSumDemoState struct {
+	states []canonicaltypesummary.State
 }
 
 func init() {
@@ -63,12 +66,17 @@ func init() {
 			"(GenerateGoCode rendered through the codeview highlighter), plus the " +
 			"optional inspector.ProvenanceChip. Read-only — editing is " +
 			"canonicaltypeedit's job.",
-		Render:     demoCanonicalTypeSummary,
+		Init: func(_ *c.WidgetIdStack) (state any) {
+			return &ctSumDemoState{states: make([]canonicaltypesummary.State, len(ctSumDemoRows))}
+		},
+		RenderStateful: func(ids *c.WidgetIdStack, state any) {
+			demoCanonicalTypeSummary(ids, state.(*ctSumDemoState))
+		},
 		SourceFunc: demoCanonicalTypeSummary,
 	})
 }
 
-func demoCanonicalTypeSummary(ids *c.WidgetIdStack) {
+func demoCanonicalTypeSummary(ids *c.WidgetIdStack, st *ctSumDemoState) {
 	density := styletokens.ActiveDensity()
 	c.Label("Each row summarises one canonical type; click a row's arrow-square-out glyph to open its inspector (the last row starts open):").Send()
 	c.Separator().Horizontal().Send()
@@ -76,23 +84,24 @@ func demoCanonicalTypeSummary(ids *c.WidgetIdStack) {
 
 	now := time.Now()
 	for i, row := range ctSumDemoRows {
-		// Per-row Renderer with a distinct idPrefix so each row owns its own
-		// toggle / window / tether identities — the widget derives those ids
-		// from the idPrefix-plus-callId scope.
-		r := canonicaltypesummary.New(row.idPrefix).
-			Provenance(inspector.Provenance{
-				Subject:   row.subject,
-				SampledAt: now,
-			})
-		if row.open {
-			r = r.DefaultOpen(true)
-		}
-		for range c.Horizontal().KeepIter() {
-			// Fixed-width label column keeps every summary cell at the same x.
-			c.UiSetMinWidth(180)
-			c.Label(row.name).Send()
-			c.AddSpace(styletokens.GapItems(density))
-			r.Render(ids.PrepareSeq(uint64(0xC7501000+i)), row.canonical)
+		// Each row is its own summary under a per-row id scope, so the rows'
+		// toggles, windows and tethers stay apart.
+		for range c.IdScope(ids.PrepareSeq(uint64(i))) {
+			for range c.Horizontal().KeepIter() {
+				// Fixed-width label column keeps every summary cell at the same x.
+				c.UiSetMinWidth(180)
+				c.Label(row.name).Send()
+				c.AddSpace(styletokens.GapItems(density))
+				canonicaltypesummary.Render(canonicaltypesummary.Input{
+					Ids:         ids,
+					ScopeKey:    "row",
+					Canonical:   row.canonical,
+					State:       &st.states[i],
+					Provenance:  inspector.Provenance{Subject: row.subject, SampledAt: now},
+					Title:       "type: " + row.name,
+					DefaultOpen: row.open,
+				})
+			}
 		}
 		c.AddSpace(styletokens.GapInline(density))
 	}

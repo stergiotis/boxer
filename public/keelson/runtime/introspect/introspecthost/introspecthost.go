@@ -19,8 +19,10 @@ import (
 
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
+	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/httpegress"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspecthttp"
@@ -125,8 +127,36 @@ type Deps struct {
 	// keelson.llm_calls (ADR-0254 §SD4). nil leaves it empty rather than
 	// absent. Same typed-nil trap: assign only a service that started.
 	LLMCalls llm.CallsI
+	// HTTPCalls is the host's egress service as a read side, backing
+	// keelson.http_calls and keelson.http_destinations (ADR-0262 §SD5).
+	// Same typed-nil trap: assign only a service that started.
+	HTTPCalls httpegress.CallsI
+	// Agent is the app operations service as a read side, backing
+	// keelson.agent_grants and keelson.agent_actions (ADR-0269 §SD9). Same
+	// typed-nil trap: assign only a service that started.
+	Agent agent.RecordsI
 	// Log is the host logger.
 	Log zerolog.Logger
+}
+
+// tasksOf maps each window key to the tasks whose grant holds it, read from
+// the agent service's grants; nil without one. A revoked grant holds nothing.
+func tasksOf(svc agent.RecordsI) introspectprovidersgui.TasksOfI {
+	if svc == nil {
+		return nil
+	}
+	return func() (tasks map[uint64][]string) {
+		tasks = make(map[uint64][]string)
+		for _, g := range svc.Grants() {
+			if g.Revoked != "" {
+				continue
+			}
+			for _, k := range g.Instances {
+				tasks[k] = append(tasks[k], g.Task)
+			}
+		}
+		return
+	}
 }
 
 // noopStop is returned whenever there is nothing to shut down, so callers can
@@ -153,7 +183,7 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	if e := introspectproviders.RegisterStatic(reg); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: static provider registration failed")
 	}
-	if e := introspectprovidersgui.RegisterAll(reg, deps.WindowHost); e != nil {
+	if e := introspectprovidersgui.RegisterAll(reg, deps.WindowHost, tasksOf(deps.Agent)); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: GUI provider registration failed")
 	}
 	// ADR-0148 §SD7: the stored workingset records, read through the facts
@@ -168,6 +198,12 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	// with no runinfo all answer with an empty table.
 	if e := introspectproviders.RegisterRunEvents(reg, deps.Facts, deps.PersistExec); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: run-events provider registration failed")
+	}
+	// ADR-0260 §SD5: sessions, log tails and audit folds across runs, for
+	// the app center. Registered unconditionally, like runtime_events: a
+	// store that cannot read the trail answers with empty tables.
+	if e := introspectproviders.RegisterAppTrail(reg, deps.Facts); e != nil {
+		deps.Log.Warn().Err(e).Msg("introspecthost: app trail provider registration failed")
 	}
 	if e := introspectproviders.RegisterAppState(reg, deps.PersistExec); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: app_state provider registration failed")
@@ -216,6 +252,16 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	// table.
 	if e := llm.RegisterIntrospect(reg, deps.LLMCalls); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: llm_calls provider registration failed")
+	}
+	// ADR-0262 §SD2, §SD5: the fetches this process answered, and every
+	// destination any app could name. Registered unconditionally.
+	if e := httpegress.RegisterIntrospect(reg, deps.HTTPCalls); e != nil {
+		deps.Log.Warn().Err(e).Msg("introspecthost: http_calls provider registration failed")
+	}
+	// ADR-0269 §SD9: the task grants and the action record. Registered
+	// unconditionally.
+	if e := agent.RegisterIntrospect(reg, deps.Agent); e != nil {
+		deps.Log.Warn().Err(e).Msg("introspecthost: agent tables registration failed")
 	}
 	// And what a model may be asked to do: every registered prompt
 	// document, joinable to llm_calls on purpose.

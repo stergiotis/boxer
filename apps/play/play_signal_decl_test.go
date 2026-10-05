@@ -40,7 +40,8 @@ func TestReservedSignalNamesAreUnique(t *testing.T) {
 func TestMapViewportSignalsComeFromTheDeclaration(t *testing.T) {
 	require.Equal(t, []SignalID{"vp_min_x", "vp_max_x", "vp_min_y", "vp_max_y", "vp_w", "vp_h"},
 		mapViewportSignals, "the emit order is the bbox order")
-	require.Equal(t, mapViewportSignals, signalsWrittenBy("map"))
+	require.Equal(t, mapViewportSignals, signalsWrittenBy("map")[:len(mapViewportSignals)],
+		"the viewport first; the selected area follows it")
 	for _, s := range mapViewportSignals {
 		assert.Equal(t, "UInt32", reservedSignalTypes()[string(s)])
 		assert.False(t, signalHasSeed(string(s)),
@@ -68,7 +69,7 @@ func TestSignalSeeds(t *testing.T) {
 func TestSignalsWrittenByIsScoped(t *testing.T) {
 	assert.Nil(t, signalsWrittenBy("table"), "the selection family belongs to no tab")
 	assert.Nil(t, signalsWrittenBy("nonexistent"))
-	assert.Equal(t, []SignalID{signalTimelineMin, signalTimelineMax}, signalsWrittenBy("timeline"))
+	assert.Equal(t, []SignalID{signalTimelineMin, signalTimelineMax, signalTimelineFrom, signalTimelineTo}, signalsWrittenBy("timeline"))
 }
 
 // The array case of the signal encoder (ADR-0231 §SD8): a multi-selection has

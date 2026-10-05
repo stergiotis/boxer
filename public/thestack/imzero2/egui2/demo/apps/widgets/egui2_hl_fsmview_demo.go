@@ -20,7 +20,7 @@ import (
 // =============================================================================
 
 type fsmviewDemoState struct {
-	tl *fsmview.Widget[string]
+	tl *fsmview.View[string]
 	m  *fsmview.Machine[string]
 }
 
@@ -34,9 +34,9 @@ func init() {
 		Kind:        registry.DemoKindUX,
 		Description: "Two-level FSM viewer (statetrooper-backed). Level 1: compact chip showing the current state + an optional \"Xs ago\" subscript. Level 2 (click chip): floating popup with Table, Graph (Graphviz layered / Sugiyama layout, in-process WASM — ADR-0069), and History views. Init seeds a few transitions so all three tabs have content to render in the tour.",
 		Init: func(ids *c.WidgetIdStack) (state any) {
-			m := fsmview.NewMachine("red", 16,
-				fsmview.WithStateOrder([]string{"red", "yellow", "green"}),
-			)
+			m := fsmview.NewMachine("red", 16, fsmview.MachineOptions[string]{
+				StateOrder: []string{"red", "yellow", "green"},
+			})
 			m.AddRule("red", "green").
 				AddRule("green", "yellow").
 				AddRule("yellow", "red").
@@ -54,15 +54,16 @@ func init() {
 			// so no click happens — we keep an explicit PopupAnchor as
 			// the fallback so the tour PNG captures the popup at a
 			// predictable location instead of egui's cascade default.
-			w := fsmview.New(ids, "traffic", m).
-				Title("Traffic light").
-				ShowSubscript(true).
-				AutoAnchor(true).
-				PopupAnchor(60, 220)
+			w := fsmview.New(ids, "traffic", m, fsmview.Options[string]{
+				Title:         "Traffic light",
+				ShowSubscript: true,
+				AutoAnchor:    true,
+				// Default to the Graph tab to showcase the layered (Graphviz)
+				// layout (ADR-0069); Table/History stay one click away.
+				Renderer: fsmview.RendererGraph,
+			})
+			w.PopupAnchor(60, 220)
 			w.Open()
-			// Default to the Graph tab to showcase the layered (Graphviz)
-			// layout (ADR-0069); Table/History stay one click away.
-			w.SetRenderer(fsmview.RendererGraph)
 			state = &fsmviewDemoState{tl: w, m: m}
 			return
 		},

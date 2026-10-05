@@ -86,42 +86,49 @@ func TestBuildDigestGridClampsMinSize(t *testing.T) {
 	assert.Len(t, xs, 2)
 }
 
-// TestRenderDigestRejectsEmpty rejects a fresh empty digest.
-func TestRenderDigestRejectsEmpty(t *testing.T) {
+// TestPaintDigestRejectsEmpty rejects a fresh empty digest.
+func TestPaintDigestRejectsEmpty(t *testing.T) {
 	d := tdigest.NewTDigest()
-	r := ecdf.New()
-	err := RenderDigest(implot.NewDetached(), r, d, 50)
+	err := PaintDigest(implot.NewDetached(), ecdf.Input{Band: ecdf.BandExact}, d, 50).Err
 	assert.Error(t, err)
 }
 
-// TestRenderDigestRejectsCollapsed rejects a digest where all pushed
+// TestPaintDigestRejectsCollapsed rejects a digest where all pushed
 // values are identical — the band is degenerate.
-func TestRenderDigestRejectsCollapsed(t *testing.T) {
+func TestPaintDigestRejectsCollapsed(t *testing.T) {
 	d := tdigest.NewTDigest()
 	for range 100 {
 		d.Push(7.0)
 	}
-	r := ecdf.New()
-	err := RenderDigest(implot.NewDetached(), r, d, 50)
+	err := PaintDigest(implot.NewDetached(), ecdf.Input{Band: ecdf.BandExact}, d, 50).Err
 	assert.Error(t, err)
 }
 
-// TestRenderDigestRejectsNil catches the nil-digest mistake.
-func TestRenderDigestRejectsNil(t *testing.T) {
-	r := ecdf.New()
-	err := RenderDigest(implot.NewDetached(), r, nil, 50)
+// TestPaintDigestRejectsNil catches the nil-digest mistake.
+func TestPaintDigestRejectsNil(t *testing.T) {
+	err := PaintDigest(implot.NewDetached(), ecdf.Input{Band: ecdf.BandExact}, nil, 50).Err
 	assert.Error(t, err)
 }
 
-// TestRenderDigestRejectsTinyGrid rejects gridN < 2 explicitly (the
-// widget's RenderGrid would short-circuit silently; RenderDigest's
+// TestPaintDigestRejectsTinyGrid rejects gridN < 2 explicitly (the
+// helper's grid path would short-circuit silently; PaintDigest's
 // contract is more strict — gridN < 2 is a caller bug).
-func TestRenderDigestRejectsTinyGrid(t *testing.T) {
+func TestPaintDigestRejectsTinyGrid(t *testing.T) {
 	d := tdigest.NewTDigest()
 	for i := range 100 {
 		d.Push(float64(i))
 	}
-	r := ecdf.New()
-	err := RenderDigest(implot.NewDetached(), r, d, 1)
+	err := PaintDigest(implot.NewDetached(), ecdf.Input{Band: ecdf.BandExact}, d, 1).Err
 	assert.Error(t, err)
+}
+
+// TestPaintDigestPaintsAGrid paints a populated digest's preview band into a
+// detached plot (ADR-0267 W19: one frame without a host).
+func TestPaintDigestPaintsAGrid(t *testing.T) {
+	d := tdigest.NewTDigest()
+	for i := range 200 {
+		d.Push(float64(i))
+	}
+	res := PaintDigest(implot.NewDetached(), ecdf.Input{Band: ecdf.BandPreview}, d, 32)
+	assert.NoError(t, res.Err)
 }

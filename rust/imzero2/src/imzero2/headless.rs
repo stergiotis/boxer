@@ -737,17 +737,19 @@ fn close_requested(out: &egui::FullOutput) -> bool {
 /// Round up to the next even number — H.264 4:2:0 (the Phase 2 encoder)
 /// requires even frame dimensions; bake that in from the start so the
 /// dumped frames and the future encoded stream agree.
-/// Queue the SVG sidecar of a capture (ADR-0257 (proposed) §SD5) on the
+/// Queue the SVG sidecar of a capture (ADR-0266 (proposed) §SD5) on the
 /// export plugin, which writes it from this pass's shapes in `on_end_pass` —
 /// the pass whose pixels the PNG is read back from. Returns the path it asked
 /// for, which [`capture_svg_written`] checks after the pass. The backdrop is
 /// the opaque black the raster is cleared to, so an uncovered region reads the
-/// same in both files.
+/// same in both files. Fonts are embedded only when the request asks: a
+/// reader of the text does not need them, and they are most of the bytes.
 #[cfg(feature = "headless_raster")]
 fn queue_capture_svg(
     export: &crate::imzero2::svgexport::ExportStateHandle,
     dump_dir: Option<&std::path::Path>,
     name: &str,
+    embed_fonts: bool,
 ) -> Option<std::path::PathBuf> {
     // No dump directory: the capture itself is refused below, with a warning.
     let dir = dump_dir?;
@@ -769,7 +771,7 @@ fn queue_capture_svg(
     crate::imzero2::svgexport::request_export(
         export,
         path.clone(),
-        true,
+        embed_fonts,
         crate::imzero2::svgexport::ExportScope::Viewport,
         Some(egui::Color32::BLACK),
     );
@@ -933,6 +935,11 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
         std::io::stdin().lock(),
         std::io::stdout().lock(),
     );
+    // ADR-0281 §SD5: captures rasterize on the CPU, apart from the live frame.
+    #[cfg(feature = "capture_raster")]
+    fffi.set_capture_raster(Box::new(
+        crate::imzero2::captureraster::SoftCaptureRaster::default(),
+    ));
     let mut cadence = if reactive {
         Cadence::Reactive
     } else {
@@ -992,6 +999,9 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
     #[cfg(feature = "headless_raster")]
     let host_encode_caps = if carrier.is_some() {
         let caps = crate::imzero2::codeclane::probe_host_encode();
+        // A viewer can switch codecs at runtime; choose each codec's lane now,
+        // off the render thread, so the switch does not probe on it.
+        crate::imzero2::codeclane::warm_best_lanes();
         tracing::info!(
             encode = ?caps.iter().map(|(c, sw, hw)| format!("{}:sw={:?}hw={:?}", c.as_str(), sw, hw)).collect::<Vec<_>>(),
             "host video-encode probe"
@@ -1239,15 +1249,19 @@ pub fn run_main_loop(config: AppConfig) -> Result<(), HeadlessError> {
             }
         }
         // ADR-0154 SD4: a capture request is taken before the pass, so that an
-        // SVG sidecar (ADR-0257 (proposed) §SD5) can be queued for the export
+        // SVG sidecar (ADR-0266 (proposed) §SD5) can be queued for the export
         // plugin to write from the same pass the PNG below rasterizes.
         #[cfg(feature = "headless_raster")]
         let capture = carrier.as_ref().and_then(|c| c.take_capture_request());
         #[cfg(feature = "headless_raster")]
-        let capture_svg = capture
-            .as_ref()
-            .filter(|r| r.svg)
-            .and_then(|r| queue_capture_svg(&fffi.export_state, opts.dump_dir.as_deref(), &r.name));
+        let capture_svg = capture.as_ref().filter(|r| r.svg).and_then(|r| {
+            queue_capture_svg(
+                &fffi.export_state,
+                opts.dump_dir.as_deref(),
+                &r.name,
+                r.svg_fonts,
+            )
+        });
         // Mirrors eframe 0.34's epi_integration: `run_ui(raw_input, |ui| {
         // app.logic(ui.ctx(), ..) })` — the interpreter dispatches against
         // the live pass exactly as it does under the desktop host.

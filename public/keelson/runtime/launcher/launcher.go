@@ -24,6 +24,10 @@ type HostI interface {
 	// open. Raise-rather-than-open is the launcher's default action (§SD10):
 	// a second click on a visible app used to open a silent duplicate.
 	OpenOrRaiseApp(appId app.AppIdT) (err error)
+	// OpenNewApp opens a further window for appId even when one already
+	// exists: the explicit verb for a second instance, so the default action
+	// can stay raise without making duplicates unreachable.
+	OpenNewApp(appId app.AppIdT) (err error)
 	// OpenAppIds reports which apps currently hold a window, for the row's
 	// "open" badge. Order is not meaningful; the launcher builds a set.
 	OpenAppIds() (ids []app.AppIdT)
@@ -69,7 +73,7 @@ type Inst struct {
 	// colours it. Held here rather than per mount point so typing a query in
 	// the pane and reopening in the window shows the same result set.
 	searchText string
-	searchHl   regexedit.Edit
+	searchHl   regexedit.Cache
 
 	// kindShown mirrors the provenance toggles as a []bool because
 	// Checkbox.SendRespVal needs a stable address and writes into it at
@@ -115,6 +119,11 @@ type Inst struct {
 	// built without it, and the launcher's job is not to know which app reads
 	// help. Empty hides the action.
 	helpAppId app.AppIdT
+
+	// inspect opens the app center on an app (ADR-0260 §SD1), injected for
+	// the reason helpAppId is: the launcher does not know which app
+	// inspects, nor how its launch config is encoded. nil hides the action.
+	inspect func(target app.AppIdT) (err error)
 
 	// rank supplies §SD8's frecency bonus. nil until a history source is
 	// wired, which is the state a run without ClickHouse stays in.
@@ -165,6 +174,13 @@ func (inst *Inst) FocusQueryField() {
 // help reader.
 func (inst *Inst) SetHelpApp(id app.AppIdT) {
 	inst.helpAppId = id
+}
+
+// SetInspect installs the detail pane's "Inspect" action: fn opens a window
+// showing target (ADR-0260 §SD1). nil hides the action, which is the state of
+// a host that registers no app center.
+func (inst *Inst) SetInspect(fn func(target app.AppIdT) (err error)) {
+	inst.inspect = fn
 }
 
 // Render draws the whole launcher: the list pane beside the detail pane. The
@@ -238,7 +254,7 @@ func (inst *Inst) renderSearchBox(ids *c.WidgetIdStack) (fieldId uint64) {
 			// CaptureKeys on the field itself, not on a wrapping Frame:
 			// capture is gated on the capturing widget having focus, and the
 			// widget with focus while someone types is this one (§SD9, keys.go).
-			edit := inst.searchHl.Prepare(ids.PrepareStr("launcher-search"), inst.searchText, false, regexedit.ModeTokens).
+			edit := inst.searchHl.TextEdit(ids.PrepareStr("launcher-search"), inst.searchText, false, regexedit.ModeTokens).
 				HintText("Search apps").
 				CaptureKeys(uint64(launcherKeyMask))
 			if inst.wantFocus {
@@ -287,7 +303,7 @@ func (inst *Inst) filterState() (f filterT) {
 // visibleManifests applies the facet filters — the set the browse sections and
 // the search both draw from.
 func (inst *Inst) visibleManifests() (out []app.Manifest) {
-	out = filterManifests(inst.registry.Manifests(),
+	out = filterManifests(inst.registry.LaunchableManifests(),
 		filterT{kinds: inst.kindFilter(), topics: inst.topicFilter}, inst.rank)
 	return
 }
@@ -388,7 +404,7 @@ func (inst *Inst) renderKindToggles(ids *c.WidgetIdStack, scope string) {
 // the registry's spelling is `observability`, and a person browsing is not
 // looking for a token.
 func (inst *Inst) renderTopicChips(ids *c.WidgetIdStack) {
-	manifests := inst.registry.Manifests()
+	manifests := inst.registry.LaunchableManifests()
 	present := make(map[app.TopicT]struct{}, len(app.AllTopics))
 	for _, m := range manifests {
 		for _, t := range m.Topics {
@@ -471,6 +487,32 @@ func (inst *Inst) open(id app.AppIdT) {
 	inst.logger.Info().Str("id", string(id)).Msg("launcher: open-or-raise")
 	if err := inst.host.OpenOrRaiseApp(id); err != nil {
 		inst.logger.Warn().Err(err).Str("id", string(id)).Msg("launcher: open failed")
+	}
+}
+
+// openNew opens a further window for id regardless of existing ones.
+func (inst *Inst) openNew(id app.AppIdT) {
+	if inst.host == nil {
+		inst.logger.Warn().Str("id", string(id)).
+			Msg("launcher: no host wired; open ignored")
+		return
+	}
+	inst.logger.Info().Str("id", string(id)).Msg("launcher: open new window")
+	if err := inst.host.OpenNewApp(id); err != nil {
+		inst.logger.Warn().Err(err).Str("id", string(id)).Msg("launcher: open failed")
+	}
+}
+
+// inspectApp opens the app center on id (ADR-0260 §SD1). The open runs on
+// the frame goroutine, as open's does: the host call enqueues the window and
+// returns.
+func (inst *Inst) inspectApp(id app.AppIdT) {
+	if inst.inspect == nil {
+		return
+	}
+	inst.logger.Info().Str("id", string(id)).Msg("launcher: inspect")
+	if err := inst.inspect(id); err != nil {
+		inst.logger.Warn().Err(err).Str("id", string(id)).Msg("launcher: inspect failed")
 	}
 }
 

@@ -359,6 +359,68 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 
 ## Updates
 
+### 2026-09-29 — §SD7: handle and appdata ops run off the requester's goroutine
+
+The in-process bus runs a responder inline, inside the requester's publish,
+so the broker's filesystem call ran before the requester's timer existed:
+a read of a FIFO nobody writes, or of a file on a hung mount, held the
+requesting goroutine for good, and `HandleOpTimeout` (the 2026-08-08 entry's
+bound for ops with no person in them) never applied. The broker now hands
+each handle and appdata op to a goroutine of its own, so the requester's
+timeout bounds its wait. At most `fsbroker.MaxInflightOps` run at once; an
+op wedged in the filesystem keeps its slot, and past the bound a request is
+refused at once. Dialog opens still queue inline. The bus itself is
+unchanged: making every in-process request asynchronous would apply
+timeouts callers never had in force, and is a separate decision.
+
+### 2026-09-28 — §SD7: a handle write replaces the file
+
+`fs.handle.{uuid}.write` wrote in place with create-or-truncate, so a save
+that failed partway (a full disk, a killed process) left the user's document
+truncated after the broker had already destroyed the previous contents. It
+now writes a temporary file beside the target, syncs it and renames it over,
+keeping the target's permission bits and resolving a symlinked target so the
+link survives. A target that is not a regular file is still written in place.
+A watch on a read handle already follows a rename-replace save.
+
+### 2026-09-28 — §SD7: a handle uuid is random per grant
+
+`mintHandleUuid` draws the uuid from `crypto/rand` for every `Resolve`
+instead of hashing (appId, path, op). A derived uuid made two grants of the
+same kind on one file — two editor tabs on one document — share a handle
+entry and a cap, so closing either revoked both, including a watch riding
+on it. Each grant now closes on its own. This retracts the "a re-grant of the
+same kind reuses its uuid" property of the 2026-09-02 entry below: nothing
+in the tree depended on it. A random uuid is also one an app cannot compute
+for a file it was not granted.
+
+### 2026-09-28 — §SD7: `fs.appdata.*`, a data area per app
+
+The Powerbox answered only for files a person hands an app, so an app keeping
+its own records had nowhere to put them but the disk, directly, which §SD10
+exists to make visible. The broker now also serves **a data area per app**:
+`fs.appdata.{read|write|append|stat|list}`, addressed by file name. No
+dialog is involved: the authority is the manifest's `fs.appdata.>`
+declaration, which the bus enforces on publish, and the broker keys the
+directory on the message's sender, so an app can reach only its own area. A
+name is one path component (letters, digits, `.`, `_`, `-`, not leading
+`.`). Write replaces atomically (temporary file, fsync, rename) and append
+is durable when the reply lands, which the handle ops do not give. A stat or
+write reply carries the file's host path for display only. The root is
+`BOXER_FS_APPDATA_DIR`, else `<user config dir>/boxer/appdata`; with neither,
+the ops refuse. The first consumer is jackstay's plan store (ADR-0259,
+2026-09-28).
+
+### 2026-09-26 — `net.http.fetch.<destination>` joins the taxonomy (ADR-0262)
+
+§SD10's `net.` prefix gains its first family: HTTP egress to a destination
+the host registers, one request/reply subject per destination
+([ADR-0262](./0262-http-egress-as-a-keelson-capability.md)). The two
+families added before it without an entry here are `llm.{describe|complete}`
+([ADR-0254](./0254-model-inference-as-a-keelson-capability.md)) and
+`keelson.query.{table}`
+([ADR-0253](./0253-introspection-table-reads-as-a-bus-capability.md)).
+
 ### 2026-08-27 — `boxer.facts` holds a corpus that is not process state (ADR-0168 §SD1)
 
 §SD6 describes `boxer.facts` as holding runtime state, capability grants and

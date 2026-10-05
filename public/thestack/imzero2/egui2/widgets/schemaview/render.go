@@ -1,6 +1,7 @@
 package schemaview
 
 import (
+	"errors"
 	"strconv"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
@@ -17,19 +18,21 @@ import (
 )
 
 // Input is the per-frame render request. The widget is pure: it renders the
-// Model's TableDesc and mutates only the Model's selection / filter.
+// host's TableDesc and mutates only the State's selection / filter.
 type Input struct {
-	// Ids is the widget id stack supplied by the host (the tour / window
-	// scopes each instance).
+	// Ids is the host's widget id stack. Render opens one IdScope under it
+	// keyed by ScopeKey, so two inspectors in one host differ by ScopeKey
+	// alone (ADR-0267 W4).
 	Ids *c.WidgetIdStack
-	// ScopeKey is retained for callers that embed two instances under one
-	// unscoped parent and must disambiguate; the default host path already
-	// scopes per instance, so Render does not open its own scope (a nested
-	// scope broke egui_ltreeview node-state keying, before this widget moved
-	// to CollapsingHeader-based navigation).
+	// ScopeKey names this inspector within the host's id space; empty uses
+	// "schemaview".
 	ScopeKey string
-	// Model is the inspector state, mutated in place by the navigator.
-	Model *Model
+	// Table is the schema under view, owned by the host. A different pointer
+	// from last frame resets the selection (see State).
+	Table *common.TableDesc
+	// State is the host-owned navigator and detail state; required. A nil
+	// State draws an error in place of the inspector.
+	State *State
 	// FillHost tells Render its host already gives it a bounded height, so
 	// it must fill that rect rather than floor to dockMinHeight. The floor
 	// is a scroll-host device (see dockMinHeight): the standalone gallery is
@@ -41,6 +44,15 @@ type Input struct {
 	// is scrolled). Bounded hosts set this true; the gallery leaves it false.
 	FillHost bool
 }
+
+// Result is what one Render reports.
+type Result struct {
+	// Err is set when the inspector cannot be drawn: a nil State.
+	Err error
+}
+
+// ErrNeedsState is Result.Err when Input.State is nil.
+var ErrNeedsState = errors.New("schemaview: Input.State is required")
 
 // navTypeFg / navTypeBg tone the terse canonical type trailing a column's name
 // in the navigator, sharing the secondary-text role with every other muted
@@ -79,13 +91,26 @@ const (
 // right. Both leaves are draggable / resizable (egui_dock persists the layout)
 // and each scrolls independently. The tethered glyph-legend window is rendered
 // outside the dock — see renderLegendWindow.
-func Render(in Input) {
-	m := in.Model
-	if m == nil || m.Table == nil {
+func Render(in Input) (res Result) {
+	if in.State == nil {
+		for rt := range c.RichTextLabel(ErrNeedsState.Error()) {
+			rt.Small().Weak()
+		}
+		res.Err = ErrNeedsState
 		return
 	}
-	scope := legendScope(in.ScopeKey)
-	for range c.IdScope(in.Ids.PrepareStr(in.ScopeKey)) {
+	if in.Table == nil {
+		return
+	}
+	m := newView(in.Table, in.State)
+	scopeKey := in.ScopeKey
+	if scopeKey == "" {
+		scopeKey = "schemaview"
+	}
+	for range c.IdScope(in.Ids.PrepareStr(scopeKey)) {
+		// The legend's tether is keyed once here, under the inspector's
+		// scope, and handed to both halves (ADR-0267 W6).
+		scope := in.Ids.PrepareStr("legend-tether").Derive()
 		// Floor the dock's height only in an unbounded scroll host; a bounded
 		// host (FillHost) lets the dock fill its leaf instead of overflowing it.
 		if !in.FillHost {
@@ -108,7 +133,7 @@ func Render(in Input) {
 				// for the outline, and answers one frame late — see
 				// renderSections on the first frame's fallback.
 				renderNavHeader(in.Ids, m, scope)
-				availW, availH, _ := c.CapturePaneSize(c.ProbeSeq(scope, "nav-pane"))
+				availW, availH, _ := c.CapturePaneSize(in.Ids.ProbeSeq("nav-pane"))
 				renderSections(in.Ids, m, availW, availH)
 			}
 			for range dock.Tab(detailTabID, "detail") {
@@ -119,6 +144,7 @@ func Render(in Input) {
 		}
 		renderLegendWindow(in.Ids, m, scope)
 	}
+	return
 }
 
 // renderNavHeader draws the pinned navigator header — table title + glyph-legend
@@ -128,7 +154,7 @@ func Render(in Input) {
 // that ScrollArea: a dock leaf hands its content a bounded child rect, so the
 // ScrollArea fills and clips it (a ScrollArea inside the former width-pinned
 // Vertical-in-Horizontal collapsed to its first child — see the package history).
-func renderNavHeader(ids *c.WidgetIdStack, m *Model, scope string) {
+func renderNavHeader(ids *c.WidgetIdStack, m *view, scope uint64) {
 	density := styletokens.ActiveDensity()
 	t := m.Table
 	for range c.Horizontal().KeepIter() {
@@ -136,7 +162,7 @@ func renderNavHeader(ids *c.WidgetIdStack, m *Model, scope string) {
 			rt.Strong().Size(15)
 		}
 		c.AddSpace(styletokens.GapInline(density))
-		renderLegendToggle(m, scope)
+		renderLegendToggle(ids, m, scope)
 	}
 	if cmt := t.DictionaryEntry.Comment; cmt != "" {
 		for rt := range c.RichTextLabel(cmt) {
@@ -175,7 +201,7 @@ func renderNavHeader(ids *c.WidgetIdStack, m *Model, scope string) {
 // to trade width with, and egui_table only leaves a non-resizable column's
 // declared width alone, so this is what lets it track the pane as the reader
 // drags the dock splitter.
-func renderSections(ids *c.WidgetIdStack, m *Model, availW, availH float32) {
+func renderSections(ids *c.WidgetIdStack, m *view, availW, availH float32) {
 	outlineW := float32(navOutlineWidth)
 	if w := availW - navScrollbarGutter; w > outlineW {
 		outlineW = w
@@ -205,7 +231,7 @@ func renderSections(ids *c.WidgetIdStack, m *Model, availW, availH float32) {
 // selectable label senses click-and-drag and is registered after the row's own
 // sense region, so it would sit over it and swallow every click on its rect
 // (ADR-0176 SD7).
-func (m *Model) navCell(r tree.Row) {
+func (m *view) navCell(r tree.Row) {
 	node := r.Node
 	// The category glyph is its own run, in the monospace face — see
 	// glyphPlainItemType for why the face is load-bearing rather than stylistic.
@@ -230,7 +256,7 @@ func (m *Model) navCell(r tree.Row) {
 // chip), the canonical-type inspector (for columns), and a two-column grid of
 // the remaining facts — scalars as monospace values, aspect sets as toned
 // chips.
-func renderDetail(ids *c.WidgetIdStack, m *Model) {
+func renderDetail(ids *c.WidgetIdStack, m *view) {
 	t := m.Table
 	switch m.sel.kind {
 	case selPlainColumn:
@@ -241,7 +267,7 @@ func renderDetail(ids *c.WidgetIdStack, m *Model) {
 		}
 		it := t.PlainValuesItemTypes[i]
 		detailHeaderCat(ids, t.PlainValuesNames[i].String(), "◆", styletokens.InfoDefault, "value column", badge.ToneInfo)
-		renderTypeBlock(ids, t.PlainValuesTypes[i])
+		renderTypeBlock(ids, m, t.PlainValuesTypes[i])
 		for range c.Grid(ids.PrepareStr("detail")).NumColumns(2).KeepIter() {
 			gridRow("scope", plainScope(it))
 			gridRow("item type", it.String())
@@ -262,7 +288,7 @@ func renderDetail(ids *c.WidgetIdStack, m *Model) {
 		}
 		glyph, gtone := sectionGlyph(sec)
 		detailHeaderCat(ids, sec.ValueColumnNames[ci].String(), glyph, gtone, "value column", badge.TonePrimary)
-		renderTypeBlock(ids, sec.ValueColumnTypes[ci])
+		renderTypeBlock(ids, m, sec.ValueColumnTypes[ci])
 		for range c.Grid(ids.PrepareStr("detail")).NumColumns(2).KeepIter() {
 			gridRow("scope", "tagged")
 			gridRow("section", sec.Name.String())
@@ -330,11 +356,13 @@ func chipRow(ids *c.WidgetIdStack, key, label string, items []string, tone badge
 	}
 	for range c.Horizontal().KeepIter() {
 		for i, it := range items {
-			badge.New(ids.PrepareStr(key+"/"+strconv.Itoa(i)), it).
-				Tone(tone).
-				Variant(badge.VariantSoft).
-				Size(badge.SizeSm).
-				Send()
+			for range c.IdScope(ids.PrepareStr(key)) {
+				badge.New(ids.PrepareSeq(uint64(i)), it).
+					Tone(tone).
+					Variant(badge.VariantSoft).
+					Size(badge.SizeSm).
+					Send()
+			}
 		}
 	}
 	c.EndRow()
@@ -382,14 +410,13 @@ func detailEmpty() {
 // canonicaltypesummary inspector (ADR-0067): a compact level-1 line —
 // canonical string · validity dot · footprint trailer — that tethers into a
 // Layout / Members / Go-codec popup, replacing a hand-rolled decomposition.
-// One persistent instance (stable idPrefix + idGen) tracks whichever column
-// is selected.
-func renderTypeBlock(ids *c.WidgetIdStack, ct canonicaltypes.PrimitiveAstNodeI) {
+// One State on the model tracks whichever column is selected.
+func renderTypeBlock(ids *c.WidgetIdStack, m *view, ct canonicaltypes.PrimitiveAstNodeI) {
 	for rt := range c.RichTextLabel("canonical type") {
 		rt.Weak().Small()
 	}
 	for range c.Horizontal().KeepIter() {
-		canonicaltypesummary.New("schemaview-coltype").Render(ids.PrepareStr("cts-col"), canonicalOf(ct))
+		canonicaltypesummary.Render(canonicaltypesummary.Input{Ids: ids, ScopeKey: "col-type", Canonical: canonicalOf(ct), State: &m.colType, Title: "type: column"})
 	}
 	c.AddSpace(styletokens.PaddingInner(styletokens.ActiveDensity()))
 }

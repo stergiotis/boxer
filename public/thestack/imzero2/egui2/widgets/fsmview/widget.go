@@ -16,7 +16,6 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph/goccyengine"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/layeredgraph/view"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
-	"github.com/zeebo/xxh3"
 )
 
 // RendererE selects which level-2 view is rendered inside the popup. The
@@ -32,46 +31,99 @@ const (
 	RendererHistory
 )
 
-// popupAnchorXY is the (x, y) carrier for [Widget.PopupAnchor]. Held by
+// popupAnchorXY is the (x, y) carrier for [View.PopupAnchor]. Held by
 // pointer on the widget so callers can distinguish "no anchor" (nil →
 // fall back to egui's default cascade) from "anchor at (0, 0)" (the
 // viewport top-left, a legitimate value).
 type popupAnchorXY struct{ X, Y float32 }
 
-// Widget is the two-level FSM viewer. Construct via [New], reuse across
-// frames via [Widget.Render]. State (popup open/closed, selected renderer)
-// lives on the receiver so multiple widgets coexist without crosstalk.
-type Widget[T comparable] struct {
+// Options configures a View. Every zero value is a default, and the View
+// re-reads its [View.Opts] on every render, so a change is an assignment
+// (ADR-0267 W11).
+type Options[T comparable] struct {
+	// Title is the human-facing name surfaced in the level-2 popup header
+	// and the chip's tooltip, so callers with multiple FSMs on screen can
+	// tell which machine each popup belongs to. Empty takes the scope key,
+	// which is already a stable short string per instance.
+	Title string
+	// ShowSubscript renders the small "Xs ago" subscript to the right of the
+	// chip, sourced from [Machine.LastTransition]. Off by default so a plain
+	// chip stays as compact as possible; enable on surfaces where the
+	// freshness of the state matters (status bars, dashboards).
+	ShowSubscript bool
+	// AutoAnchor captures the cursor position the frame the chip is clicked
+	// and pins the popup there, so it pops where the click landed. Overrides
+	// any manual [View.PopupAnchor] on the click frame. Backed by
+	// [c.StateManager.GetPointer] (R20).
+	AutoAnchor bool
+	// Tethered promotes the level-1 chip to a tethered inspector summary: the
+	// state badge gains an [inspector.AnchorToggle] and the level-2 window is
+	// linked back to it by the spring-animated bezier [inspector.AnchorTether]
+	// (ADR-0046). Pair with Summary for a rich stat line and Provenance for
+	// the window's identity chip. Off by default — non-tethered widgets keep
+	// the plain chip-click popup.
+	Tethered bool
+	// Renderer is the level-2 view a fresh View opens on (read once at New);
+	// [View.SetRenderer] / [View.SelectedRenderer] are the live state.
+	Renderer RendererE
+	// Provenance binds the FSM to its source value's identity card. When set
+	// (non-zero), the popup body renders the standard
+	// [inspector.ProvenanceChip] in its header so operators can see which
+	// subject / source-app produced the state transitions this FSM reflects.
+	Provenance inspector.Provenance
+	// BadgeTone colours the level-1 state badge by state (e.g. error states
+	// red, success green); nil keeps TonePrimary. A pure function.
+	BadgeTone func(T) badge.ToneE
+	// Summary renders a caller-owned addendum (stats / freshness) just right
+	// of the state badge in tethered mode. It runs inside the chip's
+	// Horizontal, so emit inline widgets only. Host-drawn content (W13).
+	Summary func()
+	// HistoryFooter renders a caller-owned action row under the History tab's
+	// table, below a separator — the place for whatever a host wants to do
+	// with the transition log (publish it, copy it, hand it to a playground).
+	// It runs inside a [c.Horizontal], so emit inline widgets only. The widget
+	// deliberately supplies no action of its own: what a log is worth
+	// exporting *to* depends on the host's capabilities. Pair with
+	// [View.HistorySnapshot] inside the click branch to get the rows. nil
+	// emits neither footer nor separator. Host-drawn content (W13).
+	HistoryFooter func()
+}
+
+// Events is what one Render, RenderChip or RenderPopup reports.
+type Events struct {
+	// Toggled is true when the user opened or closed the popup this frame
+	// (a chip or toggle click; the title-bar close lands a frame later
+	// through the databinding and is not reported).
+	Toggled bool
+	// Driven is true when a click on a graph node drove the machine to a
+	// new state this frame.
+	Driven bool
+}
+
+// View is the two-level FSM viewer, a semi-retained widget (ADR-0267).
+// Construct via [New], reuse across frames via [View.Render]. State (popup
+// open/closed, selected renderer, the cached graph layout) lives on the
+// receiver so multiple views coexist without crosstalk.
+type View[T comparable] struct {
+	// Opts is re-read on every render.
+	Opts Options[T]
+
 	ids      *c.WidgetIdStack
 	scopeKey string
 	machine  *Machine[T]
 
-	// title is the human-facing name surfaced in the level-2 popup
-	// header so callers with multiple FSMs on screen can tell which
-	// machine each popup belongs to. Defaults to scopeKey at
-	// construction; override via [Widget.Title]. scopeKey is the right
-	// default because it's already a stable short string per instance.
-	title string
-
-	popupOpen     bool
-	renderer      RendererE
-	showSubscript bool
+	popupOpen bool
+	renderer  RendererE
+	// events collects what this frame's render produced.
+	events Events
 
 	// popupAnchor pins the level-2 Window's default_pos on first open
 	// (egui-relative viewport coordinates in logical pixels). nil leaves
 	// egui's cascade behaviour intact. egui retains the user's dragged
 	// position across subsequent opens, so the anchor only affects the
 	// very first time a fresh widget instance shows the popup. Set via
-	// [Widget.PopupAnchor]; unset via [Widget.ClearPopupAnchor].
+	// [View.PopupAnchor]; unset via [View.ClearPopupAnchor].
 	popupAnchor *popupAnchorXY
-
-	// autoAnchor, when true, captures the cursor position the frame the
-	// chip is clicked and writes it into popupAnchor so the popup opens
-	// where the click landed (chip ≈ pointer location). Off by default to
-	// preserve M3a-i's manual-anchor semantics; enabling it overrides any
-	// previously-set anchor on the click frame. Backed by [StateManager.GetPointer]
-	// (R20), so requires the matching FFFI2 binding (added M3a-ii).
-	autoAnchor bool
 
 	// graphLayout caches the static layered layout (states + transitions)
 	// computed once via the layeredgraph engine: the FSM topology does not
@@ -91,40 +143,25 @@ type Widget[T comparable] struct {
 	// graphViewState carries interactive pan/zoom for the Graph tab across
 	// frames (view.Render reads drag/zoom over the canvas and updates it).
 	graphViewState view.ViewState
+	// graphCanvasW/H hold the last space the window left for the graph, so a
+	// frame whose probe has not landed draws at the last good size rather
+	// than flashing at the fallback.
+	graphCanvasW, graphCanvasH float32
 
 	density styletokens.DensityE
 
-	// provenance, when non-zero, is rendered at the top of the popup
-	// body as the standard [inspector.ProvenanceChip] so operators can
-	// see which source value this FSM is bound to without leaving the
-	// popup. Zero value (default) suppresses the chip entirely so
-	// existing call sites keep their current visual.
-	provenance inspector.Provenance
-
-	// tethered, set via [Widget.Tethered], promotes the level-1 chip to a
-	// tethered inspector summary: the state badge gains an
-	// [inspector.AnchorToggle] and the level-2 window is linked back to it by
-	// the spring-animated bezier [inspector.AnchorTether] (ADR-0046). Off by
-	// default — non-tethered call sites keep the plain chip-click popup.
-	tethered bool
-	tether   inspector.AnchorTether
-	// summaryFn, set via [Widget.Summary], renders a caller-owned addendum
-	// (stats / freshness) just right of the state badge in tethered mode.
-	summaryFn func()
-	// badgeToneFn, set via [Widget.BadgeTone], colours the level-1 badge by
-	// state (severity); nil keeps the default TonePrimary. Applies in both
-	// tethered and plain modes.
-	badgeToneFn func(T) badge.ToneE
-
-	// historyFooterFn, set via [Widget.HistoryFooter], renders a caller-owned
-	// action row under the History tab's table. nil (default) emits no footer
-	// and no separator.
-	historyFooterFn func()
+	// tether links the tethered chip's toggle to the popup window. Its key
+	// is derived from the id stack on the first render inside the view's
+	// scope (a scope-derived id spelled in hex — the inspector infra takes a
+	// string), so two views under different host scopes never share it
+	// (W6/W7); tetherKey is 0 until then.
+	tether    inspector.AnchorTether
+	tetherKey uint64
 
 	// historyBuf backs the History tab's per-frame row build. Held on the
 	// receiver and truncated rather than reallocated, so an open History tab
 	// costs no allocation per frame. Never escapes — callers reach the log
-	// through [Widget.HistorySnapshot], which copies.
+	// through [View.HistorySnapshot], which copies.
 	historyBuf []historyRow[T]
 }
 
@@ -145,89 +182,76 @@ type historyRow[T comparable] struct {
 	hasDwell bool
 }
 
-// New constructs a Widget bound to the given Machine. scopeKey scopes all
-// widget ids emitted by Render; pass a stable short string per instance
-// ("door-fsm", "card-status", …) so two widgets on the same id stack
-// don't collide.
+// New constructs a View bound to the given Machine, with its ids scoped
+// under scopeKey on ids — pass a stable short string per instance
+// ("door-fsm", "card-status", …) so two views on the same id stack don't
+// collide; empty uses "fsmview".
 //
-// Panics on nil ids stack, nil machine, or empty scopeKey — these are
-// programmer errors, not data-shape issues.
-func New[T comparable](ids *c.WidgetIdStack, scopeKey string, m *Machine[T]) *Widget[T] {
+// Panics on a nil ids stack or a nil machine — programmer errors, not
+// data-shape issues.
+func New[T comparable](ids *c.WidgetIdStack, scopeKey string, m *Machine[T], opts Options[T]) *View[T] {
 	if ids == nil {
 		panic("fsmview: New requires a non-nil ids stack")
-	}
-	if scopeKey == "" {
-		panic("fsmview: New requires a non-empty scopeKey")
 	}
 	if m == nil {
 		panic("fsmview: New requires a non-nil Machine")
 	}
-	return &Widget[T]{
+	if scopeKey == "" {
+		scopeKey = "fsmview"
+	}
+	return &View[T]{
+		Opts:     opts,
 		ids:      ids,
 		scopeKey: scopeKey,
 		machine:  m,
-		title:    scopeKey,
-		renderer: RendererTable,
+		renderer: opts.Renderer,
 		density:  styletokens.ActiveDensity(),
 	}
 }
 
-// Title overrides the human-facing FSM name shown in the level-2 popup
-// header. Defaults to the scopeKey passed to [New]. Set when scopeKey is
-// a terse id ("traffic") but the operator-facing label should read
-// differently ("Traffic light controller"). Returns the receiver for
-// chaining.
-func (inst *Widget[T]) Title(name string) *Widget[T] {
-	inst.title = name
-	return inst
+// title is the popup / tooltip name: Opts.Title, or the scope key.
+func (inst *View[T]) title() string {
+	if inst.Opts.Title != "" {
+		return inst.Opts.Title
+	}
+	return inst.scopeKey
 }
 
-// Provenance binds the FSM to its source value's [inspector.Provenance]
-// identity card. When set (non-zero), the popup body renders the
-// standard [inspector.ProvenanceChip] in its header so operators can
-// see which subject / source-app produced the state transitions this
-// FSM is reflecting. Zero value (default) suppresses the chip — pure
-// receiver-owned FSMs without an external binding leave the popup
-// unchanged. Returns the receiver for chaining.
-func (inst *Widget[T]) Provenance(p inspector.Provenance) *Widget[T] {
-	inst.provenance = p
-	return inst
+// ensureTether derives the tether key from the id stack the first time it is
+// needed inside the view's scope, and builds the tether.
+func (inst *View[T]) ensureTether() {
+	if inst.tetherKey != 0 {
+		return
+	}
+	inst.tetherKey = inst.ids.PrepareStr("tether").Derive()
+	inst.tether = inspector.NewAnchorTether(inst.tetherKey)
 }
 
 // IsOpen reports whether the level-2 popup is currently open. Useful for
 // drift-guard tests and for sibling widgets that want to react to the
 // popup state.
-func (inst *Widget[T]) IsOpen() bool {
+func (inst *View[T]) IsOpen() bool {
 	return inst.popupOpen
 }
 
 // Open programmatically opens the popup. No-op when already open.
-func (inst *Widget[T]) Open() {
+func (inst *View[T]) Open() {
 	inst.popupOpen = true
 }
 
 // Close programmatically dismisses the popup.
-func (inst *Widget[T]) Close() {
+func (inst *View[T]) Close() {
 	inst.popupOpen = false
 }
 
 // SelectedRenderer returns the currently-selected level-2 view.
-func (inst *Widget[T]) SelectedRenderer() RendererE {
+func (inst *View[T]) SelectedRenderer() RendererE {
 	return inst.renderer
 }
 
 // SetRenderer pins which level-2 view opens on the next click.
-func (inst *Widget[T]) SetRenderer(r RendererE) {
+func (inst *View[T]) SetRenderer(r RendererE) {
 	inst.renderer = r
-}
-
-// ShowSubscript toggles the small "Xs ago" subscript rendered to the right
-// of the chip, sourced from [Machine.LastTransition]. Off by default so a
-// plain chip stays as compact as possible; enable on surfaces where the
-// freshness of the state matters (status bars, dashboards).
-func (inst *Widget[T]) ShowSubscript(on bool) *Widget[T] {
-	inst.showSubscript = on
-	return inst
 }
 
 // PopupAnchor pins the level-2 Window's default_pos to (x, y) in egui
@@ -236,80 +260,18 @@ func (inst *Widget[T]) ShowSubscript(on bool) *Widget[T] {
 // after that. Returns the receiver for chaining.
 //
 // For click-tracking (popup pops where the chip was clicked) see
-// [Widget.AutoAnchor], which captures the pointer via the R20 fetcher
-// on each click. The two compose: AutoAnchor overrides the stored
-// anchor on each click frame, while PopupAnchor remains the fallback
-// for programmatic [Widget.Open] calls where no click happens.
-func (inst *Widget[T]) PopupAnchor(x, y float32) *Widget[T] {
+// [Options.AutoAnchor], which captures the pointer via the R20 fetcher on
+// each click. The two compose: AutoAnchor overrides the stored anchor on
+// each click frame, while PopupAnchor remains the fallback for programmatic
+// [View.Open] calls where no click happens. Idempotent.
+func (inst *View[T]) PopupAnchor(x, y float32) {
 	inst.popupAnchor = &popupAnchorXY{X: x, Y: y}
-	return inst
 }
 
 // ClearPopupAnchor reverts the popup to egui's default cascade
 // positioning. No-op when no anchor has been set.
-func (inst *Widget[T]) ClearPopupAnchor() *Widget[T] {
+func (inst *View[T]) ClearPopupAnchor() {
 	inst.popupAnchor = nil
-	return inst
-}
-
-// AutoAnchor enables click-tracking: the frame the chip is clicked, the
-// widget reads the cursor position from [StateManager.GetPointer] and
-// writes it into [Widget.PopupAnchor], so the popup pops where the
-// click landed. Off by default; turn on for "tooltip-style" popups that
-// should follow the chip across layout shifts. Overrides any previously-
-// set manual anchor on the click frame. Returns the receiver for chaining.
-func (inst *Widget[T]) AutoAnchor(on bool) *Widget[T] {
-	inst.autoAnchor = on
-	return inst
-}
-
-// Tethered promotes the level-1 chip to a tethered inspector summary: the
-// state badge gains an [inspector.AnchorToggle] (the arrow-square-out
-// open/close affordance) and the level-2 window is linked back to it by the
-// spring-animated bezier [inspector.AnchorTether] — the same connector
-// distsummary / regexsummary use (ADR-0046). Pair with [Widget.Summary] for a
-// rich stat line and [Widget.Provenance] for the window's identity chip. Off
-// by default; non-tethered widgets keep the plain chip-click popup. Returns
-// the receiver for chaining.
-func (inst *Widget[T]) Tethered() *Widget[T] {
-	inst.tethered = true
-	inst.tether = inspector.NewAnchorTether(inst.scopeKey)
-	return inst
-}
-
-// Summary sets the level-1 addendum rendered just right of the state badge in
-// tethered mode — the caller emits its own stats / freshness labels (e.g.
-// "50 rows · 12ms · 8s ago"). It runs inside the tethered chip's Horizontal,
-// so emit inline widgets only. No-op unless [Widget.Tethered] is set. Returns
-// the receiver for chaining.
-func (inst *Widget[T]) Summary(fn func()) *Widget[T] {
-	inst.summaryFn = fn
-	return inst
-}
-
-// BadgeTone colours the level-1 state badge by mapping the current state to a
-// [badge.ToneE] (e.g. error states red, success green). nil (default) keeps
-// the badge at TonePrimary. Applies in both plain and tethered modes. Returns
-// the receiver for chaining.
-func (inst *Widget[T]) BadgeTone(fn func(T) badge.ToneE) *Widget[T] {
-	inst.badgeToneFn = fn
-	return inst
-}
-
-// HistoryFooter sets a caller-owned action row rendered under the History
-// tab's table, below a separator — the place for whatever a host wants to do
-// with the transition log (publish it, copy it, hand it to a playground). It
-// runs inside a [c.Horizontal], so emit inline widgets only, the
-// [Widget.Summary] rule.
-//
-// The widget deliberately supplies no action of its own: what a log is worth
-// exporting *to* depends on the host's capabilities, which a widget cannot
-// know. Pair with [Widget.HistorySnapshot] inside the click branch to get the
-// rows. nil (default) emits neither footer nor separator. Returns the receiver
-// for chaining.
-func (inst *Widget[T]) HistoryFooter(fn func()) *Widget[T] {
-	inst.historyFooterFn = fn
-	return inst
 }
 
 // HistorySnapshot returns a freshly allocated copy of the retained transition
@@ -319,7 +281,7 @@ func (inst *Widget[T]) HistoryFooter(fn func()) *Widget[T] {
 // rule: gather here, do the blocking work there).
 //
 // Allocates on every call. Call it in a click branch, not per frame.
-func (inst *Widget[T]) HistorySnapshot() []Transition[T] {
+func (inst *View[T]) HistorySnapshot() []Transition[T] {
 	out := make([]Transition[T], 0, inst.machine.HistoryLen())
 	for tr := range inst.machine.HistoryReverse() {
 		out = append(out, tr)
@@ -329,7 +291,7 @@ func (inst *Widget[T]) HistorySnapshot() []Transition[T] {
 
 // Render emits the level-1 chip and, when open, the level-2 popup (window +
 // tether). Call once per frame inside an active egui surface (panel or window).
-// It is exactly [Widget.RenderChip] followed by [Widget.RenderPopup] in one id
+// It is exactly [View.RenderChip] followed by [View.RenderPopup] in one id
 // scope — reach for those two directly only when the chip and the window must
 // render at different points in the frame, e.g. the chip inside a dock-tab body
 // and the window AFTER the DockArea block (a floating window cannot be spawned
@@ -339,79 +301,87 @@ func (inst *Widget[T]) HistorySnapshot() []Transition[T] {
 // [c.Horizontal] flow or a panel. The popup spawns at egui's default
 // cascade position (egui_dock-style retention takes over on subsequent
 // frames so user-driven drag positions stick).
-func (inst *Widget[T]) Render() {
+func (inst *View[T]) Render() (ev Events) {
 	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
 	inst.density = styletokens.ActiveDensity()
+	inst.events = Events{}
 	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
 		inst.renderChip()
 		inst.renderPopupAndTether()
 	}
+	return inst.events
 }
 
 // RenderChip emits only the level-1 chip: the state badge, and in tethered mode
 // the [inspector.AnchorToggle] plus the toggle-rect capture the bezier anchors
-// on. Pair with [Widget.RenderPopup] later in the same frame when the window
+// on. Pair with [View.RenderPopup] later in the same frame when the window
 // must be emitted away from the chip's call site (the dock-tab case). Callers
-// using all-in-one [Widget.Render] never need this.
-func (inst *Widget[T]) RenderChip() {
+// using all-in-one [View.Render] never need this.
+func (inst *View[T]) RenderChip() (ev Events) {
 	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
 	inst.density = styletokens.ActiveDensity()
+	inst.events = Events{}
 	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
 		inst.renderChip()
 	}
+	return inst.events
 }
 
 // RenderPopup emits the level-2 popup window (when open) and, in tethered mode,
-// paints the bezier connector back to the toggle captured by [Widget.RenderChip].
+// paints the bezier connector back to the toggle captured by [View.RenderChip].
 // Call it where a floating window is legal — notably AFTER a DockArea block,
 // never inside a dock-tab body. No-op when the popup is closed. The toggle↔window
 // link is by scope (the tether), so the two calls need not be nested.
-func (inst *Widget[T]) RenderPopup() {
+func (inst *View[T]) RenderPopup() (ev Events) {
 	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
 	inst.density = styletokens.ActiveDensity()
+	inst.events = Events{}
 	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
 		inst.renderPopupAndTether()
 	}
+	return inst.events
 }
 
 // renderPopupAndTether is the shared popup half: the window when open, then the
-// bezier (tethered + open). Factored out so [Widget.Render] and
-// [Widget.RenderPopup] stay in lock-step.
-func (inst *Widget[T]) renderPopupAndTether() {
+// bezier (tethered + open). Factored out so [View.Render] and
+// [View.RenderPopup] stay in lock-step.
+func (inst *View[T]) renderPopupAndTether() {
 	if inst.popupOpen {
 		inst.renderPopup()
 	}
 	// Tethered mode: draw the bezier from the level-1 toggle to the open
 	// window above everything (PaintAbsoluteOverlay). One-frame lag on
 	// first open; gated on popupOpen so the curve vanishes with it.
-	if inst.tethered && inst.popupOpen {
+	if inst.Opts.Tethered && inst.popupOpen {
+		inst.ensureTether()
 		inst.tether.Paint()
 	}
 }
 
-func (inst *Widget[T]) renderChip() {
+func (inst *View[T]) renderChip() {
 	current := inst.machine.Current()
 	label := inst.machine.Label(current)
 	tone := badge.TonePrimary
-	if inst.badgeToneFn != nil {
-		tone = inst.badgeToneFn(current)
+	if inst.Opts.BadgeTone != nil {
+		tone = inst.Opts.BadgeTone(current)
 	}
 	emitBadge := func() {
 		resp := badge.New(inst.ids.PrepareStr("chip"), label).
 			Tone(tone).
 			Variant(badge.VariantSolid).
 			Size(badge.SizeMd).
-			Tooltip(fmt.Sprintf("%s — click for state-machine details", inst.title)).
+			Tooltip(fmt.Sprintf("%s — click for state-machine details", inst.title())).
 			SendResp()
 		if resp.HasPrimaryClicked() {
 			inst.popupOpen = !inst.popupOpen
+			inst.events.Toggled = true
 			// AutoAnchor: snapshot the pointer at the moment of the click
 			// and pin the popup to it. The R20 fetcher returns the latest
 			// observed pointer position from egui's InputState, which
 			// reflects the position the click landed on (one-frame lag is
 			// already absorbed by the response cache that gates this
 			// branch). Skip on Valid=false (headless / pre-first-pointer).
-			if inst.autoAnchor && inst.popupOpen {
+			if inst.Opts.AutoAnchor && inst.popupOpen {
 				p := c.CurrentApplicationState.StateManager.GetPointer()
 				if p.Valid {
 					inst.popupAnchor = &popupAnchorXY{X: p.X, Y: p.Y}
@@ -419,20 +389,22 @@ func (inst *Widget[T]) renderChip() {
 			}
 		}
 	}
-	if inst.tethered {
+	if inst.Opts.Tethered {
+		inst.ensureTether()
 		// Tethered inspector summary: badge · caller summary · AnchorToggle,
 		// then stamp the row rect for the bezier tether.
 		for range c.Horizontal().KeepIter() {
 			emitBadge()
-			if inst.summaryFn != nil {
+			if inst.Opts.Summary != nil {
 				c.AddSpace(styletokens.GapInline(inst.density))
-				inst.summaryFn()
+				inst.Opts.Summary()
 			}
 			c.AddSpace(styletokens.GapInline(inst.density))
 			if inspector.AnchorToggle(inst.ids.PrepareStr("anchor-toggle"), &inst.popupOpen) {
+				inst.events.Toggled = true
 				// Same AutoAnchor pointer-capture as the badge click, so the
 				// window opens near the toggle and the bezier stays short.
-				if inst.autoAnchor && inst.popupOpen {
+				if inst.Opts.AutoAnchor && inst.popupOpen {
 					if p := c.CurrentApplicationState.StateManager.GetPointer(); p.Valid {
 						inst.popupAnchor = &popupAnchorXY{X: p.X, Y: p.Y}
 					}
@@ -442,7 +414,7 @@ func (inst *Widget[T]) renderChip() {
 		}
 		return
 	}
-	if !inst.showSubscript {
+	if !inst.Opts.ShowSubscript {
 		emitBadge()
 		return
 	}
@@ -462,7 +434,7 @@ func (inst *Widget[T]) renderChip() {
 // subscriptText resolves the "Xs ago" rendering of the last transition's
 // timestamp via dustin/go-humanize. Returns "" when no transition has
 // fired yet or the recorded timestamp is the zero value (maxHistory=0).
-func (inst *Widget[T]) subscriptText() string {
+func (inst *View[T]) subscriptText() string {
 	last, ok := inst.machine.LastTransition()
 	if !ok || last.At.IsZero() {
 		return ""
@@ -470,18 +442,22 @@ func (inst *Widget[T]) subscriptText() string {
 	return humanizeOrAbsolute(last.At)
 }
 
-func (inst *Widget[T]) renderPopup() {
+func (inst *View[T]) renderPopup() {
 	// Title format: "<Name> · <CurrentState>" — the name disambiguates
 	// among multiple FSM popups, the current state tells the operator
 	// what the popup is showing without scrolling the body.
-	title := fmt.Sprintf("%s · %s", inst.title, inst.machine.Label(inst.machine.Current()))
-	win := c.Window(inst.ids.PrepareStr("popup"), c.WidgetText().Text(title).Keep()).
+	title := fmt.Sprintf("%s · %s", inst.title(), inst.machine.Label(inst.machine.Current()))
+	// The floating window is the one absolute id the view owns, derived from
+	// its scope (ADR-0267 W6).
+	winId := c.MakeAbsoluteIdHighEntropy(inst.ids.PrepareStr("popup").Derive())
+	win := c.Window(winId, c.WidgetText().Text(title).Keep()).
 		DefaultOpen(true).
 		Resizable(true).
 		Collapsible(false).
+		DefaultSize(fsmPopupDefaultW, fsmPopupDefaultH).
 		MinWidth(360).
 		MinHeight(240)
-	if inst.tethered {
+	if inst.Opts.Tethered {
 		// Tethered inspectors stay foreground (matching distsummary /
 		// regexsummary) so the window the bezier points at can't fall behind
 		// the panes it's anchored from.
@@ -500,14 +476,15 @@ func (inst *Widget[T]) renderPopup() {
 	win = win.OpenBound(bindId)
 	c.CurrentApplicationState.StateManager.AddR10Databinding(bindId, &inst.popupOpen)
 	for range win.KeepIter() {
-		if inst.tethered {
+		if inst.Opts.Tethered {
 			// Stamp the window content rect first (before any content shifts
 			// min_rect) so the bezier tether anchors to the window edge.
+			inst.ensureTether()
 			inst.tether.CaptureWindow()
 		}
 		c.AddSpace(styletokens.PaddingInner(inst.density))
-		if !inst.provenance.IsZero() {
-			inspector.ProvenanceChip(inst.provenance)
+		if !inst.Opts.Provenance.IsZero() {
+			inspector.ProvenanceChip(inst.Opts.Provenance)
 			c.Separator().Horizontal().Send()
 		}
 		inst.renderRendererToggle()
@@ -524,7 +501,7 @@ func (inst *Widget[T]) renderPopup() {
 	}
 }
 
-func (inst *Widget[T]) renderRendererToggle() {
+func (inst *View[T]) renderRendererToggle() {
 	historyLabel := fmt.Sprintf("History (%d)", inst.machine.HistoryLen())
 	selector.Segmented(inst.ids, "renderer-tabs", &inst.renderer).
 		Style(selector.StyleSelectable).
@@ -538,24 +515,28 @@ func (inst *Widget[T]) renderRendererToggle() {
 // renderTable emits a labelled key→value row per state, with the active
 // state highlighted via badge.TonePrimary. Outgoing transitions are listed
 // as a comma-separated string in the second column.
-func (inst *Widget[T]) renderTable() {
+func (inst *View[T]) renderTable() {
 	current := inst.machine.Current()
-	for s := range inst.machine.States() {
-		for range c.Horizontal().KeepIter() {
-			tone := badge.ToneNeutral
-			variant := badge.VariantSoft
-			if s == current {
-				tone = badge.TonePrimary
-				variant = badge.VariantSolid
+	for range c.IdScope(inst.ids.PrepareStr("states")) {
+		for s := range inst.machine.States() {
+			for range c.Horizontal().KeepIter() {
+				tone := badge.ToneNeutral
+				variant := badge.VariantSoft
+				if s == current {
+					tone = badge.TonePrimary
+					variant = badge.VariantSolid
+				}
+				// NodeId is a hash of the state's label, so it is a
+				// high-entropy id already.
+				badge.New(inst.ids.PrepareHighEntropy(inst.machine.NodeId(s)),
+					inst.machine.Label(s)).
+					Tone(tone).
+					Variant(variant).
+					Size(badge.SizeSm).
+					Send()
+				c.AddSpace(styletokens.GapInline(inst.density))
+				c.Label(formatOutgoing(inst.machine, s)).Send()
 			}
-			badge.New(inst.ids.PrepareStr(fmt.Sprintf("st-%d", inst.machine.NodeId(s))),
-				inst.machine.Label(s)).
-				Tone(tone).
-				Variant(variant).
-				Size(badge.SizeSm).
-				Send()
-			c.AddSpace(styletokens.GapInline(inst.density))
-			c.Label(formatOutgoing(inst.machine, s)).Send()
 		}
 	}
 }
@@ -568,7 +549,7 @@ func (inst *Widget[T]) renderTable() {
 // state keeps the Machine's StateColorFn tint, edges leaving the current state
 // light up with AccentSubtle (the next-possible transitions) and the rest sit
 // in NeutralBorderFaint.
-func (inst *Widget[T]) renderGraph() {
+func (inst *View[T]) renderGraph() {
 	// The Machine topology can grow at runtime (Mirror/AddRule), so recompute
 	// the cached layout when the state/edge counts change. The `graphLayout ==
 	// nil` term also retries while no layout has been built yet, so a transient
@@ -593,9 +574,12 @@ func (inst *Widget[T]) renderGraph() {
 	nextEdgeColor := color.Hex(styletokens.AccentSubtle.AsHex())
 	restEdgeColor := color.Hex(styletokens.NeutralBorderFaint.AsHex())
 
-	res := view.Render(inst.graphIDBase(), inst.graphLayout, view.RenderOpts{
-		CanvasW: fsmGraphCanvasW,
-		CanvasH: fsmGraphCanvasH,
+	canvasW, canvasH := inst.graphCanvasSize()
+	// The layered view takes a raw id base; a scope-derived id keeps two
+	// views' canvases apart (W5).
+	res := view.Render(inst.ids.PrepareStr("graph").Derive(), inst.graphLayout, view.RenderOpts{
+		CanvasW: canvasW,
+		CanvasH: canvasH,
 		State:   &inst.graphViewState,
 		NodeFill: func(id string) (color.Color, bool) {
 			if s, ok := idToState[id]; ok {
@@ -615,7 +599,9 @@ func (inst *Widget[T]) renderGraph() {
 	// declared from the current state (mirrors the "Drive the FSM" buttons).
 	if res.Clicked != "" {
 		if s, ok := idToState[res.Clicked]; ok && s != current && inst.machine.CanTransition(s) {
-			_ = inst.machine.Transition(s)
+			if inst.machine.Transition(s) == nil {
+				inst.events.Driven = true
+			}
 		}
 	}
 }
@@ -626,7 +612,7 @@ func (inst *Widget[T]) renderGraph() {
 // topology changed; the result is cached on the receiver. States that share a
 // node id (same label) are merged by the engine, mirroring how the user reads
 // them as one state.
-func (inst *Widget[T]) computeGraphLayout() (*layeredgraph.Layout, error) {
+func (inst *View[T]) computeGraphLayout() (*layeredgraph.Layout, error) {
 	eng, err := goccyengine.Shared()
 	if err != nil {
 		return nil, err
@@ -653,20 +639,14 @@ func (inst *Widget[T]) computeGraphLayout() (*layeredgraph.Layout, error) {
 
 // stateNodeID is the layeredgraph node id for a state: the Machine's stable
 // per-state NodeId as a string (Graphviz node names are strings).
-func (inst *Widget[T]) stateNodeID(s T) string {
+func (inst *View[T]) stateNodeID(s T) string {
 	return strconv.FormatUint(inst.machine.NodeId(s), 10)
-}
-
-// graphIDBase namespaces this widget's canvas + sense-region ids so two FSM
-// graphs on screen do not collide. Derived from the per-instance scopeKey.
-func (inst *Widget[T]) graphIDBase() uint64 {
-	return xxh3.HashString(inst.scopeKey)
 }
 
 // machineTopology returns the current state and edge counts — a cheap,
 // allocation-free signal for detecting runtime topology growth (Mirror /
 // AddRule) so renderGraph can invalidate the cached layout.
-func (inst *Widget[T]) machineTopology() (nodes, edges int) {
+func (inst *View[T]) machineTopology() (nodes, edges int) {
 	for range inst.machine.States() {
 		nodes++
 	}
@@ -679,7 +659,7 @@ func (inst *Widget[T]) machineTopology() (nodes, edges int) {
 // buildIDToState maps each state's node id back to the state for the colour and
 // click hooks. Rebuilt only when the cached layout is (re)computed, not per
 // frame.
-func (inst *Widget[T]) buildIDToState() map[string]T {
+func (inst *View[T]) buildIDToState() map[string]T {
 	m := make(map[string]T, inst.graphTopoN)
 	for s := range inst.machine.States() {
 		m[inst.stateNodeID(s)] = s
@@ -687,13 +667,42 @@ func (inst *Widget[T]) buildIDToState() map[string]T {
 	return m
 }
 
-// fsmGraphCanvas{W,H} size the painter canvas the layered graph is drawn into
-// inside the level-2 popup. Fixed for v1 (the height matches the prior graph's
-// 320px); the layout is fit-to-view into this rect. Responsive width tracking
-// is a follow-up.
+// graphCanvasSize is the space the popup leaves for the graph: the window's
+// remaining rect, as last frame measured it, less what the popup adds below
+// the body — the item gap egui leaves after the canvas, then the padding.
+// The canvas filling it is what lets the window be resized: a fixed-size body
+// holds egui's window to that size. The probe runs before the canvas, so the
+// canvas never sizes itself against its own output. The subtraction has to
+// cover everything below the canvas: a resizable egui window grows to its
+// content, so any shortfall is added to the window each frame and the window
+// creeps taller without end.
+func (inst *View[T]) graphCanvasSize() (w, h float32) {
+	aw, ah, ok := c.CapturePaneSize(inst.ids.PrepareStr("graph-canvas").Derive())
+	if ok && aw > 0 && ah > 0 {
+		below := styletokens.GapItems(inst.density) + styletokens.PaddingInner(inst.density) + fsmGraphCanvasSlack
+		inst.graphCanvasW = max(aw, fsmGraphCanvasMinW)
+		inst.graphCanvasH = max(ah-below, fsmGraphCanvasMinH)
+	}
+	if inst.graphCanvasW <= 0 || inst.graphCanvasH <= 0 {
+		return fsmGraphCanvasFallbackW, fsmGraphCanvasFallbackH
+	}
+	return inst.graphCanvasW, inst.graphCanvasH
+}
+
+// fsmPopup* and fsmGraphCanvas* size the level-2 popup and the graph inside
+// it. The popup opens large enough for a graph of a dozen states to read;
+// the graph then fills whatever the window leaves it, and the layout is
+// fit-to-view into that rect. The fallback is the first frame's, before the
+// probe has landed. The slack keeps the canvas a few pixels short of the
+// window's bottom so rounding cannot make the window grow by itself.
 const (
-	fsmGraphCanvasW float32 = 380
-	fsmGraphCanvasH float32 = 280
+	fsmPopupDefaultW        float32 = 720
+	fsmPopupDefaultH        float32 = 560
+	fsmGraphCanvasFallbackW float32 = 380
+	fsmGraphCanvasFallbackH float32 = 280
+	fsmGraphCanvasMinW      float32 = 200
+	fsmGraphCanvasMinH      float32 = 160
+	fsmGraphCanvasSlack     float32 = 4
 )
 
 // fsmHistCol* size the History tab's columns. The always-emitted five sum to
@@ -719,15 +728,6 @@ const (
 	fsmHistoryMaxH float32 = 252
 )
 
-// fsmHistId* namespace the History tab's PrepareSeq ids away from each other
-// (and leave room for future per-row sites). Sequence ids and label-hashed
-// ids share one 64-bit space, so the bases only need to separate this
-// widget's own seq users.
-const (
-	fsmHistIdFrom uint64 = 0x0001_0000
-	fsmHistIdTo   uint64 = 0x0002_0000
-)
-
 // renderHistory emits the transition log newest-first as a scrolling table:
 // ordinal, from-state, to-state, when it fired, how long the machine had sat
 // in the from-state, and the optional reason.
@@ -741,7 +741,7 @@ const (
 //
 // Empty history shows a single muted "no transitions yet" line so the panel
 // doesn't read as broken.
-func (inst *Widget[T]) renderHistory() {
+func (inst *View[T]) renderHistory() {
 	rows := inst.historyRows()
 	if len(rows) == 0 {
 		emptyAtoms := c.Atoms().BeginRichTextColored(
@@ -805,13 +805,17 @@ func (inst *Widget[T]) renderHistory() {
 			Small().End().Keep()
 		c.LabelAtoms(atoms).Send()
 	}
-	stateBadge := func(idBase uint64, seq int, label string) {
+	// One scope per column, the row's ordinal within it: the two state
+	// badges of one row stay apart without id-base arithmetic (W5).
+	stateBadge := func(col string, seq int, label string) {
 		c.AddSpace(cellPadX)
-		badge.New(inst.ids.PrepareSeq(idBase+uint64(seq)), label).
-			Tone(badge.ToneNeutral).
-			Variant(badge.VariantSoft).
-			Size(badge.SizeSm).
-			Send()
+		for range c.IdScope(inst.ids.PrepareStr(col)) {
+			badge.New(inst.ids.PrepareSeq(uint64(seq)), label).
+				Tone(badge.ToneNeutral).
+				Variant(badge.VariantSoft).
+				Size(badge.SizeSm).
+				Send()
+		}
 	}
 
 	// Emit only the rows egui_table will draw. VisibleRange reports the
@@ -833,10 +837,10 @@ func (inst *Widget[T]) renderHistory() {
 			muted(strconv.Itoa(r.seq))
 		}
 		for range et.Cells(i, 1) {
-			stateBadge(fsmHistIdFrom, r.seq, inst.machine.Label(r.tr.From))
+			stateBadge("from", r.seq, inst.machine.Label(r.tr.From))
 		}
 		for range et.Cells(i, 2) {
-			stateBadge(fsmHistIdTo, r.seq, inst.machine.Label(r.tr.To))
+			stateBadge("to", r.seq, inst.machine.Label(r.tr.To))
 		}
 		for range et.Cells(i, 3) {
 			muted(humanizeOrAbsolute(r.tr.At))
@@ -868,7 +872,7 @@ func (inst *Widget[T]) renderHistory() {
 // predecessor's timestamp is when the machine entered this row's From state.
 // The one gap is the oldest retained row, whose predecessor the ring has
 // evicted (or never had): it reports no dwell rather than a wrong one.
-func (inst *Widget[T]) historyRows() []historyRow[T] {
+func (inst *View[T]) historyRows() []historyRow[T] {
 	inst.historyBuf = inst.historyBuf[:0]
 	var prevAt time.Time
 	for tr := range inst.machine.History() {
@@ -896,14 +900,14 @@ func dwellBetween(prevAt, at time.Time) (d time.Duration, ok bool) {
 // renderHistoryFooter emits the caller-owned action row under the table, and
 // the separator that sets it off. No-op when no footer was set — a widget
 // without one shows neither, so the plain History tab is unchanged.
-func (inst *Widget[T]) renderHistoryFooter() {
-	if inst.historyFooterFn == nil {
+func (inst *View[T]) renderHistoryFooter() {
+	if inst.Opts.HistoryFooter == nil {
 		return
 	}
 	c.AddSpace(styletokens.GapInline(inst.density))
 	c.Separator().Horizontal().Send()
 	for range c.Horizontal().KeepIter() {
-		inst.historyFooterFn()
+		inst.Opts.HistoryFooter()
 	}
 }
 

@@ -16,7 +16,7 @@ import (
 func waitFetched(t *testing.T, d *runsHistoryDriver) {
 	t.Helper()
 	require.Eventually(t, func() bool {
-		_, _, inFlight, fetched, _ := d.snapshot()
+		_, _, inFlight, fetched, _, _ := d.snapshot()
 		return fetched && !inFlight
 	}, 2*time.Second, 5*time.Millisecond)
 }
@@ -28,7 +28,7 @@ func TestRunsHistoryDriverFetchAndError(t *testing.T) {
 	}
 	d.refresh()
 	waitFetched(t, d)
-	rows, err, _, _, asOf := d.snapshot()
+	rows, err, _, _, asOf, _ := d.snapshot()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, "q1", rows[0].QueryId)
@@ -39,10 +39,10 @@ func TestRunsHistoryDriverFetchAndError(t *testing.T) {
 	}
 	d.refresh()
 	require.Eventually(t, func() bool {
-		_, err, inFlight, _, _ := d.snapshot()
+		_, err, inFlight, _, _, _ := d.snapshot()
 		return !inFlight && err != nil
 	}, 2*time.Second, 5*time.Millisecond)
-	_, err, _, _, _ = d.snapshot()
+	_, err, _, _, _, _ = d.snapshot()
 	require.Contains(t, err.Error(), "table gone")
 }
 
@@ -80,7 +80,7 @@ func TestRunsHistoryDriverNilEndpoint(t *testing.T) {
 	require.Nil(t, d.fetch)
 	d.refresh()              // must not panic
 	d.maybeRefreshOnReveal() // must not panic
-	_, err, inFlight, fetched, _ := d.snapshot()
+	_, err, inFlight, fetched, _, _ := d.snapshot()
 	require.NoError(t, err)
 	require.False(t, inFlight)
 	require.False(t, fetched)
@@ -104,4 +104,23 @@ func TestRunRowLabel(t *testing.T) {
 	row.Event = "ExceptionWhileProcessing"
 	row.ExceptionCode = 47
 	require.True(t, strings.HasPrefix(runRowLabel(row), "! "))
+}
+
+func TestRunRowLabelMarksAgentRuns(t *testing.T) {
+	row := queryrunfacts.HistoryRow{Ts: time.Unix(1752700000, 0), DurationMs: 5, Kind: "Select", QueryText: "SELECT 1"}
+	require.NotContains(t, runRowLabel(row), "agent")
+	row.Task, row.TaskCall = "task-ab", "task-ab-3"
+	require.Contains(t, runRowLabel(row), "agent  SELECT 1")
+}
+
+func TestCaptureLine(t *testing.T) {
+	now := time.Unix(1700000600, 0)
+	require.Empty(t, captureLine(queryrunfacts.CaptureStatus{}, now))
+	require.Contains(t, captureLine(queryrunfacts.CaptureStatus{State: queryrunfacts.CaptureAbsent}, now), "start queryrunsd")
+	failing := captureLine(queryrunfacts.CaptureStatus{State: queryrunfacts.CaptureFailing,
+		LastSuccess: time.Unix(1700000000, 0), Exception: "Connection refused"}, now)
+	require.Contains(t, failing, "Capture failing")
+	require.Contains(t, failing, "Connection refused")
+	require.Contains(t, failing, "ago")
+	require.Contains(t, captureLine(queryrunfacts.CaptureStatus{State: queryrunfacts.CaptureRunning, LastSuccess: time.Unix(1700000595, 0)}, now), "last refresh")
 }

@@ -1,6 +1,7 @@
 package fsbrowser
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -225,4 +226,66 @@ func TestFillLayoutIsASplitter(t *testing.T) {
 	// The resolver's answer moving — a reset — retakes the layout from it.
 	f.plan([]float64{0, 90, 140}, 2, 902, floor)
 	assert.Equal(t, []float32{670, 90, 140}, f.w)
+}
+
+// TestFillLayoutSettlesOnAColumnTheTableHolds replays a pane where stored
+// widths overflow it and the outline column cannot be laid out narrower than
+// its indent, disclosure and icon: the table reports it wider than it was
+// given every frame. The layout has to fit the pane, stop re-applying, and
+// still follow a drag.
+func TestFillLayoutSettlesOnAColumnTheTableHolds(t *testing.T) {
+	const (
+		floor   = 36
+		paneW   = 484
+		nameMin = 67.2
+	)
+	resolved := []float64{320, 36, 444.8, 64, 56.6}
+	var f fillT
+	// The table lays out what it was given a frame ago, the name column no
+	// narrower than its content, and reports that.
+	table := func(given []float32) []float32 {
+		out := slices.Clone(given)
+		out[0] = max(out[0], nameMin)
+		return out
+	}
+	frame := func(report func([]float32) []float32) {
+		f.plan(resolved, 1, paneW, floor)
+		if len(f.prev) == len(f.w) {
+			f.dragged(report(f.prev), floor)
+		}
+	}
+	for range 10 {
+		frame(table)
+	}
+	epoch := f.epoch
+	for range 20 {
+		frame(table)
+	}
+	assert.Equal(t, epoch, f.epoch, "a settled layout is not re-applied")
+	assert.InDelta(t, nameMin, f.w[0], 0.01, "the name column keeps the width the table holds it at")
+	var sum float32
+	for i, w := range f.w {
+		assert.GreaterOrEqual(t, w, float32(floor), "column %d", i)
+		sum += w
+	}
+	assert.InDelta(t, paneW-fillSlack, sum, 0.01, "the columns span the pane")
+	assert.Less(t, f.w[2], float32(444.8), "the overflowing column gave")
+
+	// A drag on modified's right edge: modified grows, code gives.
+	modified, code := f.w[2], f.w[3]
+	frame(func(given []float32) []float32 {
+		out := table(given)
+		out[2] += 10
+		return out
+	})
+	for range 5 {
+		frame(table)
+	}
+	assert.InDelta(t, modified+10, f.w[2], 0.01, "the drag holds")
+	assert.InDelta(t, code-10, f.w[3], 0.01)
+	epoch = f.epoch
+	for range 10 {
+		frame(table)
+	}
+	assert.Equal(t, epoch, f.epoch, "and settles")
 }

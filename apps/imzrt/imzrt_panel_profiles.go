@@ -349,8 +349,10 @@ func (inst *App) renderProfilesPanel() {
 				Fraction: snap.Fraction,
 				EtaMs:    snap.EtaMs,
 				Note:     snap.Note,
-				CancelId: inst.ids.PrepareStr("pprof-cancel-" + spec.key),
-			}) {
+				Ids:      inst.ids,
+				ScopeKey: "pprof-" + spec.key,
+				Cancel:   true,
+			}).CancelClicked {
 				e.job.Cancel()
 			}
 		}

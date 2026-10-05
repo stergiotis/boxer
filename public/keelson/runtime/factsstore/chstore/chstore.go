@@ -252,8 +252,7 @@ func (inst *Store) WriteGrant(row factsstore.GrantRow) (id uint64, err error) {
 	}
 	sym := ent.GetSectionSymbol()
 	sym.BeginAttribute("grant").AddMembershipLowCardRef(vocab.MembKindGrant.GetId().Value()).EndAttribute()
-	sym.BeginAttribute(string(row.AppId)).AddMembershipMixedLowCardRef(
-		vocab.MembRuntimeApp.GetId().Value(), []byte(row.AppId)).EndAttribute()
+	sym.BeginAttribute(string(row.AppId)).AddMembershipLowCardRef(vocab.MembRuntimeApp.GetId().Value()).EndAttribute()
 	sym.BeginAttribute(row.Pattern).AddMembershipLowCardRef(vocab.MembGrantSubjectPattern.GetId().Value()).EndAttribute()
 	sym.BeginAttribute(row.Direction.String()).AddMembershipLowCardRef(vocab.MembGrantDirection.GetId().Value()).EndAttribute()
 	grantedVia := row.GrantedVia
@@ -287,8 +286,7 @@ func (inst *Store) WriteAudit(row factsstore.AuditRow) (id uint64, err error) {
 	ent.BeginEntity().SetId(id, nk).SetTimestamp(ts)
 	sym := ent.GetSectionSymbol()
 	sym.BeginAttribute("audit").AddMembershipLowCardRef(vocab.MembKindAudit.GetId().Value()).EndAttribute()
-	sym.BeginAttribute(string(row.AppId)).AddMembershipMixedLowCardRef(
-		vocab.MembRuntimeApp.GetId().Value(), []byte(row.AppId)).EndAttribute()
+	sym.BeginAttribute(string(row.AppId)).AddMembershipLowCardRef(vocab.MembRuntimeApp.GetId().Value()).EndAttribute()
 	sym.BeginAttribute(row.Subject).AddMembershipLowCardRef(vocab.MembAuditRequestSubject.GetId().Value()).EndAttribute()
 	if row.Result != "" {
 		sym.BeginAttribute(row.Result).AddMembershipLowCardRef(vocab.MembAuditResult.GetId().Value()).EndAttribute()
@@ -368,8 +366,7 @@ func (inst *Store) encodeLogEntity(ent *dml.InEntityFacts, id uint64, row factss
 	sym := ent.GetSectionSymbol()
 	sym.BeginAttribute("log").AddMembershipLowCardRef(vocab.MembKindLog.GetId().Value()).EndAttribute()
 	if row.AppId != "" {
-		sym.BeginAttribute(string(row.AppId)).AddMembershipMixedLowCardRef(
-			vocab.MembRuntimeApp.GetId().Value(), []byte(row.AppId)).EndAttribute()
+		sym.BeginAttribute(string(row.AppId)).AddMembershipLowCardRef(vocab.MembRuntimeApp.GetId().Value()).EndAttribute()
 	}
 	if row.Level != "" {
 		sym.BeginAttribute(row.Level).AddMembershipLowCardRef(vocab.MembLogLevel.GetId().Value()).EndAttribute()
@@ -500,12 +497,11 @@ func writeLogTypedFields(ent *dml.InEntityFacts, fields []factsstore.LogField, l
 // which reads back as an unattributed row rather than as a row belonging to
 // run "".
 //
-// The attribute VALUE carries the run id as well as the high-cardinality
-// parameter. That is how WriteRuntimeStart has always written it, and it is
-// what lets a reader gather the run through the value lane
-// (LW_CO_GATHER(`symbol:value`, LW_SEL_ATTRS(…))) — the parameter lane holds
-// the same bytes, but LW_GET refuses a mixed channel without a param: token,
-// and here the parameter is the thing being read.
+// The run rides the plain channel as the attribute's value, as the app id
+// does (ADR-0277 §SD8): the mixed channel carried the same bytes a second
+// time as the membership's parameter, which added nothing and kept these
+// rows from reading as the trail's Origin component. A row written this way
+// satisfies that component by its slots.
 func (inst *Store) stampRun(sym *dml.InEntityFactsSectionSymbol, rowRunId string) {
 	runId := rowRunId
 	if runId == "" {
@@ -514,8 +510,7 @@ func (inst *Store) stampRun(sym *dml.InEntityFactsSectionSymbol, rowRunId string
 	if runId == "" {
 		return
 	}
-	sym.BeginAttribute(runId).AddMembershipMixedLowCardRef(
-		vocab.MembRuntimeRun.GetId().Value(), []byte(runId)).EndAttribute()
+	sym.BeginAttribute(runId).AddMembershipLowCardRef(vocab.MembRuntimeRun.GetId().Value()).EndAttribute()
 }
 
 // stampInstance writes the window key onto an already-open u64 section
@@ -558,6 +553,9 @@ func (inst *Store) WriteRuntimeStart(row factsstore.RuntimeStartRow) (id uint64,
 	}
 	if row.ModulePath != "" {
 		sym.BeginAttribute(row.ModulePath).AddMembershipLowCardRef(vocab.MembRunModulePath.GetId().Value()).EndAttribute()
+	}
+	if row.BuildId != "" {
+		sym.BeginAttribute(row.BuildId).AddMembershipLowCardRef(vocab.MembRunBuildId.GetId().Value()).EndAttribute()
 	}
 	sym.EndSection()
 
@@ -621,8 +619,7 @@ func (inst *Store) WriteAppLifecycle(row factsstore.AppLifecycleRow) (id uint64,
 
 	sym := ent.GetSectionSymbol()
 	sym.BeginAttribute("app-lifecycle").AddMembershipLowCardRef(vocab.MembKindAppLifecycle.GetId().Value()).EndAttribute()
-	sym.BeginAttribute(string(row.AppId)).AddMembershipMixedLowCardRef(
-		vocab.MembRuntimeApp.GetId().Value(), []byte(row.AppId)).EndAttribute()
+	sym.BeginAttribute(string(row.AppId)).AddMembershipLowCardRef(vocab.MembRuntimeApp.GetId().Value()).EndAttribute()
 	inst.stampRun(sym, row.RunId)
 	sym.BeginAttribute(phase).AddMembershipLowCardRef(vocab.MembLifecyclePhase.GetId().Value()).EndAttribute()
 	sym.EndSection()
@@ -661,10 +658,8 @@ func (inst *Store) WriteLaunch(row factsstore.LaunchRow) (id uint64, err error) 
 
 	sym := ent.GetSectionSymbol()
 	sym.BeginAttribute("launch").AddMembershipLowCardRef(vocab.MembKindLaunch.GetId().Value()).EndAttribute()
-	sym.BeginAttribute(string(row.TargetAppId)).AddMembershipMixedLowCardRef(
-		vocab.MembRuntimeApp.GetId().Value(), []byte(row.TargetAppId)).EndAttribute()
-	sym.BeginAttribute(string(row.CallerAppId)).AddMembershipMixedLowCardRef(
-		vocab.MembLaunchCaller.GetId().Value(), []byte(row.CallerAppId)).EndAttribute()
+	sym.BeginAttribute(string(row.TargetAppId)).AddMembershipLowCardRef(vocab.MembRuntimeApp.GetId().Value()).EndAttribute()
+	sym.BeginAttribute(string(row.CallerAppId)).AddMembershipLowCardRef(vocab.MembLaunchCaller.GetId().Value()).EndAttribute()
 	inst.stampRun(sym, row.RunId)
 	if row.ConfigKind != "" {
 		sym.BeginAttribute(row.ConfigKind).AddMembershipLowCardRef(vocab.MembLaunchConfigKind.GetId().Value()).EndAttribute()

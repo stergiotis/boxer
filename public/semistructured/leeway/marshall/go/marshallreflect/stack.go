@@ -88,7 +88,8 @@ func NewRowComposer(dml any, lookup LookupI) *RowComposer {
 // plainOwner's plan resolution / plain-column emit fails. Errors
 // surface before any DML method is called when the cause is
 // composer-state related; plan / DML errors propagate from the
-// underlying emit.
+// underlying emit, and the entity BeginRow opened is rolled back
+// (RollbackEntity), closing the row.
 func (c *RowComposer) BeginRow(plainOwner any) (err error) {
 	defer recoverContract(&err)
 	if c.inRow {
@@ -103,12 +104,28 @@ func (c *RowComposer) BeginRow(plainOwner any) (err error) {
 	c.inRow = true
 	c.buf.Reset()
 	clear(c.open)
+	defer func() {
+		if err != nil {
+			c.abandonRow()
+		}
+	}()
+	// Deferred after abandonRow so it runs first: a contract violation raised
+	// mid-row becomes err before abandonRow checks it.
+	defer recoverContract(&err)
 
 	if err = marshalPlain(c.dml, rowVal, plan); err != nil {
 		return
 	}
 	err = c.buffer(plan, rowVal, groups)
 	return
+}
+
+// abandonRow rolls the DML's open entity back and closes the composer's row,
+// so a failed BeginRow or CommitRow leaves both ready for the next BeginRow.
+func (c *RowComposer) abandonRow() {
+	c.inRow = false
+	c.buf.Reset()
+	rollbackEntity(c.dml)
 }
 
 // AddSections contributes `row`'s sections to the currently open
@@ -177,7 +194,8 @@ func (c *RowComposer) section(name string) (sec reflect.Value) {
 // CommitRow closes the open entity by calling CommitEntity on the
 // DML. The entity-level error returned by CommitEntity (if any) is
 // surfaced. After CommitRow the composer is ready for the next
-// BeginRow.
+// BeginRow; on an error the entity is rolled back (RollbackEntity)
+// rather than left open on the DML.
 func (c *RowComposer) CommitRow() (err error) {
 	defer recoverContract(&err)
 	if !c.inRow {
@@ -185,6 +203,14 @@ func (c *RowComposer) CommitRow() (err error) {
 		return
 	}
 	c.inRow = false
+	defer func() {
+		if err != nil {
+			c.abandonRow()
+		}
+	}()
+	// Deferred after abandonRow so it runs first: a contract violation raised
+	// mid-row becomes err before abandonRow checks it.
+	defer recoverContract(&err)
 	if err = c.flushSections(); err != nil {
 		return
 	}

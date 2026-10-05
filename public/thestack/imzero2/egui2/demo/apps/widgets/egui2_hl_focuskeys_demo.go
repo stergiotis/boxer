@@ -79,7 +79,7 @@ type focusDemoState struct {
 	lastFocused int
 	// handles are the ids the panels' Frames ACTUALLY sent, captured during
 	// render. Not the ids handed to c.Frame: the generated factory calls
-	// i.DeriveStacked(), so the value on the wire is re-derived against the id
+	// i.Derive(), so the value on the wire is re-derived against the id
 	// stack and differs from what the caller passed. FrameFluid.Id() is the
 	// only correct source, and reading r7 or calling RequestFocus with
 	// anything else fails SILENTLY — which is SD7's trap, one level deeper
@@ -208,7 +208,7 @@ func (inst *focusDemoState) focused() int {
 
 func (inst *focusDemoState) panel(ids *c.WidgetIdStack, name string, which int, captures bool) {
 	// Build the Frame FIRST and take the id it will send. c.Frame stamps its id
-	// at construction via DeriveStacked(), so this is the only value that
+	// at construction via Derive(), so this is the only value that
 	// matches what r7 is keyed by; the decoration is chained on afterwards.
 	f := c.Frame(ids.PrepareStr("fk-panel-" + name))
 	id := f.Id()

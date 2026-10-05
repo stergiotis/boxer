@@ -46,7 +46,7 @@ import (
 // its schema is leeway-shaped (CardDriver.EnsureFor decides).
 //
 // The sinks, their row caps and their settings are vizeval's catalogue
-// (ADR-0257, proposed, §SD1–SD2): the sink bar and the option controls are
+// (ADR-0266, proposed, §SD1–SD2): the sink bar and the option controls are
 // drawn from it, and TestExperimentsImplementsTheCatalogue holds the pane to
 // it. What the pane shows can be seeded at launch as one candidate
 // (BOXER_PLAY_EXPERIMENTS, §SD3), and its output is wrapped in one named
@@ -154,7 +154,7 @@ type experimentsDriver struct {
 	// boxW / boxH, when non-zero, are the artifact box a seed declared: the
 	// region the sink draws in is exactly that size, whatever the pane has
 	// room for, so a capture's artifact does not move with play's chrome
-	// (ADR-0257 §SD3).
+	// (ADR-0266 §SD3).
 	boxW, boxH float32
 
 	// Built output, invalidated by key.
@@ -163,6 +163,8 @@ type experimentsDriver struct {
 	notice   string
 	topoSink *leewaywidgets.TopologySink
 	topoView *treemap.Treemap
+	// topoEvents is the topology treemap's last Render (the hovered cell).
+	topoEvents treemap.Events
 	// chartModel is the chart sink's projection of the batch; chartView draws
 	// it and keeps the heatmap's colour scale across frames.
 	chartModel *leewaywidgets.ChartModel
@@ -274,7 +276,7 @@ type experimentsSeed struct {
 // applySeed puts the pane in the state a seed names. Anything that does not
 // resolve against the catalogue is refused — the caller fails the mount —
 // rather than drawn with defaults, because a scripted run that captures the
-// wrong candidate is worse than one that stops (ADR-0257 §SD3).
+// wrong candidate is worse than one that stops (ADR-0266 §SD3).
 func (inst *experimentsDriver) applySeed(raw string) (err error) {
 	var seed experimentsSeed
 	if err = json.Unmarshal([]byte(raw), &seed, json.RejectUnknownMembers(true)); err != nil {
@@ -318,7 +320,7 @@ func (inst *experimentsDriver) isTextSink() bool {
 }
 
 // capRows is how many of n rows the selected sink draws, and the notice to
-// show when that is fewer than n: the cut is said, never silent (ADR-0257
+// show when that is fewer than n: the cut is said, never silent (ADR-0266
 // §SD1).
 func (inst *experimentsDriver) capRows(n int64) (drawn int64, notice string) {
 	spec := inst.spec()
@@ -512,7 +514,7 @@ func (inst *experimentsDriver) ensureBuilt(rec arrow.RecordBatch, schema *arrow.
 	inst.built = true
 	inst.notice = ""
 	inst.topoSink = nil
-	inst.topoView = nil
+	inst.topoView, inst.topoEvents = nil, treemap.Events{}
 	inst.chartModel = nil
 	inst.graphModel = nil
 	inst.hierModel = nil
@@ -548,7 +550,7 @@ func (inst *experimentsDriver) makeSink(cand vizeval.Candidate) (sink streamread
 			// topologyPointerLine above the picture instead, in the unit these
 			// sizes are actually in.
 			inst.topoView = leewaywidgets.NewTopologyTreemap(inst.ids, "play-exp-topo", topo,
-				treemap.WithStatusLine(false))
+				treemap.Options{HideStatusLine: true})
 		}
 	case vizeval.SinkJSON:
 		enc := jsontext.NewEncoder(buf, jsontext.Multiline(true), jsontext.WithIndent("  "))
@@ -732,7 +734,7 @@ const (
 // changed: the emitter takes its palette at construction.
 func (inst *experimentsDriver) cardEmitter(palette string) *leewaywidgets.Table2CardEmitter {
 	if inst.card == nil || inst.cardPalette != palette {
-		inst.card = leewaywidgets.NewTable2CardEmitter(inst.cardIds, experimentsPalettes[palette], nil)
+		inst.card = leewaywidgets.NewTable2CardEmitter(inst.cardIds, "experiments-card", experimentsPalettes[palette], nil)
 		// Without this the emitter flushes at EndBatch — inside the drive —
 		// and renderCard draws the same widgets a second time. CardDriver sets
 		// it for the same reason.
@@ -825,8 +827,7 @@ func (inst *experimentsDriver) renderTopology() {
 	// used to be 8pt for a control row the probe already excludes, which left
 	// the breadcrumb bar and the summary line unbudgeted and the picture that
 	// far past the leaf.
-	inst.topoView.SetContainerSize(experimentsTopoPaneFill.box(inst.paneW, inst.paneH))
-	inst.topoView.Render()
+	inst.topoEvents = inst.topoView.Render(experimentsTopoPaneFill.box(inst.paneW, inst.paneH))
 }
 
 // renderChart draws the chart sink's model under the candidate's options, in
@@ -836,7 +837,7 @@ func (inst *experimentsDriver) renderChart(cand vizeval.Candidate) {
 		return
 	}
 	if inst.chartView == nil {
-		inst.chartView = leewaywidgets.NewChartView(inst.ids)
+		inst.chartView = leewaywidgets.NewChartView(inst.ids, "experiments-chart")
 	}
 	if availW, availH, ok := c.CapturePaneSize(inst.ids.PrepareHighEntropy(experimentsChartPaneProbeSalt).Derive()); ok &&
 		availW > 0 && availH > 0 &&
@@ -855,7 +856,7 @@ func (inst *experimentsDriver) renderGraph(cand vizeval.Candidate) {
 		return
 	}
 	if inst.graphView == nil {
-		inst.graphView = leewaywidgets.NewGraphView(inst.ids)
+		inst.graphView = leewaywidgets.NewGraphView(inst.ids, "experiments-graph")
 	}
 	if availW, availH, ok := c.CapturePaneSize(inst.ids.PrepareHighEntropy(experimentsGraphPaneProbeSalt).Derive()); ok &&
 		availW > 0 && availH > 0 &&
@@ -873,7 +874,7 @@ func (inst *experimentsDriver) renderHierarchy(cand vizeval.Candidate) {
 		return
 	}
 	if inst.hierView == nil {
-		inst.hierView = leewaywidgets.NewHierarchyView(inst.ids)
+		inst.hierView = leewaywidgets.NewHierarchyView(inst.ids, "experiments-hierarchy")
 	}
 	if availW, availH, ok := c.CapturePaneSize(inst.ids.PrepareHighEntropy(experimentsHierarchyPaneProbeSalt).Derive()); ok &&
 		availW > 0 && availH > 0 &&
@@ -890,7 +891,7 @@ func (inst *experimentsDriver) renderLens(cand vizeval.Candidate) {
 		return
 	}
 	if inst.lensView == nil {
-		inst.lensView = leewaywidgets.NewLensView(inst.ids)
+		inst.lensView = leewaywidgets.NewLensView(inst.ids, "experiments-lens")
 	}
 	if availW, availH, ok := c.CapturePaneSize(inst.ids.PrepareHighEntropy(experimentsLensPaneProbeSalt).Derive()); ok &&
 		availW > 0 && availH > 0 &&
@@ -986,7 +987,7 @@ func chartOptionsOf(cand vizeval.Candidate) (o leewaywidgets.ChartOptions) {
 // topologyPointerLine reads the box under the pointer, or names the gesture
 // when there is nothing under it.
 //
-// It replaces the widget's own summary line (WithStatusLine(false) at
+// It replaces the widget's own summary line (HideStatusLine at
 // construction), which ran its totals through formatBytes: right for the
 // filesystem trees that widget was written against, wrong here, where a cell's
 // size is an ATTRIBUTE COUNT. It read "total size: 7 B" for seven attributes —
@@ -994,7 +995,7 @@ func chartOptionsOf(cand vizeval.Candidate) (o leewaywidgets.ChartOptions) {
 // budgeting its leaf for the widget's chrome.
 func (inst *experimentsDriver) topologyPointerLine() string {
 	if inst.topoView != nil {
-		if n := inst.topoView.HoveredNode(); n != nil {
+		if n := inst.topoEvents.Hovered; n != nil {
 			return fmt.Sprintf("%s — %.0f attribute(s)", n.Name, n.TotalSize())
 		}
 	}

@@ -41,7 +41,7 @@ const (
 
 // resolveDiameter returns the explicit Diameter override when set, else the
 // density-scaled Size preset.
-func (inst Renderer) resolveDiameter() float32 {
+func (inst dial) resolveDiameter() float32 {
 	if inst.diameter > 0 {
 		return inst.diameter
 	}
@@ -50,7 +50,7 @@ func (inst Renderer) resolveDiameter() float32 {
 
 // fonts returns the readout and the tick/label font sizes for the configured
 // size and density, drawn from the IDS type scale (ADR-0030).
-func (inst Renderer) fonts() (value, label float32) {
+func (inst dial) fonts() (value, label float32) {
 	d := inst.density
 	switch inst.size {
 	case SizeSm:
@@ -61,7 +61,7 @@ func (inst Renderer) fonts() (value, label float32) {
 }
 
 // formatValue applies the formatter (defaulting if nil) and appends the suffix.
-func (inst Renderer) formatValue(v float64) string {
+func (inst dial) formatValue(v float64) string {
 	f := inst.formatFunc
 	if f == nil {
 		f = defaultFormat
@@ -73,8 +73,8 @@ func (inst Renderer) formatValue(v float64) string {
 // (ADR-0068 §SD4). Out-of-range inputs fall back to SizeMd / Standard.
 func diameterFor(size SizeE, density styletokens.DensityE) float32 {
 	ladder := [3][3]float32{
-		{88, 96, 112},   // SizeSm: tight / standard / roomy
-		{132, 144, 168}, // SizeMd
+		{132, 144, 168}, // SizeMd: tight / standard / roomy
+		{88, 96, 112},   // SizeSm
 		{192, 208, 240}, // SizeLg
 	}
 	si := int(size)
@@ -89,10 +89,11 @@ func diameterFor(size SizeE, density styletokens.DensityE) float32 {
 }
 
 // valueToAngle maps v on [min,max] to an angle on [startDeg,endDeg], clamping
-// v into range so the needle never leaves the sweep. A degenerate range parks
-// at startDeg.
+// v into range so the needle never leaves the sweep. A degenerate range or a
+// NaN reading parks at startDeg; min/max would otherwise pass the NaN through
+// to every needle vertex.
 func valueToAngle(v, lo, hi float64, startDeg, endDeg float32) float32 {
-	if hi <= lo {
+	if !(hi > lo) || math.IsNaN(v) {
 		return startDeg
 	}
 	t := min(1, max(0, (v-lo)/(hi-lo)))

@@ -48,6 +48,11 @@ pub struct ImageCache {
     /// non-exporting callers and unit tests; production wires it up in
     /// `ImZeroFffi::new` via `attach_texture_cache`.
     texture_cache: Option<crate::imzero2::svgexport::TexturePixelCacheHandle>,
+    /// Set while a capture replay runs (ADR-0281 §SD5): nothing is uploaded
+    /// into the capture context and no live entry changes; a texture the
+    /// live context does not hold is not drawn, and counted here.
+    pub read_only: bool,
+    pub refused_uploads: u64,
 }
 
 impl ImageCache {
@@ -74,8 +79,35 @@ impl ImageCache {
     pub fn tick(&mut self) {
         self.frame = self.frame.wrapping_add(1);
         let frame = self.frame;
-        self.entries
-            .retain(|_, e| frame.saturating_sub(e.last_touched_frame) < Self::MAX_AGE_FRAMES);
+        let cache = self.texture_cache.as_ref();
+        self.entries.retain(|_, e| {
+            let keep = frame.saturating_sub(e.last_touched_frame) < Self::MAX_AGE_FRAMES;
+            if !keep && let Some(cache) = cache {
+                // The evicted texture's id is never drawn again; its pixel
+                // mirror would otherwise stay in the export cache for good.
+                cache.lock().expect("texture cache poisoned").remove(e.tex.id());
+            }
+            keep
+        });
+    }
+
+    /// True when a `w`×`h` texture fits the device's `max_texture_side`.
+    /// egui only `debug_assert!`s the limit, and wgpu's default error handler
+    /// panics on the oversized `create_texture`, so an image the app sized
+    /// past the limit is refused here rather than taking the host down.
+    fn fits_texture_side(ctx: &Context, id: u64, w: u32, h: u32) -> bool {
+        let max = ctx.input(|i| i.max_texture_side);
+        let fits = (w as usize) <= max && (h as usize) <= max;
+        if !fits {
+            tracing::warn!(
+                id = id,
+                w = w,
+                h = h,
+                max_texture_side = max,
+                "image: texture exceeds max_texture_side; skipping upload"
+            );
+        }
+        fits
     }
 
     /// Drop the cache entry (and its GPU texture) for `id`. Invoked from the
@@ -102,6 +134,10 @@ impl ImageCache {
         filter_opts: TextureOptions,
         pixels: &[u32],
     ) {
+        if self.read_only {
+            self.refused_uploads += 1;
+            return;
+        }
         let color_pixels: Vec<Color32> = pixels.iter().map(|v| color32_from_rgba_u32(*v)).collect();
         let img = ColorImage::new([w as usize, h as usize], color_pixels.clone());
         let tex = ctx.load_texture(format!("image:{id}"), img, filter_opts);
@@ -128,7 +164,8 @@ impl ImageCache {
             cache.lock().expect("texture cache poisoned").insert(tex.id(), w, h, rgba, nearest);
         }
 
-        self.entries.insert(
+        let new_tex_id = tex.id();
+        let replaced = self.entries.insert(
             id,
             Entry {
                 tex,
@@ -138,6 +175,15 @@ impl ImageCache {
                 last_touched_frame: self.frame,
             },
         );
+        // Every `load_texture` hands out a fresh TextureId, so the replaced
+        // entry's mirror is keyed by an id nothing will draw again. Drop it,
+        // or each re-upload leaks one full RGBA copy into the export cache.
+        if let Some(old) = replaced
+            && old.tex.id() != new_tex_id
+            && let Some(cache) = &self.texture_cache
+        {
+            cache.lock().expect("texture cache poisoned").remove(old.tex.id());
+        }
     }
 
     /// Upload-if-needed and return the cached texture id **without drawing**.
@@ -165,7 +211,9 @@ impl ImageCache {
         if needs_upload && !pixels.is_empty() {
             let expected = (w as usize).saturating_mul(h as usize);
             if pixels.len() == expected {
-                self.upload(ctx, id, w, h, content_version, filter_opts, pixels);
+                if Self::fits_texture_side(ctx, id, w, h) {
+                    self.upload(ctx, id, w, h, content_version, filter_opts, pixels);
+                }
             } else {
                 tracing::warn!(
                     id = id,
@@ -300,7 +348,7 @@ impl ImageCache {
                     );
                     // Fall through to draw whatever was cached (may be stale or
                     // absent — handled below).
-                } else {
+                } else if Self::fits_texture_side(ctx, id, w, h) {
                     self.upload(ctx, id, w, h, content_version, filter_opts, pixels);
                 }
             }
@@ -362,5 +410,61 @@ impl ImageCache {
         };
 
         (resp, hover_rc, false)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::imzero2::svgexport::{TexturePixelCache, TexturePixelCacheHandle};
+    use std::sync::{Arc, Mutex};
+
+    fn cache_with_mirror() -> (ImageCache, TexturePixelCacheHandle) {
+        let mirror: TexturePixelCacheHandle = Arc::new(Mutex::new(TexturePixelCache::default()));
+        let mut c = ImageCache::new();
+        c.attach_texture_cache(mirror.clone());
+        (c, mirror)
+    }
+
+    #[test]
+    fn reupload_drops_the_replaced_mirror_entry() {
+        let ctx = Context::default();
+        let (mut c, mirror) = cache_with_mirror();
+        let px = [0xff00_00ffu32; 4];
+        let first = c.ensure(&ctx, 7, 2, 2, 1, TextureOptions::NEAREST, &px).unwrap();
+        let second = c.ensure(&ctx, 7, 2, 2, 2, TextureOptions::NEAREST, &px).unwrap();
+        assert_ne!(
+            first, second,
+            "load_texture hands out a fresh id per upload"
+        );
+        let m = mirror.lock().unwrap();
+        assert!(
+            m.get(first).is_none(),
+            "the replaced texture's pixels must leave the mirror"
+        );
+        assert!(m.get(second).is_some());
+    }
+
+    #[test]
+    fn oversized_image_is_refused_not_uploaded() {
+        let ctx = Context::default();
+        let max = ctx.input(|i| i.max_texture_side) as u32;
+        let (mut c, _mirror) = cache_with_mirror();
+        let px = vec![0u32; (max + 1) as usize];
+        assert!(c.ensure(&ctx, 1, max + 1, 1, 1, TextureOptions::NEAREST, &px).is_none());
+        assert!(c.entries.is_empty());
+    }
+
+    #[test]
+    fn idle_eviction_drops_the_mirror_entry() {
+        let ctx = Context::default();
+        let (mut c, mirror) = cache_with_mirror();
+        let px = [0u32; 1];
+        let tex = c.ensure(&ctx, 3, 1, 1, 1, TextureOptions::NEAREST, &px).unwrap();
+        for _ in 0..ImageCache::MAX_AGE_FRAMES {
+            c.tick();
+        }
+        assert!(c.entries.is_empty());
+        assert!(mirror.lock().unwrap().get(tex).is_none());
     }
 }

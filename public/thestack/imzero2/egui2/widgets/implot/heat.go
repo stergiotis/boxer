@@ -79,23 +79,28 @@ func (p *Plot) Histogram2D(label string, xs []float64, ys []float64, xBins int, 
 		return p
 	}
 	if cm.DataMax <= cm.DataMin {
+		// Auto-range on a copy: writing the range into the caller's Config
+		// would make it non-degenerate, freezing every later frame at this
+		// frame's maximum count and leaking into plots sharing the Config.
 		vmax := 0.0
 		for _, v := range values {
 			vmax = math.Max(vmax, v)
 		}
-		cm.DataMin, cm.DataMax = 0, math.Max(vmax, 1)
+		local := *cm
+		local.DataMin, local.DataMax = 0, math.Max(vmax, 1)
+		cm = &local
 	}
 	return p.Heatmap(label, values, yBins, xBins, cm, x0, y0, x1, y1)
 }
 
-// binSamples is the shared 1D binning core: NaNs dropped, Sturges default,
-// clamp-to-edge on the max sample. Returns per-bin heights (already
+// binSamples is the shared 1D binning core: non-finite samples dropped,
+// Sturges default, clamp-to-edge on the max sample. Returns per-bin heights (already
 // density-normalized when asked), the low edge, the bin width and the
 // retained sample count.
 func binSamples(samples []float64, bins int, density bool) (counts []float64, lo float64, width float64, n int) {
 	lo, hi := math.Inf(1), math.Inf(-1)
 	for _, v := range samples {
-		if math.IsNaN(v) {
+		if !isFinite(v) {
 			continue
 		}
 		lo = math.Min(lo, v)
@@ -108,16 +113,18 @@ func binSamples(samples []float64, bins int, density bool) (counts []float64, lo
 	if bins <= 0 {
 		bins = int(math.Ceil(math.Log2(float64(n)))) + 1
 	}
-	counts = make([]float64, bins)
+	// A finite range can still overflow its span (-1e308..1e308), which
+	// would make every index NaN.
 	width = (hi - lo) / float64(bins)
+	if !isFinite(width) || width <= 0 {
+		return nil, 0, 0, 0
+	}
+	counts = make([]float64, bins)
 	for _, v := range samples {
-		if math.IsNaN(v) {
+		if !isFinite(v) {
 			continue
 		}
-		idx := int((v - lo) / width)
-		if idx >= bins {
-			idx = bins - 1
-		}
+		idx := min(max(int((v-lo)/width), 0), bins-1)
 		counts[idx]++
 	}
 	if density {
@@ -138,7 +145,7 @@ func bin2D(xs []float64, ys []float64, xBins int, yBins int) (values []float64, 
 	y0, y1 = math.Inf(1), math.Inf(-1)
 	kept := 0
 	for i := range n {
-		if math.IsNaN(xs[i]) || math.IsNaN(ys[i]) {
+		if !isFinite(xs[i]) || !isFinite(ys[i]) {
 			continue
 		}
 		x0 = math.Min(x0, xs[i])
@@ -150,21 +157,18 @@ func bin2D(xs []float64, ys []float64, xBins int, yBins int) (values []float64, 
 	if kept == 0 || x1 <= x0 || y1 <= y0 || xBins < 1 || yBins < 1 {
 		return nil, 0, 0, 0, 0, false
 	}
-	values = make([]float64, xBins*yBins)
 	xw := (x1 - x0) / float64(xBins)
 	yw := (y1 - y0) / float64(yBins)
+	if !isFinite(xw) || !isFinite(yw) || xw <= 0 || yw <= 0 {
+		return nil, 0, 0, 0, 0, false
+	}
+	values = make([]float64, xBins*yBins)
 	for i := range n {
-		if math.IsNaN(xs[i]) || math.IsNaN(ys[i]) {
+		if !isFinite(xs[i]) || !isFinite(ys[i]) {
 			continue
 		}
-		xi := int((xs[i] - x0) / xw)
-		if xi >= xBins {
-			xi = xBins - 1
-		}
-		yi := int((ys[i] - y0) / yw)
-		if yi >= yBins {
-			yi = yBins - 1
-		}
+		xi := min(max(int((xs[i]-x0)/xw), 0), xBins-1)
+		yi := min(max(int((ys[i]-y0)/yw), 0), yBins-1)
 		row := yBins - 1 - yi // row 0 = top = max-y bin
 		values[row*xBins+xi]++
 	}
@@ -252,3 +256,8 @@ func (p *Plot) emitHeatmap(s *seriesFrame, tr transform) {
 // emptyPixels is the non-nil empty slice the ship-once protocol sends for
 // an unchanged texture (nil would read as a different wire shape).
 var emptyPixels = []uint32{}
+
+// isFinite reports whether v is neither NaN nor ±Inf.
+func isFinite(v float64) bool {
+	return !math.IsNaN(v) && !math.IsInf(v, 0)
+}

@@ -65,7 +65,10 @@ func (inst *Evaluator) Close() (err error) {
 	return
 }
 
-const queryTemplate = `WITH toDateTime64('%s', 3, '%s') AS anchor_now
+// queryTemplate hands the anchor over as an instant (epoch milliseconds)
+// rather than a wall-clock string: toDateTime64('…', 3, tz) would read the
+// string as wall-clock time in tz and shift anchor_now by the zone offset.
+const queryTemplate = `WITH fromUnixTimestamp64Milli(toInt64(%d), '%s') AS anchor_now
 SELECT
   toUnixTimestamp64Milli(CAST((%s) AS DateTime64(3, '%s'))) AS from_ms,
   toUnixTimestamp64Milli(CAST((%s) AS DateTime64(3, '%s'))) AS to_ms`
@@ -89,8 +92,7 @@ func (inst *Evaluator) Eval(ctx context.Context, anchor time.Time, tzID uint16, 
 		err = eh.Errorf("evaluator: resolve tz: %w", tzErr)
 		return
 	}
-	anchorStr := anchor.UTC().Format("2006-01-02 15:04:05.000")
-	sql := fmt.Sprintf(queryTemplate, anchorStr, tzName, fromExpr, tzName, toExpr, tzName)
+	sql := fmt.Sprintf(queryTemplate, anchor.UnixMilli(), tzName, fromExpr, tzName, toExpr, tzName)
 
 	rep, runErr := chlocalbroker.ExecOnPool(ctx, inst.bus, inst.poolName, chlocalbroker.ExecRequest{
 		SQL:    sql,

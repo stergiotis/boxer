@@ -93,8 +93,11 @@ type rewriteTraceState struct {
 	conditions bool
 	gen        uint64
 	valid      bool // obs describes (forSQL, conditions)
-	pending    bool // a goroutine is computing (forSQL, conditions)
-	obs        []passreg.ApplyObservation
+	// forRaw is the editor buffer forSQL was built from, so a reader that
+	// must not start a measurement can tell whether obs is this buffer's.
+	forRaw  string
+	pending bool // a goroutine is computing (forSQL, conditions)
+	obs     []passreg.ApplyObservation
 }
 
 // rewriteTraceFor returns the client-side rewrite's per-unit outcomes for the
@@ -135,7 +138,7 @@ func (inst *PlayApp) rewriteTraceFor() (obs []passreg.ApplyObservation, ok bool)
 	}
 	st.gen++
 	gen := st.gen
-	st.forSQL, st.conditions = runSQL, conds
+	st.forSQL, st.conditions, st.forRaw = runSQL, conds, inst.sql
 	st.valid, st.pending, st.obs = false, true, nil
 	client := inst.client
 	go func() {
@@ -147,6 +150,19 @@ func (inst *PlayApp) rewriteTraceFor() (obs []passreg.ApplyObservation, ok bool)
 		}
 		st.obs, st.valid, st.pending = computed, true, false
 	}()
+	return nil, false
+}
+
+// rewriteTraceMeasured returns the trace when one was measured for the
+// current buffer, without starting a measurement — for get_diagnostics,
+// which must not make every edit pay for a trace nobody draws.
+func (inst *PlayApp) rewriteTraceMeasured() (obs []passreg.ApplyObservation, ok bool) {
+	st := &inst.rewriteTrace
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if st.valid && st.forRaw == inst.sql {
+		return st.obs, true
+	}
 	return nil, false
 }
 

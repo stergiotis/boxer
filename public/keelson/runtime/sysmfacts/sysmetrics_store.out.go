@@ -1083,7 +1083,9 @@ func (inst *SysmetricsEntityBuilder) Rollback() (err error) {
 
 // IngestSysCpu buffers one whole entity per row carrying only the
 // SysCpu component, all stamped with ts — rows ship on the next Flush,
-// like every write. Keys must be distinct within one call (rows
+// like every write. The envelope carries the pass-through columns
+// the row binds; the others are written zero — use Begin with a
+// filled envelope to set them. Keys must be distinct within one call (rows
 // share ts, so duplicates would tie on Order): a duplicate returns
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
@@ -1096,7 +1098,7 @@ func (inst *SysmetricsStore) IngestSysCpu(ts time.Time, rows []SysCpu) (err erro
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{}).AddSysCpu(rows[i]).Commit()
+		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysCpu(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest sysCpu row %d: %w", i, err)
 			return
@@ -1107,7 +1109,9 @@ func (inst *SysmetricsStore) IngestSysCpu(ts time.Time, rows []SysCpu) (err erro
 
 // IngestSysCpuInfo buffers one whole entity per row carrying only the
 // SysCpuInfo component, all stamped with ts — rows ship on the next Flush,
-// like every write. Keys must be distinct within one call (rows
+// like every write. The envelope carries the pass-through columns
+// the row binds; the others are written zero — use Begin with a
+// filled envelope to set them. Keys must be distinct within one call (rows
 // share ts, so duplicates would tie on Order): a duplicate returns
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
@@ -1120,7 +1124,7 @@ func (inst *SysmetricsStore) IngestSysCpuInfo(ts time.Time, rows []SysCpuInfo) (
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{}).AddSysCpuInfo(rows[i]).Commit()
+		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysCpuInfo(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest sysCpuInfo row %d: %w", i, err)
 			return
@@ -1131,7 +1135,9 @@ func (inst *SysmetricsStore) IngestSysCpuInfo(ts time.Time, rows []SysCpuInfo) (
 
 // IngestSysMem buffers one whole entity per row carrying only the
 // SysMem component, all stamped with ts — rows ship on the next Flush,
-// like every write. Keys must be distinct within one call (rows
+// like every write. The envelope carries the pass-through columns
+// the row binds; the others are written zero — use Begin with a
+// filled envelope to set them. Keys must be distinct within one call (rows
 // share ts, so duplicates would tie on Order): a duplicate returns
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
@@ -1144,7 +1150,7 @@ func (inst *SysmetricsStore) IngestSysMem(ts time.Time, rows []SysMem) (err erro
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{}).AddSysMem(rows[i]).Commit()
+		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysMem(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest sysMem row %d: %w", i, err)
 			return
@@ -1155,7 +1161,9 @@ func (inst *SysmetricsStore) IngestSysMem(ts time.Time, rows []SysMem) (err erro
 
 // IngestSysPsi buffers one whole entity per row carrying only the
 // SysPsi component, all stamped with ts — rows ship on the next Flush,
-// like every write. Keys must be distinct within one call (rows
+// like every write. The envelope carries the pass-through columns
+// the row binds; the others are written zero — use Begin with a
+// filled envelope to set them. Keys must be distinct within one call (rows
 // share ts, so duplicates would tie on Order): a duplicate returns
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
@@ -1168,7 +1176,7 @@ func (inst *SysmetricsStore) IngestSysPsi(ts time.Time, rows []SysPsi) (err erro
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{}).AddSysPsi(rows[i]).Commit()
+		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysPsi(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest sysPsi row %d: %w", i, err)
 			return
@@ -1179,7 +1187,9 @@ func (inst *SysmetricsStore) IngestSysPsi(ts time.Time, rows []SysPsi) (err erro
 
 // IngestSysNet buffers one whole entity per row carrying only the
 // SysNet component, all stamped with ts — rows ship on the next Flush,
-// like every write. Keys must be distinct within one call (rows
+// like every write. The envelope carries the pass-through columns
+// the row binds; the others are written zero — use Begin with a
+// filled envelope to set them. Keys must be distinct within one call (rows
 // share ts, so duplicates would tie on Order): a duplicate returns
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
@@ -1192,7 +1202,7 @@ func (inst *SysmetricsStore) IngestSysNet(ts time.Time, rows []SysNet) (err erro
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{}).AddSysNet(rows[i]).Commit()
+		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysNet(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest sysNet row %d: %w", i, err)
 			return
@@ -1203,7 +1213,9 @@ func (inst *SysmetricsStore) IngestSysNet(ts time.Time, rows []SysNet) (err erro
 
 // IngestSysDiskMount buffers one whole entity per row carrying only the
 // SysDiskMount component, all stamped with ts — rows ship on the next Flush,
-// like every write. Keys must be distinct within one call (rows
+// like every write. The envelope carries the pass-through columns
+// the row binds; the others are written zero — use Begin with a
+// filled envelope to set them. Keys must be distinct within one call (rows
 // share ts, so duplicates would tie on Order): a duplicate returns
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
@@ -1216,7 +1228,7 @@ func (inst *SysmetricsStore) IngestSysDiskMount(ts time.Time, rows []SysDiskMoun
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{}).AddSysDiskMount(rows[i]).Commit()
+		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysDiskMount(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest sysDiskMount row %d: %w", i, err)
 			return
@@ -1227,7 +1239,9 @@ func (inst *SysmetricsStore) IngestSysDiskMount(ts time.Time, rows []SysDiskMoun
 
 // IngestSysDiskIo buffers one whole entity per row carrying only the
 // SysDiskIo component, all stamped with ts — rows ship on the next Flush,
-// like every write. Keys must be distinct within one call (rows
+// like every write. The envelope carries the pass-through columns
+// the row binds; the others are written zero — use Begin with a
+// filled envelope to set them. Keys must be distinct within one call (rows
 // share ts, so duplicates would tie on Order): a duplicate returns
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
@@ -1240,7 +1254,7 @@ func (inst *SysmetricsStore) IngestSysDiskIo(ts time.Time, rows []SysDiskIo) (er
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{}).AddSysDiskIo(rows[i]).Commit()
+		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysDiskIo(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest sysDiskIo row %d: %w", i, err)
 			return
@@ -1251,7 +1265,9 @@ func (inst *SysmetricsStore) IngestSysDiskIo(ts time.Time, rows []SysDiskIo) (er
 
 // IngestSysBattery buffers one whole entity per row carrying only the
 // SysBattery component, all stamped with ts — rows ship on the next Flush,
-// like every write. Keys must be distinct within one call (rows
+// like every write. The envelope carries the pass-through columns
+// the row binds; the others are written zero — use Begin with a
+// filled envelope to set them. Keys must be distinct within one call (rows
 // share ts, so duplicates would tie on Order): a duplicate returns
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
@@ -1264,7 +1280,7 @@ func (inst *SysmetricsStore) IngestSysBattery(ts time.Time, rows []SysBattery) (
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{}).AddSysBattery(rows[i]).Commit()
+		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysBattery(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest sysBattery row %d: %w", i, err)
 			return
@@ -1275,7 +1291,9 @@ func (inst *SysmetricsStore) IngestSysBattery(ts time.Time, rows []SysBattery) (
 
 // IngestSysGpu buffers one whole entity per row carrying only the
 // SysGpu component, all stamped with ts — rows ship on the next Flush,
-// like every write. Keys must be distinct within one call (rows
+// like every write. The envelope carries the pass-through columns
+// the row binds; the others are written zero — use Begin with a
+// filled envelope to set them. Keys must be distinct within one call (rows
 // share ts, so duplicates would tie on Order): a duplicate returns
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
@@ -1288,7 +1306,7 @@ func (inst *SysmetricsStore) IngestSysGpu(ts time.Time, rows []SysGpu) (err erro
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{}).AddSysGpu(rows[i]).Commit()
+		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysGpu(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest sysGpu row %d: %w", i, err)
 			return
@@ -1299,7 +1317,9 @@ func (inst *SysmetricsStore) IngestSysGpu(ts time.Time, rows []SysGpu) (err erro
 
 // IngestSysProc buffers one whole entity per row carrying only the
 // SysProc component, all stamped with ts — rows ship on the next Flush,
-// like every write. Keys must be distinct within one call (rows
+// like every write. The envelope carries the pass-through columns
+// the row binds; the others are written zero — use Begin with a
+// filled envelope to set them. Keys must be distinct within one call (rows
 // share ts, so duplicates would tie on Order): a duplicate returns
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
@@ -1312,7 +1332,7 @@ func (inst *SysmetricsStore) IngestSysProc(ts time.Time, rows []SysProc) (err er
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{}).AddSysProc(rows[i]).Commit()
+		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysProc(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest sysProc row %d: %w", i, err)
 			return
@@ -1323,7 +1343,9 @@ func (inst *SysmetricsStore) IngestSysProc(ts time.Time, rows []SysProc) (err er
 
 // IngestSysProcCmd buffers one whole entity per row carrying only the
 // SysProcCmd component, all stamped with ts — rows ship on the next Flush,
-// like every write. Keys must be distinct within one call (rows
+// like every write. The envelope carries the pass-through columns
+// the row binds; the others are written zero — use Begin with a
+// filled envelope to set them. Keys must be distinct within one call (rows
 // share ts, so duplicates would tie on Order): a duplicate returns
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
@@ -1336,7 +1358,7 @@ func (inst *SysmetricsStore) IngestSysProcCmd(ts time.Time, rows []SysProcCmd) (
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{}).AddSysProcCmd(rows[i]).Commit()
+		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysProcCmd(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest sysProcCmd row %d: %w", i, err)
 			return
@@ -1347,7 +1369,9 @@ func (inst *SysmetricsStore) IngestSysProcCmd(ts time.Time, rows []SysProcCmd) (
 
 // IngestSysSocket buffers one whole entity per row carrying only the
 // SysSocket component, all stamped with ts — rows ship on the next Flush,
-// like every write. Keys must be distinct within one call (rows
+// like every write. The envelope carries the pass-through columns
+// the row binds; the others are written zero — use Begin with a
+// filled envelope to set them. Keys must be distinct within one call (rows
 // share ts, so duplicates would tie on Order): a duplicate returns
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
@@ -1360,7 +1384,7 @@ func (inst *SysmetricsStore) IngestSysSocket(ts time.Time, rows []SysSocket) (er
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{}).AddSysSocket(rows[i]).Commit()
+		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysSocket(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest sysSocket row %d: %w", i, err)
 			return
@@ -1371,7 +1395,9 @@ func (inst *SysmetricsStore) IngestSysSocket(ts time.Time, rows []SysSocket) (er
 
 // IngestSysTopology buffers one whole entity per row carrying only the
 // SysTopology component, all stamped with ts — rows ship on the next Flush,
-// like every write. Keys must be distinct within one call (rows
+// like every write. The envelope carries the pass-through columns
+// the row binds; the others are written zero — use Begin with a
+// filled envelope to set them. Keys must be distinct within one call (rows
 // share ts, so duplicates would tie on Order): a duplicate returns
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
@@ -1384,7 +1410,7 @@ func (inst *SysmetricsStore) IngestSysTopology(ts time.Time, rows []SysTopology)
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{}).AddSysTopology(rows[i]).Commit()
+		err = inst.Begin(rows[i].Id, ts, SysmetricsEnvelope{NaturalKey: rows[i].NaturalKey}).AddSysTopology(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest sysTopology row %d: %w", i, err)
 			return

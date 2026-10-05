@@ -56,6 +56,21 @@ func TestWidgetHandleWithoutWidgetIdReturnsNoWidget(t *testing.T) {
 	require.Equal(t, widgethandle.NoWidget, h)
 }
 
+// TestWidgetHandleWithoutWidgetIdLongContentReturnsNoWidget covers a holder
+// whose content is long enough to hold a u64 at offset 0: without a recorded
+// widget id, GetWidgetHandle must not read the opcode bytes as one.
+func TestWidgetHandleWithoutWidgetIdLongContentReturnsNoWidget(t *testing.T) {
+	r := NewRetainedFffiBuilder()
+	r.WriteUint32(0xdeadbeef) // opcode
+	r.WriteUint32(0x11223344)
+	r.WriteUint64(0x0102030405060708)
+	holder := r.BuildRetained()
+
+	require.Equal(t, widgethandle.NoWidget, holder.GetWidgetHandle())
+	require.Equal(t, widgethandle.NoWidget, NewRetainedFffiHolderTyped[testWidgetTag](holder).GetWidgetHandle())
+	require.Equal(t, widgethandle.NoWidget, NewRetainedFffiHolderTyped[testWidgetTag](holder).Untype().GetWidgetHandle())
+}
+
 // withCleanBuilderHint isolates a test from builderSizeHint's process-global
 // state (and leaves it as it found it), so retention assertions do not depend
 // on what other tests in this package folded into the hint first.

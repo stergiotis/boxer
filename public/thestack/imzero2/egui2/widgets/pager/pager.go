@@ -1,6 +1,7 @@
-// Package pager is a reusable client-side paginator over an in-memory dataset.
-// It owns no data — the caller feeds it a total via Configure and reads back
-// (start, end) page bounds via Range. Extracted from the play app's pager
+// Package pager is a semi-retained imzero2 widget (ADR-0267): a client-side
+// paginator over an in-memory dataset. It owns no data — the caller feeds it a
+// total via Configure and reads back (start, end) page bounds via Range; what it
+// retains is the current page and the jump binding. Extracted from the play app's pager
 // (apps/play/play_pager.go) and generalised: the page-size buckets, the unit
 // noun ("rows" → "fields", …), and whether the page-size selector shows are all
 // configurable, so it fits both large virtualised data tables and short item
@@ -14,65 +15,82 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
+// Options configures a pager. Every field's zero value is the default, and
+// all but PageSize are re-read on every Render through [Pager.Opts].
+type Options struct {
+	// PageSize is the initial page size; 0 takes 100. The user changes the
+	// live size through the selector, so this is read once at New — see
+	// [Pager.PageSize] for the live value.
+	PageSize int64
+	// PageSizeOptions are the buckets the page-size selector offers; nil
+	// takes 50, 100, 500, 1000, 10000.
+	PageSizeOptions []int64
+	// Unit is the plural noun of the range annotation ("rows 1–50 of N");
+	// empty reads "rows".
+	Unit string
+	// HideSizeCombo hides the page-size selector. Hide it when the page size
+	// is fixed — e.g. a bounded list whose page can't usefully grow (no row
+	// virtualisation), where the data-table buckets would be misleading.
+	HideSizeCombo bool
+}
+
+// Events is what one Render reports.
+type Events struct {
+	// Changed is true when the page or the page size changed this frame.
+	Changed bool
+}
+
 // Pager paginates an in-memory dataset. Construct with New, (re)bind the total
 // each frame with Configure, draw the bar with Render, and read the visible
 // slice with Range.
 type Pager struct {
+	// Opts is re-read on every Render, so a change is an assignment.
+	Opts Options
+
 	ids               *c.WidgetIdStack
+	scopeKey          string
 	total             int64
 	pageSize          int64
 	currentPage       int64
 	pageLabels        []string
 	jumpValue         uint64 // mirrors currentPage+1 (1-based); r9 U64 databinding target of the jump DragValue
 	lastSentJumpValue uint64 // what jumpValue held right after SendRespVal — distinguishes a user drag from Sync's echo
-
-	pageSizeOptions []int64
-	unit            string // plural noun for the range annotation ("rows", "fields")
-	showSizeCombo   bool
 }
 
 const pagerWindowSize = 7 // numbered buttons shown at once
 
 var defaultPageSizeOptions = []int64{50, 100, 500, 1000, 10000}
 
-// New creates a pager with an initial page size. ids must be a fresh
-// WidgetIdStack dedicated to the pager — Render Reset()s it each frame.
-func New(ids *c.WidgetIdStack, initialPageSize int64) *Pager {
-	if initialPageSize <= 0 {
-		initialPageSize = 100
+// New creates a pager whose ids are scoped under scopeKey on ids; empty
+// scopeKey uses "pager". Two pagers under one stack need distinct keys.
+func New(ids *c.WidgetIdStack, scopeKey string, opts Options) *Pager {
+	if scopeKey == "" {
+		scopeKey = "pager"
+	}
+	pageSize := opts.PageSize
+	if pageSize <= 0 {
+		pageSize = 100
 	}
 	return &Pager{
-		ids:             ids,
-		pageSize:        initialPageSize,
-		pageSizeOptions: defaultPageSizeOptions,
-		unit:            "rows",
-		showSizeCombo:   true,
+		Opts:     opts,
+		ids:      ids,
+		scopeKey: scopeKey,
+		pageSize: pageSize,
 	}
 }
 
-// WithPageSizeOptions sets the buckets offered by the page-size selector.
-func (inst *Pager) WithPageSizeOptions(opts []int64) *Pager {
-	if len(opts) > 0 {
-		inst.pageSizeOptions = opts
+func (inst *Pager) unit() string {
+	if inst.Opts.Unit == "" {
+		return "rows"
 	}
-	return inst
+	return inst.Opts.Unit
 }
 
-// WithUnit sets the plural noun used in the range annotation ("rows 1–50 of N"
-// → e.g. "fields 1–6 of N").
-func (inst *Pager) WithUnit(plural string) *Pager {
-	if plural != "" {
-		inst.unit = plural
+func (inst *Pager) pageSizeOptions() []int64 {
+	if len(inst.Opts.PageSizeOptions) == 0 {
+		return defaultPageSizeOptions
 	}
-	return inst
-}
-
-// WithPageSizeCombo toggles the page-size selector. Hide it when the page size
-// is fixed — e.g. a bounded list whose page can't usefully grow (no row
-// virtualisation), where the data-table buckets would be misleading.
-func (inst *Pager) WithPageSizeCombo(show bool) *Pager {
-	inst.showSizeCombo = show
-	return inst
+	return inst.Opts.PageSizeOptions
 }
 
 // Configure (re)binds the pager to a new total. Clamps the current page and
@@ -154,10 +172,17 @@ func (inst *Pager) numPagesFor(total, size int64) int64 {
 	return (total + size - 1) / size
 }
 
-// Render draws the pager bar; returns true if the page or page size changed.
-func (inst *Pager) Render() bool {
+// Render draws the pager bar and reports whether the page or page size
+// changed. It opens one id scope under the pager's scope key.
+func (inst *Pager) Render() (ev Events) {
+	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
+		ev = inst.render()
+	}
+	return
+}
+
+func (inst *Pager) render() (ev Events) {
 	ids := inst.ids
-	ids.Reset()
 
 	numPages := inst.NumPages()
 	maxPageIncl := numPages - 1
@@ -210,22 +235,24 @@ func (inst *Pager) Render() bool {
 		if low > 0 {
 			c.Label("…").Send()
 		}
-		for i := low; i <= high; i++ {
-			label := "?"
-			if i >= 0 && int(i) < len(inst.pageLabels) {
-				label = inst.pageLabels[i]
-			}
-			selected := i == cur
-			// Full-height (not .Small()) so the numbered buttons match the
-			// jump DragValue and the page-size ComboBox; a uniform control
-			// height keeps the centered row from reading as ragged — short
-			// buttons floating among tall controls (imzero2 SKILL.md,
-			// "Ragged Control Row").
-			if c.Button(ids.PrepareSeq(uint64(0x1000+i)),
-				c.Atoms().Text(label).Keep()).
-				Selected(selected).
-				SendResp().HasPrimaryClicked() {
-				inst.currentPage = i
+		for range c.IdScope(ids.PrepareStr("pages")) {
+			for i := low; i <= high; i++ {
+				label := "?"
+				if i >= 0 && int(i) < len(inst.pageLabels) {
+					label = inst.pageLabels[i]
+				}
+				selected := i == cur
+				// Full-height (not .Small()) so the numbered buttons match the
+				// jump DragValue and the page-size ComboBox; a uniform control
+				// height keeps the centered row from reading as ragged — short
+				// buttons floating among tall controls (imzero2 SKILL.md,
+				// "Ragged Control Row").
+				if c.Button(ids.PrepareSeq(uint64(i)),
+					c.Atoms().Text(label).Keep()).
+					Selected(selected).
+					SendResp().HasPrimaryClicked() {
+					inst.currentPage = i
+				}
 			}
 		}
 		if high < maxPageIncl {
@@ -246,16 +273,16 @@ func (inst *Pager) Render() bool {
 			rt.Weak()
 		}
 
-		if inst.showSizeCombo {
+		if !inst.Opts.HideSizeCombo {
 			c.Separator().Vertical().Send()
 			pageSizeLabel := fmt.Sprintf("%d / page", inst.pageSize)
 			for range c.ComboBox(ids.PrepareStr("pSize"),
-				c.WidgetText().Text(inst.unit+"/page").Keep(),
+				c.WidgetText().Text(inst.unit()+"/page").Keep(),
 				c.WidgetText().Text(pageSizeLabel).Keep()).
 				KeepIter() {
-				for i, opt := range inst.pageSizeOptions {
+				for i, opt := range inst.pageSizeOptions() {
 					selected := opt == inst.pageSize
-					if c.Button(ids.PrepareSeq(uint64(0x2000+i)),
+					if c.Button(ids.PrepareSeq(uint64(i)),
 						c.Atoms().Text(strconv.FormatInt(opt, 10)).Keep()).
 						Frame(false).
 						Selected(selected).
@@ -270,9 +297,9 @@ func (inst *Pager) Render() bool {
 
 		// Range annotation. The dash is UTF-8 U+2013.
 		start, end := inst.Range()
-		annotation := fmt.Sprintf("%s %d–%d of %d", inst.unit, start+1, end, inst.total)
+		annotation := fmt.Sprintf("%s %d–%d of %d", inst.unit(), start+1, end, inst.total)
 		if inst.total == 0 {
-			annotation = "no " + inst.unit
+			annotation = "no " + inst.unit()
 		}
 		for rt := range c.RichTextLabel(annotation) {
 			rt.Weak()
@@ -285,7 +312,8 @@ func (inst *Pager) Render() bool {
 		inst.currentPage = clamp(mid/inst.pageSize, 0, inst.NumPages()-1)
 		inst.Configure(inst.total)
 	}
-	return inst.currentPage != prevPage || inst.pageSize != prevSize
+	ev.Changed = inst.currentPage != prevPage || inst.pageSize != prevSize
+	return
 }
 
 // navBtn draws a first/prev/next/last stepper. Full-height (not .Small()) so

@@ -15,6 +15,8 @@ package sqleditor
 // nothing else — it does no completion of its own.
 
 import (
+	"errors"
+
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"strconv"
 	"strings"
@@ -67,7 +69,9 @@ var (
 	paneExactStroke = color.Hex(styletokens.SuccessDefault.AsHex())
 )
 
-// PaneInput is one frame's binding.
+// PaneInput is one frame's binding of the completion pane, an immediate-mode
+// widget (ADR-0267): everything it needs arrives here, and what the frame
+// produced comes back in [PaneResult].
 type PaneInput struct {
 	// Ids is the host's widget id stack; the pane opens its own scope under
 	// it, so two panes in one frame need only differ in ScopeKey.
@@ -75,6 +79,9 @@ type PaneInput struct {
 	// ScopeKey names this pane within the host's id space; empty uses
 	// "sqlcompletion".
 	ScopeKey string
+	// State is the host-owned pane state: the table's view state and the
+	// row scratch. Required; a nil State draws an error in place of the pane.
+	State *PaneState
 	// Result is what to show.
 	Result sqlcomplete.Result
 	// Heading is the line above the table saying what position this is. Empty
@@ -86,12 +93,6 @@ type PaneInput struct {
 	// Width is the pane's measured width, used to give the doc column what is
 	// left. Zero leaves every column at its floor.
 	Width float32
-	// OnAccept fires when a row in the match state is clicked. suffix is the
-	// candidate minus what has already been typed — what
-	// `TextEditFluid.InsertAtCursor` splices at the caret (§SD10). It is empty
-	// when the candidate is already fully typed, and the pane still calls, so
-	// an embedder can treat a click on the exact row as a confirmation.
-	OnAccept func(item sqlcomplete.Item, suffix string)
 	// CaretAtPartialEnd gates the click: a suffix insert is only valid when
 	// the caret sits at the end of the token being completed. When false the
 	// rows render as reference and no click completes.
@@ -100,10 +101,10 @@ type PaneInput struct {
 	Typed string
 }
 
-// Pane is one completion pane's cross-frame state.
-//
-// Render-thread-only, like every stateful widget (ADR-0013).
-type Pane struct {
+// PaneState is the host-owned state of one completion pane: the table's view
+// state and the row scratch the frame's result is built into. The zero value
+// is usable; keep one per pane across frames.
+type PaneState struct {
 	nav   tree.State
 	rows  []paneRow
 	built tree.Tree
@@ -115,12 +116,45 @@ type paneRow struct {
 	match bool
 }
 
-// Render draws one frame of the pane.
-func (inst *Pane) Render(in PaneInput) {
+// PaneResult is what one [RenderPane] reports.
+type PaneResult struct {
+	// Accepted is true on the frame a row in the match state was clicked;
+	// Item is that row's candidate and Suffix the candidate minus what has
+	// already been typed — what `TextEditFluid.InsertAtCursor` splices at the
+	// caret (§SD10). Suffix is empty when the candidate is already fully
+	// typed, and Accepted is still reported, so an embedder can treat a click
+	// on the exact row as a confirmation.
+	Accepted bool
+	Item     sqlcomplete.Item
+	Suffix   string
+	// Err is set when the pane cannot be drawn: a nil State.
+	Err error
+}
+
+// ErrPaneNeedsState is PaneResult.Err when PaneInput.State is nil.
+var ErrPaneNeedsState = errors.New("sqleditor: PaneInput.State is required")
+
+// RenderPane draws one frame of the completion pane.
+func RenderPane(in PaneInput) (res PaneResult) {
+	if in.State == nil {
+		for rt := range c.RichTextLabel(ErrPaneNeedsState.Error()) {
+			rt.Small().Weak()
+		}
+		res.Err = ErrPaneNeedsState
+		return
+	}
 	scope := in.ScopeKey
 	if scope == "" {
 		scope = "sqlcompletion"
 	}
+	for range c.IdScope(in.Ids.PrepareStr(scope)) {
+		res = in.State.render(in)
+	}
+	return
+}
+
+// render is RenderPane's body, inside the pane's scope.
+func (inst *PaneState) render(in PaneInput) (res PaneResult) {
 	if in.Heading != "" {
 		for rt := range c.RichTextLabel(in.Heading) {
 			rt.Small().Weak()
@@ -147,18 +181,14 @@ func (inst *Pane) Render(in PaneInput) {
 		docW = w
 	}
 
-	accept := in.OnAccept
-	if !in.CaretAtPartialEnd {
-		accept = nil
-	}
 	tree.Render(tree.Input{
 		Ids:      in.Ids,
-		ScopeKey: scope,
+		ScopeKey: "table",
 		Tree:     inst.built,
 		State:    &inst.nav,
 		Outline: tree.Column{
 			Header: "candidate", Width: paneNameColWidth, Resizable: true,
-			Cell: func(r tree.Row) { inst.renderNameCell(in, r, accept) },
+			Cell: func(r tree.Row) { inst.renderNameCell(in, r, &res) },
 		},
 		Columns: []tree.Column{
 			{Header: "type", Width: paneTypeColWidth, Cell: inst.renderTypeCell},
@@ -167,12 +197,13 @@ func (inst *Pane) Render(in PaneInput) {
 		},
 		MaxHeight: h,
 	})
+	return
 }
 
 // renderSilence draws the reason there is nothing, which every empty result
 // carries (§SD1). An empty table with no sentence is indistinguishable from a
 // pane that failed to render.
-func (inst *Pane) renderSilence(res sqlcomplete.Result) {
+func (inst *PaneState) renderSilence(res sqlcomplete.Result) {
 	msg := res.Silent
 	if msg == "" {
 		msg = "nothing to complete here"
@@ -187,7 +218,7 @@ func (inst *Pane) renderSilence(res sqlcomplete.Result) {
 // A domain small enough to show whole shows whole, with the matching rows
 // marked; a large one is filtered to the matches, because scrolling 597 time
 // zones to find the highlighted one is not a glance.
-func (inst *Pane) build(res sqlcomplete.Result) {
+func (inst *PaneState) build(res sqlcomplete.Result) {
 	whole := len(res.Items) <= PaneWholeDomainMax
 	inMatch := make(map[int]struct{}, len(res.Prefix))
 	for _, i := range res.Prefix {
@@ -214,7 +245,7 @@ func (inst *Pane) build(res sqlcomplete.Result) {
 	}
 }
 
-func (inst *Pane) row(node int32) *paneRow {
+func (inst *PaneState) row(node int32) *paneRow {
 	if node < 0 || int(node) >= len(inst.rows) {
 		return nil
 	}
@@ -225,12 +256,14 @@ func (inst *Pane) row(node int32) *paneRow {
 //
 // The Frame is unconditional and only its stroke varies: c.Frame derives a
 // stacked id scope, so a frame that appears and disappears XORs every inner
-// widget's id in and out, and egui keys per-widget state by id.
-func (inst *Pane) renderNameCell(in PaneInput, r tree.Row, accept func(sqlcomplete.Item, string)) {
+// widget's id in and out, and egui keys per-widget state by id. A click on a
+// matching row, when the caret allows one, is reported into res.
+func (inst *PaneState) renderNameCell(in PaneInput, r tree.Row, res *PaneResult) {
 	row := inst.row(r.Node)
 	if row == nil {
 		return
 	}
+	accept := in.CaretAtPartialEnd
 	stroke := float32(0)
 	col := paneMatchStroke
 	switch {
@@ -239,7 +272,14 @@ func (inst *Pane) renderNameCell(in PaneInput, r tree.Row, accept func(sqlcomple
 	case row.match && in.Typed != "":
 		stroke = 1
 	}
-	f := c.Frame(in.Ids.PrepareSeq(paneRowIDBase + uint64(r.Node)))
+	for range c.IdScope(in.Ids.PrepareSeq(uint64(r.Node))) {
+		inst.renderNameCellBody(in, row, stroke, col, accept, res)
+	}
+}
+
+// renderNameCellBody is renderNameCell inside the row's own scope.
+func (inst *PaneState) renderNameCellBody(in PaneInput, row *paneRow, stroke float32, col color.Color, accept bool, res *PaneResult) {
+	f := c.Frame(in.Ids.PrepareStr("row"))
 	if stroke > 0 {
 		f = f.Stroke(stroke, col)
 	}
@@ -249,7 +289,7 @@ func (inst *Pane) renderNameCell(in PaneInput, r tree.Row, accept func(sqlcomple
 				c.LabelAtoms(c.Atoms().BeginRichText(row.item.Text).Monospace().End().Keep()).
 					Selectable(false).Truncate().Send()
 			}
-			if accept == nil || !row.match {
+			if !accept || !row.match {
 				continue
 			}
 			// A Phosphor glyph, not a bare `↵`: an affordance's glyph must
@@ -260,15 +300,15 @@ func (inst *Pane) renderNameCell(in PaneInput, r tree.Row, accept func(sqlcomple
 			// and a default button is about 25, and the overflow does not
 			// centre — it hangs off the bottom of the row and through the
 			// selection outline ([tree.Column.Cell]'s height budget).
-			if c.Button(in.Ids.PrepareSeq(paneInsertIDBase+uint64(r.Node)),
+			if c.Button(in.Ids.PrepareStr("insert"),
 				c.Atoms().Text(icons.PhArrowElbowDownLeft).Keep()).Small().SendResp().HasPrimaryClicked() {
-				accept(row.item, strings.TrimPrefix(row.item.Insert, in.Typed))
+				res.Accepted, res.Item, res.Suffix = true, row.item, strings.TrimPrefix(row.item.Insert, in.Typed)
 			}
 		}
 	}
 }
 
-func (inst *Pane) renderTypeCell(r tree.Row) {
+func (inst *PaneState) renderTypeCell(r tree.Row) {
 	row := inst.row(r.Node)
 	if row == nil {
 		return
@@ -283,7 +323,7 @@ func (inst *Pane) renderTypeCell(r tree.Row) {
 	}
 }
 
-func (inst *Pane) renderSourceCell(r tree.Row) {
+func (inst *PaneState) renderSourceCell(r tree.Row) {
 	row := inst.row(r.Node)
 	if row == nil {
 		return
@@ -301,7 +341,7 @@ func (inst *Pane) renderSourceCell(r tree.Row) {
 	}
 }
 
-func (inst *Pane) renderDocCell(r tree.Row) {
+func (inst *PaneState) renderDocCell(r tree.Row) {
 	row := inst.row(r.Node)
 	if row == nil || row.item.Doc == "" {
 		return
@@ -311,14 +351,6 @@ func (inst *Pane) renderDocCell(r tree.Row) {
 			Selectable(false).Truncate().Send()
 	}
 }
-
-// The pane's two per-row id bases. Far apart so a row's frame and its button
-// cannot collide, and derived from the row index so a rebuild that keeps the
-// same rows keeps the same ids.
-const (
-	paneRowIDBase    uint64 = 0x5170_0100
-	paneInsertIDBase uint64 = 0x5170_0200
-)
 
 // PaneHeading is the sentence over the table saying which position this is.
 // Exported because an embedder drawing its own chrome wants the same wording.

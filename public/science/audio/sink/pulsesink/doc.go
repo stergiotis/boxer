@@ -29,11 +29,22 @@
 //
 // # Transport
 //
-// Pause corks the stream and keeps its buffer, so Resume continues without a
-// gap. A seek corks, drops the stream to idle and starts it again, which
-// flushes the server buffer — anything else would play the old position for
-// a buffer's worth of time. The end of the source ends the stream; Play then
-// restarts from frame 0, as the Null sink does.
+// Pause parks the pull callback; the stream stays running and uncorked, and
+// what the server already holds — one latency at most — plays out. Play
+// releases the callback. The stream is never corked and uncorked in place:
+// the library (jfreymuth/pulse v0.1.3) answers the Started event an uncork
+// provokes with a blocking send that only its Start receives, so a Resume
+// parks its read loop for good and every later round trip times out
+// (upstream issue #52). oto's PulseAudio backend suspends the same way, and
+// this package follows it. Two consequences: the server underflows once per
+// pause, so Underflow is frozen from the first pause until the next start;
+// and while parked the library processes no server events, so nothing here
+// makes a round trip during a pause. A seek while playing corks, drops the
+// stream to idle and starts it again — the one sequence that does wait for
+// a Started — which flushes the server buffer; anything else would play the
+// old position for a buffer's worth of time. A seek while paused only moves
+// the cursor. The end of the source ends the stream; Play then restarts from
+// frame 0, as the Null sink does.
 //
 // # Channels
 //

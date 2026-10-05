@@ -1,0 +1,3 @@
+(node:147257) ExperimentalWarning: CommonJS module <repo>/doc/trials/keelson-wasm-frame-cost/harness/run_node.mjs is loading ES Module <tmpdir>/kwfc.EfQMWF/wasm_exec.js using require().
+Support for loading ES Module in require() is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)

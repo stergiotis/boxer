@@ -558,27 +558,58 @@ func generateProceduralCode(w io.Writer, procedure *ir.ProceduralNode, tracker *
 `)
 	tracker.MergeError(err)
 }
+
+// generateFetcherCode emits three functions per fetcher: `Fetch<Name>`, the
+// round trip (write the opcode, read the reply), and its two halves
+// `Issue<Name>` (the opcode only) and `Collect<Name>` (the reply only). A
+// caller that needs several fetches issues them all and then collects in
+// the same order, so a batch costs one flush and one wait instead of one per
+// fetch (ADR-0077 SD3); the replies arrive in issue order because the peer
+// answers messages in the order it reads them.
 func generateFetcherCode(w io.Writer, fetcher *ir.FetcherNode, tracker *compiletime.StateAndErrTracker[GeneratorStateE]) {
 	tracker.ErrorMessagePrefix = fmt.Sprintf("fetcher %s ", fetcher.Name)
-	_, err := fmt.Fprintf(w, `func (inst *Fetcher) %s() (`, fetcher.Name.Convert(naming.UpperCamelCase))
-	tracker.MergeError(err)
-	{
+	name := fetcher.Name.Convert(naming.UpperCamelCase)
+	var err error
+	writeReturnDecl := func() {
+		_, err = fmt.Fprint(w, `() (`)
+		tracker.MergeError(err)
 		generateArgumentsDeclPlainLastIterator(w, fetcher.ReturnTypes.Iterate(), tracker)
-	}
-	_, err = fmt.Fprint(w, `) {
+		_, err = fmt.Fprint(w, `) {
 `)
-	tracker.MergeError(err)
-
-	_, err = fmt.Fprintf(w, `	inst.invoke(FuncProcId%s)
-`, fetcher.Name.Convert(naming.UpperCamelCase))
-	tracker.MergeError(err)
-
-	generateFetcherReturnHandlingPlain(w, fetcher.ReturnTypes.Iterate(), tracker)
-
-	_, err = fmt.Fprint(w, `	return
+		tracker.MergeError(err)
+	}
+	writeInvoke := func() {
+		_, err = fmt.Fprintf(w, `	inst.invoke(FuncProcId%s)
+`, name)
+		tracker.MergeError(err)
+	}
+	writeReturn := func() {
+		_, err = fmt.Fprint(w, `	return
 }
 `)
+		tracker.MergeError(err)
+	}
+
+	_, err = fmt.Fprintf(w, `func (inst *Fetcher) %s`, name)
 	tracker.MergeError(err)
+	writeReturnDecl()
+	writeInvoke()
+	generateFetcherReturnHandlingPlain(w, fetcher.ReturnTypes.Iterate(), tracker)
+	writeReturn()
+
+	_, err = fmt.Fprintf(w, `func (inst *Fetcher) Issue%s() {
+`, name)
+	tracker.MergeError(err)
+	writeInvoke()
+	_, err = fmt.Fprint(w, `}
+`)
+	tracker.MergeError(err)
+
+	_, err = fmt.Fprintf(w, `func (inst *Fetcher) Collect%s`, name)
+	tracker.MergeError(err)
+	writeReturnDecl()
+	generateFetcherReturnHandlingPlain(w, fetcher.ReturnTypes.Iterate(), tracker)
+	writeReturn()
 }
 func generateFactoryCode(w io.Writer, factory *ir.BuilderFactoryNode, tracker *compiletime.StateAndErrTracker[GeneratorStateE]) {
 	generateRootFunc(w, factory.Name, factory.IdentityArguments, factory.Arguments, tracker)
@@ -591,15 +622,11 @@ func generateFactoryCode(w io.Writer, factory *ir.BuilderFactoryNode, tracker *c
 	r.WriteOpCode(uint32(FuncProcId%s))
 `, factory.Name.Convert(naming.UpperCamelCase))
 	tracker.MergeError(err)
-	idVariant := ""
-	idDefer := ""
-	if factory.Settings.BlockIterator {
-		idVariant = "Stacked"
-		// deferred: a stacked builder carrying an id may want
-		// idDefer = "i.PopIdFromStackChecked(v)\n" here. idDefer stays "" until
-		// then, so the template hole emits nothing.
-	}
-	generateIdentityHandling(w, factory.IdentityArguments, tracker, idVariant)
+	// A block iterator's id is derived here but pushed only when KeepIter's
+	// body runs, and popped when it ends. Pushing here instead leaked the id
+	// onto the stack for the rest of the frame whenever the builder was
+	// finished with Send or Keep, or dropped, rather than ranged.
+	generateIdentityHandling(w, factory.IdentityArguments, tracker, "")
 	generateFactoryArgumentsHandlingPlain(false, w, factory.Arguments.PlainArguments, tracker)
 	generateFactoryArgumentsHandlingEvaluated(w, factory.Arguments.EvaluatedArguments, tracker)
 
@@ -629,12 +656,11 @@ func generateFactoryCode(w io.Writer, factory *ir.BuilderFactoryNode, tracker *c
 			dbmName, dbmName)
 		tracker.MergeError(err)
 	}
-	_, err = fmt.Fprintf(w, `
-	%s
+	_, err = fmt.Fprint(w, `
 	return
 }
 
-`, idDefer)
+`)
 	tracker.MergeError(err)
 }
 func generateMethodCodeBuildMethods(w io.Writer, factory *ir.BuilderFactoryNode, tracker *compiletime.StateAndErrTracker[GeneratorStateE]) {
@@ -693,11 +719,8 @@ func generateMethodCodeBuildMethods(w io.Writer, factory *ir.BuilderFactoryNode,
 	if factory.Settings.BlockIterator {
 		var idHandlingDefer = ""
 		if factory.IdentityArguments.HasId {
-			// FIXME
-			idHandlingDefer = `/*if inst.idGen.DeriveStacked() != inst.id {
-	panic("id handling is incorrect. iterators are nested in an unhandled way.")
-}*/
-defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
+			idHandlingDefer = `inst.idGen.PushIdToStack(inst.id)
+		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 `
 		}
 		if buildMethodInvoke != "" {
@@ -859,9 +882,14 @@ const (
 `, b, idx)
 		tracker.MergeError(err)
 	}
-	_, err = fmt.Fprint(w, `
+	_, err = fmt.Fprintf(w, `
 )
-`)
+
+// IdlFingerprint is the IDL these bindings were generated from, as
+// ir.Fingerprint digests it; the Rust client's generated enums carry the same
+// value from the same generation (ADR-0278 SD6, proposed).
+const IdlFingerprint uint64 = 0x%016x
+`, ir.Fingerprint(tls))
 	tracker.MergeError(err)
 }
 

@@ -185,8 +185,10 @@ func splitHasNode(split splitResult, node NodeID) bool {
 }
 
 // splitFedChannel maps a channel to the split node that fills it BY NAME — the
-// Network's two CTEs and the Kanban's lane inventory. Their verdict is
-// structural because asking the lane would execute the query (SD2).
+// Network's two CTEs, the Sankey's two, the Kanban's lane inventory and the
+// Vector field's relation. Their verdict is structural because asking the lane
+// would execute the query (SD2). A required channel missing here falls through
+// to offerPending, which is silence: the tab never gets its `-` mark.
 //
 // The Timeline's bands channel is deliberately absent: it is panel-authored
 // (the bands editor's own SQL, not a node of the user's split) and optional,
@@ -197,6 +199,10 @@ func splitFedChannel(ch ChannelID) (node NodeID, ok bool) {
 		return networkEdgesNodeID, true
 	case chVertices:
 		return networkVerticesNodeID, true
+	case chFlows:
+		return sankeyFlowsNodeID, true
+	case chNodes:
+		return sankeyNodesNodeID, true
 	case chLanes:
 		return kanbanLanesNodeID, true
 	case chVectorField:
@@ -324,4 +330,39 @@ func (inst *PlayApp) tabNotice(spec *TabSpec, f *TabFrame) (notice bool) {
 		return true
 	}
 	return inst.graph != nil && inst.graph.hasEmitDrops()
+}
+
+// PaneDrawE is whether a pane can draw what it would be handed.
+type PaneDrawE uint8
+
+const (
+	// PaneDrawUnknown — nothing to judge yet: no run, or a node that has
+	// not executed.
+	PaneDrawUnknown PaneDrawE = iota
+	PaneDrawYes
+	PaneDrawNo
+)
+
+// OpEnumNames names the values on the model's side (opjson).
+func (PaneDrawE) OpEnumNames() []string { return []string{"unknown", "yes", "no"} }
+
+// paneDraws turns the strip's rejection ladder into a three-way answer.
+// paneReject speaks only when a pane rejects, so acceptance is read off the
+// offers: a pane draws when every required channel was offered a real
+// schema and none rejected it; with any channel unoffered or pending it is
+// unknown.
+func paneDraws(panel PanelI, in tabVerdict) (draws PaneDrawE, reason string) {
+	reason, rejected := paneReject(panel, in)
+	if rejected && reason != "" {
+		return PaneDrawNo, reason
+	}
+	for _, ch := range panel.Channels() {
+		if !ch.Required {
+			continue
+		}
+		if state, _ := requiredOffer(ch.ID, in); state != offerSchema {
+			return PaneDrawUnknown, reason
+		}
+	}
+	return PaneDrawYes, ""
 }

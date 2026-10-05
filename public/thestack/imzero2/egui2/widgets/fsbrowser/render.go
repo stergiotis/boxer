@@ -8,6 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/bgjobrow"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/breadcrumbs"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexedit"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/tree"
@@ -21,12 +22,6 @@ const (
 	defaultColumnWidth float32 = 120
 	filterWidth        float32 = 180
 	searchBarWidth     float32 = 120
-
-	// Widget-id seeds, one namespace per id kind (ADR-0200 in the prefix).
-	seqRowBase    uint64 = 0x0200_0100_0000_0000
-	seqCellBase   uint64 = 0x0200_0200_0000_0000
-	seqHeaderBase uint64 = 0x0200_0300_0000_0000
-	seqCrumbBase  uint64 = 0x0200_0400_0000_0000
 )
 
 var (
@@ -116,48 +111,39 @@ func Render(in Input) (res Result) {
 	return
 }
 
-// renderBreadcrumb draws the up button, the root and one button per path
-// segment; reports true when it navigated.
+// renderBreadcrumb draws the up button and the path as a breadcrumbs trail;
+// reports true when it navigated.
 func (in Input) renderBreadcrumb(st *State, density styletokens.DensityE) (navigated bool) {
 	root := in.RootLabel
 	if root == "" {
 		root = "/"
 	}
 	for range c.Horizontal().KeepIter() {
-		up := c.Button(in.Ids.PrepareSeq(seqCrumbBase), c.Atoms().Text(icons.PhArrowUp).Keep()).
+		up := c.Button(in.Ids.PrepareStr("up"), c.Atoms().Text(icons.PhArrowUp).Keep()).
 			Frame(false).Small()
 		if up.SendResp().HasPrimaryClicked() && st.Up() {
 			navigated = true
 		}
 		c.AddSpace(styletokens.GapInline(density))
-		if c.Button(in.Ids.PrepareSeq(seqCrumbBase+1), c.Atoms().BeginRichText(root).Strong().End().Keep()).
-			Frame(false).Small().SendResp().HasPrimaryClicked() {
-			if st.Dir() != "." {
-				st.SetDir(".")
-				navigated = true
-			}
+		// The trail: the root, then one item per path segment. The current
+		// directory is the last item, the trail's default, so State.dir
+		// stays the only authority on where the browser is.
+		m := &st.crumbs
+		m.Labels = append(m.Labels[:0], root)
+		dir := st.Dir()
+		if dir != "." {
+			m.Labels = append(m.Labels, strings.Split(dir, "/")...)
 		}
-		if st.Dir() != "." {
-			segs := strings.Split(st.Dir(), "/")
-			prefix := ""
-			for i, seg := range segs {
-				if prefix == "" {
-					prefix = seg
-				} else {
-					prefix += "/" + seg
-				}
-				c.Label("›").Selectable(false).Send()
-				last := i == len(segs)-1
-				atoms := c.Atoms().Text(seg).Keep()
-				if last {
-					atoms = c.Atoms().BeginRichText(seg).Strong().End().Keep()
-				}
-				if c.Button(in.Ids.PrepareSeq(seqCrumbBase+2+uint64(i)), atoms).
-					Frame(false).Small().SendResp().HasPrimaryClicked() && !last {
-					st.SetDir(prefix)
-					navigated = true
-				}
+		st.crumbsState.SetCurrent(-1)
+		res := breadcrumbs.Render(breadcrumbs.Input{Ids: in.Ids, ScopeKey: "crumbs", Model: m, State: &st.crumbsState, Small: true})
+		if res.Clicked >= 0 {
+			// Item i is the root followed by i segments.
+			to := "."
+			if res.Clicked > 0 {
+				to = strings.Join(m.Labels[1:res.Clicked+1], "/")
 			}
+			st.SetDir(to)
+			navigated = true
 		}
 	}
 	return
@@ -174,7 +160,7 @@ func (in Input) renderBreadcrumb(st *State, density styletokens.DensityE) (navig
 func (in Input) renderFilter(st *State, density styletokens.DensityE) {
 	for range c.Horizontal().KeepIter() {
 		c.Label(icons.PhFunnelSimple).Selectable(false).Send()
-		st.filterHl.Prepare(in.Ids.PrepareStr("filter"), st.filter, false, regexedit.ModeSingle).
+		st.filterHl.TextEdit(in.Ids.PrepareStr("filter"), st.filter, false, regexedit.ModeSingle).
 			HintText("filter paths (regex)").
 			DesiredWidth(filterWidth).
 			SendRespVal(&st.filter)
@@ -207,8 +193,11 @@ func (in Input) renderFilter(st *State, density styletokens.DensityE) {
 // height and the table below it does not move when a search starts and ends.
 // The figures are the job's, a frame old like the rest of this row.
 func (in Input) renderSearchProgress(st *State) {
-	bgjobrow.Render(st.job, bgjobrow.Input{
-		CancelId: in.Ids.PrepareStr("filter-cancel"),
+	bgjobrow.Render(bgjobrow.Input{
+		Job:      st.job,
+		Ids:      in.Ids,
+		ScopeKey: "filter-search",
+		Cancel:   true,
 		Inline:   true,
 		BarWidth: searchBarWidth,
 	})
@@ -450,35 +439,49 @@ func (in Input) pushColumns(plan widthPlan, density styletokens.DensityE) {
 	}
 }
 
+// widthMenu is a header's reset gesture when widths persist: a context menu
+// that returns this column, or every column, to its default (ADR-0151's clear
+// affordance).
+func (in Input) widthMenu(plan widthPlan, col uint32) {
+	if !plan.on || int(col) >= len(plan.cols) {
+		return
+	}
+	if c.Button(in.Ids.PrepareStr("reset"), c.Atoms().Text("Reset column width").Keep()).
+		SendResp().HasPrimaryClicked() {
+		_ = in.Widths.Clear(plan.tag, plan.cols[col])
+	}
+	if c.Button(in.Ids.PrepareStr("reset-all"), c.Atoms().Text("Reset all column widths").Keep()).
+		SendResp().HasPrimaryClicked() {
+		_ = in.Widths.ClearAll(plan.tag, plan.cols)
+	}
+}
+
 // renderHeaders draws the three sortable headers and the host's. A header is
 // a frameless button; its glyph says which column orders the listing, and
 // which way.
 func (in Input) renderHeaders(et c.EndETableFluid, st *State, density styletokens.DensityE, plan widthPlan) {
 	pad := cellInset(density)
-	// withWidthMenu wraps a header in the reset gesture when widths persist:
-	// a context menu that returns this column, or every column, to its
-	// default (ADR-0151's clear affordance). ContextMenu senses hover only,
-	// so the sort click underneath keeps working.
+	// withWidthMenu wraps a header in the reset gesture when widths persist.
+	// ContextMenu senses hover only, so the sort click underneath keeps
+	// working.
+	// Each header takes a "header" scope and its column ordinal, under which
+	// the frame, the sort button and the width menu take literal ids
+	// (ADR-0267 W5).
 	withWidthMenu := func(col uint32, body func()) {
-		if !plan.on || int(col) >= len(plan.cols) {
-			body()
-			return
+		for range c.IdScope(in.Ids.PrepareStr("header")) {
+			for range c.IdScope(in.Ids.PrepareSeq(uint64(col))) {
+				if !plan.on || int(col) >= len(plan.cols) {
+					body()
+					continue
+				}
+				c.ContextMenu().Render(func() { in.widthMenu(plan, col) }, body)
+			}
 		}
-		c.ContextMenu().Render(func() {
-			if c.Button(in.Ids.PrepareSeq(seqHeaderBase+0x200+uint64(col)), c.Atoms().Text("Reset column width").Keep()).
-				SendResp().HasPrimaryClicked() {
-				_ = in.Widths.Clear(plan.tag, plan.cols[col])
-			}
-			if c.Button(in.Ids.PrepareSeq(seqHeaderBase+0x300+uint64(col)), c.Atoms().Text("Reset all column widths").Keep()).
-				SendResp().HasPrimaryClicked() {
-				_ = in.Widths.ClearAll(plan.tag, plan.cols)
-			}
-		}, body)
 	}
 	sortable := func(col uint32, text string, by SortByE) {
 		for range et.Headers(0, col) {
 			withWidthMenu(col, func() {
-				for range c.Frame(in.Ids.PrepareSeq(seqHeaderBase+uint64(col))).
+				for range c.Frame(in.Ids.PrepareStr("frame")).
 					OuterMargin(0).
 					InnerMarginSides(pad, pad, 0, 0).
 					KeepIter() {
@@ -490,7 +493,7 @@ func (in Input) renderHeaders(et c.EndETableFluid, st *State, density styletoken
 							label += " " + icons.PhCaretUp
 						}
 					}
-					if c.Button(in.Ids.PrepareSeq(seqHeaderBase+0x100+uint64(col)),
+					if c.Button(in.Ids.PrepareStr("sort"),
 						c.Atoms().BeginRichText(label).Strong().End().Keep()).
 						Frame(false).Small().SendResp().HasPrimaryClicked() {
 						if st.sortBy == by {
@@ -511,7 +514,7 @@ func (in Input) renderHeaders(et c.EndETableFluid, st *State, density styletoken
 		text := in.Columns[i].Header
 		for range et.Headers(0, col) {
 			withWidthMenu(col, func() {
-				for range c.Frame(in.Ids.PrepareSeq(seqHeaderBase+uint64(col))).
+				for range c.Frame(in.Ids.PrepareStr("frame")).
 					OuterMargin(0).
 					InnerMarginSides(pad, pad, 0, 0).
 					KeepIter() {
@@ -537,32 +540,37 @@ func (in Input) rowChrome(et c.EndETableFluid, rowIdx int, e Entry, rowH float32
 	}
 	var fr c.FrameFluid
 	for range et.Rows(uint64(rowIdx)) {
-		fr = c.Frame(in.Ids.PrepareSeq(seqRowBase+uint64(e.Ord))).
-			Fill(fill).
-			Stroke(strokeWidth, stroke).
-			OuterMargin(0).
-			InnerMargin(0).
-			SenseClick().
-			HoverCursorPointer()
-		for range fr.KeepIter() {
-			c.UiSetMinWidthAvailable()
-			// Both strokes, not one: a Frame paints its content rect grown by
-			// the stroke width on every side, so this is what makes the
-			// painted rect exactly the row. See tree.rowChrome.
-			c.UiSetMinHeight(rowH - 2*strokeWidth)
+		for range c.IdScope(in.Ids.PrepareStr("row")) {
+			fr = c.Frame(in.Ids.PrepareSeq(uint64(e.Ord))).
+				Fill(fill).
+				Stroke(strokeWidth, stroke).
+				OuterMargin(0).
+				InnerMargin(0).
+				SenseClick().
+				HoverCursorPointer()
+			for range fr.KeepIter() {
+				c.UiSetMinWidthAvailable()
+				// Both strokes, not one: a Frame paints its content rect grown by
+				// the stroke width on every side, so this is what makes the
+				// painted rect exactly the row. See tree.rowChrome.
+				c.UiSetMinHeight(rowH - 2*strokeWidth)
+			}
 		}
 	}
 	return c.CurrentApplicationState.StateManager.GetResponseByIdRaw(fr.Id())
 }
 
 func (in Input) paddedCell(e Entry, col int, density styletokens.DensityE, body func(e Entry)) {
-	ncols := uint64(builtinColumns + len(in.Columns))
 	pad := cellInset(density)
-	for range c.Frame(in.Ids.PrepareSeq(seqCellBase+uint64(e.Ord)*ncols+uint64(col))).
-		OuterMargin(0).
-		InnerMarginSides(pad, pad, 0, 0).
-		KeepIter() {
-		body(e)
+	for range c.IdScope(in.Ids.PrepareStr("cell")) {
+		for range c.IdScope(in.Ids.PrepareSeq(uint64(e.Ord))) {
+			for range c.Frame(in.Ids.PrepareSeq(uint64(col))).
+				OuterMargin(0).
+				InnerMarginSides(pad, pad, 0, 0).
+				KeepIter() {
+				body(e)
+			}
+		}
 	}
 }
 
@@ -657,6 +665,15 @@ func (in Input) renderOutline(st *State, density styletokens.DensityE, res *Resu
 		WidthEpoch: plan.epoch,
 	}
 	if plan.on {
+		treeIn.HeaderMenu = func(col uint32) { in.widthMenu(plan, col) }
+	}
+	// The tree takes a column's Width as its drag floor. That is right for
+	// the defaults, and wrong for a width that is the column's own last
+	// reading: fed back as the floor it lets the column grow and never
+	// narrow. So whenever observed widths reach the columns — under a
+	// resolver, or under the FillWidth layout on its own — the floor is the
+	// density's minimum and the ceiling the widget's.
+	if plan.on || plan.fill != nil {
 		treeIn.MinColumnWidth = MinColumnWidth(density)
 		treeIn.MaxColumnWidth = MaxColumnWidth
 	}

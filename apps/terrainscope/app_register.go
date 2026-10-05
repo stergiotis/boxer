@@ -5,14 +5,15 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
 )
 
 // manifest is the per-process AppI descriptor. Static; every newApp()
 // returns the same Manifest value.
 //
-// No Caps are declared: Phase 1 reads swissALTI3D tiles directly from
-// the filesystem (ADR-0099), so the app touches neither the bus nor the
-// persist store. The ADR-0090-style headless elevation service (which
+// The one cap is the basemap's tile destination (ADR-0262). Phase 1 reads
+// swissALTI3D tiles directly from the filesystem (ADR-0099) and touches
+// no persist store; the ADR-0090-style headless elevation service (which
 // would replace the direct read with a bus capability) is deferred to
 // Phase 4.
 var manifest = app.Manifest{
@@ -25,6 +26,7 @@ var manifest = app.Manifest{
 	Topics:   []app.TopicT{app.TopicGeo},
 	Keywords: []string{"terrain", "elevation", "line of sight", "viewshed", "swisstopo"},
 	Surface:  app.SurfaceWindowed,
+	Caps:     basemap.ClientCaps("terrainscope: basemap tiles under the picked points"),
 	SurfaceHints: app.SurfaceHints{
 		// Sized to fit the slippy map plus the sweep plot (and its legend)
 		// below it without clipping the window body.

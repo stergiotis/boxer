@@ -1,0 +1,6 @@
+# The scripted model of chat-artefact.scene.md: one turn of three model
+# calls — a first draft with a link to a heading that is not there, an edit
+# that fixes it, then the answer.
+{"tool":"artefact_write","args":{"title":"Drafting the plan","base_revision":0,"text":"---\nstatus: draft\ntags: [plan]\n---\n# Plan\n\nSee [[#Risk]] before starting.\n\n## Goals\n\n- ship the artefact\n\n> [!tip] Scope\n> one document per conversation\n\n## Risks\n\n- the ceiling binds in the chat\n"}}
+{"tool":"artefact_edit","args":{"title":"Fixing the link","base_revision":1,"old_text":"[[#Risk]]","new_text":"[[#Risks]]"}}
+{"content":"Drafted the plan in the artefact and fixed the link the lint reported."}

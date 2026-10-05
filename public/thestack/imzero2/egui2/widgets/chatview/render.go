@@ -31,14 +31,12 @@ const (
 	// tailRadius is the sender-side corner on a cluster's last bubble; the
 	// other three corners take RoundingLg.
 	tailRadius uint8 = 1
-	// dayIdBase keeps day rows' ids clear of message ordinals under one
-	// scope.
-	dayIdBase uint64 = 1 << 40
-	// reactionIdBase likewise keeps a bubble's reaction pills clear of its
-	// other widgets.
-	reactionIdBase uint64 = 0x100
-	// scrollAlignCenter / scrollAlignBottom are ScrollToCursor's alignment
-	// codes (0 top, 1 centre, 2 bottom).
+	// fitSlack keeps a measured body from wrapping its widest line again at
+	// exactly its own width.
+	fitSlack float32 = 1
+	// scrollAlignTop / scrollAlignCenter / scrollAlignBottom are
+	// ScrollToCursor's alignment codes (0 top, 1 centre, 2 bottom).
+	scrollAlignTop    uint8 = 0
 	scrollAlignCenter uint8 = 1
 	scrollAlignBottom uint8 = 2
 )
@@ -67,7 +65,7 @@ func Render(in Input) (res Result) {
 		// The pane probe goes first: the rect is the room left for the next
 		// widget, and it answers one frame late — hold the last good width
 		// so the bubbles do not flash to the fallback on a hidden→shown edge.
-		if w, _, ok := c.CapturePaneSize(c.ProbeSeq(in.ScopeKey, "chatview")); ok {
+		if w, _, ok := c.CapturePaneSize(ids.ProbeSeq("pane")); ok {
 			st.paneW = w
 			st.shown = true
 		} else {
@@ -87,8 +85,11 @@ func Render(in Input) (res Result) {
 		// A jump is consumed at the start of the frame: a quote strip
 		// requests one mid-loop, after the quoted (earlier) row has been
 		// drawn, so it must survive to the next frame's loop.
-		jump := st.jump
-		st.jump = 0
+		jump, jumpAlign := st.jump, scrollAlignCenter
+		if st.jumpTop {
+			jumpAlign = scrollAlignTop
+		}
+		st.jump, st.jumpTop = 0, false
 		n := m.Len()
 		first := max(0, n-st.Window())
 		if jump > 0 {
@@ -118,7 +119,7 @@ func Render(in Input) (res Result) {
 			}
 			for _, r := range rows {
 				if jump > 0 && r.kind != rowDay && r.msg == jump-1 {
-					c.ScrollToCursor(scrollAlignCenter)
+					c.ScrollToCursor(jumpAlign)
 				}
 				renderRow(in, m, st, r, layout, bubbleW, dens, loc, &res)
 			}
@@ -163,14 +164,16 @@ func renderRow(in Input, m *Model, st *State, r row, layout LayoutE, bubbleW flo
 	ids := in.Ids
 	switch r.kind {
 	case rowDay:
-		for range c.IdScope(ids.PrepareSeq(dayIdBase + uint64(r.msg))) {
-			c.AddSpace(styletokens.GapItems(dens))
-			for range c.VerticalCentered().KeepIter() {
-				for rt := range c.RichTextLabel(time.UnixMilli(r.dayMS).In(loc).Format("Monday, 2 January 2006")) {
-					rt.Small().Weak()
+		for range c.IdScope(ids.PrepareStr("day")) {
+			for range c.IdScope(ids.PrepareSeq(uint64(r.msg))) {
+				c.AddSpace(styletokens.GapItems(dens))
+				for range c.VerticalCentered().KeepIter() {
+					for rt := range c.RichTextLabel(time.UnixMilli(r.dayMS).In(loc).Format("Monday, 2 January 2006")) {
+						rt.Small().Weak()
+					}
 				}
+				c.AddSpace(styletokens.GapInline(dens))
 			}
-			c.AddSpace(styletokens.GapInline(dens))
 		}
 	case rowSystem:
 		i := int(r.msg)
@@ -230,13 +233,15 @@ func renderBubbleColumn(in Input, m *Model, st *State, i int, r row, layout Layo
 		keys, counts, who := m.Reactions(i)
 		if len(keys) > 0 {
 			for range hrow(mine) {
-				for j := range ordered(len(keys), mine) {
-					b := badge.New(ids.PrepareSeq(reactionIdBase+uint64(j)), keys[j]+" "+strconv.Itoa(int(counts[j]))).
-						Tone(badge.ToneNeutral).Variant(badge.VariantSoft).Size(badge.SizeSm).Pill()
-					if who[j] != "" {
-						b = b.Tooltip(who[j])
+				for range c.IdScope(ids.PrepareStr("reactions")) {
+					for j := range ordered(len(keys), mine) {
+						b := badge.New(ids.PrepareSeq(uint64(j)), keys[j]+" "+strconv.Itoa(int(counts[j]))).
+							Tone(badge.ToneNeutral).Variant(badge.VariantSoft).Size(badge.SizeSm).Pill()
+						if who[j] != "" {
+							b = b.Tooltip(who[j])
+						}
+						b.Send()
 					}
-					b.Send()
 				}
 			}
 		}
@@ -343,8 +348,10 @@ func renderBubble(in Input, m *Model, st *State, i int, r row, layout LayoutE, m
 		Fill(fill).
 		CornerRadiusSides(nw, ne, sw, se).
 		Stroke(strokeW, stroke).
-		InnerMargin(styletokens.PaddingDefault(dens)).
-		SenseClick()
+		InnerMargin(styletokens.PaddingDefault(dens))
+	if !in.InteractiveBlocks {
+		frame = frame.SenseClick()
+	}
 	fid := frame.Id()
 	for range frame.KeepIter() {
 		// The frame's content inherits the column's layout (see
@@ -365,9 +372,7 @@ func renderBubble(in Input, m *Model, st *State, i int, r row, layout LayoutE, m
 			drawn := false
 			if in.Block != nil {
 				if b, ok := in.Block(i); ok && b.Render != nil {
-					for range c.PushId(ids.PrepareStr("block")).KeepIter() {
-						b.Render()
-					}
+					renderBlock(ids, st, b, i, m.Body[i], mine, bubbleW)
 					drawn = true
 				}
 			}
@@ -377,10 +382,59 @@ func renderBubble(in Input, m *Model, st *State, i int, r row, layout LayoutE, m
 		}
 		renderFooter(m, i, mine, loc)
 	}
-	if c.CurrentApplicationState.StateManager.GetResponseByIdRaw(fid).HasPrimaryClicked() {
+	if !in.InteractiveBlocks && c.CurrentApplicationState.StateManager.GetResponseByIdRaw(fid).HasPrimaryClicked() {
 		st.SetSelected(int32(i))
 		res.Clicked = int32(i)
 	}
+}
+
+// renderBlock draws a host body left-aligned. A viewer's bubble sits in a
+// right-aligned column and hugs only content drawn against its right edge,
+// so a left-aligned body would stretch it to the bubble limit: the body is
+// measured once at that limit (its min rect, one frame late) and the
+// bubble's width is then capped at what it measured, which shrinks the
+// bubble from the left. The other side's bubble starts at the left edge and
+// hugs its content already.
+func renderBlock(ids *c.WidgetIdStack, st *State, b Block, i int, body string, mine bool, bubbleW float32) {
+	var probe uint64
+	measure := false
+	if mine {
+		probe = ids.ProbeSeq("block")
+		var w float32
+		if w, measure = st.blockWidth(i, body, bubbleW, probe); w > 0 {
+			c.UiSetMaxWidth(min(w+fitSlack, bubbleW))
+		}
+	}
+	for range c.PushId(ids.PrepareStr("block")).KeepIter() {
+		for range c.UiWithLayout().MainDirTopDown().CrossAlignMin().KeepIter() {
+			b.Render()
+			if measure {
+				c.CaptureUiRect(probe)
+			}
+		}
+	}
+}
+
+// blockWidth is the measured width of message i's body under bubbleW, or
+// measure=true when it has to be measured this frame; a measurement armed
+// last frame is read back here.
+func (inst *State) blockWidth(i int, body string, bubbleW float32, probe uint64) (w float32, measure bool) {
+	if inst.fits == nil {
+		inst.fits = map[int]blockFit{}
+	}
+	f, ok := inst.fits[i]
+	if ok && f.body == body && f.bubbleW == bubbleW {
+		if !f.measuring {
+			return f.w, false
+		}
+		if r, got := c.CurrentApplicationState.StateManager.GetUiRect(probe); got {
+			f.w, f.measuring = r.MaxX-r.MinX, false
+			inst.fits[i] = f
+			return f.w, false
+		}
+	}
+	inst.fits[i] = blockFit{body: body, bubbleW: bubbleW, measuring: true}
+	return 0, true
 }
 
 // renderFooter is the bubble's last line: the time (the full instant on

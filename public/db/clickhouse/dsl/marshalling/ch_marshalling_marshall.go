@@ -15,126 +15,26 @@ import (
 
 // --- String escape/unescape ---
 
-// UnescapeString removes surrounding single quotes and resolves escape sequences.
+// UnescapeString removes surrounding single quotes and resolves escape
+// sequences as the ClickHouse server does ([nanopass.UnescapeQuoted]): an
+// escape the server does not name keeps its backslash, so a regex or LIKE
+// pattern survives UnescapeString followed by [EscapeString] unchanged.
 func UnescapeString(raw string) (result string, err error) {
 	if len(raw) < 2 || raw[0] != '\'' || raw[len(raw)-1] != '\'' {
 		err = eb.Build().Str("input", raw).Errorf("input must be a single-quoted string")
 		return
 	}
-	inner := raw[1 : len(raw)-1]
-	var buf strings.Builder
-	buf.Grow(len(inner))
-
-	i := 0
-	for i < len(inner) {
-		ch := inner[i]
-		switch {
-		case ch == '\\' && i+1 < len(inner):
-			next := inner[i+1]
-			switch next {
-			case '\\':
-				buf.WriteByte('\\')
-				i += 2
-			case '\'':
-				buf.WriteByte('\'')
-				i += 2
-			case 'n':
-				buf.WriteByte('\n')
-				i += 2
-			case 't':
-				buf.WriteByte('\t')
-				i += 2
-			case 'r':
-				buf.WriteByte('\r')
-				i += 2
-			case '0':
-				buf.WriteByte(0)
-				i += 2
-			case 'b':
-				buf.WriteByte('\b')
-				i += 2
-			case 'f':
-				buf.WriteByte('\f')
-				i += 2
-			case 'a':
-				buf.WriteByte('\a')
-				i += 2
-			case 'v':
-				buf.WriteByte('\v')
-				i += 2
-			case 'x':
-				if i+3 >= len(inner) {
-					err = eb.Build().Int("position", i).Errorf("truncated \\x escape")
-					return
-				}
-				val, parseErr := strconv.ParseUint(inner[i+2:i+4], 16, 8)
-				if parseErr != nil {
-					err = eb.Build().Int("position", i).Errorf("invalid \\x escape: %w", parseErr)
-					return
-				}
-				buf.WriteByte(byte(val))
-				i += 4
-			case 'u':
-				if i+5 >= len(inner) {
-					err = eb.Build().Int("position", i).Errorf("truncated \\u escape")
-					return
-				}
-				val, parseErr := strconv.ParseUint(inner[i+2:i+6], 16, 32)
-				if parseErr != nil {
-					err = eb.Build().Int("position", i).Errorf("invalid \\u escape: %w", parseErr)
-					return
-				}
-				buf.WriteRune(rune(val))
-				i += 6
-			case 'U':
-				if i+9 >= len(inner) {
-					err = eb.Build().Int("position", i).Errorf("truncated \\U escape")
-					return
-				}
-				val, parseErr := strconv.ParseUint(inner[i+2:i+10], 16, 32)
-				if parseErr != nil {
-					err = eb.Build().Int("position", i).Errorf("invalid \\U escape: %w", parseErr)
-					return
-				}
-				if !utf8.ValidRune(rune(val)) {
-					err = eb.Build().Uint64("codePoint", val).Int("position", i).Errorf("invalid Unicode code point")
-					return
-				}
-				buf.WriteRune(rune(val))
-				i += 10
-			default:
-				buf.WriteByte(next)
-				i += 2
-			}
-		case ch == '\'' && i+1 < len(inner) && inner[i+1] == '\'':
-			buf.WriteByte('\'')
-			i += 2
-		default:
-			buf.WriteByte(ch)
-			i++
-		}
-	}
-	result = buf.String()
+	result, err = nanopass.UnescapeQuoted(raw[1:len(raw)-1], '\'')
 	return
 }
 
 // EscapeIdentifier produces a ClickHouse double-quoted identifier from a Go
-// string. Inner double quotes are doubled (the ANSI-SQL convention ClickHouse
-// also accepts), so a column literally named `a"b` becomes `"a""b"`.
+// string. Inner double quotes are doubled and backslashes escaped
+// ([nanopass.QuoteIdentifier]): the server reads a backslash inside a quoted
+// identifier as an escape, so an unescaped one could end the identifier
+// early. A column literally named `a"b` becomes `"a""b"`.
 func EscapeIdentifier(s string) string {
-	var buf strings.Builder
-	buf.Grow(len(s) + 2)
-	buf.WriteByte('"')
-	for i := 0; i < len(s); i++ {
-		ch := s[i]
-		if ch == '"' {
-			buf.WriteString(`""`)
-		} else {
-			buf.WriteByte(ch)
-		}
-	}
-	buf.WriteByte('"')
-	return buf.String()
+	return nanopass.QuoteIdentifier(s)
 }
 
 // EscapeString produces a ClickHouse single-quoted string literal from a Go
@@ -208,12 +108,12 @@ func UnmarshalScalarLiteral(token string) (result TypedLiteral, err error) {
 		result.Null = true
 		return
 	}
-	if token == "true" {
+	if strings.EqualFold(token, "true") {
 		result.ScalarType = ctabb.B
 		result.BoolVal = true
 		return
 	}
-	if token == "false" {
+	if strings.EqualFold(token, "false") {
 		result.ScalarType = ctabb.B
 		result.BoolVal = false
 		return
@@ -271,15 +171,7 @@ func UnmarshalScalarLiteral(token string) (result TypedLiteral, err error) {
 			err = eb.Build().Str("token", token).Errorf("invalid hex literal: %w", err)
 			return
 		}
-		if sign >= 0 || val == 0 {
-			// Negative zero is zero — keep the unsigned domain so the
-			// marshal⇄unmarshal normal form is type-stable.
-			result.ScalarType = ctabb.U64
-			result.UintVal = val
-		} else {
-			result.ScalarType = ctabb.I64
-			result.IntVal = -int64(val)
-		}
+		setSignedInteger(&result, sign < 0, val)
 		return
 	}
 
@@ -307,16 +199,28 @@ func UnmarshalScalarLiteral(token string) (result TypedLiteral, err error) {
 			result.Unknown = true
 			return
 		}
-		if sign >= 0 || val == 0 {
-			// Negative zero is zero — keep the unsigned domain so the
-			// marshal⇄unmarshal normal form is type-stable.
-			result.ScalarType = ctabb.U64
-			result.UintVal = val
-		} else {
-			result.ScalarType = ctabb.I64
-			result.IntVal = -int64(val)
-		}
+		setSignedInteger(&result, sign < 0, val)
 		return
+	}
+}
+
+// setSignedInteger stores an integer literal's magnitude and sign the way
+// the server types it: non-negative (and negative zero) as UInt64, a
+// negation down to math.MinInt64 as Int64, and a negation past it as
+// Float64.
+func setSignedInteger(result *TypedLiteral, negative bool, val uint64) {
+	switch {
+	case !negative || val == 0:
+		// Negative zero is zero — keep the unsigned domain so the
+		// marshal⇄unmarshal normal form is type-stable.
+		result.ScalarType = ctabb.U64
+		result.UintVal = val
+	case val <= 1<<63:
+		result.ScalarType = ctabb.I64
+		result.IntVal = int64(-val)
+	default:
+		result.ScalarType = ctabb.F64
+		result.FloatVal = -float64(val)
 	}
 }
 
@@ -555,35 +459,13 @@ func MarshalGoValueToSQLWithOptionsCast(val any, opts MarshalOptions) (sql strin
 	}
 	switch v := val.(type) {
 	case TypedLiteral:
-		if opts.PreserveCasts && opts.MapCanonicalToClickHouse != nil && v.CastTypeCanonical != "" {
-			castType, err = opts.MapCanonicalToClickHouse(v.CastTypeCanonical)
-			if err != nil {
-				err = eh.Errorf("unable to map cast type: %w", err)
-				return
-			}
-		}
-		sql, err = MarshalTypedLiteralToSQLEx(v, opts.MapCanonicalToClickHouse)
-		if err != nil {
-			err = eh.Errorf("marshal typed literal: %w", err)
-		}
-		return
+		return marshalTypedLiteralWithOptionsCast(v, opts)
 	case *TypedLiteral:
 		if v == nil {
 			sql = "NULL"
 			return
 		}
-		if opts.PreserveCasts && opts.MapCanonicalToClickHouse != nil && v.CastTypeCanonical != "" {
-			castType, err = opts.MapCanonicalToClickHouse(v.CastTypeCanonical)
-			if err != nil {
-				err = eh.Errorf("unable to map cast type: %w", err)
-				return
-			}
-		}
-		sql, err = MarshalTypedLiteralToSQLEx(*v, opts.MapCanonicalToClickHouse)
-		if err != nil {
-			err = eh.Errorf("marshal typed literal: %w", err)
-		}
-		return
+		return marshalTypedLiteralWithOptionsCast(*v, opts)
 
 	// --- Verbatim SQL (caller-supplied raw fragment) ---
 	case VerbatimSql:
@@ -716,6 +598,10 @@ func MarshalGoValueToSQLWithOptionsCast(val any, opts MarshalOptions) (sql strin
 
 	// --- Tuple ---
 	case *Tuple:
+		if v == nil {
+			sql = "NULL"
+			return
+		}
 		sql, err = marshalGoTuple(v, opts)
 		return
 
@@ -807,6 +693,27 @@ func MarshalGoValueToSQLWithOptionsCast(val any, opts MarshalOptions) (sql strin
 		err = eb.Build().Type("type", val).Errorf("unsupported type")
 		return
 	}
+}
+
+// marshalTypedLiteralWithOptionsCast returns the literal's cast as castType
+// when opts ask for casts to be preserved, and then marshals the value
+// without it, so the caller's CAST is the only one.
+func marshalTypedLiteralWithOptionsCast(v TypedLiteral, opts MarshalOptions) (sql string, castType string, err error) {
+	if opts.PreserveCasts && opts.MapCanonicalToClickHouse != nil && v.CastTypeCanonical != "" {
+		castType, err = opts.MapCanonicalToClickHouse(v.CastTypeCanonical)
+		if err != nil {
+			err = eh.Errorf("unable to map cast type: %w", err)
+			return
+		}
+		if castType != "" {
+			v.CastTypeCanonical = ""
+		}
+	}
+	sql, err = MarshalTypedLiteralToSQLEx(v, opts.MapCanonicalToClickHouse)
+	if err != nil {
+		err = eh.Errorf("marshal typed literal: %w", err)
+	}
+	return
 }
 
 func marshalGoArray[T any](arr []T, opts MarshalOptions) (sql string, err error) {

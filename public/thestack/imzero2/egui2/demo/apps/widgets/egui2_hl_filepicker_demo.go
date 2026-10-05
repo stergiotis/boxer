@@ -11,15 +11,15 @@ import (
 
 // filepickerDemoState is the per-app-instance state for the
 // filepicker demo. Each open gallery window owns its own four
-// filepicker.Inst values so per-dialog UI state (visibility, cursor,
+// filepicker.Dialog values so per-dialog UI state (visibility, cursor,
 // scroll) does not bleed across windows, and the four widget ids
 // derive from the host-supplied WidgetIdStack so they don't collide
 // with ids from another open app's filepicker demo.
 type filepickerDemoState struct {
-	open       *filepicker.Inst
-	multi      *filepicker.Inst
-	save       *filepicker.Inst
-	folder     *filepicker.Inst
+	open       *filepicker.Dialog
+	multi      *filepicker.Dialog
+	save       *filepicker.Dialog
+	folder     *filepicker.Dialog
 	lastAction filepicker.ActionE
 	lastPaths  []string
 }
@@ -40,18 +40,14 @@ func init() {
 			"adds and shift-click extends.",
 		Init: func(ids *c.WidgetIdStack) (state any) {
 			state = &filepickerDemoState{
-				open: filepicker.New("demo-open", filepicker.ModeOpen,
-					filepicker.WithExtensionFilter(".go", ".md", ".txt"),
-					filepicker.WithStartAtOsHome()),
-				multi: filepicker.New("demo-multi", filepicker.ModeOpen,
-					filepicker.WithExtensionFilter(".go", ".md", ".txt"),
-					filepicker.WithMultiSelect(true),
-					filepicker.WithStartAtOsHome()),
-				save: filepicker.New("demo-save", filepicker.ModeSave,
-					filepicker.WithDefaultFilename("untitled.txt"),
-					filepicker.WithStartAtOsHome()),
-				folder: filepicker.New("demo-folder", filepicker.ModePickFolder,
-					filepicker.WithStartAtOsHome()),
+				open: filepicker.New(ids, "demo-open", filepicker.Options{
+					Mode: filepicker.ModeOpen, Extensions: []string{".go", ".md", ".txt"}, StartAtOsHome: true}),
+				multi: filepicker.New(ids, "demo-multi", filepicker.Options{
+					Mode: filepicker.ModeOpen, Extensions: []string{".go", ".md", ".txt"}, MultiSelect: true, StartAtOsHome: true}),
+				save: filepicker.New(ids, "demo-save", filepicker.Options{
+					Mode: filepicker.ModeSave, DefaultFilename: "untitled.txt", StartAtOsHome: true}),
+				folder: filepicker.New(ids, "demo-folder", filepicker.Options{
+					Mode: filepicker.ModePickFolder, StartAtOsHome: true}),
 			}
 			return
 		},
@@ -90,9 +86,9 @@ func demoFilepicker(ids *c.WidgetIdStack, st *filepickerDemoState) {
 		}
 	}
 
-	for _, pp := range []*filepicker.Inst{st.open, st.multi, st.save, st.folder} {
-		if act, paths := pp.Render(ids); act != filepicker.ActionNone {
-			st.lastAction, st.lastPaths = act, paths
+	for _, pp := range []*filepicker.Dialog{st.open, st.multi, st.save, st.folder} {
+		if ev := pp.Render(); ev.Action != filepicker.ActionNone {
+			st.lastAction, st.lastPaths = ev.Action, ev.Paths
 		}
 	}
 

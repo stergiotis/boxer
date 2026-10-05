@@ -59,6 +59,10 @@ func NewCliCommand() *cli.Command {
 				Usage: "path pattern the checks skip (repeatable): a bare name or glob matches a basename, a trailing slash a directory at any depth, a pattern with a separator the whole relative path",
 			},
 			&cli.StringSliceFlag{
+				Name:  "tab-pkg",
+				Usage: "a browser-tab binary package, relative to --root (repeatable): it must compile for wasip1, and its tab report is printed (ADR-0278); none skips the tab step",
+			},
+			&cli.StringSliceFlag{
 				Name:  "step",
 				Usage: "run only this step (repeatable); empty runs all",
 			},
@@ -109,6 +113,7 @@ func gateAction(ctx *cli.Context) (err error) {
 		NamingRoots:         ctx.StringSlice("naming-root"),
 		Exclude:             ctx.StringSlice("exclude"),
 		Steps:               want,
+		TabPackages:         ctx.StringSlice("tab-pkg"),
 	}
 
 	rep := Run(ctx.Context, cfg, steps, os.Stdout)

@@ -2,8 +2,11 @@
 // embedded Natural Earth 110m admin-0 asset, filled by a per-country value
 // through a colormap, drawn Go-side into a content-versioned texture
 // (ADR-0114). Fixed camera — the whole world at once; deliberately no pan, no
-// zoom, no tiles. The projection is the caller's pick (SetProjection): Natural
-// Earth, or Equal Earth when the reading needs country areas to be comparable.
+// zoom, no tiles. The projection is the caller's pick (Options.Projection):
+// Natural Earth, or Equal Earth when the reading needs country areas to be
+// comparable. It is a semi-retained widget (ADR-0267): the object keeps the
+// raster, its geometry and the hover across frames, New takes its
+// [Options], Render draws it once per frame and returns its [Events].
 //
 // The widget is data-agnostic: callers resolve their own strings via
 // Atlas.Resolve and hand a map[CountryIdx]float64 to SetValues.
@@ -55,39 +58,72 @@ const (
 	highlightStrokeW = 2.0
 )
 
-// Widget is the schematic world choropleth. Construct via New; all methods
+// Style is the map's colours, 0xRRGGBBAA; every zero takes the default the
+// field doc gives.
+type Style struct {
+	// Sea is the water fill; the default is transparent, so the pane
+	// background reads through.
+	Sea uint32
+	// NoData fills a country without a value; the default is the
+	// faint-border neutral (mid grey on the dark spine, a light grey on a
+	// light one).
+	NoData uint32
+	// Stroke is the border colour; the default is near-black at ~55%,
+	// legible on light and dark fills.
+	Stroke uint32
+	// Presence fills a matched country in presence mode; the default is a
+	// viridis-family teal.
+	Presence uint32
+	// Palette is the choropleth colormap; the default is Viridis8.
+	Palette []uint32
+	// HighlightFill / HighlightStroke style the hovered country's painter
+	// overlay: a translucent wash so microstates still register, and an
+	// opaque outline. The wash is what makes the highlight legible on the
+	// dark end of a palette, the outline what makes it legible on the light
+	// end. Defaults: a white wash light enough to keep the fill readable,
+	// over a white outline that survives the palette's light end.
+	HighlightFill, HighlightStroke uint32
+}
+
+// Options configures a Map (ADR-0267 W11). The widget re-reads [Map.Opts] on
+// every Render, so a change is an assignment: a projection change drops the
+// raster geometry and re-rasterizes at once (a click, not a drag), a raster
+// width change goes through the resize debounce.
+type Options struct {
+	// Projection is the projection the outlines are drawn under; the zero
+	// value is Natural Earth, and an unknown value falls back to it.
+	Projection Projection
+	// RasterWidth pins the texture's width in pixels (quantized to a
+	// multiple of 8, clamped to [128, 2048]; the height follows the
+	// projection aspect). Zero, the default, tracks the canvas width so the
+	// texture is rasterized at the size it is displayed at. A caller that
+	// drives its own resolution control sets it.
+	RasterWidth float64
+	// Style is the map's colours.
+	Style Style
+}
+
+// Map is the schematic world choropleth. Construct via New; all methods
 // are render-thread-only (the imzero2 single-goroutine contract).
-type Widget struct {
+type Map struct {
+	// Opts is re-read on every Render; a change is an assignment.
+	Opts Options
+
 	ids      *c.WidgetIdStack
 	scopeKey string
 	atlas    *Atlas
 	loadErr  error
 
-	// projection is the caller's pick (SetProjection); pa is the atlas
-	// geometry under it, resolved lazily so the zero Widget is usable. The
-	// zero value of Projection is the default, so a caller that never asks
-	// gets Natural Earth.
+	// projection is the one drawn; pa is the atlas geometry under it,
+	// resolved lazily so the zero Map is usable.
 	projection Projection
 	pa         *Projected
-
-	// Style knobs, settable before the first Render. Colors are 0xRRGGBBAA.
-	SeaRGBA      uint32
-	NoDataRGBA   uint32
-	StrokeRGBA   uint32
-	PresenceRGBA uint32
-	Palette      []uint32
-
-	// HighlightFillRGBA / HighlightStrokeRGBA style the hovered country's
-	// painter overlay: a translucent wash so microstates still register, and
-	// an opaque outline. The wash is what makes the highlight legible on the
-	// dark end of a palette, the outline what makes it legible on the light
-	// end.
-	HighlightFillRGBA   uint32
-	HighlightStrokeRGBA uint32
+	// sty is Opts.Style with the defaults filled in (resolve).
+	sty Style
 
 	// values is dense per-country (NaN = no data); vmin/vmax the mapped range.
 	// presence means the caller supplied membership, not magnitudes: matched
-	// countries fill uniformly (PresenceRGBA) and there is no legend.
+	// countries fill uniformly (Style.Presence) and there is no legend.
 	values     []float64
 	haveValues bool
 	presence   bool
@@ -111,27 +147,24 @@ type Widget struct {
 	wantW, wantH int
 	wantSince    time.Time
 
-	// autoRasterW tracks the canvas width with the raster width, so the
-	// texture is drawn at the size it is displayed at. SetPixelWidth turns it
-	// off — an explicit resolution is the caller's to own.
-	autoRasterW bool
-
-	// displayH caps the map's on-screen height in points (0 = fill the
-	// available pane). See SetDisplayHeight — a caller inside a vertical
-	// ScrollArea must set it, because the pane-fills-available default reads a
-	// zero available height there and the map collapses to nothing.
-	displayH int
-
-	// displayW sets the map's on-screen width in points (0 = defer to displayH
-	// / fill-available). When > 0 it takes precedence over displayH: the map
-	// renders at exactly this width with the height derived from the projection
-	// aspect, so the on-screen size needs no available-space read. See
-	// SetDisplayWidth.
-	displayW int
-
 	hovered CountryIdx
 	// hxs / hys are the highlight ring scratch, reused across rings and frames.
 	hxs, hys []float32
+}
+
+// Events is what one Render reports; hover and click come from last frame's
+// canvas registers, so both lag one frame — the same lag the readout and
+// the highlight are drawn under.
+type Events struct {
+	// Clicked is the country under a primary click, ClickedOk whether there
+	// was one.
+	Clicked   CountryIdx
+	ClickedOk bool
+	// Hovered is the country under the pointer, HoveredOk whether there is
+	// one, and HoveredValue its value (NaN when it has no data).
+	Hovered      CountryIdx
+	HoveredOk    bool
+	HoveredValue float64
 }
 
 // New constructs the widget. scopeKey seeds the widget ids and the texture
@@ -139,50 +172,57 @@ type Widget struct {
 // atlas is parsed on first construction (process-wide once); a parse failure
 // is held and rendered as an error label rather than returned, so a broken
 // asset degrades to a dead pane instead of failing app construction.
-func New(ids *c.WidgetIdStack, scopeKey string) *Widget {
+func New(ids *c.WidgetIdStack, scopeKey string, opts Options) *Map {
 	atlas, err := LoadAtlas()
-	w := &Widget{
+	w := &Map{
+		Opts:     opts,
 		ids:      ids,
 		scopeKey: scopeKey,
 		atlas:    atlas,
 		loadErr:  err,
-		// Sea transparent (the pane background reads through), undata the
-		// faint-border neutral (mid grey on the dark spine, a light grey on a
-		// light one), borders near-black at ~55% — legible on light and dark
-		// fills. Presence fill is a viridis-family teal.
-		SeaRGBA:      0x00000000,
-		NoDataRGBA:   styletokens.NeutralBorderFaint.AsHex(),
-		StrokeRGBA:   0x0a0a0a8c,
-		PresenceRGBA: 0x2a788eff,
-		// Hover: a white wash light enough to keep the underlying fill
-		// readable, over a white outline that survives the palette's light end.
-		HighlightFillRGBA:   0xffffff30,
-		HighlightStrokeRGBA: 0xffffffe6,
-		Palette:             colormap.Viridis8,
-		tracker:             c.NewImageVersionTracker[string](),
-		hovered:             NoCountry,
-		wantW:               defaultRasterW,
-		autoRasterW:         true,
-		dirty:               true,
+		tracker:  c.NewImageVersionTracker[string](),
+		hovered:  NoCountry,
+		wantW:    defaultRasterW,
+		dirty:    true,
 	}
-	w.wantH = w.heightFor(defaultRasterW)
+	w.resolve()
+	w.wantH = w.heightFor(w.wantW)
 	return w
 }
 
-// SetPixelWidth pins the raster width (quantized to a multiple of 8, clamped
-// to [128, 2048]; height follows the projection aspect) and stops it tracking
-// the canvas. Callers that drive their own resolution control want this; the
-// default is to follow the canvas so the texture is rasterized at the size it
-// is displayed at. Re-rasterization is debounced either way, so a drag
-// re-rasters once at rest.
-func (inst *Widget) SetPixelWidth(px float64) {
-	inst.autoRasterW = false
-	inst.setRasterWidth(px)
+// resolve applies Opts: the style defaults, the projection (with the geometry
+// drop a change needs) and a pinned raster width.
+func (inst *Map) resolve() {
+	o := inst.Opts
+	inst.sty = o.Style
+	if inst.sty.NoData == 0 {
+		inst.sty.NoData = styletokens.NeutralBorderFaint.AsHex()
+	}
+	if inst.sty.Stroke == 0 {
+		inst.sty.Stroke = 0x0a0a0a8c
+	}
+	if inst.sty.Presence == 0 {
+		inst.sty.Presence = 0x2a788eff
+	}
+	if inst.sty.Palette == nil {
+		inst.sty.Palette = colormap.Viridis8
+	}
+	if inst.sty.HighlightFill == 0 {
+		inst.sty.HighlightFill = 0xffffff30
+	}
+	if inst.sty.HighlightStroke == 0 {
+		inst.sty.HighlightStroke = 0xffffffe6
+	}
+	inst.setProjection(o.Projection)
+	if o.RasterWidth > 0 {
+		inst.setRasterWidth(o.RasterWidth)
+	}
 }
 
-// setRasterWidth is SetPixelWidth without the ownership switch — the path the
-// canvas-tracking default also takes.
-func (inst *Widget) setRasterWidth(px float64) {
+// setRasterWidth quantizes and clamps a raster width and starts the resize
+// debounce when it changed — the path a pinned Options.RasterWidth and the
+// canvas-tracking default both take.
+func (inst *Map) setRasterWidth(px float64) {
 	wi := min(max(int(px)&^7, minRasterW), maxRasterW)
 	if wi != inst.wantW {
 		inst.wantW, inst.wantH = wi, inst.heightFor(wi)
@@ -190,16 +230,16 @@ func (inst *Widget) setRasterWidth(px float64) {
 	}
 }
 
-// PixelWidth returns the current target raster width (for binding a control).
-func (inst *Widget) PixelWidth() float64 { return float64(inst.wantW) }
+// RasterWidth returns the current target raster width (for a readout).
+func (inst *Map) RasterWidth() float64 { return float64(inst.wantW) }
 
-// SetProjection switches the projection the outlines are drawn under. The
+// setProjection switches the projection the outlines are drawn under. The
 // raster geometry is a function of (outlines, size), so this drops it and
 // re-rasterizes at once rather than through the resize debounce — a projection
 // change is a click, not a drag. The raster height follows the new aspect; the
 // values, the palette and the hover state are unaffected. An unknown value
 // falls back to the default (see Atlas.Projected).
-func (inst *Widget) SetProjection(p Projection) {
+func (inst *Map) setProjection(p Projection) {
 	if !p.Valid() {
 		p = ProjectionNaturalEarth
 	}
@@ -212,13 +252,10 @@ func (inst *Widget) SetProjection(p Projection) {
 	inst.dirty = true
 }
 
-// Projection returns the projection currently drawn (for binding a picker).
-func (inst *Widget) Projection() Projection { return inst.projection }
-
 // projected resolves the atlas geometry for the current projection, projecting
 // it on first use. The result is cached in the process-wide atlas, so a
 // projection flipped back to costs one map read.
-func (inst *Widget) projected() *Projected {
+func (inst *Map) projected() *Projected {
 	if inst.atlas == nil {
 		return nil
 	}
@@ -228,83 +265,34 @@ func (inst *Widget) projected() *Projected {
 	return inst.pa
 }
 
-// SetDisplayHeight caps the map's on-screen height in points; the width then
-// follows the projection aspect. Pass 0 (the default) to let the height follow
-// the pane width instead. Display size is independent of the raster resolution
-// set by SetPixelWidth.
-func (inst *Widget) SetDisplayHeight(px float64) {
-	if px <= 0 {
-		inst.displayH = 0
-		return
-	}
-	inst.displayH = max(int(px), 1)
-}
-
-// SetDisplayWidth sets the map's on-screen width in points; the height then
-// follows the projection aspect. Pass 0 (the default) to size from the pane
-// width instead. A finite width takes precedence over SetDisplayHeight and
-// needs no probe, so it is the way to make an on-screen width control actually
-// resize the map. Display size is independent of the raster resolution set by
-// SetPixelWidth.
-func (inst *Widget) SetDisplayWidth(px float64) {
-	if px <= 0 {
-		inst.displayW = 0
-		return
-	}
-	inst.displayW = max(int(px), 1)
-}
-
-// canvasBox resolves the on-screen canvas size in points. An explicit
-// SetDisplayWidth wins; otherwise the box spans the pane width read back from
-// the ui-rect probe (R21 — a per-seq append register, so unlike the single-slot
-// available-size capture it does not contend with whatever else the host app
-// sizes from; ADR-0114 Update 2026-08-01). One frame of lag: the first frame
-// draws at fallbackCanvasW. The height follows the projection aspect, bounded
-// by maxCanvasH and by SetDisplayHeight, with the width pulled back to keep the
-// aspect whenever the height binds.
-func (inst *Widget) canvasBox(paneW float32) (w, h int) {
-	if inst.displayW > 0 {
-		w = inst.displayW
-	} else {
-		w = int(paneW) - canvasMargin
-	}
-	w = min(max(w, minCanvasW), maxCanvasW)
-	h = inst.heightFor(w)
+// canvasBox resolves the on-screen canvas size in points for a box the host
+// offers: w is the width to span (the pane less a scrollbar margin in the
+// fill case, or exactly what a host asked for), h the height cap, zero for
+// none. The height follows the projection aspect, bounded by maxCanvasH and
+// by h, with the width pulled back to keep the aspect whenever the height
+// binds.
+func (inst *Map) canvasBox(w, h float32) (cw, ch int) {
+	cw = min(max(int(w), minCanvasW), maxCanvasW)
+	ch = inst.heightFor(cw)
 	capH := maxCanvasH
-	if inst.displayH > 0 && inst.displayH < capH {
-		capH = inst.displayH
+	if h > 0 && int(h) < capH {
+		capH = max(int(h), 1)
 	}
-	if h > capH {
-		h = capH
-		w = min(max(int(float64(h)*inst.projection.Aspect()), minCanvasW), maxCanvasW)
+	if ch > capH {
+		ch = capH
+		cw = min(max(int(float64(ch)*inst.projection.Aspect()), minCanvasW), maxCanvasW)
 	}
 	return
 }
 
-// paneWidth reads back the previous frame's ui-rect probe. ok=false on the
-// first frame (and in any frame where this widget went uninterpreted), which
-// the caller answers with fallbackCanvasW.
-func (inst *Widget) paneWidth(sm *c.StateManager) float32 {
-	if r, ok := sm.GetUiRect(inst.probeSeq()); ok && r.MaxX > r.MinX {
-		return r.MaxX - r.MinX
-	}
-	return fallbackCanvasW
-}
-
-// probeSeq is the ui-rect probe's key: derived from the widget's own scope, so
-// two worldmaps in one app never share a slot.
-func (inst *Widget) probeSeq() uint64 {
-	return inst.ids.PrepareStr(inst.scopeKey + "-paneprobe").Derive()
-}
-
 // Atlas exposes the shared country atlas (nil when loading failed) so the
 // caller can resolve its identifiers to CountryIdx values.
-func (inst *Widget) Atlas() *Atlas { return inst.atlas }
+func (inst *Map) Atlas() *Atlas { return inst.atlas }
 
 // SetValues replaces the choropleth data. Missing countries render in
-// NoDataRGBA. The colormap range is the data min/max; a single-valued or
+// Style.NoData. The colormap range is the data min/max; a single-valued or
 // empty range widens symmetrically so the palette midpoint is used.
-func (inst *Widget) SetValues(vals map[CountryIdx]float64) {
+func (inst *Map) SetValues(vals map[CountryIdx]float64) {
 	if inst.atlas == nil {
 		return
 	}
@@ -343,14 +331,14 @@ func (inst *Widget) SetValues(vals map[CountryIdx]float64) {
 	}
 	if inst.cm == nil || vmin != inst.vmin || vmax != inst.vmax {
 		inst.vmin, inst.vmax = vmin, vmax
-		inst.cm = colormap.NewConfig(inst.Palette, vmin, vmax)
+		inst.cm = colormap.NewConfig(inst.sty.Palette, vmin, vmax)
 		// Compact legend: the map competes for the same vertical space, so
-		// the scale stays a narrow strip beside the hover readout.
-		inst.legend = colorscale.New(c.NewWidgetIdStack(), inst.scopeKey+"-legend", inst.cm,
-			colorscale.WithOrientation(colorscale.OrientationHorizontal),
-			colorscale.WithSize(320, 44),
-			colorscale.WithLabelFormat(func(v float64) string { return fmt.Sprintf("%.4g", v) }),
-		)
+		// the scale stays a narrow strip beside the hover readout. Scoped
+		// under this map's own scope, where Render draws it.
+		inst.legend = colorscale.New(inst.ids, "legend", inst.cm, colorscale.Options{
+			Width: 320, Height: 44,
+			LabelFormat: func(v float64) string { return fmt.Sprintf("%.4g", v) },
+		})
 	}
 	inst.dirty = true
 }
@@ -366,10 +354,10 @@ func widenDegenerate(v float64) (min, max float64) {
 }
 
 // SetPresence replaces the data with membership only: the given countries
-// fill uniformly in PresenceRGBA, everything else is no-data, and no legend
+// fill uniformly in Style.Presence, everything else is no-data, and no legend
 // renders. Used when the caller's result names countries but carries no
 // numeric value to grade them by.
-func (inst *Widget) SetPresence(present map[CountryIdx]bool) {
+func (inst *Map) SetPresence(present map[CountryIdx]bool) {
 	if inst.atlas == nil {
 		return
 	}
@@ -395,7 +383,7 @@ func (inst *Widget) SetPresence(present map[CountryIdx]bool) {
 }
 
 // ClearValues drops the data: every country renders as no-data.
-func (inst *Widget) ClearValues() {
+func (inst *Map) ClearValues() {
 	inst.haveValues = false
 	inst.presence = false
 	inst.cm = nil
@@ -408,7 +396,7 @@ func (inst *Widget) ClearValues() {
 
 // Hovered returns the country under the pointer (last frame's readout) and
 // its value (NaN when the country has no data).
-func (inst *Widget) Hovered() (idx CountryIdx, value float64, ok bool) {
+func (inst *Map) Hovered() (idx CountryIdx, value float64, ok bool) {
 	if inst.hovered == NoCountry || inst.atlas == nil {
 		return NoCountry, math.NaN(), false
 	}
@@ -419,65 +407,98 @@ func (inst *Widget) Hovered() (idx CountryIdx, value float64, ok bool) {
 	return inst.hovered, v, true
 }
 
-// Render draws the map, the legend and the hover readout, and reports a
-// country click (primary button over a country) — immediate-mode style, so
-// the caller reacts in the same frame. Layout: the map spans the pane width at
-// the projection's aspect, or renders at exactly SetDisplayWidth when the
-// caller set one.
-//
-// Hover and click come from last frame's canvas registers, so both lag one
-// frame — the same lag the readout and the highlight are drawn under.
-func (inst *Widget) Render() (clicked CountryIdx, clickedOk bool) {
-	clicked = NoCountry
+// Render draws the map, the legend and the hover readout into a box the host
+// offers — w is the width the map spans, h a height cap (zero for none), the
+// map keeping the projection's aspect inside them — and reports a country
+// click and the hover. Hover and click come from last frame's canvas
+// registers, so both lag one frame — the same lag the readout and the
+// highlight are drawn under.
+func (inst *Map) Render(w, h float32) (ev Events) {
+	ev.Clicked, ev.Hovered, ev.HoveredValue = NoCountry, NoCountry, math.NaN()
 	if inst.loadErr != nil {
 		c.Label("world atlas unavailable: " + inst.loadErr.Error()).Wrap().Send()
 		return
 	}
 	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
-		sm := c.CurrentApplicationState.StateManager
-		canvasH := widgethandle.Make(inst.ids.PrepareStr(inst.scopeKey + "-canvas").Derive())
-		// The per-canvas pointer row is also the liveness signal: ok=false
-		// means this canvas did not render last frame (hidden dock tab, first
-		// frame), so neither the hover nor the click below is stale-true.
-		cur, live := sm.GetCanvasCursor(canvasH)
-		w, h := inst.canvasBox(inst.paneWidth(sm))
-		inst.updateHover(cur, live, w, h)
+		ev = inst.frame(w, h)
+	}
+	return
+}
 
-		for range c.Vertical().KeepIter() {
-			// The canvas width drives the raster resolution unless a caller
-			// pinned one; either way a pending change re-rasters once the
-			// debounce elapses, while data changes (dirty) re-raster at once.
-			if inst.autoRasterW {
-				inst.setRasterWidth(float64(w))
+// RenderFill is Render spanning the pane: its width less a scrollbar margin
+// and its height as the cap, read back through this instance's own probe
+// one frame behind, with the fallbacks serving until it reports (ADR-0267
+// W12). A host inside a vertical ScrollArea reads a zero pane height there
+// and should pass Render a height of its own instead.
+func (inst *Map) RenderFill(fallbackW, fallbackH float32) (ev Events) {
+	ev.Clicked, ev.Hovered, ev.HoveredValue = NoCountry, NoCountry, math.NaN()
+	if inst.loadErr != nil {
+		c.Label("world atlas unavailable: " + inst.loadErr.Error()).Wrap().Send()
+		return
+	}
+	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
+		// The probe goes first: the rect is the room left for the next
+		// widget, and it answers one frame late.
+		w, h, ok := c.CapturePaneSize(inst.ids.ProbeSeq("pane"))
+		if !ok || w < 1 {
+			w = fallbackW
+		}
+		if !ok || h < 1 {
+			h = fallbackH
+		}
+		ev = inst.frame(w-canvasMargin, h)
+	}
+	return
+}
+
+// frame runs inside the widget's id scope.
+func (inst *Map) frame(boxW, boxH float32) (ev Events) {
+	inst.resolve()
+	sm := c.CurrentApplicationState.StateManager
+	canvasH := widgethandle.Make(inst.ids.PrepareStr("canvas").Derive())
+	// The per-canvas pointer row is also the liveness signal: ok=false
+	// means this canvas did not render last frame (hidden dock tab, first
+	// frame), so neither the hover nor the click below is stale-true.
+	cur, live := sm.GetCanvasCursor(canvasH)
+	if boxW <= 0 {
+		boxW = fallbackCanvasW
+	}
+	w, h := inst.canvasBox(boxW, boxH)
+	inst.updateHover(cur, live, w, h)
+	ev.Clicked = NoCountry
+	ev.Hovered, ev.HoveredValue, ev.HoveredOk = inst.Hovered()
+
+	for range c.Vertical().KeepIter() {
+		// The canvas width drives the raster resolution unless a caller
+		// pinned one; either way a pending change re-rasters once the
+		// debounce elapses, while data changes (dirty) re-raster at once.
+		if inst.Opts.RasterWidth <= 0 {
+			inst.setRasterWidth(float64(w))
+		}
+		if inst.rw != inst.wantW && time.Since(inst.wantSince) >= resizeDebounce {
+			inst.dirty = true
+		}
+		if inst.dirty {
+			inst.rasterizeNow(inst.wantW, inst.wantH)
+		}
+		// Legend + readout share one row above the map. AddSpace rather
+		// than a vertical Separator: a rule in a horizontal row sizes to
+		// the available height, which balloons inside the dock's
+		// unbounded-height ScrollArea.
+		for range c.Horizontal().KeepIter() {
+			if inst.legend != nil {
+				inst.legend.Render()
+				c.AddSpace(styletokens.GapSections(styletokens.ActiveDensity()))
 			}
-			if inst.rw != inst.wantW && time.Since(inst.wantSince) >= resizeDebounce {
-				inst.dirty = true
-			}
-			if inst.dirty {
-				inst.rasterizeNow(inst.wantW, inst.wantH)
-			}
-			// Legend + readout share one row above the map. AddSpace rather
-			// than a vertical Separator: a rule in a horizontal row sizes to
-			// the available height, which balloons inside the dock's
-			// unbounded-height ScrollArea.
-			for range c.Horizontal().KeepIter() {
-				if inst.legend != nil {
-					inst.legend.Render()
-					c.AddSpace(styletokens.GapSections(styletokens.ActiveDensity()))
-				}
-				inst.renderReadout()
-			}
-			// The probe reads the pane width for the NEXT frame: a horizontal
-			// separator spans the pane, so the enclosing ui's min_rect does too.
-			c.Separator().Horizontal().Send()
-			c.CaptureUiRect(inst.probeSeq())
-			if inst.rgba != nil {
-				inst.paintMap(w, h)
-				if live && inst.hovered != NoCountry &&
-					sm.GetResponse(canvasH).HasPrimaryClicked() {
-					clicked = inst.hovered
-					clickedOk = true
-				}
+			inst.renderReadout()
+		}
+		c.Separator().Horizontal().Send()
+		if inst.rgba != nil {
+			inst.paintMap(w, h)
+			if live && inst.hovered != NoCountry &&
+				sm.GetResponse(canvasH).HasPrimaryClicked() {
+				ev.Clicked = inst.hovered
+				ev.ClickedOk = true
 			}
 		}
 	}
@@ -499,19 +520,19 @@ func (inst *Widget) Render() (clicked CountryIdx, clickedOk bool) {
 // starved id drops the "already sent" record and the full pixels re-ship
 // the next frame. Costs one blank frame on tab activation, nothing while
 // hidden.
-func (inst *Widget) paintMap(w, h int) {
+func (inst *Map) paintMap(w, h int) {
 	// Two separate PrepareStr creators per id: they derive the same
 	// content-based value, but each is a single-use state machine — reusing one
 	// across Derive() and the widget call panics ("invalid state transition").
-	imgId := inst.ids.PrepareStr(inst.scopeKey + "-img").Derive()
-	pixels := inst.tracker.PixelsToSendFor(inst.scopeKey+"-img", imgId, inst.version, inst.rgba)
+	imgId := inst.ids.PrepareStr("image").Derive()
+	pixels := inst.tracker.PixelsToSendFor("image", imgId, inst.version, inst.rgba)
 	c.PaintImage(imgId, 0, 0, float32(w), float32(h),
 		uint32(inst.rw), uint32(inst.rh), inst.version, pixels).
 		Send()
 	inst.paintHighlight(w, h)
 	// Sense hover as well as click: the pointer row is only pushed for a
 	// canvas whose response can report containment.
-	c.PaintCanvas(inst.ids.PrepareStr(inst.scopeKey+"-canvas"), float32(w), float32(h)).
+	c.PaintCanvas(inst.ids.PrepareStr("canvas"), float32(w), float32(h)).
 		Sense(true, false, true).
 		Send()
 }
@@ -526,7 +547,7 @@ func (inst *Widget) paintMap(w, h int) {
 // non-convex, which the convex fan-fill renders wrong. The fill has no hole
 // support, so an interior ring is outlined only: filling it would wash the
 // enclave it excludes (South Africa's Lesotho, the asset's only hole).
-func (inst *Widget) paintHighlight(w, h int) {
+func (inst *Map) paintHighlight(w, h int) {
 	if inst.hovered == NoCountry || inst.atlas == nil ||
 		int(inst.hovered) >= len(inst.atlas.Countries) {
 		return
@@ -534,8 +555,8 @@ func (inst *Widget) paintHighlight(w, h int) {
 	ct := &inst.atlas.Countries[inst.hovered]
 	rings := inst.projected().Rings(inst.hovered)
 	fw, fh := float32(w), float32(h)
-	fill := color.Hex(inst.HighlightFillRGBA)
-	stroke := color.Hex(inst.HighlightStrokeRGBA)
+	fill := color.Hex(inst.sty.HighlightFill)
+	stroke := color.Hex(inst.sty.HighlightStroke)
 	for i, ring := range rings {
 		// GeoJSON rings repeat their first point to close. The polyline needs
 		// that repeat, the fill does not: a duplicated vertex is a zero-length
@@ -572,7 +593,7 @@ func (inst *Widget) paintHighlight(w, h int) {
 // through the rasterization pass's per-pixel index buffer — one array load, no
 // geometry math at frame time. live=false (canvas not rendered last frame)
 // and a pointer outside the canvas both read as "nothing hovered".
-func (inst *Widget) updateHover(cur c.CanvasCursorValue, live bool, w, h int) {
+func (inst *Map) updateHover(cur c.CanvasCursorValue, live bool, w, h int) {
 	inst.hovered = NoCountry
 	if !live || inst.index == nil || w <= 0 || h <= 0 || inst.rw <= 0 || inst.rh <= 0 {
 		return
@@ -591,7 +612,7 @@ func (inst *Widget) updateHover(cur c.CanvasCursorValue, live bool, w, h int) {
 
 // renderReadout is the one-line hover status under the legend. In presence
 // mode the value is synthetic (1), so only membership is worded.
-func (inst *Widget) renderReadout() {
+func (inst *Map) renderReadout() {
 	text := "hover a country"
 	if idx, v, ok := inst.Hovered(); ok {
 		ct := &inst.atlas.Countries[idx]
@@ -609,7 +630,7 @@ func (inst *Widget) renderReadout() {
 	}
 }
 
-func (inst *Widget) heightFor(w int) int {
+func (inst *Map) heightFor(w int) int {
 	return max(int(float64(w)/inst.projection.Aspect()), 1)
 }
 
@@ -618,16 +639,16 @@ func (inst *Widget) heightFor(w int) int {
 // survives a data change: at an unchanged size and projection this is a
 // recolour of a cached geometry, not a re-rasterization. The output buffer is
 // reused too, so a value change allocates only the fill table.
-func (inst *Widget) rasterizeNow(w, h int) {
+func (inst *Map) rasterizeNow(w, h int) {
 	fills := make([]uint32, len(inst.atlas.Countries))
 	for i := range fills {
-		fills[i] = inst.NoDataRGBA
+		fills[i] = inst.sty.NoData
 		if !inst.haveValues || i >= len(inst.values) || math.IsNaN(inst.values[i]) {
 			continue
 		}
 		switch {
 		case inst.presence:
-			fills[i] = inst.PresenceRGBA
+			fills[i] = inst.sty.Presence
 		case inst.cm != nil:
 			fills[i] = inst.cm.At(inst.values[i])
 		}
@@ -640,8 +661,8 @@ func (inst *Widget) rasterizeNow(w, h int) {
 	}
 	inst.geom.resolve(inst.rgba, rasterStyle{
 		fills:  fills,
-		sea:    inst.SeaRGBA,
-		stroke: inst.StrokeRGBA,
+		sea:    inst.sty.Sea,
+		stroke: inst.sty.Stroke,
 	})
 	inst.rw, inst.rh = w, h
 	inst.version++

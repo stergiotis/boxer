@@ -2,6 +2,7 @@ package widgets
 
 import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
@@ -89,32 +90,6 @@ func init() {
 			for range c.CollapsingHeader(ids.PrepareStr("richtext"), c.WidgetText().Text("table (rich text)").Keep()).KeepIter() {
 				demoRichTextTable(ids)
 			}
-		},
-	})
-	registry.Register(registry.Demo{
-		Name: "graphs", Category: "Charts & plots", Title: icons.IconChartBar + " graphs",
-		Stage: [2]float32{1024, 700}, Flags: registry.DemoFlagNeedsLargeArea | registry.DemoFlagNonDeterministic, // dynamic-tree demo grows by time.Since(start)
-		Kind:        registry.DemoKindUX,
-		Description: "Force-directed, hierarchical and ring graph layouts sharing one set of navigation controls and a live event log.",
-		Init: func(_ *c.WidgetIdStack) (state any) {
-			state = newGraphsDemoState()
-			return
-		},
-		RenderStateful: func(ids *c.WidgetIdStack, state any) {
-			st := state.(*graphsDemoState)
-			for range c.CollapsingHeader(ids.PrepareStr("graph-nav-demo"), c.WidgetText().Text("navigation controls").Keep()).KeepIter() {
-				demoGraphGlobalNavControls(ids, st)
-			}
-			for range c.CollapsingHeader(ids.PrepareStr("graph-basic-demo"), c.WidgetText().Text("ring (random layout)").Keep()).DefaultOpen(true).KeepIter() {
-				demoGraphBasic(ids, st)
-			}
-			for range c.CollapsingHeader(ids.PrepareStr("graph-dynamic-demo"), c.WidgetText().Text("tree (force-directed)").Keep()).KeepIter() {
-				demoGraphDynamic(ids, st)
-			}
-			for range c.CollapsingHeader(ids.PrepareStr("graph-hierarchical-demo"), c.WidgetText().Text("tree (hierarchical, 10 nodes)").Keep()).KeepIter() {
-				demoGraphHierarchical(ids, st)
-			}
-			demoGraphEventLog(ids, st)
 		},
 	})
 	registry.Register(registry.Demo{
@@ -206,8 +181,8 @@ func init() {
 		Flags:       registry.DemoFlagNeedsLargeArea | registry.DemoFlagNeedsNetwork | registry.DemoFlagNonDeterministic,
 		Kind:        registry.DemoKindUX,
 		Description: "The slippy-map widget of ADR-0204 — Leaflet's map core ported to Go on the painter lane: raster tiles with cross-level retention, pan with inertia, anchored wheel zoom, animated double-click and box zoom, keyboard pan; markers, a route, an H3 region and a viewport-driven H3 heatmap through the projector hook; a tile-server switch; an H3 choropleth on a NoTiles canvas. Basemap from BOXER_MAP_TILE_URL, OpenStreetMap by default.",
-		Init: func(ids *c.WidgetIdStack) (state any) {
-			return newPortolanDemoState(ids)
+		BusInit: func(ids *c.WidgetIdStack, bus runtimeapp.BusI) (state any) {
+			return newPortolanDemoState(ids, bus)
 		},
 		RenderStateful: func(ids *c.WidgetIdStack, state any) {
 			demoPortolan(ids, state.(*portolanDemoState))
@@ -219,8 +194,8 @@ func init() {
 		Flags:       registry.DemoFlagNeedsLargeArea | registry.DemoFlagNeedsNetwork | registry.DemoFlagNonDeterministic,
 		Kind:        registry.DemoKindUX,
 		Description: "The hosted-canvas seam of ADR-0228: one canvas, owned by the portolan map and painted and picked by graphview. The map keeps its drag, wheel, box zoom and keyboard; the graph claims the pointer only where it lands on a node, and the map is told before it handles the same frame's input, so it does not pan under a node drag. Located nodes are pinned once, at their projected position in a fixed-zoom world measured from a local origin, and the map's camera at that zoom draws them — one equilibrium whatever the map shows. Nodes with no coordinates at all are declared unpinned and laid out by the force step among the pinned ones; their retained world position is already geographic. The basemap comes from BOXER_MAP_TILE_URL, OpenStreetMap by default; toggles swap it for the offline Natural Earth outlines of portolan/landoverlay, which need no tile server.",
-		Init: func(ids *c.WidgetIdStack) (state any) {
-			return newGraphOnMapState(ids)
+		BusInit: func(ids *c.WidgetIdStack, bus runtimeapp.BusI) (state any) {
+			return newGraphOnMapState(ids, bus)
 		},
 		RenderStateful: func(ids *c.WidgetIdStack, state any) {
 			demoGraphOnMap(ids, state.(*graphOnMapState))
@@ -232,8 +207,8 @@ func init() {
 		Flags:       registry.DemoFlagNeedsLargeArea,
 		Kind:        registry.DemoKindUX,
 		Description: "A gridded vector field drawn as particles on the portolan map (ADR-0249): portolan/flowoverlay is one more guest in the map's overlay callback, reading a windowed, step-indexed source — here an analytic jet and drifting vortices served through the in-memory pyramid of science/geo/vectorfield — and painting every trail in one paintSegments opcode. Particles live in projected world coordinates, advance on a fixed tick by the midpoint rule, and move at a pace that is a screen quantity; colour follows the scalar mean of the magnitude. The animation shows direction and relative speed, not transport, and a trail is a streamlet, not a trajectory. Offline country outlines stand in for tiles, so the capture needs no network; under the tour the layer runs a fixed number of ticks synchronously and rests.",
-		Init: func(ids *c.WidgetIdStack) (state any) {
-			return newFlowOnMapState(ids)
+		BusInit: func(ids *c.WidgetIdStack, bus runtimeapp.BusI) (state any) {
+			return newFlowOnMapState(ids, bus)
 		},
 		RenderStateful: func(ids *c.WidgetIdStack, state any) {
 			demoFlowOnMap(ids, state.(*flowOnMapState))
@@ -250,6 +225,19 @@ func init() {
 		},
 		RenderStateful: func(ids *c.WidgetIdStack, state any) {
 			demoFlowBench(ids, state.(*flowBenchState))
+		},
+	})
+	registry.Register(registry.Demo{
+		Name: "landbench", Category: "Maps & geo", Title: icons.IconGlobe + " land bench (portolan land trial harness)",
+		Stage:       [2]float32{1024, 760},
+		Flags:       registry.DemoFlagNeedsLargeArea | registry.DemoFlagSkipInTour | registry.DemoFlagNonDeterministic,
+		Kind:        registry.DemoKindDX,
+		Description: "The measurement harness of the land frame-cost trial (doc/trials/portolan-land-frame-cost): one map, the landoverlay, a view and a paint arm — filled as shipped, outlines only, or no layer — and a window of frames summarised into a label and a log line. Not a showcase; the trial's run script drives it.",
+		Init: func(ids *c.WidgetIdStack) (state any) {
+			return newLandBenchState(ids)
+		},
+		RenderStateful: func(ids *c.WidgetIdStack, state any) {
+			demoLandBench(ids, state.(*landBenchState))
 		},
 	})
 	registry.Register(registry.Demo{

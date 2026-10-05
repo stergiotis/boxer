@@ -20,9 +20,8 @@ import (
 type View struct {
 	Opts Options
 
-	ids     *c.WidgetIdStack
-	key     string
-	paneKey string
+	ids *c.WidgetIdStack
+	key string
 
 	g   graph
 	fs  forceState
@@ -127,7 +126,6 @@ func New(ids *c.WidgetIdStack, key string, opts Options) *View {
 		Opts:        opts,
 		ids:         ids,
 		key:         key,
-		paneKey:     key + "-pane",
 		cam:         cam.Camera{Zoom: 1},
 		style:       opts.Style.withDefaults(),
 		hoveredEdge: -1,
@@ -256,9 +254,10 @@ func (v *View) FastForward(steps uint32) {
 	v.autoPaused = false
 }
 
-// Events returns the interactions the previous frame's input produced,
-// valid until the next Render.
-func (v *View) Events() []Event { return v.events }
+// Events is what one Render produced from the previous frame's input, valid
+// until the next Render (ADR-0267 W3). Render, RenderFill and HostedPaint
+// return it.
+type Events []Event
 
 // Metrics returns the counts and the force layout's settle state.
 func (v *View) Metrics() Metrics {
@@ -516,12 +515,16 @@ func (v *View) SetNodePosition(id uint64, x, y float32) {
 // RenderFill is Render sized to the pane the widget sits in, as reported by
 // the layout probe one frame late; the fallbacks serve the first frame and
 // a hidden tab.
-func (v *View) RenderFill(nodes []NodeSpec, edges []EdgeSpec, fallbackW, fallbackH float32) {
+func (v *View) RenderFill(nodes []NodeSpec, edges []EdgeSpec, fallbackW, fallbackH float32) (ev Events) {
 	w, h := fallbackW, fallbackH
-	if pw, ph, ok := c.CapturePaneSize(v.ids.PrepareStr(v.paneKey).Derive()); ok && pw > 0 && ph > 0 {
-		w, h = pw, ph
+	// The probe's slot is keyed under the widget's own scope (ADR-0267 W7);
+	// the scope is opened for the derivation alone and emits nothing.
+	for range c.IdScope(v.ids.PrepareStr(v.key)) {
+		if pw, ph, ok := c.CapturePaneSize(v.ids.ProbeSeq("pane")); ok && pw > 0 && ph > 0 {
+			w, h = pw, ph
+		}
 	}
-	v.Render(nodes, edges, w, h)
+	return v.Render(nodes, edges, w, h)
 }
 
 // Render reconciles the declaration, applies the previous frame's input,
@@ -529,10 +532,11 @@ func (v *View) RenderFill(nodes []NodeSpec, edges []EdgeSpec, fallbackW, fallbac
 // position. A non-positive size renders nothing; RenderFill takes the
 // pane's size. The row form is rewritten into columns and rendered as
 // RenderColumns would: the two forms paint the same picture.
-func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
+func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) (ev Events) {
 	v.g.declN.fromSpecs(nodes)
 	v.g.declE.fromSpecs(edges)
 	v.renderColumns(&v.g.declN, &v.g.declE, w, h)
+	return v.events
 }
 
 // RenderColumns is Render over a columnar declaration (ADR-0232 §SD2). A
@@ -541,7 +545,7 @@ func (v *View) Render(nodes []NodeSpec, edges []EdgeSpec, w, h float32) {
 // widget's state untouched. The columns are read during the call and not
 // retained, except that a donut's values and colours are referenced until
 // the next render, as a NodeSpec's are.
-func (v *View) RenderColumns(nodes *NodeColumns, edges *EdgeColumns, w, h float32) (err error) {
+func (v *View) RenderColumns(nodes *NodeColumns, edges *EdgeColumns, w, h float32) (ev Events, err error) {
 	if err = nodes.Validate(); err != nil {
 		return
 	}
@@ -549,7 +553,7 @@ func (v *View) RenderColumns(nodes *NodeColumns, edges *EdgeColumns, w, h float3
 		return
 	}
 	v.renderColumns(nodes, edges, w, h)
-	return
+	return v.events, nil
 }
 
 func (v *View) renderColumns(nodes *NodeColumns, edges *EdgeColumns, w, h float32) {

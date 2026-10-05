@@ -73,6 +73,11 @@ type WidgetIdCreatorI interface {
 	Derive() uint64
 	// DeriveStacked side effect: stack manipulation
 	DeriveStacked() uint64
+	// PushIdToStack side effect: stack manipulation. Pushes an id obtained
+	// from Derive, so a block iterator can open its scope when its body runs
+	// rather than when it is built, and a builder that is sent or dropped
+	// instead leaves the stack as it found it.
+	PushIdToStack(id uint64)
 	// PopIdFromStack side effect: stack manipulation
 	PopIdFromStack()
 	// PopIdFromStackChecked side effect: stack manipulation
@@ -118,6 +123,10 @@ func (inst AbsoluteWidgetId) Derive() uint64 {
 }
 func (inst AbsoluteWidgetId) DeriveStacked() uint64 {
 	return inst.Derive()
+}
+
+func (inst AbsoluteWidgetId) PushIdToStack(id uint64) {
+	// no-op
 }
 
 func (inst AbsoluteWidgetId) PopIdFromStack() {
@@ -234,6 +243,10 @@ func (inst *WidgetIdStack) PrepareHighEntropy(id uint64) *WidgetIdStack {
 	return inst
 }
 
+func (inst *WidgetIdStack) PushIdToStack(id uint64) {
+	inst.verifyState(WidgetIdStackInitial)
+	inst.pushIdToStack(id)
+}
 func (inst *WidgetIdStack) pushIdToStack(id uint64) {
 	//log.Trace().Caller(3).Int("depth", inst.idStack.Depth()).Msg("pushIdToStack")
 	inst.idStack.Push(id)

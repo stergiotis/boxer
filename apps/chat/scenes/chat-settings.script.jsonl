@@ -1,0 +1,12 @@
+# The scripted model of chat-settings.scene.md (ADR-0280): one reply per
+# line, picked by the conversation's position.
+# Turn 1, under the default settings: ask for the demo app, open it, read
+# and write.
+{"tool":"request_access","args":{"plan":"write a note in the demo app","open":[{"app":"opsdemo"}]}}
+{"tool":"open_window","args":{"app":"opsdemo"}}
+{"tool":"call_operation","args":{"window":"$window","operation":"get_state","args":{},"title":"Reading the note"}}
+{"tool":"call_operation","args":{"window":"$window","operation":"set_note","args":{"text":"written by the model"},"title":"Writing the note"}}
+{"content":"The note is written."}
+# Turn 2, after the person set At most to Read: the same write is refused.
+{"tool":"call_operation","args":{"window":"$window","operation":"set_note","args":{"text":"written again"},"title":"Writing the note again"}}
+{"content":"The settings let me only read now, so the note stands."}

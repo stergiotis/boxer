@@ -1,0 +1,11 @@
+PORT 41851
+GET /index.html?target=js&consumer=pipe&flush=lazy&scene=labels&rows=1700&frames=300&warmup=30&stage=1024x600&arm=firefox-js-pipe-lazy
+GET /worker.mjs
+GET /favicon.ico
+GET /bridge.js
+GET /fetchtable.txt
+GET /fffi2stub.wasm
+GET /wasmspike_js.wasm
+GET /wasm_exec.js
+POST /report
+ARM {"result":{"arm":"firefox-js-pipe-lazy","target":"js","consumer":"pipe","lazy_flush":true,"scene":"labels","frames":300,"warmup":30,"bytes_per_frame":301799,"messages_per_frame":0,"render_us":{"p50":5999.872,"p90":6999.808,"max":19000.064},"sync_us":{"p50":0,"p90":1000.192,"max":3000.064},"total_us":{"p50":6000.128,"p90":8000,"max":20000.256}},"stub":{"messages":2815890,"bytes":99593670,"frames":330,"fetches":7920,"maxMessage":51},"bridge":{"chunks":32010,"bridgeMs":32},"wallMs":2249,"ua":"Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:149.0) Gecko/20100101 Firefox/149.0"}

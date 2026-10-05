@@ -148,17 +148,23 @@ type Step struct {
 	Comment string `json:"comment,omitempty"`
 
 	// Sidecars names what a `capture` writes beside its PNG, for a program to
-	// measure rather than a reader to look at (ADR-0257 (proposed) §SD5):
-	// [SidecarSVG] and [SidecarTree]. A requested sidecar that is not written
-	// fails the step.
+	// measure rather than a reader to look at (ADR-0266 (proposed) §SD5):
+	// [SidecarSVG] (or [SidecarSVGFonts]) and [SidecarTree]. A requested
+	// sidecar that is not written fails the step.
 	Sidecars []string `json:"sidecars,omitempty"`
 }
 
 const (
 	// SidecarSVG is the frame's shapes as an SVG, written by the host from the
-	// same pass as the PNG: text as glyph-positioned `<text>`, shapes as
-	// primitives. Named <capture>.svg.
+	// same pass as the PNG: text as `<text>` runs with a position per
+	// character, shapes as primitives, fonts named rather than embedded.
+	// Named <capture>.svg.
 	SidecarSVG = "svg"
+	// SidecarSVGFonts is the same file with a subset of each used font
+	// embedded, so it renders the same on a machine without the fonts. The
+	// fonts are most of the bytes, which a program reading the text does not
+	// need; ask for this one to look at the file, not to measure it.
+	SidecarSVGFonts = "svg+fonts"
 	// SidecarTree is the accessibility tree as JSONL ([WriteTreeJSONL]), every
 	// node, requested right after the capture — so it is the next pass's tree,
 	// not the captured pass's, which a settled frame does not tell apart.
@@ -167,10 +173,11 @@ const (
 )
 
 // SidecarFile is the file name a capture named name writes for sidecar, or
-// the PNG itself for an empty sidecar. It mirrors the host's rule: a trailing
-// ".png" on the name is dropped first.
+// the PNG itself for an empty sidecar. It mirrors the host's rule: the name is
+// reduced to its last path element, since the host owns the directory, and a
+// trailing ".png" on it is dropped.
 func SidecarFile(name string, sidecar string) string {
-	stem := name
+	stem := filepath.Base(name)
 	if ext := filepath.Ext(stem); strings.EqualFold(ext, ".png") {
 		stem = stem[:len(stem)-len(ext)]
 	}
@@ -179,6 +186,8 @@ func SidecarFile(name string, sidecar string) string {
 		return stem + ".png"
 	case SidecarTree:
 		return stem + ".tree.jsonl"
+	case SidecarSVGFonts:
+		return stem + ".svg"
 	default:
 		return stem + "." + sidecar
 	}
@@ -199,8 +208,8 @@ func (inst Step) check() (err error) {
 		return eb.Build().Str("do", inst.Do).Errorf("only a capture step takes \"sidecars\"")
 	}
 	for _, sc := range inst.Sidecars {
-		if sc != SidecarSVG && sc != SidecarTree {
-			return eb.Build().Str("sidecar", sc).Errorf("unknown capture sidecar (want %q or %q)", SidecarSVG, SidecarTree)
+		if sc != SidecarSVG && sc != SidecarSVGFonts && sc != SidecarTree {
+			return eb.Build().Str("sidecar", sc).Strs("want", []string{SidecarSVG, SidecarSVGFonts, SidecarTree}).Errorf("unknown capture sidecar")
 		}
 	}
 	return nil
@@ -372,9 +381,34 @@ func RunTrace(c *Client, steps []Step, opts RunOptions) (err error) {
 		// while a query is in flight, so "Run is enabled again" is a precise
 		// "the result has landed", and a single resolution would just fail on
 		// the disabled state it exists to wait out.
+		settle := time.Duration(st.SettleMs) * time.Millisecond
+		if settle == 0 {
+			settle = time.Duration(opts.SettleMs) * time.Millisecond
+		}
+		// settleAfter pauses for what a step set in motion. Idle, not
+		// time.Sleep: the pause must keep answering the carrier's keepalive or
+		// a long `sleep` gets the driver reaped.
+		settleAfter := func() error {
+			if settle <= 0 {
+				return nil
+			}
+			if e := c.Idle(settle); e != nil {
+				return eb.Build().Int("step", i+1).Str("step_desc", st.describe()).
+					Errorf("settle after the step failed: %w", e)
+			}
+			return nil
+		}
+
 		if st.Do == "wait" {
 			if !st.hasAnchor() {
 				return eb.Build().Int("step", i+1).Errorf("wait needs an anchor")
+			}
+			// What a wait waits for is usually the consequence of an input
+			// step a dry run did not send, so polling for it would only time
+			// out; it is skipped, as `read` is.
+			if opts.DryRun {
+				log.Info().Msg("dry run: " + st.describe())
+				continue
 			}
 			if err = waitFor(c, st, opts); err != nil {
 				return eb.Build().Int("step", i+1).Str("step_desc", st.describe()).
@@ -382,6 +416,9 @@ func RunTrace(c *Client, steps []Step, opts RunOptions) (err error) {
 			}
 			stale = true // the tree it settled on is newer than any we cached
 			tree = nil
+			if err = settleAfter(); err != nil {
+				return err
+			}
 			log.Info().Msg(st.describe())
 			continue
 		}
@@ -402,6 +439,9 @@ func RunTrace(c *Client, steps []Step, opts RunOptions) (err error) {
 			}
 			stale = true
 			tree = nil
+			if err = settleAfter(); err != nil {
+				return err
+			}
 			log.Info().Msg(st.describe())
 			continue
 		}
@@ -433,10 +473,6 @@ func RunTrace(c *Client, steps []Step, opts RunOptions) (err error) {
 			log.Info().Msg("dry run: " + st.describe())
 			continue
 		}
-		settle := time.Duration(st.SettleMs) * time.Millisecond
-		if settle == 0 {
-			settle = time.Duration(opts.SettleMs) * time.Millisecond
-		}
 		if settleBefore(st.Do) && settle > 0 {
 			if err = c.Idle(settle); err != nil {
 				return eb.Build().Int("step", i+1).Str("step_desc", st.describe()).
@@ -452,12 +488,9 @@ func RunTrace(c *Client, steps []Step, opts RunOptions) (err error) {
 		if st.Do != "wait" && st.Do != "note" && st.Do != "capture" && st.Do != "tree" && st.Do != "expect" {
 			stale = true
 		}
-		if !settleBefore(st.Do) && settle > 0 {
-			// Idle, not time.Sleep: the pause must keep answering the
-			// carrier's keepalive or a long `sleep` gets the driver reaped.
-			if err = c.Idle(settle); err != nil {
-				return eb.Build().Int("step", i+1).Str("step_desc", st.describe()).
-					Errorf("settle after the step failed: %w", err)
+		if !settleBefore(st.Do) {
+			if err = settleAfter(); err != nil {
+				return err
 			}
 		}
 		log.Info().Msg(st.describe())
@@ -527,6 +560,76 @@ func waitFor(c *Client, st Step, opts RunOptions) (err error) {
 		}
 		if err = c.Idle(150 * time.Millisecond); err != nil {
 			return err
+		}
+	}
+}
+
+// typeInto focuses node, waits until the host reports it focused, sends the
+// text and, on a text input, waits until the value changed.
+//
+// Focus first: text goes to whatever egui thinks is focused, which without
+// this is whatever the previous step left. And wait for it: sent in the same
+// pass as the text, an AccessKit focus request lands after egui's TextEdit
+// has already passed over that pass's text events — an empty one handles them
+// before it registers for focus — so the text went nowhere and nothing said
+// so. Both checks turn that silent miss into an error.
+func typeInto(c *Client, st Step, node *TreeNode, opts RunOptions) (err error) {
+	id := node.GetId()
+	if node.GetFlags()&FlagFocused == 0 {
+		if err = c.FocusNode(id); err != nil {
+			return err
+		}
+		if _, err = pollNode(c, id, opts.Timeout, func(n *TreeNode, snap *TreeSnapshot) bool {
+			return n.GetFlags()&FlagFocused != 0 || snap.GetFocus() == id
+		}); err != nil {
+			return eb.Build().Uint64("node", id).Stringer("timeout", opts.Timeout).
+				Errorf("focus did not move to the node: %w", err)
+		}
+	}
+	before := node.GetValue()
+	if err = c.TypeText(st.Text); err != nil {
+		return err
+	}
+	if st.Text == "" || !IsEditableRole(node.GetRole()) {
+		return nil
+	}
+	last, err := pollNode(c, id, opts.Timeout, func(n *TreeNode, _ *TreeSnapshot) bool {
+		return n.GetValue() != before
+	})
+	if err != nil {
+		return eb.Build().Uint64("node", id).Str("read", last.GetValue()).Str("typed", st.Text).
+			Errorf("the text did not reach the node: %w", err)
+	}
+	return nil
+}
+
+// pollNode fetches the tree until the node with id satisfies ok or timeout
+// passes, at least once after one pass. It returns the node as last read.
+func pollNode(c *Client, id uint64, timeout time.Duration, ok func(n *TreeNode, snap *TreeSnapshot) bool) (last *TreeNode, err error) {
+	deadline := time.Now().Add(timeout)
+	for attempt := 0; ; attempt++ {
+		if err = c.Idle(100 * time.Millisecond); err != nil {
+			return last, err
+		}
+		var snap *TreeSnapshot
+		if snap, err = c.Tree(timeout); err != nil {
+			return last, err
+		}
+		last = nil
+		for _, n := range snap.GetNodes() {
+			if n.GetId() == id {
+				last = n
+				break
+			}
+		}
+		if last != nil && ok(last, snap) {
+			return last, nil
+		}
+		if time.Now().After(deadline) {
+			if last == nil {
+				return nil, eb.Build().Int("attempts", attempt+1).Errorf("the node left the tree")
+			}
+			return last, eb.Build().Int("attempts", attempt+1).Errorf("still not so before the timeout")
 		}
 	}
 }
@@ -661,12 +764,7 @@ func runStep(c *Client, st Step, node *TreeNode, opts RunOptions) (err error) {
 		}
 		return c.MoveMouse(x, y)
 	case "type":
-		// Focus first: text goes to whatever egui thinks is focused, which
-		// without this is whatever the previous step left.
-		if err = c.FocusNode(node.GetId()); err != nil {
-			return err
-		}
-		return c.TypeText(st.Text)
+		return typeInto(c, st, node, opts)
 	case "set_value":
 		return c.SetNodeValue(node.GetId(), st.Text)
 	case "focus":
@@ -718,8 +816,9 @@ func runStep(c *Client, st Step, node *TreeNode, opts RunOptions) (err error) {
 		if name == "" {
 			return eh.Errorf("capture step needs a name in \"text\"")
 		}
-		svg := st.wants(SidecarSVG)
-		done, e := c.Capture(name, svg, opts.Timeout)
+		fonts := st.wants(SidecarSVGFonts)
+		svg := fonts || st.wants(SidecarSVG)
+		done, e := c.Capture(name, svg, fonts, opts.Timeout)
 		if e != nil {
 			return e
 		}

@@ -19,7 +19,7 @@ const (
 // pointer's offset. It is its own canvas with its own sense region, so it
 // never fights the main canvas's gestures.
 func (inst *Player) RenderMinimap(w, h float32) {
-	for range c.IdScope(inst.ids.PrepareStr(inst.opts.ScopeKey)) {
+	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
 		inst.minimapFrame(w, h)
 	}
 }

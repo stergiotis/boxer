@@ -1,10 +1,7 @@
 package gauge
 
 import (
-	"hash/fnv"
 	"math"
-	"strconv"
-	"sync"
 	"unicode/utf8"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -20,9 +17,8 @@ import (
 // next StateManager.Sync, so the value lands ONE FRAME after the call (the
 // colorscale cachingMeasurer idiom). The first frame a given readout string is
 // seen therefore uses an approximation and the dial settles to the exact fit
-// on the next frame. State is held per gauge instance (keyed by the stable
-// canvas-id hash), not per value, so the store holds one entry per live dial
-// and does not grow as telemetry changes.
+// on the next frame. The memo is the host's [State], one per dial, so nothing
+// in this package outlives a frame.
 
 const (
 	// readoutFitSafety keeps the readout clear of the band's inner edge and the
@@ -39,34 +35,16 @@ const (
 	approxGlyphFrac float64 = 0.62
 )
 
-// fitState is the cross-frame readout measurement for one gauge instance. width
-// is pointer-bound: MeasureTextBind writes the measured width here on the next
-// Sync. text/font record what the width was measured against, so a value change
-// re-seeds the approximation until the real width arrives.
+// fitState is the cross-frame readout measurement for one dial, kept in the
+// host's [State]. width is pointer-bound: MeasureTextBind writes the measured
+// width here on the next Sync, which is why the State must be a stable heap
+// value (SKILL §12 "Stable Pointers"). text/font record what the width was
+// measured against, so a value change re-seeds the approximation until the
+// real width arrives.
 type fitState struct {
 	text  string
 	font  float32
 	width float64
-}
-
-// fitStates maps a gauge readout's measureId to its fitState. Keyed by the
-// stable per-instance canvas-id hash, so the map is bounded by the number of
-// live dials (the distsummary/regexsummary instanceStates idiom); like those it
-// is not evicted — a dial that stops rendering leaves a tiny stale entry. The
-// egui2 render loop is single-threaded, so a given entry is only ever touched
-// from one goroutine (Render and the between-frame Sync that writes width).
-var fitStates sync.Map // map[uint64]*fitState
-
-// readoutMeasureId derives a stable, collision-resistant measurement id from the
-// gauge's canvas identity (idPrefix + callId), salted distinct from the canvas
-// id itself so it never clashes with another widget's animation/measure slot.
-func readoutMeasureId(idPrefix string, callId uint64) uint64 {
-	h := fnv.New64a()
-	_, _ = h.Write([]byte(idPrefix))
-	_, _ = h.Write([]byte("#"))
-	_, _ = h.Write([]byte(strconv.FormatUint(callId, 16)))
-	_, _ = h.Write([]byte("-gauge-readout"))
-	return h.Sum64()
 }
 
 // readoutAvailWidth is the usable readout width: the chord of the band's inner
@@ -88,12 +66,14 @@ func readoutAvailWidth(innerR, yOff float32) float32 {
 // approximation. Width scales linearly with font size, so the real width is
 // always measured at baseFont and the result scaled arithmetically — measuring
 // at the shrunk size instead would oscillate.
-func fitReadoutFont(measureId uint64, text string, baseFont, availWidth float32) float32 {
-	v, ok := fitStates.Load(measureId)
-	if !ok {
-		v, _ = fitStates.LoadOrStore(measureId, &fitState{})
+//
+// s is the dial's memo; nil (a host that keeps no [State]) falls back to the
+// approximation every frame and registers no binding. measureId is the
+// binding's slot, derived under the dial's scope ([c.WidgetIdStack.ProbeSeq]).
+func fitReadoutFont(s *fitState, measureId uint64, text string, baseFont, availWidth float32) float32 {
+	if s == nil {
+		return fitFontForWidth(approxReadoutWidth(text, baseFont), baseFont, availWidth)
 	}
-	s := v.(*fitState)
 	if s.text != text || s.font != baseFont {
 		s.text = text
 		s.font = baseFont

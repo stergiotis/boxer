@@ -1,0 +1,17 @@
+[package]
+name = "imzero2_browser"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94"
+publish = false
+description = "The imzero2 browser host as a wasm32 cdylib with a C ABI (ADR-0263)"
+
+# A cdylib and nothing else: cargo cannot pick a crate type per target, so the
+# browser module is its own crate rather than a second crate type on imzero2.
+# Build with `../build_rust_browser.sh`; a native build of this crate links
+# imzero2 into an unused shared library and is not part of the default set.
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+imzero2 = { path = "..", default-features = false, features = ["browser"] }

@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -11,12 +12,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 	"github.com/stergiotis/boxer/public/storage/recordstore/chexec"
 )
@@ -28,10 +31,15 @@ type fakeProvider struct {
 	resp openaichat.CompletionResponse
 	err  error
 	seen openaichat.CompletionRequest
+	// during, when set, runs while the provider "answers".
+	during func()
 }
 
 func (f *fakeProvider) Complete(_ context.Context, req openaichat.CompletionRequest) (openaichat.CompletionResponse, error) {
 	f.seen = req
+	if f.during != nil {
+		f.during()
+	}
 	return f.resp, f.err
 }
 func (f *fakeProvider) Close() (err error) { return }
@@ -67,6 +75,50 @@ func TestUnconfiguredHostSaysSo(t *testing.T) {
 	_, err = cli.Complete(context.Background(), Request{Messages: []openaichat.Message{{Role: openaichat.ChatRoleUser, Content: "hi"}}})
 	var refused *RefusedError
 	require.True(t, errors.As(err, &refused), "%v", err)
+}
+
+// An answer the provider ended early with no text says how it ended, what
+// it spent against the ceiling, and that the model was reasoning.
+func TestAnAnswerCutOffWithoutTextSaysWhy(t *testing.T) {
+	msg := []openaichat.Message{{Role: openaichat.ChatRoleUser, Content: "hi"}}
+	p := &fakeProvider{resp: openaichat.CompletionResponse{FinishReason: "length", OutputTokens: 64, Reasoning: "thinking"},
+		err: openaichat.ErrIncompleteCompletion}
+	cfg := localCfg(p)
+	cfg.MaxTokens = 64
+	cli, svc, _ := serve(t, cfg)
+	_, err := cli.Complete(context.Background(), Request{Messages: msg})
+	var failed *CallError
+	require.True(t, errors.As(err, &failed), "%v", err)
+	assert.Equal(t, errKindIncomplete, failed.Kind)
+	assert.True(t, errors.Is(err, openaichat.ErrIncompleteCompletion))
+	assert.Contains(t, failed.Reason, `finish_reason "length"`)
+	assert.Contains(t, failed.Reason, "64 output tokens of the call's ceiling of 64")
+	assert.Contains(t, failed.Reason, "spent them reasoning")
+	assert.Equal(t, "thinking", failed.Reasoning, "the reasoning comes back for inspection")
+	require.Len(t, svc.Calls(), 1)
+	assert.Equal(t, failed.Reason, svc.Calls()[0].Error, "the call record says the same")
+}
+
+// A failure names its row in the call record, so a caller can show where
+// to read it; a refusal does as well.
+func TestAFailureNamesItsCallRecord(t *testing.T) {
+	msg := []openaichat.Message{{Role: openaichat.ChatRoleUser, Content: "hi"}}
+	p := &fakeProvider{err: openaichat.ErrServer}
+	cli, svc, _ := serve(t, localCfg(p))
+	_, err := cli.Complete(context.Background(), Request{Messages: msg})
+	var failed *CallError
+	require.True(t, errors.As(err, &failed), "%v", err)
+	assert.Equal(t, errKindServer, failed.Kind)
+	require.Len(t, svc.Calls(), 1)
+	assert.Equal(t, svc.Calls()[0].CallId, CallIdOf(err))
+	assert.True(t, errors.Is(err, openaichat.ErrServer))
+
+	cli, svc, _ = serve(t, Config{})
+	_, err = cli.Complete(context.Background(), Request{Messages: msg})
+	require.Len(t, svc.Calls(), 1)
+	assert.NotEmpty(t, CallIdOf(err))
+	assert.Equal(t, svc.Calls()[0].CallId, CallIdOf(err))
+	assert.Empty(t, CallIdOf(context.Canceled))
 }
 
 // A completion goes through with the host's model and ceiling, the reply
@@ -163,6 +215,44 @@ func TestNoGrantIsAPermissionError(t *testing.T) {
 	require.Error(t, err)
 }
 
+// A host the deployment trusts is treated as loopback by the wall, and
+// says so in describe; any other remote host is still refused.
+func TestATrustedHostReceivesConfinedContent(t *testing.T) {
+	msg := []openaichat.Message{{Role: openaichat.ChatRoleUser, Content: "secret"}}
+	p := &fakeProvider{resp: openaichat.CompletionResponse{Content: "x"}}
+	cli, _, _ := serve(t, Config{Endpoint: "http://AmpereOne.lan:8080/v1", Model: "m", Client: p,
+		TrustedHosts: []string{"ampereone.lan"}})
+	d, err := cli.Describe(context.Background())
+	require.NoError(t, err)
+	assert.True(t, d.Local)
+	assert.True(t, d.Trusted, "describe tells a trusted host from loopback")
+	_, err = cli.Complete(context.Background(), Request{Sensitivity: queryengine.SensitivityConfined, Messages: msg})
+	require.NoError(t, err)
+	assert.Len(t, p.seen.Messages, 1)
+
+	other := &fakeProvider{resp: openaichat.CompletionResponse{Content: "x"}}
+	cli, _, _ = serve(t, Config{Endpoint: "https://api.example.net/v1", Model: "m", Client: other,
+		TrustedHosts: []string{"ampereone.lan"}})
+	d, err = cli.Describe(context.Background())
+	require.NoError(t, err)
+	assert.False(t, d.Local)
+	assert.False(t, d.Trusted)
+	_, err = cli.Complete(context.Background(), Request{Sensitivity: queryengine.SensitivityConfined, Messages: msg})
+	var refused *RefusedError
+	require.True(t, errors.As(err, &refused), "%v", err)
+	assert.Contains(t, refused.Reason, "neither loopback nor a trusted host")
+	assert.Empty(t, other.seen.Messages)
+}
+
+func TestTrustedHostsParse(t *testing.T) {
+	assert.Equal(t, []string{"a.lan", "10.0.0.5", "[fd00::1]"}, ParseTrustedHosts(" a.lan,,10.0.0.5 , [fd00::1]"))
+	assert.Empty(t, ParseTrustedHosts(""))
+	assert.True(t, isTrustedEndpoint("http://[fd00::1]:8080/v1", []string{"[fd00::1]"}))
+	assert.True(t, isTrustedEndpoint("http://10.0.0.5:8080/v1", []string{"10.0.0.5"}))
+	assert.False(t, isTrustedEndpoint("http://10.0.0.6:8080/v1", []string{"10.0.0.5"}))
+	assert.False(t, isTrustedEndpoint("http://evil.a.lan/v1", []string{"a.lan"}), "a name, not a suffix")
+}
+
 func TestLocalEndpoint(t *testing.T) {
 	assert.True(t, isLocalEndpoint("http://localhost:1234/v1"))
 	assert.True(t, isLocalEndpoint("http://127.0.0.1:1234/v1"))
@@ -184,7 +274,7 @@ func TestConfigFromEnvGatesOnEndpointAndModel(t *testing.T) {
 	assert.True(t, cfg.Configured())
 	assert.Equal(t, int32(4096), cfg.MaxTokens)
 	assert.Equal(t, 120*time.Second, cfg.Timeout)
-	assert.False(t, cfg.KeepMessages)
+	assert.Equal(t, RetainOff, cfg.Retain, "text is not kept unless the deployment says so")
 }
 
 // The durable row carries the counts and the verdict and never the text,
@@ -197,16 +287,25 @@ func TestRowRoundTrip(t *testing.T) {
 		FinishReason: "stop", Elapsed: 1500 * time.Millisecond, Incomplete: true, Error: "boom",
 		Prompt: "secret prompt", Completion: "secret answer",
 	}
-	row := RowOf(rec)
-	assert.Equal(t, kindLabel, row.Kind)
-	assert.Equal(t, []byte("llm-x-1"), row.NaturalKey)
+	rec.Durable = true
+	ent := entityOf(rec, false)
+	row := ent.LlmCall.Val
 	assert.Equal(t, "confined", row.Sensitivity)
 	assert.Equal(t, []string{"boom"}, row.Error)
+	assert.Equal(t, string(appId), ent.Origin.Val.App, "who asked is the row's origin")
 
-	back := RecordOf(row)
+	back := RecordOf(ent)
 	rec.Id, rec.Prompt, rec.Completion = 0, "", ""
 	assert.Equal(t, rec, back, "everything but the id and the bodies survives the row")
-	assert.Empty(t, RowOf(CallRecord{CallId: "c"}).Error, "no error, no element")
+	assert.Empty(t, RowOf(CallRecord{CallId: "c"}, false).Error, "no error, no element")
+}
+
+// entityOf is the trail entity a record lands as: its call row and the
+// context components the record names.
+func entityOf(rec CallRecord, kept bool) (ent *trail.TrailEntity) {
+	c := (&Service{}).contextOf(rec)
+	return &trail.TrailEntity{Ts: rec.At, Origin: option.Some(c.Origin), Conversation: c.Conversation, Delegation: c.Delegation,
+		LlmCall: option.Some(RowOf(rec, kept))}
 }
 
 // A service without an executor is not durable and scans nothing; with
@@ -238,7 +337,8 @@ func TestCallsLandOnTheFactsTable(t *testing.T) {
 
 	p := &fakeProvider{resp: openaichat.CompletionResponse{Content: "out", FinishReason: "stop", InputTokens: 10, OutputTokens: 20}}
 	cfg := localCfg(p)
-	cfg.Exec = exec
+	cfg.Trail = trail.NewRecorder(exec, "run-test", zerolog.Nop())
+	t.Cleanup(cfg.Trail.Close)
 	cli, svc, _ := serve(t, cfg)
 	require.True(t, svc.Durable())
 	_, err = cli.Complete(ctx, Request{Purpose: "test/ask", Messages: []openaichat.Message{{Role: openaichat.ChatRoleUser, Content: "hi"}}})
@@ -261,7 +361,7 @@ func TestCallsLandOnTheFactsTable(t *testing.T) {
 }
 
 // An image attached to a message crosses the bus intact and counts toward
-// the call's prompt size (ADR-0257, proposed, §SD7).
+// the call's prompt size (ADR-0266, proposed, §SD7).
 func TestImagesCrossTheBus(t *testing.T) {
 	p := &fakeProvider{resp: openaichat.CompletionResponse{Content: "a", FinishReason: "stop"}}
 	cli, svc, _ := serve(t, localCfg(p))
@@ -273,4 +373,115 @@ func TestImagesCrossTheBus(t *testing.T) {
 	assert.Equal(t, []openaichat.Image{img}, p.seen.Messages[0].Images)
 	require.Len(t, svc.Calls(), 1)
 	assert.Equal(t, 1+len(img.Data), svc.Calls()[0].PromptBytes)
+}
+
+// blockingProvider holds a completion until its context ends, and says
+// how it ended.
+type blockingProvider struct {
+	started chan struct{}
+	ended   chan error
+}
+
+func newBlockingProvider() *blockingProvider {
+	return &blockingProvider{started: make(chan struct{}, 1), ended: make(chan error, 1)}
+}
+
+func (f *blockingProvider) Complete(ctx context.Context, _ openaichat.CompletionRequest) (openaichat.CompletionResponse, error) {
+	f.started <- struct{}{}
+	<-ctx.Done()
+	f.ended <- ctx.Err()
+	return openaichat.CompletionResponse{}, ctx.Err()
+}
+func (f *blockingProvider) Close() (err error) { return }
+
+func userMessage() []openaichat.Message {
+	return []openaichat.Message{{Role: openaichat.ChatRoleUser, Content: "hi"}}
+}
+
+// Cancelling the requester's context returns at once and stops the
+// provider call on the service side; the call table records it.
+func TestCancelStopsTheProviderCall(t *testing.T) {
+	p := newBlockingProvider()
+	cli, svc, _ := serve(t, Config{Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: p})
+	ctx, cancel := context.WithCancel(context.Background())
+	errc := make(chan error, 1)
+	go func() {
+		_, err := cli.Complete(ctx, Request{Purpose: "cancel", Messages: userMessage()})
+		errc <- err
+	}()
+	<-p.started
+	cancel()
+	select {
+	case err := <-errc:
+		assert.ErrorIs(t, err, context.Canceled)
+	case <-time.After(5 * time.Second):
+		t.Fatal("Complete did not return on cancellation")
+	}
+	select {
+	case err := <-p.ended:
+		assert.ErrorIs(t, err, context.Canceled)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the provider call was not cancelled")
+	}
+	require.Eventually(t, func() bool {
+		calls := svc.Calls()
+		return len(calls) == 1 && calls[0].Error != ""
+	}, 5*time.Second, 10*time.Millisecond)
+}
+
+// Client.Timeout bounds the wait in-process too: the service answers off
+// the requester's goroutine, so a slow provider no longer holds it.
+func TestClientTimeoutHoldsInProcess(t *testing.T) {
+	p := newBlockingProvider()
+	cli, _, _ := serve(t, Config{Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: p})
+	cli.Timeout = 50 * time.Millisecond
+	t0 := time.Now()
+	_, err := cli.Complete(context.Background(), Request{Messages: userMessage()})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, inprocbus.ErrTimeout)
+	assert.Less(t, time.Since(t0), 5*time.Second)
+}
+
+// Another app cannot stop a call by guessing its key: cancel keys are
+// scoped to the sender.
+func TestCancelIsScopedToTheSender(t *testing.T) {
+	p := newBlockingProvider()
+	bus := inprocbus.NewInst(zerolog.Nop())
+	svc, err := NewService(bus, zerolog.Nop(), Config{Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: p})
+	require.NoError(t, err)
+	t.Cleanup(svc.Close)
+	owner := bus.NewClient(appId, ClientCaps("test: ask"))
+	other := bus.NewClient("test.llm.other", ClientCaps("test: other"))
+	payload, err := encode(wireRequest{V: wireVersion, Messages: userMessage(), CancelKey: "k"})
+	require.NoError(t, err)
+	go func() { _, _ = owner.RequestWithTimeout(SubjectComplete, payload, 5*time.Second) }()
+	<-p.started
+	stop, err := encode(wireCancel{V: wireVersion, Key: "k"})
+	require.NoError(t, err)
+	require.NoError(t, other.Publish(SubjectCancel, stop))
+	select {
+	case <-p.ended:
+		t.Fatal("another sender stopped the call")
+	case <-time.After(100 * time.Millisecond):
+	}
+	require.NoError(t, owner.Publish(SubjectCancel, stop))
+	select {
+	case <-p.ended:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the owner could not stop its call")
+	}
+}
+
+// A provider failure crosses the bus with its kind and its reason: the
+// caller can branch on the sentinel and show the provider's message.
+func TestAProviderFailureKeepsItsKindAndItsReason(t *testing.T) {
+	msg := []openaichat.Message{{Role: openaichat.ChatRoleUser, Content: "hi"}}
+	p := &fakeProvider{err: &openaichat.HTTPError{Status: 402, Message: "This request requires more credits"}}
+	cli, _, _ := serve(t, localCfg(p))
+	_, err := cli.Complete(context.Background(), Request{Messages: msg})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "HTTP 402: This request requires more credits")
+	assert.Equal(t, errKindPayment, kindOf(fmt.Errorf("x: %w", openaichat.ErrPaymentRequired)))
+	assert.True(t, errors.Is(failureOf(wireReply{ErrorKind: errKindPayment, Reason: "HTTP 402: no credit"}), openaichat.ErrPaymentRequired))
+	assert.Contains(t, failureOf(wireReply{ErrorKind: errKindPayment, Reason: "HTTP 402: no credit"}).Error(), "no credit")
 }

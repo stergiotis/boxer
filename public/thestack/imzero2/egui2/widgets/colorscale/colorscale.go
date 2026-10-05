@@ -1,6 +1,9 @@
 // Package colorscale renders a value-axis legend for a colormap.Config — the
 // same colormap type the scientific texture widgets (heatmapscroll) and treemap
-// use. Pass one Config to colorscale.New and to whatever renders the data (a
+// use. It is a semi-retained widget (ADR-0267): New binds it to a Config and
+// its [Options], Render draws it once per frame and returns its [Events], and
+// the object keeps the tick layout and label measurements between frames.
+// Pass one Config to colorscale.New and to whatever renders the data (a
 // treemap via treemap.ContinuousColoringFromMap + its Config(), or a heatmap) so
 // the visualization and its legend stay in sync automatically.
 //
@@ -9,9 +12,9 @@
 // colormaps so overlapping labels are penalized, or TalbotLogarithmic for
 // log colormaps.
 //
-// Interaction: when the pointer is over the gradient, the widget records
-// the hovered colormap value (HoveredValue, OnHover callback) and paints
-// a white vertical marker at the next frame. One-frame lag is a
+// Interaction: when the pointer is over the gradient, the widget reports
+// the hovered colormap value (Events.Hover, and HoveredValue between
+// frames) and paints a white vertical marker at the next frame. One-frame lag is a
 // consequence of the paint/canvas/fetch ordering.
 package colorscale
 
@@ -48,10 +51,15 @@ const (
 type TickerE uint8
 
 const (
+	// TickerAuto, the zero value, picks per orientation: Talbot for a
+	// horizontal scale, Heckbert for a vertical one (the Talbot legibility
+	// scorer penalizes label width, but a vertical axis is constrained by
+	// label height, so the width model overcrowds it).
+	TickerAuto TickerE = iota
 	// TickerTalbot runs Talbot's extended-Wilkinson algorithm with a
 	// TypesettingScorer that penalizes overlapping labels, producing
-	// legible, range-aware ticks. Default.
-	TickerTalbot TickerE = iota
+	// legible, range-aware ticks. The horizontal default.
+	TickerTalbot
 	// TickerHeckbert runs the classic Heckbert (Graphics Gems I) algorithm.
 	// Fast, no scorer, ticks are multiples of 1/2/5 × 10ⁿ.
 	TickerHeckbert
@@ -64,6 +72,8 @@ const (
 // String returns a short human label, used by demos and logs.
 func (inst TickerE) String() string {
 	switch inst {
+	case TickerAuto:
+		return "auto"
 	case TickerTalbot:
 		return "Talbot"
 	case TickerHeckbert:
@@ -90,7 +100,7 @@ var (
 	// raised-card/window tier that sibling widget canvases (timeline, treemap,
 	// gauge) paint — so a standalone colorscale reads as a surface, not a near-
 	// black rectangle. A host that embeds the scale as panel-tier chrome (e.g.
-	// the spectrumdisplay colorbar) overrides this via WithBg so the composite
+	// the spectrumdisplay colorbar) overrides this via Options.Bg so the composite
 	// reads as one surface (ADR-0091 §Update 2026-06-21).
 	DefaultBg = styletokens.NeutralBgSurface.AsHex()
 	// DefaultTickColor is the default tick-mark stroke colour (RGBA).
@@ -101,58 +111,34 @@ var (
 	DefaultBorderColor = uint32(0x444455ff)
 )
 
-// Option configures a ColorScale at construction time.
-type Option func(*ColorScale)
-
-// WithSize overrides the widget's logical-pixel size. Default 500×40 for
-// horizontal orientation.
-func WithSize(w, h float32) Option {
-	if w <= 0 || h <= 0 {
-		panic(fmt.Sprintf("colorscale: WithSize requires positive w,h (got %v,%v)", w, h))
-	}
-	return func(inst *ColorScale) { inst.width, inst.height, inst.sizeSet = w, h, true }
-}
-
-// WithOrientation selects horizontal vs vertical layout.
-func WithOrientation(o OrientationE) Option {
-	return func(inst *ColorScale) { inst.orientation = o }
-}
-
-// WithDesiredTicks hints at the tick count the chosen ticker should aim for.
-// Default 6. The algorithm may produce slightly more or fewer depending on
-// the range.
-func WithDesiredTicks(n int) Option {
-	if n < 2 {
-		panic("colorscale: WithDesiredTicks requires n >= 2")
-	}
-	return func(inst *ColorScale) { inst.desiredTicks = n }
-}
-
-// WithTicker selects the tick-placement algorithm. Default TickerTalbot —
-// which pairs a TypesettingScorer with the user-supplied font metrics for
-// overlap-aware tick selection. Heckbert/Nelder are cheaper alternatives that
-// ignore label widths.
-func WithTicker(t TickerE) Option {
-	return func(inst *ColorScale) { inst.ticker, inst.tickerSet = t, true }
-}
-
-// WithLabelFormat overrides the tick-label formatter. By default, Heckbert's
-// pre-formatted labels (from finddivisions.AxisLayout.TickLabels) are used.
-// A custom fn is only invoked when Heckbert doesn't supply labels.
-func WithLabelFormat(fn func(float64) string) Option {
-	if fn == nil {
-		panic("colorscale: WithLabelFormat requires a non-nil fn")
-	}
-	return func(inst *ColorScale) { inst.labelFormat = fn }
-}
-
-// WithBg overrides the background fill colour (RGBA, 0xRRGGBBAA) painted behind
-// the gradient and the tick/label margins. Default DefaultBg (NeutralBgSurface,
-// the standalone surface tier). A host embedding the scale as panel-tier chrome —
-// e.g. spectrumdisplay's colorbar — passes its own chrome colour so the embedded
-// legend and the surrounding panel read as one surface rather than two darks.
-func WithBg(rgba uint32) Option {
-	return func(inst *ColorScale) { inst.bgColor = rgba }
+// Options configures a ColorScale (ADR-0267 W11). Every zero value is the
+// default; the widget re-reads [ColorScale.Opts] on every Render, so a change
+// is an assignment.
+type Options struct {
+	// Width and Height are the widget's logical-pixel size. Zero takes the
+	// orientation's default: [DefaultSize] horizontal, [DefaultSizeVertical]
+	// vertical.
+	Width, Height float32
+	// Orientation selects horizontal (the default) or vertical layout.
+	Orientation OrientationE
+	// DesiredTicks hints at the tick count the ticker should aim for; zero
+	// (and anything below 2) takes [DefaultDesiredTicks]. The algorithm may
+	// produce slightly more or fewer depending on the range.
+	DesiredTicks int
+	// Ticker selects the tick-placement algorithm; [TickerAuto] picks per
+	// orientation.
+	Ticker TickerE
+	// LabelFormat overrides the tick-label formatter. nil takes the default
+	// for the colormap's scale (SI-suffixed labels for a log colormap). It
+	// is only invoked when Heckbert does not supply labels.
+	LabelFormat func(float64) string
+	// Bg is the background fill colour (RGBA, 0xRRGGBBAA) painted behind the
+	// gradient and the tick/label margins; zero takes [DefaultBg]
+	// (NeutralBgSurface, the standalone surface tier). A host embedding the
+	// scale as panel-tier chrome — spectrumdisplay's colorbar — passes its own
+	// chrome colour so the embedded legend and the surrounding panel read as
+	// one surface rather than two darks.
+	Bg uint32
 }
 
 // HoverInfo reports the colormap value currently under the pointer.
@@ -165,18 +151,22 @@ type HoverInfo struct {
 }
 
 // ColorScale is a passive value-legend widget rendered as a gradient
-// strip + tick axis. Construct with New and call Render once per frame.
+// strip + tick axis: a semi-retained widget (ADR-0267) that keeps its tick
+// layout and label measurements across frames. Construct with New and call
+// Render once per frame.
 type ColorScale struct {
-	ids          *c.WidgetIdStack
-	scopeKey     string
-	cmap         *colormap.Config
+	// Opts is re-read on every Render; a change is an assignment.
+	Opts Options
+
+	ids      *c.WidgetIdStack
+	scopeKey string
+	cmap     *colormap.Config
+	// The effective values Opts resolves to each frame (see resolve).
 	width        float32
 	height       float32
-	sizeSet      bool
 	orientation  OrientationE
 	desiredTicks int
 	ticker       TickerE
-	tickerSet    bool
 	labelFormat  func(float64) string
 	fontSize     float32
 	bgColor      uint32
@@ -200,7 +190,6 @@ type ColorScale struct {
 	// drawn ONE FRAME LATER (since the canvas has already been flushed).
 	// One-frame lag is imperceptible for a live pointer indicator.
 	lastHover HoverInfo
-	onHover   func(HoverInfo)
 
 	// Measurer for the Talbot legibility scorer. Initially misses the
 	// cache, returning approximations; real widths arrive from egui via
@@ -210,10 +199,18 @@ type ColorScale struct {
 	pendingRemeasure bool
 }
 
-// New constructs a ColorScale bound to cm. scopeKey must be unique among
-// ColorScale instances sharing the same ids stack. Panics on nil or empty
-// required arguments.
-func New(ids *c.WidgetIdStack, scopeKey string, cm *colormap.Config, opts ...Option) *ColorScale {
+// Events is what one Render reports.
+type Events struct {
+	// Hover is the colormap value under the pointer, Ok false when the
+	// pointer is not over the widget. One frame old, like every canvas
+	// readback.
+	Hover HoverInfo
+}
+
+// New constructs a ColorScale bound to cm, scoped under scopeKey on ids
+// (unique among instances sharing the stack). Panics on nil ids or cm, or an
+// empty scopeKey.
+func New(ids *c.WidgetIdStack, scopeKey string, cm *colormap.Config, opts Options) *ColorScale {
 	if ids == nil {
 		panic("colorscale: New requires a non-nil ids stack")
 	}
@@ -224,64 +221,66 @@ func New(ids *c.WidgetIdStack, scopeKey string, cm *colormap.Config, opts ...Opt
 		panic("colorscale: New requires a non-nil Colormap")
 	}
 	inst := &ColorScale{
-		ids:          ids,
-		scopeKey:     scopeKey,
-		cmap:         cm,
-		width:        DefaultSize[0],
-		height:       DefaultSize[1],
-		desiredTicks: DefaultDesiredTicks,
-		fontSize:     DefaultFontSize,
-		bgColor:      DefaultBg,
-		tickColor:    DefaultTickColor,
-		labelColor:   DefaultLabelColor,
-		borderColor:  DefaultBorderColor,
-	}
-	// Pick the default formatter based on colormap type so log colormaps
-	// get SI-suffixed labels out of the box. WithLabelFormat still overrides.
-	if cm.IsLog() {
-		inst.labelFormat = defaultLogLabelFormat
-	} else {
-		inst.labelFormat = defaultLabelFormat
+		Opts:        opts,
+		ids:         ids,
+		scopeKey:    scopeKey,
+		cmap:        cm,
+		fontSize:    DefaultFontSize,
+		tickColor:   DefaultTickColor,
+		labelColor:  DefaultLabelColor,
+		borderColor: DefaultBorderColor,
 	}
 	inst.measurer = newCachingMeasurer()
-	for _, opt := range opts {
-		opt(inst)
-	}
-	// When the caller didn't fix a size, pick an orientation-appropriate default
-	// (the horizontal default was seeded above).
-	if !inst.sizeSet && inst.orientation == OrientationVertical {
-		inst.width, inst.height = DefaultSizeVertical[0], DefaultSizeVertical[1]
-	}
-	// Default the vertical orientation to Heckbert: the Talbot legibility scorer
-	// penalizes label width, but a vertical axis is constrained by label height, so
-	// the width model overcrowds it. WithTicker still overrides.
-	if !inst.tickerSet && inst.orientation == OrientationVertical {
-		inst.ticker = TickerHeckbert
-	}
+	inst.resolve()
 	return inst
+}
+
+// resolve turns Opts into the frame's effective values: orientation-dependent
+// size and ticker defaults, the colormap-dependent label formatter, the
+// default background.
+func (inst *ColorScale) resolve() {
+	o := inst.Opts
+	inst.orientation = o.Orientation
+	inst.width, inst.height = o.Width, o.Height
+	if inst.width <= 0 || inst.height <= 0 {
+		if inst.orientation == OrientationVertical {
+			inst.width, inst.height = DefaultSizeVertical[0], DefaultSizeVertical[1]
+		} else {
+			inst.width, inst.height = DefaultSize[0], DefaultSize[1]
+		}
+	}
+	inst.desiredTicks = o.DesiredTicks
+	if inst.desiredTicks < 2 {
+		inst.desiredTicks = DefaultDesiredTicks
+	}
+	inst.ticker = o.Ticker
+	if inst.ticker == TickerAuto {
+		inst.ticker = TickerTalbot
+		if inst.orientation == OrientationVertical {
+			inst.ticker = TickerHeckbert
+		}
+	}
+	inst.labelFormat = o.LabelFormat
+	if inst.labelFormat == nil {
+		if inst.cmap.IsLog() {
+			inst.labelFormat = defaultLogLabelFormat
+		} else {
+			inst.labelFormat = defaultLabelFormat
+		}
+	}
+	inst.bgColor = o.Bg
+	if inst.bgColor == 0 {
+		inst.bgColor = DefaultBg
+	}
 }
 
 // Colormap returns the colormap.Config this scale is bound to.
 func (inst *ColorScale) Colormap() *colormap.Config { return inst.cmap }
 
-// SetSize overrides the widget's logical-pixel size after construction. Non-positive
-// arguments are ignored. Useful when the caller sizes the legend to a sub-rect that
-// changes with the window (e.g. a colorbar beside a resizing heatmap).
-func (inst *ColorScale) SetSize(w, h float32) {
-	if w > 0 && h > 0 {
-		inst.width, inst.height, inst.sizeSet = w, h, true
-	}
-}
-
 // HoveredValue returns the colormap value under the pointer as of the most
 // recent Render. The returned ok is false when the pointer is not over the
 // widget. State is one frame old relative to the latest mouse position.
 func (inst *ColorScale) HoveredValue() HoverInfo { return inst.lastHover }
-
-// OnHover registers a callback invoked once per Render with the current
-// hover state (ok=false when not hovering). Replaces any previous callback.
-// Pass nil to disable.
-func (inst *ColorScale) OnHover(fn func(HoverInfo)) { inst.onHover = fn }
 
 // canvasCursor reads this widget's R24 canvas-pointer row: the pointer in
 // canvas-relative coordinates, NaN when it is not over the canvas. R24 is
@@ -302,10 +301,11 @@ func (inst *ColorScale) canvasCursor() (hx float32, hy float32) {
 	return
 }
 
-// Render emits the widget inside the current Ui. Wraps its body in
-// c.IdScope(scopeKey) so multiple instances sharing the same WidgetIdStack
-// don't collide on painter-canvas ids.
-func (inst *ColorScale) Render() {
+// Render emits the widget inside the current Ui and reports the hover. Wraps
+// its body in c.IdScope(scopeKey) so multiple instances sharing the same
+// WidgetIdStack don't collide on painter-canvas ids.
+func (inst *ColorScale) Render() (ev Events) {
+	inst.resolve()
 	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
 		if inst.orientation == OrientationVertical {
 			inst.renderVertical()
@@ -313,6 +313,8 @@ func (inst *ColorScale) Render() {
 			inst.renderHorizontal()
 		}
 	}
+	ev.Hover = inst.lastHover
+	return
 }
 
 func (inst *ColorScale) renderHorizontal() {
@@ -340,8 +342,7 @@ func (inst *ColorScale) renderHorizontal() {
 	stepW := inst.width / float32(steps)
 	for i := range steps {
 		t := float64(i) / float64(steps-1)
-		val := min + t*(max-min)
-		rgba := cm.At(val)
+		rgba := cm.At(sampleAtNormalized(cm, t))
 		x := float32(i) * stepW
 		c.PaintRectFilled(x, 0, x+stepW+0.5, gradientH, 0, color.Hex(rgba)).Send()
 	}
@@ -353,7 +354,7 @@ func (inst *ColorScale) renderHorizontal() {
 	// `edgeGuard` px of the left/right edges where we switch to left/right
 	// anchor so the text doesn't clip the widget boundary. We always format
 	// via inst.labelFormat rather than using AxisLayout.TickLabels so a user-
-	// supplied WithLabelFormat — and the log-aware default — are uniformly
+	// supplied Options.LabelFormat — and the log-aware default — are uniformly
 	// applied.
 	const edgeGuard float32 = 12
 	for _, tickVal := range axis.TickValues {
@@ -415,9 +416,6 @@ func (inst *ColorScale) renderHorizontal() {
 		hover.Ok = true
 	}
 	inst.lastHover = hover
-	if inst.onHover != nil {
-		inst.onHover(hover)
-	}
 }
 
 // renderVertical mirrors renderHorizontal with the axes transposed: a gradient
@@ -445,9 +443,8 @@ func (inst *ColorScale) renderVertical() {
 	const steps = 128
 	stepH := inst.height / float32(steps)
 	for i := range steps {
-		t := float64(i) / float64(steps-1) // 0 at the top
-		val := max - t*(max-min)           // top=max, bottom=min
-		rgba := cm.At(val)
+		t := float64(i) / float64(steps-1)         // 0 at the top
+		rgba := cm.At(sampleAtNormalized(cm, 1-t)) // top=max, bottom=min
 		y := float32(i) * stepH
 		c.PaintRectFilled(0, y, gradientW, y+stepH+0.5, 0, color.Hex(rgba)).Send()
 	}
@@ -457,7 +454,7 @@ func (inst *ColorScale) renderVertical() {
 
 	// --- Tick marks + labels. Labels are vertically center-anchored, except within
 	// edgeGuard px of the top/bottom edges where we switch to top/bottom anchor so the
-	// text doesn't clip the boundary. Format via inst.labelFormat so a WithLabelFormat
+	// text doesn't clip the boundary. Format via inst.labelFormat so an Options.LabelFormat
 	// override and the log-aware default apply uniformly (the renderHorizontal policy).
 	const edgeGuard float32 = 8
 	for _, tickVal := range axis.TickValues {
@@ -506,9 +503,6 @@ func (inst *ColorScale) renderVertical() {
 		hover.Ok = true
 	}
 	inst.lastHover = hover
-	if inst.onHover != nil {
-		inst.onHover(hover)
-	}
 }
 
 // ensureAxis returns the cached tick layout, recomputing it only when an input that
@@ -765,4 +759,27 @@ func defaultLogLabelFormat(v float64) string {
 		}
 	}
 	return fmt.Sprintf("%.3g", v)
+}
+
+// sampleAtNormalized returns the sample value whose palette position under
+// cm is t, inverting Normalize per scale. The gradient is walked in palette
+// space, as the ticks and the hover readout are, so on a log or dB scale
+// the colour at an x matches the tick drawn there; stepping linearly in
+// value instead painted a 1..1e6 log bar almost wholly in its top decade.
+// A range the scale cannot invert (a non-positive log bound) falls back to
+// the linear step, which Normalize maps to the palette start either way.
+func sampleAtNormalized(cm *colormap.Config, t float64) (v float64) {
+	min, max := cm.Range()
+	v = min + t*(max-min)
+	switch cm.Scale {
+	case colormap.ScaleLogE:
+		if min > 0 && max > 0 {
+			lMin, lMax := math.Log10(min), math.Log10(max)
+			v = math.Pow(10, lMin+t*(lMax-lMin))
+		}
+	case colormap.ScaleDbE:
+		// DataMin/DataMax are dB; the sample is the power with that dB.
+		v = math.Pow(10, v/10)
+	}
+	return
 }

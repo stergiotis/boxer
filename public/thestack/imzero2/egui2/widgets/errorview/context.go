@@ -1,6 +1,7 @@
-// Package errorview renders a structured wrapped-error chain as a
-// collapsing tree: per-stream sub-headers, per-fact rows showing
-// message (red), stack frame triple (monospace muted), and CBOR
+// Package errorview is an immediate-mode widget (ADR-0267) that renders a
+// structured wrapped-error chain as a collapsing tree: per-stream
+// sub-headers, per-fact rows showing message (red), stack frame triple
+// (monospace muted), and CBOR
 // diagnostic of any attached structured data (in a dark canvas
 // Frame). Lifted out of the logviewer detail pane so any consumer
 // of an `eh.MarshalError`-shaped chain — observability dashboards,
@@ -18,7 +19,9 @@
 // idPrefix, so two renderers on the same stack can't collide as
 // long as their prefixes differ.
 //
-// Wire-shape adapters live with each consumer (e.g.
+// A live error goes through FromError, or Capture for a frame loop that
+// draws it every frame, and RenderCaptured draws it with a one-line
+// summary. Wire-shape adapters live with each consumer (e.g.
 // logviewer.toErrorviewContext bridges factsstore.LogErrorContext
 // → errorview.Context); errorview itself stays decoupled from any
 // particular decoder so it composes with other transports.

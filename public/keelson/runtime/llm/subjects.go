@@ -35,8 +35,22 @@ const (
 	SubjectDescribe = "llm.describe"
 	// SubjectComplete is one chat completion.
 	SubjectComplete = "llm.complete"
+	// SubjectCancel stops a completion in flight: a publish, no reply,
+	// naming the cancel key the request carried. Only the sender that
+	// made the request can stop it.
+	SubjectCancel = "llm.cancel"
 	// SubjectAll is the service's subscription pattern.
 	SubjectAll = "llm.*"
+
+	// SubjectRetainPrefix precedes the retained verbs (ADR-0264 §SD1). Two
+	// tokens, so no `llm.*` grant covers them: an app keeps text only by
+	// declaring [RetainCaps], and the bus refuses the subject otherwise.
+	SubjectRetainPrefix = "llm.retain."
+	// SubjectRetainComplete is llm.complete whose conversation the service
+	// keeps where the deployment permits it.
+	SubjectRetainComplete = "llm.retain.complete"
+	// SubjectRetainAll is the service's subscription pattern for them.
+	SubjectRetainAll = "llm.retain.*"
 )
 
 // TableCalls is the introspection table of completions this process has
@@ -55,6 +69,7 @@ const DefaultTimeout = 120 * time.Second
 func ServiceCaps() (caps []app.SubjectFilter) {
 	caps = []app.SubjectFilter{
 		{Pattern: SubjectAll, Direction: app.CapDirectionSub, Reason: "llm: serve describe and complete requests"},
+		{Pattern: SubjectRetainAll, Direction: app.CapDirectionSub, Reason: "llm: serve retained complete requests"},
 		{Pattern: inprocbus.InboxPrefix + ">", Direction: app.CapDirectionPub, Reason: "llm: reply to inboxes"},
 	}
 	return
@@ -67,6 +82,19 @@ func ServiceCaps() (caps []app.SubjectFilter) {
 func ClientCaps(reason string) (caps []app.SubjectFilter) {
 	caps = []app.SubjectFilter{
 		{Pattern: SubjectAll, Direction: app.CapDirectionPub, Reason: reason},
+	}
+	return
+}
+
+// RetainCaps is the second grant an app declares when it asks the host to
+// keep its conversations (ADR-0264 §SD1), beside [ClientCaps]. Not sticky,
+// as ClientCaps. Text is kept only where the deployment's ceiling,
+// BOXER_LLM_RETAIN, is durable; below it a retained request is served and
+// its reply says it was not kept. reason names what is kept and why, e.g.
+// "chat: keep conversations on boxer.facts".
+func RetainCaps(reason string) (caps []app.SubjectFilter) {
+	caps = []app.SubjectFilter{
+		{Pattern: SubjectRetainAll, Direction: app.CapDirectionPub, Reason: reason},
 	}
 	return
 }

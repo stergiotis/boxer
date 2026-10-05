@@ -4,6 +4,13 @@
 // HighlightJob seam, fed by the codeview regex lexer family
 // (ADR-0015).
 //
+// It is a fluid (ADR-0267's F shape): [Cache.TextEdit] returns the
+// binding's own [c.TextEditFluid] with the highlight job attached, and
+// the host chains the remaining options and sends it as it would any
+// TextEdit. The one thing that survives a frame — the retained highlight
+// job — is a memo the host holds in a [Cache], re-derivable from the text
+// at any time; the text buffer and its response stay the host's.
+//
 // The lexer is only a painter: it colours bytes and never decides
 // validity. Whatever consumes the buffer (Go's regexp, a search
 // battery, ClickHouse) remains the authority on what compiles, and the
@@ -54,12 +61,12 @@ func buildJob(text string, mode ModeE) (job typed.RetainedFffiHolderTyped[c.Code
 	return
 }
 
-// Edit is one regex input's highlight-job cache. Zero value ready;
+// Cache is one regex input's highlight-job memo. Zero value ready;
 // hold one per editor box — an idle frame re-splices the retained job
 // instead of re-lexing and re-retaining it, and two boxes sharing one
-// Edit would evict each other every frame. Render-thread confined,
+// Cache would evict each other every frame. Render-thread confined,
 // like the text buffer it colours.
-type Edit struct {
+type Cache struct {
 	src  string
 	mode ModeE
 	job  typed.RetainedFffiHolderTyped[c.CodeViewJobS]
@@ -71,9 +78,9 @@ type Edit struct {
 	buildFn func(text string, mode ModeE) typed.RetainedFffiHolderTyped[c.CodeViewJobS]
 }
 
-// Prepare returns the [c.TextEdit] builder for the buffer with the
+// TextEdit returns the [c.TextEdit] builder for the buffer with the
 // mode's highlight job attached; chain the remaining options
-// (HintText, DesiredWidth, DesiredRows, …) and Send as usual.
+// (HintText, DesiredWidth, DesiredRows, …) and SendRespVal as usual.
 //
 // CodeEditor() is set here and is not cosmetic: the Rust highlight
 // layouter resolves TextStyle::Monospace unconditionally, so without
@@ -81,7 +88,7 @@ type Edit struct {
 // a job appears (ADR-0015 §SD6). An empty buffer gets no job at all —
 // there is nothing to colour, and the hint text is not part of the
 // buffer.
-func (inst *Edit) Prepare(id c.WidgetIdCreatorI, text string, multiline bool, mode ModeE) (edit c.TextEditFluid) {
+func (inst *Cache) TextEdit(id c.WidgetIdCreatorI, text string, multiline bool, mode ModeE) (edit c.TextEditFluid) {
 	edit = c.TextEdit(id, text, multiline).CodeEditor()
 	job, ok := inst.jobFor(text, mode)
 	if ok {
@@ -92,7 +99,7 @@ func (inst *Edit) Prepare(id c.WidgetIdCreatorI, text string, multiline bool, mo
 
 // jobFor returns the retained job for (text, mode), rebuilding only
 // when either changed since the previous frame.
-func (inst *Edit) jobFor(text string, mode ModeE) (job typed.RetainedFffiHolderTyped[c.CodeViewJobS], ok bool) {
+func (inst *Cache) jobFor(text string, mode ModeE) (job typed.RetainedFffiHolderTyped[c.CodeViewJobS], ok bool) {
 	if text == "" {
 		return
 	}

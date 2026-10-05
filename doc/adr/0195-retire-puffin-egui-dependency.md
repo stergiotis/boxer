@@ -255,6 +255,13 @@ Two things made the shape worth changing independently of its magnitude. The por
 
 Not changed: the server lane itself, which this ADR's Decision keeps. Enabling it is one environment variable rather than a rebuild — the property the runtime gate exists to preserve. The runtime variable, not the compile flag, is the switch; that is now true of both dev capabilities in this build.
 
+### 2026-09-29 — the `bindings.md` skill asset is removed
+
+The imzero2 skill's `assets/bindings.md`, which M3 hand-edited, is deleted
+with the other API-stub assets
+([ADR-0268](./0268-retire-api-stub-skill-assets-and-the-stubber.md)). The
+removal table's row for it no longer names a live file.
+
 ## References
 
 - [ADR-0194](./0194-retire-egui-snarl-binding.md) — the adjacent binding

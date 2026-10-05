@@ -12,7 +12,7 @@ import (
 
 func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 	widgets = make([]*ir.ProceduralNode, 0, 8)
-	widgets = append(widgets, idl.NewProceduralNode("addSpace").
+	widgets = append(widgets, idl.NewProceduralNode("addSpace").WithEffect(ir.EffectLocal).
 		AddArguments(idl.NewArgumentsBuilder().PlainArg("amount", ctabb.F32).
 			Build()).
 		WithApplyCodeClientRust(rustClientCode(`
@@ -41,7 +41,7 @@ func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 	// Generally useful beyond that: control rows and badge clusters that
 	// want to sit tighter than the global density without every widget
 	// growing a knob. Carries no widget id.
-	widgets = append(widgets, idl.NewProceduralNode("uiSetItemSpacing").
+	widgets = append(widgets, idl.NewProceduralNode("uiSetItemSpacing").WithEffect(ir.EffectLocal).
 		AddArguments(idl.NewArgumentsBuilder().
 			PlainArg("sx", ctabb.F32).
 			PlainArg("sy", ctabb.F32).
@@ -53,7 +53,7 @@ func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 					}
 `)).
 		Build())
-	widgets = append(widgets, idl.NewProceduralNode("endRow").
+	widgets = append(widgets, idl.NewProceduralNode("endRow").WithEffect(ir.EffectLocal).
 		WithApplyCodeClientRust(rustClientCode(`
 					if {{EguiUiOptionalOuter}}.is_some() {
 						{{EguiUiOptionalOuter}}.as_mut().unwrap().end_row();
@@ -70,7 +70,7 @@ func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 	//
 	// Outside a ScrollArea the op is a no-op — egui silently drops the
 	// request when there is no parent that can apply it.
-	widgets = append(widgets, idl.NewProceduralNode("scrollToCursor").
+	widgets = append(widgets, idl.NewProceduralNode("scrollToCursor").WithEffect(ir.EffectLocal).
 		AddArguments(idl.NewArgumentsBuilder().PlainArg("align", ctabb.U8).Build()).
 		WithApplyCodeClientRust(rustClientCode(`
 					if {{EguiUiOptionalOuter}}.is_some() {
@@ -99,11 +99,11 @@ func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 	// requirement: the host can drain and emit after its panels have closed.
 	// The FFFI2 string arg arrives as an owned String, which copy_text consumes
 	// directly.
-	widgets = append(widgets, idl.NewProceduralNode("copyTextToClipboard").
+	widgets = append(widgets, idl.NewProceduralNode("copyTextToClipboard").WithEffect(ir.EffectHost).
 		AddArguments(idl.NewArgumentsBuilder().PlainArg("text", ctabb.S).Build()).
 		WithApplyCodeClientRust(rustClientCode("c.copy_text(text);\n")).
 		Build())
-	widgets = append(widgets, idl.NewProceduralNode("uiSetMinWidth").
+	widgets = append(widgets, idl.NewProceduralNode("uiSetMinWidth").WithEffect(ir.EffectLocal).
 		AddArguments(idl.NewArgumentsBuilder().PlainArg("width", ctabb.F32).Build()).
 		WithApplyCodeClientRust(rustClientCode(`
 					if {{EguiUiOptionalOuter}}.is_some() {
@@ -121,7 +121,7 @@ func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 	// background or click sense drawn from Go covered only its own text.
 	// Nothing consumes the existing ScalarSize().AvailableWidth() holder, so
 	// there was no way to say "as wide as the row" at all.
-	widgets = append(widgets, idl.NewProceduralNode("uiSetMinWidthAvailable").
+	widgets = append(widgets, idl.NewProceduralNode("uiSetMinWidthAvailable").WithEffect(ir.EffectLocal).
 		WithApplyCodeClientRust(rustClientCode(`
 					if {{EguiUiOptionalOuter}}.is_some() {
 						let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
@@ -130,7 +130,7 @@ func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 					}
 `)).
 		Build())
-	widgets = append(widgets, idl.NewProceduralNode("uiSetMinHeight").
+	widgets = append(widgets, idl.NewProceduralNode("uiSetMinHeight").WithEffect(ir.EffectLocal).
 		AddArguments(idl.NewArgumentsBuilder().PlainArg("height", ctabb.F32).Build()).
 		WithApplyCodeClientRust(rustClientCode(`
 					if {{EguiUiOptionalOuter}}.is_some() {
@@ -138,7 +138,7 @@ func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 					}
 `)).
 		Build())
-	widgets = append(widgets, idl.NewProceduralNode("uiSetMaxWidth").
+	widgets = append(widgets, idl.NewProceduralNode("uiSetMaxWidth").WithEffect(ir.EffectLocal).
 		AddArguments(idl.NewArgumentsBuilder().PlainArg("width", ctabb.F32).Build()).
 		WithApplyCodeClientRust(rustClientCode(`
 					if {{EguiUiOptionalOuter}}.is_some() {
@@ -146,7 +146,7 @@ func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 					}
 `)).
 		Build())
-	widgets = append(widgets, idl.NewProceduralNode("uiSetMaxHeight").
+	widgets = append(widgets, idl.NewProceduralNode("uiSetMaxHeight").WithEffect(ir.EffectLocal).
 		AddArguments(idl.NewArgumentsBuilder().PlainArg("height", ctabb.F32).Build()).
 		WithApplyCodeClientRust(rustClientCode(`
 					if {{EguiUiOptionalOuter}}.is_some() {
@@ -164,7 +164,7 @@ func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 	// clipping as before; this can only tighten, never widen. Layout is
 	// unaffected — min_rect growth (and the parent-size ratchet it feeds)
 	// is an allocation property, not a paint property.
-	widgets = append(widgets, idl.NewProceduralNode("uiClipToMaxRect").
+	widgets = append(widgets, idl.NewProceduralNode("uiClipToMaxRect").WithEffect(ir.EffectLocal).
 		WithApplyCodeClientRust(rustClientCode(`
 					if {{EguiUiOptionalOuter}}.is_some() {
 						let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
@@ -173,7 +173,7 @@ func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 					}
 `)).
 		Build())
-	widgets = append(widgets, idl.NewProceduralNode("uiSetWidth").
+	widgets = append(widgets, idl.NewProceduralNode("uiSetWidth").WithEffect(ir.EffectLocal).
 		AddArguments(idl.NewArgumentsBuilder().PlainArg("width", ctabb.F32).Build()).
 		WithApplyCodeClientRust(rustClientCode(`
 					if {{EguiUiOptionalOuter}}.is_some() {
@@ -181,7 +181,7 @@ func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 					}
 `)).
 		Build())
-	widgets = append(widgets, idl.NewProceduralNode("uiSetHeight").
+	widgets = append(widgets, idl.NewProceduralNode("uiSetHeight").WithEffect(ir.EffectLocal).
 		AddArguments(idl.NewArgumentsBuilder().PlainArg("height", ctabb.F32).Build()).
 		WithApplyCodeClientRust(rustClientCode(`
 					if {{EguiUiOptionalOuter}}.is_some() {
@@ -189,7 +189,7 @@ func definitionsWidgetProc() (widgets []*ir.ProceduralNode) {
 					}
 `)).
 		Build())
-	widgets = append(widgets, idl.NewProceduralNode("uiDisable").
+	widgets = append(widgets, idl.NewProceduralNode("uiDisable").WithEffect(ir.EffectLocal).
 		WithApplyCodeClientRust(rustClientCode(`
 					if {{EguiUiOptionalOuter}}.is_some() {
 						{{EguiUiOptionalOuter}}.as_mut().unwrap().disable();
@@ -316,8 +316,15 @@ func definitionsWidget() (widgets []*ir.BuilderFactoryNode) {
 				BeginMethod("frameWhenInactive").Arg("val", ctabb.B).EndMethod().
 				BeginMethod("rightText").Arg("text", ctabb.S).EndMethod().
 				BeginMethod("shortcut_text").Arg("text", ctabb.S).EndMethod().
+				// The IDS kind (ADR-0273). Unexported: Go wraps it as
+				// Kind(ButtonKindE) in the bindings.
+				BeginMethod("kind").Unexported().Arg("ki", ctabb.U8).
+				CodeClientRust(rustClientCode("ids_kind = ki;\n")).EndMethod().
 				Build()...).
-			WithConstructionCodeClientRust(rustClientCode("egui::Button::new(atoms);\n")).
+			WithConstructionCodeClientRust(rustClientCode("egui::Button::new(atoms);\nlet mut ids_kind: u8 = 0;\n")).
+			// Added through the design system's wrapper, which colours the
+			// button by its kind and adds the secondary kind unchanged.
+			WithApplyCodeClientRust(rustClientCode("self.apply_widget(imzero2_egui::style::button::IdsButton({{Instance}},ids_kind),{{EguiUiOptionalOuter}},{{FuncProcIdOuter}},Some({{Id}}));\n")).
 			WithSettingImmediate(true).
 			WithSettingRetained(true).
 			WithReturnType(structButton()).
@@ -679,7 +686,7 @@ if std::mem::take(&mut self.text_edit_pending_capture_tab) {
                 hit = inp.events.len() != before;
             });
             if hit {
-                self.r26_key_capture_push({{Id}}.value(), crate::imzero2::keycodes::imzero_key_code(egui::Key::Tab), mods_byte);
+                self.r26_key_capture_push({{Id}}.value(), crate::imzero2::keycodes::imzero_key_code(egui::Key::Tab), mods_byte, 1);
                 // R26 is read at the END of this frame, so Go acts on the
                 // capture while building the NEXT one — and the keypress that
                 // would have asked for that frame has just been eaten here.
@@ -704,15 +711,17 @@ if self.text_edit_pending_capture_keys != 0 {
                 | ((mods_now.ctrl as u8) << 1)
                 | ((mods_now.alt as u8) << 2)
                 | ((mods_now.command as u8) << 3);
-            let mut hits: Vec<u8> = Vec::new();
+            let mut hits: Vec<(u8, u8)> = Vec::new();
             ctx.input_mut(|inp| {
                 inp.events.retain(|ev| {
-                    if let egui::Event::Key { key, pressed: true, .. } = ev {
+                    if let egui::Event::Key { key, pressed: true, repeat, .. } = ev {
                         let code = crate::imzero2::keycodes::imzero_key_code(*key);
                         // Code 0 is the reserved unknown; a key the vocabulary
                         // cannot name is a key no mask can have asked for.
                         if code != 0 && (mask & (1u64 << code)) != 0 {
-                            hits.push(code);
+                            // Presses only: the edge byte says down, and
+                            // whether it repeats (ADR-0279 §SD1).
+                            hits.push((code, 1 | ((*repeat as u8) << 1)));
                             return false;
                         }
                     }
@@ -720,8 +729,8 @@ if self.text_edit_pending_capture_keys != 0 {
                 });
             });
             if !hits.is_empty() {
-                for code in hits {
-                    self.r26_key_capture_push({{Id}}.value(), code, mods_byte);
+                for (code, edges) in hits {
+                    self.r26_key_capture_push({{Id}}.value(), code, mods_byte, edges);
                 }
                 ctx.request_repaint();
             }

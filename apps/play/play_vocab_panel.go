@@ -244,7 +244,7 @@ func vocabAccepted(st *vocabTabState, e vocabEntry) bool {
 func (inst *PlayApp) renderVocabFilterRow(entries []vocabEntry) {
 	st := &inst.vocabTab
 	for range c.Horizontal().KeepIter() {
-		inst.vocabHl.Prepare(inst.ids.PrepareStr("vocabFilter"), st.filter, false, regexedit.ModeTokens).
+		inst.vocabHl.TextEdit(inst.ids.PrepareStr("vocabFilter"), st.filter, false, regexedit.ModeTokens).
 			HintText("Filter (regex, space = AND)").
 			SendRespVal(&st.filter)
 		if st.filter != "" {

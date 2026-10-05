@@ -52,7 +52,7 @@ func newBenchScene(t testing.TB, src vectorfield.SourceI, opts Options) *scene {
 	t.Helper()
 	t.Cleanup(scenetest.Install())
 	s := &scene{clock: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
-	s.m = portolan.New(c.NewWidgetIdStack(), portolan.Options{NoTiles: true, Center: portolan.LL(45, 10), Zoom: 4})
+	s.m = portolan.New(c.NewWidgetIdStack(), "", portolan.Options{NoTiles: true, Center: portolan.LL(45, 10), Zoom: 4})
 	s.layer = New(src, opts)
 	s.layer.now = func() time.Time { return s.clock }
 	t.Cleanup(s.layer.Close)
@@ -62,7 +62,7 @@ func newBenchScene(t testing.TB, src vectorfield.SourceI, opts Options) *scene {
 // frame renders once, dt after the last frame.
 func (s *scene) frame(dt time.Duration) {
 	s.clock = s.clock.Add(dt)
-	s.m.Render(800, 600, func(p portolan.Projector) { s.layer.Draw(p) })
+	s.m.Render(800, 600, func(p portolan.Projector) { s.layer.Paint(p) })
 }
 
 // settle renders until cond holds. Requests run on goroutines of the layer's
@@ -150,10 +150,10 @@ func TestFixedTicksPaintTheSameBytes(t *testing.T) {
 		src := globalSource(t, vectorfield.Swirl(0), 1)
 		sumFn, zero, reset := scenetest.InstallHashing()
 		defer reset()
-		m := portolan.New(c.NewWidgetIdStack(), portolan.Options{NoTiles: true, Center: portolan.LL(45, 10), Zoom: 4})
+		m := portolan.New(c.NewWidgetIdStack(), "", portolan.Options{NoTiles: true, Center: portolan.LL(45, 10), Zoom: 4})
 		layer := New(src, Options{Seed: seed, FixedTicks: 100})
 		defer layer.Close()
-		render := func() { m.Render(800, 600, func(p portolan.Projector) { layer.Draw(p) }) }
+		render := func() { m.Render(800, 600, func(p portolan.Projector) { layer.Paint(p) }) }
 		deadline := time.Now().Add(10 * time.Second)
 		for layer.Stats().Ticks < 100 {
 			require.True(t, time.Now().Before(deadline))
@@ -459,4 +459,23 @@ func TestStepsAheadAreHeldBeforeTheyAreNeeded(t *testing.T) {
 	s.layer.SetAhead(nil)
 	s.frame(time.Second)
 	require.Equal(t, StepStateIdle, s.layer.StepState(5), "with nothing ahead it holds the bracket alone")
+}
+
+// TestPaceNamesTheClampsInTheFieldsUnit pins the two speeds a legend states:
+// the full pace is the option's SpeedMax, and the floor is where the linear
+// pace meets its minimum, so it moves with the pace bounds and not with the
+// palette.
+func TestPaceNamesTheClampsInTheFieldsUnit(t *testing.T) {
+	src := globalSource(t, vectorfield.Uniform(10, 0), 1)
+	layer := New(src, Options{SpeedMax: 30})
+	defer layer.Close()
+	floor, full := layer.Pace()
+	require.InDelta(t, 30, full, 1e-6)
+	require.InDelta(t, 30*defaultMinPace/defaultMaxPace, floor, 1e-5)
+
+	layer2 := New(src, Options{SpeedMax: 20, MinPacePx: 1, MaxPacePx: 4})
+	defer layer2.Close()
+	floor, full = layer2.Pace()
+	require.InDelta(t, 20, full, 1e-6)
+	require.InDelta(t, 5, floor, 1e-6)
 }

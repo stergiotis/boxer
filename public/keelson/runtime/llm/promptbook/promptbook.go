@@ -65,10 +65,6 @@ const (
 	// ScopeBufferAndError runs over the buffer and the last run's error —
 	// what a fix wants.
 	ScopeBufferAndError
-	// ScopeQuestion runs over a question the reader types — what an ask
-	// wants; its body is a preamble the consumer grounds, not a system
-	// prompt it runs alone.
-	ScopeQuestion
 )
 
 // Name is the frontmatter spelling of a scope.
@@ -82,8 +78,6 @@ func (inst ScopeE) Name() (s string) {
 		return "buffer"
 	case ScopeBufferAndError:
 		return "buffer+error"
-	case ScopeQuestion:
-		return "question"
 	}
 	return "unknown"
 }
@@ -301,11 +295,9 @@ func ParseDocSource(bookId string, path string, src []byte) (def PromptDef, err 
 		def.Scope = ScopeBuffer
 	case ScopeBufferAndError.Name():
 		def.Scope = ScopeBufferAndError
-	case ScopeQuestion.Name():
-		def.Scope = ScopeQuestion
 	default:
 		err = eb.Build().Str("bookId", bookId).Str("path", path).Str("scope", scope).
-			Errorf("promptbook: unknown scope (known: selection, document, buffer, buffer+error, question)")
+			Errorf("promptbook: unknown scope (known: selection, document, buffer, buffer+error)")
 		return
 	}
 	if t, ok := frontmatterFloat(meta["temperature"]); ok {

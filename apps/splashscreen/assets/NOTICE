@@ -24,3 +24,11 @@ NOTICE at public/streaming/persisted/kafka/NOTICE for the full
 provenance and the modification log required by Apache-2.0 §4(b)).
 Distributors of derivative works that include this package must
 propagate that NOTICE per Apache-2.0 §4(d).
+
+The Windows viewer distribution built from rust/imzero2-viewer is a
+separate case: it is assembled by scripts/dev/build-viewer.sh and ships
+shared FFmpeg libraries (LGPL-2.1-or-later), dav1d (BSD-2-Clause) and
+the MinGW-w64 runtime beside the executable, each carrying its own
+notice and corresponding-source obligations. None of this reaches a
+binary built from the Go tree. THIRD_PARTY_NOTICES.md section 4 records
+what a distributor of that directory must keep with it.

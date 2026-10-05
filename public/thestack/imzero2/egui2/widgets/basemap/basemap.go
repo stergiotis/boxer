@@ -1,6 +1,7 @@
 // Package basemap resolves the shared slippy-map basemap tile server from the
-// BOXER_MAP_TILE_* environment variables and hands it to the portolan map
-// widget as a TileSource and LoaderOptions. Every app that shows a basemap
+// BOXER_MAP_TILE_* environment variables: as a TileSource for the portolan
+// map widget, and as the "basemap" destination of the host's HTTP egress
+// service (ADR-0262), which the widget's tiles are fetched through. Every app that shows a basemap
 // (play's Map panel, terrainscope, the widget gallery) routes its tile
 // configuration through here, so a deployment points every basemap at a
 // self-hosted GIS with a single BOXER_MAP_TILE_URL — no per-app knob, and no
@@ -29,9 +30,18 @@
 package basemap
 
 import (
+	"context"
+	"errors"
+	"io"
+	"net/http"
 	"strings"
+	"sync/atomic"
 
 	"github.com/stergiotis/boxer/public/config/env"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/httpegress"
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan"
 )
 
@@ -85,7 +95,7 @@ var (
 	// The two TLS knobs below date from the retired renderer-side tile
 	// client, which trusted the webpki root bundle and nothing else — no
 	// system trust store to add a private CA to, SSL_CERT_FILE ignored. The
-	// Go tile loader honours the system store, so a private CA installed
+	// host's egress service honours the system store, so a private CA installed
 	// there works without them; they remain for a CA that is not, and for
 	// the insecure escape hatch. Prefer the CA file — it keeps certificate
 	// verification on.
@@ -119,6 +129,12 @@ func Configured() bool {
 	return set && strings.TrimSpace(raw) != ""
 }
 
+// DefaultOn reports whether a map that defaults to "no basemap" should show
+// one: a tile server was configured, or this is the browser tab, where the
+// country outlines that stand in for a basemap cost more per frame than the
+// tiles do (ADR-0262 Update 2026-10-03).
+func DefaultOn() bool { return Configured() || fetchesDirect }
+
 // clampMaxZoom maps the BOXER_MAP_TILE_MAX_ZOOM int64 into the widget's uint8
 // tileMaxZoom argument. A value <=0 is "unset" (set=false → keep the widget's
 // own default of 19); anything above the uint8 ceiling saturates rather than
@@ -137,7 +153,12 @@ func clampMaxZoom(mz int64) (zoom uint8, set bool) {
 // portolan-typed twin of Apply (ADR-0204 §SD1): the URL (OpenStreetMap unless
 // BOXER_MAP_TILE_URL says otherwise), the attribution and the max zoom.
 func PortolanSource() (src portolan.TileSource) {
-	src = portolan.NewTileSource(strings.TrimSpace(TileURL.Get()))
+	tmpl := strings.TrimSpace(TileURL.Get())
+	if tmpl == "" {
+		// Whitespace-only is unset, the predicate Configured uses.
+		tmpl = osmTileURL
+	}
+	src = portolan.NewTileSource(tmpl)
 	if attr := strings.TrimSpace(TileAttribution.Get()); attr != "" {
 		src.Attribution = attr
 		if attrURL := strings.TrimSpace(TileAttributionURL.Get()); attrURL != "" {
@@ -151,16 +172,126 @@ func PortolanSource() (src portolan.TileSource) {
 	return
 }
 
-// PortolanLoader is the registry's TLS pair as loader options. The knobs bite
-// only when a custom BOXER_MAP_TILE_URL is configured — a private CA must not
-// be trusted for the public default — and they keep their names and meanings,
-// honoured by Go's http.Transport (ADR-0204 §SD4) where the retired binding's
-// renderer-side client honoured them before.
-func PortolanLoader() (opts portolan.LoaderOptions) {
-	if !Configured() {
+// Destination is the basemap's name in the HTTP egress registry
+// (ADR-0262 §SD2): an app that shows a basemap declares [ClientCaps] and
+// fetches its tiles through `net.http.fetch.basemap`.
+const Destination = "basemap"
+
+// userAgent identifies the basemap client to the tile server; the public
+// OSM servers refuse an empty one.
+const userAgent = "boxer-portolan/0.1 (+https://github.com/stergiotis/boxer)"
+
+func init() {
+	httpegress.Register(httpegress.DestinationSpec{
+		Name:        Destination,
+		Description: "the slippy-map basemap tile server (BOXER_MAP_TILE_URL, OpenStreetMap by default)",
+		Resolve:     ResolveDestination,
+	})
+}
+
+// ResolveDestination is the basemap destination from the BOXER_MAP_TILE_*
+// registry: the prefixes of PortolanSource's template, and the TLS pair. The
+// knobs bite only when a custom BOXER_MAP_TILE_URL is configured — a
+// private CA must not be trusted for the public default — and they keep
+// their names and meanings, honoured now by the host's egress service
+// (ADR-0262 §SD6) where the tile loader honoured them before.
+func ResolveDestination() (d httpegress.Destination, err error) {
+	src := PortolanSource()
+	d.Prefixes, err = httpegress.TilePrefixes(src.URLTemplate, src.Subdomains)
+	if err != nil {
 		return
 	}
-	opts.CAFile = strings.TrimSpace(TileCAFile.Get())
-	opts.InsecureTLS = TileInsecureTLS.Get()
+	d.UserAgent = userAgent
+	if Configured() {
+		d.CAFile = strings.TrimSpace(TileCAFile.Get())
+		d.InsecureTLS = TileInsecureTLS.Get()
+	}
+	return
+}
+
+// ClientCaps is the manifest entry an app that shows a basemap declares.
+func ClientCaps(reason string) (caps []app.SubjectFilter) {
+	return httpegress.ClientCaps(Destination, reason)
+}
+
+// Tiles is an app's basemap tile fetcher: a GET against the basemap
+// destination over the app's bus. The bus may arrive after construction —
+// an app's panes are built before Mount hands it over — so Bind sets it
+// late; until then every tile fails with the reason.
+type Tiles struct {
+	getter atomic.Pointer[httpegress.Getter]
+	// Purpose names the consumer on every call, e.g. "play: map".
+	purpose string
+}
+
+// NewTiles returns a fetcher over bus, which may be nil until Bind.
+func NewTiles(bus app.BusI, purpose string) (inst *Tiles) {
+	inst = &Tiles{purpose: purpose}
+	inst.Bind(bus)
+	return
+}
+
+// Bind sets the bus the tiles travel over; nil unbinds.
+func (inst *Tiles) Bind(bus app.BusI) {
+	if bus == nil {
+		inst.getter.Store(nil)
+		return
+	}
+	inst.getter.Store(&httpegress.Getter{Client: httpegress.NewClient(bus), Destination: Destination, Purpose: inst.purpose})
+}
+
+var errUnbound = errors.New("basemap: no bus bound — the map is not hosted")
+
+// Get fetches one tile.
+func (inst *Tiles) Get(ctx context.Context, url string) (data []byte, err error) {
+	if fetchesDirect {
+		return fetchDirect(ctx, url)
+	}
+	g := inst.getter.Load()
+	if g == nil {
+		return nil, errUnbound
+	}
+	return g.Get(ctx, url)
+}
+
+// maxDirectTileBytes bounds a tile fetched directly, like the loader's own cap.
+const maxDirectTileBytes = 4 << 20
+
+// fetchDirect fetches one tile over the process's own HTTP transport — the
+// browser tab's host transport, where there is no egress service to ask.
+func fetchDirect(ctx context.Context, url string) (data []byte, err error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		err = eh.Errorf("basemap: tile request: %w", err)
+		return
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		err = eh.Errorf("basemap: tile fetch: %w", err)
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		err = eb.Build().Int("status", resp.StatusCode).Str("url", url).Errorf("basemap: tile fetch")
+		return
+	}
+	data, err = io.ReadAll(io.LimitReader(resp.Body, maxDirectTileBytes+1))
+	if err != nil {
+		err = eh.Errorf("basemap: tile read: %w", err)
+		return
+	}
+	if len(data) > maxDirectTileBytes {
+		err = eb.Build().Int("limit", maxDirectTileBytes).Str("url", url).Errorf("basemap: tile too large")
+		data = nil
+	}
+	return
+}
+
+// PortolanLoader is the loader options for a map whose tiles come through
+// tiles; nil fetches nothing.
+func PortolanLoader(tiles *Tiles) (opts portolan.LoaderOptions) {
+	if tiles != nil {
+		opts.Fetcher = tiles
+	}
 	return
 }

@@ -40,7 +40,7 @@ func CreateSchemaFixedTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1493
 
 type InEntityFixedTable struct {
 	allocator             memory.Allocator
@@ -77,8 +77,11 @@ func NewInEntityFixedTable(allocator memory.Allocator, estimatedNumberOfRecords 
 
 // SetActiveSections marks which section indices BeginEntity should
 // initialise (skipping beginSection for the rest). Pass nil to clear.
-// The hint is a performance optimisation; sending BeginAttribute to
-// an unmarked section produces empty-list bytes at TransferRecords.
+// The hint is a performance optimisation for shim builders, paired
+// with the builder's SetActiveFields over the marked sections'
+// columns; BeginAttribute on an unmarked section is an invalid state
+// transition. On the arrow RecordBuilder the hint has no effect:
+// every section starts, so its list columns stay row-aligned.
 func (inst *InEntityFixedTable) SetActiveSections(idxs []int) {
 	if idxs == nil {
 		inst.activeSections = nil
@@ -111,7 +114,7 @@ var InEntityFixedTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
 
 func (inst *InEntityFixedTable) SetId(id0 uint64) *InEntityFixedTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -162,18 +165,6 @@ func (inst *InEntityFixedTable) initSections(builder *array.RecordBuilder) {
 	inst.section02Inst = NewInEntityFixedTableSectionHash(builder, inst)
 }
 func (inst *InEntityFixedTable) beginSections() {
-	if mask := inst.activeSections; mask != nil {
-		if mask[0] {
-			inst.section00Inst.beginSection()
-		}
-		if mask[1] {
-			inst.section01Inst.beginSection()
-		}
-		if mask[2] {
-			inst.section02Inst.beginSection()
-		}
-		return
-	}
 	inst.section00Inst.beginSection()
 	inst.section01Inst.beginSection()
 	inst.section02Inst.beginSection()
@@ -496,6 +487,7 @@ func (inst *InEntityFixedTableSectionCodeInAttr) EndSection() *InEntityFixedTabl
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -732,6 +724,7 @@ func (inst *InEntityFixedTableSectionCodesInAttr) EndSection() *InEntityFixedTab
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -938,6 +931,7 @@ func (inst *InEntityFixedTableSectionHashInAttr) EndSection() *InEntityFixedTabl
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }

@@ -15,7 +15,7 @@ import (
 )
 
 // Metric names. Each is a number, not a verdict: a scenario's gates decide
-// what a value means (ADR-0257 §SD6).
+// what a value means (ADR-0266 §SD6).
 const (
 	// MetricTextRuns counts text runs visible in the area.
 	MetricTextRuns = "text.runs"

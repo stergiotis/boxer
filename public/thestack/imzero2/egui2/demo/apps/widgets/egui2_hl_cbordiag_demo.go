@@ -111,14 +111,14 @@ func demoCborDiag(ids *c.WidgetIdStack, st *cbordiagDemoState) {
 		annotated := opts
 		annotated.Annotate = cbordiagAnnotate
 		st.stEntity.Verdict = "annotated by the host's path hook"
-		cbordiag.New(ids, "cd-entity").Render(&st.stEntity, cbordiagEntity, annotated)
+		cbordiag.Render(cbordiag.Input{Ids: ids, ScopeKey: "cd-entity", State: &st.stEntity, Item: cbordiagEntity, Options: annotated})
 	}
 	for range c.CollapsingHeader(ids.PrepareStr("sequence"), c.WidgetText().Text("RFC 8949 Appendix A nesting, as a sequence").Keep()).DefaultOpen(true).KeepIter() {
 		seq := opts
 		seq.Sequence = true
-		cbordiag.New(ids, "cd-seq").Render(&st.stSequence, cbordiagSequence, seq)
+		cbordiag.Render(cbordiag.Input{Ids: ids, ScopeKey: "cd-seq", State: &st.stSequence, Item: cbordiagSequence, Options: seq})
 	}
 	for range c.CollapsingHeader(ids.PrepareStr("malformed"), c.WidgetText().Text("malformed (graceful degradation)").Keep()).KeepIter() {
-		cbordiag.New(ids, "cd-bad").Render(&st.stMalformed, cbordiagMalformed, opts)
+		cbordiag.Render(cbordiag.Input{Ids: ids, ScopeKey: "cd-bad", State: &st.stMalformed, Item: cbordiagMalformed, Options: opts})
 	}
 }

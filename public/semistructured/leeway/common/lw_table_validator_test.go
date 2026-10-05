@@ -57,3 +57,24 @@ func TestValidateSectionCoSliceLengthSkew(t *testing.T) {
 	badSemantics.ValueSemantics = nil
 	require.Error(t, v.ValidateSection(badSemantics), "short ValueSemantics must be rejected")
 }
+
+// An invalid OpaqueStreamingGroup must be reported alongside the section
+// errors already collected, not in place of them.
+func TestValidateTableKeepsSectionErrorsWithBadStreamingGroup(t *testing.T) {
+	bad := validTaggedSection()
+	bad.Name = ""
+	table := &TableDesc{
+		TaggedValuesSections: []TaggedValuesSection{bad},
+		OpaqueStreamingGroup: "\xff",
+	}
+	v := NewTableValidator()
+	err := v.ValidateTable(table)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "opaque streaming group is not a valid key")
+
+	withoutGroup := *table
+	withoutGroup.OpaqueStreamingGroup = ""
+	sectionErr := NewTableValidator().ValidateTable(&withoutGroup)
+	require.Error(t, sectionErr)
+	require.ErrorContains(t, err, sectionErr.Error())
+}

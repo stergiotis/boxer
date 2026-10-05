@@ -1,0 +1,4 @@
+label ="bench done arm=off view=world-z0 countries=0 frames=300"
+label ="bench go draw_p50_us=0 draw_p95_us=0"
+label ="bench host interpret_p50_us=762 interpret_p95_us=1027 written_p50_bytes=5473"
+raster stats (per frame: rasterize, then tessellate separately) backend="wgpu" frames=540 width_px=1100 height_px=900 mean_us=2823 p50_us=2858 p90_us=3261 p99_us=3796 min_us=1351 max_us=7478 tess_mean_us=110 tess_p50_us=107 prims=11 tris=3204

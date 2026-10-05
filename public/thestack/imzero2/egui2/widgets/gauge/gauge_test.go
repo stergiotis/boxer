@@ -5,57 +5,45 @@ import (
 	"testing"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
 )
 
 func approx(a, b float32) bool { return math.Abs(float64(a-b)) < 1e-3 }
 
-func TestNewDefaults(t *testing.T) {
-	r := New("g")
-	if r.idPrefix != "g" {
-		t.Errorf("idPrefix = %q, want g", r.idPrefix)
+func TestInputDefaults(t *testing.T) {
+	d := (Input{}).resolve()
+	if d.min != 0 || d.max != 100 {
+		t.Errorf("range = [%v,%v], want [0,100]", d.min, d.max)
 	}
-	if r.min != 0 || r.max != 100 {
-		t.Errorf("range = [%v,%v], want [0,100]", r.min, r.max)
+	if !approx(d.startDeg, 225) || !approx(d.endDeg, -45) {
+		t.Errorf("sweep = [%v,%v], want [225,-45]", d.startDeg, d.endDeg)
 	}
-	if !approx(r.startDeg, 225) || !approx(r.endDeg, -45) {
-		t.Errorf("sweep = [%v,%v], want [225,-45]", r.startDeg, r.endDeg)
+	if d.size != SizeMd {
+		t.Errorf("size = %v, want SizeMd", d.size)
 	}
-	if r.size != SizeMd {
-		t.Errorf("size = %v, want SizeMd", r.size)
+	if !d.showTicks || !d.showValue {
+		t.Errorf("showTicks=%v showValue=%v, want both true", d.showTicks, d.showValue)
 	}
-	if !r.showTicks || !r.showValue {
-		t.Errorf("showTicks=%v showValue=%v, want both true", r.showTicks, r.showValue)
-	}
-	if r.formatFunc == nil {
+	if d.formatFunc == nil {
 		t.Fatal("formatFunc is nil; must be usable by default")
 	}
-	if got := r.formatFunc(0); got != "0" {
+	if got := d.formatFunc(0); got != "0" {
 		t.Errorf("default formatFunc(0) = %q, want 0", got)
 	}
-}
-
-func TestFluentSettersReturnCopies(t *testing.T) {
-	base := New("g")
-	mod := base.Range(10, 20).Size(SizeLg).Suffix("%").ShowTicks(false)
-
-	// Originals untouched (value-receiver contract).
-	if base.min != 0 || base.max != 100 {
-		t.Errorf("base range mutated: [%v,%v]", base.min, base.max)
+	// An explicit range that happens to start at zero is not the default.
+	if d := (Input{Min: 0, Max: 5}).resolve(); d.max != 5 {
+		t.Errorf("explicit max lost: %v", d.max)
 	}
-	if base.size != SizeMd || base.suffix != "" || !base.showTicks {
-		t.Error("base mutated by setters on a copy")
-	}
-	// Copy carries the changes.
-	if mod.min != 10 || mod.max != 20 || mod.size != SizeLg || mod.suffix != "%" ||
-		mod.showTicks {
-		t.Errorf("copy missing changes: %+v", mod)
+	if (Input{}).scopeKey() != "gauge" || (Input{ScopeKey: "cpu"}).scopeKey() != "cpu" {
+		t.Error("scope key default")
 	}
 }
 
-func TestFormatNilIsNoop(t *testing.T) {
-	r := New("g").Format(nil)
-	if r.formatFunc == nil {
-		t.Fatal("Format(nil) cleared the formatter; should be a no-op")
+func TestInputFlagsInvertToDefaults(t *testing.T) {
+	d := (Input{HideTicks: true, HideValue: true, Size: SizeLg, Suffix: "%"}).resolve()
+	if d.showTicks || d.showValue || d.size != SizeLg || d.suffix != "%" {
+		t.Errorf("resolve lost fields: %+v", d)
 	}
 }
 
@@ -81,6 +69,12 @@ func TestValueToAngle(t *testing.T) {
 	}
 	if got := valueToAngle(5, 10, 10, start, end); !approx(got, start) {
 		t.Errorf("degenerate range = %v, want start %v", got, start)
+	}
+	if got := valueToAngle(math.NaN(), 0, 100, start, end); !approx(got, start) {
+		t.Errorf("NaN reading = %v, want start %v", got, start)
+	}
+	if got := valueToAngle(5, math.NaN(), 100, start, end); !approx(got, start) {
+		t.Errorf("NaN range = %v, want start %v", got, start)
 	}
 }
 
@@ -173,13 +167,17 @@ func TestDefaultFormat(t *testing.T) {
 }
 
 func TestResolveDiameterOverride(t *testing.T) {
-	if got := New("g").Diameter(200).resolveDiameter(); !approx(got, 200) {
+	if got := (Input{Diameter: 200}).resolve().resolveDiameter(); !approx(got, 200) {
 		t.Errorf("explicit diameter = %v, want 200", got)
 	}
-	// Diameter(0) clears the override -> falls back to the Size preset.
-	got := New("g").Size(SizeLg).Diameter(0).resolveDiameter()
+	// Diameter 0 is no override -> the Size preset.
+	got := (Input{Size: SizeLg}).resolve().resolveDiameter()
 	if !approx(got, diameterFor(SizeLg, styletokens.ActiveDensity())) {
-		t.Errorf("cleared override = %v, want Size preset", got)
+		t.Errorf("no override = %v, want Size preset", got)
+	}
+	if diameterFor(SizeSm, styletokens.DensityStandard) >= diameterFor(SizeMd, styletokens.DensityStandard) ||
+		diameterFor(SizeMd, styletokens.DensityStandard) >= diameterFor(SizeLg, styletokens.DensityStandard) {
+		t.Error("presets are not ordered Sm < Md < Lg")
 	}
 }
 
@@ -271,20 +269,30 @@ func TestReadoutAvailWidth(t *testing.T) {
 	}
 }
 
-func TestReadoutMeasureIdStableAndDistinct(t *testing.T) {
-	// Stable across calls for the same identity (frame-to-frame stability is
-	// what the MeasureText databinding relies on).
-	first := readoutMeasureId("battery", 0x1f)
-	again := readoutMeasureId("battery", 0x1f)
-	if first != again {
-		t.Error("measureId not stable for the same (prefix, callId)")
+func TestReadoutMeasureIdIsPerDial(t *testing.T) {
+	// The measure slot is derived under the dial's scope (ADR-0267 W7): stable
+	// across frames for one dial, distinct for two dials under one host.
+	seq := func(key string) (s uint64) {
+		ids := c.NewWidgetIdStack()
+		for range c.IdScope(ids.PrepareStr("host")) {
+			for range c.IdScope(ids.PrepareStr(key)) {
+				s = ids.ProbeSeq("readout")
+			}
+		}
+		return
 	}
-	// Distinct per instance (prefix or callId), so two dials never share a slot.
-	if readoutMeasureId("battery", 0x1f) == readoutMeasureId("battery", 0x20) {
-		t.Error("measureId collides across callId")
+	if seq("battery") != seq("battery") {
+		t.Error("measure id not stable across frames")
 	}
-	if readoutMeasureId("battery", 0x1f) == readoutMeasureId("cpu", 0x1f) {
-		t.Error("measureId collides across idPrefix")
+	if seq("battery") == seq("cpu") {
+		t.Error("two dials share a measure slot")
+	}
+}
+
+func TestFitReadoutFontWithoutState(t *testing.T) {
+	// No State: the approximation, and no panic.
+	if got := fitReadoutFont(nil, 1, "8500 mAh", 20, 30); got >= 20 || got < 20*readoutMinFontFrac {
+		t.Errorf("approximate fit = %v, want shrunk within bounds", got)
 	}
 }
 
@@ -292,5 +300,20 @@ func TestApproxReadoutWidthCountsRunes(t *testing.T) {
 	// Rune-counted, not byte-counted: "88°C" is 4 runes though "°" is 2 bytes.
 	if got, want := approxReadoutWidth("88°C", 10), 4*approxGlyphFrac*10; !approx(float32(got), float32(want)) {
 		t.Errorf("approx(\"88°C\") = %v, want %v (4 runes)", got, want)
+	}
+}
+
+// TestRenderHeadless is the W19 smoke test: one frame under the discard
+// channel, from a zero State, without a host.
+func TestRenderHeadless(t *testing.T) {
+	t.Cleanup(scenetest.Install())
+	ids := c.NewWidgetIdStack()
+	var st State
+	res := Render(Input{Ids: ids, ScopeKey: "t", Value: 42, Label: "cpu", Suffix: "%", Zones: TrafficLight(0, 100), State: &st})
+	if res.Diameter <= 0 {
+		t.Fatalf("nothing drawn: %+v", res)
+	}
+	if Render(Input{Value: 1}).Diameter != 0 {
+		t.Error("a nil Ids must draw nothing")
 	}
 }

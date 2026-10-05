@@ -69,6 +69,22 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
 				// pre-binding behaviour for any in-tree c.Window usage).
 				BeginMethod("openBound").Arg("bindingId", ctabb.U64).
 				CodeClientRust(rustClientCode("self.scratch_open_binding_id = binding_id;\n")).EndMethod().
+				// dragFromTitleBar restricts moving the window to dragging
+				// its title bar (egui::WindowDrag::TitleBar). egui then
+				// places its `__title_click` widget even on a
+				// non-collapsible window, which is what the apply block
+				// reads TITLE_DOUBLE_CLICKED from.
+				BeginMethod("dragFromTitleBar").Arg("val", ctabb.B).
+				CodeClientRust(rustClientCode("if val { {{Instance}} = {{Instance}}.drag_area(egui::WindowDrag::TitleBar); }\n")).EndMethod().
+				// maximized pins the window to the rect its parent Ui has
+				// left free (the root Ui after the shell's panels), and puts
+				// the window back where it was on the first frame it is
+				// emitted without the flag. egui has no maximize state of
+				// its own; the caller owns the flag (typically toggled on
+				// TITLE_DOUBLE_CLICKED) and the restore rect lives in egui
+				// temp memory keyed by the window id.
+				BeginMethod("maximized").Arg("val", ctabb.B).
+				CodeClientRust(rustClientCode("self.scratch_window_maximized = val;\n")).EndMethod().
 				Build()...).
 			WithSettingImmediate(true).
 			WithSettingBlockIterator(true).
@@ -83,6 +99,51 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
 				rustClientCode("egui::Window::new(label).id({{Id}});\n")).
 			WithApplyCodeClientRust(rustClientCode(`
 				let open_binding_id = std::mem::take(&mut self.scratch_open_binding_id);
+				// maximized: save the outer rect on the first maximized
+				// frame, pin to the free rect while the flag holds, and on
+				// the first frame without it re-seed position and size from
+				// the saved rect once (pinning for a single frame writes the
+				// Area and Resize state back; the next frame is movable and
+				// resizable again).
+				let maximized = std::mem::take(&mut self.scratch_window_maximized);
+				let restore_id = {{Id}}.with("__imzero2_restore_rect");
+				// The rect left free by the shell's panels — what maximized
+				// fills, and the work area reported to Go (fetchR27Windows).
+				let free = {{EguiUiOptionalOuter}}
+					.as_ref()
+					.map(|u| u.available_rect_before_wrap())
+					.unwrap_or_else(|| {{EguiContext}}.content_rect());
+				self.r27_work_rect = free;
+				// windowPlace: a one-frame placement from Go wins over the
+				// maximized pin and over a pending restore, whose saved rect
+				// it supersedes. Pinned the same way as the restore below.
+				if let Some(r) = self.pending_window_place.remove(&{{Id}}.value()) {
+					{{EguiContext}}.data_mut(|d| d.remove::<egui::Rect>(restore_id));
+					{{Instance}} = {{Instance}}.fixed_pos(r.min).fixed_size(r.size()).constrain(false);
+				} else if maximized {
+					let saved = {{EguiContext}}.data(|d| d.get_temp::<egui::Rect>(restore_id)).is_some();
+					if !saved {
+						if let Some(r) = {{EguiContext}}.memory(|m| m.area_rect({{Id}})) {
+							{{EguiContext}}.data_mut(|d| d.insert_temp(restore_id, r));
+						}
+					}
+					// fixed_rect makes the Area unmovable, and egui then
+					// places no title-bar widget; the double-click that
+					// restores the window is read off the pointer below.
+					// (current_pos would keep it movable, but in title-drag
+					// mode egui re-applies the stored pivot after
+					// Area::begin and the position is lost.)
+					{{Instance}} = {{Instance}}.fixed_rect(free);
+				} else if let Some(r) = {{EguiContext}}.data(|d| d.get_temp::<egui::Rect>(restore_id)) {
+					{{EguiContext}}.data_mut(|d| d.remove::<egui::Rect>(restore_id));
+					// fixed_pos rather than current_pos for the same
+					// reason as above: only an unmovable Area keeps the
+					// position it is given. Not constrained: the Area still
+					// carries the maximized size this frame, and fitting
+					// that to the screen would shove the window into the
+					// corner. One frame, then movable again.
+					{{Instance}} = {{Instance}}.fixed_pos(r.min).fixed_size(r.size()).constrain(false);
+				}
 				// window_open always defaults to true: Go re-emitting this
 				// opcode IS the "I want to be open" signal. egui itself
 				// doesn't persist window visibility across frames (only
@@ -98,13 +159,25 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
 				// silently returned None on every subsequent emit.
 				let mut window_open: bool = true;
 				let was_open = window_open;
+				// Top of the content area; the band above it is the title
+				// bar. NaN when the body did not run (collapsed).
+				let mut content_top = f32::NAN;
+				// How far the content, as laid out this frame, claims more
+				// than the body was given. egui grows the window by that much
+				// on the next frame, so after a windowPlace it is what the
+				// placed size fell short by.
+				let mut content_overflow = egui::Vec2::ZERO;
 				let retr = if open_binding_id != 0 {
 					{{Instance}}.open(&mut window_open).show(c, |ui| {
+						content_top = ui.max_rect().top();
 						let _ = self.interpret_outer_logged({{EguiContext}}, &mut Some(ui));
+						content_overflow = (ui.min_rect().size() - ui.max_rect().size()).max(egui::Vec2::ZERO);
 					})
 				} else {
 					{{Instance}}.show(c, |ui| {
+						content_top = ui.max_rect().top();
 						let _ = self.interpret_outer_logged({{EguiContext}}, &mut Some(ui));
+						content_overflow = (ui.min_rect().size() - ui.max_rect().size()).max(egui::Vec2::ZERO);
 					})
 				};
 				if open_binding_id != 0 && was_open != window_open {
@@ -133,6 +206,41 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
                             == Some(inner.response.layer_id)
                     });
                     resp2.set(ResponseFlags::WINDOW_TOPMOST, topmost);
+                    // TITLE_DOUBLE_CLICKED: egui's own title-bar widget,
+                    // present when the window is collapsible or dragged by
+                    // its title bar (dragFromTitleBar) — on a collapsible
+                    // window egui has already toggled collapse on it. A
+                    // window egui made unmovable (fixed_rect, as while
+                    // maximized) has no such widget, so a primary
+                    // double-click in the band above the content, on this
+                    // window's layer, counts too.
+                    let wrect = inner.response.rect;
+                    let layer = inner.response.layer_id;
+                    let in_band = content_top.is_finite()
+                        && {{EguiContext}}.input(|i| {
+                            i.pointer.button_double_clicked(egui::PointerButton::Primary)
+                                && i.pointer.interact_pos().is_some_and(|p| {
+                                    p.y >= wrect.top()
+                                        && p.y < content_top
+                                        && p.x >= wrect.left()
+                                        && p.x <= wrect.right()
+                                })
+                        })
+                        && {{EguiContext}}
+                            .input(|i| i.pointer.interact_pos())
+                            .and_then(|p| {{EguiContext}}.layer_id_at(p))
+                            == Some(layer);
+                    let title_dbl = in_band
+                        || {{EguiContext}}
+                            .read_response({{Id}}.with("__title_click"))
+                            .is_some_and(|r| r.double_clicked());
+                    resp2.set(ResponseFlags::TITLE_DOUBLE_CLICKED, title_dbl);
+                    self.r27_windows.push(WindowGeomRow {
+                        id: {{Id}}.value(),
+                        rect: wrect,
+                        collapsed: inner.inner.is_none(),
+                        need: wrect.size() + content_overflow,
+                    });
                     if inner.inner.is_none() {
                         // collapsed
                         resp2.insert(ResponseFlags::BLOCK_SKIPPED);
@@ -142,6 +250,27 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
                     }
                 }
 				self.r7_push({{Id}}.value(), resp2);
+`)).Build())
+	// modal draws its body in an egui::Modal: an Area of the Foreground
+	// order, centred, over a backdrop that dims the viewport and takes every
+	// press outside the body, so nothing else can be clicked until the
+	// caller stops emitting it. Like window it is shown on the context, not
+	// in the parent Ui. The body sizes the modal; set its width inside the
+	// body (uiSetMinWidth / uiSetMaxWidth). egui's should_close (Escape, a
+	// press on the backdrop) is not reported: the callers are decisions the
+	// person makes with the body's own buttons.
+	blocks = append(blocks, idl.NewBuilderFactoryNode("modal").
+		WithIdentityId(true).
+		WithSettingImmediate(true).
+		WithSettingBlockIterator(true).
+		WithConstructionCodeClientRust(rustClientCode("egui::Modal::new({{Id}});\n")).
+		WithApplyCodeClientRust(rustClientCode(`
+				let shown = {{Instance}}.show({{EguiContext}}, |ui| {
+					let _ = self.interpret_outer_logged({{EguiContext}}, &mut Some(ui));
+				});
+				let mut resp = ResponseFlags::empty();
+				resp.populate(&shown.response);
+				self.r7_push({{Id}}.value(), resp);
 `)).Build())
 	blocks = append(blocks, idl.NewBuilderFactoryNode("collapsingHeader").
 		WithIdentityId(true).
@@ -224,6 +353,12 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
 			// takes focus by calling requestFocus when one of them is hit.
 			BeginMethod("captureKeys").Arg("mask", ctabb.U64).
 			CodeClientRust(rustClientCode("capture_keys_mask = mask;\n")).EndMethod().
+			// captureKeyEdges — ADR-0279 §SD1. The capture also takes the
+			// releases of the masked keys, and every event carries an edge
+			// byte (down, repeat). Opt-in, because an adopter that acts on
+			// each captured event would act twice per keystroke.
+			BeginMethod("captureKeyEdges").
+			CodeClientRust(rustClientCode("capture_key_edges = true;\n")).EndMethod().
 			// hoverCursorPointer changes the OS cursor to a pointing
 			// hand whenever the pointer is over this Frame — the
 			// universal "this is clickable" cue. Only meaningful when
@@ -257,7 +392,7 @@ func definitionsBlock() (blocks []*ir.BuilderFactoryNode) {
 		WithSettingBlockIterator(true).
 		WithSettingImmediate(true).
 		WithSettingRetained(true).
-		WithConstructionCodeClientRust(rustClientCode("egui::Frame::new();\nlet mut sense_click = false;\nlet mut sense_drag = false;\nlet mut hover_cursor_pointer = false;\nlet mut focusable = false;\nlet mut capture_keys_mask: u64 = 0;\n")).
+		WithConstructionCodeClientRust(rustClientCode("egui::Frame::new();\nlet mut sense_click = false;\nlet mut sense_drag = false;\nlet mut hover_cursor_pointer = false;\nlet mut focusable = false;\nlet mut capture_keys_mask: u64 = 0;\nlet mut capture_key_edges = false;\n")).
 		WithApplyCodeClientRust(rustClientCode(`
 					if {{EguiUiOptionalOuter}}.is_some() {
 						let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
@@ -886,7 +1021,7 @@ let mut layout = egui::Layout::default();`)).
 	// clipped to the enclosing ui's clip, so inside a scroll area it is the
 	// viewport's share, not the whole content. It exists so a headless driver
 	// can find where a painter-drawn artifact sits — to crop a capture to it or
-	// scope a measurement to it (ADR-0257, proposed, §SD1). Nothing is drawn
+	// scope a measurement to it (ADR-0266, proposed, §SD1). Nothing is drawn
 	// and no interaction is added. The body's own nodes stay parented where
 	// they were: the region node is created after them, so it names an area,
 	// not a subtree.

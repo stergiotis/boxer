@@ -10,16 +10,16 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
-// newHistoryTestWidget builds a Widget over a machine with the given history
+// newHistoryTestWidget builds a View over a machine with the given history
 // cap. Nothing here renders — the tests exercise the History tab's data
 // derivation, which touches no c.* op.
-func newHistoryTestWidget(t *testing.T, maxHistory int) *Widget[string] {
+func newHistoryTestWidget(t *testing.T, maxHistory int) *View[string] {
 	t.Helper()
-	m := NewMachine("a", maxHistory).
+	m := NewMachine("a", maxHistory, MachineOptions[string]{}).
 		AddRule("a", "b").
 		AddRule("b", "c").
 		AddRule("c", "a")
-	return New(c.NewWidgetIdStack(), "hist-test", m)
+	return New(c.NewWidgetIdStack(), "hist-test", m, Options[string]{})
 }
 
 func TestDwellBetween(t *testing.T) {
@@ -140,11 +140,11 @@ func TestHistorySnapshot_Empty(t *testing.T) {
 	assert.Empty(t, w.historyRows())
 }
 
-// TestHistoryFooter_Chains keeps the setter in the fluent family and pins the
-// nil default (no footer, so no separator either).
-func TestHistoryFooter_Chains(t *testing.T) {
+// TestHistoryFooter_Option pins the nil default (no footer, so no separator
+// either) and that the footer is an option re-read per frame.
+func TestHistoryFooter_Option(t *testing.T) {
 	w := newHistoryTestWidget(t, 8)
-	assert.Nil(t, w.historyFooterFn)
-	assert.Same(t, w, w.HistoryFooter(func() {}))
-	assert.NotNil(t, w.historyFooterFn)
+	assert.Nil(t, w.Opts.HistoryFooter)
+	w.Opts.HistoryFooter = func() {}
+	assert.NotNil(t, w.Opts.HistoryFooter)
 }

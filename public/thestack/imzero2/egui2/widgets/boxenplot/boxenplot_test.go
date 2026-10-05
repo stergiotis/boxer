@@ -48,7 +48,7 @@ func TestResolveOutlierMode(t *testing.T) {
 }
 
 func TestFillForDepthIsAlphaApplied(t *testing.T) {
-	r := New("x").FillAlpha(0x80)
+	r := Style{FillAlpha: 0x80}.Resolved()
 	packed := r.fillForDepth(2, 6)
 	// AAlpha is the low byte of 0xRRGGBBAA.
 	assert.Equal(t, uint32(0x80), packed&0xFF)
@@ -58,7 +58,7 @@ func TestFillForDepthRampOrdering(t *testing.T) {
 	// With batlow, t=0 → dark (low luminance), t=1 → light. The
 	// luminance of the fill should monotonically *increase* with
 	// depth under the default (shallow=dark, deep=light) mapping.
-	r := New("x").PaletteRange(0.0, 1.0)
+	r := Style{PaletteTStart: 0.0, PaletteTEnd: 1.0}.Resolved()
 	const maxDepth = uint8(8)
 	var prevL float64
 	for d := uint8(2); d <= maxDepth; d++ {
@@ -75,19 +75,35 @@ func TestFillForDepthRampOrdering(t *testing.T) {
 	}
 }
 
-// Render-emission tests (.Send) require a live FFFI2 runtime, which
-// only exists in the actual app. Visual verification of Render lives
-// in the demo app (apps/boxenplotdemo); unit tests here cover pure-
-// function logic + the early-return paths that never call Send.
+// Paint declares into a detached plot here; the visual check is the
+// gallery demo. These cover the pure logic and the early-return paths.
 
-func TestRenderEmptyLevelsIsNoOp(t *testing.T) {
-	r := New("x")
+func TestPaintEmptyLevelsIsNoOp(t *testing.T) {
 	require.NotPanics(t, func() {
-		r.Render(implot.NewDetached(), 0.0, nil, nil, -1)
+		Paint(implot.NewDetached(), Input{})
 	})
 	require.NotPanics(t, func() {
-		r.Render(implot.NewDetached(), 0.0, []letterval.LVLevel{}, nil, -1)
+		Paint(implot.NewDetached(), Input{Levels: []letterval.LVLevel{}})
 	})
+}
+
+// TestPaintDeclaresNestedBoxes paints a real letter-value ladder into a
+// detached plot (ADR-0267 W19: one frame without a host) and reads the
+// crosshair back invalid, since nothing is hovered.
+func TestPaintDeclaresNestedBoxes(t *testing.T) {
+	d := tdigest.NewTDigest()
+	rnd := rand.New(rand.NewSource(5))
+	for range 5_000 {
+		d.Push(rnd.NormFloat64())
+	}
+	in := Input{Argument: 1, Levels: letterval.RecommendedLevels(d), Name: "norm"}
+	p := implot.NewDetached()
+	require.NotPanics(t, func() { Paint(p, in) })
+	ch := At(p, in)
+	assert.False(t, ch.Valid)
+	assert.Equal(t, "norm", ch.Name)
+	assert.Equal(t, 1.0, ch.Argument)
+	require.NotPanics(t, func() { PaintCrosshair(p, in.Style, ch) })
 }
 
 func TestMedianOnlyLevelsCount(t *testing.T) {
@@ -101,37 +117,36 @@ func TestMedianOnlyLevelsCount(t *testing.T) {
 }
 
 func TestBoxWidthClampsShrink(t *testing.T) {
-	r := New("x").BoxWidth(1.0, -0.5)
-	require.Greater(t, r.widthShrink, 0.0)
-	r2 := New("x").BoxWidth(1.0, 2.5)
-	require.InDelta(t, 1.0, r2.widthShrink, 1e-12)
+	r := Style{BoxWidth: 1.0, WidthShrink: -0.5}.Resolved()
+	require.Greater(t, r.WidthShrink, 0.0)
+	r2 := Style{BoxWidth: 1.0, WidthShrink: 2.5}.Resolved()
+	require.InDelta(t, 1.0, r2.WidthShrink, 1e-12)
 }
 
-func TestFluentSettersAreImmutable(t *testing.T) {
-	base := New("x")
-	other := base.SeriesName("renamed").OutlierMode(OutlierModeCount).FillAlpha(0x40).SnapWindow(0.25)
-	// Base unchanged.
-	assert.Equal(t, "boxen", base.seriesName)
-	assert.Equal(t, OutlierModeAuto, base.outlierMode)
-	assert.Equal(t, uint8(0xC0), base.fillAlpha)
-	assert.Equal(t, 0.5, base.snapWindow)
-	// Other modified.
-	assert.Equal(t, "renamed", other.seriesName)
-	assert.Equal(t, OutlierModeCount, other.outlierMode)
-	assert.Equal(t, uint8(0x40), other.fillAlpha)
-	assert.Equal(t, 0.25, other.snapWindow)
+// TestResolvedFillsZeroFields pins the zero-value-is-default contract: a
+// zero Style resolves to DefaultStyle, and a set field survives.
+func TestResolvedFillsZeroFields(t *testing.T) {
+	def := DefaultStyle()
+	assert.Equal(t, def, Style{}.Resolved())
+	other := Style{SeriesName: "renamed", OutlierMode: OutlierModeCount, FillAlpha: 0x40, SnapWindow: 0.25}.Resolved()
+	assert.Equal(t, "renamed", other.SeriesName)
+	assert.Equal(t, OutlierModeCount, other.OutlierMode)
+	assert.Equal(t, uint8(0x40), other.FillAlpha)
+	assert.Equal(t, 0.25, other.SnapWindow)
+	assert.Equal(t, def.Palette, other.Palette, "an unset field still takes the default")
+	assert.Equal(t, "", Style{NoLegend: true}.Resolved().suffixedName("-out"))
 }
 
 // TestSnapWindowClampsNonPositive: a zero or negative snap window
 // would silently match every hover X (At()'s |HoverX - argument|
-// check would always succeed); the setter clamps to a tiny positive
-// epsilon to keep "no hover" behaviour the no-config default for
-// callers who forgot to set it.
+// check would always succeed); Resolved clamps a negative window to a tiny
+// positive epsilon and a zero one to the default.
 func TestSnapWindowClampsNonPositive(t *testing.T) {
-	r0 := New("x").SnapWindow(0)
-	rNeg := New("x").SnapWindow(-1.5)
-	assert.Greater(t, r0.snapWindow, 0.0)
-	assert.Greater(t, rNeg.snapWindow, 0.0)
+	r0 := Style{}.Resolved()
+	rNeg := Style{SnapWindow: -1.5}.Resolved()
+	assert.Equal(t, 0.5, r0.SnapWindow, "zero takes the default")
+	assert.Greater(t, rNeg.SnapWindow, 0.0)
+	assert.Less(t, rNeg.SnapWindow, 1e-6)
 }
 
 // TestFindContainingLevelInnermost verifies the innermost-wins rule:

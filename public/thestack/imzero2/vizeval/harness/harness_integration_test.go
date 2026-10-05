@@ -20,7 +20,7 @@ import (
 )
 
 // TestScoreHostMetrics scores one committed scenario end to end with the
-// default candidates (ADR-0257 Verification plan): the dataset runs, every
+// default candidates (ADR-0266 Verification plan): the dataset runs, every
 // admitted sink renders and is measured, and the card table of eight hosts —
 // small enough to fit — has no overlapping or clipped text.
 func TestScoreHostMetrics(t *testing.T) {
@@ -52,7 +52,7 @@ func TestScoreHostMetrics(t *testing.T) {
 
 // TestFactsRoundTrip files a scorecard in boxer.facts and reads it back by
 // its measurement key, the lookup that lets a search skip a candidate it has
-// already scored (ADR-0257 §SD8).
+// already scored (ADR-0266 §SD8).
 func TestFactsRoundTrip(t *testing.T) {
 	if unmet, err := scene.CheckRequire(scene.RequireClickHouse); err != nil || unmet != "" {
 		t.Skip("needs ClickHouse: ", unmet, err)

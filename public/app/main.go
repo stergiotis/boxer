@@ -7,7 +7,6 @@ import (
 	"github.com/stergiotis/boxer/public/app/commands/adr"
 	"github.com/stergiotis/boxer/public/app/commands/capmap"
 	"github.com/stergiotis/boxer/public/app/commands/capslock"
-	"github.com/stergiotis/boxer/public/app/commands/codedriven"
 	"github.com/stergiotis/boxer/public/app/commands/compression"
 	"github.com/stergiotis/boxer/public/app/commands/datacatalog"
 	"github.com/stergiotis/boxer/public/app/commands/datasource"
@@ -16,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/app/commands/findAnchor"
 	"github.com/stergiotis/boxer/public/app/commands/http"
 	"github.com/stergiotis/boxer/public/app/commands/iconsgen"
+	"github.com/stergiotis/boxer/public/app/commands/jackstay"
 	"github.com/stergiotis/boxer/public/app/commands/keelsoncodec"
 	"github.com/stergiotis/boxer/public/app/commands/keelsonddl"
 	"github.com/stergiotis/boxer/public/app/commands/key"
@@ -71,8 +71,14 @@ import (
 	// this its BOXER_LAUNCHER_* spec would be invisible to `boxer env list`
 	// and absent from doc/env-vars.md.
 	_ "github.com/stergiotis/boxer/public/keelson/runtime/launcher"
+	// KEELSON_LAUNCHABLE_APPS_WHERE (ADR-0272); read by hostboot, which this
+	// binary does not link.
+	_ "github.com/stergiotis/boxer/public/keelson/runtime/launchlimit"
 	_ "github.com/stergiotis/boxer/public/llm/openaichat"
 	_ "github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
+	// IMZERO2_BROWSER_TARGET_DIR (ADR-0278, proposed); read by a tab binary's
+	// `bundle`, which this binary is not.
+	_ "github.com/stergiotis/boxer/public/thestack/imzero2/browserhost/tabhost"
 )
 
 func mainC() (exitCode int) {
@@ -122,7 +128,6 @@ func mainC() (exitCode int) {
 			capmap.NewCliCommand(),
 			capslock.NewCliCommand(),
 			stevedoredemo.NewCliCommand(),
-			codedriven.NewCliCommand(),
 			compression.NewCliCommand(),
 			datacatalog.NewCliCommand(),
 			datasource.NewCliCommand(),
@@ -134,6 +139,7 @@ func mainC() (exitCode int) {
 			watchbillcli.NewCliCommand(),
 			runtimecodegen.NewCliCommand(),
 			keelsonddl.NewCliCommand(),
+			jackstay.NewCliCommand(),
 			ladingfs.NewCliCommand(),
 			markdown.NewCliCommand(),
 			sample.NewCliCommand(),

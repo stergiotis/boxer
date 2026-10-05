@@ -1,0 +1,623 @@
+package agent
+
+import (
+	"context"
+	"time"
+
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
+)
+
+// DefaultTimeout bounds one request when the context names no earlier
+// deadline.
+const DefaultTimeout = 10 * time.Second
+
+// Client is the family as a caller sees it, over a bus client holding
+// [ClientCaps]. Take one from [NewClient] with the bus the host minted for
+// the caller.
+type Client struct {
+	bus app.BusI
+	// Timeout bounds one request when the context has no earlier deadline;
+	// zero is DefaultTimeout.
+	Timeout time.Duration
+}
+
+// NewClient wraps bus.
+func NewClient(bus app.BusI) (inst *Client) {
+	inst = &Client{bus: bus}
+	return
+}
+
+// DescribeRequest asks for the operations agents may call. App names one
+// app by id or subject alias; Search matches app and operation names and
+// summaries; Operation names one operation of App and returns its schemas.
+type DescribeRequest struct {
+	App       string
+	Search    string
+	Operation string
+	// Asked names the model's tool call, when one asked: the describe then
+	// leaves an action row. A coordinator's own reads leave it zero.
+	Asked Asked
+}
+
+// Asked names the model's tool call behind a request (ADR-0277 §SD1, §SD6),
+// as the coordinator states it: its key for the call, the conversation and
+// turn, the model call whose reply asked, the provider's id for the tool
+// call and its index in that reply. The zero value is a request no model
+// call made.
+type Asked struct {
+	Key          string
+	Conversation string
+	Turn         string
+	ModelCall    string
+	ToolCall     string
+	ToolIndex    uint32
+}
+
+func (inst Asked) wire() (w wireCause) {
+	return wireCause{Turn: inst.Turn, ModelCall: inst.ModelCall, ToolCall: inst.ToolCall, ToolIndex: inst.ToolIndex}
+}
+
+// Resource is a resource an operation reads or writes.
+type Resource struct {
+	Name    string
+	Summary string
+}
+
+// Operation is one operation as a caller sees it. The schemas are set only
+// when the request named the operation.
+type Operation struct {
+	Name         string
+	Version      uint16
+	Summary      string
+	Class        string
+	Effect       string
+	Reads        []string
+	Writes       []string
+	Refs         []string
+	Follows      []string
+	Untrusted    bool
+	Gesture      string
+	ArgsSchema   string
+	ResultSchema string
+}
+
+// AppOperations is one app's operations agents may call. Help says the
+// app ships inline help, read with [Client.Help].
+type AppOperations struct {
+	App        string
+	Display    string
+	Summary    string
+	Help       bool
+	Resources  []Resource
+	Operations []Operation
+}
+
+// RefusedError is a request the service declined, with the reason.
+type RefusedError struct {
+	Reason string
+}
+
+func (inst *RefusedError) Error() string { return "agent: refused: " + inst.Reason }
+
+func (inst *Client) wait(ctx context.Context) (d time.Duration) {
+	d = inst.Timeout
+	if d <= 0 {
+		d = DefaultTimeout
+	}
+	if deadline, ok := ctx.Deadline(); ok {
+		if until := time.Until(deadline); until < d {
+			d = until
+		}
+	}
+	return
+}
+
+func roundTrip[Req any, Rep any](ctx context.Context, inst *Client, subject string, req Req) (rep Rep, err error) {
+	if inst == nil || inst.bus == nil {
+		err = eh.Errorf("agent: client without a bus")
+		return
+	}
+	if err = ctx.Err(); err != nil {
+		return
+	}
+	payload, err := encode(req)
+	if err != nil {
+		return
+	}
+	raw, err := inst.bus.RequestWithTimeout(subject, payload, inst.wait(ctx))
+	if err != nil {
+		err = eb.Build().Str("subject", subject).Errorf("agent: request: %w", err)
+		return
+	}
+	rep, err = decode[Rep](raw)
+	return
+}
+
+// Describe lists operations agents may call; it needs no grant.
+func (inst *Client) Describe(ctx context.Context, r DescribeRequest) (apps []AppOperations, err error) {
+	rep, err := roundTrip[wireDescribeRequest, wireDescribeReply](ctx, inst, SubjectDescribe,
+		wireDescribeRequest{V: wireVersion, App: r.App, Search: r.Search, Operation: r.Operation,
+			Key: r.Asked.Key, Conversation: r.Asked.Conversation, wireCause: r.Asked.wire()})
+	if err != nil {
+		return
+	}
+	if !rep.Ok {
+		err = &RefusedError{Reason: rep.Reason}
+		return
+	}
+	for _, a := range rep.Apps {
+		out := AppOperations{App: a.App, Display: a.Display, Summary: a.Summary, Help: a.Help}
+		for _, res := range a.Resources {
+			out.Resources = append(out.Resources, Resource(res))
+		}
+		for _, o := range a.Operations {
+			out.Operations = append(out.Operations, Operation(o))
+		}
+		apps = append(apps, out)
+	}
+	return
+}
+
+// GrantEntry names one instance a task may work in, its mode, and the
+// operations it may call there; none means every operation the app exposes
+// to agents.
+type GrantEntry struct {
+	Instance   uint64
+	Mode       ModeE
+	Operations []string
+}
+
+// GrantRequest asks for a task grant, or with Handle for the widening of
+// one.
+type GrantRequest struct {
+	Handle string
+	// Conversation names the coordinator's conversation; taint belongs to
+	// it.
+	Conversation string
+	Plan         string
+	Entries      []GrantEntry
+	Destinations []string
+	// Calls is the call budget; zero is DefaultCallBudget.
+	Calls uint32
+	// Deadline is how long the task may run; zero is DefaultDeadline.
+	Deadline time.Duration
+	// Launches are the apps the task may open windows of.
+	Launches []GrantLaunch
+	// Desktop asks for a mode over the desktop as a whole; act lets the
+	// task arrange every window (ADR-0276 §SD4). ModeUnspecified asks for
+	// none.
+	Desktop ModeE
+	// Ceiling is the most the person's settings let the model ask for
+	// (ADR-0280): the dispatcher refuses a request above it before the
+	// person is asked, and every later call, launch and destination above
+	// it. Nil sets none.
+	Ceiling *Ceiling
+	// Asked names the model's tool call that asked for the grant; the
+	// request's events carry it.
+	Asked Asked
+}
+
+// GrantLaunch lets a task open up to Count windows of App (an id or a
+// subject alias); each starts in Mode.
+type GrantLaunch struct {
+	App   string
+	Mode  ModeE
+	Count uint32
+}
+
+// Grant is what a caller holds: the task id for the record and the handle
+// it presents. The handle is honoured only from the requesting instance.
+type Grant struct {
+	Task   string
+	Handle string
+}
+
+// Request asks for a grant and waits until the person decides or ctx ends.
+// Test grants, where the host enables them, are issued at once.
+func (inst *Client) Request(ctx context.Context, r GrantRequest) (g Grant, err error) {
+	key, g, err := inst.RequestKey(ctx, r)
+	if err != nil || g.Handle != "" {
+		return
+	}
+	g, err = inst.AwaitGrant(ctx, key)
+	if err == nil && g.Handle == "" && r.Handle != "" {
+		// A widening keeps the task's handle.
+		g = Grant{Handle: r.Handle}
+	}
+	return
+}
+
+// RequestKey sends a request and returns its key without waiting; a test
+// grant comes back at once as g.
+func (inst *Client) RequestKey(ctx context.Context, r GrantRequest) (key string, g Grant, err error) {
+	req := wireGrantRequest{V: wireVersion, Handle: r.Handle, Conversation: r.Conversation, Plan: r.Plan, Destinations: r.Destinations, Calls: r.Calls,
+		DeadlineSecs: uint32(r.Deadline / time.Second), wireCause: r.Asked.wire()}
+	if r.Ceiling != nil {
+		w := wireOfCeiling(*r.Ceiling)
+		req.Ceiling = &w
+	}
+	for _, e := range r.Entries {
+		req.Entries = append(req.Entries, wireGrantEntry{Instance: e.Instance, Mode: e.Mode.String(), Operations: e.Operations})
+	}
+	for _, l := range r.Launches {
+		req.Launches = append(req.Launches, wireLaunchEntry{App: l.App, Mode: l.Mode.String(), Count: l.Count})
+	}
+	if r.Desktop != ModeUnspecified {
+		req.Desktop = r.Desktop.String()
+	}
+	rep, err := roundTrip[wireGrantRequest, wireGrantReply](ctx, inst, SubjectRequest, req)
+	if err != nil {
+		return
+	}
+	if !rep.Ok {
+		err = &RefusedError{Reason: rep.Reason}
+		return
+	}
+	key, g = rep.Key, Grant{Task: rep.Task, Handle: rep.Handle}
+	return
+}
+
+// Outcome is where a call stands; Phase is one of the phase names of
+// ADR-0269 §SD4.
+type Outcome struct {
+	Phase     string
+	Reason    string
+	AsOf      uint64
+	Revisions map[string]uint64
+	// ResultRef names the call's result, to read with Read.
+	ResultRef string
+	// Job names a capture, to read with Read once completed.
+	Job string
+	// Held marks an input_required call that waits on the person.
+	Held bool
+	// Confined is the label of what the call returned.
+	Confined bool
+	// Task and Handle answer an approved request's key.
+	Task   string
+	Handle string
+	// Remedy, on a refusal, is what would let the call through.
+	Remedy *Remedy
+}
+
+// Remedy is what the caller can change for a refused call to go through:
+// destinations to add to the grant, or arguments of the given schema.
+type Remedy struct {
+	Destinations []string
+	ArgsSchema   string
+}
+
+// Final reports whether no later phase can follow.
+func (inst Outcome) Final() (final bool) {
+	if inst.Held {
+		return false
+	}
+	for _, p := range opwire.AllPhases {
+		if p.String() == inst.Phase {
+			return p.Final()
+		}
+	}
+	return
+}
+
+// CallRequest is one command or query. Args is JSON in the operation's
+// argument schema; Expects are the revisions a command expects of what it
+// writes, defaulting to those the task last read.
+type CallRequest struct {
+	Handle    string
+	Instance  uint64
+	Operation string
+	Args      string
+	Expects   map[string]uint64
+	// Key is the caller's key for the call: a repeat under one task returns
+	// the first outcome. A coordinator keys a model's tool call with
+	// trail.ToolKey, never with the provider's id (ADR-0277 §SD6).
+	Key    string
+	Reason string
+	// Title is the model's one-line title for the call, as the person is
+	// shown it: the action row keeps it, the app never sees it.
+	Title string
+	// Turn is the conversation's turn the call belongs to; ModelCall,
+	// ToolCall and ToolIndex the model call whose reply asked for it, the
+	// provider's id for the tool call and its index in that reply.
+	Turn      string
+	ModelCall string
+	ToolCall  string
+	ToolIndex uint32
+}
+
+func outcomeOfWire(w wireOutcome) (out Outcome) {
+	out = Outcome{Phase: w.Phase, Reason: w.Reason, AsOf: w.AsOf, Revisions: w.Revisions, ResultRef: w.ResultRef, Job: w.Job,
+		Held: w.Held, Confined: w.Confined, Task: w.Task, Handle: w.Handle}
+	if w.Remedy != nil {
+		out.Remedy = &Remedy{Destinations: w.Remedy.Destinations, ArgsSchema: w.Remedy.ArgsSchema}
+	}
+	return
+}
+
+func callReply(rep wireCallReply, err error) (out Outcome, rerr error) {
+	if err != nil {
+		rerr = err
+		return
+	}
+	if !rep.Ok {
+		rerr = &RefusedError{Reason: rep.Reason}
+		return
+	}
+	out = outcomeOfWire(rep.Outcome)
+	return
+}
+
+// Call calls one command or query.
+func (inst *Client) Call(ctx context.Context, r CallRequest) (out Outcome, err error) {
+	return callReply(roundTrip[wireCall, wireCallReply](ctx, inst, SubjectCall, wireCall{V: wireVersion, Handle: r.Handle,
+		Instance: r.Instance, Operation: r.Operation, Args: r.Args, Expects: r.Expects, Key: r.Key, Reason: r.Reason, Title: r.Title,
+		Turn: r.Turn, ModelCall: r.ModelCall, ToolCall: r.ToolCall, ToolIndex: r.ToolIndex}))
+}
+
+// Status reads a call's or a capture's phase by key, waiting up to wait
+// (at most MaxStatusWait) for a final one.
+func (inst *Client) Status(ctx context.Context, handle string, key string, wait time.Duration) (out Outcome, err error) {
+	sub := *inst
+	sub.Timeout = inst.wait(ctx) + wait
+	return callReply(roundTrip[wireStatus, wireCallReply](ctx, &sub, SubjectStatus,
+		wireStatus{V: wireVersion, Handle: handle, Key: key, WaitMs: uint32(wait / time.Millisecond)}))
+}
+
+// Cancel withdraws a queued call by key; a call past the queue keeps its
+// phase, which is returned.
+func (inst *Client) Cancel(ctx context.Context, handle string, key string) (out Outcome, err error) {
+	return callReply(roundTrip[wireCancel, wireCallReply](ctx, inst, SubjectCancel, wireCancel{V: wireVersion, Handle: handle, Key: key}))
+}
+
+// Capture captures an instance's window as SVG; the outcome's Job names it.
+// asked.Key is the call's key.
+func (inst *Client) Capture(ctx context.Context, handle string, instance uint64, asked Asked) (out Outcome, err error) {
+	return inst.CaptureAs(ctx, handle, instance, asked, CaptureFormatSvg)
+}
+
+// The capture formats (ADR-0281).
+const (
+	// CaptureFormatSvg is the window's shapes as SVG.
+	CaptureFormatSvg = "svg"
+	// CaptureFormatPng is the windows' pixels as PNG.
+	CaptureFormatPng = "png"
+)
+
+// CaptureRequest is a capture of one or more windows (ADR-0281).
+type CaptureRequest struct {
+	Handle string
+	// Instances are the windows captured together; a PNG draws them all,
+	// an SVG is of one.
+	Instances []uint64
+	Format    string
+	// Crop keeps x, y, w, h of the frame, in logical points; nil keeps it
+	// all.
+	Crop *[4]float32
+	Key  string
+	// Asked names what asked for the capture; its Key is not used.
+	Asked Asked
+}
+
+// CaptureWith captures windows as a CaptureRequest says; the outcome's Job
+// names the capture.
+func (inst *Client) CaptureWith(ctx context.Context, r CaptureRequest) (out Outcome, err error) {
+	w := wireCapture{V: wireVersion, Handle: r.Handle, Instances: r.Instances, Key: r.Key, Format: r.Format, wireCause: r.Asked.wire()}
+	if len(r.Instances) > 0 {
+		w.Instance = r.Instances[0]
+	}
+	if c := r.Crop; c != nil {
+		w.Crop = &wireRect{X: c[0], Y: c[1], W: c[2], H: c[3]}
+	}
+	return callReply(roundTrip[wireCapture, wireCallReply](ctx, inst, SubjectCapture, w))
+}
+
+// CaptureAs captures an instance's window in a format; the outcome's Job
+// names it. asked.Key is the call's key.
+func (inst *Client) CaptureAs(ctx context.Context, handle string, instance uint64, asked Asked, format string) (out Outcome, err error) {
+	return callReply(roundTrip[wireCapture, wireCallReply](ctx, inst, SubjectCapture,
+		wireCapture{V: wireVersion, Handle: handle, Instance: instance, Key: asked.Key, Format: format, wireCause: asked.wire()}))
+}
+
+// Arrange arranges windows with an ADR-0275 arrangement named by its ident
+// ("cascade", "tile", "columns", "rows", "gather"): instances, or every
+// window when instances is empty. It needs the grant's desktop mode act.
+// asked.Key is the call's key, as for the other window verbs.
+func (inst *Client) Arrange(ctx context.Context, handle string, asked Asked, command string, instances []uint64) (out Outcome, err error) {
+	return callReply(roundTrip[wireWindowAct, wireCallReply](ctx, inst, SubjectArrange,
+		wireWindowAct{V: wireVersion, Handle: handle, Key: asked.Key, Command: command, Instances: instances, wireCause: asked.wire()}))
+}
+
+// Raise brings one of the task's windows to the front. It needs act mode on
+// the window.
+func (inst *Client) Raise(ctx context.Context, handle string, asked Asked, instance uint64) (out Outcome, err error) {
+	return callReply(roundTrip[wireWindowAct, wireCallReply](ctx, inst, SubjectRaise,
+		wireWindowAct{V: wireVersion, Handle: handle, Key: asked.Key, Instance: instance, wireCause: asked.wire()}))
+}
+
+// Place sets the outer rect of one of the task's windows, in logical
+// points. It needs act mode on the window.
+func (inst *Client) Place(ctx context.Context, handle string, asked Asked, instance uint64, x, y, w, h float32) (out Outcome, err error) {
+	return callReply(roundTrip[wireWindowAct, wireCallReply](ctx, inst, SubjectPlace,
+		wireWindowAct{V: wireVersion, Handle: handle, Key: asked.Key, Instance: instance, X: x, Y: y, W: w, H: h, wireCause: asked.wire()}))
+}
+
+// ReadResult is a result as JSON, or an artifact by media type and path.
+// Untrusted content comes with its Source; a coordinator delimits it and
+// tells its model it is data, never instruction (ADR-0269 §SD7). Confined
+// content the model may not see comes back as a DataHandle in place of
+// Text.
+type ReadResult struct {
+	MediaType string
+	Text      string
+	Path      string
+	// Data is a capture's bytes (ADR-0281 §SD6).
+	Data       []byte
+	Untrusted  bool
+	Source     string
+	DataHandle string
+	Confined   bool
+}
+
+// Read reads a result reference or a completed capture.
+func (inst *Client) Read(ctx context.Context, handle string, ref string) (res ReadResult, err error) {
+	rep, err := roundTrip[wireRead, wireReadReply](ctx, inst, SubjectRead, wireRead{V: wireVersion, Handle: handle, Ref: ref})
+	if err != nil {
+		return
+	}
+	if !rep.Ok {
+		err = &RefusedError{Reason: rep.Reason}
+		return
+	}
+	res = ReadResult{MediaType: rep.MediaType, Text: rep.Text, Path: rep.Path, Data: rep.Data, Untrusted: rep.Untrusted, Source: rep.Source,
+		DataHandle: rep.DataHandle, Confined: rep.Confined}
+	return
+}
+
+// Instance is one window of the task. Title is untrusted text, empty for a
+// confined window.
+type Instance struct {
+	Instance uint64
+	App      string
+	Title    string
+	Mode     string
+	Ops      bool
+	Confined bool
+	// Load is opening, ready or failed: a window is opening until its app
+	// has mounted, and only a ready window takes calls. LoadReason says
+	// why it failed.
+	Load       string
+	LoadReason string
+}
+
+// List lists the task's open instances.
+func (inst *Client) List(ctx context.Context, handle string) (out []Instance, err error) {
+	return inst.ListAsked(ctx, handle, Asked{})
+}
+
+// ListAsked is List for the model's tool call asked names; it leaves an
+// action row.
+func (inst *Client) ListAsked(ctx context.Context, handle string, asked Asked) (out []Instance, err error) {
+	rep, err := roundTrip[wireHandle, wireListReply](ctx, inst, SubjectList, wireHandle{V: wireVersion, Handle: handle, Key: asked.Key,
+		wireCause: asked.wire()})
+	if err != nil {
+		return
+	}
+	if !rep.Ok {
+		err = &RefusedError{Reason: rep.Reason}
+		return
+	}
+	for _, i := range rep.Instances {
+		out = append(out, Instance(i))
+	}
+	return
+}
+
+func ack(rep wireAck, err error) (rerr error) {
+	if err != nil {
+		return err
+	}
+	if !rep.Ok {
+		return &RefusedError{Reason: rep.Reason}
+	}
+	return
+}
+
+// Detach removes one instance from the task; its queued calls expire.
+func (inst *Client) Detach(ctx context.Context, handle string, instance uint64) (err error) {
+	return ack(roundTrip[wireHandle, wireAck](ctx, inst, SubjectDetach, wireHandle{V: wireVersion, Handle: handle, Instance: instance}))
+}
+
+// Stop ends the task, as the coordinator's own decision.
+func (inst *Client) Stop(ctx context.Context, handle string) (err error) {
+	return inst.StopWith(ctx, handle, StopRequest{})
+}
+
+// StopRequest says who stops a task and why: ByPerson for the person's
+// press in the coordinator, otherwise the coordinator; Asked names the
+// model's tool call when the model asked.
+type StopRequest struct {
+	ByPerson bool
+	Reason   string
+	Asked    Asked
+}
+
+// StopWith ends the task; the grant's record names who stopped it, as the
+// coordinator says.
+func (inst *Client) StopWith(ctx context.Context, handle string, r StopRequest) (err error) {
+	w := wireHandle{V: wireVersion, Handle: handle, Key: r.Asked.Key, wireCause: r.Asked.wire(), Reason: r.Reason}
+	if r.ByPerson {
+		w.By = "person"
+	}
+	return ack(roundTrip[wireHandle, wireAck](ctx, inst, SubjectStop, w))
+}
+
+// Change is one change by another writer since the task's previous turn:
+// the person, the app, or another task.
+type Change struct {
+	Instance  uint64
+	Seq       uint64
+	Writer    string
+	Op        string
+	Phase     string
+	Reason    string
+	Resources []string
+	Revisions map[string]uint64
+}
+
+// Turn starts a model turn: it returns the changes by other writers since
+// the previous one and lifts the task's pauses (ADR-0269 §SD3, §SD8).
+func (inst *Client) Turn(ctx context.Context, handle string) (changes []Change, err error) {
+	return inst.TurnAsked(ctx, handle, Asked{})
+}
+
+// TurnAsked is Turn naming the conversation's turn and the model call the
+// turn starts with; a lifted pause's record carries them.
+func (inst *Client) TurnAsked(ctx context.Context, handle string, asked Asked) (changes []Change, err error) {
+	rep, err := roundTrip[wireHandle, wireTurnReply](ctx, inst, SubjectTurn, wireHandle{V: wireVersion, Handle: handle, wireCause: asked.wire()})
+	if err != nil {
+		return
+	}
+	if !rep.Ok {
+		err = &RefusedError{Reason: rep.Reason}
+		return
+	}
+	for _, c := range rep.Changes {
+		changes = append(changes, Change(c))
+	}
+	return
+}
+
+// Event is one announcement on a task's event subject: what changed where,
+// never the content.
+type Event struct {
+	Task      string
+	Instance  uint64
+	Seq       uint64
+	Writer    string
+	Op        string
+	Phase     string
+	Resources []string
+	Pauses    bool
+}
+
+// SubscribeEvents delivers a task's events to fn, on the publisher's
+// goroutine; fn must not block. A coordinator that misses events reads
+// again.
+func (inst *Client) SubscribeEvents(task string, fn func(ev Event)) (unsubscribe func(), err error) {
+	if inst == nil || inst.bus == nil {
+		err = eh.Errorf("agent: client without a bus")
+		return
+	}
+	unsubscribe, err = inst.bus.Subscribe(EventSubject(task), func(msg *app.Msg) {
+		ev, derr := decode[wireEvent](msg.Payload)
+		if derr != nil {
+			return
+		}
+		fn(Event{Task: ev.Task, Instance: ev.Instance, Seq: ev.Seq, Writer: ev.Writer, Op: ev.Op, Phase: ev.Phase,
+			Resources: ev.Resource, Pauses: ev.Pauses})
+	})
+	return
+}

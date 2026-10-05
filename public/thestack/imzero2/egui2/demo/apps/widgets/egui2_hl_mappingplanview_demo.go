@@ -21,6 +21,8 @@ import (
 // edited plan against to produce the SQL artefact panes.
 type mappingPlanViewDemoState struct {
 	model *mappingplanview.Model
+	// view is the widget, built on the first frame from the host's id stack.
+	view  *mappingplanview.View
 	ir    *readback.InformationRetrieval // anchor example schema; nil if it failed to load
 	irErr error
 }
@@ -245,10 +247,8 @@ func (st *mappingPlanViewDemoState) sqlOutputs(plan *mappingplan.Plan) ([]mappin
 
 // demoMappingPlanView renders the playground for the given per-window state.
 func demoMappingPlanView(ids *c.WidgetIdStack, st *mappingPlanViewDemoState) {
-	mappingplanview.Render(mappingplanview.Input{
-		Ids:       ids,
-		ScopeKey:  "mpv",
-		Model:     st.model,
-		Recompute: st.recompute,
-	})
+	if st.view == nil {
+		st.view = mappingplanview.New(ids, "mpv", mappingplanview.Options{Recompute: st.recompute})
+	}
+	st.view.Render(st.model)
 }

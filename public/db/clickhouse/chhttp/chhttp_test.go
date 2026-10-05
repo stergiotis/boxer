@@ -140,6 +140,13 @@ func TestContentTypeForStatement(t *testing.T) {
 		{"SELECT 1 format TabSeparated", "text/tab-separated-values"},
 		{"SELECT 1 FORMAT arrowstream", "application/octet-stream"},
 		{"SELECT 1", "application/octet-stream"},
+		{"SELECT 'ıııı' FORMAT JSON", "application/json"},
+		{"SELECT 'ſſſſ' FORMAT CSV", "text/csv"},
+		{"SELECT 'ɐɐɐɐɐɐɐɐ' FORMAT JSON", "application/json"},
+		{"SELECT 1 FORMAT\tJSON", "application/json"},
+		{"SELECT 1 FORMAT\nParquet", "application/vnd.apache.parquet"},
+		{"FORMAT", "application/octet-stream"},
+		{"", "application/octet-stream"},
 	}
 	for _, tc := range cases {
 		assert.Equal(t, tc.ct, ContentTypeForStatement(tc.sql), tc.sql)

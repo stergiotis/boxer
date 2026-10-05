@@ -14,6 +14,7 @@ import (
 	"github.com/stergiotis/boxer/apps/watchbill/launchcfg"
 	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opfsm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/keelsonqueryreply"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/keelsonqueryrequest"
@@ -349,4 +350,57 @@ func TestSplitState(t *testing.T) {
 	_, ok = decodeSplit([]byte("nope"))
 	assert.False(t, ok)
 	assert.Contains(t, manifest.PersistedKeys, splitKey)
+}
+
+func TestTheCatalogRegisters(t *testing.T) {
+	m, ok := app.LookupManifest(manifest.Id)
+	require.True(t, ok)
+	require.NotNil(t, m.Operations, app.DefaultRegistry.OperationsDiagnostic(manifest.Id))
+	cancel, found := m.Operations.Lookup(opCancel)
+	require.True(t, found)
+	assert.Equal(t, app.OperationEffectConsequential, cancel.Effect, "cancel writes outside the window")
+}
+
+func TestSetFiltersThroughTheCatalog(t *testing.T) {
+	inst := newApp()
+	h := ops.Bind(inst)
+	args, err := buscodec.Encode(SetFiltersArgs{States: []string{"failed"}, Kind: "mail"})
+	require.NoError(t, err)
+	_, err = h.ApplyCommand(app.OperationCall{Writer: "task:t"}, opSetFilter, args)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"failed"}, inst.filters.stateList())
+	assert.Equal(t, "mail", inst.kindDraft)
+	assert.Equal(t, "failed|mail", h.ResourceValue(resFilters))
+
+	bad, err := buscodec.Encode(SetFiltersArgs{States: []string{"exploded"}})
+	require.NoError(t, err)
+	_, err = h.ApplyCommand(app.OperationCall{}, opSetFilter, bad)
+	require.Error(t, err)
+}
+
+// The job machine is mounted: job_state reports nothing until a job is
+// selected, then that job's state and where it can go.
+func TestTheSelectedJobsMachineIsMounted(t *testing.T) {
+	inst := newApp()
+	h := ops.Bind(inst)
+	read := func() opfsm.State {
+		raw, err := h.Snapshot().Query("job_state", nil)
+		require.NoError(t, err)
+		st, err := buscodec.Decode[opfsm.State](raw)
+		require.NoError(t, err)
+		return st
+	}
+	assert.Empty(t, read().Current, "no job selected")
+	inst.select_("j1")
+	inst.mirror(watchbillstore.Job{ID: "j1", State: watchbillstore.StateFailed})
+	st := read()
+	assert.Equal(t, watchbillstore.StateFailed, st.Current)
+	require.Len(t, st.Next, 1)
+	assert.Equal(t, opfsm.Edge{From: watchbillstore.StateFailed, To: watchbillstore.StateQueued, Label: "policy"}, st.Next[0])
+	assert.Empty(t, st.History, "the machine mirrors whichever job is selected, so its steps are left out")
+	assert.Equal(t, watchbillstore.StateFailed, h.ResourceValue("job_state"))
+
+	inst.select_("j2")
+	assert.Empty(t, read().Current, "the machine still mirrors j1, so j2 reports no state")
+	assert.Equal(t, "", h.ResourceValue("job_state"))
 }

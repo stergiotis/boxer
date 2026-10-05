@@ -189,8 +189,8 @@ type App struct {
 	// painting itself lives in widgets/regexedit since ADR-0164 §SD4
 	// made it reusable; validity stays with getCompiledRegexp
 	// (ADR-0054), not the painter.
-	patternHl     regexedit.Edit
-	patternListHl regexedit.Edit
+	patternHl     regexedit.Cache
+	patternListHl regexedit.Cache
 }
 
 // newApp builds one [App] — the unit of per-window state. clickhouse-local
@@ -340,8 +340,8 @@ func (inst *App) renderBody() {
 	for range c.CollapsingHeader(inst.ids.PrepareStr("hdr-pattern"), c.WidgetText().Text("Pattern (single regex — RE2 tabs)").Keep()).DefaultOpen(true).KeepIter() {
 		// regexedit sets CodeEditor() and attaches the highlight job
 		// (the monospace requirement is ADR-0015 §SD6, documented on
-		// regexedit.Edit.Prepare).
-		resp := inst.patternHl.Prepare(inst.ids.PrepareStr("pattern"), inst.pattern, false, regexedit.ModeSingle).
+		// regexedit.Cache.Prepare).
+		resp := inst.patternHl.TextEdit(inst.ids.PrepareStr("pattern"), inst.pattern, false, regexedit.ModeSingle).
 			DesiredWidth(editorWidth).
 			HintText("regular expression").
 			SendRespVal(&inst.pattern)
@@ -352,7 +352,7 @@ func (inst *App) renderBody() {
 	}
 
 	for range c.CollapsingHeader(inst.ids.PrepareStr("hdr-patternlist"), c.WidgetText().Text("Multi patterns (one regex per line — VectorScan multiMatchAllIndices)").Keep()).DefaultOpen(true).KeepIter() {
-		listResp := inst.patternListHl.Prepare(inst.ids.PrepareStr("patternList"), inst.patternList, true, regexedit.ModeList).
+		listResp := inst.patternListHl.TextEdit(inst.ids.PrepareStr("patternList"), inst.patternList, true, regexedit.ModeList).
 			DesiredWidth(editorWidth).
 			DesiredRows(4).
 			HintText("pattern 1\npattern 2\n...").

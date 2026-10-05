@@ -8,14 +8,18 @@
     "test": "for f in *.qnt; do quint test \"$f\" || exit 1; done",
     "sweep": "quint run versioned_cache.qnt --invariant=Safety --max-steps=14 --max-samples=20000 && quint run freshness_ttl.qnt --invariant=Safety --max-steps=14 --max-samples=20000",
     "verify": "quint verify versioned_cache.qnt --invariant=Safety --max-steps=6 && quint verify freshness_ttl.qnt --invariant=Safety --max-steps=10",
-    "findings": "quint run versioned_cache_unsafe_lww.qnt --invariant=MonotoneServe --max-steps=12 ; quint test versioned_cache_unsafe_nopin.qnt ; quint run freshness_ttl_unsafe.qnt --invariant=FreshnessHonest --max-steps=10",
+    "findings": "sh ../algebraicarch/pushout/expect_violation.sh '[violation]' quint run versioned_cache_unsafe_lww.qnt --invariant=MonotoneServe --max-steps=12 && sh ../algebraicarch/pushout/expect_violation.sh --exit=0 'ok dirtyEvictionRegressionTest passed' quint test versioned_cache_unsafe_nopin.qnt && sh ../algebraicarch/pushout/expect_violation.sh '[violation]' quint run freshness_ttl_unsafe.qnt --invariant=FreshnessHonest --max-steps=10",
     "traces": "for s in 1 2 3 4 5 6 7 8; do quint run versioned_cache.qnt --max-steps=20 --seed=0x$s --out-itf=../../../public/caching/testdata/itf/versioned_seed$s.itf.json || exit 1; done",
     "check": "npm run typecheck && npm run test && npm run sweep",
     "liveness": "java -cp \"${TLA_TOOLS:-$HOME/.tlaplus/tla2tools.jar}\" tlc2.TLC -deadlock -cleanup -config replay_liveness.cfg replay_liveness.tla",
-    "liveness:nonegcache": "java -cp \"${TLA_TOOLS:-$HOME/.tlaplus/tla2tools.jar}\" tlc2.TLC -deadlock -cleanup -config replay_liveness_nonegcache.cfg replay_liveness.tla"
+    "liveness:nonegcache": "sh ../algebraicarch/pushout/expect_violation.sh --exit=13 'Back to state' java -cp \"${TLA_TOOLS:-$HOME/.tlaplus/tla2tools.jar}\" tlc2.TLC -deadlock -cleanup -config replay_liveness_nonegcache.cfg replay_liveness.tla",
+    "liveness:all": "npm run liveness && npm run liveness:nonegcache"
   },
   "license": "ISC",
   "dependencies": {
     "@informalsystems/quint": "^0.32.0"
+  },
+  "overrides": {
+    "adm-zip": "0.6.1"
   }
 }

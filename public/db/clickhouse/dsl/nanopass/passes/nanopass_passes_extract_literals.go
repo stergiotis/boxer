@@ -123,6 +123,7 @@ type compositeCandidate struct {
 	kind            compositeKind
 	containerNode   antlr.ParserRuleContext
 	castNode        *grammar1.ColumnExprCastContext
+	castTypeText    string // the cast's type as typeTextOf renders it; set with castNode
 	literalTexts    []string
 	perElementTypes []string
 	elementType     string
@@ -174,9 +175,10 @@ func extractLiteralsApply(config *ExtractLiteralsConfig) nanopass.ApplyFunc {
 
 		var allParams []extractedParam
 		rw := nanopass.NewRewriter(pr)
+		names := newParamNameSpace()
 
 		if len(filtered) > 0 {
-			params, paramByNode := assignParamNames(filtered, config)
+			params, paramByNode := assignParamNames(filtered, config, names)
 			allParams = append(allParams, params...)
 			for _, cand := range filtered {
 				p := paramByNode[cand.node]
@@ -190,7 +192,7 @@ func extractLiteralsApply(config *ExtractLiteralsConfig) nanopass.ApplyFunc {
 		}
 
 		if len(filteredComposites) > 0 {
-			compositeParams := assignCompositeParamNames(filteredComposites, config)
+			compositeParams := assignCompositeParamNames(filteredComposites, config, names)
 			allParams = append(allParams, compositeParams...)
 			for i, cc := range filteredComposites {
 				p := &compositeParams[i]
@@ -292,17 +294,24 @@ func buildCompositeFunctionCandidate(pr *nanopass.ParseResult, funcCtx *grammar1
 	if !allLiterals || len(literalTexts) < config.minINListSize {
 		return
 	}
+	if elementType == "" && kind != compositeKindTuple {
+		// No common element type (see unifyElementType); a tuple is typed
+		// per element and needs none.
+		return
+	}
 
 	var castNode *grammar1.ColumnExprCastContext
+	var castNodeText string
 	var castType canonicaltypes.PrimitiveAstNodeI
 	if config.mapTypeToCanonical != nil {
 		if castCtx, isCast := funcCtx.GetParent().(*grammar1.ColumnExprCastContext); isCast {
-			castTypeText := extractCastTypeText(castCtx)
+			castTypeText := extractCastTypeText(pr, castCtx)
 			if castTypeText != "" {
 				ct, mapErr := config.mapTypeToCanonical(castTypeText)
 				if mapErr == nil && ct != nil {
 					castNode = castCtx
 					castType = ct
+					castNodeText = castTypeText
 				}
 			}
 		}
@@ -312,6 +321,7 @@ func buildCompositeFunctionCandidate(pr *nanopass.ParseResult, funcCtx *grammar1
 		kind:            kind,
 		containerNode:   funcCtx,
 		castNode:        castNode,
+		castTypeText:    castNodeText,
 		literalTexts:    literalTexts,
 		perElementTypes: perElementTypes,
 		elementType:     elementType,
@@ -346,11 +356,7 @@ func extractLiteralsFromArgList(pr *nanopass.ParseResult, argList *grammar1.Colu
 			return
 		}
 		thisType := inferClickHouseType(litCtx)
-		if elementType == "" {
-			elementType = thisType
-		} else if elementType != thisType {
-			elementType = "String"
-		}
+		elementType = unifyElementType(elementType, thisType, len(perElementTypes) == 0)
 		perElementTypes = append(perElementTypes, thisType)
 		texts = append(texts, nanopass.NodeText(pr, litExpr))
 	}
@@ -358,6 +364,31 @@ func extractLiteralsFromArgList(pr *nanopass.ParseResult, argList *grammar1.Colu
 		allLiterals = false
 	}
 	return
+}
+
+// unifyElementType folds one more element's inferred type into the list's
+// element type. Integers of differing signedness widen to Int64 and any
+// integer beside a float to Float64, as ClickHouse would read the literal
+// list. Any other disagreement (a string beside a number, a Bool beside
+// either) has no element type the unquoted values parse as, and yields ""
+// — which then stays "" for the rest of the list. Falling back to String
+// instead bound `[1, -2, 3]` to an Array(String) parameter ClickHouse
+// cannot parse.
+func unifyElementType(acc string, t string, first bool) string {
+	switch {
+	case first:
+		return t
+	case acc == "" || acc == t:
+		return acc
+	}
+	numeric := func(x string) bool { return x == "UInt64" || x == "Int64" || x == "Float64" }
+	if !numeric(acc) || !numeric(t) {
+		return ""
+	}
+	if acc == "Float64" || t == "Float64" {
+		return "Float64"
+	}
+	return "Int64"
 }
 
 func collectINTupleSet(pr *nanopass.ParseResult) (set map[*grammar1.ColumnExprTupleContext]bool) {
@@ -385,21 +416,25 @@ func buildCompositeCandidate(pr *nanopass.ParseResult, container antlr.ParserRul
 	}
 
 	literalTexts, elementType, perElementTypes, allLiterals := extractListLiteralsFromContainer(pr, container)
-	if !allLiterals || len(literalTexts) < config.minINListSize {
+	if !allLiterals || len(literalTexts) < config.minINListSize || elementType == "" {
+		// elementType "" is a list with no common element type (see
+		// unifyElementType).
 		return
 	}
 
 	var castNode *grammar1.ColumnExprCastContext
+	var castNodeText string
 	var castType canonicaltypes.PrimitiveAstNodeI
 	if config.mapTypeToCanonical != nil {
 		castWrapper := findINTupleCastWrapper(container)
 		if castWrapper != nil {
-			castTypeText := extractCastTypeText(castWrapper)
+			castTypeText := extractCastTypeText(pr, castWrapper)
 			if castTypeText != "" {
 				ct, mapErr := config.mapTypeToCanonical(castTypeText)
 				if mapErr == nil && ct != nil {
 					castNode = castWrapper
 					castType = ct
+					castNodeText = castTypeText
 				}
 			}
 		}
@@ -409,6 +444,7 @@ func buildCompositeCandidate(pr *nanopass.ParseResult, container antlr.ParserRul
 		kind:            kind,
 		containerNode:   container,
 		castNode:        castNode,
+		castTypeText:    castNodeText,
 		literalTexts:    literalTexts,
 		perElementTypes: perElementTypes,
 		elementType:     elementType,
@@ -500,11 +536,7 @@ func extractListLiteralsFromContainer(pr *nanopass.ParseResult, container antlr.
 			return
 		}
 		thisType := inferClickHouseType(litCtx)
-		if elementType == "" {
-			elementType = thisType
-		} else if elementType != thisType {
-			elementType = "String"
-		}
+		elementType = unifyElementType(elementType, thisType, len(perElementTypes) == 0)
 		perElementTypes = append(perElementTypes, thisType)
 		texts = append(texts, nanopass.NodeText(pr, litExpr))
 	}
@@ -541,7 +573,7 @@ func collectLiteralCandidates(pr *nanopass.ParseResult, config *ExtractLiteralsC
 		if !ok {
 			return true
 		}
-		if excludeNodes[litExpr] {
+		if excludeNodes[litExpr] || isPositionalReference(litExpr) {
 			return true
 		}
 		litCtx := findLiteralChild(litExpr)
@@ -555,7 +587,7 @@ func collectLiteralCandidates(pr *nanopass.ParseResult, config *ExtractLiteralsC
 		var castNode *grammar1.ColumnExprCastContext
 		var castType canonicaltypes.PrimitiveAstNodeI
 		if castCtx, isCast := litExpr.GetParent().(*grammar1.ColumnExprCastContext); isCast && config.mapTypeToCanonical != nil {
-			castTypeText := extractCastTypeText(castCtx)
+			castTypeText := extractCastTypeText(pr, castCtx)
 			if castTypeText != "" {
 				ct, mapErr := config.mapTypeToCanonical(castTypeText)
 				if mapErr == nil && ct != nil {
@@ -585,16 +617,39 @@ func collectLiteralCandidates(pr *nanopass.ParseResult, config *ExtractLiteralsC
 	return
 }
 
+// isPositionalReference reports a literal that is the whole expression of an
+// ORDER BY item or a GROUP BY / LIMIT BY list item. ClickHouse reads an
+// integer there as a positional reference to a projection column; a
+// parameter slot substitutes as _CAST(1, 'UInt64'), which is a constant, so
+// extracting it turned ORDER BY 1 into ordering by a constant and GROUP BY 1
+// into NOT_AN_AGGREGATE.
+func isPositionalReference(litExpr *grammar1.ColumnExprLiteralContext) bool {
+	switch p := litExpr.GetParent().(type) {
+	case *grammar1.OrderExprContext:
+		return true
+	case *grammar1.ColumnsExprColumnContext:
+		list, ok := p.GetParent().(*grammar1.ColumnExprListContext)
+		if !ok {
+			return false
+		}
+		switch list.GetParent().(type) {
+		case *grammar1.GroupByClauseContext, *grammar1.LimitByClauseContext:
+			return true
+		}
+	}
+	return false
+}
+
 // --- Cast type extraction ---
 
-func extractCastTypeText(castCtx *grammar1.ColumnExprCastContext) string {
+func extractCastTypeText(pr *nanopass.ParseResult, castCtx *grammar1.ColumnExprCastContext) string {
 	for i := 0; i < castCtx.GetChildCount(); i++ {
 		child := castCtx.GetChild(i)
 		switch c := child.(type) {
 		case *grammar1.ColumnTypeExprSimpleContext:
-			return c.GetText()
+			return typeTextOf(pr, c)
 		case *grammar1.ColumnTypeExprComplexContext:
-			return c.GetText()
+			return typeTextOf(pr, c)
 		}
 	}
 	return ""
@@ -859,7 +914,21 @@ func literalHash(literalText string) uint64 {
 	return h.Lo
 }
 
-func assignParamNames(candidates []literalCandidate, config *ExtractLiteralsConfig) (params []extractedParam, paramByNode map[*grammar1.ColumnExprLiteralContext]*extractedParam) {
+// paramNameSpace is the set of names one run has handed out, and the
+// sequence counter behind sequential names. Scalar and composite parameters
+// draw from the same space: with separate ones a scalar inside array(1, 2)
+// (context "array", arg 0) and a composite array(3, 4, 5) got the same
+// sequential name, and one value overwrote the other in env.Params.
+type paramNameSpace struct {
+	used map[string]bool
+	seq  uint32
+}
+
+func newParamNameSpace() *paramNameSpace {
+	return &paramNameSpace{used: make(map[string]bool)}
+}
+
+func assignParamNames(candidates []literalCandidate, config *ExtractLiteralsConfig, names *paramNameSpace) (params []extractedParam, paramByNode map[*grammar1.ColumnExprLiteralContext]*extractedParam) {
 	paramByNode = make(map[*grammar1.ColumnExprLiteralContext]*extractedParam, len(candidates))
 	type dedupKey struct {
 		contextName string
@@ -868,9 +937,8 @@ func assignParamNames(candidates []literalCandidate, config *ExtractLiteralsConf
 		castCanon   string
 	}
 	dedupMap := make(map[dedupKey]*extractedParam)
-	usedNames := make(map[string]bool)
+	usedNames := names.used
 	params = make([]extractedParam, 0, len(candidates))
-	seqCounter := uint32(0)
 
 	for i := range candidates {
 		c := &candidates[i]
@@ -886,8 +954,8 @@ func assignParamNames(candidates []literalCandidate, config *ExtractLiteralsConf
 		meta := ParamMetadata{ArgIndex: uint32(c.argIndex), CastTypeCanonical: castCanon}
 		if config.useSequentialNames {
 			meta.IsSequential = true
-			meta.SequentialIndex = seqCounter
-			seqCounter++
+			meta.SequentialIndex = names.seq
+			names.seq++
 		} else {
 			meta.ContentHash = literalHash(c.literalText)
 		}
@@ -918,17 +986,14 @@ func assignParamNames(candidates []literalCandidate, config *ExtractLiteralsConf
 	return
 }
 
-func assignCompositeParamNames(candidates []compositeCandidate, config *ExtractLiteralsConfig) (params []extractedParam) {
-	usedNames := make(map[string]bool)
+func assignCompositeParamNames(candidates []compositeCandidate, config *ExtractLiteralsConfig, names *paramNameSpace) (params []extractedParam) {
+	usedNames := names.used
 	params = make([]extractedParam, 0, len(candidates))
-	seqCounter := uint32(0)
 	for _, c := range candidates {
 		value := formatCompositeValue(&c)
 		typeName := defaultCompositeTypeName(&c)
-		if c.castNode != nil {
-			if castTypeText := extractCastTypeText(c.castNode); castTypeText != "" {
-				typeName = castTypeText
-			}
+		if c.castNode != nil && c.castTypeText != "" {
+			typeName = c.castTypeText
 		}
 		castCanon := ""
 		if c.castType != nil {
@@ -938,8 +1003,8 @@ func assignCompositeParamNames(candidates []compositeCandidate, config *ExtractL
 		meta := ParamMetadata{ArgIndex: 0, CastTypeCanonical: castCanon}
 		if config.useSequentialNames {
 			meta.IsSequential = true
-			meta.SequentialIndex = seqCounter
-			seqCounter++
+			meta.SequentialIndex = names.seq
+			names.seq++
 		} else {
 			meta.ContentHash = literalHash(value)
 		}
@@ -1026,8 +1091,9 @@ func AnalyzeExtractions(sql string, config *ExtractLiteralsConfig) (extractions 
 	filtered := filterCandidates(candidates, config)
 	filteredComposites := filterCompositeCandidates(compositeCandidates, config)
 	extractions = make([]ExtractionInfo, 0, len(filtered)+len(filteredComposites))
+	names := newParamNameSpace()
 	if len(filtered) > 0 {
-		_, paramByNode := assignParamNames(filtered, config)
+		_, paramByNode := assignParamNames(filtered, config, names)
 		seen := make(map[string]bool)
 		for _, c := range filtered {
 			p := paramByNode[c.node]
@@ -1044,7 +1110,7 @@ func AnalyzeExtractions(sql string, config *ExtractLiteralsConfig) (extractions 
 		}
 	}
 	if len(filteredComposites) > 0 {
-		compositeParams := assignCompositeParamNames(filteredComposites, config)
+		compositeParams := assignCompositeParamNames(filteredComposites, config, names)
 		for i, cc := range filteredComposites {
 			p := &compositeParams[i]
 			extractions = append(extractions, ExtractionInfo{

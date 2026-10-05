@@ -40,7 +40,8 @@ type schemaFixture struct {
 // schemaViewDemoState holds the inspector model plus the fixture chooser
 // across frames.
 type schemaViewDemoState struct {
-	model    *schemaview.Model
+	table    *common.TableDesc
+	state    schemaview.State
 	fixtures []schemaFixture
 	selected int
 }
@@ -57,9 +58,7 @@ func newSchemaViewState() *schemaViewDemoState {
 		st.fixtures = append(st.fixtures, schemaFixture{name: "JSON document mapping", table: td})
 	}
 	if len(st.fixtures) > 0 {
-		st.model = schemaview.NewModel(&st.fixtures[0].table)
-	} else {
-		st.model = schemaview.NewModel(nil)
+		st.table = &st.fixtures[0].table
 	}
 	return st
 }
@@ -73,11 +72,11 @@ func demoSchemaView(ids *c.WidgetIdStack, st *schemaViewDemoState) {
 				if c.SelectableLabel(ids.PrepareSeq(uint64(0x100+i)), i == st.selected, st.fixtures[i].name).
 					SendResp().HasPrimaryClicked() {
 					st.selected = i
-					st.model.SetTable(&st.fixtures[i].table)
+					st.table = &st.fixtures[i].table
 				}
 			}
 		}
 		c.AddSpace(styletokens.GapInline(styletokens.ActiveDensity()))
 	}
-	schemaview.Render(schemaview.Input{Ids: ids, ScopeKey: "schemaview", Model: st.model})
+	schemaview.Render(schemaview.Input{Ids: ids, ScopeKey: "schemaview", Table: st.table, State: &st.state})
 }

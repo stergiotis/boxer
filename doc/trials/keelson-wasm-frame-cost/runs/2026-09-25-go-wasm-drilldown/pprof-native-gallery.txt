@@ -1,0 +1,48 @@
+File: wasmspike_prof
+Build ID: c2a087b1e355c275cba17bfd3dd0a47886595f7b
+Type: cpu
+Time: 2026-09-25 22:55:45 CEST
+Duration: 138.40ms, Total samples = 150ms (108.38%)
+Showing nodes accounting for 150ms, 100% of 150ms total
+Showing top 40 nodes out of 95
+      flat  flat%   sum%        cum   cum%
+      20ms 13.33% 13.33%       20ms 13.33%  math.sin
+      10ms  6.67% 20.00%       10ms  6.67%  fmt.newPrinter
+      10ms  6.67% 26.67%       10ms  6.67%  github.com/stergiotis/boxer/public/thestack/fffi2/runtime.(*Marshaller).writeBuf
+      10ms  6.67% 33.33%       10ms  6.67%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings.PaintCanvas
+      10ms  6.67% 40.00%       20ms 13.33%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot.(*Plot).addSeries
+      10ms  6.67% 46.67%       10ms  6.67%  internal/strconv.ftoa32
+      10ms  6.67% 53.33%       10ms  6.67%  runtime.mallocgcSmallScanNoHeaderSC2
+      10ms  6.67% 60.00%       10ms  6.67%  runtime.mallocgcSmallScanNoHeaderSC3
+      10ms  6.67% 66.67%       10ms  6.67%  runtime.mallocgcSmallScanNoHeaderSC5
+      10ms  6.67% 73.33%       10ms  6.67%  runtime.mapaccess2_fast32
+      10ms  6.67% 80.00%       10ms  6.67%  runtime.memclrNoHeapPointers
+      10ms  6.67% 86.67%       10ms  6.67%  runtime.procPin (inline)
+      10ms  6.67% 93.33%       10ms  6.67%  runtime.stealWork
+      10ms  6.67%   100%       10ms  6.67%  runtime.typePointers.nextFast
+         0     0%   100%       10ms  6.67%  fmt.(*pp).free
+         0     0%   100%       20ms 13.33%  fmt.Sprintf
+         0     0%   100%       10ms  6.67%  github.com/apache/arrow-go/v18/arrow/array.(*floatArray[go.shape.float32]).ValueStr
+         0     0%   100%       10ms  6.67%  github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess.(*Driver).DriveRecordBatch
+         0     0%   100%       10ms  6.67%  github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess.(*Driver).driveCoGroup
+         0     0%   100%       10ms  6.67%  github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess.(*Driver).driveEntity
+         0     0%   100%       10ms  6.67%  github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess.(*Driver).emitValueColumns
+         0     0%   100%       10ms  6.67%  github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess.(*Driver).readListInnerValue
+         0     0%   100%       10ms  6.67%  github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess.valueText
+         0     0%   100%       10ms  6.67%  github.com/stergiotis/boxer/public/thestack/fffi2/runtime.(*Fffi2[go.shape.*uint8]).SendIntermediate
+         0     0%   100%       10ms  6.67%  github.com/stergiotis/boxer/public/thestack/fffi2/runtime.(*Marshaller).WriteUint32
+         0     0%   100%       10ms  6.67%  github.com/stergiotis/boxer/public/thestack/fffi2/typed.(*RetainedFffiBuilder).SendIntermediate
+         0     0%   100%       10ms  6.67%  github.com/stergiotis/boxer/public/thestack/fffi2/typed.(*RetainedFffiBuilder).WriteUint32 (inline)
+         0     0%   100%       10ms  6.67%  github.com/stergiotis/boxer/public/thestack/fffi2/typed.NewRetainedFffiBuilder (inline)
+         0     0%   100%       10ms  6.67%  github.com/stergiotis/boxer/public/thestack/fffi2/typed.newRetainedFffiBuilderPooled
+         0     0%   100%      130ms 86.67%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings.AllocateUiAtRectFluid.KeepIter.func1
+         0     0%   100%       10ms  6.67%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings.End
+         0     0%   100%       20ms 13.33%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings.FrameFluid.KeepIter.func1
+         0     0%   100%       10ms  6.67%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings.FrameFluid.KeepIter.func1.2
+         0     0%   100%       70ms 46.67%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings.HorizontalFluid.KeepIter.func1
+         0     0%   100%      130ms 86.67%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings.IdScope.func1
+         0     0%   100%       10ms  6.67%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings.LabelAtomsFluid.Send
+         0     0%   100%       10ms  6.67%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings.PaintText
+         0     0%   100%       10ms  6.67%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings.RichTextLabelColored.1
+         0     0%   100%       10ms  6.67%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings.RichTextLabelColored.1.1
+         0     0%   100%       10ms  6.67%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings.VerticalFluid.KeepIter.func1

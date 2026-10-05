@@ -27,6 +27,10 @@ import (
 // A dml missing a method the plan drives is returned as an error, not raised as
 // a panic; call Validate[T](dml) first to get every mismatch at once instead of
 // the first one reached.
+//
+// A row that fails after its entity is opened is rolled back through the
+// dml's RollbackEntity (when it has one), so Marshal stops at that row but
+// leaves the dml accepting further entities; rows before it stay written.
 func Marshal[T any](dml any, rows []T, lookup LookupI) (err error) {
 	defer recoverContract(&err)
 	if lookup == nil {
@@ -50,6 +54,14 @@ func Marshal[T any](dml any, rows []T, lookup LookupI) (err error) {
 
 func marshalRow(dml, row reflect.Value, plan *mappingplan.Plan, groups []goplan.SectionGroup, lookup LookupI) (err error) {
 	mustCall(dml, "BeginEntity")
+	defer func() {
+		if err != nil {
+			rollbackEntity(dml)
+		}
+	}()
+	// Deferred after the rollback so it runs first: a contract violation
+	// raised mid-row becomes err before the rollback checks it.
+	defer recoverContract(&err)
 	err = marshalPlain(dml, row, plan)
 	if err != nil {
 		return
@@ -65,6 +77,18 @@ func marshalRow(dml, row reflect.Value, plan *mappingplan.Plan, groups []goplan.
 		err = rets[0].Interface().(error)
 	}
 	return
+}
+
+// rollbackEntity abandons the open entity after a failed write, so the DML
+// accepts the next BeginEntity instead of failing every later commit. It is
+// best-effort: the write's own error is the one reported, and a DML without a
+// RollbackEntity method is left as it is.
+func rollbackEntity(dml reflect.Value) {
+	m := dml.MethodByName("RollbackEntity")
+	if !m.IsValid() {
+		return
+	}
+	m.Call(nil)
 }
 
 // marshalPlain drives the entity-header setters from the DTO's plain
@@ -156,7 +180,7 @@ func marshalMultiSubColumn(sec, row reflect.Value, g goplan.SectionGroup, lookup
 
 	args := make([]reflect.Value, 0, len(scalars))
 	for _, sc := range scalars {
-		args = append(args, reslicedIfFixedByte(row.FieldByName(sc.Fields[0].GoFieldName), sc.Fields[0]))
+		args = append(args, row.FieldByName(sc.Fields[0].GoFieldName))
 	}
 
 	// Zip-length agreement across the container class: every container
@@ -182,7 +206,7 @@ func marshalMultiSubColumn(sec, row reflect.Value, g goplan.SectionGroup, lookup
 		elemArgs := make([]reflect.Value, len(containers))
 		for k := 0; k < n; k++ {
 			for j := range containerVals {
-				elemArgs[j] = reslicedIfFixedByte(containerVals[j].Index(k), containers[j].Fields[0])
+				elemArgs[j] = containerVals[j].Index(k)
 			}
 			mustCall(attr, addMethod, elemArgs...)
 		}
@@ -283,13 +307,13 @@ func marshalTupleSection(sec, row reflect.Value, g goplan.SectionGroup, ts gopla
 		}
 		args = args[:0]
 		for _, sc := range scalars {
-			args = append(args, reslicedIfFixedByte(elem.FieldByName(sc.Fields[0].GoFieldName), sc.Fields[0]))
+			args = append(args, elem.FieldByName(sc.Fields[0].GoFieldName))
 		}
 		attr := mustCall(sec, "BeginAttribute", args...)[0]
 		// n > 0 implies at least one container sub-column exists.
 		for k := 0; k < n; k++ {
 			for j := range containerVals {
-				elemArgs[j] = reslicedIfFixedByte(containerVals[j].Index(k), containers[j].Fields[0])
+				elemArgs[j] = containerVals[j].Index(k)
 			}
 			mustCall(attr, addMethod, elemArgs...)
 		}
@@ -381,10 +405,10 @@ func marshalScalarOne(sec, row reflect.Value, f mappingplan.TaggedField, lookup 
 		if !fld.FieldByName("Has").Bool() {
 			return
 		}
-		val = reslicedIfFixedByte(fld.FieldByName("Val"), f)
+		val = fld.FieldByName("Val")
 	default:
 		// unwrapLwSingle unwraps an lw.Single[T] to its scalar; a no-op otherwise.
-		val = reslicedIfFixedByte(unwrapLwSingle(row.FieldByName(f.GoFieldName)), f)
+		val = unwrapLwSingle(row.FieldByName(f.GoFieldName))
 	}
 	attr := mustCall(sec, beginMethod, val)[0]
 	if err = addMembership(attr, row, f, lookup); err != nil {
@@ -423,7 +447,7 @@ func marshalContainer(sec, row reflect.Value, f mappingplan.TaggedField, lookup 
 		}
 		attr := mustCall(sec, "BeginAttribute")[0]
 		for i := 0; i < fld.Len(); i++ {
-			v := reslicedIfFixedByte(fld.Index(i), f)
+			v := fld.Index(i)
 			mustCall(attr, "AddToContainerP", v)
 		}
 		err = addMembership(attr, row, f, lookup)
@@ -474,22 +498,36 @@ func addMembership(attr, row reflect.Value, f mappingplan.TaggedField, lookup Lo
 	return
 }
 
-// reslicedIfFixedByte converts a [N]byte field value to a []byte
-// slice reference, mirroring marshallgen's blobSliceMaybe. Returns
-// the value unchanged for any other shape.
-func reslicedIfFixedByte(v reflect.Value, f mappingplan.TaggedField) reflect.Value {
-	if goplan.IsFixedByteArray(f.GoType()) {
-		// Take address-of element 0 + slice — reflect lacks a direct
-		// "convert array to slice" but Slice(v, 0, len) works on
-		// addressable arrays. Field values via FieldByName are not
-		// addressable; copy into a new []byte instead.
-		out := make([]byte, v.Len())
-		for i := 0; i < v.Len(); i++ {
-			out[i] = byte(v.Index(i).Uint())
+// adaptFixedByteArgs converts each [N]byte argument to a []byte copy where
+// the method's parameter at that position is a byte slice. The conversion is
+// chosen from the target parameter, not the DTO field: a y (blob) column's
+// DML method takes []byte, while a yxN or network column's takes [N]byte and
+// receives the array unchanged. Mirrors marshallgen's blobSliceMaybe for the
+// blob case.
+func adaptFixedByteArgs(m reflect.Value, args []reflect.Value) {
+	mt := m.Type()
+	for i, a := range args {
+		if a.Kind() != reflect.Array || a.Type().Elem().Kind() != reflect.Uint8 {
+			continue
 		}
-		return reflect.ValueOf(out)
+		var pt reflect.Type
+		switch {
+		case mt.IsVariadic() && i >= mt.NumIn()-1:
+			pt = mt.In(mt.NumIn() - 1).Elem()
+		case i < mt.NumIn():
+			pt = mt.In(i)
+		default:
+			continue
+		}
+		if pt.Kind() != reflect.Slice || pt.Elem().Kind() != reflect.Uint8 {
+			continue
+		}
+		// Field values via FieldByName are not addressable, so reflect's
+		// Slice is unavailable; copy into a new []byte instead.
+		out := make([]byte, a.Len())
+		reflect.Copy(reflect.ValueOf(out), a)
+		args[i] = reflect.ValueOf(out).Convert(pt)
 	}
-	return v
 }
 
 // contractPanic carries a write-contract violation raised deep inside the
@@ -533,6 +571,7 @@ func mustCall(recv reflect.Value, name string, args ...reflect.Value) (rets []re
 	if !m.IsValid() {
 		panic(contractPanic{eb.Build().Str("method", name).Str("recv", recv.Type().String()).Errorf("target DML does not have this method — call Validate[T](dml) to preflight the whole write contract")})
 	}
+	adaptFixedByteArgs(m, args)
 	rets = m.Call(args)
 	return
 }

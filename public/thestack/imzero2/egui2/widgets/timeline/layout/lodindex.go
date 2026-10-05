@@ -37,11 +37,13 @@ type LODIndex struct {
 
 // BuildLODIndex aggregates events into bins at each provided scale.
 //
-// scales is interpreted as time-per-bucket and MUST be strictly ascending
-// in millisecond precision. Sub-millisecond scales are clamped to 1 ms
-// (the wire precision); a non-ascending pair panics with a clear message
-// — silent auto-bump (the previous behaviour) papered over caller bugs
-// that produced subtly-wrong LOD choices later.
+// scales is interpreted as time-per-bucket and MUST be strictly ascending;
+// a non-ascending pair panics with a clear message — silent auto-bump (the
+// previous behaviour) papered over caller bugs that produced subtly-wrong
+// LOD choices later. Sub-millisecond scales are clamped to 1 ms (the wire
+// precision), and a scale that lands on the same bin width as the one
+// before it at that precision is dropped, so the index may hold fewer
+// scales than were passed.
 //
 // Negative TMS values (pre-1970 events) bin correctly via floor-division.
 //
@@ -53,8 +55,8 @@ func BuildLODIndex(events []PointEvent, scales []time.Duration) (idx *LODIndex) 
 
 // BuildLODIndexUnit is [BuildLODIndex] for an axis whose values count unit
 // rather than milliseconds (an offset axis, ADR-0043 update 2026-08-28): the
-// scales are converted to counts of unit, and must still ascend strictly at
-// that precision.
+// scales are converted to counts of unit, and rungs finer than unit
+// collapse as they do below 1 ms in [BuildLODIndex].
 func BuildLODIndexUnit(events []PointEvent, scales []time.Duration, unit time.Duration) (idx *LODIndex) {
 	idx = &LODIndex{}
 	if len(scales) == 0 {
@@ -63,17 +65,22 @@ func BuildLODIndexUnit(events []PointEvent, scales []time.Duration, unit time.Du
 	if unit <= 0 {
 		unit = time.Millisecond
 	}
-	idx.scales = make([]int64, len(scales))
+	idx.scales = make([]int64, 0, len(scales))
 	for i, s := range scales {
+		if i > 0 && s <= scales[i-1] {
+			panic(fmt.Sprintf("layout: BuildLODIndex requires strictly ascending scales; scales[%d]=%v <= scales[%d]=%v",
+				i, s, i-1, scales[i-1]))
+		}
 		ms := int64(s / unit)
 		if ms <= 0 {
 			ms = 1
 		}
-		if i > 0 && ms <= idx.scales[i-1] {
-			panic(fmt.Sprintf("layout: BuildLODIndex requires strictly ascending scales (at the axis unit %v); scales[%d]=%d <= scales[%d]=%d",
-				unit, i, ms, i-1, idx.scales[i-1]))
+		if n := len(idx.scales); n > 0 && ms <= idx.scales[n-1] {
+			// finer than the axis unit resolves: the rung collapses onto the
+			// previous one, so it is dropped rather than duplicated.
+			continue
 		}
-		idx.scales[i] = ms
+		idx.scales = append(idx.scales, ms)
 	}
 	idx.bins = make([]map[int64]*Bucket, len(idx.scales))
 	for i := range idx.bins {

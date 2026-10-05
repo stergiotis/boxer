@@ -122,10 +122,10 @@ func TestUnpackCursorRangeRoundTrip(t *testing.T) {
 // a bound suffix view into canonical coordinates.
 func TestBindLiftsTheCaretIntoCanonicalCoordinates(t *testing.T) {
 	buf := "SELECT '€' FROM t"
-	ed := New()
+	ed := New(nil, "t")
 	// caret after the multibyte char: char 9 → byte 11
 	ed.caretPacked = uint64(9) | uint64(9)<<32
-	res := ed.Bind(Frame{IDSlot: "e", Value: &buf})
+	res := ed.Bind(Frame{Value: &buf})
 	require.Equal(t, 11, res.Caret)
 	require.Equal(t, buf, res.Buffer)
 
@@ -135,10 +135,10 @@ func TestBindLiftsTheCaretIntoCanonicalCoordinates(t *testing.T) {
 	// come up short by exactly the elided prelude.
 	const prelude = "SET param_a = 1;\n"
 	mirror := "SELECT 1"
-	ed = New()
+	ed = New(nil, "t")
 	ed.caretPacked = uint64(3) | uint64(3)<<32
 	res = ed.Bind(Frame{
-		IDSlot: "e", Value: &mirror, Offset: len(prelude), Canonical: prelude + mirror,
+		Value: &mirror, Offset: len(prelude), Canonical: prelude + mirror,
 	})
 	require.Equal(t, len(prelude)+3, res.Caret)
 	require.Equal(t, prelude+mirror, res.Buffer)
@@ -148,19 +148,19 @@ func TestBindLiftsTheCaretIntoCanonicalCoordinates(t *testing.T) {
 // A nil buffer is a no-op rather than a panic: an embedder may mount the
 // editor before it has anything to bind.
 func TestBindWithoutABuffer(t *testing.T) {
-	ed := New()
-	require.Equal(t, Result{}, ed.Bind(Frame{IDSlot: "e"}))
-	require.Equal(t, Result{}, ed.Result())
+	ed := New(nil, "t")
+	require.Equal(t, Result{}, ed.Bind(Frame{}))
+	require.Equal(t, Result{}, ed.Render(Decoration{}), "an unbound editor renders nothing and reports the zero result")
 }
 
 // Bind publishes what the caret points at, so a consumer reads it rather than
 // re-deriving it from the buffer and a caret of its own (ADR-0147 §SD2).
 func TestBindPublishesTheCaretEntity(t *testing.T) {
 	buf := "SELECT toHour(now()) FROM t"
-	ed := New()
+	ed := New(nil, "t")
 	// Caret inside `toHour`, char == byte here.
 	ed.caretPacked = uint64(9) | uint64(9)<<32
-	res := ed.Bind(Frame{IDSlot: "e", Value: &buf})
+	res := ed.Bind(Frame{Value: &buf})
 	require.True(t, res.EntityOk)
 	require.Equal(t, "toHour", res.Entity.Name)
 	require.True(t, res.Entity.Call)
@@ -168,13 +168,13 @@ func TestBindPublishesTheCaretEntity(t *testing.T) {
 
 	// Inside the argument list: no name of its own, but the call encloses it.
 	ed.caretPacked = uint64(14) | uint64(14)<<32
-	res = ed.Bind(Frame{IDSlot: "e", Value: &buf})
+	res = ed.Bind(Frame{Value: &buf})
 	require.Equal(t, []string{"toHour"}, res.Entity.Enclosing)
 
 	// On a literal: nothing to report, and that is not an error.
 	lit := "SELECT 123"
 	ed.caretPacked = uint64(8) | uint64(8)<<32
-	res = ed.Bind(Frame{IDSlot: "e", Value: &lit})
+	res = ed.Bind(Frame{Value: &lit})
 	require.False(t, res.EntityOk)
 }
 
@@ -183,10 +183,10 @@ func TestBindPublishesTheCaretEntity(t *testing.T) {
 func TestBindEntityUsesCanonicalCoordinates(t *testing.T) {
 	const prelude = "SET param_a = 1;\n"
 	mirror := "SELECT toHour(x)"
-	ed := New()
+	ed := New(nil, "t")
 	ed.caretPacked = uint64(9) | uint64(9)<<32 // inside toHour, mirror coordinates
 	res := ed.Bind(Frame{
-		IDSlot: "e", Value: &mirror, Offset: len(prelude), Canonical: prelude + mirror,
+		Value: &mirror, Offset: len(prelude), Canonical: prelude + mirror,
 	})
 	require.True(t, res.EntityOk)
 	require.Equal(t, "toHour", res.Entity.Name)

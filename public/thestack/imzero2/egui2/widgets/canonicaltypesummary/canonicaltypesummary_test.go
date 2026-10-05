@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/inspector"
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -221,65 +221,25 @@ func TestTruncate(t *testing.T) {
 	assert.Equal(t, "abcdef", truncate("abcdef", 0))
 }
 
-// TestCallScopeDeterministic locks the "idPrefix#<hex>" scope format and its
-// stability + uniqueness contract.
-func TestCallScopeDeterministic(t *testing.T) {
-	a := callScope("col-type", 0xDEADBEEF)
-	b := callScope("col-type", 0xDEADBEEF)
-	c := callScope("col-type", 0xCAFEBABE)
-	assert.Equal(t, a, b)
-	assert.NotEqual(t, a, c)
-	assert.Equal(t, "col-type#deadbeef", a)
-}
-
-// TestGetInstanceStateIdempotent locks LoadOrStore: the same scope returns
-// the same pointer so per-instance state survives across frames.
-func TestGetInstanceStateIdempotent(t *testing.T) {
-	scope := callScope("idem", 0x1234)
-	a := getInstanceState(scope)
-	b := getInstanceState(scope)
-	assert.Same(t, a, b)
-	assert.NotSame(t, a, getInstanceState(callScope("idem", 0x5678)))
-}
-
-// TestRendererDefaults pins the documented constructor defaults, including
-// the SurfaceInspector-derived popup envelope.
-func TestRendererDefaults(t *testing.T) {
-	r := New("t")
-	assert.Equal(t, "t", r.idPrefix)
-	assert.Equal(t, float32(styletokens.SurfaceInspector.W), r.popupWidth)
-	assert.Equal(t, float32(styletokens.SurfaceInspector.H), r.popupHeight)
-	assert.Equal(t, defaultNameMaxLen, r.nameMaxLen)
-	assert.True(t, r.showIcon)
-	assert.False(t, r.defaultOpen)
-	assert.True(t, r.provenance.IsZero())
-}
-
-// TestRendererFluentSettersReturnCopies locks the value-receiver contract:
-// the base is untouched and the returned copy carries the new values.
-func TestRendererFluentSettersReturnCopies(t *testing.T) {
-	base := New("t")
-	mod := base.
-		PopupSize(640, 480).
-		NameMaxLen(64).
-		ShowIcon(false).
-		DefaultOpen(true).
-		Provenance(inspector.Provenance{Subject: "schema.col"})
-	assert.Equal(t, float32(styletokens.SurfaceInspector.W), base.popupWidth)
-	assert.Equal(t, defaultNameMaxLen, base.nameMaxLen)
-	assert.True(t, base.showIcon)
-	assert.False(t, base.defaultOpen)
-	assert.True(t, base.provenance.IsZero())
-	assert.Equal(t, float32(640), mod.popupWidth)
-	assert.Equal(t, float32(480), mod.popupHeight)
-	assert.Equal(t, 64, mod.nameMaxLen)
-	assert.False(t, mod.showIcon)
-	assert.True(t, mod.defaultOpen)
-	assert.False(t, mod.provenance.IsZero())
-}
-
-// TestNameMaxLenClamps confirms the "n<1 → default" guard.
-func TestNameMaxLenClamps(t *testing.T) {
-	assert.Equal(t, defaultNameMaxLen, New("t").NameMaxLen(0).nameMaxLen)
-	assert.Equal(t, defaultNameMaxLen, New("t").NameMaxLen(-5).nameMaxLen)
+// TestRenderHeadless renders one frame under the discard channel from a
+// zero State, closed and open (DefaultOpen), and pins the W17 nil-Ids path
+// and the empty-canonical placeholder (ADR-0267 W19).
+func TestRenderHeadless(t *testing.T) {
+	t.Cleanup(scenetest.Install())
+	ids := c.NewWidgetIdStack()
+	var st State
+	res := Render(Input{Ids: ids, ScopeKey: "t", Canonical: "u32-s_vc", State: &st})
+	require.NoError(t, res.Err)
+	assert.True(t, res.Valid)
+	assert.False(t, st.Pinned)
+	var open State
+	res = Render(Input{Ids: ids, ScopeKey: "o", Canonical: "q!!q", State: &open, DefaultOpen: true})
+	require.NoError(t, res.Err)
+	assert.False(t, res.Valid, "a parse failure is not valid")
+	assert.True(t, open.Pinned, "DefaultOpen seeds the first frame")
+	res = Render(Input{Ids: ids, ScopeKey: "e", Canonical: "", State: &State{}})
+	require.NoError(t, res.Err)
+	assert.False(t, res.Valid)
+	assert.ErrorIs(t, Render(Input{Canonical: "u32"}).Err, ErrNeedsIdsAndState)
+	assert.Equal(t, 0, ids.Depth(), "the id stack is left balanced")
 }

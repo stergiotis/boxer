@@ -330,34 +330,31 @@ func readClient() *chclient.Client {
 // assertion anyway — a test that resolved them the same way the writer does
 // would agree with itself.
 //
-// The two lanes are read by different idioms because they are shaped
-// differently, and mixing them up is the mistake this comment exists to stop
-// the next reader repeating. On the MIXED channel the parameter lane (mrhp)
-// is co-indexed with the membership lane (lmr), so arrayFirst over that PAIR
-// is sound — the value lane is not co-indexed with either and pairing it with
-// lmr fails outright ("arrays passed to arrayFirst must have equal size"). On
-// the LOW-CARD-REF channel the value lane is a ragged run per attribute, so
-// the position comes from the cumulative sum of the cardinality lane. Both
-// forms are the ones runsessions.go already composes for its readers.
+// Both ride the LOW-CARD-REF channel (the run since ADR-0277 §SD8): the
+// value lane is a ragged run per attribute, so the position comes from the
+// cumulative sum of the cardinality lane — the form runsessions.go composes
+// for its readers.
 func attributionOf(t *testing.T) (runId string, instanceKey string) {
 	t.Helper()
 	const (
-		symLMR    = "`tv:symbol:lmr:lmr:u64:1247:::0::data`"
-		symMRHP   = "`tv:symbol:mrhp:mrhp:y:4:::0::data`"
+		symValue  = "`tv:symbol:value:val:s:124::I:0::data`"
+		symLR     = "`tv:symbol:lr:lr:u64:1247:::0::data`"
+		symLRCard = "`tv:symbol:lrcard:lrcard:u64:4E:::0::data`"
 		u64Value  = "`tv:u64Array:value:val:u64h:4:::0::data`"
 		u64LR     = "`tv:u64Array:lr:lr:u64:1247:::0::data`"
 		u64LRCard = "`tv:u64Array:lrcard:lrcard:u64:4E:::0::data`"
 	)
 	tileKey := vocab.MembLifecycleTileKey.GetId().Value()
 	idxInLr := fmt.Sprintf("indexOf(%s, %d)", u64LR, tileKey)
+	runIdx := fmt.Sprintf("indexOf(%s, %d)", symLR, vocab.MembRuntimeRun.GetId().Value())
 	sql := fmt.Sprintf(`
 SELECT
-  arrayFirst((p, m) -> m = %d, %s, %s) AS run_id,
+  if(%s > 0, arrayElement(%s, indexOf(arrayCumSum(%s), %s)), '') AS run_id,
   toString(if(%s > 0, arrayElement(%s, indexOf(arrayCumSum(%s), %s)), 0)) AS instance_key
 FROM runtime_chstore_test.facts
 LIMIT 1
 FORMAT TabSeparated`,
-		vocab.MembRuntimeRun.GetId().Value(), symMRHP, symLMR,
+		runIdx, symValue, symLRCard, runIdx,
 		idxInLr, u64Value, u64LRCard, idxInLr)
 
 	body, err := readClient().Query(context.Background(), sql)

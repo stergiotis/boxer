@@ -51,6 +51,7 @@ steps=(
     "packageprops       lint/packageprops.sh"
     "h3_wasm_parity     h3_wasm_parity.sh"
     "rust_imzero2_check rust_imzero2_check.sh"
+    "tab_build          tab_build.sh"
     "repro_build_parity repro_build_parity.sh"
     "gofmt              lint/gofmt.sh"
     "rustfmt            lint/rustfmt.sh"

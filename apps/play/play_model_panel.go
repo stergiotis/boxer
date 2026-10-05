@@ -1,8 +1,8 @@
 package play
 
 // play_model_panel.go — the Model tab (ADR-0254 §SD6): play's model
-// affordance as a transformation book rather than a bespoke ask panel. Three
-// prompt documents over the buffer — explain, fix this error, ask — one
+// affordance as a transformation book rather than a bespoke ask panel. Two
+// prompt documents over the buffer — explain and fix this error — one
 // bgjob-backed flow with a preview, and Insert / Replace over the editor
 // delivery ops. Generated SQL never executes unseen: every gesture stops at
 // the preview, and Replace is a click made after the SQL is on screen.
@@ -14,8 +14,10 @@ package play
 // endpoint's `system.columns` until the layer exists; and the target is
 // the nanopass canonical dialect (SD7), which the orchestrator's validation
 // loop enforces. An `explain` is a plain completion rendered as markdown; a
-// `fix` and an `ask` go through the orchestrator, whose repair loop is what
-// keeps the answer valid.
+// `fix` goes through the orchestrator, whose repair loop is what keeps the
+// answer valid. Turning a question into a query is the coordinator's: a chat
+// conversation drives this window through play's operations, whose schema
+// reads and validate_sql are this tab's tools (ADR-0270, 2026-10-02).
 //
 // The model is the host's (ADR-0254 §SD2): the tab asks `llm.describe`
 // once, off the frame, and renders only when the host offers one. The
@@ -40,7 +42,6 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm/promptbook"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
-	"github.com/stergiotis/boxer/public/llm/openaichat"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -51,7 +52,7 @@ import (
 
 const (
 	tipModelPicker = "Pick a prompt. Each is a document in play's prompt book; its tooltip says what it does and what it runs over."
-	tipModelRun    = "Run the picked prompt over the editor buffer (or the question). The result lands below for review — nothing is inserted or run until you say so."
+	tipModelRun    = "Run the picked prompt over the editor buffer. The result lands below for review — nothing is inserted or run until you say so."
 	tipModelHost   = "Where the text is sent: the host's model endpoint, from BOXER_LLM_ENDPOINT."
 	tipModelInsert = "Insert the generated SQL at the editor caret."
 	tipModelSwap   = "Replace the editor buffer with the generated SQL. It does not run until you press Run."
@@ -61,11 +62,11 @@ const (
 
 	// modelSchemaByteCap bounds the harvested schema text a prompt carries:
 	// the evidence says a few KB of grounding is what moves accuracy, and a
-	// wide database must not turn one ask into a hundred-KB prompt.
+	// wide database must not turn one fix into a hundred-KB prompt.
 	modelSchemaByteCap = 24 << 10
 	// modelSchemaRowCap bounds the harvest itself.
 	modelSchemaRowCap = 4000
-	// modelAttempts is the orchestrator's repair budget per ask.
+	// modelAttempts is the orchestrator's repair budget per fix.
 	modelAttempts = 3
 )
 
@@ -78,15 +79,14 @@ var (
 )
 
 // modelResult is one finished run: markdown prose from an explain, or SQL
-// from a fix or an ask, plus the provenance the pane header shows.
+// from a fix, plus the provenance the pane header shows.
 type modelResult struct {
 	// Content is the answer. SQL is true when it is a statement for the
 	// editor rather than prose for the reader.
 	Content string
 	SQL     bool
 	Elapsed time.Duration
-	// Attempts is the orchestrator's count for an ask or a fix; 1 for an
-	// explain.
+	// Attempts is the orchestrator's count for a fix; 1 for an explain.
 	Attempts     int
 	InputTokens  int32
 	OutputTokens int32
@@ -108,7 +108,6 @@ type modelState struct {
 	defs      []promptbook.PromptDef
 	defsOk    bool
 	sel       int
-	question  string
 	lastErr   string
 	runner    bgjob.Runner[modelResult]
 	reqTitle  string
@@ -260,13 +259,8 @@ func (inst *PlayApp) renderModelPicker() {
 			c.Label("→ " + m.model + " · " + m.host).Selectable(false).Send()
 		}
 	}
-	switch cur.Scope {
-	case promptbook.ScopeQuestion:
-		c.TextEdit(inst.ids.PrepareStr("model-question"), m.question, true).SendRespVal(&m.question)
-	case promptbook.ScopeBufferAndError:
-		if m.lastErr == "" {
-			c.Label("The last run had no error; the prompt runs over the buffer alone.").Selectable(false).Send()
-		}
+	if cur.Scope == promptbook.ScopeBufferAndError && m.lastErr == "" {
+		c.Label("The last run had no error; the prompt runs over the buffer alone.").Selectable(false).Send()
 	}
 }
 
@@ -283,12 +277,8 @@ func modelEntryLabel(def promptbook.PromptDef) (s string) {
 // thread — the bgjob contract.
 func (inst *PlayApp) startModelRun(def promptbook.PromptDef) {
 	m := &inst.model
-	buffer, question, lastErr := inst.sql, strings.TrimSpace(m.question), m.lastErr
-	if def.Scope == promptbook.ScopeQuestion && question == "" {
-		m.errText = "Type a question first."
-		return
-	}
-	if def.Scope != promptbook.ScopeQuestion && strings.TrimSpace(buffer) == "" {
+	buffer, lastErr := inst.sql, m.lastErr
+	if strings.TrimSpace(buffer) == "" {
 		m.errText = "The editor is empty."
 		return
 	}
@@ -300,7 +290,7 @@ func (inst *PlayApp) startModelRun(def promptbook.PromptDef) {
 		bgjob.Spec{Kind: "play-model", Title: def.Title},
 		func(ctx context.Context, _ bgjob.Reporter) (res *modelResult, err error) {
 			var r modelResult
-			r, err = runModelPrompt(ctx, cli, reads, client, def, buffer, question, lastErr)
+			r, err = runModelPrompt(ctx, cli, reads, client, def, buffer, lastErr)
 			if err != nil {
 				return
 			}
@@ -313,8 +303,8 @@ func (inst *PlayApp) startModelRun(def promptbook.PromptDef) {
 }
 
 // runModelPrompt is the compute half, off the render thread: an explain is
-// one completion; a fix or an ask compiles through the orchestrator.
-func runModelPrompt(ctx context.Context, cli *llm.Client, reads *keelsonquery.Client, client *Client, def promptbook.PromptDef, buffer, question, lastErr string) (res modelResult, err error) {
+// one completion; a fix compiles through the orchestrator.
+func runModelPrompt(ctx context.Context, cli *llm.Client, reads *keelsonquery.Client, client *Client, def promptbook.PromptDef, buffer, lastErr string) (res modelResult, err error) {
 	started := time.Now()
 	sensitivity := queryengine.SensitivityOrdinary
 	if client != nil && strings.TrimSpace(buffer) != "" {
@@ -331,7 +321,7 @@ func runModelPrompt(ctx context.Context, cli *llm.Client, reads *keelsonquery.Cl
 		}
 		res = modelResult{Content: r.Content, Elapsed: r.Elapsed, Attempts: 1, InputTokens: r.InputTokens, OutputTokens: r.OutputTokens, Truncated: r.Truncated}
 		return
-	case promptbook.ScopeBufferAndError, promptbook.ScopeQuestion:
+	case promptbook.ScopeBufferAndError:
 		var schema string
 		if client != nil {
 			schema, err = harvestSchema(ctx, client)
@@ -339,10 +329,7 @@ func runModelPrompt(ctx context.Context, cli *llm.Client, reads *keelsonquery.Cl
 				return res, eh.Errorf("model: schema harvest: %w", err)
 			}
 		}
-		input := question
-		if def.Scope == promptbook.ScopeBufferAndError {
-			input = fixInput(buffer, lastErr)
-		}
+		input := fixInput(buffer, lastErr)
 		// The tool loop (ADR-0139 §SD9): the model may list and describe
 		// tables, validate a draft, and read the introspection tables this
 		// window holds grants for — each call run here, under play's grants.
@@ -403,34 +390,7 @@ type modelChat struct {
 }
 
 func (inst modelChat) Chat(ctx context.Context, _ string, messages []orchestrator.Message) (response string, err error) {
-	req := llm.Request{Purpose: inst.purpose, Sensitivity: inst.sensitivity, Temperature: inst.temperature, MaxTokens: inst.maxTokens}
-	for _, msg := range messages {
-		om, ok := chatMessage(msg)
-		if !ok {
-			return "", eb.Build().Str("role", msg.Role).Errorf("model: unknown chat role")
-		}
-		req.Messages = append(req.Messages, om)
-	}
-	res, err := inst.cli.Complete(ctx, req)
-	if err != nil {
-		return
-	}
-	response = res.Content
-	return
-}
-
-// chatMessage maps the orchestrator's stringly-typed role onto the client's.
-// An unknown role is refused rather than defaulted: a message sent under the
-// wrong role is a prompt injection the reader never sees.
-func chatMessage(msg orchestrator.Message) (out openaichat.Message, ok bool) {
-	switch msg.Role {
-	case "system":
-		return openaichat.Message{Role: openaichat.ChatRoleSystem, Content: msg.Content}, true
-	case "user":
-		return openaichat.Message{Role: openaichat.ChatRoleUser, Content: msg.Content}, true
-	case "assistant":
-		return openaichat.Message{Role: openaichat.ChatRoleAssistant, Content: msg.Content}, true
-	}
+	response, _, err = inst.ChatTools(ctx, "", messages, nil)
 	return
 }
 
@@ -506,8 +466,8 @@ func (inst *PlayApp) renderModelProgress() {
 	snap := m.runner.Snapshot()
 	if jobprogress.Render(jobprogress.Input{
 		Title: m.reqTitle, Fraction: snap.Fraction, EtaMs: snap.EtaMs, Note: snap.Note,
-		CancelId: inst.ids.PrepareStr("model-cancel"),
-	}) {
+		Ids: inst.ids, ScopeKey: "model-job", Cancel: true,
+	}).CancelClicked {
 		m.runner.Cancel()
 	}
 }
@@ -570,9 +530,7 @@ func (inst *PlayApp) renderModelResult() {
 		m.resDoc = markdown.Parse([]byte(m.res.Content))
 		m.resDocSrc = m.res.Content
 	}
-	for range c.IdScope(inst.ids.PrepareStr("model-doc")) {
-		m.resDoc.Render(inst.ids)
-	}
+	markdown.Render(markdown.Input{Ids: inst.ids, ScopeKey: "model-doc", Doc: m.resDoc})
 }
 
 // modelSummaryLine is the pane header's provenance readout.
@@ -609,12 +567,9 @@ func (inst *PlayApp) modelSummaryLine() (s string) {
 // modelTools — never in the service.
 func (inst modelChat) ChatTools(ctx context.Context, _ string, messages []orchestrator.Message, tools []orchestrator.Tool) (response string, calls []orchestrator.ToolCall, err error) {
 	req := llm.Request{Purpose: inst.purpose, Sensitivity: inst.sensitivity, Temperature: inst.temperature, MaxTokens: inst.maxTokens}
-	for _, msg := range messages {
-		om, ok := chatMessage(msg)
-		if !ok {
-			return "", nil, eb.Build().Str("role", msg.Role).Errorf("model: unknown chat role")
-		}
-		req.Messages = append(req.Messages, om)
+	req.Messages, err = llmclient.WireMessages(messages)
+	if err != nil {
+		return
 	}
 	req.Tools = llmclient.WireTools(tools)
 	res, err := inst.cli.Complete(ctx, req)

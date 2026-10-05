@@ -261,3 +261,32 @@ func int64Stream(t *testing.T, vals ...int64) []byte {
 	require.NoError(t, w.Close())
 	return buf.Bytes()
 }
+
+// TestServiceE2E_BackslashColumnNames publishes columns whose names carry
+// backslashes and reads each back by its own name: the structure string
+// must name exactly the Arrow fields, through ClickHouse's lexer.
+func TestServiceE2E_BackslashColumnNames(t *testing.T) {
+	svc, query := setupE2E(t)
+	names := []string{`a\`, `b\t`, "c`\\`d"}
+	fields := make([]arrow.Field, len(names))
+	for i, n := range names {
+		fields[i] = arrow.Field{Name: n, Type: arrow.PrimitiveTypes.Int64}
+	}
+	schema := arrow.NewSchema(fields, nil)
+	rb := array.NewRecordBuilder(memory.DefaultAllocator, schema)
+	defer rb.Release()
+	for i := range names {
+		rb.Field(i).(*array.Int64Builder).Append(int64(i + 1))
+	}
+	rec := rb.NewRecordBatch()
+	defer rec.Release()
+	var buf bytes.Buffer
+	w := ipc.NewWriter(&buf, ipc.WithSchema(schema))
+	require.NoError(t, w.Write(rec))
+	require.NoError(t, w.Close())
+
+	res, err := svc.Publish(adhocdata.PublishInput{Alias: "slashes", ArrowIPCStream: buf.Bytes()})
+	require.NoError(t, err)
+	body := query("SELECT `a\\\\`, `b\\\\t`, `c``\\\\``d` FROM keelson('" + res.Handle + "')")
+	assert.Equal(t, "1\t2\t3", body)
+}

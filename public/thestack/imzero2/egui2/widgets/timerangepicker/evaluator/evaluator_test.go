@@ -123,8 +123,8 @@ func TestEvalTzShiftsAnchor(t *testing.T) {
 	anchor := time.Date(2026, 4, 27, 12, 0, 0, 0, time.UTC)
 
 	// toStartOfDay in UTC for the 2026-04-27 12:00 UTC anchor yields
-	// 2026-04-27 00:00 UTC. Same wall-clock anchor reinterpreted in
-	// Tokyo (UTC+9) is 2026-04-27 21:00 Tokyo, whose toStartOfDay is
+	// 2026-04-27 00:00 UTC. The same instant in Tokyo (UTC+9) is
+	// 2026-04-27 21:00 Tokyo, whose toStartOfDay is
 	// 2026-04-27 00:00 Tokyo = 2026-04-26 15:00 UTC. So Tokyo's
 	// start-of-day epoch-ms is 9 hours earlier than UTC's.
 	utcFromMs, _, err := ev.Eval(context.Background(), anchor, timerangepicker.TzIDUTC,
@@ -143,6 +143,49 @@ func TestEvalTzShiftsAnchor(t *testing.T) {
 	deltaHours := (utcFromMs - tokyoFromMs) / 3600000
 	if deltaHours != 9 {
 		t.Errorf("expected UTC start-of-day to be 9h later than Tokyo's; got delta %d hours", deltaHours)
+	}
+}
+
+// In a non-UTC zone anchor_now is still the anchor instant: the anchor
+// once went over as a UTC wall-clock string that ClickHouse read as Tokyo
+// wall-clock time, 9 h early.
+func TestEvalNonUTCZoneKeepsAnchorInstant(t *testing.T) {
+	ev := setupTestEvaluator(t)
+
+	tokyoID, err := timerangepicker.LookupTz("Asia/Tokyo")
+	if err != nil {
+		t.Fatalf("LookupTz Asia/Tokyo: %v", err)
+	}
+	anchor := time.Date(2026, 4, 27, 12, 0, 0, 0, time.UTC)
+	fromMs, toMs, err := ev.Eval(context.Background(), anchor, tokyoID,
+		"anchor_now - INTERVAL 1 HOUR", "anchor_now")
+	if err != nil {
+		t.Fatalf("Eval: %v", err)
+	}
+	if toMs != anchor.UnixMilli() {
+		t.Errorf("toMs: want %d, got %d", anchor.UnixMilli(), toMs)
+	}
+	if want := anchor.Add(-time.Hour).UnixMilli(); fromMs != want {
+		t.Errorf("fromMs: want %d, got %d", want, fromMs)
+	}
+}
+
+// The System zone once reached ClickHouse as Go's "Local" whenever TZ was
+// unset, and every evaluation failed with "Cannot load time zone Local".
+func TestEvalSystemZone(t *testing.T) {
+	if _, err := timerangepicker.IanaName(timerangepicker.TzIDSystem); err != nil {
+		t.Skipf("host zone has no IANA name: %v", err)
+	}
+	ev := setupTestEvaluator(t)
+
+	anchor := time.Date(2026, 4, 27, 12, 0, 0, 0, time.UTC)
+	_, toMs, err := ev.Eval(context.Background(), anchor, timerangepicker.TzIDSystem,
+		"anchor_now - INTERVAL 1 HOUR", "anchor_now")
+	if err != nil {
+		t.Fatalf("Eval System: %v", err)
+	}
+	if toMs != anchor.UnixMilli() {
+		t.Errorf("toMs: want %d, got %d", anchor.UnixMilli(), toMs)
 	}
 }
 

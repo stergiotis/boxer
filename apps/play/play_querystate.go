@@ -233,9 +233,9 @@ func (inst *PlayApp) syncQueryFSM(loading bool, numRows int64, executed time.Tim
 // contradiction of it — so it earns no arrow. There is deliberately no Running→Idle edge: a cancel
 // sets err+executed in the store, so it settles as Failed, not Idle.
 func newQueryFSM() *fsmview.Machine[queryStateE] {
-	m := fsmview.NewMachine(queryStateIdle, 64,
-		fsmview.WithLabel(func(s queryStateE) string { return s.String() }),
-		fsmview.WithStateOrder([]queryStateE{
+	m := fsmview.NewMachine(queryStateIdle, 64, fsmview.MachineOptions[queryStateE]{
+		Label: func(s queryStateE) string { return s.String() },
+		StateOrder: []queryStateE{
 			queryStateIdle,
 			queryStateRunning,
 			queryStateRows,
@@ -244,9 +244,9 @@ func newQueryFSM() *fsmview.Machine[queryStateE] {
 			queryStateRowsStale,
 			queryStateEmptyStale,
 			queryStateFailedStale,
-		}),
-		fsmview.WithStateColor(queryStateColor),
-	)
+		},
+		StateColor: queryStateColor,
+	})
 	m.AddRule(queryStateIdle, queryStateRunning).
 		AddRule(queryStateRunning, queryStateRows, queryStateEmpty, queryStateFailed).
 		AddRule(queryStateRows, queryStateRunning, queryStateRowsStale).
@@ -311,7 +311,7 @@ func queryStateTone(s queryStateE) badge.ToneE {
 }
 
 // renderQuerySummary is the tethered summary's stat line
-// ([fsmview.Widget.Summary]): muted small text keyed on the FSM state, rendered
+// ([fsmview.Options.Summary]): muted small text keyed on the FSM state, rendered
 // just right of the colored state badge. The full error text lives in the
 // Diagnostics tab; the state graph / history live in the pop-out inspector
 // window.

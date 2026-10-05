@@ -20,7 +20,7 @@ import (
 // a screenshot catches depend on when it was taken.
 
 type sqlEditorDemoState struct {
-	ed  *sqleditor.Editor
+	ed  *sqleditor.Editor // built on the first frame, on the ids it renders with
 	sql string
 }
 
@@ -33,7 +33,6 @@ func init() {
 		Description: "The reusable SQL editing surface: a no-wrap monospace editor with a line-number gutter and marks lane beside it. Type to see lexical colour, pause to see it upgrade to semantic (table/column/alias names) on a background parse. The buffer holds three statements — move the caret between them and the active one takes a faint tint and a `>` mark in the gutter, both derived by the widget from buffer and caret alone. The underline on the middle statement is an embedder-contributed decoration, the channel a host uses for what only it can know. Below the editor, the widget's published Result: caret offset, which statement it is in, and what a run-under-cursor would ship.",
 		Init: func(_ *c.WidgetIdStack) (state any) {
 			return &sqlEditorDemoState{
-				ed: sqleditor.New(),
 				sql: "SELECT number, number * 2 AS doubled\nFROM system.numbers\nLIMIT 10;\n\n" +
 					"SELECT nonsuch FROM system.one;\n\n" +
 					"WITH t AS (SELECT 1 AS a)\nSELECT a FROM t",
@@ -47,13 +46,15 @@ func init() {
 }
 
 func demoSqlEditor(ids *c.WidgetIdStack, s *sqlEditorDemoState) {
+	if s.ed == nil {
+		s.ed = sqleditor.New(ids, "editor")
+	}
 	// Bind first: the decoration below reads the caret it publishes, and the
 	// widget's own tint is derived in the same step.
 	res := s.ed.Bind(sqleditor.Frame{
-		IDSlot: "demoSqlEditor",
-		Value:  &s.sql,
-		Hint:   "-- type SQL",
-		Rows:   12,
+		Value: &s.sql,
+		Hint:  "-- type SQL",
+		Rows:  12,
 	})
 
 	// One embedder-contributed decoration, standing in for what a host would
@@ -73,7 +74,7 @@ func demoSqlEditor(ids *c.WidgetIdStack, s *sqlEditorDemoState) {
 		deco.SubqueryMark = nanopass.SourceRange{Start: start, End: start + len("SELECT 1 AS a")}
 	}
 
-	s.ed.Render(ids, deco)
+	s.ed.Render(deco)
 
 	c.Separator().Send()
 	stmt := "none"

@@ -3,6 +3,7 @@ package bindings
 import (
 	"bytes"
 	"encoding/binary"
+	"github.com/rs/zerolog/log"
 	"iter"
 	"math"
 
@@ -709,6 +710,37 @@ func (inst EndETableFluid) Cells(key0 uint64, key1 uint32) iter.Seq[functional.N
 		defer func() { inst.EndCells() }()
 		yield(functional.NilIteratorValue)
 	}
+}
+
+// CellsBytes returns this frame's cells map as Send would splice it: a
+// self-contained copy a later frame may hand to SendWithRawCells when nothing
+// that produced the cells has changed. Call it before Send, which releases
+// the scope.
+func (inst EndETableFluid) CellsBytes() []byte {
+	var b bytes.Buffer
+	if err := inst.deferredCells.WriteToFixedKey(&b); err != nil {
+		log.Panic().Err(err).Msg("unable to copy the cells deferred-block map")
+	}
+	return b.Bytes()
+}
+
+// SendWithRawCells is Send with the cells map taken from raw — a CellsBytes
+// result of an earlier frame — instead of this frame's captures; the headers
+// and rows maps are this frame's. The host cannot tell the difference, so
+// the caller must have checked that every input to those cells is unchanged,
+// and that no cell carries a response it would act on: a cell widget the
+// host reports as clicked or hovered needs the live path, which reads the
+// response, not this one, which does not.
+func (inst EndETableFluid) SendWithRawCells(raw []byte) {
+	r := inst.r
+	r.WriteOpCode(uint32(EndETableMethodIdBuild))
+	r.SpliceRaw(raw)
+	r.SpliceDeferredBlockMap(inst.deferredHeaders)
+	r.SpliceDeferredBlockMap(inst.deferredRows)
+	inst.deferredCells.ReleaseWithHint()
+	inst.deferredHeaders.ReleaseWithHint()
+	inst.deferredRows.ReleaseWithHint()
+	r.SendIntermediate()
 }
 
 // Rows opens a deferred row capture scope as an iterator (ADR-0176 SD5).

@@ -6,8 +6,42 @@ import (
 	"iter"
 )
 
+func (inst *Fetcher) FetchCaptureResult() (requestId uint64, status uint8, width uint32, height uint32, reason string, data []uint8, refusedUploads uint64, unknownTextures uint64) {
+	inst.invoke(FuncProcIdFetchCaptureResult)
+	requestId = inst.readU64()
+	status = inst.readU8()
+	width = inst.readU32()
+	height = inst.readU32()
+	reason = inst.readS()
+	data = inst.readU8h()
+	refusedUploads = inst.readU64()
+	unknownTextures = inst.readU64()
+	return
+}
+func (inst *Fetcher) IssueFetchCaptureResult() {
+	inst.invoke(FuncProcIdFetchCaptureResult)
+}
+func (inst *Fetcher) CollectFetchCaptureResult() (requestId uint64, status uint8, width uint32, height uint32, reason string, data []uint8, refusedUploads uint64, unknownTextures uint64) {
+	requestId = inst.readU64()
+	status = inst.readU8()
+	width = inst.readU32()
+	height = inst.readU32()
+	reason = inst.readS()
+	data = inst.readU8h()
+	refusedUploads = inst.readU64()
+	unknownTextures = inst.readU64()
+	return
+}
 func (inst *Fetcher) FetchCommandEnterPressed() (pressed bool, shiftPressed bool) {
 	inst.invoke(FuncProcIdFetchCommandEnterPressed)
+	pressed = inst.readB()
+	shiftPressed = inst.readB()
+	return
+}
+func (inst *Fetcher) IssueFetchCommandEnterPressed() {
+	inst.invoke(FuncProcIdFetchCommandEnterPressed)
+}
+func (inst *Fetcher) CollectFetchCommandEnterPressed() (pressed bool, shiftPressed bool) {
 	pressed = inst.readB()
 	shiftPressed = inst.readB()
 	return
@@ -17,8 +51,22 @@ func (inst *Fetcher) FetchF1KeyPressed() (pressed bool) {
 	pressed = inst.readB()
 	return
 }
+func (inst *Fetcher) IssueFetchF1KeyPressed() {
+	inst.invoke(FuncProcIdFetchF1KeyPressed)
+}
+func (inst *Fetcher) CollectFetchF1KeyPressed() (pressed bool) {
+	pressed = inst.readB()
+	return
+}
 func (inst *Fetcher) FetchF2KeyPressed() (pressed bool) {
 	inst.invoke(FuncProcIdFetchF2KeyPressed)
+	pressed = inst.readB()
+	return
+}
+func (inst *Fetcher) IssueFetchF2KeyPressed() {
+	inst.invoke(FuncProcIdFetchF2KeyPressed)
+}
+func (inst *Fetcher) CollectFetchF2KeyPressed() (pressed bool) {
 	pressed = inst.readB()
 	return
 }
@@ -28,29 +76,24 @@ func (inst *Fetcher) FetchFrameMetrics() (interpretUs uint64, passNr uint64) {
 	passNr = inst.readU64()
 	return
 }
-func (inst *Fetcher) FetchGraphEvents() (graphIds []uint64, kinds []uint32, keyA []uint64, keyB iter.Seq[uint64]) {
-	inst.invoke(FuncProcIdFetchGraphEvents)
-	graphIds = inst.readU64h()
-	kinds = inst.readU32h()
-	keyA = inst.readU64h()
-	keyB = inst.iterateU64h()
+func (inst *Fetcher) IssueFetchFrameMetrics() {
+	inst.invoke(FuncProcIdFetchFrameMetrics)
+}
+func (inst *Fetcher) CollectFetchFrameMetrics() (interpretUs uint64, passNr uint64) {
+	interpretUs = inst.readU64()
+	passNr = inst.readU64()
 	return
 }
-func (inst *Fetcher) FetchGraphMetrics() (graphIds []uint64, nodeCount []uint32, edgeCount []uint32, frSteps []uint64, frLastDisp iter.Seq[float32]) {
-	inst.invoke(FuncProcIdFetchGraphMetrics)
-	graphIds = inst.readU64h()
-	nodeCount = inst.readU32h()
-	edgeCount = inst.readU32h()
-	frSteps = inst.readU64h()
-	frLastDisp = inst.iterateF32h()
+func (inst *Fetcher) FetchPixelsPerPoint() (pixelsPerPoint float32) {
+	inst.invoke(FuncProcIdFetchPixelsPerPoint)
+	pixelsPerPoint = inst.readF32()
 	return
 }
-func (inst *Fetcher) FetchGraphSelection() (graphIds []uint64, kinds []uint32, keyA []uint64, keyB iter.Seq[uint64]) {
-	inst.invoke(FuncProcIdFetchGraphSelection)
-	graphIds = inst.readU64h()
-	kinds = inst.readU32h()
-	keyA = inst.readU64h()
-	keyB = inst.iterateU64h()
+func (inst *Fetcher) IssueFetchPixelsPerPoint() {
+	inst.invoke(FuncProcIdFetchPixelsPerPoint)
+}
+func (inst *Fetcher) CollectFetchPixelsPerPoint() (pixelsPerPoint float32) {
+	pixelsPerPoint = inst.readF32()
 	return
 }
 func (inst *Fetcher) FetchR10() (idsTrue []uint64, idsFalse iter.Seq[uint64]) {
@@ -59,8 +102,24 @@ func (inst *Fetcher) FetchR10() (idsTrue []uint64, idsFalse iter.Seq[uint64]) {
 	idsFalse = inst.iterateU64h()
 	return
 }
+func (inst *Fetcher) IssueFetchR10() {
+	inst.invoke(FuncProcIdFetchR10)
+}
+func (inst *Fetcher) CollectFetchR10() (idsTrue []uint64, idsFalse iter.Seq[uint64]) {
+	idsTrue = inst.readU64h()
+	idsFalse = inst.iterateU64h()
+	return
+}
 func (inst *Fetcher) FetchR16ScrollDelta() (x float32, y float32) {
 	inst.invoke(FuncProcIdFetchR16ScrollDelta)
+	x = inst.readF32()
+	y = inst.readF32()
+	return
+}
+func (inst *Fetcher) IssueFetchR16ScrollDelta() {
+	inst.invoke(FuncProcIdFetchR16ScrollDelta)
+}
+func (inst *Fetcher) CollectFetchR16ScrollDelta() (x float32, y float32) {
 	x = inst.readF32()
 	y = inst.readF32()
 	return
@@ -74,8 +133,27 @@ func (inst *Fetcher) FetchR17Modifiers() (alt bool, ctrl bool, shift bool, macCm
 	command = inst.readB()
 	return
 }
+func (inst *Fetcher) IssueFetchR17Modifiers() {
+	inst.invoke(FuncProcIdFetchR17Modifiers)
+}
+func (inst *Fetcher) CollectFetchR17Modifiers() (alt bool, ctrl bool, shift bool, macCmd bool, command bool) {
+	alt = inst.readB()
+	ctrl = inst.readB()
+	shift = inst.readB()
+	macCmd = inst.readB()
+	command = inst.readB()
+	return
+}
 func (inst *Fetcher) FetchR18AvailableSize() (w float32, h float32) {
 	inst.invoke(FuncProcIdFetchR18AvailableSize)
+	w = inst.readF32()
+	h = inst.readF32()
+	return
+}
+func (inst *Fetcher) IssueFetchR18AvailableSize() {
+	inst.invoke(FuncProcIdFetchR18AvailableSize)
+}
+func (inst *Fetcher) CollectFetchR18AvailableSize() (w float32, h float32) {
 	w = inst.readF32()
 	h = inst.readF32()
 	return
@@ -85,8 +163,24 @@ func (inst *Fetcher) FetchR19ZoomDelta() (zoom float32) {
 	zoom = inst.readF32()
 	return
 }
+func (inst *Fetcher) IssueFetchR19ZoomDelta() {
+	inst.invoke(FuncProcIdFetchR19ZoomDelta)
+}
+func (inst *Fetcher) CollectFetchR19ZoomDelta() (zoom float32) {
+	zoom = inst.readF32()
+	return
+}
 func (inst *Fetcher) FetchR20Pointer() (x float32, y float32, valid bool) {
 	inst.invoke(FuncProcIdFetchR20Pointer)
+	x = inst.readF32()
+	y = inst.readF32()
+	valid = inst.readB()
+	return
+}
+func (inst *Fetcher) IssueFetchR20Pointer() {
+	inst.invoke(FuncProcIdFetchR20Pointer)
+}
+func (inst *Fetcher) CollectFetchR20Pointer() (x float32, y float32, valid bool) {
 	x = inst.readF32()
 	y = inst.readF32()
 	valid = inst.readB()
@@ -101,13 +195,43 @@ func (inst *Fetcher) FetchR21UiRects() (seqs []uint64, minX []float32, minY []fl
 	maxY = inst.iterateF32h()
 	return
 }
+func (inst *Fetcher) IssueFetchR21UiRects() {
+	inst.invoke(FuncProcIdFetchR21UiRects)
+}
+func (inst *Fetcher) CollectFetchR21UiRects() (seqs []uint64, minX []float32, minY []float32, maxX []float32, maxY iter.Seq[float32]) {
+	seqs = inst.readU64h()
+	minX = inst.readF32h()
+	minY = inst.readF32h()
+	maxX = inst.readF32h()
+	maxY = inst.iterateF32h()
+	return
+}
 func (inst *Fetcher) FetchR22StarvedTextures() (ids iter.Seq[uint64]) {
 	inst.invoke(FuncProcIdFetchR22StarvedTextures)
 	ids = inst.iterateU64h()
 	return
 }
+func (inst *Fetcher) IssueFetchR22StarvedTextures() {
+	inst.invoke(FuncProcIdFetchR22StarvedTextures)
+}
+func (inst *Fetcher) CollectFetchR22StarvedTextures() (ids iter.Seq[uint64]) {
+	ids = inst.iterateU64h()
+	return
+}
 func (inst *Fetcher) FetchR23CanvasWheel() (ids []uint64, scrollXs []float32, scrollYs []float32, zooms []float32, hoverXs []float32, hoverYs iter.Seq[float32]) {
 	inst.invoke(FuncProcIdFetchR23CanvasWheel)
+	ids = inst.readU64h()
+	scrollXs = inst.readF32h()
+	scrollYs = inst.readF32h()
+	zooms = inst.readF32h()
+	hoverXs = inst.readF32h()
+	hoverYs = inst.iterateF32h()
+	return
+}
+func (inst *Fetcher) IssueFetchR23CanvasWheel() {
+	inst.invoke(FuncProcIdFetchR23CanvasWheel)
+}
+func (inst *Fetcher) CollectFetchR23CanvasWheel() (ids []uint64, scrollXs []float32, scrollYs []float32, zooms []float32, hoverXs []float32, hoverYs iter.Seq[float32]) {
 	ids = inst.readU64h()
 	scrollXs = inst.readF32h()
 	scrollYs = inst.readF32h()
@@ -126,6 +250,18 @@ func (inst *Fetcher) FetchR24CanvasPointers() (ids []uint64, originXs []float32,
 	mods = inst.iterateU8h()
 	return
 }
+func (inst *Fetcher) IssueFetchR24CanvasPointers() {
+	inst.invoke(FuncProcIdFetchR24CanvasPointers)
+}
+func (inst *Fetcher) CollectFetchR24CanvasPointers() (ids []uint64, originXs []float32, originYs []float32, posXs []float32, posYs []float32, mods iter.Seq[uint8]) {
+	ids = inst.readU64h()
+	originXs = inst.readF32h()
+	originYs = inst.readF32h()
+	posXs = inst.readF32h()
+	posYs = inst.readF32h()
+	mods = inst.iterateU8h()
+	return
+}
 func (inst *Fetcher) FetchR25EtColWidths() (ids []uint64, counts []uint64, widths iter.Seq[float32]) {
 	inst.invoke(FuncProcIdFetchR25EtColWidths)
 	ids = inst.readU64h()
@@ -133,15 +269,79 @@ func (inst *Fetcher) FetchR25EtColWidths() (ids []uint64, counts []uint64, width
 	widths = inst.iterateF32h()
 	return
 }
-func (inst *Fetcher) FetchR26KeyCaptures() (ids []uint64, codes []uint8, mods iter.Seq[uint8]) {
+func (inst *Fetcher) IssueFetchR25EtColWidths() {
+	inst.invoke(FuncProcIdFetchR25EtColWidths)
+}
+func (inst *Fetcher) CollectFetchR25EtColWidths() (ids []uint64, counts []uint64, widths iter.Seq[float32]) {
+	ids = inst.readU64h()
+	counts = inst.readU64h()
+	widths = inst.iterateF32h()
+	return
+}
+func (inst *Fetcher) FetchR26KeyCaptures() (ids []uint64, codes []uint8, mods []uint8, edges iter.Seq[uint8]) {
 	inst.invoke(FuncProcIdFetchR26KeyCaptures)
 	ids = inst.readU64h()
 	codes = inst.readU8h()
-	mods = inst.iterateU8h()
+	mods = inst.readU8h()
+	edges = inst.iterateU8h()
+	return
+}
+func (inst *Fetcher) IssueFetchR26KeyCaptures() {
+	inst.invoke(FuncProcIdFetchR26KeyCaptures)
+}
+func (inst *Fetcher) CollectFetchR26KeyCaptures() (ids []uint64, codes []uint8, mods []uint8, edges iter.Seq[uint8]) {
+	ids = inst.readU64h()
+	codes = inst.readU8h()
+	mods = inst.readU8h()
+	edges = inst.iterateU8h()
+	return
+}
+func (inst *Fetcher) FetchR27Windows() (ids []uint64, minX []float32, minY []float32, maxX []float32, maxY []float32, z []uint32, collapsed []uint8, needW []float32, needH []float32, workMinX float32, workMinY float32, workMaxX float32, workMaxY float32) {
+	inst.invoke(FuncProcIdFetchR27Windows)
+	ids = inst.readU64h()
+	minX = inst.readF32h()
+	minY = inst.readF32h()
+	maxX = inst.readF32h()
+	maxY = inst.readF32h()
+	z = inst.readU32h()
+	collapsed = inst.readU8h()
+	needW = inst.readF32h()
+	needH = inst.readF32h()
+	workMinX = inst.readF32()
+	workMinY = inst.readF32()
+	workMaxX = inst.readF32()
+	workMaxY = inst.readF32()
+	return
+}
+func (inst *Fetcher) IssueFetchR27Windows() {
+	inst.invoke(FuncProcIdFetchR27Windows)
+}
+func (inst *Fetcher) CollectFetchR27Windows() (ids []uint64, minX []float32, minY []float32, maxX []float32, maxY []float32, z []uint32, collapsed []uint8, needW []float32, needH []float32, workMinX float32, workMinY float32, workMaxX float32, workMaxY float32) {
+	ids = inst.readU64h()
+	minX = inst.readF32h()
+	minY = inst.readF32h()
+	maxX = inst.readF32h()
+	maxY = inst.readF32h()
+	z = inst.readU32h()
+	collapsed = inst.readU8h()
+	needW = inst.readF32h()
+	needH = inst.readF32h()
+	workMinX = inst.readF32()
+	workMinY = inst.readF32()
+	workMaxX = inst.readF32()
+	workMaxY = inst.readF32()
 	return
 }
 func (inst *Fetcher) FetchR7() (ids []uint64, responses iter.Seq[uint32]) {
 	inst.invoke(FuncProcIdFetchR7)
+	ids = inst.readU64h()
+	responses = inst.iterateU32h()
+	return
+}
+func (inst *Fetcher) IssueFetchR7() {
+	inst.invoke(FuncProcIdFetchR7)
+}
+func (inst *Fetcher) CollectFetchR7() (ids []uint64, responses iter.Seq[uint32]) {
 	ids = inst.readU64h()
 	responses = inst.iterateU32h()
 	return
@@ -152,8 +352,24 @@ func (inst *Fetcher) FetchR9EtPrefetch() (ids []uint64, values iter.Seq[uint64])
 	values = inst.iterateU64h()
 	return
 }
+func (inst *Fetcher) IssueFetchR9EtPrefetch() {
+	inst.invoke(FuncProcIdFetchR9EtPrefetch)
+}
+func (inst *Fetcher) CollectFetchR9EtPrefetch() (ids []uint64, values iter.Seq[uint64]) {
+	ids = inst.readU64h()
+	values = inst.iterateU64h()
+	return
+}
 func (inst *Fetcher) FetchR9F64() (ids []uint64, values iter.Seq[float64]) {
 	inst.invoke(FuncProcIdFetchR9F64)
+	ids = inst.readU64h()
+	values = inst.iterateF64h()
+	return
+}
+func (inst *Fetcher) IssueFetchR9F64() {
+	inst.invoke(FuncProcIdFetchR9F64)
+}
+func (inst *Fetcher) CollectFetchR9F64() (ids []uint64, values iter.Seq[float64]) {
 	ids = inst.readU64h()
 	values = inst.iterateF64h()
 	return
@@ -164,8 +380,24 @@ func (inst *Fetcher) FetchR9I64() (ids []uint64, values iter.Seq[int64]) {
 	values = inst.iterateI64h()
 	return
 }
+func (inst *Fetcher) IssueFetchR9I64() {
+	inst.invoke(FuncProcIdFetchR9I64)
+}
+func (inst *Fetcher) CollectFetchR9I64() (ids []uint64, values iter.Seq[int64]) {
+	ids = inst.readU64h()
+	values = inst.iterateI64h()
+	return
+}
 func (inst *Fetcher) FetchR9S() (ids []uint64, values iter.Seq[string]) {
 	inst.invoke(FuncProcIdFetchR9S)
+	ids = inst.readU64h()
+	values = inst.iterateSh()
+	return
+}
+func (inst *Fetcher) IssueFetchR9S() {
+	inst.invoke(FuncProcIdFetchR9S)
+}
+func (inst *Fetcher) CollectFetchR9S() (ids []uint64, values iter.Seq[string]) {
 	ids = inst.readU64h()
 	values = inst.iterateSh()
 	return
@@ -176,14 +408,37 @@ func (inst *Fetcher) FetchR9U64() (ids []uint64, values iter.Seq[uint64]) {
 	values = inst.iterateU64h()
 	return
 }
+func (inst *Fetcher) IssueFetchR9U64() {
+	inst.invoke(FuncProcIdFetchR9U64)
+}
+func (inst *Fetcher) CollectFetchR9U64() (ids []uint64, values iter.Seq[uint64]) {
+	ids = inst.readU64h()
+	values = inst.iterateU64h()
+	return
+}
 func (inst *Fetcher) FetchVideoCapabilities() (codecIds []uint64, flags iter.Seq[uint32]) {
 	inst.invoke(FuncProcIdFetchVideoCapabilities)
 	codecIds = inst.readU64h()
 	flags = inst.iterateU32h()
 	return
 }
+func (inst *Fetcher) IssueFetchVideoCapabilities() {
+	inst.invoke(FuncProcIdFetchVideoCapabilities)
+}
+func (inst *Fetcher) CollectFetchVideoCapabilities() (codecIds []uint64, flags iter.Seq[uint32]) {
+	codecIds = inst.readU64h()
+	flags = inst.iterateU32h()
+	return
+}
 func (inst *Fetcher) FetchVideoStreamInfo() (info iter.Seq[uint64]) {
 	inst.invoke(FuncProcIdFetchVideoStreamInfo)
+	info = inst.iterateU64h()
+	return
+}
+func (inst *Fetcher) IssueFetchVideoStreamInfo() {
+	inst.invoke(FuncProcIdFetchVideoStreamInfo)
+}
+func (inst *Fetcher) CollectFetchVideoStreamInfo() (info iter.Seq[uint64]) {
 	info = inst.iterateU64h()
 	return
 }

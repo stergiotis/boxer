@@ -135,25 +135,33 @@ if capture_keys_mask != 0 && ` + respExpr + `.has_focus() {
         | ((mods_now.command as u8) << 3);
     // Collect first, mutate after: consuming inside the read closure would
     // borrow the input state twice.
-    let mut hits: Vec<(egui::Key, u8)> = Vec::new();
+    //
+    // A release is taken only by a widget that asked for edges (ADR-0279
+    // §SD1); every event carries its edge byte, bit 0 down and bit 1 an
+    // auto-repeat press.
+    let mut hits: Vec<(egui::Key, bool, u8, u8)> = Vec::new();
     ui.input(|inp| {
         for ev in &inp.events {
-            if let egui::Event::Key { key, pressed: true, .. } = ev {
+            if let egui::Event::Key { key, pressed, repeat, .. } = ev {
+                if !*pressed && !capture_key_edges {
+                    continue;
+                }
                 let code = crate::imzero2::keycodes::imzero_key_code(*key);
                 if code != 0 && (capture_keys_mask & (1u64 << code)) != 0 {
-                    hits.push((*key, code));
+                    let edges = (*pressed as u8) | ((*repeat as u8) << 1);
+                    hits.push((*key, *pressed, code, edges));
                 }
             }
         }
     });
     let captured_any = !hits.is_empty();
-    for (key, code) in hits {
+    for (key, pressed, code, edges) in hits {
         // Remove it from the queue so nothing downstream also acts on it.
         ui.input_mut(|inp| {
             inp.events.retain(|ev| !matches!(ev,
-                egui::Event::Key { key: k, pressed: true, .. } if *k == key));
+                egui::Event::Key { key: k, pressed: p, .. } if *k == key && *p == pressed));
         });
-        self.r26_key_capture_push(` + idExpr + `, code, mods_byte);
+        self.r26_key_capture_push(` + idExpr + `, code, mods_byte, edges);
     }
     if captured_any {
         // A capture is only half a keypress. R26 is read back at the END of
@@ -195,14 +203,17 @@ func definitionsKeysFetchers() (nodes []ir.NodeI) {
 let len = self.r26_key_capture_ids.len();
 debug_assert_eq!(len, self.r26_key_capture_codes.len());
 debug_assert_eq!(len, self.r26_key_capture_mods.len());
+debug_assert_eq!(len, self.r26_key_capture_edges.len());
 self.io.write_plain_u64h(len, self.r26_key_capture_ids.drain(..))?;
 self.io.write_plain_u8h(len, self.r26_key_capture_codes.drain(..))?;
 self.io.write_plain_u8h(len, self.r26_key_capture_mods.drain(..))?;
+self.io.write_plain_u8h(len, self.r26_key_capture_edges.drain(..))?;
 {{SendMessage}}
 `)).
 		AddReturnValue("ids", ctabb.U64h).
 		AddReturnValue("codes", ctabb.U8h).
 		AddReturnValue("mods", ctabb.U8h).
+		AddReturnValue("edges", ctabb.U8h).
 		Build())
 	return
 }
@@ -227,7 +238,7 @@ func definitionsKeys() (nodes []*ir.ProceduralNode) {
 	// the same class of failure as SD7's id mismatch: nothing logs, focus
 	// simply never moves. The Context parameter is never optional, so this form
 	// cannot be skipped.
-	nodes = append(nodes, idl.NewProceduralNode("requestFocus").
+	nodes = append(nodes, idl.NewProceduralNode("requestFocus").WithEffect(ir.EffectLocal).
 		AddArguments(idl.NewArgumentsBuilder().PlainArg("id", ctabb.U64).Build()).
 		WithApplyCodeClientRust(rustClientCode(`
 					{{EguiContext}}.memory_mut(|m| m.request_focus(`+focusIdExpr("id")+`));
@@ -238,7 +249,7 @@ func definitionsKeys() (nodes []*ir.ProceduralNode) {
 	// because without it a widget that takes focus on click has no way to give
 	// it back on Escape, and the alternative a caller would reach for (request
 	// focus on some other id) needs an id it may not have.
-	nodes = append(nodes, idl.NewProceduralNode("surrenderFocus").
+	nodes = append(nodes, idl.NewProceduralNode("surrenderFocus").WithEffect(ir.EffectLocal).
 		AddArguments(idl.NewArgumentsBuilder().PlainArg("id", ctabb.U64).Build()).
 		WithApplyCodeClientRust(rustClientCode(`
 					{{EguiContext}}.memory_mut(|m| m.surrender_focus(`+focusIdExpr("id")+`));

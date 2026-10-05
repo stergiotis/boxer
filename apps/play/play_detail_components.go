@@ -45,9 +45,7 @@ import (
 type componentDetail struct {
 	ids    *c.WidgetIdStack
 	reg    *componentview.Registry
-	disp   *componentview.Dispatcher
 	stores []componentStore
-	fields fieldview.Renderer
 
 	// physical is the facts table's physical column name at every position of
 	// the generated read access's default column-index space, and defaults
@@ -83,13 +81,10 @@ type componentDetail struct {
 // Detail pane's card does not depend on any of this.
 func newComponentDetail(ids *c.WidgetIdStack) (inst *componentDetail) {
 	inst = &componentDetail{
-		ids:    ids,
-		reg:    componentview.NewRegistry(),
-		fields: fieldview.New(ids, "cd").ShowKind(false).DefaultOpen(true),
-		row:    -1,
+		ids: ids,
+		reg: componentview.NewRegistry(),
+		row: -1,
 	}
-	inst.disp = componentview.NewDispatcher(inst.reg)
-	inst.disp.DefaultOpen = true
 	inst.buildErr = inst.build()
 	if inst.buildErr != nil {
 		log.Warn().Err(inst.buildErr).Msg("play: component report unavailable")
@@ -127,7 +122,7 @@ func (inst *componentDetail) build() (err error) {
 			return eb.Build().Str("store", st.name).Errorf("bind components: %w", err)
 		}
 		for _, b := range st.binder.Bindings() {
-			inst.reg.Register(&dtoRenderer{kind: b.Kind(), fields: inst.fields, state: &fieldview.State{}})
+			inst.reg.Register(&dtoRenderer{kind: b.Kind(), state: &fieldview.State{}})
 		}
 	}
 	return
@@ -396,7 +391,7 @@ func (inst *componentDetail) render(rec arrow.RecordBatch, row int64) (shown boo
 	for rt := range c.RichTextLabel(fmt.Sprintf("components · %d", len(comps))) {
 		rt.Weak().Small()
 	}
-	inst.disp.RenderReport(inst.ids, comps)
+	componentview.Render(componentview.Input{Ids: inst.ids, ScopeKey: "components", Registry: inst.reg, Components: comps, DefaultOpen: true})
 	return true
 }
 
@@ -406,9 +401,8 @@ func (inst *componentDetail) render(rec arrow.RecordBatch, row int64) (shown boo
 // kind (a gauge for a battery, chips for tags) is what ADR-0075's seed
 // renderers show and what a fact-component may register instead, later.
 type dtoRenderer struct {
-	kind   componentview.ComponentKindE
-	fields fieldview.Renderer
-	state  *fieldview.State
+	kind  componentview.ComponentKindE
+	state *fieldview.State
 }
 
 var _ componentview.RendererI = (*dtoRenderer)(nil)
@@ -416,8 +410,8 @@ var _ componentview.RendererI = (*dtoRenderer)(nil)
 func (inst *dtoRenderer) Kind() componentview.ComponentKindE { return inst.kind }
 func (inst *dtoRenderer) Title() string                      { return string(inst.kind) }
 
-func (inst *dtoRenderer) Render(_ *c.WidgetIdStack, value any) {
-	inst.fields.Render(inst.state, dtoFields(value))
+func (inst *dtoRenderer) Render(in componentview.ComponentInput) {
+	fieldview.Render(fieldview.Input{Ids: in.Ids, ScopeKey: "fields", State: inst.state, Fields: dtoFields(in.Value), HideKind: true})
 }
 
 // dtoFields projects a decoded DTO onto fieldview's typed fields. Only the

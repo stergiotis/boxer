@@ -223,3 +223,23 @@ func TestRemoveRedundantParensOutputValidity(t *testing.T) {
 		})
 	}
 }
+
+// Nested parens around a negative operand after a binary dash: the outer pair
+// is deleted by the same walk, so the dash guard must look past it or the
+// result fuses into a `--` line comment.
+func TestRemoveRedundantParensNestedNegativeAfterDash(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"SELECT 2-((-5))", "SELECT 2-(-5)"},
+		{"SELECT a -((-5)) FROM t WHERE b", "SELECT a -(-5) FROM t WHERE b"},
+		{"SELECT 2-(((-5))*1)", "SELECT 2-(-5)*1"},
+		{"SELECT 2- ((-5))", "SELECT 2- -5"},
+	}
+	for _, tt := range tests {
+		got, err := passes.RemoveRedundantParens.Run(tt.input)
+		require.NoError(t, err, tt.input)
+		assert.Equal(t, tt.expected, got, tt.input)
+	}
+}

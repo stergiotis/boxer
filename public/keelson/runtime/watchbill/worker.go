@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -68,8 +69,9 @@ type Worker struct {
 	cancel context.CancelFunc
 	done   chan struct{}
 
-	// stopping is set when the loop leaves; a run that ends after it
-	// records no outcome, since the row belongs to the sweep from then on.
+	// stopping is set by Stop before it cancels, and when the loop
+	// leaves; a run that ends after it records no outcome, since the row
+	// belongs to the sweep from then on.
 	stopping atomic.Bool
 
 	mu       sync.Mutex
@@ -165,6 +167,9 @@ func (inst *Worker) Stop() {
 	if inst.unsubReq != nil {
 		inst.unsubReq()
 	}
+	// Before the cancel, so a run that sees its context end already
+	// reads the worker as stopping.
+	inst.stopping.Store(true)
 	inst.cancel()
 	<-inst.done
 	if inst.cfg.Presence != nil {
@@ -264,21 +269,40 @@ func (inst *Worker) Tick(ctx context.Context, wg *sync.WaitGroup) (err error) {
 }
 
 // honourCancels cancels the context of every held job whose row says
-// cancel; the run's goroutine then writes cancelled.
+// cancel; the run's goroutine then writes cancelled. A row this run holds
+// with no run in flight — a claim whose read-back failed, a settle whose
+// transition failed — is an orphan the sweep never reaches, since the
+// sweep skips this run's rows; it is settled here: cancelled when a
+// cancel was requested, a failed attempt otherwise.
 func (inst *Worker) honourCancels(ctx context.Context) (err error) {
 	held, err := inst.cfg.Store.Held(ctx, inst.cfg.RunId)
 	if err != nil {
 		return
 	}
+	var orphans []watchbillstore.Job
 	inst.mu.Lock()
-	defer inst.mu.Unlock()
 	for _, j := range held {
-		if j.State != watchbillstore.StateCancel {
+		r, ok := inst.running[j.ID]
+		if !ok {
+			orphans = append(orphans, j)
 			continue
 		}
-		if r, ok := inst.running[j.ID]; ok {
+		if j.State == watchbillstore.StateCancel {
 			r.cancel(errCancelRequested)
 		}
+	}
+	inst.mu.Unlock()
+	if ctx.Err() != nil || inst.stopping.Load() {
+		// A run that ended on the worker stopping left its row for the
+		// sweep; read after the lock, which ordered its leaving.
+		return
+	}
+	for _, j := range orphans {
+		if j.State == watchbillstore.StateCancel {
+			inst.settle(j, outcomeCancelled, nil, "cancel requested; no run in flight")
+			continue
+		}
+		inst.settle(j, outcomeFailed, eb.Build().Str("id", j.ID).Errorf("held by this run with no run in flight"), "")
 	}
 	return
 }
@@ -320,8 +344,20 @@ func (inst *Worker) sweep(ctx context.Context, now time.Time) (err error) {
 
 // abandon writes abandoned on a job held by a dead run, then queued when
 // attempts remain; a competing sweeper loses the first guard and writes
-// nothing.
+// nothing. A job whose cancel was requested is cancelled instead: the
+// dead run cannot acknowledge the request, and re-queuing would run the
+// job it asked to stop.
 func (inst *Worker) abandon(ctx context.Context, j watchbillstore.Job, now time.Time) (err error) {
+	if j.State == watchbillstore.StateCancel {
+		job, ok, terr := inst.cfg.Store.Transition(ctx, Transition{
+			ID: j.ID, From: []string{watchbillstore.StateCancel}, HeldBy: j.WorkerRun, To: watchbillstore.StateCancelled,
+			Actor: inst.cfg.RunId, FinishedAt: &now,
+		})
+		if terr != nil || !ok {
+			return terr
+		}
+		return inst.event(ctx, now, job, watchbillstore.StateCancelled, nil, "cancel requested; worker run "+j.WorkerRun+" showed no life")
+	}
 	job, ok, err := inst.cfg.Store.Transition(ctx, Transition{
 		ID: j.ID, From: heldStates, HeldBy: j.WorkerRun, To: watchbillstore.StateAbandoned,
 		Actor: inst.cfg.RunId, FinishedAt: &now,
@@ -405,7 +441,7 @@ func (inst *Worker) start(ctx context.Context, job watchbillstore.Job, now time.
 	jobCtx, cancel := context.WithCancelCause(ctx)
 	if job.TimeoutMs > 0 {
 		var stop context.CancelFunc
-		jobCtx, stop = context.WithTimeoutCause(jobCtx, time.Duration(job.TimeoutMs)*time.Millisecond, errTimedOut)
+		jobCtx, stop = context.WithTimeoutCause(jobCtx, msDuration(job.TimeoutMs), errTimedOut)
 		prev := cancel
 		cancel = func(cause error) { prev(cause); stop() }
 	}
@@ -425,7 +461,7 @@ func (inst *Worker) start(ctx context.Context, job watchbillstore.Job, now time.
 				wg.Done()
 			}
 		}()
-		inst.execute(jobCtx, job, now)
+		inst.execute(jobCtx, job, now, ctx.Err)
 	}()
 }
 
@@ -443,8 +479,9 @@ const (
 
 // execute runs one claimed job to its transition (ADR-0223 §SD2, §SD5).
 // jobCtx is the run's, ended by a cancel request, a timeout, or the worker
-// stopping.
-func (inst *Worker) execute(jobCtx context.Context, job watchbillstore.Job, claimedAt time.Time) {
+// stopping; workerErr is the Err of the worker's context it derives from,
+// whose end is the worker stopping.
+func (inst *Worker) execute(jobCtx context.Context, job watchbillstore.Job, claimedAt time.Time, workerErr func() error) {
 	// The claim is the running transition; its event is written here,
 	// after the read-back said the claim was won.
 	if err := inst.event(context.Background(), claimedAt, job, watchbillstore.StateRunning, nil, ""); err != nil {
@@ -483,8 +520,10 @@ func (inst *Worker) execute(jobCtx context.Context, job watchbillstore.Job, clai
 		note = "cancelled through the task"
 	case errors.Is(cause, errTimedOut):
 		outcome = outcomeFailed
-		runErr = eb.Build().Str("timeout", (time.Duration(job.TimeoutMs)*time.Millisecond).String()).Errorf("timed out: %w", runErr)
-	case inst.stopping.Load():
+		runErr = eb.Build().Str("timeout", msDuration(job.TimeoutMs).String()).Errorf("timed out: %w", runErr)
+	case workerErr() != nil || inst.stopping.Load():
+		// The worker's own context ended — Stop, or Start's context —
+		// which a parent records before any child sees it.
 		outcome = outcomeAbandon
 	default:
 		outcome = outcomeFailed
@@ -586,18 +625,40 @@ func (inst *Worker) settle(job watchbillstore.Job, outcome outcomeE, runErr erro
 	}
 }
 
+// maxBackoff bounds the wait before a retry: the row's base and attempt
+// come from the enqueuing client unchecked, and an unbounded product
+// wraps into the past and retries at once.
+const maxBackoff = 30 * 24 * time.Hour
+
 // backoffOf is the wait before the next attempt (ADR-0223 §SD6), from the
-// attempt that just failed.
+// attempt that just failed, saturated at maxBackoff.
 func backoffOf(job watchbillstore.Job) (d time.Duration) {
-	base := time.Duration(job.BackoffBaseMs) * time.Millisecond
+	base := min(msDuration(job.BackoffBaseMs), maxBackoff)
 	switch job.Backoff {
 	case watchbillstore.BackoffLinear:
-		return base * time.Duration(max(job.Attempt, 1))
+		n := time.Duration(max(job.Attempt, 1))
+		if base > maxBackoff/n {
+			return maxBackoff
+		}
+		return base * n
 	case watchbillstore.BackoffExponential:
-		return base << min(job.Attempt-1, 30)
+		shift := min(job.Attempt-1, 30)
+		if base > maxBackoff>>shift {
+			return maxBackoff
+		}
+		return base << shift
 	default:
 		return 0
 	}
+}
+
+// msDuration is ms milliseconds, saturated at the longest duration rather
+// than wrapped negative.
+func msDuration(ms uint64) (d time.Duration) {
+	if ms > uint64(math.MaxInt64/int64(time.Millisecond)) {
+		return math.MaxInt64
+	}
+	return time.Duration(ms) * time.Millisecond
 }
 
 // event writes the transition row after the update it records, then

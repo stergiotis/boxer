@@ -37,12 +37,13 @@ claim := gv.HostedInput(graphview.HostCanvas{
 })
 m.SetPointerVeto(claim.Pointer)                 // the map stands down this frame
 
+var events graphview.Events
 m.Render(w, h, func(p portolan.Projector) {
     gv.SetHostCamera(p.CameraAt(refZoom, origin)) // §4 — the view moved since
-    gv.HostedPaint(nodes, edges)
+    events = gv.HostedPaint(nodes, edges)
 })
 
-for _, ev := range gv.Events() { /* as after Render */ }
+for _, ev := range events { /* what HostedPaint returned, as after Render */ }
 ```
 
 `claim.Pointer` is the whole arbitration rule: **a gesture that starts on a
@@ -113,7 +114,7 @@ same projector, so a `NoTiles` map still shows geography:
 layer := &landoverlay.Layer{}          // keep it; it reuses its buffers
 atlas, _ := worldmap.LoadAtlas()
 // inside the overlay callback, before the graph:
-layer.Draw(p, atlas, landoverlay.DefaultStyle())
+layer.Paint(p, atlas, landoverlay.DefaultStyle())
 ```
 
 The outlines are 110m Natural Earth: a basemap at country-and-continent zooms,

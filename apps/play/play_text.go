@@ -28,3 +28,17 @@ func truncateRunes(s string, maxRunes int) string {
 	}
 	return s
 }
+
+// truncateBytes returns s clamped to at most maxBytes bytes, backed off to a
+// rune boundary so the cut never splits a multi-byte rune. It bounds payloads
+// sized in bytes (an operation's reply), where truncateRunes bounds display.
+func truncateBytes(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+	i := maxBytes
+	for i > 0 && !utf8.RuneStart(s[i]) {
+		i--
+	}
+	return s[:i]
+}

@@ -291,3 +291,15 @@ type plainResolver struct{ inner *fakeResolver }
 func (p plainResolver) Resolve(dbName string, tableName string, handle string) ResolveResult {
 	return p.inner.Resolve(dbName, tableName, handle)
 }
+
+// A WITH expression binds to the main SELECT's tables, not to those of a CTE
+// body declared in the same clause, which pre-order reaches first.
+func TestResolve_WithExpressionBindsMainSelectNotCTEBody(t *testing.T) {
+	out := runResolve(t, "WITH c AS (SELECT 1 FROM facts), `symbol:value` AS v SELECT v FROM other")
+	if strings.Contains(out, qSymbol) {
+		t.Errorf("WITH expression resolved against the CTE body's table: %s", out)
+	}
+	if !strings.Contains(out, "tv:symbol:value:val:s:0:0:0:0::x") {
+		t.Errorf("WITH expression should resolve against the main SELECT's table: %s", out)
+	}
+}

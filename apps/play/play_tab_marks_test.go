@@ -95,6 +95,15 @@ func TestTabMarkUnknownShapeIsSilent(t *testing.T) {
 	assert.Equal(t, tabMarkShapeReject, tabMark(network, tabVerdict{schema: markWorldNo, split: markSplit()}),
 		"a split without an `edges` node cannot fill the required channel")
 
+	sankey := markSpec("sankey", true, sankeyPanel{})
+	assert.Equal(t, tabMarkNone, tabMark(sankey, tabVerdict{schema: markWorldNo}),
+		"no split — the flows CTE is unknown, not absent")
+	assert.Equal(t, tabMarkShapeReject, tabMark(sankey, tabVerdict{schema: markWorldNo, split: markSplit()}),
+		"a split without a `flows` node cannot fill the required channel")
+	withFlows := markSplit()
+	withFlows.Nodes = append(withFlows.Nodes, splitNode{ID: sankeyFlowsNodeID, Kind: splitNodeCTE})
+	assert.Equal(t, tabMarkNone, tabMark(sankey, tabVerdict{schema: markWorldNo, split: withFlows}))
+
 	withEdges := markSplit()
 	withEdges.Nodes = append(withEdges.Nodes, splitNode{ID: networkEdgesNodeID, Kind: splitNodeCTE})
 	assert.Equal(t, tabMarkNone, tabMark(network, tabVerdict{schema: markWorldNo, split: withEdges}),
@@ -195,9 +204,14 @@ func TestBuiltinTabMarkDeclarations(t *testing.T) {
 		"chart": true, "files": true}, shape)
 
 	require.Contains(t, writes, "map", "the Map publishes its viewport without being a PanelI")
-	assert.Len(t, writes["map"], len(mapViewportSignals))
+	assert.Len(t, writes["map"], len(mapViewportSignals)+8, "the viewport and the selected area")
+	assert.Contains(t, writes["map"], signalAreaMinX)
 	assert.Contains(t, writes["world"], signalSelectionCountry)
 	assert.Contains(t, writes["timeline"], signalTimelineMin)
+	// The brushed window is a Timeline write too: a query reading
+	// {tl_from:…} is driven by the brush, and the strip should say so.
+	assert.Contains(t, writes["timeline"], signalTimelineFrom)
+	assert.Contains(t, writes["timeline"], signalTimelineTo)
 	assert.Contains(t, writes["table"], signalSelection)
 	assert.NotContains(t, writes, "detail", "Detail is a pure consumer")
 	// The Network tab publishes the clicked vertex as a value, never as a row

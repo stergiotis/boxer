@@ -1,6 +1,7 @@
 package heatmapscroll
 
 import (
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
 	"math"
 	"testing"
 
@@ -12,7 +13,7 @@ func newFixture(t *testing.T, w, h uint32) *HeatmapScroll {
 	t.Helper()
 	cfg := colormap.NewConfig(colormap.Viridis8, 0, 1)
 	ids := c.NewWidgetIdStack()
-	return New(ids, "t-"+t.Name(), cfg, w, h)
+	return New(ids, "t-"+t.Name(), cfg, Options{WidthSlots: w, HeightSlots: h})
 }
 
 func TestNewPanics(t *testing.T) {
@@ -22,10 +23,10 @@ func TestNewPanics(t *testing.T) {
 		name string
 		fn   func()
 	}{
-		{"nil ids", func() { _ = New(nil, "k", cfg, 4, 4) }},
-		{"nil cfg", func() { _ = New(ids, "k", nil, 4, 4) }},
-		{"zero width", func() { _ = New(ids, "k", cfg, 0, 4) }},
-		{"zero height", func() { _ = New(ids, "k", cfg, 4, 0) }},
+		{"nil ids", func() { _ = New(nil, "k", cfg, Options{WidthSlots: 4, HeightSlots: 4}) }},
+		{"nil cfg", func() { _ = New(ids, "k", nil, Options{WidthSlots: 4, HeightSlots: 4}) }},
+		{"zero width", func() { _ = New(ids, "k", cfg, Options{WidthSlots: 0, HeightSlots: 4}) }},
+		{"zero height", func() { _ = New(ids, "k", cfg, Options{WidthSlots: 4, HeightSlots: 0}) }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -41,15 +42,15 @@ func TestNewPanics(t *testing.T) {
 
 func TestDefaultsAreScientific(t *testing.T) {
 	hs := newFixture(t, 4, 4)
-	if hs.orientation != ScrollLeft {
-		t.Errorf("default orientation: want ScrollLeft, got %v", hs.orientation)
+	if hs.Opts.Orientation != ScrollLeft {
+		t.Errorf("default orientation: want ScrollLeft, got %v", hs.Opts.Orientation)
 	}
-	if hs.filter != FilterNearest {
-		t.Errorf("default filter: want FilterNearest, got %v", hs.filter)
+	if hs.Opts.Filter != FilterNearest {
+		t.Errorf("default filter: want FilterNearest, got %v", hs.Opts.Filter)
 	}
-	// The "not hovered" sentinel must be u64::MAX so HoveredCell
+	// The "not hovered" sentinel must be u64::MAX so the first Render
 	// reports the correct initial state before any r9 push lands.
-	if _, _, hovered := hs.HoveredCell(); hovered {
+	if _, _, hovered := c.UnpackHoverRc(hs.hoverRc); hovered {
 		t.Errorf("freshly-constructed widget should report unhovered")
 	}
 }
@@ -98,7 +99,7 @@ func TestPushColumnWrongSizePanics(t *testing.T) {
 func TestTotalStatsAccumulates(t *testing.T) {
 	cfg := colormap.NewConfig(colormap.Viridis8, 0, 1)
 	ids := c.NewWidgetIdStack()
-	hs := New(ids, "ts", cfg, 4, 3)
+	hs := New(ids, "ts", cfg, Options{WidthSlots: 4, HeightSlots: 3})
 
 	bad := []float32{float32(math.NaN()), 0.5, 0.5} // 1 bad
 	under := []float32{-1, -2, -3}                  // 3 underflow
@@ -148,14 +149,6 @@ func TestUnpackHoverRc(t *testing.T) {
 
 func TestSetters(t *testing.T) {
 	hs := newFixture(t, 4, 4)
-	hs.SetOrientation(ScrollDown)
-	if hs.orientation != ScrollDown {
-		t.Errorf("SetOrientation failed")
-	}
-	hs.SetFilter(FilterLinear)
-	if hs.filter != FilterLinear {
-		t.Errorf("SetFilter failed")
-	}
 	cfg2 := colormap.NewConfig(colormap.Magma8, 0, 10)
 	hs.SetConfig(cfg2)
 	if hs.cfg != cfg2 {
@@ -174,5 +167,29 @@ func TestSize(t *testing.T) {
 	w, h := hs.Size()
 	if w != 17 || h != 29 {
 		t.Errorf("Size: want (17, 29), got (%d, %d)", w, h)
+	}
+}
+
+// TestRenderHeadless renders one frame without a host: the widget must not
+// panic, must report a quiet frame, and a ring-shape change through Opts must
+// restart the ring.
+func TestRenderHeadless(t *testing.T) {
+	t.Cleanup(scenetest.Install())
+	hs := newFixture(t, 4, 3)
+	hs.PushColumn([]float32{0.1, 0.5, 0.9})
+	ev := hs.Render(0, 0)
+	if ev.Hovered || ev.Clicked {
+		t.Fatalf("quiet frame reported %+v", ev)
+	}
+	if hs.Head() != 1 {
+		t.Fatalf("head = %d after one column, want 1", hs.Head())
+	}
+	hs.Opts.WidthSlots = 8
+	hs.RenderFill(100, 50)
+	if hs.Head() != 0 {
+		t.Fatalf("a ring-shape change did not restart the ring: head = %d", hs.Head())
+	}
+	if w, _ := hs.Size(); w != 8 {
+		t.Fatalf("Size follows Opts: got %d", w)
 	}
 }

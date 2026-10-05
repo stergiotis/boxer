@@ -83,11 +83,17 @@ you need (tables, plots, cards). Everything the widget paints is exported.
   but it also cannot produce PNG/framebuffer output. For rasters, use the wgpu
   headless host of [ADR-0024](../adr/0024-imzero2-remote-access-browser-viewer.md)
   instead.
-- **Output size scales with text.** The exporter emits one `<text>` element per
-  glyph, so text-heavy views produce many elements. Embedding fonts adds a
+- **Output size scales with text, and fonts are most of it.** The exporter
+  writes one `<text>` per run of same-styled glyphs, with an `x` coordinate
+  per character taken from egui's layout, so the viewer's own shaping never
+  moves a glyph and the string stays whole for a program reading it (librsvg
+  honours only the first `x` of such a list, so rsvg-based viewers drift;
+  browsers, resvg and Inkscape place every character). Embedding fonts adds a
   one-time ~30–80 KB per used face but makes the SVG self-contained and
-  pixel-faithful; without embedding, glyph positioning depends on the viewer
-  having a matching font.
+  pixel-faithful; without embedding, the file names the families and looks
+  right only where they are installed. A program (or a model) reading the
+  text wants `embed=false`: the base64 font blocks tokenize at about one
+  token per byte and outweigh the text itself.
 - **Not everything translates.** Vector content — text, shapes, plots, tables —
   maps cleanly. Textured images embed only when their pixels are in the texture
   cache; custom wgpu paint callbacks become placeholder rectangles; whether

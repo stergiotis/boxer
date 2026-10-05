@@ -106,7 +106,7 @@ func clickhouseparsergrammar1ParserInit() {
 	}
 	staticData.PredictionContextCache = antlr.NewPredictionContextCache()
 	staticData.serializedATN = []int32{
-		4, 1, 241, 1124, 2, 0, 7, 0, 2, 1, 7, 1, 2, 2, 7, 2, 2, 3, 7, 3, 2, 4,
+		4, 1, 241, 1125, 2, 0, 7, 0, 2, 1, 7, 1, 2, 2, 7, 2, 2, 3, 7, 3, 2, 4,
 		7, 4, 2, 5, 7, 5, 2, 6, 7, 6, 2, 7, 7, 7, 2, 8, 7, 8, 2, 9, 7, 9, 2, 10,
 		7, 10, 2, 11, 7, 11, 2, 12, 7, 12, 2, 13, 7, 13, 2, 14, 7, 14, 2, 15, 7,
 		15, 2, 16, 7, 16, 2, 17, 7, 17, 2, 18, 7, 18, 2, 19, 7, 19, 2, 20, 7, 20,
@@ -219,13 +219,13 @@ func clickhouseparsergrammar1ParserInit() {
 		9, 59, 1, 60, 1, 60, 1, 60, 3, 60, 1041, 8, 60, 1, 60, 1, 60, 1, 61, 1,
 		61, 1, 61, 3, 61, 1048, 8, 61, 1, 61, 1, 61, 1, 61, 3, 61, 1053, 8, 61,
 		1, 62, 1, 62, 1, 62, 5, 62, 1058, 8, 62, 10, 62, 12, 62, 1061, 9, 62, 1,
-		63, 1, 63, 1, 63, 1, 63, 3, 63, 1067, 8, 63, 1, 64, 1, 64, 3, 64, 1071,
-		8, 64, 1, 65, 1, 65, 1, 65, 1, 65, 1, 65, 1, 65, 1, 66, 1, 66, 1, 66, 1,
-		66, 1, 66, 1, 66, 3, 66, 1085, 8, 66, 3, 66, 1087, 8, 66, 1, 67, 3, 67,
-		1090, 8, 67, 1, 67, 1, 67, 1, 67, 1, 67, 1, 67, 1, 67, 3, 67, 1098, 8,
-		67, 1, 68, 1, 68, 1, 68, 3, 68, 1103, 8, 68, 1, 69, 1, 69, 1, 70, 1, 70,
-		1, 71, 1, 71, 1, 72, 1, 72, 1, 72, 3, 72, 1114, 8, 72, 1, 73, 1, 73, 3,
-		73, 1118, 8, 73, 1, 74, 1, 74, 1, 74, 1, 74, 1, 74, 0, 3, 62, 106, 118,
+		63, 1, 63, 1, 63, 1, 63, 1, 63, 3, 63, 1068, 8, 63, 1, 64, 1, 64, 3, 64,
+		1072, 8, 64, 1, 65, 1, 65, 1, 65, 1, 65, 1, 65, 1, 65, 1, 66, 1, 66, 1,
+		66, 1, 66, 1, 66, 1, 66, 3, 66, 1086, 8, 66, 3, 66, 1088, 8, 66, 1, 67,
+		3, 67, 1091, 8, 67, 1, 67, 1, 67, 1, 67, 1, 67, 1, 67, 1, 67, 3, 67, 1099,
+		8, 67, 1, 68, 1, 68, 1, 68, 3, 68, 1104, 8, 68, 1, 69, 1, 69, 1, 70, 1,
+		70, 1, 71, 1, 71, 1, 72, 1, 72, 1, 72, 3, 72, 1115, 8, 72, 1, 73, 1, 73,
+		3, 73, 1119, 8, 73, 1, 74, 1, 74, 1, 74, 1, 74, 1, 74, 0, 3, 62, 106, 118,
 		75, 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34,
 		36, 38, 40, 42, 44, 46, 48, 50, 52, 54, 56, 58, 60, 62, 64, 66, 68, 70,
 		72, 74, 76, 78, 80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100, 102, 104,
@@ -240,7 +240,7 @@ func clickhouseparsergrammar1ParserInit() {
 		215, 228, 228, 8, 0, 37, 37, 77, 77, 110, 110, 112, 112, 135, 135, 149,
 		149, 189, 189, 194, 194, 13, 0, 2, 26, 28, 36, 38, 76, 78, 82, 84, 109,
 		111, 111, 113, 114, 116, 117, 119, 132, 136, 148, 150, 188, 190, 193, 195,
-		200, 1257, 0, 161, 1, 0, 0, 0, 2, 166, 1, 0, 0, 0, 4, 172, 1, 0, 0, 0,
+		200, 1259, 0, 161, 1, 0, 0, 0, 2, 166, 1, 0, 0, 0, 4, 172, 1, 0, 0, 0,
 		6, 181, 1, 0, 0, 0, 8, 199, 1, 0, 0, 0, 10, 212, 1, 0, 0, 0, 12, 214, 1,
 		0, 0, 0, 14, 226, 1, 0, 0, 0, 16, 235, 1, 0, 0, 0, 18, 247, 1, 0, 0, 0,
 		20, 256, 1, 0, 0, 0, 22, 270, 1, 0, 0, 0, 24, 272, 1, 0, 0, 0, 26, 309,
@@ -258,11 +258,11 @@ func clickhouseparsergrammar1ParserInit() {
 		0, 0, 104, 754, 1, 0, 0, 0, 106, 887, 1, 0, 0, 0, 108, 969, 1, 0, 0, 0,
 		110, 979, 1, 0, 0, 0, 112, 1000, 1, 0, 0, 0, 114, 1008, 1, 0, 0, 0, 116,
 		1012, 1, 0, 0, 0, 118, 1024, 1, 0, 0, 0, 120, 1037, 1, 0, 0, 0, 122, 1047,
-		1, 0, 0, 0, 124, 1054, 1, 0, 0, 0, 126, 1066, 1, 0, 0, 0, 128, 1070, 1,
-		0, 0, 0, 130, 1072, 1, 0, 0, 0, 132, 1086, 1, 0, 0, 0, 134, 1089, 1, 0,
-		0, 0, 136, 1102, 1, 0, 0, 0, 138, 1104, 1, 0, 0, 0, 140, 1106, 1, 0, 0,
-		0, 142, 1108, 1, 0, 0, 0, 144, 1113, 1, 0, 0, 0, 146, 1117, 1, 0, 0, 0,
-		148, 1119, 1, 0, 0, 0, 150, 153, 3, 2, 1, 0, 151, 152, 5, 67, 0, 0, 152,
+		1, 0, 0, 0, 124, 1054, 1, 0, 0, 0, 126, 1067, 1, 0, 0, 0, 128, 1071, 1,
+		0, 0, 0, 130, 1073, 1, 0, 0, 0, 132, 1087, 1, 0, 0, 0, 134, 1090, 1, 0,
+		0, 0, 136, 1103, 1, 0, 0, 0, 138, 1105, 1, 0, 0, 0, 140, 1107, 1, 0, 0,
+		0, 142, 1109, 1, 0, 0, 0, 144, 1114, 1, 0, 0, 0, 146, 1118, 1, 0, 0, 0,
+		148, 1120, 1, 0, 0, 0, 150, 153, 3, 2, 1, 0, 151, 152, 5, 67, 0, 0, 152,
 		154, 3, 146, 73, 0, 153, 151, 1, 0, 0, 0, 153, 154, 1, 0, 0, 0, 154, 156,
 		1, 0, 0, 0, 155, 157, 5, 235, 0, 0, 156, 155, 1, 0, 0, 0, 156, 157, 1,
 		0, 0, 0, 157, 158, 1, 0, 0, 0, 158, 159, 5, 0, 0, 1, 159, 162, 1, 0, 0,
@@ -612,44 +612,45 @@ func clickhouseparsergrammar1ParserInit() {
 		1051, 1, 0, 0, 0, 1053, 123, 1, 0, 0, 0, 1054, 1059, 3, 126, 63, 0, 1055,
 		1056, 5, 213, 0, 0, 1056, 1058, 3, 126, 63, 0, 1057, 1055, 1, 0, 0, 0,
 		1058, 1061, 1, 0, 0, 0, 1059, 1057, 1, 0, 0, 0, 1059, 1060, 1, 0, 0, 0,
-		1060, 125, 1, 0, 0, 0, 1061, 1059, 1, 0, 0, 0, 1062, 1067, 3, 116, 58,
-		0, 1063, 1067, 3, 120, 60, 0, 1064, 1067, 3, 136, 68, 0, 1065, 1067, 3,
-		106, 53, 0, 1066, 1062, 1, 0, 0, 0, 1066, 1063, 1, 0, 0, 0, 1066, 1064,
-		1, 0, 0, 0, 1066, 1065, 1, 0, 0, 0, 1067, 127, 1, 0, 0, 0, 1068, 1071,
-		3, 144, 72, 0, 1069, 1071, 3, 130, 65, 0, 1070, 1068, 1, 0, 0, 0, 1070,
-		1069, 1, 0, 0, 0, 1071, 129, 1, 0, 0, 0, 1072, 1073, 5, 221, 0, 0, 1073,
-		1074, 3, 144, 72, 0, 1074, 1075, 5, 211, 0, 0, 1075, 1076, 3, 100, 50,
-		0, 1076, 1077, 5, 232, 0, 0, 1077, 131, 1, 0, 0, 0, 1078, 1087, 5, 202,
-		0, 0, 1079, 1080, 5, 216, 0, 0, 1080, 1087, 7, 17, 0, 0, 1081, 1082, 5,
-		204, 0, 0, 1082, 1084, 5, 216, 0, 0, 1083, 1085, 7, 17, 0, 0, 1084, 1083,
-		1, 0, 0, 0, 1084, 1085, 1, 0, 0, 0, 1085, 1087, 1, 0, 0, 0, 1086, 1078,
-		1, 0, 0, 0, 1086, 1079, 1, 0, 0, 0, 1086, 1081, 1, 0, 0, 0, 1087, 133,
-		1, 0, 0, 0, 1088, 1090, 7, 18, 0, 0, 1089, 1088, 1, 0, 0, 0, 1089, 1090,
-		1, 0, 0, 0, 1090, 1097, 1, 0, 0, 0, 1091, 1098, 3, 132, 66, 0, 1092, 1098,
-		5, 203, 0, 0, 1093, 1098, 5, 204, 0, 0, 1094, 1098, 5, 205, 0, 0, 1095,
-		1098, 5, 83, 0, 0, 1096, 1098, 5, 115, 0, 0, 1097, 1091, 1, 0, 0, 0, 1097,
-		1092, 1, 0, 0, 0, 1097, 1093, 1, 0, 0, 0, 1097, 1094, 1, 0, 0, 0, 1097,
-		1095, 1, 0, 0, 0, 1097, 1096, 1, 0, 0, 0, 1098, 135, 1, 0, 0, 0, 1099,
-		1103, 3, 134, 67, 0, 1100, 1103, 5, 206, 0, 0, 1101, 1103, 5, 118, 0, 0,
-		1102, 1099, 1, 0, 0, 0, 1102, 1100, 1, 0, 0, 0, 1102, 1101, 1, 0, 0, 0,
-		1103, 137, 1, 0, 0, 0, 1104, 1105, 7, 19, 0, 0, 1105, 139, 1, 0, 0, 0,
-		1106, 1107, 7, 20, 0, 0, 1107, 141, 1, 0, 0, 0, 1108, 1109, 5, 201, 0,
-		0, 1109, 143, 1, 0, 0, 0, 1110, 1114, 5, 201, 0, 0, 1111, 1114, 3, 138,
-		69, 0, 1112, 1114, 3, 140, 70, 0, 1113, 1110, 1, 0, 0, 0, 1113, 1111, 1,
-		0, 0, 0, 1113, 1112, 1, 0, 0, 0, 1114, 145, 1, 0, 0, 0, 1115, 1118, 3,
-		144, 72, 0, 1116, 1118, 5, 118, 0, 0, 1117, 1115, 1, 0, 0, 0, 1117, 1116,
-		1, 0, 0, 0, 1118, 147, 1, 0, 0, 0, 1119, 1120, 5, 206, 0, 0, 1120, 1121,
-		5, 218, 0, 0, 1121, 1122, 3, 134, 67, 0, 1122, 149, 1, 0, 0, 0, 146, 153,
-		156, 161, 166, 174, 181, 187, 191, 195, 205, 212, 216, 223, 228, 241, 247,
-		253, 258, 261, 270, 274, 277, 280, 283, 286, 289, 292, 295, 298, 301, 304,
-		307, 311, 314, 318, 328, 332, 343, 349, 379, 383, 387, 395, 401, 405, 415,
-		419, 423, 427, 431, 433, 444, 452, 455, 461, 469, 472, 478, 480, 484, 489,
-		492, 495, 499, 503, 506, 508, 511, 515, 519, 522, 524, 526, 529, 534, 545,
-		551, 556, 563, 568, 572, 576, 581, 588, 604, 617, 633, 638, 641, 644, 647,
-		666, 680, 697, 709, 721, 729, 733, 740, 746, 754, 759, 768, 772, 803, 820,
-		832, 842, 845, 849, 852, 865, 882, 887, 904, 907, 911, 914, 925, 955, 962,
-		964, 966, 974, 979, 987, 997, 1000, 1008, 1015, 1024, 1030, 1034, 1040,
-		1047, 1052, 1059, 1066, 1070, 1084, 1086, 1089, 1097, 1102, 1113, 1117,
+		1060, 125, 1, 0, 0, 0, 1061, 1059, 1, 0, 0, 0, 1062, 1068, 3, 116, 58,
+		0, 1063, 1068, 3, 120, 60, 0, 1064, 1068, 3, 136, 68, 0, 1065, 1068, 3,
+		106, 53, 0, 1066, 1068, 3, 18, 9, 0, 1067, 1062, 1, 0, 0, 0, 1067, 1063,
+		1, 0, 0, 0, 1067, 1064, 1, 0, 0, 0, 1067, 1065, 1, 0, 0, 0, 1067, 1066,
+		1, 0, 0, 0, 1068, 127, 1, 0, 0, 0, 1069, 1072, 3, 144, 72, 0, 1070, 1072,
+		3, 130, 65, 0, 1071, 1069, 1, 0, 0, 0, 1071, 1070, 1, 0, 0, 0, 1072, 129,
+		1, 0, 0, 0, 1073, 1074, 5, 221, 0, 0, 1074, 1075, 3, 144, 72, 0, 1075,
+		1076, 5, 211, 0, 0, 1076, 1077, 3, 100, 50, 0, 1077, 1078, 5, 232, 0, 0,
+		1078, 131, 1, 0, 0, 0, 1079, 1088, 5, 202, 0, 0, 1080, 1081, 5, 216, 0,
+		0, 1081, 1088, 7, 17, 0, 0, 1082, 1083, 5, 204, 0, 0, 1083, 1085, 5, 216,
+		0, 0, 1084, 1086, 7, 17, 0, 0, 1085, 1084, 1, 0, 0, 0, 1085, 1086, 1, 0,
+		0, 0, 1086, 1088, 1, 0, 0, 0, 1087, 1079, 1, 0, 0, 0, 1087, 1080, 1, 0,
+		0, 0, 1087, 1082, 1, 0, 0, 0, 1088, 133, 1, 0, 0, 0, 1089, 1091, 7, 18,
+		0, 0, 1090, 1089, 1, 0, 0, 0, 1090, 1091, 1, 0, 0, 0, 1091, 1098, 1, 0,
+		0, 0, 1092, 1099, 3, 132, 66, 0, 1093, 1099, 5, 203, 0, 0, 1094, 1099,
+		5, 204, 0, 0, 1095, 1099, 5, 205, 0, 0, 1096, 1099, 5, 83, 0, 0, 1097,
+		1099, 5, 115, 0, 0, 1098, 1092, 1, 0, 0, 0, 1098, 1093, 1, 0, 0, 0, 1098,
+		1094, 1, 0, 0, 0, 1098, 1095, 1, 0, 0, 0, 1098, 1096, 1, 0, 0, 0, 1098,
+		1097, 1, 0, 0, 0, 1099, 135, 1, 0, 0, 0, 1100, 1104, 3, 134, 67, 0, 1101,
+		1104, 5, 206, 0, 0, 1102, 1104, 5, 118, 0, 0, 1103, 1100, 1, 0, 0, 0, 1103,
+		1101, 1, 0, 0, 0, 1103, 1102, 1, 0, 0, 0, 1104, 137, 1, 0, 0, 0, 1105,
+		1106, 7, 19, 0, 0, 1106, 139, 1, 0, 0, 0, 1107, 1108, 7, 20, 0, 0, 1108,
+		141, 1, 0, 0, 0, 1109, 1110, 5, 201, 0, 0, 1110, 143, 1, 0, 0, 0, 1111,
+		1115, 5, 201, 0, 0, 1112, 1115, 3, 138, 69, 0, 1113, 1115, 3, 140, 70,
+		0, 1114, 1111, 1, 0, 0, 0, 1114, 1112, 1, 0, 0, 0, 1114, 1113, 1, 0, 0,
+		0, 1115, 145, 1, 0, 0, 0, 1116, 1119, 3, 144, 72, 0, 1117, 1119, 5, 118,
+		0, 0, 1118, 1116, 1, 0, 0, 0, 1118, 1117, 1, 0, 0, 0, 1119, 147, 1, 0,
+		0, 0, 1120, 1121, 5, 206, 0, 0, 1121, 1122, 5, 218, 0, 0, 1122, 1123, 3,
+		134, 67, 0, 1123, 149, 1, 0, 0, 0, 146, 153, 156, 161, 166, 174, 181, 187,
+		191, 195, 205, 212, 216, 223, 228, 241, 247, 253, 258, 261, 270, 274, 277,
+		280, 283, 286, 289, 292, 295, 298, 301, 304, 307, 311, 314, 318, 328, 332,
+		343, 349, 379, 383, 387, 395, 401, 405, 415, 419, 423, 427, 431, 433, 444,
+		452, 455, 461, 469, 472, 478, 480, 484, 489, 492, 495, 499, 503, 506, 508,
+		511, 515, 519, 522, 524, 526, 529, 534, 545, 551, 556, 563, 568, 572, 576,
+		581, 588, 604, 617, 633, 638, 641, 644, 647, 666, 680, 697, 709, 721, 729,
+		733, 740, 746, 754, 759, 768, 772, 803, 820, 832, 842, 845, 849, 852, 865,
+		882, 887, 904, 907, 911, 914, 925, 955, 962, 964, 966, 974, 979, 987, 997,
+		1000, 1008, 1015, 1024, 1030, 1034, 1040, 1047, 1052, 1059, 1067, 1071,
+		1085, 1087, 1090, 1098, 1103, 1114, 1118,
 	}
 	deserializer := antlr.NewATNDeserializer(nil)
 	staticData.atn = deserializer.Deserialize(staticData.serializedATN)
@@ -4356,7 +4357,7 @@ func (s *StaticColumnListContext) Accept(visitor antlr.ParseTreeVisitor) interfa
 func (p *ClickHouseParserGrammar1) StaticOrDynamicColumnSelection() (localctx IStaticOrDynamicColumnSelectionContext) {
 	localctx = NewStaticOrDynamicColumnSelectionContext(p, p.GetParserRuleContext(), p.GetState())
 	p.EnterRule(localctx, 30, ClickHouseParserGrammar1RULE_staticOrDynamicColumnSelection)
-	var _la int
+	var _alt int
 
 	p.SetState(332)
 	p.GetErrorHandler().Sync(p)
@@ -4377,28 +4378,35 @@ func (p *ClickHouseParserGrammar1) StaticOrDynamicColumnSelection() (localctx IS
 		if p.HasError() {
 			goto errorExit
 		}
-		_la = p.GetTokenStream().LA(1)
-
-		for _la == ClickHouseParserGrammar1COMMA {
-			{
-				p.SetState(324)
-				p.Match(ClickHouseParserGrammar1COMMA)
-				if p.HasError() {
-					// Recognition error - abort rule
-					goto errorExit
+		_alt = p.GetInterpreter().AdaptivePredict(p.BaseParser, p.GetTokenStream(), 35, p.GetParserRuleContext())
+		if p.HasError() {
+			goto errorExit
+		}
+		for _alt != 2 && _alt != antlr.ATNInvalidAltNumber {
+			if _alt == 1 {
+				{
+					p.SetState(324)
+					p.Match(ClickHouseParserGrammar1COMMA)
+					if p.HasError() {
+						// Recognition error - abort rule
+						goto errorExit
+					}
 				}
-			}
-			{
-				p.SetState(325)
-				p.Identifier()
-			}
+				{
+					p.SetState(325)
+					p.Identifier()
+				}
 
+			}
 			p.SetState(330)
 			p.GetErrorHandler().Sync(p)
 			if p.HasError() {
 				goto errorExit
 			}
-			_la = p.GetTokenStream().LA(1)
+			_alt = p.GetInterpreter().AdaptivePredict(p.BaseParser, p.GetTokenStream(), 35, p.GetParserRuleContext())
+			if p.HasError() {
+				goto errorExit
+			}
 		}
 
 	case ClickHouseParserGrammar1COLUMNS:
@@ -6014,6 +6022,8 @@ func (p *ClickHouseParserGrammar1) InterpolateExprs() (localctx IInterpolateExpr
 	p.EnterRule(localctx, 52, ClickHouseParserGrammar1RULE_interpolateExprs)
 	var _la int
 
+	var _alt int
+
 	p.EnterOuterAlt(localctx, 1)
 	{
 		p.SetState(392)
@@ -6047,50 +6057,57 @@ func (p *ClickHouseParserGrammar1) InterpolateExprs() (localctx IInterpolateExpr
 	if p.HasError() {
 		goto errorExit
 	}
-	_la = p.GetTokenStream().LA(1)
-
-	for _la == ClickHouseParserGrammar1COMMA {
-		{
-			p.SetState(397)
-			p.Match(ClickHouseParserGrammar1COMMA)
-			if p.HasError() {
-				// Recognition error - abort rule
-				goto errorExit
-			}
-		}
-		{
-			p.SetState(398)
-			p.columnExpr(0)
-		}
-		p.SetState(401)
-		p.GetErrorHandler().Sync(p)
-		if p.HasError() {
-			goto errorExit
-		}
-		_la = p.GetTokenStream().LA(1)
-
-		if _la == ClickHouseParserGrammar1AS {
+	_alt = p.GetInterpreter().AdaptivePredict(p.BaseParser, p.GetTokenStream(), 44, p.GetParserRuleContext())
+	if p.HasError() {
+		goto errorExit
+	}
+	for _alt != 2 && _alt != antlr.ATNInvalidAltNumber {
+		if _alt == 1 {
 			{
-				p.SetState(399)
-				p.Match(ClickHouseParserGrammar1AS)
+				p.SetState(397)
+				p.Match(ClickHouseParserGrammar1COMMA)
 				if p.HasError() {
 					// Recognition error - abort rule
 					goto errorExit
 				}
 			}
 			{
-				p.SetState(400)
+				p.SetState(398)
 				p.columnExpr(0)
+			}
+			p.SetState(401)
+			p.GetErrorHandler().Sync(p)
+			if p.HasError() {
+				goto errorExit
+			}
+			_la = p.GetTokenStream().LA(1)
+
+			if _la == ClickHouseParserGrammar1AS {
+				{
+					p.SetState(399)
+					p.Match(ClickHouseParserGrammar1AS)
+					if p.HasError() {
+						// Recognition error - abort rule
+						goto errorExit
+					}
+				}
+				{
+					p.SetState(400)
+					p.columnExpr(0)
+				}
+
 			}
 
 		}
-
 		p.SetState(407)
 		p.GetErrorHandler().Sync(p)
 		if p.HasError() {
 			goto errorExit
 		}
-		_la = p.GetTokenStream().LA(1)
+		_alt = p.GetInterpreter().AdaptivePredict(p.BaseParser, p.GetTokenStream(), 44, p.GetParserRuleContext())
+		if p.HasError() {
+			goto errorExit
+		}
 	}
 
 errorExit:
@@ -8669,12 +8686,8 @@ func (p *ClickHouseParserGrammar1) LimitExpr() (localctx ILimitExprContext) {
 	}
 	p.SetState(556)
 	p.GetErrorHandler().Sync(p)
-	if p.HasError() {
-		goto errorExit
-	}
-	_la = p.GetTokenStream().LA(1)
 
-	if _la == ClickHouseParserGrammar1OFFSET || _la == ClickHouseParserGrammar1COMMA {
+	if p.GetInterpreter().AdaptivePredict(p.BaseParser, p.GetTokenStream(), 77, p.GetParserRuleContext()) == 1 {
 		{
 			p.SetState(554)
 			_la = p.GetTokenStream().LA(1)
@@ -8691,6 +8704,8 @@ func (p *ClickHouseParserGrammar1) LimitExpr() (localctx ILimitExprContext) {
 			p.columnExpr(0)
 		}
 
+	} else if p.HasError() { // JIM
+		goto errorExit
 	}
 
 errorExit:
@@ -8825,7 +8840,7 @@ func (s *OrderExprListContext) Accept(visitor antlr.ParseTreeVisitor) interface{
 func (p *ClickHouseParserGrammar1) OrderExprList() (localctx IOrderExprListContext) {
 	localctx = NewOrderExprListContext(p, p.GetParserRuleContext(), p.GetState())
 	p.EnterRule(localctx, 74, ClickHouseParserGrammar1RULE_orderExprList)
-	var _la int
+	var _alt int
 
 	p.EnterOuterAlt(localctx, 1)
 	{
@@ -8837,28 +8852,35 @@ func (p *ClickHouseParserGrammar1) OrderExprList() (localctx IOrderExprListConte
 	if p.HasError() {
 		goto errorExit
 	}
-	_la = p.GetTokenStream().LA(1)
-
-	for _la == ClickHouseParserGrammar1COMMA {
-		{
-			p.SetState(559)
-			p.Match(ClickHouseParserGrammar1COMMA)
-			if p.HasError() {
-				// Recognition error - abort rule
-				goto errorExit
+	_alt = p.GetInterpreter().AdaptivePredict(p.BaseParser, p.GetTokenStream(), 78, p.GetParserRuleContext())
+	if p.HasError() {
+		goto errorExit
+	}
+	for _alt != 2 && _alt != antlr.ATNInvalidAltNumber {
+		if _alt == 1 {
+			{
+				p.SetState(559)
+				p.Match(ClickHouseParserGrammar1COMMA)
+				if p.HasError() {
+					// Recognition error - abort rule
+					goto errorExit
+				}
 			}
-		}
-		{
-			p.SetState(560)
-			p.OrderExpr()
-		}
+			{
+				p.SetState(560)
+				p.OrderExpr()
+			}
 
+		}
 		p.SetState(565)
 		p.GetErrorHandler().Sync(p)
 		if p.HasError() {
 			goto errorExit
 		}
-		_la = p.GetTokenStream().LA(1)
+		_alt = p.GetInterpreter().AdaptivePredict(p.BaseParser, p.GetTokenStream(), 78, p.GetParserRuleContext())
+		if p.HasError() {
+			goto errorExit
+		}
 	}
 
 errorExit:
@@ -9366,7 +9388,7 @@ func (s *SettingExprListContext) Accept(visitor antlr.ParseTreeVisitor) interfac
 func (p *ClickHouseParserGrammar1) SettingExprList() (localctx ISettingExprListContext) {
 	localctx = NewSettingExprListContext(p, p.GetParserRuleContext(), p.GetState())
 	p.EnterRule(localctx, 80, ClickHouseParserGrammar1RULE_settingExprList)
-	var _la int
+	var _alt int
 
 	p.EnterOuterAlt(localctx, 1)
 	{
@@ -9378,28 +9400,35 @@ func (p *ClickHouseParserGrammar1) SettingExprList() (localctx ISettingExprListC
 	if p.HasError() {
 		goto errorExit
 	}
-	_la = p.GetTokenStream().LA(1)
-
-	for _la == ClickHouseParserGrammar1COMMA {
-		{
-			p.SetState(584)
-			p.Match(ClickHouseParserGrammar1COMMA)
-			if p.HasError() {
-				// Recognition error - abort rule
-				goto errorExit
+	_alt = p.GetInterpreter().AdaptivePredict(p.BaseParser, p.GetTokenStream(), 83, p.GetParserRuleContext())
+	if p.HasError() {
+		goto errorExit
+	}
+	for _alt != 2 && _alt != antlr.ATNInvalidAltNumber {
+		if _alt == 1 {
+			{
+				p.SetState(584)
+				p.Match(ClickHouseParserGrammar1COMMA)
+				if p.HasError() {
+					// Recognition error - abort rule
+					goto errorExit
+				}
 			}
-		}
-		{
-			p.SetState(585)
-			p.SettingExpr()
-		}
+			{
+				p.SetState(585)
+				p.SettingExpr()
+			}
 
+		}
 		p.SetState(590)
 		p.GetErrorHandler().Sync(p)
 		if p.HasError() {
 			goto errorExit
 		}
-		_la = p.GetTokenStream().LA(1)
+		_alt = p.GetInterpreter().AdaptivePredict(p.BaseParser, p.GetTokenStream(), 83, p.GetParserRuleContext())
+		if p.HasError() {
+			goto errorExit
+		}
 	}
 
 errorExit:
@@ -18219,6 +18248,7 @@ type ITableArgExprContext interface {
 	TableFunctionExpr() ITableFunctionExprContext
 	Literal() ILiteralContext
 	ColumnExpr() IColumnExprContext
+	SelectUnionStmt() ISelectUnionStmtContext
 
 	// IsTableArgExprContext differentiates from other interfaces.
 	IsTableArgExprContext()
@@ -18320,6 +18350,22 @@ func (s *TableArgExprContext) ColumnExpr() IColumnExprContext {
 	return t.(IColumnExprContext)
 }
 
+func (s *TableArgExprContext) SelectUnionStmt() ISelectUnionStmtContext {
+	var t antlr.RuleContext
+	for _, ctx := range s.GetChildren() {
+		if _, ok := ctx.(ISelectUnionStmtContext); ok {
+			t = ctx.(antlr.RuleContext)
+			break
+		}
+	}
+
+	if t == nil {
+		return nil
+	}
+
+	return t.(ISelectUnionStmtContext)
+}
+
 func (s *TableArgExprContext) GetRuleContext() antlr.RuleContext {
 	return s
 }
@@ -18341,7 +18387,7 @@ func (s *TableArgExprContext) Accept(visitor antlr.ParseTreeVisitor) interface{}
 func (p *ClickHouseParserGrammar1) TableArgExpr() (localctx ITableArgExprContext) {
 	localctx = NewTableArgExprContext(p, p.GetParserRuleContext(), p.GetState())
 	p.EnterRule(localctx, 126, ClickHouseParserGrammar1RULE_tableArgExpr)
-	p.SetState(1066)
+	p.SetState(1067)
 	p.GetErrorHandler().Sync(p)
 	if p.HasError() {
 		goto errorExit
@@ -18374,6 +18420,13 @@ func (p *ClickHouseParserGrammar1) TableArgExpr() (localctx ITableArgExprContext
 		{
 			p.SetState(1065)
 			p.columnExpr(0)
+		}
+
+	case 5:
+		p.EnterOuterAlt(localctx, 5)
+		{
+			p.SetState(1066)
+			p.SelectUnionStmt()
 		}
 
 	case antlr.ATNInvalidAltNumber:
@@ -18493,7 +18546,7 @@ func (s *DatabaseIdentifierContext) Accept(visitor antlr.ParseTreeVisitor) inter
 func (p *ClickHouseParserGrammar1) DatabaseIdentifier() (localctx IDatabaseIdentifierContext) {
 	localctx = NewDatabaseIdentifierContext(p, p.GetParserRuleContext(), p.GetState())
 	p.EnterRule(localctx, 128, ClickHouseParserGrammar1RULE_databaseIdentifier)
-	p.SetState(1070)
+	p.SetState(1071)
 	p.GetErrorHandler().Sync(p)
 	if p.HasError() {
 		goto errorExit
@@ -18503,14 +18556,14 @@ func (p *ClickHouseParserGrammar1) DatabaseIdentifier() (localctx IDatabaseIdent
 	case ClickHouseParserGrammar1AFTER, ClickHouseParserGrammar1ALIAS, ClickHouseParserGrammar1ALL, ClickHouseParserGrammar1ALTER, ClickHouseParserGrammar1AND, ClickHouseParserGrammar1ANTI, ClickHouseParserGrammar1ANY, ClickHouseParserGrammar1ARRAY, ClickHouseParserGrammar1AS, ClickHouseParserGrammar1ASCENDING, ClickHouseParserGrammar1ASOF, ClickHouseParserGrammar1AST, ClickHouseParserGrammar1ASYNC, ClickHouseParserGrammar1ATTACH, ClickHouseParserGrammar1BETWEEN, ClickHouseParserGrammar1BOTH, ClickHouseParserGrammar1BY, ClickHouseParserGrammar1CASE, ClickHouseParserGrammar1CAST, ClickHouseParserGrammar1CHECK, ClickHouseParserGrammar1CLEAR, ClickHouseParserGrammar1CLUSTER, ClickHouseParserGrammar1CODEC, ClickHouseParserGrammar1COLLATE, ClickHouseParserGrammar1COLUMN, ClickHouseParserGrammar1COMMENT, ClickHouseParserGrammar1CONSTRAINT, ClickHouseParserGrammar1CREATE, ClickHouseParserGrammar1CROSS, ClickHouseParserGrammar1CUBE, ClickHouseParserGrammar1CURRENT, ClickHouseParserGrammar1DATABASE, ClickHouseParserGrammar1DATABASES, ClickHouseParserGrammar1DATE, ClickHouseParserGrammar1DAY, ClickHouseParserGrammar1DEDUPLICATE, ClickHouseParserGrammar1DEFAULT, ClickHouseParserGrammar1DELAY, ClickHouseParserGrammar1DELETE, ClickHouseParserGrammar1DESC, ClickHouseParserGrammar1DESCENDING, ClickHouseParserGrammar1DESCRIBE, ClickHouseParserGrammar1DETACH, ClickHouseParserGrammar1DICTIONARIES, ClickHouseParserGrammar1DICTIONARY, ClickHouseParserGrammar1DISK, ClickHouseParserGrammar1DISTINCT, ClickHouseParserGrammar1DISTRIBUTED, ClickHouseParserGrammar1DROP, ClickHouseParserGrammar1ELSE, ClickHouseParserGrammar1END, ClickHouseParserGrammar1ENGINE, ClickHouseParserGrammar1EVENTS, ClickHouseParserGrammar1EXCEPT, ClickHouseParserGrammar1EXISTS, ClickHouseParserGrammar1EXPLAIN, ClickHouseParserGrammar1EXPRESSION, ClickHouseParserGrammar1EXTRACT, ClickHouseParserGrammar1FETCHES, ClickHouseParserGrammar1FINAL, ClickHouseParserGrammar1FIRST, ClickHouseParserGrammar1FLUSH, ClickHouseParserGrammar1FOLLOWING, ClickHouseParserGrammar1FOR, ClickHouseParserGrammar1FORMAT, ClickHouseParserGrammar1FREEZE, ClickHouseParserGrammar1FROM, ClickHouseParserGrammar1FULL, ClickHouseParserGrammar1FUNCTION, ClickHouseParserGrammar1GLOBAL, ClickHouseParserGrammar1GRANULARITY, ClickHouseParserGrammar1GROUP, ClickHouseParserGrammar1HAVING, ClickHouseParserGrammar1HIERARCHICAL, ClickHouseParserGrammar1HOUR, ClickHouseParserGrammar1ID, ClickHouseParserGrammar1IF, ClickHouseParserGrammar1ILIKE, ClickHouseParserGrammar1IN, ClickHouseParserGrammar1INDEX, ClickHouseParserGrammar1INJECTIVE, ClickHouseParserGrammar1INNER, ClickHouseParserGrammar1INSERT, ClickHouseParserGrammar1INTERSECT, ClickHouseParserGrammar1INTERVAL, ClickHouseParserGrammar1INTO, ClickHouseParserGrammar1IS, ClickHouseParserGrammar1IS_OBJECT_ID, ClickHouseParserGrammar1JOIN, ClickHouseParserGrammar1KEY, ClickHouseParserGrammar1KILL, ClickHouseParserGrammar1LAST, ClickHouseParserGrammar1LAYOUT, ClickHouseParserGrammar1LEADING, ClickHouseParserGrammar1LEFT, ClickHouseParserGrammar1LIFETIME, ClickHouseParserGrammar1LIKE, ClickHouseParserGrammar1LIMIT, ClickHouseParserGrammar1LIVE, ClickHouseParserGrammar1LOCAL, ClickHouseParserGrammar1LOGS, ClickHouseParserGrammar1MATERIALIZE, ClickHouseParserGrammar1MATERIALIZED, ClickHouseParserGrammar1MAX, ClickHouseParserGrammar1MERGES, ClickHouseParserGrammar1MIN, ClickHouseParserGrammar1MINUTE, ClickHouseParserGrammar1MODIFY, ClickHouseParserGrammar1MONTH, ClickHouseParserGrammar1MOVE, ClickHouseParserGrammar1MUTATION, ClickHouseParserGrammar1NO, ClickHouseParserGrammar1NOT, ClickHouseParserGrammar1NULLS, ClickHouseParserGrammar1OFFSET, ClickHouseParserGrammar1ON, ClickHouseParserGrammar1OPTIMIZE, ClickHouseParserGrammar1OR, ClickHouseParserGrammar1ORDER, ClickHouseParserGrammar1OUTER, ClickHouseParserGrammar1OUTFILE, ClickHouseParserGrammar1OVER, ClickHouseParserGrammar1PARTITION, ClickHouseParserGrammar1POPULATE, ClickHouseParserGrammar1PRECEDING, ClickHouseParserGrammar1PREWHERE, ClickHouseParserGrammar1PRIMARY, ClickHouseParserGrammar1QUARTER, ClickHouseParserGrammar1RANGE, ClickHouseParserGrammar1RECURSIVE, ClickHouseParserGrammar1RELOAD, ClickHouseParserGrammar1REMOVE, ClickHouseParserGrammar1RENAME, ClickHouseParserGrammar1REPLACE, ClickHouseParserGrammar1REPLICA, ClickHouseParserGrammar1REPLICATED, ClickHouseParserGrammar1RIGHT, ClickHouseParserGrammar1ROLLUP, ClickHouseParserGrammar1ROW, ClickHouseParserGrammar1ROWS, ClickHouseParserGrammar1SAMPLE, ClickHouseParserGrammar1SECOND, ClickHouseParserGrammar1SELECT, ClickHouseParserGrammar1SEMI, ClickHouseParserGrammar1SENDS, ClickHouseParserGrammar1SET, ClickHouseParserGrammar1SETTINGS, ClickHouseParserGrammar1SHOW, ClickHouseParserGrammar1SOURCE, ClickHouseParserGrammar1START, ClickHouseParserGrammar1STOP, ClickHouseParserGrammar1SUBSTRING, ClickHouseParserGrammar1SYNC, ClickHouseParserGrammar1SYNTAX, ClickHouseParserGrammar1SYSTEM, ClickHouseParserGrammar1TABLE, ClickHouseParserGrammar1TABLES, ClickHouseParserGrammar1TEMPORARY, ClickHouseParserGrammar1TEST, ClickHouseParserGrammar1THEN, ClickHouseParserGrammar1TIES, ClickHouseParserGrammar1TIMEOUT, ClickHouseParserGrammar1TIMESTAMP, ClickHouseParserGrammar1TO, ClickHouseParserGrammar1TOP, ClickHouseParserGrammar1TOTALS, ClickHouseParserGrammar1TRAILING, ClickHouseParserGrammar1TRIM, ClickHouseParserGrammar1TRUNCATE, ClickHouseParserGrammar1TTL, ClickHouseParserGrammar1TYPE, ClickHouseParserGrammar1UNBOUNDED, ClickHouseParserGrammar1UNION, ClickHouseParserGrammar1UPDATE, ClickHouseParserGrammar1USE, ClickHouseParserGrammar1USING, ClickHouseParserGrammar1UUID, ClickHouseParserGrammar1VALUES, ClickHouseParserGrammar1VIEW, ClickHouseParserGrammar1VOLUME, ClickHouseParserGrammar1WATCH, ClickHouseParserGrammar1WEEK, ClickHouseParserGrammar1WHEN, ClickHouseParserGrammar1WHERE, ClickHouseParserGrammar1WINDOW, ClickHouseParserGrammar1WITH, ClickHouseParserGrammar1YEAR, ClickHouseParserGrammar1FILL, ClickHouseParserGrammar1STEP, ClickHouseParserGrammar1STALENESS, ClickHouseParserGrammar1INTERPOLATE, ClickHouseParserGrammar1JSON_FALSE, ClickHouseParserGrammar1JSON_TRUE, ClickHouseParserGrammar1IDENTIFIER:
 		p.EnterOuterAlt(localctx, 1)
 		{
-			p.SetState(1068)
+			p.SetState(1069)
 			p.Identifier()
 		}
 
 	case ClickHouseParserGrammar1LBRACE:
 		p.EnterOuterAlt(localctx, 2)
 		{
-			p.SetState(1069)
+			p.SetState(1070)
 			p.ParamSlot()
 		}
 
@@ -18649,7 +18702,7 @@ func (p *ClickHouseParserGrammar1) ParamSlot() (localctx IParamSlotContext) {
 	p.EnterRule(localctx, 130, ClickHouseParserGrammar1RULE_paramSlot)
 	p.EnterOuterAlt(localctx, 1)
 	{
-		p.SetState(1072)
+		p.SetState(1073)
 		p.Match(ClickHouseParserGrammar1LBRACE)
 		if p.HasError() {
 			// Recognition error - abort rule
@@ -18657,11 +18710,11 @@ func (p *ClickHouseParserGrammar1) ParamSlot() (localctx IParamSlotContext) {
 		}
 	}
 	{
-		p.SetState(1073)
+		p.SetState(1074)
 		p.Identifier()
 	}
 	{
-		p.SetState(1074)
+		p.SetState(1075)
 		p.Match(ClickHouseParserGrammar1COLON)
 		if p.HasError() {
 			// Recognition error - abort rule
@@ -18669,11 +18722,11 @@ func (p *ClickHouseParserGrammar1) ParamSlot() (localctx IParamSlotContext) {
 		}
 	}
 	{
-		p.SetState(1075)
+		p.SetState(1076)
 		p.ColumnTypeExpr()
 	}
 	{
-		p.SetState(1076)
+		p.SetState(1077)
 		p.Match(ClickHouseParserGrammar1RBRACE)
 		if p.HasError() {
 			// Recognition error - abort rule
@@ -18787,7 +18840,7 @@ func (p *ClickHouseParserGrammar1) FloatingLiteral() (localctx IFloatingLiteralC
 	p.EnterRule(localctx, 132, ClickHouseParserGrammar1RULE_floatingLiteral)
 	var _la int
 
-	p.SetState(1086)
+	p.SetState(1087)
 	p.GetErrorHandler().Sync(p)
 	if p.HasError() {
 		goto errorExit
@@ -18797,7 +18850,7 @@ func (p *ClickHouseParserGrammar1) FloatingLiteral() (localctx IFloatingLiteralC
 	case ClickHouseParserGrammar1FLOATING_LITERAL:
 		p.EnterOuterAlt(localctx, 1)
 		{
-			p.SetState(1078)
+			p.SetState(1079)
 			p.Match(ClickHouseParserGrammar1FLOATING_LITERAL)
 			if p.HasError() {
 				// Recognition error - abort rule
@@ -18808,7 +18861,7 @@ func (p *ClickHouseParserGrammar1) FloatingLiteral() (localctx IFloatingLiteralC
 	case ClickHouseParserGrammar1DOT:
 		p.EnterOuterAlt(localctx, 2)
 		{
-			p.SetState(1079)
+			p.SetState(1080)
 			p.Match(ClickHouseParserGrammar1DOT)
 			if p.HasError() {
 				// Recognition error - abort rule
@@ -18816,7 +18869,7 @@ func (p *ClickHouseParserGrammar1) FloatingLiteral() (localctx IFloatingLiteralC
 			}
 		}
 		{
-			p.SetState(1080)
+			p.SetState(1081)
 			_la = p.GetTokenStream().LA(1)
 
 			if !(_la == ClickHouseParserGrammar1OCTAL_LITERAL || _la == ClickHouseParserGrammar1DECIMAL_LITERAL) {
@@ -18830,7 +18883,7 @@ func (p *ClickHouseParserGrammar1) FloatingLiteral() (localctx IFloatingLiteralC
 	case ClickHouseParserGrammar1DECIMAL_LITERAL:
 		p.EnterOuterAlt(localctx, 3)
 		{
-			p.SetState(1081)
+			p.SetState(1082)
 			p.Match(ClickHouseParserGrammar1DECIMAL_LITERAL)
 			if p.HasError() {
 				// Recognition error - abort rule
@@ -18838,19 +18891,19 @@ func (p *ClickHouseParserGrammar1) FloatingLiteral() (localctx IFloatingLiteralC
 			}
 		}
 		{
-			p.SetState(1082)
+			p.SetState(1083)
 			p.Match(ClickHouseParserGrammar1DOT)
 			if p.HasError() {
 				// Recognition error - abort rule
 				goto errorExit
 			}
 		}
-		p.SetState(1084)
+		p.SetState(1085)
 		p.GetErrorHandler().Sync(p)
 
 		if p.GetInterpreter().AdaptivePredict(p.BaseParser, p.GetTokenStream(), 139, p.GetParserRuleContext()) == 1 {
 			{
-				p.SetState(1083)
+				p.SetState(1084)
 				_la = p.GetTokenStream().LA(1)
 
 				if !(_la == ClickHouseParserGrammar1OCTAL_LITERAL || _la == ClickHouseParserGrammar1DECIMAL_LITERAL) {
@@ -19004,7 +19057,7 @@ func (p *ClickHouseParserGrammar1) NumberLiteral() (localctx INumberLiteralConte
 	var _la int
 
 	p.EnterOuterAlt(localctx, 1)
-	p.SetState(1089)
+	p.SetState(1090)
 	p.GetErrorHandler().Sync(p)
 	if p.HasError() {
 		goto errorExit
@@ -19013,7 +19066,7 @@ func (p *ClickHouseParserGrammar1) NumberLiteral() (localctx INumberLiteralConte
 
 	if _la == ClickHouseParserGrammar1DASH || _la == ClickHouseParserGrammar1PLUS {
 		{
-			p.SetState(1088)
+			p.SetState(1089)
 			_la = p.GetTokenStream().LA(1)
 
 			if !(_la == ClickHouseParserGrammar1DASH || _la == ClickHouseParserGrammar1PLUS) {
@@ -19025,7 +19078,7 @@ func (p *ClickHouseParserGrammar1) NumberLiteral() (localctx INumberLiteralConte
 		}
 
 	}
-	p.SetState(1097)
+	p.SetState(1098)
 	p.GetErrorHandler().Sync(p)
 	if p.HasError() {
 		goto errorExit
@@ -19034,13 +19087,13 @@ func (p *ClickHouseParserGrammar1) NumberLiteral() (localctx INumberLiteralConte
 	switch p.GetInterpreter().AdaptivePredict(p.BaseParser, p.GetTokenStream(), 142, p.GetParserRuleContext()) {
 	case 1:
 		{
-			p.SetState(1091)
+			p.SetState(1092)
 			p.FloatingLiteral()
 		}
 
 	case 2:
 		{
-			p.SetState(1092)
+			p.SetState(1093)
 			p.Match(ClickHouseParserGrammar1OCTAL_LITERAL)
 			if p.HasError() {
 				// Recognition error - abort rule
@@ -19050,7 +19103,7 @@ func (p *ClickHouseParserGrammar1) NumberLiteral() (localctx INumberLiteralConte
 
 	case 3:
 		{
-			p.SetState(1093)
+			p.SetState(1094)
 			p.Match(ClickHouseParserGrammar1DECIMAL_LITERAL)
 			if p.HasError() {
 				// Recognition error - abort rule
@@ -19060,7 +19113,7 @@ func (p *ClickHouseParserGrammar1) NumberLiteral() (localctx INumberLiteralConte
 
 	case 4:
 		{
-			p.SetState(1094)
+			p.SetState(1095)
 			p.Match(ClickHouseParserGrammar1HEXADECIMAL_LITERAL)
 			if p.HasError() {
 				// Recognition error - abort rule
@@ -19070,7 +19123,7 @@ func (p *ClickHouseParserGrammar1) NumberLiteral() (localctx INumberLiteralConte
 
 	case 5:
 		{
-			p.SetState(1095)
+			p.SetState(1096)
 			p.Match(ClickHouseParserGrammar1INF)
 			if p.HasError() {
 				// Recognition error - abort rule
@@ -19080,7 +19133,7 @@ func (p *ClickHouseParserGrammar1) NumberLiteral() (localctx INumberLiteralConte
 
 	case 6:
 		{
-			p.SetState(1096)
+			p.SetState(1097)
 			p.Match(ClickHouseParserGrammar1NAN_SQL)
 			if p.HasError() {
 				// Recognition error - abort rule
@@ -19198,7 +19251,7 @@ func (s *LiteralContext) Accept(visitor antlr.ParseTreeVisitor) interface{} {
 func (p *ClickHouseParserGrammar1) Literal() (localctx ILiteralContext) {
 	localctx = NewLiteralContext(p, p.GetParserRuleContext(), p.GetState())
 	p.EnterRule(localctx, 136, ClickHouseParserGrammar1RULE_literal)
-	p.SetState(1102)
+	p.SetState(1103)
 	p.GetErrorHandler().Sync(p)
 	if p.HasError() {
 		goto errorExit
@@ -19208,14 +19261,14 @@ func (p *ClickHouseParserGrammar1) Literal() (localctx ILiteralContext) {
 	case ClickHouseParserGrammar1INF, ClickHouseParserGrammar1NAN_SQL, ClickHouseParserGrammar1FLOATING_LITERAL, ClickHouseParserGrammar1OCTAL_LITERAL, ClickHouseParserGrammar1DECIMAL_LITERAL, ClickHouseParserGrammar1HEXADECIMAL_LITERAL, ClickHouseParserGrammar1DASH, ClickHouseParserGrammar1DOT, ClickHouseParserGrammar1PLUS:
 		p.EnterOuterAlt(localctx, 1)
 		{
-			p.SetState(1099)
+			p.SetState(1100)
 			p.NumberLiteral()
 		}
 
 	case ClickHouseParserGrammar1STRING_LITERAL:
 		p.EnterOuterAlt(localctx, 2)
 		{
-			p.SetState(1100)
+			p.SetState(1101)
 			p.Match(ClickHouseParserGrammar1STRING_LITERAL)
 			if p.HasError() {
 				// Recognition error - abort rule
@@ -19226,7 +19279,7 @@ func (p *ClickHouseParserGrammar1) Literal() (localctx ILiteralContext) {
 	case ClickHouseParserGrammar1NULL_SQL:
 		p.EnterOuterAlt(localctx, 3)
 		{
-			p.SetState(1101)
+			p.SetState(1102)
 			p.Match(ClickHouseParserGrammar1NULL_SQL)
 			if p.HasError() {
 				// Recognition error - abort rule
@@ -19362,7 +19415,7 @@ func (p *ClickHouseParserGrammar1) Interval() (localctx IIntervalContext) {
 
 	p.EnterOuterAlt(localctx, 1)
 	{
-		p.SetState(1104)
+		p.SetState(1105)
 		_la = p.GetTokenStream().LA(1)
 
 		if !(_la == ClickHouseParserGrammar1DAY || ((int64((_la-77)) & ^0x3f) == 0 && ((int64(1)<<(_la-77))&288230419101384705) != 0) || ((int64((_la-149)) & ^0x3f) == 0 && ((int64(1)<<(_la-149))&36283883716609) != 0)) {
@@ -20381,7 +20434,7 @@ func (p *ClickHouseParserGrammar1) Keyword() (localctx IKeywordContext) {
 
 	p.EnterOuterAlt(localctx, 1)
 	{
-		p.SetState(1106)
+		p.SetState(1107)
 		_la = p.GetTokenStream().LA(1)
 
 		if !(((int64(_la) & ^0x3f) == 0 && ((int64(1)<<_la)&-137573171204) != 0) || ((int64((_la-64)) & ^0x3f) == 0 && ((int64(1)<<(_la-64))&-20618042044588033) != 0) || ((int64((_la-128)) & ^0x3f) == 0 && ((int64(1)<<(_la-128))&-2305843009215791329) != 0) || ((int64((_la-192)) & ^0x3f) == 0 && ((int64(1)<<(_la-192))&507) != 0)) {
@@ -20478,7 +20531,7 @@ func (p *ClickHouseParserGrammar1) Alias() (localctx IAliasContext) {
 	p.EnterRule(localctx, 142, ClickHouseParserGrammar1RULE_alias)
 	p.EnterOuterAlt(localctx, 1)
 	{
-		p.SetState(1108)
+		p.SetState(1109)
 		p.Match(ClickHouseParserGrammar1IDENTIFIER)
 		if p.HasError() {
 			// Recognition error - abort rule
@@ -20604,7 +20657,7 @@ func (s *IdentifierContext) Accept(visitor antlr.ParseTreeVisitor) interface{} {
 func (p *ClickHouseParserGrammar1) Identifier() (localctx IIdentifierContext) {
 	localctx = NewIdentifierContext(p, p.GetParserRuleContext(), p.GetState())
 	p.EnterRule(localctx, 144, ClickHouseParserGrammar1RULE_identifier)
-	p.SetState(1113)
+	p.SetState(1114)
 	p.GetErrorHandler().Sync(p)
 	if p.HasError() {
 		goto errorExit
@@ -20614,7 +20667,7 @@ func (p *ClickHouseParserGrammar1) Identifier() (localctx IIdentifierContext) {
 	case ClickHouseParserGrammar1IDENTIFIER:
 		p.EnterOuterAlt(localctx, 1)
 		{
-			p.SetState(1110)
+			p.SetState(1111)
 			p.Match(ClickHouseParserGrammar1IDENTIFIER)
 			if p.HasError() {
 				// Recognition error - abort rule
@@ -20625,14 +20678,14 @@ func (p *ClickHouseParserGrammar1) Identifier() (localctx IIdentifierContext) {
 	case ClickHouseParserGrammar1DAY, ClickHouseParserGrammar1HOUR, ClickHouseParserGrammar1MINUTE, ClickHouseParserGrammar1MONTH, ClickHouseParserGrammar1QUARTER, ClickHouseParserGrammar1SECOND, ClickHouseParserGrammar1WEEK, ClickHouseParserGrammar1YEAR:
 		p.EnterOuterAlt(localctx, 2)
 		{
-			p.SetState(1111)
+			p.SetState(1112)
 			p.Interval()
 		}
 
 	case ClickHouseParserGrammar1AFTER, ClickHouseParserGrammar1ALIAS, ClickHouseParserGrammar1ALL, ClickHouseParserGrammar1ALTER, ClickHouseParserGrammar1AND, ClickHouseParserGrammar1ANTI, ClickHouseParserGrammar1ANY, ClickHouseParserGrammar1ARRAY, ClickHouseParserGrammar1AS, ClickHouseParserGrammar1ASCENDING, ClickHouseParserGrammar1ASOF, ClickHouseParserGrammar1AST, ClickHouseParserGrammar1ASYNC, ClickHouseParserGrammar1ATTACH, ClickHouseParserGrammar1BETWEEN, ClickHouseParserGrammar1BOTH, ClickHouseParserGrammar1BY, ClickHouseParserGrammar1CASE, ClickHouseParserGrammar1CAST, ClickHouseParserGrammar1CHECK, ClickHouseParserGrammar1CLEAR, ClickHouseParserGrammar1CLUSTER, ClickHouseParserGrammar1CODEC, ClickHouseParserGrammar1COLLATE, ClickHouseParserGrammar1COLUMN, ClickHouseParserGrammar1COMMENT, ClickHouseParserGrammar1CONSTRAINT, ClickHouseParserGrammar1CREATE, ClickHouseParserGrammar1CROSS, ClickHouseParserGrammar1CUBE, ClickHouseParserGrammar1CURRENT, ClickHouseParserGrammar1DATABASE, ClickHouseParserGrammar1DATABASES, ClickHouseParserGrammar1DATE, ClickHouseParserGrammar1DEDUPLICATE, ClickHouseParserGrammar1DEFAULT, ClickHouseParserGrammar1DELAY, ClickHouseParserGrammar1DELETE, ClickHouseParserGrammar1DESC, ClickHouseParserGrammar1DESCENDING, ClickHouseParserGrammar1DESCRIBE, ClickHouseParserGrammar1DETACH, ClickHouseParserGrammar1DICTIONARIES, ClickHouseParserGrammar1DICTIONARY, ClickHouseParserGrammar1DISK, ClickHouseParserGrammar1DISTINCT, ClickHouseParserGrammar1DISTRIBUTED, ClickHouseParserGrammar1DROP, ClickHouseParserGrammar1ELSE, ClickHouseParserGrammar1END, ClickHouseParserGrammar1ENGINE, ClickHouseParserGrammar1EVENTS, ClickHouseParserGrammar1EXCEPT, ClickHouseParserGrammar1EXISTS, ClickHouseParserGrammar1EXPLAIN, ClickHouseParserGrammar1EXPRESSION, ClickHouseParserGrammar1EXTRACT, ClickHouseParserGrammar1FETCHES, ClickHouseParserGrammar1FINAL, ClickHouseParserGrammar1FIRST, ClickHouseParserGrammar1FLUSH, ClickHouseParserGrammar1FOLLOWING, ClickHouseParserGrammar1FOR, ClickHouseParserGrammar1FORMAT, ClickHouseParserGrammar1FREEZE, ClickHouseParserGrammar1FROM, ClickHouseParserGrammar1FULL, ClickHouseParserGrammar1FUNCTION, ClickHouseParserGrammar1GLOBAL, ClickHouseParserGrammar1GRANULARITY, ClickHouseParserGrammar1GROUP, ClickHouseParserGrammar1HAVING, ClickHouseParserGrammar1HIERARCHICAL, ClickHouseParserGrammar1ID, ClickHouseParserGrammar1IF, ClickHouseParserGrammar1ILIKE, ClickHouseParserGrammar1IN, ClickHouseParserGrammar1INDEX, ClickHouseParserGrammar1INJECTIVE, ClickHouseParserGrammar1INNER, ClickHouseParserGrammar1INSERT, ClickHouseParserGrammar1INTERSECT, ClickHouseParserGrammar1INTERVAL, ClickHouseParserGrammar1INTO, ClickHouseParserGrammar1IS, ClickHouseParserGrammar1IS_OBJECT_ID, ClickHouseParserGrammar1JOIN, ClickHouseParserGrammar1KEY, ClickHouseParserGrammar1KILL, ClickHouseParserGrammar1LAST, ClickHouseParserGrammar1LAYOUT, ClickHouseParserGrammar1LEADING, ClickHouseParserGrammar1LEFT, ClickHouseParserGrammar1LIFETIME, ClickHouseParserGrammar1LIKE, ClickHouseParserGrammar1LIMIT, ClickHouseParserGrammar1LIVE, ClickHouseParserGrammar1LOCAL, ClickHouseParserGrammar1LOGS, ClickHouseParserGrammar1MATERIALIZE, ClickHouseParserGrammar1MATERIALIZED, ClickHouseParserGrammar1MAX, ClickHouseParserGrammar1MERGES, ClickHouseParserGrammar1MIN, ClickHouseParserGrammar1MODIFY, ClickHouseParserGrammar1MOVE, ClickHouseParserGrammar1MUTATION, ClickHouseParserGrammar1NO, ClickHouseParserGrammar1NOT, ClickHouseParserGrammar1NULLS, ClickHouseParserGrammar1OFFSET, ClickHouseParserGrammar1ON, ClickHouseParserGrammar1OPTIMIZE, ClickHouseParserGrammar1OR, ClickHouseParserGrammar1ORDER, ClickHouseParserGrammar1OUTER, ClickHouseParserGrammar1OUTFILE, ClickHouseParserGrammar1OVER, ClickHouseParserGrammar1PARTITION, ClickHouseParserGrammar1POPULATE, ClickHouseParserGrammar1PRECEDING, ClickHouseParserGrammar1PREWHERE, ClickHouseParserGrammar1PRIMARY, ClickHouseParserGrammar1RANGE, ClickHouseParserGrammar1RECURSIVE, ClickHouseParserGrammar1RELOAD, ClickHouseParserGrammar1REMOVE, ClickHouseParserGrammar1RENAME, ClickHouseParserGrammar1REPLACE, ClickHouseParserGrammar1REPLICA, ClickHouseParserGrammar1REPLICATED, ClickHouseParserGrammar1RIGHT, ClickHouseParserGrammar1ROLLUP, ClickHouseParserGrammar1ROW, ClickHouseParserGrammar1ROWS, ClickHouseParserGrammar1SAMPLE, ClickHouseParserGrammar1SELECT, ClickHouseParserGrammar1SEMI, ClickHouseParserGrammar1SENDS, ClickHouseParserGrammar1SET, ClickHouseParserGrammar1SETTINGS, ClickHouseParserGrammar1SHOW, ClickHouseParserGrammar1SOURCE, ClickHouseParserGrammar1START, ClickHouseParserGrammar1STOP, ClickHouseParserGrammar1SUBSTRING, ClickHouseParserGrammar1SYNC, ClickHouseParserGrammar1SYNTAX, ClickHouseParserGrammar1SYSTEM, ClickHouseParserGrammar1TABLE, ClickHouseParserGrammar1TABLES, ClickHouseParserGrammar1TEMPORARY, ClickHouseParserGrammar1TEST, ClickHouseParserGrammar1THEN, ClickHouseParserGrammar1TIES, ClickHouseParserGrammar1TIMEOUT, ClickHouseParserGrammar1TIMESTAMP, ClickHouseParserGrammar1TO, ClickHouseParserGrammar1TOP, ClickHouseParserGrammar1TOTALS, ClickHouseParserGrammar1TRAILING, ClickHouseParserGrammar1TRIM, ClickHouseParserGrammar1TRUNCATE, ClickHouseParserGrammar1TTL, ClickHouseParserGrammar1TYPE, ClickHouseParserGrammar1UNBOUNDED, ClickHouseParserGrammar1UNION, ClickHouseParserGrammar1UPDATE, ClickHouseParserGrammar1USE, ClickHouseParserGrammar1USING, ClickHouseParserGrammar1UUID, ClickHouseParserGrammar1VALUES, ClickHouseParserGrammar1VIEW, ClickHouseParserGrammar1VOLUME, ClickHouseParserGrammar1WATCH, ClickHouseParserGrammar1WHEN, ClickHouseParserGrammar1WHERE, ClickHouseParserGrammar1WINDOW, ClickHouseParserGrammar1WITH, ClickHouseParserGrammar1FILL, ClickHouseParserGrammar1STEP, ClickHouseParserGrammar1STALENESS, ClickHouseParserGrammar1INTERPOLATE, ClickHouseParserGrammar1JSON_FALSE, ClickHouseParserGrammar1JSON_TRUE:
 		p.EnterOuterAlt(localctx, 3)
 		{
-			p.SetState(1112)
+			p.SetState(1113)
 			p.Keyword()
 		}
 
@@ -20742,7 +20795,7 @@ func (s *IdentifierOrNullContext) Accept(visitor antlr.ParseTreeVisitor) interfa
 func (p *ClickHouseParserGrammar1) IdentifierOrNull() (localctx IIdentifierOrNullContext) {
 	localctx = NewIdentifierOrNullContext(p, p.GetParserRuleContext(), p.GetState())
 	p.EnterRule(localctx, 146, ClickHouseParserGrammar1RULE_identifierOrNull)
-	p.SetState(1117)
+	p.SetState(1118)
 	p.GetErrorHandler().Sync(p)
 	if p.HasError() {
 		goto errorExit
@@ -20752,14 +20805,14 @@ func (p *ClickHouseParserGrammar1) IdentifierOrNull() (localctx IIdentifierOrNul
 	case ClickHouseParserGrammar1AFTER, ClickHouseParserGrammar1ALIAS, ClickHouseParserGrammar1ALL, ClickHouseParserGrammar1ALTER, ClickHouseParserGrammar1AND, ClickHouseParserGrammar1ANTI, ClickHouseParserGrammar1ANY, ClickHouseParserGrammar1ARRAY, ClickHouseParserGrammar1AS, ClickHouseParserGrammar1ASCENDING, ClickHouseParserGrammar1ASOF, ClickHouseParserGrammar1AST, ClickHouseParserGrammar1ASYNC, ClickHouseParserGrammar1ATTACH, ClickHouseParserGrammar1BETWEEN, ClickHouseParserGrammar1BOTH, ClickHouseParserGrammar1BY, ClickHouseParserGrammar1CASE, ClickHouseParserGrammar1CAST, ClickHouseParserGrammar1CHECK, ClickHouseParserGrammar1CLEAR, ClickHouseParserGrammar1CLUSTER, ClickHouseParserGrammar1CODEC, ClickHouseParserGrammar1COLLATE, ClickHouseParserGrammar1COLUMN, ClickHouseParserGrammar1COMMENT, ClickHouseParserGrammar1CONSTRAINT, ClickHouseParserGrammar1CREATE, ClickHouseParserGrammar1CROSS, ClickHouseParserGrammar1CUBE, ClickHouseParserGrammar1CURRENT, ClickHouseParserGrammar1DATABASE, ClickHouseParserGrammar1DATABASES, ClickHouseParserGrammar1DATE, ClickHouseParserGrammar1DAY, ClickHouseParserGrammar1DEDUPLICATE, ClickHouseParserGrammar1DEFAULT, ClickHouseParserGrammar1DELAY, ClickHouseParserGrammar1DELETE, ClickHouseParserGrammar1DESC, ClickHouseParserGrammar1DESCENDING, ClickHouseParserGrammar1DESCRIBE, ClickHouseParserGrammar1DETACH, ClickHouseParserGrammar1DICTIONARIES, ClickHouseParserGrammar1DICTIONARY, ClickHouseParserGrammar1DISK, ClickHouseParserGrammar1DISTINCT, ClickHouseParserGrammar1DISTRIBUTED, ClickHouseParserGrammar1DROP, ClickHouseParserGrammar1ELSE, ClickHouseParserGrammar1END, ClickHouseParserGrammar1ENGINE, ClickHouseParserGrammar1EVENTS, ClickHouseParserGrammar1EXCEPT, ClickHouseParserGrammar1EXISTS, ClickHouseParserGrammar1EXPLAIN, ClickHouseParserGrammar1EXPRESSION, ClickHouseParserGrammar1EXTRACT, ClickHouseParserGrammar1FETCHES, ClickHouseParserGrammar1FINAL, ClickHouseParserGrammar1FIRST, ClickHouseParserGrammar1FLUSH, ClickHouseParserGrammar1FOLLOWING, ClickHouseParserGrammar1FOR, ClickHouseParserGrammar1FORMAT, ClickHouseParserGrammar1FREEZE, ClickHouseParserGrammar1FROM, ClickHouseParserGrammar1FULL, ClickHouseParserGrammar1FUNCTION, ClickHouseParserGrammar1GLOBAL, ClickHouseParserGrammar1GRANULARITY, ClickHouseParserGrammar1GROUP, ClickHouseParserGrammar1HAVING, ClickHouseParserGrammar1HIERARCHICAL, ClickHouseParserGrammar1HOUR, ClickHouseParserGrammar1ID, ClickHouseParserGrammar1IF, ClickHouseParserGrammar1ILIKE, ClickHouseParserGrammar1IN, ClickHouseParserGrammar1INDEX, ClickHouseParserGrammar1INJECTIVE, ClickHouseParserGrammar1INNER, ClickHouseParserGrammar1INSERT, ClickHouseParserGrammar1INTERSECT, ClickHouseParserGrammar1INTERVAL, ClickHouseParserGrammar1INTO, ClickHouseParserGrammar1IS, ClickHouseParserGrammar1IS_OBJECT_ID, ClickHouseParserGrammar1JOIN, ClickHouseParserGrammar1KEY, ClickHouseParserGrammar1KILL, ClickHouseParserGrammar1LAST, ClickHouseParserGrammar1LAYOUT, ClickHouseParserGrammar1LEADING, ClickHouseParserGrammar1LEFT, ClickHouseParserGrammar1LIFETIME, ClickHouseParserGrammar1LIKE, ClickHouseParserGrammar1LIMIT, ClickHouseParserGrammar1LIVE, ClickHouseParserGrammar1LOCAL, ClickHouseParserGrammar1LOGS, ClickHouseParserGrammar1MATERIALIZE, ClickHouseParserGrammar1MATERIALIZED, ClickHouseParserGrammar1MAX, ClickHouseParserGrammar1MERGES, ClickHouseParserGrammar1MIN, ClickHouseParserGrammar1MINUTE, ClickHouseParserGrammar1MODIFY, ClickHouseParserGrammar1MONTH, ClickHouseParserGrammar1MOVE, ClickHouseParserGrammar1MUTATION, ClickHouseParserGrammar1NO, ClickHouseParserGrammar1NOT, ClickHouseParserGrammar1NULLS, ClickHouseParserGrammar1OFFSET, ClickHouseParserGrammar1ON, ClickHouseParserGrammar1OPTIMIZE, ClickHouseParserGrammar1OR, ClickHouseParserGrammar1ORDER, ClickHouseParserGrammar1OUTER, ClickHouseParserGrammar1OUTFILE, ClickHouseParserGrammar1OVER, ClickHouseParserGrammar1PARTITION, ClickHouseParserGrammar1POPULATE, ClickHouseParserGrammar1PRECEDING, ClickHouseParserGrammar1PREWHERE, ClickHouseParserGrammar1PRIMARY, ClickHouseParserGrammar1QUARTER, ClickHouseParserGrammar1RANGE, ClickHouseParserGrammar1RECURSIVE, ClickHouseParserGrammar1RELOAD, ClickHouseParserGrammar1REMOVE, ClickHouseParserGrammar1RENAME, ClickHouseParserGrammar1REPLACE, ClickHouseParserGrammar1REPLICA, ClickHouseParserGrammar1REPLICATED, ClickHouseParserGrammar1RIGHT, ClickHouseParserGrammar1ROLLUP, ClickHouseParserGrammar1ROW, ClickHouseParserGrammar1ROWS, ClickHouseParserGrammar1SAMPLE, ClickHouseParserGrammar1SECOND, ClickHouseParserGrammar1SELECT, ClickHouseParserGrammar1SEMI, ClickHouseParserGrammar1SENDS, ClickHouseParserGrammar1SET, ClickHouseParserGrammar1SETTINGS, ClickHouseParserGrammar1SHOW, ClickHouseParserGrammar1SOURCE, ClickHouseParserGrammar1START, ClickHouseParserGrammar1STOP, ClickHouseParserGrammar1SUBSTRING, ClickHouseParserGrammar1SYNC, ClickHouseParserGrammar1SYNTAX, ClickHouseParserGrammar1SYSTEM, ClickHouseParserGrammar1TABLE, ClickHouseParserGrammar1TABLES, ClickHouseParserGrammar1TEMPORARY, ClickHouseParserGrammar1TEST, ClickHouseParserGrammar1THEN, ClickHouseParserGrammar1TIES, ClickHouseParserGrammar1TIMEOUT, ClickHouseParserGrammar1TIMESTAMP, ClickHouseParserGrammar1TO, ClickHouseParserGrammar1TOP, ClickHouseParserGrammar1TOTALS, ClickHouseParserGrammar1TRAILING, ClickHouseParserGrammar1TRIM, ClickHouseParserGrammar1TRUNCATE, ClickHouseParserGrammar1TTL, ClickHouseParserGrammar1TYPE, ClickHouseParserGrammar1UNBOUNDED, ClickHouseParserGrammar1UNION, ClickHouseParserGrammar1UPDATE, ClickHouseParserGrammar1USE, ClickHouseParserGrammar1USING, ClickHouseParserGrammar1UUID, ClickHouseParserGrammar1VALUES, ClickHouseParserGrammar1VIEW, ClickHouseParserGrammar1VOLUME, ClickHouseParserGrammar1WATCH, ClickHouseParserGrammar1WEEK, ClickHouseParserGrammar1WHEN, ClickHouseParserGrammar1WHERE, ClickHouseParserGrammar1WINDOW, ClickHouseParserGrammar1WITH, ClickHouseParserGrammar1YEAR, ClickHouseParserGrammar1FILL, ClickHouseParserGrammar1STEP, ClickHouseParserGrammar1STALENESS, ClickHouseParserGrammar1INTERPOLATE, ClickHouseParserGrammar1JSON_FALSE, ClickHouseParserGrammar1JSON_TRUE, ClickHouseParserGrammar1IDENTIFIER:
 		p.EnterOuterAlt(localctx, 1)
 		{
-			p.SetState(1115)
+			p.SetState(1116)
 			p.Identifier()
 		}
 
 	case ClickHouseParserGrammar1NULL_SQL:
 		p.EnterOuterAlt(localctx, 2)
 		{
-			p.SetState(1116)
+			p.SetState(1117)
 			p.Match(ClickHouseParserGrammar1NULL_SQL)
 			if p.HasError() {
 				// Recognition error - abort rule
@@ -20880,7 +20933,7 @@ func (p *ClickHouseParserGrammar1) EnumValue() (localctx IEnumValueContext) {
 	p.EnterRule(localctx, 148, ClickHouseParserGrammar1RULE_enumValue)
 	p.EnterOuterAlt(localctx, 1)
 	{
-		p.SetState(1119)
+		p.SetState(1120)
 		p.Match(ClickHouseParserGrammar1STRING_LITERAL)
 		if p.HasError() {
 			// Recognition error - abort rule
@@ -20888,7 +20941,7 @@ func (p *ClickHouseParserGrammar1) EnumValue() (localctx IEnumValueContext) {
 		}
 	}
 	{
-		p.SetState(1120)
+		p.SetState(1121)
 		p.Match(ClickHouseParserGrammar1EQ_SINGLE)
 		if p.HasError() {
 			// Recognition error - abort rule
@@ -20896,7 +20949,7 @@ func (p *ClickHouseParserGrammar1) EnumValue() (localctx IEnumValueContext) {
 		}
 	}
 	{
-		p.SetState(1121)
+		p.SetState(1122)
 		p.NumberLiteral()
 	}
 

@@ -12,6 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colorscale"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/distsummary"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/lazypane"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timeline"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap"
@@ -64,6 +65,10 @@ type App struct {
 	// MountCtx.Ids() at Mount time. The ctor seeds it with a fresh
 	// stack so tour mode and tests work without a Mount call.
 	ids *c.WidgetIdStack
+
+	// distStates holds the inspector state of each distsummary row, keyed
+	// by the row's id suffix (renderDistsummaryRow).
+	distStates map[string]*distsummary.State
 
 	// lazyPanes holds one widgets/lazypane gate per heavy dock tab, keyed
 	// by dock id and created on first use. While a tab is hidden the host
@@ -157,6 +162,7 @@ type App struct {
 	//   topoFreqMaxMHz running max core MHz, for normalising the freq tint.
 	//   topoDim        which dimension the continuous tint encodes (% or MHz).
 	topoTreemap    *treemap.Treemap
+	topoEvents     treemap.Events // the treemap's last Render
 	topoNodeObj    map[*layout.Node]*sysmsnap.TopoObject
 	topoLoad       []uint8
 	topoFreq       []uint32
@@ -191,6 +197,7 @@ type App struct {
 	//   procBuiltMetric / procLastSampleMs / procBuiltView gate the rebuild to
 	//   sample, metric and view changes.
 	procTreemap      *treemap.Treemap
+	procEvents       treemap.Events // the treemap's last Render
 	procRoot         *layout.Node
 	procNodes        map[procEWMAKey]*layout.Node
 	procNodeObj      map[*layout.Node]*procCell
@@ -239,6 +246,7 @@ var _ app.AppI = (*App)(nil)
 func newApp() (inst *App) {
 	inst = &App{
 		ids:               c.NewWidgetIdStack(),
+		distStates:        map[string]*distsummary.State{},
 		density:           styletokens.ActiveDensity(),
 		cpuCoresDigest:    tdigest.NewTDigest(),
 		cpuHistoryDigest:  tdigest.NewTDigest(),

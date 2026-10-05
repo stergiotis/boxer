@@ -9,8 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -23,7 +21,7 @@ import (
 var BaseDir = env.NewString(env.Spec{
 	Name:        "BOXER_ADHOC_DIR",
 	Default:     "",
-	Description: "directory whose filesystem holds the unnamed sealed files of ad-hoc datasets and staged recordings (ADR-0240 §SD1); empty resolves to <user cache dir>/boxer/adhoc; must support O_TMPFILE (ext4, tmpfs)",
+	Description: "directory whose filesystem holds the unnamed sealed files of ad-hoc datasets, staged recordings and window captures (ADR-0240 §SD1, ADR-0281); empty resolves to <user cache dir>/boxer/adhoc; must support O_TMPFILE (ext4, tmpfs)",
 	Category:    env.CategorySystem,
 })
 
@@ -71,24 +69,21 @@ func CreateIn(dir string) (inst *File, err error) {
 	if err = os.MkdirAll(dir, 0o700); err != nil {
 		return nil, eb.Build().Str("dir", dir).Errorf("sealed: prepare base directory: %w", err)
 	}
-	fd, err := unix.Open(dir, unix.O_TMPFILE|unix.O_RDWR|unix.O_EXCL|unix.O_CLOEXEC, 0o600)
+	f, err := openUnnamed(dir)
 	if err != nil {
-		if errors.Is(err, unix.EOPNOTSUPP) || errors.Is(err, unix.EISDIR) || errors.Is(err, unix.ENOTSUP) {
-			return nil, eb.Build().Str("dir", dir).Errorf("sealed: %w: %w", ErrUnsupported, err)
-		}
-		return nil, eb.Build().Str("dir", dir).Errorf("sealed: allocate unnamed file: %w", err)
+		return nil, err
 	}
 	key := make([]byte, KeySize)
 	if _, err = rand.Read(key); err != nil {
-		_ = unix.Close(fd)
+		_ = f.Close()
 		return nil, eh.Errorf("sealed: mint key: %w", err)
 	}
 	aead, err := newGCM(key)
 	if err != nil {
-		_ = unix.Close(fd)
+		_ = f.Close()
 		return nil, err
 	}
-	inst = &File{f: os.NewFile(uintptr(fd), "sealed"), key: key, aead: aead}
+	inst = &File{f: f, key: key, aead: aead}
 	return
 }
 

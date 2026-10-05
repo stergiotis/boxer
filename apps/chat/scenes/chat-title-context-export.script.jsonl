@@ -1,0 +1,4 @@
+# The scripted model of chat-title-context-export.scene.md. A reply is
+# picked by how many answers the request already holds, so the title call
+# — which holds none — gets this line too: its first line is the title.
+{"content":"Calls by model, last hour\n\nRead them with:\n\n```sql\nSELECT model, count() FROM keelson('llm_calls') GROUP BY model\n```\n\nThat is all."}

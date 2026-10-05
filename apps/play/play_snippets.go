@@ -22,7 +22,7 @@ import (
 const playAppId app.AppIdT = "github.com/stergiotis/boxer/apps/play"
 
 // snippetActionLabels are the per-block buttons in the Snippets tab, in the
-// order RenderActionsN reports them via CodeBlockAction.Button: Insert
+// order markdown.Render reports them via CodeBlockAction.Button: Insert
 // splices the snippet at the editor caret (TextEditFluid.InsertAtCursor);
 // Replace swaps the whole editor buffer.
 var snippetActionLabels = []string{"Insert", "Replace"}
@@ -33,7 +33,7 @@ const (
 )
 
 // sqlBlockActionable gates which fenced blocks carry the Insert/Replace row
-// (markdown.WithCodeActionFilter). Only SQL — or untyped, which the corpora
+// (markdown.Input.CodeActionFilter). Only SQL — or untyped, which the corpora
 // use for plain snippets — may reach the editor.
 //
 // It withholds the BUTTONS, not just the click. Both surfaces used to render
@@ -58,8 +58,11 @@ func sqlBlockActionable(_ string, lang string) bool {
 // nil when the doc is absent or fails to parse, which the pane degrades to a
 // short notice.
 type snippetSource struct {
-	appId    app.AppIdT
-	docName  string
+	appId   app.AppIdT
+	docName string
+	// text is the doc's markdown source, which the catalog's snippet reads
+	// slice by section.
+	text     string
 	doc      *markdown.Doc
 	sections []help.SectionInfo
 	index    *search.Index
@@ -72,6 +75,9 @@ func newSnippetSource(appId app.AppIdT, fsys fs.FS, docName string) (src *snippe
 		return
 	}
 	if doc, info, ok := book.Doc(docName); ok {
+		if raw, found := book.Source(docName); found {
+			src.text = string(raw)
+		}
 		src.doc = doc
 		src.sections = info.Sections
 		src.index = search.NewIndexBooks(book)
@@ -120,7 +126,7 @@ type snippetPane struct {
 	literal  bool
 	altHint  string
 	coverage search.Coverage
-	hl       regexedit.Edit
+	hl       regexedit.Cache
 }
 
 // SnippetLibrary is a snippet pane contributed to every play window: a doc of
@@ -217,7 +223,7 @@ func addSnippetLibraryTabs(inst *PlayApp, reg *TabRegistry) {
 
 // renderSnippetsTab draws the snippet library in the Snippets dock tab: the
 // "snippets" help doc rendered with Insert and Replace buttons above every
-// fenced code block. This reuses markdown.Doc.RenderActionsN — the same
+// fenced code block. This reuses markdown.Render's action buttons — the same
 // mechanism HelpHost wires to "Copy" — but routes a click into the editor
 // instead of the clipboard: Insert stashes the snippet on
 // inst.pendingSnippetInsert (the Rust side splices it at the caret,
@@ -233,7 +239,7 @@ func addSnippetLibraryTabs(inst *PlayApp, reg *TabRegistry) {
 //
 // The filter box narrows the doc to matching sections (ADR-0164 §SD4):
 // hits from the shared pattern-battery search, expanded to descendant
-// subsections, drive markdown.WithSectionFilter. The filtered render
+// subsections, drive markdown.Input.SectionFilter. The filtered render
 // lives under an IdScope keyed by the query — skipping sections shifts
 // the doc's seq-derived widget ids, and abandoning egui state (an open
 // callout, a dragged column) on filter change is the accepted cost.
@@ -273,28 +279,29 @@ func (pane *snippetPane) render(inst *PlayApp) {
 		default:
 			accepted := pane.accepted
 			for range c.IdScope(inst.ids.PrepareStr(pane.key + "-f-" + pane.query)) {
-				inst.renderSnippetsDoc(doc, markdown.WithSectionFilter(func(slug string) bool {
+				inst.renderSnippetsDoc(doc, func(slug string) bool {
 					return accepted[slug]
-				}))
+				})
 			}
 		}
 	}
 }
 
-// renderSnippetsDoc is the shared render body: RenderActionsN with the
-// SQL gate, plus whatever extra options the caller adds (the section
-// filter), delivering clicks through the public seam (play_delivery.go).
+// renderSnippetsDoc is the shared render body: the action buttons with the
+// SQL gate, plus the section filter when the caller has one (nil for
+// none), delivering clicks through the public seam (play_delivery.go).
 // Both ops focus the Editor tab, so the splice lands where the buffer is
 // live (a hidden editor discards its body buffer uninterpreted, losing
 // the insert). Snippets is the in-tree consumer of the same ops an
 // embedder's snippet-class pane uses (ADR-0097 slice-6 D5 Update).
-func (inst *PlayApp) renderSnippetsDoc(doc *markdown.Doc, extra markdown.RenderOpt) {
-	opts := make([]markdown.RenderOpt, 0, 2)
-	opts = append(opts, markdown.WithCodeActionFilter(sqlBlockActionable))
-	if extra != nil {
-		opts = append(opts, extra)
-	}
-	for act := range doc.RenderActionsN(inst.ids, snippetActionLabels, opts...) {
+func (inst *PlayApp) renderSnippetsDoc(doc *markdown.Doc, sectionFilter func(slug string) bool) {
+	res := markdown.Render(markdown.Input{
+		Ids: inst.ids, ScopeKey: "snippets-doc", Doc: doc,
+		ActionLabels:     snippetActionLabels,
+		CodeActionFilter: sqlBlockActionable,
+		SectionFilter:    sectionFilter,
+	})
+	for _, act := range res.Actions {
 		switch act.Button {
 		case snippetButtonInsert:
 			inst.InsertSqlAtCaret(act.Text)
@@ -324,7 +331,7 @@ func (pane *snippetPane) renderFilterRow(inst *PlayApp) {
 	for range c.Horizontal().KeepIter() {
 		// regexedit paints the battery shape: one independent pattern
 		// per whitespace-separated token, monospace (ADR-0164 §SD4).
-		pane.hl.Prepare(inst.ids.PrepareStr(pane.key+"Filter"), pane.filter, false, regexedit.ModeTokens).
+		pane.hl.TextEdit(inst.ids.PrepareStr(pane.key+"Filter"), pane.filter, false, regexedit.ModeTokens).
 			HintText("Filter (regex, space = AND)").
 			SendRespVal(&pane.filter)
 		if pane.filter != "" {

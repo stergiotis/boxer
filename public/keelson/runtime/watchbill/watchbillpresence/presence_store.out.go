@@ -433,7 +433,9 @@ func (inst *PresenceEntityBuilder) Rollback() (err error) {
 
 // IngestWorkerPresence buffers one whole entity per row carrying only the
 // WorkerPresence component, all stamped with ts — rows ship on the next Flush,
-// like every write. Keys must be distinct within one call (rows
+// like every write. The envelope carries the pass-through columns
+// the row binds; the others are written zero — use Begin with a
+// filled envelope to set them. Keys must be distinct within one call (rows
 // share ts, so duplicates would tie on Order): a duplicate returns
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
@@ -446,7 +448,7 @@ func (inst *PresenceStore) IngestWorkerPresence(ts time.Time, rows []WorkerPrese
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.Begin(rows[i].Id, ts, PresenceEnvelope{}).AddWorkerPresence(rows[i]).Commit()
+		err = inst.Begin(rows[i].Id, ts, PresenceEnvelope{NaturalKey: rows[i].NaturalKey}).AddWorkerPresence(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest workerPresence row %d: %w", i, err)
 			return

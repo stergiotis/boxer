@@ -45,6 +45,14 @@ func RenderTourPalette(ids *c.WidgetIdStack) {
 	inst.renderSemanticPalette()
 }
 
+// RenderTourButtons renders one button per ButtonKindE (ADR-0273).
+func RenderTourButtons(ids *c.WidgetIdStack) {
+	inst := &App{ids: ids, density: styletokens.ActiveDensity()}
+	c.Label("IDS button kinds — ADR-0273").Send()
+	c.Separator().Horizontal().Send()
+	inst.renderButtonKinds()
+}
+
 // RenderTourTypography renders the type-scale section.
 func RenderTourTypography(ids *c.WidgetIdStack) {
 	inst := &App{ids: ids, density: styletokens.ActiveDensity()}
@@ -111,6 +119,16 @@ func init() {
 		Description: "IDS palette catalogue — neutral spine + semantic palette (6 roles × 3 emphasis).",
 		Render:      RenderTourPalette,
 		SourceFunc:  (*App)(nil).renderSemanticPalette,
+	})
+	registry.Register(registry.Demo{
+		Name:        "idsshowcase-buttons",
+		Category:    "Design system",
+		Title:       icons.IconPalette + " IDS button kinds",
+		Stage:       [2]float32{720, 160},
+		Kind:        registry.DemoKindUX,
+		Description: "IDS button kinds — primary, secondary, tertiary, ghost, danger, danger-ghost (ADR-0273).",
+		Render:      RenderTourButtons,
+		SourceFunc:  (*App)(nil).renderButtonKinds,
 	})
 	registry.Register(registry.Demo{
 		Name:        "idsshowcase-typography",

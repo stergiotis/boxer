@@ -1,5 +1,5 @@
-// Package cbordiag shows CBOR bytes as RFC 8949 §8 diagnostic notation —
-// ADR-0219 §SD6: a toolbar (byte count, a compact / expanded toggle, a copy
+// Package cbordiag is an immediate-mode widget (ADR-0267) that shows CBOR
+// bytes as RFC 8949 §8 diagnostic notation — ADR-0219 §SD6: a toolbar (byte count, a compact / expanded toggle, a copy
 // button, an optional verdict line the host sets) over a codeview job built
 // from the cbor/diag printer's spans.
 //
@@ -8,9 +8,9 @@
 // frame that shows the same item again costs a hash of the bytes and
 // nothing else.
 //
-//	r := cbordiag.New(ids, "wire")                      // once
-//	r.Render(&state, item, diag.Options{TagComments: true}) // per frame
+//	cbordiag.Render(cbordiag.Input{Ids: ids, ScopeKey: "wire", State: &state,
+//	    Item: item, Options: diag.Options{TagComments: true}}) // per frame
 //
-// Two views shown at once need two States and two Renderers with different
-// prefixes, as with fieldview: the prefix scopes the widget ids.
+// Two views shown at once need two States and two ScopeKeys, as with
+// fieldview: the scope key scopes the widget ids.
 package cbordiag

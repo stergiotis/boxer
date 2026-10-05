@@ -16,7 +16,7 @@ import (
 
 // GraphModel is a leeway batch projected onto a node-link graph: one node
 // per entity, one edge per attribute of the linking section whose value names
-// another entity of the batch (ADR-0257, proposed, §SD1).
+// another entity of the batch (ADR-0266, proposed, §SD1).
 //
 // The linking section is found in the data rather than declared: of the
 // tagged sections with a scalar string or integer value, the one whose values

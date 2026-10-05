@@ -3,26 +3,37 @@ package chlocalpool
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/rs/zerolog"
+	"github.com/stergiotis/boxer/public/observability/logging"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// syncBuffer collects log output from the watchdog goroutine.
+// syncBuffer collects log output from the watchdog goroutine. zerolog hands
+// each event to Write in one call, so records keeps one entry per event: the
+// events are CBOR under binary_log, where splitting on newlines does not work.
 type syncBuffer struct {
-	mu  sync.Mutex
-	buf bytes.Buffer
+	mu      sync.Mutex
+	buf     bytes.Buffer
+	records [][]byte
 }
 
 func (inst *syncBuffer) Write(p []byte) (n int, err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
+	inst.records = append(inst.records, bytes.Clone(p))
 	return inst.buf.Write(p)
+}
+
+func (inst *syncBuffer) Records() (out [][]byte) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	out = append(out, inst.records...)
+	return
 }
 
 func (inst *syncBuffer) String() (out string) {
@@ -77,9 +88,9 @@ func TestPool_WatchdogLogsAgeSinceAcquisitionNotSpawn(t *testing.T) {
 	}
 
 	var line map[string]any
-	for _, raw := range splitLines(logs.String()) {
-		var m map[string]any
-		if json.Unmarshal([]byte(raw), &m) != nil {
+	for _, raw := range logs.Records() {
+		m := decodeLogRecord(raw)
+		if m == nil {
 			continue
 		}
 		if msg, _ := m["message"].(string); msg == "chlocalpool: watchdog reaping forgotten worker" {
@@ -87,11 +98,11 @@ func TestPool_WatchdogLogsAgeSinceAcquisitionNotSpawn(t *testing.T) {
 			break
 		}
 	}
-	require.NotNil(t, line, "no reap log line found in:\n%s", logs.String())
+	require.NotNil(t, line, "no reap log line found in:\n%q", logs.String())
 
-	acquiredAge, ok := line["acquired_age"].(float64)
+	acquiredAge, ok := logNumber(line["acquired_age"])
 	require.True(t, ok, "acquired_age missing or not numeric: %v", line)
-	workerAge, ok := line["worker_age"].(float64)
+	workerAge, ok := logNumber(line["worker_age"])
 	require.True(t, ok, "worker_age missing or not numeric: %v", line)
 
 	// zerolog renders durations in milliseconds by default.
@@ -103,18 +114,40 @@ func TestPool_WatchdogLogsAgeSinceAcquisitionNotSpawn(t *testing.T) {
 		"acquired_age should be around the deadline the sweep applied")
 }
 
-func splitLines(s string) (out []string) {
-	start := 0
-	for i := range len(s) {
-		if s[i] == '\n' {
-			if i > start {
-				out = append(out, s[start:i])
+// decodeLogRecord decodes one zerolog event in whichever encoding the build
+// tags select (JSON, or CBOR under binary_log); nil when it is not an object.
+func decodeLogRecord(raw []byte) (out map[string]any) {
+	v, err := logging.UnmarshallZerologMsg(raw)
+	if err != nil {
+		return
+	}
+	switch m := v.(type) {
+	case map[string]any:
+		out = m
+	case map[any]any:
+		out = make(map[string]any, len(m))
+		for k, val := range m {
+			if ks, ok := k.(string); ok {
+				out[ks] = val
 			}
-			start = i + 1
 		}
 	}
-	if start < len(s) {
-		out = append(out, s[start:])
+	return
+}
+
+func logNumber(v any) (f float64, ok bool) {
+	ok = true
+	switch n := v.(type) {
+	case float64:
+		f = n
+	case float32:
+		f = float64(n)
+	case int64:
+		f = float64(n)
+	case uint64:
+		f = float64(n)
+	default:
+		ok = false
 	}
 	return
 }

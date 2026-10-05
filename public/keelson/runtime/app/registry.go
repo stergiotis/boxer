@@ -37,6 +37,9 @@ type entry struct {
 	manifest  Manifest
 	ctor      AppCtor
 	singleton bool
+	// opsDiagnostic says why the manifest's operations catalog was
+	// withdrawn at registration; empty when it was kept or absent.
+	opsDiagnostic string
 }
 
 // Registration is one registry row: a manifest plus how it was
@@ -49,6 +52,9 @@ type Registration struct {
 	// Singleton is true for Register (one AppI for every Open) and false
 	// for RegisterFactory (a fresh AppI per Open).
 	Singleton bool
+	// OperationsDiagnostic says why the operations catalog was withdrawn
+	// (ADR-0269 §SD2); empty when it was kept or none was declared.
+	OperationsDiagnostic string
 }
 
 // Registry is the canonical list of apps in this process. Apps register
@@ -68,6 +74,11 @@ type Registry struct {
 	// register builds a new one rather than appending, so a slice handed out
 	// by Manifests stays what it was.
 	manifests []Manifest
+	// unlaunchable is the set a launch limit refused (ADR-0272); nil means
+	// no limit is in force. launchable is manifests without that set, rebuilt
+	// with it, so the surfaces that read it every frame do not filter.
+	unlaunchable map[AppIdT]struct{}
+	launchable   []Manifest
 }
 
 // NewRegistry returns an empty Registry. Tests use this for isolation;
@@ -157,6 +168,32 @@ func (inst *Registry) register(m Manifest, ctor AppCtor, singleton bool) (err er
 			Errorf("registry: Workingset requires factory registration (RegisterFactory), not Register")
 		return
 	}
+	// ADR-0269 §SD3: only the host publishes or subscribes on the operation
+	// subjects; an app whose capability could reach them is refused, since
+	// it could call another app's operations past the dispatcher.
+	for _, cap := range m.Caps {
+		if CapReachesOperationSubjects(cap.Pattern) {
+			err = eb.Build().Str("id", string(m.Id)).Str("pattern", cap.Pattern).
+				Errorf("registry: a capability reaches the operation subjects app.{id}.{instance}.op.{name}")
+			return
+		}
+	}
+	// ADR-0269 §SD2: a catalog is served per instance, so it needs one
+	// instance per window, as a workingset does. Unlike a workingset, a bad
+	// catalog costs only the catalog: the app registers without it.
+	var opsDiagnostic string
+	if m.Operations != nil {
+		if singleton {
+			opsDiagnostic = "operations require factory registration (RegisterFactory), not Register"
+		} else if vErr := m.Operations.Validate(); vErr != nil {
+			opsDiagnostic = vErr.Error()
+		}
+		if opsDiagnostic != "" {
+			log.Warn().Str("id", string(m.Id)).Str("diagnostic", opsDiagnostic).
+				Msg("app registry: withdrawing the operations catalog; the app still registers")
+			m.Operations = nil
+		}
+	}
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	_, exists := inst.byId[m.Id]
@@ -184,7 +221,7 @@ func (inst *Registry) register(m Manifest, ctor AppCtor, singleton bool) (err er
 	})
 	inst.entries = append(inst.entries, entry{})
 	copy(inst.entries[idx+1:], inst.entries[idx:])
-	inst.entries[idx] = entry{manifest: m, ctor: ctor, singleton: singleton}
+	inst.entries[idx] = entry{manifest: m, ctor: ctor, singleton: singleton, opsDiagnostic: opsDiagnostic}
 	for i := idx; i < len(inst.entries); i++ {
 		inst.byId[inst.entries[i].manifest.Id] = i
 	}
@@ -193,7 +230,24 @@ func (inst *Registry) register(m Manifest, ctor AppCtor, singleton bool) (err er
 		manifests[i] = e.manifest
 	}
 	inst.manifests = manifests
+	inst.rebuildLaunchable()
 	return
+}
+
+// rebuildLaunchable recomputes the launchable snapshot. The caller holds mu
+// for writing.
+func (inst *Registry) rebuildLaunchable() {
+	if len(inst.unlaunchable) == 0 {
+		inst.launchable = inst.manifests
+		return
+	}
+	launchable := make([]Manifest, 0, len(inst.manifests))
+	for _, m := range inst.manifests {
+		if _, refused := inst.unlaunchable[m.Id]; !refused {
+			launchable = append(launchable, m)
+		}
+	}
+	inst.launchable = launchable
 }
 
 // Open invokes the registered ctor for id and returns the resulting AppI
@@ -311,7 +365,19 @@ func (inst *Registry) Registrations() (regs []Registration) {
 	defer inst.mu.RUnlock()
 	regs = make([]Registration, len(inst.entries))
 	for i, e := range inst.entries {
-		regs[i] = Registration{Manifest: e.manifest, Singleton: e.singleton}
+		regs[i] = Registration{Manifest: e.manifest, Singleton: e.singleton, OperationsDiagnostic: e.opsDiagnostic}
+	}
+	return
+}
+
+// OperationsDiagnostic says why the operations catalog of id was withdrawn
+// at registration (ADR-0269 §SD2); empty when it was kept, none was
+// declared, or id is not registered.
+func (inst *Registry) OperationsDiagnostic(id AppIdT) (diagnostic string) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	if idx, ok := inst.byId[id]; ok {
+		diagnostic = inst.entries[idx].opsDiagnostic
 	}
 	return
 }
@@ -368,5 +434,45 @@ func (inst *Registry) Len() (n int) {
 	inst.mu.RLock()
 	defer inst.mu.RUnlock()
 	n = len(inst.entries)
+	return
+}
+
+// LimitLaunches makes every app registered now and absent from allowed
+// unlaunchable (ADR-0272 §SD2). An app registered later is launchable: the
+// limit names the apps the process booted with, not a rule re-applied to
+// each new registration. A second call replaces the first.
+func (inst *Registry) LimitLaunches(allowed []AppIdT) {
+	keep := make(map[AppIdT]struct{}, len(allowed))
+	for _, id := range allowed {
+		keep[id] = struct{}{}
+	}
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	inst.unlaunchable = make(map[AppIdT]struct{})
+	for _, e := range inst.entries {
+		if _, ok := keep[e.manifest.Id]; !ok {
+			inst.unlaunchable[e.manifest.Id] = struct{}{}
+		}
+	}
+	inst.rebuildLaunchable()
+}
+
+// Launchable reports whether a window of id may be opened under the launch
+// limit. It does not say whether id is registered.
+func (inst *Registry) Launchable(id AppIdT) (ok bool) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	_, refused := inst.unlaunchable[id]
+	ok = !refused
+	return
+}
+
+// LaunchableManifests is Manifests without the apps the launch limit
+// refused, for the surfaces that offer apps to open. The same sharing rules
+// as Manifests apply.
+func (inst *Registry) LaunchableManifests() (manifests []Manifest) {
+	inst.mu.RLock()
+	manifests = inst.launchable
+	inst.mu.RUnlock()
 	return
 }

@@ -526,6 +526,37 @@ cannot rank it above a path it checks itself without a second reader of the
 same variable. An operator with both who wants the override to win sets
 `Config.BinaryPath`.
 
+### 2026-09-28 — the request deadline kills a running worker
+
+§SD8's mid-query cancellation was not wired: the broker's deadline reached
+`pool.Acquire` only, and a worker already running its SQL ran until it exited
+or the pool watchdog reaped it by age. The deadline — the shorter of the
+broker's request timeout and the caller's wire deadline — now closes the
+worker when it passes, and the reply's error reads "killed by cancellation".
+
+**Why.** The bus carries no per-call ctx, so the deadline is the only thing
+that can end a query the caller has given up on; without it a slow query held
+a worker, and the handler, for up to `WatchdogMaxLifetime`.
+
+**What did not change.** The watchdog still reaps by worker age, so a
+`SetRequestTimeout` longer than `WatchdogMaxLifetime` needs the watchdog raised
+with it.
+
+### 2026-09-28 — the per-request memory ceiling exists
+
+§SD4's per-request ceiling was never built: the drain read the worker's stdout
+to EOF with no limit, so a result of any size was held in the host process —
+three times at the peak, counting the reply copy and its encoding. The broker
+now stops reading one byte past `DefaultMaxResultBytes` (64 MiB, the figure
+§SD4 names), kills the worker, and fails the request with a structured
+"result exceeds" error. `Service.SetMaxResultBytes` overrides it; §SD4's
+`Config.MaxInMemoryBytes` became a setter beside `SetRequestTimeout`, since
+the broker has no config struct of its own.
+
+**Why.** `--max_memory_usage` bounds ClickHouse, not what it writes; any app
+holding `ch.local.exec.<pool>` could otherwise grow the host until the OOM
+killer ended every app in it.
+
 ## References
 
 - [ADR-0026 — App runtime and capability subjects](./0026-app-runtime-and-capability-subjects.md) — parent framework; this ADR extends §SD3 (subject taxonomy) and §SD10 (capslock).

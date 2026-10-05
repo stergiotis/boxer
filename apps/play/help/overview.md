@@ -46,34 +46,55 @@ derived from it, so you keep them open while typing:
   point here). When boxer's grammar can't parse the buffer, an `EXPLAIN AST`
   probe against the server distinguishes a boxer grammar gap from broken SQL.
 - **Snippets** — a library of ready-to-run fragments with Insert/Replace buttons.
+- **Model** — explain the buffer or fix its last error through a language model
+  the host provides; answers land as text you insert. A question to a query
+  goes to the chat app driving the window.
 - **Vocabulary** — the functions this buffer can call, grouped by where each one
   runs: installed on the endpoint, expanded by play before the statement ships,
   or computed in play and never sent. Server functions are marked present or
   missing against what the endpoint actually carries.
+- **Completion** — what may stand at the caret: component kinds, fields,
+  introspection tables, the endpoint's tables and columns.
 - **Glosses** — the catalog of value renderings (a temperature with its unit, a
   masked value, a URL as a link, markdown as prose, …), the buffer's rendering
   rules, and how each column of the current result resolved.
+- **Experiments** — one leeway batch driven through a chosen rendering sink.
 
-**The result panes**, below — these are fed the query's rows:
+**The result panes**, below — these draw the query's result. Each has a
+contract: column names it reads from the result, or CTEs it reads by name, and
+it says what it wanted when the result does not fit (see *How a pane reads the
+query* on the Features page):
 
 - **Table** — the result grid. Select a row here to drive the Detail tab.
-- **Detail** — the per-row card for the row selected in Table.
-- **Projection** — the neighbour graph of the result's numeric columns, laid out as a graph.
-- **Timeline** — plots time-shaped results on a horizontal time axis, when the
-  result matches the timeline column contract (see the example-queries page).
+- **Detail** — beside the others: the per-row card for the selected row,
+  whichever pane selected it.
+- **Projection** — a leeway-shaped result's entities as a neighbour graph, clustered, laid out as a graph, with why the clusters are what they are.
+- **Timeline** — events on a time axis, from `_tl_time` and friends.
 - **Map** — an in-database-rendered geo raster over a pannable map, for tables
   with mercator columns (queries on its own, independent of the editor).
+- **Vector field** — a wind or current drifting as particles over a map, from a
+  `vector_field` CTE.
 - **World** — a schematic world choropleth when the result names countries
   (ISO codes or names) alongside a numeric column.
-- **Kanban** — the result as cards in lanes, when it carries `lane` and `title`
-  columns.
-- **Network** — the result as a node-link graph, ranked top-down or
-  left-right, when it names an `edges` set.
-- **Graphview** — the same graph laid out live: a force simulation you can
-  drag and zoom, with each `group` drawn as a translucent aura.
+- **Kanban** — the result as cards in lanes, from `lane` and `title` columns.
+- **Chat** — a message transcript, from `ts`, `sender` and `body`.
+- **Cards** — a paged grid of cards, from `card_*` columns.
+- **Network** — a node-link graph, ranked top-down or left-right, from a CTE
+  named `edges` (and optionally `vertices`).
+- **Graphview** — the same `edges` graph laid out live: a force simulation, a
+  tree or rings, that you drag, zoom and grow by query.
+- **Sankey** — flow quantities, from a CTE named `flows`.
+- **Distribution** — distribution summaries side by side, from
+  `descriptiveStatistics(…)`.
+- **Icicle** and **Treemap** — a hierarchy as a flamegraph or as nested areas,
+  from a `stack` array or `id` / `parent` rows, plus a `value`.
+- **Series** — numbers against a time axis: the first time column and every
+  numeric one.
+- **Chart** — bars, lines, points or a heatmap, from `x`, `y`, `z`, `series`.
+- **Files** — the result as a tree of files, from a `path` column.
 - **Graph** — the reactive query-graph: the buffer's CTEs as nodes; observe an
-  intermediate node to point the result tabs at it. Also hosts the **signals**
-  editor (see below).
+  intermediate node to point the result tabs at it, or bind one tab to it. Also
+  hosts the **signals** editor (see below).
 - **Schema** — a structural inspector over the result's schema.
 
 ## The Detail card and leeway data

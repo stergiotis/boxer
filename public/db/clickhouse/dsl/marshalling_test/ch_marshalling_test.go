@@ -2,6 +2,7 @@ package marshalling_test
 
 import (
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
@@ -61,16 +62,51 @@ func TestUnescapeStringHex(t *testing.T) {
 	assert.Equal(t, "A", result)
 }
 
-func TestUnescapeStringUnicode(t *testing.T) {
+// ClickHouse has no \u / \U escape; the server reads '\u0041' as six
+// bytes of text, and so must UnescapeString.
+func TestUnescapeStringUnicodeIsLiteral(t *testing.T) {
 	result, err := marshalling.UnescapeString("'\\u0041'")
 	require.NoError(t, err)
-	assert.Equal(t, "A", result)
+	assert.Equal(t, "\\u0041", result)
+
+	result, err = marshalling.UnescapeString("'\\U0001F600'")
+	require.NoError(t, err)
+	assert.Equal(t, "\\U0001F600", result)
 }
 
-func TestUnescapeStringFullUnicode(t *testing.T) {
-	result, err := marshalling.UnescapeString("'\\U0001F600'")
-	require.NoError(t, err)
-	assert.Equal(t, "\U0001F600", result)
+// Expected values were read back from a live server with SELECT hex('…').
+func TestUnescapeStringServerEscapeRules(t *testing.T) {
+	cases := map[string]string{
+		`'\d+'`:    `\d+`,
+		`'a\_b'`:   `a\_b`,
+		`'100\%'`:  `100\%`,
+		`'\e'`:     "\x1b",
+		`'\N'`:     "",
+		`'\"'`:     `"`,
+		"'\\`'":    "`",
+		`'\/'`:     "/",
+		`'\='`:     "=",
+		`'a\\b'`:   `a\b`,
+		`'\x41'`:   "A",
+		`'\ud800'`: `\ud800`,
+	}
+	for raw, want := range cases {
+		got, err := marshalling.UnescapeString(raw)
+		require.NoError(t, err, raw)
+		assert.Equal(t, want, got, "unescape %s", raw)
+	}
+}
+
+// Unescape followed by escape must keep a regex's meaning.
+func TestUnescapeEscapeKeepsRegex(t *testing.T) {
+	for _, raw := range []string{`'^c\d+$'`, `'a\_b'`, `'\w\s'`} {
+		val, err := marshalling.UnescapeString(raw)
+		require.NoError(t, err)
+		back, err := marshalling.UnescapeString(marshalling.EscapeString(val))
+		require.NoError(t, err)
+		assert.Equal(t, val, back)
+		assert.Contains(t, val, `\`, raw)
+	}
 }
 
 func TestEscapeUnescapeRoundTrip(t *testing.T) {
@@ -1196,13 +1232,33 @@ func TestUnmarshalTupleExprWithDoubleColonCast(t *testing.T) {
 }
 
 func TestUnmarshalTupleExprWithOuterCast(t *testing.T) {
-	lit, err := marshalling.UnmarshalCompositeLiteral("CAST((1, 'hello'), 'Tuple(UInt64, String)')")
+	// The default mapper has no canonical form for a Tuple type; dropping
+	// the cast would re-marshal as tuple(1, 'hello'), whose element types
+	// the server infers differently, so the cast is an error.
+	_, err := marshalling.UnmarshalCompositeLiteral("CAST((1, 'hello'), 'Tuple(UInt64, String)')")
+	assert.Error(t, err)
+}
+
+// A cast target the mapper cannot represent must not be dropped silently:
+// the bare inner literal would re-marshal with a different type.
+func TestUnmarshalUnmappableCastIsError(t *testing.T) {
+	for _, sql := range []string{
+		"CAST('2024-01-01', 'Date')",
+		"CAST(1.5, 'Decimal(10,2)')",
+		"CAST(1, 'Nullable(Int64)')",
+		"'2024-01-01'::Date",
+	} {
+		_, err := marshalling.UnmarshalCompositeLiteral(sql)
+		assert.Error(t, err, sql)
+	}
+	lit, err := marshalling.UnmarshalCompositeLiteral("CAST(1, 'UInt8')")
 	require.NoError(t, err)
-	assert.True(t, lit.IsTuple())
-	assert.Equal(t, 2, len(lit.Elements))
-	// Outer cast — may or may not be representable depending on mapper
-	// Our mock doesn't handle "Tuple(UInt64, String)" so cast is empty
-	t.Logf("outer cast: %q", lit.CastTypeCanonical)
+	assert.Equal(t, "u8", lit.CastTypeCanonical)
+
+	// A nil mapper opts out of cast preservation, as documented.
+	lit, err = marshalling.UnmarshalCompositeLiteralEx("CAST('2024-01-01', 'Date')", nil)
+	require.NoError(t, err)
+	assert.Equal(t, "", lit.CastTypeCanonical)
 }
 
 // --- Round-trip for tuple expr forms ---
@@ -1565,4 +1621,96 @@ func TestToAnyArrayMarshalRoundTrip(t *testing.T) {
 	t.Logf("sql: %s", sql)
 
 	assert.Contains(t, sql, "array(")
+}
+
+// ClickHouse reads TRUE / False as Bool; so must both unmarshal paths.
+func TestUnmarshalBoolCaseInsensitive(t *testing.T) {
+	for _, tok := range []string{"TRUE", "True", "FALSE", "False"} {
+		want := strings.EqualFold(tok, "true")
+		lit, err := marshalling.UnmarshalScalarLiteral(tok)
+		require.NoError(t, err, tok)
+		assert.Equal(t, ctabb.B, lit.ScalarType)
+		assert.Equal(t, want, lit.BoolVal)
+
+		lit, err = marshalling.UnmarshalCompositeLiteral(tok)
+		require.NoError(t, err, tok)
+		assert.Equal(t, ctabb.B, lit.ScalarType)
+		assert.Equal(t, want, lit.BoolVal)
+	}
+	lit, err := marshalling.UnmarshalCompositeLiteral("(1, TRUE)")
+	require.NoError(t, err)
+	require.Len(t, lit.Elements, 2)
+	assert.True(t, lit.Elements[1].BoolVal)
+
+	_, err = marshalling.UnmarshalCompositeLiteral("[False]")
+	require.NoError(t, err)
+}
+
+// A negation past math.MinInt64 is Float64 on the server, not a wrapped
+// Int64. Types were read back from a live server with toTypeName.
+func TestUnmarshalScalarNegativeOverflow(t *testing.T) {
+	lit, err := marshalling.UnmarshalScalarLiteral("-9223372036854775808")
+	require.NoError(t, err)
+	assert.Equal(t, ctabb.I64, lit.ScalarType)
+	assert.Equal(t, int64(math.MinInt64), lit.IntVal)
+
+	lit, err = marshalling.UnmarshalScalarLiteral("-0x8000000000000000")
+	require.NoError(t, err)
+	assert.Equal(t, ctabb.I64, lit.ScalarType)
+	assert.Equal(t, int64(math.MinInt64), lit.IntVal)
+
+	cases := map[string]float64{
+		"-9223372036854775809":  -9223372036854775809.0,
+		"-18446744073709551615": -18446744073709551615.0,
+		"-0x8000000000000001":   -9223372036854775809.0,
+		"-0xFFFFFFFFFFFFFFFF":   -18446744073709551615.0,
+	}
+	for tok, want := range cases {
+		lit, err = marshalling.UnmarshalScalarLiteral(tok)
+		require.NoError(t, err, tok)
+		assert.Equal(t, ctabb.F64, lit.ScalarType, tok)
+		assert.Equal(t, want, lit.FloatVal, tok)
+	}
+}
+
+// A typed-nil *Tuple marshals to NULL like every other nil pointer case.
+func TestMarshalGoValueNilTuple(t *testing.T) {
+	sql, err := marshalling.MarshalGoValueToSQL((*marshalling.Tuple)(nil))
+	require.NoError(t, err)
+	assert.Equal(t, "NULL", sql)
+}
+
+// With PreserveCasts a cast-carrying TypedLiteral is wrapped once, not by
+// both MarshalTypedLiteralToSQLEx and the caller.
+func TestMarshalGoValuePreserveCastsWrapsOnce(t *testing.T) {
+	opts := marshalling.MarshalOptions{PreserveCasts: true, MapCanonicalToClickHouse: marshalling.MapCanonicalToClickHouseTypeStr}
+	lit := marshalling.NewScalarUint64(1).WithCast("u8")
+
+	sql, err := marshalling.MarshalGoValueToSQLWithOptions(lit, opts)
+	require.NoError(t, err)
+	assert.Equal(t, "CAST(1, 'UInt8')", sql)
+
+	sql, err = marshalling.MarshalGoValueToSQLWithOptions(&lit, opts)
+	require.NoError(t, err)
+	assert.Equal(t, "CAST(1, 'UInt8')", sql)
+
+	sql, castType, err := marshalling.MarshalGoValueToSQLWithOptionsCast(lit, opts)
+	require.NoError(t, err)
+	assert.Equal(t, "1", sql)
+	assert.Equal(t, "UInt8", castType)
+
+	// Without PreserveCasts the literal still carries its own cast.
+	sql, err = marshalling.MarshalGoValueToSQLWithOptions(lit, marshalling.MarshalOptions{MapCanonicalToClickHouse: marshalling.MapCanonicalToClickHouseTypeStr})
+	require.NoError(t, err)
+	assert.Equal(t, "CAST(1, 'UInt8')", sql)
+}
+
+// A backslash in a name must not escape the identifier's closing quote.
+func TestEscapeIdentifierBackslash(t *testing.T) {
+	assert.Equal(t, `"a""b"`, marshalling.EscapeIdentifier(`a"b`))
+	assert.Equal(t, `"a\\"`, marshalling.EscapeIdentifier(`a\`))
+	name := `\" , 42 AS injected --`
+	quoted := marshalling.EscapeIdentifier(name)
+	assert.Equal(t, `"\\"" , 42 AS injected --"`, quoted)
+	assert.Equal(t, name, nanopass.DecodeIdentifier(quoted))
 }

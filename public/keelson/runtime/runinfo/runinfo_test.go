@@ -125,3 +125,15 @@ func TestReset_ClearsSingleton(t *testing.T) {
 	assert.NotSame(t, a, b, "Reset must let the next Init allocate fresh")
 	assert.NotEqual(t, a.RunId, b.RunId)
 }
+
+// The build id is a digest of the running executable: set, and the same for
+// every call within one process.
+func TestBuildIdIsTheExecutablesDigest(t *testing.T) {
+	a, b := buildId(), buildId()
+	if a == "" {
+		t.Skip("the test binary cannot read itself here")
+	}
+	if len(a) != 32 || a != b {
+		t.Fatalf("buildId: got %q then %q", a, b)
+	}
+}

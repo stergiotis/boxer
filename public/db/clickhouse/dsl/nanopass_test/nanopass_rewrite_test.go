@@ -1,6 +1,7 @@
 package nanopass_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/antlr4-go/antlr/v4"
@@ -199,4 +200,48 @@ func TestTrackedRewriterInPass(t *testing.T) {
 	assert.False(t, rw.HasConflicts())
 	result := nanopass.GetText(rw)
 	assert.Contains(t, result, "replaced")
+}
+
+// TestTrackedRewriterInsertAfterMatchesAntlr checks HasConflicts against
+// what GetTextDefault actually does for every op pair involving an
+// insert-after. ANTLR stores InsertAfter(i) as an insert at token i+1, so
+// the tracked region has to sit there too.
+func TestTrackedRewriterInsertAfterMatchesAntlr(t *testing.T) {
+	sql := "SELECT a + b FROM t"
+	type op struct {
+		name  string
+		apply func(rw *nanopass.TrackedRewriter)
+	}
+	var others []op
+	for s := 1; s <= 8; s++ {
+		for e := s; e <= s+2; e++ {
+			s, e := s, e
+			others = append(others,
+				op{fmt.Sprintf("replace(%d,%d)", s, e), func(rw *nanopass.TrackedRewriter) { rw.ReplaceDefault(s, e, "r") }},
+				op{fmt.Sprintf("delete(%d,%d)", s, e), func(rw *nanopass.TrackedRewriter) { rw.DeleteDefault(s, e) }})
+		}
+		s := s
+		others = append(others,
+			op{fmt.Sprintf("insertBefore(%d)", s), func(rw *nanopass.TrackedRewriter) { rw.InsertBeforeDefault(s, "b") }},
+			op{fmt.Sprintf("insertAfter(%d)", s), func(rw *nanopass.TrackedRewriter) { rw.InsertAfterDefault(s, "a") }})
+	}
+	for ia := 1; ia <= 8; ia++ {
+		ia := ia
+		insertAfter := op{fmt.Sprintf("insertAfter(%d)", ia), func(rw *nanopass.TrackedRewriter) { rw.InsertAfterDefault(ia, "a") }}
+		for _, other := range others {
+			for _, pair := range [][2]op{{insertAfter, other}, {other, insertAfter}} {
+				pr, err := nanopass.Parse(sql)
+				require.NoError(t, err)
+				rw := nanopass.NewTrackedRewriter(pr, zerolog.Nop())
+				pair[0].apply(rw)
+				pair[1].apply(rw)
+				panicked := func() (p bool) {
+					defer func() { p = recover() != nil }()
+					_ = rw.GetTextDefault()
+					return
+				}()
+				assert.Equal(t, panicked, rw.HasConflicts(), "%s then %s", pair[0].name, pair[1].name)
+			}
+		}
+	}
 }

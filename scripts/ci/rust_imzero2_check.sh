@@ -69,8 +69,9 @@ run_step() {
 target="target/ci"
 
 # The feature matrix. Each is a configuration something actually builds and
-# ships: the desktop seat, the three headless hosts, and the mesh-only
-# appliance build. `check` rather than `build` — these exist to catch the
+# ships: the desktop seat, the three headless hosts, the mesh-only appliance
+# build, and the browser host's feature checked natively (its wasm32 link is
+# rust/imzero2/build_rust_browser.sh's business). `check` rather than `build` — these exist to catch the
 # does-it-still-compile class, and codegen would triple the runtime.
 #
 # There is no `fast_alloc` row any more, and no allocator-free row either:
@@ -82,7 +83,8 @@ for features in \
     "--no-default-features --features headless" \
     "--no-default-features --features headless_svg" \
     "--no-default-features --features headless_wgpu" \
-    "--no-default-features --features headless_soft"; do
+    "--no-default-features --features headless_soft" \
+    "--no-default-features --features browser"; do
     # shellcheck disable=SC2086 # deliberate word splitting of the flag pair
     run_step "check $features" cargo check --locked --quiet $features --target-dir "$target" --all-targets
 done

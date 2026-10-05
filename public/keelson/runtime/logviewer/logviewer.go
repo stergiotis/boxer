@@ -138,7 +138,6 @@ type LogViewerApp struct {
 	// reusable hierarchical-field viewer. Constructed once per
 	// instance so its idPrefix scopes the widget ids it allocates;
 	// per-frame Render calls don't re-build state.
-	fv fieldview.Renderer
 	// fvState is the field viewer's expansion state, which the widget
 	// stopped keeping in egui's memory when it moved to the native
 	// tree (ADR-0176 M3). It is retained across rows deliberately: a
@@ -149,7 +148,6 @@ type LogViewerApp struct {
 	// ev renders the structured boxer-error chain in the detail
 	// pane. Same per-instance lifecycle as fv — constructed in
 	// newInstance, called per frame.
-	ev errorview.Renderer
 }
 
 var _ app.AppI = (*LogViewerApp)(nil)
@@ -167,8 +165,6 @@ func newInstance(m app.Manifest) (out *LogViewerApp) {
 		filterLevel: zerolog.TraceLevel,
 		follow:      true,
 		maxRows:     256,
-		fv:          fieldview.New(ids, "lv-fld"),
-		ev:          errorview.New(ids, "lv-err"),
 	}
 	return
 }
@@ -179,8 +175,6 @@ func (inst *LogViewerApp) Mount(ctx app.MountContextI) (err error) {
 	// hold a pointer to the stack — rebuild them so they emit ids
 	// scoped under the new stack instead of the ctor's fallback.
 	inst.ids = ctx.Ids()
-	inst.fv = fieldview.New(inst.ids, "lv-fld")
-	inst.ev = errorview.New(inst.ids, "lv-err")
 	return
 }
 func (inst *LogViewerApp) Unmount(ctx app.MountContextI) (err error) { return }
@@ -749,7 +743,7 @@ func (inst *LogViewerApp) renderDetailPane() {
 		// the CBOR-diagnostic dump of any structured-data attached
 		// via eb.Build (in a dark canvas Frame).
 		if r.ErrorContext != nil {
-			inst.ev.Render(toErrorviewContext(r.ErrorContext))
+			errorview.Render(errorview.Input{Ids: inst.ids, ScopeKey: "lv-err", Chain: toErrorviewContext(r.ErrorContext)})
 		}
 
 		// Stack — the legacy single-string stack field, set when
@@ -777,7 +771,7 @@ func (inst *LogViewerApp) renderDetailPane() {
 			for range c.CollapsingHeader(inst.ids.PrepareStr("d-fields"),
 				c.WidgetText().Text(fmt.Sprintf("fields (%d)", len(r.Fields))).Keep()).
 				DefaultOpen(true).KeepIter() {
-				inst.fv.Render(&inst.fvState, toFieldviewFields(r.Fields))
+				fieldview.Render(fieldview.Input{Ids: inst.ids, ScopeKey: "lv-fld", State: &inst.fvState, Fields: toFieldviewFields(r.Fields)})
 			}
 		}
 	}

@@ -31,9 +31,9 @@ func TestSceneDoubleClickExpandsThroughApply(t *testing.T) {
 	frame := func() {
 		ns, es := nv.Declare()
 		gv.Opts.Radial.Centers = []uint64{1}
-		gv.Render(ns, es, 400, 300)
+		evs := gv.Render(ns, es, 400, 300)
 		require.False(t, typed.HasErrors(), typed.GetError())
-		for _, ev := range gv.Events() {
+		for _, ev := range evs {
 			nv.Apply(ev)
 		}
 		sm.ScriptReset()

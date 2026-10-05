@@ -371,6 +371,105 @@ over the runtime vocabulary's new cohort, written by the service beside
 its ring wherever the host's persist backend reaches `boxer.facts`. The
 bodies kind stays deferred, and the reason is recorded in SD4.
 
+### 2026-09-27 — `llm.cancel`, and the requester's wait holds
+
+The in-process bus runs a handler on the publisher's goroutine, so a
+completion answered inline held the requester for the whole provider call:
+neither `Client.Timeout` nor the caller's context could end the wait, and
+only the caller's deadline reached the service. The service now answers
+`llm.complete` off the requester's goroutine, and a request carries a
+cancel key the client mints. Cancelling the caller's context returns at
+once and publishes `llm.cancel` with the key, which stops the provider
+call; the key is scoped to the sender, so one app cannot stop another's
+call. The verb falls under the existing `llm.*` grant. `Service.Close`
+cancels the calls in flight and waits for them.
+
+### 2026-10-02 — trusted hosts
+
+§SD3's locality exemption had one form, a loopback endpoint, so a model on
+another machine the deployment controls — a GPU box on the LAN — could take
+confined content only through an SSH tunnel to `localhost`.
+`BOXER_LLM_TRUSTED_HOSTS` lists endpoint hosts, by name or IP and without
+port, that the wall treats as it treats loopback. It is narrow by
+construction: a host matches by its exact name, never as a suffix; nothing
+else about the wall changes; and a provider whose host is not listed is
+refused as before, the refusal now saying "neither loopback nor a trusted
+host". It is visible: the service logs a warning at start, `llm.describe`
+reports `trusted` beside `local`, and the chat's model line says "trusted
+host". The agent service reads `local` (ADR-0269 §SD7), so a trusted host's
+model also reads confined results rather than handles. The list is the
+deployment's declaration that the host is its own; prefer an `https`
+endpoint, since the wall does not see the transport.
+
+### 2026-10-02 — a question to a query is the coordinator's
+
+§SD6 gave play's Model tab three prompts. `ask` is withdrawn from the book:
+the chat app of [ADR-0265](./0265-chat-app-over-retained-model-calls.md),
+driving a shared play window under ADR-0269, covers what it did and what
+ADR-0120 deferred — several turns, a model that sees the result it asked
+for — and the two paths would otherwise each need the grounding of
+ADR-0139. What the coordinator lacked was what M4 had given the tab: schema
+reads and a validate that run nothing. Those are now play operations
+(ADR-0270, update of this date), with leeway sections and handles added, so
+a coordinator explores without writing into the person's buffer.
+
+The trade is recorded rather than hidden. The tab's `ask` never ran
+generated SQL; a coordinator's `run` does, bounded by the task grant and
+play's agent limits rather than by a preview. `explain` and `fix this
+error` stay, as one-click transformations over the buffer, with the M4 tool
+loop behind `fix`.
+
+### 2026-10-03 — a failure names its call
+
+A failed or refused completion now says which row of the call record it
+is: a refusal's reply carries the call id, and the client returns a
+provider failure as `llm.CallError` — the failure kind, the provider's
+reason, the call id and the elapsed time — which unwraps to the
+`openaichat` sentinel it was, so classification by `errors.Is` is
+unchanged. `RefusedError` gained the call id; `llm.CallIdOf` reads it from
+either. A caller can show where a failure is recorded and open it, as the
+chat app does (ADR-0265 §SD4). A failure that never reached the service — a
+bus timeout, a cancel before the reply — has no call id.
+
+### 2026-10-03 — `llm.describe` reports the context size
+
+`llm.describe` reports the model's context size — what a whole request,
+prompt and answer, has to fit — and where the figure came from:
+`BOXER_LLM_CONTEXT_TOKENS` when the deployment states it, otherwise one
+request for the endpoint's model list at service start, read from the field
+the server reports it in (`loaded_context_length`, `max_model_len`,
+`context_length` and the like; `ProbeContextTokens`). The model list of
+the OpenAI API names none, and the size then stays unknown (0). The probe
+is skipped when the service's client replaces the endpoint, as the scripted
+model and tests do. A chat uses the size to say how full its conversation
+is (ADR-0265 §SD4); the service itself enforces nothing with it.
+
+### 2026-10-03 — an answer cut off before any text says why
+
+An answer the provider ends early with no text — `finish_reason` `length` or
+`content_filter` — came back as the generic "completion did not finish
+normally", classed `other`. A reasoning model that spends the whole ceiling
+thinking produced exactly that on a one-line question. Such a failure is now
+the kind `incomplete`, unwrapping to `openaichat.ErrIncompleteCompletion`,
+and its reason — on the reply and on the call record — says how the answer
+ended, the output tokens it spent against the call's ceiling
+(`BOXER_LLM_MAXTOKENS` when the request names none), and whether the model
+spent them reasoning. The reasoning text returns on `CallError.Reasoning`
+for inspection. An early end that does carry text is still an answer marked
+`Incomplete`, as before.
+
+### 2026-10-04 — the call record is a trail row
+
+The `llmCall` row of §SD4 is written through the audit trail's recorder
+([ADR-0277](./0277-one-audit-trail-for-model-calls-and-agent-work.md)): who asked is the row's `Origin` component — run, app and
+window — and the conversation, turn and round a request names are recorded on
+either subject. Each call also writes a row per new message, without text,
+before the request is sent to the provider; `BOXER_TRAIL_REQUIRED` decides
+whether a call proceeds when that write fails. The row gains the provider's
+completion id and reported model, a digest of the tools offered, and the token
+ceiling. `keelson('llm_calls')` shows the same, and whether a call's rows are
+durable. `llm/llmfacts` is gone; the store is `runtime/trail`.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — §SD3 the taxonomy this family joins, §SD7 the broker, §SD10 capslock.

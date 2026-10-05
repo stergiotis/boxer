@@ -53,6 +53,14 @@ func (inst *BuilderFactoryNodeBuilder) WithIdentityId(v bool) *BuilderFactoryNod
 	inst.node.IdentityArguments.HasId = v
 	return inst
 }
+
+// WithEffect declares that the factory's client apply code reaches beyond
+// the UI it draws into (ADR-0281 §SD5). A factory that does not declare one
+// draws, by its kind.
+func (inst *BuilderFactoryNodeBuilder) WithEffect(v ir.EffectE) *BuilderFactoryNodeBuilder {
+	inst.node.Effect = v
+	return inst
+}
 func (inst *BuilderFactoryNodeBuilder) WithSettingImmediate(v bool) *BuilderFactoryNodeBuilder {
 	inst.node.Settings.Immediate = v
 	return inst

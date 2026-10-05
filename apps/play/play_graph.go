@@ -3,6 +3,7 @@ package play
 import (
 	"context"
 	"encoding/binary"
+	"hash"
 	"hash/fnv"
 	"maps"
 	"reflect"
@@ -805,14 +806,47 @@ func fingerprintRecord(rec arrow.RecordBatch) (fp uint64) {
 	_, _ = h.Write(scratch[:])
 	ncols := int(rec.NumCols())
 	for c := range ncols {
-		for _, buf := range rec.Column(c).Data().Buffers() {
-			if buf != nil {
-				_, _ = h.Write(buf.Bytes())
-			}
-		}
+		fingerprintArrayData(h, rec.Column(c).Data(), &scratch)
 	}
 	fp = h.Sum64()
 	return
+}
+
+// fingerprintArrayData hashes one ArrayData and everything it refers to: its
+// offset and length (two slices of one backing buffer are different
+// content), its buffers, then its children — List values, Struct fields, Map
+// entries — and its dictionary. A column's top-level buffers alone are only
+// validity and offsets for a nested type, so without the recursion two
+// results that differ only inside an array or a tuple would collide.
+func fingerprintArrayData(h hash.Hash64, d arrow.ArrayData, scratch *[8]byte) {
+	if d == nil {
+		return
+	}
+	binary.LittleEndian.PutUint64(scratch[:], uint64(d.Offset()))
+	_, _ = h.Write(scratch[:])
+	binary.LittleEndian.PutUint64(scratch[:], uint64(d.Len()))
+	_, _ = h.Write(scratch[:])
+	for _, buf := range d.Buffers() {
+		if buf == nil {
+			binary.LittleEndian.PutUint64(scratch[:], 0)
+			_, _ = h.Write(scratch[:])
+			continue
+		}
+		b := buf.Bytes()
+		binary.LittleEndian.PutUint64(scratch[:], uint64(len(b)))
+		_, _ = h.Write(scratch[:])
+		_, _ = h.Write(b)
+	}
+	children := d.Children()
+	binary.LittleEndian.PutUint64(scratch[:], uint64(len(children)))
+	_, _ = h.Write(scratch[:])
+	for _, ch := range children {
+		fingerprintArrayData(h, ch, scratch)
+	}
+	// Dictionary() is a typed nil off a dictionary type, so ask the type.
+	if _, dict := d.DataType().(*arrow.DictionaryType); dict {
+		fingerprintArrayData(h, d.Dictionary(), scratch)
+	}
 }
 
 // --- ADR-0097 live runtime: the `main` node's async execution lane ---
@@ -846,6 +880,9 @@ func newLiveQueryGraph(client *Client, alloc memory.Allocator, maxHistory int) (
 func (inst *queryGraph) RunMain(sql string, signals map[string]string, sourceBuffer string) {
 	inst.mainLane.Execute(sql, signals, sourceBuffer)
 }
+
+// MainConfined reports the label of `main`'s result (ADR-0270 §SD4).
+func (inst *queryGraph) MainConfined() bool { return inst.mainLane.Confined() }
 
 // CancelMain aborts an in-flight `main` execution.
 func (inst *queryGraph) CancelMain() { inst.mainLane.Cancel() }

@@ -13,7 +13,7 @@ import (
 // stack and the names rather than of a call counter (ADR-0228 §SD1).
 func TestHandlesAreStableAndDoNotConsumeTheStack(t *testing.T) {
 	ids := c.NewWidgetIdStack()
-	m := New(ids, Options{NoTiles: true})
+	m := New(ids, "", Options{NoTiles: true})
 	c1, a1 := m.Handles()
 	c2, a2 := m.Handles()
 	require.Equal(t, c1, c2, "a second call gives the same canvas handle")
@@ -25,7 +25,7 @@ func TestHandlesAreStableAndDoNotConsumeTheStack(t *testing.T) {
 // ever (ADR-0228 §SD2).
 func TestPointerVetoIsClearedByTheRenderItAppliesTo(t *testing.T) {
 	ids := c.NewWidgetIdStack()
-	m := New(ids, Options{NoTiles: true})
+	m := New(ids, "", Options{NoTiles: true})
 	require.False(t, m.pointerVeto)
 	m.SetPointerVeto(true)
 	require.True(t, m.pointerVeto)

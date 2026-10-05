@@ -711,7 +711,7 @@ func TestCanonWireGoClassBuilderSample(t *testing.T) {
 	acceptCanonicalType := tech.CheckTypeCompatibility
 	acceptEncodingAspect := ddl.EncodingAspectFilterFuncFromTechnology(tech, common.ImplementationStatusFull)
 	n := 1000
-	if testing.Short() {
+	if testing.Short() || raceEnabled {
 		n = 10
 	}
 	skipped := 0

@@ -1,0 +1,6 @@
+
+(process:2): Gtk-WARNING **: 08:07:43.961: Locale not supported by C library.
+	Using the fallback 'C' locale.
+Gtk-Message: 08:07:43.961: Failed to load module "canberra-gtk-module"
+[2:2:0926/081550.712397:ERROR:content/common/zygote/zygote_communication_linux.cc:293] Failed to send GetTerminationStatus message to zygote
+[2:2:0926/081550.726862:ERROR:content/common/zygote/zygote_communication_linux.cc:293] Failed to send GetTerminationStatus message to zygote

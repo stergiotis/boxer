@@ -116,7 +116,7 @@ func CreateSchemaLedgerTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1493
 
 type InEntityLedgerTable struct {
 	errs               []error
@@ -168,8 +168,11 @@ func NewInEntityLedgerTable(allocator memory.Allocator, estimatedNumberOfRecords
 
 // SetActiveSections marks which section indices BeginEntity should
 // initialise (skipping beginSection for the rest). Pass nil to clear.
-// The hint is a performance optimisation; sending BeginAttribute to
-// an unmarked section produces empty-list bytes at TransferRecords.
+// The hint is a performance optimisation for shim builders, paired
+// with the builder's SetActiveFields over the marked sections'
+// columns; BeginAttribute on an unmarked section is an invalid state
+// transition. On the arrow RecordBuilder the hint has no effect:
+// every section starts, so its list columns stay row-aligned.
 func (inst *InEntityLedgerTable) setActiveSections(idxs []int) {
 	if idxs == nil {
 		inst.activeSections = nil
@@ -202,7 +205,7 @@ var InEntityLedgerTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
 
 func (inst *InEntityLedgerTable) setId(id0 string) *InEntityLedgerTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -217,7 +220,7 @@ func (inst *InEntityLedgerTable) setId(id0 string) *InEntityLedgerTable {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
 
 func (inst *InEntityLedgerTable) setTimestamp(ts1 time.Time) *InEntityLedgerTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -277,33 +280,6 @@ func (inst *InEntityLedgerTable) initSections(builder *array.RecordBuilder) {
 	inst.section07Inst = NewInEntityLedgerTableSectionSnapOwner(builder, inst)
 }
 func (inst *InEntityLedgerTable) beginSections() {
-	if mask := inst.activeSections; mask != nil {
-		if mask[0] {
-			inst.section00Inst.beginSection()
-		}
-		if mask[1] {
-			inst.section01Inst.beginSection()
-		}
-		if mask[2] {
-			inst.section02Inst.beginSection()
-		}
-		if mask[3] {
-			inst.section03Inst.beginSection()
-		}
-		if mask[4] {
-			inst.section04Inst.beginSection()
-		}
-		if mask[5] {
-			inst.section05Inst.beginSection()
-		}
-		if mask[6] {
-			inst.section06Inst.beginSection()
-		}
-		if mask[7] {
-			inst.section07Inst.beginSection()
-		}
-		return
-	}
 	inst.section00Inst.beginSection()
 	inst.section01Inst.beginSection()
 	inst.section02Inst.beginSection()
@@ -834,6 +810,7 @@ func (inst *InEntityLedgerTableSectionAcctClosedInAttr) EndSection() *InEntityLe
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1187,6 +1164,7 @@ func (inst *InEntityLedgerTableSectionAcctDepositInAttr) EndSection() *InEntityL
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1512,6 +1490,7 @@ func (inst *InEntityLedgerTableSectionAcctOwnerInAttr) EndSection() *InEntityLed
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1865,6 +1844,7 @@ func (inst *InEntityLedgerTableSectionAcctWithdrawInAttr) EndSection() *InEntity
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -2218,6 +2198,7 @@ func (inst *InEntityLedgerTableSectionSnapAsOfInAttr) EndSection() *InEntityLedg
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -2571,6 +2552,7 @@ func (inst *InEntityLedgerTableSectionSnapBalanceInAttr) EndSection() *InEntityL
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -2896,6 +2878,7 @@ func (inst *InEntityLedgerTableSectionSnapClosedInAttr) EndSection() *InEntityLe
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -3221,6 +3204,7 @@ func (inst *InEntityLedgerTableSectionSnapOwnerInAttr) EndSection() *InEntityLed
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }

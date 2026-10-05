@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -11,13 +12,14 @@ import (
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 )
 
 func TestRegisterStatic(t *testing.T) {
 	r := introspect.NewRegistry()
 	require.NoError(t, RegisterStatic(r))
-	assert.Equal(t, []string{"adr", "adrcontent", "adrsections", "apps", "build",
+	assert.Equal(t, []string{"adr", "adrcontent", "adrsections", "app_operations", "apps", "build",
 		"coderef", "competence", "competencerelation", "competencesection",
 		"components", "env", "extbin", "go_modules", "go_symbols", "helpsections",
 		"lw_components", "memberships", "panel_shapes", "sbom", "sql_passes", "subtask"},
@@ -121,7 +123,7 @@ func TestAppsTableRendersLaunchAndWorkingset(t *testing.T) {
 	for _, r := range rs {
 		require.NoError(t, r.Manifest.Validate(), "the fixtures must be manifests the registry would accept")
 	}
-	rec := appsTable(rs).Build(introspect.AllColumns(), len(rs))
+	rec := appsTable(app.NewRegistry(), rs).Build(introspect.AllColumns(), len(rs))
 	defer rec.Release()
 	require.EqualValues(t, 2, rec.NumRows())
 
@@ -155,7 +157,7 @@ func TestAppsTableRendersRegistrationMode(t *testing.T) {
 			LaunchKind: "testLaunch", Workingset: true,
 		}, Singleton: true},
 	}
-	rec := appsTable(rs).Build(introspect.AllColumns(), len(rs))
+	rec := appsTable(app.NewRegistry(), rs).Build(introspect.AllColumns(), len(rs))
 	defer rec.Release()
 
 	idx := rec.Schema().FieldIndices("registration")
@@ -181,7 +183,7 @@ func TestAppsTableRendersClassification(t *testing.T) {
 	for _, r := range rs {
 		require.NoError(t, r.Manifest.Validate(), "the fixtures must be manifests the registry would accept")
 	}
-	rec := appsTable(rs).Build(introspect.AllColumns(), len(rs))
+	rec := appsTable(app.NewRegistry(), rs).Build(introspect.AllColumns(), len(rs))
 	defer rec.Release()
 	require.EqualValues(t, 1, rec.NumRows())
 
@@ -204,4 +206,27 @@ func firstStringList(t *testing.T, rec arrow.RecordBatch, col string) (out []str
 		out = append(out, vals.Value(int(i)))
 	}
 	return
+}
+
+func TestOperationsTableShowsCatalogsAndWithdrawals(t *testing.T) {
+	type args struct{ Text string }
+	vs := []appops.View{
+		appops.ViewOf(app.Manifest{Id: "x/apps/notes", Display: "Notes"}, app.OperationSpec{
+			Name: "set_note", Version: 1, Summary: "replace the note", Class: app.OperationClassCommand,
+			Effect: app.OperationEffectDocument, Writes: []string{"note"}, Args: reflect.TypeFor[args](), Agents: true}),
+		{App: "x/apps/broken", AppDisplay: "Broken", Diagnostic: "operations: version starts at 1"},
+	}
+	rec := operationsTable(vs).Build(introspect.Projection{}, len(vs))
+	defer rec.Release()
+	require.EqualValues(t, 2, rec.NumRows())
+	col := func(name string) arrow.Array {
+		idx := rec.Schema().FieldIndices(name)
+		require.Len(t, idx, 1, name)
+		return rec.Column(idx[0])
+	}
+	assert.Equal(t, "set_note", col("operation").(*array.String).Value(0))
+	assert.Equal(t, "document", col("effect").(*array.String).Value(0))
+	assert.Contains(t, col("args_schema").(*array.String).Value(0), `"text"`)
+	assert.Equal(t, "", col("operation").(*array.String).Value(1))
+	assert.Contains(t, col("diagnostic").(*array.String).Value(1), "version")
 }

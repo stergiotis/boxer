@@ -10,7 +10,7 @@ import (
 )
 
 // TestExperimentsImplementsTheCatalogue holds the pane to vizeval's sink
-// catalogue (ADR-0257 §SD2): every catalogued sink has a reading guide and is
+// catalogue (ADR-0266 §SD2): every catalogued sink has a reading guide and is
 // drawn, and every palette the card declares maps onto an emitter palette. A
 // sink added to one side and not the other fails here, not in a scored run.
 func TestExperimentsImplementsTheCatalogue(t *testing.T) {

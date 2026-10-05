@@ -1,6 +1,7 @@
 package cbordiag
 
 import (
+	"errors"
 	"strconv"
 
 	"github.com/zeebo/xxh3"
@@ -21,28 +22,35 @@ var (
 	copyAtoms     = c.Atoms().Text(icons.PhCopy).Keep()
 )
 
-// Renderer is the configured viewer: construct with New, tune with the
-// fluent setters (each returns a modified copy), then Render any number of
-// times. It holds the caller's WidgetIdStack; the idPrefix scopes every
-// widget id it emits.
-type Renderer struct {
-	ids      *c.WidgetIdStack
-	idPrefix string
-	toolbar  bool
+// Input is one frame's view.
+type Input struct {
+	// Ids is the host's widget id stack. Render opens its own IdScope under
+	// it, so two views in one frame need only differ in ScopeKey.
+	Ids *c.WidgetIdStack
+	// ScopeKey names this view within the host's id space; empty uses
+	// "cbordiag".
+	ScopeKey string
+	// Item is the CBOR to show.
+	Item []byte
+	// Options drive the printer; Options.Compact is overridden by the State's
+	// toggle.
+	Options diag.Options
+	// State is the host's memo and toggle, one per place a view is drawn.
+	// Required.
+	State *State
+	// HideToolbar drops the row above the notation. Without it the compact
+	// toggle is whatever State.Compact says and copying is the host's.
+	HideToolbar bool
 }
 
-// New returns a Renderer with the toolbar shown.
-func New(ids *c.WidgetIdStack, idPrefix string) (inst Renderer) {
-	inst = Renderer{ids: ids, idPrefix: idPrefix, toolbar: true}
-	return
-}
-
-// Toolbar shows or hides the row above the notation. Without it the
-// compact toggle is whatever State.Compact says and copying is the host's.
-func (inst Renderer) Toolbar(v bool) (out Renderer) {
-	inst.toolbar = v
-	out = inst
-	return
+// Result is what one Render reports.
+type Result struct {
+	// Copied is true on the frame the copy button put the notation on the
+	// clipboard.
+	Copied bool
+	// Err is set when Input.State is nil; the widget draws the message in
+	// place. The printer's own verdict is [State.Err].
+	Err error
 }
 
 // State is the caller's: one per place a view is drawn. Compact is the
@@ -115,26 +123,41 @@ func (st *State) prepare(item []byte, opts diag.Options) {
 	st.have = true
 }
 
-// Render draws the view at the current ui scope: the toolbar, then the
-// notation. opts.Compact is overridden by the State's toggle. A nil state
-// renders once from a throwaway one, which is only useful for a one-shot
-// draw nobody toggles or copies.
-func (inst Renderer) Render(st *State, item []byte, opts diag.Options) {
-	if st == nil {
-		st = &State{}
+// Render draws the view at the current ui scope, inside one IdScope under
+// Input.Ids: the toolbar, then the notation. A nil Ids draws nothing.
+func Render(in Input) (res Result) {
+	if in.Ids == nil {
+		return
 	}
-	st.prepare(item, opts)
-	ids := inst.ids
-	for range c.IdScope(ids.PrepareStr(inst.idPrefix)) {
-		if inst.toolbar {
-			inst.renderToolbar(st, len(item))
-		}
-		c.CodeView(ids.PrepareStr("notation"), st.job).Send()
+	scopeKey := in.ScopeKey
+	if scopeKey == "" {
+		scopeKey = "cbordiag"
 	}
+	for range c.IdScope(in.Ids.PrepareStr(scopeKey)) {
+		res = in.render()
+	}
+	return
 }
 
-func (inst Renderer) renderToolbar(st *State, nBytes int) {
-	ids := inst.ids
+func (in Input) render() (res Result) {
+	st := in.State
+	if st == nil {
+		res.Err = errors.New("cbordiag: Input.State is nil")
+		for rt := range c.RichTextLabel(res.Err.Error()) {
+			rt.Small().Weak()
+		}
+		return
+	}
+	st.prepare(in.Item, in.Options)
+	if !in.HideToolbar {
+		res.Copied = in.renderToolbar(st, len(in.Item))
+	}
+	c.CodeView(in.Ids.PrepareStr("notation"), st.job).Send()
+	return
+}
+
+func (in Input) renderToolbar(st *State, nBytes int) (copied bool) {
+	ids := in.Ids
 	density := styletokens.ActiveDensity()
 	for range c.HorizontalTop().KeepIter() {
 		c.LabelAtoms(c.Atoms().
@@ -146,6 +169,7 @@ func (inst Renderer) renderToolbar(st *State, nBytes int) {
 		for range c.HoverText("copy the diagnostic notation").KeepIter() {
 			if c.Button(ids.PrepareStr("copy"), copyAtoms).Small().SendResp().HasPrimaryClicked() {
 				c.CopyTextToClipboard(st.text)
+				copied = true
 			}
 		}
 		if st.Verdict != "" {
@@ -161,4 +185,5 @@ func (inst Renderer) renderToolbar(st *State, nBytes int) {
 				Keep()).Selectable(false).Truncate().Send()
 		}
 	}
+	return
 }

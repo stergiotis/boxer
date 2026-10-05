@@ -1,0 +1,1 @@
+RESULT {"arm":"native-inproc","target":"native","consumer":"inproc","lazy_flush":true,"scene":"labels","frames":300,"warmup":30,"bytes_per_frame":301799,"messages_per_frame":8533,"render_us":{"p50":2786.971,"p90":3564.385,"max":4379.77},"sync_us":{"p50":56.671,"p90":76.851,"max":226.475},"total_us":{"p50":2841.392,"p90":3644.046,"max":4467.621}}

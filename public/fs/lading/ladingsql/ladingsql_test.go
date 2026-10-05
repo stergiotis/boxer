@@ -90,6 +90,22 @@ func TestSnapshotSelection(t *testing.T) {
 	assert.NotContains(t, nanos, "toDateTime64(1755000000123456789")
 }
 
+// TestPinnedSnapshotMustBeComplete — §SD6: a walk that died leaves rows at a
+// ts its caller can learn (Result.Snap, the raw table), and naming that ts must
+// not surface them. A pinned instant is checked against the snapshot index like
+// '*' and the latest form are.
+func TestPinnedSnapshotMustBeComplete(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT path FROM fs(4322952322827452417, '2026-08-20 01:02:03.5')",
+		"SELECT path FROM fs(4322952322827452417, 1755000000123456789)",
+		"SELECT path FROM fsdata(4322952322827452417, 1755000000123456789)",
+		"SELECT path FROM fs('*', 1755000000123456789)",
+	} {
+		out := expandOK(t, sql)
+		assert.Containsf(t, out, "FROM boxer.fssnap", "%s must read the snapshot index", sql)
+	}
+}
+
 // TestMountIdSpellings. A 19-digit literal is awkward to type and hex is how
 // these ids are usually read, so both are accepted — and both mean the same
 // number.

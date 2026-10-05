@@ -114,8 +114,10 @@ func (v CanvasCursorValue) Command() bool { return v.Mods&8 != 0 }
 // An event, not a state. A widget can see several in one frame (key repeat, or
 // a fast typist), which is why GetCapturedKeys returns a slice rather than the
 // single value the other per-id registers hold. The slice is empty on any frame
-// with no presses — there is no "still held" reading here, and a widget that
-// wants held-key behaviour should count repeats rather than look for one.
+// with no key events — there is no "still held" reading here. A widget that
+// wants held-key behaviour asks for releases with `.CaptureKeyEdges()` and
+// folds the edges (ADR-0279 §SD1); a key released after the widget lost focus
+// is not reported, so losing focus is the widget's cue that every key is up.
 type CapturedKey struct {
 	Code keycodes.Code
 	// Mods is the modifier state at the moment of the press (bit0 shift,
@@ -123,7 +125,16 @@ type CapturedKey struct {
 	// (SD5), so Shift+Down arrives as Down with Shift set rather than being
 	// missed — read this to tell the two apart.
 	Mods uint8
+	// Edges is the event's edge byte (ADR-0279 §SD1): bit 0 set for a press,
+	// clear for a release, bit 1 set for an auto-repeat press. Releases arrive
+	// only for a Frame that called .CaptureKeyEdges().
+	Edges uint8
 }
+
+// CapturedKey edge accessors.
+func (v CapturedKey) Down() bool   { return v.Edges&1 != 0 }
+func (v CapturedKey) Up() bool     { return v.Edges&1 == 0 }
+func (v CapturedKey) Repeat() bool { return v.Edges&2 != 0 }
 
 // CapturedKey modifier accessors.
 func (v CapturedKey) Shift() bool   { return v.Mods&1 != 0 }
@@ -187,17 +198,25 @@ type UiRectValue struct {
 	MaxY float32
 }
 
-// GraphEventsValue / GraphSelectionValue / GraphMetricsValue cache the
-// three egui_graphs fetcher outputs at frame-end.
-//
-// Stored as slices on StateManager (rather than emitted to consumers
-// via callback) so multiple consumers in the same frame can read
-// independently.
-type GraphEventsValue []GraphEvent
-type GraphSelectionValue []GraphSelectedItem
-type GraphMetricsValue []GraphMetrics
+// WindowGeomValue is one row of the R27 window drain: an egui::Window's
+// outer rect as laid out last frame, in logical points with a viewport
+// top-left origin, its stacking rank (larger is further front, 0 unknown),
+// whether its body was collapsed, and the outer size its content needed as
+// laid out (NeedW/NeedH). Need exceeds the rect where the content overflowed
+// the body — after a WindowPlace, by how much the placed size fell short.
+// It is not an intrinsic minimum: content that stretches to fill the body
+// needs exactly what it was given.
+type WindowGeomValue struct {
+	MinX, MinY, MaxX, MaxY float32
+	NeedW, NeedH           float32
+	Z                      uint32
+	Collapsed              bool
+}
 
 type StateManager struct {
+	// pixelsPerPoint is fetchPixelsPerPoint's last answer (GetPixelsPerPoint).
+	pixelsPerPoint float32
+
 	responseFlags        *containers.BinarySearchGrowingKV[uint64, ResponseFlagsE]
 	r10Databinds         *containers.BinarySearchGrowingKV[uint64, *bool]
 	r9F64Databinds       *containers.BinarySearchGrowingKV[uint64, *float64]
@@ -220,6 +239,13 @@ type StateManager struct {
 	r19ZoomDelta     ZoomDeltaValue
 	r20Pointer       PointerValue
 	r21UiRects       map[uint64]UiRectValue
+	r27Windows       map[uint64]WindowGeomValue
+	r27WorkArea      UiRectValue
+	// captureWanted issues fetchCaptureResult at the next Sync; the reply
+	// waits in captureResult for TakeCaptureResult (ADR-0281 §SD5).
+	captureWanted   bool
+	captureResult   CaptureResultValue
+	captureResultOk bool
 	// r23CanvasWheel holds LAST frame's per-canvas wheel captures (ADR-0140),
 	// keyed by canvas widget id. Rebuilt each Sync; read via GetCanvasWheel.
 	r23CanvasWheel map[uint64]CanvasWheelValue
@@ -262,9 +288,6 @@ type StateManager struct {
 	// contract.
 	commandEnter      bool
 	commandEnterShift bool
-	graphEvents       GraphEventsValue
-	graphSelection    GraphSelectionValue
-	graphMetrics      GraphMetricsValue
 }
 
 func NewStateManager() *StateManager {
@@ -279,6 +302,7 @@ func NewStateManager() *StateManager {
 		overriddenBindingIds: containers.NewHashSet[uint64](128),
 		fetcher:              NewFetcher(),
 		r21UiRects:           make(map[uint64]UiRectValue, 8),
+		r27Windows:           make(map[uint64]WindowGeomValue, 8),
 		r23CanvasWheel:       make(map[uint64]CanvasWheelValue, 8),
 		r24CanvasPointers:    make(map[uint64]CanvasCursorValue, 8),
 		r26KeyCaptures:       make(map[uint64][]CapturedKey, 4),
@@ -387,6 +411,23 @@ func (inst *StateManager) GetCommandEnterPressed() (pressed bool, shiftPressed b
 	return inst.commandEnter, inst.commandEnterShift
 }
 
+// GetWindowGeom returns last frame's R27 geometry for the egui::Window
+// identified by the given handle. ok is false for a window that was not
+// shown last frame (closed, or opened this frame).
+func (inst *StateManager) GetWindowGeom(h widgethandle.WidgetHandle) (v WindowGeomValue, ok bool) {
+	v, ok = inst.r27Windows[h.Resolve()]
+	return
+}
+
+// GetWindowWorkArea returns the desktop rect the shell's panels left free
+// last frame — the rect a maximized window fills and window arrangements
+// lay out into. ok is false on a frame that showed no egui::Window.
+func (inst *StateManager) GetWindowWorkArea() (v UiRectValue, ok bool) {
+	v = inst.r27WorkArea
+	ok = !math.IsNaN(float64(v.MinX)) && v.MaxX > v.MinX && v.MaxY > v.MinY
+	return
+}
+
 // GetUiRect returns last frame's R21 captured ui.min_rect for the given
 // seq, plus whether a capture for that seq landed. Callers stamp a Ui
 // scope via [c.CaptureUiRect](seq) inside that scope; one frame later
@@ -461,20 +502,6 @@ func (inst *StateManager) GetCapturedKeys(h widgethandle.WidgetHandle) []Capture
 // will reflect the position the click landed on (one-frame lag).
 func (inst *StateManager) GetPointer() PointerValue {
 	return inst.r20Pointer
-}
-
-// GetGraphEvents / GetGraphSelection / GetGraphMetrics return last
-// frame's egui_graphs cached state. The returned slice is owned by the
-// StateManager and reused next frame; callers that need to retain
-// entries past this frame must copy.
-func (inst *StateManager) GetGraphEvents() GraphEventsValue {
-	return inst.graphEvents
-}
-func (inst *StateManager) GetGraphSelection() GraphSelectionValue {
-	return inst.graphSelection
-}
-func (inst *StateManager) GetGraphMetrics() GraphMetricsValue {
-	return inst.graphMetrics
 }
 
 // GetEtPrefetch returns the previous frame's visible (row, col) ranges for
@@ -659,40 +686,6 @@ func applyDataBindings[V any](blacklist *containers.HashSet[uint64], bindings *c
 		functional.ConsumeIterator(vals)
 	}
 }
-func applyDataBindingsConst[V any](blacklist *containers.HashSet[uint64], bindings *containers.BinarySearchGrowingKV[uint64, *V], ids iter.Seq[uint64], val V, def V) {
-	if !bindings.IsEmpty() {
-		if blacklist.IsEmpty() {
-			for f := range bindings.IterateValues() {
-				*f = def
-			}
-			for id := range ids {
-				f := bindings.GetDefault(id, nil)
-				if f != nil {
-					*f = val
-				}
-			}
-		} else {
-			for id, f := range bindings.IteratePairs() {
-				if blacklist.Has(id) {
-					continue
-				}
-				*f = def
-			}
-			for id := range ids {
-				if blacklist.Has(id) {
-					continue
-				}
-				f := bindings.GetDefault(id, nil)
-				if f != nil {
-					*f = val
-				}
-			}
-		}
-		bindings.Reset()
-	} else {
-		functional.ConsumeIterator(ids)
-	}
-}
 func applyDataBindingsConst2[V any](blacklist *containers.HashSet[uint64], bindings *containers.BinarySearchGrowingKV[uint64, *V], fetcher func() (idsVal1 []uint64, idsVal2 iter.Seq[uint64]), val1 V, val2 V) {
 	idsVal1, idsVal2 := fetcher()
 	if !bindings.IsEmpty() {
@@ -738,7 +731,42 @@ func (inst *StateManager) Sync() {
 	seenIds.Clear()
 	fetcher := inst.fetcher
 
-	ids, resps := fetcher.FetchR7()
+	// Every fetch of a Sync is issued before the first reply is read, and
+	// the replies are collected below in the same order (ADR-0077 SD3):
+	// the requests take no arguments and the peer answers messages in the
+	// order it reads them, so one flush and one wait serve the whole batch
+	// instead of one round trip per fetch. The two lists must stay in
+	// step — a collect out of order reads the wrong reply.
+	fetcher.IssueFetchR7()
+	fetcher.IssueFetchR9F64()
+	fetcher.IssueFetchR9U64()
+	fetcher.IssueFetchR9S()
+	fetcher.IssueFetchR10()
+	fetcher.IssueFetchR9EtPrefetch()
+	fetcher.IssueFetchR25EtColWidths()
+	fetcher.IssueFetchR16ScrollDelta()
+	fetcher.IssueFetchR17Modifiers()
+	fetcher.IssueFetchR18AvailableSize()
+	fetcher.IssueFetchR19ZoomDelta()
+	fetcher.IssueFetchR20Pointer()
+	fetcher.IssueFetchF1KeyPressed()
+	fetcher.IssueFetchF2KeyPressed()
+	fetcher.IssueFetchCommandEnterPressed()
+	fetcher.IssueFetchR21UiRects()
+	fetcher.IssueFetchR27Windows()
+	fetcher.IssueFetchR23CanvasWheel()
+	fetcher.IssueFetchR24CanvasPointers()
+	fetcher.IssueFetchR26KeyCaptures()
+	fetcher.IssueFetchR22StarvedTextures()
+	fetcher.IssueFetchFrameMetrics()
+	fetcher.IssueFetchPixelsPerPoint()
+	captureWanted := inst.captureWanted
+	inst.captureWanted = false
+	if captureWanted {
+		fetcher.IssueFetchCaptureResult()
+	}
+
+	ids, resps := fetcher.CollectFetchR7()
 	d := inst.responseFlags
 	for id, resp := range ragged.Zip2R(ids, resps) {
 		d.UpsertBatch(id, ResponseFlagsE(resp))
@@ -748,21 +776,21 @@ func (inst *StateManager) Sync() {
 	blacklist := inst.overriddenBindingIds
 
 	applyDataBindings(blacklist, inst.r9F64Databinds, func() ([]uint64, iter.Seq[float64]) {
-		return fetcher.FetchR9F64()
+		return fetcher.CollectFetchR9F64()
 	})
 	applyDataBindings(blacklist, inst.r9U64Databinds, func() ([]uint64, iter.Seq[uint64]) {
-		return fetcher.FetchR9U64()
+		return fetcher.CollectFetchR9U64()
 	})
 	applyDataBindings(blacklist, inst.r9SDatabinds, func() ([]uint64, iter.Seq[string]) {
-		return fetcher.FetchR9S()
+		return fetcher.CollectFetchR9S()
 	})
-	applyDataBindingsConst2(blacklist, inst.r10Databinds, fetcher.FetchR10, true, false)
+	applyDataBindingsConst2(blacklist, inst.r10Databinds, fetcher.CollectFetchR10, true, false)
 
 	// ETable prefetch — packed 5×u64 per id (rowBegin, rowEnd, colBegin,
 	// colEnd, numStickyCols). Must consume the iterator fully even if
 	// unused so the FFI channel stays in sync.
 	{
-		etIds, etVals := fetcher.FetchR9EtPrefetch()
+		etIds, etVals := fetcher.CollectFetchR9EtPrefetch()
 		next, stop := iter.Pull(etVals)
 		for _, id := range etIds {
 			rb, _ := next()
@@ -791,7 +819,7 @@ func (inst *StateManager) Sync() {
 	// ApplyWidths push here, so this is usually empty. As above, the
 	// iterator must be consumed fully even when unused or the FFI channel
 	// desynchronizes.
-	inst.applyEtColWidths(fetcher.FetchR25EtColWidths())
+	inst.applyEtColWidths(fetcher.CollectFetchR25EtColWidths())
 
 	inst.r9F64Databinds.Reset()
 	inst.r9U64Databinds.Reset()
@@ -799,26 +827,26 @@ func (inst *StateManager) Sync() {
 	inst.r10Databinds.Reset()
 	blacklist.Clear()
 	{
-		x, y := fetcher.FetchR16ScrollDelta()
+		x, y := fetcher.CollectFetchR16ScrollDelta()
 		inst.r16ScrollDelta = ScrollDeltaValue{X: x, Y: y}
 	}
 	{
-		alt, ctrl, shift, macCmd, command := fetcher.FetchR17Modifiers()
+		alt, ctrl, shift, macCmd, command := fetcher.CollectFetchR17Modifiers()
 		inst.r17Modifiers = ModifiersValue{
 			Alt: alt, Ctrl: ctrl, Shift: shift,
 			MacCmd: macCmd, Command: command,
 		}
 	}
 	{
-		w, h := fetcher.FetchR18AvailableSize()
+		w, h := fetcher.CollectFetchR18AvailableSize()
 		inst.r18AvailableSize = AvailableSizeValue{W: w, H: h}
 	}
 	{
-		z := fetcher.FetchR19ZoomDelta()
+		z := fetcher.CollectFetchR19ZoomDelta()
 		inst.r19ZoomDelta = ZoomDeltaValue{Zoom: z}
 	}
 	{
-		x, y, valid := fetcher.FetchR20Pointer()
+		x, y, valid := fetcher.CollectFetchR20Pointer()
 		inst.r20Pointer = PointerValue{X: x, Y: y, Valid: valid}
 	}
 	{
@@ -827,8 +855,8 @@ func (inst *StateManager) Sync() {
 		// same frame don't also react: the runtime owns these two shortcuts
 		// exclusively, and each has its own fetcher so that ownership is
 		// explicit per binding rather than pooled behind one "any key" drain.
-		inst.f1KeyPressed = fetcher.FetchF1KeyPressed()
-		inst.f2KeyPressed = fetcher.FetchF2KeyPressed()
+		inst.f1KeyPressed = fetcher.CollectFetchF1KeyPressed()
+		inst.f2KeyPressed = fetcher.CollectFetchF2KeyPressed()
 	}
 	{
 		// Ctrl/Cmd+Enter and Ctrl/Cmd+Shift+Enter. Draining these at
@@ -836,10 +864,10 @@ func (inst *StateManager) Sync() {
 		// TextEdit reacts to Enter only through its return_key, which
 		// carries no modifiers, so the widgets have already declined
 		// these two by the time Sync runs.
-		inst.commandEnter, inst.commandEnterShift = fetcher.FetchCommandEnterPressed()
+		inst.commandEnter, inst.commandEnterShift = fetcher.CollectFetchCommandEnterPressed()
 	}
 	{
-		seqs, minX, minY, maxX, maxYSeq := fetcher.FetchR21UiRects()
+		seqs, minX, minY, maxX, maxYSeq := fetcher.CollectFetchR21UiRects()
 		for k := range inst.r21UiRects {
 			delete(inst.r21UiRects, k)
 		}
@@ -858,7 +886,19 @@ func (inst *StateManager) Sync() {
 		}
 	}
 	{
-		ids, scrollXs, scrollYs, zooms, hoverXs, hoverYSeq := fetcher.FetchR23CanvasWheel()
+		ids, minX, minY, maxX, maxY, z, collapsed, needW, needH, wMinX, wMinY, wMaxX, wMaxY := fetcher.CollectFetchR27Windows()
+		clear(inst.r27Windows)
+		for i, id := range ids {
+			inst.r27Windows[id] = WindowGeomValue{
+				MinX: minX[i], MinY: minY[i], MaxX: maxX[i], MaxY: maxY[i],
+				NeedW: needW[i], NeedH: needH[i],
+				Z: z[i], Collapsed: collapsed[i] != 0,
+			}
+		}
+		inst.r27WorkArea = UiRectValue{MinX: wMinX, MinY: wMinY, MaxX: wMaxX, MaxY: wMaxY}
+	}
+	{
+		ids, scrollXs, scrollYs, zooms, hoverXs, hoverYSeq := fetcher.CollectFetchR23CanvasWheel()
 		for k := range inst.r23CanvasWheel {
 			delete(inst.r23CanvasWheel, k)
 		}
@@ -878,7 +918,7 @@ func (inst *StateManager) Sync() {
 		}
 	}
 	{
-		ids, originXs, originYs, posXs, posYs, modsSeq := fetcher.FetchR24CanvasPointers()
+		ids, originXs, originYs, posXs, posYs, modsSeq := fetcher.CollectFetchR24CanvasPointers()
 		for k := range inst.r24CanvasPointers {
 			delete(inst.r24CanvasPointers, k)
 		}
@@ -900,100 +940,117 @@ func (inst *StateManager) Sync() {
 	{
 		// One row per captured EVENT, so a widget appears as many times as it
 		// captured. Re-grouped by id here rather than in Rust because the wire
-		// shape is three flat arrays and the grouping is what callers want.
+		// shape is four flat arrays and the grouping is what callers want.
 		//
 		// Slices are truncated and refilled instead of reallocated: a tree
 		// under held ArrowDown captures every frame, and a fresh slice per
 		// widget per frame is garbage for no benefit. The map keeps its
 		// entries for the same reason — a widget that captured once will
 		// likely capture again.
-		ids, codes, modsSeq := fetcher.FetchR26KeyCaptures()
+		ids, codes, mods, edgesSeq := fetcher.CollectFetchR26KeyCaptures()
 		for k, v := range inst.r26KeyCaptures {
 			inst.r26KeyCaptures[k] = v[:0]
 		}
 		i := 0
-		for mods := range modsSeq {
-			if i >= len(ids) || i >= len(codes) {
+		for edges := range edgesSeq {
+			if i >= len(ids) || i >= len(codes) || i >= len(mods) {
 				break
 			}
 			id := ids[i]
 			inst.r26KeyCaptures[id] = append(inst.r26KeyCaptures[id], CapturedKey{
-				Code: keycodes.Code(codes[i]),
-				Mods: mods,
+				Code:  keycodes.Code(codes[i]),
+				Mods:  mods[i],
+				Edges: edges,
 			})
 			i++
 		}
 	}
 	{
-		ids := fetcher.FetchR22StarvedTextures()
+		ids := fetcher.CollectFetchR22StarvedTextures()
 		clear(inst.r22StarvedTextures)
 		for id := range ids {
 			inst.r22StarvedTextures[id] = struct{}{}
 		}
-	}
-	{
-		graphIds, kinds, keyA, keyBSeq := fetcher.FetchGraphEvents()
-		out := inst.graphEvents[:0]
-		i := 0
-		for kb := range keyBSeq {
-			if i >= len(graphIds) {
-				break
-			}
-			out = append(out, GraphEvent{
-				GraphId: graphIds[i],
-				Kind:    GraphEventKindE(kinds[i]),
-				KeyA:    keyA[i],
-				KeyB:    kb,
-			})
-			i++
-		}
-		inst.graphEvents = out
-	}
-	{
-		graphIds, kinds, keyA, keyBSeq := fetcher.FetchGraphSelection()
-		out := inst.graphSelection[:0]
-		i := 0
-		for kb := range keyBSeq {
-			if i >= len(graphIds) {
-				break
-			}
-			out = append(out, GraphSelectedItem{
-				GraphId: graphIds[i],
-				IsNode:  kinds[i] == 0,
-				KeyA:    keyA[i],
-				KeyB:    kb,
-			})
-			i++
-		}
-		inst.graphSelection = out
-	}
-	{
-		graphIds, nodeCount, edgeCount, frSteps, frLastSeq := fetcher.FetchGraphMetrics()
-		out := inst.graphMetrics[:0]
-		i := 0
-		for last := range frLastSeq {
-			if i >= len(graphIds) {
-				break
-			}
-			out = append(out, GraphMetrics{
-				GraphId:            graphIds[i],
-				NodeCount:          nodeCount[i],
-				EdgeCount:          edgeCount[i],
-				FrSteps:            frSteps[i],
-				FrLastDisplacement: last,
-			})
-			i++
-		}
-		inst.graphMetrics = out
 	}
 
 	// Drain the per-frame Rust-side timing one extra round-trip per Sync.
 	// Cost is one opcode + a 16-byte response; reported with one-frame lag
 	// because this fetcher fires inside the very interpret_commands_outer
 	// call whose elapsed it would otherwise need to peek at.
-	interpretUs, passNr := inst.fetcher.FetchFrameMetrics()
+	interpretUs, passNr := inst.fetcher.CollectFetchFrameMetrics()
 	metrics.Current.RecordRust(interpretUs, passNr)
+
+	// Collected in the position it was issued, after the frame metrics.
+	inst.pixelsPerPoint = inst.fetcher.CollectFetchPixelsPerPoint()
+	if captureWanted {
+		var r CaptureResultValue
+		var status uint8
+		r.RequestId, status, r.Width, r.Height, r.Reason, r.Data, r.RefusedUploads, r.UnknownTextures = inst.fetcher.CollectFetchCaptureResult()
+		r.Status = CaptureStatusE(status)
+		inst.captureResult, inst.captureResultOk = r, r.Status != CaptureStatusNone
+	}
 }
+
+// CaptureStatusE is a capture replay's outcome as the client reports it.
+type CaptureStatusE uint8
+
+const (
+	CaptureStatusNone        CaptureStatusE = 0
+	CaptureStatusCompleted   CaptureStatusE = 1
+	CaptureStatusFailed      CaptureStatusE = 2
+	CaptureStatusUnsupported CaptureStatusE = 3
+)
+
+// CaptureResultValue is one fetchCaptureResult reply: a captureReplay's
+// pixels — RGBA, Width × Height, top-left origin — or its SVG document.
+type CaptureResultValue struct {
+	RequestId       uint64
+	Status          CaptureStatusE
+	Width           uint32
+	Height          uint32
+	Reason          string
+	Data            []byte
+	RefusedUploads  uint64
+	UnknownTextures uint64
+}
+
+// WantCaptureResult asks the next Sync to fetch the client's capture result.
+// Call it in the frame that emits CaptureReplay; the reply is read in that
+// frame's Sync, after the replay ran.
+func (inst *StateManager) WantCaptureResult() {
+	inst.captureWanted = true
+}
+
+// TakeCaptureResult returns the capture result the last Sync fetched, once.
+func (inst *StateManager) TakeCaptureResult() (r CaptureResultValue, ok bool) {
+	r, ok = inst.captureResult, inst.captureResultOk
+	inst.captureResult, inst.captureResultOk = CaptureResultValue{}, false
+	return
+}
+
+// GetPixelsPerPoint is the display's physical pixels per logical point as of
+// the last frame; 1 before the first Sync has read it.
+func (inst *StateManager) GetPixelsPerPoint() float32 {
+	if inst.pixelsPerPoint <= 0 {
+		return 1
+	}
+	return inst.pixelsPerPoint
+}
+
+// ResponseFlagsAny reports whether any widget the host answered for in the
+// last Sync carries one of the flags in mask and satisfies in. It is the
+// gate a retained widget tree needs: a caller that would replay captured
+// bytes instead of re-emitting widgets must not do so on a frame where one
+// of those widgets has a response its live path would read.
+func (inst *StateManager) ResponseFlagsAny(mask ResponseFlagsE, in func(id uint64) bool) bool {
+	for id, flags := range inst.responseFlags.IteratePairs() {
+		if flags&mask != 0 && in(id) {
+			return true
+		}
+	}
+	return false
+}
+
 func (inst *StateManager) Reset() {
 	inst.responseFlags.Reset()
 }

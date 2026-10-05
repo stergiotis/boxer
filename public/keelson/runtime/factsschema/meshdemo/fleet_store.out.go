@@ -431,7 +431,9 @@ func (inst *FleetEntityBuilder) Rollback() (err error) {
 
 // IngestFleetSample buffers one whole entity per row carrying only the
 // FleetSample component, all stamped with ts — rows ship on the next Flush,
-// like every write. Keys must be distinct within one call (rows
+// like every write. The envelope carries the pass-through columns
+// the row binds; the others are written zero — use Begin with a
+// filled envelope to set them. Keys must be distinct within one call (rows
 // share ts, so duplicates would tie on Order): a duplicate returns
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
@@ -444,7 +446,7 @@ func (inst *FleetStore) IngestFleetSample(ts time.Time, rows []FleetSample) (err
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.Begin(rows[i].Id, ts, FleetEnvelope{}).AddFleetSample(rows[i]).Commit()
+		err = inst.Begin(rows[i].Id, ts, FleetEnvelope{NaturalKey: rows[i].NaturalKey}).AddFleetSample(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest fleetSample row %d: %w", i, err)
 			return

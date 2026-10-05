@@ -476,6 +476,32 @@ Mentions of the first consumer's repository were replaced with a generic
 description. That repository is private, and this one is public. The
 decision is unchanged.
 
+### 2026-09-28 — the sweep keeps a requested cancel
+
+§SD4's sweep set a dead run's held rows `abandoned`, then `queued` where
+attempts remained, and a row in `cancel` was among them, so a job whose
+cancel was requested before its run died ran again. The sweep now moves
+such a row to `cancelled` with its event; only `running` rows are
+abandoned and re-queued.
+
+### 2026-09-28 — a worker settles its own orphaned rows
+
+The sweep skips the rows of the sweeping run, so a row this run held with
+no run in flight — a claim whose read-back failed, a settle whose
+transition failed — stayed `running` until the process restarted. The
+poll that re-reads this run's held rows (§SD5) now settles such a row: a
+failed attempt under the policy, or `cancelled` where a cancel was
+requested. A worker that is stopping settles none, leaving them to the
+sweep as before.
+
+### 2026-09-28 — policy durations saturate
+
+§SD6's base and timeout come from the enqueuing client, and the worker
+multiplied them into a duration unchecked, so a large value wrapped
+negative: the timeout fired at once, or the retry was due in the past.
+The worker now saturates both, and bounds the backoff at 30 days
+(`maxBackoff`).
+
 ## References
 
 - [ADR-0038](./0038-keelson-background-task-primitive.md) — the task primitive; the Update of 2026-06-22 this ADR withdraws.

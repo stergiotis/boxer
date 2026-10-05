@@ -3,9 +3,11 @@ package capinspector
 import (
 	"strings"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appstate"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
+	"github.com/stergiotis/boxer/public/keelson/runtime/httpegress"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist/persiststore"
@@ -42,6 +44,13 @@ const (
 	// send text to the host's one model, and the service that decides
 	// what may reach it.
 	CapLLM CapId = "llm"
+	// CapHTTP is HTTP egress (ADR-0262): the grant an app holds per
+	// registered destination, and the service that holds the transports.
+	CapHTTP CapId = "http"
+	// CapAgent is the app operations contract (ADR-0269): the services
+	// through which a caller discovers and calls the operations apps
+	// declare, under a task grant the person approved.
+	CapAgent CapId = "agent"
 )
 
 // BackendImpl is one realisation of a capability's contract. A cap
@@ -382,7 +391,7 @@ var Registry = map[CapId]CapSpec{
 	CapLLM: {
 		Id:            CapLLM,
 		Display:       "llm.* model inference",
-		SubjectFamily: "llm.{describe|complete} (request/reply)",
+		SubjectFamily: "llm.{describe|complete}, llm.retain.complete (request/reply)",
 		Description: "Sending text to a model from an app (ADR-0254): describe " +
 			"says whether the host offers a model, which one and where it is; " +
 			"complete is one chat completion through the host's one client, " +
@@ -395,7 +404,11 @@ var Registry = map[CapId]CapSpec{
 			"lacks. An app holds the capability by declaring " +
 			"llm.ClientCaps(reason), not sticky; the read is a request, so " +
 			"every call lands an audit row, and keelson('llm_calls') keeps " +
-			"the record of what was asked, at what cost, and how it ended.",
+			"the record of what was asked, at what cost, and how it ended. " +
+			"An app that asks the host to keep its conversations also " +
+			"declares llm.RetainCaps(reason) (ADR-0264); the text lands on " +
+			"boxer.facts as llmMessage rows only where BOXER_LLM_RETAIN is " +
+			"durable.",
 		Backend: "runtime/llm over public/llm/openaichat",
 		AppFilter: func(f app.SubjectFilter) bool {
 			return strings.HasPrefix(f.Pattern, llm.SubjectPrefix)
@@ -404,12 +417,55 @@ var Registry = map[CapId]CapSpec{
 			{Id: "llm", Display: "llm.Service"},
 		},
 	},
+	CapHTTP: {
+		Id:            CapHTTP,
+		Display:       "net.http.fetch.* HTTP egress",
+		SubjectFamily: "net.http.fetch.{destination} (request/reply)",
+		Description: "Fetching a URL from an app (ADR-0262): a destination is a " +
+			"name the host registers for a set of URL prefixes and the " +
+			"transport policy that reaches them — trust, user agent, " +
+			"timeout, body cap. An app declares httpegress.ClientCaps per " +
+			"destination, sticky; the bus refuses a request on a destination " +
+			"the app did not declare, and the service refuses a URL outside " +
+			"the destination's prefixes, a redirect that leaves them, and " +
+			"confined content (ADR-0145) bound for a destination that is not " +
+			"loopback. GET and HEAD only. keelson('http_destinations') lists " +
+			"every destination any app could name; keelson('http_calls') " +
+			"keeps the record of what was fetched, by whom, and how it ended.",
+		Backend: "runtime/httpegress over net/http",
+		AppFilter: func(f app.SubjectFilter) bool {
+			return strings.HasPrefix(f.Pattern, httpegress.SubjectPrefix)
+		},
+		Backends: []BackendImpl{
+			{Id: "httpegress", Display: "httpegress.Service"},
+		},
+	},
+	CapAgent: {
+		Id:            CapAgent,
+		Display:       "runtime.agent.* app operations",
+		SubjectFamily: "runtime.agent.{service} (request/reply)",
+		Description: "Operating apps on the person's behalf (ADR-0269): an app " +
+			"declares the commands and queries it offers in its manifest, " +
+			"and a caller — a coordinator running a model's tool loop — " +
+			"reaches them only through the host's runtime.agent services. " +
+			"describe needs no grant; every call past it is checked against " +
+			"a task grant the person approved. keelson('app_operations') " +
+			"lists every registered catalog, including those withdrawn at " +
+			"registration and why.",
+		Backend: "runtime/agent",
+		AppFilter: func(f app.SubjectFilter) bool {
+			return strings.HasPrefix(f.Pattern, agent.SubjectPrefix)
+		},
+		Backends: []BackendImpl{
+			{Id: "agent", Display: "agent.Service"},
+		},
+	},
 }
 
 // allCapIdsOrdered returns the canonical render order so the
 // inspector picker UI doesn't shuffle entries across frames (Go map
 // iteration is randomised).
 func allCapIdsOrdered() (ids []CapId) {
-	ids = []CapId{CapRun, CapFacts, CapBus, CapFs, CapPersist, CapTask, CapWatchbill, CapAppState, CapKeelsonQuery, CapLLM}
+	ids = []CapId{CapRun, CapFacts, CapBus, CapFs, CapPersist, CapTask, CapWatchbill, CapAppState, CapKeelsonQuery, CapLLM, CapHTTP, CapAgent}
 	return
 }

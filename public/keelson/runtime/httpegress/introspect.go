@@ -1,0 +1,216 @@
+package httpegress
+
+import (
+	"time"
+
+	"github.com/apache/arrow-go/v18/arrow"
+
+	"github.com/stergiotis/boxer/public/functional/option"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
+	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
+)
+
+// CallRecord is one fetch the service answered or refused (ADR-0262 §SD5).
+type CallRecord struct {
+	Id             uint64
+	At             time.Time
+	Sender         app.AppIdT
+	SenderInstance uint64
+	Destination    string
+	Purpose        string
+	Sensitivity    queryengine.SensitivityE
+	Method         string
+	// URL is scheme, host and path; the query is never kept (recordedURL).
+	URL     string
+	Status  int
+	Bytes   int
+	Elapsed time.Duration
+	// Task is the agent task whose work the fetch was, empty for the
+	// app's own (ADR-0269 §SD6); TaskEpoch its epoch and TaskCall the
+	// dispatcher's call that caused the fetch.
+	Task      string
+	TaskEpoch uint64
+	TaskCall  string
+	Refused   bool
+	Error     string
+}
+
+// DestinationRecord is one registered destination as the host resolved it.
+type DestinationRecord struct {
+	Name         string
+	Description  string
+	Prefixes     []string
+	Local        bool
+	CAFile       string
+	InsecureTLS  bool
+	UserAgent    string
+	Timeout      time.Duration
+	MaxBodyBytes int64
+	// Error is why the destination cannot be served; empty when it can.
+	Error string
+}
+
+// record puts rec into the bounded ring, overwriting the oldest once it is
+// full: a screenful of tiles is dozens of calls, so the ring must not copy
+// itself per call.
+func (inst *Service) record(rec CallRecord) {
+	inst.persist(rec)
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	inst.next++
+	rec.Id = inst.next
+	if len(inst.calls) < inst.cfg.KeepCalls {
+		inst.calls = append(inst.calls, rec)
+		return
+	}
+	inst.calls[inst.head] = rec
+	inst.head = (inst.head + 1) % len(inst.calls)
+}
+
+// Calls returns the kept records, oldest first.
+func (inst *Service) Calls() (recs []CallRecord) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	recs = make([]CallRecord, 0, len(inst.calls))
+	recs = append(recs, inst.calls[inst.head:]...)
+	recs = append(recs, inst.calls[:inst.head]...)
+	return
+}
+
+// Destinations returns the registry as resolved, in registration order.
+func (inst *Service) Destinations() (recs []DestinationRecord) {
+	recs = make([]DestinationRecord, 0, len(inst.order))
+	for _, name := range inst.order {
+		r := inst.dests[name]
+		rec := DestinationRecord{
+			Name: name, Description: r.spec.Description, Prefixes: r.dest.Prefixes, Local: r.local,
+			CAFile: r.dest.CAFile, InsecureTLS: r.dest.InsecureTLS, UserAgent: r.dest.UserAgent,
+			Timeout: r.dest.Timeout, MaxBodyBytes: r.dest.MaxBodyBytes,
+		}
+		if r.err != nil {
+			rec.Error = r.err.Error()
+		}
+		recs = append(recs, rec)
+	}
+	return
+}
+
+// CallsI is the read side the introspection providers need.
+type CallsI interface {
+	Calls() []CallRecord
+	Destinations() []DestinationRecord
+}
+
+// RegisterIntrospect registers keelson('http_calls') and
+// keelson('http_destinations') over svc; nil leaves both empty rather
+// than absent.
+func RegisterIntrospect(reg *introspect.Registry, svc CallsI) (err error) {
+	if err = reg.Register(callsProvider{svc: svc}); err != nil {
+		return
+	}
+	return reg.Register(destinationsProvider{svc: svc})
+}
+
+type callsProvider struct{ svc CallsI }
+
+func (callsProvider) Name() string                         { return TableCalls }
+func (callsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
+func (callsProvider) Schema() *arrow.Schema                { return callsTable(nil).Schema() }
+
+func (p callsProvider) Snapshot(proj introspect.Projection) (rec arrow.RecordBatch, err error) {
+	var rows []CallRecord
+	if p.svc != nil {
+		rows = p.svc.Calls()
+	}
+	rec = callsTable(rows).Build(proj, len(rows))
+	return
+}
+
+func callsTable(rows []CallRecord) *introspect.Table {
+	return introspect.NewTable().
+		Uint64("id", func(i int) uint64 { return rows[i].Id }).
+		String("at", func(i int) string { return rows[i].At.UTC().Format(time.RFC3339Nano) }).
+		String("app_id", func(i int) string { return string(rows[i].Sender) }).
+		Uint64("instance_key", func(i int) uint64 { return rows[i].SenderInstance }).
+		String("destination", func(i int) string { return rows[i].Destination }).
+		String("purpose", func(i int) string { return rows[i].Purpose }).
+		String("task", func(i int) string { return rows[i].Task }).
+		String("sensitivity", func(i int) string { return sensitivityName(rows[i].Sensitivity) }).
+		String("method", func(i int) string { return rows[i].Method }).
+		String("url", func(i int) string { return rows[i].URL }).
+		Int64("status", func(i int) int64 { return int64(rows[i].Status) }).
+		Int64("bytes", func(i int) int64 { return int64(rows[i].Bytes) }).
+		Int64("elapsed_ms", func(i int) int64 { return rows[i].Elapsed.Milliseconds() }).
+		Bool("refused", func(i int) bool { return rows[i].Refused }).
+		String("error", func(i int) string { return rows[i].Error })
+}
+
+type destinationsProvider struct{ svc CallsI }
+
+func (destinationsProvider) Name() string                         { return TableDestinations }
+func (destinationsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessLive }
+func (destinationsProvider) Schema() *arrow.Schema                { return destinationsTable(nil).Schema() }
+
+func (p destinationsProvider) Snapshot(proj introspect.Projection) (rec arrow.RecordBatch, err error) {
+	var rows []DestinationRecord
+	if p.svc != nil {
+		rows = p.svc.Destinations()
+	}
+	rec = destinationsTable(rows).Build(proj, len(rows))
+	return
+}
+
+func destinationsTable(rows []DestinationRecord) *introspect.Table {
+	return introspect.NewTable().
+		String("name", func(i int) string { return rows[i].Name }).
+		String("subject", func(i int) string { return Subject(rows[i].Name) }).
+		String("description", func(i int) string { return rows[i].Description }).
+		StringList("prefixes", func(i int) []string { return rows[i].Prefixes }).
+		Bool("local", func(i int) bool { return rows[i].Local }).
+		String("ca_file", func(i int) string { return rows[i].CAFile }).
+		Bool("insecure_tls", func(i int) bool { return rows[i].InsecureTLS }).
+		String("user_agent", func(i int) string { return rows[i].UserAgent }).
+		Int64("timeout_ms", func(i int) int64 { return rows[i].Timeout.Milliseconds() }).
+		Int64("max_body_bytes", func(i int) int64 { return rows[i].MaxBodyBytes }).
+		String("error", func(i int) string { return rows[i].Error })
+}
+
+func sensitivityName(s queryengine.SensitivityE) (name string) {
+	if s == queryengine.SensitivityConfined {
+		return "confined"
+	}
+	return "ordinary"
+}
+
+// persist buffers the fetch for the trail and wakes its flusher (ADR-0277
+// §SD2): a fetch never waits on the store, and a screenful of tiles lands
+// in a few flushes. A failed buffer is logged; the in-process record keeps
+// the row either way.
+func (inst *Service) persist(rec CallRecord) {
+	if !inst.cfg.Trail.Durable() {
+		return
+	}
+	c := trail.Context{Origin: inst.cfg.Trail.OriginOf(rec.Sender, rec.SenderInstance)}
+	if rec.Task != "" {
+		d := trail.Delegation{Task: rec.Task, Epoch: rec.TaskEpoch}
+		if rec.TaskCall != "" {
+			d.Call = option.Some(rec.TaskCall)
+		}
+		c.Delegation = option.Some(d)
+	}
+	row := trail.HttpFetch{
+		Destination: rec.Destination, Purpose: rec.Purpose, Sensitivity: sensitivityName(rec.Sensitivity), Method: rec.Method,
+		Url: rec.URL, Status: uint32(max(rec.Status, 0)), Bytes: uint64(max(rec.Bytes, 0)),
+		ElapsedMs: uint64(max(rec.Elapsed.Milliseconds(), 0)), Refused: rec.Refused,
+	}
+	if rec.Error != "" {
+		row.Error = []string{rec.Error}
+	}
+	if err := inst.cfg.Trail.HttpFetch(rec.At, c, row); err != nil {
+		inst.log.Warn().Err(err).Str("destination", rec.Destination).Msg("httpegress: buffer fetch row")
+		return
+	}
+	inst.cfg.Trail.FlushSoon()
+}

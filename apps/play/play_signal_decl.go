@@ -39,6 +39,14 @@ const (
 	// field is at, so a query filtering on it returns nothing until the
 	// pane has written the step on display (ADR-0250 §SD6).
 	seedEpoch
+	// seedTimeFloor / seedTimeCeil are the two ends of an unbounded time
+	// window: the first and last instants DateTime64 holds, so a filter
+	// between them keeps every row until a window is brushed.
+	seedTimeFloor
+	seedTimeCeil
+	// seedLiteral seeds with the declaration row's own Literal, for a value
+	// no other kind spells: the far edge of an unbounded box.
+	seedLiteral
 )
 
 // raw is the literal an unwritten signal with this seed resolves to, and
@@ -53,6 +61,10 @@ func (inst signalSeedE) raw() (raw string, ok bool) {
 		return "[]", true
 	case seedEpoch:
 		return "1970-01-01 00:00:00.000", true
+	case seedTimeFloor:
+		return timelineWindowFloor, true
+	case seedTimeCeil:
+		return timelineWindowCeil, true
 	}
 	return "", false
 }
@@ -66,6 +78,8 @@ type reservedSignal struct {
 	Type  string
 	Seed  signalSeedE
 	Owner string
+	// Literal is the seed when Seed is seedLiteral.
+	Literal string
 }
 
 // reservedSignals is the declaration. Order is for reading only; every lookup
@@ -80,10 +94,25 @@ var reservedSignals = []reservedSignal{
 	{Name: "vp_max_y", Type: "UInt32", Seed: seedBlocks, Owner: "map"},
 	{Name: "vp_w", Type: "UInt32", Seed: seedBlocks, Owner: "map"},
 	{Name: "vp_h", Type: "UInt32", Seed: seedBlocks, Owner: "map"},
+	// The Map's selected area, in mercator units and in degrees: seeded to
+	// the whole world, so a query filtering on it runs before anything is
+	// selected and keeps every row until something is.
+	{Name: signalAreaMinX, Type: "UInt32", Seed: seedZero, Owner: "map"},
+	{Name: signalAreaMaxX, Type: "UInt32", Seed: seedLiteral, Literal: "4294967295", Owner: "map"},
+	{Name: signalAreaMinY, Type: "UInt32", Seed: seedZero, Owner: "map"},
+	{Name: signalAreaMaxY, Type: "UInt32", Seed: seedLiteral, Literal: "4294967295", Owner: "map"},
+	{Name: signalAreaMinLat, Type: "Float64", Seed: seedLiteral, Literal: "-90", Owner: "map"},
+	{Name: signalAreaMaxLat, Type: "Float64", Seed: seedLiteral, Literal: "90", Owner: "map"},
+	{Name: signalAreaMinLon, Type: "Float64", Seed: seedLiteral, Literal: "-180", Owner: "map"},
+	{Name: signalAreaMaxLon, Type: "Float64", Seed: seedLiteral, Literal: "180", Owner: "map"},
 
 	// The Timeline's extent (slice 5d), seeded by the panel on render.
 	{Name: signalTimelineMin, Type: "DateTime64(3, 'UTC')", Seed: seedBlocks, Owner: "timeline"},
 	{Name: signalTimelineMax, Type: "DateTime64(3, 'UTC')", Seed: seedBlocks, Owner: "timeline"},
+	// The Timeline's brushed window: seeded unbounded, so a query filtering on
+	// it runs before any brush and keeps every row until one is drawn.
+	{Name: signalTimelineFrom, Type: "DateTime64(3, 'UTC')", Seed: seedTimeFloor, Owner: "timeline"},
+	{Name: signalTimelineTo, Type: "DateTime64(3, 'UTC')", Seed: seedTimeCeil, Owner: "timeline"},
 
 	// The World's clicked country.
 	{Name: signalSelectionCountry, Type: "String", Seed: seedEmpty, Owner: "world"},
@@ -186,7 +215,11 @@ func reservedSignalTypes() (out map[string]string) {
 // number, "[]" for an array — because it reaches the server as the param's
 // value, where a String's "" would be rejected for a Float64 slot.
 func signalSeedRaw(name string) (raw string, ok bool) {
-	return reservedSignalIndex[SignalID(name)].Seed.raw()
+	s := reservedSignalIndex[SignalID(name)]
+	if s.Seed == seedLiteral {
+		return s.Literal, true
+	}
+	return s.Seed.raw()
 }
 
 // signalHasSeed reports whether a referenced reserved signal runs from the

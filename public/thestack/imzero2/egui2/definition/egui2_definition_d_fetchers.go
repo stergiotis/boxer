@@ -36,6 +36,24 @@ self.io.write_plain_u64h(len, self.video_stream_info.drain(..))?;
 `)).
 		AddReturnValue("info", ctabb.U64h).
 		Build())
+	// ADR-0281 §SD5: the last captureReplay's outcome — status 0 when none
+	// is held; 1 completed, 2 failed, 3 unsupported on this host. data is a
+	// pixel capture's RGBA, width × height tightly packed, top-left origin,
+	// or an SVG capture's document.
+	fetchers = append(fetchers, idl.NewFetcherNode("fetchCaptureResult").
+		WithApplyCodeClientRust(rustClientCode(`
+self.write_capture_result()?;
+{{SendMessage}}
+`)).
+		AddReturnValue("requestId", ctabb.U64).
+		AddReturnValue("status", ctabb.U8).
+		AddReturnValue("width", ctabb.U32).
+		AddReturnValue("height", ctabb.U32).
+		AddReturnValue("reason", ctabb.S).
+		AddReturnValue("data", ctabb.U8h).
+		AddReturnValue("refusedUploads", ctabb.U64).
+		AddReturnValue("unknownTextures", ctabb.U64).
+		Build())
 	fetchers = append(fetchers, idl.NewFetcherNode("fetchR7").
 		WithApplyCodeClientRust(rustClientCode(`
 let len = self.r7_ids.len();
@@ -109,78 +127,6 @@ self.io.write_plain_u64h(self.r10_false_ids.len(), self.r10_false_ids.drain(..))
 `)).
 		AddReturnValue("idsTrue", ctabb.U64h).
 		AddReturnValue("idsFalse", ctabb.U64h).
-		Build())
-
-	// egui_graphs interaction events drained from the event sink installed
-	// on each GraphView. Four parallel homogeneous arrays, all of equal
-	// length — one "row" per event. `kinds` is one of the GRAPH_EV_*
-	// constants (1..=11); `keyA`/`keyB` carry the Go-side u64 identifiers:
-	//   * node events (1..=8): keyA = node id, keyB = 0
-	//   * edge events (9..=11): keyA = fromId, keyB = toId
-	// Pan/Zoom/NodeMove are intentionally dropped in v1 — they're per-
-	// frame streams, not the useful subset.
-	fetchers = append(fetchers, idl.NewFetcherNode("fetchGraphEvents").
-		WithApplyCodeClientRust(rustClientCode(`
-let len = self.graph_events_pending.len();
-let graph_ids: Vec<u64> = self.graph_events_pending.iter().map(|r| r.graph_id).collect();
-let kinds:     Vec<u32> = self.graph_events_pending.iter().map(|r| r.kind as u32).collect();
-let key_a:     Vec<u64> = self.graph_events_pending.iter().map(|r| r.key_a).collect();
-let key_b:     Vec<u64> = self.graph_events_pending.iter().map(|r| r.key_b).collect();
-self.graph_events_pending.clear();
-self.io.write_plain_u64h(len, graph_ids)?;
-self.io.write_plain_u32h(len, kinds)?;
-self.io.write_plain_u64h(len, key_a)?;
-self.io.write_plain_u64h(len, key_b)?;
-{{SendMessage}}
-`)).
-		AddReturnValue("graphIds", ctabb.U64h).
-		AddReturnValue("kinds", ctabb.U32h).
-		AddReturnValue("keyA", ctabb.U64h).
-		AddReturnValue("keyB", ctabb.U64h).
-		Build())
-
-	// Current per-graph selection snapshot — one entry per selected node
-	// or edge. `kind` is 0 for a node (keyA = node id, keyB = 0) or 1 for
-	// an edge (keyA = from, keyB = to). Rebuilt from scratch every frame
-	// by snapshot_graph_selection.
-	fetchers = append(fetchers, idl.NewFetcherNode("fetchGraphSelection").
-		WithApplyCodeClientRust(rustClientCode(`
-let len = self.graph_selection_graph_ids.len();
-self.io.write_plain_u64h(len, self.graph_selection_graph_ids.drain(..))?;
-self.io.write_plain_u32h(len, self.graph_selection_kind.drain(..).map(|k| k as u32))?;
-self.io.write_plain_u64h(len, self.graph_selection_key_a.drain(..))?;
-self.io.write_plain_u64h(len, self.graph_selection_key_b.drain(..))?;
-{{SendMessage}}
-`)).
-		AddReturnValue("graphIds", ctabb.U64h).
-		AddReturnValue("kinds", ctabb.U32h).
-		AddReturnValue("keyA", ctabb.U64h).
-		AddReturnValue("keyB", ctabb.U64h).
-		Build())
-
-	// Per-graph metrics snapshot — one entry per graph widget rendered
-	// this frame. Node/edge counts come from the StableGraph directly;
-	// frStepCount and frLastDisp are non-zero/non-NaN only for graphs
-	// whose layout is FR or FR+CG.
-	fetchers = append(fetchers, idl.NewFetcherNode("fetchGraphMetrics").
-		WithApplyCodeClientRust(rustClientCode(`
-let len = self.graph_metrics_graph_ids.len();
-self.io.write_plain_u64h(len, self.graph_metrics_graph_ids.drain(..))?;
-self.io.write_plain_u32h(len, self.graph_metrics_node_count.drain(..))?;
-self.io.write_plain_u32h(len, self.graph_metrics_edge_count.drain(..))?;
-self.io.write_plain_u64h(len, self.graph_metrics_fr_steps.drain(..))?;
-let last_disp_count = self.graph_metrics_fr_last_disp.len();
-self.io.write_plain_u32(last_disp_count as u32)?;
-for v in self.graph_metrics_fr_last_disp.drain(..) {
-    self.io.write_plain_f32(v)?;
-}
-{{SendMessage}}
-`)).
-		AddReturnValue("graphIds", ctabb.U64h).
-		AddReturnValue("nodeCount", ctabb.U32h).
-		AddReturnValue("edgeCount", ctabb.U32h).
-		AddReturnValue("frSteps", ctabb.U64h).
-		AddReturnValue("frLastDisp", ctabb.F32h).
 		Build())
 
 	// fetchFrameMetrics — returns Rust-measured per-frame timing for the
@@ -300,6 +246,57 @@ self.io.write_plain_f32h(len, self.r21_ui_rect_max_y.drain(..))?;
 		AddReturnValue("minY", ctabb.F32h).
 		AddReturnValue("maxX", ctabb.F32h).
 		AddReturnValue("maxY", ctabb.F32h).
+		Build())
+
+	// Drains the per-frame window geometry: one row per egui::Window shown
+	// this frame — id, outer rect, stacking rank, collapsed flag and the
+	// outer size its content needed as laid out (needW/needH: larger than
+	// the rect where the content overflowed the body, as after a
+	// windowPlace that was too small; see WindowGeomRow) — plus
+	// the desktop rect the shell's panels left free. The rank is the
+	// window layer's index in egui's back-to-front layer order, read here
+	// after every window of the frame ran, plus one; larger is further
+	// front, 0 when the layer is unknown. The work rect is NaN on a frame that showed no
+	// window.
+	fetchers = append(fetchers, idl.NewFetcherNode("fetchR27Windows").
+		WithApplyCodeClientRust(rustClientCode(`
+let len = self.r27_windows.len();
+let order: Vec<egui::Id> = {{EguiContext}}.memory(|m| m.layer_ids().map(|l| l.id).collect());
+let z: Vec<u32> = self
+    .r27_windows
+    .iter()
+    .map(|r| order.iter().rposition(|id| id.value() == r.id).map_or(0, |p| p as u32 + 1))
+    .collect();
+self.io.write_plain_u64h(len, self.r27_windows.iter().map(|r| r.id))?;
+self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.rect.min.x))?;
+self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.rect.min.y))?;
+self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.rect.max.x))?;
+self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.rect.max.y))?;
+self.io.write_plain_u32h(len, z)?;
+self.io.write_plain_u8h(len, self.r27_windows.iter().map(|r| u8::from(r.collapsed)))?;
+self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.need.x))?;
+self.io.write_plain_f32h(len, self.r27_windows.iter().map(|r| r.need.y))?;
+self.r27_windows.clear();
+let w = self.r27_work_rect;
+self.io.write_plain_f32(w.min.x)?;
+self.io.write_plain_f32(w.min.y)?;
+self.io.write_plain_f32(w.max.x)?;
+self.io.write_plain_f32(w.max.y)?;
+{{SendMessage}}
+`)).
+		AddReturnValue("ids", ctabb.U64h).
+		AddReturnValue("minX", ctabb.F32h).
+		AddReturnValue("minY", ctabb.F32h).
+		AddReturnValue("maxX", ctabb.F32h).
+		AddReturnValue("maxY", ctabb.F32h).
+		AddReturnValue("z", ctabb.U32h).
+		AddReturnValue("collapsed", ctabb.U8h).
+		AddReturnValue("needW", ctabb.F32h).
+		AddReturnValue("needH", ctabb.F32h).
+		AddReturnValue("workMinX", ctabb.F32).
+		AddReturnValue("workMinY", ctabb.F32).
+		AddReturnValue("workMaxX", ctabb.F32).
+		AddReturnValue("workMaxY", ctabb.F32).
 		Build())
 
 	// Drains the per-frame batch of texture ids that were interpreted this
@@ -486,6 +483,17 @@ self.io.write_plain_b(shift)?;
 `)).
 		AddReturnValue("pressed", ctabb.B).
 		AddReturnValue("shiftPressed", ctabb.B).
+		Build())
+
+	// The display's physical pixels per logical point this frame — what a
+	// widget that draws its own raster multiplies its logical size by to
+	// match the screen (play's Map, ADR-0096 SD7's device resolution).
+	fetchers = append(fetchers, idl.NewFetcherNode("fetchPixelsPerPoint").
+		WithApplyCodeClientRust(rustClientCode(`
+self.io.write_plain_f32({{EguiContext}}.pixels_per_point())?;
+{{SendMessage}}
+`)).
+		AddReturnValue("pixelsPerPoint", ctabb.F32).
 		Build())
 
 	return

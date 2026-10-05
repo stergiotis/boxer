@@ -20,7 +20,7 @@ const (
 )
 
 // HierarchyOptions are the encoding choices a hierarchy is drawn under — the
-// settings the Experiments hierarchy sink declares (ADR-0257, proposed, §SD2).
+// settings the Experiments hierarchy sink declares (ADR-0266, proposed, §SD2).
 type HierarchyOptions struct {
 	Form HierarchyFormE
 	// Separator splits an entity's label into its path.
@@ -43,10 +43,11 @@ const treemapChrome float32 = 48
 // options change: the treemap's drill state and the icicle's and sankey's
 // layouts are expensive to redo and meaningless to keep across a new tree.
 type HierarchyView struct {
-	ids   *c.WidgetIdStack
-	model *ChartModel
-	opts  HierarchyOptions
-	h     Hierarchy
+	ids      *c.WidgetIdStack
+	scopeKey string
+	model    *ChartModel
+	opts     HierarchyOptions
+	h        Hierarchy
 
 	tm      *treemap.Treemap
 	tmRoot  *layout.Node
@@ -58,9 +59,13 @@ type HierarchyView struct {
 	err     string
 }
 
-// NewHierarchyView returns a view drawing on ids.
-func NewHierarchyView(ids *c.WidgetIdStack) *HierarchyView {
-	return &HierarchyView{ids: ids}
+// NewHierarchyView returns a view drawing on ids under its own scope, scopeKey;
+// empty uses "leeway-hierarchy" (ADR-0267 W4).
+func NewHierarchyView(ids *c.WidgetIdStack, scopeKey string) *HierarchyView {
+	if scopeKey == "" {
+		scopeKey = "leeway-hierarchy"
+	}
+	return &HierarchyView{ids: ids, scopeKey: scopeKey}
 }
 
 // Hierarchy is the tree the view last built.
@@ -77,11 +82,12 @@ func (inst *HierarchyView) rebuild(m *ChartModel, o HierarchyOptions) {
 			coloring = treemap.AncestorHueColoring(inst.tmRoot, 0.55, 0.45, 0.62, 255)
 		}
 		if inst.tm == nil {
-			inst.tm = treemap.New(inst.ids, "leeway-hierarchy-treemap", inst.tmRoot,
-				treemap.WithStatusLine(false), treemap.WithMaxNestingDepth(0), treemap.WithColoring(coloring))
+			inst.tm = treemap.New(inst.ids, "leeway-hierarchy-treemap", inst.tmRoot, treemap.Options{
+				HideStatusLine: true, MaxNestingDepth: treemap.NestingAll, Coloring: coloring,
+			})
 		} else {
 			inst.tm.SetRoot(inst.tmRoot)
-			inst.tm.SetColoring(coloring)
+			inst.tm.Opts.Coloring = coloring
 		}
 	case HierarchyFormIcicle:
 		lay, err := icicle.Compute(toIcicleTree(inst.h), icicle.Options{
@@ -101,7 +107,14 @@ func (inst *HierarchyView) rebuild(m *ChartModel, o HierarchyOptions) {
 }
 
 // Render draws the model in a w×h box.
+// Render draws the view under its scope; see render.
 func (inst *HierarchyView) Render(m *ChartModel, o HierarchyOptions, w, h float32) {
+	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
+		inst.render(m, o, w, h)
+	}
+}
+
+func (inst *HierarchyView) render(m *ChartModel, o HierarchyOptions, w, h float32) {
 	if m == nil || m.Empty() {
 		c.Label("The batch has no entities to arrange.").Send()
 		return
@@ -119,8 +132,7 @@ func (inst *HierarchyView) Render(m *ChartModel, o HierarchyOptions, w, h float3
 	}
 	switch o.Form {
 	case HierarchyFormTreemap:
-		inst.tm.SetContainerSize(w, max(h-treemapChrome, 120))
-		inst.tm.Render()
+		inst.tm.Render(w, max(h-treemapChrome, 120))
 	case HierarchyFormIcicle:
 		col := icicleview.ColorByDepth
 		if o.ColorByBranch {

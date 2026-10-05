@@ -1,8 +1,14 @@
 package play
 
 import (
+	"context"
 	"errors"
+	"math"
+	"os/exec"
+	"regexp"
 	"strconv"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -10,6 +16,8 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
+	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan"
 	"github.com/stretchr/testify/require"
 )
 
@@ -165,7 +173,7 @@ func TestMapStatusLineDoesNotLatchErrors(t *testing.T) {
 
 	d.packErr = nil
 	d.packW, d.packH = 2, 2
-	require.Equal(t, "2×2 raster · Altitude & Velocity", d.statusLine())
+	require.Equal(t, "2×2 raster · Altitude & Speed", d.statusLine())
 }
 
 // repack pins the packed state to the served fingerprint (the observers'
@@ -217,7 +225,7 @@ func TestRasterTemplateRendersWellFormed(t *testing.T) {
 			colorSQL = "transparency * 255 AS red, transparency AS green, 0 AS blue"
 		}
 		sql := rasterTemplateSQL("planes_mercator", 100, colorSQL, r.where)
-		for _, want := range []string{"255 AS alpha", "AS red", "AS green", "AS blue", "GROUP BY pos", "WITH FILL FROM 0 TO"} {
+		for _, want := range []string{"255 AS alpha", "AS red", "AS green", "AS blue", "GROUP BY pos", "SELECT toUInt32(pos), "} {
 			require.Contains(t, sql, want, "render %q missing %q", r.name, want)
 		}
 		slots, _, err := extractSlotsAndParams(sql)
@@ -255,6 +263,110 @@ func TestRasterTemplateSurvivesCanonicalization(t *testing.T) {
 	}
 }
 
+// The default render, run through clickhouse-local on a synthetic
+// planes_mercator-shaped table (one point per 1000×1000 mercator cell, one
+// cell per pixel): every channel stays in 0..255 for negative, absurd and
+// non-finite inputs, empty pixels are black, distinct altitude and speed bands
+// get distinct colours, and a dense pixel is brighter than a lone sample. The
+// template's SELECT is swapped for the pre-cast floats so an out-of-range
+// value cannot hide behind the UInt8 cast.
+func TestAltitudeSpeedRenderOnClickHouse(t *testing.T) {
+	bin, err := chlocalpool.LookupBinary()
+	if err != nil {
+		t.Skipf("clickhouse not installed: %v", err)
+	}
+	const grid, cell = 8, 1000
+	pt := func(px, py int, alt, speed string) string {
+		return "(" + strconv.Itoa(px*cell+cell/2) + "," + strconv.Itoa(py*cell+cell/2) + "," + alt + "," + speed + ")"
+	}
+	var rows []string
+	// Row 0: altitude bands at 250 kt — ground, approach, the 10,000 ft
+	// terminal ceiling, climb, cruise.
+	altBands := []string{"0", "3000", "10000", "20000", "37000"}
+	for i, a := range altBands {
+		rows = append(rows, pt(i, 0, a, "250"))
+	}
+	// Row 1: speed bands at 10,000 ft — stationary, light aircraft, a jet
+	// under the 250 kt terminal limit, a jet at cruise.
+	speedBands := []string{"0", "100", "250", "450"}
+	for i, s := range speedBands {
+		rows = append(rows, pt(i, 1, "10000", s))
+	}
+	// Row 2: inputs no aircraft reports.
+	for i, as := range [][2]string{
+		{"-1200", "-50"}, {"-2147483648", "0"}, {"2147483647", "1e9"},
+		{"60000", "inf"}, {"45000", "nan"}, {"-500", "-inf"},
+	} {
+		rows = append(rows, pt(i, 2, as[0], as[1]))
+	}
+	// Row 3: a dense pixel beside a lone sample with the same altitude and speed.
+	for range 500 {
+		rows = append(rows, pt(0, 3, "10000", "250"))
+	}
+	rows = append(rows, pt(1, 3, "10000", "250"))
+
+	insert := "CREATE TABLE planes_mercator (mercator_x UInt32, mercator_y UInt32, altitude Int32, ground_speed Float32) ENGINE = Memory;\n" +
+		"INSERT INTO planes_mercator VALUES " + strings.Join(rows, ",") + ";\n"
+	span := strconv.Itoa(grid * cell)
+	const castSelect = "SELECT toUInt32(pos), round(red)::UInt8, round(green)::UInt8, round(blue)::UInt8, round(alpha)::UInt8"
+	render := func(sampling uint32) map[int][3]float64 {
+		r := builtinRenders[0]
+		tmpl := rasterTemplateSQL("planes_mercator", sampling, r.colorSQL, r.where)
+		require.Contains(t, tmpl, castSelect)
+		tmpl = strings.Replace(tmpl, castSelect, "SELECT pos, red, green, blue", 1)
+		tmpl, err := passes.CanonicalizeFull(100).Run(tmpl)
+		require.NoError(t, err)
+		out, err := exec.Command(bin, "local", "--output-format", "TSV",
+			"--param_vp_min_x=0", "--param_vp_max_x="+span, "--param_vp_min_y=0", "--param_vp_max_y="+span,
+			"--param_vp_w="+strconv.Itoa(grid), "--param_vp_h="+strconv.Itoa(grid),
+			"--query", insert+tmpl).CombinedOutput()
+		require.NoError(t, err, string(out))
+		px := make(map[int][3]float64, grid*grid)
+		for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
+			f := strings.Split(line, "\t")
+			require.Len(t, f, 4, line)
+			pos, err := strconv.Atoi(f[0])
+			require.NoError(t, err, line)
+			var c [3]float64
+			for i := range c {
+				c[i], err = strconv.ParseFloat(f[i+1], 64)
+				require.NoError(t, err, line)
+				require.False(t, math.IsNaN(c[i]), "pixel %d: %s", pos, line)
+				require.GreaterOrEqual(t, c[i], 0.0, "pixel %d: %s", pos, line)
+				require.LessOrEqual(t, c[i], 255.0, "pixel %d: %s", pos, line)
+			}
+			px[pos] = c
+		}
+		require.NotContains(t, px, grid*grid-1, "an empty pixel has no row (sparse result)")
+		return px
+	}
+	// Distinct: some channel differs by at least 12/255 between every pair.
+	distinct := func(px map[int][3]float64, row int, names []string) {
+		for i := range names {
+			for j := i + 1; j < len(names); j++ {
+				a, b := px[row*grid+i], px[row*grid+j]
+				require.True(t, max(math.Abs(a[0]-b[0]), math.Abs(a[1]-b[1]), math.Abs(a[2]-b[2])) >= 12,
+					"row %d: %s vs %s: %v vs %v", row, names[i], names[j], a, b)
+			}
+		}
+	}
+	sum := func(c [3]float64) float64 { return c[0] + c[1] + c[2] }
+
+	// Sampling 100 (the panel default): a lone sample here has transparency
+	// ≈0.84, so both altitude and speed must separate.
+	px := render(100)
+	distinct(px, 0, altBands)
+	distinct(px, 1, speedBands)
+	require.Greater(t, sum(px[3*grid]), sum(px[3*grid+1]), "density brightens a pixel")
+
+	// Sampling 1: a lone sample is faint (transparency ≈0.33), where the sRGB
+	// gamut leaves chroma — and so speed — little room; altitude, carried by
+	// hue, must still separate.
+	px = render(1)
+	distinct(px, 0, altBands)
+	require.Greater(t, sum(px[3*grid]), sum(px[3*grid+1]), "density brightens a pixel")
+}
+
 // An extra WHERE is ANDed with in_view; an empty one leaves the filter bare.
 func TestRasterTemplateExtraWhere(t *testing.T) {
 	rgb := "0 AS red, 0 AS green, 0 AS blue"
@@ -271,13 +383,14 @@ func TestUpdateViewportEmitsSignalsAndTemplate(t *testing.T) {
 
 	d.updateViewport(51.3, 51.7, -0.6, 0.3, 800, 600, graphEmitter{graph: g})
 
-	b, ok := bboxFromLatLon(51.3, 51.7, -0.6, 0.3)
+	view, ok := bboxFromLatLon(51.3, 51.7, -0.6, 0.3)
 	require.True(t, ok)
+	b, bw, bh := (&MapDriver{}).requestBox(view, 800, 600) // the view plus SD7's margin
 	sig := g.signals()
 	for name, want := range map[SignalID]uint32{
 		"vp_min_x": b.minX, "vp_max_x": b.maxX,
 		"vp_min_y": b.minY, "vp_max_y": b.maxY,
-		"vp_w": 800, "vp_h": 600,
+		"vp_w": bw, "vp_h": bh,
 	} {
 		p, found := sig.Get(name)
 		require.True(t, found, "signal %s must be emitted", name)
@@ -290,7 +403,7 @@ func TestUpdateViewportEmitsSignalsAndTemplate(t *testing.T) {
 
 	// The template is viewport-free: a pan changes only the params.
 	d.updateViewport(48.0, 48.4, 2.0, 2.9, 800, 600, graphEmitter{graph: g})
-	require.Equal(t, params["param_vp_w"], "800")
+	require.Equal(t, params["param_vp_w"], "1200")
 	tmplAfterPan := d.template
 	d.updateViewport(51.3, 51.7, -0.6, 0.3, 800, 600, graphEmitter{graph: g})
 	require.Equal(t, tmplAfterPan, d.template, "pan/zoom never changes the SQL text")
@@ -353,4 +466,556 @@ func TestSanitizeTableFoldCannotForgeAStatementBreaker(t *testing.T) {
 	// the checks safe rather than a hole in them.
 	require.Equal(t, "a- -b", sanitizeTable("a-\n-b"))
 	require.Equal(t, "a/ *b", sanitizeTable("a/\n*b"))
+}
+
+// The raster is sized in logical points (View.Size), clamped to [16,
+// mapMaxDim]; no device-pixel factor applies (ADR-0096 2026-10-01 Update).
+func TestClampDimPinsLogicalPointsAndCap(t *testing.T) {
+	require.EqualValues(t, 16, clampDim(5))
+	require.EqualValues(t, 800, clampDim(800.4))
+	require.EqualValues(t, mapMaxDim, clampDim(4000))
+}
+
+// foldViewLon folds a view onto the one world copy mercator_x covers: a view
+// panned whole turns asks for the same span, a world-wide view asks for the
+// whole world, and a view past ±180 keeps the side its midpoint is on.
+func TestFoldViewLon(t *testing.T) {
+	for _, tc := range []struct {
+		name                   string
+		west, east             float64
+		wantW, wantE, wantFrac float64
+	}{
+		{"inside", -10, 20, -10, 20, 1},
+		{"one turn east", 350, 380, -10, 20, 1},
+		{"two turns west", -730, -700, -10, 20, 1},
+		{"wider than a world", -200, 200, -180, 180, 0.9},
+		{"past +180, midpoint west of it", 150, 190, 150, 180, 0.75},
+		{"past +180, midpoint east of it", 170, 200, -180, -160, 20.0 / 30},
+	} {
+		w, e, frac := foldViewLon(tc.west, tc.east)
+		require.InDelta(t, tc.wantW, w, 1e-9, tc.name)
+		require.InDelta(t, tc.wantE, e, 1e-9, tc.name)
+		require.InDelta(t, tc.wantFrac, frac, 1e-9, tc.name)
+	}
+}
+
+// The raster is drawn on the world copy nearest the view, and on its
+// neighbours when the view is wide enough to show them.
+func TestRasterCopies(t *testing.T) {
+	require.Equal(t, []float64{0}, rasterCopies(-10, 20, -30, 30))
+	require.Equal(t, []float64{360}, rasterCopies(-10, 20, 330, 390), "follows the reader a turn east")
+	require.Equal(t, []float64{0, -360, 360}, rasterCopies(-180, 180, -200, 200), "a world view shows the edges of both neighbours")
+	require.Empty(t, rasterCopies(-10, 20, 40, 60), "a raster outside the view is not drawn")
+}
+
+// latCoverage is below 1 only when the view reaches past the mercator clamp.
+func TestLatCoverage(t *testing.T) {
+	require.InDelta(t, 1, latCoverage(40, 60), 1e-12)
+	c := latCoverage(-89.9, 89.9)
+	require.Greater(t, c, 0.0)
+	require.Less(t, c, 1.0)
+}
+
+// Regression: after a pan of one whole world, both edges used to clamp to the
+// world's edge, the viewport was dropped as degenerate, and the map went dark.
+// The folded request is the one the unpanned view makes.
+func TestUpdateViewportAfterFullWorldPan(t *testing.T) {
+	read := func(west, east float64, screenW float32) map[SignalID]string {
+		g := newQueryGraph(nil, nil)
+		d := NewMapDriver(nil, nil)
+		defer d.lane.close()
+		d.updateViewport(30, 60, west, east, screenW, 600, graphEmitter{graph: g})
+		sig := g.signals()
+		out := map[SignalID]string{}
+		for _, s := range mapViewportSignals {
+			p, found := sig.Get(s)
+			require.True(t, found, "signal %s must be emitted for view %v..%v", s, west, east)
+			out[s] = p.Raw
+		}
+		return out
+	}
+	require.Equal(t, read(-30, 30, 800), read(330, 390, 800))
+
+	world := read(-200, 200, 1000)
+	require.Equal(t, "0", world["vp_min_x"])
+	require.Equal(t, strconv.FormatUint(mercUnitMax, 10), world["vp_max_x"])
+	require.Equal(t, "900", world["vp_w"], "the raster spans the 90% of the view one world covers")
+}
+
+// A colour block may define alpha; only a block that does not gets the opaque
+// default appended, so the alias is never defined twice.
+func TestRasterTemplateAlphaFromColourBlock(t *testing.T) {
+	plain := rasterTemplateSQL("planes_mercator", 100, "0 AS red, 0 AS green, 0 AS blue", "")
+	require.Equal(t, 1, strings.Count(plain, "255 AS alpha"))
+
+	own := "transparency * 255 AS red, 0 AS green, 0 AS blue, transparency * 255 AS alpha"
+	tmpl := rasterTemplateSQL("planes_mercator", 100, own, "")
+	require.NotContains(t, tmpl, "255 AS alpha,")
+	require.Equal(t, 1, strings.Count(strings.ToLower(tmpl), "as alpha"))
+	canon, err := passes.CanonicalizeFull(100).Run(tmpl)
+	require.NoError(t, err)
+
+	bin, err := chlocalpool.LookupBinary()
+	if err != nil {
+		t.Skipf("clickhouse not installed: %v", err)
+	}
+	out, err := exec.Command(bin, "local", "--output-format", "TSV",
+		"--param_vp_min_x=0", "--param_vp_max_x=2000", "--param_vp_min_y=0", "--param_vp_max_y=1000",
+		"--param_vp_w=2", "--param_vp_h=1",
+		"--query", "CREATE TABLE planes_mercator (mercator_x UInt32, mercator_y UInt32) ENGINE = Memory;\n"+
+			"INSERT INTO planes_mercator VALUES (500, 500);\n"+canon).CombinedOutput()
+	require.NoError(t, err, string(out))
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	require.Len(t, lines, 1, "the empty pixel has no row; packRaster leaves it alpha 0")
+	lit := strings.Split(lines[0], "\t")
+	require.Len(t, lit, 5)
+	require.Equal(t, "0", lit[0], "pos")
+	require.NotEqual(t, "255", lit[4], "a lone sample's alpha follows its transparency")
+	require.Equal(t, lit[1], lit[4], "alpha is the block's own expression")
+}
+
+// The ladder derives its levels from the source's name: coarsest first, each
+// with its own sampling factor, the reader's table never marked derived.
+func TestMapLadderLevels(t *testing.T) {
+	lv := func(table string, sampling uint32, derived bool) mapLevel {
+		return mapLevel{table: table, sampling: sampling, derived: derived}
+	}
+	require.Equal(t, []mapLevel{lv("planes_mercator_sample100", 100, false), lv("planes_mercator_sample10", 10, true), lv("planes_mercator", 1, true)},
+		mapLadderLevels("planes_mercator_sample100", 7, true, nil))
+	require.Equal(t, []mapLevel{lv("planes_mercator_sample100", 100, true), lv("planes_mercator_sample10", 10, true), lv("planes_mercator", 1, false)},
+		mapLadderLevels("planes_mercator", 7, true, nil))
+	require.Equal(t, []mapLevel{lv("db.t_sample10", 10, false), lv("db.t", 1, true)},
+		mapLadderLevels("db.t_sample10", 7, true, nil))
+	require.Equal(t, []mapLevel{lv("t_sample100", 100, false), lv("t", 1, true)},
+		mapLadderLevels("t_sample100", 7, true, map[string]bool{"t_sample10": true}), "a missing level is left out")
+	require.Equal(t, []mapLevel{lv("planes_mercator_sample100", 7, false)},
+		mapLadderLevels("planes_mercator_sample100", 7, false, nil), "refine off reads the one table at the manual sampling")
+	src := "remoteSecure('h:9440', default.planes_mercator_sample100, 'website', '')"
+	require.Equal(t, []mapLevel{lv(src, 7, false)}, mapLadderLevels(src, 7, true, nil), "a table function is not laddered")
+}
+
+func TestMapLevelLabel(t *testing.T) {
+	require.Equal(t, "1 % sample", mapLevel{sampling: 100}.label())
+	require.Equal(t, "10 % sample", mapLevel{sampling: 10}.label())
+	require.Equal(t, "full table", mapLevel{sampling: 1}.label())
+}
+
+// A level climbs only within budget, Refresh's noBudget climbs past it, and
+// the last level stays.
+func TestMapLadderServedAndBudget(t *testing.T) {
+	levels := mapLadderLevels("t_sample100", 1, true, nil)
+	var l mapLadder
+	require.True(t, l.reset("a", levels))
+	require.False(t, l.reset("a", levels), "the same inputs leave the ladder where it is")
+	require.True(t, l.served(time.Second))
+	require.Equal(t, 1, l.level)
+	require.False(t, l.served(mapLadderBudget+time.Second), "an overrun stops the climb")
+	require.True(t, l.stopped)
+	require.Contains(t, l.status(l.current(), false), "refinement paused")
+
+	require.True(t, l.reset("b", levels))
+	l.noBudget = true
+	require.True(t, l.served(mapLadderBudget+time.Second))
+	require.True(t, l.served(mapLadderBudget+time.Second))
+	require.False(t, l.served(0), "the last level stays")
+	require.Equal(t, "full table", l.status(l.current(), false))
+}
+
+// ladderExecutor serves a 1×1 raster for any table except the missing ones,
+// which fail as ClickHouse does, and records the tables it was asked for.
+type ladderExecutor struct {
+	mu      sync.Mutex
+	missing map[string]bool
+	tables  []string
+}
+
+func (inst *ladderExecutor) execute(_ context.Context, c compiledNode, _ memory.Allocator) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, err error) {
+	m := regexp.MustCompile(`(?m)^FROM (\S+)$`).FindStringSubmatch(c.SQL)
+	inst.mu.Lock()
+	inst.tables = append(inst.tables, m[1])
+	inst.mu.Unlock()
+	if inst.missing[m[1]] {
+		err = errString("clickhouse http 404: Code: 60. DB::Exception: Unknown table expression identifier '" + m[1] + "'. (UNKNOWN_TABLE)")
+		return
+	}
+	rec = rgbaRec([]uint8{1}, []uint8{2}, []uint8{3}, []uint8{4})
+	schema = rec.Schema()
+	return
+}
+
+func (inst *ladderExecutor) asked() []string {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	return append([]string(nil), inst.tables...)
+}
+
+// The panel climbs the ladder one landed level at a time under one set of
+// vp_* params, skips a derived level the server lacks, names the level on
+// screen, and a settle with the same view does not start it over.
+func TestMapDriverClimbsTheLadder(t *testing.T) {
+	exec := &ladderExecutor{missing: map[string]bool{"planes_mercator_sample10": true}}
+	d := NewMapDriver(nil, nil)
+	d.lane.close()
+	d.lane = newNodeLane(exec, memory.NewGoAllocator(), 0)
+	defer d.lane.close()
+	g := newQueryGraph(nil, nil)
+
+	settle := func() map[string]string {
+		d.updateViewport(47, 48, 8, 9, 64, 64, graphEmitter{graph: g})
+		return resolveSignalNames(d.templateReads, nil, g.signals())
+	}
+	params := settle()
+	require.Eventually(t, func() bool {
+		d.demandRaster(params)
+		return d.packLevel.table == "planes_mercator" && !d.loading
+	}, 2*time.Second, time.Millisecond)
+	require.Equal(t, []string{"planes_mercator_sample100", "planes_mercator_sample10", "planes_mercator"}, exec.asked())
+	require.Nil(t, d.laneErr, "the skipped level's error is not the panel's")
+	require.True(t, d.ladder.missing["planes_mercator_sample10"])
+	require.Contains(t, d.statusLine(), "full table")
+
+	params = settle()
+	for range 20 {
+		d.demandRaster(params)
+	}
+	require.Len(t, exec.asked(), 3, "an unchanged settle neither restarts nor re-runs")
+
+	// Forget the timings, so the pan measures from the bottom again.
+	d.ladder.lastElapsed = nil
+	d.updateViewport(47, 48, 9, 10, 64, 64, graphEmitter{graph: g})
+	params = resolveSignalNames(d.templateReads, nil, g.signals())
+	require.Eventually(t, func() bool {
+		d.demandRaster(params)
+		return len(exec.asked()) == 5 && !d.loading
+	}, 2*time.Second, time.Millisecond)
+	require.Equal(t, []string{"planes_mercator_sample100", "planes_mercator"}, exec.asked()[3:], "a pan starts over, without the missing level")
+
+	// With the full table measured fast, the next pan starts there.
+	d.updateViewport(47, 48, 10, 11, 64, 64, graphEmitter{graph: g})
+	params = resolveSignalNames(d.templateReads, nil, g.signals())
+	require.Eventually(t, func() bool {
+		d.demandRaster(params)
+		return len(exec.asked()) == 6 && !d.loading
+	}, 2*time.Second, time.Millisecond)
+	require.Equal(t, "planes_mercator", exec.asked()[5], "a fast source skips the coarse levels")
+}
+
+// A restarted ladder starts at the finest level that answered within
+// mapLadderFast last time, and back at the bottom once that level ran slow.
+func TestMapLadderStartsAtTheFinestFastLevel(t *testing.T) {
+	levels := mapLadderLevels("t_sample100", 1, true, nil)
+	var l mapLadder
+	require.True(t, l.reset("a", levels))
+	require.Equal(t, 0, l.level, "nothing measured yet")
+	require.True(t, l.served(50*time.Millisecond))
+	require.True(t, l.served(80*time.Millisecond))
+	require.False(t, l.served(120*time.Millisecond))
+
+	require.True(t, l.reset("b", levels))
+	require.Equal(t, 2, l.level, "the full table answered fast")
+	require.False(t, l.served(time.Second), "and this time it did not")
+
+	require.True(t, l.reset("c", levels))
+	require.Equal(t, 1, l.level, "the finest level still fast is the 10 % sample")
+}
+
+// The sparse shape scatters (pos, r, g, b, a) rows into a zeroed buffer in
+// any order, and drops a pos past the raster; extra columns are ignored.
+func TestPackRasterSparse(t *testing.T) {
+	mem := memory.NewGoAllocator()
+	b := array.NewRecordBuilder(mem, arrow.NewSchema([]arrow.Field{
+		{Name: "pos", Type: arrow.PrimitiveTypes.Uint32},
+		{Name: "r", Type: arrow.PrimitiveTypes.Uint8}, {Name: "g", Type: arrow.PrimitiveTypes.Uint8},
+		{Name: "b", Type: arrow.PrimitiveTypes.Uint8}, {Name: "a", Type: arrow.PrimitiveTypes.Uint8},
+		{Name: "extra", Type: arrow.PrimitiveTypes.Uint32},
+	}, nil))
+	defer b.Release()
+	b.Field(0).(*array.Uint32Builder).AppendValues([]uint32{3, 0, 99}, nil)
+	for i := 1; i <= 4; i++ {
+		b.Field(i).(*array.Uint8Builder).AppendValues([]uint8{uint8(i), uint8(10 + i), 7}, nil)
+	}
+	b.Field(5).(*array.Uint32Builder).AppendValues([]uint32{1, 2, 3}, nil)
+	rec := b.NewRecordBatch()
+	defer rec.Release()
+
+	px, err := packRaster(rec, 2, 2)
+	require.NoError(t, err)
+	require.Equal(t, []uint32{0x0b0c0d0e, 0, 0, 0x01020304}, px)
+}
+
+// The cache toggle reaches the lane's requests, and Refresh's freshness
+// lasts until the view changes.
+func TestMapCacheFollowsToggleAndRefresh(t *testing.T) {
+	exec := &ladderExecutor{}
+	d := NewMapDriver(nil, nil)
+	d.lane.close()
+	d.lane = newNodeLane(exec, memory.NewGoAllocator(), 0)
+	defer d.lane.close()
+	g := newQueryGraph(nil, nil)
+	settle := func(lon float64) {
+		d.updateViewport(47, 48, lon, lon+1, 64, 64, graphEmitter{graph: g})
+		d.demandRaster(resolveSignalNames(d.templateReads, nil, g.signals()))
+	}
+
+	settle(8)
+	require.False(t, d.cacheUse.Load(), "off by default")
+	d.cache = true
+	settle(8)
+	require.True(t, d.cacheUse.Load())
+	require.False(t, d.cacheFresh.Load())
+
+	d.requestRefresh()
+	settle(8)
+	require.True(t, d.cacheFresh.Load(), "a Refresh computes afresh")
+	settle(8)
+	require.True(t, d.cacheFresh.Load(), "for the whole climb it restarted")
+	settle(9)
+	require.False(t, d.cacheFresh.Load(), "a pan reads the cache again")
+}
+
+// The memo keeps the most recent rasters within its byte budget, forgets an
+// entry past its TTL, and a read makes an entry most recent.
+func TestMapMemoBudgetTTLAndRecency(t *testing.T) {
+	now := time.Unix(1_000_000, 0)
+	m := mapMemo{budget: 3 * 4 * 10, now: func() time.Time { return now }}
+	entry := func() *mapMemoEntry { return &mapMemoEntry{pixels: make([]uint32, 10)} }
+	m.put("a", entry())
+	m.put("b", entry())
+	m.put("c", entry())
+	_, ok := m.get("a") // a becomes most recent
+	require.True(t, ok)
+	m.put("d", entry()) // evicts the least recent: b
+	require.False(t, m.has("b"))
+	require.True(t, m.has("a"))
+	require.True(t, m.has("c"))
+	require.True(t, m.has("d"))
+
+	m.put("big", &mapMemoEntry{pixels: make([]uint32, 100)})
+	require.False(t, m.has("big"), "an entry over the whole budget is not kept")
+
+	now = now.Add(mapMemoTTL)
+	_, ok = m.get("a")
+	require.False(t, ok, "expired")
+	require.False(t, m.has("c"))
+}
+
+// A pan back to a view the ladder already refined is drawn from memory with
+// no query, at the finest level held; Refresh empties the memo.
+func TestMapDriverServesARevisitFromMemory(t *testing.T) {
+	exec := &ladderExecutor{}
+	d := NewMapDriver(nil, nil)
+	d.lane.close()
+	d.lane = newNodeLane(exec, memory.NewGoAllocator(), 0)
+	defer d.lane.close()
+	g := newQueryGraph(nil, nil)
+	visit := func(lon float64) {
+		d.ladder.lastElapsed = nil // every view climbs all three levels
+		d.updateViewport(47, 48, lon, lon+1, 64, 64, graphEmitter{graph: g})
+		params := resolveSignalNames(d.templateReads, nil, g.signals())
+		require.Eventually(t, func() bool {
+			d.demandRaster(params)
+			return d.packLevel.table == "planes_mercator" && !d.loading
+		}, 2*time.Second, time.Millisecond)
+	}
+
+	visit(8)
+	visit(9)
+	require.Len(t, exec.asked(), 6, "two views, three levels each")
+	d.demandRaster(resolveSignalNames(d.templateReads, nil, g.signals()))
+	require.False(t, d.memoOnScreen, "a raster the lane just drew is not a memory")
+	require.True(t, d.stats.valid, "and keeps its run's accounting")
+	visit(8)
+	require.Len(t, exec.asked(), 6, "the pan back sends nothing")
+	require.True(t, d.memoOnScreen)
+	require.Contains(t, d.statusLine(), "full table · from memory")
+	require.False(t, d.stats.valid, "no run's accounting beside a raster from memory")
+
+	d.requestRefresh()
+	visit(8)
+	require.Len(t, exec.asked(), 9, "Refresh climbs the ladder again")
+	require.False(t, d.memoOnScreen)
+}
+
+// SD7's margin: a settled view is widened by mapOverscan on every side at its
+// own pixel scale; a small pan inside that box emits the same request, and a
+// pan out of it, or a zoom, asks again.
+func TestRequestBoxOverscan(t *testing.T) {
+	var d MapDriver
+	view, ok := bboxFromLatLon(47, 48, 8, 9)
+	require.True(t, ok)
+	b, w, h := d.requestBox(view, 800, 400)
+	require.EqualValues(t, 1200, w)
+	require.EqualValues(t, 600, h)
+	require.True(t, b.contains(view))
+	spanX := float64(view.maxX - view.minX)
+	require.InDelta(t, spanX*0.25, float64(view.minX-b.minX), 1)
+
+	shift := func(v mercBox, frac float64) mercBox {
+		d := uint32(spanX * frac)
+		return mercBox{minX: v.minX + d, maxX: v.maxX + d, minY: v.minY, maxY: v.maxY}
+	}
+	b2, w2, h2 := d.requestBox(shift(view, 0.2), 800, 400)
+	require.Equal(t, b, b2, "a pan inside the margin asks for the same box")
+	require.Equal(t, w, w2)
+	require.Equal(t, h, h2)
+
+	b3, _, _ := d.requestBox(shift(view, 0.3), 800, 400)
+	require.NotEqual(t, b, b3, "a pan past the margin asks again")
+
+	zoomed, ok := bboxFromLatLon(47.4, 47.6, 8.4, 8.6)
+	require.True(t, ok)
+	b4, _, _ := d.requestBox(zoomed, 800, 400)
+	require.NotEqual(t, b3, b4, "a zoom inside the box still asks again, at the new scale")
+	require.True(t, b4.contains(zoomed))
+
+	world, ok := bboxFromLatLon(-80, 80, -180, 180)
+	require.True(t, ok)
+	b5, _, _ := d.requestBox(world, 800, 400)
+	require.EqualValues(t, 0, b5.minX, "clamped to the world")
+	require.EqualValues(t, mercUnitMax, b5.maxX)
+}
+
+// A selected box publishes its mercator and degree bounds, folded onto the
+// one world the mercator columns cover; cleared, the area is the whole
+// world again — the declaration's seeds.
+func TestMapAreaSignals(t *testing.T) {
+	g := newQueryGraph(nil, nil)
+	em := graphEmitter{graph: g}
+	d := NewMapDriver(nil, nil)
+	defer d.lane.close()
+
+	get := func(name SignalID) string {
+		p, ok := g.signals().Get(name)
+		require.True(t, ok, name)
+		return p.Raw
+	}
+	// Drawn on the world copy one turn east.
+	d.setArea(mapArea{south: 47, west: 368, north: 48, east: 369}, true, em)
+	require.Equal(t, "8", get(signalAreaMinLon))
+	require.Equal(t, "9", get(signalAreaMaxLon))
+	require.Equal(t, strconv.FormatUint(uint64(lonToMercX(8)), 10), get(signalAreaMinX))
+	require.Equal(t, strconv.FormatUint(uint64(latToMercY(48)), 10), get(signalAreaMinY), "north is the smaller y")
+	require.Contains(t, d.areaStatus(), "47.000…48.000 N, 8.000…9.000 E")
+
+	d.setArea(mapArea{}, false, em)
+	for _, name := range []SignalID{signalAreaMinX, signalAreaMaxX, signalAreaMinLat, signalAreaMaxLon} {
+		seed, ok := signalSeedRaw(string(name))
+		require.True(t, ok)
+		require.Equal(t, seed, get(name), "cleared is the seed: %s", name)
+	}
+	require.Empty(t, d.areaStatus())
+}
+
+// The readout keeps each non-empty pixel's count and figure in pos order and
+// finds them under a geographic point, on any world copy; an empty pixel or
+// a point off the raster reads nothing. Counts at a sampled level scale by
+// its factor.
+func TestMapReadout(t *testing.T) {
+	mem := memory.NewGoAllocator()
+	b := array.NewRecordBuilder(mem, arrow.NewSchema([]arrow.Field{
+		{Name: "pos", Type: arrow.PrimitiveTypes.Uint32},
+		{Name: "r", Type: arrow.PrimitiveTypes.Uint8}, {Name: "g", Type: arrow.PrimitiveTypes.Uint8},
+		{Name: "b", Type: arrow.PrimitiveTypes.Uint8}, {Name: "a", Type: arrow.PrimitiveTypes.Uint8},
+		{Name: "n", Type: arrow.PrimitiveTypes.Uint32},
+		{Name: "m", Type: arrow.PrimitiveTypes.Int32},
+	}, nil))
+	defer b.Release()
+	// A 2×2 raster: pixel 3 (south-east) and pixel 0 (north-west), out of order.
+	b.Field(0).(*array.Uint32Builder).AppendValues([]uint32{3, 0}, nil)
+	for i := 1; i <= 4; i++ {
+		b.Field(i).(*array.Uint8Builder).AppendValues([]uint8{1, 1}, nil)
+	}
+	b.Field(5).(*array.Uint32Builder).AppendValues([]uint32{12, 3}, nil)
+	b.Field(6).(*array.Int32Builder).AppendValues([]int32{35000, 1200}, nil)
+	rec := b.NewRecordBatch()
+	defer rec.Release()
+
+	ro, ok := readoutFromRecord(rec)
+	require.True(t, ok)
+	merc, ok := bboxFromLatLon(46, 48, 8, 10)
+	require.True(t, ok)
+	ro.merc, ro.w, ro.h, ro.label = merc, 2, 2, "ft mean altitude"
+
+	n, m, hasM, ok := ro.at(portolan.LL(46.5, 9.5)) // south-east quarter
+	require.True(t, ok)
+	require.EqualValues(t, 12, n)
+	require.True(t, hasM)
+	require.InDelta(t, 35000, m, 1e-9)
+	require.Equal(t, "under the pointer: 12 positions · 35,000 ft mean altitude", ro.text(portolan.LL(46.5, 9.5)))
+	require.Equal(t, "under the pointer: 3 positions · 1,200 ft mean altitude", ro.text(portolan.LL(47.5, 368.5)), "north-west, one world east")
+	require.Empty(t, ro.text(portolan.LL(47.5, 9.5)), "an empty pixel")
+	require.Empty(t, ro.text(portolan.LL(40, 9)), "off the raster")
+
+	ro.factor = 100
+	require.Equal(t, "under the pointer: ≈1,200 positions · 35,000 ft mean altitude", ro.text(portolan.LL(46.5, 9.5)))
+}
+
+// The readout's columns ride the query only with the readout on: the count,
+// then the render's figure rounded to an Int32.
+func TestRasterTemplateReadoutColumns(t *testing.T) {
+	r := builtinRenders[0]
+	plain := rasterTemplateSQLWith("planes_mercator", 1, r.colorSQL, "", false, r.readout, 1)
+	require.NotContains(t, plain, "toUInt32(total)")
+	with := rasterTemplateSQLWith("planes_mercator", 1, r.colorSQL, "", true, r.readout, 1)
+	require.Contains(t, with, "round(alpha)::UInt8, toUInt32(total), toInt32(round(avg(altitude)))")
+	countOnly := rasterTemplateSQLWith("planes_mercator", 1, builtinRenders[1].colorSQL, "", true, builtinRenders[1].readout, 1)
+	require.Contains(t, countOnly, "round(alpha)::UInt8, toUInt32(total)\nFROM")
+	_, err := passes.CanonicalizeFull(100).Run(with)
+	require.NoError(t, err)
+}
+
+// Device resolution keeps brightness: the same uniform density drawn at the
+// logical size and at twice it per side gives the same transparency, because
+// the normaliser divides by the display scale once more (rasterTemplateSQLWith);
+// without that division the finer raster comes out dimmer.
+func TestDeviceResolutionKeepsBrightness(t *testing.T) {
+	bin, err := chlocalpool.LookupBinary()
+	if err != nil {
+		t.Skipf("clickhouse not installed: %v", err)
+	}
+	// One point every 125 mercator units over an 8000-unit square: 64 per
+	// pixel at 8×8, 16 per pixel at 16×16.
+	const setup = "CREATE TABLE planes_mercator (mercator_x UInt32, mercator_y UInt32) ENGINE = Memory;\n" +
+		"INSERT INTO planes_mercator SELECT 62 + (number % 64) * 125, 62 + intDiv(number, 64) * 125 FROM numbers(4096);\n"
+	mean := func(side uint32, dpr float64) float64 {
+		// Every pixel holds the same count, so any one pixel's transparency
+		// is the raster's.
+		tmpl := rasterTemplateSQLWith("planes_mercator", 1, builtinRenders[1].colorSQL, "", false, "", dpr)
+		tmpl = strings.Replace(tmpl, "SELECT toUInt32(pos), round(red)::UInt8, round(green)::UInt8, round(blue)::UInt8, round(alpha)::UInt8", "SELECT transparency AS t", 1)
+		out, err := exec.Command(bin, "local", "--output-format", "TSV",
+			"--param_vp_min_x=0", "--param_vp_max_x=8000", "--param_vp_min_y=0", "--param_vp_max_y=8000",
+			"--param_vp_w="+strconv.Itoa(int(side)), "--param_vp_h="+strconv.Itoa(int(side)),
+			"--query", setup+"SELECT any(t) FROM ("+tmpl+")").CombinedOutput()
+		require.NoError(t, err, string(out))
+		v, err := strconv.ParseFloat(strings.TrimSpace(string(out)), 64)
+		require.NoError(t, err, string(out))
+		return v
+	}
+	logical := mean(8, 1)
+	device := mean(16, 2)
+	require.InDelta(t, logical, device, 1e-3, "the same density, the same brightness")
+	require.Less(t, mean(16, 1), logical-0.01, "without the correction the finer raster is dimmer")
+}
+
+// With device resolution on, the request is sized in display pixels and the
+// cap scales with the display; off, the display scale changes nothing.
+func TestDeviceResolutionRequest(t *testing.T) {
+	g := newQueryGraph(nil, nil)
+	d := NewMapDriver(nil, nil)
+	defer d.lane.close()
+	d.dpr = 2
+	d.updateViewport(47, 48, 8, 9, 800, 400, graphEmitter{graph: g})
+	w, _ := g.signals().Get("vp_w")
+	require.Equal(t, "1200", w.Raw, "off: logical points plus the margin")
+	require.NotContains(t, d.template, "zoom_factor / 2")
+
+	d.deviceRes = true
+	d.updateViewport(47, 48, 8, 9, 800, 400, graphEmitter{graph: g})
+	w, _ = g.signals().Get("vp_w")
+	require.Equal(t, "2400", w.Raw, "on: display pixels plus the margin")
+	require.Contains(t, d.template, "zoom_factor / 2,")
+	require.EqualValues(t, 3072, d.maxDim())
+
+	d.dpr = 4
+	require.EqualValues(t, mapMaxDimDevice, d.maxDim())
 }

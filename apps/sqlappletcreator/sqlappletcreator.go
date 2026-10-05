@@ -37,9 +37,10 @@ type App struct {
 	bus app.BusI
 	log zerolog.Logger
 
-	// editor is the shared SQL editing surface (ADR-0147). Zero value ready;
-	// it holds the caret channel and the colour tiers across frames.
-	editor sqleditor.Editor
+	// editor is the shared SQL editing surface (ADR-0147), built at Mount on
+	// the app's ids; it holds the caret channel and the colour tiers across
+	// frames.
+	editor *sqleditor.Editor
 
 	sql      string // seeded from the launch config; editable
 	slug     string
@@ -64,6 +65,7 @@ func (inst *App) Manifest() app.Manifest { return manifest }
 
 func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
+	inst.editor = sqleditor.New(inst.ids, "sql")
 	inst.bus = ctx.Bus()
 	inst.log = ctx.Log()
 	if raw := ctx.LaunchConfig(); len(raw) > 0 {
@@ -106,12 +108,11 @@ func (inst *App) renderForm() {
 			// it. The Decoration is zero — this app has no analysis of its own
 			// to contribute, which is the point of the seam being optional.
 			res := inst.editor.Bind(sqleditor.Frame{
-				IDSlot: "sql",
-				Value:  &inst.sql,
-				Rows:   8,
-				Hint:   "-- the query this applet runs",
+				Value: &inst.sql,
+				Rows:  8,
+				Hint:  "-- the query this applet runs",
 			})
-			inst.editor.Render(ids, sqleditor.Decoration{})
+			inst.editor.Render(sqleditor.Decoration{})
 			// Run-under-cursor is inherited rather than implemented: the app
 			// has only ever shipped whole buffers, so say which statement a
 			// run would take when the buffer holds more than one.

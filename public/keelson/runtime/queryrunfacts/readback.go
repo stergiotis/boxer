@@ -100,11 +100,39 @@ type HistoryRow struct {
 	ExceptionCode  int64
 	Exception      string
 	QueryText      string
+	// Instance is the window the query ran from (ADR-0191 §SD4); zero when
+	// the stamp named none.
+	Instance uint64
+	// Task, TaskCall and TaskEpoch are the Delegation slots (ADR-0277 §SD7):
+	// the agent task whose work the run was and the dispatcher call that
+	// caused it. Empty for a run the person started.
+	Task      string
+	TaskCall  string
+	TaskEpoch uint64
+	// The fingerprints of the statement as authored, as sent, of the pass
+	// chain and of the environment (ADR-0115 SD7); empty when unstamped.
+	AuthoredFp string
+	SentFp     string
+	ChainFp    string
+	EnvFp      string
+}
+
+// Delegated reports whether an agent task caused the run.
+func (inst HistoryRow) Delegated() bool {
+	return inst.Task != ""
 }
 
 // historyRowColumns is the SELECT-list arity ParseHistoryRows expects;
 // compose and parse must move together.
-const historyRowColumns = 20
+const historyRowColumns = 28
+
+// HistoryFilter narrows a history read. Empty fields do not filter.
+type HistoryFilter struct {
+	// RunId keeps the runs one host process stamped.
+	RunId string
+	// Task keeps the runs one agent task caused.
+	Task string
+}
 
 // HistoryLimitCap bounds one history read the same way RecentLogs caps
 // its window — an operator pane, not an export path.
@@ -130,7 +158,6 @@ const (
 	hSymLr = "`symbol:lr`"
 
 	// The parameter and value lanes a selector projects through.
-	hSymMrhp  = "`symbol:mrhp`"
 	hU64Mrhp  = "`u64Array:mrhp`"
 	hU64Value = "`u64Array:value`"
 	hU64Len   = "`u64Array:len`"
@@ -143,8 +170,9 @@ const (
 	// the counters, the fingerprints, the enumerations.
 	plainChannel = "chan:low-card-ref"
 	// mixedChannel is one membership shared by several attributes, told
-	// apart by a high-cardinality parameter: the app and run stamps, and
-	// every ProfileEvents counter (the MembLogField pattern).
+	// apart by a high-cardinality parameter: every ProfileEvents counter
+	// (the MembLogField pattern). The app and run stamps used to ride it
+	// and moved to the plain channel (ADR-0277 §SD8).
 	mixedChannel = "chan:low-card-ref-high-card-params"
 )
 
@@ -185,16 +213,6 @@ func getListFirst(section string, memb string) (expr string) {
 	return fmt.Sprintf("arrayElement(LW_GET_LIST('%s', '%s', '%s'), 1)", section, memb, plainChannel)
 }
 
-// mixedFirstParam yields the high-card parameter of the first attribute
-// carrying memb on the mixed channel — the stamped app id, the run id.
-//
-// It selects with LW_SEL rather than LW_SEL_ATTRS because the parameter
-// lane is co-indexed with the membership lane, not with the attributes.
-func mixedFirstParam(section string, memb string, paramLane string) (expr string) {
-	return fmt.Sprintf("arrayElement(LW_CO_GATHER(%s, LW_SEL('%s', '%s', '%s')), 1)",
-		paramLane, section, memb, mixedChannel)
-}
-
 // membershipIds resolves the names above for [prepare], over the runtime
 // vocabulary alone.
 //
@@ -225,7 +243,12 @@ func (membershipIds) LookupMembership(name string) (id uint64, err error) {
 // factsTable must be database-qualified: its database half is what
 // resolves the unqualified references inside.
 func ComposeHistorySql(factsTable string, limit int) (sql string, err error) {
-	sql, err = composeHistoryAuthored(factsTable, limit)
+	return ComposeHistorySqlFiltered(factsTable, limit, HistoryFilter{})
+}
+
+// ComposeHistorySqlFiltered is [ComposeHistorySql] narrowed by filter.
+func ComposeHistorySqlFiltered(factsTable string, limit int, filter HistoryFilter) (sql string, err error) {
+	sql, err = composeHistoryAuthored(factsTable, limit, filter)
 	if err != nil {
 		return "", err
 	}
@@ -242,7 +265,7 @@ func ComposeHistorySql(factsTable string, limit int) (sql string, err error) {
 // before any expansion. Kept separate so a test can assert the authored
 // shape (which memberships are read, and the SELECT arity the parser
 // depends on) without reading through an expansion.
-func composeHistoryAuthored(factsTable string, limit int) (sql string, err error) {
+func composeHistoryAuthored(factsTable string, limit int, filter HistoryFilter) (sql string, err error) {
 	if factsTable == "" {
 		err = eh.Errorf("queryrunfacts: history needs factsTable")
 		return
@@ -273,9 +296,17 @@ func composeHistoryAuthored(factsTable string, limit int) (sql string, err error
   %s AS normalized_hash,
   %s AS exception_code,
   %s AS exception,
-  %s AS query_text
+  %s AS query_text,
+  %s AS instance,
+  %s AS task,
+  %s AS task_call,
+  %s AS task_epoch,
+  %s AS authored_fp,
+  %s AS sent_fp,
+  %s AS chain_fp,
+  %s AS env_fp
 FROM %s
-WHERE has(%s, %d)
+WHERE has(%s, %d)%s
 ORDER BY %s DESC, id
 LIMIT %d`,
 		hId,
@@ -284,8 +315,8 @@ LIMIT %d`,
 		sym(vocab.MembQueryRunEventType),
 		sym(vocab.MembQueryRunQueryKind),
 		sym(vocab.MembQueryRunLane),
-		mixedFirstParam("symbol", membName(vocab.MembRuntimeApp), hSymMrhp),
-		mixedFirstParam("symbol", membName(vocab.MembRuntimeRun), hSymMrhp),
+		sym(vocab.MembRuntimeApp),
+		sym(vocab.MembRuntimeRun),
 		u64(vocab.MembQueryRunDurationMs),
 		u64(vocab.MembQueryRunReadRows),
 		u64(vocab.MembQueryRunReadBytes),
@@ -298,14 +329,41 @@ LIMIT %d`,
 		getListFirst("i64Array", membName(vocab.MembQueryRunExceptionCode)),
 		str(vocab.MembQueryRunExceptionText),
 		str(vocab.MembQueryRunQueryText),
+		u64(vocab.MembLifecycleTileKey),
+		str(vocab.MembTrailTask),
+		str(vocab.MembTrailCall),
+		u64(vocab.MembTrailTaskEpoch),
+		str(vocab.MembQueryRunAuthoredFp),
+		str(vocab.MembQueryRunSentFp),
+		str(vocab.MembQueryRunChainFp),
+		str(vocab.MembQueryRunEnvFp),
 		factsTable,
 		// The kind test stays an id: `has()` over a membership lane takes a
 		// literal, and no expansion turns a name into one — it is a plain
 		// ClickHouse built-in, which is exactly why it prunes.
 		hSymLr, vocab.MembKindQueryRun.GetId().Value(),
+		filterTerms(filter, sym, str),
 		hTs,
 		limit)
 	return
+}
+
+// filterTerms renders filter as AND terms over the same reads the SELECT
+// list makes. They are not pruning terms: the kind test before them is.
+func filterTerms(filter HistoryFilter, sym func(registry.RegisteredNaturalKey) string, str func(registry.RegisteredNaturalKey) string) (terms string) {
+	b := strings.Builder{}
+	if filter.RunId != "" {
+		b.WriteString("\n  AND " + sym(vocab.MembRuntimeRun) + " = " + quoteLiteral(filter.RunId))
+	}
+	if filter.Task != "" {
+		b.WriteString("\n  AND " + str(vocab.MembTrailTask) + " = " + quoteLiteral(filter.Task))
+	}
+	return b.String()
+}
+
+// quoteLiteral renders s as a ClickHouse string literal.
+func quoteLiteral(s string) (lit string) {
+	return "'" + strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(s) + "'"
 }
 
 // ComposeProfileEventsSql is the per-run drill-down, written as an
@@ -492,6 +550,17 @@ func ParseHistoryRows(raw []byte) (rows []HistoryRow, err error) {
 		row.ExceptionCode = excCode
 		row.Exception = UnescapeTabSeparated(parts[18])
 		row.QueryText = UnescapeTabSeparated(parts[19])
+		row.Instance = u(20)
+		row.Task = UnescapeTabSeparated(parts[21])
+		row.TaskCall = UnescapeTabSeparated(parts[22])
+		row.TaskEpoch = u(23)
+		if err != nil {
+			return
+		}
+		row.AuthoredFp = UnescapeTabSeparated(parts[24])
+		row.SentFp = UnescapeTabSeparated(parts[25])
+		row.ChainFp = UnescapeTabSeparated(parts[26])
+		row.EnvFp = UnescapeTabSeparated(parts[27])
 		rows = append(rows, row)
 	}
 	return

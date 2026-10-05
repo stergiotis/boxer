@@ -112,6 +112,7 @@ for the parts that have no such term. New house names belong in this table.
 | `rutter` | a pilot's book of sailing directions — the routes between ports | the road-network routing engine — `public/analytics/graph/rutter` ([ADR-0256](doc/adr/0256-rutter-road-routing-engine-customizable-contraction-hierarchies.md)) |
 | `watchbill` | the roster that assigns each hand a duty on each watch | durable work as job rows claimed by writing — `public/keelson/runtime/watchbill` ([ADR-0223](doc/adr/0223-watchbill-durable-work-on-facts.md)) |
 | `stevedore` | the hand who works the hatch, loading cargo and checking it against the manifest; what the cargo is, is the shipper's business | routing, failure and state handling around an ingestion processor a streaming framework drives — `public/streaming/stevedore` ([ADR-0252](doc/adr/0252-stevedore-routing-failure-and-state-handling-for-framework-driven-ingestion.md)) |
+| `jackstay` | the wire rigged between two ships under way, along which loads are hauled across | the guided sync of tables from one ClickHouse server to another — `public/db/clickhouse/jackstay` ([ADR-0259](doc/adr/0259-jackstay-guided-clickhouse-to-clickhouse-sync.md)) |
 
 ### Glossary
 <dl>

@@ -78,8 +78,8 @@ func (j *bandJob) matches(n int, alpha float64, method ecdfbands.BandMethodE) (o
 }
 
 // bandJobs is the process-global warm-up registry, keyed by the caller's
-// job key — one entry per consuming widget instance (the ECDF inspector's
-// per-call scope), NOT per (n, α, method). Per-instance keying is what
+// [BandJobKey] — one entry per consuming widget instance (derived from the
+// instance's own id scope), NOT per (n, α, method). Per-instance keying is what
 // makes cancellation safe: closing one inspector aborts exactly its own
 // solve and never a band another open inspector is still waiting on. The
 // underlying ecdfbands cache (keyed by n / α / method) still deduplicates
@@ -87,7 +87,7 @@ func (j *bandJob) matches(n int, alpha float64, method ecdfbands.BandMethodE) (o
 // a second inspector on the same parameters finds BandReady true and never
 // schedules a job at all; only inspectors that begin warming the same
 // parameters concurrently pay a redundant (and harmless) solve.
-var bandJobs sync.Map // string(jobKey) -> *bandJob
+var bandJobs sync.Map // BandJobKey -> *bandJob
 
 // ensureBandWarm returns the current snapshot of jobKey's warm-up,
 // starting one on first request. Idempotent across frames: the same
@@ -100,7 +100,7 @@ var bandJobs sync.Map // string(jobKey) -> *bandJob
 // [cancelBandJob] still aborts it; only the keelson task.HandleI
 // integration (supervisor audit, global taskmonitor visibility, host
 // mount-cancel) is skipped when nil.
-func ensureBandWarm(jobKey string, tasks task.TaskApiI, n int, alpha float64, method ecdfbands.BandMethodE) BandJobSnapshot {
+func ensureBandWarm(jobKey BandJobKey, tasks task.TaskApiI, n int, alpha float64, method ecdfbands.BandMethodE) BandJobSnapshot {
 	if existing, ok := bandJobs.Load(jobKey); ok {
 		j := existing.(*bandJob)
 		if j.matches(n, alpha, method) {
@@ -153,7 +153,7 @@ func ensureBandWarm(jobKey string, tasks task.TaskApiI, n int, alpha float64, me
 // reopen schedules a fresh solve instead of surfacing the cancelled one.
 // The shared ecdfbands cache is untouched: a band that already finished
 // stays cached and a reopen renders it immediately.
-func cancelBandJob(jobKey string) {
+func cancelBandJob(jobKey BandJobKey) {
 	if existing, ok := bandJobs.LoadAndDelete(jobKey); ok {
 		existing.(*bandJob).cancel()
 	}
@@ -171,7 +171,7 @@ func cancelBandJob(jobKey string) {
 // inspector retracted, via [cancelBandJob]) propagates to the task handle
 // too, while the handle additionally folds in bus-cancel and the host's
 // mount-cancel.
-func runBandWarm(ctx context.Context, jobKey string, j *bandJob, tasks task.TaskApiI, n int, alpha float64, method ecdfbands.BandMethodE) {
+func runBandWarm(ctx context.Context, jobKey BandJobKey, j *bandJob, tasks task.TaskApiI, n int, alpha float64, method ecdfbands.BandMethodE) {
 	var h task.HandleI
 	if tasks != nil {
 		h, _ = tasks.Spawn(ctx, task.SpawnOpts{

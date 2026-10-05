@@ -49,6 +49,7 @@ var manifest = app.Manifest{
 	Icon:     icons.PhSquaresFour,
 	Topics:   []app.TopicT{app.TopicRuntime},
 	Keywords: []string{"launcher", "apps", "open", "start", "run", "find", "search", "palette", "menu"},
+	Shell:    true,
 	Surface:  app.SurfaceWindowed,
 	SurfaceHints: app.SurfaceHints{
 		PreferredWidth:  styletokens.SurfaceApp.W,
@@ -119,7 +120,7 @@ func init() {
 }
 
 // hostAssertion documents the structural contract between this package and
-// windowhost without importing it: *windowhost.Inst carries OpenOrRaiseApp
-// and OpenAppIds precisely so it satisfies HostI, and hostboot wires the two
-// together. Written as a comment rather than a compile-time assertion because
+// windowhost without importing it: *windowhost.Inst carries OpenOrRaiseApp,
+// OpenNewApp and OpenAppIds precisely so it satisfies HostI, and hostboot
+// wires the two together. Written as a comment rather than a compile-time assertion because
 // the assertion would be the import the dependency direction forbids (§SD3).

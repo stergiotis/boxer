@@ -24,6 +24,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	wb "github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
@@ -85,9 +86,12 @@ type App struct {
 	client  *wb.Client
 	reads   *tableReader
 	tasks   task.TaskApiI
-	monitor *taskmonitor.Inst
+	monitor *taskmonitor.Monitor
 	machine *fsmview.Machine[string]
-	chip    *fsmview.Widget[string]
+	chip    *fsmview.View[string]
+	// mirrored is the job machine mirrors; the selection can move before
+	// the frame that mirrors the new job.
+	mirrored string
 
 	appCtx    context.Context
 	cancelApp context.CancelFunc
@@ -111,10 +115,15 @@ type App struct {
 	applyGen uint32
 	// split is the list pane\'s width, kept and persisted by the window;
 	// storage is where it is kept, and splitWrite its pending write.
-	split       splitState
-	storage     app.StorageI
-	splitSeen   float32
-	kindDraft   string
+	split     splitState
+	storage   app.StorageI
+	splitSeen float32
+	kindDraft string
+	// kindH is the kind field's widget, for the catalog's editing check;
+	// frameCtx the frame's context, for routing the person's gestures
+	// through the catalog (ADR-0269).
+	kindH       widgethandle.WidgetHandle
+	frameCtx    app.FrameContextI
 	selectedID  string
 	shownEvent  int
 	autoRefresh bool
@@ -149,7 +158,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.reads = newTableReader(ctx.Bus())
 	inst.tasks = task.ForApp(ctx)
 	inst.appCtx, inst.cancelApp = context.WithCancel(context.Background())
-	inst.chip = fsmview.New(inst.ids, "job-state", inst.machine).Title("job state")
+	inst.chip = fsmview.New(inst.ids, "job-state", inst.machine, fsmview.Options[string]{Title: "job state"})
 	inst.storage = ctx.Storage()
 	if inst.storage != nil {
 		if raw, found, gerr := inst.storage.Get(splitKey); gerr == nil && found {
@@ -167,7 +176,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 		inst.applyLaunch(cfg)
 	}
 
-	inst.monitor = taskmonitor.New(inst.tasks, inst.ids, "tm", taskmonitor.Opts{DefaultOpen: true})
+	inst.monitor = taskmonitor.New(inst.ids, "tm", inst.tasks, taskmonitor.Options{DefaultOpen: true})
 	if startErr := inst.monitor.Start(); startErr != nil {
 		inst.logger.Debug().Err(startErr).Msg("watchbill app: task monitor not started")
 	}
@@ -206,12 +215,13 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	}
 	inst.wg.Wait()
 	if inst.monitor != nil {
-		_ = inst.monitor.Stop()
+		_ = inst.monitor.Close()
 	}
 	return
 }
 
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
+	inst.frameCtx = ctx
 	inst.density = styletokens.ActiveDensity()
 	inst.ensureWidths(ctx)
 	inst.render()

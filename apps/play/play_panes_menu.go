@@ -36,6 +36,13 @@ type paneMenuRow struct {
 	// the subset nothing has filled yet.
 	Drives   []string
 	Unfilled []string
+	// Panel says the pane draws a result; only a panel can be bound or
+	// rejects one.
+	Panel bool
+	// Draws is the three-way verdict list_panes reports (paneDraws), and
+	// Publishes every name the pane writes, read or not.
+	Draws     PaneDrawE
+	Publishes []string
 }
 
 // paneMenuRows builds both groups for this frame. active is the current result
@@ -46,12 +53,28 @@ type paneMenuRow struct {
 // the menu is read next to the tabs, so a different sort would cost the reader
 // the mapping between them.
 func (inst *PlayApp) paneMenuRows(active *arrow.Schema) (shows, drives []paneMenuRow) {
+	rows := inst.paneRows(active)
+	shows = make([]paneMenuRow, 0, len(rows))
+	for _, row := range rows {
+		if row.Panel {
+			shows = append(shows, row)
+		}
+		if len(row.Drives) > 0 {
+			drives = append(drives, row)
+		}
+	}
+	return
+}
+
+// paneRows is every pane's row, in registration order: the menu groups them,
+// and list_panes reports them (ADR-0270 §SD1).
+func (inst *PlayApp) paneRows(active *arrow.Schema) (rows []paneMenuRow) {
 	specs := inst.tabs.all()
 	reads := bufferReads(inst.paramSlots)
-	shows = make([]paneMenuRow, 0, len(specs))
+	rows = make([]paneMenuRow, 0, len(specs))
 	for i := range specs {
 		spec := &specs[i]
-		row := paneMenuRow{TabID: spec.ID, Title: spec.Title, DockID: spec.DockID}
+		row := paneMenuRow{TabID: spec.ID, Title: spec.Title, DockID: spec.DockID, Panel: spec.Panel != nil}
 		in := tabVerdict{
 			schema: inst.paneSchemaFor(spec.ID, active),
 			split:  inst.currentSplit,
@@ -69,11 +92,12 @@ func (inst *PlayApp) paneMenuRows(active *arrow.Schema) (shows, drives []paneMen
 			// marks off the tabs is about a glyph every tab pays width for,
 			// not about a line the reader opened this menu to see.
 			row.Reject, _ = paneReject(spec.Panel, in)
-			shows = append(shows, row)
+			row.Draws, _ = paneDraws(spec.Panel, in)
 		}
-		if len(row.Drives) > 0 {
-			drives = append(drives, row)
+		for _, w := range declaredWrites(spec) {
+			row.Publishes = append(row.Publishes, string(w))
 		}
+		rows = append(rows, row)
 	}
 	return
 }
@@ -136,7 +160,7 @@ func (inst *PlayApp) paneMenuButton(row *paneMenuRow, idPrefix string) {
 		SendResp().HasPrimaryClicked() {
 		// Activation only. A rejecting pane opens too: its body carries the
 		// contract help the reason line is a summary of.
-		_ = inst.ActivateTab(row.TabID)
+		inst.personShowPane(row.TabID)
 	}
 }
 

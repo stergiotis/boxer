@@ -37,6 +37,18 @@ func TestSelectNodesWalksDepthFirstAndSkipsContainers(t *testing.T) {
 	assert.Equal(t, uint64(42), v.Pass)
 }
 
+// An empty text input has neither name nor value — egui labels it with
+// nothing and its value is the text — and is still a node to type into.
+func TestSelectNodesKeepsAnEmptyTextInput(t *testing.T) {
+	root := &TreeNode{Id: 1, Role: "window", Name: "Chat", Children: []uint64{2, 3}}
+	box := &TreeNode{Id: 2, Role: "generic_container", Parent: 1}
+	draft := &TreeNode{Id: 3, Role: "multiline_text_input", Parent: 1}
+	v := SelectNodes(&TreeSnapshot{Nodes: []*TreeNode{root, box, draft}}, TreeFilter{})
+	assert.Equal(t, []uint64{1, 3}, ids(v))
+	assert.True(t, IsEditableRole("TextInput"))
+	assert.False(t, IsEditableRole("label"))
+}
+
 func TestSelectNodesTextMatchesNameOrValueIgnoringCase(t *testing.T) {
 	assert.Equal(t, []uint64{4}, ids(SelectNodes(scene(), TreeFilter{Text: "rows"})))
 	assert.Equal(t, []uint64{3}, ids(SelectNodes(scene(), TreeFilter{Text: "RUN"})))

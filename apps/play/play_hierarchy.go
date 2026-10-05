@@ -322,7 +322,9 @@ func resolveHierarchy(schema *arrow.Schema, form hierForm) (cl hierClaim, reason
 		colorMinCol: -1, colorMaxCol: -1, colorUnitCol: -1}
 	stackIsPath := false
 	for ci, f := range schema.Fields() {
-		switch f.Name {
+		// Matched on the gloss label (pathColumnLabel): `value@gloss/bytes`
+		// is the contract's `value`, rendered as bytes.
+		switch pathColumnLabel(f.Name) {
 		case hierStackCol:
 			cl.stackCol = ci
 			stackIsPath = hierIsPathColumn(f.Type)

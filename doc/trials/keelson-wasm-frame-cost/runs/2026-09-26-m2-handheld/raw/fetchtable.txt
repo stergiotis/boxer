@@ -1,0 +1,27 @@
+fetch 35 FetchCommandEnterPressed b b
+fetch 36 FetchF1KeyPressed b
+fetch 37 FetchF2KeyPressed b
+fetch 38 FetchFrameMetrics u64 u64
+fetch 39 FetchGraphEvents h h h h
+fetch 40 FetchGraphMetrics h h h h h
+fetch 41 FetchGraphSelection h h h h
+fetch 42 FetchR10 h h
+fetch 43 FetchR16ScrollDelta f32 f32
+fetch 44 FetchR17Modifiers b b b b b
+fetch 45 FetchR18AvailableSize f32 f32
+fetch 46 FetchR19ZoomDelta f32
+fetch 47 FetchR20Pointer f32 f32 b
+fetch 48 FetchR21UiRects h h h h h
+fetch 49 FetchR22StarvedTextures h
+fetch 50 FetchR23CanvasWheel h h h h h h
+fetch 51 FetchR24CanvasPointers h h h h h h
+fetch 52 FetchR25EtColWidths h h h
+fetch 53 FetchR26KeyCaptures h h h
+fetch 54 FetchR7 h h
+fetch 55 FetchR9EtPrefetch h h
+fetch 56 FetchR9F64 h h
+fetch 57 FetchR9I64 h h
+fetch 58 FetchR9S h h
+fetch 59 FetchR9U64 h h
+fetch 60 FetchVideoCapabilities h h
+fetch 61 FetchVideoStreamInfo h

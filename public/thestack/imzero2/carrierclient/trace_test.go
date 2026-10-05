@@ -176,3 +176,12 @@ func TestSidecarFileMirrorsTheHostNaming(t *testing.T) {
 	assert.Equal(t, "a.tree.jsonl", SidecarFile("a", SidecarTree))
 	assert.Equal(t, "a.b.svg", SidecarFile("a.b", SidecarSVG))
 }
+
+func TestSidecarFileKeepsOnlyTheBasenameAsTheHostDoes(t *testing.T) {
+	// The host writes a capture named "shots/overview" as overview.png in its
+	// own directory; a caller joining the name under that directory must
+	// find it there, and a ".." in the name must not lead outside it.
+	assert.Equal(t, "overview.png", SidecarFile("shots/overview", ""))
+	assert.Equal(t, "notes.tree.jsonl", SidecarFile("../../notes", SidecarTree))
+	assert.Equal(t, "a.svg", SidecarFile("dir/a.png", SidecarSVG))
+}

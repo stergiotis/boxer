@@ -16,6 +16,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist/persiststore"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // StoreI is what the service clears through: persist.StoreBackend, the one
@@ -52,7 +53,7 @@ func NewService(inst *inprocbus.Inst, log zerolog.Logger, store StoreI) (s *Serv
 	s.busClient = inst.NewClient(ServiceAppId, ServiceCaps())
 	s.unsub, err = s.busClient.Subscribe(SubjectAll, s.handleRequest)
 	if err != nil {
-		err = eh.Errorf("appstate: subscribe %s: %w", SubjectAll, err)
+		err = eb.Build().Str("subject", SubjectAll).Errorf("appstate: subscribe: %w", err)
 		return
 	}
 	return

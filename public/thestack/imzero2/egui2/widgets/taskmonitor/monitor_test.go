@@ -3,6 +3,7 @@ package taskmonitor
 import (
 	"context"
 	"errors"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
 	"testing"
 	"time"
 
@@ -41,17 +42,17 @@ func newBusFixture(t *testing.T) (f *busFixture) {
 	return
 }
 
-func newMonitor(t *testing.T, f *busFixture, opts Opts) (m *Inst) {
+func newMonitor(t *testing.T, f *busFixture, opts Options) (m *Monitor) {
 	t.Helper()
 	api := task.NewBusApi(task.ApiConfig{
 		Bus:   f.consumer,
 		AppId: "test.monitor",
 	})
 	ids := c.NewWidgetIdStack()
-	m = New(api, ids, "tm-test", opts)
+	m = New(ids, "tm-test", api, opts)
 	require.NoError(t, m.Start())
 	t.Cleanup(func() {
-		_ = m.Stop()
+		_ = m.Close()
 	})
 	return
 }
@@ -71,9 +72,9 @@ func waitFor(predicate func() bool) (ok bool) {
 	return
 }
 
-func TestInst_CreatedThenDone_HistoryHasDone(t *testing.T) {
+func TestMonitor_CreatedThenDone_HistoryHasDone(t *testing.T) {
 	f := newBusFixture(t)
-	m := newMonitor(t, f, Opts{})
+	m := newMonitor(t, f, Options{})
 
 	h, err := task.Spawn(context.Background(), f.producer, task.SpawnOpts{
 		Id: "t1", Kind: "k1", Title: "First", OwnerAppId: "test.producer",
@@ -95,9 +96,9 @@ func TestInst_CreatedThenDone_HistoryHasDone(t *testing.T) {
 	assert.Equal(t, "First", m.history[0].created.Title)
 }
 
-func TestInst_CancelThenDone_ShowsCancelled(t *testing.T) {
+func TestMonitor_CancelThenDone_ShowsCancelled(t *testing.T) {
 	f := newBusFixture(t)
-	m := newMonitor(t, f, Opts{})
+	m := newMonitor(t, f, Options{})
 
 	h, err := task.Spawn(context.Background(), f.producer, task.SpawnOpts{
 		Id: "t-cancel", Kind: "k", OwnerAppId: "test.producer",
@@ -126,9 +127,9 @@ func TestInst_CancelThenDone_ShowsCancelled(t *testing.T) {
 		"done after cancel-pending should display as cancelled")
 }
 
-func TestInst_ErrorPath_CarriesErrorText(t *testing.T) {
+func TestMonitor_ErrorPath_CarriesErrorText(t *testing.T) {
 	f := newBusFixture(t)
-	m := newMonitor(t, f, Opts{})
+	m := newMonitor(t, f, Options{})
 
 	h, err := task.Spawn(context.Background(), f.producer, task.SpawnOpts{
 		Id: "t-err", Kind: "k", OwnerAppId: "test.producer",
@@ -151,17 +152,17 @@ func TestInst_ErrorPath_CarriesErrorText(t *testing.T) {
 		"error text must include the original error message")
 }
 
-func TestInst_StartStopIdempotent(t *testing.T) {
+func TestMonitor_StartStopIdempotent(t *testing.T) {
 	f := newBusFixture(t)
-	m := newMonitor(t, f, Opts{})
+	m := newMonitor(t, f, Options{})
 	require.Error(t, m.Start(), "second Start must error")
-	require.NoError(t, m.Stop())
-	require.NoError(t, m.Stop(), "second Stop is a no-op")
+	require.NoError(t, m.Close())
+	require.NoError(t, m.Close(), "second Stop is a no-op")
 }
 
-func TestInst_HistoryCappedByMaxHistory(t *testing.T) {
+func TestMonitor_HistoryCappedByMaxHistory(t *testing.T) {
 	f := newBusFixture(t)
-	m := newMonitor(t, f, Opts{MaxHistory: 3})
+	m := newMonitor(t, f, Options{MaxHistory: 3})
 
 	for i := range 5 {
 		opts := task.SpawnOpts{
@@ -177,7 +178,7 @@ func TestInst_HistoryCappedByMaxHistory(t *testing.T) {
 		"history should cap at MaxHistory rows even after 5 dones")
 }
 
-func TestInst_SeedFromSupervisor_PopulatesInflight(t *testing.T) {
+func TestMonitor_SeedFromSupervisor_PopulatesInflight(t *testing.T) {
 	// Without a real supervisor wired this returns a request-timeout
 	// from the bus; the widget should still subscribe and stay usable.
 	f := newBusFixture(t)
@@ -189,9 +190,9 @@ func TestInst_SeedFromSupervisor_PopulatesInflight(t *testing.T) {
 		AppId: "test.monitor",
 	})
 	ids := c.NewWidgetIdStack()
-	m := New(api, ids, "tm-seed", Opts{SeedFromSupervisor: true})
+	m := New(ids, "tm-seed", api, Options{SeedFromSupervisor: true})
 	require.NoError(t, m.Start(), "seed failure must not block Start")
-	defer func() { _ = m.Stop() }()
+	defer func() { _ = m.Close() }()
 	assert.Zero(t, m.InflightCount(), "no supervisor ⇒ empty seed")
 }
 
@@ -216,4 +217,18 @@ func TestProgressInput(t *testing.T) {
 	// Indeterminate tasks draw the animated bar; over-reported ones clamp.
 	assert.EqualValues(t, -1, progressInput(taskprogress.TaskProgress{At: at, Current: 50}, false).Fraction)
 	assert.EqualValues(t, 1, progressInput(taskprogress.TaskProgress{At: at, Current: 200, Total: 100}, false).Fraction)
+}
+
+// TestMonitor_RenderHeadless renders one frame without a host: an empty
+// monitor draws its two headers and reports no cancel.
+func TestMonitor_RenderHeadless(t *testing.T) {
+	t.Cleanup(scenetest.Install())
+	f := newBusFixture(t)
+	m := newMonitor(t, f, Options{DefaultOpen: true})
+	if ev := m.Render(); len(ev.CancelRequested) != 0 {
+		t.Fatalf("quiet frame reported %+v", ev)
+	}
+	c.CurrentApplicationState.StateManager.ScriptReset() // the frame boundary
+	m.Opts.DefaultOpen = false                           // re-read per frame
+	m.Render()
 }

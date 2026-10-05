@@ -116,7 +116,10 @@ func NewDriver(tblDesc *common.TableDesc, ir *common.IntermediateTableRepresenta
 // subsetted RecordBatches where IR column order ≠ Arrow column order.
 //
 // Columns present in the IR but absent from the schema are silently skipped
-// (arrowIdx = -1). The driving code must tolerate this.
+// (arrowIdx = -1). The driving code must tolerate this. The exception is a
+// count lane: a schema carrying array, set or membership columns without the
+// column that counts them per attribute is refused, since the elements could
+// only be sliced by guessing.
 func NewDriverFromSchema(
 	tblDesc *common.TableDesc,
 	ir *common.IntermediateTableRepresentation,
@@ -393,6 +396,18 @@ func (inst *Driver) prepareFromSchema(
 	plainMap := make(map[common.PlainItemTypeE]int, len(inst.ir.PlainValueDesc))
 	taggedOrd := 0
 
+	// Count lanes the IR declares but the schema lacks, per section index
+	// (see checkCountLanesResolved).
+	missing := make(map[int]*missingCountLanes, 4)
+	missingOf := func(sIdx int) *missingCountLanes {
+		m, ok := missing[sIdx]
+		if !ok {
+			m = &missingCountLanes{}
+			missing[sIdx] = m
+		}
+		return m
+	}
+
 	var physBuf []common.PhysicalColumnDesc
 	for cc, cp := range inst.ir.IterateColumnProps() {
 		// Map IR columns to physical column descriptors.
@@ -436,7 +451,8 @@ func (inst *Driver) prepareFromSchema(
 				inst.sections = append(inst.sections, sec)
 				taggedOrd++
 			}
-			sec := &inst.sections[len(inst.sections)-1]
+			sIdx := len(inst.sections) - 1
+			sec := &inst.sections[sIdx]
 
 			switch cc.SubType {
 			case common.IntermediateColumnsSubTypeScalar:
@@ -444,17 +460,27 @@ func (inst *Driver) prepareFromSchema(
 			case common.IntermediateColumnsSubTypeHomogenousArray:
 				appendValueColsResolved(&sec.arrayCols, cp, physBuf, resolveArrowIdx)
 			case common.IntermediateColumnsSubTypeHomogenousArraySupport:
-				appendCardColsResolved(&sec.arrayCardCols, cp, physBuf, resolveArrowIdx)
+				if appendCardColsResolved(&sec.arrayCardCols, cp, physBuf, resolveArrowIdx) {
+					missingOf(sIdx).array = true
+				}
 			case common.IntermediateColumnsSubTypeSet:
 				appendValueColsResolved(&sec.setCols, cp, physBuf, resolveArrowIdx)
 			case common.IntermediateColumnsSubTypeSetSupport:
-				appendCardColsResolved(&sec.setCardCols, cp, physBuf, resolveArrowIdx)
+				if appendCardColsResolved(&sec.setCardCols, cp, physBuf, resolveArrowIdx) {
+					missingOf(sIdx).set = true
+				}
 			case common.IntermediateColumnsSubTypeMembership:
 				appendMemberColsResolved(&sec.memberCols, cp, physBuf, resolveArrowIdx)
 			case common.IntermediateColumnsSubTypeMembershipSupport:
-				appendMemberCardDetailsResolved(&sec.memberCardDetails, cp, physBuf, resolveArrowIdx)
+				m := missingOf(sIdx)
+				m.memberCardRoles = appendMemberCardDetailsResolved(&sec.memberCardDetails, cp, physBuf, resolveArrowIdx, m.memberCardRoles)
 			}
 		}
+	}
+
+	err = inst.checkCountLanesResolved(missing)
+	if err != nil {
+		return
 	}
 
 	inst.buildCoGroups()
@@ -497,17 +523,21 @@ func appendValueColsResolved(out *[]valueColLayout, cp *common.IntermediateColum
 	}
 }
 
-func appendCardColsResolved(out *[]int, cp *common.IntermediateColumnProps, phys []common.PhysicalColumnDesc, resolve func(common.PhysicalColumnDesc) int) {
+// appendCardColsResolved reports unresolved when the IR declares a
+// per-attribute count lane the schema does not carry.
+func appendCardColsResolved(out *[]int, cp *common.IntermediateColumnProps, phys []common.PhysicalColumnDesc, resolve func(common.PhysicalColumnDesc) int) (unresolved bool) {
 	for j := range cp.Names {
 		if !isPerAttributeCountRole(cp.Roles[j]) {
 			continue
 		}
 		arrowIdx := resolve(phys[j])
 		if arrowIdx < 0 {
+			unresolved = true
 			continue
 		}
 		*out = append(*out, arrowIdx)
 	}
+	return
 }
 
 func appendMemberColsResolved(out *[]memberColLayout, cp *common.IntermediateColumnProps, phys []common.PhysicalColumnDesc, resolve func(common.PhysicalColumnDesc) int) {
@@ -524,10 +554,14 @@ func appendMemberColsResolved(out *[]memberColLayout, cp *common.IntermediateCol
 	}
 }
 
-func appendMemberCardDetailsResolved(out *[]memberCardDetail, cp *common.IntermediateColumnProps, phys []common.PhysicalColumnDesc, resolve func(common.PhysicalColumnDesc) int) {
+// appendMemberCardDetailsResolved appends the roles of the cardinality
+// columns the IR declares but the schema does not carry to unresolved.
+func appendMemberCardDetailsResolved(out *[]memberCardDetail, cp *common.IntermediateColumnProps, phys []common.PhysicalColumnDesc, resolve func(common.PhysicalColumnDesc) int, unresolvedIn []common.ColumnRoleE) (unresolved []common.ColumnRoleE) {
+	unresolved = unresolvedIn
 	for j := range cp.Names {
 		arrowIdx := resolve(phys[j])
 		if arrowIdx < 0 {
+			unresolved = append(unresolved, cp.Roles[j])
 			continue
 		}
 		*out = append(*out, memberCardDetail{
@@ -535,6 +569,44 @@ func appendMemberCardDetailsResolved(out *[]memberCardDetail, cp *common.Interme
 			role:     cp.Roles[j],
 		})
 	}
+	return
+}
+
+// missingCountLanes records, for one section, the count lanes the IR
+// declares that the schema did not resolve.
+type missingCountLanes struct {
+	array           bool
+	set             bool
+	memberCardRoles []common.ColumnRoleE
+}
+
+// checkCountLanesResolved refuses a schema that projects array, set or
+// membership columns without the lane that counts their elements per
+// attribute. Driving them anyway would fall back to one element per
+// attribute and slice every multi-element attribute at the wrong offsets —
+// the inference ADR-0213 forbids: an absent lane is not a declaration that
+// the channel is single. A channel the schema declares single has no
+// cardinality column in the IR and is not affected.
+func (inst *Driver) checkCountLanesResolved(missing map[int]*missingCountLanes) (err error) {
+	for sIdx, m := range missing {
+		sec := &inst.sections[sIdx]
+		if m.array && len(sec.arrayCardCols) == 0 && len(sec.arrayCols) > 0 {
+			return eb.Build().Stringer("section", sec.name).Errorf("schema carries homogenous-array value columns without their length column")
+		}
+		if m.set && len(sec.setCardCols) == 0 && len(sec.setCols) > 0 {
+			return eb.Build().Stringer("section", sec.name).Errorf("schema carries set value columns without their cardinality column")
+		}
+		for _, mc := range sec.memberCols {
+			cardRole, rErr := common.GetCardinalityRoleByMembershipRole(mc.role)
+			if rErr != nil {
+				continue
+			}
+			if slices.Contains(m.memberCardRoles, cardRole) {
+				return eb.Build().Stringer("section", sec.name).Stringer("role", mc.role).Errorf("schema carries a membership column without its cardinality column")
+			}
+		}
+	}
+	return
 }
 
 func (inst *Driver) buildCoGroups() {
@@ -748,9 +820,16 @@ func (inst *Driver) readPlainScalar(rec arrow.RecordBatch, colIdx int, rowIdx in
 // back to "one element per attribute": each step returns card=1 and relOff
 // equal to the prior sum (so the first call yields relOff=0, the next 1, …),
 // matching the legacy fallback in nonScalarElemRange/memberColElemRange.
+//
+// A step past the entity's slice of the cardinality lane (a record whose
+// lanes disagree in length) reports a driver error through drv and yields
+// card=0 instead of indexing past the lane.
 type cardCursor struct {
 	inner       *array.Uint64
+	drv         *Driver
+	arrowIdx    int
 	entityStart int
+	entityEnd   int
 	relOff      int
 }
 
@@ -758,7 +837,7 @@ func (inst *Driver) newCardCursor(rec arrow.RecordBatch, cardArrowIdx int, entit
 	if cardArrowIdx < 0 {
 		return cardCursor{}
 	}
-	cardEntityStart, _ := inst.listOffsets(rec, cardArrowIdx, entityIdx)
+	cardEntityStart, cardEntityEnd := inst.listOffsets(rec, cardArrowIdx, entityIdx)
 	cardInner := inst.listInnerArray(rec, cardArrowIdx)
 	u64, ok := cardInner.(*array.Uint64)
 	if !ok {
@@ -769,9 +848,16 @@ func (inst *Driver) newCardCursor(rec arrow.RecordBatch, cardArrowIdx int, entit
 		inst.handleError(eb.Build().Int("column", cardArrowIdx).Stringer("dataType", cardInner.DataType()).Errorf("cardinality column is not a Uint64 list"))
 		return cardCursor{}
 	}
+	if cardEntityEnd > u64.Len() {
+		inst.handleError(eb.Build().Int("column", cardArrowIdx).Int("end", cardEntityEnd).Int("len", u64.Len()).Errorf("cardinality list offsets exceed the lane"))
+		cardEntityEnd = u64.Len()
+	}
 	return cardCursor{
 		inner:       u64,
+		drv:         inst,
+		arrowIdx:    cardArrowIdx,
 		entityStart: cardEntityStart,
+		entityEnd:   cardEntityEnd,
 	}
 }
 
@@ -781,8 +867,10 @@ func (c *cardCursor) step(attrIdx int) (relOff, card int) {
 	relOff = c.relOff
 	if c.inner == nil {
 		card = 1
+	} else if i := c.entityStart + attrIdx; i < c.entityEnd {
+		card = int(c.inner.Value(i))
 	} else {
-		card = int(c.inner.Value(c.entityStart + attrIdx))
+		c.drv.handleError(eb.Build().Int("column", c.arrowIdx).Int("attribute", attrIdx).Int("attributes", c.entityEnd-c.entityStart).Errorf("cardinality lane is shorter than the section's attribute count"))
 	}
 	c.relOff = relOff + card
 	return
@@ -925,7 +1013,11 @@ func (inst *Driver) emitValueColumns(sink SinkI, rec arrow.RecordBatch, entityId
 
 	{ // Scalar columns
 		for _, col := range sec.scalarCols {
-			flatIdx := inst.listFlatIndex(rec, col.arrowIdx, entityIdx, attrIdx)
+			start, end := inst.listOffsets(rec, col.arrowIdx, entityIdx)
+			flatIdx := start + attrIdx
+			if !inst.laneCovers(rec, col.arrowIdx, end, flatIdx, flatIdx+1) {
+				return
+			}
 			addr := PhysicalColumnAddr{Index: col.arrowIdx, FullColumnName: rec.ColumnName(col.arrowIdx)}
 			sink.BeginColumn(addr, col.name, col.canonicalType, col.valueSemantics)
 			sink.BeginScalarValue()
@@ -944,9 +1036,12 @@ func (inst *Driver) emitValueColumns(sink SinkI, rec arrow.RecordBatch, entityId
 
 	{ // Array columns
 		for _, col := range sec.arrayCols {
-			valueEntityStart := inst.listStart(rec, col.arrowIdx, entityIdx)
+			valueEntityStart, valueEntityEnd := inst.listOffsets(rec, col.arrowIdx, entityIdx)
 			elemStart := valueEntityStart + arraySlot.relOff
 			card := arraySlot.card
+			if !inst.laneCovers(rec, col.arrowIdx, valueEntityEnd, elemStart, elemStart+card) {
+				return
+			}
 			addr := PhysicalColumnAddr{Index: col.arrowIdx, FullColumnName: rec.ColumnName(col.arrowIdx)}
 			sink.BeginColumn(addr, col.name, col.canonicalType, col.valueSemantics)
 			sink.BeginHomogenousArrayValue(card)
@@ -968,9 +1063,12 @@ func (inst *Driver) emitValueColumns(sink SinkI, rec arrow.RecordBatch, entityId
 
 	{ // Set columns
 		for _, col := range sec.setCols {
-			valueEntityStart := inst.listStart(rec, col.arrowIdx, entityIdx)
+			valueEntityStart, valueEntityEnd := inst.listOffsets(rec, col.arrowIdx, entityIdx)
 			elemStart := valueEntityStart + setSlot.relOff
 			card := setSlot.card
+			if !inst.laneCovers(rec, col.arrowIdx, valueEntityEnd, elemStart, elemStart+card) {
+				return
+			}
 			addr := PhysicalColumnAddr{Index: col.arrowIdx, FullColumnName: rec.ColumnName(col.arrowIdx)}
 			sink.BeginColumn(addr, col.name, col.canonicalType, col.valueSemantics)
 			sink.BeginSetValue(card)
@@ -1201,6 +1299,18 @@ func (inst *Driver) listInnerArray(rec arrow.RecordBatch, arrowColIdx int) arrow
 		return col
 	}
 	return listArr.ListValues()
+}
+
+// laneCovers reports whether [begin, end) lies within the entity's slice of
+// a value lane (ending at entityEnd) and within the lane's inner array. A
+// record whose lanes disagree in length fails it; the failure is reported as
+// a driver error rather than read past the lane.
+func (inst *Driver) laneCovers(rec arrow.RecordBatch, arrowColIdx int, entityEnd int, begin int, end int) (ok bool) {
+	ok = begin >= 0 && begin <= end && end <= entityEnd && end <= inst.listInnerArray(rec, arrowColIdx).Len()
+	if !ok {
+		inst.handleError(eb.Build().Int("column", arrowColIdx).Int("begin", begin).Int("end", end).Int("entityEnd", entityEnd).Errorf("value lane is shorter than its cardinality or attribute count"))
+	}
+	return
 }
 
 func (inst *Driver) listFlatIndex(rec arrow.RecordBatch, arrowColIdx int, entityIdx int, attrIdx int) (flatIdx int) {

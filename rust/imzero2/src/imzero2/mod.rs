@@ -2,6 +2,9 @@
 pub mod app;
 pub mod appconfig;
 pub mod apphost;
+#[cfg(feature = "browser")]
+pub mod browser;
+pub mod clock;
 pub mod code_view;
 #[cfg(feature = "headless")]
 pub mod codeclane;
@@ -24,24 +27,26 @@ pub mod headless;
 #[cfg(feature = "headless_svg")]
 pub mod headless_svg;
 pub mod image;
-#[cfg(feature = "headless")]
+#[cfg(any(feature = "headless", feature = "browser"))]
 pub mod inputmap;
-#[cfg(feature = "headless")]
+#[cfg(any(feature = "headless", feature = "browser"))]
 pub mod inputproto;
 pub mod interpreter;
 /// ADR-0177 key vocabulary — generated from the Go table, see keycodes.rs.
 pub mod keycodes;
-#[cfg(feature = "headless")]
+#[cfg(any(feature = "headless", feature = "browser"))]
 pub mod meshlane;
 #[cfg(feature = "headless")]
 pub mod nutreader;
 pub mod scrolling_texture;
 #[cfg(feature = "headless_soft")]
 pub mod softraster;
+#[cfg(feature = "capture_raster")]
+pub mod captureraster;
 pub mod svgexport;
 pub mod text_edit_highlight;
 pub mod time_range_picker;
-#[cfg(feature = "headless")]
+#[cfg(any(feature = "headless", feature = "browser"))]
 pub mod treemap;
 #[cfg(feature = "headless")]
 pub mod wscarrier;

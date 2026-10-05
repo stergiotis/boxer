@@ -6,6 +6,7 @@ import (
 	"math"
 	"time"
 
+	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/science/geo/vectorfield"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
@@ -71,11 +72,11 @@ type flowOnMapState struct {
 	density   float64
 }
 
-func newFlowOnMapState(ids *c.WidgetIdStack) *flowOnMapState {
+func newFlowOnMapState(ids *c.WidgetIdStack, bus runtimeapp.BusI) *flowOnMapState {
 	st := &flowOnMapState{
-		m: portolan.New(ids, portolan.Options{
+		m: portolan.New(ids, "fom-map", portolan.Options{
 			Source:  basemap.PortolanSource(),
-			Loader:  basemap.PortolanLoader(),
+			Loader:  basemap.PortolanLoader(basemap.NewTiles(bus, "gallery: flow on a map")),
 			Center:  portolan.LL(35, 5),
 			Zoom:    2.6,
 			NoTiles: true,
@@ -112,7 +113,7 @@ func newFlowOnMapState(ids *c.WidgetIdStack) *flowOnMapState {
 		st.layer.Opts.Synchronous = true
 		st.layer.Opts.FixedTicks = flowOnMapCaptureTicks
 	}
-	st.scrub = timescrubber.New(ids, timescrubber.Options{ScopeKey: "fom-time"})
+	st.scrub = timescrubber.New(ids, "fom-time", timescrubber.Options{})
 	if st.capture {
 		// Between two steps, so the capture shows the blend.
 		st.scrub.Opts.NoSnap = true
@@ -176,8 +177,8 @@ func demoFlowOnMap(ids *c.WidgetIdStack, st *flowOnMapState) {
 		if !st.tiles {
 			ls.Land, ls.Border = color.Hex(0x262d36ff), color.Hex(0x4a5563ff)
 		}
-		st.land.Draw(p, st.atlas, ls)
-		layer.Draw(p)
+		st.land.Paint(p, st.atlas, ls)
+		layer.Paint(p)
 		if st.showGraph {
 			cam := p.CameraAt(graphOnMapRefZoom, st.origin)
 			st.gv.SetHostCamera(cam)
@@ -193,10 +194,6 @@ func demoFlowOnMap(ids *c.WidgetIdStack, st *flowOnMapState) {
 			st.gv.HostedPaint(st.nodes, st.edges)
 		}
 	})
-	if st.showGraph {
-		for range st.gv.Events() {
-		}
-	}
 
 	// The time strip: each step at its valid time, with what the layer holds
 	// of it. This source has no per-step summary, so the strip has no bars.

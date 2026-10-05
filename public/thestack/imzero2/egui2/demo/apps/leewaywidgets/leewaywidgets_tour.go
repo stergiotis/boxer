@@ -60,7 +60,7 @@ func makeTourInit(view viewKeyE) func(ids *c.WidgetIdStack) (state any) {
 	return func(ids *c.WidgetIdStack) (state any) {
 		inst := newApp()
 		inst.ids = ids
-		inst.table2Emitter = leewaywidgets.NewTable2CardEmitter(ids, leewaywidgets.ColorPaletteViridis, nil)
+		inst.table2Emitter = leewaywidgets.NewTable2CardEmitter(ids, "card", leewaywidgets.ColorPaletteViridis, nil)
 		inst.selectedView = view
 		state = inst
 		return

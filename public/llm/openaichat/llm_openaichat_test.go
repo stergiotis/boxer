@@ -147,6 +147,8 @@ func TestExtractInlineThought(t *testing.T) {
 		{"think tag", "<think>cot</think>answer", "answer", "cot"},
 		{"unclosed thought left in place", "ok<thought>oops", "ok<thought>oops", ""},
 		{"unclosed think left in place", "ok<think>oops", "ok<think>oops", ""},
+		{"template-opened think", "cot</think>answer", "answer", "cot"},
+		{"template-opened think then a block", "a</think>mid<think>b</think>end", "midend", "a\n\nb"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -199,6 +201,18 @@ func TestCompleteCombinesReasoning(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "answer", resp.Content)
 	assert.Equal(t, "api\n\ninline", resp.Reasoning)
+}
+
+// TestCompleteReadsBothReasoningSpellings: Ollama's /v1 and OpenRouter
+// name the trace "reasoning", LM Studio and DeepSeek "reasoning_content".
+func TestCompleteReadsBothReasoningSpellings(t *testing.T) {
+	c := newServerClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"choices":[{"message":{"role":"assistant","content":"answer","reasoning":"trace"},"finish_reason":"stop"}]}`)
+	})
+	resp, err := c.Complete(context.Background(), userReq("m"))
+	require.NoError(t, err)
+	assert.Equal(t, "answer", resp.Content)
+	assert.Equal(t, "trace", resp.Reasoning)
 }
 
 // TestCompleteTruncatedIsError is the core finish_reason fix: a "length" stop
@@ -270,6 +284,32 @@ func TestCompleteHTTPErrorProbesModels(t *testing.T) {
 	assert.Contains(t, ebtest.Text(t, err), "model not found")
 	assert.Contains(t, ebtest.Text(t, err), "404")
 	assert.True(t, modelsHit, "classifyHttpError must probe /models on 404")
+}
+
+// A 400 about the request rather than the model (here: context length)
+// does not cost a /models probe; one that names the model does.
+func TestCompleteBadRequestProbesOnlyWhenAboutTheModel(t *testing.T) {
+	for _, tc := range []struct {
+		body  string
+		probe bool
+	}{
+		{`{"error":{"message":"This model's maximum context length is 8192 tokens"}}`, false},
+		{`{"error":{"message":"unknown model 'typo'"}}`, true},
+	} {
+		var modelsHit bool
+		c := newServerClient(t, func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/models" {
+				modelsHit = true
+				_, _ = io.WriteString(w, `{"data":[{"id":"real-model"}]}`)
+				return
+			}
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = io.WriteString(w, tc.body)
+		})
+		_, err := c.Complete(context.Background(), userReq("m"))
+		require.ErrorIs(t, err, ErrBadRequest)
+		assert.Equal(t, tc.probe, modelsHit, tc.body)
+	}
 }
 
 func TestCompleteHTTPErrorNonJSON(t *testing.T) {

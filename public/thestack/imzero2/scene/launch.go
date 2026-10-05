@@ -230,7 +230,11 @@ func Launch(spec Spec, opts Options) (s *Session, err error) {
 	}
 	args = append(args, "--launch", spec.Launch)
 
-	if s.hostLog, err = os.Create(filepath.Join(opts.OutDir, "logs", opts.Name+".host.log")); err != nil {
+	// O_APPEND, because the Go host and the client it starts both write this
+	// file through inherited descriptors. Without it, a writer that keeps
+	// its own offset — a client started under gVisor does — overwrites the
+	// other's lines from the start of the file.
+	if s.hostLog, err = os.OpenFile(filepath.Join(opts.OutDir, "logs", opts.Name+".host.log"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC|os.O_APPEND, 0o666); err != nil {
 		return s, eh.Errorf("unable to create the host log: %w", err)
 	}
 	s.cmd, err = hostProgram.Command(context.Background(), extbin.Opts{

@@ -1,21 +1,18 @@
-// Package kanban is an imzero2 widget that renders a board of columns and the
-// cards in them, and lets the user move a card between columns (and reorder it
-// within a column) with per-card controls. The host owns the data — a flat
-// [Model] of [Column]s and [Card]s — and the widget mutates only which column a
-// card sits in (and its order), reporting each change as a [Move] the host
-// drains to persist.
+// Package kanban is an immediate-mode imzero2 widget (ADR-0267) that renders
+// a board of columns and the cards in them, and lets the user move a card
+// between columns (and reorder it within a column) with per-card controls.
+// The host owns the data — a flat [Model] of [Column]s and [Card]s — and the
+// widget mutates only which column a card sits in (and its order), reporting
+// each change as a [Move] in [Result.Moves] for the host to persist.
 //
 // # Shape
 //
-// The public surface is a single pure entry point, [Render], taking an [Input]
-// that carries the host id stack, the [Model], and the standard FillHost flag
-// (see the field doc). This mirrors the schemaview idiom: immediate-mode, no
-// retained widget struct. The one deviation immediate mode forces — a board has
-// state that must survive frames (which card is selected, the pending-move
-// queue) — lives on the caller-owned Model, the sanctioned pattern in this
-// codebase (layeredgraph.ViewState, treemap's breadcrumb). Render applies a move
-// to the Model on the same frame the button is clicked, so the card visibly
-// relocates immediately, and appends a Move for the host.
+// The public surface is a single entry point, [Render], taking an [Input]
+// that carries the host id stack, the [Model], the host-owned [State] (the
+// selected card and an in-progress drag) and the standard FillHost flag (see
+// the field doc), and returning a [Result]. Render applies a move to the
+// Model on the same frame the button is clicked, so the card visibly
+// relocates immediately, and reports the Move.
 //
 // # Layout
 //

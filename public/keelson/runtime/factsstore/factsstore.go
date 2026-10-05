@@ -101,7 +101,10 @@ type RuntimeStartRow struct {
 	VcsModified  bool
 	VcsBuildInfo string
 	ModulePath   string
-	Ts           time.Time
+	// BuildId is the digest of the executable the run executes (ADR-0277
+	// §SD8); empty when it could not be read, and on rows written before it.
+	BuildId string
+	Ts      time.Time
 }
 
 // HeartbeatRow records one runtime liveness tick. Maps to a
@@ -414,6 +417,78 @@ type AppLaunchHistoryReaderI interface {
 	// Apps with no launches are absent rather than present with a zero score,
 	// so a caller can tell "never opened" from "opened long ago".
 	AppLaunchStats(ctx context.Context, halfLife time.Duration, limit uint32) (stats []AppLaunchStat, err error)
+}
+
+// AppTrailFilter bounds an [AppTrailReaderI] read: rows at or after Since,
+// and at most Limit of them. A zero Since reads the whole trail; a zero
+// Limit takes the implementation's cap.
+type AppTrailFilter struct {
+	Since time.Time
+	Limit uint32
+}
+
+// AppRunRow is one window session across runs (ADR-0260 §SD5): the
+// `started` and `stopped` lifecycle rows of one (run, app, instance) paired.
+// A zero StartedAt is a session that started before the filter's Since; a
+// zero StoppedAt is one still open, or one whose process ended without
+// writing its close. RunSeenAt is the last heartbeat or start record of the
+// session's process — for a session without a close, the latest moment it
+// is known to have been alive; zero when the process wrote neither.
+type AppRunRow struct {
+	RunId       string
+	AppId       app.AppIdT
+	InstanceKey uint64
+	StartedAt   time.Time
+	StoppedAt   time.Time
+	StopReason  string
+	RunSeenAt   time.Time
+}
+
+// AppLogRow is one log row as the app center reads it (ADR-0260 §SD5): the
+// envelope and the attribution, and neither the fields nor the stack.
+type AppLogRow struct {
+	Ts          time.Time
+	AppId       app.AppIdT
+	InstanceKey uint64
+	RunId       string
+	Level       string
+	Caller      string
+	Message     string
+	Error       string
+}
+
+// AppAuditRow is the audited requests of one app on one subject with one
+// result, folded (ADR-0260 §SD5). MeanLatencyMs averages the requests that
+// recorded a latency; both latency fields are zero when none did.
+type AppAuditRow struct {
+	AppId         app.AppIdT
+	Subject       string
+	Result        string
+	Requests      uint64
+	FirstAt       time.Time
+	LastAt        time.Time
+	MeanLatencyMs float64
+	MaxLatencyMs  uint32
+}
+
+// AppTrailReaderI is the optional capability behind the app center's
+// cross-run tables (ADR-0260 §SD5): what each app did in every process the
+// trail holds, not only this one. Optional for the reason
+// [RunEventReaderI] gives; consumers type-assert and read absence as an
+// empty trail.
+//
+// Every method is bounded by construction — a look-back and a cap — because
+// its consumer is an introspection table, which sees no predicate and so
+// cannot narrow the read itself.
+type AppTrailReaderI interface {
+	// AppRuns returns window sessions, most recent first.
+	AppRuns(ctx context.Context, filter AppTrailFilter) (rows []AppRunRow, err error)
+	// AppLogTail returns the newest perApp log rows of every app, newest
+	// first; filter.Limit bounds the total.
+	AppLogTail(ctx context.Context, filter AppTrailFilter, perApp uint32) (rows []AppLogRow, err error)
+	// AppAuditSummary returns audited requests folded per (app, subject,
+	// result), most requested first.
+	AppAuditSummary(ctx context.Context, filter AppTrailFilter) (rows []AppAuditRow, err error)
 }
 
 // FactsStoreI is the contract implementations satisfy. Write methods

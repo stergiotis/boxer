@@ -30,19 +30,32 @@ func brushTestLayout() verticalLayout {
 	return verticalLayout{axisStartPx: brushAxisStart, axisEndPx: brushAxisEnd}
 }
 
-// brushFixture builds a brush-enabled timeline plus a recorder for what the
-// listener saw.
+// brushRecorder collects what Events reported, one driven frame at a time.
+type brushRecorder struct {
+	ranges []BrushRange
+	flags  []bool
+}
+
+// brushRecs maps a fixture to its recorder; driveBrush appends to it.
+var brushRecs = map[*Timeline]*brushRecorder{}
+
+// brushFixture builds a brush-enabled timeline plus a recorder for what its
+// Events reported.
 func brushFixture(t *testing.T) (inst *Timeline, got *[]BrushRange, seen *[]bool) {
 	t.Helper()
-	ranges := make([]BrushRange, 0, 4)
-	flags := make([]bool, 0, 4)
-	inst = New(c.NewWidgetIdStack(), "brush-test", nil,
-		WithContainerWidth(1200),
-		WithBrush(func(r BrushRange, ok bool) {
-			ranges = append(ranges, r)
-			flags = append(flags, ok)
-		}))
-	return inst, &ranges, &flags
+	inst = New(c.NewWidgetIdStack(), "brush-test", nil, Options{ContainerWidth: 1200, Brush: true})
+	rec := &brushRecorder{ranges: make([]BrushRange, 0, 4), flags: make([]bool, 0, 4)}
+	brushRecs[inst] = rec
+	t.Cleanup(func() { delete(brushRecs, inst) })
+	return inst, &rec.ranges, &rec.flags
+}
+
+// record appends the frame's brush report, as a host reading Events would.
+func (inst *Timeline) record() {
+	if rec := brushRecs[inst]; rec != nil && inst.events.BrushChanged {
+		rec.ranges = append(rec.ranges, inst.events.Brush)
+		rec.flags = append(rec.flags, inst.events.BrushOk)
+	}
 }
 
 // The gesture machine reads egui's own response flags rather than
@@ -60,19 +73,23 @@ const (
 
 // driveBrush runs one frame of the gesture machine with a usable cursor.
 func (inst *Timeline) driveBrush(flags c.ResponseFlagsE, x float32) {
+	inst.events = Events{}
 	inst.advanceBrush(brushTestMap(), flags, x, true, brushViewMinMS, brushViewMaxMS)
+	inst.record()
 }
 
 // driveBrushBlind runs one frame with no usable cursor position — the pointer
 // left the strip, or none has been seen.
 func (inst *Timeline) driveBrushBlind(flags c.ResponseFlagsE) {
+	inst.events = Events{}
 	inst.advanceBrush(brushTestMap(), flags, 0, false, brushViewMinMS, brushViewMaxMS)
+	inst.record()
 }
 
 func TestBrush_DisabledByDefault(t *testing.T) {
-	inst := New(c.NewWidgetIdStack(), "no-brush", nil, WithContainerWidth(1200))
+	inst := New(c.NewWidgetIdStack(), "no-brush", nil, Options{ContainerWidth: 1200})
 	if inst.brushReserved() {
-		t.Fatal("a timeline without WithBrush must reserve no brush strip")
+		t.Fatal("a timeline without Options.Brush must reserve no brush strip")
 	}
 	if _, ok := inst.Brush(); ok {
 		t.Fatal("nothing should be brushed before any gesture")
@@ -82,7 +99,7 @@ func TestBrush_DisabledByDefault(t *testing.T) {
 func TestBrush_EnabledByOption(t *testing.T) {
 	inst, _, _ := brushFixture(t)
 	if !inst.brushReserved() {
-		t.Fatal("WithBrush must enable the strip")
+		t.Fatal("Options.Brush must enable the strip")
 	}
 }
 
@@ -317,21 +334,21 @@ func TestBrush_SetAndClear(t *testing.T) {
 		t.Error("ClearBrush must clear")
 	}
 	if len(*got) != 0 {
-		t.Errorf("programmatic changes must not fire the listener; got %d calls", len(*got))
+		t.Errorf("programmatic changes must not be reported in Events; got %d calls", len(*got))
 	}
 }
 
-// TestBrush_NilListenerIsSafe pins the documented nil-is-a-no-op tier.
-func TestBrush_NilListenerIsSafe(t *testing.T) {
-	inst := New(c.NewWidgetIdStack(), "brush-nil", nil,
-		WithContainerWidth(1200), WithBrush(nil))
+// TestBrush_TracksWithoutAReader pins that the brush tracks whether or not
+// the host reads Events.
+func TestBrush_TracksWithoutAReader(t *testing.T) {
+	inst := New(c.NewWidgetIdStack(), "brush-nil", nil, Options{ContainerWidth: 1200, Brush: true})
 
 	inst.driveBrush(brushFramePress, 200)
 	inst.driveBrush(brushFrameDrag, 400)
 	inst.driveBrush(brushFrameRelease, 400)
 
 	if _, ok := inst.Brush(); !ok {
-		t.Error("a nil listener must not stop the brush tracking")
+		t.Error("an unread Events must not stop the brush tracking")
 	}
 }
 
@@ -397,13 +414,15 @@ func TestBrush_LostEndingStillEndsTheGesture(t *testing.T) {
 	}
 }
 
-// TestBrush_ClearAndNotifyFiresOnce pins that both routes to "no range" tell
-// the listener exactly once.
+// TestBrush_ClearAndNotifyFiresOnce pins that both routes to "no range"
+// report exactly once in Events.
 func TestBrush_ClearAndNotifyFiresOnce(t *testing.T) {
 	inst, got, oks := brushFixture(t)
 	inst.SetBrush(brushViewMinMS+1_000, brushViewMinMS+2_000)
 
+	inst.events = Events{}
 	inst.clearBrushAndNotify()
+	inst.record()
 
 	if _, ok := inst.Brush(); ok {
 		t.Error("the range should be gone")

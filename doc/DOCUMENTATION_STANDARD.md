@@ -3,7 +3,7 @@ type: reference
 audience: contributor
 status: stable
 reviewed-by: "p@stergiotis"
-reviewed-date: 2026-08-27
+reviewed-date: 2026-09-23
 ---
 
 # Boxer Documentation Standards
@@ -424,6 +424,9 @@ Canonical skeletons live under `doc/templates/`:
 - [`doc/templates/EXPLANATION.md.tmpl`](./templates/EXPLANATION.md.tmpl)
 - [`doc/templates/TUTORIAL.md.tmpl`](./templates/TUTORIAL.md.tmpl)
 - [`doc/templates/HOWTO.md.tmpl`](./templates/HOWTO.md.tmpl)
+- [`doc/templates/POSITIONING.md.tmpl`](./templates/POSITIONING.md.tmpl) (a
+  per-subsystem positioning statement; see
+  [doc/explanation/positioning/](./explanation/positioning/README.md))
 - [`doc/templates/adr/0000-template.md`](./templates/adr/0000-template.md)
 - [`doc/templates/trial/README.md.tmpl`](./templates/trial/README.md.tmpl) (trial
   protocol; see [doc/trials/](./trials/README.md))

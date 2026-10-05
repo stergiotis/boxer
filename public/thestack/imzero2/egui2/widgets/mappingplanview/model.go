@@ -13,7 +13,6 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/canonicaltypeedit"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/pager"
 )
 
 // FieldRow is one editable row of a [Model]. Its fields mirror the inputs
@@ -36,8 +35,9 @@ type FieldRow struct {
 	// (ADR-0008): the bar accepts e.g. "u64" / "u64h" (array) / "u32s"
 	// (roaring set); PlanBuilder derives the Go type + multiplicity from it.
 	typeModel     *canonicaltypeedit.Model
-	lastCanonical string // last canonical seen, to mark the model dirty on edit
-	lastBarErr    string // last type-editor bar parse-error seen — unparseable input leaves Canonical() unchanged, so it is watched separately
+	typeState     canonicaltypeedit.State // the editor's bar and form state, host-owned (ADR-0267)
+	lastCanonical string                  // last canonical seen, to mark the model dirty on edit
+	lastBarErr    string                  // last type-editor bar parse-error seen — unparseable input leaves Canonical() unchanged, so it is watched separately
 
 	IsOption bool // option.Option[T] — presence, orthogonal to the value type
 
@@ -64,12 +64,11 @@ type FieldRow struct {
 	TupleElems      []*TupleElemRow
 
 	// fsm is this row's per-field validity state machine (Empty → … → Valid /
-	// Rejected / Conflicting / Blocked); fsmW is its tethered inspector chip,
-	// lazily built on first render (the [fsmview.Widget] needs the frame's id
-	// stack). state / reason are the latest derived verdict, refreshed by
-	// [Model.SetBuildResult] and mirrored into fsm each frame.
+	// Rejected / Conflicting / Blocked) — model data, since its history is the
+	// row's edit story; its tethered inspector chip is a [fsmview.View] the
+	// [View] keeps per uid. state / reason are the latest derived verdict,
+	// refreshed by [Model.SetBuildResult] and mirrored into fsm each frame.
 	fsm    *fsmview.Machine[FieldState]
-	fsmW   *fsmview.Widget[FieldState]
 	state  FieldState
 	reason string
 }
@@ -99,6 +98,7 @@ type TupleElemRow struct {
 	// FieldRow's value type. Unused for the membership element (its type is
 	// string / []byte via MembBytes).
 	typeModel     *canonicaltypeedit.Model
+	typeState     canonicaltypeedit.State
 	lastCanonical string
 	lastBarErr    string
 }
@@ -138,7 +138,7 @@ func (e *TupleElemRow) Shape() goplan.FieldShape {
 		}
 		return goplan.FieldShape{Canonical: cn}
 	}
-	if e.typeModel.BarError() != "" || !e.typeModel.Valid() {
+	if e.typeState.BarError() != "" || !e.typeModel.Valid() {
 		return goplan.FieldShape{}
 	}
 	return goplan.FieldShape{Canonical: e.typeModel.Node()}
@@ -215,14 +215,14 @@ func (r *FieldRow) LWTag() string {
 // Shape returns the FieldShape this row describes, ready to hand to
 // PlanBuilder.AddField. The value type is authored canonically (typeModel).
 // When the type is not currently usable — the formula bar does not parse
-// ([canonicaltypeedit.Model.BarError]), or the parsed type fails IsValid —
+// ([canonicaltypeedit.State.BarError]), or the parsed type fails IsValid —
 // Shape yields a nil Canonical so AddField rejects the field and the sequential
 // build halts here: the field then reads incomplete and every field after it
 // blocked, rather than the build silently proceeding on the last type that
 // happened to parse. Carrier types are not modelled in v1, so CarrierType
 // stays "".
 func (r *FieldRow) Shape() goplan.FieldShape {
-	if !r.IsConst && (r.typeModel.BarError() != "" || !r.typeModel.Valid()) {
+	if !r.IsConst && (r.typeState.BarError() != "" || !r.typeModel.Valid()) {
 		return goplan.FieldShape{IsOption: r.IsOption}
 	}
 	return goplan.FieldShape{
@@ -261,22 +261,13 @@ type Model struct {
 	Valid   bool
 	panes   []outputPane
 
-	dirty   bool   // an edit (or the initial seed) needs a Recompute
-	viewBuf string // stable backing string for the read-only error TextEdit
+	dirty bool // an edit (or the initial seed) needs a Recompute
 
-	// pager paginates the field list — the shared widget extracted from
-	// apps/play, configured for a short list: a small fixed page (cards don't
-	// virtualise, so a page must fit the editor pane), no page-size combo,
-	// "fields" unit.
-	pager *pager.Pager
-
-	// planFSM / planFSMW are the plan-level compile-pipeline state machine and
-	// its tethered inspector chip (shown beside the verdict); planFSMW is built
-	// lazily on first render. queryable is the host's read-back-availability
-	// signal (the dql SQL artefacts in the demo) feeding PlanQueryable vs
-	// PlanSchemaMismatch.
+	// planFSM is the plan-level compile-pipeline state machine (its tethered
+	// inspector chip beside the verdict is the [View]'s). queryable is the
+	// host's read-back-availability signal (the dql SQL artefacts in the demo)
+	// feeding PlanQueryable vs PlanSchemaMismatch.
 	planFSM   *fsmview.Machine[PlanState]
-	planFSMW  *fsmview.Widget[PlanState]
 	queryable bool
 }
 
@@ -285,7 +276,6 @@ type Model struct {
 func NewModel(kind, packageName, kindType string) *Model {
 	return &Model{
 		Kind: kind, PackageName: packageName, KindType: kindType, dirty: true,
-		pager:   pager.New(c.NewWidgetIdStack(), 3).WithUnit("fields").WithPageSizeCombo(false),
 		planFSM: newPlanFSM(),
 	}
 }
@@ -442,7 +432,7 @@ var fieldStateOrder = []FieldState{
 }
 
 // label is the chip / graph label for a state (lowercase, matching the editor's
-// terse aesthetic). The [fsmview.WithLabel] hook.
+// terse aesthetic). The [fsmview.MachineOptions.Label] hook.
 func (s FieldState) label() string {
 	switch s {
 	case StateEmpty:
@@ -463,7 +453,7 @@ func (s FieldState) label() string {
 
 // tone maps a state to the level-1 badge tone. Conflict takes the accent role
 // rather than error-red so it reads distinctly from a plain Rejected; Empty and
-// Blocked stay neutral. The [fsmview.Widget.BadgeTone] hook.
+// Blocked stay neutral. The [fsmview.Options.BadgeTone] hook.
 func (s FieldState) tone() badge.ToneE {
 	switch s {
 	case StateValid:
@@ -479,7 +469,7 @@ func (s FieldState) tone() badge.ToneE {
 	}
 }
 
-// stateColor is the [fsmview.WithStateColor] hook for the level-2 graph / table:
+// stateColor is the [fsmview.MachineOptions.StateColor] hook for the level-2 graph / table:
 // the field's current state lights in its severity colour, every other node sits
 // muted, so the graph reads as "here is where this field is" against the lattice.
 func stateColor(s FieldState, isCurrent bool) styletokens.RGBA8 {
@@ -510,11 +500,11 @@ const fieldFSMHistory = 24
 // [fsmview.Machine.MirrorWithMetadata] (never errors, records the real path in
 // history) for any jump the lattice does not declare.
 func newFieldFSM() *fsmview.Machine[FieldState] {
-	m := fsmview.NewMachine(StateEmpty, fieldFSMHistory,
-		fsmview.WithLabel(FieldState.label),
-		fsmview.WithStateOrder(fieldStateOrder),
-		fsmview.WithStateColor(stateColor),
-	)
+	m := fsmview.NewMachine(StateEmpty, fieldFSMHistory, fsmview.MachineOptions[FieldState]{
+		Label:      FieldState.label,
+		StateOrder: fieldStateOrder,
+		StateColor: stateColor,
+	})
 	m.AddRule(StateEmpty, StateIncomplete, StateValid)
 	m.AddRule(StateIncomplete, StateValid, StateRejected, StateConflicting)
 	m.AddRule(StateValid, StateRejected, StateConflicting, StateBlocked)
@@ -643,7 +633,7 @@ func rowIncompleteReason(row *FieldRow) string {
 		}
 		return ""
 	}
-	if row.typeModel.BarError() != "" {
+	if row.typeState.BarError() != "" {
 		return "value type does not parse"
 	}
 	if !row.typeModel.Valid() {
@@ -689,7 +679,7 @@ func tupleIncompleteReason(row *FieldRow) string {
 		if e.IsMembership {
 			continue
 		}
-		if e.typeModel.BarError() != "" {
+		if e.typeState.BarError() != "" {
 			return "element " + e.GoField + ": value type does not parse"
 		}
 		if !e.typeModel.Valid() {
@@ -822,11 +812,11 @@ func planStateColor(s PlanState, isCurrent bool) styletokens.RGBA8 {
 // the failure branches; edits are arbitrary, so the per-frame driver mirrors
 // (never errors) for any undeclared jump.
 func newPlanFSM() *fsmview.Machine[PlanState] {
-	m := fsmview.NewMachine(PlanEmpty, fieldFSMHistory,
-		fsmview.WithLabel(PlanState.label),
-		fsmview.WithStateOrder(planStateOrder),
-		fsmview.WithStateColor(planStateColor),
-	)
+	m := fsmview.NewMachine(PlanEmpty, fieldFSMHistory, fsmview.MachineOptions[PlanState]{
+		Label:      PlanState.label,
+		StateOrder: planStateOrder,
+		StateColor: planStateColor,
+	})
 	m.AddRule(PlanEmpty, PlanIncomplete, PlanSchemaMismatch, PlanQueryable)
 	m.AddRule(PlanIncomplete, PlanInvalid, PlanSchemaMismatch, PlanQueryable)
 	m.AddRule(PlanInvalid, PlanIncomplete, PlanSchemaMismatch, PlanQueryable)

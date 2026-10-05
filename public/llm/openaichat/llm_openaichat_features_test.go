@@ -165,6 +165,7 @@ func TestCompleteErrorSentinels(t *testing.T) {
 		{http.StatusTooManyRequests, ErrRateLimited},
 		{http.StatusUnauthorized, ErrAuth},
 		{http.StatusForbidden, ErrAuth},
+		{http.StatusPaymentRequired, ErrPaymentRequired},
 		{http.StatusNotFound, ErrModelNotFound},
 		{http.StatusBadRequest, ErrBadRequest},
 		{http.StatusUnprocessableEntity, ErrBadRequest},
@@ -250,6 +251,8 @@ func TestRetryable(t *testing.T) {
 	assert.True(t, retryable(0, errors.New("dial tcp: connection refused")))
 	assert.False(t, retryable(0, context.Canceled))
 	assert.False(t, retryable(0, context.DeadlineExceeded))
+	assert.False(t, retryable(0, ErrResponseTooLarge))
+	assert.False(t, retryable(0, errRequestBuild))
 }
 
 func TestParseRetryAfter(t *testing.T) {
@@ -279,12 +282,15 @@ func TestObserverReceivesStats(t *testing.T) {
 
 func TestMaxResponseBytesCap(t *testing.T) {
 	big := strings.Repeat("x", 1000)
+	var calls atomic.Int32
 	c := newServerClientOpts(t, func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
 		_, _ = io.WriteString(w, `{"choices":[{"message":{"content":"`+big+`"},"finish_reason":"stop"}]}`)
-	}, WithMaxResponseBytes(100))
+	}, WithMaxResponseBytes(100), WithRetry(RetryPolicy{MaxAttempts: 3, BaseDelay: time.Millisecond}))
 	_, err := c.Complete(context.Background(), userReq("m"))
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "exceeds")
+	assert.ErrorIs(t, err, ErrResponseTooLarge)
+	assert.Equal(t, int32(1), calls.Load(), "an oversized body must not be retried")
 }
 
 func TestMaxResponseBytesUnlimited(t *testing.T) {
@@ -295,4 +301,27 @@ func TestMaxResponseBytesUnlimited(t *testing.T) {
 	resp, err := c.Complete(context.Background(), userReq("m"))
 	require.NoError(t, err)
 	assert.Len(t, resp.Content, 5000)
+}
+
+// The provider's status and message are in the error's text, so they
+// survive a caller that passes the error on as a string.
+func TestAProvidersMessageIsInTheErrorText(t *testing.T) {
+	c := newServerClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusPaymentRequired)
+		_, _ = io.WriteString(w, `{"error":{"message":"This request requires more credits","code":402}}`)
+	})
+	_, err := c.Complete(context.Background(), userReq("m"))
+	require.ErrorIs(t, err, ErrPaymentRequired)
+	assert.Contains(t, err.Error(), "HTTP 402: This request requires more credits")
+	var he *HTTPError
+	require.ErrorAs(t, err, &he)
+	assert.Equal(t, http.StatusPaymentRequired, he.Status)
+
+	c = newServerClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = io.WriteString(w, `<html>upstream down</html>`)
+	})
+	_, err = c.Complete(context.Background(), userReq("m"))
+	require.ErrorIs(t, err, ErrServer)
+	assert.Contains(t, err.Error(), "HTTP 502: <html>upstream down</html>", "a body that is not JSON is quoted")
 }

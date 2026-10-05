@@ -12,9 +12,6 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"golang.org/x/sys/unix"
-
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/internal/procfs"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/internal/sysfs"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
@@ -307,18 +304,6 @@ func hasBlockStat(sys *sysfs.Reader, name string) (yes bool) {
 		return errors.Is(err, fs.ErrPermission)
 	}
 	return true
-}
-
-// realStatfs is the production [StatfsFunc].
-func realStatfs(path string) (cap sysmsnap.DiskCapacity, err error) {
-	var s unix.Statfs_t
-	err = unix.Statfs(path, &s)
-	if err != nil {
-		err = eb.Build().Str("path", path).Errorf("statfs: %w", err)
-		return
-	}
-	cap = computeCapacity(uint64(s.Bsize), s.Blocks, s.Bavail)
-	return
 }
 
 // realDeviceResolver is the production [DeviceResolver].

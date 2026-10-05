@@ -148,11 +148,14 @@ should iterate `Frontmatter().IteratePairs()` directly.
   `*Doc` therefore transitively keeps every interned content blob
   reachable; do not detach segments from the document for as long as
   any frame may still render it.
-- **ID derivation order.** Segments that need an id consume the seq
-  counter in render order. Two `Render` invocations of the same doc
-  emit the same seq sequence, so retained ids are stable across frames.
-  Adding a new id-needing segment kind shifts existing ids — bump the
-  scopeKey when changing the lowering rules in a way that affects
+- **ID derivation order.** A code block's widgets are scoped under a key
+  derived at parse time from its language and text plus its occurrence
+  among identical blocks, so inserting a block above another leaves the
+  lower block's id alone (ADR-0267). Every other segment that needs an id
+  consumes the seq counter in render order. Two `Render` invocations of the
+  same doc emit the same seq sequence, so retained ids are stable across
+  frames. Adding a new id-needing segment kind shifts the seq ids — bump
+  the ScopeKey when changing the lowering rules in a way that affects
   layout state stored against ids. Tables are such a kind: adding them
   moved every id after the first table in a doc, so `helphost`'s scope
   key went from `doc-render` to `doc-render-2`.
@@ -234,7 +237,7 @@ should iterate `Frontmatter().IteratePairs()` directly.
   `ok=false` and stay on `ResolveEmbed` alone. The trade-off is that
   decode happens at parse time on the calling goroutine; large image
   sets in long docs make `Parse` slower but render-path allocation
-  stays zero. `WithImageMaxSize(w, h)` caps the FitAspectMaxE
+  stays zero. `ParseOptions.ImageMaxW` / `ImageMaxH` cap the FitAspectMaxE
   bounding box at render time (default `(800, 600)`); the cap is
   per-Doc, not per-image, since Doc has no per-image style hook
   today.

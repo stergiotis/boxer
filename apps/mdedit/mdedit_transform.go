@@ -332,8 +332,10 @@ func (inst *App) renderTransformProgress() {
 		Fraction: snap.Fraction,
 		EtaMs:    snap.EtaMs,
 		Note:     snap.Note,
-		CancelId: inst.ids.PrepareStr("xform-cancel"),
-	}) {
+		Ids:      inst.ids,
+		ScopeKey: "xform-job",
+		Cancel:   true,
+	}).CancelClicked {
 		x.runner.Cancel()
 	}
 }
@@ -409,11 +411,9 @@ func (inst *App) renderTransformPane() {
 	}
 	inst.ensureTransformDoc()
 	for range c.ScrollArea().Hscroll(true).Vscroll(true).AutoShrink(false, false).KeepIter() {
-		// Its own IdScope: the main preview renders the same widget kinds in
-		// the same window, and markdown.Doc deliberately does not scope itself.
-		for range c.IdScope(inst.ids.PrepareStr("xform-preview")) {
-			x.resDoc.Render(inst.ids)
-		}
+		// Its own scope key: the main preview renders the same widget kinds
+		// in the same window.
+		markdown.Render(markdown.Input{Ids: inst.ids, ScopeKey: "xform-preview", Doc: x.resDoc})
 	}
 }
 

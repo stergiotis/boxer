@@ -1,6 +1,6 @@
 #!/bin/bash
 # The composite governance gate: buildtags, doclint, entry-points, file-naming,
-# codelint, in one boxer process.
+# codelint, tab, in one boxer process.
 #
 # One lint step. Runnable on its own; scripts/ci/lint.sh runs it with the
 # others and documents the exit-status contract every step obeys. A failing
@@ -14,7 +14,7 @@ cd "$here/../../.."
 tags="$(cat ./tags | tr -d "\n")"
 
 # The composite gate boxer publishes to consuming repositories (ADR-0179):
-# buildtags, doclint, entry-points, file-naming, codelint. This step does not
+# buildtags, doclint, entry-points, file-naming, codelint, tab. This step does not
 # spell that list out — public/gov/gate.DefaultSteps() is the single definition,
 # so a step added there reaches boxer and every consumer at once, and boxer
 # breaks first when it changes.
@@ -45,6 +45,8 @@ if out=$(./boxer.sh gov gate \
         --entry-points-baseline scripts/ci/entry-points-baseline.txt \
         --naming-baseline scripts/ci/naming-baseline.txt \
         --exclude 'prompts/' \
+        --tab-pkg ./public/thestack/cmd/imzero2tab \
+        --tab-pkg ./public/thestack/cmd/imzero2tabdemo \
         2>"$gate_err"); then
     rm -f "$gate_err"
     printf '%s\n' "$out"

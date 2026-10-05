@@ -1,6 +1,6 @@
 ---
 name: vizeval
-description: "Use when searching for, scoring or comparing renderings of leeway data with the vizeval harness (ADR-0257) — writing a scenario (*.vizeval.md), enumerating sinks and their option spaces, scoring candidates headlessly for geometry metrics, task-question accuracy and pairwise rankings, and reading scorecards back from files or boxer.facts. Covers what each metric does and does not mean, and the pitfalls that make two scorecards incomparable."
+description: "Use when searching for, scoring or comparing renderings of leeway data with the vizeval harness (ADR-0266) — writing a scenario (*.vizeval.md), enumerating sinks and their option spaces, scoring candidates headlessly for geometry metrics, task-question accuracy and pairwise rankings, and reading scorecards back from files or boxer.facts. Covers what each metric does and does not mean, and the pitfalls that make two scorecards incomparable."
 type: how-to
 audience: agent or engineer searching the encoding space of a leeway batch
 status: draft
@@ -17,7 +17,7 @@ headless host, once per **candidate** — a sink and its options — and records
 **scorecard** per candidate: geometry metrics from the capture's SVG, and
 optionally a vision model's answers to the scenario's questions and its
 pairwise preferences. The decision record is
-[ADR-0257](../../adr/0257-vizeval-scored-renderings-of-leeway-batches.md)
+[ADR-0266](../../adr/0266-vizeval-scored-renderings-of-leeway-batches.md)
 (proposed); the step-by-step recipe is
 [vizeval-score-renderings](../../howto/vizeval-score-renderings.md). This page
 is what you need to run a search with it.

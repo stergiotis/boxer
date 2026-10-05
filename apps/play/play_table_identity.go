@@ -174,6 +174,13 @@ func (inst *identityJob) stop() {
 // cell returns the text a synthetic cell shows for row and the hover text
 // behind it: the short hex once the job has landed, "…" while it runs, the
 // error when it failed.
+// isDone reports whether the job's cells are final.
+func (inst *identityJob) isDone() bool {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	return inst.done
+}
+
 func (inst *identityJob) cell(k identityColKindE, row int64) (text string, hover string) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()

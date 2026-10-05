@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -91,13 +92,46 @@ type Client struct {
 	http *http.Client
 }
 
-// New constructs a Client. Passing nil for httpClient applies a 30s timeout.
+// defaultResponseHeaderTimeout bounds how long the default client waits for
+// the server to start answering once the request is sent.
+const defaultResponseHeaderTimeout = 30 * time.Second
+
+// New constructs a Client. Passing nil for httpClient builds one that waits at
+// most 30s for the server's response headers and puts no bound on the body:
+// a streamed read (QueryArrow) lasts as long as its consumer takes, and an
+// insert is not cut off after the server may already have committed it. The
+// caller's ctx bounds the whole exchange. That client is shared by every
+// New(cfg, nil), so callers that build a Client per operation reuse one
+// connection pool, as they did with http.DefaultTransport.
 func New(cfg Config, httpClient *http.Client) (inst *Client) {
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 30 * time.Second}
+		httpClient = sharedDefaultHTTPClient()
 	}
 	inst = &Client{cfg: cfg, http: httpClient}
 	return
+}
+
+// sharedDefaultHTTPClient is the nil-argument client of [New], built once.
+var sharedDefaultHTTPClient = sync.OnceValue(func() *http.Client {
+	return newDefaultHTTPClient(defaultResponseHeaderTimeout)
+})
+
+// newDefaultHTTPClient builds a client that bounds only the wait for response
+// headers. No http.Client.Timeout: that one also covers reading the body, so
+// it would fail a healthy stream whose consumer is slow.
+//
+// A process that replaced http.DefaultTransport with something other than an
+// *http.Transport — the browser tab's host transport (ADR-0263) — gets that
+// transport as is: it is the only way out of that process, and its own
+// timeouts are the host's to set.
+func newDefaultHTTPClient(headerTimeout time.Duration) *http.Client {
+	base, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		return &http.Client{Transport: http.DefaultTransport}
+	}
+	tr := base.Clone()
+	tr.ResponseHeaderTimeout = headerTimeout
+	return &http.Client{Transport: tr}
 }
 
 func (inst *Client) injectHeaders(req *http.Request) {
@@ -245,6 +279,107 @@ func (inst *Client) InsertArrow(ctx context.Context, table string, records []arr
 			Errorf("chclient insertArrow: failed")
 		return
 	}
+	return
+}
+
+// StreamOptions shape a streamed query or insert.
+type StreamOptions struct {
+	// QueryId names the query on the server, so another connection can find
+	// it in system.processes while it runs.
+	QueryId string
+	// AcceptEncoding asks the server to compress the response ("zstd",
+	// "gzip"). The body is returned as sent, still compressed; the encoding
+	// the server actually applied is returned beside it.
+	AcceptEncoding string
+	// ContentEncoding declares the compression of an insert's body.
+	ContentEncoding string
+}
+
+func (inst *Client) streamURL(sql string, opts StreamOptions, compressResponse bool) (u string) {
+	vals := make(url.Values, 3)
+	if sql != "" {
+		vals.Set("query", sql)
+	}
+	if opts.QueryId != "" {
+		vals.Set("query_id", opts.QueryId)
+	}
+	if compressResponse {
+		vals.Set("enable_http_compression", "1")
+	}
+	sep := "?"
+	if strings.Contains(inst.cfg.URL, "?") {
+		sep = "&"
+	}
+	return inst.cfg.URL + sep + vals.Encode()
+}
+
+func (inst *Client) doStream(req *http.Request) (resp *http.Response, err error) {
+	inst.injectHeaders(req)
+	resp, err = inst.http.Do(req)
+	if err != nil {
+		err = eb.Build().Str("url", inst.cfg.URL).Errorf("chclient stream: do: %w", err)
+		return
+	}
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		err = eb.Build().Int("status", resp.StatusCode).Str("response", string(bodyBytes)).Errorf("chclient stream: non-200: %s", truncateForMessage(bodyBytes)) //boxer:lint disable=CS013 reason="the excerpt is deliberately truncated for the message; the response field keeps it whole"
+		resp = nil
+	}
+	return
+}
+
+// QueryStream runs sql and returns its response body undecoded, with the
+// Content-Encoding the server applied. A compressed body stays compressed, so
+// a copy between two servers can relay it byte for byte (ADR-0259 §SD5,
+// §SD6). A server error that begins after the body has started arrives inside
+// the body, as ClickHouse's HTTP interface sends it; a consumer that parses
+// the stream sees it as corrupt data. Caller MUST close the body.
+func (inst *Client) QueryStream(ctx context.Context, sql string, opts StreamOptions) (body io.ReadCloser, contentEncoding string, err error) {
+	var req *http.Request
+	// The statement is the request body: a long one (a repair's leaf list)
+	// would otherwise ride the URL.
+	req, err = http.NewRequestWithContext(ctx, http.MethodPost, inst.streamURL("", opts, opts.AcceptEncoding != ""), strings.NewReader(sql))
+	if err != nil {
+		err = eh.Errorf("chclient queryStream: build: %w", err)
+		return
+	}
+	req.Header.Set("Content-Type", "text/plain; charset=utf-8")
+	if opts.AcceptEncoding != "" {
+		// Set by hand, so the transport neither adds gzip nor decodes.
+		req.Header.Set("Accept-Encoding", opts.AcceptEncoding)
+	}
+	var resp *http.Response
+	resp, err = inst.doStream(req)
+	if err != nil {
+		return
+	}
+	return resp.Body, resp.Header.Get("Content-Encoding"), nil
+}
+
+// InsertStream POSTs body as the data of insertSQL, an `INSERT … FORMAT <fmt>`
+// statement, without buffering it: the statement rides the URL and the rows
+// stream from the reader. A copy between two servers pipes one server's
+// QueryStream body straight into another's InsertStream, and the bytes are
+// never decoded (ADR-0259 §SD5).
+func (inst *Client) InsertStream(ctx context.Context, insertSQL string, body io.Reader, opts StreamOptions) (err error) {
+	var req *http.Request
+	req, err = http.NewRequestWithContext(ctx, http.MethodPost, inst.streamURL(insertSQL, opts, false), body)
+	if err != nil {
+		err = eh.Errorf("chclient insertStream: build: %w", err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/octet-stream")
+	if opts.ContentEncoding != "" {
+		req.Header.Set("Content-Encoding", opts.ContentEncoding)
+	}
+	var resp *http.Response
+	resp, err = inst.doStream(req)
+	if err != nil {
+		return
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
 	return
 }
 

@@ -381,3 +381,25 @@ func TestFullPipelineCanonicalizeCastsExtractCTE(t *testing.T) {
 		})
 	}
 }
+
+// A named tuple element keeps the space between its name and type; GetText
+// would fuse them into the unknown type family `aUInt8`.
+func TestCanonicalizeCastsNamedTupleKeepsNameTypeSeparator(t *testing.T) {
+	for _, sql := range []string{
+		"SELECT x::Tuple(a UInt8, b String)",
+		"SELECT CAST(x AS Tuple(a UInt8, b String))",
+		"SELECT CAST(x AS Tuple( a  UInt8 ,\n b /* c */ String ))",
+	} {
+		got, err := passes.CanonicalizeCasts.Run(sql)
+		require.NoError(t, err, sql)
+		assert.Equal(t, "SELECT CAST(x, 'Tuple(a UInt8,b String)')", got, sql)
+	}
+}
+
+// An Enum member name carrying its own escape: the backslash must be doubled
+// along with the quotes, or the emitted type string is malformed.
+func TestCanonicalizeCastsEnumMemberWithEscapedQuote(t *testing.T) {
+	got, err := passes.CanonicalizeCasts.Run(`SELECT CAST(x AS Enum8('it\'s' = 1))`)
+	require.NoError(t, err)
+	assert.Equal(t, `SELECT CAST(x, 'Enum8(\'it\\\'s\'=1)')`, got)
+}

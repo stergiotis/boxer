@@ -1,5 +1,6 @@
-// Package markdown renders Obsidian-flavored Markdown documents through
-// the imzero2 / egui2 widget tree.
+// Package markdown is an immediate-mode widget (ADR-0267) over a parsed
+// Doc: it renders Obsidian-flavored Markdown documents through the imzero2 /
+// egui2 widget tree.
 //
 // Parsing uses boxer's goldmark-based [obsidian] extender; the resulting
 // AST is lowered once into a Go-side segment tree that pre-builds
@@ -18,13 +19,12 @@
 //	`))
 //
 //	// in your render path:
-//	for range c.IdScope(ids.PrepareStr("help-doc")) {
-//	    helpDoc.Render(ids)
-//	}
+//	res := markdown.Render(markdown.Input{Ids: ids, ScopeKey: "help-doc", Doc: helpDoc})
 //
-// The wrapping [components.IdScope] is the caller's responsibility —
-// without it, code-block and blockquote IDs will collide if multiple doc
-// instances coexist under the same parent scope.
+// Render opens its own id scope under ScopeKey, so two documents under one
+// parent differ by ScopeKey alone. Interaction — a clicked code-block
+// button, a claimed link — comes back in the [Result]; parse-time settings
+// are a [ParseOptions] passed to [ParseWith].
 //
 // # Scope
 //
@@ -58,8 +58,8 @@
 // # Concurrency
 //
 // [Parse] is safe to call from ANY goroutine, including concurrently
-// with a frame in flight on the render goroutine. [Doc.Render] and its
-// variants are not: they emit into the current Ui scope and belong to
+// with a frame in flight on the render goroutine. [Render] and
+// [RenderFrontmatter] are not: they emit into the current Ui scope and belong to
 // the render goroutine like every other widget call.
 //
 // The asymmetry is not an accident of the current implementation, and

@@ -264,10 +264,10 @@ func TestKanbanFoldCachePreservesSelection(t *testing.T) {
 
 	d.rebuild(rec, rec.Schema(), k, nil)
 	first := d.model
-	d.model.SetSelected(2)
+	d.board.SetSelected(2)
 	d.rebuild(rec, rec.Schema(), k, nil)
 	assert.Same(t, first, d.model, "an unchanged result must not rebuild the model")
-	assert.Equal(t, uint64(2), d.model.Selected(), "a rebuild would have cleared the selection")
+	assert.Equal(t, uint64(2), d.board.Selected(), "a rebuild would have cleared the selection")
 
 	// A new result identity does rebuild.
 	d.noteExecuted(d.pendingExecuted.Add(1))

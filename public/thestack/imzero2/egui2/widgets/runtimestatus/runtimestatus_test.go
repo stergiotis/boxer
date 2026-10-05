@@ -3,28 +3,28 @@ package runtimestatus
 import (
 	"testing"
 
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
 	"github.com/stretchr/testify/assert"
 )
 
-// The egui calls inside RenderInline can't be exercised without the
-// Rust runtime, so this test just covers the trivial nil-safety
-// guard. The visual smoke test is `./src/rust/hmi.sh`.
-
-func TestRenderInline_NilSnapshot_NoPanic(t *testing.T) {
+// TestRenderNilSnapshotNoPanic covers the nil-safety guard: no snapshot,
+// nothing drawn, nothing reported.
+func TestRenderNilSnapshotNoPanic(t *testing.T) {
 	assert.NotPanics(t, func() {
-		RenderInline(nil, nil)
+		res := Render(Input{})
+		assert.Equal(t, "", res.Clicked)
 	})
 }
 
-func TestSnapshot_ZeroValueFieldsAreValid(t *testing.T) {
-	// A zero-value Snapshot is a valid input (every backend marked
-	// inactive / unset). RenderInline draws cleanly.
+// TestRenderOneFrameHeadless draws a zero-value Snapshot (every backend
+// inactive) plain and clickable under the discard channel (ADR-0267 W19).
+func TestRenderOneFrameHeadless(t *testing.T) {
+	t.Cleanup(scenetest.Install())
 	s := &Snapshot{}
 	assert.NotPanics(t, func() {
-		// Defensive: RenderInline will issue egui calls which fail
-		// without the Rust runtime. Skip on environments without
-		// FFFI by short-circuiting the actual call here; the type
-		// check above is the contract we want to pin.
-		_ = s
+		_ = Render(Input{Snapshot: s})
+		res := Render(Input{Ids: c.NewWidgetIdStack(), ScopeKey: "t", Snapshot: s, Clickable: true})
+		assert.Equal(t, "", res.Clicked, "nothing is clicked without input")
 	})
 }

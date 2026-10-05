@@ -264,6 +264,14 @@ func (inst ButtonFluid) ShortcutText(text string) ButtonFluid {
 	return inst
 }
 
+func (inst ButtonFluid) kind(ki uint8) ButtonFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(ButtonMethodIdKind))
+	r.WriteUint8(ki)
+
+	return inst
+}
+
 func (inst ButtonFluid) Send() {
 	r := inst.r
 	r.WriteOpCode(uint32(ButtonMethodIdBuild))
@@ -379,9 +387,7 @@ func (inst CollapsingHeaderFluid) KeepIter() iter.Seq[functional.NilIteratorValu
 	inst.r.WriteOpCode(uint32(CollapsingHeaderMethodIdBuild))
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		/*if inst.idGen.DeriveStacked() != inst.id {
-			panic("id handling is incorrect. iterators are nested in an unhandled way.")
-		}*/
+		inst.idGen.PushIdToStack(inst.id)
 		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()
@@ -696,9 +702,7 @@ func (inst ComboBoxFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
 	inst.r.WriteOpCode(uint32(ComboBoxMethodIdBuild))
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		/*if inst.idGen.DeriveStacked() != inst.id {
-			panic("id handling is incorrect. iterators are nested in an unhandled way.")
-		}*/
+		inst.idGen.PushIdToStack(inst.id)
 		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()
@@ -1491,6 +1495,13 @@ func (inst FrameFluid) CaptureKeys(mask uint64) FrameFluid {
 	return inst
 }
 
+func (inst FrameFluid) CaptureKeyEdges() FrameFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(FrameMethodIdCaptureKeyEdges))
+
+	return inst
+}
+
 func (inst FrameFluid) HoverCursorPointer() FrameFluid {
 	r := inst.r
 	r.WriteOpCode(uint32(FrameMethodIdHoverCursorPointer))
@@ -1568,9 +1579,7 @@ func (inst FrameFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
 	inst.r.WriteOpCode(uint32(FrameMethodIdBuild))
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		/*if inst.idGen.DeriveStacked() != inst.id {
-			panic("id handling is incorrect. iterators are nested in an unhandled way.")
-		}*/
+		inst.idGen.PushIdToStack(inst.id)
 		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()
@@ -1581,296 +1590,6 @@ func (inst FrameFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
 		yield(functional.NilIteratorValue)
 
 	}
-}
-func (inst GraphFluid) Width(wi float32) GraphFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdWidth))
-	r.WriteFloat32(wi)
-
-	return inst
-}
-
-func (inst GraphFluid) Height(he float32) GraphFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdHeight))
-	r.WriteFloat32(he)
-
-	return inst
-}
-
-func (inst GraphFluid) DraggingEnabled(vl bool) GraphFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdDraggingEnabled))
-	r.WriteBool(vl)
-
-	return inst
-}
-
-func (inst GraphFluid) HoverEnabled(vl bool) GraphFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdHoverEnabled))
-	r.WriteBool(vl)
-
-	return inst
-}
-
-func (inst GraphFluid) NodeClickingEnabled(vl bool) GraphFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdNodeClickingEnabled))
-	r.WriteBool(vl)
-
-	return inst
-}
-
-func (inst GraphFluid) NodeSelectionEnabled(vl bool) GraphFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdNodeSelectionEnabled))
-	r.WriteBool(vl)
-
-	return inst
-}
-
-func (inst GraphFluid) NodeSelectionMultiEnabled(vl bool) GraphFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdNodeSelectionMultiEnabled))
-	r.WriteBool(vl)
-
-	return inst
-}
-
-func (inst GraphFluid) EdgeClickingEnabled(vl bool) GraphFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdEdgeClickingEnabled))
-	r.WriteBool(vl)
-
-	return inst
-}
-
-func (inst GraphFluid) EdgeSelectionEnabled(vl bool) GraphFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdEdgeSelectionEnabled))
-	r.WriteBool(vl)
-
-	return inst
-}
-
-func (inst GraphFluid) EdgeSelectionMultiEnabled(vl bool) GraphFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdEdgeSelectionMultiEnabled))
-	r.WriteBool(vl)
-
-	return inst
-}
-
-func (inst GraphFluid) FitToScreen(vl bool) GraphFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdFitToScreen))
-	r.WriteBool(vl)
-
-	return inst
-}
-
-func (inst GraphFluid) FitNow() GraphFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdFitNow))
-
-	return inst
-}
-
-func (inst GraphFluid) ZoomAndPan(vl bool) GraphFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdZoomAndPan))
-	r.WriteBool(vl)
-
-	return inst
-}
-
-func (inst GraphFluid) FitPadding(pd float32) GraphFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdFitPadding))
-	r.WriteFloat32(pd)
-
-	return inst
-}
-
-func (inst GraphFluid) ZoomSpeed(sp float32) GraphFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdZoomSpeed))
-	r.WriteFloat32(sp)
-
-	return inst
-}
-
-func (inst GraphFluid) LabelsAlways(vl bool) GraphFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdLabelsAlways))
-	r.WriteBool(vl)
-
-	return inst
-}
-
-func (inst GraphFluid) Layout(kind uint8) GraphFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdLayout))
-	r.WriteUint8(kind)
-
-	return inst
-}
-
-func (inst GraphFluid) ResetLayout() GraphFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdResetLayout))
-
-	return inst
-}
-
-func (inst GraphFluid) FastForwardSteps(st uint32) GraphFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdFastForwardSteps))
-	r.WriteUint32(st)
-
-	return inst
-}
-
-func (inst GraphFluid) LayoutDt(dt float32) GraphFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdLayoutDt))
-	r.WriteFloat32(dt)
-
-	return inst
-}
-
-func (inst GraphFluid) LayoutDamping(dp float32) GraphFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdLayoutDamping))
-	r.WriteFloat32(dp)
-
-	return inst
-}
-
-func (inst GraphFluid) LayoutEpsilon(ep float32) GraphFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdLayoutEpsilon))
-	r.WriteFloat32(ep)
-
-	return inst
-}
-
-func (inst GraphFluid) LayoutMaxStep(ms float32) GraphFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdLayoutMaxStep))
-	r.WriteFloat32(ms)
-
-	return inst
-}
-
-func (inst GraphFluid) LayoutKScale(ks float32) GraphFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdLayoutKScale))
-	r.WriteFloat32(ks)
-
-	return inst
-}
-
-func (inst GraphFluid) LayoutCAttract(ca float32) GraphFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdLayoutCAttract))
-	r.WriteFloat32(ca)
-
-	return inst
-}
-
-func (inst GraphFluid) LayoutCRepulse(cr float32) GraphFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdLayoutCRepulse))
-	r.WriteFloat32(cr)
-
-	return inst
-}
-
-func (inst GraphFluid) LayoutRunning(vl bool) GraphFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdLayoutRunning))
-	r.WriteBool(vl)
-
-	return inst
-}
-
-func (inst GraphFluid) LayoutRowDist(rd float32) GraphFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdLayoutRowDist))
-	r.WriteFloat32(rd)
-
-	return inst
-}
-
-func (inst GraphFluid) LayoutColDist(cd float32) GraphFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdLayoutColDist))
-	r.WriteFloat32(cd)
-
-	return inst
-}
-
-func (inst GraphFluid) LayoutCenterParent(vl bool) GraphFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdLayoutCenterParent))
-	r.WriteBool(vl)
-
-	return inst
-}
-
-func (inst GraphFluid) LayoutOrientation(or uint8) GraphFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdLayoutOrientation))
-	r.WriteUint8(or)
-
-	return inst
-}
-
-func (inst GraphFluid) Send() {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdBuild))
-	r.SendIntermediate()
-}
-func (inst GraphFluid) Keep() typed.RetainedFffiHolderTyped[GraphDrainS] {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphMethodIdBuild))
-	return typed.NewRetainedFffiHolderTyped[GraphDrainS](r.BuildRetained())
-}
-func (inst GraphEdgeFluid) Color(col color.Color) GraphEdgeFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphEdgeMethodIdColor))
-	color.PutAsU32(r, col)
-
-	return inst
-}
-
-func (inst GraphEdgeFluid) Label(text string) GraphEdgeFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphEdgeMethodIdLabel))
-	r.WriteString(text)
-
-	return inst
-}
-
-func (inst GraphEdgeFluid) Send() {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphEdgeMethodIdBuild))
-	r.SendIntermediate()
-}
-func (inst GraphNodeFluid) Color(col color.Color) GraphNodeFluid {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphNodeMethodIdColor))
-	color.PutAsU32(r, col)
-
-	return inst
-}
-
-func (inst GraphNodeFluid) Send() {
-	r := inst.r
-	r.WriteOpCode(uint32(GraphNodeMethodIdBuild))
-	r.SendIntermediate()
 }
 func (inst GridFluid) NumColumns(val uint32) GridFluid {
 	r := inst.r
@@ -1929,9 +1648,7 @@ func (inst GridFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
 	inst.r.WriteOpCode(uint32(GridMethodIdBuild))
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		/*if inst.idGen.DeriveStacked() != inst.id {
-			panic("id handling is incorrect. iterators are nested in an unhandled way.")
-		}*/
+		inst.idGen.PushIdToStack(inst.id)
 		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()
@@ -2141,9 +1858,7 @@ func (inst IndentFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
 
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		/*if inst.idGen.DeriveStacked() != inst.id {
-			panic("id handling is incorrect. iterators are nested in an unhandled way.")
-		}*/
+		inst.idGen.PushIdToStack(inst.id)
 		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()
@@ -2266,6 +1981,27 @@ func (inst MenuButtonFluid) KeepIter() iter.Seq[functional.NilIteratorValueType]
 
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
+
+		r.SyncRetained()
+		defer func() {
+			End()
+		}()
+
+		yield(functional.NilIteratorValue)
+
+	}
+}
+func (inst ModalFluid) Send() {
+	r := inst.r
+
+	r.SendIntermediate()
+}
+func (inst ModalFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
+
+	r := inst.r.BuildRetained()
+	return func(yield func(functional.NilIteratorValueType) bool) {
+		inst.idGen.PushIdToStack(inst.id)
+		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()
 		defer func() {
@@ -2676,9 +2412,7 @@ func (inst PanelBottomFluid) KeepIter() iter.Seq[functional.NilIteratorValueType
 	inst.r.WriteOpCode(uint32(PanelBottomMethodIdBuild))
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		/*if inst.idGen.DeriveStacked() != inst.id {
-			panic("id handling is incorrect. iterators are nested in an unhandled way.")
-		}*/
+		inst.idGen.PushIdToStack(inst.id)
 		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()
@@ -2723,9 +2457,7 @@ func (inst PanelBottomInsideFluid) KeepIter() iter.Seq[functional.NilIteratorVal
 	inst.r.WriteOpCode(uint32(PanelBottomInsideMethodIdBuild))
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		/*if inst.idGen.DeriveStacked() != inst.id {
-			panic("id handling is incorrect. iterators are nested in an unhandled way.")
-		}*/
+		inst.idGen.PushIdToStack(inst.id)
 		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()
@@ -2808,9 +2540,7 @@ func (inst PanelLeftFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] 
 	inst.r.WriteOpCode(uint32(PanelLeftMethodIdBuild))
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		/*if inst.idGen.DeriveStacked() != inst.id {
-			panic("id handling is incorrect. iterators are nested in an unhandled way.")
-		}*/
+		inst.idGen.PushIdToStack(inst.id)
 		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()
@@ -2855,9 +2585,7 @@ func (inst PanelLeftInsideFluid) KeepIter() iter.Seq[functional.NilIteratorValue
 	inst.r.WriteOpCode(uint32(PanelLeftInsideMethodIdBuild))
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		/*if inst.idGen.DeriveStacked() != inst.id {
-			panic("id handling is incorrect. iterators are nested in an unhandled way.")
-		}*/
+		inst.idGen.PushIdToStack(inst.id)
 		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()
@@ -2902,9 +2630,7 @@ func (inst PanelRightFluid) KeepIter() iter.Seq[functional.NilIteratorValueType]
 	inst.r.WriteOpCode(uint32(PanelRightMethodIdBuild))
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		/*if inst.idGen.DeriveStacked() != inst.id {
-			panic("id handling is incorrect. iterators are nested in an unhandled way.")
-		}*/
+		inst.idGen.PushIdToStack(inst.id)
 		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()
@@ -2949,9 +2675,7 @@ func (inst PanelRightInsideFluid) KeepIter() iter.Seq[functional.NilIteratorValu
 	inst.r.WriteOpCode(uint32(PanelRightInsideMethodIdBuild))
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		/*if inst.idGen.DeriveStacked() != inst.id {
-			panic("id handling is incorrect. iterators are nested in an unhandled way.")
-		}*/
+		inst.idGen.PushIdToStack(inst.id)
 		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()
@@ -2996,9 +2720,7 @@ func (inst PanelTopFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
 	inst.r.WriteOpCode(uint32(PanelTopMethodIdBuild))
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		/*if inst.idGen.DeriveStacked() != inst.id {
-			panic("id handling is incorrect. iterators are nested in an unhandled way.")
-		}*/
+		inst.idGen.PushIdToStack(inst.id)
 		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()
@@ -3043,9 +2765,7 @@ func (inst PanelTopInsideFluid) KeepIter() iter.Seq[functional.NilIteratorValueT
 	inst.r.WriteOpCode(uint32(PanelTopInsideMethodIdBuild))
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		/*if inst.idGen.DeriveStacked() != inst.id {
-			panic("id handling is incorrect. iterators are nested in an unhandled way.")
-		}*/
+		inst.idGen.PushIdToStack(inst.id)
 		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()
@@ -3131,9 +2851,7 @@ func (inst PushIdFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
 
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		/*if inst.idGen.DeriveStacked() != inst.id {
-			panic("id handling is incorrect. iterators are nested in an unhandled way.")
-		}*/
+		inst.idGen.PushIdToStack(inst.id)
 		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()
@@ -4246,9 +3964,7 @@ func (inst TintedScopeFluid) KeepIter() iter.Seq[functional.NilIteratorValueType
 	inst.r.WriteOpCode(uint32(TintedScopeMethodIdBuild))
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		/*if inst.idGen.DeriveStacked() != inst.id {
-			panic("id handling is incorrect. iterators are nested in an unhandled way.")
-		}*/
+		inst.idGen.PushIdToStack(inst.id)
 		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()
@@ -4551,6 +4267,22 @@ func (inst WindowFluid) OpenBound(bindingId uint64) WindowFluid {
 	return inst
 }
 
+func (inst WindowFluid) DragFromTitleBar(val bool) WindowFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WindowMethodIdDragFromTitleBar))
+	r.WriteBool(val)
+
+	return inst
+}
+
+func (inst WindowFluid) Maximized(val bool) WindowFluid {
+	r := inst.r
+	r.WriteOpCode(uint32(WindowMethodIdMaximized))
+	r.WriteBool(val)
+
+	return inst
+}
+
 func (inst WindowFluid) Send() {
 	r := inst.r
 	r.WriteOpCode(uint32(WindowMethodIdBuild))
@@ -4560,9 +4292,7 @@ func (inst WindowFluid) KeepIter() iter.Seq[functional.NilIteratorValueType] {
 	inst.r.WriteOpCode(uint32(WindowMethodIdBuild))
 	r := inst.r.BuildRetained()
 	return func(yield func(functional.NilIteratorValueType) bool) {
-		/*if inst.idGen.DeriveStacked() != inst.id {
-			panic("id handling is incorrect. iterators are nested in an unhandled way.")
-		}*/
+		inst.idGen.PushIdToStack(inst.id)
 		defer func() { inst.idGen.PopIdFromStackChecked(inst.id) }()
 
 		r.SyncRetained()

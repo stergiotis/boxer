@@ -10,7 +10,7 @@ import (
 
 // HoverBand is a treemap.ColoringI decorator that dims cells whose color
 // metric falls outside a ±halfWidth normalized band around an active center
-// value. Pair with a colorscale.ColorScale's OnHover callback to highlight
+// value. Pair with the Events.Hover a colorscale.ColorScale returns to highlight
 // the treemap cells whose value sits near whatever the user is pointing at
 // on the legend.
 //

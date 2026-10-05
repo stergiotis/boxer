@@ -58,7 +58,7 @@ func (inst *PlayApp) renderGraphTab() {
 				}
 				if c.Button(ids.PrepareStr("bindClear"), c.Atoms().Text("clear").Keep()).
 					SendResp().HasPrimaryClicked() {
-					inst.clearBindings()
+					inst.personClearBindings()
 				}
 			}
 		}
@@ -134,9 +134,9 @@ func (inst *PlayApp) renderGraphNode(ids *c.WidgetIdStack, n splitNode) {
 						Selected(bound).Small().
 						SendResp().HasPrimaryClicked() {
 						if bound {
-							inst.unbindTab(ts.ID)
+							inst.personBindPane(ts.ID, "")
 						} else {
-							inst.bindTab(ts.ID, n.ID)
+							inst.personBindPane(ts.ID, n.ID)
 						}
 					}
 				}
@@ -193,7 +193,7 @@ func (inst *PlayApp) renderSignalsSection() {
 				if c.Button(ids.PrepareStr("sigAdd"), c.Atoms().Text("add signal").Keep()).
 					SendResp().HasPrimaryClicked() {
 					if name := strings.TrimSpace(inst.sigAddName); name != "" {
-						inst.graph.setSignalRawFrom(name, inst.sigAddValue, signalWriterEditor)
+						inst.personSetSignal(SignalID(name), inst.sigAddValue, signalWriterEditor)
 					}
 				}
 			}
@@ -227,7 +227,7 @@ func (inst *PlayApp) renderSignalRow(r signalChromeRow) {
 			SendRespVal(draft)
 		if c.Button(ids.PrepareStr("sigSet-"+r.Name), c.Atoms().Text("set").Keep()).
 			SendResp().HasPrimaryClicked() {
-			inst.graph.setSignalRawFrom(r.Name, *draft, signalWriterEditor)
+			inst.personSetSignal(r.Name, *draft, signalWriterEditor)
 		}
 		if r.Held {
 			if c.Button(ids.PrepareStr("sigClear-"+r.Name), c.Atoms().Text("×").Keep()).

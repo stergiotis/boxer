@@ -28,13 +28,10 @@ type fieldNode struct {
 	value string
 }
 
-// State is the caller-owned view state: which containers are open, and the
-// scratch the per-frame rebuild reuses. The zero value is usable and starts
-// every container at the Renderer's [Renderer.DefaultOpen].
-//
-// It is separate from the Renderer because the Renderer is a value whose
-// fluent setters return copies — configuration that is safe to share, where
-// view state is not. One State belongs to one place a field list is shown.
+// State is the host-owned view state (ADR-0267 W9): which containers are
+// open, and the scratch the per-frame rebuild reuses. The zero value is
+// usable and starts every container open unless [Input.StartCollapsed] says
+// otherwise. One State belongs to one place a field list is shown.
 //
 // Expansion is the tree widget's own, filed under the key column below. There
 // is no second map here mirroring it: the widget's [tree.State] is the store,
@@ -55,7 +52,7 @@ type State struct {
 // build flattens the field forest into the State's scratch, in slice order,
 // depth first. Every field becomes a node whether or not it is a container,
 // so the row sequence reads the way the recursive renderer's output did.
-func (inst Renderer) build(s *State, fields []Field) {
+func (inst settings) build(s *State, fields []Field) {
 	labels := s.labels[:0]
 	parents := s.parents[:0]
 	nodes := s.nodes[:0]

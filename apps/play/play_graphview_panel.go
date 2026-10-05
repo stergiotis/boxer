@@ -297,6 +297,9 @@ type GraphviewDriver struct {
 	idSeed uint64
 	src    *networkSource
 	view   *graphview.View
+	// events is what this frame's render (plain or hosted) produced;
+	// publishGestures reads it after the render.
+	events graphview.Events
 
 	layout  graphviewLayoutE
 	orient  graphview.OrientationE
@@ -383,6 +386,7 @@ type GraphviewDriver struct {
 	// and picks inside it (ADR-0228). The offline atlas draws country
 	// outlines where no tile server is configured.
 	pm             *portolan.Map
+	tiles          *basemap.Tiles
 	land           *landoverlay.Layer
 	atlas          *worldmap.Atlas
 	hostViewHash   uint64
@@ -611,7 +615,8 @@ func (inst *GraphviewDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesC
 		inst.renderHosted(w, h)
 	} else {
 		o.Style.NodeRadius = 0 // the style default, in world units
-		if err := inst.view.RenderColumns(&inst.nodes, &inst.edges, w, h); err != nil {
+		var err error
+		if inst.events, err = inst.view.RenderColumns(&inst.nodes, &inst.edges, w, h); err != nil {
 			// Validate ran at rebuild, so reaching here is a panel bug rather
 			// than a malformed query; the widget rendered nothing and kept its
 			// state, and the next rebuild is the recovery.
@@ -746,7 +751,7 @@ func (inst *GraphviewDriver) publishGestures(emit SignalEmitterI) {
 	}
 
 	// --- moments ---------------------------------------------------------
-	for _, ev := range v.Events() {
+	for _, ev := range inst.events {
 		switch ev.Kind {
 		case graphview.EventKindNodeDoubleClick:
 			// The expansion gesture: with Live on, this is what turns the
@@ -1101,7 +1106,7 @@ func (inst *GraphviewDriver) statusLine() string {
 		fmt.Fprintf(&b, " · %s", r)
 	}
 	if inst.hosted() {
-		if basemap.Configured() {
+		if basemap.DefaultOn() {
 			b.WriteString(" · located: over a basemap")
 		} else {
 			b.WriteString(" · located: over country outlines (no tile server configured)")
@@ -1768,12 +1773,12 @@ func (inst *GraphviewDriver) renderHosted(w, h float32) {
 	m := inst.lastModel
 	if inst.pm == nil {
 		lat0, lon0 := netUnprojectWebMercator(m.GeoOriginX, m.GeoOriginY)
-		inst.pm = portolan.New(inst.ids, portolan.Options{
+		inst.pm = portolan.New(inst.ids, "gv-map", portolan.Options{
 			Source:  basemap.PortolanSource(),
-			Loader:  basemap.PortolanLoader(),
+			Loader:  basemap.PortolanLoader(inst.tiles),
 			Center:  portolan.LL(lat0, lon0),
 			Zoom:    netWebMercatorZoom,
-			NoTiles: !basemap.Configured(),
+			NoTiles: !basemap.DefaultOn(),
 		})
 		inst.land = &landoverlay.Layer{}
 		if a, err := worldmap.LoadAtlas(); err == nil {
@@ -1798,8 +1803,8 @@ func (inst *GraphviewDriver) renderHosted(w, h float32) {
 	inst.pm.SetPointerVeto(claim.Pointer)
 
 	inst.pm.Render(w, h, func(p portolan.Projector) {
-		if !basemap.Configured() && inst.atlas != nil {
-			inst.land.Draw(p, inst.atlas, landoverlay.DefaultStyle())
+		if !basemap.DefaultOn() && inst.atlas != nil {
+			inst.land.Paint(p, inst.atlas, landoverlay.DefaultStyle())
 		}
 		// The map's handlers ran at the top of this Render, so the paint
 		// takes the view as it is now rather than the one the pick used
@@ -1807,7 +1812,8 @@ func (inst *GraphviewDriver) renderHosted(w, h float32) {
 		cam := p.CameraAt(netWebMercatorZoom, origin)
 		inst.view.SetHostCamera(cam)
 		inst.scaleForHost(cam.Zoom)
-		if err := inst.view.HostedPaintColumns(&inst.hostNodes, &inst.edges); err != nil {
+		var err error
+		if inst.events, err = inst.view.HostedPaintColumns(&inst.hostNodes, &inst.edges); err != nil {
 			log.Error().Err(err).Msg("graphview hosted paint refused the declaration")
 		}
 	})

@@ -64,8 +64,7 @@ func (inst NavTriggerE) String() string {
 	return "NavTriggerE(?)"
 }
 
-// NavEvent is delivered to OnNavigate subscribers whenever the breadcrumb
-// changes. From and To are independent snapshots; modifying them does not
+// NavEvent reports one breadcrumb change in Events.Nav. From and To are independent snapshots; modifying them does not
 // affect the widget's state.
 type NavEvent struct {
 	Kind    NavKindE
@@ -86,8 +85,7 @@ var ErrInvalidPath = errors.New("treemap: navigation path is not anchored at roo
 // event fires).
 //
 // On success a zoom animation is triggered using the same fromRect logic as
-// internal navigation, and registered OnNavigate subscribers are invoked
-// with NavKindExternal/NavKindDrillIn/NavKindDrillUp/NavKindReset depending on the change.
+// internal navigation, and the next Render reports it in Events.Nav as NavKindExternal/NavKindDrillIn/NavKindDrillUp/NavKindReset depending on the change.
 func (inst *Treemap) NavigateTo(path []*layout.Node) error {
 	if !inst.validPath(path) {
 		return ErrInvalidPath
@@ -130,39 +128,11 @@ func (inst *Treemap) Reset() {
 	inst.applyNavigation([]*layout.Node{inst.root}, NavTriggerExternal)
 }
 
-// OnNavigate registers fn to be invoked synchronously after every successful
-// navigation. The returned closure unsubscribes; calling it more than once
-// is a no-op. fn must not call back into the same Treemap's mutating API
-// (NavigateTo, DrillTo, DrillUp, Reset, Render) — doing so panics with a
-// clear message.
-func (inst *Treemap) OnNavigate(fn func(NavEvent)) (unsubscribe func()) {
-	if fn == nil {
-		panic("treemap: OnNavigate requires a non-nil fn")
-	}
-	idx := len(inst.navSubs)
-	inst.navSubs = append(inst.navSubs, fn)
-	unsubscribed := false
-	return func() {
-		if unsubscribed {
-			return
-		}
-		unsubscribed = true
-		// Clear in place rather than removing so existing index stay valid
-		// while we may be iterating during dispatch.
-		if idx < len(inst.navSubs) {
-			inst.navSubs[idx] = nil
-		}
-	}
-}
-
 // applyNavigation performs the breadcrumb mutation, classifies the change
 // kind, computes the from-rect for the zoom animation, fires events, and
 // triggers the animation. Single point of mutation so all navigation paths
 // (cell click, breadcrumb click, external) go through the same checks.
 func (inst *Treemap) applyNavigation(newPath []*layout.Node, trigger NavTriggerE) {
-	if inst.dispatching {
-		panic("treemap: navigation API called from within an OnNavigate handler")
-	}
 	from := append([]*layout.Node(nil), inst.breadcrumb...)
 	kind := classifyNav(from, newPath)
 
@@ -193,16 +163,7 @@ func (inst *Treemap) applyNavigation(newPath []*layout.Node, trigger NavTriggerE
 	inst.breadcrumb = newPath
 	inst.anim.Start(fromRect)
 
-	if len(inst.navSubs) > 0 {
-		ev := NavEvent{Kind: kind, Trigger: trigger, From: from, To: append([]*layout.Node(nil), newPath...)}
-		inst.dispatching = true
-		for _, sub := range inst.navSubs {
-			if sub != nil {
-				sub(ev)
-			}
-		}
-		inst.dispatching = false
-	}
+	inst.pendingNav = append(inst.pendingNav, NavEvent{Kind: kind, Trigger: trigger, From: from, To: append([]*layout.Node(nil), newPath...)})
 }
 
 // validPath reports whether path begins at t.root and every adjacent pair is

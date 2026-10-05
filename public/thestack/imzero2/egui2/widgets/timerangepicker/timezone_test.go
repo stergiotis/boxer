@@ -1,6 +1,7 @@
 package timerangepicker
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
@@ -79,10 +80,10 @@ func TestIanaNameSystemResolves(t *testing.T) {
 	cat := newTzCatalogue()
 	name, err := cat.ianaName(TzIDSystem)
 	if err != nil {
-		t.Fatalf("ianaName System: %v", err)
+		t.Skipf("host zone has no IANA name: %v", err)
 	}
-	if name == "" {
-		t.Error("System should resolve to a non-empty zone name (time.Local.String())")
+	if name == "" || name == "Local" {
+		t.Errorf("System should resolve to an IANA zone name, got %q", name)
 	}
 }
 
@@ -102,5 +103,34 @@ func TestLocationUnknownIDFails(t *testing.T) {
 	_, err := cat.location(60000)
 	if err == nil {
 		t.Fatal("expected error for unknown TzID, got nil")
+	}
+}
+
+// With TZ unset Go names the host zone "Local", which ClickHouse rejects;
+// System must resolve through /etc/localtime instead.
+func TestResolveSystemZone(t *testing.T) {
+	noLink := func(string) (string, error) { return "", os.ErrNotExist }
+	link := func(target string) func(string) (string, error) {
+		return func(string) (string, error) { return target, nil }
+	}
+	cases := []struct {
+		local    string
+		readlink func(string) (string, error)
+		want     string
+		wantErr  bool
+	}{
+		{"Europe/Berlin", noLink, "Europe/Berlin", false},
+		{"UTC", noLink, "UTC", false},
+		{"/usr/share/zoneinfo/Asia/Tokyo", noLink, "Asia/Tokyo", false},
+		{"Local", link("/usr/share/zoneinfo/Europe/Zurich"), "Europe/Zurich", false},
+		{"Local", link("../usr/share/zoneinfo/America/New_York"), "America/New_York", false},
+		{"Local", noLink, "", true},
+		{"Local", link("/etc/some-copied-file"), "", true},
+	}
+	for _, tc := range cases {
+		got, err := resolveSystemZone(tc.local, tc.readlink)
+		if (err != nil) != tc.wantErr || got != tc.want {
+			t.Errorf("resolveSystemZone(%q): got (%q, %v), want %q (err=%v)", tc.local, got, err, tc.want, tc.wantErr)
+		}
 	}
 }

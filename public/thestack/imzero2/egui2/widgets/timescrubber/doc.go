@@ -3,7 +3,7 @@
 // that shows where in time there is something to look at, and what moving
 // there will cost, before the reader moves.
 //
-//	sc := timescrubber.New(ids, timescrubber.Options{ValueName: "speed", ValueUnit: "m/s"})
+//	sc := timescrubber.New(ids, "speed", timescrubber.Options{ValueName: "speed", ValueUnit: "m/s"})
 //	// every frame:
 //	ev := sc.RenderFillWidth(steps, 960)
 //	layer.SetStepPosition(sc.Transport.Pos)

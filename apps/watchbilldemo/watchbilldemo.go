@@ -56,7 +56,7 @@ type App struct {
 
 	client  *watchbill.Client
 	tasks   task.TaskApiI
-	monitor *taskmonitor.Inst
+	monitor *taskmonitor.Monitor
 
 	// appCtx ends the poller and every verb in flight at Unmount.
 	appCtx    context.Context
@@ -105,7 +105,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.tasks = task.ForApp(ctx)
 	inst.appCtx, inst.cancelApp = context.WithCancel(context.Background())
 
-	inst.monitor = taskmonitor.New(inst.tasks, inst.ids, "tm", taskmonitor.Opts{DefaultOpen: true})
+	inst.monitor = taskmonitor.New(inst.ids, "tm", inst.tasks, taskmonitor.Options{DefaultOpen: true})
 	if startErr := inst.monitor.Start(); startErr != nil {
 		inst.logger.Debug().Err(startErr).Msg("watchbilldemo: task monitor not started")
 	}
@@ -135,7 +135,7 @@ func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	}
 	inst.wg.Wait()
 	if inst.monitor != nil {
-		_ = inst.monitor.Stop()
+		_ = inst.monitor.Close()
 	}
 	return
 }

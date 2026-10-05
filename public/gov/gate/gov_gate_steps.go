@@ -15,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/gov/filenaming"
 	"github.com/stergiotis/boxer/public/gov/pathfilter"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/browserhost/tabhost"
 	"golang.org/x/tools/go/packages"
 )
 
@@ -339,4 +340,61 @@ func moduleOf(dir string) (module string) {
 		}
 	}
 	return ""
+}
+
+// StepTab checks each configured browser-tab binary (ADR-0278 SD7, proposed):
+// it must compile for wasip1, which compiles exactly the apps it links, and
+// its report of the bus subjects those apps declare that no tab service
+// answers is printed. The report never fails the step — an app may degrade
+// by design — but a binary that does not compile does.
+type StepTab struct{}
+
+var _ StepI = (*StepTab)(nil)
+
+func NewStepTab() (inst *StepTab) { return &StepTab{} }
+
+func (inst *StepTab) Name() (s string) { return "tab" }
+
+func (inst *StepTab) Run(ctx context.Context, cfg Config, w io.Writer) (status StatusE, err error) {
+	if len(cfg.TabPackages) == 0 {
+		_, _ = fmt.Fprintln(w, "no tab packages configured (--tab-pkg)")
+		return StatusSkip, nil
+	}
+	root, err := filepath.Abs(cfg.root())
+	if err != nil {
+		return
+	}
+	status = StatusPass
+	for _, p := range cfg.TabPackages {
+		pkg := p
+		if !filepath.IsAbs(pkg) {
+			pkg = filepath.Join(root, pkg)
+		}
+		_, _ = fmt.Fprintf(w, "%s: wasip1 build\n", p)
+		if failing, output, cErr := tabhost.CheckCompiles(pkg); cErr != nil {
+			_, _ = fmt.Fprintf(w, "%s: does not compile for wasip1: %v\n", p, cErr)
+			for _, f := range failing {
+				_, _ = fmt.Fprintf(w, "  fails: %s\n", f)
+			}
+			if len(failing) == 0 {
+				_, _ = fmt.Fprint(w, output)
+			}
+			status = StatusFail
+			continue
+		}
+		rep, rErr := tabhost.ReportOf(pkg)
+		if rErr != nil {
+			_, _ = fmt.Fprintf(w, "%s: no report: %v\n", p, rErr)
+			status = StatusFail
+			continue
+		}
+		_, _ = fmt.Fprintf(w, "%s: %d apps linked, %d declared subjects no tab service answers:\n", p, len(rep.Apps), len(rep.Gaps))
+		for _, g := range rep.Gaps {
+			_, _ = fmt.Fprintf(w, "  %s  %s (%s)\n", g.App, g.Pattern, g.Direction)
+		}
+		for _, g := range rep.Answered {
+			_, _ = fmt.Fprintf(w, "  %s  %s answered in the tab\n", g.App, g.Pattern)
+		}
+	}
+	return
 }

@@ -109,6 +109,9 @@ type Config struct {
 	Module string
 	// Steps restricts the run to these step names. Empty means all of them.
 	Steps []string
+	// TabPackages are the repository's browser-tab binaries (ADR-0278 SD7,
+	// proposed), relative to Root. Empty skips the tab step.
+	TabPackages []string
 }
 
 func (inst Config) root() (s string) {
@@ -241,6 +244,7 @@ func DefaultSteps() (steps []StepI) {
 		NewStepEntryPoints(),
 		NewStepFileNaming(),
 		NewStepCodelint(),
+		NewStepTab(),
 	}
 }
 

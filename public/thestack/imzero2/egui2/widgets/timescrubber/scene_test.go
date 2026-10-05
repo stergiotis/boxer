@@ -28,19 +28,17 @@ type scene struct {
 const sceneW = 1000
 
 func newScene(t *testing.T, steps []Step, opts Options) (s *scene) {
+	const scopeKey = "scene"
 	reset := scenetest.Install()
 	t.Cleanup(reset)
 	ids := c.NewWidgetIdStack()
 	opts.NoKeyboard = true // no key frame, so the handles derive as below
-	if opts.ScopeKey == "" {
-		opts.ScopeKey = "scene"
-	}
 	s = &scene{t: t, sm: c.CurrentApplicationState.StateManager, steps: steps,
 		clock: time.Date(2026, 3, 1, 0, 30, 0, 0, time.UTC)}
-	s.sc = New(ids, opts)
+	s.sc = New(ids, scopeKey, opts)
 	s.sc.now = func() time.Time { return s.clock }
 	s.sc.Transport.Dwell = -1
-	for range c.IdScope(ids.PrepareStr(opts.ScopeKey)) {
+	for range c.IdScope(ids.PrepareStr(scopeKey)) {
 		s.canvas = widgethandle.Make(ids.PrepareStr(canvasKey).Derive())
 		s.area = widgethandle.Make(ids.PrepareStr(areaKey).Derive())
 	}
@@ -220,7 +218,7 @@ func TestACrowdedStripCostsItsWidth(t *testing.T) {
 		for i := range steps {
 			steps[i].Value, steps[i].State = float32(i%17), StepStateE(i%4)
 		}
-		sc := New(c.NewWidgetIdStack(), Options{NoKeyboard: true, ScopeKey: "crowd"})
+		sc := New(c.NewWidgetIdStack(), "crowd", Options{NoKeyboard: true})
 		sm := c.CurrentApplicationState.StateManager
 		sm.ScriptReset()
 		sc.Render(sceneW, steps)

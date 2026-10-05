@@ -11,6 +11,7 @@ import (
 	"lukechampine.com/blake3"
 
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryrunfacts"
 )
 
@@ -124,7 +125,7 @@ func envFingerprint(params map[string]string, signals map[string]string) string 
 // as handed to ExecuteArrowStream, sent the body BuildStatement
 // produced; params/signals are the URL binding. Returns "" only when
 // marshalling fails (structurally impossible for this struct).
-func (inst *Client) composeLogComment(authored string, sent string, params map[string]string, signals map[string]string, opts *ExecOptions) string {
+func (inst *Client) composeLogComment(authored string, sent string, params map[string]string, signals map[string]string, opts *ExecOptions, agent *app.OnBehalfOf) string {
 	runId, appId, instanceKey := inst.stampIdentity()
 	st := queryrunfacts.Stamp{
 		RunId:      runId,
@@ -137,6 +138,12 @@ func (inst *Client) composeLogComment(authored string, sent string, params map[s
 	}
 	if opts != nil {
 		st.Lane = opts.Label
+	}
+	if agent != nil {
+		// The run is an agent task's work (ADR-0277 §SD7): the stamp names
+		// the task and the dispatcher's call, so the captured row joins the
+		// action record without a time window.
+		st.Task, st.TaskEpoch, st.TaskCall = agent.Task, agent.Epoch, agent.Call
 	}
 	return marshalStamp(st)
 }

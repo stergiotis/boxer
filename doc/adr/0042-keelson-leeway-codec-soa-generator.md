@@ -1442,6 +1442,16 @@ entry stands; cross-backend numbers in the 2026-05-22 sweep entry
 remain the canonical reference (re-running them would require
 restoring the deleted backends).
 
+### 2026-09-28 — `SetActiveSections` is a no-op on the arrow RecordBuilder
+
+The M9 section hint skipped `beginSection` for unmarked sections on every
+builder package. On arrow-go's RecordBuilder that left those sections' list
+columns a row short per entity, and `TransferRecords` panicked on unequal
+column lengths. The generator now emits the hint's skip only for shim builder
+packages, where `SetActiveFields` drops the unstarted columns from the wire;
+arrow-backed DMLs keep the method and start every section. The hint's
+measured saving was taken on the shim path and is unaffected.
+
 - [`keelson/vdd/EXPLANATION.md`](../../public/keelson/vdd/EXPLANATION.md) — the schema model and codegen contract this ADR commits to generate against.
 - [ADR-0026 — app runtime + capability subjects](0026-app-runtime-and-capability-subjects.md) — introduced `boxer.facts`.
 - [ADR-0035 — keelson namespace introduction](0035-keelson-namespace-introduction.md) — situates this work under `public/keelson/`.

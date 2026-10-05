@@ -537,21 +537,22 @@ type DetailTimeline struct {
 // NewDetailTimeline builds the driver and its widget. The widget is
 // non-interactive (a read-only overview; the annotation stagger separates
 // colliding flags without a zoom, and a pan/zoom-capturing widget at the top of
-// the Detail pane would fight the pane's own scroll). WithIntervalColors pins
+// the Detail pane would fight the pane's own scroll). Options.IntervalColors pins
 // the lane-bar palette to the qualitative cycle so a range bar matches its
 // legend swatch. The range is pinned per row via SetRange, so the widget's
 // interval-only auto-fit never applies.
 func NewDetailTimeline(ids *c.WidgetIdStack) (inst *DetailTimeline) {
 	inst = &DetailTimeline{ids: ids, seenRow: -1}
-	inst.tl = timeline.New(ids, "play-detail-timeline", nil,
-		timeline.WithInteractive(false),
-		timeline.WithIntervalColors(qualitativePalette()))
+	inst.tl = timeline.New(ids, "play-detail-timeline", nil, timeline.Options{
+		NotInteractive: true,
+		IntervalColors: qualitativePalette(),
+	})
 	return inst
 }
 
 // qualitativePalette is the categorical cycle used for both flags (the
 // widget applies it to Annotation.PaletteIdx internally) and lane bars
-// (via WithIntervalColors + IntervalEvent.KindID), so an attribute's flag,
+// (via Options.IntervalColors + IntervalEvent.KindID), so an attribute's flag,
 // bar, and legend swatch share one hue. Length follows the token cycle
 // (ADR-0156 took it from ten to seven); a row with more temporal
 // attributes than that repeats hues rather than reaching for an entry the

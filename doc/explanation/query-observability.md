@@ -43,7 +43,7 @@ why the requirements outlived them. Restated:
 | R2 | Result batches to the glass as they arrive | 0050 | inline Arrow on the response shipped; incremental rendering open |
 | R3 | Terminal run accounting (profile events, peak memory, exceptions) | 0050 | shipped — the `queryrunsd` pipeline ([ADR-0115](../adr/0115-query-observability-data-plane-strategy.md), plane B) captures every terminal `query_log` event as a KindQueryRun fact: counters and peak memory as typed attributes, ProfileEvents fanned out per counter, exceptions with code and text, identity lifted from the SD7 stamp |
 | R4 | A facts substrate absorbing operational records | 0050 | shipped — `boxer.facts` (ADR-0026 §SD6), recordstore, DimensionStore in flight |
-| R5 | Result archival routed by shape, with provenance to source rows | 0050+0051 | Tier 1 shipped — a pin freezes the batch as-is into a per-pin ClickHouse table with the result's own schema plus a metadata row (content fingerprint, query/run/lane anchors); opening a pin is plain SQL. Ref-tuple lineage and Tier-2 weaving stay open (S6) |
+| R5 | Result archival routed by shape, with provenance to source rows | 0050+0051 | open — the Tier-1 pin was removed 2026-10-02, to be rebuilt over the query result cache (ADR-0115, Update 2026-10-02). Ref-tuple lineage and Tier-2 weaving stay open (S6) |
 | R6 | Auditable query categorization; governed ingestion for data products | 0051 | open — rescoped from gate to affordance (below) |
 | R7 | Machine-consumable export without re-implementing the CH protocol | 0050 | facts + `url()` cover pull; NATS-core forwarding decided as the push leg, built at consumer trigger (plane E) |
 
@@ -145,7 +145,22 @@ Reading the runs back is a leeway-shred pivot, not a flat `SELECT`: the
 projection over the symbol/u64/i64/string sections is machine-generated
 (`queryrunfacts.ComposeHistorySql`) — play's History tab runs it, and its
 "Open as query" / "Profile events as query" affordances hand the exact
-SQL to the editor. Every `QueryRun` fact is selected by one membership
+SQL to the editor. Besides the accounting, a read-back row carries the
+window the query ran from and, when an agent task's call caused the run,
+the task, its epoch and the dispatcher call
+([ADR-0277](../adr/0277-one-audit-trail-for-model-calls-and-agent-work.md)
+§SD7) — so the History tab marks the agent's runs, and
+`queryrunfacts.ComposeHistorySqlFiltered` narrows a read to one task or
+one run. A run with no task was not caused by an agent call; that alone
+does not say a person ran it, since other clients' runs carry no task
+either.
+
+Because the daemon is optional, an empty History tab is ambiguous on its
+own. The tab therefore also reads the capture view's refresh state from
+`system.view_refreshes` (`queryrunfacts.CaptureStatusSql`) and says
+whether the view is absent, whether its last refresh failed (the usual
+cause is that `queryrunsd` is not running, so ClickHouse's pull is
+refused), or when it last succeeded. Every `QueryRun` fact is selected by one membership
 test on the symbol section's label-reference array, so a hand check that
 capture is flowing needs no pivot:
 
@@ -175,12 +190,11 @@ The rows a run produced, identified by content fingerprint (play already
 fingerprints every lane result) and ref-tupled to their run:
 
 - **Tier 0 — ephemeral** (default): the lane memo. Today's behaviour; free.
-- **Tier 1 — pin** (shipped): persist the Arrow batch as-is, any query, no
-  classification required. A pin is a per-pin ClickHouse table carrying the
-  result's own schema (the batch bytes go in verbatim) plus one metadata row
-  in `boxer.resultsets` — so the "resultsets store" is ordinary queryable
-  tables on the user's endpoint, and opening a pin is plain SQL every panel
-  already renders.
+- **Tier 1 — pin** (removed 2026-10-02): play froze a result's Arrow batch
+  into a per-pin table plus a `boxer.resultsets` row. It was taken out of
+  play, to be rebuilt over ClickHouse's own primitives such as the query
+  result cache ([ADR-0115](../adr/0115-query-observability-data-plane-strategy.md),
+  Update 2026-10-02). Tables an earlier build wrote stay on the endpoint.
 - **Tier 2 — weave**: when shape analysis proves the result data-mart-shaped
   or lineage-carrying, rows land as typed leeway rows with ref-tuple lineage
   to source rows. A candidate first cut, to be decided at the S6 ADR: for
@@ -229,8 +243,8 @@ natural delivery vehicle for the interactive case.
 |---|---|---|---|
 | A — live | progress, cancel | in-band progress headers, read live by an incremental-header transport → lane state → status-bar and loading badges (shipped) | none (glass state) |
 | B — record | terminal run + profile + identity | ADR-0115 pipeline (`queryrunsd`) (shipped) | `boxer.facts` |
-| C — weave | results, tiered, lineage | Tier-1 pin affordance + browser (shipped: per-pin tables, `boxer.resultsets` metadata); weave = ref tuples + typed archival, at S6 | per-pin tables + metadata now; typed tables at S6 |
-| D — glass | history, run detail, per-def trends, resultset browser | play panels over plain SQL; "open as query" everywhere (shipped: History runs + detail + drill-downs, pin browser; open: per-definition trends) | reads B+C |
+| C — weave | results, tiered, lineage | weave = ref tuples + typed archival, at S6; Tier-1 pinning removed 2026-10-02 | typed tables at S6 |
+| D — glass | history, run detail, per-def trends | play panels over plain SQL; "open as query" everywhere (shipped: History runs + detail + drill-downs; open: per-definition trends) | reads B+C |
 | E — export | push to external consumers | NATS-core forwarding (ADR-0090 pattern) | at consumer trigger |
 
 ## Slices
@@ -240,7 +254,10 @@ natural delivery vehicle for the interactive case.
    backfills history instead of starting blind).
 2. **S2** — History tab + run-detail panel over facts.
 3. **S3** — progress headers into lane badges (plane A).
-4. **S4** — Tier-1 pin + resultset browser.
+4. **S4** — Tier-1 pin + resultset browser (removed 2026-10-02; to be
+   rebuilt over the query result cache —
+   [ADR-0115](../adr/0115-query-observability-data-plane-strategy.md),
+   Update 2026-10-02).
 5. **S5** — QueryDef/TransformChain/ParamEnv interning (after ADR-0112) +
    per-definition trend view.
 6. **S6** — Tier-2 weave: catalog-aware shape analysis as affordance, typed

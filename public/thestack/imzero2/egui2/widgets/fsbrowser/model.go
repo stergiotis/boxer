@@ -17,6 +17,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/breadcrumbs"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexedit"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/tree"
 )
@@ -185,6 +186,10 @@ type State struct {
 	cache    map[string]*listing
 	cacheKey string
 
+	// the path trail's model, refilled from dir every frame, and its state
+	crumbs      breadcrumbs.Model
+	crumbsState breadcrumbs.State
+
 	// filter, compiled: filterSrc is the trimmed text filterRe was built
 	// from, filterLiteral whether that text failed to compile and matches
 	// as a quoted literal instead (ADR-0164 §SD2's degradation). filterHl
@@ -193,7 +198,7 @@ type State struct {
 	filterSrc     string
 	filterRe      *regexp.Regexp
 	filterLiteral bool
-	filterHl      regexedit.Edit
+	filterHl      regexedit.Cache
 	found         searchT
 	// job runs the filter's search off the render thread (search.go). A
 	// pointer, made in ensure: the runner holds a mutex, and a State is

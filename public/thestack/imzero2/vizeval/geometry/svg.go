@@ -1,5 +1,5 @@
 // Package geometry measures a rendering from the SVG the imzero2 host writes
-// beside a capture (ADR-0257, proposed, §SD6): where text sits, what it
+// beside a capture (ADR-0266, proposed, §SD6): where text sits, what it
 // overlaps, what clips it, how it contrasts with what is painted under it.
 //
 // It reads the exporter's output, not SVG in general. Text is one

@@ -154,6 +154,46 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 
 ## Updates
 
+### 2026-09-26 — Phase 0 run; SD1's topology amended by ADR-0263
+
+The SD2 spike has been run as the [keelson-wasm-frame-cost](../trials/keelson-wasm-frame-cost/README.md)
+trial; its §0 is the citable statement. In short: Go under wasm costs about
+four times native on two machines, `wasip1` is the target (a `GOOS=js`
+host call is an order of magnitude dearer per message), the bridge's cost
+is the flush count rather than the bytes, and a real play frame is about
+180 messages. The acceptance gate holds on the handheld for a gallery-class
+frame with the Rust half compiled to wasm as well. Two consequences landed
+natively: the FFFI2 channel defers its flushes to the next blocking read by
+default, and the interpreter treats an empty reader at a message boundary
+as the end of a step rather than of the session.
+
+[ADR-0263](./0263-imzero2-browser-both-modules-in-one-worker-mesh-to-the-painter.md)
+amends SD1: both modules run in one Web Worker with this ADR's synchronous
+bridge between them, and the worker posts each frame's tessellated mesh to
+the existing viewer page in the ADR-0128 wire, so the egui pass no longer
+wraps the Go frame on the main thread. O3's aim — the Go frame off the
+main thread — is met without the `SharedArrayBuffer` that killed it. SD2
+through SD12 are unchanged in substance.
+
+SD3 landed the same day as pipelining rather than a combined message:
+`StateManager.Sync` issues every fetch of a frame before it reads the
+first reply and collects the replies in the same order, which the
+protocol allowed all along (the requests take no arguments, the peer
+answers in read order). No IDL change, no new opcode; the native hosts
+read the same stream. In the tab the host is stepped once a frame instead
+of 24 times; what that is worth on a loaded handheld the trial's logbook
+records as small (about 0.2 ms in Node, 1 to 2 ms in Chromium).
+
+SD8 and SD9 have a first cut as of 2026-09-27: the four Linux-only corners
+the sweep found (fsbroker's inotify, sealed's O_TMPFILE, the disk
+collector's statfs, the Graphviz engine) sit behind build tags with
+fallbacks, so play and mdedit compile for wasip1; and the data plane is a
+same-origin proxy in front of ClickHouse plus one host import that
+`http.DefaultTransport` is swapped to under wasip1 — the "custom http host
+import" SD2 named. play ran a query in a tab that way. What the tab still
+lacks — live progress, the runtime services, sealed files — is listed in
+the trial's logbook.
+
 ### 2026-09-21 — `wasm2go` surveyed as an O5 mechanism: an AOT translator, not a sandbox
 
 Firefox's library sandboxing uses `wasm2c`, so the Go-native analogue — [`goccy/wasm2go`](https://github.com/goccy/wasm2go) (AOT wasm→Go, MIT) — was examined as an O5 mechanism that would need no cgo. It does not carry the property the option is named for, and the reason is a stated design choice rather than an immaturity: its codegen drops the runtime bounds check. The rationale is written into `internal/codegen/emit_memops.go` under its "Bounds check" heading — the input wasm is taken as already validated and the source language as having enforced its own bounds, so an out-of-range address counts as a bug in the input rather than a trap path. Scalar accesses compile to `unsafe.Add` on the linear-memory base pointer, which is an ordinary Go slice with no guard-page reservation (its SIMD check-coalescing pass states outright that an AOT translation cannot use guard pages). An out-of-range guest address is therefore a Go-heap access. SIMD and bulk-memory ops do keep an explicit compare against the memory size; the scalar path — the overwhelming majority of accesses in the module measured below — does not.

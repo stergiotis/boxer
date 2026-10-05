@@ -45,9 +45,6 @@ type Mark struct {
 
 // Options tunes a [Scrubber]; the zero value is usable.
 type Options struct {
-	// ScopeKey scopes the widget's ids; two scrubbers on one id stack need
-	// different keys. Empty takes "timescrubber".
-	ScopeKey string
 	// Height is the strip's height in logical pixels. Zero takes 104.
 	Height float32
 	// Location is the zone times are shown in. nil takes UTC.
@@ -110,7 +107,6 @@ const (
 	areaKey       = "timescrubber-area"
 	keysKey       = "timescrubber-keys"
 	tickSpacingPx = 96
-	probeSaltSeed = uint64(0x51c7_0be2_94ad_3f16)
 	// loadingAfter is how old a load is before it is drawn as one, so a
 	// quick load does not flicker.
 	loadingAfter = 250 * time.Millisecond
@@ -159,8 +155,8 @@ type Scrubber struct {
 	Marks []Mark
 
 	ids        *c.WidgetIdStack
+	key        string
 	keyFrameID uint64
-	probeSalt  uint64
 	lastFrame  time.Time
 	// now is the frame clock: what a frame's elapsed time and the age of a
 	// load are measured against. Opts.Now is the wall clock and is a
@@ -188,17 +184,17 @@ type Scrubber struct {
 	columns            []column
 }
 
-// New makes a scrubber. ids scopes every id it derives.
-func New(ids *c.WidgetIdStack, opts Options) (inst *Scrubber) {
-	return &Scrubber{Opts: opts, ids: ids, now: time.Now, loadingSince: make(map[int]time.Time)}
+// New makes a scrubber. Every id it derives is scoped under scopeKey on ids,
+// so two scrubbers on one stack differ by scopeKey alone; empty takes
+// "timescrubber".
+func New(ids *c.WidgetIdStack, scopeKey string, opts Options) (inst *Scrubber) {
+	if scopeKey == "" {
+		scopeKey = "timescrubber"
+	}
+	return &Scrubber{Opts: opts, ids: ids, key: scopeKey, now: time.Now, loadingSince: make(map[int]time.Time)}
 }
 
-func (inst *Scrubber) scopeKey() string {
-	if inst.Opts.ScopeKey != "" {
-		return inst.Opts.ScopeKey
-	}
-	return "timescrubber"
-}
+func (inst *Scrubber) scopeKey() string { return inst.key }
 
 // wall is the clock the now line and the offsets from now are read against.
 func (inst *Scrubber) wall() time.Time {
@@ -219,10 +215,13 @@ func (inst *Scrubber) location() *time.Location {
 // the enclosing pane, read back through a size probe one frame behind;
 // fallbackW serves until the probe reports.
 func (inst *Scrubber) RenderFillWidth(steps []Step, fallbackW float32) (ev Events) {
-	if inst.probeSalt == 0 {
-		inst.probeSalt = inst.ids.PrepareHighEntropy(probeSaltSeed).Derive()
+	// The probe's slot is keyed under the strip's own scope (ADR-0267 W7);
+	// the scope is opened for the derivation alone and emits nothing.
+	var w float32
+	var ok bool
+	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey())) {
+		w, _, ok = c.CapturePaneSize(inst.ids.ProbeSeq("pane"))
 	}
-	w, _, ok := c.CapturePaneSize(c.ProbeSeq(inst.scopeKey(), "pane") ^ inst.probeSalt)
 	if !ok || w < 1 {
 		w = fallbackW
 	}

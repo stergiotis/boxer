@@ -98,7 +98,7 @@ scripts/ci/lint.sh
 ```
 
 `gofmt` and `go vet` run first, from the wrapper — they have to work on a tree
-too broken to build the binary the gate lives in. Then five steps from the
+too broken to build the binary the gate lives in. Then six steps from the
 pinned boxer:
 
 ```
@@ -107,7 +107,12 @@ doclint       pass     0.01s
 entry-points  pass     0.11s
 file-naming   pass     0.00s
 codelint      pass     0.11s
+tab           skip     0.00s
 ```
+
+`tab` checks a repository's browser-tab binaries
+([ADR-0278](../adr/0278-tab-mode-for-downstream-apps.md)) and is skipped until
+the gate is given one with `--tab-pkg`.
 
 ## 4. Accept the adoption ADR
 
@@ -120,6 +125,76 @@ $(scripts/boxer-path.sh)/scripts/dev/adr-accept.sh 1
 
 Record anything you do differently in the **Repository-local supplement**
 section of `AGENTS.md`, not by editing a generated file.
+
+## Run your apps in a browser tab
+
+Optional. A keelson app can run in a browser tab as a WebAssembly module beside
+boxer's Rust browser host
+([ADR-0263](../adr/0263-imzero2-browser-both-modules-in-one-worker-mesh-to-the-painter.md)).
+A tab has none of the host's runtime services — file dialogs, the model,
+ad-hoc datasets, the window host — so an app that needs one runs degraded or
+not at all; [imzero2-in-the-browser](imzero2-in-the-browser.md) lists what is
+missing. The pieces are boxer's
+([ADR-0278](../adr/0278-tab-mode-for-downstream-apps.md)); your repository
+carries one `package main`.
+
+1. **Write the tab binary.** It names the apps a tab may open and hands its
+   `cli.App` to `tabhost`, which adds the rest — the reactor, `serve`,
+   `bundle`, `tabreport`. The variable is deliberate: a wasm module built as
+   a reactor runs package initialisation but never `main`.
+
+   ```go
+   // cmd/<name>tab/main.go
+   package main
+
+   import (
+   	"github.com/urfave/cli/v2"
+
+   	"github.com/stergiotis/boxer/public/observability/logging"
+   	"github.com/stergiotis/boxer/public/observability/vcs"
+   	"github.com/stergiotis/boxer/public/thestack/imzero2/browserhost/tabhost"
+
+   	_ "example.com/<module>/apps/<other>"
+   	"example.com/<module>/apps/<app>"
+   )
+
+   var tab = tabhost.New(tabhost.Options{DefaultApp: <app>.ManifestId},
+   	&cli.App{Name: "<name>tab", Version: vcs.BuildVersionInfo(), Before: logging.Apply})
+
+   func main() { tab.Main() }
+   ```
+
+2. **Gate it.** Name it in `scripts/ci/gate-flags.sh`, and the gate's `tab`
+   step builds it for wasip1 and prints what its apps declare that a tab does
+   not serve:
+
+   ```sh
+   GATE_FLAGS+=(--tab-pkg ./cmd/<name>tab)
+   ```
+
+   A failure names the packages that do not compile. Most are dependencies:
+   anything that maps memory, locks files, creates an in-memory file or starts
+   a process. `GOOS=wasip1 GOARCH=wasm go list -deps ./apps/<app>` finds the
+   app that pulls one in; leave that app out of the tab binary. The report is
+   also `go run ./cmd/<name>tab tabreport`; it counts apps your apps link from
+   boxer, such as play.
+
+3. **Bundle and serve it.**
+
+   ```sh
+   go run ./cmd/<name>tab bundle --out dist/tab
+   go run ./cmd/<name>tab serve --dir dist/tab --chURL http://127.0.0.1:8123/
+   ```
+
+   `bundle` builds your module for wasm and fetches the Rust browser host your
+   boxer pin needs from boxer's published copies, checked against the digest
+   the pin records, so no Rust toolchain is needed. Without network access,
+   point `BOXER_TAB_HOST_URL` at a mirror, pass a file with `--host`, or build
+   it with `--hostFrom source` (cargo and the `wasm32-unknown-unknown`
+   target). `serve` hands out the page, worker and shim from the binary;
+   `bundle --withAssets` writes them into the directory for any other static
+   host. Open
+   `http://127.0.0.1:8765/index.html?worker=worker.mjs%3Fapp%3D<url-encoded app id>`.
 
 ## Local steps
 

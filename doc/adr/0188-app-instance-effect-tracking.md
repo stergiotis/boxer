@@ -418,6 +418,17 @@ takes up two items from *Deferred*:
 `adhocdata.Follower`, and a play window opened with dataset aliases in its
 launch config runs it too.
 
+### 2026-09-29 — fs handle grants go to the requesting window
+
+The fs broker no longer grants a dialog's handle cap to the newest client
+of the app. `inprocbus.Inst.ClientByInstance` looks a client up by app id
+and instance key; the broker records the requesting window's key
+(`app.Msg.SenderInstance`) with the dialog, grants to that client at
+`Resolve`, and revokes from it at close. A non-zero key that matches no
+live client grants nothing rather than falling through to another window;
+key 0 keeps the newest-client answer. The cap broker's grants stay
+addressed to an app id, as the *Neutral* consequence above records.
+
 ## References
 
 - [spatiotemporal-composability-lessons](../explanation/spatiotemporal-composability-lessons.md)

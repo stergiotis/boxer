@@ -16,17 +16,18 @@ ClickHouse — one day by default, or several (see [Loading more](#loading-more)
 reaching a remote instance at render time.
 
 It is the local, offline counterpart to ClickHouse's
-[`adsb.exposed`](https://github.com/ClickHouse/adsb.exposed) demo, whose
-in-DB tile-rendering technique the Map panel generalizes. The schema
-(`setup.sql`) is adopted from that project; the data is pulled once from its
-public instance.
+`adsb.exposed` demo, whose in-DB tile-rendering technique — as its
+[announcement post](https://clickhouse.com/blog/interactive-visualization-analytics-adsb-flight-data-with-clickhouse) describes it — the Map panel generalizes. The schema
+(`setup.sql`) follows the one published in that post; the data is pulled once
+from its public instance.
 
 ## What it does
 
 `demo.sh` runs two statements against a local `clickhouse-server`:
 
 1. `setup.sql` — creates `planes_mercator` (+ the `sample10`/`sample100` tables
-   and their materialized views), adopted from the upstream schema. `mercator_x`
+   and their materialized views), following the schema published in the
+   announcement post. `mercator_x`
    / `mercator_y` are `MATERIALIZED` from lat/lon with the same formulas
    `play_map.go` mirrors in Go (ADR-0096 §SD4). Their world span is the one
    deliberate deviation from upstream: 2^32 (ClickHouse's own full-`UInt32`

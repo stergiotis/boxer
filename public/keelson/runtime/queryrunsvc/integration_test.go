@@ -4,6 +4,7 @@ package queryrunsvc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,12 +13,21 @@ import (
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow/ipc"
+	"github.com/fxamacker/cbor/v2"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryrunfacts"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
+	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/constructsql"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 )
 
 // scratchDb isolates the pipeline objects; dropped at test end. The
@@ -122,6 +132,10 @@ func TestLivePipelineEndToEnd(t *testing.T) {
 
 	profSql, err := queryrunfacts.ComposeProfileEventsSql(scratchDb+".facts", probeRow.Id)
 	require.NoError(t, err)
+	// The drill-down comes back authored (handles and LW_ calls) for play's
+	// editor to expand; the server has never heard of either, so expand it
+	// here the way play's pipeline does before posting.
+	profSql = expandAuthored(t, profSql, scratchDb+".facts")
 	profRaw := queryRaw(t, cli, profSql+" FORMAT TabSeparated")
 	require.NotEmpty(t, strings.TrimSpace(profRaw), "even SELECT 42 carries ProfileEvents counters")
 	for line := range strings.SplitSeq(strings.TrimSpace(profRaw), "\n") {
@@ -188,7 +202,53 @@ func TestLiveReconcileRefusesDriftedDestination(t *testing.T) {
 	err = svc.Start(ctx)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "older schema generation")
-	require.Contains(t, err.Error(), db+".facts")
+	// The table travels as an eb field, not in the message (house style keeps
+	// the message bare), so the assertion reads the structured payload.
+	require.Equal(t, db+".facts", errorField(t, err, "destination"),
+		"the refusal must name the table it refused")
+}
+
+// errorField returns the first value the error chain carries under key in an
+// eb-built structured payload, decoding with an independent CBOR library.
+func errorField(t *testing.T, err error, key string) any {
+	t.Helper()
+	for e := err; e != nil; e = errors.Unwrap(e) {
+		esd, ok := e.(eh.ErrorWithStructuredDataI)
+		if !ok || len(esd.GetCBORStructuredData()) == 0 {
+			continue
+		}
+		var v map[any]any
+		require.NoError(t, cbor.Unmarshal(esd.GetCBORStructuredData(), &v))
+		if val, present := v[key]; present {
+			return val
+		}
+	}
+	require.Failf(t, "field missing", "no %q field in the error chain of %v", key, err)
+	return nil
+}
+
+// expandAuthored rewrites an authored readback query into the one that
+// executes: column handles against the generated facts schema, then the LW_
+// extraction calls against the membership lookup play binds.
+func expandAuthored(t *testing.T, sql string, table string) string {
+	t.Helper()
+	database, _, _ := strings.Cut(table, ".")
+	fields := dml.CreateSchemaFacts().Fields()
+	names := make([]string, 0, len(fields))
+	for i := range fields {
+		names = append(names, fields[i].Name)
+	}
+	resolver := lwsql.NewResolver(passes.NewStaticSchemaProvider(map[string][]string{table: names}))
+	for _, pass := range []nanopass.Pass{
+		passes.ResolveColumnNames(resolver, database, nil),
+		constructsql.ExtractExpandPassWithIds(resolver, providers.MembershipLookup{}, database),
+	} {
+		var err error
+		sql, err = pass.Apply(env.NewEnvironment(), sql)
+		require.NoError(t, err, "pass %s", pass.Name)
+	}
+	require.False(t, constructsql.HasExtractMarker(sql))
+	return sql
 }
 
 // runTaggedQuery issues SELECT 42 under the given query_id (the natural

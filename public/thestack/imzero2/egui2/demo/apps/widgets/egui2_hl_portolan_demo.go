@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strings"
 	"sync"
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/httpegress"
 	"github.com/stergiotis/boxer/public/science/geo/h3"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
@@ -110,6 +113,64 @@ var demoTileServers = []demoTileServer{
 		attribution: "© OpenStreetMap contributors, SRTM, © OpenTopoMap (CC-BY-SA)", maxZoom: 17},
 }
 
+// galleryTilesDestination is the egress destination for the switch's
+// alternative servers (ADR-0262 §SD2): the gallery's own, beside the
+// registry's basemap, so an app that declares only "basemap" cannot reach
+// them.
+const galleryTilesDestination = "gallery-tiles"
+
+func init() {
+	httpegress.Register(httpegress.DestinationSpec{
+		Name:        galleryTilesDestination,
+		Description: "the widget gallery's alternative tile servers (CARTO, OpenTopoMap) for the portolan demo's tile-server switch",
+		Resolve: func() (d httpegress.Destination, err error) {
+			d.Prefixes, err = galleryTilePrefixes()
+			d.UserAgent = "boxer-portolan/0.1 (+https://github.com/stergiotis/boxer)"
+			return
+		},
+	})
+}
+
+func galleryTilePrefixes() (prefixes []string, err error) {
+	for _, ts := range demoTileServers {
+		if ts.url == "" {
+			continue
+		}
+		ps, perr := httpegress.TilePrefixes(ts.url, ts.source().Subdomains)
+		if perr != nil {
+			return nil, perr
+		}
+		prefixes = append(prefixes, ps...)
+	}
+	return
+}
+
+// demoTiles routes a tile to the destination that covers it: the gallery's
+// own servers to galleryTilesDestination, everything else to the basemap.
+type demoTiles struct {
+	basemap  *basemap.Tiles
+	gallery  httpegress.Getter
+	prefixes []string
+}
+
+func newDemoTiles(bus runtimeapp.BusI) (inst *demoTiles) {
+	inst = &demoTiles{basemap: basemap.NewTiles(bus, "gallery: portolan demo")}
+	if bus != nil {
+		inst.gallery = httpegress.Getter{Client: httpegress.NewClient(bus), Destination: galleryTilesDestination, Purpose: "gallery: portolan demo"}
+	}
+	inst.prefixes, _ = galleryTilePrefixes()
+	return
+}
+
+func (inst *demoTiles) Get(ctx context.Context, url string) (data []byte, err error) {
+	for _, p := range inst.prefixes {
+		if strings.HasPrefix(url, p) && inst.gallery.Client != nil {
+			return inst.gallery.Get(ctx, url)
+		}
+	}
+	return inst.basemap.Get(ctx, url)
+}
+
 func (ts demoTileServer) source() portolan.TileSource {
 	if ts.url == "" {
 		return basemap.PortolanSource()
@@ -161,11 +222,11 @@ type demoHeatmap struct {
 	fills    []color.Color
 }
 
-func newPortolanDemoState(ids *c.WidgetIdStack) *portolanDemoState {
+func newPortolanDemoState(ids *c.WidgetIdStack, bus runtimeapp.BusI) *portolanDemoState {
 	return &portolanDemoState{
-		m: portolan.New(ids, portolan.Options{
+		m: portolan.New(ids, "portolan-demo", portolan.Options{
 			Source: basemap.PortolanSource(),
-			Loader: basemap.PortolanLoader(),
+			Loader: portolan.LoaderOptions{Fetcher: newDemoTiles(bus)},
 			Center: portolan.LL(demoMapCenterLat, demoMapCenterLon),
 			Zoom:   12,
 		}),
@@ -356,13 +417,11 @@ func (st *portolanDemoState) choropleth(ids *c.WidgetIdStack) {
 		c.Label("(h3 runtime not ready)").Send()
 		return
 	}
-	for range c.IdScope(ids.PrepareStr("choropleth-map")) {
-		if st.choro == nil {
-			st.choro = portolan.New(ids, portolan.Options{
-				NoTiles: true, HideAttribution: true,
-				Center: portolan.LL(demoMapCenterLat, demoMapCenterLon), Zoom: 11,
-			})
-		}
+	if st.choro == nil {
+		st.choro = portolan.New(ids, "choropleth", portolan.Options{
+			NoTiles: true, HideAttribution: true,
+			Center: portolan.LL(demoMapCenterLat, demoMapCenterLon), Zoom: 11,
+		})
 		n := len(cells)
 		fills := make([]color.Color, n)
 		for i := range n {
@@ -480,7 +539,7 @@ func demoMapRaster(ids *c.WidgetIdStack, st *rasterDemoState) {
 	c.SliderF64(ids.PrepareStr("mapraster-opacity"), st.opacity, 0.1, 1.0).Text("opacity").SendRespVal(&st.opacity)
 	c.Label("Synthetic raster pinned to a bbox: red band = north, green band = west.").Send()
 	if st.m == nil {
-		st.m = portolan.New(ids, portolan.Options{
+		st.m = portolan.New(ids, "mapraster", portolan.Options{
 			NoTiles: true, HideAttribution: true,
 			Center: portolan.LL(rasterDemoCenterLat, rasterDemoCenterLon), Zoom: 12,
 		})

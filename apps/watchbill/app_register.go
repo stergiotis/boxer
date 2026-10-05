@@ -21,7 +21,7 @@ var manifest = app.Manifest{
 	Version:  "0.1.0",
 	Display:  "Watchbill",
 	Title:    "Watchbill",
-	Summary:  "Inspect, cancel and retry durable jobs, read their trail, see who serves them",
+	Summary:  "Inspect, cancel and retry durable jobs, and see their trail and workers",
 	Icon:     icons.PhClipboard,
 	Topics:   []app.TopicT{app.TopicRuntime},
 	Keywords: []string{"watchbill", "job", "queue", "durable", "worker", "retry", "cancel", "river"},
@@ -31,6 +31,7 @@ var manifest = app.Manifest{
 		PreferredHeight: 800,
 	},
 	LaunchKind: launchcfg.Kind,
+	Operations: ops.Catalog(),
 	// The split between the list and the detail, kept across the process
 	// (watchbill_split.go); the host injects the persist cap for it.
 	PersistedKeys: []string{splitKey},

@@ -125,6 +125,13 @@ struct Entry {
     /// updates so the SVG-export cache can hand the visitor a complete
     /// 2D image even though the GPU side only sees one-column patches.
     rgba: Vec<u8>,
+    /// Columns landed in `rgba` since it was last copied into the export
+    /// cache. The copy is W×H×4 bytes, so it waits for
+    /// [`ScrollingTextureCache::sync_export_mirror`] instead of running on
+    /// every push.
+    mirror_stale: bool,
+    /// Magnification filter of the latest push, carried into the mirror.
+    nearest: bool,
 }
 
 #[derive(Default)]
@@ -132,6 +139,11 @@ pub struct ScrollingTextureCache {
     entries: HashMap<u64, Entry>,
     frame: u64,
     texture_cache: Option<crate::imzero2::svgexport::TexturePixelCacheHandle>,
+    /// Set while a capture replay runs (ADR-0281 §SD5): nothing is uploaded
+    /// into the capture context and no live entry changes; a texture the
+    /// live context does not hold is not drawn, and counted here.
+    pub read_only: bool,
+    pub refused_uploads: u64,
 }
 
 impl ScrollingTextureCache {
@@ -159,8 +171,38 @@ impl ScrollingTextureCache {
     pub fn tick(&mut self) {
         self.frame = self.frame.wrapping_add(1);
         let frame = self.frame;
-        self.entries
-            .retain(|_, e| frame.saturating_sub(e.last_touched_frame) < Self::MAX_AGE_FRAMES);
+        let cache = self.texture_cache.as_ref();
+        self.entries.retain(|_, e| {
+            let keep = frame.saturating_sub(e.last_touched_frame) < Self::MAX_AGE_FRAMES;
+            if !keep && let Some(cache) = cache {
+                // The evicted texture's id is never drawn again; its pixel
+                // mirror would otherwise stay in the export cache for good.
+                cache.lock().expect("texture cache poisoned").remove(e.tex.id());
+            }
+            keep
+        });
+    }
+
+    /// Copy every ring whose columns moved since the last copy into the
+    /// SVG-export cache. The interpreter calls this at the end of a frame
+    /// that has an export pending, so the export plugin, which runs at the
+    /// end of that pass, reads current pixels while frames without an export
+    /// skip the full-texture copy.
+    pub fn sync_export_mirror(&mut self) {
+        let Some(cache) = &self.texture_cache else {
+            return;
+        };
+        let mut cache = cache.lock().expect("texture cache poisoned");
+        for entry in self.entries.values_mut().filter(|e| e.mirror_stale) {
+            cache.insert(
+                entry.tex.id(),
+                entry.width_slots,
+                entry.height_slots,
+                entry.rgba.clone(),
+                entry.nearest,
+            );
+            entry.mirror_stale = false;
+        }
     }
 
     /// Drop the cache entry (and its GPU texture) for `id`. Invoked from the
@@ -208,7 +250,8 @@ impl ScrollingTextureCache {
                     nearest,
                 );
             }
-            self.entries.insert(
+            let new_tex_id = tex.id();
+            let replaced = self.entries.insert(
                 id,
                 Entry {
                     tex,
@@ -216,8 +259,18 @@ impl ScrollingTextureCache {
                     height_slots,
                     last_touched_frame: self.frame,
                     rgba,
+                    mirror_stale: false,
+                    nearest,
                 },
             );
+            // A reshape allocates a fresh TextureId; the old one's mirror
+            // would otherwise stay in the export cache for good.
+            if let Some(old) = replaced
+                && old.tex.id() != new_tex_id
+                && let Some(cache) = &self.texture_cache
+            {
+                cache.lock().expect("texture cache poisoned").remove(old.tex.id());
+            }
         }
         needs_new
     }
@@ -252,6 +305,21 @@ impl ScrollingTextureCache {
         if width_slots == 0 || height_slots == 0 {
             return ScrollingTextureResponse::none();
         }
+        // egui only `debug_assert!`s `max_texture_side`, and wgpu's default
+        // error handler panics on the oversized `create_texture`, so a ring the
+        // app sized past the limit (a long waterfall history) is refused here.
+        // The bound also caps the CPU mirror at max² × 4 bytes.
+        let max_side = ctx.input(|i| i.max_texture_side);
+        if width_slots as usize > max_side || height_slots as usize > max_side {
+            tracing::warn!(
+                id = id,
+                width_slots = width_slots,
+                height_slots = height_slots,
+                max_texture_side = max_side,
+                "scrollingTexture: ring exceeds max_texture_side; not drawn"
+            );
+            return ScrollingTextureResponse::none();
+        }
 
         let filter_opts = filter_to_options(filter);
         let expected_len = (new_count as usize).saturating_mul(height_slots as usize);
@@ -267,11 +335,30 @@ impl ScrollingTextureCache {
             );
         }
 
-        let fresh_texture = self.ensure_entry(ctx, id, width_slots, height_slots, filter_opts);
+        let read_only = self.read_only;
+        let fresh_texture = if read_only {
+            // A capture replay draws the ring as the live frame left it: the
+            // columns were pushed then, and pushing them again would write
+            // into the live texture.
+            let held = self
+                .entries
+                .get(&id)
+                .is_some_and(|e| e.width_slots == width_slots && e.height_slots == height_slots);
+            if !held {
+                self.refused_uploads += 1;
+                return ScrollingTextureResponse::none();
+            }
+            false
+        } else {
+            self.ensure_entry(ctx, id, width_slots, height_slots, filter_opts)
+        };
+        let frame = self.frame;
         let entry = self.entries.get_mut(&id).expect("entry just ensured above");
-        entry.last_touched_frame = self.frame;
+        if !read_only {
+            entry.last_touched_frame = frame;
+        }
 
-        if payload_valid && new_count > 0 {
+        if !read_only && payload_valid && new_count > 0 {
             let h = height_slots as usize;
             let w = width_slots as usize;
             for i in 0..(new_count as usize) {
@@ -297,16 +384,8 @@ impl ScrollingTextureCache {
                     entry.rgba[dst + 3] = (v & 0xff) as u8;
                 }
             }
-            if let Some(cache) = &self.texture_cache {
-                let nearest = filter_opts.magnification == egui::TextureFilter::Nearest;
-                cache.lock().expect("texture cache poisoned").insert(
-                    entry.tex.id(),
-                    entry.width_slots,
-                    entry.height_slots,
-                    entry.rgba.clone(),
-                    nearest,
-                );
-            }
+            entry.mirror_stale = true;
+            entry.nearest = filter_opts.magnification == egui::TextureFilter::Nearest;
         }
 
         let tex_id = entry.tex.id();
@@ -614,5 +693,112 @@ impl ScrollingTextureCache {
             hover_x,
             hover_y,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::imzero2::svgexport::{TexturePixelCache, TexturePixelCacheHandle};
+    use std::sync::{Arc, Mutex};
+
+    fn cache_with_mirror() -> (ScrollingTextureCache, TexturePixelCacheHandle) {
+        let mirror: TexturePixelCacheHandle = Arc::new(Mutex::new(TexturePixelCache::default()));
+        let mut c = ScrollingTextureCache::new();
+        c.attach_texture_cache(mirror.clone());
+        (c, mirror)
+    }
+
+    fn tex_id(c: &ScrollingTextureCache, id: u64) -> TextureId {
+        c.entries[&id].tex.id()
+    }
+
+    #[test]
+    fn reshape_drops_the_replaced_mirror_entry() {
+        let ctx = Context::default();
+        let (mut c, mirror) = cache_with_mirror();
+        assert!(c.ensure_entry(&ctx, 5, 4, 2, TextureOptions::NEAREST));
+        let first = tex_id(&c, 5);
+        assert!(c.ensure_entry(&ctx, 5, 8, 2, TextureOptions::NEAREST));
+        let second = tex_id(&c, 5);
+        let m = mirror.lock().unwrap();
+        assert!(
+            m.get(first).is_none(),
+            "the replaced texture's pixels must leave the mirror"
+        );
+        assert!(m.get(second).is_some());
+    }
+
+    #[test]
+    fn oversized_ring_is_refused_not_allocated() {
+        let ctx = Context::default();
+        let max = ctx.input(|i| i.max_texture_side) as u32;
+        let mut c = ScrollingTextureCache::new();
+        let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let r = c.push_and_draw(
+                ui,
+                &ctx,
+                2,
+                max + 1,
+                1,
+                ORIENTATION_SCROLL_LEFT,
+                FILTER_NEAREST,
+                0,
+                0,
+                &[],
+                0.0,
+                0.0,
+            );
+            assert!(!r.fresh_texture);
+        });
+        assert!(c.entries.is_empty());
+    }
+
+    #[test]
+    fn pushes_reach_the_mirror_only_on_sync() {
+        let ctx = Context::default();
+        let (mut c, mirror) = cache_with_mirror();
+        let column = [0x1122_33ffu32, 0x4455_66ffu32];
+        let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+            c.push_and_draw(
+                ui,
+                &ctx,
+                4,
+                3,
+                2,
+                ORIENTATION_SCROLL_LEFT,
+                FILTER_LINEAR,
+                1,
+                1,
+                &column,
+                0.0,
+                0.0,
+            );
+        });
+        let tex = tex_id(&c, 4);
+        let at = |m: &TexturePixelCache| m.get(tex).map(|t| (t.rgba[4..8].to_vec(), t.nearest));
+        assert_eq!(
+            at(&mirror.lock().unwrap()),
+            Some((vec![0, 0, 0, 0], false)),
+            "a push without an export pending leaves the seeded mirror alone"
+        );
+        c.sync_export_mirror();
+        assert_eq!(
+            at(&mirror.lock().unwrap()),
+            Some((vec![0x11, 0x22, 0x33, 0xff], false))
+        );
+    }
+
+    #[test]
+    fn idle_eviction_drops_the_mirror_entry() {
+        let ctx = Context::default();
+        let (mut c, mirror) = cache_with_mirror();
+        c.ensure_entry(&ctx, 9, 4, 2, TextureOptions::NEAREST);
+        let tex = tex_id(&c, 9);
+        for _ in 0..ScrollingTextureCache::MAX_AGE_FRAMES {
+            c.tick();
+        }
+        assert!(c.entries.is_empty());
+        assert!(mirror.lock().unwrap().get(tex).is_none());
     }
 }

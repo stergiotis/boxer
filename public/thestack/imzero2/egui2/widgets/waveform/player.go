@@ -73,9 +73,6 @@ func DefaultVisuals() (vis Visuals) {
 // Options configure a [Player]. The zero value is a usable player: split
 // channels, continuous columns, auto-scroll on, keyboard on.
 type Options struct {
-	// ScopeKey names the id scope the player's widgets derive from; two
-	// players under one id stack need different keys. Empty is "waveform".
-	ScopeKey string
 	// OverlayChannels draws every channel over the same band instead of one
 	// band per channel.
 	OverlayChannels bool
@@ -106,10 +103,11 @@ type Options struct {
 // Player draws one track and owns the view over it. Construct with [New],
 // draw with [Player.Render] every frame from the frame goroutine.
 type Player struct {
-	ids  *c.WidgetIdStack
-	tr   *track.Track
-	opts Options
-	vis  Visuals
+	ids      *c.WidgetIdStack
+	scopeKey string
+	tr       *track.Track
+	opts     Options
+	vis      Visuals
 
 	view     View
 	viewInit bool
@@ -117,7 +115,6 @@ type Player struct {
 	height   float32
 
 	keyFrameID uint64
-	probeSalt  uint64
 
 	dragging      bool
 	dragOriginX   float32
@@ -180,8 +177,6 @@ const (
 	areaKey   = "waveform-area"
 	keysKey   = "waveform-keys"
 
-	probeSaltSeed uint64 = 0x7a8e_5b1c_0a44_d9f3
-
 	rulerGap        float32 = 2
 	playheadCaretW  float32 = 10
 	playheadCaretH  float32 = 6
@@ -205,9 +200,9 @@ var keyMask = keycodes.MaskOf(keycodes.Space, keycodes.ArrowLeft, keycodes.Arrow
 
 // New makes a player over tr. ids scopes every id the player derives; the
 // player does not take ownership of the track.
-func New(ids *c.WidgetIdStack, tr *track.Track, opts Options) (inst *Player) {
-	if opts.ScopeKey == "" {
-		opts.ScopeKey = "waveform"
+func New(ids *c.WidgetIdStack, scopeKey string, tr *track.Track, opts Options) (inst *Player) {
+	if scopeKey == "" {
+		scopeKey = "waveform"
 	}
 	if opts.SeekStep <= 0 {
 		opts.SeekStep = defaultSeekStep
@@ -216,7 +211,7 @@ func New(ids *c.WidgetIdStack, tr *track.Track, opts Options) (inst *Player) {
 	if opts.Visuals != nil {
 		vis = *opts.Visuals
 	}
-	return &Player{ids: ids, tr: tr, opts: opts, vis: vis}
+	return &Player{ids: ids, scopeKey: scopeKey, tr: tr, opts: opts, vis: vis}
 }
 
 // Track returns the track the player draws.
@@ -236,7 +231,6 @@ func (inst *Player) SetLayers(l *Layers) { inst.layers = l }
 func (inst *Player) Layers() (l *Layers) { return inst.layers }
 
 // Events reports what the pointer did to the layers during the last frame.
-func (inst *Player) Events() (ev Events) { return inst.events }
 
 // SetReadout selects how frames are printed on the ruler and by
 // [Player.FormatOffset] (SD9).
@@ -315,8 +309,9 @@ func (inst *Player) FormatOffset(frame int64) (s string) {
 
 // Render draws the player into a canvas of w×h logical pixels at the current
 // position of the enclosing Ui.
-func (inst *Player) Render(w, h float32) {
-	for range c.IdScope(inst.ids.PrepareStr(inst.opts.ScopeKey)) {
+func (inst *Player) Render(w, h float32) (ev Events) {
+	defer func() { ev = inst.events }()
+	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
 		if inst.opts.NoKeyboard {
 			inst.keyFrameID = 0
 			inst.frame(w, h)
@@ -328,34 +323,38 @@ func (inst *Player) Render(w, h float32) {
 			inst.frame(w, h)
 		}
 	}
+	return
 }
 
 // RenderFillWidth draws the player h pixels tall across the width of the
 // enclosing pane, read back through a size probe (one frame behind); the
 // fallback width is used until the probe reports.
-func (inst *Player) RenderFillWidth(h float32, fallbackW float32) {
-	w, _, ok := c.CapturePaneSize(inst.probeSeq("waveform-pane"))
+func (inst *Player) RenderFillWidth(h float32, fallbackW float32) (ev Events) {
+	w, _, ok := inst.paneSize()
 	if !ok || w < 1 {
 		w = fallbackW
 	}
-	inst.Render(w, h)
+	return inst.Render(w, h)
 }
 
 // RenderFill draws the player across the whole enclosing pane, with the
 // fallback size until the probe reports.
-func (inst *Player) RenderFill(fallbackW, fallbackH float32) {
-	w, h, ok := c.CapturePaneSize(inst.probeSeq("waveform-pane"))
+func (inst *Player) RenderFill(fallbackW, fallbackH float32) (ev Events) {
+	w, h, ok := inst.paneSize()
 	if !ok || w < 1 || h < 1 {
 		w, h = fallbackW, fallbackH
 	}
-	inst.Render(w, h)
+	return inst.Render(w, h)
 }
 
-func (inst *Player) probeSeq(role string) (seq uint64) {
-	if inst.probeSalt == 0 {
-		inst.probeSalt = inst.ids.PrepareHighEntropy(probeSaltSeed).Derive()
+// paneSize arms the pane probe under the player's own scope (ADR-0267 W7)
+// and returns what it reported last frame; the scope is opened for the
+// derivation alone and emits nothing.
+func (inst *Player) paneSize() (w, h float32, ok bool) {
+	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
+		w, h, ok = c.CapturePaneSize(inst.ids.ProbeSeq("pane"))
 	}
-	return c.ProbeSeq(inst.opts.ScopeKey, role) ^ inst.probeSalt
+	return
 }
 
 func (inst *Player) frame(w, h float32) {

@@ -81,10 +81,10 @@ func newComponentViewState(ids *c.WidgetIdStack) (st *componentViewDemoState) {
 		return
 	}
 	st.cvDriver = driver
-	st.emitter = leewaywidgets.NewTable2CardEmitter(ids, leewaywidgets.ColorPaletteViridis, nil)
+	st.emitter = leewaywidgets.NewTable2CardEmitter(ids, "card", leewaywidgets.ColorPaletteViridis, nil)
 	// Page size 1: each page is exactly one drone, so the pager selects the
 	// single record whose report is shown.
-	st.pager = pager.New(c.NewWidgetIdStack(), 1).WithUnit("drones").WithPageSizeCombo(false)
+	st.pager = pager.New(c.NewWidgetIdStack(), "pager", pager.Options{PageSize: 1, Unit: "drones", HideSizeCombo: true})
 	st.pager.Configure(int64(len(st.comps)))
 	st.ready = true
 	return
@@ -129,14 +129,13 @@ func renderComponentViewDemo(ids *c.WidgetIdStack, st *componentViewDemoState) {
 		rt.Strong().Size(15)
 	}
 
-	disp := componentview.NewDispatcher(componentViewReg)
-	disp.ShowAbsent = true
-	disp.DefaultOpen = true
-
 	for rt := range c.RichTextLabel("typed per-component report") {
 		rt.Weak().Small()
 	}
-	disp.RenderReport(ids, st.comps[active])
+	componentview.Render(componentview.Input{
+		Ids: ids, ScopeKey: "report", Registry: componentViewReg, Components: st.comps[active],
+		ShowAbsent: true, DefaultOpen: true,
+	})
 
 	c.Separator().Horizontal().Send()
 	for rt := range c.RichTextLabel("generic · Table2CardEmitter — every attribute") {

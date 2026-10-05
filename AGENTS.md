@@ -42,6 +42,7 @@ the linked document wins.
 | Ingest a markdown vault and query its graph, tags and properties | [doc/howto/markdown-facts-obsidian-queries.md](./doc/howto/markdown-facts-obsidian-queries.md) |
 | Draw a graph over a slippy map | [doc/howto/graph-on-a-map.md](./doc/howto/graph-on-a-map.md) |
 | Draw a gridded vector field (wind, currents) on a map | [doc/howto/vector-field-on-a-map.md](./doc/howto/vector-field-on-a-map.md) |
+| Run an app in a browser tab — build the bundle, serve it, what the tab lacks | [doc/howto/imzero2-in-the-browser.md](./doc/howto/imzero2-in-the-browser.md) |
 | Drive a running app, or write a headless scene that asserts and captures | [doc/skills/imzero2-drive/SKILL.md](./doc/skills/imzero2-drive/SKILL.md) |
 | Score renderings of a leeway batch — geometry metrics per candidate sink | [doc/howto/vizeval-score-renderings.md](./doc/howto/vizeval-score-renderings.md) |
 | Diagnose janky / laggy rendering | [doc/howto/imzero2-render-troubleshooting.md](./doc/howto/imzero2-render-troubleshooting.md) |
@@ -227,7 +228,18 @@ need:
   hand-edit generated dispatch code (`interpreter.rs` is hybrid — only the marked
   region regenerates). Multi-child Go widgets must scope their id stack
   (`c.IdScope(...)`); a mismatched id stack compiles and vets clean but panics at
-  render.
+  render. A Go widget under `widgets/` is one of three shapes — fluid,
+  immediate-mode, semi-retained — with one contract each
+  ([ADR-0267](./doc/adr/0267-imzero2-go-widget-api-contract-immediate-and-semi-retained.md),
+  written out in the imzero2 skill §21); `widgets/conformance` checks the
+  mechanical rules over every package, with an empty allowlist.
+- **Browser host digest** — any change under `rust/imzero2/` (or a bindings
+  regeneration) changes the browser tab's Rust host, whose SHA-256 is recorded
+  in `tabhost/browserhost.sum` and checked by the `tab-host` workflow on push.
+  In the commit that changes it, refresh the file:
+  `go run ./public/thestack/cmd/imzero2tab hostdigest --write`. Compute it from
+  the commit being pushed — another session's Rust change in between makes it
+  stale again ([ADR-0278](./doc/adr/0278-tab-mode-for-downstream-apps.md) SD5).
 - **nanopass / dsl** — the SQL pipeline. Fix downstream passes for the canonical
   (function-call) form; if a shape isn't canonicalised, fix the canonicalize
   pass, not the consumer.

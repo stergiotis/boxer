@@ -1,5 +1,3 @@
-//go:build linux && gpu_rocm
-
 // Package rocm samples AMD GPU state via the kernel's amdgpu sysfs
 // surface. Each [Sample] reads the per-card scalars and emits one
 // [Device] per detected AMD GPU. The collector is stateless — every
@@ -12,6 +10,10 @@
 // Per [ADR-0019] SD8 the default `./tags` does not include it; consumers
 // who want AMD GPU support add the tag (or pass it explicitly via
 // `go build -tags="$(cat tags | tr -d $'\n'),gpu_rocm"`).
+//
+// This file carries no constraint, so without the tag the package is empty
+// rather than excluded: a package-list run of vet, staticcheck or
+// govulncheck that names it then still analyses everything else.
 //
 // # Strategy: pure sysfs first
 //

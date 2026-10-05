@@ -1,8 +1,6 @@
 package treemap
 
 import (
-	"hash/fnv"
-
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
@@ -71,19 +69,24 @@ type labelMetrics struct {
 	idValueW, idValueH uint64
 }
 
-// init seeds the metrics analytically and derives the measurement ids.
-// scopeKey is the owning Treemap's instance key, so concurrent instances
-// keep distinct databinding slots.
-func (m *labelMetrics) init(scopeKey string, d styletokens.DensityE) {
+// init seeds the metrics analytically. The measurement ids come from bindIds,
+// at render time, under the owning Treemap's scope.
+func (m *labelMetrics) init(d styletokens.DensityE) {
 	m.nameFontPt = styletokens.ScaledPt(styletokens.BodyPt, d)
 	m.valueFontPt = styletokens.ScaledPt(styletokens.CaptionPt, d)
 	m.gapY = float64(styletokens.GapItems(d))
 	m.nameRowH = float64(m.nameFontPt) * rowHSeedFactor
 	m.valueRowH = float64(m.valueFontPt) * rowHSeedFactor
-	m.idNameW = metricsMeasureId(scopeKey, "name-row-w")
-	m.idNameH = metricsMeasureId(scopeKey, "name-row-h")
-	m.idValueW = metricsMeasureId(scopeKey, "value-row-w")
-	m.idValueH = metricsMeasureId(scopeKey, "value-row-h")
+}
+
+// bindIds derives the four measurement slots from the id stack; call it
+// inside the Treemap's own scope, so concurrent instances keep distinct
+// databinding slots (ADR-0267 W7).
+func (m *labelMetrics) bindIds(ids *c.WidgetIdStack) {
+	m.idNameW = ids.ProbeSeq("metrics-name-row-w")
+	m.idNameH = ids.ProbeSeq("metrics-name-row-h")
+	m.idValueW = ids.ProbeSeq("metrics-value-row-w")
+	m.idValueH = ids.ProbeSeq("metrics-value-row-h")
 }
 
 // renewBindings re-emits the probe measurements; call once per Render so the
@@ -121,14 +124,4 @@ func (m *labelMetrics) valueRow() float64 {
 		return float64(m.valueFontPt)
 	}
 	return m.valueRowH
-}
-
-// metricsMeasureId derives a stable databinding id from the instance scope
-// key and a slot salt (the gauge readoutMeasureId idiom).
-func metricsMeasureId(scopeKey string, salt string) uint64 {
-	h := fnv.New64a()
-	_, _ = h.Write([]byte(scopeKey))
-	_, _ = h.Write([]byte("#treemap-metrics-"))
-	_, _ = h.Write([]byte(salt))
-	return h.Sum64()
 }

@@ -271,7 +271,7 @@ func CreateSchemaTestTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1493
 
 type InEntityTestTable struct {
 	errs               []error
@@ -351,8 +351,11 @@ func NewInEntityTestTable(allocator memory.Allocator, estimatedNumberOfRecords i
 
 // SetActiveSections marks which section indices BeginEntity should
 // initialise (skipping beginSection for the rest). Pass nil to clear.
-// The hint is a performance optimisation; sending BeginAttribute to
-// an unmarked section produces empty-list bytes at TransferRecords.
+// The hint is a performance optimisation for shim builders, paired
+// with the builder's SetActiveFields over the marked sections'
+// columns; BeginAttribute on an unmarked section is an invalid state
+// transition. On the arrow RecordBuilder the hint has no effect:
+// every section starts, so its list columns stay row-aligned.
 func (inst *InEntityTestTable) SetActiveSections(idxs []int) {
 	if idxs == nil {
 		inst.activeSections = nil
@@ -404,7 +407,7 @@ var InEntityTestTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
 
 func (inst *InEntityTestTable) SetId(id0 uint64, naturalKey1 []byte) *InEntityTestTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -479,75 +482,6 @@ func (inst *InEntityTestTable) initSections(builder *array.RecordBuilder) {
 	inst.section21Inst = NewInEntityTestTableSectionU8Array(builder, inst)
 }
 func (inst *InEntityTestTable) beginSections() {
-	if mask := inst.activeSections; mask != nil {
-		if mask[0] {
-			inst.section00Inst.beginSection()
-		}
-		if mask[1] {
-			inst.section01Inst.beginSection()
-		}
-		if mask[2] {
-			inst.section02Inst.beginSection()
-		}
-		if mask[3] {
-			inst.section03Inst.beginSection()
-		}
-		if mask[4] {
-			inst.section04Inst.beginSection()
-		}
-		if mask[5] {
-			inst.section05Inst.beginSection()
-		}
-		if mask[6] {
-			inst.section06Inst.beginSection()
-		}
-		if mask[7] {
-			inst.section07Inst.beginSection()
-		}
-		if mask[8] {
-			inst.section08Inst.beginSection()
-		}
-		if mask[9] {
-			inst.section09Inst.beginSection()
-		}
-		if mask[10] {
-			inst.section10Inst.beginSection()
-		}
-		if mask[11] {
-			inst.section11Inst.beginSection()
-		}
-		if mask[12] {
-			inst.section12Inst.beginSection()
-		}
-		if mask[13] {
-			inst.section13Inst.beginSection()
-		}
-		if mask[14] {
-			inst.section14Inst.beginSection()
-		}
-		if mask[15] {
-			inst.section15Inst.beginSection()
-		}
-		if mask[16] {
-			inst.section16Inst.beginSection()
-		}
-		if mask[17] {
-			inst.section17Inst.beginSection()
-		}
-		if mask[18] {
-			inst.section18Inst.beginSection()
-		}
-		if mask[19] {
-			inst.section19Inst.beginSection()
-		}
-		if mask[20] {
-			inst.section20Inst.beginSection()
-		}
-		if mask[21] {
-			inst.section21Inst.beginSection()
-		}
-		return
-	}
 	inst.section00Inst.beginSection()
 	inst.section01Inst.beginSection()
 	inst.section02Inst.beginSection()
@@ -1281,6 +1215,7 @@ func (inst *InEntityTestTableSectionBlobArrayInAttr) EndSection() *InEntityTestT
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1634,6 +1569,7 @@ func (inst *InEntityTestTableSectionF32ArrayInAttr) EndSection() *InEntityTestTa
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1987,6 +1923,7 @@ func (inst *InEntityTestTableSectionF64ArrayInAttr) EndSection() *InEntityTestTa
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -2192,6 +2129,7 @@ func (inst *InEntityTestTableSectionForeignKeyInAttr) EndSection() *InEntityTest
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -2587,6 +2525,7 @@ func (inst *InEntityTestTableSectionGeoAreaInAttr) EndSection() *InEntityTestTab
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -2934,6 +2873,7 @@ func (inst *InEntityTestTableSectionGeoPointInAttr) EndSection() *InEntityTestTa
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -3287,6 +3227,7 @@ func (inst *InEntityTestTableSectionI16ArrayInAttr) EndSection() *InEntityTestTa
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -3640,6 +3581,7 @@ func (inst *InEntityTestTableSectionI32ArrayInAttr) EndSection() *InEntityTestTa
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -3993,6 +3935,7 @@ func (inst *InEntityTestTableSectionI64ArrayInAttr) EndSection() *InEntityTestTa
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -4346,6 +4289,7 @@ func (inst *InEntityTestTableSectionI8ArrayInAttr) EndSection() *InEntityTestTab
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -4699,6 +4643,7 @@ func (inst *InEntityTestTableSectionStringArrayInAttr) EndSection() *InEntityTes
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -5024,6 +4969,7 @@ func (inst *InEntityTestTableSectionSymbolInAttr) EndSection() *InEntityTestTabl
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -5377,6 +5323,7 @@ func (inst *InEntityTestTableSectionSymbolArrayInAttr) EndSection() *InEntityTes
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -5760,6 +5707,7 @@ func (inst *InEntityTestTableSectionTextInAttr) EndSection() *InEntityTestTable 
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -6113,6 +6061,7 @@ func (inst *InEntityTestTableSectionTimeArrayInAttr) EndSection() *InEntityTestT
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -6449,6 +6398,7 @@ func (inst *InEntityTestTableSectionTimeRangeInAttr) EndSection() *InEntityTestT
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -6802,6 +6752,7 @@ func (inst *InEntityTestTableSectionU16ArrayInAttr) EndSection() *InEntityTestTa
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -7155,6 +7106,7 @@ func (inst *InEntityTestTableSectionU32ArrayInAttr) EndSection() *InEntityTestTa
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -7508,6 +7460,7 @@ func (inst *InEntityTestTableSectionU32SetInAttr) EndSection() *InEntityTestTabl
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -7861,6 +7814,7 @@ func (inst *InEntityTestTableSectionU64ArrayInAttr) EndSection() *InEntityTestTa
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -8214,6 +8168,7 @@ func (inst *InEntityTestTableSectionU64SetInAttr) EndSection() *InEntityTestTabl
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -8567,6 +8522,7 @@ func (inst *InEntityTestTableSectionU8ArrayInAttr) EndSection() *InEntityTestTab
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }

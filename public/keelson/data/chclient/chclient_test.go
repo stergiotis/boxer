@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -285,4 +286,57 @@ func scrubClickHouseEnv(environ []string) (out []string) {
 		out = append(out, kv)
 	}
 	return
+}
+
+// The default client bounds the wait for headers, never the body: a stream
+// whose consumer is slower than the bound still reads to its end.
+func TestDefaultHTTPClient_BoundsHeadersNotBody(t *testing.T) {
+	assert.Zero(t, New(Defaults(), nil).http.Timeout, "a whole-exchange timeout would cut a streamed body")
+
+	slowBody := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		for range 3 {
+			_, _ = w.Write([]byte("x"))
+			w.(http.Flusher).Flush()
+			time.Sleep(150 * time.Millisecond)
+		}
+	}))
+	defer slowBody.Close()
+	c := newDefaultHTTPClient(100 * time.Millisecond)
+	resp, err := c.Get(slowBody.URL)
+	require.NoError(t, err)
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	require.NoError(t, err)
+	assert.Equal(t, "xxx", string(body))
+
+	slowHeaders := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(400 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer slowHeaders.Close()
+	_, err = c.Get(slowHeaders.URL)
+	require.Error(t, err, "a server that never starts answering is still bounded")
+}
+
+// roundTripFunc is an http.RoundTripper that is not an *http.Transport.
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// A process that replaced http.DefaultTransport with another RoundTripper —
+// the browser tab's host transport — gets that transport, not a panic.
+func TestDefaultClientUsesAReplacedDefaultTransport(t *testing.T) {
+	saved := http.DefaultTransport
+	t.Cleanup(func() { http.DefaultTransport = saved })
+	var used bool
+	http.DefaultTransport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		used = true
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("Ok.")), Request: r}, nil
+	})
+	c := newDefaultHTTPClient(time.Second)
+	resp, err := c.Get("http://ch.invalid/ping")
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	assert.True(t, used)
 }

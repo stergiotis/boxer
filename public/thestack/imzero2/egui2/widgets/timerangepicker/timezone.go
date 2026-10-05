@@ -1,6 +1,8 @@
 package timerangepicker
 
 import (
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -78,9 +80,11 @@ func LoadTzLocation(id uint16) (loc *time.Location, err error) {
 }
 
 // IanaName returns the IANA zone name for a TzID. System resolves to
-// the runtime's time.Local zone name (e.g. "Europe/Berlin" on a
-// host configured for CET) — this is the value the picker injects
-// into ClickHouse SQL as the anchor_now timezone literal.
+// the host's zone (e.g. "Europe/Berlin" on a host configured for CET) —
+// this is the value the picker injects into ClickHouse SQL as the
+// anchor_now timezone literal. When the host zone has no IANA name (TZ
+// unset and /etc/localtime not a link into a zoneinfo tree) System is an
+// error rather than Go's "Local", which ClickHouse rejects.
 func IanaName(id uint16) (name string, err error) {
 	name, err = globalTzCatalogue.ianaName(id)
 	return
@@ -143,7 +147,7 @@ func (inst *tzCatalogue) location(id uint16) (loc *time.Location, err error) {
 
 func (inst *tzCatalogue) ianaName(id uint16) (name string, err error) {
 	if id == TzIDSystem {
-		name = time.Local.String()
+		name, err = resolveSystemZone(time.Local.String(), os.Readlink)
 		return
 	}
 	resolved, ok := inst.name(id)
@@ -152,5 +156,39 @@ func (inst *tzCatalogue) ianaName(id uint16) (name string, err error) {
 		return
 	}
 	name = resolved
+	return
+}
+
+// localtimePath is the file Go reads the host zone from when TZ is unset.
+const localtimePath = "/etc/localtime"
+
+// resolveSystemZone maps Go's name for time.Local to an IANA name. With TZ
+// set, Go names the zone after it (a zoneinfo path is cut back to the
+// name); with TZ unset Go says "Local", and the name comes from the
+// target of /etc/localtime instead.
+func resolveSystemZone(localName string, readlink func(string) (string, error)) (name string, err error) {
+	name = localName
+	if name == "Local" {
+		target, rlErr := readlink(localtimePath)
+		if rlErr != nil {
+			err = eb.Build().Str("path", localtimePath).Errorf("timerangepicker: System zone has no IANA name: %w", rlErr)
+			name = ""
+			return
+		}
+		name = target
+	}
+	if i := strings.LastIndex(name, "zoneinfo/"); i >= 0 {
+		name = name[i+len("zoneinfo/"):]
+	}
+	if name == "" || name == "Local" || strings.HasPrefix(name, "/") {
+		err = eb.Build().Str("name", name).Errorf("timerangepicker: System zone has no IANA name")
+		name = ""
+		return
+	}
+	if _, loadErr := time.LoadLocation(name); loadErr != nil {
+		err = eb.Build().Str("name", name).Errorf("timerangepicker: System zone: %w", loadErr)
+		name = ""
+		return
+	}
 	return
 }

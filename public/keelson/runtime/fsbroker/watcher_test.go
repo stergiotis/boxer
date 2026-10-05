@@ -546,3 +546,133 @@ func TestService_Watch_NonRecursive_SubdirEventNotReported(t *testing.T) {
 		}
 	}
 }
+
+// TestService_TwoReadGrantsOnOnePathCloseIndependently: two opens of the same
+// file by the same app (two editor tabs) are two grants. Closing one must
+// leave the other's handle, cap and read path intact.
+func TestService_TwoReadGrantsOnOnePathCloseIndependently(t *testing.T) {
+	inst := inprocbus.NewInst(zerolog.Nop())
+	inst.SetRequestTimeout(time.Second)
+	svc, err := fsbroker.NewService(inst, zerolog.Nop())
+	require.NoError(t, err)
+	defer svc.Close()
+
+	appBus := inst.NewClient("test.tworeads", []app.SubjectFilter{
+		{Pattern: fsbroker.SubjectDialogRead, Direction: app.CapDirectionPub},
+	})
+	path := filepath.Join(t.TempDir(), "notes.md")
+	require.NoError(t, os.WriteFile(path, []byte("body"), 0o644))
+
+	first := resolveDialog(t, svc, appBus, fsbroker.SubjectDialogRead, "read", path)
+	second := resolveDialog(t, svc, appBus, fsbroker.SubjectDialogRead, "read", path)
+	require.NotEqual(t, first.HandleSubjectPrefix, second.HandleSubjectPrefix,
+		"two grants of one file must not share a handle")
+
+	_, err = appBus.Request(first.HandleSubjectPrefix+".close", nil)
+	require.NoError(t, err)
+
+	body, err := appBus.Request(second.HandleSubjectPrefix+".read", nil)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("body"), body, "closing one grant must not revoke the other")
+}
+
+// TestService_Handle_WriteReplacesRatherThanTruncates: a save over an
+// existing document goes to a temporary file that is renamed over the
+// target, so a write that fails partway (ENOSPC, a kill) leaves the previous
+// contents whole. The target's permission bits survive the replace, and a
+// symlinked target stays a symlink: the bytes land in the file it names.
+func TestService_Handle_WriteReplacesRatherThanTruncates(t *testing.T) {
+	inst := inprocbus.NewInst(zerolog.Nop())
+	inst.SetRequestTimeout(time.Second)
+	svc, err := fsbroker.NewService(inst, zerolog.Nop())
+	require.NoError(t, err)
+	defer svc.Close()
+	appBus := inst.NewClient("test.replace", []app.SubjectFilter{
+		{Pattern: fsbroker.SubjectDialogWrite, Direction: app.CapDirectionPub},
+	})
+	write := func(path string, body []byte) {
+		t.Helper()
+		grant := resolveDialog(t, svc, appBus, fsbroker.SubjectDialogWrite, "write", path)
+		raw, err := appBus.Request(grant.HandleSubjectPrefix+".write", body)
+		require.NoError(t, err)
+		ack, err := fsbroker.UnmarshalDialogReply(raw)
+		require.NoError(t, err)
+		require.True(t, ack.Granted, "write ack: %q", ack.Reason)
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "doc.md")
+	require.NoError(t, os.WriteFile(path, []byte("old"), 0o600))
+	before, err := os.Stat(path)
+	require.NoError(t, err)
+
+	write(path, []byte("new"))
+	after, err := os.Stat(path)
+	require.NoError(t, err)
+	got, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("new"), got)
+	assert.False(t, os.SameFile(before, after), "the document is replaced, not truncated in place")
+	assert.Equal(t, os.FileMode(0o600), after.Mode().Perm(), "the replace keeps the target's mode")
+	des, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	assert.Len(t, des, 1, "no temporary file is left behind")
+
+	link := filepath.Join(dir, "link.md")
+	require.NoError(t, os.Symlink(path, link))
+	write(link, []byte("via link"))
+	fi, err := os.Lstat(link)
+	require.NoError(t, err)
+	assert.NotZero(t, fi.Mode()&os.ModeSymlink, "a symlinked target stays a symlink")
+	got, err = os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("via link"), got)
+
+	fresh := filepath.Join(dir, "fresh.md")
+	write(fresh, []byte("first"))
+	got, err = os.ReadFile(fresh)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("first"), got)
+}
+
+// TestService_Watch_ConcurrentStartsOnlyOne: concurrent watch requests on one
+// handle start exactly one backend. The losers are told the watch is already
+// active; a second backend that no map holds would never be stopped.
+func TestService_Watch_ConcurrentStartsOnlyOne(t *testing.T) {
+	inst, svc, appBus, cleanup := newWatchSetup(t)
+	defer cleanup()
+	_ = inst
+	dir := t.TempDir()
+	for i := 0; i < 64; i++ {
+		require.NoError(t, os.Mkdir(filepath.Join(dir, "d"+string(rune('a'+i%26))+string(rune('a'+i/26))), 0o755))
+	}
+	prefix := resolveWatchPath(t, svc, appBus, dir)
+	reqPayload, err := fsbroker.MarshalWatchRequest(fsbroker.WatchRequest{Recursive: true})
+	require.NoError(t, err)
+
+	const n = 16
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	started := 0
+	gate := make(chan struct{})
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-gate
+			raw, rerr := appBus.Request(prefix+".watch", reqPayload)
+			if rerr != nil {
+				return
+			}
+			wr, derr := fsbroker.UnmarshalWatchReply(raw)
+			if derr == nil && wr.Started {
+				mu.Lock()
+				started++
+				mu.Unlock()
+			}
+		}()
+	}
+	close(gate)
+	wg.Wait()
+	assert.Equal(t, 1, started, "exactly one of %d concurrent watch requests starts a backend", n)
+}

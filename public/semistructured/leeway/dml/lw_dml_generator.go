@@ -623,6 +623,12 @@ func (inst *GoClassBuilder) findFirstMatchingColumnAndGenerateCode(irh *common.I
 	err = eb.Build().Stringer("role", role).Errorf("unable to find column with given role")
 	return
 }
+
+// targetsArrowBuilder reports whether the generated DML writes through
+// arrow-go's own RecordBuilder rather than an API-compatible shim.
+func (inst *GoClassBuilder) targetsArrowBuilder() bool {
+	return inst.builderPkg.ImportPath == DefaultBuilderPackage().ImportPath
+}
 func deriveSubHolderSelectNonScalar(cc common.IntermediateColumnContext) (keep bool) {
 	switch cc.SubType {
 	case common.IntermediateColumnsSubTypeHomogenousArray,
@@ -1021,8 +1027,7 @@ func (inst *GoClassBuilder) ComposeAttributeCode(clsNamer gocodegen.GoClassNamer
 		if err != nil {
 			return
 		}
-		sectionIRH.DeriveSubHolder(deriveSubHolderSelectNonScalarSupport)
-		for cc, cp := range sectionIRH.IterateColumnProps() {
+		for cc, cp := range nonScalarSupportIRH.IterateColumnProps() {
 			switch cc.SubType {
 			case common.IntermediateColumnsSubTypeHomogenousArraySupport:
 				for i := 0; i < cp.Length(); i++ {
@@ -1039,7 +1044,7 @@ func (inst *GoClassBuilder) ComposeAttributeCode(clsNamer gocodegen.GoClassNamer
 				}
 			}
 		}
-		for cc, cp := range sectionIRH.IterateColumnProps() {
+		for cc, cp := range nonScalarSupportIRH.IterateColumnProps() {
 			switch cc.SubType {
 			case common.IntermediateColumnsSubTypeSetSupport:
 				for i := 0; i < cp.Length(); i++ {
@@ -1123,6 +1128,7 @@ func (inst *GoClassBuilder) ComposeAttributeCode(clsNamer gocodegen.GoClassNamer
 		}
 		_, err = b.WriteString(`
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1600,8 +1606,11 @@ func New%s(allocator memory.Allocator, estimatedNumberOfRecords int) (inst *%s) 
 	_, err = fmt.Fprintf(b, `
 // SetActiveSections marks which section indices BeginEntity should
 // initialise (skipping beginSection for the rest). Pass nil to clear.
-// The hint is a performance optimisation; sending BeginAttribute to
-// an unmarked section produces empty-list bytes at TransferRecords.
+// The hint is a performance optimisation for shim builders, paired
+// with the builder's SetActiveFields over the marked sections'
+// columns; BeginAttribute on an unmarked section is an invalid state
+// transition. On the arrow RecordBuilder the hint has no effect:
+// every section starts, so its list columns stay row-aligned.
 func (inst *%s) %s(idxs []int) {
 	if idxs == nil { inst.activeSections = nil; return }
 	var mask [%d]bool
@@ -1820,23 +1829,33 @@ func (inst *%s) ClearMembershipsHighCardRef() {
 	}
 	{ // beginSections (with optional activeSections hint)
 		_, err = fmt.Fprintf(b, `func (inst *%s) beginSections() {
-	if mask := inst.activeSections; mask != nil {
 `, clsNames.InEntityClassName)
 		if err != nil {
 			return
 		}
-		for i := range sectionNames {
-			_, err = fmt.Fprintf(b, `		if mask[%d] { inst.section%02dInst.beginSection() }
-`, i, i)
+		// The hint is honoured only on shim builders, whose SetActiveFields
+		// drops the unstarted sections' columns from the wire. The arrow
+		// RecordBuilder needs a list row in every column per entity, so there
+		// every section starts regardless.
+		if !inst.targetsArrowBuilder() {
+			_, err = b.WriteString(`	if mask := inst.activeSections; mask != nil {
+`)
 			if err != nil {
 				return
 			}
-		}
-		_, err = b.WriteString(`		return
+			for i := range sectionNames {
+				_, err = fmt.Fprintf(b, `		if mask[%d] { inst.section%02dInst.beginSection() }
+`, i, i)
+				if err != nil {
+					return
+				}
+			}
+			_, err = b.WriteString(`		return
 	}
 `)
-		if err != nil {
-			return
+			if err != nil {
+				return
+			}
 		}
 		for i := range sectionNames {
 			_, err = fmt.Fprintf(b, `	inst.section%02dInst.beginSection()

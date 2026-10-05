@@ -120,11 +120,16 @@ type ClickHouseDocsSource struct {
 // through whatever endpoint client resolves to. Query and SiteBase carry
 // today's defaults and may be overridden before installing (SetDocsSource).
 func NewClickHouseDocsSource(client *Client) *ClickHouseDocsSource {
+	// The lookup is this type's own statement with the name bound as a
+	// parameter, so a task driving the window does not bound it: the Docs
+	// pane keeps working under an agent's grant (ADR-0270, update of
+	// 2026-10-04).
+	opts := newExecOptions("docs")
+	opts.OwnStatement = true
 	return &ClickHouseDocsSource{
 		Query:    defaultDocsQuery,
 		SiteBase: defaultDocsSiteBase,
-		lane: newNodeLane(clientExecutor{client: client, opts: newExecOptions("docs")},
-			memory.NewGoAllocator(), docsProbeTimeout),
+		lane:     newNodeLane(clientExecutor{client: client, opts: opts}, memory.NewGoAllocator(), docsProbeTimeout),
 	}
 }
 

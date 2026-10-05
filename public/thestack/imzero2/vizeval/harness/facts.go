@@ -22,7 +22,7 @@ const kindLabel = "vizevalScore"
 
 // ScoreKey is the identity of one measurement: the same candidate over the
 // same data at the same build is the same measurement, and is filed under the
-// same key (ADR-0257 §SD8). A scenario that declares an artifact box adds its
+// same key (ADR-0266 §SD8). A scenario that declares an artifact box adds its
 // frame, so a card measured in another box is not taken for this one; one
 // that does not keeps the key it always had.
 func ScoreKey(scenario string, candidateID string, build string, digest string, frame string) (id uint64, nk string) {

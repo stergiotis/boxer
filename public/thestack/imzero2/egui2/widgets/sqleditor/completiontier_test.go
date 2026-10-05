@@ -117,21 +117,21 @@ func TestCompletionTierInstallsOnRefusal(t *testing.T) {
 // statement that was parsed.
 func TestBindPublishesTheScope(t *testing.T) {
 	buf := "SELECT 1;\nSELECT LW_COMPONENT('SysMem') AS m, tupleElement(m, 'Tot"
-	e := New()
+	e := New(nil, "t")
 	n := uint64(len([]rune(buf)))
 	e.SetCaretForTest(n)
 	clock := newFakeClock()
 	e.completion.now = clock.now
 
-	res := e.Bind(Frame{IDSlot: "t", Value: &buf})
+	res := e.Bind(Frame{Value: &buf})
 	assert.Nil(t, res.Scope, "a fresh buffer has no scope yet")
 
 	clock.advance(completionQuiescence + time.Millisecond)
-	res = e.Bind(Frame{IDSlot: "t", Value: &buf})
+	res = e.Bind(Frame{Value: &buf})
 	assert.Nil(t, res.Scope, "not on the launching frame")
 	waitCompletionIdle(t, &e.completion)
 
-	res = e.Bind(Frame{IDSlot: "t", Value: &buf})
+	res = e.Bind(Frame{Value: &buf})
 	require.NotNil(t, res.Scope)
 	assert.Equal(t, "LW_COMPONENT('SysMem')", res.Scope.Aliases["m"])
 	require.NotNil(t, res.Scope.Frame)

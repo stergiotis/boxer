@@ -50,13 +50,59 @@ var (
 		Category:    env.CategoryLLM,
 	})
 
-	// KeepMessages opts a deployment into keeping prompt and completion
-	// text on the keelson('llm_calls') rows (ADR-0254 §SD4); off, the rows
-	// carry sizes and counts only.
-	KeepMessages = env.NewBool(env.Spec{
-		Name:        "BOXER_LLM_KEEP_MESSAGES",
-		Default:     "false",
-		Description: "keep prompt and completion text on keelson('llm_calls') rows; off keeps sizes and token counts only",
+	// TrustedHosts are endpoint hosts the deployment declares under its own
+	// control: the sensitivity wall (ADR-0254 §SD3) treats them as it treats
+	// loopback, so confined content may reach them.
+	TrustedHosts = env.NewString(env.Spec{
+		Name:        "BOXER_LLM_TRUSTED_HOSTS",
+		Description: "comma-separated endpoint host names or IPs, without port, that the llm service treats like loopback: confined (sealed) content may be sent to them; list only machines under your own control, and prefer an https endpoint",
 		Category:    env.CategoryLLM,
 	})
+
+	// ContextTokens is the model's context size as the deployment states
+	// it; unset, the service asks the endpoint's model list once.
+	ContextTokens = env.NewInt(env.Spec{
+		Name:        "BOXER_LLM_CONTEXT_TOKENS",
+		Default:     "0",
+		Description: "the model's context size in tokens, reported by llm.describe so a chat can say how full its conversation is; 0 asks the endpoint's model list once at start (context_length, max_model_len and the like), and a server that reports none leaves it unknown",
+		Category:    env.CategoryLLM,
+	})
+
+	// Retain is the deployment's ceiling on keeping message text (ADR-0264
+	// §SD1, replacing ADR-0254's BOXER_LLM_KEEP_MESSAGES): off keeps sizes
+	// and counts only; ring keeps prompt and completion text on this
+	// process's keelson('llm_calls') rows for every call; durable does that
+	// and also keeps the messages of retained requests on boxer.facts.
+	Retain = env.NewCategorialString(env.Spec{
+		Name:        "BOXER_LLM_RETAIN",
+		Default:     string(RetainOff),
+		Description: "ceiling on keeping model message text: off (sizes and counts only), ring (text on this process's keelson('llm_calls') rows), durable (ring, plus the messages of llm.retain.* requests on boxer.facts, kept until removed by hand)",
+		Category:    env.CategoryLLM,
+	}, []string{string(RetainOff), string(RetainRing), string(RetainDurable)})
 )
+
+// RetainE is a BOXER_LLM_RETAIN level, ordered: each keeps what the one
+// before it does.
+type RetainE string
+
+const (
+	RetainOff     RetainE = "off"
+	RetainRing    RetainE = "ring"
+	RetainDurable RetainE = "durable"
+)
+
+// atLeast says level keeps what other keeps.
+func (inst RetainE) atLeast(other RetainE) (yes bool) {
+	return inst.rank() >= other.rank()
+}
+
+func (inst RetainE) rank() (r int) {
+	switch inst {
+	case RetainRing:
+		return 1
+	case RetainDurable:
+		return 2
+	default:
+		return 0
+	}
+}

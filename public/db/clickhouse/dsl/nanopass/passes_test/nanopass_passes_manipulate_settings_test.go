@@ -447,3 +447,21 @@ func TestSerializeSettingValue(t *testing.T) {
 		})
 	}
 }
+
+// A leading CTE body is not the statement: settings are read from and
+// written to the main SELECT, not the SELECT inside `WITH c AS (...)`.
+func TestReadSettingsSkipsCTEBody(t *testing.T) {
+	settings, err := passes.ReadSettings("WITH c AS (SELECT 1 AS a SETTINGS max_threads = 3) SELECT * FROM c SETTINGS max_threads = 5")
+	require.NoError(t, err)
+	assert.Equal(t, uint64(5), settings["max_threads"])
+
+	settings, err = passes.ReadSettings("WITH c AS (SELECT 1 AS a SETTINGS max_threads = 3) SELECT * FROM c")
+	require.NoError(t, err)
+	assert.Empty(t, settings)
+}
+
+func TestWriteSettingsSkipsCTEBody(t *testing.T) {
+	got, err := passes.WriteSettings(map[string]any{"max_threads": uint64(1)}).Run("WITH c AS (SELECT 1 AS a) SELECT * FROM c")
+	require.NoError(t, err)
+	assert.Equal(t, "WITH c AS (SELECT 1 AS a) SELECT * FROM c SETTINGS max_threads = 1", got)
+}

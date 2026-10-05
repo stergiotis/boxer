@@ -134,6 +134,15 @@ func TestExtractPassthroughTables(t *testing.T) {
 		// table) and it must still classify — only a same-clause rebinding fails
 		// closed.
 		{"cte_nested_shadow_ok", `WITH t AS (SELECT * FROM outer_t) SELECT * FROM (WITH t AS (SELECT * FROM inner_t) SELECT * FROM t)`, []string{"inner_t"}},
+		// A WITH expression alias is its expression, not a stored column —
+		// here a scalar subquery over another table.
+		{"with_expr_alias_scalar_subquery", `WITH (SELECT secret FROM other LIMIT 1) AS a SELECT a FROM t`, []string{}},
+		{"with_expr_alias_constant", `WITH 1 AS a SELECT b, a FROM t`, []string{}},
+		// An enclosing query's alias reaches a subquery too, where a
+		// same-named stored column would shadow it; the classifier cannot
+		// see the schema, so it errs closed.
+		{"with_expr_alias_outer_query", `WITH 1 AS a SELECT * FROM (SELECT a FROM t)`, []string{}},
+		{"with_expr_alias_unreferenced", `WITH 1 AS a SELECT b, t.a FROM t`, []string{"t"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

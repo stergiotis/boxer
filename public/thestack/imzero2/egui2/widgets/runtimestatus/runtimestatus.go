@@ -1,6 +1,6 @@
-// Package runtimestatus renders a one-line snapshot of the active
-// runtime services suitable for embedding in the carousel's bottom
-// panel. Values are captured once at carousel startup (the set of
+// Package runtimestatus is an immediate-mode widget (ADR-0267) rendering a
+// one-line snapshot of the active runtime services for the host chrome's
+// bottom panel. Values are captured once at carousel startup (the set of
 // active backends is process-static); the render is a pure read.
 //
 // Layout (monospace, fixed-ish column widths):
@@ -33,14 +33,31 @@ const (
 	CapAdhoc   = "adhoc"
 )
 
-// ClickHandler is called when a status segment is clicked. capId is
-// one of the Cap* constants above. Nil disables the click affordance
-// — segments render as plain labels.
-type ClickHandler func(capId string)
+// Input places the row. Clickable segments need Ids; a row without them
+// draws plain labels.
+type Input struct {
+	// Ids is the host's widget id stack; Render opens one IdScope under it.
+	// nil draws the segments as plain, unclickable labels.
+	Ids *c.WidgetIdStack
+	// ScopeKey names the row within the host's id space; empty uses
+	// "runtimestatus".
+	ScopeKey string
+	// Snapshot is what to show; nil draws nothing.
+	Snapshot *Snapshot
+	// Clickable draws each segment as a SelectableLabel (clickable but
+	// visually like a label) whose click Result.Clicked reports. Needs Ids.
+	Clickable bool
+}
+
+// Result is what one Render reports.
+type Result struct {
+	// Clicked is the Cap* id of the segment clicked this frame, "" for none.
+	Clicked string
+}
 
 // Snapshot describes the active runtime services. Constructed by the
 // carousel after all subsystems boot; passed by pointer into
-// RenderInline so adding a field is cheap. All fields are
+// Render so adding a field is cheap. All fields are
 // process-static so the snapshot is built once.
 type Snapshot struct {
 	// RunIdShort is the first 8 chars of the inherited run_id, or
@@ -73,53 +90,65 @@ type Snapshot struct {
 	PersistBackend string
 }
 
-// RenderInline draws the snapshot as a single horizontal row of mono
-// labels. Designed to nest inside a c.Horizontal()/MenuBar — does not
-// open its own layout container. When onClick is non-nil each segment
-// is rendered as a SelectableLabel (clickable but visually like a
-// label) and the callback fires with the segment's CapId on
-// HasPrimaryClicked.
-func RenderInline(s *Snapshot, onClick ClickHandler) {
-	if s == nil {
+// Render draws the snapshot as a single horizontal row of mono labels.
+// Designed to nest inside a c.Horizontal()/MenuBar — does not open its own
+// layout container. Under Input.Clickable each segment is a SelectableLabel
+// and Result.Clicked names the one clicked.
+func Render(in Input) (res Result) {
+	if in.Snapshot == nil {
 		return
 	}
-	idsLocal := c.NewWidgetIdStack()
-	renderSegment(idsLocal, "run:"+s.RunIdShort, CapRun, onClick)
+	if in.Ids == nil || !in.Clickable {
+		in.render(nil, &res)
+		return
+	}
+	if in.ScopeKey == "" {
+		in.ScopeKey = "runtimestatus"
+	}
+	for range c.IdScope(in.Ids.PrepareStr(in.ScopeKey)) {
+		in.render(in.Ids, &res)
+	}
+	return
+}
+
+func (in Input) render(ids *c.WidgetIdStack, res *Result) {
+	s := in.Snapshot
+	renderSegment(ids, "run:"+s.RunIdShort, CapRun, res)
 	monoSpacer()
-	renderSegment(idsLocal, "facts:"+s.FactsBackend, CapFacts, onClick)
+	renderSegment(ids, "facts:"+s.FactsBackend, CapFacts, res)
 	monoSpacer()
-	renderStatusSegment(idsLocal, "bus", s.BusActive, CapBus, onClick)
+	renderStatusSegment(ids, "bus", s.BusActive, CapBus, res)
 	monoSpacer()
-	renderStatusSegment(idsLocal, "fs", s.FsBrokerActive, CapFs, onClick)
+	renderStatusSegment(ids, "fs", s.FsBrokerActive, CapFs, res)
 	monoSpacer()
-	renderStatusSegment(idsLocal, "adhoc", s.AdhocActive, CapAdhoc, onClick)
+	renderStatusSegment(ids, "adhoc", s.AdhocActive, CapAdhoc, res)
 	monoSpacer()
 	if s.PersistBackend == "" {
-		renderStatusSegment(idsLocal, "persist", false, CapPersist, onClick)
+		renderStatusSegment(ids, "persist", false, CapPersist, res)
 	} else {
-		renderSegment(idsLocal, "persist:"+s.PersistBackend, CapPersist, onClick)
+		renderSegment(ids, "persist:"+s.PersistBackend, CapPersist, res)
 	}
 }
 
-// renderSegment emits one label-shaped segment. When onClick is nil a
-// monoLabel is used (no click overhead); otherwise a SelectableLabel
-// captures clicks while preserving the inline label look.
-func renderSegment(ids *c.WidgetIdStack, text, capId string, onClick ClickHandler) {
-	if onClick == nil {
+// renderSegment emits one label-shaped segment. With nil ids a monoLabel
+// is used (no click overhead); otherwise a SelectableLabel captures clicks
+// while preserving the inline label look.
+func renderSegment(ids *c.WidgetIdStack, text, capId string, res *Result) {
+	if ids == nil {
 		monoLabel(text)
 		return
 	}
-	if c.SelectableLabel(ids.PrepareStr("seg-"+capId), false, text).
+	if c.SelectableLabel(ids.PrepareStr(capId), false, text).
 		SendResp().HasPrimaryClicked() {
-		onClick(capId)
+		res.Clicked = capId
 	}
 }
 
 // renderStatusSegment emits the "name ✓"/"name ✗" pair as either a
 // plain label or a clickable selectable label. The colour applies in
 // both modes via RichTextColored.
-func renderStatusSegment(ids *c.WidgetIdStack, name string, active bool, capId string, onClick ClickHandler) {
-	if onClick == nil {
+func renderStatusSegment(ids *c.WidgetIdStack, name string, active bool, capId string, res *Result) {
+	if ids == nil {
 		monoStatus(name, active)
 		return
 	}
@@ -131,9 +160,9 @@ func renderStatusSegment(ids *c.WidgetIdStack, name string, active bool, capId s
 	} else {
 		glyph = icons.PhX
 	}
-	if c.SelectableLabel(ids.PrepareStr("seg-"+capId), false, name+" "+glyph).
+	if c.SelectableLabel(ids.PrepareStr(capId), false, name+" "+glyph).
 		SendResp().HasPrimaryClicked() {
-		onClick(capId)
+		res.Clicked = capId
 	}
 }
 

@@ -20,7 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
-	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine/chserver"
@@ -34,11 +34,25 @@ type ClientConfig struct {
 	URL      string
 	User     string
 	Password string
+	// AllowWrites mirrors BOXER_PLAY_ALLOW_WRITES. Unset, the Arrow run
+	// path sends readonly=2 so the server refuses any write or DDL that
+	// reaches it (ADR-0181 Update 2026-09-28).
+	AllowWrites bool
+	// AppWritesOff mirrors BOXER_PLAY_APP_WRITES=off: play does not write
+	// its own tables, pins and Series verdicts (ADR-0270 §SD7).
+	AppWritesOff bool
 }
 
 type Client struct {
 	cfg  ClientConfig
 	http *http.Client
+
+	// agentMark is the task whose input the window acts on (ADR-0270
+	// §SD3), nil while the work is the person's. Every lane of the window
+	// runs SQL derived from that input — a pane's CTE, the Map's raster —
+	// so every run without its own Agent is checked against it. Set on the
+	// render goroutine, read on the lanes' workers.
+	agentMark atomic.Pointer[app.OnBehalfOf]
 
 	// passes supplies the registered pre-execute rewrites (ADR-0108 §SD6),
 	// e.g. LW_ID_* macro expansion. Defaults to passreg.Default — the host
@@ -89,6 +103,10 @@ type Client struct {
 	// unlock sees a consistent set.
 	exprValues map[string]string
 
+	// readonly remembers each endpoint's server-reported readonly level for
+	// cfg.User (play_readonly.go).
+	readonly readonlyLevels
+
 	mu        sync.RWMutex
 	targetURL string
 	// resolver is the E2 seam. nil means staticResolver — every run goes to
@@ -132,6 +150,11 @@ func NewClient(cfg ClientConfig, httpClient *http.Client) *Client {
 // Passes tab draws its catalog (ADR-0119 M3).
 func (inst *Client) PassRegistry() *passreg.Registry { return inst.passes }
 
+// SetAgentMark sets the task whose input the window acts on, or nil when
+// the work is the person's (ADR-0270 §SD3). The Diagnostics probe is not
+// checked against it: `EXPLAIN AST` parses and resolves nothing.
+func (inst *Client) SetAgentMark(obo *app.OnBehalfOf) { inst.agentMark.Store(obo) }
+
 // ExecOptions carries per-lane execution settings for ExecuteArrowStream.
 // QueryID is a stable per-lane ClickHouse query_id: combined with
 // ReplaceRunningQuery, a superseding run REPLACES its still-running
@@ -141,12 +164,30 @@ func (inst *Client) PassRegistry() *passreg.Registry { return inst.passes }
 // queries pile up on the server. Endpoints that don't know these params
 // ignore them (the keelson introspection /query reads only cols/query/param_*).
 type ExecOptions struct {
+	// Agent is set on a main-lane run an agent's work caused (ADR-0270
+	// §SD2): the statement is checked against the grant before it is sent,
+	// and it goes with readonly = 2 whatever BOXER_PLAY_ALLOW_WRITES says.
+	// A run without it is checked against the window's mark instead
+	// (Client.SetAgentMark).
+	Agent *app.OnBehalfOf
+	// OwnStatement exempts the lane from the window's agent mark: its SQL is
+	// play's own and a looked-up value enters only as a bound parameter,
+	// never as SQL — the Docs pane's documentation lookup. Under a mark it
+	// is still sent read-only; an explicit Agent is still checked.
+	OwnStatement        bool
 	QueryID             string
 	ReplaceRunningQuery bool
 	// Label is the human lane name ("main", "map", "diagnostics", …) the
 	// QueryID embeds — carried separately so the SD7 log_comment stamp
 	// can record it without parsing it back out of the id.
 	Label string
+	// QueryCache, when set, is asked on each request whether the run may use
+	// the server's query cache (use_query_cache=1) and whether it must not
+	// read from it (fresh: the result is computed and the entry rewritten).
+	// A func rather than two fields so a lane's stable options follow a
+	// toggle the panel flips between runs; it is called on the run's
+	// goroutine and must be safe there.
+	QueryCache func() (use bool, fresh bool)
 	// OnProgress, when set, opts the request into ClickHouse's in-band
 	// progress headers (ADR-0115 plane A): the server streams
 	// X-ClickHouse-Progress lines inside the open response-header block,
@@ -246,10 +287,21 @@ func (inst *Client) BuildStatement(sql string) (body string, params map[string]s
 // a re-derivation of it.
 func (inst *Client) buildStatementObserved(sql string, observe func(passreg.ApplyObservation)) (body string, params map[string]string) {
 	residual, params := inst.buildResidualObserved(sql, observe)
+	body = finishStatementObserved(residual, observe)
+	return
+}
+
+// finishStatementObserved is the last step of buildStatementObserved: the wire
+// format appended to a residual. Split out for a caller that needs the
+// residual and the body from one rewrite.
+func finishStatementObserved(residual string, observe func(passreg.ApplyObservation)) (body string) {
 	started := stepClock(observe)
-	// ADR-0181 §SD8 M3: an INSERT wrapper takes no FORMAT clause — the
-	// appended FORMAT is exactly why DDL from play fails, and a write
-	// answers with a summary, not a stream. The step still reports itself
+	// ADR-0181 §SD8 M3: an INSERT wrapper takes no FORMAT clause — a write
+	// answers with a summary, not a stream. (What keeps DDL and other
+	// writes off the Arrow path, unless writes are allowed, is the readonly
+	// setting ExecuteArrowStream sends, not the appended FORMAT: ClickHouse
+	// accepts FORMAT on DDL.)
+	// The step still reports itself
 	// (applied, unchanged), so the Preview trace accounts for the wire body
 	// carrying no FORMAT rather than looking like a skipped rewrite.
 	if pr, perr := nanopass.Parse(residual); perr == nil && pr.InsertStmt() != nil {
@@ -367,7 +419,7 @@ func (inst *Client) ProbeStatement(ctx context.Context, sql string, params map[s
 	}
 	req := queryengine.Request{
 		SQL:         sql,
-		Params:      bareParams(nil, params),
+		Params:      bareParams(sql, nil, params),
 		Settings:    settings,
 		Sensitivity: dec.sensitivity,
 	}
@@ -379,6 +431,21 @@ func (inst *Client) ProbeStatement(ctx context.Context, sql string, params map[s
 			settings["replace_running_query"] = "1"
 		}
 	}
+	// A server holding this user read-only refuses the stamp; what it
+	// refused before is not sent again (play_readonly.go).
+	target, _ := dec.target()
+	sentLevel := inst.knownReadonlyLevel(target)
+	degradeForReadonly(&req, sentLevel)
+	err = deliverVerdict(ctx, eng, req)
+	if level, retry := inst.learnReadonlyLevel(ctx, eng, target, sentLevel, err); retry {
+		degradeForReadonly(&req, level)
+		err = deliverVerdict(ctx, eng, req)
+	}
+	return
+}
+
+// deliverVerdict sends req and reports only whether the server accepted it.
+func deliverVerdict(ctx context.Context, eng *chserver.Engine, req queryengine.Request) (err error) {
 	st, _, err := eng.Deliver(ctx, req)
 	if err != nil {
 		return
@@ -412,24 +479,67 @@ func (inst *Client) ProbeStatement(ctx context.Context, sql string, params map[s
 
 // bareParams merges the caller's signal and SET-harvested bindings into the
 // bare `{name:Type}` names the engine expects, dropping the `param_` prefix
-// play carries them under.
+// play carries them under, and puts each value in the form the HTTP param
+// channel decodes (see paramWireValue). wireSQL is the statement the
+// bindings travel with; its placeholders supply each name's declared type.
 //
 // A SET-bound name SHADOWS a same-named signal (ADR-0097 slice-5 D1: a SET
 // pins a signal into a constant), which is why params are applied second.
-func bareParams(signals map[string]string, params map[string]string) (out map[string]string) {
+func bareParams(wireSQL string, signals map[string]string, params map[string]string) (out map[string]string) {
 	if len(signals) == 0 && len(params) == 0 {
 		return
+	}
+	var types map[string]string
+	if pr, err := nanopass.Parse(wireSQL); err == nil {
+		slots := collectParamSlots(pr)
+		types = make(map[string]string, len(slots))
+		for _, s := range slots {
+			types[s.Name] = s.Type
+		}
 	}
 	out = make(map[string]string, len(signals)+len(params))
 	add := func(src map[string]string) {
 		for k, v := range src {
-			out[strings.TrimPrefix(k, chhttp.ParamPrefix)] = v
+			name := strings.TrimPrefix(k, chhttp.ParamPrefix)
+			typeExpr, known := types[name]
+			out[name] = paramWireValue(v, typeExpr, known)
 		}
 	}
 	add(signals)
 	add(params)
 	return
 }
+
+// paramWireValue encodes one binding for ClickHouse's HTTP `param_*`
+// channel. The server reads a scalar value there in TSV-escaped form, so a
+// raw backslash, tab, newline, carriage return or NUL is escaped: `C:\new`
+// sent as-is arrives with a newline in it, and a raw newline fails the whole
+// run with BAD_QUERY_PARAMETER. A compound value (Array, Tuple, Map) is a
+// literal whose strings carry their own quoted escapes and gets no second
+// layer, and `\N` stays the NULL marker. When the placeholder's type is
+// unknown (the wire statement did not parse, or the name is not a slot in
+// it), a value that opens like a compound literal is taken for one.
+func paramWireValue(v string, typeExpr string, typeKnown bool) string {
+	if v == `\N` {
+		return v
+	}
+	if typeKnown {
+		if isCompoundType(typeExpr) {
+			return v
+		}
+	} else if t := strings.TrimSpace(v); t != "" && (t[0] == '[' || t[0] == '(' || t[0] == '{') {
+		return v
+	}
+	return paramTSVEscape.Replace(v)
+}
+
+var paramTSVEscape = strings.NewReplacer(
+	`\`, `\\`,
+	"\t", `\t`,
+	"\n", `\n`,
+	"\r", `\r`,
+	"\x00", `\0`,
+)
 
 // engineFor builds the delivery engine a decision names (ADR-0144).
 //
@@ -455,7 +565,7 @@ func (inst *Client) engineFor(dec dispatchDecision) (eng *chserver.Engine, err e
 		// has DEMONSTRATED it can fetch from that plane. Derived from the
 		// target, never from the decision's own label, so the two gates
 		// cannot agree by construction.
-		ServesConfined: target == introspect.LocalQueryEndpoint() || inst.reach.isProven(target),
+		ServesConfined: inst.servesConfined(target),
 	})
 	return
 }
@@ -549,6 +659,20 @@ func (inst *Client) buildResidual(sql string) (residual string, params map[strin
 // buildResidualObserved is buildResidual with the observer buildStatementObserved
 // documents. A nil observe is the plain path.
 func (inst *Client) buildResidualObserved(sql string, observe func(passreg.ApplyObservation)) (residual string, params map[string]string) {
+	return inst.buildResidualWith(sql, observe, true)
+}
+
+// buildResidualOffline is buildResidualObserved without the steps that read
+// the endpoint's catalog: the late-bound passes see no binding and decline,
+// and the selection-condition rewrite is reported declined rather than run.
+// It is the rewrite an agent's work may make without the endpoint among its
+// grant's destinations (ADR-0270 §SD2); [Client.rewriteFor] decides which an
+// agent's work gets.
+func (inst *Client) buildResidualOffline(sql string, observe func(passreg.ApplyObservation)) (residual string, params map[string]string) {
+	return inst.buildResidualWith(sql, observe, false)
+}
+
+func (inst *Client) buildResidualWith(sql string, observe func(passreg.ApplyObservation), catalog bool) (residual string, params map[string]string) {
 	// Ad-hoc dataset alias→handle rewrite runs first, before the SET-param
 	// harvest and pre-execute passes, so keelson('<alias>') becomes
 	// keelson('<handle>') for every downstream consumer and the Preview
@@ -566,8 +690,30 @@ func (inst *Client) buildResidualObserved(sql string, observe func(passreg.Apply
 	}
 	observeStep(observe, rewriteStepExtractParams, orderExtractParams, exErr, sql, residual, stepDur(started))
 	residual = inst.applyExprSplice(residual, observe)
+	if !catalog {
+		residual = inst.passes.ApplyBestEffortBoundObserved(passreg.StagePreExecute, residual, nil, log.Logger, observe)
+		if observe != nil && inst.exposeConditions.Load() && inst.conditionsPass.Apply != nil {
+			observe(passreg.ApplyObservation{Name: rewriteStepExposeConditions, Order: orderExposeConditions, Outcome: passreg.ApplyOutcomeDeclined})
+		}
+		return
+	}
 	residual = inst.passes.ApplyBestEffortBoundObserved(passreg.StagePreExecute, residual, inst.passBinding, log.Logger, observe)
 	residual = inst.applyExposeConditions(residual, observe)
+	return
+}
+
+// datasetAliasOf maps each bound dataset handle to its alias: the name a
+// grant lists, since the handle is ephemeral and the person never sees it.
+func (inst *Client) datasetAliasOf() (aliasOf map[string]string) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	if len(inst.datasetBindings) == 0 {
+		return
+	}
+	aliasOf = make(map[string]string, len(inst.datasetBindings))
+	for alias, handle := range inst.datasetBindings {
+		aliasOf[handle] = alias
+	}
 	return
 }
 
@@ -866,8 +1012,22 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 	if err != nil {
 		return
 	}
+	// An agent's run gets the rewrite its grant allows (ADR-0270 §SD2): one
+	// the agent limits below check as it ships, with no catalog probe sent to
+	// an endpoint the grant does not list.
+	agent := inst.agentMark.Load()
+	ownStatement := agent != nil && opts != nil && opts.OwnStatement
+	if ownStatement {
+		// Nothing the task wrote reaches this statement as SQL (ADR-0270,
+		// update of 2026-10-04), so the grant does not bound it; it still
+		// cannot write.
+		agent = nil
+	}
+	if opts != nil && opts.Agent != nil {
+		agent = opts.Agent
+	}
+	residual, params, _ := inst.rewriteFor(agent, sql, nil)
 	var q string
-	var params map[string]string
 	rowCap := readResultRowCap(sql)
 	if opts != nil && opts.WrapStatement != nil {
 		// Wire-body wrap (see ExecOptions.WrapStatement): the rewrites and
@@ -876,20 +1036,24 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 		// and one inside the parens would bind to the inner statement. The
 		// row cap is the wire statement's own declaration — the inner LIMIT
 		// bounds the query being explained, not the wrapper's result.
-		var residual string
-		residual, params = inst.buildResidualObserved(sql, nil)
 		q = opts.WrapStatement(residual) + " FORMAT ArrowStream"
 		rowCap = readResultRowCap(q)
 	} else {
-		q, params = inst.BuildStatement(sql)
+		q = finishStatementObserved(residual, nil)
 	}
 	req := queryengine.Request{
 		SQL: q,
+		// default_format as well as the FORMAT clause: the textual fallback
+		// in buildStatementObserved skips its append when "FORMAT " occurs
+		// anywhere in the body, a literal or a comment included, and a body
+		// left without one would come back TabSeparated. A FORMAT the
+		// statement carries itself still wins on the server.
+		Format: "ArrowStream",
 		// Params ride the URL rather than the body: ClickHouse reads the
 		// body verbatim as SQL, and the typed substitution from
 		// `{name:Type}` placeholders is what it expects on that channel.
 		// See the function doc for the size limits that bounds.
-		Params:   bareParams(signals, params),
+		Params:   bareParams(q, signals, params),
 		Settings: map[string]string{},
 		// What the statement declared about its own result size, for the
 		// engine to judge the delivery against (R9). play parses it; the
@@ -901,6 +1065,24 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 		// than trusting whatever placed it (ADR-0145 §SD4).
 		Sensitivity: dec.sensitivity,
 	}
+	// Without BOXER_PLAY_ALLOW_WRITES the Arrow path is the read path.
+	// readonly=2 has the server refuse a write or DDL that reaches it — any
+	// statement runIsInsertWrapper did not recognise as the gated INSERT
+	// wrapper, which ClickHouse would otherwise execute with the appended
+	// FORMAT — while still admitting the per-query settings play sends
+	// (ADR-0181 Update 2026-09-28). With writes allowed, DDL runs as before.
+	if !inst.cfg.AllowWrites {
+		req.Settings["readonly"] = "2"
+	}
+	if ownStatement {
+		req.Settings["readonly"] = "2"
+	}
+	if agent != nil {
+		if err = checkAgentLimits(residual, dec, agent, inst.datasetAliasOf()); err != nil {
+			return
+		}
+		req.Settings["readonly"] = "2"
+	}
 	if opts != nil {
 		if opts.QueryID != "" {
 			req.RunID = opts.QueryID
@@ -911,26 +1093,46 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 			}
 		}
 		req.OnProgress = opts.OnProgress
+		if opts.QueryCache != nil {
+			if use, fresh := opts.QueryCache(); use {
+				req.Settings["use_query_cache"] = "1"
+				if fresh {
+					req.Settings["enable_reads_from_query_cache"] = "0"
+				}
+			}
+		}
 	}
 	// SD7 identity stamp (ADR-0115): {run_id, app, lane, four
 	// fingerprints} as compact JSON, so the server's query_log row is
 	// attributable and the capture pipeline lifts the identity. Endpoints
 	// that don't know the setting ignore the parameter, like query_id.
-	if lc := inst.composeLogComment(sql, q, params, signals, opts); lc != "" {
+	if lc := inst.composeLogComment(sql, q, params, signals, opts, agent); lc != "" {
 		req.Settings["log_comment"] = lc
 	}
-
-	st, res, err := eng.Deliver(ctx, req)
-	if err != nil {
-		return
-	}
-	summary = summaryFrom(res.Summary)
+	// A server holding this user read-only refuses some of the above; what
+	// it refused before is not sent again (play_readonly.go).
+	target, _ := dec.target()
+	sentLevel := inst.knownReadonlyLevel(target)
+	degradeForReadonly(&req, sentLevel)
 
 	// A run the server rejected ends before any bytes arrive, and opening
 	// the stream is what surfaces its diagnostic — handing an empty body to
 	// the Arrow decoder would replace "clickhouse http 400: <the actual
 	// problem>" with a complaint about a missing IPC header.
-	rs, err = openResultStream(st)
+	deliver := func() (dErr error) {
+		st, res, dErr := eng.Deliver(ctx, req)
+		if dErr != nil {
+			return
+		}
+		summary = summaryFrom(res.Summary)
+		rs, dErr = openResultStream(st)
+		return
+	}
+	err = deliver()
+	if level, retry := inst.learnReadonlyLevel(ctx, eng, target, sentLevel, err); retry {
+		degradeForReadonly(&req, level)
+		err = deliver()
+	}
 	if err != nil {
 		return
 	}

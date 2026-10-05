@@ -20,7 +20,7 @@ import (
 	"golang.org/x/image/math/fixed"
 )
 
-// The contact sheet (ADR-0257 §SD8) is every candidate's artifact of one run
+// The contact sheet (ADR-0266 §SD8) is every candidate's artifact of one run
 // in one image, labelled with its options and status, for a reader who looks
 // at a round as a whole before opening one artifact. It is sized for being
 // looked at as one image: a viewer that shows an image whole shrinks it to

@@ -61,8 +61,35 @@ func TestClassifyQuerySecurity(t *testing.T) {
 		{"local_numbers", `SELECT * FROM numbers(10)`, QuerySecurityRead, nil},
 		{"local_keelson", `SELECT * FROM keelson('env')`, QuerySecurityRead, nil},
 
-		// The scalar egress denylist.
+		// Scalars that reach out, and one that changes server state.
 		{"egress_scalar_file", `SELECT file('/etc/hostname')`, QuerySecurityReadEgress, []string{"file"}},
+		{"egress_scalar_ai", `SELECT aiGenerate(note) FROM t`, QuerySecurityReadEgress, []string{"aiGenerate"}},
+		{"state_changing_scalar", `SELECT generateSerialID('orders')`, QuerySecurityMutating, []string{"generateSerialID"}},
+
+		// eval() runs a query built at run time.
+		{"eval", `SELECT * FROM eval('SELECT 1')`, QuerySecurityReadEgress, []string{"eval"}},
+
+		// A call in a table function's arguments is an expression, as the
+		// server reads it: the canonical tuple(…)/array(…) of a row literal,
+		// a scalar call, an egress scalar.
+		{"args_tuple", `SELECT * FROM values('a String, b String', ('x', 'y'))`, QuerySecurityRead, nil},
+		{"args_tuple_canonical", `SELECT * FROM values('a String, b String', tuple('x', 'y'))`, QuerySecurityRead, nil},
+		{"args_array_canonical", `SELECT * FROM values('a Array(UInt8)', array(1, 2))`, QuerySecurityRead, nil},
+		{"args_scalar_call", `SELECT * FROM merge(currentDatabase(), '^t')`, QuerySecurityRead, nil},
+		{"args_no_false_witness", `SELECT * FROM url(concat('http://', 'h'), 'CSV')`, QuerySecurityReadEgress, []string{"url"}},
+		{"args_egress_scalar", `SELECT * FROM values('x String', file('/etc/passwd'))`, QuerySecurityReadEgress, []string{"file"}},
+
+		// …except a table function among the arguments of one that takes a
+		// table, which is read as a table; under a local one an unknown name
+		// is read as a table too (fail closed).
+		{"loop_local", `SELECT * FROM loop(numbers(3))`, QuerySecurityRead, nil},
+		{"loop_egress", `SELECT * FROM loop(url('http://h/x', 'CSV'))`, QuerySecurityReadEgress, []string{"url"}},
+		{"loop_unknown", `SELECT * FROM loop(shinynew(1))`, QuerySecurityReadEgress, []string{"shinynew"}},
+		{"remote_args", `SELECT * FROM remote(concat('h', ':9000'), 'db', 't')`, QuerySecurityReadEgress, []string{"remote"}},
+
+		// view() takes a query; what the query reads is judged as anywhere.
+		{"view_local", `SELECT * FROM view(SELECT * FROM numbers(3))`, QuerySecurityRead, nil},
+		{"view_egress", `SELECT * FROM view(SELECT * FROM url('http://h/x', 'CSV'))`, QuerySecurityReadEgress, []string{"url"}},
 
 		// Witness order is source order; the class is the strongest witness.
 		{"multi_witness", `SET foo = 1; SELECT file('a') FROM url('http://h/x', 'CSV')`,
@@ -124,4 +151,45 @@ func TestClassifyQuerySecurityNilTree(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, QuerySecurityMutating, class, "nil input must fail closed")
 	assert.Empty(t, witnesses)
+}
+
+// The witness says how far its construct reaches, for the reader of
+// Diagnostics and of a refusal.
+func TestSecurityWitnessReach(t *testing.T) {
+	for _, tc := range []struct {
+		sql   string
+		kind  SecurityWitnessKindE
+		reach SecurityReachE
+	}{
+		{`SELECT * FROM url('http://h/x', 'CSV')`, SecurityWitnessEgressTableFunction, SecurityReachExternal},
+		{`SELECT * FROM remote('h', 'db', 't')`, SecurityWitnessEgressTableFunction, SecurityReachOtherServers},
+		{`SELECT * FROM filesystem('/')`, SecurityWitnessEgressTableFunction, SecurityReachServerFiles},
+		{`SELECT * FROM eval('SELECT 1')`, SecurityWitnessEgressTableFunction, SecurityReachRunTime},
+		{`SELECT * FROM shinynewtf(1)`, SecurityWitnessEgressTableFunction, SecurityReachUnknown},
+		{`SELECT aiEmbed('x')`, SecurityWitnessEgressFunction, SecurityReachExternal},
+		{`SELECT catboostEvaluate('m.bin', 1)`, SecurityWitnessEgressFunction, SecurityReachServerFiles},
+		{`SELECT generateSerialID('s')`, SecurityWitnessStateChangingFunction, SecurityReachNone},
+	} {
+		_, witnesses := mustSecurity(t, tc.sql)
+		require.Len(t, witnesses, 1, tc.sql)
+		assert.Equal(t, tc.kind, witnesses[0].Kind, tc.sql)
+		assert.Equal(t, tc.reach, witnesses[0].Reach, tc.sql)
+		assert.NotEmpty(t, witnesses[0].Describe(), tc.sql)
+	}
+	assert.Equal(t, "egress table function (external storage or service)",
+		SecurityWitness{Kind: SecurityWitnessEgressTableFunction, Reach: SecurityReachExternal}.Describe())
+}
+
+// A lookup folds names to lower case, so no two spellings in a list may fold
+// onto one name; and a name that is both a table function and a scalar
+// reaches as far either way.
+func TestSecurityVocabularyFolds(t *testing.T) {
+	assert.Len(t, tableFunctions, len(tableFunctionSpellings))
+	assert.Len(t, egressScalarFunctions, len(egressScalarSpellings))
+	assert.Len(t, stateChangingScalarFunctions, len(stateChangingScalarSpellings))
+	for name, reach := range egressScalarFunctions {
+		if info, isTable := tableFunctions[name]; isTable {
+			assert.Equal(t, info.reach, reach, name)
+		}
+	}
 }

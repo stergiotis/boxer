@@ -5,6 +5,7 @@ import (
 
 	"github.com/antlr4-go/antlr/v4"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -93,9 +94,10 @@ func wrapColumnsInScope(rw nanopass.RewriterI, scope *nanopass.SelectScope, re *
 			return false
 		}
 
-		// Replace the entire ColumnsExprColumn with COLUMNS('^colName$')
-		escaped := regexp.QuoteMeta(colName)
-		nanopass.ReplaceNode(rw, colsExpr, "COLUMNS('^"+escaped+"')")
+		// Replace the entire ColumnsExprColumn with COLUMNS('^colName$'). The
+		// anchors keep the selection to this one column; the regex escapes are
+		// themselves escaped for the SQL string literal.
+		nanopass.ReplaceNode(rw, colsExpr, "COLUMNS("+marshalling.EscapeString("^"+regexp.QuoteMeta(colName)+"$")+")")
 
 		return false
 	})

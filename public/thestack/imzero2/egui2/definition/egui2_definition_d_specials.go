@@ -12,30 +12,30 @@ func definitionsSpecial() (specials []ir.NodeI) {
 	// (0=H.264, 1=VP9, 2=AV1) into ImZeroFffi::video_pipeline_request; the
 	// headless host drains it after dispatch and re-points the encoder.
 	specials = append(specials,
-		idl.NewProceduralNode("setVideoPipeline").
+		idl.NewProceduralNode("setVideoPipeline").WithEffect(ir.EffectHost).
 			AddArguments(idl.NewArgumentsBuilder().
 				PlainArg("codec", ctabb.U32).
 				Build()).
 			WithApplyCodeClientRust(rustClientCode("self.video_pipeline_request = Some(codec as u8);\n")).
 			Build())
-	specials = append(specials, idl.NewProceduralNode("end").
+	specials = append(specials, idl.NewProceduralNode("end").WithEffect(ir.EffectLocal).
 		WithApplyCodeClientRust(rustClientCode("r = true;\n")).
 		Build())
-	specials = append(specials, idl.NewProceduralNode("requestRepaint").
+	specials = append(specials, idl.NewProceduralNode("requestRepaint").WithEffect(ir.EffectLocal).
 		WithApplyCodeClientRust(rustClientCode("{{EguiContext}}.request_repaint();\n")).
 		Build())
-	specials = append(specials, idl.NewProceduralNode("showDebugTools").
+	specials = append(specials, idl.NewProceduralNode("showDebugTools").WithEffect(ir.EffectLocal).
 		WithApplyCodeClientRust(rustClientCode(`
 				if {{EguiUiOptionalOuter}}.is_some() {
 					self.render_debug_tools(c, {{EguiUiOptionalOuter}}.as_mut().unwrap());
                 }
 `)).
 		Build())
-	specials = append(specials, idl.NewProceduralNode("prepareNextFrame").
+	specials = append(specials, idl.NewProceduralNode("prepareNextFrame").WithEffect(ir.EffectHost).
 		WithApplyCodeClientRust(rustClientCode("self.prepare_next_frame();\n")).
 		Build())
 	specials = append(specials,
-		idl.NewProceduralNode("passthrough").
+		idl.NewProceduralNode("passthrough").WithEffect(ir.EffectLocal).
 			WithIdentityId(true).
 			AddArguments(idl.NewArgumentsBuilder().
 				PlainArg("input", ctabb.U64).
@@ -43,7 +43,7 @@ func definitionsSpecial() (specials []ir.NodeI) {
 			WithApplyCodeClientRust(rustClientCode("self.r9_u64_push({{Id}}.value(),input+1);\n")).
 			Build())
 	specials = append(specials,
-		idl.NewProceduralNode("memoryResetAreas").
+		idl.NewProceduralNode("memoryResetAreas").WithEffect(ir.EffectLocal).
 			WithApplyCodeClientRust(rustClientCode("{{EguiContext}}.memory_mut(|mem| mem.reset_areas());")).Build())
 	// captureAvailableSize — snapshots ui.available_size() into r18 fields
 	// so a Go-side widget can read the parent panel's available width/height
@@ -57,7 +57,7 @@ func definitionsSpecial() (specials []ir.NodeI) {
 	// is added. The seq-keyed op below reports the same rect's size per caller.
 	// Kept because the opcode is wire-visible.
 	specials = append(specials,
-		idl.NewProceduralNode("captureAvailableSize").
+		idl.NewProceduralNode("captureAvailableSize").WithEffect(ir.EffectLocal).
 			WithApplyCodeClientRust(rustClientCode(`
 if {{EguiUiOptionalOuter}}.is_some() {
     let ui = {{EguiUiOptionalOuter}}.as_mut().unwrap();
@@ -79,7 +79,7 @@ if {{EguiUiOptionalOuter}}.is_some() {
 	// also move styletokens.SetActiveDensity — imzhost.DecorateRenderer's
 	// Layout menu does both. ADR-0032 §SD1 (Update 2026-08-23).
 	specials = append(specials,
-		idl.NewProceduralNode("setIdsDensity").
+		idl.NewProceduralNode("setIdsDensity").WithEffect(ir.EffectLocal).
 			AddArguments(idl.NewArgumentsBuilder().
 				PlainArg("density", ctabb.U32).
 				Build()).
@@ -95,38 +95,38 @@ if {{EguiUiOptionalOuter}}.is_some() {
 				{{EguiContext}}.request_repaint();
 `)).Build())
 	specials = append(specials,
-		idl.NewProceduralNode("guiZoomZoomMenuButtons").
+		idl.NewProceduralNode("guiZoomZoomMenuButtons").WithEffect(ir.EffectLocal).
 			WithApplyCodeClientRust(rustClientCode(`
 				if {{EguiUiOptionalOuter}}.is_some() {
 					egui::gui_zoom::zoom_menu_buttons({{EguiUiOptionalOuter}}.as_mut().unwrap());
                 }
 `)).Build())
 	specials = append(specials,
-		idl.NewProceduralNode("widgetsGlobalThemePreferenceButtons").
+		idl.NewProceduralNode("widgetsGlobalThemePreferenceButtons").WithEffect(ir.EffectLocal).
 			WithApplyCodeClientRust(rustClientCode(`
 			if {{EguiUiOptionalOuter}}.is_some() {
 				egui::widgets::global_theme_preference_buttons({{EguiUiOptionalOuter}}.as_mut().unwrap());
 			}
 `)).Build())
 	specials = append(specials,
-		idl.NewProceduralNode("contextSendViewPortCommandClose").
+		idl.NewProceduralNode("contextSendViewPortCommandClose").WithEffect(ir.EffectHost).
 			WithApplyCodeClientRust(rustClientCode("{{EguiContext}}.send_viewport_cmd(egui::ViewportCommand::Close);")).Build())
 	specials = append(specials,
-		idl.NewProceduralNode("contextInspectionUi").
+		idl.NewProceduralNode("contextInspectionUi").WithEffect(ir.EffectLocal).
 			WithApplyCodeClientRust(rustClientCode(`
 			if {{EguiUiOptionalOuter}}.is_some() {
 				{{EguiContext}}.inspection_ui({{EguiUiOptionalOuter}}.as_mut().unwrap());
 			}
 `)).Build())
 	specials = append(specials,
-		idl.NewProceduralNode("warnIfDebugBuild").
+		idl.NewProceduralNode("warnIfDebugBuild").WithEffect(ir.EffectLocal).
 			WithApplyCodeClientRust(rustClientCode(`
 			if {{EguiUiOptionalOuter}}.is_some() {
 				egui::warn_if_debug_build({{EguiUiOptionalOuter}}.as_mut().unwrap());
 			}
 `)).Build())
 	specials = append(specials,
-		idl.NewProceduralNode("requestScreenshot").
+		idl.NewProceduralNode("requestScreenshot").WithEffect(ir.EffectHost).
 			AddArguments(idl.NewArgumentsBuilder().
 				PlainArg("path", ctabb.S).
 				Build()).
@@ -149,7 +149,7 @@ if {{EguiUiOptionalOuter}}.is_some() {
 	// subsetted TTFs as `@font-face`. The SVG becomes self-contained and
 	// pixel-faithful at the cost of a one-time ~30–80 KB per used face.
 	specials = append(specials,
-		idl.NewProceduralNode("exportSvg").
+		idl.NewProceduralNode("exportSvg").WithEffect(ir.EffectHost).
 			AddArguments(idl.NewArgumentsBuilder().
 				PlainArg("path", ctabb.S).
 				PlainArg("embedFonts", ctabb.B).
@@ -185,7 +185,7 @@ if {{EguiUiOptionalOuter}}.is_some() {
 	// this pass (collapsed, off-screen, never opened) the export fails
 	// with a tracing error and no file is written.
 	specials = append(specials,
-		idl.NewProceduralNode("exportSvgWindow").
+		idl.NewProceduralNode("exportSvgWindow").WithEffect(ir.EffectHost).
 			WithIdentityIdReference().
 			AddArguments(idl.NewArgumentsBuilder().
 				PlainArg("path", ctabb.S).
@@ -222,12 +222,28 @@ if {{EguiUiOptionalOuter}}.is_some() {
 				bg,
 			});
 `)).Build())
+	// Capture replay (ADR-0281 §SD5): `stream` is whole messages of a
+	// recorded frame — the granted windows' spans. The client replays them
+	// into a separate, input-less context built from the live one and keeps
+	// the result for fetchCaptureResult: format 0 rasterizes to pixels,
+	// 1 exports SVG, both in memory. Host-effect: a replay must never start
+	// another.
+	specials = append(specials,
+		idl.NewProceduralNode("captureReplay").WithEffect(ir.EffectHost).
+			AddArguments(idl.NewArgumentsBuilder().
+				PlainArg("requestId", ctabb.U64).
+				PlainArg("format", ctabb.U8).
+				PlainArg("stream", ctabb.U8h).
+				Build()).
+			WithApplyCodeClientRust(rustClientCode(`
+			self.capture_render({{EguiContext}}, request_id, format, &stream);
+`)).Build())
 	// Cropped-region screenshot. The rect is in logical points (pre-DPI); the
 	// handler multiplies by pixels_per_point before slicing the ColorImage.
 	// Used by the deterministic TestDriver to capture each demo's fixed stage
 	// rect without neighbour chrome bleed.
 	specials = append(specials,
-		idl.NewProceduralNode("requestScreenshotRect").
+		idl.NewProceduralNode("requestScreenshotRect").WithEffect(ir.EffectHost).
 			AddArguments(idl.NewArgumentsBuilder().
 				PlainArg("path", ctabb.S).
 				PlainArg("rectX", ctabb.F32).
@@ -250,7 +266,7 @@ if {{EguiUiOptionalOuter}}.is_some() {
 	// methods snap to their target value instead of tweening. TestDriver
 	// sets this to true at startup for pixel-stable captures.
 	specials = append(specials,
-		idl.NewProceduralNode("setAnimationFreeze").
+		idl.NewProceduralNode("setAnimationFreeze").WithEffect(ir.EffectHost).
 			AddArguments(idl.NewArgumentsBuilder().
 				PlainArg("freeze", ctabb.B).
 				Build()).
@@ -258,13 +274,31 @@ if {{EguiUiOptionalOuter}}.is_some() {
 			self.animation_freeze = freeze;
 `)).Build())
 	specials = append(specials,
-		idl.NewProceduralNode("moveWindowToTop").
+		idl.NewProceduralNode("moveWindowToTop").WithEffect(ir.EffectLocal).
 			WithIdentityIdReference().
 			WithApplyCodeClientRust(rustClientCode(`
 			{{EguiContext}}.move_to_top(egui::LayerId::new(egui::Order::Middle, {{Id}}));
 `)).Build())
+	// windowPlace sets a window's outer rect for the next time it is shown
+	// this frame: position and size are pinned for that one frame (like
+	// the window's restore from maximized) and the window is movable and
+	// resizable again on the next. Emit it before the window it places.
+	// Coordinates are egui logical points, viewport top-left origin. A
+	// placement for a window not shown this frame is dropped at frame end.
 	specials = append(specials,
-		idl.NewProceduralNode("setWindowCollapsed").
+		idl.NewProceduralNode("windowPlace").WithEffect(ir.EffectHost).
+			WithIdentityIdReference().
+			AddArguments(idl.NewArgumentsBuilder().
+				PlainArg("posX", ctabb.F32).
+				PlainArg("posY", ctabb.F32).
+				PlainArg("width", ctabb.F32).
+				PlainArg("height", ctabb.F32).
+				Build()).
+			WithApplyCodeClientRust(rustClientCode(`
+			self.pending_window_place.insert({{Id}}.value(), egui::Rect::from_min_size(egui::pos2(pos_x, pos_y), egui::vec2(width, height)));
+`)).Build())
+	specials = append(specials,
+		idl.NewProceduralNode("setWindowCollapsed").WithEffect(ir.EffectLocal).
 			WithIdentityIdReference().
 			AddArguments(idl.NewArgumentsBuilder().
 				PlainArg("collapsed", ctabb.B).
@@ -280,7 +314,7 @@ if {{EguiUiOptionalOuter}}.is_some() {
 	// across frames. Result (current 0..1 value) is pushed to r9_f64 keyed by
 	// `animId`; the Go-side wrapper registers a databinding to read it next Sync.
 	specials = append(specials,
-		idl.NewProceduralNode("animateBoolWithTime").
+		idl.NewProceduralNode("animateBoolWithTime").WithEffect(ir.EffectLocal).
 			AddArguments(idl.NewArgumentsBuilder().
 				PlainArg("animId", ctabb.U64).
 				PlainArg("target", ctabb.B).
@@ -296,7 +330,7 @@ if {{EguiUiOptionalOuter}}.is_some() {
 			self.r9_f64_push(anim_id, val as f64);
 `)).Build())
 	specials = append(specials,
-		idl.NewProceduralNode("animateBoolResponsive").
+		idl.NewProceduralNode("animateBoolResponsive").WithEffect(ir.EffectLocal).
 			AddArguments(idl.NewArgumentsBuilder().
 				PlainArg("animId", ctabb.U64).
 				PlainArg("target", ctabb.B).
@@ -311,7 +345,7 @@ if {{EguiUiOptionalOuter}}.is_some() {
 			self.r9_f64_push(anim_id, val as f64);
 `)).Build())
 	specials = append(specials,
-		idl.NewProceduralNode("animateValueWithTime").
+		idl.NewProceduralNode("animateValueWithTime").WithEffect(ir.EffectLocal).
 			AddArguments(idl.NewArgumentsBuilder().
 				PlainArg("animId", ctabb.U64).
 				PlainArg("target", ctabb.F32).
@@ -327,7 +361,7 @@ if {{EguiUiOptionalOuter}}.is_some() {
 			self.r9_f64_push(anim_id, val as f64);
 `)).Build())
 	specials = append(specials,
-		idl.NewProceduralNode("requestRepaintAfter").
+		idl.NewProceduralNode("requestRepaintAfter").WithEffect(ir.EffectLocal).
 			AddArguments(idl.NewArgumentsBuilder().
 				PlainArg("durSecs", ctabb.F64).
 				Build()).
@@ -340,7 +374,7 @@ if {{EguiUiOptionalOuter}}.is_some() {
 	// Needed by widgets that position labels precisely (axis ticks, legends,
 	// overlap-aware tick selection).
 	specials = append(specials,
-		idl.NewProceduralNode("measureText").
+		idl.NewProceduralNode("measureText").WithEffect(ir.EffectLocal).
 			AddArguments(idl.NewArgumentsBuilder().
 				PlainArg("measureId", ctabb.U64).
 				PlainArg("text", ctabb.S).
@@ -369,7 +403,7 @@ if {{EguiUiOptionalOuter}}.is_some() {
 	// callers commonly hash-derive measure ids, where a bit-trick sibling id
 	// is collision-prone; explicit ids are collision-free by construction.
 	specials = append(specials,
-		idl.NewProceduralNode("measureTextSize").
+		idl.NewProceduralNode("measureTextSize").WithEffect(ir.EffectLocal).
 			AddArguments(idl.NewArgumentsBuilder().
 				PlainArg("widthMeasureId", ctabb.U64).
 				PlainArg("heightMeasureId", ctabb.U64).
@@ -411,7 +445,7 @@ if {{EguiUiOptionalOuter}}.is_some() {
 	//     dedup; duplicate seqs produce two rows and fetchR21UiRects
 	//     returns both (Go-side last-write-wins in the StateManager map).
 	specials = append(specials,
-		idl.NewProceduralNode("captureUiRect").
+		idl.NewProceduralNode("captureUiRect").WithEffect(ir.EffectLocal).
 			AddArguments(idl.NewArgumentsBuilder().
 				PlainArg("seq", ctabb.U64).
 				Build()).
@@ -452,7 +486,7 @@ if {{EguiUiOptionalOuter}}.is_some() {
 	//   - No-op with no Ui in scope: the seq stays absent from the drain, so a
 	//     reader sees ok=false rather than a zero rect.
 	specials = append(specials,
-		idl.NewProceduralNode("captureUiAvailableRect").
+		idl.NewProceduralNode("captureUiAvailableRect").WithEffect(ir.EffectLocal).
 			AddArguments(idl.NewArgumentsBuilder().
 				PlainArg("seq", ctabb.U64).
 				Build()).
@@ -484,7 +518,7 @@ if {{EguiUiOptionalOuter}}.is_some() {
 	// is skipped (interactive sensing requires a Ui scope which the
 	// foreground overlay does not have) and logs a tracing warning.
 	specials = append(specials,
-		idl.NewProceduralNode("paintAbsoluteOverlay").
+		idl.NewProceduralNode("paintAbsoluteOverlay").WithEffect(ir.EffectLocal).
 			WithApplyCodeClientRust(rustClientCode(`
 {
     let screen = {{EguiContext}}.viewport_rect();

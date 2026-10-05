@@ -12,7 +12,7 @@ import (
 )
 
 // A judge sheet puts a reader — an agent or a person — where the model
-// stands (ADR-0257, proposed, §SD10): the picture, the scenario's intent and
+// stands (ADR-0266, proposed, §SD10): the picture, the scenario's intent and
 // the questions, and nothing else. The reader's replies come back as lines of
 // an answers file and are checked by VerdictOf, as a model's are.
 

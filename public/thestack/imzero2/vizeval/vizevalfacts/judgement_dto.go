@@ -3,7 +3,7 @@ package vizevalfacts
 import "time"
 
 // VizevalJudgement is one pairwise comparison as a `boxer.facts` row
-// (ADR-0257 §SD6, §SD8): two candidates' drawings compared by a model under a
+// (ADR-0266 §SD6, §SD8): two candidates' drawings compared by a model under a
 // prompt version, both orders merged. Id is the xxh3 of NaturalKey, which
 // names what makes two comparisons the same — scenario, prompt, model and the
 // two drawings — so a comparison asked again lands under the same key.

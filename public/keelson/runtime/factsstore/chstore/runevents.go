@@ -113,8 +113,7 @@ func composeRunEventsSql(table string, filter factsstore.RunEventFilter, limit u
 	const (
 		symValue  = "`tv:symbol:value:val:s:124::I:0::data`"
 		symLR     = "`tv:symbol:lr:lr:u64:1247:::0::data`"
-		symLMR    = "`tv:symbol:lmr:lmr:u64:1247:::0::data`"
-		symMRHP   = "`tv:symbol:mrhp:mrhp:y:4:::0::data`"
+		symLRCard = "`tv:symbol:lrcard:lrcard:u64:4E:::0::data`"
 		strValue  = "`tv:stringArray:value:val:sh:4::8:0::data`"
 		u64Value  = "`tv:u64Array:value:val:u64h:4:::0::data`"
 		u64LR     = "`tv:u64Array:lr:lr:u64:1247:::0::data`"
@@ -132,10 +131,8 @@ func composeRunEventsSql(table string, filter factsstore.RunEventFilter, limit u
 	idArray := "[" + strings.Join(ids, ",") + "]"
 	labelArray := "[" + strings.Join(labels, ",") + "]"
 
-	appExpr := fmt.Sprintf("arrayFirst((p, m) -> m = %d, %s, %s)",
-		vocab.MembRuntimeApp.GetId().Value(), symMRHP, symLMR)
-	runExpr := fmt.Sprintf("arrayFirst((p, m) -> m = %d, %s, %s)",
-		vocab.MembRuntimeRun.GetId().Value(), symMRHP, symLMR)
+	appExpr := pickLcrString(symValue, symLR, symLRCard, vocab.MembRuntimeApp.GetId().Value())
+	runExpr := pickLcrString(symValue, symLR, symLRCard, vocab.MembRuntimeRun.GetId().Value())
 	instanceExpr := pickLcrNumeric(u64Value, u64LR, u64LRCard,
 		vocab.MembLifecycleTileKey.GetId().Value(), "0")
 	// A row carries exactly one kind, so intersecting the kind lane with the

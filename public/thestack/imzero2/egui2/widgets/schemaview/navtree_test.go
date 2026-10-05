@@ -46,7 +46,7 @@ func fixture() *common.TableDesc {
 }
 
 func TestBuildNavShape(t *testing.T) {
-	m := NewModel(fixture())
+	m := newView(fixture(), &State{})
 	m.buildNav()
 
 	// The category glyph is NOT in the label: it rides in navNode.glyph so the
@@ -76,7 +76,7 @@ func TestBuildNavShape(t *testing.T) {
 }
 
 func TestBuildNavSelections(t *testing.T) {
-	m := NewModel(fixture())
+	m := newView(fixture(), &State{})
 	m.buildNav()
 
 	assert.Equal(t, selection{}, m.navNodes[0].sel,
@@ -90,7 +90,7 @@ func TestBuildNavSelections(t *testing.T) {
 }
 
 func TestBuildNavFilterDropsWholeSections(t *testing.T) {
-	m := NewModel(fixture())
+	m := newView(fixture(), &State{})
 	m.filter = "celsius"
 	m.buildNav()
 
@@ -102,7 +102,7 @@ func TestBuildNavFilterDropsWholeSections(t *testing.T) {
 }
 
 func TestSyncNavSetsTheDefaultAndProjectsTheSelection(t *testing.T) {
-	m := NewModel(fixture())
+	m := newView(fixture(), &State{})
 	m.buildNav()
 	m.syncNav()
 
@@ -125,7 +125,7 @@ func TestSyncNavSetsTheDefaultAndProjectsTheSelection(t *testing.T) {
 // TestNavStateSurvivesAFilterRenumberingTheNodes is the property the key column
 // exists for, and the one the Model kept its own collapse map for before it.
 func TestNavStateSurvivesAFilterRenumberingTheNodes(t *testing.T) {
-	m := NewModel(fixture())
+	m := newView(fixture(), &State{})
 	m.buildNav()
 	m.syncNav()
 
@@ -145,7 +145,7 @@ func TestNavStateSurvivesAFilterRenumberingTheNodes(t *testing.T) {
 }
 
 func TestApplyNavTurnsAClickIntoASelectionOrAToggle(t *testing.T) {
-	m := NewModel(fixture())
+	m := newView(fixture(), &State{})
 	m.buildNav()
 	m.syncNav()
 

@@ -67,6 +67,11 @@ type previewContent struct {
 	imgH   uint32
 }
 
+// renderDoc draws the markdown preview under ids; a nil doc draws nothing.
+func (inst previewContent) renderDoc(ids *c.WidgetIdStack) {
+	markdown.Render(markdown.Input{Ids: ids, ScopeKey: "doc", Doc: inst.doc})
+}
+
 // loadPreview reads one file through the view and classifies it. Off the
 // render thread: every adapter call is a query. The read goes through
 // ladingview so this package handles bytes, never file handles.

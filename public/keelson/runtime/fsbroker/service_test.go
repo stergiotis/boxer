@@ -327,11 +327,9 @@ func TestService_Handle_CloseEvictsHandle(t *testing.T) {
 
 func TestService_AppCannotAccessOtherAppsHandle(t *testing.T) {
 	// App A obtains a handle. App B has fs.handle.> pub cap (an unusually
-	// permissive grant); it tries to read A's handle. The bus permits the
-	// publish (B has the cap), but the service trusts the subject — for
-	// M2.6 hygiene-mode this means B succeeds. Documenting the gap: real
-	// enforcement requires M4 NKey identity. For now this test asserts
-	// the existing behaviour so a regression is caught.
+	// permissive grant); it tries to read and to close A's handle. The bus
+	// permits the publishes (B has the cap); the broker refuses them because
+	// the handle was granted to A, not to the message's sender.
 	inst, svc, appA, cleanup := newSetup(t)
 	defer cleanup()
 
@@ -362,9 +360,16 @@ func TestService_AppCannotAccessOtherAppsHandle(t *testing.T) {
 	})
 	bReply, err := appB.Request(drA.HandleSubjectPrefix+".read", nil)
 	require.NoError(t, err)
-	// Today: succeeds because the service does not check Msg.Sender
-	// against handle.appId. M4 NKey identity will tighten this.
-	assert.Equal(t, []byte("secret"), bReply, "hygiene-mode: documenting cross-app handle access")
+	denied, err := fsbroker.UnmarshalDialogReply(bReply)
+	require.NoError(t, err, "a refusal, not the file's bytes")
+	assert.False(t, denied.Granted)
+	assert.NotContains(t, string(bReply), "secret")
+
+	_, err = appB.Request(drA.HandleSubjectPrefix+".close", nil)
+	require.NoError(t, err)
+	aReply, err := appA.Request(drA.HandleSubjectPrefix+".read", nil)
+	require.NoError(t, err)
+	assert.Equal(t, []byte("secret"), aReply, "another app's close must not revoke A's grant")
 }
 
 func TestDialogRequest_RoundTrip(t *testing.T) {
@@ -381,4 +386,99 @@ func TestDialogRequest_RoundTrip(t *testing.T) {
 	zero, err := fsbroker.UnmarshalDialogRequest(nil)
 	require.NoError(t, err)
 	assert.Equal(t, fsbroker.DialogRequest{}, zero)
+}
+
+// TestService_Pending_InArrivalOrder: the bridge takes Pending()[0], so the
+// list is ordered by arrival, not by map iteration.
+func TestService_Pending_InArrivalOrder(t *testing.T) {
+	inst, svc, _, cleanup := newSetup(t)
+	defer cleanup()
+	const n = 8
+	for i := 0; i < n; i++ {
+		c := inst.NewClient(app.AppIdT("test.order"+string(rune('a'+i))), []app.SubjectFilter{
+			{Pattern: fsbroker.SubjectDialogRead, Direction: app.CapDirectionPub},
+		})
+		go func() { _, _ = c.Request(fsbroker.SubjectDialogRead, nil) }()
+		deadline := time.Now().Add(time.Second)
+		for len(svc.Pending()) != i+1 && time.Now().Before(deadline) {
+			time.Sleep(time.Millisecond)
+		}
+		require.Len(t, svc.Pending(), i+1)
+	}
+	for round := 0; round < 20; round++ {
+		all := svc.Pending()
+		require.Len(t, all, n)
+		for i, p := range all {
+			require.Equal(t, app.AppIdT("test.order"+string(rune('a'+i))), p.AppId, "round %d", round)
+		}
+	}
+}
+
+// TestService_Pending_DroppedWhenInstanceCloses: a window that closes with a
+// dialog open leaves nobody on the reply inbox, so the picker must not pop up
+// for it and a late Resolve must not mint a grant.
+func TestService_Pending_DroppedWhenInstanceCloses(t *testing.T) {
+	inst, svc, _, cleanup := newSetup(t)
+	defer cleanup()
+	window := inst.NewClient("test.window", []app.SubjectFilter{
+		{Pattern: fsbroker.SubjectDialogRead, Direction: app.CapDirectionPub},
+	})
+	window.SetInstanceKey(7)
+	other := inst.NewClient("test.window", []app.SubjectFilter{
+		{Pattern: fsbroker.SubjectDialogRead, Direction: app.CapDirectionPub},
+	})
+	other.SetInstanceKey(8)
+	go func() { _, _ = window.Request(fsbroker.SubjectDialogRead, nil) }()
+	req := pendingOnce(t, svc)
+	go func() { _, _ = other.Request(fsbroker.SubjectDialogRead, nil) }()
+	deadline := time.Now().Add(time.Second)
+	for len(svc.Pending()) != 2 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	require.Len(t, svc.Pending(), 2)
+
+	require.NoError(t, window.Close())
+	left := svc.Pending()
+	require.Len(t, left, 1, "only the closed window's dialog is dropped")
+	assert.NotEqual(t, req.Id, left[0].Id)
+	_, err := svc.Resolve(req.Id, "/etc/hostname")
+	require.Error(t, err)
+}
+
+// A grant lands on the window that opened the dialog, not on the newest
+// window of the same app, and Close revokes it from that same window.
+func TestService_Resolve_GrantsTheRequestingWindow(t *testing.T) {
+	inst, svc, _, cleanup := newSetup(t)
+	defer cleanup()
+	older := inst.NewClient("test.window", []app.SubjectFilter{
+		{Pattern: fsbroker.SubjectDialogRead, Direction: app.CapDirectionPub},
+	})
+	older.SetInstanceKey(7)
+	newer := inst.NewClient("test.window", []app.SubjectFilter{
+		{Pattern: fsbroker.SubjectDialogRead, Direction: app.CapDirectionPub},
+	})
+	newer.SetInstanceKey(8)
+
+	replies := make(chan []byte, 1)
+	go func() {
+		reply, _ := older.Request(fsbroker.SubjectDialogRead, nil)
+		replies <- reply
+	}()
+	req := pendingOnce(t, svc)
+	handleUuid, err := svc.Resolve(req.Id, "/etc/hostname")
+	require.NoError(t, err)
+	<-replies
+
+	pattern := fsbroker.HandleSubjectPrefix + handleUuid + ".>"
+	assert.True(t, hasCapPattern(older, pattern), "the requesting window holds the handle cap")
+	assert.False(t, hasCapPattern(newer, pattern), "another window of the app does not")
+}
+
+func hasCapPattern(c *inprocbus.Client, pattern string) bool {
+	for _, f := range c.Caps() {
+		if f.Pattern == pattern {
+			return true
+		}
+	}
+	return false
 }

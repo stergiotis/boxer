@@ -60,7 +60,8 @@ nesting among the printed nodes.
 Filters, all optional: `--treeText` (name or value contains, case ignored),
 `--treeRole`, `--treeUnder <id>` (that node and below), `--treeLimit`,
 `--treeHidden`. Unnamed containers and `text_run` duplicates of a label are left
-out. The header says `nodes=200 of 640` when the limit cut the list — narrow
+out; an empty text input is not, though it has neither name nor value (its
+hint text does not reach the tree). The header says `nodes=200 of 640` when the limit cut the list — narrow
 the filter rather than reading a partial scene as the whole one.
 
 A script that parses the dump wants `--treeFormat jsonl` instead: one JSON
@@ -88,7 +89,7 @@ substring), `value`, `valueContains`, `role`, `nth`.
 | `read` | anchor, `pattern`, `on` | polls until the node's value (or name, with `"on":"name"`) matches the regular expression, then binds every named group `(?P<zoom>[\d.]+)` for the rest of the run |
 | `expect` | `of`, `minus`; `eq`, `approx`+`tol`, `min`, `max`, `is`, `matches` | compares a bound name — less another, with `minus` — with a constant; fails with what was read and what was expected |
 | `tree` | `text`, `role`, `id` (as *under*) | prints matching nodes mid-run |
-| `capture` | `text` as the file name; `sidecars` | PNG into the host's `IMZERO2_HEADLESS_DUMP_DIR`; with `"sidecars":["svg","tree"]` also `<name>.svg` (the same pass's shapes, text as glyph-positioned `<text>`) and `<name>.tree.jsonl` (every node, taken right after) |
+| `capture` | `text` as the file name; `sidecars` | PNG into the host's `IMZERO2_HEADLESS_DUMP_DIR`; with `"sidecars":["svg","tree"]` also `<name>.svg` (the same pass's shapes; text as one `<text>` per run with an `x` per character, so `data-text` and the element's string agree) and `<name>.tree.jsonl` (every node, taken right after). `"svg+fonts"` in place of `"svg"` embeds the used fonts in the SVG, for looking at it on a machine without them; it is several times the size |
 | `resize`, `cadence`, `sleep`, `note` | see `carrierclient.Step` | |
 
 Coordinate steps (`click`, `hover`, `drag`) also take `xFrom` / `yFrom`: the
@@ -146,8 +147,15 @@ step, or before it for `capture` and `tree`. `modifiers` is a bitmask: 1 alt,
 - **No dump directory.** A `capture` against a host started without
   `IMZERO2_HEADLESS_DUMP_DIR` is ignored and the step times out. The PNG lands
   on the host's filesystem; the driver reports the path.
+- **Clicking through a modal.** A `click` without `pointer` is an AccessKit
+  action, and egui honours it on a widget behind a modal's backdrop, where
+  a person's press is blocked. To check that a modal blocks, press with
+  `"pointer":true`.
 - **Typing into the wrong widget.** `key` goes to whatever holds focus. `type`
-  focuses its anchor first; `key` after a `click` elsewhere does not.
+  focuses its anchor, waits until the host reports it focused, and on a text
+  input waits until the value changed — it fails with `focus did not move` or
+  `the text did not reach the node` rather than typing nowhere. `key` after a
+  `click` elsewhere does not focus anything.
 - **A stale headless client.** If the host log shows `unable to convert from
   representation`, the Rust client predates the last codegen; rebuild it before
   suspecting the app.

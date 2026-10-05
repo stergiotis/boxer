@@ -87,7 +87,7 @@ func clampHi(v int) uint8 {
 // --- Built-in colorings ---
 
 // DepthColoring resolves colors from a fixed palette indexed by CellInfo.Depth
-// (modulo palette length). The default coloring used when no WithColoring
+// (modulo palette length). The default coloring used when no Options.Coloring
 // option is supplied.
 func DepthColoring(palette []uint32) ColoringI {
 	if len(palette) == 0 {

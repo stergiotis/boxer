@@ -9,9 +9,13 @@ status: draft
 > **Status: draft — pre-human-review.** Compiled 2026-09-20 from a design
 > dialogue. Nothing here is a decision and nothing in §5 is built. Provenance
 > is four-tiered: (a) claims about this repository were checked against the
-> working tree on the compile date; (b) the numbers in §6 were *measured* on the
-> compile date — one machine that was not idle, one build, two launches per
-> cell, a synthetic demo — so read them as observations; (c) figures quoted
+> working tree on the compile date; (b) §6, §9 and §10 summarize measurements
+> taken 2026-09-24 to -26 on two AMD APUs with integrated encode blocks — a
+> handheld-class one that was loaded throughout, and a workstation-class one —
+> one or two launches per configuration, one recorded workload for the
+> encoders. They are stated as directions and orders of magnitude; the raw
+> data is not in the tree, so none of it is a figure to plan capacity on;
+> (c) figures quoted
 > from ADRs and trials keep the date and conditions of their source, which is
 > linked; (d) §7 is a **clean-room** survey: it rests on product documentation,
 > protocol-specification prose, engineering blogs and published papers, read on
@@ -44,7 +48,7 @@ The project owner set four constraints in the dialogue this page records:
 Out of scope: the appliance image itself
 ([ADR-0206](../adr/0206-gokrazy-appliance-image.md)), authentication design
 ([ADR-0082](../adr/0082-imzero2-remote-session-auth-tls.md), accepted and
-unbuilt), and guest egress policy, which §10 lists as open.
+unbuilt), and guest egress policy, which §11 lists as open.
 
 ## 2 What the tree already has
 
@@ -208,7 +212,10 @@ Why each piece looks the way it does:
   touching a guest.
 - **The guest dials out.** It listens on nothing, which removes the posture
   ADR-0206 §SD5 had to excuse. An idle, unwatched guest already falls to a one
-  second heartbeat.
+  second heartbeat. The stock gokrazy amd64 kernel builds no vsock transport
+  (checked 2026-09-24 against the kernel package's image): the uplink needs a
+  kernel configured with `CONFIG_VIRTIO_VSOCKETS`, or virtio-serial, which it
+  carries.
 - **The Go front parses no carrier protocol.** For mesh viewers the media host
   is a relay; the worker parses framing only and re-hashes bodies, so upstream
   and downstream names are independent and a guest cannot name a body falsely.
@@ -223,87 +230,65 @@ Why each piece looks the way it does:
 One carrier change serves this shape and the standalone host alike: per-viewer
 lane mixing (ADR-0128 M4).
 
-## 6 Measurement — the mesh lane under dense animated geometry
+## 6 Measurement — the mesh lane under dense geometry
 
 The owner's doubt: data-visualization widgets have pathological cases that
 matter to this project, and the mesh lane's measurements (ADR-0128) cover a
-launcher, a widget gallery and a treemap. The
-[flow-particles trial](../trials/flow-particles-frame-cost/README.md) lists
-"bytes per frame to a remote viewer" as its open M2. This section is a first
-look at that number, not that milestone: it follows the trial's cell shape and
-none of its repeat discipline.
+launcher, a widget gallery and a treemap. A 2 000- and a 20 000-node graph, a
+country map with particle trails, and the flow-particles trial's animation
+were put on the mesh lane and on H.264 — VAAPI with the host's arguments and
+`libopenh264` — held still, panned and animated, at 1100 × 900 and 30 Hz, with
+a passive second viewer counting what the carrier sent.
 
-**Method.** 2026-09-20, the machine of the trial's first run (a handheld-class
-APU, 8 hardware threads), **not idle** — one-minute load between 5 and 15. The
-CPU-rasterizer host at 1100 × 900 and a 30 Hz cap; the `flowbench` demo's
-shipped `segments-mesh` arm through the scene runner; the codec lane forced to
-`mesh` or to `h264` with the scene runner's software encoder
-(`libopenh264`, rate control off — so the video figure is not bitrate-capped).
-A second, passive viewer connection on loopback tallied carrier messages by
-kind per second; the figures are an 11-second window of steady animation. Two
-launches per cell; the per-frame sizes agreed within 1 %, the rates did not,
-and the table gives the second.
-
-| Particles | Lane | Largest message | To one viewer | Messages / s |
-| --- | --- | --- | --- | --- |
-| 1 000 | mesh | 0.59 MB | 13.2 MB/s ≈ 106 Mbit/s | 60 |
-| 1 000 | h264 | 53 kB | 0.17 MB/s ≈ 1.4 Mbit/s | 30 |
-| 5 000 (~43 000 segments) | mesh | 3.21 MB | 73.5 MB/s ≈ 590 Mbit/s | 47 |
-| 5 000 | h264 | 80 kB | 0.76 MB/s ≈ 6.1 Mbit/s | 29 |
-| 20 000 | mesh | 12.8 MB | 56.6 MB/s ≈ 450 Mbit/s | 9 |
-| 20 000 | h264 | 137 kB | 0.65 MB/s ≈ 5.2 Mbit/s | 8 |
-
-The mesh lane sent two messages per frame at 1 000 particles, so its frame rate
-is about half its message rate *(inference: the second is ADR-0242's retirement
-message)*: 30, about 23 and about 4.5 frames per second down the rows. The
-rates are what a Python observer on a loaded machine received, so they are
-lower bounds on what the host offered; the message sizes are exact.
+*Correction.* This section first held a table from an informal run on
+2026-09-20 whose video column was labelled `libopenh264`. The host had
+replaced that encoder, which the machine's ffmpeg lacks, with VAAPI — a
+fallback it takes with only a log warning. The table is removed; it is in git
+history at `36ca229a`.
 
 **What it says.**
 
-- The size is the wire format's arithmetic. A segment is a quad: four vertices
-  at 12 B and six indices at 4 B once a mesh passes 65 535 vertices — 72 B.
-  43 000 segments predict 3.10 MB; 3.21 MB was measured with the gallery
-  around it. Every particle moves every frame, so content addressing
-  deduplicates nothing.
-- **Mesh cost follows scene complexity and change rate; video cost follows
-  pixel count.** A raw frame at this size is 3.96 MB: at 5 000 particles the
-  mesh frame is four fifths of raw pixels, at 20 000 it is three times raw
-  pixels. Against the software H.264 lane the mesh lane moved roughly a hundred
-  times the bytes.
+- **Mesh cost follows what moves, not what is shown.** Held still, the dense
+  graph and the map cost the mesh lane about what video costs — around a tenth
+  of a megabyte per second — because content addressing re-sends only what
+  changed. Panned or animated they cost one to three orders of magnitude more
+  than either H.264 lane, and a frame is hundreds of kilobytes to megabytes.
+  That is the wire format's arithmetic: a segment or a marker is a quad, 72 B
+  once a mesh passes 65 535 vertices, and a moving view changes every vertex.
+- **Video cost follows pixel count and motion**, and stayed below a megabyte
+  per second in every case.
 - ADR-0128's deferred frame compression (zstd, 3.2× measured there on UI
   frames) would not change the class *(inference — not measured on this
-  content)*: a third of 3.2 MB at 30 Hz is still a quarter of a gigabit.
-- The doubt was right for animated dense geometry. It is **not** shown for
-  static dense plots, which ship once and deduplicate; panning or zooming one
-  re-sends it every frame and should behave like the rows above — unmeasured.
+  content)*.
+- The doubt was right for moving dense geometry and wrong for held dense
+  geometry.
 
 **What it changes in §5.**
 
-- On one machine the uplink is vsock, and a heavy session is a CPU cost, not a
-  link cost: the guest serializes and hashes megabytes per frame, the worker
-  parses and rasterizes them, and the viewer gets video. The media host absorbs
-  the pathology for the viewer leg, which needs a **measured trigger** — mesh
-  bytes per frame or per second over a window — to move a session's viewers to
-  video. That is ADR-0128's M4 bandwidth guard, decided on the media host.
-- Across a LAN a heavy session wants hundreds of megabits on the uplink. One
-  fits a gigabit link; a few fit ten. There the guest needs its own pixel path
-  — the rasterizer and a software encoder in the image, α5 — for the sessions
-  that trip the guard, and the media host relays. That path uses no GPU.
-- Widgets decide how often the guard trips. Dense marks drawn as an image —
-  a density texture computed where the data is — ship once as a texture and
-  deduplicate; a particle cap on the mesh lane is cheap. The trial's §0 already
-  bounds the CPU-rasterizer host near 5 000 particles at 30 Hz for its own
-  reasons.
+- On one machine the uplink is a local channel, and a heavy session is a CPU
+  cost, not a link cost: the guest serializes and hashes megabytes per frame,
+  the worker parses and rasterizes them, and the viewer gets video. The media
+  host absorbs the pathology for the viewer leg, which needs a **measured
+  trigger** — mesh bytes per second over a window — to move a session's viewers
+  to video. Every held state measured sat more than an order of magnitude below
+  the lightest moving one, so the trigger has a wide band to sit in. That is
+  ADR-0128's M4 bandwidth guard, decided on the media host.
+- Across a LAN a heavy session wants tens to hundreds of megabits on the
+  uplink. There the guest needs its own pixel path — the rasterizer and a
+  software encoder in the image, α5 — for the sessions that trip the guard,
+  and the media host relays. That path uses no GPU.
+- Widgets decide how often the guard trips. Dense marks drawn as an image — a
+  density texture computed where the data is — ship once as a texture and
+  deduplicate; a particle cap on the mesh lane is cheap.
 - A `segments` primitive in the wire — endpoints, width and colour, expanded to
-  quads by the consumer — would cut these frames by three to six times
-  *(inference from the trial's 20 B per segment across FFFI2)* and still leave
-  them well over an order above video. It also grows the vocabulary; §7.3 has
-  what the surveyed protocols did about that.
+  quads by the consumer — would cut moving frames by three to six times
+  *(inference from the flow-particles trial's 20 B per segment across FFFI2)*
+  and still leave them well over an order above video. It also grows the
+  vocabulary; §7.3 has what the surveyed protocols did about that.
 
 ## 7 What others do
 
-Sources are keyed in §11. A claim without a mark was *read*; *(snippet)*,
+Sources are keyed in §12. A claim without a mark was *read*; *(snippet)*,
 *(recalled)* and *(inference)* mark the rest.
 
 ### 7.1 Cloud game streaming
@@ -355,7 +340,7 @@ Sources are keyed in §11. A claim without a mark was *read*; *(snippet)*,
 
 ### 7.2 Desktop-as-a-service
 
-All *read* on the vendor documentation linked in §11 unless marked.
+All *read* on the vendor documentation linked in §12 unless marked.
 
 - **Reverse connect.** Azure Virtual Desktop's session host keeps an outbound
   channel to the broker and, on a connection, dials the same gateway instance
@@ -522,7 +507,8 @@ measurement.**
   transport change, not before it.
 - **Encode density is bought as fixed-function hardware**, a consumer card caps
   concurrent sessions in its driver, and the cards sold for density are 4:2:0.
-  §10's first measurement should run on the hardware actually intended.
+  The encoder measurement (§10) ran on integrated APU blocks, not on the
+  hardware a media host would use.
 - **The broker is a product in its own right** in both fields — capacity held
   idle in anticipation, a reconnect window, scale-down that waits for a host to
   empty.
@@ -534,10 +520,17 @@ measurement.**
 ## 9 Where the cost of a session sits
 
 Placement of rendering and encoding moves hundreds of mebibytes and
-milliseconds per session. The guest itself costs more: `gok vm run` defaults to
+milliseconds per session. The guest itself costs more. `gok vm run` defaults to
 1 GiB, and the image that carries ClickHouse is documented at 3 GiB
 ([showcase/gokrazy](../../showcase/gokrazy/README.md)) because its
-`clickhouse-local` pool keeps warm workers.
+`clickhouse-local` pool keeps warm workers. Booted under QEMU at decreasing
+memory, both images served a watched session in about a third of a GiB — below
+that they did not crash but thrashed and served nothing — and the Go app held
+most of it, the Rust host a small part. `play` starts its pools on first use,
+so that floor has no workers in it; an idle worker is on the order of
+150 MiB, most of it the binary's pages, which the workers of one guest share.
+At this size memory, not the placement of rendering, sets the density; the
+guest's own heap is what to shrink.
 
 A pool shared across guests is structurally easy — workers are one-shot
 ([ADR-0028](../adr/0028-chlocal-low-latency-sql-cap.md)), fungible until handed
@@ -556,22 +549,102 @@ tenant SQL with `file()`, `url()` and `s3()` inside a large C++ program.
 Memory deduplication across guests (KSM) is a known side channel between
 hostile tenants and should stay off.
 
-## 10 Open questions and measurements
+## 10 What the measurements showed
 
-1. **Encoder concurrency** on the intended GPU: N existing headless hosts as
-   plain processes against `h264_vaapi`, to the knee. No new code.
-2. **Minimum guest memory**, for the lean image and for one that uses
-   ClickHouse, and the idle resident size of a warm `clickhouse-local` worker,
-   which the tree does not record.
-3. **The guard's threshold**: §6 repeated as the trial's M2, with a panned dense
-   plot and a map beside the particles, on an idle machine.
-4. **The control arm**: guest-side software encode at the same N.
-5. Whether the gokrazy kernel carries virtio-vsock; virtio-serial is the
-   fallback.
-6. Guest egress policy; the broker role (§8); whether the media host validates
+What §6, §9 and the encoder and whole-session runs of 2026-09-24 to -26
+taught, and what it means for §5. The encoder figures are from integrated APU
+encode blocks, one recorded workload, and a full headless host standing in
+for the worker §5 describes; they bound the design, they do not size it.
+
+**Findings.**
+
+- **Held content is cheap on the mesh lane, moving dense content is not** (§6).
+  The gap between the two is wide enough that a byte-rate trigger separates
+  them without tuning.
+- **An integrated encode block carries on the order of a hundred 1100 × 900
+  streams at 30 fps, and the block itself is the limit** — its media engine is
+  saturated there, while the upload path keeps up well beyond. Past that point
+  latency jumps past a second instead of frame rates falling, because frames
+  queue inside the encoder process.
+- **Whole sessions run out of CPU well before that.** On a 32-thread
+  workstation, some tens of sessions held 30 fps and the count depended on
+  what a session drew: a panned map rasterizes several times slower than an
+  animated particle field, and carried about half as many sessions. Past the
+  knee frame rates collapse and sessions fail to start.
+- **Two costs were configuration, not design.** The host's VAAPI argument list
+  left `h264_vaapi` at an `async_depth` of 2, which emits a frame only when the
+  next arrives — a frame of latency always, and, since the host feeds only
+  changed frames, the settled screen's last frame held until the next change;
+  the depth is now 1, at no measured cost in throughput. The same list converts
+  BGRA to NV12 on the CPU, which costs about as much as rasterizing the frame
+  and is most of what hardware encoding costs the host; converting on the GPU
+  removes most of it. The host now converts on the GPU where a check at
+  start-up finds the driver converting to BT.709, and says so in the stream;
+  the GPU conversion as first measured wrote full range and declared the
+  samples RGB, and the driver, not the filter's options, picks the matrix.
+- **A software encoder is affordable per session** — a fraction of a core at
+  this size, a few milliseconds of latency — and runs out with the CPU.
+- **Guests are small** (§9), and **the stock gokrazy kernel has no vsock** (§5).
+
+**Strengths of §5 that the measurements support.**
+
+- Mesh as the default viewer lane fits UI: most screen time is held content,
+  where mesh costs what video does, stays lossless for text, and needs no
+  encoder.
+- The guard to video is cheap and stable, because held and moving content are
+  far apart; this is the settled practice of §7.3, confirmed on this project's
+  own widgets.
+- Density is plausible: guests are a fraction of a GiB and one encode block is
+  not the bottleneck.
+- The isolation boundary costs nothing measured: the hostile guest never
+  touches the GPU or the encoder, and what crosses to the media host is
+  geometry it validates.
+
+**Weaknesses and risks the measurements expose.**
+
+- **Rasterizing on the media host is the capacity bottleneck.** Every session
+  with a video viewer is rasterized on the shared, trusted machine's CPU, at a
+  cost set by tenant content the host does not control. That wants a CPU
+  budget per tenant, or GPU rasterization on the media host — which §5 avoided
+  for isolation.
+- **Overload is a cliff, not a slope,** for the encode block and for the CPU
+  alike. The media host needs admission control, which makes the broker §8
+  found missing more urgent.
+- **Moving content over a LAN uplink is expensive,** tens to hundreds of
+  megabits a session, so α5 — guest-side rasterizing and software encoding for
+  sessions that trip the guard — is required rather than optional wherever the
+  hypervisor and the media host are separate machines.
+- **Widgets become an architectural concern.** Chrome that changes every frame
+  defeats sending only on change, and dense marks drawn as geometry make every
+  pan expensive. Dense data drawn as a texture, capped particle counts and
+  throttled live counters keep sessions on the cheap side of the guard.
+- **The uplink needs a kernel decision** — vsock in a custom kernel
+  configuration, or virtio-serial.
+- **Video quality was not measured.** For text-heavy UI the 4:2:0 hardware lane
+  may read worse than mesh, which argues for keeping viewers on mesh wherever
+  the guard allows.
+
+**What it changes in §5.** The shape stands: mesh-only guests, a trusted media
+host, mesh to viewers by default and video past a measured trigger. Capacity
+is planned in sessions per CPU core by what the sessions draw, not in streams
+per encoder; admission control and the broker are components of the design,
+not later additions; guest-side encoding is a supported path; and GPU colour
+conversion (done where the driver's matrix is verified) and the uplink's
+transport are the cheap fixes to make first.
+
+## 11 Open questions
+
+1. The §5 worker itself — mesh parsing and rasterizing without a UI pass — and
+   what it costs next to the whole host measured here.
+2. A discrete GPU's encoder, and GPU rasterization on the media host with what
+   it does to isolation.
+3. Video quality for text-heavy UI, lane against lane.
+4. The guest floor with warm `clickhouse-local` workers, measured rather than
+   added up; a realistic mix of mostly idle sessions.
+5. Guest egress policy; the broker role (§8); whether the media host validates
    frames it only relays.
 
-## 11 References
+## 12 References
 
 In-tree: [ARCHITECTURE §2](../ARCHITECTURE.md#2-operation-modes) ·
 [ADR-0024](../adr/0024-imzero2-remote-access-browser-viewer.md) ·

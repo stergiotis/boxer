@@ -33,8 +33,10 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
+	"github.com/stergiotis/boxer/apps/mdedit/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
@@ -472,10 +474,38 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	// shape): the host is asked once whether it offers a model, off the
 	// frame, and the surface renders only once it said yes.
 	inst.startTransformDescribe()
+	if inst.handOver(ctx.LaunchConfig()) {
+		return
+	}
 	if inst.store != nil {
 		go inst.restore()
 	}
 	return
+}
+
+// handOver opens a document another app handed over (launchcfg,
+// ADR-0178's update of 2026-10-03) as a document of its own: the window
+// neither restores nor autosaves the one document mdedit keeps, so the
+// person's own draft is never overwritten, and the handed text stays
+// unsaved until it is saved to a file or copied out. It reports whether
+// the window was opened with one.
+func (inst *App) handOver(raw []byte) (handed bool) {
+	if len(raw) == 0 {
+		return false
+	}
+	l, err := buscodec.Decode[launchcfg.MdeditLaunch](raw)
+	if err != nil {
+		inst.logger.Warn().Err(err).Msg("mdedit: the launch config does not decode; opening as usual")
+		return false
+	}
+	inst.store = nil
+	inst.src = l.Text
+	name := l.Name
+	if name == "" {
+		name = "a handed-over document"
+	}
+	inst.status = "opened " + name + " — not autosaved: Save to keep it"
+	return true
 }
 
 // Unmount persists the buffer one last time, synchronously. Every other
@@ -1063,17 +1093,13 @@ func (inst *App) renderPreview() {
 		c.Label("Nothing to preview yet.").Send()
 		return
 	}
-	// markdown.Doc derives ids for its code blocks, blockquotes and callouts
-	// from a per-Render sequence and deliberately does NOT open its own scope;
-	// supplying one is the caller's job whenever more than one doc might share
-	// a parent scope (markdown EXPLANATION, "Caller-provided IdScope").
-	for range c.IdScope(inst.ids.PrepareStr("preview")) {
-		if slug, changed := inst.takeScrollTarget(); changed {
-			inst.doc.Render(inst.ids, markdown.WithScrollToSection(slug))
-		} else {
-			inst.doc.Render(inst.ids)
-		}
+	// markdown.Render opens its own scope under ScopeKey, so the preview and
+	// the transform preview in the same window cannot collide.
+	in := markdown.Input{Ids: inst.ids, ScopeKey: "preview", Doc: inst.doc}
+	if slug, changed := inst.takeScrollTarget(); changed {
+		in.ScrollToSection = slug
 	}
+	markdown.Render(in)
 }
 
 // ---------------------------------------------------------------------------
@@ -1126,7 +1152,7 @@ func (inst *App) syncDoc() {
 //
 // It only ever queues on a CHANGE. Queuing every frame would re-issue the
 // scroll continuously and pin the preview against the reader's own scrolling,
-// which is the guard markdown.WithScrollToSection documents.
+// which is the guard markdown.Input.ScrollToSection documents.
 func (inst *App) trackCaretSection() {
 	if inst.doc == nil {
 		return

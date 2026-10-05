@@ -1,0 +1,4 @@
+# The scripted model of chat-questions.scene.md: one turn of two model
+# calls — ask_user with two questions, then the answer.
+{"tool":"ask_user","args":{"title":"Asking about the report","questions":[{"question":"Which sections should the report have?","header":"Sections","multi_select":true,"options":[{"label":"Summary","description":"one paragraph on top (recommended)"},{"label":"Costs","description":"the table by month"},{"label":"Risks"}]},{"question":"Which format?","header":"Format","options":[{"label":"Markdown"},{"label":"CSV"}]}]}}
+{"content":"Here is the report, with the sections you chose."}

@@ -161,7 +161,7 @@ func (n treemapNestingE) depth() int {
 	case treemapNestFour:
 		return 3
 	case treemapNestAll:
-		return 0 // the widget's "unlimited", capped internally
+		return treemap.NestingAll // capped internally by the widget
 	}
 	return 1
 }
@@ -210,6 +210,9 @@ type treemapDriver struct {
 	idSeed uint64
 
 	tm *treemap.Treemap
+	// events is the widget's last Render: the clicked leaf and the hovered
+	// node pointerLine reads.
+	events treemap.Events
 
 	// paneW / paneH are the last box the pane probe reported. Held across
 	// frames rather than read fresh: the probe answers nothing on the first
@@ -370,15 +373,14 @@ func (inst *treemapDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, c
 	w, h := treemapPaneFill.box(inst.paneW, inst.paneH)
 
 	inst.ensureWidget()
-	inst.tm.SetContainerSize(w, h)
-	inst.tm.SetMaxNestingDepth(inst.nesting.depth())
-	inst.tm.Render()
+	inst.tm.Opts.MaxNestingDepth = inst.nesting.depth()
+	inst.events = inst.tm.Render(w, h)
 
 	// A clicked leaf is the pin; clicking the pinned one again clears it, so
 	// the gesture is its own undo. Container clicks are the widget's drill and
 	// never reach here. An empty key is the honest "nothing focused" value a
 	// query reading {selection_key:String} sees before anything is clicked.
-	if leaf := inst.tm.ClickedLeaf(); leaf != nil {
+	if leaf := inst.events.ClickedLeaf; leaf != nil {
 		if leaf.Name == inst.selected {
 			inst.selected = ""
 		} else {
@@ -397,17 +399,17 @@ func (inst *treemapDriver) ensureWidget() {
 	if inst.tm != nil {
 		return
 	}
-	inst.tm = treemap.New(inst.ids, "play-treemap", inst.root,
-		treemap.WithColoring(inst.coloring()),
-		treemap.WithLeafClickSensing(true),
-		treemap.WithCellLabel(inst.cellLabel),
-		treemap.WithSelfCellLabel(inst.selfCellLabel),
+	inst.tm = treemap.New(inst.ids, "play-treemap", inst.root, treemap.Options{
+		Coloring:         inst.coloring(),
+		LeafClickSensing: true,
+		CellLabel:        inst.cellLabel,
+		SelfCellLabel:    inst.selfCellLabel,
 		// This pane draws its own readout above the picture — pointerLine, which
 		// reads a cell in the result's OWN unit and against the whole. The
 		// widget's line under the container would say the same thing again in
 		// bytes, and would be a row of the pane's height to reserve for it.
-		treemap.WithStatusLine(false),
-	)
+		HideStatusLine: true,
+	})
 }
 
 // rebuildTree projects the flat tree onto the pointer tree the widget takes,
@@ -459,7 +461,7 @@ func (inst *treemapDriver) rebuildTree() {
 	inst.rebuildColormap()
 	if inst.tm != nil && inst.root != nil {
 		inst.tm.SetRoot(inst.root)
-		inst.tm.SetColoring(inst.coloring())
+		inst.tm.Opts.Coloring = inst.coloring()
 	}
 }
 
@@ -637,16 +639,16 @@ func (inst *treemapDriver) ensureScale() {
 	if inst.scale != nil || inst.cmap == nil {
 		return
 	}
-	inst.scale = colorscale.New(inst.ids, "play-treemap-legend", inst.cmap.Config(),
-		colorscale.WithSize(treemapLegendW, treemapLegendH),
-		colorscale.WithDesiredTicks(treemapLegendTicks),
+	inst.scale = colorscale.New(inst.ids, "play-treemap-legend", inst.cmap.Config(), colorscale.Options{
+		Width: treemapLegendW, Height: treemapLegendH,
+		DesiredTicks: treemapLegendTicks,
 		// `unit` labels the VALUE, so it cannot serve here; the colour channel
 		// has its own, `color_unit`, and reads as a bare SI-suffixed number
 		// without one. Read through inst rather than captured, so a re-resolve
 		// that keeps the same colormap cannot leave the ticks labelled for the
 		// previous result.
-		colorscale.WithLabelFormat(func(v float64) string { return treemapQty(v, inst.color.unit) }),
-	)
+		LabelFormat: func(v float64) string { return treemapQty(v, inst.color.unit) },
+	})
 }
 
 // renderLegend says what a fill means, for the mode that is actually on.
@@ -978,7 +980,7 @@ func (inst *treemapDriver) pointerLine() string {
 	if inst.tm == nil {
 		return inst.statusLine()
 	}
-	if n := inst.tm.HoveredNode(); n != nil {
+	if n := inst.events.Hovered; n != nil {
 		return inst.describeNode(n)
 	}
 	if inst.selected != "" {

@@ -288,10 +288,6 @@ func (inst *App) buildTreeForMetrics(sizeIdx, colorIdx int, keep func(*scctree.S
 type App struct {
 	ids *c.WidgetIdStack
 
-	// probeSalt is this window's share of the r21 slot map, derived on first
-	// use. See [App.probeSeq].
-	probeSalt uint64
-
 	// repoPath is the scan target, bound to the header path box. job runs the
 	// scc scan off the render thread; data is the last completed scan, owned by
 	// the render thread and read by every render helper. tasks wires the host
@@ -345,11 +341,9 @@ type App struct {
 	// mirrors sizeTotal when the two metric indices coincide.
 	sizeTotal  float64
 	colorTotal float64
-	// distRenderer is the configure-once distsummary template shared by
-	// both metric summaries. Renderer is value-typed and stateless, so
-	// per-row .Render calls take fresh prepared ids without disturbing
-	// each other.
-	distRenderer distsummary.Renderer
+	// sizeDist / colorDist are the two metric summaries' inspector states.
+	sizeDist  distsummary.State
+	colorDist distsummary.State
 
 	// density is re-resolved from styletokens.ActiveDensity at the top of
 	// every Frame — the preset is runtime-switchable (Layout ▸ Density) —
@@ -381,7 +375,6 @@ func newApp() (inst *App) {
 		colorMetricIdx: defaultColorMetricIdx,
 		showValues:     true,
 		density:        styletokens.ActiveDensity(),
-		distRenderer:   distsummary.New("scc-dist"),
 	}
 	return
 }
@@ -494,36 +487,25 @@ func (inst *App) rebuildTreemap() {
 		treemap.ContinuousColoringFromMap(cm, valueFn),
 		valueFn,
 	)
-	inst.tm = treemap.New(inst.ids, "scc-treemap", root,
-		treemap.WithColoring(treemap.CompositeColoring(
+	inst.tm = treemap.New(inst.ids, "scc-treemap", root, treemap.Options{
+		Coloring: treemap.CompositeColoring(
 			treemap.DepthColoring(treemap.DefaultDepthColors),
 			inst.hoverBand,
-		)),
-	)
-	// Secondary in-cell label: humanized size/color values, gated live on
-	// inst.showValues so toggling needs no rebuild. Captures this build's
-	// valueFn so it tracks the current color metric.
-	inst.tm.SetCellLabel(inst.makeCellLabelFn(valueFn))
+		),
+		// Secondary in-cell label: humanized size/color values, gated live on
+		// inst.showValues so toggling needs no rebuild. Captures this build's
+		// valueFn so it tracks the current color metric.
+		CellLabel: inst.makeCellLabelFn(valueFn),
+	})
 	// ColorScale layout: gradient = 55% of height, then a 5 px tick row +
 	// 2 px gap + fontSize-10 labels = ~17 px of axis chrome. h=32 placed
 	// the label baseline at ~25, with text descending past the canvas's
 	// clip rect and clipping the digits vertically. h=56 puts the
 	// gradient at 30 px (still legible) with ~26 px of room for the
 	// axis below.
-	inst.cs = colorscale.New(inst.ids, "scc-colorscale", cm.Config(),
-		colorscale.WithSize(280, colorscaleH),
-		colorscale.WithDesiredTicks(4),
-	)
-	// Wire the legend hover into the hover-band decorator. The closure
-	// captures inst (not inst.hoverBand directly), so subsequent rebuilds
-	// pick up the fresh *HoverBand pointer automatically — no need to
-	// reattach the callback when the user switches metrics.
-	inst.cs.OnHover(func(h colorscale.HoverInfo) {
-		if !h.Ok {
-			inst.hoverBand.ClearBand()
-			return
-		}
-		inst.hoverBand.SetBand(h.Value)
+	inst.cs = colorscale.New(inst.ids, "scc-colorscale", cm.Config(), colorscale.Options{
+		Width: 280, Height: colorscaleH,
+		DesiredTicks: 4,
 	})
 }
 
@@ -544,20 +526,11 @@ func (inst *App) Unmount(ctx runtimeapp.MountContextI) (err error) {
 	return
 }
 
-// sccmapProbeSalt namespaces this app's pane probes in the shared r21 slot map.
-const sccmapProbeSalt uint64 = 0x2e6b90d41f7a3c85
-
-// probeSeq is this window's slot for one probe role. The app id alone cannot
-// key it: sccmap is registered as a factory, so two open windows would hash to
-// one seq and each treemap would size itself from the other's pane — the
-// process-wide-slot failure that r18 had, inside the seq-keyed register.
-// Derived on first use so it sees the per-window id scope the host pushes
-// around Frame (empty during Mount).
+// probeSeq is this window's slot for one probe role, derived from the id
+// stack at render time: the host pushes a per-window scope around Frame, so
+// two open windows get distinct slots (ADR-0267 W7).
 func (inst *App) probeSeq(role string) (seq uint64) {
-	if inst.probeSalt == 0 {
-		inst.probeSalt = inst.ids.PrepareHighEntropy(sccmapProbeSalt).Derive()
-	}
-	return c.ProbeSeq("sccmap", role) ^ inst.probeSalt
+	return inst.ids.ProbeSeq(role)
 }
 
 func (inst *App) Frame(ctx runtimeapp.FrameContextI) (err error) {
@@ -630,13 +603,12 @@ func (inst *App) Frame(ctx runtimeapp.FrameContextI) (err error) {
 	}
 	inst.lastContainerW = w
 	inst.lastContainerH = h
-	inst.tm.SetContainerSize(w, h)
 	// Arm the pane probe HERE — after the chrome above, before the treemap
 	// below — so the rect it reports next frame is the space the treemap
 	// actually gets, and does not include what the treemap itself drew.
 	inst.availW, inst.availH, inst.availOk = c.CapturePaneSize(inst.probeSeq("treemap-pane"))
 
-	inst.tm.Render()
+	inst.tm.Render(w, h)
 
 	// Colorscale legend renders last. This used to be load-bearing: the
 	// colorscale detected hovers through R14, one global slot that every
@@ -645,7 +617,13 @@ func (inst *App) Frame(ctx runtimeapp.FrameContextI) (err error) {
 	// branch) stole it and cs.OnHover never fired unless cs wrote last. The
 	// colorscale reads the per-canvas R24 row now and R14 is retired, so the
 	// order no longer decides whether hover works — it is kept as layout.
-	inst.cs.Render()
+	// The legend hover feeds the hover-band decorator: the band follows the
+	// value under the pointer and clears when it leaves.
+	if h := inst.cs.Render().Hover; h.Ok {
+		inst.hoverBand.SetBand(h.Value)
+	} else {
+		inst.hoverBand.ClearBand()
+	}
 	return
 }
 
@@ -710,8 +688,10 @@ func (inst *App) renderScanOrProgress() {
 				Fraction: snap.Fraction,
 				EtaMs:    snap.EtaMs,
 				Note:     snap.Note,
-				CancelId: inst.ids.PrepareStr("scan-cancel"),
-			}) {
+				Ids:      inst.ids,
+				ScopeKey: "scan-job",
+				Cancel:   true,
+			}).CancelClicked {
 				inst.job.Cancel()
 			}
 		}
@@ -846,12 +826,12 @@ func (inst *App) renderDistSummaries() {
 			inst.gutterLabel("Size (" + sizeName + "):")
 		}
 		c.AddSpace(styletokens.GapItems(inst.density))
-		inst.distRenderer.Render(inst.ids.PrepareStr("size-dist"), inst.sizeDigest, nil)
+		distsummary.Render(distsummary.Input{Ids: inst.ids, ScopeKey: "size-dist", Digest: inst.sizeDigest, State: &inst.sizeDist, Title: "size: " + sizeName})
 		if !aliased {
 			c.AddSpace(styletokens.GapSections(inst.density))
 			inst.gutterLabel("Color (" + colorName + "):")
 			c.AddSpace(styletokens.GapItems(inst.density))
-			inst.distRenderer.Render(inst.ids.PrepareStr("color-dist"), inst.colorDigest, nil)
+			distsummary.Render(distsummary.Input{Ids: inst.ids, ScopeKey: "color-dist", Digest: inst.colorDigest, State: &inst.colorDist, Title: "color: " + colorName})
 		}
 	}
 }

@@ -153,23 +153,6 @@ type FrameFluid struct {
 }
 type FrameMethodIdE uint32
 
-type GraphFluid struct {
-	r     *typed.RetainedFffiBuilder
-	id    uint64
-	idGen WidgetIdCreatorI
-}
-type GraphMethodIdE uint32
-
-type GraphEdgeFluid struct {
-	r *typed.RetainedFffiBuilder
-}
-type GraphEdgeMethodIdE uint32
-
-type GraphNodeFluid struct {
-	r *typed.RetainedFffiBuilder
-}
-type GraphNodeMethodIdE uint32
-
 type GridFluid struct {
 	r     *typed.RetainedFffiBuilder
 	id    uint64
@@ -269,6 +252,13 @@ type MenuButtonFluid struct {
 	r *typed.RetainedFffiBuilder
 }
 type MenuButtonMethodIdE uint32
+
+type ModalFluid struct {
+	r     *typed.RetainedFffiBuilder
+	id    uint64
+	idGen WidgetIdCreatorI
+}
+type ModalMethodIdE uint32
 
 type NewTableFluid struct {
 	r               *typed.RetainedFffiBuilder
@@ -691,12 +681,6 @@ type EtColumnS struct{}
 type EtDummyS struct{}
 
 type EtHeaderTextS struct{}
-
-type GraphDrainS struct{}
-
-type GraphEdgeS struct{}
-
-type GraphNodeS struct{}
 
 type HoverUiDummyS struct{}
 

@@ -215,7 +215,7 @@ func CreateSchemaFacts() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1438
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1493
 
 type InEntityFacts struct {
 	errs               []error
@@ -303,8 +303,11 @@ func NewInEntityFacts(allocator memory.Allocator, estimatedNumberOfRecords int) 
 
 // SetActiveSections marks which section indices BeginEntity should
 // initialise (skipping beginSection for the rest). Pass nil to clear.
-// The hint is a performance optimisation; sending BeginAttribute to
-// an unmarked section produces empty-list bytes at TransferRecords.
+// The hint is a performance optimisation for shim builders, paired
+// with the builder's SetActiveFields over the marked sections'
+// columns; BeginAttribute on an unmarked section is an invalid state
+// transition. On the arrow RecordBuilder the hint has no effect:
+// every section starts, so its list columns stay row-aligned.
 func (inst *InEntityFacts) SetActiveSections(idxs []int) {
 	if idxs == nil {
 		inst.activeSections = nil
@@ -355,7 +358,7 @@ var InEntityFactsSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1633
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
 
 func (inst *InEntityFacts) SetId(id0 uint64, naturalKey1 []byte) *InEntityFacts {
 	if inst.state != runtime.EntityStateInEntity {
@@ -371,7 +374,7 @@ func (inst *InEntityFacts) SetId(id0 uint64, naturalKey1 []byte) *InEntityFacts 
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1633
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
 
 func (inst *InEntityFacts) SetTimestamp(ts2 time.Time) *InEntityFacts {
 	if inst.state != runtime.EntityStateInEntity {
@@ -386,7 +389,7 @@ func (inst *InEntityFacts) SetTimestamp(ts2 time.Time) *InEntityFacts {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1633
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
 
 func (inst *InEntityFacts) SetLifecycle(expiresAt3 time.Time) *InEntityFacts {
 	if inst.state != runtime.EntityStateInEntity {
@@ -467,72 +470,6 @@ func (inst *InEntityFacts) initSections(builder *array.RecordBuilder) {
 	inst.section20Inst = NewInEntityFactsSectionU8Array(builder, inst)
 }
 func (inst *InEntityFacts) beginSections() {
-	if mask := inst.activeSections; mask != nil {
-		if mask[0] {
-			inst.section00Inst.beginSection()
-		}
-		if mask[1] {
-			inst.section01Inst.beginSection()
-		}
-		if mask[2] {
-			inst.section02Inst.beginSection()
-		}
-		if mask[3] {
-			inst.section03Inst.beginSection()
-		}
-		if mask[4] {
-			inst.section04Inst.beginSection()
-		}
-		if mask[5] {
-			inst.section05Inst.beginSection()
-		}
-		if mask[6] {
-			inst.section06Inst.beginSection()
-		}
-		if mask[7] {
-			inst.section07Inst.beginSection()
-		}
-		if mask[8] {
-			inst.section08Inst.beginSection()
-		}
-		if mask[9] {
-			inst.section09Inst.beginSection()
-		}
-		if mask[10] {
-			inst.section10Inst.beginSection()
-		}
-		if mask[11] {
-			inst.section11Inst.beginSection()
-		}
-		if mask[12] {
-			inst.section12Inst.beginSection()
-		}
-		if mask[13] {
-			inst.section13Inst.beginSection()
-		}
-		if mask[14] {
-			inst.section14Inst.beginSection()
-		}
-		if mask[15] {
-			inst.section15Inst.beginSection()
-		}
-		if mask[16] {
-			inst.section16Inst.beginSection()
-		}
-		if mask[17] {
-			inst.section17Inst.beginSection()
-		}
-		if mask[18] {
-			inst.section18Inst.beginSection()
-		}
-		if mask[19] {
-			inst.section19Inst.beginSection()
-		}
-		if mask[20] {
-			inst.section20Inst.beginSection()
-		}
-		return
-	}
 	inst.section00Inst.beginSection()
 	inst.section01Inst.beginSection()
 	inst.section02Inst.beginSection()
@@ -1218,6 +1155,7 @@ func (inst *InEntityFactsSectionBlobArrayInAttr) EndSection() *InEntityFacts {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1509,6 +1447,7 @@ func (inst *InEntityFactsSectionBoolInAttr) EndSection() *InEntityFacts {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1828,6 +1767,7 @@ func (inst *InEntityFactsSectionF32ArrayInAttr) EndSection() *InEntityFacts {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -2147,6 +2087,7 @@ func (inst *InEntityFactsSectionF64ArrayInAttr) EndSection() *InEntityFacts {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -2352,6 +2293,7 @@ func (inst *InEntityFactsSectionForeignKeyInAttr) EndSection() *InEntityFacts {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -2671,6 +2613,7 @@ func (inst *InEntityFactsSectionI16ArrayInAttr) EndSection() *InEntityFacts {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -2990,6 +2933,7 @@ func (inst *InEntityFactsSectionI32ArrayInAttr) EndSection() *InEntityFacts {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -3309,6 +3253,7 @@ func (inst *InEntityFactsSectionI64ArrayInAttr) EndSection() *InEntityFacts {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -3628,6 +3573,7 @@ func (inst *InEntityFactsSectionI8ArrayInAttr) EndSection() *InEntityFacts {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -3947,6 +3893,7 @@ func (inst *InEntityFactsSectionStringArrayInAttr) EndSection() *InEntityFacts {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -4238,6 +4185,7 @@ func (inst *InEntityFactsSectionSymbolInAttr) EndSection() *InEntityFacts {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -4557,6 +4505,7 @@ func (inst *InEntityFactsSectionSymbolArrayInAttr) EndSection() *InEntityFacts {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -4876,6 +4825,7 @@ func (inst *InEntityFactsSectionTextArrayInAttr) EndSection() *InEntityFacts {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -5195,6 +5145,7 @@ func (inst *InEntityFactsSectionTimeArrayInAttr) EndSection() *InEntityFacts {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -5514,6 +5465,7 @@ func (inst *InEntityFactsSectionU16ArrayInAttr) EndSection() *InEntityFacts {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -5833,6 +5785,7 @@ func (inst *InEntityFactsSectionU32ArrayInAttr) EndSection() *InEntityFacts {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -6135,6 +6088,7 @@ func (inst *InEntityFactsSectionU32RangeInAttr) EndSection() *InEntityFacts {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -6454,6 +6408,7 @@ func (inst *InEntityFactsSectionU32SetInAttr) EndSection() *InEntityFacts {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -6773,6 +6728,7 @@ func (inst *InEntityFactsSectionU64ArrayInAttr) EndSection() *InEntityFacts {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -7092,6 +7048,7 @@ func (inst *InEntityFactsSectionU64SetInAttr) EndSection() *InEntityFacts {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -7411,6 +7368,7 @@ func (inst *InEntityFactsSectionU8ArrayInAttr) EndSection() *InEntityFacts {
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }

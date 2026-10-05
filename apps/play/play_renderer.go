@@ -2,6 +2,7 @@ package play
 
 import (
 	"fmt"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"os"
 	"slices"
 	"sort"
@@ -31,6 +32,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/colwidth"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/fsmview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/inspector"
@@ -40,6 +42,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/pager"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexedit"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexsummary"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/schemaview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sqleditor"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker"
@@ -208,8 +211,11 @@ type PlayApp struct {
 	// editor is the SQL editing surface (ADR-0147). It owns what follows
 	// from the buffer and the caret alone — the colour tiers, the statement
 	// split and its memo, the gutter, the run-under-cursor composition — and
-	// publishes them through its Result. The zero value is ready.
-	editor sqleditor.Editor
+	// publishes them through its Result. Constructed in NewPlayApp on its own
+	// id stack; editorResult is what this frame's Bind published, for the
+	// panels that read it after the render (the docs pane).
+	editor       *sqleditor.Editor
+	editorResult sqleditor.Result
 
 	// Slice-5a signal-store state. frameSig is the per-frame immutable
 	// snapshot of the graph's signal store, taken at Render top so every
@@ -278,11 +284,6 @@ type PlayApp struct {
 	// S2): captured KindQueryRun facts read back from the live endpoint,
 	// fetched manually and on first reveal (play_runs_history.go).
 	runsHist *runsHistoryDriver
-	// pins / pinsBrowser are Tier-1 result pinning (ADR-0115 S4): the
-	// Table tab's pin affordance and the History tab's pin browser
-	// (play_pin.go).
-	pins        *pinDriver
-	pinsBrowser *pinsBrowserDriver
 	// tabs is the instance's dock-tab set (ADR-0097 slice 6a): every tab a
 	// registered TabSpec, frozen at the first Render. Embedders customize
 	// it via Tabs() between construction and mounting (D4).
@@ -320,7 +321,11 @@ type PlayApp struct {
 	// refreshed from the editor's Bind whether or not the tab is open, because
 	// the editor's own tint reads the same result.
 	completion completionState
-	vocabHl    regexedit.Edit
+	vocabHl    regexedit.Cache
+	// regexAnchors holds one regexsummary.State per anchored regexp cell,
+	// keyed by the cell scope renderRegexpAnchor is given; a cell that goes
+	// away leaves its closed inspector behind, which is cheap.
+	regexAnchors map[string]*regexsummary.State
 	// Per-buffer outcomes of the client-side rewrite (play_passes_tab.go),
 	// shared by the Passes and Diagnostics tabs and computed on first demand
 	// per frame — both tabs are lazy, so a session with neither open pays
@@ -390,6 +395,9 @@ type PlayApp struct {
 	// tableSort is the Table pane's header-click sort: a permutation over the
 	// record already in hand, never a re-issued query (play_table_sort.go).
 	tableSort tableSortState
+	// masterCells replays the master table's cells while nothing they depend
+	// on changes; see play_table_cells_cache.go.
+	masterCells masterCellsCache
 
 	// schemaModel backs the Schema dock tab: the schemaview inspector bound to
 	// a leeway TableDesc inferred from the active result's Arrow schema (plain
@@ -397,7 +405,8 @@ type PlayApp struct {
 	// ad-hoc result; see play_schema_infer.go). schemaForSchema is the pointer-
 	// identity cache that gates the rebuild, mirroring colWidthsForSchema and
 	// the projector's forSchema.
-	schemaModel     *schemaview.Model
+	schemaTable     *common.TableDesc
+	schemaState     schemaview.State
 	schemaForSchema *arrow.Schema
 
 	// detailContent, when non-nil, replaces the Detail panel's built-in body
@@ -413,12 +422,12 @@ type PlayApp struct {
 	// observed status transition so the popup graph view paints the full
 	// lifecycle.
 	projFSM       *fsmview.Machine[projectorStatusE]
-	projFSMWidget *fsmview.Widget[projectorStatusE]
+	projFSMWidget *fsmview.View[projectorStatusE]
 	// queryFSM tracks the result↔input lifecycle (play_querystate.go) so the
 	// status bar names the state and flags stale/empty output; queryFSMWidget
 	// surfaces the graph + transition history + provenance as a status-bar chip.
 	queryFSM       *fsmview.Machine[queryStateE]
-	queryFSMWidget *fsmview.Widget[queryStateE]
+	queryFSMWidget *fsmview.View[queryStateE]
 	// progress folds the observed lane's live ticks into a smoothed rate and
 	// a damped ETA (play_progress.go); frameProgress is this frame's answer,
 	// computed once in Render and read by every display site — the top bar,
@@ -453,10 +462,13 @@ type PlayApp struct {
 	// clock — tests and scripted scenes.
 	// rowGlossSt is the row-value gloss resolution of the result on screen
 	// (ADR-0245 §SD2), shared by the grids, Detail and Chat.
-	rowGlossSt    rowGlossState
-	audio         *audioSession
-	frameResult   ResultID
-	audioNoDevice bool
+	rowGlossSt  rowGlossState
+	audio       *audioSession
+	frameResult ResultID
+	// projFrameDigest is the projection's run as this frame saw it
+	// (play_ops_projection.go).
+	projFrameDigest string
+	audioNoDevice   bool
 
 	// netSource is the pair of lanes the graph contract is fed from — the
 	// `edges` and `vertices` CTEs of the user's query — SHARED by the two graph
@@ -787,6 +799,26 @@ type PlayApp struct {
 	// drift baseline (write only when the draft moved away from it) and the
 	// reseed guard (follow the store only when the store moved away from
 	// it), so a co-writing panel and the pane do not chase each other.
+	// The agent mark (ADR-0270 §SD3): the on-behalf-of context of the task
+	// whose input the window acts on, what the window held when it was
+	// last set, whether it was set this frame, and whether the task asked
+	// for the next run. runAgent is the context of the run executing now.
+	agentDriven       *app.OnBehalfOf
+	agentSql          string
+	agentParams       string
+	agentFresh        bool
+	agentRunRequested bool
+	runAgent          *app.OnBehalfOf
+	// gestureCtx is the frame context the person's gestures route through
+	// (ADR-0270 §SD6); only PlayLauncher sets it, since an embedder's
+	// context serves the embedder's catalog. gestureSignalWriter is the
+	// signal writer of the person's set_signal in flight.
+	gestureCtx          app.FrameContextI
+	gestureSignalWriter string
+	// frameSchema is the active result's schema as the last frame drew it,
+	// which list_panes judges the panes against (ADR-0270 §SD1).
+	frameSchema *arrow.Schema
+
 	paramSlots        []paramSlot
 	paramDrafts       map[string]*string
 	paramSyncedValues map[string]string
@@ -829,6 +861,9 @@ type PlayApp struct {
 	bus     app.BusI
 	storage app.StorageI
 	logger  zerolog.Logger
+	// tiles is the map panes' basemap fetcher (ADR-0262 §SD6), built
+	// unbound with the panes and bound to bus by SetCapabilities.
+	tiles *basemap.Tiles
 
 	// pickMu guards the goroutine-side load state. The Load button
 	// fires loadFromPicker in a goroutine; the Render loop reads
@@ -872,6 +907,7 @@ func (inst *PlayApp) SetCapabilities(bus app.BusI, storage app.StorageI, logger 
 	inst.bus = bus
 	inst.storage = storage
 	inst.logger = logger
+	inst.tiles.Bind(bus)
 
 	// Wire the time-range evaluator + fan it out to widgets that
 	// opt into evaluatorAwareI. Nil-bus or constructor failure
@@ -1000,7 +1036,7 @@ func (inst *PlayApp) consumePickedSql() {
 	inst.pickedSql = nil
 	inst.pickMu.Unlock()
 	if picked != nil {
-		inst.sql = *picked
+		inst.personSetSql(*picked)
 	}
 }
 
@@ -1059,6 +1095,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	projFSMIds := mk()
 	queryFSMIds := mk()
 	timelineIds := mk()
+	editorIds := mk()
 	cards := NewCardDriver(cardIds, nil)
 	projFSM := newProjectorFSM()
 	queryFSM := newQueryFSM()
@@ -1083,20 +1120,22 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 		sigEmit:          graphEmitter{graph: graph},
 		cards:            cards,
 		projector:        NewProjector(projectorIds, cards),
-		schemaModel:      schemaview.NewModel(nil),
+		editor:           sqleditor.New(editorIds, "sql-editor"),
 		projFSM:          projFSM,
-		projFSMWidget: fsmview.New(projFSMIds, "projector-fsm", projFSM).
-			Title("projector").
-			ShowSubscript(true).
-			AutoAnchor(true),
+		projFSMWidget: fsmview.New(projFSMIds, "projector-fsm", projFSM, fsmview.Options[projectorStatusE]{
+			Title:         "projector",
+			ShowSubscript: true,
+			AutoAnchor:    true,
+		}),
 		queryFSM: queryFSM,
-		queryFSMWidget: fsmview.New(queryFSMIds, "query-state-fsm", queryFSM).
-			Title("Query result state").
-			Tethered().
-			BadgeTone(queryStateTone).
-			AutoAnchor(true),
+		queryFSMWidget: fsmview.New(queryFSMIds, "query-state-fsm", queryFSM, fsmview.Options[queryStateE]{
+			Title:      "Query result state",
+			Tethered:   true,
+			BadgeTone:  queryStateTone,
+			AutoAnchor: true,
+		}),
 		colorByFeature: -1,
-		pager:          pager.New(pagerIds, int64(defaultPageSize)),
+		pager:          pager.New(pagerIds, "pager", pager.Options{PageSize: int64(defaultPageSize)}),
 		affordances: []sqlAffordanceI{
 			&multiMatchAffordance{},
 		},
@@ -1133,7 +1172,9 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	// gesture exists for.
 	inst.captureParamDefaults(initialSQL)
 	inst.timeline = NewTimelineDriver(timelineIds, client, &inst.timelineBandsSql, &inst.timelineNowLineEnabled)
+	inst.tiles = basemap.NewTiles(nil, "play: map panes")
 	inst.mapDriver = NewMapDriver(mk(), client)
+	inst.mapDriver.tiles = inst.tiles
 	inst.worldDriver = NewWorldDriver(mk())
 	inst.kanbanDriver = NewKanbanDriver(mk(), client)
 	inst.chatDriver = NewChatDriver(mk(), client)
@@ -1147,8 +1188,10 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	inst.netSource = newNetworkSource(client)
 	inst.networkDriver = NewNetworkDriver(mk(), inst.netSource)
 	inst.graphviewDriver = NewGraphviewDriver(mk(), inst.netSource)
+	inst.graphviewDriver.tiles = inst.tiles
 	inst.sankeyDriver = NewSankeyDriver(mk(), client)
 	inst.vectorFieldDriver = NewVectorFieldDriver(mk(), client, inst.openVectorFieldQuery)
+	inst.vectorFieldDriver.tiles = inst.tiles
 	inst.distDriver = NewDistDriver(mk())
 	inst.icicleDriver = NewIcicleDriver(mk())
 	inst.treemapDriver = newTreemapDriver(mk())
@@ -1161,6 +1204,9 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	inst.tsCollisions = newTsCollisionProbe(client)
 	inst.vocab = newVocabProbe(client)
 	inst.seriesLabels = newTsLabelsWriter(client)
+	if graph != nil {
+		inst.seriesLabels.confined = graph.MainConfined
+	}
 	inst.fixtures = newFixtureState()
 	inst.cardFixtures = newCardgridFixtureState()
 	inst.projPublish = newProjectionPublishState()
@@ -1188,8 +1234,6 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	inst.docs = newDocsDriver(docsSource)
 	inst.docsPane = newDocsPaneState()
 	inst.runsHist = newRunsHistoryDriver(client)
-	inst.pins = newPinDriver(client)
-	inst.pinsBrowser = newPinsBrowserDriver(client)
 	inst.affordanceEval = newAffordanceEvaluator(&inst.observations)
 	// Last: the tab set closes over the drivers above (slice 6a).
 	inst.tabs = defaultTabs(inst)
@@ -1277,9 +1321,9 @@ func (inst *PlayApp) Close() {
 // renderProjection's mirror step, and a missing arrow in the popup
 // graph view.
 func newProjectorFSM() *fsmview.Machine[projectorStatusE] {
-	m := fsmview.NewMachine(projectorStatusIdle, 64,
-		fsmview.WithLabel(func(s projectorStatusE) string { return s.String() }),
-		fsmview.WithStateOrder([]projectorStatusE{
+	m := fsmview.NewMachine(projectorStatusIdle, 64, fsmview.MachineOptions[projectorStatusE]{
+		Label: func(s projectorStatusE) string { return s.String() },
+		StateOrder: []projectorStatusE{
 			projectorStatusIdle,
 			projectorStatusExtracting,
 			projectorStatusRunning,
@@ -1287,8 +1331,8 @@ func newProjectorFSM() *fsmview.Machine[projectorStatusE] {
 			projectorStatusCancelled,
 			projectorStatusDone,
 			projectorStatusFailed,
-		}),
-	)
+		},
+	})
 	m.AddRule(projectorStatusIdle, projectorStatusExtracting).
 		AddRule(projectorStatusExtracting, projectorStatusRunning, projectorStatusCancelling, projectorStatusFailed).
 		AddRule(projectorStatusRunning, projectorStatusDone, projectorStatusCancelling, projectorStatusFailed).
@@ -1447,6 +1491,7 @@ func (inst *PlayApp) render() error {
 	if rec != nil {
 		defer rec.Release()
 	}
+	inst.frameSchema = schema
 	// Drive the bound nodes' lanes against this frame's snapshot (slice 6c)
 	// — one demand per distinct bound node; the views feed frameFor below.
 	// The pager/projector/schema syncs moved into their tabs, which since 6c
@@ -1546,6 +1591,9 @@ func (inst *PlayApp) render() error {
 			// the same per-frame view. First Render freezes the set (D4).
 			inst.tabs.freeze()
 			inst.audioFollowResult(resultID)
+			// The projection's run lands on its own goroutine; its revision
+			// moves here, inside a frame, where the change is the app's.
+			inst.projFrameDigest = inst.projectionDigest()
 			frame := TabFrame{
 				Rec: rec, Schema: schema, NumRows: numRows,
 				Loading: loading, Elapsed: elapsed, Summary: summary,
@@ -1614,7 +1662,9 @@ func (inst *PlayApp) render() error {
 		inst.runIsAuto = false
 		sub := inst.requestSubquery
 		inst.requestSubquery = false
+		inst.runAgent = inst.takeAgentForRun(auto)
 		inst.executeRun(auto, sub)
+		inst.runAgent = nil
 	}
 
 	inst.frame++
@@ -1697,7 +1747,7 @@ func (inst *PlayApp) claimRunChord(run, sub bool) {
 	if inst.graph.MainLoading() {
 		return
 	}
-	inst.applyRunShortcut(run, sub)
+	inst.personRun(sub)
 }
 
 // applyRunShortcut turns a press into a run request. Split from the poll above
@@ -1780,12 +1830,18 @@ func (inst *PlayApp) executeRun(auto bool, subquery bool) {
 	// the query summary line; the result panels keep the last read.
 	inst.writeGateNotice = ""
 	if runIsInsertWrapper(runSQL) {
+		if inst.runAgent != nil {
+			// An agent's work writes only as a confirmed consequential
+			// command, never as a run (ADR-0269 §SD6, ADR-0270 §SD2).
+			inst.runBlockedReason = "agent limit: an agent's run does not write"
+			return
+		}
 		if AllowWrites.Get() == "" {
 			inst.writeGateNotice = "the INSERT is gated — set BOXER_PLAY_ALLOW_WRITES=1 to execute writes from play, or copy Preview → As sent and run it via `clickhouse client`"
 			return
 		}
 		inst.executeWriteRun(runSQL, sigParams)
-		if !auto {
+		if !auto && inst.runAgent == nil {
 			inst.noteWorkingsetIntent()
 			inst.resumeLiveAfterHumanAction()
 		}
@@ -1855,8 +1911,11 @@ func (inst *PlayApp) executeRun(auto bool, subquery bool) {
 	if runSQL != sql {
 		sourceBuffer = sql
 	}
+	if inst.runAgent != nil {
+		inst.graph.mainLane.SetNextAgent(inst.runAgent)
+	}
 	inst.graph.RunMain(executable, sigParams, sourceBuffer)
-	if !auto {
+	if !auto && inst.runAgent == nil {
 		// A manual Run is intent by construction — "this is the query I
 		// want" — even when it re-runs an unchanged buffer, so it marks
 		// the workingset dirty (ADR-0148 §SD4). The host does the saving,
@@ -1971,12 +2030,13 @@ func (inst *PlayApp) restoreHistoryEntry(entry HistoryEntry) {
 	// Buffer is set only when the run shipped less than the buffer — a
 	// multi-statement buffer under run-under-cursor (ADR-0130 L3). Restoring
 	// it puts the siblings back rather than silently discarding them.
-	inst.sql = entry.SQL
+	sql := entry.SQL
 	if entry.Buffer != "" {
-		inst.sql = entry.Buffer
+		sql = entry.Buffer
 	}
+	inst.personSetSql(sql)
 	for urlKey, raw := range entry.SigParams {
-		inst.graph.setSignalRawFrom(strings.TrimPrefix(urlKey, "param_"), raw, signalWriterHistory)
+		inst.personSetSignal(SignalID(strings.TrimPrefix(urlKey, "param_")), raw, signalWriterHistory)
 	}
 }
 
@@ -2091,8 +2151,9 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 			// button they duplicate is where anyone would look for them.
 			for range c.HoverText("Ctrl+Enter runs this. Ctrl+Shift+Enter runs just the query the caret is in — a subquery, a CTE body, or one statement of several — with the enclosing WITH items carried along.").KeepIter() {
 				if c.Button(ids.PrepareStr("run"), c.Atoms().Text("Run").Keep()).
+					Kind(c.ButtonKindPrimary).
 					SendResp().HasPrimaryClicked() {
-					inst.requestRun = true
+					inst.personRun(false)
 				}
 			}
 			// Run subquery: the mouse path for Ctrl+Shift+Enter, offered
@@ -2108,9 +2169,9 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 			if inst.subqueryMode {
 				for range c.HoverText("Runs just the query the caret is in, with the WITH items and SET prelude it needs carried along — the tinted region in the editor. Same as Ctrl+Shift+Enter. With the caret at statement level there is nothing narrower, and this runs the whole query.").KeepIter() {
 					if c.Button(ids.PrepareStr("runSubquery"), c.Atoms().Text("Run subquery").Keep()).
+						Kind(c.ButtonKindTertiary).
 						SendResp().HasPrimaryClicked() {
-						inst.requestRun = true
-						inst.requestSubquery = true
+						inst.personRun(true)
 					}
 				}
 			}
@@ -2405,8 +2466,14 @@ func (inst *PlayApp) renderEndpointSwitcher() {
 	base := inst.client.URL()
 	label := fmt.Sprintf("%s  as %s", truncateRunes(base, 40), inst.client.cfg.User)
 	full := fmt.Sprintf("%s  as %s", base, inst.client.cfg.User)
+	// What the server said about this user's readonly level (play_readonly.go):
+	// a degraded run is visible here rather than only in query_log.
+	note := inst.client.ReadonlyNote(base)
 	if inst.autoEndpoint {
 		if dec, ok := inst.client.LastDecision(); ok {
+			if target, err := dec.target(); err == nil {
+				note = inst.client.ReadonlyNote(target)
+			}
 			// No arrow glyph: the host font has no →, and it renders as tofu.
 			label = "auto: " + truncateRunes(dec.describe(), 72)
 			full = "auto — last run went to " + dec.describe() +
@@ -2418,6 +2485,10 @@ func (inst *PlayApp) renderEndpointSwitcher() {
 			full = "auto — nothing has run yet; a query naming no keelson " +
 				"table goes to the pinned base: " + base
 		}
+	}
+	if note != "" {
+		label += "  · " + note
+		full += "\n" + note
 	}
 	// The label is truncated twice over (runes here, pixels by Truncate), and
 	// a host:port that differs only in its tail is exactly the case where
@@ -2586,11 +2657,10 @@ func (inst *PlayApp) consumePendingSnippet() (insert string) {
 	inst.pendingSnippetInsert = ""
 	if replace := inst.pendingSnippetReplace; replace != "" {
 		inst.pendingSnippetReplace = ""
-		inst.sql = replace
 		// A whole-buffer swap is a new buffer, so its prelude is the new
-		// default Reset restores to. An insert is not: it edits the buffer the
-		// reader already has.
-		inst.captureParamDefaults(replace)
+		// default Reset restores to (swapSql). An insert is not: it edits
+		// the buffer the reader already has.
+		inst.personSetSql(replace)
 		insert = ""
 	}
 	return
@@ -2615,7 +2685,6 @@ func (inst *PlayApp) renderSqlEditor(rows uint32) {
 	pending := inst.consumePendingSnippet()
 
 	f := sqleditor.Frame{
-		IDSlot:  "sqlEditor",
 		Value:   &inst.sql,
 		Hint:    mainHint,
 		Rows:    rows,
@@ -2640,7 +2709,7 @@ func (inst *PlayApp) renderSqlEditor(rows uint32) {
 			// recomposeMirror guarantees Canonical == Prelude+Mirror, so the
 			// mirror is a suffix view: the widget rebases the overlays onto it
 			// by the elided prelude's length rather than dropping them.
-			f.IDSlot = "sqlEditorResidual"
+			f.View = "residual"
 			f.Value = &inst.paramSqlEdit
 			f.Offset = len(pre.Prelude)
 			f.Canonical = pre.Canonical
@@ -2649,6 +2718,7 @@ func (inst *PlayApp) renderSqlEditor(rows uint32) {
 	}
 
 	res := inst.editor.Bind(f)
+	inst.editorResult = res
 	// One caret per frame, in inst.sql coordinates, for the producers below
 	// and for everything outside this render that reads it.
 	inst.caretByte = res.Caret
@@ -2671,7 +2741,7 @@ func (inst *PlayApp) renderSqlEditor(rows uint32) {
 	// ADR-0130 L3 overlays, in inst.sql coordinates. Composed after Bind
 	// because every one of them reads the caret the Bind just published; the
 	// statement tint is absent because the widget emits that itself.
-	inst.editor.Render(inst.ids, sqleditor.Decoration{
+	inst.editor.Render(sqleditor.Decoration{
 		Styled: inst.editorStyledSections(),
 		// The subquery mark travels beside the sections rather than inside
 		// them: it is drawn whether or not the Subquery toggle produced any.
@@ -2933,14 +3003,13 @@ func (inst *PlayApp) updateWirePreview() {
 // history / provenance). The FSM is mirrored each frame in Render so the badge
 // and summary agree.
 func (inst *PlayApp) renderStatus(numRows int64, elapsed time.Duration, summary Summary, executed time.Time, err error, truncation string) {
-	inst.queryFSMWidget.
-		Provenance(inspector.Provenance{
-			Subject:   "app.play.query.result-state",
-			SourceApp: "github.com/stergiotis/boxer/apps/play",
-			SampledAt: executed,
-		}).
-		Summary(func() { inst.renderQuerySummary(numRows, elapsed, summary, executed, err, truncation) }).
-		Render()
+	inst.queryFSMWidget.Opts.Provenance = inspector.Provenance{
+		Subject:   "app.play.query.result-state",
+		SourceApp: "github.com/stergiotis/boxer/apps/play",
+		SampledAt: executed,
+	}
+	inst.queryFSMWidget.Opts.Summary = func() { inst.renderQuerySummary(numRows, elapsed, summary, executed, err, truncation) }
+	inst.queryFSMWidget.Render()
 }
 
 // renderHistoryTab is the History dock tab body. The tab title already
@@ -2965,8 +3034,6 @@ func (inst *PlayApp) renderHistoryTab() {
 	}
 	// The durable half: captured runs from boxer.facts (ADR-0115 S2).
 	inst.renderRecordedRuns()
-	// Tier-1 pins: frozen resultsets on the endpoint (ADR-0115 S4).
-	inst.renderPinnedResults()
 }
 
 // renderTableTab is the Table dock tab body: pager strip atop the master
@@ -3019,9 +3086,6 @@ func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema,
 	pad := styletokens.PaddingTight(inst.density)
 	c.AddSpace(pad)
 	inst.pager.Render()
-	// Tier-1 pin affordance (ADR-0115 S4): freeze the rows this tab
-	// shows into a queryable table.
-	inst.renderPinControl(rec)
 	// ADR-0186 raw toggle: bypass every gloss for the session — the escape
 	// hatch a wrong rule needs. Offered only once a column is glossed.
 	inst.renderGlossControl(schema)
@@ -3554,6 +3618,28 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 			rowHi = uint64(displayRows)
 		}
 	}
+	// Nothing on a page changes between most frames, so the cells are captured
+	// once and replayed until one of their inputs moves or a cell has a
+	// response the live path would read (a click selects a row). The host
+	// sees the same bytes either way.
+	key := masterCellsKey{
+		result: inst.tableResult, schema: schema,
+		pageStart: pageStart, pageEnd: pageEnd, rowLo: rowLo, rowHi: rowHi,
+		selectedRow: selectedRow, refit: refit, cellPadX: cellPadX,
+		sortActive: inst.tableSort.active, sortCol: inst.tableSort.col, sortDesc: inst.tableSort.desc,
+		identityDone: idJob == nil || idJob.isDone(),
+		opts:         inst.tableOpts,
+		columns: foldColumns(visCols, synth, func(pos uint32) bool {
+			vis, _ := et.ColVisible(pos)
+			return vis
+		}),
+	}
+	if raw := inst.masterCells.retained(key, c.CurrentApplicationState.StateManager); raw != nil {
+		et.SendWithRawCells(raw)
+		inst.captureMasterWidths(et, cols)
+		return
+	}
+	inst.masterCells.beginCapture(key)
 	for local := rowLo; local < rowHi; local++ {
 		// The display position walks the page; the record row it draws comes
 		// from the sort permutation (identity when unsorted).
@@ -3609,6 +3695,7 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 			}
 		}
 	}
+	inst.masterCells.endCapture(et.CellsBytes())
 	et.Send()
 	inst.captureMasterWidths(et, cols)
 }

@@ -60,9 +60,12 @@ func (inst *App) renderProblems(sc *storeConn) {
 			})
 			switch {
 			case abusy:
-				bgjobrow.Render(&inst.auditLane, bgjobrow.Input{
+				bgjobrow.Render(bgjobrow.Input{
+					Job:      &inst.auditLane,
+					Ids:      inst.ids,
+					ScopeKey: "auditLane",
+					Cancel:   true,
 					Note:     "Recomputing BLAKE3 over every block…",
-					CancelId: inst.ids.PrepareStr("cancel-auditLane"),
 					Inline:   true,
 				})
 			case adone && errors.Is(aerr, bgjob.ErrCancelled):

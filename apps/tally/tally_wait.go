@@ -32,10 +32,13 @@ func (inst *App) configureLanes() {
 // reports whether it drew: nothing for a lane that is not running. id is the
 // lane's name, which is unique in the app and so makes the Cancel's id.
 func (inst *App) waiting(job bgjobrow.JobI, id string, note string) (running bool) {
-	return bgjobrow.Render(job, bgjobrow.Input{
+	return bgjobrow.Render(bgjobrow.Input{
+		Job:      job,
+		Ids:      inst.ids,
+		ScopeKey: id,
+		Cancel:   true,
 		Note:     note,
-		CancelId: inst.ids.PrepareStr("cancel-" + id),
-	})
+	}).Running
 }
 
 // laneFailed says why a lane has nothing to show. A cancelled run is the

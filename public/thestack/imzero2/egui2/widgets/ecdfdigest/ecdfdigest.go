@@ -1,7 +1,7 @@
-// Package ecdfdigest bridges a boxer tdigest.TDigest to the ecdf
-// widget. The widget itself accepts an explicit (xs, fnAt, n) grid
-// via RenderGrid; this helper builds that grid from a streaming
-// sketch in one call.
+// Package ecdfdigest bridges a boxer tdigest.TDigest to the ecdf painter
+// helper (ADR-0267). The helper itself accepts an explicit (Xs, FnAt, N)
+// grid on its Input; this package builds that grid from a streaming sketch
+// in one call.
 //
 // Kept in its own package so the ecdf widget remains import-free of
 // the tdigest dependency. Callers that already pull in tdigest for
@@ -19,49 +19,47 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/implot"
 )
 
-// RenderDigest renders the ECDF and simultaneous confidence band of
-// the data summarised by digest, using the supplied widget renderer.
-// The visualisation grid is uniform across [digest.Min(), digest.Max()]
-// with gridN samples (gridN ≥ 2). The band's calibration depends on
-// the total observation count digest.Count(), not on gridN.
+// PaintDigest paints the ECDF and the confidence band in.Band names for
+// the data summarised by digest, with in.Style; in's own sample fields are
+// ignored. The visualisation grid is uniform across [digest.Min(),
+// digest.Max()] with gridN samples (gridN ≥ 2). The band's calibration
+// depends on the total observation count digest.Count(), not on gridN.
 //
-// The caller passes its open *implot.Plot (between Begin and End) —
-// RenderDigest invokes renderer.RenderGrid, which declares the band
-// and curve into that plot.
-//
-// Returns an error if gridN < 2 or if the digest's support has
-// collapsed (Min ≥ Max — typically because Count == 0 or all
-// observations were identical).
-func RenderDigest(p *implot.Plot, renderer ecdf.Renderer, digest *tdigest.TDigest, gridN int) (err error) {
+// The caller passes its open *implot.Plot (between Begin and End).
+// Result.Err reports gridN < 2, a nil or empty digest, or a collapsed
+// support (Min ≥ Max — every observation identical), and nothing is
+// painted then.
+func PaintDigest(p *implot.Plot, in ecdf.Input, digest *tdigest.TDigest, gridN int) (res ecdf.Result) {
 	if digest == nil {
-		err = eh.Errorf("nil digest")
+		res.Err = eh.Errorf("nil digest")
 		return
 	}
 	if gridN < 2 {
-		err = eb.Build().Int("gridN", gridN).Errorf("gridN must be at least 2")
+		res.Err = eb.Build().Int("gridN", gridN).Errorf("gridN must be at least 2")
 		return
 	}
 	n := digest.Count()
 	if n <= 0 {
-		err = eh.Errorf("digest is empty (Count == 0)")
+		res.Err = eh.Errorf("digest is empty (Count == 0)")
 		return
 	}
 	xmin := digest.Min()
 	xmax := digest.Max()
 	if !(xmax > xmin) {
-		err = eb.Build().Float64("min", xmin).Float64("max", xmax).Errorf("digest support collapsed; the band is degenerate")
+		res.Err = eb.Build().Float64("min", xmin).Float64("max", xmax).Errorf("digest support collapsed; the band is degenerate")
 		return
 	}
-	xs, fn := BuildDigestGrid(digest, gridN)
-	err = renderer.RenderGrid(p, xs, fn, int(n))
-	return
+	in.Sorted = nil
+	in.Xs, in.FnAt = BuildDigestGrid(digest, gridN)
+	in.N = int(n)
+	return ecdf.Paint(p, in)
 }
 
 // BuildDigestGrid samples a uniform x-grid over [digest.Min(),
 // digest.Max()] of length gridN and evaluates the digest's CDF at
 // each point. Returned slices are freshly allocated and aligned by
 // index. Useful when the caller wants the grid in hand (e.g. for a
-// custom render path) rather than going through RenderDigest.
+// custom paint path) rather than going through PaintDigest.
 //
 // gridN < 2 is clamped to 2 to keep the API total without an error
 // path; callers worried about edge cases should validate gridN

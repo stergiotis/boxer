@@ -674,6 +674,20 @@ only the fills were wrong, and the stroke path clips segment by segment where
 the fill path clipped the polygon. The method is in the imzero2 skill,
 §16.1a.
 
+## Updates
+
+### 2026-09-26 — Q5 answered: tiles fetch through `net.http.fetch.basemap` (ADR-0262)
+
+§SD4's keelson HTTP facility is drawn in
+[ADR-0262](./0262-http-egress-as-a-keelson-capability.md). The tile loader
+no longer holds an HTTP client: it is handed a fetcher, and a hosted app's
+fetcher sends each tile through the host's egress service to the `basemap`
+destination, which `BOXER_MAP_TILE_*` configure. The TLS pair keeps its
+names, its meanings and its rule of applying only to a deployment's own
+server; the loader's `CAFile`, `InsecureTLS`, `UserAgent` and `Transport`
+options are gone. The worker pool, byte cache, negative cache and health
+readback stay in the loader.
+
 ## References
 
 - [leaflet-port-analysis](../adr-background-work/leaflet-port-analysis.md) — the measurements, the three split shapes, the substrate check and the cut line this ADR decides on.

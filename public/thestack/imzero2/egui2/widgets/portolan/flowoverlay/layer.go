@@ -137,9 +137,9 @@ type fetchReply struct {
 
 // Layer is a flow layer over one source.
 //
-// Draw and the setters belong to the frame goroutine. Window requests run on
+// Paint and the setters belong to the frame goroutine. Window requests run on
 // goroutines of the layer's own and hand their replies over through a
-// mailbox, which Draw empties.
+// mailbox, which Paint empties.
 type Layer struct {
 	Opts Options
 
@@ -405,9 +405,9 @@ func (p crsProjection) UnprojectAt(pt portolan.Point, zoom float64) portolan.Lat
 	return p.crs.PointToLatLng(pt, zoom)
 }
 
-// Draw advances the particles and paints them. It is called inside the map's
+// Paint advances the particles and paints them. It is called inside the map's
 // overlay callback, with that frame's projector.
-func (inst *Layer) Draw(p portolan.Projector) {
+func (inst *Layer) Paint(p portolan.Projector) {
 	view := p.View()
 	size := view.Size()
 	if !(size.X > 0) || !(size.Y > 0) {
@@ -470,6 +470,19 @@ func (inst *Layer) field(proj crsProjection) (f field) {
 			f.wrap = proj.ProjectAt(portolan.LL(0, hi), worldZoom).X - proj.ProjectAt(portolan.LL(0, lo), worldZoom).X
 		}
 	}
+	return
+}
+
+// Pace is what a legend needs to say about the trails: the magnitude at
+// which a particle reaches the fastest pace and tops the palette, and the
+// one below which every particle creeps alike at the floor — pace is a
+// clamped linear function of magnitude (ADR-0249 §SD4), so between the two
+// a trail's pace is proportional to speed and outside them it is not. Both
+// are in the field's unit, from the options as the simulation resolves them.
+func (inst *Layer) Pace() (floorSpeed, fullSpeed float32) {
+	params := inst.resolveSimParams()
+	fullSpeed = params.speedMax
+	floorSpeed = params.speedMax * params.minPace / params.maxPace
 	return
 }
 

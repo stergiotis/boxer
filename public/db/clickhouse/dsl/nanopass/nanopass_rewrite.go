@@ -122,6 +122,12 @@ func classifyConflict(earlier, later modifiedRegion) conflictKind {
 
 	case earlier.op.isInsert() && !later.op.isInsert():
 		// Insert first, then a replace/delete covering it: dropped or merged.
+		// antlr4-go folds a prior insert-before into a replace starting at
+		// its index, but not a prior insert-after (a distinct op type there):
+		// the two stay at one index, and GetText panics.
+		if earlier.op == opInsertAfter && later.start == earlier.start {
+			return conflictFatal
+		}
 		if later.start <= earlier.start && earlier.start <= later.stop {
 			return conflictLossy
 		}
@@ -198,9 +204,10 @@ func (inst *TrackedRewriter) InsertBeforeDefault(index int, text string) {
 	inst.inner.InsertBeforeDefault(index, text)
 }
 
-// InsertAfterDefault inserts text after the token at index.
+// InsertAfterDefault inserts text after the token at index. ANTLR stores it
+// as an insert at index+1, so that is where the region is recorded.
 func (inst *TrackedRewriter) InsertAfterDefault(index int, text string) {
-	inst.record(modifiedRegion{start: index, stop: index, op: opInsertAfter})
+	inst.record(modifiedRegion{start: index + 1, stop: index + 1, op: opInsertAfter})
 	inst.inner.InsertAfterDefault(index, text)
 }
 

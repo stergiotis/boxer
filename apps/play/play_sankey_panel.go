@@ -603,7 +603,9 @@ func (inst sankeyPanel) Render(filled map[ChannelID]ChannelResult, emit SignalEm
 func resolveSankeyFlows(schema *arrow.Schema) (fc sankeyFlowsClaim, reason string) {
 	fc = sankeyFlowsClaim{srcCol: -1, tgtCol: -1, valCol: -1, labelCol: -1, toneCol: -1}
 	for ci, f := range schema.Fields() {
-		switch f.Name {
+		// Matched on the gloss label (pathColumnLabel), like every named-column
+		// contract: `label@text/markdown` is still the contract's `label`.
+		switch pathColumnLabel(f.Name) {
 		case sankeySourceCol:
 			fc.srcCol = ci
 		case sankeyTargetCol:
@@ -641,7 +643,7 @@ func resolveSankeyFlows(schema *arrow.Schema) (fc sankeyFlowsClaim, reason strin
 func resolveSankeyNodes(schema *arrow.Schema) (nc sankeyNodesClaim, reason string) {
 	nc = sankeyNodesClaim{idCol: -1, labelCol: -1, stageCol: -1, orderCol: -1, groupCol: -1, toneCol: -1}
 	for ci, f := range schema.Fields() {
-		switch f.Name {
+		switch pathColumnLabel(f.Name) { // the gloss label, as for flows
 		case sankeyIDCol:
 			nc.idCol = ci
 		case sankeyLabelCol:

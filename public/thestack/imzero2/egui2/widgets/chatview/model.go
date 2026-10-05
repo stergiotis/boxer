@@ -160,8 +160,24 @@ type State struct {
 	unfollow bool
 	window   int
 	jump     int32 // ordinal+1; 0 none
-	paneW    float32
-	shown    bool
+	// jumpTop brings the jump's message to the top of the view rather
+	// than its middle (ScrollToStart).
+	jumpTop bool
+	paneW   float32
+	shown   bool
+	// fits holds the measured width of the viewer's host-drawn bubbles, by
+	// ordinal (see blockFit).
+	fits map[int]blockFit
+}
+
+// blockFit is one viewer's bubble's host-drawn body, measured: its natural
+// width under a bubble limit, for the message body it was measured on. A
+// changed body or limit measures again.
+type blockFit struct {
+	body      string
+	bubbleW   float32
+	w         float32
+	measuring bool
 }
 
 // Selected is the selected message's ordinal, -1 for none.
@@ -202,11 +218,26 @@ func (inst *State) JumpTo(ordinal int32) {
 		return
 	}
 	inst.jump = ordinal + 1
+	inst.jumpTop = false
 	inst.unfollow = true
 }
 
+// ScrollToStart asks the next Render to scroll so that a message's first line
+// is at the top of the view — where a reader starts a long answer that
+// just arrived — and releases the tail. A message shorter than what is
+// below it in the view ends up where following would have put it.
+func (inst *State) ScrollToStart(ordinal int32) {
+	inst.JumpTo(ordinal)
+	inst.jumpTop = ordinal >= 0
+}
+
 // Block is a host-drawn message body: Render runs at draw time inside the
-// bubble and must scope its own widget ids. Height is the height the host
+// bubble and must scope its own widget ids. The bubble is already inside
+// its row's IdScope(PrepareSeq(ordinal)), so the ids a body draws are the
+// message's own; a host scope must not repeat that push — the id stack
+// combines by XOR, and the same id pushed twice on one path cancels,
+// giving every message's widgets the same ids. The body is laid out
+// left-aligned on either side, and a viewer's bubble is fitted to it. Height is the height the host
 // expects the body to take, advisory in this cut — the scroll area lays the
 // body out itself — and the contract the etable path would read.
 type Block struct {
@@ -239,6 +270,12 @@ type Input struct {
 	// BubbleFraction is the bubble's maximum width as a fraction of the
 	// pane's; 0 is the default.
 	BubbleFraction float32
+	// InteractiveBlocks gives a Block's own widgets the pointer: the
+	// bubbles sense no click, so nothing is selected and Result.Clicked
+	// stays -1, and a button, a code block's action row or selectable
+	// text drawn by a Block takes its clicks. A click-sensed frame wins
+	// the pointer over everything inside it.
+	InteractiveBlocks bool
 }
 
 // Result is what the frame's input did.

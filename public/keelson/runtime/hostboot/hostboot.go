@@ -16,9 +16,13 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
+	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appcenter"
+	appcenterlaunch "github.com/stergiotis/boxer/public/keelson/runtime/appcenter/launchcfg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appstate"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audit"
+	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/coveragebus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/covscrape"
@@ -28,10 +32,12 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker/pickerbridge"
 	"github.com/stergiotis/boxer/public/keelson/runtime/heartbeat"
 	"github.com/stergiotis/boxer/public/keelson/runtime/helphost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/httpegress"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspecthost"
 	"github.com/stergiotis/boxer/public/keelson/runtime/launcher"
+	"github.com/stergiotis/boxer/public/keelson/runtime/launchlimit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/natsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
@@ -42,6 +48,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	tasksupervisor "github.com/stergiotis/boxer/public/keelson/runtime/task/supervisor"
 	"github.com/stergiotis/boxer/public/keelson/runtime/topo"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
@@ -121,6 +128,13 @@ type Services struct {
 	// (ADR-0254). Without BOXER_LLM_ENDPOINT and BOXER_LLM_MODEL it still
 	// answers, saying no model is configured.
 	LLM bool
+	// HTTP is net.http.fetch.*: HTTP egress to the registered destinations
+	// (ADR-0262). A destination that failed to resolve is refused with the
+	// reason.
+	HTTP bool
+	// Agent is runtime.agent.*: the services through which a caller
+	// discovers and calls the operations apps declare (ADR-0269).
+	Agent bool
 }
 
 // AllServices is every service on — the carousel's configuration.
@@ -128,7 +142,7 @@ func AllServices() Services {
 	return Services{
 		Fs: true, Persist: true, Watchbill: true, ChLocal: true, AdhocData: true,
 		Clipboard: true, Coverage: true, Sysmetrics: true, Introspect: true,
-		AppState: true, LLM: true,
+		AppState: true, LLM: true, HTTP: true, Agent: true,
 	}
 }
 
@@ -216,12 +230,22 @@ type Runtime struct {
 	// PersistExec the executor behind a store backend, nil otherwise.
 	PersistBackend string
 	PersistExec    recordstore.ExecutorI
+	// Trail is the audit trail's one writer (ADR-0277): the model service,
+	// the dispatcher and the egress service record through it. Durable where
+	// PersistExec is set; never nil once the services have booted.
+	Trail *trail.Recorder
 	// AppState is the app-state manager's delete seam (ADR-0185 §SD3); nil
 	// when the service is off or failed to start.
 	AppState *appstate.Service
 	// LLM is the model-inference service (ADR-0254); nil when off or
 	// failed to start.
 	LLM *llm.Service
+	// HTTP is the egress service (ADR-0262); nil when off or failed to
+	// start.
+	HTTP *httpegress.Service
+	// Agent is the app operations service (ADR-0269); nil when off or
+	// failed to start.
+	Agent *agent.Service
 	// State is where workingsets and column-width overrides live (ADR-0105
 	// Update 2026-08-15): the durable persist backend when ClickHouse is
 	// reachable, an in-memory twin otherwise. Never nil after Boot, and
@@ -314,6 +338,7 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 			VcsRevision:  runInst.VcsRevision,
 			VcsModified:  runInst.VcsModified,
 			VcsBuildInfo: runInst.VcsBuildInfo,
+			BuildId:      runInst.BuildId,
 			ModulePath:   runInst.ModulePath,
 			Ts:           runInst.StartedAt,
 		})
@@ -360,10 +385,26 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 		screenshotDir = imzero2env.ScreenshotDir.Get()
 	}
 	rt.ScreenshotMode = screenshotDir != ""
+	// The launch limit (ADR-0272) is in force before the first window, seeded
+	// or toured, opens. Unset, it costs nothing and touches no chlocal.
+	reg := opts.Registry
+	if reg == nil {
+		reg = app.DefaultRegistry
+	}
+	if err = launchlimit.Apply(ctx, rt.Bus, reg, rt.ChLocal != nil, logger); err != nil {
+		err = eh.Errorf("hostboot: %w", err)
+		return
+	}
 	if rt.ScreenshotMode {
 		if len(opts.LaunchApps) == 0 {
 			err = eh.Errorf("--launch must match at least one app in screenshot mode (IMZERO2_SCREENSHOT_DIR set)")
 			return
+		}
+		for _, a := range opts.LaunchApps {
+			if id := a.Manifest().Id; !reg.Launchable(id) {
+				err = eb.Build().Str("id", string(id)).Errorf("hostboot: screenshot mode: app is not launchable under %s", launchlimit.Where.Spec().Name) //boxer:lint disable=CS013 reason="shape 3: the variable's name is what the reader changes"
+				return
+			}
 		}
 		for _, a := range opts.LaunchApps {
 			logger.Info().Str("id", string(a.Manifest().Id)).Msg("screenshot mode: adding tour renderer")
@@ -375,6 +416,8 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 			return
 		}
 	}
+
+	rt.bootAgent()
 
 	if opts.AfterHost != nil {
 		if err = opts.AfterHost(rt); err != nil {
@@ -422,6 +465,18 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 			rt.cleanups = append(rt.cleanups, persistSvc.Close)
 		}
 	}
+	// The audit trail (ADR-0277), durable where the persist backend is the
+	// server that holds boxer.facts. It closes after the services that write
+	// through it and before the backend they share.
+	runId := ""
+	if rt.RunInfo != nil {
+		runId = rt.RunInfo.RunId
+	}
+	rt.Trail = trail.NewRecorder(rt.PersistExec, runId, logger)
+	rt.cleanups = append(rt.cleanups, rt.Trail.Close)
+	if trail.RequiredEnv.Get() && !rt.Trail.Durable() {
+		logger.Warn().Msg("trail: BOXER_TRAIL_REQUIRED is set and this host has no durable backend; model calls and egress fetches will be refused")
+	}
 	if svc.AppState {
 		// Only the durable backend can clear what another run could see;
 		// the in-memory fallbacks leave the service refusing with the
@@ -440,11 +495,24 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 		}
 	}
 	if svc.LLM {
-		// Durable where the persist backend is the server that holds
-		// boxer.facts (ADR-0254 §SD4); the in-memory fallback keeps the
-		// service's own record.
+		// Durable where the trail is (ADR-0254 §SD4); the in-memory fallback
+		// keeps the service's own record.
 		llmCfg := llm.ConfigFromEnv()
-		llmCfg.Exec = rt.PersistExec
+		llmCfg.Trail = rt.Trail
+		if path := llm.ScriptEnv.Get(); path != "" {
+			// A scripted model, for scenes (ADR-0269 M6): on the headless
+			// host only, where no person reads its answers as a model's.
+			if headlessOnly(true, imzero2env.HeadlessListen.Get() != "") {
+				scripted, sErr := llm.LoadScript(path)
+				if sErr != nil {
+					logger.Warn().Err(sErr).Msg("llm: BOXER_LLM_SCRIPT does not load; no scripted model")
+				} else {
+					llmCfg.Client, llmCfg.Endpoint, llmCfg.Model = scripted, llm.ScriptedEndpoint, "scripted"
+				}
+			} else {
+				logger.Warn().Msg("llm: BOXER_LLM_SCRIPT is honoured only on the headless host; refused here")
+			}
+		}
 		llmSvc, lErr := llm.NewService(rt.Bus, logger, llmCfg)
 		if lErr != nil {
 			logger.Warn().Err(lErr).Msg("llm: service start failed; llm.* will be unbound")
@@ -454,6 +522,22 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 			d := llmSvc.Describe()
 			logger.Info().Bool("configured", d.Configured).Str("model", d.Model).Str("endpointHost", d.EndpointHost).
 				Bool("local", d.Local).Bool("durable", llmSvc.Durable()).Msg("llm: service listening on llm.*")
+		}
+	}
+	if svc.HTTP {
+		httpSvc, hErr := httpegress.NewService(rt.Bus, logger, httpegress.Config{Trail: rt.Trail})
+		if hErr != nil {
+			logger.Warn().Err(hErr).Msg("httpegress: service start failed; net.http.fetch.* will be unbound")
+		} else {
+			rt.HTTP = httpSvc
+			rt.cleanups = append(rt.cleanups, httpSvc.Close)
+			for _, d := range httpSvc.Destinations() {
+				ev := logger.Info()
+				if d.Error != "" {
+					ev = logger.Warn()
+				}
+				ev.Str("destination", d.Name).Strs("prefixes", d.Prefixes).Bool("local", d.Local).Str("error", d.Error).Msg("httpegress: destination")
+			}
 		}
 	}
 	if svc.Watchbill {
@@ -532,6 +616,20 @@ func (rt *Runtime) bootWindowHost() (err error) {
 	lchr := launcher.Default
 	lchr.SetHost(host)
 	lchr.SetHelpApp(helphost.ManifestId)
+	// The detail pane's Inspect (ADR-0260 §SD1): the app center, opened on
+	// the app the pane shows. Wired only where the registry holds it, so a
+	// host built over a narrower registry shows no dead action.
+	// Nor where the launch limit (ADR-0272) refuses the app center.
+	if _, ok := reg.LookupManifest(appcenter.AppId); ok && reg.Launchable(appcenter.AppId) {
+		lchr.SetInspect(func(target app.AppIdT) (err error) {
+			cfg, err := buscodec.Encode(appcenterlaunch.AppCenterLaunch{At: time.Now().UTC(), AppId: string(target)})
+			if err != nil {
+				return
+			}
+			_, err = host.OpenWithConfig(appcenter.AppId, appcenterlaunch.Kind, cfg)
+			return
+		})
+	}
 	// Ranking, when the facts store can answer for it (ADR-0214 §SD7). A
 	// no-op against the in-memory fallback, which is the correct behaviour
 	// rather than a degraded one: a run with no server has no trail to rank
@@ -672,6 +770,83 @@ func (rt *Runtime) bootSysmetrics() {
 	}
 }
 
+// bootAgent starts the app operations service (ADR-0269) once the window
+// host exists, since calls are served by the instances it holds.
+func (rt *Runtime) bootAgent() {
+	if !rt.opts.Services.Agent {
+		return
+	}
+	logger := rt.opts.Log
+	// Durable where the trail is (ADR-0269 §SD9), as for llm_calls.
+	headless := imzero2env.HeadlessListen.Get() != ""
+	cfg := agent.Config{TestGrants: headlessOnly(agent.TestGrantsEnv.Get(), headless),
+		Trail: rt.Trail, Coordinators: agent.ParseCoordinators(agent.CoordinatorsEnv.Get()), Deadline: agent.DeadlineEnv.Get(),
+		Pace: agent.PaceEnv.Get()}
+	if rt.LLM != nil {
+		// Confined content reaches a coordinator's model only where the host's
+		// endpoint is local (ADR-0254 §SD3, ADR-0269 §SD7).
+		llmSvc := rt.LLM
+		cfg.ModelLocal = func() bool { return llmSvc.Describe().Local }
+	}
+	if agent.TestGrantsEnv.Get() && !cfg.TestGrants {
+		logger.Warn().Msg("agent: BOXER_AGENT_TEST_GRANTS is honoured only on the headless host; refused here")
+	}
+	if path := agent.ActionsFileEnv.Get(); path != "" {
+		if headlessOnly(true, headless) {
+			f, fErr := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+			if fErr != nil {
+				logger.Warn().Err(fErr).Str("path", path).Msg("agent: BOXER_AGENT_ACTIONS_FILE does not open; no action file")
+			} else {
+				cfg.ActionsLog = f
+				rt.cleanups = append(rt.cleanups, func() { _ = f.Close() })
+			}
+		} else {
+			logger.Warn().Msg("agent: BOXER_AGENT_ACTIONS_FILE is honoured only on the headless host; refused here")
+		}
+	}
+	if rt.Host != nil {
+		cfg.Host = rt.Host
+		ops, oErr := windowhost.NewOpsService(rt.Bus, rt.Host, logger)
+		if oErr != nil {
+			logger.Warn().Err(oErr).Msg("windowhost: ops service start failed; operation calls will go unanswered")
+		} else {
+			rt.cleanups = append(rt.cleanups, ops.Close)
+		}
+	}
+	svc, err := agent.NewService(rt.Bus, logger, cfg)
+	if err != nil {
+		logger.Warn().Err(err).Msg("agent: service start failed; runtime.agent.* will be unbound")
+		return
+	}
+	rt.Agent = svc
+	rt.cleanups = append(rt.cleanups, svc.Close)
+	// Host services that reach outside check agent-caused work against the
+	// task's grant (ADR-0269 §SD6).
+	if rt.HTTP != nil {
+		rt.HTTP.SetDelegation(svc)
+	}
+	if rt.LLM != nil {
+		rt.LLM.SetDelegation(svc)
+	}
+	if rt.Host != nil {
+		// The person's side: the badge in each window a task works in and
+		// the dialog in which requests are decided (ADR-0269 §SD5).
+		rt.Host.SetAgentChrome(svc.Chrome())
+		rt.Host.SetOpsListener(svc.Listener())
+	}
+	logger.Info().Bool("testGrants", cfg.TestGrants).Bool("durable", svc.Durable()).Msg("agent: service listening on runtime.agent.*")
+}
+
+// headlessOnly decides whether a test-lane knob takes effect: only when
+// asked for, and only on the headless host. The desktop host is where a
+// person's windows are: a grant there needs the person (ADR-0269 §SD6), a
+// script's answers would read as a model's, and the action record has its
+// own home (§SD9). It gates BOXER_AGENT_TEST_GRANTS, BOXER_LLM_SCRIPT and
+// BOXER_AGENT_ACTIONS_FILE.
+func headlessOnly(requested bool, headless bool) (on bool) {
+	return requested && headless
+}
+
 // bootIntrospect starts the introspection HTTP host when the service is on;
 // the registry itself exists regardless so late registrations land.
 func (rt *Runtime) bootIntrospect() {
@@ -711,6 +886,12 @@ func (rt *Runtime) bootIntrospect() {
 	}
 	if rt.LLM != nil {
 		deps.LLMCalls = rt.LLM
+	}
+	if rt.HTTP != nil {
+		deps.HTTPCalls = rt.HTTP
+	}
+	if rt.Agent != nil {
+		deps.Agent = rt.Agent
 	}
 	stop, ierr := introspecthost.Start(deps)
 	if ierr != nil {
@@ -899,10 +1080,44 @@ func (rt *Runtime) Close() {
 	})
 }
 
-// Run creates the imzero2 application from cfg, installs the signal handler
-// (SIGINT / SIGTERM reap the windows, shut the application down and force
-// exit after the grace period), runs the render loop until the window
-// closes, and Closes the runtime. It returns the application's error.
+// shutdownOnSignal waits for one signal, asks the loop to stop, and leaves
+// the reaping to Close on the render goroutine (ADR-0261). If the loop has
+// not returned within grace it is wedged — no frame boundary will come — and
+// the windows are reaped here instead. Either way, exit runs a grace period
+// later if the process is still up: a Close that hangs must not keep it
+// alive.
+func shutdownOnSignal(sigCh <-chan os.Signal, loopDone <-chan struct{}, grace time.Duration, logger zerolog.Logger,
+	stopLoop func(), reap func(), exit func()) {
+	sig, ok := <-sigCh
+	if !ok {
+		return
+	}
+	logger.Info().Str("signal", sig.String()).Msg("hostboot: caught signal, shutting down")
+	stopLoop()
+	select {
+	case <-loopDone:
+		// Close reaps on the render goroutine once Run's loop returns.
+	case <-time.After(grace):
+		logger.Warn().Dur("grace", grace).Msg("hostboot: render loop did not stop within the grace period; reaping off the render goroutine")
+		reap()
+	}
+	time.AfterFunc(grace, func() {
+		logger.Warn().Dur("grace", grace).Msg("hostboot: shutdown did not complete within the grace period, forcing exit")
+		exit()
+	})
+}
+
+// Run creates the imzero2 application from cfg, installs the signal handler,
+// runs the render loop until the window closes, and Closes the runtime. It
+// returns the application's error.
+//
+// SIGINT / SIGTERM stop the loop at its next frame boundary; Run then returns
+// through Close, which reaps the windows on this goroutine — the render
+// goroutine — so no app's Unmount overlaps its Frame (ADR-0261). A loop that
+// does not stop within the grace period is wedged, most likely blocked on a
+// client that no longer answers: the handler then reaps from its own
+// goroutine, the one case where Unmount runs off the render goroutine, so
+// that state is still saved before the forced exit a grace period later.
 func (rt *Runtime) Run(cfg *application.Config) (err error) {
 	defer rt.Close()
 	logger := rt.opts.Log
@@ -919,19 +1134,11 @@ func (rt *Runtime) Run(cfg *application.Config) (err error) {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigCh)
-	go func() {
-		sig, ok := <-sigCh
-		if !ok {
-			return
-		}
-		logger.Info().Str("signal", sig.String()).Msg("hostboot: caught signal, shutting down")
-		rt.Reap()
-		application_.Shutdown()
-		time.AfterFunc(grace, func() {
-			logger.Warn().Dur("grace", grace).Msg("hostboot: shutdown did not complete within the grace period, forcing exit")
-			os.Exit(1)
-		})
-	}()
+	// Closed when Run returns, before the deferred Close reaps: on every
+	// path, so a signal after a failed Launch does not wait out the grace.
+	loopDone := make(chan struct{})
+	defer close(loopDone)
+	go shutdownOnSignal(sigCh, loopDone, grace, logger, application_.Shutdown, rt.Reap, func() { os.Exit(1) })
 
 	application_.FffiEstablishedHandler = func(fffi *runtime.Fffi2[*runtime.Unmarshaller]) error {
 		typed.SetCurrentFffiVar(fffi)

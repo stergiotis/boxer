@@ -17,6 +17,9 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/chatview"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/text"
 )
 
 // play_chat_panel.go is the ADR-0239 Chat dock tab: a result set rendered as
@@ -246,6 +249,7 @@ type ChatDriver struct {
 	forReactions    ResultID
 	forSchema       *arrow.Schema
 	forConversation string
+	forMarkdownBody bool
 	folded          bool
 
 	// The pickers (§SD2): the viewer by sender key ("" is nobody), the
@@ -379,7 +383,9 @@ type chatReactionsInput struct {
 func (inst *ChatDriver) render(app *PlayApp, rec arrow.RecordBatch, result ResultID, k chatClaim, roster *chatRosterInput, reactions *chatReactionsInput, emit SignalEmitterI) {
 	schema := rec.Schema()
 	inst.syncCache(result)
-	inst.rebuild(rec, result, k, roster, reactions)
+	cols := app.glossColumns(schema)
+	rawCells := app.tableOpts.rawCells
+	inst.rebuild(rec, result, k, roster, reactions, !rawCells && chatBodyIsMarkdown(cols, k))
 	m := inst.model
 	dens := styletokens.ActiveDensity()
 
@@ -400,8 +406,6 @@ func (inst *ChatDriver) render(app *PlayApp, rec arrow.RecordBatch, result Resul
 		inst.state.SetSelected(-1)
 	}
 
-	cols := app.glossColumns(schema)
-	rawCells := app.tableOpts.rawCells
 	res := chatview.Render(chatview.Input{
 		Ids:      inst.ids,
 		ScopeKey: "play-chat",
@@ -540,7 +544,7 @@ type chatEntry struct {
 
 // rebuild folds the result into a chatview model, keyed on (main result,
 // roster result, reactions result, schema, conversation).
-func (inst *ChatDriver) rebuild(rec arrow.RecordBatch, result ResultID, k chatClaim, roster *chatRosterInput, reactions *chatReactionsInput) {
+func (inst *ChatDriver) rebuild(rec arrow.RecordBatch, result ResultID, k chatClaim, roster *chatRosterInput, reactions *chatReactionsInput, markdownBody bool) {
 	var rosterID, reactionsID ResultID
 	if roster != nil {
 		rosterID = roster.result
@@ -556,17 +560,18 @@ func (inst *ChatDriver) rebuild(rec arrow.RecordBatch, result ResultID, k chatCl
 		conversation = conversations[0]
 	}
 	if inst.folded && inst.forMain == result && inst.forRoster == rosterID && inst.forReactions == reactionsID &&
-		inst.forSchema == rec.Schema() && inst.forConversation == conversation {
+		inst.forSchema == rec.Schema() && inst.forConversation == conversation && inst.forMarkdownBody == markdownBody {
 		return
 	}
 	inst.folded = true
 	inst.forMain, inst.forRoster, inst.forReactions = result, rosterID, reactionsID
 	inst.forSchema = rec.Schema()
 	inst.forConversation = conversation
+	inst.forMarkdownBody = markdownBody
 	inst.conversations = conversations
 	inst.conversation = conversation
 
-	m, rows, participantKeys, skipped, truncated, unmatched := foldChat(rec, k, roster, reactions, conversation, chatMaxMessages)
+	m, rows, participantKeys, skipped, truncated, unmatched := foldChat(rec, k, roster, reactions, conversation, chatMaxMessages, markdownBody)
 	inst.model, inst.rows, inst.participantKeys = m, rows, participantKeys
 	inst.skipped, inst.truncated, inst.unmatched = skipped, truncated, unmatched
 	inst.ordOf = make(map[int64]int32, len(rows))
@@ -609,8 +614,11 @@ func containsString(list []string, s string) bool {
 // participants by first appearance, reactions aggregated per (message, key)
 // in first-seen order. Returns the ordinal → row map, the participant keys,
 // and the counts the status line reports. cap bounds the messages kept —
-// the newest ones, since a transcript is read from its tail.
-func foldChat(rec arrow.RecordBatch, k chatClaim, roster *chatRosterInput, reactions *chatReactionsInput, conversation string, cap int) (
+// the newest ones, since a transcript is read from its tail. markdownBody
+// says the body column is glossed text/markdown: the model's Body is then the
+// body's plain text, because the widget reads Body where it draws no block —
+// the quote strip, a system line — and would show the markup verbatim.
+func foldChat(rec arrow.RecordBatch, k chatClaim, roster *chatRosterInput, reactions *chatReactionsInput, conversation string, cap int, markdownBody bool) (
 	m *chatview.Model, rows []int64, participantKeys []string, skipped int, truncated int64, unmatched int) {
 	tsArr, _ := rec.Column(k.tsCol).(*array.Timestamp)
 	senderArr := rec.Column(k.senderCol)
@@ -723,7 +731,11 @@ func foldChat(rec arrow.RecordBatch, k chatClaim, roster *chatRosterInput, react
 		}
 		// Cloned: formatCell may hand back a string aliasing the Arrow
 		// buffer, and the model outlives the frame.
-		m.Body[ord] = strings.Clone(formatCell(rec, k.bodyCol, row))
+		if markdownBody {
+			m.Body[ord] = markdownPlainText(formatCell(rec, k.bodyCol, row))
+		} else {
+			m.Body[ord] = strings.Clone(formatCell(rec, k.bodyCol, row))
+		}
 		if flag(k.deletedCol, row) {
 			m.Flags[ord] |= chatview.FlagDeleted
 		}
@@ -798,6 +810,48 @@ func foldChat(rec arrow.RecordBatch, k chatClaim, roster *chatRosterInput, react
 
 // chatStatusOf reads the `status` vocabulary, case-insensitively; anything
 // else is no status.
+// chatBodyIsMarkdown reports whether the body column resolved to the
+// text/markdown gloss.
+func chatBodyIsMarkdown(cols []glossColumn, k chatClaim) bool {
+	return k.bodyCol >= 0 && k.bodyCol < len(cols) && cols[k.bodyCol].mediaType == gloss.MediaTypeMarkdown
+}
+
+// markdownPlainText flattens markdown to the text a reader sees: inline
+// markup dropped, a soft break as a space, one line per block. Code keeps its
+// text. The result never aliases src.
+func markdownPlainText(src string) string {
+	b := []byte(src)
+	var sb strings.Builder
+	_ = ast.Walk(goldmark.DefaultParser().Parse(text.NewReader(b)), func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			if n.Type() == ast.TypeBlock && sb.Len() > 0 && !strings.HasSuffix(sb.String(), "\n") {
+				sb.WriteByte('\n')
+			}
+			return ast.WalkContinue, nil
+		}
+		switch t := n.(type) {
+		case *ast.Text:
+			sb.Write(t.Segment.Value(b))
+			if t.SoftLineBreak() {
+				sb.WriteByte(' ')
+			} else if t.HardLineBreak() {
+				sb.WriteByte('\n')
+			}
+		case *ast.String:
+			sb.Write(t.Value)
+		case *ast.FencedCodeBlock, *ast.CodeBlock:
+			lines := n.Lines()
+			for i := range lines.Len() {
+				seg := lines.At(i)
+				sb.Write(seg.Value(b))
+			}
+			return ast.WalkSkipChildren, nil
+		}
+		return ast.WalkContinue, nil
+	})
+	return strings.TrimRight(sb.String(), "\n")
+}
+
 func chatStatusOf(s string) chatview.StatusE {
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "sent":

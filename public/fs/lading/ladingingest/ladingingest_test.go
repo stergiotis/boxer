@@ -488,3 +488,114 @@ var _ = strings.TrimSpace
 func tsLiteral(t time.Time) string {
 	return fmt.Sprintf("fromUnixTimestamp64Nano(%d, 'UTC')", t.UTC().UnixNano())
 }
+
+// vanishingDirFS models a directory removed between its parent's ReadDir and
+// its own lstat: its DirEntry still says directory, its Info fails, and the
+// ReadDir that fs.WalkDir then attempts on it fails too.
+type vanishingDirFS struct {
+	fstest.MapFS
+	dir string
+}
+
+type vanishingEntry struct {
+	fs.DirEntry
+}
+
+func (inst vanishingEntry) Info() (fs.FileInfo, error) {
+	return nil, &fs.PathError{Op: "lstat", Path: inst.Name(), Err: fs.ErrNotExist}
+}
+
+func (inst vanishingDirFS) ReadDir(name string) ([]fs.DirEntry, error) {
+	if name == inst.dir {
+		return nil, &fs.PathError{Op: "readdir", Path: name, Err: fs.ErrNotExist}
+	}
+	ents, err := inst.MapFS.ReadDir(name)
+	for i, e := range ents {
+		if pathJoin(name, e.Name()) == inst.dir {
+			ents[i] = vanishingEntry{DirEntry: e}
+		}
+	}
+	return ents, err
+}
+
+func pathJoin(dir, name string) string {
+	if dir == "." {
+		return name
+	}
+	return dir + "/" + name
+}
+
+// TestVanishedDirectoryIsOneRow. A directory whose lstat and ReadDir both fail
+// is called back twice by fs.WalkDir; it must still be one row under its key.
+func TestVanishedDirectoryIsOneRow(t *testing.T) {
+	h := newHarness(t)
+	fsys := vanishingDirFS{MapFS: tree(), dir: "a/c"}
+
+	res, err := ladingingest.Snapshot(context.Background(), fsys, testMount, testPolicy(), h.stores())
+	require.NoError(t, err)
+
+	n := 0
+	for ent, err := range h.meta.ScanLadingEntry(context.Background(), recordstore.ScanOpts{
+		ExtraPredicate: fmt.Sprintf("%s = %d AND %s = %s AND %s = 'a/c'",
+			plain(t, "id"), testMount.Value(), plain(t, "ts"), tsLiteral(res.Snap), plain(t, "naturalKey")),
+	}) {
+		require.NoError(t, err)
+		n++
+		assert.NotEmpty(t, ent.LadingEntry.Val.Err)
+	}
+	assert.Equal(t, 1, n, "one row per (mount, snapshot, path)")
+}
+
+// understatedSizeFS reports one file's stat size as 1 byte, the way a
+// pseudo-file or a file appended to after the stat would look to the walker.
+type understatedSizeFS struct {
+	fstest.MapFS
+	file string
+}
+
+type understatedEntry struct {
+	fs.DirEntry
+}
+
+type understatedInfo struct {
+	fs.FileInfo
+}
+
+func (inst understatedInfo) Size() int64 { return 1 }
+
+func (inst understatedEntry) Info() (fs.FileInfo, error) {
+	fi, err := inst.DirEntry.Info()
+	if err != nil {
+		return nil, err
+	}
+	return understatedInfo{FileInfo: fi}, nil
+}
+
+func (inst understatedSizeFS) ReadDir(name string) ([]fs.DirEntry, error) {
+	ents, err := inst.MapFS.ReadDir(name)
+	for i, e := range ents {
+		if pathJoin(name, e.Name()) == inst.file {
+			ents[i] = understatedEntry{DirEntry: e}
+		}
+	}
+	return ents, err
+}
+
+// TestInlineMaxBoundsTheReadNotOnlyTheStat. A file whose stat size is under
+// InlineMax but whose bytes are not is referenced, not held whole: InlineMax
+// is the walker's memory bound per file (ADR-0198).
+func TestInlineMaxBoundsTheReadNotOnlyTheStat(t *testing.T) {
+	h := newHarness(t)
+	fsys := understatedSizeFS{MapFS: tree(), file: "big.bin"}
+
+	res, err := ladingingest.Snapshot(context.Background(), fsys, testMount, testPolicy(), h.stores())
+	require.NoError(t, err)
+
+	got := h.entries(t, res)
+	require.Contains(t, got, "big.bin")
+	assert.Equal(t, "ref", got["big.bin"].Content)
+	assert.EqualValues(t, 4096, got["big.bin"].Size, "the size is restated from what arrived")
+	want := blake3.Sum256(fsys.MapFS["big.bin"].Data)
+	assert.Equal(t, want[:], got["big.bin"].ContentHash, "the whole file is hashed")
+	assert.Len(t, h.blocksOf(t, res.Snap, "big.bin"), 0, "a referenced file stores no blocks")
+}

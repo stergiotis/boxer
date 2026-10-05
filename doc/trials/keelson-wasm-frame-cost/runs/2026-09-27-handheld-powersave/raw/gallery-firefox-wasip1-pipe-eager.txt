@@ -1,0 +1,10 @@
+PORT 39615
+GET /index.html?target=wasip1&consumer=pipe&flush=eager&scene=gallery&rows=1700&frames=300&warmup=30&stage=1024x600&arm=firefox-wasip1-pipe-eager
+GET /worker.mjs
+GET /favicon.ico
+GET /bridge.js
+GET /fetchtable.txt
+GET /fffi2stub.wasm
+GET /wasmspike_wasip1.wasm
+POST /report
+ARM {"result":{"arm":"firefox-wasip1-pipe-eager","target":"wasip1","consumer":"pipe","lazy_flush":false,"scene":"gallery","frames":300,"warmup":30,"bytes_per_frame":128689,"messages_per_frame":0,"render_us":{"p50":9000,"p90":11000,"max":17000},"sync_us":{"p50":0,"p90":1000,"max":2000},"total_us":{"p50":9000,"p90":11000,"max":18000}},"stub":{"messages":600930,"bytes":42467394,"frames":330,"fetches":7920,"maxMessage":27777},"bridge":{"chunks":601920,"bridgeMs":382},"wallMs":4506,"ua":"Mozilla/5.0 (X11; Linux x86_64; rv:146.0) Gecko/20100101 Firefox/146.0"}

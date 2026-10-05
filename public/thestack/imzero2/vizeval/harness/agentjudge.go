@@ -20,7 +20,7 @@ import (
 	"lukechampine.com/blake3"
 )
 
-// The agent judge (ADR-0257, proposed, §SD10): a reader — an agent or a
+// The agent judge (ADR-0266, proposed, §SD10): a reader — an agent or a
 // person — answers the scenario's questions from judge sheets, and the harness
 // scores the replies as it scores a model's. What the design guards against is
 // a reader who already knows the answers, so the sheets carry nothing but the

@@ -215,7 +215,7 @@ func CreateSchemaFsdataTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1493
 
 type InEntityFsdataTable struct {
 	errs               []error
@@ -303,8 +303,11 @@ func NewInEntityFsdataTable(allocator memory.Allocator, estimatedNumberOfRecords
 
 // SetActiveSections marks which section indices BeginEntity should
 // initialise (skipping beginSection for the rest). Pass nil to clear.
-// The hint is a performance optimisation; sending BeginAttribute to
-// an unmarked section produces empty-list bytes at TransferRecords.
+// The hint is a performance optimisation for shim builders, paired
+// with the builder's SetActiveFields over the marked sections'
+// columns; BeginAttribute on an unmarked section is an invalid state
+// transition. On the arrow RecordBuilder the hint has no effect:
+// every section starts, so its list columns stay row-aligned.
 func (inst *InEntityFsdataTable) setActiveSections(idxs []int) {
 	if idxs == nil {
 		inst.activeSections = nil
@@ -350,7 +353,7 @@ var InEntityFsdataTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
 
 func (inst *InEntityFsdataTable) setId(id0 uint64, naturalKey1 []byte) *InEntityFsdataTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -366,7 +369,7 @@ func (inst *InEntityFsdataTable) setId(id0 uint64, naturalKey1 []byte) *InEntity
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
 
 func (inst *InEntityFsdataTable) setTimestamp(ts2 time.Time) *InEntityFsdataTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -381,7 +384,7 @@ func (inst *InEntityFsdataTable) setTimestamp(ts2 time.Time) *InEntityFsdataTabl
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
 
 func (inst *InEntityFsdataTable) setLifecycle(expiresAt3 time.Time) *InEntityFsdataTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -462,72 +465,6 @@ func (inst *InEntityFsdataTable) initSections(builder *array.RecordBuilder) {
 	inst.section20Inst = NewInEntityFsdataTableSectionU8Array(builder, inst)
 }
 func (inst *InEntityFsdataTable) beginSections() {
-	if mask := inst.activeSections; mask != nil {
-		if mask[0] {
-			inst.section00Inst.beginSection()
-		}
-		if mask[1] {
-			inst.section01Inst.beginSection()
-		}
-		if mask[2] {
-			inst.section02Inst.beginSection()
-		}
-		if mask[3] {
-			inst.section03Inst.beginSection()
-		}
-		if mask[4] {
-			inst.section04Inst.beginSection()
-		}
-		if mask[5] {
-			inst.section05Inst.beginSection()
-		}
-		if mask[6] {
-			inst.section06Inst.beginSection()
-		}
-		if mask[7] {
-			inst.section07Inst.beginSection()
-		}
-		if mask[8] {
-			inst.section08Inst.beginSection()
-		}
-		if mask[9] {
-			inst.section09Inst.beginSection()
-		}
-		if mask[10] {
-			inst.section10Inst.beginSection()
-		}
-		if mask[11] {
-			inst.section11Inst.beginSection()
-		}
-		if mask[12] {
-			inst.section12Inst.beginSection()
-		}
-		if mask[13] {
-			inst.section13Inst.beginSection()
-		}
-		if mask[14] {
-			inst.section14Inst.beginSection()
-		}
-		if mask[15] {
-			inst.section15Inst.beginSection()
-		}
-		if mask[16] {
-			inst.section16Inst.beginSection()
-		}
-		if mask[17] {
-			inst.section17Inst.beginSection()
-		}
-		if mask[18] {
-			inst.section18Inst.beginSection()
-		}
-		if mask[19] {
-			inst.section19Inst.beginSection()
-		}
-		if mask[20] {
-			inst.section20Inst.beginSection()
-		}
-		return
-	}
 	inst.section00Inst.beginSection()
 	inst.section01Inst.beginSection()
 	inst.section02Inst.beginSection()
@@ -1237,6 +1174,7 @@ func (inst *InEntityFsdataTableSectionBlobArrayInAttr) EndSection() *InEntityFsd
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1528,6 +1466,7 @@ func (inst *InEntityFsdataTableSectionBoolInAttr) EndSection() *InEntityFsdataTa
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1847,6 +1786,7 @@ func (inst *InEntityFsdataTableSectionF32ArrayInAttr) EndSection() *InEntityFsda
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -2166,6 +2106,7 @@ func (inst *InEntityFsdataTableSectionF64ArrayInAttr) EndSection() *InEntityFsda
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -2371,6 +2312,7 @@ func (inst *InEntityFsdataTableSectionForeignKeyInAttr) EndSection() *InEntityFs
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -2690,6 +2632,7 @@ func (inst *InEntityFsdataTableSectionI16ArrayInAttr) EndSection() *InEntityFsda
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -3009,6 +2952,7 @@ func (inst *InEntityFsdataTableSectionI32ArrayInAttr) EndSection() *InEntityFsda
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -3328,6 +3272,7 @@ func (inst *InEntityFsdataTableSectionI64ArrayInAttr) EndSection() *InEntityFsda
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -3647,6 +3592,7 @@ func (inst *InEntityFsdataTableSectionI8ArrayInAttr) EndSection() *InEntityFsdat
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -3966,6 +3912,7 @@ func (inst *InEntityFsdataTableSectionStringArrayInAttr) EndSection() *InEntityF
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -4257,6 +4204,7 @@ func (inst *InEntityFsdataTableSectionSymbolInAttr) EndSection() *InEntityFsdata
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -4576,6 +4524,7 @@ func (inst *InEntityFsdataTableSectionSymbolArrayInAttr) EndSection() *InEntityF
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -4895,6 +4844,7 @@ func (inst *InEntityFsdataTableSectionTextArrayInAttr) EndSection() *InEntityFsd
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -5214,6 +5164,7 @@ func (inst *InEntityFsdataTableSectionTimeArrayInAttr) EndSection() *InEntityFsd
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -5533,6 +5484,7 @@ func (inst *InEntityFsdataTableSectionU16ArrayInAttr) EndSection() *InEntityFsda
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -5852,6 +5804,7 @@ func (inst *InEntityFsdataTableSectionU32ArrayInAttr) EndSection() *InEntityFsda
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -6154,6 +6107,7 @@ func (inst *InEntityFsdataTableSectionU32RangeInAttr) EndSection() *InEntityFsda
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -6473,6 +6427,7 @@ func (inst *InEntityFsdataTableSectionU32SetInAttr) EndSection() *InEntityFsdata
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -6792,6 +6747,7 @@ func (inst *InEntityFsdataTableSectionU64ArrayInAttr) EndSection() *InEntityFsda
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -7111,6 +7067,7 @@ func (inst *InEntityFsdataTableSectionU64SetInAttr) EndSection() *InEntityFsdata
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -7430,6 +7387,7 @@ func (inst *InEntityFsdataTableSectionU8ArrayInAttr) EndSection() *InEntityFsdat
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }

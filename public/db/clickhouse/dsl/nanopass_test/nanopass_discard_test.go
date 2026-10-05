@@ -101,3 +101,13 @@ func TestSequenceMixesAnalyticalAndIdempotentTransform(t *testing.T) {
 	assert.Equal(t, "SELECT a FROM t", out)
 	assert.Equal(t, 1, calls)
 }
+
+func TestIsDiscardOutputIgnoresQuotesInComments(t *testing.T) {
+	m := nanopass.PassDiscardOutputMarker
+	assert.True(t, nanopass.IsDiscardOutput("SELECT 1 -- don't\n, "+m))
+	assert.True(t, nanopass.IsDiscardOutput("SELECT 1 /* don't */, "+m))
+	assert.True(t, nanopass.IsDiscardOutput("SELECT 1 -- "+m))
+	assert.True(t, nanopass.IsDiscardOutput("SELECT 1 /* x "+m+" */"))
+	assert.False(t, nanopass.IsDiscardOutput("SELECT 1 -- don't\n, '"+m+"'"))
+	assert.False(t, nanopass.IsDiscardOutput("SELECT 1 /* unterminated "))
+}

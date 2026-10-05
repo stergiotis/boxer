@@ -14,7 +14,7 @@ import (
 // reader's benefit. The record that IS a flat row is the call fact
 // (introspect.go), and that one is a table.
 
-const wireVersion uint8 = 1
+const wireVersion uint8 = 2
 
 // wireRequest is the envelope on llm.complete: the caller's purpose and
 // sensitivity declaration, and the completion request minus what the
@@ -36,6 +36,34 @@ type wireRequest struct {
 	// DeadlineUnixNanos carries the caller's ctx deadline, since the
 	// handler has no ctx of its own. 0 means none.
 	DeadlineUnixNanos int64 `json:"deadline_ns,omitempty"`
+	// Conversation, Turn and Round say what the call belongs to, and
+	// ParentCallId which call it continues (ADR-0264 §SD2); recorded on
+	// either subject (ADR-0277 §SD5). Round counts from 0 and is read only
+	// beside a Turn.
+	Conversation string `json:"conversation,omitempty"`
+	Turn         string `json:"turn,omitempty"`
+	Round        uint32 `json:"round,omitempty"`
+	ParentCallId string `json:"parent_call_id,omitempty"`
+	// OmitFrom and OmitTo declare the range of the logical conversation
+	// the request left out (ADR-0264 §SD3); OmitTo 0 is none.
+	OmitFrom uint32 `json:"omit_from,omitempty"`
+	OmitTo   uint32 `json:"omit_to,omitempty"`
+	// CancelKey is the requester's handle for llm.cancel; empty is a
+	// request that cannot be stopped early.
+	CancelKey string `json:"cancel_key,omitempty"`
+	// OnBehalfTask, OnBehalfEpoch and OnBehalfCall name the agent task
+	// whose work this completion is, and the dispatcher's call that caused
+	// it (ADR-0269 §SD6); empty for the app's own.
+	OnBehalfTask  string `json:"obo_task,omitempty"`
+	OnBehalfEpoch uint64 `json:"obo_epoch,omitempty"`
+	OnBehalfCall  string `json:"obo_call,omitempty"`
+}
+
+// wireCancel is the message on llm.cancel: stop the sender's completion
+// that carried Key. No reply.
+type wireCancel struct {
+	V   uint8  `json:"v"`
+	Key string `json:"key"`
 }
 
 // wireDescribe is the reply on llm.describe.
@@ -45,8 +73,13 @@ type wireDescribe struct {
 	Model        string `json:"model,omitempty"`
 	EndpointHost string `json:"endpoint_host,omitempty"`
 	Local        bool   `json:"local,omitempty"`
+	Trusted      bool   `json:"trusted,omitempty"`
 	MaxTokens    int32  `json:"max_tokens,omitempty"`
-	Reason       string `json:"reason,omitempty"`
+	// ContextTokens is the model's context size, 0 unknown; ContextSource
+	// says where it came from.
+	ContextTokens int32  `json:"context_tokens,omitempty"`
+	ContextSource string `json:"context_source,omitempty"`
+	Reason        string `json:"reason,omitempty"`
 }
 
 // wireReply is the reply on llm.complete. Ok false carries the reason and
@@ -66,6 +99,13 @@ type wireReply struct {
 	OutputTokens int32                 `json:"output_tokens,omitempty"`
 	Incomplete   bool                  `json:"incomplete,omitempty"`
 	ElapsedNs    int64                 `json:"elapsed_ns,omitempty"`
+	// CallId is the call's identity, what a retained turn's successor
+	// names as its parent.
+	CallId string `json:"call_id,omitempty"`
+	// Retention and RetentionReason are the verdict on a retained request
+	// (ADR-0264 §SD4).
+	Retention       uint8  `json:"retention,omitempty"`
+	RetentionReason string `json:"retention_reason,omitempty"`
 }
 
 // The failure kinds a reply can name, mapped back onto openaichat's
@@ -75,10 +115,15 @@ const (
 	errKindAuth          = "auth"
 	errKindModelNotFound = "model_not_found"
 	errKindRateLimited   = "rate_limited"
+	errKindPayment       = "payment_required"
 	errKindBadRequest    = "bad_request"
 	errKindServer        = "server"
 	errKindTimeout       = "timeout"
-	errKindOther         = "other"
+	errKindCancelled     = "cancelled"
+	// errKindIncomplete is an answer the provider ended early — the token
+	// ceiling, a content filter — with no text to hand over.
+	errKindIncomplete = "incomplete"
+	errKindOther      = "other"
 )
 
 func encode[T any](v T) (b []byte, err error) {

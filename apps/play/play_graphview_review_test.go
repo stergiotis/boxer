@@ -62,7 +62,8 @@ func gvDriverScene(t *testing.T, d *GraphviewDriver) {
 	// The simulation is held: these tests read positions the panel set, not
 	// ones the force step moved.
 	d.view.Opts.Force.Paused = true
-	require.NoError(t, d.view.RenderColumns(&d.nodes, &d.edges, 400, 300))
+	_, err := d.view.RenderColumns(&d.nodes, &d.edges, 400, 300)
+	require.NoError(t, err)
 }
 
 // The seeded channels follow the seed: a `size_by = 'distance'` is derived

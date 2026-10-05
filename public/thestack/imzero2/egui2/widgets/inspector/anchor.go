@@ -132,17 +132,30 @@ type AnchorTether struct {
 	windowSeq uint64
 }
 
-// NewAnchorTether constructs a tether scoped by the given string —
-// typically the same idPrefix / scopeKey the inspector uses to derive
-// its absolute widget ids. The scope is hashed independently for the
-// toggle and window R21 seqs so the same scope across runs deterministic-
-// ally addresses the same capture slots; distinct scopes across
-// inspectors give independent slots.
-func NewAnchorTether(scope string) AnchorTether {
+// NewAnchorTether constructs a tether keyed by key, an id the inspector
+// derives once under its own scope — `ids.PrepareStr("tether").Derive()` —
+// and hands to both the toggle and the window side, so the two halves meet
+// even when they render at different stack depths (ADR-0267 W6). The key is
+// mixed independently for the toggle and window R21 seqs; distinct keys give
+// independent slots.
+func NewAnchorTether(key uint64) AnchorTether {
 	return AnchorTether{
-		toggleSeq: uint64(c.MakeAbsoluteIdStr(scope + "-anchor-tether-toggle-rect")),
-		windowSeq: uint64(c.MakeAbsoluteIdStr(scope + "-anchor-tether-window-rect")),
+		toggleSeq: tetherSeq(key, 0x746f67676c65), // "toggle"
+		windowSeq: tetherSeq(key, 0x77696e646f77), // "window"
 	}
+}
+
+// tetherSeq mixes a role into key with the splitmix64 finaliser, so the two
+// slots of one tether, and the slots of two tethers, stay apart.
+func tetherSeq(key, role uint64) (seq uint64) {
+	z := key ^ role
+	z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9
+	z = (z ^ (z >> 27)) * 0x94d049bb133111eb
+	z ^= z >> 31
+	if z == 0 {
+		z = 1
+	}
+	return z
 }
 
 // tetherSpringState carries the spring simulation for one tether's

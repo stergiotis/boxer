@@ -16,9 +16,24 @@ fn apply_tweak(data: &mut egui::FontData, tweak: &FontTweakConfig) {
     data.tweak.y_offset = tweak.y_offset;
 }
 
+/// Where a font slot's bytes come from. The native hosts read the path the
+/// config names; the browser host names a slot the page filled with bytes
+/// before init (ADR-0077 SD5, ADR-0263 SD2), since a tab has no font files.
+pub type FontReader<'a> = dyn FnMut(&str) -> std::io::Result<Vec<u8>> + 'a;
+
 pub fn load_custom_fonts(
     ctx: &egui::Context,
     config: &AppConfig,
+) -> imzero2::svgexport::FontResolver {
+    load_custom_fonts_with(ctx, config, &mut |path| std::fs::read(path))
+}
+
+/// `load_custom_fonts` with the bytes behind each configured font coming
+/// from `read` instead of the filesystem.
+pub fn load_custom_fonts_with(
+    ctx: &egui::Context,
+    config: &AppConfig,
+    read: &mut FontReader<'_>,
 ) -> imzero2::svgexport::FontResolver {
     let mut fonts = egui::FontDefinitions::default();
     let mut resolver = imzero2::svgexport::FontResolver::new();
@@ -40,7 +55,7 @@ pub fn load_custom_fonts(
         if path.is_empty() {
             return false;
         }
-        match std::fs::read(path) {
+        match read(path) {
             Ok(data) => {
                 if let Some(slot) = capture {
                     *slot = Some((data.clone(), 0));
@@ -191,7 +206,18 @@ pub fn init_common<'a, R: std::io::BufRead, W: std::io::Write>(
     r: R,
     w: W,
 ) -> (imzero2::interpreter::ImZeroFffi<'a, R, W>, bool) {
-    let font_resolver = std::sync::Arc::new(load_custom_fonts(ctx, config));
+    init_common_with_fonts(ctx, config, r, w, &mut |path| std::fs::read(path))
+}
+
+/// `init_common` with the font bytes coming from `read` (see [`FontReader`]).
+pub fn init_common_with_fonts<'a, R: std::io::BufRead, W: std::io::Write>(
+    ctx: &egui::Context,
+    config: &AppConfig,
+    r: R,
+    w: W,
+    read: &mut FontReader<'_>,
+) -> (imzero2::interpreter::ImZeroFffi<'a, R, W>, bool) {
+    let font_resolver = std::sync::Arc::new(load_custom_fonts_with(ctx, config, read));
 
     // IDS overlay (ADR-0029 §SD2). Density from IMZERO2_DENSITY env.
     // Set IMZERO2_IDS_FONTS=on to swap in the IDS font bundle
@@ -244,7 +270,8 @@ pub fn init_common<'a, R: std::io::BufRead, W: std::io::Write>(
     // `cx.data_mut(...)` survives the discarded pass, so subsequent FFFI
     // frames render correctly without needing multipass at all.
     ctx.options_mut(|o| o.max_passes = std::num::NonZeroUsize::new(1).expect("1 is non-zero"));
-    let fffi = imzero2::interpreter::ImZeroFffi::new(r, w);
+    let mut fffi = imzero2::interpreter::ImZeroFffi::new(r, w);
+    fffi.set_capture_fonts(font_resolver.clone());
     // SVG export plugin — registered once at host init. Drains
     // ImZeroFffi::export_state during each on_end_pass; cheap when no
     // export is pending. See imzero2::svgexport for the visitor.

@@ -22,8 +22,9 @@ status: draft
 | AnimateBoolWithTime | Procedural | No | 3 | 0 | - | - |
 | AnimateValueWithTime | Procedural | No | 3 | 0 | - | - |
 | Atoms | BuilderFactory | No | 0 | 0 | 20 | Retained |
-| Button | BuilderFactory | Yes | 0 | 1 | 8 | Immediate, Retained |
+| Button | BuilderFactory | Yes | 0 | 1 | 9 | Immediate, Retained |
 | CaptureAvailableSize | Procedural | No | 0 | 0 | - | - |
+| CaptureReplay | Procedural | No | 3 | 0 | - | - |
 | CaptureUiAvailableRect | Procedural | No | 1 | 0 | - | - |
 | CaptureUiRect | Procedural | No | 1 | 0 | - | - |
 | Checkbox | BuilderFactory | Yes | 2 | 0 | 1 | Immediate |
@@ -51,13 +52,12 @@ status: draft
 | EtRowHeight | BuilderFactory | No | 1 | 0 | 0 | Immediate |
 | ExportSvg | Procedural | No | 3 | 0 | - | - |
 | ExportSvgWindow | Procedural | Yes | 4 | 0 | - | - |
+| FetchCaptureResult | Fetcher | No | 0 | 0 | - | - |
 | FetchCommandEnterPressed | Fetcher | No | 0 | 0 | - | - |
 | FetchF1KeyPressed | Fetcher | No | 0 | 0 | - | - |
 | FetchF2KeyPressed | Fetcher | No | 0 | 0 | - | - |
 | FetchFrameMetrics | Fetcher | No | 0 | 0 | - | - |
-| FetchGraphEvents | Fetcher | No | 0 | 0 | - | - |
-| FetchGraphMetrics | Fetcher | No | 0 | 0 | - | - |
-| FetchGraphSelection | Fetcher | No | 0 | 0 | - | - |
+| FetchPixelsPerPoint | Fetcher | No | 0 | 0 | - | - |
 | FetchR10 | Fetcher | No | 0 | 0 | - | - |
 | FetchR16ScrollDelta | Fetcher | No | 0 | 0 | - | - |
 | FetchR17Modifiers | Fetcher | No | 0 | 0 | - | - |
@@ -70,6 +70,7 @@ status: draft
 | FetchR24CanvasPointers | Fetcher | No | 0 | 0 | - | - |
 | FetchR25EtColWidths | Fetcher | No | 0 | 0 | - | - |
 | FetchR26KeyCaptures | Fetcher | No | 0 | 0 | - | - |
+| FetchR27Windows | Fetcher | No | 0 | 0 | - | - |
 | FetchR7 | Fetcher | No | 0 | 0 | - | - |
 | FetchR9EtPrefetch | Fetcher | No | 0 | 0 | - | - |
 | FetchR9F64 | Fetcher | No | 0 | 0 | - | - |
@@ -78,10 +79,7 @@ status: draft
 | FetchR9U64 | Fetcher | No | 0 | 0 | - | - |
 | FetchVideoCapabilities | Fetcher | No | 0 | 0 | - | - |
 | FetchVideoStreamInfo | Fetcher | No | 0 | 0 | - | - |
-| Frame | BuilderFactory | Yes | 0 | 0 | 23 | Immediate, Retained, BlockIterator |
-| Graph | BuilderFactory | Yes | 0 | 0 | 31 | Immediate, Retained |
-| GraphEdge | BuilderFactory | No | 2 | 0 | 2 | Immediate |
-| GraphNode | BuilderFactory | No | 2 | 0 | 1 | Immediate |
+| Frame | BuilderFactory | Yes | 0 | 0 | 24 | Immediate, Retained, BlockIterator |
 | Grid | BuilderFactory | Yes | 0 | 0 | 6 | Immediate, BlockIterator |
 | Group | BuilderFactory | No | 0 | 0 | 0 | Immediate, BlockIterator |
 | GuiZoomZoomMenuButtons | Procedural | No | 0 | 0 | - | - |
@@ -104,6 +102,7 @@ status: draft
 | MemoryResetAreas | Procedural | No | 0 | 0 | - | - |
 | MenuBar | BuilderFactory | No | 0 | 0 | 0 | Immediate, BlockIterator |
 | MenuButton | BuilderFactory | No | 0 | 1 | 0 | BlockIterator |
+| Modal | BuilderFactory | Yes | 0 | 0 | 0 | Immediate, BlockIterator |
 | MoveWindowToTop | Procedural | Yes | 0 | 0 | - | - |
 | NewTable | BuilderFactory | Yes | 0 | 0 | 8 | Immediate, Retained |
 | NewTableColumn | BuilderFactory | No | 0 | 0 | 8 | Immediate, Retained |
@@ -195,7 +194,8 @@ status: draft
 | WarnIfDebugBuild | Procedural | No | 0 | 0 | - | - |
 | WidgetText | BuilderFactory | No | 0 | 0 | 1 | Retained |
 | WidgetsGlobalThemePreferenceButtons | Procedural | No | 0 | 0 | - | - |
-| Window | BuilderFactory | Yes | 0 | 1 | 15 | Immediate, BlockIterator |
+| Window | BuilderFactory | Yes | 0 | 1 | 17 | Immediate, BlockIterator |
+| WindowPlace | Procedural | Yes | 4 | 0 | - | - |
 
 
 ## BuilderFactory Nodes
@@ -296,6 +296,7 @@ Atoms
 - **FrameWhenInactive**(val: b)
 - **RightText**(text: s)
 - **ShortcutText**(text: s)
+- **Kind**(ki: u8)
 
 #### Return Type
 
@@ -804,6 +805,7 @@ EtHeaderText
 - **SenseDrag**()
 - **Focusable**()
 - **CaptureKeys**(mask: u64)
+- **CaptureKeyEdges**()
 - **HoverCursorPointer**()
 - **PresetGroup**()
 - **PresetWindow**()
@@ -817,99 +819,6 @@ EtHeaderText
 #### Return Type
 
 Block
-
----
-
-### Graph
-
-- **Type:** BuilderFactory
-- **Identity:** Yes
-- **Features:** Immediate, Retained
-
-#### Builder Methods
-
-- **Width**(wi: f32)
-- **Height**(he: f32)
-- **DraggingEnabled**(vl: b)
-- **HoverEnabled**(vl: b)
-- **NodeClickingEnabled**(vl: b)
-- **NodeSelectionEnabled**(vl: b)
-- **NodeSelectionMultiEnabled**(vl: b)
-- **EdgeClickingEnabled**(vl: b)
-- **EdgeSelectionEnabled**(vl: b)
-- **EdgeSelectionMultiEnabled**(vl: b)
-- **FitToScreen**(vl: b)
-- **FitNow**()
-- **ZoomAndPan**(vl: b)
-- **FitPadding**(pd: f32)
-- **ZoomSpeed**(sp: f32)
-- **LabelsAlways**(vl: b)
-- **Layout**(kind: u8)
-- **ResetLayout**()
-- **FastForwardSteps**(st: u32)
-- **LayoutDt**(dt: f32)
-- **LayoutDamping**(dp: f32)
-- **LayoutEpsilon**(ep: f32)
-- **LayoutMaxStep**(ms: f32)
-- **LayoutKScale**(ks: f32)
-- **LayoutCAttract**(ca: f32)
-- **LayoutCRepulse**(cr: f32)
-- **LayoutRunning**(vl: b)
-- **LayoutRowDist**(rd: f32)
-- **LayoutColDist**(cd: f32)
-- **LayoutCenterParent**(vl: b)
-- **LayoutOrientation**(or: u8)
-
-#### Return Type
-
-GraphDrain
-
----
-
-### GraphEdge
-
-- **Type:** BuilderFactory
-- **Identity:** No
-- **Features:** Immediate
-
-#### Constructor Arguments
-
-| Name | Kind | Type |
-|------|------|------|
-| fromId | plain | u64 |
-| toId | plain | u64 |
-
-#### Builder Methods
-
-- **Color**(col: u32)
-- **Label**(text: s)
-
-#### Return Type
-
-GraphEdge
-
----
-
-### GraphNode
-
-- **Type:** BuilderFactory
-- **Identity:** No
-- **Features:** Immediate
-
-#### Constructor Arguments
-
-| Name | Kind | Type |
-|------|------|------|
-| nodeId | plain | u64 |
-| label | plain | s |
-
-#### Builder Methods
-
-- **Color**(col: u32)
-
-#### Return Type
-
-GraphNode
 
 ---
 
@@ -1215,6 +1124,18 @@ Block
 | Name | Kind | Type |
 |------|------|------|
 | atoms | evaluated | Atoms (concrete) |
+
+#### Return Type
+
+Block
+
+---
+
+### Modal
+
+- **Type:** BuilderFactory
+- **Identity:** Yes
+- **Features:** Immediate, BlockIterator
 
 #### Return Type
 
@@ -2617,6 +2538,8 @@ WidgetText
 - **MinHeight**(height: f32)
 - **AlwaysOnTop**(val: b)
 - **OpenBound**(bindingId: u64)
+- **DragFromTitleBar**(val: b)
+- **Maximized**(val: b)
 
 #### Return Type
 
@@ -2687,6 +2610,21 @@ Block
 
 - **Type:** Procedural
 - **Identity:** No
+
+---
+
+### CaptureReplay
+
+- **Type:** Procedural
+- **Identity:** No
+
+#### Constructor Arguments
+
+| Name | Kind | Type |
+|------|------|------|
+| requestId | plain | u64 |
+| format | plain | u8 |
+| stream | plain | u8h |
 
 ---
 
@@ -3144,7 +3082,42 @@ Block
 
 ---
 
+### WindowPlace
+
+- **Type:** Procedural
+- **Identity:** Yes
+
+#### Constructor Arguments
+
+| Name | Kind | Type |
+|------|------|------|
+| posX | plain | f32 |
+| posY | plain | f32 |
+| width | plain | f32 |
+| height | plain | f32 |
+
+---
+
 ## Fetcher Nodes
+
+### FetchCaptureResult
+
+- **Type:** Fetcher
+
+#### Return Values
+
+| Name | Type |
+|------|------|
+| requestId | u64 |
+| status | u8 |
+| width | u32 |
+| height | u32 |
+| reason | s |
+| data | u8h |
+| refusedUploads | u64 |
+| unknownTextures | u64 |
+
+---
 
 ### FetchCommandEnterPressed
 
@@ -3196,7 +3169,7 @@ Block
 
 ---
 
-### FetchGraphEvents
+### FetchPixelsPerPoint
 
 - **Type:** Fetcher
 
@@ -3204,41 +3177,7 @@ Block
 
 | Name | Type |
 |------|------|
-| graphIds | u64h |
-| kinds | u32h |
-| keyA | u64h |
-| keyB | u64h |
-
----
-
-### FetchGraphMetrics
-
-- **Type:** Fetcher
-
-#### Return Values
-
-| Name | Type |
-|------|------|
-| graphIds | u64h |
-| nodeCount | u32h |
-| edgeCount | u32h |
-| frSteps | u64h |
-| frLastDisp | f32h |
-
----
-
-### FetchGraphSelection
-
-- **Type:** Fetcher
-
-#### Return Values
-
-| Name | Type |
-|------|------|
-| graphIds | u64h |
-| kinds | u32h |
-| keyA | u64h |
-| keyB | u64h |
+| pixelsPerPoint | f32 |
 
 ---
 
@@ -3410,6 +3349,31 @@ Block
 | ids | u64h |
 | codes | u8h |
 | mods | u8h |
+| edges | u8h |
+
+---
+
+### FetchR27Windows
+
+- **Type:** Fetcher
+
+#### Return Values
+
+| Name | Type |
+|------|------|
+| ids | u64h |
+| minX | f32h |
+| minY | f32h |
+| maxX | f32h |
+| maxY | f32h |
+| z | u32h |
+| collapsed | u8h |
+| needW | f32h |
+| needH | f32h |
+| workMinX | f32 |
+| workMinY | f32 |
+| workMaxX | f32 |
+| workMaxY | f32 |
 
 ---
 

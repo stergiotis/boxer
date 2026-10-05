@@ -1,6 +1,7 @@
 package kanban
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 
@@ -56,18 +57,6 @@ const (
 // whatever the fallback chain answered with. See renderControls.
 const showMoveButtons = false
 
-// CaptureUiRect seq bases for drag hit-testing. Distinctive high bases keep them
-// clear of other widgets' seqs; the per-index offset is the card's slice index
-// or the column index. A single active drag is assumed — two boards dragging at
-// the same instant would share these seqs.
-const (
-	seqCardBase uint64 = 0xCA0B_0000_0000_0000
-	seqLaneBase uint64 = 0xCA0B_1000_0000_0000
-)
-
-func cardRectSeq(sliceIdx int) uint64 { return seqCardBase + uint64(sliceIdx) }
-func laneRectSeq(colIdx int) uint64   { return seqLaneBase + uint64(colIdx) }
-
 // Input is the per-frame render request.
 type Input struct {
 	// Ids is the widget id stack supplied by the host (the tour / window scopes
@@ -76,8 +65,11 @@ type Input struct {
 	// ScopeKey disambiguates instances that share one unscoped parent; Render
 	// opens IdScope(Ids.PrepareStr(ScopeKey)) around the whole board.
 	ScopeKey string
-	// Model is the board state, mutated in place on a move.
+	// Model is the board's data, mutated in place on a move.
 	Model *Model
+	// State is the host-owned selection and drag; required (W9). A nil
+	// State draws an error in place of the board.
+	State *State
 	// FillHost tells Render its host already gives it a bounded height, so it
 	// fills that rect rather than flooring to boardMinHeight. Dock-tab leaves
 	// set this true; a vertically-unbounded gallery ScrollArea leaves it false.
@@ -99,15 +91,40 @@ type Input struct {
 	GroupField func(c *Card) (key, label string)
 }
 
+// Result is what one Render reports.
+type Result struct {
+	// Moves are the lane or order changes applied to the Model this frame,
+	// in the order they happened; nil when none.
+	Moves []Move
+	// Clicked is the card whose frame was clicked this frame, 0 for none.
+	// The selection in State has already moved to it.
+	Clicked uint64
+	// Err is set when the board cannot be drawn: a nil State.
+	Err error
+}
+
+// ErrNeedsState is Result.Err when Input.State is nil.
+var ErrNeedsState = errors.New("kanban: Input.State is required")
+
 // Render draws the board: columns left-to-right inside one board ScrollArea,
 // each a fixed-width lane of card frames with per-card move controls. A move
 // clicked this frame is applied to the Model after the pass (so the card
-// relocates next frame) and recorded for [Model.DrainMoves].
-func Render(in Input) {
-	m := in.Model
+// relocates next frame) and reported in [Result.Moves].
+func Render(in Input) (res Result) {
+	m, st := in.Model, in.State
+	if st == nil {
+		for rt := range c.RichTextLabel(ErrNeedsState.Error()) {
+			rt.Small().Weak()
+		}
+		res.Err = ErrNeedsState
+		return
+	}
 	if m == nil || len(m.Columns) == 0 {
 		return
 	}
+	st.clicked = 0
+	st.sizeSeqs(len(m.Columns), len(m.Cards))
+	defer func() { res.Clicked = st.clicked }()
 	colW := in.ColumnWidth
 	if colW <= 0 {
 		colW = defaultColumnWidth
@@ -115,7 +132,7 @@ func Render(in Input) {
 	density := styletokens.ActiveDensity()
 
 	if in.Group == GroupByParent || (in.Group == GroupByField && in.GroupField != nil) {
-		renderGrouped(in, m, colW, density)
+		renderGrouped(in, m, st, colW, density)
 		return
 	}
 
@@ -129,7 +146,7 @@ func Render(in Input) {
 		for range c.ScrollArea().Vscroll(true).Hscroll(true).AutoShrink(false, false).KeepIter() {
 			for range c.Horizontal().KeepIter() {
 				for i := range m.Columns {
-					aCard, aKind := renderColumn(in, m, i, colW, density)
+					aCard, aKind := renderColumn(in, m, st, i, colW, density)
 					if aKind != mvNone {
 						actCard, act = aCard, aKind
 					}
@@ -140,15 +157,20 @@ func Render(in Input) {
 
 	if act != mvNone && !in.ReadOnly {
 		idx := m.cardIndex(actCard)
+		var mv Move
+		var ok bool
 		switch act {
 		case mvLeft:
-			m.shiftColumn(idx, -1)
+			mv, ok = m.shiftColumn(idx, -1)
 		case mvRight:
-			m.shiftColumn(idx, +1)
+			mv, ok = m.shiftColumn(idx, +1)
 		case mvUp:
-			m.reorderWithin(idx, -1)
+			mv, ok = m.reorderWithin(idx, -1)
 		case mvDown:
-			m.reorderWithin(idx, +1)
+			mv, ok = m.reorderWithin(idx, +1)
+		}
+		if ok {
+			res.Moves = append(res.Moves, mv)
 		}
 	}
 
@@ -157,16 +179,19 @@ func Render(in Input) {
 	// line over everything; apply on release. Uses the previous frame's rects
 	// (one-frame lag), which is exact here because the layout is frozen for the
 	// duration of a drag — nothing moves until the drop lands.
-	if m.drag != nil {
-		updateAndPaintDrag(m, density)
-		if m.dragStop {
-			if m.drag.dropOK && !in.ReadOnly {
-				m.moveTo(m.drag.cardID, m.drag.dropColumn, m.drag.dropIndex)
+	if st.drag != nil {
+		updateAndPaintDrag(st, m, density)
+		if st.dragStop {
+			if st.drag.dropOK && !in.ReadOnly {
+				if mv, ok := m.moveTo(st.drag.cardID, st.drag.dropColumn, st.drag.dropIndex); ok {
+					res.Moves = append(res.Moves, mv)
+				}
 			}
-			m.drag = nil
-			m.dragStop = false
+			st.drag = nil
+			st.dragStop = false
 		}
 	}
+	return
 }
 
 // RenderLegend draws the board's dot legend: an always-visible row of one
@@ -215,38 +240,41 @@ func renderLegendEntry(dk DotKind) {
 
 // renderColumn draws one lane: a panel Frame around a width-pinned Vertical
 // carrying the header and the lane's cards.
-func renderColumn(in Input, m *Model, colIdx int, colW float32, density styletokens.DensityE) (actCard uint64, act moveKind) {
+func renderColumn(in Input, m *Model, st *State, colIdx int, colW float32, density styletokens.DensityE) (actCard uint64, act moveKind) {
 	ids := in.Ids
 	col := m.Columns[colIdx]
 	atFirst := colIdx == 0
 	atLast := colIdx == len(m.Columns)-1
 	idxs := m.cardIndicesIn(col.ID)
 
-	for range c.IdScope(ids.PrepareStr("col:" + strconv.FormatUint(col.ID, 10))) {
-		for range c.Frame(ids.PrepareStr("lane")).
-			Fill(color.Hex(styletokens.NeutralBgPanel.AsHex())).
-			CornerRadius(styletokens.RoundingMd).
-			InnerMargin(styletokens.PaddingDefault(density)).
-			KeepIter() {
-			for range c.Vertical().KeepIter() {
-				c.UiSetMinWidth(colW)
-				c.UiSetMaxWidth(colW)
-				renderColumnHeader(ids, col, len(idxs), density)
-				c.AddSpace(styletokens.GapInline(density))
-				for _, ci := range idxs {
-					aCard, aKind := renderCard(in, m, ci, colW, atFirst, atLast, density, !in.ReadOnly)
-					if aKind != mvNone {
-						actCard, act = aCard, aKind
+	for range c.IdScope(ids.PrepareStr("col")) {
+		for range c.IdScope(ids.PrepareSeq(col.ID)) {
+			st.laneSeq[colIdx] = ids.ProbeSeq("rect")
+			for range c.Frame(ids.PrepareStr("lane")).
+				Fill(color.Hex(styletokens.NeutralBgPanel.AsHex())).
+				CornerRadius(styletokens.RoundingMd).
+				InnerMargin(styletokens.PaddingDefault(density)).
+				KeepIter() {
+				for range c.Vertical().KeepIter() {
+					c.UiSetMinWidth(colW)
+					c.UiSetMaxWidth(colW)
+					renderColumnHeader(ids, col, len(idxs), density)
+					c.AddSpace(styletokens.GapInline(density))
+					for _, ci := range idxs {
+						aCard, aKind := renderCard(in, m, st, ci, colW, atFirst, atLast, density, !in.ReadOnly)
+						if aKind != mvNone {
+							actCard, act = aCard, aKind
+						}
 					}
-				}
-				if len(idxs) == 0 {
-					for rt := range c.RichTextLabel("— empty —") {
-						rt.Weak().Small().Italics()
+					if len(idxs) == 0 {
+						for rt := range c.RichTextLabel("— empty —") {
+							rt.Weak().Small().Italics()
+						}
 					}
+					// Snapshot the lane's rect (viewport-absolute, one-frame lag)
+					// for drag hit-testing: which column is the pointer over.
+					c.CaptureUiRect(st.laneSeq[colIdx])
 				}
-				// Snapshot the lane's rect (viewport-absolute, one-frame lag)
-				// for drag hit-testing: which column is the pointer over.
-				c.CaptureUiRect(laneRectSeq(colIdx))
 			}
 		}
 		c.AddSpace(styletokens.GapItems(density)) // gap to the next lane
@@ -271,11 +299,11 @@ func renderColumnHeader(ids *c.WidgetIdStack, col Column, count int, density sty
 }
 
 // renderCard draws one card Frame (click-sensed for selection) and its controls.
-func renderCard(in Input, m *Model, ci int, colW float32, atFirst, atLast bool, density styletokens.DensityE, dragEnabled bool) (actCard uint64, act moveKind) {
+func renderCard(in Input, m *Model, st *State, ci int, colW float32, atFirst, atLast bool, density styletokens.DensityE, dragEnabled bool) (actCard uint64, act moveKind) {
 	ids := in.Ids
 	card := m.Cards[ci]
-	selected := m.sel == card.ID
-	dragging := m.drag != nil && m.drag.cardID == card.ID
+	selected := st.sel == card.ID
+	dragging := st.drag != nil && st.drag.cardID == card.ID
 
 	fill := color.Hex(styletokens.NeutralBgSurface.AsHex())
 	stroke := color.Hex(styletokens.NeutralBorderFaint.AsHex())
@@ -289,81 +317,85 @@ func renderCard(in Input, m *Model, ci int, colW float32, atFirst, atLast bool, 
 		}
 	}
 
-	for range c.IdScope(ids.PrepareStr("card:" + strconv.FormatUint(card.ID, 10))) {
-		// Wrap the frame + footer in one Vertical so the CaptureUiRect below
-		// snapshots the whole card *unit*, not just the frame's inner content.
-		// The drag insertion line is placed in the gaps between these unit
-		// rects — capturing only the content rect (as an earlier cut did) put
-		// the line inside the card, above its footer, instead of in the gap.
-		for range c.Vertical().KeepIter() {
-			frame := c.Frame(ids.PrepareStr("frame")).
-				Fill(fill).
-				CornerRadius(styletokens.RoundingMd).
-				Stroke(strokeW, stroke).
-				InnerMargin(styletokens.PaddingTight(density)).
-				SenseClick()
-			if dragEnabled {
-				frame = frame.SenseDrag()
-			}
-			fid := frame.Id()
-			for range frame.KeepIter() {
-				bodyW := colW - 2*styletokens.PaddingTight(density)
-				c.UiSetMinWidth(bodyW)
-				c.UiSetMaxWidth(bodyW)
+	for range c.IdScope(ids.PrepareStr("card")) {
+		for range c.IdScope(ids.PrepareSeq(card.ID)) {
+			st.cardSeq[ci] = ids.ProbeSeq("rect")
+			// Wrap the frame + footer in one Vertical so the CaptureUiRect below
+			// snapshots the whole card *unit*, not just the frame's inner content.
+			// The drag insertion line is placed in the gaps between these unit
+			// rects — capturing only the content rect (as an earlier cut did) put
+			// the line inside the card, above its footer, instead of in the gap.
+			for range c.Vertical().KeepIter() {
+				frame := c.Frame(ids.PrepareStr("frame")).
+					Fill(fill).
+					CornerRadius(styletokens.RoundingMd).
+					Stroke(strokeW, stroke).
+					InnerMargin(styletokens.PaddingTight(density)).
+					SenseClick()
+				if dragEnabled {
+					frame = frame.SenseDrag()
+				}
+				fid := frame.Id()
+				for range frame.KeepIter() {
+					bodyW := colW - 2*styletokens.PaddingTight(density)
+					c.UiSetMinWidth(bodyW)
+					c.UiSetMaxWidth(bodyW)
 
-				for range c.Horizontal().KeepIter() {
-					switch {
-					case card.ParentID != 0:
-						for rt := range c.RichTextLabel(icons.PhArrowElbowDownRight) {
-							rt.Weak()
+					for range c.Horizontal().KeepIter() {
+						switch {
+						case card.ParentID != 0:
+							for rt := range c.RichTextLabel(icons.PhArrowElbowDownRight) {
+								rt.Weak()
+							}
+						case card.Accent.Kind() != color.ColorKindNone:
+							for rt := range c.RichTextLabelColored(card.Accent, color.Transparent, icons.PhDot) {
+								rt.Small()
+							}
 						}
-					case card.Accent.Kind() != color.ColorKindNone:
-						for rt := range c.RichTextLabelColored(card.Accent, color.Transparent, icons.PhDot) {
-							rt.Small()
+						// Wrapped, not plain: an unwrapped label is sized by its
+						// text, and a title longer than the lane pushes straight
+						// through the UiSetMaxWidth pin above — widening the card,
+						// the lane, and every lane after it. Wrapping keeps the
+						// card at colW and lets it grow downwards instead.
+						titleAtoms := c.Atoms()
+						titleAtoms = titleAtoms.BeginRichText(card.Title).Strong().End()
+						c.LabelAtoms(titleAtoms.Keep()).Wrap().Send()
+					}
+					if card.Subtitle != "" {
+						for rt := range c.RichTextLabel(card.Subtitle) {
+							rt.Weak().Small()
 						}
 					}
-					// Wrapped, not plain: an unwrapped label is sized by its
-					// text, and a title longer than the lane pushes straight
-					// through the UiSetMaxWidth pin above — widening the card,
-					// the lane, and every lane after it. Wrapping keeps the
-					// card at colW and lets it grow downwards instead.
-					titleAtoms := c.Atoms()
-					titleAtoms = titleAtoms.BeginRichText(card.Title).Strong().End()
-					c.LabelAtoms(titleAtoms.Keep()).Wrap().Send()
+					renderRelations(ids, m, card)
+					renderDots(m, card.Dots, density)
 				}
-				if card.Subtitle != "" {
-					for rt := range c.RichTextLabel(card.Subtitle) {
-						rt.Weak().Small()
+				resp := c.CurrentApplicationState.StateManager.GetResponseByIdRaw(fid)
+				if resp.HasPrimaryClicked() {
+					st.sel = card.ID
+					st.clicked = card.ID
+				}
+				if dragEnabled {
+					if resp.HasDragStarted() {
+						beginDrag(st, m, card, ci)
+					}
+					if st.drag != nil && st.drag.cardID == card.ID && resp.HasDragStopped() {
+						st.dragStop = true
 					}
 				}
-				renderRelations(ids, m, card)
-				renderDots(m, card.Dots, density)
-			}
-			resp := c.CurrentApplicationState.StateManager.GetResponseByIdRaw(fid)
-			if resp.HasPrimaryClicked() {
-				m.sel = card.ID
-			}
-			if dragEnabled {
-				if resp.HasDragStarted() {
-					beginDrag(m, card, ci)
+				// The controls are a footer row OUTSIDE the card Frame (a click-
+				// sensed Frame wins the pointer over buttons drawn inside it). They
+				// are gated behind showMoveButtons — off until they are styled;
+				// drag-and-drop is the move mechanism meanwhile.
+				if showMoveButtons && !in.ReadOnly {
+					aCard, aKind := renderControls(ids, card, atFirst, atLast, density)
+					if aKind != mvNone {
+						actCard, act = aCard, aKind
+					}
 				}
-				if m.drag != nil && m.drag.cardID == card.ID && resp.HasDragStopped() {
-					m.dragStop = true
-				}
+				// Snapshot the whole card unit (frame + footer) for drag hit-testing,
+				// the insertion line, and the ghost's grab offset + size.
+				c.CaptureUiRect(st.cardSeq[ci])
 			}
-			// The controls are a footer row OUTSIDE the card Frame (a click-
-			// sensed Frame wins the pointer over buttons drawn inside it). They
-			// are gated behind showMoveButtons — off until they are styled;
-			// drag-and-drop is the move mechanism meanwhile.
-			if showMoveButtons && !in.ReadOnly {
-				aCard, aKind := renderControls(ids, card, atFirst, atLast, density)
-				if aKind != mvNone {
-					actCard, act = aCard, aKind
-				}
-			}
-			// Snapshot the whole card unit (frame + footer) for drag hit-testing,
-			// the insertion line, and the ghost's grab offset + size.
-			c.CaptureUiRect(cardRectSeq(ci))
 		}
 		c.AddSpace(styletokens.GapInline(density))
 	}
@@ -469,17 +501,17 @@ func renderControls(ids *c.WidgetIdStack, card Card, atFirst, atLast bool, densi
 // beginDrag starts a drag for the card at slice index ci, seeding the ghost's
 // grab offset and size from the previous frame's captured rect so it tracks the
 // pointer without jumping to a corner.
-func beginDrag(m *Model, card Card, ci int) {
+func beginDrag(st *State, m *Model, card Card, ci int) {
 	sm := c.CurrentApplicationState.StateManager
 	d := &dragState{cardID: card.ID, title: card.Title, accent: card.Accent}
 	p := sm.GetPointer()
-	if r, ok := sm.GetUiRect(cardRectSeq(ci)); ok && p.Valid {
+	if r, ok := sm.GetUiRect(st.cardSeq[ci]); ok && p.Valid {
 		d.grabDX = p.X - r.MinX
 		d.grabDY = p.Y - r.MinY
 		d.w = r.MaxX - r.MinX
 		d.h = r.MaxY - r.MinY
 	}
-	m.drag = d
+	st.drag = d
 }
 
 // updateAndPaintDrag recomputes the drop target for the held card and paints the
@@ -488,9 +520,9 @@ func beginDrag(m *Model, card Card, ci int) {
 // captured for the previous frame). The drop column is the lane whose x-range
 // contains the pointer; the drop index counts that column's other cards whose
 // vertical midpoint sits above the pointer.
-func updateAndPaintDrag(m *Model, density styletokens.DensityE) {
+func updateAndPaintDrag(st *State, m *Model, density styletokens.DensityE) {
 	sm := c.CurrentApplicationState.StateManager
-	d := m.drag
+	d := st.drag
 	p := sm.GetPointer()
 	d.dropOK = false
 
@@ -501,7 +533,7 @@ func updateAndPaintDrag(m *Model, density styletokens.DensityE) {
 
 	if p.Valid {
 		for i := range m.Columns {
-			lr, ok := sm.GetUiRect(laneRectSeq(i))
+			lr, ok := sm.GetUiRect(st.laneSeq[i])
 			if !ok || p.X < lr.MinX || p.X > lr.MaxX {
 				continue
 			}
@@ -512,7 +544,7 @@ func updateAndPaintDrag(m *Model, density styletokens.DensityE) {
 				if m.Cards[ci].ID == d.cardID {
 					continue // a card never counts toward its own drop
 				}
-				if cr, ok := sm.GetUiRect(cardRectSeq(ci)); ok {
+				if cr, ok := sm.GetUiRect(st.cardSeq[ci]); ok {
 					rects = append(rects, cr)
 				}
 			}
@@ -661,9 +693,9 @@ func groupedSwimlanes(in Input, m *Model) (lanes []swimlaneSpec) {
 // column titles on top, then one band per lane. Grouped modes are a read/select
 // view — pointer-drag is disabled (flat mode owns moves), so any in-flight drag
 // is cancelled here.
-func renderGrouped(in Input, m *Model, colW float32, density styletokens.DensityE) {
-	m.drag = nil
-	m.dragStop = false
+func renderGrouped(in Input, m *Model, st *State, colW float32, density styletokens.DensityE) {
+	st.drag = nil
+	st.dragStop = false
 	ids := in.Ids
 	lanes := groupedSwimlanes(in, m)
 	for range c.IdScope(ids.PrepareStr(in.ScopeKey)) {
@@ -674,7 +706,7 @@ func renderGrouped(in Input, m *Model, colW float32, density styletokens.Density
 			for range c.Vertical().KeepIter() {
 				renderColumnTitleRow(ids, m, colW, density)
 				for i := range lanes {
-					renderSwimlane(in, m, colW, density, lanes[i])
+					renderSwimlane(in, m, st, colW, density, lanes[i])
 				}
 			}
 		}
@@ -686,7 +718,7 @@ func renderGrouped(in Input, m *Model, colW float32, density styletokens.Density
 func renderColumnTitleRow(ids *c.WidgetIdStack, m *Model, colW float32, density styletokens.DensityE) {
 	for range c.Horizontal().KeepIter() {
 		for i := range m.Columns {
-			for range c.IdScope(ids.PrepareStr("cth:" + strconv.FormatUint(m.Columns[i].ID, 10))) {
+			for range c.IdScope(ids.PrepareSeq(m.Columns[i].ID)) {
 				for range c.Vertical().KeepIter() {
 					c.UiSetMinWidth(colW)
 					c.UiSetMaxWidth(colW)
@@ -704,10 +736,10 @@ func renderColumnTitleRow(ids *c.WidgetIdStack, m *Model, colW float32, density 
 // renderSwimlane draws one lane: a faint full-width band with a header row
 // (parent + rollup + own-status chip, or a "Standalone" label) over a row of the
 // same columns, each showing this lane's cards.
-func renderSwimlane(in Input, m *Model, colW float32, density styletokens.DensityE, s swimlaneSpec) {
+func renderSwimlane(in Input, m *Model, st *State, colW float32, density styletokens.DensityE, s swimlaneSpec) {
 	ids := in.Ids
 	pad := styletokens.PaddingTight(density)
-	for range c.IdScope(ids.PrepareStr("swim:" + s.key)) {
+	for range c.IdScope(ids.PrepareStr(s.key)) {
 		for range c.Frame(ids.PrepareStr("band")).
 			Fill(color.Hex(styletokens.NeutralBgFaint.AsHex())).
 			CornerRadius(styletokens.RoundingMd).
@@ -719,14 +751,14 @@ func renderSwimlane(in Input, m *Model, colW float32, density styletokens.Densit
 				for range c.Horizontal().KeepIter() {
 					for i := range m.Columns {
 						col := m.Columns[i]
-						for range c.IdScope(ids.PrepareStr("sc:" + strconv.FormatUint(col.ID, 10))) {
+						for range c.IdScope(ids.PrepareSeq(col.ID)) {
 							for range c.Vertical().KeepIter() {
 								c.UiSetMinWidth(colW)
 								c.UiSetMaxWidth(colW)
 								any := false
 								for _, ci := range s.cardIdxs {
 									if m.Cards[ci].ColumnID == col.ID {
-										renderCard(in, m, ci, colW, false, false, density, false)
+										renderCard(in, m, st, ci, colW, false, false, density, false)
 										any = true
 									}
 								}

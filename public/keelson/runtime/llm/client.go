@@ -3,6 +3,8 @@ package llm
 import (
 	"context"
 	"errors"
+	"math/rand/v2"
+	"strconv"
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -37,11 +39,21 @@ type Description struct {
 	Configured   bool
 	Model        string
 	EndpointHost string
-	// Local says the endpoint is loopback: the sensitivity wall (§SD3)
-	// admits confined content there and nowhere else.
+	// Local says the sensitivity wall (§SD3) admits confined content to the
+	// endpoint: it is loopback, or a host the deployment trusts.
 	Local bool
+	// Trusted says Local holds only because BOXER_LLM_TRUSTED_HOSTS lists
+	// the endpoint's host.
+	Trusted bool
 	// MaxTokens is the host's ceiling when a request names none.
 	MaxTokens int32
+	// ContextTokens is the model's context size — what a whole request,
+	// prompt and answer, has to fit — and 0 when the host does not know
+	// it. ContextSource says where it came from: BOXER_LLM_CONTEXT_TOKENS,
+	// or "endpoint: <field>" for the field of the endpoint's model list it
+	// was read from.
+	ContextTokens int32
+	ContextSource string
 	// Reason says why nothing is configured.
 	Reason string
 }
@@ -53,6 +65,11 @@ type Request struct {
 	// Purpose names why, for the audit row and the call table — the
 	// prompt slug, the pane, the transformation.
 	Purpose string
+	// OnBehalfOf is set when the completion is work an agent's call
+	// started: the service then refuses it unless the task's grant lists
+	// the model service (ADR-0269 §SD6). Carry OperationCall.OnBehalfOf
+	// here; a coordinator's own turns carry none.
+	OnBehalfOf *app.OnBehalfOf
 	// Sensitivity is what the content was composed from (ADR-0145 §SD3):
 	// SensitivityConfined when any of it derives from a sealed dataset.
 	// The caller's declaration; the service cannot see provenance.
@@ -67,6 +84,30 @@ type Request struct {
 	Tools          []openaichat.Tool
 	ToolChoice     string
 	ResponseFormat *openaichat.ResponseFormat
+
+	// Retain sends the request on llm.retain.complete (ADR-0264): the host
+	// keeps the conversation where its BOXER_LLM_RETAIN ceiling is durable.
+	// Needs [RetainCaps] beside [ClientCaps]; the bus refuses it otherwise.
+	Retain bool
+	// Conversation is the app's id for the conversation, required with
+	// Retain and recorded on either subject (ADR-0277 §SD5). Turn is the
+	// app's id for the turn — one message the person sent and all that
+	// answering it took — and Round the call's place in the turn's tool
+	// loop, from 0; Round is read only beside a Turn. ParentCallId is the
+	// CallId of the reply this call continues, empty on the first; the host
+	// then writes only the messages that are new.
+	Conversation string
+	Turn         string
+	Round        uint32
+	ParentCallId string
+	// OmitFrom and OmitTo declare that the request leaves out messages
+	// [OmitFrom, OmitTo) of the conversation — positions in the whole
+	// conversation, not in Messages — to fit the model's context. Messages
+	// is then the conversation with that range removed, followed by what is
+	// new, and the host still keeps only what is new; an omission that does
+	// not match keeps the whole request. OmitTo 0 declares none.
+	OmitFrom int
+	OmitTo   int
 }
 
 // Response is one completion's answer. Tool calls come back unexecuted
@@ -84,7 +125,27 @@ type Response struct {
 	// there is, and err is nil.
 	Incomplete bool
 	Elapsed    time.Duration
+	// CallId is the call's identity: the next turn's ParentCallId.
+	CallId string
+	// Retention says whether a retained request's messages were kept, and
+	// RetentionReason why not (ADR-0264 §SD4).
+	Retention       RetentionE
+	RetentionReason string
 }
+
+// RetentionE is the verdict on a request's text.
+type RetentionE uint8
+
+const (
+	// RetentionNotAsked is a request sent on llm.complete.
+	RetentionNotAsked RetentionE = 0
+	// RetentionKept means the messages were flushed to boxer.facts before
+	// the reply was sent.
+	RetentionKept RetentionE = 1
+	// RetentionNotKept carries the reason: the ceiling, no durable backend,
+	// or a failed write.
+	RetentionNotKept RetentionE = 2
+)
 
 // RefusedError is a reply the service declined: no model, a confined
 // request against a remote endpoint, a malformed request. Provider
@@ -93,9 +154,54 @@ type Response struct {
 // keeps working.
 type RefusedError struct {
 	Reason string
+	// CallId names the refusal's row in the call record
+	// (keelson('llm_calls')); empty for a request the service could not
+	// read.
+	CallId string
 }
 
 func (inst *RefusedError) Error() string { return "llm: refused: " + inst.Reason }
+
+// CallError is a provider failure: the call reached the endpoint and did
+// not come back answered. Kind is the failure class as the service named
+// it ("auth", "rate_limited", "server", …), Reason the provider's own
+// account, CallId the call's row in the call record and Elapsed how long
+// the provider took. It unwraps to the openaichat sentinel of its kind, so
+// errors.Is classifies it as before.
+type CallError struct {
+	Kind    string
+	Reason  string
+	CallId  string
+	Elapsed time.Duration
+	// Reasoning is what the model reasoned before the call failed — on an
+	// answer cut off at the ceiling, where its budget went.
+	Reasoning string
+	sentinel  error
+}
+
+func (inst *CallError) Error() string {
+	if inst.sentinel == nil {
+		return "llm: " + inst.Reason
+	}
+	return "llm: " + inst.Reason + ": " + inst.sentinel.Error()
+}
+
+func (inst *CallError) Unwrap() error { return inst.sentinel }
+
+// CallIdOf is the call id a failed Complete carries, "" when the failure
+// never reached the service's call record (a bus timeout, a cancel before
+// the reply).
+func CallIdOf(err error) (id string) {
+	var refused *RefusedError
+	if errors.As(err, &refused) {
+		return refused.CallId
+	}
+	var failed *CallError
+	if errors.As(err, &failed) {
+		return failed.CallId
+	}
+	return
+}
 
 // Describe asks what the host offers.
 func (inst *Client) Describe(ctx context.Context) (d Description, err error) {
@@ -113,13 +219,15 @@ func (inst *Client) Describe(ctx context.Context) (d Description, err error) {
 	if err != nil {
 		return
 	}
-	d = Description{Configured: w.Configured, Model: w.Model, EndpointHost: w.EndpointHost, Local: w.Local, MaxTokens: w.MaxTokens, Reason: w.Reason}
+	d = Description{Configured: w.Configured, Model: w.Model, EndpointHost: w.EndpointHost, Local: w.Local, Trusted: w.Trusted,
+		MaxTokens: w.MaxTokens, ContextTokens: w.ContextTokens, ContextSource: w.ContextSource, Reason: w.Reason}
 	return
 }
 
 // Complete runs one completion. A refusal is a *RefusedError; a provider
 // failure wraps the openaichat sentinel it maps to; a transport failure is
-// neither.
+// neither. Cancelling ctx returns at once with its error and asks the
+// service to stop the provider call (llm.cancel).
 func (inst *Client) Complete(ctx context.Context, r Request) (res Response, err error) {
 	if inst == nil || inst.bus == nil {
 		return res, eh.Errorf("llm: client without a bus")
@@ -128,9 +236,19 @@ func (inst *Client) Complete(ctx context.Context, r Request) (res Response, err 
 		return res, eh.Errorf("llm: before request: %w", err)
 	}
 	req := wireRequest{
-		Purpose: r.Purpose, Sensitivity: uint8(r.Sensitivity),
+		V: wireVersion, Purpose: r.Purpose, Sensitivity: uint8(r.Sensitivity),
 		Messages: r.Messages, Temperature: r.Temperature, MaxTokens: r.MaxTokens, Seed: r.Seed, Stop: r.Stop,
 		EnableThinking: r.EnableThinking, Tools: r.Tools, ToolChoice: r.ToolChoice, ResponseFormat: r.ResponseFormat,
+		CancelKey: strconv.FormatUint(rand.Uint64(), 36),
+	}
+	if r.OnBehalfOf != nil {
+		req.OnBehalfTask, req.OnBehalfEpoch, req.OnBehalfCall = r.OnBehalfOf.Task, r.OnBehalfOf.Epoch, r.OnBehalfOf.Call
+	}
+	req.Conversation, req.Turn, req.Round, req.ParentCallId = r.Conversation, r.Turn, r.Round, r.ParentCallId
+	req.OmitFrom, req.OmitTo = uint32(max(r.OmitFrom, 0)), uint32(max(r.OmitTo, 0))
+	subject := SubjectComplete
+	if r.Retain {
+		subject = SubjectRetainComplete
 	}
 	if deadline, ok := ctx.Deadline(); ok {
 		req.DeadlineUnixNanos = deadline.UnixNano()
@@ -139,7 +257,7 @@ func (inst *Client) Complete(ctx context.Context, r Request) (res Response, err 
 	if err != nil {
 		return
 	}
-	raw, err := inst.bus.RequestWithTimeout(SubjectComplete, payload, inst.wait(ctx, DefaultTimeout))
+	raw, err := inst.request(ctx, subject, payload, req.CancelKey)
 	if err != nil {
 		return res, eb.Build().Str("purpose", r.Purpose).Errorf("llm.complete request: %w", err)
 	}
@@ -153,9 +271,36 @@ func (inst *Client) Complete(ctx context.Context, r Request) (res Response, err 
 	res = Response{
 		Content: w.Content, Reasoning: w.Reasoning, FinishReason: w.FinishReason, ToolCalls: w.ToolCalls,
 		InputTokens: w.InputTokens, OutputTokens: w.OutputTokens, Incomplete: w.Incomplete,
-		Elapsed: time.Duration(w.ElapsedNs),
+		Elapsed: time.Duration(w.ElapsedNs), CallId: w.CallId,
+		Retention: RetentionE(w.Retention), RetentionReason: w.RetentionReason,
 	}
 	return
+}
+
+// request sends payload and waits for the reply or for ctx, whichever
+// comes first. On cancellation it publishes llm.cancel with key so the
+// service stops the provider call rather than finishing it for no one;
+// the abandoned request's goroutine ends when the reply or its wait does.
+func (inst *Client) request(ctx context.Context, subject string, payload []byte, key string) (raw []byte, err error) {
+	type result struct {
+		raw []byte
+		err error
+	}
+	done := make(chan result, 1)
+	wait := inst.wait(ctx, DefaultTimeout)
+	go func() {
+		r, e := inst.bus.RequestWithTimeout(subject, payload, wait)
+		done <- result{raw: r, err: e}
+	}()
+	select {
+	case r := <-done:
+		return r.raw, r.err
+	case <-ctx.Done():
+		if cancelPayload, cerr := encode(wireCancel{V: wireVersion, Key: key}); cerr == nil {
+			_ = inst.bus.Publish(SubjectCancel, cancelPayload)
+		}
+		return nil, eh.Errorf("llm: waiting for the reply: %w", ctx.Err())
+	}
 }
 
 // wait is the request wait: Timeout, else fallback, shortened to the
@@ -178,23 +323,29 @@ func failureOf(w wireReply) (err error) {
 	var sentinel error
 	switch w.ErrorKind {
 	case errKindRefused, "":
-		return &RefusedError{Reason: w.Reason}
+		return &RefusedError{Reason: w.Reason, CallId: w.CallId}
 	case errKindAuth:
 		sentinel = openaichat.ErrAuth
 	case errKindModelNotFound:
 		sentinel = openaichat.ErrModelNotFound
 	case errKindRateLimited:
 		sentinel = openaichat.ErrRateLimited
+	case errKindPayment:
+		sentinel = openaichat.ErrPaymentRequired
 	case errKindBadRequest:
 		sentinel = openaichat.ErrBadRequest
 	case errKindServer:
 		sentinel = openaichat.ErrServer
 	case errKindTimeout:
 		sentinel = context.DeadlineExceeded
-	default:
-		return errors.New("llm: " + w.Reason)
+	case errKindCancelled:
+		sentinel = context.Canceled
+	case errKindIncomplete:
+		sentinel = openaichat.ErrIncompleteCompletion
 	}
-	return eb.Build().Str("reason", w.Reason).Errorf("llm: %w", sentinel)
+	// The reason is the provider's own account — a status and its message —
+	// so it stays in the text, where a caller showing the error reads it.
+	return &CallError{Kind: w.ErrorKind, Reason: w.Reason, CallId: w.CallId, Elapsed: time.Duration(w.ElapsedNs), Reasoning: w.Reasoning, sentinel: sentinel}
 }
 
 // kindOf is failureOf's inverse on the service side.
@@ -206,12 +357,18 @@ func kindOf(err error) (kind string) {
 		return errKindModelNotFound
 	case errors.Is(err, openaichat.ErrRateLimited):
 		return errKindRateLimited
+	case errors.Is(err, openaichat.ErrPaymentRequired):
+		return errKindPayment
 	case errors.Is(err, openaichat.ErrBadRequest):
 		return errKindBadRequest
 	case errors.Is(err, openaichat.ErrServer):
 		return errKindServer
 	case errors.Is(err, context.DeadlineExceeded):
 		return errKindTimeout
+	case errors.Is(err, context.Canceled):
+		return errKindCancelled
+	case errors.Is(err, openaichat.ErrIncompleteCompletion):
+		return errKindIncomplete
 	default:
 		return errKindOther
 	}

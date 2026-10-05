@@ -380,7 +380,7 @@ var builtinTabDefs = []builtinTabDef{
 	{id: "projection", dockID: dockTabProjection, title: "Projection", lazy: true,
 		writes: []SignalID{signalSelection}},
 	{id: "timeline", dockID: dockTabTimeline, title: "Timeline", lazy: true, shapeContract: true,
-		writes: []SignalID{signalSelection, signalTimelineMin, signalTimelineMax}},
+		writes: append([]SignalID{signalSelection}, signalsWrittenBy("timeline")...)},
 	// NoScroll: the map reads wheel/zoom input globally (no
 	// consumption), so the dock's default body ScrollArea would scroll the
 	// panel in the same gesture that pans/zooms the map.
@@ -493,7 +493,7 @@ var TabZoneNames = map[string]TabZoneE{
 // TabZonesOverride is the launch-time re-zoning knob. Its use is a scripted
 // capture that needs one pane large: "*=body" puts every tab in one leaf, the
 // whole central panel, and a BOXER_PLAY_FOCUS_* knob raises the pane to draw
-// (ADR-0257, proposed — the vizeval harness captures the Experiments pane
+// (ADR-0266, proposed — the vizeval harness captures the Experiments pane
 // this way).
 var TabZonesOverride = env.NewString(env.Spec{
 	Name:        "BOXER_PLAY_TAB_ZONES",
@@ -630,6 +630,17 @@ func (inst *TabRegistry) dockIDForSlug(id string) (dockID uint64, ok bool) {
 	for i := range inst.specs {
 		if inst.specs[i].ID == id {
 			return inst.specs[i].DockID, true
+		}
+	}
+	return
+}
+
+// specForSlug returns the spec a tab's slug names; ok is false for an
+// unknown slug.
+func (inst *TabRegistry) specForSlug(id string) (spec TabSpec, ok bool) {
+	for i := range inst.specs {
+		if inst.specs[i].ID == id {
+			return inst.specs[i], true
 		}
 	}
 	return

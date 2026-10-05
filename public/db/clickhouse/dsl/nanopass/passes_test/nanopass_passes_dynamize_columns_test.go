@@ -24,12 +24,12 @@ func TestWrapColumnsBasic(t *testing.T) {
 		{
 			name:     "single_match",
 			input:    "SELECT id, tenant_id, amount FROM orders",
-			expected: "SELECT id, COLUMNS('^tenant_id'), amount FROM orders",
+			expected: "SELECT id, COLUMNS('^tenant_id$'), amount FROM orders",
 		},
 		{
 			name:     "multiple_matches",
 			input:    "SELECT id, tenant_id, customer_id, amount FROM orders",
-			expected: "SELECT id, COLUMNS('^tenant_id'), COLUMNS('^customer_id'), amount FROM orders",
+			expected: "SELECT id, COLUMNS('^tenant_id$'), COLUMNS('^customer_id$'), amount FROM orders",
 		},
 		{
 			name:     "no_match",
@@ -39,7 +39,7 @@ func TestWrapColumnsBasic(t *testing.T) {
 		{
 			name:     "all_match",
 			input:    "SELECT tenant_id, customer_id FROM orders",
-			expected: "SELECT COLUMNS('^tenant_id'), COLUMNS('^customer_id') FROM orders",
+			expected: "SELECT COLUMNS('^tenant_id$'), COLUMNS('^customer_id$') FROM orders",
 		},
 	}
 	for _, tt := range tests {
@@ -72,7 +72,7 @@ func TestWrapColumnsSkipsQualified(t *testing.T) {
 		{
 			name:     "mixed_qualified_and_bare",
 			input:    "SELECT tenant_id, o.customer_id FROM orders AS o",
-			expected: "SELECT COLUMNS('^tenant_id'), o.customer_id FROM orders AS o",
+			expected: "SELECT COLUMNS('^tenant_id$'), o.customer_id FROM orders AS o",
 		},
 	}
 	for _, tt := range tests {
@@ -148,19 +148,19 @@ func TestWrapColumnsPatterns(t *testing.T) {
 			name:     "prefix_match",
 			pattern:  "^is_",
 			input:    "SELECT id, is_active, is_deleted, name FROM users",
-			expected: "SELECT id, COLUMNS('^is_active'), COLUMNS('^is_deleted'), name FROM users",
+			expected: "SELECT id, COLUMNS('^is_active$'), COLUMNS('^is_deleted$'), name FROM users",
 		},
 		{
 			name:     "exact_match",
 			pattern:  "^amount$",
 			input:    "SELECT id, amount, total_amount FROM orders",
-			expected: "SELECT id, COLUMNS('^amount'), total_amount FROM orders",
+			expected: "SELECT id, COLUMNS('^amount$'), total_amount FROM orders",
 		},
 		{
 			name:     "contains_match",
 			pattern:  "date",
 			input:    "SELECT id, created_date, updated_date, name FROM events",
-			expected: "SELECT id, COLUMNS('^created_date'), COLUMNS('^updated_date'), name FROM events",
+			expected: "SELECT id, COLUMNS('^created_date$'), COLUMNS('^updated_date$'), name FROM events",
 		},
 	}
 	for _, tt := range tests {
@@ -187,7 +187,7 @@ func TestWrapColumnsEscapesMetachars(t *testing.T) {
 	// We can test the escaping function directly
 	got, err := pass.Run("SELECT amount FROM orders")
 	require.NoError(t, err)
-	assert.Equal(t, "SELECT COLUMNS('^amount') FROM orders", got)
+	assert.Equal(t, "SELECT COLUMNS('^amount$') FROM orders", got)
 }
 
 // --- UNION ALL ---
@@ -197,8 +197,8 @@ func TestWrapColumnsUnionAll(t *testing.T) {
 
 	got, err := pass.Run("SELECT tenant_id, amount FROM t1 UNION ALL SELECT customer_id, price FROM t2")
 	require.NoError(t, err)
-	assert.Contains(t, got, "COLUMNS('^tenant_id')")
-	assert.Contains(t, got, "COLUMNS('^customer_id')")
+	assert.Contains(t, got, "COLUMNS('^tenant_id$')")
+	assert.Contains(t, got, "COLUMNS('^customer_id$')")
 	assert.Contains(t, got, "amount")
 	assert.Contains(t, got, "price")
 
@@ -216,7 +216,7 @@ func TestWrapColumnsCTE(t *testing.T) {
 
 	// Both the CTE body and outer SELECT should be wrapped
 	// Count occurrences of COLUMNS
-	assert.Equal(t, 2, countOccurrences(got, "COLUMNS('^tenant_id')"))
+	assert.Equal(t, 2, countOccurrences(got, "COLUMNS('^tenant_id$')"))
 
 	_, err = nanopass.Parse(got)
 	require.NoError(t, err, "produced invalid SQL: %s", got)
@@ -229,7 +229,7 @@ func TestWrapColumnsSubquery(t *testing.T) {
 
 	got, err := pass.Run("SELECT * FROM (SELECT tenant_id, amount FROM orders)")
 	require.NoError(t, err)
-	assert.Contains(t, got, "COLUMNS('^tenant_id')")
+	assert.Contains(t, got, "COLUMNS('^tenant_id$')")
 	assert.Contains(t, got, "amount")
 
 	_, err = nanopass.Parse(got)
@@ -246,7 +246,7 @@ func TestWrapColumnsOnlyAffectsProjection(t *testing.T) {
 	require.NoError(t, err)
 
 	// Only the SELECT list column is wrapped
-	assert.Contains(t, got, "SELECT COLUMNS('^tenant_id')")
+	assert.Contains(t, got, "SELECT COLUMNS('^tenant_id$')")
 	// WHERE and GROUP BY columns are untouched
 	assert.Contains(t, got, "WHERE customer_id > 0")
 	assert.Contains(t, got, "GROUP BY tenant_id")
@@ -286,7 +286,7 @@ func TestWrapColumnsInPipeline(t *testing.T) {
 	)
 	result, err := pipe.Run("select tenant_id, amount from orders")
 	require.NoError(t, err)
-	assert.Contains(t, result, "COLUMNS('^tenant_id')")
+	assert.Contains(t, result, "COLUMNS('^tenant_id$')")
 	assert.Contains(t, result, "amount")
 }
 
@@ -362,4 +362,12 @@ func indexOf(s, substr string) int {
 		}
 	}
 	return -1
+}
+
+// The emitted regex is anchored at both ends: `^id_foo` alone would also
+// select id_foo_len and silently widen the result schema.
+func TestWrapColumnsWithDynamicAnchorsBothEnds(t *testing.T) {
+	got, err := passes.WrapColumnsWithDynamic(`^id_foo$`).Run("SELECT id_foo FROM t")
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT COLUMNS('^id_foo$') FROM t", got)
 }

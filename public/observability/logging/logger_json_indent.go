@@ -4,12 +4,18 @@ import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"io"
+	"sync"
 
 	"github.com/stergiotis/boxer/public/ea"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
+// JsonIndentLogger re-encodes each zerolog event through one jsontext
+// encoder. Write is safe for concurrent use — zerolog calls it from every
+// goroutine that logs, and the encoder is a state machine that interleaved
+// writes would leave mid-value for good.
 type JsonIndentLogger struct {
+	mu     sync.Mutex
 	Out    io.Writer
 	enc    *jsontext.Encoder
 	szW    *ea.SizeMeasureWriter
@@ -18,6 +24,8 @@ type JsonIndentLogger struct {
 }
 
 func (inst *JsonIndentLogger) Write(p []byte) (n int, err error) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
 	var v any
 	v, err = UnmarshallZerologMsg(p)
 	if err != nil {
@@ -55,6 +63,11 @@ func (inst *JsonIndentLogger) Write(p []byte) (n int, err error) {
 		v,
 		json.DefaultOptionsV2())
 	n = int(szW.Size)
+	if err != nil {
+		// An event that failed part-way leaves the encoder inside it; start
+		// the next one on a fresh encoder rather than failing it too.
+		inst.enc, inst.szW = nil, nil
+	}
 	return
 }
 

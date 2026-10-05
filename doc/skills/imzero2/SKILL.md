@@ -84,11 +84,18 @@ components.Button(ids.PrepareSeq(i), c.Atoms().Text("button").Keey()).Send()
 Two properties of the derivation are worth knowing, because response
 read-back depends on both:
 
-- **Derivation is injective.** Distinct inputs produce distinct wire ids,
-  for every creator above. Only one value is rewritten: an id that derives
-  to exactly `0`, which egui rejects (`egui::Id` is a `NonZeroU64`), is
-  replaced by a fixed high-entropy stand-in. Adjacent integers
-  (`MakeAbsoluteIdHighEntropy(base+0)`, `+1`, `+2`, …) are safe.
+- **Derivation is injective within one scope, not across scopes.** Under
+  one enclosing scope, distinct inputs produce distinct wire ids, for every
+  creator above. Only one value is rewritten: an id that derives to exactly
+  `0`, which egui rejects (`egui::Id` is a `NonZeroU64`), is replaced by a
+  fixed high-entropy stand-in. Adjacent integers
+  (`MakeAbsoluteIdHighEntropy(base+0)`, `+1`, `+2`, …) are safe. The scope
+  and the local id are combined by XOR, which cancels and commutes: a
+  widget keyed like its own scope (`IdScope(x)` around `W(x)`) derives to
+  the scope's parent, so two such pairs `x` and `y` share one id, and
+  `IdScope(a){W(b)}` collides with `IdScope(b){W(a)}`. `checkId` logs
+  "id has already been used" when that happens; key a widget differently
+  from the scope it sits in.
 - **An `AbsoluteWidgetId`'s numeric value *is* its wire id**, so
   `uint64(absId)` and `absId.Derive()` agree. Side tables keyed by an
   absolute id may use either spelling.
@@ -1289,15 +1296,15 @@ All coordinates are canvas-relative (translated to screen coords at render time 
 
 ## 15. Binding an External egui Widget Library
 
-Distilled from `egui_dock`, `egui_table`, `egui_plot` (whose bridge has since been retired in favor of the implot port, ADR-0149), and `egui_graphs`. When the widget you're wrapping isn't just a leaf painter but brings its own state (layout positions, selection, scroll, drag offsets) or its own callback-driven API, these patterns recur.
+Distilled from `egui_dock`, `egui_table`, `egui_plot` (whose bridge has since been retired in favor of the implot port, ADR-0149), and `egui_graphs` (whose `c.Graph` binding has since been removed in favor of the pure-Go `widgets/graphview`, ADR-0224 — the `egui_graphs` snippets below quote that former binding to show the shapes, and name nothing in the tree any more). When the widget you're wrapping isn't just a leaf painter but brings its own state (layout positions, selection, scroll, drag offsets) or its own callback-driven API, these patterns recur.
 
 ### 15.1 State location — pick the right bucket
 
 | Bucket | When | Examples |
 |---|---|---|
-| **Per-frame register** — `Vec<FooData>` on the interpreter, cleared in `prepare_next_frame()` | Pure accumulators. The drain widget consumes all of it and the buffer is empty at frame end. | `plot_lines`, `table_cells`, `graph_pending_nodes` |
-| **Retained HashMap keyed by widget id** — `HashMap<u64, State>` on the interpreter, *not* cleared per-frame | Library owns state that must survive frames (positions, selection, collapse, scroll) | `dock_states` (egui_dock layout), `graph_states` (egui_graphs graph + node/edge index maps) |
-| **Local scope in apply code** — `RefCell`, channel, `&mut Vec`, closure captures | Only needed for the duration of this frame's `ui.add_sized(…)` call | FR event-sink `frame_events`, `EtPrefetchInfo` visible-range probes |
+| **Per-frame register** — `Vec<FooData>` on the interpreter, cleared in `prepare_next_frame()` | Pure accumulators. The drain widget consumes all of it and the buffer is empty at frame end. | `table_cells`, `paint_cmds` |
+| **Retained HashMap keyed by widget id** — `HashMap<u64, State>` on the interpreter, *not* cleared per-frame | Library owns state that must survive frames (positions, selection, collapse, scroll) | `dock_states` (egui_dock layout) |
+| **Local scope in apply code** — `RefCell`, channel, `&mut Vec`, closure captures | Only needed for the duration of this frame's `ui.add_sized(…)` call | an event-sink `frame_events` (§15.5), `EtPrefetchInfo` visible-range probes |
 
 The retained-HashMap pattern is **the** way to bind a stateful library. Go is authoritative about which entities *exist*; the library is authoritative about each entity's layout / position / selection. Every frame Go re-declares the topology, the apply code reconciles (remove-missing + add-new + update-in-place), and the library continues with the same state slot untouched by the reconciliation.
 
@@ -1414,17 +1421,17 @@ The slippy map is a Go widget on the painter lane (ADR-0204: Leaflet's map core 
 
 | What | Go | Shape |
 |---|---|---|
-| The map | `portolan.New(ids, portolan.Options{...}) *Map` | `Options`: `Source` (`TileSource`, OSM by default), `Loader` (`LoaderOptions`), `Center`, `Zoom`, `CRS` (EPSG3857 by default; `EPSG4326`, `EPSG3395`, `Simple`), `MinZoom/MaxZoom` + `Has*`, `MaxBounds`, `ZoomSnap` (0 = continuous), `ZoomDelta`, `NoDragging/NoScrollWheelZoom/NoDoubleClickZoom/NoPinchZoom/NoBoxZoom/NoKeyboard/NoZoomAnimation`, `Handlers` (inertia, viscosity, wheel knobs — Leaflet's defaults), `Background`, `HideAttribution`, `NoTiles` |
-| Basemap from the environment | `basemap.PortolanSource()`, `basemap.PortolanLoader()` | the `BOXER_MAP_TILE_*` vars as a `TileSource` and the TLS knobs as `LoaderOptions`; every app's map goes through these |
+| The map | `portolan.New(ids, scopeKey, portolan.Options{...}) *Map` | `Options`: `Source` (`TileSource`, OSM by default), `Loader` (`LoaderOptions`), `Center`, `Zoom`, `CRS` (EPSG3857 by default; `EPSG4326`, `EPSG3395`, `Simple`), `MinZoom/MaxZoom` + `Has*`, `MaxBounds`, `ZoomSnap` (0 = continuous), `ZoomDelta`, `NoDragging/NoScrollWheelZoom/NoDoubleClickZoom/NoPinchZoom/NoBoxZoom/NoKeyboard/NoZoomAnimation`, `Handlers` (inertia, viscosity, wheel knobs — Leaflet's defaults), `Background`, `HideAttribution`, `NoTiles` |
+| Basemap from the environment | `basemap.PortolanSource()`, `basemap.PortolanLoader(basemap.NewTiles(ctx.Bus(), purpose))` | the `BOXER_MAP_TILE_*` vars as a `TileSource`; tiles fetched through the host's `net.http.fetch.basemap` destination (ADR-0262), so the app declares `basemap.ClientCaps(reason)`. A loader without a fetcher fetches nothing; every app's map goes through these |
 | Draw | `m.Render(w, h, overlay func(portolan.Projector))`, `m.RenderFill(fallbackW, fallbackH, overlay)` | one canvas per frame; `RenderFill` takes the pane's captured size |
 | The view | `m.View() *portolan.View` | Leaflet's Map view: `SetView/SetZoom/PanTo/PanBy/FitBounds/FitWorld`, animated `SetViewAnimated/SetZoomAnimated/SetZoomAroundAnimated/PanToAnimated/PanByAnimated/FlyTo/FlyToBounds/FitBoundsAnimated`, `Stop`, `Center/Zoom/Bounds/Size`, `LatLngToContainerPoint/ContainerPointToLatLng`, `SetMaxBounds/SetMinZoom/SetMaxZoom` |
-| Readback | `m.Hover() (LatLng, bool)`, `m.Clicked() (LatLng, bool)`, `m.ViewHash()`, `m.Events()`, `m.Loading()`, `m.Stats()`, `m.Health()`, `m.BytesShipped()`, `m.Reships()` | all from the map itself, one frame behind the host like every canvas register |
+| Readback | `ev := m.Render(...)` / `m.RenderFill(...)` returns `Events` (the `ViewEvents` plus `Clicked`/`ClickedOk`); `m.Hover() (LatLng, bool)`, `m.ViewHash()`, `m.Loading()`, `m.Stats()`, `m.Health()`, `m.BytesShipped()`, `m.Reships()` | all from the map itself, one frame behind the host like every canvas register |
 | Tiles | `m.SetSource(src)`, `m.Source()`, `m.SetNoTiles(on)` | a source switch restarts the pyramid at the current view and re-uploads under the same ids |
 | Overlays (inside the callback) | `p.Marker`, `p.Label`, `p.Polyline`, `p.Polygon`, `p.ConvexPolygon`, `p.Image`; `p.ToCanvas/ToLatLng/View`, `p.Camera/CameraAt` | canvas-pixel painting through `c.Paint*`. A polyline, and a **convex** polygon, are projected, clipped to the padded viewport and simplified per frame (Leaflet's vector pipeline), so a geometry far larger than the view costs its visible part. A **concave** polygon is neither clipped nor simplified, only culled: the fill ear-clips the ring and an ear clipper needs a simple polygon, where Leaflet's canvas fill rule did not — clipping invents edges along the window and simplifying can make a ring cross itself, and both draw triangles the ring does not contain (ADR-0204's 2026-09-12 update). Prefer `ConvexPolygon` when the ring really is convex |
 | A camera for a widget drawn over the map | `m.View().CameraAt(refZoom, origin)`, `p.CameraAt(...)`; `Camera(refZoom)` is the origin-less form | the map's transform as a `camera.Camera`, for hosted rendering (ADR-0228 §SD5); prefer the local-origin form |
-| Offline geography (no tile server) | [`portolan/landoverlay`](../../../public/thestack/imzero2/egui2/widgets/portolan/landoverlay/): `Layer.Draw(p, atlas, Style)`, `Layer.Drawn()`, `DefaultStyle()` | fills land and strokes country borders from the `worldmap` atlas (vendored Natural Earth 110m admin-0) through the projector, so a `NoTiles` map still shows geography; culled per country against the viewport, buffers reused per frame. Coarse by design — a basemap stand-in at country-and-continent zooms, not a replacement for tiles past about zoom 8. The map does not depend on it |
+| Offline geography (no tile server) | [`portolan/landoverlay`](../../../public/thestack/imzero2/egui2/widgets/portolan/landoverlay/): `Layer.Paint(p, atlas, Style)`, `Layer.Drawn()`, `DefaultStyle()` | fills land and strokes country borders from the `worldmap` atlas (vendored Natural Earth 110m admin-0) through the projector, so a `NoTiles` map still shows geography; culled per country against the viewport, buffers reused per frame. Coarse by design — a basemap stand-in at country-and-continent zooms, not a replacement for tiles past about zoom 8. The map does not depend on it |
 | H3 cells and regions | [`portolan/h3overlay`](../../../public/thestack/imzero2/egui2/widgets/portolan/h3overlay/): `Layer.Cells`, `Layer.Region`, `ViewportCells`, `ResolutionForZoom` | boundaries and the dissolve come from the `h3` wasm bridge (`public/science/geo/h3`); the caller owns the `h3.Handle` — the map does not depend on the runtime |
-| A gridded vector field (wind, currents) as particles | [`portolan/flowoverlay`](../../../public/thestack/imzero2/egui2/widgets/portolan/flowoverlay/): `New(src, Options)`, `Layer.Draw(p)`, `SetTime` / `SetStepPosition`, `At(ll)`, `Stats()`, `Close()` | ADR-0249. Reads a `vectorfield.SourceI` (`public/science/geo/vectorfield`: a windowed, step-indexed contract and an in-memory pyramid) on goroutines of its own and paints every trail in one `paintSegments` opcode. Takes no pointer, so it composes with a hosted graphview guest by call order. The animation shows direction and relative speed, not transport, and a trail is a streamlet, not a trajectory — the package doc leads with that. An animating layer keeps its window from idling (`Opts.Paused`). For a capture set `Opts.Synchronous` and `Opts.FixedTicks`. The recipe, including what a loader must normalise, is [doc/howto/vector-field-on-a-map.md](../../howto/vector-field-on-a-map.md) |
+| A gridded vector field (wind, currents) as particles | [`portolan/flowoverlay`](../../../public/thestack/imzero2/egui2/widgets/portolan/flowoverlay/): `New(src, Options)`, `Layer.Paint(p)`, `SetTime` / `SetStepPosition`, `At(ll)`, `Stats()`, `Close()` | ADR-0249. Reads a `vectorfield.SourceI` (`public/science/geo/vectorfield`: a windowed, step-indexed contract and an in-memory pyramid) on goroutines of its own and paints every trail in one `paintSegments` opcode. Takes no pointer, so it composes with a hosted graphview guest by call order. The animation shows direction and relative speed, not transport, and a trail is a streamlet, not a trajectory — the package doc leads with that. An animating layer keeps its window from idling (`Opts.Paused`). For a capture set `Opts.Synchronous` and `Opts.FixedTicks`. The recipe, including what a loader must normalise, is [doc/howto/vector-field-on-a-map.md](../../howto/vector-field-on-a-map.md) |
 
 ### 16.1a Debugging a painter-lane drawing: let the symptom's shape choose
 
@@ -1473,9 +1480,9 @@ Arrow keys pan and Escape cancels a box zoom through a key-capturing Frame (ADR-
 
 The `Projector` is valid only inside the `Render` callback for that frame — it closes over the view the tiles were just drawn with. Compute geometry outside (cells, colours, simplification inputs) and only project and paint inside. `p.Image` carries the send-once protocol (pixels ship on a version bump or when the host reports the texture starved; pass the full slice every frame and let it decide) — the play Map panel's raster and the `mapraster` demo are the examples.
 
-### 16.4 Two maps in one scope need their own id scopes
+### 16.4 Two maps under one host differ by scope key
 
-A map derives its ids from the stack it was given at `New` (`portolan`, `portolan-canvas`, `portolan-area`, `portolan-keys`, `tile-*`). Two maps rendered under the same stack state collide silently (the second one's responses vanish — the usual duplicate-id symptom). Wrap each in its own `c.IdScope(...)` at both construction and render, as the demo does for its choropleth canvas.
+A map opens its own id scope from the `scopeKey` given at `New` and derives every child id under it (`portolan-canvas`, `portolan-area`, `portolan-keys`, the tile textures under a `tile` scope). Two maps under one stack therefore need only distinct scope keys; no host-side `c.IdScope` is required (ADR-0267 W4).
 
 ### 16.5 Headless and export
 
@@ -1488,7 +1495,7 @@ Tiles are painter images, so a headless PNG capture shows the basemap (unlike th
 | Grey map, `tiles: N requested · 0 loaded`, `consecutive fetch failures` rising | the tile server is unreachable or its TLS does not chain | `BOXER_MAP_TILE_URL` / `_CA_FILE` / `_INSECURE_TLS` (doc/env-vars.md); `m.Health()` carries the last error |
 | Arrows do nothing | the map never got focus (see §16.2) | click the map first; do not wrap it in a focusable Frame |
 | Overlay drawn at the wrong place after a zoom | geometry projected outside the callback, or cached canvas points | project inside the callback every frame |
-| Second map inert | duplicate ids | own `c.IdScope` per map (§16.4) |
+| Second map inert | two maps built with the same scope key | distinct `scopeKey` at `New` (§16.4) |
 | H3 layer empty | the `h3` runtime failed to initialise | check the log for `h3 runtime init failed`; the demo's `ensureH3` pattern |
 
 ## 17. Badge / Chip — high-level Frame composition
@@ -1641,7 +1648,7 @@ off-thread — draw the pyramid that frame and ask again; never call
 `ReadWindowE` from a frame.
 
 Annotations (SD8) are host-owned: `p.SetLayers(&layers)` with sorted
-`Regions` / `Markers` / `Curves`; read `p.Events()` after `Render` and apply a
+`Regions` / `Markers` / `Curves`; read the `Events` that `Render` returns and apply a
 `RegionEdit` to your own slice (the player never mutates it). Interval and
 point lanes are the `timeline` widget on its offset axis (ADR-0043 SD17):
 `lanes := waveform.NewLanes(ids, key, tr.TimeBase(), intervals)` with bounds
@@ -1684,19 +1691,17 @@ the readbacks (one frame behind, like every canvas register).
 ## 20. graphview — the live graph widget
 
 The force-directed / hierarchical graph is a Go widget on the painter lane
-(ADR-0224; package [`widgets/graphview`](../../../public/thestack/imzero2/egui2/widgets/graphview/)),
-the sibling of the `egui_graphs`-backed `c.Graph` binding it is meant to
-replace once its downstream consumers have moved. New graph work targets
-graphview; `c.GraphNode` / `c.GraphEdge` / `c.Graph` and the three
-`FetchGraph*` fetchers stay until then.
+(ADR-0224; package [`widgets/graphview`](../../../public/thestack/imzero2/egui2/widgets/graphview/)).
+It replaced the `egui_graphs`-backed `c.Graph` binding, which has been
+removed: `c.GraphNode` / `c.GraphEdge` / `c.Graph` and the three
+`FetchGraph*` fetchers do not exist any more.
 
 ```go
 gv := graphview.New(ids, "deps", graphview.Options{
     Layout: graphview.LayoutForceDirectedCG, NodeClicking: true, NodeSelection: true, LabelsAlways: true,
 })
 // every frame — declare the whole graph, keyed by uint64 ids:
-gv.Render(nodes, edges, w, h)              // or gv.RenderFill(nodes, edges, fallbackW, fallbackH)
-for _, ev := range gv.Events() {          // same frame; the input is one frame old
+for _, ev := range gv.Render(nodes, edges, w, h) { // or gv.RenderFill(nodes, edges, fallbackW, fallbackH); the input is one frame old
     if ev.Kind == graphview.EventKindNodeDoubleClick { recenter(ev.Node) }
 }
 if m := gv.Metrics(); m.Steps > 0 && m.LastDisplacement <= eps { gv.Opts.Force.Paused = true }
@@ -1901,10 +1906,10 @@ What to know before using it:
 
 The gallery registers six graphview demos from `egui2_hl_graphview_demo.go`
 — ring, force-directed, hierarchical, soft pins, exploration, styling and
-weights — so the screenshot tour captures each one whole; the ring and force
-ones mirror the `graphs` demo so the two can be compared while both exist.
+weights — so the screenshot tour captures each one whole.
 
-Migrating from the `c.Graph` binding, beyond the type renames: the binding's
+Where graphview departs from the removed `c.Graph` binding, for code ported
+from it: the binding's
 `zoomSpeed` was a fixed step per wheel event, graphview follows the host's
 zoom factor and `Opts.ZoomSpeed` is an exponent on it; `fitPadding` is a
 fraction of the canvas per side here, not a scale on the graph's diagonal,
@@ -1912,3 +1917,127 @@ so the same number frames a little tighter; a zero width or height no longer
 means "fill" — use `RenderFill` for that. Edge selection and hover are keyed
 by `EdgeRef{From, To, Id}`: parallel edges of one pair select together
 unless the declaration gives them distinct ids.
+
+## 21. Writing a Go widget — the ADR-0267 contract
+
+This section is the authoring reference for every Go widget under
+`widgets/`; [ADR-0267](../../adr/0267-imzero2-go-widget-api-contract-immediate-and-semi-retained.md)
+records why it is shaped this way. `widgets/conformance` checks the
+mechanical rules over every package, and its allowlist is empty: a new
+package conforms from its first commit, and one that cannot needs an ADR,
+not an allowlist line.
+
+### 21.1 Pick the shape with one question
+
+**Does anything have to survive the frame that cannot be re-derived from the
+model?**
+
+| Shape | When | Host writes | Reference |
+|---|---|---|---|
+| **F — fluid** | the widget *is* one binding widget with one id and no state | `pkg.New(id c.WidgetIdCreatorI, …).Knob(…).SendResp()` | `badge`, `selector`, `regexedit` |
+| **IM — immediate** | only a small host-ownable value survives: selection, expansion, cursor, a bound buffer | `res := pkg.Render(pkg.Input{Ids, ScopeKey, Model, State, …})` | `tree`, `chatview`, `kanban`, `markdown` |
+| **SR — semi-retained** | a cache, camera, simulation, worker or subscription survives | `w := pkg.New(ids, scopeKey, …, pkg.Options{…})`; per frame `ev := w.Render(…)`; `w.Close()` if it owns workers | `graphview`, `portolan`, `treemap`, `timeline` |
+
+An IM widget embeds only IM and F widgets; the moment it needs an SR child
+it is SR (`mappingplanview` owns a pager, so it is SR). A painter helper that
+draws into a canvas the host owns takes no ids, is named `Paint`, and carries
+its knobs as a `Style` embedded in its `Input` (`boxenplot`, `ecdf`,
+`legend`, the portolan overlays).
+
+### 21.2 Names and entry points (W1–W3)
+
+- **Verbs:** `Render` (IM, SR), `Paint` (helper), `Send`/`SendResp` (F). A
+  second placeable part is `RenderPart` (`RenderChip`, `RenderMinimap`); a
+  size-probing twin is `RenderFill`. `Show` only as the half of a
+  `Show`/`Hide` pair.
+- **Types:** IM `Input`, `Result`, `State`, `Model`; SR `Options`, `Events`
+  and the object named for what it is (`Map`, `View`, `Dialog`, `Monitor`) —
+  never `Inst`, `Widget`, `Renderer`. Receivers are `inst`.
+- **What `Render` produces, `Render` returns:** a `Result` or `Events`
+  struct, never a bool, a tuple or a separate accessor. The one allowed pair
+  is `(Events, error)` from an entry that validates its declaration first
+  (`graphview.RenderColumns`). Slices in it are the widget's scratch, valid
+  until the next `Render`. Sentinels: `-1` for no ordinal, `false` for did
+  not happen.
+
+### 21.3 Identity (W4–W7)
+
+- **One scope.** IM: `Ids *c.WidgetIdStack` and `ScopeKey string` on `Input`.
+  SR: `ids, scopeKey` as the first two arguments of `New`. Either way, one
+  `c.IdScope(ids.PrepareStr(scopeKey))` at the root of every `Render`, empty
+  `ScopeKey` meaning a package default. Two instances under one host differ
+  by scope key alone; the host adds no `IdScope` of its own.
+- **Child ids from the vocabulary:** `PrepareStr("literal")` for a
+  singleton, `IdScope(PrepareSeq(uint64(i)))` for a row, `PrepareStr(key)`
+  of a stable key when ordinals shift. Never `PrepareStr(a + b)`, a
+  `Sprintf` key, a hex seed, or a namespace constant added to an ordinal
+  (`rowBase + n`): nest a scope per namespace instead. An id that must
+  survive an edit above it is keyed on content, not position (`markdown`
+  keys code blocks on a hash of language and text).
+- **Absolute ids** only for a floating window, popup or tether the widget
+  owns, derived from the scope:
+  `c.MakeAbsoluteIdHighEntropy(ids.PrepareStr("window").Derive())`. A
+  tethered inspector keys its tether the same way:
+  `inspector.NewAnchorTether(ids.PrepareStr("tether").Derive())`, derived
+  once and handed to both the toggle and the window.
+- **Probe seqs** (`CapturePaneSize`, `CaptureUiRect`, measure ids) are
+  `ids.ProbeSeq("role")` called inside the scope. A step that runs before
+  `Render` (a `RenderFill` probe, a `Bind`) opens the scope for the
+  derivation alone — `for range c.IdScope(ids.PrepareStr(scopeKey)) { … }`
+  emits nothing. `c.ProbeSeq(scopeKey, role)` is stack-independent and is
+  not for widgets.
+
+### 21.4 Model, state, options, size (W8–W12)
+
+- **The model is the host's data**, passed every frame, columnar where rows
+  are iterated. It carries no UI state. `Set*` exists only for expensive
+  data the host does not re-declare per frame (`treemap.SetRoot`,
+  `timeline.SetIntervals`, `heatmapscroll.PushColumn`).
+- **UI state** is a host-owned `State` (IM, zero value usable, passed as
+  `*State`, kept at one address) or inside the SR object with getters and
+  idempotent setters. Never a package-level map. A table swap resets what
+  indexed into it (`schemaview`).
+- **Bound values** (`TextEdit`, `DragValue`) live in `State` or the object;
+  programmatic writes go through `OverrideDatabinding*`.
+- **Options are a struct.** IM: fields on `Input`. SR: `Options` at `New`,
+  kept as a public `Opts` the widget re-reads every frame, so a toggle is an
+  assignment. No `With*` functions, no copy-returning setters, no `Set*`
+  twin of an option. Zero is the default, so booleans take the inverted
+  spelling (`HideTicks`, `StartCollapsed`) and enums an `Auto` zero value; a
+  knob whose zero used to mean something takes a negative for "none". An
+  option that seeds persistent state is read once, and its doc says so.
+- **One sizing shape:** canvas `Render(w, h)` plus `RenderFill(fallbackW,
+  fallbackH)`; flow `Input.MaxHeight` (a ceiling) and `Input.FillHost`;
+  inline, no knob. Never size against a probe emitted after your own
+  content.
+
+### 21.5 Interaction, threads, composition (W13–W16)
+
+- **Interaction returns as data** in `Result`/`Events` — clicks, moves,
+  navigation, selection, brush, hover. No `OnX(fn)` registration. Callbacks
+  remain only for host-drawn content in a slot (`Cell`, `Block`, an overlay
+  `func(Projector)`) and pure functions (formatters, filters, predicates).
+  Navigation the host itself triggers is reported in the next `Events` too.
+- **Render goroutine only** (ADR-0261). A widget whose own methods start
+  goroutines drains them at the top of `Render` and exports `Close`, which
+  its doc says is required. Work a free function starts under a caller's
+  context or task handle is bounded by that, not by a widget.
+- **Host-skippable regions:** IM is idempotent per frame; an SR send-once
+  protocol re-arms on `TextureStarved` (§12 "Lost Sends").
+- **Composition:** embed by passing your `Ids` and a literal sub-scope key;
+  an SR widget constructs its SR children in `New` and closes them in
+  `Close`. A host with no id stack at construction (a window host, the demo
+  registry's `Init`) builds the widget on its first frame.
+
+### 21.6 Errors, docs, tests (W17–W19)
+
+- A structurally broken model or a missing required `State` draws a short
+  message in place and sets `Result.Err`; never a panic, never silence.
+- The package doc's first paragraph names the shape ("an immediate-mode
+  widget (ADR-0267)") and the ADR that decided the widget, and states the
+  one-frame lag of its readbacks once.
+- Two tests at least: one frame renders under the discard channel from a
+  zero `State` or a fresh `New` (`scenetest.Install()`), and a widget that
+  reacts to input has one scripted-input test in the
+  `graphview/scenetest` pattern. A multi-frame test calls
+  `StateManager.ScriptReset()` between frames.

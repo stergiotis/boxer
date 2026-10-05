@@ -148,6 +148,60 @@ func TestNewFollowerAbsent(t *testing.T) {
 	assert.Nil(t, bindings)
 }
 
+// TestFollowerFollowsAnAddedAlias: an alias added after construction is
+// pending, resolves on the round the next Sync starts — never on the
+// caller's thread — and binds; adding it again is a no-op.
+func TestFollowerFollowsAnAddedAlias(t *testing.T) {
+	r := newFakeResolver()
+	f := newFollowerWith(r, zerolog.Nop())
+	f.seed(nil, nil)
+	target := newRecordingTarget()
+
+	require.True(t, f.Follow("items"))
+	assert.False(t, f.Follow("items"), "already pending")
+	assert.Equal(t, []string{"items"}, f.Pending())
+	assert.Zero(t, r.questions(), "Follow asks nothing on the caller's thread")
+
+	assert.Equal(t, map[string]string{"items": WaitNotAsked}, f.Waiting())
+	_, changed := settle(t, f, target)
+	assert.True(t, changed, "the new pending alias is reported")
+	assert.Equal(t, 1, r.questions(), "the next Sync asks for it at once, without waiting for the tick")
+	assert.Empty(t, target.bound, "nothing is live under it yet")
+	assert.Equal(t, map[string]string{"items": WaitNoLive}, f.Waiting(), "the answer says why it waits")
+
+	r.publish("items", "adhoc_h1000000000000000")
+	f.onEvent(Event{Op: EventOpPublished, Alias: "items", Handle: "adhoc_h1000000000000000", Revision: 1})
+	bound, _ := settle(t, f, target)
+	assert.True(t, bound)
+	assert.Equal(t, map[string]string{"items": "adhoc_h1000000000000000"}, target.bound)
+	assert.Empty(t, f.Waiting())
+	assert.False(t, f.Follow("items"), "already bound")
+
+	r.retract("items", "adhoc_h1000000000000000")
+	f.onEvent(Event{Op: EventOpRetracted, Alias: "items", Handle: "adhoc_h1000000000000000"})
+	f.Sync(target)
+	assert.Equal(t, WaitWithdrawn, f.Waiting()["items"])
+
+	r.setFailing(true)
+	due(f)
+	settle(t, f, target)
+	assert.Contains(t, f.Waiting()["items"], WaitUnanswered)
+}
+
+// TestNewDeferredFollower: no bus builds nothing; with one, the follower
+// exists with no alias declared, and a declared alias waits for the first
+// Sync instead of resolving at construction.
+func TestNewDeferredFollower(t *testing.T) {
+	assert.Nil(t, NewDeferredFollower(FollowerConfig{Log: zerolog.Nop(), Aliases: []string{"items"}}))
+	f := NewDeferredFollower(FollowerConfig{Bus: &app.NoopBus{}, Log: zerolog.Nop()})
+	require.NotNil(t, f)
+	assert.Empty(t, f.Pending())
+	f = NewDeferredFollower(FollowerConfig{Bus: &app.NoopBus{}, Log: zerolog.Nop(), Aliases: []string{"items"}})
+	require.NotNil(t, f)
+	assert.Equal(t, []string{"items"}, f.Pending())
+	f.Close()
+}
+
 // TestFollowerNoopBusFallsBackToPolling: a bus that can neither resolve nor
 // subscribe (NoopBus) leaves every alias pending, at the poll interval, with
 // the pending set reported once and not again, and no second round stacked
@@ -421,4 +475,34 @@ func waitFor(t *testing.T, cond func() bool, what string) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatalf("timed out waiting: %s", what)
+}
+
+// A verdict answered before a retract of the handle it names, but replayed
+// after it, binds nothing: the handle has left and the alias stays pending.
+func TestFollowerVerdictOutdatedByRetract(t *testing.T) {
+	r := newFakeResolver()
+	f := newFollowerWith(r, zerolog.Nop())
+	f.seed(nil, []string{"items"})
+	target := newRecordingTarget()
+	_, _ = f.Sync(target)
+
+	// The worker's answer is parked, then the retract arrives — one frame.
+	f.mu.Lock()
+	f.verdicts = append(f.verdicts, verdict{alias: "items", handle: "adhoc_h1000000000000000", revision: 1})
+	f.mu.Unlock()
+	f.onEvent(Event{Op: EventOpRetracted, Alias: "items", Handle: "adhoc_h1000000000000000"})
+	bound, _ := f.Sync(target)
+	assert.False(t, bound)
+	assert.Empty(t, target.bound, "the retracted handle is not bound")
+	assert.Equal(t, []string{"items"}, f.Pending())
+
+	// The successor binds as usual once asked.
+	r.publish("items", "adhoc_h2000000000000000")
+	f.onEvent(Event{Op: EventOpPublished, Alias: "items", Handle: "adhoc_h2000000000000000", Revision: 1})
+	bound, _ = settle(t, f, target)
+	assert.True(t, bound)
+	assert.Equal(t, "adhoc_h2000000000000000", target.bound["items"])
+	f.mu.Lock()
+	assert.Empty(t, f.retracted, "cleared once no round is outstanding")
+	f.mu.Unlock()
 }

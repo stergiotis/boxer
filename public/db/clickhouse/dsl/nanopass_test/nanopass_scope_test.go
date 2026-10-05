@@ -769,3 +769,26 @@ func TestBuildScopesRecursiveClauseMarksAllDefs(t *testing.T) {
 	assert.True(t, scopes[0].CTEDefs[0].Recursive)
 	assert.True(t, scopes[0].CTEDefs[1].Recursive)
 }
+
+// A subquery in a JOIN ... ON condition reads its tables in its own scope;
+// they are not FROM sources of the enclosing select.
+func TestBuildScopesJoinOnSubqueryTablesStayInner(t *testing.T) {
+	sql := "SELECT * FROM a JOIN b ON b.x IN (SELECT k FROM other)"
+	pr, err := nanopass.Parse(sql)
+	require.NoError(t, err)
+
+	scopes, err := nanopass.BuildScopes(pr, "")
+	require.NoError(t, err)
+	require.NotEmpty(t, scopes)
+	outer := scopes[0]
+	require.Len(t, outer.Tables, 2)
+	assert.Equal(t, "a", outer.Tables[0].Table)
+	assert.Equal(t, "b", outer.Tables[1].Table)
+}
+
+func TestQualifyTablesJoinOnSubqueryKeepsInnerCTE(t *testing.T) {
+	sql := "SELECT * FROM a JOIN b ON b.x IN (WITH c AS (SELECT 1 AS y) SELECT y FROM c)"
+	got, err := passes.QualifyTables("db").Run(sql)
+	require.NoError(t, err)
+	assert.Equal(t, "SELECT * FROM db.a JOIN db.b ON b.x IN (WITH c AS (SELECT 1 AS y) SELECT y FROM c)", got)
+}

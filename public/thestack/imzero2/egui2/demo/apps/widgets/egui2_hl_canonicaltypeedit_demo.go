@@ -18,13 +18,14 @@ import (
 // canonicaltypesummary level-1 chip, whose anchor toggle pops the full tethered
 // inspector.
 //
-// Stateful: the SignatureModel is caller-owned, built in Init and rendered in
-// RenderStateful. Seeded to `u32l` so the simple primitive view shows its
+// Stateful: the SignatureModel and the editor's SignatureState are
+// caller-owned, built in Init and rendered in RenderStateful. Seeded to `u32l` so the simple primitive view shows its
 // numeric controls populated (width, byte order = LE).
 // =============================================================================
 
 type ctEditDemoState struct {
 	model *canonicaltypeedit.SignatureModel
+	state canonicaltypeedit.SignatureState
 }
 
 func init() {
@@ -62,5 +63,5 @@ func demoCanonicalTypeEdit(ids *c.WidgetIdStack, st *ctEditDemoState) {
 	c.Label("Edit a canonical type — it opens compact (one row: the bar + a caret; click the caret for the structured form); click '+ element' to grow it into a group/signature (chips with '-'/'_' separators):").Send()
 	c.Separator().Horizontal().Send()
 	c.AddSpace(styletokens.GapInline(styletokens.ActiveDensity()))
-	st.model.Render(ids, "ctedit-demo")
+	canonicaltypeedit.RenderSignature(canonicaltypeedit.SignatureInput{Ids: ids, ScopeKey: "ctedit-demo", Model: st.model, State: &st.state})
 }

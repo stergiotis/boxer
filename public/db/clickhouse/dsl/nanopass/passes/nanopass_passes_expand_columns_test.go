@@ -69,3 +69,112 @@ func TestCachingSchemaProvider_KeysByDatabase(t *testing.T) {
 		t.Fatalf("b.facts on cache hit: got %q n=%d, want \"y\" n=2", got, n)
 	}
 }
+
+// TestExpandColumns_DeclinesWhenASourceHasNoSchema guards a bug where bare
+// `*` and COLUMNS() skipped CTE, subquery and table-function sources, so
+// `SELECT * FROM t, numbers(3)` expanded to t's columns alone and silently
+// dropped `number`.
+func TestExpandColumns_DeclinesWhenASourceHasNoSchema(t *testing.T) {
+	pass := ExpandColumns(NewStaticSchemaProvider(map[string][]string{"t": {"a1", "a2", "b"}}), "")
+	for _, sql := range []string{
+		"SELECT * FROM t, numbers(3)",
+		"SELECT * FROM t AS x JOIN (SELECT 1 AS z) AS s ON 1",
+		"WITH c AS (SELECT 1 AS a3) SELECT * FROM t, c",
+		"SELECT COLUMNS('a') FROM t, numbers(3)",
+		"SELECT COLUMNS('a') FROM t JOIN unknown AS u ON 1",
+	} {
+		got, err := pass.Run(sql)
+		if err != nil {
+			t.Fatalf("%s: %v", sql, err)
+		}
+		if got != sql {
+			t.Errorf("%s: expanded to %s, want it left unexpanded", sql, got)
+		}
+	}
+}
+
+// TestExpandColumns_DynamicOperandLeftAlone guards a bug where the
+// COLUMNS() expansion replaced whatever node was its parent, so
+// `SELECT COLUMNS('a') + 1 FROM t` became `SELECT t.a1, t.a2 FROM t` and
+// lost the `+ 1` ClickHouse applies to every matched column.
+func TestExpandColumns_DynamicOperandLeftAlone(t *testing.T) {
+	pass := ExpandColumns(NewStaticSchemaProvider(map[string][]string{"t": {"a1", "a2", "b"}}), "")
+	for _, sql := range []string{
+		"SELECT COLUMNS('a') + 1 FROM t",
+		"SELECT toString(COLUMNS('a')) FROM t",
+	} {
+		got, err := pass.Run(sql)
+		if err != nil {
+			t.Fatalf("%s: %v", sql, err)
+		}
+		if got != sql {
+			t.Errorf("%s: rewritten to %s, want it left alone", sql, got)
+		}
+	}
+	got, err := pass.Run("SELECT COLUMNS('a'), b FROM t")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "SELECT t.a1, t.a2, b FROM t"; got != want {
+		t.Errorf("projection item: got %s, want %s", got, want)
+	}
+}
+
+// TestExpandColumns_QuotesExoticNames guards a bug where the expansion
+// spliced decoded table and column names raw, so `SELECT * FROM "my table"`
+// became `SELECT my table.x y, my table.select FROM "my table"`. A keyword
+// qualifier is quoted as well: ClickHouse rejects `SELECT distinct.x`.
+func TestExpandColumns_QuotesExoticNames(t *testing.T) {
+	pass := ExpandColumns(NewStaticSchemaProvider(map[string][]string{
+		"my table": {"x y", "select", "plain"},
+		"u":        {"a:b", "c.d"},
+	}), "")
+	for sql, want := range map[string]string{
+		`SELECT * FROM u AS distinct`:         `SELECT "distinct"."a:b", "distinct"."c.d" FROM u AS distinct`,
+		`SELECT * FROM "my table"`:            `SELECT "my table"."x y", "my table".select, "my table".plain FROM "my table"`,
+		`SELECT "my table".* FROM "my table"`: `SELECT "my table"."x y", "my table".select, "my table".plain FROM "my table"`,
+		`SELECT COLUMNS('l') FROM "my table"`: `SELECT "my table".select, "my table".plain FROM "my table"`,
+	} {
+		got, err := pass.Run(sql)
+		if err != nil {
+			t.Fatalf("%s: %v", sql, err)
+		}
+		if got != want {
+			t.Errorf("%s:\n got %s\nwant %s", sql, got, want)
+		}
+	}
+}
+
+// TestCachingSchemaProvider_BoundedByMaxSize guards a bug where maxSize was
+// stored but never enforced, so a long-running session that probed many
+// tables kept every entry.
+func TestCachingSchemaProvider_BoundedByMaxSize(t *testing.T) {
+	delegate := NewStaticSchemaProvider(map[string][]string{"a": {"x"}, "b": {"x"}, "c": {"x"}})
+	c := NewCachingSchemaProvider(time.Minute, delegate, 2)
+	probe := func(tbl string) {
+		t.Helper()
+		if _, _, found := c.GetColumns("", tbl); !found {
+			t.Fatalf("%s not found", tbl)
+		}
+	}
+	probe("a")
+	probe("b")
+	// Back-date a so the eviction order does not hinge on clock resolution.
+	c.mu.Lock()
+	e := c.cache[cacheKey("", "a")]
+	e.timestamp = e.timestamp.Add(-time.Second)
+	c.cache[cacheKey("", "a")] = e
+	c.mu.Unlock()
+	probe("c")
+	probe("c")
+	c.mu.Lock()
+	n := len(c.cache)
+	_, hasA := c.cache[cacheKey("", "a")]
+	c.mu.Unlock()
+	if n != 2 {
+		t.Fatalf("cache holds %d entries, want 2", n)
+	}
+	if hasA {
+		t.Fatal("oldest entry a survived eviction")
+	}
+}

@@ -46,6 +46,9 @@ func init() {
 	})
 }
 
+// gaugeDemoFit keeps each dial's readout-fit memo across frames.
+var gaugeDemoFit [3]gauge.State
+
 func demoGauge(ids *c.WidgetIdStack) {
 	c.Label("Read-only radial dials — one scalar judged against IDS-toned zones:").Send()
 	c.Separator().Horizontal().Send()
@@ -53,35 +56,33 @@ func demoGauge(ids *c.WidgetIdStack) {
 
 	for range c.Horizontal().KeepIter() {
 		// 1. Plain neutral track — no zones, default (5) major ticks.
-		gauge.New("gauge-latency").
-			Range(0, 500).
-			Suffix(" ms").
-			Label("Latency").
-			Render(ids.PrepareSeq(0x6A0301), 240)
+		gauge.Render(gauge.Input{
+			Ids: ids, ScopeKey: "gauge-latency", Value: 240,
+			Min: 0, Max: 500, Suffix: " ms", Label: "Latency",
+			State: &gaugeDemoFit[0],
+		})
 		c.AddSpace(gapSections())
 
 		// 2. TrafficLight preset + colour-by-value needle.
-		gauge.New("gauge-cpu").
-			Range(0, 100).
-			Zones(gauge.TrafficLight(0, 100)...).
-			Suffix("%").
-			Label("CPU").
-			Render(ids.PrepareSeq(0x6A0302), 78)
+		gauge.Render(gauge.Input{
+			Ids: ids, ScopeKey: "gauge-cpu", Value: 78,
+			Min: 0, Max: 100, Zones: gauge.TrafficLight(0, 100), Suffix: "%", Label: "CPU",
+			State: &gaugeDemoFit[1],
+		})
 		c.AddSpace(gapSections())
 
 		// 3. Explicit semantic tone zones at the large preset, with minor ticks.
-		gauge.New("gauge-temp").
-			Range(0, 120).
-			Size(gauge.SizeLg).
-			Ticks(7, 1).
-			Zones(
-				gauge.Zone{From: 0, To: 60, Tone: styletokens.ToneSuccess, Label: "ok"},
-				gauge.Zone{From: 60, To: 90, Tone: styletokens.ToneWarning, Label: "warm"},
-				gauge.Zone{From: 90, To: 120, Tone: styletokens.ToneError, Label: "hot"},
-			).
-			Suffix("°C").
-			Label("Temp").
-			Render(ids.PrepareSeq(0x6A0303), 88)
+		gauge.Render(gauge.Input{
+			Ids: ids, ScopeKey: "gauge-temp", Value: 88,
+			Min: 0, Max: 120, Size: gauge.SizeLg, MajorTicks: 7, MinorTicks: 1,
+			Zones: []gauge.Zone{
+				{From: 0, To: 60, Tone: styletokens.ToneSuccess, Label: "ok"},
+				{From: 60, To: 90, Tone: styletokens.ToneWarning, Label: "warm"},
+				{From: 90, To: 120, Tone: styletokens.ToneError, Label: "hot"},
+			},
+			Suffix: "°C", Label: "Temp",
+			State: &gaugeDemoFit[2],
+		})
 	}
 
 	c.AddSpace(padInner())

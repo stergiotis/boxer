@@ -2,11 +2,13 @@ package watchbill
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/widgethandle"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/badge"
 )
@@ -58,7 +60,13 @@ func (inst *App) renderFilters(snap snapshot, shown int) {
 				variant = badge.VariantSolid
 			}
 			if badge.New(inst.ids.PrepareSeq(seqChip+uint64(i)), s).Tone(toneOf(s)).Variant(variant).Size(badge.SizeSm).Selected(on).SendResp().HasPrimaryClicked() {
-				inst.toggleState(s)
+				toggled := inst.filters.stateList()
+				if i := slices.Index(toggled, s); i >= 0 {
+					toggled = slices.Delete(toggled, i, i+1)
+				} else {
+					toggled = append(toggled, s)
+				}
+				gesture(inst, opSetFilter, SetFiltersArgs{States: toggled, Kind: inst.filters.kind}, func() { inst.toggleState(s) })
 			}
 		}
 		// Clear drops every pill and the kind text at once; it is drawn
@@ -69,6 +77,7 @@ func (inst *App) renderFilters(snap snapshot, shown int) {
 		}
 		c.AddSpace(styletokens.PaddingOuter(inst.density))
 		c.Label("Kind").Send()
+		inst.kindH = widgethandle.Make(inst.ids.PrepareStr("kind").Derive())
 		if c.TextEdit(inst.ids.PrepareStr("kind"), inst.kindDraft, false).SendRespVal(&inst.kindDraft).HasChanged() {
 			inst.filters.kind = inst.kindDraft
 		}
@@ -115,16 +124,16 @@ func (inst *App) renderDetail(snap snapshot, jobs []watchbillstore.Job) {
 		c.Label("Job " + short(inst.selectedID) + " is not in the listed rows; widen the filter or wait for the list.").Send()
 		return
 	}
-	inst.machine.Mirror(job.State)
+	inst.mirror(job)
 	for range c.Horizontal().KeepIter() {
 		c.LabelAtoms(c.Atoms().BeginRichText(job.ID).Monospace().Heading().End().Keep()).Send()
 		inst.chip.Render()
 		cancellable := job.State == watchbillstore.StateQueued || job.State == watchbillstore.StateRunning
 		if c.Button(inst.ids.PrepareStr("cancel"), c.Atoms().Text("Cancel").Keep()).SendResp().HasPrimaryClicked() && cancellable {
-			inst.cancel(job.ID)
+			gesture(inst, opCancel, JobArgs{Id: job.ID}, func() { inst.cancel(job.ID) })
 		}
 		if c.Button(inst.ids.PrepareStr("retry"), c.Atoms().Text("Retry").Keep()).SendResp().HasPrimaryClicked() && watchbillstore.IsFinal(job.State) {
-			inst.retry(job.ID)
+			gesture(inst, opRetry, JobArgs{Id: job.ID}, func() { inst.retry(job.ID) })
 		}
 	}
 	c.AddSpace(styletokens.PaddingInner(inst.density))
@@ -285,4 +294,10 @@ func when(t time.Time) (s string) {
 		return ""
 	}
 	return t.UTC().Format(time.RFC3339)
+}
+
+// mirror sets the job machine to job's state.
+func (inst *App) mirror(job watchbillstore.Job) {
+	inst.machine.Mirror(job.State)
+	inst.mirrored = job.ID
 }

@@ -32,6 +32,7 @@ func NewRetainedFffiHolderTyped[T any](r *RetainedFffiHolder) RetainedFffiHolder
 		content:           r.content,
 		retainedElementId: r.retainedElementId,
 		widgetIdOffset:    r.widgetIdOffset,
+		hasWidgetId:       r.hasWidgetId,
 	}
 }
 func (inst RetainedFffiHolderTyped[T]) Untype() *RetainedFffiHolder {
@@ -40,6 +41,7 @@ func (inst RetainedFffiHolderTyped[T]) Untype() *RetainedFffiHolder {
 		content:           inst.content,
 		retainedElementId: inst.retainedElementId,
 		widgetIdOffset:    inst.widgetIdOffset,
+		hasWidgetId:       inst.hasWidgetId,
 	}
 }
 
@@ -226,12 +228,14 @@ func (inst *RetainedFffiBuilder) BuildRetained() *RetainedFffiHolder {
 	content := unsafeperf.UnsafeStringToByte(handle.Value())
 
 	woff := inst.widgetIdOffset
+	hasWid := inst.hasWidgetId
 	inst.putInPool()
 	return &RetainedFffiHolder{
 		interned:          handle,
 		content:           content,
 		retainedElementId: id,
 		widgetIdOffset:    woff,
+		hasWidgetId:       hasWid,
 	}
 }
 func (inst *RetainedFffiBuilder) putInPool() {
@@ -255,6 +259,14 @@ func (inst *RetainedFffiBuilder) SpliceDeferredBlockMap(scope *runtime.DeferredB
 	if err != nil {
 		log.Panic().Err(err).Msg("unable to splice deferred block map")
 	}
+}
+
+// SpliceRaw appends bytes already in wire form — a deferred-block map a
+// DeferredBlockScope.WriteToFixedKey produced earlier — where the generated
+// code would splice this frame's scope. The caller vouches that nothing the
+// bytes describe has changed since they were written.
+func (inst *RetainedFffiBuilder) SpliceRaw(raw []byte) {
+	inst.builder.buf.Write(raw)
 }
 
 func (inst *RetainedFffiBuilder) SendIntermediate() {

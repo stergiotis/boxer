@@ -86,6 +86,9 @@ func (inst *StaticSchemaProvider) GetColumns(db string, tableName string) (colum
 // endpoint change — in play, the UI thread — while a query may be probing on
 // another, and lwsql.Resolver already calls GetColumns outside its own lock so
 // two probes can land here at once.
+//
+// maxSize bounds the number of entries (<= 0 leaves it unbounded); a miss
+// that would exceed it evicts the entry fetched longest ago.
 type CachingSchemaProvider struct {
 	delegate SchemaProviderI
 	mu       sync.Mutex
@@ -153,6 +156,9 @@ func (inst *CachingSchemaProvider) GetColumns(dbName, tableName string) (columns
 			cs2 = append(cs2, v)
 		}
 		inst.mu.Lock()
+		if _, present := inst.cache[key]; !present && inst.maxSize > 0 && len(inst.cache) >= inst.maxSize {
+			inst.evictOldestLocked()
+		}
 		inst.cache[key] = struct {
 			timestamp time.Time
 			columns   []string
@@ -169,6 +175,23 @@ func (inst *CachingSchemaProvider) GetColumns(dbName, tableName string) (columns
 	return
 }
 
+// evictOldestLocked drops the entry fetched longest ago, keeping the cache
+// within maxSize. A linear scan: maxSize bounds a schema cache of tables, and
+// eviction runs only on a miss that would outgrow it. Caller holds mu.
+func (inst *CachingSchemaProvider) evictOldestLocked() {
+	var oldestKey string
+	var oldest time.Time
+	first := true
+	for k, v := range inst.cache {
+		if first || v.timestamp.Before(oldest) {
+			oldestKey, oldest, first = k, v.timestamp, false
+		}
+	}
+	if !first {
+		delete(inst.cache, oldestKey)
+	}
+}
+
 var _ SchemaProviderI = (*CachingSchemaProvider)(nil)
 var _ SchemaProviderI = (*StaticSchemaProvider)(nil)
 
@@ -181,7 +204,9 @@ var _ SchemaProviderI = (*StaticSchemaProvider)(nil)
 //   - `COLUMNS('regex')` — expands to all columns (from all tables) matching the regex
 //
 // If a table is not found in the schema, the expression is left unexpanded.
-// CTE references and subquery sources are skipped (no schema for them).
+// CTE, subquery and table-function sources have no schema: `*` and
+// `COLUMNS()` are left unexpanded when any such source is in scope, and
+// `src.*` naming one is left unexpanded.
 // ExpandColumns returns a Pass that expands `*`, `table.*`, and
 // `COLUMNS('regex')`. Optional defaultDatabase is used for resolving
 // unqualified table names in schema lookups.
@@ -255,14 +280,17 @@ func expandColumnsInScope(rw nanopass.RewriterI, scope *nanopass.SelectScope, sc
 			return false
 
 		case *grammar1.ColumnExprDynamicContext:
+			// Only a COLUMNS() that is a whole projection item expands to a
+			// column list. As an operand (COLUMNS('a') + 1) or under an alias
+			// ClickHouse applies the surrounding expression per column, which
+			// a plain list cannot express, so it is left alone.
+			parent, ok := c.GetParent().(*grammar1.ColumnsExprColumnContext)
+			if !ok {
+				return false
+			}
 			expanded := expandDynamic(c, scope, schema)
 			if expanded != "" {
-				// Replace the parent ColumnsExprColumn, not just the dynamic expr,
-				// to get clean output
-				parent := c.GetParent()
-				if prc, ok := parent.(antlr.ParserRuleContext); ok {
-					nanopass.ReplaceNode(rw, prc, expanded)
-				}
+				nanopass.ReplaceNode(rw, parent, expanded)
 			}
 			return false
 		}
@@ -321,6 +349,40 @@ func extractStringLiteralFromDynamic(ctx *grammar1.DynamicColumnSelectionContext
 	}
 	return
 }
+
+// spellQualifier renders a decoded table name or alias as identifier text:
+// bare when the lexer reads it back as exactly one IDENTIFIER token with the
+// same text, double-quoted otherwise. A keyword is quoted too, since at the
+// head of a projection item (`distinct.x`) ClickHouse reads it as the keyword.
+// Splicing the decoded name raw turned `"my table"` into `my table`.
+func spellQualifier(name string) string {
+	if name != "" && name[0] != '"' && name[0] != '`' {
+		lexer := grammar1.NewClickHouseLexer(antlr.NewInputStream(name))
+		lexer.RemoveErrorListeners()
+		tok := lexer.NextToken()
+		if tok.GetTokenType() == grammar1.ClickHouseLexerIDENTIFIER &&
+			tok.GetText() == name &&
+			lexer.NextToken().GetTokenType() == antlr.TokenEOF {
+			return name
+		}
+	}
+	return nanopass.QuoteIdentifier(name)
+}
+
+// bareColumnRe matches the column names safe to emit bare after `qualifier.`:
+// there ClickHouse (and grammar1) read any bare word as an identifier,
+// keywords such as `select` or `id` included.
+var bareColumnRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// spellColumn renders a schema column name for the position after a
+// qualifier's dot, double-quoting anything that is not a bare word.
+func spellColumn(name string) string {
+	if bareColumnRe.MatchString(name) {
+		return name
+	}
+	return nanopass.QuoteIdentifier(name)
+}
+
 func expandForTable(nameOrAlias string, scope *nanopass.SelectScope, schema SchemaProviderI) (expanded string) {
 	source, found := scope.ResolveAlias(nameOrAlias)
 	if !found || source.IsCTE || source.IsSubquery || source.IsFunction {
@@ -333,10 +395,11 @@ func expandForTable(nameOrAlias string, scope *nanopass.SelectScope, schema Sche
 		return ""
 	}
 
+	// nameOrAlias is the qualifier's text as written, so it re-lexes as is.
 	qualifier := nameOrAlias
 	parts := make([]string, 0, nColumns)
 	for col := range columns {
-		parts = append(parts, qualifier+"."+col)
+		parts = append(parts, qualifier+"."+spellColumn(col))
 	}
 	expanded = strings.Join(parts, ", ")
 	return
@@ -346,8 +409,11 @@ func expandForAllTables(scope *nanopass.SelectScope, schema SchemaProviderI) (ex
 	var allParts []string
 
 	for _, ts := range scope.Tables {
+		// A source without a schema (CTE, subquery, table function) still
+		// contributes columns to `*`; skipping it would silently drop them,
+		// so decline exactly as for a table the schema does not know.
 		if ts.IsCTE || ts.IsSubquery || ts.IsFunction {
-			continue
+			return ""
 		}
 
 		db := ts.ResolvedDatabase(scope)
@@ -360,9 +426,10 @@ func expandForAllTables(scope *nanopass.SelectScope, schema SchemaProviderI) (ex
 		if ts.Alias != "" {
 			qualifier = ts.Alias
 		}
+		qualifier = spellQualifier(qualifier)
 
 		for col := range columns {
-			allParts = append(allParts, qualifier+"."+col)
+			allParts = append(allParts, qualifier+"."+spellColumn(col))
 		}
 	}
 
@@ -398,24 +465,27 @@ func expandDynamic(ctx *grammar1.ColumnExprDynamicContext, scope *nanopass.Selec
 
 	var matched []string
 	for _, ts := range scope.Tables {
+		// Any source whose columns are unknown may hold a match; expanding
+		// from the known ones alone would silently drop it. Decline instead.
 		if ts.IsCTE || ts.IsSubquery || ts.IsFunction {
-			continue
+			return ""
 		}
 
 		db := ts.ResolvedDatabase(scope)
 		columns, _, found := schema.GetColumns(db, ts.Table)
 		if !found {
-			continue
+			return ""
 		}
 
 		qualifier := ts.Table
 		if ts.Alias != "" {
 			qualifier = ts.Alias
 		}
+		qualifier = spellQualifier(qualifier)
 
 		for col := range columns {
 			if re.MatchString(col) {
-				matched = append(matched, qualifier+"."+col)
+				matched = append(matched, qualifier+"."+spellColumn(col))
 			}
 		}
 	}

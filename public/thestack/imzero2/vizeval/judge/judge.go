@@ -1,5 +1,5 @@
 // Package judge asks a vision model the scenario's questions about a rendering
-// and checks its answers against the ones computed from the data (ADR-0257,
+// and checks its answers against the ones computed from the data (ADR-0266,
 // proposed, §SD6 second layer). Accuracy over a scenario's questions measures
 // whether the rendering lets a reader get at what the scenario is about: an
 // encoding the model cannot answer from has failed, however it looks.

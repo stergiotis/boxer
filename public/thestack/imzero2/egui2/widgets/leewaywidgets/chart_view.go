@@ -33,7 +33,7 @@ const (
 )
 
 // ChartOptions are the encoding choices a ChartModel is drawn under — the
-// settings the Experiments chart sink declares (ADR-0257, proposed, §SD2).
+// settings the Experiments chart sink declares (ADR-0266, proposed, §SD2).
 type ChartOptions struct {
 	Mark ChartMarkE
 	// Transpose puts series on the category axis and categories in series:
@@ -52,15 +52,20 @@ const chartMaxTickLabels = 40
 // ChartView draws ChartModels. It keeps the heatmap's colormap and colour
 // scale across frames: the scale binds to the config at construction.
 type ChartView struct {
-	ids  *c.WidgetIdStack
-	cm   *colormap.Config
-	cbar *colorscale.ColorScale
-	pal  []uint32
+	ids      *c.WidgetIdStack
+	scopeKey string
+	cm       *colormap.Config
+	cbar     *colorscale.ColorScale
+	pal      []uint32
 }
 
-// NewChartView returns a view drawing on ids.
-func NewChartView(ids *c.WidgetIdStack) *ChartView {
-	return &ChartView{ids: ids}
+// NewChartView returns a view drawing on ids under its own scope, scopeKey;
+// empty uses "leeway-chart" (ADR-0267 W4).
+func NewChartView(ids *c.WidgetIdStack, scopeKey string) *ChartView {
+	if scopeKey == "" {
+		scopeKey = "leeway-chart"
+	}
+	return &ChartView{ids: ids, scopeKey: scopeKey}
 }
 
 // oriented is a model as drawn: transposed and sorted per the options.
@@ -122,7 +127,14 @@ func orient(m *ChartModel, o ChartOptions) (r oriented) {
 }
 
 // Render draws the model in a w×h box.
+// Render draws the view under its scope; see render.
 func (inst *ChartView) Render(m *ChartModel, o ChartOptions, valueName string, w, h float32) {
+	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
+		inst.render(m, o, valueName, w, h)
+	}
+}
+
+func (inst *ChartView) render(m *ChartModel, o ChartOptions, valueName string, w, h float32) {
 	if m == nil || m.Empty() {
 		c.Label("The batch has no tagged section with a numeric value to chart.").Send()
 		return
@@ -241,7 +253,7 @@ func (inst *ChartView) renderHeatmap(r oriented, o ChartOptions, valueName strin
 		p.Heatmap(valueName, vals, rows, cols, inst.cm, 0, 0, float64(cols), float64(rows))
 	}
 	if inst.cbar == nil {
-		inst.cbar = colorscale.New(inst.ids, "leeway-chart-cbar", inst.cm, colorscale.WithSize(min(w, 640), barH))
+		inst.cbar = colorscale.New(inst.ids, "leeway-chart-cbar", inst.cm, colorscale.Options{Width: min(w, 640), Height: barH})
 	}
 	inst.cbar.Render()
 	// The colour scale draws its tick labels below the box it is given;

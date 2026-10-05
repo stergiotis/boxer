@@ -10,6 +10,8 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog/log"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
 )
 
@@ -40,10 +42,18 @@ type QueryStore struct {
 	schema   *arrow.Schema
 	numRows  int64
 	resultID ResultID // minted by finish; see ResultID
-	err      error
-	elapsed  time.Duration
-	summary  Summary
-	executed time.Time
+	// confined is the label of the result held (ADR-0270 §SD4): whether
+	// the dispatch decision that produced it classified the run as
+	// confined. runConfined is the in-flight run's, moved over by finish.
+	confined    bool
+	runConfined bool
+	// nextAgent is the on-behalf-of context of the next run, taken by
+	// Execute (ADR-0270 §SD2).
+	nextAgent *app.OnBehalfOf
+	err       error
+	elapsed   time.Duration
+	summary   Summary
+	executed  time.Time
 	// loading mirrors isLoading but lives under mu, so Snapshot hands back a
 	// (loading, executed) pair that is always mutually consistent: a reader
 	// can never see loading=false against a pre-finish snapshot (executed not
@@ -180,6 +190,8 @@ func (inst *QueryStore) Execute(sql string, signals map[string]string, sourceBuf
 		return
 	}
 	inst.mu.Lock()
+	agent := inst.nextAgent
+	inst.nextAgent = nil
 	inst.sourceBuffer = sourceBuffer
 	inst.loading = true
 	inst.progress = runstream.Progress{}
@@ -212,6 +224,7 @@ func (inst *QueryStore) Execute(sql string, signals map[string]string, sourceBuf
 		// isLoading gate above means no second run can be in flight, so
 		// no generation counter is needed here.
 		opts := *inst.opts
+		opts.Agent = agent
 		opts.OnProgress = func(p runstream.Progress) {
 			inst.mu.Lock()
 			if inst.loading && !inst.closed {
@@ -223,7 +236,10 @@ func (inst *QueryStore) Execute(sql string, signals map[string]string, sourceBuf
 
 		// One resolution per run (play_dispatch.go). Taken on this goroutine,
 		// not on the render thread, because it runs the client-side rewrites.
-		dec := inst.client.Dispatch(sql, "")
+		dec := inst.client.dispatchFor(agent, sql, "")
+		inst.mu.Lock()
+		inst.runConfined = dec.sensitivity == queryengine.SensitivityConfined
+		inst.mu.Unlock()
 
 		start := time.Now()
 		rdr, rs, summary, err := inst.client.ExecuteArrowStream(ctx, sql, inst.alloc, &opts, sigs, dec)
@@ -318,6 +334,7 @@ func (inst *QueryStore) finish(sql string, sigs map[string]string, start time.Ti
 	inst.executedSQL = sql
 	inst.loading = false
 	inst.resultID = nextResultID()
+	inst.confined = inst.runConfined
 
 	entry := HistoryEntry{
 		SQL:       sql,
@@ -335,4 +352,26 @@ func (inst *QueryStore) finish(sql string, sigs map[string]string, start time.Ti
 	if len(inst.history) > inst.maxHist {
 		inst.history = inst.history[len(inst.history)-inst.maxHist:]
 	}
+}
+
+// Confined reports the label of the result the store holds (ADR-0270
+// §SD4).
+func (inst *QueryStore) Confined() (confined bool) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	return inst.confined
+}
+
+// ResultID names the result the store holds; 0 before any run.
+func (inst *QueryStore) ResultID() (id ResultID) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	return inst.resultID
+}
+
+// SetNextAgent marks the next run as agent-caused (ADR-0270 §SD2).
+func (inst *QueryStore) SetNextAgent(obo *app.OnBehalfOf) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	inst.nextAgent = obo
 }

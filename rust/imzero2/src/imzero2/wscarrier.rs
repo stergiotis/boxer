@@ -774,6 +774,9 @@ impl WsCarrier {
             ffmpeg = %crate::imzero2::codeclane::ffmpeg_bin(),
             "video lane unusable — degrading to the mesh draw-stream lane"
         );
+        // The lane probed clean but cannot run; a later switch back to this
+        // codec probes again instead of reusing the remembered choice.
+        crate::imzero2::codeclane::CodecLane::forget_best(self.lane.codec);
         self.set_video_codec(crate::imzero2::codeclane::VideoCodec::Mesh);
     }
 

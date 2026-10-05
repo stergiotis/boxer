@@ -474,6 +474,14 @@ func extractTableSources(from *grammar1.FromClauseContext, parentScope *SelectSc
 			}
 			return false
 		}
+		// Expressions in the FROM clause (JOIN ... ON, ARRAY JOIN) are not
+		// table sources; a subquery inside one reads its own tables in its
+		// own scope, built by findSubqueryScopes.
+		switch ctx.GetRuleIndex() {
+		case grammar1.ClickHouseParserGrammar1RULE_columnExpr,
+			grammar1.ClickHouseParserGrammar1RULE_columnsExpr:
+			return false
+		}
 		return true
 	})
 

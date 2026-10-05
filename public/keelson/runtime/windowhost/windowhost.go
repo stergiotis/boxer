@@ -4,11 +4,15 @@ import (
 	"slices"
 	"strconv"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opengine"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/kindcheck"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
@@ -103,6 +107,58 @@ type window struct {
 	// handle of a window that has not rendered yet resolves to empty
 	// flags. Render-thread only.
 	focusHandle widgethandle.WidgetHandle
+
+	// place is a one-frame placement computed by an arrangement; placePending
+	// emits it as c.WindowPlace before the window's next c.Window.
+	// Render-thread only.
+	place        Rect
+	placePending bool
+
+	// geom is the window's state as of the last completed frame, copied by
+	// Frame under inst.mu for readers off the render thread (WindowInfos).
+	geom WindowGeom
+
+	// maximized pins the window to the desktop rect left free by the
+	// shell's panels. A title-bar double-click toggles it, read off
+	// focusHandle one frame late; egui keeps the rect to restore to.
+	// Render-thread only.
+	maximized bool
+
+	// ops serves the app's operations catalog for this window (ADR-0269);
+	// nil when the app declares none or the instance does not serve it.
+	// Created on the render goroutine after Mount; read by the operation
+	// service off it, hence the atomic.
+	ops atomic.Pointer[opengine.Engine]
+	// opsTried records that startOps ran. Render-thread only.
+	opsTried bool
+	// loaded is set once the window's body has met a returned Mount — its
+	// own or the shared instance's — and says whether it failed; nil while
+	// the window is opening. Read by the operation service off the render
+	// goroutine, hence the atomic.
+	loaded atomic.Pointer[windowLoad]
+	// opened is when the window was opened; it bounds how long an opening
+	// window asks for frames.
+	opened time.Time
+}
+
+// windowLoad is how a window's open ended.
+type windowLoad struct {
+	failed bool
+	reason string
+}
+
+// loadState reports how far the window has come since it opened.
+func (w *window) loadState() (load opwire.LoadE, reason string) {
+	l := w.loaded.Load()
+	switch {
+	case l == nil:
+		load = opwire.LoadOpening
+	case l.failed:
+		load, reason = opwire.LoadFailed, l.reason
+	default:
+		load = opwire.LoadReady
+	}
+	return
 }
 
 // instMount is the Mount/Unmount lifecycle shared by every window pointing
@@ -171,6 +227,10 @@ type Inst struct {
 	nextKey uint64
 	windows []*window
 
+	// frameTimes times each window's Frame on the render goroutine
+	// (ADR-0261); read through FrameTimes.
+	frameTimes frameTimes
+
 	// pendingRaise queues one window to be raised to the top of egui's
 	// stacking on the next Frame — OpenOrRaise's "focus the existing
 	// window" half. Written under mu (OpenOrRaise may be called off the
@@ -179,6 +239,19 @@ type Inst struct {
 	// whose window closed in between matches nothing and the raise is
 	// dropped, which is the right answer. Zero = nothing pending.
 	pendingRaise WindowKeyT
+
+	// pendingArrange queues one whole-desktop arrangement (Arrange) for the
+	// next Frame. Written under mu, consumed by Frame like pendingRaise.
+	pendingArrange ArrangeE
+	// pendingArrangeKeys limits pendingArrange to these windows; empty is
+	// every window (ArrangeWindows).
+	pendingArrangeKeys []WindowKeyT
+	// pendingPlaces queues one-frame placements by window key (Place).
+	// Written under mu, consumed by Frame.
+	pendingPlaces map[WindowKeyT]Rect
+	// arranging is the arrangement in progress across frames (stepArrange);
+	// nil when none. Render-thread only.
+	arranging *arrangeRun
 
 	// mountState shares Mount/Unmount lifecycle across windows that point at
 	// the same AppI instance (singleton-registered apps). Keyed by the AppI
@@ -203,7 +276,11 @@ type Inst struct {
 	// because the in-loop `c.Window(...)` call already consumed the
 	// original handle this frame.
 	pendingExportKey WindowKeyT
-	fpSaveSvg        *filepicker.Inst
+	// fpSaveSvg is built on the first Frame, when the id stack is at hand;
+	// dialogWidths and dialogTasks hold what the setters were given before.
+	fpSaveSvg    *filepicker.Dialog
+	dialogWidths *colwidth.Resolver
+	dialogTasks  task.TaskApiI
 
 	// activeKey names the shell's active window — the one whose frame
 	// context reads focused (app.WindowFocusI), and therefore the one
@@ -212,6 +289,10 @@ type Inst struct {
 	// WINDOW_TOPMOST reports; zero while no window is open. Mutated
 	// only inside Frame: render-thread only, like searchText below.
 	activeKey WindowKeyT
+
+	// desktop is the desktop's state as of the last completed frame,
+	// copied by Frame under mu (DesktopInfo).
+	desktop DesktopInfo
 
 	// launcher renders every launcher surface: the empty-state pane and the
 	// Apps ▾ menu (ADR-0214 §SD2). The query, the facet filters and the
@@ -223,6 +304,22 @@ type Inst struct {
 	// pane that says so, which is what the screenshot-tour path and the
 	// windowhost's own tests get.
 	launcher launcherI
+
+	// caps holds window captures the dispatcher asked for (ADR-0269
+	// §SD11).
+	caps captures
+	// renderGoroutine is the id of the goroutine running Frame, recorded
+	// each Frame so the dispatcher can refuse requests made on it.
+	renderGoroutine atomic.Uint64
+
+	// opsListener hears every change a window's engine logs (ADR-0269
+	// §SD8); nil hears nothing. Set before the first Frame.
+	opsListener func(key uint64, e opengine.LogEntry)
+
+	// agentChrome draws the host chrome of the app operations contract
+	// (ADR-0269 §SD5): a badge row in each window a task works in, and the
+	// host's dialogs. nil draws nothing. Set before the first Frame.
+	agentChrome AgentChromeI
 }
 
 // NewInst constructs a WindowHost backed by registry. logger is used
@@ -240,12 +337,25 @@ func NewInst(registry *app.Registry, logger zerolog.Logger) (inst *Inst) {
 		logger:     logger,
 		density:    styletokens.ActiveDensity(),
 		mountState: make(map[app.AppI]*instMount),
-		fpSaveSvg: filepicker.New("windowhost-save-svg", filepicker.ModeSave,
-			filepicker.WithExtensionFilter(".svg"),
-			filepicker.WithDefaultFilename("window.svg"),
-			filepicker.WithStartAtOsHome()),
 	}
 	return
+}
+
+// saveDialog returns the SVG-save dialog, building it on first use under the
+// frame's id stack with whatever SetDialogColumnWidths / SetDialogTasks
+// supplied before.
+func (inst *Inst) saveDialog(ids *c.WidgetIdStack) *filepicker.Dialog {
+	if inst.fpSaveSvg == nil {
+		inst.fpSaveSvg = filepicker.New(ids, "windowhost-save-svg", filepicker.Options{
+			Mode:            filepicker.ModeSave,
+			Extensions:      []string{".svg"},
+			DefaultFilename: "window.svg",
+			StartAtOsHome:   true,
+			ColumnWidths:    inst.dialogWidths,
+			Tasks:           inst.dialogTasks,
+		})
+	}
+	return inst.fpSaveSvg
 }
 
 // SetBus attaches a bus provider to the window host. Once set, each Open
@@ -298,7 +408,10 @@ func (inst *Inst) SetState(state statestore.StoreI) {
 func (inst *Inst) SetDialogColumnWidths(res *colwidth.Resolver) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	inst.fpSaveSvg.SetColumnWidths(res)
+	inst.dialogWidths = res
+	if inst.fpSaveSvg != nil {
+		inst.fpSaveSvg.Opts.ColumnWidths = res
+	}
 }
 
 // SetDialogTasks publishes the filter searches of the dialogs the window host
@@ -308,7 +421,10 @@ func (inst *Inst) SetDialogColumnWidths(res *colwidth.Resolver) {
 func (inst *Inst) SetDialogTasks(tasks task.TaskApiI) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	inst.fpSaveSvg.SetTasks(tasks)
+	inst.dialogTasks = tasks
+	if inst.fpSaveSvg != nil {
+		inst.fpSaveSvg.Opts.Tasks = tasks
+	}
 }
 
 // Open allocates a new window for the given AppId. Returns the fresh
@@ -386,6 +502,13 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 	m, ok := inst.registry.LookupManifest(appId)
 	if !ok {
 		err = eb.Build().Str("id", string(appId)).Errorf("windowhost: app not registered")
+		return
+	}
+	// Every open passes here — launcher, launch request, agent, seed — so
+	// this is where the launch limit holds (ADR-0272 §SD3).
+	if !inst.registry.Launchable(appId) {
+		err = eb.Build().Str("id", string(appId)).
+			Errorf("windowhost: app is not launchable in this process (KEELSON_LAUNCHABLE_APPS_WHERE)")
 		return
 	}
 	if kind == "" && len(cfg) > 0 {
@@ -551,6 +674,7 @@ func (inst *Inst) OpenWithConfig(appId app.AppIdT, kind string, cfg []byte) (key
 		mount:       ms,
 		openFlag:    true,
 		stop:        stop,
+		opened:      time.Now(),
 	})
 	runId := inst.runId
 	facts := inst.facts
@@ -718,6 +842,7 @@ func (w *window) unload(logger zerolog.Logger) {
 // the last release, otherwise its own (unobserved) stop channel and client
 // close now.
 func (inst *Inst) reapWindow(w *window, reason string, unmountMsg string) {
+	inst.frameTimes.forget(w.key)
 	uc, shared, carried := inst.releaseMount(w)
 	if shared {
 		inst.warnWorkingsetSharedInstance(w)
@@ -844,6 +969,9 @@ type WindowInfo struct {
 	// neither be handed a config nor have its workingset saved, because
 	// the state is not this window's alone.
 	SharesInstance bool
+	// Geom is the window's geometry and shell state as of the last
+	// completed frame (ADR-0276 §SD1).
+	Geom WindowGeom
 }
 
 // WindowInfos returns a metadata snapshot of the currently open windows
@@ -880,6 +1008,7 @@ func (inst *Inst) WindowInfos() (out []WindowInfo) {
 			ConfigKind:     kind,
 			ConfigBytes:    len(cfg),
 			SharesInstance: w.mount != nil && w.mount.refs > 1,
+			Geom:           w.geom,
 		})
 	}
 	return
@@ -975,6 +1104,8 @@ func emitStopped(facts factsstore.FactsStoreI, logger zerolog.Logger, runId stri
 // "open" button per app and runs inside a c.PanelCentral so the user
 // can at least see something on the desktop after launch.
 func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
+	inst.frameTimes.beginLoop(time.Now())
+	inst.renderGoroutine.Store(opwire.GoroutineId())
 	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
 	inst.density = styletokens.ActiveDensity()
 	// Snapshot the slice under lock; the iteration runs without the
@@ -985,8 +1116,15 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 	copy(snapshot, inst.windows)
 	raiseKey := inst.pendingRaise
 	inst.pendingRaise = 0
+	arrangeCmd, arrangeKeys := inst.pendingArrange, inst.pendingArrangeKeys
+	inst.pendingArrange, inst.pendingArrangeKeys = ArrangeNone, nil
+	places := inst.pendingPlaces
+	inst.pendingPlaces = nil
 	inst.mu.Unlock()
 
+	sm := c.CurrentApplicationState.StateManager
+	inst.pixelFrameBegin(sm)
+	defer inst.pixelFrameEnd()
 	if len(snapshot) == 0 {
 		// renderEmptyState needs a ui scope — egui's interpret_outer
 		// starts each frame with `u = &mut None`; after the carousel's
@@ -996,6 +1134,9 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 		for range c.PanelCentral().KeepIter() {
 			inst.renderEmptyState(ids)
 		}
+		inst.activeKey = 0
+		inst.arranging = nil
+		inst.snapshotGeometry(nil)
 		inst.reapClosed()
 		return
 	}
@@ -1003,7 +1144,6 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 	// c.Window is a top-level egui::Window; it does not need a parent
 	// ui scope (it uses egui::Context directly), so no PanelCentral
 	// wrap here.
-	sm := c.CurrentApplicationState.StateManager
 	// Decide the shell's active window from last frame's stacking
 	// reports, then stamp every window's frame context below so each
 	// app's Frame can gate process-global input (app.WindowFocusI) on
@@ -1019,10 +1159,22 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 		}
 		inst.activeKey = pickActiveWindow(inst.activeKey, facts)
 	}
+	inst.stepArrange(arrangeCmd, arrangeKeys, snapshot)
+	inst.applyPlaces(places, snapshot)
+	inst.snapshotGeometry(snapshot)
 	for _, w := range snapshot {
+		// A pixel capture replays a window's emission, from its placement to
+		// its body's end (ADR-0281 §SD4).
+		spanBegin := inst.pixelRecordingPosition()
 		title := w.manifest.WindowTitle()
 		if title == "" {
 			title = string(w.manifest.Id)
+		}
+		if w.placePending {
+			// Emitted before the window it places, with last frame's
+			// handle: the id is stable for the window's lifetime.
+			w.placePending = false
+			c.WindowPlace(w.focusHandle, w.place.MinX, w.place.MinY, w.place.W(), w.place.H())
 		}
 		winId := ids.PrepareStr("window-" + strconv.FormatUint(uint64(w.key), 10))
 		// Register the r10 databinding for the title-bar X. Re-registers
@@ -1035,11 +1187,22 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 		openBindingId := openBindingIdFor(w.key)
 		sm.AddR10Databinding(openBindingId, &w.openFlag)
 		ww, hh := windowDefaultSize(w.manifest.SurfaceHints)
+		if sm.GetResponse(w.focusHandle).HasTitleDoubleClicked() {
+			w.maximized = !w.maximized
+		}
+		// Not collapsible: egui collapses on a title-bar double-click,
+		// which here maximizes instead. Dragging by the title bar only
+		// gives egui's title widget (the double-click source) a place on a
+		// non-collapsible window, and keeps drags in app content from
+		// moving the window.
 		wf := c.Window(winId, c.WidgetText().Text(title).Keep()).
 			Resizable(true).
+			Collapsible(false).
 			TitleBar(true).
+			DragFromTitleBar(true).
 			DefaultOpen(true).
 			DefaultSize(ww, hh).
+			Maximized(w.maximized).
 			OpenBound(openBindingId)
 		// The handle feeds next frame's active-window decision; the
 		// focus stamp is this frame's answer, set before the app's
@@ -1061,16 +1224,22 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 			// label) so the visual cost is bounded. Per-window keying
 			// avoids id collisions across windows on the shared ids
 			// stack.
-			saveBtnId := ids.PrepareStr("windowhost-save-svg-" +
-				strconv.FormatUint(uint64(w.key), 10))
-			if c.Button(saveBtnId,
-				c.Atoms().Text(icons.IconSaveAs+" SVG").Keep()).
-				SendResp().HasPrimaryClicked() {
-				inst.pendingExportKey = w.key
-				inst.fpSaveSvg.Show()
+			for range c.HorizontalTop().KeepIter() {
+				saveBtnId := ids.PrepareStr("windowhost-save-svg-" +
+					strconv.FormatUint(uint64(w.key), 10))
+				if c.Button(saveBtnId,
+					c.Atoms().Text(icons.IconSaveAs+" SVG").Keep()).
+					SendResp().HasPrimaryClicked() {
+					inst.pendingExportKey = w.key
+					inst.saveDialog(ids).Show()
+				}
+				if inst.agentChrome != nil {
+					inst.agentChrome.RenderWindowChrome(uint64(w.key), ids)
+				}
 			}
-			renderWindowBody(w, inst.logger)
+			renderWindowBody(w, inst.closeRequested(w), inst.logger, &inst.frameTimes, inst.opsListener)
 		}
+		inst.pixelWindowSpan(w.key, spanBegin, inst.pixelRecordingPosition())
 	}
 	// Render the SVG-save picker once per Frame. It draws its own
 	// egui::Window so it sits at top level; Render returns
@@ -1080,7 +1249,14 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 	// the ExportSvgWindow opcode. The SvgExportPlugin drains it in
 	// on_end_pass this same frame, so the captured shapes match what
 	// the user just saw.
-	switch act, paths := inst.fpSaveSvg.Render(ids); act {
+	if opsBusy(snapshot) {
+		c.RequestRepaintAfter(opsRepaintIntervalSecs)
+	}
+	if inst.agentChrome != nil {
+		inst.agentChrome.RenderDialogs(ids)
+	}
+	saveEv := inst.saveDialog(ids).Render()
+	switch act, paths := saveEv.Action, saveEv.Paths; act {
 	case filepicker.ActionSave:
 		if inst.pendingExportKey != 0 && len(paths) > 0 {
 			key := inst.pendingExportKey
@@ -1207,6 +1383,13 @@ func (inst *Inst) OpenOrRaiseApp(appId app.AppIdT) (err error) {
 	return
 }
 
+// OpenNewApp opens a further window for appId, discarding the window key.
+// It is the launcher host interface's explicit second-instance verb.
+func (inst *Inst) OpenNewApp(appId app.AppIdT) (err error) {
+	_, err = inst.Open(appId)
+	return
+}
+
 // OpenAppIds reports which apps currently hold a window, for the launcher's
 // "open" badge. Duplicates are possible and meaningful to nobody here — two
 // windows of one app are still one "open" — so callers build a set.
@@ -1274,6 +1457,16 @@ func windowhostInstanceSalt(key WindowKeyT) uint64 {
 	return (uint64(key) * 0x9e3779b97f4a7c15) ^ saltTag
 }
 
+// closeRequested reads w.closeReq under inst.mu: Close and CloseAll
+// write it from off the render thread, so the render loop must not
+// read it bare.
+func (inst *Inst) closeRequested(w *window) (closeReq bool) {
+	inst.mu.Lock()
+	closeReq = w.closeReq
+	inst.mu.Unlock()
+	return
+}
+
 // renderWindowBody draws one window's body: the app's Frame call,
 // gated by lazy Mount + sticky mountErr handling. The close
 // affordance is the egui::Window title-bar X (wired via openBound +
@@ -1286,14 +1479,14 @@ func windowhostInstanceSalt(key WindowKeyT) uint64 {
 // on their outermost panel cannot collide on the wire id — each derives
 // its id under a different salt. The IdScope wrapper pops the salt on
 // return so the stack is empty between frames.
-func renderWindowBody(w *window, logger zerolog.Logger) {
+func renderWindowBody(w *window, closeReq bool, logger zerolog.Logger, ft *frameTimes, opsListener func(key uint64, e opengine.LogEntry)) {
 	if windowhostDebugRender {
 		logger.Info().
 			Uint64("windowKey", uint64(w.key)).
 			Str("id", string(w.manifest.Id)).
 			Msg("windowhost: rendering window body")
 	}
-	if w.closeReq {
+	if closeReq {
 		// closeReq was set this frame (external Close or shutdown
 		// reap). Skip Frame to avoid drawing content the next reap is
 		// about to tear down anyway.
@@ -1302,7 +1495,9 @@ func renderWindowBody(w *window, logger zerolog.Logger) {
 	// Mount runs once per AppI instance (shared via w.mount), capturing the
 	// first window's mountCtx so the eventual Unmount uses the same context.
 	if !w.mount.mounted && w.mount.mountErr == nil {
+		mountStart := time.Now()
 		mErr := w.appInst.Mount(w.mountCtx)
+		ft.recordMount(w, time.Since(mountStart))
 		if mErr != nil {
 			w.mount.mountErr = mErr
 		} else {
@@ -1311,15 +1506,32 @@ func renderWindowBody(w *window, logger zerolog.Logger) {
 		}
 	}
 	if w.mount.mountErr != nil {
+		if w.loaded.Load() == nil {
+			w.loaded.Store(&windowLoad{failed: true, reason: w.mount.mountErr.Error()})
+		}
 		c.Label("windowhost: mount failed: " + w.mount.mountErr.Error()).Send()
 		return
 	}
+	// ADR-0269 §SD4: the previous frame's write-back has landed, so the
+	// person's changes are in Go state; queued commands apply now, and the
+	// app's Frame draws their effects.
+	w.startOps(logger, opsListener)
+	if w.loaded.Load() == nil {
+		// Ready only once the engine exists, so a reader seeing ready
+		// also sees whether the window serves a catalog.
+		w.loaded.Store(&windowLoad{})
+	}
+	w.beginOps()
 	for range c.IdScope(w.appIds.PrepareHighEntropy(windowhostInstanceSalt(w.key))) {
+		msgs := frameMessages()
+		start := time.Now()
 		fErr := w.appInst.Frame(w.frameCtxApp)
+		ft.recordFrame(w, time.Since(start), frameMessages()-msgs)
 		if fErr != nil {
 			c.Label("windowhost: frame error: " + fErr.Error()).Send()
 		}
 	}
+	w.endOps()
 }
 
 // RenderAppsMenu draws the shell's top-bar "Apps ▾" menu.

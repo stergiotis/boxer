@@ -225,18 +225,23 @@ for name, val := range tup.IterateAllWithNames() { ... }
 
 ## Escape Sequences
 
-`UnescapeString` / `EscapeString` handle:
-- `\\` ↔ `\`, `\'` ↔ `'`, `\n` ↔ newline, `\t` ↔ tab, `\r` ↔ CR
-- `\0` ↔ NUL, `\b` ↔ backspace, `\f` ↔ form feed, `\a` ↔ bell, `\v` ↔ vtab
-- `\xHH` ↔ byte, `\uHHHH` ↔ BMP, `\UHHHHHHHH` ↔ full Unicode
-- `''` → `'` (unmarshal only, doubled-quote form)
+`UnescapeString` decodes escapes the way the ClickHouse server does; the
+table is `nanopass.UnescapeQuoted`'s doc comment. Two consequences matter
+for round-trips:
+- An escape the server does not name keeps its backslash, so `'^c\d+$'`
+  stays the regex `^c\d+$` and `'a\_b'` stays the LIKE pattern `a\_b`.
+- There is no `\u` / `\U` escape: `'\u0041'` is six bytes of text.
+
+`EscapeString` writes `\\`, `\'`, `\n`, `\t`, `\r` and `\0`, so
+`UnescapeString` followed by `EscapeString` preserves the value the server
+sees. `''` → `'` is accepted on unmarshal only.
 
 ## Known Limitations
 
 1. **No Map/Date/DateTime/Enum/Decimal/FixedString/LowCardinality** — Only the 12 primitive types are supported in type mappings.
 2. **Always `u64`/`i64`** — Does not infer smallest integer type like ClickHouse does.
 3. **`MarshalTypedLiteralToSQLEx` always uses `CAST(expr, 'Type')`** — Never `expr::Type`.
-4. **`CastTypeCanonical` not stored for non-homogeneous composite types** — e.g. `Tuple(UInt64, String)` cannot be represented as a single canonical string.
+4. **A cast target the mapper cannot represent is an unmarshal error** — e.g. `CAST((1, 'hello'), 'Tuple(UInt64, String)')`, `CAST('2024-01-01', 'Date')` or `x::Decimal(10,2)`. Dropping the cast would re-marshal the inner literal with a different type. A nil mapper opts out of cast preservation instead.
 5. **`ToAny()` drops `CastTypeCanonical`** — The `any` world has no cast tracking.
 
 ## Integration with Nanopass

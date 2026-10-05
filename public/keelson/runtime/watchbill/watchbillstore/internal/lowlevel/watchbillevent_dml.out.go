@@ -82,7 +82,7 @@ func CreateSchemaWatchbilleventTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1493
 
 type InEntityWatchbilleventTable struct {
 	errs               []error
@@ -128,8 +128,11 @@ func NewInEntityWatchbilleventTable(allocator memory.Allocator, estimatedNumberO
 
 // SetActiveSections marks which section indices BeginEntity should
 // initialise (skipping beginSection for the rest). Pass nil to clear.
-// The hint is a performance optimisation; sending BeginAttribute to
-// an unmarked section produces empty-list bytes at TransferRecords.
+// The hint is a performance optimisation for shim builders, paired
+// with the builder's SetActiveFields over the marked sections'
+// columns; BeginAttribute on an unmarked section is an invalid state
+// transition. On the arrow RecordBuilder the hint has no effect:
+// every section starts, so its list columns stay row-aligned.
 func (inst *InEntityWatchbilleventTable) setActiveSections(idxs []int) {
 	if idxs == nil {
 		inst.activeSections = nil
@@ -159,7 +162,7 @@ var InEntityWatchbilleventTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
 
 func (inst *InEntityWatchbilleventTable) setId(id0 string) *InEntityWatchbilleventTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -174,7 +177,7 @@ func (inst *InEntityWatchbilleventTable) setId(id0 string) *InEntityWatchbilleve
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
 
 func (inst *InEntityWatchbilleventTable) setTimestamp(ts1 time.Time) *InEntityWatchbilleventTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -231,24 +234,6 @@ func (inst *InEntityWatchbilleventTable) initSections(builder *array.RecordBuild
 	inst.section04Inst = NewInEntityWatchbilleventTableSectionEventWorkerRun(builder, inst)
 }
 func (inst *InEntityWatchbilleventTable) beginSections() {
-	if mask := inst.activeSections; mask != nil {
-		if mask[0] {
-			inst.section00Inst.beginSection()
-		}
-		if mask[1] {
-			inst.section01Inst.beginSection()
-		}
-		if mask[2] {
-			inst.section02Inst.beginSection()
-		}
-		if mask[3] {
-			inst.section03Inst.beginSection()
-		}
-		if mask[4] {
-			inst.section04Inst.beginSection()
-		}
-		return
-	}
 	inst.section00Inst.beginSection()
 	inst.section01Inst.beginSection()
 	inst.section02Inst.beginSection()
@@ -741,6 +726,7 @@ func (inst *InEntityWatchbilleventTableSectionEventAttemptInAttr) EndSection() *
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1066,6 +1052,7 @@ func (inst *InEntityWatchbilleventTableSectionEventErrorInAttr) EndSection() *In
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1391,6 +1378,7 @@ func (inst *InEntityWatchbilleventTableSectionEventNoteInAttr) EndSection() *InE
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -1716,6 +1704,7 @@ func (inst *InEntityWatchbilleventTableSectionEventStateInAttr) EndSection() *In
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -2041,6 +2030,7 @@ func (inst *InEntityWatchbilleventTableSectionEventWorkerRunInAttr) EndSection()
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }

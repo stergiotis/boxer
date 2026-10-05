@@ -24,6 +24,7 @@ import (
 	boxerenv "github.com/stergiotis/boxer/public/config/env"
 
 	"github.com/rs/zerolog"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -43,7 +44,8 @@ type Config struct {
 	// outside FsRoot.
 	StartDir string
 	// TitleOverride replaces the per-op default title ("Open file" /
-	// "Save as" / "Pick folder"). Empty leaves the default.
+	// "Save as" / "Pick folder"). Empty leaves the default. Either way the
+	// requesting app's id is appended (see attributedTitle).
 	TitleOverride string
 	// ColumnWidths persists the dialogs' column widths (ADR-0151). Build
 	// it with filepicker.NewColumnWidths; the bridge hands it to every
@@ -56,14 +58,14 @@ type Config struct {
 	Tasks task.TaskApiI
 }
 
-// Bridge couples the fsbroker.Service queue with a filepicker.Inst.
+// Bridge couples the fsbroker.Service queue with a filepicker.Dialog.
 type Bridge struct {
 	svc  *fsbroker.Service
 	log  zerolog.Logger
 	cfg  Config
 	fsys fs.FS
 
-	picker *filepicker.Inst
+	picker *filepicker.Dialog
 	curReq *fsbroker.PendingRequest
 }
 
@@ -96,12 +98,13 @@ func (inst *Bridge) Render(ids *c.WidgetIdStack) {
 			return
 		}
 		next := pending[0]
-		inst.startPicker(&next)
+		inst.startPicker(ids, &next)
 	}
 	if inst.picker == nil {
 		return
 	}
-	action, picked := inst.picker.Render(ids)
+	ev := inst.picker.Render()
+	action, picked := ev.Action, ev.Paths
 	switch action {
 	case filepicker.ActionOpen, filepicker.ActionSave, filepicker.ActionPickFolder:
 		if len(picked) == 0 {
@@ -136,21 +139,25 @@ func (inst *Bridge) CurrentRequestId() (id string) {
 	return
 }
 
-func (inst *Bridge) startPicker(req *fsbroker.PendingRequest) {
+// startPicker raises the dialog for req under the frame's id stack. One
+// dialog is in flight at a time, so the scope is a constant: the window
+// keeps its place from one request to the next.
+func (inst *Bridge) startPicker(ids *c.WidgetIdStack, req *fsbroker.PendingRequest) {
 	mode, title := pickerOptionsFor(req.Op, inst.cfg.TitleOverride)
-	idStr := "fs-picker-" + req.Id
-	opts := []filepicker.Option{
-		filepicker.WithFsBackend(inst.fsys),
-		filepicker.WithStartDir(inst.cfg.StartDir),
-		filepicker.WithTitle(title),
-		filepicker.WithColumnWidths(inst.cfg.ColumnWidths),
-		filepicker.WithTasks(inst.cfg.Tasks),
-	}
-	// Pre-fill the "Save as" filename when the requesting app suggested one.
-	if hint := saveFilenameHint(mode, req.SuggestedName); hint != "" {
-		opts = append(opts, filepicker.WithDefaultFilename(hint))
-	}
-	inst.picker = filepicker.New(idStr, mode, opts...)
+	title = attributedTitle(title, req.AppId)
+	inst.picker = filepicker.New(ids, "fs-picker", filepicker.Options{
+		Mode:     mode,
+		FS:       inst.fsys,
+		StartDir: inst.cfg.StartDir,
+		Title:    title,
+		// The pick grants the requesting app a handle: a modal, so no
+		// window can cover the dialog that asks for it.
+		Modal:        true,
+		ColumnWidths: inst.cfg.ColumnWidths,
+		Tasks:        inst.cfg.Tasks,
+		// Pre-fill the "Save as" filename when the requesting app suggested one.
+		DefaultFilename: saveFilenameHint(mode, req.SuggestedName),
+	})
 	inst.picker.Show()
 	inst.curReq = req
 }
@@ -201,6 +208,19 @@ func pickerOptionsFor(op string, titleOverride string) (mode filepicker.ModeE, t
 		title = titleOverride
 	}
 	return
+}
+
+// attributedTitle names the requesting app in the picker's title. The picker
+// is the grant prompt (ADR-0026 §SD7): a file the user picks goes to whoever
+// asked, and a request can come from a window that is not the one in front,
+// so the prompt has to say whose it is. The app id is the bus's record of the
+// sender, not a payload claim. Applied after pickerOptionsFor, so a host's
+// TitleOverride replaces the wording and never the attribution.
+func attributedTitle(title string, appId app.AppIdT) (out string) {
+	if appId == "" {
+		return title
+	}
+	return title + " — for " + string(appId)
 }
 
 func (inst *Bridge) clearCurrent() {

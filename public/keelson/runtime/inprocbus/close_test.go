@@ -175,3 +175,24 @@ func TestClientClose_AnnouncesInstanceClosed(t *testing.T) {
 	require.NoError(t, service.Close())
 	assert.Len(t, got, 1, "a client with no instance key owns nothing and announces nothing")
 }
+
+// ClientByInstance names one window: an exact key match, never another
+// window of the same app; key 0 falls back to the newest client.
+func TestClientByInstance(t *testing.T) {
+	inst := NewInst(zerolog.Nop())
+	a := inst.NewClient("app.x", nil)
+	a.SetInstanceKey(1)
+	b := inst.NewClient("app.x", nil)
+	b.SetInstanceKey(2)
+
+	c, ok := inst.ClientByInstance("app.x", 1)
+	require.True(t, ok)
+	require.Same(t, a, c)
+	c, ok = inst.ClientByInstance("app.x", 0)
+	require.True(t, ok)
+	require.Same(t, b, c, "key 0 falls back to the newest client")
+
+	require.NoError(t, a.Close())
+	_, ok = inst.ClientByInstance("app.x", 1)
+	require.False(t, ok, "a closed window's key does not fall through to another window")
+}

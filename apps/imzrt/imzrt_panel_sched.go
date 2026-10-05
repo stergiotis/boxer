@@ -137,7 +137,7 @@ func (inst *App) renderSchedSpectrogram(snap *PublishedSnapshot) {
 		}
 		st.cfg.BadColor = bg
 		st.cfg.UnderflowColor = bg
-		st.hs = heatmapscroll.New(inst.ids, "sched-spectro", st.cfg, spectroWidthSlots, uint32(st.nDisplay))
+		st.hs = heatmapscroll.New(inst.ids, "sched-spectro", st.cfg, heatmapscroll.Options{WidthSlots: spectroWidthSlots, HeightSlots: uint32(st.nDisplay)})
 		// ScrollLeft — newest column on the RIGHT, ageing leftward, matching
 		// this panel's Goroutines/p99 line plots and every other plot in the
 		// app. The spectrogram's hot band now lines up vertically with the p99
@@ -145,7 +145,7 @@ func (inst *App) renderSchedSpectrogram(snap *PublishedSnapshot) {
 		// "p99 aligns with the hot band" goal. (Until 2026-06-17 this used
 		// ScrollRight/newest-left to mirror imztop's CPU heatmap per SD10;
 		// imztop was flipped in tandem, so the two dashboards stay consistent.)
-		st.hs.SetOrientation(heatmapscroll.ScrollLeft)
+		st.hs.Opts.Orientation = heatmapscroll.ScrollLeft
 		st.colBuf = make([]float32, st.nDisplay)
 		// Prefill the ring so it opens as a full background rectangle.
 		for range spectroWidthSlots {
@@ -154,11 +154,11 @@ func (inst *App) renderSchedSpectrogram(snap *PublishedSnapshot) {
 		// Legend for the colour axis (goroutine count), bound to the same cfg the
 		// heatmap colours from — now possible because colorscale takes a
 		// colormap.Config. It tracks cfg.DataMax live as the scale rescales.
-		st.legend = colorscale.New(inst.ids, "sched-spectro-scale", st.cfg,
-			colorscale.WithSize(spectroLegendW, spectroLegendH),
-			colorscale.WithDesiredTicks(4),
-			colorscale.WithLabelFormat(func(v float64) string { return fmt.Sprintf("%.0f", v) }),
-		)
+		st.legend = colorscale.New(inst.ids, "sched-spectro-scale", st.cfg, colorscale.Options{
+			Width: spectroLegendW, Height: spectroLegendH,
+			DesiredTicks: 4,
+			LabelFormat:  func(v float64) string { return fmt.Sprintf("%.0f", v) },
+		})
 	}
 
 	// One column per published sample; guard against re-pushing across the many
@@ -200,10 +200,9 @@ func (inst *App) renderSchedSpectrogram(snap *PublishedSnapshot) {
 			texW = cand
 		}
 	}
-	st.hs.SetDisplaySize(texW, spectroDisplayHeight)
 	for range c.Horizontal().KeepIter() {
 		inst.renderSpectroYTicks(st.loEdge, st.hiEdge, spectroDisplayHeight)
-		st.hs.Render()
+		st.hs.Render(texW, spectroDisplayHeight)
 	}
 	xw := texW
 	if xw <= 0 {

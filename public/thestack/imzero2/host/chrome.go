@@ -8,6 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/helphost"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/distsummary"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/metricsoverlay"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/runtimestatus"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
@@ -29,7 +30,7 @@ const idleRepaintIntervalSecs = 1.0
 // (no extra menus, no status line, no video-output control, no F1 help).
 type ChromeConfig struct {
 	// ExtraMenus, when non-nil, is invoked inside the top MenuBar scope
-	// after the built-in File / Layout menus (used by the dock host to
+	// after the built-in File / Layout / Window menus (used by the dock host to
 	// inject its "Apps" menu). May be nil.
 	ExtraMenus func()
 	// Status, when non-nil, renders the runtime status line in the bottom
@@ -53,7 +54,7 @@ type ChromeConfig struct {
 }
 
 // DecorateRenderer wraps an inner renderer in the shared host chrome:
-// top PanelTop with the File / Layout menus + an optional ExtraMenus
+// top PanelTop with the File / Layout / Window menus + an optional ExtraMenus
 // callback (used by the dock host to inject its "Apps" menu), bottom
 // PanelBottom with a runtime status line + the metrics overlay.
 // cc.ExtraMenus may be nil — the screenshot tour path uses nil since
@@ -98,6 +99,8 @@ func DecorateRenderer(inner func() error, cc ChromeConfig) func() error {
 	// across frames; renders only when a remote viewer has reported decode
 	// capabilities (so it is invisible under the desktop host).
 	videoState := &videooutput.State{}
+	// The frame-rate inspector's pinned state, owned here as the widget asks.
+	fpsState := &distsummary.State{}
 	return func() error {
 		// F1 global shortcut: open or raise HelpHost. The cached value
 		// was drained from egui's input queue during StateManager.Sync
@@ -137,7 +140,7 @@ func DecorateRenderer(inner func() error, cc ChromeConfig) func() error {
 		// viewer (ADR-0088/0024): prefer the host's live cadence over the
 		// launch-time flag so a viewer-driven switch takes effect on the Go side
 		// too. videoState carries the value the host reported on the previous
-		// frame (refreshed by videooutput.ShowStatus below — a one-frame lag).
+		// frame (refreshed by videooutput.RenderStatus below — a one-frame lag).
 		// Without this the Go side stays pinned to the launch cadence, and the
 		// immediate repaint defeats a runtime switch to reactive since egui
 		// takes the soonest repaint deadline. Falls back to the launch-time flag
@@ -172,9 +175,6 @@ func DecorateRenderer(inner func() error, cc ChromeConfig) func() error {
 					}
 				}
 				for range c.MenuButton(c.Atoms().Text("Layout").Keep()).KeepIter() {
-					if c.Button(ids.PrepareStr("arrangeWindows"), c.Atoms().Text("Arrange Windows").Keep()).SendResp().HasPrimaryClicked() {
-						c.MemoryResetAreas()
-					}
 					c.GuiZoomZoomMenuButtons()
 					// IDS density preset (ADR-0032 §SD1). The switch has to
 					// land on both sides of the FFFI boundary: the Go token
@@ -198,6 +198,23 @@ func DecorateRenderer(inner func() error, cc ChromeConfig) func() error {
 						}
 					}
 				}
+				for range c.MenuButton(c.Atoms().Text("Window").Keep()).KeepIter() {
+					// Whole-desktop arrangements over the windowhost's windows,
+					// computed in Go from the geometry the host reports.
+					if cc.Host != nil {
+						for _, cmd := range windowhost.ArrangeCommands {
+							if c.Button(ids.PrepareStr("arrange-"+cmd.String()), c.Atoms().Text(cmd.String()).Keep()).SendResp().HasPrimaryClicked() {
+								cc.Host.Arrange(cmd)
+							}
+						}
+						c.Separator().Horizontal().Send()
+					}
+					// Forgets every window's position and size; egui then
+					// re-places each one from its defaults.
+					if c.Button(ids.PrepareStr("arrangeWindows"), c.Atoms().Text("Reset window positions").Keep()).SendResp().HasPrimaryClicked() {
+						c.MemoryResetAreas()
+					}
+				}
 				if cc.ExtraMenus != nil {
 					cc.ExtraMenus()
 				}
@@ -209,38 +226,34 @@ func DecorateRenderer(inner func() error, cc ChromeConfig) func() error {
 				for range c.Horizontal().KeepIter() {
 					c.AddSpace(styletokens.GapItems(density))
 					if cc.Status != nil {
-						var onClick runtimestatus.ClickHandler
-						if cc.Host != nil {
-							onClick = func(capId string) {
-								// Push the selection first: a fresh
-								// open pops it in newApp(), a raise
-								// leaves it for the live instance's
-								// next Frame (consumePendingSelection).
-								// OpenOrRaise keeps the status bar at
-								// one inspector — clicking another
-								// chip retargets and raises that
-								// window rather than stacking a
-								// sibling per click.
-								capinspector.PushSelection(capinspector.CapId(capId))
-								_, _, openErr := cc.Host.OpenOrRaise(capinspector.ManifestId)
-								if openErr != nil {
-									log.Warn().Err(openErr).Str("capId", capId).
-										Msg("status-bar: capinspector open failed")
-								}
+						rs := runtimestatus.Render(runtimestatus.Input{
+							Ids: ids, ScopeKey: "runtimestatus", Snapshot: cc.Status, Clickable: cc.Host != nil,
+						})
+						if capId := rs.Clicked; capId != "" && cc.Host != nil {
+							// Push the selection first: a fresh open pops it in
+							// newApp(), a raise leaves it for the live instance's
+							// next Frame (consumePendingSelection). OpenOrRaise
+							// keeps the status bar at one inspector — clicking
+							// another chip retargets and raises that window
+							// rather than stacking a sibling per click.
+							capinspector.PushSelection(capinspector.CapId(capId))
+							_, _, openErr := cc.Host.OpenOrRaise(capinspector.ManifestId)
+							if openErr != nil {
+								log.Warn().Err(openErr).Str("capId", capId).
+									Msg("status-bar: capinspector open failed")
 							}
 						}
-						runtimestatus.RenderInline(cc.Status, onClick)
 						// Visual separator before the metrics block; the
 						// status segment is process-static info, metrics
 						// is per-frame telemetry — the gap signals the
 						// shift in cadence.
 						c.AddSpace(styletokens.GapSections(density))
 					}
-					metricsoverlay.RenderInline(ids.PrepareStr("fps"))
+					metricsoverlay.Render(metricsoverlay.Input{Ids: ids, ScopeKey: "metrics", Fps: fpsState})
 					// ADR-0088: compact active-codec indicator; clicking it opens
 					// the video-output settings dialog (ShowDialog, below).
 					if cc.VideoOutput {
-						videooutput.ShowStatus(ids, videoState)
+						videooutput.RenderStatus(videooutput.Input{Ids: ids, State: videoState})
 					}
 				}
 			}
@@ -248,7 +261,7 @@ func DecorateRenderer(inner func() error, cc ChromeConfig) func() error {
 		// ADR-0088: the video-output settings dialog floats over the app when
 		// opened from the status-bar indicator (self-hides otherwise).
 		if cc.VideoOutput {
-			videooutput.ShowDialog(ids, videoState)
+			videooutput.RenderDialog(videooutput.Input{Ids: ids, State: videoState})
 		}
 		return inner()
 	}

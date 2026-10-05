@@ -144,9 +144,12 @@ func (inst *App) renderFiles() {
 	case busy:
 		// The standard job row: a store that does not answer can be given
 		// up on, and the Retry below is the way back.
-		bgjobrow.Render(&f.mounts, bgjobrow.Input{
+		bgjobrow.Render(bgjobrow.Input{
+			Job:      &f.mounts,
+			Ids:      inst.ids,
+			ScopeKey: "files-mounts",
+			Cancel:   true,
 			Note:     "listing mounts…",
-			CancelId: inst.ids.PrepareStr("files-mounts-cancel"),
 		})
 		return
 	case !done:
@@ -260,7 +263,8 @@ func (inst *App) requestSnapshotLoad(fsys fs.FS, label, cacheKey, path string) {
 	f.loadKey = cacheKey + ":" + path
 	f.loadLabel = label + ":" + path + " @ latest"
 	inst.status = "loading " + path + "…"
-	f.load.Demand(f.loadKey, func(ctx context.Context) (string, error) {
+	// Kick off the load now; the render path polls the result.
+	_, _, _, _ = f.load.Demand(f.loadKey, func(ctx context.Context) (string, error) {
 		h, err := ladingview.ReadHead(fsys, path, maxSnapshotDocBytes, 0)
 		if err != nil {
 			return "", err

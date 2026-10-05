@@ -18,120 +18,153 @@ var (
 	transparentBgEv = color.Transparent
 )
 
-// Renderer is the configured error-chain viewer. Holds a pointer
-// to the caller's WidgetIdStack so widget IDs derive deterministically
-// from the caller's id scope plus the per-Renderer idPrefix — two
-// renderers on the same stack don't collide as long as their
-// prefixes differ.
-//
-// Renderer is intentionally a value (not a pointer): config changes
-// don't mutate the caller's instance, which makes a "build a base
-// config once, override per-call" pattern safe.
-type Renderer struct {
-	ids         *c.WidgetIdStack
-	idPrefix    string
+// Input is one frame's error chain. Every zero value is the documented
+// default, so a chain needs only Ids, ScopeKey and Chain (or Captured).
+type Input struct {
+	// Ids is the host's widget id stack. Render opens its own IdScope under
+	// it, so two chains in one frame need only differ in ScopeKey.
+	Ids *c.WidgetIdStack
+	// ScopeKey names this chain within the host's id space; empty uses
+	// "errorview".
+	ScopeKey string
+	// Chain is what Render draws.
+	Chain Context
+	// Captured is what RenderCaptured draws: the error's one line and, under
+	// it, its chain. Render ignores it.
+	Captured Captured
+
+	// StartCollapsed is the initial state of the per-stream headers; the outer
+	// "error chain — N streams" header tracks it. Off, a freshly rendered
+	// chain reveals its facts. Set it for deep chains whose first view should
+	// be terse.
+	StartCollapsed bool
+	// Indent is the per-fact left padding before frame triples and structured
+	// data, in points; 0 takes 12, a negative value none.
+	Indent float32
+	// ErrorFg is the foreground of fact messages and MutedFg of stack-frame
+	// triples; the zero Color takes the IDS error and secondary-text tokens.
+	ErrorFg, MutedFg color.Color
+}
+
+// Result is what one Render reports.
+type Result struct {
+	// Drawn is whether anything was: false for an empty chain, which draws
+	// nothing so the UI does not grow an "error chain — 0 streams" header.
+	Drawn bool
+}
+
+const (
+	defaultIndent   float32 = 12
+	defaultScopeKey         = "errorview"
+)
+
+// settings is one frame's Input with every default resolved.
+type settings struct {
 	defaultOpen bool
 	indent      float32
 	errorFg     color.Color
 	mutedFg     color.Color
-	// density resolves IDS spacing tokens at the active preset
-	// (ADR-0032 §SD2); cached once at construction.
+	// density resolves IDS spacing tokens at the active preset (ADR-0032
+	// §SD2), re-read every frame because the preset is runtime-switchable.
 	density styletokens.DensityE
 }
 
-// New builds a Renderer with sensible defaults: DefaultOpen on so
-// freshly-rendered chains reveal their facts immediately, Indent
-// 12 px matching the fieldview default. The idPrefix scopes every
-// widget ID this Renderer emits so multiple renderers can share an
-// ids stack without collisions; pass a stable short string
-// ("card-err" / "log-err" / "trace").
-func New(ids *c.WidgetIdStack, idPrefix string) (inst Renderer) {
-	inst = Renderer{
-		ids:         ids,
-		idPrefix:    idPrefix,
-		defaultOpen: true,
-		indent:      12,
-		errorFg:     defaultErrorFg,
-		mutedFg:     defaultMutedFg,
+func (in Input) resolve() (s settings) {
+	s = settings{
+		defaultOpen: !in.StartCollapsed,
+		indent:      in.Indent,
+		errorFg:     in.ErrorFg,
+		mutedFg:     in.MutedFg,
 		density:     styletokens.ActiveDensity(),
 	}
+	switch {
+	case s.indent == 0:
+		s.indent = defaultIndent
+	case s.indent < 0:
+		s.indent = 0
+	}
+	if s.errorFg == (color.Color{}) {
+		s.errorFg = defaultErrorFg
+	}
+	if s.mutedFg == (color.Color{}) {
+		s.mutedFg = defaultMutedFg
+	}
 	return
 }
 
-// DefaultOpen sets the initial collapsed/expanded state of the
-// per-stream CollapsingHeaders. The outer "error chain — N streams"
-// header tracks the same default. Set false for deep chains where
-// the initial summary should be terse.
-func (inst Renderer) DefaultOpen(v bool) (out Renderer) {
-	inst.defaultOpen = v
-	out = inst
-	return
+func (in Input) scopeKey() string {
+	if in.ScopeKey == "" {
+		return defaultScopeKey
+	}
+	return in.ScopeKey
 }
 
-// Indent sets the per-fact left padding before frame triples and
-// structured-data blocks, in pixels. Default 12. Zero is allowed
-// for a flat layout.
-func (inst Renderer) Indent(v float32) (out Renderer) {
-	inst.indent = v
-	out = inst
-	return
-}
-
-// ErrorFg overrides the foreground colour used for fact messages.
-// Default is a soft red (Tailwind red-300) calibrated to read on
-// the standard dark egui theme. Override when adopting a different
-// theme palette.
-func (inst Renderer) ErrorFg(col color.Color) (out Renderer) {
-	inst.errorFg = col
-	out = inst
-	return
-}
-
-// MutedFg overrides the foreground colour used for stack-frame
-// triples. Default is Tailwind gray-400.
-func (inst Renderer) MutedFg(col color.Color) (out Renderer) {
-	inst.mutedFg = col
-	out = inst
-	return
-}
-
-// Render draws the error chain at the current ui scope. Outer
-// CollapsingHeader titled "error chain — N stream(s)"; per stream
-// a sub-header titled "<name> · M fact(s)"; per fact a message
-// line, an optional indented frame-triple line, and an optional
-// dark-canvas Frame with the CBOR diagnostic of structured data.
+// Render draws Input.Chain at the current ui scope, inside one IdScope under
+// Input.Ids. Outer CollapsingHeader titled "error chain — N stream(s)"; per
+// stream a sub-header titled "<name> · M fact(s)"; per fact a message line,
+// an optional indented frame-triple line, and an optional dark-canvas Frame
+// with the CBOR diagnostic of structured data.
 //
-// No outer wrapper is added beyond the top-level CollapsingHeader;
-// the caller owns whatever surrounding scope (panel, Frame, dialog)
-// frames the viewer.
-//
-// Empty contexts (no streams or no facts) short-circuit so the UI
-// doesn't grow an "error chain — 0 streams" header.
-func (inst Renderer) Render(ctx Context) {
-	// Re-resolve: the density preset is runtime-switchable (Layout ▸ Density).
-	inst.density = styletokens.ActiveDensity()
-	if ctx.IsEmpty() {
+// No outer wrapper is added beyond the top-level CollapsingHeader; the caller
+// owns whatever surrounding scope (panel, Frame, dialog) frames the viewer.
+// An empty chain (no streams or no facts) draws nothing. A nil Ids draws
+// nothing.
+func Render(in Input) (res Result) {
+	if in.Ids == nil || in.Chain.IsEmpty() {
 		return
 	}
+	for range c.IdScope(in.Ids.PrepareStr(in.scopeKey())) {
+		in.resolve().renderChain(in.Ids, in.Chain)
+	}
+	res.Drawn = true
+	return
+}
+
+// RenderCaptured draws Input.Captured the way an app's status area wants
+// it: the error's text on one wrapped line in the error colour, and under
+// it the chain as Render draws it, following StartCollapsed. The zero
+// Captured draws nothing, so a caller may render its error slot
+// unconditionally. The chain carries what the one line drops — the frames
+// and the fields eb attached — so build the error with eh and eb and wrap
+// it with the surface's context rather than concatenating strings.
+func RenderCaptured(in Input) (res Result) {
+	if in.Ids == nil || in.Captured.IsEmpty() {
+		return
+	}
+	inst := in.resolve()
+	for range c.IdScope(in.Ids.PrepareStr(in.scopeKey())) {
+		msgAtoms := c.Atoms().BeginRichTextColored(inst.errorFg, transparentBgEv, "✗ "+in.Captured.Err().Error()).End().Keep()
+		c.LabelAtoms(msgAtoms).Wrap().Send()
+		if chain := in.Captured.Chain(); !chain.IsEmpty() {
+			inst.renderChain(in.Ids, chain)
+		}
+	}
+	res.Drawn = true
+	return
+}
+
+func (inst settings) renderChain(ids *c.WidgetIdStack, ctx Context) {
 	c.AddSpace(styletokens.PaddingInner(inst.density))
 	title := fmt.Sprintf("error chain — %d %s", len(ctx.Streams), pluralize("stream", len(ctx.Streams)))
-	hdrId := inst.ids.PrepareStr(inst.idPrefix + "-root")
-	for range c.CollapsingHeader(hdrId, c.WidgetText().Text(title).Keep()).
+	for range c.CollapsingHeader(ids.PrepareStr("root"), c.WidgetText().Text(title).Keep()).
 		DefaultOpen(inst.defaultOpen).KeepIter() {
 		for si, st := range ctx.Streams {
-			inst.renderStream(si, st)
+			for range c.IdScope(ids.PrepareSeq(uint64(si))) {
+				inst.renderStream(ids, st)
+			}
 		}
 	}
 }
 
 // renderStream emits one stream's collapsing block.
-func (inst Renderer) renderStream(si int, st Stream) {
+func (inst settings) renderStream(ids *c.WidgetIdStack, st Stream) {
 	header := fmt.Sprintf("%s · %d %s", st.Name, len(st.Facts), pluralize("fact", len(st.Facts)))
-	hdrId := inst.ids.PrepareStr(fmt.Sprintf("%s-s-%d", inst.idPrefix, si))
-	for range c.CollapsingHeader(hdrId, c.WidgetText().Text(header).Keep()).
+	for range c.CollapsingHeader(ids.PrepareStr("stream"), c.WidgetText().Text(header).Keep()).
 		DefaultOpen(inst.defaultOpen).KeepIter() {
 		for fi, f := range st.Facts {
-			inst.renderFact(si, fi, f)
+			for range c.IdScope(ids.PrepareSeq(uint64(fi))) {
+				inst.renderFact(ids, f)
+			}
 		}
 	}
 }
@@ -143,7 +176,7 @@ func (inst Renderer) renderStream(si int, st Stream) {
 //
 // Each leg is gated on its corresponding field being non-empty so
 // message-only facts and frame-only facts both render compactly.
-func (inst Renderer) renderFact(si, fi int, f Fact) {
+func (inst settings) renderFact(ids *c.WidgetIdStack, f Fact) {
 	if f.Msg != "" {
 		msgAtoms := c.Atoms().BeginRichTextColored(inst.errorFg, transparentBgEv, "✗ "+f.Msg).
 			Monospace().End().Keep()
@@ -164,8 +197,7 @@ func (inst Renderer) renderFact(si, fi int, f Fact) {
 			if inst.indent > 0 {
 				c.AddSpace(inst.indent)
 			}
-			frameId := inst.ids.PrepareStr(fmt.Sprintf("%s-d-%d-%d", inst.idPrefix, si, fi))
-			for range c.Frame(frameId).
+			for range c.Frame(ids.PrepareStr("data")).
 				PresetDarkCanvas().
 				InnerMargin(styletokens.PaddingInner(inst.density)).
 				KeepIter() {

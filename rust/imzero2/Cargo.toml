@@ -1,5 +1,8 @@
 [workspace]
-members = [".", "imzero2_egui"]
+members = [".", "imzero2_egui", "browser"]
+# The browser module is a wasm32 cdylib built by build_rust_browser.sh; a
+# plain `cargo build` here does not link it natively.
+default-members = [".", "imzero2_egui"]
 # Vendored third-party source (vendor/egui_software_backend, see its
 # VENDORING.md) is a path dependency but NOT a member: `check.sh` runs
 # `cargo fmt --all` and `cargo clippy --workspace -- -D warnings`, and neither
@@ -53,7 +56,7 @@ default = ["desktop", "inspection"]
 # mapping the `-vsync` flag onto the wgpu swapchain (eframe 0.35 dropped the
 # `NativeOptions::vsync` field). headless already enables it; headless_svg does
 # not, keeping that host GPU-less.
-desktop = ["dep:eframe", "dep:egui-wgpu"]
+desktop = ["dep:eframe", "dep:egui-wgpu", "capture_raster"]
 # ADR-0128 M3 — the appliance-host split. `headless` is the carrier + FFFI2
 # host with NO wgpu and NO ffmpeg: the mesh draw-stream lane only (SD6), which
 # is the lean appliance build. `headless_wgpu` adds the offscreen wgpu renderer
@@ -63,6 +66,7 @@ desktop = ["dep:eframe", "dep:egui-wgpu"]
 # exactly what the lean `headless` build serves. `cargo tree --features headless`
 # carries no wgpu — the hard guarantee the appliance target needs.
 headless = [
+    "capture_raster",
     "dep:tokio",
     "dep:tokio-tungstenite",
     "dep:prost",
@@ -85,6 +89,12 @@ headless_wgpu = ["headless_raster", "dep:wgpu", "dep:egui-wgpu", "dep:pollster"]
 # `not(feature = "headless_wgpu")`). ffmpeg is still reachable, since the
 # encoder takes BGRA from host memory either way. See
 # doc/adr-background-work/egui-software-backend-survey.md.
+# The capture rasterizer (ADR-0281 §SD5, captureraster.rs): the software
+# backend alone, so every native host can rasterize a window capture apart
+# from what paints its live frame — the mesh-only host included, which grows
+# by this crate and nothing GPU. The browser host does not take it and
+# refuses pixel captures.
+capture_raster = ["dep:egui_software_backend", "dep:bytemuck"]
 headless_soft = [
     "headless_raster",
     "dep:egui_software_backend",
@@ -127,6 +137,15 @@ inspection = ["desktop", "eframe?/inspection"]
 # 94 543 bytes. No allocator is worth an unreproducible binary, and dropping it
 # also finishes what ADR-0205 M6 started — `libmimalloc-sys` was the last crate
 # blocking `--target x86_64-unknown-linux-musl`.
+# ADR-0077 Phase 1 / keelson-wasm-frame-cost M2 — the browser host: the shared
+# interpreter plus egui, tessellating into the ADR-0128 mesh wire, exported as
+# C-ABI functions for a JS worker that owns the FFFI2 bytes (browser.rs). No
+# GPU, no sockets, no threads, no files: fonts come as bytes and the clock is a
+# host import. `cargo build --lib --no-default-features --features browser
+# --target wasm32-unknown-unknown` of the `browser/` cdylib crate is the
+# artifact (build_rust_browser.sh); the feature also builds natively so its
+# tests run in the ordinary lane.
+browser = ["dep:prost"]
 puffin = ["dep:puffin", "dep:puffin_http", "profiling/profile-with-puffin"]
 dhat-heap = ["dep:dhat"]
 wayland = ["eframe?/wayland"]
@@ -134,7 +153,7 @@ x11 = ["eframe?/x11"]
 
 [dependencies]
 # Pinned to the 0.35 line, and pinned deliberately: every widget crate below
-# (egui_extras, egui_table, egui_dock, egui_graphs) links egui itself,
+# (egui_extras, egui_table, egui_dock) links egui itself,
 # so the whole ring has to sit on one egui version or the same type appears
 # twice in the graph and nothing typechecks across the seam.
 #
@@ -145,10 +164,11 @@ x11 = ["eframe?/x11"]
 # found egui::Ui`. A caret requirement makes the next such move a visible
 # manifest change instead.
 #
-# The ring can go to 0.36 once egui_graphs releases against it — egui_extras
-# 0.36.1, egui_table 0.10 and egui_dock 0.21.1 are all out already, but
-# egui_graphs 0.31.0 (its newest, and its master branch) still asks for egui
-# 0.35. Move all of them, and the wgpu/egui-wgpu pins below, in one commit.
+# Nothing blocks the ring from going to 0.36: egui_extras 0.36.1, egui_table
+# 0.10 and egui_dock 0.21.1 are all out. The last holdout, egui_graphs (whose
+# newest release asked for egui 0.35), left the tree with the `Graph` binding
+# (2026-10-03); widgets/graphview replaced it. Move all of them, and the
+# wgpu/egui-wgpu pins below, in one commit.
 egui = "0.35"
 eframe = { version = "0.35", optional = true, default-features = false, features = [
     "accesskit",     # Make egui compatible with screen readers. NOTE: adds a lot of dependencies.
@@ -203,8 +223,6 @@ puffin_http = {version = "0.17.0", optional = true }
 puffin = {version = "0.20.0", optional = true }
 profiling = "1.0.17"
 dhat = { version = "0.3.3", optional = true }
-memmap2 = "0.9.9"
-rand = "0.10.2"
 blake3 = "1.8.2"
 egui_extras = { version = "0.35.0", features = ["default", "datepicker", "serde"] }
 jiff = { version = "0.2", default-features = false, features = ["std"] }
@@ -215,8 +233,6 @@ jiff = { version = "0.2", default-features = false, features = ["std"] }
 # crate's own 0.35 `Ui` as unrelated types.
 egui_table = "0.9.0"
 egui_dock = "0.20"
-egui_graphs = { version = "0.31", features = ["events"] }
-petgraph = { version = "0.8", default-features = false, features = ["stable_graph"] }
 png = "0.18"
 # Used by imzero2::svgexport to read the TTF `name` table at font-load time,
 # so SVG export can emit the real family name (e.g. "Noto Sans") instead of
@@ -259,6 +275,13 @@ rayon = { version = "1", optional = true }
 # memcpy per frame — more than the rasterization itself. Same crate epaint
 # uses, so it is one crate in the graph and no new supply-chain surface.
 bytemuck = { version = "1.25", optional = true, default-features = false }
+
+# Used by the IPC test harness only, which is not built for the browser:
+# memmap2 has no wasm32 backend and rand would pull getrandom, which refuses
+# wasm32-unknown-unknown without a JS backend (ADR-0077 SD4).
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+memmap2 = "0.9.9"
+rand = "0.10.2"
 
 [profile.release]
 opt-level = 2

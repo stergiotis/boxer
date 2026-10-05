@@ -59,19 +59,19 @@ type navNode struct {
 }
 
 // buildNav rebuilds the navigator hierarchy from the bound schema under the
-// active filter, into the Model's scratch slices.
+// active filter, into the State's scratch slices.
 //
 // The order is the one the CollapsingHeader navigator used, because it is the
 // order the schema is authored in and the detail pane's indices point into:
 // plain item-types in [common.AllPlainItemTypes] order, then tagged sections
 // in declaration order. Filtering drops whole sections rather than individual
-// columns, which is [Model.matchesSection]'s rule, not a new one.
+// columns, which is [view.matchesSection]'s rule, not a new one.
 //
 // A tagged section's header row IS the section — clicking it selects the
 // section itself, which is what the "· properties" child row did before. The
 // tree gives a section row a click of its own, so the child was left saying
 // what its parent already says.
-func (m *Model) buildNav() {
+func (m *view) buildNav() {
 	labels := m.navLabels[:0]
 	parents := m.navParents[:0]
 	keys := m.navKeys[:0]
@@ -147,18 +147,18 @@ func (m *Model) buildNav() {
 	m.navLabels, m.navParents, m.navKeys, m.navNodes = labels, parents, keys, nodes
 }
 
-// navTree is the columnar view of the last [Model.buildNav], borrowed: valid
+// navTree is the columnar view of the last [view.buildNav], borrowed: valid
 // until the next build. The key column is what carries a collapse across one.
-func (m *Model) navTree() tree.Tree {
+func (m *view) navTree() tree.Tree {
 	return tree.Tree{Labels: m.navLabels, Parents: m.navParents, Keys: m.navKeys}
 }
 
 // syncNav sets up the widget's state for the frame: the expansion default, and
-// the selection projected from the Model's own [selection].
+// the selection projected from the State's own [selection].
 //
 // Expansion is not projected. The hierarchy carries a key column, so the
 // widget files a collapse under [navNode.key] and it survives the rebuild
-// every filter keystroke triggers — which is what the Model used to keep a
+// every filter keystroke triggers — which is what the State used to keep a
 // parallel map for. What it does need saying is the polarity: sections start
 // OPEN, as the CollapsingHeader navigator's DefaultOpen(true) did, so only
 // what the reader closed is stored.
@@ -170,7 +170,7 @@ func (m *Model) navTree() tree.Tree {
 // click on a row with no selection does: nothing is drawn from it, because
 // Render applies its own selection after the row loop and this runs before the
 // next one.
-func (m *Model) syncNav() {
+func (m *view) syncNav() {
 	// Bound to THIS frame's hierarchy before anything is written, or the
 	// selection below is filed under whatever key the previous build gave that
 	// index — and on the first frame, under no key at all.
@@ -190,9 +190,9 @@ func (m *Model) syncNav() {
 	m.navState.SelectOnly(sel)
 }
 
-// applyNav turns a frame's tree interaction into a Model change. Expansion
+// applyNav turns a frame's tree interaction into a State change. Expansion
 // needs nothing: the widget has already applied it to the state that owns it.
-func (m *Model) applyNav(res tree.Result) {
+func (m *view) applyNav(res tree.Result) {
 	n := res.Clicked
 	if n < 0 || int(n) >= len(m.navNodes) {
 		return

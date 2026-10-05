@@ -29,7 +29,7 @@ const (
 	kindVizevalMetricValue      uint64 = 9223372049739677831
 	kindVizevalGatePassed       uint64 = 9223372049739677832
 	kindVizevalGateFailed       uint64 = 9223372049739677833
-	kindVizevalTaskJudge        uint64 = 9223372049739677846
+	kindVizevalTaskJudge        uint64 = 9223372049739677939
 )
 
 // vizevalScoreSymbolAttrI is the InAttr-side view of the symbol section. P-variants only —

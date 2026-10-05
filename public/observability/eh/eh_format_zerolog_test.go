@@ -325,3 +325,45 @@ func TestZerologIntegration_VisualDemo(t *testing.T) {
 	// Also write to stderr for immediate visibility during test -v
 	_, _ = os.Stderr.Write(buf.Bytes())
 }
+
+func TestConsoleFormatErrorExtra_MarshaledError(t *testing.T) {
+	// MarshalError's structured shape reaches the console writer when it is
+	// the process-wide ErrorMarshalFunc (logbridge installs it for the facts
+	// capture). With the field excluded, FormatExtra is the only place the
+	// error can appear.
+	origMarshal := zerolog.ErrorMarshalFunc
+	defer func() { zerolog.ErrorMarshalFunc = origMarshal }()
+	zerolog.ErrorMarshalFunc = MarshalError
+
+	var buf bytes.Buffer
+	writer := zerolog.ConsoleWriter{
+		Out:           &buf,
+		NoColor:       true,
+		FieldsExclude: []string{zerolog.ErrorFieldName},
+		FormatExtra:   ConsoleFormatErrorExtra(false),
+	}
+	logger := zerolog.New(writer)
+	inner := New("operation not supported")
+	outer := Errorf("store unavailable: %w", Errorf("allocate: %w", inner))
+	logger.Warn().Err(outer).Msg("service start failed")
+
+	output := buf.String()
+	t.Log("output:\n" + output)
+	for _, want := range []string{"service start failed", "Error: store unavailable", "cause: allocate", "cause: operation not supported", "eh_format_zerolog_test.go"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("expected %q in output", want)
+		}
+	}
+}
+
+func TestFormatMarshaledError_OtherShapes(t *testing.T) {
+	for _, m := range []map[string]any{
+		{},
+		{"streams": "not an array"},
+		{"streams": []any{map[string]any{"s": []any{map[string]any{"func": "f"}}}}},
+	} {
+		if s, ok := formatMarshaledError(m); ok {
+			t.Fatalf("expected no rendering for %v, got %q", m, s)
+		}
+	}
+}

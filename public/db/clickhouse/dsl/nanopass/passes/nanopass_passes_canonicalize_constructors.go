@@ -88,17 +88,73 @@ func columnFuncToLiteralRule(pr *nanopass.ParseResult, node antlr.ParserRuleCont
 		}
 		return "[" + nanopass.NodeText(pr, argList.(antlr.ParserRuleContext)) + "]", true
 	case "tupleelement":
-		if args := extractFunctionArgs(pr, fn); len(args) == 2 {
-			return args[0] + "." + args[1], true
+		// Only a positional index has a literal spelling: `t.'name'` does not
+		// parse, and `t.name` on an identifier reads as a qualified column.
+		args := extractFunctionArgs(pr, fn)
+		if len(args) != 2 || !isDecimalDigits(args[1]) {
+			return "", false
 		}
-		return "", false
+		base, ok := postfixOperandText(pr, fn)
+		if !ok {
+			return "", false
+		}
+		return base + "." + args[1], true
 	case "arrayelement":
-		if args := extractFunctionArgs(pr, fn); len(args) == 2 {
-			return args[0] + "[" + args[1] + "]", true
+		args := extractFunctionArgs(pr, fn)
+		if len(args) != 2 {
+			return "", false
 		}
-		return "", false
+		base, ok := postfixOperandText(pr, fn)
+		if !ok {
+			return "", false
+		}
+		return base + "[" + args[1] + "]", true
 	}
 	return "", false
+}
+
+// postfixOperandText returns the first argument of fn spelled so that a
+// postfix `.N` or `[i]` binds to all of it: an operator-shaped expression is
+// parenthesised (`arrayElement(a + b, 1)` → `(a + b)[1]`, not `a + b[1]`).
+// A lambda argument has no postfix spelling and reports false.
+func postfixOperandText(pr *nanopass.ParseResult, fn *grammar1.ColumnExprFunctionContext) (string, bool) {
+	argList, ok := fn.ColumnArgList().(*grammar1.ColumnArgListContext)
+	if !ok {
+		return "", false
+	}
+	for i := 0; i < argList.GetChildCount(); i++ {
+		argExpr, ok := argList.GetChild(i).(*grammar1.ColumnArgExprContext)
+		if !ok {
+			continue
+		}
+		expr := argExpr.ColumnExpr()
+		if expr == nil {
+			return "", false
+		}
+		text := nanopass.NodeText(pr, expr.(antlr.ParserRuleContext))
+		switch expr.(type) {
+		case *grammar1.ColumnExprIdentifierContext, *grammar1.ColumnExprFunctionContext,
+			*grammar1.ColumnExprParensContext, *grammar1.ColumnExprTupleContext,
+			*grammar1.ColumnExprArrayContext, *grammar1.ColumnExprArrayAccessContext,
+			*grammar1.ColumnExprTupleAccessContext, *grammar1.ColumnExprTupleAccessNamedContext,
+			*grammar1.ColumnExprSubqueryContext, *grammar1.ColumnExprParamSlotContext:
+			return text, true
+		}
+		return "(" + text + ")", true
+	}
+	return "", false
+}
+
+func isDecimalDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func settingFuncToLiteralRule(pr *nanopass.ParseResult, node antlr.ParserRuleContext) (string, bool) {

@@ -4,9 +4,11 @@ import (
 	"embed"
 	"fmt"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
+	"slices"
 	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/config/env"
@@ -24,6 +26,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexsummary"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timerangepicker"
 )
@@ -79,13 +82,19 @@ var (
 
 	AllowWrites = env.NewString(env.Spec{
 		Name:        "BOXER_PLAY_ALLOW_WRITES",
-		Description: "non-empty lets Run execute an INSERT … SELECT wrapper (ADR-0181 §SD8); unset, Run refuses the write with a copy-out hint. Governs every play-engined host, sqlapplet included",
+		Description: "non-empty lets Run execute an INSERT … SELECT wrapper (ADR-0181 §SD8) and DDL; unset, Run refuses the write with a copy-out hint and every Arrow run is sent readonly=2. Governs every play-engined host, sqlapplet included",
+		Category:    env.CategoryE("boxer-play"),
+	})
+
+	AppWrites = env.NewString(env.Spec{
+		Name:        "BOXER_PLAY_APP_WRITES",
+		Description: "\"off\" stops play writing its own tables — the Series verdicts in boxer.tslabels; unset or anything else lets it (ADR-0270 §SD7). BOXER_PLAY_ALLOW_WRITES does not govern them",
 		Category:    env.CategoryE("boxer-play"),
 	})
 
 	ExperimentsSeed = env.NewString(env.Spec{
 		Name:        "BOXER_PLAY_EXPERIMENTS",
-		Description: "seed the Experiments pane with one vizeval candidate as JSON, {\"source\":\"fixture|result\",\"sink\":…,\"options\":{…},\"box\":[w,h]} (ADR-0257); box, optional, fixes the artifact's size in points whatever room the pane has; a seed that does not resolve against the sink catalogue fails the mount",
+		Description: "seed the Experiments pane with one vizeval candidate as JSON, {\"source\":\"fixture|result\",\"sink\":…,\"options\":{…},\"box\":[w,h]} (ADR-0266); box, optional, fixes the artifact's size in points whatever room the pane has; a seed that does not resolve against the sink catalogue fails the mount",
 		Category:    env.CategoryE("boxer-play"),
 	})
 
@@ -177,9 +186,15 @@ func NewLivePlayApp(client *Client, initialSQL string, maxHistory int, rules *gl
 // can't be captured cleanly at init time before the cli flag parser has run.
 type PlayLauncher struct {
 	inner *PlayApp
-	// follower keeps the launch config's dataset aliases bound for the life
-	// of the window (ADR-0240 §SD7); nil when the config declared none.
-	follower *adhocdata.Follower
+	// follower keeps the window's dataset aliases bound for its life
+	// (ADR-0240 §SD7): those its launch config declared and those bind_dataset
+	// added; nil while there are none. launchAliases are the declared ones,
+	// whose binding re-runs the buffer; bus and log build a follower for
+	// bind_dataset on a window whose config declared none.
+	follower      *adhocdata.Follower
+	launchAliases []string
+	bus           app.BusI
+	log           zerolog.Logger
 	// Rules is the gloss rule repository every window this launcher opens is
 	// built over (ADR-0186); nil takes DefaultRepository. The factory
 	// registered in init leaves it nil, so a deployment that links play
@@ -288,6 +303,9 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 			// composing a query (ADR-0139 §SD8 under ADR-0254 §SD5): run here,
 			// under this grant, never by the service.
 			keelsonquery.ClientCaps(modelToolTables...)[0],
+			// The Map, Graph and Vector field panes' basemap tiles, fetched
+			// through the host's egress service (ADR-0262 §SD6).
+			basemap.ClientCaps("play: basemap tiles under the Map, Graph and Vector field panes")[0],
 		},
 		// PersistedKeys → host auto-injects the runtime.persist.play.>
 		// cap. Kept for the read-only bridge only (ADR-0148 §SD8, added
@@ -304,6 +322,9 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 		// PlayLaunch out of a window the user acted in and hands it back
 		// at the next plain open. play is the reference adopter (§SD8).
 		Workingset: true,
+		// What an agent may read and do in a window under a task grant
+		// (ADR-0269, ADR-0270).
+		Operations: playOps.Catalog(),
 	}
 	return
 }
@@ -362,9 +383,11 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 		initSQL = "SELECT * FROM boxer.facts"
 	}
 	cfg := ClientConfig{
-		URL:      clickhouseenv.URL.Get(),
-		User:     clickhouseenv.User.Get(),
-		Password: clickhouseenv.Password.Get(),
+		URL:          clickhouseenv.URL.Get(),
+		User:         clickhouseenv.User.Get(),
+		Password:     clickhouseenv.Password.Get(),
+		AllowWrites:  AllowWrites.Get() != "",
+		AppWritesOff: AppWrites.Get() == "off",
 	}
 	// Reconcile leeway's SQL read surface (ADR-0171 §SD2) against the env
 	// endpoint, once per process and off the open path — before the
@@ -488,7 +511,9 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 	// bind, and keep the bindings in step with the service from then on.
 	// A miss binds nothing — the notice says what the window waits for —
 	// and the follower picks the dataset up when it is published.
+	inst.bus, inst.log = ctx.Bus(), ctx.Log()
 	if launch != nil && len(launch.Datasets) > 0 {
+		inst.launchAliases = launch.Datasets
 		follower, bindings := adhocdata.NewFollower(adhocdata.FollowerConfig{
 			Bus: ctx.Bus(), Log: ctx.Log(), Aliases: launch.Datasets,
 		})
@@ -510,20 +535,42 @@ func (inst *PlayLauncher) Frame(ctx app.FrameContextI) (err error) {
 		return
 	}
 	if inst.follower != nil {
+		before := inst.boundLaunchAliases()
 		bound, pendingChanged := inst.follower.Sync(inst.inner)
 		if pendingChanged {
 			inst.inner.SetDatasetNotice(launchDatasetNotice(inst.follower.Pending()))
 		}
-		if bound {
+		if bound && inst.boundLaunchAliases() > before {
 			// AutoRun already fired against the unbound buffer at open, so
-			// a newly bound alias needs its own run to become visible.
+			// a newly bound alias of the launch config needs its own run to
+			// become visible. An alias bind_dataset added runs when the
+			// task asks for it, under its limits.
 			inst.inner.RequestRun()
 		}
 	}
 	// Every per-frame capability the engine reads off the context — the
 	// window-focus gate, the column-width store — is PlayApp.Frame's job, so
 	// this launcher and an out-of-tree re-host discharge it identically.
+	// The agent mark (ADR-0270 §SD3) is judged after the write-back and
+	// settled once the frame's own changes are in.
+	inst.inner.checkAgentMark()
+	inst.inner.gestureCtx = ctx
 	err = inst.inner.Frame(ctx)
+	inst.inner.gestureCtx = nil
+	inst.inner.settleAgentMark()
+	return
+}
+
+// boundLaunchAliases counts the launch config's aliases bound now.
+func (inst *PlayLauncher) boundLaunchAliases() (n int) {
+	if len(inst.launchAliases) == 0 || inst.inner == nil || inst.inner.client == nil {
+		return
+	}
+	for _, alias := range inst.inner.client.DatasetAliases() {
+		if slices.Contains(inst.launchAliases, alias) {
+			n++
+		}
+	}
 	return
 }
 

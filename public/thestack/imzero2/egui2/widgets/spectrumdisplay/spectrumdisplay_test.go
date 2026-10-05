@@ -1,6 +1,9 @@
 package spectrumdisplay
 
 import (
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colormap"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -36,7 +39,7 @@ func TestPartitionNoColorbar(t *testing.T) {
 
 // TestFreqToPx maps and clamps the frequency axis onto pixels.
 func TestFreqToPx(t *testing.T) {
-	sd := &SpectrumDisplay{freqAxis: AxisSpec{Min: 0, Max: 100}}
+	sd := &SpectrumDisplay{FreqAxis: AxisSpec{Min: 0, Max: 100}}
 	require.InDelta(t, 100, sd.freqToPx(50, 200), 1e-4)
 	require.InDelta(t, 0, sd.freqToPx(-10, 200), 1e-4, "clamps below min")
 	require.InDelta(t, 200, sd.freqToPx(150, 200), 1e-4, "clamps above max")
@@ -44,7 +47,7 @@ func TestFreqToPx(t *testing.T) {
 
 // TestDbToPx maps the dB axis with max at the top (y=0).
 func TestDbToPx(t *testing.T) {
-	sd := &SpectrumDisplay{powerAxis: AxisSpec{Min: -100, Max: 0}}
+	sd := &SpectrumDisplay{PowerAxis: AxisSpec{Min: -100, Max: 0}}
 	require.InDelta(t, 0, sd.dbToPx(0, 100), 1e-4, "max at top")
 	require.InDelta(t, 100, sd.dbToPx(-100, 100), 1e-4, "min at bottom")
 	require.InDelta(t, 50, sd.dbToPx(-50, 100), 1e-4)
@@ -84,9 +87,8 @@ func TestLeftGutterWidthFallback(t *testing.T) {
 // the clamp bounds (the ADR-0091 §SD2 widest-label rule).
 func TestLeftGutterWidthMeasured(t *testing.T) {
 	sd := &SpectrumDisplay{
-		fontSize:      DefaultFontSize,
-		showLinePanel: true,
-		powerAxis:     AxisSpec{Min: -110, Max: -20, Unit: AxisUnitDecibel},
+		fontSize:  DefaultFontSize,
+		PowerAxis: AxisSpec{Min: -110, Max: -20, Unit: AxisUnitDecibel},
 	}
 	w := sd.leftGutterWidth()
 	require.GreaterOrEqual(t, w, minLeftGutterWPx)
@@ -101,4 +103,23 @@ func TestRegionBand(t *testing.T) {
 	y0, y1 = regionBand(PlacementTop, 100)
 	require.Equal(t, float32(0), y0)
 	require.InDelta(t, 18, y1, 1e-4)
+}
+
+// TestRenderHeadless renders one frame without a host: the composite must
+// not panic, must report a quiet frame, and must follow its Opts.
+func TestRenderHeadless(t *testing.T) {
+	t.Cleanup(scenetest.Install())
+	ids := c.NewWidgetIdStack()
+	cfg := colormap.NewConfig(colormap.Viridis8, -110, -20)
+	sd := New(ids, "t", cfg, Options{WidthSlots: 8, HeightSlots: 4})
+	sd.FreqAxis = AxisSpec{Min: 88e6, Max: 108e6, Unit: AxisUnitHertz}
+	sd.PowerAxis = AxisSpec{Min: -110, Max: -20, Unit: AxisUnitDecibel}
+	sd.PushColumn([]float32{-100, -60, -40, -90})
+	ev := sd.Render(640, 400)
+	require.False(t, ev.Readout.Ok)
+	require.False(t, ev.Clicked)
+	require.Equal(t, uint32(1), sd.Head())
+	sd.Opts.HideColorbar, sd.Opts.HideLinePanel = true, true
+	ev = sd.RenderFill(640, 400)
+	require.False(t, ev.Readout.Ok)
 }

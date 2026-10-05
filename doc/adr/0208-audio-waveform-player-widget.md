@@ -560,6 +560,42 @@ the ETA is Holt-smoothed and damped like every other progress readout, and a
 `Rate` in frames per second rides beside it. `track.EstimateEtaMs` is removed.
 See [ADR-0247](./0247-one-progress-estimator.md).
 
+### 2026-09-29 — the pulse sink no longer corks on pause
+
+SD6's sink corked the stream on Pause and uncorked it on Play. Against
+`jfreymuth/pulse` v0.1.3 that kills playback: the uncork makes the server
+send a Started event, the library delivers it with a blocking send on an
+unbuffered channel whose only receiver is its `Start`, and its protocol read
+goroutine parks for good — every later request times out after a second and
+the stream is never fed again. Reproduced here on the first resume against
+PipeWire's pulse server, and filed upstream as jfreymuth/pulse#52 by
+Ebitengine's author, who hit it in oto. The integration test did not see it
+because the position readout is interpolated by wall clock; the one-second
+close timeout was the only trace. The same resume also raced the library's
+underflow flag against its read loop, which is what surfaced under the race
+detector (the `state` race the report also names is fixed in v0.1.3).
+
+Options weighed: a fork of the library (about 4k lines, MIT, no
+dependencies; the fix is ~40 lines and was prototyped and confirmed to clear
+both the stall and the race), an upstream PR, or changing how the sink uses
+the library. The sink now follows oto's PulseAudio backend: a pause parks
+the pull callback on a condition variable and the stream stays running and
+uncorked; Play releases it. No cork or uncork happens in place, so no Started
+arrives that nobody waits for. What this costs: the server plays out what it
+already holds after Pause (one latency, 60 ms by default); it underflows once
+per pause, so `Underflow` is frozen at its value from the first pause until
+the next start; the library processes no server events while the callback is
+parked, so the sink makes no round trip during a pause and a seek while paused
+only moves the cursor (a seek within one latency of the pause can let up to a
+buffer of the old position play on resume). A seek while playing keeps the
+cork/stop/start sequence, whose `Start` is the one caller that waits for the
+Started it provokes. The integration lane now cycles pause and resume and
+asserts the position advances by more than one buffer, which a stream the
+server stopped pulling from cannot do, and that a close from paused returns
+well under the library's request timeout. The fork stays unbuilt; if upstream
+merges a fix for #52 and #53 the sink can cork again for the power saving a
+suspended sink brings, which is the only thing this loses.
+
 ## References
 
 - [ADR-0003](./0003-h3-wasm-bridge.md) — the no-cgo stance and the wasm route for native libraries.

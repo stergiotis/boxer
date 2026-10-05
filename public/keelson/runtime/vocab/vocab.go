@@ -323,8 +323,6 @@ var (
 	// on it; counts are u32/u64 units, flags bools.
 	MembKindLlmCall            = NkRegistry.MustBegin("runtimeKindLlmCall", 102).End()
 	MembLlmCallId              = NkRegistry.MustBegin("llmCallId", 103).End()
-	MembLlmCallApp             = NkRegistry.MustBegin("llmCallApp", 104).End()
-	MembLlmCallInstance        = NkRegistry.MustBegin("llmCallInstance", 105).End()
 	MembLlmCallPurpose         = NkRegistry.MustBegin("llmCallPurpose", 106).End()
 	MembLlmCallSensitivity     = NkRegistry.MustBegin("llmCallSensitivity", 107).End()
 	MembLlmCallModel           = NkRegistry.MustBegin("llmCallModel", 108).End()
@@ -342,7 +340,7 @@ var (
 	MembLlmCallRefused         = NkRegistry.MustBegin("llmCallRefused", 120).End()
 	MembLlmCallError           = NkRegistry.MustBegin("llmCallError", 121).End()
 
-	// vizeval scorecards (ADR-0257 §SD8) — one boxer.facts row per candidate
+	// vizeval scorecards (ADR-0266 §SD8) — one boxer.facts row per candidate
 	// scored over a scenario at a build: which rendering, of which data, how
 	// far it got, and its metrics. Append-only. Metrics are two parallel
 	// arrays, names and values, so a new metric needs no new membership; the
@@ -365,11 +363,11 @@ var (
 	MembVizevalGatePassed  = NkRegistry.MustBegin("vizevalGatePassed", 136).End()
 	MembVizevalGateFailed  = NkRegistry.MustBegin("vizevalGateFailed", 137).End()
 	// MembVizevalTaskJudge names who answered the scenario's questions — a
-	// model id or a reader (ADR-0257 §SD10); accuracies of two judges are two
+	// model id or a reader (ADR-0266 §SD10); accuracies of two judges are two
 	// measurements.
-	MembVizevalTaskJudge = NkRegistry.MustBegin("vizevalTaskJudge", 150).End()
+	MembVizevalTaskJudge = NkRegistry.MustBegin("vizevalTaskJudge", 243).End()
 
-	// vizeval pairwise judgements (ADR-0257 §SD6, §SD8) — one boxer.facts
+	// vizeval pairwise judgements (ADR-0266 §SD6, §SD8) — one boxer.facts
 	// row per pair of candidates a model compared, both orders merged: which
 	// two drawings, by which model and prompt, and per criterion which side
 	// it preferred (a, b, tie, or split when the orders disagreed).
@@ -385,6 +383,128 @@ var (
 	MembVizevalCriterion         = NkRegistry.MustBegin("vizevalCriterion", 147).End()
 	MembVizevalPreference        = NkRegistry.MustBegin("vizevalPreference", 148).End()
 	MembVizevalWhy               = NkRegistry.MustBegin("vizevalWhy", 149).End()
+
+	// retained model conversations (ADR-0264) — the llmCall row gains the
+	// conversation it belongs to, the call it continues, where its kept
+	// messages start and the hash over its history; the text is a kind of
+	// its own, one boxer.facts row per message, apart from the counts so it
+	// can be ditched without touching them (§SD6). Content and reasoning
+	// are text; the reply's tool calls and the image digests string arrays.
+	MembLlmCallParent         = NkRegistry.MustBegin("llmCallParent", 151).End()
+	MembLlmCallRetainedFrom   = NkRegistry.MustBegin("llmCallRetainedFrom", 152).End()
+	MembLlmCallHistoryHash    = NkRegistry.MustBegin("llmCallHistoryHash", 153).End()
+	MembKindLlmMessage        = NkRegistry.MustBegin("runtimeKindLlmMessage", 154).End()
+	MembLlmMessageCallId      = NkRegistry.MustBegin("llmMessageCallId", 155).End()
+	MembLlmMessageSensitivity = NkRegistry.MustBegin("llmMessageSensitivity", 158).End()
+	MembLlmMessageOrdinal     = NkRegistry.MustBegin("llmMessageOrdinal", 159).End()
+	MembLlmMessageRole        = NkRegistry.MustBegin("llmMessageRole", 160).End()
+	MembLlmMessageContent     = NkRegistry.MustBegin("llmMessageContent", 161).End()
+	MembLlmMessageReasoning   = NkRegistry.MustBegin("llmMessageReasoning", 162).End()
+	MembLlmMessageToolCallId  = NkRegistry.MustBegin("llmMessageToolCallId", 163).End()
+	MembLlmMessageToolCalls   = NkRegistry.MustBegin("llmMessageToolCalls", 164).End()
+	MembLlmMessageImages      = NkRegistry.MustBegin("llmMessageImages", 165).End()
+	// A retained call's declared omission (ADR-0264 §SD3): the range of the
+	// logical conversation the request left out, so the model saw a window
+	// and the kept rows still continue the conversation.
+	MembLlmCallOmitFrom = NkRegistry.MustBegin("llmCallOmitFrom", 166).End()
+	MembLlmCallOmitTo   = NkRegistry.MustBegin("llmCallOmitTo", 167).End()
+	// The action record of the app operations contract (ADR-0269 §SD9):
+	// one row per dispatcher decision and one at a call's final phase.
+	MembKindAgentAction       = NkRegistry.MustBegin("runtimeKindAgentAction", 168).End()
+	MembAgentActionInstance   = NkRegistry.MustBegin("agentActionInstance", 175).End()
+	MembAgentActionApp        = NkRegistry.MustBegin("agentActionApp", 176).End()
+	MembAgentActionOperation  = NkRegistry.MustBegin("agentActionOperation", 177).End()
+	MembAgentActionEffect     = NkRegistry.MustBegin("agentActionEffect", 178).End()
+	MembAgentActionArgsDigest = NkRegistry.MustBegin("agentActionArgsDigest", 179).End()
+	MembAgentActionDecision   = NkRegistry.MustBegin("agentActionDecision", 180).End()
+	MembAgentActionPhase      = NkRegistry.MustBegin("agentActionPhase", 181).End()
+	MembAgentActionReason     = NkRegistry.MustBegin("agentActionReason", 182).End()
+	MembAgentActionBudgetLeft = NkRegistry.MustBegin("agentActionBudgetLeft", 183).End()
+	MembAgentActionTest       = NkRegistry.MustBegin("agentActionTest", 184).End()
+	MembAgentActionTainted    = NkRegistry.MustBegin("agentActionTainted", 185).End()
+	MembAgentActionConfined   = NkRegistry.MustBegin("agentActionConfined", 186).End()
+	// The audit trail (ADR-0277). The context components every trail row
+	// composes: which conversation, turn and round a row belongs to; which
+	// task, at which epoch, through which dispatcher call; and which model
+	// call's reply asked for it. Run, app and window are the Origin
+	// component, on MembRuntimeRun, MembRuntimeApp and MembLifecycleTileKey.
+	// Identifiers minted per event ride the string section, not the
+	// dictionary-encoded symbol section (§SD9).
+	//
+	// The per-kind spellings these replace — the llmCall and llmMessage app,
+	// instance and conversation, the agentAction task, conversation, actor
+	// and call ids — were retired with the rows that carried them; their
+	// ordinals (104, 105, 150, 156, 157, 169-174) stay unused.
+	MembTrailConversation   = NkRegistry.MustBegin("trailConversation", 187).End()
+	MembTrailTurn           = NkRegistry.MustBegin("trailTurn", 188).End()
+	MembTrailRound          = NkRegistry.MustBegin("trailRound", 189).End()
+	MembTrailTask           = NkRegistry.MustBegin("trailTask", 190).End()
+	MembTrailTaskEpoch      = NkRegistry.MustBegin("trailTaskEpoch", 191).End()
+	MembTrailCall           = NkRegistry.MustBegin("trailCall", 192).End()
+	MembTrailCauseModelCall = NkRegistry.MustBegin("trailCauseModelCall", 193).End()
+	MembTrailCauseToolCall  = NkRegistry.MustBegin("trailCauseToolCall", 194).End()
+	MembTrailCauseToolIndex = NkRegistry.MustBegin("trailCauseToolIndex", 195).End()
+	// What the trail adds to the model call and its messages: the retention
+	// verdict, the provider's own id and model name, a digest of the tools
+	// offered and the token ceiling asked for; per message its size, a
+	// digest of its content and the tool calls it issued.
+	MembLlmCallRetention      = NkRegistry.MustBegin("llmCallRetention", 196).End()
+	MembLlmCallProviderId     = NkRegistry.MustBegin("llmCallProviderId", 197).End()
+	MembLlmCallReportedModel  = NkRegistry.MustBegin("llmCallReportedModel", 198).End()
+	MembLlmCallToolsDigest    = NkRegistry.MustBegin("llmCallToolsDigest", 199).End()
+	MembLlmCallMaxTokens      = NkRegistry.MustBegin("llmCallMaxTokens", 200).End()
+	MembLlmMessageBytes       = NkRegistry.MustBegin("llmMessageBytes", 201).End()
+	MembLlmMessageDigest      = NkRegistry.MustBegin("llmMessageDigest", 202).End()
+	MembLlmMessageToolCallIds = NkRegistry.MustBegin("llmMessageToolCallIds", 203).End()
+	MembLlmMessageToolNames   = NkRegistry.MustBegin("llmMessageToolNames", 204).End()
+	// The coordinator's key for an agent's call (§SD6), and the grant
+	// events: what was asked of the person, what they decided, and how a
+	// task ended (§SD2).
+	MembAgentActionKey         = NkRegistry.MustBegin("agentActionKey", 205).End()
+	MembKindAgentGrant         = NkRegistry.MustBegin("runtimeKindAgentGrant", 206).End()
+	MembAgentGrantEvent        = NkRegistry.MustBegin("agentGrantEvent", 207).End()
+	MembAgentGrantPlan         = NkRegistry.MustBegin("agentGrantPlan", 208).End()
+	MembAgentGrantPlanDigest   = NkRegistry.MustBegin("agentGrantPlanDigest", 209).End()
+	MembAgentGrantEntries      = NkRegistry.MustBegin("agentGrantEntries", 210).End()
+	MembAgentGrantLaunches     = NkRegistry.MustBegin("agentGrantLaunches", 211).End()
+	MembAgentGrantDestinations = NkRegistry.MustBegin("agentGrantDestinations", 212).End()
+	MembAgentGrantCallsBudget  = NkRegistry.MustBegin("agentGrantCallsBudget", 213).End()
+	MembAgentGrantDeadlineMs   = NkRegistry.MustBegin("agentGrantDeadlineMs", 214).End()
+	MembAgentGrantDecidedBy    = NkRegistry.MustBegin("agentGrantDecidedBy", 215).End()
+	MembAgentGrantReason       = NkRegistry.MustBegin("agentGrantReason", 216).End()
+	// The egress fetch record (ADR-0262 §SD5) as a trail row.
+	MembKindHttpFetch        = NkRegistry.MustBegin("runtimeKindHttpFetch", 217).End()
+	MembHttpFetchDestination = NkRegistry.MustBegin("httpFetchDestination", 218).End()
+	MembHttpFetchPurpose     = NkRegistry.MustBegin("httpFetchPurpose", 219).End()
+	MembHttpFetchSensitivity = NkRegistry.MustBegin("httpFetchSensitivity", 220).End()
+	MembHttpFetchMethod      = NkRegistry.MustBegin("httpFetchMethod", 221).End()
+	MembHttpFetchUrl         = NkRegistry.MustBegin("httpFetchUrl", 222).End()
+	MembHttpFetchStatus      = NkRegistry.MustBegin("httpFetchStatus", 223).End()
+	MembHttpFetchBytes       = NkRegistry.MustBegin("httpFetchBytes", 224).End()
+	MembHttpFetchElapsedMs   = NkRegistry.MustBegin("httpFetchElapsedMs", 225).End()
+	MembHttpFetchRefused     = NkRegistry.MustBegin("httpFetchRefused", 226).End()
+	MembHttpFetchError       = NkRegistry.MustBegin("httpFetchError", 227).End()
+	// The build a run executed: a digest of the running executable (§SD8).
+	MembRunBuildId = NkRegistry.MustBegin("runtimeRunBuildId", 228).End()
+	// The capture record (ADR-0281 §SD6): one row per window capture, the
+	// policy enforcement point's decision and what it handed out.
+	MembKindAgentCapture        = NkRegistry.MustBegin("runtimeKindAgentCapture", 229).End()
+	MembAgentCaptureFormat      = NkRegistry.MustBegin("agentCaptureFormat", 230).End()
+	MembAgentCaptureWindows     = NkRegistry.MustBegin("agentCaptureWindows", 231).End()
+	MembAgentCaptureDecision    = NkRegistry.MustBegin("agentCaptureDecision", 232).End()
+	MembAgentCapturePolicy      = NkRegistry.MustBegin("agentCapturePolicy", 233).End()
+	MembAgentCaptureObligations = NkRegistry.MustBegin("agentCaptureObligations", 234).End()
+	MembAgentCaptureSpansDigest = NkRegistry.MustBegin("agentCaptureSpansDigest", 235).End()
+	MembAgentCaptureDigest      = NkRegistry.MustBegin("agentCaptureDigest", 236).End()
+	MembAgentCaptureBytes       = NkRegistry.MustBegin("agentCaptureBytes", 237).End()
+	MembAgentCapturePhase       = NkRegistry.MustBegin("agentCapturePhase", 238).End()
+	MembAgentCaptureReason      = NkRegistry.MustBegin("agentCaptureReason", 239).End()
+	MembAgentCaptureConfined    = NkRegistry.MustBegin("agentCaptureConfined", 240).End()
+	// What the person was shown of an agent's call: the model's one-line
+	// title and its stated reason, bounded, kept in every retention mode as
+	// the grant's plan is.
+	MembAgentActionCallTitle  = NkRegistry.MustBegin("agentActionCallTitle", 241).End()
+	MembAgentActionCallReason = NkRegistry.MustBegin("agentActionCallReason", 242).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -414,10 +534,19 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembPersistValue,
 	MembKindWatchbillWorker, MembWatchbillPresenceRun, MembWatchbillPresenceHost, MembWatchbillPresencePhase,
 	MembWatchbillPresenceKinds, MembWatchbillPresenceQueues, MembWatchbillPresenceMaxWorkers,
-	MembKindLlmCall, MembLlmCallId, MembLlmCallApp, MembLlmCallInstance, MembLlmCallPurpose, MembLlmCallSensitivity,
+	MembKindLlmCall, MembLlmCallId, MembLlmCallPurpose, MembLlmCallSensitivity,
 	MembLlmCallModel, MembLlmCallEndpointHost, MembLlmCallMessages, MembLlmCallTools, MembLlmCallPromptBytes,
 	MembLlmCallCompletionBytes, MembLlmCallInputTokens, MembLlmCallOutputTokens, MembLlmCallToolCalls,
 	MembLlmCallFinishReason, MembLlmCallElapsedMs, MembLlmCallIncomplete, MembLlmCallRefused, MembLlmCallError,
+	MembLlmCallParent, MembLlmCallRetainedFrom, MembLlmCallHistoryHash,
+	MembKindLlmMessage, MembLlmMessageCallId, MembLlmMessageSensitivity,
+	MembLlmMessageOrdinal, MembLlmMessageRole, MembLlmMessageContent, MembLlmMessageReasoning,
+	MembLlmMessageToolCallId, MembLlmMessageToolCalls, MembLlmMessageImages,
+	MembLlmCallOmitFrom, MembLlmCallOmitTo,
+	MembKindAgentAction, MembAgentActionInstance,
+	MembAgentActionApp, MembAgentActionOperation, MembAgentActionEffect, MembAgentActionArgsDigest,
+	MembAgentActionDecision, MembAgentActionPhase, MembAgentActionReason, MembAgentActionBudgetLeft,
+	MembAgentActionTest, MembAgentActionTainted, MembAgentActionConfined,
 	MembKindVizevalScore, MembVizevalScenario, MembVizevalCandidateId, MembVizevalSink, MembVizevalCandidate,
 	MembVizevalBuild, MembVizevalBatchDigest, MembVizevalRows, MembVizevalStatus, MembVizevalReason,
 	MembVizevalDir, MembVizevalArea, MembVizevalMetricName, MembVizevalMetricValue,
@@ -425,4 +554,18 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembKindVizevalJudgement, MembVizevalJudgementScenario, MembVizevalJudgementDigest, MembVizevalJudgeModel,
 	MembVizevalJudgePrompt, MembVizevalPairA, MembVizevalPairB, MembVizevalDrawingA, MembVizevalDrawingB,
 	MembVizevalCriterion, MembVizevalPreference, MembVizevalWhy,
+	MembTrailConversation, MembTrailTurn, MembTrailRound, MembTrailTask, MembTrailTaskEpoch, MembTrailCall,
+	MembTrailCauseModelCall, MembTrailCauseToolCall, MembTrailCauseToolIndex,
+	MembLlmCallRetention, MembLlmCallProviderId, MembLlmCallReportedModel, MembLlmCallToolsDigest, MembLlmCallMaxTokens,
+	MembLlmMessageBytes, MembLlmMessageDigest, MembLlmMessageToolCallIds, MembLlmMessageToolNames,
+	MembAgentActionKey, MembKindAgentGrant, MembAgentGrantEvent, MembAgentGrantPlan, MembAgentGrantPlanDigest,
+	MembAgentGrantEntries, MembAgentGrantLaunches, MembAgentGrantDestinations, MembAgentGrantCallsBudget,
+	MembAgentGrantDeadlineMs, MembAgentGrantDecidedBy, MembAgentGrantReason,
+	MembKindHttpFetch, MembHttpFetchDestination, MembHttpFetchPurpose, MembHttpFetchSensitivity, MembHttpFetchMethod,
+	MembHttpFetchUrl, MembHttpFetchStatus, MembHttpFetchBytes, MembHttpFetchElapsedMs, MembHttpFetchRefused, MembHttpFetchError,
+	MembRunBuildId,
+	MembKindAgentCapture, MembAgentCaptureFormat, MembAgentCaptureWindows, MembAgentCaptureDecision,
+	MembAgentCapturePolicy, MembAgentCaptureObligations, MembAgentCaptureSpansDigest, MembAgentCaptureDigest,
+	MembAgentCaptureBytes, MembAgentCapturePhase, MembAgentCaptureReason, MembAgentCaptureConfined,
+	MembAgentActionCallTitle, MembAgentActionCallReason,
 }

@@ -19,5 +19,3 @@ func convertToCBOR(msg []byte) (retr []byte, err error) {
 	retr = msg
 	return
 }
-
-var zerologCborMessages = true

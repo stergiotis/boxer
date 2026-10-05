@@ -14,7 +14,7 @@ This recipe renders one dataset through several of play's Experiments sinks
 and records geometry metrics for each — overlap, clipping, elision, contrast,
 colour distance, numeric alignment — as files you can read or compare. It
 covers the harness as built through
-[ADR-0257](../adr/0257-vizeval-scored-renderings-of-leeway-batches.md) (proposed)
+[ADR-0266](../adr/0266-vizeval-scored-renderings-of-leeway-batches.md) (proposed)
 M6: geometry metrics, model-answered task questions and a pairwise ranking,
 filed as files and optionally in `boxer.facts`. Model-judged task accuracy and pairwise ranking are later
 milestones, and searching the candidate space is left to the caller.

@@ -17,7 +17,7 @@ import (
 // ScenarioSuffix names a scenario document.
 const ScenarioSuffix = ".vizeval.md"
 
-// Scenario is the fixed part of a problem (ADR-0257 §SD4): a dataset, what a
+// Scenario is the fixed part of a problem (ADR-0266 §SD4): a dataset, what a
 // reader wants from it, the viewport, the sinks that may answer, questions
 // with computable answers, and the gates a candidate must pass.
 type Scenario struct {
@@ -227,7 +227,7 @@ func (inst *Scenario) ArtifactBox() (w, h int, ok bool) {
 // Frame names the render geometry a scorecard was measured in when the
 // scenario declares an artifact box — `<box>@<viewport>` — and is empty
 // otherwise. Two boxes are two measurements, so it is part of a scorecard's
-// key (ADR-0257 §SD8).
+// key (ADR-0266 §SD8).
 func (inst *Scenario) Frame() string {
 	aw, ah, ok := inst.ArtifactBox()
 	if !ok {

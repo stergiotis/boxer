@@ -210,7 +210,12 @@ func GenerateRustFiles(basePath string) (err error) {
 		TypeWriter:     typeBuf,
 	}
 
-	err = rustclient.GenerateCode(wh, definition.Definitions(), tracker)
+	defs := definition.Definitions()
+	err = definition.CheckEffects(defs)
+	if err != nil {
+		return
+	}
+	err = rustclient.GenerateCode(wh, defs, tracker)
 	if err != nil {
 		return
 	}

@@ -1,4 +1,4 @@
-// Package vizevalcmd is the `imzero2 vizeval` subcommand (ADR-0257, proposed,
+// Package vizevalcmd is the `imzero2 vizeval` subcommand (ADR-0266, proposed,
 // §SD9): list what a scenario admits, and score candidates over it.
 //
 // It must run from the imzero2 binary: the scene launcher starts the host as a
@@ -20,6 +20,8 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
+	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/scene"
@@ -54,7 +56,7 @@ const appId app.AppIdT = "imzero2.vizeval"
 func NewCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "vizeval",
-		Usage: "score renderings of a scenario's leeway batch in play's Experiments pane (ADR-0257)",
+		Usage: "score renderings of a scenario's leeway batch in play's Experiments pane (ADR-0266)",
 		Subcommands: []*cli.Command{
 			{
 				Name:      "space",
@@ -125,7 +127,7 @@ func NewCommand() *cli.Command {
 					&cli.BoolFlag{Name: flagRescore, Usage: "with --" + flagFacts + ", render every candidate even when a measurement can be reused"},
 					&cli.BoolFlag{Name: flagJudge, Usage: "ask the scenario's questions of the configured vision model (BOXER_LLM_*) about every candidate that passed its gates"},
 					&cli.IntFlag{Name: flagJudgeCalls, Value: 200, Usage: "with --" + flagJudge + ", the most model calls the run makes; cached answers are free"},
-					&cli.BoolFlag{Name: flagJudgeSheet, Usage: "write a judge sheet per drawing of a candidate that passed its gates, and a control, under <out>/<scenario>/" + harness.JudgeDirName + "/, for a reader to answer (ADR-0257 §SD10)"},
+					&cli.BoolFlag{Name: flagJudgeSheet, Usage: "write a judge sheet per drawing of a candidate that passed its gates, and a control, under <out>/<scenario>/" + harness.JudgeDirName + "/, for a reader to answer (ADR-0266 §SD10)"},
 					&cli.PathFlag{Name: flagAnswers, Usage: "score a reader's replies to judge sheets (JSONL) onto the candidates whose drawings the sheets show"},
 				},
 				Action: runScore,
@@ -299,19 +301,27 @@ func openJudge(ctx *cli.Context, out string) (j *judge.Judge, closeFn func(), er
 		return nil, nil, eh.Errorf("--" + flagJudge + " needs a model: set BOXER_LLM_ENDPOINT and BOXER_LLM_MODEL")
 	}
 	if ctx.Bool(flagFacts) {
-		if cfg.Exec, err = storeexec.New(chclient.New(chclient.ConfigFromEnv(), nil), nil); err != nil {
-			return nil, nil, err
+		exec, eerr := storeexec.New(chclient.New(chclient.ConfigFromEnv(), nil), nil)
+		if eerr != nil {
+			return nil, nil, eerr
 		}
+		// The harness's own run names the rows' origin (ADR-0277 §SD1).
+		run := ""
+		if inst, rerr := runinfo.Init(); rerr == nil {
+			run = inst.RunId
+		}
+		cfg.Trail = trail.NewRecorder(exec, run, log.Logger)
 	}
 	bus := inprocbus.NewInst(log.Logger)
 	svc, err := llm.NewService(bus, log.Logger, cfg)
 	if err != nil {
+		cfg.Trail.Close()
 		return nil, nil, eh.Errorf("unable to start the llm service: %w", err)
 	}
 	client := llm.NewClient(bus.NewClient(appId, llm.ClientCaps("vizeval: answer scenario questions from renderings")))
 	client.Timeout = cfg.Timeout
 	j = &judge.Judge{Client: client, Model: cfg.Model, CacheDir: filepath.Join(out, "judge-cache")}
-	return j, svc.Close, nil
+	return j, func() { svc.Close(); cfg.Trail.Close() }, nil
 }
 
 func readCandidates(path string) (cands []vizeval.Candidate, err error) {

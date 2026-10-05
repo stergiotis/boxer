@@ -1,21 +1,20 @@
 // Package graphview is the live node-and-edge graph widget of ADR-0224:
 // random, force-directed (Fruchterman–Reingold, optionally with
 // centre gravity) and hierarchical layouts, drawn on the imzero2 painter lane
-// with no IDL, Rust or fetcher of its own. It is the Go sibling of the
-// egui_graphs-backed `Graph` binding and carries that binding's feature set
-// and parameter semantics, so a consumer moves over by renaming types.
+// with no IDL, Rust or fetcher of its own. It replaced the egui_graphs-backed
+// `Graph` binding, since removed, and carries that binding's feature set and
+// parameter semantics.
 //
 // The caller declares the full node and edge set every frame (ADR-0224 §SD1);
 // the widget retains positions, selection and the camera across frames and
 // reconciles the declaration against them. Input is read from the previous
 // frame's canvas registers, so events and hover lag one frame like every
-// canvas widget. Read [View.Events], [View.Metrics] and the selection
-// iterators after [View.Render].
+// canvas widget. [View.Render] returns the frame's [Events]; read
+// [View.Metrics] and the selection iterators after it.
 //
 //	gv := graphview.New(ids, "my-graph", graphview.Options{Layout: graphview.LayoutForceDirectedCG})
 //	// every frame:
-//	gv.Render(nodes, edges, w, h)
-//	for _, ev := range gv.Events() { … }
+//	for _, ev := range gv.Render(nodes, edges, w, h) { … }
 //
 // Nodes that name the same aura id are drawn over one translucent blob when
 // [Options.Auras] is enabled (ADR-0224 §SD11): a per-aura scalar field on a

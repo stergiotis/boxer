@@ -254,13 +254,14 @@ func (w *exprWidget) renderOne(ids *c.WidgetIdStack, s paramSlot, cat paramExprC
 		}
 		f, held := w.fields[s.Name]
 		if !held {
-			f = sqleditor.NewField()
+			// Scoped by the slot's name under the stack the panel renders on;
+			// a renamed slot is a new field, which ClearStateForAbsent prunes.
+			f = sqleditor.NewField(ids, s.Name)
 			w.fields[s.Name] = f
 		}
-		f.Render(ids, sqleditor.FieldFrame{
-			IDSlot: "paramSlotExpr-" + s.Name,
-			Value:  draft,
-			Hint:   exprHintTextFor(cat, s.Name),
+		f.Render(sqleditor.FieldFrame{
+			Value: draft,
+			Hint:  exprHintTextFor(cat, s.Name),
 			// The mark is in the VALUE's own coordinates, which is what the
 			// field is bound to — exprMarkFor already subtracted the splice
 			// origin, so nothing here has to know where the value landed.

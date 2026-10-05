@@ -1,26 +1,27 @@
-// Package timeline provides a calendar-axis interval-event widget for the
-// ImZero2 framework. It packs IntervalEvents into non-overlapping lanes
+// Package timeline is a semi-retained widget (ADR-0267) for interval events
+// on a calendar axis. It packs IntervalEvents into non-overlapping lanes
 // (greedy left-to-right) and paints them as filled rectangles on a
 // PaintCanvas, with a calendar-aware tick axis along the bottom and
 // optional rollover context rows (year / date) above the ticks.
 //
 // Basic usage:
 //
-//	var tl = timeline.New(ids, "ops-deploys", events,
-//	    timeline.WithContainerSize(1024, 220))
-//	for range c.Window(...).KeepIter() {
-//	    tl.Render()
-//	}
+//	tl := timeline.New(ids, "ops-deploys", events, timeline.Options{NowLine: true})
+//	tl.SetPoints(commits) // data: points, annotations, an explicit range
+//	// every frame:
+//	ev := tl.Render()
+//	if ev.SelectionChanged { use(ev.Selection) }
 //
-// Visual tweaks go through WithVisuals + DefaultVisuals; see the Visuals
-// type docs for the full surface.
+// Options are a struct kept as the public [Timeline.Opts] and re-read every
+// frame, so a toggle is an assignment. Data the host does not re-declare per
+// frame goes through SetIntervals / SetPoints / SetAnnotations; what the user
+// did comes back in [Events]. Visual tweaks start from DefaultVisuals and go
+// in [Options.Visuals].
 //
-// The widget is composite, not an FFFI2 primitive: all state lives on the
-// receiver pointer and the caller holds *Timeline across frames. Multiple
-// instances coexist safely — Render wraps its body in c.IdScope(scopeKey).
-// All time on the wire is int64 epoch milliseconds in UTC; the tick axis
-// can be localised via the (currently widget-internal) loc parameter on
-// ComputeTickMap.
+// All state lives on the receiver pointer and the caller holds *Timeline
+// across frames. Multiple instances coexist safely — Render wraps its body in
+// c.IdScope(scopeKey). All time on the wire is int64 epoch milliseconds in
+// UTC; [Options.TimeZone] localises the tick axis.
 //
 // # Validation policy
 //
@@ -29,13 +30,12 @@
 //
 //   - Panic: programmer errors (nil where required, structurally
 //     impossible input). Fails loudly at the call site so bugs surface
-//     during development. Examples: WithContainerSize(0, 0),
-//     New(nil ids, ...), WithRange(t1, t0) with t1 <= t0.
+//     during development. Examples: New(nil ids, ...), SetRange(t1, t0)
+//     with t1 <= t0.
 //
 //   - Nil clears / no-op: data-shaped inputs where a missing value has an
-//     obvious semantic ("no data", "no callback"). Documented per option;
-//     never panics. Examples: WithPointEvents(nil), WithOnIntervalClick(nil),
-//     WithBackgroundBands(nil), WithVisuals(nil).
+//     obvious semantic ("no data"). Never panics. Examples: SetPoints(nil),
+//     a nil Options.BackgroundBands or Options.Visuals.
 //
 //   - Snapshot at boundary: methods returning state computed during the
 //     most recent Render reflect *that* frame, not the live data — see
@@ -68,14 +68,13 @@ import (
 type BackgroundBandProducer func(viewMinMS, viewMaxMS int64) iter.Seq[layout.BackgroundBand]
 
 // Visuals bundles every visual-styling knob the Timeline exposes. All
-// pixel dimensions are in egui logical pixels (post-DPI). Callers tweak
-// via the WithVisuals mutator option:
+// pixel dimensions are in egui logical pixels (post-DPI). Callers start
+// from DefaultVisuals and hand the result to Options.Visuals:
 //
-//	tl := timeline.New(ids, scopeKey, data,
-//	    timeline.WithVisuals(func(v *timeline.Visuals) {
-//	        v.LaneHeight = 30
-//	        v.IntensityColormap = styletokens.SequentialMagma
-//	    }))
+//	v := timeline.DefaultVisuals()
+//	v.LaneHeight = 30
+//	v.IntensityColormap = styletokens.SequentialMagma
+//	tl.Opts.Visuals = &v
 //
 // The struct has no internal invariants and accepts any field values; the
 // widget will render whatever it's given, including zeroes (which produce
@@ -98,7 +97,7 @@ type Visuals struct {
 	RugStripH    float32
 	RugGap       float32
 	// BrushStripH is the height of the range-brush strip; BrushGap the space
-	// between it and the widget above. Both are inert unless WithBrush was
+	// between it and the widget above. Both are inert unless Options.Brush is
 	// given (ADR-0043 §SD16).
 	BrushStripH     float32
 	BrushGap        float32
@@ -157,7 +156,7 @@ type Visuals struct {
 	BrushHintText string
 
 	// Flat event fills — used for interval bars and raw rug marks when
-	// intensity is NOT the encoded dimension (see WithIntensityEncoding).
+	// intensity is NOT the encoded dimension (see Options.NoIntensityEncoding).
 	// A sequential colormap is lightness-monotonic from its dark end, so an
 	// all-zero-intensity dataset (the common case when the caller never
 	// attached an intensity column) would otherwise paint every glyph at the
@@ -172,24 +171,7 @@ type Visuals struct {
 	RugColormap       styletokens.SequentialE
 }
 
-// DefaultVisuals returns the IDS-token-derived default visual treatment.
-// Color tokens resolve via styletokens; layout dimensions are tuned to
-// look reasonable at the demo's 1180×280-ish stage. Callers wanting a
-// dense / sparse / monospace look should start here and mutate via
-// WithTimeZone localises the tick axis and the rollover rows.
-//
-// It matters when the timeline sits beside other controls that name the same
-// instants: two readouts of one moment in different zones is a defect the user
-// has to decode, and the widget is usually the one that can move.
-//
-// Validation: nil clears — the axis returns to UTC.
-func WithTimeZone(loc *time.Location) Option {
-	return func(inst *Timeline) {
-		inst.loc = loc
-	}
-}
-
-// WithVisuals.
+// DefaultVisuals is the look Options.Visuals == nil selects.
 func DefaultVisuals() (v Visuals) {
 	v = Visuals{
 		LaneHeight:   28,
@@ -328,6 +310,10 @@ const (
 	playheadCaretW  float32 = 9
 	playheadCaretH  float32 = 6
 	emptyFallback           = 1 * time.Hour
+	// maxViewSpanSeconds is the widest view zoom-out reaches: 1000 years,
+	// held in seconds because it overflows time.Duration.
+	maxViewSpanSeconds  float64 = 1000 * 365.25 * 24 * 3600
+	maxViewSpanUnitsCap float64 = 1 << 60
 	// canvasIdKey names the PaintCanvas this widget drains into. It is a
 	// const because the id is derived twice per frame: once at the top of
 	// renderBody to read last frame's response flags (the pan gate), and
@@ -477,32 +463,17 @@ type laneRef struct {
 	index int32
 }
 
-// timelineProbeSalt namespaces one Timeline's register slots (the r21 pane
-// probe) inside the shared slot map. The scopeKey alone cannot: embedders pass
-// a constant ("play-timeline"), so two windows of the same app hash to one seq
-// and size each other — the shape the r18 retirement removed between panels,
-// which survives between windows for as long as the seq ignores the instance.
-// Mixed through the instance's own id stack, which carries whatever separates
-// the instances — a base salt, or the host's per-window scope. Mirrors
-// imztop's paneProbeSeq.
-const timelineProbeSalt uint64 = 0x4b3f21c7a95e6d03
-
-// probeSeq is this instance's slot for one probe role. The salt is derived on
-// FIRST USE rather than at New, which is what makes it window-unique for every
-// embedder: windowhost pushes its per-window salt as an id SCOPE around Frame,
-// so a widget constructed in Mount would read an empty stack (peek falls back
-// to the base salt, zero unless the embedder set one) and two windows would
-// mint the same value. At render time the scope is on the stack. Derive is
-// non-zero by construction, so zero is an unambiguous "not yet".
+// probeSeq is this instance's slot for one probe role, derived from the id
+// stack at RENDER time rather than at New: windowhost pushes its per-window
+// salt as an id scope around Frame, so a value minted in Mount would read an
+// empty stack and two windows would share a slot (ADR-0267 W7). Called
+// inside the Render scope, [c.WidgetIdStack.ProbeSeq] sees that scope.
 func (inst *Timeline) probeSeq(role string) (seq uint64) {
-	if inst.probeSalt == 0 {
-		inst.probeSalt = inst.ids.PrepareHighEntropy(timelineProbeSalt).Derive()
-	}
-	return c.ProbeSeq(inst.scopeKey, role) ^ inst.probeSalt
+	return inst.ids.ProbeSeq(role)
 }
 
 // defaultLODScales is the binning ladder used by Timeline when the caller
-// does not pass WithLODScales. Spans 1 ms → 1 week so a single index can
+// does not set Options.LODScales. Spans 1 ms → 1 week so a single index can
 // serve everything from sub-second log streams to multi-month dashboards.
 var defaultLODScales = []time.Duration{
 	1 * time.Millisecond,
@@ -526,11 +497,13 @@ var defaultLODScales = []time.Duration{
 // updates — though SetIntervals / SetPoints / SetAnnotations deliberately
 // drop a user-driven pin so new data auto-fits; see dropInteractivePin).
 type Timeline struct {
+	// Opts is re-read at the top of every Render (see [Options]).
+	Opts Options
+
 	ids      *c.WidgetIdStack
 	scopeKey string
-	// probeSalt makes this instance's register slots window-unique. See
-	// [timelineProbeSalt].
-	probeSalt uint64
+	// events is the frame's scratch, returned by Render.
+	events Events
 
 	intervals   []*layout.IntervalEvent
 	points      []*layout.PointEvent
@@ -560,8 +533,6 @@ type Timeline struct {
 
 	interactionEnabled bool
 
-	onSelection SelectionListener
-
 	backgroundBands BackgroundBandProducer
 	nowLineEnabled  bool
 	// playheadMS is the caller-set instant, valid only while playheadHas.
@@ -590,11 +561,10 @@ type Timeline struct {
 	lastViewPxWidth int32
 
 	// Range-brush state (ADR-0043 §SD16). All of it is inert unless
-	// WithBrush was given: brushEnabled gates the strip's canvas, its input
+	// Options.Brush is set: brushEnabled gates the strip's canvas, its input
 	// and its paint, so a timeline without a brush is byte-identical on the
 	// wire to one from before the brush existed.
 	brushEnabled bool
-	onBrush      BrushListener
 	// brushing is true between the press and the release of one gesture.
 	// anchor/cur are the two ends as it is made; from/to/has are the
 	// committed result. They are separate because a gesture in flight must
@@ -632,224 +602,89 @@ type Timeline struct {
 	lockedView bool
 }
 
-// Option configures a Timeline at construction.
-type Option func(inst *Timeline)
-
-// WithContainerWidth sets the widget's initial / first-frame canvas width,
-// used before the captureAvailableSize FFFI2 fetcher has surfaced a value
-// (typically frame 1 after construction). Each subsequent frame the
-// widget auto-fits its width to the parent panel's available_size; height
-// is always content-driven (annotation band + rug + lane rows + axis +
-// rollover rows) and never padded to fill leftover vertical space.
-//
-// Validation: panic on w <= 0.
-func WithContainerWidth(w float32) Option {
-	if w <= 0 {
-		panic(fmt.Sprintf("timeline: WithContainerWidth requires positive w (got %v)", w))
-	}
-	return func(inst *Timeline) {
-		inst.containerW = w
-	}
+// Options configures a Timeline. The zero value is the default widget: the
+// calendar axis in UTC, interactive, intensity-coloured, no brush. Render
+// re-reads every field each frame, so a toggle is an assignment on
+// [Timeline.Opts]; the three marked "read at New" shape state the widget
+// builds once and are not re-read.
+type Options struct {
+	// TimeZone localises the tick axis and the rollover rows; nil is UTC.
+	// Two readouts of one instant in different zones is a defect the user
+	// has to decode, so match the zone of the controls beside the timeline.
+	TimeZone *time.Location
+	// ContainerWidth is the canvas width for the frames before the widget's
+	// own pane probe answers; 0 is 1024. After that the widget fits its
+	// width to its pane; its height is always content-driven.
+	ContainerWidth float32
+	// NotInteractive renders read-only: no pan, zoom or hover tooltip.
+	NotInteractive bool
+	// BackgroundBands, when set, yields shaded ranges (weekends, office
+	// hours, maintenance windows) for the current view; they paint under
+	// every other glyph. Called once per frame; yield only bands that
+	// intersect the view.
+	BackgroundBands BackgroundBandProducer
+	// NowLine draws a vertical line at time.Now() while it falls inside the
+	// view. Inert on an offset axis.
+	NowLine bool
+	// NoIntensityEncoding paints bars and raw rug marks in the flat
+	// Visuals.IntervalColor / PointColor instead of deriving the fill from
+	// each event's Intensity. Set it when the data carries no intensity: a
+	// sequential colormap paints zero at its dark end, which vanishes
+	// against the background. The density rug is unaffected.
+	NoIntensityEncoding bool
+	// IntervalColors, when non-empty, paints bars from this palette indexed
+	// by IntervalEvent.KindID (modulo len); it outranks intensity and flat
+	// colouring.
+	IntervalColors []color.Color
+	// Visuals replaces DefaultVisuals when non-nil. Start from
+	// DefaultVisuals and change the fields you care about.
+	Visuals *Visuals
+	// RawPointThreshold is the visible-item count above which the rug strip
+	// switches from raw marks to density bins; 0 is 500.
+	RawPointThreshold int32
+	// LODScales overrides the rug's bin ladder, strictly ascending; nil is
+	// the default 1 ms … 1 w ladder. A change rebuilds the LOD index.
+	LODScales []time.Duration
+	// Brush adds the range-brush strip under the axis. Off, no strip is
+	// emitted and no row reserved. A completed gesture arrives in
+	// [Events.BrushChanged]; [Timeline.Brush] reads the committed range.
+	Brush bool
+	// OffsetAxis makes the axis an offset from zero instead of the
+	// calendar: every int64 value counts OffsetUnit (0 is the millisecond)
+	// from a zero that is no calendar instant; ticks are offset labels and
+	// the rollover rows, now line and time zone are inert. Read at New.
+	OffsetAxis bool
+	OffsetUnit time.Duration
+	// LockedView leaves the view to the host: no wheel zoom, no drag pan,
+	// while hover, click, selection and the brush still work — for a
+	// timeline under a widget that owns the time axis and drives
+	// SetRangeUnits every frame.
+	LockedView bool
 }
 
-// WithInteractive toggles pan/zoom/hover-tooltip behaviour. Default true.
-// Set false for embedded use where the timeline should render read-only
-// (e.g. inside a screenshot tour where the cursor isn't meaningful).
-//
-// Validation: none — both true and false are valid.
-func WithInteractive(enabled bool) Option {
-	return func(inst *Timeline) {
-		inst.interactionEnabled = enabled
-	}
-}
-
-// SelectionListener receives every selection change driven by a
-// primary-click over the canvas — including click-miss / click-same
-// gestures that clear the previous selection (the listener then receives
-// a SelectionInfo with Kind == SelectionNone). Programmatic mutators
-// (SelectAnnotationByNumber, ClearSelection, SetIntervals, etc.) do NOT
-// fire the listener — those are caller-initiated by definition.
-type SelectionListener func(sel SelectionInfo)
-
-// WithOnSelection registers a callback that fires on every selection
-// change driven by a primary-click over the canvas. Subsumes the previous
-// per-kind callbacks (WithOnIntervalClick / WithOnRugBucketClick /
-// WithOnAnnotationClick); the listener dispatches on SelectionInfo.Kind:
-//
-//	timeline.WithOnSelection(func(sel timeline.SelectionInfo) {
-//	    switch sel.Kind {
-//	    case timeline.SelectionInterval:   useInterval(sel.Interval)
-//	    case timeline.SelectionBucket:     useBucket(sel.Bucket)
-//	    case timeline.SelectionAnnotation: useAnnotation(sel.Annotation)
-//	    case timeline.SelectionLane:       useLane(sel.Lane)
-//	    case timeline.SelectionNone:       // click cleared selection
-//	    }
-//	})
-//
-// Validation: nil disables the listener (no-op).
-func WithOnSelection(fn SelectionListener) Option {
-	return func(inst *Timeline) {
-		inst.onSelection = fn
-	}
-}
-
-// WithAnnotations attaches Grafana-style time-pinned markers (vertical
-// dashed lines + numbered flag at the top of the canvas). Annotations are
-// rendered above bars and rug events; their hit corridor extends the full
-// vertical data area. Flags too close together at the current zoom to
-// paint side by side stagger into additional flag rows (the band grows
-// downward, up to annotationMaxFlagRows) rather than overlapping.
-//
-// Validation: nil clears (widget renders without annotations).
-func WithAnnotations(as []*layout.Annotation) Option {
-	return func(inst *Timeline) {
-		inst.annotations = as
-	}
-}
-
-// WithBackgroundBands registers a lazy producer of shaded time ranges
-// (weekend overlay, office hours, maintenance windows, alert windows).
-// The producer is called once per frame with the current view range and
-// must yield only bands that intersect it — typically a one-pass for-loop
-// stepping through the relevant calendar units. Bands paint *under* every
-// other glyph (lanes, rug, axis) so foreground stays legible; choose low
-// alpha (~0x18–0x40) in the BackgroundBand.Color channel.
-//
-// Validation: nil clears (widget renders without background bands).
-func WithBackgroundBands(producer BackgroundBandProducer) Option {
-	return func(inst *Timeline) {
-		inst.backgroundBands = producer
-	}
-}
-
-// WithNowLine toggles a vertical "now" line at time.Now() (UTC). Renders
-// only when the current wall-clock time falls inside the view range —
-// for static / historical views it disappears silently. Solid 1.5 px
-// line in Visuals.NowLineColor, painted above the data and below the
-// tooltip.
-//
-// Validation: none — both true and false are valid.
-func WithNowLine(enabled bool) Option {
-	return func(inst *Timeline) {
-		inst.nowLineEnabled = enabled
-	}
-}
-
-// WithIntensityEncoding toggles whether interval bars and raw rug marks
-// derive their fill from the per-event Intensity via IntensityColormap /
-// RugColormap (true, the default) or from the flat Visuals.IntervalColor /
-// Visuals.PointColor (false). Turn it OFF when the data carries no intensity
-// dimension: a sequential colormap is lightness-monotonic from its dark end,
-// so an all-zero-intensity dataset would otherwise paint every glyph at the
-// near-background dark end and vanish against BgColor. The density rug always
-// encodes bucket count and is unaffected by this toggle.
-//
-// Validation: none — both true and false are valid.
-func WithIntensityEncoding(enabled bool) Option {
-	return func(inst *Timeline) {
-		inst.intensityEncoded = enabled
-	}
-}
-
-// WithIntervalColors paints interval bars from a categorical palette indexed by
-// IntervalEvent.KindID (modulo len) — the interval analogue of annotations'
-// PaletteIdx coloring. When the palette is non-empty it takes precedence over
-// intensity and flat coloring, so callers can paint bars by a discrete category
-// (deploy state, severity, …) with their own semantic colors. A nil/empty
-// palette restores the default intensity/flat path.
-//
-// Validation: none — nil/empty is a no-op.
-func WithIntervalColors(palette []color.Color) Option {
-	return func(inst *Timeline) {
-		inst.intervalColors = palette
-	}
-}
-
-// WithRange forces an explicit [t0,t1] viewport instead of auto-fitting to
-// data extent. t1 must be after t0; both are interpreted as UTC moments
-// (timezone handling on the tick axis is the timeticks layer's concern).
-//
-// Validation: panic on !t1.After(t0). To restore auto-fit on a
-// constructed Timeline use SetRange(time.Time{}, time.Time{}); the
-// constructor option has no zero-value escape because no defaulting
-// applies at construction.
-func WithRange(t0, t1 time.Time) Option {
-	if !t1.After(t0) {
-		panic(fmt.Sprintf("timeline: WithRange requires t1 after t0 (got %v, %v)", t0, t1))
-	}
-	return func(inst *Timeline) {
-		inst.explicitRange = true
-		inst.viewMinMS = inst.timeToUnits(t0)
-		inst.viewMaxMS = inst.timeToUnits(t1)
-	}
-}
-
-// WithVisuals mutates the widget's Visuals (which start at DefaultVisuals
-// values set in New) so callers tweak only the fields they care about
-// without leaving the others zero-valued:
-//
-//	timeline.WithVisuals(func(v *timeline.Visuals) {
-//	    v.LaneHeight = 30
-//	    v.IntensityColormap = styletokens.SequentialMagma
-//	})
-//
-// Validation: nil modify is treated as a no-op (the default visuals
-// remain in place).
-func WithVisuals(modify func(v *Visuals)) Option {
-	return func(inst *Timeline) {
-		if modify == nil {
-			return
-		}
-		modify(&inst.visuals)
-	}
-}
-
-// WithPointEvents attaches point events (commits, alerts, log entries) to
-// the timeline. Rendered above the lane bars as a rug strip — raw vertical
-// marks below WithRawPointThreshold visible items, density-binned rects
-// above.
-//
-// Validation: nil clears (no rug strip rendered).
-func WithPointEvents(points []*layout.PointEvent) Option {
-	return func(inst *Timeline) {
-		inst.points = points
-	}
-}
-
-// WithRawPointThreshold sets the cutoff between raw and density rug-strip
-// rendering. Default 500: rendering up to 500 individual vertical lines per
-// frame stays well inside an immediate-mode budget; above that, density
-// bins are faster and visually less noisy.
-//
-// Validation: panic on n < 0.
-func WithRawPointThreshold(n int32) Option {
-	if n < 0 {
-		panic(fmt.Sprintf("timeline: WithRawPointThreshold requires n >= 0 (got %d)", n))
-	}
-	return func(inst *Timeline) {
-		inst.rawPointThreshold = n
-	}
-}
-
-// WithLODScales overrides the LOD bin ladder. Scales must be strictly
-// ascending durations; the default ladder ([1ms,10ms,…,1w]) covers most
-// log-style and ops-style timelines.
-//
-// Validation: panic on empty slice (here); BuildLODIndex panics again on
-// non-ascending scales when rebuildLOD runs from New.
-func WithLODScales(scales []time.Duration) Option {
-	if len(scales) == 0 {
-		panic("timeline: WithLODScales requires at least one scale")
-	}
-	return func(inst *Timeline) {
-		inst.lodScales = scales
-	}
+// Events is what one Render produced from the previous frame's input.
+type Events struct {
+	// SelectionChanged is true on a frame a primary click changed the
+	// selection — including a click that cleared it — and Selection is the
+	// new value. Programmatic selection (SelectAnnotationByNumber,
+	// ClearSelection, SetIntervals, …) is the host's own doing and is not
+	// reported.
+	SelectionChanged bool
+	Selection        SelectionInfo
+	// BrushChanged is true on the frame a brush gesture completed; Brush is
+	// the committed range and BrushOk false when the gesture cleared it.
+	// SetBrush / ClearBrush are not reported.
+	BrushChanged bool
+	Brush        BrushRange
+	BrushOk      bool
 }
 
 // New constructs a Timeline that paints the given intervals. ids and
 // scopeKey are required (panic on nil / empty); intervals may be nil for
-// an empty-state widget that still renders the axis.
-func New(ids *c.WidgetIdStack, scopeKey string, intervals []*layout.IntervalEvent, opts ...Option) (inst *Timeline) {
+// an empty-state widget that still renders the axis. Points, annotations
+// and an explicit range are data, set with SetPoints, SetAnnotations and
+// SetRange after New.
+func New(ids *c.WidgetIdStack, scopeKey string, intervals []*layout.IntervalEvent, opts Options) (inst *Timeline) {
 	if ids == nil {
 		panic("timeline: New requires a non-nil ids stack")
 	}
@@ -857,21 +692,57 @@ func New(ids *c.WidgetIdStack, scopeKey string, intervals []*layout.IntervalEven
 		panic("timeline: New requires a non-empty scopeKey")
 	}
 	inst = &Timeline{
-		ids:                ids,
-		scopeKey:           scopeKey,
-		intervals:          intervals,
-		lodScales:          defaultLODScales,
-		rawPointThreshold:  defaultRawPointThreshold,
-		containerW:         defaultContainerW,
-		interactionEnabled: true,
-		intensityEncoded:   true,
-		visuals:            DefaultVisuals(),
+		ids:        ids,
+		scopeKey:   scopeKey,
+		intervals:  intervals,
+		Opts:       opts,
+		offsetAxis: opts.OffsetAxis,
+		unit:       opts.OffsetUnit,
 	}
-	for _, opt := range opts {
-		opt(inst)
+	if inst.offsetAxis && inst.unit <= 0 {
+		inst.unit = time.Millisecond
 	}
+	inst.applyOpts()
 	inst.rebuildLOD()
 	return
+}
+
+// applyOpts resolves Opts into the fields the renderer reads. Called from
+// New and at the top of every Render; rebuilds the LOD index when the
+// ladder changed.
+func (inst *Timeline) applyOpts() {
+	o := &inst.Opts
+	inst.loc = o.TimeZone
+	inst.containerW = o.ContainerWidth
+	if inst.containerW <= 0 {
+		inst.containerW = defaultContainerW
+	}
+	inst.interactionEnabled = !o.NotInteractive
+	inst.backgroundBands = o.BackgroundBands
+	inst.nowLineEnabled = o.NowLine
+	inst.intensityEncoded = !o.NoIntensityEncoding
+	inst.intervalColors = o.IntervalColors
+	if o.Visuals != nil {
+		inst.visuals = *o.Visuals
+	} else {
+		inst.visuals = DefaultVisuals()
+	}
+	inst.rawPointThreshold = o.RawPointThreshold
+	if inst.rawPointThreshold <= 0 {
+		inst.rawPointThreshold = defaultRawPointThreshold
+	}
+	scales := o.LODScales
+	if len(scales) == 0 {
+		scales = defaultLODScales
+	}
+	if !slices.Equal(scales, inst.lodScales) {
+		inst.lodScales = scales
+		if inst.lodIndex != nil {
+			inst.rebuildLOD()
+		}
+	}
+	inst.brushEnabled = o.Brush
+	inst.lockedView = o.LockedView
 }
 
 // rugReserved returns true when the renderer must reserve vertical space
@@ -924,17 +795,6 @@ func (inst *Timeline) SetPoints(points []*layout.PointEvent) {
 	inst.dropInteractivePin()
 }
 
-// SetNowLine toggles the vertical "now" line at runtime — runtime
-// counterpart to [WithNowLine]. Use this when the caller exposes a
-// user-facing toggle (toolbar checkbox, settings panel) so the flip
-// preserves pan/zoom state instead of recreating the widget. Cheap
-// flag flip; no animation, no selection mutation.
-//
-// Validation: none — both true and false are valid.
-func (inst *Timeline) SetNowLine(enabled bool) {
-	inst.nowLineEnabled = enabled
-}
-
 // SetPlayhead marks one instant on the canvas: a vertical rule with a caret
 // at its head, at tMS (epoch milliseconds, UTC).
 //
@@ -944,7 +804,7 @@ func (inst *Timeline) SetNowLine(enabled bool) {
 // present"; this answers "where am I", and the two are different questions
 // whenever the view is historical.
 //
-// There is no WithPlayhead: an instant that never moves is an annotation, and
+// There is no playhead option: an instant that never moves is an annotation, and
 // annotations already carry the flag, the number and the selection a fixed
 // marker wants. Set it per frame from whatever the caller is tracking.
 //
@@ -975,19 +835,6 @@ func (inst *Timeline) Playhead() (tMS int64, ok bool) {
 	}
 	tMS, ok = inst.playheadMS, true
 	return
-}
-
-// SetIntensityEncoding toggles intensity-driven fills at runtime — runtime
-// counterpart to [WithIntensityEncoding]. Use this when the caller's data
-// shape varies between frames (e.g. a SQL playground re-resolving its column
-// contract per query): flip it off when the new result has no intensity
-// column so bars/marks fall back to the flat Visuals.IntervalColor /
-// Visuals.PointColor instead of collapsing to the colormap's dark end. Cheap
-// flag flip; no selection mutation, no LOD rebuild.
-//
-// Validation: none — both true and false are valid.
-func (inst *Timeline) SetIntensityEncoding(enabled bool) {
-	inst.intensityEncoded = enabled
 }
 
 // SetAnnotations replaces the annotations shown by this timeline. Safe
@@ -1024,7 +871,7 @@ func (inst *Timeline) SelectAnnotationByNumber(number int32) {
 // SelectIntervalByPointer programmatically selects the given interval
 // event. Symmetric with SelectAnnotationByNumber for the cross-widget-
 // linking pattern; a sibling widget holding the same *IntervalEvent
-// (passed via WithIntervals / SetIntervals) drives the timeline's
+// (passed to New / SetIntervals) drives the timeline's
 // selection by calling this method. No-op when ev is nil or not in the
 // current intervals slice; never panics.
 func (inst *Timeline) SelectIntervalByPointer(ev *layout.IntervalEvent) {
@@ -1045,7 +892,7 @@ func (inst *Timeline) SelectIntervalByPointer(ev *layout.IntervalEvent) {
 //
 // No-op when:
 //   - No render has happened yet (the last-frame view snapshot is empty).
-//   - The LOD index is empty (no points attached via WithPointEvents).
+//   - The LOD index is empty (no points attached via SetPoints).
 //   - tMS falls in a bucket that holds zero events at the picked scale.
 //
 // Selection resolution uses the SAME view + pxWidth the last Render saw,
@@ -1205,8 +1052,8 @@ func asPointValues(points []*layout.PointEvent) (out []layout.PointEvent) {
 	return
 }
 
-// SetRange forces a viewport range, equivalent to constructing with
-// WithRange(t0,t1). Pass an empty time pair to revert to auto-fit. The
+// SetRange forces a caller-driven viewport range. Pass an empty time pair to
+// revert to auto-fit. The
 // resulting pin is treated as caller-driven (not interactive) so it
 // survives subsequent SetIntervals / SetPoints / SetAnnotations calls.
 func (inst *Timeline) SetRange(t0, t1 time.Time) {
@@ -1254,7 +1101,7 @@ func (inst *Timeline) CursorValue() (v int64, ok bool) {
 }
 
 // Unit is the duration one axis value counts: the millisecond on the
-// calendar, the unit given to [WithOffsetAxis] otherwise.
+// calendar, Options.OffsetUnit otherwise.
 func (inst *Timeline) Unit() (unit time.Duration) { return inst.unitOrMS() }
 
 // IsOffsetAxis reports whether the axis counts offsets rather than the calendar.
@@ -1328,12 +1175,15 @@ func (inst *Timeline) LaneCount() (n int32) {
 	return
 }
 
-// Render paints the timeline. Call once per frame inside an active egui
-// surface (panel or window).
-func (inst *Timeline) Render() {
+// Render paints the timeline and returns what the frame's input produced.
+// Call once per frame inside an active egui surface (panel or window).
+func (inst *Timeline) Render() (ev Events) {
+	inst.events = Events{}
+	inst.applyOpts()
 	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
 		inst.renderBody()
 	}
+	return inst.events
 }
 
 func (inst *Timeline) renderBody() {
@@ -1375,7 +1225,7 @@ func (inst *Timeline) renderBody() {
 	// width and overspill a narrow pane, clipping its right edge (the newest
 	// event). Only the pan/zoom input handling here is gated on interactivity.
 	if inst.interactionEnabled && !inst.lockedView {
-		inst.applyZoomInput(wheel, effW)
+		inst.applyZoomInput(wheel, labelW, effW)
 		inst.applyPanInput(stateMgr, labelW, effW)
 	}
 
@@ -1432,7 +1282,7 @@ func (inst *Timeline) renderBody() {
 	// The brush strip is its own canvas, emitted after the main one so it
 	// lands below it in the enclosing Ui and drains its own paint ops. It
 	// shares the frame's tick map, so its x↔time mapping cannot drift from the
-	// axis above it (ADR-0043 §SD16). Absent WithBrush this returns before
+	// axis above it (ADR-0043 §SD16). Without Options.Brush this returns before
 	// touching anything.
 	if inst.brushReserved() {
 		c.AddSpace(inst.visuals.BrushGap)
@@ -1534,13 +1384,13 @@ func (inst *Timeline) hitTestLane(vl verticalLayout, cursorY float32) (idx int32
 	return
 }
 
-// fireSelectionListener hands the listener the same value Selection would
-// return — not the raw selection field — so a SelectionLane arrives with
-// its Lane snapshot already materialised.
+// fireSelectionListener records a user-driven selection change in this
+// frame's Events, with the same value Selection would return — not the raw
+// selection field — so a SelectionLane arrives with its Lane snapshot
+// already materialised.
 func (inst *Timeline) fireSelectionListener() {
-	if inst.onSelection != nil {
-		inst.onSelection(inst.Selection())
-	}
+	inst.events.Selection = inst.Selection()
+	inst.events.SelectionChanged = true
 }
 
 // hitTestBackgroundBand returns the first band (in producer-yield order)
@@ -1626,7 +1476,7 @@ func (inst *Timeline) paintLaneLabels(vl verticalLayout) {
 // effectiveContainerW returns the parent's available width as this instance's
 // own pane probe reported it last frame. Falls back to containerW when no
 // capture has landed yet (first frame after construction, or the probe ran
-// outside a Ui). WithContainerWidth sets the fallback, not a pin — auto-fit
+// outside a Ui). Options.ContainerWidth sets the fallback, not a pin — auto-fit
 // always wins when a valid probe is available.
 func (inst *Timeline) effectiveContainerW(availW float32, ok bool) (w float32) {
 	w = inst.containerW
@@ -1647,11 +1497,16 @@ func (inst *Timeline) effectiveContainerW(availW float32, ok bool) (w float32) {
 // gesture is owned by whichever canvas the pointer was actually over — a scroll
 // over a neighbouring etable or a sibling canvas no longer zooms this strip, and
 // the anchor no longer depends on the single-slot global canvas pointer.
-func (inst *Timeline) applyZoomInput(wheel c.CanvasWheelValue, effW float32) {
+//
+// The anchor fraction is taken over the time axis, [labelW, effW], the same
+// span panBy and ComputeTickMap use; measuring it over the whole canvas would
+// drift the instant under the cursor whenever the lane-label band is present.
+func (inst *Timeline) applyZoomInput(wheel c.CanvasWheelValue, labelW, effW float32) {
 	if wheel.Zoom == 1.0 || wheel.Zoom <= 0 {
 		return
 	}
-	if math.IsNaN(float64(wheel.HoverX)) || effW <= 0 {
+	axisW := effW - labelW
+	if math.IsNaN(float64(wheel.HoverX)) || axisW <= 0 {
 		return
 	}
 	if !inst.pinToCurrentView() {
@@ -1661,13 +1516,24 @@ func (inst *Timeline) applyZoomInput(wheel c.CanvasWheelValue, effW float32) {
 	if spanMS <= 0 {
 		return
 	}
-	anchorFrac := clamp01(wheel.HoverX / effW)
+	anchorFrac := clamp01((wheel.HoverX - labelW) / axisW)
 	anchorMS := inst.viewMinMS + int64(float64(anchorFrac)*float64(spanMS))
 	// zoom > 1 → smaller span; zoom < 1 → larger span. Invert + clamp.
 	mul := clamp01ToRange(1.0/wheel.Zoom, minZoomMul, maxZoomMul)
-	newSpan := max(int64(float64(spanMS)*float64(mul)), 1)
+	// The product is formed in float64 and bounded before the int64
+	// conversion: past 2^63 the conversion yields MinInt64, which max(…, 1)
+	// would turn into a 1-unit view.
+	newSpan := int64(max(min(float64(spanMS)*float64(mul), inst.maxViewSpanUnits()), 1))
 	inst.viewMinMS = anchorMS - int64(float64(anchorFrac)*float64(newSpan))
 	inst.viewMaxMS = inst.viewMinMS + newSpan
+}
+
+// maxViewSpanUnits bounds how far zoom-out can widen the view: maxViewSpanSeconds in
+// axis units, and never past maxViewSpanUnitsCap so viewMin±span stays clear
+// of int64 overflow on a fine offset-axis unit.
+func (inst *Timeline) maxViewSpanUnits() (units float64) {
+	units = maxViewSpanSeconds * float64(time.Second) / float64(inst.unitOrMS())
+	return min(units, maxViewSpanUnitsCap)
 }
 
 // applyPanInput mutates the viewport from a pointer drag over the canvas:
@@ -1737,7 +1603,7 @@ func (inst *Timeline) panBy(dx, labelW, effW float32) {
 // viewMinMS/MaxMS on the first user interaction so subsequent pans/zooms
 // build on the same baseline the user saw, not on a moving auto-fit
 // target that data updates would shift underneath them. The interactivePin
-// flag distinguishes user-driven pins from caller-driven WithRange/SetRange
+// flag distinguishes user-driven pins from caller-driven SetRange
 // pins so SetIntervals/Points/Annotations can revert to auto-fit on data
 // swap (user pan over stale data would silently hide events otherwise).
 //
@@ -1763,7 +1629,7 @@ func (inst *Timeline) pinToCurrentView() (ok bool) {
 }
 
 // dropInteractivePin reverts to auto-fit if the current pin came from
-// user interaction (pan/zoom). Caller-driven pins (WithRange / SetRange)
+// user interaction (pan/zoom). Caller-driven pins (SetRange)
 // are preserved on the assumption the caller meant the absolute window.
 // Called from SetIntervals / SetPoints / SetAnnotations.
 func (inst *Timeline) dropInteractivePin() {
@@ -1915,7 +1781,7 @@ func (inst *Timeline) paintBackgroundBands(tm layout.TickMap, vl verticalLayout,
 }
 
 // paintNowLine paints a vertical line at the current wall-clock moment
-// when WithNowLine(true) is set AND time.Now() falls inside the view.
+// when Options.NowLine is set AND time.Now() falls inside the view.
 // Skipped silently for historical / future-only views — no "off-screen
 // now" indicator is rendered, by design (Grafana convention).
 func (inst *Timeline) paintNowLine(tm layout.TickMap, vl verticalLayout, viewMinMS, viewMaxMS int64) {
@@ -2295,6 +2161,22 @@ func (inst *Timeline) computeViewRange() (v0, v1 int64) {
 		minMS = min(minMS, ev.FromMS)
 		maxMS = max(maxMS, ev.ToMS)
 	}
+	// Points and annotations count toward the extent too: a timeline fed
+	// only a rug or only markers must fit to them, not to the last hour.
+	for _, p := range inst.points {
+		if p == nil {
+			continue
+		}
+		minMS = min(minMS, p.TMS)
+		maxMS = max(maxMS, p.TMS)
+	}
+	for _, a := range inst.annotations {
+		if a == nil {
+			continue
+		}
+		minMS = min(minMS, a.TMS)
+		maxMS = max(maxMS, a.TMS)
+	}
 	if minMS == int64(math.MaxInt64) {
 		if inst.offsetAxis {
 			// No events on an offset axis: the first stretch from zero.
@@ -2330,33 +2212,6 @@ func clamp01(v float32) (out float32) {
 		out = v
 	}
 	return
-}
-
-// WithOffsetAxis makes the axis an offset from zero instead of the calendar
-// (ADR-0043 SD17, for ADR-0208 SD8). Every int64 value the widget takes or
-// returns — event bounds, the view, the playhead, the brush — counts unit (a
-// duration; zero or less is the millisecond) from a zero that is no calendar
-// instant. Ticks come from [timeticks.OffsetLadder] and are labelled as
-// offsets; the rollover rows, the now line and the time zone are inert. The
-// time.Time surface stays usable and maps through the Unix epoch.
-func WithOffsetAxis(unit time.Duration) Option {
-	if unit <= 0 {
-		unit = time.Millisecond
-	}
-	return func(inst *Timeline) {
-		inst.offsetAxis = true
-		inst.unit = unit
-	}
-}
-
-// WithLockedView leaves the view where the host puts it: the wheel does not
-// zoom and a drag does not pan, while hover, click, selection and the brush
-// still work. For a timeline stacked under a widget that owns the time axis
-// and drives [Timeline.SetRangeUnits] every frame.
-func WithLockedView(locked bool) Option {
-	return func(inst *Timeline) {
-		inst.lockedView = locked
-	}
 }
 
 func (inst *Timeline) unitOrMS() (unit time.Duration) {

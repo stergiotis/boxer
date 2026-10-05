@@ -283,7 +283,7 @@ func (inst *App) renderList(jobs []watchbillstore.Job) {
 	et.Send()
 	inst.captureWidths(et, cols)
 	if clicked != "" {
-		inst.select_(clicked)
+		gesture(inst, opSelect, JobArgs{Id: clicked}, func() { inst.select_(clicked) })
 	}
 }
 

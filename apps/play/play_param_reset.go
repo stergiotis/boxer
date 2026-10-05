@@ -105,7 +105,7 @@ func (inst *PlayApp) resetParamsToDefaults() {
 	}
 	// Re-run: the knobs are what the query reads, so leaving the result showing
 	// the old ones would make the button look like it had not worked.
-	inst.RequestRun()
+	inst.personRun(false)
 }
 
 // renderParamResetControl draws the gesture beside the PARAMETERS caption, and

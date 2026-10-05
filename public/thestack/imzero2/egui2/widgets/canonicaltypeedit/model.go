@@ -1,5 +1,6 @@
-// Package canonicaltypeedit is an editor widget for a single primitive leeway
-// canonical type ([canonicaltypes]). It is the editor half of ADR-0067.
+// Package canonicaltypeedit is an immediate-mode widget (ADR-0267): an editor
+// for a single primitive leeway canonical type ([canonicaltypes]), and for a
+// signature of them. It is the editor half of ADR-0067.
 //
 // The editor presents two synchronised views of one type, kept consistent by
 // the bidirectional discipline in ADR-0067 §SD2:
@@ -9,17 +10,21 @@
 //     (family → base → family-specific modifiers → scalar shape), so invalid
 //     *shapes* are unrepresentable from the form (ADR-0067 §SD3).
 //
-// The single source of truth is a flat draft (the unexported fields of
-// [Model]). Each frame, at most one side can have been edited (egui edits one
-// widget per frame), so [Model.Render] applies a simple edge-ownership rule:
-// a bar edit re-parses into the draft (keeping the buffer on a parse failure
-// so mid-typing survives); a form edit re-canonicalises the bar. The editor
-// also embeds the level-1 chip of [canonicaltypesummary] over the live value,
-// so the same anchor can pop the full tethered inspector (ADR-0067 §SD4).
+// The value is a flat draft (the unexported fields of [Model]), which the
+// host owns and reads back with [Model.Canonical] / [Model.Node] /
+// [Model.Valid]. What the editor needs to remember between frames that is
+// not the value — the bar's text buffer and its parse-error headline, the
+// form's disclosure — is a [State] the host also owns and passes on every
+// [Render] (ADR-0267 W9/W10). Each frame, at most one side can have been
+// edited (egui edits one widget per frame), so Render applies a simple
+// edge-ownership rule: a bar edit re-parses into the draft (keeping the
+// buffer on a parse failure so mid-typing survives); a form edit
+// re-canonicalises the bar. The editor also embeds the level-1 chip of
+// [canonicaltypesummary] over the live value, so the same anchor can pop the
+// full tethered inspector (ADR-0067 §SD4).
 //
-// Scope is a single primitive; groups and signatures are deferred (ADR-0067).
-// Callers own the [Model]: construct with [NewModel], render each frame, and
-// read the result with [Model.Canonical] / [Model.Node] / [Model.Valid].
+// [RenderSignature] edits a [SignatureModel] — a chip strip of primitive
+// elements joined by '-'/'_' — with the same bar+form over the selected chip.
 package canonicaltypeedit
 
 import (
@@ -27,6 +32,7 @@ import (
 	"sync"
 
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/canonicaltypesummary"
 )
 
 // familyE is the primitive family, derived from the base rune.
@@ -39,7 +45,9 @@ const (
 	familyNetwork
 )
 
-// Model is the caller-owned editable state for one primitive canonical type.
+// Model is the host-owned value of one primitive canonical type: the flat
+// draft and what is derived from it. It carries no UI state; that is
+// [State]'s.
 type Model struct {
 	// Flat draft (ADR-0067 §SD1). base is the canonical base rune; the family
 	// is derived from it via familyOf. The modifier fields are read only when
@@ -52,21 +60,58 @@ type Model struct {
 	cidr       bool
 	scalarMod  canonicaltypes.ScalarModifierE
 
-	// Bidirectional bar state: barBuf is the formula-bar backing string;
-	// barErr is the last parse error headline (empty when the bar parses).
-	barBuf string
-	barErr string
-
-	// formOpen drives the structured-form disclosure: false (the default)
-	// keeps the editor a single bar row with just the inline toggle; true
-	// reveals the grammar controls below it. View state only — it has no
-	// bearing on the draft, the canonical string, or validity.
-	formOpen bool
-
 	// Derived cache, refreshed by rebuildFromDraft.
 	ast       canonicaltypes.PrimitiveAstNodeI
 	canonical string
 	valid     bool
+}
+
+// State is the host-owned UI state of one primitive editor: the formula
+// bar's text buffer and parse-error headline, the form's disclosure, and the
+// embedded summary chip's own state. The zero value is a collapsed editor
+// whose bar mirrors the model on the first frame. It must live at a stable
+// address for as long as the editor is drawn — the bar's TextEdit binds to
+// the buffer across frames (ADR-0267 W10).
+type State struct {
+	// barBuf is the formula-bar backing string; barErr is the last parse
+	// error headline (empty when the bar parses). barFor is the canonical
+	// the buffer was last synchronised to: when the model's canonical moves
+	// away from it — a host SetCanonical, a form edit — the bar follows.
+	barBuf string
+	barErr string
+	barFor string
+
+	// formOpen drives the structured-form disclosure: false (the default)
+	// keeps the editor a single bar row with just the inline toggle; true
+	// reveals the grammar controls below it.
+	formOpen bool
+
+	summary canonicaltypesummary.State
+}
+
+// BarError reports the formula-bar parse-error headline, or "" when the bar
+// parses. A non-empty result means the editor is showing an unparseable
+// in-progress entry, so [Model.Canonical] / [Model.Node] / [Model.Valid] are
+// stale (they hold the last type that parsed, since a parse failure keeps the
+// draft) — a consumer gating on the edited type should treat a non-empty
+// BarError as "not a usable type right now".
+func (st *State) BarError() string { return st.barErr }
+
+// FormOpen reports whether the structured form is disclosed.
+func (st *State) FormOpen() bool { return st.formOpen }
+
+// SetFormOpen discloses or collapses the structured form from code.
+func (st *State) SetFormOpen(open bool) { st.formOpen = open }
+
+// syncBar makes the bar follow the model when the canonical changed behind
+// it (a host seed, a form edit). While the user is mid-edit on an unparseable
+// entry the canonical has not moved, so the buffer is left alone.
+func (st *State) syncBar(m *Model) {
+	if st.barFor != m.canonical {
+		st.barBuf = m.canonical
+		st.barErr = ""
+		st.barFor = m.canonical
+	}
 }
 
 // NewModel returns an editor seeded with a friendly default (`u32`).
@@ -76,7 +121,6 @@ func NewModel() (m *Model) {
 		width: 32,
 	}
 	m.rebuildFromDraft()
-	m.barBuf = m.canonical
 	return
 }
 
@@ -86,14 +130,6 @@ func (m *Model) Canonical() string { return m.canonical }
 // Valid reports whether the current type passes [canonicaltypes.AstNodeI.IsValid].
 func (m *Model) Valid() bool { return m.valid }
 
-// BarError reports the formula-bar parse-error headline, or "" when the bar
-// parses. A non-empty result means the editor is showing an unparseable
-// in-progress entry, so [Model.Canonical] / [Model.Node] / [Model.Valid] are
-// stale (they hold the last type that parsed, since a parse failure keeps the
-// draft) — a consumer gating on the edited type should treat a non-empty
-// BarError as "not a usable type right now".
-func (m *Model) BarError() string { return m.barErr }
-
 // Node returns the current primitive AST node. It is constructed even when the
 // type is invalid (e.g. a fixed-width string with width 0), so pair it with
 // [Model.Valid] before relying on it.
@@ -101,7 +137,8 @@ func (m *Model) Node() canonicaltypes.PrimitiveAstNodeI { return m.ast }
 
 // SetCanonical seeds the editor from a canonical string. A parse failure is a
 // no-op so the editor keeps its current value; pass a single primitive (groups
-// and signatures are out of scope for this editor).
+// and signatures are out of scope for this editor). The bar follows on the
+// next Render.
 func (m *Model) SetCanonical(s string) {
 	n, err := parsePrimitive(s)
 	if err != nil {
@@ -109,8 +146,6 @@ func (m *Model) SetCanonical(s string) {
 	}
 	m.nodeToDraft(n)
 	m.rebuildFromDraft()
-	m.barBuf = m.canonical
-	m.barErr = ""
 }
 
 // rebuildFromDraft reconstructs the AST node from the draft and refreshes the

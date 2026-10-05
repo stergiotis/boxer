@@ -235,6 +235,12 @@ type SeriesDriver struct {
 	fixtureSummary    string
 	fixtureErr        error
 
+	// auxNotes are what the status line says about the optional `scores` /
+	// `spans` lanes this frame: a query that failed or is still running. A
+	// result the channel refuses is the dispatcher's to report, as for every
+	// pane's optional channels.
+	auxNotes []string
+
 	// adjudicate writes one verdict. Injected like `deliver`, so the driver
 	// reaches for a seam rather than for the app.
 	adjudicate func(row tsLabelRow)
@@ -381,7 +387,7 @@ func acceptSeriesScores(schema *arrow.Schema) (claim ChannelClaim, reason string
 			k.tCol = ci
 			continue
 		}
-		if f.Name == "score" && chrows.IsNumeric(f.Type) {
+		if pathColumnLabel(f.Name) == "score" && chrows.IsNumeric(f.Type) {
 			k.vCols = append(k.vCols, ci)
 		}
 	}
@@ -713,7 +719,7 @@ func (inst *SeriesDriver) rebuildOverlays(scoreRec arrow.RecordBatch, spanRec ar
 // has to be readable somewhere other than the footer's sample counts.
 func (inst *SeriesDriver) renderControls() {
 	for range c.HorizontalTop().KeepIter() {
-		inst.smooth.RenderControls(inst.ids)
+		trendsmooth.Render(trendsmooth.Input{Ids: inst.ids, ScopeKey: "trendsmooth", State: inst.smooth})
 		for range c.HoverText("Draws at most two samples per pixel column — the smallest and the largest value in it — so a long series stays cheap to draw. It cannot drop an extreme: whatever the data reaches inside a pixel, the line reaches too. Drawing only, and only when there is more than one sample per pixel; hover, selection and every analysis read the full series. Turn it off to check the drawing against the undecimated one.").KeepIter() {
 			c.Checkbox(inst.ids.PrepareStr("series-decimate"), inst.decimate, "envelope").
 				SendRespVal(&inst.decimate)
@@ -837,7 +843,7 @@ func (inst *SeriesDriver) rebuild(rec arrow.RecordBatch, schema *arrow.Schema, k
 	inst.foldErr = ""
 	inst.skippedRows = 0
 	inst.droppedLane = 0
-	inst.tLabel = schema.Field(k.tCol).Name
+	inst.tLabel = pathColumnLabel(schema.Field(k.tCol).Name)
 
 	vCols := k.vCols
 	if len(vCols) > seriesMaxLanes {
@@ -851,7 +857,7 @@ func (inst *SeriesDriver) rebuild(rec arrow.RecordBatch, schema *arrow.Schema, k
 	lanes := make([]seriesLane, len(vCols))
 	for i, ci := range vCols {
 		lanes[i] = seriesLane{
-			label: schema.Field(ci).Name,
+			label: pathColumnLabel(schema.Field(ci).Name),
 			vals:  make([]float64, 0, n),
 			valid: make([]bool, 0, n),
 		}
@@ -928,6 +934,10 @@ func (inst *SeriesDriver) statusLine() (line string) {
 	}
 	if inst.smooth.On {
 		fmt.Fprintf(&b, " · smoothed ±%d, faded tail is extrapolated", inst.smooth.HalfWidth())
+	}
+	for _, n := range inst.auxNotes {
+		b.WriteString(" · ")
+		b.WriteString(n)
 	}
 	return b.String()
 }
@@ -1032,18 +1042,20 @@ func (inst *PlayApp) renderSeriesTab(rec arrow.RecordBatch, schema *arrow.Schema
 	// each on its own lane like the Sankey's second input. Offered only when
 	// the split has them, so a buffer without them reads as "no overlay"
 	// rather than as pending.
-	if r, s := inst.demandSeriesAux(seriesScoresNodeID, &inst.seriesScoresLane); r != nil || s != nil {
+	var notes []string
+	if r, s := inst.demandSeriesAux(seriesScoresNodeID, &inst.seriesScoresLane, &notes); r != nil || s != nil {
 		inputs[chScores] = channelInput{node: seriesScoresNodeID, rec: r, schema: s, sig: inst.frameSig}
 		if r != nil {
 			defer r.Release()
 		}
 	}
-	if r, s := inst.demandSeriesAux(seriesSpansNodeID, &inst.seriesSpansLane); r != nil || s != nil {
+	if r, s := inst.demandSeriesAux(seriesSpansNodeID, &inst.seriesSpansLane, &notes); r != nil || s != nil {
 		inputs[chSpans] = channelInput{node: seriesSpansNodeID, rec: r, schema: s, sig: inst.frameSig}
 		if r != nil {
 			defer r.Release()
 		}
 	}
+	inst.seriesDriver.auxNotes = notes
 	reject := dispatchPanel(seriesPanel{driver: inst.seriesDriver}, inputs, inst.sigEmit)
 	if reject != "" {
 		for rt := range c.RichTextLabel(reject) {
@@ -1137,8 +1149,9 @@ func (inst *PlayApp) forgetSeriesLanes() {
 }
 
 // demandSeriesAux drives one optional CTE on its own lane, the Sankey's
-// demandSankeyNodes shape with the node id as a parameter.
-func (inst *PlayApp) demandSeriesAux(nodeID NodeID, lane **nodeLane) (rec arrow.RecordBatch, schema *arrow.Schema) {
+// demandSankeyNodes shape with the node id as a parameter. A failed or still
+// running lane is appended to notes for the status line.
+func (inst *PlayApp) demandSeriesAux(nodeID NodeID, lane **nodeLane, notes *[]string) (rec arrow.RecordBatch, schema *arrow.Schema) {
 	node, ok := findSplitNode(inst.currentSplit, nodeID)
 	if !ok {
 		return
@@ -1154,5 +1167,19 @@ func (inst *PlayApp) demandSeriesAux(nodeID NodeID, lane **nodeLane) (rec arrow.
 	// which is exactly what this did until M2 wired the overlays and the
 	// channels came back empty.
 	v := (*lane).demand(compileNodeFor(inst.currentSplit, node, inst.lastRunBound, inst.frameSig))
+	*notes = append(*notes, seriesAuxNote(nodeID, v.err, v.loading, v.schema)...)
 	return v.rec, v.schema
+}
+
+// seriesAuxNote is the status-line wording for one overlay lane. Pure, so the
+// outcomes are testable without a lane: an error outranks everything, and a
+// lane still loading with nothing served says so.
+func seriesAuxNote(nodeID NodeID, err error, loading bool, schema *arrow.Schema) (out []string) {
+	switch {
+	case err != nil:
+		out = append(out, "`"+string(nodeID)+"` query failed: "+firstLine(err.Error()))
+	case loading && schema == nil:
+		out = append(out, "`"+string(nodeID)+"` …")
+	}
+	return
 }

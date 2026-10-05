@@ -31,6 +31,11 @@ type statementRange = sqleditor.StatementRange
 // live buffer plus the caret field keeps them describing the buffer they are
 // actually looking at.
 func (inst *PlayApp) statementRanges() (ranges []statementRange, bodyOffset int) {
+	if inst.editor == nil {
+		// A PlayApp built without NewPlayApp (tests) has no editor to memoise
+		// the split in; the unmemoised split is the same answer.
+		return sqleditor.BodyStatementRanges(inst.sql)
+	}
 	return inst.editor.Statements(inst.sql)
 }
 

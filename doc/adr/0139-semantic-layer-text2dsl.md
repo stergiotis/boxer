@@ -336,8 +336,11 @@ left it implicit. Revised in place 2026-09-23 when ADR-0120 was withdrawn:
 SD8's executor and SD9's client are placed by ADR-0254 (the tools run
 under the calling app's grants; the client rides `llm.complete`), and the
 layer's entries are an introspection table. Sequencing, also settled: the
-engine lands first and the `boxer text2sql` CLI proves it; play's `ask`
-transformation (ADR-0254 §SD6) consumes the proven engine after. ADR-0254
+engine lands first and the `boxer text2sql` CLI proves it. Revised in place
+2026-10-02: play's `ask` transformation was withdrawn in favour of a chat
+coordinator driving play (ADR-0254, update of that date), so the layer's
+in-app consumer is whichever model caller reads it — the coordinator through
+play's `describe_table`, or `keelson('semlayer')` under SD8. ADR-0254
 was accepted on its own (2026-09-23); this ADR awaits review for acceptance
 separately, with the layer (SD1–SD7) still unbuilt — see `## Updates`.
 
@@ -356,8 +359,10 @@ tool loop in `public/db/clickhouse/text2sql2/orchestrator`, and the SD8 tools
 under the calling app's grants. ADR-0254 §SD5 owns that executor; SD8's
 "guarded executor" is its manifest guard. Not built: the layer itself —
 SD1–SD7 (the home package, the block grammar, the lint, the renderer). Until
-it exists, play's `ask` grounds on a schema harvest of the pinned endpoint
-(ADR-0254 M3).
+it exists, play's `fix this error` grounds on a schema harvest of the pinned
+endpoint (ADR-0254 M3), and a coordinator on play's `list_tables` and
+`describe_table` operations, which carry T0 and T2a — the catalog and the
+leeway handles — and none of the authored tier (ADR-0270, 2026-10-02).
 
 ## References
 

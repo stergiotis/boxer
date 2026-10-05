@@ -62,9 +62,54 @@ func TestPlayAdvancesPauseHolds(t *testing.T) {
 	require.Equal(t, held, s.Position(), "a paused position must not move")
 
 	s.Play()
-	time.Sleep(200 * time.Millisecond)
-	require.Greater(t, s.Position(), held, "resume did not continue")
+	time.Sleep(300 * time.Millisecond)
+	// Position is capped at the frames delivered, so a stream the server
+	// stopped pulling from freezes within one buffer (40 ms) of held. Ask
+	// for well past that.
+	require.Greater(t, s.Position(), held+format.DurationToFrames(150*time.Millisecond), "resume did not continue")
 	require.False(t, s.Underflow(), "silence at 40 ms latency should not underflow")
+}
+
+// Every pause and resume used to cork and uncork the stream, and the uncork
+// provoked a Started event that parked the library's read loop for good
+// (jfreymuth/pulse#52): audio died and every later round trip took the
+// library's one-second timeout. A pause now parks the pull callback instead.
+// This holds the stream alive through repeated cycles and closes fast.
+func TestPauseResumeCyclesKeepTheStreamAlive(t *testing.T) {
+	requireServer(t)
+	format := pcm.Format{SampleRate: 48000, Channels: 2}
+	src, err := pcm.NewSynthSourceE(format, format.DurationToFrames(30*time.Second), pcm.Silence())
+	require.NoError(t, err)
+	s, err := pulsesink.OpenE(src, pulsesink.Options{AppName: "boxer-test", Latency: 40 * time.Millisecond})
+	require.NoError(t, err)
+	s.Play()
+	time.Sleep(150 * time.Millisecond)
+	for i := 0; i < 5; i++ {
+		s.Pause()
+		// A pause longer than the latency drains the server; the resume
+		// after it is the case that parked the read loop.
+		time.Sleep(100 * time.Millisecond)
+		held := s.Position()
+		s.Play()
+		time.Sleep(300 * time.Millisecond)
+		require.Greater(t, s.Position(), held+format.DurationToFrames(150*time.Millisecond), "cycle %d: the stream stopped pulling after resume", i)
+	}
+	// A seek while paused leaves the stream alone; playing on picks it up.
+	s.Pause()
+	time.Sleep(100 * time.Millisecond)
+	target := format.DurationToFrames(20 * time.Second)
+	require.NoError(t, s.SeekE(target))
+	require.Equal(t, target, s.Position())
+	s.Play()
+	time.Sleep(300 * time.Millisecond)
+	require.Greater(t, s.Position(), target+format.DurationToFrames(150*time.Millisecond), "resume after a paused seek did not continue")
+	require.False(t, s.Underflow(), "the pauses' own underflows are not reported")
+	// Closing from paused must release the callback before the close round
+	// trip; a blocked read loop shows as the one-second request timeout.
+	s.Pause()
+	started := time.Now()
+	require.NoError(t, s.CloseE())
+	require.Less(t, time.Since(started), 500*time.Millisecond, "close waited on a blocked read loop")
 }
 
 func TestSeekFlushesAndEndStops(t *testing.T) {

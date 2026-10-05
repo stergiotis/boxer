@@ -368,3 +368,29 @@ func TestTheCutoffHidesAnExpiredSnapshot(t *testing.T) {
 	require.Len(t, rows, 1)
 	assert.Equal(t, "2", rows[0][0], "the expired snapshot must not be one of them")
 }
+
+// TestAPinnedPartialWalkIsInvisible — §SD6: a walk that died leaves rows but no
+// root row, and naming its ts must not return them. The ts is not secret (the
+// failed call's Result.Snap carries it), so the pinned form has to check the
+// snapshot index as '*' and the latest form do.
+func TestAPinnedPartialWalkIsInvisible(t *testing.T) {
+	s := seedCorpus(t)
+	ctx := context.Background()
+
+	partial := time.Now().UTC().Add(-time.Minute).Truncate(time.Microsecond)
+	require.NoError(t, s.stores.Meta.Begin(m(), partial, ladingmeta.MetaEnvelope{
+		NaturalKey: []byte("docs/half.md"), ExpiresAt: time.Now().UTC().Add(time.Hour),
+	}).AddLadingEntry(ladingmeta.LadingEntry{
+		Kind: "entry", NodeKind: "file", Content: "none", Mode: 0o644,
+	}).Commit())
+	_, err := s.stores.Meta.Flush(ctx)
+	require.NoError(t, err)
+
+	rows := run(t, fmt.Sprintf(`SELECT count() FROM fs(%d, %d)`, m(), partial.UnixNano()))
+	require.Len(t, rows, 1)
+	assert.Equal(t, "0", rows[0][0], "a snapshot with no root row must not be readable by its ts")
+
+	rows = run(t, fmt.Sprintf(`SELECT count() FROM fs(%d, %d) WHERE path = '.'`, m(), s.first.Snap.UnixNano()))
+	require.Len(t, rows, 1)
+	assert.Equal(t, "1", rows[0][0], "a complete snapshot stays readable by its ts")
+}

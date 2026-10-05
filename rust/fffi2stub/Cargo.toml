@@ -1,0 +1,18 @@
+[package]
+name = "fffi2stub"
+version = "0.1.0"
+edition = "2024"
+description = "A consumer for the FFFI2 command stream that interprets nothing: it walks messages, counts them and answers every fetcher with an empty reply. Built natively (pipe peer) and for wasm32 (in-page bridge peer) by the keelson-wasm-frame-cost trial."
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "fffi2stub"
+path = "src/main.rs"
+
+[dependencies]
+
+[profile.release]
+opt-level = 2

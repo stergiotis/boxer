@@ -122,13 +122,13 @@ func (inst *App) initTopology(topo *sysmsnap.Topology) {
 		treemap.DepthColoring(topoDepthPalette()),
 		treemap.ContinuousColoring(cpuHeatmapPalette(), loadFn, 0, 1),
 	)
-	// No WithContainerSize: sized per-frame to fill the dock pane.
-	// WithMaxNestingDepth(0) renders the whole hierarchy at once (lstopo-style);
-	// drill-in still works on the top-level boxes.
-	inst.topoTreemap = treemap.New(inst.ids, "imztop-topology", root,
-		treemap.WithMaxNestingDepth(0),
-		treemap.WithColoring(coloring),
-	)
+	// Sized per-frame to fill the dock pane. NestingAll renders the whole
+	// hierarchy at once (lstopo-style); drill-in still works on the top-level
+	// boxes.
+	inst.topoTreemap = treemap.New(inst.ids, "imztop-topology", root, treemap.Options{
+		MaxNestingDepth: treemap.NestingAll,
+		Coloring:        coloring,
+	})
 }
 
 // renderTopologyPanel draws the lstopo-style CPU containment tree: monochrome
@@ -187,10 +187,11 @@ func (inst *App) renderTopologyPanel(snap *PublishedSnapshot) {
 
 	// Size the treemap to the pane, reserving room below for the legend + hover
 	// line. One-frame lag on the seq-keyed pane probe, the CPU-heatmap idiom.
+	var w, h float32 // zero keeps the treemap's last size
 	availW, availH, _ := inst.capturePane("topology")
 	if availW > 0 && availH > 0 &&
 		!math.IsNaN(float64(availW)) && !math.IsNaN(float64(availH)) {
-		w, h := availW, availH-topoReservedBelowPx
+		w, h = availW, availH-topoReservedBelowPx
 		if h < topoMinH {
 			h = topoMinH
 			w -= topoScrollbarAllowPx // vertical scrollbar is showing
@@ -198,9 +199,8 @@ func (inst *App) renderTopologyPanel(snap *PublishedSnapshot) {
 		if w < topoMinW {
 			w = topoMinW
 		}
-		inst.topoTreemap.SetContainerSize(w, h)
 	}
-	inst.topoTreemap.Render()
+	inst.topoEvents = inst.topoTreemap.Render(w, h)
 
 	// Colorscale legend (gradient + value axis), rebuilt only when the
 	// dimension or rounded max changes.
@@ -279,17 +279,17 @@ func (inst *App) ensureTopoScale() {
 	} else {
 		labelFmt = func(v float64) string { return fmt.Sprintf("%.0f%%", v) }
 	}
-	inst.topoScale = colorscale.New(inst.ids, "imztop-topo-scale", cm,
-		colorscale.WithSize(topoScaleW, topoScaleH),
-		colorscale.WithDesiredTicks(5),
-		colorscale.WithLabelFormat(labelFmt),
-	)
+	inst.topoScale = colorscale.New(inst.ids, "imztop-topo-scale", cm, colorscale.Options{
+		Width: topoScaleW, Height: topoScaleH,
+		DesiredTicks: 5,
+		LabelFormat:  labelFmt,
+	})
 }
 
 // renderTopoHoverDetail prints a one-line readout of the hovered object: its
 // label plus the per-level data we have (static structure + live metrics).
 func (inst *App) renderTopoHoverDetail(snap *PublishedSnapshot) {
-	n := inst.topoTreemap.HoveredNode()
+	n := inst.topoEvents.Hovered
 	if n == nil {
 		c.Label("Hover a box for details.").Send()
 		return

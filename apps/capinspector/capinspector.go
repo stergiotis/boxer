@@ -15,6 +15,7 @@ package capinspector
 
 import (
 	"embed"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"slices"
 	"sort"
 	"sync"
@@ -119,7 +120,8 @@ type App struct {
 	// schemaErr carries a failed build so the section can say so instead
 	// of rendering an empty pane. schemaScope is the per-window half of
 	// the widget's scope key, derived lazily — see schemaScopePrefix.
-	schemaModel *schemaview.Model
+	schemaTable *common.TableDesc
+	schemaState schemaview.State
 	schemaCap   CapId
 	schemaErr   error
 	schemaScope string
@@ -248,8 +250,8 @@ func (inst *App) renderCapDoc(spec CapSpec) {
 		c.Label(spec.Description).Send()
 		return
 	}
-	for range c.IdScope(inst.ids.PrepareStr("doc-" + string(spec.Id))) {
-		doc.Render(inst.ids)
+	for range c.IdScope(inst.ids.PrepareStr(string(spec.Id))) {
+		markdown.Render(markdown.Input{Ids: inst.ids, ScopeKey: "doc", Doc: doc})
 	}
 }
 
@@ -279,6 +281,10 @@ func diagramCapLabel(capId CapId) (s string) {
 		s = "Table reads"
 	case CapLLM:
 		s = "Model inference"
+	case CapHTTP:
+		s = "HTTP egress"
+	case CapAgent:
+		s = "App operations"
 	}
 	return
 }

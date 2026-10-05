@@ -1,0 +1,8 @@
+[2] Sandbox: CanCreateUserNamespace() clone() failure: EPERM
+*** You are running in headless mode.
+[2, Main Thread] WARNING: Locale not supported by C library.
+	Using the fallback 'C' locale.: 'glib warning', file /builds/worker/checkouts/gecko/toolkit/xre/nsSigHandlers.cpp:201
+
+(firefox:2): Gtk-WARNING **: 08:09:53.949: Locale not supported by C library.
+	Using the fallback 'C' locale.
+Gtk-Message: 08:09:53.949: Failed to load module "canberra-gtk-module"

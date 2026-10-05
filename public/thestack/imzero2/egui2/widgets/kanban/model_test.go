@@ -1,6 +1,11 @@
 package kanban
 
-import "testing"
+import (
+	"testing"
+
+	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview/scenetest"
+)
 
 // orderIn returns the ids of the cards in column cid, in render (slice) order —
 // the white-box view the move helpers are specified against.
@@ -39,7 +44,7 @@ func eq(t *testing.T, name string, got, want []uint64) {
 
 func TestShiftColumnLandsAtBottomOfDestination(t *testing.T) {
 	m := board()
-	m.shiftColumn(m.cardIndex(10), +1) // A: col1 -> col2
+	mv, ok := m.shiftColumn(m.cardIndex(10), +1) // A: col1 -> col2
 
 	if c := m.cardByID(10); c == nil || c.ColumnID != 2 {
 		t.Fatalf("A.ColumnID = %v, want 2", c)
@@ -48,42 +53,44 @@ func TestShiftColumnLandsAtBottomOfDestination(t *testing.T) {
 	eq(t, "col2", m.orderIn(2), []uint64{11, 13, 10}) // A appended after B,D
 	eq(t, "col3", m.orderIn(3), []uint64{14})         // untouched
 
-	moves := m.DrainMoves()
-	if len(moves) != 1 || moves[0] != (Move{CardID: 10, FromColumn: 1, ToColumn: 2}) {
-		t.Fatalf("moves = %#v", moves)
-	}
-	if m.DrainMoves() != nil {
-		t.Fatalf("DrainMoves did not clear the queue")
+	if !ok || mv != (Move{CardID: 10, FromColumn: 1, ToColumn: 2}) {
+		t.Fatalf("move = %#v ok=%v", mv, ok)
 	}
 }
 
 func TestShiftColumnEdgesAreNoOps(t *testing.T) {
 	m := board()
-	m.shiftColumn(m.cardIndex(10), -1) // A already in the first column
-	m.shiftColumn(m.cardIndex(14), +1) // E already in the last column
+	_, okA := m.shiftColumn(m.cardIndex(10), -1) // A already in the first column
+	_, okE := m.shiftColumn(m.cardIndex(14), +1) // E already in the last column
 
 	eq(t, "col1", m.orderIn(1), []uint64{10, 12})
 	eq(t, "col2", m.orderIn(2), []uint64{11, 13})
 	eq(t, "col3", m.orderIn(3), []uint64{14})
-	if moves := m.DrainMoves(); moves != nil {
-		t.Fatalf("edge shifts recorded moves: %#v", moves)
+	if okA || okE {
+		t.Fatalf("edge shifts reported moves: %v %v", okA, okE)
 	}
 }
 
 func TestReorderWithinColumn(t *testing.T) {
 	m := board()
-	m.reorderWithin(m.cardIndex(12), -1) // C up past A within col1
+	var moves []Move
+	if mv, ok := m.reorderWithin(m.cardIndex(12), -1); ok { // C up past A within col1
+		moves = append(moves, mv)
+	}
 	eq(t, "col1 after up", m.orderIn(1), []uint64{12, 10})
 
-	m.reorderWithin(m.cardIndex(12), +1) // C back down
+	if mv, ok := m.reorderWithin(m.cardIndex(12), +1); ok { // C back down
+		moves = append(moves, mv)
+	}
 	eq(t, "col1 after down", m.orderIn(1), []uint64{10, 12})
 
 	// Cross-column neighbours are ignored: A is the top of col1, nothing above.
 	before := m.orderIn(1)
-	m.reorderWithin(m.cardIndex(10), -1)
+	if _, ok := m.reorderWithin(m.cardIndex(10), -1); ok {
+		t.Fatal("a top-of-lane reorder reported a move")
+	}
 	eq(t, "col1 top no-op", m.orderIn(1), before)
 
-	moves := m.DrainMoves()
 	if len(moves) != 2 {
 		t.Fatalf("want 2 reorder moves, got %#v", moves)
 	}
@@ -114,11 +121,10 @@ func TestMoveToInsertsAtIndex(t *testing.T) {
 
 func TestMoveToSameColumnReorder(t *testing.T) {
 	m := board() // col1 [A(10), C(12)]
-	m.moveTo(10, 1, 1)
+	mv, ok := m.moveTo(10, 1, 1)
 	eq(t, "col1", m.orderIn(1), []uint64{12, 10}) // A dropped after C
-	mv := m.DrainMoves()
-	if len(mv) != 1 || mv[0].FromColumn != 1 || mv[0].ToColumn != 1 {
-		t.Fatalf("same-column move = %#v", mv)
+	if !ok || mv.FromColumn != 1 || mv.ToColumn != 1 {
+		t.Fatalf("same-column move = %#v ok=%v", mv, ok)
 	}
 }
 
@@ -251,5 +257,30 @@ func TestDotKindLookup(t *testing.T) {
 	}
 	if _, ok := m.dotKind(99); ok {
 		t.Fatalf("dotKind(99) should be absent")
+	}
+}
+
+// TestRenderHeadless renders one frame of a board without a host: the
+// widget must not panic, must refuse a nil State, and must key its rect probes
+// per board so two boards under different scopes never share a slot (W7).
+func TestRenderHeadless(t *testing.T) {
+	t.Cleanup(scenetest.Install())
+	ids := c.NewWidgetIdStack()
+	m := board()
+	var st State
+	res := Render(Input{Ids: ids, ScopeKey: "a", Model: m, State: &st})
+	if res.Err != nil || res.Clicked != 0 || len(res.Moves) != 0 {
+		t.Fatalf("quiet frame reported %+v", res)
+	}
+	if len(st.cardSeq) != len(m.Cards) || st.cardSeq[0] == 0 || st.cardSeq[0] == st.cardSeq[1] {
+		t.Fatalf("card probe slots not derived per card: %v", st.cardSeq)
+	}
+	var st2 State
+	Render(Input{Ids: ids, ScopeKey: "b", Model: board(), State: &st2})
+	if st.cardSeq[0] == st2.cardSeq[0] {
+		t.Fatal("two boards under different scopes share a probe slot")
+	}
+	if Render(Input{Ids: ids, ScopeKey: "c", Model: m}).Err == nil {
+		t.Fatal("a nil State must be refused")
 	}
 }

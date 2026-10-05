@@ -20,7 +20,8 @@ import (
 // detail. Every text is monospace, so widths are computed rather than
 // measured and a column of values lines up.
 type LensView struct {
-	ids *c.WidgetIdStack
+	ids      *c.WidgetIdStack
+	scopeKey string
 }
 
 // LensFormE is how the lens lays a plan out.
@@ -37,9 +38,13 @@ const (
 	LensFormFocus
 )
 
-// NewLensView returns a view drawing on ids.
-func NewLensView(ids *c.WidgetIdStack) *LensView {
-	return &LensView{ids: ids}
+// NewLensView returns a view drawing on ids under its own scope, scopeKey;
+// empty uses "leeway-lens" (ADR-0267 W4).
+func NewLensView(ids *c.WidgetIdStack, scopeKey string) *LensView {
+	if scopeKey == "" {
+		scopeKey = "leeway-lens"
+	}
+	return &LensView{ids: ids, scopeKey: scopeKey}
 }
 
 // Geometry, in points. The advance is a monospace face's, a little generous
@@ -163,7 +168,14 @@ type lensPainter struct {
 
 // Render draws plan p of analysis a in a w×h box, laid out as form; focus
 // is the row LensFormFocus draws.
+// Render draws the view under its scope; see render.
 func (inst *LensView) Render(a *lwlens.Analysis, p *lwlens.Plan, form LensFormE, focus int32, w, h float32) {
+	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
+		inst.render(a, p, form, focus, w, h)
+	}
+}
+
+func (inst *LensView) render(a *lwlens.Analysis, p *lwlens.Plan, form LensFormE, focus int32, w, h float32) {
 	if a == nil || p == nil || len(a.Model.Rows) == 0 {
 		c.Label("The batch has no rows.").Send()
 		return

@@ -17,8 +17,6 @@
 //     your own loop. The direct analogue of egui's `radio_value`.
 //   - [Segmented]    — a whole option bar over one *T, addressed through a
 //     [c.WidgetIdStack] + scope key (the fsmview / kanban convention).
-//   - [SegmentedAbs] — the same bar for widgets that address children by
-//     absolute id (a `scope string`), with no id stack to thread.
 //
 // All replicate egui's exact change-rule: a primary click assigns
 // `*current = value` and reports changed only when the value actually moved
@@ -40,8 +38,6 @@
 package selector
 
 import (
-	"strconv"
-
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
@@ -188,11 +184,10 @@ type option[T comparable] struct {
 }
 
 // GroupFluid is the chained builder for an option bar. Zero value is not valid;
-// always start from [Segmented] or [SegmentedAbs].
+// always start from [Segmented].
 type GroupFluid[T comparable] struct {
-	ids       *c.WidgetIdStack // nil for the SegmentedAbs (absolute-id) form
-	scopeKey  string           // id scope name; used only when ids != nil
-	absScope  string           // absolute-id prefix; used only when ids == nil
+	ids       *c.WidgetIdStack
+	scopeKey  string // id scope name
 	current   *T
 	opts      []option[T]
 	style     Style
@@ -211,17 +206,6 @@ type GroupFluid[T comparable] struct {
 // [StyleRadio] for a settings-style radio list.
 func Segmented[T comparable](ids *c.WidgetIdStack, scopeKey string, current *T) GroupFluid[T] {
 	return GroupFluid[T]{ids: ids, scopeKey: scopeKey, current: current, style: StyleSegmented}
-}
-
-// SegmentedAbs is [Segmented] for widgets that address their children by
-// absolute id (a `scope string` fed to [c.MakeAbsoluteIdStr]) instead of
-// threading a [c.WidgetIdStack] — the distsummary / canonicaltypesummary
-// "widget-in-a-box" convention. Each option's id is derived as
-// MakeAbsoluteIdStr(scope + "#" + i), so pass a `scope` unique to this bar
-// (e.g. the widget scope + "-tab"). No id scope is opened — absolute ids are
-// already globally unique.
-func SegmentedAbs[T comparable](scope string, current *T) GroupFluid[T] {
-	return GroupFluid[T]{absScope: scope, current: current, style: StyleSegmented}
 }
 
 // Option appends a choice. Order is render order.
@@ -292,11 +276,7 @@ func (inst GroupFluid[T]) SendResp() (changed bool) {
 			}
 		}
 	}
-	if inst.ids != nil {
-		for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
-			withLayout()
-		}
-	} else {
+	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
 		withLayout()
 	}
 	return
@@ -320,13 +300,9 @@ func (inst GroupFluid[T]) renderOptions() (changed bool) {
 	return
 }
 
-// idFor derives option i's id from whichever source the constructor set:
-// PrepareSeq under the pushed scope (stack form) or a per-index absolute id.
+// idFor derives option i's id: PrepareSeq under the pushed scope.
 func (inst GroupFluid[T]) idFor(i int) c.WidgetIdCreatorI {
-	if inst.ids != nil {
-		return inst.ids.PrepareSeq(uint64(i))
-	}
-	return c.MakeAbsoluteIdStr(inst.absScope + "#" + strconv.Itoa(i))
+	return inst.ids.PrepareSeq(uint64(i))
 }
 
 // Send lays out the bar and discards the change edge.

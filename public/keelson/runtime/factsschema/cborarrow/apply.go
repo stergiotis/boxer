@@ -43,11 +43,13 @@ func applyScalarSection[
 	sec := getSec()
 	offset := 0
 	for i, kind := range s.lr {
-		card := int(s.lrcard[i])
-		if offset+card > len(vals) {
-			return eb.Build().Str("section", section).Int("lr_idx", i).Int("card", card).Int("offset", offset).Int("len(val)", len(vals)).
+		// Compare in uint64 before narrowing: a wire count above MaxInt
+		// would turn negative under int() and slip past an int check.
+		if s.lrcard[i] > uint64(len(vals)-offset) {
+			return eb.Build().Str("section", section).Int("lr_idx", i).Uint64("card", s.lrcard[i]).Int("offset", offset).Int("len(val)", len(vals)).
 				Errorf("cborarrow: lrcard sum exceeds val length")
 		}
+		card := int(s.lrcard[i])
 		for j := range card {
 			sec.BeginAttribute(vals[offset+j]).AddMembershipLowCardRef(kind).EndAttribute()
 		}
@@ -114,11 +116,13 @@ func applyRangeSection[
 	sec := getSec()
 	offset := 0
 	for i, kind := range s.lr {
-		card := int(s.lrcard[i])
-		if offset+card > len(vals1) {
-			return eb.Build().Str("section", section).Int("lr_idx", i).Int("card", card).Int("offset", offset).Int("len(val)", len(vals1)).
+		// Compare in uint64 before narrowing: a wire count above MaxInt
+		// would turn negative under int() and slip past an int check.
+		if s.lrcard[i] > uint64(len(vals1)-offset) {
+			return eb.Build().Str("section", section).Int("lr_idx", i).Uint64("card", s.lrcard[i]).Int("offset", offset).Int("len(val)", len(vals1)).
 				Errorf("cborarrow: lrcard sum exceeds val length")
 		}
+		card := int(s.lrcard[i])
 		for j := range card {
 			sec.BeginAttribute(vals1[offset+j], vals2[offset+j]).AddMembershipLowCardRef(kind).EndAttribute()
 		}
@@ -311,14 +315,16 @@ func validateArrayShape(s *sectionState, section string, valLen int) (err error)
 			Errorf("cborarrow: lr / countsPerAttr length mismatch")
 		return
 	}
-	var total int
-	for _, c := range s.countsPerAttr {
-		total += int(c)
-	}
-	if total > valLen {
-		err = eb.Build().Str("section", section).Int("total", total).Int("len(val)", valLen).
-			Errorf("cborarrow: countsPerAttr sum exceeds value length")
-		return
+	// Subtract from the remaining length in uint64: summing wire
+	// counts as int can wrap or go negative and pass a total check.
+	remaining := uint64(valLen)
+	for i, c := range s.countsPerAttr {
+		if c > remaining {
+			err = eb.Build().Str("section", section).Int("attr_idx", i).Uint64("count", c).Uint64("remaining", remaining).Int("len(val)", valLen).
+				Errorf("cborarrow: countsPerAttr sum exceeds value length")
+			return
+		}
+		remaining -= c
 	}
 	return
 }

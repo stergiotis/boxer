@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
@@ -116,11 +117,11 @@ type graphOnMapState struct {
 	landNoFill bool
 }
 
-func newGraphOnMapState(ids *c.WidgetIdStack) *graphOnMapState {
+func newGraphOnMapState(ids *c.WidgetIdStack, bus runtimeapp.BusI) *graphOnMapState {
 	st := &graphOnMapState{
-		m: portolan.New(ids, portolan.Options{
+		m: portolan.New(ids, "gom-map", portolan.Options{
 			Source: basemap.PortolanSource(),
-			Loader: basemap.PortolanLoader(),
+			Loader: basemap.PortolanLoader(basemap.NewTiles(bus, "gallery: graph on a map")),
 			Center: graphOnMapCentre,
 			Zoom:   graphOnMapRefZoom,
 		}),
@@ -217,11 +218,12 @@ func demoGraphOnMap(ids *c.WidgetIdStack, st *graphOnMapState) {
 
 	// 2. The map draws; the offline outlines and the graph paint inside its
 	//    canvas, through the same projector.
+	var events graphview.Events
 	m.Render(graphOnMapW, graphOnMapH, func(p portolan.Projector) {
 		if st.showLand {
 			ls := landoverlay.DefaultStyle()
 			ls.NoFill = st.landNoFill
-			st.land.Draw(p, st.atlas, ls)
+			st.land.Paint(p, st.atlas, ls)
 		}
 		// The map's handlers ran at the top of this Render, so the paint
 		// takes the view as it is now — not the one the pick used, which
@@ -229,11 +231,11 @@ func demoGraphOnMap(ids *c.WidgetIdStack, st *graphOnMapState) {
 		now := p.CameraAt(graphOnMapRefZoom, st.origin)
 		gv.SetHostCamera(now)
 		st.declare(p.View(), now.Zoom)
-		gv.HostedPaint(st.nodes, st.edges)
+		events = gv.HostedPaint(st.nodes, st.edges)
 	})
 
 	// 3. The guest's events are read after the paint, as after Render.
-	for _, ev := range gv.Events() {
+	for _, ev := range events {
 		switch ev.Kind {
 		case graphview.EventKindNodeClick:
 			st.lastEvent = fmt.Sprintf("click on %s", graphOnMapLabel(ev.Node))

@@ -413,15 +413,8 @@ func ParseDocSource(bookID string, path string, src []byte) (def *AppletDef, err
 	// Unbound slots = placeholders minus the prelude-bound names (the
 	// ADR-0097 signal definition). Extraction failures leave the flag
 	// false — the Live preset is a convenience, never a correctness gate.
-	if slots, serr := play.ExtractParamSlots(sql); serr == nil && len(slots) > 0 {
-		if _, params, perr2 := play.ExtractParams(sql); perr2 == nil {
-			for _, s := range slots {
-				if _, bound := params["param_"+s.Name]; !bound {
-					def.HasUnboundSlots = true
-					break
-				}
-			}
-		}
+	if unbound, uerr := play.UnboundSlotsFromParse(pr); uerr == nil {
+		def.HasUnboundSlots = unbound
 	}
 	return
 }

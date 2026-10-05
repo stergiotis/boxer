@@ -342,9 +342,11 @@ npm run findings         # the expected violations: exit 0 only if every counter
 npm run verify:all       # only the Apalache bounded verifies (slowest part; ~11 min total)
 npm run liveness:all     # only the two TLC runs
 
-# liveness needs TLC (one-time): grab tla2tools.jar to ~/.tlaplus/ (or set $TLA_TOOLS)
+# liveness needs TLC (one-time): grab tla2tools.jar to ~/.tlaplus/ (or set $TLA_TOOLS);
+# the version and digest are the ones formal-pushout.yaml pins
 mkdir -p ~/.tlaplus && curl -fL -o ~/.tlaplus/tla2tools.jar \
-  https://github.com/tlaplus/tlaplus/releases/download/v1.8.0/tla2tools.jar
+  https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar
+echo "936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88  $HOME/.tlaplus/tla2tools.jar" | sha256sum -c -
 npm run liveness         # TLC: Convergence holds under fairness -> "No error has been found"
 npm run liveness:nofair  # TLC: Convergence fails without fairness -> stuttering counterexample (expected)
 ```

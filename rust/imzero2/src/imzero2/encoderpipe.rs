@@ -1408,4 +1408,74 @@ mod tests {
             "the payload bytes are unchanged: 0x01 + VideoChunk"
         );
     }
+
+    #[test]
+    fn the_hardware_lane_emits_a_frame_without_waiting_for_the_next() {
+        // The host feeds its encoder only frames whose pixels changed
+        // (ADR-0242 SD3), so the frame before the screen settles may be the
+        // last one for a long time. An encoder that keeps a frame in flight
+        // until its successor arrives (h264_vaapi's default async_depth of 2)
+        // would show that screen one frame stale until the next change.
+        use crate::imzero2::codeclane::{CodecLane, VideoCodec, probe_lane};
+        let lanes = [
+            Some(CodecLane::hardware(VideoCodec::H264)),
+            CodecLane::hardware_gpu_conversion(VideoCodec::H264),
+        ];
+        let mut tried = 0;
+        for lane in lanes.into_iter().flatten() {
+            if !probe_lane(&lane).is_ok() {
+                continue;
+            }
+            tried += 1;
+            every_frame_comes_out_without_a_successor(lane);
+        }
+        if tried == 0 {
+            eprintln!("no working VAAPI H.264 encoder here; skipping");
+        }
+    }
+
+    fn every_frame_comes_out_without_a_successor(lane: crate::imzero2::codeclane::CodecLane) {
+        let (w, h) = (256u32, 256u32);
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<EncodedFrame>(64);
+        let mut sink = EncoderSink::new(
+            w,
+            h,
+            30.0,
+            lane,
+            EncoderTarget::Channel {
+                tx,
+                generation: Arc::new(AtomicU64::new(0)),
+            },
+        )
+        .expect("spawn the hardware encoder");
+        // The feeder's mailbox is latest-wins, and opening a VA device takes a
+        // while: frames fed before the encoder reads any are coalesced, which
+        // is the mailbox's job, so they are counted out below.
+        let fed = 3u64;
+        for i in 0..fed {
+            let frame = vec![(i as u8).wrapping_mul(80); (w * h * 4) as usize];
+            sink.on_frame(&frame, w, h, i);
+            std::thread::sleep(Duration::from_millis(if i == 0 { 500 } else { 40 }));
+        }
+        let expected = fed - sink.dropped();
+        assert!(
+            expected >= 2,
+            "the encoder must see at least two frames to test the second"
+        );
+        // Then nothing, as on a settled screen: every frame it took must come out.
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        let mut got = 0u64;
+        while got < expected && std::time::Instant::now() < deadline {
+            match rx.try_recv() {
+                Ok(_) => got += 1,
+                Err(_) => std::thread::sleep(Duration::from_millis(10)),
+            }
+        }
+        assert_eq!(
+            got,
+            expected,
+            "the encoder held back {} of {expected} frames with no successor to push them out",
+            expected - got
+        );
+    }
 }

@@ -196,3 +196,63 @@ func TestPanelAcceptRejectContract(t *testing.T) {
 	require.Empty(t, reason, "a real schema ⇒ accept, no reason")
 	require.Equal(t, 1, claim)
 }
+
+// Nested content is content: two list results that differ only in their
+// element values, or a struct differing only in a field, fingerprint apart.
+func TestFingerprintRecordCoversNestedData(t *testing.T) {
+	alloc := memory.NewGoAllocator()
+	listRec := func(v int64) arrow.RecordBatch {
+		b := array.NewListBuilder(alloc, arrow.PrimitiveTypes.Int64)
+		defer b.Release()
+		b.Append(true)
+		b.ValueBuilder().(*array.Int64Builder).Append(v)
+		arr := b.NewArray()
+		defer arr.Release()
+		schema := arrow.NewSchema([]arrow.Field{{Name: "v", Type: arr.DataType()}}, nil)
+		return array.NewRecordBatch(schema, []arrow.Array{arr}, 1)
+	}
+	a, b := listRec(1), listRec(2)
+	defer a.Release()
+	defer b.Release()
+	require.NotEqual(t, fingerprintRecord(a), fingerprintRecord(b), "list element values")
+
+	structRec := func(v int64) arrow.RecordBatch {
+		st := arrow.StructOf(arrow.Field{Name: "x", Type: arrow.PrimitiveTypes.Int64})
+		sb := array.NewStructBuilder(alloc, st)
+		defer sb.Release()
+		sb.Append(true)
+		sb.FieldBuilder(0).(*array.Int64Builder).Append(v)
+		arr := sb.NewArray()
+		defer arr.Release()
+		schema := arrow.NewSchema([]arrow.Field{{Name: "t", Type: st}}, nil)
+		return array.NewRecordBatch(schema, []arrow.Array{arr}, 1)
+	}
+	c, d := structRec(1), structRec(2)
+	defer c.Release()
+	defer d.Release()
+	require.NotEqual(t, fingerprintRecord(c), fingerprintRecord(d), "struct field values")
+
+	e, f := listRec(7), listRec(7)
+	defer e.Release()
+	defer f.Release()
+	require.Equal(t, fingerprintRecord(e), fingerprintRecord(f), "identical nested content")
+}
+
+// Two dictionary columns sharing indices but not values fingerprint apart.
+func TestFingerprintRecordCoversDictionary(t *testing.T) {
+	alloc := memory.NewGoAllocator()
+	dictRec := func(v string) arrow.RecordBatch {
+		dt := &arrow.DictionaryType{IndexType: arrow.PrimitiveTypes.Int32, ValueType: arrow.BinaryTypes.String}
+		b := array.NewDictionaryBuilder(alloc, dt).(*array.BinaryDictionaryBuilder)
+		defer b.Release()
+		require.NoError(t, b.AppendString(v))
+		arr := b.NewArray()
+		defer arr.Release()
+		schema := arrow.NewSchema([]arrow.Field{{Name: "d", Type: dt}}, nil)
+		return array.NewRecordBatch(schema, []arrow.Array{arr}, 1)
+	}
+	a, b := dictRec("x"), dictRec("y")
+	defer a.Release()
+	defer b.Release()
+	require.NotEqual(t, fingerprintRecord(a), fingerprintRecord(b))
+}

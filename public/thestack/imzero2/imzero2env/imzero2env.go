@@ -91,6 +91,17 @@ var (
 		Category:    env.CategoryDev,
 	})
 
+	// RenderGoroutineCheck binds the FFFI channel to the render loop's
+	// goroutine (ADR-0261): an imzero2 call from any other goroutine then
+	// panics there, naming the caller, instead of interleaving into the
+	// frame. Off by default because each message pays a stack read to learn
+	// its goroutine.
+	RenderGoroutineCheck = env.NewBool(env.Spec{
+		Name:        "IMZERO2_RENDER_GOROUTINE_CHECK",
+		Description: "true: panic when an imzero2 call reaches the FFFI channel off the render loop's goroutine (ADR-0261); costs about a microsecond per message",
+		Category:    env.CategoryDev,
+	})
+
 	// Density is the IDS density preset (tight | standard | roomy).
 	// Case-insensitive; anything else is treated as "standard".
 	//

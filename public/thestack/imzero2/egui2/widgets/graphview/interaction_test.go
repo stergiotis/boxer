@@ -43,7 +43,7 @@ func TestEdgeIdsTellParallelEdgesApart(t *testing.T) {
 	require.False(t, v.SelectEdge(EdgeRef{From: 1, To: 2, Id: 3}), "no such id")
 	require.False(t, v.SelectEdge(EdgeRef{From: 1, To: 2}), "the pair alone does not name an edge that carries ids")
 	require.Equal(t, []EdgeRef{{1, 2, 1}, {1, 2, 2}, {2, 1, 0}}, slices.Collect(v.SelectedEdges()))
-	require.Empty(t, v.Events(), "programmatic selection reports nothing")
+	require.Empty(t, v.events, "programmatic selection reports nothing")
 
 	// Dropping one parallel edge prunes only it, though its endpoints stay.
 	_, changed := v.g.reconcile([]NodeSpec{{Id: 1}, {Id: 2}}, []EdgeSpec{{From: 1, To: 2, Id: 1}, {From: 2, To: 1}})
@@ -63,7 +63,7 @@ func TestProgrammaticNodeSelection(t *testing.T) {
 	require.Equal(t, []uint64{2}, slices.Collect(v.SelectedNodes()))
 	v.ClearSelection()
 	require.Empty(t, slices.Collect(v.SelectedNodes()))
-	require.Empty(t, v.Events())
+	require.Empty(t, v.events)
 }
 
 func TestSecondaryClicksReportOnNodeEdgeAndBackground(t *testing.T) {

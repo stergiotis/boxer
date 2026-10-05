@@ -1,0 +1,54 @@
+File: landoverlay.test
+Build ID: 8e7a18e8e495eeb00d7ab1c67757f9d4fbc0be81
+Type: cpu
+Time: 2026-10-03 19:45:53 CEST
+Duration: 5.59s, Total samples = 4.27s (76.40%)
+Showing nodes accounting for 1.61s, 37.70% of 4.27s total
+Dropped 144 nodes (cum <= 0.02s)
+Showing top 45 nodes out of 147
+      flat  flat%   sum%        cum   cum%
+         0     0%     0%      2.84s 66.51%  testing.(*B).runN
+         0     0%     0%      2.82s 66.04%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings.FrameFluid.KeepIter.func1
+         0     0%     0%      2.82s 66.04%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings.IdScope.func1
+         0     0%     0%      2.82s 66.04%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan.(*Map).Render
+         0     0%     0%      2.82s 66.04%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan.(*Map).Render-range1
+         0     0%     0%      2.82s 66.04%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan.(*Map).Render-range1-range1
+         0     0%     0%      2.82s 66.04%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan.(*Map).frame
+     0.04s  0.94%  0.94%      2.82s 66.04%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan/landoverlay.(*Layer).Paint
+         0     0%  0.94%      2.82s 66.04%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan/landoverlay.BenchmarkPaint.func1
+         0     0%  0.94%      2.82s 66.04%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan/landoverlay.BenchmarkPaint.func1.1 (inline)
+         0     0%  0.94%      2.82s 66.04%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan/landoverlay.BenchmarkPaint.func1.1.1
+         0     0%  0.94%      2.77s 64.87%  testing.(*B).launch
+     0.11s  2.58%  3.51%      2.59s 60.66%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan.Projector.Polyline
+     0.09s  2.11%  5.62%      1.19s 27.87%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan.Projector.project
+         0     0%  5.62%      1.03s 24.12%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan.(*View).LatLngToContainerPoint (inline)
+         0     0%  5.62%      1.03s 24.12%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan.(*View).LatLngToLayerPoint
+         0     0%  5.62%      1.03s 24.12%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan.Projector.ToCanvas (inline)
+         0     0%  5.62%         1s 23.42%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan.(*View).Project (inline)
+     0.05s  1.17%  6.79%         1s 23.42%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan.(*crs).LatLngToPoint
+     0.01s  0.23%  7.03%         1s 23.42%  runtime.systemstack
+     0.10s  2.34%  9.37%      0.90s 21.08%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan.sphericalMercator.Project
+     0.01s  0.23%  9.60%      0.82s 19.20%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan.Projector.Polyline.func1 (inline)
+         0     0%  9.60%      0.75s 17.56%  runtime.gcBgMarkWorker
+         0     0%  9.60%      0.66s 15.46%  runtime.gcBgMarkWorker.func2
+         0     0%  9.60%      0.66s 15.46%  runtime.gcDrain
+         0     0%  9.60%      0.57s 13.35%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan.Simplify
+     0.03s   0.7% 10.30%      0.55s 12.88%  runtime.mallocgc
+         0     0% 10.30%      0.54s 12.65%  runtime.markroot
+     0.01s  0.23% 10.54%      0.52s 12.18%  runtime.growslice
+     0.01s  0.23% 10.77%      0.50s 11.71%  runtime.bgsweep
+         0     0% 10.77%      0.50s 11.71%  runtime.markroot.func1
+         0     0% 10.77%      0.49s 11.48%  runtime.gcDrainMarkWorkerDedicated (inline)
+     0.03s   0.7% 11.48%      0.45s 10.54%  runtime.suspendG
+     0.01s  0.23% 11.71%      0.40s  9.37%  runtime.mallocgcSmallNoscan
+     0.04s  0.94% 12.65%      0.34s  7.96%  math.Log (inline)
+         0     0% 12.65%      0.34s  7.96%  runtime.procyield (inline)
+     0.34s  7.96% 20.61%      0.34s  7.96%  runtime.procyieldAsm
+     0.02s  0.47% 21.08%      0.33s  7.73%  math.Sin (inline)
+     0.03s   0.7% 21.78%      0.30s  7.03%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan.simplifyDP
+     0.30s  7.03% 28.81%      0.30s  7.03%  math.archLog
+     0.26s  6.09% 34.89%      0.29s  6.79%  math.sin
+     0.11s  2.58% 37.47%      0.27s  6.32%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan.reducePoints
+         0     0% 37.47%      0.24s  5.62%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan.paintPolyline
+         0     0% 37.47%      0.24s  5.62%  runtime.(*mcache).nextFree
+     0.01s  0.23% 37.70%      0.24s  5.62%  runtime.(*mcache).refill

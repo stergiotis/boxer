@@ -1,6 +1,6 @@
-// Package fieldview renders a hierarchical list of typed key-value
-// pairs as an outline: one row per field, name and kind tag in the
-// first column and the value (monospace) in the second. Container
+// Package fieldview is an immediate-mode widget (ADR-0267) that renders a
+// hierarchical list of typed key-value pairs as an outline: one row per
+// field, name and kind tag in the first column and the value (monospace) in the second. Container
 // kinds (Object, Array) hold their Children beneath them, so deep
 // trees stay collapsible.
 //

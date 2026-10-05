@@ -1,0 +1,1 @@
+RESULT {"arm":"native-pipe-eager","target":"native","consumer":"pipe","lazy_flush":false,"scene":"labels","frames":300,"warmup":30,"bytes_per_frame":301799,"messages_per_frame":0,"render_us":{"p50":3136.321,"p90":4558.387,"max":5545.665},"sync_us":{"p50":94.007,"p90":146.365,"max":892.439},"total_us":{"p50":3237.482,"p90":4687.581,"max":5669.287}}

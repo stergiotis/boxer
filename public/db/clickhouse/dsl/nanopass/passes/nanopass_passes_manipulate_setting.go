@@ -404,16 +404,28 @@ func serializeSettingsMap(settings map[string]any) (sql string, err error) {
 	return
 }
 
-// findOutermostSelectStmt finds the first (outermost) selectStmt in the parse tree.
-func findOutermostSelectStmt(pr *nanopass.ParseResult) *grammar1.SelectStmtContext {
-	node := nanopass.FindFirst(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
-		_, ok := ctx.(*grammar1.SelectStmtContext)
-		return ok
-	})
-	if node == nil {
-		return nil
+// findOutermostSelectStmt finds the first (outermost) selectStmt in the parse
+// tree. CTE bodies are skipped: `ctes` heads its selectUnionStmt, so a plain
+// pre-order search would return the body of `WITH c AS (SELECT …)` instead of
+// the statement's own SELECT.
+func findOutermostSelectStmt(pr *nanopass.ParseResult) (stmt *grammar1.SelectStmtContext) {
+	if pr.Tree == nil {
+		return
 	}
-	return node.(*grammar1.SelectStmtContext)
+	nanopass.WalkCST(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
+		if stmt != nil {
+			return false
+		}
+		switch c := ctx.(type) {
+		case *grammar1.CtesContext:
+			return false
+		case *grammar1.SelectStmtContext:
+			stmt = c
+			return false
+		}
+		return true
+	})
+	return
 }
 
 // findLastSelectStmtClause returns the last clause present in the selectStmt.

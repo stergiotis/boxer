@@ -37,6 +37,12 @@ res, err := inst.model.Complete(ctx, llm.Request{
 
 - **Subjects.** `llm.describe` and `llm.complete`, request/reply. The host
   owns the model and the endpoint; a request carries neither.
+  `llm.cancel` is a publish that stops the sender's own completion in
+  flight; the typed client sends it when the caller's context is cancelled.
+  `llm.retain.complete` is `complete` whose conversation the host keeps
+  ([ADR-0264](../../../doc/adr/0264-retained-model-conversations-on-facts.md));
+  it has two tokens, so no `llm.*` grant covers it and an app declares
+  `llm.RetainCaps(reason)` beside `ClientCaps`.
 - **Backends.** One service, under the id `runtime.llm`, over the
   repository's one chat-completion client, configured once by
   `BOXER_LLM_ENDPOINT`, `BOXER_LLM_MODEL`, `BOXER_LLM_APIKEY`,
@@ -54,13 +60,25 @@ res, err := inst.model.Complete(ctx, llm.Request{
   service never exercises a capability the app lacks.
 - **Consent and audit.** The grant is not sticky; the call is a request,
   so the bus records it with the app as sender.
+- **An agent's work.** A completion an agent's call started carries the
+  task's on-behalf-of context, and is refused unless the task is live and
+  its grant lists `llm` (ADR-0269 §SD6).
 
 ## Where the calls are read
 
 - `keelson('llm_calls')` — every completion this process answered or
   refused: app, purpose, sensitivity, model, sizes, tokens, elapsed, how it
-  ended. Prompt and completion text only under `BOXER_LLM_KEEP_MESSAGES`,
-  and only here; the same row without the text lands on `boxer.facts` as
-  the `llmCall` kind wherever the host's persist backend reaches it.
+  ended. Prompt and completion text only at `BOXER_LLM_RETAIN=ring` or
+  above, and only here; the same row without the text lands on
+  `boxer.facts` as the `llmCall` kind wherever the host's persist backend
+  reaches it.
+- `boxer.facts`, kind `llmMessage` — one row per message of every call,
+  only what is new since the call's parent: who spoke, how much, a digest,
+  and the tool calls it issued or answers, never the text (ADR-0277). The
+  request's rows are written before the request leaves the machine. At
+  `BOXER_LLM_RETAIN=durable` a retained request's rows also carry the text.
+  Read with SQL; no verb reads it back. The text is kept until removed by
+  hand: `trail.DitchBodiesSQL` empties it for every row, or for one app's,
+  and leaves the rows — the way to check an app does not rely on it.
 - `keelson('llm_prompts')` — every registered prompt document: what a
   model may be asked to do here. `purpose` is `book/slug` on both tables.

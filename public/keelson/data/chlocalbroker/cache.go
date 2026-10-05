@@ -192,14 +192,24 @@ var cacheableSQLPrefixes = []string{
 
 // sqlIsCacheable returns true if the SQL begins with one of the
 // allowlisted prefixes after stripping leading whitespace and line
-// / block comments. Conservative — anything ambiguous is "not
-// cacheable" and gets the worker path.
+// / block comments, is a single statement, and writes no file.
+// Conservative — anything ambiguous is "not cacheable" and gets the
+// worker path: a ';' followed by more text, even inside a string
+// literal, and an OUTFILE anywhere both refuse.
 func sqlIsCacheable(sql string) (ok bool) {
 	s := stripSQLNoise(sql)
 	if s == "" {
 		return
 	}
+	// The worker runs the whole script, so a read-only first statement
+	// says nothing about the ones after it; a hit would skip them.
+	if i := strings.IndexByte(s, ';'); i >= 0 && stripSQLNoise(strings.ReplaceAll(s[i:], ";", " ")) != "" {
+		return
+	}
 	upper := strings.ToUpper(s)
+	if strings.Contains(upper, "OUTFILE") {
+		return
+	}
 	for _, p := range cacheableSQLPrefixes {
 		if !strings.HasPrefix(upper, p) {
 			continue

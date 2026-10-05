@@ -98,8 +98,11 @@ func (inst *Fetcher) readF32h() (r []float32) {
 	return
 }
 func (inst *Fetcher) readU8h() (r []uint8) {
+	// ReadBytes reads the same encoding as a u8 slice — a u32 length (or the
+	// nil sentinel), then the bytes — in one read rather than one per byte;
+	// a capture's pixels are megabytes (ADR-0281).
 	for u := range typed.GetCurrentFffiVar().ReceiveMsg() {
-		return runtime.GetUint8SliceRetr[*runtime.Unmarshaller, uint8](u)
+		return u.ReadBytes()
 	}
 	return
 }
@@ -132,6 +135,24 @@ func (inst *Fetcher) readU64() uint64 {
 		return runtime.GetUint64Retr[*runtime.Unmarshaller, uint64](u)
 	}
 	return 0
+}
+func (inst *Fetcher) readU8() uint8 {
+	for u := range typed.GetCurrentFffiVar().ReceiveMsg() {
+		return u.ReadUInt8()
+	}
+	return 0
+}
+func (inst *Fetcher) readU32() uint32 {
+	for u := range typed.GetCurrentFffiVar().ReceiveMsg() {
+		return u.ReadUInt32()
+	}
+	return 0
+}
+func (inst *Fetcher) readS() string {
+	for u := range typed.GetCurrentFffiVar().ReceiveMsg() {
+		return u.ReadString()
+	}
+	return ""
 }
 func (inst *Fetcher) readB() bool {
 	for u := range typed.GetCurrentFffiVar().ReceiveMsg() {

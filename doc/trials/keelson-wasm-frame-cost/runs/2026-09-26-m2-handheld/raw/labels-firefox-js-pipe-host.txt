@@ -1,0 +1,12 @@
+PORT 41125
+GET /index.html?target=js&consumer=pipe&flush=host&host=1&scene=labels&rows=1700&frames=300&warmup=30&stage=1024x600&arm=firefox-js-pipe-host
+GET /worker.mjs
+GET /favicon.ico
+GET /bridge.js
+GET /fetchtable.txt
+GET /fffi2stub.wasm
+GET /wasmspike_js.wasm
+GET /imzero2.wasm
+GET /wasm_exec.js
+POST /report
+ARM {"result":{"arm":"firefox-js-pipe-host","target":"js","consumer":"pipe","lazy_flush":true,"scene":"labels","frames":300,"warmup":30,"bytes_per_frame":301799,"messages_per_frame":0,"render_us":{"p50":16000,"p90":19000.064,"max":32999.936},"sync_us":{"p50":34000.128,"p90":37000.192,"max":48000},"total_us":{"p50":50000.128,"p90":54000.128,"max":68000}},"host":{"frames":330,"bytesIn":99593670,"lastInterpretUs":32000,"lastTessellateUs":0,"lastSerializeUs":0,"lastBodies":1,"lastBodiesSent":0,"errors":0,"stepMs":11086,"steps":7920,"meshBytes":1271092,"jsFrames":330,"meshFrames":661,"lastError":""},"bridge":{"chunks":32010,"bridgeMs":35},"wallMs":17738,"ua":"Mozilla/5.0 (X11; Linux x86_64; rv:146.0) Gecko/20100101 Firefox/146.0"}

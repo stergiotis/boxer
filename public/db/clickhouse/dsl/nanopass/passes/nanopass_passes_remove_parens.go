@@ -209,17 +209,24 @@ func innerStartsWithMinus(ctx antlr.ParserRuleContext) bool {
 
 // dashPrecedesParen reports whether the token immediately before the
 // paren expression's '(' — with no intervening hidden tokens — is a dash.
+// A directly adjacent run of '(' is skipped: the same walk may delete those
+// enclosing parens, so `2-((-5))` must still see the dash before the inner
+// paren. Skipping a '(' that survives only keeps a redundant pair.
 func dashPrecedesParen(pr *nanopass.ParseResult, parenNode antlr.ParserRuleContext) bool {
 	lparen := parenNode.GetStart()
 	if lparen == nil {
 		return false
 	}
-	idx := lparen.GetTokenIndex()
-	if idx == 0 {
+	for idx := lparen.GetTokenIndex() - 1; idx >= 0; idx-- {
+		switch pr.TokenStream.Get(idx).GetTokenType() {
+		case grammar1.ClickHouseLexerLPAREN:
+			continue
+		case grammar1.ClickHouseLexerDASH:
+			return true
+		}
 		return false
 	}
-	prev := pr.TokenStream.Get(idx - 1)
-	return prev.GetTokenType() == grammar1.ClickHouseLexerDASH
+	return false
 }
 
 // RemoveRedundantParens removes parentheses that are unnecessary given

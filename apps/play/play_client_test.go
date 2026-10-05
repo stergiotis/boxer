@@ -577,3 +577,122 @@ func TestExecuteArrowStreamCanonicalizesViaHostSet(t *testing.T) {
 		t.Errorf("== not canonicalised after a comment: %q", bs)
 	}
 }
+
+// The HTTP param channel reads a scalar value TSV-escaped, so a backslash or
+// a newline in a String binding must be escaped on the way out or the server
+// decodes `C:\new` into a newline. A compound literal carries its own quoted
+// escapes and must not gain a second layer.
+func TestExecuteArrowStreamEscapesParamValuesForTheParamChannel(t *testing.T) {
+	body := emptyArrowStream(t)
+	var gotURLParams url.Values
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotURLParams = r.URL.Query()
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(srv.Close)
+
+	c := NewClient(ClientConfig{URL: srv.URL}, nil)
+	const sql = `SET param_s = 'a\nb'; SELECT {s : String}, {p : String}, {a : Array(String)}, {n : Nullable(String)}`
+	signals := map[string]string{
+		"param_p": `C:\new`,
+		"param_a": `['x\\y']`,
+		"param_n": `\N`,
+	}
+	rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), sql, memory.NewGoAllocator(), nil, signals, c.Dispatch(sql, ""))
+	if err != nil {
+		t.Fatalf("ExecuteArrowStream: %v", err)
+	}
+	t.Cleanup(func() { _ = closer.Close() })
+	t.Cleanup(rdr.Release)
+
+	for name, want := range map[string]string{
+		"param_s": `a\nb`,
+		"param_p": `C:\\new`,
+		"param_a": `['x\\y']`,
+		"param_n": `\N`,
+	} {
+		if got := gotURLParams.Get(name); got != want {
+			t.Errorf("URL %s = %q, want %q", name, got, want)
+		}
+	}
+}
+
+func TestParamWireValueUnknownType(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{"a\tb", `a\tb`},
+		{`['x\\y']`, `['x\\y']`},
+		{`('x\\y', 1)`, `('x\\y', 1)`},
+		{"42", "42"},
+	} {
+		if got := paramWireValue(c.in, "", false); got != c.want {
+			t.Errorf("paramWireValue(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// A statement outside grammar1 that mentions "format " in a literal skips
+// the textual FORMAT append; default_format still asks for ArrowStream, so
+// the reply is decodable rather than TabSeparated.
+func TestExecuteArrowStreamSetsDefaultFormat(t *testing.T) {
+	body := emptyArrowStream(t)
+	var (
+		gotURLParams url.Values
+		gotBody      []byte
+	)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotURLParams = r.URL.Query()
+		gotBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(srv.Close)
+
+	c := NewClient(ClientConfig{URL: srv.URL}, nil)
+	const sql = `SELEKT 'format later' FROM t`
+	rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), sql, memory.NewGoAllocator(), nil, nil, c.Dispatch(sql, ""))
+	if err != nil {
+		t.Fatalf("ExecuteArrowStream: %v", err)
+	}
+	t.Cleanup(func() { _ = closer.Close() })
+	t.Cleanup(rdr.Release)
+	if strings.Contains(string(gotBody), "FORMAT ArrowStream") {
+		t.Fatalf("fixture no longer exercises the skipped append: %q", gotBody)
+	}
+	if got := gotURLParams.Get("default_format"); got != "ArrowStream" {
+		t.Errorf("default_format = %q, want ArrowStream", got)
+	}
+}
+
+// Without writes allowed the Arrow path is the read path: every run carries
+// readonly=2, so a DDL or a write the INSERT-wrapper gate did not recognise
+// is refused by the server rather than executed with the appended FORMAT.
+// With BOXER_PLAY_ALLOW_WRITES set, the run carries no readonly and DDL
+// reaches the server as before.
+func TestExecuteArrowStreamReadonlyUnlessWritesAllowed(t *testing.T) {
+	body := emptyArrowStream(t)
+	for _, tc := range []struct {
+		allowWrites bool
+		want        string
+	}{{false, "2"}, {true, ""}} {
+		var gotURLParams url.Values
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotURLParams = r.URL.Query()
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(body)
+		}))
+		t.Cleanup(srv.Close)
+
+		c := NewClient(ClientConfig{URL: srv.URL, AllowWrites: tc.allowWrites}, nil)
+		const sql = `DROP TABLE IF EXISTS t`
+		rdr, closer, _, err := c.ExecuteArrowStream(context.Background(), sql, memory.NewGoAllocator(), nil, nil, c.Dispatch(sql, ""))
+		if err != nil {
+			t.Fatalf("ExecuteArrowStream: %v", err)
+		}
+		t.Cleanup(func() { _ = closer.Close() })
+		t.Cleanup(rdr.Release)
+		if got := gotURLParams.Get("readonly"); got != tc.want {
+			t.Errorf("allowWrites=%v: readonly = %q, want %q", tc.allowWrites, got, tc.want)
+		}
+	}
+}

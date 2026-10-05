@@ -74,7 +74,7 @@ func TestComposeHistorySqlExpandsFully(t *testing.T) {
 // form rather than the expanded one: the expansion emits calls of its own, so
 // counting aliases after it would count the wrong thing.
 func TestComposeHistoryAuthoredArity(t *testing.T) {
-	sql, err := composeHistoryAuthored("boxer.facts", 100)
+	sql, err := composeHistoryAuthored("boxer.facts", 100, HistoryFilter{})
 	require.NoError(t, err)
 	require.Equal(t, historyRowColumns, strings.Count(sql, " AS "),
 		"compose and parse must agree on the column count")
@@ -98,9 +98,10 @@ func TestComposeHistoryAuthoredArity(t *testing.T) {
 	// The kind test is the exception, and deliberately: has() takes a
 	// literal, and it is the term that prunes.
 	require.Contains(t, sql, fmt.Sprintf("has(%s, %d)", hSymLr, vocab.MembKindQueryRun.GetId().Value()))
-	// The app and run stamps ride the mixed channel; everything else is the
-	// ordinary one-membership-per-attribute one.
-	require.Contains(t, sql, mixedChannel)
+	// Every column of the row model rides the ordinary
+	// one-membership-per-attribute channel, the app and run stamps included
+	// (ADR-0277 §SD8); only the profile events, read elsewhere, are mixed.
+	require.NotContains(t, sql, mixedChannel)
 	require.Contains(t, sql, plainChannel)
 }
 
@@ -126,6 +127,14 @@ func TestParseHistoryRowsRoundTrip(t *testing.T) {
 		"0",                         // exception_code
 		"",                          // exception
 		"SELECT 1\\nFROM t\\tWHERE", // query_text with escapes
+		"2",                         // instance
+		"task-ab",                   // task
+		"task-ab-3",                 // task_call
+		"1",                         // task_epoch
+		"afp",                       // authored_fp
+		"sfp",                       // sent_fp
+		"cfp",                       // chain_fp
+		"",                          // env_fp
 	}, "\t")
 	rows, err := ParseHistoryRows([]byte(line + "\n"))
 	require.NoError(t, err)
@@ -141,6 +150,13 @@ func TestParseHistoryRowsRoundTrip(t *testing.T) {
 	require.Equal(t, uint64(18446744073709551615), r.NormalizedHash)
 	require.Equal(t, "SELECT 1\nFROM t\tWHERE", r.QueryText)
 	require.Empty(t, r.Exception)
+	require.Equal(t, uint64(2), r.Instance)
+	require.Equal(t, "task-ab", r.Task)
+	require.Equal(t, "task-ab-3", r.TaskCall)
+	require.Equal(t, uint64(1), r.TaskEpoch)
+	require.True(t, r.Delegated())
+	require.Equal(t, "afp", r.AuthoredFp)
+	require.Empty(t, r.EnvFp)
 
 	rows, err = ParseHistoryRows(nil)
 	require.NoError(t, err)

@@ -7,7 +7,7 @@ status: draft
 ---
 
 > **Status: draft — pre-human-review.** An exploration dated 2026-09-26, done
-> with the vizeval harness ([ADR-0257](../adr/0257-vizeval-scored-renderings-of-leeway-batches.md),
+> with the vizeval harness ([ADR-0266](../adr/0266-vizeval-scored-renderings-of-leeway-batches.md),
 > proposed). Every quality judgement below is one reader's reading of
 > captures plus vizeval's geometry gates, except §Judged rounds, which
 > report five task-accuracy rounds by blind agent readers.
@@ -155,7 +155,7 @@ Tried and dropped:
 
 2026-09-26, at build `4ebcd397`: scenario `60_mixed_kinds` in a
 1500×900 artifact box, its five questions answered per candidate by one
-agent reader given only that candidate's judge sheet (ADR-0257 §SD10). A
+agent reader given only that candidate's judge sheet (ADR-0266 §SD10). A
 blurred control sheet was answered "unreadable" throughout, so no reader was
 recorded as informed. One reader per candidate means each figure is one
 reading, not a mean.

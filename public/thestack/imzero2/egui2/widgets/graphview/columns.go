@@ -307,30 +307,30 @@ func nanIfNotPositive(v float32) float32 {
 
 // colF32 reads a float column at row i, NaN when the column is absent.
 func colF32(col []float32, i int) float32 {
-	if col == nil {
+	if len(col) == 0 {
 		return nan32
 	}
 	return col[i]
 }
 
-func colBool(col []bool, i int) bool { return col != nil && col[i] }
+func colBool(col []bool, i int) bool { return len(col) != 0 && col[i] }
 
 func colStr(col []string, i int) string {
-	if col == nil {
+	if len(col) == 0 {
 		return ""
 	}
 	return col[i]
 }
 
 func colColor(col []color.Color, i int) color.Color {
-	if col == nil {
+	if len(col) == 0 {
 		return color.Color{}
 	}
 	return col[i]
 }
 
 func colU64(col []uint64, i int) uint64 {
-	if col == nil {
+	if len(col) == 0 {
 		return 0
 	}
 	return col[i]

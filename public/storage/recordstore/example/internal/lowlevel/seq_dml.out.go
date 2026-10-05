@@ -34,7 +34,7 @@ func CreateSchemaSeqTable() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1493
 
 type InEntitySeqTable struct {
 	errs               []error
@@ -72,8 +72,11 @@ func NewInEntitySeqTable(allocator memory.Allocator, estimatedNumberOfRecords in
 
 // SetActiveSections marks which section indices BeginEntity should
 // initialise (skipping beginSection for the rest). Pass nil to clear.
-// The hint is a performance optimisation; sending BeginAttribute to
-// an unmarked section produces empty-list bytes at TransferRecords.
+// The hint is a performance optimisation for shim builders, paired
+// with the builder's SetActiveFields over the marked sections'
+// columns; BeginAttribute on an unmarked section is an invalid state
+// transition. On the arrow RecordBuilder the hint has no effect:
+// every section starts, so its list columns stay row-aligned.
 func (inst *InEntitySeqTable) setActiveSections(idxs []int) {
 	if idxs == nil {
 		inst.activeSections = nil
@@ -99,7 +102,7 @@ var InEntitySeqTableSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
 
 func (inst *InEntitySeqTable) setId(id0 uint64, eid1 uint64) *InEntitySeqTable {
 	if inst.state != runtime.EntityStateInEntity {
@@ -153,12 +156,6 @@ func (inst *InEntitySeqTable) initSections(builder *array.RecordBuilder) {
 	inst.section00Inst = NewInEntitySeqTableSectionMeasure(builder, inst)
 }
 func (inst *InEntitySeqTable) beginSections() {
-	if mask := inst.activeSections; mask != nil {
-		if mask[0] {
-			inst.section00Inst.beginSection()
-		}
-		return
-	}
 	inst.section00Inst.beginSection()
 }
 func (inst *InEntitySeqTable) resetSections() {
@@ -464,6 +461,7 @@ func (inst *InEntitySeqTableSectionMeasureInAttr) EndSection() *InEntitySeqTable
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }

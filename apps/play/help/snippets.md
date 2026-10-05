@@ -1186,8 +1186,9 @@ drawing rather than of one row (ADR-0231): one row, and every column optional.
 `hide_edges` / `undirected` / `pin_on_drag`, and the encoding selectors
 `size_by`, `tone_by`, `opacity_by` and `aura_by`. A selector names either a
 column of `vertices` or a metric the graph engine computes — `degree`,
-`pagerank`, `betweenness`, `kcore`, `triangles`, `clustering`, `clique`,
-`component`, `component_size`, `distance`, `relevance` — so
+`in_degree`, `out_degree`, `pagerank`, `betweenness`, `kcore`, `triangles`,
+`clustering`, `clique`, `component`, `scc`, `component_size`, `distance`,
+`distance_in`, `distance_out`, `relevance` — so
 `size_by = 'pagerank'` sizes each node by its rank without the query computing
 one. A leading `-` inverts an ordinal ramp. `component` and `scc` are labels
 rather than quantities, so they colour and group but cannot size.
@@ -1280,13 +1281,16 @@ and `vertices` say what a node or edge *is*: identity, category, magnitude,
 and — as the columns land — placement and emphasis. **Signals** named `gv_*`
 say what the reader *did* to the picture: hover, selection, a double-click, a
 right-click, an edge click, a dropped node, a background click, the camera,
-the legend. A query reads them as `{gv_focus:String}` like any signal, and
-with **Live** checked it re-runs when they move. **Encoding selectors** spend a
+the legend. A query reads them as `{gv_focus:String}` like any signal. A
+graph CTE (`edges`, `vertices`, `graph_opts`) re-runs on its own when a signal
+it reads moves; the final `SELECT` follows only with **Live** checked. **Encoding selectors** spend a
 computed metric on a channel: the *size by* control of the Graphview tab
 offers `weight` and every ordinal metric of the analytics engine (ADR-0229) —
-`degree`, `pagerank`, `betweenness`, `kcore`, `triangles`, `clustering`,
-`clique`, `component_size`, and the seeded `distance`, `distance_in`,
-`distance_out` and `relevance`, which measure from the selected node.
+`degree`, `in_degree`, `out_degree`, `pagerank`, `betweenness`, `kcore`,
+`triangles`, `clustering`, `clique`, `component_size`, and the seeded
+`distance`, `distance_in`, `distance_out` and `relevance`, which measure from
+the selected node, or from the hovered one with `distance_from = 'hover'` in
+`graph_opts`.
 
 One rule makes every block below safe to run today: a column the current build
 does not claim stays an ordinary result column — the **Table** tab shows it and
@@ -1352,9 +1356,10 @@ The graph is a window onto a larger one and the database is the universe. The
 and falls back to a starting decision while nothing has. The picture is that
 decision, everything within one citation of it, and everything within two;
 `hop` becomes the `group`, so the rings blob separately with auras on, and
-`3 - hop` is the `weight`, so the centre is the largest node. Check **Live**,
-double-click a node on the rim, and the query re-runs around it: the nodes
-that survive keep their places and the new rim arrives beside them. Nothing
+`3 - hop` is the `weight`, so the centre is the largest node. Double-click a
+node on the rim and the graph CTEs re-run around it: the nodes that survive
+keep their places and the new rim arrives beside them. Check **Live** as well
+if the Table should follow, since the final `SELECT` re-runs only then. Nothing
 in the widget knows what an ADR is; the expansion is the query's.
 
 ```sql
@@ -1409,16 +1414,18 @@ Three of the seam's signals in one query. `{gv_selection:Array(String)}` is
 the selected set — one id today, since a click replaces the selection, but the
 type is a set because the seam is — and `main` turns it into the selected
 decisions' rows with their source, so **Detail** renders the decision you
-clicked. `selection_key` carries the last selected id as a scalar; it is the
-value the Table and Network panes also write, so a query written against it
-follows a click in any of them. `{gv_hover:String}` moves after the pointer
+clicked. `selection_key` carries the last selected id as a scalar; Network,
+Sankey, Icicle, Treemap and Files write it too, and so does a row click in any
+pane over a result with a `key` column, so a query written against it follows a
+click in any of them. `{gv_hover:String}` moves after the pointer
 has rested on a node for a moment, not on every crossing, which is what keeps a
 Live query from re-running once per node under a sweep. The camera publishes
 its world-unit bounds and zoom once a pan or a wheel has settled, and a
 background click publishes where it landed; every row of the result carries
 them, so the result is empty until a node is selected. Read these in `main`,
-as here: a graph CTE that read the camera would rebuild the picture on every
-settle, and a rebuild re-frames the camera.
+as here. A graph CTE may read them, and a rebuild caused only by Graphview's own
+`gv_*` signals keeps the camera where it is, but every settle then costs a
+re-run of the graph's queries.
 
 ```sql
 WITH
@@ -2140,13 +2147,19 @@ ships `lttb`, which returns real samples (never interpolated ones), at the cost
 of non-uniform spacing:
 
 ```sql
-SELECT arrayJoin(lttb(2000)(t, v)) AS point
+SELECT tupleElement(p, 1) AS t, tupleElement(p, 2) AS v
 FROM (
-    SELECT toDateTime64(toStartOfMinute(event_time), 3) AS t, count() AS v
-    FROM system.query_log
-    GROUP BY t
+    SELECT arrayJoin(lttb(2000)(t, v)) AS p
+    FROM (
+        SELECT toDateTime64(toStartOfMinute(event_time), 3) AS t, count() AS v
+        FROM system.query_log
+        GROUP BY t
+    )
 )
 ```
+
+`lttb` returns an array of `(t, v)` tuples, and Series needs the time column at
+the top level, so the outer `SELECT` unpacks each tuple again.
 
 Its output is deliberately not on a grid, so it is a way to *look* at a long
 range — not an input to analysis, which needs the spacing `WITH FILL` or
@@ -2728,11 +2741,42 @@ ORDER BY positions DESC
 LIMIT 20
 ```
 
+Traffic per hour on the **Timeline**, to window the **Map**: brush a range in
+the strip under the Timeline's axis and the Map draws only the positions whose
+`time` falls inside it — the window is published as `tl_from` / `tl_to`, which
+any query can read as `{tl_from:DateTime64(3, 'UTC')}`. With nothing brushed
+the two span all of time.
+
+```sql
+SELECT toDateTime64(toStartOfHour(time), 3, 'UTC') AS _tl_time,
+       toDateTime64(toStartOfHour(time) + INTERVAL 1 HOUR, 3, 'UTC') AS _tl_time_end,
+       toFloat64(count()) AS _tl_intensity
+FROM planes_mercator_sample10
+GROUP BY toStartOfHour(time)
+ORDER BY _tl_time
+```
+
+What a box on the **Map** holds: tick **select area**, drag a box, and Run.
+The box is published as `area_min_x` … `area_max_y` in mercator units (and
+`area_min_lat` … `area_max_lon` in degrees, for a table without mercator
+columns); with nothing selected they span the whole world.
+
+```sql
+SELECT t AS type, count() AS positions, uniqExact(icao) AS aircraft
+FROM planes_mercator
+WHERE mercator_x BETWEEN {area_min_x:UInt32} AND {area_max_x:UInt32}
+  AND mercator_y BETWEEN {area_min_y:UInt32} AND {area_max_y:UInt32}
+GROUP BY type
+ORDER BY positions DESC
+LIMIT 20
+```
+
 The Map tab's raster query as a snippet (ADR-0096 §SD6): it bins the visible
 points into a `W×H` grid and derives an RGBA value per pixel, so it returns one
 row per pixel — a `W*H`-row framebuffer, not a readable table (the **Map** tab
-draws it). Here the viewport is fixed to a Zürich box at 256×256; the Map tab
-injects the live viewport instead.
+draws it), coloured by the Map tab's default render, *Altitude & Speed*. Here
+the viewport is fixed to a Zürich box at 256×256; the Map tab injects the live
+viewport instead.
 
 ```sql
 WITH
@@ -2754,13 +2798,16 @@ WITH
   count() AS total,
   greatest(1000000. / sampling / zoom_factor, toFloat64(count())) AS max_total,
   pow(total / max_total, 1/5) AS transparency,
-  greatest(0, least(avg(altitude), 5000)) / 5000 AS color1,
-  greatest(0, least(avg(altitude), 50000)) / 50000 AS color3,
-  greatest(0, least(avg(ground_speed), 700)) / 700 AS color2,
   255 AS alpha,
-  (1 + transparency) / 2 * (1 - color3) * 255 AS red,
-  transparency * color1 * 255 AS green,
-  color2 * 255 AS blue
+  greatest(0, least(avg(altitude), 45000)) / 45000 AS alt_t,
+  greatest(0, least(avg(ground_speed), 600)) / 600 AS spd_t,
+  0.22 + 0.58 * transparency AS lum,
+  0.19 * sqrt(lum / 0.8) * (0.25 + 0.75 * sqrt(spd_t)) AS chroma,
+  30 + 230 * sqrt(alt_t) AS hue,
+  colorOKLCHToSRGB(tuple(lum, chroma, hue)) AS rgb,
+  greatest(0, least(255, tupleElement(rgb, 1))) AS red,
+  greatest(0, least(255, tupleElement(rgb, 2))) AS green,
+  greatest(0, least(255, tupleElement(rgb, 3))) AS blue
 SELECT round(red)::UInt8 AS r, round(green)::UInt8 AS g,
        round(blue)::UInt8 AS b, round(alpha)::UInt8 AS a
 FROM planes_mercator

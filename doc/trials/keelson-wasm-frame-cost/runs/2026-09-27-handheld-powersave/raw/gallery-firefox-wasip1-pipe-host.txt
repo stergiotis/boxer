@@ -1,0 +1,11 @@
+PORT 45951
+GET /index.html?target=wasip1&consumer=pipe&flush=host&host=1&scene=gallery&rows=1700&frames=300&warmup=30&stage=1024x600&arm=firefox-wasip1-pipe-host
+GET /worker.mjs
+GET /favicon.ico
+GET /bridge.js
+GET /fetchtable.txt
+GET /fffi2stub.wasm
+GET /wasmspike_wasip1.wasm
+GET /imzero2.wasm
+POST /report
+ARM {"result":{"arm":"firefox-wasip1-pipe-host","target":"wasip1","consumer":"pipe","lazy_flush":true,"scene":"gallery","frames":300,"warmup":30,"bytes_per_frame":128689,"messages_per_frame":0,"render_us":{"p50":5000,"p90":6000,"max":9000},"sync_us":{"p50":4000,"p90":5000,"max":6000},"total_us":{"p50":10000,"p90":11000,"max":14000}},"host":{"frames":330,"bytesIn":42467394,"lastInterpretUs":3000,"lastTessellateUs":1000,"lastSerializeUs":0,"lastBodies":19,"lastBodiesSent":0,"errors":0,"framesUnchanged":311,"lastSentBbox":[-4.5,66.5,1004.5,391],"stepMs":1494,"steps":330,"meshBytes":2079410,"jsFrames":330,"meshFrames":41,"lastError":""},"bridge":{"chunks":6930,"bridgeMs":22},"wallMs":4788,"ua":"Mozilla/5.0 (X11; Linux x86_64; rv:146.0) Gecko/20100101 Firefox/146.0"}

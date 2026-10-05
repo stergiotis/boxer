@@ -1,0 +1,1 @@
+wasi: path_filestat_get called; answered ENOSYS

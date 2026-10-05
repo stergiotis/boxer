@@ -233,7 +233,7 @@ func TestScrollTarget_ReportsChangeOnlyOnTransition(t *testing.T) {
 
 // TestScrollTarget_LeavingIntoDocLevelSection pins the degenerate direction:
 // moving the caret above the first heading is a real transition to the
-// document-level section, whose empty slug markdown.WithScrollToSection then
+// document-level section, whose empty slug markdown.Input.ScrollToSection then
 // treats as a no-op. The preview stays put rather than scrolling to nowhere.
 func TestScrollTarget_LeavingIntoDocLevelSection(t *testing.T) {
 	slug, changed := scrollTarget(headingDoc, headingsOf(), 2, "first")

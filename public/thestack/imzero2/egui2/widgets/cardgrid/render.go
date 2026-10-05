@@ -33,8 +33,6 @@ const (
 	// scrollAlignCenter is ScrollToCursor's alignment code (0 top, 1 centre,
 	// 2 bottom).
 	scrollAlignCenter uint8 = 1
-	// tagIdBase keeps a card's tag badges clear of its other widgets.
-	tagIdBase uint64 = 0x200
 )
 
 // cullSlackRows is how many rows past the viewport are still drawn on each
@@ -72,7 +70,7 @@ func Render(in Input) (res Result) {
 		// The pane probe goes first: the rect is the room left for the next
 		// widget, and it answers one frame late — hold the last good width
 		// so the grid does not reflow to the fallback on a hidden→shown edge.
-		paneSeq := c.ProbeSeq(in.ScopeKey, "cardgrid")
+		paneSeq := ids.ProbeSeq("pane")
 		if w, _, ok := c.CapturePaneSize(paneSeq); ok {
 			st.paneW = w
 		}
@@ -102,7 +100,7 @@ func Render(in Input) (res Result) {
 			for range c.ScrollArea().Vscroll(true).AutoShrink(false, false).KeepIter() {
 				// The content's top, before anything moves the cursor: with
 				// the viewport's, it gives the scroll offset.
-				contentSeq := c.ProbeSeq(in.ScopeKey, "cardgrid-content")
+				contentSeq := ids.ProbeSeq("content")
 				c.CaptureUiAvailableRect(contentSeq)
 				content, contentOK := c.CurrentApplicationState.StateManager.GetUiRect(contentSeq)
 				if contentOK {
@@ -258,11 +256,10 @@ func renderCard(in Input, lay Layout, i int, reveal bool, res *Result) {
 		renderHero(in, lay, i, x, y, res)
 	}
 	if m.Tone != nil && m.Tone[i].Kind() != color.ColorKindNone {
-		top := y + lay.Hero.H + styletokens.RoundingLg
-		if lay.Hero.H == 0 {
-			top = y + styletokens.RoundingLg
-		}
-		fillRect(ids.PrepareStr("tone"), x+1, top, x+1+toneW, y+lay.CardH-styletokens.RoundingLg, m.Tone[i], styletokens.RoundingSm)
+		// Inside the stroke, so the selection outline stays whole; below the
+		// hero, whose bottom edge is square.
+		toneEdge(ids.PrepareStr("tone"), x+strokeW, y+max(lay.Hero.H, strokeW), x+lay.CardW-strokeW, y+lay.CardH-strokeW,
+			lay.Hero.H == 0, m.Tone[i], styletokens.RoundingLg-strokeW)
 	}
 
 	tx0, tx1 := x+cardPad, x+lay.CardW-cardPad
@@ -486,9 +483,11 @@ func renderTags(in Input, lay Layout, i int, x0, y0, x1, y1 float32) {
 	}
 	for range slot(x0, y0, x1, y1) {
 		for range c.HorizontalTop().KeepIter() {
-			for j := range shown {
-				badge.New(in.Ids.PrepareSeq(tagIdBase+uint64(j)), tags[j]).
-					Tone(badge.ToneNeutral).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
+			for range c.IdScope(in.Ids.PrepareStr("tags")) {
+				for j := range shown {
+					badge.New(in.Ids.PrepareSeq(uint64(j)), tags[j]).
+						Tone(badge.ToneNeutral).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
+				}
 			}
 			if rest := len(tags) - shown; rest > 0 {
 				c.LabelAtoms(c.Atoms().BeginRichText("+" + strconv.Itoa(rest)).Small().Weak().End().Keep()).
@@ -543,16 +542,27 @@ func hover(on bool, full string, body func()) {
 	}
 }
 
-// fillRect draws a filled, rounded rect at a computed position.
-func fillRect(id c.WidgetIdCreatorI, x0, y0, x1, y1 float32, fill color.Color, rounding float32) {
-	if x1 <= x0 || y1 <= y0 {
+// toneEdge paints the accent edge along the left side of the rect x0..x1,
+// y0..y1: a rounded rect of that shape, clipped to a toneW-wide column, so
+// the edge follows the corners and tapers along them instead of stopping
+// where they begin. roundTop is false when the rect's top edge is square.
+func toneEdge(id c.WidgetIdCreatorI, x0, y0, x1, y1 float32, roundTop bool, fill color.Color, rounding float32) {
+	if x1-x0 <= toneW || y1 <= y0 {
 		return
 	}
-	for range c.AllocateUiAtRect(x0, y0, x1, y1).KeepIter() {
+	r := uint8(max(rounding, 0))
+	nw, ne := r, r
+	if !roundTop {
+		nw, ne = 0, 0
+	}
+	for range c.AllocateUiAtRect(x0, y0, x0+toneW, y1).KeepIter() {
 		c.UiClipToMaxRect()
-		for range c.Frame(id).Fill(fill).CornerRadius(rounding).InnerMargin(0).KeepIter() {
-			c.UiSetMinWidth(x1 - x0)
-			c.UiSetMinHeight(y1 - y0)
+		// Relative to the column; the child keeps the column's clip.
+		for range c.AllocateUiAtRect(0, 0, x1-x0, y1-y0).KeepIter() {
+			for range c.Frame(id).Fill(fill).CornerRadiusSides(nw, ne, r, r).InnerMargin(0).KeepIter() {
+				c.UiSetMinWidth(x1 - x0)
+				c.UiSetMinHeight(y1 - y0)
+			}
 		}
 	}
 }
@@ -560,43 +570,46 @@ func fillRect(id c.WidgetIdCreatorI, x0, y0, x1, y1 float32, fill color.Color, r
 func tok(t styletokens.RGBA8) color.Color { return color.Hex(t.AsHex()) }
 
 // Toolbar draws the density and hero-aspect controls inline — the host
-// places it in its own row, beside a pager. The aspect control is drawn only
+// places it in its own row, beside a pager. Its ids sit under the same
+// scopeKey the grid's Render uses, in a "toolbar" scope of their own. The aspect control is drawn only
 // for a page that has heroes.
 func Toolbar(ids *c.WidgetIdStack, scopeKey string, st *State, slots SlotsE) {
 	if st == nil || ids == nil {
 		return
 	}
-	for range c.IdScope(ids.PrepareStr(scopeKey + "-toolbar")) {
-		pick := func(key, label, tip string, on bool) (clicked bool) {
-			for range c.HoverText(tip).KeepIter() {
-				clicked = c.Button(ids.PrepareStr(key), c.Atoms().Text(label).Keep()).Small().
-					Selected(on).SendResp().HasPrimaryClicked()
+	for range c.IdScope(ids.PrepareStr(scopeKey)) {
+		for range c.IdScope(ids.PrepareStr("toolbar")) {
+			pick := func(key, label, tip string, on bool) (clicked bool) {
+				for range c.HoverText(tip).KeepIter() {
+					clicked = c.Button(ids.PrepareStr(key), c.Atoms().Text(label).Keep()).Small().
+						Selected(on).SendResp().HasPrimaryClicked()
+				}
+				return
 			}
-			return
-		}
-		if pick("d-s", "S", "small cards", st.density == DensitySmall) {
-			st.density = DensitySmall
-		}
-		if pick("d-m", "M", "medium cards", st.density == DensityMedium) {
-			st.density = DensityMedium
-		}
-		if pick("d-l", "L", "large cards", st.density == DensityLarge) {
-			st.density = DensityLarge
-		}
-		if !slots.Has(SlotsHero) {
-			return
-		}
-		// A gap, not a vertical Separator: that one grows to the height the
-		// row is offered, and a toolbar row is offered the whole pane.
-		c.AddSpace(toolbarGap)
-		if pick("a-169", "16:9", "hero aspect 16:9", st.aspect == Aspect16x9) {
-			st.aspect = Aspect16x9
-		}
-		if pick("a-43", "4:3", "hero aspect 4:3", st.aspect == Aspect4x3) {
-			st.aspect = Aspect4x3
-		}
-		if pick("a-11", "1:1", "hero aspect 1:1", st.aspect == Aspect1x1) {
-			st.aspect = Aspect1x1
+			if pick("d-s", "S", "small cards", st.density == DensitySmall) {
+				st.density = DensitySmall
+			}
+			if pick("d-m", "M", "medium cards", st.density == DensityMedium) {
+				st.density = DensityMedium
+			}
+			if pick("d-l", "L", "large cards", st.density == DensityLarge) {
+				st.density = DensityLarge
+			}
+			if !slots.Has(SlotsHero) {
+				return
+			}
+			// A gap, not a vertical Separator: that one grows to the height the
+			// row is offered, and a toolbar row is offered the whole pane.
+			c.AddSpace(toolbarGap)
+			if pick("a-169", "16:9", "hero aspect 16:9", st.aspect == Aspect16x9) {
+				st.aspect = Aspect16x9
+			}
+			if pick("a-43", "4:3", "hero aspect 4:3", st.aspect == Aspect4x3) {
+				st.aspect = Aspect4x3
+			}
+			if pick("a-11", "1:1", "hero aspect 1:1", st.aspect == Aspect1x1) {
+				st.aspect = Aspect1x1
+			}
 		}
 	}
 }

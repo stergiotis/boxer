@@ -4,6 +4,8 @@ import (
 	"math"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/pipelineview"
 )
 
@@ -95,4 +97,27 @@ func TestVolumeWidthBoundsDefaultAndClamp(t *testing.T) {
 	if w, _ := h("", "", 1e9); w != 5 {
 		t.Errorf("over-max volume gave %v, want maxW 5", w)
 	}
+}
+
+// TestHeadBaseKeepsTheTipAndEndsTheStrokeBeforeIt pins where the stroke
+// stops: the head's base is headLen before the tip along the segment, so
+// the tip is the edge's final point at every stroke width, and a segment
+// shorter than the head gives up the whole segment to it.
+func TestHeadBaseKeepsTheTipAndEndsTheStrokeBeforeIt(t *testing.T) {
+	for _, strokeW := range []float32{1.25, 4, 7} {
+		headLen, headHalfW := headSize(strokeW)
+		require.GreaterOrEqual(t, headLen, float32(8))
+		require.GreaterOrEqual(t, headHalfW, strokeW, "the head must be at least as wide as the stroke it ends")
+		bx, by := headBase(0, 50, 100, 50, headLen)
+		require.InDelta(t, 100-headLen, bx, 1e-4)
+		require.InDelta(t, 50, by, 1e-4)
+	}
+	headLen, _ := headSize(7)
+	bx, by := headBase(90, 50, 100, 50, headLen)
+	require.Equal(t, float32(90), bx, "a short final segment is all head")
+	require.Equal(t, float32(50), by)
+	// A vertical segment ends short of its tip by the same length.
+	bx, by = headBase(30, 0, 30, 40, 8)
+	require.InDelta(t, 30, bx, 1e-4)
+	require.InDelta(t, 32, by, 1e-4)
 }

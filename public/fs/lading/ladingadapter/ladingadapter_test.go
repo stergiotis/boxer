@@ -346,6 +346,36 @@ func TestSymlinksAreRecordedAndResolved(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// TestPathsThroughALinkedDirectoryResolve. What ReadDir lists under a linked
+// directory, Stat and Open reach: every component of a path is resolved, not
+// only the last, as os.DirFS over the same source does.
+func TestPathsThroughALinkedDirectoryResolve(t *testing.T) {
+	h := seed(t)
+	fsys := h.open(t)
+
+	si, err := fsys.Stat("linkdir/tiny")
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, si.Size())
+	got, err := fs.ReadFile(fsys, "linkdir/tiny")
+	require.NoError(t, err)
+	assert.Equal(t, []byte("x"), got)
+	f, err := fsys.Open("linkdir/d.bin")
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	// Lstat follows the directories on the way, not the last component.
+	li, err := fsys.Lstat("linkdir/tiny")
+	require.NoError(t, err)
+	assert.Zero(t, li.Mode()&fs.ModeSymlink)
+
+	// A miss under a linked directory is still a miss.
+	_, err = fsys.Stat("linkdir/nothing")
+	assert.ErrorIs(t, err, fs.ErrNotExist)
+	// And a path through a file is not a path.
+	_, err = fsys.Stat("top.md/x")
+	assert.ErrorIs(t, err, fs.ErrNotExist)
+}
+
 // TestSubIsTheSameSnapshot.
 func TestSubIsTheSameSnapshot(t *testing.T) {
 	h := seed(t)

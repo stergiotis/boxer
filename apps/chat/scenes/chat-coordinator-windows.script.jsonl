@@ -1,0 +1,10 @@
+# The scripted model of chat-coordinator-windows.scene.md: read the desktop
+# from keelson, ask for the desktop, lay every window side by side, and read
+# where they went. The reads in between give the arrangement its frames; a
+# scripted model cannot poll.
+{"tool":"query_windows","args":{"table":"windows","sql":"SELECT key, display, round(x) AS x, round(w) AS w, stack, active FROM keelson('windows') ORDER BY key","title":"Reading the desktop"}}
+{"tool":"request_access","args":{"plan":"lay the windows out side by side","desktop":true}}
+{"tool":"arrange_windows","args":{"command":"columns","title":"Laying the windows side by side"}}
+{"tool":"query_windows","args":{"table":"desktop","sql":"SELECT work_w, work_h, arranging FROM keelson('desktop')","title":"Reading the work area"}}
+{"tool":"query_windows","args":{"table":"windows","sql":"SELECT key, display, round(x) AS x, round(y) AS y, round(w) AS w FROM keelson('windows') ORDER BY x","title":"Reading where they went"}}
+{"content":"The windows are side by side."}

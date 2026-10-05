@@ -48,40 +48,18 @@ func InjectParamsAsCTE(
 				return
 			}
 
-			// Build the input as `SET line; ... ; body` so the existing logic
-			// (which iterates SET text) can be reused without redesign.
-			var preludeBuilder strings.Builder
+			// Params are read straight from env: a SET-text prelude re-split on
+			// "\n" would cut a string literal holding a raw newline in two.
+			var accepted []acceptedParam
 			for name, p := range e.Params {
 				if p.Raw == "" {
 					continue
 				}
-				if _, _, parseErr := ParseParamName(name, prefix); parseErr != nil {
+				info, parseErr := parseSetStatementToInfo("SET "+name+" = "+p.Raw, prefix)
+				if parseErr != nil {
 					continue
 				}
-				preludeBuilder.WriteString("SET ")
-				preludeBuilder.WriteString(name)
-				preludeBuilder.WriteString(" = ")
-				preludeBuilder.WriteString(p.Raw)
-				preludeBuilder.WriteString(";\n")
-			}
-			prelude := preludeBuilder.String()
-			if prelude == "" {
-				result = body
-				return
-			}
-			full := prelude + body
-			sets, _, query := ParseExtractedQuery(full, prefix)
-			if len(sets) == 0 {
-				result = body
-				return
-			}
-
-			var accepted []acceptedParam
-			rejectedNames := make(map[string]bool, len(sets))
-
-			for _, info := range IterateExtractedParamsFromSets(sets, prefix) {
 				if predicate != nil && !predicate(info) {
-					rejectedNames[info.FullName] = true
 					continue
 				}
 				cteValue := info.LiteralSQL
@@ -105,7 +83,7 @@ func InjectParamsAsCTE(
 				return
 			}
 
-			modifiedQuery := query
+			modifiedQuery := body
 			for _, ap := range accepted {
 				modifiedQuery = replaceParamSlots(modifiedQuery, ap.info.FullName, ap.info.FullName)
 			}

@@ -1,6 +1,14 @@
 package basemap
 
-import "testing"
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
 
 // TestConfigured pins the switch play's Map panel keys its basemap-on default
 // on, and the one the TLS knobs are gated behind. Since BOXER_MAP_TILE_URL
@@ -99,54 +107,83 @@ func TestClampMaxZoom(t *testing.T) {
 	}
 }
 
-// TestPortolanLoaderGatesOnConfiguredURL is the assertion the comment on
-// TestTLSKnobsDefaultToVerifiedPublicRoots used to promise and never made: the
-// TLS knobs reach the loader only once BOXER_MAP_TILE_URL names a server. Both
-// are set here and must still come out inert, because the URL in effect is the
+// TestDestinationGatesOnConfiguredURL: the TLS knobs reach the basemap
+// destination only once BOXER_MAP_TILE_URL names a server. Both are set here
+// and must still come out inert, because the URL in effect is the
 // OpenStreetMap default — the case where honouring them would disable
 // certificate verification against a public host on the strength of a stray
 // environment variable.
-func TestPortolanLoaderGatesOnConfiguredURL(t *testing.T) {
+func TestDestinationGatesOnConfiguredURL(t *testing.T) {
 	TileCAFile.SetForTest(t, "/etc/ssl/gis-ca.pem")
 	TileInsecureTLS.SetForTest(t, "1")
 
-	// BOXER_MAP_TILE_URL unset: the default OSM server is in effect, so
-	// neither knob applies however loudly the environment asks.
 	if Configured() {
 		t.Fatalf("Configured() = true with BOXER_MAP_TILE_URL unset; the rest of this test is meaningless")
 	}
-	opts := PortolanLoader()
-	if opts.InsecureTLS {
-		t.Errorf("PortolanLoader().InsecureTLS = true with BOXER_MAP_TILE_URL unset; the OSM default must not be downgradable")
-	}
-	if opts.CAFile != "" {
-		t.Errorf("PortolanLoader().CAFile = %q with BOXER_MAP_TILE_URL unset; want empty", opts.CAFile)
-	}
+	d, err := ResolveDestination()
+	require.NoError(t, err)
+	assert.False(t, d.InsecureTLS, "the OSM default must not be downgradable")
+	assert.Empty(t, d.CAFile)
+	assert.Equal(t, []string{"https://tile.openstreetmap.org/"}, d.Prefixes)
 
 	// Whitespace-only is unset too — the same predicate Configured uses.
 	TileURL.SetForTest(t, "   ")
-	if opts := PortolanLoader(); opts.InsecureTLS || opts.CAFile != "" {
-		t.Errorf("PortolanLoader() = %+v with whitespace-only BOXER_MAP_TILE_URL; want the zero options", opts)
-	}
+	d, err = ResolveDestination()
+	require.NoError(t, err)
+	assert.False(t, d.InsecureTLS)
+	assert.Empty(t, d.CAFile)
 
-	// A named server: now both knobs land on the loader options.
+	// A named server: now both knobs land on the destination, and its
+	// prefix is the server's.
 	TileURL.SetForTest(t, "https://mygis.internal/{z}/{x}/{y}.png")
-	opts = PortolanLoader()
-	if !opts.InsecureTLS {
-		t.Errorf("PortolanLoader().InsecureTLS = false with BOXER_MAP_TILE_URL set; the knob never reaches the loader")
-	}
-	if opts.CAFile != "/etc/ssl/gis-ca.pem" {
-		t.Errorf("PortolanLoader().CAFile = %q; want /etc/ssl/gis-ca.pem", opts.CAFile)
-	}
+	d, err = ResolveDestination()
+	require.NoError(t, err)
+	assert.True(t, d.InsecureTLS)
+	assert.Equal(t, "/etc/ssl/gis-ca.pem", d.CAFile)
+	assert.Equal(t, []string{"https://mygis.internal/"}, d.Prefixes)
 }
 
-// TestPortolanLoaderTrimsCAFile pins the trim on the path: an env var edited
-// by hand or through a YAML block picks up trailing whitespace easily, and a
-// path with a stray space is a CA file that silently does not load.
-func TestPortolanLoaderTrimsCAFile(t *testing.T) {
+// TestDestinationTrimsCAFile pins the trim on the path: a path with a stray
+// space is a CA file that silently does not load.
+func TestDestinationTrimsCAFile(t *testing.T) {
 	TileURL.SetForTest(t, "https://mygis.internal/{z}/{x}/{y}.png")
 	TileCAFile.SetForTest(t, "  /etc/ssl/gis-ca.pem\n")
-	if got := PortolanLoader().CAFile; got != "/etc/ssl/gis-ca.pem" {
-		t.Errorf("PortolanLoader().CAFile = %q; want the trimmed path", got)
-	}
+	d, err := ResolveDestination()
+	require.NoError(t, err)
+	assert.Equal(t, "/etc/ssl/gis-ca.pem", d.CAFile)
+}
+
+// An unbound Tiles fails with the reason rather than reaching anywhere.
+func TestTilesUnboundFails(t *testing.T) {
+	_, err := NewTiles(nil, "test").Get(context.Background(), "https://tile.openstreetmap.org/1/1/1.png")
+	require.ErrorIs(t, err, errUnbound)
+}
+
+// fetchDirect returns a tile's bytes, refuses a non-200 answer, and refuses
+// a body past the loader's own cap.
+func TestFetchDirect(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/1/0/0.png":
+			_, _ = w.Write([]byte("png"))
+		case "/big.png":
+			_, _ = w.Write(make([]byte, maxDirectTileBytes+1))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	data, err := fetchDirect(context.Background(), srv.URL+"/1/0/0.png")
+	require.NoError(t, err)
+	require.Equal(t, "png", string(data))
+	_, err = fetchDirect(context.Background(), srv.URL+"/9/9/9.png")
+	require.ErrorContains(t, err, "tile fetch")
+	_, err = fetchDirect(context.Background(), srv.URL+"/big.png")
+	require.ErrorContains(t, err, "too large")
+}
+
+// Outside the browser tab a map shows a basemap by default only when a tile
+// server was configured; the tab turns it on (direct_wasip1.go).
+func TestDefaultOnFollowsConfiguredOutsideTheTab(t *testing.T) {
+	require.Equal(t, Configured(), DefaultOn())
 }

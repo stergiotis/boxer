@@ -70,7 +70,7 @@ func ReadScorecards(outDir string) (cards []Scorecard, err error) {
 }
 
 // tableGroup is the cards of one scenario over one batch: the unit within
-// which scorecards compare (ADR-0257 §SD4).
+// which scorecards compare (ADR-0266 §SD4).
 type tableGroup struct {
 	scenario, digest, frame string
 	rows                    int64

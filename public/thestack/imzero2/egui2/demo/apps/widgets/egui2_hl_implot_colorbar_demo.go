@@ -49,9 +49,8 @@ func init() {
 				}
 			}
 			st.cm = colormap.NewConfig(colormap.Viridis8, -1.35, 1.35)
-			st.cs = colorscale.New(ids, "implot-colorbar-cs", st.cm,
-				colorscale.WithOrientation(colorscale.OrientationVertical),
-				colorscale.WithSize(64, 360))
+			st.cs = colorscale.New(ids, "implot-colorbar-cs", st.cm, colorscale.Options{
+				Orientation: colorscale.OrientationVertical, Width: 64, Height: 360})
 			return st
 		},
 		RenderStateful: func(ids *c.WidgetIdStack, state any) {

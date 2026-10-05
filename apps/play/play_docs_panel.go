@@ -98,7 +98,7 @@ func (inst *PlayApp) renderDocsTab() {
 
 	// The editor already knows what the caret is on (ADR-0147 §SD2); the pane
 	// reads it rather than deriving a second answer from the same buffer.
-	er := inst.editor.Result()
+	er := inst.editorResult
 	res := inst.resolveDocs(docsCandidates(er.Entity, er.EntityOk))
 
 	// The body.
@@ -150,20 +150,27 @@ func (inst *PlayApp) renderDocsTab() {
 		// IdScope isolates the document's derived widget ids (markdown.Doc's
 		// documented invariant) so the pane cannot collide with the Snippets
 		// tab or the Help center rendering another document the same frame.
-		for range c.IdScope(ids.PrepareStr("docsBody")) {
+		{
 			// Links the source itself documents are followed in place; the
 			// rest stay browser hyperlinks (DocsSourceI.LinkClaimed). The
 			// action filter is what keeps a ```response block of query
 			// output from advertising an Insert (sqlBlockActionable).
-			for act := range entry.rendered().RenderActionsN(ids, snippetActionLabels,
-				markdown.WithLinkRouter(inst.docs.source.LinkClaimed, inst.followDocsLink),
-				markdown.WithCodeActionFilter(sqlBlockActionable)) {
+			res := markdown.Render(markdown.Input{
+				Ids: ids, ScopeKey: "docsBody", Doc: entry.rendered(),
+				ActionLabels:     snippetActionLabels,
+				LinkClaims:       inst.docs.source.LinkClaimed,
+				CodeActionFilter: sqlBlockActionable,
+			})
+			for _, act := range res.Actions {
 				switch act.Button {
 				case snippetButtonInsert:
 					inst.InsertSqlAtCaret(act.Text)
 				case snippetButtonReplace:
 					inst.ReplaceSql(act.Text)
 				}
+			}
+			for _, l := range res.Links {
+				inst.followDocsLink(l.Label, l.URL)
 			}
 		}
 		if entry.Source != "" {

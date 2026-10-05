@@ -53,6 +53,27 @@ func ExtractParamSlots(sql string) (slots []paramSlot, err error) {
 // param_* with regular settings) come back as err; the slot list is
 // still returned so the UI can render widgets while the user fixes
 // the SET line.
+// UnboundSlotsFromParse reports whether pr has a placeholder its SET prelude
+// does not bind — the Live preset's definition (ADR-0097) — from a parse the
+// caller already holds, so a catalogue classifying a document does not parse
+// it a second and third time for this answer.
+func UnboundSlotsFromParse(pr *nanopass.ParseResult) (unbound bool, err error) {
+	slots := collectParamSlots(pr)
+	if len(slots) == 0 {
+		return
+	}
+	params, err := collectParamValues(pr)
+	if err != nil {
+		return
+	}
+	for _, s := range slots {
+		if _, bound := params["param_"+s.Name]; !bound {
+			return true, nil
+		}
+	}
+	return
+}
+
 func extractSlotsAndParams(sql string) (slots []paramSlot, params map[string]string, err error) {
 	pr, perr := nanopass.Parse(sql)
 	if perr != nil {

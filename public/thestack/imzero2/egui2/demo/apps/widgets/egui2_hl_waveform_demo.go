@@ -20,6 +20,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/jobprogress"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timeline"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/timeline/layout"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/waveform"
 )
@@ -216,7 +217,7 @@ func (st *waveformDemoState) setTrack(tr *track.Track, source string, synthetic 
 	}
 	st.tr = tr
 	st.source = source
-	st.player = waveform.New(st.ids, tr, waveform.Options{ScopeKey: "waveform-demo"})
+	st.player = waveform.New(st.ids, "waveform-demo", tr, waveform.Options{})
 	st.player.SetReadout(waveform.ReadoutRelative)
 	st.wallClock, st.editRegions = false, false
 	c.CurrentApplicationState.StateManager.OverrideDatabindingBPtr(&st.wallClock)
@@ -229,7 +230,7 @@ func (st *waveformDemoState) setTrack(tr *track.Track, source string, synthetic 
 		st.layers, intervals = waveformDemoAnnotations(tr.TimeBase(), tr.Frames())
 	}
 	st.player.SetLayers(&st.layers)
-	st.lanes = waveform.NewLanes(st.ids, "waveform-demo-lanes", tr.TimeBase(), intervals)
+	st.lanes = waveform.NewLanes(st.ids, "waveform-demo-lanes", tr.TimeBase(), intervals, timeline.Options{})
 	st.lastEdit, st.lastLayerClick = "", ""
 	// A build still running is a background job the host should see.
 	st.buildTaskId = ""
@@ -397,8 +398,7 @@ func demoWaveform(ids *c.WidgetIdStack, st *waveformDemoState) {
 	// A button above may have swapped the track; draw the current player,
 	// the lanes locked under it (SD8) and the minimap (SD10).
 	p = st.player
-	p.RenderFillWidth(waveformDemoHeight, waveformDemoWidth)
-	ev := p.Events()
+	ev := p.RenderFillWidth(waveformDemoHeight, waveformDemoWidth)
 	if ev.RegionEdit != nil {
 		e := ev.RegionEdit
 		if e.Index >= 0 && e.Index < len(st.layers.Regions) {
@@ -431,7 +431,7 @@ func demoWaveform(ids *c.WidgetIdStack, st *waveformDemoState) {
 		if bp.Err != nil {
 			note = "build stopped: " + bp.Err.Error()
 		}
-		if jobprogress.Render(jobprogress.Input{Title: "peaks", Fraction: frac, EtaMs: bp.EtaMs, Note: note, CancelId: ids.PrepareStr("wf-cancel-build")}) {
+		if jobprogress.Render(jobprogress.Input{Title: "peaks", Fraction: frac, EtaMs: bp.EtaMs, Note: note, Ids: ids, ScopeKey: "wf-cancel-build", Cancel: true}).CancelClicked {
 			st.tr.CancelBuild()
 		}
 	}

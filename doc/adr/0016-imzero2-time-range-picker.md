@@ -176,6 +176,19 @@ Accepted on 2026-04-27 by @stergiotis.
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
 ADRs are append-only; supersession is recorded, not deleted.
 
+## Updates
+
+### 2026-09-28 — anchor_now is handed over as an instant, not a wall-clock string
+
+The Decision's `WITH toDateTime64('2026-04-27 12:00:00.000', 3, 'UTC')`
+form is correct only for UTC: `toDateTime64(str, 3, tz)` reads the string
+as wall-clock time in `tz`, so formatting the anchor in UTC and naming any
+other zone shifted `anchor_now` by that zone's offset (Asia/Tokyo: 9 h
+early). The evaluator now binds `fromUnixTimestamp64Milli(toInt64(<epoch
+ms>), tz) AS anchor_now`, which keeps the anchor instant and still types
+it as `DateTime64(3, tz)`, so zone-sensitive expressions (`toStartOfDay`)
+keep their meaning. Regression: `TestEvalNonUTCZoneKeepsAnchorInstant`.
+
 ## References
 
 - Upstream pin: **Grafana v7.5.17** (2022-04-12) — last Apache-2.0 release before the v8.0 AGPL-3.0 switch. Tag SHA verification at the v7.5.17 tag is part of the Phase 0 merge checklist.

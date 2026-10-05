@@ -18,13 +18,21 @@ import (
 // slices as "[a, b, c]", nested KVs as "{k: v, ...}", scalars via
 // fmt.Sprintf("%v", …). No-op when the doc has no frontmatter (whether
 // because [obsidian.FeatureFrontmatter] was disabled or the source had
-// none) so it is safe to call unconditionally after [Doc.Render].
+// none) so it is safe to call unconditionally. [Input.Frontmatter] appends
+// the same list after a [Render]'s body; this entry is for a host that
+// places it elsewhere. It emits no widget ids.
 //
 // Callers who want a richer layout (table, side panel, pill chips,
 // per-key custom widgets) should iterate
 // [Doc.Frontmatter].IteratePairs directly instead of using this
 // helper.
-func (inst *Doc) RenderFrontmatter() {
+func RenderFrontmatter(doc *Doc) {
+	if doc != nil {
+		doc.renderFrontmatter()
+	}
+}
+
+func (inst *Doc) renderFrontmatter() {
 	fm := inst.frontmatter
 	if fm == nil || fm.IsEmpty() {
 		return
@@ -42,7 +50,7 @@ func (inst *Doc) RenderFrontmatter() {
 }
 
 // stringifyFrontmatterValue is the default value formatter used by
-// [Doc.RenderFrontmatter]. Recognised shapes:
+// [RenderFrontmatter]. Recognised shapes:
 //
 //   - string                                        — passed through.
 //   - []any                                         — "[v1, v2, ...]" with each element recursed.

@@ -13,10 +13,10 @@ import (
 // one this caret is inside.
 func TestBindPublishesTheSite(t *testing.T) {
 	buf := "SELECT LW_COMPONENT('Sys"
-	e := New()
+	e := New(nil, "t")
 	n := uint64(len([]rune(buf)))
 	e.caretPacked = n | n<<32
-	res := e.Bind(Frame{IDSlot: "t", Value: &buf})
+	res := e.Bind(Frame{Value: &buf})
 
 	f, ok := res.Site.InnerFrame()
 	require.True(t, ok)
@@ -30,10 +30,10 @@ func TestBindPublishesTheSite(t *testing.T) {
 
 func TestSiteIsScopedToTheCaretsStatement(t *testing.T) {
 	buf := "SELECT f(1;\nSELECT 2"
-	e := New()
+	e := New(nil, "t")
 	n := uint64(len([]rune(buf)))
 	e.caretPacked = n | n<<32
-	res := e.Bind(Frame{IDSlot: "t", Value: &buf})
+	res := e.Bind(Frame{Value: &buf})
 
 	assert.Empty(t, res.Site.Frames, "the previous statement's open paren is not this caret's frame")
 	assert.Empty(t, res.Site.Open)

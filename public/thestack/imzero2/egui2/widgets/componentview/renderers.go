@@ -21,7 +21,7 @@ var (
 func DefaultRegistry() (inst *Registry) {
 	inst = NewRegistry()
 	inst.Register(identityRenderer{})
-	inst.Register(batteryRenderer{})
+	inst.Register(batteryRenderer{fit: &gauge.State{}})
 	inst.Register(taskedRenderer{})
 	return
 }
@@ -31,8 +31,8 @@ type identityRenderer struct{}
 
 func (identityRenderer) Kind() ComponentKindE { return KindIdentity }
 func (identityRenderer) Title() string        { return "identity" }
-func (identityRenderer) Render(ids *c.WidgetIdStack, value any) {
-	v, _ := value.(IdentityVal)
+func (identityRenderer) Render(in ComponentInput) {
+	v, _ := in.Value.(IdentityVal)
 	tone := badge.ToneNeutral
 	switch v.Status {
 	case "IN_TRANSIT":
@@ -46,7 +46,7 @@ func (identityRenderer) Render(ids *c.WidgetIdStack, value any) {
 	if label == "" {
 		label = "∅"
 	}
-	badge.New(ids.PrepareStr("status"), label).Tone(tone).Variant(badge.VariantSoft).Pill().Send()
+	badge.New(in.Ids.PrepareStr("status"), label).Tone(tone).Variant(badge.VariantSoft).Pill().Send()
 }
 
 // batteryRenderer shows the battery charge on a radial charge gauge. The dial
@@ -54,19 +54,29 @@ func (identityRenderer) Render(ids *c.WidgetIdStack, value any) {
 // already draws a "battery" section header above the dial, so a "battery"
 // caption would be a redundant double-label. With the unit in the caption the
 // readout itself is just the number (and is no longer widened by the suffix).
-type batteryRenderer struct{}
+//
+// The renderer keeps the dial's readout-fit memo: one report shows one entity
+// at a time, so one memo per registry serves every battery it draws.
+type batteryRenderer struct {
+	fit *gauge.State
+}
 
 func (batteryRenderer) Kind() ComponentKindE { return KindBattery }
 func (batteryRenderer) Title() string        { return "battery" }
-func (batteryRenderer) Render(ids *c.WidgetIdStack, value any) {
-	v, _ := value.(BatteryVal)
-	gauge.New("battery").
-		Range(0, batteryMaxMAh).
-		Label("mAh").
-		Diameter(115).
-		ZoneMode(gauge.ZonePercentage).
-		Zones(batteryChargeZones()...).
-		Render(ids.PrepareStr("dial"), float64(v.Charge))
+func (inst batteryRenderer) Render(in ComponentInput) {
+	v, _ := in.Value.(BatteryVal)
+	gauge.Render(gauge.Input{
+		Ids:      in.Ids,
+		ScopeKey: "dial",
+		Value:    float64(v.Charge),
+		Min:      0,
+		Max:      batteryMaxMAh,
+		Label:    "mAh",
+		Diameter: 115,
+		ZoneMode: gauge.ZonePercentage,
+		Zones:    batteryChargeZones(),
+		State:    inst.fit,
+	})
 }
 
 // batteryChargeZones are charge-appropriate gauge bands. A generic
@@ -88,8 +98,8 @@ type taskedRenderer struct{}
 
 func (taskedRenderer) Kind() ComponentKindE { return KindTasked }
 func (taskedRenderer) Title() string        { return "tasked" }
-func (taskedRenderer) Render(ids *c.WidgetIdStack, value any) {
-	v, _ := value.(TaskedVal)
+func (taskedRenderer) Render(in ComponentInput) {
+	v, _ := in.Value.(TaskedVal)
 	if len(v.Tags) == 0 {
 		for rt := range c.RichTextLabel("no tags") {
 			rt.Weak().Italics().Small()
@@ -98,7 +108,7 @@ func (taskedRenderer) Render(ids *c.WidgetIdStack, value any) {
 	}
 	for range c.Horizontal().KeepIter() {
 		for i, tag := range v.Tags {
-			badge.New(ids.PrepareSeq(uint64(i)), tag).
+			badge.New(in.Ids.PrepareSeq(uint64(i)), tag).
 				Tone(badge.ToneNeutral).
 				Variant(badge.VariantOutline).
 				Size(badge.SizeSm).

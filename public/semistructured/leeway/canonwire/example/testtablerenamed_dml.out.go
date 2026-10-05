@@ -51,7 +51,7 @@ func CreateSchemaTestTableRenamed() (schema *arrow.Schema) {
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityClassAndFactoryCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1487
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1493
 
 type InEntityTestTableRenamed struct {
 	plainSeenAt1          time.Time
@@ -96,8 +96,11 @@ func NewInEntityTestTableRenamed(allocator memory.Allocator, estimatedNumberOfRe
 
 // SetActiveSections marks which section indices BeginEntity should
 // initialise (skipping beginSection for the rest). Pass nil to clear.
-// The hint is a performance optimisation; sending BeginAttribute to
-// an unmarked section produces empty-list bytes at TransferRecords.
+// The hint is a performance optimisation for shim builders, paired
+// with the builder's SetActiveFields over the marked sections'
+// columns; BeginAttribute on an unmarked section is an invalid state
+// transition. On the arrow RecordBuilder the hint has no effect:
+// every section starts, so its list columns stay row-aligned.
 func (inst *InEntityTestTableRenamed) SetActiveSections(idxs []int) {
 	if idxs == nil {
 		inst.activeSections = nil
@@ -129,7 +132,7 @@ var InEntityTestTableRenamedSectionIndices = map[string]int{
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
 
 func (inst *InEntityTestTableRenamed) SetId(ident0 uint64) *InEntityTestTableRenamed {
 	if inst.state != runtime.EntityStateInEntity {
@@ -144,7 +147,7 @@ func (inst *InEntityTestTableRenamed) SetId(ident0 uint64) *InEntityTestTableRen
 ///////////////////////////////////////////////////////////////////
 // code generator
 // dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1682
+// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
 
 func (inst *InEntityTestTableRenamed) SetTimestamp(seenAt1 time.Time, stampedAt2 []time.Time) *InEntityTestTableRenamed {
 	if inst.state != runtime.EntityStateInEntity {
@@ -206,15 +209,6 @@ func (inst *InEntityTestTableRenamed) initSections(builder *array.RecordBuilder)
 	inst.section01Inst = NewInEntityTestTableRenamedSectionPhrases(builder, inst)
 }
 func (inst *InEntityTestTableRenamed) beginSections() {
-	if mask := inst.activeSections; mask != nil {
-		if mask[0] {
-			inst.section00Inst.beginSection()
-		}
-		if mask[1] {
-			inst.section01Inst.beginSection()
-		}
-		return
-	}
 	inst.section00Inst.beginSection()
 	inst.section01Inst.beginSection()
 }
@@ -600,6 +594,7 @@ func (inst *InEntityTestTableRenamedSectionCoordsInAttr) EndSection() *InEntityT
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
@@ -910,6 +905,7 @@ func (inst *InEntityTestTableRenamedSectionPhrasesInAttr) EndSection() *InEntity
 	}
 
 	inst.completeAttribute()
+	inst.parent.endAttribute()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }

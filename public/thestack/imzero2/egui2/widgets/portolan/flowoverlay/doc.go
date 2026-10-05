@@ -8,7 +8,7 @@
 //	layer := flowoverlay.New(src, flowoverlay.Options{})
 //	defer layer.Close()
 //	// every frame:
-//	m.Render(w, h, func(p portolan.Projector) { layer.Draw(p) })
+//	m.Render(w, h, func(p portolan.Projector) { layer.Paint(p) })
 //
 // What the picture does not say, first.
 //

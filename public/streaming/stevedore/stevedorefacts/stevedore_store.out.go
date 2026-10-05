@@ -451,7 +451,9 @@ func (inst *StevedoreEntityBuilder) Rollback() (err error) {
 
 // IngestDeadLetter buffers one whole entity per row carrying only the
 // DeadLetter component, all stamped with ts — rows ship on the next Flush,
-// like every write. Keys must be distinct within one call (rows
+// like every write. The envelope carries the pass-through columns
+// the row binds; the others are written zero — use Begin with a
+// filled envelope to set them. Keys must be distinct within one call (rows
 // share ts, so duplicates would tie on Order): a duplicate returns
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
@@ -464,7 +466,7 @@ func (inst *StevedoreStore) IngestDeadLetter(ts time.Time, rows []DeadLetter) (e
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.Begin(rows[i].Id, ts, StevedoreEnvelope{}).AddDeadLetter(rows[i]).Commit()
+		err = inst.Begin(rows[i].Id, ts, StevedoreEnvelope{NaturalKey: rows[i].NaturalKey}).AddDeadLetter(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest deadLetter row %d: %w", i, err)
 			return

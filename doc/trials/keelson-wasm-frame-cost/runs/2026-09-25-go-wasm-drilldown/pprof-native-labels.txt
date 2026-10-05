@@ -1,0 +1,48 @@
+File: wasmspike_prof
+Build ID: c2a087b1e355c275cba17bfd3dd0a47886595f7b
+Type: cpu
+Time: 2026-09-25 22:55:57 CEST
+Duration: 800.45ms, Total samples = 840ms (104.94%)
+Showing nodes accounting for 700ms, 83.33% of 840ms total
+Showing top 40 nodes out of 135
+      flat  flat%   sum%        cum   cum%
+      40ms  4.76%  4.76%       80ms  9.52%  github.com/stergiotis/boxer/public/thestack/fffi2/runtime.(*Marshaller).WriteUint32
+      40ms  4.76%  9.52%       80ms  9.52%  main.(*inprocChannel).SendSingleUseMsg
+      30ms  3.57% 13.10%       30ms  3.57%  bytes.(*Buffer).tryGrowByReslice (inline)
+      30ms  3.57% 16.67%       50ms  5.95%  fmt.(*pp).printArg
+      30ms  3.57% 20.24%       30ms  3.57%  internal/runtime/maps.ctrlGroup.matchH2 (inline)
+      30ms  3.57% 23.81%       30ms  3.57%  internal/runtime/maps.memHash64AES
+      30ms  3.57% 27.38%       40ms  4.76%  runtime.mapaccess2_fast32
+      30ms  3.57% 30.95%       30ms  3.57%  runtime.memmove
+      20ms  2.38% 33.33%       50ms  5.95%  bytes.(*Buffer).Write
+      20ms  2.38% 35.71%      100ms 11.90%  github.com/stergiotis/boxer/public/thestack/fffi2/runtime.(*Fffi2[go.shape.*uint8]).SendIntermediate
+      20ms  2.38% 38.10%       50ms  5.95%  github.com/stergiotis/boxer/public/thestack/fffi2/runtime.(*Marshaller).writeBuf
+      20ms  2.38% 40.48%       40ms  4.76%  github.com/stergiotis/boxer/public/thestack/fffi2/typed.(*RetainedFffiBuilder).putInPool
+      20ms  2.38% 42.86%       70ms  8.33%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings.Button
+      20ms  2.38% 45.24%      770ms 91.67%  main.(*labelsScene).render-range1-range1-range1
+      20ms  2.38% 47.62%       50ms  5.95%  runtime.mallocgc
+      20ms  2.38% 50.00%       40ms  4.76%  runtime.mallocgcSmallScanNoHeaderSC2
+      20ms  2.38% 52.38%       20ms  2.38%  runtime.mallocgcTinySC2
+      20ms  2.38% 54.76%       20ms  2.38%  runtime.scanblock
+      20ms  2.38% 57.14%       50ms  5.95%  sync.(*Pool).Get
+      20ms  2.38% 59.52%       30ms  3.57%  sync.runtime_procPin
+      10ms  1.19% 60.71%       10ms  1.19%  bytes.(*Buffer).Bytes (inline)
+      10ms  1.19% 61.90%       10ms  1.19%  bytes.(*Buffer).Len (inline)
+      10ms  1.19% 63.10%       10ms  1.19%  bytes.(*Buffer).Reset (inline)
+      10ms  1.19% 64.29%       20ms  2.38%  fmt.(*fmt).fmtInteger
+      10ms  1.19% 65.48%       10ms  1.19%  fmt.(*fmt).pad
+      10ms  1.19% 66.67%       80ms  9.52%  fmt.(*pp).doPrintf
+      10ms  1.19% 67.86%      140ms 16.67%  fmt.Sprintf
+      10ms  1.19% 69.05%       10ms  1.19%  github.com/stergiotis/boxer/public/containers.(*BinarySearchGrowingKV[go.shape.uint64,go.shape.uint32]).ensureSorted
+      10ms  1.19% 70.24%       20ms  2.38%  github.com/stergiotis/boxer/public/thestack/fffi2/runtime.(*Marshaller).WriteUint64
+      10ms  1.19% 71.43%       10ms  1.19%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings.(*StateManager).AddR10Databinding (inline)
+      10ms  1.19% 72.62%       30ms  3.57%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings.AtomsFluid.Text
+      10ms  1.19% 73.81%       40ms  4.76%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings.CheckboxFluid.SendRespVal
+      10ms  1.19% 75.00%       60ms  7.14%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings.EndRow
+      10ms  1.19% 76.19%       90ms 10.71%  github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings.checkId
+      10ms  1.19% 77.38%       10ms  1.19%  github.com/zeebo/xxh3.xxh3Avalanche (inline)
+      10ms  1.19% 78.57%       10ms  1.19%  internal/runtime/maps.(*ctrlGroup).get (inline)
+      10ms  1.19% 79.76%       10ms  1.19%  internal/runtime/maps.probeSeq.next (inline)
+      10ms  1.19% 80.95%       10ms  1.19%  runtime.(*gcWork).tryStealSpan
+      10ms  1.19% 82.14%       10ms  1.19%  runtime.(*mspan).ensureSwept
+      10ms  1.19% 83.33%       10ms  1.19%  runtime.(*mspan).markBitsForIndex (inline)

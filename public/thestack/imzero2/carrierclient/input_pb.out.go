@@ -1373,11 +1373,17 @@ func (x *TreeNode) GetChildren() []uint64 {
 type CaptureRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	// ADR-0257 (proposed) §SD5: also write the frame's shapes as an SVG
+	// ADR-0266 (proposed) §SD5: also write the frame's shapes as an SVG
 	// beside the PNG — same basename, `.svg` — from the same pass. The SVG
-	// carries what the pixels do not: text as glyph-positioned `<text>`, and
-	// shapes as primitives, for geometry to be measured rather than seen.
-	Svg           bool `protobuf:"varint,2,opt,name=svg,proto3" json:"svg,omitempty"`
+	// carries what the pixels do not: text as `<text>` runs with a position
+	// per character, and shapes as primitives, for geometry to be measured
+	// rather than seen.
+	Svg bool `protobuf:"varint,2,opt,name=svg,proto3" json:"svg,omitempty"`
+	// Embed a subset of each used font in the SVG, so it renders the same
+	// without the fonts installed. Off, the file names the families instead:
+	// a program reading the text does not need the glyph outlines, and the
+	// base64 they take is most of the file.
+	SvgFonts      bool `protobuf:"varint,3,opt,name=svg_fonts,json=svgFonts,proto3" json:"svg_fonts,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1422,6 +1428,13 @@ func (x *CaptureRequest) GetName() string {
 func (x *CaptureRequest) GetSvg() bool {
 	if x != nil {
 		return x.Svg
+	}
+	return false
+}
+
+func (x *CaptureRequest) GetSvgFonts() bool {
+	if x != nil {
+		return x.SvgFonts
 	}
 	return false
 }
@@ -2426,10 +2439,11 @@ const file_boxer_imzero2_v1_input_proto_rawDesc = "" +
 	"\x05flags\x18\t \x01(\rR\x05flags\x12\x16\n" +
 	"\x06parent\x18\n" +
 	" \x01(\x04R\x06parent\x12\x1a\n" +
-	"\bchildren\x18\v \x03(\x04R\bchildren\"6\n" +
+	"\bchildren\x18\v \x03(\x04R\bchildren\"S\n" +
 	"\x0eCaptureRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
-	"\x03svg\x18\x02 \x01(\bR\x03svg\"\x8b\x01\n" +
+	"\x03svg\x18\x02 \x01(\bR\x03svg\x12\x1b\n" +
+	"\tsvg_fonts\x18\x03 \x01(\bR\bsvgFonts\"\x8b\x01\n" +
 	"\vCaptureDone\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x14\n" +
 	"\x05width\x18\x02 \x01(\rR\x05width\x12\x16\n" +

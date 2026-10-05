@@ -1,0 +1,77 @@
+---
+type: explanation
+audience: prospective consumers and integrators evaluating adoption
+status: draft
+# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to stable
+# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to stable
+---
+
+> **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
+
+> Where this page and an ADR disagree, the ADR is the record. The
+> product-level statement is [positioning-statement](../positioning-statement.md);
+> this page applies the same template to one subsystem.
+
+# <Subsystem> — positioning
+
+<One sentence: which part of boxer this positions, and which page positions
+its parent or its siblings. Link them.>
+
+## Short form
+
+<Two paragraphs, under 150 words together. The first opens "For …
+<subsystem> is …"; the second opens "Unlike …" and ends with the trade,
+as a sentence of its own ("The cost is …"). Every house term gets a
+footnote gloss the first time it appears — `[^term]`, defined at the end of
+the page in plain words an outsider can follow. Write for a reader who has
+not opened the repo: no counts, no internal nouns without a gloss, one idea
+per sentence.>
+
+## Full form
+
+**For** <the target customer: a role, not a company type>, who <the need
+that makes them look for something in this category>,
+
+**<subsystem> is** <the category, in words a reader from outside the
+project would use>: <what it is made of — the mechanisms, not adjectives>,
+
+**that** <the one key benefit, and the clauses that make it concrete; each
+clause maps to a row of the table below>,
+
+**unlike** <the primary alternative a real team would pick; name it as a
+practice or a product class, not a straw man>,
+
+**<subsystem>** <the one primary difference — one, not a list>. The cost
+is <what the customer gives up>.
+
+<The full form stays under about 200 words: one idea per slot, no semicolon
+lists. Inventories belong in the table below, not in the clauses.>
+
+## What each clause rests on
+
+Every clause above is a projection of a premise or a decision. A clause with
+no row is either cut or marked *proposed*.
+
+| Slot | Clause | Rests on |
+| --- | --- | --- |
+| For | … | <a why-boxer premise (P1–P7), an ADR's Context> |
+| is a | … | <ADR-NNNN …> |
+| that | … | <ADR-NNNN …> |
+| unlike | … | <the ADR whose Alternatives section rejects it, with the kill-reason> |
+| <subsystem> | … | <ADR-NNNN …> |
+| trade | … | <the ADR's Consequences, or "What this costs you" in why-boxer> |
+
+## Boundary
+
+<What this page deliberately does not position: parts folded into a parent's
+clause, siblings with their own page, and anything proposed rather than
+shipped, named as such.>
+
+## Further reading
+
+- [why-boxer](../why-boxer.md) — the premises the clauses compress.
+- [positioning-statement](../positioning-statement.md) — the product-level statement.
+- Decisions: [ADR-NNNN: <title>](../../adr/NNNN-<slug>.md)
+- Reference: https://pkg.go.dev/github.com/stergiotis/boxer/<path>
+
+[^term]: <The gloss, one sentence, in words an outsider can follow.>

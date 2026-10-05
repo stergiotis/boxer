@@ -195,3 +195,36 @@ func TestStartReportingCancelResetsIdle(t *testing.T) {
 		t.Error("cancelled run yielded a result")
 	}
 }
+
+// TestRunnerCancelWithoutStagesResetsIdle verifies a Start run with no pacing
+// stages that is cancelled during compute resets to idle, as StartReporting
+// does, instead of surfacing the compute's context error as a failure.
+func TestRunnerCancelWithoutStagesResetsIdle(t *testing.T) {
+	var r Runner[int]
+	started := make(chan struct{})
+	r.Start(nil, Spec{Kind: "test.job", Title: "test"}, func(ctx context.Context) (*int, error) {
+		close(started)
+		<-ctx.Done()
+		return nil, ctx.Err()
+	})
+	<-started
+	r.Cancel()
+	if st := waitState(t, &r, 3*time.Second); st != StateIdle {
+		t.Fatalf("terminal state after cancel = %d, want StateIdle", st)
+	}
+}
+
+// TestRunnerNilResultReturnsIdle verifies a compute that answers (nil, nil)
+// leaves the runner idle rather than Done with nothing TakeResult can hand out.
+func TestRunnerNilResultReturnsIdle(t *testing.T) {
+	var r Runner[int]
+	r.Start(nil, Spec{Kind: "test.job", Title: "test"}, func(context.Context) (*int, error) {
+		return nil, nil
+	})
+	if st := waitState(t, &r, 3*time.Second); st != StateIdle {
+		t.Fatalf("terminal state = %d, want StateIdle", st)
+	}
+	if _, _, ok := r.TakeResult(); ok {
+		t.Error("a nil result was handed out")
+	}
+}

@@ -97,7 +97,7 @@ func (inst *PlayApp) renderDefinitionPanel() {
 				// title, icon, endpoint, the pinned `tabs:` list. Last,
 				// where the helper is designed to sit, so the prose the
 				// author wrote opens the drawer.
-				d.doc.RenderFrontmatter()
+				markdown.RenderFrontmatter(d.doc)
 			}
 		}
 	}
@@ -150,11 +150,9 @@ func (inst *PlayApp) renderDatasetNotice() {
 	}
 	ids := inst.ids
 	for range c.PanelTopInside(ids.PrepareStr("datasetNoticePanel")).Resizable(false).KeepIter() {
-		// IdScope isolates the document's derived widget ids, for the reason
-		// the preamble does it: more than one markdown doc renders per frame.
-		for range c.IdScope(ids.PrepareStr("datasetNoticeBody")) {
-			inst.datasetNotice.Render(ids)
-		}
+		// Its own scope key, for the reason the preamble has one: more than
+		// one markdown doc renders per frame.
+		markdown.Render(markdown.Input{Ids: ids, ScopeKey: "datasetNoticeBody", Doc: inst.datasetNotice})
 		c.Separator().Send()
 	}
 }
@@ -171,12 +169,10 @@ func (inst *PlayApp) renderPreamble() {
 	}
 	ids := inst.ids
 	for range c.PanelTopInside(ids.PrepareStr("preamblePanel")).Resizable(false).KeepIter() {
-		// IdScope isolates the document's derived widget ids — the same
-		// invariant the Definition drawer observes, and it matters more here:
-		// both documents can be on screen in the same frame.
-		for range c.IdScope(ids.PrepareStr("preambleBody")) {
-			inst.preamble.Render(ids)
-		}
+		// Its own scope key — the same invariant the Definition drawer
+		// observes, and it matters more here: both documents can be on
+		// screen in the same frame.
+		markdown.Render(markdown.Input{Ids: ids, ScopeKey: "preambleBody", Doc: inst.preamble})
 		c.Separator().Send()
 	}
 }
@@ -189,12 +185,12 @@ func (inst *PlayApp) renderPreamble() {
 // sqlBlockActionable stance: an affordance that does nothing is worse than
 // no affordance).
 func (inst *PlayApp) renderDefinitionDoc(doc *markdown.Doc) {
-	if inst.bus == nil {
-		doc.Render(inst.ids)
-		return
+	in := markdown.Input{Ids: inst.ids, ScopeKey: "definition-doc", Doc: doc}
+	if inst.bus != nil {
+		in.ActionLabels = []string{"Copy"}
+		in.CodeActionFilter = sqlBlockActionable
 	}
-	for act := range doc.RenderActions(inst.ids, "Copy",
-		markdown.WithCodeActionFilter(sqlBlockActionable)) {
+	for _, act := range markdown.Render(in).Actions {
 		inst.copyToClipboard(act.Text)
 	}
 }

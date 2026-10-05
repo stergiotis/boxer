@@ -1,0 +1,6 @@
+check	what	result...
+b	tiles 7/66/44+7/67/44 vs one bbox 2048x1024	nonempty=439378	differing_px=0
+c	s03 view (z9, integer) vs its z7 1024-px tiles, at the view pixel centre	view_px_side=32768	tile_px_side=32768	both_nonempty=176298	equal_transparency=176298	only_view=0	only_tile=0	mean_abs_transparency_diff=0.0000	mean_view=0.1776	mean_tile=0.1776	median_tile_over_view_unsaturated=1.0000
+c	view at zoom 9.4 (continuous, as the pane) vs its z7 1024-px tiles, at the view pixel centre	view_px_side=24834	tile_px_side=32768	both_nonempty=107693	equal_transparency=0	only_view=26609	only_tile=97449	mean_abs_transparency_diff=0.0151	mean_view=0.1873	mean_tile=0.1843	median_tile_over_view_unsaturated=0.9461
+c	view at zoom 9.5 (continuous, as the pane) vs its z8 1024-px tiles, at the view pixel centre	view_px_side=23170	tile_px_side=16384	both_nonempty=61218	equal_transparency=0	only_view=63483	only_tile=8165	mean_abs_transparency_diff=0.0151	mean_view=0.1925	mean_tile=0.1993	median_tile_over_view_unsaturated=1.0718
+d	tile 7/66/44 vs its four children at z8 (zoom offset one)	parent_nonempty=185777	children_nonempty=218526	count_mismatch_px=0	mean_transparency_parent=0.1736	mean_transparency_children=0.1950	mean_child_over_parent_where_all_four_nonempty_unsaturated=0.8542(n=545)

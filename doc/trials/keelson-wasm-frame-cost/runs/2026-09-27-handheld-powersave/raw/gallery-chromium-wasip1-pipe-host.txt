@@ -1,0 +1,11 @@
+PORT 45945
+GET /index.html?target=wasip1&consumer=pipe&flush=host&host=1&scene=gallery&rows=1700&frames=300&warmup=30&stage=1024x600&arm=chromium-wasip1-pipe-host
+GET /worker.mjs
+GET /favicon.ico
+GET /bridge.js
+GET /fetchtable.txt
+GET /fffi2stub.wasm
+GET /wasmspike_wasip1.wasm
+GET /imzero2.wasm
+POST /report
+ARM {"result":{"arm":"chromium-wasip1-pipe-host","target":"wasip1","consumer":"pipe","lazy_flush":true,"scene":"gallery","frames":300,"warmup":30,"bytes_per_frame":128689,"messages_per_frame":0,"render_us":{"p50":4900,"p90":5400,"max":9100},"sync_us":{"p50":5200,"p90":5500,"max":6200},"total_us":{"p50":10100,"p90":11000,"max":15300}},"host":{"frames":330,"bytesIn":42467394,"lastInterpretUs":4200,"lastTessellateUs":100,"lastSerializeUs":300,"lastBodies":19,"lastBodiesSent":0,"errors":0,"framesUnchanged":323,"lastSentBbox":[-4.5,66.5,1004.5,391],"stepMs":1874.7,"steps":330,"meshBytes":1428913,"jsFrames":330,"meshFrames":17,"lastError":""},"bridge":{"chunks":6930,"bridgeMs":16.8},"wallMs":4948.70000000298,"ua":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/144.0.0.0 Safari/537.36"}

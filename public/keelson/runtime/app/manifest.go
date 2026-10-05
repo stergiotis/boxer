@@ -267,6 +267,11 @@ type Manifest struct {
 	// introspection column, not a browse section. Zero value KindApp covers
 	// ordinary Go apps, so most manifests leave it unset.
 	Kind KindE
+	// Shell marks an app the host's own chrome opens — the launcher behind
+	// the Apps menu and its key, help behind F1. It labels rather than
+	// exempts: a launch limit (ADR-0272) applies to shell apps like any
+	// other, and `shell` on keelson.apps is how a predicate names them.
+	Shell bool
 
 	Surface      SurfaceE
 	SurfaceHints SurfaceHints
@@ -304,6 +309,13 @@ type Manifest struct {
 	// content too large or complex for the record, which then carries only
 	// a reference to it (§SD1).
 	Workingset bool
+
+	// Operations is the optional catalog of commands and queries the app
+	// offers to callers on the bus, agents among them (ADR-0269 §SD2). It
+	// requires factory registration. A catalog that fails validation is
+	// withdrawn at registration with a diagnostic, and the app still
+	// registers; [Registry.OperationsDiagnostic] says why.
+	Operations *OperationsCatalog
 
 	// Help is the optional inline-help corpus for this app. When non-nil,
 	// the keelson/runtime/help package's DefaultLibrary will lazily index

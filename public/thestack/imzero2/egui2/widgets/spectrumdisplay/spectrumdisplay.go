@@ -8,20 +8,22 @@
 // [colormap.Config] so they stay in lock-step — and paints the axes,
 // annotations, and cursor on painter overlays placed with AllocateUiAtRect.
 // No Rust changes are involved; the substrate is the same painter idiom as
-// treemap and gauge. See ADR-0091.
+// treemap and gauge. See ADR-0091. It is a semi-retained widget (ADR-0267):
+// New takes its [Options], the axes, markers and regions are public data
+// fields the host declares, Render draws it once per frame and returns its
+// [Events].
 //
 // The caller owns the data and the physical ranges. Each frame it sets the
 // frequency and power axes, pushes one column of dB samples, and renders:
 //
-//	sd := spectrumdisplay.New(ids, "rx", cfg, 256, 512)
-//	// ... each frame:
-//	sd.SetFrequencyAxis(spectrumdisplay.AxisSpec{Min: 868.59e6, Max: 871.59e6, Unit: spectrumdisplay.AxisUnitHertz})
-//	sd.SetPowerAxis(spectrumdisplay.AxisSpec{Min: -110, Max: -20, Unit: spectrumdisplay.AxisUnitDecibel, UnitLabel: "dBFS"})
+//	sd := spectrumdisplay.New(ids, "rx", cfg, spectrumdisplay.Options{WidthSlots: 256, HeightSlots: 512})
+//	sd.FreqAxis = spectrumdisplay.AxisSpec{Min: 868.59e6, Max: 871.59e6, Unit: spectrumdisplay.AxisUnitHertz}
+//	sd.PowerAxis = spectrumdisplay.AxisSpec{Min: -110, Max: -20, Unit: spectrumdisplay.AxisUnitDecibel, UnitLabel: "dBFS"}
 //	sd.SetWaterfallRange(-110, -20)
+//	// ... each frame:
 //	sd.PushColumn(magsDB)
-//	sd.SetDisplaySize(0, 0) // fill the available area
-//	sd.Render()
-//	if r := sd.Readout(); r.Ok { /* r.Freq, r.Db, r.Age */ }
+//	ev := sd.RenderFill(640, 400) // or sd.Render(w, h)
+//	if ev.Readout.Ok { /* .Freq, .Db, .Age */ }
 //
 // The cursor readout and any markers carry the one-frame hover lag inherent to
 // the canvas-pointer/HoveredCell capture (the colorscale/heatmapscroll
@@ -42,8 +44,8 @@ import (
 
 // Package-level defaults exposed as vars so callers can globally tweak them.
 var (
-	// DefaultSize is the fallback widget size [w,h] in logical pixels, used when
-	// SetDisplaySize is auto (0,0) and the available size is not yet known.
+	// DefaultSize is a fallback widget size [w,h] in logical pixels a host may
+	// hand RenderFill for the frames before its pane probe answers.
 	DefaultSize = [2]float32{640, 400}
 	// DefaultLeftGutterW is the fallback left-gutter width (logical px) used when
 	// no power/time axis is set so there are no labels to measure; otherwise the
@@ -105,21 +107,6 @@ type Marker struct {
 	Dashed bool    // reserved; v1 draws solid
 }
 
-// spectrumProbeSalt namespaces one display's r21 pane slot. Mixed through the
-// instance's id stack so two windows of the same app — which pass the same
-// constant scopeKey — do not share a slot and size each other.
-const spectrumProbeSalt uint64 = 0x8c1d5f30b7429ae6
-
-// probeSeq is this instance's slot for one probe role, salted on first use so
-// the derivation sees the enclosing per-window id scope (windowhost pushes it
-// around Frame, not around Mount). Same shape as the timeline widget's.
-func (inst *SpectrumDisplay) probeSeq(role string) (seq uint64) {
-	if inst.probeSalt == 0 {
-		inst.probeSalt = inst.ids.PrepareHighEntropy(spectrumProbeSalt).Derive()
-	}
-	return c.ProbeSeq(inst.scopeKey, role) ^ inst.probeSalt
-}
-
 // PlacementE selects where a Region band is drawn within the texture height.
 type PlacementE uint8
 
@@ -149,40 +136,58 @@ type Readout struct {
 	Ok      bool
 }
 
-// SpectrumDisplay is the composite display widget. Construct with New, configure
-// per frame, push columns, and call Render once per frame.
+// Options configures a SpectrumDisplay (ADR-0267 W11). The widget re-reads
+// [SpectrumDisplay.Opts] on every Render, so a change is an assignment.
+type Options struct {
+	// WidthSlots and HeightSlots are the waterfall ring's dimensions: time
+	// columns of history and frequency bins per column. Both must be
+	// positive (New panics otherwise).
+	WidthSlots, HeightSlots uint32
+	// HideColorbar hides the dB colorbar legend; HideLinePanel hides the
+	// spectrum-line trace beneath the waterfall (both shown by default).
+	HideColorbar, HideLinePanel bool
+	// SplitRatio is the line panel's height as a fraction (0,1) of the data
+	// area when it is shown; zero (or out of range) takes 0.4.
+	SplitRatio float32
+	// FontSize is the axis-label font size in logical pixels; zero takes
+	// [DefaultFontSize].
+	FontSize float32
+}
+
+// Events is what one Render reports. Everything is one frame behind the
+// pixels that produced it.
+type Events struct {
+	// Readout is the cursor readout in physical units, Ok false when the
+	// pointer is not over the waterfall.
+	Readout Readout
+	// Clicked reports a primary click on the waterfall.
+	Clicked bool
+}
+
+// SpectrumDisplay is the composite display widget. Construct with New, set
+// the axes and annotations, push columns, and call Render once per frame.
 type SpectrumDisplay struct {
+	// Opts is re-read on every Render; a change is an assignment.
+	Opts Options
+	// FreqAxis is the physical frequency range mapped across the texture's
+	// X; PowerAxis the dB range for the colorbar labels and the line panel's
+	// Y. TimeAxis, when its Max exceeds its Min, labels the waterfall's time
+	// range in the left gutter (e.g. seconds of history); left zero the
+	// gutter omits time labels.
+	FreqAxis, PowerAxis, TimeAxis AxisSpec
+	// Markers and Regions are the frequency/time annotations drawn over the
+	// waterfall and the line panel; the host owns both slices.
+	Markers []Marker
+	Regions []Region
+
 	ids      *c.WidgetIdStack
 	scopeKey string
-	// probeSalt makes this instance's r21 pane slot window-unique — the
-	// scopeKey is a constant at the embedder, so two windows of the same app
-	// would otherwise share one slot and size each other. See [probeSeq].
-	probeSalt uint64
-	cfg       *colormap.Config
-	hs        *heatmapscroll.HeatmapScroll
-	cbar      *colorscale.ColorScale
+	cfg      *colormap.Config
+	hs       *heatmapscroll.HeatmapScroll
+	cbar     *colorscale.ColorScale
 
-	// availW/availH/availOk are this instance's own pane probe, read one frame
-	// after it is armed and only in fill mode (no pinned display size).
-	availW, availH float32
-	availOk        bool
-
-	heightSlots uint32
-
-	freqAxis    AxisSpec
-	powerAxis   AxisSpec
-	timeAxis    AxisSpec
-	timeAxisSet bool
-
-	markers []Marker
-	regions []Region
-
-	showColorbar  bool
-	showLinePanel bool
-	splitRatio    float32
-	fontSize      float32
-
-	dispW, dispH float32 // explicit display size; 0 ⇒ derive from available size
+	splitRatio float32
+	fontSize   float32
 
 	lastCol     []float32
 	lastReadout Readout
@@ -190,11 +195,11 @@ type SpectrumDisplay struct {
 	bgColor, axisColor, labelColor, gridColor uint32
 }
 
-// New constructs a SpectrumDisplay owning a heatmapscroll waterfall (widthSlots
-// time × heightSlots frequency bins) and a vertical colorbar, both bound to cfg.
-// Panics on nil ids/cfg, empty scopeKey, or zero dimensions (the heatmapscroll
-// contract).
-func New(ids *c.WidgetIdStack, scopeKey string, cfg *colormap.Config, widthSlots, heightSlots uint32) *SpectrumDisplay {
+// New constructs a SpectrumDisplay owning a heatmapscroll waterfall
+// (Opts.WidthSlots time × Opts.HeightSlots frequency bins) and a vertical
+// colorbar, both bound to cfg. Panics on nil ids/cfg, empty scopeKey, or zero
+// dimensions (the heatmapscroll contract).
+func New(ids *c.WidgetIdStack, scopeKey string, cfg *colormap.Config, opts Options) *SpectrumDisplay {
 	if ids == nil {
 		panic("spectrumdisplay: New requires a non-nil ids stack")
 	}
@@ -204,40 +209,46 @@ func New(ids *c.WidgetIdStack, scopeKey string, cfg *colormap.Config, widthSlots
 	if cfg == nil {
 		panic("spectrumdisplay: New requires a non-nil colormap.Config")
 	}
-	hs := heatmapscroll.New(ids, scopeKey+".wf", cfg, widthSlots, heightSlots)
-	hs.SetOrientation(heatmapscroll.ScrollDown) // RF waterfall: newest on top, frequency across X
+	// The children are scoped under this widget's own scope (the ids they
+	// derive are prepared inside Render's IdScope), so their keys are plain.
+	// RF waterfall: newest on top, frequency across X.
+	hs := heatmapscroll.New(ids, "waterfall", cfg, heatmapscroll.Options{
+		WidthSlots: opts.WidthSlots, HeightSlots: opts.HeightSlots, Orientation: heatmapscroll.ScrollDown,
+	})
 	// Pin the colorbar to this display's chrome bg (panel tier) rather than the
 	// colorscale's standalone default (surface tier), so the colorbar, gutters and
 	// line panel read as one surface with no internal seam.
-	cbar := colorscale.New(ids, scopeKey+".cb", cfg,
-		colorscale.WithOrientation(colorscale.OrientationVertical),
-		colorscale.WithBg(DefaultBg))
+	cbar := colorscale.New(ids, "colorbar", cfg, colorscale.Options{
+		Orientation: colorscale.OrientationVertical, Bg: DefaultBg,
+	})
 	return &SpectrumDisplay{
-		ids:          ids,
-		scopeKey:     scopeKey,
-		cfg:          cfg,
-		hs:           hs,
-		cbar:         cbar,
-		heightSlots:  heightSlots,
-		showColorbar: true,
-		splitRatio:   0.4,
-		fontSize:     DefaultFontSize,
-		bgColor:      DefaultBg,
-		axisColor:    DefaultAxisColor,
-		labelColor:   DefaultLabelColor,
-		gridColor:    DefaultGridColor,
+		Opts:       opts,
+		ids:        ids,
+		scopeKey:   scopeKey,
+		cfg:        cfg,
+		hs:         hs,
+		cbar:       cbar,
+		bgColor:    DefaultBg,
+		axisColor:  DefaultAxisColor,
+		labelColor: DefaultLabelColor,
+		gridColor:  DefaultGridColor,
 	}
 }
 
-// SetFrequencyAxis sets the physical frequency range mapped across the texture's X.
-func (inst *SpectrumDisplay) SetFrequencyAxis(a AxisSpec) { inst.freqAxis = a }
-
-// SetPowerAxis sets the dB range for the colorbar labels and the line panel's Y.
-func (inst *SpectrumDisplay) SetPowerAxis(a AxisSpec) { inst.powerAxis = a }
-
-// SetTimeAxis sets the waterfall's time range (left gutter, e.g. seconds of history).
-// Without it the left gutter omits time labels.
-func (inst *SpectrumDisplay) SetTimeAxis(a AxisSpec) { inst.timeAxis, inst.timeAxisSet = a, true }
+// resolve turns Opts into the frame's effective values and forwards the ring
+// shape to the waterfall.
+func (inst *SpectrumDisplay) resolve() {
+	o := inst.Opts
+	inst.splitRatio = o.SplitRatio
+	if !(inst.splitRatio > 0 && inst.splitRatio < 1) {
+		inst.splitRatio = 0.4
+	}
+	inst.fontSize = o.FontSize
+	if inst.fontSize <= 0 {
+		inst.fontSize = DefaultFontSize
+	}
+	inst.hs.Opts.WidthSlots, inst.hs.Opts.HeightSlots = o.WidthSlots, o.HeightSlots
+}
 
 // SetWaterfallRange sets the colormap range used to color the waterfall, independent
 // of the line panel's power axis. It mutates the shared colormap.Config in place, so
@@ -255,36 +266,6 @@ func (inst *SpectrumDisplay) SetColormap(cfg *colormap.Config) {
 	}
 }
 
-// SetMarkers replaces the marker set. SetRegions replaces the region set.
-func (inst *SpectrumDisplay) SetMarkers(m []Marker) { inst.markers = m }
-func (inst *SpectrumDisplay) SetRegions(r []Region) { inst.regions = r }
-
-// AddMarker appends one marker; ClearMarkers empties the set.
-func (inst *SpectrumDisplay) AddMarker(m Marker) { inst.markers = append(inst.markers, m) }
-func (inst *SpectrumDisplay) ClearMarkers()      { inst.markers = inst.markers[:0] }
-
-// SetColorbarVisible / SetLinePanelVisible toggle the colorbar and the spectrum-line
-// subpanel. SetSplitRatio sets the line panel's height as a fraction (0,1) of the data
-// area when it is shown.
-func (inst *SpectrumDisplay) SetColorbarVisible(b bool)  { inst.showColorbar = b }
-func (inst *SpectrumDisplay) SetLinePanelVisible(b bool) { inst.showLinePanel = b }
-func (inst *SpectrumDisplay) SetSplitRatio(f float32) {
-	if f > 0 && f < 1 {
-		inst.splitRatio = f
-	}
-}
-
-// SetDisplaySize sets the total widget box in logical pixels. 0,0 derives it from the
-// available size each frame (window-fill).
-func (inst *SpectrumDisplay) SetDisplaySize(wPx, hPx float32) { inst.dispW, inst.dispH = wPx, hPx }
-
-// SetFont sets the axis-label font size in logical pixels.
-func (inst *SpectrumDisplay) SetFont(sizePx float32) {
-	if sizePx > 0 {
-		inst.fontSize = sizePx
-	}
-}
-
 // PushColumn forwards one column of heightSlots dB samples to the waterfall and
 // retains it for the line trace and the cursor readout.
 func (inst *SpectrumDisplay) PushColumn(samples []float32) colormap.ColumnStats {
@@ -296,47 +277,55 @@ func (inst *SpectrumDisplay) PushColumn(samples []float32) colormap.ColumnStats 
 	return inst.hs.PushColumn(samples)
 }
 
-// Readout returns the cursor readout in physical units (one-frame lag).
-func (inst *SpectrumDisplay) Readout() Readout { return inst.lastReadout }
-
-// FrequencyAxis / PowerAxis return the current axis specs.
-func (inst *SpectrumDisplay) FrequencyAxis() AxisSpec { return inst.freqAxis }
-func (inst *SpectrumDisplay) PowerAxis() AxisSpec     { return inst.powerAxis }
-
-// Clicked / Head / Size forward to the owned waterfall. Release drops its texture.
-func (inst *SpectrumDisplay) Clicked() bool       { return inst.hs.Clicked() }
+// Head / Size forward to the owned waterfall. Release drops its texture.
 func (inst *SpectrumDisplay) Head() uint32        { return inst.hs.Head() }
 func (inst *SpectrumDisplay) Size() (w, h uint32) { return inst.hs.Size() }
-func (inst *SpectrumDisplay) Release()            { inst.hs.Release() }
-
-// Render emits the whole composite for this frame. Call once per frame.
-func (inst *SpectrumDisplay) Render() {
+func (inst *SpectrumDisplay) Release() {
 	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
-		inst.renderInner()
+		inst.hs.Release()
 	}
 }
 
-func (inst *SpectrumDisplay) renderInner() {
-	// Probe this Ui's free rect for next frame's window-fill resolve, into this
-	// instance's own r21 slot. NOT CaptureAvailableSize: that register is a
-	// single process-wide scalar the frame's last capture wins, so in fill mode
-	// this widget was sized by whichever unrelated panel captured after it.
-	if inst.dispW <= 0 || inst.dispH <= 0 {
-		inst.availW, inst.availH, inst.availOk = c.CapturePaneSize(
-			inst.probeSeq("spectrumdisplay-pane"))
+// Render emits the whole composite into a w × h box (logical pixels) and
+// reports last frame's interaction. Call once per frame.
+func (inst *SpectrumDisplay) Render(w, h float32) (ev Events) {
+	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
+		ev = inst.renderInner(w, h)
 	}
-	W, H := inst.resolveSize()
+	return
+}
+
+// RenderFill is Render sized to the pane: the room left in the parent, read
+// back through this instance's own probe one frame behind (not the single
+// process-wide available-size register, which the frame's last capture wins),
+// with the fallbacks serving until it reports (ADR-0267 W12).
+func (inst *SpectrumDisplay) RenderFill(fallbackW, fallbackH float32) (ev Events) {
+	for range c.IdScope(inst.ids.PrepareStr(inst.scopeKey)) {
+		w, h, ok := c.CapturePaneSize(inst.ids.ProbeSeq("pane"))
+		if !ok || math.IsNaN(float64(w)) || w < 1 {
+			w = fallbackW
+		}
+		if !ok || math.IsNaN(float64(h)) || h < 1 {
+			h = fallbackH
+		}
+		ev = inst.renderInner(w, h)
+	}
+	return
+}
+
+func (inst *SpectrumDisplay) renderInner(W, H float32) (ev Events) {
+	inst.resolve()
 	if W < 8 || H < 8 {
 		return
 	}
 	o := layoutOpts{
 		leftGutterW: inst.leftGutterWidth(),
 		freqGutterH: DefaultFreqGutterH,
-		showLine:    inst.showLinePanel,
+		showLine:    !inst.Opts.HideLinePanel,
 		splitRatio:  inst.splitRatio,
 		lineGapY:    2,
 	}
-	if inst.showColorbar {
+	if !inst.Opts.HideColorbar {
 		o.colorbarW = DefaultColorbarW
 	}
 	r := partition(W, H, o)
@@ -347,24 +336,24 @@ func (inst *SpectrumDisplay) renderInner() {
 	// single Ui makes every sub-rect share that one origin so the gutters stay in
 	// register. Without this wrapper the rects anchor to the *enclosing* panel's
 	// top-left and paint over anything placed above us — e.g. the demo's controls.
+	var hsEv heatmapscroll.Events
 	for range c.Vertical().KeepIter() {
 		if r.texture.valid() {
 			// designlint:ignore=L5 (sub-rects share this widget's child-Ui origin — see wrapper comment above)
 			for range c.AllocateUiAtRect(r.texture.minX, r.texture.minY, r.texture.maxX, r.texture.maxY).KeepIter() {
 				c.UiClipToMaxRect()
-				inst.hs.SetDisplaySize(r.texture.w(), r.texture.h())
-				inst.hs.Render()
+				hsEv = inst.hs.Render(r.texture.w(), r.texture.h())
 			}
 			inst.renderOverlay(r.texture)
 		}
-		if inst.showLinePanel && r.linePanel.valid() {
+		if !inst.Opts.HideLinePanel && r.linePanel.valid() {
 			inst.renderLinePanel(r.linePanel)
 		}
-		if inst.showColorbar && r.colorbar.valid() {
+		if !inst.Opts.HideColorbar && r.colorbar.valid() {
 			// designlint:ignore=L5 (sub-rects share this widget's child-Ui origin — see wrapper comment above)
 			for range c.AllocateUiAtRect(r.colorbar.minX, r.colorbar.minY, r.colorbar.maxX, r.colorbar.maxY).KeepIter() {
 				c.UiClipToMaxRect()
-				inst.cbar.SetSize(r.colorbar.w(), r.colorbar.h())
+				inst.cbar.Opts.Width, inst.cbar.Opts.Height = r.colorbar.w(), r.colorbar.h()
 				inst.cbar.Render()
 			}
 		}
@@ -375,20 +364,9 @@ func (inst *SpectrumDisplay) renderInner() {
 			inst.renderFreqGutter(r.freqGutter)
 		}
 	}
-	inst.updateReadout()
-}
-
-func (inst *SpectrumDisplay) resolveSize() (w, h float32) {
-	if inst.dispW > 0 && inst.dispH > 0 {
-		return inst.dispW, inst.dispH
-	}
-	w, h = inst.availW, inst.availH
-	if !inst.availOk || math.IsNaN(float64(w)) || w < 1 {
-		w = DefaultSize[0]
-	}
-	if !inst.availOk || math.IsNaN(float64(h)) || h < 1 {
-		h = DefaultSize[1]
-	}
+	inst.updateReadout(hsEv)
+	ev.Readout = inst.lastReadout
+	ev.Clicked = hsEv.Clicked
 	return
 }
 
@@ -399,7 +377,7 @@ func (inst *SpectrumDisplay) renderOverlay(tr rect) {
 	tw, th := tr.w(), tr.h()
 	for range c.AllocateUiAtRect(tr.minX, tr.minY, tr.maxX, tr.maxY).KeepIter() {
 		c.UiClipToMaxRect()
-		for _, rg := range inst.regions {
+		for _, rg := range inst.Regions {
 			x0 := inst.freqToPx(rg.StartHz, tw)
 			x1 := inst.freqToPx(rg.EndHz, tw)
 			if x1 < x0 {
@@ -415,7 +393,7 @@ func (inst *SpectrumDisplay) renderOverlay(tr rect) {
 				c.PaintText((x0+x1)/2, y0+1, 1 /*center*/, 0 /*top*/, rg.Label, inst.fontSize, color.Hex(DefaultAnnotationColor)).Send()
 			}
 		}
-		for _, m := range inst.markers {
+		for _, m := range inst.Markers {
 			if m.Kind == MarkerHorizontal {
 				continue // dB markers belong to the line panel, not the time-axis texture
 			}
@@ -441,14 +419,14 @@ func (inst *SpectrumDisplay) renderLinePanel(lp rect) {
 	pw, ph := lp.w(), lp.h()
 	for range c.AllocateUiAtRect(lp.minX, lp.minY, lp.maxX, lp.maxY).KeepIter() {
 		c.UiClipToMaxRect()
-		if inst.powerAxis.Max > inst.powerAxis.Min {
-			positions, _ := AxisTicks(inst.powerAxis)
+		if inst.PowerAxis.Max > inst.PowerAxis.Min {
+			positions, _ := AxisTicks(inst.PowerAxis)
 			for _, v := range positions {
 				y := inst.dbToPx(v, ph)
 				c.PaintLine(0, y, pw, y, color.Hex(inst.gridColor), 0.5).Send()
 			}
 		}
-		if n := len(inst.lastCol); n > 1 && inst.powerAxis.Max > inst.powerAxis.Min {
+		if n := len(inst.lastCol); n > 1 && inst.PowerAxis.Max > inst.PowerAxis.Min {
 			xs := make([]float32, n)
 			ys := make([]float32, n)
 			for i, v := range inst.lastCol {
@@ -468,14 +446,14 @@ func (inst *SpectrumDisplay) renderLeftGutter(r layoutRects) {
 	st.Baseline = false // the power and time axes share the gutter; neither owns a full-height baseline
 	for range c.AllocateUiAtRect(g.minX, g.minY, g.maxX, g.maxY).KeepIter() {
 		c.UiClipToMaxRect()
-		if inst.showLinePanel && r.linePanel.valid() && inst.powerAxis.Max > inst.powerAxis.Min {
+		if !inst.Opts.HideLinePanel && r.linePanel.valid() && inst.PowerAxis.Max > inst.PowerAxis.Min {
 			top, hgt := r.linePanel.minY-g.minY, r.linePanel.h()
-			ticks := inst.gutterTicks(inst.powerAxis, top, hgt, true) // dB: max signal at the top
+			ticks := inst.gutterTicks(inst.PowerAxis, top, hgt, true) // dB: max signal at the top
 			axisruler.Paint(axisruler.SideLeft, gw, top, top+hgt, ticks, st)
 		}
-		if inst.timeAxisSet && inst.timeAxis.Max > inst.timeAxis.Min {
+		if inst.TimeAxis.Max > inst.TimeAxis.Min {
 			top, hgt := r.texture.minY-g.minY, r.texture.h()
-			ticks := inst.gutterTicks(inst.timeAxis, top, hgt, false) // time-since: newest row at the top
+			ticks := inst.gutterTicks(inst.TimeAxis, top, hgt, false) // time-since: newest row at the top
 			axisruler.Paint(axisruler.SideLeft, gw, top, top+hgt, ticks, st)
 		}
 		c.PaintCanvas(inst.ids.PrepareStr("lgutter"), gw, gh).Background(color.Hex(inst.bgColor)).Send()
@@ -531,8 +509,8 @@ func (inst *SpectrumDisplay) leftGutterWidth() float32 {
 			}
 		}
 	}
-	consider(inst.powerAxis, inst.showLinePanel)
-	consider(inst.timeAxis, inst.timeAxisSet)
+	consider(inst.PowerAxis, !inst.Opts.HideLinePanel)
+	consider(inst.TimeAxis, inst.TimeAxis.Max > inst.TimeAxis.Min)
 	if widest == 0 {
 		return DefaultLeftGutterW
 	}
@@ -554,8 +532,8 @@ func (inst *SpectrumDisplay) renderFreqGutter(fg rect) {
 	fw, fh := fg.w(), fg.h()
 	for range c.AllocateUiAtRect(fg.minX, fg.minY, fg.maxX, fg.maxY).KeepIter() {
 		c.UiClipToMaxRect()
-		if inst.freqAxis.Max > inst.freqAxis.Min {
-			positions, labels := AxisTicks(inst.freqAxis)
+		if inst.FreqAxis.Max > inst.FreqAxis.Min {
+			positions, labels := AxisTicks(inst.FreqAxis)
 			ticks := make([]axisruler.Tick, len(positions))
 			for i, v := range positions {
 				ticks[i] = axisruler.Tick{Pos: inst.freqToPx(v, fw), Label: labels[i]}
@@ -570,12 +548,12 @@ func (inst *SpectrumDisplay) renderFreqGutter(fg rect) {
 }
 
 // updateReadout maps the waterfall's hovered cell to physical (freq, dB, age).
-func (inst *SpectrumDisplay) updateReadout() {
-	row, col, hovered := inst.hs.HoveredCell()
+func (inst *SpectrumDisplay) updateReadout(hsEv heatmapscroll.Events) {
+	row, col, hovered := hsEv.Row, hsEv.Col, hsEv.Hovered
 	ro := Readout{}
-	if hovered && inst.heightSlots > 0 && inst.freqAxis.Max > inst.freqAxis.Min {
-		frac := (float64(row) + 0.5) / float64(inst.heightSlots)
-		ro.Freq = inst.freqAxis.Min + frac*(inst.freqAxis.Max-inst.freqAxis.Min)
+	if hovered && inst.Opts.HeightSlots > 0 && inst.FreqAxis.Max > inst.FreqAxis.Min {
+		frac := (float64(row) + 0.5) / float64(inst.Opts.HeightSlots)
+		ro.Freq = inst.FreqAxis.Min + frac*(inst.FreqAxis.Max-inst.FreqAxis.Min)
 		ro.BinRow = row
 		ro.RingCol = col
 		if w, _ := inst.hs.Size(); w > 0 {
@@ -598,7 +576,7 @@ func (inst *SpectrumDisplay) updateReadout() {
 
 // freqToPx maps a frequency to a clamped pixel x within width w.
 func (inst *SpectrumDisplay) freqToPx(f float64, w float32) float32 {
-	lo, hi := inst.freqAxis.Min, inst.freqAxis.Max
+	lo, hi := inst.FreqAxis.Min, inst.FreqAxis.Max
 	if hi <= lo {
 		return 0
 	}
@@ -608,7 +586,7 @@ func (inst *SpectrumDisplay) freqToPx(f float64, w float32) float32 {
 
 // dbToPx maps a dB value to a clamped pixel y within height h (max at top).
 func (inst *SpectrumDisplay) dbToPx(v float64, h float32) float32 {
-	lo, hi := inst.powerAxis.Min, inst.powerAxis.Max
+	lo, hi := inst.PowerAxis.Min, inst.PowerAxis.Max
 	if hi <= lo {
 		return 0
 	}

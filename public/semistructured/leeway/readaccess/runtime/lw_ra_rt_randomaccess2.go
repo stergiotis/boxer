@@ -24,15 +24,26 @@ func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) SetCurrentEntityIdx(cu
 	inst.accel.LoadCardinalities(inst.cards[b:e])
 	inst.loaded = true
 }
+
+// SetReleaser releases the data a previous load handed over before taking
+// the new one, so an accel reused across records does not leak them.
 func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) SetReleaser(releaser ReleasableI) {
+	if inst.releaser != nil {
+		inst.releaser.Release()
+	}
 	inst.releaser = releaser
 }
+
+// SetRanger and LoadCardinalities invalidate the per-entity cache: the same
+// entity index in a newly loaded record names different offsets.
 func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) SetRanger(ranger ValueOffsetI[I, I2]) {
 	inst.ranger = ranger
+	inst.loaded = false
 }
 
 func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) LoadCardinalities(cards []uint64) {
 	inst.cards = cards
+	inst.loaded = false
 }
 
 // GetEntityAttributeCount returns the number of attributes for the
@@ -99,6 +110,7 @@ func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) Len() int {
 func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) Release() {
 	if inst.releaser != nil {
 		inst.releaser.Release()
+		inst.releaser = nil
 	}
 }
 func (inst *RandomAccessTwoLevelLookupAccel[F, B, I, I2]) Reset() {

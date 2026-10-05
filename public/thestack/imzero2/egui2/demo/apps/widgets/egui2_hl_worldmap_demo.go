@@ -18,7 +18,7 @@ import (
 // =============================================================================
 
 type worldmapDemoState struct {
-	widget   *worldmap.Widget
+	widget   *worldmap.Map
 	width    float64
 	presence bool
 	applied  bool // demo data pushed for the current mode
@@ -62,15 +62,13 @@ func demoWorldmap(ids *c.WidgetIdStack, st *worldmapDemoState) {
 	// Construct on first render so the widget binds the same id stack the
 	// render pass uses.
 	if st.widget == nil {
-		st.widget = worldmap.New(ids, "worldmap-demo")
-		// Size the map explicitly by on-screen width — the "Width:" slider
-		// below drives this every frame, so scrubbing it visibly resizes the
-		// map, rather than letting it span the gallery pane. SetPixelWidth
-		// pins the raster resolution to match; without it the widget would
-		// track the canvas width by itself, which is what the play pane wants
-		// but would make this slider's two roles indistinguishable.
-		st.widget.SetPixelWidth(st.width)
-		st.widget.SetDisplayWidth(st.width)
+		// The "Width:" slider below drives the on-screen width every frame
+		// (Render's w), so scrubbing it visibly resizes the map rather than
+		// letting it span the gallery pane. RasterWidth pins the raster
+		// resolution to match; without it the widget would track the canvas
+		// width by itself, which is what the play pane wants but would make
+		// this slider's two roles indistinguishable.
+		st.widget = worldmap.New(ids, "worldmap-demo", worldmap.Options{RasterWidth: st.width})
 	}
 
 	for range c.Horizontal().KeepIter() {
@@ -93,7 +91,7 @@ func demoWorldmap(ids *c.WidgetIdStack, st *worldmapDemoState) {
 		// changes with it — Equal Earth is the flatter of the two.
 		c.Label("Projection:").Send()
 		c.AddSpace(padInner())
-		cur := st.widget.Projection()
+		cur := st.widget.Opts.Projection
 		for range c.ComboBox(ids.PrepareStr("wm-projection"),
 			c.WidgetText().Text("projection").Keep(),
 			c.WidgetText().Text(cur.String()).Keep()).KeepIter() {
@@ -105,15 +103,14 @@ func demoWorldmap(ids *c.WidgetIdStack, st *worldmapDemoState) {
 					FrameWhenInactive(!selected).
 					Frame(true).
 					SendResp().HasPrimaryClicked() {
-					st.widget.SetProjection(p)
+					st.widget.Opts.Projection = p
 				}
 			}
 		}
 	}
 	c.Separator().Horizontal().Send()
 
-	st.widget.SetPixelWidth(st.width)
-	st.widget.SetDisplayWidth(st.width)
+	st.widget.Opts.RasterWidth = st.width
 	if !st.applied {
 		st.applied = true
 		atlas := st.widget.Atlas()
@@ -137,5 +134,5 @@ func demoWorldmap(ids *c.WidgetIdStack, st *worldmapDemoState) {
 			}
 		}
 	}
-	st.widget.Render()
+	st.widget.Render(float32(st.width), 0)
 }

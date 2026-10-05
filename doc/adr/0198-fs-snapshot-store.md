@@ -1209,6 +1209,27 @@ Mentions of a downstream repository were replaced with a generic
 description. That repository is private, and this one is public. The
 decision is unchanged.
 
+### 2026-09-28 — a pinned snapshot is checked for completeness too
+
+§SD7 sketched `fs(m, snap)` as `… AND ts = snap`, and the expansion did
+exactly that, so a caller who knew the ts of a walk that died (the failed
+call's `Result.Snap`, or the raw table) read its partial rows back as a
+snapshot. That contradicted §SD6, which makes an incomplete walk invisible
+to every query. The pinned form now also requires the instant to be in
+`fssnap` for the mount (the `(id, ts)` pair for a wildcard mount), as `'*'`
+and the latest form already did; the plain equality stays beside it for key
+pruning. `TestAPinnedPartialWalkIsInvisible` pins it against a live server.
+
+
+### 2026-09-28 — the adapter resolves links in every path component
+
+M3's resolution followed a symlink only when it was a path's last
+component, so `ReadDir("linkdir")` listed children that `Stat` and `Open`
+of `linkdir/<child>` then reported absent. Every component is now
+resolved, with one depth budget across the path, and `Lstat` / `ReadLink`
+follow the directories on the way while still reporting a link in the last
+component. An exact-path hit stays one point lookup: the walker never
+descends into a link, so a row under a path means nothing above it is one.
 
 ## References
 

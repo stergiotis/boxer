@@ -66,7 +66,7 @@ func (cm *gvCommon) controls(ids *c.WidgetIdStack, v *graphview.View) {
 }
 
 // events lists the selection and the last events of the view.
-func (cm *gvCommon) events(ids *c.WidgetIdStack, v *graphview.View) {
+func (cm *gvCommon) events(ids *c.WidgetIdStack, v *graphview.View, events graphview.Events) {
 	c.Separator().Send()
 	c.Checkbox(ids.PrepareStr("gv-show-hover"), cm.showHover, "show hover enter/leave events").SendRespVal(&cm.showHover)
 	for id := range v.SelectedNodes() {
@@ -75,7 +75,7 @@ func (cm *gvCommon) events(ids *c.WidgetIdStack, v *graphview.View) {
 	for k := range v.SelectedEdges() {
 		c.Label(fmt.Sprintf("  selected edge=%d→%d id=%d", k.From, k.To, k.Id)).Send()
 	}
-	for _, ev := range v.Events() {
+	for _, ev := range events {
 		if !cm.showHover && (ev.Kind == graphview.EventKindNodeHoverEnter || ev.Kind == graphview.EventKindNodeHoverLeave ||
 			ev.Kind == graphview.EventKindEdgeHoverEnter || ev.Kind == graphview.EventKindEdgeHoverLeave) {
 			continue
@@ -169,7 +169,7 @@ func demoGraphviewRing(ids *c.WidgetIdStack, st *graphviewRingState) {
 		c.Checkbox(ids.PrepareStr("gv-ring-nozoom"), st.noZoom, "no zoom and pan").SendRespVal(&st.noZoom)
 	}
 	st.v.Opts.NoDragging, st.v.Opts.NoHover, st.v.Opts.NoZoomAndPan = st.noDrag, st.noHover, st.noZoom
-	st.v.Render(st.nodes, st.edges, demoGraphviewWidth(ids, "gv-ring-pane"), 360)
+	events := st.v.Render(st.nodes, st.edges, demoGraphviewWidth(ids, "gv-ring-pane"), 360)
 	// Readout: the hovered node and where n1 sits in the canvas — the
 	// hover path through R24 and the camera, legible to a headless scene.
 	hover := "none"
@@ -179,7 +179,7 @@ func demoGraphviewRing(ids *c.WidgetIdStack, st *graphviewRingState) {
 	x, y, _ := st.v.NodeCanvasPosition(1)
 	ox, oy, _ := st.v.CanvasScreenOrigin()
 	c.Label(fmt.Sprintf("hover: %s · n1 at (%.0f, %.0f) · canvas at (%.0f, %.0f)", hover, x, y, ox, oy)).Send()
-	st.events(ids, st.v)
+	st.events(ids, st.v, events)
 }
 
 // --- force-directed -----------------------------------------------------
@@ -352,8 +352,8 @@ func demoGraphviewForce(ids *c.WidgetIdStack, st *graphviewForceState) {
 	}
 	o.PinOnDrag = st.hold
 	o.Auras = graphview.AuraParams{Enabled: st.auras, Overlap: st.overlap, Legend: graphview.AuraLegendInside}
-	st.v.Render(st.nodeSet, st.edgeSet, width, 400)
-	for _, ev := range st.v.Events() {
+	events := st.v.Render(st.nodeSet, st.edgeSet, width, 400)
+	for _, ev := range events {
 		if ev.Kind == graphview.EventKindNodeDoubleClick {
 			st.v.UnpinNode(ev.Node)
 		}
@@ -361,7 +361,7 @@ func demoGraphviewForce(ids *c.WidgetIdStack, st *graphviewForceState) {
 	m := st.v.Metrics()
 	c.Label(fmt.Sprintf("nodes=%d edges=%d pinned=%d steps=%d avg displacement=%.4f settled=%v paused=%v camera moved=%v",
 		m.NodeCount, m.EdgeCount, m.PinnedCount, m.Steps, m.LastDisplacement, m.Settled, m.Paused, m.CameraMoved)).Send()
-	st.events(ids, st.v)
+	st.events(ids, st.v, events)
 }
 
 // --- hierarchical -------------------------------------------------------
@@ -433,8 +433,8 @@ func demoGraphviewHier(ids *c.WidgetIdStack, st *graphviewHierState) {
 	if st.lr {
 		o.Hier.Orientation = graphview.OrientationLeftRight
 	}
-	st.v.Render(st.nodes, st.edges, demoGraphviewWidth(ids, "gv-hier-pane"), 320)
-	st.events(ids, st.v)
+	events := st.v.Render(st.nodes, st.edges, demoGraphviewWidth(ids, "gv-hier-pane"), 320)
+	st.events(ids, st.v, events)
 }
 
 // --- exploration ---------------------------------------------------------
@@ -627,15 +627,15 @@ func demoGraphviewExplore(ids *c.WidgetIdStack, st *graphviewExploreState) {
 		st.centre = append(st.centre, 1)
 	}
 	o.Radial.Centers = st.centre
-	st.v.Render(ns, es, demoGraphviewWidth(ids, "gv-explore-pane"), 420)
-	for _, ev := range st.v.Events() {
+	events := st.v.Render(ns, es, demoGraphviewWidth(ids, "gv-explore-pane"), 420)
+	for _, ev := range events {
 		st.nv.Apply(ev)
 		if ev.Kind == graphview.EventKindNodeSecondaryClick {
 			st.nv.Hide(ev.Node)
 		}
 	}
 	c.Label(fmt.Sprintf("visible=%d of %d · focus=%v · hidden=%d · wanted stubs=%d", len(ns), st.nv.NodeCount(), st.nv.FocusNodes(), len(st.nv.HiddenNodes()), len(st.nv.Pending()))).Send()
-	st.events(ids, st.v)
+	st.events(ids, st.v, events)
 }
 
 // --- styling and weights ------------------------------------------------
@@ -727,10 +727,10 @@ func demoGraphviewStyle(ids *c.WidgetIdStack, st *graphviewStyleState) {
 			"far":  {Fill: color.Hex(styletokens.InfoDefault.AsHex()&^0xff | 0x30), Line: color.Hex(styletokens.InfoDefault.AsHex()), LineWidth: 1, NoLegend: true},
 		},
 	}
-	st.v.Render(st.nodes, st.edges, demoGraphviewWidth(ids, "gv-style-pane"), 380)
+	events := st.v.Render(st.nodes, st.edges, demoGraphviewWidth(ids, "gv-style-pane"), 380)
 	zoom, _, _ := st.v.Camera()
 	c.Label(fmt.Sprintf("zoom=%.2f · weighted=%v", zoom, st.weighted)).Send()
-	st.events(ids, st.v)
+	st.events(ids, st.v, events)
 }
 
 // --- soft pins (levels) --------------------------------------------------
@@ -811,6 +811,6 @@ func demoGraphviewPull(ids *c.WidgetIdStack, st *graphviewPullState) {
 			st.nodes[i].Pull = graphview.Pull{Y: at, StrengthY: float32(st.strength)}
 		}
 	}
-	st.v.Render(st.nodes, st.edges, demoGraphviewWidth(ids, "gv-pull-pane"), 340)
-	st.events(ids, st.v)
+	events := st.v.Render(st.nodes, st.edges, demoGraphviewWidth(ids, "gv-pull-pane"), 340)
+	st.events(ids, st.v, events)
 }

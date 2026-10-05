@@ -9,6 +9,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryrunfacts"
 )
 
@@ -17,7 +18,8 @@ func TestComposeLogCommentRoundTrips(t *testing.T) {
 	c.SetStampIdentity("run-abc", "github.com/stergiotis/boxer/apps/play", 3)
 	opts := newExecOptions("main")
 	lc := c.composeLogComment("SELECT 1 -- authored", "SELECT 1 FORMAT ArrowStream",
-		map[string]string{"param_a": "1"}, map[string]string{"param_b": "2"}, opts)
+		map[string]string{"param_a": "1"}, map[string]string{"param_b": "2"}, opts,
+		&app.OnBehalfOf{Task: "task-1", Epoch: 2, Call: "task-1-7"})
 	require.NotEmpty(t, lc)
 
 	st, ok := queryrunfacts.ParseStamp(lc)
@@ -33,6 +35,16 @@ func TestComposeLogCommentRoundTrips(t *testing.T) {
 	require.Len(t, st.ChainFp, 16)
 	require.Len(t, st.EnvFp, 16)
 	require.NotEqual(t, st.AuthoredFp, st.SentFp, "authored and sent texts differ here")
+	// An agent's run names its task and the dispatcher's call (ADR-0277
+	// §SD7), so the captured row joins the action record by key.
+	require.Equal(t, "task-1", st.Task)
+	require.Equal(t, uint64(2), st.TaskEpoch)
+	require.Equal(t, "task-1-7", st.TaskCall)
+
+	own := c.composeLogComment("SELECT 1", "SELECT 1 FORMAT ArrowStream", nil, nil, opts, nil)
+	st, ok = queryrunfacts.ParseStamp(own)
+	require.True(t, ok)
+	require.Empty(t, st.Task, "the person's own run names no task")
 }
 
 func TestStampFingerprintStability(t *testing.T) {

@@ -66,7 +66,7 @@ type flowBenchState struct {
 
 func newFlowBenchState(ids *c.WidgetIdStack) *flowBenchState {
 	st := &flowBenchState{
-		m: portolan.New(ids, portolan.Options{
+		m: portolan.New(ids, "fb-map", portolan.Options{
 			Center: portolan.LL(35, 5), Zoom: 2.6, NoTiles: true, Background: 0x0e141bff,
 			NoDragging: true, NoScrollWheelZoom: true, NoDoubleClickZoom: true, NoKeyboard: true,
 		}),
@@ -145,7 +145,7 @@ func demoFlowBench(ids *c.WidgetIdStack, st *flowBenchState) {
 			return
 		}
 		t := time.Now()
-		st.layer.Draw(p)
+		st.layer.Paint(p)
 		drawNs = time.Since(t).Nanoseconds()
 	})
 	if count == 0 {

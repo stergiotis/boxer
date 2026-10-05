@@ -313,11 +313,15 @@ tableArgList: tableArgExpr (COMMA tableArgExpr)*;
 // ordinary column contexts, so CanonicalizeConstructors' existing rules lower
 // tuples/arrays to tuple(…)/array(…) calls, which both grammars accept as
 // nested table functions.
+// A bare query is admitted LAST for the same reason: `view(SELECT …)` takes a
+// query as its argument (a parenthesised one already parses, as columnExpr's
+// subquery), and before this alternative such a buffer did not parse at all.
 tableArgExpr
     : nestedIdentifier
     | tableFunctionExpr
     | literal
     | columnExpr
+    | selectUnionStmt
     ;
 
 // Databases

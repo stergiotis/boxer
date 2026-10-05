@@ -23,11 +23,13 @@
 //	layer := &landoverlay.Layer{}
 //	atlas, _ := worldmap.LoadAtlas()
 //	m.Render(w, h, func(p portolan.Projector) {
-//	    layer.Draw(p, atlas, landoverlay.DefaultStyle())
+//	    layer.Paint(p, atlas, landoverlay.DefaultStyle())
 //	})
 package landoverlay
 
 import (
+	"math"
+
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan"
@@ -56,24 +58,75 @@ func DefaultStyle() Style {
 	}
 }
 
-// Layer holds the buffers one overlay reuses across frames: a ring is
-// re-projected every frame because the view moves, and its degrees come back
-// into these slices rather than fresh ones. The zero value is ready to use.
+// Layer is one overlay's state across frames: the atlas taken to the map's
+// projection plane once, so a frame applies only the zoom's affine step to
+// it, and the readout of the last frame. The zero value is ready to use.
 type Layer struct {
-	lats, lngs []float64
+	plane planeAtlas
 	// drawn counts the countries the last Draw painted, for a readout.
 	drawn int
+}
+
+// planeAtlas is an atlas in one CRS's plane, ring after ring, struct of
+// arrays: ring r's vertices are pts[ringStart[r]:ringStart[r+1]], and
+// country i's rings are ringStart indexes [countryStart[i],
+// countryStart[i+1]). It is rebuilt when the atlas or the CRS changes,
+// which for a map is never. Projecting is most of what drawing the atlas
+// costs (doc/trials/portolan-land-frame-cost), and none of it depends on
+// the view.
+type planeAtlas struct {
+	atlas        *worldmap.Atlas
+	crs          portolan.CRSI
+	pts          []portolan.Point
+	ringStart    []int32
+	hole         []bool
+	countryStart []int32
+	// turn is one turn of longitude in plane units: the dx of the next copy
+	// of the world east.
+	turn float64
+}
+
+func (inst *planeAtlas) build(atlas *worldmap.Atlas, crs portolan.CRSI) {
+	*inst = planeAtlas{atlas: atlas, crs: crs,
+		pts:          make([]portolan.Point, 0, 16384),
+		ringStart:    make([]int32, 0, 512),
+		hole:         make([]bool, 0, 512),
+		countryStart: make([]int32, 0, len(atlas.Countries)+1),
+		turn:         crs.Project(portolan.LL(0, 180)).X - crs.Project(portolan.LL(0, -180)).X,
+	}
+	var lats, lngs []float64
+	for i := range atlas.Countries {
+		cy := &atlas.Countries[i]
+		inst.countryStart = append(inst.countryStart, int32(len(inst.ringStart)))
+		for r := range cy.RingCount() {
+			var hole bool
+			lats, lngs, hole = cy.Ring(r, lats[:0], lngs[:0])
+			if len(lats) < 3 {
+				continue
+			}
+			inst.ringStart = append(inst.ringStart, int32(len(inst.pts)))
+			inst.hole = append(inst.hole, hole)
+			for j := range lats {
+				inst.pts = append(inst.pts, crs.Project(portolan.LL(lats[j], lngs[j])))
+			}
+		}
+	}
+	inst.countryStart = append(inst.countryStart, int32(len(inst.ringStart)))
+	inst.ringStart = append(inst.ringStart, int32(len(inst.pts)))
 }
 
 // Drawn is how many countries the last Draw painted — the rest were outside
 // the viewport and cost their bounds test and nothing more.
 func (l *Layer) Drawn() int { return l.drawn }
 
-// Draw paints every country that meets the current viewport: the outer rings
+// Paint paints every country that meets the current viewport: the outer rings
 // filled and stroked, the holes stroked only, since a filled polygon on the
 // painter lane carries a single outer ring and would fill an enclave shut.
-// A nil atlas draws nothing.
-func (l *Layer) Draw(p portolan.Projector, atlas *worldmap.Atlas, st Style) {
+// The map wraps in longitude, so a view panned past ±180 or wider than the
+// world shows further copies of it; each copy the view meets is painted, the
+// atlas shifted by whole turns (worldShifts) in the projection plane. A nil
+// atlas draws nothing.
+func (l *Layer) Paint(p portolan.Projector, atlas *worldmap.Atlas, st Style) {
 	l.drawn = 0
 	if atlas == nil {
 		return
@@ -81,30 +134,53 @@ func (l *Layer) Draw(p portolan.Projector, atlas *worldmap.Atlas, st Style) {
 	if st.BorderWidth <= 0 {
 		st = DefaultStyle()
 	}
+	crs := p.View().CRS()
+	if l.plane.atlas != atlas || l.plane.crs != crs {
+		l.plane.build(atlas, crs)
+	}
+	pl := &l.plane
 	b := p.View().Bounds()
 	south, west, north, east := b.GetSouth(), b.GetWest(), b.GetNorth(), b.GetEast()
-	for i := range atlas.Countries {
-		cy := &atlas.Countries[i]
-		if !meets(cy, south, west, north, east) {
-			continue
-		}
-		l.drawn++
-		for r := range cy.RingCount() {
-			l.lats, l.lngs = l.lats[:0], l.lngs[:0]
-			var hole bool
-			l.lats, l.lngs, hole = cy.Ring(r, l.lats, l.lngs)
-			if len(l.lats) < 3 {
+	for _, shift := range worldShifts(west, east) {
+		dx := shift / 360 * pl.turn
+		for i := range atlas.Countries {
+			cy := &atlas.Countries[i]
+			if !meets(cy, south, west-shift, north, east-shift) {
 				continue
 			}
-			if hole || st.NoFill {
-				// An enclave: its border, never the fill that would swallow
-				// it. NoFill takes every ring down the same path.
-				p.Polyline(l.lats, l.lngs, st.Border, st.BorderWidth)
-				continue
+			l.drawn++
+			for r := pl.countryStart[i]; r < pl.countryStart[i+1]; r++ {
+				ring := pl.pts[pl.ringStart[r]:pl.ringStart[r+1]]
+				if pl.hole[r] || st.NoFill {
+					// An enclave: its border, never the fill that would swallow
+					// it. NoFill takes every ring down the same path.
+					p.PlanePolyline(ring, dx, st.Border, st.BorderWidth)
+					continue
+				}
+				p.PlanePolygon(ring, dx, st.Land, st.Border, st.BorderWidth)
 			}
-			p.Polygon(l.lats, l.lngs, st.Land, st.Border, st.BorderWidth)
 		}
 	}
+}
+
+// maxWorldCopies bounds the copies one frame paints: a view at zoom 0 in a
+// wide pane can span several worlds, and each copy costs a full pass over
+// the atlas.
+const maxWorldCopies = 4
+
+// worldShifts returns the whole-turn longitude shifts at which the atlas's
+// world, lon −180..180, meets the view [west, east] — 0 alone for a view
+// inside it — in west-to-east order, at most maxWorldCopies.
+func worldShifts(west, east float64) (shifts []float64) {
+	if east < west {
+		return
+	}
+	first := math.Floor((west + 180) / 360)
+	last := math.Floor((east + 180) / 360)
+	for k := first; k <= last && len(shifts) < maxWorldCopies; k++ {
+		shifts = append(shifts, 360*k)
+	}
+	return
 }
 
 // meets reports whether a country's extent overlaps the viewport box. It is

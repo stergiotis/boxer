@@ -19,10 +19,6 @@ import (
 // the gate (ADR-0134 SD1).
 const maxColumnNameLen = 256
 
-// maxBareIdentLen bounds a bare (unquoted) identifier — a dataset alias or
-// handle — which must stay safe to interpolate without quoting.
-const maxBareIdentLen = 64
-
 // StructureFor renders the ClickHouse structure string — a comma-joined
 // list of backtick-quoted `name Type` columns — that the
 // `url(...,'ArrowStream',<structure>)` read of a sealed dataset is handed,
@@ -255,7 +251,7 @@ func scalarTypeFor(dt arrow.DataType, colName string) (chType string, err error)
 // checkColumnName rejects an empty or over-long identifier (a top-level
 // column or a nested Tuple field name), naming col — the enclosing top-level
 // column — for context. Every other byte is legal because the name is
-// backtick-quoted (quoteIdent), so the bounded set of physical names a
+// backtick-quoted and escaped (quoteIdent), so the bounded set of physical names a
 // leeway columnar schema carries passes unchanged.
 func checkColumnName(name, col string) (err error) {
 	if name == "" {
@@ -268,35 +264,14 @@ func checkColumnName(name, col string) (err error) {
 }
 
 // quoteIdent backtick-quotes a ClickHouse identifier, doubling any embedded
-// backtick, so a name carrying colons, dashes, or spaces is carried verbatim
-// into the structure string. The structure string is itself wrapped as a
+// backslash and backtick, so a name carrying colons, dashes, spaces or
+// backslashes is carried verbatim into the structure string: ClickHouse
+// reads backslash escapes inside a backtick-quoted identifier, so a bare
+// backslash would escape the closing backtick or turn `\t` into a tab. The
+// structure string is itself wrapped as a
 // single-quoted SQL literal downstream (the url() rewrite), which escapes
 // the quote and backslash bytes; a backtick is not
 // special in that literal, so the two escaping layers do not interfere.
 func quoteIdent(name string) string {
-	return "`" + strings.ReplaceAll(name, "`", "``") + "`"
-}
-
-// validColumnName reports whether name is a bare ClickHouse identifier —
-// `[A-Za-z_][A-Za-z0-9_]*`, up to maxBareIdentLen bytes — safe to
-// interpolate unquoted. Column names in the structure string no longer need
-// this (they are backtick-quoted); it guards nested field names and stays
-// the rule a dataset alias and handle satisfy, which stay bare so they can
-// name a table and a frontmatter binding without quoting.
-func validColumnName(name string) (ok bool) {
-	if name == "" || len(name) > maxBareIdentLen {
-		return
-	}
-	for i := 0; i < len(name); i++ {
-		c := name[i]
-		valid := c == '_' ||
-			(c >= 'a' && c <= 'z') ||
-			(c >= 'A' && c <= 'Z') ||
-			(i > 0 && c >= '0' && c <= '9')
-		if !valid {
-			return
-		}
-	}
-	ok = true
-	return
+	return "`" + strings.ReplaceAll(strings.ReplaceAll(name, `\`, `\\`), "`", "``") + "`"
 }

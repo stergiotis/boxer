@@ -1,7 +1,6 @@
 package markdown
 
 import (
-	"iter"
 	"slices"
 	"strings"
 
@@ -10,17 +9,17 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian/resolver"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/zeebo/xxh3"
 )
 
 // Doc is a parsed Obsidian-flavored markdown document. Construct with
-// [Parse]; render once or many times via [Doc.Render]. Doc is immutable
+// [Parse] or [ParseWith]; render once or many times via [Render]. Doc is immutable
 // after construction and safe to share across goroutines provided the
 // frame-time render path remains single-threaded.
 //
 // imageMaxW / imageMaxH cap the bounding box for FitAspectMaxE on
 // inline images sourced from [resolver.ResolverI.LoadImage] — see
-// [WithImageMaxSize] for the exact meaning, including what a zero axis
-// does. Pixels are decoded once at parse time, stashed on a
+// [ParseOptions.ImageMaxW] for the exact meaning. Pixels are decoded once at parse time, stashed on a
 // runKindImage paragraph run, and re-sent every frame; the bindings
 // doc-comment at [c.ImageVersionTracker] explicitly recommends skipping
 // the tracker for static assets ("the per-widget-id one-shot upload
@@ -98,7 +97,7 @@ func (inst *Doc) Dropped() (kinds []KindCount) {
 // target across a retitling. The anchor is sanitised the same way, so
 // Slug is in one form whatever its origin, and it is stripped from Text
 // — see [obsidian.FeatureHeadingAnchor] for the syntax and
-// [WithFeatures] to turn it off.
+// [ParseOptions.Features] to turn it off.
 //
 // HeadingInfo is what callers feed to a help/TOC sidebar or a section
 // jump table; the inline styling (bold/italic/code spans inside the
@@ -122,7 +121,7 @@ type HeadingInfo struct {
 // across frames (Go's map iteration is not, which would otherwise
 // re-shuffle frontmatter UI every frame).
 //
-// Returns nil when frontmatter is disabled (see [WithFeatures]) or
+// Returns nil when frontmatter is disabled (see [ParseOptions.Features]) or
 // when the source contains none.
 func (inst *Doc) Frontmatter() (fm *containers.BinarySearchGrowingKV[string, any]) {
 	fm = inst.frontmatter
@@ -151,34 +150,74 @@ func SlugHeading(text string) (slug string) {
 	return
 }
 
-// Render emits the document into the current egui Ui scope, deriving
-// ids for embedded widgets (code blocks, blockquotes, callouts, inline
-// images) from ids.PrepareSeq(0), PrepareSeq(1), … in document order.
-//
-// Render does NOT open its own [bindings.IdScope]. Callers that may
-// render multiple instances of any markdown doc under the same parent
-// scope MUST wrap the call:
-//
-//	for range c.IdScope(ids.PrepareStr("help-section")) {
-//	    helpDoc.Render(ids)
-//	}
-//
-// Rendering inside a layout container that owns its own id context (a
-// [bindings.CollapsingHeader] body, [bindings.Window] body, etc.)
-// usually does not need an extra wrap — the outer container already
-// scopes the ids.
-func (inst *Doc) Render(ids *c.WidgetIdStack, opts ...RenderOpt) {
-	inst.renderCollect(ids, nil, false, opts)
+// Input is one frame's render request for a parsed [Doc].
+type Input struct {
+	// Ids is the host's widget id stack. Render opens one IdScope under it
+	// keyed by ScopeKey, so two documents under one parent differ by
+	// ScopeKey alone (ADR-0267 W4).
+	Ids *c.WidgetIdStack
+	// ScopeKey names this render site; empty uses "markdown". A host that
+	// filters sections should vary it with the filter state — see
+	// SectionFilter.
+	ScopeKey string
+	// Doc is the parsed document. A nil Doc draws nothing.
+	Doc *Doc
+
+	// ScrollToSection schedules an egui ScrollArea scroll-to-top exactly
+	// once, when the heading whose [SlugHeading] matches it is about to
+	// render. Empty is a no-op. The underlying [bindings.ScrollToCursor] op
+	// is dropped when the doc renders outside a ScrollArea, so it is safe in
+	// tooltip and popup contexts. Hosts gate it on their own
+	// selection-just-changed signal: passing the same slug every frame keeps
+	// re-scrolling and prevents the reader from scrolling away.
+	ScrollToSection string
+
+	// ActionLabels, when non-empty, places one small button per label above
+	// every code/verbatim block (left to right); a click is reported in
+	// [Result.Actions]. CodeView's own selectable text (Ctrl+C) is present
+	// either way.
+	ActionLabels []string
+	// CodeActionFilter limits which blocks carry the action row. It runs
+	// during layout, once per block, and must be a pure function of the
+	// block; nil accepts every block. Withholding the buttons here is the
+	// only way to avoid showing an affordance the host cannot act on.
+	CodeActionFilter func(text string, lang string) bool
+	// CodeActionMask picks which of ActionLabels a block carries: bit i
+	// shows label i, and a block with no bit set carries no row. It runs
+	// after CodeActionFilter, under the same purity rule; nil shows every
+	// label. A clicked button keeps its index into ActionLabels.
+	CodeActionMask func(text string, lang string) uint64
+
+	// LinkClaims lets the host take ownership of the links it recognises:
+	// true makes a link an in-document link — visually a link, but a widget
+	// whose click arrives in [Result.Links] — and false leaves it an
+	// ordinary hyperlink. It runs every frame, once per link, and must be a
+	// pure function of the URL. Nil disables routing.
+	LinkClaims func(url string) bool
+
+	// SectionFilter renders only the sections it admits: the region before
+	// the first heading is consulted as slug "", each top-level heading
+	// (with everything under it, to the next top-level heading) as its
+	// [SlugHeading] slug. It must be a pure function of the slug for the
+	// frame; expanding an accepted section to its subsections is the
+	// host's job. Two consequences (ADR-0164 §SD4): skipping segments
+	// shifts the ids of the non-code widgets that still render, so vary
+	// ScopeKey with the filter state; and ScrollToSection cannot count
+	// across skipped headings, so a filter disarms it.
+	SectionFilter func(slug string) bool
+
+	// Frontmatter appends the parsed YAML frontmatter as a labeled list
+	// after the body; see [RenderFrontmatter] for the layout.
+	Frontmatter bool
 }
 
 // CodeBlockAction is one code/verbatim block whose action button was
-// clicked during a [Doc.RenderActions]/[Doc.RenderActionsN] frame. Text is
-// the block's verbatim source (what the author wrote, before the
-// highlighter's canonicalisation); Lang is the normalised fence language
-// ("go", "sql", "" for an unlabelled/indented block); Index is the block's
-// 0-based ordinal among the code blocks in the document, stable across
-// frames. Button is the 0-based index of the clicked button within the
-// label list — always 0 for the single-button [Doc.RenderActions].
+// clicked this frame. Text is the block's verbatim source (what the author
+// wrote, before the highlighter's canonicalisation); Lang is the normalised
+// fence language ("go", "sql", "" for an unlabelled/indented block); Index
+// is the block's 0-based ordinal among the code blocks rendered, stable
+// across frames for an unchanged document and filter. Button is the 0-based
+// index of the clicked label in [Input.ActionLabels].
 type CodeBlockAction struct {
 	Text   string
 	Lang   string
@@ -186,83 +225,68 @@ type CodeBlockAction struct {
 	Button int
 }
 
-// RenderActions renders the document like [Doc.Render] but additionally
-// places a small button labelled `label` above every code/verbatim
-// block, and returns the blocks whose button was clicked this frame.
-//
-// It is an immediate-mode API: the whole document is drawn eagerly when
-// RenderActions is called (the returned sequence merely replays clicks
-// already captured), so ranging over it, breaking early, or ignoring it
-// entirely all leave the same pixels on screen. A single frame can yield
-// more than one action when the user clicks several buttons before the
-// next paint, so the sequence may produce zero, one, or many values.
-//
-// Typical use — wire the button to any per-block action:
-//
-//	for act := range doc.RenderActions(ids, "Copy", markdown.WithScrollToSection(s)) {
-//		text := act.Text
-//		go func() { _, _ = bus.Request(clipboardbroker.SubjectWrite, []byte(text)) }()
-//	}
-//
-// The renderer itself performs no action — it only reports clicks; the
-// caller decides what a click means. CodeView's built-in selectable text
-// (Ctrl+C) is unaffected and present whether or not buttons are shown.
-func (inst *Doc) RenderActions(ids *c.WidgetIdStack, label string, opts ...RenderOpt) iter.Seq[CodeBlockAction] {
-	actions := inst.renderCollect(ids, []string{label}, true, opts)
-	return slices.Values(actions)
+// LinkClick is one claimed link clicked this frame.
+type LinkClick struct {
+	Label string
+	URL   string
 }
 
-// RenderActionsN is [Doc.RenderActions] with more than one button per
-// code/verbatim block: it places one small button for each entry of labels
-// (left to right, in a horizontal row) above every block, and returns the
-// blocks whose button was clicked this frame, each [CodeBlockAction]
-// carrying the 0-based index of the clicked button in its Button field.
-// [Doc.RenderActions] is the single-button special case. The same
-// immediate-mode contract applies — the document is drawn eagerly and the
-// sequence merely replays this frame's clicks.
-//
-//	for act := range doc.RenderActionsN(ids, []string{"Insert", "Replace"}) {
-//		switch act.Button {
-//		case 0:
-//			insertAtCursor(act.Text)
-//		case 1:
-//			replaceBuffer(act.Text)
-//		}
-//	}
-func (inst *Doc) RenderActionsN(ids *c.WidgetIdStack, labels []string, opts ...RenderOpt) iter.Seq[CodeBlockAction] {
-	actions := inst.renderCollect(ids, labels, true, opts)
-	return slices.Values(actions)
+// Result is what one Render reports.
+type Result struct {
+	// Actions are the code-block buttons clicked this frame, in document
+	// order; a frame can hold more than one.
+	Actions []CodeBlockAction
+	// Links are the claimed links clicked this frame ([Input.LinkClaims]).
+	// A host that navigates in response records the intent and acts on it
+	// after the frame.
+	Links []LinkClick
 }
 
-// renderCollect is the shared render core. actionsEnabled gates the
-// per-code-block action buttons (one per actionLabels entry); when true the
-// returned slice holds every block whose button was clicked this frame, in
-// document order. [Doc.Render] calls it with actions disabled (nil return);
-// [Doc.RenderActions]/[Doc.RenderActionsN] wrap the slice as an iter.Seq.
-func (inst *Doc) renderCollect(ids *c.WidgetIdStack, actionLabels []string, actionsEnabled bool, opts []RenderOpt) (actions []CodeBlockAction) {
-	var ro renderOptions
-	for _, opt := range opts {
-		opt(&ro)
+// Render emits the document into the current egui Ui scope. It opens one
+// IdScope keyed by ScopeKey; a code block's widgets are keyed on the block
+// itself (its language and text, plus its occurrence among identical
+// blocks), so a block keeps its id — and egui's memory of it — when blocks
+// are inserted above it. The remaining embedded widgets (blockquotes,
+// callouts, tables, images, claimed links) take ids in document order.
+func Render(in Input) (res Result) {
+	doc := in.Doc
+	if doc == nil || in.Ids == nil {
+		return
 	}
+	scopeKey := in.ScopeKey
+	if scopeKey == "" {
+		scopeKey = "markdown"
+	}
+	for range c.IdScope(in.Ids.PrepareStr(scopeKey)) {
+		res = doc.render(in)
+		if in.Frontmatter {
+			doc.renderFrontmatter()
+		}
+	}
+	return
+}
+
+// render is the shared render core, called inside the Render scope.
+func (inst *Doc) render(in Input) (res Result) {
 	rc := renderCtx{
-		ids:            ids,
+		ids:            in.Ids,
 		imageMaxW:      inst.imageMaxW,
 		imageMaxH:      inst.imageMaxH,
-		scrollToSlug:   ro.scrollToSlug,
+		scrollToSlug:   in.ScrollToSection,
 		headings:       inst.headings,
-		actionsEnabled: actionsEnabled,
-		actionLabels:   actionLabels,
-		linkClaims:     ro.linkClaims,
-		linkClicked:    ro.linkClicked,
-		actionAccept:   ro.actionAccept,
+		actionsEnabled: len(in.ActionLabels) > 0,
+		actionLabels:   in.ActionLabels,
+		linkClaims:     in.LinkClaims,
+		actionAccept:   in.CodeActionFilter,
+		actionMask:     in.CodeActionMask,
 	}
 	var visible []bool
-	if ro.sectionAccept != nil {
-		visible = visibleSegments(inst.segments, inst.headings, ro.sectionAccept)
+	if in.SectionFilter != nil {
+		visible = visibleSegments(inst.segments, inst.headings, in.SectionFilter)
 		// Skipped headings would desynchronise the scroll dispatch's
 		// heading ordinals (renderCtx.headingIdx), so a section filter
 		// disarms scroll-to-section outright — the documented
-		// incompatibility on [WithSectionFilter], enforced rather than
+		// incompatibility on [Input.SectionFilter], enforced rather than
 		// left to the caller.
 		rc.scrollToSlug = ""
 	}
@@ -272,7 +296,8 @@ func (inst *Doc) renderCollect(ids *c.WidgetIdStack, actionLabels []string, acti
 		}
 		inst.segments[i].render(&rc)
 	}
-	actions = rc.codeActions
+	res.Actions = rc.codeActions
+	res.Links = rc.links
 	return
 }
 
@@ -298,113 +323,6 @@ func visibleSegments(segments []segment, headings []HeadingInfo, accept func(slu
 	return
 }
 
-// RenderOpt configures a single [Doc.Render] call. Construct via the
-// `With*` helpers; passing options to one call does not affect later
-// calls — every Render starts from defaults.
-type RenderOpt func(*renderOptions)
-
-type renderOptions struct {
-	scrollToSlug  string
-	linkClaims    func(url string) bool
-	linkClicked   func(label string, url string)
-	actionAccept  func(text string, lang string) bool
-	sectionAccept func(slug string) bool
-}
-
-// WithScrollToSection asks the next [Doc.Render] to schedule an egui
-// ScrollArea scroll-to-top exactly once, when the heading whose
-// [SlugHeading] matches slug is about to render. Empty slug is a
-// no-op. The underlying [bindings.ScrollToCursor] op is silently
-// dropped when the doc renders outside a ScrollArea, so passing this
-// hint is safe even in tooltip / popup contexts that don't scroll.
-//
-// Callers are expected to gate this option on their own
-// "selection-just-changed" signal — re-passing the same slug every
-// frame keeps re-scrolling and prevents the user from scrolling
-// away. See helphost.HelpHost for the typical "last-scrolled vs
-// currently-selected" guard.
-func WithScrollToSection(slug string) (opt RenderOpt) {
-	opt = func(o *renderOptions) {
-		o.scrollToSlug = slug
-	}
-	return
-}
-
-// WithLinkRouter lets the host take ownership of the links it recognises,
-// so a link into content the host itself can display navigates in place
-// instead of leaving for a browser.
-//
-// `claims` runs during layout, once per link, and decides how that link
-// RENDERS: true makes it an in-document link — visually a link, but a widget
-// whose click the host hears about — and false leaves it the ordinary
-// [c.HyperlinkTo] hyperlink. It must be a pure function of the URL, because
-// it is consulted every frame and a link that changes shape mid-scroll reads
-// as a glitch.
-//
-// `clicked` fires during the render of the frame the click landed on. That is
-// the immediate-mode contract the code-block actions already follow: the
-// document is drawn eagerly and the callback merely reports what the user
-// did to it. A host that navigates in response should record the intent and
-// act on it, rather than re-entering Render from inside the callback.
-//
-// Either function may be nil, which disables routing entirely.
-func WithLinkRouter(claims func(url string) bool, clicked func(label string, url string)) (opt RenderOpt) {
-	opt = func(o *renderOptions) {
-		o.linkClaims = claims
-		o.linkClicked = clicked
-	}
-	return
-}
-
-// WithCodeActionFilter limits which fenced blocks carry an action-button row.
-//
-// `accept` runs during layout, once per block, and decides whether that block
-// gets the buttons at all. Without it every fenced block gets them, and a host
-// that can only act on some kinds is left suppressing the CLICK while the
-// BUTTONS still render — which shows the reader an affordance that does
-// nothing. Deciding it here is the only place the buttons can be withheld.
-//
-// It must be a pure function of the block, because it is consulted every
-// frame. Nil accepts everything, which is the default and the behaviour
-// before this existed.
-func WithCodeActionFilter(accept func(text string, lang string) bool) (opt RenderOpt) {
-	opt = func(o *renderOptions) {
-		o.actionAccept = accept
-	}
-	return
-}
-
-// WithSectionFilter renders only the sections accept admits: the
-// doc-level region before the first heading is consulted as slug "",
-// and each top-level heading (with everything under it, to the next
-// top-level heading) as its [SlugHeading] slug. Filtering to a matched
-// section usually wants its subsections too — expanding the accepted
-// set to descendants is the caller's job (help/search.ExpandDescendants),
-// because only the caller knows its hit semantics. `accept` must be a
-// pure function of the slug for the frame, like the other With* hooks.
-//
-// Two consequences to design around (ADR-0164 §SD4):
-//
-//   - Skipping segments shifts the seq-derived ids of everything that
-//     still renders (the "ID derivation order" invariant in
-//     EXPLANATION.md), so wrap a filtered render in an IdScope keyed
-//     by the filter state — abandoning per-widget egui state on filter
-//     change is the accepted cost. Keep the UNfiltered path outside
-//     that scope so its state survives.
-//   - [WithScrollToSection] cannot work across skipped headings (the
-//     dispatch counts heading ordinals); combining them disarms the
-//     scroll rather than corrupting it.
-//
-// [CodeBlockAction.Index] stays the ordinal within the *rendered*
-// subset — consumers that key on it must not mix indices across
-// different filters.
-func WithSectionFilter(accept func(slug string) bool) (opt RenderOpt) {
-	opt = func(o *renderOptions) {
-		o.sectionAccept = accept
-	}
-	return
-}
-
 // renderCtx threads the per-Render-invocation id sequence counter and
 // the configured fit cap through the recursive segment walk. A single
 // instance is allocated per Render call and threaded by pointer;
@@ -419,12 +337,12 @@ type renderCtx struct {
 	// been reached, and exists only so a heading knows whether it opens
 	// the document. A leading heading takes no gap above it; every later
 	// one does. It tracks what actually rendered, so under
-	// [WithSectionFilter] the first ADMITTED segment is the one treated
+	// [Input.SectionFilter] the first ADMITTED segment is the one treated
 	// as the start.
 	emittedAny bool
 
 	// Scroll-to-section state. scrollToSlug is the caller-provided
-	// target ([WithScrollToSection]); empty disables the dispatch.
+	// target ([Input.ScrollToSection]); empty disables the dispatch.
 	// headings mirrors [Doc.headings] for slug→ordinal lookup at
 	// render time, and headingIdx is bumped as the walker emits each
 	// heading segment so the dispatch matches against the correct
@@ -433,30 +351,74 @@ type renderCtx struct {
 	headings     []HeadingInfo
 	headingIdx   int
 
-	// Code-block action state ([Doc.RenderActions]/[Doc.RenderActionsN]).
+	// Code-block action state ([Input.ActionLabels]).
 	// When actionsEnabled is set, each code block emits one small button per
 	// actionLabels entry (in a horizontal row); a click appends a
 	// [CodeBlockAction] (carrying the clicked button's 0-based index) to
 	// codeActions. codeBlockIdx is bumped per code block so each action
 	// carries a stable 0-based ordinal. All are zero/empty under the plain
-	// [Doc.Render] path.
+	// action-less path.
 	actionsEnabled bool
 	actionLabels   []string
 	codeActions    []CodeBlockAction
 	codeBlockIdx   int
 
-	// Link routing state ([WithLinkRouter]). Both nil under the plain path,
-	// which is what keeps every link an ordinary hyperlink.
-	linkClaims  func(url string) bool
-	linkClicked func(label string, url string)
+	// Link routing state ([Input.LinkClaims]). Nil under the plain path,
+	// which is what keeps every link an ordinary hyperlink; claimed clicks
+	// collect in links.
+	linkClaims func(url string) bool
+	links      []LinkClick
 
-	// actionAccept gates the per-block action buttons ([WithCodeActionFilter]).
+	// actionAccept gates the per-block action buttons ([Input.CodeActionFilter]).
 	// Nil accepts every block.
 	actionAccept func(text string, lang string) bool
+	// actionMask picks the labels per block ([Input.CodeActionMask]).
+	actionMask func(text string, lang string) uint64
 }
 
-// Option configures [Parse]. Pass options at construction time.
-type Option func(*config)
+// ParseOptions configures [ParseWith]; its zero value is [Parse]'s
+// behaviour.
+type ParseOptions struct {
+	// Features overrides the default obsidian feature set; zero keeps the
+	// default. The default covers everything the renderer can lower:
+	// frontmatter, GFM (tables, strikethrough, task lists), wikilinks,
+	// embeds, callouts, ==highlight== and %%comment%% stripping, `#tag`
+	// spans, `{#anchor}` heading anchors ([obsidian.FeatureHeadingAnchor],
+	// which feeds [HeadingInfo.Slug]), and footnotes
+	// ([obsidian.FeatureFootnote]: a superscript `[n]` whose hover tooltip
+	// is the definition, plus the definitions as a numbered list at the
+	// end — ADR-0255).
+	//
+	// The default set does NOT include math: [obsidian.FeatureMath] is
+	// declared and reserved but wired to nothing, and is deliberately not
+	// part of [obsidian.FeatureAll]; setting it changes neither parse nor
+	// render.
+	//
+	// Enabling a feature the lowering does not handle is worse than leaving
+	// it off: an unrecognised inline node reaches the default branch of
+	// emitInline and is DROPPED, so the text disappears from the document
+	// rather than rendering unstyled. Every flag in the default set has a
+	// case, and [Doc.Dropped] reports whatever still got skipped.
+	Features obsidian.FeatureE
+
+	// Resolver supplies a custom wikilink/embed resolver; nil keeps
+	// [resolver.NoopResolver], which generates `/page#heading` URLs without
+	// vault knowledge. The resolver's LoadImage is consulted at parse time
+	// to decode inline images (CommonMark `![alt](url)` and Obsidian
+	// `![[file.png]]`) into RGBA8 pixels; NoopResolver returns ok=false, so
+	// the default is the glyph-hyperlink fallback.
+	Resolver resolver.ResolverI
+
+	// ImageMaxW / ImageMaxH cap the bounding box used when rendering inline
+	// images: an image larger than the box is scaled down
+	// aspect-preserving to fit inside it; zero on an axis keeps that axis's
+	// default (800 × 600). The cap only ever shrinks — an image smaller
+	// than the box renders at its native size (ADR-0180 item 5). The cap is
+	// per-Doc, not per-image; Obsidian's `![[img.png|300]]` size suffix is
+	// parsed off and ignored.
+	ImageMaxW uint32
+	ImageMaxH uint32
+}
 
 type config struct {
 	features  obsidian.FeatureE
@@ -466,7 +428,7 @@ type config struct {
 }
 
 // imageMaxDefaultW / imageMaxDefaultH are the FitAspectMaxE bounding box
-// used when WithImageMaxSize is not supplied. Tuned for typical
+// used when ParseOptions.ImageMaxW / ImageMaxH are zero. Tuned for typical
 // embedded screenshots and asset previews in a sidebar or panel layout;
 // callers driving full-width content (e.g. a Markdown reader window)
 // should override.
@@ -492,88 +454,32 @@ func defaultConfig() (cfg config) {
 	return
 }
 
-// WithFeatures overrides the default obsidian feature set. The default
-// covers everything the renderer can lower: frontmatter, GFM (tables,
-// strikethrough, task lists), wikilinks, embeds, callouts, ==highlight==
-// and %%comment%% stripping, `#tag` spans, `{#anchor}` heading
-// anchors ([obsidian.FeatureHeadingAnchor], which feeds
-// [HeadingInfo.Slug]), and footnotes ([obsidian.FeatureFootnote]: a
-// superscript `[n]` whose hover tooltip is the definition, plus the
-// definitions as a numbered list at the end — ADR-0255).
-//
-// The default set does NOT include math: [obsidian.FeatureMath] is
-// declared and reserved but wired to nothing, and is deliberately not part
-// of [obsidian.FeatureAll]; setting it changes neither parse nor render.
-//
-// Enabling a feature the lowering does not handle is worse than leaving it
-// off: an unrecognised inline node reaches the default branch of emitInline
-// and is DROPPED, so the text disappears from the document rather than
-// rendering unstyled. Every flag in the default set has a case, and
-// [Doc.Dropped] reports whatever still got skipped.
-func WithFeatures(features obsidian.FeatureE) (opt Option) {
-	opt = func(cfg *config) {
-		cfg.features = features
-	}
-	return
-}
-
-// WithResolver supplies a custom wikilink/embed resolver. Defaults to
-// [resolver.NoopResolver] which generates `/page#heading` URLs without
-// vault knowledge. Vault-aware UIs implement [resolver.ResolverI] and
-// pass it via this option so wikilinks land on real notes.
-//
-// The resolver's LoadImage method is consulted at parse time to decode
-// inline images (CommonMark `![alt](url)` and Obsidian `![[file.png]]`)
-// into RGBA8 pixels. NoopResolver returns ok=false from LoadImage, so
-// the default behaviour is the pre-image-widget glyph-hyperlink
-// fallback. Supply a vault-aware resolver to opt into real inline
-// image rendering.
-func WithResolver(r resolver.ResolverI) (opt Option) {
-	opt = func(cfg *config) {
-		if r != nil {
-			cfg.resolver = r
-		}
-	}
-	return
-}
-
-// WithImageMaxSize caps the bounding box used when rendering inline
-// images: an image larger than (maxW × maxH) is scaled down
-// aspect-preserving to fit inside it. Zero on an axis means "no cap on
-// that axis". Defaults are (800, 600).
-//
-// The cap only ever shrinks. An image smaller than the box renders at
-// its native size, never blown up to fill it — the renderer passes
-// min(cap, native) per axis rather than the cap itself. This is a
-// deliberate change of an exported option's semantics (ADR-0180 item 5):
-//
-//   - A zero axis used to mean "fill available", which inside a vertical
-//     ScrollArea — where every markdown document lives — measures ~0 and
-//     collapsed the image to nothing. Nobody wants that in a reader.
-//   - The cap used to be a target rather than a ceiling, so a 128×80
-//     asset under the default box rendered upscaled and soft.
-//
-// The cap is per-Doc, not per-image; Obsidian's `![[img.png|300]]` size
-// suffix is parsed off and ignored (honouring it needs a per-run cap).
-func WithImageMaxSize(maxW uint32, maxH uint32) (opt Option) {
-	opt = func(cfg *config) {
-		cfg.imageMaxW = maxW
-		cfg.imageMaxH = maxH
-	}
-	return
-}
-
-// Parse parses obsidian-flavored markdown and returns a renderable
-// [Doc]. Hoist the result to a package-level var to amortise parse cost
-// across many render frames — it mirrors the
+// Parse parses obsidian-flavored markdown with the default options and
+// returns a renderable [Doc]. Hoist the result to a package-level var to
+// amortise parse cost across many render frames — it mirrors the
 // [codeview.PrepareSql] retain-once / render-many pattern.
-func Parse(md []byte, opts ...Option) (doc *Doc) {
+func Parse(md []byte) (doc *Doc) {
+	return ParseWith(md, ParseOptions{})
+}
+
+// ParseWith is [Parse] under opts.
+func ParseWith(md []byte, opts ParseOptions) (doc *Doc) {
 	cfg := defaultConfig()
-	for _, opt := range opts {
-		opt(&cfg)
+	if opts.Features != 0 {
+		cfg.features = opts.Features
+	}
+	if opts.Resolver != nil {
+		cfg.resolver = opts.Resolver
+	}
+	if opts.ImageMaxW != 0 {
+		cfg.imageMaxW = opts.ImageMaxW
+	}
+	if opts.ImageMaxH != 0 {
+		cfg.imageMaxH = opts.ImageMaxH
 	}
 
 	segments, frontmatter, headings, dropped := parseAndLower(md, &cfg)
+	assignCodeKeys(segments, map[uint64]uint64{})
 	doc = &Doc{
 		segments:    segments,
 		frontmatter: frontmatter,
@@ -583,6 +489,25 @@ func Parse(md []byte, opts ...Option) (doc *Doc) {
 		imageMaxH:   cfg.imageMaxH,
 	}
 	return
+}
+
+// assignCodeKeys gives every code block, at any depth, an id key derived
+// from its language and text plus its occurrence among identical blocks
+// seen so far in document order. The key is what the block's widgets are
+// scoped under, so a block keeps its id when other blocks are inserted
+// or removed around it; only an edit to the block itself, or to an
+// identical block before it, moves it.
+func assignCodeKeys(segments []segment, seen map[uint64]uint64) {
+	for i := range segments {
+		s := &segments[i]
+		if s.kind == segKindCodeBlock {
+			h := xxh3.HashString(s.codeLang + "\x00" + s.codeText)
+			n := seen[h]
+			seen[h] = n + 1
+			s.codeKey = h ^ (n * 0x9e3779b97f4a7c15)
+		}
+		assignCodeKeys(s.children, seen)
+	}
 }
 
 // segKindE tags a segment in the lowered document tree.
@@ -654,7 +579,7 @@ type paragraphRun struct {
 //   - segKindCodeBlock:                  code holds the retained job;
 //     codeText holds the verbatim source
 //     and codeLang the fence language,
-//     both surfaced by [Doc.RenderActions].
+//     both surfaced by [Result.Actions].
 //   - segKindList:                       children is a slice of segKindListItem
 //     segments; listOrdered + listStart
 //     drive the bullet glyph. For an
@@ -690,8 +615,10 @@ type segment struct {
 	kind               segKindE
 	runs               []paragraphRun
 	code               typed.RetainedFffiHolderTyped[c.CodeViewJobS]
+	codeBuilt          bool // code holds the job built from codeText/codeLang
 	codeText           string
 	codeLang           string
+	codeKey            uint64 // widget id key; see assignCodeKeys
 	children           []segment
 	headingLevel       uint8
 	listOrdered        bool
