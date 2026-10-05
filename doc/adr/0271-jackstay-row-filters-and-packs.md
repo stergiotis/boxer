@@ -257,15 +257,15 @@ as unfiltered. Callers of the engine wrap their source client in
 
 ## Status
 
-Proposed 2026-10-02.
+Proposed 2026-10-02. M1–M4 landed 2026-10-02; the decision awaits review.
 
-### M1 — Row filters: validation, both sides, clear, journal, CLI and wizard field
+### M1 — Row filters: validation, both sides, clear, journal, CLI and wizard field ✓
 
-### M2 — `SourceI`: the source side behind one interface
+### M2 — `SourceI`: the source side behind one interface ✓
 
-### M3 — Export to a pack, with resume
+### M3 — Export to a pack, with resume ✓
 
-### M4 — A pack as the source of structure, diff and sync
+### M4 — A pack as the source of structure, diff and sync ✓
 
 Deferred:
 
