@@ -271,9 +271,16 @@ func (inst *App) renderSurfaceGraph(w float32) {
 			Auras: graphview.AuraParams{Enabled: true, Overlap: true}})
 	}
 	_ = sv.gv.Render(sv.nodes, sv.edges, w, surfaceGraphH)
+	inst.renderSurfaceHover()
+	inst.renderSurfaceLegend()
+}
+
+// renderSurfaceHover is the hovered node's line under the graph.
+func (inst *App) renderSurfaceHover() {
+	sv := &inst.surface
 	id, ok := sv.gv.HoveredNode()
 	if !ok {
-		weak("colour: status · ring: calls by outcome · faded: not granted or above the ceiling")
+		weak("hover a node for its detail, a legend entry for what it means")
 		return
 	}
 	i, isCell := sv.cellOf[id]
@@ -287,6 +294,119 @@ func (inst *App) renderSurfaceGraph(w float32) {
 		line += " · " + u
 	}
 	c.Label(line).Selectable(false).Send()
+}
+
+// legendEntry is one key of the graph's legend: a glyph in a tone, a
+// short label and what it means, shown on hover.
+type legendEntry struct {
+	glyph string
+	tone  styletokens.RGBA8
+	label string
+	tip   string
+}
+
+// legendGroup is one encoding of the graph — shape, colour, ring, size —
+// with its entries, perRow to a row: a wrapped row breaks a trailing label
+// letter by letter.
+type legendGroup struct {
+	title  string
+	tip    string
+	perRow int
+	keys   []legendEntry
+}
+
+// statusTip says what a status means for a call the model makes.
+func statusTip(s agent.CellStatusE) (tip string) {
+	switch s {
+	case agent.CellStatusAboveCeiling:
+		return "The chat's settings refuse this whatever the task's grant holds; raise the ceiling in Settings to allow it."
+	case agent.CellStatusNotGranted:
+		return "No grant of the running task covers this. A call asks you to widen the grant first."
+	case agent.CellStatusObserveOnly:
+		return "The window is shared in observe mode and this operation changes something. A call asks you to raise the mode to act."
+	case agent.CellStatusGranted:
+		return "A call goes through — or reaches you as a proposal, where the window's mode or the operation's effect says so."
+	}
+	return ""
+}
+
+// useTips say what became of a call, by outcome.
+var useTips = [useCount]string{
+	"The host let the call through: queued, applied or completed.",
+	"The call waits on you, or went to you, as a proposal you accept or reject in the window.",
+	"The call was outside the grant: you were asked to widen it.",
+	"The call was refused, denied, rejected by you, or lost a conflict with a newer change.",
+	"The call failed, expired or was cancelled.",
+}
+
+func surfaceLegend() (groups []legendGroup) {
+	status := legendGroup{title: "colour", tip: "A leaf's colour is where it stands under the settings and the task's grant.", perRow: 2}
+	for _, st := range []agent.CellStatusE{agent.CellStatusGranted, agent.CellStatusObserveOnly, agent.CellStatusNotGranted, agent.CellStatusAboveCeiling} {
+		status.keys = append(status.keys, legendEntry{glyph: "●", tone: statusTone(st), label: statusLabel(st), tip: statusTip(st)})
+	}
+	ring := legendGroup{title: "ring", tip: "A ring around a leaf splits the calls the model made to it by what became of them. A leaf without a ring was not called.", perRow: 3}
+	for u := range useCount {
+		ring.keys = append(ring.keys, legendEntry{glyph: "◯", tone: useTones[u], label: useNames[u], tip: useTips[u]})
+	}
+	groups = []legendGroup{
+		{title: "nodes", tip: "The graph is a tree around this conversation: one hub per group, one leaf per thing the model could do.", perRow: 3, keys: []legendEntry{
+			{glyph: "●", tone: styletokens.AccentDefault, label: "conversation", tip: "This conversation, at the centre: what the model reaches, it reaches from here."},
+			{glyph: "●", tone: styletokens.NeutralStrong, label: "hub", tip: "A group: an open window, opening a window of an app, or arranging the desktop. The shaded region around a hub's leaves is the same group."},
+			{glyph: "•", tone: styletokens.NeutralTextSecondary, label: "leaf", tip: "One thing the model could do: an operation of a window, opening an app's window, or an arrangement of the desktop."},
+		}},
+		status,
+		ring,
+		{title: "size", tip: "How much the model used a leaf.", perRow: 2, keys: []legendEntry{
+			{glyph: "●", tone: styletokens.NeutralTextSecondary, label: "larger: more calls", tip: "A leaf grows with the square root of its calls in this conversation, and its edge thickens up to six calls."},
+			{glyph: "●", tone: styletokens.NeutralTextDisabled, label: "faded: out of reach", tip: "A faded leaf is not granted or above the ceiling: a call to it would not go through as things stand."},
+		}},
+	}
+	return
+}
+
+// renderSurfaceLegend is the key under the graph: each encoding by name,
+// its entries in their colours, and on hover what an entry means.
+func (inst *App) renderSurfaceLegend() {
+	c.AddSpace(4)
+	for gi, g := range surfaceLegend() {
+		for range c.IdScope(inst.ids.PrepareStr("surface-legend-" + strconv.Itoa(gi))) {
+			for start := 0; start < len(g.keys); start += g.perRow {
+				for range c.HorizontalTop().KeepIter() {
+					title := ""
+					if start == 0 {
+						title = g.title
+					}
+					for range c.HoverText(g.tip).KeepIter() {
+						for rt := range c.RichTextLabel(padRight(title, legendTitleW)) {
+							rt.Small().Strong().Monospace()
+						}
+					}
+					for _, k := range g.keys[start:min(start+g.perRow, len(g.keys))] {
+						for range c.HoverText(k.tip).KeepIter() {
+							for range c.HorizontalTop().KeepIter() {
+								for rt := range c.RichTextLabelColored(color.Hex(k.tone.AsHex()), color.Transparent, k.glyph) {
+									rt.Small()
+								}
+								for rt := range c.RichTextLabel(k.label) {
+									rt.Small()
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+// legendTitleW lines the legend's entries up behind their group's title.
+const legendTitleW = 6
+
+func padRight(s string, n int) string {
+	if pad := n - len([]rune(s)); pad > 0 {
+		s += strings.Repeat(" ", pad)
+	}
+	return s
 }
 
 const nodeRoot uint64 = 1

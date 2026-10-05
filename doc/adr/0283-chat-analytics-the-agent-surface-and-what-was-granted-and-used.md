@@ -123,7 +123,9 @@ radial layout: the conversation at the centre, a hub per window, one for
 launches and one for the desktop, a leaf per cell; colour by status, a donut
 of call outcomes on used cells, `not-granted` and `above-ceiling` faded, one
 aura per hub, edge width by call count. Hovering a leaf names its cell under
-the graph. A toggle switches between them. *Open in play* publishes the cells as the ad-hoc dataset `chat_surface`
+the graph, and a legend under it names each encoding — the node kinds, the
+status colours, the ring's outcomes, size and fading — with what each entry
+means on hover; the colours are the ones the graph draws with. A toggle switches between them. *Open in play* publishes the cells as the ad-hoc dataset `chat_surface`
 beside `chat_turns` and `chat_calls`.
 
 ### SD4 — The panel is renamed

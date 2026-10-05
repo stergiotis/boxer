@@ -45,6 +45,8 @@ used, with one call each.
 {"do":"wait","valueContains":"1 call: 1 done","role":"label","nth":0}
 {"do":"wait","valueContains":"1 call: 1 done","role":"label","nth":3,"comment":"four used cells, one call each"}
 {"do":"click","name":"As graph","role":"button","comment":"the same cells as a graph"}
-{"do":"wait","valueContains":"colour: status","role":"label","settleMs":1500}
+{"do":"wait","valueContains":"hover a node for its detail","role":"label","settleMs":1500}
+{"do":"scroll_into_view","value":"observe only","role":"label","settleMs":500,"comment":"the legend's colour key"}
+{"do":"hover","value":"observe only","role":"label","settleMs":800,"comment":"a legend entry explains itself on hover"}
 {"do":"capture","text":"chat-analytics-graph"}
 ```
