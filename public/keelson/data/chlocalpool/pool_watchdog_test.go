@@ -93,7 +93,7 @@ func TestPool_WatchdogLogsAgeSinceAcquisitionNotSpawn(t *testing.T) {
 		if m == nil {
 			continue
 		}
-		if msg, _ := m["message"].(string); msg == "chlocalpool: watchdog reaping forgotten worker" {
+		if msg, _ := m["message"].(string); msg == "watchdog reaping forgotten worker" {
 			line = m
 			break
 		}

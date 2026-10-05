@@ -12,52 +12,31 @@
 // avoiding the engine=Memory leakage and format-framing problems
 // that motivated ADR-0028's O2 rejection.
 //
-// M1 of ADR-0028 (per §SD9): standalone package, no bus or broker
-// integration. Consumable directly via Pool.Acquire for testing
-// and direct Go callers. M2 wraps this in chlocalbroker.
+// The pool mechanics — refill, watchdog, stop — are
+// [github.com/stergiotis/boxer/public/keelson/runtime/procpool]
+// (ADR-0285, proposed); this package supplies the clickhouse-local
+// worker and ADR-0028 §SD3's defaults.
 package chlocalpool
 
 import (
 	"context"
 	"os"
-	"sync"
-	"time"
 
 	"github.com/rs/zerolog"
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/keelson/runtime/procpool"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Pool manages a set of clickhouse-local worker processes per the
-// supplied Config. New launches refill and watchdog goroutines; the
-// caller MUST invoke Stop on shutdown to drain workers and join the
-// goroutines.
+// supplied Config. The caller MUST invoke Stop on shutdown to drain
+// workers and join the pool's goroutines.
 type Pool struct {
-	cfg    Config
-	logger zerolog.Logger
-
-	idle          chan *Worker
-	spawnSem      chan struct{}
-	refillTrigger chan struct{}
-	stopCh        chan struct{}
-	bg            sync.WaitGroup
-
-	// stopOnce guards the single teardown; stopDone closes once it has
-	// finished, so every Stop caller — including one retrying after its own
-	// deadline expired — waits on the same completion signal.
-	stopOnce sync.Once
-	stopDone chan struct{}
-
-	mu            sync.Mutex
-	stopped       bool
-	live          int
-	pendingSpawns int
-	tracked       map[*Worker]struct{}
-	acquired      map[*Worker]time.Time
+	cfg   Config
+	inner *procpool.Pool[*Worker]
 }
 
 // New constructs a Pool, validates cfg, probes the binary, and
-// kicks off the refill goroutine to fill MinIdle workers.
+// starts filling MinIdle workers.
 func New(cfg Config, logger zerolog.Logger) (p *Pool, err error) {
 	if cfg.BinaryPath == "" {
 		cfg.BinaryPath = resolveBinaryPath()
@@ -70,21 +49,19 @@ func New(cfg Config, logger zerolog.Logger) (p *Pool, err error) {
 		err = eb.Build().Str("binaryPath", cfg.BinaryPath).Errorf("chlocalpool: binary: %w", statErr)
 		return
 	}
-	p = &Pool{
-		cfg:           cfg,
-		logger:        logger,
-		idle:          make(chan *Worker, cfg.MaxConcurrent),
-		spawnSem:      make(chan struct{}, cfg.SpawnConcurrency),
-		refillTrigger: make(chan struct{}, 1),
-		stopCh:        make(chan struct{}),
-		stopDone:      make(chan struct{}),
-		tracked:       make(map[*Worker]struct{}),
-		acquired:      make(map[*Worker]time.Time),
+	inner, err := procpool.New(procpool.Config{
+		MinIdle:          cfg.MinIdle,
+		MaxConcurrent:    cfg.MaxConcurrent,
+		SpawnConcurrency: cfg.SpawnConcurrency,
+		// newWorker bounds Start by SpawnTimeout itself; the pool's
+		// deadline covers the wait for a spawn slot as well.
+		SpawnTimeout:        cfg.SpawnTimeout * 4,
+		WatchdogMaxLifetime: cfg.WatchdogMaxLifetime,
+	}, procpool.SpawnerI[*Worker](spawner{cfg: cfg}), logger)
+	if err != nil {
+		return
 	}
-	p.bg.Add(2)
-	go p.refillLoop()
-	go p.watchdogLoop()
-	p.signalRefill() // kick the initial fill
+	p = &Pool{cfg: cfg, inner: inner}
 	return
 }
 
@@ -97,122 +74,15 @@ func New(cfg Config, logger zerolog.Logger) (p *Pool, err error) {
 // The caller MUST eventually Close the returned worker to release
 // its slot in the pool and free OS resources.
 func (inst *Pool) Acquire(ctx context.Context) (w *Worker, err error) {
-	// Fast path: pop an idle worker.
-	select {
-	case w = <-inst.idle:
-		err = inst.claim(w)
-		if err != nil {
-			w = nil
-		}
-		return
-	default:
-	}
-
-	// Idle empty: see if we can spawn on demand.
-	inst.mu.Lock()
-	if inst.stopped {
-		inst.mu.Unlock()
-		err = eh.Errorf("chlocalpool: pool stopped")
-		return
-	}
-	canSpawn := inst.live+inst.pendingSpawns < int(inst.cfg.MaxConcurrent)
-	if canSpawn {
-		inst.pendingSpawns++
-	}
-	inst.mu.Unlock()
-
-	if canSpawn {
-		w, err = inst.spawnAndCount(ctx)
-		if err != nil {
-			return
-		}
-		err = inst.claim(w)
-		if err != nil {
-			w = nil
-		}
-		return
-	}
-
-	// Pool maxed; block. A stopping pool can present both a buffered
-	// worker and a closed stopCh, and select picks between ready cases at
-	// random — claim is what makes the outcome deterministic.
-	select {
-	case w = <-inst.idle:
-		err = inst.claim(w)
-		if err != nil {
-			w = nil
-		}
-		return
-	case <-ctx.Done():
-		err = eh.Errorf("chlocalpool: acquire cancelled: %w", ctx.Err())
-		return
-	case <-inst.stopCh:
-		err = eh.Errorf("chlocalpool: pool stopped")
-		return
-	}
+	return inst.inner.AcquireE(ctx)
 }
 
-// Stop drains the pool: closes every tracked worker, joins the
-// refill / watchdog / in-flight spawn goroutines. Aggressive — any
-// worker the caller still holds will be terminated under it.
-//
-// The teardown runs once, but every call waits for it to finish and
-// reports honestly under its own ctx. A caller whose deadline expires gets
-// an error and can call again to keep waiting; the second call does not
-// report success while workers are still being reaped.
+// Stop drains the pool: closes every worker, joins the refill and
+// watchdog goroutines. Aggressive — any worker the caller still holds
+// is terminated under it. Every call waits for the one teardown under
+// its own ctx, so a caller whose deadline expired can call again.
 func (inst *Pool) Stop(ctx context.Context) (err error) {
-	inst.stopOnce.Do(inst.beginStop)
-	select {
-	case <-inst.stopDone:
-		return
-	case <-ctx.Done():
-		err = eh.Errorf("chlocalpool: stop timed out: %w", ctx.Err())
-		return
-	}
-}
-
-// beginStop closes the pool to new work and launches the teardown that
-// closes stopDone when the last worker and background goroutine is gone.
-// Runs exactly once, under stopOnce.
-func (inst *Pool) beginStop() {
-	inst.mu.Lock()
-	inst.stopped = true
-	close(inst.stopCh)
-	workers := make([]*Worker, 0, len(inst.tracked))
-	for w := range inst.tracked {
-		workers = append(workers, w)
-	}
-	inst.mu.Unlock()
-
-	// Empty the idle buffer. Everything in it is also in tracked and so is
-	// closed below, but leaving the entries buffered keeps reaped workers
-	// reachable by a racing Acquire and leaves Stats reporting idle workers
-	// against a live count of zero. Nothing sends to idle after this point:
-	// refillSpawnOnce only reaches its send once spawnAndCount has returned
-	// successfully, and spawnAndCount refuses to register under a stopped
-	// pool.
-drain:
-	for {
-		select {
-		case <-inst.idle:
-		default:
-			break drain
-		}
-	}
-
-	go func() {
-		defer close(inst.stopDone)
-		var wg sync.WaitGroup
-		for _, w := range workers {
-			wg.Add(1)
-			go func(w *Worker) {
-				defer wg.Done()
-				_ = w.Close()
-			}(w)
-		}
-		wg.Wait()
-		inst.bg.Wait()
-	}()
+	return inst.inner.StopE(ctx)
 }
 
 // Stats snapshots the pool's current cardinality. Useful for tests
@@ -226,227 +96,23 @@ type Stats struct {
 }
 
 func (inst *Pool) Stats() (s Stats) {
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
-	s.Live = inst.live
-	s.Idle = len(inst.idle)
-	s.Acquired = len(inst.acquired)
-	s.PendingSpawns = inst.pendingSpawns
-	s.Stopped = inst.stopped
+	ps := inst.inner.Stats()
+	s = Stats{
+		Live:          ps.Live,
+		Idle:          ps.Idle,
+		Acquired:      ps.Acquired,
+		PendingSpawns: ps.PendingSpawns,
+		Stopped:       ps.Stopped,
+	}
 	return
 }
 
-// claim hands a worker to the caller: it records the moment of handover
-// for the watchdog to age out forgotten Closes, and nudges the refill
-// goroutine.
-//
-// It refuses, and closes, a worker drawn after the pool stopped. Taking
-// inst.mu is what settles the race with Stop, which sets stopped and
-// snapshots tracked under that same lock: either this claim registers
-// before the snapshot — and Stop reaps the worker under its caller, the
-// documented aggressive behaviour — or it observes stopped and refuses.
-// Without the refusal, Acquire hands back a worker whose subprocess Stop
-// has already reaped, with a nil error.
-func (inst *Pool) claim(w *Worker) (err error) {
-	inst.mu.Lock()
-	if inst.stopped {
-		inst.mu.Unlock()
-		_ = w.Close()
-		err = eh.Errorf("chlocalpool: pool stopped")
-		return
-	}
-	inst.acquired[w] = time.Now()
-	inst.mu.Unlock()
-	inst.signalRefill()
-	return
+type spawner struct {
+	cfg Config
 }
 
-// workerClosed is the Worker→Pool callback invoked from Worker.Close
-// after the subprocess has been reaped and the tmpdir removed.
-func (inst *Pool) workerClosed(w *Worker) {
-	inst.mu.Lock()
-	delete(inst.acquired, w)
-	if _, ok := inst.tracked[w]; ok {
-		delete(inst.tracked, w)
-		inst.live--
-	}
-	needSignal := !inst.stopped && len(inst.idle)+inst.pendingSpawns < int(inst.cfg.MinIdle) &&
-		inst.live+inst.pendingSpawns < int(inst.cfg.MaxConcurrent)
-	inst.mu.Unlock()
-	if needSignal {
-		inst.signalRefill()
-	}
+func (inst spawner) SpawnE(ctx context.Context, release procpool.ReleaseFunc) (w *Worker, err error) {
+	return newWorker(ctx, inst.cfg, release)
 }
 
-// signalRefill nudges the refill goroutine to re-check depth.
-// Non-blocking: a single buffered slot collapses repeated nudges.
-func (inst *Pool) signalRefill() {
-	select {
-	case inst.refillTrigger <- struct{}{}:
-	default:
-	}
-}
-
-// spawnAndCount spawns one worker, registering it in the pool's
-// live/tracked bookkeeping on success. Caller must have already
-// incremented pendingSpawns under the lock. On any return path,
-// pendingSpawns is decremented (success or failure).
-func (inst *Pool) spawnAndCount(ctx context.Context) (w *Worker, err error) {
-	// Bounded parallelism on spawns.
-	select {
-	case inst.spawnSem <- struct{}{}:
-	case <-ctx.Done():
-		inst.decPendingSpawns()
-		err = eh.Errorf("chlocalpool: spawn cancelled: %w", ctx.Err())
-		return
-	case <-inst.stopCh:
-		inst.decPendingSpawns()
-		err = eh.Errorf("chlocalpool: pool stopped during spawn wait")
-		return
-	}
-	defer func() { <-inst.spawnSem }()
-
-	spawnCtx, cancel := context.WithTimeout(ctx, inst.cfg.SpawnTimeout*4)
-	defer cancel()
-	w, err = newWorker(spawnCtx, inst)
-	if err != nil {
-		inst.decPendingSpawns()
-		return
-	}
-
-	inst.mu.Lock()
-	if inst.stopped {
-		inst.pendingSpawns--
-		inst.mu.Unlock()
-		_ = w.Close()
-		w = nil
-		err = eh.Errorf("chlocalpool: pool stopped during spawn")
-		return
-	}
-	inst.live++
-	inst.pendingSpawns--
-	inst.tracked[w] = struct{}{}
-	inst.mu.Unlock()
-	return
-}
-
-func (inst *Pool) decPendingSpawns() {
-	inst.mu.Lock()
-	inst.pendingSpawns--
-	inst.mu.Unlock()
-}
-
-// refillLoop consumes refillTrigger nudges and keeps len(idle) +
-// pendingSpawns >= MinIdle, bounded by MaxConcurrent.
-func (inst *Pool) refillLoop() {
-	defer inst.bg.Done()
-	for {
-		select {
-		case <-inst.stopCh:
-			return
-		case <-inst.refillTrigger:
-		}
-		for inst.tryStartRefillSpawn() {
-		}
-	}
-}
-
-func (inst *Pool) tryStartRefillSpawn() (started bool) {
-	inst.mu.Lock()
-	if inst.stopped {
-		inst.mu.Unlock()
-		return
-	}
-	if len(inst.idle)+inst.pendingSpawns >= int(inst.cfg.MinIdle) {
-		inst.mu.Unlock()
-		return
-	}
-	if inst.live+inst.pendingSpawns >= int(inst.cfg.MaxConcurrent) {
-		inst.mu.Unlock()
-		return
-	}
-	inst.pendingSpawns++
-	inst.mu.Unlock()
-
-	inst.bg.Add(1)
-	go inst.refillSpawnOnce()
-	return true
-}
-
-func (inst *Pool) refillSpawnOnce() {
-	defer inst.bg.Done()
-
-	// Use a parent context that observes stopCh so a slow spawn unblocks
-	// on shutdown.
-	parent, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go func() {
-		select {
-		case <-inst.stopCh:
-			cancel()
-		case <-parent.Done():
-		}
-	}()
-
-	w, err := inst.spawnAndCount(parent)
-	if err != nil {
-		inst.logger.Warn().Err(err).Msg("chlocalpool: refill spawn failed")
-		return
-	}
-	select {
-	case inst.idle <- w:
-	case <-inst.stopCh:
-		_ = w.Close()
-	}
-}
-
-// watchdogLoop reaps acquired workers older than WatchdogMaxLifetime.
-// Idle workers are left alone — they sit on stdin without consuming
-// CPU and have nothing to leak. This is the belt-and-suspenders for
-// forgotten Worker.Close calls (ADR-0028 §SD3).
-func (inst *Pool) watchdogLoop() {
-	defer inst.bg.Done()
-	tick := max(inst.cfg.WatchdogMaxLifetime/4, 50*time.Millisecond)
-	t := time.NewTicker(tick)
-	defer t.Stop()
-	for {
-		select {
-		case <-inst.stopCh:
-			return
-		case <-t.C:
-			inst.watchdogSweep()
-		}
-	}
-}
-
-// reapCandidate carries the acquisition time alongside the worker so the
-// sweep can report the age it actually judged.
-type reapCandidate struct {
-	w          *Worker
-	acquiredAt time.Time
-}
-
-func (inst *Pool) watchdogSweep() {
-	deadline := inst.cfg.WatchdogMaxLifetime
-	now := time.Now()
-	var candidates []reapCandidate
-	inst.mu.Lock()
-	for w, acquiredAt := range inst.acquired {
-		if now.Sub(acquiredAt) > deadline {
-			candidates = append(candidates, reapCandidate{w: w, acquiredAt: acquiredAt})
-		}
-	}
-	inst.mu.Unlock()
-	for _, c := range candidates {
-		// acquired_age used to be logged as time since bornAt — the spawn
-		// time, not the handover — so it read high by however long the
-		// worker sat idle first, and did not match the deadline the sweep
-		// had just applied. Both ages are reported now, under their own
-		// names.
-		inst.logger.Warn().
-			Dur("acquired_age", now.Sub(c.acquiredAt)).
-			Dur("worker_age", now.Sub(c.w.bornAt)).
-			Msg("chlocalpool: watchdog reaping forgotten worker")
-		_ = c.w.Close()
-	}
-}
+var _ procpool.SpawnerI[*Worker] = spawner{}

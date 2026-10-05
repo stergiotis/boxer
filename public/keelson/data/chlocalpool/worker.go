@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/extbin"
+	"github.com/stergiotis/boxer/public/keelson/runtime/procpool"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -21,13 +22,14 @@ import (
 // single-use per ADR-0028 §SD3 — once submitted they exit and are
 // not returned to the pool.
 type Worker struct {
-	pool   *Pool
-	cmd    *exec.Cmd
-	stdin  io.WriteCloser
-	stdout io.ReadCloser
-	stderr *capBuffer
-	tmpdir string
-	bornAt time.Time
+	release   procpool.ReleaseFunc
+	killGrace time.Duration
+	cmd       *exec.Cmd
+	stdin     io.WriteCloser
+	stdout    io.ReadCloser
+	stderr    *capBuffer
+	tmpdir    string
+	bornAt    time.Time
 
 	submitOnce sync.Once
 	submitErr  error
@@ -40,12 +42,9 @@ type Worker struct {
 	closeErr  error
 }
 
-// newWorker spawns a clickhouse-local subprocess per cfg. The
-// returned Worker is registered in pool.live by the caller (the
-// pool holds the mutex during spawn ordering).
-func newWorker(ctx context.Context, p *Pool) (w *Worker, err error) {
-	cfg := p.cfg
-
+// newWorker spawns a clickhouse-local subprocess per cfg. release is
+// called once, at the end of Close.
+func newWorker(ctx context.Context, cfg Config, release procpool.ReleaseFunc) (w *Worker, err error) {
 	tmpdir, err := os.MkdirTemp(cfg.BaseTmpDir, "chlocal-*")
 	if err != nil {
 		err = eh.Errorf("chlocalpool: mktemp: %w", err)
@@ -118,14 +117,15 @@ func newWorker(ctx context.Context, p *Pool) (w *Worker, err error) {
 	}
 
 	w = &Worker{
-		pool:     p,
-		cmd:      cmd,
-		stdin:    stdin,
-		stdout:   stdout,
-		stderr:   stderr,
-		tmpdir:   tmpdir,
-		bornAt:   time.Now(),
-		waitDone: make(chan struct{}),
+		release:   release,
+		killGrace: cfg.KillGrace,
+		cmd:       cmd,
+		stdin:     stdin,
+		stdout:    stdout,
+		stderr:    stderr,
+		tmpdir:    tmpdir,
+		bornAt:    time.Now(),
+		waitDone:  make(chan struct{}),
 	}
 	return
 }
@@ -240,9 +240,9 @@ func (inst *Worker) Close() (err error) {
 				inst.closeErr = eb.Build().Str("tmpdir", inst.tmpdir).Errorf("chlocalpool: rm tmpdir: %w", rmErr)
 			}
 		}
-		// Notify pool last so the live count drops after cleanup.
-		if inst.pool != nil {
-			inst.pool.workerClosed(inst)
+		// Release last so the slot counts as free only after cleanup.
+		if inst.release != nil {
+			inst.release()
 		}
 	})
 	err = inst.closeErr
@@ -260,7 +260,7 @@ func (inst *Worker) reapWithGrace() {
 	}()
 	select {
 	case <-reapDone:
-	case <-time.After(inst.pool.cfg.KillGrace):
+	case <-time.After(inst.killGrace):
 		if inst.cmd.Process != nil {
 			_ = inst.cmd.Process.Kill()
 		}

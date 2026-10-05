@@ -557,6 +557,18 @@ the broker has no config struct of its own.
 holding `ch.local.exec.<pool>` could otherwise grow the host until the OOM
 killer ended every app in it.
 
+### 2026-10-05 — the pool mechanics moved to procpool
+
+§SD3's refill, ceiling, watchdog and stop now live in
+[`github.com/stergiotis/boxer/public/keelson/runtime/procpool`](../../public/keelson/runtime/procpool)
+behind a spawner ([ADR-0285](./0285-procpool-pre-spawned-workers-behind-a-spawner.md),
+proposed), so an engine other than ClickHouse can use them. `chlocalpool`
+keeps its exported API and its defaults and supplies the `clickhouse local`
+worker. Two observable differences: the pool's log lines lose their
+`chlocalpool:` prefix, and a spare whose process exits while idle is dropped
+rather than handed out — a ClickHouse worker reports that only once its
+caller waits on it, so in practice nothing changes for this pool.
+
 ## References
 
 - [ADR-0026 — App runtime and capability subjects](./0026-app-runtime-and-capability-subjects.md) — parent framework; this ADR extends §SD3 (subject taxonomy) and §SD10 (capslock).
