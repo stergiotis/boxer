@@ -163,10 +163,7 @@ func TestTranscriptModel(t *testing.T) {
 	assert.NotZero(t, m.Flags[2]&chatview.FlagEdited)
 	assert.Equal(t, 2, kinds[2].entry)
 	assert.True(t, kinds[3].pending)
-	before := m.Body[2]
-	conv.entries[2].failed = false
-	m, _ = transcriptModel(conv, false, 30)
-	assert.NotEqual(t, before, m.Body[2], "a bubble whose actions change is measured again")
+	assert.Equal(t, "q2", m.Body[2], "the thread layout measures nothing, so a body is its text alone")
 }
 
 // Regenerate and Edit take the last answered turn back: the next request

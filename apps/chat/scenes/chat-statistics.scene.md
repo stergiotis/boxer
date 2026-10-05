@@ -42,8 +42,8 @@ opens a play window that reads the turns.
 {"do":"wait","valueContains":"1 turns · 1 answered","role":"label","settleMs":1000}
 {"do":"capture","text":"chat-statistics","sidecars":["tree"]}
 {"do":"click","name":"As graph","role":"button","comment":"the same cells as a graph"}
-{"do":"wait","valueContains":"colour: status","role":"label","settleMs":1500}
-{"do":"scroll_into_view","valueContains":"colour: status","role":"label"}
+{"do":"wait","valueContains":"hover a node for its detail","role":"label","settleMs":1500}
+{"do":"scroll_into_view","valueContains":"hover a node for its detail","role":"label"}
 {"do":"capture","text":"chat-statistics-graph"}
 {"do":"click","contains":"Open in play","role":"button"}
 {"do":"wait","valueContains":"surface cells as chat_surface","role":"label","comment":"published and play asked for"}

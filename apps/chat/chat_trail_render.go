@@ -242,13 +242,12 @@ func stepCopy(s *trailStep) string {
 	return b.String()
 }
 
-// renderToolEntry is a landed tool call's line in the transcript, as
-// chatview draws a system line, and its steps folded under Details.
+// renderToolEntry is a landed tool call's line in the transcript, from the
+// left edge as the thread's messages are, and its steps folded under
+// Details.
 func (inst *App) renderToolEntry(e *entry) {
-	for range c.VerticalCentered().KeepIter() {
-		c.LabelAtoms(c.Atoms().BeginRichText("⚙ " + e.text).Small().Weak().Italics().End().Keep()).
-			Wrap().Selectable(false).Send()
-	}
+	c.LabelAtoms(c.Atoms().BeginRichText("⚙ " + e.text).Small().Weak().Italics().End().Keep()).
+		Wrap().Selectable(false).Send()
 	if len(e.steps) == 0 {
 		return
 	}

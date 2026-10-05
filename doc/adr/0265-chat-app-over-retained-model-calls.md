@@ -105,9 +105,13 @@ its own (SD5).
 
 ### SD4 — What the app shows
 
-- **The transcript** is chatview over the in-memory history, every
-  message body — the user's as well as the model's — rendered as
-  markdown, with the message's actions under it: Copy on every message,
+- **The transcript** is chatview over the in-memory history in its
+  thread layout (ADR-0239, update of 2026-10-05): every message a
+  full-width block from the left edge, the person's tinted, under a line
+  with the sender and the time; a tool call's line sits at the left edge as
+  well. Long answers, code and the tool trail get the pane's width, and
+  nothing is right-aligned, so no body is measured. Every message body —
+  the user's as well as the model's — is rendered as markdown, with the message's actions under it: Copy on every message,
   Retry and Edit on a failed last turn, Edit on an answered one, and
   Regenerate on the last answer (SD3). A reply's code blocks carry Copy,
   and an `sql` block Open in play, which opens a play window with the
@@ -414,7 +418,9 @@ Revised in place on 2026-10-04 for SD7, built and tested against a scripted
 model: the form's validation and reply, and a turn that waits for the form,
 is skipped, or is cancelled while it waits.
 
-Revised in place on 2026-10-05 for SD6: the trail of a turn, live and kept
+Revised in place on 2026-10-05 for SD4: the transcript in chatview's
+thread layout instead of a dialogue of bubbles. Revised in place on
+2026-10-05 for SD6: the trail of a turn, live and kept
 on its tool lines, and the rounds per turn as a setting in a configured
 range; built, unit-tested against a scripted model, and scene-run in
 [chat-trail](../../apps/chat/scenes/chat-trail.scene.md), whose scripted

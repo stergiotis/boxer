@@ -534,7 +534,7 @@ func (inst *App) renderTranscript() {
 	}()
 	chatview.Render(chatview.Input{
 		Ids: inst.ids, ScopeKey: "transcript", Model: m, State: &inst.view,
-		Viewer: 0, Layout: chatview.LayoutDialogue, Location: time.Local, FillHost: true,
+		Viewer: 0, Layout: chatview.LayoutThread, Location: time.Local, FillHost: true,
 		InteractiveBlocks: true, SystemBlocks: true,
 		Block: func(ord int) (chatview.Block, bool) {
 			k := kinds[ord]
@@ -727,12 +727,7 @@ type ordinalKind struct {
 
 // transcriptModel builds the chatview model: participant 0 is the user,
 // 1 the model, ordinal i is entry i and the waiting bubble comes last. A
-// failed user message is marked failed; its bubble draws why.
-//
-// A message's Body is its text and, after a NUL, what decides the actions
-// drawn under it: chatview fits the user's bubbles to a body measured once
-// per Body, so a bubble that gains a row — a failure, Retry — has to be
-// measured again.
+// failed user message is marked failed; its block draws why.
 func transcriptModel(conv *conversation, pending bool, nowMs int64) (m *chatview.Model, kinds []ordinalKind) {
 	m = &chatview.Model{Participants: []chatview.Participant{{Name: "You"}, {Name: "Model"}}}
 	add := func(atMs int64, sender int32, body string, flags chatview.FlagsE, status chatview.StatusE, k ordinalKind) {
@@ -747,8 +742,6 @@ func transcriptModel(conv *conversation, pending bool, nowMs int64) (m *chatview
 		m.Status = append(m.Status, status)
 		kinds = append(kinds, k)
 	}
-	last := conv.lastUser()
-	rewind := conv.canRewind()
 	for i, e := range conv.entries {
 		if e.speaker == speakerTool {
 			// The coordinator's activity: a tool call and how it ended.
@@ -767,11 +760,7 @@ func transcriptModel(conv *conversation, pending bool, nowMs int64) (m *chatview
 		if e.edited {
 			flags |= chatview.FlagEdited
 		}
-		body := e.text
-		if e.speaker == speakerUser {
-			body += "\x00" + strconv.FormatBool(e.failed) + strconv.FormatBool(i == last && (e.failed || rewind))
-		}
-		add(e.atMs, sender, body, flags, status, ordinalKind{entry: i})
+		add(e.atMs, sender, e.text, flags, status, ordinalKind{entry: i})
 	}
 	if pending {
 		add(nowMs, 1, "…", 0, chatview.StatusNone, ordinalKind{entry: -1, pending: true})
