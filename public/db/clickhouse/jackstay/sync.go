@@ -281,7 +281,7 @@ func SyncTable(ctx context.Context, src SourceI, dst ClientI, pt *PlanTable, j *
 	case pt.Sync.Mode == SyncModeSample && (pt.Sync.SampleDen == 0 || pt.Sync.SampleNum == 0 || pt.Sync.SampleNum > pt.Sync.SampleDen):
 		err = eb.Build().Str("table", pt.Source.String()).Errorf("invalid sample fraction")
 	case pt.Sync.Mode != SyncModeFull && src.limits().noSubsets:
-		err = eb.Build().Str("table", pt.Source.String()).Str("mode", pt.Sync.Mode.String()).Errorf("%s holds whole chunks only; sync it in full", src.limits().what)
+		err = eb.Build().Str("table", pt.Source.String()).Str("mode", pt.Sync.Mode.String()).Errorf("%s holds whole chunks only; sync it in full", src.limits().what) //boxer:lint disable=CS013 reason="shape 2: the source's noun phrase is the sentence's subject"
 	}
 	if err != nil {
 		return

@@ -506,7 +506,7 @@ func DiffPlanTable(ctx context.Context, src SourceI, dst QueryI, pt *PlanTable, 
 		return
 	}
 	if final && src.limits().noFinal {
-		err = eb.Build().Str("table", pt.Source.String()).Errorf("%s cannot be read with FINAL", src.limits().what)
+		err = eb.Build().Str("table", pt.Source.String()).Errorf("%s cannot be read with FINAL", src.limits().what) //boxer:lint disable=CS013 reason="shape 2: the source's noun phrase is the sentence's subject"
 		return
 	}
 	if pt.Chunking == nil {
