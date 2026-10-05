@@ -376,7 +376,7 @@ func TestReadHelpGivesTheModelTheAppsDocumentation(t *testing.T) {
 func TestTheLastRoundAsksForAnAnswer(t *testing.T) {
 	bus := inprocbus.NewInst(zerolog.Nop())
 	var replies []openaichat.CompletionResponse
-	for i := 0; i < maxRounds-1; i++ {
+	for i := 0; i < defaultRounds-1; i++ {
 		replies = append(replies, toolCall("l"+strconv.Itoa(i), "list_windows", `{}`))
 	}
 	replies = append(replies, openaichat.CompletionResponse{Content: "Here is what I found.", FinishReason: "stop"})
@@ -391,12 +391,12 @@ func TestTheLastRoundAsksForAnAnswer(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, res.stopped)
 	assert.Equal(t, "Here is what I found.", res.final.Content)
-	assert.Len(t, rounds, maxRounds, "every round is reported")
+	assert.Len(t, rounds, defaultRounds, "every round is reported")
 
 	model.mu.Lock()
 	defer model.mu.Unlock()
-	require.Len(t, model.seen, maxRounds)
-	last := model.seen[maxRounds-1]
+	require.Len(t, model.seen, defaultRounds)
+	last := model.seen[defaultRounds-1]
 	assert.Equal(t, "none", last.ToolChoice)
 	assert.Equal(t, lastRoundNote, last.Messages[len(last.Messages)-1].Content)
 	assert.Empty(t, model.seen[0].ToolChoice, "earlier rounds leave the choice to the model")

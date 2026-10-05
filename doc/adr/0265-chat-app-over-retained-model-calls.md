@@ -225,9 +225,14 @@ through the host:
 - **A turn.** Before the first model call the app asks the host for the
   changes others made since the previous turn (`runtime.agent.turn`) and
   puts them before the person's message; then it alternates model calls
-  and tool calls, at most 24 rounds, and the transcript shows each tool
-  call as a system line — also when the turn stops without an answer, which,
-  unanswered, is not resent.
+  and tool calls for at most the chat's rounds per turn, and the
+  transcript shows each tool call as a system line — also when the turn
+  stops without an answer, which, unanswered, is not resent. The person
+  sets the rounds per turn in Settings, within `BOXER_CHAT_ROUNDS_MIN` and
+  `BOXER_CHAT_ROUNDS_MAX` (24 to start with); a change applies from the
+  next turn, and the last round offers no tools, so a turn that reaches it
+  still answers. The fixed prompt says the rounds are limited without
+  naming the number, since the number can change within a conversation.
 - **The trail.** While a turn runs, the waiting bubble lists its steps
   as they happen — each model call with its tokens and the tools it asked
   for, each tool call with its title and time, the running one with how
@@ -407,7 +412,8 @@ model: the form's validation and reply, and a turn that waits for the form,
 is skipped, or is cancelled while it waits.
 
 Revised in place on 2026-10-05 for SD6: the trail of a turn, live and kept
-on its tool lines; built, unit-tested against a scripted model, and scene-run in
+on its tool lines, and the rounds per turn as a setting in a configured
+range; built, unit-tested against a scripted model, and scene-run in
 [chat-trail](../../apps/chat/scenes/chat-trail.scene.md), whose scripted
 model holds one reply back (`delayMs`) so the turn can be looked at while it
 runs.

@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -90,3 +91,27 @@ func TestANilTrailRecordsNothing(t *testing.T) {
 	assert.False(t, changed)
 }
 
+// The person's limit on rounds bounds the turn: its last round offers no
+// tools, and a limit outside the configured range is brought into it.
+func TestAChatsRoundLimitBoundsTheTurn(t *testing.T) {
+	bus := inprocbus.NewInst(zerolog.Nop())
+	var replies []openaichat.CompletionResponse
+	for i := range 10 {
+		replies = append(replies, toolCall("l"+strconv.Itoa(i), "list_windows", `{}`))
+	}
+	model := &scriptedModel{replies: replies}
+	_, coord, cli, req, ctx := coordRig(t, bus, model, false)
+	coord.setRounds(5)
+	_, err := runTurn(ctx, cli, coord, req, nil)
+	require.NoError(t, err)
+	model.mu.Lock()
+	defer model.mu.Unlock()
+	require.Len(t, model.seen, 5)
+	assert.Equal(t, "none", model.seen[4].ToolChoice)
+
+	lo, hi := roundRange()
+	coord.setRounds(1)
+	assert.Equal(t, lo, coord.roundLimit())
+	coord.setRounds(100000)
+	assert.Equal(t, hi, coord.roundLimit())
+}

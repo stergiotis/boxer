@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
@@ -26,11 +27,49 @@ import (
 // dispatcher, and what comes back from an app reaches the model delimited
 // and attributed, as data. Nothing here touches the UI.
 
-// maxRounds bounds the model calls of one turn: a guard against a model
-// that never stops calling tools. The host's call budget per task is what
-// bounds the calls themselves. The last round offers no tools, so a turn
-// that reaches it still ends with an answer.
-const maxRounds = 24
+// The rounds of a turn bound its model calls: a guard against a model that
+// never stops calling tools. The host's call budget per task is what bounds
+// the calls themselves. The last round offers no tools, so a turn that
+// reaches it still ends with an answer. The person picks the limit per chat
+// in Settings, within RoundsMinEnv and RoundsMaxEnv; defaultRounds is where
+// it starts.
+const (
+	defaultRounds   = 24
+	defaultRoundsLo = 4
+	defaultRoundsHi = 96
+)
+
+var RoundsMinEnv = env.NewInt(env.Spec{
+	Name:        "BOXER_CHAT_ROUNDS_MIN",
+	Default:     "4",
+	Description: "the fewest rounds of model calls a chat turn with tools may be given in the chat's Settings; the last round of a turn offers no tools, so it ends with an answer",
+	Category:    env.CategoryE("boxer-chat"),
+})
+
+var RoundsMaxEnv = env.NewInt(env.Spec{
+	Name:        "BOXER_CHAT_ROUNDS_MAX",
+	Default:     "96",
+	Description: "the most rounds of model calls a chat turn with tools may be given in the chat's Settings",
+	Category:    env.CategoryE("boxer-chat"),
+})
+
+// roundRange is the range the Settings slider offers.
+func roundRange() (lo int, hi int) {
+	if lo = int(RoundsMinEnv.Get()); lo < 2 {
+		// One round would be the last, with no tools at all.
+		lo = 2
+	}
+	return lo, max(int(RoundsMaxEnv.Get()), lo)
+}
+
+// clampRounds is n within roundRange; zero is defaultRounds.
+func clampRounds(n int) int {
+	if n == 0 {
+		n = defaultRounds
+	}
+	lo, hi := roundRange()
+	return min(max(n, lo), hi)
+}
 
 // lastRoundNote is the host's word to the model on the last round.
 const lastRoundNote = "You have used every round of tool calls this turn allows. Answer the person now with what you found, and say what is still open; no tool can be called."
@@ -55,7 +94,7 @@ const coordinatorPrompt = `You can work in app windows the person shares with yo
 - Before writing SQL in play, look for a worked query: list_snippets finds them by words and read_snippet gives the SQL; list_functions says which functions a query may call and where each runs.
 - A task runs for a limited time. When a call says its deadline passed, request_access asks the person for more time; when it says the task ended, request_access starts a new one.
 - keelson('windows') lists every open window — its key, app, title, rect (x, y, w, h), stacking rank, whether it is active or maximized, and the tasks holding it — and keelson('desktop') the work area windows are laid out in; query_windows reads either with a SELECT. arrange_windows lays windows out (cascade, tile, columns, rows, gather), all of them or the ones you name, and needs request_access with desktop true; raise_window and place_window act on a window of your task shared in act mode. A move takes a frame or more: query again to see where windows ended.
-- A turn has at most 24 rounds of tool calls. Answer as soon as you know enough; when you cannot finish, say what you found and what is left.`
+- A turn has a limited number of rounds of tool calls, and on the last one no tool can be called. Answer as soon as you know enough; when you cannot finish, say what you found and what is left.`
 
 const (
 	untrustedOpen  = "<<untrusted source=\""
@@ -96,6 +135,9 @@ type coordinator struct {
 	waiting int
 	// trail is the running turn's steps (chat_trail.go), for the window.
 	trail *turnTrail
+	// rounds is the person's limit on a turn's rounds, read when a turn
+	// starts; zero is defaultRounds. Guarded by mu.
+	rounds int
 
 	mu sync.Mutex
 	// apps and questions are what the conversation offers the model, fixed
@@ -130,6 +172,22 @@ func (inst *coordinator) setOptions(ceiling agent.Ceiling, opTools bool) {
 	inst.mu.Lock()
 	inst.ceiling, inst.opTools = ceiling, opTools
 	inst.mu.Unlock()
+}
+
+// setRounds takes the person's limit on a turn's rounds; the next turn
+// runs under it.
+func (inst *coordinator) setRounds(n int) {
+	inst.mu.Lock()
+	inst.rounds = n
+	inst.mu.Unlock()
+}
+
+// roundLimit is the rounds a turn starting now may take.
+func (inst *coordinator) roundLimit() (n int) {
+	inst.mu.Lock()
+	n = inst.rounds
+	inst.mu.Unlock()
+	return clampRounds(n)
 }
 
 func (inst *coordinator) ceilingNow() (c agent.Ceiling) {
@@ -879,13 +937,14 @@ func runTurn(ctx context.Context, cli *llm.Client, coord *coordinator, req llm.R
 		out.steps, _, _ = coord.trail.snapshot(0)
 	}()
 	parent := req.ParentCallId
-	for round := 0; round < maxRounds; round++ {
+	limit := coord.roundLimit()
+	for round := 0; round < limit; round++ {
 		if progress != nil {
 			progress(round, "")
 		}
 		r := req
 		r.Messages, r.Tools, r.Sensitivity, r.ParentCallId, r.Round = msgs, coord.tools(ctx), coord.sensitivity(), parent, uint32(round)
-		if round == maxRounds-1 {
+		if round == limit-1 {
 			// The note is for this call only: it does not join the history
 			// the next turn resends.
 			r.Messages = append(slices.Clip(msgs), openaichat.Message{Role: openaichat.ChatRoleSystem, Content: lastRoundNote})
@@ -928,9 +987,9 @@ func runTurn(ctx context.Context, cli *llm.Client, coord *coordinator, req llm.R
 			out.activity = append(out.activity, activity)
 			msgs = append(msgs, openaichat.Message{Role: openaichat.ChatRoleTool, ToolCallId: tc.Id, Content: content})
 		}
-		if round == maxRounds-1 {
+		if round == limit-1 {
 			// Only a model that ignores tool_choice gets here.
-			out.stopped = "the model kept calling tools past " + strconv.Itoa(maxRounds) + " rounds"
+			out.stopped = "the model kept calling tools past " + strconv.Itoa(limit) + " rounds"
 			return
 		}
 	}

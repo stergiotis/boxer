@@ -22,7 +22,8 @@ call takes eight seconds. While it waits, the waiting bubble lists the
 turn's steps — two model calls, two tool calls, and the running model call
 — and a finished step opens to its arguments and what came back. Once the
 turn lands, each tool line in the transcript keeps its steps under
-Details.
+Details. Settings holds the chat's limit on a turn's rounds, which the
+waiting line counts against.
 
 ```jsonl trace
 {"do":"note","text":"chat: the trail of a turn, live and afterwards"}
@@ -30,6 +31,7 @@ Details.
 {"do":"click","contains":"Send","role":"button"}
 {"do":"wait","valueContains":"waiting for the answer","role":"label","comment":"the slow third model call"}
 {"do":"wait","valueContains":"model calls · 2 tool calls","role":"label","comment":"the trail's summary line"}
+{"do":"wait","valueContains":"round 3 of 24","role":"label","comment":"the chat's round limit, at its default"}
 {"do":"click","contains":"Reading the desktop (query_windows)","settleMs":500,"comment":"open a finished step"}
 {"do":"wait","valueContains":"came back","role":"label"}
 {"do":"capture","text":"chat-trail-running"}
@@ -38,4 +40,7 @@ Details.
 {"do":"click","name":"Details","nth":2,"settleMs":500,"comment":"the third tool line's steps"}
 {"do":"wait","valueContains":"SELECT work_w, work_h","role":"label"}
 {"do":"capture","text":"chat-trail-details"}
+{"do":"click","contains":"Settings","role":"button","settleMs":500}
+{"do":"scroll_into_view","name":"rounds per turn","role":"slider","settleMs":500}
+{"do":"capture","text":"chat-trail-rounds"}
 ```

@@ -169,6 +169,7 @@ const (
 	tipPace     = "At a pace I can follow: the host spaces the model's changes — an edit, a run, a window opened or moved — so you can see each one and stop the task. As fast as it can: they land as the model makes them, faster than you can read or intervene."
 	tipArtefact = "Give this conversation one markdown document the model reads and edits through tools, shown in the Artefact panel. At most and Changes above decide whether it may write and whether each change waits for you."
 	tipScore    = "may is what these settings allow, now what the running task was granted, each 0–100: the level picks the band, and what else is allowed — listed below — moves it within the band."
+	tipRounds   = "How many model calls one turn may make before it must answer: each round is a model call and the tool calls it asks for, and the last round offers no tools. A change applies from the next turn."
 	tipTyped    = "Offer each operation of the task's windows to the model as a tool of its own, instead of one call_operation tool. More tools in every request; some models call them more reliably."
 )
 
@@ -400,6 +401,15 @@ func (inst *App) renderMaySection() {
 	}
 	for range c.HoverText(tipTyped).KeepIter() {
 		c.Checkbox(inst.ids.PrepareStr("typed"), inst.opTools, "A tool per operation").SendRespVal(&inst.opTools)
+	}
+	c.AddSpace(4)
+	lo, hi := roundRange()
+	for range c.HorizontalTop().KeepIter() {
+		for range c.HoverText(tipRounds).KeepIter() {
+			c.SliderF64(inst.ids.PrepareStr("rounds"), inst.rounds, float64(lo), float64(hi)).
+				Integer().Text("rounds per turn").SendRespVal(&inst.rounds)
+		}
+		weak("(" + strconv.Itoa(lo) + "–" + strconv.Itoa(hi) + ")")
 	}
 }
 

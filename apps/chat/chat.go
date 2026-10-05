@@ -84,9 +84,12 @@ type App struct {
 	showSettings bool
 	perms        permissions
 	opTools      bool
-	authority    agent.Authority
-	authJob      bgjob.Runner[agent.Authority]
-	authAsked    authorityAsk
+	// rounds is the Settings slider's limit on a turn's rounds, a float
+	// for the slider's binding.
+	rounds    float64
+	authority agent.Authority
+	authJob   bgjob.Runner[agent.Authority]
+	authAsked authorityAsk
 	// draft is the composer's text, bound to the text input; hlJob colours
 	// it as markdown, rebuilt only when hlSrc no longer equals it.
 	draft string
@@ -151,7 +154,7 @@ var _ app.AppI = (*App)(nil)
 func newApp() (inst *App) {
 	inst = &App{turnMachine: newTurnMachine(), log: zerolog.Nop(), ids: c.NewWidgetIdStack(), keep: true, draft: DraftSeed.Get(), conv: newConversation(), apps: AppsSeed.Get() || registeredCoordinator(),
 		questions: QuestionsSeed.Get(), artefact: ArtefactSeed.Get(), showArtefact: ArtefactSeed.Get(), advanced: AdvancedSeed.Get(), pubs: newStatsPublishers(), perms: defaultPermissions(),
-		opTools: OperationToolsSeed.Get()}
+		opTools: OperationToolsSeed.Get(), rounds: float64(clampRounds(0))}
 	return
 }
 
@@ -309,15 +312,20 @@ func (inst *App) startTurn(text string) (started bool) {
 			req.Messages = append([]openaichat.Message{{Role: openaichat.ChatRoleSystem, Content: systemPromptOf(conv.apps, conv.questions, conv.artefact)}}, req.Messages...)
 		}
 	}
+	limit := clampRounds(int(inst.rounds))
+	if coord != nil {
+		// The limit the turn runs under, for its progress line.
+		coord.setRounds(limit)
+	}
 	ok := inst.turn.StartReporting(nil, bgjob.Spec{Kind: "chat-turn", Title: "answer"},
 		func(ctx context.Context, report bgjob.Reporter) (res *turnResult, err error) {
 			if coord != nil {
 				return runTurn(ctx, cli, coord, req, func(round int, doing string) {
-					note := "round " + strconv.Itoa(round+1) + " of " + strconv.Itoa(maxRounds)
+					note := "round " + strconv.Itoa(round+1) + " of " + strconv.Itoa(limit)
 					if doing != "" {
 						note += " · " + doing
 					}
-					report(uint64(round+1), maxRounds, note)
+					report(uint64(round+1), uint64(limit), note)
 				})
 			}
 			got, err := cli.Complete(ctx, req)
