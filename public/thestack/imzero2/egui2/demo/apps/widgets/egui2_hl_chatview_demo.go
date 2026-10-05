@@ -10,9 +10,10 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/chatview"
 )
 
-// Two registrations so the screenshot tour captures both layouts whole
-// (ADR-0239): the dialogue, with a viewer picked over a two-party model, and
-// the group, over a three-party one with nobody as the viewer.
+// Three registrations so the screenshot tour captures every layout whole
+// (ADR-0239): the dialogue, with a viewer picked over a two-party model, the
+// group, over a three-party one with nobody as the viewer, and the thread,
+// over the three-party one with a viewer.
 func init() {
 	registry.Register(registry.Demo{
 		Name: "chatview-dialogue", Category: "Layout & widgets", Title: icons.PhChatCircle + " chat: dialogue",
@@ -42,12 +43,27 @@ func init() {
 		},
 		SourceFunc: demoChatview,
 	})
+	registry.Register(registry.Demo{
+		Name: "chatview-thread", Category: "Layout & widgets", Title: icons.PhChatCircle + " chat: thread",
+		Stage:       [2]float32{880, 1000},
+		Flags:       registry.DemoFlagNeedsLargeArea,
+		Kind:        registry.DemoKindMixed,
+		Description: "The same widget in the thread layout: every message a full-width block from the left edge, the viewer's tinted, the sender's name on each cluster's first message beside the time. Nothing is right-aligned, so a long body — a document, code, a tool trail — gets the whole width. Pick another viewer to move the tint.",
+		Init: func(_ *c.WidgetIdStack) (state any) {
+			return &chatDemoState{model: chatDemoModel(true), viewer: 0, layout: chatview.LayoutThread}
+		},
+		RenderStateful: func(ids *c.WidgetIdStack, state any) {
+			demoChatview(ids, state.(*chatDemoState))
+		},
+		SourceFunc: demoChatview,
+	})
 }
 
 type chatDemoState struct {
 	model  *chatview.Model
 	state  chatview.State
 	viewer int32
+	layout chatview.LayoutE
 	last   chatview.Result
 }
 
@@ -129,6 +145,7 @@ func demoChatview(ids *c.WidgetIdStack, st *chatDemoState) {
 		Model:    st.model,
 		State:    &st.state,
 		Viewer:   st.viewer,
+		Layout:   st.layout,
 		Location: time.UTC,
 	})
 }

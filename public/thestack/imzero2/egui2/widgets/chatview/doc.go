@@ -3,7 +3,9 @@
 // a two-party dialogue laid out like a phone's SMS view (the viewer's
 // messages on the right, the other party's on the left), or a group chat
 // (every message on the left under its sender's name and colour, the
-// viewer's on the right). ADR-0239 is the decision record.
+// viewer's on the right), or a thread (every message a full-width block
+// from the left edge, the viewer's tinted — for long bodies, and with
+// nothing right-aligned to measure). ADR-0239 is the decision record.
 //
 // # Shape
 //

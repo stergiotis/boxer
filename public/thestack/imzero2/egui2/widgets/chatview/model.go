@@ -47,6 +47,12 @@ const (
 	// every cluster; the viewer's own bubbles on the right when a viewer is
 	// set.
 	LayoutGroup
+	// LayoutThread: every message a full-width block from the left edge,
+	// the viewer's tinted, under a line with the sender's name on a
+	// cluster's first message and the time. Nothing is right-aligned, so a
+	// host body is laid out at the pane's width and never measured — the
+	// arrangement for long bodies: documents, code, a tool trail.
+	LayoutThread
 )
 
 // Participant is one party to the conversation.

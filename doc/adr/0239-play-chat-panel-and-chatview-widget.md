@@ -532,6 +532,30 @@ id scope as a bubble's body is. Off by default, so a host that returns a
 `Block` for every ordinal keeps its system lines as they were; the chat app
 sets it to fold a tool call's steps under its line (ADR-0265 §SD6).
 
+### 2026-10-05 — a thread layout, with nothing right-aligned
+
+`LayoutThread` lays every message out as a full-width block from the left
+edge: the viewer's tinted, the others' plain, under a line with the sender's
+name on a cluster's first message and the footer's parts. It is chosen
+explicitly; `LayoutAuto` never picks it.
+
+The viewer's right-aligned bubble is where egui's single pass bites. Its
+left edge depends on a width known only after its content is drawn; egui's
+own answer, a sizing pass discarded and drawn again, is off in this host
+(`max_passes` is one, since the FFFI stream cannot be replayed). A plain
+label hugs the right edge through the layout's alignment, but a host body is
+laid out left-aligned and measured a frame late (update of 2026-09-28): a
+bubble shows at the limit for a frame whenever it is new or its width moves,
+and one whose content changes under an unchanged body keeps its old width
+unless the host encodes its state into the body. A thread has none of that:
+a body is laid out at the pane's width where it stands. The chat app of
+[ADR-0265](./0265-chat-app-over-retained-model-calls.md), whose bodies are
+long markdown, tool trails and action rows, moved to it and dropped its
+body-encoded state; the dialogue and group layouts are unchanged. A
+host-side container that places a body from last frame's width was the
+alternative kept for a widget that wants right-aligned bubbles with host
+bodies.
+
 ## References
 
 - [ADR-0186](./0186-play-gloss-catalog.md) — the gloss catalog, faces and the

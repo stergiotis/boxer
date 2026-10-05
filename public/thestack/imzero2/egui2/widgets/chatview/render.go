@@ -200,6 +200,8 @@ func renderRow(in Input, m *Model, st *State, r row, layout LayoutE, bubbleW flo
 		}
 		for range c.IdScope(ids.PrepareSeq(uint64(r.msg))) {
 			switch {
+			case layout == LayoutThread:
+				renderThreadMessage(in, m, st, i, r, bubbleW, dens, loc, res)
 			case mine:
 				renderBubbleColumn(in, m, st, i, r, layout, true, bubbleW, dens, loc, res)
 			case layout == LayoutGroup:
@@ -217,6 +219,85 @@ func renderRow(in Input, m *Model, st *State, r row, layout LayoutE, bubbleW flo
 				}
 			}
 		}
+	}
+}
+
+// renderThreadMessage is one message of LayoutThread: the quote strip, then
+// a block as wide as the pane — the viewer's tinted, the others' plain —
+// holding a line with the sender's name on a cluster's first message and
+// the footer's parts, the body, and the reactions. Everything is laid out
+// from the left edge, so a host body needs no measuring.
+func renderThreadMessage(in Input, m *Model, st *State, i int, r row, bubbleW float32, dens styletokens.DensityE, loc *time.Location, res *Result) {
+	ids := in.Ids
+	mine := in.Viewer >= 0 && m.Sender[i] == in.Viewer
+	if q := m.ReplyTo[i]; q >= 0 {
+		renderQuote(ids, m, st, int(q), false, bubbleW, dens, res)
+	}
+	fill := color.Transparent
+	stroke, strokeW := color.Transparent, float32(0)
+	if mine {
+		fill = color.Hex(styletokens.AccentSubtle.AsHex())
+		stroke, strokeW = color.Hex(styletokens.NeutralBorderFaint.AsHex()), styletokens.StrokeHair
+	}
+	if st.Selected() == int32(i) {
+		stroke, strokeW = color.Hex(styletokens.AccentDefault.AsHex()), styletokens.StrokeStrong
+	}
+	frame := c.Frame(ids.PrepareStr("bubble")).
+		Fill(fill).
+		CornerRadius(styletokens.RoundingMd).
+		Stroke(strokeW, stroke).
+		InnerMargin(styletokens.PaddingDefault(dens))
+	if !in.InteractiveBlocks {
+		frame = frame.SenseClick()
+	}
+	fid := frame.Id()
+	for range frame.KeepIter() {
+		c.UiSetMinWidthAvailable()
+		for range c.HorizontalTop().KeepIter() {
+			if r.first && m.Sender[i] >= 0 && int(m.Sender[i]) < len(m.Participants) {
+				for rt := range c.RichTextLabelColored(participantColor(m, m.Sender[i]), color.Transparent, m.Participants[m.Sender[i]].Name) {
+					rt.Small().Strong()
+				}
+			}
+			for _, item := range footerItems(m, i, mine, loc) {
+				item()
+			}
+		}
+		switch {
+		case m.Flags[i]&FlagDeleted != 0:
+			c.LabelAtoms(c.Atoms().BeginRichText("message deleted").Italics().Weak().End().Keep()).
+				Wrap().Selectable(false).Send()
+		default:
+			drawn := false
+			if in.Block != nil {
+				if b, ok := in.Block(i); ok && b.Render != nil {
+					renderBlock(ids, st, b, i, m.Body[i], false, bubbleW)
+					drawn = true
+				}
+			}
+			if !drawn {
+				c.Label(m.Body[i]).Wrap().Selectable(false).Send()
+			}
+		}
+		keys, counts, who := m.Reactions(i)
+		if len(keys) > 0 {
+			for range c.HorizontalTop().KeepIter() {
+				for range c.IdScope(ids.PrepareStr("reactions")) {
+					for j := range keys {
+						b := badge.New(ids.PrepareSeq(uint64(j)), keys[j]+" "+strconv.Itoa(int(counts[j]))).
+							Tone(badge.ToneNeutral).Variant(badge.VariantSoft).Size(badge.SizeSm).Pill()
+						if who[j] != "" {
+							b = b.Tooltip(who[j])
+						}
+						b.Send()
+					}
+				}
+			}
+		}
+	}
+	if !in.InteractiveBlocks && c.CurrentApplicationState.StateManager.GetResponseByIdRaw(fid).HasPrimaryClicked() {
+		st.SetSelected(int32(i))
+		res.Clicked = int32(i)
 	}
 }
 
@@ -446,8 +527,19 @@ func (inst *State) blockWidth(i int, body string, bubbleW float32, probe uint64)
 // renderFooter is the bubble's last line: the time (the full instant on
 // hover), an "edited" mark, and on the viewer's own bubbles the status.
 func renderFooter(m *Model, i int, mine bool, loc *time.Location) {
+	items := footerItems(m, i, mine, loc)
+	for range hrow(mine) {
+		for j := range ordered(len(items), mine) {
+			items[j]()
+		}
+	}
+}
+
+// footerItems are the footer's parts in reading order: the time, an
+// "edited" mark, and on the viewer's own messages the status.
+func footerItems(m *Model, i int, mine bool, loc *time.Location) (items []func()) {
 	t := time.UnixMilli(m.TimeMS[i]).In(loc)
-	items := make([]func(), 0, 3)
+	items = make([]func(), 0, 3)
 	items = append(items, func() {
 		for range c.HoverText(t.Format(time.RFC3339)).KeepIter() {
 			for rt := range c.RichTextLabel(t.Format("15:04")) {
@@ -479,11 +571,7 @@ func renderFooter(m *Model, i int, mine bool, loc *time.Location) {
 			})
 		}
 	}
-	for range hrow(mine) {
-		for j := range ordered(len(items), mine) {
-			items[j]()
-		}
-	}
+	return
 }
 
 // statusMark is the delivery glyph: one check sent, two delivered, two in
