@@ -154,9 +154,9 @@ type View[T comparable] struct {
 	// is derived from the id stack on the first render inside the view's
 	// scope (a scope-derived id spelled in hex — the inspector infra takes a
 	// string), so two views under different host scopes never share it
-	// (W6/W7); tetherKey is "" until then.
+	// (W6/W7); tetherKey is 0 until then.
 	tether    inspector.AnchorTether
-	tetherKey string
+	tetherKey uint64
 
 	// historyBuf backs the History tab's per-frame row build. Held on the
 	// receiver and truncated rather than reallocated, so an open History tab
@@ -220,10 +220,10 @@ func (inst *View[T]) title() string {
 // ensureTether derives the tether key from the id stack the first time it is
 // needed inside the view's scope, and builds the tether.
 func (inst *View[T]) ensureTether() {
-	if inst.tetherKey != "" {
+	if inst.tetherKey != 0 {
 		return
 	}
-	inst.tetherKey = strconv.FormatUint(inst.ids.PrepareStr("tether").Derive(), 16)
+	inst.tetherKey = inst.ids.PrepareStr("tether").Derive()
 	inst.tether = inspector.NewAnchorTether(inst.tetherKey)
 }
 

@@ -108,10 +108,9 @@ func Render(in Input) (res Result) {
 		scopeKey = "schemaview"
 	}
 	for range c.IdScope(in.Ids.PrepareStr(scopeKey)) {
-		// The legend's tether is keyed by a string the inspector infra hashes
-		// to an absolute id; spelling the scope-derived id keeps the slot per
-		// host scope (ADR-0267 W6).
-		scope := strconv.FormatUint(in.Ids.PrepareStr("legend-tether").Derive(), 16)
+		// The legend's tether is keyed once here, under the inspector's
+		// scope, and handed to both halves (ADR-0267 W6).
+		scope := in.Ids.PrepareStr("legend-tether").Derive()
 		// Floor the dock's height only in an unbounded scroll host; a bounded
 		// host (FillHost) lets the dock fill its leaf instead of overflowing it.
 		if !in.FillHost {
@@ -155,7 +154,7 @@ func Render(in Input) (res Result) {
 // that ScrollArea: a dock leaf hands its content a bounded child rect, so the
 // ScrollArea fills and clips it (a ScrollArea inside the former width-pinned
 // Vertical-in-Horizontal collapsed to its first child — see the package history).
-func renderNavHeader(ids *c.WidgetIdStack, m *view, scope string) {
+func renderNavHeader(ids *c.WidgetIdStack, m *view, scope uint64) {
 	density := styletokens.ActiveDensity()
 	t := m.Table
 	for range c.Horizontal().KeepIter() {

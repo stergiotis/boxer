@@ -405,10 +405,9 @@ func (in Input) bandJobKey() ecdf.BandJobKey {
 	return ecdf.BandJobKey(in.Ids.ProbeSeq("band-job"))
 }
 
-// tetherScope names this summary's tether capture slots; the tether takes
-// a string, so the id-scope-derived slot is spelled in hex.
-func (in Input) tetherScope() string {
-	return "distsummary#" + strconv.FormatUint(in.Ids.ProbeSeq("tether"), 16)
+// tetherKey keys this summary's tether capture slots under its scope.
+func (in Input) tetherKey() uint64 {
+	return in.Ids.ProbeSeq("tether")
 }
 
 func (in Input) render() (res Result) {
@@ -424,7 +423,7 @@ func (in Input) render() (res Result) {
 	}
 
 	labelAtoms := c.Atoms().BeginRichText(label).Monospace().End().Keep()
-	tether := inspector.NewAnchorTether(in.tetherScope())
+	tether := inspector.NewAnchorTether(in.tetherKey())
 	// Level-1 anchor: summary label + inspector toggle. In inline mode the
 	// caller already owns a horizontal row, so emit straight into it — a
 	// nested horizontal would seat the anchor a few px below its siblings

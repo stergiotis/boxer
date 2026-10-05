@@ -40,7 +40,6 @@ package regexsummary
 import (
 	"errors"
 	"regexp"
-	"strconv"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -202,7 +201,7 @@ func (in Input) render() (res Result) {
 	ids, st := in.Ids, in.State
 	// The tether infrastructure keys its rect captures by a string; it is
 	// derived from this scope's id so two summaries never share a slot.
-	tether := inspector.NewAnchorTether(strconv.FormatUint(ids.PrepareStr("tether").Derive(), 16))
+	tether := inspector.NewAnchorTether(ids.PrepareStr("tether").Derive())
 	wasPinned := st.Pinned
 	for range c.Horizontal().KeepIter() {
 		in.renderLevel1Atoms()
