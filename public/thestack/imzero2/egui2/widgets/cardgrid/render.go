@@ -33,8 +33,6 @@ const (
 	// scrollAlignCenter is ScrollToCursor's alignment code (0 top, 1 centre,
 	// 2 bottom).
 	scrollAlignCenter uint8 = 1
-	// tagIdBase keeps a card's tag badges clear of its other widgets.
-	tagIdBase uint64 = 0x200
 )
 
 // cullSlackRows is how many rows past the viewport are still drawn on each
@@ -485,9 +483,11 @@ func renderTags(in Input, lay Layout, i int, x0, y0, x1, y1 float32) {
 	}
 	for range slot(x0, y0, x1, y1) {
 		for range c.HorizontalTop().KeepIter() {
-			for j := range shown {
-				badge.New(in.Ids.PrepareSeq(tagIdBase+uint64(j)), tags[j]).
-					Tone(badge.ToneNeutral).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
+			for range c.IdScope(in.Ids.PrepareStr("tags")) {
+				for j := range shown {
+					badge.New(in.Ids.PrepareSeq(uint64(j)), tags[j]).
+						Tone(badge.ToneNeutral).Variant(badge.VariantSoft).Size(badge.SizeSm).Send()
+				}
 			}
 			if rest := len(tags) - shown; rest > 0 {
 				c.LabelAtoms(c.Atoms().BeginRichText("+" + strconv.Itoa(rest)).Small().Weak().End().Keep()).

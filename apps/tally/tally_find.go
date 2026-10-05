@@ -114,10 +114,12 @@ func (inst *App) renderFind(sc *storeConn) {
 		c.TextEdit(inst.ids.PrepareStr("find-min"), f.minSize, false).HintText("min bytes").DesiredWidth(90).SendRespVal(&f.minSize)
 		c.TextEdit(inst.ids.PrepareStr("find-needle"), f.needle, false).HintText("content (RE2, text files)").DesiredWidth(220).SendRespVal(&f.needle)
 		c.AddSpace(styletokens.GapInline(inst.density))
-		for _, s := range []findScopeE{findScopeDir, findScopeMount, findScopeAll} {
-			if c.Button(inst.ids.PrepareSeq(0x3000+uint64(s)), c.Atoms().Text(s.String()).Keep()).
-				Selected(f.scope == s).SendResp().HasPrimaryClicked() {
-				f.scope = s
+		for range c.IdScope(inst.ids.PrepareStr("find-scope")) {
+			for _, s := range []findScopeE{findScopeDir, findScopeMount, findScopeAll} {
+				if c.Button(inst.ids.PrepareSeq(uint64(s)), c.Atoms().Text(s.String()).Keep()).
+					Selected(f.scope == s).SendResp().HasPrimaryClicked() {
+					f.scope = s
+				}
 			}
 		}
 		c.AddSpace(styletokens.GapInline(inst.density))

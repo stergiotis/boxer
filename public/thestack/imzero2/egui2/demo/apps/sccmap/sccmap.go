@@ -288,10 +288,6 @@ func (inst *App) buildTreeForMetrics(sizeIdx, colorIdx int, keep func(*scctree.S
 type App struct {
 	ids *c.WidgetIdStack
 
-	// probeSalt is this window's share of the r21 slot map, derived on first
-	// use. See [App.probeSeq].
-	probeSalt uint64
-
 	// repoPath is the scan target, bound to the header path box. job runs the
 	// scc scan off the render thread; data is the last completed scan, owned by
 	// the render thread and read by every render helper. tasks wires the host
@@ -530,20 +526,11 @@ func (inst *App) Unmount(ctx runtimeapp.MountContextI) (err error) {
 	return
 }
 
-// sccmapProbeSalt namespaces this app's pane probes in the shared r21 slot map.
-const sccmapProbeSalt uint64 = 0x2e6b90d41f7a3c85
-
-// probeSeq is this window's slot for one probe role. The app id alone cannot
-// key it: sccmap is registered as a factory, so two open windows would hash to
-// one seq and each treemap would size itself from the other's pane — the
-// process-wide-slot failure that r18 had, inside the seq-keyed register.
-// Derived on first use so it sees the per-window id scope the host pushes
-// around Frame (empty during Mount).
+// probeSeq is this window's slot for one probe role, derived from the id
+// stack at render time: the host pushes a per-window scope around Frame, so
+// two open windows get distinct slots (ADR-0267 W7).
 func (inst *App) probeSeq(role string) (seq uint64) {
-	if inst.probeSalt == 0 {
-		inst.probeSalt = inst.ids.PrepareHighEntropy(sccmapProbeSalt).Derive()
-	}
-	return c.ProbeSeq("sccmap", role) ^ inst.probeSalt
+	return inst.ids.ProbeSeq(role)
 }
 
 func (inst *App) Frame(ctx runtimeapp.FrameContextI) (err error) {

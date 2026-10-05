@@ -504,6 +504,14 @@ ADRs are append-only; supersession is recorded, not deleted.
   function starts under a caller's context; and a painter helper's knobs are
   a `Style` embedded in its `Input`. The deprecated wrappers M5 planned were
   not needed, because every caller moved in the same change.
+- **2026-09-30 — follow-up cleanups.** `inspector.NewAnchorTether` takes a
+  derived id instead of a string it hashed, so the "tether still takes a
+  string" note under M2 no longer holds. The W5 checker now also flags a
+  namespace constant added to an ordinal (`rowBase + n`); it found nineteen
+  such sites in six widgets the phases had passed, including `tree`, and
+  they became nested scopes. The seventeen non-widget packages under
+  `widgets/` stay where they are: moving them changes public import paths
+  for every downstream consumer, which is a decision for its own ADR.
 
 ## References
 

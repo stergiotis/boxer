@@ -652,39 +652,41 @@ func (inst *App) renderMounts(sc *storeConn) {
 	}
 	p := inst.activePane()
 	c.Label(fmt.Sprintf("Clicks set pane %s", inst.target.String())).Selectable(false).Send()
-	for i := range inst.mountRows {
-		m := inst.mountRows[i]
-		sel := m.id == p.mount
-		label := m.label()
-		if n := len(m.snapshots); n > 0 {
-			label += fmt.Sprintf("  ·  %d", n)
-		}
-		if c.Button(inst.ids.PrepareSeq(0x1000+uint64(i)), c.Atoms().Text(icons.PhFolder+" "+label).Keep()).
-			Selected(sel).SendResp().HasPrimaryClicked() && !sel {
-			inst.selectMount(p, m.id)
-		}
-		if !sel {
-			continue
-		}
-		for range c.IdScope(inst.ids.PrepareStr("snaps")) {
-			c.AddSpace(styletokens.GapInline(inst.density))
-			c.Label("id " + hexID(m.id)).Selectable(false).Send()
-			if m.store != "" {
-				c.Label("store " + m.store).Selectable(false).Send()
+	for range c.IdScope(inst.ids.PrepareStr("mounts")) {
+		for i := range inst.mountRows {
+			m := inst.mountRows[i]
+			sel := m.id == p.mount
+			label := m.label()
+			if n := len(m.snapshots); n > 0 {
+				label += fmt.Sprintf("  ·  %d", n)
 			}
-			c.Checkbox(inst.ids.PrepareStr("follow"), p.followLatest, "Follow latest").SendRespVal(&p.followLatest)
-			for j, s := range m.snapshots {
-				pinned := !p.followLatest && p.snap.Equal(s.Snap)
-				isLatest := j == 0
-				text := s.Snap.UTC().Format("2006-01-02 15:04:05")
-				if isLatest {
-					text += "  (latest)"
+			if c.Button(inst.ids.PrepareSeq(uint64(i)), c.Atoms().Text(icons.PhFolder+" "+label).Keep()).
+				Selected(sel).SendResp().HasPrimaryClicked() && !sel {
+				inst.selectMount(p, m.id)
+			}
+			if !sel {
+				continue
+			}
+			for range c.IdScope(inst.ids.PrepareStr("snaps")) {
+				c.AddSpace(styletokens.GapInline(inst.density))
+				c.Label("id " + hexID(m.id)).Selectable(false).Send()
+				if m.store != "" {
+					c.Label("store " + m.store).Selectable(false).Send()
 				}
-				text += fmt.Sprintf("\n%d entries · %s · expires %s", s.Entries, humanSize(int64(s.Bytes)), s.ExpiresAt.UTC().Format("2006-01-02"))
-				if c.Button(inst.ids.PrepareSeq(0x2000+uint64(j)), c.Atoms().Text(text).Keep()).
-					Selected(pinned || (p.followLatest && isLatest)).
-					SendResp().HasPrimaryClicked() {
-					inst.pinSnapshot(p, s.Snap)
+				c.Checkbox(inst.ids.PrepareStr("follow"), p.followLatest, "Follow latest").SendRespVal(&p.followLatest)
+				for j, s := range m.snapshots {
+					pinned := !p.followLatest && p.snap.Equal(s.Snap)
+					isLatest := j == 0
+					text := s.Snap.UTC().Format("2006-01-02 15:04:05")
+					if isLatest {
+						text += "  (latest)"
+					}
+					text += fmt.Sprintf("\n%d entries · %s · expires %s", s.Entries, humanSize(int64(s.Bytes)), s.ExpiresAt.UTC().Format("2006-01-02"))
+					if c.Button(inst.ids.PrepareSeq(uint64(j)), c.Atoms().Text(text).Keep()).
+						Selected(pinned || (p.followLatest && isLatest)).
+						SendResp().HasPrimaryClicked() {
+						inst.pinSnapshot(p, s.Snap)
+					}
 				}
 			}
 		}
