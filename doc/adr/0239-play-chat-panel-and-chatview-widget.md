@@ -524,6 +524,14 @@ the pointer. A transcript that selects messages leaves it off.
 of the view instead of the middle: where a reader starts a long answer that
 just arrived, rather than at its end where following leaves them.
 
+### 2026-10-05 — a host body for system lines
+
+`Input.SystemBlocks` asks `Block` for system lines too. Its `Render` then
+draws the whole line in place of the centred weak text, under the row's
+id scope as a bubble's body is. Off by default, so a host that returns a
+`Block` for every ordinal keeps its system lines as they were; the chat app
+sets it to fold a tool call's steps under its line (ADR-0265 §SD6).
+
 ## References
 
 - [ADR-0186](./0186-play-gloss-catalog.md) — the gloss catalog, faces and the

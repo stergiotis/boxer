@@ -263,6 +263,10 @@ type Input struct {
 	// Block draws a message's body in the host's own way; nil, or a false
 	// second result, draws Model.Body wrapped.
 	Block func(ordinal int) (Block, bool)
+	// SystemBlocks asks Block for system lines too. Its Render then draws
+	// the whole line, in place of the centred weak text, under the row's
+	// IdScope(PrepareSeq(ordinal)) as a bubble's body is.
+	SystemBlocks bool
 	// FillHost tells Render its host already bounds its height, so the
 	// transcript fills that rect rather than flooring to a minimum. Dock-tab
 	// leaves set it; an unbounded gallery scroll host leaves it false.

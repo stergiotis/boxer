@@ -183,6 +183,12 @@ func renderRow(in Input, m *Model, st *State, r row, layout LayoutE, bubbleW flo
 		i := int(r.msg)
 		for range c.IdScope(ids.PrepareSeq(uint64(r.msg))) {
 			c.AddSpace(styletokens.GapInline(dens))
+			if in.SystemBlocks && in.Block != nil {
+				if b, ok := in.Block(i); ok && b.Render != nil {
+					b.Render()
+					break
+				}
+			}
 			for range c.VerticalCentered().KeepIter() {
 				c.LabelAtoms(c.Atoms().BeginRichText(m.Body[i]).Small().Weak().Italics().End().Keep()).
 					Wrap().Selectable(false).Send()
