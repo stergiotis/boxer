@@ -9,6 +9,11 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
+
+	// The trail views inline the surface and register to be re-created by
+	// every install (lwsqlsurface.RegisterDependent); linking them here is
+	// what makes play's startup reconcile refresh them where boxer.facts is.
+	_ "github.com/stergiotis/boxer/public/keelson/runtime/trail/trailviews"
 )
 
 // surfaceInstallOnce gates the per-process surface reconcile: every window
