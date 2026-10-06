@@ -12,9 +12,11 @@ package agent
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 )
 
@@ -90,10 +92,18 @@ func (inst *Client) Disclose(ctx context.Context, d Disclosure) (err error) {
 }
 
 // disclose answers SubjectDisclose: only a registered coordinator reports,
-// and the row is written or the report refused.
+// and the row is written or the report refused. A refused report is a row of
+// the actions file, so an app that keeps reporting what it may not is seen.
 func (inst *Service) disclose(msg *app.Msg) (rep wireAck) {
 	rep.V = wireVersion
 	req, err := decode[wireDisclose](msg.Payload)
+	defer func() {
+		if !rep.Ok {
+			inst.record(nil, &callRec{key: "disclose|" + strconv.FormatInt(time.Now().UnixNano(), 36), turn: req.Turn,
+				cause: req.wireCause.cause(), conversation: req.Conversation, actor: msg.Sender, actorInstance: msg.SenderInstance,
+				spec: app.OperationSpec{Name: "disclose", Effect: app.OperationEffectNone}}, "final", phaseOutcome(opwire.PhaseRefused, rep.Reason))
+		}
+	}()
 	if err != nil {
 		rep.Reason = err.Error()
 		return
@@ -102,20 +112,8 @@ func (inst *Service) disclose(msg *app.Msg) (rep wireAck) {
 		rep.Reason = "only an app registered as a coordinator reports disclosures"
 		return
 	}
-	switch req.Decision {
-	case DisclosureShown, DisclosureDeclined, DisclosureRefused:
-	default:
-		rep.Reason = "a disclosure's decision is shown, declined or refused"
-		return
-	}
-	switch req.DecidedBy {
-	case DecidedByPerson, DecidedByConsent, DecidedBySetting, DecidedByChat:
-	default:
-		rep.Reason = "a disclosure is decided by the person, a consent, the setting or the chat"
-		return
-	}
-	if req.Decision == DisclosureShown && (req.Digest == "" || req.DecidedBy == DecidedByChat) {
-		rep.Reason = "a shown disclosure names its digest and was let through by the person, a consent or the setting"
+	if why := disclosureMismatch(req.Decision, req.DecidedBy, req.Digest); why != "" {
+		rep.Reason = why
 		return
 	}
 	if err = inst.cfg.Trail.Admit(); err != nil {
@@ -153,4 +151,24 @@ func (inst *Service) disclose(msg *app.Msg) (rep wireAck) {
 	inst.cfg.Trail.FlushSoon()
 	rep.Ok = true
 	return
+}
+
+// disclosureMismatch is why a decision and its decider do not belong
+// together, "" when they do: the person declines; the chat refuses; a shown
+// view names its digest and was let through by the person, a consent they
+// gave or a level that does not ask.
+func disclosureMismatch(decision string, decidedBy string, digest string) (why string) {
+	switch {
+	case decision == DisclosureShown && decidedBy != DecidedByPerson && decidedBy != DecidedByConsent && decidedBy != DecidedBySetting:
+		return "a shown view is let through by the person, a consent or the setting"
+	case decision == DisclosureShown && digest == "":
+		return "a shown view names its digest"
+	case decision == DisclosureDeclined && decidedBy != DecidedByPerson:
+		return "only the person declines a view"
+	case decision == DisclosureRefused && decidedBy != DecidedByChat:
+		return "only the chat refuses a view"
+	case decision != DisclosureShown && decision != DisclosureDeclined && decision != DisclosureRefused:
+		return "a disclosure's decision is shown, declined or refused"
+	}
+	return ""
 }

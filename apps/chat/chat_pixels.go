@@ -82,26 +82,25 @@ func pixelsCap() (level agent.PixelsE, localRequired bool) {
 	return pixelsOf(PixelsMaxEnv.Get()), PixelsLocalRequiredEnv.Get()
 }
 
+// capPixels is a level and its switch under the host's cap; the panel's
+// permissions and the coordinator's policy both pass through it.
+func capPixels(level agent.PixelsE, localOnly bool) (agent.PixelsE, bool) {
+	maxLevel, required := pixelsCap()
+	return min(level, maxLevel), localOnly || required
+}
+
 // capped is p under the host's cap.
 func (inst pixelPolicy) capped() (out pixelPolicy) {
 	out = inst
-	level, local := pixelsCap()
-	out.level = min(out.level, level)
-	out.localOnly = out.localOnly || local
+	out.level, out.localOnly = capPixels(inst.level, inst.localOnly)
 	return
 }
 
-// pixelsLabel is a level as the Settings panel names it.
+// pixelsLabel is a level as the Settings panel names it: the trail's word,
+// capitalised.
 func pixelsLabel(p agent.PixelsE) string {
-	switch p {
-	case agent.PixelsAskEach:
-		return "Ask each time"
-	case agent.PixelsAskOnce:
-		return "Ask once per image"
-	case agent.PixelsCaptures:
-		return "This chat's captures"
-	}
-	return "Metadata only"
+	s := p.String()
+	return strings.ToUpper(s[:1]) + s[1:]
 }
 
 // pixelsPreviewSide bounds the longer side of the image the consent shows.
@@ -137,8 +136,13 @@ type pixelVerdictE uint8
 
 const (
 	pixelAllowed pixelVerdictE = iota
+	// pixelAllowedBySetting is the setting raised to a level that does not
+	// ask while the view waited: the setting decided, not the person.
+	pixelAllowedBySetting
 	pixelDeclined
-	// pixelRefused is the setting moving while the view waited.
+	// pixelStopped is the turn stopped while the view waited.
+	pixelStopped
+	// pixelRefused is the setting lowered while the view waited.
 	pixelRefused
 )
 
@@ -173,9 +177,11 @@ type shownImage struct {
 // pixelState is the coordinator's side of the setting, guarded by its mu.
 type pixelState struct {
 	policy pixelPolicy
-	// told is the policy the model was last told of.
+	// told is the policy the model was last told of, toldSees whether that
+	// one let it see pixels.
 	told     pixelPolicy
 	toldOnce bool
+	toldSees bool
 	// consented are the hashes the person allowed under Ask once per image.
 	consented map[string]bool
 	ask       *pixelAsk
@@ -204,7 +210,7 @@ func (inst *coordinator) setPixels(p pixelPolicy) {
 	case !p.reaches():
 		ask.decide(pixelRefused)
 	case p.level == agent.PixelsCaptures:
-		ask.decide(pixelAllowed)
+		ask.decide(pixelAllowedBySetting)
 	}
 }
 
@@ -224,24 +230,26 @@ func (inst *coordinator) pixelAskNow() (a *pixelAsk) {
 	return inst.pix.ask
 }
 
-// pixelsNote tells the model what it may see, on the first turn with an
-// artefact and whenever the setting moved since it was last told.
+// pixelsNote tells the model what it may see when that is news: the first
+// time it may see pixels, whenever what it may see moved since, and when it
+// no longer may. A model that never could is told nothing beyond the system
+// prompt.
 func (inst *coordinator) pixelsNote() (note string) {
 	if inst.artefactOf() == nil {
 		return
 	}
 	inst.mu.Lock()
-	p := inst.pix.policy
+	p, sees := inst.pix.policy, inst.pix.policy.reaches()
 	same := inst.pix.toldOnce && inst.pix.told.level == p.level && inst.pix.told.localOnly == p.localOnly && inst.pix.told.modelLocal == p.modelLocal
-	inst.pix.told, inst.pix.toldOnce = p, true
+	wasSeeing := inst.pix.toldSees
+	inst.pix.told, inst.pix.toldOnce, inst.pix.toldSees = p, true, sees
 	inst.mu.Unlock()
-	if same {
-		return
-	}
 	switch {
+	case !sees && !wasSeeing, sees && same:
+		return
 	case p.level == agent.PixelsNone:
-		return "The person's settings show you no screenshot's pixels: artefact_images gives their metadata, and the person sees them in the panel."
-	case !p.reaches():
+		return "The person's settings no longer show you screenshots' pixels: artefact_images gives their metadata, and the person sees them in the panel."
+	case !sees:
 		return "The person's settings show screenshots only to a model on this machine or one the host trusts with sealed data, and you are neither: artefact_images gives their metadata."
 	case p.level == agent.PixelsAskEach:
 		note = "artefact_view_image shows you a screenshot after the person allows it, each time you ask."
@@ -340,10 +348,20 @@ func (inst *coordinator) viewImage(ctx context.Context, o toolOrigin, args toolA
 			inst.disclose(ctx, o, d)
 			return marshal(viewResult{Name: e.name, Status: "declined", Then: "the person declined to show you this screenshot; do not ask for it again unless they say so"}),
 				name + " · declined · " + e.name
+		case verdict == pixelStopped:
+			// The person stopped the turn: declined, and the trail says how.
+			d.Decision, d.DecidedBy, d.Reason = agent.DisclosureDeclined, agent.DecidedByPerson, "the turn was stopped"
+			// The turn's context is gone; the report must still reach the host.
+			inst.disclose(context.WithoutCancel(ctx), o, d)
+			return marshal(viewResult{Name: e.name, Status: "declined", Then: "the turn was stopped before the person decided"}),
+				name + " · stopped · " + e.name
 		case verdict == pixelRefused:
 			return fail("the person's settings changed while the view waited, and no longer show it")
 		}
 		how, by = "allowed by the person", agent.DecidedByPerson
+		if verdict == pixelAllowedBySetting {
+			how, by = "allowed by the person's setting: this chat's captures", agent.DecidedBySetting
+		}
 		if p = inst.pixelsNow(); p.level == agent.PixelsAskOnce {
 			inst.mu.Lock()
 			if inst.pix.consented == nil {
@@ -417,7 +435,7 @@ func (inst *coordinator) askPixels(ctx context.Context, e artImage, data []byte,
 	case v = <-a.reply:
 	case <-ctx.Done():
 		// Stopping the turn ends the wait as declined (ADR-0287 §SD3).
-		v = pixelDeclined
+		v = pixelStopped
 	}
 	return
 }
@@ -489,7 +507,13 @@ func stripPixels(ms []openaichat.Message) (out []openaichat.Message, stripped bo
 func (inst *coordinator) bindPixels(ms []openaichat.Message) (out []openaichat.Message, confine bool) {
 	p := inst.pixelsNow()
 	if !p.reaches() {
-		out, _ = stripPixels(ms)
+		var stripped bool
+		if out, stripped = stripPixels(ms); stripped {
+			// Gone from the turn: a later view attaches them again.
+			inst.mu.Lock()
+			inst.pix.turnHashes = nil
+			inst.mu.Unlock()
+		}
 		return
 	}
 	out = ms

@@ -151,9 +151,10 @@ func TestAskOnceRemembersTheContent(t *testing.T) {
 }
 
 // The setting binds at once: a waiting view ends refused when the level no
-// longer shows it, and allowed when it no longer asks.
+// longer shows it, and allowed — by the setting, not the person — when it no
+// longer asks; a stopped turn ends it declined, and the trail says why.
 func TestAWaitingViewFollowsTheSetting(t *testing.T) {
-	coord, _ := pixelRig(t, agent.PixelsAskEach)
+	coord, _, got := discloseRig(t, agent.PixelsAskEach, nil)
 	out := make(chan string, 1)
 	go func() {
 		_, c := view(t, coord, "screenshot-1.png")
@@ -168,18 +169,56 @@ func TestAWaitingViewFollowsTheSetting(t *testing.T) {
 	waitPixelAsk(t, coord)
 	coord.setPixels(pixelPolicy{level: agent.PixelsCaptures, modelLocal: true})
 	assert.Equal(t, "shown", (<-done).Status)
+	bySetting := (*got)[len(*got)-1]
+	assert.Equal(t, agent.DecidedBySetting, bySetting.DecidedBy, "the person did not allow it; the setting did")
+	assert.Equal(t, agent.PixelsCaptures, bySetting.Level)
+	m, _ := coord.takeShown()
+	assert.Contains(t, m.Content, "allowed by the person's setting")
 
 	coord.beginPixelTurn()
 	coord.setPixels(pixelPolicy{level: agent.PixelsAskEach, modelLocal: true})
 	ctx, cancel := context.WithCancel(context.Background())
-	got := make(chan string, 1)
+	gotContent := make(chan string, 1)
 	go func() {
 		c, _ := coord.dispatch(ctx, toolOrigin{turn: "t1"}, openaichat.ToolCall{Name: "artefact_view_image"}, map[string]any{"name": "screenshot-1.png"})
-		got <- c
+		gotContent <- c
 	}()
 	waitPixelAsk(t, coord)
 	cancel()
-	assert.Contains(t, <-got, `"declined"`, "stopping the turn ends the wait as declined")
+	assert.Contains(t, <-gotContent, "the turn was stopped", "stopping the turn ends the wait as declined")
+	stopped := (*got)[len(*got)-1]
+	assert.Equal(t, agent.DisclosureDeclined, stopped.Decision)
+	assert.Equal(t, "the turn was stopped", stopped.Reason)
+}
+
+// The model hears of pixels when it may see them, and when it no longer
+// may; a model that never could is told nothing beyond the system prompt.
+func TestThePixelsNoteIsNewsOnly(t *testing.T) {
+	coord, _ := pixelRig(t, agent.PixelsNone)
+	assert.Empty(t, coord.pixelsNote(), "the default is not news")
+	coord.setPixels(pixelPolicy{level: agent.PixelsAskEach, localOnly: true})
+	assert.Empty(t, coord.pixelsNote(), "a remote model under the switch sees none either")
+	coord.setPixels(pixelPolicy{level: agent.PixelsCaptures, modelLocal: true})
+	assert.Contains(t, coord.pixelsNote(), "without asking")
+	assert.Empty(t, coord.pixelsNote(), "told once")
+	coord.setPixels(pixelPolicy{level: agent.PixelsNone})
+	assert.Contains(t, coord.pixelsNote(), "no longer")
+}
+
+// Pixels stripped mid-turn are no longer attached: a later view in the turn
+// attaches them again rather than pointing at a placeholder.
+func TestAViewAfterAStripAttachesAgain(t *testing.T) {
+	coord, _ := pixelRig(t, agent.PixelsCaptures)
+	coord.beginPixelTurn()
+	view(t, coord, "screenshot-1.png")
+	m, _ := coord.takeShown()
+	coord.setPixels(pixelPolicy{level: agent.PixelsNone})
+	coord.bindPixels([]openaichat.Message{m})
+	coord.setPixels(pixelPolicy{level: agent.PixelsCaptures, modelLocal: true})
+	r, _ := view(t, coord, "screenshot-1.png")
+	assert.NotContains(t, r.Then, "already attached")
+	_, ok := coord.takeShown()
+	assert.True(t, ok)
 }
 
 func TestPixelsMessagesBecomePlaceholders(t *testing.T) {

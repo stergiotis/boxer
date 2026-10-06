@@ -295,17 +295,20 @@ func modelWhere(local bool, trusted bool) string {
 	return "off this machine"
 }
 
-// scores are the two markers' places. Pixels moves may within its band;
-// now is the task's grant, which does not hold them.
+// scores are the two markers' places. Pixels moves may within its band
+// when they can reach the model; now is the task's grant, which does not
+// hold them.
 func (inst *App) scores() (may agent.Score, now agent.Score) {
 	remote := inst.remoteModel()
 	ceil := inst.authority.Ceiling
 	if inst.artefactOn() {
 		ceil = withArtefact(ceil, inst.perms.artCeiling())
 	}
-	perms := inst.perms.pixelsCapped()
-	may = ceil.ScoreBeside(agent.Beside{RemoteModel: remote, Pixels: perms.pixelsIn(inst.artefactOn(), inst.appsOn()),
-		PixelsLocalOnly: perms.pixelsLocal})
+	beside := agent.Beside{RemoteModel: remote}
+	if p := inst.pixelPolicy(); p.reaches() {
+		beside.Pixels, beside.PixelsLocalOnly = p.level, p.localOnly
+	}
+	may = ceil.ScoreBeside(beside)
 	return may, inst.authority.Granted.Score(remote)
 }
 
@@ -561,8 +564,6 @@ func (inst permissions) withPixels(p agent.PixelsE, localOnly bool) (out permiss
 // PixelsLocalRequiredEnv): what the panel shows is what binds.
 func (inst permissions) pixelsCapped() (out permissions) {
 	out = inst
-	level, local := pixelsCap()
-	out.pixels = min(out.pixels, level)
-	out.pixelsLocal = out.pixelsLocal || local
+	out.pixels, out.pixelsLocal = capPixels(inst.pixels, inst.pixelsLocal)
 	return
 }

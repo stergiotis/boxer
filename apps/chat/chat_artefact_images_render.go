@@ -113,8 +113,9 @@ func (inst *App) renderImageProposal(p *artProposal, what string, head int) {
 // would be sent, where it would go, Allow and Decline.
 func (inst *App) renderPixelAsk(a *pixelAsk) {
 	section("The model asks to see a screenshot")
-	c.Label(a.name + " · " + strconv.Itoa(a.w) + "×" + strconv.Itoa(a.h) + " px, sent as it is").Selectable(false).Send()
+	c.Label(a.name + " · sent at " + strconv.Itoa(a.w) + "×" + strconv.Itoa(a.h) + " px").Selectable(false).Send()
 	weak(a.origin)
+	weak("The preview below is fitted to the panel; the model gets every pixel.")
 	to := "the host's model"
 	if a.endpoint != "" {
 		to = a.endpoint

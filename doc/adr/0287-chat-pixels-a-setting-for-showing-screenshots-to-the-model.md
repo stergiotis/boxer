@@ -83,8 +83,10 @@ Metadata only.
   behave as before until the person moves it.
 - **Moving the setting binds at once**, as the ceiling does (ADR-0280
   §SD2): a view waiting for consent that the new level does not allow ends
-  refused, and the next request is built under the new level. What was
-  already sent cannot be recalled; the setting's tooltip says so.
+  refused, one waiting under a level raised to This chat's captures goes
+  through as the setting's decision, not the person's, and the next request
+  is built under the new level. What was already sent cannot be recalled;
+  the setting's tooltip says so.
 - **Lowering below Ask once per image forgets the remembered consents.**
   Raising it again starts with none.
 - **The chat enforces the level**, as it does the artefact's policy
@@ -112,15 +114,18 @@ Edit and names no base revision.
 - **That message says what it is**: a text part naming the image and its
   source, stating it was attached by the chat at the model's request and
   that its content is untrusted, then the image part. It is not the
-  person's turn, and the transcript shows it as the chat's.
+  person's turn. The transcript shows the view's tool line, not the
+  message.
 - **The image is sent as the set holds it**, a PNG. Providers bill an
   image by its pixel dimensions, not its encoding, so the encoding is not
   the lever on cost or disclosure; downscaling is (SD7).
 - A **purged** image, a name not in the set, and an image the level does
   not reach are refused with a reason, and nothing waits. A second view of
-  an image already attached this turn is answered as such, without asking.
-- **The model is told the level in force**, on its first turn and whenever
-  the setting moved, as it is told the ceiling; the system prompt's
+  an image already attached this turn is answered as such, without asking
+  and without a record, since nothing more leaves the host.
+- **The model is told what it may see when that is news**: the first time
+  it may see pixels, whenever that moved since, and when it no longer may;
+  a model that never could is told nothing more. The system prompt's
   screenshot part (ADR-0284 §SD3) names `artefact_view_image` as the one
   way it sees pixels.
 
@@ -129,14 +134,14 @@ Edit and names no base revision.
 Under the two Ask levels a view waits for the person, as an artefact
 proposal does under Ask first (ADR-0284 §SD5), in the Artefact panel.
 
-- **The panel shows the bytes that would be sent**, at the size they would
-  be sent, the image's name and source, and the model endpoint it would go
-  to, with **Allow** and **Decline**.
+- **The panel shows the image that would be sent**, fitted to the panel,
+  with the size it is sent at, its name and source, and the model endpoint
+  it would go to, with **Allow** and **Decline**.
 - **Under Ask once per image**, Allow records the content hash. A later
   view of that hash under any name does not ask; a crop, a new capture or
   any other derived image has a new hash and asks.
 - **Declining** returns a declined result to the model; the turn goes on.
-  Stopping the turn ends the wait as declined.
+  Stopping the turn ends the wait as declined, recorded with the reason.
 - **Reads that wait.** ADR-0280's *Changes* tooltip says reads never wait;
   it gains the exception for pixels under the Ask levels.
 
@@ -170,11 +175,12 @@ switch adds no locality predicate of its own.
   then no worse than an omission. Keeping only what is new needs several
   ranges per request (SD7).
 - Rewind, take-back and branch carry the placeholder, never the pixels.
-- Export (ADR-0265 §SD4) writes the placeholder.
+- Export (ADR-0265 §SD4) writes the transcript, which holds the view's tool
+  line and never the pixels.
 
 ### SD6 — Records and the ladder
 
-- **Every view is one `agentDisclosure` row**
+- **Every view the setting decides is one `agentDisclosure` row**
   ([ADR-0277](./0277-one-audit-trail-for-model-calls-and-agent-work.md)),
   whatever its retention: the image's name, its BLAKE3 digest, the digest
   of the capture it descends from by copies and crops, how it came to be,
@@ -187,7 +193,9 @@ switch adds no locality predicate of its own.
   hold the trail's recorder, so the chat reports each view on
   `runtime.agent.disclose`, which only a registered coordinator may call.
   What it reports is the coordinator's account, as the conversation and
-  turn of every row are the app's.
+  turn of every row are the app's. A report the host refuses — from an app
+  that is no coordinator, or a decision and decider that do not belong
+  together — is a refused row of the actions file, as a refused call is.
 - **A shown view is recorded before it is attached.** When the host does
   not record it — no agent service, a trail the host requires and cannot
   keep — the view is refused and nothing is sent. Declined and refused
@@ -320,15 +328,16 @@ None: the default is Metadata only, the behaviour of ADR-0284.
   non-local endpoint the view is refused before attaching and the turn goes
   on.
 - Retention: the image is in every request of its turn and replaced by the
-  placeholder in the next; rewind and export carry the placeholder.
+  placeholder in the next; rewind carries the placeholder, export no pixels.
 - The host refuses a request carrying pixels under the switch to a model
   off this machine, even when the chat believes it local.
 - Every view is reported — shown with who let it through, declined,
   refused — a crop names its capture's digest, and a view the host cannot
   record is not shown. Over clickhouse-local, a report lands as one row
   joined to the task and the model call that asked; one from an app that is
-  no coordinator, or a shown view the chat claims to have decided, is
-  refused and leaves none.
+  no coordinator, or with a decision and decider that do not belong
+  together, is refused, leaves no disclosure row and is a refused row of the
+  actions file.
 - The host's cap clamps the level and forces the switch in the coordinator
   and in the panel.
 - A scene on the headless host: capture, view under Ask each time, Allow in
@@ -336,20 +345,13 @@ None: the default is Metadata only, the behaviour of ADR-0284.
 
 ## Status
 
-Proposed 2026-10-06, built. The verification plan holds in unit tests —
-each level, the waiting view following the setting and a stopped turn,
-remembered consents per hash, placeholders, the confined label, a turn
-through the host's llm service carrying the pixels in its second round
-only, the host's refusal under the switch, every view reported and a
-shown one refused when it cannot be, and the cap — and in the agent
-service's test of the disclosure row over clickhouse-local; and in the
-scenes [chat-artefact-pixels](../../apps/chat/scenes/chat-artefact-pixels.scene.md)
-— a capture, a view under Ask each time, the consent in the panel, Allow,
-recorded through the host's service — and
-[chat-pixels-host-cap](../../apps/chat/scenes/chat-pixels-host-cap.scene.md)
-on the headless host. Not verified: the desktop host, a real
-vision-capable model reading the images, and a disclosure row read back
-from a host's durable trail outside a test.
+Proposed 2026-10-06, built. The verification plan holds in the tests of
+`apps/chat` and `runtime/agent` and in the scenes
+[chat-artefact-pixels](../../apps/chat/scenes/chat-artefact-pixels.scene.md)
+and [chat-pixels-host-cap](../../apps/chat/scenes/chat-pixels-host-cap.scene.md).
+Not verified: the desktop host, a real vision-capable model reading the
+images, and a disclosure row read back from a host's durable trail outside
+a test.
 
 ## Updates
 

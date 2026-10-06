@@ -339,6 +339,19 @@ func TestTheDisclosureRecordLandsOnTheTrail(t *testing.T) {
 	err = other.Disclose(ctx, shown)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "coordinator")
+	odd := declined
+	odd.DecidedBy = DecidedBySetting
+	assert.Error(t, r.cli.Disclose(ctx, odd), "only the person declines")
+	var refusedReports []ActionRecord
+	for _, a := range r.svc.Actions() {
+		if a.Operation == "disclose" {
+			refusedReports = append(refusedReports, a)
+		}
+	}
+	require.Len(t, refusedReports, 3, "every refused report is a row of the actions file")
+	assert.Equal(t, "refused", refusedReports[1].Phase)
+	assert.Equal(t, "test.other", string(refusedReports[1].Actor))
+	assert.Contains(t, refusedReports[1].Reason, "coordinator")
 	r.svc.Close()
 
 	rows, err := rec.Scan(func(st *trail.TrailStore) iter.Seq2[*trail.TrailEntity, error] {
