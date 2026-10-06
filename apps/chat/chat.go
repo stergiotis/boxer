@@ -153,7 +153,7 @@ var _ app.AppI = (*App)(nil)
 
 func newApp() (inst *App) {
 	inst = &App{turnMachine: newTurnMachine(), log: zerolog.Nop(), ids: c.NewWidgetIdStack(), keep: true, draft: DraftSeed.Get(), conv: newConversation(), apps: AppsSeed.Get() || registeredCoordinator(),
-		questions: QuestionsSeed.Get(), artefact: ArtefactSeed.Get(), showArtefact: ArtefactSeed.Get(), advanced: AdvancedSeed.Get(), pubs: newStatsPublishers(), perms: defaultPermissions(),
+		questions: QuestionsSeed.Get(), artefact: ArtefactSeed.Get(), showArtefact: ArtefactSeed.Get(), advanced: AdvancedSeed.Get(), pubs: newStatsPublishers(), perms: defaultPermissions().withPixels(pixelsSeed(), PixelsLocalSeed.Get()),
 		opTools: OperationToolsSeed.Get(), rounds: float64(clampRounds(0))}
 	return
 }

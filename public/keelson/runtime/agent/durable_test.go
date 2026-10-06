@@ -297,3 +297,78 @@ func TestTheCaptureRecordLandsOnTheTrail(t *testing.T) {
 	require.Len(t, gif.Reason, 1)
 	assert.Contains(t, gif.Reason[0], "svg or png")
 }
+
+// Over clickhouse-local: a coordinator's report of a view leaves one
+// agentDisclosure row (ADR-0287 §SD6) — the image's digest and its
+// capture's, the level and who decided, joined to the task and the model
+// call that asked; a report from an app that is no coordinator, or one that
+// claims a shown view the chat decided, is refused and leaves none.
+func TestTheDisclosureRecordLandsOnTheTrail(t *testing.T) {
+	exec, err := chexec.NewLocalExecutor(t.TempDir(), nil)
+	if err != nil {
+		t.Skipf("clickhouse unavailable: %v", err)
+	}
+	ctx := context.Background()
+	setup, err := chstore.ComposeSetupSQL(chstore.Config{Database: factsschema.DatabaseName, Table: factsschema.TableName}, "")
+	require.NoError(t, err)
+	for stmt := range strings.SplitSeq(setup, ";") {
+		if stmt = strings.TrimSpace(stmt); stmt != "" {
+			require.NoError(t, exec.Exec(ctx, stmt))
+		}
+	}
+	rec := trail.NewRecorder(exec, "run-test", zerolog.Nop())
+	defer rec.Close()
+	r := newRigWith(t, func(cfg *Config) {
+		cfg.TestGrants, cfg.Trail, cfg.Coordinators = true, rec, []string{"test.coordinator"}
+	})
+	g := r.grant(ModeObserve)
+	shown := Disclosure{Handle: g.Handle, Conversation: "conv-1", Asked: Asked{Turn: "turn-1", ModelCall: "call-1", ToolCall: "v1", ToolIndex: 2},
+		Image: "corner.png", Digest: strings.Repeat("a", 64), RootDigest: strings.Repeat("b", 64), Source: "crop",
+		Width: 240, Height: 120, Bytes: 999, Level: PixelsAskOnce, LocalOnly: true,
+		Decision: DisclosureShown, DecidedBy: DecidedByConsent, Endpoint: "m · 127.0.0.1 · on this machine"}
+	require.NoError(t, r.cli.Disclose(ctx, shown))
+	declined := Disclosure{Conversation: "conv-1", Asked: Asked{Turn: "turn-1"}, Image: "screenshot-1.png",
+		Digest: strings.Repeat("c", 64), RootDigest: strings.Repeat("c", 64), Source: "capture", Level: PixelsAskEach,
+		Decision: DisclosureDeclined, DecidedBy: DecidedByPerson}
+	require.NoError(t, r.cli.Disclose(ctx, declined))
+
+	bad := shown
+	bad.DecidedBy = DecidedByChat
+	assert.Error(t, r.cli.Disclose(ctx, bad), "a shown view is let through by the person, a consent or the setting")
+	other := NewClient(r.bus.NewClient("test.other", ClientCaps("test: not a coordinator")))
+	err = other.Disclose(ctx, shown)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "coordinator")
+	r.svc.Close()
+
+	rows, err := rec.Scan(func(st *trail.TrailStore) iter.Seq2[*trail.TrailEntity, error] {
+		return st.ScanAgentDisclosure(ctx, recordstore.ScanOpts{})
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	byDecision := map[string]*trail.TrailEntity{}
+	for _, ent := range rows {
+		byDecision[ent.AgentDisclosure.Val.Decision] = ent
+	}
+	s := byDecision[DisclosureShown]
+	require.NotNil(t, s)
+	d := s.AgentDisclosure.Val
+	assert.Equal(t, "corner.png", d.Image)
+	assert.Equal(t, strings.Repeat("b", 64), d.RootDigest)
+	assert.Equal(t, "crop", d.Source)
+	assert.Equal(t, "ask once per image", d.Level)
+	assert.True(t, d.LocalOnly)
+	assert.Equal(t, DecidedByConsent, d.DecidedBy)
+	assert.Equal(t, []string{"m · 127.0.0.1 · on this machine"}, d.Endpoint)
+	require.True(t, s.Delegation.Has)
+	assert.Equal(t, g.Task, s.Delegation.Val.Task)
+	require.True(t, s.Cause.Has)
+	assert.Equal(t, "call-1", s.Cause.Val.ModelCall)
+	assert.Equal(t, uint32(2), s.Cause.Val.ToolIndex)
+	require.True(t, s.Conversation.Has)
+	assert.Equal(t, "conv-1", s.Conversation.Val.Conversation)
+	dd := byDecision[DisclosureDeclined]
+	require.NotNil(t, dd)
+	assert.False(t, dd.Delegation.Has, "no task named: none joined")
+	assert.Equal(t, DecidedByPerson, dd.AgentDisclosure.Val.DecidedBy)
+}

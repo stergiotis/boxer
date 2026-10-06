@@ -297,6 +297,18 @@ repository on this host's disk is what the host holds, like its
 `keelson:<table>` tables, so `git:<path>` is host reach. The rule for a
 class not listed is unchanged: the widest.
 
+### 2026-10-06 — the model's sight of screenshots moves the position
+
+[ADR-0287](./0287-chat-pixels-a-setting-for-showing-screenshots-to-the-model.md)
+lets a chat's model see the artefact's screenshots as pixels, at four
+levels, optionally only on a local model. Like a remote model, this lies
+beside the ceiling rather than in it — the chat enforces it, the host sees
+only a confined label — so it moves the *may* marker within its band and
+not up a level: `Ceiling.ScoreBeside` takes it with the model's locality,
+and the weights gain room for it. The *now* marker, the task's grant, does
+not hold it. The *Changes* tooltip's "reads never wait" gains the
+exception of a view waiting for consent.
+
 ## References
 
 - [ADR-0265](./0265-chat-app-over-retained-model-calls.md) — the chat app and its coordinator.

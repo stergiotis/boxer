@@ -244,15 +244,62 @@ const (
 	weightNetwork = 2
 	weightRemote  = 1
 	weightUnpaced = 2 // changes land faster than a person can follow
-	weightAll     = weightUnasked + weightLaunch + weightDesktop + weightNetwork + weightRemote + weightUnpaced
+	// weightPixels is the most the model's sight of its captures adds, at
+	// PixelsCaptures sent anywhere (ADR-0287 §SD6).
+	weightPixels = 3
+	weightAll    = weightUnasked + weightLaunch + weightDesktop + weightNetwork + weightRemote + weightUnpaced + weightPixels
 	// bandInset keeps a position off its band's edges, so a marker always
 	// reads as inside one band.
 	bandInset = 0.12
 )
 
-// Score places c on the ladder. remoteModel says the model is reached off
-// this machine, which no ceiling decides and every level is affected by.
+// PixelsE is how much of its captures' pixels the model may see (ADR-0287):
+// none, each one after the person allows that send, each one after the
+// person allowed its content once, or every capture of the conversation.
+// The chat enforces it; the ladder places it within the band, since seeing a
+// granted window's pixels reads nothing the grant does not already reach.
+type PixelsE uint8
+
+const (
+	PixelsNone PixelsE = iota
+	PixelsAskEach
+	PixelsAskOnce
+	PixelsCaptures
+)
+
+var AllPixels = []PixelsE{PixelsNone, PixelsAskEach, PixelsAskOnce, PixelsCaptures}
+
+func (inst PixelsE) String() string {
+	switch inst {
+	case PixelsAskEach:
+		return "ask each time"
+	case PixelsAskOnce:
+		return "ask once per image"
+	case PixelsCaptures:
+		return "this chat's captures"
+	}
+	return "metadata only"
+}
+
+// Beside is what places a position besides the ceiling itself: where the
+// model runs, and what of the captures it sees.
+type Beside struct {
+	// RemoteModel says the model is reached off this machine, which no
+	// ceiling decides and every level is affected by.
+	RemoteModel bool
+	Pixels      PixelsE
+	// PixelsLocalOnly keeps the pixels to a model on this machine or one
+	// the host trusts with sealed data.
+	PixelsLocalOnly bool
+}
+
+// Score places c on the ladder; remoteModel is Beside's.
 func (inst Ceiling) Score(remoteModel bool) (s Score) {
+	return inst.ScoreBeside(Beside{RemoteModel: remoteModel})
+}
+
+// ScoreBeside places c on the ladder with what lies beside it.
+func (inst Ceiling) ScoreBeside(b Beside) (s Score) {
 	c := inst.normal()
 	s.Level = c.Level()
 	w := 0
@@ -267,10 +314,31 @@ func (inst Ceiling) Score(remoteModel bool) (s Score) {
 	add(c.Desktop, weightDesktop, "arranges the desktop")
 	add(c.Mode != ModeUnspecified && c.Reach == ReachData, weightData, "reaches data endpoints")
 	add(c.Mode != ModeUnspecified && c.Reach == ReachNetwork, weightNetwork, "reaches the network")
-	add(remoteModel, weightRemote, "the model is off this machine")
+	add(b.RemoteModel, weightRemote, "the model is off this machine")
 	add(c.Unpaced && s.Level >= LevelView, weightUnpaced, "works faster than you can follow")
+	if b.Pixels != PixelsNone {
+		pw, factor := pixelsWeight(b.Pixels, b.PixelsLocalOnly)
+		add(true, pw, factor)
+	}
 	within := bandInset + (1-2*bandInset)*float64(w)/float64(weightAll)
 	s.Position = (float64(s.Level) + within) / float64(len(AllLevels))
+	return
+}
+
+// pixelsWeight is what a pixels level adds and says: more the less the
+// person decides each send, less when the pixels stay on a local model.
+func pixelsWeight(p PixelsE, localOnly bool) (w int, factor string) {
+	switch p {
+	case PixelsAskEach:
+		w, factor = 1, "sees a screenshot each time you allow it"
+	case PixelsAskOnce:
+		w, factor = 2, "sees a screenshot once you allowed it"
+	default:
+		w, factor = weightPixels, "sees this chat's screenshots"
+	}
+	if localOnly {
+		w, factor = max(w-1, 1), factor+", on a local model only"
+	}
 	return
 }
 

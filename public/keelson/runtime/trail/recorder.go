@@ -216,6 +216,20 @@ func (inst *Recorder) AgentCapture(at time.Time, c Context, row AgentCapture) (e
 	})
 }
 
+// AgentDisclosure buffers one view's row (ADR-0287 §SD6).
+func (inst *Recorder) AgentDisclosure(at time.Time, c Context, cause option.Option[Cause], row AgentDisclosure) (err error) {
+	key := "disclosure|" + inst.unique(at)
+	return inst.write(key, at, c, func(b *TrailEntityBuilder, id uint64) {
+		if cause.Has {
+			v := cause.Val
+			v.Id = id
+			b.AddCause(v)
+		}
+		row.Id, row.Kind = id, "agentDisclosure"
+		b.AddAgentDisclosure(row)
+	})
+}
+
 // HttpFetch buffers one egress fetch's row.
 func (inst *Recorder) HttpFetch(at time.Time, c Context, row HttpFetch) (err error) {
 	key := "fetch|" + inst.unique(at)

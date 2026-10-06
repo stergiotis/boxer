@@ -505,6 +505,23 @@ var (
 	// the grant's plan is.
 	MembAgentActionCallTitle  = NkRegistry.MustBegin("agentActionCallTitle", 241).End()
 	MembAgentActionCallReason = NkRegistry.MustBegin("agentActionCallReason", 242).End()
+	// The disclosure record (ADR-0287 §SD6): one row per view of a
+	// screenshot's pixels a coordinator's model asked for — shown, declined
+	// or refused — and what decided it.
+	MembKindAgentDisclosure       = NkRegistry.MustBegin("runtimeKindAgentDisclosure", 244).End()
+	MembAgentDisclosureImage      = NkRegistry.MustBegin("agentDisclosureImage", 245).End()
+	MembAgentDisclosureDigest     = NkRegistry.MustBegin("agentDisclosureDigest", 246).End()
+	MembAgentDisclosureRootDigest = NkRegistry.MustBegin("agentDisclosureRootDigest", 247).End()
+	MembAgentDisclosureSource     = NkRegistry.MustBegin("agentDisclosureSource", 248).End()
+	MembAgentDisclosureWidth      = NkRegistry.MustBegin("agentDisclosureWidth", 249).End()
+	MembAgentDisclosureHeight     = NkRegistry.MustBegin("agentDisclosureHeight", 250).End()
+	MembAgentDisclosureBytes      = NkRegistry.MustBegin("agentDisclosureBytes", 251).End()
+	MembAgentDisclosureLevel      = NkRegistry.MustBegin("agentDisclosureLevel", 252).End()
+	MembAgentDisclosureLocalOnly  = NkRegistry.MustBegin("agentDisclosureLocalOnly", 253).End()
+	MembAgentDisclosureDecision   = NkRegistry.MustBegin("agentDisclosureDecision", 254).End()
+	MembAgentDisclosureDecidedBy  = NkRegistry.MustBegin("agentDisclosureDecidedBy", 255).End()
+	MembAgentDisclosureEndpoint   = NkRegistry.MustBegin("agentDisclosureEndpoint", 256).End()
+	MembAgentDisclosureReason     = NkRegistry.MustBegin("agentDisclosureReason", 257).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -568,4 +585,8 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembAgentCapturePolicy, MembAgentCaptureObligations, MembAgentCaptureSpansDigest, MembAgentCaptureDigest,
 	MembAgentCaptureBytes, MembAgentCapturePhase, MembAgentCaptureReason, MembAgentCaptureConfined,
 	MembAgentActionCallTitle, MembAgentActionCallReason,
+	MembKindAgentDisclosure, MembAgentDisclosureImage, MembAgentDisclosureDigest, MembAgentDisclosureRootDigest,
+	MembAgentDisclosureSource, MembAgentDisclosureWidth, MembAgentDisclosureHeight, MembAgentDisclosureBytes,
+	MembAgentDisclosureLevel, MembAgentDisclosureLocalOnly, MembAgentDisclosureDecision, MembAgentDisclosureDecidedBy,
+	MembAgentDisclosureEndpoint, MembAgentDisclosureReason,
 }

@@ -43,7 +43,7 @@ func TestScoreStaysInItsBand(t *testing.T) {
 		if l == LevelRead {
 			lo.Mode, hi.Mode = ModeObserve, ModeObserve
 		}
-		a, b := lo.Score(false), hi.Score(true)
+		a, b := lo.Score(false), hi.ScoreBeside(Beside{RemoteModel: true, Pixels: PixelsCaptures})
 		require.Equal(t, l, a.Level)
 		require.Equal(t, l, b.Level)
 		assert.GreaterOrEqual(t, a.Position, float64(l)/bands)
@@ -52,11 +52,28 @@ func TestScoreStaysInItsBand(t *testing.T) {
 		assert.Greater(t, a.Position, prevTop, "the least of a rung is above the most of the rung below")
 		prevTop = b.Position
 	}
-	s := Unlimited().Score(true)
+	s := Unlimited().ScoreBeside(Beside{RemoteModel: true, Pixels: PixelsCaptures})
 	assert.Equal(t, 98, s.Value())
+	assert.Contains(t, s.Factors, "sees this chat's screenshots")
 	assert.Contains(t, s.Factors, "changes apply without asking")
 	assert.Contains(t, s.Factors, "the model is off this machine")
 	assert.Empty(t, Ceiling{}.Score(false).Factors)
+}
+
+// Pixels move a position within its band, more the less the person decides
+// each send, and less when they stay on a local model (ADR-0287 §SD6).
+func TestPixelsMoveWithinTheBand(t *testing.T) {
+	c := Ceiling{Mode: ModeObserve}
+	prev := c.Score(false)
+	for _, p := range AllPixels[1:] {
+		s := c.ScoreBeside(Beside{Pixels: p})
+		require.Equal(t, prev.Level, s.Level)
+		assert.Greater(t, s.Position, prev.Position, p.String())
+		local := c.ScoreBeside(Beside{Pixels: p, PixelsLocalOnly: true})
+		assert.LessOrEqual(t, local.Position, s.Position, p.String())
+		assert.Greater(t, local.Position, c.Score(false).Position, "a local-only level still moves it")
+		prev = s
+	}
 }
 
 func effectOf(l LevelE) app.OperationEffectE {

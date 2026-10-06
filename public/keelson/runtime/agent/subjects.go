@@ -60,6 +60,9 @@ const (
 	// SubjectAuthority reads a task's ceiling and what its grant allows
 	// under it, and moves the ceiling (ADR-0280).
 	SubjectAuthority = SubjectPrefix + "authority"
+	// SubjectDisclose records a view of a screenshot's pixels a
+	// coordinator's model asked for (ADR-0287 §SD6).
+	SubjectDisclose = SubjectPrefix + "disclose"
 	// SubjectTurn starts a model turn: the changes by other writers since
 	// the previous one, and the task's pauses lifted.
 	SubjectTurn = SubjectPrefix + "turn"

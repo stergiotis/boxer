@@ -351,7 +351,11 @@ func (inst *conversation) landTurn(req llm.Request, res *turnResult, err error, 
 		return
 	}
 	inst.land(req, &res.final, nil, atMs)
-	inst.history, inst.omitTo = append(inst.history[:0:0], res.messages...), res.omitTo
+	// A screenshot shown this turn stays for this turn: the next resends a
+	// placeholder in its place (ADR-0287 §SD5). The host then keeps that
+	// request in full, as a rewrite (ADR-0264 §SD3).
+	history, _ := stripPixels(res.messages)
+	inst.history, inst.omitTo = append(inst.history[:0:0], history...), res.omitTo
 }
 
 // fail marks the user entry i as not answered. A failed turn after an

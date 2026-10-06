@@ -157,7 +157,8 @@ A read tool, offered whenever Artefact is on:
 - **References from the markdown**: resolving `![[name]]` through
   `obsidian/resolver`, and the linter's rule for a name that is not in the
   set.
-- **Showing images to the model** (ADR-0281 §SD7).
+- **Showing images to the model** (ADR-0281 §SD7) — decided in
+  [ADR-0287](./0287-chat-pixels-a-setting-for-showing-screenshots-to-the-model.md).
 - **Copying to the clipboard** from the panel.
 - **Captures the person starts**, which need ADR-0281's other subjects.
 

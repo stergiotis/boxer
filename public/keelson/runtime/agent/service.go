@@ -176,7 +176,7 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 			return
 		}
 	}
-	if msg.Subject != SubjectDescribe && msg.Subject != SubjectRequest && inst.cfg.Host == nil {
+	if msg.Subject != SubjectDescribe && msg.Subject != SubjectRequest && msg.Subject != SubjectDisclose && inst.cfg.Host == nil {
 		inst.reply(msg.Reply, wireAck{V: wireVersion, Reason: "no window host"})
 		return
 	}
@@ -213,6 +213,8 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 		inst.reply(msg.Reply, inst.launch(msg))
 	case SubjectAuthority:
 		inst.reply(msg.Reply, inst.authority(msg))
+	case SubjectDisclose:
+		inst.reply(msg.Reply, inst.disclose(msg))
 	case SubjectArrange, SubjectRaise, SubjectPlace:
 		inst.reply(msg.Reply, inst.windowAct(msg))
 	default:

@@ -42,7 +42,7 @@ func TestOnlyTheBodyBindsTheTextSection(t *testing.T) {
 		"Origin": factsScanOriginFilter, "Conversation": factsScanConversationFilter, "Delegation": factsScanDelegationFilter,
 		"Cause": factsScanCauseFilter, "LlmCall": factsScanLlmCallFilter, "LlmMessage": factsScanLlmMessageFilter,
 		"AgentAction": factsScanAgentActionFilter, "AgentGrant": factsScanAgentGrantFilter, "HttpFetch": factsScanHttpFetchFilter,
-		"AgentCapture": factsScanAgentCaptureFilter,
+		"AgentCapture": factsScanAgentCaptureFilter, "AgentDisclosure": factsScanAgentDisclosureFilter,
 	} {
 		assert.NotContains(t, sql, "tv:textArray", comp+" binds no slot on the text section")
 	}
@@ -66,6 +66,16 @@ func TestTheCaptureRecordUsesTheVocabulary(t *testing.T) {
 	assert.Equal(t, vocab.MembKindAgentCapture.GetId().Value(), ids["runtimeKindAgentCapture"])
 	assert.Equal(t, vocab.MembAgentCaptureDigest.GetId().Value(), ids["agentCaptureDigest"])
 	assert.Equal(t, vocab.MembAgentCaptureObligations.GetId().Value(), ids["agentCaptureObligations"])
+}
+
+// So do the disclosure record's (ADR-0287 §SD6), and its digests join a
+// capture's and a message's images.
+func TestTheDisclosureRecordUsesTheVocabulary(t *testing.T) {
+	ids := TrailMembershipIds["AgentDisclosure"]
+	assert.Equal(t, vocab.MembKindAgentDisclosure.GetId().Value(), ids["runtimeKindAgentDisclosure"])
+	assert.Equal(t, vocab.MembAgentDisclosureDigest.GetId().Value(), ids["agentDisclosureDigest"])
+	assert.Equal(t, vocab.MembAgentDisclosureRootDigest.GetId().Value(), ids["agentDisclosureRootDigest"])
+	assert.Equal(t, vocab.MembAgentDisclosureDecidedBy.GetId().Value(), ids["agentDisclosureDecidedBy"])
 }
 
 // A nil recorder and one without a backend record nothing, say so, and

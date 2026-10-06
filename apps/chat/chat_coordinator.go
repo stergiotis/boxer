@@ -106,6 +106,8 @@ type coordinator struct {
 	cli *agent.Client
 	// captureHook stands in for the host's capture service in tests.
 	captureHook func(ctx context.Context, windows []uint64, crop *[4]float32) (data []byte, reason string)
+	// discloseHook stands in for the host's disclosure record in tests.
+	discloseHook func(d agent.Disclosure) error
 	// kq reads keelson('windows') and keelson('desktop') (ADR-0276 §SD2);
 	// nil leaves query_windows unanswered.
 	kq           *keelsonquery.Client
@@ -138,6 +140,9 @@ type coordinator struct {
 	// rounds is the person's limit on a turn's rounds, read when a turn
 	// starts; zero is defaultRounds. Guarded by mu.
 	rounds int
+	// pix is the Pixels setting and what it holds: consents, a view waiting
+	// on the person, the turn's shown screenshots (ADR-0287). Guarded by mu.
+	pix pixelState
 
 	mu sync.Mutex
 	// apps and questions are what the conversation offers the model, fixed
@@ -377,6 +382,9 @@ func (inst *coordinator) tools(ctx context.Context) (out []openaichat.Tool) {
 		write := art.policyNow().write
 		out = append(out, artefactTools(write)...)
 		out = append(out, imageTools(write, apps)...)
+		if inst.pixelsNow().reaches() {
+			out = append(out, viewTool())
+		}
 	}
 	if !apps {
 		return
@@ -939,6 +947,11 @@ func runTurn(ctx context.Context, cli *llm.Client, coord *coordinator, req llm.R
 		last := msgs[len(msgs)-1]
 		msgs = append(msgs[:len(msgs)-1], openaichat.Message{Role: openaichat.ChatRoleSystem, Content: note}, last)
 	}
+	if note := coord.pixelsNote(); note != "" {
+		// What the model may see of the screenshots, when it is news.
+		last := msgs[len(msgs)-1]
+		msgs = append(msgs[:len(msgs)-1], openaichat.Message{Role: openaichat.ChatRoleSystem, Content: note}, last)
+	}
 	if note := coord.changesNote(ctx, req.Turn); note != "" {
 		// The host's account goes before the person's message.
 		last := msgs[len(msgs)-1]
@@ -946,6 +959,7 @@ func runTurn(ctx context.Context, cli *llm.Client, coord *coordinator, req llm.R
 	}
 	out = &turnResult{}
 	coord.trail.reset()
+	coord.beginPixelTurn()
 	defer func() {
 		out.steps, _, _ = coord.trail.snapshot(0)
 	}()
@@ -956,7 +970,14 @@ func runTurn(ctx context.Context, cli *llm.Client, coord *coordinator, req llm.R
 			progress(round, "")
 		}
 		r := req
+		// The Pixels setting binds at once: the round is sent under it as it
+		// stands now (ADR-0287 §SD1).
+		var confine bool
+		msgs, confine = coord.bindPixels(msgs)
 		r.Messages, r.Tools, r.Sensitivity, r.ParentCallId, r.Round = msgs, coord.tools(ctx), coord.sensitivity(), parent, uint32(round)
+		if confine {
+			r.Sensitivity = queryengine.SensitivityConfined
+		}
 		if round == limit-1 {
 			// The note is for this call only: it does not join the history
 			// the next turn resends.
@@ -1005,6 +1026,11 @@ func runTurn(ctx context.Context, cli *llm.Client, coord *coordinator, req llm.R
 			})
 			out.activity = append(out.activity, activity)
 			msgs = append(msgs, openaichat.Message{Role: openaichat.ChatRoleTool, ToolCallId: tc.Id, Content: content})
+		}
+		if m, ok := coord.takeShown(); ok {
+			// After every tool result of the round, which must follow the
+			// calls directly.
+			msgs = append(msgs, m)
 		}
 	}
 	out.messages = msgs

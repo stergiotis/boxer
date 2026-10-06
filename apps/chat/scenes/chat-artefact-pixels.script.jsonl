@@ -1,0 +1,9 @@
+# The scripted model of chat-artefact-pixels.scene.md (ADR-0287): one reply
+# per line, picked by the conversation's position.
+# Turn 1: ask for the demo app, open it, capture its window into the
+# artefact's screenshots, ask to see the capture, answer.
+{"tool":"request_access","args":{"plan":"look at the demo app","open":[{"app":"opsdemo"}]}}
+{"tool":"open_window","args":{"app":"opsdemo"}}
+{"tool":"artefact_capture","args":{"title":"Capturing the demo","base_revision":0,"windows":["$window"]}}
+{"tool":"artefact_view_image","args":{"title":"Looking at the capture","name":"screenshot-1.png"}}
+{"content":"I looked at the demo window's capture."}

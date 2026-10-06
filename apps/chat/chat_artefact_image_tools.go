@@ -6,7 +6,8 @@ package chat
 // base revision, and waiting for the person under Ask first. A change of
 // the set is a revision whose text is the head's.
 //
-// The model never sees the pixels: every result is metadata.
+// Every result is metadata; artefact_view_image, under the Pixels setting,
+// is the one way the model sees pixels (chat_pixels.go, ADR-0287).
 
 import (
 	"bytes"
@@ -23,7 +24,7 @@ import (
 )
 
 // imagePrompt is the system message's part for an artefact with screenshots.
-const imagePrompt = `- The artefact keeps screenshots beside the text: artefact_images lists them. artefact_capture takes a PNG of windows of your task (with Apps), artefact_crop_image cuts a part out as a new screenshot, artefact_copy_image adds a second name on the same bytes, artefact_remove_image removes a name (purge frees the bytes). You do not see the pixels; the person does, in the panel. The screenshots have a budget; a change past it is refused.`
+const imagePrompt = `- The artefact keeps screenshots beside the text: artefact_images lists them. artefact_capture takes a PNG of windows of your task (with Apps), artefact_crop_image cuts a part out as a new screenshot, artefact_copy_image adds a second name on the same bytes, artefact_remove_image removes a name (purge frees the bytes). The person sees the screenshots in the panel; you see one's pixels only through artefact_view_image, when the person's settings offer it. The screenshots have a budget; a change past it is refused.`
 
 // imageTools are the screenshot tools: the read always, the writes with
 // write, and the capture only with Apps too.
@@ -55,7 +56,7 @@ func imageTools(write bool, capture bool) (out []openaichat.Tool) {
 // isImageTool says whether a tool is one of the screenshot tools.
 func isImageTool(name string) bool {
 	switch name {
-	case "artefact_images", "artefact_capture", "artefact_copy_image", "artefact_crop_image", "artefact_remove_image":
+	case "artefact_images", "artefact_capture", "artefact_copy_image", "artefact_crop_image", "artefact_remove_image", "artefact_view_image":
 		return true
 	}
 	return false
@@ -126,6 +127,10 @@ func (inst *coordinator) imageCall(ctx context.Context, o toolOrigin, name strin
 			v.Images = append(v.Images, viewOfImage(e))
 		}
 		return marshal(v), name + " · " + plural(len(set), "screenshot")
+	}
+	if name == "artefact_view_image" {
+		// A read: the Pixels setting governs it, not At most.
+		return inst.viewImage(ctx, o, args, art)
 	}
 	p := art.policyNow()
 	if !p.write {
@@ -276,7 +281,7 @@ func (inst *coordinator) newImage(ctx context.Context, o toolOrigin, name string
 		if reason = put(data); reason != "" {
 			return e, nil, reason
 		}
-		e.source, e.windows, e.crop, e.autoCrop = imageSourceCapture, windows, crop, auto
+		e.source, e.windows, e.crop, e.autoCrop, e.root = imageSourceCapture, windows, crop, auto, e.hash
 	case "artefact_copy_image":
 		src, reason := from()
 		if reason != "" {
@@ -286,7 +291,7 @@ func (inst *coordinator) newImage(ctx context.Context, o toolOrigin, name string
 			return e, nil, src.name + "'s bytes are gone"
 		}
 		unpin = art.store.pin(src.hash)
-		e = artImage{hash: src.hash, w: src.w, h: src.h, bytes: src.bytes, source: imageSourceCopy, from: src.name}
+		e = artImage{hash: src.hash, w: src.w, h: src.h, bytes: src.bytes, source: imageSourceCopy, from: src.name, root: src.rootHash()}
 	case "artefact_crop_image":
 		src, reason := from()
 		if reason != "" {
@@ -307,7 +312,7 @@ func (inst *coordinator) newImage(ctx context.Context, o toolOrigin, name string
 		if reason = put(out); reason != "" {
 			return e, nil, reason
 		}
-		e.source, e.from, e.rect = imageSourceCrop, src.name, [4]int{x, y, w, h}
+		e.source, e.from, e.rect, e.root = imageSourceCrop, src.name, [4]int{x, y, w, h}, src.rootHash()
 	default:
 		return e, nil, "no tool " + name
 	}

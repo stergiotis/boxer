@@ -3,12 +3,14 @@ package chat
 // The Artefact panel's screenshots (ADR-0284 §SD5): the set with a
 // thumbnail, size and source per name, the budget's use, and Remove and
 // Purge — the person's way out of a full budget; and an image change
-// waiting under Ask first, shown as the image it adds or removes.
+// waiting under Ask first, shown as the image it adds or removes; and a view
+// of a screenshot waiting under Pixels' Ask levels (ADR-0287 §SD3).
 
 import (
 	"strconv"
 	"strings"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
@@ -17,13 +19,20 @@ const (
 	// imageThumbBox bounds a thumbnail as drawn, in logical points.
 	imageThumbBox uint32 = 160
 
-	tipImageRemove = "Remove this name from the set, as a new revision. The bytes stay while an earlier revision names them, so a revert brings it back."
-	tipImagePurge  = "Remove it and free its bytes for good: earlier revisions keep the name, marked purged, and a revert cannot bring the image back."
+	tipImageRemove  = "Remove this name from the set, as a new revision. The bytes stay while an earlier revision names them, so a revert brings it back."
+	tipImagePurge   = "Remove it and free its bytes for good: earlier revisions keep the name, marked purged, and a revert cannot bring the image back."
+	tipPixelAllow   = "Send this screenshot to the model with the turn. It stays in the model's context for this turn only; what was sent cannot be called back."
+	tipPixelDecline = "Keep this screenshot from the model; it is told you declined, and asked not to ask again."
+
+	// pixelPreviewH bounds the height of the image a view's consent shows.
+	pixelPreviewH uint32 = 480
 )
 
 var (
-	atomsImageRemove = c.Atoms().Text(icons.PhTrash + " Remove").Keep()
-	atomsImagePurge  = c.Atoms().Text(icons.PhTrash + " Purge").Keep()
+	atomsImageRemove  = c.Atoms().Text(icons.PhTrash + " Remove").Keep()
+	atomsImagePurge   = c.Atoms().Text(icons.PhTrash + " Purge").Keep()
+	atomsPixelAllow   = c.Atoms().Text(icons.PhCheck + " Allow").Keep()
+	atomsPixelDecline = c.Atoms().Text(icons.PhX + " Decline").Keep()
 )
 
 // renderImages is the Images tab.
@@ -98,6 +107,48 @@ func (inst *App) renderImageProposal(p *artProposal, what string, head int) {
 			weak(imageOrigin(*p.image))
 		}
 	}
+}
+
+// renderPixelAsk is a view of a screenshot waiting for the person: what
+// would be sent, where it would go, Allow and Decline.
+func (inst *App) renderPixelAsk(a *pixelAsk) {
+	section("The model asks to see a screenshot")
+	c.Label(a.name + " · " + strconv.Itoa(a.w) + "×" + strconv.Itoa(a.h) + " px, sent as it is").Selectable(false).Send()
+	weak(a.origin)
+	to := "the host's model"
+	if a.endpoint != "" {
+		to = a.endpoint
+	}
+	weak("It would go to " + to + ".")
+	if a.level == agent.PixelsAskOnce {
+		weak("Allowed, this image is not asked for again while its content is unchanged.")
+	} else {
+		weak("Allowed, it is shown for this turn; the next view asks again.")
+	}
+	for range c.HorizontalTop().KeepIter() {
+		for range c.HoverText(tipPixelAllow).KeepIter() {
+			if c.Button(inst.ids.PrepareStr("pixel-allow"), atomsPixelAllow).SendResp().HasPrimaryClicked() {
+				a.decide(pixelAllowed)
+			}
+		}
+		for range c.HoverText(tipPixelDecline).KeepIter() {
+			if c.Button(inst.ids.PrepareStr("pixel-decline"), atomsPixelDecline).SendResp().HasPrimaryClicked() {
+				a.decide(pixelDeclined)
+			}
+		}
+	}
+	t := a.preview
+	if len(t.Pixels) == 0 {
+		weak("no preview")
+		return
+	}
+	id := inst.ids.PrepareStr("pixel-ask-" + a.hash).Derive()
+	if inst.artView.thumbs == nil {
+		inst.artView.thumbs = c.NewImageVersionTracker[uint64]()
+	}
+	px := inst.artView.thumbs.PixelsToSendFor(id, id, 1, t.Pixels)
+	c.Image(c.MakeAbsoluteIdHighEntropy(id), t.WidthPx, t.HeightPx, 1, uint8(c.FitAspectMaxE), uint32(artefactPanelW)-40, pixelPreviewH,
+		uint8(c.FilterLinearE), c.TintNoneRgba, px).Send()
 }
 
 // renderImageThumb draws an entry's thumbnail, or says why there is none.

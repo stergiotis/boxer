@@ -99,6 +99,18 @@ type artImage struct {
 	rect [4]int
 	// purged marks an entry whose bytes were freed (ADR-0284 §SD2).
 	purged bool
+	// root is the hash of the capture the entry descends from by copies and
+	// crops — its own for a capture — which a disclosure names, so the trail
+	// joins a view to the capture's row (ADR-0287 §SD6).
+	root string
+}
+
+// rootHash is the hash of the capture e descends from.
+func (inst artImage) rootHash() string {
+	if inst.root == "" {
+		return inst.hash
+	}
+	return inst.root
 }
 
 // imageLimits are the budget's ceilings.

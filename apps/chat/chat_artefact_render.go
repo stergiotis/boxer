@@ -108,7 +108,7 @@ func (inst *App) renderArtefactToggle() {
 		return
 	}
 	label := atomsArtefact
-	if inst.conv.art.pending() != nil {
+	if inst.conv.art.pending() != nil || inst.coord.pixelAskNow() != nil {
 		label = c.Atoms().Text(icons.PhFileText + " Artefact · waiting").Keep()
 	}
 	for range c.HoverText(tipArtefactPanel).KeepIter() {
@@ -159,6 +159,11 @@ func (inst *App) renderArtefact() {
 	}
 	if p := art.pending(); p != nil {
 		inst.renderProposal(p, n, text)
+	}
+	if a := inst.coord.pixelAskNow(); a != nil {
+		for range c.IdScope(inst.ids.PrepareStr("pixel-ask")) {
+			inst.renderPixelAsk(a)
+		}
 	}
 	c.AddSpace(4)
 	lintLabel := "Lint"

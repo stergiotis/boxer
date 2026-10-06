@@ -235,3 +235,17 @@
 241	agent-action-call-title	9223372049739677937
 242	agent-action-call-reason	9223372049739677938
 243	vizeval-task-judge	9223372049739677939
+244	runtime-kind-agent-disclosure	9223372049739677940
+245	agent-disclosure-image	9223372049739677941
+246	agent-disclosure-digest	9223372049739677942
+247	agent-disclosure-root-digest	9223372049739677943
+248	agent-disclosure-source	9223372049739677944
+249	agent-disclosure-width	9223372049739677945
+250	agent-disclosure-height	9223372049739677946
+251	agent-disclosure-bytes	9223372049739677947
+252	agent-disclosure-level	9223372049739677948
+253	agent-disclosure-local-only	9223372049739677949
+254	agent-disclosure-decision	9223372049739677950
+255	agent-disclosure-decided-by	9223372049739677951
+256	agent-disclosure-endpoint	9223372049739677952
+257	agent-disclosure-reason	9223372049739677953

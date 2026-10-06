@@ -55,6 +55,11 @@ type permissions struct {
 	// unpaced lets the model's changes land as fast as it makes them; off,
 	// the host spaces them so each can be followed and stopped.
 	unpaced bool
+	// pixels is which of the artefact's screenshots the model may see, and
+	// pixelsLocal keeps them to a local model (ADR-0287). The chat enforces
+	// both; the host only sees the confined label.
+	pixels      agent.PixelsE
+	pixelsLocal bool
 }
 
 // defaultPermissions let the model do what a conversation with Apps on could
@@ -114,6 +119,15 @@ func (inst permissions) artCeiling() (ceil agent.Ceiling) {
 	return
 }
 
+// pixelsIn is the Pixels level in force for a conversation: screenshots
+// live in the artefact and come from captures, which need Apps.
+func (inst permissions) pixelsIn(artefact bool, apps bool) (p agent.PixelsE) {
+	if !artefact || !apps {
+		return agent.PixelsNone
+	}
+	return inst.pixels
+}
+
 // withArtefact raises a ceiling to what the artefact allows, for the scale;
 // what goes to the host stays the windows' ceiling alone.
 func withArtefact(ceil agent.Ceiling, art agent.Ceiling) (out agent.Ceiling) {
@@ -159,7 +173,7 @@ const (
 		"Edit: also change what it holds — text, parameters — and write the artefact.\n" +
 		"Run: also run against a data source.\n" +
 		"Outside: also act outside the app — publish, export — confirmed by you each time."
-	tipChanges = "Ask first: every change waits as a proposal you accept or reject — in the window it changes, or in the Artefact panel. Apply directly: changes land as the model makes them. Reads never wait, and a change outside the app is confirmed each time either way."
+	tipChanges = "Ask first: every change waits as a proposal you accept or reject — in the window it changes, or in the Artefact panel. Apply directly: changes land as the model makes them. Reads never wait — except a screenshot's pixels under Pixels' Ask levels — and a change outside the app is confirmed each time either way."
 	tipLaunch  = "Let the model ask to open windows of apps. You still decide which, in the host's dialog."
 	tipDesktop = "Let the model ask to arrange every window on the desktop."
 	tipReach   = "How far the model's work may reach beyond the windows. The task's grant names each place, and you approve the list.\n" +
@@ -170,7 +184,14 @@ const (
 	tipArtefact = "Give this conversation one markdown document the model reads and edits through tools, shown in the Artefact panel. At most and Changes above decide whether it may write and whether each change waits for you."
 	tipScore    = "may is what these settings allow, now what the running task was granted, each 0–100: the level picks the band, and what else is allowed — listed below — moves it within the band."
 	tipRounds   = "How many model calls one turn may make before it must answer: each round is a model call and the tool calls it asks for, and the last round offers no tools. A change applies from the next turn."
-	tipTyped    = "Offer each operation of the task's windows to the model as a tool of its own, instead of one call_operation tool. More tools in every request; some models call them more reliably."
+	tipPixels   = "Which of the artefact's screenshots the model may see as pixels, sent to the model with the turn.\n" +
+		"Metadata only: names, sizes and where each came from; you see the pixels, the model does not.\n" +
+		"Ask each time: each view waits in the Artefact panel, showing the image and the model it would go to, until you allow or decline it.\n" +
+		"Ask once per image: as above, and an image you allowed is shown again without asking; a crop or a new capture asks.\n" +
+		"This chat's captures: any screenshot of this conversation, without asking — the windows were shared with the task.\n" +
+		"A shown image stays in the model's context for its turn only. What was sent cannot be called back; lowering this binds from the next request on."
+	tipPixelsLocal = "Send screenshots only to a model on this machine, or one this host trusts with sealed data: every request carrying pixels is labelled confined, and the host refuses it elsewhere."
+	tipTyped       = "Offer each operation of the task's windows to the model as a tool of its own, instead of one call_operation tool. More tools in every request; some models call them more reliably."
 )
 
 var (
@@ -216,6 +237,7 @@ func (inst *App) syncAuthority() {
 		return
 	}
 	inst.coord.setOptions(ceil, inst.opTools)
+	inst.coord.setPixels(inst.pixelPolicy())
 	if a, _, ok := inst.authJob.TakeResult(); ok {
 		inst.authority = *a
 	} else if inst.authJob.Snapshot().State == bgjob.StateFailed {
@@ -250,14 +272,41 @@ func (inst *App) syncAuthority() {
 	}
 }
 
-// scores are the two markers' places.
+// pixelPolicy is the Pixels setting as the coordinator applies it.
+func (inst *App) pixelPolicy() (p pixelPolicy) {
+	perms := inst.perms.pixelsCapped()
+	p = pixelPolicy{level: perms.pixelsIn(inst.artefactOn(), inst.appsOn()), localOnly: perms.pixelsLocal}
+	if inst.answered && inst.model.Configured {
+		m := inst.model
+		p.modelLocal = m.Local
+		p.endpoint = m.Model + " · " + m.EndpointHost + " · " + modelWhere(m.Local, m.Trusted)
+	}
+	return
+}
+
+// modelWhere says where a model runs, as Settings words it.
+func modelWhere(local bool, trusted bool) string {
+	switch {
+	case trusted:
+		return "off this machine, trusted with sealed data"
+	case local:
+		return "on this machine"
+	}
+	return "off this machine"
+}
+
+// scores are the two markers' places. Pixels moves may within its band;
+// now is the task's grant, which does not hold them.
 func (inst *App) scores() (may agent.Score, now agent.Score) {
 	remote := inst.remoteModel()
 	ceil := inst.authority.Ceiling
 	if inst.artefactOn() {
 		ceil = withArtefact(ceil, inst.perms.artCeiling())
 	}
-	return ceil.Score(remote), inst.authority.Granted.Score(remote)
+	perms := inst.perms.pixelsCapped()
+	may = ceil.ScoreBeside(agent.Beside{RemoteModel: remote, Pixels: perms.pixelsIn(inst.artefactOn(), inst.appsOn()),
+		PixelsLocalOnly: perms.pixelsLocal})
+	return may, inst.authority.Granted.Score(remote)
 }
 
 func markers(may agent.Score, now agent.Score) (ms []bandscale.Marker) {
@@ -403,6 +452,39 @@ func (inst *App) renderMaySection() {
 		c.Checkbox(inst.ids.PrepareStr("typed"), inst.opTools, "A tool per operation").SendRespVal(&inst.opTools)
 	}
 	c.AddSpace(4)
+	for range c.HoverText(tipPixels).KeepIter() {
+		c.Label("Pixels").Selectable(false).Send()
+	}
+	capLevel, localRequired := pixelsCap()
+	sel := selector.Segmented(inst.ids, "pixels", &inst.perms.pixels).Style(selector.StyleRadio).Vertical()
+	for _, l := range agent.AllPixels {
+		if l <= capLevel {
+			sel = sel.Option(l, pixelsLabel(l))
+		}
+	}
+	sel.Send()
+	if localRequired {
+		for range c.HoverText(tipPixelsLocal).KeepIter() {
+			c.Label("Only to a local model: required by this host").Selectable(false).Send()
+		}
+	} else {
+		for range c.HoverText(tipPixelsLocal).KeepIter() {
+			c.Checkbox(inst.ids.PrepareStr("pixels-local"), inst.perms.pixelsLocal, "Only to a local model").SendRespVal(&inst.perms.pixelsLocal)
+		}
+	}
+	if capLevel < agent.PixelsCaptures {
+		weak("This host allows at most " + pixelsLabel(capLevel) + ".")
+	}
+	inst.perms = inst.perms.pixelsCapped()
+	switch p := inst.pixelPolicy(); {
+	case inst.perms.pixels == agent.PixelsNone:
+	case !inst.artefactOn() || !inst.appsOn():
+		weak("Screenshots are the artefact's, captured with Apps: this conversation has none to show.")
+	case !inst.answered || !inst.model.Configured:
+	case !p.reaches():
+		weak("This conversation's model is off this machine and not trusted with sealed data: it sees no pixels.")
+	}
+	c.AddSpace(4)
 	lo, hi := roundRange()
 	for range c.HorizontalTop().KeepIter() {
 		for range c.HoverText(tipRounds).KeepIter() {
@@ -460,17 +542,27 @@ func (inst *App) renderModelSection() {
 		weak("The host offers no model: " + inst.model.Reason)
 	default:
 		m := inst.model
-		where := "off this machine"
-		switch {
-		case m.Trusted:
-			where = "off this machine, trusted with sealed data"
-		case m.Local:
-			where = "on this machine"
-		}
 		c.Label(m.Model + " · " + m.EndpointHost).Selectable(false).Send()
-		weak(where)
+		weak(modelWhere(m.Local, m.Trusted))
 		if m.ContextTokens > 0 {
 			weak("context " + tokens(int64(m.ContextTokens)) + " tokens (" + m.ContextSource + ") · answers up to " + tokens(int64(m.MaxTokens)))
 		}
 	}
+}
+
+// withPixels is the permissions with the Pixels level p and its switch.
+func (inst permissions) withPixels(p agent.PixelsE, localOnly bool) (out permissions) {
+	out = inst
+	out.pixels, out.pixelsLocal = p, localOnly
+	return out.pixelsCapped()
+}
+
+// pixelsCapped is the permissions under the host's cap (PixelsMaxEnv,
+// PixelsLocalRequiredEnv): what the panel shows is what binds.
+func (inst permissions) pixelsCapped() (out permissions) {
+	out = inst
+	level, local := pixelsCap()
+	out.pixels = min(out.pixels, level)
+	out.pixelsLocal = out.pixelsLocal || local
+	return
 }
