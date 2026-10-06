@@ -564,6 +564,31 @@ No `LW_` name, artefact or registry changes shape. The sysmetrics expansion
 golden moves by three lines — the injected `WHERE` gains its parentheses — which
 is the whole visible extent of the change.
 
+### 2026-10-06 — a CTE or subquery that passes the bound table through stands in for it
+
+§SD6 required the scope's one source to be the bound table itself, so the
+usual analytical shape — `WITH e AS (SELECT * FROM facts WHERE …) SELECT
+LW_COMPONENT('SysMem') FROM e` — was refused, the same limit ADR-0181's
+`LW_GET*` binding had.
+
+The one source may now be a CTE or FROM subquery when every UNION branch of
+its body reads exactly one source — the bound table, or another derived source
+that carries it — and projects that source's `*` without `* EXCEPT`,
+`ARRAY JOIN` or `GROUP BY` (`nanopass.StarPassthrough`, shared with `LW_GET*`
+and handle resolution). §SD6's count rule still holds, at every level, so the
+artefacts' bare names stay unambiguous wherever they are read; a join is
+refused as before.
+
+§SD4's Filter goes into the `WHERE` of the SELECT holding the call, as before
+— the outer one. It is not pushed into the body, which other readers of the
+same CTE share. Whether its presence terms still prune granules then rests on
+ClickHouse pushing the predicate down into the derived source, which it does
+for this shape by default (`enable_optimize_predicate_expression`); this was
+not measured.
+
+A derived source that does not pass the table through is refused with the
+reason in the message.
+
 ## References
 
 - [ADR-0066](./0066-leeway-dql-clickhouse-readback-generator.md) — the artefact

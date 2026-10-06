@@ -217,11 +217,43 @@ func TestJoinIsRefused(t *testing.T) {
 	assert.Contains(t, err.Error(), "exactly one table")
 }
 
-func TestCteOrSubquerySourceIsRefused(t *testing.T) {
-	_, err := expand(t,
-		"WITH c AS (SELECT 1) SELECT LW_COMPONENT('SysMem') FROM c")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "CTE, subquery or table function")
+// A CTE or subquery that narrows the bound table's rows and projects its
+// star stands in for the table: the bare artefact names bind in the outer
+// SELECT as they would against the table. The Filter goes into the WHERE of
+// the SELECT holding the call, never into the body, which other readers of
+// the same CTE share.
+func TestCteOrSubqueryPassingTheTableThroughBinds(t *testing.T) {
+	cte := "WITH c AS (SELECT * FROM boxer.facts WHERE ts > 0) "
+	out := expandOK(t, cte+"SELECT LW_COMPONENT('SysMem') AS m FROM c")
+	assert.Equal(t, cte+"SELECT "+memProjection+" AS m FROM c WHERE "+parens(memFilter), out)
+
+	out = expandOK(t, "SELECT LW_COMPONENT('SysMem') AS m FROM (SELECT f.* FROM facts AS f) AS s WHERE x = 1")
+	assert.Equal(t, "SELECT "+memProjection+" AS m FROM (SELECT f.* FROM facts AS f) AS s WHERE (x = 1) AND "+parens(memFilter), out)
+
+	// A chain of CTEs, each branch of a UNION ALL body over the table.
+	out = expandOK(t, "WITH a AS (SELECT * FROM boxer.facts), b AS (SELECT * FROM a UNION ALL SELECT * FROM boxer.facts) "+
+		"SELECT LW_COMPONENT_FILTER('SysMem') AS ok FROM b")
+	assert.Contains(t, out, "SELECT "+parens(memFilter)+" AS ok FROM b")
+}
+
+// A derived source that does not hand the bound table's columns through is
+// refused with the reason, so the person learns what to change rather than
+// that CTEs are unsupported.
+func TestCteOrSubqueryHidingTheTableIsRefused(t *testing.T) {
+	for body, reason := range map[string]string{
+		"SELECT 1":                                      "its body reads no table",
+		"SELECT ts FROM boxer.facts":                    "does not project *",
+		"SELECT * EXCEPT ts FROM boxer.facts":           "* EXCEPT",
+		"SELECT * FROM boxer.persiststate":              "its body reads boxer.persiststate",
+		"SELECT * FROM boxer.facts AS f JOIN o ON 1":    "more than one source",
+		"SELECT * FROM boxer.facts ARRAY JOIN [1] AS k": "ARRAY JOIN",
+		"SELECT * FROM numbers(3)":                      "table function",
+	} {
+		_, err := expand(t, "WITH c AS ("+body+") SELECT LW_COMPONENT('SysMem') FROM c")
+		require.Error(t, err, body)
+		assert.Contains(t, err.Error(), "does not pass the component's table through", body)
+		assert.Contains(t, err.Error(), reason, body)
+	}
 }
 
 func TestBadArgumentsAreRefused(t *testing.T) {

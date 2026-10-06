@@ -228,35 +228,133 @@ func (inst *componentState) checkBinding(scope *nanopass.SelectScope, b componen
 		return
 	}
 	ts := scope.Tables[0]
-	if ts.IsCTE || ts.IsSubquery || ts.IsFunction {
+	if ts.IsFunction {
 		err = inst.errCall(spelled, funcExpr).Str("kind", b.Kind).Str("wants", b.Table).
 			Str("found", ts.Table).
-			Errorf("a component binds a stored table; this SELECT reads a CTE, subquery or table function")
+			Errorf("a component binds a stored table; this SELECT reads a table function")
 		return
 	}
-	if ts.Table != table {
+	if ts.IsCTE || ts.IsSubquery {
+		// A CTE or subquery may stand in for the table when it hands the
+		// table's columns through under their own names: the artefacts'
+		// bare names then bind in this SELECT exactly as they would against
+		// the table, and the Filter injected into this SELECT's WHERE sees
+		// the same rows. The Filter is not pushed into the body, which other
+		// readers of the same CTE share.
+		label := ts.Alias
+		if label == "" {
+			label = ts.Table
+		}
+		if label == "" {
+			label = "(subquery)"
+		}
+		if why := inst.derivedCarries(scope, &ts, table, db, 0); why != "" {
+			err = inst.errCall(spelled, funcExpr).Str("kind", b.Kind).Str("wants", b.Table).
+				Str("found", label).
+				Errorf("this SELECT reads %s, which does not pass the component's table through: %s; project * from %s in it, or call the component inside it", label, why, b.Table)
+		}
+		return
+	}
+	switch inst.tableMismatch(ts.Database, ts.Table, table, db) {
+	case mismatchTable:
 		err = inst.errCall(spelled, funcExpr).Str("kind", b.Kind).Str("wants", b.Table).
 			Str("found", qualifyTable(ts.Database, ts.Table)).
 			Errorf("this SELECT does not read the table the component is stored in")
-		return
-	}
-	// The database is checked only when one is known. An unqualified FROM on
-	// a host that configured no default database is left to the server, which
-	// resolves it against the session database — refusing it instead would
-	// reject `FROM facts` everywhere, since every pass in the standard
-	// registry is wired with an empty default. A qualifier that IS present
-	// and disagrees is still refused.
-	tsDB := ts.Database
-	if tsDB == "" {
-		tsDB = inst.defaultDatabase
-	}
-	if tsDB != "" && tsDB != db {
+	case mismatchDatabase:
 		err = inst.errCall(spelled, funcExpr).Str("kind", b.Kind).Str("wants", b.Table).
-			Str("found", qualifyTable(tsDB, ts.Table)).
+			Str("found", qualifyTable(inst.databaseOf(ts.Database), ts.Table)).
 			Errorf("this SELECT reads a different database's table of that name")
-		return
 	}
 	return
+}
+
+type mismatchE uint8
+
+const (
+	mismatchNone mismatchE = iota
+	mismatchTable
+	mismatchDatabase
+)
+
+// tableMismatch compares a stored-table reference with the kind's bound
+// table.
+//
+// The database is checked only when one is known. An unqualified FROM on
+// a host that configured no default database is left to the server, which
+// resolves it against the session database — refusing it instead would
+// reject `FROM facts` everywhere, since every pass in the standard
+// registry is wired with an empty default. A qualifier that IS present
+// and disagrees is still refused.
+func (inst *componentState) tableMismatch(tsDatabase, tsTable, table, db string) mismatchE {
+	if tsTable != table {
+		return mismatchTable
+	}
+	if tsDB := inst.databaseOf(tsDatabase); tsDB != "" && tsDB != db {
+		return mismatchDatabase
+	}
+	return mismatchNone
+}
+
+func (inst *componentState) databaseOf(tsDatabase string) string {
+	if tsDatabase == "" {
+		return inst.defaultDatabase
+	}
+	return tsDatabase
+}
+
+// maxComponentDepth bounds following nested CTEs and subqueries.
+const maxComponentDepth = 64
+
+// derivedCarries reports why a CTE or FROM subquery does NOT stand in for the
+// kind's bound table, or "" when it does: every UNION branch of its body reads
+// exactly one source — the bound table, or another derived source that
+// carries it — and hands its columns through (nanopass.StarPassthrough). One
+// source per branch is §SD6's count rule applied inside: the artefacts' bare
+// names must be unambiguous where they are read.
+func (inst *componentState) derivedCarries(scope *nanopass.SelectScope, ts *nanopass.TableSource, table, db string, depth int) (why string) {
+	if depth >= maxComponentDepth {
+		return "it is nested too deeply to follow"
+	}
+	bodies, why := scope.DerivedBodies(ts)
+	if why != "" {
+		return why
+	}
+	if len(bodies) == 0 {
+		return "its body could not be read"
+	}
+	for _, body := range bodies {
+		switch len(body.Tables) {
+		case 0:
+			return "its body reads no table"
+		case 1:
+		default:
+			return "its body reads more than one source"
+		}
+		inner := &body.Tables[0]
+		switch {
+		case inner.IsFunction:
+			return "its body reads a table function"
+		case inner.IsCTE || inner.IsSubquery:
+			if why = inst.derivedCarries(body, inner, table, db, depth+1); why != "" {
+				return why
+			}
+		default:
+			switch inst.tableMismatch(inner.Database, inner.Table, table, db) {
+			case mismatchTable:
+				return "its body reads " + qualifyTable(inner.Database, inner.Table)
+			case mismatchDatabase:
+				return "its body reads a different database's table of that name"
+			}
+		}
+		carrier := inner.Alias
+		if carrier == "" {
+			carrier = inner.Table
+		}
+		if why = nanopass.StarPassthrough(body, carrier); why != "" {
+			return why
+		}
+	}
+	return ""
 }
 
 func (inst *componentState) needFor(scope *nanopass.SelectScope) (n *scopeNeeds) {
