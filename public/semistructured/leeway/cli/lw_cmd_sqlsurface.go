@@ -115,7 +115,7 @@ func newCliCommandSqlSurfacePrint() *cli.Command {
 func newCliCommandSqlSurfaceInstall() *cli.Command {
 	return &cli.Command{
 		Name:  "install",
-		Usage: "install the function families, the version marker and the schema-decode views, verify the marker, and drop this repository's withdrawn spellings",
+		Usage: "install the function families, the version marker and the schema-decode views, verify the marker, drop this repository's withdrawn spellings, and re-create the dependent view families this binary links (e.g. the keelson trail views)",
 		Flags: append(sqlSurfaceConnFlags(), sqlSurfaceViewsFlag()),
 		Action: func(cCtx *cli.Context) error {
 			client, url, ctx, cancel := sqlSurfaceClient(cCtx)

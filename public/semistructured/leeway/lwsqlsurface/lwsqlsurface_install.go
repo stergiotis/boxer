@@ -41,20 +41,25 @@ const featureProbeName = "leewaySurfaceFeatureProbe"
 //  3. CREATE OR REPLACE the three function families in dependency order,
 //  4. verify LW_SURFACE_VERSION() reports this build's Version,
 //  5. drop the names this repository has retired (RetiredNames),
-//  6. CREATE OR REPLACE the views, which expand the families just installed.
+//  6. CREATE OR REPLACE the views, which expand the families just installed,
+//  7. re-create the registered dependents — view families defined outside
+//     leeway that inline the surface too (RegisterDependent).
 //
 // Step 5 runs only once the new roster has verified: until then the server's
 // existing functions are the only working ones, and dropping them ahead of a
 // failed install would take a working server down. It is also the one step
 // that may fail without failing Install — see dropRetired.
 //
-// Step 6 is last because ClickHouse expands a SQL UDF INTO a view's stored
+// Steps 6 and 7 are last because ClickHouse expands a SQL UDF INTO a view's stored
 // query at CREATE time rather than resolving it at read time (measured on
 // 26.7). A view is therefore a snapshot of the function bodies, and
 // re-creating it is the only thing that refreshes it — which also means the
 // views cannot be created before step 3, and that an install which stopped
 // after step 5 would leave views answering from the previous revision.
-// ViewStamp is how that state is detectable rather than silent.
+// ViewStamp is how that state is detectable rather than silent. Step 7
+// follows step 6 so a dependent may read the decode views as well; a
+// dependent that fails stops the install with its name, everything before it
+// in place.
 //
 // Step 6 can fail on an endpoint whose role cannot create the database. The
 // functions are installed by then and the server is better off than it was;
@@ -109,6 +114,7 @@ func InstallInto(ctx context.Context, conn Conn, target chviews.TargetDatabase) 
 			return
 		}
 	}
+	err = installDependents(ctx, conn)
 	return
 }
 
