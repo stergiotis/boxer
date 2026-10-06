@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-06
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-06
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0287: Pixels — a chat setting for which screenshots the model may see, and with whose consent
 
@@ -345,7 +343,7 @@ None: the default is Metadata only, the behaviour of ADR-0284.
 
 ## Status
 
-Proposed 2026-10-06, built. The verification plan holds in the tests of
+Accepted 2026-10-06, built. The verification plan holds in the tests of
 `apps/chat` and `runtime/agent` and in the scenes
 [chat-artefact-pixels](../../apps/chat/scenes/chat-artefact-pixels.scene.md)
 and [chat-pixels-host-cap](../../apps/chat/scenes/chat-pixels-host-cap.scene.md).
