@@ -523,29 +523,15 @@ func (inst *extractState) bindIn(section string, scope *nanopass.SelectScope, de
 
 // resolveDerived binds the section through a CTE or FROM subquery. Every
 // UNION branch of its body must carry the section and pass it through
-// (passesThrough), and all branches must agree on the lanes — a UNION's
+// (nanopass.StarPassthrough), and all branches must agree on the lanes — a UNION's
 // columns are positional, so branches over differently-shaped tables would
 // put one table's lane under another's name.
 //
 // ok false with an empty why means the source plainly does not carry the
 // section; a non-empty why says what stopped a source that might have.
 func (inst *extractState) resolveDerived(section string, scope *nanopass.SelectScope, ts *nanopass.TableSource, depth int) (lanes lwsql.ExtractLanes, ok bool, why string) {
-	branches := ts.Scopes
-	if ts.IsCTE {
-		def, found := scope.ResolveCTE(ts.Table)
-		switch {
-		case !found:
-			return
-		case def.Ambiguous:
-			why = "its name is bound more than once in one WITH clause"
-			return
-		case def.Recursive:
-			why = "a recursive CTE is not followed"
-			return
-		}
-		branches = def.Scopes
-	}
-	if len(branches) == 0 {
+	branches, why := scope.DerivedBodies(ts)
+	if why != "" || len(branches) == 0 {
 		return
 	}
 	for i, branch := range branches {
@@ -559,7 +545,7 @@ func (inst *extractState) resolveDerived(section string, scope *nanopass.SelectS
 			}
 			return
 		}
-		why = passesThrough(branch, c)
+		why = nanopass.StarPassthrough(branch, c.qualifier)
 		if why != "" {
 			return
 		}
@@ -571,52 +557,6 @@ func (inst *extractState) resolveDerived(section string, scope *nanopass.SelectS
 	}
 	ok = true
 	return
-}
-
-// passesThrough checks that a body SELECT hands the carrying source's
-// columns to its reader under their physical names: a bare * or the
-// carrier's qualified star, with nothing that drops or replaces a column.
-// It returns the reason when it does not, empty when it does.
-//
-// The check is syntactic and errs closed. A later projection item aliased to
-// a lane's physical name would shadow it; no one writes those by hand, and
-// the names are not ones a person types.
-func passesThrough(branch *nanopass.SelectScope, carrier boundSource) (why string) {
-	stmt := branch.Node
-	if stmt == nil {
-		return "its body could not be read"
-	}
-	if stmt.ArrayJoinClause() != nil {
-		return "its body has an ARRAY JOIN, which can replace a lane with one element"
-	}
-	if stmt.GroupByClause() != nil {
-		return "its body aggregates"
-	}
-	proj, isProj := stmt.ProjectionClause().(*grammar1.ProjectionClauseContext)
-	if !isProj {
-		return "its body has no projection"
-	}
-	if proj.ProjectionExceptClause() != nil {
-		return "its body projects * EXCEPT, which may drop a lane"
-	}
-	list, isList := proj.ColumnExprList().(*grammar1.ColumnExprListContext)
-	if !isList {
-		return "its body has no projection"
-	}
-	for _, item := range list.AllColumnsExpr() {
-		star, isStar := item.(*grammar1.ColumnsExprAsteriskContext)
-		if !isStar {
-			continue
-		}
-		tid, qualified := star.TableIdentifier().(*grammar1.TableIdentifierContext)
-		if !qualified || tid == nil {
-			return ""
-		}
-		if id := tid.Identifier(); id != nil && nanopass.DecodeIdentifier(id.GetText()) == carrier.qualifier {
-			return ""
-		}
-	}
-	return "its body does not project * from the table carrying the section"
 }
 
 // scopeOf finds the scope of the SELECT lexically enclosing the call.

@@ -287,3 +287,21 @@ runs.
   `PlayLauncher.Mount` never installed the resolver, and `CachingSchemaProvider`
   reported not-found on every first/cache-miss lookup — a latent `ExpandColumns`
   bug too.)
+
+## Update 2026-10-06 — a handle resolves through a CTE or subquery that passes the table through
+
+A handle resolved only against stored tables in its own SELECT, so
+``WITH e AS (SELECT * FROM t WHERE …) SELECT `symbol:value` FROM e`` shipped
+the handle unchanged and the server answered UNKNOWN_IDENTIFIER. The
+explanation went only to the diagnostics sink, which the execution path does
+not supply.
+
+`ResolveColumnNames` now follows a CTE or FROM subquery to the table it reads
+when every UNION branch of its body resolves the handle to the same physical
+columns and projects `*` or that table's qualified star, without `* EXCEPT`,
+`ARRAY JOIN` or `GROUP BY` — the rule ADR-0181's `LW_GET*` binding uses, now
+shared as `nanopass.SelectScope.DerivedBodies` and `nanopass.StarPassthrough`.
+A qualified handle (``e.`symbol:value` ``) keeps its qualifier. A misspelt
+handle read through a CTE gets the unknown-column diagnostic it would get
+from the table; a derived source that does not pass the columns through is
+named in the diagnostic with the reason.

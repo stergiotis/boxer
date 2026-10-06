@@ -2,6 +2,7 @@ package passes
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
@@ -234,7 +235,7 @@ func resolveColumnIdentifier(rw nanopass.RewriterI, scope *nanopass.SelectScope,
 	var res ResolveResult
 	if tid := colIdCtx.TableIdentifier(); tid != nil {
 		src, found := scope.ResolveAlias(nanopass.DecodeIdentifier(tid.GetText()))
-		if !found || src.IsCTE || src.IsSubquery || src.IsFunction {
+		if !found || src.IsFunction {
 			// An unknown alias is left alone: the scope may simply not model
 			// the shape. A source that IS resolved and carries no catalog
 			// schema is different — the handle cannot resolve in principle,
@@ -246,17 +247,27 @@ func resolveColumnIdentifier(rw nanopass.RewriterI, scope *nanopass.SelectScope,
 			return
 		}
 		aliasPrefix = tid.GetText() + "."
-		res = resolver.Resolve(src.ResolvedDatabase(scope), src.Table, handle)
+		if src.IsCTE || src.IsSubquery {
+			var why string
+			res, why = resolveThroughDerived(scope, &src, resolver, handle, 0)
+			if res.Kind == ResolveNotAHandle {
+				reportNoCatalogSource(sink, resolver, handle, derivedLabels([]nanopass.TableSource{src}, map[int]string{0: why}))
+				return
+			}
+		} else {
+			res = resolver.Resolve(src.ResolvedDatabase(scope), src.Table, handle)
+		}
 	} else {
-		res = resolveBareAcrossScope(scope, resolver, handle)
-		// Every source in scope is a CTE, a subquery or a table function, so
-		// no resolver was consulted and the verdict above is a default rather
-		// than an answer. Report it — but only here: with a real table in
-		// scope, a NotAHandle verdict came from the resolver deciding the
-		// name is ordinary SQL or the table is not leeway-shaped, and warning
-		// on that would flag every plain column.
+		var whys map[int]string
+		res, _, whys = resolveBareAcrossScope(scope, resolver, handle, 0)
+		// Every source in scope is a CTE, a subquery or a table function, and
+		// none of them led to a table that resolves the handle, so the verdict
+		// above is a default rather than an answer. Report it — but only
+		// here: with a real table in scope, a NotAHandle verdict came from the
+		// resolver deciding the name is ordinary SQL or the table is not
+		// leeway-shaped, and warning on that would flag every plain column.
 		if res.Kind == ResolveNotAHandle && len(scope.Tables) > 0 && !scopeHasCatalogTable(scope) {
-			reportNoCatalogSource(sink, resolver, handle, sourceLabels(scope.Tables))
+			reportNoCatalogSource(sink, resolver, handle, derivedLabels(scope.Tables, whys))
 			return
 		}
 	}
@@ -288,25 +299,52 @@ func resolveColumnIdentifier(rw nanopass.RewriterI, scope *nanopass.SelectScope,
 	}
 }
 
-// resolveBareAcrossScope resolves an unqualified handle against every real
-// table in scope. Exactly one table resolving it wins; several is ambiguous
-// (left untouched). With none, the most specific failure is returned for a
+// maxDerivedDepth bounds following nested CTEs and subqueries. The parser's
+// own nesting guards cap real queries well below it.
+const maxDerivedDepth = 64
+
+// resolveBareAcrossScope resolves an unqualified handle against every source
+// in scope. Exactly one source resolving it wins; several is ambiguous (left
+// untouched). With none, the most specific failure is returned for a
 // diagnostic — an unknown-column (the section exists somewhere) outranks an
 // unknown-section.
-func resolveBareAcrossScope(scope *nanopass.SelectScope, resolver ColumnResolverI, handle string) ResolveResult {
+//
+// A CTE or FROM subquery is followed to the table it reads
+// (resolveThroughDerived), which is what lets a handle name a column of
+// `WITH e AS (SELECT * FROM t WHERE …) … FROM e`. carrier is the winning
+// source's name as a qualified star in an enclosing body would spell it.
+// whys holds, by index into scope.Tables, why a derived source that might
+// have carried the handle did not pass it through.
+func resolveBareAcrossScope(scope *nanopass.SelectScope, resolver ColumnResolverI, handle string, depth int) (res ResolveResult, carrier string, whys map[int]string) {
 	oks := 0
 	var win ResolveResult
 	best := ResolveResult{Kind: ResolveNotAHandle}
 	for i := range scope.Tables {
 		ts := &scope.Tables[i]
-		if ts.IsCTE || ts.IsSubquery || ts.IsFunction {
+		if ts.IsFunction {
 			continue
 		}
-		r := resolver.Resolve(ts.ResolvedDatabase(scope), ts.Table, handle)
+		var r ResolveResult
+		if ts.IsCTE || ts.IsSubquery {
+			var why string
+			r, why = resolveThroughDerived(scope, ts, resolver, handle, depth+1)
+			if why != "" {
+				if whys == nil {
+					whys = make(map[int]string, 1)
+				}
+				whys[i] = why
+			}
+		} else {
+			r = resolver.Resolve(ts.ResolvedDatabase(scope), ts.Table, handle)
+		}
 		switch r.Kind {
 		case ResolveOK:
 			oks++
 			win = r
+			carrier = ts.Alias
+			if carrier == "" {
+				carrier = ts.Table
+			}
 		case ResolveUnknownColumn:
 			best = r
 		case ResolveUnknownSection:
@@ -316,12 +354,60 @@ func resolveBareAcrossScope(scope *nanopass.SelectScope, resolver ColumnResolver
 		}
 	}
 	if oks == 1 {
-		return win
+		res = win
+		return
 	}
+	carrier = ""
 	if oks > 1 {
-		return ResolveResult{Kind: ResolveNotAHandle} // ambiguous — leave it
+		res = ResolveResult{Kind: ResolveNotAHandle} // ambiguous — leave it
+		return
 	}
-	return best
+	res = best
+	return
+}
+
+// resolveThroughDerived resolves a handle through a CTE or FROM subquery:
+// every UNION branch of its body must resolve it to the same physical columns
+// and hand them through under their own names (nanopass.StarPassthrough).
+// Branches disagreeing would put one table's column under another's name,
+// since a UNION's columns are positional.
+//
+// An unknown-section or unknown-column verdict from the body is returned as
+// is, so a misspelt handle read through a CTE is diagnosed like one read from
+// the table. why says what stopped a body that did resolve the handle.
+func resolveThroughDerived(scope *nanopass.SelectScope, ts *nanopass.TableSource, resolver ColumnResolverI, handle string, depth int) (res ResolveResult, why string) {
+	res = ResolveResult{Kind: ResolveNotAHandle}
+	if depth >= maxDerivedDepth {
+		why = "nested too deeply to follow"
+		return
+	}
+	bodies, why := scope.DerivedBodies(ts)
+	if why != "" || len(bodies) == 0 {
+		return
+	}
+	var physical []string
+	for i, body := range bodies {
+		r, carrier, _ := resolveBareAcrossScope(body, resolver, handle, depth)
+		if r.Kind != ResolveOK {
+			if i == 0 {
+				res = r
+			} else {
+				why = "not every UNION branch resolves the handle"
+			}
+			return
+		}
+		why = nanopass.StarPassthrough(body, carrier)
+		if why != "" {
+			return
+		}
+		if i > 0 && !slices.Equal(r.Physical, physical) {
+			why = "its UNION branches resolve the handle to different columns"
+			return
+		}
+		physical = r.Physical
+		res = r
+	}
+	return
 }
 
 // scopeHasCatalogTable reports whether any of scope's sources is a stored
@@ -367,6 +453,22 @@ func sourceLabels(sources []nanopass.TableSource) (labels []string) {
 	return
 }
 
+// derivedLabels is sourceLabels with the reason a derived source did not
+// pass the handle through appended to its label, keyed by index into sources.
+func derivedLabels(sources []nanopass.TableSource, whys map[int]string) (labels []string) {
+	for i := range sources {
+		l := sourceLabels(sources[i : i+1])
+		if len(l) == 0 {
+			continue
+		}
+		if why := whys[i]; why != "" {
+			l[0] += ": " + why
+		}
+		labels = append(labels, l[0])
+	}
+	return
+}
+
 // reportNoCatalogSource warns that a handle's source carries no catalog schema,
 // so the handle cannot be resolved at all.
 //
@@ -385,7 +487,7 @@ func reportNoCatalogSource(sink func(ColumnDiagnostic), resolver ColumnResolverI
 	sink(ColumnDiagnostic{
 		Handle: handle,
 		Message: fmt.Sprintf(
-			"a column handle resolves against a stored table's schema, and this SELECT reads %s — spell the physical name here, or move the handle into the subselect that reads the table",
+			"a column handle resolves against a stored table's schema, and this SELECT reads %s — a CTE or subquery passes the table's columns through only when it projects * without EXCEPT, ARRAY JOIN or GROUP BY; project it, spell the physical name here, or move the handle into the subselect that reads the table",
 			strings.Join(labels, ", ")),
 	})
 }

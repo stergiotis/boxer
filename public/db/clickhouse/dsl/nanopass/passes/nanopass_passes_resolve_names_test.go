@@ -209,22 +209,54 @@ func TestResolve_UnparseableBareColonIsError(t *testing.T) {
 	}
 }
 
+// TestResolve_ThroughDerivedSources covers the shape analytical SQL is
+// usually written in: a CTE or subquery narrows the table's rows and the
+// handle reads the result. The table's columns arrive under their own names,
+// so the handle resolves against the table the body reads.
+func TestResolve_ThroughDerivedSources(t *testing.T) {
+	for _, tc := range []struct{ sql, want string }{
+		{"SELECT `symbol:value` FROM (SELECT * FROM facts)",
+			"SELECT " + qSymbol + " FROM (SELECT * FROM facts)"},
+		{"SELECT v.`symbol:value` FROM (SELECT * FROM facts WHERE 1) AS v",
+			"SELECT v." + qSymbol + " FROM (SELECT * FROM facts WHERE 1) AS v"},
+		{"WITH c AS (SELECT f.* FROM facts AS f), d AS (SELECT * FROM c) SELECT `symbol:value` FROM d",
+			"WITH c AS (SELECT f.* FROM facts AS f), d AS (SELECT * FROM c) SELECT " + qSymbol + " FROM d"},
+		{"SELECT `symbol:value` FROM (SELECT * FROM facts UNION ALL SELECT * FROM facts)",
+			"SELECT " + qSymbol + " FROM (SELECT * FROM facts UNION ALL SELECT * FROM facts)"},
+	} {
+		out, diags := runResolveDiag(t, tc.sql)
+		if out != tc.want {
+			t.Errorf("%s\n got  %s\n want %s", tc.sql, out, tc.want)
+		}
+		if len(diags) != 0 {
+			t.Errorf("%s: unexpected diagnostics %+v", tc.sql, diags)
+		}
+	}
+	// A misspelt column read through a CTE is diagnosed as it would be from
+	// the table, not as a source without a schema.
+	_, diags := runResolveDiag(t, "WITH c AS (SELECT * FROM facts) SELECT `geoPoint:lat` FROM c")
+	if len(diags) != 1 || len(diags[0].Candidates) == 0 {
+		t.Errorf("want the unknown-column diagnostic with candidates, got %+v", diags)
+	}
+}
+
 // TestResolve_NoCatalogSourceDiagnostic covers the gap where a handle whose
 // only source is a subquery, a CTE or a table function was left untouched AND
 // unreported: the statement shipped the handle verbatim and the server answered
-// UNKNOWN_IDENTIFIER about a name the user never typed. The rewrite still does
-// not happen — there is no schema to resolve against — but the Diagnostics sink
-// now says so before the round-trip.
+// UNKNOWN_IDENTIFIER about a name the user never typed. Where a derived source
+// does not hand the table's columns through there is nothing to resolve
+// against, and the Diagnostics sink says so — and why — before the round-trip.
 func TestResolve_NoCatalogSourceDiagnostic(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
 		sql    string
 		expect string
 	}{
-		{"from subquery", "SELECT `symbol:value` FROM (SELECT * FROM facts)", "(subquery)"},
-		{"from aliased subquery", "SELECT `symbol:value` FROM (SELECT * FROM facts) AS v", "v (subquery)"},
-		{"qualified through subquery", "SELECT v.`symbol:value` FROM (SELECT * FROM facts) AS v", "v (subquery)"},
-		{"from cte", "WITH c AS (SELECT * FROM facts) SELECT `symbol:value` FROM c", "c (CTE)"},
+		{"subquery without star", "SELECT `symbol:value` FROM (SELECT 1 AS x FROM facts)", "(subquery): its body does not project *"},
+		{"aliased subquery with except", "SELECT `symbol:value` FROM (SELECT * EXCEPT x FROM facts) AS v", "v (subquery): its body projects * EXCEPT"},
+		{"qualified through subquery", "SELECT v.`symbol:value` FROM (SELECT 1 AS x FROM facts) AS v", "v (subquery): its body does not project *"},
+		{"cte with array join", "WITH c AS (SELECT * FROM facts ARRAY JOIN [1] AS k) SELECT `symbol:value` FROM c", "c (CTE): its body has an ARRAY JOIN"},
+		{"cte over an unknown table", "WITH c AS (SELECT * FROM elsewhere) SELECT `symbol:value` FROM c", "c (CTE)"},
 		{"from table function", "SELECT `symbol:value` FROM numbers(10)", "numbers (table function)"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
