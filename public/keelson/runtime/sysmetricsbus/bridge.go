@@ -2,8 +2,8 @@ package sysmetricsbus
 
 import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/planebus"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // Bridge relays messages on subject from src to dst — it subscribes on one bus
@@ -25,16 +25,9 @@ import (
 //
 // src needs subscribe and dst publish permission for subject.
 func Bridge(src, dst app.BusI, subject string) (stop func(), err error) {
-	if src == nil || dst == nil {
-		err = eh.Errorf("sysmetricsbus: bridge needs both src and dst buses")
-		return
-	}
-	stop, err = src.Subscribe(subject, func(m *app.Msg) {
-		_ = dst.Publish(m.Subject, m.Payload)
-	})
+	stop, err = planebus.Bridge(src, dst, subject)
 	if err != nil {
-		err = eb.Build().Str("subject", subject).Errorf("sysmetricsbus: bridge subscribe: %w", err)
-		return
+		err = eh.Errorf("sysmetricsbus: %w", err)
 	}
 	return
 }

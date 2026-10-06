@@ -3,6 +3,7 @@ package coveragebus
 import (
 	"github.com/RoaringBitmap/roaring"
 	"github.com/fxamacker/cbor/v2"
+	"github.com/stergiotis/boxer/public/keelson/runtime/planebus"
 	"github.com/stergiotis/boxer/public/observability/coverage/covsnap"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
@@ -17,8 +18,7 @@ import (
 // settle; nothing here is waiting on a decision made elsewhere. ADR-0089
 // keeps the bus wire distinct from the ingest wire either way.
 type Codec interface {
-	Encode(upd *covsnap.Update) (payload []byte, err error)
-	Decode(payload []byte) (upd *covsnap.Update, err error)
+	planebus.CodecI[covsnap.Update]
 }
 
 // wireUpdate is the CBOR shape of one Update. The covered set travels as
@@ -36,6 +36,8 @@ type wireUpdate struct {
 }
 
 type CBORCodec struct{}
+
+var _ Codec = CBORCodec{}
 
 func NewCBORCodec() (c CBORCodec) {
 	return CBORCodec{}

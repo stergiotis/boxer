@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/fxamacker/cbor/v2"
+	"github.com/stergiotis/boxer/public/keelson/runtime/planebus"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
@@ -17,8 +18,7 @@ import (
 // what that cost). The seam stays because it is what lets the wire change
 // at all, not because a particular change is pending.
 type Codec interface {
-	Encode(snap *sysmsnap.BundleSnapshot) (payload []byte, err error)
-	Decode(payload []byte) (snap *sysmsnap.BundleSnapshot, err error)
+	planebus.CodecI[sysmsnap.BundleSnapshot]
 }
 
 // CBORCodec is the plane's wire format. It uses fxamacker/cbor — already a

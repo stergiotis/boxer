@@ -1,13 +1,12 @@
 package sysmetricsbus
 
 import (
-	"sort"
-	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/planebus"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/sysmetrics/sysmsnap"
 )
@@ -28,19 +27,8 @@ type HostSnapshot struct {
 // the most recent snapshot per host — the process-lifetime, host-scoped
 // consumer the keelson.procs/keelson.sockets tables read (ADR-0126 §SD5).
 // imztop's consumer is mount-gated; this one lives as long as the host.
-//
-// It subscribes on the bus directly rather than through [Consumer]
-// because it needs the message subject (the host token), which the
-// Consumer handler signature drops.
 type LatestHolder struct {
-	log   zerolog.Logger
-	codec Codec
-	nowFn func() time.Time
-
-	mu     sync.RWMutex
-	byHost map[string]HostSnapshot
-
-	unsubscribe func()
+	inner *planebus.LatestHolder[sysmsnap.BundleSnapshot]
 }
 
 // LatestHolderOptions configures StartLatestHolder. Bus is required.
@@ -62,67 +50,40 @@ func StartLatestHolder(opts LatestHolderOptions) (inst *LatestHolder, err error)
 		err = eh.Errorf("sysmetricsbus: latest holder needs a Bus")
 		return
 	}
-	if opts.Codec == nil {
-		opts.Codec = NewCBORCodec()
+	var codec planebus.CodecI[sysmsnap.BundleSnapshot] = NewCBORCodec()
+	if opts.Codec != nil {
+		codec = opts.Codec
 	}
-	if opts.NowFunc == nil {
-		opts.NowFunc = time.Now
-	}
-	inst = &LatestHolder{
-		log:    opts.Log,
-		codec:  opts.Codec,
-		nowFn:  opts.NowFunc,
-		byHost: map[string]HostSnapshot{},
-	}
-	unsub, serr := opts.Bus.Subscribe(BundleSubjectWildcard(), inst.onMsg)
-	if serr != nil {
-		inst = nil
-		err = eh.Errorf("sysmetricsbus: latest holder subscribe: %w", serr)
+	inner, err := planebus.StartLatestHolder(planebus.LatestHolderOptions[sysmsnap.BundleSnapshot]{
+		Bus:     opts.Bus,
+		Subject: BundleSubjectWildcard(),
+		Codec:   codec,
+		Key:     ParseBundleSubjectHost,
+		NowFunc: opts.NowFunc,
+		Log:     opts.Log,
+	})
+	if err != nil {
+		err = eh.Errorf("sysmetricsbus: latest holder: %w", err)
 		return
 	}
-	inst.unsubscribe = unsub
+	inst = &LatestHolder{inner: inner}
 	return
-}
-
-// onMsg decodes one bundle and replaces its host's entry. A decode
-// failure or an off-shape subject is logged and dropped — one corrupt
-// frame must not tear down the stream (the Consumer rule).
-func (inst *LatestHolder) onMsg(msg *app.Msg) {
-	host, ok := ParseBundleSubjectHost(msg.Subject)
-	if !ok {
-		inst.log.Warn().Str("subject", msg.Subject).Msg("sysmetricsbus: latest holder: unexpected subject shape")
-		return
-	}
-	snap, derr := inst.codec.Decode(msg.Payload)
-	if derr != nil {
-		inst.log.Warn().Err(derr).Str("subject", msg.Subject).Msg("sysmetricsbus: latest holder: decode error")
-		return
-	}
-	entry := HostSnapshot{Host: host, ReceivedAtUnixMs: inst.nowFn().UnixMilli(), Snap: snap}
-	inst.mu.Lock()
-	inst.byHost[host] = entry
-	inst.mu.Unlock()
 }
 
 // Hosts returns every host's latest snapshot, sorted by host token —
 // the stable enumeration the table providers flatten. Empty (not nil
 // semantics — just zero rows downstream) until a first bundle arrives.
 func (inst *LatestHolder) Hosts() (out []HostSnapshot) {
-	inst.mu.RLock()
-	out = make([]HostSnapshot, 0, len(inst.byHost))
-	for _, hs := range inst.byHost {
-		out = append(out, hs)
+	entries := inst.inner.Entries()
+	out = make([]HostSnapshot, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, HostSnapshot{Host: e.Key, ReceivedAtUnixMs: e.ReceivedAtUnixMs, Snap: e.Value})
 	}
-	inst.mu.RUnlock()
-	sort.Slice(out, func(i, j int) bool { return out[i].Host < out[j].Host })
 	return
 }
 
 // Close unsubscribes. Safe to call more than once.
 func (inst *LatestHolder) Close() (err error) {
-	if inst.unsubscribe != nil {
-		inst.unsubscribe()
-		inst.unsubscribe = nil
-	}
+	err = inst.inner.Close()
 	return
 }

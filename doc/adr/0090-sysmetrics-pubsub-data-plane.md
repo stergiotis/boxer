@@ -197,6 +197,33 @@ externally-provisioned, which omits `EnsureTable` entirely and keeps
 against a table another component owns, so no ADR had said which of the two
 provisions it.
 
+### 2026-10-06 — The payload-independent half is lifted into `runtime/planebus`
+
+A second plane wants this one's shape: a downstream Redpanda observability
+plane (hackathon_2026 ADR-0054) publishes cluster snapshots per domain.
+And one hand copy already existed: `coveragebus` (ADR-0169) re-implemented
+the Consumer and Codec around its own payload. So the parts that do not
+depend on the payload now live once, generic over it, in
+`runtime/planebus`: `CodecI[T]`, a reflection `CBORCodec[T]`,
+`Consumer[T]`, `Bridge`, and `LatestHolder[T]` keyed by a subject parser.
+
+What moved and what did not:
+
+- `sysmetricsbus` and `coveragebus` keep every exported name. Their
+  Consumer and LatestHolder wrap the generic ones, their Codec interfaces
+  embed `planebus.CodecI` (no type alias), and their CBOR codecs stay their
+  own, because each maps a value CBOR cannot carry (an error interface, a
+  roaring bitmap) to a wire struct. No caller changed.
+- The Producer is **not** lifted. It drives one sampler per tick and clamps
+  the interval to a plane-specific range; a plane that schedules domains on
+  their own cadences needs a different producer, so each plane keeps its own.
+- `planebus.Consumer` hands the handler the concrete subject. That is what
+  let `LatestHolder` stop subscribing around the Consumer to recover the
+  host token.
+
+§SD1's per-domain subjects remain deferred here; the downstream plane uses
+them from the start, which the generic Consumer supports unchanged.
+
 ## References
 
 - [ADR-0019](./0019-observability-sysmetrics-linux-collector.md) sysmetrics collector · [ADR-0020](./0020-imzero2-imztop-resource-monitor.md) imztop · [ADR-0024](./0024-imzero2-remote-access-browser-viewer.md) remote access · [ADR-0082](./0082-imzero2-remote-session-auth-tls.md) auth/TLS
