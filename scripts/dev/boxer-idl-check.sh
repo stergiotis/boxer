@@ -150,14 +150,23 @@ EOF
 # boxer's tags and build environment, as scripts/dev/generate.sh uses; in a
 # subshell so neither leaks into the caller. GOWORK=off: the generator is
 # boxer's alone, and a workspace above the checkout would pull every sibling
-# module into its build.
+# module into its build. The exception is a vendored workspace (an extracted
+# airgap bundle): boxer has no vendor/ of its own there, GOFLAGS=-mod=vendor and
+# there is no module cache or proxy behind it, so outside the workspace the
+# build fails with "inconsistent vendoring". The workspace's vendor/ is the only
+# place its dependencies exist, so the build stays in it.
 gen="$STATE_DIR/gen"
 (
     cd "$BOXER_ROOT" || exit 1
     # shellcheck source=/dev/null
     source "$BOXER_ROOT/scripts/dev/go-build-env.sh"
+    gowork=off
+    ws="$(go env GOWORK 2>/dev/null)"
+    if [ -n "$ws" ] && [ "$ws" != off ] && [ -f "$(dirname "$ws")/vendor/modules.txt" ]; then
+        gowork="$ws"
+    fi
     # shellcheck disable=SC2086 # deliberate word splitting of the flag list
-    GOWORK=off go build $BOXER_GO_FLAGS -tags "$BOXER_GO_TAGS" -o "$gen" "./$STATE_REL/_gen"
+    GOWORK="$gowork" go build $BOXER_GO_FLAGS -tags "$BOXER_GO_TAGS" -o "$gen" "./$STATE_REL/_gen"
 ) || { echo "ERROR: unable to build the egui2 generator" >&2; exit 1; }
 
 # The Rust generator splices into existing files at marker comments and runs
