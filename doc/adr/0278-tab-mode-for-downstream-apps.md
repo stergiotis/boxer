@@ -355,6 +355,18 @@ about two minutes, against a five-second Go build. Optimising is now asked for
 (`--wasmOpt`) rather than implied, and the demo is published unoptimised; the
 module crosses the wire gzip-compressed at about 10 MB.
 
+### 2026-10-06 — `tab-host` runs on manual dispatch only
+
+The push trigger is removed; the workflow builds, checks and publishes only
+when dispatched. SD5's check that the committed digest is the one the tree
+builds therefore no longer runs per push: a commit that changes
+`rust/imzero2` without refreshing `browserhost.sum` passes, and surfaces at the
+next dispatch. A host is published only by a dispatch, so a consumer pinned to
+a commit whose digest was never dispatched finds nothing under
+`tabhost/<sha256>.wasm`; `bundle --hostFrom auto` then builds the host,
+which needs cargo and the wasm32 target.
+Refreshing the file in the commit that changes the host stays the rule.
+
 ## References
 
 - [ADR-0263](./0263-imzero2-browser-both-modules-in-one-worker-mesh-to-the-painter.md) — the tab this makes reusable.

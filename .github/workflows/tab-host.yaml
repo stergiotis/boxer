@@ -14,6 +14,10 @@ name: tab-host
 # the published page reaches no third-party endpoint — bundled with this
 # commit's host and published under demo/. A run that does not build it
 # carries the published demo over unchanged, as it does the hosts.
+#
+# Runs on manual dispatch only (ADR-0278 Update 2026-10-06): a push no longer
+# builds or checks the host, so a stale browserhost.sum surfaces at the next
+# dispatch, and a host is published only when someone dispatches.
 on:
   workflow_dispatch:
     inputs:
@@ -21,14 +25,6 @@ on:
         description: 'Also build and publish the demo under demo/'
         type: boolean
         default: true
-  push:
-    branches:
-      - main
-    paths:
-      - 'rust/imzero2/**'
-      - 'public/thestack/imzero2/browserhost/tabhost/browserhost.sum'
-      - 'scripts/dev/rust-repro-env.sh'
-      - '.github/workflows/tab-host.yaml'
 
 permissions:
   contents: read

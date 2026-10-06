@@ -235,7 +235,8 @@ need:
   mechanical rules over every package, with an empty allowlist.
 - **Browser host digest** — any change under `rust/imzero2/` (or a bindings
   regeneration) changes the browser tab's Rust host, whose SHA-256 is recorded
-  in `tabhost/browserhost.sum` and checked by the `tab-host` workflow on push.
+  in `tabhost/browserhost.sum` and checked by the `tab-host` workflow when it is
+  dispatched (manual only — nothing checks it on push).
   In the commit that changes it, refresh the file:
   `go run ./public/thestack/cmd/imzero2tab hostdigest --write`. Compute it from
   the commit being pushed — another session's Rust change in between makes it
