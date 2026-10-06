@@ -200,6 +200,18 @@ opens it (loopback only), and the headless remote-access build excludes the
 feature entirely. Full steps and the security note:
 [doc/howto/egui-mcp.md](../../doc/howto/egui-mcp.md).
 
+## Development and production builds
+
+The `build_rust*.sh` scripts build the development hosts under cargo's
+`release` profile. The desktop one (`build_rust.sh`) also compiles in the
+profiler (`puffin`) and `inspection`, both dormant until their variables ask
+for them.
+`./build_rust_dist.sh [desktop|headless|headless_mesh|headless_soft|headless_svg]`
+builds the same host under the `dist` profile — fat LTO, one codegen unit,
+stripped symbols — without that dev tooling, into `target/<host dir>/dist/imzero2`.
+Nothing picks the `dist` binary up by default; point `--clientBinary` at it.
+The profile's trade-offs are noted beside `[profile.dist]` in `Cargo.toml`.
+
 ## Layout
 
 | Path | Contents |
