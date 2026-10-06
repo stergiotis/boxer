@@ -263,8 +263,10 @@ type Runtime struct {
 	// Introspect is the shared introspection registry (populated whether or
 	// not the HTTP host serves it).
 	Introspect *introspect.Registry
-	Coverage   *coverage.Sampler
-	Status     *runtimestatus.Snapshot
+	// HostServices names the registered host services that started.
+	HostServices []string
+	Coverage     *coverage.Sampler
+	Status       *runtimestatus.Snapshot
 	// Host is the window host; nil in screenshot mode.
 	Host *windowhost.Inst
 	// Renderers are the per-frame render functions in order.
@@ -377,6 +379,8 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 		rt.Tasks = taskSup
 		rt.cleanups = append(rt.cleanups, func() { _ = taskSup.Stop() })
 	}
+
+	rt.bootHostServices(ctx)
 
 	rt.Status = rt.statusSnapshot()
 

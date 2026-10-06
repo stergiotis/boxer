@@ -213,13 +213,20 @@ only.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
-<!--
 ## Updates
 
-Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
-claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
-YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
--->
+### 2026-10-06 — Host services registered from linked packages
+
+`AfterHost` belongs to whoever calls `Boot`. A host built from another
+module that reuses the carousel command does not call `Boot` and so had no
+way to start a service of its own on the bus. `RegisterHostService(name,
+start)` is that way: a package registers a start func from its `init`, and
+every `Boot` in the process starts the registered services in registration
+order, after the task supervisor and before any window opens. A service
+that fails to start is logged and left out, like every optional service;
+one that starts has its stop run at `Close`, and `Runtime.HostServices`
+names those that started. The first user is the co-located scraper of a
+downstream Redpanda plane (hackathon_2026 ADR-0054 §SD2).
 
 ## References
 
