@@ -81,8 +81,6 @@ type Table2CardEmitter struct {
 	renderer   *membership.Renderer
 	palette    imgcolor.Palette
 
-	idCounter uint64
-
 	// Cross-batch counters, reset in BeginBatch.
 	entityIdx  int32 // current entity ordinal during streaming
 	nEntities  int32 // total entities seen, used at flush time
@@ -261,11 +259,6 @@ func NewTable2CardEmitter(ids *c.WidgetIdStack, scopeKey string, palette ColorPa
 	return
 }
 
-func (inst *Table2CardEmitter) nextId() *c.WidgetIdStack {
-	inst.idCounter++
-	return inst.ids.PrepareSeq(inst.idCounter)
-}
-
 func (inst *Table2CardEmitter) accentColor(idx int32) (col color.Color) {
 	n := len(inst.palette)
 	if n == 0 {
@@ -296,7 +289,6 @@ func (inst *Table2CardEmitter) BeginBatch() {
 	inst.entityIdx = 0
 	inst.nEntities = 0
 	inst.sectionIdx = 0
-	inst.idCounter = 0x30000
 	inst.inCoGroup = false
 	inst.coGroupKey = ""
 	inst.pendingSectionHeader = nil
@@ -841,7 +833,7 @@ func (inst *Table2CardEmitter) flushUnifiedScoped() {
 	// sum and parks the trailing right-side panel area unused. Disabling
 	// horizontal shrink lets the Remainder values column absorb that
 	// slack so the table fills the panel width.
-	for tbl := range c.NewTable(inst.nextId()).
+	for tbl := range c.NewTable(inst.ids.PrepareStr("table")).
 		Striped(true).
 		HeaderHeight(table2HeaderHeight).
 		AutoShrink(false, true).
@@ -929,6 +921,10 @@ func (inst *Table2CardEmitter) flushUnifiedScoped() {
 // without it, egui_extras' item_spacing.x leaves a small dark gutter
 // between columns. The chevron + name only go in the first cell after
 // the optional entity column.
+// table2ColumnKeys names the card table's columns in draw order; the
+// section-header cells key their ids by it.
+var table2ColumnKeys = [...]string{"entity", "section", "primary", "secondary", "values"}
+
 func (inst *Table2CardEmitter) renderSectionHeaderRow(
 	r *c.NewTableDataRow,
 	row *table2UnifiedRow,
@@ -963,30 +959,45 @@ func (inst *Table2CardEmitter) renderSectionHeaderRow(
 	// strokes do place a vertical line at every column boundary, but the
 	// natural egui_extras column dividers sit in the same place, so the
 	// effect reads as an outlined row rather than as visible seams.
+	//
+	// A cell is keyed by its column's name under the section's accent
+	// ordinal under a "section" scope. The packed accentIdx<<16|col it
+	// replaces shared the card scope with the table's own ordinal id and
+	// collided with it at section 3, column 1; and the column cannot be a
+	// second ordinal under the first, since the XOR stack commutes — (1,2)
+	// and (2,1) would derive one id.
+	columnKeys := table2ColumnKeys[:]
+	if !showEntity {
+		columnKeys = columnKeys[1:]
+	}
 	clicked := false
-	for col := range nCols {
-		for range r.Col() {
-			ts := c.TintedScope(inst.sectionCellId(row.sectionAccentIdx, col), transparentFill).
-				Stroke(styletokens.StrokeRegular, accent).
-				OuterMargin(table2SectionHeaderOuterMargin).
-				InnerMargin(table2SectionHeaderInnerMargin).
-				SenseClick()
-			for range ts.KeepIter() {
-				switch col {
-				case nameCellIdx:
-					for rt := range c.RichTextLabel(text) {
-						rt.Strong().Monospace().Size(14)
-					}
-				case statsCellIdx:
-					if statsText != "" {
-						for rt := range c.RichTextLabel(statsText) {
-							rt.Monospace().Small()
+	for range c.IdScope(inst.ids.PrepareStr("section")) {
+		for range c.IdScope(inst.ids.PrepareSeq(uint64(row.sectionAccentIdx))) {
+			for col := range nCols {
+				for range r.Col() {
+					ts := c.TintedScope(inst.ids.PrepareStr(columnKeys[col]), transparentFill).
+						Stroke(styletokens.StrokeRegular, accent).
+						OuterMargin(table2SectionHeaderOuterMargin).
+						InnerMargin(table2SectionHeaderInnerMargin).
+						SenseClick()
+					for range ts.KeepIter() {
+						switch col {
+						case nameCellIdx:
+							for rt := range c.RichTextLabel(text) {
+								rt.Strong().Monospace().Size(14)
+							}
+						case statsCellIdx:
+							if statsText != "" {
+								for rt := range c.RichTextLabel(statsText) {
+									rt.Monospace().Small()
+								}
+							}
 						}
 					}
+					if ts.HasPrimaryClicked() {
+						clicked = true
+					}
 				}
-			}
-			if ts.HasPrimaryClicked() {
-				clicked = true
 			}
 		}
 	}
@@ -1278,11 +1289,4 @@ func renderPackedValues(pairs []table2NamedValue, named bool) {
 	for rt := range c.RichTextLabel(b.String()) {
 		rt.Monospace().Small()
 	}
-}
-
-// sectionCellId is a section-header cell's id: the section's accent index
-// and the column, each an ordinal under its own scope rather than packed
-// into one seeded integer.
-func (inst *Table2CardEmitter) sectionCellId(accentIdx int32, col uint32) c.WidgetIdCreatorI {
-	return inst.ids.PrepareSeq(uint64(accentIdx)<<16 | uint64(col))
 }
