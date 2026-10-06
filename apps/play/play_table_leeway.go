@@ -445,7 +445,9 @@ func (inst *PlayApp) selectableCell(id uint64, cellPadX float32, text string, we
 // options bar selected. The per-attribute view exists only for a leeway-shaped
 // result; a non-leeway result always renders the per-DB-row grid.
 func (inst *PlayApp) renderTableBody(rec arrow.RecordBatch, schema *arrow.Schema, numRows int64, selectedRow int64, emit SignalEmitterI) {
-	if inst.tableOpts.granularity == tableRowPerAttr && inst.leewayColumnClasses(schema) != nil {
+	perAttr := inst.tableOpts.granularity == tableRowPerAttr && inst.leewayColumnClasses(schema) != nil
+	inst.tableDrawn = tableDrawnMark{schema: schema, rows: min(rec.NumRows(), numRows), perAttr: perAttr}
+	if perAttr {
 		inst.renderAttrTable(rec, schema, numRows, selectedRow, emit)
 		return
 	}

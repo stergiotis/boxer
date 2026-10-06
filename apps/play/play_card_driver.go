@@ -90,53 +90,15 @@ func (inst *CardDriver) EnsureFor(schema *arrow.Schema) bool {
 	inst.ir = nil
 	inst.conv = nil
 
-	nFields := schema.NumFields()
-	colNames := make([]string, 0, nFields)
-	for i := range nFields {
-		colNames = append(colNames, schema.Field(i).Name)
-	}
-	// Probe the schema with the shared classifier (ADR-0170 §SD1): sniff the
-	// naming-convention separator, attempt discovery, treat failure as
-	// "opaque, expected". The data catalog runs the same function over
-	// system.columns, so "is this leeway-shaped" has one answer in the
-	// codebase rather than two that drift apart.
-	cl := datacatalog.Classify(colNames)
-	if cl.Kind != datacatalog.KindLeeway {
-		// A non-leeway result (aggregation, join, arbitrary SQL) is an
-		// expected, fully-supported case — the caller renders the ad-hoc
-		// detail view. Debug, not Warn: a normal fallback, not a fault. The
-		// pointer cache above means this logs at most once per result schema.
-		log.Debug().Err(cl.Err).Msg("play: result not leeway-shaped — using ad-hoc view")
+	r, ok := discoverCardRecipe(schema)
+	// Published before the Driver is checked: the Schema pane wants the
+	// TableDesc, and the Table pane the classification, even on a schema
+	// where the Driver build failed.
+	inst.table, inst.classes = r.table, r.classes
+	if !ok {
 		return false
 	}
-	// Publish the reconstructed schema now, before the (heavier, and card-only)
-	// Driver construction: the Schema pane wants the TableDesc even on a schema
-	// where the Driver build later fails.
-	inst.table = cl.Table
-	tech := clickhouse.NewTechnologySpecificCodeGenerator()
-	ir := common.NewIntermediateTableRepresentation()
-	err := ir.LoadFromTable(cl.Table, tech)
-	if err != nil {
-		log.Warn().Err(err).Msg("play: ir load failed — falling back")
-		return false
-	}
-	// Classify every physical column now that the IR is built. Like inst.table
-	// this is published before the (heavier, card-only) Driver construction, so
-	// the Table pane's display modes still get the classification on a schema
-	// where the Driver build later fails. Keyed by Arrow column index.
-	inst.classes = streamreadaccess.ClassifyArrowColumns(ir, cl.Convention, schema, cl.RowConfig)
-	driver, err := streamreadaccess.NewDriverFromSchema(
-		cl.Table, ir,
-		streamreadaccess.DefaultFormatters(),
-		schema, cl.Convention, cl.RowConfig)
-	if err != nil {
-		log.Warn().Err(err).Msg("play: driver construction failed — falling back")
-		return false
-	}
-	inst.driver = driver
-	inst.ir = ir
-	inst.conv = cl.Convention
-	inst.rowConfig = cl.RowConfig
+	inst.driver, inst.ir, inst.conv, inst.rowConfig = r.driver, r.ir, r.conv, r.rowConfig
 	inst.emitter = leewaywidgets.NewTable2CardEmitter(inst.ids, "card", leewaywidgets.ColorPaletteViridis, nil)
 	// Deferred rendering: Render walks the record in two steps (Prepare buffers,
 	// Render draws) so the Detail timeline can read the per-section digests
@@ -270,4 +232,59 @@ func (inst *CardDriver) Render() {
 		return
 	}
 	inst.emitter.Render()
+}
+
+// cardRecipe is one schema's leeway reading: the reconstructed table, the
+// IR, the per-column classification and a Driver over it. table and classes
+// may be set while driver is nil, when the Driver build failed.
+type cardRecipe struct {
+	table     *common.TableDesc
+	ir        *common.IntermediateTableRepresentation
+	classes   []streamreadaccess.ColumnClass
+	conv      common.NamingConventionFwdI
+	rowConfig common.TableRowConfigE
+	driver    *streamreadaccess.Driver
+}
+
+// discoverCardRecipe reconstructs schema's leeway table from its column
+// names and builds a Driver over it. Pure, so a caller off the render
+// goroutine (get_detail) builds its own rather than share the pane's. ok is
+// false for a schema that is not leeway-shaped or whose Driver did not build.
+func discoverCardRecipe(schema *arrow.Schema) (r cardRecipe, ok bool) {
+	nFields := schema.NumFields()
+	colNames := make([]string, 0, nFields)
+	for i := range nFields {
+		colNames = append(colNames, schema.Field(i).Name)
+	}
+	// Probe the schema with the shared classifier (ADR-0170 §SD1): sniff the
+	// naming-convention separator, attempt discovery, treat failure as
+	// "opaque, expected". The data catalog runs the same function over
+	// system.columns, so "is this leeway-shaped" has one answer in the
+	// codebase rather than two that drift apart.
+	cl := datacatalog.Classify(colNames)
+	if cl.Kind != datacatalog.KindLeeway {
+		// A non-leeway result (aggregation, join, arbitrary SQL) is an
+		// expected, fully-supported case — the caller renders the ad-hoc
+		// detail view. Debug, not Warn: a normal fallback, not a fault.
+		log.Debug().Err(cl.Err).Msg("play: result not leeway-shaped — using ad-hoc view")
+		return r, false
+	}
+	r.table = cl.Table
+	tech := clickhouse.NewTechnologySpecificCodeGenerator()
+	ir := common.NewIntermediateTableRepresentation()
+	if err := ir.LoadFromTable(cl.Table, tech); err != nil {
+		log.Warn().Err(err).Msg("play: ir load failed — falling back")
+		return r, false
+	}
+	r.classes = streamreadaccess.ClassifyArrowColumns(ir, cl.Convention, schema, cl.RowConfig)
+	driver, err := streamreadaccess.NewDriverFromSchema(
+		cl.Table, ir,
+		streamreadaccess.DefaultFormatters(),
+		schema, cl.Convention, cl.RowConfig)
+	if err != nil {
+		log.Warn().Err(err).Msg("play: driver construction failed — falling back")
+		return r, false
+	}
+	r.ir, r.conv, r.rowConfig, r.driver = ir, cl.Convention, cl.RowConfig, driver
+	return r, true
 }

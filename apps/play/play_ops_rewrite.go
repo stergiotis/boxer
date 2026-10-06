@@ -43,7 +43,7 @@ var playStepDocs = map[string]string{
 
 // TraceArgs is trace_rewrite's argument.
 type TraceArgs struct {
-	Sql   string `json:",omitzero" desc:"the statement to trace; the buffer when left out"`
+	Sql   string `json:",omitzero" desc:"the statement to trace; when left out, what run would ship: the buffer, or for a buffer of several statements the one at the caret, with the SET prelude"`
 	Costs bool   `json:",omitzero" desc:"true adds each pass's internal breakdown: the pass invocations it made, with durations"`
 }
 
@@ -94,10 +94,12 @@ type RewriteTrace struct {
 }
 
 func addRewriteOps(s *appops.Set[*PlayLauncher, opsSnap]) {
-	appops.ExternalRead(s, app.OperationSpec{Name: opTraceRewrite, Version: 1,
+	appops.ExternalRead(s, app.OperationSpec{Name: opTraceRewrite, Version: 2,
 		Summary: "trace play's client-side rewrite of a statement: every pass in order with its outcome, time and error, and the body that would ship",
 		Reads:   []string{opsResSql}, Agents: true,
-		Follows: []string{"nothing runs and the buffer is unchanged; validate_sql is the short verdict"}},
+		// Untrusted: without sql it quotes the person's buffer back.
+		Untrusted: true,
+		Follows:   []string{"nothing runs and the buffer is unchanged; validate_sql is the short verdict"}},
 		func(sn opsSnap, call app.OperationCall, in TraceArgs) (RewriteTrace, error) {
 			switch {
 			case !sn.mounted:
@@ -107,7 +109,9 @@ func addRewriteOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 			}
 			stmt := in.Sql
 			if strings.TrimSpace(stmt) == "" {
-				stmt = sn.state.Sql
+				// What run would ship, not the whole buffer: a
+				// multi-statement buffer runs the caret's statement.
+				stmt = sn.runSql
 			}
 			if err := statementBounds(stmt); err != nil {
 				return RewriteTrace{}, err

@@ -67,7 +67,7 @@ type Snippet struct {
 
 // FunctionArgs is list_functions' argument.
 type FunctionArgs struct {
-	Search string `json:",omitzero" desc:"words to find in a function's name, doc or family; every function when left out"`
+	Search string `json:",omitzero" desc:"words or regular expressions, all of which must match a function's name, doc and family taken together, as in the Vocabulary pane's filter; every function when left out"`
 	Where  string `json:",omitzero" desc:"server, client or host; every population when left out"`
 }
 
@@ -83,6 +83,9 @@ type FunctionInfo struct {
 	Installed string `desc:"for a server function: yes or no once play's Vocabulary pane has probed the endpoint, else unknown"`
 	// Dependencies are server functions a client macro expands into.
 	Dependencies []string `desc:"server functions a client macro's expansion calls; the macro works only where they are installed"`
+	// MissingDependencies is filled only once the probe answered: empty
+	// before then means not known, not all present.
+	MissingDependencies []string `desc:"those of Dependencies the endpoint lacks, once play's Vocabulary pane has probed it; empty before then"`
 }
 
 // FunctionList is list_functions' result.
@@ -90,6 +93,12 @@ type FunctionList struct {
 	Functions []FunctionInfo `desc:"the functions"`
 	Probed    bool           `desc:"true when installed reflects the endpoint"`
 	Truncated bool           `desc:"true when the bound cut the list; search or where narrow it"`
+	// AlsoMatching is the thesaurus' expansions of the search, as the pane
+	// shows them under its filter.
+	AlsoMatching string `json:",omitzero" desc:"what the search also matched for, from the Vocabulary pane's thesaurus: typed word → alternates"`
+	// UnlistedExtras counts endpoint functions left out because their names
+	// are not plain identifiers, so their text never reaches the model.
+	UnlistedExtras int `json:",omitzero" desc:"functions on the endpoint that no roster declares and whose names are not plain identifiers; counted, not listed"`
 }
 
 func addReferenceOps(s *appops.Set[*PlayLauncher, opsSnap]) {
@@ -104,8 +113,9 @@ func addReferenceOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 		func(sn opsSnap, in SnippetArgs) (Snippet, error) {
 			return readSnippet(referenceLibraries(), in.Library, in.Section)
 		})
-	appops.Query(s, app.OperationSpec{Name: opListFunctions, Version: 1,
-		Summary: "list the functions a query may call in play: where each runs, its parameters and whether the endpoint has it", Agents: true},
+	appops.Query(s, app.OperationSpec{Name: opListFunctions, Version: 2,
+		Summary: "list the functions boxer adds to a query in play — its server UDFs, client macros and host functions, not ClickHouse's built-ins: where each runs, its parameters and whether the endpoint has it", Agents: true,
+		Follows: []string{"once the Vocabulary pane has probed the endpoint, functions it carries that no roster declares are listed too, under their own family"}},
 		func(sn opsSnap, in FunctionArgs) (FunctionList, error) {
 			return listFunctions(sqlvocab.Default, sn.installed, sn.probed, in.Search, in.Where)
 		})
@@ -125,6 +135,9 @@ func referenceLibraries() (libs []snippetLibrary) {
 	}
 	return
 }
+
+// plainIdentifier is a function name list_functions repeats from the endpoint.
+var plainIdentifier = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 // snippetSqlFence matches a fenced block and its language.
 var snippetSqlFence = regexp.MustCompile("(?ms)^```([A-Za-z]*)[^\\n]*\\n(.*?)^```")
@@ -236,15 +249,30 @@ func listFunctions(r *sqlvocab.Registry, installed map[string]string, probed boo
 	entries := vocabDeclared(r)
 	if probed {
 		vocabMarkInstalled(entries, installed)
+		// The pane lists what the endpoint carries and no roster declares;
+		// so does the operation. A name that is not a plain identifier is
+		// counted, not listed: it is the endpoint's text, and this
+		// operation's output is the build's.
+		for _, e := range vocabExtras(installed, entries) {
+			if !plainIdentifier.MatchString(e.Name) {
+				out.UnlistedExtras++
+				continue
+			}
+			entries = append(entries, e)
+		}
 	}
 	sortVocabByName(entries)
-	q := strings.ToLower(strings.TrimSpace(query))
+	var battery search.Battery
+	if q := strings.TrimSpace(query); q != "" {
+		battery = search.ParseQueryWith(q, snippetThesaurus())
+		out.AlsoMatching = battery.AlternatesHint()
+	}
 	out.Probed = probed
 	for _, e := range entries {
 		if want != 0 && e.Where != want {
 			continue
 		}
-		if q != "" && !strings.Contains(strings.ToLower(e.Name+" "+e.Doc+" "+e.Family), q) {
+		if !battery.IsZero() && !vocabMatches(&battery, e) {
 			continue
 		}
 		if len(out.Functions) == refMaxFunctions {
@@ -252,7 +280,7 @@ func listFunctions(r *sqlvocab.Registry, installed map[string]string, probed boo
 			break
 		}
 		f := FunctionInfo{Name: e.Name, Call: e.call(), Doc: e.Doc, Where: e.Where.String(), Family: e.Family,
-			Available: e.Available, Dependencies: slices.Clone(e.Dependencies)}
+			Available: e.Available, Dependencies: slices.Clone(e.Dependencies), MissingDependencies: slices.Clone(e.MissingDeps)}
 		if len(f.Doc) > refMaxDoc {
 			f.Doc = truncateBytes(f.Doc, refMaxDoc)
 		}
@@ -260,7 +288,8 @@ func listFunctions(r *sqlvocab.Registry, installed map[string]string, probed boo
 			switch {
 			case !probed:
 				f.Installed = "unknown"
-			case e.Installed:
+			case e.Installed || !e.Declared:
+				// An undeclared entry is one the probe found there.
 				f.Installed = "yes"
 			default:
 				f.Installed = "no"

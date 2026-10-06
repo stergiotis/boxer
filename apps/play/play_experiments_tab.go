@@ -183,7 +183,9 @@ type experimentsDriver struct {
 	lensView     *leewaywidgets.LensView
 	jsonView     typed.RetainedFffiHolderTyped[c.CodeViewJobS]
 	jsonOK       bool
-	textOut      []string
+	// jsonText is the json sink's output as text, for get_experiments.
+	jsonText string
+	textOut  []string
 
 	// card is the pane's card emitter, for both sources; cardPalette is the
 	// palette it was built with, since the emitter takes it at construction.
@@ -247,7 +249,13 @@ func (inst *experimentsDriver) spec() vizeval.SinkSpec {
 // fails only on a declaration bug; the error is carried all the same.
 func (inst *experimentsDriver) candidate() (cand vizeval.Candidate, err error) {
 	spec := inst.spec()
-	raw := make(map[string]any, len(spec.Space))
+	return vizeval.NewCandidate(spec.ID, inst.knobsRaw(spec))
+}
+
+// knobsRaw is what a sink's controls say, as the raw options a candidate
+// resolves.
+func (inst *experimentsDriver) knobsRaw(spec vizeval.SinkSpec) (raw map[string]any) {
+	raw = make(map[string]any, len(spec.Space))
 	for _, o := range spec.Space {
 		k := inst.knobs[spec.ID][o.Name]
 		switch o.Kind {
@@ -261,7 +269,7 @@ func (inst *experimentsDriver) candidate() (cand vizeval.Candidate, err error) {
 			raw[o.Name] = k.flag
 		}
 	}
-	return vizeval.NewCandidate(spec.ID, raw)
+	return
 }
 
 // experimentsSeed is BOXER_PLAY_EXPERIMENTS: a candidate plus the source it is
@@ -521,6 +529,7 @@ func (inst *experimentsDriver) ensureBuilt(rec arrow.RecordBatch, schema *arrow.
 	inst.lensAnalysis = nil
 	inst.textOut = nil
 	inst.jsonOK = false
+	inst.jsonText = ""
 
 	if inst.sink == vizeval.SinkCard {
 		return
@@ -555,7 +564,8 @@ func (inst *experimentsDriver) makeSink(cand vizeval.Candidate) (sink streamread
 	case vizeval.SinkJSON:
 		enc := jsontext.NewEncoder(buf, jsontext.Multiline(true), jsontext.WithIndent("  "))
 		return card.NewJsonCardEmitter(enc, nil), func() {
-			inst.jsonView = codeview.PrepareJson(buf.String())
+			inst.jsonText = buf.String()
+			inst.jsonView = codeview.PrepareJson(inst.jsonText)
 			inst.jsonOK = true
 		}
 	case vizeval.SinkUnicode:

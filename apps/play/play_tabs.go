@@ -111,6 +111,19 @@ type TabSpec struct {
 	// dispatcher stamps (`selection_node`, `selection_id`) are implied by
 	// declaring `selection` — see declaredWrites.
 	Writes []SignalID
+	// Frameless marks a panel that reads its named CTEs off the split and
+	// ignores the frame it is handed — Network, Graphview, Sankey, Vector
+	// field. A binding would not reach what it draws, so bind_pane refuses
+	// one and the Graph pane offers none (ADR-0270, update of 2026-10-05).
+	Frameless bool
+	// Status is the pane's own reading of what it last drew: its status
+	// line, and the reason it drew nothing when the data — not the schema —
+	// broke its contract (a repeated heatmap cell, no country column that
+	// resolves). It is called on the render goroutine between frames, so it
+	// reads the driver's state as the last draw left it. Nil for a pane
+	// without one; list_panes then reports no status (ADR-0270, update of
+	// 2026-10-05).
+	Status func() (line string, reject string)
 }
 
 // TabRegistry is a PlayApp instance's tab set (D4): mutate between
@@ -722,10 +735,11 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 		case "map":
 			// The Map is a panel-authored node on its own lane (5c), not a
 			// PanelI: it renders the driver directly.
-			spec.Render = func(f *TabFrame) { inst.mapDriver.Render(f.Sig, inst.sigEmit.as(signalWriterMap)) }
+			spec.Render = func(f *TabFrame) { inst.mapDriver.Render(f.Sig, inst.sigEmit.as(inst.mapDriver.emitWriter())) }
 		case "vectorfield":
 			spec.Panel = vectorFieldPanel{driver: inst.vectorFieldDriver}
 			spec.Render = func(f *TabFrame) { inst.renderVectorFieldTab() }
+			spec.Frameless = true
 		case "world":
 			spec.Panel = worldPanel{driver: inst.worldDriver}
 			spec.Render = func(f *TabFrame) { inst.renderWorldTab(f.Rec, f.Schema, f.Loading, f.Err, f.Executed) }
@@ -745,6 +759,7 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 			// ScrollArea.
 			spec.Panel = layeredGraphPanel{driver: inst.networkDriver}
 			spec.Render = func(f *TabFrame) { scrollTab(inst.renderNetworkTab) }
+			spec.Frameless = true
 		case "graphview":
 			// Reads the same two named CTEs off the split as the Network tab,
 			// so the body ignores the frame. Scrolled for the Network tab's
@@ -753,6 +768,7 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 			// while the pointer is over its canvas (ADR-0140).
 			spec.Panel = graphviewPanel{driver: inst.graphviewDriver}
 			spec.Render = func(f *TabFrame) { scrollTab(inst.renderGraphviewTab) }
+			spec.Frameless = true
 		case "sankey":
 			// Reads its two named CTEs off the split, not the active result, so
 			// the body ignores the frame. Scrolled, like the Network tab: the
@@ -763,6 +779,7 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 			// zeroes the delta the ScrollArea would read (ADR-0140).
 			spec.Panel = sankeyPanel{driver: inst.sankeyDriver}
 			spec.Render = func(f *TabFrame) { scrollTab(inst.renderSankeyTab) }
+			spec.Frameless = true
 		case "dist":
 			// Scrolled like its neighbours, but it does NOT rely on the scroll
 			// to reach its own content: the plot box is sized from the pane's
@@ -866,6 +883,7 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 			spec.Panel = detailPanel{app: inst}
 			spec.Render = func(f *TabFrame) { inst.renderDetailTab(f.Rec, f.Schema, f.Executed, f.Result) }
 		}
+		attachPaneStatus(inst, &spec)
 		if err := reg.Add(spec); err != nil {
 			// The defs are a static table; a duplicate here is a
 			// programming error, not a runtime condition.

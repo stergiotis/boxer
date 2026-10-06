@@ -80,7 +80,63 @@ type reservedSignal struct {
 	Owner string
 	// Literal is the seed when Seed is seedLiteral.
 	Literal string
+	// Shape says whether another writer's value holds: the default does;
+	// the others are outputs of their pane, which set_signal refuses
+	// (ADR-0270, update of 2026-10-05).
+	Shape signalShapeE
+	// Instead is what set_signal's refusal points at for a pane output:
+	// the pane's command that moves it, or the read that reports it.
+	Instead string
 }
+
+// signalShapeE says what a pane does with a value another writer put in
+// one of its signals.
+type signalShapeE uint8
+
+const (
+	// shapeFollowed: the value holds until the pane's next gesture, and the
+	// pane draws from it or ignores it harmlessly.
+	shapeFollowed signalShapeE = iota
+	// shapeRepublished: the pane writes the signal again every frame it
+	// draws, so another writer's value lasts until the pane is next drawn.
+	shapeRepublished
+	// shapeUnfollowed: the pane writes the signal and never reads it back,
+	// so another writer's value moves the queries that read it while the
+	// picture stays where it was.
+	shapeUnfollowed
+)
+
+// paneOutputRefusal is set_signal's refusal for a pane output, or "" when
+// the name is one another writer may set.
+func paneOutputRefusal(name SignalID) (reason string) {
+	s, ok := reservedSignalIndex[name]
+	if !ok {
+		return
+	}
+	switch s.Shape {
+	case shapeRepublished:
+		reason = string(name) + " is published by the " + s.Owner + " pane every frame it draws, so a value set here would not hold"
+	case shapeUnfollowed:
+		reason = string(name) + " is published by the " + s.Owner + " pane, which does not follow a value set here, so the queries reading it and the picture would disagree"
+	default:
+		return
+	}
+	if s.Instead != "" {
+		reason += "; " + s.Instead
+	}
+	return
+}
+
+// What set_signal's refusals point at instead of a pane output. The commands
+// are the panes' own (ADR-0270, update of 2026-10-05).
+const (
+	insteadMapView         = "set_map_view moves the Map's camera, which publishes it once the view settles"
+	insteadTimelineExtent  = "it is the extent of the events the Timeline draws; get_timeline reads it"
+	insteadTimelineWindow  = "set_timeline_window sets the Timeline's brushed window"
+	insteadGraphviewSelect = "select_graphview_nodes selects vertices in the Graphview pane"
+	insteadGraphviewHover  = "it is where the person's pointer dwells, an output only"
+	insteadVectorFieldView = "set_vectorfield_view moves the Vector field pane's view"
+)
 
 // reservedSignals is the declaration. Order is for reading only; every lookup
 // goes through the map built below.
@@ -88,12 +144,12 @@ var reservedSignals = []reservedSignal{
 	// The Map's viewport (ADR-0096 §SD6): the six slots its raster template
 	// reads back, published once the view settles. They block rather than
 	// seed — there is no viewport that means "anywhere".
-	{Name: "vp_min_x", Type: "UInt32", Seed: seedBlocks, Owner: "map"},
-	{Name: "vp_max_x", Type: "UInt32", Seed: seedBlocks, Owner: "map"},
-	{Name: "vp_min_y", Type: "UInt32", Seed: seedBlocks, Owner: "map"},
-	{Name: "vp_max_y", Type: "UInt32", Seed: seedBlocks, Owner: "map"},
-	{Name: "vp_w", Type: "UInt32", Seed: seedBlocks, Owner: "map"},
-	{Name: "vp_h", Type: "UInt32", Seed: seedBlocks, Owner: "map"},
+	{Name: "vp_min_x", Type: "UInt32", Seed: seedBlocks, Owner: "map", Shape: shapeUnfollowed, Instead: insteadMapView},
+	{Name: "vp_max_x", Type: "UInt32", Seed: seedBlocks, Owner: "map", Shape: shapeUnfollowed, Instead: insteadMapView},
+	{Name: "vp_min_y", Type: "UInt32", Seed: seedBlocks, Owner: "map", Shape: shapeUnfollowed, Instead: insteadMapView},
+	{Name: "vp_max_y", Type: "UInt32", Seed: seedBlocks, Owner: "map", Shape: shapeUnfollowed, Instead: insteadMapView},
+	{Name: "vp_w", Type: "UInt32", Seed: seedBlocks, Owner: "map", Shape: shapeUnfollowed, Instead: insteadMapView},
+	{Name: "vp_h", Type: "UInt32", Seed: seedBlocks, Owner: "map", Shape: shapeUnfollowed, Instead: insteadMapView},
 	// The Map's selected area, in mercator units and in degrees: seeded to
 	// the whole world, so a query filtering on it runs before anything is
 	// selected and keeps every row until something is.
@@ -107,12 +163,12 @@ var reservedSignals = []reservedSignal{
 	{Name: signalAreaMaxLon, Type: "Float64", Seed: seedLiteral, Literal: "180", Owner: "map"},
 
 	// The Timeline's extent (slice 5d), seeded by the panel on render.
-	{Name: signalTimelineMin, Type: "DateTime64(3, 'UTC')", Seed: seedBlocks, Owner: "timeline"},
-	{Name: signalTimelineMax, Type: "DateTime64(3, 'UTC')", Seed: seedBlocks, Owner: "timeline"},
+	{Name: signalTimelineMin, Type: "DateTime64(3, 'UTC')", Seed: seedBlocks, Owner: "timeline", Shape: shapeRepublished, Instead: insteadTimelineExtent},
+	{Name: signalTimelineMax, Type: "DateTime64(3, 'UTC')", Seed: seedBlocks, Owner: "timeline", Shape: shapeRepublished, Instead: insteadTimelineExtent},
 	// The Timeline's brushed window: seeded unbounded, so a query filtering on
 	// it runs before any brush and keeps every row until one is drawn.
-	{Name: signalTimelineFrom, Type: "DateTime64(3, 'UTC')", Seed: seedTimeFloor, Owner: "timeline"},
-	{Name: signalTimelineTo, Type: "DateTime64(3, 'UTC')", Seed: seedTimeCeil, Owner: "timeline"},
+	{Name: signalTimelineFrom, Type: "DateTime64(3, 'UTC')", Seed: seedTimeFloor, Owner: "timeline", Shape: shapeRepublished, Instead: insteadTimelineWindow},
+	{Name: signalTimelineTo, Type: "DateTime64(3, 'UTC')", Seed: seedTimeCeil, Owner: "timeline", Shape: shapeRepublished, Instead: insteadTimelineWindow},
 
 	// The World's clicked country.
 	{Name: signalSelectionCountry, Type: "String", Seed: seedEmpty, Owner: "world"},
@@ -123,8 +179,8 @@ var reservedSignals = []reservedSignal{
 	// from the first frame. That is the difference from the Map's viewport: a
 	// pin of zero beside an empty `gv_pin_id` is a valid "no drop yet", where
 	// a viewport of zero would draw a raster of nowhere.
-	{Name: signalGvHover, Type: "String", Seed: seedEmpty, Owner: "graphview"},
-	{Name: signalGvSelection, Type: "Array(String)", Seed: seedEmptyArray, Owner: "graphview"},
+	{Name: signalGvHover, Type: "String", Seed: seedEmpty, Owner: "graphview", Shape: shapeUnfollowed, Instead: insteadGraphviewHover},
+	{Name: signalGvSelection, Type: "Array(String)", Seed: seedEmptyArray, Owner: "graphview", Shape: shapeRepublished, Instead: insteadGraphviewSelect},
 	{Name: signalGvFocus, Type: "String", Seed: seedEmpty, Owner: "graphview"},
 	{Name: signalGvContext, Type: "String", Seed: seedEmpty, Owner: "graphview"},
 	{Name: signalGvEdgeSource, Type: "String", Seed: seedEmpty, Owner: "graphview"},
@@ -158,10 +214,10 @@ var reservedSignals = []reservedSignal{
 	// select nothing — the epoch, an empty box — and the pane overwrites them
 	// once its field is described.
 	{Name: signalVfT, Type: "DateTime64(3, 'UTC')", Seed: seedEpoch, Owner: "vectorfield"},
-	{Name: signalVfMinLat, Type: "Float64", Seed: seedZero, Owner: "vectorfield"},
-	{Name: signalVfMaxLat, Type: "Float64", Seed: seedZero, Owner: "vectorfield"},
-	{Name: signalVfMinLon, Type: "Float64", Seed: seedZero, Owner: "vectorfield"},
-	{Name: signalVfMaxLon, Type: "Float64", Seed: seedZero, Owner: "vectorfield"},
+	{Name: signalVfMinLat, Type: "Float64", Seed: seedZero, Owner: "vectorfield", Shape: shapeUnfollowed, Instead: insteadVectorFieldView},
+	{Name: signalVfMaxLat, Type: "Float64", Seed: seedZero, Owner: "vectorfield", Shape: shapeUnfollowed, Instead: insteadVectorFieldView},
+	{Name: signalVfMinLon, Type: "Float64", Seed: seedZero, Owner: "vectorfield", Shape: shapeUnfollowed, Instead: insteadVectorFieldView},
+	{Name: signalVfMaxLon, Type: "Float64", Seed: seedZero, Owner: "vectorfield", Shape: shapeUnfollowed, Instead: insteadVectorFieldView},
 
 	// The selection family (slice 5b). No owner: the row cursor is written by
 	// every pane whose rows ARE result rows, and the three companions are

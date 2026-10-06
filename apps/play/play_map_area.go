@@ -79,7 +79,8 @@ func (inst *MapDriver) onSelected(ev portolan.Events, emit SignalEmitterI) {
 		return
 	}
 	b := ev.Selected
-	inst.setArea(mapArea{south: b.GetSouth(), west: b.GetWest(), north: b.GetNorth(), east: b.GetEast()}, true, emit)
+	box := MapBox{South: max(b.GetSouth(), -90), West: b.GetWest(), North: min(b.GetNorth(), 90), East: b.GetEast()}
+	inst.requestOptions(SetMapOptionsArgs{Area: &box}, emit)
 }
 
 // paintArea outlines the selected box where it was drawn.

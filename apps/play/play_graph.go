@@ -242,6 +242,14 @@ type progressAwareExecutorI interface {
 	executeWithProgress(ctx context.Context, c compiledNode, alloc memory.Allocator, onProgress func(p runstream.Progress)) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, err error)
 }
 
+// labelledExecutorI is the optional executor upgrade that also reports the
+// run's dispatch label: whether the statement read confined data (ADR-0145).
+// A lane that finds it keeps the label with the result, so the window's
+// label covers what its bound and observed lanes hold (ADR-0270 §SD4).
+type labelledExecutorI interface {
+	executeLabelled(ctx context.Context, c compiledNode, alloc memory.Allocator, onProgress func(p runstream.Progress)) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, confined bool, err error)
+}
+
 // Node is a query node. Compile produces the pushed-down SQL plus the signal
 // values it reads from the current signal env (ADR-0097: editor SQL →
 // nanopass pipeline → param resolution). In slice 1 Compile is supplied
@@ -270,6 +278,10 @@ type nodeResult struct {
 	executedAt  time.Time     // when the execution finished (zero = never ran)
 	elapsed     time.Duration // wall-clock of the execution
 	err         error
+	// confined is the dispatch label of the run that produced the result
+	// (ADR-0270 §SD4, extended to lanes): set by an executor that reports
+	// it (labelledExecutorI).
+	confined bool
 }
 
 // signalMeta is a signal's write provenance for the Signals chrome (ADR-0097

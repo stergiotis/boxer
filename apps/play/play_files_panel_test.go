@@ -139,3 +139,39 @@ func TestFilesStatusLineReportsWhatWasNotInterned(t *testing.T) {
 	inst.fsys.dropped = 7
 	assert.Contains(t, inst.statusLine(), "the browser caps at")
 }
+
+// An inbound selection — a task's set_signal, another pane's click — moves the
+// browser to the row's path, and the path followed is not published back. A
+// row that has not moved leaves the person's own navigation alone, and a row
+// the tree does not hold clears the selection, so a click on the old path
+// publishes it again.
+func TestFilesDriverFollowsAnInboundSelection(t *testing.T) {
+	rec := pathTestRec(t, pathTestCol{name: "path", str: []string{"a/b.txt", "c.txt", "a/d/e.txt"}})
+	inst, k := filesTestDriver(t, rec, time.Unix(1, 0))
+
+	k.selRow = 2
+	inst.follow(k)
+	assert.Equal(t, []string{"a/d/e.txt"}, inst.st.Selection())
+	assert.Equal(t, "a/d", inst.st.Dir(), "the list moves to the row's directory")
+	probe := &emitProbe{}
+	inst.publish(k, probe)
+	assert.Empty(t, probe.ids, "the signal already names the row")
+
+	inst.st.SelectOnly("a/d")
+	inst.follow(k)
+	assert.Equal(t, []string{"a/d"}, inst.st.Selection(), "an unmoved row does not undo the person's click")
+
+	k.selRow = 0
+	inst.follow(k)
+	assert.Equal(t, []string{"a/b.txt"}, inst.st.Selection())
+	assert.Equal(t, "a", inst.st.Dir())
+
+	k.selRow = 7
+	inst.follow(k)
+	assert.Empty(t, inst.st.Selection(), "a row the tree does not hold clears the pick")
+	inst.st.SelectOnly("a/b.txt")
+	probe = &emitProbe{}
+	inst.publish(k, probe)
+	require.Equal(t, []SignalID{signalSelectionKey, signalSelection}, probe.ids, "the old path, clicked again, is published")
+	assert.Equal(t, int64(0), probe.vals[1])
+}

@@ -226,6 +226,13 @@ type ChatDriver struct {
 	reactionsErr     error
 	participantsBusy bool
 	reactionsBusy    bool
+	// The optional CTEs as the last draw found them, for get_chat_pane:
+	// whether the buffer has one, and why its result does not fit the
+	// channel's contract (painted nowhere, since the channel is optional).
+	participantsPresent bool
+	reactionsPresent    bool
+	participantsReject  string
+	reactionsReject     string
 
 	// cache holds the block-face artifacts (a parsed markdown Doc, decoded
 	// pixels, a highlighted job) keyed by (column, ordinal) — the Detail
@@ -526,12 +533,16 @@ func (inst *ChatDriver) statusLine() string {
 		fmt.Fprintf(&b, " · participants query failed: %v", inst.participantsErr)
 	case inst.participantsBusy:
 		b.WriteString(" · participants…")
+	case inst.participantsReject != "":
+		fmt.Fprintf(&b, " · participants not joined: %s", inst.participantsReject)
 	}
 	switch {
 	case inst.reactionsErr != nil:
 		fmt.Fprintf(&b, " · reactions query failed: %v", inst.reactionsErr)
 	case inst.reactionsBusy:
 		b.WriteString(" · reactions…")
+	case inst.reactionsReject != "":
+		fmt.Fprintf(&b, " · reactions not joined: %s", inst.reactionsReject)
 	}
 	return b.String()
 }
@@ -1006,8 +1017,14 @@ func (inst *PlayApp) renderChatTab(rec arrow.RecordBatch, schema *arrow.Schema, 
 	inputs := map[ChannelID]channelInput{
 		chMain: {node: inst.resolvedTabNode("chat"), rec: rec, schema: schema, sig: inst.frameSig, result: result},
 	}
+	d.participantsPresent, d.participantsReject = false, ""
+	d.reactionsPresent, d.reactionsReject = false, ""
 	if view, present := inst.demandChatCTE(d.participantsLane, chatParticipantsNodeID); present {
 		d.participantsBusy, d.participantsErr = view.loading, view.err
+		d.participantsPresent = true
+		if view.schema != nil {
+			_, d.participantsReject = resolveChatRoster(view.schema)
+		}
 		if view.rec != nil {
 			defer view.rec.Release()
 		}
@@ -1019,6 +1036,10 @@ func (inst *PlayApp) renderChatTab(rec arrow.RecordBatch, schema *arrow.Schema, 
 	}
 	if view, present := inst.demandChatCTE(d.reactionsLane, chatReactionsNodeID); present {
 		d.reactionsBusy, d.reactionsErr = view.loading, view.err
+		d.reactionsPresent = true
+		if view.schema != nil {
+			_, d.reactionsReject = resolveChatReactions(view.schema)
+		}
 		if view.rec != nil {
 			defer view.rec.Release()
 		}

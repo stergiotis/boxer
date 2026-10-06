@@ -196,6 +196,14 @@ type MapDriver struct {
 	laneErr    error
 	packErr    error
 	controlErr string
+
+	// followWriter is the task whose set_map_view or set_map_options asked
+	// for the next fetch: the viewport signals that fetch writes carry it,
+	// then the pane's own writer again (play_ops_map.go). onOptions routes
+	// the render combo, Clear area and a drawn box through set_map_options
+	// (ADR-0270 §SD6); nil applies directly.
+	followWriter string
+	onOptions    func(SetMapOptionsArgs)
 }
 
 // mapViewportSignals are the six reserved panel-written params of the raster
@@ -480,6 +488,9 @@ func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
 			b, sz := v.Bounds(), v.Size()
 			inst.updateViewport(b.GetSouth(), b.GetNorth(), b.GetWest(), b.GetEast(),
 				float32(sz.X), float32(sz.Y), emit)
+			// The fetch a command asked for has published; later moves
+			// are the pane's own.
+			inst.followWriter = ""
 		}
 	}
 
@@ -537,7 +548,7 @@ func (inst *MapDriver) Render(sig SignalEnvI, emit SignalEmitterI) {
 	}
 	if inst.clearAreaRequested {
 		inst.clearAreaRequested = false
-		inst.setArea(mapArea{}, false, emit)
+		inst.requestOptions(SetMapOptionsArgs{ClearArea: true}, emit)
 	}
 }
 
@@ -917,8 +928,8 @@ func (inst *MapDriver) renderModeCombo() {
 				Frame(false).
 				Selected(i == inst.renderIdx).
 				SendResp().HasPrimaryClicked() {
-				inst.renderIdx = i
-				inst.requestRefresh()
+				name := r.name
+				inst.requestOptions(SetMapOptionsArgs{Render: &name}, nil)
 			}
 		}
 	}

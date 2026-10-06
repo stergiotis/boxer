@@ -113,3 +113,36 @@ func TestTraceRewriteReportsEveryStep(t *testing.T) {
 	broken := externalReadOp[RewriteTrace](t, h, granted, opTraceRewrite, TraceArgs{Sql: "SELEC 1"})
 	assert.NotEmpty(t, broken.ParseError)
 }
+
+// Without sql, validate_sql and trace_rewrite read what run would ship: for a
+// buffer of several statements, the one at the caret, not the whole text.
+func TestStatementReadsDefaultToWhatRunWouldShip(t *testing.T) {
+	l, h := opsLauncher(t)
+	l.inner.client = NewClient(ClientConfig{URL: "http://ch.example:8123/"}, nil)
+	l.inner.sql = "SELECT 7 AS q;\nSELECT 8 AS r"
+	l.inner.caretByte = len(l.inner.sql) - 2
+	granted := app.OperationCall{Writer: "task:t", OnBehalfOf: &app.OnBehalfOf{Task: "t", Epoch: 1,
+		Destinations: []string{"clickhouse:ch.example:8123"}}}
+
+	tr := externalReadOp[RewriteTrace](t, h, granted, opTraceRewrite, nil)
+	assert.Empty(t, tr.ParseError, "one statement, not the two")
+	assert.Contains(t, tr.Body, "8 AS r")
+	assert.NotContains(t, tr.Body, "7 AS q")
+
+	v := externalReadOp[ValidateResult](t, h, granted, opValidateSql, nil)
+	assert.True(t, v.Valid, v.Error)
+	assert.Contains(t, v.Sent, "8 AS r")
+	assert.NotContains(t, v.Sent, "7 AS q")
+
+	m := (&PlayLauncher{}).Manifest()
+	// validate_sql moved to 3 with its literals (ADR-0270, update of
+	// 2026-10-05).
+	for name, version := range map[string]int{opTraceRewrite: 2, opValidateSql: 3} {
+		spec, ok := m.Operations.Lookup(name)
+		require.True(t, ok, name)
+		assert.Equal(t, version, int(spec.Version), name)
+		assert.Equal(t, []string{opsResSql}, spec.Reads, name)
+		// Untrusted: without sql both quote the person's buffer back.
+		assert.True(t, spec.Untrusted, name)
+	}
+}

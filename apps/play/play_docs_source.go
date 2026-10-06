@@ -7,6 +7,12 @@ package play
 // with SetDocsSource to point the pane at its own corpus instead. See
 // doc/howto/play-pluggable-docs.md.
 
+import (
+	"context"
+
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+)
+
 // DocsEntry is one documentation result for a name, source-agnostic: the pane
 // renders whatever a DocsSourceI returns without knowing where it came from.
 type DocsEntry struct {
@@ -63,4 +69,17 @@ type DocsSourceI interface {
 	// once, from PlayApp.Close or when SetDocsSource replaces it; a source
 	// with nothing to release can no-op.
 	Close()
+}
+
+// DocsLookupNowI is the optional capability of a DocsSourceI to answer one
+// name at once, off the render goroutine: play's lookup_docs operation
+// (ADR-0270, update of 2026-10-05). Lookup cannot serve it — it polls, and
+// its single slot and memo belong to the pane — so a source that wants to
+// answer agents implements this beside it. obo is the calling agent's
+// context, nil for the person; a source that reaches outside the process
+// checks it as the window's other external reads do and refuses with the
+// destination it lacks. A name with no documentation is entries empty, not
+// an error. A source without it leaves lookup_docs refused in its window.
+type DocsLookupNowI interface {
+	LookupNow(ctx context.Context, name string, obo *app.OnBehalfOf) (entries []DocsEntry, err error)
 }

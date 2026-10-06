@@ -3,6 +3,7 @@ package play
 import (
 	"fmt"
 	"math"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -67,6 +68,18 @@ type filesDriver struct {
 	// emitted is the path last published, so a cursor that lands where it
 	// already was does not re-emit every frame.
 	emitted string
+	// followed is the inbound selection row the browser last followed, so a
+	// row that has not moved does not undo the person's own navigation;
+	// keyedGen is the generation the browser has keyed its state on, since a
+	// new key clears the selection a follow would have set.
+	followed int64
+	keyedGen uint64
+
+	// onOptions and onSelect route the mode buttons, the browser's own
+	// moves and a click through set_files_options and select_files_path
+	// (ADR-0270 §SD6); nil applies directly.
+	onOptions func(SetFilesOptionsArgs)
+	onSelect  func(SelectFilesPathArgs)
 
 	// paneH is the last height the Files tab reported to the browser's pane
 	// probe. Held across frames because the probe answers one frame late and
@@ -75,7 +88,7 @@ type filesDriver struct {
 }
 
 func newFilesDriver(ids *c.WidgetIdStack) (inst *filesDriver) {
-	return &filesDriver{ids: ids}
+	return &filesDriver{ids: ids, followed: -1}
 }
 
 // noteFrame hands the driver what the frame knows and the panel interface does
@@ -129,6 +142,9 @@ func (inst filesPanel) Render(filled map[ChannelID]ChannelResult, emit SignalEmi
 // and publishes what the selection became.
 func (inst *filesDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, k pathClaim, emit SignalEmitterI) {
 	inst.rebuild(rec, schema, k)
+	if inst.keyedGen == inst.gen {
+		inst.follow(k)
+	}
 	inst.renderStrip()
 	// The pane's height, which bounds the browser: MaxHeight is a ceiling, so
 	// a long listing fills the tab and a short one stays short. Probed after
@@ -141,6 +157,8 @@ func (inst *filesDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, k p
 		h > 0 && !math.IsNaN(float64(h)) {
 		inst.paneH = h
 	}
+	dirBefore := inst.st.Dir()
+	byBefore, descBefore := inst.st.Sort()
 	res := fsbrowser.Render(fsbrowser.Input{
 		Ids:      inst.ids,
 		ScopeKey: "files",
@@ -160,12 +178,75 @@ func (inst *filesDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, k p
 		MaxHeight:  inst.paneH,
 	})
 	inst.flushWidths()
+	inst.routeBrowser(res, dirBefore, byBefore, descBefore)
 	if res.Err != nil {
 		for rt := range c.RichTextLabel(res.Err.Error()) {
 			rt.Small().Weak()
 		}
 	}
+	// A new result was keyed by the browser just now, which cleared its
+	// selection; a row that moved on the same frame is followed here and
+	// drawn next frame.
+	inst.keyedGen = inst.gen
+	inst.follow(k)
 	inst.publish(k, emit)
+}
+
+// routeBrowser makes what the browser changed inside the frame again through
+// the catalog, as the person's gesture: a move to another directory, a new
+// order, and a click that left one path selected. Each is already applied,
+// so the command applies it again unchanged; select_files_path publishes the
+// signals, after which publish finds them in place.
+func (inst *filesDriver) routeBrowser(res fsbrowser.Result, dirBefore string, byBefore fsbrowser.SortByE, descBefore bool) {
+	var in SetFilesOptionsArgs
+	moved := false
+	if dir := inst.st.Dir(); res.Navigated && dir != dirBefore {
+		in.Dir, moved = &dir, true
+	}
+	if by, desc := inst.st.Sort(); by != byBefore || desc != descBefore {
+		name := nameAt(filesSortNames, int(by))
+		in.SortBy, in.Descending, moved = &name, &desc, true
+	}
+	if moved && inst.onOptions != nil {
+		inst.onOptions(in)
+	}
+	if sel := inst.st.Selection(); res.SelectionChanged && len(sel) == 1 && sel[0] != inst.emitted && inst.onSelect != nil {
+		inst.onSelect(SelectFilesPathArgs{Path: sel[0]})
+	}
+}
+
+// follow moves the browser to the selection row when another writer moved
+// it: a task's set_signal, or another pane's click. Only a row that changed
+// since the last follow is followed, so the person's navigation inside the
+// pane stands. A row the tree did not intern clears the browser's selection,
+// so clicking the old path again publishes it. The path followed counts as
+// published: the signal already names its row.
+func (inst *filesDriver) follow(k pathClaim) {
+	if k.selRow == inst.followed {
+		return
+	}
+	inst.followed = k.selRow
+	p, ok := inst.fsys.pathOf(k.selRow)
+	if !ok || p == "." {
+		// The root row is the result itself, which the browser does not
+		// select.
+		if sel := inst.st.Selection(); len(sel) == 1 && inst.fsys.rowOf(sel[0]) >= 0 {
+			inst.st.ClearSelection()
+		}
+		inst.emitted = ""
+		return
+	}
+	if sel := inst.st.Selection(); len(sel) == 1 && sel[0] == p {
+		inst.emitted = p
+		return
+	}
+	dir := inst.st.Dir()
+	under := dir == "." || strings.HasPrefix(p, dir+"/")
+	if path.Dir(p) != dir && !(inst.mode == fsbrowser.ModeOutline && under) {
+		inst.st.SetDir(path.Dir(p))
+	}
+	inst.st.SelectOnly(p)
+	inst.emitted = p
 }
 
 // rebuild interns the result into a file system, keyed on (schema, executed).
@@ -188,11 +269,13 @@ func (inst *filesDriver) renderStrip() {
 	for range c.HorizontalTop().KeepIter() {
 		if c.Button(inst.ids.PrepareStr("files-list"), c.Atoms().Text(icons.PhListBullets+" List").Keep()).
 			Selected(inst.mode == fsbrowser.ModeList).SendResp().HasPrimaryClicked() {
-			inst.mode = fsbrowser.ModeList
+			mode := filesModeNames[fsbrowser.ModeList]
+			inst.requestOptions(SetFilesOptionsArgs{Mode: &mode})
 		}
 		if c.Button(inst.ids.PrepareStr("files-outline"), c.Atoms().Text(icons.PhTreeStructure+" Outline").Keep()).
 			Selected(inst.mode == fsbrowser.ModeOutline).SendResp().HasPrimaryClicked() {
-			inst.mode = fsbrowser.ModeOutline
+			mode := filesModeNames[fsbrowser.ModeOutline]
+			inst.requestOptions(SetFilesOptionsArgs{Mode: &mode})
 		}
 		c.AddSpace(styletokens.GapInline(inst.density))
 		c.Checkbox(inst.ids.PrepareStr("files-hidden"), inst.showHidden, "Hidden names").SendRespVal(&inst.showHidden)

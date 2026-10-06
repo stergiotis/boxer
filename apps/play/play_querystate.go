@@ -317,11 +317,26 @@ func queryStateTone(s queryStateE) badge.ToneE {
 // window.
 func (inst *PlayApp) renderQuerySummary(numRows int64, elapsed time.Duration, summary Summary, executed time.Time, err error, truncation string) {
 	s := inst.querySummaryLine(numRows, elapsed, summary, executed, err, truncation)
-	// A Run refused on unfilled inputs (5e, D3) reports where its result
-	// summary would have landed — the FSM chip beside it keeps showing the
-	// last settled state. Retires as soon as the inputs are filled or
-	// edited away, no Run needed.
-	if inst.runBlockedReason != "" && len(inst.unfilledInputs()) > 0 {
+	if n := inst.queryNotice(); n != "" {
+		s = n
+	}
+	if s == "" {
+		return
+	}
+	muted := color.Hex(styletokens.NeutralTextSecondary.AsHex())
+	atoms := c.Atoms().BeginRichTextColored(muted, color.Transparent, s).Small().End().Keep()
+	c.LabelAtoms(atoms).Send()
+}
+
+// queryNotice is what the status line shows in place of the result summary,
+// or "" when it shows the summary; get_state reports it as Result.Notice.
+func (inst *PlayApp) queryNotice() (s string) {
+	// A refused Run reports where its result summary would have landed —
+	// the FSM chip beside it keeps showing the last settled state. The
+	// unfilled-input refusal (5e, D3) retires as soon as the inputs are
+	// filled or edited away, no Run needed; the class ceiling's and the
+	// agent-write refusal stand until the next Run clears them.
+	if inst.runBlockedReason != "" && (!inst.runBlockedUnfilled || len(inst.unfilledInputs()) > 0) {
 		s = "Run blocked: " + inst.runBlockedReason
 	}
 	// The write gate's refusal and the async write's outcome (ADR-0181
@@ -339,12 +354,7 @@ func (inst *PlayApp) renderQuerySummary(numRows int64, elapsed time.Duration, su
 	if inst.liveSuspendReason != "" {
 		s = inst.liveSuspendReason
 	}
-	if s == "" {
-		return
-	}
-	muted := color.Hex(styletokens.NeutralTextSecondary.AsHex())
-	atoms := c.Atoms().BeginRichTextColored(muted, color.Transparent, s).Small().End().Keep()
-	c.LabelAtoms(atoms).Send()
+	return
 }
 
 // querySummaryLine is the FSM-keyed one-line result summary, shared by the

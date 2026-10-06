@@ -284,6 +284,15 @@ type CardGridDriver struct {
 	forSchema     *arrow.Schema
 	folded        bool
 	unknownTones  int
+	// heroMedia and heroNote are each card's hero as get_cards reads it:
+	// its media type, and why it cannot be shown when it cannot. Built
+	// with the model, per page, and replaced, never edited.
+	rows      int64 // the result's rows, as the pager was last configured
+	heroMedia []string
+	heroNote  []string
+	// onOptions routes the toolbar and the pager through
+	// set_cards_options (ADR-0270 §SD6); nil applies them directly.
+	onOptions func(SetCardsOptionsArgs)
 
 	// lastSel is the selection this pane last saw, so a cursor moved
 	// elsewhere — and only that — turns the page.
@@ -367,6 +376,7 @@ func (inst *CardGridDriver) render(app *PlayApp, rec arrow.RecordBatch, result R
 		inst.lastSel = -1
 	}
 	inst.pager.Configure(rec.NumRows())
+	inst.rows = rec.NumRows()
 
 	// The page follows a selection that moved elsewhere (§SD5) — and only
 	// one that moved: following the standing selection every frame would
@@ -378,9 +388,38 @@ func (inst *CardGridDriver) render(app *PlayApp, rec arrow.RecordBatch, result R
 	}
 
 	for range c.HorizontalTop().KeepIter() {
+		// The toolbar and the pager change their state inside the frame;
+		// the change is taken back and made again through
+		// set_cards_options, so the person's pick is logged as theirs
+		// (ADR-0270 §SD6).
+		density, aspect := inst.state.Density(), inst.state.Aspect()
 		cardgrid.Toolbar(inst.ids, "play-cards", &inst.state, k.slots())
+		if d, a := inst.state.Density(), inst.state.Aspect(); d != density || a != aspect {
+			inst.state.SetDensity(density)
+			inst.state.SetAspect(aspect)
+			var in SetCardsOptionsArgs
+			if d != density {
+				name := nameAt(cardgridDensityNames, int(d))
+				in.Density = &name
+			}
+			if a != aspect {
+				name := nameAt(cardgridAspectNames, int(a))
+				in.Aspect = &name
+			}
+			inst.requestOptions(in)
+		}
 		c.AddSpace(styletokens.GapSections(styletokens.ActiveDensity()))
-		inst.pager.Render()
+		page, size := inst.pager.CurrentPage(), inst.pager.PageSize()
+		if ev := inst.pager.Render(); ev.Changed {
+			newPage, newSize := inst.pager.CurrentPage()+1, inst.pager.PageSize()
+			inst.pager.SetPageSize(size)
+			inst.pager.GoToIndex(page * size)
+			in := SetCardsOptionsArgs{Page: &newPage}
+			if newSize != size {
+				in.PageSize = &newSize
+			}
+			inst.requestOptions(in)
+		}
 		if inst.unknownTones > 0 {
 			for range c.HoverText("known tones: " + toneTokenNames()).KeepIter() {
 				for rt := range c.RichTextLabel(strconv.Itoa(inst.unknownTones) + " unknown `card_tone` on this page") {
@@ -476,6 +515,7 @@ func (inst *CardGridDriver) refold(app *PlayApp, rec arrow.RecordBatch, schema *
 	inst.forResult, inst.forStart, inst.forEnd = result, start, end
 	inst.forRaw, inst.forDirectives, inst.forSchema = rawCells, directives, schema
 	inst.unknownTones = 0
+	inst.heroMedia, inst.heroNote = nil, nil
 
 	n := int(max(end-start, 0))
 	m := &cardgrid.Model{Count: n, Slots: k.slots()}
@@ -568,6 +608,12 @@ func (inst *CardGridDriver) refold(app *PlayApp, rec arrow.RecordBatch, schema *
 		if k.tags >= 0 {
 			m.Tag = append(m.Tag, cardgridTags(rec, k.tags, row)...)
 			m.TagOff = append(m.TagOff, int32(len(m.Tag)))
+		}
+	}
+	if k.hero >= 0 {
+		inst.heroMedia, inst.heroNote = make([]string, n), make([]string, n)
+		for i := range n {
+			inst.heroMedia[i], inst.heroNote[i] = cardgridHeroNote(app, rec, schema, cols, k.hero, start+int64(i), rawCells)
 		}
 	}
 	inst.model = m

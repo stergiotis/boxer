@@ -269,6 +269,10 @@ type Projector struct {
 	// the button through it); the pane's next draw starts the run over the
 	// result it draws.
 	computeRequested bool
+	// runTask is the task whose compute_projection asked for the run in
+	// flight or requested; empty for the person's. cancel_projection lets
+	// a task stop only its own run.
+	runTask string
 	// posX, posY are the layout as get_projection last copied it, for the
 	// run of posVersion; posSettled says it was copied settled.
 	posX, posY []float32
@@ -815,7 +819,8 @@ func (inst *PlayApp) renderProjection(rec arrow.RecordBatch, selectedRow int64, 
 			if c.Button(ids.PrepareStr("projectionCancel"),
 				c.Atoms().Text("Cancel").Keep()).
 				SendResp().HasPrimaryClicked() {
-				p.Cancel()
+				// The person's Cancel goes through the catalog (ADR-0270 §SD6).
+				inst.personCancelProjection()
 			}
 		case projectorStatusCancelling:
 			c.Spinner().Size(14).Send()
@@ -833,7 +838,7 @@ func (inst *PlayApp) renderProjection(rec arrow.RecordBatch, selectedRow int64, 
 				// The person's Compute goes through the catalog, as an
 				// agent's does (ADR-0270 §SD6).
 				args := ComputeProjectionArgs{Neighbours: int32(math.Round(p.kKnob)), MinCluster: int32(math.Round(p.mcsKnob)), Features: p.params.FeatureSet.String()}
-				playGesture(inst, opComputeProjection, args, func() { p.computeRequested = true })
+				playGesture(inst, opComputeProjection, args, func() { p.computeRequested, p.runTask = true, "" })
 			}
 			if p.computeRequested {
 				p.computeRequested = false

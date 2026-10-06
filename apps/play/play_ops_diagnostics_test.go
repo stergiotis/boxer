@@ -3,10 +3,13 @@ package play
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
 )
 
 // get_diagnostics reads the pane's sections: the statement's status, the
@@ -54,4 +57,46 @@ func TestGetDiagnosticsReadsThePanesSections(t *testing.T) {
 
 	p.lastSentSql, p.splitErr = "SELECT 1", errors.New("two sinks")
 	require.Contains(t, snapshotDiagnostics(p).QueryGraph, "two sinks")
+}
+
+func TestGetDiagnosticsCatalogEntry(t *testing.T) {
+	m := (&PlayLauncher{}).Manifest()
+	spec, ok := m.Operations.Lookup(opGetDiagnostics)
+	require.True(t, ok)
+	require.Equal(t, 2, int(spec.Version))
+	require.True(t, spec.Untrusted)
+	require.Equal(t, app.OperationEffectNone, spec.Effect)
+	require.Equal(t, []string{opsResSql, opsResResult, opsResSignals, opsResPanes}, spec.Reads)
+	require.Empty(t, spec.Writes)
+}
+
+// A gloss directive that does not compile is a diagnostic of the buffer, as
+// the Table pane notes it under its pager, whether or not the Table drew.
+func TestGetDiagnosticsReportsGlossDirectivesThatDoNotCompile(t *testing.T) {
+	p := &PlayApp{diag: NewDiagnosticsDriver(nil)}
+	p.sql = "-- play: gloss no/such-type ^x$\nSELECT 1 AS x"
+	d := snapshotDiagnostics(p)
+	require.Len(t, d.GlossNotes, 1)
+	require.Contains(t, d.GlossNotes[0], "line 1")
+
+	p.sql = "SELECT 1 AS x"
+	require.Empty(t, snapshotDiagnostics(p).GlossNotes)
+}
+
+// LastRun is of the result the panels draw: with the main result landed and
+// nothing observed, its summary; a failed run gives its full error.
+func TestGetDiagnosticsLastRunIsOfTheActiveFrame(t *testing.T) {
+	l, _ := opsLauncher(t)
+	p := l.inner
+
+	rec := int64Rec("n", 1, 2, 3)
+	p.graph.mainLane.finish("SELECT n", nil, time.Now(), rec, rec.Schema(), 3, Summary{}, nil, runstream.Terminal{})
+	d := snapshotDiagnostics(p)
+	require.False(t, d.LastRunError)
+	require.NotEmpty(t, d.LastRun)
+
+	p.graph.mainLane.finish("SELECT n", nil, time.Now(), nil, nil, 0, Summary{}, errors.New("Code: 60. Unknown table"), runstream.Terminal{})
+	d = snapshotDiagnostics(p)
+	require.True(t, d.LastRunError)
+	require.Contains(t, d.LastRun, "Unknown table")
 }

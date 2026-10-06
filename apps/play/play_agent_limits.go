@@ -75,11 +75,25 @@ func checkAgentLimits(residual string, dec dispatchDecision, obo *app.OnBehalfOf
 // accepted, so a run the grant does not cover is refused with the
 // destination it needs rather than failing after it was applied.
 func (inst *PlayApp) refuseAgentRun(obo *app.OnBehalfOf) (err error) {
-	if inst.client == nil {
+	return inst.refuseAgentRunOf(obo, inst.sql)
+}
+
+// refuseAgentRunOf is refuseAgentRun for a given text: a subquery run is
+// checked on the narrowed text it ships.
+func (inst *PlayApp) refuseAgentRunOf(obo *app.OnBehalfOf, sql string) (err error) {
+	return refuseAgentStatement(inst.client, obo, sql)
+}
+
+// refuseAgentStatement is the agent limits' refusal of sql as the client
+// would send it for obo, naming the destination a grant lacks: the check
+// run makes at the call, and explain_sql's for the statement it explains.
+// A nil client refuses nothing.
+func refuseAgentStatement(client *Client, obo *app.OnBehalfOf, sql string) (err error) {
+	if client == nil {
 		return
 	}
-	residual, _, _ := inst.client.rewriteFor(obo, inst.sql, nil)
-	lerr := checkAgentLimits(residual, inst.client.previewDispatch(residual, ""), obo, inst.client.datasetAliasOf())
+	residual, _, _ := client.rewriteFor(obo, sql, nil)
+	lerr := checkAgentLimits(residual, client.previewDispatch(residual, ""), obo, client.datasetAliasOf())
 	if limit, ok := lerr.(*AgentLimitError); ok {
 		if limit.Destination != "" {
 			return app.RefuseForDestinations(lerr.Error(), limit.Destination)

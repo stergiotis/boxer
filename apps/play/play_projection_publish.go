@@ -383,6 +383,13 @@ func (inst *PlayApp) syncProjectionPublish() {
 			return
 		}
 	}
+	// An agent's round binds the aliases and leaves the person's caret
+	// alone: get_projection names the handles for it to write its own
+	// query (ADR-0270, the person's caret stays the person's).
+	if inst.projPublishQuiet {
+		inst.projPublishQuiet = false
+		return
+	}
 	inst.InsertSqlAtCaret(projectionScaffold())
 }
 
@@ -413,7 +420,8 @@ func (inst *PlayApp) renderProjectionPublish(in func() projectionPublishInput) {
 	}
 	if c.Button(inst.ids.PrepareStr("projectionPublish"), c.Atoms().Text(label).Keep()).
 		SendResp().HasPrimaryClicked() && !publishing {
-		inst.publishProjection(in())
+		// The person's publish goes through the catalog (ADR-0270 §SD6).
+		inst.personPublishProjection(func() { inst.publishProjection(in()) })
 	}
 	switch {
 	case err != nil:

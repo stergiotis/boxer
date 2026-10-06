@@ -176,6 +176,9 @@ type IcicleDriver struct {
 	// Both are LOCAL — see the file comment on why no cursor is published.
 	selected icicleview.Hit
 	hover    icicleview.Hit
+	// onSelect routes a frame click through select_icicle_frame (ADR-0270
+	// §SD6); nil pins directly.
+	onSelect func(SelectIcicleFrameArgs)
 
 	stats icicleStats
 
@@ -238,14 +241,7 @@ func (inst iciclePanel) Render(filled map[ChannelID]ChannelResult, emit SignalEm
 // on the tree generation and the geometry controls), draws it, and tracks the
 // pinned frame.
 func (inst *IcicleDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, cl icicleClaim, emit SignalEmitterI) {
-	if schema != inst.forSchema || !inst.pendingExecuted.Equal(inst.forExecuted) || inst.treeGen == 0 {
-		inst.tree, inst.stats = buildIcicleTree(rec, cl)
-		inst.forSchema, inst.forExecuted = schema, inst.pendingExecuted
-		inst.treeGen++
-		// A new tree invalidates a pin taken against the old one: the index
-		// would still resolve, and to a different frame.
-		inst.selected, inst.hover = icicleview.Hit{}, icicleview.Hit{}
-	}
+	inst.syncTree(rec, schema, cl, emit)
 	inst.renderControls()
 
 	if inst.tree.Len() == 0 {
@@ -261,12 +257,8 @@ func (inst *IcicleDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, cl
 		return
 	}
 
-	if key := (icicleLayoutKey{gen: inst.treeGen, orient: inst.orient, order: inst.order, prune: inst.prune}); key != inst.layoutKey {
-		inst.layoutKey = key
-		inst.layout, inst.layoutErr = icicle.Compute(inst.tree,
-			icicleTreeOpts(inst.orient, inst.order, inst.prune, inst.stats.unit))
-		// One frame of CondAlways limits, on the frame the geometry changed.
-		inst.resetView = true
+	if inst.syncLayout() && emit != nil {
+		emit.Emit(signalSelectionKey, "")
 	}
 	if inst.layout == nil {
 		c.Label(inst.statusLine()).Send()
@@ -333,16 +325,79 @@ func (inst *IcicleDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, cl
 	// one is the honest "nothing focused" value a query reading
 	// `{selection_key:String}` sees before anything is clicked.
 	if clicked {
-		if click == inst.selected {
-			inst.selected = icicleview.Hit{}
-		} else {
-			inst.selected = click
+		in := SelectIcicleFrameArgs{Clear: true}
+		if click != inst.selected && !click.None() {
+			// The number pins the frame clicked even when a sibling's label
+			// agrees with it; the path is checked against it (review finding).
+			frame := int32(click.Node)
+			in = SelectIcicleFrameArgs{Path: icicleFrameLabels(inst.layout, int(click.Node)), Frame: &frame}
 		}
-		if emit != nil {
-			emit.Emit(signalSelectionKey, inst.selectedLabel())
-		}
+		inst.requestSelect(in, emit)
 	}
+}
 
+// syncLayout lays the tree out again when the tree or a control that
+// changes geometry moved. A pin indexes the layout, so a new layout keeps
+// the pinned frame by its path, and drops the pin when the path is gone
+// (pruned away); dropped reports that, so the caller publishes the empty
+// selection_key.
+func (inst *IcicleDriver) syncLayout() (dropped bool) {
+	key := icicleLayoutKey{gen: inst.treeGen, orient: inst.orient, order: inst.order, prune: inst.prune}
+	if key == inst.layoutKey {
+		return
+	}
+	var pinned []string
+	if !inst.selected.None() && inst.layoutKey.gen == key.gen {
+		pinned = icicleFrameLabels(inst.layout, int(inst.selected.Node))
+	}
+	inst.layoutKey = key
+	inst.layout, inst.layoutErr = icicle.Compute(inst.tree,
+		icicleTreeOpts(inst.orient, inst.order, inst.prune, inst.stats.unit))
+	// One frame of CondAlways limits, on the frame the geometry changed.
+	inst.resetView = true
+	inst.hover = icicleview.Hit{}
+	inst.selected = icicleview.Hit{}
+	if i, ok := icicleFrameByPath(inst.layout, pinned); ok {
+		inst.selected = icicleview.NodeHit(i)
+	}
+	dropped = pinned != nil && inst.selected.None()
+	return
+}
+
+// requestSelect is a frame click: through select_icicle_frame when play's
+// launcher routes it, directly through the pane's emitter otherwise.
+func (inst *IcicleDriver) requestSelect(in SelectIcicleFrameArgs, emit SignalEmitterI) {
+	if inst.onSelect != nil {
+		inst.onSelect(in)
+		return
+	}
+	hit, err := inst.pinFor(in)
+	if err != nil {
+		return
+	}
+	inst.selected = hit
+	if emit != nil {
+		emit.Emit(signalSelectionKey, inst.selectedLabel())
+	}
+}
+
+// syncTree rebuilds the tree when the result is new. A new tree invalidates a
+// pin taken against the old one: the index would still resolve, and to a
+// different frame. The dropped pin is published as an empty selection_key, so
+// a Live query filtering on it does not keep the label the pane no longer
+// pins.
+func (inst *IcicleDriver) syncTree(rec arrow.RecordBatch, schema *arrow.Schema, cl icicleClaim, emit SignalEmitterI) {
+	if schema == inst.forSchema && inst.pendingExecuted.Equal(inst.forExecuted) && inst.treeGen != 0 {
+		return
+	}
+	pinned := inst.selected != (icicleview.Hit{})
+	inst.tree, inst.stats = buildIcicleTree(rec, cl)
+	inst.forSchema, inst.forExecuted = schema, inst.pendingExecuted
+	inst.treeGen++
+	inst.selected, inst.hover = icicleview.Hit{}, icicleview.Hit{}
+	if pinned && emit != nil {
+		emit.Emit(signalSelectionKey, "")
+	}
 }
 
 // selectedLabel is the pinned frame's label, or "" when nothing is pinned.

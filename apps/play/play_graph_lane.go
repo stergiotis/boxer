@@ -79,6 +79,8 @@ type laneView struct {
 	elapsed     time.Duration // its wall-clock
 	loading     bool
 	err         error
+	// confined is the served result's dispatch label (ADR-0270 §SD4).
+	confined bool
 	// progress is the in-flight run's latest in-band tick, set only while
 	// loading (ADR-0115 plane A); progressFresh distinguishes "no tick
 	// yet" from a zero-valued tick.
@@ -144,6 +146,12 @@ func (inst *nodeLane) demand(c compiledNode) (view laneView) {
 		inst.startLocked(c, demandKey)
 	}
 
+	view = inst.viewLocked()
+	return
+}
+
+// viewLocked is the retained snapshot demand and peek return. Caller holds mu.
+func (inst *nodeLane) viewLocked() (view laneView) {
 	if inst.result != nil {
 		if inst.result.rec != nil {
 			inst.result.rec.Retain()
@@ -159,6 +167,7 @@ func (inst *nodeLane) demand(c compiledNode) (view laneView) {
 		view.executedAt = inst.result.executedAt
 		view.elapsed = inst.result.elapsed
 		view.err = inst.result.err
+		view.confined = inst.result.confined
 	}
 	view.loading = inst.loading
 	if inst.loading && inst.progressFresh {
@@ -166,6 +175,27 @@ func (inst *nodeLane) demand(c compiledNode) (view laneView) {
 		view.progressFresh = true
 	}
 	return
+}
+
+// peek returns the lane's last-good result without demanding anything: no
+// run starts, none is superseded. It takes the lane's lock, so it is safe
+// from any goroutine — the read an operation's query makes off the render
+// goroutine, as MainSnapshot is for the main lane. The caller releases
+// view.rec (nil-safe). A closed lane serves nothing.
+func (inst *nodeLane) peek() (view laneView) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if inst.closed {
+		return
+	}
+	return inst.viewLocked()
+}
+
+// servesConfined reports the label of the result the lane serves.
+func (inst *nodeLane) servesConfined() (confined bool) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	return !inst.closed && inst.result != nil && inst.result.confined
 }
 
 // progressView returns the in-flight run's latest progress tick without
@@ -259,19 +289,23 @@ func (inst *nodeLane) run(ctx context.Context, cancel context.CancelFunc, gen ui
 	var schema *arrow.Schema
 	var summary Summary
 	var err error
-	if pe, ok := inst.exec.(progressAwareExecutorI); ok {
-		// The sink is generation-guarded: a superseded run's late ticks
-		// must not paint the new run's badge.
-		sink := func(p runstream.Progress) {
-			inst.mu.Lock()
-			if gen == inst.gen && inst.loading {
-				inst.progress = p
-				inst.progressFresh = true
-			}
-			inst.mu.Unlock()
+	var confined bool
+	// The sink is generation-guarded: a superseded run's late ticks must
+	// not paint the new run's badge.
+	sink := func(p runstream.Progress) {
+		inst.mu.Lock()
+		if gen == inst.gen && inst.loading {
+			inst.progress = p
+			inst.progressFresh = true
 		}
-		rec, schema, summary, err = pe.executeWithProgress(ctx, c, inst.alloc, sink)
-	} else {
+		inst.mu.Unlock()
+	}
+	switch ex := inst.exec.(type) {
+	case labelledExecutorI:
+		rec, schema, summary, confined, err = ex.executeLabelled(ctx, c, inst.alloc, sink)
+	case progressAwareExecutorI:
+		rec, schema, summary, err = ex.executeWithProgress(ctx, c, inst.alloc, sink)
+	default:
 		rec, schema, summary, err = inst.exec.execute(ctx, c, inst.alloc)
 	}
 	// A client node's SQL is the transform's INPUT; its real output is what
@@ -312,6 +346,7 @@ func (inst *nodeLane) run(ctx context.Context, cancel context.CancelFunc, gen ui
 		executedAt:  time.Now(),
 		elapsed:     time.Since(start),
 		err:         err,
+		confined:    confined,
 	}
 	inst.servedKey = demandKey
 	if prev != nil && prev.rec != nil {

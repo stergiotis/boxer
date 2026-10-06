@@ -170,6 +170,16 @@ func (inst *PlayApp) completionProbeGen() (gen uint64) {
 // sections of the bound table (ADR-0147 §SD9's schema reader), the membership
 // registry, the identity tag registry, and everything under `system.*`.
 func (inst *PlayApp) completionProviders() (p sqlcomplete.Providers) {
+	p = inProcessCompletionProviders(inst.datasetAliases)
+	inst.addEndpointCompletionProviders(&p)
+	return
+}
+
+// inProcessCompletionProviders are the providers this build answers without
+// asking an endpoint: pure functions of in-process registries, plus the
+// session's bound dataset aliases. complete_sql and validate_sql build their
+// own engine over them off the render goroutine (play_ops_completion.go).
+func inProcessCompletionProviders(aliases func() []string) (p sqlcomplete.Providers) {
 	p.ComponentKinds = func() (items []sqlcomplete.Item, ready bool) {
 		kinds := componentsql.Default.Kinds()
 		items = make([]sqlcomplete.Item, 0, len(kinds))
@@ -192,15 +202,18 @@ func (inst *PlayApp) completionProviders() (p sqlcomplete.Providers) {
 	}
 	p.IntrospectionTables = func() (items []sqlcomplete.Item, ready bool) {
 		names := introspect.Default.Names()
-		aliases := inst.datasetAliases()
-		items = make([]sqlcomplete.Item, 0, len(names)+len(aliases))
+		var bound []string
+		if aliases != nil {
+			bound = aliases()
+		}
+		items = make([]sqlcomplete.Item, 0, len(names)+len(bound))
 		for _, n := range names {
 			items = append(items, sqlcomplete.Item{Text: n, Kind: sqlcomplete.ItemTable, Source: "introspection"})
 		}
 		// Ad-hoc dataset aliases are tables no catalogue enumerates: they exist
 		// only because this session bound them (ADR-0134 §SD4), which is why
 		// the answer is per buffer rather than per build.
-		for _, a := range aliases {
+		for _, a := range bound {
 			items = append(items, sqlcomplete.Item{
 				Text: a, Kind: sqlcomplete.ItemTable, Source: "bound dataset",
 				Doc: "an ad-hoc dataset this session bound",
@@ -241,6 +254,31 @@ func (inst *PlayApp) completionProviders() (p sqlcomplete.Providers) {
 		})
 		return items, true
 	}
+	p.GlossKeys = func(mediaType string) (items []sqlcomplete.Item, ready bool) {
+		g, ok := gloss.Default().Lookup(mediaType)
+		if !ok {
+			return nil, true
+		}
+		specs := g.Params()
+		items = make([]sqlcomplete.Item, 0, len(specs))
+		for _, s := range specs {
+			doc := s.Doc
+			if len(s.Values) > 0 {
+				doc = strings.TrimSpace(doc + " — one of " + strings.Join(s.Values, ", "))
+			}
+			items = append(items, sqlcomplete.Item{
+				Text: s.Name, Kind: sqlcomplete.ItemGlossKey, Source: mediaType, Doc: doc,
+			})
+		}
+		return items, true
+	}
+	return
+}
+
+// addEndpointCompletionProviders wires the endpoint half (§SD12's B rows)
+// and the expression position, which mixes both halves. Render-goroutine
+// only: every catalog provider demands its probe.
+func (inst *PlayApp) addEndpointCompletionProviders(p *sqlcomplete.Providers) {
 	// The endpoint half (§SD12's B rows). Every one is a probe: off the frame
 	// thread, cached, and "not yet" until it answers.
 	p.Catalog = sqlcomplete.Catalog{
@@ -308,25 +346,6 @@ func (inst *PlayApp) completionProviders() (p sqlcomplete.Providers) {
 		st.exprValid = true
 		return items, true
 	}
-	p.GlossKeys = func(mediaType string) (items []sqlcomplete.Item, ready bool) {
-		g, ok := gloss.Default().Lookup(mediaType)
-		if !ok {
-			return nil, true
-		}
-		specs := g.Params()
-		items = make([]sqlcomplete.Item, 0, len(specs))
-		for _, s := range specs {
-			doc := s.Doc
-			if len(s.Values) > 0 {
-				doc = strings.TrimSpace(doc + " — one of " + strings.Join(s.Values, ", "))
-			}
-			items = append(items, sqlcomplete.Item{
-				Text: s.Name, Kind: sqlcomplete.ItemGlossKey, Source: mediaType, Doc: doc,
-			})
-		}
-		return items, true
-	}
-	return
 }
 
 // datasetAliases are the ad-hoc dataset aliases bound in this session.
@@ -416,8 +435,14 @@ func (inst *PlayApp) renderCompletionTab() {
 // be client-side, or the endpoint may be about to be provisioned — and hiding
 // it would hide the provisioning fact the tab exists to report (§SD8).
 func (inst *PlayApp) completionVocabularyItems() (items []sqlcomplete.Item) {
-	entries := vocabDeclared(sqlvocab.Default)
 	installed, ready := inst.vocab.demand()
+	return vocabularyCompletionItems(installed, ready)
+}
+
+// vocabularyCompletionItems is completionVocabularyItems over an installed
+// set already in hand, which complete_sql reads from the snapshot.
+func vocabularyCompletionItems(installed map[string]string, ready bool) (items []sqlcomplete.Item) {
+	entries := vocabDeclared(sqlvocab.Default)
 	vocabMarkInstalled(entries, installed)
 	items = make([]sqlcomplete.Item, 0, len(entries))
 	seen := make(map[string]struct{}, len(entries))

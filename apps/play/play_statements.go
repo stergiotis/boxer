@@ -11,7 +11,10 @@ package play
 // status line does.
 
 import (
+	"strings"
+
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
+	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/sqleditor"
 )
 
@@ -133,4 +136,24 @@ func (inst *PlayApp) runSubqueryBuffer() (run string, scope runScopeE) {
 	_, bodyOffset := inst.statementRanges()
 	text := inst.sql[stmt.Src.Start:stmt.Src.End]
 	return sqleditor.WithPrelude(inst.sql, bodyOffset, unit.compose(text)), runScopeSubquery
+}
+
+// statementBuffer is what a run of statement n (1-based) ships: the SET
+// prelude plus that statement, as a Run with the caret in it would — run's
+// Statement argument, so an agent picks a statement without the person's
+// caret. A buffer of one statement ships itself for n = 1.
+func (inst *PlayApp) statementBuffer(n int) (run string, err error) {
+	ranges, bodyOffset := inst.statementRanges()
+	total := len(ranges)
+	if total <= 1 {
+		if n != 1 {
+			return "", eh.Errorf("statement %d: the buffer holds one statement", n)
+		}
+		return strings.TrimSpace(inst.sql), nil
+	}
+	if n < 1 || n > total {
+		return "", eh.Errorf("statement %d: the buffer holds statements 1 to %d", n, total)
+	}
+	r := ranges[n-1]
+	return sqleditor.WithPrelude(inst.sql, bodyOffset, inst.sql[r.Src.Start:r.Src.End]), nil
 }

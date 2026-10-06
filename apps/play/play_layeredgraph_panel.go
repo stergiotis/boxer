@@ -131,6 +131,15 @@ type NetworkDriver struct {
 	nodeCount int
 	edgeCount int
 	capped    bool
+
+	// model and declaredSel are the last frame's build, for get_network:
+	// built fresh every frame and never edited afterwards, so a snapshot
+	// shares them.
+	model       layeredgraph.GraphModel
+	declaredSel map[string]struct{}
+	// onSelect routes a node click through select_network_node (ADR-0270
+	// §SD6); nil applies it directly.
+	onSelect func(SelectNetworkNodeArgs)
 }
 
 // NewNetworkDriver builds the driver over the shared source. src may be nil
@@ -257,6 +266,7 @@ func (inst *NetworkDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesCla
 	inst.nodeCount = len(b.model.Nodes)
 	inst.edgeCount = len(b.model.Edges)
 	inst.capped = b.capped
+	inst.model, inst.declaredSel = b.model, b.declaredSel
 	c.Label(inst.statusLine()).Send()
 
 	if len(b.model.Nodes) == 0 {
@@ -447,14 +457,11 @@ func (inst *NetworkDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesCla
 	// the honest "nothing focused" value — a query reading
 	// `{selection_key:String}` sees the same state it started in.
 	if res.Clicked != "" {
+		in := SelectNetworkNodeArgs{Id: res.Clicked}
 		if inst.selectedID == res.Clicked {
-			inst.selectedID = ""
-		} else {
-			inst.selectedID = res.Clicked
+			in = SelectNetworkNodeArgs{Clear: true}
 		}
-		if emit != nil {
-			emit.Emit(signalSelectionKey, inst.selectedID)
-		}
+		inst.requestSelect(in, emit)
 	}
 }
 
