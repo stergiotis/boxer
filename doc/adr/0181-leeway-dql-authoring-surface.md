@@ -834,3 +834,11 @@ alone.
 
 Not changed: a pass failure under best-effort application still ships the
 statement unexpanded.
+
+## Update 2026-10-06 — a failed run names the rewrite it went without
+
+Best-effort application is unchanged: a failing pass is still skipped and the
+statement still ships. When the server then refuses the run, play's Run and
+write paths append each skipped step and its error after the server's
+diagnostic, so "function does not exist" arrives with the binding error that
+caused it. A cancelled run is left alone.

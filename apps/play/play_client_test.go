@@ -696,3 +696,43 @@ func TestExecuteArrowStreamReadonlyUnlessWritesAllowed(t *testing.T) {
 		}
 	}
 }
+
+// TestFailedRunNamesTheRewriteItWentWithout pins the run-side half of a
+// skipped rewrite: the statement still ships, and when the server refuses it
+// the error carries the skipped pass and its reason after the server's own
+// diagnostic. Without this the server's complaint about the leftover (an
+// unknown LW_GET function) was all a reader saw.
+func TestFailedRunNamesTheRewriteItWentWithout(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = io.WriteString(w, "Code: 46. DB::Exception: Function with name LW_GET does not exist")
+	}))
+	t.Cleanup(srv.Close)
+
+	c := NewClient(ClientConfig{URL: srv.URL}, nil)
+	reg := passreg.NewRegistry()
+	broken := nanopass.LiftBodyPass("Broken", func(string) (string, error) {
+		return "", errors.New("no table in scope carries that section")
+	}, nanopass.PassProperties{Reads: nanopass.RegionBody, Writes: nanopass.RegionBody})
+	if err := reg.Register(passreg.Entry{Pass: broken, Stage: passreg.StagePreExecute, Order: 100}); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	c.passes = reg
+
+	_, _, _, err := c.ExecuteArrowStream(context.Background(), `SELECT 1`, memory.NewGoAllocator(), nil, nil, c.Dispatch(`SELECT 1`, ""))
+	if err == nil {
+		t.Fatal("ExecuteArrowStream succeeded against a refusing server")
+	}
+	msg := err.Error()
+	i, j, k := strings.Index(msg, "does not exist"), strings.Index(msg, "Broken: "), strings.Index(msg, "no table in scope carries that section")
+	if i < 0 || j < i || k < j {
+		t.Errorf("error = %q, want the server's diagnostic followed by the skipped pass and its reason", msg)
+	}
+
+	// A clean rewrite adds nothing to the server's error.
+	c.passes = passreg.NewRegistry()
+	_, _, _, err = c.ExecuteArrowStream(context.Background(), `SELECT 1`, memory.NewGoAllocator(), nil, nil, c.Dispatch(`SELECT 1`, ""))
+	if err == nil || strings.Contains(err.Error(), "client-side rewrite") {
+		t.Errorf("error = %v, want the server's diagnostic alone", err)
+	}
+}

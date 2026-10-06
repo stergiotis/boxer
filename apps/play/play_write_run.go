@@ -118,7 +118,9 @@ func (inst *Client) ExecuteWrite(ctx context.Context, sql string, signals map[st
 	if err != nil {
 		return
 	}
-	q, params := inst.BuildStatement(sql)
+	var skipped failedRewrites
+	q, params := inst.buildStatementObserved(sql, skipped.observe)
+	defer func() { err = skipped.explain(ctx, err) }()
 	opts := newExecOptions("write")
 	req := queryengine.Request{
 		SQL:         q,
