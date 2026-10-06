@@ -290,10 +290,68 @@ func TestSubqueryScopesBindIndependently(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, out, "LW_VALUE_BY_TAG_EQUAL(")
 
-	// The outer scope reads a subquery, which has no catalog schema to ask.
+	// The outer scope reads a subquery that does not pass the section's
+	// columns through, so there is nothing to bind to.
 	_, err = expandExtract(t,
 		"SELECT LW_GET('symbol', 'ticker') FROM (SELECT 1 AS x FROM events)")
 	require.ErrorContains(t, err, "no table in scope carries that section")
+	require.ErrorContains(t, err, "call the extraction inside the CTE")
+}
+
+// TestResolvesThroughDerivedSources covers the shape analytical SQL is
+// usually written in: a CTE or subquery narrows the table's rows and the
+// extraction reads the result. Before, the pass refused these, and a
+// best-effort consumer then shipped the call unexpanded — which ClickHouse
+// answers as an unknown function.
+func TestResolvesThroughDerivedSources(t *testing.T) {
+	direct, err := expandExtract(t, "SELECT LW_GET_NULL('symbol', 'ticker') FROM events")
+	require.NoError(t, err)
+	want := strings.TrimSuffix(strings.TrimPrefix(direct, "SELECT "), " FROM events")
+
+	for _, tail := range []string{
+		"FROM (SELECT * FROM events)",
+		"FROM (SELECT * FROM events WHERE 1 UNION ALL SELECT * FROM events)",
+	} {
+		out, err := expandExtract(t, "SELECT LW_GET_NULL('symbol', 'ticker') "+tail)
+		require.NoError(t, err, tail)
+		require.Equal(t, "SELECT "+want+" "+tail, out)
+	}
+
+	cte := "WITH e AS (SELECT * FROM events WHERE 1) "
+	out, err := expandExtract(t, cte+
+		"SELECT LW_GET_NULL('symbol', 'ticker') FROM e UNION ALL SELECT LW_GET_NULL('symbol', 'ticker') FROM e")
+	require.NoError(t, err)
+	require.Equal(t, cte+"SELECT "+want+" FROM e UNION ALL SELECT "+want+" FROM e", out)
+
+	// A chain of CTEs, the first projecting the carrier's qualified star,
+	// read beside a join: the lanes are qualified by the outer CTE's name.
+	out, err = expandExtract(t,
+		"WITH a AS (SELECT ev.* FROM events AS ev), b AS (SELECT * FROM a) "+
+			"SELECT LW_GET('symbol', 'ticker') FROM b JOIN other ON 1")
+	require.NoError(t, err)
+	require.Contains(t, out, "LW_VALUE_BY_TAG_EQUAL(\"b\".")
+	require.NotContains(t, out, "LW_GET")
+}
+
+// TestDerivedSourceThatHidesTheSectionSaysWhy pins the refusals: a body
+// that projects no star, drops columns, or replaces a lane cannot pass the
+// section through, and the error names the source and the reason rather
+// than leaving the person to suspect a misspelt section.
+func TestDerivedSourceThatHidesTheSectionSaysWhy(t *testing.T) {
+	for body, reason := range map[string]string{
+		"SELECT 1 AS x FROM events":                "does not project *",
+		"SELECT * EXCEPT x FROM events":            "* EXCEPT",
+		"SELECT ev.* FROM events AS ev, ev2":       "",
+		"SELECT * FROM events ARRAY JOIN [1] AS k": "ARRAY JOIN",
+	} {
+		_, err := expandExtract(t, "WITH e AS ("+body+") SELECT LW_GET('symbol', 'ticker') FROM e")
+		if reason == "" {
+			require.NoError(t, err, body)
+			continue
+		}
+		require.ErrorContains(t, err, "no table in scope carries that section", body)
+		require.ErrorContains(t, err, reason, body)
+	}
 }
 
 // TestUntouchedAndIdempotent covers the two properties registration relies

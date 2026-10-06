@@ -807,3 +807,30 @@ and `readonly=2` is never dropped for a writable user. If the level cannot
 be learned the run fails with the server's own diagnostic, unchanged. The
 diagnostics probe (`Client.ProbeStatement`) follows the same rule. The
 mechanism is in `apps/play/play_readonly.go`.
+
+## Update 2026-10-05 — §SD3's binding follows a CTE or subquery that passes the table through
+
+§SD3 bound a section only against base tables in the call's own SELECT, so
+`WITH e AS (SELECT * FROM t WHERE …) SELECT LW_GET_NULL(…) FROM e` failed to
+expand. That is the shape analytical SQL is usually written in, and the
+failure was quiet in practice: play applies the pre-execute stage
+best-effort, so the refused call shipped as written and ClickHouse answered
+"function does not exist", which reads as a missing helper pack rather than
+a binding rule.
+
+`LwExtractExpand` now binds through a CTE or a FROM subquery when every
+UNION branch of its body binds the section and passes the carrying table's
+columns through under their physical names: the body projects `*` or the
+carrier's qualified star, and has no `* EXCEPT`, `ARRAY JOIN` or `GROUP BY`.
+All branches must resolve to the same lanes. CTE chains are followed; a
+recursive or doubly bound CTE is not. In a join the lanes are qualified by
+the derived source's name, so an unaliased subquery beside a join is refused
+with a request to alias it. The check is syntactic and errs closed.
+
+A derived source that carries the section but does not pass it through is
+named in the error with its reason, in the message text rather than only in
+a structured field, because the reader is often an agent that sees the text
+alone.
+
+Not changed: a pass failure under best-effort application still ships the
+statement unexpanded.

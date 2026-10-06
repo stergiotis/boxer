@@ -2,6 +2,7 @@ package constructsql
 
 import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlvocab"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -386,23 +387,78 @@ func (inst *extractState) bind(section string, funcExpr *grammar1.ColumnExprFunc
 		err = eb.Build().Str("section", section).Errorf("no enclosing SELECT to resolve the section against")
 		return
 	}
-
-	type candidate struct {
-		lanes     lwsql.ExtractLanes
-		qualifier string
-		label     string
+	c, err := inst.bindIn(section, scope, 0)
+	if err != nil {
+		return
 	}
+	lanes = c.lanes
+	if len(scope.Tables) > 1 {
+		// More than one source in scope, so an unqualified physical
+		// name could bind to the wrong side of a join — qualify even
+		// though only one side carries the section, because the other
+		// side's columns are what an ambiguity error would be about.
+		if c.qualifier == "" {
+			err = eb.Build().Str("section", section).Str("source", c.label).
+				Errorf("the source carrying that section has no name to qualify its columns with in a join; give the subquery an alias")
+			return
+		}
+		qualifier = c.qualifier
+	}
+	return
+}
+
+// maxDerivedDepth bounds resolving through nested CTEs and subqueries. The
+// parser's own nesting guards cap real queries well below it.
+const maxDerivedDepth = 64
+
+// boundSource is one source in a scope that carries the section: its lanes,
+// the name a qualified reference to it uses, and how to name it in errors.
+type boundSource struct {
+	lanes     lwsql.ExtractLanes
+	qualifier string
+	label     string
+}
+
+// bindIn finds the one source of scope carrying the section.
+//
+// A base table answers from the catalog. A CTE or a FROM subquery answers
+// through its body (resolveDerived): the section's columns reach the outer
+// SELECT under their physical names whenever the body projects the carrying
+// table's star, which is the shape analytical SQL takes when a CTE narrows a
+// table's rows — `WITH e AS (SELECT * FROM t WHERE …) SELECT LW_GET(…) FROM e`.
+// A table function has no schema to ask and is skipped.
+func (inst *extractState) bindIn(section string, scope *nanopass.SelectScope, depth int) (bound boundSource, err error) {
 	type tableRef struct{ db, table string }
 	var notFound []tableRef
-	var found []candidate
+	var found []boundSource
 	var searched []string
+	var opaque []string
 	for i := range scope.Tables {
 		ts := &scope.Tables[i]
-		// A CTE, a subquery or a table function has no catalog schema to
-		// ask. Their columns come from the SELECT that defines them, which
-		// this pass does not model — a section reached through one is out
-		// of scope rather than silently unresolved.
-		if ts.IsCTE || ts.IsSubquery || ts.IsFunction {
+		if ts.IsFunction {
+			continue
+		}
+		name := ts.Alias
+		if name == "" {
+			name = ts.Table
+		}
+		if ts.IsCTE || ts.IsSubquery {
+			label := name
+			if label == "" {
+				label = "(subquery)"
+			}
+			if depth >= maxDerivedDepth {
+				opaque = append(opaque, label+": nested too deeply to follow")
+				continue
+			}
+			l, ok, why := inst.resolveDerived(section, scope, ts, depth+1)
+			if !ok {
+				if why != "" {
+					opaque = append(opaque, label+": "+why)
+				}
+				continue
+			}
+			found = append(found, boundSource{lanes: l, qualifier: name, label: label})
 			continue
 		}
 		// ResolvedDatabase, not ts.Database: an unqualified reference
@@ -417,23 +473,12 @@ func (inst *extractState) bind(section string, funcExpr *grammar1.ColumnExprFunc
 			notFound = append(notFound, tableRef{db: db, table: ts.Table})
 			continue
 		}
-		q := ts.Alias
-		if q == "" {
-			q = ts.Table
-		}
-		found = append(found, candidate{lanes: l, qualifier: q, label: tableLabel(db, ts.Table)})
+		found = append(found, boundSource{lanes: l, qualifier: name, label: tableLabel(db, ts.Table)})
 	}
 
 	switch len(found) {
 	case 1:
-		lanes = found[0].lanes
-		if len(scope.Tables) > 1 {
-			// More than one source in scope, so an unqualified physical
-			// name could bind to the wrong side of a join — qualify even
-			// though only one side carries the section, because the other
-			// side's columns are what an ambiguity error would be about.
-			qualifier = found[0].qualifier
-		}
+		bound = found[0]
 	case 0:
 		// The message carries the candidates, not just the structured
 		// fields: this reaches a person who typed the call into a SQL
@@ -453,6 +498,15 @@ func (inst *extractState) bind(section string, funcExpr *grammar1.ColumnExprFunc
 				b = b.Str("sectionsFound", strings.Join(have, ", "))
 			}
 		}
+		if len(opaque) > 0 {
+			// A derived source that hides the section is the likelier
+			// mistake than a misspelt section, so say what it hid and why.
+			// The reasons go in the message, not only in a field: the
+			// person reading it is often an agent that sees the text alone.
+			b = b.Str("derivedSources", strings.Join(opaque, "; "))
+			err = b.Errorf("no table in scope carries that section (%s); a CTE or subquery passes a section through only when every branch projects the carrying table's * without EXCEPT or ARRAY JOIN — project it, or call the extraction inside the CTE", strings.Join(opaque, "; "))
+			return
+		}
 		err = b.Errorf("no table in scope carries that section")
 	default:
 		var where []string
@@ -465,6 +519,104 @@ func (inst *extractState) bind(section string, funcExpr *grammar1.ColumnExprFunc
 			Errorf("more than one table in scope carries that section, and an extraction call cannot name which; read it in a subselect over the one table, or join on the already-extracted column")
 	}
 	return
+}
+
+// resolveDerived binds the section through a CTE or FROM subquery. Every
+// UNION branch of its body must carry the section and pass it through
+// (passesThrough), and all branches must agree on the lanes — a UNION's
+// columns are positional, so branches over differently-shaped tables would
+// put one table's lane under another's name.
+//
+// ok false with an empty why means the source plainly does not carry the
+// section; a non-empty why says what stopped a source that might have.
+func (inst *extractState) resolveDerived(section string, scope *nanopass.SelectScope, ts *nanopass.TableSource, depth int) (lanes lwsql.ExtractLanes, ok bool, why string) {
+	branches := ts.Scopes
+	if ts.IsCTE {
+		def, found := scope.ResolveCTE(ts.Table)
+		switch {
+		case !found:
+			return
+		case def.Ambiguous:
+			why = "its name is bound more than once in one WITH clause"
+			return
+		case def.Recursive:
+			why = "a recursive CTE is not followed"
+			return
+		}
+		branches = def.Scopes
+	}
+	if len(branches) == 0 {
+		return
+	}
+	for i, branch := range branches {
+		c, err := inst.bindIn(section, branch, depth)
+		if err != nil {
+			// A branch that cannot bind says why only when the source is
+			// otherwise a candidate; a body over unrelated tables is not
+			// worth a line in the error.
+			if i > 0 {
+				why = "not every UNION branch carries the section"
+			}
+			return
+		}
+		why = passesThrough(branch, c)
+		if why != "" {
+			return
+		}
+		if i > 0 && !reflect.DeepEqual(c.lanes, lanes) {
+			why = "its UNION branches carry the section under different columns"
+			return
+		}
+		lanes = c.lanes
+	}
+	ok = true
+	return
+}
+
+// passesThrough checks that a body SELECT hands the carrying source's
+// columns to its reader under their physical names: a bare * or the
+// carrier's qualified star, with nothing that drops or replaces a column.
+// It returns the reason when it does not, empty when it does.
+//
+// The check is syntactic and errs closed. A later projection item aliased to
+// a lane's physical name would shadow it; no one writes those by hand, and
+// the names are not ones a person types.
+func passesThrough(branch *nanopass.SelectScope, carrier boundSource) (why string) {
+	stmt := branch.Node
+	if stmt == nil {
+		return "its body could not be read"
+	}
+	if stmt.ArrayJoinClause() != nil {
+		return "its body has an ARRAY JOIN, which can replace a lane with one element"
+	}
+	if stmt.GroupByClause() != nil {
+		return "its body aggregates"
+	}
+	proj, isProj := stmt.ProjectionClause().(*grammar1.ProjectionClauseContext)
+	if !isProj {
+		return "its body has no projection"
+	}
+	if proj.ProjectionExceptClause() != nil {
+		return "its body projects * EXCEPT, which may drop a lane"
+	}
+	list, isList := proj.ColumnExprList().(*grammar1.ColumnExprListContext)
+	if !isList {
+		return "its body has no projection"
+	}
+	for _, item := range list.AllColumnsExpr() {
+		star, isStar := item.(*grammar1.ColumnsExprAsteriskContext)
+		if !isStar {
+			continue
+		}
+		tid, qualified := star.TableIdentifier().(*grammar1.TableIdentifierContext)
+		if !qualified || tid == nil {
+			return ""
+		}
+		if id := tid.Identifier(); id != nil && nanopass.DecodeIdentifier(id.GetText()) == carrier.qualifier {
+			return ""
+		}
+	}
+	return "its body does not project * from the table carrying the section"
 }
 
 // scopeOf finds the scope of the SELECT lexically enclosing the call.
