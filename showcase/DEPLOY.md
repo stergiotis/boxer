@@ -47,7 +47,7 @@ Binaries must be built once with the project scripts:
 
 ```bash
 cd rust/imzero2
-./build_rust_headless.sh && ./build_go.sh     # produces target/headless/release/imzero2 + main_go
+./build_rust_dist.sh headless && ./build_go.sh     # produces target/headless/dist/imzero2 + main_go
 ```
 
 ## 1. Build the image (local)

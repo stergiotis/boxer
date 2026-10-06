@@ -283,12 +283,13 @@ bytemuck = { version = "1.25", optional = true, default-features = false }
 memmap2 = "0.9.9"
 rand = "0.10.2"
 
-# Two optimised profiles. `release` is the development build: every
-# build_rust*.sh script and every consumer that names target/*/release/imzero2
-# uses it, it compiles in parallel codegen units without LTO, and it keeps the
-# symbol table so a panic backtrace names its frames. `dist` is the production
-# build (build_rust_dist.sh), which writes to target/*/dist/imzero2 and is
-# chosen per invocation, never by default.
+# Two optimised profiles. `dist` is the production build (build_rust_dist.sh,
+# target/*/dist/imzero2), which the launchers, the deploy and airgap scripts
+# and the svg server run. `release` is the development build (the
+# build_rust*.sh scripts, target/*/release/imzero2): parallel codegen units
+# without LTO, so it rebuilds two to three times faster, and the symbol table
+# kept so a panic backtrace names its frames; profile.sh and an
+# EGUI_INSPECTION launch of hmi.sh use it.
 [profile.release]
 opt-level = 2
 

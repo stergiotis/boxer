@@ -110,7 +110,7 @@ airgap_preflight_services clickhouse ollama
     echo "    source boxer-airgap.env"
     echo "    source scripts/dev/go-build-env.sh"
     echo "    go build \$BOXER_GO_FLAGS -tags \"\$BOXER_GO_TAGS\" -o app ./public/app"
-    [ "$scope" = full ] && echo "    ( cd rust/imzero2 && ./build_rust_headless.sh )"
+    [ "$scope" = full ] && echo "    ( cd rust/imzero2 && ./build_rust_dist.sh headless )"
     exit 0
 }
 
@@ -131,10 +131,10 @@ go build $BOXER_GO_FLAGS -tags "$tags,binary_log" -o "$repo/rust/imzero2/main_go
 
 if [ "$scope" = full ]; then
     airgap_step "build Rust: imzero2 headless render host (offline)"
-    ( cd rust/imzero2 && ./build_rust_headless.sh )   # CARGO_NET_OFFLINE keeps it offline
+    ( cd rust/imzero2 && ./build_rust_dist.sh headless )   # CARGO_NET_OFFLINE keeps it offline
 else
     airgap_step "place prebuilt imzero2 (go-only scope)"
-    dst="rust/imzero2/target/headless/release/imzero2"
+    dst="rust/imzero2/target/headless/dist/imzero2"
     mkdir -p "$(dirname "$dst")"
     cp "$repo/_airgap/prebuilt/imzero2" "$dst"
     echo "    installed $dst"
@@ -143,5 +143,5 @@ fi
 echo "=== done. Built binaries: ==="
 echo "    $repo/app                                   (aggregate CLI; try: ./app dev entry-points)"
 echo "    $repo/rust/imzero2/main_go                  (imzero2 Go host)"
-echo "    $repo/rust/imzero2/target/headless/release/imzero2  (Rust render head)"
+echo "    $repo/rust/imzero2/target/headless/dist/imzero2  (Rust render head)"
 echo "    Run the headless HMI with rust/imzero2/hmi_headless.sh once a Vulkan ICD is present."

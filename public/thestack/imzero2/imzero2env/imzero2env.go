@@ -169,9 +169,9 @@ var (
 	// port stays closed.
 	//
 	// This mirrors the EGUI_INSPECTION gate on the `inspection` feature: the
-	// capability ships in the default build (build_rust.sh passes
-	// --features puffin) and the runtime variable, not the compile flag, is
-	// the switch. Like that port, this one is unauthenticated — it exposes
+	// capability ships in the development build (build_rust.sh passes
+	// --features puffin; the production build_rust_dist.sh does not) and the
+	// runtime variable, not the compile flag, is the switch. Like that port, this one is unauthenticated — it exposes
 	// internal frame timings and scope names to any local user — so it stays
 	// closed until asked for. Read by the Rust client (main.rs), which
 	// inherits the variable as a child process; registered here so the

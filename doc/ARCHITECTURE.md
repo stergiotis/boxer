@@ -314,8 +314,8 @@ lists four files, about 4.8 MB.
   is untouched (all ADR-0205 §Consequences, 2026-08-22).
 - **Status:** accepted after implementation; M0–M5 done; the musl half of M6
   open. `HMI_RASTER=soft ./hmi_headless.sh` builds and runs it
-  ([`build_rust_headless_soft.sh`](../rust/imzero2/build_rust_headless_soft.sh),
-  `--clientBinary target/headless-soft/release/imzero2`).
+  ([`build_rust_dist.sh headless_soft`](../rust/imzero2/build_rust_dist.sh),
+  `--clientBinary target/headless-soft/dist/imzero2`).
 
 ### 2.4 What the appliance adds
 

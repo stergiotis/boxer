@@ -81,7 +81,7 @@ imzero2 container:
 the entrypoint runs its `imzero2 demo` subcommand, which spawns the Rust client
 named by `--clientBinary` (see [`entrypoint.sh`](entrypoint.sh) and the spawn in
 [`github.com/stergiotis/boxer/public/thestack/imzero2/application`](../public/thestack/imzero2/application)).
-The baked Rust binary is a **headless-only build** (`build_rust_headless.sh`), so
+The baked Rust binary is a **headless-only build** (`build_rust_dist.sh headless`), so
 it always renders offscreen and streams rather than opening a window.
 
 ## The edges

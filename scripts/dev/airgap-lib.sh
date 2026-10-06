@@ -440,7 +440,7 @@ airgap_cargo_env_lines() {  # <rust_tc_bin_parent> <cargo_home>
 # is verified rather than merely declared.
 # NOTE the default here is only a conservative fallback. Each bundler DECLARES its
 # own, because the two repos genuinely build different heads: boxer's
-# rust/imzero2/build_rust_headless.sh — which its unbundler runs in both scopes —
+# `rust/imzero2/build_rust_dist.sh headless` — which its unbundler runs in both scopes —
 # builds `headless_wgpu`, while hackathon's flow builds `headless`.
 # Getting this wrong is not cosmetic: it decides whether the operator is told to
 # supply a Vulkan ICD and a C compiler.

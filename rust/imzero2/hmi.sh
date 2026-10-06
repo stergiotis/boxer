@@ -3,7 +3,6 @@
 set -o pipefail
 here=$(dirname "$(readlink -f "$BASH_SOURCE")")
 cd "$here"
-clientDir="$here/target/release/"
 VSYNC="${VSYNC:-on}"
 # Font selection lives in font-resolve.sh, sourced rather than repeated: the
 # launchers here and the ones in consuming repositories (which reach this
@@ -38,7 +37,20 @@ fi
 # the decision; a missing binary rebuilds regardless, so a launcher never
 # starts nothing.
 go_bin="$here/main_go"
-rust_bin="$here/target/release/imzero2"
+# The production host (build_rust_dist.sh: LTO, no puffin, no inspection) unless
+# egui_mcp is asked for — `inspection` only exists in the development build, so
+# a truthy EGUI_INSPECTION builds and runs that one (build_rust.sh) instead.
+# profile.sh, which needs `puffin`, uses the development build too.
+case "${EGUI_INSPECTION,,}" in
+	""|0|false)
+		rust_build=(./build_rust_dist.sh desktop)
+		rust_bin="$here/target/dist/imzero2"
+		;;
+	*)
+		rust_build=(./build_rust.sh)
+		rust_bin="$here/target/release/imzero2"
+		;;
+esac
 if [[ "$HMI_BUILD" == 0 ]]; then
 	do_build=0
 elif [[ "$HMI_BUILD" == 1 || -t 0 ]]; then
@@ -50,10 +62,10 @@ else
 	echo "hmi.sh: non-interactive launch — skipping rebuild (HMI_BUILD=1 to force)" >&2
 	do_build=0
 fi
-# egui_mcp (doc/howto/egui-mcp.md): the `inspection` cargo feature now ships in
-# the desktop default build, so there is nothing to toggle or rebuild here — a
-# truthy EGUI_INSPECTION is simply exported so the launched client inherits it
-# (the Go launcher passes its environment through). eframe then binds the
+# egui_mcp (doc/howto/egui-mcp.md): the `inspection` cargo feature ships in the
+# development build, which a truthy EGUI_INSPECTION selects above; the variable
+# is then exported so the launched client inherits it (the Go launcher passes
+# its environment through). eframe then binds the
 # inspection port (127.0.0.1:5719 by default) — unauthenticated remote control
 # of the app, so keep it to trusted local sessions. Falsy set mirrors eframe's
 # own (unset/empty/0/false) and leaves the port closed; anything else (1, true,
@@ -66,7 +78,7 @@ case "${EGUI_INSPECTION,,}" in
 		;;
 esac
 if [[ "$do_build" == 1 ]]; then
-	./build_rust.sh || exit 1
+	"${rust_build[@]}" || exit 1
 	./build_go.sh || exit 1
 fi
 export BOXER_LOG_OS_PID_ON_START="true"
@@ -119,7 +131,7 @@ export BOXER_COMPONENT="${BOXER_COMPONENT:-imzero2-demo}"
 	--logLevel=info \
        	--pprofHttpListenAddress "localhost:6060" \
        	--flightRecorder --flightRecorderOutputFile="$flightRecord" --flightRecorderFlushOnSignal=SIGTERM,SIGINT \
-       	imzero2 demo --clientBinary "$clientDir/imzero2" \
+       	imzero2 demo --clientBinary "$rust_bin" \
                       --clientType "egui" \
                       --clientVsync $VSYNC \
 		      --clientFullscreen off \

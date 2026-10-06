@@ -43,6 +43,21 @@ func isMeshOnly(path string) bool {
 	return err == nil && bytes.Contains(b, []byte(meshOnlyMarker))
 }
 
+// newerBuild returns the more recently built of a host's production (`dist`,
+// build_rust_dist.sh) and development (`release`) binaries, so an old build of
+// one never shadows a fresh build of the other. With neither present it names
+// the production path, which then reads "not there".
+func newerBuild(targetDir string) (path string) {
+	path = filepath.Join(targetDir, "dist", "imzero2")
+	dev := filepath.Join(targetDir, "release", "imzero2")
+	pst, perr := os.Stat(path)
+	dst, derr := os.Stat(dev)
+	if derr == nil && (perr != nil || dst.ModTime().After(pst.ModTime())) {
+		path = dev
+	}
+	return
+}
+
 // chooseClient picks the client binary. An explicit one is taken as given but
 // still checked; otherwise the CPU rasterizer is preferred over the wgpu build,
 // since it needs no GPU and both rasterize.
@@ -59,8 +74,8 @@ func chooseClient(root string, explicit string, needs []string) (client string, 
 	cands := []string{explicit}
 	if explicit == "" {
 		cands = []string{
-			filepath.Join(root, "rust", "imzero2", "target", "headless-soft", "release", "imzero2"),
-			filepath.Join(root, "rust", "imzero2", "target", "headless", "release", "imzero2"),
+			newerBuild(filepath.Join(root, "rust", "imzero2", "target", "headless-soft")),
+			newerBuild(filepath.Join(root, "rust", "imzero2", "target", "headless")),
 		}
 	}
 	var rejected []string
@@ -79,7 +94,7 @@ func chooseClient(root string, explicit string, needs []string) (client string, 
 	}
 	if client == "" {
 		return "", eb.Build().Str("tried", strings.Join(rejected, "; ")).
-			Errorf("no usable headless client — build one with rust/imzero2/build_rust_headless_soft.sh")
+			Errorf("no usable headless client — build one with rust/imzero2/build_rust_dist.sh headless_soft")
 	}
 	// Always fatal. A client older than the generated interpreter desyncs the
 	// FFFI wire on whichever opcode moved, and that reads like an app bug.

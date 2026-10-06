@@ -31,8 +31,10 @@ test.
 - A ClickHouse the configured endpoint reaches (`CLICKHOUSE_URL`, see
   [env-vars](../env-vars.md)); scenario datasets are generated there, so no
   table needs to exist.
-- The headless Rust client: `rust/imzero2/build_rust_headless_soft.sh`. The
-  launcher names it if it is missing or older than the generated sources.
+- The headless Rust client: `rust/imzero2/build_rust_dist.sh headless_soft`
+  (or `build_rust_headless_soft.sh`, the quicker development build; the
+  launcher takes whichever of the two is newer). The launcher names it if it
+  is missing or older than the generated sources.
 
 ## Steps
 

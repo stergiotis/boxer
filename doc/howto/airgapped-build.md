@@ -213,7 +213,7 @@ source scripts/dev/go-build-env.sh     # after the env file: keeps GOTOOLCHAIN=l
 go build $BOXER_GO_FLAGS -tags "$BOXER_GO_TAGS" -o /dev/null ./public/app   # rebuilds offline
 ```
 
-`full` scope additionally produces `rust/imzero2/target/headless/release/imzero2`;
+`full` scope additionally produces `rust/imzero2/target/headless/dist/imzero2`;
 `go-only` installs the prebuilt one there. Launch the headless head with
 `rust/imzero2/hmi_headless.sh` once a Vulkan ICD is present.
 

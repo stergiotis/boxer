@@ -40,7 +40,7 @@ moved up here.
 
 Both put the carrier behind Caddy, which supplies the TLS + password the v1
 carrier doesn't (ADR-0082). The transport binaries are built by the imzero2
-scripts that stay put: `rust/imzero2/build_rust_headless.sh` + `build_go.sh`.
+scripts that stay put: `rust/imzero2/build_rust_dist.sh headless` + `build_go.sh`.
 
 ## Start here
 

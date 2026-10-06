@@ -85,9 +85,9 @@ type Config struct {
 const (
 	rustDirRel    = "rust/imzero2"
 	mainGoRel     = "rust/imzero2/main_go"
-	clientBinRel  = "rust/imzero2/target/headless/release/imzero2"
-	wsProbeRel    = "rust/imzero2/target/headless/release/imzero2_ws_probe" // Cargo bin target name (file is ws_probe.rs)
-	natsServerRel = "rust/imzero2/nats-server"                              // from-source NATS core bus (ADR-0026 SD4), built next to main_go
+	clientBinRel  = "rust/imzero2/target/headless/dist/imzero2"
+	wsProbeRel    = "rust/imzero2/target/headless/dist/imzero2_ws_probe" // Cargo bin target name (file is ws_probe.rs)
+	natsServerRel = "rust/imzero2/nats-server"                           // from-source NATS core bus (ADR-0026 SD4), built next to main_go
 	assetsRel     = "rust/imzero2/assets"
 	phosphorRel   = "assets/fonts/phosphor/Phosphor.ttf" // within a release dir
 )
@@ -396,13 +396,13 @@ func firstEnv(keys ...string) string {
 
 func build(ctx context.Context, lg zerolog.Logger, cfg Config) error {
 	rustDir := filepath.Join(cfg.Workspace, rustDirRel)
-	// The headless Rust client (+ assets), via the project's own script.
-	if err := step(ctx, lg, "build-rust", extbin.Bash, extbin.Opts{Dir: rustDir}, "build_rust_headless.sh"); err != nil {
+	// The headless Rust client (+ assets), via the project's own production build.
+	if err := step(ctx, lg, "build-rust", extbin.Bash, extbin.Opts{Dir: rustDir}, "build_rust_dist.sh", "headless"); err != nil {
 		return err
 	}
 	// ws_probe (the gate client) shares the headless target-dir.
 	if err := step(ctx, lg, "build-ws_probe", extbin.Cargo, extbin.Opts{Dir: rustDir},
-		"build", "--release", "--no-default-features", "--features", "headless",
+		"build", "--profile", "dist", "--no-default-features", "--features", "headless",
 		"--bin", "imzero2_ws_probe", "--target-dir", "target/headless"); err != nil {
 		return err
 	}

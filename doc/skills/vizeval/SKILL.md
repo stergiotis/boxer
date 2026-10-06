@@ -30,8 +30,10 @@ The harness scores; it does not search. Choosing the next candidates is yours.
   `CLICKHOUSE_URL`; default `http://localhost:8123/`). Datasets are generated
   there from `numbers()` / `values()`; no table needs to exist. Every candidate
   whose scene cannot reach it is `failed` with a `skip:` reason.
-- **The headless client**: `rust/imzero2/build_rust_headless_soft.sh`. Rebuild it
-  after any change under `rust/imzero2`, or the capture runs old code.
+- **The headless client**: `rust/imzero2/build_rust_dist.sh headless_soft`, or
+  `build_rust_headless_soft.sh` for a quicker development build — the launcher
+  takes the newer of the two. Rebuild after any change under `rust/imzero2`, or
+  the capture runs old code.
 - **A model** only for `--judge` and `rank`: `BOXER_LLM_ENDPOINT` and
   `BOXER_LLM_MODEL` (an OpenAI-compatible endpoint serving a vision model).
   Without one, task questions can be answered by readers from judge sheets
