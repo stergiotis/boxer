@@ -298,6 +298,14 @@ opt-level = 2
 # isolates a panicking task — under `abort` that one task takes the process.
 # The feature set (no `puffin`, no `inspection`) is build_rust_dist.sh's job;
 # a cargo profile cannot select features.
+#
+# Measured 2026-10-06 on one 8-thread machine under other load, five
+# interleaved rounds of the portolan-land frame-cost protocol, cpu host:
+# opcode dispatch with nothing drawn (`off` arm) 14–17 % faster than
+# `release`, in all ten pairs; the filled world-view frame ~5 % faster;
+# rasterise and tessellate no consistent difference. Binaries 11–15 %
+# smaller, builds ~2–2.5× longer. Two builds from copies at different paths
+# were byte-identical (desktop, headless_mesh), so ADR-0215 holds under LTO.
 [profile.dist]
 inherits = "release"
 lto = "fat"
