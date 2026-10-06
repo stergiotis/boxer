@@ -222,10 +222,11 @@ func (inst *Service) Durable() (yes bool) {
 func (inst *Service) Describe() (d Description) {
 	if !inst.cfg.Configured() {
 		d.Reason = "no model is configured on this host (BOXER_LLM_ENDPOINT and BOXER_LLM_MODEL)"
+		d.Timeout = inst.cfg.Timeout
 		return
 	}
 	d = Description{Configured: true, Model: inst.cfg.Model, EndpointHost: inst.host, Local: inst.local, Trusted: inst.trusted,
-		MaxTokens: inst.cfg.MaxTokens}
+		MaxTokens: inst.cfg.MaxTokens, Timeout: inst.cfg.Timeout}
 	if cs := inst.context.Load(); cs != nil {
 		d.ContextTokens, d.ContextSource = cs.tokens, cs.source
 	}
@@ -245,7 +246,8 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	case SubjectDescribe:
 		d := inst.Describe()
 		inst.reply(msg.Reply, wireDescribe{Configured: d.Configured, Model: d.Model, EndpointHost: d.EndpointHost, Local: d.Local,
-			Trusted: d.Trusted, MaxTokens: d.MaxTokens, ContextTokens: d.ContextTokens, ContextSource: d.ContextSource, Reason: d.Reason})
+			Trusted: d.Trusted, MaxTokens: d.MaxTokens, ContextTokens: d.ContextTokens, ContextSource: d.ContextSource, Reason: d.Reason,
+			TimeoutNs: int64(d.Timeout)})
 	case SubjectComplete, SubjectRetainComplete:
 		inst.startComplete(msg, msg.Subject == SubjectRetainComplete)
 	default:

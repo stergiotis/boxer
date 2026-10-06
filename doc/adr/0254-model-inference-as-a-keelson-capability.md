@@ -470,6 +470,18 @@ completion id and reported model, a digest of the tools offered, and the token
 ceiling. `keelson('llm_calls')` shows the same, and whether a call's rows are
 durable. `llm/llmfacts` is gone; the store is `runtime/trail`.
 
+### 2026-10-06 — `BOXER_LLM_TIMEOUT` governs the client's wait too
+
+`BOXER_LLM_TIMEOUT` used to bound the service alone: a client that named
+no `Client.Timeout` waited a fixed `DefaultTimeout`, so a deployment that
+raised the variable for a slow local model still saw its apps give up
+first, and the provider call ran on to the service's bound for an answer
+no one read. `llm.describe` now reports the service's bound, and such a
+client waits that long plus `ReplyMargin`, so the caller receives the
+service's timeout with its call id. A client whose wait expires for any
+reason publishes `llm.cancel`, as it already did when its context ended.
+An explicit `Client.Timeout` or an earlier context deadline still wins.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — §SD3 the taxonomy this family joins, §SD7 the broker, §SD10 capslock.

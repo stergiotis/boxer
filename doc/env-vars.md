@@ -4,7 +4,7 @@ audience: contributor
 status: draft
 generated: true
 generator: public/app env gen-docs
-generated-at: 2026-10-05T20:14:05Z
+generated-at: 2026-10-06T11:07:45Z
 ---
 
 > **Status: draft — pre-human-review.** Machine-generated registry snapshot;
@@ -217,7 +217,7 @@ generated-at: 2026-10-05T20:14:05Z
 | `BOXER_LLM_MODEL` | string | — | — |  | model id the host's llm service completes with; unset means no model is offered even with the endpoint set |
 | `BOXER_LLM_RETAIN` | categorial-string | `off` | — |  | ceiling on keeping model message text: off (sizes and counts only), ring (text on this process's keelson('llm_calls') rows), durable (ring, plus the messages of llm.retain.* requests on boxer.facts, kept until removed by hand)<br>**Allowed:** `off` \| `ring` \| `durable` |
 | `BOXER_LLM_SCRIPT` | string | — | — |  | path to a scripted model (JSON lines, one reply each; "$name" in an argument takes the last value a tool result gave name) the llm service answers from instead of an endpoint; honoured only on the headless host, for scenes |
-| `BOXER_LLM_TIMEOUT` | duration | `120s` | — |  | wall-clock bound on one llm.complete on the service side |
+| `BOXER_LLM_TIMEOUT` | duration | `120s` | — |  | wall-clock bound on one llm.complete; the service cancels the provider call at it, and app clients that name no timeout of their own wait that long plus a few seconds for the reply |
 | `BOXER_LLM_TRUSTED_HOSTS` | string | — | — |  | comma-separated endpoint host names or IPs, without port, that the llm service treats like loopback: confined (sealed) content may be sent to them; list only machines under your own control, and prefer an https endpoint |
 | `GEMINI_API_KEY` | string | — | — | yes | Google AI Studio / Gemini API key |
 

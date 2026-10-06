@@ -442,6 +442,39 @@ func TestClientTimeoutHoldsInProcess(t *testing.T) {
 	assert.Less(t, time.Since(t0), 5*time.Second)
 }
 
+// Without a Timeout of its own the client waits as long as the service
+// bounds a completion, plus the reply margin: the caller sees the
+// service's timeout, with its call id, not a bus timeout of its own.
+func TestClientWaitFollowsTheServiceTimeout(t *testing.T) {
+	p := newBlockingProvider()
+	cli, _, _ := serve(t, Config{Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: p, Timeout: 50 * time.Millisecond})
+	cli.Timeout = 0
+	d, err := cli.Describe(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 50*time.Millisecond, d.Timeout)
+	_, err = cli.Complete(context.Background(), Request{Messages: userMessage()})
+	require.Error(t, err)
+	assert.NotErrorIs(t, err, inprocbus.ErrTimeout)
+	assert.NotEmpty(t, CallIdOf(err), "the service answered the timeout")
+	assert.Equal(t, 50*time.Millisecond+ReplyMargin, cli.completionWait(context.Background()))
+}
+
+// A client whose wait runs out asks the service to stop the call, so the
+// provider does not run on for an answer no one will read.
+func TestAnExpiredWaitCancelsTheCall(t *testing.T) {
+	p := newBlockingProvider()
+	cli, _, _ := serve(t, Config{Endpoint: "http://127.0.0.1:1234/v1", Model: "m", Client: p, Timeout: time.Minute})
+	cli.Timeout = 50 * time.Millisecond
+	_, err := cli.Complete(context.Background(), Request{Messages: userMessage()})
+	require.ErrorIs(t, err, inprocbus.ErrTimeout)
+	select {
+	case err = <-p.ended:
+		assert.ErrorIs(t, err, context.Canceled)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the provider call ran on after the client stopped waiting")
+	}
+}
+
 // Another app cannot stop a call by guessing its key: cancel keys are
 // scoped to the sender.
 func TestCancelIsScopedToTheSender(t *testing.T) {

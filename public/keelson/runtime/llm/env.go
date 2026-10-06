@@ -41,12 +41,13 @@ var (
 		Category:    env.CategoryLLM,
 	})
 
-	// Timeout bounds one completion on the service side; the requester's
-	// own wait is the client's.
+	// Timeout bounds one completion on the service side. A client that
+	// names no wait of its own learns it from llm.describe and waits that
+	// long plus ReplyMargin, so this one value governs the apps too.
 	Timeout = env.NewDuration(env.Spec{
 		Name:        "BOXER_LLM_TIMEOUT",
 		Default:     "120s",
-		Description: "wall-clock bound on one llm.complete on the service side",
+		Description: "wall-clock bound on one llm.complete; the service cancels the provider call at it, and app clients that name no timeout of their own wait that long plus a few seconds for the reply",
 		Category:    env.CategoryLLM,
 	})
 

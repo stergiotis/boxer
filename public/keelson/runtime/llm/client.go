@@ -5,6 +5,7 @@ import (
 	"errors"
 	"math/rand/v2"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -20,10 +21,21 @@ import (
 // app (its MountContextI.Bus()).
 type Client struct {
 	bus app.BusI
-	// Timeout bounds one request; zero is [DefaultTimeout]. A completion
-	// against a local model can take most of it.
+	// Timeout bounds one request. Zero waits as long as the service bounds
+	// a completion (BOXER_LLM_TIMEOUT, learned from llm.describe) plus
+	// [ReplyMargin], so the service's own timeout is the one a caller
+	// sees; [DefaultTimeout] when the service cannot be asked.
 	Timeout time.Duration
+	// serviceTimeout is the service's completion bound as the last
+	// describe reported it, in nanoseconds; 0 is not yet known.
+	serviceTimeout atomic.Int64
 }
+
+// ReplyMargin is how much longer than the service's completion bound a
+// client waits by default: the time a timed-out completion's reply takes
+// to arrive, so the caller gets the service's account (a timeout with its
+// call id) rather than a bare bus timeout.
+const ReplyMargin = 5 * time.Second
 
 // NewClient wraps bus.
 func NewClient(bus app.BusI) (inst *Client) {
@@ -56,6 +68,9 @@ type Description struct {
 	ContextSource string
 	// Reason says why nothing is configured.
 	Reason string
+	// Timeout is the service's bound on one completion
+	// (BOXER_LLM_TIMEOUT); 0 from a service that does not report it.
+	Timeout time.Duration
 }
 
 // Request is one completion as a Go value: the caller's declaration of
@@ -220,7 +235,11 @@ func (inst *Client) Describe(ctx context.Context) (d Description, err error) {
 		return
 	}
 	d = Description{Configured: w.Configured, Model: w.Model, EndpointHost: w.EndpointHost, Local: w.Local, Trusted: w.Trusted,
-		MaxTokens: w.MaxTokens, ContextTokens: w.ContextTokens, ContextSource: w.ContextSource, Reason: w.Reason}
+		MaxTokens: w.MaxTokens, ContextTokens: w.ContextTokens, ContextSource: w.ContextSource, Reason: w.Reason,
+		Timeout: time.Duration(w.TimeoutNs)}
+	if d.Timeout > 0 {
+		inst.serviceTimeout.Store(int64(d.Timeout))
+	}
 	return
 }
 
@@ -287,20 +306,50 @@ func (inst *Client) request(ctx context.Context, subject string, payload []byte,
 		err error
 	}
 	done := make(chan result, 1)
-	wait := inst.wait(ctx, DefaultTimeout)
+	wait := inst.wait(ctx, inst.completionWait(ctx))
 	go func() {
 		r, e := inst.bus.RequestWithTimeout(subject, payload, wait)
 		done <- result{raw: r, err: e}
 	}()
 	select {
 	case r := <-done:
+		if r.err != nil {
+			// The wait ran out, or the bus failed: no one will read the
+			// answer, so the provider call should not run on for it.
+			inst.cancel(key)
+		}
 		return r.raw, r.err
 	case <-ctx.Done():
-		if cancelPayload, cerr := encode(wireCancel{V: wireVersion, Key: key}); cerr == nil {
-			_ = inst.bus.Publish(SubjectCancel, cancelPayload)
-		}
+		inst.cancel(key)
 		return nil, eh.Errorf("llm: waiting for the reply: %w", ctx.Err())
 	}
+}
+
+// cancel asks the service to stop the completion that carried key. An
+// unknown key is ignored there, so a call already answered is unharmed.
+func (inst *Client) cancel(key string) {
+	if cancelPayload, err := encode(wireCancel{V: wireVersion, Key: key}); err == nil {
+		_ = inst.bus.Publish(SubjectCancel, cancelPayload)
+	}
+}
+
+// completionWait is the default wait for a completion: the service's
+// bound plus ReplyMargin. The bound is learned once from llm.describe;
+// a client that cannot ask falls back to DefaultTimeout.
+func (inst *Client) completionWait(ctx context.Context) (d time.Duration) {
+	if inst.Timeout > 0 {
+		return inst.Timeout
+	}
+	st := time.Duration(inst.serviceTimeout.Load())
+	if st <= 0 {
+		if desc, err := inst.Describe(ctx); err == nil {
+			st = desc.Timeout
+		}
+	}
+	if st <= 0 {
+		st = DefaultTimeout
+	}
+	return st + ReplyMargin
 }
 
 // wait is the request wait: Timeout, else fallback, shortened to the

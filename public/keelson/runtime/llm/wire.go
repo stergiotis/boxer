@@ -80,6 +80,9 @@ type wireDescribe struct {
 	ContextTokens int32  `json:"context_tokens,omitempty"`
 	ContextSource string `json:"context_source,omitempty"`
 	Reason        string `json:"reason,omitempty"`
+	// TimeoutNs is the service's bound on one completion
+	// (BOXER_LLM_TIMEOUT), the wait a client takes when it names none.
+	TimeoutNs int64 `json:"timeout_ns,omitempty"`
 }
 
 // wireReply is the reply on llm.complete. Ok false carries the reason and

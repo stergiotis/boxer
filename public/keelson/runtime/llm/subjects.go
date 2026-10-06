@@ -57,9 +57,10 @@ const (
 // answered (ADR-0254 §SD4).
 const TableCalls = "llm_calls"
 
-// DefaultTimeout bounds one completion when neither the request's context
-// nor Client.Timeout says otherwise. Generous, because local models are
-// slow; the run is cancellable throughout.
+// DefaultTimeout is BOXER_LLM_TIMEOUT's default: the service's bound on
+// one completion when its config names none, and a client's when it cannot
+// learn the service's. Generous, because local models are slow; the run is
+// cancellable throughout.
 const DefaultTimeout = 120 * time.Second
 
 // ServiceCaps is what the host's service holds: the requests to serve and
