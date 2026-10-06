@@ -126,14 +126,24 @@ pub fn load_custom_fonts_with(
     } else {
         None
     };
+    // A family without a supplied primary keeps egui's own text face (the
+    // first default) as its primary, ahead of phosphor: Phosphor's cmap
+    // covers a–z, space and '-' for its ligatures, so placed first it would
+    // draw every lowercase letter from the icon font. The remaining
+    // defaults (egui's emoji faces) stay at the tail.
+    let mut default_primaries: Vec<(egui::FontFamily, String)> = Vec::new();
     for (family, primary) in [
         (egui::FontFamily::Proportional, prop_primary),
         (egui::FontFamily::Monospace, mono_primary),
     ] {
-        let defaults = fonts.families.get(&family).cloned().unwrap_or_default();
+        let mut defaults = fonts.families.get(&family).cloned().unwrap_or_default();
         let mut chain = Vec::new();
         if let Some(name) = primary {
             chain.push(name.to_owned());
+        } else if !defaults.is_empty() {
+            let name = defaults.remove(0);
+            default_primaries.push((family.clone(), name.clone()));
+            chain.push(name);
         }
         if has_phosphor {
             chain.push("phosphor".to_owned());
@@ -150,12 +160,25 @@ pub fn load_custom_fonts_with(
     // chain entry whose cmap covers it. Proportional uses
     // main → phosphor → fallback; Monospace uses
     // mono → phosphor → fallback (or main → ... when no explicit mono
-    // was provided, matching the egui fallback above).
+    // was provided, matching the egui fallback above). A family whose
+    // primary is egui's default face gets that face's bytes, for the same
+    // reason it leads the egui chain.
+    let default_bytes = |family: egui::FontFamily| -> Option<(std::sync::Arc<Vec<u8>>, u32)> {
+        let name = &default_primaries.iter().find(|(f, _)| *f == family)?.1;
+        let data = fonts.font_data.get(name)?;
+        Some((std::sync::Arc::new(data.font.to_vec()), data.index))
+    };
     let phosphor_arc = phosphor_bytes.take().map(|(b, i)| (std::sync::Arc::new(b), i));
     let fallback_arc = fallback_bytes.take().map(|(b, i)| (std::sync::Arc::new(b), i));
-    let main_arc = main_bytes.take().map(|(b, i)| (std::sync::Arc::new(b), i));
-    let mono_arc =
-        mono_bytes.take().map(|(b, i)| (std::sync::Arc::new(b), i)).or_else(|| main_arc.clone());
+    let main_arc = main_bytes
+        .take()
+        .map(|(b, i)| (std::sync::Arc::new(b), i))
+        .or_else(|| default_bytes(egui::FontFamily::Proportional));
+    let mono_arc = mono_bytes
+        .take()
+        .map(|(b, i)| (std::sync::Arc::new(b), i))
+        .or_else(|| has_main.then(|| main_arc.clone()).flatten())
+        .or_else(|| default_bytes(egui::FontFamily::Monospace));
     let build_svg =
         |primary: Option<(std::sync::Arc<Vec<u8>>, u32)>| -> Vec<(std::sync::Arc<Vec<u8>>, u32)> {
             let mut out = Vec::new();
@@ -282,4 +305,27 @@ pub fn init_common_with_fonts<'a, R: std::io::BufRead, W: std::io::Write>(
         fffi.link_zones.clone(),
     ));
     (fffi, reactive)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The tab demo ships Phosphor without a main face. Phosphor's cmap covers
+    // a–z, so a chain led by it draws lowercase text as icon glyphs.
+    #[test]
+    fn phosphor_alone_does_not_lead_the_chains() {
+        let phosphor = include_bytes!("../../assets/fonts/phosphor/Phosphor.ttf").to_vec();
+        let config = AppConfig { phosphor_font_ttf: "phosphor".to_owned(), ..AppConfig::default() };
+        let ctx = egui::Context::default();
+        let mut read = |_: &str| -> std::io::Result<Vec<u8>> { Ok(phosphor.clone()) };
+        load_custom_fonts_with(&ctx, &config, &mut read);
+        let _ = ctx.run_ui(egui::RawInput::default(), |_| {});
+        let defaults = egui::FontDefinitions::default();
+        for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
+            let chain = ctx.fonts(|f| f.definitions().families[&family].clone());
+            assert_eq!(chain[0], defaults.families[&family][0], "{family:?}: {chain:?}");
+            assert_eq!(chain[1], "phosphor", "{family:?}: {chain:?}");
+        }
+    }
 }
