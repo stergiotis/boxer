@@ -147,6 +147,22 @@ func (inst *Pager) GoToIndex(i int64) (changed bool) {
 	return true
 }
 
+// SetPageSize sets the page size programmatically — for a host applying a
+// size chosen elsewhere. Like the size selector, it keeps the row that was
+// in the middle of the page in view, and seeds the jump databinding for the
+// reason GoToLast does. A size <= 0 is ignored.
+func (inst *Pager) SetPageSize(size int64) {
+	if size <= 0 || size == inst.pageSize {
+		return
+	}
+	mid := inst.currentPage*inst.pageSize + inst.pageSize/2
+	inst.pageSize = size
+	inst.Configure(inst.total)
+	inst.currentPage = clamp(mid/size, 0, inst.NumPages()-1)
+	inst.jumpValue = uint64(inst.currentPage + 1)
+	inst.lastSentJumpValue = 0
+}
+
 // Range returns [start, end) indices for the current page, clamped to total.
 func (inst *Pager) Range() (start, end int64) {
 	start = inst.currentPage * inst.pageSize

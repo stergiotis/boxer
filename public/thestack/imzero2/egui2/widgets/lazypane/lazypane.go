@@ -83,6 +83,14 @@ func (inst *Pane) JustRevealed() bool {
 	return inst.justRevealed
 }
 
+// Live reports whether the body drew this frame: the pane is past its
+// warm-up and the host rendered it last frame. Valid after this frame's
+// Skip; a reader between frames sees the last frame's answer. It is what
+// an app reports as "the pane is drawn" without raising it.
+func (inst *Pane) Live() bool {
+	return inst.phase == phaseLive
+}
+
 // step advances the phase machine on this frame's rendered signal. Pure
 // (no FFFI emission) — the unit-testable core of the pane.
 func (inst *Pane) step(rendered bool) (skip bool, revealed bool) {
