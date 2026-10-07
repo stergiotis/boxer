@@ -113,9 +113,9 @@ func (inst *lensPainter) paintFocus(r int32) {
 	where := fmt.Sprintf("one of %d rows", len(m.Rows))
 	if a.Clustered {
 		if a.Bands[a.BandOf[r]].Cluster < 0 {
-			where = fmt.Sprintf("unclustered: shares too little with any of %d clusters", len(a.Bands)-1)
+			where = fmt.Sprintf("unclustered: none of the %d clusters took it, or it shares under half of its cluster's slots", len(a.Bands)-1)
 		} else {
-			where = fmt.Sprintf("cluster %s, %d rows", lensBandName(b, int(a.BandOf[r])), len(b.Rows))
+			where = fmt.Sprintf("%s, %d rows", lensBandName(b, int(a.BandOf[r])), len(b.Rows))
 			if rule := inst.ruleText(b); rule != "" {
 				where += ": " + rule
 			}
@@ -269,7 +269,7 @@ func (inst *lensPainter) paintStanding(x0, x1, cy float32, s int32, cell *lwlens
 			return x0 + (x1-x0)*float32((v-lo)/(hi-lo))
 		}
 		c.PaintRectFilled(x0, cy-0.5, x1, cy+0.5, 0, lensMix(styletokens.NeutralBgSurface, styletokens.NeutralTextSecondary, 0.3)).Send()
-		nums, _ := inst.bandValues(b, s)
+		nums, _ := lwlens.BandValues(inst.a, b, s)
 		for _, v := range nums {
 			x := at(v)
 			c.PaintLine(x, cy-4, x, cy+4, lensMix(styletokens.NeutralBgSurface, styletokens.NeutralTextSecondary, 0.6), 1).Send()
@@ -285,7 +285,7 @@ func (inst *lensPainter) paintStanding(x0, x1, cy float32, s int32, cell *lwlens
 		return // free text has no standing to show
 	}
 	inst.paintDistribution(x0, x1, cy, s, b)
-	_, texts := inst.bandValues(b, s)
+	_, texts := lwlens.BandValues(inst.a, b, s)
 	if len(texts) == 0 {
 		return
 	}

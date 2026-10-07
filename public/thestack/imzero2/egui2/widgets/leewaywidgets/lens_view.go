@@ -129,15 +129,13 @@ func lensShortNum(v float64) string {
 	return strconv.FormatFloat(v, 'g', 2, 64)
 }
 
-// lensBandName is a band's letter; the unclustered rows have none.
-func lensBandName(b *lwlens.Band, i int) string {
+// lensBandName names a band by its cluster, numbered from 1 as the
+// Projection panel numbers it; the unclustered rows have no name.
+func lensBandName(b *lwlens.Band, _ int) string {
 	if b.Cluster < 0 {
 		return "·"
 	}
-	if i < 26 {
-		return string(rune('A' + i))
-	}
-	return strconv.Itoa(i + 1)
+	return "cluster " + strconv.Itoa(int(b.Cluster)+1)
 }
 
 // lensPainter holds one frame's drawing state.
@@ -685,16 +683,7 @@ func (inst *lensPainter) paintBand(pb *lwlens.PlanBand) {
 
 // ruleText reads a band's rule as has/lacks literals.
 func (inst *lensPainter) ruleText(b *lwlens.Band) string {
-	var parts []string
-	for _, t := range b.Rule {
-		lbl := inst.a.Model.Slots[t.Slot].Label()
-		if t.Has {
-			parts = append(parts, "has "+lbl)
-		} else {
-			parts = append(parts, "lacks "+lbl)
-		}
-	}
-	return strings.Join(parts, " ∧ ")
+	return inst.a.RuleText(b)
 }
 
 func (inst *lensPainter) paintBandHeader(b *lwlens.Band, i int) {

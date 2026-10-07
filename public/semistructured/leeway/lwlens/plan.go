@@ -420,11 +420,16 @@ func RowDistance(a *Analysis, r, q int32, values float64) float64 {
 	return (1-values)*structural + values*(0.5*structural+0.5*valueDist)
 }
 
+// seriateMaxRows bounds the bands seriate orders: the chain is quadratic in
+// a band's rows, and a plan is made on the render thread whenever an intent
+// moves. A band past it keeps its label order.
+const seriateMaxRows = 512
+
 // seriate orders rows so that each is followed by the nearest of those
 // left, starting from the first: a greedy chain that puts like rows
 // together, so a column of values shows runs rather than noise.
 func seriate(a *Analysis, rows []PlanRow, values float64) {
-	if len(rows) < 3 {
+	if len(rows) < 3 || len(rows) > seriateMaxRows {
 		return
 	}
 	left := slices.Clone(rows[1:])
