@@ -46,13 +46,7 @@ func (inst *PlayLauncher) SetMainResultForTest(rec arrow.RecordBatch, sql string
 
 // DatasetBindingsForTest is the window's bound names and their handles.
 func (inst *PlayLauncher) DatasetBindingsForTest() (bindings map[string]string) {
-	inst.inner.client.mu.RLock()
-	defer inst.inner.client.mu.RUnlock()
-	bindings = make(map[string]string, len(inst.inner.client.datasetBindings))
-	for k, v := range inst.inner.client.datasetBindings {
-		bindings[k] = v
-	}
-	return
+	return inst.inner.DatasetBindingsForTest()
 }
 
 // LastPublishForTest is the window's last publish_result.
@@ -60,3 +54,23 @@ func (inst *PlayLauncher) LastPublishForTest() (last LastPublish) { return inst.
 
 // BufferForTest is the window's SQL buffer.
 func (inst *PlayLauncher) BufferForTest() (sql string) { return inst.inner.sql }
+
+// DatasetBindingsForTest is an instance's bound names and their handles.
+func (inst *PlayApp) DatasetBindingsForTest() (bindings map[string]string) {
+	inst.client.mu.RLock()
+	defer inst.client.mu.RUnlock()
+	bindings = make(map[string]string, len(inst.client.datasetBindings))
+	for k, v := range inst.client.datasetBindings {
+		bindings[k] = v
+	}
+	return
+}
+
+// BufferForTest is an instance's SQL buffer.
+func (inst *PlayApp) BufferForTest() (sql string) { return inst.sql }
+
+// RunRequestedForTest says a run is queued for the next frame.
+func (inst *PlayApp) RunRequestedForTest() (requested bool) { return inst.requestRun }
+
+// OpenPlaygroundBundleForTest is the bundle Open in Playground opens.
+func (inst *PlayApp) OpenPlaygroundBundleForTest() (alias string) { return inst.openPlaygroundBundle }

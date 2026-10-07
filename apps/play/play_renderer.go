@@ -780,6 +780,9 @@ type PlayApp struct {
 	// hatch appears. Set via SetToolbarMinimal between construction and
 	// mount.
 	toolbarMinimal bool
+	// openPlaygroundBundle, when set, is the bundle "Open in Playground"
+	// opens instead of the buffer (SetOpenPlaygroundBundle).
+	openPlaygroundBundle string
 
 	// definition is the document this instance was defined by, when an
 	// embedder handed one over (SetDefinitionMarkdown) — a sqlapplet's
@@ -2249,20 +2252,24 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 				// stamps the frontmatter from it). Classified off the frame
 				// goroutine — see runsOnIntrospection.
 				sql, autoRun, live, bands := inst.sql, inst.AutoRun, inst.liveMain, inst.timelineBandsSql
-				go func() {
-					endpoint := ""
-					if inst.runsOnIntrospection(sql) {
-						endpoint = launchcfg.EndpointIntrospection
-					}
-					inst.requestOpenPlayground(launchcfg.PlayLaunch{
-						At:       time.Now().UTC(),
-						Sql:      sql,
-						AutoRun:  autoRun,
-						Live:     live,
-						BandsSql: bands,
-						Endpoint: endpoint,
-					})
-				}()
+				if bundle := inst.openPlaygroundBundle; bundle != "" {
+					go inst.requestOpenPlayground(launchcfg.PlayLaunch{At: time.Now().UTC(), Bundle: bundle, AutoRun: true})
+				} else {
+					go func() {
+						endpoint := ""
+						if inst.runsOnIntrospection(sql) {
+							endpoint = launchcfg.EndpointIntrospection
+						}
+						inst.requestOpenPlayground(launchcfg.PlayLaunch{
+							At:       time.Now().UTC(),
+							Sql:      sql,
+							AutoRun:  autoRun,
+							Live:     live,
+							BandsSql: bands,
+							Endpoint: endpoint,
+						})
+					}()
+				}
 			}
 			if openErr != "" {
 				for rt := range c.RichTextLabel("Open failed: " + openErr) {

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/apps/play"
 	"github.com/stergiotis/boxer/apps/sqlapplet"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -18,14 +19,19 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 )
 
-func TestItemsDocParses(t *testing.T) {
-	def, err := sqlapplet.ParseDocSource(string(ManifestId), "items.md", []byte(itemsDoc))
+// The bundle's document composes and parses with sqlapplet's parser: the
+// rows read as items on the introspection endpoint (ADR-0288 §SD2).
+func TestItemsBundleComposes(t *testing.T) {
+	inst := &App{log: zerolog.Nop(), bundle: adhocdata.WindowAlias(bundleBase, 7)}
+	doc, err := play.ComposeBundleDocE(inst.itemsSpec(0))
+	require.NoError(t, err)
+	def, err := sqlapplet.ParseDocSource(string(ManifestId), "items.md", doc)
 	require.NoError(t, err)
 	require.NotNil(t, def)
-	assert.Equal(t, "items", def.Slug)
 	assert.Equal(t, sqlapplet.EndpointIntrospection, def.Endpoint)
 	assert.Equal(t, []string{datasetAlias}, def.Datasets)
 	assert.Contains(t, def.SQL, "keelson('items')")
+	assert.Equal(t, "adhocdemo_items_w7", inst.bundle)
 }
 
 func TestSeriesEncodes(t *testing.T) {
@@ -60,7 +66,8 @@ func TestManifestCapsCoverEmbeddedApplet(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		adhocdata.SubjectPublish,
+		adhocdata.SubjectBundlePublish,
+		adhocdata.SubjectBundleResolve,
 		adhocdata.SubjectResolve,
 		clipboardbroker.SubjectWrite,
 		windowhost.OpenSubject,
@@ -69,9 +76,11 @@ func TestManifestCapsCoverEmbeddedApplet(t *testing.T) {
 		assert.True(t, ok, want)
 		assert.Equal(t, app.CapDirectionPub, dir, want)
 	}
-	dir, ok := patterns[adhocdata.SubjectEventAll]
-	assert.True(t, ok, "the follower's events subscription")
-	assert.Equal(t, app.CapDirectionSub, dir)
+	for _, want := range []string{adhocdata.SubjectEventAll, adhocdata.SubjectBundleEventAll} {
+		dir, ok := patterns[want]
+		assert.True(t, ok, want)
+		assert.Equal(t, app.CapDirectionSub, dir, want)
+	}
 }
 
 // TestManifestCapsAuthorizeEscapeHatches runs the declaration through the
