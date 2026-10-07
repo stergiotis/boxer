@@ -71,9 +71,14 @@ its apps running in a browser tab.</p>
 <!-- demo -->
 <h2>Demo</h2>
 <p>boxer apps compiled to WebAssembly and running in this tab, beside the Rust browser host (ADR-0263). The first visit
-downloads about 20 MB; the page loads nothing from any other site. Each app also opens in <code>fresh</code>, the
+downloads about 27 MB; the page loads nothing from any other site. Each app also opens in <code>fresh</code>, the
 light theme of ADR-0258; the theme is chosen when an app starts, so switching opens the app afresh.</p>
 <ul class="apps">
+  <li><a class="app" href="demo/index.html?worker=worker.mjs%3Fapp%3Dgithub.com%2Fstergiotis%2Fboxer%2Fapps%2Fplay%26env%3DCLICKHOUSE_URL%3Dhttp%253A%252F%252Fkeelson.invalid%252Fquery%26env%3DBOXER_PLAY_SQL%3DWITH%2520vector_field%2520AS%2520%2528SELECT%2520%252A%2520FROM%2520keelson%2528%2527gfs_wind%2527%2529%2529%252C%2520vector_field_opts%2520AS%2520%2528SELECT%2520%252A%2520FROM%2520keelson%2528%2527gfs_wind_opts%2527%2529%2529%2520SELECT%2520%252A%2520FROM%2520vector_field%2520LIMIT%25201000%26env%3DBOXER_PLAY_AUTORUN%3D1%26env%3DBOXER_PLAY_FOCUS_VECTORFIELD%3D1"><strong>Wind forecast in play</strong>
+    <span>A real GFS 10 m wind forecast, 17 steps over two days, read with SQL in play and drawn as particles. The SQL
+    is answered in this tab by Go, with no database: <code>SELECT * FROM keelson('gfs_wind')</code> (ADR-0290 to
+    ADR-0292). Data: NOAA GFS, a work of the US Government.</span></a>
+    <a class="theme" href="demo/index.html?worker=worker.mjs%3Fapp%3Dgithub.com%2Fstergiotis%2Fboxer%2Fapps%2Fplay%26env%3DCLICKHOUSE_URL%3Dhttp%253A%252F%252Fkeelson.invalid%252Fquery%26env%3DBOXER_PLAY_SQL%3DWITH%2520vector_field%2520AS%2520%2528SELECT%2520%252A%2520FROM%2520keelson%2528%2527gfs_wind%2527%2529%2529%252C%2520vector_field_opts%2520AS%2520%2528SELECT%2520%252A%2520FROM%2520keelson%2528%2527gfs_wind_opts%2527%2529%2529%2520SELECT%2520%252A%2520FROM%2520vector_field%2520LIMIT%25201000%26env%3DBOXER_PLAY_AUTORUN%3D1%26env%3DBOXER_PLAY_FOCUS_VECTORFIELD%3D1%26env%3DIMZERO2_THEME%3Dfresh">light theme</a></li>
   <li><a class="app" href="demo/index.html?worker=worker.mjs%3Fapp%3Dgithub.com%2Fstergiotis%2Fboxer%2Fpublic%2Fthestack%2Fimzero2%2Fegui2%2Fdemo%2Fapps%2Fwidgets"><strong>Widget gallery</strong>
     <span>The widget demos with their source. The map demos are left out, since they load tiles from a third-party
     server, and so are a few that do not run in a tab.</span></a>

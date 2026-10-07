@@ -389,6 +389,17 @@ and the reason per entry are `tabHidden` in `imzero2tabdemo`:
 The Go module grows from about 50 MB to about 83 MB; the page now downloads
 about 20 MB compressed.
 
+### 2026-10-08 — the demo carries play over keelson SQL, and makes no requests
+
+The demo binary adds play, the static keelson tables and a real GFS wind
+forecast as a field family, served in the tab by the trivial SQL endpoint
+(ADR-0290, ADR-0291, ADR-0292), and the landing page opens play on it. Its
+maps start without a basemap (`basemap.SetOffline`), and a new
+`tabhost.Services.NoEgress` refuses every HTTP request the module makes except
+the in-process keelson endpoint, so the page's claim that it loads nothing from
+elsewhere holds whatever a visitor switches on. The module grows to about
+113 MB, 24 MB compressed.
+
 ## References
 
 - [ADR-0263](./0263-imzero2-browser-both-modules-in-one-worker-mesh-to-the-painter.md) — the tab this makes reusable.

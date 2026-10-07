@@ -36,6 +36,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/introspecthttp"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/trivialsql"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/observability/logging"
 	fffiruntime "github.com/stergiotis/boxer/public/thestack/fffi2/runtime"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
@@ -56,6 +57,18 @@ type Services struct {
 	// CLICKHOUSE_URL at KeelsonSQLURL to have play read from it; every other
 	// request still leaves through the host.
 	KeelsonSQL *introspect.Registry
+	// NoEgress refuses every HTTP request the module makes, except to
+	// KeelsonSQLOrigin, which is answered in process: a tab published on a
+	// site that says it loads nothing from elsewhere keeps that true whatever
+	// a visitor switches on (a map's tiles, a fetch an app makes).
+	NoEgress bool
+}
+
+// noEgress is the transport of a tab with Services.NoEgress.
+type noEgress struct{}
+
+func (noEgress) RoundTrip(req *http.Request) (*http.Response, error) {
+	return nil, eb.Build().Str("host", req.URL.Host).Errorf("tabhost: this tab makes no requests to other sites")
 }
 
 // KeelsonSQLOrigin is where the tab answers keelson SQL in process. The
@@ -151,6 +164,9 @@ func (inst *Program) run(args []string) (step func() int32) {
 func (inst *Program) tab(ctx *cli.Context) (err error) {
 	// Deliberate and once: the module's HTTP leaves through the host.
 	browserhost.InstallHostTransport()
+	if inst.opts.Services.NoEgress {
+		http.DefaultTransport = noEgress{}
+	}
 	if reg := inst.opts.Services.KeelsonSQL; reg != nil {
 		if err = installKeelsonSQL(reg); err != nil {
 			return

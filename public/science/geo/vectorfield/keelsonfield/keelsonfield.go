@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -72,26 +73,63 @@ func (inst *field) step(text string) (i int, ok bool) {
 	return i, i >= 0
 }
 
-// Register registers base and its family in reg.
+// Register registers base and its family in reg, checking f first.
 func Register(reg *introspect.Registry, base string, f Field) (err error) {
 	ff, err := validate(base, f)
 	if err != nil {
 		return
 	}
+	src := &source{base: base, f: ff}
+	src.once.Do(func() {})
+	return register(reg, base, src)
+}
+
+// RegisterLazy registers base and its family in reg with a field load reads
+// on first use, and checks it then: a binary that serves a field it seldom
+// shows does not decode it at start (a tab decodes the GFS forecast in about
+// a second). A load that fails is the error of every read.
+func RegisterLazy(reg *introspect.Registry, base string, load func() (Field, error)) (err error) {
+	if !introspect.ValidTableName(base + SuffixRegularity) {
+		return eb.Build().Str("base", base).Errorf("keelsonfield: the base name, with its longest suffix, must be a table name")
+	}
+	return register(reg, base, &source{base: base, load: load})
+}
+
+func register(reg *introspect.Registry, base string, src *source) (err error) {
 	for _, p := range []introspect.Provider{
-		relationProvider{name: base, f: ff},
-		optsProvider{name: base + SuffixOpts, base: base, f: ff},
-		stepsProvider{name: base + SuffixSteps, f: ff},
-		geometryProvider{name: base + SuffixGeometry, f: ff},
-		regularityProvider{name: base + SuffixRegularity, f: ff},
-		windowProvider{name: base + SuffixWindow, f: ff},
-		summaryProvider{name: base + SuffixSummary, f: ff},
+		relationProvider{name: base, src: src},
+		optsProvider{name: base + SuffixOpts, base: base, src: src},
+		stepsProvider{name: base + SuffixSteps, src: src},
+		geometryProvider{name: base + SuffixGeometry, src: src},
+		regularityProvider{name: base + SuffixRegularity, src: src},
+		windowProvider{name: base + SuffixWindow, src: src},
+		summaryProvider{name: base + SuffixSummary, src: src},
 	} {
 		if err = reg.Register(p); err != nil {
 			return eb.Build().Str("table", p.Name()).Errorf("keelsonfield: %w", err)
 		}
 	}
 	return
+}
+
+// source is a family's field, loaded and checked once.
+type source struct {
+	once sync.Once
+	load func() (Field, error)
+	base string
+	f    *field
+	err  error
+}
+
+func (inst *source) get() (f *field, err error) {
+	inst.once.Do(func() {
+		var raw Field
+		raw, inst.err = inst.load()
+		if inst.err == nil {
+			inst.f, inst.err = validate(inst.base, raw)
+		}
+	})
+	return inst.f, inst.err
 }
 
 func validate(base string, f Field) (ff *field, err error) {
@@ -130,7 +168,7 @@ func (inst *field) lon(c int) float64 { g := inst.grid(); return g.West + float6
 
 type relationProvider struct {
 	name string
-	f    *field
+	src  *source
 }
 
 var relationSchema = arrow.NewSchema([]arrow.Field{
@@ -145,24 +183,28 @@ func (inst relationProvider) Name() string                    { return inst.name
 func (relationProvider) Schema() *arrow.Schema                { return relationSchema }
 func (relationProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessStatic }
 func (inst relationProvider) Snapshot(introspect.Projection) (arrow.RecordBatch, error) {
+	f, err := inst.src.get()
+	if err != nil {
+		return nil, err
+	}
 	b := array.NewRecordBuilder(memory.NewGoAllocator(), relationSchema)
 	defer b.Release()
-	g := inst.f.grid()
-	n := len(inst.f.Steps) * g.Cols * g.Rows
+	g := f.grid()
+	n := len(f.Steps) * g.Cols * g.Rows
 	for _, fb := range b.Fields() {
 		fb.Reserve(n)
 	}
 	tb := b.Field(0).(*array.TimestampBuilder)
 	lab, lob := b.Field(1).(*array.Float64Builder), b.Field(2).(*array.Float64Builder)
 	ub, vb := b.Field(3).(*array.Float32Builder), b.Field(4).(*array.Float32Builder)
-	for s, grid := range inst.f.Grids {
-		ts := arrow.Timestamp(inst.f.Steps[s].Unix())
+	for s, grid := range f.Grids {
+		ts := arrow.Timestamp(f.Steps[s].Unix())
 		for r := range g.Rows {
 			for c := range g.Cols {
 				i := r*g.Cols + c
 				tb.Append(ts)
-				lab.Append(inst.f.lat(r))
-				lob.Append(inst.f.lon(c))
+				lab.Append(f.lat(r))
+				lob.Append(f.lon(c))
 				ub.Append(grid.U[i])
 				vb.Append(grid.V[i])
 			}
@@ -175,7 +217,7 @@ func (inst relationProvider) Snapshot(introspect.Projection) (arrow.RecordBatch,
 
 type optsProvider struct {
 	name, base string
-	f          *field
+	src        *source
 }
 
 var optsSchema = arrow.NewSchema([]arrow.Field{
@@ -189,11 +231,15 @@ func (inst optsProvider) Name() string                    { return inst.name }
 func (optsProvider) Schema() *arrow.Schema                { return optsSchema }
 func (optsProvider) Freshness() introspect.FreshnessClass { return introspect.FreshnessStatic }
 func (inst optsProvider) Snapshot(introspect.Projection) (arrow.RecordBatch, error) {
+	f, err := inst.src.get()
+	if err != nil {
+		return nil, err
+	}
 	b := array.NewRecordBuilder(memory.NewGoAllocator(), optsSchema)
 	defer b.Release()
-	b.Field(0).(*array.StringBuilder).Append(inst.f.Name)
-	b.Field(1).(*array.StringBuilder).Append(inst.f.Unit)
-	b.Field(2).(*array.Float64Builder).Append(float64(inst.f.SpeedMax))
+	b.Field(0).(*array.StringBuilder).Append(f.Name)
+	b.Field(1).(*array.StringBuilder).Append(f.Unit)
+	b.Field(2).(*array.Float64Builder).Append(float64(f.SpeedMax))
 	b.Field(3).(*array.StringBuilder).Append(inst.base)
 	return b.NewRecordBatch(), nil
 }
@@ -262,7 +308,7 @@ func isFinite(x float64) bool { return !math.IsNaN(x) && !math.IsInf(x, 0) }
 
 type stepsProvider struct {
 	name string
-	f    *field
+	src  *source
 }
 
 var stepsSchema = arrow.NewSchema([]arrow.Field{
@@ -282,14 +328,18 @@ func (stepsProvider) Args() []introspect.ArgSpec {
 	return []introspect.ArgSpec{req("cap", introspect.ArgTypeUInt64)}
 }
 func (inst stepsProvider) SnapshotArgs(_ introspect.Projection, a introspect.Args) (arrow.RecordBatch, error) {
+	f, err := inst.src.get()
+	if err != nil {
+		return nil, err
+	}
 	b := array.NewRecordBuilder(memory.NewGoAllocator(), stepsSchema)
 	defer b.Release()
-	g := inst.f.grid()
-	for i, t := range inst.f.Steps {
+	g := f.grid()
+	for i, t := range f.Steps {
 		if uint64(i) >= a.UInt64("cap") {
 			break
 		}
-		b.Field(0).(*array.StringBuilder).Append(inst.f.text[i])
+		b.Field(0).(*array.StringBuilder).Append(f.text[i])
 		b.Field(1).(*array.Int64Builder).Append(t.UnixMilli())
 		b.Field(2).(*array.StringBuilder).Append(TimeType)
 		b.Field(3).(*array.Uint64Builder).Append(uint64(g.Cols * g.Rows))
@@ -305,7 +355,7 @@ func (inst *field) stepOf(a introspect.Args) (s int, ok bool) { return inst.step
 
 type geometryProvider struct {
 	name string
-	f    *field
+	src  *source
 }
 
 var geometrySchema = arrow.NewSchema([]arrow.Field{
@@ -329,16 +379,20 @@ func (geometryProvider) Args() []introspect.ArgSpec {
 	return []introspect.ArgSpec{req("t", introspect.ArgTypeString)}
 }
 func (inst geometryProvider) SnapshotArgs(_ introspect.Projection, a introspect.Args) (arrow.RecordBatch, error) {
+	f, err := inst.src.get()
+	if err != nil {
+		return nil, err
+	}
 	b := array.NewRecordBuilder(memory.NewGoAllocator(), geometrySchema)
 	defer b.Release()
-	g := inst.f.grid()
-	s, ok := inst.f.stepOf(a)
-	south, north := inst.f.lat(g.Rows-1), inst.f.lat(0)
-	west, east := inst.f.lon(0), inst.f.lon(g.Cols-1)
+	g := f.grid()
+	s, ok := f.stepOf(a)
+	south, north := f.lat(g.Rows-1), f.lat(0)
+	west, east := f.lon(0), f.lon(g.Cols-1)
 	rows, cols, count := uint64(g.Rows), uint64(g.Cols), uint64(g.Rows*g.Cols)
 	high := math.NaN()
 	if ok {
-		grid := inst.f.Grids[s]
+		grid := f.Grids[s]
 		speeds := make([]float64, 0, len(grid.U))
 		for i := range grid.U {
 			u, v := float64(grid.U[i]), float64(grid.V[i])
@@ -379,7 +433,7 @@ func quantile(xs []float64, q float64) float64 {
 
 type regularityProvider struct {
 	name string
-	f    *field
+	src  *source
 }
 
 var regularitySchema = arrow.NewSchema([]arrow.Field{
@@ -401,18 +455,22 @@ func (regularityProvider) Args() []introspect.ArgSpec {
 	}
 }
 func (inst regularityProvider) SnapshotArgs(_ introspect.Projection, a introspect.Args) (arrow.RecordBatch, error) {
+	f, err := inst.src.get()
+	if err != nil {
+		return nil, err
+	}
 	b := array.NewRecordBuilder(memory.NewGoAllocator(), regularitySchema)
 	defer b.Release()
-	g := inst.f.grid()
+	g := f.grid()
 	var offX, offY float64
-	if _, ok := inst.f.stepOf(a); ok {
+	if _, ok := f.stepOf(a); ok {
 		west, north, dLon, dLat := a.Float64("west"), a.Float64("north"), a.Float64("dlon"), a.Float64("dlat")
 		for c := range g.Cols {
-			x := (inst.f.lon(c) - west) / dLon
+			x := (f.lon(c) - west) / dLon
 			offX = max(offX, math.Abs(x-math.RoundToEven(x)))
 		}
 		for r := range g.Rows {
-			y := (north - inst.f.lat(r)) / dLat
+			y := (north - f.lat(r)) / dLat
 			offY = max(offY, math.Abs(y-math.RoundToEven(y)))
 		}
 	}
@@ -425,7 +483,7 @@ func (inst regularityProvider) SnapshotArgs(_ introspect.Projection, a introspec
 
 type windowProvider struct {
 	name string
-	f    *field
+	src  *source
 }
 
 var windowSchema = arrow.NewSchema([]arrow.Field{
@@ -458,6 +516,10 @@ type binAcc struct {
 }
 
 func (inst windowProvider) SnapshotArgs(_ introspect.Projection, a introspect.Args) (batch arrow.RecordBatch, err error) {
+	f, err := inst.src.get()
+	if err != nil {
+		return nil, err
+	}
 	turns, err := parseInts(a.String("turns"))
 	if err != nil {
 		return nil, eb.Build().Str("table", inst.name).Errorf("keelsonfield: turns: %w", err)
@@ -470,16 +532,16 @@ func (inst windowProvider) SnapshotArgs(_ introspect.Projection, a introspect.Ar
 	colStart, colEnd := a.Int64("col_start"), a.Int64("col_end")
 	bins := make(map[[2]int64]*binAcc)
 	var order [][2]int64
-	if s, ok := inst.f.stepOf(a); ok {
-		g, grid := inst.f.grid(), inst.f.Grids[s]
+	if s, ok := f.stepOf(a); ok {
+		g, grid := f.grid(), f.Grids[s]
 		for r := range g.Rows {
-			lat := inst.f.lat(r)
+			lat := f.lat(r)
 			ri := bd.ri(lat)
 			if ri < rowStart || ri > rowEnd {
 				continue
 			}
 			for c := range g.Cols {
-				lon := inst.f.lon(c)
+				lon := f.lon(c)
 				if !bd.holds(lat, lon) {
 					continue
 				}
@@ -556,7 +618,7 @@ func parseInts(s string) (out []int64, err error) {
 
 type summaryProvider struct {
 	name string
-	f    *field
+	src  *source
 }
 
 var summarySchema = arrow.NewSchema([]arrow.Field{
@@ -574,26 +636,30 @@ func (inst summaryProvider) Snapshot(introspect.Projection) (arrow.RecordBatch, 
 }
 func (summaryProvider) Args() []introspect.ArgSpec { return planeArgs }
 func (inst summaryProvider) SnapshotArgs(_ introspect.Projection, a introspect.Args) (batch arrow.RecordBatch, err error) {
+	f, err := inst.src.get()
+	if err != nil {
+		return nil, err
+	}
 	bd := boundsOf(a)
 	if bd.factor < 1 {
 		return nil, eb.Build().Int64("factor", bd.factor).Errorf("keelsonfield: factor must be positive")
 	}
-	g := inst.f.grid()
+	g := f.grid()
 	b := array.NewRecordBuilder(memory.NewGoAllocator(), summarySchema)
 	defer b.Release()
 	var written uint64
-	for s, grid := range inst.f.Grids {
+	for s, grid := range f.Grids {
 		var sumW, sumWS, peak float64
 		var valid uint32
 		any := false
 		for r := range g.Rows {
-			lat := inst.f.lat(r)
+			lat := f.lat(r)
 			if bd.ri(lat)%bd.factor != 0 {
 				continue
 			}
 			w := max(math.Cos(lat*math.Pi/180), 0)
 			for c := range g.Cols {
-				lon := inst.f.lon(c)
+				lon := f.lon(c)
 				if !bd.holds(lat, lon) || bd.ci(lon)%bd.factor != 0 {
 					continue
 				}
@@ -621,7 +687,7 @@ func (inst summaryProvider) SnapshotArgs(_ introspect.Projection, a introspect.A
 		if sumW > 0 {
 			mean = sumWS / sumW
 		}
-		b.Field(0).(*array.StringBuilder).Append(inst.f.text[s])
+		b.Field(0).(*array.StringBuilder).Append(f.text[s])
 		b.Field(1).(*array.Float32Builder).Append(float32(mean))
 		b.Field(2).(*array.Float32Builder).Append(float32(peak))
 		b.Field(3).(*array.Uint32Builder).Append(valid)

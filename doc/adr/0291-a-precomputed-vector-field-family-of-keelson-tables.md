@@ -183,6 +183,24 @@ masked and a finer-than-native request; the palette's high end agrees within
 the relation and options tables joined the family, and windows are computed
 per request rather than sliced from per-level grids.
 
+### 2026-10-08 — M2 built: the demo
+
+The Pages demo binary registers the GFS forecast of ADR-0292 as `gfs_wind`
+with `keelsonfield.RegisterLazy`, which decodes it on the first read rather
+than at start, beside the static tables, and serves them through the trivial
+endpoint (ADR-0290 §SD4). A landing-page card opens play with the family as its
+`vector_field` and `vector_field_opts` and the Vector field pane in front; the
+tab draws the forecast with no ClickHouse. Two settings keep the page's claim
+that it loads nothing from elsewhere: `basemap.SetOffline` starts every map on
+its offline outlines, and `tabhost.Services.NoEgress` refuses any request that
+would leave the tab, whatever a visitor switches on. With play the first visit
+downloads about 27 MB.
+
+The outlines show a defect in the tab that predates this work: long straight
+grey lines across the map, the same in the gallery's flow-on-a-map demo and
+whatever the field's longitude convention. A README image of the demo waits
+for it.
+
 ## References
 
 - [ADR-0249](./0249-vector-fields-on-the-map-particles-over-a-batched-segment-opcode.md) — vector fields; GRIB deferred.

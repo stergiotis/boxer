@@ -45,3 +45,29 @@ func TestRegister_Refusals(t *testing.T) {
 	}
 	assert.Error(t, keelsonfield.Register(introspect.NewRegistry(), "not a name", good))
 }
+
+// A lazily registered family loads its field on the first read, once, and
+// reports a failed load on every read.
+func TestRegisterLazy(t *testing.T) {
+	storm := keelsonfieldtest.Storm(t)
+	loads := 0
+	reg := introspect.NewRegistry()
+	require.NoError(t, keelsonfield.RegisterLazy(reg, "storm", func() (keelsonfield.Field, error) {
+		loads++
+		return storm, nil
+	}))
+	assert.Zero(t, loads, "nothing is loaded at registration")
+	for range 2 {
+		body, err := trivialsql.Run(context.Background(), reg, "SELECT * FROM keelson('storm_opts')", nil)
+		require.NoError(t, err)
+		assert.Equal(t, "storm\tm/s\t30\tstorm\n", string(body))
+	}
+	assert.Equal(t, 1, loads)
+
+	failing := introspect.NewRegistry()
+	require.NoError(t, keelsonfield.RegisterLazy(failing, "storm", func() (keelsonfield.Field, error) {
+		return keelsonfield.Field{}, assert.AnError
+	}))
+	_, err := trivialsql.Run(context.Background(), failing, "SELECT * FROM keelson('storm_opts')", nil)
+	assert.ErrorIs(t, err, assert.AnError)
+}
