@@ -51,33 +51,21 @@ planes, and commit one GFS wind forecast as the demo's data.
 ### Subsidiary design decisions
 
 - **SD1 — The reader and its rules.** `grib` and its sub-packages `aec`,
-  `jpeg2000` and `tables` move under `public/science/geo/grib`. They keep the
-  rules they were built under, now recorded here:
-  - *A named subset.* The grid, product and packing templates real producers
-    write are implemented; every other template, flag value or codec feature
-    is refused with `ErrUnsupported` naming it. Adding one is a decision
-    recorded in this ADR's Updates, with its fixture.
-  - *Stored order.* Values come back in the order the message stores them,
-    missing points as NaN, with the scan flags exposed; a raster view applies
-    them once, on request. Nothing is reordered silently.
-  - *Refuse, never guess, never panic.* Malformed bytes fail with
-    `ErrMalformed`, self-contradicting sections with `ErrInconsistent`; a
-    property test holds that no input panics.
-  - *No encoder, no regridding, no names beyond the WMO tables.*
-
-  Package documentation cites this ADR for those rules.
+  `jpeg2000` and `tables` move under `public/science/geo/grib` and keep the
+  rules they were built under, restated below as §R1–§R12 so the package's
+  comments can cite them here.
 
 - **SD2 — Fixtures whose licences are clear.** The producer messages that come
   along are NOAA's (US Government works) and ecCodes' public test files
-  (Apache-2.0, with the notice the licence asks for); the JPEG 2000 codestreams
-  were synthesised for the reader with OpenJPEG and come along too. Messages
-  from DWD and MeteoSwiss (CC BY 4.0) and ECCC (Open Government Licence –
-  Canada) stay out, and the tests that read them are removed. Their loss is
-  one of coverage: they were the only producer files using CCSDS packing
-  (template 5.42), which the `aec` package's unit tests still cover on
-  synthesised data, but no longer end to end. Expected values were produced
-  with ecCodes by a script kept beside the fixtures as text; the oracle stays
-  out of the test lane.
+  (Apache-2.0, with a notice beside them); the messages re-packed from those
+  as CCSDS and JPEG 2000, and the JPEG 2000 codestreams synthesised with
+  OpenJPEG, come along too. Messages from DWD and MeteoSwiss (CC BY 4.0) and
+  ECCC (Open Government Licence – Canada) stay out, and the checks that read
+  them move to carried files. What is lost is a producer's own file for three
+  cases — DWD's CCSDS packing, ECCC's JPEG 2000 on a rotated grid,
+  MeteoSwiss's unstructured grid — each still exercised by a re-packed or
+  ecCodes message. Expected values were produced with ecCodes by a script kept
+  beside the fixtures as text; the oracle stays out of the test lane.
 
 - **SD3 — Tables and the command line.** The WMO code tables (MIT licence, from
   `wmo-im/GRIB2` and `wmo-im/CCT`) are generated into `tables` and embedded,
@@ -106,11 +94,59 @@ planes, and commit one GFS wind forecast as the demo's data.
   committed rather than fetched at build time, so a build stays offline
   ([ADR-0095](./0095-airgapped-build-bundle.md)).
 
+### The reader's rules
+
+- **R1 — The subset is named.** Grid templates 3.0, 3.1, 3.10, 3.20, 3.30,
+  3.40, 3.90 and 3.101; product templates 4.0–4.2, 4.8, 4.11, 4.12 and 4.15,
+  and the 4.0 prefix of any other; packings 5.0, 5.2, 5.3, 5.4, 5.40, 5.41
+  and 5.42; edition 1 with simple packing on lat/lon, rotated and Gaussian
+  grids. Everything else is `ErrUnsupported` naming the feature; adding one is
+  an Update here, with its fixture.
+- **R2 — Stored order, declared.** Values come back in the order the message
+  stores them, missing points as NaN, with the scan flags and row lengths
+  exposed; a point iterator follows that order and a raster view applies the
+  flags once, on request. Nothing is reordered silently.
+- **R3 — Refuse, never guess, never panic.** Bytes that are not GRIB fail with
+  `ErrMalformed`; sections that contradict each other with `ErrInconsistent`,
+  naming both numbers; a property test over mutated fixtures holds that no
+  input panics.
+- **R4 — Framing per message.** Messages are found from any offset, skipping
+  bulletin headers, blocking records and padding; a truncated last message is
+  that message's error while the earlier ones stand; sub-messages share their
+  parent's sections; the end of a message is its length, never a `7777` found
+  in its data.
+- **R5 — Sign-magnitude, all ones missing.** Every signed octet is decoded
+  sign-magnitude, with all ones as missing; angles and scales are applied as
+  coded, longitudes returned as coded.
+- **R6 — Codecs from the standards.** Complex packing and spatial
+  differencing from the WMO Manual; the adaptive entropy coder from CCSDS
+  121.0-B-3; the JPEG 2000 profile producers emit from ITU-T T.800, with what
+  lies outside it refused by name; PNG through the standard library.
+- **R7 — Time is a tuple.** Reference time, forecast offset in its coded unit
+  converted only where the unit has a duration, and for statistical templates
+  the interval and its operator; nothing is "the step".
+- **R8 — Tables are generated data.** WMO code and flag tables and template
+  layouts are generated from WMO's files, versioned and embedded; a parameter
+  is its coded triplet, and a name is an optional lookup.
+- **R9 — Offsets are API.** Every message and field carries its byte offset
+  and length; an index lists them as JSON lines for readers that fetch by
+  byte range.
+- **R10 — Unstructured grids carry their UUID.** Template 3.101 exposes the
+  grid's identifier and nothing more; joining it to its coordinates is the
+  caller's.
+- **R11 — The oracle stays outside the lane.** Fixtures are real or
+  synthesised messages with expected values computed by ecCodes once, by a
+  script kept as text; a full corpus, when present, runs in the integration
+  lane.
+- **R12 — Not built.** No encoder, no regridding, no names beyond the WMO
+  tables, no other format.
+
 ### Deferred and open
 
-- **Q1 — Producer fixtures with attribution terms.** DWD's and MeteoSwiss's
-  files would restore end-to-end CCSDS coverage; carrying them means meeting
-  CC BY 4.0's attribution in the tree. Left until someone wants it.
+- **Q1 — Producer fixtures with attribution terms.** DWD's, MeteoSwiss's and
+  ECCC's files would restore a producer's own file for the three cases SD2
+  names; carrying them means meeting their attribution terms in the tree.
+  Left until someone wants it.
 - **Q2 — Grid-relative components.** Rotating winds on a rotated or projected
   grid to earth-relative ones, which regional models need.
 - **Q3 — Finer data.** GFS at 0.25° is sixteen times the bytes per step; a
@@ -159,8 +195,8 @@ planes, and commit one GFS wind forecast as the demo's data.
 ### Negative
 
 - About 6,600 lines of decoder and 10,000 lines of tables to maintain.
-- CCSDS packing is covered by unit tests only, not by a producer's file, until
-  Q1 is taken up.
+- Three cases are covered by re-packed or ecCodes messages only, not by a
+  producer's own file, until Q1 is taken up.
 - The committed forecast is a snapshot; it ages as a picture, not as code.
 
 ### Neutral
@@ -185,6 +221,21 @@ None. Nothing in boxer reads GRIB today.
 Proposed 2026-10-07.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
+
+## Updates
+
+### 2026-10-08 — M1 built
+
+The reader is in `public/science/geo/grib` with `aec`, `jpeg2000` and `tables`;
+its comments cite §R1–§R12 above. Of its fixtures, the three SD2 leaves out are
+gone with their rows of `expect.tsv`; the checks that read them moved to a
+re-packed CCSDS message and to GFS precipitation for an interval's end.
+Notices sit beside the carried data (`tables/wmo/LICENSE.wmo-im.txt`,
+`testdata/NOTICE.ecCodes.txt`) and in `THIRD_PARTY_NOTICES.md` §2.3. The
+command is `./boxer.sh grib` (`ls`, `dump`, `index`, `tables`); the corpus
+directory of the integration lane is `BOXER_GRIB_CORPUS`. All tests pass
+natively and under `wasip1` in Node's WASI runtime — 96, 7, 6 and 1, with the
+two table-generation tests skipping without the WMO checkouts.
 
 ## References
 

@@ -1,0 +1,8 @@
+The files named ec_* in this directory, and the syn_* files re-packed from
+them, are test data of ecCodes, copyright European Centre for Medium-Range
+Weather Forecasts (ECMWF), published at
+https://sites.ecmwf.int/repository/eccodes/test-data/data/ and licensed under
+the Apache License, Version 2.0. A copy of the licence is at
+https://www.apache.org/licenses/LICENSE-2.0. The ec_* files are unmodified
+apart from the ec_ prefix; the syn_* files were produced from them as
+SOURCES.txt describes.

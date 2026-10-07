@@ -1,0 +1,16 @@
+Embedded tables of public/science/geo/grib/tables (ADR-0292 §R8), derived by
+tables.GenerateE from:
+
+wmo-im/GRIB2 at tag v37 (master table version 37, valid from 2026-06-01)
+    https://github.com/wmo-im/GRIB2 — MIT licence, © World Meteorological
+    Organization. Every GRIB2_CodeFlag_*_CodeTable_en.csv,
+    *_FlagTable_en.csv and GRIB2_Template_*_en.csv reduced to codes.tsv,
+    flags.tsv and templates.tsv; notes dropped, meanings verbatim.
+wmo-im/CCT, common code table C-11 (originating centres), commit
+    8d5866c2 of 2026-04-27
+    https://github.com/wmo-im/CCT — MIT licence. Reduced to centres.tsv.
+
+Regenerate with both checkouts under $BOXER_GRIB_CORPUS as
+wmo-im-GRIB2 and wmo-im-CCT:
+    go test -run TestGenerateWmoTables ./public/science/geo/grib/tables/
+or through ./boxer.sh grib tables --grib2 <dir> --cct <dir> --version vNN.

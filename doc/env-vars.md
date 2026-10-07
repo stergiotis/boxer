@@ -295,11 +295,12 @@ generated-at: 2026-10-07T15:05:11Z
 | `KEELSON_WATCHBILL_KEEP` | duration | `168h` | — |  | watchbill worker: finished job rows older than this are deleted; the event rows stay |
 | `KEELSON_WATCHBILL_POLL` | duration | `5s` | — |  | watchbill worker: interval between queue reads when no wake arrives |
 
-## test-integration (1)
+## test-integration (2)
 
 | Name | Type | Default | CLI flag | Sensitive | Description |
 |------|------|---------|----------|-----------|-------------|
 | `BOXER_CLICKHOUSE_BINARY_PATH` | path | `~/opt/clickhouse/clickhouse` | — |  | path to the clickhouse binary used by leeway DDL test utilities |
+| `BOXER_GRIB_CORPUS` | string | — | — |  | directory of GRIB survey corpora with oracle dumps, and the WMO table checkouts, for the integration lane and the table generator |
 
 ## Origins
 
@@ -340,6 +341,7 @@ generated-at: 2026-10-07T15:05:11Z
 | `BOXER_FS_APPDATA_DIR` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/fsbroker` |
 | `BOXER_GODEP_ROOT` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/introspect/providersgodep` |
 | `BOXER_GODEP_TAGS` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/introspect/providersgodep` |
+| `BOXER_GRIB_CORPUS` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/science/geo/grib/tables` |
 | `BOXER_IMZERO_DEBUG_MODE` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env` |
 | `BOXER_JACKSTAY_PLAN` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/jackstay` |
 | `BOXER_JACKSTAY_TARGET_ENDPOINT` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/db/clickhouse/jackstay` |

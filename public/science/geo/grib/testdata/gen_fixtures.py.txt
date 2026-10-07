@@ -1,0 +1,238 @@
+# Provenance of the fixtures and of expect.tsv (ADR-0292 §R11). Not part of
+# any toolchain: run by hand with the ecCodes Python wheel (2.49.0) as the
+# oracle, on 2026-09-27:
+#   python gen_fixtures.py.txt <corpus dir> <testdata dir>
+# <corpus dir> is the survey corpus (a local directory of producer samples);
+# the producer messages are copied, cut or bzip2-compressed from it, the
+# ecCodes test files copied under an ec_ prefix, and every fixture is then
+# decoded field by field into expect.tsv. Needs: eccodes, numpy, xxhash.
+import sys, os, bz2, struct, math
+import numpy as np, xxhash
+import eccodes as ec
+
+corpus, out = sys.argv[1], sys.argv[2]
+
+def cut_first_message(path, keep_prefix=True):
+    b = open(path, 'rb').read()
+    i = b.find(b'GRIB')
+    if b[i + 7] == 2:
+        L = struct.unpack('>Q', b[i + 8:i + 16])[0]
+    else:
+        L = int.from_bytes(b[i + 4:i + 7], 'big')
+    j = b.find(b'GRIB', i + L)
+    end = j if (keep_prefix and j > 0) else i + L
+    return b[(0 if keep_prefix else i):end]
+
+fixtures = {
+    # producer messages, taken by byte range on 2026-09-27 (SOURCES.txt)
+    'gefs_tmp850.grib2': open(os.path.join(corpus, 'gefs_tmp850.grib2'), 'rb').read(),
+    'gfs_apcp6.grib2': open(os.path.join(corpus, 'gfs_apcp6.grib2'), 'rb').read(),
+    'hrrr_refc.grib2': open(os.path.join(corpus, 'hrrr_refc.grib2'), 'rb').read(),
+    'mrms_refl.grib2': open(os.path.join(corpus, 'mrms_refl.grib2'), 'rb').read(),
+    # ECCC RDPS: JPEG 2000 (JasPer 2.0.28), 12-bit, on a rotated grid
+    # NDFD: the 80-byte blocking record, message 1, and the 40 bytes before message 2
+    'ndfd_temp_msg1.bin': cut_first_message(os.path.join(corpus, 'ndfd_temp_head.bin'), keep_prefix=True),
+    # MeteoSwiss: 16-bit simple packing compresses; DWD ships bz2, so a bz2 fixture is realistic
+}
+for name in ['regular_latlon_surface.grib2', 'regular_latlon_surface_constant.grib2', 'reduced_gaussian_surface.grib2',
+             'reduced_gaussian_pressure_level_constant.grib2', 'regular_gaussian_surface.grib2', 'reduced_gaussian_sub_area.grib2',
+             'reduced_latlon_surface.grib2', 'gfs.complex.mvmu.grib2', 'gfs.c255.grib2', 'grid_complex_spatial_differencing.grib2',
+             'grid_ieee.grib', 'mercator.grib2', 'constant_field.grib2', 'test_uuid.grib2', 'tigge_pf_ecmwf.grib2',
+             'multi_created.grib2', 'run_length_packing.grib2', 'spherical_pressure_level.grib2', 'gts.grib', 'pad.grib', 'bad.grib',
+             'regular_latlon_surface.grib1', 'regular_latlon_surface_constant.grib1', 'regular_gaussian_surface.grib1',
+             'reduced_gaussian_surface.grib1', 'reduced_gaussian_pressure_level_constant.grib1', 'constant_field.grib1',
+             'timeRangeIndicator_5.grib', 'timeRangeIndicator_10.grib', 'tp_ecmwf.grib', 'simple_bitmap.grib', 'simple.grib',
+             'gen_ext_spd_2.grib', 'spherical_pressure_level.grib1', 'missing_field.grib1', 'msl.octa.glob.grib1',
+             'reduced_gaussian_sub_area.grib1', 'jpeg.grib2', 'reduced_gaussian_surface_jpeg.grib2']:
+    fixtures['ec_' + name] = open(os.path.join(corpus, 'eccodes', name), 'rb').read()
+
+# Synthetic CCSDS fixtures (M2): ecCodes re-packs the 496-point
+# regular_latlon_surface field as grid_ccsds under every parameter set the
+# reader must decode — resolution 1 to 32 bits, every block size, short
+# reference intervals, the preprocessor off (flags 4), the restricted option
+# set (flags 30), padding at interval boundaries (flags 46), a high-entropy
+# field and one of all-zero blocks. The oracle's own encoder is libaec; the
+# expectations are what it decodes back.
+_src = os.path.join(corpus, 'eccodes', 'regular_latlon_surface.grib2')
+with open(_src, 'rb') as _f:
+    _h = ec.codes_grib_new_from_file(_f)
+_vals = ec.codes_get_values(_h)
+_rng = np.random.default_rng(1)
+def ccsds(bits, block, rsi, flags, values):
+    g = ec.codes_clone(_h)
+    ec.codes_set(g, 'packingType', 'grid_ccsds')
+    ec.codes_set(g, 'ccsdsBlockSize', block); ec.codes_set(g, 'ccsdsRsi', rsi); ec.codes_set(g, 'ccsdsFlags', flags)
+    ec.codes_set(g, 'bitsPerValue', bits)
+    ec.codes_set_values(g, values)
+    msg = ec.codes_get_message(g)
+    ec.codes_release(g)
+    return msg
+for _bits in [1, 2, 3, 4, 5, 8, 12, 16, 17, 20, 24, 25, 31, 32]:
+    fixtures['syn_ccsds_b%d_j32_r128_f14.grib2' % _bits] = ccsds(_bits, 32, 128, 14, _vals)
+for _block in [8, 16, 64]:
+    fixtures['syn_ccsds_b12_j%d_r128_f14.grib2' % _block] = ccsds(12, _block, 128, 14, _vals)
+for _rsi in [1, 2, 7]:
+    fixtures['syn_ccsds_b12_j32_r%d_f14.grib2' % _rsi] = ccsds(12, 32, _rsi, 14, _vals)
+fixtures['syn_ccsds_b12_j32_r128_f4.grib2'] = ccsds(12, 32, 128, 4, _vals)
+fixtures['syn_ccsds_b3_j32_r128_f30.grib2'] = ccsds(3, 32, 128, 30, _vals)
+fixtures['syn_ccsds_b2_j32_r128_f30.grib2'] = ccsds(2, 32, 128, 30, _vals)
+fixtures['syn_ccsds_b12_j32_r128_f46.grib2'] = ccsds(12, 32, 128, 46, _vals)
+fixtures['syn_ccsds_b12_noise.grib2'] = ccsds(12, 32, 128, 14, _rng.uniform(250, 320, size=len(_vals)))
+fixtures['syn_ccsds_b16_noise.grib2'] = ccsds(16, 32, 128, 14, _rng.uniform(250, 320, size=len(_vals)))
+_flat = np.full(len(_vals), 280.0); _flat[100:110] = 281.0
+fixtures['syn_ccsds_b12_zeroblocks.grib2'] = ccsds(12, 32, 128, 14, _flat)
+
+# Synthetic JPEG 2000 fixtures (M4): the oracle's encoder is OpenJPEG, a
+# second writer beside the corpus's JasPer, at several depths, on the JMA
+# field with its bitmap, and as a constant field.
+def jpeg(bits, values, h0=None):
+    # The oracle's JPEG 2000 packer takes missing points as its default
+    # missing value (9999) under a bitmap, not as NaN.
+    g = ec.codes_clone(h0 or _h)
+    ec.codes_set(g, 'packingType', 'grid_jpeg')
+    ec.codes_set(g, 'bitsPerValue', bits)
+    ec.codes_set_values(g, values)
+    msg = ec.codes_get_message(g)
+    ec.codes_release(g)
+    return msg
+for _bits in [1, 4, 8, 12, 16]:
+    fixtures['syn_jpeg_b%d.grib2' % _bits] = jpeg(_bits, _vals)
+fixtures['syn_jpeg_b16_noise.grib2'] = jpeg(16, _rng.uniform(250, 320, size=len(_vals)))
+with open(os.path.join(corpus, 'eccodes', 'grid_complex_spatial_differencing.grib2'), 'rb') as _f:
+    _hj = ec.codes_grib_new_from_file(_f)
+fixtures['syn_jpeg_b12_bitmap.grib2'] = jpeg(12, ec.codes_get_values(_hj), _hj)
+ec.codes_release(_hj)
+ec.codes_release(_h)
+
+for name, data in fixtures.items():
+    with open(os.path.join(out, name), 'wb') as f:
+        f.write(data)
+
+UNIT_SECONDS = {0: 60, 1: 3600, 2: 86400, 10: 3 * 3600, 11: 6 * 3600, 12: 12 * 3600, 13: 1}
+REFUSED_DRT = {
+               50: 'packing template 5.50', 51: 'packing template 5.51', 200: 'packing template 5.200'}
+POINT_GRIDS = {0, 1, 40}
+
+def g(h, k, default=None):
+    try:
+        if not ec.codes_is_defined(h, k):
+            return default
+        return ec.codes_get(h, k)
+    except Exception:
+        return default
+
+rows = []
+ec.codes_grib_multi_support_on()
+for name in sorted(fixtures):
+    raw = fixtures[name]
+    if name.endswith('.bz2'):
+        raw = bz2.decompress(raw)
+    tmp = os.path.join(out, '.decoded.tmp')
+    open(tmp, 'wb').write(raw)
+    with open(tmp, 'rb') as f:
+        msg, field, last_off = 0, 0, -1
+        while True:
+            try:
+                h = ec.codes_grib_new_from_file(f)
+            except Exception as e:
+                rows.append([name, str(msg + 1), '1'] + [''] * 20 + ['malformed'])
+                break
+            if h is None:
+                break
+            off = g(h, 'offset')
+            if off != last_off:
+                msg += 1; field = 0; last_off = off
+            field += 1
+            ed = g(h, 'edition')
+            cells = [name, str(msg), str(field), str(ed), str(int(off)), str(g(h, 'totalLength'))]
+            if ed == 1:
+                # Edition 1: the representation type stands in the grid column,
+                # the time range indicator in the product column.
+                rep = g(h, 'dataRepresentationType'); tri = g(h, 'timeRangeIndicator')
+                ni = g(h, 'Ni'); nj = g(h, 'Nj')
+                ni = '' if ni in (None, 65535, 2147483647) else str(ni)
+                nj = '' if nj in (None, 65535, 2147483647) else str(nj)
+                npts = g(h, 'numberOfDataPoints')
+                year, month, day, hour, minute = (g(h, k, 0) for k in ['year', 'month', 'day', 'hour', 'minute'])
+                ref = f'{year:04d}{month:02d}{day:02d}{hour:02d}{minute:02d}00'
+                ec.codes_set(h, 'stepUnits', 's')
+                start_s, end_s = g(h, 'startStep'), g(h, 'endStep')
+                iend = ''
+                if tri in (2, 3, 4, 5):
+                    import datetime
+                    iend = (datetime.datetime(year, month, day, hour, minute) + datetime.timedelta(seconds=int(end_s))).strftime('%Y%m%d%H%M%S')
+                cells += ['', str(ec.codes_get(h, 'centre', int)), str(rep), str(tri), '', ni, nj, str(npts), ref, str(int(start_s)), iend]
+                pt = g(h, 'packingType', '')
+                refused = None
+                if pt.startswith('spectral'):
+                    refused = 'grib1 spectral packing'
+                elif pt.startswith('grid_second_order'):
+                    refused = 'grib1 second-order packing'
+                if refused:
+                    rows.append(cells + [''] * 6 + ['unsupported:' + refused])
+                    ec.codes_release(h); continue
+                ec.codes_set(h, 'missingValue', math.nan)
+                v = ec.codes_get_values(h).astype('<f8')
+                assert len(v) == npts, (name, len(v), npts)
+                miss = int(np.isnan(v).sum()); good = v[~np.isnan(v)]
+                canon = v.copy(); canon[np.isnan(canon)] = np.frombuffer(struct.pack('<Q', 0x7FF8000000000000), dtype='<f8')[0]
+                digest = xxhash.xxh3_64_hexdigest(canon.tobytes())
+                stats = [str(miss), repr(float(good.min())) if len(good) else '', repr(float(good.max())) if len(good) else '', repr(float(good.sum())) if len(good) else '0.0', digest]
+                points = ''
+                if rep in (0, 4, 10):
+                    if g(h, 'PLPresent', 0) == 1 and g(h, 'global', 1) != 1:
+                        points = 'unsupported'
+                    else:
+                        lats = ec.codes_get_array(h, 'latitudes'); lons = ec.codes_get_array(h, 'longitudes')
+                        idx = sorted(set([0, npts // 3, npts // 2, 2 * npts // 3, npts - 1]))
+                        points = ';'.join('%d=%.5f/%.5f' % (i, lats[i], lons[i]) for i in idx)
+                rows.append(cells + stats + [points, 'ok'])
+                ec.codes_release(h); continue
+            gdt, pdt, drt = g(h, 'gridDefinitionTemplateNumber'), g(h, 'productDefinitionTemplateNumber'), g(h, 'dataRepresentationTemplateNumber')
+            ni = g(h, 'Ni'); nj = g(h, 'Nj')
+            ni = '' if ni in (None, 2147483647) else str(ni)
+            nj = '' if nj in (None, 2147483647) else str(nj)
+            npts = g(h, 'numberOfDataPoints')
+            year, month, day, hour, minute, second = (g(h, k, 0) for k in ['year', 'month', 'day', 'hour', 'minute', 'second'])
+            ref = f'{year:04d}{month:02d}{day:02d}{hour:02d}{minute:02d}{second:02d}'
+            unit = g(h, 'indicatorOfUnitOfTimeRange'); ft = g(h, 'forecastTime')
+            fcst = str(ft * UNIT_SECONDS[unit]) if (unit in UNIT_SECONDS and ft is not None) else ''
+            iend = ''
+            if pdt in (8, 9, 10, 11, 12, 13, 14, 15):
+                iend = '%04d%02d%02d%02d%02d%02d' % tuple(g(h, k, 0) for k in ['yearOfEndOfOverallTimeInterval', 'monthOfEndOfOverallTimeInterval', 'dayOfEndOfOverallTimeInterval', 'hourOfEndOfOverallTimeInterval', 'minuteOfEndOfOverallTimeInterval', 'secondOfEndOfOverallTimeInterval'])
+            cells += [str(g(h, 'discipline')), str(ec.codes_get(h, 'centre', int)), str(gdt), str(pdt), str(drt), ni, nj, str(npts), ref, fcst, iend]
+            bmi = g(h, 'bitMapIndicator', 255)
+            refused = REFUSED_DRT.get(drt)
+            if refused is None and bmi not in (0, 255):
+                refused = 'bitmap indicator %d' % bmi
+            if refused:
+                rows.append(cells + [''] * 6 + ['unsupported:' + refused])
+                ec.codes_release(h); continue
+            ec.codes_set(h, 'missingValue', math.nan)
+            v = ec.codes_get_values(h).astype('<f8')
+            assert len(v) == npts, (name, len(v), npts)
+            miss = int(np.isnan(v).sum())
+            good = v[~np.isnan(v)]
+            # canonical NaN so the digest is reproducible across languages
+            canon = v.copy(); canon[np.isnan(canon)] = np.frombuffer(struct.pack('<Q', 0x7FF8000000000000), dtype='<f8')[0]
+            digest = xxhash.xxh3_64_hexdigest(canon.tobytes())
+            stats = [str(miss), repr(float(good.min())) if len(good) else '', repr(float(good.max())) if len(good) else '', repr(float(good.sum())) if len(good) else '0.0', digest]
+            points = ''
+            if gdt in POINT_GRIDS:
+                if g(h, 'PLPresent', 0) == 1 and g(h, 'global', 1) != 1:
+                    points = 'unsupported'
+                else:
+                    lats = ec.codes_get_array(h, 'latitudes'); lons = ec.codes_get_array(h, 'longitudes')
+                    idx = sorted(set([0, npts // 3, npts // 2, 2 * npts // 3, npts - 1]))
+                    points = ';'.join('%d=%.5f/%.5f' % (i, lats[i], lons[i]) for i in idx)
+            rows.append(cells + stats + [points, 'ok'])
+            ec.codes_release(h)
+    os.remove(tmp)
+
+hdr = ['file', 'msg', 'field', 'edition', 'offset', 'length', 'discipline', 'centre', 'gdt', 'pdt', 'drt', 'ni', 'nj', 'npoints', 'reftime', 'fcst_s', 'interval_end', 'nmissing', 'min', 'max', 'sum', 'xxh3', 'points', 'result']
+with open(os.path.join(out, 'expect.tsv'), 'w') as f:
+    f.write('\t'.join(hdr) + '\n')
+    for r in rows:
+        assert len(r) == len(hdr), (len(r), r[:3])
+        f.write('\t'.join(r) + '\n')
+print(len(rows), 'rows')

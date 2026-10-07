@@ -511,6 +511,24 @@ Only the `Regular` weight of IDS Mono is embedded; the five upstream
 italic/bold variants are not vendored. PragmataPro is never shipped -- it is a
 personal-install monospace override (ADR-0030 section SD11).
 
+### 2.3 GRIB reader data: WMO code tables and ecCodes test files (public/science/geo/grib)
+
+The GRIB reader (ADR-0292) carries data, not code, from two third parties:
+
+- **WMO code tables** -- `public/science/geo/grib/tables/wmo/*.tsv`, reduced
+  from <https://github.com/wmo-im/GRIB2> and <https://github.com/wmo-im/CCT>
+  and embedded in the reader. MIT; Copyright (c) World Meteorological
+  Organization. License text:
+  [`.../wmo/LICENSE.wmo-im.txt`](public/science/geo/grib/tables/wmo/LICENSE.wmo-im.txt);
+  origin and versions in `.../wmo/SOURCES.txt`.
+- **ecCodes test data** -- `public/science/geo/grib/testdata/ec_*` and the
+  `syn_*` messages re-packed from them, used by tests only and not built into
+  any binary. Apache-2.0; Copyright ECMWF. Notice:
+  [`.../testdata/NOTICE.ecCodes.txt`](public/science/geo/grib/testdata/NOTICE.ecCodes.txt).
+
+The remaining fixtures beside them are NOAA products, works of the US
+Government, as `.../testdata/SOURCES.txt` records per file.
+
 ## 3. Module-level Go dependencies
 
 The authoritative list of Go module dependencies is `go.mod` (with

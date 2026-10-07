@@ -50,6 +50,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/profiling/pprofhttp"
 	"github.com/stergiotis/boxer/public/observability/tracing"
 	"github.com/stergiotis/boxer/public/observability/vcs"
+	"github.com/stergiotis/boxer/public/science/geo/grib"
 	"github.com/stergiotis/boxer/public/semistructured/cbor"
 	lw "github.com/stergiotis/boxer/public/semistructured/leeway/cli"
 	"github.com/urfave/cli/v2"
@@ -142,6 +143,7 @@ func mainC() (exitCode int) {
 			markdown.NewCliCommand(),
 			sample.NewCliCommand(),
 			swisstopo.NewCliCommand(),
+			grib.NewCliCommand(),
 			sysmetricsd.NewCliCommand(),
 			watch.NewCliCommand(),
 			// Codegen tools folded from cmd/* mains (entry-point standard).
