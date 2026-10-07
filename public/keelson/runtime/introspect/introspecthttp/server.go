@@ -165,6 +165,10 @@ func (s *Server) BaseURL() string { return "http://" + s.Addr() }
 // Stop gracefully shuts the server down.
 func (s *Server) Stop(ctx context.Context) error { return s.srv.Shutdown(ctx) }
 
+// Handler is the server's routes, for serving them without a listener — in
+// process, as a browser tab does through [InProcess] (ADR-0290 §SD4).
+func (s *Server) Handler() http.Handler { return s.srv.Handler }
+
 func (s *Server) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /tables", s.handleTables)

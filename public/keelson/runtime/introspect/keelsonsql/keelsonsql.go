@@ -14,6 +14,8 @@
 package keelsonsql
 
 import (
+	"crypto/sha256" //boxer:lint disable=CS009 reason="names a TEMPORARY table after a call's resolved arguments; not a security boundary"
+	"encoding/hex"
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
@@ -54,10 +56,11 @@ func References(sql string) (names []string) {
 	seen := make(map[string]struct{}, len(calls))
 	names = make([]string, 0, len(calls))
 	for _, fn := range calls {
-		name, argErr := tableArg(fn)
+		call, argErr := parseCall(fn)
 		if argErr != nil {
 			continue
 		}
+		name := call.Name
 		if _, dup := seen[name]; dup {
 			continue
 		}
@@ -170,15 +173,16 @@ func RewriteAliases(sql string, bindings map[string]string) (result string) {
 	rw := nanopass.NewRewriter(pr)
 	changed := false
 	for _, fn := range findCalls(pr) {
-		name, argErr := tableArg(fn)
+		call, argErr := parseCall(fn)
 		if argErr != nil {
 			continue // leave a malformed call for the server to reject
 		}
-		handle, ok := bindings[name]
+		handle, ok := bindings[call.Name]
 		if !ok {
 			continue // unbound names pass through untouched
 		}
-		nanopass.ReplaceNode(rw, fn, FuncName+"('"+handle+"')")
+		// The name argument alone, so a call's named arguments survive.
+		nanopass.ReplaceNode(rw, call.nameNode, "'"+handle+"'")
 		changed = true
 	}
 	// Bare names: a plain, unqualified relation in any FROM/JOIN — not a
@@ -235,17 +239,113 @@ func expand(reg *introspect.Registry, sql string, target func(name string, p int
 	}
 	rw := nanopass.NewRewriter(pr)
 	for _, fn := range calls {
-		name, argErr := tableArg(fn)
+		call, argErr := parseCall(fn)
 		if argErr != nil {
 			return "", argErr
 		}
-		p, ok := reg.Lookup(name)
+		p, ok := reg.Lookup(call.Name)
 		if !ok {
-			return "", eb.Build().Str("name", name).Errorf("keelsonsql: unknown keelson table")
+			return "", eb.Build().Str("name", call.Name).Errorf("keelsonsql: unknown keelson table")
 		}
-		nanopass.ReplaceNode(rw, fn, target(name, p))
+		if len(call.Args) > 0 {
+			// Arguments are resolved against the query's parameters, which
+			// only ExpandWithArgs is given (ADR-0290 §SD2).
+			return "", eb.Build().Str("name", call.Name).Errorf("keelsonsql: keelson() with named arguments is resolved by the introspection engine, not on this path")
+		}
+		nanopass.ReplaceNode(rw, fn, target(call.Name, p))
 	}
 	return nanopass.GetText(rw), nil
+}
+
+// ArgCall is one keelson() call with named arguments, resolved for a run:
+// the provider's table, the TEMPORARY table the statement now reads in its
+// place, and the arguments' value texts by name.
+type ArgCall struct {
+	Table string
+	Temp  string
+	Raw   map[string]string
+}
+
+// ExpandWithArgs is the in-process engine's rewrite (ADR-0290 §SD2): every
+// keelson() call becomes a bare TEMPORARY-table reference, as BareNamePass
+// does, except a sealed dataset, which becomes url() against sealedBaseURL
+// when it is non-empty (SplitPass). A call with named arguments takes each
+// value from its literal or, for a `{slot:Type}` placeholder, from params by
+// bare name; the arguments are checked and typed against the provider's
+// declaration, and the call is renamed to a TEMPORARY table of its own, so
+// two calls with different values are two tables. Those calls are returned
+// for the engine to snapshot; calls without arguments are not, since the
+// engine finds them by name as before.
+func ExpandWithArgs(reg *introspect.Registry, sealedBaseURL, sql string, params map[string]string) (result string, argCalls []ArgCall, err error) {
+	pr, err := nanopass.Parse(sql)
+	if err != nil {
+		return "", nil, eh.Errorf("keelsonsql: parse: %w", err)
+	}
+	calls := findCalls(pr)
+	if len(calls) == 0 {
+		return sql, nil, nil
+	}
+	var url func(string, introspect.Provider) string
+	if sealedBaseURL != "" {
+		url = urlTarget(sealedBaseURL)
+	}
+	rw := nanopass.NewRewriter(pr)
+	seen := make(map[string]struct{})
+	for _, fn := range calls {
+		call, argErr := parseCall(fn)
+		if argErr != nil {
+			return "", nil, argErr
+		}
+		p, ok := reg.Lookup(call.Name)
+		if !ok {
+			return "", nil, eb.Build().Str("name", call.Name).Errorf("keelsonsql: unknown keelson table")
+		}
+		_, sealed := p.(introspect.EncryptedDatasetI)
+		if len(call.Args) == 0 {
+			if sealed && url != nil {
+				nanopass.ReplaceNode(rw, fn, url(call.Name, p))
+			} else {
+				nanopass.ReplaceNode(rw, fn, call.Name)
+			}
+			continue
+		}
+		if sealed {
+			return "", nil, eb.Build().Str("name", call.Name).Errorf("keelsonsql: a sealed dataset takes no arguments")
+		}
+		var raw map[string]string
+		raw, err = call.values(params)
+		if err != nil {
+			return "", nil, err
+		}
+		ap, takes := p.(introspect.ArgsProviderI)
+		if !takes {
+			return "", nil, eb.Build().Str("name", call.Name).Errorf("keelsonsql: the keelson table takes no arguments")
+		}
+		var args introspect.Args
+		args, err = introspect.ResolveArgs(ap.Args(), raw)
+		if err != nil {
+			return "", nil, eb.Build().Str("name", call.Name).Errorf("keelsonsql: %w", err)
+		}
+		temp := argTableName(call.Name, args.Key())
+		nanopass.ReplaceNode(rw, fn, temp)
+		if _, dup := seen[temp]; !dup {
+			seen[temp] = struct{}{}
+			argCalls = append(argCalls, ArgCall{Table: call.Name, Temp: temp, Raw: raw})
+		}
+	}
+	return nanopass.GetText(rw), argCalls, nil
+}
+
+// argTableName is the TEMPORARY table a call with arguments is read from:
+// the provider's name and a digest of the resolved values, within the
+// 64-byte identifier limit.
+func argTableName(name string, key string) (temp string) {
+	sum := sha256.Sum256([]byte(name + "\x00" + key))
+	suffix := "__a" + hex.EncodeToString(sum[:8])
+	if len(name)+len(suffix) > 64 {
+		name = name[:64-len(suffix)]
+	}
+	return name + suffix
 }
 
 // findCalls returns every keelson(...) table-function call in pr, in
@@ -257,11 +357,7 @@ func expand(reg *introspect.Registry, sql string, target func(name string, p int
 func findCalls(pr *nanopass.ParseResult) (calls []*grammar1.TableFunctionExprContext) {
 	nodes := nanopass.FindAll(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
 		fn, ok := ctx.(*grammar1.TableFunctionExprContext)
-		if !ok {
-			return false
-		}
-		id := fn.Identifier()
-		return id != nil && strings.EqualFold(nanopass.DecodeIdentifier(id.GetText()), FuncName)
+		return ok && IsCall(fn)
 	})
 	calls = make([]*grammar1.TableFunctionExprContext, 0, len(nodes))
 	for _, n := range nodes {
@@ -270,28 +366,194 @@ func findCalls(pr *nanopass.ParseResult) (calls []*grammar1.TableFunctionExprCon
 	return
 }
 
-// tableArg extracts the single table-name argument from keelson(...). It
-// accepts a quoted literal (keelson('env')) or a bare identifier
-// (keelson(env)).
-func tableArg(fn *grammar1.TableFunctionExprContext) (name string, err error) {
+// callArg is one named argument of a keelson() call: its value is a
+// literal's text, or the name of the query parameter a `{slot:Type}`
+// placeholder binds.
+type callArg struct {
+	key     string
+	literal string
+	slot    string
+}
+
+// call is a parsed keelson(...) call: the table name, the node that spells
+// it, and the named arguments in source order.
+type call struct {
+	Name     string
+	Args     []callArg
+	nameNode antlr.ParserRuleContext
+}
+
+// values resolves the arguments' value texts, a placeholder's from params by
+// bare name.
+func (inst call) values(params map[string]string) (raw map[string]string, err error) {
+	raw = make(map[string]string, len(inst.Args))
+	for _, a := range inst.Args {
+		if a.slot == "" {
+			raw[a.key] = a.literal
+			continue
+		}
+		v, ok := params[a.slot]
+		if !ok {
+			return nil, eb.Build().Str("name", inst.Name).Str("arg", a.key).Str("param", a.slot).Errorf("keelsonsql: the argument's query parameter is not bound")
+		}
+		raw[a.key] = v
+	}
+	return
+}
+
+// parseCall reads a keelson(...) call: the table name first — a quoted
+// literal (keelson('env')) or a bare identifier (keelson(env)) — then any
+// number of named arguments `key = value`, where value is a literal or a
+// `{slot:Type}` placeholder (ADR-0290 §SD1). A key may appear once.
+func parseCall(fn *grammar1.TableFunctionExprContext) (c call, err error) {
 	al := fn.TableArgList()
 	if al == nil {
-		return "", eh.Errorf("keelsonsql: keelson() needs exactly one table-name argument")
+		return c, eh.Errorf("keelsonsql: keelson() needs a table-name argument")
 	}
 	args := al.AllTableArgExpr()
-	if len(args) != 1 {
-		return "", eb.Build().Int("args", len(args)).Errorf("keelsonsql: keelson() takes exactly one argument")
+	if len(args) == 0 {
+		return c, eh.Errorf("keelsonsql: keelson() needs a table-name argument")
 	}
-	arg := args[0]
-	if lit := arg.Literal(); lit != nil {
-		t := lit.GetText()
-		if len(t) >= 2 && t[0] == '\'' && t[len(t)-1] == '\'' {
-			return t[1 : len(t)-1], nil
+	first := args[0]
+	c.nameNode = first
+	switch {
+	case first.Literal() != nil:
+		t := first.Literal().GetText()
+		if len(t) < 2 || t[0] != '\'' || t[len(t)-1] != '\'' {
+			return c, eb.Build().Str("arg", t).Errorf("keelsonsql: keelson() argument must be a quoted table name")
 		}
-		return "", eb.Build().Str("arg", t).Errorf("keelsonsql: keelson() argument must be a quoted table name")
+		c.Name = t[1 : len(t)-1]
+	case first.NestedIdentifier() != nil:
+		c.Name = nanopass.DecodeIdentifier(first.NestedIdentifier().GetText())
+	default:
+		return c, eh.Errorf("keelsonsql: unsupported keelson() argument (use keelson('table'))")
 	}
-	if ni := arg.NestedIdentifier(); ni != nil {
-		return nanopass.DecodeIdentifier(ni.GetText()), nil
+	keys := make(map[string]struct{}, len(args)-1)
+	for _, a := range args[1:] {
+		var ca callArg
+		ca, err = parseNamedArg(a)
+		if err != nil {
+			return c, eb.Build().Str("name", c.Name).Errorf("%w", err)
+		}
+		if _, dup := keys[ca.key]; dup {
+			return c, eb.Build().Str("name", c.Name).Str("arg", ca.key).Errorf("keelsonsql: keelson() names an argument twice")
+		}
+		keys[ca.key] = struct{}{}
+		c.Args = append(c.Args, ca)
 	}
-	return "", eh.Errorf("keelsonsql: unsupported keelson() argument (use keelson('table'))")
+	return
+}
+
+// parseNamedArg reads `key = literal` or `key = {slot:Type}`.
+func parseNamedArg(a grammar1.ITableArgExprContext) (ca callArg, err error) {
+	eq, ok := a.ColumnExpr().(*grammar1.ColumnExprPrecedence3Context)
+	if !ok || eq.EQ_SINGLE() == nil || len(eq.AllColumnExpr()) != 2 {
+		return ca, eb.Build().Str("arg", a.GetText()).Errorf("keelsonsql: keelson() takes named arguments after the table name, as key = value")
+	}
+	sides := eq.AllColumnExpr()
+	id, ok := sides[0].(*grammar1.ColumnExprIdentifierContext)
+	if !ok {
+		return ca, eb.Build().Str("arg", a.GetText()).Errorf("keelsonsql: a keelson() argument's name must be an identifier")
+	}
+	ca.key = nanopass.DecodeIdentifier(id.GetText())
+	if !introspect.ValidTableName(ca.key) {
+		return ca, eb.Build().Str("arg", ca.key).Errorf("keelsonsql: a keelson() argument's name must be an identifier")
+	}
+	switch v := sides[1].(type) {
+	case *grammar1.ColumnExprParamSlotContext:
+		ca.slot = nanopass.DecodeIdentifier(v.ParamSlot().Identifier().GetText())
+	case *grammar1.ColumnExprLiteralContext:
+		ca.literal, err = literalText(v.Literal())
+	case *grammar1.ColumnExprNegateContext:
+		lit, isLit := v.ColumnExpr().(*grammar1.ColumnExprLiteralContext)
+		if !isLit || lit.Literal().NumberLiteral() == nil {
+			return ca, eb.Build().Str("arg", ca.key).Errorf("keelsonsql: a keelson() argument's value must be a literal or a {slot:Type} parameter")
+		}
+		ca.literal = "-" + lit.Literal().GetText()
+	default:
+		return ca, eb.Build().Str("arg", ca.key).Errorf("keelsonsql: a keelson() argument's value must be a literal or a {slot:Type} parameter")
+	}
+	return
+}
+
+// literalText is a literal's value as text: a string literal unquoted, a
+// number as written. NULL is refused; an argument has a value or is left out.
+func literalText(lit grammar1.ILiteralContext) (text string, err error) {
+	switch {
+	case lit.NumberLiteral() != nil:
+		return lit.GetText(), nil
+	case lit.STRING_LITERAL() != nil:
+		return unquoteString(lit.GetText()), nil
+	default:
+		return "", eb.Build().Str("literal", lit.GetText()).Errorf("keelsonsql: a keelson() argument cannot be NULL; leave it out")
+	}
+}
+
+// unquoteString decodes a ClickHouse single-quoted string literal: the
+// quotes are dropped, and a backslash escape or a doubled quote is undone.
+func unquoteString(s string) string {
+	if len(s) < 2 {
+		return s
+	}
+	body := s[1 : len(s)-1]
+	var sb strings.Builder
+	for i := 0; i < len(body); i++ {
+		c := body[i]
+		switch {
+		case c == '\\' && i+1 < len(body):
+			i++
+			sb.WriteByte(body[i])
+		case c == '\'' && i+1 < len(body) && body[i+1] == '\'':
+			i++
+			sb.WriteByte('\'')
+		default:
+			sb.WriteByte(c)
+		}
+	}
+	return sb.String()
+}
+
+// IsCall reports whether fn is a keelson(...) table-function call.
+func IsCall(fn *grammar1.TableFunctionExprContext) (yes bool) {
+	id := fn.Identifier()
+	return id != nil && strings.EqualFold(nanopass.DecodeIdentifier(id.GetText()), FuncName)
+}
+
+// ResolveCall resolves one keelson(...) call for a run without rewriting
+// anything: the registered provider it names and its arguments' value
+// texts, a placeholder's taken from params by bare name. It is what a
+// reader that answers the call itself — rather than handing SQL to
+// ClickHouse — needs (ADR-0290 §SD3). Arguments are checked against the
+// provider's declaration; a sealed dataset is refused, since only the
+// loopback source can open one.
+func ResolveCall(reg *introspect.Registry, fn *grammar1.TableFunctionExprContext, params map[string]string) (p introspect.Provider, raw map[string]string, err error) {
+	if !IsCall(fn) {
+		return nil, nil, eb.Build().Str("fn", fn.GetText()).Errorf("keelsonsql: not a keelson() call")
+	}
+	c, err := parseCall(fn)
+	if err != nil {
+		return nil, nil, err
+	}
+	p, ok := reg.Lookup(c.Name)
+	if !ok {
+		return nil, nil, eb.Build().Str("name", c.Name).Errorf("keelsonsql: unknown keelson table")
+	}
+	if _, sealed := p.(introspect.EncryptedDatasetI); sealed {
+		return nil, nil, eb.Build().Str("name", c.Name).Errorf("keelsonsql: a sealed dataset is read through the introspection source, not here")
+	}
+	raw, err = c.values(params)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(raw) == 0 {
+		raw = nil
+	}
+	if ap, takes := p.(introspect.ArgsProviderI); takes {
+		if _, err = introspect.ResolveArgs(ap.Args(), raw); err != nil {
+			return nil, nil, eb.Build().Str("name", c.Name).Errorf("keelsonsql: %w", err)
+		}
+	} else if len(raw) > 0 {
+		return nil, nil, eb.Build().Str("name", c.Name).Errorf("keelsonsql: the keelson table takes no arguments")
+	}
+	return
 }

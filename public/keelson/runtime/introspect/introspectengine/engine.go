@@ -113,24 +113,25 @@ func (e *Engine) QueryParams(ctx context.Context, sql, format string, params map
 	// Expand keelson('x') table-function macros before analysis (ADR-0094
 	// §SD4): an ordinary table to its bare TEMPORARY-table name —
 	// keelson('env') and env are interchangeable — and a sealed dataset,
-	// where a source is known, to url() against it. An unknown keelson
-	// table fails fast here.
+	// where a source is known, to url() against it. A call with named
+	// arguments is resolved against params and becomes a TEMPORARY table of
+	// its own (ADR-0290 §SD2). An unknown keelson table fails fast here.
+	sealedBase := ""
 	if base := e.sealedBaseURL.Load(); base != nil {
-		sql, err = keelsonsql.RewriteSplit(e.reg, *base, sql)
-	} else {
-		sql, err = keelsonsql.RewriteToBare(e.reg, sql)
+		sealedBase = *base
 	}
+	sql, argCalls, err := keelsonsql.ExpandWithArgs(e.reg, sealedBase, sql, params)
 	if err != nil {
 		return nil, "", err
 	}
 	p := e.plan(sql)
-	body, contentType, err = e.exec(ctx, sql, format, params, p.tables, p.proj)
+	body, contentType, err = e.exec(ctx, sql, format, params, p.tables, p.proj, argCalls)
 	if err != nil && p.pruned {
 		// Conservative fallback (ADR-0094 §SD4): a pruned column set may
 		// have dropped a column the analyser missed. Retry once with all
 		// columns before surfacing the error.
 		e.log.Debug().Err(err).Str("sql", sql).Msg("introspectengine: pruned query failed; retrying with all columns")
-		body, contentType, err = e.exec(ctx, sql, format, params, p.tables, allColumns(p.tables))
+		body, contentType, err = e.exec(ctx, sql, format, params, p.tables, allColumns(p.tables), argCalls)
 	}
 	return
 }
@@ -210,10 +211,25 @@ func (e *Engine) plan(sql string) (p queryPlan) {
 	return
 }
 
-// exec snapshots the referenced tables under proj and runs sql via the
+// exec snapshots the referenced tables under proj, and each call with
+// named arguments whole under its TEMPORARY name, and runs sql via the
 // chlocal broker.
-func (e *Engine) exec(ctx context.Context, sql, format string, params map[string]string, tables []string, proj map[string]introspect.Projection) (body []byte, contentType string, err error) {
+func (e *Engine) exec(ctx context.Context, sql, format string, params map[string]string, tables []string, proj map[string]introspect.Projection, argCalls []keelsonsql.ArgCall) (body []byte, contentType string, err error) {
 	var inputs map[string][]byte
+	for _, c := range argCalls {
+		prov, ok := e.reg.Lookup(c.Table)
+		if !ok {
+			return nil, "", eb.Build().Str("table", c.Table).Errorf("introspectengine: the keelson table was unregistered during the run")
+		}
+		b, snapErr := introspect.SnapshotCallFile(prov, introspect.AllColumns(), c.Raw)
+		if snapErr != nil {
+			return nil, "", eb.Build().Str("table", c.Table).Errorf("introspectengine: snapshot failed: %w", snapErr)
+		}
+		if inputs == nil {
+			inputs = make(map[string][]byte, len(tables)+len(argCalls))
+		}
+		inputs[c.Temp] = b
+	}
 	for _, t := range tables {
 		prov, ok := e.reg.Lookup(t)
 		if !ok {
