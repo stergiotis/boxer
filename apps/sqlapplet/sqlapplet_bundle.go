@@ -1,6 +1,9 @@
 package sqlapplet
 
 import (
+	"path/filepath"
+	"strings"
+
 	"github.com/stergiotis/boxer/apps/play"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -16,7 +19,7 @@ func init() {
 // parseBundleDoc parses a bundle's applet document into what a play window
 // applies.
 func parseBundleDoc(path string, src []byte) (doc play.AppletDoc, err error) {
-	def, err := ParseDocSource("bundle", path, src)
+	def, err := ParseDocSource("bundle", bundleDocPath(path), src)
 	if err != nil {
 		return
 	}
@@ -31,4 +34,29 @@ func parseBundleDoc(path string, src []byte) (doc play.AppletDoc, err error) {
 		doc.Tab = def.Tabs[0].ID
 	}
 	return
+}
+
+// bundleDocPath is the path a bundle's document is parsed under: its base
+// name made an applet slug — lowercase, every run of other characters one
+// hyphen. A bundle's identity is its alias, which may hold capitals and
+// underscores; the slug is the applet book's file-name rule and means
+// nothing for a bundle, so the alias must not fail it.
+func bundleDocPath(path string) (slugged string) {
+	base := strings.TrimSuffix(filepath.Base(path), ".md")
+	var b strings.Builder
+	hyphen := false
+	for _, r := range strings.ToLower(base) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			hyphen = false
+		} else if !hyphen && b.Len() > 0 {
+			b.WriteByte('-')
+			hyphen = true
+		}
+	}
+	slug := strings.TrimRight(b.String(), "-")
+	if slug == "" {
+		slug = "bundle"
+	}
+	return slug + ".md"
 }

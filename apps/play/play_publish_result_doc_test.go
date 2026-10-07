@@ -52,3 +52,10 @@ func TestComposeBundleDocRefusesAForeignDataset(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(doc), "datasets: [result, rules]")
 }
+
+// A bundle alias with capitals and underscores composes and parses: the
+// applet slug rule is a book's file-name rule, not a bundle's.
+func TestComposeBundleDocTakesAnyAlias(t *testing.T) {
+	_, err := play.ComposeBundleDocE(play.BundleSpec{Alias: "Sales_Q3", Datasets: []adhocdata.BundleDatasetInput{{LocalName: "result"}}})
+	require.NoError(t, err)
+}
