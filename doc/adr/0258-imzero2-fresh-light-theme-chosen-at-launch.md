@@ -53,6 +53,14 @@ is the IDS dark palette. Both sides read the variable on their own — the
 Rust overlay when it first needs it, the Go token package in its `init`
 — so no opcode carries the choice and the two halves cannot disagree.
 
+In a browser tab ([ADR-0263](./0263-imzero2-browser-both-modules-in-one-worker-mesh-to-the-painter.md))
+the Rust host is a wasm32 module with no environment to read. The worker
+hands it the `IMZERO2_THEME` value the Go module gets from its own
+environment, before the host starts (`host_theme`), so the two halves
+still agree. The tab's painter clears to black, so the browser host paints
+the theme's panel fill under each frame, as the native host's clear colour
+does.
+
 There is **no runtime switch**, unlike density
 ([ADR-0032 §SD1](./0032-imzero2-design-system-spacing-density-motion.md)).
 Density can be re-applied because every consumer resolves spacing per

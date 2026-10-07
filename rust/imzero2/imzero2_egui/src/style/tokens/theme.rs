@@ -42,18 +42,34 @@ static ACTIVE: AtomicU8 = AtomicU8::new(UNRESOLVED);
 /// The theme this process runs with, resolved from the environment on the
 /// first call and constant afterwards.
 pub fn active() -> Theme {
-    match ACTIVE.load(Ordering::Relaxed) {
+    resolve(&ACTIVE)
+}
+
+fn resolve(cell: &AtomicU8) -> Theme {
+    match cell.load(Ordering::Relaxed) {
         UNRESOLVED => {
             let t = from_env();
             // Another thread may have resolved it first; both read the same
             // environment, so either value is the same value.
             let _ =
-                ACTIVE.compare_exchange(UNRESOLVED, t as u8, Ordering::Relaxed, Ordering::Relaxed);
+                cell.compare_exchange(UNRESOLVED, t as u8, Ordering::Relaxed, Ordering::Relaxed);
             t
         }
         1 => Theme::Fresh,
         _ => Theme::Dark,
     }
+}
+
+/// Fixes the theme before anything has resolved it, for a host whose
+/// process has no environment to read — the browser host, whose page passes
+/// the value the Go module reads from its own environment (ADR-0263). The
+/// first resolution stands: false when the theme was already resolved.
+pub fn preset(t: Theme) -> bool {
+    preset_in(&ACTIVE, t)
+}
+
+fn preset_in(cell: &AtomicU8, t: Theme) -> bool {
+    cell.compare_exchange(UNRESOLVED, t as u8, Ordering::Relaxed, Ordering::Relaxed).is_ok()
 }
 
 #[cfg(test)]
@@ -67,6 +83,16 @@ mod tests {
         assert_eq!(parse(""), Theme::Dark);
         assert_eq!(parse("dark"), Theme::Dark);
         assert_eq!(parse("light"), Theme::Dark);
+    }
+
+    #[test]
+    fn preset_holds_until_the_first_resolution() {
+        // A cell of its own: ACTIVE is process-wide and other tests style.
+        let cell = AtomicU8::new(UNRESOLVED);
+        assert!(preset_in(&cell, Theme::Fresh));
+        assert_eq!(resolve(&cell), Theme::Fresh);
+        assert!(!preset_in(&cell, Theme::Dark));
+        assert_eq!(resolve(&cell), Theme::Fresh);
     }
 
     #[test]

@@ -12,7 +12,8 @@
 //                       Rust host (default imzero2_browser.wasm)
 //   arg=<flag>          extra module arguments, repeatable
 //   env=NAME=value      the module's environment, repeatable; CLICKHOUSE_URL
-//                       defaults to <origin>/ch/, which `imzero2tab serve` proxies
+//                       defaults to <origin>/ch/, which `imzero2tab serve` proxies;
+//                       IMZERO2_THEME also reaches the Rust host
 //   stage=WxH           the initial viewport in points (the page's resize
 //                       takes over)
 //   fps=, idle=, cadence=continuous   the cadence, see below
@@ -50,8 +51,10 @@ try {
   ]);
   const fonts = Object.fromEntries(FONT_SLOTS.map((slot, i) => [slot, fontList[i]]));
   log('worker — fonts: ' + (FONT_SLOTS.filter((s) => fonts[s]).join(', ') || 'egui defaults'));
+  // The colour theme is the module's IMZERO2_THEME; the host is told the same.
+  const theme = q.getAll('env').filter((e) => e.startsWith('IMZERO2_THEME=')).map((e) => e.slice('IMZERO2_THEME='.length)).pop();
   const stub = await loadHost(hostBytes, stage[0], stage[1], 1.0,
-    (m) => self.postMessage({ kind: 'mesh', bytes: m.buffer }, [m.buffer]), undefined, fonts);
+    (m) => self.postMessage({ kind: 'mesh', bytes: m.buffer }, [m.buffer]), undefined, fonts, theme);
   // The hello the carrier would send: the canvas backing size in pixels and
   // the scale. Sent at start and again whenever the page's resize changed
   // the host's geometry.

@@ -10,7 +10,7 @@
 
 use std::cell::RefCell;
 
-use imzero2::imzero2::browser::{FONT_SLOTS, FontBytes, Host};
+use imzero2::imzero2::browser::{FONT_SLOTS, FontBytes, Host, preset_theme};
 
 thread_local! {
     static HOST: RefCell<Option<Host>> = const { RefCell::new(None) };
@@ -44,6 +44,19 @@ pub extern "C" fn host_font(kind: u32, n: usize) -> u32 {
     }
     SCRATCH.with(|s| FONTS.with(|f| f.borrow_mut()[i] = Some(s.borrow()[..n].to_vec())));
     1
+}
+
+/// Sets the colour theme from the `n`-byte name in the scratch buffer (the
+/// `IMZERO2_THEME` value the Go module reads from its environment), for the
+/// next `host_init`; a wasm32 module has no environment of its own
+/// (ADR-0258). 1 when it took effect, 0 when the theme was already fixed.
+#[unsafe(no_mangle)]
+pub extern "C" fn host_theme(n: usize) -> u32 {
+    SCRATCH.with(|s| {
+        let s = s.borrow();
+        let name = std::str::from_utf8(&s[..n]).unwrap_or_default();
+        u32::from(preset_theme(name))
+    })
 }
 
 /// Creates the host for a viewport of `width` × `height` points at `ppp`,

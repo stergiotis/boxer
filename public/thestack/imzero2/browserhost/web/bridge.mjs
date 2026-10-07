@@ -49,7 +49,9 @@ export const FONT_SLOTS = ['main', 'mono', 'phosphor', 'fallback'];
 
 // fonts: {main, mono, phosphor, fallback} → bytes (ArrayBuffer or Uint8Array),
 // each optional; a tab has no font files, so they cross as bytes before init.
-export async function loadHost(hostBytes, width, height, ppp, onMesh, paceMs, fonts) {
+// theme: the IMZERO2_THEME value the Go module is given, optional; the host has
+// no environment of its own, so it crosses before init too (ADR-0258).
+export async function loadHost(hostBytes, width, height, ppp, onMesh, paceMs, fonts, theme) {
   const module = await WebAssembly.compile(hostBytes);
   const imports = { env: { now_ms: () => performance.now() } };
   for (const i of WebAssembly.Module.imports(module)) {
@@ -66,6 +68,12 @@ export async function loadHost(hostBytes, width, height, ppp, onMesh, paceMs, fo
     const p = ex.host_alloc(b.length);
     mem().set(b, p);
     ex.host_font(i, b.length);
+  }
+  if (theme && ex.host_theme) {
+    const b = new TextEncoder().encode(theme);
+    const p = ex.host_alloc(b.length);
+    mem().set(b, p);
+    ex.host_theme(b.length);
   }
   ex.host_init(width, height, ppp);
   let stepNs = 0n, steps = 0, frames = 0, meshBytes = 0, lastFrameAt = 0;
