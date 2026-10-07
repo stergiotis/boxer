@@ -225,19 +225,28 @@ a dataset whole, through a read that takes no statement.
     appears in captures (ADR-0269 §SD11), and adds nothing to the
     receiver's catalog.
   - **Operable** offers a subset of play's operations to agents through the
-    receiver's catalog, prefixed `bundle_`, mounted with
-    `appops.Set.Mount`:
+    receiver's catalog (`sqlapplet.BundleViewOps`, a view built with
+    `Operable`): play's own operations, prefixed `bundle_`, with play's
+    arguments plus `bundle_view`, which names the view and may be left
+    out when the window has one; `bundle_list_views` lists the views,
+    their bundles and panes. Each is served by the play embedded in the
+    view — play's handler, availability and agent limits — so a run from
+    a view is play's run, judged by the bundle's name:
 
     | Offered | Not offered |
     | --- | --- |
     | reading state, results and history | changing the SQL, binding datasets, publishing — the document is the publisher's; a changed document is a new bundle, made in play |
     | `run`, `cancel_run`, `set_param` | authoring tools: explain, trace, flow, completion |
     | the read, option and select operations of the panes the document names | the operations of panes it does not show |
-    | pane verdicts and the last run's error for those panes | the rest of play's diagnostics |
+    | pane verdicts (`list_panes`) and the last run's error | the rest of play's diagnostics |
 
-    The catalog is static, so an operation for a pane the bundle does not
-    show is declared and reported unavailable with the reason. A run from
-    an operable view is play's run, under the same agent limits.
+    The subset is play's to declare (`play.OperableOperations`), beside
+    the catalog it is taken from, and a test fails until every pane
+    operation play adds is offered or excluded on purpose. The catalog is
+    static, so an operation for a pane no view shows is declared and
+    reported unavailable with the reason. A view does its work on the
+    frame it is drawn (SD7), so a run an agent asks of a view the receiver
+    does not draw waits for its next frame.
 
 - **SD9 — Many bundles per receiver.** A receiver may publish a bundle per
   item it shows. The count quota has two levels — per process, which
@@ -274,8 +283,8 @@ a dataset whole, through a read that takes no statement.
 - **M4 — One owner per alias, window-scoped publishes:** ✓
 - **M5 — The end-to-end lane:** ✓ with provenance and lineage.
 - **M6 — Bundle views:** ✓ plain views; adhocdemo is a receiver.
-- **M7 — Operable views:** mounted commands in appops and the `bundle_`
-  subset.
+- **M7 — Operable views:** ✓ `BundleViewOps`, raw mounted commands in
+  appops; adhocdemo's view is operable.
 - **M8 — Publish grants:** ✓ `app.OperationConsent`; `publish_result`
   declares `{publish, bundle}`.
 - **M9 — Column summaries:** ✓ in the bundle catalog, on the trail row,
@@ -296,8 +305,9 @@ a dataset whole, through a read that takes no statement.
 | play | catalog: `list_bundles`, `open_bundle`, `publish_result`, `bind_dataset as`; API: `PublishBundleE`, `SetAppletDocParser`; the Publish menu | play's ops and caps tests; the chat's guidance |
 | Agent grant destinations | added: `keelson-bundle:<bundle>` and `publish:<prefix>`, host reach | play's agent limits; the dataset read's check |
 | keelson.query gate (ADR-0253) | refuses sealed tables | `keelsonquery.Gate` |
-| `sqlapplet` | added: `NewBundleView`, `BundleViewCaps`; `BundleViewOps` (M7) | receivers' manifests |
-| `appops` | mounted commands (M7) | catalogs that mount a component |
+| `sqlapplet` | added: `NewBundleView`, `BundleViewCaps`, `BundleViewOps` | receivers' manifests and catalogs |
+| `appops` | added: `MountedCommandRaw`, `MountedQueryRaw`, `Set.MountedAvailable` | catalogs that mount a component |
+| play's exported API, for embedders | added: `OperableOperations`, `OperableResources`, `PlayApp.ServedOperations`, `FrameServed`, `SetDatasetOrigin` | sqlapplet's bundle views |
 
 ## Alternatives
 
@@ -468,6 +478,28 @@ triggers.
 - **The person's publish is a gesture.** The Publish menu runs
   `publish_result` through play's catalog as the person, so it takes the
   same checks and the same audit as an agent's, without a call context.
+
+### 2026-10-07 — M7 built
+
+- **The view argument is `bundle_view`.** `view` was the plan, but
+  play's own `set_dist_options` takes a `view`; an operation's
+  arguments are play's struct with one field in front, and the bytes the
+  dispatcher encodes decode into play's type unchanged, since the
+  decoder ignores the field play's type lacks.
+- **An embedded play is framed as a served one.** A play window judges
+  and settles the agent mark around its frame, which is what makes a run
+  an agent asked for the task's; an operable view does the same
+  (`PlayApp.FrameServed`), and records each dataset's origin so the
+  grant is asked for the bundle, never the local name.
+- **A defect the lane found.** A play pinned to this process's
+  introspection endpoint — every applet and bundle view — resolved as a
+  manual endpoint, so an agent's run there was asked for
+  `clickhouse:<loopback>`. The static resolver now classes that base as
+  the introspection plane.
+- **The lane.** `agent.TestAnAgentDrivesAnOperableBundleView` drives a
+  receiver's view through the dispatcher: list, state, a pane the bundle
+  does not show refused, the SQL not offered, a run refused until the
+  grant lists `keelson-bundle:<bundle>` and applied after.
 
 ## References
 
