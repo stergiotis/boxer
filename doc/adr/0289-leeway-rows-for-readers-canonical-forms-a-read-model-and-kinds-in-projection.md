@@ -165,7 +165,7 @@ panel:
 - **M3 — The lens in the Projection panel.** ✓ The run's lens pass, the four
   views, the archetypes operation, and the SD5 defaults.
 - **M4 — Removal.** ✓ SD6.
-- **M5 — The canonical operation.** SD2.
+- **M5 — The canonical operation.** ✓ SD2.
 - **M6 — The read model.** SD3: the sink, the Detail card on it,
   `get_detail` on it, `Table2CardEmitter` removed.
 

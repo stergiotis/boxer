@@ -1109,6 +1109,11 @@ graph, archetypes, rows, row — are a display setting, like colour-by, and have
 no command. `compute_projection`'s defaults are the panel's new ones:
 structure features and a minimum cluster of 5 (ADR-0289 §SD5).
 
+The Detail pane gains `get_canonical` (ADR-0289 §SD2): a row's canonform
+digest and pin, its canonwire fingerprint and verdict, and the CBOR items both
+were taken over in diagnostic notation, cut at a line boundary under the byte
+bound.
+
 ## References
 
 - [ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md) — the contract this catalog serves.

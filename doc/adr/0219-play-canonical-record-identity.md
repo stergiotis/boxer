@@ -444,6 +444,18 @@ named under Verification's gap is still owed.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
+## Updates
+
+### 2026-10-07 — The items reach agents
+
+`get_detail` returned the two digests only. `get_canonical`
+([ADR-0289](./0289-leeway-rows-for-readers-canonical-forms-a-read-model-and-kinds-in-projection.md)
+§SD2, proposed) returns what the strip's CBOR disclosure shows: the canonform
+items and the canonwire entity item in diagnostic notation, with the same
+position comments, beside the digests, the canonform pin and the checker's
+verdict. ADR-0289 makes these forms the lossless reading of a leeway row, now
+that card JSON is removed.
+
 ## References
 
 - [ADR-0201](./0201-leeway-canonical-record-form.md) — canonform, the content identity.

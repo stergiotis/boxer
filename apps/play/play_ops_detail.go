@@ -128,6 +128,7 @@ func addDetailOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 			}
 			return getDetail(&sn.results, sn.state.Signals, sn.detail, in)
 		})
+	addCanonicalOps(s)
 }
 
 // getDetail reads one row of the result the Detail pane follows, or of a
@@ -145,25 +146,9 @@ func getDetail(r *opsResults, signals []SignalState, v detailOpsView, in DetailA
 	if lr.rec == nil || lr.schema == nil {
 		return out, app.RefuseOperation("node " + string(lr.node) + " holds no result")
 	}
-	row := int64(-1)
-	if in.Row != nil {
-		row = *in.Row
-	} else {
-		for _, s := range signals {
-			if s.Name == string(signalSelection) {
-				if n, perr := strconv.ParseInt(strings.TrimSpace(s.Value), 10, 64); perr == nil {
-					row = n
-				}
-				break
-			}
-		}
-		if row < 0 {
-			return out, app.RefuseOperation("no row is selected; pass row, or set_signal selection")
-		}
-	}
-	if row < 0 || row >= lr.numRows {
-		return out, app.RefuseOperation("row " + strconv.FormatInt(row, 10) + " is not in the result; it has " +
-			strconv.FormatInt(lr.numRows, 10) + " rows, 0 for the first")
+	row, err := opsRow(signals, in.Row, lr.numRows)
+	if err != nil {
+		return
 	}
 	out = DetailReading{ResultId: uint64(lr.id), Node: string(lr.node), Row: row, Rows: lr.numRows, Embedded: v.embedded, Note: detailOpsNote}
 	out.Entity, out.NaturalKey = entityHeader(lr.rec, row)

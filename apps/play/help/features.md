@@ -572,7 +572,11 @@ both were computed from in RFC 8949 diagnostic notation — the canonform
 attribute items and entity item as a sequence, and the canonwire entity item —
 with the positions labelled (`/ version /`, `/ plains /`, `/ tagged /`, the
 plain item types, `/ memberships /`) and a compact / expanded toggle. The same
-notation is what `boxer.sh cbor diagnostics --pretty` prints on a terminal.
+notation is what `boxer.sh cbor diagnostics --pretty` prints on a terminal. An
+agent reads the strip with `get_canonical`: both digests, the canonform pin and
+the checker's verdict, and the items in the same notation — the canonwire item
+is the row's whole content, losslessly — cut at a line boundary under the
+operations' byte bound.
 
 Above either card, when the selected row carries one or more **datetime attributes**,
 a compact **timeline** plots them on a shared UTC axis. Each attribute is one legend
