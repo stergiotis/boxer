@@ -299,6 +299,31 @@ func TestAPublishGrantIsStandingConsent(t *testing.T) {
 	assert.False(t, confirm)
 }
 
+// A call held for a widening is checked again when the person approves it,
+// consent included: approved, it applies under the standing consent rather
+// than turning into a confirmation.
+func TestAHeldCallIsCheckedForConsentWhenRouted(t *testing.T) {
+	r := coordinatorRig(t)
+	got := make(chan Grant, 1)
+	go func() {
+		g, err := r.cli.Request(context.Background(), GrantRequest{Plan: "read and publish",
+			Entries: []GrantEntry{{Instance: 7, Mode: ModeObserve}}, Destinations: []string{"publish:report_"}})
+		assert.NoError(t, err)
+		got <- g
+	}()
+	r.person(true, nil)
+	g := <-got
+	out := r.call(g, "p", "publish_text", `{"name":"report_q3"}`)
+	require.Equal(t, "input_required", out.Phase, "observe mode holds a command for the person to raise the mode")
+	r.person(true, nil)
+	require.Eventually(t, func() bool {
+		st, _ := r.cli.Status(context.Background(), g.Handle, "p", 0)
+		return st.Phase != "input_required"
+	}, 2*time.Second, 10*time.Millisecond)
+	st, _ := r.cli.Status(context.Background(), g.Handle, "p", 0)
+	assert.NotEqual(t, "proposed", st.Phase, "the routed call applies under the consent: %s", st.Reason)
+}
+
 // A test grant has nobody to consent: a publish: destination does not let
 // a consequential command through it.
 func TestATestGrantNeverAppliesAConsequentialCommand(t *testing.T) {

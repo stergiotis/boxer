@@ -44,6 +44,7 @@ func TestBundleViewOpsArePlaysOperations(t *testing.T) {
 		assert.Equal(t, o.Spec.Result, got.Result, o.Spec.Name)
 		assert.Equal(t, o.Spec.Follows, got.Follows, o.Spec.Name)
 		assert.Equal(t, o.Spec.Untrusted, got.Untrusted, o.Spec.Name)
+		assert.Equal(t, app.OperationConsent{}, got.Consent, "a view offers nothing a consent could waive")
 		assert.Equal(t, prefixed(o.Spec.Reads), got.Reads, o.Spec.Name)
 		assert.Equal(t, prefixed(o.Spec.Writes), got.Writes, o.Spec.Name)
 		require.Equal(t, "BundleView", got.Args.Field(0).Name, o.Spec.Name)

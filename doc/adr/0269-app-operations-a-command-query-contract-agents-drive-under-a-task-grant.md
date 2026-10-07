@@ -1069,6 +1069,20 @@ into the range; a budget asked for outside the range is clamped there on
 every path, test grants included. What a spent budget's approval adds is
 unchanged.
 
+### 2026-10-07 — standing consent for a consequential command
+
+§SD5 confirms a consequential command each time. A command may now
+declare a consent (`app.OperationConsent`): a destination class the
+platform defines (`app.ConsentClasses`) and the argument it matches. When
+the task's grant lists `<class>:<prefix>` and the argument starts with the
+prefix, the call applies as the task's mode applies a document command —
+without a proposal in act mode, as a proposal the person accepts in
+suggest mode. The person approved that destination as any other (§SD6),
+so the consent is theirs, per task and scoped by name; the action record
+names the destination that admitted the call, and a test grant never
+applies a consequential command. The one class so far, `publish`, is
+ADR-0288's (§SD4).
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — the subject taxonomy SD3 extends; the threat model SD6 keeps.
