@@ -5,8 +5,6 @@ import (
 	"fmt"
 
 	"github.com/apache/arrow-go/v18/arrow"
-	"github.com/stergiotis/boxer/public/semistructured/cbor/diag"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/cbordiag"
 )
@@ -161,12 +159,12 @@ func (inst *identityDetail) render(app *PlayApp, rec arrow.RecordBatch, row int6
 		for rt := range c.RichTextLabel("canonform · attribute items, then the entity item") {
 			rt.Weak().Small()
 		}
-		cbordiag.Render(cbordiag.Input{Ids: inst.ids, ScopeKey: "idn-cf", State: &inst.canonState, Item: canonItems, Options: diag.Options{Sequence: true, TagComments: true, Annotate: annotateCanonform}})
+		cbordiag.Render(cbordiag.Input{Ids: inst.ids, ScopeKey: "idn-cf", State: &inst.canonState, Item: canonItems, Options: inst.comp.notes.canonformOptions()})
 		for rt := range c.RichTextLabel("canonwire · entity item") {
 			rt.Weak().Small()
 		}
 		inst.wireState.Verdict = verdict
-		cbordiag.Render(cbordiag.Input{Ids: inst.ids, ScopeKey: "idn-cw", State: &inst.wireState, Item: wireItem, Options: diag.Options{TagComments: true, Annotate: annotateCanonwire}})
+		cbordiag.Render(cbordiag.Input{Ids: inst.ids, ScopeKey: "idn-cw", State: &inst.wireState, Item: wireItem, Options: inst.comp.notes.canonwireOptions()})
 	}
 	return true
 }
@@ -205,72 +203,4 @@ func cborKeyUint(key []byte) (n uint64, ok bool) {
 		return uint64(key[1])<<8 | uint64(key[2]), true
 	}
 	return
-}
-
-// annotateCanonwire labels the positions of a canonical-wire entity item
-// (ADR-0210 SD1–SD3): the three top-level elements, the plain item types,
-// the slots and each attribute's memberships element.
-func annotateCanonwire(path []diag.PathElem) string {
-	switch len(path) {
-	case 1:
-		if path[0].Kind == diag.PathElemIndex {
-			switch path[0].Index {
-			case 0:
-				return "version"
-			case 1:
-				return "plains"
-			case 2:
-				return "tagged"
-			}
-		}
-	case 2:
-		if path[0].Kind != diag.PathElemIndex || path[1].Kind != diag.PathElemKey {
-			return ""
-		}
-		switch path[0].Index {
-		case 1:
-			if n, ok := cborKeyUint(path[1].Key); ok {
-				return common.PlainItemTypeE(n).String()
-			}
-		case 2:
-			return "slot"
-		}
-	case 3:
-		if path[0].Kind == diag.PathElemIndex && path[0].Index == 2 && path[2].Kind == diag.PathElemIndex {
-			return "attribute"
-		}
-	case 4:
-		if path[0].Kind == diag.PathElemIndex && path[0].Index == 2 && path[3].Kind == diag.PathElemIndex && path[3].Index == 0 {
-			return "memberships"
-		}
-	}
-	return ""
-}
-
-// annotateCanonform labels the canonform items (ADR-0201 SD1, SD6): an
-// attribute item is [memberships, value]; the entity item is
-// {0: plains, 1: leaf digests}.
-func annotateCanonform(path []diag.PathElem) string {
-	if len(path) != 1 {
-		return ""
-	}
-	switch path[0].Kind {
-	case diag.PathElemIndex:
-		switch path[0].Index {
-		case 0:
-			return "memberships"
-		case 1:
-			return "value"
-		}
-	case diag.PathElemKey:
-		if n, ok := cborKeyUint(path[0].Key); ok {
-			switch n {
-			case 0:
-				return "plains"
-			case 1:
-				return "leaf digests"
-			}
-		}
-	}
-	return ""
 }

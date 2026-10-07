@@ -51,6 +51,8 @@ type identityComputer struct {
 	canon  *canonform.Encoder
 	wire   *streamenc.Encoder
 	fp     *cwruntime.Fingerprinter
+	// notes annotate the row's items in diagnostic notation (ADR-0289 SD2).
+	notes *identityNotes
 }
 
 // newIdentityComputer binds the encoders to tbl / ir, which must be the pair
@@ -76,6 +78,7 @@ func newIdentityComputer(tbl *common.TableDesc, ir *common.IntermediateTableRepr
 		err = eh.Errorf("play: canonwire stream encoder: %w", err)
 		return nil, err
 	}
+	inst.notes = newIdentityNotes(tbl, registryRenderer(), inst.pin)
 	return
 }
 

@@ -50,7 +50,9 @@ func TestGetCanonicalReadsALeewayRow(t *testing.T) {
 	assert.Contains(t, out.CanonwireItem, "/ tagged /")
 	assert.Contains(t, out.CanonwireItem, "notes.md", "the wire item is the row's content")
 	assert.Contains(t, out.CanonformItems, "/ memberships /")
-	assert.Contains(t, out.CanonformItems, "/ leaf digests /")
+	assert.Contains(t, out.CanonformItems, "/ leaf digests, sorted bytewise")
+	assert.Contains(t, out.CanonformItems, "/ leaf of ", "each digest is paired with its attribute")
+	assert.Contains(t, out.CanonwireItem, `/ natural-key · "doc-b" /`, "plain columns are named, text bytes spelled")
 	assert.False(t, out.ItemsCut)
 
 	wire := queryOp[CanonicalReading](t, h, opGetCanonical, CanonicalArgs{Items: "canonwire"})

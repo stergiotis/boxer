@@ -260,6 +260,35 @@ Accepted 2026-10-07. M1–M6 are built: the lens in the Projection panel with
 
 ## Updates
 
+### 2026-10-07 — the diagnostic notation says what each position holds
+
+The items as SD2 first returned them labelled each position's role and
+nothing more: a membership was a bare 64-bit id, a slot a type code
+(`"u64h"`), a plain item type's columns were positional, a time was an RFC 9581
+map, and the entity item's leaf digests, sorted bytewise, could not be
+matched to the attribute items above them without rehashing. A reader could
+follow the shape but not connect it to the row `get_detail` reads.
+
+The comments now carry what the bytes hold, for the Detail pane's disclosure
+and `get_canonical` alike: a membership's channel and its name through the
+registry renderer the read model uses (SD3); a slot's section, or every
+section sharing its signature (the wire item cannot tell which; the
+decoder's dispatch does, ADR-0210 §SD5), and its column types in words; a
+plain column's name; a time in ISO 8601; bytes that are printable text as
+text; and on the canonform side, each attribute item's name and leaf-digest
+prefix, and each sorted digest's attribute. The notes are comments only: the
+items, the digests and the fingerprint are what they were.
+
+The diagnostic printer gained `diag.Options.AnnotateItem`, a hook that
+receives the item's encoded bytes beside its path, since every note above
+depends on the value. A comment no longer counts against the line width for
+what follows it on the line, as it already did not for the container it
+labels.
+
+Membership names stay ids where the process's registries do not know the
+ref; markdown-document refs are one such case, and the read model shows the
+same ids for them.
+
 ## References
 
 - [ADR-0018](./0018-leeway-card-json-canonical-format.md) — card JSON, superseded by this ADR.

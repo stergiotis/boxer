@@ -47,10 +47,10 @@ type CanonicalReading struct {
 	WireBytes int    `desc:"the wire item's size in bytes"`
 	Canonical bool   `desc:"true when the wire item passes the runtime's canonical-form check"`
 	Verdict   string `json:",omitzero" desc:"why the wire item fails the check"`
-	// The items, in RFC 8949 diagnostic notation with the pane's position
-	// comments.
-	CanonwireItem  string `json:",omitzero" desc:"the canonwire entity item — version, plains, then each tagged slot's attributes with their memberships — the row's whole content, losslessly"`
-	CanonformItems string `json:",omitzero" desc:"the items the canonform digest counted: each attribute's [memberships, value], then the entity's {plains, leaf digests}"`
+	// The items, in RFC 8949 diagnostic notation with the pane's comments:
+	// each position's role and what it holds (ADR-0289 SD2).
+	CanonwireItem  string `json:",omitzero" desc:"the canonwire entity item — version, plains, then each tagged slot's attributes with their memberships — the row's whole content, losslessly; comments name each membership's channel and name, each slot's section and column types, each plain column, and spell times and text bytes"`
+	CanonformItems string `json:",omitzero" desc:"the items the canonform digest counted: each attribute's [memberships, value], then the entity's {plains, leaf digests}; comments name each attribute and its leaf digest, and pair each sorted digest with its attribute"`
 	ItemsCut       bool   `json:",omitzero" desc:"true when the byte bound cut an items text; a cut text ends at a line boundary with a … line"`
 }
 
@@ -105,12 +105,12 @@ func getCanonical(r *opsResults, signals []SignalState, in CanonicalArgs) (out C
 	}
 	var cw, cf string
 	if items != canonicalItemsCanonform {
-		if cw, err = diag.String(wireItem, diag.Options{TagComments: true, Annotate: annotateCanonwire}); err != nil {
+		if cw, err = diag.String(wireItem, comp.notes.canonwireOptions()); err != nil {
 			return out, app.RefuseOperation("the canonwire item: " + truncateRunes(err.Error(), 300))
 		}
 	}
 	if items != canonicalItemsCanonwire {
-		if cf, err = diag.String(canonItems, diag.Options{Sequence: true, TagComments: true, Annotate: annotateCanonform}); err != nil {
+		if cf, err = diag.String(canonItems, comp.notes.canonformOptions()); err != nil {
 			return out, app.RefuseOperation("the canonform items: " + truncateRunes(err.Error(), 300))
 		}
 	}
