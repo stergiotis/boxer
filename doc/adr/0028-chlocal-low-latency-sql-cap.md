@@ -561,8 +561,8 @@ killer ended every app in it.
 
 §SD3's refill, ceiling, watchdog and stop now live in
 [`github.com/stergiotis/boxer/public/keelson/runtime/procpool`](../../public/keelson/runtime/procpool)
-behind a spawner ([ADR-0285](./0285-procpool-pre-spawned-workers-behind-a-spawner.md),
-proposed), so an engine other than ClickHouse can use them. `chlocalpool`
+behind a spawner ([ADR-0285](./0285-procpool-pre-spawned-workers-behind-a-spawner.md)),
+so an engine other than ClickHouse can use them. `chlocalpool`
 keeps its exported API and its defaults and supplies the `clickhouse local`
 worker. Two observable differences: the pool's log lines lose their
 `chlocalpool:` prefix, and a spare whose process exits while idle is dropped

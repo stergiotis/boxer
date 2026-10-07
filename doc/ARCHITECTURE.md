@@ -84,7 +84,7 @@ Four kinds of process, and the boundaries between them:
 | Go ⇄ Rust, **FFFI2** over the child's stdin/stdout | one opcode stream per frame down, `Sync()` readback up; lock-step, one Go frame per Rust pass | [ADR-0024](./adr/0024-imzero2-remote-access-browser-viewer.md) §Context, [ADR-0062](./adr/0062-imzero2-render-cadence.md) |
 | Go ⇄ ClickHouse server, **HTTP** | Arrow IPC bulk writes, `FORMAT ArrowStream` reads; one statement per request, no `FORMAT` of its own | [ADR-0089](./adr/0089-rowdml-serialization-clickhouse-native-ingestion.md), [ADR-0184 §SD2](./adr/0184-sysmetrics-persistence-tee.md) |
 | Go ⇄ `clickhouse-local`, Rust ⇄ `ffmpeg`, boxer ⇄ `rclone`: **pipes** | SQL in / bytes out; BGRA frames in / an elementary stream out; SFTP in either direction | [ADR-0028](./adr/0028-chlocal-low-latency-sql-cap.md), [ADR-0088](./adr/0088-imzero2-runtime-codec-pipeline-and-viewer-capabilities.md), [ADR-0198](./adr/0198-fs-snapshot-store.md) |
-| Rust ⇄ browser, **one WebSocket** | `0x01` video chunk, `0x02` protobuf input, `0x03` session control, `0x04` mesh frame; the viewer page on port + 1 | [ADR-0024 §SD6](./adr/0024-imzero2-remote-access-browser-viewer.md), [ADR-0128](./adr/0128-imzero2-mesh-draw-stream-codec-lane.md) (proposed) |
+| Rust ⇄ browser, **one WebSocket** | `0x01` video chunk, `0x02` protobuf input, `0x03` session control, `0x04` mesh frame; the viewer page on port + 1 | [ADR-0024 §SD6](./adr/0024-imzero2-remote-access-browser-viewer.md), [ADR-0128](./adr/0128-imzero2-mesh-draw-stream-codec-lane.md) |
 
 The keelson host is one Go binary — for the GUI stack,
 [`public/thestack/cmd/imzero2`](../public/thestack/cmd/imzero2) (`imzero2 demo
@@ -400,8 +400,8 @@ rather than a surprise. A musl-static Rust host is ADR-0206 M4; the blocker
    idle 85 B/frame ≈ 20 kbit/s · animated ≈ 1–2 Mbit/s deduped · bootstrap 1 MiB atlas + 34 KiB
 ```
 
-[ADR-0128](./adr/0128-imzero2-mesh-draw-stream-codec-lane.md) (proposed
-2026-07-18; M1–M2 landed the same day, M3 split the features) streams egui's
+[ADR-0128](./adr/0128-imzero2-mesh-draw-stream-codec-lane.md) (accepted
+2026-10-07; M1–M2 landed 2026-07-18, M3 split the features) streams egui's
 tessellated output — `ClippedPrimitive` meshes and `TexturesDelta`, content-
 addressed and deduplicated per connection — to a WebGL2 painter in the same
 single-file viewer. Nothing rasterizes on the box and nothing encodes; the host
@@ -485,7 +485,7 @@ feeds the encoder pipeline of §2.2, and the carrier advertises H.264.
 | wire, idle → busy | — | constant, encoder-paced | constant, encoder-paced | 20 kbit/s → 1–2 Mbit/s, bursts to 34 Mbit/s | constant, encoder-paced |
 | several viewers | no | 1 active + N passive | same | same carrier | same |
 | auth / TLS | n/a | decided (ADR-0082), unbuilt | same | same, QEMU-only posture | same |
-| decision record | ADR-0024 baseline | ADR-0024 / 0088 / 0086 accepted | ADR-0205 accepted | ADR-0128 proposed + 0206 accepted | ADR-0206 accepted |
+| decision record | ADR-0024 baseline | ADR-0024 / 0088 / 0086 accepted | ADR-0205 accepted | ADR-0128 + 0206 accepted | ADR-0206 accepted |
 
 The choice follows the axes: a seat → desktop; a server with a GPU and a
 VAAPI driver → headless wgpu; a server without one, or an appliance → the CPU

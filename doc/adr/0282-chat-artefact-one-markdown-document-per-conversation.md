@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-04
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-07
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0282: The chat's artefact — one markdown document per conversation, edited by the model under the ceiling
 
@@ -260,8 +258,8 @@ A right panel beside Settings and Statistics, toggled from the bar.
 
 ## Migration — Tier 1
 
-None: new packages, and a new option that is off by default. ADR-0265 is
-proposed and gains a reference.
+None: new packages, and a new option that is off by default. ADR-0265, then
+proposed, gains a reference.
 
 ## Verification plan — Tier 1
 
@@ -277,7 +275,7 @@ proposed and gains a reference.
 
 ## Status
 
-Proposed 2026-10-04, built. The verification plan holds: the unit tests of
+Accepted 2026-10-07. The verification plan holds: the unit tests of
 `mdspan`, `mdlint` and the chat's tools, revisions, policy and rewind, a
 turn under Ask first against a scripted model, and the scene
 [chat-artefact](../../apps/chat/scenes/chat-artefact.scene.md) on the

@@ -72,8 +72,8 @@ that the harness moves into one runner either way?
 **Criteria.** C1 a scene stays a reviewable data file, and an agent's working
 steps become one by being saved; C2 every assertion observed today is
 expressible somewhere without shell; C3 the vocabulary stays small enough to
-execute on a second seam ([ADR-0127](./0127-imzero2-interaction-record-replay.md),
-proposed) and to teach in a page; C4 implementation weight.
+execute on a second seam ([ADR-0127](./0127-imzero2-interaction-record-replay.md))
+and to teach in a page; C4 implementation weight.
 
 |    | O1 | O2 | O3 | O4 |
 |----|----|----|----|----|
@@ -370,7 +370,7 @@ No decision changes.
 
 - [ADR-0154](./0154-headless-carrier-tree-and-driver.md) — the carrier, the
   driver and the step vocabulary this extends.
-- [ADR-0127](./0127-imzero2-interaction-record-replay.md) (proposed) — owns the
+- [ADR-0127](./0127-imzero2-interaction-record-replay.md) — owns the
   vocabulary's first definition and a second executor, if built.
 - [ADR-0132](./0132-sqlapplet-sql-defined-applets.md) — the one-document
   convention a scene reuses.

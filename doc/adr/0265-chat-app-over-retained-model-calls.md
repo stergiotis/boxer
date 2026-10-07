@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-27
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-07
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0265: A chat app over retained model calls — session-only, and a coordinator of apps
 
@@ -389,15 +387,14 @@ the machine's steps are those events.
 
 ## Status
 
-Proposed — awaiting review by the code owner. Revised in place on
+Accepted 2026-10-07. Revised in place on
 2026-10-01 for ADR-0269's M5: the coordinator of SD6, built and tested
 against a scripted model over the host's services. Revised in place on 2026-10-03: the last turn
 taken back (SD3), message actions, inspectable failures and the layout of
 SD4, built and scene-run; and the title, the context meter and Open in
 mdedit of SD4.
 
-Built 2026-09-27, in the working tree, as the chat app beside the other
-apps. The default lane passes: the turn loop against the llm service over
+Built 2026-09-27 as the chat app beside the other apps. The default lane passes: the turn loop against the llm service over
 an in-process bus, and — over clickhouse-local with the ceiling durable —
 a second turn keeping only its new messages. A headless run against a
 stub OpenAI-compatible endpoint on loopback sent a turn with Ctrl+Enter,

@@ -331,7 +331,7 @@ Use these canonical verb pairs rather than invented synonyms, so that symmetrica
 
 ## Adversarial Code Review
 
-> **Pending [ADR-0131](./doc/adr/0131-systematic-adversarial-code-review.md) (proposed).** The practice below — review adversarially, scaled to blast radius, with a disposition for every finding — applies now. The recording mechanics are the ADR's proposal and are not built: `packageprops.Review` and the review-aware `props verify` do not exist yet, and the ADR's open questions (scope mechanism, normalized-hash definition, sidecar format, CLI home) are unsettled.
+> **Decided in [ADR-0131](./doc/adr/0131-systematic-adversarial-code-review.md).** The practice below — review adversarially, scaled to blast radius, with a disposition for every finding — applies now. The recording mechanics are not built: `packageprops.Review` and the review-aware `props verify` do not exist yet.
 
 Review-critical code is reviewed **adversarially** — the reviewer's job is to refute the change, not to bless it — and the review is recorded where the next reader, human or agent, will look. Trunk-based development has no merge gate (see [Version Control](#version-control)), so the recorded review, not a pull request, is what attests that a subsystem was examined and marks when that examination has gone stale. The decision and its rejected alternatives are [ADR-0131](./doc/adr/0131-systematic-adversarial-code-review.md); the marker mechanics extend `packageprops` ([ADR-0080](./doc/adr/0080-packageprops-per-package-declarations.md)).
 

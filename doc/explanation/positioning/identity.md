@@ -76,7 +76,7 @@ breaking switch from the earlier scheme.
 
 - The leased, technology-neutral id generation interface
   ([ADR-0111](../../adr/0111-identity-technology-neutral-leased-id-generation.md))
-  is proposed; its reference code exists and nothing outside the package
+  is accepted; its reference code exists and nothing outside the package
   consumes it. Not a clause.
 - Deferred and absent from the clauses: the id-to-name dictionary, wiring
   the SQL function DDL into the leeway DDL generator, an "install

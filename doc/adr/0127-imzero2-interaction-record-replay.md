@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-17
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-07
 ---
-
-> **Status: proposed — pre-human-review.** Not verified; do not cite as
-> authoritative. Rescoped 2026-09-25 to the recorder: replay shipped
-> elsewhere (see SD6 and `## Status`).
 
 # ADR-0127: imzero2 interaction record/replay — semantic capture over the inspection seam
 
@@ -270,14 +268,14 @@ driver that needs neither. The recorder's traces target that driver.
 
 ## Status
 
-Proposed. Decision dialogue captured 2026-07-17. Rescoped in place
+Accepted 2026-10-07. Decision dialogue captured 2026-07-17. Rescoped in place
 2026-09-25 to the recorder (M1, M2, M4): the replay executor and the anchor
 ladder shipped through ADR-0154 and ADR-0248, which cite this ADR for the
 step vocabulary. Nothing of M1 is built — no `RecorderPlugin`, no
 `IMZERO2_RECORD`. Open: the env-var name, the trace container, and whether
 the recorder taps the desktop build (as SD1 assumes) or the headless
-carrier the driver already reads. Next step is review of the SD carve and,
-if accepted, M1.
+carrier the driver already reads. Accepted with those three open; they are
+M1's to settle.
 
 ## References
 

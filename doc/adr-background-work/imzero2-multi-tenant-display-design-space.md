@@ -56,7 +56,7 @@ unbuilt), and guest egress policy, which §11 lists as open.
 The ones this page builds on:
 
 - The **mesh lane** ([ADR-0128](../adr/0128-imzero2-mesh-draw-stream-codec-lane.md),
-  proposed, code shipped): tessellated meshes and texture deltas,
+  code shipped): tessellated meshes and texture deltas,
   content-addressed per connection, to a WebGL2 painter. The tree serializes
   this wire (`meshlane.rs`) and has no Rust decoder for it; the viewer page is
   its only consumer.

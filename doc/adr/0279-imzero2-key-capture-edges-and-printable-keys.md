@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-04
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-07
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0279: Key releases, repeats and printable keys in imzero2 key capture
 
@@ -19,8 +17,8 @@ one frame later. It was shaped for navigation. Its vocabulary (§SD4) holds
 the fourteen keys a tree or a contact sheet needs, and it reports presses
 only, because for those widgets a key is an event, not a state.
 
-A downstream adopter needs more than that. shadow-boxer's HP 48GX emulator
-(its ADR-0017, proposed, §SD8 and §M3a) draws the calculator in a window.
+A downstream adopter needs more than that. An HP 48GX emulator in a
+consuming repository draws the calculator in a window.
 The calculator scans a key matrix and acts on what is *down*, so it needs
 to know when a key goes up as well as when it goes down. It also needs the
 keys a person types numbers and names with, not only arrows and Enter. With
@@ -54,8 +52,8 @@ use:
   receives what it received before, presses including repeats, now with the
   edge byte filled in. In Go, `CapturedKey` carries the byte, read through
   `Down()`, `Up()` and `Repeat()`.
-- **SD2 — The vocabulary gains digits, letters and a short list of
-  punctuation.** These are codes 15–60: `Num0`…`Num9`, `A`…`Z`, and `Plus`,
+- **SD2 — The vocabulary gains digits, letters and a short list of punctuation.**
+  These are codes 15–60: `Num0`…`Num9`, `A`…`Z`, and `Plus`,
   `Minus`, `Equals`, `Period`, `Comma`, `Slash`, `Colon`, `Quote`,
   `OpenBracket`, `CloseBracket`. Codes 61–63 stay free. They are physical
   keys, named after egui's variants and generated from the one Go table
@@ -140,13 +138,17 @@ use:
 - **What would fail.** A code that drifts between the Go table and the Rust
   match fails the drift test. A wrong edge decoding fails the accessor test.
 - **Gap.** The interpreter's consume-and-push of releases runs only with a
-  live client. The adopter's integration (shadow-boxer's astrolabe) is where
+  live client. The adopter's integration is where
   it is first seen working, and a headless scene driving key-up events is
   worth adding when the scene driver can send them.
 
 ## Status
 
-Proposed — awaiting review by the code owner.
+Accepted 2026-10-07. SD1 and SD2 are built: `captureKeyEdges` on the Frame,
+the edge byte on every captured event, and the digit, letter and punctuation
+codes in `keycodes`, with the drift and accessor tests of the verification
+plan. SD3 asks nothing of the host: focus loss stays the adopter's release. The gap that plan names stands: no headless scene drives
+key releases yet.
 
 ## References
 

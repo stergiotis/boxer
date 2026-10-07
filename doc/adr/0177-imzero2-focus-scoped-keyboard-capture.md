@@ -384,7 +384,7 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 ### 2026-10-04 — releases, repeats and printable keys
 
 [ADR-0279](./0279-imzero2-key-capture-edges-and-printable-keys.md)
-(proposed) extends this capture. R26 gains an edge byte per event; a Frame
+extends this capture. R26 gains an edge byte per event; a Frame
 that calls `.captureKeyEdges()` also receives releases. The §SD4 vocabulary
 gains digits, letters and ten punctuation keys (codes 15–60). A widget that
 uses neither sees what it saw before.

@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-24
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-07
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0258: imzero2 — a light theme, `fresh`, chosen at launch
 
@@ -163,6 +161,6 @@ the flip; a hand-tuned light palette per language is a later refinement.
 
 ## Status
 
-Proposed. Built and captured behind `IMZERO2_THEME=fresh`: the widgets
+Accepted 2026-10-07. Built and captured behind `IMZERO2_THEME=fresh`: the widgets
 gallery tour under both themes, and the play scene tour under both, with
 identical pass and skip sets.

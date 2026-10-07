@@ -322,7 +322,7 @@ absent, and rows written with run and app on the mixed channel are not found
 by the moved readers, so a deployment empties `boxer.facts` once when it
 takes this change (`TRUNCATE TABLE boxer.facts`); `boxer.persiststate` is
 untouched. SQL a person saved that reads run or app through the mixed channel
-moves to the plain one. ADR-0264 and ADR-0265 are proposed and are revised in place;
+moves to the plain one. ADR-0264 and ADR-0265, both then proposed, are revised in place;
 ADR-0191, ADR-0254, ADR-0262 and ADR-0269 take dated Updates when this ADR
 is accepted.
 

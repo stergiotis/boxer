@@ -19,7 +19,7 @@ everything mdedit touches"; the feature is gated on `BOXER_MDEDIT_LLM_*`
 environment variables. [ADR-0120](./0120-play-natural-language-ask-panel.md)
 (proposed, unbuilt) planned the same shape for a play Ask panel: a sibling
 package, an endpoint variable as the egress gate, the endpoint host shown
-beside the gesture. [ADR-0139](./0139-semantic-layer-text2dsl.md) (proposed,
+beside the gesture. [ADR-0139](./0139-semantic-layer-text2dsl.md) (deferred,
 unbuilt) added an agentic loop in which the model calls tools that read the
 introspection tables.
 
@@ -530,7 +530,7 @@ other apps' operations run under a task grant
 - [ADR-0253](./0253-introspection-table-reads-as-a-bus-capability.md) — the same move for table reads; the grants a model's tools run under.
 - [ADR-0216](./0216-mdedit-llm-transformations.md) — the shipped consumer; the transformation-book shape play adopts.
 - [ADR-0120](./0120-play-natural-language-ask-panel.md) (withdrawn) — the evidence review and the generation constraints SD6 keeps.
-- [ADR-0139](./0139-semantic-layer-text2dsl.md) (proposed) — grounding, and the tool protocol SD5 places.
+- [ADR-0139](./0139-semantic-layer-text2dsl.md) (deferred) — grounding, and the tool protocol SD5 places.
 - [ADR-0145](./0145-sealed-app-data.md) — the sensitivity label and the locality rule SD3 copies.
 - [ADR-0090](./0090-sysmetrics-pubsub-data-plane.md) §SD8 — the masking rule SD3 is built to hold.
 - [ADR-0165](./0165-imzero2-tile-transport-over-fffi2.md) O3, [ADR-0204](./0204-leaflet-map-core-port.md) §SD4 — the HTTP facility this does not wait for.

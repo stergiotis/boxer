@@ -1,10 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-05
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-07
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0285: procpool — pre-spawned workers behind a spawner
 
@@ -155,7 +155,9 @@ O2 is untouched.
 
 ## Status
 
-Proposed — awaiting review by p@stergiotis.
+Accepted 2026-10-07. SD1–SD4 are built: `procpool` with the tests the
+verification plan names, and `chlocalpool` as a ClickHouse spawner over it
+with its exported API unchanged.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.

@@ -18,7 +18,7 @@ from progressing on an unchanged screen. Content-addressed mesh bodies need a
 retirement agreement, not lifetime-long retention on both ends.
 
 This decision refines ADR-0024, ADR-0086 and ADR-0088 and the implemented mesh
-lane described by ADR-0128 (proposed). It does not change origin validation,
+lane described by ADR-0128. It does not change origin validation,
 authentication, TLS, listener exposure, proxy routing, or admission policy.
 
 ## Decision

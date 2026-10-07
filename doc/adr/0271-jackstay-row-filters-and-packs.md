@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-02
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-07
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0271: jackstay — per-table row filters, and packs that carry a sync between hosts
 
@@ -257,7 +255,7 @@ as unfiltered. Callers of the engine wrap their source client in
 
 ## Status
 
-Proposed 2026-10-02. M1–M4 landed 2026-10-02; the decision awaits review.
+Accepted 2026-10-07. M1–M4 landed 2026-10-02.
 
 ### M1 — Row filters: validation, both sides, clear, journal, CLI and wizard field ✓
 

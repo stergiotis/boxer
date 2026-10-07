@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-06-12
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-07
 ---
-
-> **Status: proposed — pre-human-review.** Engineering selection: **Architecture A** (see Decision); the front-matter `status` stays `proposed` until data-protection counsel signs off on OQ1 (destroyed-nonce commitment anonymisation) and OQ5 (audit-record retention). Pre-acceptance, the body is maintained in place (Tier 1) as a snapshot of current understanding; shipped behaviour (so far only SD8) is recorded under `## Updates`.
 
 > **Disclaimer.** This document is engineering-grade legal context assembled from primary sources to inform an architectural decision. It is not legal advice. The author is not a lawyer. Verify with qualified counsel before treating any specific position here as compliant.
 
@@ -296,12 +294,17 @@ OQ2 / OQ3 / OQ4 were B-specific (ICO "put beyond use" travel, Art 17(2) reasonab
 
 ## Status
 
-Engineering-decided — Architecture A; awaiting counsel sign-off on OQ1 / OQ5
-before flipping the front-matter `status` to `accepted`.
+Accepted 2026-10-07 as the engineering selection, Architecture A. OQ1
+(destroyed-nonce commitments as anonymisation) and OQ5 (whether the audit
+record is personal data) have not been reviewed by data-protection counsel:
+they are engineering positions, and this ADR makes no compliance claim.
+Counsel sign-off stays the gate before the vault layer ships to production
+(see Decision). Shipped behaviour — so far only SD8 — is recorded under
+`## Updates`.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
-for the edit-policy tiers; pre-acceptance, the body is maintained Tier-1 (in place) and implementation status lands in `## Updates`.
+for the edit-policy tiers.
 
 ## Updates
 

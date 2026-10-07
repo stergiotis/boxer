@@ -275,7 +275,7 @@ natural delivery vehicle for the interactive case.
 | lineage encoding (ref tuples) | [ADR-0109](../adr/0109-leeway-marshall-multi-membership-ref-tuples.md) | accepted |
 | interning substrate (texts, chains, large values) | [ADR-0112](../adr/0112-dimensionstore-interned-facts-additive-memberships.md) | accepted |
 | lanes, signals, per-lane query ids, glass | [ADR-0097](../adr/0097-play-reactive-query-graph.md) | accepted, slices ongoing |
-| identity bands / leased ids | [ADR-0106](../adr/0106-identity-fibonacci-tags-build-tag-retirement.md), [ADR-0111](../adr/0111-identity-technology-neutral-leased-id-generation.md) | accepted / proposed |
+| identity bands / leased ids | [ADR-0106](../adr/0106-identity-fibonacci-tags-build-tag-retirement.md), [ADR-0111](../adr/0111-identity-technology-neutral-leased-id-generation.md) | accepted |
 | service anatomy precedent | [ADR-0090](../adr/0090-sysmetrics-pubsub-data-plane.md) | accepted |
 | requirement origins | [ADR-0050](../adr/0050-clickhouse-observability-pipeline.md) (superseded), [ADR-0051](../adr/0051-query-categorization-provenance.md) (dormant) | records kept |
 | weave semantics (S6) | future ADR, at slice | — |

@@ -915,7 +915,7 @@ func (inst *PushoutGraph) NodeContentStatus(id t.NodeID) (status t.NodeContentSt
 // It purges the in-memory graph only: envelopes in storage keep
 // Change.Content, and StorageI has no delete verb, so the bytes remain
 // recoverable from storage (at-rest and fleet-wide erasure are ADR-0025's
-// layer, proposed). The legal framing (the choice between salt-destruction,
+// layer, unbuilt). The legal framing (the choice between salt-destruction,
 // commitment-destruction, encryption-shredding, etc.) is the consuming
 // repo's concern; this method drops content past a retention horizon
 // under any of those architectures.

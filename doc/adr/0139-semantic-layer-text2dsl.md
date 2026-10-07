@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: deferred
 date: 2026-07-22
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
 ---
 
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
+> **Status: deferred (2026-10-07).** The layer (SD1–SD7) is not built; SD8's tools are play's operations and SD9's loop is the chat's. See `## Status`.
 
 # ADR-0139: Semantic layer for text2dsl grounding
 
@@ -332,25 +330,23 @@ ADR-0270, is the one that exists). Proposed settled decisions:
 
 ## Status
 
-Proposed — all formerly open decisions were closed in the 2026-07-22
-design dialogue (SD1 home, SD2 line-oriented block grammar, SD3 lint
-beside the engine CLI, SD6-T2a handles in v0, SD8 bespoke façade) and are
-folded into the SD texts above. SD9 — the interactive in-conversation
-tool protocol — was added the same day after review feedback that SD8
-left it implicit. Revised in place 2026-09-23 when ADR-0120 was withdrawn:
-SD8's executor and SD9's client are placed by ADR-0254 (the tools run
-under the calling app's grants; the client rides `llm.complete`), and the
-layer's entries are an introspection table. Sequencing, also settled: the
-engine lands first. Revised in place
-2026-10-02: play's `ask` transformation was withdrawn in favour of a chat
-coordinator driving play (ADR-0254, update of that date), so the layer's
-in-app consumer is whichever model caller reads it — the coordinator through
-play's `describe_table`, or `keelson('semlayer')` under SD8. ADR-0254
-was accepted on its own (2026-09-23); this ADR awaits review for acceptance
-separately, with the layer (SD1–SD7) still unbuilt — see `## Updates`.
-Revised in place 2026-10-07: the `text2sql` packages, the `boxer text2sql`
-CLI and the orchestrator that held SD9's loop are deleted; the SD8 tools
-survive as play's operations.
+Deferred (2026-10-07). The layer itself — SD1–SD7: the home package, the
+block grammar, the lint and the renderer — is not built. Its tool half
+exists elsewhere: SD8's tools are play's `list_tables`, `describe_table` and
+`validate_sql` operations (ADR-0270), run under the calling app's grants
+(ADR-0254 §SD5), and SD9's loop is the chat's (ADR-0265). The `text2sql`
+packages, the `boxer text2sql` CLI and the orchestrator that first held
+SD9's loop were deleted the same day (see the 2026-10-07 Update). A model
+caller grounds on those operations, which carry T0 and T2a — the catalog and
+the leeway handles — and none of the authored tier. ADR-0164's M3 waits on
+this layer.
+
+Trigger: a model caller needs authored measures, certified joins or
+disambiguation rules that the catalog and the handles cannot give it — a
+wrong number traced to a fan-out join or an ambiguous business term — at
+which point this returns to review with SD1–SD7 as written. The evidence in
+Context stands; a revival re-checks the cited figures against newer
+benchmarks.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

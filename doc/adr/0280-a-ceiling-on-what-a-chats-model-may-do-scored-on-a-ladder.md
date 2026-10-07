@@ -260,7 +260,7 @@ those too was weighed and left out by the owner (2026-10-04).
 ## Migration — Tier 1
 
 One step: the ceiling and its checks in the dispatcher, the widget, and the
-chat's panel and bar. ADR-0265 is proposed and is revised in place; ADR-0269
+chat's panel and bar. ADR-0265, then proposed, is revised in place; ADR-0269
 takes a dated Update.
 
 ## Verification plan — Tier 1

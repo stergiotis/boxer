@@ -488,8 +488,8 @@ in place rather than as dated updates. The earlier open forks are settled — M1
 built, SD4 granularity is fixed at attribute-level (the entity-level synthetic
 section dropped), and SD5 is ordered-flush-by-default with a best-effort toggle.
 Depends on ADR-0111 for the id-generation seam (its `GetId(ctx)` has landed).
-ADR-0111 itself stays proposed; the durable-generator integration waits on
-it. S3 (a readback artefact, host-only / sampled capture tiers) and S4 (a
+ADR-0111 was proposed when this was written (accepted 2026-10-07); the
+durable-generator integration waits on it. S3 (a readback artefact, host-only / sampled capture tiers) and S4 (a
 second dimension) remain optional follow-ups.
 
 ## References

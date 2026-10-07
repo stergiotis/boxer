@@ -110,7 +110,7 @@ a fabricated "open" state that has no other reason to exist.
 ## 3 What ADR-0127 would cost
 
 [ADR-0127](../adr/0127-imzero2-interaction-record-replay.md) (proposed
-2026-07-17, unimplemented — no `RecorderPlugin`, no `IMZERO2_RECORD`, no
+2026-07-17, accepted 2026-10-07, unimplemented — no `RecorderPlugin`, no `IMZERO2_RECORD`, no
 `app imzero2 replay` in the tree) decides semantic interaction record/replay
 over the `egui_inspection` seam. Its milestones:
 

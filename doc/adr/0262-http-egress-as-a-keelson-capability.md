@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-26
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-07
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0262: HTTP egress as a keelson capability — `net.http.fetch.<destination>`
 
@@ -240,7 +238,7 @@ The QOC section carries the killed options. Two more were weighed:
 
 ## Status
 
-Proposed — 2026-09-26. Answers ADR-0165 O3 and ADR-0204 §SD4 Q5.
+Accepted 2026-10-07. Answers ADR-0165 O3 and ADR-0204 §SD4 Q5.
 
 Built the same day: `public/keelson/runtime/httpegress` (registry,
 service, client, `Getter`, both tables), hostboot `Services.HTTP`,

@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-04
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-07
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0284: Screenshots beside the chat's artefact — collected, copied and cropped by the model, sealed on disk under a budget
 
@@ -231,7 +229,7 @@ every existing conversation.
 
 ## Status
 
-Proposed 2026-10-04, built. The verification plan holds: the unit tests of
+Accepted 2026-10-07. The verification plan holds: the unit tests of
 the store (sealing once per hash, both budgets, the pixel ceiling before
 decoding, pins, purge), the crop, the names, revisions carrying the set
 through revert, rewind and purge, the tools under the settings and Ask

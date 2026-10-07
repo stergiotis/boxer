@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-27
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-07
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0264: Retained model conversations — an opt-in bodies kind for `llm.*` on `boxer.facts`
 
@@ -166,12 +164,16 @@ call row's reason, so a chat shows the turn that failed.
 answered — is kept for the counts. A chat learns of a lost turn from the
 verdict instead of discovering the gap later.
 
-### SD5 — Confined text is kept with its label
+### SD5 — Confined text is kept only on a local store
 
-A retained confined request, served under §SD3's locality rule, is kept
-with `sensitivity = confined` on every row. The label is what purge and
-masking will select by (SD7); until then confined text sits on the table
-like the rest.
+A retained confined request, served under ADR-0254 §SD3's locality rule,
+keeps its text only when the server holding `boxer.facts` is local by the
+same rule: loopback, or a host `BOXER_LLM_TRUSTED_HOSTS` names. On any
+other store the message rows are written without `LlmMessageBody`, and the
+reply's retention verdict says the text was not kept and why. Content the
+wall kept on this machine for the model does not leave it for the record.
+Every row of a confined request carries `sensitivity = confined`, the label
+purge and masking will select by (SD7).
 
 ### SD6 — The capability writes; reading is SQL, and ditchable
 
@@ -205,9 +207,10 @@ too.
   the mechanism a purge would likely use, and the columns it would
   select by — app, conversation, sensitivity — are on every row from the
   first write.
-- **Locality of the store.** §SD3 sends confined content only to a local
-  model, but the server holding `boxer.facts` may itself be remote.
-  Whether confined text may be kept on a non-local store is open (Q1).
+- **Locality of the store.** ADR-0254 §SD3 sends confined content only to a
+  local model, but the server holding `boxer.facts` may itself be remote.
+  Decided in SD5 (Q1, the owner's answer): confined text is not kept on a
+  store that is not local.
 - **Non-call conversation events** (rename, delete-from-list). No model
   call carries them; a small write verb is the next decision. A title the
   model wrote is a model call: the chat sends it on the retained subject
@@ -230,7 +233,7 @@ too.
 | `llm.RetainCaps` | new client grant, not sticky | manifests of consuming apps; cap-count pins |
 | Wire forms | request +`Conversation`, `ParentCallId`, `OmitFrom`, `OmitTo`; reply +call id, retention verdict; `wireVersion` bumps | the client's `Request` / `Response` |
 | Env registry (ADR-0009) | `BOXER_LLM_RETAIN` (off/ring/durable) added; `BOXER_LLM_KEEP_MESSAGES` retired | `doc/env-vars.md` regeneration; launch scripts setting the old name |
-| Runtime vocabulary | `llmCall` cohort +conversation, parent, where its kept messages start, history hash, declared omission; new `llmMessage` cohort | the assignments golden; `llmfacts` regenerates |
+| Runtime vocabulary | `llmCall` cohort +conversation, parent, where its kept messages start, history hash, declared omission; new `llmMessage` cohort | the assignments golden; the trail store (`runtime/trail`, ADR-0277) regenerates |
 | `boxer.facts` kinds | +`llmMessage`, append-shaped, externally provisioned | nothing in chstore; `VerifySchema` is the guard |
 | `keelson('llm_calls')` | +conversation, parent columns | the introspection table docs |
 
@@ -285,8 +288,8 @@ The QOC section carries the killed options. Two more were weighed:
 - **Path.** `true` becomes `BOXER_LLM_RETAIN=ring`. The env registry has no
   retired-name mechanism, so a host still setting the old name gets no
   diagnostic; the old variable is ignored and text is not kept.
-- **Regeneration.** The `llmfacts` store and DDL from the vocabulary; the
-  env table.
+- **Regeneration.** The trail store (`runtime/trail`, ADR-0277) and DDL from
+  the vocabulary; the env table.
 - **Old shape.** Removed outright; it has no consumer outside the service.
 
 ## Verification plan — Tier 1
@@ -301,27 +304,31 @@ The QOC section carries the killed options. Two more were weighed:
 - **Lane: integration.** Rows land in a ClickHouse server's facts table; a
   SQL read reassembles a conversation with one branch and a sliding
   window over two turns; the SD6
-  ditch removes every `llmMessage` row (and, scoped, one app's) while the
-  `llmCall` rows and other kinds count the same before and after. What
-  fails: the delete cannot select the kind through the membership
-  columns, or it touches another kind.
+  ditch clears the text on `llmMessage` rows (scoped to one app, then all)
+  while those rows, the `llmCall` rows and other kinds count the same
+  before and after. What fails: the ditch leaves text behind, or touches a
+  row or column outside the text section.
 - **Gap.** No live model here; the model's side is the fake client's.
 
 ## Status
 
-Proposed — awaiting review by the code owner. Open:
+Accepted 2026-10-07. The owner's answer:
 
 - **Q1** — may confined text be kept when the facts server is not local
-  (SD7)? Built as SD5 states: kept, with the label.
+  (SD7)? **No** (SD5): the text is kept only on a store that is local by
+  ADR-0254 §SD3's rule.
 
-Built 2026-09-27, in the working tree: the subject and grant, the ceiling,
-the request and reply fields, the declared omission, the `llmMessage` kind in the `llmfacts`
-store, the call row's retained fields, `llmfacts.DitchMessagesSQL`, and
-capinspector's entry. Both verification lanes pass, the integration one
-over clickhouse-local, where the ditch selects the kind through its
-membership and one app through the symbol value. Three points where the
-build is narrower than the text:
+Built 2026-09-27: the subject and grant, the ceiling, the request and reply
+fields, the declared omission, the call row's retained fields and
+capinspector's entry. ADR-0277 then moved the record onto the audit trail: a
+kept message is the `llmMessage` audit row plus the `LlmMessageBody`
+component, written through `runtime/trail`, and the SD6 ditch is
+`trail.DitchBodiesSQL`, which clears that component. Points where the build
+is narrower than the text:
 
+- **Confined text is kept on a remote store.** The write path does not yet
+  check where the facts server is; it keeps the text with the label, as SD5
+  read before Q1 was answered.
 - **The parent is looked up in-process.** The call row records the
   history hash, where its messages start and any declared omission, but
   the service reads its successor's parent — the per-message hashes —
