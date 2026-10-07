@@ -515,6 +515,7 @@ var (
 	MembAdhocDatasetColumnMax      = NkRegistry.MustBegin("adhocDatasetColumnMax", 285).End()
 	MembAdhocDatasetColumnDistinct = NkRegistry.MustBegin("adhocDatasetColumnDistinct", 286).End()
 	MembAdhocDatasetColumnSample   = NkRegistry.MustBegin("adhocDatasetColumnSample", 287).End()
+	MembAgentActionConsent         = NkRegistry.MustBegin("agentActionConsent", 288).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -583,5 +584,5 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembAdhocDatasetInputAliases, MembAdhocDatasetInputDigests, MembAdhocDatasetColumnDatasets,
 	MembAdhocDatasetColumnNames, MembAdhocDatasetColumnTypes, MembAdhocDatasetColumnNulls,
 	MembAdhocDatasetColumnMin, MembAdhocDatasetColumnMax, MembAdhocDatasetColumnDistinct,
-	MembAdhocDatasetColumnSample,
+	MembAdhocDatasetColumnSample, MembAgentActionConsent,
 }

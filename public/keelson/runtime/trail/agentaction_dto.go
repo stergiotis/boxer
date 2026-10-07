@@ -42,4 +42,8 @@ type AgentAction struct {
 	// Confined that the outcome carried confined content (ADR-0269 §SD7).
 	Tainted  bool `lw:"agentActionTainted,bool"`
 	Confined bool `lw:"agentActionConfined,bool"`
+	// Consent is the grant destination that admitted a consequential call
+	// without the person's confirmation (ADR-0288 (proposed) §SD4): one
+	// element when one did.
+	Consent []string `lw:"agentActionConsent,stringArray"`
 }

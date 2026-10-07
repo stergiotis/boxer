@@ -131,6 +131,38 @@ type OperationSpec struct {
 	// Gesture names the UI gesture that does the same; empty means there
 	// is none.
 	Gesture string
+	// Consent lets a consequential command run under the person's
+	// standing consent instead of a confirmation per call; zero means
+	// every call is confirmed.
+	Consent OperationConsent
+}
+
+// OperationConsent names how a task's grant covers a consequential call
+// (ADR-0288 (proposed) §SD4): a grant destination "<Class>:<prefix>",
+// approved by the person as any destination is, covers a call whose
+// argument Arg is a string starting with the non-empty prefix. A covered
+// call is applied as the task's mode applies a document command, and its
+// record names the destination that admitted it.
+type OperationConsent struct {
+	// Class is the destination class, a lower snake_case name: "publish".
+	Class string
+	// Arg is the argument field, as the model's JSON names it, whose value
+	// the prefix is matched against.
+	Arg string
+}
+
+// Pattern is the destination as a person or a model writes it in a
+// grant: "publish:<bundle prefix>"; empty when there is no consent.
+func (inst OperationConsent) Pattern() (pattern string) {
+	if inst == (OperationConsent{}) {
+		return ""
+	}
+	return inst.Destination("<" + inst.Arg + " prefix>")
+}
+
+// Destination is the grant destination for prefix under this consent.
+func (inst OperationConsent) Destination(prefix string) (destination string) {
+	return inst.Class + ":" + prefix
 }
 
 // OperationsCatalog is what an app declares in Manifest.Operations.
@@ -266,6 +298,23 @@ func (inst OperationSpec) problem(resources map[string]bool) (problem string) {
 			if !slices.Contains(fieldNames, r) {
 				return "the reference " + r + " names no argument field"
 			}
+		}
+	}
+	if inst.Consent != (OperationConsent{}) {
+		switch {
+		case inst.Effect != OperationEffectConsequential:
+			return "only a consequential command declares a consent"
+		case !ValidOperationName(inst.Consent.Class):
+			return "a consent's class is lower snake_case"
+		case inst.Args == nil:
+			return "a consent names an argument, and the command takes none"
+		}
+		fieldNames, err := opjson.FieldNames(inst.Args)
+		if err != nil {
+			return err.Error()
+		}
+		if !slices.Contains(fieldNames, inst.Consent.Arg) {
+			return "the consent's argument " + inst.Consent.Arg + " names no argument field"
 		}
 	}
 	return

@@ -138,18 +138,27 @@ func TestABundleCrossesWindowsWithItsProvenance(t *testing.T) {
 
 	// The consumer derives a result from it and publishes that in turn:
 	// its provenance names the bytes it read (lineage between bundles).
+	// This time the person has given standing consent for bundles named
+	// summ…, so the publish applies without a confirmation (§SD4).
+	widened := make(chan struct{})
+	go func() {
+		_, wErr := r.cli.Request(ctx, GrantRequest{Handle: g.Handle, Plan: "publish summaries", Destinations: []string{"publish:summ"}})
+		assert.NoError(t, wErr)
+		close(widened)
+	}()
+	r.person(true, nil)
+	<-widened
 	consumer.SetMainResultForTest(e2eInts(t, 10), "SELECT sum(n) AS total FROM keelson('result')")
 	out, err = r.cli.Call(ctx, CallRequest{Handle: g.Handle, Instance: consumerKey, Operation: "publish_result",
 		Args: `{"bundle":"summary"}`, Key: "pub2", Turn: "turn-3", ModelCall: "llm-3", ToolCall: "call_pub2", ToolIndex: 0})
 	require.NoError(t, err)
-	require.Equal(t, "proposed", out.Phase, out.Reason)
-	r.decideProposal(true, true)
+	require.Contains(t, []string{"accepted", "applied"}, out.Phase, out.Reason)
 	frameUntil(consumerKey, consumer, func() bool {
 		last := consumer.LastPublishForTest()
 		return last.Bundle == "summary" && last.Revision == 1 && !last.Pending
 	})
 
-		// A third party reads the dataset whole.
+	// A third party reads the dataset whole.
 	reader := r.bus.NewClient("test.notebook", caps)
 	read, err := adhocdata.ReadAllE(reader, "counts__result", nil)
 	require.NoError(t, err)
@@ -179,16 +188,22 @@ func TestABundleCrossesWindowsWithItsProvenance(t *testing.T) {
 		byOp[e.AdhocDataset.Val.Operation] = e
 	}
 	callOf := map[string]string{}
+	consentOf := map[string][]string{}
 	for _, a := range actions {
 		if a.Delegation.Has && a.Delegation.Val.Call.Has {
 			callOf[a.AgentAction.Val.Key] = a.Delegation.Val.Call.Val
 		}
+		consentOf[a.AgentAction.Val.Key] = append(consentOf[a.AgentAction.Val.Key], a.AgentAction.Val.Consent...)
 	}
 
 	pub := byOp[adhocdata.AuditPublish]
 	require.NotNil(t, pub, "the publish is a trail row")
 	assert.Equal(t, "SELECT number AS n FROM numbers(5)", pub.AdhocDataset.Val.SourceSql, "where the rows came from, as data")
 	assert.Equal(t, []string{"n"}, pub.AdhocDataset.Val.ColumnNames)
+	assert.Equal(t, []string{"0"}, pub.AdhocDataset.Val.ColumnMin, "and what they hold, summarised")
+	assert.Equal(t, []string{"4"}, pub.AdhocDataset.Val.ColumnMax)
+	assert.Equal(t, []uint64{5}, pub.AdhocDataset.Val.ColumnDistinct)
+	assert.Empty(t, consentOf["pub"], "the first publish was confirmed")
 	assert.Contains(t, pub.AdhocDataset.Val.Document, "keelson('result')", "the document is on the trail")
 	assert.True(t, pub.AdhocDataset.Val.Attested)
 	assert.Equal(t, callOf["pub"], pub.Delegation.Val.Call.Val, "it joins the publish_result action on (task, call)")
@@ -217,6 +232,7 @@ func TestABundleCrossesWindowsWithItsProvenance(t *testing.T) {
 		"lineage names the bytes the first publish sealed, as the service found them")
 	assert.Equal(t, "turn-3", derived.Conversation.Val.Turn.Val)
 	assert.Equal(t, callOf["pub2"], derived.Delegation.Val.Call.Val)
+	assert.Contains(t, consentOf["pub2"], "publish:summ", "its action row names the consent that admitted it")
 }
 
 func e2eInts(t *testing.T, vals ...int64) arrow.RecordBatch {

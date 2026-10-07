@@ -239,6 +239,66 @@ func TestAConsequentialCommandIsConfirmedEachTime(t *testing.T) {
 	assert.Equal(t, "proposed", out.Phase, "every time")
 }
 
+// widen adds destinations to the rig's task, as the person approves them.
+func (inst *rig) widen(g Grant, destinations ...string) {
+	inst.t.Helper()
+	got := make(chan Grant, 1)
+	go func() {
+		w, err := inst.cli.Request(context.Background(), GrantRequest{Handle: g.Handle, Plan: "publish", Destinations: destinations})
+		assert.NoError(inst.t, err)
+		got <- w
+	}()
+	inst.person(true, nil)
+	<-got
+}
+
+// ADR-0288 (proposed) §SD4: a publish:<prefix> destination the person
+// approved is standing consent for a consequential call whose argument
+// starts with the prefix; the call applies as a document command would,
+// and its record names the destination that admitted it.
+func TestAPublishGrantIsStandingConsent(t *testing.T) {
+	r, g := approvedRig(t, ModeAct)
+	out := r.call(g, "p0", "publish_text", `{"name":"report_q3"}`)
+	require.Equal(t, "proposed", out.Phase, "without the grant, the person confirms")
+	assert.Contains(t, out.Reason, "unless the grant lists publish:<name prefix>", "the refusal says what would cover it")
+	r.decideProposal(false, true)
+
+	r.widen(g, "publish:report_", "publish:")
+	out = r.call(g, "p1", "publish_text", `{"name":"report_q3"}`)
+	assert.Contains(t, []string{"accepted", "applied"}, out.Phase, out.Reason)
+	out = r.call(g, "p2", "publish_text", `{"name":"other"}`)
+	assert.Equal(t, "proposed", out.Phase, "a name outside the prefix is confirmed; an empty prefix covers nothing")
+	r.decideProposal(false, true)
+
+	var admitted []string
+	for _, a := range r.svc.Actions() {
+		if a.Key == "p1" {
+			admitted = append(admitted, a.Consent)
+		}
+		if a.Key == "p2" {
+			assert.Empty(t, a.Consent)
+		}
+	}
+	require.NotEmpty(t, admitted)
+	assert.Equal(t, "publish:report_", admitted[0])
+
+	// Suggest mode still proposes, but the person accepts rather than
+	// confirms: consent waives the confirmation, not the mode.
+	r.svc.mu.Lock()
+	var t0 *task
+	for _, cand := range r.svc.tasks {
+		t0 = cand
+	}
+	r.svc.mu.Unlock()
+	r.svc.setMode(t0, 7, ModeSuggest)
+	out = r.call(g, "p3", "publish_text", `{"name":"report_q4"}`)
+	require.Equal(t, "proposed", out.Phase)
+	r.svc.mu.Lock()
+	confirm := t0.keys["p3"].proposal.confirm
+	r.svc.mu.Unlock()
+	assert.False(t, confirm)
+}
+
 func TestLoweringToSuggestTurnsQueuedCommandsIntoProposals(t *testing.T) {
 	r, g := approvedRig(t, ModeAct)
 	r.call(g, "q", "get_text", "{}")

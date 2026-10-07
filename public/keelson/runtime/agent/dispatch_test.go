@@ -42,6 +42,9 @@ type setTextArgs struct {
 	Text string `desc:"the new text"`
 }
 type textResult struct{ Text string }
+type publishArgs struct {
+	Name string `desc:"the name to publish under"`
+}
 type useRefArgs struct {
 	Source string `desc:"a result reference"`
 }
@@ -70,6 +73,10 @@ var docOps = func() *appops.Set[*doc, docSnap] {
 	appops.Command(s, app.OperationSpec{Name: "export", Version: 1, Summary: "export the text",
 		Effect: app.OperationEffectConsequential, Reads: []string{"text"}, Agents: true},
 		func(d *doc, call app.OperationCall, in appops.None) (appops.None, error) { return appops.None{}, nil })
+	appops.Command(s, app.OperationSpec{Name: "publish_text", Version: 1, Summary: "publish the text under a name",
+		Effect: app.OperationEffectConsequential, Reads: []string{"text"}, Agents: true,
+		Consent: app.OperationConsent{Class: "publish", Arg: "name"}},
+		func(d *doc, call app.OperationCall, in publishArgs) (appops.None, error) { return appops.None{}, nil })
 	appops.Command(s, app.OperationSpec{Name: "wipe", Version: 1, Summary: "clear everything",
 		Effect: app.OperationEffectDocument, Writes: []string{"text"}},
 		func(d *doc, call app.OperationCall, in appops.None) (appops.None, error) {

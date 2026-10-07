@@ -9,20 +9,23 @@ import (
 // the JSON Schemas of its arguments and result derived. A withdrawn catalog
 // is one View with an empty Name and the Diagnostic set.
 type View struct {
-	App          app.AppIdT
-	AppDisplay   string
-	Name         string
-	Version      uint16
-	Summary      string
-	Class        app.OperationClassE
-	Effect       app.OperationEffectE
-	Reads        []string
-	Writes       []string
-	Refs         []string
-	Follows      []string
-	Agents       bool
-	Untrusted    bool
-	Gesture      string
+	App        app.AppIdT
+	AppDisplay string
+	Name       string
+	Version    uint16
+	Summary    string
+	Class      app.OperationClassE
+	Effect     app.OperationEffectE
+	Reads      []string
+	Writes     []string
+	Refs       []string
+	Follows    []string
+	Agents     bool
+	Untrusted  bool
+	Gesture    string
+	// Consent is the grant destination that covers a call without a
+	// confirmation, as app.OperationConsent.Pattern writes it.
+	Consent      string
 	ArgsSchema   string
 	ResultSchema string
 	Diagnostic   string
@@ -54,7 +57,7 @@ func ViewOf(m app.Manifest, o app.OperationSpec) (v View) {
 	v = View{
 		App: m.Id, AppDisplay: m.Display, Name: o.Name, Version: o.Version, Summary: o.Summary,
 		Class: o.Class, Effect: o.Effect, Reads: o.Reads, Writes: o.Writes, Refs: o.Refs, Follows: o.Follows,
-		Agents: o.Agents, Untrusted: o.Untrusted, Gesture: o.Gesture,
+		Agents: o.Agents, Untrusted: o.Untrusted, Gesture: o.Gesture, Consent: o.Consent.Pattern(),
 	}
 	if s, err := opjson.Schema(o.Args); err == nil {
 		v.ArgsSchema = string(s)

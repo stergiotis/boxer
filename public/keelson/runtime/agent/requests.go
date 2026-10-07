@@ -405,11 +405,11 @@ func (inst *Service) routeHeld(h *held) {
 			inst.mu.Unlock()
 			return
 		}
-		out, spec, e, _, _ := inst.check(t, h.req)
-		h.rec.spec = spec
+		out, spec, e, _, _, consent := inst.check(t, h.req)
+		h.rec.spec, h.rec.consent = spec, consent
 		if out.Phase == opwire.PhaseProposed {
 			h.rec.req, h.rec.entry = h.req, e
-			h.rec.proposal = &proposal{confirm: spec.Effect == app.OperationEffectConsequential,
+			h.rec.proposal = &proposal{confirm: spec.Effect == app.OperationEffectConsequential && consent == "",
 				expects: inst.expectsFor(t, h.req, spec)}
 		}
 		if out.Phase != opwire.PhaseUnspecified {

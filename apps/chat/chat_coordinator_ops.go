@@ -71,6 +71,7 @@ type describedOperation struct {
 	Follows      []string       `json:"follows,omitempty"`
 	Untrusted    bool           `json:"untrusted,omitempty"`
 	Gesture      string         `json:"gesture,omitempty"`
+	Consent      string         `json:"consent,omitempty"`
 	ArgsSchema   jsontext.Value `json:"args_schema,omitempty"`
 	ResultSchema jsontext.Value `json:"result_schema,omitempty"`
 }
@@ -101,7 +102,7 @@ func describeView(apps []agent.AppOperations) (out []describedApp) {
 		}
 		for _, o := range a.Operations {
 			d.Operations = append(d.Operations, describedOperation{Name: o.Name, Summary: o.Summary, Class: o.Class, Effect: o.Effect,
-				Reads: o.Reads, Writes: o.Writes, Refs: o.Refs, Follows: o.Follows, Untrusted: o.Untrusted, Gesture: o.Gesture,
+				Reads: o.Reads, Writes: o.Writes, Refs: o.Refs, Follows: o.Follows, Untrusted: o.Untrusted, Gesture: o.Gesture, Consent: o.Consent,
 				ArgsSchema: schemaValue(o.ArgsSchema), ResultSchema: schemaValue(o.ResultSchema)})
 		}
 		out = append(out, d)

@@ -54,6 +54,7 @@ type wireOperation struct {
 	Follows      []string `json:"follows,omitempty"`
 	Untrusted    bool     `json:"untrusted,omitempty"`
 	Gesture      string   `json:"gesture,omitempty"`
+	Consent      string   `json:"consent,omitempty"`
 	ArgsSchema   string   `json:"args_schema,omitempty"`
 	ResultSchema string   `json:"result_schema,omitempty"`
 }

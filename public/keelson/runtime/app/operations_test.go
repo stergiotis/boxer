@@ -53,11 +53,27 @@ func TestOperationsCatalogValidate(t *testing.T) {
 		"unspecified class":     func(c *OperationsCatalog) { c.Operations[0].Class = OperationClassUnspecified },
 		"unspecified effect":    func(c *OperationsCatalog) { c.Operations[1].Effect = OperationEffectUnspecified },
 		"invalid resource name": func(c *OperationsCatalog) { c.Resources[0].Name = "Doc" },
+		"consent on a document command": func(c *OperationsCatalog) {
+			c.Operations[1].Consent = OperationConsent{Class: "publish", Arg: "text"}
+		},
+		"consent names no field": func(c *OperationsCatalog) {
+			c.Operations[1].Effect, c.Operations[1].Consent = OperationEffectConsequential, OperationConsent{Class: "publish", Arg: "missing"}
+		},
+		"consent class not snake_case": func(c *OperationsCatalog) {
+			c.Operations[1].Effect, c.Operations[1].Consent = OperationEffectConsequential, OperationConsent{Class: "Publish", Arg: "text"}
+		},
 	} {
 		c := validCatalog()
 		mutate(c)
 		assert.Error(t, c.Validate(), name)
 	}
+}
+
+func TestAConsequentialCommandMayDeclareAConsent(t *testing.T) {
+	c := validCatalog()
+	c.Operations[1].Effect, c.Operations[1].Consent = OperationEffectConsequential, OperationConsent{Class: "publish", Arg: "text"}
+	require.NoError(t, c.Validate())
+	assert.Equal(t, "publish:sales_", c.Operations[1].Consent.Destination("sales_"))
 }
 
 func TestRegistryWithdrawsABadCatalogAndKeepsTheApp(t *testing.T) {

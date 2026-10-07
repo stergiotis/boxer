@@ -326,6 +326,7 @@ func wireOperationOf(m app.Manifest, o app.OperationSpec, withSchemas bool) (w w
 	w = wireOperation{
 		Name: o.Name, Version: o.Version, Summary: o.Summary, Class: o.Class.String(), Effect: o.Effect.String(),
 		Reads: o.Reads, Writes: o.Writes, Refs: o.Refs, Follows: o.Follows, Untrusted: o.Untrusted, Gesture: o.Gesture,
+		Consent: o.Consent.Pattern(),
 	}
 	if withSchemas {
 		v := appops.ViewOf(m, o)

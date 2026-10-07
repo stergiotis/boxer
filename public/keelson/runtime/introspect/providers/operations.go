@@ -50,6 +50,9 @@ func operationsTable(vs []appops.View) *introspect.Table {
 		Bool("untrusted", func(i int) bool { return v(i).Untrusted }).
 		// The UI gesture that does the same; empty when there is none.
 		String("gesture", func(i int) string { return v(i).Gesture }).
+		// The grant destination that covers a consequential call without a
+		// confirmation, e.g. publish:<bundle prefix>; empty when none.
+		String("consent", func(i int) string { return v(i).Consent }).
 		String("args_schema", func(i int) string { return v(i).ArgsSchema }).
 		String("result_schema", func(i int) string { return v(i).ResultSchema }).
 		// Why the app's catalog was withdrawn; set only on that app's one
