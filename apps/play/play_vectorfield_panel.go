@@ -48,6 +48,9 @@ const (
 	vectorFieldOptNameCol     = "name"
 	vectorFieldOptUnitCol     = "unit"
 	vectorFieldOptSpeedMaxCol = "speed_max"
+	// vectorFieldOptFamilyCol names a field family of keelson tables the pane
+	// reads in place of the reduction statements (ADR-0291 §SD4).
+	vectorFieldOptFamilyCol = "family"
 
 	// vector_field_sites columns. lat and lon are the contract; the other
 	// two are the ADR-0231 §SD5 optional form.
@@ -97,12 +100,13 @@ type vectorFieldClaim struct {
 // vectorFieldOptsClaim is the resolved column indices; -1 marks an absent
 // column, which is every column's normal state.
 type vectorFieldOptsClaim struct {
-	nameCol, unitCol, speedMaxCol int
+	nameCol, unitCol, speedMaxCol, familyCol int
 }
 
 type vectorFieldOpts struct {
 	name, unit string
 	speedMax   float32
+	family     string
 }
 
 // vectorFieldSitesClaim is the resolved column indices of the sites relation;
@@ -153,7 +157,7 @@ func (inst vectorFieldPanel) AcceptForChannel(ch ChannelID, schema *arrow.Schema
 			reason = "no `vector_field_opts` CTE"
 			return
 		}
-		oc := vectorFieldOptsClaim{nameCol: -1, unitCol: -1, speedMaxCol: -1}
+		oc := vectorFieldOptsClaim{nameCol: -1, unitCol: -1, speedMaxCol: -1, familyCol: -1}
 		for i, f := range schema.Fields() {
 			switch f.Name {
 			case vectorFieldOptNameCol:
@@ -162,6 +166,8 @@ func (inst vectorFieldPanel) AcceptForChannel(ch ChannelID, schema *arrow.Schema
 				oc.unitCol = i
 			case vectorFieldOptSpeedMaxCol:
 				oc.speedMaxCol = i
+			case vectorFieldOptFamilyCol:
+				oc.familyCol = i
 			}
 		}
 		claim = oc
@@ -268,6 +274,9 @@ func readVectorFieldOpts(rec arrow.RecordBatch, oc vectorFieldOptsClaim) (o vect
 		if v, ok := numericCellValue(rec.Column(oc.speedMaxCol), 0); ok && v > 0 && !math.IsInf(v, 0) {
 			o.speedMax = float32(v)
 		}
+	}
+	if oc.familyCol >= 0 {
+		o.family = formatCell(rec, oc.familyCol, 0)
 	}
 	return
 }
@@ -423,7 +432,9 @@ func (inst *VectorFieldDriver) Render(claim vectorFieldClaim, opts vectorFieldOp
 	inst.sites = sites
 	inst.lastOpts = opts
 	g := inst.guest
-	g.Ensure(inst.rel, inst.relParams, claim.shape)
+	rel := inst.rel
+	rel.Family = opts.family
+	g.Ensure(rel, inst.relParams, claim.shape)
 	g.Opts.Density = float32(inst.density)
 	g.Opts.Opacity = float32(inst.opacity)
 	g.Opts.Paused = inst.paused

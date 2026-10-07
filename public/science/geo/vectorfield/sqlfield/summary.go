@@ -30,6 +30,9 @@ type StepSummary struct {
 // would show anyway. The text is fixed per relation, like the window's
 // (ADR-0250 §SD3).
 func summaryStatement(rel Relation, timeType string) string {
+	if rel.Family != "" {
+		return familyStatement(rel, "_summary", append(append([]string{}, familyGridArgs...), familyPlaneArgs...))
+	}
 	stepCol, groupBy := "'' AS ff_text,", ""
 	inner := ""
 	if timeType != "" {

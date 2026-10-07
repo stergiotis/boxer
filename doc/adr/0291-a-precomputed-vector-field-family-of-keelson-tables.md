@@ -49,27 +49,35 @@ statement sets to the same answers.
 ### Subsidiary design decisions
 
 - **SD1 — The family.** For a field registered under a base name, a Go package
-  registers companion keelson tables: `<base>_steps`; `<base>_geometry` and
-  `<base>_regularity` (argument `step`); `<base>_window` (`step`, `level`, row
-  and column bounds, the turns of a periodic grid); `<base>_summary` (bounds and
-  level). Each replies in the shape of the statement it replaces.
+  registers keelson tables: `<base>`, the relation itself (`t, lat, lon, u, v`),
+  which a probe and a person's `SELECT *` read; `<base>_opts`, what
+  `vector_field_opts` carries (`name, unit, speed_max`) and the base under
+  `family`; and one table per purpose — `<base>_steps`; `<base>_geometry` and
+  `<base>_regularity` (argument `t`); `<base>_window` (`t`, row and column
+  bounds, the turns of a periodic grid, the plan's node filter); and
+  `<base>_summary` (the node filter). A purpose table's arguments are named
+  after the parameters its statement binds, and it replies in that
+  statement's shape. With `<base>_opts` in place of a literal options CTE, a
+  statement over a family is `SELECT *` over keelson calls throughout, which the
+  trivial endpoint of ADR-0290 answers.
 
-- **SD2 — Built once, sliced per request.** At registration the package
-  computes, per step, the binned grid of every power-of-two level from the
-  native planes — about a third more than the raw data — with the per-bin vector
-  mean, scalar mean speed and valid count the window statement returns. A window
-  is a slice of one level; a summary reduces the decimated nodes inside the
-  bounds. Nothing in a request is computed at a cost proportional to the
-  native grid.
+- **SD2 — Computed from the planes, per request.** Each purpose table computes
+  what its statement computes — the same filters, the same grouping, means in
+  float64 rounded to float32, non-finite values excluded as `isFinite`
+  excludes them. A window reads the nodes of one step once; for a grid of a
+  degree or coarser that is tens of thousands of nodes, cheap enough per
+  request in a tab. A binned grid per power-of-two level, which would make a
+  window a slice, is deferred until a finer grid needs it (Q3).
 
 - **SD3 — Any planes.** The family takes its input from any source that yields
   two `float32` planes per step on a regular grid
   ([ADR-0249](./0249-vector-fields-on-the-map-particles-over-a-batched-segment-opcode.md)),
   so it is independent of the file format behind them.
 
-- **SD4 — `sqlfield` reads the family when the relation says so.** The pane's
-  options relation (`vector_field_opts`) gains a column that names the family
-  base. When it is set, `sqlfield` sends its keelson statement set —
+- **SD4 — `sqlfield` reads the family when the relation says so.** A
+  `sqlfield.Relation` names a family base; a host sets it from the `family`
+  column of `vector_field_opts`. When it is set, `sqlfield` sends its keelson
+  statement set, without the relation's head, which the family does not need —
   `SELECT * FROM keelson('<base>_window', step = {ff_step:UInt32}, level =
   {ff_level:UInt8}, …)` and its siblings — with the parameters it sends today,
   and reads replies of the same shape. When it is not, nothing changes. The
@@ -87,6 +95,12 @@ statement sets to the same answers.
 - **Q1 — Which demo data.** A real forecast needs a GRIB reader, which
   ADR-0249 deferred to an ADR of its own; until then the family is filled from a
   synthetic field such as the tour's storm.
+- **Q3 — Per-level grids.** SD2 computes each reply from the native planes.
+  A 0.25° global grid is a million nodes a step, where a binned grid per level
+  would answer a coarse window from a few thousand; it is built when such a
+  grid is served in a tab.
+- **Q4 — Array arguments.** ADR-0290's arguments are scalars, so the window's
+  turns travel as the text of an `Array(Int64)` literal and the table parses it.
 - **Q2 — Families of other fields.** Only the vector field's purposes are
   served; whether another pane gains a family is that pane's decision.
 
@@ -128,7 +142,8 @@ statement sets to the same answers.
 ### Negative
 
 - `sqlfield` carries two statement sets, held together by the parity test.
-- The family holds every level of every step in memory, about 1.33× the field.
+- The family holds the field's planes in memory, and the relation table
+  materialises every node of every step when it is read whole.
 
 ### Neutral
 
@@ -141,8 +156,8 @@ None. `sqlfield` without the option behaves as before.
 
 ## Verification plan — Tier 1
 
-- M1: the parity integration test of SD5 against a ClickHouse server; unit tests
-  of the per-level grids and of a window across the seam.
+- M1: the parity test of SD5 against clickhouse-local, with windows across the
+  seam, coarser and finer than the grid, and over masked nodes.
 - M2: the demo scene captured in the tab and natively, compared.
 
 ## Status
@@ -150,6 +165,23 @@ None. `sqlfield` without the option behaves as before.
 Proposed 2026-10-07.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
+
+## Updates
+
+### 2026-10-07 — M1 built
+
+`keelsonfield` registers the family of SD1 from a `vectorfield.Grid` per step;
+`sqlfield.Relation.Family` switches a source to the keelson statement set. The
+parity test builds a masked 2° global swirl over three steps and reads it three
+ways — the six reduction statements over `keelson('<base>')` in
+clickhouse-local, the keelson set through the same engine (named arguments
+resolved natively), and the keelson set through the trivial evaluator with no
+ClickHouse — and finds the descriptions equal, the windows and summaries equal
+within float32 summation order, for a global, a regional, a seam-crossing, a
+masked and a finer-than-native request; the palette's high end agrees within
+5 %, since ClickHouse's quantile samples. The body above was revised as built:
+the relation and options tables joined the family, and windows are computed
+per request rather than sliced from per-level grids.
 
 ## References
 

@@ -77,9 +77,9 @@ func vectorFieldRelation(res splitResult, nodeID NodeID) (rel sqlfield.Relation,
 	return
 }
 
-// vectorFieldIdentity is what makes two relations the same field: the text
-// and the values of the signals it reads. A change of either is another
-// source (ADR-0250 §SD5).
+// vectorFieldIdentity is what makes two relations the same field: the text,
+// the family it reads instead when it names one (ADR-0291), and the values of
+// the signals it reads. A change of any is another source (ADR-0250 §SD5).
 func vectorFieldIdentity(rel sqlfield.Relation, params map[string]string) string {
 	names := make([]string, 0, len(params))
 	for k := range params {
@@ -90,6 +90,8 @@ func vectorFieldIdentity(rel sqlfield.Relation, params map[string]string) string
 	b.WriteString(rel.Head)
 	b.WriteByte(0)
 	b.WriteString(rel.From)
+	b.WriteByte(0)
+	b.WriteString(rel.Family)
 	for _, k := range names {
 		b.WriteByte(0)
 		b.WriteString(k)

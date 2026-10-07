@@ -36,6 +36,11 @@ type Relation struct {
 	// From is what the SELECT reads: a table, a table function, or the name
 	// of an item of Head's WITH list.
 	From string
+	// Family, when set, names a precomputed field family of keelson tables
+	// (ADR-0291): every statement is then `SELECT * FROM keelson('<Family>_…',
+	// …)` with the same parameters bound as named arguments, and Head and
+	// From are not read. It must be a table-name identifier.
+	Family string
 }
 
 func (inst Relation) statement(tail string) string {
@@ -53,6 +58,9 @@ var timeTypePattern = regexp.MustCompile(`^(Date|Date32|DateTime(\('[A-Za-z0-9_/
 // ProbeStatement reads the relation's schema and no rows. What it returns is
 // what [ShapeOf] judges.
 func ProbeStatement(rel Relation) string {
+	if rel.Family != "" {
+		return familyStatement(rel, "", nil)
+	}
 	return rel.statement("SELECT * FROM " + rel.From + " LIMIT 0")
 }
 
@@ -60,6 +68,9 @@ func ProbeStatement(rel Relation) string {
 // is what the step slot is later filled with, its instant, the column's type
 // and how many rows the step holds.
 func stepsStatement(rel Relation) string {
+	if rel.Family != "" {
+		return familyStatement(rel, "_steps", []string{"cap = {ff_cap:UInt64}"})
+	}
 	return rel.statement(`SELECT
     toString(t) AS ff_text,
     toUnixTimestamp64Milli(toDateTime64(t, 3, 'UTC')) AS ff_ms,
@@ -81,6 +92,9 @@ func stepPredicate(timeType string) string {
 // geometryStatement reads one step's extent and node counts, and a high
 // quantile of the magnitude for a palette to span.
 func geometryStatement(rel Relation, timeType string) string {
+	if rel.Family != "" {
+		return familyStatement(rel, "_geometry", []string{familyStep})
+	}
 	return rel.statement(`SELECT
     min(ff_lat) AS ff_south,
     max(ff_lat) AS ff_north,
@@ -103,6 +117,9 @@ FROM (
 // regularityStatement measures how far, in cells, the step's nodes stand off
 // the regular grid the geometry implies.
 func regularityStatement(rel Relation, timeType string) string {
+	if rel.Family != "" {
+		return familyStatement(rel, "_regularity", append([]string{familyStep}, familyGridArgs[:4]...))
+	}
 	return rel.statement(`SELECT
     max(abs(ff_x - round(ff_x))) AS ff_off_x,
     max(abs(ff_y - round(ff_y))) AS ff_off_y
@@ -132,6 +149,12 @@ FROM (
 // A NULL or non-finite component makes ff_ok NULL or 0, and the -If
 // aggregates count neither.
 func windowStatement(rel Relation, timeType string) string {
+	if rel.Family != "" {
+		return familyStatement(rel, "_window", append(append([]string{familyStep,
+			"row_start = {ff_row_start:Int64}", "row_end = {ff_row_end:Int64}",
+			"col_start = {ff_col_start:Int64}", "col_end = {ff_col_end:Int64}",
+			"turns = {ff_turns:String}"}, familyGridArgs...), familyPlaneArgs...))
+	}
 	return rel.statement(`SELECT
     intDiv(ff_ri - {ff_row_start:Int64}, {ff_factor:Int64}) AS ff_r,
     intDiv(ff_ciu - {ff_col_start:Int64}, {ff_factor:Int64}) AS ff_c,
@@ -156,6 +179,39 @@ WHERE ff_ri >= {ff_row_start:Int64} AND ff_ri <= {ff_row_end:Int64}
     AND ff_ciu >= {ff_col_start:Int64} AND ff_ciu <= {ff_col_end:Int64}
 GROUP BY ff_r, ff_c
 LIMIT {ff_cap:UInt64}`)
+}
+
+// The keelson statement set (ADR-0291 §SD4): one call per purpose, the
+// parameters bound as the same names a reduction statement reads.
+const familyStep = "t = {ff_t:String}"
+
+var familyGridArgs = []string{
+	"west = {ff_west:Float64}", "north = {ff_north:Float64}",
+	"dlon = {ff_dlon:Float64}", "dlat = {ff_dlat:Float64}",
+	"factor = {ff_factor:Int64}",
+}
+
+var familyPlaneArgs = []string{
+	"lat_min = {ff_lat_min:Float64}", "lat_max = {ff_lat_max:Float64}",
+	"lon_min1 = {ff_lon_min1:Float64}", "lon_max1 = {ff_lon_max1:Float64}",
+	"lon_min2 = {ff_lon_min2:Float64}", "lon_max2 = {ff_lon_max2:Float64}",
+	"cap = {ff_cap:UInt64}",
+}
+
+// familyPattern is what a family base may be: it lands in a string literal
+// and in keelson table names.
+var familyPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+func familyStatement(rel Relation, suffix string, args []string) string {
+	call := "keelson('" + rel.Family + suffix + "'"
+	for _, a := range args {
+		call += ", " + a
+	}
+	tail := ""
+	if suffix == "" {
+		tail = " LIMIT 0"
+	}
+	return "SELECT * FROM " + call + ")" + tail
 }
 
 func formatFloat(v float64) string { return strconv.FormatFloat(v, 'g', -1, 64) }

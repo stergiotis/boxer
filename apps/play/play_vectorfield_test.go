@@ -529,3 +529,27 @@ func TestVectorFieldLegendTicksNameTheClamps(t *testing.T) {
 	require.Contains(t, legendWords(true, 3.5, 30, "m/s"), "below 3.5 m/s")
 	require.Contains(t, legendWords(false, 0, 0, ""), "display setting")
 }
+
+// A `family` option names the keelson tables the pane reads instead of the
+// reduction statements, and it is part of what makes a field (ADR-0291).
+func TestVectorFieldOptsFamily(t *testing.T) {
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "name", Type: arrow.BinaryTypes.String},
+		{Name: "family", Type: arrow.BinaryTypes.String},
+	}, nil)
+	b := array.NewRecordBuilder(memory.NewGoAllocator(), schema)
+	defer b.Release()
+	b.Field(0).(*array.StringBuilder).Append("storm")
+	b.Field(1).(*array.StringBuilder).Append("gfs_wind")
+	rec := b.NewRecordBatch()
+	defer rec.Release()
+	claimAny, reason := vectorFieldPanel{}.AcceptForChannel(chVectorFieldOpts, schema, nil)
+	require.Empty(t, reason)
+	o := readVectorFieldOpts(rec, claimAny.(vectorFieldOptsClaim))
+	assert.Equal(t, "gfs_wind", o.family)
+
+	rel := sqlfield.Relation{Head: "WITH vector_field AS (SELECT * FROM keelson('gfs_wind'))", From: "vector_field"}
+	fam := rel
+	fam.Family = "gfs_wind"
+	assert.NotEqual(t, vectorFieldIdentity(rel, nil), vectorFieldIdentity(fam, nil))
+}
