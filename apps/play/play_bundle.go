@@ -261,13 +261,15 @@ func (inst *PlayLauncher) applyBundle(st *bundleState, res adhocdata.BundleResul
 		if st.follower != nil {
 			for _, a := range aliases {
 				st.follower.FollowAs(a, names[a])
-				// A grant names the dataset by its bundle, never by the
-				// local name the document reads (§SD3).
-				p.client.setDatasetOrigin(names[a], a, st.alias)
 			}
 		}
 		st.locals = locals
 		changed = true
+	}
+	for _, a := range aliases {
+		// The publisher can change on any revision; a grant names the
+		// dataset by its bundle, never by the local name (§SD3, §SD4).
+		p.client.setBundleOrigin(names[a], a, st.alias, res.PublisherTask)
 	}
 	st.revision, st.digest = res.Revision, res.DocumentDigest
 	st.runnable = doc.Runnable

@@ -73,6 +73,9 @@ type ReadResult struct {
 	Rows           uint64
 	ArrowIPCStream []byte
 	StreamDigest   string
+	// PublisherTask is the task whose attested call published the
+	// dataset's live revision; empty when no agent's call did.
+	PublisherTask string
 }
 
 // Read returns the newest live dataset under alias, whole. A read leaves
@@ -135,6 +138,9 @@ func (inst *Service) read(alias string) (res ReadResult, err error) {
 	best.mu.RLock()
 	res = ReadResult{Alias: alias, Bundle: best.bundle, Handle: best.handle, Revision: revision, Rows: best.rows,
 		ArrowIPCStream: stream, StreamDigest: best.streamDigest}
+	if best.context.Has {
+		res.PublisherTask = best.context.Val.Task
+	}
 	if best.revision != revision {
 		// A republish swapped the file between Open and the stats; the
 		// digest and rows are the new revision's. Hash what was read.
@@ -170,6 +176,7 @@ func (inst *Service) handleRead(msg *app.Msg) {
 	inst.reply(msg.Reply, adhocreply.AdhocReply{
 		At: time.Now().UTC(), Ok: true, Handle: res.Handle, Bundle: res.Bundle, Revision: res.Revision, Rows: res.Rows,
 		Bytes: uint64(len(res.ArrowIPCStream)), ArrowStream: res.ArrowIPCStream, StreamDigest: res.StreamDigest,
+		PublisherTask: res.PublisherTask,
 	})
 }
 
@@ -206,7 +213,7 @@ func ReadAllE(bus app.BusI, alias string, obo *app.OnBehalfOf) (res ReadResult, 
 		return res, eb.Build().Str("alias", alias).Errorf("read rejected: %s", rep.Reason) //boxer:lint disable=CS013 reason="the service's refusal crosses the bus as text and is what a reader shows"
 	}
 	res = ReadResult{Alias: alias, Bundle: rep.Bundle, Handle: rep.Handle, Revision: rep.Revision, Rows: rep.Rows,
-		ArrowIPCStream: rep.ArrowStream, StreamDigest: rep.StreamDigest}
+		ArrowIPCStream: rep.ArrowStream, StreamDigest: rep.StreamDigest, PublisherTask: rep.PublisherTask}
 	if got := streamDigest(res.ArrowIPCStream); got != res.StreamDigest {
 		return ReadResult{}, eb.Build().Str("alias", alias).Str("want", res.StreamDigest).Str("got", got).Errorf("%w", ErrDigestMismatch)
 	}
@@ -215,8 +222,14 @@ func ReadAllE(bus app.BusI, alias string, obo *app.OnBehalfOf) (res ReadResult, 
 
 // checkGrant asks the dispatcher whether the task's grant lists the
 // bundle res belongs to, or its alias; it refuses with the bundle's
-// destination first, the one that covers the bundle's other datasets.
+// destination first, the one that covers the bundle's other datasets. A
+// task reads what it published without a grant entry (§SD4): the live
+// revision's attested publisher is the reading task, which the caller's
+// attestation has confirmed is obo's.
 func (inst *Service) checkGrant(obo *app.OnBehalfOf, res ReadResult) (err error) {
+	if res.PublisherTask != "" && res.PublisherTask == obo.Task {
+		return nil
+	}
 	ref := inst.callCtx.Load()
 	if ref == nil || ref.c == nil {
 		return eh.Errorf("no dispatcher to check the grant: %w", ErrUnattested)

@@ -140,3 +140,9 @@ var (
 	MembAdhocInputHandles = KeelsonHrNkRegistry.MustBegin("adhocInputHandles", 243).
 				MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityArbitrary).End()
 )
+
+// MembAdhocPublisherTask is the task whose attested call published a
+// bundle's live revision (ADR-0288 (proposed) §SD4): that task reads and
+// runs on the bundle without a grant entry for it.
+var MembAdhocPublisherTask = KeelsonHrNkRegistry.MustBegin("adhocPublisherTask", 244).
+	MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()

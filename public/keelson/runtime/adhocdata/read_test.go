@@ -146,3 +146,32 @@ func TestReadDestinations(t *testing.T) {
 	assert.Equal(t, []string{"keelson-bundle:sales", "keelson:sales__orders"}, ReadDestinations("sales__orders"))
 	assert.Equal(t, []string{"keelson:stats_w3"}, ReadDestinations("stats_w3"))
 }
+
+// A task reads what it published (ADR-0288 (proposed) §SD4): the live
+// revision's attested publisher reads it without a grant entry; any other
+// task still needs one, and the publisher task travels on the resolve.
+func TestATaskReadsWhatItPublished(t *testing.T) {
+	svc, bus := readService(t)
+	d := &fakeDispatcher{call: agentCall()}
+	svc.SetDispatcher(d)
+	_, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t),
+		By: windowA, OnBehalfOf: oboOf(d.call)})
+	require.NoError(t, err)
+	window := bus.NewClient(windowA.App, []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
+	window.SetInstanceKey(windowA.Instance)
+
+	got, err := ReadAllE(window, "sales__orders", oboOf(d.call))
+	require.NoError(t, err, "no grant entry: the task published it")
+	assert.Equal(t, "task-1", got.PublisherTask)
+	res, err := ResolveBundleRequest(window, "sales", nil)
+	require.NoError(t, err)
+	assert.Equal(t, "task-1", res.PublisherTask, "the publisher task travels on the resolve")
+
+	d.mu.Lock()
+	d.call.Task, d.call.Call = "task-2", "task-2-1"
+	d.mu.Unlock()
+	_, err = ReadAllE(window, "sales__orders", oboOf(d.call))
+	var ge *GrantError
+	require.ErrorAs(t, err, &ge, "another task still needs the grant")
+	assert.Equal(t, "keelson-bundle:sales", ge.Destination)
+}

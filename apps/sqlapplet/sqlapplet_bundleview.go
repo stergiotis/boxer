@@ -310,7 +310,7 @@ func (inst *BundleView) apply(res adhocdata.BundleResult) {
 	for _, d := range res.Datasets {
 		// A grant names the dataset by its bundle or its alias, never by
 		// the name the document reads it under (ADR-0288 §SD3).
-		inst.inner.SetDatasetOrigin(d.LocalName, d.Alias, inst.alias)
+		inst.inner.SetDatasetOrigin(d.LocalName, d.Alias, inst.alias, res.PublisherTask)
 	}
 	inst.revision, inst.digest = res.Revision, res.DocumentDigest
 	inst.inner.SetDatasetNotice(nil)

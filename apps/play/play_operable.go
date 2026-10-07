@@ -129,9 +129,11 @@ func (inst *PlayApp) WorkPending() (pending bool) {
 // SetDatasetOrigin records that the name local, under which a dataset is
 // bound, stands for the dataset published as alias in bundle (empty when it
 // is in none), so the agent limits judge a run by the names a grant lists
-// it by, never by local (ADR-0288 (proposed) §SD3).
-func (inst *PlayApp) SetDatasetOrigin(local string, alias string, bundle string) {
+// it by, never by local (ADR-0288 (proposed) §SD3). publisherTask is the
+// task whose attested call published the bundle's live revision, which
+// runs on it without a grant entry (§SD4); empty when no agent's call did.
+func (inst *PlayApp) SetDatasetOrigin(local string, alias string, bundle string, publisherTask string) {
 	if inst.client != nil {
-		inst.client.setDatasetOrigin(local, alias, bundle)
+		inst.client.setBundleOrigin(local, alias, bundle, publisherTask)
 	}
 }

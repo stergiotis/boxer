@@ -385,7 +385,8 @@ func (inst *Service) handleBundleRetract(msg *app.Msg) {
 func bundleReply(res BundleResult, withDocument bool) (rep adhocreply.AdhocReply) {
 	rep = adhocreply.AdhocReply{
 		At: time.Now().UTC(), Ok: true, Bundle: res.Alias, Revision: res.Revision, CreatedAtUs: res.CreatedAtUs,
-		LocalNames: make([]string, 0, len(res.Datasets)), Handles: make([]string, 0, len(res.Datasets)),
+		PublisherTask: res.PublisherTask,
+		LocalNames:    make([]string, 0, len(res.Datasets)), Handles: make([]string, 0, len(res.Datasets)),
 	}
 	if withDocument {
 		rep.Document = res.Document

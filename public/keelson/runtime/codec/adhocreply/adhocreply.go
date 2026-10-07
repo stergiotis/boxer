@@ -71,4 +71,9 @@ type AdhocReply struct {
 	// Destination is the grant destination a refused read needed
 	// (ADR-0288 (proposed) §SD6); empty otherwise.
 	Destination string `lw:"adhocDestination,stringArray"`
+
+	// PublisherTask is the task whose attested call published the bundle's
+	// live revision, on a resolve and a read; empty when no agent's call
+	// did (ADR-0288 (proposed) §SD4).
+	PublisherTask string `lw:"adhocPublisherTask,stringArray"`
 }

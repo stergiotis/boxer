@@ -152,7 +152,11 @@ a dataset whole, through a read that takes no statement.
   would miss rows with nothing to say so, and a node's lane does not record
   whether it was cut. An agent's run reading a bundle needs
   `keelson-bundle:<bundle>` or `keelson:<global alias>` in its grant; both
-  are host reach.
+  are host reach. A task reads and runs on what it
+  published without either: the dataset service records the attested
+  task of each live revision and carries it on a resolve and a read, so
+  the decision is by identity, and a republish by the person or another
+  task ends it.
 
 - **SD5 — Every bundle operation is audited, and provenance is data.**
   Every request is audited under a context the host attests. A request an agent's call caused

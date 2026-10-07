@@ -228,7 +228,8 @@ func oboCall(obo *app.OnBehalfOf) (s string) {
 // not split here.
 func bundleResultOf(rep adhocreply.AdhocReply) (res BundleResult) {
 	res = BundleResult{Alias: rep.Bundle, Revision: rep.Revision, Document: rep.Document, CreatedAtUs: rep.CreatedAtUs,
-		Datasets: make([]BundleDataset, 0, len(rep.LocalNames))}
+		PublisherTask: rep.PublisherTask,
+		Datasets:      make([]BundleDataset, 0, len(rep.LocalNames))}
 	if len(rep.Document) > 0 {
 		res.DocumentDigest = trail.ContentDigest(string(rep.Document))
 	}

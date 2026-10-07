@@ -67,7 +67,10 @@ func checkAgentLimits(residual string, dec dispatchDecision, obo *app.OnBehalfOf
 			n = datasetName{local: t, alias: t}
 		}
 		dests := n.destinations()
-		covered := slices.Contains(obo.Destinations, DestinationKeelson(t))
+		// A task runs on what it published without a grant entry (ADR-0288
+		// §SD4): the dataset service attested the publish to that task.
+		covered := slices.Contains(obo.Destinations, DestinationKeelson(t)) ||
+			(n.publisherTask != "" && n.publisherTask == obo.Task)
 		for _, d := range dests {
 			covered = covered || slices.Contains(obo.Destinations, d)
 		}

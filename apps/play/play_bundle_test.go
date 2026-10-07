@@ -288,6 +288,10 @@ func TestABundleRunNeedsTheBundleInTheGrant(t *testing.T) {
 	assert.Contains(t, refusal.Error(), "keelson-bundle:sales")
 	assert.NoError(t, refuseAgentStatement(l.inner.client, &app.OnBehalfOf{Task: "t", Destinations: []string{"keelson-bundle:sales"}}, stmt))
 	assert.NoError(t, refuseAgentStatement(l.inner.client, &app.OnBehalfOf{Task: "t", Destinations: []string{"keelson:sales__orders"}}, stmt))
+	l.inner.client.setBundleOrigin("orders", "sales__orders", "sales", "t")
+	assert.NoError(t, refuseAgentStatement(l.inner.client, &app.OnBehalfOf{Task: "t"}, stmt), "a task runs on what it published")
+	assert.Error(t, refuseAgentStatement(l.inner.client, &app.OnBehalfOf{Task: "other"}, stmt))
+	l.inner.client.setBundleOrigin("orders", "sales__orders", "sales", "")
 
 	list, err := listDatasets(l.inner.client, &app.OnBehalfOf{Task: "t", Destinations: []string{"keelson-bundle:sales"}}, "", nil)
 	require.NoError(t, err)

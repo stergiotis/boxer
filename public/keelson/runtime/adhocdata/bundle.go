@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sealed"
@@ -136,6 +135,10 @@ type BundleResult struct {
 	// SourceSql and Inputs are the live revision's provenance.
 	SourceSql string
 	Inputs    []BundleInput
+	// PublisherTask is Context's task, and what survives the bus: the
+	// task that reads and runs on the bundle without a grant entry for it
+	// (§SD4).
+	PublisherTask string
 }
 
 // bundleRec is one live bundle. It is replaced, never mutated, so a
@@ -608,6 +611,9 @@ func (inst *bundleRec) result(recs []*record) (res BundleResult) {
 		Alias: inst.alias, Revision: inst.revision, Document: inst.document, DocumentDigest: inst.documentDigest,
 		CreatedAtUs: inst.createdAt, Datasets: make([]BundleDataset, 0, len(inst.handles)),
 		Owner: inst.owner, Context: inst.context, SourceSql: inst.sourceSql, Inputs: inst.inputs,
+	}
+	if inst.context.Has {
+		res.PublisherTask = inst.context.Val.Task
 	}
 	for i, h := range inst.handles {
 		d := BundleDataset{LocalName: inst.localNames[i], Alias: DatasetAlias(inst.alias, inst.localNames[i]), Handle: h}

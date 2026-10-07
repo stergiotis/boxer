@@ -33,23 +33,24 @@ import (
 // --- Resolved membership ids from vdd. ---
 
 var (
-	kindAdhocReplyOk      uint64
-	kindReason            uint64
-	kindAdhocHandle       uint64
-	kindAdhocRevision     uint64
-	kindAdhocRows         uint64
-	kindAdhocBytes        uint64
-	kindAdhocCreatedAtUs  uint64
-	kindAdhocHandleLive   uint64
-	kindAdhocNoLive       uint64
-	kindAdhocBundle       uint64
-	kindAdhocDocument     uint64
-	kindAdhocLocalNames   uint64
-	kindAdhocHandles      uint64
-	kindAdhocArrowStream  uint64
-	kindAdhocStreamDigest uint64
-	kindAdhocAlias        uint64
-	kindAdhocDestination  uint64
+	kindAdhocReplyOk       uint64
+	kindReason             uint64
+	kindAdhocHandle        uint64
+	kindAdhocRevision      uint64
+	kindAdhocRows          uint64
+	kindAdhocBytes         uint64
+	kindAdhocCreatedAtUs   uint64
+	kindAdhocHandleLive    uint64
+	kindAdhocNoLive        uint64
+	kindAdhocBundle        uint64
+	kindAdhocDocument      uint64
+	kindAdhocLocalNames    uint64
+	kindAdhocHandles       uint64
+	kindAdhocArrowStream   uint64
+	kindAdhocStreamDigest  uint64
+	kindAdhocAlias         uint64
+	kindAdhocDestination   uint64
+	kindAdhocPublisherTask uint64
 )
 
 func init() {
@@ -70,6 +71,7 @@ func init() {
 	kindAdhocStreamDigest = vdd.MembAdhocStreamDigest.GetId().Value()
 	kindAdhocAlias = vdd.MembAdhocAlias.GetId().Value()
 	kindAdhocDestination = vdd.MembAdhocDestination.GetId().Value()
+	kindAdhocPublisherTask = vdd.MembAdhocPublisherTask.GetId().Value()
 	buscodec.Register[AdhocReply](adhocReplyBusCodec)
 }
 
@@ -133,23 +135,24 @@ type AdhocReplyColumns struct {
 	NaturalKey [][]byte
 	At         []time.Time
 
-	Ok           []bool
-	Reason       []string
-	Handle       []string
-	Revision     []uint64
-	Rows         []uint64
-	Bytes        []uint64
-	CreatedAtUs  []int64
-	HandleLive   []bool
-	NoLive       []bool
-	Bundle       []string
-	Document     [][]byte
-	LocalNames   [][]string
-	Handles      [][]string
-	ArrowStream  [][]byte
-	StreamDigest []string
-	Alias        []string
-	Destination  []string
+	Ok            []bool
+	Reason        []string
+	Handle        []string
+	Revision      []uint64
+	Rows          []uint64
+	Bytes         []uint64
+	CreatedAtUs   []int64
+	HandleLive    []bool
+	NoLive        []bool
+	Bundle        []string
+	Document      [][]byte
+	LocalNames    [][]string
+	Handles       [][]string
+	ArrowStream   [][]byte
+	StreamDigest  []string
+	Alias         []string
+	Destination   []string
+	PublisherTask []string
 }
 
 // Len returns the number of rows currently in the batch.
@@ -182,6 +185,7 @@ func (c *AdhocReplyColumns) Append(row AdhocReply) {
 	c.StreamDigest = append(c.StreamDigest, row.StreamDigest)
 	c.Alias = append(c.Alias, row.Alias)
 	c.Destination = append(c.Destination, row.Destination)
+	c.PublisherTask = append(c.PublisherTask, row.PublisherTask)
 }
 
 // Row reconstructs entity i as an AoS AdhocReply record. Inverse of
@@ -208,6 +212,7 @@ func (c *AdhocReplyColumns) Row(i int) (row AdhocReply) {
 	row.StreamDigest = c.StreamDigest[i]
 	row.Alias = c.Alias[i]
 	row.Destination = c.Destination[i]
+	row.PublisherTask = c.PublisherTask[i]
 	return
 }
 
@@ -433,6 +438,9 @@ func AdhocReplyBuildEntities[
 		stringArraySecAttr_Destination := stringArraySec.BeginAttributeSingle(c.Destination[i])
 		stringArraySecAttr_Destination.AddMembershipLowCardRefP(kindAdhocDestination)
 		stringArraySecAttr_Destination.EndAttributeP()
+		stringArraySecAttr_PublisherTask := stringArraySec.BeginAttributeSingle(c.PublisherTask[i])
+		stringArraySecAttr_PublisherTask.AddMembershipLowCardRefP(kindAdhocPublisherTask)
+		stringArraySecAttr_PublisherTask.EndAttributeP()
 		if len(c.LocalNames[i]) > 0 {
 			stringArraySecAttr_LocalNames := stringArraySec.BeginAttribute()
 			for _, v := range c.LocalNames[i] {
@@ -549,6 +557,9 @@ func AdhocReplyEmitSectionStringArray[
 	stringArraySecAttr_Destination := stringArraySec.BeginAttributeSingle(row.Destination)
 	stringArraySecAttr_Destination.AddMembershipLowCardRefP(kindAdhocDestination)
 	stringArraySecAttr_Destination.EndAttributeP()
+	stringArraySecAttr_PublisherTask := stringArraySec.BeginAttributeSingle(row.PublisherTask)
+	stringArraySecAttr_PublisherTask.AddMembershipLowCardRefP(kindAdhocPublisherTask)
+	stringArraySecAttr_PublisherTask.EndAttributeP()
 	if len(row.LocalNames) > 0 {
 		stringArraySecAttr_LocalNames := stringArraySec.BeginAttribute()
 		for _, v := range row.LocalNames {
@@ -946,6 +957,9 @@ func AdhocReplyFillFromArrow[
 		var stringArrayDestinationVal string
 		var stringArrayDestinationCount int
 		var stringArrayDestinationLastAttr int64
+		var stringArrayPublisherTaskVal string
+		var stringArrayPublisherTaskCount int
+		var stringArrayPublisherTaskLastAttr int64
 		var stringArrayLocalNamesSlice []string
 		var stringArrayLocalNamesCount int
 		var stringArrayLocalNamesLastAttr int64
@@ -989,6 +1003,17 @@ func AdhocReplyFillFromArrow[
 						return
 					}
 					stringArrayDestinationVal = val
+				case kindAdhocPublisherTask:
+					if stringArrayPublisherTaskLastAttr != attrJ+1 {
+						stringArrayPublisherTaskLastAttr = attrJ + 1
+						stringArrayPublisherTaskCount++
+					}
+					val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocPublisherTask").Str("field", "PublisherTask").Errorf("slot stringArray@adhocPublisherTask (field PublisherTask) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
+					stringArrayPublisherTaskVal = val
 				case kindAdhocLocalNames:
 					if stringArrayLocalNamesLastAttr != attrJ+1 {
 						stringArrayLocalNamesLastAttr = attrJ + 1
@@ -1023,6 +1048,11 @@ func AdhocReplyFillFromArrow[
 			return
 		}
 		c.Destination = append(c.Destination, stringArrayDestinationVal)
+		if stringArrayPublisherTaskCount != 1 {
+			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocPublisherTask").Int("got", stringArrayPublisherTaskCount).Errorf("slot stringArray@adhocPublisherTask (field PublisherTask) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayPublisherTaskCount)
+			return
+		}
+		c.PublisherTask = append(c.PublisherTask, stringArrayPublisherTaskVal)
 		if stringArrayLocalNamesCount > 1 {
 			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocLocalNames").Int("got", stringArrayLocalNamesCount).Errorf("slot stringArray@adhocLocalNames (field LocalNames) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayLocalNamesCount)
 			return
@@ -1359,6 +1389,9 @@ func AdhocReplyReadRow[
 	var stringArrayDestinationVal string
 	var stringArrayDestinationCount int
 	var stringArrayDestinationLastAttr int64
+	var stringArrayPublisherTaskVal string
+	var stringArrayPublisherTaskCount int
+	var stringArrayPublisherTaskLastAttr int64
 	var stringArrayLocalNamesSlice []string
 	var stringArrayLocalNamesCount int
 	var stringArrayLocalNamesLastAttr int64
@@ -1402,6 +1435,17 @@ func AdhocReplyReadRow[
 					return
 				}
 				stringArrayDestinationVal = val
+			case kindAdhocPublisherTask:
+				if stringArrayPublisherTaskLastAttr != attrJ+1 {
+					stringArrayPublisherTaskLastAttr = attrJ + 1
+					stringArrayPublisherTaskCount++
+				}
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocPublisherTask").Str("field", "PublisherTask").Errorf("slot stringArray@adhocPublisherTask (field PublisherTask) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				stringArrayPublisherTaskVal = val
 			case kindAdhocLocalNames:
 				if stringArrayLocalNamesLastAttr != attrJ+1 {
 					stringArrayLocalNamesLastAttr = attrJ + 1
@@ -1443,6 +1487,14 @@ func AdhocReplyReadRow[
 	}
 	if stringArrayDestinationCount == 1 {
 		row.Destination = stringArrayDestinationVal
+		present = true
+	}
+	if stringArrayPublisherTaskCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocPublisherTask").Int("got", stringArrayPublisherTaskCount).Errorf("slot stringArray@adhocPublisherTask (field PublisherTask) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayPublisherTaskCount)
+		return
+	}
+	if stringArrayPublisherTaskCount == 1 {
+		row.PublisherTask = stringArrayPublisherTaskVal
 		present = true
 	}
 	if stringArrayLocalNamesCount > 1 {

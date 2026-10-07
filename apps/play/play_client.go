@@ -151,6 +151,9 @@ type Client struct {
 type datasetOrigin struct {
 	alias  string
 	bundle string
+	// publisherTask is the task whose attested call published the
+	// bundle's live revision; that task runs on it without a grant entry.
+	publisherTask string
 }
 
 func NewClient(cfg ClientConfig, httpClient *http.Client) *Client {
@@ -754,9 +757,10 @@ func (inst *Client) inputHandlesOf(sql string) (handles []string) {
 // datasetName is a bound dataset as a grant names it: the name the buffer
 // reads, its global alias, and its bundle when it has one.
 type datasetName struct {
-	local  string
-	alias  string
-	bundle string
+	local         string
+	alias         string
+	bundle        string
+	publisherTask string
 }
 
 // destinations are the grant entries that cover the dataset, the one a
@@ -771,7 +775,7 @@ func (inst datasetName) destinations() (dests []string) {
 func (inst *Client) datasetNameLocked(local string) (n datasetName) {
 	n = datasetName{local: local, alias: local}
 	if o, ok := inst.datasetOrigins[local]; ok {
-		n.alias, n.bundle = o.alias, o.bundle
+		n.alias, n.bundle, n.publisherTask = o.alias, o.bundle, o.publisherTask
 	}
 	return
 }
@@ -781,6 +785,19 @@ func (inst *Client) datasetNameOf(local string) (n datasetName) {
 	inst.mu.RLock()
 	defer inst.mu.RUnlock()
 	return inst.datasetNameLocked(local)
+}
+
+// setBundleOrigin is setDatasetOrigin for a bundle's dataset, with the task
+// that published the bundle's live revision, empty when no agent's call
+// did (ADR-0288 (proposed) §SD4).
+func (inst *Client) setBundleOrigin(local string, alias string, bundle string, publisherTask string) {
+	inst.setDatasetOrigin(local, alias, bundle)
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if o, ok := inst.datasetOrigins[local]; ok {
+		o.publisherTask = publisherTask
+		inst.datasetOrigins[local] = o
+	}
 }
 
 // setDatasetOrigin records that local stands for the dataset published
