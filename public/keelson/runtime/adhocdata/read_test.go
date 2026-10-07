@@ -175,3 +175,48 @@ func TestATaskReadsWhatItPublished(t *testing.T) {
 	require.ErrorAs(t, err, &ge, "another task still needs the grant")
 	assert.Equal(t, "keelson-bundle:sales", ge.Destination)
 }
+
+// Column summaries carry values, so they are read as the data is: anyone's
+// read without an agent's call gets them, an agent's needs the grant or to
+// have published the bundle, and the catalog carries no values at all
+// (ADR-0288 (proposed) §SD5).
+func TestColumnValuesAreReadAsTheDataIs(t *testing.T) {
+	svc, bus := readService(t)
+	d := &fakeDispatcher{call: agentCall()}
+	svc.SetDispatcher(d)
+	_, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t),
+		By: windowA, OnBehalfOf: oboOf(d.call)})
+	require.NoError(t, err)
+	window := bus.NewClient(windowA.App, []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
+	window.SetInstanceKey(windowA.Instance)
+
+	got, err := ReadColumnsE(window, "sales__orders", nil)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"1"}, got.Columns.Min)
+	assert.Equal(t, []string{"3"}, got.Columns.Max)
+	assert.Equal(t, []string{"[1,2,3]"}, got.Columns.Sample)
+
+	got, err = ReadColumnsE(window, "sales__orders", oboOf(d.call))
+	require.NoError(t, err, "the task that published it")
+	assert.Equal(t, []string{"3"}, got.Columns.Max)
+
+	d.mu.Lock()
+	d.call.Task, d.call.Call = "task-2", "task-2-1"
+	d.mu.Unlock()
+	_, err = ReadColumnsE(window, "sales__orders", oboOf(d.call))
+	var ge *GrantError
+	require.ErrorAs(t, err, &ge, "another task needs the grant for the values")
+	assert.Equal(t, "keelson-bundle:sales", ge.Destination)
+
+	batch, err := newBundleCatalogProvider(svc).Snapshot(introspect.AllColumns())
+	require.NoError(t, err)
+	defer batch.Release()
+	for _, f := range batch.Schema().Fields() {
+		assert.NotContains(t, []string{"column_min", "column_max", "column_sample"}, f.Name, "the catalog carries no values")
+	}
+	ops := []string{}
+	for _, a := range svc.auditRecords() {
+		ops = append(ops, a.Operation)
+	}
+	assert.Contains(t, ops, AuditReadColumns, "a read of the values is audited")
+}

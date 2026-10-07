@@ -511,10 +511,10 @@ var (
 	MembAdhocDatasetColumnNames    = NkRegistry.MustBegin("adhocDatasetColumnNames", 281).End()
 	MembAdhocDatasetColumnTypes    = NkRegistry.MustBegin("adhocDatasetColumnTypes", 282).End()
 	MembAdhocDatasetColumnNulls    = NkRegistry.MustBegin("adhocDatasetColumnNulls", 283).End()
-	MembAdhocDatasetColumnMin      = NkRegistry.MustBegin("adhocDatasetColumnMin", 284).End()
-	MembAdhocDatasetColumnMax      = NkRegistry.MustBegin("adhocDatasetColumnMax", 285).End()
+	// 284, 285 and 287 were a column's minimum, maximum and sample: values
+	// of sealed data, which the trail does not keep (ADR-0288 (proposed)
+	// §SD5). Retired before they were ever pushed; never reuse them.
 	MembAdhocDatasetColumnDistinct = NkRegistry.MustBegin("adhocDatasetColumnDistinct", 286).End()
-	MembAdhocDatasetColumnSample   = NkRegistry.MustBegin("adhocDatasetColumnSample", 287).End()
 	MembAgentActionConsent         = NkRegistry.MustBegin("agentActionConsent", 288).End()
 )
 
@@ -583,6 +583,5 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembAdhocDatasetInFlight, MembAdhocDatasetDocument, MembAdhocDatasetSourceSql, MembAdhocDatasetInputHandles,
 	MembAdhocDatasetInputAliases, MembAdhocDatasetInputDigests, MembAdhocDatasetColumnDatasets,
 	MembAdhocDatasetColumnNames, MembAdhocDatasetColumnTypes, MembAdhocDatasetColumnNulls,
-	MembAdhocDatasetColumnMin, MembAdhocDatasetColumnMax, MembAdhocDatasetColumnDistinct,
-	MembAdhocDatasetColumnSample, MembAgentActionConsent,
+	MembAdhocDatasetColumnDistinct, MembAgentActionConsent,
 }

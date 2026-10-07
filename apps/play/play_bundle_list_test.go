@@ -96,7 +96,7 @@ func TestBundleListSqlRunsAgainstTheCatalog(t *testing.T) {
 	require.Len(t, got, 1)
 	assert.Equal(t, "sales", got[0].Alias)
 	assert.Equal(t, []BundleColumn{
-		{Dataset: "orders", Name: "id", Type: "int64", Min: "1", Max: "3", Distinct: 3, Sample: "[3,1,2]"},
-		{Dataset: "orders", Name: "note", Type: "utf8", Nulls: 1, Min: `"a"`, Max: `"b"`, Distinct: 2, Sample: `["b","a"]`},
-	}, got[0].Columns)
+		{Dataset: "orders", Name: "id", Type: "int64", Distinct: 3},
+		{Dataset: "orders", Name: "note", Type: "utf8", Nulls: 1, Distinct: 2},
+	}, got[0].Columns, "the catalog carries statistics, never values")
 }

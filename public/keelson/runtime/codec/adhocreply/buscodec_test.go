@@ -75,6 +75,9 @@ func normalized(got adhocreply.AdhocReply, orig adhocreply.AdhocReply) adhocrepl
 	if len(got.ArrowStream) == 0 {
 		got.ArrowStream = orig.ArrowStream
 	}
+	if len(got.ColumnSummaries) == 0 {
+		got.ColumnSummaries = orig.ColumnSummaries
+	}
 	return got
 }
 

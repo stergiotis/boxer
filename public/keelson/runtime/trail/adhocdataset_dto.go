@@ -50,9 +50,10 @@ type AdhocDataset struct {
 	// published; the statement that produced the rows, as the publisher
 	// ran it; the datasets it read, with the alias and digest the service
 	// held for each; and every dataset's columns, ColumnDatasets naming the
-	// dataset by its position in LocalNames, each with its summary as
-	// adhocdata.ColumnSummaries describes it: nulls, minimum and maximum
-	// as JSON literals, an estimated distinct count, a JSON array sample.
+	// dataset by its position in LocalNames, each with the summary
+	// statistics that are not values of the data: its nulls and an
+	// estimated distinct count. Minimum, maximum and sample are values of
+	// sealed data and stay with the dataset.
 	Document       string   `lw:"adhocDatasetDocument,stringArray,unit"`
 	SourceSql      string   `lw:"adhocDatasetSourceSql,stringArray,unit"`
 	InputHandles   []string `lw:"adhocDatasetInputHandles,stringArray"`
@@ -62,8 +63,5 @@ type AdhocDataset struct {
 	ColumnNames    []string `lw:"adhocDatasetColumnNames,stringArray"`
 	ColumnTypes    []string `lw:"adhocDatasetColumnTypes,stringArray"`
 	ColumnNulls    []uint64 `lw:"adhocDatasetColumnNulls,u64Array"`
-	ColumnMin      []string `lw:"adhocDatasetColumnMin,stringArray"`
-	ColumnMax      []string `lw:"adhocDatasetColumnMax,stringArray"`
 	ColumnDistinct []uint64 `lw:"adhocDatasetColumnDistinct,u64Array"`
-	ColumnSample   []string `lw:"adhocDatasetColumnSample,stringArray"`
 }

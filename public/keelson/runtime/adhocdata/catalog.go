@@ -224,8 +224,5 @@ func bundleCatalogTable(rows []bundleCatalogRow) *introspect.Table {
 		StringList("column_names", func(i int) []string { return rows[i].columns.Names }).
 		StringList("column_types", func(i int) []string { return rows[i].columns.Types }).
 		Uint64List("column_nulls", func(i int) []uint64 { return rows[i].columns.Nulls }).
-		StringList("column_min", func(i int) []string { return rows[i].columns.Min }).
-		StringList("column_max", func(i int) []string { return rows[i].columns.Max }).
-		Uint64List("column_distinct", func(i int) []uint64 { return rows[i].columns.Distinct }).
-		StringList("column_sample", func(i int) []string { return rows[i].columns.Sample })
+		Uint64List("column_distinct", func(i int) []uint64 { return rows[i].columns.Distinct })
 }

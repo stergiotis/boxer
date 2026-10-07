@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"slices"
 	"strconv"
 	"sync"
@@ -317,6 +318,8 @@ type BundleInfo struct {
 	Task           string         `json:",omitzero" desc:"the agent task whose call published the live revision"`
 	Turn           string         `json:",omitzero" desc:"and the conversation turn that call belongs to"`
 	Columns        []BundleColumn `desc:"every dataset's columns, summarised when the dataset was sealed"`
+	// ValuesNeed is set when the columns' values were withheld.
+	ValuesNeed string `json:",omitzero" desc:"the grant destination that would show the columns' min, max and sample, which are values of the data; absent when they are shown"`
 }
 
 // BundleColumn is one column of a bundle's dataset as the seal summarised
@@ -326,10 +329,10 @@ type BundleColumn struct {
 	Name     string `desc:"the column's name"`
 	Type     string `desc:"its Arrow type"`
 	Nulls    uint64 `desc:"how many of its values are null"`
-	Min      string `json:",omitzero" desc:"its smallest value as a JSON literal; absent when the type does not order or every value is null"`
+	Min      string `json:",omitzero" desc:"its smallest value as a JSON literal; absent when the type does not order, every value is null, or the task may not read the bundle"`
 	Max      string `json:",omitzero" desc:"its largest value as a JSON literal"`
 	Distinct uint64 `desc:"an estimate of its distinct non-null values, within a few percent"`
-	Sample   string `desc:"its first few non-null values, as a JSON array"`
+	Sample   string `json:",omitzero" desc:"its first few non-null values, as a JSON array; absent when the task may not read the bundle"`
 }
 
 // BundleList is list_bundles' result.
@@ -344,7 +347,7 @@ type BundleList struct {
 // takes without guessing at 64-bit integer quoting.
 const bundleListSql = "SELECT alias, publisher, toString(revision) AS revision, local_names, dataset_aliases, task, turn, " +
 	"column_local_names, column_names, column_types, arrayMap(x -> toString(x), column_nulls) AS column_nulls, " +
-	"column_min, column_max, arrayMap(x -> toString(x), column_distinct) AS column_distinct, column_sample FROM keelson('" +
+	"arrayMap(x -> toString(x), column_distinct) AS column_distinct FROM keelson('" +
 	adhocdata.BundleCatalogTableName + "') ORDER BY alias"
 
 // bundleListTimeout bounds list_bundles' read of the catalog.
@@ -365,7 +368,7 @@ func addBundleOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 			if sn.bus == nil {
 				return out, app.RefuseOperation("the window has no bus to read the bundle catalog over")
 			}
-			out, err = listBundles(sn.bus)
+			out, err = listBundles(sn.bus, call.OnBehalfOf)
 			out.Open = sn.bundle
 			if sn.lastPublish.Bundle != "" {
 				last := sn.lastPublish
@@ -418,10 +421,7 @@ type bundleRow struct {
 	ColumnNames    []string `json:"column_names"`
 	ColumnTypes    []string `json:"column_types"`
 	ColumnNulls    []string `json:"column_nulls"`
-	ColumnMin      []string `json:"column_min"`
-	ColumnMax      []string `json:"column_max"`
 	ColumnDistinct []string `json:"column_distinct"`
-	ColumnSample   []string `json:"column_sample"`
 }
 
 // columns zips the row's parallel column lists; a list shorter than the
@@ -438,13 +438,13 @@ func (inst *bundleRow) columns() (cols []BundleColumn) {
 		nulls, _ := strconv.ParseUint(at(inst.ColumnNulls, i), 10, 64)
 		distinct, _ := strconv.ParseUint(at(inst.ColumnDistinct, i), 10, 64)
 		cols = append(cols, BundleColumn{Dataset: at(inst.ColumnDatasets, i), Name: name, Type: at(inst.ColumnTypes, i),
-			Nulls: nulls, Min: at(inst.ColumnMin, i), Max: at(inst.ColumnMax, i), Distinct: distinct, Sample: at(inst.ColumnSample, i)})
+			Nulls: nulls, Distinct: distinct})
 	}
 	return
 }
 
 // listBundles reads keelson('adhoc_bundles') over keelson.query.
-func listBundles(bus app.BusI) (out BundleList, err error) {
+func listBundles(bus app.BusI, obo *app.OnBehalfOf) (out BundleList, err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), bundleListTimeout)
 	defer cancel()
 	res, err := keelsonquery.NewClient(bus).Query(ctx, adhocdata.BundleCatalogTableName, bundleListSql, "JSONEachRow")
@@ -452,7 +452,53 @@ func listBundles(bus app.BusI) (out BundleList, err error) {
 		return out, app.RefuseOperation("the bundle catalog could not be read: " + err.Error())
 	}
 	out.Bundles, err = decodeBundleRows(res.Body)
+	if err == nil {
+		withColumnValues(bus, obo, out.Bundles)
+	}
 	return
+}
+
+// withColumnValues fills in the columns' min, max and sample, which are
+// values of the data (ADR-0288 (proposed) §SD5), for each bundle the task
+// may read — its grant lists the bundle or the dataset, or the task
+// published it — through the read the dataset service holds to that grant.
+// A bundle it may not read keeps its statistics and says which destination
+// would show the values; the service decides when this guess admits.
+func withColumnValues(bus app.BusI, obo *app.OnBehalfOf, bundles []BundleInfo) {
+	for b := range bundles {
+		info := &bundles[b]
+		for i, local := range info.LocalNames {
+			alias := adhocdata.DatasetAlias(info.Alias, local)
+			if i < len(info.DatasetAliases) {
+				alias = info.DatasetAliases[i]
+			}
+			if obo != nil && !(info.Task != "" && info.Task == obo.Task) &&
+				!slices.Contains(obo.Destinations, DestinationKeelsonBundle(info.Alias)) &&
+				!slices.Contains(obo.Destinations, DestinationKeelson(alias)) {
+				info.ValuesNeed = DestinationKeelsonBundle(info.Alias)
+				continue
+			}
+			res, err := adhocdata.ReadColumnsE(bus, alias, obo)
+			if err != nil {
+				var ge *adhocdata.GrantError
+				if errors.As(err, &ge) {
+					info.ValuesNeed = ge.Destination
+				}
+				continue
+			}
+			k := 0
+			for c := range info.Columns {
+				col := &info.Columns[c]
+				if col.Dataset != local {
+					continue
+				}
+				if k < res.Columns.Len() && res.Columns.Names[k] == col.Name {
+					col.Min, col.Max, col.Sample = res.Columns.Min[k], res.Columns.Max[k], res.Columns.Sample[k]
+				}
+				k++
+			}
+		}
+	}
 }
 
 func decodeBundleRows(body []byte) (bundles []BundleInfo, err error) {

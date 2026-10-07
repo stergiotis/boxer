@@ -254,9 +254,7 @@ func TestTheAuditLandsOnTheTrail(t *testing.T) {
 	assert.Equal(t, testDoc, e.AdhocDataset.Val.Document, "the document is reconstructible from the trail")
 	assert.Equal(t, []string{"v", "v"}, e.AdhocDataset.Val.ColumnNames)
 	assert.Equal(t, []uint32{0, 1}, e.AdhocDataset.Val.ColumnDatasets)
-	assert.Equal(t, []string{"1", "7"}, e.AdhocDataset.Val.ColumnMin, "the summaries reach the trail")
-	assert.Equal(t, []string{"3", "7"}, e.AdhocDataset.Val.ColumnMax)
-	assert.Equal(t, []uint64{3, 1}, e.AdhocDataset.Val.ColumnDistinct)
+	assert.Equal(t, []uint64{3, 1}, e.AdhocDataset.Val.ColumnDistinct, "statistics reach the trail; values of the data do not")
 }
 
 // A bundle's provenance is data: the statement that produced its rows, the

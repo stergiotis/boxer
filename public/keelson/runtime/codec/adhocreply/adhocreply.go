@@ -76,4 +76,8 @@ type AdhocReply struct {
 	// live revision, on a resolve and a read; empty when no agent's call
 	// did (ADR-0288 (proposed) §SD4).
 	PublisherTask string `lw:"adhocPublisherTask,stringArray"`
+
+	// ColumnSummaries answers a columns-only read: the dataset's column
+	// summaries, values included, as JSON (ADR-0288 (proposed) §SD5).
+	ColumnSummaries []byte `lw:"adhocColumnSummaries,blobArray"`
 }

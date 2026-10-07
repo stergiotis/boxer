@@ -106,13 +106,13 @@ func (inst *Service) Read(alias string, by Identity, obo *app.OnBehalfOf) (res R
 	return
 }
 
-func (inst *Service) read(alias string) (res ReadResult, err error) {
+// newest is the newest live dataset under alias.
+func (inst *Service) newest(alias string) (best *record, err error) {
 	inst.mu.RLock()
+	defer inst.mu.RUnlock()
 	if inst.closed {
-		inst.mu.RUnlock()
-		return res, ErrClosed
+		return nil, ErrClosed
 	}
-	var best *record
 	var bestAt int64
 	for _, r := range inst.live {
 		r.mu.RLock()
@@ -122,9 +122,16 @@ func (inst *Service) read(alias string) (res ReadResult, err error) {
 			best, bestAt = r, at
 		}
 	}
-	inst.mu.RUnlock()
 	if best == nil {
-		return res, eb.Build().Str("alias", alias).Errorf("read: %w", ErrNoLiveDataset)
+		return nil, eb.Build().Str("alias", alias).Errorf("read: %w", ErrNoLiveDataset)
+	}
+	return
+}
+
+func (inst *Service) read(alias string) (res ReadResult, err error) {
+	best, err := inst.newest(alias)
+	if err != nil {
+		return
 	}
 	rc, revision, err := best.Open()
 	if err != nil {
@@ -163,14 +170,13 @@ func (inst *Service) handleRead(msg *app.Msg) {
 		inst.refuse(msg, "decode: "+err.Error())
 		return
 	}
+	if req.ColumnsOnly {
+		inst.handleReadColumns(msg, req)
+		return
+	}
 	res, rErr := inst.Read(req.Alias, sender(msg), callContextFields(req.OboTask, req.OboEpoch, req.OboCall))
 	if rErr != nil {
-		rep := adhocreply.AdhocReply{At: time.Now().UTC(), Reason: rErr.Error(), NoLive: errors.Is(rErr, ErrNoLiveDataset)}
-		var ge *GrantError
-		if errors.As(rErr, &ge) {
-			rep.Destination = ge.Destination
-		}
-		inst.reply(msg.Reply, rep)
+		inst.reply(msg.Reply, readRefusal(rErr))
 		return
 	}
 	inst.reply(msg.Reply, adhocreply.AdhocReply{
@@ -178,6 +184,28 @@ func (inst *Service) handleRead(msg *app.Msg) {
 		Bytes: uint64(len(res.ArrowIPCStream)), ArrowStream: res.ArrowIPCStream, StreamDigest: res.StreamDigest,
 		PublisherTask: res.PublisherTask,
 	})
+}
+
+// readRefusal is the reply to a refused read: the reason, whether nothing
+// was live, and the grant destination it needed.
+func readRefusal(err error) (rep adhocreply.AdhocReply) {
+	rep = adhocreply.AdhocReply{At: time.Now().UTC(), Reason: err.Error(), NoLive: errors.Is(err, ErrNoLiveDataset)}
+	var ge *GrantError
+	if errors.As(err, &ge) {
+		rep.Destination = ge.Destination
+	}
+	return
+}
+
+// readReplyError is the error a refused read's reply stands for.
+func readReplyError(alias string, rep adhocreply.AdhocReply) (err error) {
+	if rep.NoLive {
+		return eb.Build().Str("alias", alias).Errorf("read: %w", ErrNoLiveDataset)
+	}
+	if rep.Destination != "" {
+		return &GrantError{Destination: rep.Destination, Reason: strings.TrimPrefix(rep.Reason, "agent limit: ")}
+	}
+	return eb.Build().Str("alias", alias).Errorf("read rejected: %s", rep.Reason) //boxer:lint disable=CS013 reason="the service's refusal crosses the bus as text and is what a reader shows"
 }
 
 // ReadAllE reads the newest live dataset under alias whole, via
@@ -204,13 +232,7 @@ func ReadAllE(bus app.BusI, alias string, obo *app.OnBehalfOf) (res ReadResult, 
 		return res, eh.Errorf("decode read reply: %w", err)
 	}
 	if !rep.Ok {
-		if rep.NoLive {
-			return res, eb.Build().Str("alias", alias).Errorf("read: %w", ErrNoLiveDataset)
-		}
-		if rep.Destination != "" {
-			return res, &GrantError{Destination: rep.Destination, Reason: strings.TrimPrefix(rep.Reason, "agent limit: ")}
-		}
-		return res, eb.Build().Str("alias", alias).Errorf("read rejected: %s", rep.Reason) //boxer:lint disable=CS013 reason="the service's refusal crosses the bus as text and is what a reader shows"
+		return res, readReplyError(alias, rep)
 	}
 	res = ReadResult{Alias: alias, Bundle: rep.Bundle, Handle: rep.Handle, Revision: rep.Revision, Rows: rep.Rows,
 		ArrowIPCStream: rep.ArrowStream, StreamDigest: rep.StreamDigest, PublisherTask: rep.PublisherTask}

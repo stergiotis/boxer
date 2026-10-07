@@ -80,4 +80,8 @@ type AdhocRequest struct {
 	// read (ADR-0288 (proposed) §SD5).
 	SourceSql    string   `lw:"adhocSourceSql,stringArray"`
 	InputHandles []string `lw:"adhocInputHandles,stringArray"`
+
+	// ColumnsOnly asks a read for the dataset's column summaries instead
+	// of its stream, under the same grant (ADR-0288 (proposed) §SD5).
+	ColumnsOnly bool `lw:"adhocColumnsOnly,bool"`
 }

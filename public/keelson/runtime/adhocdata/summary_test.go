@@ -9,6 +9,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/apache/arrow-go/v18/arrow/decimal128"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stretchr/testify/assert"
@@ -38,6 +39,21 @@ func summarise(t *testing.T, schema *arrow.Schema, batches ...func(rb *array.Rec
 	ss, err := sealStream(f, buf.Bytes())
 	require.NoError(t, err)
 	return ss.columns
+}
+
+// summariseDirect runs the summariser over the batches without sealing them.
+func summariseDirect(t *testing.T, schema *arrow.Schema, batches ...func(rb *array.RecordBuilder)) (cols ColumnSummaries) {
+	t.Helper()
+	sm := newSummarizer(schema)
+	for _, fill := range batches {
+		rb := array.NewRecordBuilder(memory.DefaultAllocator, schema)
+		fill(rb)
+		rec := rb.NewRecordBatch()
+		sm.observe(rec)
+		rec.Release()
+		rb.Release()
+	}
+	return sm.result()
 }
 
 func TestSummariesAcrossBatches(t *testing.T) {
@@ -120,4 +136,66 @@ func TestHyperLogLogIsWithinItsError(t *testing.T) {
 		got := float64(c.hll.estimate())
 		assert.InEpsilon(t, float64(n), got, 0.05, "n=%d estimate=%v", n, got)
 	}
+}
+
+// The types without a fast path: a Null column is all nulls, a decimal
+// orders and is a JSON number, everything else is sampled and counted by
+// its Arrow rendering and has no range.
+func TestSummariesOfTheOtherTypes(t *testing.T) {
+	dec := &arrow.Decimal128Type{Precision: 10, Scale: 2}
+	dict := &arrow.DictionaryType{IndexType: arrow.PrimitiveTypes.Int8, ValueType: arrow.BinaryTypes.String}
+	schema := arrow.NewSchema([]arrow.Field{
+		{Name: "nothing", Type: arrow.Null, Nullable: true},
+		{Name: "price", Type: dec},
+		{Name: "tag", Type: dict},
+		{Name: "list", Type: arrow.ListOf(arrow.PrimitiveTypes.Int32)},
+		{Name: "pair", Type: arrow.StructOf(arrow.Field{Name: "a", Type: arrow.PrimitiveTypes.Int32})},
+		{Name: "blob", Type: arrow.BinaryTypes.Binary},
+	}, nil)
+	// Null, decimal and dictionary columns are outside the store's
+	// structure set, so the summariser is driven directly.
+	cols := summariseDirect(t, schema, func(rb *array.RecordBuilder) {
+		rb.Field(0).(*array.NullBuilder).AppendNulls(3)
+		db := rb.Field(1).(*array.Decimal128Builder)
+		db.Append(decimal128.FromI64(1234))
+		db.Append(decimal128.FromI64(-50))
+		db.Append(decimal128.FromI64(99))
+		tb := rb.Field(2).(*array.BinaryDictionaryBuilder)
+		require.NoError(t, tb.AppendString("x"))
+		require.NoError(t, tb.AppendString("y"))
+		require.NoError(t, tb.AppendString("x"))
+		lb := rb.Field(3).(*array.ListBuilder)
+		for range 3 {
+			lb.Append(true)
+			lb.ValueBuilder().(*array.Int32Builder).Append(1)
+		}
+		sb := rb.Field(4).(*array.StructBuilder)
+		for i := range 3 {
+			sb.Append(true)
+			sb.FieldBuilder(0).(*array.Int32Builder).Append(int32(i))
+		}
+		rb.Field(5).(*array.BinaryBuilder).AppendValues([][]byte{{1}, {2}, {3}}, nil)
+	})
+	assert.Equal(t, uint64(3), cols.Nulls[0], "a Null column is all nulls")
+	assert.Equal(t, "[]", cols.Sample[0])
+	assert.Equal(t, uint64(0), cols.Distinct[0])
+	assert.Equal(t, "-0.5", cols.Min[1], "a decimal orders, and is a JSON number")
+	assert.Equal(t, "12.34", cols.Max[1])
+	assert.Equal(t, `[12.34,-0.5,0.99]`, cols.Sample[1])
+	assert.Equal(t, uint64(2), cols.Distinct[2])
+	for i := 2; i < 6; i++ {
+		assert.Empty(t, cols.Min[i], "%s has no range", cols.Names[i])
+		assert.True(t, strings.HasPrefix(cols.Sample[i], "["), cols.Sample[i])
+	}
+}
+
+// A text extreme found in an earlier batch survives that batch's release.
+func TestATextExtremeOutlivesItsBatch(t *testing.T) {
+	schema := arrow.NewSchema([]arrow.Field{{Name: "s", Type: arrow.BinaryTypes.String}}, nil)
+	cols := summarise(t, schema,
+		func(rb *array.RecordBuilder) { rb.Field(0).(*array.StringBuilder).AppendValues([]string{"m", "a", "z"}, nil) },
+		func(rb *array.RecordBuilder) { rb.Field(0).(*array.StringBuilder).AppendValues([]string{"q", "r"}, nil) },
+		func(rb *array.RecordBuilder) { rb.Field(0).(*array.StringBuilder).AppendValues([]string{"b"}, nil) })
+	assert.Equal(t, `"a"`, cols.Min[0])
+	assert.Equal(t, `"z"`, cols.Max[0])
 }

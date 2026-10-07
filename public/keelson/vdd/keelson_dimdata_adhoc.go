@@ -146,3 +146,13 @@ var (
 // runs on the bundle without a grant entry for it.
 var MembAdhocPublisherTask = KeelsonHrNkRegistry.MustBegin("adhocPublisherTask", 244).
 	MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
+
+// Column summaries carry values of sealed data (ADR-0288 (proposed) §SD5),
+// so they are read as the data is: a read asks for them alone, held to the
+// same grant, and the reply carries them as one JSON document.
+var (
+	MembAdhocColumnsOnly = KeelsonHrNkRegistry.MustBegin("adhocColumnsOnly", 245).
+				MustAddRestriction("bool", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
+	MembAdhocColumnSummaries = KeelsonHrNkRegistry.MustBegin("adhocColumnSummaries", 246).
+					MustAddRestriction("blobArray", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
+)

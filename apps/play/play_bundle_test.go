@@ -239,13 +239,13 @@ func TestOpenBundleRefusals(t *testing.T) {
 func TestDecodeBundleRows(t *testing.T) {
 	body := []byte(`{"alias":"sales","publisher":"apps/notebook","revision":"3","local_names":["orders"],"dataset_aliases":["sales__orders"],"task":"task-1","turn":"turn-2",` +
 		`"column_local_names":["orders","orders"],"column_names":["id","note"],"column_types":["int64","utf8"],"column_nulls":["0","2"],` +
-		`"column_min":["1",""],"column_max":["9",""],"column_distinct":["9","3"],"column_sample":["[1,2]","[\"a\"]"]}` + "\n")
+		`"column_distinct":["9","3"]}` + "\n")
 	got, err := decodeBundleRows(body)
 	require.NoError(t, err)
 	assert.Equal(t, []BundleInfo{{Alias: "sales", Publisher: "apps/notebook", Revision: 3, LocalNames: []string{"orders"},
 		DatasetAliases: []string{"sales__orders"}, Task: "task-1", Turn: "turn-2", Columns: []BundleColumn{
-			{Dataset: "orders", Name: "id", Type: "int64", Min: "1", Max: "9", Distinct: 9, Sample: "[1,2]"},
-			{Dataset: "orders", Name: "note", Type: "utf8", Nulls: 2, Distinct: 3, Sample: `["a"]`},
+			{Dataset: "orders", Name: "id", Type: "int64", Distinct: 9},
+			{Dataset: "orders", Name: "note", Type: "utf8", Nulls: 2, Distinct: 3},
 		}}}, got)
 }
 
@@ -332,4 +332,33 @@ func introspectionPlane(l *PlayLauncher) {
 	l.inner.client.SetResolver(&recordingResolver{answer: func(_ string, _ string) dispatchDecision {
 		return dispatchDecision{targetURL: "http://127.0.0.1:1/query", class: dispatchClassIntrospection}
 	}})
+}
+
+// list_bundles shows a bundle's column values only where the task may read
+// it, and otherwise names the destination that would show them (ADR-0288
+// (proposed) §SD5).
+func TestListBundlesShowsValuesOnlyWhereTheTaskMayRead(t *testing.T) {
+	l, _, publisher := bundleLauncher(t)
+	publishSalesBundle(t, publisher, "doc", "orders")
+	info := func() []BundleInfo {
+		return []BundleInfo{{Alias: "sales", LocalNames: []string{"orders"}, DatasetAliases: []string{"sales__orders"},
+			Columns: []BundleColumn{{Dataset: "orders", Name: "v", Type: "int64"}}}}
+	}
+
+	got := info()
+	withColumnValues(l.bus, nil, got)
+	assert.Equal(t, "0", got[0].Columns[0].Max, "the person's read sees the values")
+	assert.Empty(t, got[0].ValuesNeed)
+
+	got = info()
+	withColumnValues(l.bus, &agentCall, got)
+	assert.Empty(t, got[0].Columns[0].Max, "an agent without the grant does not")
+	assert.Equal(t, "keelson-bundle:sales", got[0].ValuesNeed)
+
+	got = info()
+	granted := agentCall
+	granted.Destinations = []string{"keelson-bundle:sales"}
+	withColumnValues(l.bus, &granted, got)
+	assert.Equal(t, "0", got[0].Columns[0].Max, "with the grant it does")
+	assert.Equal(t, "[0]", got[0].Columns[0].Sample)
 }

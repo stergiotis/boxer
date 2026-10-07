@@ -247,3 +247,5 @@
 242	adhoc-source-sql	12884902130
 243	adhoc-input-handles	12884902131
 244	adhoc-publisher-task	12884902132
+245	adhoc-columns-only	12884902133
+246	adhoc-column-summaries	12884902134

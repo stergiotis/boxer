@@ -48,6 +48,7 @@ var (
 	kindAdhocWindowScoped   uint64
 	kindAdhocSourceSql      uint64
 	kindAdhocInputHandles   uint64
+	kindAdhocColumnsOnly    uint64
 )
 
 func init() {
@@ -66,6 +67,7 @@ func init() {
 	kindAdhocWindowScoped = vdd.MembAdhocWindowScoped.GetId().Value()
 	kindAdhocSourceSql = vdd.MembAdhocSourceSql.GetId().Value()
 	kindAdhocInputHandles = vdd.MembAdhocInputHandles.GetId().Value()
+	kindAdhocColumnsOnly = vdd.MembAdhocColumnsOnly.GetId().Value()
 	buscodec.Register[AdhocRequest](adhocRequestBusCodec)
 }
 
@@ -144,6 +146,7 @@ type AdhocRequestColumns struct {
 	WindowScoped   []bool
 	SourceSql      []string
 	InputHandles   [][]string
+	ColumnsOnly    []bool
 }
 
 // Len returns the number of rows currently in the batch.
@@ -174,6 +177,7 @@ func (c *AdhocRequestColumns) Append(row AdhocRequest) {
 	c.WindowScoped = append(c.WindowScoped, row.WindowScoped)
 	c.SourceSql = append(c.SourceSql, row.SourceSql)
 	c.InputHandles = append(c.InputHandles, row.InputHandles)
+	c.ColumnsOnly = append(c.ColumnsOnly, row.ColumnsOnly)
 }
 
 // Row reconstructs entity i as an AoS AdhocRequest record. Inverse of
@@ -198,6 +202,7 @@ func (c *AdhocRequestColumns) Row(i int) (row AdhocRequest) {
 	row.WindowScoped = c.WindowScoped[i]
 	row.SourceSql = c.SourceSql[i]
 	row.InputHandles = c.InputHandles[i]
+	row.ColumnsOnly = c.ColumnsOnly[i]
 	return
 }
 
@@ -405,6 +410,9 @@ func AdhocRequestBuildEntities[
 		boolSecAttr_WindowScoped := boolSec.BeginAttribute(c.WindowScoped[i])
 		boolSecAttr_WindowScoped.AddMembershipLowCardRefP(kindAdhocWindowScoped)
 		boolSecAttr_WindowScoped.EndAttributeP()
+		boolSecAttr_ColumnsOnly := boolSec.BeginAttribute(c.ColumnsOnly[i])
+		boolSecAttr_ColumnsOnly.AddMembershipLowCardRefP(kindAdhocColumnsOnly)
+		boolSecAttr_ColumnsOnly.EndAttributeP()
 		boolSec.EndSection()
 		// --- blobArray. ---
 		blobArraySec := dml.GetSectionBlobArray()
@@ -514,6 +522,9 @@ func AdhocRequestEmitSectionBool[
 	boolSecAttr_WindowScoped := boolSec.BeginAttribute(row.WindowScoped)
 	boolSecAttr_WindowScoped.AddMembershipLowCardRefP(kindAdhocWindowScoped)
 	boolSecAttr_WindowScoped.EndAttributeP()
+	boolSecAttr_ColumnsOnly := boolSec.BeginAttribute(row.ColumnsOnly)
+	boolSecAttr_ColumnsOnly.AddMembershipLowCardRefP(kindAdhocColumnsOnly)
+	boolSecAttr_ColumnsOnly.EndAttributeP()
 	return
 }
 
@@ -901,6 +912,9 @@ func AdhocRequestFillFromArrow[
 		var boolWindowScopedVal bool
 		var boolWindowScopedCount int
 		var boolWindowScopedLastAttr int64
+		var boolColumnsOnlyVal bool
+		var boolColumnsOnlyCount int
+		var boolColumnsOnlyLastAttr int64
 		nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nbool; attrJ++ {
 			for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -919,6 +933,13 @@ func AdhocRequestFillFromArrow[
 					}
 					val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					boolWindowScopedVal = val
+				case kindAdhocColumnsOnly:
+					if boolColumnsOnlyLastAttr != attrJ+1 {
+						boolColumnsOnlyLastAttr = attrJ + 1
+						boolColumnsOnlyCount++
+					}
+					val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					boolColumnsOnlyVal = val
 				}
 			}
 		}
@@ -932,6 +953,11 @@ func AdhocRequestFillFromArrow[
 			return
 		}
 		c.WindowScoped = append(c.WindowScoped, boolWindowScopedVal)
+		if boolColumnsOnlyCount != 1 {
+			err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "adhocColumnsOnly").Int("got", boolColumnsOnlyCount).Errorf("slot bool@adhocColumnsOnly (field ColumnsOnly) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolColumnsOnlyCount)
+			return
+		}
+		c.ColumnsOnly = append(c.ColumnsOnly, boolColumnsOnlyVal)
 		// --- blobArray. ---
 		var blobArrayArrowStreamVal []byte
 		var blobArrayArrowStreamCount int
@@ -1266,6 +1292,9 @@ func AdhocRequestReadRow[
 	var boolWindowScopedVal bool
 	var boolWindowScopedCount int
 	var boolWindowScopedLastAttr int64
+	var boolColumnsOnlyVal bool
+	var boolColumnsOnlyCount int
+	var boolColumnsOnlyLastAttr int64
 	nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nbool; attrJ++ {
 		for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -1284,6 +1313,13 @@ func AdhocRequestReadRow[
 				}
 				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				boolWindowScopedVal = val
+			case kindAdhocColumnsOnly:
+				if boolColumnsOnlyLastAttr != attrJ+1 {
+					boolColumnsOnlyLastAttr = attrJ + 1
+					boolColumnsOnlyCount++
+				}
+				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				boolColumnsOnlyVal = val
 			}
 		}
 	}
@@ -1301,6 +1337,14 @@ func AdhocRequestReadRow[
 	}
 	if boolWindowScopedCount == 1 {
 		row.WindowScoped = boolWindowScopedVal
+		present = true
+	}
+	if boolColumnsOnlyCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "adhocColumnsOnly").Int("got", boolColumnsOnlyCount).Errorf("slot bool@adhocColumnsOnly (field ColumnsOnly) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolColumnsOnlyCount)
+		return
+	}
+	if boolColumnsOnlyCount == 1 {
+		row.ColumnsOnly = boolColumnsOnlyVal
 		present = true
 	}
 	// --- blobArray. ---

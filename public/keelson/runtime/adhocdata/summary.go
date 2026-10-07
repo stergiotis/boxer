@@ -7,6 +7,7 @@ package adhocdata
 
 import (
 	"encoding/binary"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"math"
 	"math/bits"
@@ -124,14 +125,27 @@ type columnSummarizer struct {
 	minU, maxU uint64
 	minF, maxF float64
 	minS, maxS string
+	// minX and maxX hold the extremes of a type that orders by its own
+	// Cmp (observeOrdered).
+	minX, maxX any
 	// min and max are the extremes rendered when they were found: the
 	// array that held them is gone by the end of the stream.
 	min, max string
 }
 
 func (inst *columnSummarizer) observe(arr arrow.Array) {
+	if arr.DataType().ID() == arrow.NULL {
+		// A Null-typed column holds nothing but nulls, whatever its
+		// validity bitmap says.
+		inst.nulls += uint64(arr.Len())
+		return
+	}
 	inst.nulls += uint64(arr.NullN())
 	switch a := arr.(type) {
+	case *array.Decimal128:
+		observeOrdered(inst, a, a.Value)
+	case *array.Decimal256:
+		observeOrdered(inst, a, a.Value)
 	case *array.Int8:
 		observeSigned(inst, a, a.Int8Values())
 	case *array.Int16:
@@ -204,6 +218,7 @@ func observeSigned[T ~int8 | ~int16 | ~int32 | ~int64](inst *columnSummarizer, a
 	// A plain integer is a JSON number; a date, time or duration is spelt
 	// as Arrow renders it.
 	numeric := isPlainInteger(arr.DataType())
+	lo, hi := -1, -1
 	for i, tv := range vals {
 		if arr.IsNull(i) {
 			continue
@@ -214,16 +229,25 @@ func observeSigned[T ~int8 | ~int16 | ~int32 | ~int64](inst *columnSummarizer, a
 			inst.addSample(renderSigned(arr, i, v, numeric))
 		}
 		if !inst.seen || v < inst.minI {
-			inst.minI, inst.min = v, renderSigned(arr, i, v, numeric)
+			inst.minI, lo = v, i
 		}
 		if !inst.seen || v > inst.maxI {
-			inst.maxI, inst.max = v, renderSigned(arr, i, v, numeric)
+			inst.maxI, hi = v, i
 		}
 		inst.seen = true
+	}
+	// Rendered once a batch, not at every new extreme: a sorted column
+	// has one at every row.
+	if lo >= 0 {
+		inst.min = renderSigned(arr, lo, inst.minI, numeric)
+	}
+	if hi >= 0 {
+		inst.max = renderSigned(arr, hi, inst.maxI, numeric)
 	}
 }
 
 func observeUnsigned[T ~uint8 | ~uint16 | ~uint32 | ~uint64](inst *columnSummarizer, arr arrow.Array, vals []T) {
+	lo, hi := false, false
 	for i, tv := range vals {
 		if arr.IsNull(i) {
 			continue
@@ -234,16 +258,23 @@ func observeUnsigned[T ~uint8 | ~uint16 | ~uint32 | ~uint64](inst *columnSummari
 			inst.addSample(strconv.FormatUint(v, 10))
 		}
 		if !inst.seen || v < inst.minU {
-			inst.minU, inst.min = v, strconv.FormatUint(v, 10)
+			inst.minU, lo = v, true
 		}
 		if !inst.seen || v > inst.maxU {
-			inst.maxU, inst.max = v, strconv.FormatUint(v, 10)
+			inst.maxU, hi = v, true
 		}
 		inst.seen = true
+	}
+	if lo {
+		inst.min = strconv.FormatUint(inst.minU, 10)
+	}
+	if hi {
+		inst.max = strconv.FormatUint(inst.maxU, 10)
 	}
 }
 
 func observeFloat[T ~float32 | ~float64](inst *columnSummarizer, arr arrow.Array, vals []T) {
+	lo, hi := false, false
 	for i, tv := range vals {
 		if arr.IsNull(i) {
 			continue
@@ -258,16 +289,23 @@ func observeFloat[T ~float32 | ~float64](inst *columnSummarizer, arr arrow.Array
 			continue
 		}
 		if !inst.seen || v < inst.minF {
-			inst.minF, inst.min = v, renderFloat(v)
+			inst.minF, lo = v, true
 		}
 		if !inst.seen || v > inst.maxF {
-			inst.maxF, inst.max = v, renderFloat(v)
+			inst.maxF, hi = v, true
 		}
 		inst.seen = true
+	}
+	if lo {
+		inst.min = renderFloat(inst.minF)
+	}
+	if hi {
+		inst.max = renderFloat(inst.maxF)
 	}
 }
 
 func observeText(inst *columnSummarizer, arr arrow.Array, value func(i int) string) {
+	lo, hi := false, false
 	for i := range arr.Len() {
 		if arr.IsNull(i) {
 			continue
@@ -278,14 +316,65 @@ func observeText(inst *columnSummarizer, arr arrow.Array, value func(i int) stri
 			inst.addSample(jsonText(v))
 		}
 		if !inst.seen || v < inst.minS {
-			// The comparison keeps the whole value; only its rendering is cut.
-			inst.minS, inst.min = strings.Clone(v), jsonText(v)
+			inst.minS, lo = v, true
 		}
 		if !inst.seen || v > inst.maxS {
-			inst.maxS, inst.max = strings.Clone(v), jsonText(v)
+			inst.maxS, hi = v, true
 		}
 		inst.seen = true
 	}
+	// A new extreme points into this batch's buffer, which goes with the
+	// batch: it is copied once, and its rendering cut, at the batch's end.
+	if lo {
+		inst.minS = strings.Clone(inst.minS)
+		inst.min = jsonText(inst.minS)
+	}
+	if hi {
+		inst.maxS = strings.Clone(inst.maxS)
+		inst.max = jsonText(inst.maxS)
+	}
+}
+
+// observeOrdered summarises a column whose values order by their own Cmp:
+// decimals, spelt as Arrow renders them, which is a JSON number.
+func observeOrdered[T interface{ Cmp(T) int }](inst *columnSummarizer, arr arrow.Array, value func(i int) T) {
+	lo, hi := -1, -1
+	var minV, maxV T
+	if inst.seen {
+		minV, maxV = inst.minX.(T), inst.maxX.(T)
+	}
+	for i := range arr.Len() {
+		if arr.IsNull(i) {
+			continue
+		}
+		v := value(i)
+		text := arr.ValueStr(i)
+		inst.hll.add(xxh3.HashString(text))
+		inst.addSample(jsonNumberOrText(text))
+		if !inst.seen || v.Cmp(minV) < 0 {
+			minV, lo = v, i
+		}
+		if !inst.seen || v.Cmp(maxV) > 0 {
+			maxV, hi = v, i
+		}
+		inst.seen = true
+	}
+	inst.minX, inst.maxX = minV, maxV
+	if lo >= 0 {
+		inst.min = jsonNumberOrText(arr.ValueStr(lo))
+	}
+	if hi >= 0 {
+		inst.max = jsonNumberOrText(arr.ValueStr(hi))
+	}
+}
+
+// jsonNumberOrText is s as a JSON number when it spells one, else as a
+// JSON string.
+func jsonNumberOrText(s string) (literal string) {
+	if s != "" && (s[0] == '-' || (s[0] >= '0' && s[0] <= '9')) && jsontext.Value(s).IsValid() {
+		return s
+	}
+	return jsonText(s)
 }
 
 func isPlainInteger(dt arrow.DataType) (plain bool) {

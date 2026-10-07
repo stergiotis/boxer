@@ -33,24 +33,25 @@ import (
 // --- Resolved membership ids from vdd. ---
 
 var (
-	kindAdhocReplyOk       uint64
-	kindReason             uint64
-	kindAdhocHandle        uint64
-	kindAdhocRevision      uint64
-	kindAdhocRows          uint64
-	kindAdhocBytes         uint64
-	kindAdhocCreatedAtUs   uint64
-	kindAdhocHandleLive    uint64
-	kindAdhocNoLive        uint64
-	kindAdhocBundle        uint64
-	kindAdhocDocument      uint64
-	kindAdhocLocalNames    uint64
-	kindAdhocHandles       uint64
-	kindAdhocArrowStream   uint64
-	kindAdhocStreamDigest  uint64
-	kindAdhocAlias         uint64
-	kindAdhocDestination   uint64
-	kindAdhocPublisherTask uint64
+	kindAdhocReplyOk         uint64
+	kindReason               uint64
+	kindAdhocHandle          uint64
+	kindAdhocRevision        uint64
+	kindAdhocRows            uint64
+	kindAdhocBytes           uint64
+	kindAdhocCreatedAtUs     uint64
+	kindAdhocHandleLive      uint64
+	kindAdhocNoLive          uint64
+	kindAdhocBundle          uint64
+	kindAdhocDocument        uint64
+	kindAdhocLocalNames      uint64
+	kindAdhocHandles         uint64
+	kindAdhocArrowStream     uint64
+	kindAdhocStreamDigest    uint64
+	kindAdhocAlias           uint64
+	kindAdhocDestination     uint64
+	kindAdhocPublisherTask   uint64
+	kindAdhocColumnSummaries uint64
 )
 
 func init() {
@@ -72,6 +73,7 @@ func init() {
 	kindAdhocAlias = vdd.MembAdhocAlias.GetId().Value()
 	kindAdhocDestination = vdd.MembAdhocDestination.GetId().Value()
 	kindAdhocPublisherTask = vdd.MembAdhocPublisherTask.GetId().Value()
+	kindAdhocColumnSummaries = vdd.MembAdhocColumnSummaries.GetId().Value()
 	buscodec.Register[AdhocReply](adhocReplyBusCodec)
 }
 
@@ -135,24 +137,25 @@ type AdhocReplyColumns struct {
 	NaturalKey [][]byte
 	At         []time.Time
 
-	Ok            []bool
-	Reason        []string
-	Handle        []string
-	Revision      []uint64
-	Rows          []uint64
-	Bytes         []uint64
-	CreatedAtUs   []int64
-	HandleLive    []bool
-	NoLive        []bool
-	Bundle        []string
-	Document      [][]byte
-	LocalNames    [][]string
-	Handles       [][]string
-	ArrowStream   [][]byte
-	StreamDigest  []string
-	Alias         []string
-	Destination   []string
-	PublisherTask []string
+	Ok              []bool
+	Reason          []string
+	Handle          []string
+	Revision        []uint64
+	Rows            []uint64
+	Bytes           []uint64
+	CreatedAtUs     []int64
+	HandleLive      []bool
+	NoLive          []bool
+	Bundle          []string
+	Document        [][]byte
+	LocalNames      [][]string
+	Handles         [][]string
+	ArrowStream     [][]byte
+	StreamDigest    []string
+	Alias           []string
+	Destination     []string
+	PublisherTask   []string
+	ColumnSummaries [][]byte
 }
 
 // Len returns the number of rows currently in the batch.
@@ -186,6 +189,7 @@ func (c *AdhocReplyColumns) Append(row AdhocReply) {
 	c.Alias = append(c.Alias, row.Alias)
 	c.Destination = append(c.Destination, row.Destination)
 	c.PublisherTask = append(c.PublisherTask, row.PublisherTask)
+	c.ColumnSummaries = append(c.ColumnSummaries, row.ColumnSummaries)
 }
 
 // Row reconstructs entity i as an AoS AdhocReply record. Inverse of
@@ -213,6 +217,7 @@ func (c *AdhocReplyColumns) Row(i int) (row AdhocReply) {
 	row.Alias = c.Alias[i]
 	row.Destination = c.Destination[i]
 	row.PublisherTask = c.PublisherTask[i]
+	row.ColumnSummaries = c.ColumnSummaries[i]
 	return
 }
 
@@ -493,6 +498,9 @@ func AdhocReplyBuildEntities[
 		blobArraySecAttr_ArrowStream := blobArraySec.BeginAttributeSingle(c.ArrowStream[i])
 		blobArraySecAttr_ArrowStream.AddMembershipLowCardRefP(kindAdhocArrowStream)
 		blobArraySecAttr_ArrowStream.EndAttributeP()
+		blobArraySecAttr_ColumnSummaries := blobArraySec.BeginAttributeSingle(c.ColumnSummaries[i])
+		blobArraySecAttr_ColumnSummaries.AddMembershipLowCardRefP(kindAdhocColumnSummaries)
+		blobArraySecAttr_ColumnSummaries.EndAttributeP()
 		blobArraySec.EndSection()
 		err = dml.CommitEntity()
 		if err != nil {
@@ -648,6 +656,9 @@ func AdhocReplyEmitSectionBlobArray[
 	blobArraySecAttr_ArrowStream := blobArraySec.BeginAttributeSingle(row.ArrowStream)
 	blobArraySecAttr_ArrowStream.AddMembershipLowCardRefP(kindAdhocArrowStream)
 	blobArraySecAttr_ArrowStream.EndAttributeP()
+	blobArraySecAttr_ColumnSummaries := blobArraySec.BeginAttributeSingle(row.ColumnSummaries)
+	blobArraySecAttr_ColumnSummaries.AddMembershipLowCardRefP(kindAdhocColumnSummaries)
+	blobArraySecAttr_ColumnSummaries.EndAttributeP()
 	return
 }
 
@@ -1200,6 +1211,9 @@ func AdhocReplyFillFromArrow[
 		var blobArrayArrowStreamVal []byte
 		var blobArrayArrowStreamCount int
 		var blobArrayArrowStreamLastAttr int64
+		var blobArrayColumnSummariesVal []byte
+		var blobArrayColumnSummariesCount int
+		var blobArrayColumnSummariesLastAttr int64
 		nblobArray := blobArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nblobArray; attrJ++ {
 			for membID := range blobArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -1230,6 +1244,19 @@ func AdhocReplyFillFromArrow[
 					cp := make([]byte, len(val))
 					copy(cp, val)
 					blobArrayArrowStreamVal = cp
+				case kindAdhocColumnSummaries:
+					if blobArrayColumnSummariesLastAttr != attrJ+1 {
+						blobArrayColumnSummariesLastAttr = attrJ + 1
+						blobArrayColumnSummariesCount++
+					}
+					val, valErr := blobArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "blobArray").Str("membership", "adhocColumnSummaries").Str("field", "ColumnSummaries").Errorf("slot blobArray@adhocColumnSummaries (field ColumnSummaries) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
+					cp := make([]byte, len(val))
+					copy(cp, val)
+					blobArrayColumnSummariesVal = cp
 				}
 			}
 		}
@@ -1243,6 +1270,11 @@ func AdhocReplyFillFromArrow[
 			return
 		}
 		c.ArrowStream = append(c.ArrowStream, blobArrayArrowStreamVal)
+		if blobArrayColumnSummariesCount != 1 {
+			err = eb.Build().Int("row", i).Str("section", "blobArray").Str("membership", "adhocColumnSummaries").Int("got", blobArrayColumnSummariesCount).Errorf("slot blobArray@adhocColumnSummaries (field ColumnSummaries) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", blobArrayColumnSummariesCount)
+			return
+		}
+		c.ColumnSummaries = append(c.ColumnSummaries, blobArrayColumnSummariesVal)
 	}
 	return
 }
@@ -1668,6 +1700,9 @@ func AdhocReplyReadRow[
 	var blobArrayArrowStreamVal []byte
 	var blobArrayArrowStreamCount int
 	var blobArrayArrowStreamLastAttr int64
+	var blobArrayColumnSummariesVal []byte
+	var blobArrayColumnSummariesCount int
+	var blobArrayColumnSummariesLastAttr int64
 	nblobArray := blobArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nblobArray; attrJ++ {
 		for membID := range blobArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -1698,6 +1733,19 @@ func AdhocReplyReadRow[
 				cp := make([]byte, len(val))
 				copy(cp, val)
 				blobArrayArrowStreamVal = cp
+			case kindAdhocColumnSummaries:
+				if blobArrayColumnSummariesLastAttr != attrJ+1 {
+					blobArrayColumnSummariesLastAttr = attrJ + 1
+					blobArrayColumnSummariesCount++
+				}
+				val, valErr := blobArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "blobArray").Str("membership", "adhocColumnSummaries").Str("field", "ColumnSummaries").Errorf("slot blobArray@adhocColumnSummaries (field ColumnSummaries) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				cp := make([]byte, len(val))
+				copy(cp, val)
+				blobArrayColumnSummariesVal = cp
 			}
 		}
 	}
@@ -1715,6 +1763,14 @@ func AdhocReplyReadRow[
 	}
 	if blobArrayArrowStreamCount == 1 {
 		row.ArrowStream = blobArrayArrowStreamVal
+		present = true
+	}
+	if blobArrayColumnSummariesCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "blobArray").Str("membership", "adhocColumnSummaries").Int("got", blobArrayColumnSummariesCount).Errorf("slot blobArray@adhocColumnSummaries (field ColumnSummaries) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", blobArrayColumnSummariesCount)
+		return
+	}
+	if blobArrayColumnSummariesCount == 1 {
+		row.ColumnSummaries = blobArrayColumnSummariesVal
 		present = true
 	}
 	return

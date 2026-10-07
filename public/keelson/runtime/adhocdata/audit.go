@@ -25,6 +25,9 @@ const (
 	// closed (ADR-0240 §SD5).
 	AuditWithdraw = "withdraw"
 	AuditResolve  = "resolve"
+	// AuditReadColumns is a read of a dataset's column summaries alone:
+	// values of the data, held to the grant a read is (§SD5).
+	AuditReadColumns = "read-columns"
 
 	AuditApplied = "applied"
 	AuditRefused = "refused"
@@ -158,8 +161,7 @@ func (inst *Service) persistAudit(r AuditRecord) {
 		Document: string(r.Document), SourceSql: r.SourceSql,
 		InputHandles: r.InputHandles, InputAliases: r.InputAliases, InputDigests: r.InputDigests,
 		ColumnDatasets: r.ColumnDatasets, ColumnNames: r.Columns.Names, ColumnTypes: r.Columns.Types,
-		ColumnNulls: r.Columns.Nulls, ColumnMin: r.Columns.Min, ColumnMax: r.Columns.Max,
-		ColumnDistinct: r.Columns.Distinct, ColumnSample: r.Columns.Sample,
+		ColumnNulls: r.Columns.Nulls, ColumnDistinct: r.Columns.Distinct,
 	}
 	if r.Reason != "" {
 		row.Reason = []string{r.Reason}
