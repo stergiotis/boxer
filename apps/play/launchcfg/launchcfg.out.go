@@ -40,6 +40,7 @@ var (
 	kindPlayLaunchTab      uint64
 	kindPlayLaunchEndpoint uint64
 	kindPlayLaunchDatasets uint64
+	kindPlayLaunchBundle   uint64
 )
 
 func init() {
@@ -50,6 +51,7 @@ func init() {
 	kindPlayLaunchTab = vdd.MembPlayLaunchTab.GetId().Value()
 	kindPlayLaunchEndpoint = vdd.MembPlayLaunchEndpoint.GetId().Value()
 	kindPlayLaunchDatasets = vdd.MembPlayLaunchDatasets.GetId().Value()
+	kindPlayLaunchBundle = vdd.MembPlayLaunchBundle.GetId().Value()
 	buscodec.Register[PlayLaunch](playLaunchBusCodec)
 }
 
@@ -120,6 +122,7 @@ type PlayLaunchColumns struct {
 	Tab      []string
 	Endpoint []string
 	Datasets [][]string
+	Bundle   []string
 }
 
 // Len returns the number of rows currently in the batch.
@@ -142,6 +145,7 @@ func (c *PlayLaunchColumns) Append(row PlayLaunch) {
 	c.Tab = append(c.Tab, row.Tab)
 	c.Endpoint = append(c.Endpoint, row.Endpoint)
 	c.Datasets = append(c.Datasets, row.Datasets)
+	c.Bundle = append(c.Bundle, row.Bundle)
 }
 
 // Row reconstructs entity i as an AoS PlayLaunch record. Inverse of
@@ -158,6 +162,7 @@ func (c *PlayLaunchColumns) Row(i int) (row PlayLaunch) {
 	row.Tab = c.Tab[i]
 	row.Endpoint = c.Endpoint[i]
 	row.Datasets = c.Datasets[i]
+	row.Bundle = c.Bundle[i]
 	return
 }
 
@@ -316,6 +321,9 @@ func PlayLaunchBuildEntities[
 		symbolSecAttr_Endpoint := symbolSec.BeginAttribute(c.Endpoint[i])
 		symbolSecAttr_Endpoint.AddMembershipLowCardRefP(kindPlayLaunchEndpoint)
 		symbolSecAttr_Endpoint.EndAttributeP()
+		symbolSecAttr_Bundle := symbolSec.BeginAttribute(c.Bundle[i])
+		symbolSecAttr_Bundle.AddMembershipLowCardRefP(kindPlayLaunchBundle)
+		symbolSecAttr_Bundle.EndAttributeP()
 		symbolSec.EndSection()
 		// --- stringArray. ---
 		stringArraySec := dml.GetSectionStringArray()
@@ -388,6 +396,9 @@ func PlayLaunchEmitSectionSymbol[
 	symbolSecAttr_Endpoint := symbolSec.BeginAttribute(row.Endpoint)
 	symbolSecAttr_Endpoint.AddMembershipLowCardRefP(kindPlayLaunchEndpoint)
 	symbolSecAttr_Endpoint.EndAttributeP()
+	symbolSecAttr_Bundle := symbolSec.BeginAttribute(row.Bundle)
+	symbolSecAttr_Bundle.AddMembershipLowCardRefP(kindPlayLaunchBundle)
+	symbolSecAttr_Bundle.EndAttributeP()
 	return
 }
 
@@ -642,6 +653,9 @@ func PlayLaunchFillFromArrow[
 		var symbolEndpointVal string
 		var symbolEndpointCount int
 		var symbolEndpointLastAttr int64
+		var symbolBundleVal string
+		var symbolBundleCount int
+		var symbolBundleLastAttr int64
 		nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 			for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -660,6 +674,13 @@ func PlayLaunchFillFromArrow[
 					}
 					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					symbolEndpointVal = val
+				case kindPlayLaunchBundle:
+					if symbolBundleLastAttr != attrJ+1 {
+						symbolBundleLastAttr = attrJ + 1
+						symbolBundleCount++
+					}
+					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					symbolBundleVal = val
 				}
 			}
 		}
@@ -673,6 +694,11 @@ func PlayLaunchFillFromArrow[
 			return
 		}
 		c.Endpoint = append(c.Endpoint, symbolEndpointVal)
+		if symbolBundleCount != 1 {
+			err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "playLaunchBundle").Int("got", symbolBundleCount).Errorf("slot symbol@playLaunchBundle (field Bundle) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolBundleCount)
+			return
+		}
+		c.Bundle = append(c.Bundle, symbolBundleVal)
 		// --- stringArray. ---
 		var stringArrayDatasetsSlice []string
 		var stringArrayDatasetsCount int
@@ -832,6 +858,9 @@ func PlayLaunchReadRow[
 	var symbolEndpointVal string
 	var symbolEndpointCount int
 	var symbolEndpointLastAttr int64
+	var symbolBundleVal string
+	var symbolBundleCount int
+	var symbolBundleLastAttr int64
 	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -850,6 +879,13 @@ func PlayLaunchReadRow[
 				}
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolEndpointVal = val
+			case kindPlayLaunchBundle:
+				if symbolBundleLastAttr != attrJ+1 {
+					symbolBundleLastAttr = attrJ + 1
+					symbolBundleCount++
+				}
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolBundleVal = val
 			}
 		}
 	}
@@ -867,6 +903,14 @@ func PlayLaunchReadRow[
 	}
 	if symbolEndpointCount == 1 {
 		row.Endpoint = symbolEndpointVal
+		present = true
+	}
+	if symbolBundleCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "playLaunchBundle").Int("got", symbolBundleCount).Errorf("slot symbol@playLaunchBundle (field Bundle) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolBundleCount)
+		return
+	}
+	if symbolBundleCount == 1 {
+		row.Bundle = symbolBundleVal
 		present = true
 	}
 	// --- stringArray. ---

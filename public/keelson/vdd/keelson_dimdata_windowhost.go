@@ -80,6 +80,12 @@ var (
 	// Appended with the next free id, out of the ADR-0135 block.
 	MembPlayLaunchDatasets = KeelsonHrNkRegistry.MustBegin("playLaunchDatasets", 195).
 				MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityArbitrary).End()
+	// MembPlayLaunchBundle names the ad-hoc bundle the opened window shows
+	// and follows (ADR-0288 (proposed) §SD4): its document becomes the
+	// buffer, its datasets are bound under their local names, and a
+	// republish reloads both. Empty opens no bundle.
+	MembPlayLaunchBundle = KeelsonHrNkRegistry.MustBegin("playLaunchBundle", 238).
+				MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
 )
 
 // AppletCreate config columns (ADR-0132 Update "O4" / ADR-0135 §SD7) — the

@@ -563,6 +563,35 @@ process, `MaxDatasetsPerOwner` 256, the byte quota unchanged. The
 regex explorer's quota test fills one window's share, which it now meets
 first.
 
+### 2026-10-07 — M3a play opens bundles
+
+Shipped: `launchcfg.PlayLaunch.Bundle`; a window that follows a bundle
+(the document becomes the buffer, its definition and preamble; its
+datasets are bound under their local names; a republish reloads, a
+retract leaves the window waiting and a publish reopens it);
+`list_bundles` and `open_bundle`. The applet parser stays in sqlapplet,
+which imports play: sqlapplet hands play the parser at init
+(`play.SetAppletDocParser`), and a host without it refuses a bundle by
+name.
+
+Refinements:
+
+- **`open_bundle` is asynchronous.** A command runs on the render
+  goroutine, where play asks the bus nothing, so the outcome says the
+  window follows the bundle and moved to the introspection endpoint;
+  the resolve and the apply happen on the following frames, and
+  `list_panes` then reports what each pane draws — not the outcome, as
+  SD4 had it.
+- **A bundle runs on open only if its document is a plain read**, the
+  rule ADR-0132 §SD5 applies to an applet; one that writes is applied and
+  waits for a run the person or the grant asks for.
+- **`list_bundles` reads `keelson('adhoc_bundles')` over keelson.query**
+  rather than a list request of its own.
+- **A refused resolve says why in the window.** The dataset service's
+  reason travels in the reply's text; the request helpers put it in the
+  error's message rather than a structured field, so an unattested open
+  reads "not attested by the dispatcher" in the window's notice.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — capability subjects.

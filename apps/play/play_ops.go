@@ -297,6 +297,10 @@ type opsSnap struct {
 	completion completionOpsView
 	// queryGraph is get_query_graph's reading (play_ops_query_graph.go).
 	queryGraph *QueryGraph
+	// bus is the window's bus, which list_bundles reads the catalog over;
+	// bundle is the bundle the window follows (play_bundle.go).
+	bus    app.BusI
+	bundle string
 }
 
 var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
@@ -468,6 +472,7 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 	addSchemaOps(s)
 	addRewriteOps(s)
 	addDatasetOps(s)
+	addBundleOps(s)
 	addProjectionOps(s)
 	addDiagnosticsOps(s)
 	addChartOps(s)
@@ -623,6 +628,10 @@ func snapshotPlay(inst *PlayLauncher) (sn opsSnap) {
 		return
 	}
 	sn.mounted, sn.graph = true, p.graph
+	sn.bus = inst.bus
+	if inst.bundle != nil {
+		sn.bundle = inst.bundle.alias
+	}
 	sn.installed, sn.probed = p.vocab.known()
 	sn.client = p.client
 	st := snapshotState(p)

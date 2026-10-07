@@ -45,7 +45,7 @@ func request(bus app.BusI, subject string, req adhocrequest.AdhocRequest, verb s
 		return rep, eb.Build().Str("verb", verb).Errorf("adhocdata: decode reply: %w", err)
 	}
 	if !rep.Ok {
-		return rep, eb.Build().Str("verb", verb).Str("reason", rep.Reason).Errorf("adhocdata: request rejected")
+		return rep, eb.Build().Str("verb", verb).Errorf("request rejected: %s", rep.Reason) //boxer:lint disable=CS013 reason="the service's refusal crosses the bus as text and is what a window shows"
 	}
 	return rep, nil
 }
@@ -182,7 +182,7 @@ func ResolveBundleRequest(bus app.BusI, alias string, obo *app.OnBehalfOf) (res 
 		if rep.NoLive {
 			return res, eb.Build().Str("bundle", alias).Errorf("resolve: %w", ErrNoLiveBundle)
 		}
-		return res, eb.Build().Str("bundle", alias).Str("reason", rep.Reason).Errorf("bundle resolve rejected")
+		return res, eb.Build().Str("bundle", alias).Errorf("bundle resolve rejected: %s", rep.Reason) //boxer:lint disable=CS013 reason="the service's refusal crosses the bus as text and is what a window shows"
 	}
 	return bundleResultOf(rep), nil
 }

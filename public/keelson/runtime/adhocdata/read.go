@@ -153,7 +153,7 @@ func ReadAllE(bus app.BusI, alias string, obo *app.OnBehalfOf) (res ReadResult, 
 		if rep.NoLive {
 			return res, eb.Build().Str("alias", alias).Errorf("read: %w", ErrNoLiveDataset)
 		}
-		return res, eb.Build().Str("alias", alias).Str("reason", rep.Reason).Errorf("read rejected")
+		return res, eb.Build().Str("alias", alias).Errorf("read rejected: %s", rep.Reason) //boxer:lint disable=CS013 reason="the service's refusal crosses the bus as text and is what a reader shows"
 	}
 	res = ReadResult{Alias: alias, Bundle: rep.Bundle, Handle: rep.Handle, Revision: rep.Revision, Rows: rep.Rows,
 		ArrowIPCStream: rep.ArrowStream, StreamDigest: rep.StreamDigest}

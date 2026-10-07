@@ -193,8 +193,11 @@ type PlayLauncher struct {
 	// bind_dataset on a window whose config declared none.
 	follower      *adhocdata.Follower
 	launchAliases []string
-	bus           app.BusI
-	log           zerolog.Logger
+	// bundle is the ad-hoc bundle the window follows (ADR-0288 (proposed)
+	// §SD4), from its launch config or open_bundle; nil when none.
+	bundle *bundleState
+	bus    app.BusI
+	log    zerolog.Logger
 	// Rules is the gloss rule repository every window this launcher opens is
 	// built over (ADR-0186); nil takes DefaultRepository. The factory
 	// registered in init leaves it nil, so a deployment that links play
@@ -286,6 +289,18 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 				Direction: app.CapDirectionSub,
 				Reason:    "and follows their publish and retract events",
 			},
+			{
+				Pattern:   adhocdata.SubjectBundleResolve,
+				Direction: app.CapDirectionPub,
+				Reason:    "a window opens an ad-hoc bundle: its document and the datasets it reads (ADR-0288 §SD4)",
+			},
+			{
+				Pattern:   adhocdata.SubjectBundleEventAll,
+				Direction: app.CapDirectionSub,
+				Reason:    "and follows the bundle's republish and retract",
+			},
+			// list_bundles reads the bundle catalog (ADR-0288 §SD4).
+			keelsonquery.ClientCaps(adhocdata.BundleCatalogTableName)[0],
 			{
 				Pattern:   regexsummary.ChLocalCapPattern,
 				Direction: app.CapDirectionPub,
@@ -407,7 +422,7 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 	// toolbar switcher reflects the retarget with no further wiring. A
 	// request with no such endpoint up degrades to the env default with a
 	// warning — a degraded open, not a failed one, like the Tab tier.
-	if launch != nil && launch.Endpoint == launchcfg.EndpointIntrospection {
+	if bundleLaunchEndpoint(launch) {
 		if ep := introspect.LocalQueryEndpoint(); ep != "" {
 			cfg.URL = ep
 		} else {
@@ -526,6 +541,9 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 		inst.follower = follower
 	}
 	inst.inner = inner
+	if launch != nil && launch.Bundle != "" {
+		inst.openBundle(launch.Bundle, nil)
+	}
 	return
 }
 
@@ -534,6 +552,7 @@ func (inst *PlayLauncher) Frame(ctx app.FrameContextI) (err error) {
 		err = eh.Errorf("playlauncher: Frame called before Mount")
 		return
 	}
+	inst.syncBundle()
 	if inst.follower != nil {
 		before := inst.boundLaunchAliases()
 		bound, pendingChanged := inst.follower.Sync(inst.inner)
@@ -603,6 +622,7 @@ func (inst *PlayLauncher) Unmount(ctx app.MountContextI) (err error) {
 		inst.follower.Close()
 		inst.follower = nil
 	}
+	inst.closeBundle()
 	if inst.inner != nil {
 		// Tear down the async machinery: cancel in-flight queries and the
 		// projector, release held results, close every lane.

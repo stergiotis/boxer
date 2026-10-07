@@ -101,4 +101,11 @@ type PlayLaunch struct {
 	// and retract from then on, exactly as a declared applet does. Empty
 	// follows nothing.
 	Datasets []string `lw:"playLaunchDatasets,stringArray"`
+
+	// Bundle names an ad-hoc bundle the window opens and follows (ADR-0288
+	// (proposed) §SD4): its document seeds the buffer, its datasets are
+	// bound under their local names, and a republish reloads both. It
+	// takes the window to the introspection endpoint, where datasets
+	// resolve, and supersedes Sql and Datasets.
+	Bundle string `lw:"playLaunchBundle,symbol"`
 }
