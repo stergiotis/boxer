@@ -735,4 +735,50 @@ func TestDefaultLinterCarriesNewRules(t *testing.T) {
 	}
 	require.True(t, ids["DL016"])
 	require.True(t, ids["DL017"])
+	require.True(t, ids["DL018"])
+}
+
+func TestRuleDL018ReportsProposedDocsAcceptedOnesLinkTo(t *testing.T) {
+	findings := collectFindings(t, NewRuleDL018(), []string{"testdata/dl018"})
+	bases := map[string]string{}
+	var order []string
+	for _, f := range findings {
+		require.Equal(t, "DL018", f.RuleId)
+		require.Equal(t, FindingSeverityWarn, f.Severity)
+		bases[filepath.Base(f.Path)] = f.Message
+		order = append(order, filepath.Base(f.Path))
+	}
+	require.Equal(t, []string{"proposed spaced.md", "proposed_target.md"}, order, "one finding per target, sorted by path")
+
+	msg := bases["proposed_target.md"]
+	require.Contains(t, msg, "linked from 2 accepted docs")
+	require.Contains(t, msg, "accepted_a.md:12", "first link of a source, a fragment link folded into it")
+	require.Contains(t, msg, "accepted_b.md:15", "a link without ./ resolves the same way")
+	require.Contains(t, bases["proposed spaced.md"], "linked from 1 accepted doc: ")
+	require.Contains(t, bases["proposed spaced.md"], "accepted_c.md:12", "percent-decoded, resolved from a subdirectory")
+
+	require.NotContains(t, bases, "proposed_other.md", "linked only from a fence and from a proposed doc")
+	require.NotContains(t, bases, "accepted_target.md", "an accepted target is settled")
+	require.NotContains(t, bases, "proposed_source.md", "nothing links to it")
+}
+
+// A file reached through two roots is one file: its links are not counted twice.
+func TestRuleDL018CountsEachSourceOnce(t *testing.T) {
+	findings := collectFindings(t, NewRuleDL018(), []string{"testdata/dl018", "testdata/dl018/sub", "testdata/dl018"})
+	require.Len(t, findings, 2)
+	for _, f := range findings {
+		if filepath.Base(f.Path) == "proposed_target.md" {
+			require.Contains(t, f.Message, "linked from 2 accepted docs")
+		}
+	}
+}
+
+func TestDL018MessageCapsTheSourceList(t *testing.T) {
+	var sources []dl018Source
+	for i := range 7 {
+		sources = append(sources, dl018Source{path: "a" + string(rune('0'+i)) + ".md", line: int32(i + 1)})
+	}
+	msg := dl018Message(sources)
+	require.Contains(t, msg, "linked from 7 accepted docs: a0.md:1, a1.md:2, a2.md:3, a3.md:4, a4.md:5, +2 more")
+	require.NotContains(t, msg, "a5.md")
 }

@@ -268,10 +268,10 @@ with no off-the-shelf equivalent are described below; `gov codelint` is
 Sources under [github.com/stergiotis/boxer/public/gov/doclint](../public/gov/doclint).
 Implements numbered rules over Markdown front-matter, draft banners, ADR
 section completeness and sub-item declarations, link resolution, banned
-filenames, Go doc-comment hygiene, and stale review stamps. The numbering has
-gaps: an id is reserved when a check is planned and assigned when it is
+filenames, Go doc-comment hygiene, stale review stamps, and proposed ADRs
+that accepted ones link to. The numbering has gaps: an id is reserved when a check is planned and assigned when it is
 implemented, so `DL013` and `DL014` name checks that do not exist yet while
-`DL015`, `DL016` and `DL017` ship (the register is DOCUMENTATION_STANDARD §8's table). Findings carry one of three severities:
+`DL015` through `DL018` ship (the register is DOCUMENTATION_STANDARD §8's table). Findings carry one of three severities:
 
 - `error` — sets the script's exit code to 1.
 - `warn` — visible in output but non-blocking.

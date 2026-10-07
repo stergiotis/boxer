@@ -121,6 +121,8 @@ Supersession is cheap. Prefer it over an `Updates` chain that has started to des
 
 If ADRs accumulate in `proposed` indefinitely, the bar is being misread. Flip them.
 
+A `proposed` ADR that an `accepted` one links to is one other decisions already rely on, while its own text can still change in place without a dated entry. DL018 reports it, listing the accepted documents that link to it.
+
 `scripts/dev/adr-accept.sh <number|path>` does the mechanical part of the flip — front-matter status, `reviewed-by` / `reviewed-date`, the banner, and the leading sentence of `## Status` — then runs doclint. It leaves the rest of the `## Status` prose alone and prints it, because text written against a pending decision ("awaiting review by …") usually needs a human edit afterwards.
 
 ---
@@ -399,6 +401,7 @@ Every invariant stated in this standard maps to exactly one enforcer. The `Rule`
 | Cross-package Markdown references use fully qualified Go import paths, not bare directory names. | §7 | `DL006` |
 | Every in-repo Markdown link resolves to an existing file that git tracks. A git-ignored target counts as missing: it resolves in a working checkout and in no clean one. Targets are percent-decoded before resolving, so a link to `Architecture%20Overview.md` finds `Architecture Overview.md`. | §7 | `DL007` (anchor existence not yet checked) |
 | Open set of `status: draft` / `status: proposed` docs reported (informational, not a merge block). | §4 | `DL011` |
+| A `proposed` doc that an `accepted` doc links to is reported once, on the proposed doc, with the accepted docs that link it: accepted text relies on a doc that can still change in place. Links only — bare `ADR-NNNN` citations are DL014's — and links inside fences do not count. | §1 ADR *When to flip* | `DL018` (warn) |
 | A bare backticked in-repo path (`doc/<file>.md`, `public/<pkg>/`, `./<file>`) resolves to a file or directory that exists and git tracks. Templates (`<`, `>`, `*`, `{`, `$`, `…`) and sibling-checkout paths (`../boxer/…`) are skipped; a `:NNN` pin is stripped first (DL016 reports the pin). Whether the path should have been a link stays a judgment call. | §4 *Claims that decay*, §7 | `DL017` (warn while the in-tree backlog is measured) |
 | Identifiers named in Markdown resolve to a symbol in the tree. Docs in `draft` / `proposed` are exempt: they describe symbols that do not exist yet, which is their purpose. | §4 *Claims that decay* | `DL013 (pending)` |
 | ADR citations — in Markdown and in Go comments — resolve to an existing ADR, and cite by number rather than filename. | §1 ADR | `DL014 (pending)` |
