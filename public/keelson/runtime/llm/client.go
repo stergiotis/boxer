@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"encoding/json/v2"
 	"errors"
 	"math/rand/v2"
 	"strconv"
@@ -99,6 +100,12 @@ type Request struct {
 	Tools          []openaichat.Tool
 	ToolChoice     string
 	ResponseFormat *openaichat.ResponseFormat
+	// Extra holds provider-specific members merged verbatim into the
+	// provider's request, as openaichat.CompletionRequest.Extra does:
+	// llama.cpp sampler knobs such as dry_multiplier, or
+	// chat_template_kwargs. A member the request already sets fails the
+	// call, and so does a provider that rejects members it does not know.
+	Extra map[string]any
 
 	// Retain sends the request on llm.retain.complete (ADR-0264): the host
 	// keeps the conversation where its BOXER_LLM_RETAIN ceiling is durable.
@@ -259,6 +266,11 @@ func (inst *Client) Complete(ctx context.Context, r Request) (res Response, err 
 		Messages: r.Messages, Temperature: r.Temperature, MaxTokens: r.MaxTokens, Seed: r.Seed, Stop: r.Stop,
 		EnableThinking: r.EnableThinking, Tools: r.Tools, ToolChoice: r.ToolChoice, ResponseFormat: r.ResponseFormat,
 		CancelKey: strconv.FormatUint(rand.Uint64(), 36),
+	}
+	if len(r.Extra) > 0 {
+		if req.Extra, err = json.Marshal(r.Extra); err != nil {
+			return res, eh.Errorf("llm: encode extra: %w", err)
+		}
 	}
 	if r.OnBehalfOf != nil {
 		req.OnBehalfTask, req.OnBehalfEpoch, req.OnBehalfCall = r.OnBehalfOf.Task, r.OnBehalfOf.Epoch, r.OnBehalfOf.Call

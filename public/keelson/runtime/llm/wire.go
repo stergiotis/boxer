@@ -33,6 +33,9 @@ type wireRequest struct {
 	Tools          []openaichat.Tool          `json:"tools,omitempty"`
 	ToolChoice     string                     `json:"tool_choice,omitempty"`
 	ResponseFormat *openaichat.ResponseFormat `json:"response_format,omitempty"`
+	// Extra is the request's provider-specific members as one JSON object,
+	// so a nested member keeps its shape across the bus codec.
+	Extra []byte `json:"extra,omitempty"`
 	// DeadlineUnixNanos carries the caller's ctx deadline, since the
 	// handler has no ctx of its own. 0 means none.
 	DeadlineUnixNanos int64 `json:"deadline_ns,omitempty"`

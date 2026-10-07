@@ -3,6 +3,7 @@ package llm
 import (
 	"bytes"
 	"context"
+	"encoding/json/v2"
 	"errors"
 	"net"
 	"net/url"
@@ -305,6 +306,13 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 		inst.refuse(msg, "malformed request: "+err.Error(), CallRecord{}, nil)
 		return
 	}
+	var extra map[string]any
+	if len(req.Extra) > 0 {
+		if err = json.Unmarshal(req.Extra, &extra); err != nil {
+			inst.refuse(msg, "malformed request: extra: "+err.Error(), CallRecord{}, nil)
+			return
+		}
+	}
 	rec := CallRecord{
 		CallId: inst.mintCallId(), At: time.Now().UTC(), Sender: msg.Sender, SenderInstance: msg.SenderInstance,
 		Purpose: req.Purpose, Sensitivity: queryengine.SensitivityE(req.Sensitivity),
@@ -394,7 +402,7 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 	resp, cerr := inst.client.Complete(ctx, openaichat.CompletionRequest{
 		ModelId: inst.cfg.Model, Messages: req.Messages, Temperature: req.Temperature, MaxTokens: maxTokens,
 		Seed: req.Seed, Stop: req.Stop, EnableThinking: req.EnableThinking, Tools: req.Tools,
-		ToolChoice: req.ToolChoice, ResponseFormat: req.ResponseFormat,
+		ToolChoice: req.ToolChoice, ResponseFormat: req.ResponseFormat, Extra: extra,
 	})
 	rec.Elapsed = time.Since(started)
 	rec.InputTokens, rec.OutputTokens = resp.InputTokens, resp.OutputTokens

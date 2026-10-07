@@ -482,6 +482,22 @@ service's timeout with its call id. A client whose wait expires for any
 reason publishes `llm.cancel`, as it already did when its context ended.
 An explicit `Client.Timeout` or an earlier context deadline still wins.
 
+### 2026-10-07 — a request carries provider-specific members
+
+`Request.Extra` carries members the service merges verbatim into the
+provider's request, as `openaichat.CompletionRequest.Extra` does. A
+downstream that moved its own calls onto the service sends two of them to a
+local llama.cpp server: `dry_multiplier` 0, because a DRY penalty tuned for
+chat corrupts the verbatim quotes an extraction or a cited answer copies from
+its context, and `chat_template_kwargs.enable_thinking` false, because
+`EnableThinking` false omits the kwarg and a chat template that defaults
+reasoning on then spends the whole token ceiling thinking. The members cross
+the bus as one JSON object, so a nested member keeps its shape through the
+CBOR codec. The host still names the model: a member that collides with one
+the request sets fails the encode, and a provider that rejects members it does
+not know fails the call. The call record does not keep the members, as it
+keeps none of the sampling settings.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — §SD3 the taxonomy this family joins, §SD7 the broker, §SD10 capslock.
