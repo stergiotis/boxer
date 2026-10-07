@@ -286,9 +286,12 @@ takes no statement.
   document, its digest and the local-name-to-alias mapping, so the view
   needs no second request. The view follows the bundle: a dataset revision
   rebinds as ADR-0240 §SD6's follower does, a document revision re-parses
-  and rebuilds the embedded play in place, keeping parameter values whose
-  name and type survive; a retract leaves the view saying what it waits
-  for. Because an embedded applet's capabilities are the embedder's
+  and rebuilds the embedded play from the new document — parameter values
+  the person set are not carried over — and a retract leaves the view
+  saying what it waits for. The first run waits until the datasets are
+  bound, and only a plain-read document runs at all. The view's "Open in
+  Playground" opens the bundle itself (`PlayLaunch.Bundle`): its buffer
+  reads local names that mean nothing in another window. Because an embedded applet's capabilities are the embedder's
   (ADR-0132 §SD8) and a manifest is fixed before any bundle exists, a
   bundle document may ask for nothing beyond `BundleViewCaps`: endpoint
   introspection, reads of its own datasets, no declared capabilities of its
@@ -302,9 +305,11 @@ takes no statement.
   answers wait in its mailbox, and the frame that next draws the view
   syncs them — a dataset revision, a document revision, a retract —
   before it draws, so the view shows the bundle as it stands, not the
-  sequence it missed. An idle view costs only its draw; its frame cost is
-  measured (M6) so a receiver can choose between a view and a widget of
-  its own.
+  sequence it missed. A view not drawn costs nothing: `BundleView.Sync`
+  runs only inside its frame. A drawn idle view costs its draw — about
+  0.2 ms of Go, 0.8 ms of Rust and 8.5 KB per frame for one showing 21
+  table rows (2026-10-07, M6 entry) — which a receiver weighs against a
+  widget of its own.
 
 - **SD8 — A bundle view is plain or operable.** The receiver picks one per
   view at construction (`Operable` in the view's config), and the manifest
@@ -369,6 +374,11 @@ takes no statement.
   publish under the person's standing consent, each publish still
   audited. Trigger: a multi-hop pipeline whose confirmations the person
   reports as friction.
+- **Parameter values across a new document.** A bundle view rebuilt from
+  a republished document starts from the document's parameters; carrying
+  the person's values whose name and type survive needs play to expose
+  its parameter state. Trigger: a receiver whose bundles are republished
+  while the person works in them.
 - **The person's own publish.** `publish_result` has no gesture; the
   person publishes only by confirming an agent.
 - **Summaries and meaning.** The catalog and the trail carry rows, bytes,
@@ -400,7 +410,7 @@ takes no statement.
 - **M5b — The review's corrections:** ✓ grant-checked reads, provenance as
   data with `play.PublishBundleE`, one unit for bytes, members carrying
   the bundle revision, `InFlight`, no in-process audit list.
-- **M6 — Bundle views:** `NewBundleView`, `BundleViewCaps`, the document
+- **M6 — Bundle views:** ✓ `NewBundleView`, `BundleViewCaps`, the document
   check in `PublishBundleE`, plain views that sync on the frame they are
   drawn; adhocdemo becomes a receiver; the frame cost of an idle plain
   view measured in a headless scene and recorded.
@@ -803,6 +813,26 @@ on the row (`InFlight`), and the in-process audit list removed. The
 review's points that are decisions rather than corrections are under
 Deferred and open; its point about a receiver dropping the digest past
 its own transcoding belongs to that receiver.
+
+### 2026-10-07 — M6 bundle views, and what one costs
+
+Shipped: `sqlapplet.NewBundleView`, `BundleViewCaps`,
+`PlayApp.SetOpenPlaygroundBundle`; adhocdemo publishes its series through
+`play.PublishBundleE` under a window-scoped bundle alias and shows it in a
+bundle view. The document check SD7 asks of the constructor is
+`play.ComposeBundleDocE`'s: introspection endpoint, the bundle's own
+datasets.
+
+Measured on the headless host with the CPU rasterizer client, at
+1000×800, after an 8 s settle, three readings of the status bar's frame
+label 400 ms apart: adhocdemo — a bar and one bundle view with 21 table
+rows on screen — Go 1.0 ms, Rust 1.3–1.5 ms, 15.3 KB sent per frame;
+capdemo, as a baseline, Go 0.8 ms, Rust 0.6 ms, 6.8 KB. Method: a scene
+(ADR-0248) whose `tree` step reads the label, run through `scene.RunDoc`
+from a temporary build-tagged test with `-count=1`.
+
+Not built: carrying parameter values across a new document (Deferred and
+open).
 
 ## References
 
