@@ -1112,7 +1112,12 @@ structure features and a minimum cluster of 5 (ADR-0289 §SD5).
 The Detail pane gains `get_canonical` (ADR-0289 §SD2): a row's canonform
 digest and pin, its canonwire fingerprint and verdict, and the CBOR items both
 were taken over in diagnostic notation, cut at a line boundary under the byte
-bound.
+bound. `get_detail` (version 2) reads the row through the read model
+(ADR-0289 §SD3): one list of attributes, each named by its first membership
+through the session's registries or by its plain column, with its values
+spelled once, its further memberships as labels and the `LW_GET` handle that
+reads it; columns the card hides as machine-readable only are counted. The
+sections-with-roles shape of version 1 is gone.
 
 ## References
 

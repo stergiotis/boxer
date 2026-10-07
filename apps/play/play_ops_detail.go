@@ -1,12 +1,13 @@
 package play
 
 // play_ops_detail.go: get_detail, the Detail pane's reading of one row for
-// an agent (ADR-0270, update of 2026-10-05). The pane draws through a card
-// emitter that lives on the render goroutine; the read builds its own
-// Driver from the result's column names (discoverCardRecipe, the same
-// derivation the pane's CardDriver makes) and drives one row into a sink
-// that keeps text, on the query's goroutine. Nothing the pane holds is
-// touched, so the read neither needs the pane raised nor disturbs it.
+// an agent (ADR-0270, update of 2026-10-05). The read builds its own Driver
+// from the result's column names (discoverCardRecipe, the same derivation the
+// pane's CardDriver makes) and drives one row into the read model (lwread,
+// ADR-0289 §SD3, proposed) on the query's goroutine: attributes named by
+// their first membership through the session's registries, values spelled
+// once, hidden and cut values counted. Nothing the pane holds is touched, so
+// the read neither needs the pane raised nor disturbs it.
 
 import (
 	"encoding/hex"
@@ -17,14 +18,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/membership"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/membershiprole"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/valueaspects"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/lwread"
 )
 
 const (
@@ -50,27 +44,24 @@ type DetailArgs struct {
 	Node string `json:",omitzero" desc:"the split node whose row to read; the node the Detail pane follows (selection_node, or its binding) when left out"`
 }
 
-// DetailValue is one named value of a row.
+// DetailValue is one value column of an attribute.
 type DetailValue struct {
-	Name  string `desc:"the value column's name; for a result that is not leeway-shaped, the column's short label"`
-	Value string `desc:"the value as text, cut at 300 bytes; a list as [a, b, …]"`
+	Column string   `desc:"the value column; for a result that is not leeway-shaped, the column's short label"`
+	Type   string   `json:",omitzero" desc:"its canonical type, of one item for a list or set"`
+	Value  string   `json:",omitzero" desc:"a scalar's value: bytes as text when printable, else 0x-hex; cut at 300 bytes with …"`
+	Items  []string `json:",omitzero" desc:"a list's items in order, or a set's in value order"`
+	More   int      `json:",omitzero" desc:"items left out after the first 64"`
 }
 
-// DetailAttribute is one attribute of a section: its values and, in a
-// tagged section, the memberships that tag it.
+// DetailAttribute is one attribute of the row.
 type DetailAttribute struct {
-	Values    []DetailValue `desc:"its values"`
-	Primary   []string      `json:",omitzero" desc:"the memberships that name the attribute"`
-	Secondary []string      `json:",omitzero" desc:"the memberships that annotate it"`
-}
-
-// DetailSection is one section of a row.
-type DetailSection struct {
-	Name       string            `desc:"the section"`
-	Kind       string            `desc:"plain (one value per row), tagged (attributes carrying memberships) or, for a result that is not leeway-shaped, the column group the pane draws (pinned, relations, data, meta)"`
-	CoGroup    string            `json:",omitzero" desc:"the co-section group the tagged section belongs to"`
-	Attributes []DetailAttribute `json:",omitzero" desc:"its attributes, in the order the card draws them"`
-	More       int               `json:",omitzero" desc:"attributes the byte bound left out"`
+	Name    string        `desc:"what the attribute is: its first membership, a ref named through the session's registries, parameters in brackets; the section when no membership names it; a plain column's name; section·name when two sections give one name"`
+	Section string        `desc:"its section; for a plain column, the plain item type; for a result that is not leeway-shaped, the group the pane draws it in (pinned, relations, data, meta)"`
+	Plain   bool          `json:",omitzero" desc:"true for a plain column, which every row carries once"`
+	Labels  []string      `json:",omitzero" desc:"its further memberships"`
+	Values  []DetailValue `json:",omitzero" desc:"its value columns the card shows"`
+	Hidden  int           `json:",omitzero" desc:"its value columns the card hides as machine-readable only"`
+	Handle  string        `json:",omitzero" desc:"the LW_GET expression that reads it in SQL"`
 }
 
 // DetailIdentity is a row's canonical identity, as the pane's identity strip
@@ -97,29 +88,31 @@ type DetailTemporal struct {
 
 // DetailReading is get_detail's result.
 type DetailReading struct {
-	ResultId         uint64           `desc:"the result the row is of"`
-	Node             string           `desc:"the split node the result is of"`
-	Row              int64            `desc:"the row read"`
-	Rows             int64            `desc:"the result's row count"`
-	Entity           string           `json:",omitzero" desc:"the entity type the row's tagged id names"`
-	NaturalKey       string           `json:",omitzero" desc:"the row's natural key"`
-	Leeway           bool             `desc:"true when the result is leeway-shaped and the sections are its own"`
-	Sections         []DetailSection  `json:",omitzero" desc:"the row's sections in card order; for a result that is not leeway-shaped, its non-empty columns grouped as the pane groups them"`
-	Identity         *DetailIdentity  `json:",omitzero" desc:"the row's canonical identity, for a leeway result"`
-	Temporal         []DetailTemporal `json:",omitzero" desc:"the row's temporal attributes, as the pane's time strip draws them"`
-	TemporalDropped  int              `json:",omitzero" desc:"marks the strip's density bound left out"`
-	Embedded         bool             `json:",omitzero" desc:"true when the window replaced the Detail pane's body: the person sees the embedder's view, not this reading"`
-	Truncated        bool             `json:",omitzero" desc:"true when the byte bound left attributes out (each section's more counts them)"`
-	TruncationReason string           `json:",omitzero" desc:"which bound cut it"`
-	Note             string           `json:",omitzero" desc:"what the reading leaves out"`
+	ResultId         uint64            `desc:"the result the row is of"`
+	Node             string            `desc:"the split node the result is of"`
+	Row              int64             `desc:"the row read"`
+	Rows             int64             `desc:"the result's row count"`
+	Entity           string            `json:",omitzero" desc:"the entity type the row's tagged id names"`
+	NaturalKey       string            `json:",omitzero" desc:"the row's natural key"`
+	Leeway           bool              `desc:"true when the result is leeway-shaped and the sections are its own"`
+	Attributes       []DetailAttribute `json:",omitzero" desc:"the row's attributes: plain columns, then each tagged section's in card order; for a result that is not leeway-shaped, its non-empty columns grouped as the pane groups them"`
+	More             int               `json:",omitzero" desc:"attributes the byte bound left out"`
+	Hidden           int               `json:",omitzero" desc:"value columns the card hides as machine-readable only"`
+	Identity         *DetailIdentity   `json:",omitzero" desc:"the row's canonical identity, for a leeway result"`
+	Temporal         []DetailTemporal  `json:",omitzero" desc:"the row's temporal attributes, as the pane's time strip draws them"`
+	TemporalDropped  int               `json:",omitzero" desc:"marks the strip's density bound left out"`
+	Embedded         bool              `json:",omitzero" desc:"true when the window replaced the Detail pane's body: the person sees the embedder's view, not this reading"`
+	Truncated        bool              `json:",omitzero" desc:"true when the byte bound left attributes out (more counts them)"`
+	TruncationReason string            `json:",omitzero" desc:"which bound cut it"`
+	Note             string            `json:",omitzero" desc:"what the reading leaves out"`
 }
 
-const detailOpsNote = "values are the driver's text, before the glosses the pane draws them through; typed components are not read"
+const detailOpsNote = "values are read before the glosses the pane draws them through; typed components are not read; get_canonical reads the row losslessly"
 
 func addDetailOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 	// Untrusted: every value is the data's.
-	appops.Query(s, app.OperationSpec{Name: opGetDetail, Version: 1,
-		Summary: "read one row as the Detail pane does: its sections, each attribute's values and memberships, its canonical identity and its temporal attributes",
+	appops.Query(s, app.OperationSpec{Name: opGetDetail, Version: 2,
+		Summary: "read one row as the Detail pane does: its attributes by name with their values, labels and SQL handles, its canonical identity and its temporal attributes",
 		Reads:   []string{opsResResult, opsResSignals, opsResPanes}, Agents: true, Untrusted: true,
 		Follows: []string{"the Detail pane is unchanged; set_signal selection moves the row it draws"}},
 		func(sn opsSnap, in DetailArgs) (DetailReading, error) {
@@ -168,22 +161,27 @@ func getDetail(r *opsResults, signals []SignalState, v detailOpsView, in DetailA
 		}
 		out.Temporal = append(out.Temporal, t)
 	}
-	var sections []DetailSection
+	var read []DetailAttribute
 	if leeway {
 		out.Leeway = true
-		sink := &detailSink{renderer: membership.DefaultRenderer(), classifier: membershiprole.PathPrefixClassifier{}}
+		sink := lwread.NewSink(lwread.Options{Renderer: projectionLensRenderer(), MaxValueBytes: detailOpsMaxValue})
 		slice := lr.rec.NewSlice(row, row+1)
 		derr := recipe.driver.DriveRecordBatch(sink, slice)
 		slice.Release()
 		if derr != nil {
 			return out, app.RefuseOperation("the row did not read as leeway: " + truncateRunes(derr.Error(), 300))
 		}
-		sections = sink.sections
+		m := sink.Model()
+		m.Qualify()
+		if len(m.Records) == 1 {
+			read, out.Hidden = detailAttributes(m), m.Records[0].Hidden
+		}
 		out.Identity = detailIdentity(recipe, lr.rec, row)
 	} else {
-		sections = adHocDetailSections(lr.rec, lr.schema, row)
+		read = adHocDetailAttributes(lr.rec, lr.schema, row)
 	}
-	out.Sections, out.Truncated = boundDetailSections(sections, detailOpsMaxBytes)
+	out.Attributes, out.More = boundDetailAttributes(read, detailOpsMaxBytes)
+	out.Truncated = out.More > 0
 	if out.Truncated {
 		out.TruncationReason = "the reading's byte bound (" + strconv.Itoa(detailOpsMaxBytes>>10) + " KiB of values)"
 	}
@@ -209,12 +207,41 @@ func detailIdentity(recipe cardRecipe, rec arrow.RecordBatch, row int64) *Detail
 	return id
 }
 
-// adHocDetailSections groups a non-leeway row's non-empty columns as the
-// pane's ad-hoc view does.
-func adHocDetailSections(rec arrow.RecordBatch, schema *arrow.Schema, row int64) (out []DetailSection) {
+// detailAttributes is the read model's one record as the reading's
+// attributes, each with the handle the batch's header gives it.
+func detailAttributes(m *lwread.Model) (out []DetailAttribute) {
+	handles := map[string]string{}
+	for _, h := range m.Header() {
+		handles[h.Section+"\x00"+h.Name] = h.Handle
+	}
+	for _, a := range m.Records[0].Attributes {
+		da := DetailAttribute{Name: a.Name, Section: a.Section, Plain: a.Plain, Hidden: a.Hidden, Handle: handles[a.Section+"\x00"+a.Name]}
+		for _, l := range a.Labels {
+			da.Labels = append(da.Labels, l.Text)
+		}
+		for _, v := range a.Values {
+			dv := DetailValue{Column: v.Column, Type: v.Type, More: v.More}
+			if v.Shape == lwread.ShapeScalar {
+				if len(v.Items) > 0 {
+					dv.Value = v.Items[0].Text
+				}
+			} else {
+				for _, it := range v.Items {
+					dv.Items = append(dv.Items, it.Text)
+				}
+			}
+			da.Values = append(da.Values, dv)
+		}
+		out = append(out, da)
+	}
+	return
+}
+
+// adHocDetailAttributes groups a non-leeway row's non-empty columns as the
+// pane's ad-hoc view does, one attribute per column.
+func adHocDetailAttributes(rec arrow.RecordBatch, schema *arrow.Schema, row int64) (out []DetailAttribute) {
 	for _, g := range []struct{ section, heading string }{
 		{sectionPlain, "pinned"}, {sectionForeignKey, "relations"}, {sectionData, "data"}, {sectionRare, "meta"}} {
-		sec := DetailSection{Name: g.heading, Kind: g.heading}
 		for i := 0; i < schema.NumFields(); i++ {
 			name := schema.Field(i).Name
 			if sectionForColumn(name) != g.section {
@@ -224,186 +251,35 @@ func adHocDetailSections(rec arrow.RecordBatch, schema *arrow.Schema, row int64)
 			if val == "" || val == "[len=0]" {
 				continue
 			}
-			sec.Attributes = append(sec.Attributes, DetailAttribute{Values: []DetailValue{{Name: shortColumnLabel(name),
+			label := shortColumnLabel(name)
+			out = append(out, DetailAttribute{Name: label, Section: g.heading, Values: []DetailValue{{Column: label,
 				Value: truncateBytes(strings.Clone(val), detailOpsMaxValue)}}})
 		}
-		if len(sec.Attributes) > 0 {
-			out = append(out, sec)
-		}
 	}
 	return
 }
 
-// boundDetailSections keeps attributes in card order until the byte budget
-// is spent; each section counts the attributes it lost.
-func boundDetailSections(in []DetailSection, budget int) (out []DetailSection, truncated bool) {
+// boundDetailAttributes keeps attributes in order until the byte budget is
+// spent, and counts the ones it left out.
+func boundDetailAttributes(in []DetailAttribute, budget int) (out []DetailAttribute, more int) {
 	used := 0
-	for _, sec := range in {
-		kept := sec
-		kept.Attributes = nil
-		for _, a := range sec.Attributes {
-			cost := 16
-			for _, v := range a.Values {
-				cost += len(v.Name) + len(v.Value) + 8
-			}
-			for _, m := range a.Primary {
-				cost += len(m) + 4
-			}
-			for _, m := range a.Secondary {
-				cost += len(m) + 4
-			}
-			if truncated || used+cost > budget {
-				truncated = true
-				kept.More++
-				continue
-			}
-			used += cost
-			kept.Attributes = append(kept.Attributes, a)
+	for _, a := range in {
+		cost := 24 + len(a.Name) + len(a.Section) + len(a.Handle)
+		for _, l := range a.Labels {
+			cost += len(l) + 4
 		}
-		out = append(out, kept)
+		for _, v := range a.Values {
+			cost += len(v.Column) + len(v.Type) + len(v.Value) + 12
+			for _, it := range v.Items {
+				cost += len(it) + 3
+			}
+		}
+		if more > 0 || used+cost > budget {
+			more++
+			continue
+		}
+		used += cost
+		out = append(out, a)
 	}
 	return
-}
-
-// detailSink is a streamreadaccess sink keeping one entity's sections as
-// text: plain sections, then tagged sections with each attribute's values
-// and memberships split by role as the card's emitter splits them.
-type detailSink struct {
-	renderer   *membership.Renderer
-	classifier membershiprole.ClassifierI
-
-	sections []DetailSection
-	cur      *DetailSection
-	attr     *DetailAttribute
-	coGroup  string
-	ctx      membershiprole.SectionContext
-
-	col     string
-	items   []string
-	text    strings.Builder
-	inItems bool
-	inValue bool
-}
-
-var (
-	_ streamreadaccess.SinkI           = (*detailSink)(nil)
-	_ streamreadaccess.MembershipSinkI = (*detailSink)(nil)
-)
-
-func (inst *detailSink) BeginBatch()              {}
-func (inst *detailSink) EndBatch() error          { return nil }
-func (inst *detailSink) BeginEntity()             {}
-func (inst *detailSink) EndEntity() error         { return nil }
-func (inst *detailSink) BeginTaggedSections()     {}
-func (inst *detailSink) EndTaggedSections() error { return nil }
-
-func (inst *detailSink) BeginPlainSection(itemType common.PlainItemTypeE, _ []naming.StylableName, _ []canonicaltypes.PrimitiveAstNodeI, _ int) {
-	inst.sections = append(inst.sections, DetailSection{Name: itemType.String(), Kind: "plain"})
-	inst.cur = &inst.sections[len(inst.sections)-1]
-}
-func (inst *detailSink) EndPlainSection() error { inst.cur = nil; return nil }
-func (inst *detailSink) BeginPlainValue() {
-	if inst.cur != nil {
-		inst.cur.Attributes = append(inst.cur.Attributes, DetailAttribute{})
-		inst.attr = &inst.cur.Attributes[len(inst.cur.Attributes)-1]
-	}
-}
-func (inst *detailSink) EndPlainValue() error { inst.attr = nil; return nil }
-
-func (inst *detailSink) BeginCoSectionGroup(name naming.Key) { inst.coGroup = name.String() }
-func (inst *detailSink) EndCoSectionGroup() error            { inst.coGroup = ""; return nil }
-
-func (inst *detailSink) BeginSection(name naming.StylableName, _ []naming.StylableName, _ []canonicaltypes.PrimitiveAstNodeI, aspects useaspects.AspectSet, _ int) {
-	inst.sections = append(inst.sections, DetailSection{Name: name.String(), Kind: "tagged", CoGroup: inst.coGroup})
-	inst.cur = &inst.sections[len(inst.sections)-1]
-	inst.ctx = membershiprole.SectionContext{Name: name, UseAspects: aspects}
-}
-func (inst *detailSink) EndSection() error { inst.cur = nil; return nil }
-func (inst *detailSink) BeginTaggedValue() {
-	if inst.cur != nil {
-		inst.cur.Attributes = append(inst.cur.Attributes, DetailAttribute{})
-		inst.attr = &inst.cur.Attributes[len(inst.cur.Attributes)-1]
-	}
-}
-func (inst *detailSink) EndTaggedValue() error { inst.attr = nil; return nil }
-
-func (inst *detailSink) BeginColumn(_ streamreadaccess.PhysicalColumnAddr, name naming.StylableName, _ canonicaltypes.PrimitiveAstNodeI, _ valueaspects.AspectSet) {
-	inst.col = name.String()
-	inst.items = inst.items[:0]
-	inst.text.Reset()
-	inst.inItems = false
-}
-func (inst *detailSink) EndColumn() {
-	if inst.attr == nil {
-		return
-	}
-	val := inst.text.String()
-	if inst.inItems {
-		val = "[" + strings.Join(inst.items, ", ") + "]"
-	}
-	inst.attr.Values = append(inst.attr.Values, DetailValue{Name: inst.col, Value: truncateBytes(val, detailOpsMaxValue)})
-}
-
-func (inst *detailSink) BeginScalarValue()             { inst.text.Reset(); inst.inValue = true }
-func (inst *detailSink) EndScalarValue() error         { inst.inValue = false; return nil }
-func (inst *detailSink) BeginHomogenousArrayValue(int) { inst.inItems = true }
-func (inst *detailSink) EndHomogenousArrayValue()      {}
-func (inst *detailSink) BeginSetValue(int)             { inst.inItems = true }
-func (inst *detailSink) EndSetValue()                  {}
-func (inst *detailSink) BeginValueItem(int)            { inst.text.Reset(); inst.inValue = true }
-func (inst *detailSink) EndValueItem() {
-	inst.inValue = false
-	// Items past what any value can show are not kept.
-	if len(inst.items) < 64 {
-		inst.items = append(inst.items, inst.text.String())
-	}
-}
-
-func (inst *detailSink) Write(p []byte) (int, error) {
-	if inst.text.Len() < detailOpsMaxValue+8 {
-		inst.text.Write(p)
-	}
-	return len(p), nil
-}
-func (inst *detailSink) WriteString(s string) (int, error) {
-	if inst.text.Len() < detailOpsMaxValue+8 {
-		inst.text.WriteString(s)
-	}
-	return len(s), nil
-}
-
-func (inst *detailSink) BeginTags(int) {}
-func (inst *detailSink) EndTags()      {}
-
-func (inst *detailSink) AddMembershipRef(lowCard bool, ref uint64) {
-	inst.addMembership(membership.MembershipValue{Kind: membership.IdentityRef, LowCard: lowCard, Ref: ref})
-}
-func (inst *detailSink) AddMembershipVerbatim(lowCard bool, verbatim string) {
-	inst.addMembership(membership.MembershipValue{Kind: membership.IdentityVerbatim, LowCard: lowCard, Verbatim: verbatim})
-}
-func (inst *detailSink) AddMembershipRefParametrized(lowCard bool, ref uint64, params string) {
-	inst.addMembership(membership.MembershipValue{Kind: membership.IdentityPerRowBlob, LowCard: lowCard, Ref: ref, Params: params})
-}
-func (inst *detailSink) AddMembershipMixedLowCardRefHighCardParam(ref uint64, params string) {
-	inst.addMembership(membership.MembershipValue{Kind: membership.IdentityPerRowId, Ref: ref, Params: params})
-}
-func (inst *detailSink) AddMembershipMixedLowCardVerbatimHighCardParam(verbatim string, params string) {
-	inst.addMembership(membership.MembershipValue{Kind: membership.IdentityPerRowName, Verbatim: verbatim, Params: params})
-}
-
-func (inst *detailSink) addMembership(mv membership.MembershipValue) {
-	if inst.attr == nil || membership.IsPlaceholder(mv) {
-		return
-	}
-	label := inst.renderer.Render(mv)
-	if mv.Params != "" {
-		label += " (" + inst.renderer.RenderParams(mv.Params) + ")"
-	}
-	label = truncateBytes(label, detailOpsMaxValue)
-	role, _ := inst.classifier.Classify(inst.ctx, mv)
-	if role == membershiprole.MembershipRoleSecondary {
-		inst.attr.Secondary = append(inst.attr.Secondary, label)
-		return
-	}
-	inst.attr.Primary = append(inst.attr.Primary, label)
 }

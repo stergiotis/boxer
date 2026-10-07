@@ -572,8 +572,14 @@ both were computed from in RFC 8949 diagnostic notation — the canonform
 attribute items and entity item as a sequence, and the canonwire entity item —
 with the positions labelled (`/ version /`, `/ plains /`, `/ tagged /`, the
 plain item types, `/ memberships /`) and a compact / expanded toggle. The same
-notation is what `boxer.sh cbor diagnostics --pretty` prints on a terminal. An
-agent reads the strip with `get_canonical`: both digests, the canonform pin and
+notation is what `boxer.sh cbor diagnostics --pretty` prints on a terminal.
+
+**For an agent.** `get_detail` reads the row as attributes: each named by its
+first membership — a ref by the name the session's registries give it — or by
+its plain column, with its values (bytes as text when printable, else hex; a
+list's items; a set's in value order), its further memberships as labels, and
+the `LW_GET` expression that reads it in SQL; columns the card hides are
+counted, not listed. `get_canonical` reads the strip: both digests, the canonform pin and
 the checker's verdict, and the items in the same notation — the canonwire item
 is the row's whole content, losslessly — cut at a line boundary under the
 operations' byte bound.

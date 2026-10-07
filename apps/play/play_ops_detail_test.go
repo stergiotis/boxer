@@ -58,22 +58,20 @@ func TestGetDetailReadsALeewayRow(t *testing.T) {
 	assert.Equal(t, int64(2), out.Rows)
 	assert.True(t, out.Leeway)
 	assert.Equal(t, "646f632d62", out.NaturalKey, "doc-b, as the pane shows bytes")
-	require.NotEmpty(t, out.Sections)
-	var values []string
+	require.NotEmpty(t, out.Attributes)
 	tagged := false
-	for _, s := range out.Sections {
-		tagged = tagged || s.Kind == "tagged"
-		for _, a := range s.Attributes {
-			for _, v := range a.Values {
-				values = append(values, v.Value)
-			}
-			if s.Kind == "tagged" {
-				assert.NotEmpty(t, append(a.Primary, a.Secondary...), "a tagged attribute carries its memberships")
-			}
-		}
+	for _, a := range out.Attributes {
+		tagged = tagged || !a.Plain
+		assert.NotContains(t, a.Name, "_unidentified", "an attribute is named by what it is")
 	}
 	assert.True(t, tagged)
-	assert.Contains(t, values, "[notes.md]", "the row's own values; a list-valued attribute reads as a list")
+	assert.Equal(t, 3, out.Hidden, "the doc's machine-readable-only columns are counted, as the card hides them")
+	for _, a := range out.Attributes {
+		if a.Section == "u64-array" {
+			assert.Equal(t, []string{"1"}, a.Values[0].Items, "a list-valued attribute reads as a list")
+			assert.Contains(t, a.Handle, "LW_GET_LIST('u64-array', ")
+		}
+	}
 	require.NotNil(t, out.Identity)
 	assert.Empty(t, out.Identity.Error)
 	assert.Len(t, out.Identity.Canonform, 64)
@@ -83,6 +81,14 @@ func TestGetDetailReadsALeewayRow(t *testing.T) {
 
 	row0 := int64(0)
 	first := queryOp[DetailReading](t, h, opGetDetail, DetailArgs{Row: &row0})
+	host := map[string]DetailAttribute{}
+	for _, a := range first.Attributes {
+		host[a.Name] = a
+	}
+	require.Contains(t, host, "sysm-mem-host", "a ref is named through the session's registries")
+	assert.Equal(t, "host-a", host["sysm-mem-host"].Values[0].Value)
+	assert.Equal(t, []string{"17179869184"}, host["sysm-mem-total-bytes"].Values[0].Items)
+	assert.Equal(t, "host-a", host["natural-key"].Values[0].Value, "a bytes natural key reads as text")
 	assert.Equal(t, "686f73742d61", first.NaturalKey)
 	assert.NotEqual(t, out.Identity.Canonform, first.Identity.Canonform)
 
@@ -118,22 +124,17 @@ func TestGetDetailReadsAnAdHocRow(t *testing.T) {
 	assert.False(t, out.Leeway)
 	assert.True(t, out.Embedded)
 	assert.Nil(t, out.Identity)
-	require.Len(t, out.Sections, 1)
-	assert.Equal(t, "data", out.Sections[0].Kind)
-	require.Len(t, out.Sections[0].Attributes, 1, "the empty column is left out")
-	assert.Equal(t, DetailValue{Name: "city", Value: "Basel"}, out.Sections[0].Attributes[0].Values[0])
+	require.Len(t, out.Attributes, 1, "the empty column is left out")
+	assert.Equal(t, "data", out.Attributes[0].Section)
+	assert.Equal(t, DetailValue{Column: "city", Value: "Basel"}, out.Attributes[0].Values[0])
 }
 
 // The byte bound keeps attributes in order and counts what it left out.
-func TestBoundDetailSectionsCountsWhatItLeavesOut(t *testing.T) {
-	big := DetailAttribute{Values: []DetailValue{{Name: "v", Value: string(make([]byte, 200))}}}
-	in := []DetailSection{{Name: "a", Attributes: []DetailAttribute{big, big}}, {Name: "b", Attributes: []DetailAttribute{big}}}
-	out, truncated := boundDetailSections(in, 300)
-	assert.True(t, truncated)
-	require.Len(t, out, 2)
-	assert.Len(t, out[0].Attributes, 1)
-	assert.Equal(t, 1, out[0].More)
-	assert.Equal(t, 1, out[1].More)
+func TestBoundDetailAttributesCountsWhatItLeavesOut(t *testing.T) {
+	big := DetailAttribute{Name: "a", Values: []DetailValue{{Column: "v", Value: string(make([]byte, 200))}}}
+	out, more := boundDetailAttributes([]DetailAttribute{big, big, big}, 300)
+	require.Len(t, out, 1)
+	assert.Equal(t, 2, more)
 }
 
 // list_glosses lists the catalog with the spellings that declare each gloss
