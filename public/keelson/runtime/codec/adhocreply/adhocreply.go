@@ -49,4 +49,13 @@ type AdhocReply struct {
 	// NoLive marks a failed resolve as "nothing live under the alias"
 	// rather than a malformed request, so the caller waits, not retries.
 	NoLive bool `lw:"adhocNoLive,bool"`
+
+	// Bundle, Document, LocalNames and Handles answer a bundle verb: the
+	// bundle's alias, its applet document (resolve), and its datasets'
+	// local names with their handles, index for index. Revision is then
+	// the bundle's revision.
+	Bundle     string   `lw:"adhocBundle,symbol"`
+	Document   []byte   `lw:"adhocDocument,blobArray"`
+	LocalNames []string `lw:"adhocLocalNames,stringArray"`
+	Handles    []string `lw:"adhocHandles,stringArray"`
 }

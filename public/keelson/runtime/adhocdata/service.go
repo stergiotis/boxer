@@ -15,6 +15,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -142,6 +143,7 @@ type record struct {
 
 	mu             sync.RWMutex
 	alias          string
+	bundle         string // the bundle it belongs to; empty when published on its own
 	owner          Identity
 	keepAfterClose bool
 	schema         *arrow.Schema
@@ -218,6 +220,7 @@ type Service struct {
 
 	mu         sync.RWMutex
 	live       map[string]*record
+	bundles    map[string]*bundleRec  // by bundle alias
 	leaving    map[string]*time.Timer // left, still registered until the timer unloads
 	totalBytes uint64
 	closed     bool
@@ -244,6 +247,7 @@ func NewService(cfg Config) (inst *Service, err error) {
 		log:          cfg.Log,
 		retractGrace: grace,
 		live:         make(map[string]*record),
+		bundles:      make(map[string]*bundleRec),
 		leaving:      make(map[string]*time.Timer),
 	}
 	// A probe publish is not worth a start-up dependency on the base
@@ -256,6 +260,10 @@ func NewService(cfg Config) (inst *Service, err error) {
 	_ = probe.Close()
 	if regErr := reg.Register(newCatalogProvider(inst)); regErr != nil {
 		return nil, eb.Build().Str("catalogTableName", CatalogTableName).Errorf("adhocdata: register catalog: %w", regErr)
+	}
+	if regErr := reg.Register(newBundleCatalogProvider(inst)); regErr != nil {
+		reg.Unregister(CatalogTableName)
+		return nil, eb.Build().Str("catalogTableName", BundleCatalogTableName).Errorf("register bundle catalog: %w", regErr)
 	}
 	if cfg.Bus != nil {
 		if subErr := inst.subscribe(cfg.Bus); subErr != nil {
@@ -288,6 +296,7 @@ func (inst *Service) Close(context.Context) (err error) {
 		}
 	}
 	inst.live = make(map[string]*record)
+	inst.bundles = make(map[string]*bundleRec)
 	inst.leaving = make(map[string]*time.Timer)
 	inst.totalBytes = 0
 	unsubs := inst.unsubs
@@ -305,6 +314,7 @@ func (inst *Service) Close(context.Context) (err error) {
 		_ = f.Close()
 	}
 	inst.reg.Unregister(CatalogTableName)
+	inst.reg.Unregister(BundleCatalogTableName)
 	inst.log.Info().Int("datasets", len(recs)).Msg("adhocdata: closed")
 	return nil
 }
@@ -361,7 +371,10 @@ func (inst *Service) Publish(in PublishInput) (res PublishResult, err error) {
 			return res, ownErr
 		}
 	}
-	err = inst.checkQuotaLocked(existing, uint64(len(in.ArrowIPCStream)))
+	err = inst.checkSoloPublishLocked(existing, in.Alias)
+	if err == nil {
+		err = inst.checkQuotaLocked(existing, uint64(len(in.ArrowIPCStream)))
+	}
 	inst.mu.RUnlock()
 	if err != nil {
 		return res, err
@@ -399,7 +412,11 @@ func (inst *Service) Publish(in PublishInput) (res PublishResult, err error) {
 			return res, eb.Build().Str("handle", in.Handle).Errorf("adhocdata: handle retracted during publish")
 		}
 	}
-	if quErr := inst.checkQuotaLocked(rec, nbytes); quErr != nil {
+	quErr := inst.checkSoloPublishLocked(rec, in.Alias)
+	if quErr == nil {
+		quErr = inst.checkQuotaLocked(rec, nbytes)
+	}
+	if quErr != nil {
 		inst.mu.Unlock()
 		_ = f.Close()
 		return res, quErr
@@ -552,9 +569,28 @@ func (inst *Service) Retract(handle string, by Identity) (err error) {
 		inst.mu.Unlock()
 		return ownErr
 	}
+	if rec.bundle != "" {
+		inst.mu.Unlock()
+		return eb.Build().Str("handle", handle).Str("bundle", rec.bundle).Errorf("retract: %w", ErrBundleMember)
+	}
+	ev := inst.leaveLocked(rec)
+	inst.mu.Unlock()
+
+	inst.emitAudit("retract", ev.Handle, ev.Alias, ev.Revision)
+	inst.publishEvent(SubjectEventRetracted, ev)
+	return nil
+}
+
+// leaveLocked is the LEAVE step for rec: it leaves the live set, its
+// quota is released, and its UNLOAD is scheduled after the grace. The
+// caller holds inst.mu and emits the returned event once it has released
+// it.
+func (inst *Service) leaveLocked(rec *record) (ev Event) {
+	handle := rec.handle
 	delete(inst.live, handle)
 	rec.mu.RLock()
-	alias, revision, publisher, nbytes := rec.alias, rec.revision, rec.owner, rec.bytes
+	ev = Event{Op: EventOpRetracted, Handle: handle, Alias: rec.alias, Bundle: rec.bundle, Publisher: string(rec.owner.App), Revision: rec.revision}
+	nbytes := rec.bytes
 	rec.mu.RUnlock()
 	inst.totalBytes -= nbytes
 	grace := inst.retractGrace
@@ -568,12 +604,27 @@ func (inst *Service) Retract(handle string, by Identity) (err error) {
 		inst.mu.Unlock()
 		inst.unload(handle, grace)
 	})
-	inst.mu.Unlock()
+	return
+}
 
-	inst.emitAudit("retract", handle, alias, revision)
-	inst.publishEvent(SubjectEventRetracted, Event{
-		Op: EventOpRetracted, Handle: handle, Alias: alias, Publisher: string(publisher.App), Revision: revision,
-	})
+// checkSoloPublishLocked refuses a publish of one dataset that would
+// reach into a bundle: a republish onto one of its datasets, or a new
+// dataset under an alias a bundle holds (ADR-0288 (proposed) §SD2, §SD3).
+// existing is the record a republish names, nil for a new dataset. The
+// caller holds inst.mu.
+func (inst *Service) checkSoloPublishLocked(existing *record, alias string) (err error) {
+	if existing != nil && existing.bundle != "" {
+		return eb.Build().Str("handle", existing.handle).Str("bundle", existing.bundle).Errorf("republish: %w", ErrBundleMember)
+	}
+	if b := inst.bundles[alias]; b != nil {
+		return eb.Build().Str("alias", alias).Str("holder", string(b.owner.App)).Uint64("holderInstance", b.owner.Instance).
+			Errorf("%w", ErrAliasHeld)
+	}
+	for _, r := range inst.live {
+		if r.bundle != "" && r.alias == alias {
+			return eb.Build().Str("alias", alias).Str("bundle", r.bundle).Errorf("%w", ErrAliasHeld)
+		}
+	}
 	return nil
 }
 
@@ -583,16 +634,27 @@ func (inst *Service) Retract(handle string, by Identity) (err error) {
 // lives until Close.
 func (inst *Service) retractOwnedBy(who Identity) (retracted int) {
 	inst.mu.RLock()
+	var bundles []string
+	for alias, b := range inst.bundles {
+		if b.owner == who && !b.keepAfterClose {
+			bundles = append(bundles, alias)
+		}
+	}
 	var handles []string
 	for h, r := range inst.live {
 		r.mu.RLock()
-		mine := r.owner == who && !r.keepAfterClose
+		mine := r.owner == who && !r.keepAfterClose && r.bundle == ""
 		r.mu.RUnlock()
 		if mine {
 			handles = append(handles, h)
 		}
 	}
 	inst.mu.RUnlock()
+	for _, alias := range bundles {
+		if err := inst.RetractBundle(alias, Identity{}); err == nil {
+			retracted++
+		}
+	}
 	for _, h := range handles {
 		if err := inst.Retract(h, Identity{}); err == nil {
 			retracted++
@@ -781,7 +843,26 @@ func newHandle() (handle string, err error) {
 	if _, err = rand.Read(b[:]); err != nil {
 		return "", eh.Errorf("adhocdata: random handle: %w", err)
 	}
-	return "adhoc_" + hex.EncodeToString(b[:]), nil
+	return handlePrefix + hex.EncodeToString(b[:]), nil
+}
+
+const handlePrefix = "adhoc_"
+
+// IsHandle reports whether name has a dataset handle's shape: "adhoc_" and
+// sixteen lowercase hex digits. Introspection tables of the capability
+// itself (`adhoc`, `adhoc_bundles`) share the prefix but not the shape.
+func IsHandle(name string) (yes bool) {
+	rest, ok := strings.CutPrefix(name, handlePrefix)
+	if !ok || len(rest) != 16 {
+		return false
+	}
+	for i := range len(rest) {
+		c := rest[i]
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 // validAlias reports whether s is a bare identifier usable as a stable

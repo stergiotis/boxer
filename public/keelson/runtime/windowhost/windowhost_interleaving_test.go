@@ -206,7 +206,7 @@ func (w *effWorld) summary(t *testing.T) (s effSummary) {
 	// while any of its windows is open.
 	live := 0
 	for _, name := range w.reg.Names() {
-		if strings.HasPrefix(name, "adhoc_") {
+		if adhocdata.IsHandle(name) {
 			live++
 		}
 	}

@@ -7,6 +7,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/adhocreply"
 	"github.com/stergiotis/boxer/public/keelson/runtime/codec/adhocrequest"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -130,6 +131,82 @@ func SubscribeEvents(bus app.BusI, handler func(ev Event)) (unsubscribe func(), 
 	})
 	if err != nil {
 		err = eh.Errorf("adhocdata: subscribe events: %w", err)
+	}
+	return
+}
+
+// PublishBundleRequest publishes — or, under an alias the caller already
+// holds, republishes — a bundle via adhoc.bundle.publish (ADR-0288
+// (proposed) §SD2). The caller's bus client needs Pub on
+// adhoc.bundle.publish; the publisher is the envelope's sender, and in.By
+// is ignored. The result carries no document: the caller has it.
+func PublishBundleRequest(bus app.BusI, in BundlePublishInput) (res BundleResult, err error) {
+	req := adhocrequest.AdhocRequest{
+		At: time.Now().UTC(), Op: adhocrequest.OpPublish, Bundle: in.Alias, Document: in.Document,
+		KeepAfterClose: in.KeepAfterClose,
+		LocalNames:     make([]string, 0, len(in.Datasets)), ArrowStreams: make([][]byte, 0, len(in.Datasets)),
+	}
+	for _, d := range in.Datasets {
+		req.LocalNames = append(req.LocalNames, d.LocalName)
+		req.ArrowStreams = append(req.ArrowStreams, d.ArrowIPCStream)
+	}
+	rep, err := request(bus, SubjectBundlePublish, req, "publish-bundle")
+	if err != nil {
+		return
+	}
+	return bundleResultOf(rep), nil
+}
+
+// ResolveBundleRequest returns the live bundle under alias — its document
+// and its datasets' local names, aliases and handles — via
+// adhoc.bundle.resolve. Nothing live is a typed ErrNoLiveBundle.
+func ResolveBundleRequest(bus app.BusI, alias string) (res BundleResult, err error) {
+	payload, err := buscodec.Encode(adhocrequest.AdhocRequest{
+		At: time.Now().UTC(), Op: adhocrequest.OpResolve, Bundle: alias,
+	})
+	if err != nil {
+		return res, eh.Errorf("encode bundle resolve: %w", err)
+	}
+	replyBytes, err := bus.Request(SubjectBundleResolve, payload)
+	if err != nil {
+		return res, eb.Build().Str("bundle", alias).Errorf("bundle resolve request: %w", err)
+	}
+	rep, err := buscodec.Decode[adhocreply.AdhocReply](replyBytes)
+	if err != nil {
+		return res, eh.Errorf("decode bundle resolve reply: %w", err)
+	}
+	if !rep.Ok {
+		if rep.NoLive {
+			return res, eb.Build().Str("bundle", alias).Errorf("resolve: %w", ErrNoLiveBundle)
+		}
+		return res, eb.Build().Str("bundle", alias).Str("reason", rep.Reason).Errorf("bundle resolve rejected")
+	}
+	return bundleResultOf(rep), nil
+}
+
+// RetractBundleRequest retracts a bundle whole via adhoc.bundle.retract.
+func RetractBundleRequest(bus app.BusI, alias string) (err error) {
+	_, err = request(bus, SubjectBundleRetract, adhocrequest.AdhocRequest{
+		At: time.Now().UTC(), Op: adhocrequest.OpRetract, Bundle: alias,
+	}, "retract-bundle")
+	return
+}
+
+// bundleResultOf reads a bundle reply. Per-dataset row and byte counts do
+// not travel; the reply's Rows and Bytes are the bundle's totals and are
+// not split here.
+func bundleResultOf(rep adhocreply.AdhocReply) (res BundleResult) {
+	res = BundleResult{Alias: rep.Bundle, Revision: rep.Revision, Document: rep.Document, CreatedAtUs: rep.CreatedAtUs,
+		Datasets: make([]BundleDataset, 0, len(rep.LocalNames))}
+	if len(rep.Document) > 0 {
+		res.DocumentDigest = trail.ContentDigest(string(rep.Document))
+	}
+	for i, name := range rep.LocalNames {
+		d := BundleDataset{LocalName: name, Alias: DatasetAlias(rep.Bundle, name)}
+		if i < len(rep.Handles) {
+			d.Handle = rep.Handles[i]
+		}
+		res.Datasets = append(res.Datasets, d)
 	}
 	return
 }

@@ -49,4 +49,16 @@ type AdhocRequest struct {
 
 	// ArrowStream is the Arrow IPC stream a publish carries.
 	ArrowStream []byte `lw:"adhocArrowStream,blobArray"`
+
+	// Bundle is the bundle alias of a bundle verb (ADR-0288 (proposed)
+	// §SD2); empty for a verb on one dataset.
+	Bundle string `lw:"adhocBundle,symbol"`
+
+	// Document is the applet document a bundle publish carries.
+	Document []byte `lw:"adhocDocument,blobArray"`
+
+	// LocalNames and ArrowStreams are a bundle publish's datasets, the
+	// name the document reads each by and its stream, index for index.
+	LocalNames   []string `lw:"adhocLocalNames,stringArray"`
+	ArrowStreams [][]byte `lw:"adhocArrowStreams,blobArray"`
 }

@@ -413,6 +413,39 @@ Proposed — awaiting review by p@stergiotis.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
+## Updates
+
+### 2026-10-07 — M1 bundle records, without the solo-alias refusal
+
+Shipped in `adhocdata`: `Service.PublishBundle`, `ResolveBundle`,
+`RetractBundle` and their bus requests on `adhoc.bundle.publish`,
+`.resolve` and `.retract`; one request carries the whole bundle (the
+wire's list memberships carry the local names and streams), so
+atomicity needs no staging step. Every stream is sealed before the commit
+lock is taken and admission is checked again under it. A republish
+withdraws the previous revision's datasets in two phases and keeps the
+bundle's creation instant. `keelson('adhoc_bundles')` lists live bundles;
+`keelson('adhoc')` gains `bundle`.
+
+Refinements:
+
+- **Bundle events have their own subjects**, `adhoc.bundle.event.published`
+  and `.retracted` under `adhoc.bundle.event.>`, outside `adhoc.event.>`,
+  so a consumer that follows datasets never decodes a bundle event. Each
+  dataset of a bundle still announces itself on `adhoc.event.*` with the
+  bundle named.
+- **A bundle's members are touched only through the bundle**: a plain
+  retract or republish of a member is refused (`ErrBundleMember`), and a
+  plain publish under a member's alias or a bundle's alias is refused
+  (`ErrAliasHeld`). A bundle alias may not contain the separator `__`.
+- **The refusal of one plain dataset's alias by another owner is not in
+  M1.** It breaks every fixed-alias publisher with a second window open,
+  and SD3's way out — local names on `Follower` — is M2; the refusal lands
+  with M4's migration. Until then a plain alias resolves to the newest
+  dataset as before.
+- `adhocdata.IsHandle` recognises a handle by shape: the catalog names
+  `adhoc` and `adhoc_bundles` share the `adhoc_` prefix.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — capability subjects.

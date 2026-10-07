@@ -69,3 +69,31 @@ var (
 	MembAdhocEventOp = KeelsonHrNkRegistry.MustBegin("adhocEventOp", 208).
 				MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 )
+
+// Bundle memberships (ADR-0288 (proposed) §SD2): `adhoc.bundle.publish`,
+// `.resolve` and `.retract` ride the same request and reply kinds, so a
+// bundle adds only what one dataset never needed — the bundle alias, the
+// applet document, and parallel lists of local names, streams and handles.
+// A dataset event carries the bundle it belongs to, empty for a dataset
+// published on its own.
+var (
+	// MembAdhocBundle is the alias of the bundle a request, reply or event
+	// concerns; empty outside bundles.
+	MembAdhocBundle = KeelsonHrNkRegistry.MustBegin("adhocBundle", 229).
+			MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
+	// MembAdhocDocument is a bundle's applet document, as published.
+	MembAdhocDocument = KeelsonHrNkRegistry.MustBegin("adhocDocument", 230).
+				MustAddRestriction("blobArray", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
+	// MembAdhocLocalNames are a bundle's dataset names as its document
+	// spells them, parallel to MembAdhocArrowStreams and MembAdhocHandles.
+	MembAdhocLocalNames = KeelsonHrNkRegistry.MustBegin("adhocLocalNames", 231).
+				MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityArbitrary).End()
+	// MembAdhocArrowStreams are a bundle publish's Arrow IPC streams, one
+	// per local name.
+	MembAdhocArrowStreams = KeelsonHrNkRegistry.MustBegin("adhocArrowStreams", 232).
+				MustAddRestriction("blobArray", common.MembershipSpecLowCardRef, registry.CardinalityArbitrary).End()
+	// MembAdhocHandles are the handles of a bundle's datasets, one per
+	// local name.
+	MembAdhocHandles = KeelsonHrNkRegistry.MustBegin("adhocHandles", 233).
+				MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityArbitrary).End()
+)
