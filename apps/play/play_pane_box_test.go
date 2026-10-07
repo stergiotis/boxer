@@ -57,7 +57,7 @@ func TestPanelPaneFillsAreCoherent(t *testing.T) {
 		{"sankey", sankeyPaneFill},
 		{"icicle", iciclePaneFill},
 		{"treemap", treemapPaneFill},
-		{"experiments-topology", experimentsTopoPaneFill},
+		{"projection-lens", projectionLensPaneFill},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			assert.Positive(t, tc.f.slack)

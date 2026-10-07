@@ -1097,6 +1097,18 @@ lanes. The Vector field would follow the same convention.
   counts the rest; the graph and Sankey pages also stop at about 24 KiB of
   text, with their More counts saying what is past them.
 
+### 2026-10-07 — The Experiments pane's operations go; the Projection pane reads its archetypes
+
+`get_experiments` and `set_experiments` are removed with the Experiments pane
+([ADR-0289](./0289-leeway-rows-for-readers-canonical-forms-a-read-model-and-kinds-in-projection.md) §SD6, proposed).
+The Projection pane gains `get_archetypes`, a query over its run (ADR-0289
+§SD4): per cluster its rule, the attributes every row holds with one value,
+what it typically holds, its extremes, and the exception rows with their
+departures and result rows, under the operations' byte bound. Its views —
+graph, archetypes, rows, row — are a display setting, like colour-by, and have
+no command. `compute_projection`'s defaults are the panel's new ones:
+structure features and a minimum cluster of 5 (ADR-0289 §SD5).
+
 ## References
 
 - [ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md) — the contract this catalog serves.

@@ -228,6 +228,5 @@ var paneOperations = map[string][]string{
 	filesPaneId:       {opGetFiles, opSetFilesOptions, opSelectFilesPath},
 	chatPaneId:        {opGetChatPane},
 	mapPaneId:         {opGetMap, opSetMapView, opSetMapOptions},
-	experimentsPaneId: {opGetExperiments, opSetExperiments},
-	projectionPaneId:  {opGetProjection, opExplainClusters, opComputeProjection, opCancelProjection, opPublishProjection},
+	projectionPaneId:  {opGetProjection, opExplainClusters, opGetArchetypes, opComputeProjection, opCancelProjection, opPublishProjection},
 }

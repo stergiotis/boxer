@@ -123,7 +123,7 @@ const (
 	dockTabDocs        uint64 = 17
 	dockTabFlow        uint64 = 18
 	dockTabSankey      uint64 = 19
-	dockTabExperiments uint64 = 20
+	// 20 was the Experiments pane, removed with ADR-0289 (proposed).
 	dockTabDist        uint64 = 21
 	dockTabIcicle      uint64 = 22
 	dockTabSeries      uint64 = 23
@@ -397,9 +397,6 @@ type PlayApp struct {
 	tableResult  ResultID
 	detailResult ResultID
 	projector    *Projector
-	// experiments backs the Experiments tool pane: a leeway sink playground
-	// over the fixture or the current result.
-	experiments *experimentsDriver
 
 	// tableOpts holds the Table pane's leeway display-mode configuration — the
 	// options bar's three orthogonal controls (row granularity, reveal support
@@ -1239,16 +1236,6 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	inst.components = newComponentDetail(mk())
 	inst.projector.componentPresence = inst.components.presenceRows
 	inst.identity = newIdentityDetail(mk())
-	// The Experiments pane's card emitters get a stack on a DIFFERENT base
-	// salt, not merely a different instance. PrepareSeq maps its argument
-	// through makeHighEntropy alone and Derive XORs it with the enclosing
-	// scope, which on an empty stack is the base salt — so two stacks built by
-	// mk() produce byte-identical ids for the same argument. The pane and the
-	// Detail tab both render a Table2CardEmitter over the same result in the
-	// same frame, so sharing a salt makes every cell id a duplicate.
-	expCardIds := mk()
-	expCardIds.SetBaseSalt(salt ^ experimentsCardSaltMix)
-	inst.experiments = newExperimentsDriver(mk(), expCardIds)
 	inst.diag = NewDiagnosticsDriver(client)
 	var docsSource DocsSourceI
 	if client != nil {

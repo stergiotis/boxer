@@ -17,7 +17,7 @@ The window is a rearrangeable, splittable dock of tabs between a pinned top bar
 (Run, Load, connection) and a status bar (the query-state inspector). They fall
 into three groups: the **editor** (Editor, History), the **tool panes** beside
 it (Docs, Preview, Flow, Passes, Diagnostics, Snippets, Model, Vocabulary,
-Completion, Glosses, Experiments — each reads the buffer, or something derived
+Completion, Glosses — each reads the buffer, or something derived
 from it, while you type), and the **result panes** below (Table, Projection,
 Timeline, Map, Vector field, World, Kanban, Chat, Cards, Network, Graphview,
 Sankey, Distribution, Icicle, Series, Treemap, Chart, Files, Graph, Schema, and
@@ -636,10 +636,10 @@ become a k-nearest-neighbour graph, HDBSCAN clusters it, and the graph is laid o
 under the neighbour-embedding force model. The button becomes **Cancel** while it
 works, and an fsmview chip shows the projector's lifecycle (extracting → running →
 done, or failed / cancelled). **Neighbours** and **min cluster** apply on the next
-Compute, as does **features**: *shape* (the default) builds the graph over the
-sixteen size-and-skew features under Euclidean distance, *structure* over a hashed
-vector of which sections and attributes each record has, under cosine, so records
-of one kind sit together whatever their values or sizes, and *components* over
+Compute, as does **features**: *structure* (the default) builds the graph over a
+hashed vector of which sections and attributes each record has, under cosine, so
+records of one kind sit together whatever their values or sizes, *shape* over the
+sixteen size-and-skew features under Euclidean distance, and *components* over
 which registered component kinds each record carries, one column per kind, for a
 facts-shaped result; **exaggeration** applies live and moves the same graph along the
 attraction–repulsion spectrum — about 1 draws t-SNE, 4 UMAP, 30 ForceAtlas2 — after
@@ -649,7 +649,26 @@ low-probability members and noise out; **edges** shows the neighbour edges the l
 runs on, off by default because they cover the picture. Drag pans and moves a node, ctrl+scroll zooms,
 **fit** reframes, **re-lay-out** restarts the schedule, **settle** runs it ahead.
 Click a node to select that row (it drives the Detail tab). Very large results are
-sampled (10000-row cap) so the exact k-NN stays interactive.
+sampled (10000-row cap) so the exact k-NN stays interactive. HDBSCAN reads each
+row's density at its (min cluster − 1)-th neighbour rather than at the graph's
+last, so a record kind smaller than the neighbour count is still found; the
+defaults are 15 neighbours and a min cluster of 5.
+
+**Show** switches what is drawn under the status line, over the same run and its
+cluster numbers. *graph* is the neighbour graph above. *archetypes* reads each
+cluster as one line of what its rows typically hold — a number's median, a
+label and its share — then the rows holding its lowest and highest values, then
+only the rows that break the pattern, most telling first: an attribute the
+cluster nearly always has and the row lacks (`−num·disk`), one it rarely has
+(`+num·cpu`), a rare label with how many of the cluster's rows hold it
+(`state failed (1 of 12 rows)`), an extreme number with its direction. *rows*
+draws every row in its cluster's band; *row* draws the selected row against its
+cluster's typical values and its nearest peers. Membership ids are named through
+the session's registries. The **structure ↔ values** slider moves the cells from
+presence to the values themselves, and **each row on its own ↔ one frame** from
+each row listing its own attributes to every row drawn against one set of
+columns. A row that shares under half of its cluster's attributes is read with
+the unclustered rows, though the graph keeps it in its cluster.
 
 **Why these clusters** (a collapsible section under the status line, present when
 HDBSCAN found any) reads the clusters back off the feature set the run used: the
@@ -713,6 +732,9 @@ page of points with their row, cluster, probability and position.
 `explain_clusters` returns "why these clusters", by features (at a rule depth, one
 tree per cluster or the one partition) or by attributes: per cluster the SQL rule,
 its fit and what sets the cluster apart — the same text the section shows.
+`get_archetypes` returns the archetypes view as data: per cluster its rule, the
+attributes every row holds with one value, what it typically holds, its
+extremes, and the exception rows with their departures and result rows.
 `list_panes` says up front when a result is not leeway-shaped.
 
 ### Timeline
@@ -1598,21 +1620,6 @@ window has bound, which the model reads with `keelson('<alias>')`; a grant
 names one as `keelson:<alias>`. `bind_dataset` binds an alias another window
 published — the window waits for it when nothing is published under it yet,
 and `list_datasets` lists a waiting alias with why — and runs nothing.
-
-### Experiments
-
-Drives one leeway batch through a chosen rendering **sink** and shows what it
-draws, which is the same catalogue the vizeval harness scores (the
-`vizeval-score-renderings` how-to). **source** picks the batch: `fixture`, a small
-built-in batch with plain sections, a co-section group and a repeated tagged
-section, or `result`, the active result. The `result` source must be
-leeway-shaped (`id:…` / `tv:…` columns, as from `SELECT * FROM anchor.facts`), or
-the pane says it has no section structure to drive. **sink** picks the rendering
-(`card`, `topology`, `json`, `unicode`, `topo`, `braille`, `treemap`, `chart`,
-`graph`, `hierarchy`, `lens`), and the controls under it are that sink's own
-options. Each sink takes the first rows up to its own cap, from 16 to 128, and the
-pane says when it cut. `BOXER_PLAY_EXPERIMENTS` seeds the source, sink and options
-as JSON for a scripted capture.
 
 ## Configuration
 

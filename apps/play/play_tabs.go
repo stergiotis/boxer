@@ -383,11 +383,6 @@ var builtinTabDefs = []builtinTabDef{
 	// resolution and the catalog, and a session that never opens it needs
 	// neither on screen.
 	{id: "glosses", dockID: dockTabGlosses, title: "Glosses", zone: TabZoneTools, lazy: true},
-	// Experiments drives one batch through a chosen leeway sink. It is a tool
-	// pane, not a result view: its default source is a built-in fixture, so it
-	// says something before a query has run and keeps saying it when the
-	// result is not leeway-shaped. Lazy — a hidden pane must not drive a sink.
-	{id: "experiments", dockID: dockTabExperiments, title: "Experiments", zone: TabZoneTools, lazy: true},
 
 	{id: "table", dockID: dockTabTable, title: "Table", writes: []SignalID{signalSelection}},
 	{id: "projection", dockID: dockTabProjection, title: "Projection", lazy: true,
@@ -505,9 +500,7 @@ var TabZoneNames = map[string]TabZoneE{
 
 // TabZonesOverride is the launch-time re-zoning knob. Its use is a scripted
 // capture that needs one pane large: "*=body" puts every tab in one leaf, the
-// whole central panel, and a BOXER_PLAY_FOCUS_* knob raises the pane to draw
-// (ADR-0266, proposed — the vizeval harness captures the Experiments pane
-// this way).
+// whole central panel, and a BOXER_PLAY_FOCUS_* knob raises the pane to draw.
 var TabZonesOverride = env.NewString(env.Spec{
 	Name:        "BOXER_PLAY_TAB_ZONES",
 	Description: "re-zone tabs at launch, as comma-separated id=zone pairs (zones: body, editor, tools, side, bottom; id * names every tab; later pairs win), e.g. \"*=body\" for one full-panel leaf; a pair naming an unknown tab or zone fails the mount",
@@ -725,13 +718,6 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 			spec.Render = func(f *TabFrame) { inst.renderSnippetsTab() }
 		case "model":
 			spec.Render = func(f *TabFrame) { inst.renderModelTab(f) }
-		case "experiments":
-			// Scrolled: the text sinks emit an unbounded run of lines, and the
-			// topology treemap floors its own height rather than shrinking to
-			// fit a short leaf.
-			spec.Render = func(f *TabFrame) {
-				scrollTab(func() { inst.renderExperimentsTab(f.Rec, f.Schema) })
-			}
 		case "map":
 			// The Map is a panel-authored node on its own lane (5c), not a
 			// PanelI: it renders the driver directly.

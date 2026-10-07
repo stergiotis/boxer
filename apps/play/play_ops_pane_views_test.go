@@ -83,7 +83,7 @@ func queryErr(t *testing.T, h app.OperationsHandlerI, op string, args any) error
 func TestPaneReadsRefuseAPaneThatHasNotDrawn(t *testing.T) {
 	l, h := opsLauncher(t)
 	p := l.inner
-	for _, op := range []string{opGetChart, opGetDist, opGetSeries, opGetTimeline, opGetTreemap, opGetIcicle, opGetKanban, opGetCards, opGetWorld, opGetVectorfield, opGetNetwork, opGetGraphview, opGetSankey, opGetTable, opGetFiles, opGetChatPane, opGetMap, opGetExperiments} {
+	for _, op := range []string{opGetChart, opGetDist, opGetSeries, opGetTimeline, opGetTreemap, opGetIcicle, opGetKanban, opGetCards, opGetWorld, opGetVectorfield, opGetNetwork, opGetGraphview, opGetSankey, opGetTable, opGetFiles, opGetChatPane, opGetMap} {
 		err := queryErr(t, h, op, nil)
 		require.Error(t, err, op)
 		assert.Contains(t, err.Error(), "not drawn: show_pane", op)

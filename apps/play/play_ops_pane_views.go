@@ -101,8 +101,7 @@ type paneViewsSnap struct {
 	files       filesOpsView
 	chat        chatOpsView
 	// The tool panes draw no result of their own.
-	mapv        mapOpsView
-	experiments experimentsOpsView
+	mapv mapOpsView
 }
 
 // snapshotPaneViews copies what the get_<pane> reads need, on the render
@@ -163,9 +162,6 @@ func snapshotPaneViews(p *PlayApp) (out paneViewsSnap) {
 	}
 	if _, ok := p.paneDrawn[mapPaneId]; ok && p.mapDriver != nil {
 		out.mapv = p.mapView()
-	}
-	if _, ok := p.paneDrawn[experimentsPaneId]; ok && p.experiments != nil {
-		out.experiments = p.experimentsView()
 	}
 	return
 }

@@ -18,8 +18,7 @@ const appletMaxHistory = 25
 // handles an emptied editor zone (ADR-0097 slice 6a). Docs is chrome too:
 // its follow-caret half reads the editor the applet just removed. So is
 // Flow: it inspects how the buffer executes, not what it returned. And so is
-// Experiments: a sink playground whose default subject is a built-in fixture
-// rather than the applet's own result. And so is Vocabulary (ADR-0174): it
+// Vocabulary (ADR-0174): it
 // lists what a buffer could call, which an applet — a published query with no
 // editor — has no buffer for. Glosses (ADR-0186) is chrome for the same
 // reason: it explains how a buffer's rules resolved, an authoring view; the
@@ -30,7 +29,7 @@ const appletMaxHistory = 25
 // is chrome by the same criterion as Snippets and goes with it, but it cannot
 // be listed here: its slug is the contributor's, chosen in another repository
 // and unknown at this line. attenuateTabs removes it by its Contributed mark.
-var chromeTabIDs = []string{"editor", "history", "preview", "snippets", "map", "graph", "diagnostics", "passes", "docs", "flow", "experiments", "vocabulary", "glosses", "completion", "model"}
+var chromeTabIDs = []string{"editor", "history", "preview", "snippets", "map", "graph", "diagnostics", "passes", "docs", "flow", "vocabulary", "glosses", "completion", "model"}
 
 // orderedResultTabIDs is resultTabIDs in play's registration order, for
 // deterministic removal when an explicit `tabs:` list prunes the set.

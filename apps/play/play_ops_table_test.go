@@ -15,9 +15,9 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
 )
 
-// ADR-0270, update of 2026-10-05: the Table, Files, Chat, Map and
-// Experiments panes' operations.
-func TestTableFilesChatMapExperimentsCatalogEntries(t *testing.T) {
+// ADR-0270, update of 2026-10-05: the Table, Files, Chat and Map panes'
+// operations.
+func TestTableFilesChatMapCatalogEntries(t *testing.T) {
 	m := (&PlayLauncher{}).Manifest()
 	require.NoError(t, m.Operations.Validate())
 	for _, q := range []struct {
@@ -28,7 +28,6 @@ func TestTableFilesChatMapExperimentsCatalogEntries(t *testing.T) {
 		{opGetFiles, []string{opsResFiles, opsResResult, opsResPanes}},
 		{opGetChatPane, []string{opsResResult, opsResPanes}},
 		{opGetMap, []string{opsResMap, opsResPanes}},
-		{opGetExperiments, []string{opsResExperiments, opsResResult, opsResPanes}},
 	} {
 		spec, ok := m.Operations.Lookup(q.op)
 		require.True(t, ok, q.op)
@@ -49,7 +48,6 @@ func TestTableFilesChatMapExperimentsCatalogEntries(t *testing.T) {
 		{opSelectFilesPath, app.OperationEffectDocument, []string{opsResSignals, opsResFiles}, true},
 		{opSetMapView, app.OperationEffectView, []string{opsResMap}, false},
 		{opSetMapOptions, app.OperationEffectDocument, []string{opsResMap, opsResSignals}, true},
-		{opSetExperiments, app.OperationEffectDocument, []string{opsResExperiments}, false},
 	} {
 		spec, ok := m.Operations.Lookup(c.op)
 		require.True(t, ok, c.op)

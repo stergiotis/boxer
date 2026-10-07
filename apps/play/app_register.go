@@ -92,12 +92,6 @@ var (
 		Category:    env.CategoryE("boxer-play"),
 	})
 
-	ExperimentsSeed = env.NewString(env.Spec{
-		Name:        "BOXER_PLAY_EXPERIMENTS",
-		Description: "seed the Experiments pane with one vizeval candidate as JSON, {\"source\":\"fixture|result\",\"sink\":…,\"options\":{…},\"box\":[w,h]} (ADR-0266); box, optional, fixes the artifact's size in points whatever room the pane has; a seed that does not resolve against the sink catalogue fails the mount",
-		Category:    env.CategoryE("boxer-play"),
-	})
-
 	// The BOXER_PLAY_FOCUS_* knobs are registered per built-in body tab in
 	// play_tabs.go (registerFocusVars, slice 6a) — derived from the tab
 	// definitions instead of hand-written here.
@@ -455,14 +449,6 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 	if zones := TabZonesOverride.Get(); zones != "" {
 		if err = inner.Tabs().ApplyTabZones(zones); err != nil {
 			err = eh.Errorf("BOXER_PLAY_TAB_ZONES does not describe a layout: %w", err)
-			return
-		}
-	}
-	if seed := ExperimentsSeed.Get(); seed != "" {
-		// Refused rather than defaulted: a scripted capture of the wrong
-		// candidate would be scored under the right one's name.
-		if err = inner.experiments.applySeed(seed); err != nil {
-			err = eh.Errorf("BOXER_PLAY_EXPERIMENTS does not name a candidate: %w", err)
 			return
 		}
 	}

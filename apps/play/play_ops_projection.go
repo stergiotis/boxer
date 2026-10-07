@@ -38,8 +38,8 @@ const (
 // keeps the pane's setting.
 type ComputeProjectionArgs struct {
 	Neighbours int32  `json:",omitzero" desc:"neighbours per row in the graph, 2 to 50; the pane's setting when left out (15 by default)"`
-	MinCluster int32  `json:",omitzero" desc:"the smallest group HDBSCAN calls a cluster, 2 to 100; the pane's setting when left out (10 by default)"`
-	Features   string `json:",omitzero" desc:"what rows are compared by: shape (how big and skewed a record is), structure (which sections and attributes it has) or components (which registered components it carries; facts-shaped results only); the pane's setting when left out"`
+	MinCluster int32  `json:",omitzero" desc:"the smallest group HDBSCAN calls a cluster, 2 to 100; the pane's setting when left out (5 by default)"`
+	Features   string `json:",omitzero" desc:"what rows are compared by: structure (which sections and attributes it has; the default), shape (how big and skewed a record is) or components (which registered components it carries; facts-shaped results only); the pane's setting when left out"`
 }
 
 // ProjectionArgs is get_projection's argument.
@@ -74,7 +74,7 @@ type ProjectionState struct {
 	Neighbours int32         `desc:"the run's neighbours per row, or the pane's setting before a run"`
 	MinCluster int32         `desc:"the run's minimum cluster size, or the pane's setting before a run"`
 	Features   string        `desc:"the run's feature set, or the pane's setting before a run"`
-	Clusters   []ClusterSize `desc:"the clusters with their sizes; explain_clusters says what sets them apart"`
+	Clusters   []ClusterSize `desc:"the clusters with their sizes; explain_clusters says what sets them apart, get_archetypes what each holds and which rows break it"`
 	Noise      int32         `desc:"projected rows in no cluster"`
 	// Summary is the pane's status line.
 	Summary string            `json:",omitzero" desc:"the pane's status line: the graph, the clustering and how far the layout has got"`

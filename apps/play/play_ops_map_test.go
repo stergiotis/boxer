@@ -9,7 +9,6 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/vizeval"
 )
 
 // mapPaneLaidOut gives the Map a camera, as its first frame does.
@@ -125,52 +124,6 @@ func TestMapGesturesGoThroughSetMapOptions(t *testing.T) {
 	_, writer := signalOf(t, p, signalAreaMaxLat)
 	assert.Equal(t, signalWriterMap, writer)
 	assert.True(t, p.mapDriver.hasArea)
-}
-
-func TestGetAndSetExperiments(t *testing.T) {
-	l, h := opsLauncher(t)
-	p := l.inner
-	drawnPane(p, experimentsPaneId, 0, nil)
-	r := queryOp[ExperimentsReading](t, h, opGetExperiments, GetExperimentsArgs{Catalog: true})
-	assert.Equal(t, "fixture", r.Source)
-	assert.Equal(t, vizeval.SinkCard, r.Sink)
-	assert.NotEmpty(t, r.Candidate)
-	assert.True(t, r.Picture)
-	assert.False(t, r.Built)
-	require.Len(t, r.Catalog, len(vizeval.Sinks()))
-	require.NotEmpty(t, r.Options)
-	assert.Equal(t, vizeval.OptionPalette, r.Options[0].Name)
-
-	for _, in := range []SetExperimentsArgs{
-		{},
-		{Source: strp("disk")},
-		{Sink: strp("nope")},
-		{Sink: strp(vizeval.SinkUnicode), Options: map[string]string{"colour": "red"}},
-		{Sink: strp(vizeval.SinkUnicode), Options: map[string]string{vizeval.OptionWidth: "300"}},
-		{Sink: strp(vizeval.SinkUnicode), Options: map[string]string{vizeval.OptionWidth: "80.5"}},
-		{Sink: strp(vizeval.SinkTopoSpark), Options: map[string]string{vizeval.OptionWidth: "80"}},
-		{Options: map[string]string{vizeval.OptionPalette: "sepia"}},
-	} {
-		require.Error(t, applyOp(t, h, opSetExperiments, in), "%+v", in)
-	}
-	assert.Equal(t, vizeval.SinkCard, p.experiments.sink, "a refused call applies nothing")
-
-	require.NoError(t, applyOp(t, h, opSetExperiments, SetExperimentsArgs{Sink: strp(vizeval.SinkUnicode), Options: map[string]string{vizeval.OptionWidth: "80"}}))
-	assert.Equal(t, vizeval.SinkUnicode, p.experiments.sink)
-	assert.Equal(t, 80.0, p.experiments.knobs[vizeval.SinkUnicode][vizeval.OptionWidth].num)
-	assert.Equal(t, 60.0, p.experiments.knobs[vizeval.SinkUnicode][vizeval.OptionMaxColumnWidth].num, "an option left out keeps its setting")
-	r = queryOp[ExperimentsReading](t, h, opGetExperiments, GetExperimentsArgs{})
-	assert.False(t, r.Built, "built once the pane has drawn it")
-	assert.Empty(t, r.Output)
-
-	cand, err := p.experiments.candidate()
-	require.NoError(t, err)
-	p.experiments.ensureBuilt(nil, nil, cand)
-	r = queryOp[ExperimentsReading](t, h, opGetExperiments, GetExperimentsArgs{})
-	assert.True(t, r.Built)
-	assert.False(t, r.Picture)
-	assert.NotEmpty(t, r.Output, "the box-drawn tables as text")
-	assert.Contains(t, experimentsDigest(p), vizeval.SinkUnicode)
 }
 
 func float64p(v float64) *float64 { return &v }
