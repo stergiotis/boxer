@@ -69,7 +69,7 @@ type State struct {
 }
 
 // Invalidate drops the memo, so the next Render rebuilds. Needed only when
-// something the key does not see changes: the Annotate hook.
+// something the key does not see changes: an annotation hook.
 func (st *State) Invalidate() { st.have = false }
 
 // Text is the plain notation of the last rendering — what the copy button
@@ -81,7 +81,7 @@ func (st *State) Text() string { return st.text }
 func (st *State) Err() error { return st.err }
 
 // keyOf fingerprints the bytes and every option that moves the rendering.
-// The Annotate hook is not a value and is not part of it.
+// The annotation hooks are not values and are not part of it.
 func keyOf(item []byte, opts diag.Options) uint64 {
 	h := xxh3.New()
 	_, _ = h.Write(item)

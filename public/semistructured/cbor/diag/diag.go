@@ -100,6 +100,13 @@ type Options struct {
 	// PathElemKey step. The hook must be pure: pretty mode measures a
 	// container's compact width before laying it out, and asks again.
 	Annotate func(path []PathElem) string
+	// AnnotateItem is Annotate for a comment that depends on the value: it
+	// is handed the item's encoded bytes beside its path (a view into the
+	// input; do not retain), so a hook can name an id or spell a time. When
+	// set it is asked instead of Annotate, under the same rules. The bytes
+	// are nil for a container laid out over lines whose end the width
+	// measurement could not find.
+	AnnotateItem func(path []PathElem, item []byte) string
 	// Sequence treats the input as an RFC 8742 CBOR sequence: items are
 	// rendered one after another, separated by ", " in Compact mode and by
 	// a line break otherwise. Without it, bytes after the first item are
