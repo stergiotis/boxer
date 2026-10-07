@@ -246,7 +246,8 @@ a dataset whole, through a read that takes no statement.
     static, so an operation for a pane no view shows is declared and
     reported unavailable with the reason. A view does its work on the
     frame it is drawn (SD7), so a run an agent asks of a view the receiver
-    does not draw waits for its next frame.
+    does not draw waits for its next frame; `BundleView.Pending` says so,
+    and a receiver that culls views draws a pending one until it is not.
 
 - **SD9 — Many bundles per receiver.** A receiver may publish a bundle per
   item it shows. The count quota has two levels — per process, which

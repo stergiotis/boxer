@@ -109,8 +109,11 @@ func TestAnOperableViewServesPlaysOperations(t *testing.T) {
 	require.ErrorAs(t, err, &refusal, "a run is play's, under play's agent limits")
 	assert.Contains(t, refusal.Destinations, play.DestinationKeelsonBundle("counts"), "the grant is asked for the bundle, never the local name")
 	obo.Destinations = []string{play.DestinationKeelsonBundle("counts")}
+	assert.False(t, v.commanded, "a refused command leaves nothing pending")
 	_, err = h.ApplyCommand(app.OperationCall{Writer: "task:t", OnBehalfOf: &obo}, BundleOpPrefix+"run", encodeView(t, "main"))
 	require.NoError(t, err)
+	assert.True(t, v.Pending(), "the run waits for the view's frame, so a receiver that culls it draws it")
+	assert.True(t, v.commanded)
 
 	r.views["second"] = NewBundleView("counts", BundleViewConfig{Bus: viewBus, Log: zerolog.Nop(), StampAppId: "test.receiver#second", Operable: true})
 	t.Cleanup(r.views["second"].Close)

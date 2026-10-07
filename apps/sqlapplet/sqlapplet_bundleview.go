@@ -75,6 +75,9 @@ type BundleView struct {
 	revision uint64
 	digest   string
 	runnable bool
+	// commanded is set when a bundle_ command was applied to the view and
+	// cleared by the frame that next draws it.
+	commanded bool
 	// panes are the result panes the embedded play shows.
 	panes    []string
 	failed   string
@@ -130,6 +133,16 @@ func (inst *BundleView) Inner() (inner *play.PlayApp) { return inst.inner }
 
 // Operable reports whether the view offers its operations to agents.
 func (inst *BundleView) Operable() (operable bool) { return inst.cfg.Operable }
+
+// Pending reports work an agent's operation left that only the view's
+// frames finish: a command applied since the view was last drawn, or a
+// run requested or still loading (ADR-0288 (proposed) §SD8). A receiver
+// that culls views out of sight draws a view while it is pending, so a
+// bundle_run on a culled view does not wait for the person to scroll to
+// it. Render goroutine only, before deciding whether to draw.
+func (inst *BundleView) Pending() (pending bool) {
+	return inst.commanded || (inst.inner != nil && inst.inner.WorkPending())
+}
 
 // Panes are the result panes the view shows; render goroutine only.
 func (inst *BundleView) Panes() (panes []string) { return inst.panes }
@@ -216,6 +229,7 @@ func (inst *BundleView) Frame(ctx app.FrameContextI) (err error) {
 		return nil
 	}
 	if inst.cfg.Operable {
+		inst.commanded = false
 		return inst.inner.FrameServed(ctx)
 	}
 	return inst.inner.Frame(ctx)

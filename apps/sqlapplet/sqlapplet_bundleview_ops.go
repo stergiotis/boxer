@@ -150,7 +150,11 @@ func BundleViewOps[A any, S any](set *appops.Set[A, S], views func(inst A) map[s
 			if p == nil {
 				return nil, app.RefuseOperation("the view " + name + " waits: " + v.Waiting())
 			}
-			return p.ServedOperations().ApplyCommand(call, target, args)
+			result, err = p.ServedOperations().ApplyCommand(call, target, args)
+			if err == nil {
+				v.commanded = true
+			}
+			return
 		})
 	}
 }

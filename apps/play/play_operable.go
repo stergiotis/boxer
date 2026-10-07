@@ -119,6 +119,13 @@ func (inst *PlayApp) FrameServed(ctx app.FrameContextI) (err error) {
 	return
 }
 
+// WorkPending reports work that needs this instance's frames to finish: a
+// run requested for the next frame, or the main result still loading. A
+// receiver that culls an embedded play keeps drawing it while this holds.
+func (inst *PlayApp) WorkPending() (pending bool) {
+	return inst.requestRun || inst.graph.MainLoading()
+}
+
 // SetDatasetOrigin records that the name local, under which a dataset is
 // bound, stands for the dataset published as alias in bundle (empty when it
 // is in none), so the agent limits judge a run by the names a grant lists
