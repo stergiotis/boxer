@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>boxer</title>
+<!-- The site root of the tab-host workflow (ADR-0278). Styled by the IDS
+     classless stylesheet (ADR-0076), copied beside this page at publish time;
+     the rules below are this page's own and use only IDS tokens. The demo
+     section between the markers is dropped while no demo is published. -->
+<link rel="stylesheet" href="ids.css">
+<style>
+  header p { color: var(--ids-text-secondary); }
+  .apps { list-style: none; padding: 0; display: grid; gap: var(--ids-space-3);
+          grid-template-columns: repeat(auto-fill, minmax(14em, 1fr)); }
+  .apps li { margin: 0; }
+  .apps a { display: block; height: 100%; padding: var(--ids-space-4);
+            background: var(--ids-bg-surface); border-radius: var(--ids-radius-md);
+            border: var(--ids-border-hair) solid var(--ids-border-faint);
+            transition: border-color var(--ids-motion-quick) ease; }
+  .apps a:hover { text-decoration: none; border-color: var(--ids-accent); }
+  .apps strong { display: block; color: var(--ids-accent); }
+  .apps span { color: var(--ids-text-secondary); font-size: var(--ids-text-caption); }
+
+  /* the architecture figure: boxes that stack on a narrow screen */
+  figure { margin: 1.5em 0; }
+  figcaption { color: var(--ids-text-secondary); font-size: var(--ids-text-caption); margin-top: var(--ids-space-3); }
+  .arch { display: grid; gap: var(--ids-space-3); align-items: stretch;
+          grid-template-columns: 1fr auto 1.6fr; }
+  .zone { border: var(--ids-border-hair) dashed var(--ids-border-default);
+          border-radius: var(--ids-radius-lg); padding: var(--ids-space-4);
+          display: flex; flex-direction: column; gap: var(--ids-space-3); }
+  .zone > h3 { margin: 0; font-size: var(--ids-text-caption); text-transform: uppercase;
+               letter-spacing: 0.05em; color: var(--ids-text-secondary); font-weight: 600; }
+  .box { border-radius: var(--ids-radius-md); padding: var(--ids-space-3) var(--ids-space-4);
+         border: var(--ids-border-regular) solid; }
+  .box b { display: block; color: var(--ids-text-extreme); }
+  .box code { font-size: 0.85em; }
+  .box p { margin: var(--ids-space-1) 0 0; font-size: var(--ids-text-caption); color: var(--ids-text-secondary); }
+  .page { background: var(--ids-info-subtle); border-color: var(--ids-info); }
+  .go   { background: var(--ids-success-subtle); border-color: var(--ids-success); }
+  .rust { background: var(--ids-warning-subtle); border-color: var(--ids-warning); }
+  .link { display: flex; flex-direction: column; justify-content: center; gap: var(--ids-space-1);
+          font-size: var(--ids-text-caption); color: var(--ids-text-secondary); text-align: center; }
+  .link .arrow { font-family: var(--ids-font-mono); color: var(--ids-text-primary); font-size: var(--ids-text-body); }
+  .shim { text-align: center; font-size: var(--ids-text-caption); color: var(--ids-text-secondary); }
+  .shim .arrow { font-family: var(--ids-font-mono); color: var(--ids-text-primary); }
+  .origin { grid-column: 1 / -1; background: var(--ids-bg-faint); border-color: var(--ids-border-faint); }
+  .origin b { color: var(--ids-text-primary); }
+  .h { display: inline; }
+  .v { display: none; }
+  @media (max-width: 40em) {
+    .arch { grid-template-columns: 1fr; }
+    .h { display: none; }
+    .v { display: inline; }
+  }
+</style>
+</head>
+<body>
+<header>
+<h1>boxer</h1>
+<p>Build artifacts of <a href="https://github.com/stergiotis/boxer">boxer</a>, addressed by content, and a demo of
+its apps running in a browser tab.</p>
+</header>
+
+<!-- demo -->
+<h2>Demo</h2>
+<p>boxer apps compiled to WebAssembly and running in this tab, beside the Rust browser host (ADR-0263). The first visit
+downloads about 20 MB; the page loads nothing from any other site.</p>
+<ul class="apps">
+  <li><a href="demo/index.html?worker=worker.mjs%3Fapp%3Dgithub.com%2Fstergiotis%2Fboxer%2Fpublic%2Fthestack%2Fimzero2%2Fegui2%2Fdemo%2Fapps%2Fwidgets"><strong>Widget gallery</strong>
+    <span>The widget demos with their source. The map demos are left out, since they load tiles from a third-party
+    server, and so are a few that do not run in a tab.</span></a></li>
+  <li><a href="demo/index.html?worker=worker.mjs%3Fapp%3Dgithub.com%2Fstergiotis%2Fboxer%2Fpublic%2Fthestack%2Fimzero2%2Fegui2%2Fdemo%2Fapps%2Fidsshowcase"><strong>IDS token catalogue</strong>
+    <span>The design-system tokens: neutral spine, semantic palette, type scale, colormaps.</span></a></li>
+  <li><a href="demo/index.html?worker=worker.mjs%3Fapp%3Dgithub.com%2Fstergiotis%2Fboxer%2Fpublic%2Fthestack%2Fimzero2%2Fegui2%2Fdemo%2Fapps%2Fleewaywidgets"><strong>leeway widgets</strong>
+    <span>The leeway widgets over built-in fixtures.</span></a></li>
+  <li><a href="demo/index.html?worker=worker.mjs%3Fapp%3Dgithub.com%2Fstergiotis%2Fboxer%2Fapps%2Ffibscope"><strong>fibscope</strong>
+    <span>Fibonacci-tagged identifiers.</span></a></li>
+  <li><a href="demo/index.html?worker=worker.mjs%3Fapp%3Dgithub.com%2Fstergiotis%2Fboxer%2Fapps%2Fsplashscreen"><strong>splashscreen</strong>
+    <span>Build, version and licence notices.</span></a></li>
+</ul>
+<!-- /demo -->
+
+<h2>How a tab runs an app</h2>
+<figure>
+<div class="arch" role="img" aria-label="The page's main thread paints meshes and sends input; a Web Worker runs the Go module and the Rust browser host, joined by a synchronous byte shim; all files come from one static origin.">
+  <div class="zone">
+    <h3>Main thread</h3>
+    <div class="box page"><b>Viewer page</b>
+      <p>Paints each frame's mesh with WebGL. Encodes pointer and keyboard events as the carrier's protobuf.</p></div>
+  </div>
+  <div class="link">
+    <span class="arrow"><span class="h">◀──</span><span class="v">▲</span></span>
+    <span>mesh, the ADR-0128 wire</span>
+    <span>input events</span>
+    <span class="arrow"><span class="h">──▶</span><span class="v">▼</span></span>
+    <span>postMessage</span>
+  </div>
+  <div class="zone">
+    <h3>Web Worker</h3>
+    <div class="box go"><b>Go module <code>imzero2tab.wasm</code></b>
+      <p>A wasip1 reactor holding the apps. The worker calls its frame export per tick, at a reactive cadence. Each
+      frame becomes FFFI2 bytes on fd 1.</p></div>
+    <div class="shim"><span class="arrow">▼ frame bytes · ▲ fetch replies</span><br>fd 0/1 shim, synchronous, in <code>bridge.mjs</code></div>
+    <div class="box rust"><b>Rust browser host <code>imzero2_browser.wasm</code></b>
+      <p>A C-ABI module: the FFFI2 interpreter, egui layout and tessellation into the mesh wire. Fonts arrive as bytes.</p></div>
+  </div>
+  <div class="box origin"><b>One static origin</b>
+    <p>The page, <code>worker.mjs</code>, <code>bridge.mjs</code>, the two modules and the fonts. Nothing runs on the
+    server.</p></div>
+</div>
+<figcaption>Both modules share one worker thread, so they can alternate synchronously without blocking the page; the
+page keeps only painting and input (ADR-0263).</figcaption>
+</figure>
+
+<h2>Browser hosts by digest</h2>
+<p><code>tabhost/&lt;sha256&gt;.wasm</code> is the Rust browser host a tab runs (ADR-0278). A module consuming boxer
+bundles its own apps and fetches the host its boxer pin records in <code>browserhost.sum</code>, without a Rust
+toolchain. <a href="tabhost/index.txt">tabhost/index.txt</a> lists the published digests; nothing published is
+removed.</p>
+</body>
+</html>
