@@ -9,7 +9,7 @@ import (
 
 // A bundle's document reaches play as what a window applies: the SQL, the
 // local names, the first pane, the endpoint and whether it may run on open
-// (ADR-0288 (proposed) §SD4).
+// (ADR-0288 §SD4).
 func TestParseBundleDoc(t *testing.T) {
 	src := "---\ntype: reference\nstatus: draft\ntitle: Sales\nsummary: \"orders by region\"\nendpoint: introspection\ndatasets: [orders, regions]\ntabs: [chart, table]\n---\n\n# Sales\n\n```sql\nSELECT region, count() AS n FROM keelson('orders') GROUP BY region\n```\n"
 	doc, err := parseBundleDoc("sales.md", []byte(src))

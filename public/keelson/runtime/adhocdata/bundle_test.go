@@ -172,7 +172,7 @@ func TestPublishBundleRespectsTheCountQuota(t *testing.T) {
 }
 
 // A receiver that publishes many bundles meets its own count first, and
-// another window still publishes (ADR-0288 (proposed) §SD9).
+// another window still publishes (ADR-0288 §SD9).
 func TestPublishBundleRespectsThePerOwnerQuota(t *testing.T) {
 	svc := newTestService(t)
 	stream := int64Stream(t, false, 1)

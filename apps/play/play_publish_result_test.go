@@ -50,7 +50,7 @@ func waitPublished(t *testing.T, l *PlayLauncher) (last LastPublish) {
 }
 
 // The whole main result leaves as a one-dataset bundle whose document reads
-// it; a reader takes the rows in as play held them (ADR-0288 (proposed)
+// it; a reader takes the rows in as play held them (ADR-0288
 // §SD4).
 func TestPublishResultPublishesTheMainResultAsABundle(t *testing.T) {
 	fakeAppletDocs(t)

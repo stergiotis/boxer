@@ -17,7 +17,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// SubjectRead reads a dataset whole (ADR-0288 (proposed) §SD6): the
+// SubjectRead reads a dataset whole (ADR-0288 §SD6): the
 // stream as sealed, with its digest. It takes an alias and nothing else —
 // no statement — so an app other than play can take a dataset in, but not
 // query it.
@@ -27,7 +27,7 @@ const SubjectRead = "adhoc.read"
 const AuditRead = "read"
 
 // DestinationDataset and DestinationBundle are how a grant names a dataset
-// and a bundle (ADR-0288 (proposed) §SD4); play's agent limits and the
+// and a bundle (ADR-0288 §SD4); play's agent limits and the
 // read's check use the same spelling.
 func DestinationDataset(alias string) (name string) { return "keelson:" + alias }
 
@@ -79,7 +79,7 @@ type ReadResult struct {
 }
 
 // Read returns the newest live dataset under alias, whole. A read leaves
-// play's query surface (ADR-0288 (proposed) §SD6), so every read is
+// play's query surface (ADR-0288 §SD6), so every read is
 // audited, and one an agent's call caused is attested first and then held
 // to the task's grant as a run in play is: it needs the bundle, or the
 // dataset's alias, among the grant's destinations.
@@ -209,7 +209,7 @@ func readReplyError(alias string, rep adhocreply.AdhocReply) (err error) {
 }
 
 // ReadAllE reads the newest live dataset under alias whole, via
-// adhoc.read (ADR-0288 (proposed) §SD6), and checks the stream against
+// adhoc.read (ADR-0288 §SD6), and checks the stream against
 // the digest it was sealed under. It is how an app other than play takes a
 // dataset in: no statement travels, so filtering, joining and aggregating
 // stay play's, and what arrives is what was published. obo is the agent's

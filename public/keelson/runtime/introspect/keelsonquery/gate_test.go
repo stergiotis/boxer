@@ -86,7 +86,7 @@ func (inst sealedTable) Snapshot(introspect.Projection) (arrow.RecordBatch, erro
 }
 
 // A sealed table is refused whatever the grant names: play is the one
-// place a dataset is queried (ADR-0288 (proposed) §SD6).
+// place a dataset is queried (ADR-0288 §SD6).
 func TestGateRefusesASealedTable(t *testing.T) {
 	r := testRegistry(t)
 	require.NoError(t, r.Register(sealedTable{name: "adhoc_0123456789abcdef"}))

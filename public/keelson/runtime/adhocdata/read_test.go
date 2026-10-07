@@ -39,7 +39,7 @@ func readService(t *testing.T) (svc *Service, bus *inprocbus.Inst) {
 
 // A reader gets the stream as sealed — what every reader of the dataset
 // reads, under the digest the publish was audited with — and the read is
-// audited too (ADR-0288 (proposed) §SD6).
+// audited too (ADR-0288 §SD6).
 func TestReadAllEReturnsTheSealedStream(t *testing.T) {
 	svc, bus := readService(t)
 	caps := []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}}
@@ -147,7 +147,7 @@ func TestReadDestinations(t *testing.T) {
 	assert.Equal(t, []string{"keelson:stats_w3"}, ReadDestinations("stats_w3"))
 }
 
-// A task reads what it published (ADR-0288 (proposed) §SD4): the live
+// A task reads what it published (ADR-0288 §SD4): the live
 // revision's attested publisher reads it without a grant entry; any other
 // task still needs one, and the publisher task travels on the resolve.
 func TestATaskReadsWhatItPublished(t *testing.T) {
@@ -179,7 +179,7 @@ func TestATaskReadsWhatItPublished(t *testing.T) {
 // Column summaries carry values, so they are read as the data is: anyone's
 // read without an agent's call gets them, an agent's needs the grant or to
 // have published the bundle, and the catalog carries no values at all
-// (ADR-0288 (proposed) §SD5).
+// (ADR-0288 §SD5).
 func TestColumnValuesAreReadAsTheDataIs(t *testing.T) {
 	svc, bus := readService(t)
 	d := &fakeDispatcher{call: agentCall()}

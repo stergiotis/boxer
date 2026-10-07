@@ -130,7 +130,7 @@ func TestRowsOfThreeLanesJoinByKey(t *testing.T) {
 
 // A bundle operation an agent's call caused joins that call's action on
 // (task, call) and the turn's model call on (conversation, turn), and keeps
-// its per-dataset lists and digests (ADR-0288 (proposed) §SD5).
+// its per-dataset lists and digests (ADR-0288 §SD5).
 func TestBundleRowJoinsTheActionThatCausedIt(t *testing.T) {
 	exec, err := chexec.NewLocalExecutor(t.TempDir(), nil)
 	if err != nil {

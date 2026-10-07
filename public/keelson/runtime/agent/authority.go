@@ -50,7 +50,7 @@ func ReachOf(destination string) (r ReachE) {
 	switch {
 	case strings.HasPrefix(destination, "keelson:"), strings.HasPrefix(destination, "keelson-bundle:"),
 		strings.HasPrefix(destination, "publish:"), strings.HasPrefix(destination, "git:"):
-		// An ad-hoc bundle (ADR-0288 (proposed) §SD4) is datasets in this
+		// An ad-hoc bundle (ADR-0288 §SD4) is datasets in this
 		// process, as a keelson table is, and publishing one stays in it.
 		return ReachHost
 	case strings.HasPrefix(destination, "clickhouse:"):

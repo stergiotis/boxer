@@ -186,7 +186,7 @@ type PlayLauncher struct {
 	// bind_dataset on a window whose config declared none.
 	follower      *adhocdata.Follower
 	launchAliases []string
-	// bundle is the ad-hoc bundle the window follows (ADR-0288 (proposed)
+	// bundle is the ad-hoc bundle the window follows (ADR-0288
 	// §SD4), from its launch config or open_bundle; nil when none.
 	bundle *bundleState
 	// publish is the window's last publish_result (play_publish_result.go).

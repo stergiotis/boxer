@@ -1,6 +1,6 @@
 package play
 
-// What an operable bundle view offers agents (ADR-0288 (proposed) §SD8): a
+// What an operable bundle view offers agents (ADR-0288 §SD8): a
 // subset of play's catalog, served over a play embedded in another app's
 // window. The subset and the panes its operations belong to are declared
 // here, beside the catalog they are taken from, so a pane operation added to
@@ -97,7 +97,7 @@ func OperableResources() (resources []app.ResourceSpec) {
 }
 
 // ServedOperations serves play's catalog over this instance, for a receiver
-// that offers it to agents through its own catalog (ADR-0288 (proposed)
+// that offers it to agents through its own catalog (ADR-0288
 // §SD8). The handler is made once and kept: its resources' values are read
 // across frames. A receiver that serves it frames the instance with
 // FrameServed.
@@ -130,7 +130,7 @@ func (inst *PlayApp) WorkPending() (pending bool) {
 // stamped as the task's and judged by the agent limits under obo's grant,
 // where a refusal lands in the status line. nil requests the person's run.
 // An embedder runs a document an agent authored this way, so the document
-// does not run with the person's authority (ADR-0288 (proposed) §SD7).
+// does not run with the person's authority (ADR-0288 §SD7).
 func (inst *PlayApp) RequestRunAs(obo *app.OnBehalfOf) {
 	if obo != nil {
 		inst.markAgent(obo)
@@ -146,7 +146,7 @@ func (inst *PlayApp) AgentMark() (obo *app.OnBehalfOf) { return inst.agentDriven
 // SetDatasetOrigin records that the name local, under which a dataset is
 // bound, stands for the dataset published as alias in bundle (empty when it
 // is in none), so the agent limits judge a run by the names a grant lists
-// it by, never by local (ADR-0288 (proposed) §SD3). publisherTask is the
+// it by, never by local (ADR-0288 §SD3). publisherTask is the
 // task whose attested call published the bundle's live revision, which
 // runs on it without a grant entry (§SD4); empty when no agent's call did.
 func (inst *PlayApp) SetDatasetOrigin(local string, alias string, bundle string, publisherTask string) {

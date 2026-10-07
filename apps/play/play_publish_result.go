@@ -1,6 +1,6 @@
 package play
 
-// publish_result (ADR-0288 (proposed) §SD4): the window's main result
+// publish_result (ADR-0288 §SD4): the window's main result
 // leaves play as an ad-hoc bundle — the result as one dataset, and an
 // applet document whose SQL reads it in the shape a pane draws — so
 // another window or app takes it in as the bytes play held, not as text a

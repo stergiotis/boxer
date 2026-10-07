@@ -13,7 +13,7 @@ import (
 
 // Every operation the subset names is in play's catalog, and every pane
 // operation of play's is offered or excluded on purpose (ADR-0288
-// (proposed) §SD8).
+// §SD8).
 func TestOperableSubsetCoversEveryPaneOperation(t *testing.T) {
 	catalog := playOps.Catalog()
 	names := make([]string, 0, len(catalog.Operations))

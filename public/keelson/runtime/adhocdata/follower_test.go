@@ -510,7 +510,7 @@ func TestFollowerVerdictOutdatedByRetract(t *testing.T) {
 // TestFollowerBindsUnderLocalNames: an alias followed under a local name
 // reaches the consumer under that name — bound, revised and unbound — so a
 // document reads one name whatever alias its data was published under
-// (ADR-0288 (proposed) §SD3). A local name another alias holds is refused.
+// (ADR-0288 §SD3). A local name another alias holds is refused.
 func TestFollowerBindsUnderLocalNames(t *testing.T) {
 	r := newFakeResolver()
 	f := newFollowerWith(r, zerolog.Nop())

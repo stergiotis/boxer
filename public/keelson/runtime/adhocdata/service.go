@@ -52,7 +52,7 @@ const (
 	// MaxDatasetsPerOwner caps the datasets one owner — a window, or an
 	// app for what it keeps after close — may hold live, so a receiver
 	// that publishes a bundle per item it shows cannot take the process's
-	// whole count (ADR-0288 (proposed) §SD9). The byte quota bounds the
+	// whole count (ADR-0288 §SD9). The byte quota bounds the
 	// store whatever the count.
 	MaxDatasetsPerOwner = 256
 )
@@ -111,7 +111,7 @@ type Config struct {
 	// RetractGrace overrides DefaultRetractGrace; zero keeps the default.
 	RetractGrace time.Duration
 	// Trail is the host's audit trail (ADR-0277); every bundle operation
-	// lands there (ADR-0288 (proposed) §SD5). Nil keeps only the
+	// lands there (ADR-0288 §SD5). Nil keeps only the
 	// in-process record.
 	Trail *trail.Recorder
 }
@@ -133,7 +133,7 @@ type PublishInput struct {
 	KeepAfterClose bool
 	// WindowScoped publishes under the window's own alias,
 	// WindowAlias(Alias, By.Instance), so two windows of one app never
-	// hold one alias (ADR-0288 (proposed) §SD3). The result names the
+	// hold one alias (ADR-0288 §SD3). The result names the
 	// alias used.
 	WindowScoped bool
 }
@@ -157,7 +157,7 @@ type ResolveResult struct {
 	Bytes           uint64
 	CreatedAtUnixUs int64
 	// Origin is the bundle the dataset belongs to and the task that
-	// published its live revision (ADR-0288 (proposed) §SD3, §SD4).
+	// published its live revision (ADR-0288 §SD3, §SD4).
 	Origin DatasetOrigin
 }
 
@@ -675,7 +675,7 @@ func (inst *Service) leaveLocked(rec *record) (ev Event) {
 
 // checkSoloPublishLocked refuses a publish of one dataset that would
 // reach into a bundle: a republish onto one of its datasets, or a new
-// dataset under an alias a bundle holds (ADR-0288 (proposed) §SD2, §SD3).
+// dataset under an alias a bundle holds (ADR-0288 §SD2, §SD3).
 // existing is the record a republish names, nil for a new dataset. The
 // caller holds inst.mu.
 func (inst *Service) checkSoloPublishLocked(existing *record, alias string, by Identity) (err error) {

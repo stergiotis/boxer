@@ -1,6 +1,6 @@
 package play
 
-// The person's own publish (ADR-0288 (proposed) §SD4): a Publish menu in
+// The person's own publish (ADR-0288 §SD4): a Publish menu in
 // the top bar with the form publish_result takes — the bundle's name and
 // the panes it opens on. It runs as a gesture through play's catalog, the
 // handler an agent's call runs, so the person's publish is logged and

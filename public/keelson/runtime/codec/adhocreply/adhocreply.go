@@ -59,25 +59,25 @@ type AdhocReply struct {
 	LocalNames []string `lw:"adhocLocalNames,stringArray"`
 	Handles    []string `lw:"adhocHandles,stringArray"`
 
-	// ArrowStream and StreamDigest answer `adhoc.read` (ADR-0288 (proposed)
+	// ArrowStream and StreamDigest answer `adhoc.read` (ADR-0288
 	// §SD6): the dataset's stream as sealed, and its content digest.
 	ArrowStream  []byte `lw:"adhocArrowStream,blobArray"`
 	StreamDigest string `lw:"adhocStreamDigest,stringArray"`
 
 	// Alias is the alias a publish went under: the window's own when the
-	// request was window-scoped (ADR-0288 (proposed) §SD3).
+	// request was window-scoped (ADR-0288 §SD3).
 	Alias string `lw:"adhocAlias,symbol"`
 
 	// Destination is the grant destination a refused read needed
-	// (ADR-0288 (proposed) §SD6); empty otherwise.
+	// (ADR-0288 §SD6); empty otherwise.
 	Destination string `lw:"adhocDestination,stringArray"`
 
 	// PublisherTask is the task whose attested call published the bundle's
 	// live revision, on a resolve and a read; empty when no agent's call
-	// did (ADR-0288 (proposed) §SD4).
+	// did (ADR-0288 §SD4).
 	PublisherTask string `lw:"adhocPublisherTask,stringArray"`
 
 	// ColumnSummaries answers a columns-only read: the dataset's column
-	// summaries, values included, as JSON (ADR-0288 (proposed) §SD5).
+	// summaries, values included, as JSON (ADR-0288 §SD5).
 	ColumnSummaries []byte `lw:"adhocColumnSummaries,blobArray"`
 }

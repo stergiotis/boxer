@@ -200,7 +200,7 @@ func TestACaptureIsScopedAndLabelledByItsWindows(t *testing.T) {
 
 // A host service asking about a call gets the dispatcher's record of it —
 // conversation, turn and cause as the coordinator stated them — and only
-// for the window the call was sent to, in a live task (ADR-0288 (proposed)
+// for the window the call was sent to, in a live task (ADR-0288
 // §SD5).
 func TestCallContextIsTheDispatchersRecord(t *testing.T) {
 	r := newRig(t, true)

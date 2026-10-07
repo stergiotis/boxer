@@ -167,7 +167,7 @@ func TestBoundLaunchAliasesCountsOnlyTheConfigs(t *testing.T) {
 
 // A bundle's dataset bound with bind_dataset is covered by the bundle, as
 // any other bundle dataset is: the follower records its origin on the bind
-// (ADR-0288 (proposed) §SD3, §SD4).
+// (ADR-0288 §SD3, §SD4).
 func TestABoundBundleDatasetIsCoveredByItsBundle(t *testing.T) {
 	l, h, publisher := bindLauncher(t)
 	publishSalesBundle(t, publisher, "doc", "orders")

@@ -99,7 +99,7 @@ func (inst *PlayApp) SetToolbarMinimal(on bool) {
 
 // SetOpenPlaygroundBundle makes "Open in Playground" open the ad-hoc
 // bundle under alias rather than this instance's buffer (ADR-0288
-// (proposed) §SD7): a bundle view's buffer reads its datasets by local
+// §SD7): a bundle view's buffer reads its datasets by local
 // names that mean nothing in another window, and the bundle carries the
 // document and the datasets together. Empty restores the buffer.
 func (inst *PlayApp) SetOpenPlaygroundBundle(alias string) {

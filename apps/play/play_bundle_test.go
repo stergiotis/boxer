@@ -153,7 +153,7 @@ func settleBundle(t *testing.T, l *PlayLauncher, cond func() bool) {
 
 // open_bundle moves the window to the introspection endpoint and returns at
 // once; the next frames apply the document and bind its datasets under
-// their local names, then run it (ADR-0288 (proposed) §SD4).
+// their local names, then run it (ADR-0288 §SD4).
 func TestOpenBundleAppliesTheDocumentAndBindsLocalNames(t *testing.T) {
 	fakeAppletDocs(t)
 	withQueryEndpoint(t, "http://127.0.0.1:1/query")
@@ -270,7 +270,7 @@ func TestAnUnattestedOpenSaysWhy(t *testing.T) {
 
 // A run reading a bundle's dataset is covered by the bundle or by the
 // dataset's global alias, never by the local name the document reads,
-// and a refusal asks for the bundle (ADR-0288 (proposed) §SD4).
+// and a refusal asks for the bundle (ADR-0288 §SD4).
 func TestABundleRunNeedsTheBundleInTheGrant(t *testing.T) {
 	fakeAppletDocs(t)
 	withQueryEndpoint(t, "http://127.0.0.1:1/query")
@@ -336,7 +336,7 @@ func introspectionPlane(l *PlayLauncher) {
 
 // list_bundles shows a bundle's column values only where the task may read
 // it, and otherwise names the destination that would show them (ADR-0288
-// (proposed) §SD5).
+// §SD5).
 func TestListBundlesShowsValuesOnlyWhereTheTaskMayRead(t *testing.T) {
 	l, _, publisher := bundleLauncher(t)
 	publishSalesBundle(t, publisher, "doc", "orders")

@@ -19,7 +19,7 @@ const (
 	OpPublish = "publish"
 	OpResolve = "resolve"
 	OpRetract = "retract"
-	// OpRead reads a dataset whole (ADR-0288 (proposed) §SD6).
+	// OpRead reads a dataset whole (ADR-0288 §SD6).
 	OpRead = "read"
 )
 
@@ -52,7 +52,7 @@ type AdhocRequest struct {
 	// ArrowStream is the Arrow IPC stream a publish carries.
 	ArrowStream []byte `lw:"adhocArrowStream,blobArray"`
 
-	// Bundle is the bundle alias of a bundle verb (ADR-0288 (proposed)
+	// Bundle is the bundle alias of a bundle verb (ADR-0288
 	// §SD2); empty for a verb on one dataset.
 	Bundle string `lw:"adhocBundle,symbol"`
 
@@ -65,23 +65,23 @@ type AdhocRequest struct {
 	ArrowStreams [][]byte `lw:"adhocArrowStreams,blobArray"`
 
 	// OboTask, OboEpoch and OboCall are the on-behalf-of context an
-	// agent-caused bundle request ran under (ADR-0288 (proposed) §SD5);
+	// agent-caused bundle request ran under (ADR-0288 §SD5);
 	// empty for the person's and the app's own requests.
 	OboTask  string `lw:"adhocOboTask,stringArray"`
 	OboEpoch uint64 `lw:"adhocOboEpoch,u64Array"`
 	OboCall  string `lw:"adhocOboCall,stringArray"`
 
 	// WindowScoped asks for the publishing window's own alias,
-	// `<alias>_w<instance>` (ADR-0288 (proposed) §SD3).
+	// `<alias>_w<instance>` (ADR-0288 §SD3).
 	WindowScoped bool `lw:"adhocWindowScoped,bool"`
 
 	// SourceSql and InputHandles are a bundle publish's provenance: the
 	// statement that produced its rows and the datasets that statement
-	// read (ADR-0288 (proposed) §SD5).
+	// read (ADR-0288 §SD5).
 	SourceSql    string   `lw:"adhocSourceSql,stringArray"`
 	InputHandles []string `lw:"adhocInputHandles,stringArray"`
 
 	// ColumnsOnly asks a read for the dataset's column summaries instead
-	// of its stream, under the same grant (ADR-0288 (proposed) §SD5).
+	// of its stream, under the same grant (ADR-0288 §SD5).
 	ColumnsOnly bool `lw:"adhocColumnsOnly,bool"`
 }

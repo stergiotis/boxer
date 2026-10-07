@@ -211,7 +211,7 @@ func TestAClosedWindowsBundleIsAuditedAsWithdrawn(t *testing.T) {
 }
 
 // The audit lands on the trail as an AdhocDataset row with the attested
-// components (ADR-0288 (proposed) §SD5).
+// components (ADR-0288 §SD5).
 func TestTheAuditLandsOnTheTrail(t *testing.T) {
 	exec, err := chexec.NewLocalExecutor(t.TempDir(), nil)
 	if err != nil {
@@ -259,7 +259,7 @@ func TestTheAuditLandsOnTheTrail(t *testing.T) {
 
 // A bundle's provenance is data: the statement that produced its rows, the
 // datasets it read — resolved by the service to their aliases and digests,
-// not taken from the publisher — and its columns (ADR-0288 (proposed)
+// not taken from the publisher — and its columns (ADR-0288
 // §SD5).
 func TestProvenanceNamesTheBytesABundleCameFrom(t *testing.T) {
 	svc := newTestService(t)

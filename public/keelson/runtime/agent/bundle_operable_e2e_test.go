@@ -31,7 +31,7 @@ var viewReceiverOps = func() (s *appops.Set[*viewReceiver, struct{}]) {
 	return
 }()
 
-// The ADR-0288 (proposed) §SD8 lane: a receiver window shows a bundle in an
+// The ADR-0288 §SD8 lane: a receiver window shows a bundle in an
 // operable view, and a coordinator drives it through the receiver's catalog
 // — the model's JSON, with the bundle_view argument, reaching play's own
 // handler in the view, under play's agent limits.

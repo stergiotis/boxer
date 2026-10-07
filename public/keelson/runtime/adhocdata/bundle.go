@@ -14,7 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// Bundle bounds (ADR-0288 (proposed) §SD1). The datasets of a bundle
+// Bundle bounds (ADR-0288 §SD1). The datasets of a bundle
 // count against the dataset quotas like any other; these bound what the
 // bundle adds.
 const (
@@ -26,17 +26,17 @@ const (
 )
 
 // BundleAliasSeparator joins a bundle alias and a local name into the
-// dataset alias the service mints (ADR-0288 (proposed) §SD1), so a
+// dataset alias the service mints (ADR-0288 §SD1), so a
 // document reads its datasets by local name under any bundle alias.
 const BundleAliasSeparator = "__"
 
 // ErrAliasHeld is returned when a publish names an alias another owner
-// holds (ADR-0288 (proposed) §SD3).
+// holds (ADR-0288 §SD3).
 var ErrAliasHeld = errors.New("alias held by another publisher")
 
 // ErrBundleMember is returned when a verb on one dataset names a dataset
 // that belongs to a bundle: a bundle is published, republished and
-// retracted whole (ADR-0288 (proposed) §SD2).
+// retracted whole (ADR-0288 §SD2).
 var ErrBundleMember = errors.New("dataset belongs to a bundle")
 
 // ErrNoLiveBundle is ResolveBundle's answer when no bundle is live under
@@ -73,7 +73,7 @@ type BundlePublishInput struct {
 	KeepAfterClose bool
 	// OnBehalfOf is the agent's call the publish is work of, as the
 	// publishing app received it; the dispatcher attests it (ADR-0288
-	// (proposed) §SD5). Nil for the person's and the app's own publish.
+	// §SD5). Nil for the person's and the app's own publish.
 	OnBehalfOf *app.OnBehalfOf
 	// Provenance is where the rows came from (§SD5): recorded on the
 	// bundle, in its catalog row and on its trail row, as data.
@@ -224,7 +224,7 @@ func validateBundle(in BundlePublishInput) (err error) {
 }
 
 // PublishBundle seals every dataset of in, then makes them and the bundle
-// live together under one lock (ADR-0288 (proposed) §SD2): a failure at
+// live together under one lock (ADR-0288 §SD2): a failure at
 // any step leaves nothing of this publish live. A republish swaps the
 // document and every dataset; the previous revision's datasets withdraw
 // in two phases, so a reader that holds one finishes. Validation and
@@ -498,7 +498,7 @@ func (inst *Service) aliasHolderLocked(alias string) (holder *Identity) {
 
 // ResolveBundle returns the live bundle under alias: its document and its
 // datasets with their handles, in the order they were published. A resolve
-// an agent's call caused is attested and audited (ADR-0288 (proposed)
+// an agent's call caused is attested and audited (ADR-0288
 // §SD5); the person's and the apps' own resolves — every bundle view
 // resolves on each revision — are not, so the trail records what an agent
 // looked up rather than every follower's reconcile.
@@ -544,7 +544,7 @@ func (inst *Service) resolveBundle(alias string) (res BundleResult, err error) {
 // RetractBundle withdraws a bundle whole: every dataset leaves in two
 // phases as Retract withdraws one, and the bundle stops resolving at once.
 // Only its owner, or the runtime, may retract it. An agent-caused retract
-// is attested first; every retract is audited (ADR-0288 (proposed) §SD5).
+// is attested first; every retract is audited (ADR-0288 §SD5).
 func (inst *Service) RetractBundle(alias string, by Identity, obo *app.OnBehalfOf) (err error) {
 	cc, err := inst.attest(by, obo)
 	if err != nil {

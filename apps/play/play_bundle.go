@@ -1,6 +1,6 @@
 package play
 
-// A window shows an ad-hoc bundle (ADR-0288 (proposed) §SD4): the bundle's
+// A window shows an ad-hoc bundle (ADR-0288 §SD4): the bundle's
 // applet document becomes the buffer, its datasets are bound under the
 // local names the document reads, and the window follows the bundle — a
 // republish reloads the document and rebinds, a retract leaves the window
@@ -323,7 +323,7 @@ type BundleInfo struct {
 }
 
 // BundleColumn is one column of a bundle's dataset as the seal summarised
-// it (ADR-0288 (proposed) §SD5).
+// it (ADR-0288 §SD5).
 type BundleColumn struct {
 	Dataset  string `desc:"the local name of the dataset the column belongs to"`
 	Name     string `desc:"the column's name"`
@@ -459,7 +459,7 @@ func listBundles(bus app.BusI, obo *app.OnBehalfOf) (out BundleList, err error) 
 }
 
 // withColumnValues fills in the columns' min, max and sample, which are
-// values of the data (ADR-0288 (proposed) §SD5), for each bundle the task
+// values of the data (ADR-0288 §SD5), for each bundle the task
 // may read — its grant lists the bundle or the dataset, or the task
 // published it — through the read the dataset service holds to that grant.
 // A bundle it may not read keeps its statistics and says which destination

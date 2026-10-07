@@ -9,7 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// play opens ad-hoc bundles (ADR-0288 (proposed) §SD4) whose documents are
+// play opens ad-hoc bundles (ADR-0288 §SD4) whose documents are
 // applet documents; this package owns their parser and play cannot import
 // it, so it hands play the parser when it is linked.
 func init() {

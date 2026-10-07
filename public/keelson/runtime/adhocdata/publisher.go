@@ -41,7 +41,7 @@ func NewPublisher(alias string, keepAfterClose bool) (inst *Publisher) {
 }
 
 // NewWindowPublisher builds a publisher that publishes under its window's
-// own alias, `<base>_w<instance>` (ADR-0288 (proposed) §SD3): two windows
+// own alias, `<base>_w<instance>` (ADR-0288 §SD3): two windows
 // of one app each hold their own dataset, and a consumer binds it under
 // base. [Publisher.Alias] names the window's alias once a publish landed.
 func NewWindowPublisher(base string) (inst *Publisher) {

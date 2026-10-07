@@ -28,7 +28,7 @@ import (
 
 // list_bundles' statement is a string until an engine runs it: this runs it
 // over the introspection endpoint against a live bundle catalog and decodes
-// what comes back, column summaries included (ADR-0288 (proposed) §SD5).
+// what comes back, column summaries included (ADR-0288 §SD5).
 func TestBundleListSqlRunsAgainstTheCatalog(t *testing.T) {
 	if _, err := chlocalpool.LookupBinary(); err != nil {
 		t.Skipf("clickhouse not installed: %v", err)

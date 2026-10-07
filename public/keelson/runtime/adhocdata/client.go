@@ -142,7 +142,7 @@ func SubscribeEvents(bus app.BusI, handler func(ev Event)) (unsubscribe func(), 
 
 // PublishBundleRequest publishes — or, under an alias the caller already
 // holds, republishes — a bundle via adhoc.bundle.publish (ADR-0288
-// (proposed) §SD2). The caller's bus client needs Pub on
+// §SD2). The caller's bus client needs Pub on
 // adhoc.bundle.publish; the publisher is the envelope's sender, and in.By
 // is ignored. The result carries no document: the caller has it.
 func PublishBundleRequest(bus app.BusI, in BundlePublishInput) (res BundleResult, err error) {

@@ -138,7 +138,7 @@ type OperationSpec struct {
 }
 
 // OperationConsent names how a task's grant covers a consequential call
-// (ADR-0288 (proposed) §SD4): a grant destination "<Class>:<prefix>",
+// (ADR-0288 §SD4): a grant destination "<Class>:<prefix>",
 // approved by the person as any destination is, covers a call whose
 // argument Arg is a string starting with the non-empty prefix. A covered
 // call is applied as the task's mode applies a document command, and its
@@ -153,7 +153,7 @@ type OperationConsent struct {
 }
 
 // ConsentClassPublish covers publishing an ad-hoc bundle under the name
-// the consent's argument carries (ADR-0288 (proposed) §SD4).
+// the consent's argument carries (ADR-0288 §SD4).
 const ConsentClassPublish = "publish"
 
 // ConsentClasses are the consent classes a catalog may declare, each with
@@ -451,7 +451,7 @@ type DelegationI interface {
 }
 
 // CallContext is what the dispatcher recorded for an agent's call, as it
-// answers a host service asking about it (ADR-0288 (proposed) §SD5).
+// answers a host service asking about it (ADR-0288 §SD5).
 // Conversation and Turn are what the coordinator stated when it made the
 // call (ADR-0277 §SD1); ModelCall, ToolCall and ToolIndex the model call
 // whose reply asked for it. Empty where the coordinator stated none.
@@ -472,7 +472,7 @@ type CallContext struct {
 	// InFlight is true when the window had not answered the call yet:
 	// work its handler did. False is work the window did later, under a
 	// call it had answered while the task stayed live (ADR-0288
-	// (proposed) §SD5).
+	// §SD5).
 	InFlight bool
 }
 

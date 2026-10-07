@@ -33,7 +33,7 @@ import (
 // is queried over it here, the windows only move to it.
 const e2eQueryEndpoint = "http://127.0.0.1:1/query"
 
-// The ADR-0288 (proposed) M5 lane: a chat-like coordinator, under a grant
+// The ADR-0288 M5 lane: a chat-like coordinator, under a grant
 // the person approved, has one play window publish its result as a bundle
 // — the person confirms — and another open it; a third party reads the
 // dataset whole. Every hop's bytes are the producer's, and every hop is a

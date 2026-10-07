@@ -103,14 +103,14 @@ type PlayLaunch struct {
 	Datasets []string `lw:"playLaunchDatasets,stringArray"`
 
 	// DatasetNames are the names the window binds Datasets under, index
-	// for index — the names Sql reads in keelson('…') (ADR-0288 (proposed)
+	// for index — the names Sql reads in keelson('…') (ADR-0288
 	// §SD3). A publisher of window-scoped aliases launches with its
 	// window's alias in Datasets and the base name here; empty, or an
 	// empty entry, binds the alias under itself.
 	DatasetNames []string `lw:"playLaunchDatasetNames,stringArray"`
 
 	// Bundle names an ad-hoc bundle the window opens and follows (ADR-0288
-	// (proposed) §SD4): its document seeds the buffer, its datasets are
+	// §SD4): its document seeds the buffer, its datasets are
 	// bound under their local names, and a republish reloads both. It
 	// takes the window to the introspection endpoint, where datasets
 	// resolve, and supersedes Sql and Datasets.

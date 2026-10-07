@@ -25,7 +25,7 @@ const (
 	SubjectResolve = "adhoc.resolve"
 )
 
-// Bundle subjects (ADR-0288 (proposed) §SD2): the same request and reply
+// Bundle subjects (ADR-0288 §SD2): the same request and reply
 // kinds, carrying a bundle. Bundle events sit outside `adhoc.event.>`, so
 // a consumer that follows datasets never decodes one; a consumer that
 // follows bundles declares `Sub adhoc.bundle.event.>`

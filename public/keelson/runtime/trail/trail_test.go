@@ -51,7 +51,7 @@ func TestOnlyTheBodyBindsTheTextSection(t *testing.T) {
 }
 
 // The bundle record's memberships come from the runtime vocabulary, so a
-// scan filters on the ids its rows carry (ADR-0288 (proposed) §SD5).
+// scan filters on the ids its rows carry (ADR-0288 §SD5).
 func TestTheBundleRecordUsesTheVocabulary(t *testing.T) {
 	ids := TrailMembershipIds["AdhocDataset"]
 	assert.Equal(t, vocab.MembKindAdhocDataset.GetId().Value(), ids["runtimeKindAdhocDataset"])

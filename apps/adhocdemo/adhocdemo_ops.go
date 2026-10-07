@@ -10,7 +10,7 @@ import (
 // read the view's snapshot, which BundleViewOps captures.
 type adhocSnap struct{}
 
-// adhocOps offers the window's bundle view to agents (ADR-0288 (proposed)
+// adhocOps offers the window's bundle view to agents (ADR-0288
 // §SD8): the view is operable, so a model reads, runs and steers the
 // bundle the window shows through the bundle_ operations.
 var adhocOps = func() (s *appops.Set[*App, adhocSnap]) {

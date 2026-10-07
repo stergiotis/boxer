@@ -1,6 +1,6 @@
 package sqlapplet
 
-// A bundle view (ADR-0288 (proposed) §SD7) is an embedded play showing an
+// A bundle view (ADR-0288 §SD7) is an embedded play showing an
 // ad-hoc bundle inside another app's window: one constructor, one manifest
 // entry. It follows the bundle — a dataset revision rebinds, a document
 // revision rebuilds the embedded play, a retract leaves the view saying
@@ -59,7 +59,7 @@ type BundleViewConfig struct {
 	// Rules is the gloss rule repository; nil takes play's default.
 	Rules *gloss.Repository
 	// Operable offers the view's play operations to agents through the
-	// receiver's catalog (ADR-0288 (proposed) §SD8, BundleViewOps); a plain
+	// receiver's catalog (ADR-0288 §SD8, BundleViewOps); a plain
 	// view is drawn for the person only.
 	Operable bool
 }
@@ -140,7 +140,7 @@ func (inst *BundleView) Operable() (operable bool) { return inst.cfg.Operable }
 
 // Pending reports work an agent's operation left that only the view's
 // frames finish: a command applied since the view was last drawn, or a
-// run requested or still loading (ADR-0288 (proposed) §SD8). A receiver
+// run requested or still loading (ADR-0288 §SD8). A receiver
 // that culls views out of sight draws a view while it is pending, so a
 // bundle_run on a culled view does not wait for the person to scroll to
 // it. Render goroutine only, before deciding whether to draw.

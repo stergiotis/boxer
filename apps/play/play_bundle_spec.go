@@ -1,6 +1,6 @@
 package play
 
-// The checked constructor of an ad-hoc bundle (ADR-0288 (proposed) §SD2):
+// The checked constructor of an ad-hoc bundle (ADR-0288 §SD2):
 // a producer states what the bundle is — its SQL in a pane's shape, the
 // panes, the datasets by local name, where the rows came from — and gets a
 // document composed the one way, parsed by the applet parser before it is
@@ -130,7 +130,7 @@ func ComposeBundleDocE(spec BundleSpec) (doc []byte, err error) {
 }
 
 // PublishBundleE composes and checks spec's document, then publishes the
-// bundle with its provenance (ADR-0288 (proposed) §SD2, §SD5). It is a bus
+// bundle with its provenance (ADR-0288 §SD2, §SD5). It is a bus
 // round trip: call it off the render goroutine.
 func PublishBundleE(bus app.BusI, spec BundleSpec) (res adhocdata.BundleResult, err error) {
 	doc, err := ComposeBundleDocE(spec)

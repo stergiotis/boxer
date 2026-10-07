@@ -140,7 +140,7 @@ type Client struct {
 	// before the request leaves play; unbound names pass through.
 	datasetBindings map[string]string
 	// datasetOrigins maps a bound name to where the dataset comes from,
-	// when the name is a local one (ADR-0288 (proposed) §SD3): its global
+	// when the name is a local one (ADR-0288 §SD3): its global
 	// alias and the bundle it belongs to. A grant names a dataset by
 	// those, never by a local name, which means another dataset in
 	// another window. Guarded by mu.
@@ -789,7 +789,7 @@ func (inst *Client) datasetNameOf(local string) (n datasetName) {
 
 // setBundleOrigin is setDatasetOrigin for a bundle's dataset, with the task
 // that published the bundle's live revision, empty when no agent's call
-// did (ADR-0288 (proposed) §SD4).
+// did (ADR-0288 §SD4).
 func (inst *Client) setBundleOrigin(local string, alias string, bundle string, publisherTask string) {
 	inst.setDatasetOrigin(local, alias, bundle)
 	inst.mu.Lock()

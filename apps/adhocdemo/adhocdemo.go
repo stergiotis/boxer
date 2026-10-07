@@ -1,4 +1,4 @@
-// Package adhocdemo dogfoods ad-hoc bundles (ADR-0288 (proposed), over
+// Package adhocdemo dogfoods ad-hoc bundles (ADR-0288, over
 // ADR-0240's datasets): it generates a computed series, publishes it as a
 // bundle — the rows and an applet document that reads them as `items` —
 // through play.PublishBundleE, and shows it through a sqlapplet bundle

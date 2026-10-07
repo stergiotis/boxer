@@ -834,7 +834,7 @@ func (rt *Runtime) bootAgent() {
 		rt.LLM.SetDelegation(svc)
 	}
 	// The dataset service records an agent-caused bundle operation under
-	// the call context the dispatcher attests (ADR-0288 (proposed) §SD5).
+	// the call context the dispatcher attests (ADR-0288 §SD5).
 	if rt.Adhoc != nil {
 		rt.Adhoc.SetDispatcher(svc)
 	}

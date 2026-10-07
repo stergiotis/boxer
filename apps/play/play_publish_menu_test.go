@@ -14,7 +14,7 @@ import (
 )
 
 // The person's Publish runs publish_result through the gesture path: the
-// handler an agent's call runs, with no call behind it (ADR-0288 (proposed)
+// handler an agent's call runs, with no call behind it (ADR-0288
 // §SD4).
 func TestThePersonPublishesThroughTheGesturePath(t *testing.T) {
 	fakeAppletDocs(t)

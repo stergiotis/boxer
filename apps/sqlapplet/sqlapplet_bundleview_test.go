@@ -68,7 +68,7 @@ func syncUntil(t *testing.T, v *BundleView, cond func() bool) {
 // A bundle view is one constructor and the receiver's manifest entry: it
 // builds the embedded play from the bundle's document, binds the datasets
 // under their local names, runs once they are bound, and opens the bundle,
-// not its buffer, in a playground (ADR-0288 (proposed) §SD7).
+// not its buffer, in a playground (ADR-0288 §SD7).
 func TestABundleViewShowsTheBundle(t *testing.T) {
 	_, publisher, viewBus := viewRig(t)
 	pub := publishView(t, publisher, "SELECT * FROM keelson('result')", "result")
@@ -140,7 +140,7 @@ func (viewDispatcher) AllowDestination(task string, epoch uint64, destination st
 
 // A document an agent's call published runs in a view as that task's work,
 // under the agent limits; the person's document runs as the person's
-// (ADR-0288 (proposed) §SD7).
+// (ADR-0288 §SD7).
 func TestAnAgentsDocumentRunsAsItsTask(t *testing.T) {
 	prev := introspect.LocalQueryEndpoint()
 	introspect.SetLocalQueryEndpoint("http://127.0.0.1:1/query")

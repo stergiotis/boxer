@@ -13,7 +13,7 @@ import (
 )
 
 // The document publish_result composes parses with sqlapplet's own parser,
-// which the bundle's readers open it with (ADR-0288 (proposed) §SD4).
+// which the bundle's readers open it with (ADR-0288 §SD4).
 func TestThePublishedDocumentParses(t *testing.T) {
 	src, err := play.ComposeResultDocForTest("counts", "result", "SELECT n, count() AS c FROM keelson('result') GROUP BY n",
 		[]string{"chart", "table"}, "quarterly \"counts\"\t\x01", "SELECT number AS n FROM numbers(3)")

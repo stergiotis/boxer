@@ -29,7 +29,7 @@ var receiverOps = func() (s *appops.Set[*opsReceiver, opsReceiverSnap]) {
 
 // Every bundle_ operation is play's of the same name: same version, class,
 // effect, result and prose, its resources prefixed, its arguments play's
-// with the view in front (ADR-0288 (proposed) §SD8).
+// with the view in front (ADR-0288 §SD8).
 func TestBundleViewOpsArePlaysOperations(t *testing.T) {
 	catalog := receiverOps.Catalog()
 	require.NoError(t, catalog.Validate())

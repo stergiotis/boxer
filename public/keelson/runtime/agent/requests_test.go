@@ -252,7 +252,7 @@ func (inst *rig) widen(g Grant, destinations ...string) {
 	<-got
 }
 
-// ADR-0288 (proposed) §SD4: a publish:<prefix> destination the person
+// ADR-0288 §SD4: a publish:<prefix> destination the person
 // approved is standing consent for a consequential call whose argument
 // starts with the prefix; the call applies as a document command would,
 // and its record names the destination that admitted it.

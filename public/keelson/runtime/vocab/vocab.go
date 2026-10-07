@@ -482,7 +482,7 @@ var (
 	MembAgentDisclosureDecidedBy  = NkRegistry.MustBegin("agentDisclosureDecidedBy", 255).End()
 	MembAgentDisclosureEndpoint   = NkRegistry.MustBegin("agentDisclosureEndpoint", 256).End()
 	MembAgentDisclosureReason     = NkRegistry.MustBegin("agentDisclosureReason", 257).End()
-	// The ad-hoc bundle record (ADR-0288 (proposed) §SD5): one row per
+	// The ad-hoc bundle record (ADR-0288 §SD5): one row per
 	// bundle operation and outcome, with the call context the dispatcher
 	// attested and digests of what was stored.
 	MembKindAdhocDataset           = NkRegistry.MustBegin("runtimeKindAdhocDataset", 258).End()
@@ -512,7 +512,7 @@ var (
 	MembAdhocDatasetColumnTypes    = NkRegistry.MustBegin("adhocDatasetColumnTypes", 282).End()
 	MembAdhocDatasetColumnNulls    = NkRegistry.MustBegin("adhocDatasetColumnNulls", 283).End()
 	// 284, 285 and 287 were a column's minimum, maximum and sample: values
-	// of sealed data, which the trail does not keep (ADR-0288 (proposed)
+	// of sealed data, which the trail does not keep (ADR-0288
 	// §SD5). Retired before they were ever pushed; never reuse them.
 	MembAdhocDatasetColumnDistinct = NkRegistry.MustBegin("adhocDatasetColumnDistinct", 286).End()
 	MembAgentActionConsent         = NkRegistry.MustBegin("agentActionConsent", 288).End()

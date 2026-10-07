@@ -239,7 +239,7 @@ func (inst *Recorder) HttpFetch(at time.Time, c Context, row HttpFetch) (err err
 	})
 }
 
-// AdhocDataset buffers one bundle operation's row (ADR-0288 (proposed)
+// AdhocDataset buffers one bundle operation's row (ADR-0288
 // §SD5); cause names the model call whose reply asked for the operation,
 // when the dispatcher recorded one.
 func (inst *Recorder) AdhocDataset(at time.Time, c Context, cause option.Option[Cause], row AdhocDataset) (err error) {

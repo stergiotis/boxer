@@ -1,7 +1,7 @@
 package trail
 
 // AdhocDataset is one operation on an ad-hoc bundle and its outcome
-// (ADR-0288 (proposed) §SD5): a publish, republish, retract, a withdrawal
+// (ADR-0288 §SD5): a publish, republish, retract, a withdrawal
 // when the publishing window closed, a resolve, or a refusal. Who asked is
 // the row's [Origin]. When an agent's call caused it, the [Delegation],
 // [Conversation] and [Cause] are what the dispatcher recorded for that call
@@ -45,7 +45,7 @@ type AdhocDataset struct {
 	InFlight bool `lw:"adhocDatasetInFlight,bool"`
 
 	// On a publish and a republish, where the rows came from and what they
-	// are (ADR-0288 (proposed) §SD5), so a bundle is described — and its
+	// are (ADR-0288 §SD5), so a bundle is described — and its
 	// document reconstructible — from the trail alone: the document as
 	// published; the statement that produced the rows, as the publisher
 	// ran it; the datasets it read, with the alias and digest the service

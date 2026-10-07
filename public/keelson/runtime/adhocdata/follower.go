@@ -78,7 +78,7 @@ type TargetI interface {
 // OriginTargetI is a target that also records where each bound dataset
 // comes from — the name it is bound under, its alias, its bundle and the
 // task that published its live revision — so its consumer's grant checks
-// judge it by those (ADR-0288 (proposed) §SD3, §SD4). The follower tells it
+// judge it by those (ADR-0288 §SD3, §SD4). The follower tells it
 // on every bind and every revision.
 type OriginTargetI interface {
 	SetDatasetOrigin(local string, alias string, bundle string, publisherTask string)
@@ -122,7 +122,7 @@ type FollowerConfig struct {
 	// follower.
 	Aliases []string
 	// LocalNames maps an alias to the name the consumer binds it under
-	// (ADR-0288 (proposed) §SD3): the name its SQL reads in
+	// (ADR-0288 §SD3): the name its SQL reads in
 	// `keelson('…')`. An alias without an entry is bound under itself.
 	LocalNames map[string]string
 	// Reconcile overrides DefaultReconcileInterval; zero keeps it.
@@ -302,7 +302,7 @@ func (f *Follower) Follow(alias string) (added bool) {
 }
 
 // FollowAs is Follow binding the alias under local, the name the consumer's
-// SQL reads (ADR-0288 (proposed) §SD3); an empty local binds it under the
+// SQL reads (ADR-0288 §SD3); an empty local binds it under the
 // alias. It reports false, and changes nothing, for an alias already
 // followed or a local name another alias is bound under.
 func (f *Follower) FollowAs(alias string, local string) (added bool) {

@@ -1,6 +1,6 @@
 package sqlapplet
 
-// An operable bundle view (ADR-0288 (proposed) §SD8) offers agents a subset
+// An operable bundle view (ADR-0288 §SD8) offers agents a subset
 // of play's operations through the receiver's own catalog. BundleViewOps
 // declares them once per receiver type: each is play's operation under a
 // bundle_ prefix, with play's arguments plus a bundle_view argument that

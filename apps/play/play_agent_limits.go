@@ -31,7 +31,7 @@ func (inst *AgentLimitError) Error() string { return "agent limit: " + inst.Reas
 func DestinationKeelson(table string) (name string) { return "keelson:" + table }
 
 // DestinationKeelsonBundle is how a grant names an ad-hoc bundle; it
-// covers every dataset of the bundle (ADR-0288 (proposed) §SD4).
+// covers every dataset of the bundle (ADR-0288 §SD4).
 func DestinationKeelsonBundle(bundle string) (name string) {
 	return adhocdata.DestinationBundle(bundle)
 }

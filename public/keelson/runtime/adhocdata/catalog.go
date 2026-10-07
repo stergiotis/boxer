@@ -33,7 +33,7 @@ type catalogRow struct {
 }
 
 // callContext is the attested call a live revision came from (ADR-0288
-// (proposed) §SD5), as the catalogs show it; empty where no agent's call
+// §SD5), as the catalogs show it; empty where no agent's call
 // published it.
 type callContext struct {
 	task         string
@@ -112,7 +112,7 @@ func catalogTable(rows []catalogRow) *introspect.Table {
 }
 
 // BundleCatalogTableName is the keelson('…') name of the live bundle
-// catalog (ADR-0288 (proposed) §SD5).
+// catalog (ADR-0288 §SD5).
 const BundleCatalogTableName = "adhoc_bundles"
 
 type bundleCatalogRow struct {

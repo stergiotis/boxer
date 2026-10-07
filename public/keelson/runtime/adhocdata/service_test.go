@@ -216,7 +216,7 @@ func TestCheckQuotaLocked(t *testing.T) {
 	require.NoError(t, svc.checkQuotaLocked(svc.live["d0"], 1, Identity{}), "republish keeps the count")
 }
 
-// One owner cannot take the process's whole count (ADR-0288 (proposed)
+// One owner cannot take the process's whole count (ADR-0288
 // §SD9): its datasets stop at MaxDatasetsPerOwner while another owner's
 // still go in, and a republish never counts.
 func TestCheckQuotaLockedPerOwner(t *testing.T) {
@@ -376,7 +376,7 @@ func TestOpenRacingRepublish(t *testing.T) {
 
 // A window-scoped publish goes under the window's own alias, so two
 // windows of one app each hold theirs; a plain alias held by one window is
-// refused to the other (ADR-0288 (proposed) §SD3).
+// refused to the other (ADR-0288 §SD3).
 func TestWindowScopedAliasesAndOwnership(t *testing.T) {
 	svc := newTestService(t)
 	w1, w2 := Identity{App: "test.app", Instance: 3}, Identity{App: "test.app", Instance: 4}

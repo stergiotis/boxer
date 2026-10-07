@@ -1,6 +1,6 @@
 package adhocdata
 
-// Column summaries (ADR-0288 (proposed) §SD5): the pass that seals and
+// Column summaries (ADR-0288 §SD5): the pass that seals and
 // digests a stream also describes each column, so an agent learns what a
 // dataset holds without opening it and the trail describes the data, not
 // only its bytes.

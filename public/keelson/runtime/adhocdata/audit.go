@@ -12,10 +12,10 @@ import (
 
 // ErrUnattested refuses an agent-caused bundle request whose on-behalf-of
 // context the dispatcher does not confirm, or that no dispatcher can
-// confirm (ADR-0288 (proposed) §SD5).
+// confirm (ADR-0288 §SD5).
 var ErrUnattested = errors.New("on-behalf-of context not attested by the dispatcher")
 
-// The audited bundle operations and their outcomes (ADR-0288 (proposed)
+// The audited bundle operations and their outcomes (ADR-0288
 // §SD5), as the trail row and the in-process record name them.
 const (
 	AuditPublish   = "publish"
@@ -33,7 +33,7 @@ const (
 	AuditRefused = "refused"
 )
 
-// AuditRecord is one audited bundle operation (ADR-0288 (proposed) §SD5).
+// AuditRecord is one audited bundle operation (ADR-0288 §SD5).
 // Context is set when an agent's call caused the operation and the
 // dispatcher attested it.
 type AuditRecord struct {
@@ -81,7 +81,7 @@ type callContextRef struct{ c DispatcherI }
 
 // SetDispatcher installs the dispatcher that attests agent-caused bundle
 // requests and checks an agent's read against its grant (ADR-0288
-// (proposed) §SD5, §SD6). Until it is set, an agent-caused request is
+// §SD5, §SD6). Until it is set, an agent-caused request is
 // refused: nothing could confirm what it claims.
 func (inst *Service) SetDispatcher(d DispatcherI) {
 	inst.callCtx.Store(&callContextRef{c: d})

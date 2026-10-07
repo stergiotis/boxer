@@ -2,7 +2,7 @@ package play
 
 // Test support for lanes outside this package that drive a play window
 // through its operations with no client process attached — the agent
-// dispatcher's end-to-end test of ADR-0288 (proposed) M5 among them. It is
+// dispatcher's end-to-end test of ADR-0288 M5 among them. It is
 // production code by Go's rules (a _test.go symbol is invisible to other
 // packages), so it holds only what such a lane needs and nothing a window
 // uses.

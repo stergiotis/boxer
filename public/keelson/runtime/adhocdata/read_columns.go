@@ -24,7 +24,7 @@ type ColumnsResult struct {
 
 // ReadColumns returns the column summaries of the newest live dataset under
 // alias. A minimum, a maximum and a sample are values of the data, so they
-// are read as the data is (ADR-0288 (proposed) §SD5): audited, and an
+// are read as the data is (ADR-0288 §SD5): audited, and an
 // agent's read attested and held to the task's grant, or to its having
 // published the dataset. keelson('adhoc_bundles') and the trail carry only
 // the statistics that are not values.

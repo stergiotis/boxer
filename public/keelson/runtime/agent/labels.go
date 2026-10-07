@@ -121,7 +121,7 @@ func (inst *Service) AllowDestination(taskId string, epoch uint64, destination s
 var _ app.DelegationI = (*Service)(nil)
 
 // CallContext answers a host service that records agent-caused work
-// (ADR-0288 (proposed) §SD5): the task must be live at this epoch, and the
+// (ADR-0288 §SD5): the task must be live at this epoch, and the
 // call must be one the dispatcher sent to the sender's app and window,
 // in flight or answered. The answer is the dispatcher's record of the call, so a
 // sender cannot attach its work to a turn or a call that did not cause it.
