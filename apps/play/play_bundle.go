@@ -315,6 +315,8 @@ type BundleInfo struct {
 type BundleList struct {
 	Bundles []BundleInfo `desc:"the live bundles, by alias"`
 	Open    string       `json:",omitzero" desc:"the bundle this window follows, if any"`
+	// LastPublish is this window's last publish_result.
+	LastPublish *LastPublish `json:",omitzero" desc:"this window's last publish_result: the bundle, the revision it made or why it failed, or that it is in flight"`
 }
 
 // bundleListSql reads the catalog with every column as text the decoder
@@ -342,6 +344,10 @@ func addBundleOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 			}
 			out, err = listBundles(sn.bus)
 			out.Open = sn.bundle
+			if sn.lastPublish.Bundle != "" {
+				last := sn.lastPublish
+				out.LastPublish = &last
+			}
 			return
 		})
 	appops.Command(s, app.OperationSpec{Name: opOpenBundle, Version: 1,

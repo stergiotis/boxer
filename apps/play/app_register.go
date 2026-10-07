@@ -196,8 +196,10 @@ type PlayLauncher struct {
 	// bundle is the ad-hoc bundle the window follows (ADR-0288 (proposed)
 	// §SD4), from its launch config or open_bundle; nil when none.
 	bundle *bundleState
-	bus    app.BusI
-	log    zerolog.Logger
+	// publish is the window's last publish_result (play_publish_result.go).
+	publish publishState
+	bus     app.BusI
+	log     zerolog.Logger
 	// Rules is the gloss rule repository every window this launcher opens is
 	// built over (ADR-0186); nil takes DefaultRepository. The factory
 	// registered in init leaves it nil, so a deployment that links play

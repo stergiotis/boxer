@@ -301,6 +301,8 @@ type opsSnap struct {
 	// bundle is the bundle the window follows (play_bundle.go).
 	bus    app.BusI
 	bundle string
+	// lastPublish is the window's last publish_result.
+	lastPublish LastPublish
 }
 
 var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
@@ -473,6 +475,7 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 	addRewriteOps(s)
 	addDatasetOps(s)
 	addBundleOps(s)
+	addPublishResultOps(s)
 	addProjectionOps(s)
 	addDiagnosticsOps(s)
 	addChartOps(s)
@@ -632,6 +635,7 @@ func snapshotPlay(inst *PlayLauncher) (sn opsSnap) {
 	if inst.bundle != nil {
 		sn.bundle = inst.bundle.alias
 	}
+	sn.lastPublish = inst.lastPublish()
 	sn.installed, sn.probed = p.vocab.known()
 	sn.client = p.client
 	st := snapshotState(p)

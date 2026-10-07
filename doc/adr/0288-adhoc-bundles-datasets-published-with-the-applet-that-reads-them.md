@@ -592,6 +592,29 @@ Refinements:
   error's message rather than a structured field, so an unattested open
   reads "not attested by the dispatcher" in the window's notice.
 
+### 2026-10-07 — M3b publish_result
+
+Shipped: `publish_result {bundle, local_name?, sql?, tabs?, title?}`,
+consequential. The window's main result leaves as a one-dataset bundle;
+play composes its applet document — the caller's SQL over
+`keelson('<local name>')` on the panes it names, defaulting to `SELECT *`
+on the table, and the query that produced the rows as the record of
+where they came from. The publish runs off the frame, under the call's
+on-behalf-of context, and `list_bundles` reports the window's last
+publish.
+
+Refinements:
+
+- **Only a whole main result is published.** A result the row cap cut
+  short is refused, naming the cap: a dataset made of a prefix would miss
+  rows and nothing downstream could tell. A node's lane does not record
+  whether it was cut, so a node is published by running it as the main
+  result; SD4's `node` argument is not offered.
+- **Always a bundle.** `publish_result` publishes a bundle even for one
+  dataset, so what crosses carries the SQL that reads it and its source
+  query; a lone dataset without a document is not offered.
+- `publish_projection` stays as it is until M4.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — capability subjects.

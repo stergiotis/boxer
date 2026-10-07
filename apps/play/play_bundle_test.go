@@ -29,6 +29,19 @@ func fakeAppletDocs(t *testing.T) {
 	prev := appletDocParser.Load()
 	SetAppletDocParser(func(path string, src []byte) (doc AppletDoc, err error) {
 		text := string(src)
+		if strings.HasPrefix(text, "---\n") {
+			// play's own composed documents: frontmatter, then the first
+			// sql fence is the buffer.
+			for line := range strings.SplitSeq(text, "\n") {
+				if names, ok := strings.CutPrefix(line, "datasets: ["); ok {
+					doc.Datasets = strings.Split(strings.TrimSuffix(names, "]"), ", ")
+				}
+			}
+			_, rest, _ := strings.Cut(text, "```sql\n")
+			doc.Sql, _, _ = strings.Cut(rest, "\n```")
+			doc.Introspection, doc.Runnable = true, true
+			return
+		}
 		first, rest, _ := strings.Cut(text, "\n")
 		if names, ok := strings.CutPrefix(first, "-- datasets: "); ok {
 			doc.Datasets = strings.Split(names, ",")
