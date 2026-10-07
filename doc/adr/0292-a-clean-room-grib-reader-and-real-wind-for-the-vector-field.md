@@ -237,6 +237,23 @@ directory of the integration lane is `BOXER_GRIB_CORPUS`. All tests pass
 natively and under `wasip1` in Node's WASI runtime — 96, 7, 6 and 1, with the
 two table-generation tests skipping without the WMO checkouts.
 
+### 2026-10-08 — M2 built
+
+`vectorfield/gribfield` reads u and v into a `keelsonfield.Field` and refuses by
+name another parameter or level, a second run, a grid other than template 3.0,
+grid-relative components, an unpaired component and a component twice. The
+raster view lists every row's latitude for regular grids too, so the grid
+template, not that list, tells a Gaussian grid apart. `gribfield/gfsdemo`
+embeds the GFS 1.0° run of 2026-10-07 00 UTC — 34 messages, 2.7 MB, fetched
+by `scripts/dev/fetch-gfs-wind.sh`, its origin and digest in `SOURCES.txt` —
+and reads as 17 steps three hours apart on a 360 × 181 periodic grid, with a
+North Atlantic low of 20–24 m/s off southern Greenland moving east. No ecCodes
+was at hand for spot values, so the verification is the reader's own, which is
+held against ecCodes on its fixtures, plus plausibility (no missing node, peak
+speeds between 10 and 60 m/s per step). As a field family the forecast passes
+ADR-0291's parity test on steps 0, 8 and 16; the parity run moved into
+`keelsonfield/keelsonfieldtest` so that both fields use it.
+
 ## References
 
 - [ADR-0095](./0095-airgapped-build-bundle.md) — the offline build.

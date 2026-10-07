@@ -30,12 +30,18 @@ import (
 
 // Table-name suffixes of a family, after its base name.
 const (
-	SuffixOpts       = "_opts"
-	SuffixSteps      = "_steps"
-	SuffixGeometry   = "_geometry"
+	// SuffixOpts names the options table, what vector_field_opts carries.
+	SuffixOpts = "_opts"
+	// SuffixSteps names the steps statement's table.
+	SuffixSteps = "_steps"
+	// SuffixGeometry names the geometry statement's table.
+	SuffixGeometry = "_geometry"
+	// SuffixRegularity names the regularity statement's table.
 	SuffixRegularity = "_regularity"
-	SuffixWindow     = "_window"
-	SuffixSummary    = "_summary"
+	// SuffixWindow names the window statement's table.
+	SuffixWindow = "_window"
+	// SuffixSummary names the summary statement's table.
+	SuffixSummary = "_summary"
 )
 
 // TimeType is the ClickHouse type the family's t stands for; a step's text

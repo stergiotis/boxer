@@ -1,4 +1,4 @@
-package keelsonfield
+package keelsonfield_test
 
 import (
 	"context"
@@ -11,12 +11,14 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/trivialsql"
 	"github.com/stergiotis/boxer/public/science/geo/vectorfield"
+	"github.com/stergiotis/boxer/public/science/geo/vectorfield/keelsonfield"
+	"github.com/stergiotis/boxer/public/science/geo/vectorfield/keelsonfield/keelsonfieldtest"
 )
 
 func TestRegister_TheFamilyAndItsOptions(t *testing.T) {
 	reg := introspect.NewRegistry()
-	require.NoError(t, Register(reg, "storm", stormField(t)))
-	for _, s := range []string{"", SuffixOpts, SuffixSteps, SuffixGeometry, SuffixRegularity, SuffixWindow, SuffixSummary} {
+	require.NoError(t, keelsonfield.Register(reg, "storm", keelsonfieldtest.Storm(t)))
+	for _, s := range []string{"", keelsonfield.SuffixOpts, keelsonfield.SuffixSteps, keelsonfield.SuffixGeometry, keelsonfield.SuffixRegularity, keelsonfield.SuffixWindow, keelsonfield.SuffixSummary} {
 		_, ok := reg.Lookup("storm" + s)
 		assert.True(t, ok, "storm"+s)
 	}
@@ -30,8 +32,8 @@ func TestRegister_TheFamilyAndItsOptions(t *testing.T) {
 }
 
 func TestRegister_Refusals(t *testing.T) {
-	good := stormField(t)
-	for name, f := range map[string]Field{
+	good := keelsonfieldtest.Storm(t)
+	for name, f := range map[string]keelsonfield.Field{
 		"no steps":        {Name: "x"},
 		"steps and grids": {Steps: good.Steps[:2], Grids: good.Grids},
 		"out of order":    {Steps: []time.Time{good.Steps[1], good.Steps[0]}, Grids: good.Grids[:2]},
@@ -39,15 +41,7 @@ func TestRegister_Refusals(t *testing.T) {
 			West: 0, North: 90, DLon: 2, DLat: 2, Cols: 180, Rows: 91,
 			U: good.Grids[1].U, V: good.Grids[1].V}}},
 	} {
-		assert.Error(t, Register(introspect.NewRegistry(), "storm", f), name)
+		assert.Error(t, keelsonfield.Register(introspect.NewRegistry(), "storm", f), name)
 	}
-	assert.Error(t, Register(introspect.NewRegistry(), "not a name", good))
-}
-
-func TestParseInts(t *testing.T) {
-	got, err := parseInts("[0, -180,360]")
-	require.NoError(t, err)
-	assert.Equal(t, []int64{0, -180, 360}, got)
-	_, err = parseInts("0,1")
-	assert.Error(t, err)
+	assert.Error(t, keelsonfield.Register(introspect.NewRegistry(), "not a name", good))
 }

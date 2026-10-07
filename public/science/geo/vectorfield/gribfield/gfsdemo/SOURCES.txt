@@ -1,0 +1,14 @@
+gfs-10m-wind-2026100700.grib2
+
+NOAA Global Forecast System (GFS) at 1.0°, run of 2026-10-07 00 UTC:
+UGRD and VGRD at 10 m above ground, forecast hours 0 to 48 every 3 hours,
+34 messages. Cut by HTTP byte range on 2026-10-08 from
+
+    https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.20261007/00/atmos/gfs.t00z.pgrb2.1p00.fFFF
+
+using each file's .idx sidecar, by
+
+    scripts/dev/fetch-gfs-wind.sh 20261007 00 gfs-10m-wind-2026100700.grib2
+
+The messages are unmodified. GFS output is a work of the US Government.
+SHA-256: 51a2d698cbabe055e7a9936d7c762c51858b7f56e9cfcd7433cd16bdf97765a3
