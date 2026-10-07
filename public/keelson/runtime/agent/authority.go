@@ -48,7 +48,10 @@ func (inst ReachE) String() (s string) {
 // name is never admitted under a narrower ceiling.
 func ReachOf(destination string) (r ReachE) {
 	switch {
-	case strings.HasPrefix(destination, "keelson:"), strings.HasPrefix(destination, "git:"):
+	case strings.HasPrefix(destination, "keelson:"), strings.HasPrefix(destination, "keelson-bundle:"),
+		strings.HasPrefix(destination, "git:"):
+		// An ad-hoc bundle (ADR-0288 (proposed) §SD4) is datasets in this
+		// process, as a keelson table is.
 		return ReachHost
 	case strings.HasPrefix(destination, "clickhouse:"):
 		return ReachData

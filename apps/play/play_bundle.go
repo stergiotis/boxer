@@ -149,6 +149,7 @@ func (inst *PlayLauncher) closeBundle() {
 	if inst.inner != nil {
 		for _, local := range st.locals {
 			_ = inst.inner.UnbindDataset(local)
+			inst.inner.client.setDatasetOrigin(local, "", "")
 		}
 	}
 	inst.bundle = nil
@@ -254,11 +255,15 @@ func (inst *PlayLauncher) applyBundle(st *bundleState, res adhocdata.BundleResul
 		}
 		for _, local := range st.locals {
 			_ = p.UnbindDataset(local)
+			p.client.setDatasetOrigin(local, "", "")
 		}
 		st.follower = adhocdata.NewDeferredFollower(adhocdata.FollowerConfig{Bus: st.bus, Log: st.log, LocalNames: names})
 		if st.follower != nil {
 			for _, a := range aliases {
 				st.follower.FollowAs(a, names[a])
+				// A grant names the dataset by its bundle, never by the
+				// local name the document reads (§SD3).
+				p.client.setDatasetOrigin(names[a], a, st.alias)
 			}
 		}
 		st.locals = locals
@@ -355,7 +360,8 @@ func addBundleOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 		Effect:  app.OperationEffectDocument, Writes: []string{opsResSql, opsResBundle}, Agents: true,
 		Follows: []string{"the window resolves the bundle off the frame, applies it and runs the buffer; list_panes then says what each pane draws",
 			"the window moves to the introspection endpoint, where ad-hoc datasets resolve",
-			"a republish reloads the document and rebinds; a retract leaves the window waiting for the bundle"}},
+			"a republish reloads the document and rebinds; a retract leaves the window waiting for the bundle",
+			"a run reading the bundle's datasets needs keelson-bundle:<alias> in the grant"}},
 		func(inst *PlayLauncher, call app.OperationCall, in OpenBundleArgs) (out OpenBundleResult, err error) {
 			p := inst.inner
 			switch {

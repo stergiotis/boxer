@@ -256,3 +256,65 @@ func TestAnUnattestedOpenSaysWhy(t *testing.T) {
 	})
 	assert.Empty(t, l.inner.client.datasetBindings)
 }
+
+// A run reading a bundle's dataset is covered by the bundle or by the
+// dataset's global alias, never by the local name the document reads,
+// and a refusal asks for the bundle (ADR-0288 (proposed) §SD4).
+func TestABundleRunNeedsTheBundleInTheGrant(t *testing.T) {
+	fakeAppletDocs(t)
+	withQueryEndpoint(t, "http://127.0.0.1:1/query")
+	l, h, publisher := bundleLauncher(t)
+	t.Cleanup(l.closeBundle)
+	publishSalesBundle(t, publisher, "-- datasets: orders\nSELECT * FROM keelson('orders')", "orders")
+	_, err := openBundleOp(t, h, "sales")
+	require.NoError(t, err)
+	settleBundle(t, l, func() bool { return len(l.inner.client.datasetBindings) == 1 })
+	introspectionPlane(l)
+
+	stmt := "SELECT * FROM keelson('orders')"
+	refusal := refuseAgentStatement(l.inner.client, &app.OnBehalfOf{Task: "t", Destinations: []string{"keelson:orders"}}, stmt)
+	require.Error(t, refusal, "a local name means another dataset in another window")
+	assert.Contains(t, refusal.Error(), "keelson-bundle:sales")
+	assert.NoError(t, refuseAgentStatement(l.inner.client, &app.OnBehalfOf{Task: "t", Destinations: []string{"keelson-bundle:sales"}}, stmt))
+	assert.NoError(t, refuseAgentStatement(l.inner.client, &app.OnBehalfOf{Task: "t", Destinations: []string{"keelson:sales__orders"}}, stmt))
+
+	list, err := listDatasets(l.inner.client, &app.OnBehalfOf{Task: "t", Destinations: []string{"keelson-bundle:sales"}}, "", nil)
+	require.NoError(t, err)
+	require.Len(t, list.Datasets, 1)
+	assert.Equal(t, "keelson-bundle:sales", list.Datasets[0].Destination)
+	assert.True(t, list.Datasets[0].Granted)
+}
+
+// bind_dataset as binds an alias under the name the buffer reads; the
+// grant still names the alias.
+func TestBindDatasetAsALocalName(t *testing.T) {
+	withQueryEndpoint(t, "http://127.0.0.1:1/query")
+	l, h, publisher := bundleLauncher(t)
+	res := publishInts(t, publisher, "projection_w7")
+	args, err := buscodec.Encode(BindDatasetArgs{Alias: "projection_w7", As: "projection"})
+	require.NoError(t, err)
+	raw, err := h.ApplyCommand(app.OperationCall{Writer: "task:t", OnBehalfOf: &app.OnBehalfOf{Task: "t"}}, opBindDataset, args)
+	require.NoError(t, err)
+	out, err := buscodec.Decode[BindDatasetResult](raw)
+	require.NoError(t, err)
+	assert.Equal(t, "keelson('projection')", out.ReadWith)
+	assert.Equal(t, "keelson:projection_w7", out.Destination)
+	require.Eventually(t, func() bool {
+		l.follower.Sync(l.inner)
+		return l.inner.client.datasetBindings["projection"] == res.Handle
+	}, 5*time.Second, 5*time.Millisecond)
+	introspectionPlane(l)
+
+	stmt := "SELECT * FROM keelson('projection')"
+	assert.Error(t, refuseAgentStatement(l.inner.client, &app.OnBehalfOf{Task: "t", Destinations: []string{"keelson:projection"}}, stmt))
+	assert.NoError(t, refuseAgentStatement(l.inner.client, &app.OnBehalfOf{Task: "t", Destinations: []string{"keelson:projection_w7"}}, stmt))
+}
+
+// introspectionPlane makes the window's dispatch decide the introspection
+// plane, as a host does for a window on its loopback endpoint, so the
+// agent limits judge the datasets alone.
+func introspectionPlane(l *PlayLauncher) {
+	l.inner.client.SetResolver(&recordingResolver{answer: func(_ string, _ string) dispatchDecision {
+		return dispatchDecision{targetURL: "http://127.0.0.1:1/query", class: dispatchClassIntrospection}
+	}})
+}

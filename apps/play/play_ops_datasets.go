@@ -46,6 +46,7 @@ const (
 // BindDatasetArgs is bind_dataset's argument.
 type BindDatasetArgs struct {
 	Alias string `desc:"the alias the dataset was published under, as its publisher names it; never a handle"`
+	As    string `json:",omitzero" desc:"the name the buffer reads it by, keelson('<as>'), when it is not the alias (ADR-0288 local names); the grant still names it by its alias"`
 }
 
 // BindDatasetResult is bind_dataset's result.
@@ -106,9 +107,9 @@ func addDatasetOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 		Follows: []string{"the window resolves the alias off the frame and binds the newest live dataset under it; list_datasets lists it, with why it waits until it is bound",
 			"until a dataset is live under the alias the window says it waits for it, and binds one when it is published",
 			"the binding follows republishes and retracts for the life of the window; binding runs nothing",
-			"a run reading it needs keelson:<alias> in the grant"}},
+			"a run reading it needs keelson:<alias> in the grant, whatever name it is bound under"}},
 		func(inst *PlayLauncher, call app.OperationCall, in BindDatasetArgs) (out BindDatasetResult, err error) {
-			return inst.bindDatasetAlias(in.Alias)
+			return inst.bindDatasetAlias(in.Alias, in.As)
 		})
 	appops.ExternalRead(s, app.OperationSpec{Name: opListDatasets, Version: 1,
 		Summary: "list the ad-hoc datasets bound in this window: the alias to read with keelson('<alias>'), the destination a run needs, and their columns",
@@ -145,8 +146,13 @@ func listDatasets(client *Client, obo *app.OnBehalfOf, only string, waiting map[
 		aliases, out.Truncated = aliases[:datasetMaxListed], true
 	}
 	for _, alias := range aliases {
-		d := DatasetInfo{Alias: alias, Destination: DestinationKeelson(alias)}
-		d.Granted = obo == nil || slices.Contains(obo.Destinations, d.Destination)
+		n := client.datasetNameOf(alias)
+		dests := n.destinations()
+		d := DatasetInfo{Alias: alias, Destination: dests[0]}
+		d.Granted = obo == nil
+		for _, dest := range dests {
+			d.Granted = d.Granted || slices.Contains(obo.Destinations, dest)
+		}
 		stmt := "SELECT * FROM keelson('" + alias + "') LIMIT 0"
 		residual, _ := client.buildResidualOffline(stmt, nil)
 		dec := client.previewDispatch(residual, "")
@@ -188,10 +194,11 @@ func datasetColumns(client *Client, stmt string, dec dispatchDecision, obo *app.
 	return
 }
 
-// bindDatasetAlias follows alias in this window, building the follower when
-// the launch config declared none. It runs on the render goroutine and
-// resolves nothing there: the follower asks on its next Sync's worker round.
-func (inst *PlayLauncher) bindDatasetAlias(alias string) (out BindDatasetResult, err error) {
+// bindDatasetAlias follows alias in this window under the name as (the
+// alias when empty), building the follower when the launch config declared
+// none. It runs on the render goroutine and resolves nothing there: the
+// follower asks on its next Sync's worker round.
+func (inst *PlayLauncher) bindDatasetAlias(alias string, as string) (out BindDatasetResult, err error) {
 	p := inst.inner
 	switch {
 	case p == nil:
@@ -200,11 +207,20 @@ func (inst *PlayLauncher) bindDatasetAlias(alias string) (out BindDatasetResult,
 		return out, app.RefuseOperation("the window has no endpoint")
 	case !validDatasetIdentifier(alias):
 		return out, app.RefuseOperation("an alias is a bare identifier: letters, digits and _, at most 64 bytes")
-	case strings.HasPrefix(alias, "adhoc_"):
+	case adhocdata.IsHandle(alias):
 		return out, app.RefuseOperation("that is a dataset handle; bind the alias its publisher names")
+	case as != "" && !validDatasetIdentifier(as):
+		return out, app.RefuseOperation("as is a bare identifier: letters, digits and _, at most 64 bytes")
 	}
-	out = BindDatasetResult{Alias: alias, ReadWith: "keelson('" + alias + "')", Destination: DestinationKeelson(alias)}
-	if slices.Contains(p.client.DatasetAliases(), alias) {
+	local := as
+	if local == "" {
+		local = alias
+	}
+	out = BindDatasetResult{Alias: alias, ReadWith: "keelson('" + local + "')", Destination: DestinationKeelson(alias)}
+	if slices.Contains(p.client.DatasetAliases(), local) {
+		if n := p.client.datasetNameOf(local); n.alias != alias {
+			return out, app.RefuseOperation("the name " + local + " is bound to " + n.alias + " already; bind this alias under another name with as")
+		}
 		out.Bound = true
 		return
 	}
@@ -214,7 +230,14 @@ func (inst *PlayLauncher) bindDatasetAlias(alias string) (out BindDatasetResult,
 			return out, app.RefuseOperation("the window has no bus to resolve datasets over")
 		}
 	}
-	inst.follower.Follow(alias)
+	if !inst.follower.FollowAs(alias, local) {
+		if inst.follower.LocalName(alias) != local {
+			return out, app.RefuseOperation("this window follows " + alias + " under another name already, or another alias holds " + local)
+		}
+	}
+	if local != alias {
+		p.client.setDatasetOrigin(local, alias, "")
+	}
 	out.Waiting = inst.follower.Waiting()[alias]
 	return
 }

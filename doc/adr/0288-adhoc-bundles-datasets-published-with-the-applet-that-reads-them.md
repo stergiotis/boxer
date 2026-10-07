@@ -295,7 +295,7 @@ takes no statement.
   `MaxDatasets`.
 - **M2 — `adhoc.read` and the gate:** ✓ `ReadAllE`, keelson.query refusing
   sealed tables, local names on `Follower`.
-- **M3 — play:** `PlayLaunch.Bundle`, `list_bundles`, `open_bundle`,
+- **M3 — play:** ✓ `PlayLaunch.Bundle`, `list_bundles`, `open_bundle`,
   `publish_result`, `bind_dataset` with `as`, the `keelson-bundle:`
   destination.
 - **M4 — Publishers migrated;** `publish_projection` over `publish_result`.
@@ -614,6 +614,24 @@ Refinements:
   dataset, so what crosses carries the SQL that reads it and its source
   query; a lone dataset without a document is not offered.
 - `publish_projection` stays as it is until M4.
+
+### 2026-10-07 — M3c local names in play and the bundle grant
+
+Shipped: `bind_dataset {alias, as}`; the `keelson-bundle:<alias>` grant
+destination; the chat's guidance that data moves between windows as
+bundles. M3 is complete.
+
+Refinements:
+
+- **A grant never names a local name.** `keelson('orders')` in a bundle
+  window and in another window are different datasets, so play keeps,
+  per bound name, the dataset's global alias and bundle; a run's check
+  accepts `keelson-bundle:<bundle>` or `keelson:<global alias>`, and a
+  refusal asks for the bundle. `list_datasets` reports the same
+  destination.
+- **A bundle destination is host reach.** The dispatcher's ceiling took
+  an unknown destination class as network reach, the widest; a bundle is
+  datasets in this process, as a keelson table is, and is now host reach.
 
 ## References
 

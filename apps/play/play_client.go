@@ -137,6 +137,18 @@ type Client struct {
 	// render thread. keelson('<alias>') rewrites to keelson('<handle>')
 	// before the request leaves play; unbound names pass through.
 	datasetBindings map[string]string
+	// datasetOrigins maps a bound name to where the dataset comes from,
+	// when the name is a local one (ADR-0288 (proposed) §SD3): its global
+	// alias and the bundle it belongs to. A grant names a dataset by
+	// those, never by a local name, which means another dataset in
+	// another window. Guarded by mu.
+	datasetOrigins map[string]datasetOrigin
+}
+
+// datasetOrigin is where a dataset bound under a local name comes from.
+type datasetOrigin struct {
+	alias  string
+	bundle string
 }
 
 func NewClient(cfg ClientConfig, httpClient *http.Client) *Client {
@@ -706,17 +718,64 @@ func (inst *Client) buildResidualWith(sql string, observe func(passreg.ApplyObse
 
 // datasetAliasOf maps each bound dataset handle to its alias: the name a
 // grant lists, since the handle is ephemeral and the person never sees it.
-func (inst *Client) datasetAliasOf() (aliasOf map[string]string) {
+func (inst *Client) datasetAliasOf() (aliasOf map[string]datasetName) {
 	inst.mu.RLock()
 	defer inst.mu.RUnlock()
 	if len(inst.datasetBindings) == 0 {
 		return
 	}
-	aliasOf = make(map[string]string, len(inst.datasetBindings))
-	for alias, handle := range inst.datasetBindings {
-		aliasOf[handle] = alias
+	aliasOf = make(map[string]datasetName, len(inst.datasetBindings))
+	for local, handle := range inst.datasetBindings {
+		aliasOf[handle] = inst.datasetNameLocked(local)
 	}
 	return
+}
+
+// datasetName is a bound dataset as a grant names it: the name the buffer
+// reads, its global alias, and its bundle when it has one.
+type datasetName struct {
+	local  string
+	alias  string
+	bundle string
+}
+
+// destinations are the grant entries that cover the dataset, the one a
+// refusal asks for first.
+func (inst datasetName) destinations() (dests []string) {
+	if inst.bundle != "" {
+		dests = append(dests, DestinationKeelsonBundle(inst.bundle))
+	}
+	return append(dests, DestinationKeelson(inst.alias))
+}
+
+func (inst *Client) datasetNameLocked(local string) (n datasetName) {
+	n = datasetName{local: local, alias: local}
+	if o, ok := inst.datasetOrigins[local]; ok {
+		n.alias, n.bundle = o.alias, o.bundle
+	}
+	return
+}
+
+// datasetNameOf is the grant's view of a bound name.
+func (inst *Client) datasetNameOf(local string) (n datasetName) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	return inst.datasetNameLocked(local)
+}
+
+// setDatasetOrigin records that local stands for the dataset published
+// under alias, in bundle when it is not empty; an empty alias forgets it.
+func (inst *Client) setDatasetOrigin(local string, alias string, bundle string) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if alias == "" {
+		delete(inst.datasetOrigins, local)
+		return
+	}
+	if inst.datasetOrigins == nil {
+		inst.datasetOrigins = make(map[string]datasetOrigin)
+	}
+	inst.datasetOrigins[local] = datasetOrigin{alias: alias, bundle: bundle}
 }
 
 // applyExprSplice substitutes the buffer's SQL-valued placeholders (ADR-0187
