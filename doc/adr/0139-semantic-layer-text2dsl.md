@@ -139,14 +139,15 @@ while giving the structured parts real validation.
 
 We will build a **semantic layer**: a per-scope, file-based artifact that
 grounds text2dsl generation, validated by the nanopass grammar, rendered
-deterministically into prompts, and consumed by every generation surface
-(the `boxer text2sql` CLI today, the ADR-0120 Ask panel next). Proposed
-settled decisions:
+deterministically into prompts, and consumed by every model caller that
+composes a query (a chat coordinator driving play through its operations,
+ADR-0270, is the one that exists). Proposed settled decisions:
 
 - **SD1 — Engine-side ownership.** `public/db/clickhouse/semlayer`, with
   no dependency on play; consumers reach it through a small
-  render/validate API. The SD8 tool registry lives beside the
-  orchestrator. *(Settled 2026-07-22.)*
+  render/validate API. *(Settled 2026-07-22.)* *(Revised 2026-10-07:)*
+  the SD8 tools are the calling app's operations (ADR-0270); the
+  orchestrator they were first placed beside is deleted.
 - **SD2 — Artifact form (O3).** One markdown file per scope. Fenced,
   machine-parsed blocks declare: *measures* (name, description, DSL
   expression), *dimensions* (name, description, column or expression,
@@ -178,8 +179,7 @@ settled decisions:
   fragments as a later tier.
 - **SD6 — Content tiers.**
   - **T0 auto-derived (always on, zero authoring):** the `system.columns`
-    harvest — tables, columns, types, comments, key markers (v1
-    text2sql's query, reused).
+    harvest — tables, columns, types, comments, key markers.
   - **T1 authored overlay (the v0 deliverable):** measures, dimensions,
     certified joins, disambiguation rules, routing hints — dogfooded with
     a real layer for the demo dataset.
@@ -253,7 +253,12 @@ settled decisions:
   in the app's process — which is what keeps the service stateless per
   turn. *(Built 2026-09-23 under ADR-0254 M4:)* `ToolClientI` and
   `ToolExecutorI` in the orchestrator, the budget, the history kept
-  across repair attempts; play's executor is the first.
+  across repair attempts; play's executor is the first. *(Revised
+  2026-10-07:)* that orchestrator is deleted with play's Model tab
+  (ADR-0254, update of that date). The loop that remains is the chat's
+  ([ADR-0265](./0265-chat-app-over-retained-model-calls.md)), with an
+  app's operations as its tools, so the layer's tools are operations and
+  the repair loop is the model's own use of `validate_sql`.
 
 ## Alternatives
 
@@ -267,8 +272,8 @@ settled decisions:
 - **Pure prose (O1).** Rejected as the artifact — silent semantic failure
   is the production killer, and an unvalidated layer rots into one more
   silent-failure source; prose survives *inside* O3 where it belongs.
-- **Play-internal grounding assembler.** Rejected: multiple consumers
-  exist today (CLI) and next (panel); this is an engine concern.
+- **Play-internal grounding assembler.** Rejected: the consumer is any
+  model caller, not play alone; this is an engine concern.
 - **Table-centric integration over text-to-SQL** (e.g. RUBICON,
   arXiv:2604.21413, the authors' own proposal): reject the single-LLM
   text pipeline for constrained per-source query interfaces and a
@@ -311,8 +316,8 @@ settled decisions:
   pipelines report up to ~19–21 calls per query); a per-question call
   budget and cancellation are part of the contract, not afterthoughts.
 - Handles-in-v0 couples the engine to leeway handle resolution from the
-  first release — the CLI inherits the resolution pass binding, not only
-  play.
+  first release — every consumer inherits the resolution pass binding,
+  not only play.
 
 ### Neutral
 
@@ -336,13 +341,16 @@ left it implicit. Revised in place 2026-09-23 when ADR-0120 was withdrawn:
 SD8's executor and SD9's client are placed by ADR-0254 (the tools run
 under the calling app's grants; the client rides `llm.complete`), and the
 layer's entries are an introspection table. Sequencing, also settled: the
-engine lands first and the `boxer text2sql` CLI proves it. Revised in place
+engine lands first. Revised in place
 2026-10-02: play's `ask` transformation was withdrawn in favour of a chat
 coordinator driving play (ADR-0254, update of that date), so the layer's
 in-app consumer is whichever model caller reads it — the coordinator through
 play's `describe_table`, or `keelson('semlayer')` under SD8. ADR-0254
 was accepted on its own (2026-09-23); this ADR awaits review for acceptance
 separately, with the layer (SD1–SD7) still unbuilt — see `## Updates`.
+Revised in place 2026-10-07: the `text2sql` packages, the `boxer text2sql`
+CLI and the orchestrator that held SD9's loop are deleted; the SD8 tools
+survive as play's operations.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
@@ -354,7 +362,7 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 The 2026-09-23 revision of `## Status` placed SD8 and SD9 under
 [ADR-0254](./0254-model-inference-as-a-keelson-capability.md) without a dated
 entry; this records it. Built under ADR-0254 (M4): the SD9 in-conversation
-tool loop in `public/db/clickhouse/text2sql2/orchestrator`, and the SD8 tools
+tool loop in the `text2sql2` orchestrator (deleted 2026-10-07), and the SD8 tools
 (`list_tables`, `describe_table`, `validate_sql`, `keelson_query`) executed
 under the calling app's grants. ADR-0254 §SD5 owns that executor; SD8's
 "guarded executor" is its manifest guard. Not built: the layer itself —
@@ -363,6 +371,17 @@ it exists, play's `fix this error` grounds on a schema harvest of the pinned
 endpoint (ADR-0254 M3), and a coordinator on play's `list_tables` and
 `describe_table` operations, which carry T0 and T2a — the catalog and the
 leeway handles — and none of the authored tier (ADR-0270, 2026-10-02).
+
+### 2026-10-07 — the orchestrator and both text2sql packages are deleted
+
+With play's Model tab removed (ADR-0254, update of this date), nothing
+called `text2sql2`'s orchestrator, and `boxer text2sql` was an undocumented
+CLI that called a local Ollama server directly, beside the `llm` service.
+Both packages are deleted. `Validate` moved into play as the check behind
+`validate_sql`. SD1 and SD9 are revised in place: the tools are an app's
+operations and the loop is the chat's. T0 no longer names v1's harvest
+query; it was a few lines over `system.columns`, and a layer that needs it
+writes it again.
 
 ## References
 
@@ -390,5 +409,5 @@ leeway handles — and none of the authored tier (ADR-0270, 2026-10-02).
   Stonebraker & Chen, "If You Think You Can Do Real-World Text-to-SQL"
   (CACM, 2026-07), for the benchmark-vs-production gap;
   dbt-labs/dbt-llm-sl-bench (vendor-reported).
-- Engine: `public/db/clickhouse/text2sql2/`, `public/db/clickhouse/text2sql`
-  (v1 harvest query).
+- Tools: play's `list_tables`, `describe_table` and `validate_sql`
+  operations (`apps/play/play_ops_schema.go`).

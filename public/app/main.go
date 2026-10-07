@@ -36,7 +36,6 @@ import (
 	"github.com/stergiotis/boxer/public/config/env/envdoc"
 	badgercli "github.com/stergiotis/boxer/public/db/badger/cli"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/genbuildertest"
-	"github.com/stergiotis/boxer/public/db/clickhouse/text2sql"
 	"github.com/stergiotis/boxer/public/dev"
 	"github.com/stergiotis/boxer/public/docgen"
 	"github.com/stergiotis/boxer/public/gov"
@@ -118,7 +117,6 @@ func mainC() (exitCode int) {
 			gov.NewCliCommand(),
 			finddivisions.NewCliCommand(),
 			code.NewCliCommand(genbuildertest.NewCliCommand()),
-			text2sql.NewCliCommand(),
 			badgercli.NewCliCommandBadger(),
 			// Ported from pebble2impl app/commands (P9). cbor/leeway/observability/
 			// dev/env(=envgen)/gov are intentionally omitted as boxer wires them

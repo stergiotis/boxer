@@ -23,11 +23,11 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
-	"github.com/stergiotis/boxer/public/db/clickhouse/text2sql2/orchestrator"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
+	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwextract"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 )
@@ -237,7 +237,7 @@ func validateStatement(client *Client, obo *app.OnBehalfOf, stmt string) (out Va
 	if err = statementBounds(stmt); err != nil {
 		return
 	}
-	out.Canonical, err = orchestrator.Validate(stmt)
+	out.Canonical, err = canonicalStatement(stmt)
 	if err != nil {
 		out.Error, err = err.Error(), nil
 		return
@@ -307,6 +307,22 @@ func unresolvedHandles(client *Client, stmt string) (out []string) {
 		}
 		out = append(out, line)
 	}).Run(stmt)
+	return
+}
+
+// canonicalStatement checks stmt against boxer's grammar and returns its
+// canonical form, which must parse in turn under the canonical grammar.
+func canonicalStatement(stmt string) (canonical string, err error) {
+	if _, err = nanopass.Parse(stmt); err != nil {
+		return "", eh.Errorf("SQL syntax error: %w", err)
+	}
+	canonical, err = passes.CanonicalizeFull(128).Run(stmt)
+	if err != nil {
+		return "", eh.Errorf("normalization error: %w", err)
+	}
+	if _, err = nanopass.ParseCanonical(canonical); err != nil {
+		return "", eh.Errorf("canonical validation error: %w", err)
+	}
 	return
 }
 

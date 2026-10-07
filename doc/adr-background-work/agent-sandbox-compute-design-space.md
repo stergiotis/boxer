@@ -719,8 +719,11 @@ the tree for other reasons:
   ([ADR-0094](../adr/0094-keelson-introspection-tables.md));
 - publishing a computed table without storing it
   ([ADR-0240](../adr/0240-adhoc-datasets-v2-sealed-store-owned-capability.md));
-- a text-to-SQL orchestrator
-  ([`github.com/stergiotis/boxer/public/db/clickhouse/text2sql2`](../../public/db/clickhouse/text2sql2/)).
+- a chat whose model drives an app's windows through the app's operations
+  ([ADR-0265](../adr/0265-chat-app-over-retained-model-calls.md),
+  [ADR-0269](../adr/0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md)).
+  The text-to-SQL orchestrator listed here when this survey was written was
+  deleted on 2026-10-07.
 
 What they lack is a boundary. A spike on 2026-09-27, on one machine and with
 data kept outside the tree, ran `clickhouse-local` under rootless gVisor with

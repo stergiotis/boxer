@@ -1,6 +1,7 @@
 package play
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -51,6 +52,15 @@ func TestACatalogReadNeedsTheEndpointDestination(t *testing.T) {
 // validate_sql checks the grammar without reaching anything; the rewrite,
 // which reads the endpoint's catalog, waits for the destination, and a run's
 // verdict comes with it.
+func TestCanonicalStatement(t *testing.T) {
+	canonical, err := canonicalStatement("SELECT a FROM t WHERE b = 1")
+	require.NoError(t, err)
+	assert.Contains(t, strings.ToUpper(canonical), "SELECT")
+	_, err = canonicalStatement("SELECT FROM WHERE")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "syntax")
+}
+
 func TestValidateSqlChecksWithoutRunning(t *testing.T) {
 	l, h := opsLauncher(t)
 	l.inner.client = NewClient(ClientConfig{URL: "http://ch.example:8123/"}, nil)

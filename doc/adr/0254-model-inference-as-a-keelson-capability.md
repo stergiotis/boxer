@@ -498,7 +498,7 @@ the request sets fails the encode, and a provider that rejects members it does
 not know fails the call. The call record does not keep the members, as it
 keeps none of the sampling settings.
 
-### 2026-10-07 — play's Model tab is removed
+### 2026-10-07 — play's Model tab and the text2sql packages are removed
 
 §SD6's play consumer is withdrawn. After the 2026-10-02 update it held
 `explain` and `fix this error`, both of which a chat driving a shared play
@@ -510,6 +510,19 @@ ceiling stops at *edit* ([ADR-0280](./0280-a-ceiling-on-what-a-chats-model-may-d
 Play no longer declares `llm.complete` or the `keelson.query` grant on
 `sql_passes`; dock tab id 34 is retired. mdedit remains the prompt-book
 consumer.
+
+The tab was the only caller of the `text2sql2` orchestrator, so §SD6's
+"compile-only through the text2sql2 orchestrator" and §SD5's loop in it have
+no subject left. The `text2sql2` and `text2sql` packages are deleted; the
+Surfaces row and the References entry that name the orchestrator describe
+code that is gone. `Validate` moved into play as the check behind
+`validate_sql`. The `boxer text2sql` CLI §SD6 left on `openaichat`
+in fact called a local Ollama server directly, beside this service, and
+goes too. The service still returns tool calls unexecuted for the caller
+to run, as §SD5 decided; the loop that remains is the chat's
+([ADR-0265](./0265-chat-app-over-retained-model-calls.md)), whose tools are
+other apps' operations run under a task grant
+([ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md)).
 
 ## References
 
