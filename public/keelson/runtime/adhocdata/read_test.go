@@ -141,3 +141,8 @@ func TestAnAgentsReadOfABundleNeedsTheBundle(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []int64{7}, int64Values(t, got.ArrowIPCStream))
 }
+
+func TestReadDestinations(t *testing.T) {
+	assert.Equal(t, []string{"keelson-bundle:sales", "keelson:sales__orders"}, ReadDestinations("sales__orders"))
+	assert.Equal(t, []string{"keelson:stats_w3"}, ReadDestinations("stats_w3"))
+}

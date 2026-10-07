@@ -35,6 +35,19 @@ func DestinationDataset(alias string) (name string) { return "keelson:" + alias 
 // dataset of it.
 func DestinationBundle(bundle string) (name string) { return "keelson-bundle:" + bundle }
 
+// ReadDestinations are the grant destinations that would cover a read of
+// alias, the one a refusal asks for first: the bundle a member's alias
+// names (`<bundle>__<local>`), then the alias itself. An app checks them
+// against app.OnBehalfOf.Destinations to refuse an agent's read in its
+// command, before any bus round trip; the service's check at the read
+// stays the one that decides.
+func ReadDestinations(alias string) (dests []string) {
+	if bundle, _, ok := strings.Cut(alias, BundleAliasSeparator); ok && bundle != "" {
+		dests = append(dests, DestinationBundle(bundle))
+	}
+	return append(dests, DestinationDataset(alias))
+}
+
 // GrantError is a read an agent's call caused that its task's grant does
 // not cover (§SD6). Destination is what the grant would have to list; an
 // app surfaces it with app.RefuseForDestinations so the coordinator can
