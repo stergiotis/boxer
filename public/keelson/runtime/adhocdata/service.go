@@ -45,8 +45,15 @@ const (
 	PerDatasetMaxBytes = 256 << 20 // 256 MiB
 	// StoreMaxBytes caps the live datasets' ciphertext together.
 	StoreMaxBytes = 1 << 30 // 1 GiB
-	// MaxDatasets caps how many datasets may be live at once.
-	MaxDatasets = 64
+	// MaxDatasets caps how many datasets may be live at once in the
+	// process; each holds a sealed file open.
+	MaxDatasets = 1024
+	// MaxDatasetsPerOwner caps the datasets one owner — a window, or an
+	// app for what it keeps after close — may hold live, so a receiver
+	// that publishes a bundle per item it shows cannot take the process's
+	// whole count (ADR-0288 (proposed) §SD9). The byte quota bounds the
+	// store whatever the count.
+	MaxDatasetsPerOwner = 256
 )
 
 // ServiceAppId is the synthetic identity the capability service speaks
@@ -392,7 +399,7 @@ func (inst *Service) Publish(in PublishInput) (res PublishResult, err error) {
 	}
 	err = inst.checkSoloPublishLocked(existing, in.Alias)
 	if err == nil {
-		err = inst.checkQuotaLocked(existing, uint64(len(in.ArrowIPCStream)))
+		err = inst.checkQuotaLocked(existing, uint64(len(in.ArrowIPCStream)), in.By)
 	}
 	inst.mu.RUnlock()
 	if err != nil {
@@ -433,7 +440,7 @@ func (inst *Service) Publish(in PublishInput) (res PublishResult, err error) {
 	}
 	quErr := inst.checkSoloPublishLocked(rec, in.Alias)
 	if quErr == nil {
-		quErr = inst.checkQuotaLocked(rec, nbytes)
+		quErr = inst.checkQuotaLocked(rec, nbytes, in.By)
 	}
 	if quErr != nil {
 		inst.mu.Unlock()
@@ -703,11 +710,15 @@ func (inst *Service) unload(handle string, ceiling time.Duration) {
 }
 
 // checkQuotaLocked verifies the count and byte budgets for a publish of
-// newBytes, treating existing (nil for a new dataset) as being replaced.
-// The caller holds inst.mu.
-func (inst *Service) checkQuotaLocked(existing *record, newBytes uint64) (err error) {
+// newBytes by by, treating existing (nil for a new dataset) as being
+// replaced. The caller holds inst.mu.
+func (inst *Service) checkQuotaLocked(existing *record, newBytes uint64, by Identity) (err error) {
 	if existing == nil && len(inst.live) >= MaxDatasets {
 		return eb.Build().Int("quotaCount", MaxDatasets).Errorf("adhocdata: dataset count quota exceeded")
+	}
+	if existing == nil && !by.IsRuntime() && inst.ownedCountLocked(by) >= MaxDatasetsPerOwner {
+		return eb.Build().Int("quotaCount", MaxDatasetsPerOwner).Str("app", string(by.App)).Uint64("instance", by.Instance).
+			Errorf("per-owner dataset count quota exceeded")
 	}
 	total := inst.totalBytes
 	if existing != nil {
@@ -908,3 +919,14 @@ func IsHandle(name string) (yes bool) {
 // validAlias reports whether s is a bare identifier usable as a stable
 // alias in an applet's frontmatter and rewrite — the table-name rule.
 func validAlias(s string) bool { return introspect.ValidTableName(s) }
+
+// ownedCountLocked counts the live datasets owned by by. The caller holds
+// inst.mu.
+func (inst *Service) ownedCountLocked(by Identity) (n int) {
+	for _, r := range inst.live {
+		if r.owner == by {
+			n++
+		}
+	}
+	return
+}

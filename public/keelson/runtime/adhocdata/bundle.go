@@ -398,6 +398,14 @@ func (inst *Service) admitBundleLocked(in BundlePublishInput, newAliases []strin
 	if len(inst.live)-replacedCount+len(newAliases) > MaxDatasets {
 		return eb.Build().Int("quotaCount", MaxDatasets).Errorf("dataset count quota exceeded")
 	}
+	owner := in.By
+	if old != nil {
+		owner = old.owner
+	}
+	if !owner.IsRuntime() && inst.ownedCountLocked(owner)-replacedCount+len(newAliases) > MaxDatasetsPerOwner {
+		return eb.Build().Int("quotaCount", MaxDatasetsPerOwner).Str("app", string(owner.App)).Uint64("instance", owner.Instance).
+			Errorf("per-owner dataset count quota exceeded")
+	}
 	if inst.totalBytes-replacedBytes+newBytes > StoreMaxBytes {
 		return eb.Build().Int("quotaBytes", StoreMaxBytes).Errorf("store byte quota exceeded")
 	}

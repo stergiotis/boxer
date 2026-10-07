@@ -482,8 +482,10 @@ func TestClosingTheWindowRetractsBothHandles(t *testing.T) {
 // just made tighter. A handle minted but not recorded is one nothing can
 // retract: Unmount cannot see it, and every retry mints another.
 //
-// Driven by the MaxDatasets quota: fill the service to one slot short, so
-// the Go publish takes the last slot and the ClickHouse publish is refused.
+// Driven by the count quota: fill the window's share to one slot short
+// (MaxDatasetsPerOwner, which one window meets before the process's
+// MaxDatasets), so the Go publish takes the last slot and the ClickHouse
+// publish is refused.
 func TestPartialPublishRetainsTheHandleItMinted(t *testing.T) {
 	rig := setupEvalRig(t)
 	inst := rig.app
@@ -493,14 +495,14 @@ func TestPartialPublishRetainsTheHandleItMinted(t *testing.T) {
 	filler, err := encodeChExtract([]chExtractRow{{MatchIdx: 0, GroupIdx: 0, Text: "x"}})
 	require.NoError(t, err)
 	bus := inst.busSnapshot()
-	for i := range adhocdata.MaxDatasets - 1 {
+	for i := range adhocdata.MaxDatasetsPerOwner - 1 {
 		_, pErr := adhocdata.PublishRequest(bus, adhocdata.PublishInput{
 			Alias:          fmt.Sprintf("filler_%d", i),
 			ArrowIPCStream: filler,
 		})
 		require.NoErrorf(t, pErr, "filler %d", i)
 	}
-	require.Equal(t, adhocdata.MaxDatasets-1, rig.svc.LiveCount())
+	require.Equal(t, adhocdata.MaxDatasetsPerOwner-1, rig.svc.LiveCount())
 
 	snap, err := inst.snapshotEval()
 	require.NoError(t, err)

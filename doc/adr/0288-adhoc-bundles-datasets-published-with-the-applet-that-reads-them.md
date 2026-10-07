@@ -161,8 +161,8 @@ takes no statement.
   theirs. The dataset service does not take the rest from the publisher: it
   asks the host's dispatcher through a new `app.CallContextI` (wired by
   hostboot as `app.DelegationI` is), which answers for a call only when the
-  call is live in that task at that epoch and was routed to the requesting
-  sender and instance, and returns what the dispatcher recorded for it:
+  dispatcher sent it to the requesting sender and instance, in a task
+  still live at that epoch, and returns what the dispatcher recorded for it:
   the **conversation** (the chat session the task was requested from), the
   **turn**, the model call, the provider's tool-call id and index, the
   operation and the coordinator. A context the dispatcher does not confirm
@@ -170,6 +170,14 @@ takes no statement.
   app's own and is audited as such. Turn and conversation are therefore
   what the coordinator stated to the dispatcher (ADR-0277 §SD1), never what
   the publishing app claims.
+
+  **The attribution outlives the call.** The call need not be in flight:
+  an operation that answers at once and publishes when its work finishes —
+  a run, an evaluation, anything longer than an agent call's timeout —
+  publishes under the call that started it, for as long as the task is
+  live. The app keeps the `OnBehalfOf` of the call for the work it starts
+  and passes it with each request that work causes. Work that outlives its
+  task is the app's own.
 
   The audit is a new archetype on ADR-0277's trail, written through the
   host's `trail.Recorder` like every other row there, one row per operation
@@ -220,6 +228,16 @@ takes no statement.
   every bundle opens in every receiver. The view keeps "Open in
   Playground", which opens the bundle in a full play window.
 
+  **A view does its work on the frame it is drawn.** A receiver that culls
+  views out of sight or keeps them in tabs may not call a view's frame for
+  many frames. Nothing reaches an undrawn view: the follower's events and
+  answers wait in its mailbox, and the frame that next draws the view
+  syncs them — a dataset revision, a document revision, a retract —
+  before it draws, so the view shows the bundle as it stands, not the
+  sequence it missed. An idle view costs only its draw; its frame cost is
+  measured (M6) so a receiver can choose between a view and a widget of
+  its own.
+
 - **SD8 — A bundle view is plain or operable.** The receiver picks one per
   view at construction (`Operable` in the view's config), and the manifest
   says whether it can be operable.
@@ -254,6 +272,18 @@ takes no statement.
   read the drawn chart — is operable. Anything beyond the subset is reached by
   opening the bundle in play.
 
+- **SD9 — Many bundles per receiver.** A receiver may publish a bundle per
+  item it shows — a notebook, one per output cell — so the count quota
+  has two levels: `MaxDatasets` per process, which bounds the sealed files
+  held open, and `MaxDatasetsPerOwner` per owner (the window, or the app
+  for what it keeps after close), so one receiver cannot take the
+  process's whole count. The byte quota (`StoreMaxBytes`) bounds the store
+  whatever the count. A many-bundle receiver keeps one bundle alias per
+  item, republishes it when the item changes — a republish replaces, it
+  does not add — and retracts it when the item goes; it does not mark
+  per-item bundles `KeepAfterClose`, so closing the window releases them
+  all.
+
 ### Milestones
 
 - **M1 — Bundle records in `adhocdata`:** atomic publish, republish and
@@ -261,6 +291,8 @@ takes no statement.
 - **M1a — Audit:** ✓ `app.CallContextI` on the dispatcher, attestation on
   every bundle request, the `AdhocDataset` archetype on the trail, the
   context columns on `keelson('adhoc')`.
+- **M1b — Two-level count quota (SD9):** ✓ `MaxDatasetsPerOwner` beside
+  `MaxDatasets`.
 - **M2 — `adhoc.read` and the gate:** ✓ `ReadAllE`, keelson.query refusing
   sealed tables, local names on `Follower`.
 - **M3 — play:** `PlayLaunch.Bundle`, `list_bundles`, `open_bundle`,
@@ -269,7 +301,9 @@ takes no statement.
 - **M4 — Publishers migrated;** `publish_projection` over `publish_result`.
 - **M5 — The headless end-to-end test** of the Verification plan.
 - **M6 — Bundle views:** `NewBundleView`, `BundleViewCaps`, the document
-  check in `PublishBundleE`, plain views; adhocdemo becomes a receiver.
+  check in `PublishBundleE`, plain views that sync on the frame they are
+  drawn; adhocdemo becomes a receiver; the frame cost of an idle plain
+  view measured in a headless scene and recorded.
 - **M7 — Operable views:** mounted commands in appops, `BundleViewOps` with
   the subset and its availability.
 
@@ -282,7 +316,7 @@ takes no statement.
 | Introspection tables | added: `keelson('adhoc_bundles')`; `keelson('adhoc')` gains `bundle`, `task`, `call`, `conversation`, `turn` | catalog providers; the help pages that list them |
 | The trail store (ADR-0277) | added: the `AdhocDataset` component and its archetype | `runtime/trail` regeneration; the trail views; the facts claims golden |
 | `app` exported API | added: `CallContextI`, implemented by `agent.Service` and wired by hostboot | httpegress may move from `DelegationI` onto it later; not in this decision |
-| `adhocdata` exported API | added: bundle publish/resolve/retract, `ReadAllE`, local-name binding on `Follower`; changed: publish refuses an alias another owner holds | every publisher in the Migration list |
+| `adhocdata` exported API | added: bundle publish/resolve/retract, `ReadAllE`, local-name binding on `Follower`, `MaxDatasetsPerOwner`; changed: publish refuses an alias another owner holds, `MaxDatasets` is a process bound | every publisher in the Migration list |
 | `launchcfg.PlayLaunch` | added: `Bundle` | leeway codec regeneration |
 | play's catalog (ADR-0270) | added: `list_bundles`, `open_bundle`, `publish_result`; changed: `bind_dataset` takes `as` | play's ops tests; the operation summaries the chat reads |
 | Agent grant destinations | added: `keelson-bundle:<alias>` | play's agent limits; the request dialog |
@@ -344,6 +378,8 @@ takes no statement.
 - A bundle document is limited to what every receiver can grant; a bundle
   that needs another endpoint or capability is opened in play, not
   embedded.
+- A receiver that shows many items carries the bookkeeping of one bundle
+  alias per item: republish on change, retract on removal.
 - An operable view's subset is a second list of play's operations to keep in
   step with play's catalog; a test holds it to play's names and specs.
 - A bundle request under an agent's call takes a round to the dispatcher,
@@ -399,6 +435,11 @@ takes no statement.
   is; every `bundle_` operation's spec matches play's of the same name
   apart from the `view` argument; `PublishBundleE` refuses a document
   outside `BundleViewCaps`.
+- **Receivers.** A publish under a call the window has already answered is
+  attested while the task is live; one owner stops at its count while
+  another still publishes; a view not drawn for a run of frames shows the
+  bundle's current revision on the frame it is next drawn, after a
+  republish and after a retract-and-republish in between.
 - **What would fail.** A partial bundle live after a failed publish; a
   second owner's publish accepted; bytes differing between publish and
   read; an agent's publish applied without a confirmation; an audit row
@@ -511,6 +552,16 @@ draws each output cell's table or graph as a view), for M6:
 - **Per-view cost.** A view is an embedded play; M6 measures what an idle
   plain view costs per frame, so a receiver can choose between a view and
   a widget of its own.
+
+### 2026-10-07 — the receiver's points folded into the decision
+
+The four points of the M2 entry are now in the body: attribution
+outlives the call (SD5), a view syncs on the frame it is drawn and its
+idle cost is measured (SD7, M6), and the count quota has two levels
+(SD9). The two-level quota shipped as M1b: `MaxDatasets` 1024 per
+process, `MaxDatasetsPerOwner` 256, the byte quota unchanged. The
+regex explorer's quota test fills one window's share, which it now meets
+first.
 
 ## References
 

@@ -161,13 +161,30 @@ func TestRetractBundleWithdrawsItWhole(t *testing.T) {
 
 func TestPublishBundleRespectsTheCountQuota(t *testing.T) {
 	svc := newTestService(t)
-	for i := range MaxDatasets - 1 {
-		_, err := svc.Publish(PublishInput{Alias: "fill", ArrowIPCStream: int64Stream(t, false, int64(i)), By: windowB})
+	stream := int64Stream(t, false, 1)
+	for range MaxDatasets - 1 {
+		_, err := svc.Publish(PublishInput{Alias: "fill", ArrowIPCStream: stream})
 		require.NoError(t, err)
 	}
 	_, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA})
 	require.Error(t, err)
 	assert.Equal(t, MaxDatasets-1, svc.LiveCount(), "a bundle that does not fit adds nothing")
+}
+
+// A receiver that publishes many bundles meets its own count first, and
+// another window still publishes (ADR-0288 (proposed) §SD9).
+func TestPublishBundleRespectsThePerOwnerQuota(t *testing.T) {
+	svc := newTestService(t)
+	stream := int64Stream(t, false, 1)
+	for range MaxDatasetsPerOwner - 1 {
+		_, err := svc.Publish(PublishInput{Alias: "fill", ArrowIPCStream: stream, By: windowA})
+		require.NoError(t, err)
+	}
+	_, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "per-owner")
+	_, err = svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowB})
+	require.NoError(t, err)
 }
 
 func TestBundleCatalogs(t *testing.T) {

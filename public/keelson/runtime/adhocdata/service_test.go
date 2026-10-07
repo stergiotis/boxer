@@ -203,16 +203,31 @@ func TestCheckQuotaLocked(t *testing.T) {
 
 	// Byte budget.
 	svc.totalBytes = StoreMaxBytes - 10
-	require.NoError(t, svc.checkQuotaLocked(nil, 10))
-	require.Error(t, svc.checkQuotaLocked(nil, 11))
+	require.NoError(t, svc.checkQuotaLocked(nil, 10, Identity{}))
+	require.Error(t, svc.checkQuotaLocked(nil, 11, Identity{}))
 
 	// Count budget; a republish (existing != nil) does not add to the count.
 	svc.totalBytes = 0
 	for i := range MaxDatasets {
 		svc.live[fmt.Sprintf("d%d", i)] = &record{}
 	}
-	require.Error(t, svc.checkQuotaLocked(nil, 1), "a new dataset past the count exceeds")
-	require.NoError(t, svc.checkQuotaLocked(svc.live["d0"], 1), "republish keeps the count")
+	require.Error(t, svc.checkQuotaLocked(nil, 1, Identity{}), "a new dataset past the count exceeds")
+	require.NoError(t, svc.checkQuotaLocked(svc.live["d0"], 1, Identity{}), "republish keeps the count")
+}
+
+// One owner cannot take the process's whole count (ADR-0288 (proposed)
+// §SD9): its datasets stop at MaxDatasetsPerOwner while another owner's
+// still go in, and a republish never counts.
+func TestCheckQuotaLockedPerOwner(t *testing.T) {
+	svc := &Service{live: make(map[string]*record)}
+	owner := Identity{App: "test.app", Instance: 1}
+	for i := range MaxDatasetsPerOwner {
+		svc.live[fmt.Sprintf("d%d", i)] = &record{owner: owner}
+	}
+	require.Error(t, svc.checkQuotaLocked(nil, 1, owner))
+	require.NoError(t, svc.checkQuotaLocked(svc.live["d0"], 1, owner), "republish keeps the count")
+	require.NoError(t, svc.checkQuotaLocked(nil, 1, Identity{App: "test.app", Instance: 2}), "another window still publishes")
+	require.NoError(t, svc.checkQuotaLocked(nil, 1, Identity{}), "the runtime has no per-owner count")
 }
 
 // TestQuotaAccountingSurvivesRetractAndRepublish pins the invariant the v1
