@@ -135,13 +135,16 @@ jobs:
           import os
           from urllib.parse import quote
           def link(app):
-              return "demo/index.html?worker=" + quote("worker.mjs?app=github.com/stergiotis/boxer/apps/" + app, safe="")
+              return "demo/index.html?worker=" + quote("worker.mjs?app=github.com/stergiotis/boxer/" + app, safe="")
           demo = ""
           if os.path.isdir("site/demo"):
-              demo = ("<h2>Demo</h2><p>Two boxer apps running in this tab as WebAssembly, beside the Rust browser host "
-                      "(ADR-0263). The first visit downloads about 10 MB. "
-                      f'<a href="{link("splashscreen")}">splashscreen</a> (build, version, licence notices) · '
-                      f'<a href="{link("fibscope")}">fibscope</a> (fibonacci-tagged identifiers).</p>')
+              demo = ("<h2>Demo</h2><p>boxer apps running in this tab as WebAssembly, beside the Rust browser host "
+                      "(ADR-0263). The first visit downloads about 20 MB.</p><ul>"
+                      f'<li><a href="{link("public/thestack/imzero2/egui2/demo/apps/widgets")}">widget gallery</a> (the widget demos with their source; the map demos are left out, since they load tiles from a third-party server)</li>'
+                      f'<li><a href="{link("public/thestack/imzero2/egui2/demo/apps/idsshowcase")}">IDS token catalogue</a> (the design-system tokens)</li>'
+                      f'<li><a href="{link("public/thestack/imzero2/egui2/demo/apps/leewaywidgets")}">leeway widgets</a> (the leeway widgets over built-in fixtures)</li>'
+                      f'<li><a href="{link("apps/fibscope")}">fibscope</a> (fibonacci-tagged identifiers)</li>'
+                      f'<li><a href="{link("apps/splashscreen")}">splashscreen</a> (build, version, licence notices)</li></ul>')
           open("site/index.html", "w").write(
               '<!doctype html><meta charset="utf-8"><title>boxer</title>'
               '<p>Build artifacts of <a href="https://github.com/stergiotis/boxer">boxer</a>, addressed by content. '

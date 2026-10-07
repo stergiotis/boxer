@@ -97,6 +97,30 @@ const filterCaretAtEnd = uint64(0xffff_ffff_ffff_ffff)
 // alive simultaneously — once every demo opts into Init+RenderStateful,
 // the package-level [ids] stack and the legacy Render field can be
 // retired.
+// hidden hides the demos it reports true for from the interactive gallery:
+// neither listed nor initialised at Mount. Set by a binary through
+// [HideDemos] before the gallery mounts; nil hides nothing.
+var hidden func(d registry.Demo) bool
+
+// HideDemos hides the demos hide reports true for from every gallery
+// mounted afterwards. The browser-tab demo uses it to leave out what a tab
+// on boxer's site cannot or must not run.
+func HideDemos(hide func(d registry.Demo) bool) {
+	hidden = hide
+}
+
+// galleryDemos is the registry less the demos [HideDemos] hid.
+func galleryDemos() (demos []registry.Demo) {
+	all := registry.All()
+	demos = make([]registry.Demo, 0, len(all))
+	for _, d := range all {
+		if hidden == nil || !hidden(d) {
+			demos = append(demos, d)
+		}
+	}
+	return
+}
+
 type App struct {
 	// ids is the per-window WidgetIdStack the host pre-prepares with
 	// a window-unique salt every frame (windowhost wraps Frame in
@@ -157,7 +181,7 @@ func (inst *App) Mount(ctx runtimeapp.MountContextI) (err error) {
 	inst.ids = ctx.Ids()
 	inst.bus = ctx.Bus()
 	inst.focusFilter = true
-	for _, d := range registry.All() {
+	for _, d := range galleryDemos() {
 		switch {
 		case d.BusInit != nil:
 			inst.demoState[d.Name] = d.BusInit(inst.ids, inst.bus)
@@ -196,7 +220,7 @@ func (inst *App) Frame(ctx runtimeapp.FrameContextI) (err error) {
 	filterEdit.SendRespVal(&inst.filter)
 
 	needle := strings.ToLower(strings.TrimSpace(inst.filter))
-	grouped := galleryGroupByCategory(registry.All(), needle)
+	grouped := galleryGroupByCategory(galleryDemos(), needle)
 	if len(grouped) == 0 {
 		c.Label("(no demos match filter)").Send()
 	}

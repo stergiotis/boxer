@@ -367,6 +367,28 @@ a commit whose digest was never dispatched finds nothing under
 which needs cargo and the wasm32 target.
 Refreshing the file in the commit that changes the host stays the rule.
 
+### 2026-10-07 — the demo grows a widget gallery
+
+The demo binary adds the widget gallery, the IDS token catalogue and the
+leeway fixture showcase. Each was opened in a locally served bundle in
+headless Chromium, the gallery demo by demo. The gallery leaves out, through
+`widgets.HideDemos`, what a tab on this site cannot or must not run; the list
+and the reason per entry are `tabHidden` in `imzero2tabdemo`:
+
+- **A third-party endpoint.** In a tab the basemap fetches tiles from the
+  visitor's browser, so the demos flagged as needing the network go, and so
+  does one whose checkbox turns tiles on.
+- **The wall clock.** egui_extras' date picker reads it through jiff, whose
+  calls go to JavaScript imports the browser host leaves unwired: the
+  time-range picker kills the tab on its first frame, the date pickers when
+  the calendar opens. The full tab binary has the same gap wherever play shows
+  a time-range picker; closing it is a change to the host, not to the demo.
+- **What does not work in a tab** — graphviz layout, the streamed texture, a
+  file dialog with no filesystem behind it — and two trial harnesses.
+
+The Go module grows from about 50 MB to about 83 MB; the page now downloads
+about 20 MB compressed.
+
 ## References
 
 - [ADR-0263](./0263-imzero2-browser-both-modules-in-one-worker-mesh-to-the-painter.md) — the tab this makes reusable.
