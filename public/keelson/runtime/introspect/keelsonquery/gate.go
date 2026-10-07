@@ -26,7 +26,16 @@ import (
 // database, and `system.x` on the worker is not what the grant covers. A
 // table function is refused by kind: url(), file() and remote() would let
 // a grant on one table read anywhere clickhouse-local can reach.
+//
+// A sealed table — an ad-hoc dataset — is refused whatever the grant: play
+// is the one place a dataset is queried, and another app reads one whole
+// through adhoc.read (ADR-0288 (proposed) §SD6). Without the refusal a
+// grant pattern wide enough to cover a handle would make this a second
+// query surface over datasets, outside play's agent limits and history.
 func Gate(reg *introspect.Registry, sql string, table string) (bare string, reason string) {
+	if reg.IsSealed(table) {
+		return "", table + " is an ad-hoc dataset: query it in play, or read it whole through adhoc.read"
+	}
 	bare, err := keelsonsql.RewriteToBare(reg, sql)
 	if err != nil {
 		return "", err.Error()

@@ -154,6 +154,7 @@ func (inst *Service) subscribe(bus *inprocbus.Inst) (err error) {
 		{Pattern: SubjectBundlePublish, Direction: app.CapDirectionSub, Reason: "adhoc capability: publish a bundle (ADR-0288)"},
 		{Pattern: SubjectBundleRetract, Direction: app.CapDirectionSub, Reason: "adhoc capability: retract a bundle (ADR-0288)"},
 		{Pattern: SubjectBundleResolve, Direction: app.CapDirectionSub, Reason: "adhoc capability: resolve a bundle (ADR-0288)"},
+		{Pattern: SubjectRead, Direction: app.CapDirectionSub, Reason: "adhoc capability: read a dataset whole (ADR-0288)"},
 		{Pattern: SubjectEventAll, Direction: app.CapDirectionPub, Reason: "adhoc: announce publish and retract"},
 		{Pattern: SubjectBundleEventAll, Direction: app.CapDirectionPub, Reason: "adhoc: announce bundle publish and retract (ADR-0288)"},
 		{Pattern: app.SubjectInstanceClosed, Direction: app.CapDirectionSub, Reason: "adhoc: retract what a closed instance published (ADR-0240 §SD5)"},
@@ -170,6 +171,7 @@ func (inst *Service) subscribe(bus *inprocbus.Inst) (err error) {
 		{SubjectBundlePublish, inst.handleRequest},
 		{SubjectBundleRetract, inst.handleRequest},
 		{SubjectBundleResolve, inst.handleRequest},
+		{SubjectRead, inst.handleRequest},
 		{app.SubjectInstanceClosed, inst.handleInstanceClosed},
 	}
 	for _, sub := range subs {
@@ -225,6 +227,8 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 		inst.handleBundleRetract(msg)
 	case SubjectBundleResolve:
 		inst.handleBundleResolve(msg)
+	case SubjectRead:
+		inst.handleRead(msg)
 	default:
 		inst.refuse(msg, "unknown adhoc subject: "+msg.Subject)
 	}

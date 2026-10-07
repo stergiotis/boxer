@@ -110,3 +110,9 @@ var (
 	MembAdhocOboCall = KeelsonHrNkRegistry.MustBegin("adhocOboCall", 236).
 				MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
 )
+
+// MembAdhocStreamDigest is the content digest of a dataset's stream as
+// sealed, which an `adhoc.read` reply carries beside the stream so the
+// reader can check what it received (ADR-0288 (proposed) §SD6).
+var MembAdhocStreamDigest = KeelsonHrNkRegistry.MustBegin("adhocStreamDigest", 237).
+	MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()

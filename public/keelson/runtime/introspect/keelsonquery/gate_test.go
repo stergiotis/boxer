@@ -1,7 +1,10 @@
 package keelsonquery
 
 import (
+	"io"
 	"testing"
+
+	"github.com/apache/arrow-go/v18/arrow"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -66,4 +69,29 @@ func TestSubjectsAndCaps(t *testing.T) {
 	svc := ServiceCaps("introspect")
 	require.Len(t, svc, 3)
 	assert.Equal(t, "ch.local.exec.introspect", svc[2].Pattern)
+}
+
+// sealedTable is a sealed provider as the registry sees one: what an
+// ad-hoc dataset registers under its handle.
+type sealedTable struct{ name string }
+
+func (inst sealedTable) Name() string                             { return inst.name }
+func (inst sealedTable) Freshness() introspect.FreshnessClass     { return introspect.FreshnessLive }
+func (inst sealedTable) Schema() *arrow.Schema                    { return arrow.NewSchema(nil, nil) }
+func (inst sealedTable) Structure() string                        { return "v Int64" }
+func (inst sealedTable) Revision() uint64                         { return 1 }
+func (inst sealedTable) Open() (io.ReadSeekCloser, uint64, error) { return nil, 0, io.EOF }
+func (inst sealedTable) Snapshot(introspect.Projection) (arrow.RecordBatch, error) {
+	return nil, io.EOF
+}
+
+// A sealed table is refused whatever the grant names: play is the one
+// place a dataset is queried (ADR-0288 (proposed) §SD6).
+func TestGateRefusesASealedTable(t *testing.T) {
+	r := testRegistry(t)
+	require.NoError(t, r.Register(sealedTable{name: "adhoc_0123456789abcdef"}))
+	_, reason := Gate(r, "SELECT * FROM adhoc_0123456789abcdef", "adhoc_0123456789abcdef")
+	assert.Contains(t, reason, "query it in play")
+	_, reason = Gate(r, "SELECT * FROM keelson('adhoc_0123456789abcdef')", "adhoc_0123456789abcdef")
+	assert.NotEmpty(t, reason)
 }

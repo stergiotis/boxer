@@ -261,7 +261,7 @@ takes no statement.
 - **M1a — Audit:** ✓ `app.CallContextI` on the dispatcher, attestation on
   every bundle request, the `AdhocDataset` archetype on the trail, the
   context columns on `keelson('adhoc')`.
-- **M2 — `adhoc.read` and the gate:** `ReadAllE`, keelson.query refusing
+- **M2 — `adhoc.read` and the gate:** ✓ `ReadAllE`, keelson.query refusing
   sealed tables, local names on `Follower`.
 - **M3 — play:** `PlayLaunch.Bundle`, `list_bundles`, `open_bundle`,
   `publish_result`, `bind_dataset` with `as`, the `keelson-bundle:`
@@ -472,6 +472,45 @@ Refinements:
   or turn the sender named.
 - The bundle view is general, like the egress fetches: its name carries
   no agentic tag, since the person's publishes land there too.
+
+### 2026-10-07 — M2 the whole-dataset read, the gate, local names
+
+Shipped: `adhoc.read` and `adhocdata.ReadAllE(bus, alias, obo)`;
+`keelsonquery.Gate` refusing a sealed table; `FollowerConfig.LocalNames`
+and `Follower.FollowAs`, which bind an alias under the name a document
+reads.
+
+Refinements:
+
+- **`ReadAllE` returns the stream, not a record reader**: a `ReadResult`
+  with the Arrow IPC stream as sealed and its digest, which `ReadAllE`
+  checks against the bytes it received (`ErrDigestMismatch`). A reader
+  decodes it with `ipc.NewReader`; a consumer that hands the bytes on —
+  into a sandbox, onto a wire — keeps the digest with them.
+- **Every read is audited**, whoever asks: a read is data leaving play's
+  query surface, which is what the audit is for. An agent's read is
+  attested first.
+- **A follower reports waiting by alias**, what the service knows; only
+  the target sees local names.
+
+Raised by the first receiver to plan around bundle views (a notebook that
+draws each output cell's table or graph as a view), for M6:
+
+- **Many bundles per window.** A bundle per output cell meets
+  `MaxDatasets` (64 live datasets per process) within one window. A
+  receiver retracts what it no longer shows, or the quota's unit is
+  revisited; M6 states which.
+- **Provenance outlives the call.** Attestation holds for a call the
+  dispatcher sent while the task is live at that epoch, not only while the
+  call is in flight, so an operation that answers at once and publishes
+  when its work finishes keeps the call's task, conversation and turn.
+- **Views not drawn every frame.** A receiver that culls off-screen views
+  or keeps them in tabs calls a view's frame rarely. A view catches up on
+  the frame it is next drawn: follower `Sync`, document revisions and
+  retracts are pulled then, never pushed into an undrawn frame.
+- **Per-view cost.** A view is an embedded play; M6 measures what an idle
+  plain view costs per frame, so a receiver can choose between a view and
+  a widget of its own.
 
 ## References
 

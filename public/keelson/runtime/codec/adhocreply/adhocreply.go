@@ -58,4 +58,9 @@ type AdhocReply struct {
 	Document   []byte   `lw:"adhocDocument,blobArray"`
 	LocalNames []string `lw:"adhocLocalNames,stringArray"`
 	Handles    []string `lw:"adhocHandles,stringArray"`
+
+	// ArrowStream and StreamDigest answer `adhoc.read` (ADR-0288 (proposed)
+	// §SD6): the dataset's stream as sealed, and its content digest.
+	ArrowStream  []byte `lw:"adhocArrowStream,blobArray"`
+	StreamDigest string `lw:"adhocStreamDigest,stringArray"`
 }

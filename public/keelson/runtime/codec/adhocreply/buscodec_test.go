@@ -72,6 +72,9 @@ func normalized(got adhocreply.AdhocReply, orig adhocreply.AdhocReply) adhocrepl
 	if len(got.Handles) == 0 {
 		got.Handles = orig.Handles
 	}
+	if len(got.ArrowStream) == 0 {
+		got.ArrowStream = orig.ArrowStream
+	}
 	return got
 }
 

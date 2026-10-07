@@ -506,3 +506,35 @@ func TestFollowerVerdictOutdatedByRetract(t *testing.T) {
 	assert.Empty(t, f.retracted, "cleared once no round is outstanding")
 	f.mu.Unlock()
 }
+
+// TestFollowerBindsUnderLocalNames: an alias followed under a local name
+// reaches the consumer under that name — bound, revised and unbound — so a
+// document reads one name whatever alias its data was published under
+// (ADR-0288 (proposed) §SD3). A local name another alias holds is refused.
+func TestFollowerBindsUnderLocalNames(t *testing.T) {
+	r := newFakeResolver()
+	f := newFollowerWith(r, zerolog.Nop())
+	f.seed(nil, nil)
+	target := newRecordingTarget()
+
+	require.True(t, f.FollowAs("sales__orders", "orders"))
+	assert.False(t, f.FollowAs("other__orders", "orders"), "the local name is taken")
+	assert.Equal(t, "orders", f.LocalName("sales__orders"))
+	assert.Equal(t, "items", f.LocalName("items"), "an alias without a local name is bound under itself")
+
+	r.publish("sales__orders", "adhoc_h2000000000000000")
+	f.onEvent(Event{Op: EventOpPublished, Alias: "sales__orders", Handle: "adhoc_h2000000000000000", Revision: 1})
+	bound, _ := settle(t, f, target)
+	assert.True(t, bound)
+	assert.Equal(t, map[string]string{"orders": "adhoc_h2000000000000000"}, target.bound)
+
+	f.onEvent(Event{Op: EventOpPublished, Alias: "sales__orders", Handle: "adhoc_h2000000000000000", Revision: 2})
+	f.Sync(target)
+	assert.Equal(t, uint64(2), target.revised["orders"])
+
+	r.retract("sales__orders", "adhoc_h2000000000000000")
+	f.onEvent(Event{Op: EventOpRetracted, Alias: "sales__orders", Handle: "adhoc_h2000000000000000"})
+	f.Sync(target)
+	assert.Empty(t, target.bound)
+	assert.Equal(t, []string{"sales__orders"}, f.Pending(), "waiting is reported by alias, what the service knows")
+}

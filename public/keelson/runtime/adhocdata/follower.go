@@ -112,6 +112,10 @@ type FollowerConfig struct {
 	// Aliases are the declared aliases to keep bound. Empty builds no
 	// follower.
 	Aliases []string
+	// LocalNames maps an alias to the name the consumer binds it under
+	// (ADR-0288 (proposed) §SD3): the name its SQL reads in
+	// `keelson('…')`. An alias without an entry is bound under itself.
+	LocalNames map[string]string
 	// Reconcile overrides DefaultReconcileInterval; zero keeps it.
 	Reconcile time.Duration
 	// Poll overrides DefaultPollInterval; zero keeps it.
@@ -171,6 +175,11 @@ type Follower struct {
 	log      zerolog.Logger
 	interval time.Duration
 
+	// localMu guards local, which the target adapter reads while Sync
+	// may hold mu.
+	localMu sync.RWMutex
+	local   map[string]string // alias → local name; absent = the alias
+
 	mu       sync.Mutex
 	bound    map[string]string   // alias → handle currently bound
 	revision map[string]uint64   // alias → last revision seen of the bound handle; 0 = unknown
@@ -218,6 +227,7 @@ func NewFollower(cfg FollowerConfig) (f *Follower, bindings map[string]string) {
 	f = subscribedFollower(cfg)
 	bindings, unresolved := resolveAliases(cfg.Bus, cfg.Log, cfg.Aliases)
 	f.seed(bindings, unresolved)
+	bindings = f.localBindings(bindings)
 	return
 }
 
@@ -242,6 +252,7 @@ func NewDeferredFollower(cfg FollowerConfig) (f *Follower) {
 // dataset events; where it cannot, the tick polls instead.
 func subscribedFollower(cfg FollowerConfig) (f *Follower) {
 	f = newFollowerWith(busResolver{bus: cfg.Bus}, cfg.Log)
+	maps.Copy(f.local, cfg.LocalNames)
 	if cfg.Reconcile > 0 {
 		f.interval = cfg.Reconcile
 	}
@@ -276,6 +287,27 @@ func subscribedFollower(cfg FollowerConfig) (f *Follower) {
 // then on like a declared one. It reports false for an alias already
 // followed, bound or pending.
 func (f *Follower) Follow(alias string) (added bool) {
+	return f.FollowAs(alias, "")
+}
+
+// FollowAs is Follow binding the alias under local, the name the consumer's
+// SQL reads (ADR-0288 (proposed) §SD3); an empty local binds it under the
+// alias. It reports false, and changes nothing, for an alias already
+// followed or a local name another alias is bound under.
+func (f *Follower) FollowAs(alias string, local string) (added bool) {
+	if local != "" && local != alias {
+		f.localMu.Lock()
+		for a, l := range f.local {
+			if l == local && a != alias {
+				f.localMu.Unlock()
+				return false
+			}
+		}
+		if _, taken := f.local[alias]; !taken {
+			f.local[alias] = local
+		}
+		f.localMu.Unlock()
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	_, isBound := f.bound[alias]
@@ -302,6 +334,7 @@ func newFollowerWith(resolver resolverI, logger zerolog.Logger) (f *Follower) {
 		pending:  make(map[string]struct{}),
 		why:      make(map[string]string),
 		dirty:    make(map[string]struct{}),
+		local:    make(map[string]string),
 
 		retracted: make(map[string]struct{}),
 	}
@@ -354,6 +387,12 @@ func (f *Follower) onEvent(ev Event) {
 // A verdict about a handle the alias no longer holds is stale and ignored,
 // and so is one that names a handle retracted since its round began.
 func (f *Follower) Sync(target TargetI) (bound bool, pendingChanged bool) {
+	f.localMu.RLock()
+	renamed := len(f.local) > 0
+	f.localMu.RUnlock()
+	if renamed {
+		target = localTarget{f: f, inner: target}
+	}
 	f.mu.Lock()
 	events := f.events
 	verdicts := f.verdicts
@@ -620,4 +659,43 @@ func resolveAliases(bus app.BusI, logger zerolog.Logger, aliases []string) (bind
 		bindings[alias] = res.Handle
 	}
 	return
+}
+
+// LocalName is the name alias is bound under in the consumer.
+func (f *Follower) LocalName(alias string) (local string) {
+	f.localMu.RLock()
+	local, ok := f.local[alias]
+	f.localMu.RUnlock()
+	if !ok {
+		local = alias
+	}
+	return
+}
+
+// localBindings re-keys alias → handle bindings by local name.
+func (f *Follower) localBindings(bindings map[string]string) (out map[string]string) {
+	out = make(map[string]string, len(bindings))
+	for alias, handle := range bindings {
+		out[f.LocalName(alias)] = handle
+	}
+	return
+}
+
+// localTarget is the consumer's target seen through the follower's local
+// names: the follower speaks aliases, the consumer binds local names.
+type localTarget struct {
+	f     *Follower
+	inner TargetI
+}
+
+func (inst localTarget) BindDataset(alias, handle string) error {
+	return inst.inner.BindDataset(inst.f.LocalName(alias), handle)
+}
+
+func (inst localTarget) UnbindDataset(alias string) error {
+	return inst.inner.UnbindDataset(inst.f.LocalName(alias))
+}
+
+func (inst localTarget) NotifyDatasetRevision(alias string, revision uint64) {
+	inst.inner.NotifyDatasetRevision(inst.f.LocalName(alias), revision)
 }

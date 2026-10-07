@@ -19,6 +19,8 @@ const (
 	OpPublish = "publish"
 	OpResolve = "resolve"
 	OpRetract = "retract"
+	// OpRead reads a dataset whole (ADR-0288 (proposed) §SD6).
+	OpRead = "read"
 )
 
 // AdhocRequest is the flat wire form of one request.
