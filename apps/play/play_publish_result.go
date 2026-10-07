@@ -75,7 +75,7 @@ func addPublishResultOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 		// writes is outside, which is what makes it consequential.
 		Effect: app.OperationEffectConsequential, Reads: []string{opsResResult}, Agents: true,
 		Consent: app.OperationConsent{Class: "publish", Arg: "bundle"},
-		Gesture: "",
+		Gesture: "Publish in the top bar",
 		Follows: []string{"only a whole main result is published: one the row cap cut short is refused, as is one still loading or failed",
 			"the publish runs off the frame; list_bundles reports this window's last publish and the bundle once it is live",
 			"the bundle lives as long as this window, and publishing again under its alias replaces it",

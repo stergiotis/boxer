@@ -780,6 +780,8 @@ type PlayApp struct {
 	// hatch appears. Set via SetToolbarMinimal between construction and
 	// mount.
 	toolbarMinimal bool
+	// publish is the Publish menu (ADR-0288 §SD4), offered by the launcher.
+	publish publishMenu
 	// openPlaygroundBundle, when set, is the bundle "Open in Playground"
 	// opens instead of the buffer (SetOpenPlaygroundBundle).
 	openPlaygroundBundle string
@@ -2398,6 +2400,7 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 		if !inst.toolbarMinimal {
 			c.Separator().Vertical().Send()
 			inst.renderPanesMenu(schema)
+			inst.renderPublishMenu()
 		}
 
 		// Hide-prelude toggle (visible only when there's at least one

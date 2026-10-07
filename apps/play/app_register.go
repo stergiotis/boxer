@@ -539,6 +539,7 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 		}
 		inst.follower = follower
 	}
+	inner.publish.last = inst.lastPublish
 	inst.inner = inner
 	if launch != nil && launch.Bundle != "" {
 		inst.openBundle(launch.Bundle, nil)
