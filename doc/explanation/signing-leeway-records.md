@@ -137,7 +137,6 @@ record.asice  (ZIP)
 ├── mimetype
 ├── schema.cbor            ← canonical TableDesc (the schema plane)
 ├── data.bin               ← canonical row encoding (the data plane)
-├── card.json              ← optional human-facing projection + blake3 fingerprint
 └── META-INF/
     ├── ASiCManifest.xml    ← lists the objects + their digests
     └── signature.p7s       ← ONE detached CAdES-B-LTA signature/seal over the manifest
@@ -182,14 +181,12 @@ notes not carried in this repo): no format version / magic; layout pinned to
 struct order; the naming style is an **out-of-band parameter**; some carried
 fields historically dropped on the compare path.
 
-**Card schema document — closest to signing-grade today.**
-`card.JsonCardSchemaEmitter` (`card/leeway_card_json_schema.go`, per
-[ADR-0018](../adr/0018-leeway-card-json-canonical-format.md)) sorts sections, blanks a
-`fingerprint` field, computes `blake3.Sum256`, prefixes `"blake3:"`, re-emits — a
-**versioned** (`"leewayCardSchema":"1"`), content-addressed artifact. Limits: it
-canonicalises at the *section* level only (column order left to an upstream
-`Normalize`), and is computed over the *card-JSON projection*, a **different byte
-stream** than the CBOR DTO.
+**Card schema document — removed.** The card-JSON schema document
+([ADR-0018](../adr/0018-leeway-card-json-canonical-format.md)) carried a blake3
+fingerprint over a JSON projection of the schema, a different byte stream than the
+CBOR DTO; it was removed with card JSON
+([ADR-0289](../adr/0289-leeway-rows-for-readers-canonical-forms-a-read-model-and-kinds-in-projection.md),
+proposed). The schema plane's one serialization is the CBOR DTO.
 
 **Data plane — not canonical; do not sign.** The row path emits Arrow IPC / Parquet /
 sparse formats (`dml/…`), carrying buffer padding, alignment, optional dictionary
@@ -240,13 +237,13 @@ requirements **on leeway/boxer**.
 | --- | --- | --- | --- |
 | **CS-1** | **Canonical form.** Equal logical content ⇒ byte-identical output, independent of authoring order, naming style, map iteration, build. | AES 26(d) | Schema: yes *after* `Normalize`. Data: **no**. |
 | **CS-2** | **No out-of-band parameters.** Every input that changes the bytes (naming style, set/array order, numeric encoding) is fixed by the spec or embedded — never a caller argument a verifier could set differently. | reproducible verification | `Normalize` takes the style as an **argument** → violated. |
-| **CS-3** | **Versioned, spec-pinned layout + magic.** A version/magic and a layout pinned to a written spec (not Go struct order), so a refactor or enum-value change cannot silently alter bytes. | B-LTA long-term verifiability | Card doc: versioned. CBOR DTO: **no version, struct-order layout** (A-14). |
+| **CS-3** | **Versioned, spec-pinned layout + magic.** A version/magic and a layout pinned to a written spec (not Go struct order), so a refactor or enum-value change cannot silently alter bytes. | B-LTA long-term verifiability | CBOR DTO: **no version, struct-order layout** (A-14). |
 | **CS-4** | **Total, loss-free coverage.** The preimage covers every field of the signed meaning; **nothing silently dropped**; a verifier reconstructs the exact preimage from what it holds. | integrity / non-repudiation | `Compare` deliberately ignores some fields; a signing encoder must not. |
 | **CS-5** | **Canonical data-plane encoding.** Fixed column order; a **total order on set/multi-membership elements**; no Arrow padding/dictionary/compression variance; canonical numerics (fixed int width; one float form — resolve −0.0/NaN). | AES 26(d) over the **values** | **Does not exist** — net-new; the long pole. |
-| **CS-6** | **Fingerprint over the signed bytes themselves** — not a separate projection. | signed digest ≡ artifact | Only fingerprint is over the *card-JSON projection* ≠ CBOR DTO. |
+| **CS-6** | **Fingerprint over the signed bytes themselves** — not a separate projection. | signed digest ≡ artifact | No fingerprint over the CBOR DTO exists. |
 | **CS-7** | **Hash-addressable & detachable.** A standalone octet string, hashable for a **detached** CAdES signature in an ASiC-E manifest and usable as a **Merkle leaf**. | container / batch pattern | Achievable once CS-1/CS-5 hold. |
 | **CS-8** | **Schema↔data binding.** A signed data preimage transitively commits its schema fingerprint, so a signature cannot be transplanted onto a different schema. | integrity of *interpretation* | No binding today. |
-| **CS-9** | **Algorithm-agility metadata.** The artifact records which canonicalization + hash version produced it, so an algorithm migration does not break historic verification. | B-LTA longevity | `"blake3:"` tag on the card doc only. |
+| **CS-9** | **Algorithm-agility metadata.** The artifact records which canonicalization + hash version produced it, so an algorithm migration does not break historic verification. | B-LTA longevity | Not recorded for the schema plane. |
 
 **Note — general shredded tables.** When the signed rows belong to a *shared, general*
 type-shredded table (a facts-style table whose physical columns are canonical-type
@@ -258,11 +255,9 @@ fingerprint** as well as the physical schema — and neither the mappingplan nor
 membership vocabulary is fingerprinted today, so for this class of table CS-8 is
 entirely net-new.
 
-**Two routes to a signing-grade preimage:** (a) harden `Normalize + EncodeTableCbor`
+**The route to a signing-grade preimage** is to harden `Normalize + EncodeTableCbor`
 with CS-2/CS-3/CS-4 (pin the style into the spec, add magic+version, freeze the
-layout, audit for dropped fields); or (b) promote the **card schema document**
-(already CS-3/CS-6-shaped) by extending its sort to column level (CS-1) and folding
-CBOR-only fields in (CS-4). Either way the **data plane (CS-5) is unavoidable new
+layout, audit for dropped fields). The **data plane (CS-5) is unavoidable new
 work**.
 
 ## Signing and erasure interact
@@ -302,7 +297,6 @@ The generic recipe (a consumer discharges the specifics):
 
 - **CS-5 is net-new.** The schema plane is mostly there; a byte-canonical row
   encoding must be built — it is the long pole.
-- **Two fingerprint preimages must converge** (CS-6): CBOR DTO vs card-JSON.
 - **Naming-style portability vs. a frozen canonical style** (CS-2) — freeze one
   (e.g. `naming.DefaultNamingStyle`) for reproducibility.
 - **Merkle batching** amortises the qualified operation but makes per-record
@@ -313,9 +307,7 @@ The generic recipe (a consumer discharges the specifics):
 ## Mapping to code
 
 - **Exists:** `common.TableNormalizer.Normalize`, `common.TableMarshaller.EncodeTableCbor`
-  (schema plane), `card.JsonCardSchemaEmitter` + `Fingerprint()` (content-addressed
-  doc, [ADR-0018](../adr/0018-leeway-card-json-canonical-format.md)),
-  `namemint/naturalkey` (deterministic identity) — all under
+  (schema plane), `namemint/naturalkey` (deterministic identity) — all under
   `public/semistructured/leeway/`. Since 2026-08 also `canonform` (the
   content-identity quotient, [ADR-0201](../adr/0201-leeway-canonical-record-form.md))
   and `canonwire` + `canonwire/runtime` (the lossless deterministic wire,
@@ -335,7 +327,7 @@ The generic recipe (a consumer discharges the specifics):
   [commitments-and-zero-knowledge](./commitments-and-zero-knowledge.md),
   [leeway-column-names](./leeway-column-names.md),
   [pushout-distributed-operation](./pushout-distributed-operation.md).
-- Decisions: [ADR-0018 (card canonical format)](../adr/0018-leeway-card-json-canonical-format.md),
+- Decisions: [ADR-0018 (card canonical format, superseded by ADR-0289)](../adr/0018-leeway-card-json-canonical-format.md),
   [ADR-0025 (forget architecture)](../adr/0025-pushout-forget-architecture.md).
 - EU: eIDAS [Reg (EU) 910/2014](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX%3A02014R0910)
   amending [2024/1183](https://eur-lex.europa.eu/eli/reg/2024/1183/oj) — Art. 3, 25,

@@ -12,12 +12,11 @@ generator: go test, TestMembershipRendererGeneration
 # anchor — membership rendering: ids on the wire, names at read time
 
 The batch carries membership ids; how an id displays is decided at read
-time by the consumer's renderer (ADR-0072). The test drives the same batch
-through the JSON card emitter with the default renderer and with an anchor
-domain formatter injected via WithRenderer, and asserts the card's
-membership keys swap from the hex column to the named column below. The
-formatter is a demo-local stand-in for the deferred registry-backed
-ref-to-name formatter (the seam's intended first-class injector).
+time by the consumer's renderer (ADR-0072). The test reads the same batch
+through the lens sink with the default renderer and with an anchor domain
+formatter injected, and asserts the attribute names swap from the hex
+column to the named column below. The formatter is a demo-local stand-in
+for the registry-backed ref-to-name formatter play injects.
 
 | ref id (wire) | default renderer | anchor formatter |
 |---|---|---|

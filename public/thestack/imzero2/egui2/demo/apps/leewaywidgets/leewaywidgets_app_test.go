@@ -27,6 +27,6 @@ func TestApp_InstancesAreIndependent(t *testing.T) {
 
 	assert.NotSame(t, app1, app2, "factory must allocate a fresh App per Open")
 
-	app1.selectedView = viewKeyJSON
+	app1.selectedView = viewKeySchemaGo
 	assert.Equal(t, viewKeyTable2, app2.selectedView, "selectedView must not leak between windows")
 }

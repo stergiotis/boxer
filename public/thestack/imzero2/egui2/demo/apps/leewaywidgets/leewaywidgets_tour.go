@@ -1,7 +1,7 @@
 // Demo-registry enrollment for the leewaywidgets showcase (ADR-0057). This
 // replaces the former per-app screenshot tour: instead of a
 // settle/capture/advance state machine driven by a screenshot-mode
-// SeededFuncApp, each view (table2 / json / schema / fixture) registers as its
+// SeededFuncApp, each view (table2 / schema / fixture) registers as its
 // own Demo whose body is the showcase App rendered into the host Ui scope. The
 // central TestDriver (widgets) captures one PNG per view, and they appear in
 // the widget gallery via registry.Embed.
@@ -26,10 +26,8 @@ var leewayScenes = []struct {
 }{
 	{"leewaywidgets-table2", viewKeyTable2, icons.PhFlask + " Leeway — table2 card", registry.DemoKindUX,
 		"A leeway fixture rendered as a Table2 card: viridis-encoded columns built from the declarative TableDesc."},
-	{"leewaywidgets-json", viewKeyJSON, icons.PhFlask + " Leeway — JSON card", registry.DemoKindMixed,
-		"The same fixture in its canonical JSON card form (JsonCardEmitter), syntax-highlighted."},
 	{"leewaywidgets-schema", viewKeySchemaGo, icons.PhFlask + " Leeway — schema.go", registry.DemoKindDX,
-		"fixture_schema.go — the declarative TableDesc that drives the table2 and JSON views."},
+		"fixture_schema.go — the declarative TableDesc that drives the table2 view."},
 	{"leewaywidgets-fixture", viewKeyFixtureGo, icons.PhFlask + " Leeway — fixture.go", registry.DemoKindDX,
 		"fixture.go — the data populator and driver wiring behind the fixture."},
 }

@@ -13,21 +13,19 @@
 //
 // # Why it reads TableDesc directly
 //
-// The rest of the leeway "card" family — UnicodeCard, JsonCard, the SVG and
-// topology sparks, and the egui Table2CardEmitter next door in leewaywidgets
-// — are [streamreadaccess.SinkI] implementations driven over an Arrow batch.
-// There is a schema-only traversal (Driver.DriveSchema, which
-// JsonCardSchemaEmitter consumes), but it is lossy for schema metadata:
-// memberships only ever surface as runtime instances (AddMembership*), so
-// the schema path carries no MembershipSpec, and it does not surface
-// encoding hints. A faithful schema inspector wants exactly those. So this
-// widget reads the TableDesc fields directly rather than going through a
-// Driver. It stays consistent with the card family in vocabulary (the
-// topology-spark glyphs, the membership-role notions) but not in plumbing.
+// The leeway readers next door — the egui Table2CardEmitter in leewaywidgets,
+// the lens's sink — are [streamreadaccess.SinkI] implementations driven over
+// an Arrow batch. The sink protocol is lossy for schema metadata: memberships
+// only ever surface as runtime instances (AddMembership*), so it carries no
+// MembershipSpec, and it does not surface encoding hints. A faithful schema
+// inspector wants exactly those. So this widget reads the TableDesc fields
+// directly rather than going through a Driver. It shares the readers'
+// membership-role notions but not their plumbing.
 //
 // # Glyph vocabulary
 //
-// The tree reuses TopologySpark's legend, rebound from data to schema:
+// The tree's glyphs, first drawn by the retired topology spark (ADR-0289,
+// proposed), now belong to this widget:
 //
 //	◆ plain item-type section
 //	◇ tagged section
@@ -36,10 +34,9 @@
 //	       mixed) — the spec, not an instance count
 //	·∅ a value-less (membership-only) section
 //
-// TopologySpark's instance counts (#2 tags, ∥4 four-element array) have no
-// schema analog and are dropped; a column leaf shows the terse canonical
-// type, a section node shows the accepted membership spec as a badge, and
-// the full MembershipSpec / aspect / type decodes live in the detail pane.
+// A column leaf shows the terse canonical type, a section node shows the
+// accepted membership spec as a badge, and the full MembershipSpec / aspect /
+// type decodes live in the detail pane.
 //
 // The vocabulary travels with the widget: a "?" toggle in the navigator
 // header opens a tethered legend window (the canonicaltypesummary inspector

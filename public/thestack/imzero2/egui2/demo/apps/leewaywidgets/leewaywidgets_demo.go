@@ -1,12 +1,8 @@
 package leewaywidgets_demo
 
 import (
-	"bytes"
-	"encoding/json/jsontext"
-
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/card"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
@@ -19,7 +15,6 @@ type viewKeyE uint8
 
 const (
 	viewKeyTable2 viewKeyE = iota
-	viewKeyJSON
 	viewKeySchemaGo
 	viewKeyFixtureGo
 )
@@ -30,11 +25,6 @@ const (
 // stay package-level because they hold expensive-to-build text that
 // every window can share.
 var (
-	// JSON view cache — built once on first access (driving RunFixture
-	// against a JsonCardEmitter then highlighting the bytes).
-	jsonViewReady bool
-	jsonView      typed.RetainedFffiHolderTyped[c.CodeViewJobS]
-
 	// Go-source view caches — built once from the embedded sources.
 	// schemaGoView mirrors fixture_schema.go (the declarative TableDesc);
 	// fixtureGoView mirrors fixture.go (the data populator + driver wiring).
@@ -165,9 +155,6 @@ func (inst *App) renderViewTree() {
 	for range c.CollapsingHeader(inst.ids.PrepareStr("catVisual"), c.WidgetText().Text("Visual").Keep()).DefaultOpen(true).KeepIter() {
 		inst.renderViewLeaf(viewKeyTable2, "leafTable2", "table2")
 	}
-	for range c.CollapsingHeader(inst.ids.PrepareStr("catCanonical"), c.WidgetText().Text("Canonical").Keep()).DefaultOpen(true).KeepIter() {
-		inst.renderViewLeaf(viewKeyJSON, "leafJson", "json")
-	}
 	for range c.CollapsingHeader(inst.ids.PrepareStr("catSource"), c.WidgetText().Text("Source").Keep()).DefaultOpen(true).KeepIter() {
 		inst.renderViewLeaf(viewKeySchemaGo, "leafSchemaGo", "schema.go")
 		inst.renderViewLeaf(viewKeyFixtureGo, "leafFixtureGo", "fixture.go")
@@ -183,7 +170,7 @@ func (inst *App) renderViewLeaf(key viewKeyE, idStr string, label string) {
 }
 
 // renderActiveView draws the central pane for the currently selected view.
-// JSON and Go views build their highlighted holders lazily on first access
+// The Go views build their highlighted holders lazily on first access
 // and reuse them across frames; the table2 emitter re-runs RunFixture each
 // frame because its output is widget commands, not text.
 //
@@ -195,11 +182,6 @@ func (inst *App) renderViewLeaf(key viewKeyE, idStr string, label string) {
 // for the windowed app, the height-clamped column for the gallery).
 func (inst *App) renderActiveView() {
 	switch inst.selectedView {
-	case viewKeyJSON:
-		ensureJSONView()
-		for range c.ScrollArea().Vscroll(true).Hscroll(true).AutoShrink(false, false).KeepIter() {
-			c.CodeView(inst.ids.PrepareStr("jsonView"), jsonView).Wrap().Send()
-		}
 	case viewKeySchemaGo:
 		ensureSchemaGoView()
 		for range c.ScrollArea().Vscroll(true).Hscroll(true).AutoShrink(false, false).KeepIter() {
@@ -216,24 +198,6 @@ func (inst *App) renderActiveView() {
 		// supply unbounded available_size and crop the tail rows.
 		leewaywidgets.RunFixture(inst.table2Emitter)
 	}
-}
-
-// ensureJSONView lazily builds the canonical card-JSON for the fixture and
-// hands it to codeview.PrepareJson. The JsonCardEmitter is one-shot so we drain
-// it into a buffer and re-highlight only when explicitly invalidated (today
-// the fixture is static, so once-per-process is enough).
-func ensureJSONView() {
-	if jsonViewReady {
-		return
-	}
-	buf := bytes.NewBuffer(make([]byte, 0, 4096))
-	enc := jsontext.NewEncoder(buf,
-		jsontext.Multiline(true),
-		jsontext.WithIndent("  "))
-	sink := card.NewJsonCardEmitter(enc, nil)
-	leewaywidgets.RunFixture(sink)
-	jsonView = codeview.PrepareJson(buf.String())
-	jsonViewReady = true
 }
 
 func ensureSchemaGoView() {

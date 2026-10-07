@@ -15,9 +15,8 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/tree"
 )
 
-// The navigator's category glyphs, documented in the help book, keyed by the
-// legend window, and shared with the TopologySpark card that this vocabulary
-// came from.
+// The navigator's category glyphs, documented in the help book and keyed by
+// the legend window.
 //
 // Two things about them are load-bearing rather than decorative.
 //
