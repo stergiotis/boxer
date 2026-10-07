@@ -185,8 +185,8 @@ fields historically dropped on the compare path.
 ([ADR-0018](../adr/0018-leeway-card-json-canonical-format.md)) carried a blake3
 fingerprint over a JSON projection of the schema, a different byte stream than the
 CBOR DTO; it was removed with card JSON
-([ADR-0289](../adr/0289-leeway-rows-for-readers-canonical-forms-a-read-model-and-kinds-in-projection.md),
-proposed). The schema plane's one serialization is the CBOR DTO.
+([ADR-0289](../adr/0289-leeway-rows-for-readers-canonical-forms-a-read-model-and-kinds-in-projection.md)).
+The schema plane's one serialization is the CBOR DTO.
 
 **Data plane — not canonical; do not sign.** The row path emits Arrow IPC / Parquet /
 sparse formats (`dml/…`), carrying buffer padding, alignment, optional dictionary

@@ -450,7 +450,7 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 
 `get_detail` returned the two digests only. `get_canonical`
 ([ADR-0289](./0289-leeway-rows-for-readers-canonical-forms-a-read-model-and-kinds-in-projection.md)
-§SD2, proposed) returns what the strip's CBOR disclosure shows: the canonform
+§SD2) returns what the strip's CBOR disclosure shows: the canonform
 items and the canonwire entity item in diagnostic notation, with the same
 position comments, beside the digests, the canonform pin and the checker's
 verdict. ADR-0289 makes these forms the lossless reading of a leeway row, now

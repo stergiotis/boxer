@@ -14,7 +14,7 @@ import (
 )
 
 // TestReadModelOverTheAnchorBatch reads the membership demo batch through
-// the read model (ADR-0289 §SD3, proposed) with the anchor's ref formatter:
+// the read model (ADR-0289 §SD3) with the anchor's ref formatter:
 // every attribute is named by what it is — a ref by the formatter's name, an
 // attribute with no membership by its section — never by its position, and
 // the bytes natural key labels its record as text.

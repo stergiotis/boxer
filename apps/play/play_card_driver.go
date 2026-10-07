@@ -31,7 +31,7 @@ import (
 //   - The Driver + TableDesc are rebuilt only when the Arrow schema object
 //     changes (cheap pointer compare).
 //   - Each Prepare reads a single-row slice of the record batch into the
-//     read model (ADR-0289 §SD3, proposed), its memberships named through
+//     read model (ADR-0289 §SD3), its memberships named through
 //     the session's registries, and lays it out on the card.
 type CardDriver struct {
 	alloc memory.Allocator

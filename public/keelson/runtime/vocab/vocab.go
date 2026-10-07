@@ -341,7 +341,7 @@ var (
 	MembLlmCallError           = NkRegistry.MustBegin("llmCallError", 121).End()
 
 	// The vizeval scorecard and judgement memberships (ADR-0266, withdrawn)
-	// were retired with the harness (ADR-0289 §SD6, proposed); their
+	// were retired with the harness (ADR-0289 §SD6); their
 	// ordinals (122-149, 243) stay unused.
 
 	// retained model conversations (ADR-0264) — the llmCall row gains the

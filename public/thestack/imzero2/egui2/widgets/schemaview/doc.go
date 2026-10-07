@@ -24,8 +24,8 @@
 //
 // # Glyph vocabulary
 //
-// The tree's glyphs, first drawn by the retired topology spark (ADR-0289,
-// proposed), now belong to this widget:
+// The tree's glyphs, first drawn by the topology spark ADR-0289 retired, now
+// belong to this widget:
 //
 //	◆ plain item-type section
 //	◇ tagged section

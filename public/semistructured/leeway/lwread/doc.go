@@ -1,5 +1,5 @@
 // Package lwread reads leeway records as a person or a model reads them
-// (ADR-0289 §SD3, proposed): each record as its attributes, each attribute
+// (ADR-0289 §SD3): each record as its attributes, each attribute
 // named by what it is rather than by where it sits, its values spelled once
 // for every reader, and every value the reading leaves out counted.
 //

@@ -138,7 +138,7 @@ type Analysis struct {
 type AnalyzeOptions struct {
 	// Labels is each row's cluster, −1 for a row no cluster took — the
 	// clustering the lens draws, which is the caller's: the Projection
-	// panel's run (ADR-0289 §SD4, proposed). Nil puts every row in one band.
+	// panel's run (ADR-0289 §SD4). Nil puts every row in one band.
 	Labels []int32
 	// RuleDepth bounds a cluster rule's terms; 0 takes 3.
 	RuleDepth int

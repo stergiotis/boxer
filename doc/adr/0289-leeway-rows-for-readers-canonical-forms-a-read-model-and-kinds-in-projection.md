@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-07
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-07
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0289: Leeway rows for readers — canonical forms for identity, a read model for rows, kinds in the Projection panel
 
@@ -27,7 +25,7 @@ along about twenty paths. Two of them claim to be the general form:
   [{"name": "cpu"}]}`. Ref memberships key as hex ids (`0xd1d`). On the anchor
   fixtures, 90 of 130 attributes came out positional, and the per-entity
   section list was 55 % of the bytes (measured 2026-10-07).
-- **The Experiments pane** ([ADR-0266](./0266-vizeval-scored-renderings-of-leeway-batches.md), proposed),
+- **The Experiments pane** ([ADR-0266](./0266-vizeval-scored-renderings-of-leeway-batches.md), withdrawn by this ADR),
   eleven candidate renderings and the vizeval harness that scores them. On
   2026-10-07 every sink was rendered over the six maintained scenarios and
   over the 48-row mixed-kinds batch. The text sinks (card JSON, box-drawn
@@ -256,7 +254,9 @@ panel:
 
 ## Status
 
-Proposed — 2026-10-07.
+Accepted 2026-10-07. M1–M6 are built: the lens in the Projection panel with
+`get_archetypes`, the removals of SD6, `get_canonical`, and the read model
+(`lwread`) behind `get_detail` and the Detail card (`leewaywidgets.RecordCard`).
 
 ## Updates
 

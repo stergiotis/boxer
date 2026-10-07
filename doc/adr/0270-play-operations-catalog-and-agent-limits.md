@@ -1100,7 +1100,7 @@ lanes. The Vector field would follow the same convention.
 ### 2026-10-07 — The Experiments pane's operations go; the Projection pane reads its archetypes
 
 `get_experiments` and `set_experiments` are removed with the Experiments pane
-([ADR-0289](./0289-leeway-rows-for-readers-canonical-forms-a-read-model-and-kinds-in-projection.md) §SD6, proposed).
+([ADR-0289](./0289-leeway-rows-for-readers-canonical-forms-a-read-model-and-kinds-in-projection.md) §SD6).
 The Projection pane gains `get_archetypes`, a query over its run (ADR-0289
 §SD4): per cluster its rule, the attributes every row holds with one value,
 what it typically holds, its extremes, and the exception rows with their

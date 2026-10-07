@@ -13,9 +13,9 @@
 //   - Model, collected by Sink from a streamreadaccess drive: rows, slots,
 //     cells.
 //   - Analysis, computed by Analyze: slot support, the bands of the
-//     caller's clusters (the Projection panel's run, ADR-0289 §SD4,
-//     proposed), a one-vs-rest threshold tree per cluster read as a rule,
-//     and per-slot value distributions.
+//     caller's clusters (the Projection panel's run, ADR-0289 §SD4), a
+//     one-vs-rest threshold tree per cluster read as a rule, and per-slot
+//     value distributions.
 //   - Plan, computed by PlanRows from an Analysis and the two intents: which
 //     rows go in which band, which slots each row is drawn against, and in
 //     what order.

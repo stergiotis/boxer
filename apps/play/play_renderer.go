@@ -123,7 +123,7 @@ const (
 	dockTabDocs        uint64 = 17
 	dockTabFlow        uint64 = 18
 	dockTabSankey      uint64 = 19
-	// 20 was the Experiments pane, removed with ADR-0289 (proposed).
+	// 20 was the Experiments pane, removed with ADR-0289.
 	dockTabDist        uint64 = 21
 	dockTabIcicle      uint64 = 22
 	dockTabSeries      uint64 = 23

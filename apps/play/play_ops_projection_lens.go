@@ -11,7 +11,7 @@ import (
 )
 
 // get_archetypes reads the Projection run's clusters as the lens's archetype
-// form (ADR-0289 §SD4, proposed): per cluster what it typically holds, its
+// form (ADR-0289 §SD4): per cluster what it typically holds, its
 // extremes and the rows that break it — what the panel's archetypes view
 // draws, as data.
 

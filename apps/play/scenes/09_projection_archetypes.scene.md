@@ -20,7 +20,7 @@ scene:
 Projection over forty-eight records of four kinds — hosts, services, jobs and
 alerts, each kind a set of attributes in a `num` and a `sym` section — at the
 panel's defaults (structure features, min cluster 5), which find the four
-kinds, the eight alerts among them (ADR-0289 §SD5, proposed). The archetypes
+kinds, the eight alerts among them (ADR-0289 §SD5). The archetypes
 view then reads each cluster as what it typically holds and the rows that
 break it: the host without a disk, the service with a cpu, the one failed job
 (ADR-0289 §SD4).

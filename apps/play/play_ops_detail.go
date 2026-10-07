@@ -4,7 +4,7 @@ package play
 // an agent (ADR-0270, update of 2026-10-05). The read builds its own Driver
 // from the result's column names (discoverCardRecipe, the same derivation the
 // pane's CardDriver makes) and drives one row into the read model (lwread,
-// ADR-0289 §SD3, proposed) on the query's goroutine: attributes named by
+// ADR-0289 §SD3) on the query's goroutine: attributes named by
 // their first membership through the session's registries, values spelled
 // once, hidden and cut values counted. Nothing the pane holds is touched, so
 // the read neither needs the pane raised nor disturbs it.

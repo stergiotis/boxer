@@ -13,8 +13,8 @@ status: draft
 > report five task-accuracy rounds by blind agent readers.
 >
 > **2026-10-07.** The lens has moved into the Projection panel
-> ([ADR-0289](../adr/0289-leeway-rows-for-readers-canonical-forms-a-read-model-and-kinds-in-projection.md),
-> proposed): its bands are the panel's clusters, its own clustering is gone,
+> ([ADR-0289](../adr/0289-leeway-rows-for-readers-canonical-forms-a-read-model-and-kinds-in-projection.md)):
+> its bands are the panel's clusters, its own clustering is gone,
 > the archetype form is data in `lwlens` that play's `get_archetypes`
 > returns, and the view scrolls. The Experiments pane and vizeval are
 > removed. Below, "the Experiments pane" and the lens's K are the state this

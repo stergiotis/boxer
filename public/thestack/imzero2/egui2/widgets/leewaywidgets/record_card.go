@@ -16,9 +16,9 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/utfsafe"
 )
 
-// RecordCard draws leeway records as lwread reads them (ADR-0289 §SD3,
-// proposed) as ONE table (egui_extras::TableBuilder via the c.NewTable
-// row-iterator surface). Every record, every section and every attribute
+// RecordCard draws leeway records as lwread reads them (ADR-0289 §SD3) as
+// ONE table (egui_extras::TableBuilder via the c.NewTable row-iterator
+// surface). Every record, every section and every attribute
 // share a single table whose columns are
 //
 //	[entity? · ] section · attribute · labels · values

@@ -526,7 +526,7 @@ ADRs are append-only; supersession is recorded, not deleted.
 ### 2026-10-07 — Superseded by ADR-0289; the emitters are removed
 
 `JsonCardEmitter`, `JsonCardSchemaEmitter`, `Driver.DriveSchema` and the
-`lw card inspect` command are removed (ADR-0289 §SD6, proposed). The parser
+`lw card inspect` command are removed (ADR-0289 §SD6). The parser
 this ADR named as a follow-on was never written, so the isomorphism it claimed
 was never tested. On data whose attribute names carry no leading `/` — the way
 a facts-style table names them — the default classifier made every attribute

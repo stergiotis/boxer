@@ -7,8 +7,8 @@ withdrawn-date: 2026-10-07
 
 > **Status: withdrawn (2026-10-07).** Retracted before acceptance. The
 > renderings it scored — the Experiments pane's sinks — are removed by
-> [ADR-0289](./0289-leeway-rows-for-readers-canonical-forms-a-read-model-and-kinds-in-projection.md)
-> (proposed), and the harness with them. The lens it helped shape moved into
+> [ADR-0289](./0289-leeway-rows-for-readers-canonical-forms-a-read-model-and-kinds-in-projection.md),
+> and the harness with them. The lens it helped shape moved into
 > the Projection panel; the record of its judged rounds is the lens
 > exploration's background document. The idea worth keeping — scenario
 > questions with SQL-computed answers, posed to a reader given only the

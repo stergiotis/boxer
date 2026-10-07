@@ -1,7 +1,7 @@
 package play
 
 // play_ops_canonical.go: get_canonical, a leeway row's canonical forms for an
-// agent (ADR-0289 §SD2, proposed) — the canonform digest and the canonwire
+// agent (ADR-0289 §SD2) — the canonform digest and the canonwire
 // fingerprint get_detail also returns, and the CBOR items both were taken
 // over, as the Detail pane's identity strip shows them behind its CBOR
 // disclosure (ADR-0219 SD5, SD6). The canonwire item is the row's whole

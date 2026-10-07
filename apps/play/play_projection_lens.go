@@ -14,7 +14,7 @@ import (
 )
 
 // play_projection_lens.go is the lens inside the Projection panel (ADR-0289
-// §SD4, proposed): the run's rows read as slots, banded by the run's own
+// §SD4): the run's rows read as slots, banded by the run's own
 // clusters, and drawn as the clusters' archetypes, every row in its band, or
 // one row among its peers — beside the neighbour graph, under one numbering.
 

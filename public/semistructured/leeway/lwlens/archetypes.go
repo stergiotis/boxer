@@ -11,7 +11,7 @@ import (
 // in each slot — and under it only the rows that break the pattern, so a
 // batch of n rows in k clusters reads in about k lines plus its exceptions.
 // What the form says is computed here, as data; leewaywidgets.LensView paints
-// it and play's archetypes operation returns it (ADR-0289 §SD4, proposed).
+// it and play's archetypes operation returns it (ADR-0289 §SD4).
 
 const (
 	// TemplateAt is the band support a slot needs to be in its template.
