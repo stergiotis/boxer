@@ -29,8 +29,8 @@ model:
 
 - **ADR-0269's result references and data handles**: a query's result is
   held by the host and an operation can declare an argument as a reference
-  (`OperationSpec.Refs`). No operation declares one, and the chat reads
-  every reference into the model's context on receipt.
+  (`OperationSpec.Refs`). No operation declared one, and the chat read
+  every reference into the model's context on receipt (2026-10-07).
 - **[ADR-0240](./0240-adhoc-datasets-v2-sealed-store-owned-capability.md)'s
   ad-hoc datasets**: an app publishes an Arrow stream under an alias, play
   reads it as `keelson('<alias>')`, a window follows republishes and
@@ -129,8 +129,14 @@ takes no statement.
   each dataset still announces itself on `adhoc.event.*`, naming its
   bundle. The service stores the document without parsing it — it lives
   under `public/keelson/runtime` and the applet parser in `apps/sqlapplet`.
-  The checked constructor `sqlapplet.PublishBundleE` (SD7) parses a
-  document before it is published; play parses it again on open.
+  The checked constructor is `play.PublishBundleE` (`ComposeBundleDocE`):
+  a producer states the bundle — its SQL in a pane's shape, the panes, the
+  datasets by local name, its provenance — and the constructor composes
+  the document one way, parses it with the applet parser sqlapplet
+  installs, and refuses one that reads a dataset the bundle does not
+  carry. It lives in play, not sqlapplet, because play's `publish_result`
+  is a producer and sqlapplet imports play. play parses a document again
+  on open.
 
 - **SD3 — An alias has one owner, and a window publishes under its own.** A
   publish of a dataset or bundle alias that is live under another owner is
@@ -168,7 +174,7 @@ takes no statement.
 
     | Operation | Class | Effect |
     | --- | --- | --- |
-    | `list_bundles` | external read of `keelson('adhoc_bundles')` over keelson.query | none — and this window's last publish |
+    | `list_bundles` | external read of `keelson('adhoc_bundles')` over keelson.query; it also reports this window's last publish | none |
     | `open_bundle {alias}` | command | document — the window follows the bundle from the next frames; `list_panes` then says what each pane draws |
     | `publish_result {bundle, local_name?, sql?, tabs?, title?}` | command | **consequential** — the whole main result as a one-dataset bundle |
     | `bind_dataset {alias, as?}` | command | document — an alias bound under the name the buffer reads |
@@ -215,6 +221,16 @@ takes no statement.
   `OnBehalfOf` of the call for the work it starts and passes it with each
   request that work causes.
 
+  **Provenance is data.** A bundle publish carries the statement that
+  produced its rows, as the producer ran it, and the handles of the
+  datasets that statement read; the service resolves each handle to the
+  alias, bundle and stream digest it holds, so lineage between bundles
+  names bytes, not the producer's word for them. The provenance is on the
+  bundle, in `keelson('adhoc_bundles')` (`source_sql`, `input_handles`,
+  `input_aliases`) and on the publish's trail row, with the document
+  itself and every dataset's columns, so a bundle is described — and its
+  document reconstructible — from `boxer.facts` alone.
+
   The audit is an archetype on ADR-0277's trail, written through the host's
   `trail.Recorder`, one row per operation and outcome: publish,
   republish, retract, withdraw (the publishing window closed), read, and
@@ -226,9 +242,13 @@ takes no statement.
   `Delegation`, `Conversation` and `Cause` from the attested context, and
   the domain component `AdhocDataset`: operation, outcome and reason,
   bundle, revision, owner, and per dataset its local name, alias, handle,
-  rows, bytes and the BLAKE3 digest of its stream as sealed — computed
-  while sealing — with the document's digest; `Attested` says the context
-  came from the dispatcher. The stream digest is what lets a reader, or a
+  rows, bytes — the stream's length as a reader receives it, the bytes its
+  digest is over — and the BLAKE3 digest of its stream as sealed, computed
+  while sealing; the document, its digest, the source statement, the
+  inputs and the columns on a publish. `Attested` says the context came
+  from the dispatcher, and `InFlight` whether the window had answered the
+  call yet: false is work done later under an answered call while its
+  task stayed live. The stream digest is what lets a reader, or a
   test, show that the bytes a consumer read are the bytes a producer
   published, without either party's word for it. The trail view
   `dm_trail_adhoc_bundles` and a timeline branch read the rows. The live
@@ -244,8 +264,14 @@ takes no statement.
   resolves the alias and returns the Arrow IPC stream as sealed — the bytes
   every reader of it reads — with its digest, which `ReadAllE` checks
   against what it received (`ErrDigestMismatch`). A reader decodes the
-  stream with `ipc.NewReader`; one that hands the bytes on, into a sandbox
-  or onto a wire, keeps the digest with them. The request takes no
+  stream with `ipc.NewReader`. A receiver that hands the bytes on, into a
+  sandbox or onto a wire, is to carry the handle, revision and digest with
+  them; boxer cannot check that, so each receiver's own tests hold it. An
+  agent's read is held to its task's grant as a run in play is: it needs
+  `keelson-bundle:<bundle>` or `keelson:<alias>`, and a refusal
+  (`GrantError`) names the destination, which the reply carries so the
+  reading app can surface it with `app.RefuseForDestinations`. The request
+  takes no
   statement, so a reader cannot filter, join or aggregate; that is play's
   job, and the result of it is a `publish_result`. The keelson.query
   service (ADR-0253) refuses a statement that reads a table the registry
@@ -266,7 +292,7 @@ takes no statement.
   (ADR-0132 §SD8) and a manifest is fixed before any bundle exists, a
   bundle document may ask for nothing beyond `BundleViewCaps`: endpoint
   introspection, reads of its own datasets, no declared capabilities of its
-  own. `sqlapplet.PublishBundleE` refuses a document outside that set, so
+  own. `play.PublishBundleE` refuses a document outside that set, so
   every bundle opens in every receiver. The view keeps "Open in
   Playground", which opens the bundle in a full play window.
 
@@ -326,6 +352,33 @@ takes no statement.
   per-item bundles `KeepAfterClose`, so closing the window releases them
   all.
 
+### Deferred and open
+
+- **Only play queries (SD6).** keelson.query could admit a sealed table
+  under the read's attestation and grant check, stamped like a run, so a
+  consumer projects a dataset rather than copying it whole. Trigger: a
+  consumer that needs a slice of a dataset larger than it can take in.
+- **Durable bundles.** A bundle lives as long as its window; the trail
+  keeps digests of streams that are gone. A person-confirmed `promote`
+  would write a bundle's streams into a durable store keyed by their
+  digests, so a trail row resolves later and an analysis can be
+  reproduced. Trigger: an analysis that must be reread after its windows
+  closed.
+- **Publishing without a confirmation per hop.** A destination such as
+  `publish:<alias prefix>`, granted once per task, would let a pipeline
+  publish under the person's standing consent, each publish still
+  audited. Trigger: a multi-hop pipeline whose confirmations the person
+  reports as friction.
+- **The person's own publish.** `publish_result` has no gesture; the
+  person publishes only by confirming an agent.
+- **Summaries and meaning.** The catalog and the trail carry rows, bytes,
+  digests and columns; per-column summaries (nulls, min, max, a bounded
+  sample) and units would let an agent learn what a bundle holds without
+  opening it.
+- **Names carrying identity.** A window-scoped alias, `<base>_w<instance>`,
+  names a per-run instance key; a lookup keyed on alias and owner would
+  keep names clean. Trigger: aliases that must mean the same across runs.
+
 ### Milestones
 
 - **M1 — Bundle records in `adhocdata`:** ✓ atomic publish, republish and
@@ -344,6 +397,9 @@ takes no statement.
   moved to them, `PlayLaunch.DatasetNames`, and the refusal of an alias
   another owner holds.
 - **M5 — The headless end-to-end test** ✓ of the Verification plan.
+- **M5b — The review's corrections:** ✓ grant-checked reads, provenance as
+  data with `play.PublishBundleE`, one unit for bytes, members carrying
+  the bundle revision, `InFlight`, no in-process audit list.
 - **M6 — Bundle views:** `NewBundleView`, `BundleViewCaps`, the document
   check in `PublishBundleE`, plain views that sync on the frame they are
   drawn; adhocdemo becomes a receiver; the frame cost of an idle plain
@@ -358,15 +414,15 @@ takes no statement.
 | Capability subjects (ADR-0026) | added: `adhoc.bundle.publish`, `.resolve`, `.retract`; `adhoc.bundle.event.published`, `.retracted` (`adhoc.bundle.event.>`); `adhoc.read` | `adhocdata` service and client; the manifests of apps that publish, open or read bundles |
 | Bus codecs (ADR-0240 §SD8) | added to the adhoc request, reply and event kinds: bundle, document, local names, streams, handles, stream digest, on-behalf-of task/epoch/call, window scope, the reply's alias | generated with the existing adhoc codecs; vdd's assignment golden |
 | Introspection tables | added: `keelson('adhoc_bundles')`; `keelson('adhoc')` gains `bundle`, `task`, `call`, `conversation`, `turn` | catalog providers; the help pages that list them |
-| The trail store (ADR-0277) | added: the `AdhocDataset` component, its archetype, the view `dm_trail_adhoc_bundles` and a timeline branch | `runtime/trail` regeneration; `trailviews` (views v3); the runtime vocabulary's golden |
-| `app` exported API | added: `CallContext`, `CallContextI`, implemented by `agent.Service` and wired by hostboot | httpegress may move from `DelegationI` onto it later; not in this decision |
-| `adhocdata` exported API | added: bundle publish/resolve/retract, `ReadAllE`, `NewWindowPublisher`, `WindowAlias`, `DatasetAlias`, `IsHandle`, local names on `Follower`, `MaxDatasetsPerOwner`; changed: publish refuses an alias another owner holds, `MaxDatasets` is a process bound | every publisher in the Migration list |
+| The trail store (ADR-0277) | added: the `AdhocDataset` component — bytes are plain stream lengths; document, source statement, inputs and columns on a publish; `InFlight` — its archetype, the view `dm_trail_adhoc_bundles` and a timeline branch | `runtime/trail` regeneration; `trailviews` (views v3); the runtime vocabulary's golden |
+| `app` exported API | added: `CallContext` (with `InFlight`), `CallContextI`, implemented by `agent.Service` and wired by hostboot | httpegress may move from `DelegationI` onto it later; not in this decision |
+| `adhocdata` exported API | added: bundle publish/resolve/retract with `BundleProvenance`, `ReadAllE`, `GrantError`, `DispatcherI` / `SetDispatcher`, `DestinationDataset` / `DestinationBundle`, `NewWindowPublisher`, `WindowAlias`, `DatasetAlias`, `IsHandle`, local names on `Follower`, `MaxDatasetsPerOwner`; changed: publish refuses an alias another owner holds, `MaxDatasets` is a process bound | every publisher in the Migration list |
 | `launchcfg.PlayLaunch` | added: `Bundle`, `DatasetNames` | leeway codec regeneration |
 | play's catalog (ADR-0270) | added: `list_bundles`, `open_bundle`, `publish_result`; changed: `bind_dataset` takes `as`; play's manifest gains the bundle resolve and events and `keelson.query.adhoc_bundles` | play's ops and caps tests; the operation summaries the chat reads |
-| play's exported API | added: `AppletDoc`, `SetAppletDocParser`, `DestinationKeelsonBundle` | sqlapplet installs the parser |
+| play's exported API | added: `AppletDoc`, `SetAppletDocParser`, `DestinationKeelsonBundle`, `BundleSpec`, `ComposeBundleDocE`, `PublishBundleE`, and test support for headless windows | sqlapplet installs the parser; producers outside play publish through `PublishBundleE` |
 | Agent grant destinations | added: `keelson-bundle:<alias>`, host reach | play's agent limits; the chat's guidance and `request_access`'s example |
 | keelson.query gate (ADR-0253) | changed: refuses sealed tables | `keelsonquery.Gate` tests |
-| `sqlapplet` exported API | added: `NewBundleView`, `BundleViewCaps`, `BundleViewOps`, `PublishBundleE` (M6, M7) | receivers' manifests |
+| `sqlapplet` exported API | added: `NewBundleView`, `BundleViewCaps`, `BundleViewOps` (M6, M7) | receivers' manifests |
 | `appops` exported API | added: mounted commands (M7) | catalogs that mount a component |
 | Receivers' catalogs | added, for an operable view: the `bundle_` operations (M7) | the operation summaries the chat reads |
 
@@ -387,9 +443,11 @@ takes no statement.
   and local names (SD3) give the same isolation with the document
   untouched.
 - **Letting producers query their own datasets through keelson.query.**
-  Rejected: a second query surface over datasets is a second place an
-  agent's reads escape play's agent limits and history, and a second dialect
-  of what a dataset means.
+  Not taken, for capacity rather than principle: play is the one place the
+  agent limits, the run history and the panes are implemented, and
+  keelson.query would need the same attestation, grant check and stamp
+  to admit a sealed table. The cost is that a consumer takes a dataset
+  whole or not at all; reopening it is listed under Deferred and open.
 - **`publish_projection` rebuilt on `publish_result`.** The projection's
   two datasets are bound by handle in the window that computed them, and
   its scaffold names them; a bundle around them adds nothing that window
@@ -408,7 +466,8 @@ takes no statement.
 
 - A table crosses from play to another app, and back, as the producer's
   Arrow bytes, at up to ADR-0240's per-dataset quota, and a test can assert
-  identity at each hop.
+  identity at each hop inside the process; past a receiver's own
+  transcoding, the receiver's tests have to.
 - What an agent published is visible in the person's tools: open the bundle
   in play, read `keelson('adhoc_bundles')`, follow the call to the action
   record and the turn to the chat transcript that asked for it.
@@ -728,6 +787,22 @@ a command that writes a resource the task never read, and nothing read
 `open_bundle` — or, since ADR-0270, `bind_dataset`. `publish_result` now
 writes nothing of its window (its effect is outside), and `get_state`
 reads both resources and reports them (`Bundle`, `Followed`).
+
+### 2026-10-07 — an independent review, and its corrections
+
+A review of the decision and M1–M4 for data-centricity found the
+storage and audit layer sound and asked for three design corrections,
+all made: an agent's `adhoc.read` is held to its task's grant (it was
+attested but not checked, so a reader outside play escaped the grant a
+run in play needed); provenance is data — source statement, inputs
+resolved to digests, columns, the document — rather than prose in a
+document held in memory; and the document is composed by one checked
+constructor, `play.PublishBundleE`. Smaller fixes: bytes in one unit,
+bundle members carrying the bundle's revision, the attestation's scope
+on the row (`InFlight`), and the in-process audit list removed. The
+review's points that are decisions rather than corrections are under
+Deferred and open; its point about a receiver dropping the digest past
+its own transcoding belongs to that receiver.
 
 ## References
 
