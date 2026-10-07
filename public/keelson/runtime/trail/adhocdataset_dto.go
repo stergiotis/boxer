@@ -43,4 +43,20 @@ type AdhocDataset struct {
 	// was done; false with Attested is work done later under a call the
 	// window had answered, while its task stayed live.
 	InFlight bool `lw:"adhocDatasetInFlight,bool"`
+
+	// On a publish and a republish, where the rows came from and what they
+	// are (ADR-0288 (proposed) §SD5), so a bundle is described — and its
+	// document reconstructible — from the trail alone: the document as
+	// published; the statement that produced the rows, as the publisher
+	// ran it; the datasets it read, with the alias and digest the service
+	// held for each; and every dataset's columns, ColumnDatasets naming the
+	// dataset by its position in LocalNames.
+	Document       string   `lw:"adhocDatasetDocument,stringArray,unit"`
+	SourceSql      string   `lw:"adhocDatasetSourceSql,stringArray,unit"`
+	InputHandles   []string `lw:"adhocDatasetInputHandles,stringArray"`
+	InputAliases   []string `lw:"adhocDatasetInputAliases,stringArray"`
+	InputDigests   []string `lw:"adhocDatasetInputDigests,stringArray"`
+	ColumnDatasets []uint32 `lw:"adhocDatasetColumnDatasets,u32Array"`
+	ColumnNames    []string `lw:"adhocDatasetColumnNames,stringArray"`
+	ColumnTypes    []string `lw:"adhocDatasetColumnTypes,stringArray"`
 }

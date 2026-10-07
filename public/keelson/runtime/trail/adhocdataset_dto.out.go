@@ -30,6 +30,14 @@ const (
 	kindAdhocDatasetDocumentDigest uint64 = 9223372049739677968
 	kindAdhocDatasetAttested       uint64 = 9223372049739677969
 	kindAdhocDatasetInFlight       uint64 = 9223372049739677970
+	kindAdhocDatasetDocument       uint64 = 9223372049739677971
+	kindAdhocDatasetSourceSql      uint64 = 9223372049739677972
+	kindAdhocDatasetInputHandles   uint64 = 9223372049739677973
+	kindAdhocDatasetInputAliases   uint64 = 9223372049739677974
+	kindAdhocDatasetInputDigests   uint64 = 9223372049739677975
+	kindAdhocDatasetColumnDatasets uint64 = 9223372049739677976
+	kindAdhocDatasetColumnNames    uint64 = 9223372049739677977
+	kindAdhocDatasetColumnTypes    uint64 = 9223372049739677978
 )
 
 // adhocDatasetSymbolAttrI is the InAttr-side view of the symbol section. P-variants only —
@@ -96,6 +104,22 @@ type adhocDatasetBoolSecI[Attr any, Ent any] interface {
 	EndSection() Ent
 }
 
+// adhocDatasetU32ArrayAttrI is the InAttr-side view of the u32Array section. P-variants only —
+// every method returns void so no F-bounded `[Self]` parameter is
+// needed.
+type adhocDatasetU32ArrayAttrI interface {
+	dmlruntime.InAttributeMembershipLowCardRefPI
+	AddToContainerP(value uint32)
+	EndAttributeP()
+}
+
+// adhocDatasetU32ArraySecI is the Section-side view: opens an attribute and closes
+// the section. Attr and Ent are bound at the call site by inference.
+type adhocDatasetU32ArraySecI[Attr any, Ent any] interface {
+	BeginAttribute() Attr
+	EndSection() Ent
+}
+
 // adhocDatasetEntityI is the entity-builder surface adhocDatasetAddSections drives.
 // It always lists the per-section getters; the entity-frame methods
 // (BeginEntity / plain setters / CommitEntity) are added only for the
@@ -112,12 +136,15 @@ type adhocDatasetEntityI[
 	U64ArraySec adhocDatasetU64ArraySecI[U64ArrayAttr, Ent],
 	BoolAttr adhocDatasetBoolAttrI,
 	BoolSec adhocDatasetBoolSecI[BoolAttr, Ent],
+	U32ArrayAttr adhocDatasetU32ArrayAttrI,
+	U32ArraySec adhocDatasetU32ArraySecI[U32ArrayAttr, Ent],
 	Ent any,
 ] interface {
 	GetSectionSymbol() SymbolSec
 	GetSectionStringArray() StringArraySec
 	GetSectionU64Array() U64ArraySec
 	GetSectionBool() BoolSec
+	GetSectionU32Array() U32ArraySec
 }
 
 // adhocDatasetEmitSectionSymbol writes this kind's symbol attributes into an
@@ -159,6 +186,12 @@ func adhocDatasetEmitSectionStringArray[
 	stringArraySecAttr_DocumentDigest := stringArraySec.BeginAttributeSingle(row.DocumentDigest)
 	stringArraySecAttr_DocumentDigest.AddMembershipLowCardRefP(kindAdhocDatasetDocumentDigest)
 	stringArraySecAttr_DocumentDigest.EndAttributeP()
+	stringArraySecAttr_Document := stringArraySec.BeginAttributeSingle(row.Document)
+	stringArraySecAttr_Document.AddMembershipLowCardRefP(kindAdhocDatasetDocument)
+	stringArraySecAttr_Document.EndAttributeP()
+	stringArraySecAttr_SourceSql := stringArraySec.BeginAttributeSingle(row.SourceSql)
+	stringArraySecAttr_SourceSql.AddMembershipLowCardRefP(kindAdhocDatasetSourceSql)
+	stringArraySecAttr_SourceSql.EndAttributeP()
 	if len(row.Reason) > 0 {
 		stringArraySecAttr_Reason := stringArraySec.BeginAttribute()
 		for _, v := range row.Reason {
@@ -198,6 +231,46 @@ func adhocDatasetEmitSectionStringArray[
 		}
 		stringArraySecAttr_StreamDigests.AddMembershipLowCardRefP(kindAdhocDatasetStreamDigests)
 		stringArraySecAttr_StreamDigests.EndAttributeP()
+	}
+	if len(row.InputHandles) > 0 {
+		stringArraySecAttr_InputHandles := stringArraySec.BeginAttribute()
+		for _, v := range row.InputHandles {
+			stringArraySecAttr_InputHandles.AddToContainerP(v)
+		}
+		stringArraySecAttr_InputHandles.AddMembershipLowCardRefP(kindAdhocDatasetInputHandles)
+		stringArraySecAttr_InputHandles.EndAttributeP()
+	}
+	if len(row.InputAliases) > 0 {
+		stringArraySecAttr_InputAliases := stringArraySec.BeginAttribute()
+		for _, v := range row.InputAliases {
+			stringArraySecAttr_InputAliases.AddToContainerP(v)
+		}
+		stringArraySecAttr_InputAliases.AddMembershipLowCardRefP(kindAdhocDatasetInputAliases)
+		stringArraySecAttr_InputAliases.EndAttributeP()
+	}
+	if len(row.InputDigests) > 0 {
+		stringArraySecAttr_InputDigests := stringArraySec.BeginAttribute()
+		for _, v := range row.InputDigests {
+			stringArraySecAttr_InputDigests.AddToContainerP(v)
+		}
+		stringArraySecAttr_InputDigests.AddMembershipLowCardRefP(kindAdhocDatasetInputDigests)
+		stringArraySecAttr_InputDigests.EndAttributeP()
+	}
+	if len(row.ColumnNames) > 0 {
+		stringArraySecAttr_ColumnNames := stringArraySec.BeginAttribute()
+		for _, v := range row.ColumnNames {
+			stringArraySecAttr_ColumnNames.AddToContainerP(v)
+		}
+		stringArraySecAttr_ColumnNames.AddMembershipLowCardRefP(kindAdhocDatasetColumnNames)
+		stringArraySecAttr_ColumnNames.EndAttributeP()
+	}
+	if len(row.ColumnTypes) > 0 {
+		stringArraySecAttr_ColumnTypes := stringArraySec.BeginAttribute()
+		for _, v := range row.ColumnTypes {
+			stringArraySecAttr_ColumnTypes.AddToContainerP(v)
+		}
+		stringArraySecAttr_ColumnTypes.AddMembershipLowCardRefP(kindAdhocDatasetColumnTypes)
+		stringArraySecAttr_ColumnTypes.EndAttributeP()
 	}
 	return
 }
@@ -254,6 +327,26 @@ func adhocDatasetEmitSectionBool[
 	return
 }
 
+// adhocDatasetEmitSectionU32Array writes this kind's u32Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func adhocDatasetEmitSectionU32Array[
+	U32ArrayAttr adhocDatasetU32ArrayAttrI,
+	U32ArraySec adhocDatasetU32ArraySecI[U32ArrayAttr, Ent],
+	Ent any,
+](u32ArraySec U32ArraySec, row AdhocDataset) (err error) {
+	if len(row.ColumnDatasets) > 0 {
+		u32ArraySecAttr_ColumnDatasets := u32ArraySec.BeginAttribute()
+		for _, v := range row.ColumnDatasets {
+			u32ArraySecAttr_ColumnDatasets.AddToContainerP(v)
+		}
+		u32ArraySecAttr_ColumnDatasets.AddMembershipLowCardRefP(kindAdhocDatasetColumnDatasets)
+		u32ArraySecAttr_ColumnDatasets.EndAttributeP()
+	}
+	return
+}
+
 // adhocDatasetAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -266,12 +359,15 @@ func adhocDatasetAddSections[
 	U64ArraySec adhocDatasetU64ArraySecI[U64ArrayAttr, Ent],
 	BoolAttr adhocDatasetBoolAttrI,
 	BoolSec adhocDatasetBoolSecI[BoolAttr, Ent],
+	U32ArrayAttr adhocDatasetU32ArrayAttrI,
+	U32ArraySec adhocDatasetU32ArraySecI[U32ArrayAttr, Ent],
 	Ent any,
 	DML adhocDatasetEntityI[
 		SymbolAttr, SymbolSec,
 		StringArrayAttr, StringArraySec,
 		U64ArrayAttr, U64ArraySec,
 		BoolAttr, BoolSec,
+		U32ArrayAttr, U32ArraySec,
 		Ent,
 	],
 ](dml DML, row AdhocDataset) (err error) {
@@ -303,6 +399,13 @@ func adhocDatasetAddSections[
 		return
 	}
 	boolSec.EndSection()
+	// --- u32Array. ---
+	u32ArraySec := dml.GetSectionU32Array()
+	err = adhocDatasetEmitSectionU32Array(u32ArraySec, row)
+	if err != nil {
+		return
+	}
+	u32ArraySec.EndSection()
 	return
 }
 
@@ -352,6 +455,17 @@ type adhocDatasetBoolMembsReadI interface {
 	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
+// adhocDatasetU32ArrayAttrsReadI is the Attributes-side view of the u32Array section.
+type adhocDatasetU32ArrayAttrsReadI interface {
+	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint32]
+	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
+}
+
+// adhocDatasetU32ArrayMembsReadI is the Memberships-side view of the u32Array section.
+type adhocDatasetU32ArrayMembsReadI interface {
+	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
+}
+
 // adhocDatasetReadRow reads row i as one optional AdhocDataset component: presence-
 // gated (a row carrying none of the kind's memberships yields
 // present=false), membership-matched. A slot carrying more
@@ -369,6 +483,8 @@ func adhocDatasetReadRow[
 	U64ArrayMembs adhocDatasetU64ArrayMembsReadI,
 	BoolAttrs adhocDatasetBoolAttrsReadI,
 	BoolMembs adhocDatasetBoolMembsReadI,
+	U32ArrayAttrs adhocDatasetU32ArrayAttrsReadI,
+	U32ArrayMembs adhocDatasetU32ArrayMembsReadI,
 ](
 	i int,
 	symbolAttrs SymbolAttrs,
@@ -379,6 +495,8 @@ func adhocDatasetReadRow[
 	u64ArrayMembs U64ArrayMembs,
 	boolAttrs BoolAttrs,
 	boolMembs BoolMembs,
+	u32ArrayAttrs U32ArrayAttrs,
+	u32ArrayMembs U32ArrayMembs,
 ) (row AdhocDataset, present bool, err error) {
 	// --- symbol. ---
 	var symbolKindVal string
@@ -482,6 +600,12 @@ func adhocDatasetReadRow[
 	var stringArrayDocumentDigestVal string
 	var stringArrayDocumentDigestCount int
 	var stringArrayDocumentDigestLastAttr int64
+	var stringArrayDocumentVal string
+	var stringArrayDocumentCount int
+	var stringArrayDocumentLastAttr int64
+	var stringArraySourceSqlVal string
+	var stringArraySourceSqlCount int
+	var stringArraySourceSqlLastAttr int64
 	var stringArrayReasonSlice []string
 	var stringArrayReasonCount int
 	var stringArrayReasonLastAttr int64
@@ -497,6 +621,21 @@ func adhocDatasetReadRow[
 	var stringArrayStreamDigestsSlice []string
 	var stringArrayStreamDigestsCount int
 	var stringArrayStreamDigestsLastAttr int64
+	var stringArrayInputHandlesSlice []string
+	var stringArrayInputHandlesCount int
+	var stringArrayInputHandlesLastAttr int64
+	var stringArrayInputAliasesSlice []string
+	var stringArrayInputAliasesCount int
+	var stringArrayInputAliasesLastAttr int64
+	var stringArrayInputDigestsSlice []string
+	var stringArrayInputDigestsCount int
+	var stringArrayInputDigestsLastAttr int64
+	var stringArrayColumnNamesSlice []string
+	var stringArrayColumnNamesCount int
+	var stringArrayColumnNamesLastAttr int64
+	var stringArrayColumnTypesSlice []string
+	var stringArrayColumnTypesCount int
+	var stringArrayColumnTypesLastAttr int64
 	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -512,6 +651,28 @@ func adhocDatasetReadRow[
 					return
 				}
 				stringArrayDocumentDigestVal = val
+			case kindAdhocDatasetDocument:
+				if stringArrayDocumentLastAttr != attrJ+1 {
+					stringArrayDocumentLastAttr = attrJ + 1
+					stringArrayDocumentCount++
+				}
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocDatasetDocument").Str("field", "Document").Errorf("slot stringArray@adhocDatasetDocument (field Document) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				stringArrayDocumentVal = val
+			case kindAdhocDatasetSourceSql:
+				if stringArraySourceSqlLastAttr != attrJ+1 {
+					stringArraySourceSqlLastAttr = attrJ + 1
+					stringArraySourceSqlCount++
+				}
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocDatasetSourceSql").Str("field", "SourceSql").Errorf("slot stringArray@adhocDatasetSourceSql (field SourceSql) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				stringArraySourceSqlVal = val
 			case kindAdhocDatasetReason:
 				if stringArrayReasonLastAttr != attrJ+1 {
 					stringArrayReasonLastAttr = attrJ + 1
@@ -552,6 +713,46 @@ func adhocDatasetReadRow[
 				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					stringArrayStreamDigestsSlice = append(stringArrayStreamDigestsSlice, v)
 				}
+			case kindAdhocDatasetInputHandles:
+				if stringArrayInputHandlesLastAttr != attrJ+1 {
+					stringArrayInputHandlesLastAttr = attrJ + 1
+					stringArrayInputHandlesCount++
+				}
+				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					stringArrayInputHandlesSlice = append(stringArrayInputHandlesSlice, v)
+				}
+			case kindAdhocDatasetInputAliases:
+				if stringArrayInputAliasesLastAttr != attrJ+1 {
+					stringArrayInputAliasesLastAttr = attrJ + 1
+					stringArrayInputAliasesCount++
+				}
+				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					stringArrayInputAliasesSlice = append(stringArrayInputAliasesSlice, v)
+				}
+			case kindAdhocDatasetInputDigests:
+				if stringArrayInputDigestsLastAttr != attrJ+1 {
+					stringArrayInputDigestsLastAttr = attrJ + 1
+					stringArrayInputDigestsCount++
+				}
+				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					stringArrayInputDigestsSlice = append(stringArrayInputDigestsSlice, v)
+				}
+			case kindAdhocDatasetColumnNames:
+				if stringArrayColumnNamesLastAttr != attrJ+1 {
+					stringArrayColumnNamesLastAttr = attrJ + 1
+					stringArrayColumnNamesCount++
+				}
+				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					stringArrayColumnNamesSlice = append(stringArrayColumnNamesSlice, v)
+				}
+			case kindAdhocDatasetColumnTypes:
+				if stringArrayColumnTypesLastAttr != attrJ+1 {
+					stringArrayColumnTypesLastAttr = attrJ + 1
+					stringArrayColumnTypesCount++
+				}
+				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					stringArrayColumnTypesSlice = append(stringArrayColumnTypesSlice, v)
+				}
 			}
 		}
 	}
@@ -561,6 +762,22 @@ func adhocDatasetReadRow[
 	}
 	if stringArrayDocumentDigestCount == 1 {
 		row.DocumentDigest = stringArrayDocumentDigestVal
+		present = true
+	}
+	if stringArrayDocumentCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocDatasetDocument").Int("got", stringArrayDocumentCount).Errorf("slot stringArray@adhocDatasetDocument (field Document) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayDocumentCount)
+		return
+	}
+	if stringArrayDocumentCount == 1 {
+		row.Document = stringArrayDocumentVal
+		present = true
+	}
+	if stringArraySourceSqlCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocDatasetSourceSql").Int("got", stringArraySourceSqlCount).Errorf("slot stringArray@adhocDatasetSourceSql (field SourceSql) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArraySourceSqlCount)
+		return
+	}
+	if stringArraySourceSqlCount == 1 {
+		row.SourceSql = stringArraySourceSqlVal
 		present = true
 	}
 	if stringArrayReasonCount > 1 {
@@ -601,6 +818,46 @@ func adhocDatasetReadRow[
 	}
 	if stringArrayStreamDigestsSlice != nil {
 		row.StreamDigests = stringArrayStreamDigestsSlice
+		present = true
+	}
+	if stringArrayInputHandlesCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocDatasetInputHandles").Int("got", stringArrayInputHandlesCount).Errorf("slot stringArray@adhocDatasetInputHandles (field InputHandles) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayInputHandlesCount)
+		return
+	}
+	if stringArrayInputHandlesSlice != nil {
+		row.InputHandles = stringArrayInputHandlesSlice
+		present = true
+	}
+	if stringArrayInputAliasesCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocDatasetInputAliases").Int("got", stringArrayInputAliasesCount).Errorf("slot stringArray@adhocDatasetInputAliases (field InputAliases) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayInputAliasesCount)
+		return
+	}
+	if stringArrayInputAliasesSlice != nil {
+		row.InputAliases = stringArrayInputAliasesSlice
+		present = true
+	}
+	if stringArrayInputDigestsCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocDatasetInputDigests").Int("got", stringArrayInputDigestsCount).Errorf("slot stringArray@adhocDatasetInputDigests (field InputDigests) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayInputDigestsCount)
+		return
+	}
+	if stringArrayInputDigestsSlice != nil {
+		row.InputDigests = stringArrayInputDigestsSlice
+		present = true
+	}
+	if stringArrayColumnNamesCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocDatasetColumnNames").Int("got", stringArrayColumnNamesCount).Errorf("slot stringArray@adhocDatasetColumnNames (field ColumnNames) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayColumnNamesCount)
+		return
+	}
+	if stringArrayColumnNamesSlice != nil {
+		row.ColumnNames = stringArrayColumnNamesSlice
+		present = true
+	}
+	if stringArrayColumnTypesCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocDatasetColumnTypes").Int("got", stringArrayColumnTypesCount).Errorf("slot stringArray@adhocDatasetColumnTypes (field ColumnTypes) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayColumnTypesCount)
+		return
+	}
+	if stringArrayColumnTypesSlice != nil {
+		row.ColumnTypes = stringArrayColumnTypesSlice
 		present = true
 	}
 	// --- u64Array. ---
@@ -735,6 +992,33 @@ func adhocDatasetReadRow[
 	}
 	if boolInFlightCount == 1 {
 		row.InFlight = boolInFlightVal
+		present = true
+	}
+	// --- u32Array. ---
+	var u32ArrayColumnDatasetsSlice []uint32
+	var u32ArrayColumnDatasetsCount int
+	var u32ArrayColumnDatasetsLastAttr int64
+	nu32Array := u32ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nu32Array; attrJ++ {
+		for membID := range u32ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindAdhocDatasetColumnDatasets:
+				if u32ArrayColumnDatasetsLastAttr != attrJ+1 {
+					u32ArrayColumnDatasetsLastAttr = attrJ + 1
+					u32ArrayColumnDatasetsCount++
+				}
+				for v := range u32ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					u32ArrayColumnDatasetsSlice = append(u32ArrayColumnDatasetsSlice, v)
+				}
+			}
+		}
+	}
+	if u32ArrayColumnDatasetsCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "adhocDatasetColumnDatasets").Int("got", u32ArrayColumnDatasetsCount).Errorf("slot u32Array@adhocDatasetColumnDatasets (field ColumnDatasets) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u32ArrayColumnDatasetsCount)
+		return
+	}
+	if u32ArrayColumnDatasetsSlice != nil {
+		row.ColumnDatasets = u32ArrayColumnDatasetsSlice
 		present = true
 	}
 	return

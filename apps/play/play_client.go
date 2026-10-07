@@ -7,6 +7,7 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -20,6 +21,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
+	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
@@ -727,6 +729,24 @@ func (inst *Client) datasetAliasOf() (aliasOf map[string]datasetName) {
 	aliasOf = make(map[string]datasetName, len(inst.datasetBindings))
 	for local, handle := range inst.datasetBindings {
 		aliasOf[handle] = inst.datasetNameLocked(local)
+	}
+	return
+}
+
+// inputHandlesOf is the handles of the datasets sql reads: each
+// keelson('…') name that is a handle, or a name bound in this window, as
+// bound now. A name bound to nothing reads no dataset and is left out.
+func (inst *Client) inputHandlesOf(sql string) (handles []string) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	for _, name := range keelsonsql.References(sql) {
+		h := name
+		if bound, ok := inst.datasetBindings[name]; ok {
+			h = bound
+		}
+		if adhocdata.IsHandle(h) && !slices.Contains(handles, h) {
+			handles = append(handles, h)
+		}
 	}
 	return
 }

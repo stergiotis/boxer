@@ -103,7 +103,7 @@ import (
 // ViewsVersion is the revision of the views this package composes. Bump it
 // whenever a view's columns or meaning change, so the stamp a deployed view
 // carries tells an operator it predates the build.
-const ViewsVersion = 4
+const ViewsVersion = 5
 
 // agenticTag marks the views over what the agentic side of keelson writes —
 // model calls and their messages, and what agents did under a grant. The
@@ -489,6 +489,13 @@ var kindViews = []kindView{
 		{"document-digest", "stringArray", vocab.MembAdhocDatasetDocumentDigest, first},
 		{"attested", "bool", vocab.MembAdhocDatasetAttested, scalar},
 		{"in-flight", "bool", vocab.MembAdhocDatasetInFlight, scalar},
+		{"document", "stringArray", vocab.MembAdhocDatasetDocument, first},
+		{"source-sql", "stringArray", vocab.MembAdhocDatasetSourceSql, first},
+		{"input-handles", "stringArray", vocab.MembAdhocDatasetInputHandles, list},
+		{"input-aliases", "stringArray", vocab.MembAdhocDatasetInputAliases, list},
+		{"input-digests", "stringArray", vocab.MembAdhocDatasetInputDigests, list},
+		{"column-names", "stringArray", vocab.MembAdhocDatasetColumnNames, list},
+		{"column-types", "stringArray", vocab.MembAdhocDatasetColumnTypes, list},
 	}},
 }
 

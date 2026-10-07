@@ -46,6 +46,8 @@ var (
 	kindAdhocOboEpoch       uint64
 	kindAdhocOboCall        uint64
 	kindAdhocWindowScoped   uint64
+	kindAdhocSourceSql      uint64
+	kindAdhocInputHandles   uint64
 )
 
 func init() {
@@ -62,6 +64,8 @@ func init() {
 	kindAdhocOboEpoch = vdd.MembAdhocOboEpoch.GetId().Value()
 	kindAdhocOboCall = vdd.MembAdhocOboCall.GetId().Value()
 	kindAdhocWindowScoped = vdd.MembAdhocWindowScoped.GetId().Value()
+	kindAdhocSourceSql = vdd.MembAdhocSourceSql.GetId().Value()
+	kindAdhocInputHandles = vdd.MembAdhocInputHandles.GetId().Value()
 	buscodec.Register[AdhocRequest](adhocRequestBusCodec)
 }
 
@@ -138,6 +142,8 @@ type AdhocRequestColumns struct {
 	OboEpoch       []uint64
 	OboCall        []string
 	WindowScoped   []bool
+	SourceSql      []string
+	InputHandles   [][]string
 }
 
 // Len returns the number of rows currently in the batch.
@@ -166,6 +172,8 @@ func (c *AdhocRequestColumns) Append(row AdhocRequest) {
 	c.OboEpoch = append(c.OboEpoch, row.OboEpoch)
 	c.OboCall = append(c.OboCall, row.OboCall)
 	c.WindowScoped = append(c.WindowScoped, row.WindowScoped)
+	c.SourceSql = append(c.SourceSql, row.SourceSql)
+	c.InputHandles = append(c.InputHandles, row.InputHandles)
 }
 
 // Row reconstructs entity i as an AoS AdhocRequest record. Inverse of
@@ -188,6 +196,8 @@ func (c *AdhocRequestColumns) Row(i int) (row AdhocRequest) {
 	row.OboEpoch = c.OboEpoch[i]
 	row.OboCall = c.OboCall[i]
 	row.WindowScoped = c.WindowScoped[i]
+	row.SourceSql = c.SourceSql[i]
+	row.InputHandles = c.InputHandles[i]
 	return
 }
 
@@ -367,6 +377,9 @@ func AdhocRequestBuildEntities[
 		stringArraySecAttr_OboCall := stringArraySec.BeginAttributeSingle(c.OboCall[i])
 		stringArraySecAttr_OboCall.AddMembershipLowCardRefP(kindAdhocOboCall)
 		stringArraySecAttr_OboCall.EndAttributeP()
+		stringArraySecAttr_SourceSql := stringArraySec.BeginAttributeSingle(c.SourceSql[i])
+		stringArraySecAttr_SourceSql.AddMembershipLowCardRefP(kindAdhocSourceSql)
+		stringArraySecAttr_SourceSql.EndAttributeP()
 		if len(c.LocalNames[i]) > 0 {
 			stringArraySecAttr_LocalNames := stringArraySec.BeginAttribute()
 			for _, v := range c.LocalNames[i] {
@@ -374,6 +387,14 @@ func AdhocRequestBuildEntities[
 			}
 			stringArraySecAttr_LocalNames.AddMembershipLowCardRefP(kindAdhocLocalNames)
 			stringArraySecAttr_LocalNames.EndAttributeP()
+		}
+		if len(c.InputHandles[i]) > 0 {
+			stringArraySecAttr_InputHandles := stringArraySec.BeginAttribute()
+			for _, v := range c.InputHandles[i] {
+				stringArraySecAttr_InputHandles.AddToContainerP(v)
+			}
+			stringArraySecAttr_InputHandles.AddMembershipLowCardRefP(kindAdhocInputHandles)
+			stringArraySecAttr_InputHandles.EndAttributeP()
 		}
 		stringArraySec.EndSection()
 		// --- bool. ---
@@ -456,6 +477,9 @@ func AdhocRequestEmitSectionStringArray[
 	stringArraySecAttr_OboCall := stringArraySec.BeginAttributeSingle(row.OboCall)
 	stringArraySecAttr_OboCall.AddMembershipLowCardRefP(kindAdhocOboCall)
 	stringArraySecAttr_OboCall.EndAttributeP()
+	stringArraySecAttr_SourceSql := stringArraySec.BeginAttributeSingle(row.SourceSql)
+	stringArraySecAttr_SourceSql.AddMembershipLowCardRefP(kindAdhocSourceSql)
+	stringArraySecAttr_SourceSql.EndAttributeP()
 	if len(row.LocalNames) > 0 {
 		stringArraySecAttr_LocalNames := stringArraySec.BeginAttribute()
 		for _, v := range row.LocalNames {
@@ -463,6 +487,14 @@ func AdhocRequestEmitSectionStringArray[
 		}
 		stringArraySecAttr_LocalNames.AddMembershipLowCardRefP(kindAdhocLocalNames)
 		stringArraySecAttr_LocalNames.EndAttributeP()
+	}
+	if len(row.InputHandles) > 0 {
+		stringArraySecAttr_InputHandles := stringArraySec.BeginAttribute()
+		for _, v := range row.InputHandles {
+			stringArraySecAttr_InputHandles.AddToContainerP(v)
+		}
+		stringArraySecAttr_InputHandles.AddMembershipLowCardRefP(kindAdhocInputHandles)
+		stringArraySecAttr_InputHandles.EndAttributeP()
 	}
 	return
 }
@@ -756,9 +788,15 @@ func AdhocRequestFillFromArrow[
 		var stringArrayOboCallVal string
 		var stringArrayOboCallCount int
 		var stringArrayOboCallLastAttr int64
+		var stringArraySourceSqlVal string
+		var stringArraySourceSqlCount int
+		var stringArraySourceSqlLastAttr int64
 		var stringArrayLocalNamesSlice []string
 		var stringArrayLocalNamesCount int
 		var stringArrayLocalNamesLastAttr int64
+		var stringArrayInputHandlesSlice []string
+		var stringArrayInputHandlesCount int
+		var stringArrayInputHandlesLastAttr int64
 		nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 			for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -796,6 +834,17 @@ func AdhocRequestFillFromArrow[
 						return
 					}
 					stringArrayOboCallVal = val
+				case kindAdhocSourceSql:
+					if stringArraySourceSqlLastAttr != attrJ+1 {
+						stringArraySourceSqlLastAttr = attrJ + 1
+						stringArraySourceSqlCount++
+					}
+					val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocSourceSql").Str("field", "SourceSql").Errorf("slot stringArray@adhocSourceSql (field SourceSql) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
+					stringArraySourceSqlVal = val
 				case kindAdhocLocalNames:
 					if stringArrayLocalNamesLastAttr != attrJ+1 {
 						stringArrayLocalNamesLastAttr = attrJ + 1
@@ -803,6 +852,14 @@ func AdhocRequestFillFromArrow[
 					}
 					for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						stringArrayLocalNamesSlice = append(stringArrayLocalNamesSlice, v)
+					}
+				case kindAdhocInputHandles:
+					if stringArrayInputHandlesLastAttr != attrJ+1 {
+						stringArrayInputHandlesLastAttr = attrJ + 1
+						stringArrayInputHandlesCount++
+					}
+					for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+						stringArrayInputHandlesSlice = append(stringArrayInputHandlesSlice, v)
 					}
 				}
 			}
@@ -822,11 +879,21 @@ func AdhocRequestFillFromArrow[
 			return
 		}
 		c.OboCall = append(c.OboCall, stringArrayOboCallVal)
+		if stringArraySourceSqlCount != 1 {
+			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocSourceSql").Int("got", stringArraySourceSqlCount).Errorf("slot stringArray@adhocSourceSql (field SourceSql) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArraySourceSqlCount)
+			return
+		}
+		c.SourceSql = append(c.SourceSql, stringArraySourceSqlVal)
 		if stringArrayLocalNamesCount > 1 {
 			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocLocalNames").Int("got", stringArrayLocalNamesCount).Errorf("slot stringArray@adhocLocalNames (field LocalNames) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayLocalNamesCount)
 			return
 		}
 		c.LocalNames = append(c.LocalNames, stringArrayLocalNamesSlice)
+		if stringArrayInputHandlesCount > 1 {
+			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocInputHandles").Int("got", stringArrayInputHandlesCount).Errorf("slot stringArray@adhocInputHandles (field InputHandles) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayInputHandlesCount)
+			return
+		}
+		c.InputHandles = append(c.InputHandles, stringArrayInputHandlesSlice)
 		// --- bool. ---
 		var boolKeepAfterCloseVal bool
 		var boolKeepAfterCloseCount int
@@ -1068,9 +1135,15 @@ func AdhocRequestReadRow[
 	var stringArrayOboCallVal string
 	var stringArrayOboCallCount int
 	var stringArrayOboCallLastAttr int64
+	var stringArraySourceSqlVal string
+	var stringArraySourceSqlCount int
+	var stringArraySourceSqlLastAttr int64
 	var stringArrayLocalNamesSlice []string
 	var stringArrayLocalNamesCount int
 	var stringArrayLocalNamesLastAttr int64
+	var stringArrayInputHandlesSlice []string
+	var stringArrayInputHandlesCount int
+	var stringArrayInputHandlesLastAttr int64
 	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -1108,6 +1181,17 @@ func AdhocRequestReadRow[
 					return
 				}
 				stringArrayOboCallVal = val
+			case kindAdhocSourceSql:
+				if stringArraySourceSqlLastAttr != attrJ+1 {
+					stringArraySourceSqlLastAttr = attrJ + 1
+					stringArraySourceSqlCount++
+				}
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocSourceSql").Str("field", "SourceSql").Errorf("slot stringArray@adhocSourceSql (field SourceSql) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				stringArraySourceSqlVal = val
 			case kindAdhocLocalNames:
 				if stringArrayLocalNamesLastAttr != attrJ+1 {
 					stringArrayLocalNamesLastAttr = attrJ + 1
@@ -1115,6 +1199,14 @@ func AdhocRequestReadRow[
 				}
 				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					stringArrayLocalNamesSlice = append(stringArrayLocalNamesSlice, v)
+				}
+			case kindAdhocInputHandles:
+				if stringArrayInputHandlesLastAttr != attrJ+1 {
+					stringArrayInputHandlesLastAttr = attrJ + 1
+					stringArrayInputHandlesCount++
+				}
+				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					stringArrayInputHandlesSlice = append(stringArrayInputHandlesSlice, v)
 				}
 			}
 		}
@@ -1143,12 +1235,28 @@ func AdhocRequestReadRow[
 		row.OboCall = stringArrayOboCallVal
 		present = true
 	}
+	if stringArraySourceSqlCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocSourceSql").Int("got", stringArraySourceSqlCount).Errorf("slot stringArray@adhocSourceSql (field SourceSql) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArraySourceSqlCount)
+		return
+	}
+	if stringArraySourceSqlCount == 1 {
+		row.SourceSql = stringArraySourceSqlVal
+		present = true
+	}
 	if stringArrayLocalNamesCount > 1 {
 		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocLocalNames").Int("got", stringArrayLocalNamesCount).Errorf("slot stringArray@adhocLocalNames (field LocalNames) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayLocalNamesCount)
 		return
 	}
 	if stringArrayLocalNamesSlice != nil {
 		row.LocalNames = stringArrayLocalNamesSlice
+		present = true
+	}
+	if stringArrayInputHandlesCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocInputHandles").Int("got", stringArrayInputHandlesCount).Errorf("slot stringArray@adhocInputHandles (field InputHandles) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayInputHandlesCount)
+		return
+	}
+	if stringArrayInputHandlesSlice != nil {
+		row.InputHandles = stringArrayInputHandlesSlice
 		present = true
 	}
 	// --- bool. ---

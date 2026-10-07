@@ -244,3 +244,5 @@
 239	adhoc-window-scoped	12884902127
 240	play-launch-dataset-names	12884902128
 241	adhoc-destination	12884902129
+242	adhoc-source-sql	12884902130
+243	adhoc-input-handles	12884902131

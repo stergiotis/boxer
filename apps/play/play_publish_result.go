@@ -122,11 +122,14 @@ func (inst *PlayLauncher) publishResult(call app.OperationCall, in PublishResult
 		}
 		return out, app.RefuseOperation(refusal)
 	}
-	doc := composeResultDoc(in, local, p.graph.MainSQL())
-	if _, perr := parseAppletDoc(in.Bundle+".md", []byte(doc)); perr != nil {
+	source := p.graph.MainSQL()
+	spec := resultBundleSpec(in, local, source)
+	doc, cerr := ComposeBundleDocE(spec)
+	if cerr != nil {
 		rec.Release()
-		return out, app.RefuseOperation("the bundle's document does not parse: " + perr.Error())
+		return out, app.RefuseOperation(cerr.Error())
 	}
+	inputs := p.client.inputHandlesOf(source)
 	inst.publish.mu.Lock()
 	if inst.publish.busy {
 		inst.publish.mu.Unlock()
@@ -140,21 +143,21 @@ func (inst *PlayLauncher) publishResult(call app.OperationCall, in PublishResult
 
 	out = PublishResultOutcome{Bundle: in.Bundle, Dataset: adhocdata.DatasetAlias(in.Bundle, local), Rows: rec.NumRows(),
 		Columns: int32(rec.NumCols()), Following: "list_bundles"}
-	go inst.publishBundleOff(rec, in.Bundle, local, doc, call.OnBehalfOf)
+	go inst.publishBundleOff(rec, in.Bundle, local, doc, adhocdata.BundleProvenance{SourceSql: source, InputHandles: inputs}, call.OnBehalfOf)
 	return
 }
 
 // publishBundleOff encodes and publishes off the render goroutine; it owns
 // rec and releases it.
-func (inst *PlayLauncher) publishBundleOff(rec arrow.RecordBatch, bundle string, local string, doc string, obo *app.OnBehalfOf) {
+func (inst *PlayLauncher) publishBundleOff(rec arrow.RecordBatch, bundle string, local string, doc []byte, prov adhocdata.BundleProvenance, obo *app.OnBehalfOf) {
 	rows := rec.NumRows()
 	stream, err := adhocdata.EncodeRecord(rec)
 	rec.Release()
 	last := LastPublish{Bundle: bundle, Rows: rows}
 	if err == nil {
 		var res adhocdata.BundleResult
-		res, err = adhocdata.PublishBundleRequest(inst.bus, adhocdata.BundlePublishInput{Alias: bundle, Document: []byte(doc),
-			Datasets: []adhocdata.BundleDatasetInput{{LocalName: local, ArrowIPCStream: stream}}, OnBehalfOf: obo})
+		res, err = adhocdata.PublishBundleRequest(inst.bus, adhocdata.BundlePublishInput{Alias: bundle, Document: doc,
+			Datasets: []adhocdata.BundleDatasetInput{{LocalName: local, ArrowIPCStream: stream}}, OnBehalfOf: obo, Provenance: prov})
 		last.Revision = res.Revision
 	}
 	if err != nil {
@@ -175,48 +178,16 @@ func (inst *PlayLauncher) lastPublish() (last LastPublish) {
 	return
 }
 
-// composeResultDoc writes the applet document of a published result: the
-// caller's SQL over the dataset on the panes it names, and the query that
-// produced the rows, kept as the record of where they came from.
-func composeResultDoc(in PublishResultArgs, local string, source string) (doc string) {
-	title := in.Title
-	if title == "" {
-		title = in.Bundle
+// resultBundleSpec is the bundle of a published result: the caller's SQL
+// over the dataset on the panes it names, and, for the person who opens it,
+// the query that produced the rows; the same query, and the datasets it
+// read, travel as the bundle's provenance.
+func resultBundleSpec(in PublishResultArgs, local string, source string) (spec BundleSpec) {
+	spec = BundleSpec{Alias: in.Bundle, Title: in.Title, Summary: "a result published from play", Sql: in.Sql, Tabs: in.Tabs,
+		Datasets: []adhocdata.BundleDatasetInput{{LocalName: local}}}
+	if src := strings.TrimSpace(source); src != "" && !strings.Contains(src, "```") {
+		spec.Prose = "The rows of `" + local + "` are the result of this query, as play ran it:\n\n    " +
+			strings.ReplaceAll(src, "\n", "\n    ")
 	}
-	sql := strings.TrimSpace(in.Sql)
-	if sql == "" {
-		sql = "SELECT * FROM keelson('" + local + "')"
-	}
-	tabs := in.Tabs
-	if len(tabs) == 0 {
-		tabs = []string{"table"}
-	}
-	var b strings.Builder
-	b.WriteString("---\ntype: reference\nstatus: draft\ntitle: ")
-	b.WriteString(yamlQuote(title))
-	b.WriteString("\nsummary: ")
-	b.WriteString(yamlQuote("a result published from play"))
-	b.WriteString("\nendpoint: introspection\ndatasets: [")
-	b.WriteString(local)
-	b.WriteString("]\ntabs: [")
-	b.WriteString(strings.Join(tabs, ", "))
-	b.WriteString("]\n---\n\n# ")
-	b.WriteString(title)
-	b.WriteString("\n\n```sql\n")
-	b.WriteString(sql)
-	b.WriteString("\n```\n")
-	if src := strings.TrimSpace(source); src != "" {
-		b.WriteString("\nThe rows of `")
-		b.WriteString(local)
-		b.WriteString("` are the result of this query, as play ran it:\n\n```sql\n")
-		b.WriteString(src)
-		b.WriteString("\n```\n")
-	}
-	return b.String()
-}
-
-// yamlQuote quotes s as a YAML double-quoted scalar.
-func yamlQuote(s string) (q string) {
-	r := strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`)
-	return `"` + r.Replace(s) + `"`
+	return
 }

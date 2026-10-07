@@ -251,4 +251,48 @@ func TestTheAuditLandsOnTheTrail(t *testing.T) {
 	assert.Equal(t, "sales", e.AdhocDataset.Val.Bundle)
 	assert.Equal(t, svc.auditRecords()[0].StreamDigests, e.AdhocDataset.Val.StreamDigests)
 	assert.True(t, e.AdhocDataset.Val.Attested)
+	assert.Equal(t, testDoc, e.AdhocDataset.Val.Document, "the document is reconstructible from the trail")
+	assert.Equal(t, []string{"v", "v"}, e.AdhocDataset.Val.ColumnNames)
+	assert.Equal(t, []uint32{0, 1}, e.AdhocDataset.Val.ColumnDatasets)
+}
+
+// A bundle's provenance is data: the statement that produced its rows, the
+// datasets it read — resolved by the service to their aliases and digests,
+// not taken from the publisher — and its columns (ADR-0288 (proposed)
+// §SD5).
+func TestProvenanceNamesTheBytesABundleCameFrom(t *testing.T) {
+	svc := newTestService(t)
+	first, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA})
+	require.NoError(t, err)
+	orders := first.Datasets[0]
+
+	derived, err := svc.PublishBundle(BundlePublishInput{Alias: "summary", Document: []byte(testDoc), By: windowA,
+		Datasets:   []BundleDatasetInput{{LocalName: "orders", ArrowIPCStream: int64Stream(t, false, 6)}},
+		Provenance: BundleProvenance{SourceSql: "SELECT sum(v) FROM keelson('orders')", InputHandles: []string{orders.Handle, "adhoc_00000000000000ff"}}})
+	require.NoError(t, err)
+	require.Len(t, derived.Inputs, 2)
+	assert.Equal(t, BundleInput{Handle: orders.Handle, Alias: "sales__orders", Bundle: "sales", StreamDigest: orders.StreamDigest}, derived.Inputs[0])
+	assert.Equal(t, BundleInput{Handle: "adhoc_00000000000000ff"}, derived.Inputs[1], "a handle the service never held is recorded as given")
+	assert.Equal(t, "SELECT sum(v) FROM keelson('orders')", derived.SourceSql)
+
+	audits := svc.auditRecords()
+	a := audits[len(audits)-1]
+	assert.Equal(t, []string{orders.Handle, "adhoc_00000000000000ff"}, a.InputHandles)
+	assert.Equal(t, []string{orders.StreamDigest, ""}, a.InputDigests)
+	assert.Equal(t, []string{"v"}, a.ColumnNames)
+	assert.Equal(t, []string{"int64"}, a.ColumnTypes)
+	assert.Equal(t, []byte(testDoc), a.Document)
+
+	var row bundleCatalogRow
+	for _, r := range svc.bundleCatalogRows() {
+		if r.alias == "summary" {
+			row = r
+		}
+	}
+	assert.Equal(t, []string{"sales__orders", ""}, row.inputAliases)
+	assert.Equal(t, "SELECT sum(v) FROM keelson('orders')", row.sourceSql)
+
+	_, err = svc.PublishBundle(BundlePublishInput{Alias: "bad", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA,
+		Provenance: BundleProvenance{InputHandles: []string{"orders"}}})
+	assert.Error(t, err, "an input is a handle, never an alias")
 }

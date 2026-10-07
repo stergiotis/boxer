@@ -237,3 +237,11 @@
 272	adhoc-dataset-document-digest	9223372049739677968
 273	adhoc-dataset-attested	9223372049739677969
 274	adhoc-dataset-in-flight	9223372049739677970
+275	adhoc-dataset-document	9223372049739677971
+276	adhoc-dataset-source-sql	9223372049739677972
+277	adhoc-dataset-input-handles	9223372049739677973
+278	adhoc-dataset-input-aliases	9223372049739677974
+279	adhoc-dataset-input-digests	9223372049739677975
+280	adhoc-dataset-column-datasets	9223372049739677976
+281	adhoc-dataset-column-names	9223372049739677977
+282	adhoc-dataset-column-types	9223372049739677978

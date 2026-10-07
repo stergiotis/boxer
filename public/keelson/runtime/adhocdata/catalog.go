@@ -127,6 +127,9 @@ type bundleCatalogRow struct {
 	documentBytes     int64
 	documentDigest    string
 	createdAtUnixUs   int64
+	sourceSql         string
+	inputHandles      []string
+	inputAliases      []string
 	callContext
 }
 
@@ -144,8 +147,13 @@ func (inst *Service) bundleCatalogRows() (rows []bundleCatalogRow) {
 			keepAfterClose: b.keepAfterClose, revision: b.revision,
 			localNames: b.localNames, datasetAliases: aliases, handles: b.handles,
 			documentBytes: int64(len(b.document)), documentDigest: b.documentDigest, createdAtUnixUs: b.createdAt,
-			callContext: callContextOf(b.context),
+			callContext: callContextOf(b.context), sourceSql: b.sourceSql,
 		})
+		last := &rows[len(rows)-1]
+		for _, in := range b.inputs {
+			last.inputHandles = append(last.inputHandles, in.Handle)
+			last.inputAliases = append(last.inputAliases, in.Alias)
+		}
 	}
 	inst.mu.RUnlock()
 	slices.SortFunc(rows, func(a, b bundleCatalogRow) int { return strings.Compare(a.alias, b.alias) })
@@ -188,6 +196,9 @@ func bundleCatalogTable(rows []bundleCatalogRow) *introspect.Table {
 		Int64("document_bytes", func(i int) int64 { return rows[i].documentBytes }).
 		String("document_digest", func(i int) string { return rows[i].documentDigest }).
 		Int64("created_at_unix_us", func(i int) int64 { return rows[i].createdAtUnixUs }).
+		String("source_sql", func(i int) string { return rows[i].sourceSql }).
+		StringList("input_handles", func(i int) []string { return rows[i].inputHandles }).
+		StringList("input_aliases", func(i int) []string { return rows[i].inputAliases }).
 		String("task", func(i int) string { return rows[i].task }).
 		String("call", func(i int) string { return rows[i].call }).
 		String("conversation", func(i int) string { return rows[i].conversation }).

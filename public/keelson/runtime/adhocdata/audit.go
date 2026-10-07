@@ -34,24 +34,36 @@ const (
 // Context is set when an agent's call caused the operation and the
 // dispatcher attested it.
 type AuditRecord struct {
-	At             time.Time
-	Operation      string
-	Outcome        string
-	Reason         string
-	Bundle         string
-	Revision       uint64
-	By             Identity
-	Owner          Identity
-	LocalNames     []string
-	Aliases        []string
-	Handles        []string
-	Rows []uint64
+	At         time.Time
+	Operation  string
+	Outcome    string
+	Reason     string
+	Bundle     string
+	Revision   uint64
+	By         Identity
+	Owner      Identity
+	LocalNames []string
+	Aliases    []string
+	Handles    []string
+	Rows       []uint64
 	// Bytes are the streams' lengths as a reader receives them, the bytes
 	// their digests are over.
 	Bytes          []uint64
 	StreamDigests  []string
 	DocumentDigest string
 	Context        option.Option[app.CallContext]
+	// Provenance and shape, on a publish and a republish (§SD5): the
+	// document as published, the statement that produced the rows, the
+	// datasets it read with their digests as the service found them, and
+	// each dataset's columns.
+	Document       []byte
+	SourceSql      string
+	InputHandles   []string
+	InputAliases   []string
+	InputDigests   []string
+	ColumnDatasets []uint32
+	ColumnNames    []string
+	ColumnTypes    []string
 }
 
 // DispatcherI is what the dataset service asks the host's agent
@@ -143,6 +155,9 @@ func (inst *Service) persistAudit(r AuditRecord) {
 		LocalNames: r.LocalNames, Aliases: r.Aliases, Handles: r.Handles, Rows: r.Rows, Bytes: r.Bytes,
 		StreamDigests: r.StreamDigests, DocumentDigest: r.DocumentDigest, Attested: r.Context.Has,
 		InFlight: r.Context.Has && r.Context.Val.InFlight,
+		Document: string(r.Document), SourceSql: r.SourceSql,
+		InputHandles: r.InputHandles, InputAliases: r.InputAliases, InputDigests: r.InputDigests,
+		ColumnDatasets: r.ColumnDatasets, ColumnNames: r.ColumnNames, ColumnTypes: r.ColumnTypes,
 	}
 	if r.Reason != "" {
 		row.Reason = []string{r.Reason}

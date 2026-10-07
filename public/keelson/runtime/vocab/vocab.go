@@ -502,6 +502,14 @@ var (
 	MembAdhocDatasetDocumentDigest = NkRegistry.MustBegin("adhocDatasetDocumentDigest", 272).End()
 	MembAdhocDatasetAttested       = NkRegistry.MustBegin("adhocDatasetAttested", 273).End()
 	MembAdhocDatasetInFlight       = NkRegistry.MustBegin("adhocDatasetInFlight", 274).End()
+	MembAdhocDatasetDocument       = NkRegistry.MustBegin("adhocDatasetDocument", 275).End()
+	MembAdhocDatasetSourceSql      = NkRegistry.MustBegin("adhocDatasetSourceSql", 276).End()
+	MembAdhocDatasetInputHandles   = NkRegistry.MustBegin("adhocDatasetInputHandles", 277).End()
+	MembAdhocDatasetInputAliases   = NkRegistry.MustBegin("adhocDatasetInputAliases", 278).End()
+	MembAdhocDatasetInputDigests   = NkRegistry.MustBegin("adhocDatasetInputDigests", 279).End()
+	MembAdhocDatasetColumnDatasets = NkRegistry.MustBegin("adhocDatasetColumnDatasets", 280).End()
+	MembAdhocDatasetColumnNames    = NkRegistry.MustBegin("adhocDatasetColumnNames", 281).End()
+	MembAdhocDatasetColumnTypes    = NkRegistry.MustBegin("adhocDatasetColumnTypes", 282).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -566,5 +574,7 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembAdhocDatasetBundle, MembAdhocDatasetRevision, MembAdhocDatasetOwnerApp, MembAdhocDatasetOwnerInstance,
 	MembAdhocDatasetLocalNames, MembAdhocDatasetAliases, MembAdhocDatasetHandles, MembAdhocDatasetRows,
 	MembAdhocDatasetBytes, MembAdhocDatasetStreamDigests, MembAdhocDatasetDocumentDigest, MembAdhocDatasetAttested,
-	MembAdhocDatasetInFlight,
+	MembAdhocDatasetInFlight, MembAdhocDatasetDocument, MembAdhocDatasetSourceSql, MembAdhocDatasetInputHandles,
+	MembAdhocDatasetInputAliases, MembAdhocDatasetInputDigests, MembAdhocDatasetColumnDatasets,
+	MembAdhocDatasetColumnNames, MembAdhocDatasetColumnTypes,
 }

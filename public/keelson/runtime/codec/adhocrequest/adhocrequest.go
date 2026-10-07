@@ -74,4 +74,10 @@ type AdhocRequest struct {
 	// WindowScoped asks for the publishing window's own alias,
 	// `<alias>_w<instance>` (ADR-0288 (proposed) §SD3).
 	WindowScoped bool `lw:"adhocWindowScoped,bool"`
+
+	// SourceSql and InputHandles are a bundle publish's provenance: the
+	// statement that produced its rows and the datasets that statement
+	// read (ADR-0288 (proposed) §SD5).
+	SourceSql    string   `lw:"adhocSourceSql,stringArray"`
+	InputHandles []string `lw:"adhocInputHandles,stringArray"`
 }

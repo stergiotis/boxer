@@ -200,13 +200,21 @@ func (inst *fakeHost) SourceStatus(job string) (capture.SourceResult, bool) {
 
 // frame runs one frame of instance k; person runs where the write-back
 // would land.
-func (inst *fakeHost) frame(k uint64) {
+func (inst *fakeHost) frame(k uint64) { inst.frameWith(k, nil) }
+
+// frameWith runs one frame of instance k with app as the app's own frame,
+// where the window host runs it: after the snapshot, before EndFrame, so
+// what it changes is the app's, not the person's.
+func (inst *fakeHost) frameWith(k uint64, app func()) {
 	inst.frameMu.Lock()
 	defer inst.frameMu.Unlock()
 	e := inst.eng(k)
 	e.BeginFrame()
 	e.ApplyQueued()
 	e.TakeSnapshot()
+	if app != nil {
+		app()
+	}
 	e.EndFrame()
 }
 

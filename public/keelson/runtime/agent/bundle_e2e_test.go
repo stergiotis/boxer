@@ -93,8 +93,7 @@ func TestABundleCrossesWindowsWithItsProvenance(t *testing.T) {
 	frameUntil := func(key uint64, l *play.PlayLauncher, cond func() bool) {
 		t.Helper()
 		require.Eventually(t, func() bool {
-			r.host.frame(key)
-			l.SyncForTest()
+			r.host.frameWith(key, l.SyncForTest)
 			return cond()
 		}, 5*time.Second, 5*time.Millisecond)
 	}
@@ -137,7 +136,20 @@ func TestABundleCrossesWindowsWithItsProvenance(t *testing.T) {
 	frameUntil(consumerKey, consumer, func() bool { return len(consumer.DatasetBindingsForTest()) == 1 })
 	assert.Equal(t, "SELECT n FROM keelson('result') ORDER BY n", consumer.BufferForTest())
 
-	// A third party reads the dataset whole.
+	// The consumer derives a result from it and publishes that in turn:
+	// its provenance names the bytes it read (lineage between bundles).
+	consumer.SetMainResultForTest(e2eInts(t, 10), "SELECT sum(n) AS total FROM keelson('result')")
+	out, err = r.cli.Call(ctx, CallRequest{Handle: g.Handle, Instance: consumerKey, Operation: "publish_result",
+		Args: `{"bundle":"summary"}`, Key: "pub2", Turn: "turn-3", ModelCall: "llm-3", ToolCall: "call_pub2", ToolIndex: 0})
+	require.NoError(t, err)
+	require.Equal(t, "proposed", out.Phase, out.Reason)
+	r.decideProposal(true, true)
+	frameUntil(consumerKey, consumer, func() bool {
+		last := consumer.LastPublishForTest()
+		return last.Bundle == "summary" && last.Revision == 1 && !last.Pending
+	})
+
+		// A third party reads the dataset whole.
 	reader := r.bus.NewClient("test.notebook", caps)
 	read, err := adhocdata.ReadAllE(reader, "counts__result", nil)
 	require.NoError(t, err)
@@ -158,20 +170,28 @@ func TestABundleCrossesWindowsWithItsProvenance(t *testing.T) {
 		return st.ScanAgentAction(ctx, recordstore.ScanOpts{})
 	})
 	byOp := map[string]*trail.TrailEntity{}
+	var derived *trail.TrailEntity
 	for _, e := range bundleRows {
+		if e.AdhocDataset.Val.Bundle == "summary" {
+			derived = e
+			continue
+		}
 		byOp[e.AdhocDataset.Val.Operation] = e
 	}
 	callOf := map[string]string{}
 	for _, a := range actions {
 		if a.Delegation.Has && a.Delegation.Val.Call.Has {
-			callOf[a.AgentAction.Val.Operation] = a.Delegation.Val.Call.Val
+			callOf[a.AgentAction.Val.Key] = a.Delegation.Val.Call.Val
 		}
 	}
 
 	pub := byOp[adhocdata.AuditPublish]
 	require.NotNil(t, pub, "the publish is a trail row")
+	assert.Equal(t, "SELECT number AS n FROM numbers(5)", pub.AdhocDataset.Val.SourceSql, "where the rows came from, as data")
+	assert.Equal(t, []string{"n"}, pub.AdhocDataset.Val.ColumnNames)
+	assert.Contains(t, pub.AdhocDataset.Val.Document, "keelson('result')", "the document is on the trail")
 	assert.True(t, pub.AdhocDataset.Val.Attested)
-	assert.Equal(t, callOf["publish_result"], pub.Delegation.Val.Call.Val, "it joins the publish_result action on (task, call)")
+	assert.Equal(t, callOf["pub"], pub.Delegation.Val.Call.Val, "it joins the publish_result action on (task, call)")
 	assert.Equal(t, "conv-e2e", pub.Conversation.Val.Conversation)
 	assert.Equal(t, "turn-1", pub.Conversation.Val.Turn.Val)
 	assert.Equal(t, "llm-1", pub.Cause.Val.ModelCall)
@@ -179,7 +199,7 @@ func TestABundleCrossesWindowsWithItsProvenance(t *testing.T) {
 
 	open := byOp[adhocdata.AuditResolve]
 	require.NotNil(t, open, "the agent's open resolved the bundle, and that is a trail row")
-	assert.Equal(t, callOf["open_bundle"], open.Delegation.Val.Call.Val)
+	assert.Equal(t, callOf["open"], open.Delegation.Val.Call.Val)
 	assert.Equal(t, "turn-2", open.Conversation.Val.Turn.Val)
 
 	rd := byOp[adhocdata.AuditRead]
@@ -188,6 +208,15 @@ func TestABundleCrossesWindowsWithItsProvenance(t *testing.T) {
 	assert.Equal(t, pub.AdhocDataset.Val.StreamDigests, rd.AdhocDataset.Val.StreamDigests,
 		"the read names the bytes the publish sealed")
 	assert.Equal(t, read.StreamDigest, rd.AdhocDataset.Val.StreamDigests[0])
+
+	require.NotNil(t, derived, "the derived publish is a trail row")
+	assert.Equal(t, "SELECT sum(n) AS total FROM keelson('result')", derived.AdhocDataset.Val.SourceSql)
+	assert.Equal(t, pub.AdhocDataset.Val.Handles, derived.AdhocDataset.Val.InputHandles, "it read the first bundle's dataset")
+	assert.Equal(t, pub.AdhocDataset.Val.Aliases, derived.AdhocDataset.Val.InputAliases)
+	assert.Equal(t, pub.AdhocDataset.Val.StreamDigests, derived.AdhocDataset.Val.InputDigests,
+		"lineage names the bytes the first publish sealed, as the service found them")
+	assert.Equal(t, "turn-3", derived.Conversation.Val.Turn.Val)
+	assert.Equal(t, callOf["pub2"], derived.Delegation.Val.Call.Val)
 }
 
 func e2eInts(t *testing.T, vals ...int64) arrow.RecordBatch {

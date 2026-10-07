@@ -129,3 +129,14 @@ var MembAdhocWindowScoped = KeelsonHrNkRegistry.MustBegin("adhocWindowScoped", 2
 // play asks for its own.
 var MembAdhocDestination = KeelsonHrNkRegistry.MustBegin("adhocDestination", 241).
 	MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
+
+// Provenance memberships (ADR-0288 (proposed) §SD5): a bundle publish
+// carries the statement that produced its rows and the handles of the
+// datasets that statement read, so the service records where a bundle came
+// from as data rather than as prose in its document.
+var (
+	MembAdhocSourceSql = KeelsonHrNkRegistry.MustBegin("adhocSourceSql", 242).
+				MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
+	MembAdhocInputHandles = KeelsonHrNkRegistry.MustBegin("adhocInputHandles", 243).
+				MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityArbitrary).End()
+)

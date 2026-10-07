@@ -77,6 +77,34 @@ type BundlePublishInput struct {
 	// publishing app received it; the dispatcher attests it (ADR-0288
 	// (proposed) §SD5). Nil for the person's and the app's own publish.
 	OnBehalfOf *app.OnBehalfOf
+	// Provenance is where the rows came from (§SD5): recorded on the
+	// bundle, in its catalog row and on its trail row, as data.
+	Provenance BundleProvenance
+}
+
+// Bounds on a bundle's provenance.
+const (
+	MaxBundleSourceSqlBytes = 64 << 10
+	MaxBundleInputs         = 64
+)
+
+// BundleProvenance is what produced a bundle's rows: the statement as the
+// publisher ran it, and the handles of the datasets it read. The service
+// resolves each handle to its alias, bundle and stream digest itself, so
+// lineage between bundles names bytes, not the publisher's word for them.
+type BundleProvenance struct {
+	SourceSql    string
+	InputHandles []string
+}
+
+// BundleInput is one dataset a bundle's source statement read, as the
+// service found it at the publish: Alias, Bundle and StreamDigest are
+// empty when the handle named no dataset the service held.
+type BundleInput struct {
+	Handle       string
+	Alias        string
+	Bundle       string
+	StreamDigest string
 }
 
 // BundleDataset is one dataset of a live bundle.
@@ -84,7 +112,7 @@ type BundleDataset struct {
 	LocalName string
 	Alias     string
 	Handle    string
-	Rows uint64
+	Rows      uint64
 	// Bytes is the dataset's sealed (ciphertext) size, what the quotas
 	// count; PlainBytes the stream's length as a reader receives it.
 	Bytes      uint64
@@ -106,6 +134,9 @@ type BundleResult struct {
 	// published the live revision, when an agent's call did.
 	Owner   Identity
 	Context option.Option[app.CallContext]
+	// SourceSql and Inputs are the live revision's provenance.
+	SourceSql string
+	Inputs    []BundleInput
 }
 
 // bundleRec is one live bundle. It is replaced, never mutated, so a
@@ -122,6 +153,8 @@ type bundleRec struct {
 	handles        []string
 	createdAt      int64 // unix µs, kept across republishes
 	context        option.Option[app.CallContext]
+	sourceSql      string
+	inputs         []BundleInput
 }
 
 func (inst *bundleRec) checkOwner(by Identity) (err error) {
@@ -162,6 +195,17 @@ func validateBundle(in BundlePublishInput) (err error) {
 	if len(in.Datasets) == 0 || len(in.Datasets) > MaxBundleDatasets {
 		return eb.Build().Str("alias", in.Alias).Int("datasets", len(in.Datasets)).Int("limit", MaxBundleDatasets).
 			Errorf("a bundle carries one or more datasets, up to its limit")
+	}
+	if len(in.Provenance.SourceSql) > MaxBundleSourceSqlBytes {
+		return eb.Build().Str("alias", in.Alias).Int("limitBytes", MaxBundleSourceSqlBytes).Errorf("bundle source statement exceeds its limit")
+	}
+	if len(in.Provenance.InputHandles) > MaxBundleInputs {
+		return eb.Build().Str("alias", in.Alias).Int("limit", MaxBundleInputs).Errorf("a bundle names too many inputs")
+	}
+	for _, h := range in.Provenance.InputHandles {
+		if !IsHandle(h) {
+			return eb.Build().Str("alias", in.Alias).Str("input", h).Errorf("a bundle's input is a dataset handle")
+		}
 	}
 	seen := make(map[string]struct{}, len(in.Datasets))
 	for _, d := range in.Datasets {
@@ -206,8 +250,35 @@ func (inst *Service) PublishBundle(in BundlePublishInput) (res BundleResult, err
 	}
 	r.Outcome, r.Revision, r.Owner, r.DocumentDigest = AuditApplied, res.Revision, res.Owner, res.DocumentDigest
 	r.fillDatasets(res.Datasets)
+	r.Document, r.SourceSql = res.Document, res.SourceSql
+	for _, in := range res.Inputs {
+		r.InputHandles = append(r.InputHandles, in.Handle)
+		r.InputAliases = append(r.InputAliases, in.Alias)
+		r.InputDigests = append(r.InputDigests, in.StreamDigest)
+	}
+	r.fillColumns(inst, res.Datasets)
 	inst.audit(r)
 	return
+}
+
+// fillColumns records each dataset's columns, name and Arrow type, index
+// for index with ColumnDatasets naming the dataset by its position.
+func (inst *AuditRecord) fillColumns(svc *Service, ds []BundleDataset) {
+	for i, d := range ds {
+		p, ok := svc.reg.Lookup(d.Handle)
+		if !ok {
+			continue
+		}
+		rec, isRec := p.(*record)
+		if !isRec {
+			continue
+		}
+		for _, f := range rec.Schema().Fields() {
+			inst.ColumnDatasets = append(inst.ColumnDatasets, uint32(i))
+			inst.ColumnNames = append(inst.ColumnNames, f.Name)
+			inst.ColumnTypes = append(inst.ColumnTypes, f.Type.String())
+		}
+	}
 }
 
 // fillDatasets copies a bundle's datasets into the record's parallel lists.
@@ -344,6 +415,7 @@ func (inst *Service) publishBundle(in BundlePublishInput, cc option.Option[app.C
 	b := &bundleRec{
 		alias: in.Alias, owner: owner, keepAfterClose: keep, revision: revision,
 		document: document, documentDigest: digest, createdAt: createdAt, context: cc,
+		sourceSql: in.Provenance.SourceSql, inputs: inst.resolveInputsLocked(in.Provenance.InputHandles),
 		localNames: make([]string, 0, len(registered)), handles: make([]string, 0, len(registered)),
 	}
 	for i, r := range registered {
@@ -545,7 +617,7 @@ func (inst *bundleRec) result(recs []*record) (res BundleResult) {
 	res = BundleResult{
 		Alias: inst.alias, Revision: inst.revision, Document: inst.document, DocumentDigest: inst.documentDigest,
 		CreatedAtUs: inst.createdAt, Datasets: make([]BundleDataset, 0, len(inst.handles)),
-		Owner: inst.owner, Context: inst.context,
+		Owner: inst.owner, Context: inst.context, SourceSql: inst.sourceSql, Inputs: inst.inputs,
 	}
 	for i, h := range inst.handles {
 		d := BundleDataset{LocalName: inst.localNames[i], Alias: DatasetAlias(inst.alias, inst.localNames[i]), Handle: h}
@@ -555,6 +627,32 @@ func (inst *bundleRec) result(recs []*record) (res BundleResult) {
 			recs[i].mu.RUnlock()
 		}
 		res.Datasets = append(res.Datasets, d)
+	}
+	return
+}
+
+// resolveInputsLocked finds each input handle among the datasets the
+// service holds — live, or leaving and still registered — and records its
+// alias, bundle and digest as they are now. The caller holds inst.mu.
+func (inst *Service) resolveInputsLocked(handles []string) (inputs []BundleInput) {
+	if len(handles) == 0 {
+		return nil
+	}
+	inputs = make([]BundleInput, 0, len(handles))
+	for _, h := range handles {
+		in := BundleInput{Handle: h}
+		r := inst.live[h]
+		if r == nil {
+			if p, ok := inst.reg.Lookup(h); ok {
+				r, _ = p.(*record)
+			}
+		}
+		if r != nil {
+			r.mu.RLock()
+			in.Alias, in.Bundle, in.StreamDigest = r.alias, r.bundle, r.streamDigest
+			r.mu.RUnlock()
+		}
+		inputs = append(inputs, in)
 	}
 	return
 }
