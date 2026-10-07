@@ -123,8 +123,7 @@ func ComposeBundleDocE(spec BundleSpec) (doc []byte, err error) {
 	}
 	for _, name := range keelsonsql.References(parsed.Sql) {
 		if !slices.Contains(locals, name) {
-			return nil, eb.Build().Str("bundle", spec.Alias).Str("table", name).
-				Errorf("the bundle's SQL reads keelson('%s'), which the bundle does not carry", name) //boxer:lint disable=CS013 reason="the refusal reaches the model as text and names the table to fix"
+			return nil, eb.Build().Str("bundle", spec.Alias).Str("table", name).Errorf("the bundle's SQL reads keelson('%s'), which the bundle does not carry", name) //boxer:lint disable=CS013 reason="the refusal reaches the model as text and names the table to fix"
 		}
 	}
 	return doc, nil

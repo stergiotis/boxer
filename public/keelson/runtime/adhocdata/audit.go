@@ -55,15 +55,15 @@ type AuditRecord struct {
 	// Provenance and shape, on a publish and a republish (§SD5): the
 	// document as published, the statement that produced the rows, the
 	// datasets it read with their digests as the service found them, and
-	// each dataset's columns.
+	// each dataset's columns with their summaries, ColumnDatasets naming
+	// the dataset by its position.
 	Document       []byte
 	SourceSql      string
 	InputHandles   []string
 	InputAliases   []string
 	InputDigests   []string
 	ColumnDatasets []uint32
-	ColumnNames    []string
-	ColumnTypes    []string
+	Columns        ColumnSummaries
 }
 
 // DispatcherI is what the dataset service asks the host's agent
@@ -157,7 +157,9 @@ func (inst *Service) persistAudit(r AuditRecord) {
 		InFlight: r.Context.Has && r.Context.Val.InFlight,
 		Document: string(r.Document), SourceSql: r.SourceSql,
 		InputHandles: r.InputHandles, InputAliases: r.InputAliases, InputDigests: r.InputDigests,
-		ColumnDatasets: r.ColumnDatasets, ColumnNames: r.ColumnNames, ColumnTypes: r.ColumnTypes,
+		ColumnDatasets: r.ColumnDatasets, ColumnNames: r.Columns.Names, ColumnTypes: r.Columns.Types,
+		ColumnNulls: r.Columns.Nulls, ColumnMin: r.Columns.Min, ColumnMax: r.Columns.Max,
+		ColumnDistinct: r.Columns.Distinct, ColumnSample: r.Columns.Sample,
 	}
 	if r.Reason != "" {
 		row.Reason = []string{r.Reason}

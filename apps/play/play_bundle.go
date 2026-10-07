@@ -307,13 +307,27 @@ type BundleListArgs struct{}
 
 // BundleInfo is one live bundle.
 type BundleInfo struct {
-	Alias          string   `desc:"the bundle's alias, what open_bundle takes"`
-	Publisher      string   `desc:"the app that published it"`
-	Revision       uint64   `desc:"its revision; a republish bumps it"`
-	LocalNames     []string `desc:"its datasets as its document reads them, keelson('<local name>') once it is open"`
-	DatasetAliases []string `desc:"the same datasets' global aliases, index for index"`
-	Task           string   `json:",omitzero" desc:"the agent task whose call published the live revision"`
-	Turn           string   `json:",omitzero" desc:"and the conversation turn that call belongs to"`
+	Alias          string         `desc:"the bundle's alias, what open_bundle takes"`
+	Publisher      string         `desc:"the app that published it"`
+	Revision       uint64         `desc:"its revision; a republish bumps it"`
+	LocalNames     []string       `desc:"its datasets as its document reads them, keelson('<local name>') once it is open"`
+	DatasetAliases []string       `desc:"the same datasets' global aliases, index for index"`
+	Task           string         `json:",omitzero" desc:"the agent task whose call published the live revision"`
+	Turn           string         `json:",omitzero" desc:"and the conversation turn that call belongs to"`
+	Columns        []BundleColumn `desc:"every dataset's columns, summarised when the dataset was sealed"`
+}
+
+// BundleColumn is one column of a bundle's dataset as the seal summarised
+// it (ADR-0288 (proposed) §SD5).
+type BundleColumn struct {
+	Dataset  string `desc:"the local name of the dataset the column belongs to"`
+	Name     string `desc:"the column's name"`
+	Type     string `desc:"its Arrow type"`
+	Nulls    uint64 `desc:"how many of its values are null"`
+	Min      string `json:",omitzero" desc:"its smallest value as a JSON literal; absent when the type does not order or every value is null"`
+	Max      string `json:",omitzero" desc:"its largest value as a JSON literal"`
+	Distinct uint64 `desc:"an estimate of its distinct non-null values, within a few percent"`
+	Sample   string `desc:"its first few non-null values, as a JSON array"`
 }
 
 // BundleList is list_bundles' result.
@@ -326,7 +340,9 @@ type BundleList struct {
 
 // bundleListSql reads the catalog with every column as text the decoder
 // takes without guessing at 64-bit integer quoting.
-const bundleListSql = "SELECT alias, publisher, toString(revision) AS revision, local_names, dataset_aliases, task, turn FROM keelson('" +
+const bundleListSql = "SELECT alias, publisher, toString(revision) AS revision, local_names, dataset_aliases, task, turn, " +
+	"column_local_names, column_names, column_types, arrayMap(x -> toString(x), column_nulls) AS column_nulls, " +
+	"column_min, column_max, arrayMap(x -> toString(x), column_distinct) AS column_distinct, column_sample FROM keelson('" +
 	adhocdata.BundleCatalogTableName + "') ORDER BY alias"
 
 // bundleListTimeout bounds list_bundles' read of the catalog.
@@ -340,7 +356,7 @@ func addBundleOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 		return inst.bundle.alias + "@" + strconv.FormatUint(inst.bundle.revision, 10)
 	})
 	appops.ExternalRead(s, app.OperationSpec{Name: opListBundles, Version: 1,
-		Summary: "list the live ad-hoc bundles — an applet document and the datasets it reads, published together — with who published each and the datasets' local names",
+		Summary: "list the live ad-hoc bundles — an applet document and the datasets it reads, published together — with who published each, the datasets' local names, and each column summarised: nulls, range, distinct count, a sample",
 		Agents:  true, Untrusted: true,
 		Follows: []string{"open_bundle opens one in this window"}},
 		func(sn opsSnap, call app.OperationCall, in BundleListArgs) (out BundleList, err error) {
@@ -396,6 +412,33 @@ type bundleRow struct {
 	DatasetAliases []string `json:"dataset_aliases"`
 	Task           string   `json:"task"`
 	Turn           string   `json:"turn"`
+	ColumnDatasets []string `json:"column_local_names"`
+	ColumnNames    []string `json:"column_names"`
+	ColumnTypes    []string `json:"column_types"`
+	ColumnNulls    []string `json:"column_nulls"`
+	ColumnMin      []string `json:"column_min"`
+	ColumnMax      []string `json:"column_max"`
+	ColumnDistinct []string `json:"column_distinct"`
+	ColumnSample   []string `json:"column_sample"`
+}
+
+// columns zips the row's parallel column lists; a list shorter than the
+// names leaves its field zero.
+func (inst *bundleRow) columns() (cols []BundleColumn) {
+	cols = make([]BundleColumn, 0, len(inst.ColumnNames))
+	at := func(l []string, i int) (s string) {
+		if i < len(l) {
+			return l[i]
+		}
+		return ""
+	}
+	for i, name := range inst.ColumnNames {
+		nulls, _ := strconv.ParseUint(at(inst.ColumnNulls, i), 10, 64)
+		distinct, _ := strconv.ParseUint(at(inst.ColumnDistinct, i), 10, 64)
+		cols = append(cols, BundleColumn{Dataset: at(inst.ColumnDatasets, i), Name: name, Type: at(inst.ColumnTypes, i),
+			Nulls: nulls, Min: at(inst.ColumnMin, i), Max: at(inst.ColumnMax, i), Distinct: distinct, Sample: at(inst.ColumnSample, i)})
+	}
+	return
 }
 
 // listBundles reads keelson('adhoc_bundles') over keelson.query.
@@ -421,7 +464,7 @@ func decodeBundleRows(body []byte) (bundles []BundleInfo, err error) {
 		}
 		rev, _ := strconv.ParseUint(r.Revision, 10, 64)
 		bundles = append(bundles, BundleInfo{Alias: r.Alias, Publisher: r.Publisher, Revision: rev,
-			LocalNames: r.LocalNames, DatasetAliases: r.DatasetAliases, Task: r.Task, Turn: r.Turn})
+			LocalNames: r.LocalNames, DatasetAliases: r.DatasetAliases, Task: r.Task, Turn: r.Turn, Columns: r.columns()})
 	}
 	return
 }

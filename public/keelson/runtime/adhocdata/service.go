@@ -182,6 +182,8 @@ type record struct {
 	// ciphertext the quotas count.
 	streamDigest string
 	plainBytes   uint64
+	// columns summarise the live revision's columns (§SD5).
+	columns ColumnSummaries
 	// context is the attested call that published the live revision; set
 	// for a bundle's datasets an agent's call published.
 	context option.Option[app.CallContext]
@@ -426,7 +428,7 @@ func (inst *Service) Publish(in PublishInput) (res PublishResult, err error) {
 	if err != nil {
 		return res, eh.Errorf("adhocdata: allocate sealed file: %w", err)
 	}
-	schema, structure, rows, digest, plain, err := sealStream(f, in.ArrowIPCStream)
+	ss, err := sealStream(f, in.ArrowIPCStream)
 	if err != nil {
 		_ = f.Close()
 		return res, err
@@ -470,11 +472,11 @@ func (inst *Service) Publish(in PublishInput) (res PublishResult, err error) {
 		old = rec.file
 		inst.totalBytes -= rec.bytes
 		rec.alias = in.Alias
-		rec.schema, rec.structure = schema, structure
+		rec.schema, rec.structure = ss.schema, ss.structure
 		rec.revision++
-		rec.rows, rec.bytes = rows, nbytes
+		rec.rows, rec.bytes = ss.rows, nbytes
 		rec.file = f
-		rec.streamDigest, rec.plainBytes = digest, plain
+		rec.streamDigest, rec.plainBytes, rec.columns = ss.digest, ss.plain, ss.columns
 		rec.keepAfterClose = rec.keepAfterClose || in.KeepAfterClose
 		revision, publisher = rec.revision, rec.owner
 		rec.mu.Unlock()
@@ -488,8 +490,8 @@ func (inst *Service) Publish(in PublishInput) (res PublishResult, err error) {
 		}
 		rec = &record{
 			handle: handle, alias: in.Alias, owner: in.By, keepAfterClose: in.KeepAfterClose,
-			schema: schema, structure: structure, revision: 1, rows: rows, bytes: nbytes,
-			createdAt: time.Now().UnixMicro(), file: f, streamDigest: digest, plainBytes: plain,
+			schema: ss.schema, structure: ss.structure, revision: 1, rows: ss.rows, bytes: nbytes,
+			createdAt: time.Now().UnixMicro(), file: f, streamDigest: ss.digest, plainBytes: ss.plain, columns: ss.columns,
 		}
 		if regErr := inst.reg.Register(rec); regErr != nil {
 			inst.mu.Unlock()
@@ -513,7 +515,7 @@ func (inst *Service) Publish(in PublishInput) (res PublishResult, err error) {
 	inst.publishEvent(SubjectEventPublished, Event{
 		Op: EventOpPublished, Handle: handle, Alias: in.Alias, Publisher: string(publisher.App), Revision: revision,
 	})
-	return PublishResult{Alias: in.Alias, Handle: handle, Revision: revision, Rows: rows, Bytes: nbytes}, nil
+	return PublishResult{Alias: in.Alias, Handle: handle, Revision: revision, Rows: ss.rows, Bytes: nbytes}, nil
 }
 
 // checkOwner is the ownership rule (ADR-0240 §SD2/§SD5): the runtime may
@@ -803,15 +805,36 @@ func (inst *Service) emitAudit(op, handle, alias string, revision uint64) {
 // reader of the dataset reads — in the trail's form (trail.ContentDigest).
 //
 // plain is the stream's length as sealed, the size a reader receives.
-func sealStream(f *sealed.File, streamBytes []byte) (schema *arrow.Schema, structure string, rows uint64, digest string, plain uint64, err error) {
+// sealedStream is what sealing a stream learnt about it.
+type sealedStream struct {
+	schema    *arrow.Schema
+	structure string
+	rows      uint64
+	// digest is over the plaintext as sealed, plain its length: what a
+	// reader receives.
+	digest  string
+	plain   uint64
+	columns ColumnSummaries
+}
+
+func sealStream(f *sealed.File, streamBytes []byte) (out sealedStream, err error) {
 	h := blake3.New(32, nil)
 	cw := &countingWriter{w: h}
-	schema, structure, rows, err = sealStreamTo(f, streamBytes, PerDatasetMaxBytes, cw)
+	var summ *summarizer
+	out.schema, out.structure, out.rows, err = sealStreamTo(f, streamBytes, PerDatasetMaxBytes, cw, func(rec arrow.RecordBatch) {
+		if summ == nil {
+			summ = newSummarizer(rec.Schema())
+		}
+		summ.observe(rec)
+	})
 	if err != nil {
 		return
 	}
+	if summ == nil {
+		summ = newSummarizer(out.schema)
+	}
 	sum := h.Sum(nil)
-	digest, plain = hex.EncodeToString(sum[:16]), cw.n
+	out.digest, out.plain, out.columns = hex.EncodeToString(sum[:16]), cw.n, summ.result()
 	return
 }
 
@@ -837,12 +860,13 @@ func (inst *countingWriter) Write(p []byte) (n int, err error) {
 // counted, and a budget of limit alone would refuse a compressed stream
 // that decodes to well under the quota.
 func sealStreamCapped(f *sealed.File, streamBytes []byte, limit uint64) (schema *arrow.Schema, structure string, rows uint64, err error) {
-	return sealStreamTo(f, streamBytes, limit, nil)
+	return sealStreamTo(f, streamBytes, limit, nil, nil)
 }
 
 // sealStreamTo is sealStreamCapped writing every sealed plaintext byte to
-// tee as well, when tee is set.
-func sealStreamTo(f *sealed.File, streamBytes []byte, limit uint64, tee io.Writer) (schema *arrow.Schema, structure string, rows uint64, err error) {
+// tee as well, when tee is set, and showing every batch to observe, when
+// observe is set.
+func sealStreamTo(f *sealed.File, streamBytes []byte, limit uint64, tee io.Writer, observe func(rec arrow.RecordBatch)) (schema *arrow.Schema, structure string, rows uint64, err error) {
 	budget := &budgetAllocator{limit: limit + uint64(len(streamBytes))}
 	rdr, err := ipc.NewReader(bytes.NewReader(streamBytes), ipc.WithAllocator(budget))
 	if err != nil {
@@ -866,6 +890,9 @@ func sealStreamTo(f *sealed.File, streamBytes []byte, limit uint64, tee io.Write
 	for rdr.Next() {
 		rec := rdr.RecordBatch()
 		rows += uint64(rec.NumRows())
+		if observe != nil {
+			observe(rec)
+		}
 		if wErr := w.Write(rec); wErr != nil {
 			_ = w.Close()
 			return nil, "", 0, eh.Errorf("adhocdata: seal arrow stream: %w", wErr)

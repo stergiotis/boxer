@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/apache/arrow-go/v18/arrow"
 
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -173,12 +172,8 @@ type sealedDataset struct {
 	localName string
 	alias     string
 	file      *sealed.File
-	schema    *arrow.Schema
-	structure string
-	rows      uint64
 	bytes     uint64
-	digest    string
-	plain     uint64
+	stream    sealedStream
 }
 
 func validateBundle(in BundlePublishInput) (err error) {
@@ -261,23 +256,18 @@ func (inst *Service) PublishBundle(in BundlePublishInput) (res BundleResult, err
 	return
 }
 
-// fillColumns records each dataset's columns, name and Arrow type, index
-// for index with ColumnDatasets naming the dataset by its position.
+// fillColumns records each dataset's column summaries, ColumnDatasets
+// naming the dataset by its position.
 func (inst *AuditRecord) fillColumns(svc *Service, ds []BundleDataset) {
 	for i, d := range ds {
-		p, ok := svc.reg.Lookup(d.Handle)
+		cols, ok := svc.columnsOf(d.Handle)
 		if !ok {
 			continue
 		}
-		rec, isRec := p.(*record)
-		if !isRec {
-			continue
-		}
-		for _, f := range rec.Schema().Fields() {
+		for range cols.Len() {
 			inst.ColumnDatasets = append(inst.ColumnDatasets, uint32(i))
-			inst.ColumnNames = append(inst.ColumnNames, f.Name)
-			inst.ColumnTypes = append(inst.ColumnTypes, f.Type.String())
 		}
+		inst.Columns.appendAll(cols)
 	}
 }
 
@@ -340,7 +330,7 @@ func (inst *Service) publishBundle(in BundlePublishInput, cc option.Option[app.C
 			closeAll()
 			return res, op, eh.Errorf("allocate sealed file: %w", fErr)
 		}
-		schema, structure, rows, digest, plain, sErr := sealStream(f, d.ArrowIPCStream)
+		ss, sErr := sealStream(f, d.ArrowIPCStream)
 		if sErr != nil {
 			_ = f.Close()
 			closeAll()
@@ -355,7 +345,7 @@ func (inst *Service) publishBundle(in BundlePublishInput, cc option.Option[app.C
 		}
 		sealedBytes += nbytes
 		sealedSet = append(sealedSet, sealedDataset{localName: d.LocalName, alias: newAliases[i], file: f,
-			schema: schema, structure: structure, rows: rows, bytes: nbytes, digest: digest, plain: plain})
+			bytes: nbytes, stream: ss})
 	}
 	digest := trail.ContentDigest(string(in.Document))
 	document := slices.Clone(in.Document)
@@ -386,8 +376,8 @@ func (inst *Service) publishBundle(in BundlePublishInput, cc option.Option[app.C
 				handle: handle, alias: s.alias, bundle: in.Alias, owner: owner, keepAfterClose: keep,
 				// A member carries its bundle's revision, so a reader of
 				// the member sees the bundle move.
-				schema: s.schema, structure: s.structure, revision: revision, rows: s.rows, bytes: s.bytes,
-				createdAt: now, file: s.file, streamDigest: s.digest, plainBytes: s.plain, context: cc,
+				schema: s.stream.schema, structure: s.stream.structure, revision: revision, rows: s.stream.rows, bytes: s.bytes,
+				createdAt: now, file: s.file, streamDigest: s.stream.digest, plainBytes: s.stream.plain, columns: s.stream.columns, context: cc,
 			}
 			hErr = inst.reg.Register(rec)
 			if hErr == nil {

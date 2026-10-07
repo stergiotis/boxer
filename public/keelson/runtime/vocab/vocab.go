@@ -510,6 +510,11 @@ var (
 	MembAdhocDatasetColumnDatasets = NkRegistry.MustBegin("adhocDatasetColumnDatasets", 280).End()
 	MembAdhocDatasetColumnNames    = NkRegistry.MustBegin("adhocDatasetColumnNames", 281).End()
 	MembAdhocDatasetColumnTypes    = NkRegistry.MustBegin("adhocDatasetColumnTypes", 282).End()
+	MembAdhocDatasetColumnNulls    = NkRegistry.MustBegin("adhocDatasetColumnNulls", 283).End()
+	MembAdhocDatasetColumnMin      = NkRegistry.MustBegin("adhocDatasetColumnMin", 284).End()
+	MembAdhocDatasetColumnMax      = NkRegistry.MustBegin("adhocDatasetColumnMax", 285).End()
+	MembAdhocDatasetColumnDistinct = NkRegistry.MustBegin("adhocDatasetColumnDistinct", 286).End()
+	MembAdhocDatasetColumnSample   = NkRegistry.MustBegin("adhocDatasetColumnSample", 287).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -576,5 +581,7 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembAdhocDatasetBytes, MembAdhocDatasetStreamDigests, MembAdhocDatasetDocumentDigest, MembAdhocDatasetAttested,
 	MembAdhocDatasetInFlight, MembAdhocDatasetDocument, MembAdhocDatasetSourceSql, MembAdhocDatasetInputHandles,
 	MembAdhocDatasetInputAliases, MembAdhocDatasetInputDigests, MembAdhocDatasetColumnDatasets,
-	MembAdhocDatasetColumnNames, MembAdhocDatasetColumnTypes,
+	MembAdhocDatasetColumnNames, MembAdhocDatasetColumnTypes, MembAdhocDatasetColumnNulls,
+	MembAdhocDatasetColumnMin, MembAdhocDatasetColumnMax, MembAdhocDatasetColumnDistinct,
+	MembAdhocDatasetColumnSample,
 }

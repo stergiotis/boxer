@@ -130,6 +130,10 @@ type bundleCatalogRow struct {
 	sourceSql         string
 	inputHandles      []string
 	inputAliases      []string
+	// columnLocalNames names, index for index with columns, the dataset
+	// each summarised column belongs to.
+	columnLocalNames []string
+	columns          ColumnSummaries
 	callContext
 }
 
@@ -153,6 +157,19 @@ func (inst *Service) bundleCatalogRows() (rows []bundleCatalogRow) {
 		for _, in := range b.inputs {
 			last.inputHandles = append(last.inputHandles, in.Handle)
 			last.inputAliases = append(last.inputAliases, in.Alias)
+		}
+		for i, h := range b.handles {
+			rec := inst.live[h]
+			if rec == nil {
+				continue
+			}
+			rec.mu.RLock()
+			cols := rec.columns
+			rec.mu.RUnlock()
+			for range cols.Len() {
+				last.columnLocalNames = append(last.columnLocalNames, b.localNames[i])
+			}
+			last.columns.appendAll(cols)
 		}
 	}
 	inst.mu.RUnlock()
@@ -202,5 +219,13 @@ func bundleCatalogTable(rows []bundleCatalogRow) *introspect.Table {
 		String("task", func(i int) string { return rows[i].task }).
 		String("call", func(i int) string { return rows[i].call }).
 		String("conversation", func(i int) string { return rows[i].conversation }).
-		String("turn", func(i int) string { return rows[i].turn })
+		String("turn", func(i int) string { return rows[i].turn }).
+		StringList("column_local_names", func(i int) []string { return rows[i].columnLocalNames }).
+		StringList("column_names", func(i int) []string { return rows[i].columns.Names }).
+		StringList("column_types", func(i int) []string { return rows[i].columns.Types }).
+		Uint64List("column_nulls", func(i int) []uint64 { return rows[i].columns.Nulls }).
+		StringList("column_min", func(i int) []string { return rows[i].columns.Min }).
+		StringList("column_max", func(i int) []string { return rows[i].columns.Max }).
+		Uint64List("column_distinct", func(i int) []uint64 { return rows[i].columns.Distinct }).
+		StringList("column_sample", func(i int) []string { return rows[i].columns.Sample })
 }

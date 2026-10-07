@@ -203,6 +203,12 @@ func TestBundleCatalogs(t *testing.T) {
 	require.NoError(t, err)
 	defer batch.Release()
 	assert.Equal(t, int64(1), batch.NumRows())
+
+	// Every column is summarised, named by the dataset it belongs to.
+	assert.Equal(t, []string{"orders", "regions"}, rows[0].columnLocalNames)
+	assert.Equal(t, []string{"v", "v"}, rows[0].columns.Names)
+	assert.Equal(t, []string{"[1,2,3]", "[7]"}, rows[0].columns.Sample)
+	assert.Equal(t, []uint64{0, 0}, rows[0].columns.Nulls)
 }
 
 func TestBundleOverTheBus(t *testing.T) {

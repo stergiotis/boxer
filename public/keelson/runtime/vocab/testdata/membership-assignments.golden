@@ -245,3 +245,8 @@
 280	adhoc-dataset-column-datasets	9223372049739677976
 281	adhoc-dataset-column-names	9223372049739677977
 282	adhoc-dataset-column-types	9223372049739677978
+283	adhoc-dataset-column-nulls	9223372049739677979
+284	adhoc-dataset-column-min	9223372049739677980
+285	adhoc-dataset-column-max	9223372049739677981
+286	adhoc-dataset-column-distinct	9223372049739677982
+287	adhoc-dataset-column-sample	9223372049739677983

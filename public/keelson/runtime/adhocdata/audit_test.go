@@ -254,6 +254,9 @@ func TestTheAuditLandsOnTheTrail(t *testing.T) {
 	assert.Equal(t, testDoc, e.AdhocDataset.Val.Document, "the document is reconstructible from the trail")
 	assert.Equal(t, []string{"v", "v"}, e.AdhocDataset.Val.ColumnNames)
 	assert.Equal(t, []uint32{0, 1}, e.AdhocDataset.Val.ColumnDatasets)
+	assert.Equal(t, []string{"1", "7"}, e.AdhocDataset.Val.ColumnMin, "the summaries reach the trail")
+	assert.Equal(t, []string{"3", "7"}, e.AdhocDataset.Val.ColumnMax)
+	assert.Equal(t, []uint64{3, 1}, e.AdhocDataset.Val.ColumnDistinct)
 }
 
 // A bundle's provenance is data: the statement that produced its rows, the
@@ -279,8 +282,8 @@ func TestProvenanceNamesTheBytesABundleCameFrom(t *testing.T) {
 	a := audits[len(audits)-1]
 	assert.Equal(t, []string{orders.Handle, "adhoc_00000000000000ff"}, a.InputHandles)
 	assert.Equal(t, []string{orders.StreamDigest, ""}, a.InputDigests)
-	assert.Equal(t, []string{"v"}, a.ColumnNames)
-	assert.Equal(t, []string{"int64"}, a.ColumnTypes)
+	assert.Equal(t, []string{"v"}, a.Columns.Names)
+	assert.Equal(t, []string{"int64"}, a.Columns.Types)
 	assert.Equal(t, []byte(testDoc), a.Document)
 
 	var row bundleCatalogRow

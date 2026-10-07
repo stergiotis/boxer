@@ -41,7 +41,7 @@ SELECT
   CAST(arrayElement(LW_LIST_BY_TAG_EQUAL("tv:stringArray:value:val:sh:4::8:0::data", "tv:stringArray:len:len:u64:4D:::0::data", "tv:stringArray:lr:lr:u64:1247:::0::data", 9223372049739677849, LW_RAGGED_PARENT_IDS("tv:stringArray:lrcard:lrcard:u64:4E:::0::data")), 1), 'String') AS "oq:history-hash:s:::0:"
 FROM boxer.facts
 WHERE has("tv:symbol:lr:lr:u64:1247:::0::data", 9223372049739677798)
-COMMENT 'keelson trail views v5 over leeway SQL read surface v2';
+COMMENT 'keelson trail views v6 over leeway SQL read surface v2';
 
 CREATE OR REPLACE VIEW boxer.dm_trail_llm_model_messages AS
 SELECT
@@ -72,7 +72,7 @@ SELECT
   CAST(LW_LIST_BY_TAG_EQUAL("tv:textArray:value:val:sh:5::7:0::data", "tv:textArray:len:len:u64:4D:::0::data", "tv:textArray:lr:lr:u64:1247:::0::data", 9223372049739677860, LW_RAGGED_PARENT_IDS("tv:textArray:lrcard:lrcard:u64:4E:::0::data")), 'Array(String)') AS "oq:tool-calls-json:sh:::0:"
 FROM boxer.facts
 WHERE has("tv:symbol:lr:lr:u64:1247:::0::data", 9223372049739677850)
-COMMENT 'keelson trail views v5 over leeway SQL read surface v2';
+COMMENT 'keelson trail views v6 over leeway SQL read surface v2';
 
 CREATE OR REPLACE VIEW boxer.dm_trail_llm_agent_actions AS
 SELECT
@@ -108,7 +108,7 @@ SELECT
   CAST(LW_VALUE_BY_TAG_EQUAL("tv:bool:value:val:b:4:::0::data", "tv:bool:lr:lr:u64:1247:::0::data", 9223372049739677882, LW_RAGGED_PARENT_IDS("tv:bool:lrcard:lrcard:u64:4E:::0::data")), 'Bool') AS "oq:confined:b:::0:"
 FROM boxer.facts
 WHERE has("tv:symbol:lr:lr:u64:1247:::0::data", 9223372049739677864)
-COMMENT 'keelson trail views v5 over leeway SQL read surface v2';
+COMMENT 'keelson trail views v6 over leeway SQL read surface v2';
 
 CREATE OR REPLACE VIEW boxer.dm_trail_llm_agent_grants AS
 SELECT
@@ -139,7 +139,7 @@ SELECT
   CAST(LW_LIST_BY_TAG_EQUAL("tv:stringArray:value:val:sh:4::8:0::data", "tv:stringArray:len:len:u64:4D:::0::data", "tv:stringArray:lr:lr:u64:1247:::0::data", 9223372049739677912, LW_RAGGED_PARENT_IDS("tv:stringArray:lrcard:lrcard:u64:4E:::0::data")), 'Array(String)') AS "oq:reason:sh:::0:"
 FROM boxer.facts
 WHERE has("tv:symbol:lr:lr:u64:1247:::0::data", 9223372049739677902)
-COMMENT 'keelson trail views v5 over leeway SQL read surface v2';
+COMMENT 'keelson trail views v6 over leeway SQL read surface v2';
 
 CREATE OR REPLACE VIEW boxer.dm_trail_llm_agent_captures AS
 SELECT
@@ -168,7 +168,7 @@ SELECT
   CAST(LW_VALUE_BY_TAG_EQUAL("tv:bool:value:val:b:4:::0::data", "tv:bool:lr:lr:u64:1247:::0::data", 9223372049739677936, LW_RAGGED_PARENT_IDS("tv:bool:lrcard:lrcard:u64:4E:::0::data")), 'Bool') AS "oq:confined:b:::0:"
 FROM boxer.facts
 WHERE has("tv:symbol:lr:lr:u64:1247:::0::data", 9223372049739677925)
-COMMENT 'keelson trail views v5 over leeway SQL read surface v2';
+COMMENT 'keelson trail views v6 over leeway SQL read surface v2';
 
 CREATE OR REPLACE VIEW boxer.dm_trail_llm_agent_disclosures AS
 SELECT
@@ -202,7 +202,7 @@ SELECT
   CAST(LW_LIST_BY_TAG_EQUAL("tv:stringArray:value:val:sh:4::8:0::data", "tv:stringArray:len:len:u64:4D:::0::data", "tv:stringArray:lr:lr:u64:1247:::0::data", 9223372049739677953, LW_RAGGED_PARENT_IDS("tv:stringArray:lrcard:lrcard:u64:4E:::0::data")), 'Array(String)') AS "oq:reason:sh:::0:"
 FROM boxer.facts
 WHERE has("tv:symbol:lr:lr:u64:1247:::0::data", 9223372049739677940)
-COMMENT 'keelson trail views v5 over leeway SQL read surface v2';
+COMMENT 'keelson trail views v6 over leeway SQL read surface v2';
 
 CREATE OR REPLACE VIEW boxer.dm_trail_http_fetches AS
 SELECT
@@ -230,7 +230,7 @@ SELECT
   CAST(LW_LIST_BY_TAG_EQUAL("tv:stringArray:value:val:sh:4::8:0::data", "tv:stringArray:len:len:u64:4D:::0::data", "tv:stringArray:lr:lr:u64:1247:::0::data", 9223372049739677923, LW_RAGGED_PARENT_IDS("tv:stringArray:lrcard:lrcard:u64:4E:::0::data")), 'Array(String)') AS "oq:error:sh:::0:"
 FROM boxer.facts
 WHERE has("tv:symbol:lr:lr:u64:1247:::0::data", 9223372049739677913)
-COMMENT 'keelson trail views v5 over leeway SQL read surface v2';
+COMMENT 'keelson trail views v6 over leeway SQL read surface v2';
 
 CREATE OR REPLACE VIEW boxer.dm_trail_adhoc_bundles AS
 SELECT
@@ -271,10 +271,15 @@ SELECT
   CAST(LW_LIST_BY_TAG_EQUAL("tv:stringArray:value:val:sh:4::8:0::data", "tv:stringArray:len:len:u64:4D:::0::data", "tv:stringArray:lr:lr:u64:1247:::0::data", 9223372049739677974, LW_RAGGED_PARENT_IDS("tv:stringArray:lrcard:lrcard:u64:4E:::0::data")), 'Array(String)') AS "oq:input-aliases:sh:::0:",
   CAST(LW_LIST_BY_TAG_EQUAL("tv:stringArray:value:val:sh:4::8:0::data", "tv:stringArray:len:len:u64:4D:::0::data", "tv:stringArray:lr:lr:u64:1247:::0::data", 9223372049739677975, LW_RAGGED_PARENT_IDS("tv:stringArray:lrcard:lrcard:u64:4E:::0::data")), 'Array(String)') AS "oq:input-digests:sh:::0:",
   CAST(LW_LIST_BY_TAG_EQUAL("tv:stringArray:value:val:sh:4::8:0::data", "tv:stringArray:len:len:u64:4D:::0::data", "tv:stringArray:lr:lr:u64:1247:::0::data", 9223372049739677977, LW_RAGGED_PARENT_IDS("tv:stringArray:lrcard:lrcard:u64:4E:::0::data")), 'Array(String)') AS "oq:column-names:sh:::0:",
-  CAST(LW_LIST_BY_TAG_EQUAL("tv:stringArray:value:val:sh:4::8:0::data", "tv:stringArray:len:len:u64:4D:::0::data", "tv:stringArray:lr:lr:u64:1247:::0::data", 9223372049739677978, LW_RAGGED_PARENT_IDS("tv:stringArray:lrcard:lrcard:u64:4E:::0::data")), 'Array(String)') AS "oq:column-types:sh:::0:"
+  CAST(LW_LIST_BY_TAG_EQUAL("tv:stringArray:value:val:sh:4::8:0::data", "tv:stringArray:len:len:u64:4D:::0::data", "tv:stringArray:lr:lr:u64:1247:::0::data", 9223372049739677978, LW_RAGGED_PARENT_IDS("tv:stringArray:lrcard:lrcard:u64:4E:::0::data")), 'Array(String)') AS "oq:column-types:sh:::0:",
+  CAST(LW_LIST_BY_TAG_EQUAL("tv:u64Array:value:val:u64h:4:::0::data", "tv:u64Array:len:len:u64:4D:::0::data", "tv:u64Array:lr:lr:u64:1247:::0::data", 9223372049739677979, LW_RAGGED_PARENT_IDS("tv:u64Array:lrcard:lrcard:u64:4E:::0::data")), 'Array(UInt64)') AS "oq:column-nulls:u64h:::0:",
+  CAST(LW_LIST_BY_TAG_EQUAL("tv:stringArray:value:val:sh:4::8:0::data", "tv:stringArray:len:len:u64:4D:::0::data", "tv:stringArray:lr:lr:u64:1247:::0::data", 9223372049739677980, LW_RAGGED_PARENT_IDS("tv:stringArray:lrcard:lrcard:u64:4E:::0::data")), 'Array(String)') AS "oq:column-min:sh:::0:",
+  CAST(LW_LIST_BY_TAG_EQUAL("tv:stringArray:value:val:sh:4::8:0::data", "tv:stringArray:len:len:u64:4D:::0::data", "tv:stringArray:lr:lr:u64:1247:::0::data", 9223372049739677981, LW_RAGGED_PARENT_IDS("tv:stringArray:lrcard:lrcard:u64:4E:::0::data")), 'Array(String)') AS "oq:column-max:sh:::0:",
+  CAST(LW_LIST_BY_TAG_EQUAL("tv:u64Array:value:val:u64h:4:::0::data", "tv:u64Array:len:len:u64:4D:::0::data", "tv:u64Array:lr:lr:u64:1247:::0::data", 9223372049739677982, LW_RAGGED_PARENT_IDS("tv:u64Array:lrcard:lrcard:u64:4E:::0::data")), 'Array(UInt64)') AS "oq:column-distinct:u64h:::0:",
+  CAST(LW_LIST_BY_TAG_EQUAL("tv:stringArray:value:val:sh:4::8:0::data", "tv:stringArray:len:len:u64:4D:::0::data", "tv:stringArray:lr:lr:u64:1247:::0::data", 9223372049739677983, LW_RAGGED_PARENT_IDS("tv:stringArray:lrcard:lrcard:u64:4E:::0::data")), 'Array(String)') AS "oq:column-sample:sh:::0:"
 FROM boxer.facts
 WHERE has("tv:symbol:lr:lr:u64:1247:::0::data", 9223372049739677954)
-COMMENT 'keelson trail views v5 over leeway SQL read surface v2';
+COMMENT 'keelson trail views v6 over leeway SQL read surface v2';
 
 CREATE OR REPLACE VIEW boxer.dm_trail_timeline AS
 SELECT
@@ -412,7 +417,7 @@ SELECT
   CAST(0, 'UInt64') AS "oq:tokens-out:u64:::0:",
   CAST(0, 'UInt64') AS "oq:elapsed-ms:u64:::0:"
 FROM boxer.dm_trail_adhoc_bundles
-COMMENT 'keelson trail views v5 over leeway SQL read surface v2';
+COMMENT 'keelson trail views v6 over leeway SQL read surface v2';
 
 CREATE OR REPLACE VIEW boxer.agg_trail_llm_agent_action_outcomes AS
 SELECT
@@ -447,7 +452,7 @@ SELECT
   CAST(groupArray("id:id:u64:47::0:"), 'Array(UInt64)') AS "oq:facts-ids:u64h:::0:"
 FROM boxer.dm_trail_llm_agent_actions
 GROUP BY if("oq:key:s:::0:" = '', concat('row:', toString("id:id:u64:47::0:")), "oq:key:s:::0:")
-COMMENT 'keelson trail views v5 over leeway SQL read surface v2';
+COMMENT 'keelson trail views v6 over leeway SQL read surface v2';
 
 CREATE OR REPLACE VIEW boxer.agg_trail_llm_conversations AS
 SELECT
@@ -509,7 +514,7 @@ LEFT JOIN (
   WHERE "oq:conversation:s:::0:" != ''
   GROUP BY "oq:conversation:s:::0:"
 ) AS a ON a.conversation = t.conversation
-COMMENT 'keelson trail views v5 over leeway SQL read surface v2';
+COMMENT 'keelson trail views v6 over leeway SQL read surface v2';
 
 CREATE OR REPLACE VIEW boxer.agg_trail_llm_tasks AS
 SELECT
@@ -568,4 +573,4 @@ LEFT JOIN (
   WHERE "oq:task:s:::0:" != ''
   GROUP BY "oq:task:s:::0:"
 ) AS a ON a.task = t.task
-COMMENT 'keelson trail views v5 over leeway SQL read surface v2';
+COMMENT 'keelson trail views v6 over leeway SQL read surface v2';

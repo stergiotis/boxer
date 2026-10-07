@@ -38,6 +38,11 @@ const (
 	kindAdhocDatasetColumnDatasets uint64 = 9223372049739677976
 	kindAdhocDatasetColumnNames    uint64 = 9223372049739677977
 	kindAdhocDatasetColumnTypes    uint64 = 9223372049739677978
+	kindAdhocDatasetColumnNulls    uint64 = 9223372049739677979
+	kindAdhocDatasetColumnMin      uint64 = 9223372049739677980
+	kindAdhocDatasetColumnMax      uint64 = 9223372049739677981
+	kindAdhocDatasetColumnDistinct uint64 = 9223372049739677982
+	kindAdhocDatasetColumnSample   uint64 = 9223372049739677983
 )
 
 // adhocDatasetSymbolAttrI is the InAttr-side view of the symbol section. P-variants only —
@@ -272,6 +277,30 @@ func adhocDatasetEmitSectionStringArray[
 		stringArraySecAttr_ColumnTypes.AddMembershipLowCardRefP(kindAdhocDatasetColumnTypes)
 		stringArraySecAttr_ColumnTypes.EndAttributeP()
 	}
+	if len(row.ColumnMin) > 0 {
+		stringArraySecAttr_ColumnMin := stringArraySec.BeginAttribute()
+		for _, v := range row.ColumnMin {
+			stringArraySecAttr_ColumnMin.AddToContainerP(v)
+		}
+		stringArraySecAttr_ColumnMin.AddMembershipLowCardRefP(kindAdhocDatasetColumnMin)
+		stringArraySecAttr_ColumnMin.EndAttributeP()
+	}
+	if len(row.ColumnMax) > 0 {
+		stringArraySecAttr_ColumnMax := stringArraySec.BeginAttribute()
+		for _, v := range row.ColumnMax {
+			stringArraySecAttr_ColumnMax.AddToContainerP(v)
+		}
+		stringArraySecAttr_ColumnMax.AddMembershipLowCardRefP(kindAdhocDatasetColumnMax)
+		stringArraySecAttr_ColumnMax.EndAttributeP()
+	}
+	if len(row.ColumnSample) > 0 {
+		stringArraySecAttr_ColumnSample := stringArraySec.BeginAttribute()
+		for _, v := range row.ColumnSample {
+			stringArraySecAttr_ColumnSample.AddToContainerP(v)
+		}
+		stringArraySecAttr_ColumnSample.AddMembershipLowCardRefP(kindAdhocDatasetColumnSample)
+		stringArraySecAttr_ColumnSample.EndAttributeP()
+	}
 	return
 }
 
@@ -305,6 +334,22 @@ func adhocDatasetEmitSectionU64Array[
 		}
 		u64ArraySecAttr_Bytes.AddMembershipLowCardRefP(kindAdhocDatasetBytes)
 		u64ArraySecAttr_Bytes.EndAttributeP()
+	}
+	if len(row.ColumnNulls) > 0 {
+		u64ArraySecAttr_ColumnNulls := u64ArraySec.BeginAttribute()
+		for _, v := range row.ColumnNulls {
+			u64ArraySecAttr_ColumnNulls.AddToContainerP(v)
+		}
+		u64ArraySecAttr_ColumnNulls.AddMembershipLowCardRefP(kindAdhocDatasetColumnNulls)
+		u64ArraySecAttr_ColumnNulls.EndAttributeP()
+	}
+	if len(row.ColumnDistinct) > 0 {
+		u64ArraySecAttr_ColumnDistinct := u64ArraySec.BeginAttribute()
+		for _, v := range row.ColumnDistinct {
+			u64ArraySecAttr_ColumnDistinct.AddToContainerP(v)
+		}
+		u64ArraySecAttr_ColumnDistinct.AddMembershipLowCardRefP(kindAdhocDatasetColumnDistinct)
+		u64ArraySecAttr_ColumnDistinct.EndAttributeP()
 	}
 	return
 }
@@ -636,6 +681,15 @@ func adhocDatasetReadRow[
 	var stringArrayColumnTypesSlice []string
 	var stringArrayColumnTypesCount int
 	var stringArrayColumnTypesLastAttr int64
+	var stringArrayColumnMinSlice []string
+	var stringArrayColumnMinCount int
+	var stringArrayColumnMinLastAttr int64
+	var stringArrayColumnMaxSlice []string
+	var stringArrayColumnMaxCount int
+	var stringArrayColumnMaxLastAttr int64
+	var stringArrayColumnSampleSlice []string
+	var stringArrayColumnSampleCount int
+	var stringArrayColumnSampleLastAttr int64
 	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -753,6 +807,30 @@ func adhocDatasetReadRow[
 				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					stringArrayColumnTypesSlice = append(stringArrayColumnTypesSlice, v)
 				}
+			case kindAdhocDatasetColumnMin:
+				if stringArrayColumnMinLastAttr != attrJ+1 {
+					stringArrayColumnMinLastAttr = attrJ + 1
+					stringArrayColumnMinCount++
+				}
+				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					stringArrayColumnMinSlice = append(stringArrayColumnMinSlice, v)
+				}
+			case kindAdhocDatasetColumnMax:
+				if stringArrayColumnMaxLastAttr != attrJ+1 {
+					stringArrayColumnMaxLastAttr = attrJ + 1
+					stringArrayColumnMaxCount++
+				}
+				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					stringArrayColumnMaxSlice = append(stringArrayColumnMaxSlice, v)
+				}
+			case kindAdhocDatasetColumnSample:
+				if stringArrayColumnSampleLastAttr != attrJ+1 {
+					stringArrayColumnSampleLastAttr = attrJ + 1
+					stringArrayColumnSampleCount++
+				}
+				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					stringArrayColumnSampleSlice = append(stringArrayColumnSampleSlice, v)
+				}
 			}
 		}
 	}
@@ -860,6 +938,30 @@ func adhocDatasetReadRow[
 		row.ColumnTypes = stringArrayColumnTypesSlice
 		present = true
 	}
+	if stringArrayColumnMinCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocDatasetColumnMin").Int("got", stringArrayColumnMinCount).Errorf("slot stringArray@adhocDatasetColumnMin (field ColumnMin) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayColumnMinCount)
+		return
+	}
+	if stringArrayColumnMinSlice != nil {
+		row.ColumnMin = stringArrayColumnMinSlice
+		present = true
+	}
+	if stringArrayColumnMaxCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocDatasetColumnMax").Int("got", stringArrayColumnMaxCount).Errorf("slot stringArray@adhocDatasetColumnMax (field ColumnMax) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayColumnMaxCount)
+		return
+	}
+	if stringArrayColumnMaxSlice != nil {
+		row.ColumnMax = stringArrayColumnMaxSlice
+		present = true
+	}
+	if stringArrayColumnSampleCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocDatasetColumnSample").Int("got", stringArrayColumnSampleCount).Errorf("slot stringArray@adhocDatasetColumnSample (field ColumnSample) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayColumnSampleCount)
+		return
+	}
+	if stringArrayColumnSampleSlice != nil {
+		row.ColumnSample = stringArrayColumnSampleSlice
+		present = true
+	}
 	// --- u64Array. ---
 	var u64ArrayRevisionVal uint64
 	var u64ArrayRevisionCount int
@@ -873,6 +975,12 @@ func adhocDatasetReadRow[
 	var u64ArrayBytesSlice []uint64
 	var u64ArrayBytesCount int
 	var u64ArrayBytesLastAttr int64
+	var u64ArrayColumnNullsSlice []uint64
+	var u64ArrayColumnNullsCount int
+	var u64ArrayColumnNullsLastAttr int64
+	var u64ArrayColumnDistinctSlice []uint64
+	var u64ArrayColumnDistinctCount int
+	var u64ArrayColumnDistinctLastAttr int64
 	nu64Array := u64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
 		for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -915,6 +1023,22 @@ func adhocDatasetReadRow[
 				for v := range u64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					u64ArrayBytesSlice = append(u64ArrayBytesSlice, v)
 				}
+			case kindAdhocDatasetColumnNulls:
+				if u64ArrayColumnNullsLastAttr != attrJ+1 {
+					u64ArrayColumnNullsLastAttr = attrJ + 1
+					u64ArrayColumnNullsCount++
+				}
+				for v := range u64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					u64ArrayColumnNullsSlice = append(u64ArrayColumnNullsSlice, v)
+				}
+			case kindAdhocDatasetColumnDistinct:
+				if u64ArrayColumnDistinctLastAttr != attrJ+1 {
+					u64ArrayColumnDistinctLastAttr = attrJ + 1
+					u64ArrayColumnDistinctCount++
+				}
+				for v := range u64ArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					u64ArrayColumnDistinctSlice = append(u64ArrayColumnDistinctSlice, v)
+				}
 			}
 		}
 	}
@@ -948,6 +1072,22 @@ func adhocDatasetReadRow[
 	}
 	if u64ArrayBytesSlice != nil {
 		row.Bytes = u64ArrayBytesSlice
+		present = true
+	}
+	if u64ArrayColumnNullsCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "adhocDatasetColumnNulls").Int("got", u64ArrayColumnNullsCount).Errorf("slot u64Array@adhocDatasetColumnNulls (field ColumnNulls) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u64ArrayColumnNullsCount)
+		return
+	}
+	if u64ArrayColumnNullsSlice != nil {
+		row.ColumnNulls = u64ArrayColumnNullsSlice
+		present = true
+	}
+	if u64ArrayColumnDistinctCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "adhocDatasetColumnDistinct").Int("got", u64ArrayColumnDistinctCount).Errorf("slot u64Array@adhocDatasetColumnDistinct (field ColumnDistinct) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u64ArrayColumnDistinctCount)
+		return
+	}
+	if u64ArrayColumnDistinctSlice != nil {
+		row.ColumnDistinct = u64ArrayColumnDistinctSlice
 		present = true
 	}
 	// --- bool. ---
