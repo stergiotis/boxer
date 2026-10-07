@@ -21,8 +21,8 @@ func (seqProvider) Snapshot(Projection) (arrow.RecordBatch, error) {
 }
 func (seqProvider) Args() []ArgSpec {
 	return []ArgSpec{
-		{Name: "n", Type: ArgUInt64, Required: true},
-		{Name: "label", Type: ArgString, Default: "x"},
+		{Name: "n", Type: ArgTypeUInt64, Required: true},
+		{Name: "label", Type: ArgTypeString, Default: "x"},
 	}
 }
 func (seqProvider) SnapshotArgs(proj Projection, args Args) (arrow.RecordBatch, error) {
@@ -54,14 +54,14 @@ func TestResolveArgs_Refusals(t *testing.T) {
 		_, err := ResolveArgs(specs, raw)
 		assert.Error(t, err, name)
 	}
-	_, err := ResolveArgs([]ArgSpec{{Name: "f", Type: ArgFloat64, Required: true}}, map[string]string{"f": "nan"})
+	_, err := ResolveArgs([]ArgSpec{{Name: "f", Type: ArgTypeFloat64, Required: true}}, map[string]string{"f": "nan"})
 	assert.Error(t, err, "NaN")
 }
 
 func TestArgsKey_IsCanonical(t *testing.T) {
 	specs := []ArgSpec{
-		{Name: "b", Type: ArgFloat64, Required: true},
-		{Name: "a", Type: ArgInt64, Required: true},
+		{Name: "b", Type: ArgTypeFloat64, Required: true},
+		{Name: "a", Type: ArgTypeInt64, Required: true},
 	}
 	k1, err := ResolveArgs(specs, map[string]string{"a": "7", "b": "1.50"})
 	require.NoError(t, err)

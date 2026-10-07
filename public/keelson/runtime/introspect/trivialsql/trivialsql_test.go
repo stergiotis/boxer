@@ -23,7 +23,7 @@ func (seqProvider) Snapshot(introspect.Projection) (arrow.RecordBatch, error) {
 	return nil, assert.AnError
 }
 func (seqProvider) Args() []introspect.ArgSpec {
-	return []introspect.ArgSpec{{Name: "n", Type: introspect.ArgUInt64, Required: true}}
+	return []introspect.ArgSpec{{Name: "n", Type: introspect.ArgTypeUInt64, Required: true}}
 }
 func (seqProvider) SnapshotArgs(proj introspect.Projection, args introspect.Args) (arrow.RecordBatch, error) {
 	return seqTable().Build(proj, int(args.UInt64("n"))), nil

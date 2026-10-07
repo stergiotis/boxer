@@ -205,13 +205,13 @@ func req(name string, t introspect.ArgTypeE) introspect.ArgSpec {
 
 // planeArgs are the arguments that place nodes on the bins of a plan.
 var planeArgs = []introspect.ArgSpec{
-	req("north", introspect.ArgFloat64), req("west", introspect.ArgFloat64),
-	req("dlat", introspect.ArgFloat64), req("dlon", introspect.ArgFloat64),
-	req("factor", introspect.ArgInt64),
-	req("lat_min", introspect.ArgFloat64), req("lat_max", introspect.ArgFloat64),
-	req("lon_min1", introspect.ArgFloat64), req("lon_max1", introspect.ArgFloat64),
-	req("lon_min2", introspect.ArgFloat64), req("lon_max2", introspect.ArgFloat64),
-	req("cap", introspect.ArgUInt64),
+	req("north", introspect.ArgTypeFloat64), req("west", introspect.ArgTypeFloat64),
+	req("dlat", introspect.ArgTypeFloat64), req("dlon", introspect.ArgTypeFloat64),
+	req("factor", introspect.ArgTypeInt64),
+	req("lat_min", introspect.ArgTypeFloat64), req("lat_max", introspect.ArgTypeFloat64),
+	req("lon_min1", introspect.ArgTypeFloat64), req("lon_max1", introspect.ArgTypeFloat64),
+	req("lon_min2", introspect.ArgTypeFloat64), req("lon_max2", introspect.ArgTypeFloat64),
+	req("cap", introspect.ArgTypeUInt64),
 }
 
 // bounds is the node filter of the window and summary statements, on the
@@ -273,7 +273,7 @@ func (inst stepsProvider) Snapshot(introspect.Projection) (arrow.RecordBatch, er
 	return nil, noSnapshot(inst.name)
 }
 func (stepsProvider) Args() []introspect.ArgSpec {
-	return []introspect.ArgSpec{req("cap", introspect.ArgUInt64)}
+	return []introspect.ArgSpec{req("cap", introspect.ArgTypeUInt64)}
 }
 func (inst stepsProvider) SnapshotArgs(_ introspect.Projection, a introspect.Args) (arrow.RecordBatch, error) {
 	b := array.NewRecordBuilder(memory.NewGoAllocator(), stepsSchema)
@@ -320,7 +320,7 @@ func (inst geometryProvider) Snapshot(introspect.Projection) (arrow.RecordBatch,
 	return nil, noSnapshot(inst.name)
 }
 func (geometryProvider) Args() []introspect.ArgSpec {
-	return []introspect.ArgSpec{req("t", introspect.ArgString)}
+	return []introspect.ArgSpec{req("t", introspect.ArgTypeString)}
 }
 func (inst geometryProvider) SnapshotArgs(_ introspect.Projection, a introspect.Args) (arrow.RecordBatch, error) {
 	b := array.NewRecordBuilder(memory.NewGoAllocator(), geometrySchema)
@@ -389,9 +389,9 @@ func (inst regularityProvider) Snapshot(introspect.Projection) (arrow.RecordBatc
 }
 func (regularityProvider) Args() []introspect.ArgSpec {
 	return []introspect.ArgSpec{
-		req("t", introspect.ArgString),
-		req("west", introspect.ArgFloat64), req("north", introspect.ArgFloat64),
-		req("dlon", introspect.ArgFloat64), req("dlat", introspect.ArgFloat64),
+		req("t", introspect.ArgTypeString),
+		req("west", introspect.ArgTypeFloat64), req("north", introspect.ArgTypeFloat64),
+		req("dlon", introspect.ArgTypeFloat64), req("dlat", introspect.ArgTypeFloat64),
 	}
 }
 func (inst regularityProvider) SnapshotArgs(_ introspect.Projection, a introspect.Args) (arrow.RecordBatch, error) {
@@ -439,10 +439,10 @@ func (inst windowProvider) Snapshot(introspect.Projection) (arrow.RecordBatch, e
 }
 func (windowProvider) Args() []introspect.ArgSpec {
 	return append([]introspect.ArgSpec{
-		req("t", introspect.ArgString),
-		req("row_start", introspect.ArgInt64), req("row_end", introspect.ArgInt64),
-		req("col_start", introspect.ArgInt64), req("col_end", introspect.ArgInt64),
-		req("turns", introspect.ArgString),
+		req("t", introspect.ArgTypeString),
+		req("row_start", introspect.ArgTypeInt64), req("row_end", introspect.ArgTypeInt64),
+		req("col_start", introspect.ArgTypeInt64), req("col_end", introspect.ArgTypeInt64),
+		req("turns", introspect.ArgTypeString),
 	}, planeArgs...)
 }
 

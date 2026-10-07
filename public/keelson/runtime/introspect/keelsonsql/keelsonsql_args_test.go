@@ -24,8 +24,8 @@ func (seqProvider) Snapshot(introspect.Projection) (arrow.RecordBatch, error) {
 }
 func (seqProvider) Args() []introspect.ArgSpec {
 	return []introspect.ArgSpec{
-		{Name: "n", Type: introspect.ArgUInt64, Required: true},
-		{Name: "label", Type: introspect.ArgString, Default: "x"},
+		{Name: "n", Type: introspect.ArgTypeUInt64, Required: true},
+		{Name: "label", Type: introspect.ArgTypeString, Default: "x"},
 	}
 }
 func (seqProvider) SnapshotArgs(proj introspect.Projection, args introspect.Args) (arrow.RecordBatch, error) {
@@ -124,8 +124,8 @@ func (signedProvider) Snapshot(introspect.Projection) (arrow.RecordBatch, error)
 }
 func (signedProvider) Args() []introspect.ArgSpec {
 	return []introspect.ArgSpec{
-		{Name: "i", Type: introspect.ArgInt64, Required: true},
-		{Name: "s", Type: introspect.ArgString, Required: true},
+		{Name: "i", Type: introspect.ArgTypeInt64, Required: true},
+		{Name: "s", Type: introspect.ArgTypeString, Required: true},
 	}
 }
 func (signedProvider) SnapshotArgs(proj introspect.Projection, args introspect.Args) (arrow.RecordBatch, error) {

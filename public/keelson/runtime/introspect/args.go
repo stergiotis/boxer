@@ -17,24 +17,24 @@ import (
 type ArgTypeE uint8
 
 const (
-	ArgInt64 ArgTypeE = iota
-	ArgUInt64
-	ArgFloat64
-	ArgString
-	ArgBool
+	ArgTypeInt64 ArgTypeE = iota
+	ArgTypeUInt64
+	ArgTypeFloat64
+	ArgTypeString
+	ArgTypeBool
 )
 
 func (t ArgTypeE) String() (s string) {
 	switch t {
-	case ArgInt64:
+	case ArgTypeInt64:
 		s = "Int64"
-	case ArgUInt64:
+	case ArgTypeUInt64:
 		s = "UInt64"
-	case ArgFloat64:
+	case ArgTypeFloat64:
 		s = "Float64"
-	case ArgString:
+	case ArgTypeString:
 		s = "String"
-	case ArgBool:
+	case ArgTypeBool:
 		s = "Bool"
 	default:
 		s = "unknown"
@@ -81,19 +81,19 @@ type argVal struct {
 	b bool
 }
 
-// Int64 returns an ArgInt64 argument; zero when absent or of another type.
+// Int64 returns an ArgTypeInt64 argument; zero when absent or of another type.
 func (inst Args) Int64(name string) (v int64) { return inst.vals[name].i }
 
-// UInt64 returns an ArgUInt64 argument; zero when absent or of another type.
+// UInt64 returns an ArgTypeUInt64 argument; zero when absent or of another type.
 func (inst Args) UInt64(name string) (v uint64) { return inst.vals[name].u }
 
-// Float64 returns an ArgFloat64 argument; zero when absent or of another type.
+// Float64 returns an ArgTypeFloat64 argument; zero when absent or of another type.
 func (inst Args) Float64(name string) (v float64) { return inst.vals[name].f }
 
-// String returns an ArgString argument; empty when absent or of another type.
+// String returns an ArgTypeString argument; empty when absent or of another type.
 func (inst Args) String(name string) (v string) { return inst.vals[name].s }
 
-// Bool returns an ArgBool argument; false when absent or of another type.
+// Bool returns an ArgTypeBool argument; false when absent or of another type.
 func (inst Args) Bool(name string) (v bool) { return inst.vals[name].b }
 
 // Key is a canonical spelling of the values, ordered by name, so two calls
@@ -113,15 +113,15 @@ func (inst Args) Key() (key string) {
 		sb.WriteByte('=')
 		v := inst.vals[n]
 		switch v.t {
-		case ArgInt64:
+		case ArgTypeInt64:
 			sb.WriteString(strconv.FormatInt(v.i, 10))
-		case ArgUInt64:
+		case ArgTypeUInt64:
 			sb.WriteString(strconv.FormatUint(v.u, 10))
-		case ArgFloat64:
+		case ArgTypeFloat64:
 			sb.WriteString(strconv.FormatFloat(v.f, 'g', -1, 64))
-		case ArgString:
+		case ArgTypeString:
 			sb.WriteString(strconv.Quote(v.s))
-		case ArgBool:
+		case ArgTypeBool:
 			sb.WriteString(strconv.FormatBool(v.b))
 		}
 	}
@@ -163,18 +163,18 @@ func ResolveArgs(specs []ArgSpec, raw map[string]string) (args Args, err error) 
 func parseArg(t ArgTypeE, text string) (v argVal, err error) {
 	v.t = t
 	switch t {
-	case ArgInt64:
+	case ArgTypeInt64:
 		v.i, err = strconv.ParseInt(text, 10, 64)
-	case ArgUInt64:
+	case ArgTypeUInt64:
 		v.u, err = strconv.ParseUint(text, 10, 64)
-	case ArgFloat64:
+	case ArgTypeFloat64:
 		v.f, err = strconv.ParseFloat(text, 64)
 		if err == nil && math.IsNaN(v.f) {
 			err = eb.Build().Errorf("NaN is not an argument value")
 		}
-	case ArgString:
+	case ArgTypeString:
 		v.s = text
-	case ArgBool:
+	case ArgTypeBool:
 		switch strings.ToLower(text) {
 		case "1", "true":
 			v.b = true

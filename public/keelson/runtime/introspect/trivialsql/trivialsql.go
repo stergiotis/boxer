@@ -119,9 +119,19 @@ func Read(reg *introspect.Registry, sql string, params map[string]string) (batch
 	return batch, format, nil
 }
 
-func refuse(what string) error {
-	return eb.Build().Str("found", what).Errorf("%w: found %s", ErrNeedsClickHouse, what)
+func refuse(what string) error { return &RefusalError{Found: what} }
+
+// RefusalError is a refusal of a statement outside the shape, naming what the
+// shape did not allow. It is [ErrNeedsClickHouse] to errors.Is.
+type RefusalError struct {
+	Found string
 }
+
+func (inst *RefusalError) Error() string {
+	return ErrNeedsClickHouse.Error() + ": found " + inst.Found
+}
+
+func (inst *RefusalError) Is(target error) bool { return target == ErrNeedsClickHouse }
 
 func knownFormat(f string) bool {
 	switch f {
