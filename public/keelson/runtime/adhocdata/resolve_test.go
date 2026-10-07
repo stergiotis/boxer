@@ -27,9 +27,14 @@ func TestResolveNewestPerAlias(t *testing.T) {
 	require.NoError(t, err)
 	// Creation instants are microsecond-resolution; keep them distinct.
 	time.Sleep(2 * time.Millisecond)
-	second, err := svc.Publish(PublishInput{Alias: "prof", By: Identity{App: "b"}, ArrowIPCStream: int64Stream(t, false, 2)})
+	second, err := svc.Publish(PublishInput{Alias: "prof", By: Identity{App: "a"}, ArrowIPCStream: int64Stream(t, false, 2)})
 	require.NoError(t, err)
 	require.NotEqual(t, first.Handle, second.Handle)
+	// One alias has one owner (ADR-0288 (proposed) §SD3): another app's
+	// publish under it is refused rather than replacing the first in every
+	// consumer that resolves it.
+	_, err = svc.Publish(PublishInput{Alias: "prof", By: Identity{App: "b"}, ArrowIPCStream: int64Stream(t, false, 9)})
+	require.ErrorIs(t, err, ErrAliasHeld)
 
 	res, err := svc.Resolve("prof")
 	require.NoError(t, err)

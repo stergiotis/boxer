@@ -203,8 +203,8 @@ func newApp() (inst *App) {
 	inst = &App{
 		ids:         c.NewWidgetIdStack(),
 		alloc:       memory.NewGoAllocator(),
-		goPub:       adhocdata.NewPublisher(goDatasetAlias, false),
-		chPub:       adhocdata.NewPublisher(chDatasetAlias, false),
+		goPub:       adhocdata.NewWindowPublisher(goDatasetAlias),
+		chPub:       adhocdata.NewWindowPublisher(chDatasetAlias),
 		tabPanes:    make(map[uint64]*lazypane.Pane, 3),
 		instanceSeq: appInstanceSeq.Add(1),
 	}

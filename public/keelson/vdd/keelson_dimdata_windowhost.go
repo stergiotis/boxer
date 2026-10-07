@@ -86,6 +86,12 @@ var (
 	// republish reloads both. Empty opens no bundle.
 	MembPlayLaunchBundle = KeelsonHrNkRegistry.MustBegin("playLaunchBundle", 238).
 				MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
+	// MembPlayLaunchDatasetNames are the names the opened window binds the
+	// launch's dataset aliases under, index for index (ADR-0288 (proposed)
+	// §SD3): what its SQL reads in keelson('…'). Empty binds each alias
+	// under itself.
+	MembPlayLaunchDatasetNames = KeelsonHrNkRegistry.MustBegin("playLaunchDatasetNames", 240).
+					MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityArbitrary).End()
 )
 
 // AppletCreate config columns (ADR-0132 Update "O4" / ADR-0135 §SD7) — the

@@ -100,8 +100,8 @@ type fixtureState struct {
 
 func newFixtureState() *fixtureState {
 	return &fixtureState{
-		series: adhocdata.NewPublisher(fixtureSeriesAlias, false),
-		truth:  adhocdata.NewPublisher(fixtureTruthAlias, false),
+		series: adhocdata.NewWindowPublisher(fixtureSeriesAlias),
+		truth:  adhocdata.NewWindowPublisher(fixtureTruthAlias),
 	}
 }
 
@@ -323,9 +323,12 @@ func (inst *PlayApp) syncFixtures() {
 	// dataset that was never published — which is what left the pane on
 	// "Executing query…" the first time this ran.
 	seriesHandle, truthHandle := inst.fixtures.handles()
-	for _, b := range []struct{ alias, handle string }{
-		{fixtureSeriesAlias, seriesHandle},
-		{fixtureTruthAlias, truthHandle},
+	for _, b := range []struct {
+		alias, handle string
+		pub           *adhocdata.Publisher
+	}{
+		{fixtureSeriesAlias, seriesHandle, inst.fixtures.series},
+		{fixtureTruthAlias, truthHandle, inst.fixtures.truth},
 	} {
 		if b.handle == "" {
 			continue
@@ -333,6 +336,8 @@ func (inst *PlayApp) syncFixtures() {
 		if bErr := inst.BindDataset(b.alias, b.handle); bErr != nil {
 			continue
 		}
+		// The window's own alias stands behind the name (ADR-0288 §SD3).
+		inst.client.setDatasetOrigin(b.alias, b.pub.Alias(), "")
 	}
 	inst.InsertSqlAtCaret(fixtureScaffold())
 }

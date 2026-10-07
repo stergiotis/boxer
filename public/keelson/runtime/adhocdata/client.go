@@ -21,12 +21,16 @@ import (
 func PublishRequest(bus app.BusI, in PublishInput) (res PublishResult, err error) {
 	rep, err := request(bus, SubjectPublish, adhocrequest.AdhocRequest{
 		At: time.Now().UTC(), Op: adhocrequest.OpPublish, Alias: in.Alias, Handle: in.Handle,
-		KeepAfterClose: in.KeepAfterClose, ArrowStream: in.ArrowIPCStream,
+		KeepAfterClose: in.KeepAfterClose, ArrowStream: in.ArrowIPCStream, WindowScoped: in.WindowScoped,
 	}, "publish")
 	if err != nil {
 		return
 	}
-	return PublishResult{Handle: rep.Handle, Revision: rep.Revision, Rows: rep.Rows, Bytes: rep.Bytes}, nil
+	alias := rep.Alias
+	if alias == "" {
+		alias = in.Alias
+	}
+	return PublishResult{Alias: alias, Handle: rep.Handle, Revision: rep.Revision, Rows: rep.Rows, Bytes: rep.Bytes}, nil
 }
 
 // request encodes req, sends it on subject and decodes the reply; a reply

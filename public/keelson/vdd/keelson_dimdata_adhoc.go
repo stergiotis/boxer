@@ -116,3 +116,10 @@ var (
 // reader can check what it received (ADR-0288 (proposed) §SD6).
 var MembAdhocStreamDigest = KeelsonHrNkRegistry.MustBegin("adhocStreamDigest", 237).
 	MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
+
+// MembAdhocWindowScoped asks the service to publish under the publishing
+// window's own alias, `<alias>_w<instance>` (ADR-0288 (proposed) §SD3), so
+// two windows of one app never hold one alias; the reply's alias is the
+// one the service used.
+var MembAdhocWindowScoped = KeelsonHrNkRegistry.MustBegin("adhocWindowScoped", 239).
+	MustAddRestriction("bool", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()

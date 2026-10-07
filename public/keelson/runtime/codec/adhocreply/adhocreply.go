@@ -63,4 +63,8 @@ type AdhocReply struct {
 	// §SD6): the dataset's stream as sealed, and its content digest.
 	ArrowStream  []byte `lw:"adhocArrowStream,blobArray"`
 	StreamDigest string `lw:"adhocStreamDigest,stringArray"`
+
+	// Alias is the alias a publish went under: the window's own when the
+	// request was window-scoped (ADR-0288 (proposed) §SD3).
+	Alias string `lw:"adhocAlias,symbol"`
 }

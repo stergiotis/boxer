@@ -33,14 +33,15 @@ import (
 // --- Resolved membership ids from vdd. ---
 
 var (
-	kindPlayLaunchSql      uint64
-	kindPlayLaunchAutoRun  uint64
-	kindPlayLaunchLive     uint64
-	kindPlayLaunchBandsSql uint64
-	kindPlayLaunchTab      uint64
-	kindPlayLaunchEndpoint uint64
-	kindPlayLaunchDatasets uint64
-	kindPlayLaunchBundle   uint64
+	kindPlayLaunchSql          uint64
+	kindPlayLaunchAutoRun      uint64
+	kindPlayLaunchLive         uint64
+	kindPlayLaunchBandsSql     uint64
+	kindPlayLaunchTab          uint64
+	kindPlayLaunchEndpoint     uint64
+	kindPlayLaunchDatasets     uint64
+	kindPlayLaunchDatasetNames uint64
+	kindPlayLaunchBundle       uint64
 )
 
 func init() {
@@ -51,6 +52,7 @@ func init() {
 	kindPlayLaunchTab = vdd.MembPlayLaunchTab.GetId().Value()
 	kindPlayLaunchEndpoint = vdd.MembPlayLaunchEndpoint.GetId().Value()
 	kindPlayLaunchDatasets = vdd.MembPlayLaunchDatasets.GetId().Value()
+	kindPlayLaunchDatasetNames = vdd.MembPlayLaunchDatasetNames.GetId().Value()
 	kindPlayLaunchBundle = vdd.MembPlayLaunchBundle.GetId().Value()
 	buscodec.Register[PlayLaunch](playLaunchBusCodec)
 }
@@ -115,14 +117,15 @@ type PlayLaunchColumns struct {
 	NaturalKey [][]byte
 	At         []time.Time
 
-	Sql      []string
-	AutoRun  []bool
-	Live     []bool
-	BandsSql []string
-	Tab      []string
-	Endpoint []string
-	Datasets [][]string
-	Bundle   []string
+	Sql          []string
+	AutoRun      []bool
+	Live         []bool
+	BandsSql     []string
+	Tab          []string
+	Endpoint     []string
+	Datasets     [][]string
+	DatasetNames [][]string
+	Bundle       []string
 }
 
 // Len returns the number of rows currently in the batch.
@@ -145,6 +148,7 @@ func (c *PlayLaunchColumns) Append(row PlayLaunch) {
 	c.Tab = append(c.Tab, row.Tab)
 	c.Endpoint = append(c.Endpoint, row.Endpoint)
 	c.Datasets = append(c.Datasets, row.Datasets)
+	c.DatasetNames = append(c.DatasetNames, row.DatasetNames)
 	c.Bundle = append(c.Bundle, row.Bundle)
 }
 
@@ -162,6 +166,7 @@ func (c *PlayLaunchColumns) Row(i int) (row PlayLaunch) {
 	row.Tab = c.Tab[i]
 	row.Endpoint = c.Endpoint[i]
 	row.Datasets = c.Datasets[i]
+	row.DatasetNames = c.DatasetNames[i]
 	row.Bundle = c.Bundle[i]
 	return
 }
@@ -335,6 +340,14 @@ func PlayLaunchBuildEntities[
 			stringArraySecAttr_Datasets.AddMembershipLowCardRefP(kindPlayLaunchDatasets)
 			stringArraySecAttr_Datasets.EndAttributeP()
 		}
+		if len(c.DatasetNames[i]) > 0 {
+			stringArraySecAttr_DatasetNames := stringArraySec.BeginAttribute()
+			for _, v := range c.DatasetNames[i] {
+				stringArraySecAttr_DatasetNames.AddToContainerP(v)
+			}
+			stringArraySecAttr_DatasetNames.AddMembershipLowCardRefP(kindPlayLaunchDatasetNames)
+			stringArraySecAttr_DatasetNames.EndAttributeP()
+		}
 		stringArraySec.EndSection()
 		err = dml.CommitEntity()
 		if err != nil {
@@ -418,6 +431,14 @@ func PlayLaunchEmitSectionStringArray[
 		}
 		stringArraySecAttr_Datasets.AddMembershipLowCardRefP(kindPlayLaunchDatasets)
 		stringArraySecAttr_Datasets.EndAttributeP()
+	}
+	if len(row.DatasetNames) > 0 {
+		stringArraySecAttr_DatasetNames := stringArraySec.BeginAttribute()
+		for _, v := range row.DatasetNames {
+			stringArraySecAttr_DatasetNames.AddToContainerP(v)
+		}
+		stringArraySecAttr_DatasetNames.AddMembershipLowCardRefP(kindPlayLaunchDatasetNames)
+		stringArraySecAttr_DatasetNames.EndAttributeP()
 	}
 	return
 }
@@ -703,6 +724,9 @@ func PlayLaunchFillFromArrow[
 		var stringArrayDatasetsSlice []string
 		var stringArrayDatasetsCount int
 		var stringArrayDatasetsLastAttr int64
+		var stringArrayDatasetNamesSlice []string
+		var stringArrayDatasetNamesCount int
+		var stringArrayDatasetNamesLastAttr int64
 		nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 			for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -715,6 +739,14 @@ func PlayLaunchFillFromArrow[
 					for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 						stringArrayDatasetsSlice = append(stringArrayDatasetsSlice, v)
 					}
+				case kindPlayLaunchDatasetNames:
+					if stringArrayDatasetNamesLastAttr != attrJ+1 {
+						stringArrayDatasetNamesLastAttr = attrJ + 1
+						stringArrayDatasetNamesCount++
+					}
+					for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+						stringArrayDatasetNamesSlice = append(stringArrayDatasetNamesSlice, v)
+					}
 				}
 			}
 		}
@@ -723,6 +755,11 @@ func PlayLaunchFillFromArrow[
 			return
 		}
 		c.Datasets = append(c.Datasets, stringArrayDatasetsSlice)
+		if stringArrayDatasetNamesCount > 1 {
+			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "playLaunchDatasetNames").Int("got", stringArrayDatasetNamesCount).Errorf("slot stringArray@playLaunchDatasetNames (field DatasetNames) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayDatasetNamesCount)
+			return
+		}
+		c.DatasetNames = append(c.DatasetNames, stringArrayDatasetNamesSlice)
 	}
 	return
 }
@@ -917,6 +954,9 @@ func PlayLaunchReadRow[
 	var stringArrayDatasetsSlice []string
 	var stringArrayDatasetsCount int
 	var stringArrayDatasetsLastAttr int64
+	var stringArrayDatasetNamesSlice []string
+	var stringArrayDatasetNamesCount int
+	var stringArrayDatasetNamesLastAttr int64
 	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -929,6 +969,14 @@ func PlayLaunchReadRow[
 				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					stringArrayDatasetsSlice = append(stringArrayDatasetsSlice, v)
 				}
+			case kindPlayLaunchDatasetNames:
+				if stringArrayDatasetNamesLastAttr != attrJ+1 {
+					stringArrayDatasetNamesLastAttr = attrJ + 1
+					stringArrayDatasetNamesCount++
+				}
+				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					stringArrayDatasetNamesSlice = append(stringArrayDatasetNamesSlice, v)
+				}
 			}
 		}
 	}
@@ -938,6 +986,14 @@ func PlayLaunchReadRow[
 	}
 	if stringArrayDatasetsSlice != nil {
 		row.Datasets = stringArrayDatasetsSlice
+		present = true
+	}
+	if stringArrayDatasetNamesCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "playLaunchDatasetNames").Int("got", stringArrayDatasetNamesCount).Errorf("slot stringArray@playLaunchDatasetNames (field DatasetNames) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayDatasetNamesCount)
+		return
+	}
+	if stringArrayDatasetNamesSlice != nil {
+		row.DatasetNames = stringArrayDatasetNamesSlice
 		present = true
 	}
 	return

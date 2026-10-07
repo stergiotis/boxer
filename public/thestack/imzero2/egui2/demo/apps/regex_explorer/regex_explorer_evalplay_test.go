@@ -387,7 +387,11 @@ func TestEvalHandoffPublishesBothAndOpensPlay(t *testing.T) {
 	// Ad-hoc datasets only resolve at the in-process keelson endpoint, and
 	// the window follows the aliases the buffer names (ADR-0240 §SD7).
 	assert.Equal(t, launchcfg.EndpointIntrospection, cfg.Endpoint)
-	assert.Equal(t, []string{goDatasetAlias, chDatasetAlias}, cfg.Datasets)
+	// The window's own aliases, bound in play under the base names the
+	// buffer writes (ADR-0288 §SD3).
+	assert.Equal(t, []string{rig.app.goPub.Alias(), rig.app.chPub.Alias()}, cfg.Datasets)
+	assert.Equal(t, []string{goDatasetAlias, chDatasetAlias}, cfg.DatasetNames)
+	assert.True(t, strings.HasPrefix(cfg.Datasets[0], goDatasetAlias+"_w"), cfg.Datasets[0])
 	assert.Contains(t, cfg.Sql, "keelson('"+goDatasetAlias+"')")
 	assert.Contains(t, cfg.Sql, "keelson('"+chDatasetAlias+"')")
 	assert.NotContains(t, cfg.Sql, goHandle, "the buffer names aliases, never handles")

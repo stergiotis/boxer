@@ -45,6 +45,7 @@ var (
 	kindAdhocOboTask        uint64
 	kindAdhocOboEpoch       uint64
 	kindAdhocOboCall        uint64
+	kindAdhocWindowScoped   uint64
 )
 
 func init() {
@@ -60,6 +61,7 @@ func init() {
 	kindAdhocOboTask = vdd.MembAdhocOboTask.GetId().Value()
 	kindAdhocOboEpoch = vdd.MembAdhocOboEpoch.GetId().Value()
 	kindAdhocOboCall = vdd.MembAdhocOboCall.GetId().Value()
+	kindAdhocWindowScoped = vdd.MembAdhocWindowScoped.GetId().Value()
 	buscodec.Register[AdhocRequest](adhocRequestBusCodec)
 }
 
@@ -135,6 +137,7 @@ type AdhocRequestColumns struct {
 	OboTask        []string
 	OboEpoch       []uint64
 	OboCall        []string
+	WindowScoped   []bool
 }
 
 // Len returns the number of rows currently in the batch.
@@ -162,6 +165,7 @@ func (c *AdhocRequestColumns) Append(row AdhocRequest) {
 	c.OboTask = append(c.OboTask, row.OboTask)
 	c.OboEpoch = append(c.OboEpoch, row.OboEpoch)
 	c.OboCall = append(c.OboCall, row.OboCall)
+	c.WindowScoped = append(c.WindowScoped, row.WindowScoped)
 }
 
 // Row reconstructs entity i as an AoS AdhocRequest record. Inverse of
@@ -183,6 +187,7 @@ func (c *AdhocRequestColumns) Row(i int) (row AdhocRequest) {
 	row.OboTask = c.OboTask[i]
 	row.OboEpoch = c.OboEpoch[i]
 	row.OboCall = c.OboCall[i]
+	row.WindowScoped = c.WindowScoped[i]
 	return
 }
 
@@ -376,6 +381,9 @@ func AdhocRequestBuildEntities[
 		boolSecAttr_KeepAfterClose := boolSec.BeginAttribute(c.KeepAfterClose[i])
 		boolSecAttr_KeepAfterClose.AddMembershipLowCardRefP(kindAdhocKeepAfterClose)
 		boolSecAttr_KeepAfterClose.EndAttributeP()
+		boolSecAttr_WindowScoped := boolSec.BeginAttribute(c.WindowScoped[i])
+		boolSecAttr_WindowScoped.AddMembershipLowCardRefP(kindAdhocWindowScoped)
+		boolSecAttr_WindowScoped.EndAttributeP()
 		boolSec.EndSection()
 		// --- blobArray. ---
 		blobArraySec := dml.GetSectionBlobArray()
@@ -471,6 +479,9 @@ func AdhocRequestEmitSectionBool[
 	boolSecAttr_KeepAfterClose := boolSec.BeginAttribute(row.KeepAfterClose)
 	boolSecAttr_KeepAfterClose.AddMembershipLowCardRefP(kindAdhocKeepAfterClose)
 	boolSecAttr_KeepAfterClose.EndAttributeP()
+	boolSecAttr_WindowScoped := boolSec.BeginAttribute(row.WindowScoped)
+	boolSecAttr_WindowScoped.AddMembershipLowCardRefP(kindAdhocWindowScoped)
+	boolSecAttr_WindowScoped.EndAttributeP()
 	return
 }
 
@@ -820,6 +831,9 @@ func AdhocRequestFillFromArrow[
 		var boolKeepAfterCloseVal bool
 		var boolKeepAfterCloseCount int
 		var boolKeepAfterCloseLastAttr int64
+		var boolWindowScopedVal bool
+		var boolWindowScopedCount int
+		var boolWindowScopedLastAttr int64
 		nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nbool; attrJ++ {
 			for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -831,6 +845,13 @@ func AdhocRequestFillFromArrow[
 					}
 					val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					boolKeepAfterCloseVal = val
+				case kindAdhocWindowScoped:
+					if boolWindowScopedLastAttr != attrJ+1 {
+						boolWindowScopedLastAttr = attrJ + 1
+						boolWindowScopedCount++
+					}
+					val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					boolWindowScopedVal = val
 				}
 			}
 		}
@@ -839,6 +860,11 @@ func AdhocRequestFillFromArrow[
 			return
 		}
 		c.KeepAfterClose = append(c.KeepAfterClose, boolKeepAfterCloseVal)
+		if boolWindowScopedCount != 1 {
+			err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "adhocWindowScoped").Int("got", boolWindowScopedCount).Errorf("slot bool@adhocWindowScoped (field WindowScoped) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolWindowScopedCount)
+			return
+		}
+		c.WindowScoped = append(c.WindowScoped, boolWindowScopedVal)
 		// --- blobArray. ---
 		var blobArrayArrowStreamVal []byte
 		var blobArrayArrowStreamCount int
@@ -1129,6 +1155,9 @@ func AdhocRequestReadRow[
 	var boolKeepAfterCloseVal bool
 	var boolKeepAfterCloseCount int
 	var boolKeepAfterCloseLastAttr int64
+	var boolWindowScopedVal bool
+	var boolWindowScopedCount int
+	var boolWindowScopedLastAttr int64
 	nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nbool; attrJ++ {
 		for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -1140,6 +1169,13 @@ func AdhocRequestReadRow[
 				}
 				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				boolKeepAfterCloseVal = val
+			case kindAdhocWindowScoped:
+				if boolWindowScopedLastAttr != attrJ+1 {
+					boolWindowScopedLastAttr = attrJ + 1
+					boolWindowScopedCount++
+				}
+				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				boolWindowScopedVal = val
 			}
 		}
 	}
@@ -1149,6 +1185,14 @@ func AdhocRequestReadRow[
 	}
 	if boolKeepAfterCloseCount == 1 {
 		row.KeepAfterClose = boolKeepAfterCloseVal
+		present = true
+	}
+	if boolWindowScopedCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "adhocWindowScoped").Int("got", boolWindowScopedCount).Errorf("slot bool@adhocWindowScoped (field WindowScoped) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolWindowScopedCount)
+		return
+	}
+	if boolWindowScopedCount == 1 {
+		row.WindowScoped = boolWindowScopedVal
 		present = true
 	}
 	// --- blobArray. ---

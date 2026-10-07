@@ -256,14 +256,14 @@ func (inst *Service) handlePublish(msg *app.Msg) {
 	// The publisher is the envelope's sender, never a client-supplied field.
 	res, pErr := inst.Publish(PublishInput{
 		Alias: req.Alias, Handle: req.Handle, ArrowIPCStream: req.ArrowStream,
-		KeepAfterClose: req.KeepAfterClose, By: sender(msg),
+		KeepAfterClose: req.KeepAfterClose, By: sender(msg), WindowScoped: req.WindowScoped,
 	})
 	if pErr != nil {
 		inst.refuse(msg, pErr.Error())
 		return
 	}
 	inst.reply(msg.Reply, adhocreply.AdhocReply{
-		At: time.Now().UTC(), Ok: true, Handle: res.Handle, Revision: res.Revision, Rows: res.Rows, Bytes: res.Bytes,
+		At: time.Now().UTC(), Ok: true, Alias: res.Alias, Handle: res.Handle, Revision: res.Revision, Rows: res.Rows, Bytes: res.Bytes,
 	})
 }
 

@@ -160,11 +160,14 @@ func (inst *App) handover(res *Analysis) (note string, err error) {
 		return
 	}
 
+	// The window's own alias (ADR-0288 §SD3); the launched play reads it
+	// as pairs.
 	cfg := launchcfg.PlayLaunch{
-		Sql:      handoverSql(datasetAlias),
-		AutoRun:  true,
-		Endpoint: launchcfg.EndpointIntrospection,
-		Datasets: []string{datasetAlias},
+		Sql:          handoverSql(datasetAlias),
+		AutoRun:      true,
+		Endpoint:     launchcfg.EndpointIntrospection,
+		Datasets:     []string{pub.Alias},
+		DatasetNames: []string{datasetAlias},
 	}
 	cfgBytes, err := buscodec.Encode(cfg)
 	if err != nil {

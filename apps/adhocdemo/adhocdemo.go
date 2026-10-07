@@ -93,7 +93,9 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 		return
 	}
 
-	inst.pub = adhocdata.NewPublisher(datasetAlias, false)
+	// The window's own alias (ADR-0288 §SD3): a second adhocdemo window
+	// publishes its own, and each applet reads its own as `items`.
+	inst.pub = adhocdata.NewWindowPublisher(datasetAlias)
 	if _, pubErr := inst.pub.Publish(inst.bus, inst.series(0)); pubErr != nil {
 		inst.statusErr = "publish: " + pubErr.Error()
 		return
@@ -102,7 +104,8 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	// published — and hands back the binding the applet mounts with; from
 	// here on it keeps the alias in step with the service.
 	follower, bindings := adhocdata.NewFollower(adhocdata.FollowerConfig{
-		Bus: inst.bus, Log: inst.log, Aliases: []string{datasetAlias},
+		Bus: inst.bus, Log: inst.log, Aliases: []string{inst.pub.Alias()},
+		LocalNames: map[string]string{inst.pub.Alias(): datasetAlias},
 	})
 	inner, embErr := sqlapplet.NewEmbedded(def, sqlapplet.EmbedConfig{
 		StampAppId: string(ManifestId) + "#" + def.Slug,

@@ -15,6 +15,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -130,10 +131,18 @@ type PublishInput struct {
 	// republish or retract it, and it survives the publishing window
 	// (ADR-0240 §SD5). Sticky across republishes.
 	KeepAfterClose bool
+	// WindowScoped publishes under the window's own alias,
+	// WindowAlias(Alias, By.Instance), so two windows of one app never
+	// hold one alias (ADR-0288 (proposed) §SD3). The result names the
+	// alias used.
+	WindowScoped bool
 }
 
 // PublishResult reports the minted (or reused) handle and dataset stats.
 type PublishResult struct {
+	// Alias is the alias the dataset went under: the window's own for a
+	// window-scoped publish.
+	Alias    string
 	Handle   string
 	Revision uint64
 	Rows     uint64
@@ -369,6 +378,9 @@ func (inst *Service) FlushRetracts() {
 // held. A republish or a publish onto an unknown, retracted or foreign
 // handle is refused before any byte is sealed.
 func (inst *Service) Publish(in PublishInput) (res PublishResult, err error) {
+	if in.WindowScoped {
+		in.Alias = WindowAlias(in.Alias, in.By.Instance)
+	}
 	if !validAlias(in.Alias) {
 		return res, eb.Build().Str("alias", in.Alias).Errorf("adhocdata: invalid alias (want [A-Za-z_][A-Za-z0-9_]*, <=64)")
 	}
@@ -397,7 +409,7 @@ func (inst *Service) Publish(in PublishInput) (res PublishResult, err error) {
 			return res, ownErr
 		}
 	}
-	err = inst.checkSoloPublishLocked(existing, in.Alias)
+	err = inst.checkSoloPublishLocked(existing, in.Alias, in.By)
 	if err == nil {
 		err = inst.checkQuotaLocked(existing, uint64(len(in.ArrowIPCStream)), in.By)
 	}
@@ -438,7 +450,7 @@ func (inst *Service) Publish(in PublishInput) (res PublishResult, err error) {
 			return res, eb.Build().Str("handle", in.Handle).Errorf("adhocdata: handle retracted during publish")
 		}
 	}
-	quErr := inst.checkSoloPublishLocked(rec, in.Alias)
+	quErr := inst.checkSoloPublishLocked(rec, in.Alias, in.By)
 	if quErr == nil {
 		quErr = inst.checkQuotaLocked(rec, nbytes, in.By)
 	}
@@ -497,7 +509,7 @@ func (inst *Service) Publish(in PublishInput) (res PublishResult, err error) {
 	inst.publishEvent(SubjectEventPublished, Event{
 		Op: EventOpPublished, Handle: handle, Alias: in.Alias, Publisher: string(publisher.App), Revision: revision,
 	})
-	return PublishResult{Handle: handle, Revision: revision, Rows: rows, Bytes: nbytes}, nil
+	return PublishResult{Alias: in.Alias, Handle: handle, Revision: revision, Rows: rows, Bytes: nbytes}, nil
 }
 
 // checkOwner is the ownership rule (ADR-0240 §SD2/§SD5): the runtime may
@@ -639,7 +651,7 @@ func (inst *Service) leaveLocked(rec *record) (ev Event) {
 // dataset under an alias a bundle holds (ADR-0288 (proposed) §SD2, §SD3).
 // existing is the record a republish names, nil for a new dataset. The
 // caller holds inst.mu.
-func (inst *Service) checkSoloPublishLocked(existing *record, alias string) (err error) {
+func (inst *Service) checkSoloPublishLocked(existing *record, alias string, by Identity) (err error) {
 	if existing != nil && existing.bundle != "" {
 		return eb.Build().Str("handle", existing.handle).Str("bundle", existing.bundle).Errorf("republish: %w", ErrBundleMember)
 	}
@@ -648,11 +660,27 @@ func (inst *Service) checkSoloPublishLocked(existing *record, alias string) (err
 			Errorf("%w", ErrAliasHeld)
 	}
 	for _, r := range inst.live {
-		if r.bundle != "" && r.alias == alias {
+		switch {
+		case r == existing || r.alias != alias:
+		case r.bundle != "":
 			return eb.Build().Str("alias", alias).Str("bundle", r.bundle).Errorf("%w", ErrAliasHeld)
+		case r.checkOwner(by) != nil:
+			// An alias has one owner (§SD3): another window's dataset under
+			// it would be replaced in every consumer that resolves it.
+			return eb.Build().Str("alias", alias).Str("holder", string(r.owner.App)).Uint64("holderInstance", r.owner.Instance).
+				Errorf("%w", ErrAliasHeld)
 		}
 	}
 	return nil
+}
+
+// WindowAlias is the alias a window-scoped publish goes under:
+// `<alias>_w<instance>`, or alias itself for the runtime (instance 0).
+func WindowAlias(alias string, instance uint64) (scoped string) {
+	if instance == 0 {
+		return alias
+	}
+	return alias + "_w" + strconv.FormatUint(instance, 10)
 }
 
 // retractOwnedBy withdraws every dataset the instance published and did

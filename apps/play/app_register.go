@@ -516,10 +516,21 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 	// and the follower picks the dataset up when it is published.
 	inst.bus, inst.log = ctx.Bus(), ctx.Log()
 	if launch != nil && len(launch.Datasets) > 0 {
-		inst.launchAliases = launch.Datasets
+		names := launchDatasetNames(launch)
+		inst.launchAliases = make([]string, 0, len(launch.Datasets))
+		for _, alias := range launch.Datasets {
+			inst.launchAliases = append(inst.launchAliases, names[alias])
+		}
 		follower, bindings := adhocdata.NewFollower(adhocdata.FollowerConfig{
-			Bus: ctx.Bus(), Log: ctx.Log(), Aliases: launch.Datasets,
+			Bus: ctx.Bus(), Log: ctx.Log(), Aliases: launch.Datasets, LocalNames: names,
 		})
+		for alias, local := range names {
+			if local != alias {
+				// A grant names the dataset by its alias, never by the
+				// name this window reads it under (ADR-0288 §SD3).
+				inner.client.setDatasetOrigin(local, alias, "")
+			}
+		}
 		for alias, handle := range bindings {
 			if bErr := inner.BindDataset(alias, handle); bErr != nil {
 				logger := ctx.Log()
@@ -565,6 +576,19 @@ func (inst *PlayLauncher) Frame(ctx app.FrameContextI) (err error) {
 	err = inst.inner.Frame(ctx)
 	inst.inner.gestureCtx = nil
 	inst.inner.settleAgentMark()
+	return
+}
+
+// launchDatasetNames maps each of the launch's dataset aliases to the name
+// the window binds it under: its DatasetNames entry, or itself.
+func launchDatasetNames(launch *launchcfg.PlayLaunch) (names map[string]string) {
+	names = make(map[string]string, len(launch.Datasets))
+	for i, alias := range launch.Datasets {
+		names[alias] = alias
+		if i < len(launch.DatasetNames) && launch.DatasetNames[i] != "" {
+			names[alias] = launch.DatasetNames[i]
+		}
+	}
 	return
 }
 

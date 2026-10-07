@@ -54,6 +54,8 @@ func (inst *effApp) Mount(ctx app.MountContextI) (err error) {
 	res, pErr := inst.svc.Publish(adhocdata.PublishInput{
 		Alias: fmt.Sprintf("ds_%s", strings.ReplaceAll(string(inst.manifest.Id), ".", "_")),
 		By:    adhocdata.Identity{App: inst.manifest.Id, Instance: inst.key}, ArrowIPCStream: oneRowStream(),
+		// Instances of one factory each hold their own alias (ADR-0288 §SD3).
+		WindowScoped: true,
 	})
 	if pErr != nil {
 		err = pErr
@@ -279,6 +281,7 @@ func (m *effMachine) republish(rt *rapid.T) {
 	a := apps[rapid.IntRange(0, len(apps)-1).Draw(rt, "producer")]
 	_, err := m.w.svc.Publish(adhocdata.PublishInput{
 		Alias: "ds_re", Handle: a.handle, By: adhocdata.Identity{App: a.manifest.Id, Instance: a.key}, ArrowIPCStream: oneRowStream(),
+		WindowScoped: true,
 	})
 	require.NoError(m.t, err)
 }

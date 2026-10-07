@@ -70,4 +70,8 @@ type AdhocRequest struct {
 	OboTask  string `lw:"adhocOboTask,stringArray"`
 	OboEpoch uint64 `lw:"adhocOboEpoch,u64Array"`
 	OboCall  string `lw:"adhocOboCall,stringArray"`
+
+	// WindowScoped asks for the publishing window's own alias,
+	// `<alias>_w<instance>` (ADR-0288 (proposed) §SD3).
+	WindowScoped bool `lw:"adhocWindowScoped,bool"`
 }

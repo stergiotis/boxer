@@ -48,6 +48,7 @@ var (
 	kindAdhocHandles      uint64
 	kindAdhocArrowStream  uint64
 	kindAdhocStreamDigest uint64
+	kindAdhocAlias        uint64
 )
 
 func init() {
@@ -66,6 +67,7 @@ func init() {
 	kindAdhocHandles = vdd.MembAdhocHandles.GetId().Value()
 	kindAdhocArrowStream = vdd.MembAdhocArrowStream.GetId().Value()
 	kindAdhocStreamDigest = vdd.MembAdhocStreamDigest.GetId().Value()
+	kindAdhocAlias = vdd.MembAdhocAlias.GetId().Value()
 	buscodec.Register[AdhocReply](adhocReplyBusCodec)
 }
 
@@ -144,6 +146,7 @@ type AdhocReplyColumns struct {
 	Handles      [][]string
 	ArrowStream  [][]byte
 	StreamDigest []string
+	Alias        []string
 }
 
 // Len returns the number of rows currently in the batch.
@@ -174,6 +177,7 @@ func (c *AdhocReplyColumns) Append(row AdhocReply) {
 	c.Handles = append(c.Handles, row.Handles)
 	c.ArrowStream = append(c.ArrowStream, row.ArrowStream)
 	c.StreamDigest = append(c.StreamDigest, row.StreamDigest)
+	c.Alias = append(c.Alias, row.Alias)
 }
 
 // Row reconstructs entity i as an AoS AdhocReply record. Inverse of
@@ -198,6 +202,7 @@ func (c *AdhocReplyColumns) Row(i int) (row AdhocReply) {
 	row.Handles = c.Handles[i]
 	row.ArrowStream = c.ArrowStream[i]
 	row.StreamDigest = c.StreamDigest[i]
+	row.Alias = c.Alias[i]
 	return
 }
 
@@ -460,6 +465,9 @@ func AdhocReplyBuildEntities[
 		symbolSecAttr_Bundle := symbolSec.BeginAttribute(c.Bundle[i])
 		symbolSecAttr_Bundle.AddMembershipLowCardRefP(kindAdhocBundle)
 		symbolSecAttr_Bundle.EndAttributeP()
+		symbolSecAttr_Alias := symbolSec.BeginAttribute(c.Alias[i])
+		symbolSecAttr_Alias.AddMembershipLowCardRefP(kindAdhocAlias)
+		symbolSecAttr_Alias.EndAttributeP()
 		symbolSec.EndSection()
 		// --- blobArray. ---
 		blobArraySec := dml.GetSectionBlobArray()
@@ -597,6 +605,9 @@ func AdhocReplyEmitSectionSymbol[
 	symbolSecAttr_Bundle := symbolSec.BeginAttribute(row.Bundle)
 	symbolSecAttr_Bundle.AddMembershipLowCardRefP(kindAdhocBundle)
 	symbolSecAttr_Bundle.EndAttributeP()
+	symbolSecAttr_Alias := symbolSec.BeginAttribute(row.Alias)
+	symbolSecAttr_Alias.AddMembershipLowCardRefP(kindAdhocAlias)
+	symbolSecAttr_Alias.EndAttributeP()
 	return
 }
 
@@ -1088,6 +1099,9 @@ func AdhocReplyFillFromArrow[
 		var symbolBundleVal string
 		var symbolBundleCount int
 		var symbolBundleLastAttr int64
+		var symbolAliasVal string
+		var symbolAliasCount int
+		var symbolAliasLastAttr int64
 		nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 			for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -1099,6 +1113,13 @@ func AdhocReplyFillFromArrow[
 					}
 					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					symbolBundleVal = val
+				case kindAdhocAlias:
+					if symbolAliasLastAttr != attrJ+1 {
+						symbolAliasLastAttr = attrJ + 1
+						symbolAliasCount++
+					}
+					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					symbolAliasVal = val
 				}
 			}
 		}
@@ -1107,6 +1128,11 @@ func AdhocReplyFillFromArrow[
 			return
 		}
 		c.Bundle = append(c.Bundle, symbolBundleVal)
+		if symbolAliasCount != 1 {
+			err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "adhocAlias").Int("got", symbolAliasCount).Errorf("slot symbol@adhocAlias (field Alias) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolAliasCount)
+			return
+		}
+		c.Alias = append(c.Alias, symbolAliasVal)
 		// --- blobArray. ---
 		var blobArrayDocumentVal []byte
 		var blobArrayDocumentCount int
@@ -1491,6 +1517,9 @@ func AdhocReplyReadRow[
 	var symbolBundleVal string
 	var symbolBundleCount int
 	var symbolBundleLastAttr int64
+	var symbolAliasVal string
+	var symbolAliasCount int
+	var symbolAliasLastAttr int64
 	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -1502,6 +1531,13 @@ func AdhocReplyReadRow[
 				}
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolBundleVal = val
+			case kindAdhocAlias:
+				if symbolAliasLastAttr != attrJ+1 {
+					symbolAliasLastAttr = attrJ + 1
+					symbolAliasCount++
+				}
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolAliasVal = val
 			}
 		}
 	}
@@ -1511,6 +1547,14 @@ func AdhocReplyReadRow[
 	}
 	if symbolBundleCount == 1 {
 		row.Bundle = symbolBundleVal
+		present = true
+	}
+	if symbolAliasCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "adhocAlias").Int("got", symbolAliasCount).Errorf("slot symbol@adhocAlias (field Alias) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolAliasCount)
+		return
+	}
+	if symbolAliasCount == 1 {
+		row.Alias = symbolAliasVal
 		present = true
 	}
 	// --- blobArray. ---
