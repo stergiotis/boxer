@@ -546,9 +546,13 @@ A structured card for the row selected in the Table tab. The card picks its rend
 from the result's column names:
 
 - **Leeway card** — when the columns are leeway-encoded (`id:…`, `tv:…`), the card
-  groups them into the entity's plain `id` section, its tagged sections, and the
-  membership chips on each attribute. A `SELECT *` from a leeway table takes this
-  path.
+  reads the row as attributes (ADR-0289): one row per attribute in its section,
+  the **attribute** column naming it by its first membership — a ref by the name
+  the session's registries give it — or by its plain column, the **labels**
+  column holding its further memberships, and the **values** column its values,
+  bytes as text when printable and as hex otherwise. Columns marked
+  machine-readable only are left out. A `SELECT *` from a leeway table takes
+  this path.
 - **Ad-hoc grouping** — for ordinary SQL results (aliased or aggregated columns),
   columns are grouped by name prefix into pinned / relations / data / meta sections.
   A glossed column ([Glosses](#glosses)) renders through its gloss here: a
@@ -587,7 +591,7 @@ operations' byte bound.
 Above either card, when the selected row carries one or more **datetime attributes**,
 a compact **timeline** plots them on a shared UTC axis. Each attribute is one legend
 entry — a coloured swatch and its identity. A flag from a **tagged section** is
-labelled with that section's memberships (primary · secondary) and every
+labelled with its attribute's name and labels and every
 co-attribute value, mirroring the card row below it; a backbone or ad-hoc flag
 shows its name and value. On the axis:
 

@@ -164,7 +164,7 @@ func getDetail(r *opsResults, signals []SignalState, v detailOpsView, in DetailA
 	var read []DetailAttribute
 	if leeway {
 		out.Leeway = true
-		sink := lwread.NewSink(lwread.Options{Renderer: projectionLensRenderer(), MaxValueBytes: detailOpsMaxValue})
+		sink := lwread.NewSink(lwread.Options{Renderer: registryRenderer(), MaxValueBytes: detailOpsMaxValue})
 		slice := lr.rec.NewSlice(row, row+1)
 		derr := recipe.driver.DriveRecordBatch(sink, slice)
 		slice.Release()

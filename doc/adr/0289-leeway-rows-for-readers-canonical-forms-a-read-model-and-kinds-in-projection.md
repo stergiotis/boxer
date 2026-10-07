@@ -97,17 +97,21 @@ A read model, built by one sink, is what the Detail card draws and what
   the membership registry's formatter, its parameters spelled into the name;
   further memberships are its labels. A section name qualifies an attribute
   only when two sections name one. A positional key is never a name.
-- **Values.** One spelling for every text form: typed scalars; strings
-  verbatim; bytes as text when they are printable UTF-8, else hex; lists as
-  lists, cut with an explicit count of what was left out; sets in value
-  order; times in ISO 8601.
+- **Values.** One spelling for every text form, each value beside its
+  canonical type: strings and numbers as the driver writes them; bytes as
+  text when they are printable UTF-8, else 0x-hex; lists as lists, cut with
+  an explicit count of what was left out; sets in value order; times in ISO
+  8601. Each value keeps the driver's own text too, which a gloss reads.
 - **Header.** Per result: each attribute's name, section, type, how many rows
   carry it, and the handle an agent writes SQL with
-  ([ADR-0171](./0171-leeway-sql-read-surface.md)).
+  ([ADR-0171](./0171-leeway-sql-read-surface.md)) — `LW_GET` naming a ref by
+  its registry id, which resolves whatever renderer named the attribute.
 - **Omissions.** Columns the readability aspect hides, values cut, attributes
   over the bound: each counted, none dropped silently.
 
-`Table2CardEmitter` retires once the Detail card draws the read model.
+The read model is `lwread`. `Table2CardEmitter` retires as a sink; its
+drawing stays as `leewaywidgets.RecordCard`, which lays out an `lwread.Model`
+and keeps the card's gloss and block-face seams, fed the driver's text.
 
 ### SD4 — The lens lives in the Projection panel
 
@@ -166,7 +170,7 @@ panel:
   views, the archetypes operation, and the SD5 defaults.
 - **M4 — Removal.** ✓ SD6.
 - **M5 — The canonical operation.** ✓ SD2.
-- **M6 — The read model.** SD3: the sink, the Detail card on it,
+- **M6 — The read model.** ✓ SD3: the sink, the Detail card on it,
   `get_detail` on it, `Table2CardEmitter` removed.
 
 ## Alternatives

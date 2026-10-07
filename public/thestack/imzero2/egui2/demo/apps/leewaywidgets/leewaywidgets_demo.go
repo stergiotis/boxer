@@ -3,6 +3,7 @@ package leewaywidgets_demo
 import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
@@ -20,7 +21,7 @@ const (
 )
 
 // Package-scoped state survives across render-loop frames. Per-window
-// state (selectedView, ids, table2Emitter) lives on the *App value the
+// state (selectedView, ids, card) lives on the *App value the
 // registry hands back from each Open(); the codeview holders below
 // stay package-level because they hold expensive-to-build text that
 // every window can share.
@@ -46,10 +47,10 @@ type App struct {
 	// Mount still have a non-nil stack.
 	ids *c.WidgetIdStack
 
-	// table2Emitter binds the Table2 card view to the App's ids
-	// stack; per-instance so two open windows emit widget ids under
-	// distinct host salts.
-	table2Emitter *leewaywidgets.Table2CardEmitter
+	// card binds the record card view to the App's ids stack;
+	// per-instance so two open windows emit widget ids under distinct
+	// host salts.
+	card *leewaywidgets.RecordCard
 
 	selectedView viewKeyE
 }
@@ -59,9 +60,9 @@ var _ runtimeapp.AppI = (*App)(nil)
 func newApp() (inst *App) {
 	ids := c.NewWidgetIdStack()
 	inst = &App{
-		ids:           ids,
-		table2Emitter: leewaywidgets.NewTable2CardEmitter(ids, "card", leewaywidgets.ColorPaletteViridis, nil),
-		selectedView:  viewKeyTable2,
+		ids:          ids,
+		card:         leewaywidgets.NewRecordCard(ids, "card", leewaywidgets.ColorPaletteViridis),
+		selectedView: viewKeyTable2,
 	}
 	return
 }
@@ -69,11 +70,11 @@ func newApp() (inst *App) {
 func (inst *App) Manifest() (m runtimeapp.Manifest) { m = manifest; return }
 func (inst *App) Mount(ctx runtimeapp.MountContextI) (err error) {
 	// Pick up the host-supplied per-instance ids stack and rebuild
-	// the Table2 emitter so it emits ids under the same stack. The
-	// emitter holds a pointer to the stack so it can't just be left
-	// pointing at the ctor's fallback.
+	// the card so it emits ids under the same stack. The card holds a
+	// pointer to the stack so it can't just be left pointing at the
+	// ctor's fallback.
 	inst.ids = ctx.Ids()
-	inst.table2Emitter = leewaywidgets.NewTable2CardEmitter(inst.ids, "card", leewaywidgets.ColorPaletteViridis, nil)
+	inst.card = leewaywidgets.NewRecordCard(inst.ids, "card", leewaywidgets.ColorPaletteViridis)
 	return
 }
 func (inst *App) Unmount(ctx runtimeapp.MountContextI) (err error) { return }
@@ -193,10 +194,14 @@ func (inst *App) renderActiveView() {
 			c.CodeView(inst.ids.PrepareStr("fixtureGoView"), fixtureGoView).Wrap().Send()
 		}
 	default: // viewKeyTable2
-		// Table2CardEmitter renders into an egui_extras::TableBuilder which
+		// The record card renders into an egui_extras::TableBuilder which
 		// owns its own ScrollArea, so wrapping in another ScrollArea would
 		// supply unbounded available_size and crop the tail rows.
-		leewaywidgets.RunFixture(inst.table2Emitter)
+		_ = inst.card.PrepareFrom(func(sink streamreadaccess.SinkI) error {
+			leewaywidgets.RunFixture(sink)
+			return nil
+		}, nil)
+		inst.card.Render()
 	}
 }
 

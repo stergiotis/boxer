@@ -13,9 +13,9 @@
 //
 // # Why it reads TableDesc directly
 //
-// The leeway readers next door — the egui Table2CardEmitter in leewaywidgets,
-// the lens's sink — are [streamreadaccess.SinkI] implementations driven over
-// an Arrow batch. The sink protocol is lossy for schema metadata: memberships
+// The leeway readers next door — the read model behind leewaywidgets'
+// RecordCard, the lens's sink — are [streamreadaccess.SinkI] implementations
+// driven over an Arrow batch. The sink protocol is lossy for schema metadata: memberships
 // only ever surface as runtime instances (AddMembership*), so it carries no
 // MembershipSpec, and it does not surface encoding hints. A faithful schema
 // inspector wants exactly those. So this widget reads the TableDesc fields

@@ -520,7 +520,7 @@ func (inst *Projector) run(rec arrow.RecordBatch, cancel chan struct{}, params p
 	allItems := withComponentItems(ie.Results(), compKinds, compRows)
 	// The lens reads the rows as slots on a pass of its own; a failure there
 	// costs the lens views, not the run.
-	ls := lwlens.NewSink(projectionLensRenderer())
+	ls := lwlens.NewSink(registryRenderer())
 	lensErr := driver.DriveRecordBatch(ls, rec)
 	if isClosed(cancel) {
 		inst.markCancelled(cancel)

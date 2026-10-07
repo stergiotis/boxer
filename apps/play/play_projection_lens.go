@@ -69,9 +69,9 @@ const (
 // projectionLensProbeSalt namespaces the lens's pane probe.
 const projectionLensProbeSalt uint64 = 0x2c61f0b8d3a7e945
 
-// projectionLensRenderer names memberships through the process's registries,
+// registryRenderer names memberships through the process's registries,
 // so a ref membership reads as its name rather than its id.
-func projectionLensRenderer() *membership.Renderer {
+func registryRenderer() *membership.Renderer {
 	return membership.NewRenderer(providers.MembershipRefFormatter{}, nil, nil)
 }
 

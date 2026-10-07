@@ -1,6 +1,6 @@
 // Package componentview is an immediate-mode widget (ADR-0267), the typed
-// per-component complement to the generic leewaywidgets.Table2CardEmitter
-// (ADR-0075). Where Table2CardEmitter renders any leeway table structurally,
+// per-component complement to the generic leewaywidgets.RecordCard
+// (ADR-0075). Where RecordCard renders any leeway table structurally,
 // this renders *recognised* components with bespoke widgets: each registered
 // RendererI is an ECS "system that draws", matched to entities that carry its
 // component. Render lays the detected components out as a collapsible
@@ -118,7 +118,7 @@ type Input struct {
 	// DefaultOpen sets the initial expanded state of each component panel.
 	DefaultOpen bool
 	// Fallback renders a present component that no renderer claims — a
-	// consumer wires this to the generic Table2CardEmitter. It is host-drawn
+	// consumer wires this to the generic RecordCard. It is host-drawn
 	// content in a slot the report positions; nil renders a short note.
 	Fallback func(in ComponentInput, comp Component)
 }
@@ -194,7 +194,7 @@ func (in Input) render() (res Result) {
 						if in.Fallback != nil {
 							in.Fallback(ComponentInput{Ids: ids, ScopeKey: string(comp.Kind), Value: comp.Value}, comp)
 						} else {
-							for rt := range c.RichTextLabel("rendered by the generic Table2CardEmitter fallback") {
+							for rt := range c.RichTextLabel("rendered by the generic record card") {
 								rt.Weak().Small()
 							}
 						}

@@ -32,7 +32,7 @@ import (
 // app's rowGloss as in every other pane), so one result can mix kinds.
 //
 // "Card" already names the leeway Detail card in this package (CardDriver,
-// Table2CardEmitter); this pane's code says cardgrid throughout so the two do
+// RecordCard); this pane's code says cardgrid throughout so the two do
 // not differ by one letter.
 
 const (

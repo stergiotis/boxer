@@ -392,7 +392,7 @@ func (inst *glossColumn) declaration(caption string) (d gloss.Declaration, ok bo
 	}, true
 }
 
-// cardCellGloss is the leeway card's per-value gloss (Table2CardEmitter's
+// cardCellGloss is the leeway card's per-value gloss (RecordCard's
 // SetCellGloss seam): the same resolution the grids use, applied to the
 // marshalled text of each value with the column's element kind. Nil when
 // nothing in the schema is glossed or the raw toggle is on, so the emitter
@@ -411,7 +411,7 @@ func (inst *PlayApp) cardCellGloss(schema *arrow.Schema) leewaywidgets.CellGloss
 }
 
 // cardCellBlock is the leeway card's per-value block-face seam
-// (Table2CardEmitter's SetCellBlock): for a column whose gloss has a block
+// (RecordCard's SetCellBlock): for a column whose gloss has a block
 // face in this pane — the content family's markdown, code and images, and
 // gloss/url's hyperlink — a renderer over the value's marshalled text with
 // the height the card should reserve; declined for every other value. Nil

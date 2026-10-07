@@ -8,13 +8,15 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/lwread"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/leewaywidgets"
 )
 
 // CardDriver bridges the current Arrow schema to the leeway
-// streamreadaccess.Driver + a Table2CardEmitter.
+// streamreadaccess.Driver, the read model (lwread) and the Detail card
+// (leewaywidgets.RecordCard).
 //
 // It is also the play app's single leeway-schema reconstruction point: the
 // leeway physical column names carry the whole authored structure (sections,
@@ -28,9 +30,9 @@ import (
 // Two-stage caching:
 //   - The Driver + TableDesc are rebuilt only when the Arrow schema object
 //     changes (cheap pointer compare).
-//   - Each Render call walks a single-row slice of the record batch,
-//     producing the same Begin*/End* sequence the HtmlCardEmitter consumes,
-//     but emitting ImZero2 widgets through the Table2CardEmitter.
+//   - Each Prepare reads a single-row slice of the record batch into the
+//     read model (ADR-0289 §SD3, proposed), its memberships named through
+//     the session's registries, and lays it out on the card.
 type CardDriver struct {
 	alloc memory.Allocator
 	ids   *c.WidgetIdStack
@@ -38,7 +40,7 @@ type CardDriver struct {
 	// Cached per-schema.
 	schema  *arrow.Schema
 	driver  *streamreadaccess.Driver
-	emitter *leewaywidgets.Table2CardEmitter
+	card    *leewaywidgets.RecordCard
 	usable  bool                           // false if the schema is not leeway-shaped
 	table   *common.TableDesc              // reconstructed leeway schema, nil when not leeway-shaped
 	classes []streamreadaccess.ColumnClass // per-Arrow-column leeway classification, nil when not leeway-shaped
@@ -66,7 +68,7 @@ func (inst *CardDriver) EnsureFor(schema *arrow.Schema) bool {
 	if schema == nil {
 		inst.schema = nil
 		inst.driver = nil
-		inst.emitter = nil
+		inst.card = nil
 		inst.usable = false
 		inst.table = nil
 		inst.classes = nil
@@ -83,7 +85,7 @@ func (inst *CardDriver) EnsureFor(schema *arrow.Schema) bool {
 	}
 	inst.schema = schema
 	inst.driver = nil
-	inst.emitter = nil
+	inst.card = nil
 	inst.usable = false
 	inst.table = nil
 	inst.classes = nil
@@ -99,11 +101,7 @@ func (inst *CardDriver) EnsureFor(schema *arrow.Schema) bool {
 		return false
 	}
 	inst.driver, inst.ir, inst.conv, inst.rowConfig = r.driver, r.ir, r.conv, r.rowConfig
-	inst.emitter = leewaywidgets.NewTable2CardEmitter(inst.ids, "card", leewaywidgets.ColorPaletteViridis, nil)
-	// Deferred rendering: Render walks the record in two steps (Prepare buffers,
-	// Render draws) so the Detail timeline can read the per-section digests
-	// between them.
-	inst.emitter.DeferRender = true
+	inst.card = leewaywidgets.NewRecordCard(inst.ids, "card", leewaywidgets.ColorPaletteViridis)
 	inst.usable = true
 	return true
 }
@@ -162,43 +160,30 @@ func (inst *CardDriver) ColumnClasses() []streamreadaccess.ColumnClass {
 	return inst.classes
 }
 
-// SetTagClickHandler wires a clipboard / filter pivot callback through to the
-// emitter. Passing nil clears it. Note: Table2CardEmitter renders chips as
-// comma-joined strings, so the callback never fires in practice — kept for
-// API parity with the older two-emitter model.
-func (inst *CardDriver) SetTagClickHandler(fn func(display, detail string)) {
-	if inst.emitter != nil {
-		inst.emitter.OnTagClicked = fn
-	}
-}
-
-// SetCellGloss installs the per-value gloss on the card emitter (ADR-0186
-// §SD4) — the host's inline face over the marshalled text of each value.
-// Passing nil clears it. A no-op until EnsureFor has built an emitter.
+// SetCellGloss installs the per-value gloss on the card (ADR-0186 §SD4) —
+// the host's inline face over the driver's text of each value. Passing nil
+// clears it. A no-op until EnsureFor has built a card.
 func (inst *CardDriver) SetCellGloss(fn leewaywidgets.CellGlossFunc) {
-	if inst.emitter != nil {
-		inst.emitter.SetCellGloss(fn)
+	if inst.card != nil {
+		inst.card.SetCellGloss(fn)
 	}
 }
 
-// SetCellBlock installs the per-value block face on the card emitter
-// (ADR-0186, block faces on the card) — the host's renderer for the values
-// whose gloss has one. Passing nil clears it. A no-op until EnsureFor has
-// built an emitter.
+// SetCellBlock installs the per-value block face on the card (ADR-0186,
+// block faces on the card) — the host's renderer for the values whose gloss
+// has one. Passing nil clears it. A no-op until EnsureFor has built a card.
 func (inst *CardDriver) SetCellBlock(fn leewaywidgets.CellBlockFunc) {
-	if inst.emitter != nil {
-		inst.emitter.SetCellBlock(fn)
+	if inst.card != nil {
+		inst.card.SetCellBlock(fn)
 	}
 }
 
-// Prepare walks a single-row slice of rec through the Driver, buffering the
-// leeway card rows in the emitter without drawing them (the emitter runs with
-// DeferRender set). Call it before SectionDigests and before Render. A no-op on
-// a non-leeway or out-of-range input. Prepare drives every frame — the emitter
-// re-bases its widget-id counter at each drive, so the deferred Render stays
-// id-stable frame to frame.
+// Prepare reads a single-row slice of rec into the read model and lays it
+// out on the card. Call it before SectionDigests and before Render. A no-op
+// on a non-leeway or out-of-range input. The pane prepares every frame; the
+// gloss and block seams run here, once per value.
 func (inst *CardDriver) Prepare(rec arrow.RecordBatch, row int64) error {
-	if !inst.usable || inst.driver == nil || inst.emitter == nil {
+	if !inst.usable || inst.driver == nil || inst.card == nil {
 		return nil
 	}
 	if rec == nil || row < 0 || row >= rec.NumRows() {
@@ -206,32 +191,36 @@ func (inst *CardDriver) Prepare(rec arrow.RecordBatch, row int64) error {
 	}
 	slice := rec.NewSlice(row, row+1)
 	defer slice.Release()
-	if err := inst.driver.DriveRecordBatch(inst.emitter, slice); err != nil {
+	sink := lwread.NewSink(lwread.Options{Renderer: registryRenderer()})
+	if err := inst.driver.DriveRecordBatch(sink, slice); err != nil {
 		log.Warn().Err(err).Int64("row", row).Msg("play: driver error")
 		return eh.Errorf("unable to drive record batch: %w", err)
 	}
+	m := sink.Model()
+	m.Qualify()
+	inst.card.Prepare(m)
 	return nil
 }
 
-// SectionDigests returns the per-tagged-section summaries (memberships split
-// primary / secondary + co-attribute values) buffered by the last Prepare, or
+// SectionDigests returns the per-tagged-section summaries (the attribute's
+// name, its labels and its co-attribute values) of the last Prepare, or
 // nil when the schema is not leeway-shaped. The Detail timeline reuses these to
 // label its temporal flags with the same content the card draws below.
 func (inst *CardDriver) SectionDigests() []leewaywidgets.SectionDigest {
-	if !inst.usable || inst.emitter == nil {
+	if !inst.usable || inst.card == nil {
 		return nil
 	}
-	return inst.emitter.SectionDigests()
+	return inst.card.SectionDigests()
 }
 
 // Render draws the rows buffered by the last Prepare into the current ui scope.
 // Call it after Prepare (and after any SectionDigests read), inside a ScrollArea
 // or Vertical container.
 func (inst *CardDriver) Render() {
-	if !inst.usable || inst.emitter == nil {
+	if !inst.usable || inst.card == nil {
 		return
 	}
-	inst.emitter.Render()
+	inst.card.Render()
 }
 
 // cardRecipe is one schema's leeway reading: the reconstructed table, the

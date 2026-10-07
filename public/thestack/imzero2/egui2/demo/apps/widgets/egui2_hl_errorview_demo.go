@@ -11,6 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/errorview"
@@ -32,16 +33,16 @@ import (
 
 // errorviewDemoState carries the live-toggleable Renderer config per
 // gallery window. The three sample contexts are shared package-level
-// because they're immutable test fixtures; the table2Emitter is per-
-// window because it binds to the host-supplied WidgetIdStack.
+// because they're immutable test fixtures; the card is per-window
+// because it binds to the host-supplied WidgetIdStack.
 type errorviewDemoState struct {
 	defaultOpen bool
 	indent      uint64
 
-	// table2Emitter renders the same shredded error fact as the
-	// leewaywidgets table widget — its ids must be the per-instance
-	// stack so two open windows do not collide.
-	table2Emitter *leewaywidgets.Table2CardEmitter
+	// card renders the same shredded error fact as the leewaywidgets
+	// record card — its ids must be the per-instance stack so two open
+	// windows do not collide.
+	card *leewaywidgets.RecordCard
 }
 
 // Sample fixtures built once at package init so the per-frame cost
@@ -70,9 +71,9 @@ func init() {
 		Description: "Reusable widgets/errorview package: renders an eh.MarshalError-shaped chain (per-stream collapsing headers, per-fact message + frame triple + dark-canvas CBOR diagnostic of structured-data payloads). Live config (DefaultOpen / Indent) over four fixtures — single stackless, multi-stream wrap, structured-data leaf, plus an end-to-end real-boxer-error section that runs FromBoxerError → rowmarshall → leewayrender so the SAME error renders side-by-side through errorview AND the leeway fact-table widget.",
 		Init: func(ids *c.WidgetIdStack) (state any) {
 			state = &errorviewDemoState{
-				defaultOpen:   true,
-				indent:        uint64(12),
-				table2Emitter: leewaywidgets.NewTable2CardEmitter(ids, "card", leewaywidgets.ColorPaletteViridis, nil),
+				defaultOpen: true,
+				indent:      uint64(12),
+				card:        leewaywidgets.NewRecordCard(ids, "card", leewaywidgets.ColorPaletteViridis),
 			}
 			return
 		},
@@ -138,9 +139,12 @@ func demoErrorView(ids *c.WidgetIdStack, st *errorviewDemoState) {
 		c.AddSpace(gapSections())
 		c.Label("Leeway fact-table widget (same error, shredded into boxer.facts):").Send()
 		c.AddSpace(padInner())
-		if err := leewayrender.Render(st.table2Emitter, evRealRowmarshallError); err != nil {
+		if err := st.card.PrepareFrom(func(sink streamreadaccess.SinkI) error {
+			return leewayrender.Render(sink, evRealRowmarshallError)
+		}, nil); err != nil {
 			c.Label(fmt.Sprintf("leewayrender error: %v", err)).Send()
 		}
+		st.card.Render()
 	}
 }
 
