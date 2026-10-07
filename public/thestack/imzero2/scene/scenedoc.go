@@ -98,7 +98,7 @@ type Fence struct {
 // SplitDoc separates frontmatter, fences and prose. Fences open with three
 // backticks at the start of a line and close with a bare three-backtick line,
 // which is the applet book's rule too. It is exported for documents that
-// share the scene document's shape (vizeval scenarios, ADR-0266).
+// share the scene document's shape.
 func SplitDoc(src []byte) (front []byte, fences []Fence, prose string) {
 	lines := strings.Split(string(src), "\n")
 	i := 0
