@@ -88,19 +88,55 @@ func TestAnAgentsReadIsAttested(t *testing.T) {
 	svc, bus := readService(t)
 	d := &fakeDispatcher{call: agentCall()}
 	d.call.App, d.call.Instance = "test.notebook", 2
-	svc.SetCallContext(d)
+	svc.SetDispatcher(d)
 	_, err := svc.Publish(PublishInput{Alias: "items", ArrowIPCStream: int64Stream(t, false, 1)})
 	require.NoError(t, err)
 	reader := bus.NewClient("test.notebook", []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
 	reader.SetInstanceKey(2)
+
+	// Held to the grant as a run in play is (§SD6): refused, naming what
+	// the grant would have to list, until it lists it.
+	_, err = ReadAllE(reader, "items", oboOf(d.call))
+	var ge *GrantError
+	require.ErrorAs(t, err, &ge)
+	assert.Equal(t, "keelson:items", ge.Destination)
+	assert.NotContains(t, ge.Error(), "agent limit: agent limit")
+	d.mu.Lock()
+	d.grants = []string{"keelson:items"}
+	d.mu.Unlock()
 	_, err = ReadAllE(reader, "items", oboOf(d.call))
 	require.NoError(t, err)
 	audits := svc.auditRecords()
-	require.Len(t, audits, 1)
+	require.Len(t, audits, 2)
+	assert.Equal(t, AuditRefused, audits[0].Outcome)
+	audits = audits[1:]
 	require.True(t, audits[0].Context.Has)
 	assert.Equal(t, "turn-2", audits[0].Context.Val.Turn)
 
 	other := bus.NewClient("test.other", []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
 	_, err = ReadAllE(other, "items", oboOf(d.call))
 	require.Error(t, err, "another app cannot read under the call")
+}
+
+// A bundle's dataset is covered by the bundle, and a refusal asks for the
+// bundle, which covers its other datasets too.
+func TestAnAgentsReadOfABundleNeedsTheBundle(t *testing.T) {
+	svc, bus := readService(t)
+	d := &fakeDispatcher{call: agentCall()}
+	d.call.App, d.call.Instance = "test.notebook", 2
+	svc.SetDispatcher(d)
+	_, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t)})
+	require.NoError(t, err)
+	reader := bus.NewClient("test.notebook", []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
+	reader.SetInstanceKey(2)
+	_, err = ReadAllE(reader, "sales__orders", oboOf(d.call))
+	var ge *GrantError
+	require.ErrorAs(t, err, &ge)
+	assert.Equal(t, "keelson-bundle:sales", ge.Destination)
+	d.mu.Lock()
+	d.grants = []string{"keelson-bundle:sales"}
+	d.mu.Unlock()
+	got, err := ReadAllE(reader, "sales__regions", oboOf(d.call))
+	require.NoError(t, err)
+	assert.Equal(t, []int64{7}, int64Values(t, got.ArrowIPCStream))
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"iter"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -29,6 +30,7 @@ type fakeDispatcher struct {
 	call   app.CallContext
 	asked  []app.CallContext
 	refuse string
+	grants []string
 }
 
 func (inst *fakeDispatcher) CallContext(task string, epoch uint64, call string, sender app.AppIdT, senderInstance uint64) (cc app.CallContext, ok bool, reason string) {
@@ -46,7 +48,17 @@ func (inst *fakeDispatcher) CallContext(task string, epoch uint64, call string, 
 	return inst.call, true, ""
 }
 
-var _ app.CallContextI = (*fakeDispatcher)(nil)
+// AllowDestination grants what grants lists for the dispatcher's task.
+func (inst *fakeDispatcher) AllowDestination(task string, epoch uint64, destination string) (ok bool, reason string) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if task == inst.call.Task && slices.Contains(inst.grants, destination) {
+		return true, ""
+	}
+	return false, "the task's grant does not list " + destination
+}
+
+var _ DispatcherI = (*fakeDispatcher)(nil)
 
 func agentCall() app.CallContext {
 	return app.CallContext{Task: "task-1", Epoch: 3, Call: "task-1-7", Conversation: "conv-9", Turn: "turn-2",
@@ -60,7 +72,7 @@ func oboOf(cc app.CallContext) *app.OnBehalfOf {
 func TestAnAgentsPublishCarriesTheDispatchersContext(t *testing.T) {
 	svc := newTestService(t)
 	d := &fakeDispatcher{call: agentCall()}
-	svc.SetCallContext(d)
+	svc.SetDispatcher(d)
 	res, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t),
 		By: windowA, OnBehalfOf: oboOf(d.call)})
 	require.NoError(t, err)
@@ -108,7 +120,7 @@ func TestAnUnattestedContextIsRefusedAndAudited(t *testing.T) {
 	assert.ErrorIs(t, err, ErrUnattested, "no dispatcher, nothing can confirm the claim")
 
 	d := &fakeDispatcher{call: call}
-	svc.SetCallContext(d)
+	svc.SetDispatcher(d)
 	_, err = svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t),
 		By: windowB, OnBehalfOf: oboOf(call)})
 	assert.ErrorIs(t, err, ErrUnattested, "another window cannot publish under the call")
@@ -144,7 +156,7 @@ func TestThePersonsOperationsAreAuditedWithoutAContext(t *testing.T) {
 func TestAnAgentsResolveIsAudited(t *testing.T) {
 	svc := newTestService(t)
 	d := &fakeDispatcher{call: agentCall()}
-	svc.SetCallContext(d)
+	svc.SetDispatcher(d)
 	_, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowB})
 	require.NoError(t, err)
 	_, err = svc.ResolveBundle("sales", windowA, oboOf(d.call))
@@ -164,7 +176,7 @@ func TestAClosedWindowsBundleIsAuditedAsWithdrawn(t *testing.T) {
 	t.Cleanup(func() { _ = svc.Close(context.Background()) })
 	d := &fakeDispatcher{call: agentCall()}
 	d.call.App, d.call.Instance = "test.app", 5
-	svc.SetCallContext(d)
+	svc.SetDispatcher(d)
 	caps := []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}}
 	window := bus.NewClient("test.app", caps)
 	window.SetInstanceKey(5)
@@ -209,7 +221,7 @@ func TestTheAuditLandsOnTheTrail(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = svc.Close(context.Background()) })
 	d := &fakeDispatcher{call: agentCall()}
-	svc.SetCallContext(d)
+	svc.SetDispatcher(d)
 
 	_, err = svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t),
 		By: windowA, OnBehalfOf: oboOf(d.call)})

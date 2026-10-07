@@ -56,13 +56,22 @@ type AuditRecord struct {
 	Context        option.Option[app.CallContext]
 }
 
-type callContextRef struct{ c app.CallContextI }
+// DispatcherI is what the dataset service asks the host's agent
+// dispatcher: who an agent-caused request is work of (§SD5), and whether
+// the task's grant lists what a read reaches (§SD6).
+type DispatcherI interface {
+	app.CallContextI
+	app.DelegationI
+}
 
-// SetCallContext installs the dispatcher that attests agent-caused bundle
-// requests (ADR-0288 (proposed) §SD5). Until it is set, an agent-caused
-// request is refused: nothing could confirm what it claims.
-func (inst *Service) SetCallContext(c app.CallContextI) {
-	inst.callCtx.Store(&callContextRef{c: c})
+type callContextRef struct{ c DispatcherI }
+
+// SetDispatcher installs the dispatcher that attests agent-caused bundle
+// requests and checks an agent's read against its grant (ADR-0288
+// (proposed) §SD5, §SD6). Until it is set, an agent-caused request is
+// refused: nothing could confirm what it claims.
+func (inst *Service) SetDispatcher(d DispatcherI) {
+	inst.callCtx.Store(&callContextRef{c: d})
 }
 
 // attest confirms obo with the dispatcher for a request by. A nil obo is

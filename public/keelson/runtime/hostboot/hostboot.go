@@ -836,7 +836,7 @@ func (rt *Runtime) bootAgent() {
 	// The dataset service records an agent-caused bundle operation under
 	// the call context the dispatcher attests (ADR-0288 (proposed) §SD5).
 	if rt.Adhoc != nil {
-		rt.Adhoc.SetCallContext(svc)
+		rt.Adhoc.SetDispatcher(svc)
 	}
 	if rt.Host != nil {
 		// The person's side: the badge in each window a task works in and

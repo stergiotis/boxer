@@ -93,6 +93,12 @@ func (attestAll) CallContext(task string, epoch uint64, call string, sender app.
 	return app.CallContext{Task: task, Epoch: epoch, Call: call, Conversation: "conv", Turn: "turn-1", App: sender, Instance: senderInstance}, true, ""
 }
 
+// AllowDestination lets agentCall's task reach anything; these tests
+// judge play's own limits, not the dataset service's.
+func (attestAll) AllowDestination(task string, epoch uint64, destination string) (ok bool, reason string) {
+	return task == agentCall.Task, "not agentCall's task"
+}
+
 // bundleLauncher is bindLauncher whose dataset service attests agentCall.
 func bundleLauncher(t *testing.T) (l *PlayLauncher, h app.OperationsHandlerI, publisher app.BusI) {
 	t.Helper()
@@ -100,7 +106,7 @@ func bundleLauncher(t *testing.T) (l *PlayLauncher, h app.OperationsHandlerI, pu
 	bus := inprocbus.NewInst(logger)
 	svc, err := adhocdata.NewService(adhocdata.Config{Bus: bus, Registry: introspect.NewRegistry(), Dir: t.TempDir(), Log: logger})
 	require.NoError(t, err)
-	svc.SetCallContext(attestAll{})
+	svc.SetDispatcher(attestAll{})
 	t.Cleanup(func() { _ = svc.Close(context.Background()) })
 	caps := []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}}
 	l, h = opsLauncher(t)

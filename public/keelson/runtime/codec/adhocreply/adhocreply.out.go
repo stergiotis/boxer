@@ -49,6 +49,7 @@ var (
 	kindAdhocArrowStream  uint64
 	kindAdhocStreamDigest uint64
 	kindAdhocAlias        uint64
+	kindAdhocDestination  uint64
 )
 
 func init() {
@@ -68,6 +69,7 @@ func init() {
 	kindAdhocArrowStream = vdd.MembAdhocArrowStream.GetId().Value()
 	kindAdhocStreamDigest = vdd.MembAdhocStreamDigest.GetId().Value()
 	kindAdhocAlias = vdd.MembAdhocAlias.GetId().Value()
+	kindAdhocDestination = vdd.MembAdhocDestination.GetId().Value()
 	buscodec.Register[AdhocReply](adhocReplyBusCodec)
 }
 
@@ -147,6 +149,7 @@ type AdhocReplyColumns struct {
 	ArrowStream  [][]byte
 	StreamDigest []string
 	Alias        []string
+	Destination  []string
 }
 
 // Len returns the number of rows currently in the batch.
@@ -178,6 +181,7 @@ func (c *AdhocReplyColumns) Append(row AdhocReply) {
 	c.ArrowStream = append(c.ArrowStream, row.ArrowStream)
 	c.StreamDigest = append(c.StreamDigest, row.StreamDigest)
 	c.Alias = append(c.Alias, row.Alias)
+	c.Destination = append(c.Destination, row.Destination)
 }
 
 // Row reconstructs entity i as an AoS AdhocReply record. Inverse of
@@ -203,6 +207,7 @@ func (c *AdhocReplyColumns) Row(i int) (row AdhocReply) {
 	row.ArrowStream = c.ArrowStream[i]
 	row.StreamDigest = c.StreamDigest[i]
 	row.Alias = c.Alias[i]
+	row.Destination = c.Destination[i]
 	return
 }
 
@@ -425,6 +430,9 @@ func AdhocReplyBuildEntities[
 		stringArraySecAttr_StreamDigest := stringArraySec.BeginAttributeSingle(c.StreamDigest[i])
 		stringArraySecAttr_StreamDigest.AddMembershipLowCardRefP(kindAdhocStreamDigest)
 		stringArraySecAttr_StreamDigest.EndAttributeP()
+		stringArraySecAttr_Destination := stringArraySec.BeginAttributeSingle(c.Destination[i])
+		stringArraySecAttr_Destination.AddMembershipLowCardRefP(kindAdhocDestination)
+		stringArraySecAttr_Destination.EndAttributeP()
 		if len(c.LocalNames[i]) > 0 {
 			stringArraySecAttr_LocalNames := stringArraySec.BeginAttribute()
 			for _, v := range c.LocalNames[i] {
@@ -538,6 +546,9 @@ func AdhocReplyEmitSectionStringArray[
 	stringArraySecAttr_StreamDigest := stringArraySec.BeginAttributeSingle(row.StreamDigest)
 	stringArraySecAttr_StreamDigest.AddMembershipLowCardRefP(kindAdhocStreamDigest)
 	stringArraySecAttr_StreamDigest.EndAttributeP()
+	stringArraySecAttr_Destination := stringArraySec.BeginAttributeSingle(row.Destination)
+	stringArraySecAttr_Destination.AddMembershipLowCardRefP(kindAdhocDestination)
+	stringArraySecAttr_Destination.EndAttributeP()
 	if len(row.LocalNames) > 0 {
 		stringArraySecAttr_LocalNames := stringArraySec.BeginAttribute()
 		for _, v := range row.LocalNames {
@@ -932,6 +943,9 @@ func AdhocReplyFillFromArrow[
 		var stringArrayStreamDigestVal string
 		var stringArrayStreamDigestCount int
 		var stringArrayStreamDigestLastAttr int64
+		var stringArrayDestinationVal string
+		var stringArrayDestinationCount int
+		var stringArrayDestinationLastAttr int64
 		var stringArrayLocalNamesSlice []string
 		var stringArrayLocalNamesCount int
 		var stringArrayLocalNamesLastAttr int64
@@ -964,6 +978,17 @@ func AdhocReplyFillFromArrow[
 						return
 					}
 					stringArrayStreamDigestVal = val
+				case kindAdhocDestination:
+					if stringArrayDestinationLastAttr != attrJ+1 {
+						stringArrayDestinationLastAttr = attrJ + 1
+						stringArrayDestinationCount++
+					}
+					val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocDestination").Str("field", "Destination").Errorf("slot stringArray@adhocDestination (field Destination) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
+					stringArrayDestinationVal = val
 				case kindAdhocLocalNames:
 					if stringArrayLocalNamesLastAttr != attrJ+1 {
 						stringArrayLocalNamesLastAttr = attrJ + 1
@@ -993,6 +1018,11 @@ func AdhocReplyFillFromArrow[
 			return
 		}
 		c.StreamDigest = append(c.StreamDigest, stringArrayStreamDigestVal)
+		if stringArrayDestinationCount != 1 {
+			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocDestination").Int("got", stringArrayDestinationCount).Errorf("slot stringArray@adhocDestination (field Destination) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayDestinationCount)
+			return
+		}
+		c.Destination = append(c.Destination, stringArrayDestinationVal)
 		if stringArrayLocalNamesCount > 1 {
 			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocLocalNames").Int("got", stringArrayLocalNamesCount).Errorf("slot stringArray@adhocLocalNames (field LocalNames) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayLocalNamesCount)
 			return
@@ -1326,6 +1356,9 @@ func AdhocReplyReadRow[
 	var stringArrayStreamDigestVal string
 	var stringArrayStreamDigestCount int
 	var stringArrayStreamDigestLastAttr int64
+	var stringArrayDestinationVal string
+	var stringArrayDestinationCount int
+	var stringArrayDestinationLastAttr int64
 	var stringArrayLocalNamesSlice []string
 	var stringArrayLocalNamesCount int
 	var stringArrayLocalNamesLastAttr int64
@@ -1358,6 +1391,17 @@ func AdhocReplyReadRow[
 					return
 				}
 				stringArrayStreamDigestVal = val
+			case kindAdhocDestination:
+				if stringArrayDestinationLastAttr != attrJ+1 {
+					stringArrayDestinationLastAttr = attrJ + 1
+					stringArrayDestinationCount++
+				}
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocDestination").Str("field", "Destination").Errorf("slot stringArray@adhocDestination (field Destination) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				stringArrayDestinationVal = val
 			case kindAdhocLocalNames:
 				if stringArrayLocalNamesLastAttr != attrJ+1 {
 					stringArrayLocalNamesLastAttr = attrJ + 1
@@ -1391,6 +1435,14 @@ func AdhocReplyReadRow[
 	}
 	if stringArrayStreamDigestCount == 1 {
 		row.StreamDigest = stringArrayStreamDigestVal
+		present = true
+	}
+	if stringArrayDestinationCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocDestination").Int("got", stringArrayDestinationCount).Errorf("slot stringArray@adhocDestination (field Destination) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayDestinationCount)
+		return
+	}
+	if stringArrayDestinationCount == 1 {
+		row.Destination = stringArrayDestinationVal
 		present = true
 	}
 	if stringArrayLocalNamesCount > 1 {

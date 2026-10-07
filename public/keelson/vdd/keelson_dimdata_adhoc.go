@@ -123,3 +123,9 @@ var MembAdhocStreamDigest = KeelsonHrNkRegistry.MustBegin("adhocStreamDigest", 2
 // one the service used.
 var MembAdhocWindowScoped = KeelsonHrNkRegistry.MustBegin("adhocWindowScoped", 239).
 	MustAddRestriction("bool", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
+
+// MembAdhocDestination names the grant destination a refused read needed
+// (ADR-0288 (proposed) §SD6), so the reading app can ask for it as a run in
+// play asks for its own.
+var MembAdhocDestination = KeelsonHrNkRegistry.MustBegin("adhocDestination", 241).
+	MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()

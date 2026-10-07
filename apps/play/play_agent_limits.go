@@ -8,6 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
+	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
 )
@@ -31,7 +32,9 @@ func DestinationKeelson(table string) (name string) { return "keelson:" + table 
 
 // DestinationKeelsonBundle is how a grant names an ad-hoc bundle; it
 // covers every dataset of the bundle (ADR-0288 (proposed) §SD4).
-func DestinationKeelsonBundle(bundle string) (name string) { return "keelson-bundle:" + bundle }
+func DestinationKeelsonBundle(bundle string) (name string) {
+	return adhocdata.DestinationBundle(bundle)
+}
 
 // DestinationClickHouse is how a grant names an endpoint, by host.
 func DestinationClickHouse(host string) (name string) { return "clickhouse:" + host }

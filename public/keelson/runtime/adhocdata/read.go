@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"strings"
 	"time"
 
 	"lukechampine.com/blake3"
@@ -25,6 +26,26 @@ const SubjectRead = "adhoc.read"
 // AuditRead is the audited operation of an `adhoc.read`.
 const AuditRead = "read"
 
+// DestinationDataset and DestinationBundle are how a grant names a dataset
+// and a bundle (ADR-0288 (proposed) §SD4); play's agent limits and the
+// read's check use the same spelling.
+func DestinationDataset(alias string) (name string) { return "keelson:" + alias }
+
+// DestinationBundle is how a grant names a bundle; it covers every
+// dataset of it.
+func DestinationBundle(bundle string) (name string) { return "keelson-bundle:" + bundle }
+
+// GrantError is a read an agent's call caused that its task's grant does
+// not cover (§SD6). Destination is what the grant would have to list; an
+// app surfaces it with app.RefuseForDestinations so the coordinator can
+// ask the person for it.
+type GrantError struct {
+	Destination string
+	Reason      string
+}
+
+func (inst *GrantError) Error() (s string) { return "agent limit: " + inst.Reason }
+
 // ErrDigestMismatch is ReadAllE's answer when the stream it received does
 // not hash to the digest the service sealed it under.
 var ErrDigestMismatch = errors.New("dataset stream does not match its digest")
@@ -43,11 +64,19 @@ type ReadResult struct {
 
 // Read returns the newest live dataset under alias, whole. A read leaves
 // play's query surface (ADR-0288 (proposed) §SD6), so every read is
-// audited, and one an agent's call caused is attested first.
+// audited, and one an agent's call caused is attested first and then held
+// to the task's grant as a run in play is: it needs the bundle, or the
+// dataset's alias, among the grant's destinations.
 func (inst *Service) Read(alias string, by Identity, obo *app.OnBehalfOf) (res ReadResult, err error) {
 	cc, err := inst.attest(by, obo)
 	if err == nil {
 		res, err = inst.read(alias)
+	}
+	if err == nil && cc.Has {
+		err = inst.checkGrant(obo, res)
+		if err != nil {
+			res = ReadResult{Alias: res.Alias, Bundle: res.Bundle}
+		}
 	}
 	r := AuditRecord{Operation: AuditRead, Bundle: res.Bundle, By: by, Context: cc, Aliases: []string{alias}}
 	if err != nil {
@@ -117,7 +146,12 @@ func (inst *Service) handleRead(msg *app.Msg) {
 	}
 	res, rErr := inst.Read(req.Alias, sender(msg), callContextFields(req.OboTask, req.OboEpoch, req.OboCall))
 	if rErr != nil {
-		inst.reply(msg.Reply, adhocreply.AdhocReply{At: time.Now().UTC(), Reason: rErr.Error(), NoLive: errors.Is(rErr, ErrNoLiveDataset)})
+		rep := adhocreply.AdhocReply{At: time.Now().UTC(), Reason: rErr.Error(), NoLive: errors.Is(rErr, ErrNoLiveDataset)}
+		var ge *GrantError
+		if errors.As(rErr, &ge) {
+			rep.Destination = ge.Destination
+		}
+		inst.reply(msg.Reply, rep)
 		return
 	}
 	inst.reply(msg.Reply, adhocreply.AdhocReply{
@@ -153,6 +187,9 @@ func ReadAllE(bus app.BusI, alias string, obo *app.OnBehalfOf) (res ReadResult, 
 		if rep.NoLive {
 			return res, eb.Build().Str("alias", alias).Errorf("read: %w", ErrNoLiveDataset)
 		}
+		if rep.Destination != "" {
+			return res, &GrantError{Destination: rep.Destination, Reason: strings.TrimPrefix(rep.Reason, "agent limit: ")}
+		}
 		return res, eb.Build().Str("alias", alias).Errorf("read rejected: %s", rep.Reason) //boxer:lint disable=CS013 reason="the service's refusal crosses the bus as text and is what a reader shows"
 	}
 	res = ReadResult{Alias: alias, Bundle: rep.Bundle, Handle: rep.Handle, Revision: rep.Revision, Rows: rep.Rows,
@@ -161,4 +198,30 @@ func ReadAllE(bus app.BusI, alias string, obo *app.OnBehalfOf) (res ReadResult, 
 		return ReadResult{}, eb.Build().Str("alias", alias).Str("want", res.StreamDigest).Str("got", got).Errorf("%w", ErrDigestMismatch)
 	}
 	return res, nil
+}
+
+// checkGrant asks the dispatcher whether the task's grant lists the
+// bundle res belongs to, or its alias; it refuses with the bundle's
+// destination first, the one that covers the bundle's other datasets.
+func (inst *Service) checkGrant(obo *app.OnBehalfOf, res ReadResult) (err error) {
+	ref := inst.callCtx.Load()
+	if ref == nil || ref.c == nil {
+		return eh.Errorf("no dispatcher to check the grant: %w", ErrUnattested)
+	}
+	dests := make([]string, 0, 2)
+	if res.Bundle != "" {
+		dests = append(dests, DestinationBundle(res.Bundle))
+	}
+	dests = append(dests, DestinationDataset(res.Alias))
+	var why string
+	for _, d := range dests {
+		ok, reason := ref.c.AllowDestination(obo.Task, obo.Epoch, d)
+		if ok {
+			return nil
+		}
+		if why == "" {
+			why = reason
+		}
+	}
+	return &GrantError{Destination: dests[0], Reason: "the grant does not list " + dests[0] + " (" + why + ")"}
 }

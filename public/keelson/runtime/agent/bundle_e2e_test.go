@@ -68,7 +68,7 @@ func TestABundleCrossesWindowsWithItsProvenance(t *testing.T) {
 		Log: zerolog.Nop(), Trail: rec})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = svc.Close(ctx) })
-	svc.SetCallContext(r.svc)
+	svc.SetDispatcher(r.svc)
 
 	caps := []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}}
 	window := func(key uint64) (l *play.PlayLauncher) {

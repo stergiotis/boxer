@@ -67,4 +67,8 @@ type AdhocReply struct {
 	// Alias is the alias a publish went under: the window's own when the
 	// request was window-scoped (ADR-0288 (proposed) §SD3).
 	Alias string `lw:"adhocAlias,symbol"`
+
+	// Destination is the grant destination a refused read needed
+	// (ADR-0288 (proposed) §SD6); empty otherwise.
+	Destination string `lw:"adhocDestination,stringArray"`
 }
