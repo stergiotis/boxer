@@ -134,7 +134,15 @@ a dataset whole, through a read that takes no statement.
   | `bind_dataset {alias, as?}` | document |
 
   `publish_result` is consequential as ADR-0269 §SD5 defines publishing:
-  the person confirms each one. It publishes only a whole main result: a
+  the person confirms each one, unless the task's grant carries
+  `publish:<prefix>` and the bundle's alias starts with that prefix. The
+  person approves that grant as any other (ADR-0269 §SD6) — standing
+  consent for the task's lifetime, scoped by name — and each publish under
+  it is still audited, with the destination that admitted it. A prefix is
+  at least one character, and the grant never covers an alias another
+  owner holds (SD3). The person publishes too: play's result bar has a
+  Publish action that opens the same form — bundle alias, panes — and its
+  publish is the person's, audited without a call context. It publishes only a whole main result: a
   result the row cap cut short is refused, since a dataset made of a prefix
   would miss rows with nothing to say so, and a node's lane does not record
   whether it was cut. An agent's run reading a bundle needs
@@ -162,12 +170,21 @@ a dataset whole, through a read that takes no statement.
   an agent caused — is a row on ADR-0277's trail: context components from
   the attestation, and per dataset its alias, handle, rows, stream length
   and BLAKE3 digest of the stream as sealed; a publish adds the document,
-  the source statement, the inputs and the columns, so a bundle is
-  described and reconstructible from `boxer.facts` alone. The digest is
-  what shows the bytes a consumer read are the bytes a producer published.
+  the source statement, the inputs and the columns with their summaries,
+  so a bundle is described and reconstructible from `boxer.facts` alone.
+  The digest is what shows the bytes a consumer read are the bytes a
+  producer published.
   Rows join the dispatcher's action rows on `(task, call)` and the model's
   messages on `(conversation, turn)`; `keelson('adhoc_bundles')` and
   `keelson('adhoc')` carry the live state with the same context.
+
+  **A dataset is summarised when it is sealed.** The pass that digests a
+  stream also summarises each column: nulls, minimum and maximum where the
+  type orders, an approximate distinct count, and a bounded sample of
+  values. The summaries are in `keelson('adhoc_bundles')`, which
+  `list_bundles` reads, and on the publish's trail row, so an agent learns
+  what a bundle holds without opening it and the trail describes the data,
+  not only its bytes.
 
 - **SD6 — Only play queries a dataset.** Any other app reads a dataset whole
   with `adhocdata.ReadAllE`: the stream as sealed, with its digest, which
@@ -231,24 +248,13 @@ a dataset whole, through a read that takes no statement.
   under the read's attestation and grant check, stamped like a run, so a
   consumer projects a dataset rather than copying it whole. Trigger: a
   consumer that needs a slice of a dataset larger than it can take in.
-- **Durable bundles.** A bundle lives as long as its window; the trail keeps
-  digests of streams that are gone. A person-confirmed `promote` would
-  write a bundle's streams into a durable store keyed by digest, so a trail
-  row resolves later and an analysis can be reproduced. Trigger: an
-  analysis that must be reread after its windows closed.
-- **Publishing without a confirmation per hop.** A destination granted once
-  per task — `publish:<alias prefix>` — would let a pipeline publish under
-  the person's standing consent, each publish still audited. Trigger: a
-  multi-hop pipeline whose confirmations the person reports as friction.
 - **Parameter values across a new document.** A rebuilt bundle view starts
   from the document's parameters; carrying the person's values needs play
   to expose its parameter state. Trigger: bundles republished while the
   person works in them.
-- **The person's own publish.** `publish_result` has no gesture; the person
-  publishes only by confirming an agent.
-- **Summaries and meaning.** Per-column summaries (nulls, min, max, a
-  bounded sample) and units would let an agent learn what a bundle holds
-  without opening it.
+- **Units.** A unit per column, declared by the producer, would tell an
+  agent what a number means; it needs a unit vocabulary first. Trigger: a
+  result misread for want of its unit.
 - **Names carrying identity.** A window-scoped alias names a per-run
   instance key; a lookup keyed on alias and owner would keep names clean.
   Trigger: aliases that must mean the same across runs.
@@ -265,6 +271,11 @@ a dataset whole, through a read that takes no statement.
 - **M6 — Bundle views:** ✓ plain views; adhocdemo is a receiver.
 - **M7 — Operable views:** mounted commands in appops and the `bundle_`
   subset.
+- **M8 — Publish grants:** the `publish:<prefix>` destination; a covered
+  `publish_result` applied without a confirmation and audited with it.
+- **M9 — Column summaries:** computed while sealing, in the bundle catalog
+  and on the trail row.
+- **M10 — The person's publish:** the Publish action in play's result bar.
 
 ## Surfaces — Tier 1
 
@@ -272,13 +283,13 @@ a dataset whole, through a read that takes no statement.
 | --- | --- | --- |
 | Capability subjects (ADR-0026) | added: `adhoc.bundle.publish`, `.resolve`, `.retract`, `adhoc.bundle.event.>`, `adhoc.read` | the manifests of apps that publish, open, show or read bundles |
 | Bus codecs (ADR-0240 §SD8) | the adhoc request, reply and event kinds gain the bundle, document, streams, handles, provenance, on-behalf-of context, window scope, digest and grant destination | the generated adhoc codecs; vdd's assignment golden |
-| Introspection tables | added: `keelson('adhoc_bundles')`; `keelson('adhoc')` gains the bundle and call context | catalog providers |
+| Introspection tables | added: `keelson('adhoc_bundles')` with column summaries (M9); `keelson('adhoc')` gains the bundle and call context | catalog providers |
 | The trail store (ADR-0277) | added: the `AdhocDataset` component, its archetype and view | `runtime/trail` regeneration; `trailviews`; the runtime vocabulary's golden |
 | `app` exported API | added: `CallContext`, `CallContextI` | implemented by the agent dispatcher, wired by hostboot |
 | `adhocdata` exported API | bundles, provenance, `ReadAllE`, grant errors, window-scoped publishers, local names on `Follower`; publish refuses a held alias | every publisher of a fixed alias |
 | `launchcfg.PlayLaunch` | added: `Bundle`, `DatasetNames` | leeway codec regeneration |
 | play | catalog: `list_bundles`, `open_bundle`, `publish_result`, `bind_dataset as`; API: `PublishBundleE`, `SetAppletDocParser` | play's ops and caps tests; the chat's guidance |
-| Agent grant destinations | added: `keelson-bundle:<bundle>`, host reach | play's agent limits; the dataset read's check |
+| Agent grant destinations | added: `keelson-bundle:<bundle>`, host reach; `publish:<prefix>` (M8) | play's agent limits; the dataset read's check |
 | keelson.query gate (ADR-0253) | refuses sealed tables | `keelsonquery.Gate` |
 | `sqlapplet` | added: `NewBundleView`, `BundleViewCaps`; `BundleViewOps` (M7) | receivers' manifests |
 | `appops` | mounted commands (M7) | catalogs that mount a component |
@@ -303,6 +314,13 @@ a dataset whole, through a read that takes no statement.
   datasets are bound by handle in the window that computed them; a bundle
   adds nothing there, and an agent that wants them elsewhere publishes a
   query over them.
+- **Durable bundles.** A person-confirmed `promote` writing a bundle's
+  streams into a durable store keyed by digest, so a trail row resolves
+  after its windows closed. Rejected (2026-10-07): the trail's digests,
+  statements, inputs and summaries prove what crossed and how it was made,
+  and an analysis is reproduced by running it again, not by keeping its
+  intermediates. A table worth keeping is written to a store of its own
+  by the tool that owns it.
 - **A lone dataset from `publish_result`.** Rejected: what crosses would
   carry no SQL that reads it and no record of what made it.
 - **`publish_result` as a document-level command.** Rejected: ADR-0269 §SD5
@@ -325,15 +343,17 @@ a dataset whole, through a read that takes no statement.
 
 ### Negative
 
-- A confirmation per `publish_result`; a pipeline of many hops asks many
-  times.
+- Without a `publish:` grant, a confirmation per `publish_result`; with
+  one, the person consents per task and prefix, not per publish, and sees
+  each publish only in the trail.
 - A truncated result cannot be published.
 - A publisher whose app can open two windows publishes window-scoped, and
   whatever opens its data binds the window's alias under a local name.
 - A bundle document is limited to what every receiver can grant; one that
   needs another endpoint is opened in play, not embedded.
-- Bundles die with their windows, and the trail then holds digests of
-  streams that are gone.
+- Bundles die with their windows; the trail then holds digests,
+  statements and summaries of streams that are gone, by decision.
+- Sealing a stream costs a summarising pass beside the digest.
 - An operable view's subset is a second list of play's operations to keep
   in step with play's catalog.
 - On a host without a durable trail the audit is lost, as all trail rows
@@ -415,6 +435,14 @@ taught, kept for its reasons:
   rows — Go 1.0 ms, Rust 1.3–1.5 ms, 15.3 KB sent per frame; a minimal
   demo app — 0.8 ms, 0.6 ms, 6.8 KB. Read from the status bar's frame
   label through a scene's `tree` step (ADR-0248).
+
+### 2026-10-07 — the open options decided
+
+Durable bundles rejected (Alternatives). Publish grants (M8), column
+summaries computed at seal (M9) and the person's own publish (M10) taken
+into the decision. keelson.query over datasets, parameter values across a
+new document, names carrying identity and units stay deferred on their
+triggers.
 
 ## References
 
