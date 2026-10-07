@@ -667,7 +667,8 @@ func (inst *Service) check(t *task, req wireCall) (out opwire.Outcome, spec app.
 		out = phaseOutcome(opwire.PhaseRefused, pausedReason(ch, t))
 	case t.callsUsed >= t.callsBudget:
 		out, need, mode = phaseOutcome(opwire.PhaseInputRequired, "the task's call budget is spent; the person is asked"), needBudget, e.mode
-	case spec.Effect == app.OperationEffectConsequential && consent == "" && t.test:
+	case spec.Effect == app.OperationEffectConsequential && t.test:
+		// A test grant has no person to consent, standing or not.
 		out = phaseOutcome(opwire.PhaseInputRequired, "a consequential command needs the person's confirmation")
 	case spec.Effect == app.OperationEffectConsequential && consent == "":
 		reason := "a consequential command: the person confirms it"

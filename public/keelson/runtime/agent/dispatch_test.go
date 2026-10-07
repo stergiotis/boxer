@@ -75,7 +75,7 @@ var docOps = func() *appops.Set[*doc, docSnap] {
 		func(d *doc, call app.OperationCall, in appops.None) (appops.None, error) { return appops.None{}, nil })
 	appops.Command(s, app.OperationSpec{Name: "publish_text", Version: 1, Summary: "publish the text under a name",
 		Effect: app.OperationEffectConsequential, Reads: []string{"text"}, Agents: true,
-		Consent: app.OperationConsent{Class: "publish", Arg: "name"}},
+		Consent: app.OperationConsent{Class: app.ConsentClassPublish, Arg: "name"}},
 		func(d *doc, call app.OperationCall, in publishArgs) (appops.None, error) { return appops.None{}, nil })
 	appops.Command(s, app.OperationSpec{Name: "wipe", Version: 1, Summary: "clear everything",
 		Effect: app.OperationEffectDocument, Writes: []string{"text"}},

@@ -144,11 +144,24 @@ type OperationSpec struct {
 // call is applied as the task's mode applies a document command, and its
 // record names the destination that admitted it.
 type OperationConsent struct {
-	// Class is the destination class, a lower snake_case name: "publish".
+	// Class is the destination class, one of ConsentClasses: what the
+	// person consents to is the platform's to define, never the app's.
 	Class string
 	// Arg is the argument field, as the model's JSON names it, whose value
 	// the prefix is matched against.
 	Arg string
+}
+
+// ConsentClassPublish covers publishing an ad-hoc bundle under the name
+// the consent's argument carries (ADR-0288 (proposed) §SD4).
+const ConsentClassPublish = "publish"
+
+// ConsentClasses are the consent classes a catalog may declare, each with
+// the one meaning a grant destination of that class consents to. A class
+// is a platform decision: an app that could name its own would let one
+// approved destination cover whatever any app called by that name.
+var ConsentClasses = map[string]string{
+	ConsentClassPublish: "publish an ad-hoc bundle under a name starting with the prefix",
 }
 
 // Pattern is the destination as a person or a model writes it in a
@@ -304,8 +317,8 @@ func (inst OperationSpec) problem(resources map[string]bool) (problem string) {
 		switch {
 		case inst.Effect != OperationEffectConsequential:
 			return "only a consequential command declares a consent"
-		case !ValidOperationName(inst.Consent.Class):
-			return "a consent's class is lower snake_case"
+		case ConsentClasses[inst.Consent.Class] == "":
+			return "a consent's class is not one the platform defines: " + inst.Consent.Class
 		case inst.Args == nil:
 			return "a consent names an argument, and the command takes none"
 		}

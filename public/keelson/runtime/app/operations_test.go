@@ -59,8 +59,8 @@ func TestOperationsCatalogValidate(t *testing.T) {
 		"consent names no field": func(c *OperationsCatalog) {
 			c.Operations[1].Effect, c.Operations[1].Consent = OperationEffectConsequential, OperationConsent{Class: "publish", Arg: "missing"}
 		},
-		"consent class not snake_case": func(c *OperationsCatalog) {
-			c.Operations[1].Effect, c.Operations[1].Consent = OperationEffectConsequential, OperationConsent{Class: "Publish", Arg: "text"}
+		"consent class not the platform's": func(c *OperationsCatalog) {
+			c.Operations[1].Effect, c.Operations[1].Consent = OperationEffectConsequential, OperationConsent{Class: "export", Arg: "text"}
 		},
 	} {
 		c := validCatalog()

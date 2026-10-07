@@ -52,10 +52,9 @@ type PublishResultOutcome struct {
 // publishState is the window's last publish, shared between the render
 // goroutine and the publishing goroutine.
 type publishState struct {
-	mu       sync.Mutex
-	busy     bool
-	last     LastPublish
-	sequence uint64
+	mu   sync.Mutex
+	busy bool
+	last LastPublish
 }
 
 // LastPublish is the outcome of the window's last publish_result.
@@ -74,7 +73,7 @@ func addPublishResultOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 		// It reads the result and changes nothing of the window's: what it
 		// writes is outside, which is what makes it consequential.
 		Effect: app.OperationEffectConsequential, Reads: []string{opsResResult}, Agents: true,
-		Consent: app.OperationConsent{Class: "publish", Arg: "bundle"},
+		Consent: app.OperationConsent{Class: app.ConsentClassPublish, Arg: "bundle"},
 		Gesture: "Publish in the top bar",
 		Follows: []string{"only a whole main result is published: one the row cap cut short is refused, as is one still loading or failed",
 			"the publish runs off the frame; list_bundles reports this window's last publish and the bundle once it is live",
@@ -138,7 +137,6 @@ func (inst *PlayLauncher) publishResult(call app.OperationCall, in PublishResult
 		return out, app.RefuseOperation("a publish from this window is in flight; list_bundles reports when it lands")
 	}
 	inst.publish.busy = true
-	inst.publish.sequence++
 	inst.publish.last = LastPublish{Bundle: in.Bundle, Pending: true}
 	inst.publish.mu.Unlock()
 

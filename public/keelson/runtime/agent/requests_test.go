@@ -299,6 +299,17 @@ func TestAPublishGrantIsStandingConsent(t *testing.T) {
 	assert.False(t, confirm)
 }
 
+// A test grant has nobody to consent: a publish: destination does not let
+// a consequential command through it.
+func TestATestGrantNeverAppliesAConsequentialCommand(t *testing.T) {
+	r := newRig(t, true)
+	g := r.grant(ModeAct)
+	_, err := r.cli.Request(context.Background(), GrantRequest{Handle: g.Handle, Plan: "publish", Destinations: []string{"publish:report_"}})
+	require.NoError(t, err)
+	out := r.call(g, "p", "publish_text", `{"name":"report_q3"}`)
+	assert.Equal(t, "input_required", out.Phase, out.Reason)
+}
+
 func TestLoweringToSuggestTurnsQueuedCommandsIntoProposals(t *testing.T) {
 	r, g := approvedRig(t, ModeAct)
 	r.call(g, "q", "get_text", "{}")
