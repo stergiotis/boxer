@@ -183,8 +183,10 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	//
 	// Three more open ad-hoc bundles (ADR-0288 §SD4): adhoc.bundle.resolve
 	// and adhoc.bundle.event.> for a window that follows one, and
-	// keelson.query.adhoc_bundles for list_bundles.
-	require.Len(t, m.Caps, 14)
+	// keelson.query.adhoc_bundles for list_bundles. The Model tab's
+	// llm.complete and keelson.query.sql_passes left with the tab
+	// (ADR-0254, Updates 2026-10-07).
+	require.Len(t, m.Caps, 12)
 	patterns := make([]string, 0, len(m.Caps))
 	for _, cap := range m.Caps {
 		patterns = append(patterns, cap.Pattern)

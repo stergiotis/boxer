@@ -498,6 +498,19 @@ the request sets fails the encode, and a provider that rejects members it does
 not know fails the call. The call record does not keep the members, as it
 keeps none of the sampling settings.
 
+### 2026-10-07 — play's Model tab is removed
+
+§SD6's play consumer is withdrawn. After the 2026-10-02 update it held
+`explain` and `fix this error`, both of which a chat driving a shared play
+window does with play's own operations. Its tool loop had become a second,
+weaker copy of those operations' `list_tables` and `describe_table`, agents
+could not reach it, and it was never checked live against a model. The
+property the update kept it for, a fix that runs nothing, is a chat whose
+ceiling stops at *edit* ([ADR-0280](./0280-a-ceiling-on-what-a-chats-model-may-do-scored-on-a-ladder.md)).
+Play no longer declares `llm.complete` or the `keelson.query` grant on
+`sql_passes`; dock tab id 34 is retired. mdedit remains the prompt-book
+consumer.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — §SD3 the taxonomy this family joins, §SD7 the broker, §SD10 capslock.

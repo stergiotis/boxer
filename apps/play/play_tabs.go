@@ -348,11 +348,6 @@ var builtinTabDefs = []builtinTabDef{
 	// caller that ever does owes it the ActivateTab-then-queue pattern the
 	// lazypane docs describe, because a skipped body runs no delivery.
 	{id: "snippets", dockID: dockTabSnippets, title: "Snippets", zone: TabZoneTools, lazy: true},
-	// Model is the prompt book over the buffer (ADR-0254 §SD6): explain,
-	// fix this error, ask — an editor tool like Snippets, delivering into
-	// the editor through the same ops. Lazy: a session that never opens it
-	// never asks the host for a model.
-	{id: "model", dockID: dockTabModel, title: "Model", zone: TabZoneTools, lazy: true},
 	// Vocabulary is Snippets' sibling: same zone, same filter language, same
 	// Insert seam — a snippet is a statement you want, a vocabulary entry is a
 	// name you can use. Lazy, so a session that never opens it never runs the
@@ -716,8 +711,6 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 			spec.Render = func(f *TabFrame) { inst.renderTimelineTab(f.Rec, f.Schema, f.Loading, f.Err) }
 		case "snippets":
 			spec.Render = func(f *TabFrame) { inst.renderSnippetsTab() }
-		case "model":
-			spec.Render = func(f *TabFrame) { inst.renderModelTab(f) }
 		case "map":
 			// The Map is a panel-authored node on its own lane (5c), not a
 			// PanelI: it renders the driver directly.

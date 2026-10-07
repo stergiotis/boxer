@@ -16,7 +16,7 @@ ready-to-run fragments see **Snippets**. This page describes each feature in tur
 The window is a rearrangeable, splittable dock of tabs between a pinned top bar
 (Run, Load, connection) and a status bar (the query-state inspector). They fall
 into three groups: the **editor** (Editor, History), the **tool panes** beside
-it (Docs, Preview, Flow, Passes, Diagnostics, Snippets, Model, Vocabulary,
+it (Docs, Preview, Flow, Passes, Diagnostics, Snippets, Vocabulary,
 Completion, Glosses — each reads the buffer, or something derived
 from it, while you type), and the **result panes** below (Table, Projection,
 Timeline, Map, Vector field, World, Kanban, Chat, Cards, Network, Graphview,
@@ -1601,27 +1601,10 @@ matched but lost: a later directive behind an earlier one, an affinity behind
 a directive, any rule behind an alias. **Raw cells** on the Table toolbar
 bypasses every gloss for the session.
 
-### Model
+### A language model
 
-A prompt book over the buffer (ADR-0254), which asks a language model the host
-provides. The host needs `BOXER_LLM_ENDPOINT` and `BOXER_LLM_MODEL` set. Without
-them, or in a window with no host to ask, the pane says why and offers nothing.
-Two prompts:
-
-- **Explain this query** sends the buffer and returns prose.
-- **Fix this error** sends the buffer and the last Run's error, and returns a
-  corrected query. With no error, it runs over the buffer alone.
-
-Fix is grounded in the endpoint's schema (`system.columns` of the current
-database, capped) and may call tools: list tables, describe a table, check a
-statement against boxer's grammar, and read `keelson('sql_passes')`. It
-retries up to three times on a statement that does not validate. **Nothing
-runs on its own**: a returned query is text with **Insert** (at the caret) and
-**Replace** (the whole buffer), and Run is still yours. The header shows the
-model, elapsed time, attempts and tokens, and marks an answer cut short by
-`BOXER_LLM_MAXTOKENS`.
-
-Turning a question into a query is the chat app's, which works in a play
+Play has no model pane of its own. Explaining a query, fixing its error or
+turning a question into a query is the chat app's, which works in a play
 window you share with it. Its model reads the endpoint through play's
 operations without touching the buffer: `list_tables`, `describe_table` (for
 a leeway table, its sections, the handles to write and the membership
