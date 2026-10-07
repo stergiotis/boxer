@@ -66,6 +66,7 @@ func newTestService(t *testing.T) *Service {
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = svc.Close(context.Background()) })
+	captureAudits(svc)
 	return svc
 }
 

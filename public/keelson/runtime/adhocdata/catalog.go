@@ -25,6 +25,7 @@ type catalogRow struct {
 	keepAfterClose    bool
 	rows              uint64
 	bytes             uint64
+	plainBytes        uint64
 	revision          uint64
 	createdAtUnixUs   int64
 	openReaders       int64
@@ -58,7 +59,7 @@ func (inst *Service) catalogRows() (rows []catalogRow) {
 		rows = append(rows, catalogRow{
 			handle: r.handle, alias: r.alias, bundle: r.bundle,
 			publisher: string(r.owner.App), publisherInstance: r.owner.Instance, keepAfterClose: r.keepAfterClose,
-			rows: r.rows, bytes: r.bytes, revision: r.revision, createdAtUnixUs: r.createdAt,
+			rows: r.rows, bytes: r.bytes, plainBytes: r.plainBytes, revision: r.revision, createdAtUnixUs: r.createdAt,
 			openReaders: int64(r.file.Readers()), callContext: callContextOf(r.context),
 		})
 		r.mu.RUnlock()
@@ -100,6 +101,7 @@ func catalogTable(rows []catalogRow) *introspect.Table {
 		Bool("keep_after_close", func(i int) bool { return rows[i].keepAfterClose }).
 		Uint64("rows", func(i int) uint64 { return rows[i].rows }).
 		Uint64("bytes", func(i int) uint64 { return rows[i].bytes }).
+		Uint64("plain_bytes", func(i int) uint64 { return rows[i].plainBytes }).
 		Uint64("revision", func(i int) uint64 { return rows[i].revision }).
 		Int64("created_at_unix_us", func(i int) int64 { return rows[i].createdAtUnixUs }).
 		Int64("open_readers", func(i int) int64 { return rows[i].openReaders }).

@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 )
 
 // Labels and taint (ADR-0269 §SD7). A result carries the label of the window
@@ -170,7 +171,7 @@ func (inst *Service) CallContext(taskId string, epoch uint64, callId string, sen
 		conversation = rec.conversation
 	}
 	cc = app.CallContext{Task: t.id, Epoch: t.epoch, Call: rec.callId, Conversation: conversation, Turn: rec.turn,
-		App: rec.app, Instance: rec.instance, Operation: rec.spec.Name}
+		App: rec.app, Instance: rec.instance, Operation: rec.spec.Name, InFlight: rec.outcome.Phase == opwire.PhaseUnspecified}
 	if rec.cause.Has {
 		cc.ModelCall = rec.cause.Val.ModelCall
 		cc.ToolIndex = rec.cause.Val.ToolIndex

@@ -105,10 +105,19 @@ func TestAnAgentsPublishCarriesTheDispatchersContext(t *testing.T) {
 	require.Len(t, rows, 1)
 	assert.Equal(t, "conv-9", rows[0].conversation)
 
-	_, err = svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t),
+	for i, h := range a.Handles {
+		plain, _ := readAll(t, svc.reg, h)
+		assert.Equal(t, uint64(len(plain)), a.Bytes[i], "bytes are the stream's length, what a reader receives")
+	}
+	assert.False(t, a.Context.Val.InFlight, "the fake dispatcher answers for a call already answered")
+
+	re, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t),
 		By: windowA, OnBehalfOf: oboOf(d.call)})
 	require.NoError(t, err)
 	assert.Equal(t, AuditRepublish, svc.auditRecords()[1].Operation)
+	got, err := svc.Resolve("sales__orders")
+	require.NoError(t, err)
+	assert.Equal(t, re.Revision, got.Revision, "a member carries its bundle's revision")
 }
 
 func TestAnUnattestedContextIsRefusedAndAudited(t *testing.T) {
@@ -174,6 +183,7 @@ func TestAClosedWindowsBundleIsAuditedAsWithdrawn(t *testing.T) {
 	svc, err := NewService(Config{Bus: bus, Registry: introspect.NewRegistry(), Dir: t.TempDir(), Log: logger})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = svc.Close(context.Background()) })
+	captureAudits(svc)
 	d := &fakeDispatcher{call: agentCall()}
 	d.call.App, d.call.Instance = "test.app", 5
 	svc.SetDispatcher(d)
@@ -220,6 +230,7 @@ func TestTheAuditLandsOnTheTrail(t *testing.T) {
 	svc, err := NewService(Config{Registry: introspect.NewRegistry(), Dir: t.TempDir(), Log: testLogger(t), Trail: rec})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = svc.Close(context.Background()) })
+	captureAudits(svc)
 	d := &fakeDispatcher{call: agentCall()}
 	svc.SetDispatcher(d)
 

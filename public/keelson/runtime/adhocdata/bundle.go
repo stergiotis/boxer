@@ -84,8 +84,11 @@ type BundleDataset struct {
 	LocalName string
 	Alias     string
 	Handle    string
-	Rows      uint64
-	Bytes     uint64
+	Rows uint64
+	// Bytes is the dataset's sealed (ciphertext) size, what the quotas
+	// count; PlainBytes the stream's length as a reader receives it.
+	Bytes      uint64
+	PlainBytes uint64
 	// StreamDigest is the content digest of the stream as sealed.
 	StreamDigest string
 }
@@ -142,6 +145,7 @@ type sealedDataset struct {
 	rows      uint64
 	bytes     uint64
 	digest    string
+	plain     uint64
 }
 
 func validateBundle(in BundlePublishInput) (err error) {
@@ -219,7 +223,7 @@ func (inst *AuditRecord) fillDatasets(ds []BundleDataset) {
 		inst.Aliases = append(inst.Aliases, d.Alias)
 		inst.Handles = append(inst.Handles, d.Handle)
 		inst.Rows = append(inst.Rows, d.Rows)
-		inst.Bytes = append(inst.Bytes, d.Bytes)
+		inst.Bytes = append(inst.Bytes, d.PlainBytes)
 		inst.StreamDigests = append(inst.StreamDigests, d.StreamDigest)
 	}
 }
@@ -265,7 +269,7 @@ func (inst *Service) publishBundle(in BundlePublishInput, cc option.Option[app.C
 			closeAll()
 			return res, op, eh.Errorf("allocate sealed file: %w", fErr)
 		}
-		schema, structure, rows, digest, sErr := sealStream(f, d.ArrowIPCStream)
+		schema, structure, rows, digest, plain, sErr := sealStream(f, d.ArrowIPCStream)
 		if sErr != nil {
 			_ = f.Close()
 			closeAll()
@@ -280,7 +284,7 @@ func (inst *Service) publishBundle(in BundlePublishInput, cc option.Option[app.C
 		}
 		sealedBytes += nbytes
 		sealedSet = append(sealedSet, sealedDataset{localName: d.LocalName, alias: newAliases[i], file: f,
-			schema: schema, structure: structure, rows: rows, bytes: nbytes, digest: digest})
+			schema: schema, structure: structure, rows: rows, bytes: nbytes, digest: digest, plain: plain})
 	}
 	digest := trail.ContentDigest(string(in.Document))
 	document := slices.Clone(in.Document)
@@ -309,8 +313,10 @@ func (inst *Service) publishBundle(in BundlePublishInput, cc option.Option[app.C
 		if hErr == nil {
 			rec := &record{
 				handle: handle, alias: s.alias, bundle: in.Alias, owner: owner, keepAfterClose: keep,
-				schema: s.schema, structure: s.structure, revision: 1, rows: s.rows, bytes: s.bytes,
-				createdAt: now, file: s.file, streamDigest: s.digest, context: cc,
+				// A member carries its bundle's revision, so a reader of
+				// the member sees the bundle move.
+				schema: s.schema, structure: s.structure, revision: revision, rows: s.rows, bytes: s.bytes,
+				createdAt: now, file: s.file, streamDigest: s.digest, plainBytes: s.plain, context: cc,
 			}
 			hErr = inst.reg.Register(rec)
 			if hErr == nil {
@@ -545,7 +551,7 @@ func (inst *bundleRec) result(recs []*record) (res BundleResult) {
 		d := BundleDataset{LocalName: inst.localNames[i], Alias: DatasetAlias(inst.alias, inst.localNames[i]), Handle: h}
 		if i < len(recs) && recs[i] != nil {
 			recs[i].mu.RLock()
-			d.Rows, d.Bytes, d.StreamDigest = recs[i].rows, recs[i].bytes, recs[i].streamDigest
+			d.Rows, d.Bytes, d.PlainBytes, d.StreamDigest = recs[i].rows, recs[i].bytes, recs[i].plainBytes, recs[i].streamDigest
 			recs[i].mu.RUnlock()
 		}
 		res.Datasets = append(res.Datasets, d)

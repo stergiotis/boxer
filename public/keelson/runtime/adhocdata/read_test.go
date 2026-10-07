@@ -33,6 +33,7 @@ func readService(t *testing.T) (svc *Service, bus *inprocbus.Inst) {
 	svc, err := NewService(Config{Bus: bus, Registry: introspect.NewRegistry(), Dir: t.TempDir(), Log: logger})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = svc.Close(context.Background()) })
+	captureAudits(svc)
 	return
 }
 

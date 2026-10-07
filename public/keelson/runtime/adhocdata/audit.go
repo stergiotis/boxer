@@ -2,7 +2,6 @@ package adhocdata
 
 import (
 	"errors"
-	"slices"
 	"time"
 
 	"github.com/stergiotis/boxer/public/functional/option"
@@ -31,9 +30,6 @@ const (
 	AuditRefused = "refused"
 )
 
-// auditKeep bounds the in-process audit record; the trail keeps all of it.
-const auditKeep = 512
-
 // AuditRecord is one audited bundle operation (ADR-0288 (proposed) §SD5).
 // Context is set when an agent's call caused the operation and the
 // dispatcher attested it.
@@ -49,7 +45,9 @@ type AuditRecord struct {
 	LocalNames     []string
 	Aliases        []string
 	Handles        []string
-	Rows           []uint64
+	Rows []uint64
+	// Bytes are the streams' lengths as a reader receives them, the bytes
+	// their digests are over.
 	Bytes          []uint64
 	StreamDigests  []string
 	DocumentDigest string
@@ -96,27 +94,16 @@ func (inst *Service) attest(by Identity, obo *app.OnBehalfOf) (cc option.Option[
 	return option.Some(got), nil
 }
 
-// audit keeps r in the in-process record and buffers its trail row.
+// audit buffers r as a trail row and hands it to the test hook.
 func (inst *Service) audit(r AuditRecord) {
 	if r.At.IsZero() {
 		r.At = time.Now()
 	}
-	inst.auditMu.Lock()
-	if len(inst.audits) >= auditKeep {
-		inst.audits = slices.Delete(inst.audits, 0, len(inst.audits)-auditKeep+1)
+	if hook := inst.auditHook.Load(); hook != nil {
+		(*hook)(r)
 	}
-	inst.audits = append(inst.audits, r)
-	inst.auditMu.Unlock()
 	inst.emitAudit(r.Operation+"-bundle-"+r.Outcome, "", r.Bundle, r.Revision)
 	inst.persistAudit(r)
-}
-
-// auditRecords returns the in-process record, oldest first.
-func (inst *Service) auditRecords() (out []AuditRecord) {
-	inst.auditMu.Lock()
-	out = slices.Clone(inst.audits)
-	inst.auditMu.Unlock()
-	return
 }
 
 // persistAudit buffers r as an AdhocDataset row on the trail (ADR-0277)
@@ -155,6 +142,7 @@ func (inst *Service) persistAudit(r AuditRecord) {
 		OwnerApp: string(r.Owner.App), OwnerInstance: r.Owner.Instance,
 		LocalNames: r.LocalNames, Aliases: r.Aliases, Handles: r.Handles, Rows: r.Rows, Bytes: r.Bytes,
 		StreamDigests: r.StreamDigests, DocumentDigest: r.DocumentDigest, Attested: r.Context.Has,
+		InFlight: r.Context.Has && r.Context.Val.InFlight,
 	}
 	if r.Reason != "" {
 		row.Reason = []string{r.Reason}

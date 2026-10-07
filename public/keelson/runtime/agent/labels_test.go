@@ -227,6 +227,7 @@ func TestCallContextIsTheDispatchersRecord(t *testing.T) {
 	assert.Equal(t, "call_x", cc.ToolCall)
 	assert.Equal(t, uint32(2), cc.ToolIndex)
 	assert.Equal(t, "get_text", cc.Operation)
+	assert.False(t, cc.InFlight, "the call was answered before the service asked")
 
 	_, ok, why = r.svc.CallContext(g.Task, 1, callId, docAppId, r.docKey+1)
 	assert.False(t, ok, "another window cannot claim the call")

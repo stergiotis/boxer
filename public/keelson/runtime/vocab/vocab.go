@@ -501,6 +501,7 @@ var (
 	MembAdhocDatasetStreamDigests  = NkRegistry.MustBegin("adhocDatasetStreamDigests", 271).End()
 	MembAdhocDatasetDocumentDigest = NkRegistry.MustBegin("adhocDatasetDocumentDigest", 272).End()
 	MembAdhocDatasetAttested       = NkRegistry.MustBegin("adhocDatasetAttested", 273).End()
+	MembAdhocDatasetInFlight       = NkRegistry.MustBegin("adhocDatasetInFlight", 274).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -565,4 +566,5 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembAdhocDatasetBundle, MembAdhocDatasetRevision, MembAdhocDatasetOwnerApp, MembAdhocDatasetOwnerInstance,
 	MembAdhocDatasetLocalNames, MembAdhocDatasetAliases, MembAdhocDatasetHandles, MembAdhocDatasetRows,
 	MembAdhocDatasetBytes, MembAdhocDatasetStreamDigests, MembAdhocDatasetDocumentDigest, MembAdhocDatasetAttested,
+	MembAdhocDatasetInFlight,
 }

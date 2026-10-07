@@ -11,7 +11,8 @@ package trail
 //
 // LocalNames, Aliases, Handles, Rows, Bytes and StreamDigests run index
 // for index over the bundle's datasets. A stream digest is over the Arrow
-// IPC stream as sealed, which is what every reader of the dataset reads.
+// IPC stream as sealed, which is what every reader of the dataset reads;
+// Bytes are those streams' lengths.
 type AdhocDataset struct {
 	_ struct{} `kind:"adhocDataset"`
 
@@ -38,4 +39,8 @@ type AdhocDataset struct {
 	DocumentDigest string   `lw:"adhocDatasetDocumentDigest,stringArray,unit"`
 
 	Attested bool `lw:"adhocDatasetAttested,bool"`
+	// InFlight says the attested call had not been answered when the work
+	// was done; false with Attested is work done later under a call the
+	// window had answered, while its task stayed live.
+	InFlight bool `lw:"adhocDatasetInFlight,bool"`
 }

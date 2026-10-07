@@ -177,8 +177,11 @@ type record struct {
 	bytes          uint64 // ciphertext
 	createdAt      int64  // unix µs
 	file           *sealed.File
-	// streamDigest is the content digest of the stream as sealed.
+	// streamDigest is the content digest of the stream as sealed, and
+	// plainBytes its length: what a reader receives, where bytes is the
+	// ciphertext the quotas count.
 	streamDigest string
+	plainBytes   uint64
 	// context is the attested call that published the live revision; set
 	// for a bundle's datasets an agent's call published.
 	context option.Option[app.CallContext]
@@ -249,8 +252,9 @@ type Service struct {
 
 	trail   *trail.Recorder
 	callCtx atomic.Pointer[callContextRef]
-	auditMu sync.Mutex
-	audits  []AuditRecord
+	// auditHook, when set, sees every audit record as it is made; the
+	// package's tests set it, production leaves the trail the one record.
+	auditHook atomic.Pointer[func(AuditRecord)]
 
 	mu         sync.RWMutex
 	live       map[string]*record
@@ -422,7 +426,7 @@ func (inst *Service) Publish(in PublishInput) (res PublishResult, err error) {
 	if err != nil {
 		return res, eh.Errorf("adhocdata: allocate sealed file: %w", err)
 	}
-	schema, structure, rows, digest, err := sealStream(f, in.ArrowIPCStream)
+	schema, structure, rows, digest, plain, err := sealStream(f, in.ArrowIPCStream)
 	if err != nil {
 		_ = f.Close()
 		return res, err
@@ -470,7 +474,7 @@ func (inst *Service) Publish(in PublishInput) (res PublishResult, err error) {
 		rec.revision++
 		rec.rows, rec.bytes = rows, nbytes
 		rec.file = f
-		rec.streamDigest = digest
+		rec.streamDigest, rec.plainBytes = digest, plain
 		rec.keepAfterClose = rec.keepAfterClose || in.KeepAfterClose
 		revision, publisher = rec.revision, rec.owner
 		rec.mu.Unlock()
@@ -485,7 +489,7 @@ func (inst *Service) Publish(in PublishInput) (res PublishResult, err error) {
 		rec = &record{
 			handle: handle, alias: in.Alias, owner: in.By, keepAfterClose: in.KeepAfterClose,
 			schema: schema, structure: structure, revision: 1, rows: rows, bytes: nbytes,
-			createdAt: time.Now().UnixMicro(), file: f, streamDigest: digest,
+			createdAt: time.Now().UnixMicro(), file: f, streamDigest: digest, plainBytes: plain,
 		}
 		if regErr := inst.reg.Register(rec); regErr != nil {
 			inst.mu.Unlock()
@@ -797,14 +801,29 @@ func (inst *Service) emitAudit(op, handle, alias string, revision uint64) {
 //
 // digest is the content digest of the stream as sealed — the bytes every
 // reader of the dataset reads — in the trail's form (trail.ContentDigest).
-func sealStream(f *sealed.File, streamBytes []byte) (schema *arrow.Schema, structure string, rows uint64, digest string, err error) {
+//
+// plain is the stream's length as sealed, the size a reader receives.
+func sealStream(f *sealed.File, streamBytes []byte) (schema *arrow.Schema, structure string, rows uint64, digest string, plain uint64, err error) {
 	h := blake3.New(32, nil)
-	schema, structure, rows, err = sealStreamTo(f, streamBytes, PerDatasetMaxBytes, h)
+	cw := &countingWriter{w: h}
+	schema, structure, rows, err = sealStreamTo(f, streamBytes, PerDatasetMaxBytes, cw)
 	if err != nil {
 		return
 	}
 	sum := h.Sum(nil)
-	digest = hex.EncodeToString(sum[:16])
+	digest, plain = hex.EncodeToString(sum[:16]), cw.n
+	return
+}
+
+// countingWriter counts what passes through to w.
+type countingWriter struct {
+	w io.Writer
+	n uint64
+}
+
+func (inst *countingWriter) Write(p []byte) (n int, err error) {
+	n, err = inst.w.Write(p)
+	inst.n += uint64(n)
 	return
 }
 

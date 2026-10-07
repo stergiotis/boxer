@@ -29,6 +29,7 @@ const (
 	kindAdhocDatasetStreamDigests  uint64 = 9223372049739677967
 	kindAdhocDatasetDocumentDigest uint64 = 9223372049739677968
 	kindAdhocDatasetAttested       uint64 = 9223372049739677969
+	kindAdhocDatasetInFlight       uint64 = 9223372049739677970
 )
 
 // adhocDatasetSymbolAttrI is the InAttr-side view of the symbol section. P-variants only —
@@ -247,6 +248,9 @@ func adhocDatasetEmitSectionBool[
 	boolSecAttr_Attested := boolSec.BeginAttribute(row.Attested)
 	boolSecAttr_Attested.AddMembershipLowCardRefP(kindAdhocDatasetAttested)
 	boolSecAttr_Attested.EndAttributeP()
+	boolSecAttr_InFlight := boolSec.BeginAttribute(row.InFlight)
+	boolSecAttr_InFlight.AddMembershipLowCardRefP(kindAdhocDatasetInFlight)
+	boolSecAttr_InFlight.EndAttributeP()
 	return
 }
 
@@ -693,6 +697,9 @@ func adhocDatasetReadRow[
 	var boolAttestedVal bool
 	var boolAttestedCount int
 	var boolAttestedLastAttr int64
+	var boolInFlightVal bool
+	var boolInFlightCount int
+	var boolInFlightLastAttr int64
 	nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nbool; attrJ++ {
 		for membID := range boolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -704,6 +711,13 @@ func adhocDatasetReadRow[
 				}
 				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				boolAttestedVal = val
+			case kindAdhocDatasetInFlight:
+				if boolInFlightLastAttr != attrJ+1 {
+					boolInFlightLastAttr = attrJ + 1
+					boolInFlightCount++
+				}
+				val := boolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				boolInFlightVal = val
 			}
 		}
 	}
@@ -713,6 +727,14 @@ func adhocDatasetReadRow[
 	}
 	if boolAttestedCount == 1 {
 		row.Attested = boolAttestedVal
+		present = true
+	}
+	if boolInFlightCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "bool").Str("membership", "adhocDatasetInFlight").Int("got", boolInFlightCount).Errorf("slot bool@adhocDatasetInFlight (field InFlight) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", boolInFlightCount)
+		return
+	}
+	if boolInFlightCount == 1 {
+		row.InFlight = boolInFlightVal
 		present = true
 	}
 	return

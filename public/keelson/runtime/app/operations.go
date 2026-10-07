@@ -407,6 +407,11 @@ type CallContext struct {
 	App       AppIdT
 	Instance  uint64
 	Operation string
+	// InFlight is true when the window had not answered the call yet:
+	// work its handler did. False is work the window did later, under a
+	// call it had answered while the task stayed live (ADR-0288
+	// (proposed) §SD5).
+	InFlight bool
 }
 
 // CallContextI attests an on-behalf-of context for a host service that
