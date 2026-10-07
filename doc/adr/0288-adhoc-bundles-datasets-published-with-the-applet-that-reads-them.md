@@ -135,15 +135,20 @@ a dataset whole, through a read that takes no statement.
 
   `publish_result` is consequential as ADR-0269 §SD5 defines publishing:
   the person confirms each one, unless the task's grant carries
-  `publish:<prefix>` and the bundle's alias starts with that prefix. The
+  `publish:<prefix>` and the bundle's alias starts with that prefix
+  (`app.OperationConsent`, which any consequential command may declare). The
   person approves that grant as any other (ADR-0269 §SD6) — standing
   consent for the task's lifetime, scoped by name — and each publish under
   it is still audited, with the destination that admitted it. A prefix is
   at least one character, and the grant never covers an alias another
-  owner holds (SD3). The person publishes too: play's result bar has a
-  Publish action that opens the same form — bundle alias, panes — and its
-  publish is the person's, audited without a call context. It publishes only a whole main result: a
-  result the row cap cut short is refused, since a dataset made of a prefix
+  owner holds (SD3). Consent waives the confirmation, not the mode: in
+  suggest mode the call is still a proposal, which the person accepts.
+  The person publishes too: play's top bar has a Publish menu with the
+  same form — bundle alias, panes — and their publish runs the same
+  handler, audited without a call context.
+
+  `publish_result` publishes only a whole main result: a result the row
+  cap cut short is refused, since a dataset made of a prefix
   would miss rows with nothing to say so, and a node's lane does not record
   whether it was cut. An agent's run reading a bundle needs
   `keelson-bundle:<bundle>` or `keelson:<global alias>` in its grant; both
@@ -271,11 +276,11 @@ a dataset whole, through a read that takes no statement.
 - **M6 — Bundle views:** ✓ plain views; adhocdemo is a receiver.
 - **M7 — Operable views:** mounted commands in appops and the `bundle_`
   subset.
-- **M8 — Publish grants:** the `publish:<prefix>` destination; a covered
-  `publish_result` applied without a confirmation and audited with it.
-- **M9 — Column summaries:** computed while sealing, in the bundle catalog
-  and on the trail row.
-- **M10 — The person's publish:** the Publish action in play's result bar.
+- **M8 — Publish grants:** ✓ `app.OperationConsent`; `publish_result`
+  declares `{publish, bundle}`.
+- **M9 — Column summaries:** ✓ in the bundle catalog, on the trail row,
+  in `list_bundles`.
+- **M10 — The person's publish:** ✓ the Publish menu in play's top bar.
 
 ## Surfaces — Tier 1
 
@@ -283,13 +288,13 @@ a dataset whole, through a read that takes no statement.
 | --- | --- | --- |
 | Capability subjects (ADR-0026) | added: `adhoc.bundle.publish`, `.resolve`, `.retract`, `adhoc.bundle.event.>`, `adhoc.read` | the manifests of apps that publish, open, show or read bundles |
 | Bus codecs (ADR-0240 §SD8) | the adhoc request, reply and event kinds gain the bundle, document, streams, handles, provenance, on-behalf-of context, window scope, digest and grant destination | the generated adhoc codecs; vdd's assignment golden |
-| Introspection tables | added: `keelson('adhoc_bundles')` with column summaries (M9); `keelson('adhoc')` gains the bundle and call context | catalog providers |
-| The trail store (ADR-0277) | added: the `AdhocDataset` component, its archetype and view | `runtime/trail` regeneration; `trailviews`; the runtime vocabulary's golden |
-| `app` exported API | added: `CallContext`, `CallContextI` | implemented by the agent dispatcher, wired by hostboot |
+| Introspection tables | added: `keelson('adhoc_bundles')` with column summaries; `keelson('adhoc')` gains the bundle and call context; `keelson('agent_actions')` and `keelson('operations')` gain `consent` | catalog providers |
+| The trail store (ADR-0277) | added: the `AdhocDataset` component, its archetype and view; the agent action row's `Consent` | `runtime/trail` regeneration; `trailviews`; the runtime vocabulary's golden |
+| `app` exported API | added: `CallContext`, `CallContextI`; `OperationSpec.Consent` (`OperationConsent`) | the dispatcher; every view of a catalog the model reads, and `keelson('operations').consent` |
 | `adhocdata` exported API | bundles, provenance, `ReadAllE`, grant errors, window-scoped publishers, local names on `Follower`; publish refuses a held alias | every publisher of a fixed alias |
 | `launchcfg.PlayLaunch` | added: `Bundle`, `DatasetNames` | leeway codec regeneration |
-| play | catalog: `list_bundles`, `open_bundle`, `publish_result`, `bind_dataset as`; API: `PublishBundleE`, `SetAppletDocParser` | play's ops and caps tests; the chat's guidance |
-| Agent grant destinations | added: `keelson-bundle:<bundle>`, host reach; `publish:<prefix>` (M8) | play's agent limits; the dataset read's check |
+| play | catalog: `list_bundles`, `open_bundle`, `publish_result`, `bind_dataset as`; API: `PublishBundleE`, `SetAppletDocParser`; the Publish menu | play's ops and caps tests; the chat's guidance |
+| Agent grant destinations | added: `keelson-bundle:<bundle>` and `publish:<prefix>`, host reach | play's agent limits; the dataset read's check |
 | keelson.query gate (ADR-0253) | refuses sealed tables | `keelsonquery.Gate` |
 | `sqlapplet` | added: `NewBundleView`, `BundleViewCaps`; `BundleViewOps` (M7) | receivers' manifests |
 | `appops` | mounted commands (M7) | catalogs that mount a component |
@@ -443,6 +448,26 @@ summaries computed at seal (M9) and the person's own publish (M10) taken
 into the decision. keelson.query over datasets, parameter values across a
 new document, names carrying identity and units stay deferred on their
 triggers.
+
+### 2026-10-07 — M8–M10 built
+
+- **Consent is the spec's, not publish's.** `app.OperationConsent` names a
+  destination class and the argument it matches, so the dispatcher stays
+  ignorant of bundles and another consequential command can take the same
+  path. Every view of the catalog the model reads shows the consent as
+  `publish:<bundle prefix>`, and a confirmation the grant could have
+  spared says which destination would have, so the model learns what to
+  ask for from the refusal. The action row names the destination that
+  admitted a call.
+- **Summaries are JSON literals.** A minimum, a maximum and each sampled
+  value are JSON, so an empty-string minimum is told apart from a type
+  that does not order; a timestamp, NaN or infinity is a string of its
+  Arrow rendering. The distinct count is a HyperLogLog of precision 12,
+  within 5% in the lane. `list_bundles`' statement now runs in a test
+  against a live catalog on clickhouse-local.
+- **The person's publish is a gesture.** The Publish menu runs
+  `publish_result` through play's catalog as the person, so it takes the
+  same checks and the same audit as an agent's, without a call context.
 
 ## References
 
