@@ -172,6 +172,13 @@ func (inst staticResolver) resolve(_ string, base string, _ string) (dec dispatc
 		class:     dispatchClassManual,
 		reason:    "pinned endpoint",
 	}
+	// A window pinned to this process's own introspection endpoint — an
+	// applet or a bundle view on `endpoint: introspection` — runs on the
+	// introspection plane: the agent limits and the locality wall judge it
+	// by that identity, not as a server whose host a grant must list.
+	if ep := introspect.LocalQueryEndpoint(); ep != "" && base == ep {
+		dec.class, dec.reason = dispatchClassIntrospection, "pinned to the introspection endpoint"
+	}
 	return
 }
 

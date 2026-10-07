@@ -57,6 +57,10 @@ type BundleViewConfig struct {
 	InstanceKey uint64
 	// Rules is the gloss rule repository; nil takes play's default.
 	Rules *gloss.Repository
+	// Operable offers the view's play operations to agents through the
+	// receiver's catalog (ADR-0288 (proposed) §SD8, BundleViewOps); a plain
+	// view is drawn for the person only.
+	Operable bool
 }
 
 // BundleView shows one bundle. Build it with NewBundleView, call Frame
@@ -71,6 +75,8 @@ type BundleView struct {
 	revision uint64
 	digest   string
 	runnable bool
+	// panes are the result panes the embedded play shows.
+	panes    []string
 	failed   string
 	polled   bool
 	nextPoll time.Time
@@ -121,6 +127,25 @@ func (inst *BundleView) Revision() (revision uint64) { return inst.revision }
 
 // Inner is the embedded play, nil until the bundle was first applied.
 func (inst *BundleView) Inner() (inner *play.PlayApp) { return inst.inner }
+
+// Operable reports whether the view offers its operations to agents.
+func (inst *BundleView) Operable() (operable bool) { return inst.cfg.Operable }
+
+// Panes are the result panes the view shows; render goroutine only.
+func (inst *BundleView) Panes() (panes []string) { return inst.panes }
+
+// Waiting says what the view waits for, empty once it shows the bundle.
+func (inst *BundleView) Waiting() (why string) {
+	if inst.failed != "" {
+		return inst.failed
+	}
+	if inst.inner != nil {
+		return ""
+	}
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	return inst.waiting
+}
 
 // Close stops following the bundle and releases the embedded play.
 func (inst *BundleView) Close() {
@@ -190,6 +215,9 @@ func (inst *BundleView) Frame(ctx app.FrameContextI) (err error) {
 		c.Label("Waiting for bundle " + inst.alias + ": " + waiting).Send()
 		return nil
 	}
+	if inst.cfg.Operable {
+		return inst.inner.FrameServed(ctx)
+	}
 	return inst.inner.Frame(ctx)
 }
 
@@ -248,6 +276,10 @@ func (inst *BundleView) apply(res adhocdata.BundleResult) {
 			inst.follower = nil
 		}
 		inst.inner, inst.failed = inner, ""
+		inst.panes = inst.panes[:0]
+		for _, spec := range inner.Tabs().Specs() {
+			inst.panes = append(inst.panes, spec.ID)
+		}
 	}
 	names := make(map[string]string, len(res.Datasets))
 	for _, d := range res.Datasets {
@@ -260,6 +292,11 @@ func (inst *BundleView) apply(res adhocdata.BundleResult) {
 		for _, d := range res.Datasets {
 			inst.follower.FollowAs(d.Alias, d.LocalName)
 		}
+	}
+	for _, d := range res.Datasets {
+		// A grant names the dataset by its bundle or its alias, never by
+		// the name the document reads it under (ADR-0288 §SD3).
+		inst.inner.SetDatasetOrigin(d.LocalName, d.Alias, inst.alias)
 	}
 	inst.revision, inst.digest = res.Revision, res.DocumentDigest
 	inst.inner.SetDatasetNotice(nil)

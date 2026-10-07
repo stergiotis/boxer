@@ -782,6 +782,8 @@ type PlayApp struct {
 	toolbarMinimal bool
 	// publish is the Publish menu (ADR-0288 §SD4), offered by the launcher.
 	publish publishMenu
+	// served is the handler ServedOperations made, kept across frames.
+	served app.OperationsHandlerI
 	// openPlaygroundBundle, when set, is the bundle "Open in Playground"
 	// opens instead of the buffer (SetOpenPlaygroundBundle).
 	openPlaygroundBundle string

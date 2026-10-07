@@ -84,7 +84,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 		return
 	}
 	inst.view = sqlapplet.NewBundleView(inst.bundle, sqlapplet.BundleViewConfig{Bus: inst.bus, Log: inst.log,
-		RunId: inst.runId, StampAppId: string(ManifestId) + "#items", InstanceKey: ctx.InstanceKey()})
+		RunId: inst.runId, StampAppId: string(ManifestId) + "#items", InstanceKey: ctx.InstanceKey(), Operable: true})
 	return
 }
 

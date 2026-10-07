@@ -35,6 +35,7 @@ var manifest = app.Manifest{
 			Reason:    "adhocdemo: publish and republish the computed series as an ad-hoc bundle (ADR-0288)",
 		},
 	}, sqlapplet.BundleViewCaps...),
+	Operations: adhocOps.Catalog(),
 }
 
 func init() {
