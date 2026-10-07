@@ -17,17 +17,21 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog"
+	"lukechampine.com/blake3"
 
+	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sealed"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -98,6 +102,10 @@ type Config struct {
 	Log zerolog.Logger
 	// RetractGrace overrides DefaultRetractGrace; zero keeps the default.
 	RetractGrace time.Duration
+	// Trail is the host's audit trail (ADR-0277); every bundle operation
+	// lands there (ADR-0288 (proposed) §SD5). Nil keeps only the
+	// in-process record.
+	Trail *trail.Recorder
 }
 
 // PublishInput is the in-process shape of a publish (the bus wire mirrors
@@ -153,6 +161,11 @@ type record struct {
 	bytes          uint64 // ciphertext
 	createdAt      int64  // unix µs
 	file           *sealed.File
+	// streamDigest is the content digest of the stream as sealed.
+	streamDigest string
+	// context is the attested call that published the live revision; set
+	// for a bundle's datasets an agent's call published.
+	context option.Option[app.CallContext]
 }
 
 var _ introspect.EncryptedDatasetI = (*record)(nil)
@@ -218,6 +231,11 @@ type Service struct {
 	busClient *inprocbus.Client
 	unsubs    []func()
 
+	trail   *trail.Recorder
+	callCtx atomic.Pointer[callContextRef]
+	auditMu sync.Mutex
+	audits  []AuditRecord
+
 	mu         sync.RWMutex
 	live       map[string]*record
 	bundles    map[string]*bundleRec  // by bundle alias
@@ -246,6 +264,7 @@ func NewService(cfg Config) (inst *Service, err error) {
 		dir:          dir,
 		log:          cfg.Log,
 		retractGrace: grace,
+		trail:        cfg.Trail,
 		live:         make(map[string]*record),
 		bundles:      make(map[string]*bundleRec),
 		leaving:      make(map[string]*time.Timer),
@@ -384,7 +403,7 @@ func (inst *Service) Publish(in PublishInput) (res PublishResult, err error) {
 	if err != nil {
 		return res, eh.Errorf("adhocdata: allocate sealed file: %w", err)
 	}
-	schema, structure, rows, err := sealStream(f, in.ArrowIPCStream)
+	schema, structure, rows, digest, err := sealStream(f, in.ArrowIPCStream)
 	if err != nil {
 		_ = f.Close()
 		return res, err
@@ -432,6 +451,7 @@ func (inst *Service) Publish(in PublishInput) (res PublishResult, err error) {
 		rec.revision++
 		rec.rows, rec.bytes = rows, nbytes
 		rec.file = f
+		rec.streamDigest = digest
 		rec.keepAfterClose = rec.keepAfterClose || in.KeepAfterClose
 		revision, publisher = rec.revision, rec.owner
 		rec.mu.Unlock()
@@ -446,7 +466,7 @@ func (inst *Service) Publish(in PublishInput) (res PublishResult, err error) {
 		rec = &record{
 			handle: handle, alias: in.Alias, owner: in.By, keepAfterClose: in.KeepAfterClose,
 			schema: schema, structure: structure, revision: 1, rows: rows, bytes: nbytes,
-			createdAt: time.Now().UnixMicro(), file: f,
+			createdAt: time.Now().UnixMicro(), file: f, streamDigest: digest,
 		}
 		if regErr := inst.reg.Register(rec); regErr != nil {
 			inst.mu.Unlock()
@@ -651,7 +671,7 @@ func (inst *Service) retractOwnedBy(who Identity) (retracted int) {
 	}
 	inst.mu.RUnlock()
 	for _, alias := range bundles {
-		if err := inst.RetractBundle(alias, Identity{}); err == nil {
+		if err := inst.retractBundle(alias, Identity{}, option.None[app.CallContext](), AuditWithdraw); err == nil {
 			retracted++
 		}
 	}
@@ -735,8 +755,18 @@ func (inst *Service) emitAudit(op, handle, alias string, revision uint64) {
 // writes it batch by batch into the sealed file — one pass, no canonical
 // copy — returning the schema, its ClickHouse structure and the row count.
 // The writer is closed on success; on failure the caller closes the file.
-func sealStream(f *sealed.File, streamBytes []byte) (schema *arrow.Schema, structure string, rows uint64, err error) {
-	return sealStreamCapped(f, streamBytes, PerDatasetMaxBytes)
+//
+// digest is the content digest of the stream as sealed — the bytes every
+// reader of the dataset reads — in the trail's form (trail.ContentDigest).
+func sealStream(f *sealed.File, streamBytes []byte) (schema *arrow.Schema, structure string, rows uint64, digest string, err error) {
+	h := blake3.New(32, nil)
+	schema, structure, rows, err = sealStreamTo(f, streamBytes, PerDatasetMaxBytes, h)
+	if err != nil {
+		return
+	}
+	sum := h.Sum(nil)
+	digest = hex.EncodeToString(sum[:16])
+	return
 }
 
 // sealStreamCapped is sealStream with the plaintext bounded by limit. A
@@ -749,6 +779,12 @@ func sealStream(f *sealed.File, streamBytes []byte) (schema *arrow.Schema, struc
 // counted, and a budget of limit alone would refuse a compressed stream
 // that decodes to well under the quota.
 func sealStreamCapped(f *sealed.File, streamBytes []byte, limit uint64) (schema *arrow.Schema, structure string, rows uint64, err error) {
+	return sealStreamTo(f, streamBytes, limit, nil)
+}
+
+// sealStreamTo is sealStreamCapped writing every sealed plaintext byte to
+// tee as well, when tee is set.
+func sealStreamTo(f *sealed.File, streamBytes []byte, limit uint64, tee io.Writer) (schema *arrow.Schema, structure string, rows uint64, err error) {
 	budget := &budgetAllocator{limit: limit + uint64(len(streamBytes))}
 	rdr, err := ipc.NewReader(bytes.NewReader(streamBytes), ipc.WithAllocator(budget))
 	if err != nil {
@@ -764,7 +800,11 @@ func sealStreamCapped(f *sealed.File, streamBytes []byte, limit uint64) (schema 
 	if err != nil {
 		return nil, "", 0, err
 	}
-	w := ipc.NewWriter(&cappedWriter{w: sw, limit: limit}, ipc.WithSchema(schema))
+	var out io.Writer = sw
+	if tee != nil {
+		out = io.MultiWriter(sw, tee)
+	}
+	w := ipc.NewWriter(&cappedWriter{w: out, limit: limit}, ipc.WithSchema(schema))
 	for rdr.Next() {
 		rec := rdr.RecordBatch()
 		rows += uint64(rec.NumRows())

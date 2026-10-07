@@ -236,3 +236,6 @@
 231	adhoc-local-names	12884902119
 232	adhoc-arrow-streams	12884902120
 233	adhoc-handles	12884902121
+234	adhoc-obo-task	12884902122
+235	adhoc-obo-epoch	12884902123
+236	adhoc-obo-call	12884902124

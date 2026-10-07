@@ -144,7 +144,8 @@ func PublishBundleRequest(bus app.BusI, in BundlePublishInput) (res BundleResult
 	req := adhocrequest.AdhocRequest{
 		At: time.Now().UTC(), Op: adhocrequest.OpPublish, Bundle: in.Alias, Document: in.Document,
 		KeepAfterClose: in.KeepAfterClose,
-		LocalNames:     make([]string, 0, len(in.Datasets)), ArrowStreams: make([][]byte, 0, len(in.Datasets)),
+		OboTask:        oboTask(in.OnBehalfOf), OboEpoch: oboEpoch(in.OnBehalfOf), OboCall: oboCall(in.OnBehalfOf),
+		LocalNames: make([]string, 0, len(in.Datasets)), ArrowStreams: make([][]byte, 0, len(in.Datasets)),
 	}
 	for _, d := range in.Datasets {
 		req.LocalNames = append(req.LocalNames, d.LocalName)
@@ -159,10 +160,12 @@ func PublishBundleRequest(bus app.BusI, in BundlePublishInput) (res BundleResult
 
 // ResolveBundleRequest returns the live bundle under alias — its document
 // and its datasets' local names, aliases and handles — via
-// adhoc.bundle.resolve. Nothing live is a typed ErrNoLiveBundle.
-func ResolveBundleRequest(bus app.BusI, alias string) (res BundleResult, err error) {
+// adhoc.bundle.resolve. Nothing live is a typed ErrNoLiveBundle. obo is
+// the agent's call the resolve is work of, nil when it is none.
+func ResolveBundleRequest(bus app.BusI, alias string, obo *app.OnBehalfOf) (res BundleResult, err error) {
 	payload, err := buscodec.Encode(adhocrequest.AdhocRequest{
 		At: time.Now().UTC(), Op: adhocrequest.OpResolve, Bundle: alias,
+		OboTask: oboTask(obo), OboEpoch: oboEpoch(obo), OboCall: oboCall(obo),
 	})
 	if err != nil {
 		return res, eh.Errorf("encode bundle resolve: %w", err)
@@ -184,11 +187,34 @@ func ResolveBundleRequest(bus app.BusI, alias string) (res BundleResult, err err
 	return bundleResultOf(rep), nil
 }
 
-// RetractBundleRequest retracts a bundle whole via adhoc.bundle.retract.
-func RetractBundleRequest(bus app.BusI, alias string) (err error) {
+// RetractBundleRequest retracts a bundle whole via adhoc.bundle.retract;
+// obo is the agent's call the retract is work of, nil when it is none.
+func RetractBundleRequest(bus app.BusI, alias string, obo *app.OnBehalfOf) (err error) {
 	_, err = request(bus, SubjectBundleRetract, adhocrequest.AdhocRequest{
 		At: time.Now().UTC(), Op: adhocrequest.OpRetract, Bundle: alias,
+		OboTask: oboTask(obo), OboEpoch: oboEpoch(obo), OboCall: oboCall(obo),
 	}, "retract-bundle")
+	return
+}
+
+func oboTask(obo *app.OnBehalfOf) (s string) {
+	if obo != nil {
+		s = obo.Task
+	}
+	return
+}
+
+func oboEpoch(obo *app.OnBehalfOf) (e uint64) {
+	if obo != nil {
+		e = obo.Epoch
+	}
+	return
+}
+
+func oboCall(obo *app.OnBehalfOf) (s string) {
+	if obo != nil {
+		s = obo.Call
+	}
 	return
 }
 

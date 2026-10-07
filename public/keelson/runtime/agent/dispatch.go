@@ -146,7 +146,11 @@ type callRec struct {
 	spec          app.OperationSpec
 	// routed is true once the call reached the instance; until then, or
 	// when the dispatcher decided it, outcome is all there is.
-	routed  bool
+	routed bool
+	// sent is true from the moment the call is put on the bus to its
+	// window, which then holds its on-behalf-of context; a call turned
+	// back into a proposal is unsent again.
+	sent    bool
 	outcome opwire.Outcome
 	// job is a capture's job id; capture what the capture record needs.
 	job     string
@@ -581,6 +585,9 @@ func (inst *Service) route(t *task, rec *callRec, req wireCall, spec app.Operati
 		inst.record(t, rec, "dispatch", out)
 		return
 	}
+	inst.mu.Lock()
+	rec.sent = true
+	inst.mu.Unlock()
 	raw, err := inst.busClient.RequestWithTimeout(opwire.Subject(alias, req.Instance, spec.Name), payload, DefaultTimeout)
 	if err != nil {
 		out := phaseOutcome(opwire.PhaseFailed, "the instance did not answer: "+err.Error())

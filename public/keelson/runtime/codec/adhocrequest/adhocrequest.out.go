@@ -42,6 +42,9 @@ var (
 	kindAdhocDocument       uint64
 	kindAdhocLocalNames     uint64
 	kindAdhocArrowStreams   uint64
+	kindAdhocOboTask        uint64
+	kindAdhocOboEpoch       uint64
+	kindAdhocOboCall        uint64
 )
 
 func init() {
@@ -54,6 +57,9 @@ func init() {
 	kindAdhocDocument = vdd.MembAdhocDocument.GetId().Value()
 	kindAdhocLocalNames = vdd.MembAdhocLocalNames.GetId().Value()
 	kindAdhocArrowStreams = vdd.MembAdhocArrowStreams.GetId().Value()
+	kindAdhocOboTask = vdd.MembAdhocOboTask.GetId().Value()
+	kindAdhocOboEpoch = vdd.MembAdhocOboEpoch.GetId().Value()
+	kindAdhocOboCall = vdd.MembAdhocOboCall.GetId().Value()
 	buscodec.Register[AdhocRequest](adhocRequestBusCodec)
 }
 
@@ -62,7 +68,7 @@ func init() {
 // AdhocRequestActiveSections is the dml_cbor section-index subset this kind
 // populates. Passed to InEntityFacts.SetActiveSections so the
 // builder skips beginSection list-slot work for inactive sections.
-var AdhocRequestActiveSections = []int{0, 1, 9, 10}
+var AdhocRequestActiveSections = []int{0, 1, 9, 10, 18}
 
 // AdhocRequestActiveFields is the column-index subset this kind populates
 // in the boxer.facts Arrow schema. Lazily computed once via
@@ -71,7 +77,7 @@ var AdhocRequestActiveSections = []int{0, 1, 9, 10}
 // plain prefixes (id:, ts:, lc:). Driven through RecordBuilder.
 // SetActiveFields to skip per-row emit walks for unused columns.
 var AdhocRequestActiveFields = sync.OnceValue(func() []int {
-	active := map[string]bool{"blobArray": true, "bool": true, "stringArray": true, "symbol": true}
+	active := map[string]bool{"blobArray": true, "bool": true, "stringArray": true, "symbol": true, "u64Array": true}
 	schema := cbdml.CreateSchemaFacts()
 	out := make([]int, 0, 4+len(active)*8)
 	for i, f := range schema.Fields() {
@@ -126,6 +132,9 @@ type AdhocRequestColumns struct {
 	Document       [][]byte
 	LocalNames     [][]string
 	ArrowStreams   [][][]byte
+	OboTask        []string
+	OboEpoch       []uint64
+	OboCall        []string
 }
 
 // Len returns the number of rows currently in the batch.
@@ -150,6 +159,9 @@ func (c *AdhocRequestColumns) Append(row AdhocRequest) {
 	c.Document = append(c.Document, row.Document)
 	c.LocalNames = append(c.LocalNames, row.LocalNames)
 	c.ArrowStreams = append(c.ArrowStreams, row.ArrowStreams)
+	c.OboTask = append(c.OboTask, row.OboTask)
+	c.OboEpoch = append(c.OboEpoch, row.OboEpoch)
+	c.OboCall = append(c.OboCall, row.OboCall)
 }
 
 // Row reconstructs entity i as an AoS AdhocRequest record. Inverse of
@@ -168,6 +180,9 @@ func (c *AdhocRequestColumns) Row(i int) (row AdhocRequest) {
 	row.Document = c.Document[i]
 	row.LocalNames = c.LocalNames[i]
 	row.ArrowStreams = c.ArrowStreams[i]
+	row.OboTask = c.OboTask[i]
+	row.OboEpoch = c.OboEpoch[i]
+	row.OboCall = c.OboCall[i]
 	return
 }
 
@@ -248,6 +263,21 @@ type AdhocRequestBlobArraySecI[Attr any, Ent any] interface {
 	EndSection() Ent
 }
 
+// AdhocRequestU64ArrayAttrI is the InAttr-side view of the u64Array section. P-variants only —
+// every method returns void so no F-bounded `[Self]` parameter is
+// needed.
+type AdhocRequestU64ArrayAttrI interface {
+	dmlruntime.InAttributeMembershipLowCardRefPI
+	EndAttributeP()
+}
+
+// AdhocRequestU64ArraySecI is the Section-side view: opens an attribute and closes
+// the section. Attr and Ent are bound at the call site by inference.
+type AdhocRequestU64ArraySecI[Attr any, Ent any] interface {
+	BeginAttributeSingle(value uint64) Attr
+	EndSection() Ent
+}
+
 // AdhocRequestEntityI is the entity-builder surface AdhocRequestAddSections drives.
 // It always lists the per-section getters; the entity-frame methods
 // (BeginEntity / plain setters / CommitEntity) are added only for the
@@ -264,6 +294,8 @@ type AdhocRequestEntityI[
 	BoolSec AdhocRequestBoolSecI[BoolAttr, Ent],
 	BlobArrayAttr AdhocRequestBlobArrayAttrI,
 	BlobArraySec AdhocRequestBlobArraySecI[BlobArrayAttr, Ent],
+	U64ArrayAttr AdhocRequestU64ArrayAttrI,
+	U64ArraySec AdhocRequestU64ArraySecI[U64ArrayAttr, Ent],
 	Ent any,
 ] interface {
 	BeginEntity() Ent
@@ -273,6 +305,7 @@ type AdhocRequestEntityI[
 	GetSectionStringArray() StringArraySec
 	GetSectionBool() BoolSec
 	GetSectionBlobArray() BlobArraySec
+	GetSectionU64Array() U64ArraySec
 	CommitEntity() (err error)
 }
 
@@ -289,12 +322,15 @@ func AdhocRequestBuildEntities[
 	BoolSec AdhocRequestBoolSecI[BoolAttr, Ent],
 	BlobArrayAttr AdhocRequestBlobArrayAttrI,
 	BlobArraySec AdhocRequestBlobArraySecI[BlobArrayAttr, Ent],
+	U64ArrayAttr AdhocRequestU64ArrayAttrI,
+	U64ArraySec AdhocRequestU64ArraySecI[U64ArrayAttr, Ent],
 	Ent any,
 	DML AdhocRequestEntityI[
 		SymbolAttr, SymbolSec,
 		StringArrayAttr, StringArraySec,
 		BoolAttr, BoolSec,
 		BlobArrayAttr, BlobArraySec,
+		U64ArrayAttr, U64ArraySec,
 		Ent,
 	],
 ](dml DML, c *AdhocRequestColumns) (err error) {
@@ -320,6 +356,12 @@ func AdhocRequestBuildEntities[
 		stringArraySecAttr_Handle := stringArraySec.BeginAttributeSingle(c.Handle[i])
 		stringArraySecAttr_Handle.AddMembershipLowCardRefP(kindAdhocHandle)
 		stringArraySecAttr_Handle.EndAttributeP()
+		stringArraySecAttr_OboTask := stringArraySec.BeginAttributeSingle(c.OboTask[i])
+		stringArraySecAttr_OboTask.AddMembershipLowCardRefP(kindAdhocOboTask)
+		stringArraySecAttr_OboTask.EndAttributeP()
+		stringArraySecAttr_OboCall := stringArraySec.BeginAttributeSingle(c.OboCall[i])
+		stringArraySecAttr_OboCall.AddMembershipLowCardRefP(kindAdhocOboCall)
+		stringArraySecAttr_OboCall.EndAttributeP()
 		if len(c.LocalNames[i]) > 0 {
 			stringArraySecAttr_LocalNames := stringArraySec.BeginAttribute()
 			for _, v := range c.LocalNames[i] {
@@ -352,6 +394,12 @@ func AdhocRequestBuildEntities[
 			blobArraySecAttr_ArrowStreams.EndAttributeP()
 		}
 		blobArraySec.EndSection()
+		// --- u64Array. ---
+		u64ArraySec := dml.GetSectionU64Array()
+		u64ArraySecAttr_OboEpoch := u64ArraySec.BeginAttributeSingle(c.OboEpoch[i])
+		u64ArraySecAttr_OboEpoch.AddMembershipLowCardRefP(kindAdhocOboEpoch)
+		u64ArraySecAttr_OboEpoch.EndAttributeP()
+		u64ArraySec.EndSection()
 		err = dml.CommitEntity()
 		if err != nil {
 			err = eh.Errorf("commit row %d: %w", i, err)
@@ -394,6 +442,12 @@ func AdhocRequestEmitSectionStringArray[
 	stringArraySecAttr_Handle := stringArraySec.BeginAttributeSingle(row.Handle)
 	stringArraySecAttr_Handle.AddMembershipLowCardRefP(kindAdhocHandle)
 	stringArraySecAttr_Handle.EndAttributeP()
+	stringArraySecAttr_OboTask := stringArraySec.BeginAttributeSingle(row.OboTask)
+	stringArraySecAttr_OboTask.AddMembershipLowCardRefP(kindAdhocOboTask)
+	stringArraySecAttr_OboTask.EndAttributeP()
+	stringArraySecAttr_OboCall := stringArraySec.BeginAttributeSingle(row.OboCall)
+	stringArraySecAttr_OboCall.AddMembershipLowCardRefP(kindAdhocOboCall)
+	stringArraySecAttr_OboCall.EndAttributeP()
 	if len(row.LocalNames) > 0 {
 		stringArraySecAttr_LocalNames := stringArraySec.BeginAttribute()
 		for _, v := range row.LocalNames {
@@ -446,6 +500,21 @@ func AdhocRequestEmitSectionBlobArray[
 	return
 }
 
+// AdhocRequestEmitSectionU64Array writes this kind's u64Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func AdhocRequestEmitSectionU64Array[
+	U64ArrayAttr AdhocRequestU64ArrayAttrI,
+	U64ArraySec AdhocRequestU64ArraySecI[U64ArrayAttr, Ent],
+	Ent any,
+](u64ArraySec U64ArraySec, row AdhocRequest) (err error) {
+	u64ArraySecAttr_OboEpoch := u64ArraySec.BeginAttributeSingle(row.OboEpoch)
+	u64ArraySecAttr_OboEpoch.AddMembershipLowCardRefP(kindAdhocOboEpoch)
+	u64ArraySecAttr_OboEpoch.EndAttributeP()
+	return
+}
+
 // AdhocRequestAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -458,12 +527,15 @@ func AdhocRequestAddSections[
 	BoolSec AdhocRequestBoolSecI[BoolAttr, Ent],
 	BlobArrayAttr AdhocRequestBlobArrayAttrI,
 	BlobArraySec AdhocRequestBlobArraySecI[BlobArrayAttr, Ent],
+	U64ArrayAttr AdhocRequestU64ArrayAttrI,
+	U64ArraySec AdhocRequestU64ArraySecI[U64ArrayAttr, Ent],
 	Ent any,
 	DML AdhocRequestEntityI[
 		SymbolAttr, SymbolSec,
 		StringArrayAttr, StringArraySec,
 		BoolAttr, BoolSec,
 		BlobArrayAttr, BlobArraySec,
+		U64ArrayAttr, U64ArraySec,
 		Ent,
 	],
 ](dml DML, row AdhocRequest) (err error) {
@@ -495,6 +567,13 @@ func AdhocRequestAddSections[
 		return
 	}
 	blobArraySec.EndSection()
+	// --- u64Array. ---
+	u64ArraySec := dml.GetSectionU64Array()
+	err = AdhocRequestEmitSectionU64Array(u64ArraySec, row)
+	if err != nil {
+		return
+	}
+	u64ArraySec.EndSection()
 	return
 }
 
@@ -551,6 +630,17 @@ type AdhocRequestBlobArrayMembsReadI interface {
 	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
+// AdhocRequestU64ArrayAttrsReadI is the Attributes-side view of the u64Array section.
+type AdhocRequestU64ArrayAttrsReadI interface {
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (uint64, error)
+	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
+}
+
+// AdhocRequestU64ArrayMembsReadI is the Memberships-side view of the u64Array section.
+type AdhocRequestU64ArrayMembsReadI interface {
+	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
+}
+
 // AdhocRequestFillFromArrow walks rec row-by-row and appends each entity's
 // plain + tagged-section values into c. Plain columns enter as
 // concrete Arrow accessors; per-section Attrs + Membs bind through
@@ -564,6 +654,8 @@ func AdhocRequestFillFromArrow[
 	BoolMembs AdhocRequestBoolMembsReadI,
 	BlobArrayAttrs AdhocRequestBlobArrayAttrsReadI,
 	BlobArrayMembs AdhocRequestBlobArrayMembsReadI,
+	U64ArrayAttrs AdhocRequestU64ArrayAttrsReadI,
+	U64ArrayMembs AdhocRequestU64ArrayMembsReadI,
 ](
 	c *AdhocRequestColumns,
 	n int,
@@ -578,6 +670,8 @@ func AdhocRequestFillFromArrow[
 	boolMembs BoolMembs,
 	blobArrayAttrs BlobArrayAttrs,
 	blobArrayMembs BlobArrayMembs,
+	u64ArrayAttrs U64ArrayAttrs,
+	u64ArrayMembs U64ArrayMembs,
 ) (err error) {
 	for i := 0; i < n; i++ {
 		c.FactId = append(c.FactId, idCol.Value(i))
@@ -645,6 +739,12 @@ func AdhocRequestFillFromArrow[
 		var stringArrayHandleVal string
 		var stringArrayHandleCount int
 		var stringArrayHandleLastAttr int64
+		var stringArrayOboTaskVal string
+		var stringArrayOboTaskCount int
+		var stringArrayOboTaskLastAttr int64
+		var stringArrayOboCallVal string
+		var stringArrayOboCallCount int
+		var stringArrayOboCallLastAttr int64
 		var stringArrayLocalNamesSlice []string
 		var stringArrayLocalNamesCount int
 		var stringArrayLocalNamesLastAttr int64
@@ -663,6 +763,28 @@ func AdhocRequestFillFromArrow[
 						return
 					}
 					stringArrayHandleVal = val
+				case kindAdhocOboTask:
+					if stringArrayOboTaskLastAttr != attrJ+1 {
+						stringArrayOboTaskLastAttr = attrJ + 1
+						stringArrayOboTaskCount++
+					}
+					val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocOboTask").Str("field", "OboTask").Errorf("slot stringArray@adhocOboTask (field OboTask) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
+					stringArrayOboTaskVal = val
+				case kindAdhocOboCall:
+					if stringArrayOboCallLastAttr != attrJ+1 {
+						stringArrayOboCallLastAttr = attrJ + 1
+						stringArrayOboCallCount++
+					}
+					val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocOboCall").Str("field", "OboCall").Errorf("slot stringArray@adhocOboCall (field OboCall) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
+					stringArrayOboCallVal = val
 				case kindAdhocLocalNames:
 					if stringArrayLocalNamesLastAttr != attrJ+1 {
 						stringArrayLocalNamesLastAttr = attrJ + 1
@@ -679,6 +801,16 @@ func AdhocRequestFillFromArrow[
 			return
 		}
 		c.Handle = append(c.Handle, stringArrayHandleVal)
+		if stringArrayOboTaskCount != 1 {
+			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocOboTask").Int("got", stringArrayOboTaskCount).Errorf("slot stringArray@adhocOboTask (field OboTask) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayOboTaskCount)
+			return
+		}
+		c.OboTask = append(c.OboTask, stringArrayOboTaskVal)
+		if stringArrayOboCallCount != 1 {
+			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocOboCall").Int("got", stringArrayOboCallCount).Errorf("slot stringArray@adhocOboCall (field OboCall) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayOboCallCount)
+			return
+		}
+		c.OboCall = append(c.OboCall, stringArrayOboCallVal)
 		if stringArrayLocalNamesCount > 1 {
 			err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocLocalNames").Int("got", stringArrayLocalNamesCount).Errorf("slot stringArray@adhocLocalNames (field LocalNames) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayLocalNamesCount)
 			return
@@ -775,6 +907,33 @@ func AdhocRequestFillFromArrow[
 			return
 		}
 		c.ArrowStreams = append(c.ArrowStreams, blobArrayArrowStreamsSlice)
+		// --- u64Array. ---
+		var u64ArrayOboEpochVal uint64
+		var u64ArrayOboEpochCount int
+		var u64ArrayOboEpochLastAttr int64
+		nu64Array := u64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+		for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
+			for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+				switch membID {
+				case kindAdhocOboEpoch:
+					if u64ArrayOboEpochLastAttr != attrJ+1 {
+						u64ArrayOboEpochLastAttr = attrJ + 1
+						u64ArrayOboEpochCount++
+					}
+					val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					if valErr != nil {
+						err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "adhocOboEpoch").Str("field", "OboEpoch").Errorf("slot u64Array@adhocOboEpoch (field OboEpoch) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+						return
+					}
+					u64ArrayOboEpochVal = val
+				}
+			}
+		}
+		if u64ArrayOboEpochCount != 1 {
+			err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "adhocOboEpoch").Int("got", u64ArrayOboEpochCount).Errorf("slot u64Array@adhocOboEpoch (field OboEpoch) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u64ArrayOboEpochCount)
+			return
+		}
+		c.OboEpoch = append(c.OboEpoch, u64ArrayOboEpochVal)
 	}
 	return
 }
@@ -796,6 +955,8 @@ func AdhocRequestReadRow[
 	BoolMembs AdhocRequestBoolMembsReadI,
 	BlobArrayAttrs AdhocRequestBlobArrayAttrsReadI,
 	BlobArrayMembs AdhocRequestBlobArrayMembsReadI,
+	U64ArrayAttrs AdhocRequestU64ArrayAttrsReadI,
+	U64ArrayMembs AdhocRequestU64ArrayMembsReadI,
 ](
 	i int,
 	symbolAttrs SymbolAttrs,
@@ -806,6 +967,8 @@ func AdhocRequestReadRow[
 	boolMembs BoolMembs,
 	blobArrayAttrs BlobArrayAttrs,
 	blobArrayMembs BlobArrayMembs,
+	u64ArrayAttrs U64ArrayAttrs,
+	u64ArrayMembs U64ArrayMembs,
 ) (row AdhocRequest, present bool, err error) {
 	// --- symbol. ---
 	var symbolOpVal string
@@ -873,6 +1036,12 @@ func AdhocRequestReadRow[
 	var stringArrayHandleVal string
 	var stringArrayHandleCount int
 	var stringArrayHandleLastAttr int64
+	var stringArrayOboTaskVal string
+	var stringArrayOboTaskCount int
+	var stringArrayOboTaskLastAttr int64
+	var stringArrayOboCallVal string
+	var stringArrayOboCallCount int
+	var stringArrayOboCallLastAttr int64
 	var stringArrayLocalNamesSlice []string
 	var stringArrayLocalNamesCount int
 	var stringArrayLocalNamesLastAttr int64
@@ -891,6 +1060,28 @@ func AdhocRequestReadRow[
 					return
 				}
 				stringArrayHandleVal = val
+			case kindAdhocOboTask:
+				if stringArrayOboTaskLastAttr != attrJ+1 {
+					stringArrayOboTaskLastAttr = attrJ + 1
+					stringArrayOboTaskCount++
+				}
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocOboTask").Str("field", "OboTask").Errorf("slot stringArray@adhocOboTask (field OboTask) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				stringArrayOboTaskVal = val
+			case kindAdhocOboCall:
+				if stringArrayOboCallLastAttr != attrJ+1 {
+					stringArrayOboCallLastAttr = attrJ + 1
+					stringArrayOboCallCount++
+				}
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocOboCall").Str("field", "OboCall").Errorf("slot stringArray@adhocOboCall (field OboCall) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				stringArrayOboCallVal = val
 			case kindAdhocLocalNames:
 				if stringArrayLocalNamesLastAttr != attrJ+1 {
 					stringArrayLocalNamesLastAttr = attrJ + 1
@@ -908,6 +1099,22 @@ func AdhocRequestReadRow[
 	}
 	if stringArrayHandleCount == 1 {
 		row.Handle = stringArrayHandleVal
+		present = true
+	}
+	if stringArrayOboTaskCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocOboTask").Int("got", stringArrayOboTaskCount).Errorf("slot stringArray@adhocOboTask (field OboTask) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayOboTaskCount)
+		return
+	}
+	if stringArrayOboTaskCount == 1 {
+		row.OboTask = stringArrayOboTaskVal
+		present = true
+	}
+	if stringArrayOboCallCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "adhocOboCall").Int("got", stringArrayOboCallCount).Errorf("slot stringArray@adhocOboCall (field OboCall) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayOboCallCount)
+		return
+	}
+	if stringArrayOboCallCount == 1 {
+		row.OboCall = stringArrayOboCallVal
 		present = true
 	}
 	if stringArrayLocalNamesCount > 1 {
@@ -1021,6 +1228,36 @@ func AdhocRequestReadRow[
 		row.ArrowStreams = blobArrayArrowStreamsSlice
 		present = true
 	}
+	// --- u64Array. ---
+	var u64ArrayOboEpochVal uint64
+	var u64ArrayOboEpochCount int
+	var u64ArrayOboEpochLastAttr int64
+	nu64Array := u64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
+		for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindAdhocOboEpoch:
+				if u64ArrayOboEpochLastAttr != attrJ+1 {
+					u64ArrayOboEpochLastAttr = attrJ + 1
+					u64ArrayOboEpochCount++
+				}
+				val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "adhocOboEpoch").Str("field", "OboEpoch").Errorf("slot u64Array@adhocOboEpoch (field OboEpoch) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				u64ArrayOboEpochVal = val
+			}
+		}
+	}
+	if u64ArrayOboEpochCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "adhocOboEpoch").Int("got", u64ArrayOboEpochCount).Errorf("slot u64Array@adhocOboEpoch (field OboEpoch) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u64ArrayOboEpochCount)
+		return
+	}
+	if u64ArrayOboEpochCount == 1 {
+		row.OboEpoch = u64ArrayOboEpochVal
+		present = true
+	}
 	return
 }
 
@@ -1065,6 +1302,7 @@ type adhocRequestReader struct {
 	StringArray     *ra.ReadAccessFactsTaggedStringArray
 	Bool            *ra.ReadAccessFactsTaggedBool
 	BlobArray       *ra.ReadAccessFactsTaggedBlobArray
+	U64Array        *ra.ReadAccessFactsTaggedU64Array
 }
 
 func newAdhocRequestReader() *adhocRequestReader {
@@ -1075,6 +1313,7 @@ func newAdhocRequestReader() *adhocRequestReader {
 		StringArray:     ra.NewReadAccessFactsTaggedStringArray(),
 		Bool:            ra.NewReadAccessFactsTaggedBool(),
 		BlobArray:       ra.NewReadAccessFactsTaggedBlobArray(),
+		U64Array:        ra.NewReadAccessFactsTaggedU64Array(),
 	}
 }
 
@@ -1109,6 +1348,11 @@ func (r *adhocRequestReader) loadFromRecord(rec arrow.Record) (err error) {
 		err = eh.Errorf("adhocrequest: load BlobArray: %w", err)
 		return
 	}
+	err = r.U64Array.LoadFromRecord(rec)
+	if err != nil {
+		err = eh.Errorf("adhocrequest: load U64Array: %w", err)
+		return
+	}
 	return
 }
 
@@ -1134,6 +1378,9 @@ func (r *adhocRequestReader) release() {
 	if r.BlobArray != nil {
 		r.BlobArray.Release()
 	}
+	if r.U64Array != nil {
+		r.U64Array.Release()
+	}
 }
 
 // Unmarshal appends one row to c per entity in rec, projecting
@@ -1157,6 +1404,7 @@ func (c *AdhocRequestColumns) Unmarshal(rec arrow.Record) (err error) {
 		r.StringArray.Attributes, r.StringArray.Memberships,
 		r.Bool.Attributes, r.Bool.Memberships,
 		r.BlobArray.Attributes, r.BlobArray.Memberships,
+		r.U64Array.Attributes, r.U64Array.Memberships,
 	)
 	return
 }

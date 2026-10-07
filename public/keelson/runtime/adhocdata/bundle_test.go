@@ -45,7 +45,7 @@ func TestPublishBundleMakesEveryDatasetLiveUnderMintedAliases(t *testing.T) {
 		assert.Equal(t, d.Handle, got.Handle, "the minted alias resolves to the bundle's dataset")
 	}
 
-	again, err := svc.ResolveBundle("sales")
+	again, err := svc.ResolveBundle("sales", windowA, nil)
 	require.NoError(t, err)
 	assert.Equal(t, []byte(testDoc), again.Document)
 	assert.Equal(t, res.Datasets, again.Datasets)
@@ -59,7 +59,7 @@ func TestPublishBundleIsAllOrNothing(t *testing.T) {
 	_, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: ds, By: windowA})
 	require.Error(t, err)
 	assert.Equal(t, 0, svc.LiveCount(), "the dataset that sealed did not go live without its sibling")
-	_, err = svc.ResolveBundle("sales")
+	_, err = svc.ResolveBundle("sales", windowA, nil)
 	assert.ErrorIs(t, err, ErrNoLiveBundle)
 	_, err = svc.Resolve("sales__orders")
 	assert.ErrorIs(t, err, ErrNoLiveDataset)
@@ -123,7 +123,7 @@ func TestBundleOwnershipAndAliasCollisions(t *testing.T) {
 
 	_, err = svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowB})
 	assert.ErrorIs(t, err, ErrNotOwner, "another window cannot republish the bundle")
-	assert.ErrorIs(t, svc.RetractBundle("sales", windowB), ErrNotOwner)
+	assert.ErrorIs(t, svc.RetractBundle("sales", windowB, nil), ErrNotOwner)
 
 	_, err = svc.Publish(PublishInput{Alias: "sales__orders", ArrowIPCStream: int64Stream(t, false, 1), By: windowB})
 	assert.ErrorIs(t, err, ErrAliasHeld, "a dataset cannot take a bundle member's alias")
@@ -146,9 +146,9 @@ func TestRetractBundleWithdrawsItWhole(t *testing.T) {
 	svc := newTestService(t)
 	res, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA})
 	require.NoError(t, err)
-	require.NoError(t, svc.RetractBundle("sales", windowA))
+	require.NoError(t, svc.RetractBundle("sales", windowA, nil))
 	assert.Equal(t, 0, svc.LiveCount())
-	_, err = svc.ResolveBundle("sales")
+	_, err = svc.ResolveBundle("sales", windowA, nil)
 	assert.ErrorIs(t, err, ErrNoLiveBundle)
 	svc.FlushRetracts()
 	for _, d := range res.Datasets {
@@ -221,7 +221,7 @@ func TestBundleOverTheBus(t *testing.T) {
 	assert.Equal(t, uint64(1), pub.Revision)
 	require.Len(t, pub.Datasets, 2)
 
-	got, err := ResolveBundleRequest(window, "sales")
+	got, err := ResolveBundleRequest(window, "sales", nil)
 	require.NoError(t, err)
 	assert.Equal(t, []byte(testDoc), got.Document)
 	assert.Equal(t, pub.Datasets[1].Handle, got.Datasets[1].Handle)
@@ -229,10 +229,10 @@ func TestBundleOverTheBus(t *testing.T) {
 
 	other := bus.NewClient("test.app", caps)
 	other.SetInstanceKey(2)
-	require.Error(t, RetractBundleRequest(other, "sales"), "the owner is the envelope's sender")
+	require.Error(t, RetractBundleRequest(other, "sales", nil), "the owner is the envelope's sender")
 
 	require.NoError(t, window.Close())
-	_, err = ResolveBundleRequest(other, "sales")
+	_, err = ResolveBundleRequest(other, "sales", nil)
 	assert.ErrorIs(t, err, ErrNoLiveBundle, "a bundle goes with the window that published it")
 	assert.Equal(t, 0, svc.LiveCount())
 
@@ -253,6 +253,6 @@ func TestResolveBundleRequestNamesNothingLive(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = svc.Close(context.Background()) })
 	c := bus.NewClient("test.app", []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
-	_, err = ResolveBundleRequest(c, "nothing")
+	_, err = ResolveBundleRequest(c, "nothing", nil)
 	assert.True(t, errors.Is(err, ErrNoLiveBundle), err)
 }

@@ -118,3 +118,67 @@ func (inst *Service) AllowDestination(taskId string, epoch uint64, destination s
 }
 
 var _ app.DelegationI = (*Service)(nil)
+
+// CallContext answers a host service that records agent-caused work
+// (ADR-0288 (proposed) §SD5): the task must be live at this epoch, and the
+// call must be one the dispatcher sent to the sender's app and window,
+// in flight or answered. The answer is the dispatcher's record of the call, so a
+// sender cannot attach its work to a turn or a call that did not cause it.
+func (inst *Service) CallContext(taskId string, epoch uint64, callId string, sender app.AppIdT, senderInstance uint64) (cc app.CallContext, ok bool, reason string) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	var t *task
+	for _, cand := range inst.tasks {
+		if cand.id == taskId {
+			t = cand
+		}
+	}
+	switch {
+	case t == nil:
+		reason = "no task by that id"
+		return
+	case t.revoked != "":
+		reason = "the task ended: " + t.revoked
+		return
+	case t.epoch != epoch:
+		reason = "the task's epoch moved; the work belongs to a stopped turn"
+		return
+	}
+	var rec *callRec
+	for _, r := range t.keys {
+		if r.callId == callId {
+			rec = r
+			break
+		}
+	}
+	switch {
+	case callId == "" || rec == nil:
+		reason = "the task has no call by that id"
+		return
+	case !rec.sent:
+		// Refused before sending, or turned back into a proposal. A call
+		// in flight is sent: a handler that publishes before it replies is
+		// attested.
+		reason = "the call did not reach a window"
+		return
+	case rec.app != sender || rec.instance != senderInstance:
+		reason = "the call was routed to another window"
+		return
+	}
+	conversation := t.conversation
+	if conversation == "" {
+		conversation = rec.conversation
+	}
+	cc = app.CallContext{Task: t.id, Epoch: t.epoch, Call: rec.callId, Conversation: conversation, Turn: rec.turn,
+		App: rec.app, Instance: rec.instance, Operation: rec.spec.Name}
+	if rec.cause.Has {
+		cc.ModelCall = rec.cause.Val.ModelCall
+		cc.ToolIndex = rec.cause.Val.ToolIndex
+		if rec.cause.Val.ToolCall.Has {
+			cc.ToolCall = rec.cause.Val.ToolCall.Val
+		}
+	}
+	return cc, true, ""
+}
+
+var _ app.CallContextI = (*Service)(nil)

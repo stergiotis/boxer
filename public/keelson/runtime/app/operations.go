@@ -388,6 +388,37 @@ type DelegationI interface {
 	AllowDestination(task string, epoch uint64, destination string) (ok bool, reason string)
 }
 
+// CallContext is what the dispatcher recorded for an agent's call, as it
+// answers a host service asking about it (ADR-0288 (proposed) §SD5).
+// Conversation and Turn are what the coordinator stated when it made the
+// call (ADR-0277 §SD1); ModelCall, ToolCall and ToolIndex the model call
+// whose reply asked for it. Empty where the coordinator stated none.
+type CallContext struct {
+	Task  string
+	Epoch uint64
+	Call  string
+
+	Conversation string
+	Turn         string
+	ModelCall    string
+	ToolCall     string
+	ToolIndex    uint32
+
+	App       AppIdT
+	Instance  uint64
+	Operation string
+}
+
+// CallContextI attests an on-behalf-of context for a host service that
+// records agent-caused work: it answers only for a call routed to the
+// sender's window (app and instance) in a task that is live at that epoch,
+// and returns what the dispatcher recorded for it. A service that records
+// the answer records the dispatcher's word for conversation and turn, not
+// the sender's. The host's dispatcher implements it.
+type CallContextI interface {
+	CallContext(task string, epoch uint64, call string, sender AppIdT, senderInstance uint64) (cc CallContext, ok bool, reason string)
+}
+
 // OperationRefusal is an error a handler returns to decline a call without
 // failing it. Conflict marks a refusal the caller can resolve by reading
 // again: the person is editing, or the state moved. Destinations, when set,

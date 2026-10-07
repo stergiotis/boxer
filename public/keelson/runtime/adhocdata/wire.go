@@ -337,6 +337,7 @@ func (inst *Service) handleBundlePublish(msg *app.Msg) {
 	res, pErr := inst.PublishBundle(BundlePublishInput{
 		Alias: req.Bundle, Document: req.Document, Datasets: datasets,
 		KeepAfterClose: req.KeepAfterClose, By: sender(msg),
+		OnBehalfOf: callContextFields(req.OboTask, req.OboEpoch, req.OboCall),
 	})
 	if pErr != nil {
 		inst.refuse(msg, pErr.Error())
@@ -351,7 +352,7 @@ func (inst *Service) handleBundleResolve(msg *app.Msg) {
 		inst.refuse(msg, "decode: "+err.Error())
 		return
 	}
-	res, rErr := inst.ResolveBundle(req.Bundle)
+	res, rErr := inst.ResolveBundle(req.Bundle, sender(msg), callContextFields(req.OboTask, req.OboEpoch, req.OboCall))
 	if rErr != nil {
 		inst.reply(msg.Reply, adhocreply.AdhocReply{
 			At: time.Now().UTC(), Reason: rErr.Error(), Bundle: req.Bundle, NoLive: errors.Is(rErr, ErrNoLiveBundle),
@@ -367,7 +368,7 @@ func (inst *Service) handleBundleRetract(msg *app.Msg) {
 		inst.refuse(msg, "decode: "+err.Error())
 		return
 	}
-	if rErr := inst.RetractBundle(req.Bundle, sender(msg)); rErr != nil {
+	if rErr := inst.RetractBundle(req.Bundle, sender(msg), callContextFields(req.OboTask, req.OboEpoch, req.OboCall)); rErr != nil {
 		inst.refuse(msg, rErr.Error())
 		return
 	}

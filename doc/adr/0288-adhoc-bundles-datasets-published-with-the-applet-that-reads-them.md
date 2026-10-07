@@ -258,7 +258,7 @@ takes no statement.
 
 - **M1 — Bundle records in `adhocdata`:** atomic publish, republish and
   retract, owned aliases, `keelson('adhoc_bundles')`.
-- **M1a — Audit:** `app.CallContextI` on the dispatcher, attestation on
+- **M1a — Audit:** ✓ `app.CallContextI` on the dispatcher, attestation on
   every bundle request, the `AdhocDataset` archetype on the trail, the
   context columns on `keelson('adhoc')`.
 - **M2 — `adhoc.read` and the gate:** `ReadAllE`, keelson.query refusing
@@ -445,6 +445,33 @@ Refinements:
   dataset as before.
 - `adhocdata.IsHandle` recognises a handle by shape: the catalog names
   `adhoc` and `adhoc_bundles` share the `adhoc_` prefix.
+
+### 2026-10-07 — M1a audit under an attested call context
+
+Shipped: `app.CallContextI`, implemented by the agent dispatcher and wired
+by hostboot into the dataset service; bundle requests carry the task,
+epoch and call (`adhocOboTask`, `adhocOboEpoch`, `adhocOboCall`); the
+`AdhocDataset` component on the trail with its view
+`dm_trail_adhoc_bundles` and a timeline branch; the stream digest
+computed while sealing; `task`, `call`, `conversation` and `turn` on both
+catalogs.
+
+Refinements:
+
+- **A call is attested from the moment the dispatcher sends it**, not when
+  the window has answered: a handler publishes before it replies. The
+  dispatcher's record gained a `sent` flag for this; a call turned back
+  into a proposal is unsent again.
+- **Only an agent-caused resolve is audited.** A bundle view (SD7)
+  resolves on every revision and a follower reconciles periodically;
+  writing each as a trail row would bury the agents' lookups the trail is
+  for. Publishes, republishes, retracts and withdrawals are audited
+  whoever caused them.
+- **A refused claim is audited without its context.** The row records the
+  sender and the dispatcher's reason, and is not attributed to the task
+  or turn the sender named.
+- The bundle view is general, like the egress fetches: its name carries
+  no agentic tag, since the person's publishes land there too.
 
 ## References
 

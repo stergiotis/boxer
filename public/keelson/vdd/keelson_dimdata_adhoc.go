@@ -97,3 +97,16 @@ var (
 	MembAdhocHandles = KeelsonHrNkRegistry.MustBegin("adhocHandles", 233).
 				MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityArbitrary).End()
 )
+
+// On-behalf-of memberships (ADR-0288 (proposed) §SD5): the task, epoch and
+// dispatcher call an agent-caused bundle request ran under. The service
+// asks the dispatcher what they stand for; they are never recorded as the
+// sender stated them.
+var (
+	MembAdhocOboTask = KeelsonHrNkRegistry.MustBegin("adhocOboTask", 234).
+				MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
+	MembAdhocOboEpoch = KeelsonHrNkRegistry.MustBegin("adhocOboEpoch", 235).
+				MustAddRestriction("u64Array", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
+	MembAdhocOboCall = KeelsonHrNkRegistry.MustBegin("adhocOboCall", 236).
+				MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
+)

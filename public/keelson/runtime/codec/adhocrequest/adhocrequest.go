@@ -61,4 +61,11 @@ type AdhocRequest struct {
 	// name the document reads each by and its stream, index for index.
 	LocalNames   []string `lw:"adhocLocalNames,stringArray"`
 	ArrowStreams [][]byte `lw:"adhocArrowStreams,blobArray"`
+
+	// OboTask, OboEpoch and OboCall are the on-behalf-of context an
+	// agent-caused bundle request ran under (ADR-0288 (proposed) §SD5);
+	// empty for the person's and the app's own requests.
+	OboTask  string `lw:"adhocOboTask,stringArray"`
+	OboEpoch uint64 `lw:"adhocOboEpoch,u64Array"`
+	OboCall  string `lw:"adhocOboCall,stringArray"`
 }

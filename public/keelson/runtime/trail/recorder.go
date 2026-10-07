@@ -239,6 +239,22 @@ func (inst *Recorder) HttpFetch(at time.Time, c Context, row HttpFetch) (err err
 	})
 }
 
+// AdhocDataset buffers one bundle operation's row (ADR-0288 (proposed)
+// §SD5); cause names the model call whose reply asked for the operation,
+// when the dispatcher recorded one.
+func (inst *Recorder) AdhocDataset(at time.Time, c Context, cause option.Option[Cause], row AdhocDataset) (err error) {
+	key := "adhoc|" + inst.unique(at)
+	return inst.write(key, at, c, func(b *TrailEntityBuilder, id uint64) {
+		if cause.Has {
+			v := cause.Val
+			v.Id = id
+			b.AddCause(v)
+		}
+		row.Id, row.Kind = id, "adhocDataset"
+		b.AddAdhocDataset(row)
+	})
+}
+
 // unique is a key part no other row of this run shares.
 func (inst *Recorder) unique(at time.Time) (s string) {
 	if inst == nil {

@@ -1,0 +1,41 @@
+package trail
+
+// AdhocDataset is one operation on an ad-hoc bundle and its outcome
+// (ADR-0288 (proposed) §SD5): a publish, republish, retract, a withdrawal
+// when the publishing window closed, a resolve, or a refusal. Who asked is
+// the row's [Origin]. When an agent's call caused it, the [Delegation],
+// [Conversation] and [Cause] are what the dispatcher recorded for that call
+// and confirmed to the dataset service — Attested says so; a context the
+// dispatcher did not confirm refuses the operation and is not written as
+// one.
+//
+// LocalNames, Aliases, Handles, Rows, Bytes and StreamDigests run index
+// for index over the bundle's datasets. A stream digest is over the Arrow
+// IPC stream as sealed, which is what every reader of the dataset reads.
+type AdhocDataset struct {
+	_ struct{} `kind:"adhocDataset"`
+
+	Id uint64 `lw:",id"`
+	// Kind's value is the label; its membership id is what a query filters on.
+	Kind string `lw:"runtimeKindAdhocDataset,symbol"`
+
+	Operation string `lw:"adhocDatasetOperation,symbol"`
+	Outcome   string `lw:"adhocDatasetOutcome,symbol"`
+	// Reason is the refusal or failure: one element when there is one.
+	Reason []string `lw:"adhocDatasetReason,stringArray"`
+
+	Bundle        string `lw:"adhocDatasetBundle,symbol"`
+	Revision      uint64 `lw:"adhocDatasetRevision,u64Array,unit"`
+	OwnerApp      string `lw:"adhocDatasetOwnerApp,symbol"`
+	OwnerInstance uint64 `lw:"adhocDatasetOwnerInstance,u64Array,unit"`
+
+	LocalNames     []string `lw:"adhocDatasetLocalNames,stringArray"`
+	Aliases        []string `lw:"adhocDatasetAliases,stringArray"`
+	Handles        []string `lw:"adhocDatasetHandles,stringArray"`
+	Rows           []uint64 `lw:"adhocDatasetRows,u64Array"`
+	Bytes          []uint64 `lw:"adhocDatasetBytes,u64Array"`
+	StreamDigests  []string `lw:"adhocDatasetStreamDigests,stringArray"`
+	DocumentDigest string   `lw:"adhocDatasetDocumentDigest,stringArray,unit"`
+
+	Attested bool `lw:"adhocDatasetAttested,bool"`
+}

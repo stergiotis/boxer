@@ -43,10 +43,20 @@ func TestOnlyTheBodyBindsTheTextSection(t *testing.T) {
 		"Cause": factsScanCauseFilter, "LlmCall": factsScanLlmCallFilter, "LlmMessage": factsScanLlmMessageFilter,
 		"AgentAction": factsScanAgentActionFilter, "AgentGrant": factsScanAgentGrantFilter, "HttpFetch": factsScanHttpFetchFilter,
 		"AgentCapture": factsScanAgentCaptureFilter, "AgentDisclosure": factsScanAgentDisclosureFilter,
+		"AdhocDataset": factsScanAdhocDatasetFilter,
 	} {
 		assert.NotContains(t, sql, "tv:textArray", comp+" binds no slot on the text section")
 	}
 	assert.Contains(t, factsScanLlmMessageBodyFilter, "tv:textArray")
+}
+
+// The bundle record's memberships come from the runtime vocabulary, so a
+// scan filters on the ids its rows carry (ADR-0288 (proposed) §SD5).
+func TestTheBundleRecordUsesTheVocabulary(t *testing.T) {
+	ids := TrailMembershipIds["AdhocDataset"]
+	assert.Equal(t, vocab.MembKindAdhocDataset.GetId().Value(), ids["runtimeKindAdhocDataset"])
+	assert.Equal(t, vocab.MembAdhocDatasetStreamDigests.GetId().Value(), ids["adhocDatasetStreamDigests"])
+	assert.Equal(t, vocab.MembAdhocDatasetAttested.GetId().Value(), ids["adhocDatasetAttested"])
 }
 
 // The context components spell run, app and window with the memberships

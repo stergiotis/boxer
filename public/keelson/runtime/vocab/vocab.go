@@ -522,6 +522,25 @@ var (
 	MembAgentDisclosureDecidedBy  = NkRegistry.MustBegin("agentDisclosureDecidedBy", 255).End()
 	MembAgentDisclosureEndpoint   = NkRegistry.MustBegin("agentDisclosureEndpoint", 256).End()
 	MembAgentDisclosureReason     = NkRegistry.MustBegin("agentDisclosureReason", 257).End()
+	// The ad-hoc bundle record (ADR-0288 (proposed) §SD5): one row per
+	// bundle operation and outcome, with the call context the dispatcher
+	// attested and digests of what was stored.
+	MembKindAdhocDataset           = NkRegistry.MustBegin("runtimeKindAdhocDataset", 258).End()
+	MembAdhocDatasetOperation      = NkRegistry.MustBegin("adhocDatasetOperation", 259).End()
+	MembAdhocDatasetOutcome        = NkRegistry.MustBegin("adhocDatasetOutcome", 260).End()
+	MembAdhocDatasetReason         = NkRegistry.MustBegin("adhocDatasetReason", 261).End()
+	MembAdhocDatasetBundle         = NkRegistry.MustBegin("adhocDatasetBundle", 262).End()
+	MembAdhocDatasetRevision       = NkRegistry.MustBegin("adhocDatasetRevision", 263).End()
+	MembAdhocDatasetOwnerApp       = NkRegistry.MustBegin("adhocDatasetOwnerApp", 264).End()
+	MembAdhocDatasetOwnerInstance  = NkRegistry.MustBegin("adhocDatasetOwnerInstance", 265).End()
+	MembAdhocDatasetLocalNames     = NkRegistry.MustBegin("adhocDatasetLocalNames", 266).End()
+	MembAdhocDatasetAliases        = NkRegistry.MustBegin("adhocDatasetAliases", 267).End()
+	MembAdhocDatasetHandles        = NkRegistry.MustBegin("adhocDatasetHandles", 268).End()
+	MembAdhocDatasetRows           = NkRegistry.MustBegin("adhocDatasetRows", 269).End()
+	MembAdhocDatasetBytes          = NkRegistry.MustBegin("adhocDatasetBytes", 270).End()
+	MembAdhocDatasetStreamDigests  = NkRegistry.MustBegin("adhocDatasetStreamDigests", 271).End()
+	MembAdhocDatasetDocumentDigest = NkRegistry.MustBegin("adhocDatasetDocumentDigest", 272).End()
+	MembAdhocDatasetAttested       = NkRegistry.MustBegin("adhocDatasetAttested", 273).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -589,4 +608,8 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembAgentDisclosureSource, MembAgentDisclosureWidth, MembAgentDisclosureHeight, MembAgentDisclosureBytes,
 	MembAgentDisclosureLevel, MembAgentDisclosureLocalOnly, MembAgentDisclosureDecision, MembAgentDisclosureDecidedBy,
 	MembAgentDisclosureEndpoint, MembAgentDisclosureReason,
+	MembKindAdhocDataset, MembAdhocDatasetOperation, MembAdhocDatasetOutcome, MembAdhocDatasetReason,
+	MembAdhocDatasetBundle, MembAdhocDatasetRevision, MembAdhocDatasetOwnerApp, MembAdhocDatasetOwnerInstance,
+	MembAdhocDatasetLocalNames, MembAdhocDatasetAliases, MembAdhocDatasetHandles, MembAdhocDatasetRows,
+	MembAdhocDatasetBytes, MembAdhocDatasetStreamDigests, MembAdhocDatasetDocumentDigest, MembAdhocDatasetAttested,
 }

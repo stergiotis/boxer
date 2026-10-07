@@ -125,7 +125,7 @@ func (inst *Service) requeueAsProposals(t *task, key uint64) {
 			continue
 		}
 		inst.mu.Lock()
-		rec.routed = false
+		rec.routed, rec.sent = false, false
 		rec.outcome = phaseOutcome(opwire.PhaseProposed, "the person lowered the mode; now a proposal")
 		rec.proposal = &proposal{expects: rec.req.Expects}
 		inst.mu.Unlock()
