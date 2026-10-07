@@ -119,6 +119,10 @@ type PlayState struct {
 	// Destination is what a grant must list for a run to reach the
 	// endpoint (ADR-0270 §SD2).
 	Destination string `desc:"the endpoint as a grant names it, clickhouse:<host>; a run that names a table outside keelson() needs it, and under Auto a run naming only keelson tables needs keelson:<table> for each instead"`
+	// Bundle and Followed are what open_bundle and bind_dataset change, so
+	// a task reads them here before it calls either (ADR-0269 §SD1).
+	Bundle   string   `json:",omitzero" desc:"the ad-hoc bundle the window follows, alias@revision; open_bundle changes it"`
+	Followed []string `json:",omitzero" desc:"the dataset names the window binds or waits for; bind_dataset adds to them"`
 }
 
 // Column is one result column.
@@ -355,7 +359,7 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 
 	appops.Query(s, app.OperationSpec{Name: opGetState, Version: 2,
 		Summary: "read the buffer, the parameters, the signals, Live and the main result's phase",
-		Reads:   []string{opsResSql, opsResParams, opsResSignals, opsResResult, opsResPanes}, Agents: true, Untrusted: true,
+		Reads:   []string{opsResSql, opsResParams, opsResSignals, opsResResult, opsResPanes, opsResBundle, opsResFollowed}, Agents: true, Untrusted: true,
 		Follows: []string{"each parameter names its control, an enum's options and the default Reset restores; set_param refuses a value an enum does not offer",
 			"result.notice says why a run did not happen or Live switched off"}},
 		func(sn opsSnap, in appops.None) (PlayState, error) {
@@ -640,6 +644,12 @@ func snapshotPlay(inst *PlayLauncher) (sn opsSnap) {
 	sn.client = p.client
 	st := snapshotState(p)
 	sn.state = st
+	if inst.bundle != nil {
+		sn.state.Bundle = inst.bundle.alias + "@" + strconv.FormatUint(inst.bundle.revision, 10)
+	}
+	if digest := inst.followedDigest(); digest != "" {
+		sn.state.Followed = strings.Split(digest, ",")
+	}
 	sn.runSql, _, _ = p.runBuffer()
 	raised, _ := p.tabs.slugForDockID(p.raisedTab)
 	for _, row := range p.paneRows(p.frameSchema) {

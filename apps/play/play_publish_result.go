@@ -71,7 +71,9 @@ type LastPublish struct {
 func addPublishResultOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 	appops.Command(s, app.OperationSpec{Name: opPublishResult, Version: 1,
 		Summary: "publish the main result as an ad-hoc bundle — the rows as one dataset and an applet document reading them — for another window or app to take in; the person confirms each publish",
-		Effect:  app.OperationEffectConsequential, Reads: []string{opsResResult}, Writes: []string{opsResBundle}, Agents: true,
+		// It reads the result and changes nothing of the window's: what it
+		// writes is outside, which is what makes it consequential.
+		Effect: app.OperationEffectConsequential, Reads: []string{opsResResult}, Agents: true,
 		Gesture: "",
 		Follows: []string{"only a whole main result is published: one the row cap cut short is refused, as is one still loading or failed",
 			"the publish runs off the frame; list_bundles reports this window's last publish and the bundle once it is live",

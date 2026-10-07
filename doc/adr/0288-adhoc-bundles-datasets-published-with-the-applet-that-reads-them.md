@@ -343,7 +343,7 @@ takes no statement.
 - **M4 — One owner per alias:** ✓ window-scoped publishes, the publishers
   moved to them, `PlayLaunch.DatasetNames`, and the refusal of an alias
   another owner holds.
-- **M5 — The headless end-to-end test** of the Verification plan.
+- **M5 — The headless end-to-end test** ✓ of the Verification plan.
 - **M6 — Bundle views:** `NewBundleView`, `BundleViewCaps`, the document
   check in `PublishBundleE`, plain views that sync on the frame they are
   drawn; adhocdemo becomes a receiver; the frame cost of an idle plain
@@ -708,6 +708,26 @@ nothing there (Alternatives). It publishes window-scoped.
 The body now states the decision as built through M4 — SD1 to SD6, the
 milestones, Surfaces, Migration and the Verification plan; the entries
 above record how each part got there.
+
+### 2026-10-07 — M5 the end-to-end lane, and read-before-write
+
+Shipped: `agent.TestABundleCrossesWindowsWithItsProvenance`, in the
+dispatcher's own tests so the person's acts stay unexported. Under a
+grant the person approved, one play window publishes its result — the
+person confirms — another opens the bundle, and a third party reads the
+dataset whole; the rows are the producer's, and the publish, the
+agent's resolve and the read are trail rows that join the dispatcher's
+action rows on `(task, call)`, carry the conversation and turns the
+coordinator stated, and name one stream digest. clickhouse-local holds
+the trail; the lane skips without it. play gained
+`play_headless_testutils.go` for windows driven without a client.
+
+The lane found what the handler tests could not: ADR-0269 §SD1 refuses
+a command that writes a resource the task never read, and nothing read
+`bundle` or `followed_datasets`. So no agent could call `publish_result`,
+`open_bundle` — or, since ADR-0270, `bind_dataset`. `publish_result` now
+writes nothing of its window (its effect is outside), and `get_state`
+reads both resources and reports them (`Bundle`, `Followed`).
 
 ## References
 

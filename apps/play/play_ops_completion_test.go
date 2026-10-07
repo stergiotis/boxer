@@ -28,7 +28,7 @@ func TestCompletionStateGraphHistoryCatalogEntries(t *testing.T) {
 		opCompleteSql:       {app.OperationClassQuery, app.OperationEffectNone, true, []string{opsResSql}, nil, false},
 		opValidateSql:       {app.OperationClassExternalRead, app.OperationEffectNone, true, []string{opsResSql}, nil, false},
 		opEndpointFunctions: {app.OperationClassExternalRead, app.OperationEffectNone, true, nil, nil, false},
-		opGetState:          {app.OperationClassQuery, app.OperationEffectNone, true, []string{opsResSql, opsResParams, opsResSignals, opsResResult, opsResPanes}, nil, false},
+		opGetState:          {app.OperationClassQuery, app.OperationEffectNone, true, []string{opsResSql, opsResParams, opsResSignals, opsResResult, opsResPanes, opsResBundle, opsResFollowed}, nil, false},
 		opSetParam:          {app.OperationClassCommand, app.OperationEffectDocument, false, nil, []string{opsResParams}, true},
 		opGetQueryGraph:     {app.OperationClassQuery, app.OperationEffectNone, true, []string{opsResSql, opsResResult, opsResPanes, opsResSignals}, nil, false},
 		opObserveNode:       {app.OperationClassCommand, app.OperationEffectDocument, false, []string{opsResSql}, []string{opsResPanes}, true},

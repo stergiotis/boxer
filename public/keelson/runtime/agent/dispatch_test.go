@@ -94,6 +94,17 @@ type fakeHost struct {
 	loads      map[uint64]opwire.InstanceInfo
 	// windowActs are the window verbs the host was asked to queue.
 	windowActs []string
+	// apps names the app of a window that is not a doc; a window absent
+	// from it is a doc.
+	apps map[uint64]app.AppIdT
+}
+
+// appOf is the app instance k belongs to. The caller holds mu.
+func (inst *fakeHost) appOf(k uint64) (a app.AppIdT) {
+	if a = inst.apps[k]; a == "" {
+		a = docAppId
+	}
+	return
 }
 
 func (inst *fakeHost) OpsInstances() (out []opwire.InstanceInfo) {
@@ -101,7 +112,8 @@ func (inst *fakeHost) OpsInstances() (out []opwire.InstanceInfo) {
 	defer inst.mu.Unlock()
 	for k, e := range inst.engines {
 		l := inst.loads[k]
-		out = append(out, opwire.InstanceInfo{App: docAppId, Alias: docAppId.SubjectAlias(), Key: k, Title: "Doc", Ops: true,
+		a := inst.appOf(k)
+		out = append(out, opwire.InstanceInfo{App: a, Alias: a.SubjectAlias(), Key: k, Title: "Doc", Ops: true,
 			Confined: e.Confined(), Load: l.Load, Reason: l.Reason})
 	}
 	return
