@@ -150,6 +150,11 @@ func BundleViewOps[A any, S any](set *appops.Set[A, S], views func(inst A) map[s
 			if p == nil {
 				return nil, app.RefuseOperation("the view " + name + " waits: " + v.Waiting())
 			}
+			// Availability was judged over every view; the command runs
+			// on this one, so it is judged again here.
+			if ok, reason := p.ServedOperations().Snapshot().Available(target); !ok {
+				return nil, app.RefuseOperation("the view " + name + ": " + reason)
+			}
 			result, err = p.ServedOperations().ApplyCommand(call, target, args)
 			if err == nil {
 				v.commanded = true

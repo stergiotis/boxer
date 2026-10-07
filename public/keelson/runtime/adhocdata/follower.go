@@ -75,6 +75,15 @@ type TargetI interface {
 	NotifyDatasetRevision(alias string, revision uint64)
 }
 
+// OriginTargetI is a target that also records where each bound dataset
+// comes from — the name it is bound under, its alias, its bundle and the
+// task that published its live revision — so its consumer's grant checks
+// judge it by those (ADR-0288 (proposed) §SD3, §SD4). The follower tells it
+// on every bind and every revision.
+type OriginTargetI interface {
+	SetDatasetOrigin(local string, alias string, bundle string, publisherTask string)
+}
+
 // EventsModeE says how the follower uses the service's events. It exists
 // for fault injection — the headless lane shows the reconcile working
 // against a running host — and is not an operating knob.
@@ -132,12 +141,12 @@ type resolverI interface {
 	// when nothing is live under it) with its revision, and whether
 	// boundHandle — when non-empty — is itself still live. err is a
 	// transport failure only.
-	resolveVerify(alias string, boundHandle string) (handle string, revision uint64, boundLive bool, err error)
+	resolveVerify(alias string, boundHandle string) (handle string, revision uint64, boundLive bool, origin DatasetOrigin, err error)
 }
 
 type busResolver struct{ bus app.BusI }
 
-func (r busResolver) resolveVerify(alias string, boundHandle string) (handle string, revision uint64, boundLive bool, err error) {
+func (r busResolver) resolveVerify(alias string, boundHandle string) (handle string, revision uint64, boundLive bool, origin DatasetOrigin, err error) {
 	res, live, rErr := ResolveVerifyRequest(r.bus, alias, boundHandle)
 	// "no live dataset under alias" is an answer, not a transport failure:
 	// the service replied, and boundLive is meaningful on that reply.
@@ -152,6 +161,7 @@ func (r busResolver) resolveVerify(alias string, boundHandle string) (handle str
 	handle = res.Handle
 	revision = res.Revision
 	boundLive = live
+	origin = res.Origin
 	return
 }
 
@@ -165,6 +175,7 @@ type verdict struct {
 	revision    uint64 // revision of that handle
 	askedHandle string // the bound handle the question was about; "" for a pending alias
 	askedLive   bool
+	origin      DatasetOrigin // of the newest live handle
 }
 
 // Follower keeps declared aliases bound to live datasets for the life of a
@@ -438,6 +449,7 @@ func (f *Follower) Sync(target TargetI) (bound bool, pendingChanged bool) {
 		switch {
 		case waiting && v.handle != "" && !gone:
 			if f.bindAlias(target, v.alias, v.handle, v.revision) {
+				f.recordOrigin(target, v.alias, v.origin)
 				bound = true
 			}
 		case isBound && v.askedHandle == held && !v.askedLive:
@@ -445,6 +457,7 @@ func (f *Follower) Sync(target TargetI) (bound bool, pendingChanged bool) {
 			f.unbindHandle(target, held)
 			if v.handle != "" && v.handle != held && !gone {
 				if f.bindAlias(target, v.alias, v.handle, v.revision) {
+					f.recordOrigin(target, v.alias, v.origin)
 					bound = true
 				}
 			}
@@ -456,6 +469,9 @@ func (f *Follower) Sync(target TargetI) (bound bool, pendingChanged bool) {
 			f.mu.Lock()
 			f.revision[v.alias] = v.revision
 			f.mu.Unlock()
+			// A republish may be another task's: its publisher is the
+			// live revision's.
+			f.recordOrigin(target, v.alias, v.origin)
 			if known != 0 {
 				target.NotifyDatasetRevision(v.alias, v.revision)
 			}
@@ -521,6 +537,19 @@ func (f *Follower) bindAlias(target TargetI, alias string, handle string, revisi
 	return
 }
 
+// recordOrigin tells a target that records origins where the dataset bound
+// under alias comes from, under the name the consumer binds it by.
+func (f *Follower) recordOrigin(target TargetI, alias string, origin DatasetOrigin) {
+	switch t := target.(type) {
+	case localTarget:
+		if o, ok := t.inner.(OriginTargetI); ok {
+			o.SetDatasetOrigin(f.LocalName(alias), alias, origin.Bundle, origin.PublisherTask)
+		}
+	case OriginTargetI:
+		t.SetDatasetOrigin(alias, alias, origin.Bundle, origin.PublisherTask)
+	}
+}
+
 // unbindHandle returns every alias bound to handle to pending, on the
 // caller's thread; false when nothing held it.
 func (f *Follower) unbindHandle(target TargetI, handle string) (changed bool) {
@@ -559,7 +588,7 @@ func (f *Follower) reconcile(pending []string, bound map[string]string) {
 	var out []verdict
 	why := make(map[string]string, len(pending))
 	for _, alias := range pending {
-		handle, rev, _, err := f.resolver.resolveVerify(alias, "")
+		handle, rev, _, origin, err := f.resolver.resolveVerify(alias, "")
 		if err != nil {
 			f.log.Debug().Err(err).Str("alias", alias).Msg("adhocdata: dataset alias still unresolved")
 			why[alias] = WaitUnanswered + ": " + err.Error()
@@ -569,16 +598,16 @@ func (f *Follower) reconcile(pending []string, bound map[string]string) {
 			why[alias] = WaitNoLive
 			continue
 		}
-		out = append(out, verdict{alias: alias, handle: handle, revision: rev})
+		out = append(out, verdict{alias: alias, handle: handle, revision: rev, origin: origin})
 	}
 	for _, alias := range slices.Sorted(maps.Keys(bound)) {
 		held := bound[alias]
-		handle, rev, live, err := f.resolver.resolveVerify(alias, held)
+		handle, rev, live, origin, err := f.resolver.resolveVerify(alias, held)
 		if err != nil {
 			f.log.Debug().Err(err).Str("alias", alias).Msg("adhocdata: dataset binding not verified this round")
 			continue
 		}
-		out = append(out, verdict{alias: alias, handle: handle, revision: rev, askedHandle: held, askedLive: live})
+		out = append(out, verdict{alias: alias, handle: handle, revision: rev, askedHandle: held, askedLive: live, origin: origin})
 	}
 	f.mu.Lock()
 	f.verdicts = append(f.verdicts, out...)

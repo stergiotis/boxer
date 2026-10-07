@@ -11,6 +11,7 @@ package sqlapplet
 // only off the render goroutine; answers wait in a mailbox.
 
 import (
+	"strconv"
 	"sync"
 	"time"
 
@@ -75,6 +76,9 @@ type BundleView struct {
 	revision uint64
 	digest   string
 	runnable bool
+	// publisherTask is the task whose attested call published the revision
+	// shown; its document's runs are that task's work, not the person's.
+	publisherTask string
 	// commanded is set when a bundle_ command was applied to the view and
 	// cleared by the frame that next draws it.
 	commanded bool
@@ -201,7 +205,15 @@ func (inst *BundleView) Sync() {
 	}
 	if inst.follower != nil && inst.inner != nil {
 		if bound, _ := inst.follower.Sync(inst.inner); bound && inst.runnable {
-			inst.inner.RequestRun()
+			// A document an agent's call published runs as that task's
+			// work, under the agent limits, never with the person's
+			// authority (§SD7): its own bundle's datasets are what that
+			// task may read without a grant entry.
+			var obo *app.OnBehalfOf
+			if inst.publisherTask != "" {
+				obo = &app.OnBehalfOf{Task: inst.publisherTask}
+			}
+			inst.inner.RequestRunAs(obo)
 		}
 	}
 	if inst.inner != nil {
@@ -248,6 +260,17 @@ func (inst *BundleView) resolve() {
 	inst.arrived = &res
 }
 
+// keepShowing says, over the revision the view still shows, why the
+// revision that arrived is not shown; with nothing shown yet, Frame draws
+// the failure itself.
+func (inst *BundleView) keepShowing(revision uint64) {
+	if inst.inner == nil {
+		return
+	}
+	inst.inner.SetDatasetNotice([]byte("**Revision " + strconv.FormatUint(revision, 10) + " of bundle `" + inst.alias +
+		"` cannot be shown:** " + inst.failed + ". The view shows revision " + strconv.FormatUint(inst.revision, 10) + "."))
+}
+
 // apply takes a resolved bundle in on the render goroutine. A new document
 // rebuilds the embedded play from it — parameter values the person set are
 // not carried over — and every revision rebinds the datasets under their
@@ -267,6 +290,7 @@ func (inst *BundleView) apply(res adhocdata.BundleResult) {
 			inst.failed = "its document does not ask for the introspection endpoint, where bundles resolve"
 		}
 		if inst.failed != "" {
+			inst.keepShowing(res.Revision)
 			inst.revision, inst.digest = res.Revision, res.DocumentDigest
 			return
 		}
@@ -274,6 +298,7 @@ func (inst *BundleView) apply(res adhocdata.BundleResult) {
 			InstanceKey: inst.cfg.InstanceKey, Bus: inst.cfg.Bus, Log: inst.cfg.Log, Rules: inst.cfg.Rules})
 		if eErr != nil {
 			inst.failed = "the embedded play could not be built: " + eErr.Error()
+			inst.keepShowing(res.Revision)
 			inst.revision, inst.digest = res.Revision, res.DocumentDigest
 			return
 		}
@@ -312,6 +337,6 @@ func (inst *BundleView) apply(res adhocdata.BundleResult) {
 		// the name the document reads it under (ADR-0288 §SD3).
 		inst.inner.SetDatasetOrigin(d.LocalName, d.Alias, inst.alias, res.PublisherTask)
 	}
-	inst.revision, inst.digest = res.Revision, res.DocumentDigest
+	inst.revision, inst.digest, inst.publisherTask = res.Revision, res.DocumentDigest, res.PublisherTask
 	inst.inner.SetDatasetNotice(nil)
 }

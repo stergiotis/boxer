@@ -284,6 +284,7 @@ func (inst *Service) handleResolve(msg *app.Msg) {
 	inst.reply(msg.Reply, adhocreply.AdhocReply{
 		At: time.Now().UTC(), Ok: true, Handle: res.Handle, Revision: res.Revision,
 		Rows: res.Rows, Bytes: res.Bytes, CreatedAtUs: res.CreatedAtUnixUs, HandleLive: live,
+		Bundle: res.Origin.Bundle, PublisherTask: res.Origin.PublisherTask,
 	})
 }
 

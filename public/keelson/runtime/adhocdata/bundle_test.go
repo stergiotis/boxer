@@ -279,3 +279,15 @@ func TestResolveBundleRequestNamesNothingLive(t *testing.T) {
 	_, err = ResolveBundleRequest(c, "nothing", nil)
 	assert.True(t, errors.Is(err, ErrNoLiveBundle), err)
 }
+
+// A bundle's revision continues across a retract, so a follower that saw
+// revision n does not take the next publish for the one it has.
+func TestARevisionContinuesAcrossARetract(t *testing.T) {
+	svc := newTestService(t)
+	_, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA})
+	require.NoError(t, err)
+	require.NoError(t, svc.RetractBundle("sales", windowA, nil))
+	res, err := svc.PublishBundle(BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t), By: windowA})
+	require.NoError(t, err)
+	assert.Equal(t, uint64(2), res.Revision)
+}

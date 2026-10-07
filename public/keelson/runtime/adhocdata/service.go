@@ -156,6 +156,18 @@ type ResolveResult struct {
 	Rows            uint64
 	Bytes           uint64
 	CreatedAtUnixUs int64
+	// Origin is the bundle the dataset belongs to and the task that
+	// published its live revision (ADR-0288 (proposed) §SD3, §SD4).
+	Origin DatasetOrigin
+}
+
+// DatasetOrigin is where a dataset comes from, as the grant judges it: its
+// bundle, empty for a dataset published on its own, and the task whose
+// attested call published its live revision, empty when no agent's call
+// did.
+type DatasetOrigin struct {
+	Bundle        string
+	PublisherTask string
 }
 
 // record is the one record of a dataset: the registry provider, the owner,
@@ -258,12 +270,16 @@ type Service struct {
 	// package's tests set it, production leaves the trail the one record.
 	auditHook atomic.Pointer[func(AuditRecord)]
 
-	mu         sync.RWMutex
-	live       map[string]*record
-	bundles    map[string]*bundleRec  // by bundle alias
-	leaving    map[string]*time.Timer // left, still registered until the timer unloads
-	totalBytes uint64
-	closed     bool
+	mu      sync.RWMutex
+	live    map[string]*record
+	bundles map[string]*bundleRec // by bundle alias
+	// retiredRevisions keep each retracted bundle alias's last revision, so
+	// a later publish under it continues the count: a follower that saw
+	// revision n before a retract must not take the next publish for it.
+	retiredRevisions map[string]uint64
+	leaving          map[string]*time.Timer // left, still registered until the timer unloads
+	totalBytes       uint64
+	closed           bool
 }
 
 // NewService builds the Service and, when a bus is supplied, subscribes to
@@ -282,14 +298,15 @@ func NewService(cfg Config) (inst *Service, err error) {
 		grace = DefaultRetractGrace
 	}
 	inst = &Service{
-		reg:          reg,
-		dir:          dir,
-		log:          cfg.Log,
-		retractGrace: grace,
-		trail:        cfg.Trail,
-		live:         make(map[string]*record),
-		bundles:      make(map[string]*bundleRec),
-		leaving:      make(map[string]*time.Timer),
+		reg:              reg,
+		dir:              dir,
+		log:              cfg.Log,
+		retractGrace:     grace,
+		trail:            cfg.Trail,
+		live:             make(map[string]*record),
+		bundles:          make(map[string]*bundleRec),
+		retiredRevisions: make(map[string]uint64),
+		leaving:          make(map[string]*time.Timer),
 	}
 	// A probe publish is not worth a start-up dependency on the base
 	// directory, but an unusable one must not surface as the first app's
@@ -584,6 +601,10 @@ func (inst *Service) Resolve(alias string) (res ResolveResult, err error) {
 	best.mu.RLock()
 	res = ResolveResult{
 		Handle: best.handle, Revision: best.revision, Rows: best.rows, Bytes: best.bytes, CreatedAtUnixUs: best.createdAt,
+		Origin: DatasetOrigin{Bundle: best.bundle},
+	}
+	if best.context.Has {
+		res.Origin.PublisherTask = best.context.Val.Task
 	}
 	best.mu.RUnlock()
 	inst.mu.RUnlock()

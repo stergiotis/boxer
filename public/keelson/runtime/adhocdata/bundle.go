@@ -367,7 +367,7 @@ func (inst *Service) publishBundle(in BundlePublishInput, cc option.Option[app.C
 	}
 	old := inst.bundles[in.Alias]
 	now := time.Now().UnixMicro()
-	owner, keep, revision, createdAt := in.By, in.KeepAfterClose, uint64(1), now
+	owner, keep, revision, createdAt := in.By, in.KeepAfterClose, inst.retiredRevisions[in.Alias]+1, now
 	if old != nil {
 		owner, keep, revision, createdAt = old.owner, keep || old.keepAfterClose, old.revision+1, old.createdAt
 	}
@@ -582,6 +582,7 @@ func (inst *Service) retractBundle(alias string, by Identity, cc option.Option[a
 		return
 	}
 	delete(inst.bundles, alias)
+	inst.retiredRevisions[alias] = b.revision
 	recs := make([]*record, 0, len(b.handles))
 	for _, h := range b.handles {
 		recs = append(recs, inst.live[h])

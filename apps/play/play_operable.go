@@ -126,6 +126,23 @@ func (inst *PlayApp) WorkPending() (pending bool) {
 	return inst.requestRun || inst.graph.MainLoading()
 }
 
+// RequestRunAs requests a run that is obo's work, not the person's: it is
+// stamped as the task's and judged by the agent limits under obo's grant,
+// where a refusal lands in the status line. nil requests the person's run.
+// An embedder runs a document an agent authored this way, so the document
+// does not run with the person's authority (ADR-0288 (proposed) §SD7).
+func (inst *PlayApp) RequestRunAs(obo *app.OnBehalfOf) {
+	if obo != nil {
+		inst.markAgent(obo)
+		inst.agentRunRequested = true
+	}
+	inst.RequestRun()
+}
+
+// AgentMark is the task whose work the instance's next run is, nil when it
+// is the person's.
+func (inst *PlayApp) AgentMark() (obo *app.OnBehalfOf) { return inst.agentDriven }
+
 // SetDatasetOrigin records that the name local, under which a dataset is
 // bound, stands for the dataset published as alias in bundle (empty when it
 // is in none), so the agent limits judge a run by the names a grant lists

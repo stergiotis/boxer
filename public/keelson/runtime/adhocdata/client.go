@@ -103,7 +103,8 @@ func resolve(bus app.BusI, alias string, boundHandle string) (res ResolveResult,
 		}
 		return res, boundLive, eb.Build().Str("reason", rep.Reason).Errorf("adhocdata: resolve rejected")
 	}
-	res = ResolveResult{Handle: rep.Handle, Revision: rep.Revision, Rows: rep.Rows, Bytes: rep.Bytes, CreatedAtUnixUs: rep.CreatedAtUs}
+	res = ResolveResult{Handle: rep.Handle, Revision: rep.Revision, Rows: rep.Rows, Bytes: rep.Bytes, CreatedAtUnixUs: rep.CreatedAtUs,
+		Origin: DatasetOrigin{Bundle: rep.Bundle, PublisherTask: rep.PublisherTask}}
 	return res, boundLive, nil
 }
 

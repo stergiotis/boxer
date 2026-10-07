@@ -94,7 +94,7 @@ func (f *fakeResolver) questions() (n int) {
 	return
 }
 
-func (f *fakeResolver) resolveVerify(alias string, boundHandle string) (handle string, revision uint64, boundLive bool, err error) {
+func (f *fakeResolver) resolveVerify(alias string, boundHandle string) (handle string, revision uint64, boundLive bool, origin DatasetOrigin, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.asked++

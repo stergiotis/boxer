@@ -126,3 +126,50 @@ func TestABundleViewWaitsForItsBundle(t *testing.T) {
 	publishView(t, publisher, "SELECT * FROM keelson('result')", "result")
 	syncUntil(t, v, func() bool { return v.Inner() != nil && len(v.Inner().DatasetBindingsForTest()) == 1 })
 }
+
+// viewDispatcher attests one agent call, as the host's dispatcher would.
+type viewDispatcher struct{}
+
+func (viewDispatcher) CallContext(task string, epoch uint64, call string, sender app.AppIdT, senderInstance uint64) (cc app.CallContext, ok bool, reason string) {
+	return app.CallContext{Task: task, Epoch: epoch, Call: call, App: sender, Instance: senderInstance}, true, ""
+}
+
+func (viewDispatcher) AllowDestination(task string, epoch uint64, destination string) (ok bool, reason string) {
+	return false, "no grant"
+}
+
+// A document an agent's call published runs in a view as that task's work,
+// under the agent limits; the person's document runs as the person's
+// (ADR-0288 (proposed) §SD7).
+func TestAnAgentsDocumentRunsAsItsTask(t *testing.T) {
+	prev := introspect.LocalQueryEndpoint()
+	introspect.SetLocalQueryEndpoint("http://127.0.0.1:1/query")
+	t.Cleanup(func() { introspect.SetLocalQueryEndpoint(prev) })
+	bus := inprocbus.NewInst(zerolog.Nop())
+	svc, err := adhocdata.NewService(adhocdata.Config{Bus: bus, Registry: introspect.NewRegistry(), Dir: t.TempDir(), Log: zerolog.Nop()})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = svc.Close(context.Background()) })
+	svc.SetDispatcher(viewDispatcher{})
+	publisher := bus.NewClient("test.producer", []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
+	spec := play.BundleSpec{Alias: "counts", Sql: "SELECT * FROM keelson('result')", Tabs: []string{"table"},
+		Datasets:   []adhocdata.BundleDatasetInput{{LocalName: "result", ArrowIPCStream: viewInts(t, 1)}},
+		OnBehalfOf: &app.OnBehalfOf{Task: "task-9", Epoch: 1, Call: "task-9-1"}}
+	_, err = play.PublishBundleE(publisher, spec)
+	require.NoError(t, err)
+
+	viewBus := bus.NewClient("test.receiver", BundleViewCaps)
+	v := NewBundleView("counts", BundleViewConfig{Bus: viewBus, Log: zerolog.Nop(), StampAppId: "test.receiver#counts"})
+	t.Cleanup(v.Close)
+	syncUntil(t, v, func() bool { return v.Inner() != nil && len(v.Inner().DatasetBindingsForTest()) == 1 })
+	require.True(t, v.Inner().RunRequestedForTest())
+	require.NotNil(t, v.Inner().AgentMark(), "the agent's document is not run with the person's authority")
+	assert.Equal(t, "task-9", v.Inner().AgentMark().Task)
+
+	spec.OnBehalfOf, spec.Alias = nil, "mine"
+	_, err = play.PublishBundleE(publisher, spec)
+	require.NoError(t, err)
+	mine := NewBundleView("mine", BundleViewConfig{Bus: viewBus, Log: zerolog.Nop(), StampAppId: "test.receiver#mine"})
+	t.Cleanup(mine.Close)
+	syncUntil(t, mine, func() bool { return mine.Inner() != nil && len(mine.Inner().DatasetBindingsForTest()) == 1 })
+	assert.Nil(t, mine.Inner().AgentMark(), "the person's document runs as the person's")
+}
