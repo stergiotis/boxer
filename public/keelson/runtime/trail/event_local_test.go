@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"iter"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -190,4 +191,69 @@ func TestGapRowReadsBack(t *testing.T) {
 	assert.Equal(t, at.Format(time.RFC3339Nano), gapRow.AttrValues[1])
 	assert.Equal(t, at.Add(time.Minute).Format(time.RFC3339Nano), gapRow.AttrValues[2])
 	assert.EqualValues(t, 2, rec.Counts().Dropped)
+}
+
+// Over clickhouse-local: the read helpers return one principal's and one
+// subject's events within a window, oldest first, under a limit, and a row
+// that carries the looked-for value in another slot is not returned.
+func TestReadHelpersByPrincipalAndSubject(t *testing.T) {
+	exec, ctx := localFacts(t)
+	rec := trail.NewRecorder(exec, "run-9", zerolog.Nop())
+	defer rec.Close()
+	at := time.Unix(1_700_000_000, 0).UTC()
+	withP := func(p string) context.Context {
+		return callident.WithClaims(ctx, callident.Claims{Principal: p})
+	}
+	ev := func(action string, subject uint64, refs ...string) trail.AuditEvent {
+		e := trail.AuditEvent{Domain: "dmdm", Action: action, Outcome: trail.OutcomeOk, PrincipalBy: trail.PrincipalByEnv, Subject: subject, Retention: "disclosure"}
+		for i := 0; i+1 < len(refs); i += 2 {
+			e.RefTypes = append(e.RefTypes, refs[i])
+			e.RefValues = append(e.RefValues, refs[i+1])
+		}
+		return e
+	}
+	require.NoError(t, rec.Event(withP("p-1"), at, trail.Context{}, ev("vault-resolve", 42)))
+	require.NoError(t, rec.Event(withP("p-1"), at.Add(time.Minute), trail.Context{}, ev("vault-resolve", 43)))
+	require.NoError(t, rec.Event(withP("p-2"), at.Add(2*time.Minute), trail.Context{}, ev("erase-issue", 42)))
+	// p-1 appears as a reference value, not as the principal.
+	require.NoError(t, rec.Event(withP("p-2"), at.Add(3*time.Minute), trail.Context{}, ev("share-peer", 44, "peer", "p-1")))
+	require.NoError(t, rec.Event(withP("p-1"), at.Add(time.Hour), trail.Context{}, ev("vault-resolve", 42)))
+	require.NoError(t, rec.Flush(ctx))
+
+	actions := func(ents []*trail.TrailEntity) (out []string) {
+		for _, e := range ents {
+			out = append(out, e.AuditEvent.Val.Action+"/"+strconv.FormatUint(e.AuditEvent.Val.Subject, 10)+"@"+e.Ts.Sub(at).String())
+		}
+		return
+	}
+	ents, err := rec.EventsByPrincipal(ctx, "p-1", time.Time{}, time.Time{}, 0)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"vault-resolve/42@0s", "vault-resolve/43@1m0s", "vault-resolve/42@1h0m0s"}, actions(ents), "oldest first; the reference to p-1 is not p-1's event")
+
+	ents, err = rec.EventsByPrincipal(ctx, "p-1", at.Add(30*time.Second), at.Add(time.Hour), 0)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"vault-resolve/43@1m0s"}, actions(ents), "the window is half-open")
+
+	ents, err = rec.EventsByPrincipal(ctx, "p-1", time.Time{}, time.Time{}, 2)
+	require.NoError(t, err)
+	assert.Len(t, ents, 2, "the limit holds")
+
+	ents, err = rec.EventsBySubject(ctx, 42, time.Time{}, time.Time{}, 0)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"vault-resolve/42@0s", "erase-issue/42@2m0s", "vault-resolve/42@1h0m0s"}, actions(ents))
+
+	ents, err = rec.EventsBySubject(ctx, 42, at.Add(time.Minute), time.Time{}, 1)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"erase-issue/42@2m0s"}, actions(ents))
+
+	_, err = rec.EventsBySubject(ctx, 0, time.Time{}, time.Time{}, 0)
+	assert.Error(t, err, "subject 0 is refused")
+
+	ents, err = rec.EventsByPrincipal(ctx, "nobody", time.Time{}, time.Time{}, 0)
+	require.NoError(t, err)
+	assert.Empty(t, ents)
+	var none *trail.Recorder
+	ents, err = none.EventsBySubject(ctx, 42, time.Time{}, time.Time{}, 0)
+	require.NoError(t, err)
+	assert.Nil(t, ents)
 }

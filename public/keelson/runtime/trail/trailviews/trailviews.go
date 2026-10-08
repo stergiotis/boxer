@@ -104,7 +104,7 @@ import (
 // ViewsVersion is the revision of the views this package composes. Bump it
 // whenever a view's columns or meaning change, so the stamp a deployed view
 // carries tells an operator it predates the build.
-const ViewsVersion = 9
+const ViewsVersion = 10
 
 // agenticTag marks the views over what the agentic side of keelson writes —
 // model calls and their messages, and what agents did under a grant. The
@@ -132,6 +132,7 @@ const (
 	ViewAgentDisclosures = prefixDataMart + "trail_" + agenticTag + "_agent_disclosures"
 	ViewHttpFetches      = prefixDataMart + "trail_http_fetches"
 	ViewAdhocBundles     = prefixDataMart + "trail_adhoc_bundles"
+	ViewAuditEvents      = prefixDataMart + "trail_audit_events"
 	ViewTimeline         = prefixDataMart + "trail_timeline"
 	ViewActionOutcomes   = prefixAggregate + "trail_" + agenticTag + "_agent_action_outcomes"
 	ViewConversations    = prefixAggregate + "trail_" + agenticTag + "_conversations"
@@ -507,6 +508,21 @@ var kindViews = []kindView{
 		{"column-types", "stringArray", vocab.MembAdhocDatasetColumnTypes, list},
 		{"column-nulls", "u64Array", vocab.MembAdhocDatasetColumnNulls, list},
 		{"column-distinct", "u64Array", vocab.MembAdhocDatasetColumnDistinct, list},
+	}},
+	{name: ViewAuditEvents, kind: vocab.MembKindAuditEvent, columns: []column{
+		{"domain", "symbol", vocab.MembAuditEventDomain, scalar},
+		{"action", "symbol", vocab.MembAuditEventAction, scalar},
+		{"outcome", "symbol", vocab.MembAuditEventOutcome, scalar},
+		{"principal", "stringArray", vocab.MembAuditEventPrincipal, first},
+		{"principal-by", "symbol", vocab.MembAuditEventPrincipalBy, scalar},
+		{"purpose", "symbol", vocab.MembAuditEventPurpose, scalar},
+		{"node", "symbol", vocab.MembAuditEventNode, scalar},
+		{"subject", "u64Array", vocab.MembAuditEventSubject, first},
+		{"retention", "symbol", vocab.MembAuditEventRetention, scalar},
+		{"ref-types", "stringArray", vocab.MembAuditEventRefTypes, list},
+		{"ref-values", "stringArray", vocab.MembAuditEventRefValues, list},
+		{"attr-keys", "stringArray", vocab.MembAuditEventAttrKeys, list},
+		{"attr-values", "stringArray", vocab.MembAuditEventAttrValues, list},
 	}},
 }
 
@@ -918,6 +934,14 @@ var timelineBranches = []timelineBranch{
 			"if({attested}, ' (attested)', ''), " +
 			"if(length({reason}) > 0, concat(' (', arrayStringConcat({reason}, ' | '), ')'), ''))",
 		"arrayStringConcat({reason}, ' | ')", "false", "false", "0", "0", "0",
+	}},
+	{ViewAuditEvents, "auditEvent", [12]string{
+		"{principal}", "0", "''", "{outcome}", "concat({domain}, '.', {action})",
+		"concat({domain}, ' ', {action}, ' -> ', {outcome}, " +
+			"if({subject} != 0, concat(' subject ', toString({subject})), ''), " +
+			"if({principal} != '', concat(' by ', {principal}, ' (', {principal-by}, ')'), ''), " +
+			"if(length({ref-types}) > 0, concat(' [', arrayStringConcat(arrayMap((rt, rv) -> concat(rt, ':', rv), {ref-types}, {ref-values}), ', '), ']'), ''))",
+		"arrayStringConcat(arrayMap((k, v) -> concat(k, '=', v), {attr-keys}, {attr-values}), ' | ')", "false", "false", "0", "0", "0",
 	}},
 }
 
