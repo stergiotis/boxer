@@ -60,6 +60,18 @@ fn pressed_fill() -> Color32 {
     p::ACCENT_SUBTLE.lerp_to_gamma(p::ACCENT_DEFAULT, 0.35)
 }
 
+/// A progress bar's fill: the accent a tenth of the way back toward its
+/// tint. egui paints the bar's label in one colour across the fill and the
+/// empty rail, and no colour reads on both the accent and near-white; ink
+/// does once the fill is this much lighter. The dark palette's pair is in
+/// `style::progress`.
+pub fn progress_fill() -> Color32 {
+    p::ACCENT_SUBTLE.lerp_to_gamma(p::ACCENT_DEFAULT, 0.9)
+}
+
+/// A progress bar's label, on its fill and on the empty rail alike.
+pub const PROGRESS_LABEL: Color32 = p::NEUTRAL_TEXT_EXTREME;
+
 /// The slider rail at rest — see `style::slider` and `style::slider_rail`.
 /// Clears WCAG 1.4.11's 3:1 against both the panel and the surface fill.
 pub const RAIL: Color32 = p::NEUTRAL_BORDER_DEFAULT;
@@ -247,6 +259,16 @@ mod tests {
         assert_eq!(v.widgets.hovered.bg_stroke.width.fract(), 0.0);
         assert_eq!(v.widgets.active.bg_stroke.width.fract(), 0.0);
         assert_eq!(v.widgets.hovered.expansion, 1.0);
+    }
+
+    #[test]
+    fn a_progress_label_reads_on_the_fill_and_the_rail() {
+        // The rail is `extreme_bg_color`; the label straddles both.
+        let v = applied();
+        assert!(contrast(PROGRESS_LABEL, progress_fill()) >= 4.5);
+        assert!(contrast(PROGRESS_LABEL, v.extreme_bg_color) >= 4.5);
+        // WCAG 1.4.11: the filled part still stands off the rail.
+        assert!(contrast(progress_fill(), v.extreme_bg_color) >= 3.0);
     }
 
     #[test]

@@ -12,6 +12,7 @@
 pub mod button;
 pub mod data_encoding;
 pub mod fresh;
+pub mod progress;
 pub mod slider;
 pub mod tokens;
 
@@ -66,6 +67,34 @@ pub fn accent_default() -> egui::Color32 {
         tokens::Theme::Fresh => tokens::palette_fresh_generated::ACCENT_DEFAULT,
         tokens::Theme::Dark => tokens::palette_generated::ACCENT_DEFAULT,
     }
+}
+
+/// The default `ProgressBar` fill for the active theme — darker than
+/// [`accent_default`] on the dark palette and lighter on `fresh`, so the
+/// label can read on it and on the empty rail; see [`progress`].
+pub fn progress_fill() -> egui::Color32 {
+    match tokens::theme::active() {
+        tokens::Theme::Fresh => fresh::progress_fill(),
+        tokens::Theme::Dark => progress::fill(),
+    }
+}
+
+/// Run `add` — a progress bar — with its label colour set for the active
+/// theme. egui paints the label in `override_text_color`, else in
+/// `selection.stroke.color`: on the dark palette body text, near-white on a
+/// light accent fill; on `fresh` the strong accent, purple on purple.
+pub fn with_progress_bar_label<R>(
+    ui: &mut egui::Ui,
+    add: impl FnOnce(&mut egui::Ui) -> R,
+) -> R {
+    let label = match tokens::theme::active() {
+        tokens::Theme::Fresh => fresh::PROGRESS_LABEL,
+        tokens::Theme::Dark => progress::LABEL,
+    };
+    let saved = ui.style_mut().visuals.override_text_color.replace(label);
+    let r = add(ui);
+    ui.style_mut().visuals.override_text_color = saved;
+    r
 }
 
 /// The default `ProgressBar` height: a button's, i.e. one row of button text

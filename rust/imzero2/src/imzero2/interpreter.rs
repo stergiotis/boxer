@@ -7479,7 +7479,7 @@ egui::Panel::top(i);
                 // construct
 
                 let mut w = egui::ProgressBar::new(progress)
-                    .fill(imzero2_egui::style::accent_default())
+                    .fill(imzero2_egui::style::progress_fill())
                     .desired_height(imzero2_egui::style::progress_bar_height(c));
                 // methods
                 loop {
@@ -10389,8 +10389,9 @@ egui::Window::new(label).id(i);
     }
 
     // `f` is the opcode the widget came from. A checkbox gets its theme's
-    // own corner radius (`style::with_checkbox_radius`), which egui has no
-    // slot for.
+    // own corner radius (`style::with_checkbox_radius`) and a progress bar
+    // its label colour (`style::with_progress_bar_label`); egui has a slot
+    // for neither.
     pub fn apply_widget(
         &mut self,
         w: impl egui::Widget,
@@ -10400,10 +10401,14 @@ egui::Window::new(label).id(i);
     ) -> Option<egui::Response> {
         if u.is_some() {
             let ui = u.as_mut().unwrap();
-            let r = if *f == FuncProcId::Checkbox {
-                imzero2_egui::style::with_checkbox_radius(ui, |ui| w.ui(ui))
-            } else {
-                w.ui(ui)
+            let r = match f {
+                FuncProcId::Checkbox => {
+                    imzero2_egui::style::with_checkbox_radius(ui, |ui| w.ui(ui))
+                }
+                FuncProcId::ProgressBar => {
+                    imzero2_egui::style::with_progress_bar_label(ui, |ui| w.ui(ui))
+                }
+                _ => w.ui(ui),
             };
             if let Some(i) = i
                 && self.r8_response_flags_filter.match_response_any(&r)
