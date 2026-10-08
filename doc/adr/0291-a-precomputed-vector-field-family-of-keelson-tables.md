@@ -196,10 +196,12 @@ its offline outlines, and `tabhost.Services.NoEgress` refuses any request that
 would leave the tab, whatever a visitor switches on. With play the first visit
 downloads about 27 MB.
 
-The outlines show a defect in the tab that predates this work: long straight
-grey lines across the map, the same in the gallery's flow-on-a-map demo and
-whatever the field's longitude convention. A README image of the demo waits
-for it.
+The outlines showed long straight grey lines across the map in the tab, the
+same in the gallery's flow-on-a-map demo. The cause was the mesh wire, not the
+map: a ring that turns back on itself gives egui's feathered stroke a vertex
+at infinity, which a GPU skips and the wire's quantizer pinned to the frame's
+corner, drawing a sliver across the view. The serializer now drops a triangle
+with a non-finite corner, as the GPU does, which mends every mesh-lane client.
 
 ## References
 

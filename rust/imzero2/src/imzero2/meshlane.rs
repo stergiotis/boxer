@@ -130,6 +130,12 @@ fn clip_mesh_to_wire_range(mesh: &egui::epaint::Mesh, lim: f32) -> egui::epaint:
             mesh.vertices[tri[1] as usize],
             mesh.vertices[tri[2] as usize],
         ];
+        // A GPU rasterizes nothing for a triangle with a NaN or infinite
+        // corner; the quantizer would pin that corner to the frame's edge and
+        // draw a sliver across it. Drop the triangle, as the GPU would.
+        if vs.iter().any(|v| !v.pos.x.is_finite() || !v.pos.y.is_finite()) {
+            continue;
+        }
         if vs.iter().all(|v| inside(v.pos)) {
             out.indices.extend_from_slice(tri);
             continue;
@@ -593,5 +599,53 @@ mod tests {
         // order list always present; bodies only when missing
         assert_eq!(none.len(), 2 + 12 + 4 + 16 + 4);
         assert!(all.len() > none.len() + frame.scratch.len());
+    }
+
+    /// A ring that turns back on itself — a spike, A → B → A, common once
+    /// outline points are rounded to whole pixels at world zoom — gives the
+    /// feathered stroke a corner whose two normals cancel, and the
+    /// tessellator a vertex at infinity. A GPU draws nothing for a triangle
+    /// with such a corner; the wire must not pin it to the frame's edge, where
+    /// it was a long sliver across a map (the country outlines in a tab).
+    #[test]
+    fn non_finite_corners_drop_their_triangles() {
+        let pts = vec![
+            egui::pos2(100.0, 100.0),
+            egui::pos2(200.0, 100.0),
+            egui::pos2(300.0, 120.0),
+            egui::pos2(200.0, 100.0), // the spike turns back
+            egui::pos2(150.0, 180.0),
+        ];
+        let mut tess = egui::epaint::Tessellator::new(
+            1.0,
+            egui::epaint::TessellationOptions::default(),
+            [1, 1],
+            Vec::new(),
+        );
+        let mut mesh = egui::epaint::Mesh::default();
+        tess.tessellate_shape(
+            egui::Shape::closed_line(pts, egui::Stroke::new(1.0, egui::Color32::WHITE)),
+            &mut mesh,
+        );
+        assert!(
+            mesh.vertices.iter().any(|v| !v.pos.x.is_finite() || !v.pos.y.is_finite()),
+            "the spike gives the stroke a non-finite vertex"
+        );
+        let prim = egui::ClippedPrimitive {
+            clip_rect: egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(400.0, 400.0)),
+            primitive: egui::epaint::Primitive::Mesh(mesh),
+        };
+        let frame = serialize(&[prim], 1.0);
+        let body = &frame.scratch[frame.ranges[0].0..frame.ranges[0].1];
+        let tris = decoded_triangles(body, 1.0);
+        assert!(!tris.is_empty(), "the finite part of the stroke is kept");
+        for tri in tris {
+            for p in tri {
+                assert!(
+                    (95.0..=305.0).contains(&p.x) && (95.0..=185.0).contains(&p.y),
+                    "a vertex at {p:?} lies off the ring: a sliver to the frame's edge"
+                );
+            }
+        }
     }
 }
