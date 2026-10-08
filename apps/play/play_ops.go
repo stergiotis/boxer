@@ -476,6 +476,7 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 	addRunOps(s)
 	addReferenceOps(s)
 	addSchemaOps(s)
+	addSchemaPaneOps(s)
 	addRewriteOps(s)
 	addDatasetOps(s)
 	addBundleOps(s)

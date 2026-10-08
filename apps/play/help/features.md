@@ -1289,6 +1289,18 @@ half-typed statement keeps the last answer instead of streaming errors.
 A leeway `TableDesc` inspector over the active result's Arrow schema — column
 types and inferred structure in a master-detail view (ad-hoc results show plain
 opaque columns; tagged sections aren't recoverable from an arbitrary result).
+The structure is read off the physical column names, so a column subset that
+keeps the names is still read as leeway, with each section's membership
+channels (`low-card-verbatim`, `low-card-ref`, …) as the badge beside it; an
+alias or an aggregate is not. Section and column names are spelled as the
+columns spell them (`u32Array`, where leeway's canonical style is `u32-array`),
+as the Table's headers, `leeway.columns` and `describe_table` print them.
+
+**For an agent.** `get_schema` reads what the pane draws, for the result the
+pane is fed or a named node: the plain columns and the tagged sections, each
+section's membership channels, and each column's handle and canonical type.
+`list_tables` and `describe_table` read the endpoint's catalog instead, with the
+tables' comments.
 
 ### Docs
 

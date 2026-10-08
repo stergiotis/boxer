@@ -208,7 +208,7 @@ var paneOperations = map[string][]string{
 	"vocabulary":      {opListFunctions, opEndpointFunctions},
 	"completion":      {opCompleteSql},
 	"glosses":         {opListGlosses},
-	"schema":          {opListTables, opDescribeTable},
+	"schema":          {opGetSchema, opListTables, opDescribeTable},
 	"graph":           {opGetQueryGraph, opObserveNode, opBindPane, opSetSignal, opDeleteSignal},
 	"detail":          {opGetDetail},
 	tablePaneId:       {opGetTable, opSetTableOptions},
