@@ -193,8 +193,12 @@ func TestSummariesOfTheOtherTypes(t *testing.T) {
 func TestATextExtremeOutlivesItsBatch(t *testing.T) {
 	schema := arrow.NewSchema([]arrow.Field{{Name: "s", Type: arrow.BinaryTypes.String}}, nil)
 	cols := summarise(t, schema,
-		func(rb *array.RecordBuilder) { rb.Field(0).(*array.StringBuilder).AppendValues([]string{"m", "a", "z"}, nil) },
-		func(rb *array.RecordBuilder) { rb.Field(0).(*array.StringBuilder).AppendValues([]string{"q", "r"}, nil) },
+		func(rb *array.RecordBuilder) {
+			rb.Field(0).(*array.StringBuilder).AppendValues([]string{"m", "a", "z"}, nil)
+		},
+		func(rb *array.RecordBuilder) {
+			rb.Field(0).(*array.StringBuilder).AppendValues([]string{"q", "r"}, nil)
+		},
 		func(rb *array.RecordBuilder) { rb.Field(0).(*array.StringBuilder).AppendValues([]string{"b"}, nil) })
 	assert.Equal(t, `"a"`, cols.Min[0])
 	assert.Equal(t, `"z"`, cols.Max[0])

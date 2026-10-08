@@ -20,7 +20,7 @@ func (inst *fakeMachine) OpsCurrent() string { return inst.current }
 func (inst *fakeMachine) OpsView(history int) opfsm.View {
 	inst.asked = history
 	return opfsm.View{Current: inst.current, States: []string{"idle", "running", "done"},
-		Edges: []opfsm.Edge{{From: "idle", To: "running", Label: "Run"}, {From: "running", To: "done"}, {From: "done", To: "running", Label: "Run"}},
+		Edges:   []opfsm.Edge{{From: "idle", To: "running", Label: "Run"}, {From: "running", To: "done"}, {From: "done", To: "running", Label: "Run"}},
 		History: []opfsm.Step{{From: "idle", To: "running"}}}
 }
 
