@@ -3,7 +3,7 @@ type: reference
 audience: contributor
 status: stable
 reviewed-by: "p@stergiotis"
-reviewed-date: 2026-08-27
+reviewed-date: 2026-10-08
 ---
 
 # Go Coding Standard

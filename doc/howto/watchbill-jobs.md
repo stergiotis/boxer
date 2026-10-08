@@ -3,7 +3,7 @@ type: how-to
 audience: developer giving an app or a headless binary durable work to do
 status: stable
 reviewed-by: "p@stergiotis"
-reviewed-date: 2026-09-15
+reviewed-date: 2026-10-08
 ---
 
 # How to run a job on watchbill

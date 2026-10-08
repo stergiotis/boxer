@@ -3,7 +3,7 @@ type: reference
 audience: package maintainer
 status: stable
 reviewed-by: "p@stergiotis"
-reviewed-date: 2026-04-23
+reviewed-date: 2026-10-08
 ---
 
 # H3 geospatial indexing bridge
