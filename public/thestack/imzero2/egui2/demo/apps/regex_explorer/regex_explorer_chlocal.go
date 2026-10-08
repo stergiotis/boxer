@@ -9,6 +9,7 @@ package regex_explorer
 
 import (
 	"context"
+	"errors"
 	"io"
 	"regexp"
 	"strings"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
@@ -89,9 +91,14 @@ var exceptionCode = regexp.MustCompile(`\(([A-Z][A-Z0-9_]+)\)`)
 // own exception text and its code, without the transport chain the broker
 // wraps it in ("execute query: … chlocalpool: worker exit: exit status 36
 // (stderr: Code: 36. DB::Exception: …") or the echoed query ("In scope
-// SELECT …"). Anything that is not a ClickHouse exception comes back
-// whole.
+// SELECT …"). A refused capability — the usual state of an explorer
+// embedded in a host that does not grant ChLocalCapPattern — is said in
+// those terms. Anything else comes back whole.
 func clickHouseMessage(err error) (msg string) {
+	if errors.Is(err, inprocbus.ErrPermissionViolation) {
+		msg = "this window may not query ClickHouse — its host app does not grant " + ChLocalCapPattern
+		return
+	}
 	msg = err.Error()
 	const marker = "DB::Exception: "
 	i := strings.Index(msg, marker)

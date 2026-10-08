@@ -556,7 +556,11 @@ func (inst *App) renderFunctionsTab() {
 			switch {
 			case chHas:
 				chText = fnReplaceValue(fn, repView.Value)
-			case repView.Err != nil:
+			case isEngineRejection(repView.Err):
+				// ClickHouse refused the replacement (`\9` with one
+				// group): the row is where to say so. A transport
+				// failure is the pattern lane's too, and the line above
+				// the table already carries it.
 				chText = clickHouseMessage(repView.Err)
 			}
 			inst.renderFnRow(fn, a.pattern, chText, chHas, "", false)

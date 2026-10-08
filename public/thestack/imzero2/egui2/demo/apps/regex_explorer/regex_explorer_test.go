@@ -13,10 +13,15 @@ import (
 	"regexp"
 	"slices"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/rs/zerolog"
+
+	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
@@ -650,5 +655,21 @@ func TestCompileCacheIsBounded(t *testing.T) {
 	}
 	if _, err := inst.getCompiledRegexp(`\d+`); err != nil {
 		t.Errorf("compile after a reset: %v", err)
+	}
+}
+
+// TestClickHouseMessageNamesARefusedCapability pins the wording an
+// explorer embedded in a host without the ch.local grant shows: the
+// broker's transport chain reduced to what the user can act on.
+func TestClickHouseMessageNamesARefusedCapability(t *testing.T) {
+	t.Parallel()
+	bus := inprocbus.NewInst(zerolog.Nop())
+	caller := bus.NewClient("test.no-grant", nil)
+	_, _, err := executeArrowStreamViaBus(context.Background(), caller, "SELECT 1", memory.NewGoAllocator())
+	if err == nil {
+		t.Fatalf("a client without the grant reached the broker")
+	}
+	if got := clickHouseMessage(err); !strings.Contains(got, ChLocalCapPattern) || strings.Contains(got, "chlocalbroker") {
+		t.Errorf("clickHouseMessage(%v) = %q; want the capability named and the transport chain gone", err, got)
 	}
 }
