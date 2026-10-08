@@ -17,9 +17,11 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/card"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/lwlens"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/graphview"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/leewaywidgets"
 )
 
 // play_projection.go is the Projection tab (ADR-0230 §SD4): the result's
@@ -98,8 +100,11 @@ func (inst projectionFeatureSetE) Doc() string {
 var projectionFeatureSets = [...]projectionFeatureSetE{projectionFeatureShape, projectionFeatureStructure, projectionFeatureComponents}
 
 const (
-	projectionDefaultK              = 15
-	projectionDefaultMinClusterSize = 10
+	projectionDefaultK = 15
+	// projectionDefaultMinClusterSize is small enough that a rare record
+	// kind of a facts-style batch is a cluster rather than noise
+	// (ADR-0289 §SD5).
+	projectionDefaultMinClusterSize = 5
 	// projectionExaggerationStart and projectionExaggerationSteps are the
 	// annealing schedule (ADR-0230 §SD2): t-SNE's early exaggeration of 12,
 	// lowered geometrically to the slider's value over the first steps
@@ -176,6 +181,11 @@ type projectionResult struct {
 	// slotFeatures is the raw features per slot, what the explanation was
 	// fitted on and what a publish writes out.
 	slotFeatures []card.EntityFeatures
+	// lens is the run's rows read as slots and banded by its clusters, the
+	// lens's row s being the graph's slot s (ADR-0289 §SD4); lensErr says
+	// why there is none.
+	lens    *lwlens.Analysis
+	lensErr error
 }
 
 // projectorSnapshot is a value-copy of Projector state taken under mutex,
@@ -269,12 +279,26 @@ type Projector struct {
 	// the button through it); the pane's next draw starts the run over the
 	// result it draws.
 	computeRequested bool
+	// runTask is the task whose compute_projection asked for the run in
+	// flight or requested; empty for the person's. cancel_projection lets
+	// a task stop only its own run.
+	runTask string
 	// posX, posY are the layout as get_projection last copied it, for the
 	// run of posVersion; posSettled says it was copied settled.
 	posX, posY []float32
 	posVersion uint64
 	posAt      time.Time
 	posSettled bool
+	// show is what the panel shows under its status line; lensValues and
+	// lensStable are the lens's two intents, bound by the sliders.
+	show                 projectionViewE
+	lensValues           float64
+	lensStable           float64
+	lensView             *leewaywidgets.LensView
+	lensPlan             lwlens.Plan
+	lensPlanFor          lensPlanKey
+	lensPlanOk           bool
+	lensPaneW, lensPaneH float32
 }
 
 // NewProjector binds the Projector to the play app's CardDriver. The Projector
@@ -287,6 +311,9 @@ func NewProjector(ids *c.WidgetIdStack, cards *CardDriver) *Projector {
 		params: projectionParams{
 			K:              projectionDefaultK,
 			MinClusterSize: projectionDefaultMinClusterSize,
+			// A leeway batch's kinds are which attributes its rows carry
+			// (ADR-0289 §SD5).
+			FeatureSet: projectionFeatureStructure,
 		},
 		view: graphview.New(ids, "play-projection", graphview.Options{
 			Layout:        graphview.LayoutForceDirected,
@@ -303,6 +330,8 @@ func NewProjector(ids *c.WidgetIdStack, cards *CardDriver) *Projector {
 		builtColorBy:      -2,
 		lastSelected:      -1,
 		idSeed:            nextVizSeed(),
+		lensValues:        projectionLensDefaultValues,
+		lensStable:        projectionLensDefaultStable,
 	}
 }
 
@@ -489,6 +518,14 @@ func (inst *Projector) run(rec arrow.RecordBatch, cancel chan struct{}, params p
 		}
 	}
 	allItems := withComponentItems(ie.Results(), compKinds, compRows)
+	// The lens reads the rows as slots on a pass of its own; a failure there
+	// costs the lens views, not the run.
+	ls := lwlens.NewSink(registryRenderer())
+	lensErr := driver.DriveRecordBatch(ls, rec)
+	if isClosed(cancel) {
+		inst.markCancelled(cancel)
+		return
+	}
 
 	features := fe.Results()
 	nRows := len(features)
@@ -595,7 +632,7 @@ func (inst *Projector) run(rec arrow.RecordBatch, cancel chan struct{}, params p
 		inst.fail(cancel, eh.Errorf("projection: distance graph: %w", err))
 		return
 	}
-	cl, err := algo.HDBSCAN(ctx, dg, g.CoreDist, algo.HDBSCANOptions{MinClusterSize: params.MinClusterSize})
+	cl, err := algo.HDBSCAN(ctx, dg, projectionCoreDist(&g, params.MinClusterSize), algo.HDBSCANOptions{MinClusterSize: params.MinClusterSize})
 	if err != nil {
 		inst.fail(cancel, eh.Errorf("projection: clustering: %w", err))
 		return
@@ -656,6 +693,10 @@ func (inst *Projector) run(rec arrow.RecordBatch, cancel chan struct{}, params p
 	}
 	res.explanation = explainProjection(ctx, desc, cl)
 	res.explanation.items = items
+	if lensErr == nil {
+		res.lens, lensErr = projectionLens(ctx, ls.Model(), slotIdx, cl.Label)
+	}
+	res.lensErr = lensErr
 	if isClosed(cancel) {
 		inst.markCancelled(cancel)
 		return
@@ -815,7 +856,8 @@ func (inst *PlayApp) renderProjection(rec arrow.RecordBatch, selectedRow int64, 
 			if c.Button(ids.PrepareStr("projectionCancel"),
 				c.Atoms().Text("Cancel").Keep()).
 				SendResp().HasPrimaryClicked() {
-				p.Cancel()
+				// The person's Cancel goes through the catalog (ADR-0270 §SD6).
+				inst.personCancelProjection()
 			}
 		case projectorStatusCancelling:
 			c.Spinner().Size(14).Send()
@@ -833,7 +875,7 @@ func (inst *PlayApp) renderProjection(rec arrow.RecordBatch, selectedRow int64, 
 				// The person's Compute goes through the catalog, as an
 				// agent's does (ADR-0270 §SD6).
 				args := ComputeProjectionArgs{Neighbours: int32(math.Round(p.kKnob)), MinCluster: int32(math.Round(p.mcsKnob)), Features: p.params.FeatureSet.String()}
-				playGesture(inst, opComputeProjection, args, func() { p.computeRequested = true })
+				playGesture(inst, opComputeProjection, args, func() { p.computeRequested, p.runTask = true, "" })
 			}
 			if p.computeRequested {
 				p.computeRequested = false
@@ -938,6 +980,18 @@ func (inst *Projector) renderGraph(snap projectorSnapshot, selectedRow int64, co
 			inst.frozen = false
 			inst.lastSelected = -1
 		}
+	}
+
+	inst.renderViewSelector()
+	if inst.show != projectionViewGraph {
+		inst.renderLensControls()
+		c.Label(inst.statusLine(res)).Send()
+		if res.clusters.NumClusters > 0 {
+			inst.renderExplanation(res)
+		}
+		c.Separator().Horizontal().Send()
+		inst.renderLens(snap, selectedRow)
+		return
 	}
 
 	// Layout controls: the exaggeration slider is the one knob of the

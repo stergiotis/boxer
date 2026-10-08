@@ -6,6 +6,8 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 
+	"github.com/stergiotis/boxer/public/functional/option"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 )
 
@@ -17,14 +19,34 @@ const CatalogTableName = "adhoc"
 type catalogRow struct {
 	handle            string
 	alias             string
+	bundle            string
 	publisher         string
 	publisherInstance uint64
 	keepAfterClose    bool
 	rows              uint64
 	bytes             uint64
+	plainBytes        uint64
 	revision          uint64
 	createdAtUnixUs   int64
 	openReaders       int64
+	callContext
+}
+
+// callContext is the attested call a live revision came from (ADR-0288
+// §SD5), as the catalogs show it; empty where no agent's call
+// published it.
+type callContext struct {
+	task         string
+	call         string
+	conversation string
+	turn         string
+}
+
+func callContextOf(cc option.Option[app.CallContext]) (c callContext) {
+	if cc.Has {
+		c = callContext{task: cc.Val.Task, call: cc.Val.Call, conversation: cc.Val.Conversation, turn: cc.Val.Turn}
+	}
+	return
 }
 
 // catalogRows returns a stable snapshot of the live datasets, sorted by
@@ -35,10 +57,10 @@ func (inst *Service) catalogRows() (rows []catalogRow) {
 	for _, r := range inst.live {
 		r.mu.RLock()
 		rows = append(rows, catalogRow{
-			handle: r.handle, alias: r.alias,
+			handle: r.handle, alias: r.alias, bundle: r.bundle,
 			publisher: string(r.owner.App), publisherInstance: r.owner.Instance, keepAfterClose: r.keepAfterClose,
-			rows: r.rows, bytes: r.bytes, revision: r.revision, createdAtUnixUs: r.createdAt,
-			openReaders: int64(r.file.Readers()),
+			rows: r.rows, bytes: r.bytes, plainBytes: r.plainBytes, revision: r.revision, createdAtUnixUs: r.createdAt,
+			openReaders: int64(r.file.Readers()), callContext: callContextOf(r.context),
 		})
 		r.mu.RUnlock()
 	}
@@ -73,12 +95,134 @@ func catalogTable(rows []catalogRow) *introspect.Table {
 	return introspect.NewTable().
 		String("handle", func(i int) string { return rows[i].handle }).
 		String("alias", func(i int) string { return rows[i].alias }).
+		String("bundle", func(i int) string { return rows[i].bundle }).
 		String("publisher", func(i int) string { return rows[i].publisher }).
 		Uint64("publisher_instance", func(i int) uint64 { return rows[i].publisherInstance }).
 		Bool("keep_after_close", func(i int) bool { return rows[i].keepAfterClose }).
 		Uint64("rows", func(i int) uint64 { return rows[i].rows }).
 		Uint64("bytes", func(i int) uint64 { return rows[i].bytes }).
+		Uint64("plain_bytes", func(i int) uint64 { return rows[i].plainBytes }).
 		Uint64("revision", func(i int) uint64 { return rows[i].revision }).
 		Int64("created_at_unix_us", func(i int) int64 { return rows[i].createdAtUnixUs }).
-		Int64("open_readers", func(i int) int64 { return rows[i].openReaders })
+		Int64("open_readers", func(i int) int64 { return rows[i].openReaders }).
+		String("task", func(i int) string { return rows[i].task }).
+		String("call", func(i int) string { return rows[i].call }).
+		String("conversation", func(i int) string { return rows[i].conversation }).
+		String("turn", func(i int) string { return rows[i].turn })
+}
+
+// BundleCatalogTableName is the keelson('…') name of the live bundle
+// catalog (ADR-0288 §SD5).
+const BundleCatalogTableName = "adhoc_bundles"
+
+type bundleCatalogRow struct {
+	alias             string
+	publisher         string
+	publisherInstance uint64
+	keepAfterClose    bool
+	revision          uint64
+	localNames        []string
+	datasetAliases    []string
+	handles           []string
+	documentBytes     int64
+	documentDigest    string
+	createdAtUnixUs   int64
+	sourceSql         string
+	inputHandles      []string
+	inputAliases      []string
+	// columnLocalNames names, index for index with columns, the dataset
+	// each summarised column belongs to.
+	columnLocalNames []string
+	columns          ColumnSummaries
+	callContext
+}
+
+// bundleCatalogRows returns the live bundles sorted by alias.
+func (inst *Service) bundleCatalogRows() (rows []bundleCatalogRow) {
+	inst.mu.RLock()
+	rows = make([]bundleCatalogRow, 0, len(inst.bundles))
+	for _, b := range inst.bundles {
+		aliases := make([]string, 0, len(b.localNames))
+		for _, n := range b.localNames {
+			aliases = append(aliases, DatasetAlias(b.alias, n))
+		}
+		rows = append(rows, bundleCatalogRow{
+			alias: b.alias, publisher: string(b.owner.App), publisherInstance: b.owner.Instance,
+			keepAfterClose: b.keepAfterClose, revision: b.revision,
+			localNames: b.localNames, datasetAliases: aliases, handles: b.handles,
+			documentBytes: int64(len(b.document)), documentDigest: b.documentDigest, createdAtUnixUs: b.createdAt,
+			callContext: callContextOf(b.context), sourceSql: b.sourceSql,
+		})
+		last := &rows[len(rows)-1]
+		for _, in := range b.inputs {
+			last.inputHandles = append(last.inputHandles, in.Handle)
+			last.inputAliases = append(last.inputAliases, in.Alias)
+		}
+		for i, h := range b.handles {
+			rec := inst.live[h]
+			if rec == nil {
+				continue
+			}
+			rec.mu.RLock()
+			cols := rec.columns
+			rec.mu.RUnlock()
+			for range cols.Len() {
+				last.columnLocalNames = append(last.columnLocalNames, b.localNames[i])
+			}
+			last.columns.appendAll(cols)
+		}
+	}
+	inst.mu.RUnlock()
+	slices.SortFunc(rows, func(a, b bundleCatalogRow) int { return strings.Compare(a.alias, b.alias) })
+	return
+}
+
+// bundleCatalogProvider serves keelson('adhoc_bundles'): what bundles are
+// live, whose they are, and which datasets each reads by which local name.
+type bundleCatalogProvider struct {
+	svc *Service
+}
+
+func newBundleCatalogProvider(svc *Service) *bundleCatalogProvider {
+	return &bundleCatalogProvider{svc: svc}
+}
+
+func (c *bundleCatalogProvider) Name() string { return BundleCatalogTableName }
+
+func (c *bundleCatalogProvider) Freshness() introspect.FreshnessClass {
+	return introspect.FreshnessLive
+}
+
+func (c *bundleCatalogProvider) Schema() *arrow.Schema { return bundleCatalogTable(nil).Schema() }
+
+func (c *bundleCatalogProvider) Snapshot(proj introspect.Projection) (arrow.RecordBatch, error) {
+	rows := c.svc.bundleCatalogRows()
+	return bundleCatalogTable(rows).Build(proj, len(rows)), nil
+}
+
+func bundleCatalogTable(rows []bundleCatalogRow) *introspect.Table {
+	return introspect.NewTable().
+		String("alias", func(i int) string { return rows[i].alias }).
+		String("publisher", func(i int) string { return rows[i].publisher }).
+		Uint64("publisher_instance", func(i int) uint64 { return rows[i].publisherInstance }).
+		Bool("keep_after_close", func(i int) bool { return rows[i].keepAfterClose }).
+		Uint64("revision", func(i int) uint64 { return rows[i].revision }).
+		StringList("local_names", func(i int) []string { return rows[i].localNames }).
+		StringList("dataset_aliases", func(i int) []string { return rows[i].datasetAliases }).
+		StringList("handles", func(i int) []string { return rows[i].handles }).
+		Int64("document_bytes", func(i int) int64 { return rows[i].documentBytes }).
+		String("document_digest", func(i int) string { return rows[i].documentDigest }).
+		Int64("created_at_unix_us", func(i int) int64 { return rows[i].createdAtUnixUs }).
+		String("source_sql", func(i int) string { return rows[i].sourceSql }).
+		StringList("input_handles", func(i int) []string { return rows[i].inputHandles }).
+		StringList("input_aliases", func(i int) []string { return rows[i].inputAliases }).
+		String("task", func(i int) string { return rows[i].task }).
+		String("call", func(i int) string { return rows[i].call }).
+		String("conversation", func(i int) string { return rows[i].conversation }).
+		String("turn", func(i int) string { return rows[i].turn }).
+		StringList("column_local_names", func(i int) []string { return rows[i].columnLocalNames }).
+		StringList("column_names", func(i int) []string { return rows[i].columns.Names }).
+		StringList("column_types", func(i int) []string { return rows[i].columns.Types }).
+		Uint64List("column_nulls", func(i int) []uint64 { return rows[i].columns.Nulls }).
+		Uint64List("column_distinct", func(i int) []uint64 { return rows[i].columns.Distinct })
 }

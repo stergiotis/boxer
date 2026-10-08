@@ -258,6 +258,9 @@ type ChartDriver struct {
 	droppedSeries int
 	points        int
 	foldedOnce    bool
+	// foldGen counts the folds, so get_chart's snapshot copies a fold once
+	// (play_ops_chart.go).
+	foldGen uint64
 
 	forExecuted     time.Time
 	forSchema       *arrow.Schema
@@ -266,6 +269,9 @@ type ChartDriver struct {
 	mark     chartMarkE
 	markSet  bool // the reader picked; otherwise the default follows the data
 	logScale bool
+	// onOptions routes the mark chips through set_chart_options; nil applies
+	// them directly (play_ops_chart.go).
+	onOptions func(in SetChartOptionsArgs)
 
 	// paneW/paneH is the last good answer from the pane probe. The probe
 	// reports nothing on the frame a hidden tab comes back — and this tab is
@@ -599,7 +605,10 @@ func (inst *ChartDriver) renderChips() {
 		for i, m := range inst.availableMarks() {
 			if c.Button(inst.ids.PrepareSeq(uint64(0xc4a0+i)), c.Atoms().Text(m.String()).Keep()).
 				Selected(m == active).FrameWhenInactive(false).Frame(true).SendResp().HasPrimaryClicked() {
-				inst.mark, inst.markSet = m, true
+				// Through set_chart_options (ADR-0270 §SD6): the pick is the
+				// person's, and a task that read the chart pauses.
+				name := chartMarkName(m)
+				inst.requestOptions(SetChartOptionsArgs{Mark: &name})
 			}
 		}
 		if inst.logOK {
@@ -934,6 +943,7 @@ func (inst *ChartDriver) rebuild(rec arrow.RecordBatch, schema *arrow.Schema, k 
 	inst.forSchema = schema
 	inst.forExecuted = inst.pendingExecuted
 	inst.foldedOnce = true
+	inst.foldGen++
 	inst.foldErr = ""
 	inst.truncated = 0
 	inst.droppedSeries = 0

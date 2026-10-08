@@ -8,6 +8,7 @@ package play
 // learns why a statement failed without guessing from a one-line error.
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
@@ -34,7 +35,7 @@ type RewriteFailure struct {
 
 // RewritesDiag is the Pre-execute rewrites section.
 type RewritesDiag struct {
-	Measured bool             `desc:"true when the rewrite of this buffer was measured; false until the Passes or Diagnostics pane has measured it — validate_sql reports a statement's failed rewrites without it"`
+	Measured bool             `desc:"true when the rewrite of this buffer was measured; false until the Passes or Diagnostics pane has drawn this buffer — show_pane diagnostics measures it on its next draw, and validate_sql reports a statement's failed rewrites without it"`
 	Summary  string           `json:",omitzero" desc:"how many steps applied, changed, were skipped or declined"`
 	Failed   []RewriteFailure `json:",omitzero" desc:"the steps that did not run; the statement still runs without them"`
 }
@@ -66,8 +67,10 @@ type DiagnosticsState struct {
 	QueryGraph     string       `desc:"how the last run split into a query graph, or why it ran as one statement"`
 	// DroppedEmits are panel signal writes the store refused.
 	DroppedEmits []string `json:",omitzero" desc:"signal writes from panels the store dropped; the signal keeps its previous value"`
-	LastRun      string   `desc:"the last run's outcome: the full error when it failed, else its summary"`
-	LastRunError bool     `desc:"true when the last run failed"`
+	// GlossNotes are the buffer's gloss directives that did not compile.
+	GlossNotes   []string `json:",omitzero" desc:"the buffer's -- play: gloss directive lines that did not compile, with why; the columns they meant draw unglossed"`
+	LastRun      string   `desc:"the outcome of the run the panels draw — the main result, or the node observed in the panels: the full error when it failed, else its summary"`
+	LastRunError bool     `desc:"true when that run failed"`
 }
 
 // snapshotDiagnostics copies the pane's sections on the render goroutine;
@@ -143,11 +146,16 @@ func snapshotDiagnostics(p *PlayApp) (out DiagnosticsState) {
 		out.QueryGraph = "split into " + strconv.Itoa(len(p.currentSplit.Nodes)) + " node(s); the panes observe " + strconv.Quote(string(p.activeNodeID()))
 	}
 
+	out.GlossNotes = p.glossDirectiveNotes()
+
 	if p.graph != nil {
 		for _, d := range p.graph.emitDrops() {
 			out.DroppedEmits = append(out.DroppedEmits, d.Name+": "+d.Writer+" emitted a "+d.ValueType+", which has no raw form")
 		}
-		rec, _, numRows, _, elapsed, summary, executed, err, _ := p.graph.MainSnapshot()
+		// The pane's Last run is fed the active frame, an observed
+		// intermediate included, and so is this; activeTruncation is that
+		// frame's truncation.
+		rec, _, numRows, _, elapsed, summary, executed, err, _ := p.activeSnapshot()
 		if rec != nil {
 			rec.Release()
 		}
@@ -161,9 +169,9 @@ func snapshotDiagnostics(p *PlayApp) (out DiagnosticsState) {
 }
 
 func addDiagnosticsOps(s *appops.Set[*PlayLauncher, opsSnap]) {
-	appops.Query(s, app.OperationSpec{Name: opGetDiagnostics, Version: 1,
-		Summary: "read the Diagnostics pane: whether the buffer parses and ClickHouse's verdict when it does not, skipped rewrites, unresolved leeway handles, the security class, the query graph split, dropped signal emits and the last run's full error",
-		Reads:   []string{opsResSql, opsResResult, opsResSignals}, Agents: true, Untrusted: true,
+	appops.Query(s, app.OperationSpec{Name: opGetDiagnostics, Version: 2,
+		Summary: "read the Diagnostics pane: whether the buffer parses and ClickHouse's verdict when it does not, skipped rewrites, unresolved leeway handles, the security class, the query graph split, dropped signal emits, gloss directives that did not compile and the last run's full error",
+		Reads:   []string{opsResSql, opsResResult, opsResSignals, opsResPanes}, Agents: true, Untrusted: true,
 		Follows: []string{"validate_sql checks a statement you have not set; get_diagnostics reads the buffer as it stands and the last run"}},
 		func(sn opsSnap, in appops.None) (DiagnosticsState, error) {
 			if !sn.mounted {
@@ -171,4 +179,25 @@ func addDiagnosticsOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 			}
 			return sn.diagnostics, nil
 		})
+}
+
+// glossDirectiveNotes are the buffer's gloss directives that do not compile,
+// as the Table pane notes them under its pager. The Table's resolution holds
+// them for the buffer it last drew against; a buffer it has not drawn since
+// is compiled here, which reads no result.
+func (inst *PlayApp) glossDirectiveNotes() (notes []string) {
+	ds := scanGlossDirectives(inst.sql)
+	if len(ds) == 0 {
+		return
+	}
+	if inst.glossRes.forSchema != nil && inst.glossRes.directives == directivesKey(ds) {
+		return slices.Clone(inst.glossRes.notes)
+	}
+	cat := inst.glossCatalog()
+	for _, d := range ds {
+		if _, err := cat.CompileRule(d.token, d.pattern, "directive line "+strconv.Itoa(d.line)); err != nil {
+			notes = append(notes, "-- play: gloss, line "+strconv.Itoa(d.line)+": "+err.Error())
+		}
+	}
+	return
 }

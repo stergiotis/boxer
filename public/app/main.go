@@ -36,7 +36,6 @@ import (
 	"github.com/stergiotis/boxer/public/config/env/envdoc"
 	badgercli "github.com/stergiotis/boxer/public/db/badger/cli"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/genbuildertest"
-	"github.com/stergiotis/boxer/public/db/clickhouse/text2sql"
 	"github.com/stergiotis/boxer/public/dev"
 	"github.com/stergiotis/boxer/public/docgen"
 	"github.com/stergiotis/boxer/public/gov"
@@ -51,6 +50,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/profiling/pprofhttp"
 	"github.com/stergiotis/boxer/public/observability/tracing"
 	"github.com/stergiotis/boxer/public/observability/vcs"
+	"github.com/stergiotis/boxer/public/science/geo/grib"
 	"github.com/stergiotis/boxer/public/semistructured/cbor"
 	lw "github.com/stergiotis/boxer/public/semistructured/leeway/cli"
 	"github.com/urfave/cli/v2"
@@ -118,7 +118,6 @@ func mainC() (exitCode int) {
 			gov.NewCliCommand(),
 			finddivisions.NewCliCommand(),
 			code.NewCliCommand(genbuildertest.NewCliCommand()),
-			text2sql.NewCliCommand(),
 			badgercli.NewCliCommandBadger(),
 			// Ported from pebble2impl app/commands (P9). cbor/leeway/observability/
 			// dev/env(=envgen)/gov are intentionally omitted as boxer wires them
@@ -144,6 +143,7 @@ func mainC() (exitCode int) {
 			markdown.NewCliCommand(),
 			sample.NewCliCommand(),
 			swisstopo.NewCliCommand(),
+			grib.NewCliCommand(),
 			sysmetricsd.NewCliCommand(),
 			watch.NewCliCommand(),
 			// Codegen tools folded from cmd/* mains (entry-point standard).

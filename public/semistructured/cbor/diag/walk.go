@@ -71,6 +71,10 @@ type printer struct {
 	// keyDepth is positive while a map key is being rendered; nothing
 	// inside a key is annotated, the value is.
 	keyDepth int
+	// labelLine is the offset of the newline that starts the line the
+	// annotation comments in labelBytes sit on; column does not count them.
+	labelLine  int
+	labelBytes int
 	// lastFiller is where the trailing run of filler spans began, or -1
 	// when the last emit was not filler — degrade drops it so the failure
 	// does not land on a half-indented line.
@@ -189,10 +193,16 @@ func (p *printer) emit(cat CategoryE, s string) {
 	p.out = append(p.out, s...)
 }
 
-// column is the width of the current output line.
+// column is the width of the current output line, less the annotation
+// comments on it: a comment is a label, not content, and does not push the
+// rest of its line over the width.
 func (p *printer) column() int {
 	i := bytes.LastIndexByte(p.out, '\n')
-	return len(p.out) - i - 1
+	col := len(p.out) - i - 1
+	if p.labelLine == i {
+		col -= p.labelBytes
+	}
+	return max(0, col)
 }
 
 func (p *printer) newline(depth int) {
@@ -288,13 +298,13 @@ func (p *printer) item(inKey bool) (err error) {
 			return p.fail(start, ErrIndefiniteHead)
 		}
 		p.emit(p.scalarCat(CategoryNumber, inKey), strconv.FormatUint(val, 10))
-		p.annotate()
+		p.annotate(start, p.off)
 	case majorNeg:
 		if ai == aiIndefinite {
 			return p.fail(start, ErrIndefiniteHead)
 		}
 		p.emit(p.scalarCat(CategoryNumber, inKey), negativeText(val))
-		p.annotate()
+		p.annotate(start, p.off)
 	case majorBytes:
 		if ai == aiIndefinite {
 			return p.chunks(mt, inKey)
@@ -305,7 +315,7 @@ func (p *printer) item(inKey bool) (err error) {
 		b := p.data[p.off : p.off+int(val)]
 		p.off += int(val)
 		p.byteString(b, inKey)
-		p.annotate()
+		p.annotate(start, p.off)
 	case majorText:
 		if ai == aiIndefinite {
 			return p.chunks(mt, inKey)
@@ -319,7 +329,7 @@ func (p *printer) item(inKey bool) (err error) {
 		}
 		p.off += int(val)
 		p.emit(p.scalarCat(CategoryText, inKey), textString(p.scratch[:0], b))
-		p.annotate()
+		p.annotate(start, p.off)
 	case majorArray:
 		return p.container(start, false, ai == aiIndefinite, val)
 	case majorMap:
@@ -328,7 +338,7 @@ func (p *printer) item(inKey bool) (err error) {
 		if ai == aiIndefinite {
 			return p.fail(start, ErrIndefiniteHead)
 		}
-		return p.tag(val, inKey)
+		return p.tag(start, val, inKey)
 	case majorSimple:
 		return p.simple(start, ai, val, inKey)
 	}
@@ -431,10 +441,10 @@ func (p *printer) chunks(mt byte, inKey bool) (err error) {
 		} else {
 			p.emit(p.scalarCat(CategoryText, inKey), `""_`)
 		}
-		p.annotate()
+		p.annotate(start, p.off)
 		return
 	}
-	multi := p.multiline(start)
+	multi, _ := p.multiline(start)
 	p.emit(CategoryStructural, "(_")
 	if !multi {
 		p.emit(CategoryFiller, " ")
@@ -479,10 +489,13 @@ func (p *printer) chunks(mt byte, inKey bool) (err error) {
 
 // multiline decides whether the container starting at start (its head
 // offset) is laid out one element per line: never in Compact mode, else
-// when its compact rendering overruns the line from the current column.
-func (p *printer) multiline(start int) bool {
+// when its compact rendering overruns the line from the current column. end
+// is the offset just past the container, which the measuring walk found, or
+// -1 when it did not run or failed.
+func (p *printer) multiline(start int) (multi bool, end int) {
+	end = -1
 	if p.opts.Compact {
-		return false
+		return false, end
 	}
 	avail := p.width - p.column()
 	m := &printer{
@@ -502,10 +515,11 @@ func (p *printer) multiline(start int) bool {
 	// against the width, so a container that fits stays on one line and
 	// carries its comment after it.
 	m.opts.Annotate = nil
+	m.opts.AnnotateItem = nil
 	if err := m.item(false); err != nil {
-		return true
+		return true, end
 	}
-	return len(m.out) > avail
+	return len(m.out) > avail, m.off
 }
 
 // container renders an array or a map, definite or indefinite.
@@ -518,7 +532,7 @@ func (p *printer) container(start int, isMap bool, indefinite bool, count uint64
 		// the item truncated; without this a huge count would spin.
 		return p.fail(start, ErrTruncated)
 	}
-	multi := p.multiline(start)
+	multi, end := p.multiline(start)
 	open, closer := "[", "]"
 	if isMap {
 		open, closer = "{", "}"
@@ -531,7 +545,7 @@ func (p *printer) container(start int, isMap bool, indefinite bool, count uint64
 		}
 	}
 	if multi {
-		p.annotate()
+		p.annotate(start, end)
 	}
 	p.depth++
 	var i uint64
@@ -584,7 +598,7 @@ func (p *printer) container(start int, isMap bool, indefinite bool, count uint64
 	}
 	p.emit(CategoryStructural, closer)
 	if !multi {
-		p.annotate()
+		p.annotate(start, p.off)
 	}
 	return
 }
@@ -592,7 +606,7 @@ func (p *printer) container(start int, isMap bool, indefinite bool, count uint64
 // tag renders `n(content)`. Tags 2 and 3 over a byte string render as the
 // bignum they carry, the fxamacker spelling; over anything else the tag is
 // shown as any other tag.
-func (p *printer) tag(num uint64, inKey bool) (err error) {
+func (p *printer) tag(tagStart int, num uint64, inKey bool) (err error) {
 	if (num == 2 || num == 3) && p.off < len(p.data) && p.data[p.off]>>5 == majorBytes && p.data[p.off]&0x1f != aiIndefinite {
 		start := p.off
 		_, _, n, herr := p.head()
@@ -605,7 +619,7 @@ func (p *printer) tag(num uint64, inKey bool) (err error) {
 				bi.Neg(bi)
 			}
 			p.emit(p.scalarCat(CategoryNumber, inKey), bi.String())
-			p.annotate()
+			p.annotate(tagStart, p.off)
 			return
 		}
 		p.off = start
@@ -649,7 +663,7 @@ func (p *printer) simple(start int, ai byte, val uint64, inKey bool) (err error)
 	default:
 		p.emit(cat, "simple("+strconv.FormatUint(val, 10)+")")
 	}
-	p.annotate()
+	p.annotate(start, p.off)
 	return
 }
 
@@ -733,14 +747,29 @@ func float16ToFloat64(h uint16) float64 {
 // annotate asks the hook for the current item's comment and writes it
 // after the item — after the opening bracket when the item is a container
 // that spans lines, so the label sits on the line a reader starts from.
-func (p *printer) annotate() {
-	if p.opts.Annotate == nil || p.keyDepth > 0 {
+// [start, end) are the item's encoded bytes, which AnnotateItem is handed;
+// an end of -1 hands it nil.
+func (p *printer) annotate(start int, end int) {
+	if (p.opts.Annotate == nil && p.opts.AnnotateItem == nil) || p.keyDepth > 0 {
 		return
 	}
-	text := p.opts.Annotate(p.path)
+	var text string
+	if p.opts.AnnotateItem != nil {
+		var item []byte
+		if start >= 0 && end >= start && end <= len(p.data) {
+			item = p.data[start:end]
+		}
+		text = p.opts.AnnotateItem(p.path, item)
+	} else {
+		text = p.opts.Annotate(p.path)
+	}
 	if text == "" {
 		return
 	}
+	if i := bytes.LastIndexByte(p.out, '\n'); i != p.labelLine {
+		p.labelLine, p.labelBytes = i, 0
+	}
+	p.labelBytes += len(text) + 5
 	p.emit(CategoryFiller, " ")
 	p.emit(CategoryComment, "/ "+text+" /")
 }

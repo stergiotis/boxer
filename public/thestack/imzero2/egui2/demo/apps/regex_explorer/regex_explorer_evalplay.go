@@ -190,11 +190,13 @@ func chExtractRows(out listOutcome) (rows []chExtractRow) {
 func (inst *App) requestEvalInPlay(snap evalSnapshot) {
 	handles, err := inst.publishEvalDatasets(snap)
 	if err == nil {
-		datasets := []string{goDatasetAlias}
+		// The window's own aliases (ADR-0288 §SD3), read in play under the
+		// base names the SQL writes.
+		datasets, names := []string{inst.goPub.Alias()}, []string{goDatasetAlias}
 		if handles.chHandle != "" {
-			datasets = append(datasets, chDatasetAlias)
+			datasets, names = append(datasets, inst.chPub.Alias()), append(names, chDatasetAlias)
 		}
-		err = inst.openEvalPlayground(buildEvalSQL(snap, handles), datasets)
+		err = inst.openEvalPlayground(buildEvalSQL(snap, handles), datasets, names)
 	}
 
 	inst.mu.Lock()
@@ -297,18 +299,19 @@ func (inst *App) publishEvalDatasets(snap evalSnapshot) (handles evalHandles, er
 // following the dataset aliases sql names (ADR-0240 §SD7), so a later
 // hand-off from this window reaches the open playground. AutoRun so the
 // join is on screen when the window appears.
-func (inst *App) openEvalPlayground(sql string, datasets []string) (err error) {
+func (inst *App) openEvalPlayground(sql string, datasets []string, names []string) (err error) {
 	bus := inst.busSnapshot()
 	if bus == nil {
 		err = eh.Errorf("no bus wired")
 		return
 	}
 	cfgBytes, err := buscodec.Encode(launchcfg.PlayLaunch{
-		At:       time.Now().UTC(),
-		Sql:      sql,
-		AutoRun:  true,
-		Endpoint: launchcfg.EndpointIntrospection,
-		Datasets: datasets,
+		At:           time.Now().UTC(),
+		Sql:          sql,
+		AutoRun:      true,
+		Endpoint:     launchcfg.EndpointIntrospection,
+		Datasets:     datasets,
+		DatasetNames: names,
 	})
 	if err != nil {
 		err = eh.Errorf("encode launch config: %w", err)

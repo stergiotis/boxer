@@ -62,3 +62,21 @@ func TestGalleryGroupByCategory_FilterNoMatch(t *testing.T) {
 	groups := galleryGroupByCategory(demos, "nomatch")
 	assert.Empty(t, groups)
 }
+
+func TestGalleryDemos_HideDemosHidesMatches(t *testing.T) {
+	t.Cleanup(func() { HideDemos(nil) })
+	all := galleryDemos()
+	HideDemos(func(d registry.Demo) bool { return d.Flags&registry.DemoFlagNeedsNetwork != 0 })
+	kept := galleryDemos()
+	n := 0
+	for _, d := range all {
+		if d.Flags&registry.DemoFlagNeedsNetwork != 0 {
+			n++
+		}
+	}
+	require.NotZero(t, n, "the registry has network demos to hide")
+	assert.Len(t, kept, len(all)-n)
+	for _, d := range kept {
+		assert.Zero(t, d.Flags&registry.DemoFlagNeedsNetwork, d.Name)
+	}
+}

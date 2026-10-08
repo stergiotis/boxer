@@ -132,8 +132,9 @@ surface in [`doc/env-vars.md`](../../doc/env-vars.md):
 | `IMZERO2_HEADLESS` | unset | Only with a dual-feature build: `1`/`on` selects the headless host at runtime. |
 
 When both binaries exist, the Go launcher selects via
-`--clientBinary` (`target/release/imzero2` vs
-`target/headless/release/imzero2`).
+`--clientBinary` (`target/dist/imzero2` vs
+`target/headless/dist/imzero2` for the production builds, `release` in place
+of `dist` for the development ones).
 
 ### Render cadence
 
@@ -199,6 +200,22 @@ port is unauthenticated remote control, so it stays closed until `EGUI_INSPECTIO
 opens it (loopback only), and the headless remote-access build excludes the
 feature entirely. Full steps and the security note:
 [doc/howto/egui-mcp.md](../../doc/howto/egui-mcp.md).
+
+## Development and production builds
+
+`./build_rust_dist.sh [desktop|headless|headless_mesh|headless_soft|headless_svg]`
+builds a host under the `dist` profile — fat LTO, one codegen unit, stripped
+symbols — without the dev tooling, into `target/<host dir>/dist/imzero2`. The
+launchers (`hmi.sh`, `hmi_headless.sh`), the showcase and airgap scripts and
+the svg server use it; the scene runner takes whichever of a host's `dist` and
+`release` binaries is newer.
+
+The `build_rust*.sh` scripts build the development hosts under cargo's
+`release` profile, two to three times faster. The desktop one (`build_rust.sh`)
+also compiles in the profiler (`puffin`) and `inspection`, both dormant until
+their variables ask for them; `profile.sh` runs it, and so does `hmi.sh` when
+`EGUI_INSPECTION` is set. The profile's trade-offs are noted beside
+`[profile.dist]` in `Cargo.toml`.
 
 ## Layout
 

@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/apache/arrow-go/v18/arrow"
+
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/fsmops"
@@ -49,13 +51,41 @@ type ParamState struct {
 	// Tier is pinned (a SET line in the buffer) or live (the signal store).
 	Tier  string `desc:"pinned or live"`
 	Value string `desc:"its current value, as text"`
+	// Widget and what it offers are ADR-0274 §SD3's: the control the
+	// parameter block draws for the slot.
+	Widget  string        `desc:"the control that edits it: text, enum, range (a from/to pair with relative expressions), datetime pair, or expr (a SQL expression)"`
+	With    string        `json:",omitzero" desc:"for a range or a datetime pair, the other parameter folded into the same control"`
+	Options []ParamOption `json:",omitzero" desc:"for an enum, the values it offers, from its -- play: enum line; set_param refuses any other"`
+	// Unfilled is what run refuses on.
+	Unfilled bool `json:",omitzero" desc:"true when a run still needs a value for it"`
+	// Default is the prelude value Reset restores; only pinned values have one.
+	Default *string `json:",omitzero" desc:"the value the buffer's prelude gave it when the buffer was loaded, which the person's Reset restores; set_param it back and run to do the same"`
+	Moved   bool    `json:",omitzero" desc:"true when its value is not its default"`
 }
 
-// SignalState is one signal as get_state reports it.
+// ParamOption is one value an enumerated parameter offers.
+type ParamOption struct {
+	Value string `desc:"the value set_param takes"`
+	Label string `json:",omitzero" desc:"what the dropdown shows for it, when that is not the value"`
+}
+
+// SignalState is one signal as get_state reports it: held in the store,
+// read by the buffer, or both.
 type SignalState struct {
 	Name   string `desc:"the signal name"`
 	Value  string `desc:"its value, as text"`
 	Writer string `desc:"who wrote it last: a pane, a widget, the person's editor, or a task"`
+	// The Signals section's facts (ADR-0274 §SD3's signal half).
+	Held     bool     `desc:"true when the store holds a value; false for a name the buffer reads and nothing has written"`
+	Read     bool     `json:",omitzero" desc:"true when the buffer reads it"`
+	Types    []string `json:",omitzero" desc:"the types the buffer and the panes read it as"`
+	Conflict bool     `json:",omitzero" desc:"true when it is read as more than one type: one value, divergent casts"`
+	Pinned   bool     `json:",omitzero" desc:"true when a SET line in the buffer binds the name, so the constant shadows the store at run time and set_signal changes nothing a run sees"`
+	Unfilled bool     `json:",omitzero" desc:"true when the buffer reads it and nothing fills it; a run needs it"`
+	Lags     bool     `json:",omitzero" desc:"for selection_id, true when it was written before the selection it accompanies, so it names the previous leeway row"`
+	Revision uint64   `json:",omitzero" desc:"the store revision of its last write"`
+	Pane     string   `json:",omitzero" desc:"the pane that publishes it, when one does"`
+	Refused  string   `json:",omitzero" desc:"why set_signal refuses it, and what to call instead; empty when it may be set"`
 }
 
 // ResultState is the main result as get_state reports it.
@@ -64,6 +94,12 @@ type ResultState struct {
 	Phase string `desc:"idle, running, rows, empty or failed, or rows (stale), empty (stale) or failed (stale) when the buffer or a signal moved since the run; query_state has the transitions"`
 	Rows  int64  `desc:"its row count"`
 	Error string `desc:"the error of a failed run"`
+	// Notice is the status line's override of the summary.
+	Notice    string `json:",omitzero" desc:"what the status line says in place of the result's summary: a refused run and why, the write gate, a write's outcome, or Live switched off by its breaker"`
+	Progress  string `json:",omitzero" desc:"while running, the server's progress: rows and bytes read, rate, estimate"`
+	Truncated string `json:",omitzero" desc:"why the main result is a prefix of what the statement returns; empty when it is whole"`
+	// RunBy says whose run is in flight, which cancel_run checks.
+	RunBy string `json:",omitzero" desc:"while running, whose run it is: person, or task:<id>; cancel_run stops only the calling task's own"`
 }
 
 // PlayState is get_state's result.
@@ -72,33 +108,64 @@ type PlayState struct {
 	Live       bool          `desc:"whether Live reruns the query when a signal it reads moves"`
 	RaisedPane string        `desc:"the pane play last raised"`
 	Params     []ParamState  `desc:"the buffer's parameter slots"`
-	Signals    []SignalState `desc:"the signals held"`
+	ParamNote  string        `json:",omitzero" desc:"the parameter block's note on a slot that did not get the control its name suggests: a half-pinned range, an enum or expr line naming no slot, a type mismatch"`
+	Signals    []SignalState `desc:"the signals held, and those the buffer reads that nothing holds"`
 	Result     ResultState   `desc:"the main result"`
+	// Statements says which statement of a buffer of several run ships.
+	Statements   int32 `json:",omitzero" desc:"how many statements the buffer holds besides its SET prelude, when more than one"`
+	RunStatement int32 `json:",omitzero" desc:"for a buffer of several, which one run ships (1 for the first): the one at the person's caret; run's statement picks another"`
+	// Conditions is the run option set_run_options sets.
+	Conditions string `json:",omitzero" desc:"the conditions rewrite, on or off; empty when the endpoint does not offer it; set_run_options sets it"`
 	// Destination is what a grant must list for a run to reach the
 	// endpoint (ADR-0270 §SD2).
 	Destination string `desc:"the endpoint as a grant names it, clickhouse:<host>; a run that names a table outside keelson() needs it, and under Auto a run naming only keelson tables needs keelson:<table> for each instead"`
+	// Bundle and Followed are what open_bundle and bind_dataset change, so
+	// a task reads them here before it calls either (ADR-0269 §SD1).
+	Bundle   string   `json:",omitzero" desc:"the ad-hoc bundle the window follows, alias@revision; open_bundle changes it"`
+	Followed []string `json:",omitzero" desc:"the dataset names the window binds or waits for; bind_dataset adds to them"`
 }
 
 // Column is one result column.
 type Column struct {
 	Name string `desc:"the column name"`
 	Type string `desc:"its Arrow type"`
+	// Handle is what the Table's header and describe_table call a leeway
+	// column; Label is the name a gloss directive's column goes by.
+	Handle string `json:",omitzero" desc:"for a leeway column, its handle (section:column), the name to write"`
+	Label  string `json:",omitzero" desc:"for a column whose name carries a gloss directive (mass@gloss/kg), the name it goes by (mass)"`
+	// Gloss is the column's gloss as the window resolved it: list_glosses
+	// names the glosses, and this says whether a declaration took.
+	Gloss *ColumnGloss `json:",omitzero" desc:"the gloss its cells render through, what bound it, and whether it is applied; left out for a plain column"`
 }
 
 // ResultDescription is describe_result's result.
 type ResultDescription struct {
 	Id      uint64   `desc:"the result id; 0 before any run"`
+	Node    string   `json:",omitzero" desc:"the split node the result is of"`
 	Columns []Column `desc:"the columns"`
 	Rows    int64    `desc:"the row count"`
 	Loading bool     `desc:"true while a run is in flight"`
 	Error   string   `desc:"the error of a failed run"`
+	// Truncated is the result's own bound, not a read's: the run kept a
+	// prefix of what the statement returns.
+	Truncated        bool   `json:",omitzero" desc:"true when the result is a prefix of what the statement returns"`
+	TruncationReason string `json:",omitzero" desc:"why the result is a prefix"`
+	// Leeway and Reading are the result's leeway reading: its columns
+	// carry leeway's encoding, and how to write against them.
+	Leeway  bool   `json:",omitzero" desc:"true when the result's columns carry leeway's encoding; write their handles"`
+	Reading string `json:",omitzero" desc:"for a leeway result, how to read leeway columns in play"`
+	// GlossNote says when the columns' glosses could not be reported.
+	GlossNote string `json:",omitzero" desc:"why the columns carry no gloss state"`
 }
 
 // SampleArgs is sample_rows' argument.
 type SampleArgs struct {
+	Pane   string   `json:",omitzero" desc:"the pane whose fed result to sample, as list_panes names it; left out, the result the unbound panels draw"`
+	Node   string   `json:",omitzero" desc:"the split node whose result to sample, as list_panes names it; it must be drawn by a pane or be the main result"`
 	Offset uint32   `json:",omitzero" desc:"the first row; 0 when left out"`
 	Limit  uint32   `json:",omitzero" desc:"how many rows, at most 50; 50 when left out"`
-	Fields []string `json:",omitzero" desc:"the columns to return; every column when left out"`
+	Rows   []int64  `json:",omitzero" desc:"the rows to read, 0 for the first, at most 50; in place of offset and limit"`
+	Fields []string `json:",omitzero" desc:"the columns to return, by name, by gloss label or, for a leeway result, by handle (section:column); every column when left out"`
 	// ResultId, when set, must name the result held: a sample never mixes
 	// rows of two runs.
 	ResultId *uint64 `desc:"the result the sample is of; refused when another is held"`
@@ -106,10 +173,23 @@ type SampleArgs struct {
 
 // SampleRows is sample_rows' result.
 type SampleRows struct {
-	ResultId  uint64     `desc:"the result the rows come from"`
-	Columns   []string   `desc:"the columns returned"`
-	Rows      [][]string `desc:"the cells as text"`
-	Truncated bool       `desc:"true when the row or byte bound cut the sample"`
+	ResultId uint64   `desc:"the result the rows come from"`
+	Node     string   `json:",omitzero" desc:"the split node the result is of"`
+	Columns  []string `desc:"the columns returned, by their names in the result"`
+	// Handles is parallel to Columns: what the Table's header and
+	// describe_table call a leeway column, "" where that is its name.
+	Handles []string `json:",omitzero" desc:"for a leeway result, each returned column's handle (section:column), parallel to Columns; empty where the column's name is what to write"`
+	// Labels is parallel to Columns: the name a gloss directive's column
+	// goes by.
+	Labels []string   `json:",omitzero" desc:"each returned column's gloss label, parallel to Columns; empty where the column's name carries no gloss directive"`
+	Rows   [][]string `desc:"the cells as text; a NULL cell is empty text and listed in Nulls"`
+	// RowNumbers is parallel to Rows.
+	RowNumbers []int64 `desc:"the result row each row of Rows is, 0 for the first"`
+	// Nulls keeps NULL apart from empty text (ADR-0269 §SD10).
+	Nulls            [][]int32 `json:",omitzero" desc:"per row of Rows, the indexes into Columns of the cells that are NULL; an empty cell not listed is empty text"`
+	Truncated        bool      `desc:"true when the row or byte bound cut the sample"`
+	TruncationReason string    `json:",omitzero" desc:"which bound cut the sample, and where to read on"`
+	ResultPrefix     string    `json:",omitzero" desc:"why the result itself is a prefix of what the statement returns; empty when it is whole"`
 }
 
 // SetSqlArgs is set_sql's argument.
@@ -121,6 +201,9 @@ type SetSqlArgs struct {
 type SetSignalArgs struct {
 	Name  string `desc:"the signal name"`
 	Value string `desc:"its new value, as text"`
+	// Node is the node a selection's row indexes; selection_node,
+	// selection_id and selection_key are written from that node's row.
+	Node string `json:",omitzero" desc:"for selection only: the node whose result the row indexes, as list_panes names it; left out, the result the panels draw"`
 }
 
 // ShowPaneArgs is show_pane's argument.
@@ -149,6 +232,17 @@ type PaneState struct {
 	// Publishes is every signal the pane writes when the person uses it,
 	// whether or not the buffer reads it yet.
 	Publishes []string `desc:"every signal the pane publishes when used; Writes is the part the buffer reads"`
+	// Status is the pane's own line under what it drew, quoted as drawn:
+	// it can carry the data's values and a failed lane's error.
+	Status string `json:",omitzero" desc:"the pane's status line as its last draw showed it; empty when it has none, has not drawn, or cannot draw what it is fed"`
+	// StatusOf ties Status to a result: compare it with get_state's result
+	// id, since a hidden pane keeps the status of its last draw.
+	StatusOf uint64 `json:",omitzero" desc:"the result id Status describes; 0 for a pane that draws its own CTEs"`
+	Visible  bool   `desc:"whether the pane's body drew in the last frame: a lazy pane draws only while its tab is in front, the others whenever the dock draws them"`
+	Zone     string `desc:"the dock leaf the pane starts in: body, editor, tools, side or bottom"`
+	Lazy     bool   `desc:"whether the pane draws only while in front; a hidden lazy pane's status is of its last draw, show_pane raises it"`
+	// Ops points from the pane to its own operations.
+	Ops []string `json:",omitzero" desc:"the operations that read this pane (get_<pane> first, which says what the pane last drew) and drive it; empty for a pane read through describe_result and sample_rows alone"`
 }
 
 // PanesState is list_panes' result.
@@ -185,6 +279,34 @@ type opsSnap struct {
 	// waiting is the aliases bind_dataset or the launch config follows that
 	// are not bound yet, with why (play_ops_datasets.go).
 	waiting map[string]string
+	// results is what describe_result and sample_rows resolve a pane or a
+	// node against (play_ops_result.go).
+	results opsResults
+	// runSql is the text a run would ship (runBuffer): the buffer, or the
+	// caret's statement of a multi-statement buffer with the prelude. The
+	// statement reads that take an optional sql default to it.
+	runSql string
+	// paneViews is what the get_<pane> reads see (play_ops_pane_views.go).
+	paneViews paneViewsSnap
+	// glossCatalog and glossColumns are the gloss catalog and the window's
+	// last column resolution (play_ops_glosses.go); docs is the Docs pane's
+	// source and what it shows (play_ops_docs.go); detail is what get_detail
+	// reads besides the result (play_ops_detail.go).
+	glossCatalog *GlossCatalog
+	glossColumns *glossColumnsOps
+	docs         docsOpsView
+	detail       detailOpsView
+	// completion is what complete_sql and validate_sql's literal check read
+	// (play_ops_completion.go).
+	completion completionOpsView
+	// queryGraph is get_query_graph's reading (play_ops_query_graph.go).
+	queryGraph *QueryGraph
+	// bus is the window's bus, which list_bundles reads the catalog over;
+	// bundle is the bundle the window follows (play_bundle.go).
+	bus    app.BusI
+	bundle string
+	// lastPublish is the window's last publish_result.
+	lastPublish LastPublish
 }
 
 var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
@@ -216,7 +338,7 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 		}
 		return inst.inner.frameResult
 	})
-	s.Resource(opsResPanes, "the raised pane and the pane bindings", func(inst *PlayLauncher) any {
+	s.Resource(opsResPanes, "the raised pane, the observed node and the pane bindings", func(inst *PlayLauncher) any {
 		if inst.inner == nil {
 			return ""
 		}
@@ -225,7 +347,7 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 	s.Editing(opsResSql, func(inst *PlayLauncher) bool {
 		return inst.inner != nil && inst.inner.editor != nil && appops.WidgetEditing(inst.inner.editor.TextHandle())
 	})
-	s.Confined(func(inst *PlayLauncher) bool { return inst.inner != nil && inst.inner.graph.MainConfined() })
+	s.Confined(func(inst *PlayLauncher) bool { return inst.inner != nil && inst.inner.windowConfined() })
 	// The result's lifecycle, as the state chip draws it: query_state and
 	// query_machine, the operations every app's mounted machine offers.
 	fsmops.Mount(s, "query", "the main result's lifecycle", func(inst *PlayLauncher) opfsm.SourceI {
@@ -235,43 +357,35 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 		return inst.inner.queryFSM
 	}, fsmops.Options{History: 16})
 
-	appops.Query(s, app.OperationSpec{Name: opGetState, Version: 1,
+	appops.Query(s, app.OperationSpec{Name: opGetState, Version: 2,
 		Summary: "read the buffer, the parameters, the signals, Live and the main result's phase",
-		Reads:   []string{opsResSql, opsResParams, opsResSignals, opsResResult, opsResPanes}, Agents: true, Untrusted: true},
+		Reads:   []string{opsResSql, opsResParams, opsResSignals, opsResResult, opsResPanes, opsResBundle, opsResFollowed}, Agents: true, Untrusted: true,
+		Follows: []string{"each parameter names its control, an enum's options and the default Reset restores; set_param refuses a value an enum does not offer",
+			"result.notice says why a run did not happen or Live switched off"}},
 		func(sn opsSnap, in appops.None) (PlayState, error) {
 			if !sn.mounted {
 				return PlayState{}, app.RefuseOperation("the window has not mounted")
 			}
 			return sn.state, nil
 		})
-	appops.Query(s, app.OperationSpec{Name: opDescribeResult, Version: 1, Summary: "describe the main result: columns, types, row count",
-		Reads: []string{opsResResult}, Agents: true},
-		func(sn opsSnap, in appops.None) (out ResultDescription, err error) {
+	// Untrusted: the column names are the statement's and the data's.
+	appops.Query(s, app.OperationSpec{Name: opDescribeResult, Version: 2,
+		Summary: "describe a result — the one the panels draw, a pane's, or a drawn node's: columns, handles, types, row count, whether it is a prefix",
+		Reads:   []string{opsResResult}, Agents: true, Untrusted: true},
+		func(sn opsSnap, in ResultArgs) (out ResultDescription, err error) {
 			if !sn.mounted {
 				return out, app.RefuseOperation("the window has not mounted")
 			}
-			rec, schema, numRows, loading, _, _, _, runErr, id := sn.graph.MainSnapshot()
-			if rec != nil {
-				rec.Release()
-			}
-			out = ResultDescription{Id: uint64(id), Rows: numRows, Loading: loading}
-			if runErr != nil {
-				out.Error = runErr.Error()
-			}
-			if schema != nil {
-				for _, f := range schema.Fields() {
-					out.Columns = append(out.Columns, Column{Name: f.Name, Type: f.Type.String()})
-				}
-			}
-			return
+			return describeResult(&sn.results, sn.glossColumns, in)
 		})
-	appops.Query(s, app.OperationSpec{Name: opSampleRows, Version: 1, Summary: "read up to 50 rows of the main result as cell text",
-		Reads: []string{opsResResult}, Agents: true, Untrusted: true},
+	appops.Query(s, app.OperationSpec{Name: opSampleRows, Version: 2,
+		Summary: "read up to 50 rows of a result — the one the panels draw, a pane's, or a drawn node's — as cell text, NULL kept apart from empty",
+		Reads:   []string{opsResResult}, Agents: true, Untrusted: true},
 		func(sn opsSnap, in SampleArgs) (out SampleRows, err error) {
 			if !sn.mounted {
 				return out, app.RefuseOperation("the window has not mounted")
 			}
-			return sampleMain(sn.graph, in)
+			return sampleResult(&sn.results, in)
 		})
 	appops.Command(s, app.OperationSpec{Name: opSetSql, Version: 1, Summary: "replace the SQL buffer",
 		Effect: app.OperationEffectDocument, Writes: []string{opsResSql}, Agents: true, Gesture: "typing in the editor",
@@ -284,25 +398,47 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 			inst.inner.markAgent(call.OnBehalfOf)
 			return appops.None{}, nil
 		})
-	appops.Command(s, app.OperationSpec{Name: opSetSignal, Version: 1, Summary: "set one signal, with the task as its writer",
+	appops.Command(s, app.OperationSpec{Name: opSetSignal, Version: 2, Summary: "set one signal, with the task as its writer",
 		Effect: app.OperationEffectDocument, Writes: []string{opsResSignals}, Agents: true, Gesture: "the Signals section of the Graph pane",
-		Follows: []string{"Live reruns a query that reads the signal"}},
+		Follows: []string{"Live reruns a query that reads the signal",
+			"selection is a row of a node's result; selection_node, selection_id and selection_key follow it from that row",
+			"a signal a pane publishes and does not take back (tl_from, vp_min_x, gv_selection, …) is refused, naming the pane's command"}},
 		func(inst *PlayLauncher, call app.OperationCall, in SetSignalArgs) (appops.None, error) {
-			if inst.inner == nil {
+			p := inst.inner
+			if p == nil {
 				return appops.None{}, app.RefuseOperation("the window has not mounted")
 			}
 			if strings.TrimSpace(in.Name) == "" {
 				return appops.None{}, app.RefuseOperation("a signal needs a name")
 			}
+			name := SignalID(in.Name)
+			person := call.Writer == opwire.WriterPerson
+			if in.Node != "" && name != signalSelection {
+				return appops.None{}, app.RefuseOperation("node applies only to selection")
+			}
+			if !person {
+				// The person's Signals section may write anything; an
+				// agent's value must hold, or the call reports a change
+				// the pane undoes (ADR-0270, update of 2026-10-05).
+				if reason := paneOutputRefusal(name); reason != "" {
+					return appops.None{}, app.RefuseOperation(reason)
+				}
+			}
 			writer := call.Writer
 			switch writer {
 			case opwire.WriterPerson:
-				writer = inst.inner.takeGestureSignalWriter()
+				writer = p.takeGestureSignalWriter()
 			case "":
 				writer = signalWriterApp
 			}
-			inst.inner.graph.setSignalRawFrom(SignalID(in.Name), in.Value, writer)
-			inst.inner.markAgent(call.OnBehalfOf)
+			if name == signalSelection {
+				if err := p.setSelectionFrom(in.Value, NodeID(in.Node), writer, !person); err != nil {
+					return appops.None{}, err
+				}
+			} else {
+				p.graph.setSignalRawFrom(name, in.Value, writer)
+			}
+			p.markAgent(call.OnBehalfOf)
 			return appops.None{}, nil
 		})
 	appops.Command(s, app.OperationSpec{Name: opShowPane, Version: 1, Summary: "raise a pane",
@@ -316,9 +452,10 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 			}
 			return appops.None{}, nil
 		})
-	appops.Query(s, app.OperationSpec{Name: opListPanes, Version: 1,
-		Summary: "list the panes: whether each can draw what it is fed and why not, the node feeding it, the signals it writes",
-		Reads:   []string{opsResPanes, opsResResult, opsResSql}, Agents: true},
+	// Untrusted: a status line quotes the data's values and lane errors.
+	appops.Query(s, app.OperationSpec{Name: opListPanes, Version: 2,
+		Summary: "list the panes: whether each can draw what it is fed and why not, what its last draw said, the node feeding it, the signals it writes, and the operations that read and drive it (get_<pane>, set_<pane>_options, a pane's select command)",
+		Reads:   []string{opsResPanes, opsResResult, opsResSql}, Agents: true, Untrusted: true},
 		func(sn opsSnap, in appops.None) (PanesState, error) {
 			if !sn.mounted {
 				return PanesState{}, app.RefuseOperation("the window has not mounted")
@@ -341,8 +478,35 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 	addSchemaOps(s)
 	addRewriteOps(s)
 	addDatasetOps(s)
+	addBundleOps(s)
+	addPublishResultOps(s)
 	addProjectionOps(s)
+	addArchetypesOps(s)
 	addDiagnosticsOps(s)
+	addChartOps(s)
+	addDistOps(s)
+	addSeriesOps(s)
+	addTimelineOps(s)
+	addHierarchyOps(s)
+	addKanbanOps(s)
+	addCardsOps(s)
+	addWorldOps(s)
+	addVectorfieldOps(s)
+	addGraphOps(s)
+	addSankeyOps(s)
+	addTableOps(s)
+	addFilesOps(s)
+	addChatPaneOps(s)
+	addMapOps(s)
+	addFlowOps(s)
+	addDocsOps(s)
+	addDetailOps(s)
+	addGlossOps(s)
+	addCompletionOps(s)
+	addEndpointFunctionOps(s)
+	addQueryGraphOps(s)
+	addHistoryOps(s)
+	addWorkOps(s)
 	return
 }()
 
@@ -357,6 +521,9 @@ func (inst *PlayApp) bindPane(pane string, node NodeID) (err error) {
 	}
 	if spec.Panel == nil {
 		return app.RefuseOperation("pane " + pane + " draws no result and cannot be bound")
+	}
+	if spec.Frameless {
+		return app.RefuseOperation(framelessRefusal(pane, spec.Panel))
 	}
 	if node == "" {
 		inst.unbindTab(pane)
@@ -373,6 +540,89 @@ func (inst *PlayApp) bindPane(pane string, node NodeID) (err error) {
 	return
 }
 
+// setSelectionFrom writes the row cursor the way a pane's click does: through
+// selectionStamper, so selection_node names the node the row indexes and
+// selection_id and selection_key are read off that row, rather than staying
+// with the previous one. strict refuses what a click could not produce — a
+// value that is not a row, a node not on screen, a row the result lacks —
+// where the person's Signals section writes the value as typed.
+func (inst *PlayApp) setSelectionFrom(raw string, node NodeID, writer string, strict bool) (err error) {
+	direct := func() { inst.graph.setSignalRawFrom(signalSelection, raw, writer) }
+	row, perr := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+	if perr != nil {
+		if strict {
+			return app.RefuseOperation("selection is a row number of a result, 0 for the first")
+		}
+		direct()
+		return
+	}
+	if node == "" {
+		node = inst.activeNodeID()
+	}
+	rec, visible := inst.selectionRecord(node)
+	if rec != nil {
+		defer rec.Release()
+	}
+	switch {
+	case !visible:
+		if strict {
+			return app.RefuseOperation("node " + string(node) + " is not on screen; a selection indexes the result the panels draw (" +
+				string(inst.activeNodeID()) + ") or a node a pane is bound to")
+		}
+		direct()
+		return
+	case rec == nil:
+		if strict {
+			return app.RefuseOperation("node " + string(node) + " holds no result to select in")
+		}
+		direct()
+		return
+	case row < 0 || row >= rec.NumRows():
+		if strict {
+			return app.RefuseOperation("node " + string(node) + " has " + strconv.FormatInt(rec.NumRows(), 10) + " rows; selection " + raw + " is not one of them")
+		}
+		direct()
+		return
+	}
+	selectionStamper{inner: graphEmitter{graph: inst.graph, writer: writer}, node: node, rec: rec}.Emit(signalSelection, row)
+	return
+}
+
+// selectionRecord is the result a selection on node indexes: the active
+// result, or the lane view of a node a pane was bound to in the last frame.
+// visible is false for any other node. The caller releases rec (nil-safe).
+func (inst *PlayApp) selectionRecord(node NodeID) (rec arrow.RecordBatch, visible bool) {
+	if node == inst.activeNodeID() {
+		rec, _, _, _, _, _, _, _, _ = inst.activeSnapshot()
+		return rec, true
+	}
+	if _, bound := inst.boundViews[node]; !bound {
+		return
+	}
+	n, found := findSplitNode(inst.currentSplit, node)
+	lane := inst.boundLanes[node]
+	if !found || lane == nil {
+		return
+	}
+	view := lane.demand(compileNodeFor(inst.currentSplit, n, inst.lastRunBound, inst.frameSig))
+	return view.rec, true
+}
+
+// framelessRefusal is bind_pane's answer for a pane that reads its CTEs off
+// the split by name: what it reads, and that the buffer is where to change it.
+func framelessRefusal(pane string, panel PanelI) (reason string) {
+	var ctes []string
+	for _, ch := range panel.Channels() {
+		label := ch.Label
+		if label == "" {
+			label = string(ch.ID)
+		}
+		ctes = append(ctes, "`"+label+"`")
+	}
+	return "pane " + pane + " reads the " + strings.Join(ctes, ", ") + " CTEs of the buffer by name and cannot be bound; " +
+		"write or rename those CTEs with set_sql instead"
+}
+
 // Operations serves play's catalog for this window.
 func (inst *PlayLauncher) Operations() (h app.OperationsHandlerI) { return playOps.Bind(inst) }
 
@@ -385,48 +635,45 @@ func snapshotPlay(inst *PlayLauncher) (sn opsSnap) {
 		return
 	}
 	sn.mounted, sn.graph = true, p.graph
+	sn.bus = inst.bus
+	if inst.bundle != nil {
+		sn.bundle = inst.bundle.alias
+	}
+	sn.lastPublish = inst.lastPublish()
 	sn.installed, sn.probed = p.vocab.known()
 	sn.client = p.client
-	st := PlayState{Sql: p.sql, Live: p.liveMain}
-	if p.client != nil {
-		st.Destination = DestinationClickHouse(endpointHost(p.client.URL()))
-	}
-	if slug, ok := p.tabs.slugForDockID(p.raisedTab); ok {
-		st.RaisedPane = slug
-	}
-	for _, slot := range p.paramSlots {
-		ps := ParamState{Name: slot.Name, Type: slot.Type, Tier: "live"}
-		if p.paramPinned(slot.Name) {
-			ps.Tier = "pinned"
-		}
-		if d := p.paramDrafts[slot.Name]; d != nil {
-			ps.Value = *d
-		}
-		st.Params = append(st.Params, ps)
-	}
-	for _, r := range p.graph.signalRows() {
-		st.Signals = append(st.Signals, SignalState{Name: r.Name, Value: r.Raw, Writer: r.Writer})
-	}
-	rec, _, numRows, loading, _, _, executed, runErr, id := p.graph.MainSnapshot()
-	if rec != nil {
-		rec.Release()
-	}
-	st.Result = ResultState{Id: uint64(id), Phase: p.observeQueryState(loading, numRows, executed, runErr).String(), Rows: numRows}
-	if runErr != nil {
-		st.Result.Error = runErr.Error()
-	}
+	st := snapshotState(p)
 	sn.state = st
+	if inst.bundle != nil {
+		sn.state.Bundle = inst.bundle.alias + "@" + strconv.FormatUint(inst.bundle.revision, 10)
+	}
+	if digest := inst.followedDigest(); digest != "" {
+		sn.state.Followed = strings.Split(digest, ",")
+	}
+	sn.runSql, _, _ = p.runBuffer()
 	raised, _ := p.tabs.slugForDockID(p.raisedTab)
 	for _, row := range p.paneRows(p.frameSchema) {
-		sn.panes.Panes = append(sn.panes.Panes, PaneState{Pane: row.TabID, Title: row.Title, Panel: row.Panel,
+		ps := PaneState{Pane: row.TabID, Title: row.Title, Panel: row.Panel,
 			Node: string(row.Node), Reason: row.Reject, Writes: row.Drives, Unfilled: row.Unfilled,
-			Draws: row.Draws, Raised: row.TabID == raised, Publishes: row.Publishes})
+			Draws: row.Draws, Raised: row.TabID == raised, Publishes: row.Publishes, Ops: paneOperations[row.TabID]}
+		if spec, ok := p.tabs.specForSlug(row.TabID); ok {
+			p.paneStatusState(&spec, &ps)
+		}
+		sn.panes.Panes = append(sn.panes.Panes, ps)
 	}
+	sn.results = snapshotResults(p)
 	for _, n := range p.currentSplit.Nodes {
 		sn.panes.Nodes = append(sn.panes.Nodes, string(n.ID))
 	}
 	sn.projection = snapshotProjection(p, sn.panes)
 	sn.diagnostics = snapshotDiagnostics(p)
+	sn.paneViews = snapshotPaneViews(p)
+	sn.glossCatalog = p.glossCatalogView()
+	sn.glossColumns = p.glossColumnsView()
+	sn.docs = snapshotDocs(p)
+	sn.detail = detailOpsView{embedded: p.detailContent != nil}
+	sn.completion = p.completionView()
+	sn.queryGraph = p.queryGraphView()
 	if inst.follower != nil {
 		sn.waiting = inst.follower.Waiting()
 	}
@@ -453,7 +700,8 @@ func (inst *PlayApp) paramDigest() (digest string) {
 	return b.String()
 }
 
-// paneDigest is the raised pane and the bindings, compared across frames.
+// paneDigest is the raised pane, the observed node and the bindings,
+// compared across frames.
 func (inst *PlayApp) paneDigest() (digest string) {
 	tabs := make([]string, 0, len(inst.tabBindings))
 	for t := range inst.tabBindings {
@@ -462,6 +710,9 @@ func (inst *PlayApp) paneDigest() (digest string) {
 	slices.Sort(tabs)
 	var b strings.Builder
 	b.WriteString(strconv.FormatUint(inst.raisedTab, 10))
+	// The observed node feeds every panel without a binding (list_panes'
+	// Node), so the person's "observe in panels" moves the resource.
+	b.WriteString("|observed=" + string(inst.observedNode))
 	for _, t := range tabs {
 		b.WriteString("|" + t + "=" + string(inst.tabBindings[t]))
 	}
@@ -477,53 +728,14 @@ func (inst *PlayApp) swapSql(sql string) {
 	inst.captureParamDefaults(sql)
 }
 
-// sampleMain reads cells of the main result, bounded by rows and bytes.
-func sampleMain(g *queryGraph, in SampleArgs) (out SampleRows, err error) {
-	rec, schema, numRows, _, _, _, _, _, id := g.MainSnapshot()
-	if rec == nil || schema == nil {
-		return out, app.RefuseOperation("no result is held")
-	}
-	defer rec.Release()
-	if in.ResultId != nil && *in.ResultId != uint64(id) {
-		return out, app.ConflictOperation("another result is held now: " + strconv.FormatUint(uint64(id), 10))
-	}
-	out.ResultId = uint64(id)
-	var cols []int
-	for i, f := range schema.Fields() {
-		if len(in.Fields) == 0 || slices.Contains(in.Fields, f.Name) {
-			cols = append(cols, i)
-			out.Columns = append(out.Columns, f.Name)
-		}
-	}
-	limit := int64(in.Limit)
-	if limit <= 0 || limit > opsSampleMaxRows {
-		limit = opsSampleMaxRows
-	}
-	bytes := 0
-	for row := int64(in.Offset); row < numRows && row < int64(in.Offset)+limit; row++ {
-		cells := make([]string, 0, len(cols))
-		for _, col := range cols {
-			v := strings.Clone(formatCell(rec, col, row))
-			bytes += len(v)
-			cells = append(cells, v)
-		}
-		if bytes > opsSampleMaxBytes {
-			out.Truncated = true
-			break
-		}
-		out.Rows = append(out.Rows, cells)
-	}
-	if int64(in.Offset)+int64(len(out.Rows)) < numRows {
-		out.Truncated = out.Truncated || int64(len(out.Rows)) == limit
-	}
-	return
-}
-
 // RunArgs is run's argument.
 type RunArgs struct {
 	// Subquery narrows the run to the innermost query at the caret, as
 	// Ctrl+Shift+Enter does.
 	Subquery bool `json:",omitzero" desc:"run only the innermost query at the caret"`
+	// Statement picks one statement of a buffer of several by number, so
+	// an agent need not rely on the person's caret.
+	Statement int32 `json:",omitzero" desc:"for a buffer of several statements, the one to run, from 1, shipped with the SET prelude; get_state's statements counts them; left out, the one at the person's caret"`
 }
 
 // SetParamArgs is set_param's argument.
@@ -591,11 +803,13 @@ func (inst *PlayApp) takeAgentForRun(auto bool) (obo *app.OnBehalfOf) {
 // addRunOps declares run and set_param; playOps' initializer calls it, so
 // they are in the catalog before play registers its manifest.
 func addRunOps(playOps *appops.Set[*PlayLauncher, opsSnap]) {
-	appops.Command(playOps, app.OperationSpec{Name: opRun, Version: 1, Summary: "run the buffer, under the agent limits",
+	appops.Command(playOps, app.OperationSpec{Name: opRun, Version: 2, Summary: "run the buffer, or one statement of it, under the agent limits",
 		Effect: app.OperationEffectRun, Reads: []string{opsResSql, opsResParams, opsResSignals}, Writes: []string{opsResResult},
 		Agents: true, Gesture: "the Run button",
 		Follows: []string{"the result replaces the main result; describe_result reads it",
-			"a run the grant does not cover is refused, naming the destination the grant would have to list"}},
+			"a run the grant does not cover is refused, naming the destination the grant would have to list",
+			"a run the window's class ceiling would block is refused at the call, with the parameter that raised the class",
+			"statement n ships the SET prelude and that statement, and the checks judge that text; cancel_run stops the run while it is in flight"}},
 		func(inst *PlayLauncher, call app.OperationCall, in RunArgs) (appops.None, error) {
 			p := inst.inner
 			if p == nil {
@@ -606,6 +820,7 @@ func addRunOps(playOps *appops.Set[*PlayLauncher, opsSnap]) {
 				// run path reports an empty buffer or an unfilled input in
 				// the status line, as it always has.
 				p.applyRunShortcut(true, in.Subquery)
+				p.requestStatement = int(in.Statement)
 				return appops.None{}, nil
 			}
 			if call.OnBehalfOf == nil {
@@ -614,17 +829,29 @@ func addRunOps(playOps *appops.Set[*PlayLauncher, opsSnap]) {
 			if strings.TrimSpace(p.sql) == "" {
 				return appops.None{}, app.RefuseOperation("the buffer is empty")
 			}
-			if names := p.unfilledInputs(); len(names) > 0 {
+			if in.Statement != 0 && in.Subquery {
+				return appops.None{}, app.RefuseOperation("subquery narrows at the person's caret; statement picks a statement without it: pass one of them")
+			}
+			names := p.unfilledInputs()
+			if in.Statement != 0 {
+				// Only what the statement ships needs a value, as the run
+				// path judges it.
+				stmt, err := p.statementBuffer(int(in.Statement))
+				if err != nil {
+					return appops.None{}, app.RefuseOperation(err.Error())
+				}
+				_, _, names = p.resolveRunSignals(stmt)
+			}
+			if len(names) > 0 {
 				return appops.None{}, app.RefuseOperation("parameters need a value first: " + strings.Join(names, ", "))
 			}
-			if !in.Subquery {
-				if err := p.refuseAgentRun(call.OnBehalfOf); err != nil {
-					return appops.None{}, err
-				}
+			if err := p.refuseAgentRunCall(call.OnBehalfOf, in.Subquery, int(in.Statement)); err != nil {
+				return appops.None{}, err
 			}
 			p.markAgent(call.OnBehalfOf)
 			p.agentRunRequested = true
 			p.requestSubquery = in.Subquery
+			p.requestStatement = int(in.Statement)
 			p.RequestRun()
 			return appops.None{}, nil
 		})
@@ -634,9 +861,10 @@ func addRunOps(playOps *appops.Set[*PlayLauncher, opsSnap]) {
 		}
 		return true, ""
 	})
-	appops.Command(playOps, app.OperationSpec{Name: opSetParam, Version: 1, Summary: "set one parameter, in its tier",
+	appops.Command(playOps, app.OperationSpec{Name: opSetParam, Version: 2, Summary: "set one parameter, in its tier",
 		Effect: app.OperationEffectDocument, Writes: []string{opsResParams}, Agents: true, Gesture: "the parameter's field above the editor",
-		Follows: []string{"a pinned parameter rewrites its SET line in the buffer; a live one writes its signal, and Live reruns"}},
+		Follows: []string{"a pinned parameter rewrites its SET line in the buffer; a live one writes its signal, and Live reruns",
+			"an enum parameter takes one of the options get_state lists; any other value is refused"}},
 		func(inst *PlayLauncher, call app.OperationCall, in SetParamArgs) (appops.None, error) {
 			p := inst.inner
 			if p == nil {
@@ -646,10 +874,40 @@ func addRunOps(playOps *appops.Set[*PlayLauncher, opsSnap]) {
 			if d == nil {
 				return appops.None{}, app.ConflictOperation("no parameter " + in.Name + " in the buffer yet; slots follow a new buffer after a short debounce, read get_state again")
 			}
+			if call.Writer != opwire.WriterPerson {
+				if err := p.refuseParamValue(in.Name, in.Value); err != nil {
+					return appops.None{}, err
+				}
+			}
 			*d = in.Value
 			p.markAgent(call.OnBehalfOf)
 			return appops.None{}, nil
 		})
+}
+
+// refuseAgentRunCall is run's checks at the call, on the text the run will
+// ship: the window's class ceiling, then the agent limits (on the whole
+// buffer, or on the narrowed text of a subquery run or of statement n). The
+// run path checks both again, where a refusal lands only in the status line.
+// The ceiling goes first because its reason names the parameter that raised
+// the class. statement is run's Statement argument, 0 when left out.
+func (inst *PlayApp) refuseAgentRunCall(obo *app.OnBehalfOf, subquery bool, statement int) (err error) {
+	runSQL, _, _ := inst.runBuffer()
+	checked := inst.sql
+	switch {
+	case statement != 0:
+		if runSQL, err = inst.statementBuffer(statement); err != nil {
+			return app.RefuseOperation(err.Error())
+		}
+		checked = runSQL
+	case subquery:
+		runSQL, _ = inst.runSubqueryBuffer()
+		checked = runSQL
+	}
+	if reason := inst.exprCeilingRefusal(runSQL); reason != "" {
+		return app.RefuseOperation(reason)
+	}
+	return inst.refuseAgentRunOf(obo, checked)
 }
 
 const (

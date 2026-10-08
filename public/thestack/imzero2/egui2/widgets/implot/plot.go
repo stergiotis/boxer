@@ -226,6 +226,18 @@ func Scoped(ids *c.WidgetIdStack, title string, w float32, h float32) iter.Seq[*
 	}
 }
 
+// ScopeId is the id Begin derived for this plot, under which its retained
+// state lives until [Release].
+func (p *Plot) ScopeId() uint64 { return p.scopeId }
+
+// Release drops the retained state — ranges, gesture history, legend
+// visibility — of the plot whose [Plot.ScopeId] is scopeId. The state of a
+// plot outlives its last frame, so a caller whose plots come and go, such as
+// a notebook's cells, releases each one it will not draw again; a plot drawn
+// after its release starts afresh. Call it from the frame goroutine, like
+// Begin.
+func Release(scopeId uint64) { delete(pool, scopeId) }
+
 // NewDetached returns a plot handle bound to no canvas and no frame,
 // for headless tests of widgets that declare into a *Plot: items
 // accumulate and fit extents compute, nothing renders. End must not be

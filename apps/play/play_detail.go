@@ -159,7 +159,7 @@ func (inst *PlayApp) renderDetailPane(rec arrow.RecordBatch, schema *arrow.Schem
 // results. Exported so a custom DetailContentFunc can delegate to it and append
 // its own widgets.
 //
-// The leeway card view (Table2CardEmitter) renders into an
+// The leeway card view (RecordCard) renders into an
 // egui_extras::TableBuilder that owns its own ScrollArea, so it must NOT be
 // wrapped in an outer ScrollArea: that hands the table unbounded available
 // height and egui_extras then crops its tail rows. The driver emits the plain

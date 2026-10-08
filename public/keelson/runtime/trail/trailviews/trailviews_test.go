@@ -61,12 +61,12 @@ func TestComposeShape(t *testing.T) {
 	}
 	require.Equal(t, []string{
 		ViewModelCalls, ViewModelMessages, ViewAgentActions, ViewAgentGrants,
-		ViewAgentCaptures, ViewAgentDisclosures, ViewHttpFetches,
+		ViewAgentCaptures, ViewAgentDisclosures, ViewHttpFetches, ViewAdhocBundles,
 		ViewTimeline, ViewActionOutcomes, ViewConversations, ViewTasks,
 	}, names, "creation order: each view only reads views created before it")
 	require.Equal(t, names, AllViewNames())
 
-	general := map[string]bool{ViewTimeline: true, ViewHttpFetches: true}
+	general := map[string]bool{ViewTimeline: true, ViewHttpFetches: true, ViewAdhocBundles: true}
 	for _, n := range names {
 		// The class prefix says what a reader may rely on (ADR-0051).
 		if aggregates[n] {

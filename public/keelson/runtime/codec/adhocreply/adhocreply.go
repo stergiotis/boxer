@@ -49,4 +49,35 @@ type AdhocReply struct {
 	// NoLive marks a failed resolve as "nothing live under the alias"
 	// rather than a malformed request, so the caller waits, not retries.
 	NoLive bool `lw:"adhocNoLive,bool"`
+
+	// Bundle, Document, LocalNames and Handles answer a bundle verb: the
+	// bundle's alias, its applet document (resolve), and its datasets'
+	// local names with their handles, index for index. Revision is then
+	// the bundle's revision.
+	Bundle     string   `lw:"adhocBundle,symbol"`
+	Document   []byte   `lw:"adhocDocument,blobArray"`
+	LocalNames []string `lw:"adhocLocalNames,stringArray"`
+	Handles    []string `lw:"adhocHandles,stringArray"`
+
+	// ArrowStream and StreamDigest answer `adhoc.read` (ADR-0288
+	// §SD6): the dataset's stream as sealed, and its content digest.
+	ArrowStream  []byte `lw:"adhocArrowStream,blobArray"`
+	StreamDigest string `lw:"adhocStreamDigest,stringArray"`
+
+	// Alias is the alias a publish went under: the window's own when the
+	// request was window-scoped (ADR-0288 §SD3).
+	Alias string `lw:"adhocAlias,symbol"`
+
+	// Destination is the grant destination a refused read needed
+	// (ADR-0288 §SD6); empty otherwise.
+	Destination string `lw:"adhocDestination,stringArray"`
+
+	// PublisherTask is the task whose attested call published the bundle's
+	// live revision, on a resolve and a read; empty when no agent's call
+	// did (ADR-0288 §SD4).
+	PublisherTask string `lw:"adhocPublisherTask,stringArray"`
+
+	// ColumnSummaries answers a columns-only read: the dataset's column
+	// summaries, values included, as JSON (ADR-0288 §SD5).
+	ColumnSummaries []byte `lw:"adhocColumnSummaries,blobArray"`
 }

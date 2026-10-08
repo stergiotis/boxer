@@ -97,6 +97,15 @@ func (inst *PlayApp) SetToolbarMinimal(on bool) {
 	inst.toolbarMinimal = on
 }
 
+// SetOpenPlaygroundBundle makes "Open in Playground" open the ad-hoc
+// bundle under alias rather than this instance's buffer (ADR-0288
+// §SD7): a bundle view's buffer reads its datasets by local
+// names that mean nothing in another window, and the bundle carries the
+// document and the datasets together. Empty restores the buffer.
+func (inst *PlayApp) SetOpenPlaygroundBundle(alias string) {
+	inst.openPlaygroundBundle = alias
+}
+
 // requestOpenPlayground asks the window host for a full play window
 // seeded with cfg over `windowhost.open` (ADR-0135 §SD7 — the ADR-0132
 // §SD3 escape-hatch upgrade rendered as the minimal toolbar's "Open in

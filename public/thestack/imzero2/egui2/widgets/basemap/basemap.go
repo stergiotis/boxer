@@ -133,7 +133,17 @@ func Configured() bool {
 // one: a tile server was configured, or this is the browser tab, where the
 // country outlines that stand in for a basemap cost more per frame than the
 // tiles do (ADR-0262 Update 2026-10-03).
-func DefaultOn() bool { return Configured() || fetchesDirect }
+func DefaultOn() bool { return !offline.Load() && (Configured() || fetchesDirect) }
+
+// offline is set by SetOffline.
+var offline atomic.Bool
+
+// SetOffline makes every map of this process start without a basemap,
+// whatever DefaultOn would otherwise say: for a binary that must not reach a
+// tile server, such as a demo published on a site whose pages say they load
+// nothing from elsewhere (ADR-0291 M2). A person can still switch tiles on;
+// a binary that must forbid that refuses the requests themselves.
+func SetOffline() { offline.Store(true) }
 
 // clampMaxZoom maps the BOXER_MAP_TILE_MAX_ZOOM int64 into the widget's uint8
 // tileMaxZoom argument. A value <=0 is "unset" (set=false → keep the widget's

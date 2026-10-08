@@ -121,6 +121,9 @@ type DistDriver struct {
 	sharedGrid bool   // every series carries the identical ps grid
 	haveHist   bool   // every series carries the histogram triplet
 	truncated  int64
+	// foldGen counts the folds, so get_dist's snapshot copies a fold once
+	// (play_ops_dist.go).
+	foldGen uint64
 
 	forExecuted     time.Time
 	forSchema       *arrow.Schema
@@ -128,6 +131,9 @@ type DistDriver struct {
 
 	view     int // 0 ecdf, 1 shift, 2 boxen, 3 histogram
 	selected int // selected series index = the shift baseline
+	// onOptions routes the view buttons through set_dist_options; nil
+	// applies them directly (play_ops_dist.go).
+	onOptions func(in SetDistOptionsArgs)
 
 	// paneW/paneH is the last good answer from the pane probe. The probe
 	// reports nothing on the frame a hidden tab comes back — and this tab is
@@ -393,7 +399,9 @@ func (inst *DistDriver) renderSelectors(emit SignalEmitterI, k distClaim) {
 			sel := inst.view == i
 			if c.Button(inst.ids.PrepareSeq(uint64(0xd150+i)), c.Atoms().Text(v.name).Keep()).
 				Selected(sel).FrameWhenInactive(false).Frame(true).SendResp().HasPrimaryClicked() {
-				inst.view = i
+				// Through set_dist_options (ADR-0270 §SD6).
+				name := distViewNames[i]
+				inst.requestOptions(SetDistOptionsArgs{View: &name})
 			}
 		}
 		if !shiftOK && len(inst.series) >= 2 {
@@ -409,6 +417,9 @@ func (inst *DistDriver) renderSelectors(emit SignalEmitterI, k distClaim) {
 				if c.Button(inst.ids.PrepareStr("chip"), c.Atoms().BeginRichText("● ").Size(10).End().Text(s.label).Keep()).
 					Selected(sel).FrameWhenInactive(false).Frame(true).SendResp().HasPrimaryClicked() {
 					inst.selected = i
+					// deferred: the chip writes the selection from inside the
+					// frame as the pane's writer, not through set_signal as the
+					// person's gesture (ADR-0270, update of 2026-10-05).
 					if int64(i) != k.selRow {
 						emit.Emit(signalSelection, int64(i))
 					}
@@ -546,6 +557,7 @@ func (inst *DistDriver) rebuild(rec arrow.RecordBatch, schema *arrow.Schema, k d
 	}
 	inst.forSchema = schema
 	inst.forExecuted = inst.pendingExecuted
+	inst.foldGen++
 	inst.foldErr = ""
 	inst.truncated = 0
 

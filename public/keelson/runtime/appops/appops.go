@@ -50,8 +50,11 @@ type Set[A any, S any] struct {
 	queries   map[string]queryFn[S]
 	reads     map[string]readFn[S]
 	avail     map[string]func(snap S) (ok bool, reason string)
-	snapshot  func(inst A) S
-	confined  func(inst A) bool
+	// availMounted decide an operation's availability from the value a
+	// mounted component captured.
+	availMounted map[string]mountedAvail
+	snapshot     func(inst A) S
+	confined     func(inst A) bool
 	// mounts capture, per mounted component, the value its queries read.
 	mounts map[string]func(inst A) any
 }
@@ -61,15 +64,16 @@ type Set[A any, S any] struct {
 // goroutine — a copy, never a pointer into live state.
 func NewSet[A any, S any](snapshot func(inst A) S) (s *Set[A, S]) {
 	s = &Set[A, S]{
-		values:   make(map[string]func(A) any),
-		editing:  make(map[string]func(A) bool),
-		restore:  make(map[string]func(A, any) bool),
-		commands: make(map[string]commandFn[A]),
-		queries:  make(map[string]queryFn[S]),
-		reads:    make(map[string]readFn[S]),
-		avail:    make(map[string]func(S) (bool, string)),
-		snapshot: snapshot,
-		mounts:   make(map[string]func(A) any),
+		values:       make(map[string]func(A) any),
+		editing:      make(map[string]func(A) bool),
+		restore:      make(map[string]func(A, any) bool),
+		commands:     make(map[string]commandFn[A]),
+		queries:      make(map[string]queryFn[S]),
+		reads:        make(map[string]readFn[S]),
+		avail:        make(map[string]func(S) (bool, string)),
+		availMounted: make(map[string]mountedAvail),
+		snapshot:     snapshot,
+		mounts:       make(map[string]func(A) any),
 	}
 	return
 }
@@ -240,6 +244,47 @@ func MountedQuery[A any, S any, In any, Out any](set *Set[A, S], key string, spe
 	}
 }
 
+// MountedQueryRaw declares a query over the value a mounted component
+// captured under key, for a component whose argument and result types are
+// known only at run time: spec carries Args and Result, and fn takes and
+// returns their encoded bytes. Class is always query; Effect defaults to
+// none.
+func MountedQueryRaw[A any, S any](set *Set[A, S], key string, spec app.OperationSpec, fn func(v any, args []byte) (result []byte, err error)) {
+	spec.Class = app.OperationClassQuery
+	if spec.Effect == app.OperationEffectUnspecified {
+		spec.Effect = app.OperationEffectNone
+	}
+	set.ops = append(set.ops, spec)
+	set.queries[spec.Name] = func(_ S, mounted map[string]any, args []byte) (result []byte, err error) {
+		return fn(mounted[key], args)
+	}
+}
+
+// MountedCommandRaw declares a command a mounted component serves, for a
+// component whose argument and result types are known only at run time:
+// spec carries Args and Result, and fn takes and returns their encoded
+// bytes. It runs on the render goroutine with the app instance, as
+// [Command] does; Class defaults to command.
+func MountedCommandRaw[A any, S any](set *Set[A, S], spec app.OperationSpec, fn func(inst A, call app.OperationCall, args []byte) (result []byte, err error)) {
+	if spec.Class == app.OperationClassUnspecified {
+		spec.Class = app.OperationClassCommand
+	}
+	set.ops = append(set.ops, spec)
+	set.commands[spec.Name] = fn
+}
+
+type mountedAvail struct {
+	key string
+	fn  func(v any) (ok bool, reason string)
+}
+
+// MountedAvailable declares when an operation can run from the value a
+// mounted component captured under key; it is checked after [Set.Available]'s.
+func (inst *Set[A, S]) MountedAvailable(name string, key string, fn func(v any) (ok bool, reason string)) *Set[A, S] {
+	inst.availMounted[name] = mountedAvail{key: key, fn: fn}
+	return inst
+}
+
 func decodeArgs[In any](name string, args []byte) (in In, err error) {
 	if len(args) == 0 {
 		return
@@ -346,12 +391,15 @@ type snapshot[A any, S any] struct {
 }
 
 func (inst *snapshot[A, S]) Available(name string) (ok bool, reason string) {
-	fn, declared := inst.set.avail[name]
-	if !declared {
-		ok = true
-		return
+	ok = true
+	if fn, declared := inst.set.avail[name]; declared {
+		if ok, reason = fn(inst.snap); !ok {
+			return
+		}
 	}
-	ok, reason = fn(inst.snap)
+	if m, declared := inst.set.availMounted[name]; declared {
+		ok, reason = m.fn(inst.mounted[m.key])
+	}
 	return
 }
 

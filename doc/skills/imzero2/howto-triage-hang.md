@@ -198,8 +198,9 @@ a length-0 prefix for the implicated slice arg.
   GL thread not in futex).
   **Cause:** This is a render-side hang, not an FFFI2 deadlock.
   **Fix:** Out of scope for this recipe — use puffin or `gdb -p $RUST_PID`
-  to inspect the busy thread's stack. `build_rust.sh` compiles the puffin
-  feature into every build, but collection and the loopback server stay off
+  to inspect the busy thread's stack. `build_rust.sh` (the development build
+  `profile.sh` runs; `hmi.sh` runs the production build, which has no puffin)
+  compiles the puffin feature in, but collection and the loopback server stay off
   until `IMZERO2_PUFFIN=1` is set for the run (ADR-0195), so relaunch with it
   before expecting a `puffin-server` thread or a listener on :8585. Once it is
   up: `puffin_viewer --url 127.0.0.1:8585`.

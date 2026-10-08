@@ -274,8 +274,10 @@ type statsPublishers struct {
 }
 
 func newStatsPublishers() (p statsPublishers) {
-	return statsPublishers{calls: adhocdata.NewPublisher(aliasCalls, false), turns: adhocdata.NewPublisher(aliasTurns, false),
-		surface: adhocdata.NewPublisher(aliasSurface, false)}
+	// Each window publishes under its own aliases (ADR-0288 §SD3); the play
+	// window it opens reads them under the base names.
+	return statsPublishers{calls: adhocdata.NewWindowPublisher(aliasCalls), turns: adhocdata.NewWindowPublisher(aliasTurns),
+		surface: adhocdata.NewWindowPublisher(aliasSurface)}
 }
 
 // openStatsInPlay publishes s, and the surface's cells when there are any,
@@ -315,8 +317,19 @@ func openStatsInPlay(bus app.BusI, pubs statsPublishers, s chatStats, cells []su
 		err = eh.Errorf("publish %s: %w", aliasTurns, err)
 		return
 	}
+	scoped := make([]string, 0, len(datasets))
+	for _, base := range datasets {
+		switch base {
+		case aliasTurns:
+			scoped = append(scoped, pubs.turns.Alias())
+		case aliasCalls:
+			scoped = append(scoped, pubs.calls.Alias())
+		default:
+			scoped = append(scoped, pubs.surface.Alias())
+		}
+	}
 	cfg, err := buscodec.Encode(launchcfg.PlayLaunch{Sql: statsSql, AutoRun: true, Endpoint: launchcfg.EndpointIntrospection,
-		Datasets: datasets})
+		Datasets: scoped, DatasetNames: datasets})
 	if err != nil {
 		err = eh.Errorf("encode the play launch config: %w", err)
 		return

@@ -19,6 +19,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stretchr/testify/require"
 )
 
@@ -778,4 +779,26 @@ func TestAutoRunLoopOnSignalDivergence(t *testing.T) {
 
 	app.frameSig = app.graph.signals()
 	require.False(t, app.shouldAutoRun(), "the divergence cleared with the run")
+}
+
+// The status line keeps the unfilled refusal only while inputs are unfilled;
+// the agent-write refusal (and the ceiling's) is not that refusal and stands
+// until the next Run, so it reaches the status line.
+func TestExecuteRunMarksWhichRefusalItIs(t *testing.T) {
+	srv, got := captureServer(t)
+	defer srv.Close()
+	client := NewClient(ClientConfig{URL: srv.URL}, srv.Client())
+	pa := NewPlayApp(client, newLiveQueryGraph(client, memory.NewGoAllocator(), 10), "", nil)
+	defer pa.graph.close()
+	pa.sql = "SELECT {x:Int64} AS v"
+	pa.frameSig = pa.graph.signals()
+	pa.executeRun(false, false)
+	require.True(t, pa.runBlockedUnfilled)
+
+	pa.sql = "INSERT INTO t SELECT 1"
+	pa.runAgent = &app.OnBehalfOf{Task: "t", Epoch: 1}
+	pa.executeRun(false, false)
+	require.Contains(t, pa.runBlockedReason, "agent limit")
+	require.False(t, pa.runBlockedUnfilled, "not the unfilled refusal: it stands until the next Run")
+	require.Empty(t, got())
 }

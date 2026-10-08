@@ -1,12 +1,10 @@
-// Package adhocdemo dogfoods ad-hoc datasets (ADR-0240): it generates a
-// computed series, publishes it as a sealed dataset through an
-// adhocdata.Publisher, and embeds a SQL applet that queries it by the
-// stable alias `items`, kept bound by an adhocdata.Follower exactly as a
-// standalone applet would be. A Regenerate button republishes fresh data
-// under the same handle; the follower sees the service's `published` event
-// and the Live applet re-queries — no hand-delivered notification. The
-// applet is a committed, gated, classified document — the ADR-0132 §SD8
-// embedder shape.
+// Package adhocdemo dogfoods ad-hoc bundles (ADR-0288, over
+// ADR-0240's datasets): it generates a computed series, publishes it as a
+// bundle — the rows and an applet document that reads them as `items` —
+// through play.PublishBundleE, and shows it through a sqlapplet bundle
+// view, the receiver's one constructor. A Regenerate button republishes
+// the bundle; the view follows it on the frame it is drawn, like any
+// receiver of a bundle another app published.
 package adhocdemo
 
 import (
@@ -27,25 +25,21 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
-// datasetAlias is the stable alias the applet buffer names and the
-// publisher publishes under; the follower binds one to the other.
+// datasetAlias is the name the bundle's document reads its rows by.
 const datasetAlias = "items"
 
-// itemsDoc is the embedded applet document: an introspection-endpoint
-// applet declaring the `items` dataset and selecting it ordered by x.
-const itemsDoc = "---\n" +
-	"type: reference\n" +
-	"status: draft\n" +
-	"title: Ad-hoc items\n" +
-	"summary: \"Query an ad-hoc dataset bound by its embedding host\"\n" +
-	"icon: \"\U0001F4E6\"\n" +
-	"endpoint: introspection\n" +
-	"datasets: [items]\n" +
-	"tabs: [table]\n" +
-	"---\n\n" +
-	"# Ad-hoc items\n\n" +
-	"The host publishes a computed series and binds it to `items`.\n\n" +
-	"```sql\nSELECT * FROM keelson('items') ORDER BY x\n```\n"
+// bundleBase is the bundle's alias before the window's instance makes it
+// this window's own (adhocdata.WindowAlias).
+const bundleBase = "adhocdemo_items"
+
+// itemsSpec is the bundle generation gen publishes: the series, and SQL
+// that reads it ordered by x on the table.
+func (inst *App) itemsSpec(gen int) play.BundleSpec {
+	return play.BundleSpec{Alias: inst.bundle, Title: "Ad-hoc items", Summary: "a computed series published as an ad-hoc bundle",
+		Sql: "SELECT * FROM keelson('" + datasetAlias + "') ORDER BY x", Tabs: []string{"table"},
+		Prose:    "The host publishes a computed series as a bundle; Regenerate republishes it.",
+		Datasets: []adhocdata.BundleDatasetInput{{LocalName: datasetAlias, ArrowIPCStream: inst.series(gen)}}}
+}
 
 // App is the dogfood embedder.
 type App struct {
@@ -54,9 +48,8 @@ type App struct {
 	runId string
 	log   zerolog.Logger
 
-	inner    *play.PlayApp
-	pub      *adhocdata.Publisher
-	follower *adhocdata.Follower
+	bundle string
+	view   *sqlapplet.BundleView
 
 	mu        sync.Mutex
 	gen       int
@@ -83,68 +76,32 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.runId = ctx.RunId()
 	inst.log = ctx.Log()
 
-	def, perr := sqlapplet.ParseDocSource(string(ManifestId), "items.md", []byte(itemsDoc))
-	if perr != nil {
-		inst.statusErr = "parse applet: " + perr.Error()
-		return
-	}
-	if def == nil {
-		inst.statusErr = "applet document has no SQL buffer"
-		return
-	}
-
-	inst.pub = adhocdata.NewPublisher(datasetAlias, false)
-	if _, pubErr := inst.pub.Publish(inst.bus, inst.series(0)); pubErr != nil {
+	// The window's own bundle alias (ADR-0288 §SD3): a second adhocdemo
+	// window publishes its own.
+	inst.bundle = adhocdata.WindowAlias(bundleBase, ctx.InstanceKey())
+	if _, pubErr := play.PublishBundleE(inst.bus, inst.itemsSpec(0)); pubErr != nil {
 		inst.statusErr = "publish: " + pubErr.Error()
 		return
 	}
-	// The follower subscribes, then resolves the alias — to the dataset just
-	// published — and hands back the binding the applet mounts with; from
-	// here on it keeps the alias in step with the service.
-	follower, bindings := adhocdata.NewFollower(adhocdata.FollowerConfig{
-		Bus: inst.bus, Log: inst.log, Aliases: []string{datasetAlias},
-	})
-	inner, embErr := sqlapplet.NewEmbedded(def, sqlapplet.EmbedConfig{
-		StampAppId: string(ManifestId) + "#" + def.Slug,
-		RunId:      inst.runId,
-		Bus:        inst.bus,
-		Log:        inst.log,
-		Bindings:   bindings,
-	})
-	if embErr != nil {
-		if follower != nil {
-			follower.Close()
-		}
-		inst.statusErr = "embed applet: " + embErr.Error()
-		return
-	}
-	inst.follower = follower
-	// Run Live so a republish (Regenerate) re-queries without an explicit
-	// Run: the follower notifies the revision, Live re-runs.
-	inner.SetLiveMain(true)
-	inst.inner = inner
+	inst.view = sqlapplet.NewBundleView(inst.bundle, sqlapplet.BundleViewConfig{Bus: inst.bus, Log: inst.log,
+		RunId: inst.runId, StampAppId: string(ManifestId) + "#items", InstanceKey: ctx.InstanceKey(), Operable: true})
 	return
 }
 
 func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 	inst.mu.Lock()
-	inner := inst.inner
+	view := inst.view
 	busy := inst.busy
 	statusErr := inst.statusErr
 	inst.mu.Unlock()
-	if inner != nil && inst.follower != nil {
-		inst.follower.Sync(inner)
-	}
-	var handle string
-	var revision, rows uint64
-	if inst.pub != nil {
-		last, _, _ := inst.pub.Last()
-		handle, revision, rows = last.Handle, last.Revision, last.Rows
+	var revision uint64
+	if view != nil {
+		revision = view.Revision()
 	}
 
 	for range c.PanelTopInside(inst.ids.PrepareStr("adhoc-bar")).Resizable(false).KeepIter() {
 		for range c.Horizontal().KeepIter() {
-			if inner != nil {
+			if view != nil {
 				label := "Regenerate"
 				if busy {
 					label = "Regenerating…"
@@ -153,8 +110,8 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 					go inst.regenerate()
 				}
 			}
-			if handle != "" {
-				c.Label(fmt.Sprintf("handle %s · rev %d · %d rows", handle, revision, rows)).Send()
+			if revision > 0 {
+				c.Label(fmt.Sprintf("bundle %s · rev %d", inst.bundle, revision)).Send()
 			}
 			c.Separator().Vertical().Send()
 			// The tree half: the same computation as a file tree rather
@@ -178,7 +135,7 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 		}
 	}
 
-	if inner == nil {
+	if view == nil {
 		for range c.PanelCentralInside().KeepIter() {
 			if statusErr != "" {
 				c.Label("ad-hoc demo unavailable: " + statusErr).Send()
@@ -188,34 +145,29 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 		}
 		return
 	}
-	// This app's own frame context, which is the one it holds: the engine is
-	// hand-embedded here rather than acquired through an embed seam, so the
-	// identity the context presents is this app's — and per ADR-0155 §SD3 that
-	// identity is exactly what column-width state keys on.
-	return inner.Frame(ctx)
+	// This app's own frame context, which is the one it holds: the view's
+	// embedded play draws under this app's identity — and per ADR-0155 §SD3
+	// that identity is exactly what column-width state keys on.
+	return view.Frame(ctx)
 }
 
 func (inst *App) Unmount(ctx app.MountContextI) (err error) {
-	if inst.follower != nil {
-		inst.follower.Close()
-		inst.follower = nil
+	if inst.view != nil {
+		inst.view.Close()
+		inst.view = nil
 	}
-	if inst.inner != nil {
-		inst.inner.Close()
-		inst.inner = nil
-	}
-	// The dataset is not retracted here: the runtime retracts what this
+	// The bundle is not retracted here: the runtime retracts what this
 	// window published when the host closes its bus client (ADR-0240 §SD5).
 	return
 }
 
-// regenerate republishes a fresh series under the same handle. Runs off
-// the render thread — bus.Request is synchronous and would stall the
-// frame. The embedded applet learns of the new revision from the service's
-// event through its follower, like any other consumer.
+// regenerate republishes the bundle with a fresh series. Runs off the
+// render thread — bus.Request is synchronous and would stall the frame.
+// The view learns of the new revision from the service's event, like any
+// other receiver.
 func (inst *App) regenerate() {
 	inst.mu.Lock()
-	if inst.busy || inst.pub == nil {
+	if inst.busy || inst.view == nil {
 		inst.mu.Unlock()
 		return
 	}
@@ -224,7 +176,7 @@ func (inst *App) regenerate() {
 	gen := inst.gen
 	inst.mu.Unlock()
 
-	if _, err := inst.pub.Publish(inst.bus, inst.series(gen)); err != nil {
+	if _, err := play.PublishBundleE(inst.bus, inst.itemsSpec(gen)); err != nil {
 		inst.log.Warn().Err(err).Msg("adhocdemo: regenerate failed")
 	}
 

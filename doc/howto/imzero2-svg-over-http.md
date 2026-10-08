@@ -21,8 +21,8 @@ egui's pre-tessellation shapes, so no GPU is involved. This is a prototype — r
 Two binaries: the Rust client and the Go server.
 
 ```sh
-# 1. the GPU-less SVG client → rust/imzero2/target/headless_svg/release/imzero2
-bash rust/imzero2/build_rust_headless_svg.sh
+# 1. the GPU-less SVG client → rust/imzero2/target/headless_svg/dist/imzero2
+bash rust/imzero2/build_rust_dist.sh headless_svg
 
 # 2. the HTTP server
 go build -tags="$(cat ./tags)" -o /tmp/svgserver ./apps/svgserver/
@@ -38,7 +38,7 @@ installed fonts.
 ```sh
 /tmp/svgserver \
   -addr :8087 \
-  -clientBinary rust/imzero2/target/headless_svg/release/imzero2 \
+  -clientBinary rust/imzero2/target/headless_svg/dist/imzero2 \
   -mainFontTTF rust/imzero2/assets/fonts/iosevka-aile/IosevkaAile-Regular.ttf \
   -monoFontTTF rust/imzero2/assets/fonts/ids-mono/IDSMono-Regular.ttf \
   -phosphorFontTTF rust/imzero2/assets/fonts/phosphor/Phosphor.ttf

@@ -19,7 +19,7 @@ everything mdedit touches"; the feature is gated on `BOXER_MDEDIT_LLM_*`
 environment variables. [ADR-0120](./0120-play-natural-language-ask-panel.md)
 (proposed, unbuilt) planned the same shape for a play Ask panel: a sibling
 package, an endpoint variable as the egress gate, the endpoint host shown
-beside the gesture. [ADR-0139](./0139-semantic-layer-text2dsl.md) (proposed,
+beside the gesture. [ADR-0139](./0139-semantic-layer-text2dsl.md) (deferred,
 unbuilt) added an agentic loop in which the model calls tools that read the
 introspection tables.
 
@@ -482,13 +482,55 @@ service's timeout with its call id. A client whose wait expires for any
 reason publishes `llm.cancel`, as it already did when its context ended.
 An explicit `Client.Timeout` or an earlier context deadline still wins.
 
+### 2026-10-07 — a request carries provider-specific members
+
+`Request.Extra` carries members the service merges verbatim into the
+provider's request, as `openaichat.CompletionRequest.Extra` does. A
+downstream that moved its own calls onto the service sends two of them to a
+local llama.cpp server: `dry_multiplier` 0, because a DRY penalty tuned for
+chat corrupts the verbatim quotes an extraction or a cited answer copies from
+its context, and `chat_template_kwargs.enable_thinking` false, because
+`EnableThinking` false omits the kwarg and a chat template that defaults
+reasoning on then spends the whole token ceiling thinking. The members cross
+the bus as one JSON object, so a nested member keeps its shape through the
+CBOR codec. The host still names the model: a member that collides with one
+the request sets fails the encode, and a provider that rejects members it does
+not know fails the call. The call record does not keep the members, as it
+keeps none of the sampling settings.
+
+### 2026-10-07 — play's Model tab and the text2sql packages are removed
+
+§SD6's play consumer is withdrawn. After the 2026-10-02 update it held
+`explain` and `fix this error`, both of which a chat driving a shared play
+window does with play's own operations. Its tool loop had become a second,
+weaker copy of those operations' `list_tables` and `describe_table`, agents
+could not reach it, and it was never checked live against a model. The
+property the update kept it for, a fix that runs nothing, is a chat whose
+ceiling stops at *edit* ([ADR-0280](./0280-a-ceiling-on-what-a-chats-model-may-do-scored-on-a-ladder.md)).
+Play no longer declares `llm.complete` or the `keelson.query` grant on
+`sql_passes`; dock tab id 34 is retired. mdedit remains the prompt-book
+consumer.
+
+The tab was the only caller of the `text2sql2` orchestrator, so §SD6's
+"compile-only through the text2sql2 orchestrator" and §SD5's loop in it have
+no subject left. The `text2sql2` and `text2sql` packages are deleted; the
+Surfaces row and the References entry that name the orchestrator describe
+code that is gone. `Validate` moved into play as the check behind
+`validate_sql`. The `boxer text2sql` CLI §SD6 left on `openaichat`
+in fact called a local Ollama server directly, beside this service, and
+goes too. The service still returns tool calls unexecuted for the caller
+to run, as §SD5 decided; the loop that remains is the chat's
+([ADR-0265](./0265-chat-app-over-retained-model-calls.md)), whose tools are
+other apps' operations run under a task grant
+([ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md)).
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — §SD3 the taxonomy this family joins, §SD7 the broker, §SD10 capslock.
 - [ADR-0253](./0253-introspection-table-reads-as-a-bus-capability.md) — the same move for table reads; the grants a model's tools run under.
 - [ADR-0216](./0216-mdedit-llm-transformations.md) — the shipped consumer; the transformation-book shape play adopts.
 - [ADR-0120](./0120-play-natural-language-ask-panel.md) (withdrawn) — the evidence review and the generation constraints SD6 keeps.
-- [ADR-0139](./0139-semantic-layer-text2dsl.md) (proposed) — grounding, and the tool protocol SD5 places.
+- [ADR-0139](./0139-semantic-layer-text2dsl.md) (deferred) — grounding, and the tool protocol SD5 places.
 - [ADR-0145](./0145-sealed-app-data.md) — the sensitivity label and the locality rule SD3 copies.
 - [ADR-0090](./0090-sysmetrics-pubsub-data-plane.md) §SD8 — the masking rule SD3 is built to hold.
 - [ADR-0165](./0165-imzero2-tile-transport-over-fffi2.md) O3, [ADR-0204](./0204-leaflet-map-core-port.md) §SD4 — the HTTP facility this does not wait for.

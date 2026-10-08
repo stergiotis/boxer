@@ -196,17 +196,7 @@ func (inst *PlayApp) renderParamSlots(maxHeight float32) {
 	// its own slots, the way it does the range evaluator (ADR-0124 Update
 	// 2026-08-14). Re-scanned per frame for the same reason the ungroup hint is:
 	// a marker is part of the buffer, and the buffer is being edited.
-	enums := scanEnumHints(inst.sql)
-	exprs := scanExprHints(inst.sql)
-	for _, w := range inst.paramWidgets {
-		if aware, ok := w.(enumHintAwareI); ok {
-			aware.SetEnumHints(enums)
-		}
-		if aware, ok := w.(exprHintAwareI); ok {
-			aware.SetExprHints(exprs)
-			aware.SetExprMarks(inst.exprMarks)
-		}
-	}
+	enums, exprs := inst.setParamWidgetHints()
 
 	// The ceiling belongs to the scroll area itself, NOT to a uiSetMaxHeight
 	// on a scope around it. That idiom bounds what the area is allocated and
@@ -225,102 +215,62 @@ func (inst *PlayApp) renderParamSlots(maxHeight float32) {
 	inst.syncParamDriftToPrelude()
 }
 
+// setParamWidgetHints hands the buffer's declared option lists and SQL
+// fields to the widgets that read them, and returns them.
+func (inst *PlayApp) setParamWidgetHints() (enums map[string][]enumOption, exprs map[string]string) {
+	enums = scanEnumHints(inst.sql)
+	exprs = scanExprHints(inst.sql)
+	for _, w := range inst.paramWidgets {
+		if aware, ok := w.(enumHintAwareI); ok {
+			aware.SetEnumHints(enums)
+		}
+		if aware, ok := w.(exprHintAwareI); ok {
+			aware.SetExprHints(exprs)
+			aware.SetExprMarks(inst.exprMarks)
+		}
+	}
+	return
+}
+
 // renderParamClaims runs one dispatch pass over the registered widgets and
 // closes with the near-miss note. It is the scrolled part of the params block
 // — everything whose height grows with the number of slots.
 func (inst *PlayApp) renderParamClaims(slots []paramSlot, enums map[string][]enumOption, exprs map[string]string) {
-	consumed := make([]bool, len(slots))
-	// grouped tracks the slots a group widget folded, which is what §SD7's
-	// near-miss pass reports on. It cannot read `consumed` instead: the tail
-	// scalarTextWidget claims every remaining slot, so by the end of dispatch
-	// nothing is unconsumed and the interesting set would be empty.
-	grouped := make([]bool, len(slots))
 	ungroup := scanUngroupHint(inst.sql)
-	// A half-pinned pair declines the fold (ADR-0124's 2026-07-22 amendment):
-	// its halves are withheld from the group widgets so the tail claims them
-	// as two scalars, and the near-miss line says why. Withholding rather
-	// than vetoing after the fact keeps paramWidgetI untouched — the matcher
-	// never learns what a tier is — and leaves any OTHER pair in the same
-	// buffer free to fold.
 	halfPinned, mixed := inst.mixedTierRangeHalves(slots)
 	unfilled := inst.unfilledSet()
-	for _, w := range inst.paramWidgets {
-		if ungroup && w.IsGroup() {
-			continue
+	claims, grouped := inst.dispatchParamClaims(slots, ungroup, halfPinned)
+	for _, cl := range claims {
+		subset, w := cl.slots, cl.widget
+		if w.IsGroup() {
+			inst.renderFoldLabel(subset)
 		}
-		// Group widgets see the withheld halves as already taken; the tail
-		// sees the true consumed set, so nothing is lost.
-		withheld := halfPinned
-		if !w.IsGroup() {
-			withheld = nil
+		// The tier control sits beside the claim it migrates, drawn by
+		// the orchestrator for the renderFoldLabel reason: a widget
+		// deciding its own tier would have to know about the buffer's
+		// prelude, which is exactly what §SD4 keeps away from it.
+		//
+		// The row is always framed, outlined only when the caret is in one
+		// of its placeholders (ADR-0130 L3's caret report). Always framed,
+		// so the widget tree keeps one shape — a frame that came and went
+		// would move every inner widget's id with it, and with it the
+		// editor state egui holds per id.
+		row := c.Frame(inst.ids.PrepareStr("paramClaim:" + subset[0].Name)).
+			Fill(color.Transparent).InnerMargin(styletokens.PaddingHair(styletokens.ActiveDensity()))
+		if inst.caretOnClaim(subset) {
+			// Hairline: the outline marks the row without competing with the
+			// text inside it, which the paragraph on styleCaretRowMark records.
+			row = row.Stroke(styletokens.StrokeHair, styleCaretRowMark)
 		}
-		mask := maskUnion(consumed, withheld)
-		remaining := unconsumedSlots(slots, mask)
-		if len(remaining) == 0 {
-			continue
-		}
-		// Repeated dispatch lets one widget claim multiple disjoint
-		// matches in a single frame (e.g. two from/to pairs in one
-		// query). The empty-idx guard is defensive: a misbehaving
-		// widget that returns ok=true with nil indices would consume
-		// nothing yet re-match identically next iteration.
-		for {
-			idxInRemaining, ok := w.Matches(remaining)
-			if !ok || len(idxInRemaining) == 0 {
-				break
-			}
-			subset := make([]paramSlot, 0, len(idxInRemaining))
-			absoluteIdx := make([]int, 0, len(idxInRemaining))
-			for _, ri := range idxInRemaining {
-				abs := absoluteIndex(slots, mask, ri)
-				if abs < 0 || consumed[abs] {
-					break
-				}
-				subset = append(subset, slots[abs])
-				absoluteIdx = append(absoluteIdx, abs)
-			}
-			if len(subset) != len(idxInRemaining) {
-				break
-			}
-			for _, a := range absoluteIdx {
-				consumed[a] = true
-				grouped[a] = w.IsGroup()
-			}
-			if w.IsGroup() {
-				inst.renderFoldLabel(subset)
-			}
-			// The tier control sits beside the claim it migrates, drawn by
-			// the orchestrator for the renderFoldLabel reason: a widget
-			// deciding its own tier would have to know about the buffer's
-			// prelude, which is exactly what §SD4 keeps away from it.
-			//
-			// The row is always framed, outlined only when the caret is in one
-			// of its placeholders (ADR-0130 L3's caret report). Always framed,
-			// so the widget tree keeps one shape — a frame that came and went
-			// would move every inner widget's id with it, and with it the
-			// editor state egui holds per id.
-			row := c.Frame(inst.ids.PrepareStr("paramClaim:" + subset[0].Name)).
-				Fill(color.Transparent).InnerMargin(styletokens.PaddingHair(styletokens.ActiveDensity()))
-			if inst.caretOnClaim(subset) {
-				// Hairline: the outline marks the row without competing with the
-				// text inside it, which the paragraph on styleCaretRowMark records.
-				row = row.Stroke(styletokens.StrokeHair, styleCaretRowMark)
-			}
-			for range row.KeepIter() {
-				for range c.Horizontal().KeepIter() {
-					inst.renderClaimTierControl(subset)
-					inst.renderClaimUnfilledMark(subset, unfilled)
-					w.Render(&paramCtx{
-						Ids:    inst.ids,
-						Slots:  subset,
-						Drafts: inst.paramDrafts,
-					})
-				}
-			}
-			mask = maskUnion(consumed, withheld)
-			remaining = unconsumedSlots(slots, mask)
-			if len(remaining) == 0 {
-				break
+		for range row.KeepIter() {
+			for range c.Horizontal().KeepIter() {
+				inst.renderClaimTierControl(subset)
+				inst.renderClaimUnfilledMark(subset, unfilled)
+				w.Render(&paramCtx{
+					Ids:    inst.ids,
+					Slots:  subset,
+					Drafts: inst.paramDrafts,
+				})
 			}
 		}
 	}
@@ -528,6 +478,84 @@ func (inst *PlayApp) caretOnClaim(subset []paramSlot) bool {
 	return false
 }
 
+// paramClaim is one widget's claim on slots, in dispatch order.
+type paramClaim struct {
+	widget paramWidgetI
+	slots  []paramSlot
+}
+
+// dispatchParamClaims runs one dispatch pass over the registered widgets:
+// which widget draws which slots, in the order the block draws them, and
+// which slots a group widget folded. It draws nothing, so get_state reads
+// the same claims the block draws (ADR-0274 §SD3).
+//
+// grouped tracks the slots a group widget folded, which is what §SD7's
+// near-miss pass reports on. It cannot read the consumed mask instead: the
+// tail scalarTextWidget claims every remaining slot, so by the end of
+// dispatch nothing is unconsumed and the interesting set would be empty.
+//
+// A half-pinned pair declines the fold (ADR-0124's 2026-07-22 amendment):
+// its halves are withheld from the group widgets so the tail claims them as
+// two scalars, and the near-miss line says why. Withholding rather than
+// vetoing after the fact keeps paramWidgetI untouched — the matcher never
+// learns what a tier is — and leaves any OTHER pair in the same buffer free
+// to fold.
+func (inst *PlayApp) dispatchParamClaims(slots []paramSlot, ungroup bool, halfPinned []bool) (claims []paramClaim, grouped []bool) {
+	consumed := make([]bool, len(slots))
+	grouped = make([]bool, len(slots))
+	for _, w := range inst.paramWidgets {
+		if ungroup && w.IsGroup() {
+			continue
+		}
+		// Group widgets see the withheld halves as already taken; the tail
+		// sees the true consumed set, so nothing is lost.
+		withheld := halfPinned
+		if !w.IsGroup() {
+			withheld = nil
+		}
+		mask := maskUnion(consumed, withheld)
+		remaining := unconsumedSlots(slots, mask)
+		if len(remaining) == 0 {
+			continue
+		}
+		// Repeated dispatch lets one widget claim multiple disjoint
+		// matches in a single frame (e.g. two from/to pairs in one
+		// query). The empty-idx guard is defensive: a misbehaving
+		// widget that returns ok=true with nil indices would consume
+		// nothing yet re-match identically next iteration.
+		for {
+			idxInRemaining, ok := w.Matches(remaining)
+			if !ok || len(idxInRemaining) == 0 {
+				break
+			}
+			subset := make([]paramSlot, 0, len(idxInRemaining))
+			absoluteIdx := make([]int, 0, len(idxInRemaining))
+			for _, ri := range idxInRemaining {
+				abs := absoluteIndex(slots, mask, ri)
+				if abs < 0 || consumed[abs] {
+					break
+				}
+				subset = append(subset, slots[abs])
+				absoluteIdx = append(absoluteIdx, abs)
+			}
+			if len(subset) != len(idxInRemaining) {
+				break
+			}
+			for _, a := range absoluteIdx {
+				consumed[a] = true
+				grouped[a] = w.IsGroup()
+			}
+			claims = append(claims, paramClaim{widget: w, slots: subset})
+			mask = maskUnion(consumed, withheld)
+			remaining = unconsumedSlots(slots, mask)
+			if len(remaining) == 0 {
+				break
+			}
+		}
+	}
+	return
+}
+
 // unfilledSet is unfilledInputs as a lookup, computed once per frame — the
 // per-claim mark would otherwise re-derive it per claim.
 func (inst *PlayApp) unfilledSet() (out map[string]bool) {
@@ -617,13 +645,24 @@ func mixedTierNote(pairs []mixedTierPair) string {
 // typo with a visible symptom and no other explanation; then the type mismatch and the generic vocabulary note, both inside
 // nearMissNote.
 func (inst *PlayApp) renderNearMissNote(slots []paramSlot, grouped []bool, ungroup bool, mixed []mixedTierPair, orphanEnums []string, orphanExprs []string) {
+	note := paramNearMissNote(slots, grouped, ungroup, mixed, orphanEnums, orphanExprs)
+	if note == "" {
+		return
+	}
+	for rt := range c.RichTextLabel(note) {
+		rt.Small().Weak()
+	}
+}
+
+// paramNearMissNote is the note renderNearMissNote draws, or "" for none;
+// get_state reports it as ParamNote.
+func paramNearMissNote(slots []paramSlot, grouped []bool, ungroup bool, mixed []mixedTierPair, orphanEnums []string, orphanExprs []string) (note string) {
 	unfolded := make([]paramSlot, 0, len(slots))
 	for i, s := range slots {
 		if !grouped[i] {
 			unfolded = append(unfolded, s)
 		}
 	}
-	note := ""
 	if !ungroup {
 		note = mixedTierNote(mixed)
 	}
@@ -636,12 +675,7 @@ func (inst *PlayApp) renderNearMissNote(slots []paramSlot, grouped []bool, ungro
 	if note == "" {
 		note = nearMissNote(unfolded, ungroup)
 	}
-	if note == "" {
-		return
-	}
-	for rt := range c.RichTextLabel(note) {
-		rt.Small().Weak()
-	}
+	return
 }
 
 // maskUnion returns a fresh mask that is true where either input is. A nil

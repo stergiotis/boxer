@@ -283,8 +283,35 @@ bytemuck = { version = "1.25", optional = true, default-features = false }
 memmap2 = "0.9.9"
 rand = "0.10.2"
 
+# Two optimised profiles. `dist` is the production build (build_rust_dist.sh,
+# target/*/dist/imzero2), which the launchers, the deploy and airgap scripts
+# and the svg server run. `release` is the development build (the
+# build_rust*.sh scripts, target/*/release/imzero2): parallel codegen units
+# without LTO, so it rebuilds two to three times faster, and the symbol table
+# kept so a panic backtrace names its frames; profile.sh and an
+# EGUI_INSPECTION launch of hmi.sh use it.
 [profile.release]
 opt-level = 2
+
+# Production: whole-graph LTO in a single codegen unit, symbols stripped.
+# opt-level stays at release's 2 until a measurement says 3 pays for the size.
+# panic stays `unwind` on purpose: the headless hosts run on tokio, which
+# isolates a panicking task — under `abort` that one task takes the process.
+# The feature set (no `puffin`, no `inspection`) is build_rust_dist.sh's job;
+# a cargo profile cannot select features.
+#
+# Measured 2026-10-06 on one 8-thread machine under other load, five
+# interleaved rounds of the portolan-land frame-cost protocol, cpu host:
+# opcode dispatch with nothing drawn (`off` arm) 14–17 % faster than
+# `release`, in all ten pairs; the filled world-view frame ~5 % faster;
+# rasterise and tessellate no consistent difference. Binaries 11–15 %
+# smaller, builds ~2–2.5× longer. Two builds from copies at different paths
+# were byte-identical (desktop, headless_mesh), so ADR-0215 holds under LTO.
+[profile.dist]
+inherits = "release"
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
 
 # Optimize all dependencies even in debug builds:
 [profile.dev.package."*"]

@@ -48,6 +48,9 @@ const (
 	vectorFieldOptNameCol     = "name"
 	vectorFieldOptUnitCol     = "unit"
 	vectorFieldOptSpeedMaxCol = "speed_max"
+	// vectorFieldOptFamilyCol names a field family of keelson tables the pane
+	// reads in place of the reduction statements (ADR-0291 §SD4).
+	vectorFieldOptFamilyCol = "family"
 
 	// vector_field_sites columns. lat and lon are the contract; the other
 	// two are the ADR-0231 §SD5 optional form.
@@ -97,12 +100,13 @@ type vectorFieldClaim struct {
 // vectorFieldOptsClaim is the resolved column indices; -1 marks an absent
 // column, which is every column's normal state.
 type vectorFieldOptsClaim struct {
-	nameCol, unitCol, speedMaxCol int
+	nameCol, unitCol, speedMaxCol, familyCol int
 }
 
 type vectorFieldOpts struct {
 	name, unit string
 	speedMax   float32
+	family     string
 }
 
 // vectorFieldSitesClaim is the resolved column indices of the sites relation;
@@ -153,7 +157,7 @@ func (inst vectorFieldPanel) AcceptForChannel(ch ChannelID, schema *arrow.Schema
 			reason = "no `vector_field_opts` CTE"
 			return
 		}
-		oc := vectorFieldOptsClaim{nameCol: -1, unitCol: -1, speedMaxCol: -1}
+		oc := vectorFieldOptsClaim{nameCol: -1, unitCol: -1, speedMaxCol: -1, familyCol: -1}
 		for i, f := range schema.Fields() {
 			switch f.Name {
 			case vectorFieldOptNameCol:
@@ -162,6 +166,8 @@ func (inst vectorFieldPanel) AcceptForChannel(ch ChannelID, schema *arrow.Schema
 				oc.unitCol = i
 			case vectorFieldOptSpeedMaxCol:
 				oc.speedMaxCol = i
+			case vectorFieldOptFamilyCol:
+				oc.familyCol = i
 			}
 		}
 		claim = oc
@@ -269,6 +275,9 @@ func readVectorFieldOpts(rec arrow.RecordBatch, oc vectorFieldOptsClaim) (o vect
 			o.speedMax = float32(v)
 		}
 	}
+	if oc.familyCol >= 0 {
+		o.family = formatCell(rec, oc.familyCol, 0)
+	}
 	return
 }
 
@@ -348,6 +357,18 @@ type VectorFieldDriver struct {
 	seenT         string
 	emittedBounds [4]float64
 
+	// lastOpts and drawnStatus are what the last draw used and said, for
+	// get_vectorfield and list_panes (ADR-0270, update of 2026-10-05).
+	lastOpts    vectorFieldOpts
+	drawnStatus string
+	// followWriter is the writer of the vf_* signals that follow an
+	// agent's set_vectorfield_view: the task, until the time and the view
+	// the command moved have rested and been published (ADR-0269 §SD8).
+	// followTime and followView say which of the two are still to come.
+	followWriter string
+	followTime   bool
+	followView   bool
+
 	now func() time.Time
 }
 
@@ -409,8 +430,11 @@ func (inst *VectorFieldDriver) close() {
 // Render draws the controls and the map with the guest on it.
 func (inst *VectorFieldDriver) Render(claim vectorFieldClaim, opts vectorFieldOpts, sites []vectorFieldSite, emit SignalEmitterI) {
 	inst.sites = sites
+	inst.lastOpts = opts
 	g := inst.guest
-	g.Ensure(inst.rel, inst.relParams, claim.shape)
+	rel := inst.rel
+	rel.Family = opts.family
+	g.Ensure(rel, inst.relParams, claim.shape)
 	g.Opts.Density = float32(inst.density)
 	g.Opts.Opacity = float32(inst.opacity)
 	g.Opts.Paused = inst.paused
@@ -617,7 +641,8 @@ func (inst *VectorFieldDriver) renderControls(meta vectorfield.Meta, has bool, o
 			}
 			c.AddSpace(vectorFieldStatusGap)
 		}
-		c.Label(inst.statusLine(meta, has, opts)).Truncate().Send()
+		inst.drawnStatus = inst.statusLine(meta, has, opts)
+		c.Label(inst.drawnStatus).Truncate().Send()
 	}
 	unit := opts.unit
 	if unit == "" {
@@ -838,11 +863,15 @@ func (inst *VectorFieldDriver) emitWhenRested(meta vectorfield.Meta, has bool, e
 		inst.lastPos = inst.pos
 		step := min(max(int(math.Round(inst.pos)), 0), len(meta.Steps)-1)
 		raw := meta.Steps[step].Valid.UTC().Format(vectorFieldTimeLayout)
-		if (step != inst.emittedStep || raw != inst.emittedT) && now.Sub(inst.posChangedAt) >= vectorFieldSettle {
-			inst.emittedStep, inst.emittedT = step, raw
-			emit.Emit(signalVfT, raw)
+		if now.Sub(inst.posChangedAt) >= vectorFieldSettle {
+			if step != inst.emittedStep || raw != inst.emittedT {
+				inst.emittedStep, inst.emittedT = step, raw
+				emit.Emit(signalVfT, raw)
+			}
+			inst.followTime = false
 		}
 	}
+	defer inst.settleFollow()
 	if inst.pm == nil {
 		return
 	}
@@ -857,6 +886,7 @@ func (inst *VectorFieldDriver) emitWhenRested(meta vectorfield.Meta, has bool, e
 	if inst.viewStableAt.IsZero() || now.Sub(inst.viewStableAt) < vectorFieldSettle {
 		return
 	}
+	inst.followView = false
 	b := v.Bounds()
 	if west, east := b.GetWest(), b.GetEast(); west < east && b.GetSouth() < b.GetNorth() {
 		if east-west > 360 {
@@ -880,6 +910,14 @@ func (inst *VectorFieldDriver) emitWhenRested(meta vectorfield.Meta, has bool, e
 	emit.Emit(signalVfMaxLat, bounds[1])
 	emit.Emit(signalVfMinLon, bounds[2])
 	emit.Emit(signalVfMaxLon, bounds[3])
+}
+
+// settleFollow hands the vf_* signals back to the pane's own writer once
+// what an agent's set_vectorfield_view moved has rested and been published.
+func (inst *VectorFieldDriver) settleFollow() {
+	if !inst.followTime && !inst.followView {
+		inst.followWriter = ""
+	}
 }
 
 // servedBuffer is the source's last statement as a buffer that runs on its
@@ -965,7 +1003,13 @@ func (inst *PlayApp) renderVectorFieldTab() {
 	if sitesRec != nil || sitesSchema != nil {
 		inputs[chVectorFieldSites] = channelInput{node: vectorFieldSitesNodeID, rec: sitesRec, schema: sitesSchema, sig: inst.frameSig}
 	}
-	reject := dispatchPanel(vectorFieldPanel{driver: d}, inputs, inst.sigEmit)
+	// The vf_* writes that follow an agent's set_vectorfield_view carry the
+	// task as their writer until they are published (ADR-0269 §SD8).
+	emit := inst.sigEmit
+	if d.followWriter != "" {
+		emit = emit.as(d.followWriter)
+	}
+	reject := dispatchPanel(vectorFieldPanel{driver: d}, inputs, emit)
 	if reject == "" {
 		return
 	}

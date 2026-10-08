@@ -1,10 +1,8 @@
 package leewaywidgets
 
 import (
-	"cmp"
 	"fmt"
 	"slices"
-	"strings"
 	"unicode/utf8"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
@@ -14,116 +12,50 @@ import (
 
 // The archetype form draws a band as one line — its template, each slot at
 // how typical it is or what it typically holds — and under it only the rows
-// that break the pattern. A batch of n rows in k clusters reads in about k
-// lines plus its exceptions.
+// that break the pattern. What it says is lwlens.Archetypes; this file is how
+// it is drawn.
 
-const (
-	// lensTemplateAt is the band support a slot needs to be in a template
-	// under ScopeRow, where the plan gives a band no frame.
-	lensTemplateAt = 0.5
-	// lensOutlierAt is the value surprise over which a value is an
-	// exception worth a line: the outer 5% of its slot at either end.
-	lensOutlierAt = 0.9
-	// lensExceptionLines bounds the exception lines drawn per band.
-	lensExceptionLines = 6
-	// lensRareShare is the most of a band a label value may hold and still
-	// be an exception: rare against a slot whose band has a typical value.
-	lensRareShare = 0.1
-)
-
-// exceptionClassE ranks what an exception line says, most telling first:
-// the row budget cuts from the end, so a missing slot is never lost to a
-// numeric outlier (the judged round in the lens exploration found it was).
-type exceptionClassE uint8
-
-const (
-	// exceptionStructural: a slot missing that the band has, or present
-	// that it lacks.
-	exceptionStructural exceptionClassE = iota
-	// exceptionRareLabel: a label value few of the band's rows hold.
-	exceptionRareLabel
-	// exceptionOutlier: numeric values in the outer ends of their slot.
-	exceptionOutlier
-)
-
-// bandValues is a band's values in slot s.
-func (inst *lensPainter) bandValues(b *lwlens.Band, s int32) (nums []float64, texts []string) {
-	for _, r := range b.Rows {
-		if cell, ok := inst.a.Model.Rows[r].Cell(s); ok {
-			if cell.HasNum {
-				nums = append(nums, cell.Num)
-			}
-			texts = append(texts, cell.Text)
-		}
-	}
-	slices.Sort(nums)
-	return
-}
-
-// mode is the most frequent text and its share.
-func mode(texts []string) (m string, share float64, distinct int) {
-	counts := map[string]int{}
-	best := 0
-	for _, t := range texts {
-		counts[t]++
-		if k := counts[t]; k > best || (k == best && t < m) {
-			m, best = t, k
-		}
-	}
-	if len(texts) > 0 {
-		share = float64(best) / float64(len(texts))
-	}
-	return m, share, len(counts)
-}
-
-func quantile(sorted []float64, q float64) float64 {
-	if len(sorted) == 0 {
-		return 0
-	}
-	return sorted[int(q*float64(len(sorted)-1)+0.5)]
-}
+// lensExceptionLines bounds the exception lines drawn per band.
+const lensExceptionLines = 6
 
 // templateText is what a band typically holds in slot s, in at most n
 // runes: the longest of its readings that fits, so a narrow column drops the
 // spread or the share before it cuts the value.
 func (inst *lensPainter) templateText(b *lwlens.Band, s int32, n int) string {
-	for _, t := range inst.templateTexts(b, s) {
+	ts := inst.templateTexts(lwlens.BandTypical(inst.a, b, s))
+	for _, t := range ts {
 		if utf8.RuneCountInString(t) <= n {
 			return t
 		}
 	}
-	ts := inst.templateTexts(b, s)
 	return lensFit(ts[len(ts)-1], n)
 }
 
-// templateTexts are a band's readings of slot s, longest first.
-func (inst *lensPainter) templateTexts(b *lwlens.Band, s int32) (out []string) {
-	nums, texts := inst.bandValues(b, s)
-	sl := inst.a.Model.Slots[s]
-	if sl.Kind == lwlens.ValueKindNumeric && len(nums) > 0 {
-		med := inst.numText(s, quantile(nums, 0.5))
-		if inst.p.Detail == lwlens.DetailValues && len(nums) > 2 {
-			out = append(out, fmt.Sprintf("%s (%s–%s)", med, inst.numText(s, quantile(nums, 0.1)), inst.numText(s, quantile(nums, 0.9))))
+// templateTexts are the readings of t, longest first.
+func (inst *lensPainter) templateTexts(t lwlens.Typical) (out []string) {
+	s := t.Slot
+	if t.Numeric {
+		med := inst.numText(s, t.Median)
+		if inst.p.Detail == lwlens.DetailValues && t.Count > 2 {
+			out = append(out, fmt.Sprintf("%s (%s–%s)", med, inst.numText(s, t.Low), inst.numText(s, t.High)))
 		}
-		return append(out, med, lensShortNum(quantile(nums, 0.5)))
+		return append(out, med, lensShortNum(t.Median))
 	}
-	m, share, distinct := mode(texts)
-	if share < 0.5 && len(texts) > 1 {
+	if t.Share < 0.5 && t.Count > 1 {
 		// Timestamps are read as the span they cover.
-		if _, ok := lensShortTime(texts[0]); ok {
-			sorted := slices.Clone(texts)
-			slices.Sort(sorted)
-			first, _ := lensShortTime(sorted[0])
-			last, _ := lensShortTime(sorted[len(sorted)-1])
-			return []string{first + "…" + last, first[:5] + "…" + last[:5]}
+		if first, ok := lensShortTime(t.First); ok {
+			if last, ok := lensShortTime(t.Last); ok {
+				return []string{first + "…" + last, first[:5] + "…" + last[:5]}
+			}
 		}
-		return []string{fmt.Sprintf("%d distinct", distinct), fmt.Sprintf("(%d)", distinct)}
+		return []string{fmt.Sprintf("%d distinct", t.Distinct), fmt.Sprintf("(%d)", t.Distinct)}
 	}
+	m := t.Mode
 	if ts, ok := lensShortTime(m); ok {
 		m = ts
 	}
-	if inst.p.Detail == lwlens.DetailValues && share < 1 {
-		out = append(out, fmt.Sprintf("%s %.0f%%", m, 100*share))
+	if inst.p.Detail == lwlens.DetailValues && t.Share < 1 {
+		out = append(out, fmt.Sprintf("%s %.0f%%", m, 100*t.Share))
 	}
 	return append(out, m, inst.a.Stats[s].Elide(m))
 }
@@ -168,10 +100,11 @@ func (inst *lensPainter) paintTemplateCell(x, cy float32, s int32, b *lwlens.Ban
 // over the slot's whole range; for a label, the band's shares of the slot's
 // most frequent labels, in their chip colours.
 func (inst *lensPainter) paintDistribution(x0, x1, cy float32, s int32, b *lwlens.Band) {
-	nums, texts := inst.bandValues(b, s)
+	t := lwlens.BandTypical(inst.a, b, s)
+	_, texts := lwlens.BandValues(inst.a, b, s)
 	st := &inst.a.Stats[s]
 	track := lensMix(styletokens.NeutralBgSurface, styletokens.NeutralTextSecondary, 0.2)
-	if inst.a.Model.Slots[s].Kind == lwlens.ValueKindNumeric && len(nums) > 0 && len(st.Sorted) > 1 {
+	if t.Numeric && len(st.Sorted) > 1 {
 		lo, hi := st.Sorted[0], st.Sorted[len(st.Sorted)-1]
 		at := func(v float64) float32 {
 			if hi == lo {
@@ -180,9 +113,9 @@ func (inst *lensPainter) paintDistribution(x0, x1, cy float32, s int32, b *lwlen
 			return x0 + (x1-x0)*float32((v-lo)/(hi-lo))
 		}
 		c.PaintRectFilled(x0, cy-1, x1, cy+1, 0, track).Send()
-		a, z := at(quantile(nums, 0.1)), at(quantile(nums, 0.9))
+		a, z := at(t.Low), at(t.High)
 		c.PaintRectFilled(a, cy-2.5, max(z, a+2), cy+2.5, 1, lensTok(styletokens.NeutralTextSecondary)).Send()
-		m := at(quantile(nums, 0.5))
+		m := at(t.Median)
 		c.PaintRectFilled(m-1, cy-4, m+1, cy+4, 0, lensTok(styletokens.NeutralTextExtreme)).Send()
 		return
 	}
@@ -211,125 +144,39 @@ func (inst *lensPainter) paintDistribution(x0, x1, cy float32, s int32, b *lwlen
 	}
 }
 
-// exception is one row's departures from its band, as drawn text, and the
-// most telling class among them.
+// exception is an lwlens.Exception as drawn: its rows, and its departures
+// as text.
 type exception struct {
-	rows  []int32
-	parts []string
-	class exceptionClassE
-	// surprise is the most extreme value surprise among its outliers,
-	// which orders lines within a class: the budget cuts the mildest.
+	rows     []int32
+	parts    []string
+	class    lwlens.ExceptionClassE
 	surprise float64
 }
 
-// rareLabels finds, per label slot the band mostly has, the values rare
-// enough to be exceptions, with how many of the band's rows hold each: the
-// slot must have a typical value in the band (one held by half its rows or
-// more), and the value is held by at most lensRareShare of them, one row at
-// least.
-func (inst *lensPainter) rareLabels(b *lwlens.Band) (rare map[int32]map[string]int) {
-	rare = map[int32]map[string]int{}
-	m := inst.a.Model
-	for s := range m.Slots {
-		sl := int32(s)
-		if m.Slots[s].Kind == lwlens.ValueKindNumeric || b.Support[sl] < lensTemplateAt {
-			continue
-		}
-		_, texts := inst.bandValues(b, sl)
-		typical, share, _ := mode(texts)
-		if share < 0.5 {
-			continue
-		}
-		counts := map[string]int{}
-		for _, t := range texts {
-			counts[t]++
-		}
-		limit := max(1, int(lensRareShare*float64(len(texts))))
-		for t, n := range counts {
-			if t != typical && n <= limit {
-				if rare[sl] == nil {
-					rare[sl] = map[string]int{}
-				}
-				rare[sl][t] = n
-			}
-		}
-	}
-	return rare
-}
-
-// exceptions lists a band's rows that break its pattern — missing and unusual
-// slots, and above the shape detail rare labels and extreme values — most
-// telling first (exceptionClassE), and within a class most extreme first, so
-// the row budget cuts outliers before structure and mild outliers before
-// extreme ones. Rows with the same departures share a line.
+// exceptions formats a band's exceptions, most telling first.
 func (inst *lensPainter) exceptions(pb *lwlens.PlanBand, b *lwlens.Band) (out []exception) {
-	idx := map[string]int{}
 	m := inst.a.Model
-	var rare map[int32]map[string]int
-	if inst.p.Detail >= lwlens.DetailGist {
-		rare = inst.rareLabels(b)
-	}
-	for _, pr := range pb.Rows {
-		var parts []string
-		var surprise float64
-		class := exceptionOutlier
-		if len(pr.Missing)+len(pr.Unexpected) > 0 {
-			class = exceptionStructural
-		}
-		for _, s := range pr.Missing {
-			parts = append(parts, "−"+m.Slots[s].Label())
-		}
-		for _, s := range pr.Unexpected {
-			parts = append(parts, "+"+m.Slots[s].Label())
-		}
-		if inst.p.Detail >= lwlens.DetailGist {
-			row := &m.Rows[pr.Row]
-			for _, cell := range row.Cells {
-				if n := rare[cell.Slot][cell.Text]; n > 0 {
-					// The count says whether the list is complete: a reader
-					// who sees every one of the n rows needs no "more rows"
-					// line to conclude none was cut (the fourth judged round's
-					// readers could only infer it).
-					parts = append(parts, fmt.Sprintf("%s %s (%d of %d rows)", inst.memberName(cell.Slot),
-						lensFit(cell.Text, 24), n, len(b.Rows)))
-					class = min(class, exceptionRareLabel)
+	for _, e := range lwlens.BandExceptions(inst.a, inst.p.Detail, pb, b) {
+		parts := make([]string, 0, len(e.Departures))
+		for _, d := range e.Departures {
+			switch d.Kind {
+			case lwlens.DepartureKindMissing:
+				parts = append(parts, "−"+m.Slots[d.Slot].Label())
+			case lwlens.DepartureKindUnexpected:
+				parts = append(parts, "+"+m.Slots[d.Slot].Label())
+			case lwlens.DepartureKindRareLabel:
+				parts = append(parts, fmt.Sprintf("%s %s (%d of %d rows)", inst.memberName(d.Slot),
+					lensFit(d.Text, 24), d.Count, len(b.Rows)))
+			case lwlens.DepartureKindOutlier:
+				dir := "↓"
+				if d.High {
+					dir = "↑"
 				}
-			}
-			for _, cell := range row.Cells {
-				s := cell.Slot
-				if m.Slots[s].Kind != lwlens.ValueKindNumeric || !cell.HasNum || b.Support[s] < lensTemplateAt {
-					continue
-				}
-				vs := lwlens.ValueSurprise(inst.a, s, &cell)
-				if vs < lensOutlierAt {
-					continue
-				}
-				surprise = max(surprise, vs)
-				dir := "↑"
-				if inst.a.Stats[s].Percentile(cell.Num) < 0.5 {
-					dir = "↓"
-				}
-				parts = append(parts, fmt.Sprintf("%s %s%s", inst.memberName(s), inst.numText(s, cell.Num), dir))
+				parts = append(parts, fmt.Sprintf("%s %s%s", inst.memberName(d.Slot), inst.numText(d.Slot, d.Value), dir))
 			}
 		}
-		if len(parts) == 0 {
-			continue
-		}
-		rows := append([]int32{pr.Row}, pr.Also...)
-		key := strings.Join(parts, "\x00")
-		if i, ok := idx[key]; ok {
-			out[i].rows = append(out[i].rows, rows...)
-			continue
-		}
-		idx[key] = len(out)
-		out = append(out, exception{rows: rows, parts: parts, class: class, surprise: surprise})
+		out = append(out, exception{rows: e.Rows, parts: parts, class: e.Class, surprise: e.Surprise})
 	}
-	slices.SortStableFunc(out, func(x, y exception) int {
-		if x.class != y.class {
-			return int(x.class) - int(y.class)
-		}
-		return cmp.Compare(y.surprise, x.surprise)
-	})
 	return
 }
 
@@ -395,7 +242,7 @@ func (inst *lensPainter) paintArchetypes() {
 		case lwlens.ScopeRow:
 			frame = nil
 			for _, s := range inst.a.Order {
-				if b.Support[s] >= lensTemplateAt && !slices.Contains(pb.Constants, s) &&
+				if b.Support[s] >= lwlens.TemplateAt && !slices.Contains(pb.Constants, s) &&
 					(inst.p.Detail != lwlens.DetailShape || (!inst.a.Model.Slots[s].Plain && inst.a.Support[s] < 1)) {
 					frame = append(frame, s)
 				}
@@ -430,42 +277,11 @@ func (inst *lensPainter) paintArchetypes() {
 	}
 }
 
-// lensExtremesMin is the fewest values a band needs in a slot for its
-// extremes to be named: with two, the lowest and highest are the band.
-const lensExtremesMin = 3
-
-// extremes names, per numeric slot of the frame the band mostly has, the rows
-// holding the band's lowest and highest value — what a reader asking for a
-// band's maximum needs named, whether or not it is the batch's strangest
-// value, which is what the exception lines rank by (the lens exploration's
-// third judged round found the two differ).
+// extremes formats the band's extremes over the numeric slots of frame.
 func (inst *lensPainter) extremes(frame []int32, b *lwlens.Band) (parts []string) {
-	m := inst.a.Model
-	for _, s := range frame {
-		if m.Slots[s].Kind != lwlens.ValueKindNumeric || b.Support[s] < lensTemplateAt {
-			continue
-		}
-		lo, hi := int32(-1), int32(-1)
-		var vlo, vhi float64
-		n := 0
-		for _, r := range b.Rows {
-			cell, ok := m.Rows[r].Cell(s)
-			if !ok || !cell.HasNum {
-				continue
-			}
-			n++
-			if lo < 0 || cell.Num < vlo {
-				lo, vlo = r, cell.Num
-			}
-			if hi < 0 || cell.Num > vhi {
-				hi, vhi = r, cell.Num
-			}
-		}
-		if n < lensExtremesMin || vlo == vhi {
-			continue
-		}
-		parts = append(parts, fmt.Sprintf("%s ↓%s %s ↑%s %s", inst.memberName(s),
-			inst.rowLabel(lo), inst.numText(s, vlo), inst.rowLabel(hi), inst.numText(s, vhi)))
+	for _, e := range lwlens.BandExtremes(inst.a, b, frame) {
+		parts = append(parts, fmt.Sprintf("%s ↓%s %s ↑%s %s", inst.memberName(e.Slot),
+			inst.rowLabel(e.LowRow), inst.numText(e.Slot, e.LowValue), inst.rowLabel(e.HighRow), inst.numText(e.Slot, e.HighValue)))
 	}
 	return parts
 }

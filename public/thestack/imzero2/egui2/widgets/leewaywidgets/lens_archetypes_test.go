@@ -12,9 +12,10 @@ import (
 )
 
 // jobsModel is twelve jobs — a numeric attempt and runtime, and a state
-// label — beside twelve hosts with a cpu, so clustering has kinds to find. job-00 carries the batch's only extreme runtime, job-10 lacks
-// its runtime, job-11 alone is failed. Row order puts the outlier first and
-// the rare label last, which is the order an unranked budget would keep.
+// label — beside twelve hosts with a cpu. job-00 carries the batch's only
+// extreme runtime, job-10 lacks its runtime, job-11 alone is failed. Row
+// order puts the outlier first and the rare label last, which is the order
+// an unranked budget would keep.
 func jobsModel() *lwlens.Model {
 	m := &lwlens.Model{
 		Slots: []lwlens.Slot{
@@ -50,9 +51,23 @@ func jobsModel() *lwlens.Model {
 	return m
 }
 
-func TestArchetypeExceptionsRankStructureThenRareLabels(t *testing.T) {
-	a, err := lwlens.Analyze(context.Background(), jobsModel(), lwlens.AnalyzeOptions{})
+// jobsAnalysis analyses jobsModel under its two kinds as clusters.
+func jobsAnalysis(t *testing.T) lwlens.Analysis {
+	t.Helper()
+	m := jobsModel()
+	labels := make([]int32, len(m.Rows))
+	for i, r := range m.Rows {
+		if strings.HasPrefix(r.Label, "host-") {
+			labels[i] = 1
+		}
+	}
+	a, err := lwlens.Analyze(context.Background(), m, lwlens.AnalyzeOptions{Labels: labels})
 	require.NoError(t, err)
+	return a
+}
+
+func TestArchetypeExceptionsRankStructureThenRareLabels(t *testing.T) {
+	a := jobsAnalysis(t)
 	p := lwlens.PlanRows(&a, lwlens.Intent{Values: 0.5, Stable: 0.5})
 	lp := &lensPainter{a: &a, p: &p}
 	var exc []exception
@@ -89,8 +104,7 @@ func jobExceptions(a lwlens.Analysis, exc []exception) (out []exception) {
 }
 
 func TestArchetypeExtremesNameTheBandsMaximum(t *testing.T) {
-	a, err := lwlens.Analyze(context.Background(), jobsModel(), lwlens.AnalyzeOptions{})
-	require.NoError(t, err)
+	a := jobsAnalysis(t)
 	p := lwlens.PlanRows(&a, lwlens.Intent{Values: 0.5, Stable: 0.5})
 	lp := &lensPainter{a: &a, p: &p, labelPrefix: make([]int, len(a.Bands))}
 	var parts []string

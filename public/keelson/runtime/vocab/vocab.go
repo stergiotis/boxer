@@ -340,49 +340,9 @@ var (
 	MembLlmCallRefused         = NkRegistry.MustBegin("llmCallRefused", 120).End()
 	MembLlmCallError           = NkRegistry.MustBegin("llmCallError", 121).End()
 
-	// vizeval scorecards (ADR-0266 §SD8) — one boxer.facts row per candidate
-	// scored over a scenario at a build: which rendering, of which data, how
-	// far it got, and its metrics. Append-only. Metrics are two parallel
-	// arrays, names and values, so a new metric needs no new membership; the
-	// gates a scenario named are split into passed and failed. The candidate's
-	// canonical JSON and the free-text reason are strings, the rest symbols.
-	MembKindVizevalScore   = NkRegistry.MustBegin("runtimeKindVizevalScore", 122).End()
-	MembVizevalScenario    = NkRegistry.MustBegin("vizevalScenario", 123).End()
-	MembVizevalCandidateId = NkRegistry.MustBegin("vizevalCandidateId", 124).End()
-	MembVizevalSink        = NkRegistry.MustBegin("vizevalSink", 125).End()
-	MembVizevalCandidate   = NkRegistry.MustBegin("vizevalCandidate", 126).End()
-	MembVizevalBuild       = NkRegistry.MustBegin("vizevalBuild", 127).End()
-	MembVizevalBatchDigest = NkRegistry.MustBegin("vizevalBatchDigest", 128).End()
-	MembVizevalRows        = NkRegistry.MustBegin("vizevalRows", 129).End()
-	MembVizevalStatus      = NkRegistry.MustBegin("vizevalStatus", 130).End()
-	MembVizevalReason      = NkRegistry.MustBegin("vizevalReason", 131).End()
-	MembVizevalDir         = NkRegistry.MustBegin("vizevalDir", 132).End()
-	MembVizevalArea        = NkRegistry.MustBegin("vizevalArea", 133).End()
-	MembVizevalMetricName  = NkRegistry.MustBegin("vizevalMetricName", 134).End()
-	MembVizevalMetricValue = NkRegistry.MustBegin("vizevalMetricValue", 135).End()
-	MembVizevalGatePassed  = NkRegistry.MustBegin("vizevalGatePassed", 136).End()
-	MembVizevalGateFailed  = NkRegistry.MustBegin("vizevalGateFailed", 137).End()
-	// MembVizevalTaskJudge names who answered the scenario's questions — a
-	// model id or a reader (ADR-0266 §SD10); accuracies of two judges are two
-	// measurements.
-	MembVizevalTaskJudge = NkRegistry.MustBegin("vizevalTaskJudge", 243).End()
-
-	// vizeval pairwise judgements (ADR-0266 §SD6, §SD8) — one boxer.facts
-	// row per pair of candidates a model compared, both orders merged: which
-	// two drawings, by which model and prompt, and per criterion which side
-	// it preferred (a, b, tie, or split when the orders disagreed).
-	MembKindVizevalJudgement     = NkRegistry.MustBegin("runtimeKindVizevalJudgement", 138).End()
-	MembVizevalJudgementScenario = NkRegistry.MustBegin("vizevalJudgementScenario", 139).End()
-	MembVizevalJudgementDigest   = NkRegistry.MustBegin("vizevalJudgementDigest", 140).End()
-	MembVizevalJudgeModel        = NkRegistry.MustBegin("vizevalJudgeModel", 141).End()
-	MembVizevalJudgePrompt       = NkRegistry.MustBegin("vizevalJudgePrompt", 142).End()
-	MembVizevalPairA             = NkRegistry.MustBegin("vizevalPairA", 143).End()
-	MembVizevalPairB             = NkRegistry.MustBegin("vizevalPairB", 144).End()
-	MembVizevalDrawingA          = NkRegistry.MustBegin("vizevalDrawingA", 145).End()
-	MembVizevalDrawingB          = NkRegistry.MustBegin("vizevalDrawingB", 146).End()
-	MembVizevalCriterion         = NkRegistry.MustBegin("vizevalCriterion", 147).End()
-	MembVizevalPreference        = NkRegistry.MustBegin("vizevalPreference", 148).End()
-	MembVizevalWhy               = NkRegistry.MustBegin("vizevalWhy", 149).End()
+	// The vizeval scorecard and judgement memberships (ADR-0266, withdrawn)
+	// were retired with the harness (ADR-0289 §SD6); their
+	// ordinals (122-149, 243) stay unused.
 
 	// retained model conversations (ADR-0264) — the llmCall row gains the
 	// conversation it belongs to, the call it continues, where its kept
@@ -522,6 +482,40 @@ var (
 	MembAgentDisclosureDecidedBy  = NkRegistry.MustBegin("agentDisclosureDecidedBy", 255).End()
 	MembAgentDisclosureEndpoint   = NkRegistry.MustBegin("agentDisclosureEndpoint", 256).End()
 	MembAgentDisclosureReason     = NkRegistry.MustBegin("agentDisclosureReason", 257).End()
+	// The ad-hoc bundle record (ADR-0288 §SD5): one row per
+	// bundle operation and outcome, with the call context the dispatcher
+	// attested and digests of what was stored.
+	MembKindAdhocDataset           = NkRegistry.MustBegin("runtimeKindAdhocDataset", 258).End()
+	MembAdhocDatasetOperation      = NkRegistry.MustBegin("adhocDatasetOperation", 259).End()
+	MembAdhocDatasetOutcome        = NkRegistry.MustBegin("adhocDatasetOutcome", 260).End()
+	MembAdhocDatasetReason         = NkRegistry.MustBegin("adhocDatasetReason", 261).End()
+	MembAdhocDatasetBundle         = NkRegistry.MustBegin("adhocDatasetBundle", 262).End()
+	MembAdhocDatasetRevision       = NkRegistry.MustBegin("adhocDatasetRevision", 263).End()
+	MembAdhocDatasetOwnerApp       = NkRegistry.MustBegin("adhocDatasetOwnerApp", 264).End()
+	MembAdhocDatasetOwnerInstance  = NkRegistry.MustBegin("adhocDatasetOwnerInstance", 265).End()
+	MembAdhocDatasetLocalNames     = NkRegistry.MustBegin("adhocDatasetLocalNames", 266).End()
+	MembAdhocDatasetAliases        = NkRegistry.MustBegin("adhocDatasetAliases", 267).End()
+	MembAdhocDatasetHandles        = NkRegistry.MustBegin("adhocDatasetHandles", 268).End()
+	MembAdhocDatasetRows           = NkRegistry.MustBegin("adhocDatasetRows", 269).End()
+	MembAdhocDatasetBytes          = NkRegistry.MustBegin("adhocDatasetBytes", 270).End()
+	MembAdhocDatasetStreamDigests  = NkRegistry.MustBegin("adhocDatasetStreamDigests", 271).End()
+	MembAdhocDatasetDocumentDigest = NkRegistry.MustBegin("adhocDatasetDocumentDigest", 272).End()
+	MembAdhocDatasetAttested       = NkRegistry.MustBegin("adhocDatasetAttested", 273).End()
+	MembAdhocDatasetInFlight       = NkRegistry.MustBegin("adhocDatasetInFlight", 274).End()
+	MembAdhocDatasetDocument       = NkRegistry.MustBegin("adhocDatasetDocument", 275).End()
+	MembAdhocDatasetSourceSql      = NkRegistry.MustBegin("adhocDatasetSourceSql", 276).End()
+	MembAdhocDatasetInputHandles   = NkRegistry.MustBegin("adhocDatasetInputHandles", 277).End()
+	MembAdhocDatasetInputAliases   = NkRegistry.MustBegin("adhocDatasetInputAliases", 278).End()
+	MembAdhocDatasetInputDigests   = NkRegistry.MustBegin("adhocDatasetInputDigests", 279).End()
+	MembAdhocDatasetColumnDatasets = NkRegistry.MustBegin("adhocDatasetColumnDatasets", 280).End()
+	MembAdhocDatasetColumnNames    = NkRegistry.MustBegin("adhocDatasetColumnNames", 281).End()
+	MembAdhocDatasetColumnTypes    = NkRegistry.MustBegin("adhocDatasetColumnTypes", 282).End()
+	MembAdhocDatasetColumnNulls    = NkRegistry.MustBegin("adhocDatasetColumnNulls", 283).End()
+	// 284, 285 and 287 were a column's minimum, maximum and sample: values
+	// of sealed data, which the trail does not keep (ADR-0288
+	// §SD5). Retired before they were ever pushed; never reuse them.
+	MembAdhocDatasetColumnDistinct = NkRegistry.MustBegin("adhocDatasetColumnDistinct", 286).End()
+	MembAgentActionConsent         = NkRegistry.MustBegin("agentActionConsent", 288).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -564,13 +558,6 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembAgentActionApp, MembAgentActionOperation, MembAgentActionEffect, MembAgentActionArgsDigest,
 	MembAgentActionDecision, MembAgentActionPhase, MembAgentActionReason, MembAgentActionBudgetLeft,
 	MembAgentActionTest, MembAgentActionTainted, MembAgentActionConfined,
-	MembKindVizevalScore, MembVizevalScenario, MembVizevalCandidateId, MembVizevalSink, MembVizevalCandidate,
-	MembVizevalBuild, MembVizevalBatchDigest, MembVizevalRows, MembVizevalStatus, MembVizevalReason,
-	MembVizevalDir, MembVizevalArea, MembVizevalMetricName, MembVizevalMetricValue,
-	MembVizevalGatePassed, MembVizevalGateFailed, MembVizevalTaskJudge,
-	MembKindVizevalJudgement, MembVizevalJudgementScenario, MembVizevalJudgementDigest, MembVizevalJudgeModel,
-	MembVizevalJudgePrompt, MembVizevalPairA, MembVizevalPairB, MembVizevalDrawingA, MembVizevalDrawingB,
-	MembVizevalCriterion, MembVizevalPreference, MembVizevalWhy,
 	MembTrailConversation, MembTrailTurn, MembTrailRound, MembTrailTask, MembTrailTaskEpoch, MembTrailCall,
 	MembTrailCauseModelCall, MembTrailCauseToolCall, MembTrailCauseToolIndex,
 	MembLlmCallRetention, MembLlmCallProviderId, MembLlmCallReportedModel, MembLlmCallToolsDigest, MembLlmCallMaxTokens,
@@ -589,4 +576,12 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembAgentDisclosureSource, MembAgentDisclosureWidth, MembAgentDisclosureHeight, MembAgentDisclosureBytes,
 	MembAgentDisclosureLevel, MembAgentDisclosureLocalOnly, MembAgentDisclosureDecision, MembAgentDisclosureDecidedBy,
 	MembAgentDisclosureEndpoint, MembAgentDisclosureReason,
+	MembKindAdhocDataset, MembAdhocDatasetOperation, MembAdhocDatasetOutcome, MembAdhocDatasetReason,
+	MembAdhocDatasetBundle, MembAdhocDatasetRevision, MembAdhocDatasetOwnerApp, MembAdhocDatasetOwnerInstance,
+	MembAdhocDatasetLocalNames, MembAdhocDatasetAliases, MembAdhocDatasetHandles, MembAdhocDatasetRows,
+	MembAdhocDatasetBytes, MembAdhocDatasetStreamDigests, MembAdhocDatasetDocumentDigest, MembAdhocDatasetAttested,
+	MembAdhocDatasetInFlight, MembAdhocDatasetDocument, MembAdhocDatasetSourceSql, MembAdhocDatasetInputHandles,
+	MembAdhocDatasetInputAliases, MembAdhocDatasetInputDigests, MembAdhocDatasetColumnDatasets,
+	MembAdhocDatasetColumnNames, MembAdhocDatasetColumnTypes, MembAdhocDatasetColumnNulls,
+	MembAdhocDatasetColumnDistinct, MembAgentActionConsent,
 }

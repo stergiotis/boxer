@@ -387,7 +387,11 @@ func TestEvalHandoffPublishesBothAndOpensPlay(t *testing.T) {
 	// Ad-hoc datasets only resolve at the in-process keelson endpoint, and
 	// the window follows the aliases the buffer names (ADR-0240 §SD7).
 	assert.Equal(t, launchcfg.EndpointIntrospection, cfg.Endpoint)
-	assert.Equal(t, []string{goDatasetAlias, chDatasetAlias}, cfg.Datasets)
+	// The window's own aliases, bound in play under the base names the
+	// buffer writes (ADR-0288 §SD3).
+	assert.Equal(t, []string{rig.app.goPub.Alias(), rig.app.chPub.Alias()}, cfg.Datasets)
+	assert.Equal(t, []string{goDatasetAlias, chDatasetAlias}, cfg.DatasetNames)
+	assert.True(t, strings.HasPrefix(cfg.Datasets[0], goDatasetAlias+"_w"), cfg.Datasets[0])
 	assert.Contains(t, cfg.Sql, "keelson('"+goDatasetAlias+"')")
 	assert.Contains(t, cfg.Sql, "keelson('"+chDatasetAlias+"')")
 	assert.NotContains(t, cfg.Sql, goHandle, "the buffer names aliases, never handles")
@@ -482,8 +486,10 @@ func TestClosingTheWindowRetractsBothHandles(t *testing.T) {
 // just made tighter. A handle minted but not recorded is one nothing can
 // retract: Unmount cannot see it, and every retry mints another.
 //
-// Driven by the MaxDatasets quota: fill the service to one slot short, so
-// the Go publish takes the last slot and the ClickHouse publish is refused.
+// Driven by the count quota: fill the window's share to one slot short
+// (MaxDatasetsPerOwner, which one window meets before the process's
+// MaxDatasets), so the Go publish takes the last slot and the ClickHouse
+// publish is refused.
 func TestPartialPublishRetainsTheHandleItMinted(t *testing.T) {
 	rig := setupEvalRig(t)
 	inst := rig.app
@@ -493,14 +499,14 @@ func TestPartialPublishRetainsTheHandleItMinted(t *testing.T) {
 	filler, err := encodeChExtract([]chExtractRow{{MatchIdx: 0, GroupIdx: 0, Text: "x"}})
 	require.NoError(t, err)
 	bus := inst.busSnapshot()
-	for i := range adhocdata.MaxDatasets - 1 {
+	for i := range adhocdata.MaxDatasetsPerOwner - 1 {
 		_, pErr := adhocdata.PublishRequest(bus, adhocdata.PublishInput{
 			Alias:          fmt.Sprintf("filler_%d", i),
 			ArrowIPCStream: filler,
 		})
 		require.NoErrorf(t, pErr, "filler %d", i)
 	}
-	require.Equal(t, adhocdata.MaxDatasets-1, rig.svc.LiveCount())
+	require.Equal(t, adhocdata.MaxDatasetsPerOwner-1, rig.svc.LiveCount())
 
 	snap, err := inst.snapshotEval()
 	require.NoError(t, err)

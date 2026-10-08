@@ -28,7 +28,7 @@ Leeway has three structural features that interact with any contract standard:
 2. **Tagged value sections** — sparse, type-indexed containers of values carrying uniform column-wise aspects ([`../skills/leeway-advanced/SKILL.md`](../skills/leeway-advanced/SKILL.md)).
 3. **Tagged attributes** — individual tag paths within a section, with memberships (5 kinds), high-card parameters, multi-membership aliasing, co-occurrence, and per-attribute value constraints. Graph-shaped; no standard contract format expresses this directly.
 
-The physical naming convention (`tv:bool:lmvcard:lmvcard:u64:4gw:0:0:0::` and friends) already encodes schema in Base62-serialised column names — so schema discovery does not require an external registry. The lossless streaming JSON form is carried by `JsonCardEmitter` at [`../../public/semistructured/leeway/card/leeway_card_json.go`](../../public/semistructured/leeway/card/leeway_card_json.go); it is byte-deterministic (sorted co-groups, ordered sections/columns/tags) and a strict superset of native JSON. Reconstructed-document JSON (original `{"hostname": …, "metrics": {"cpu": …}}` shape) is not derivable in general — multi-membership, co-sections, sets-vs-arrays, and `value-card`-carried ragged tensors exceed what a JSON tree can express without loss.
+The physical naming convention (`tv:bool:lmvcard:lmvcard:u64:4gw:0:0:0::` and friends) already encodes schema in Base62-serialised column names — so schema discovery does not require an external registry. The lossless streaming JSON form is carried by `JsonCardEmitter` at `leeway_card_json.go` (removed by ADR-0289); it is byte-deterministic (sorted co-groups, ordered sections/columns/tags) and a strict superset of native JSON. Reconstructed-document JSON (original `{"hostname": …, "metrics": {"cpu": …}}` shape) is not derivable in general — multi-membership, co-sections, sets-vs-arrays, and `value-card`-carried ragged tensors exceed what a JSON tree can express without loss.
 
 Forces the decision must respect:
 
@@ -206,4 +206,4 @@ ADRs are append-only; withdrawal is recorded, not deleted.
 - [`../skills/leeway-advanced/SKILL.md`](../skills/leeway-advanced/SKILL.md) — Leeway structural semantics, membership types, aspects
 - [`../skills/leeway-streamreadaccess/SKILL.md`](../skills/leeway-streamreadaccess/SKILL.md) — `SinkI` protocol, card-JSON emitter
 - [`../skills/canonicaltypes/SKILL.md`](../skills/canonicaltypes/SKILL.md) — canonical type signatures
-- [`../../public/semistructured/leeway/card/leeway_card_json.go`](../../public/semistructured/leeway/card/leeway_card_json.go) — current `JsonCardEmitter` location
+- `leeway_card_json.go` (removed by ADR-0289) — current `JsonCardEmitter` location

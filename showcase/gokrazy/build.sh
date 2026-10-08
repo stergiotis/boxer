@@ -69,11 +69,11 @@ command -v gok >/dev/null 2>&1 || {
 
 # ---- the Rust host ----------------------------------------------------------
 # headless_soft, not headless_wgpu: the point of the image is that it carries no
-# Vulkan loader and no ICD. build_rust_headless_soft.sh keeps its own target dir.
-rust_bin="$repo/rust/imzero2/target/headless-soft/release/imzero2"
+# Vulkan loader and no ICD. Built as the production host (build_rust_dist.sh).
+rust_bin="$repo/rust/imzero2/target/headless-soft/dist/imzero2"
 if [ "$rust_build" = 1 ] || [ ! -x "$rust_bin" ]; then
     echo "build.sh: building the CPU-rasterizing host (--features headless_soft)" >&2
-    "$repo/rust/imzero2/build_rust_headless_soft.sh"
+    "$repo/rust/imzero2/build_rust_dist.sh" headless_soft
 fi
 [ -x "$rust_bin" ] || { echo "build.sh: no host binary at $rust_bin" >&2; exit 1; }
 

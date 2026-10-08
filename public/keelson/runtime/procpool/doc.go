@@ -1,5 +1,5 @@
 // Package procpool keeps warm, pre-spawned worker processes for callers that
-// cannot afford a process start per request (ADR-0285, proposed).
+// cannot afford a process start per request (ADR-0285).
 //
 // The pool knows nothing about what a worker runs. A [SpawnerI] makes one and
 // returns it once it can serve; the worker frees its own resources in Close

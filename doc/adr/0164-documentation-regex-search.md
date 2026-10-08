@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-05
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-07
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0164: documentation regex search — pattern batteries over the doc corpora
 
@@ -304,16 +302,15 @@ case.
 
 ## Status
 
-Proposed. M0–M2b implemented alongside this draft for review, M1b with
-them; M3+ pending acceptance. Open (noted 2026-09-25): M3, the text2regex
-generator, waits on the ADR-0139 semantic layer, which is unbuilt; M4, the
-golden query set, gates the embeddings deferral. Neither blocks accepting
-what M0–M2b shipped.
+Accepted 2026-10-07 for what M0–M2b shipped, M1b with them. Open (noted
+2026-09-25): M3, the text2regex generator, waits on the ADR-0139 semantic
+layer, which is unbuilt; M4, the golden query set, gates the embeddings
+deferral.
 
 ## References
 
 - ADR-0094 (introspection tables), ADR-0122 §SD4 (`adrcontent`), ADR-0125
-  (codeview memoisation), ADR-0139 (text2dsl, proposed), ADR-0120 (Ask panel, withdrawn),
+  (codeview memoisation), ADR-0139 (text2dsl, deferred), ADR-0120 (Ask panel, withdrawn),
   ADR-0158 §SD6 (launcher search precedent).
 - `public/keelson/runtime/help` (BookI/RefT), `widgets/markdown`
   (EXPLANATION.md — id derivation order), `apps/play/play_docs_clickhouse.go`

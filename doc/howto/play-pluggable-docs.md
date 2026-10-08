@@ -125,6 +125,19 @@ poll for it, let the last-good result ride until a fresh one lands. A source
 backed by something synchronous and cheap (an in-memory map) can simply
 always return `ready=true`.
 
+## Answering agents (optional)
+
+An agent reads documentation through play's `lookup_docs` operation
+([ADR-0270](../adr/0270-play-operations-catalog-and-agent-limits.md),
+update of 2026-10-05), which cannot use the polling `Lookup`. A source that
+should answer it also implements `DocsLookupNowI`: `LookupNow(ctx, name,
+obo)` blocks until it has the entries. `obo` is the calling agent's
+context, nil for the person; a source that reaches outside the process
+should refuse a destination the grant does not list
+(`app.RefuseForDestinations`), as `ClickHouseDocsSource` does for its
+endpoint. Without it, `lookup_docs` is refused in that window and the pane
+works as before.
+
 ## Further reading
 
 - [`DocsSourceI`](../../apps/play/play_docs_source.go) — the full interface

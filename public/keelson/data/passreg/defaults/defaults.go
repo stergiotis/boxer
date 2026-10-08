@@ -50,7 +50,7 @@ import (
 //
 // Also deliberately NOT here: passes.CanonicalizeFull. It is result-schema-
 // neutral but rewrites the whole statement, and pipelines that already
-// canonicalise themselves (text2sql, genbuildertest) must not inherit a
+// canonicalise themselves (genbuildertest) must not inherit a
 // second copy via the registry. Hosts that want executed statements
 // canonical register it at their wiring site — see play.RegisterPasses,
 // which orders it ahead of the standard entries so they consume canonical

@@ -5,6 +5,7 @@ import (
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
@@ -27,6 +28,7 @@ type clientExecutor struct {
 var (
 	_ nodeExecutorI          = clientExecutor{}
 	_ progressAwareExecutorI = clientExecutor{}
+	_ labelledExecutorI      = clientExecutor{}
 )
 
 // execute runs the compiled node synchronously and returns the single
@@ -45,6 +47,14 @@ func (inst clientExecutor) execute(ctx context.Context, c compiledNode, alloc me
 // headers. The lane's identity options (query_id, label, supersession)
 // are untouched — OnProgress is the only per-run field.
 func (inst clientExecutor) executeWithProgress(ctx context.Context, c compiledNode, alloc memory.Allocator, onProgress func(p runstream.Progress)) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, err error) {
+	rec, schema, summary, _, err = inst.executeLabelled(ctx, c, alloc, onProgress)
+	return
+}
+
+// executeLabelled is executeWithProgress plus the run's dispatch label:
+// whether the statement reads confined data, from the same resolution the
+// request is sent with.
+func (inst clientExecutor) executeLabelled(ctx context.Context, c compiledNode, alloc memory.Allocator, onProgress func(p runstream.Progress)) (rec arrow.RecordBatch, schema *arrow.Schema, summary Summary, confined bool, err error) {
 	opts := inst.opts
 	if onProgress != nil && opts != nil {
 		o := *opts
@@ -54,6 +64,7 @@ func (inst clientExecutor) executeWithProgress(ctx context.Context, c compiledNo
 	// One resolution per run (play_dispatch.go), taken here rather than on
 	// the lane so a decision never outlives the request it was made for.
 	dec := inst.client.Dispatch(c.SQL, "")
+	confined = dec.sensitivity == queryengine.SensitivityConfined
 	rdr, rs, summary, xErr := inst.client.ExecuteArrowStream(ctx, c.SQL, alloc, opts, c.Params, dec)
 	if xErr != nil {
 		err = eh.Errorf("clientExecutor.execute: %w", xErr)

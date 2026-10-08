@@ -355,6 +355,51 @@ about two minutes, against a five-second Go build. Optimising is now asked for
 (`--wasmOpt`) rather than implied, and the demo is published unoptimised; the
 module crosses the wire gzip-compressed at about 10 MB.
 
+### 2026-10-06 — `tab-host` runs on manual dispatch only
+
+The push trigger is removed; the workflow builds, checks and publishes only
+when dispatched. SD5's check that the committed digest is the one the tree
+builds therefore no longer runs per push: a commit that changes
+`rust/imzero2` without refreshing `browserhost.sum` passes, and surfaces at the
+next dispatch. A host is published only by a dispatch, so a consumer pinned to
+a commit whose digest was never dispatched finds nothing under
+`tabhost/<sha256>.wasm`; `bundle --hostFrom auto` then builds the host,
+which needs cargo and the wasm32 target.
+Refreshing the file in the commit that changes the host stays the rule.
+
+### 2026-10-07 — the demo grows a widget gallery
+
+The demo binary adds the widget gallery, the IDS token catalogue and the
+leeway fixture showcase. Each was opened in a locally served bundle in
+headless Chromium, the gallery demo by demo. The gallery leaves out, through
+`widgets.HideDemos`, what a tab on this site cannot or must not run; the list
+and the reason per entry are `tabHidden` in `imzero2tabdemo`:
+
+- **A third-party endpoint.** In a tab the basemap fetches tiles from the
+  visitor's browser, so the demos flagged as needing the network go, and so
+  does one whose checkbox turns tiles on.
+- **The wall clock.** egui_extras' date picker reads it through jiff, whose
+  calls go to JavaScript imports the browser host leaves unwired: the
+  time-range picker kills the tab on its first frame, the date pickers when
+  the calendar opens. The full tab binary has the same gap wherever play shows
+  a time-range picker; closing it is a change to the host, not to the demo.
+- **What does not work in a tab** — graphviz layout, the streamed texture, a
+  file dialog with no filesystem behind it — and two trial harnesses.
+
+The Go module grows from about 50 MB to about 83 MB; the page now downloads
+about 20 MB compressed.
+
+### 2026-10-08 — the demo carries play over keelson SQL, and makes no requests
+
+The demo binary adds play, the static keelson tables and a real GFS wind
+forecast as a field family, served in the tab by the trivial SQL endpoint
+(ADR-0290, ADR-0291, ADR-0292), and the landing page opens play on it. Its
+maps start without a basemap (`basemap.SetOffline`), and a new
+`tabhost.Services.NoEgress` refuses every HTTP request the module makes except
+the in-process keelson endpoint, so the page's claim that it loads nothing from
+elsewhere holds whatever a visitor switches on. The module grows to about
+113 MB, 24 MB compressed.
+
 ## References
 
 - [ADR-0263](./0263-imzero2-browser-both-modules-in-one-worker-mesh-to-the-painter.md) — the tab this makes reusable.

@@ -1,25 +1,32 @@
 package play
 
 import (
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"testing"
 
+	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/sqlvocab"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opfsm"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 )
 
 func TestPlayCatalogRegisters(t *testing.T) {
 	m := (&PlayLauncher{}).Manifest()
 	require.NoError(t, m.Operations.Validate())
-	for _, name := range []string{opGetState, opDescribeResult, opSampleRows, opSetSql, opSetSignal, opShowPane, opListPanes, opBindPane, "query_state", "query_machine", opListSnippets, opReadSnippet, opListFunctions, opListDatasets, opBindDataset} {
+	for _, name := range []string{opGetState, opDescribeResult, opSampleRows, opSetSql, opSetSignal, opShowPane, opListPanes, opBindPane, "query_state", "query_machine", opListSnippets, opReadSnippet, opListFunctions, opListDatasets, opBindDataset, opGetChart, opSetChartOptions, opGetDist, opSetDistOptions, opGetSeries, opSetSeriesOptions, opGetTimeline, opSetTimelineOptions, opSetTimelineWindow, opGetTreemap, opSetTreemapOptions, opSelectTreemapNode, opGetIcicle, opSetIcicleOptions, opSelectIcicleFrame, opGetKanban, opGetCards, opSetCardsOptions, opGetWorld, opSetWorldOptions, opGetVectorfield, opSetVectorfieldView, opGetNetwork, opSetNetworkOptions, opSelectNetworkNode, opGetGraphview, opSetGraphviewOptions, opSelectGraphviewNodes, opGetSankey, opSetSankeyOptions, opSelectSankeyNode, opGetTable, opSetTableOptions, opGetFiles, opSetFilesOptions, opSelectFilesPath, opGetChatPane, opGetMap, opSetMapView, opSetMapOptions, opSqlFlow, opExplainSql, opLookupDocs, opGetDetail, opListGlosses, opCompleteSql, opEndpointFunctions, opGetQueryGraph, opObserveNode, opListHistory, opCancelRun, opCancelProjection, opPublishProjection, opDeleteSignal, opSetRunOptions} {
 		spec, ok := m.Operations.Lookup(name)
 		require.True(t, ok, name)
 		assert.True(t, spec.Agents, name)
@@ -312,4 +319,267 @@ func TestListPanesReportsDrawsRaisedAndPublishes(t *testing.T) {
 	require.NotNil(t, world)
 	assert.Contains(t, world.Publishes, string(signalSelectionCountry))
 	assert.Empty(t, world.Writes, "the buffer reads none of them")
+}
+
+// ADR-0270, update of 2026-10-05: describe_result quotes the statement's
+// and the data's column names; set_signal is a document command on signals.
+func TestDescribeResultAndSetSignalCatalogEntries(t *testing.T) {
+	m := (&PlayLauncher{}).Manifest()
+	spec, ok := m.Operations.Lookup(opDescribeResult)
+	require.True(t, ok)
+	assert.True(t, spec.Untrusted)
+	assert.Equal(t, app.OperationEffectNone, spec.Effect)
+	assert.Equal(t, []string{opsResResult}, spec.Reads)
+	spec, ok = m.Operations.Lookup(opSetSignal)
+	require.True(t, ok)
+	assert.Equal(t, app.OperationEffectDocument, spec.Effect)
+	assert.Equal(t, []string{opsResSignals}, spec.Writes)
+	assert.False(t, spec.Untrusted)
+}
+
+// The person's "observe in panels" changes what list_panes reports, so it
+// moves the panes resource.
+func TestObservingANodeMovesThePanesResource(t *testing.T) {
+	l, h := opsLauncher(t)
+	before := h.ResourceValue(opsResPanes)
+	l.inner.observedNode = "edges"
+	assert.NotEqual(t, before, h.ResourceValue(opsResPanes))
+}
+
+// A pane that reads its CTEs off the split by name ignores a binding, so
+// bind_pane refuses one and names what the pane reads.
+func TestBindPaneRefusesAFramelessPane(t *testing.T) {
+	l, h := opsLauncher(t)
+	p := l.inner
+	p.currentSplit = splitResult{
+		Nodes: []splitNode{{ID: "edges", Kind: splitNodeCTE}, {ID: mainNodeID, Kind: splitNodeStatement}},
+		Sink:  mainNodeID,
+	}
+	bind := func(pane string) error {
+		_, err := h.ApplyCommand(app.OperationCall{Writer: "task:t"}, opBindPane, mustEncode(t, BindPaneArgs{Pane: pane, Node: "edges"}))
+		return err
+	}
+	for pane, cte := range map[string]string{"network": "`edges`", "graphview": "`graph_opts`", "sankey": "`flows`", "vectorfield": "`vector_field`"} {
+		err := bind(pane)
+		var refusal *app.OperationRefusal
+		require.ErrorAs(t, err, &refusal, pane)
+		assert.Contains(t, err.Error(), cte, pane)
+		assert.Contains(t, err.Error(), "set_sql", pane)
+	}
+	assert.Empty(t, p.tabBindings)
+	require.NoError(t, bind("table"))
+}
+
+// A subquery run is checked at the call on the text it ships, as a whole
+// run is; before, it was accepted and failed in the status line.
+func TestAnUncoveredSubqueryRunIsRefusedAtTheCall(t *testing.T) {
+	l, h := opsLauncher(t)
+	l.inner.client = NewClient(ClientConfig{URL: "http://ch.example:8123/"}, nil)
+	_, err := h.ApplyCommand(app.OperationCall{Writer: "task:t", OnBehalfOf: &app.OnBehalfOf{Task: "t", Epoch: 1}}, opRun,
+		mustEncode(t, RunArgs{Subquery: true}))
+	var refusal *app.OperationRefusal
+	require.ErrorAs(t, err, &refusal)
+	assert.Equal(t, []string{"clickhouse:ch.example:8123"}, refusal.Destinations)
+	assert.False(t, l.inner.requestRun)
+}
+
+// The window's class ceiling is judged at the call, ahead of the agent
+// limits, so the refusal names the parameter; a write is refused there too.
+func TestARunTheCeilingOrTheLimitsBlockIsRefusedAtTheCall(t *testing.T) {
+	l, h := opsLauncher(t)
+	p := l.inner
+	p.client = NewClient(ClientConfig{URL: "http://localhost:8123/"}, nil)
+	obo := &app.OnBehalfOf{Task: "t", Epoch: 1, Destinations: []string{"clickhouse:localhost:8123"}}
+	run := func() error {
+		_, err := h.ApplyCommand(app.OperationCall{Writer: "task:t", OnBehalfOf: obo}, opRun, nil)
+		return err
+	}
+
+	p.swapSql("-- play: expr cond = number IN (SELECT h FROM url('http://x/y', 'CSV'))\n" +
+		"SELECT number FROM numbers(10) WHERE {cond:Expr}")
+	p.SetSecurityCeiling(analysis.QuerySecurityRead)
+	err := run()
+	var refusal *app.OperationRefusal
+	require.ErrorAs(t, err, &refusal)
+	assert.Contains(t, err.Error(), "{cond}")
+	assert.False(t, p.requestRun)
+
+	p.SetSecurityCeiling(analysis.QuerySecurityMutating)
+	p.swapSql("INSERT INTO t SELECT 1")
+	err = run()
+	require.ErrorAs(t, err, &refusal)
+	assert.Contains(t, err.Error(), "mutating")
+	assert.False(t, p.requestRun)
+}
+
+// A pane output — re-published as the pane draws, or never followed — is
+// refused for an agent, naming the pane's command; the person's Signals
+// section still writes it.
+func TestSetSignalRefusesPaneOutputs(t *testing.T) {
+	l, h := opsLauncher(t)
+	set := func(writer, name string) error {
+		_, err := h.ApplyCommand(app.OperationCall{Writer: writer}, opSetSignal, mustEncode(t, SetSignalArgs{Name: name, Value: "1"}))
+		return err
+	}
+	for name, cmd := range map[SignalID]string{
+		signalTimelineFrom: "set_timeline_window", signalTimelineMax: "get_timeline",
+		signalVfMinLat: "set_vectorfield_view", "vp_min_x": "set_map_view", signalGvSelection: "select_graphview_nodes",
+	} {
+		err := set("task:t", string(name))
+		var refusal *app.OperationRefusal
+		require.ErrorAs(t, err, &refusal, name)
+		assert.Contains(t, err.Error(), cmd, name)
+		_, held := l.inner.graph.signalWriterFor(name)
+		assert.False(t, held, name)
+	}
+	require.NoError(t, set("task:t", string(signalVfT)), "the Vector field pane follows vf_t")
+	require.NoError(t, set("task:t", string(signalSelectionCountry)))
+	require.NoError(t, set(opwire.WriterPerson, string(signalTimelineFrom)), "the person's Signals section")
+}
+
+// selection moves with its companions: the node it indexes, and the row's
+// key, read off the result the panels draw.
+func TestSetSignalSelectionStampsItsCompanions(t *testing.T) {
+	l, h := opsLauncher(t)
+	g := l.inner.graph
+	rec := int64Rec(selectionKeyCol, 10, 20, 30)
+	g.mainLane.finish("SELECT", nil, time.Now(), rec, rec.Schema(), rec.NumRows(), Summary{}, nil, runstream.Terminal{})
+	set := func(in SetSignalArgs) error {
+		_, err := h.ApplyCommand(app.OperationCall{Writer: "task:t"}, opSetSignal, mustEncode(t, in))
+		return err
+	}
+	require.NoError(t, set(SetSignalArgs{Name: string(signalSelection), Value: "1"}))
+	sig := g.signals()
+	for name, want := range map[SignalID]string{signalSelection: "1", signalSelectionNode: string(mainNodeID), signalSelectionKey: "20"} {
+		p, ok := sig.Get(string(name))
+		require.True(t, ok, name)
+		assert.Equal(t, want, p.Raw, name)
+		writer, _ := g.signalWriterFor(name)
+		assert.Equal(t, "task:t", writer, name)
+	}
+	require.NoError(t, set(SetSignalArgs{Name: string(signalSelection), Value: "2"}))
+	p, _ := g.signals().Get(string(signalSelectionKey))
+	assert.Equal(t, "30", p.Raw, "the key follows the row")
+
+	var refusal *app.OperationRefusal
+	require.ErrorAs(t, set(SetSignalArgs{Name: string(signalSelection), Value: "3"}), &refusal, "past the last row")
+	require.ErrorAs(t, set(SetSignalArgs{Name: string(signalSelection), Value: "first"}), &refusal, "not a row")
+	require.ErrorAs(t, set(SetSignalArgs{Name: string(signalSelection), Value: "0", Node: "edges"}), &refusal, "a node not on screen")
+	require.ErrorAs(t, set(SetSignalArgs{Name: "threshold", Value: "0", Node: string(mainNodeID)}), &refusal, "node is selection's")
+	p, _ = g.signals().Get(string(signalSelection))
+	assert.Equal(t, "2", p.Raw, "a refused write leaves the cursor")
+}
+
+// list_functions v2: the search is the Vocabulary pane's (every word must
+// match, across name, doc and family), a client macro names the server
+// functions its expansion lacks once the probe answered, and what the
+// endpoint carries beyond the rosters is listed as the pane lists it.
+func TestListFunctionsSearchesAsThePaneDoesAndNamesWhatIsMissing(t *testing.T) {
+	r := sqlvocab.NewRegistry()
+	require.NoError(t, RegisterVocabulary(r))
+	all, err := listFunctions(r, nil, false, "", "")
+	require.NoError(t, err)
+
+	var macro FunctionInfo
+	for _, f := range all.Functions {
+		if len(f.Dependencies) > 0 && strings.Contains(f.Doc, " ") {
+			macro = f
+			break
+		}
+	}
+	require.NotEmpty(t, macro.Name, "the build declares a macro with dependencies")
+	assert.Empty(t, macro.MissingDependencies, "unprobed: not known, not all present")
+
+	// Two words, one from the name and one from the doc: the v1 search took
+	// the whole query as one substring and found nothing.
+	word := strings.Fields(macro.Doc)[0]
+	found, err := listFunctions(r, nil, false, macro.Name+" "+word, "")
+	require.NoError(t, err)
+	names := make([]string, 0, len(found.Functions))
+	for _, f := range found.Functions {
+		names = append(names, f.Name)
+	}
+	assert.Contains(t, names, macro.Name)
+
+	installed := map[string]string{"myOwnHelper": "", "not plain!": ""}
+	for _, f := range all.Functions {
+		if f.Where == "server" {
+			installed[f.Name] = ""
+		}
+	}
+	delete(installed, macro.Dependencies[0])
+	probed, err := listFunctions(r, installed, true, "", "")
+	require.NoError(t, err)
+	assert.Equal(t, 1, probed.UnlistedExtras, "a name that is not an identifier is counted, not repeated")
+	var sawMacro, sawExtra bool
+	for _, f := range probed.Functions {
+		if f.Name == macro.Name && f.Where == macro.Where {
+			sawMacro = true
+			assert.Contains(t, f.MissingDependencies, macro.Dependencies[0])
+		}
+		if f.Name == "myOwnHelper" {
+			sawExtra = true
+			assert.Equal(t, "server", f.Where)
+			assert.Equal(t, "yes", f.Installed)
+			assert.Equal(t, vocabFamilyUndeclared, f.Family)
+		}
+	}
+	assert.True(t, sawMacro)
+	assert.True(t, sawExtra || probed.Truncated, "the endpoint's own helper is listed")
+}
+
+// sample_rows v2: a NULL cell is listed apart from an empty one (ADR-0269
+// §SD10), and a leeway column is asked for and reported by its handle as
+// well as by its physical name.
+func TestSampleRowsKeepsNullApartAndSpeaksHandles(t *testing.T) {
+	l, h := opsLauncher(t)
+	// A result that is wholly leeway-shaped, as the Table's header labels
+	// only such a result; note stands for a column that carries NULLs.
+	names := slices.Clone(schemaWithSymbol)
+	const note = "tv:symbol:hr:hr:u64:47:::0::data"
+	labels := lwsql.BuildLabels(names)
+	require.Equal(t, "symbol:value", labels["tv:symbol:value:val:s:124::I:0::data"], "the fixture is leeway-shaped")
+
+	mem := memory.NewGoAllocator()
+	fields := make([]arrow.Field, 0, len(names))
+	cols := make([]arrow.Array, 0, len(names))
+	for _, n := range names {
+		b := array.NewStringBuilder(mem)
+		switch n {
+		case note:
+			b.AppendNull()
+			b.Append("")
+		default:
+			b.Append("a")
+			b.Append("b")
+		}
+		cols = append(cols, b.NewArray())
+		b.Release()
+		fields = append(fields, arrow.Field{Name: n, Type: arrow.BinaryTypes.String, Nullable: true})
+	}
+	schema := arrow.NewSchema(fields, nil)
+	rec := array.NewRecordBatch(schema, cols, 2)
+	l.inner.graph.mainLane.finish("SELECT …", nil, time.Now(), rec, schema, 2, Summary{}, nil, runstream.Terminal{})
+
+	out := queryOp[SampleRows](t, h, opSampleRows, SampleArgs{Fields: []string{"symbol:value", note}})
+	require.Equal(t, []string{"tv:symbol:value:val:s:124::I:0::data", note}, out.Columns)
+	require.Equal(t, []string{"symbol:value", "symbol:hr"}, out.Handles)
+	require.Equal(t, [][]string{{"a", ""}, {"b", ""}}, out.Rows)
+	require.Equal(t, [][]int32{{1}, {}}, out.Nulls, "row 0's note is NULL, row 1's is empty text")
+
+	out = queryOp[SampleRows](t, h, opSampleRows, SampleArgs{Fields: []string{"tv:symbol:value:val:s:124::I:0::data"}})
+	require.Equal(t, []string{"symbol:value"}, out.Handles, "the physical name is still accepted")
+	require.Nil(t, out.Nulls, "no NULL in the sample, no Nulls")
+
+	_, err := h.Snapshot().Query(opSampleRows, mustEncode(t, SampleArgs{Fields: []string{"symbol:nope"}}))
+	var refusal *app.OperationRefusal
+	require.ErrorAs(t, err, &refusal)
+
+	m := (&PlayLauncher{}).Manifest()
+	spec, ok := m.Operations.Lookup(opSampleRows)
+	require.True(t, ok)
+	require.Equal(t, 2, int(spec.Version))
+	require.True(t, spec.Untrusted)
+	require.Equal(t, app.OperationEffectNone, spec.Effect)
+	require.Equal(t, []string{opsResResult}, spec.Reads)
 }

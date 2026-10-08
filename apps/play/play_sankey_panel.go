@@ -490,6 +490,10 @@ type SankeyDriver struct {
 	modeFallback string
 
 	stats sankeyStats
+
+	// onSelect routes a click through select_sankey_node (ADR-0270 §SD6);
+	// nil applies it directly.
+	onSelect func(SelectSankeyNodeArgs)
 }
 
 // NewSankeyDriver builds the driver. client may be nil (tests, an unwired
@@ -687,7 +691,9 @@ func (inst *SankeyDriver) render(flowsRec arrow.RecordBatch, fc sankeyFlowsClaim
 
 	if key := sankeyDiagramKey(b.diagram); key != inst.layoutKey || (inst.layout == nil && inst.layoutErr == nil) {
 		inst.layoutKey = key
+		prev := inst.layout
 		inst.layout, inst.modeUsed, inst.modeFallback, inst.layoutErr = computeSankeyLayout(b.diagram)
+		inst.repin(prev, emit)
 	}
 	if inst.layout == nil {
 		c.Label(inst.statusLine()).Send()
@@ -746,14 +752,11 @@ func (inst *SankeyDriver) render(flowsRec arrow.RecordBatch, fc sankeyFlowsClaim
 	// publishes the empty string, which is the honest "nothing focused" value a
 	// query reading `{selection_key:String}` sees before anything is clicked.
 	if clicked {
+		in := inst.selectArgsOf(click)
 		if click == inst.selected {
-			inst.selected = sankeyview.Hit{}
-		} else {
-			inst.selected = click
+			in = SelectSankeyNodeArgs{Clear: true}
 		}
-		if emit != nil {
-			emit.Emit(signalSelectionKey, inst.selectedNodeID())
-		}
+		inst.requestSelect(in, emit)
 	}
 }
 

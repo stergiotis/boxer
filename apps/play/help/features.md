@@ -16,8 +16,8 @@ ready-to-run fragments see **Snippets**. This page describes each feature in tur
 The window is a rearrangeable, splittable dock of tabs between a pinned top bar
 (Run, Load, connection) and a status bar (the query-state inspector). They fall
 into three groups: the **editor** (Editor, History), the **tool panes** beside
-it (Docs, Preview, Flow, Passes, Diagnostics, Snippets, Model, Vocabulary,
-Completion, Glosses, Experiments — each reads the buffer, or something derived
+it (Docs, Preview, Flow, Passes, Diagnostics, Snippets, Vocabulary,
+Completion, Glosses — each reads the buffer, or something derived
 from it, while you type), and the **result panes** below (Table, Projection,
 Timeline, Map, Vector field, World, Kanban, Chat, Cards, Network, Graphview,
 Sankey, Distribution, Icicle, Series, Treemap, Chart, Files, Graph, Schema, and
@@ -546,9 +546,13 @@ A structured card for the row selected in the Table tab. The card picks its rend
 from the result's column names:
 
 - **Leeway card** — when the columns are leeway-encoded (`id:…`, `tv:…`), the card
-  groups them into the entity's plain `id` section, its tagged sections, and the
-  membership chips on each attribute. A `SELECT *` from a leeway table takes this
-  path.
+  reads the row as attributes (ADR-0289): one row per attribute in its section,
+  the **attribute** column naming it by its first membership — a ref by the name
+  the session's registries give it — or by its plain column, the **labels**
+  column holding its further memberships, and the **values** column its values,
+  bytes as text when printable and as hex otherwise. Columns marked
+  machine-readable only are left out. A `SELECT *` from a leeway table takes
+  this path.
 - **Ad-hoc grouping** — for ordinary SQL results (aliased or aggregated columns),
   columns are grouped by name prefix into pinned / relations / data / meta sections.
   A glossed column ([Glosses](#glosses)) renders through its gloss here: a
@@ -574,10 +578,20 @@ with the positions labelled (`/ version /`, `/ plains /`, `/ tagged /`, the
 plain item types, `/ memberships /`) and a compact / expanded toggle. The same
 notation is what `boxer.sh cbor diagnostics --pretty` prints on a terminal.
 
+**For an agent.** `get_detail` reads the row as attributes: each named by its
+first membership — a ref by the name the session's registries give it — or by
+its plain column, with its values (bytes as text when printable, else hex; a
+list's items; a set's in value order), its further memberships as labels, and
+the `LW_GET` expression that reads it in SQL; columns the card hides are
+counted, not listed. `get_canonical` reads the strip: both digests, the canonform pin and
+the checker's verdict, and the items in the same notation — the canonwire item
+is the row's whole content, losslessly — cut at a line boundary under the
+operations' byte bound.
+
 Above either card, when the selected row carries one or more **datetime attributes**,
 a compact **timeline** plots them on a shared UTC axis. Each attribute is one legend
 entry — a coloured swatch and its identity. A flag from a **tagged section** is
-labelled with that section's memberships (primary · secondary) and every
+labelled with its attribute's name and labels and every
 co-attribute value, mirroring the card row below it; a backbone or ad-hoc flag
 shows its name and value. On the axis:
 
@@ -636,10 +650,10 @@ become a k-nearest-neighbour graph, HDBSCAN clusters it, and the graph is laid o
 under the neighbour-embedding force model. The button becomes **Cancel** while it
 works, and an fsmview chip shows the projector's lifecycle (extracting → running →
 done, or failed / cancelled). **Neighbours** and **min cluster** apply on the next
-Compute, as does **features**: *shape* (the default) builds the graph over the
-sixteen size-and-skew features under Euclidean distance, *structure* over a hashed
-vector of which sections and attributes each record has, under cosine, so records
-of one kind sit together whatever their values or sizes, and *components* over
+Compute, as does **features**: *structure* (the default) builds the graph over a
+hashed vector of which sections and attributes each record has, under cosine, so
+records of one kind sit together whatever their values or sizes, *shape* over the
+sixteen size-and-skew features under Euclidean distance, and *components* over
 which registered component kinds each record carries, one column per kind, for a
 facts-shaped result; **exaggeration** applies live and moves the same graph along the
 attraction–repulsion spectrum — about 1 draws t-SNE, 4 UMAP, 30 ForceAtlas2 — after
@@ -649,7 +663,26 @@ low-probability members and noise out; **edges** shows the neighbour edges the l
 runs on, off by default because they cover the picture. Drag pans and moves a node, ctrl+scroll zooms,
 **fit** reframes, **re-lay-out** restarts the schedule, **settle** runs it ahead.
 Click a node to select that row (it drives the Detail tab). Very large results are
-sampled (10000-row cap) so the exact k-NN stays interactive.
+sampled (10000-row cap) so the exact k-NN stays interactive. HDBSCAN reads each
+row's density at its (min cluster − 1)-th neighbour rather than at the graph's
+last, so a record kind smaller than the neighbour count is still found; the
+defaults are 15 neighbours and a min cluster of 5.
+
+**Show** switches what is drawn under the status line, over the same run and its
+cluster numbers. *graph* is the neighbour graph above. *archetypes* reads each
+cluster as one line of what its rows typically hold — a number's median, a
+label and its share — then the rows holding its lowest and highest values, then
+only the rows that break the pattern, most telling first: an attribute the
+cluster nearly always has and the row lacks (`−num·disk`), one it rarely has
+(`+num·cpu`), a rare label with how many of the cluster's rows hold it
+(`state failed (1 of 12 rows)`), an extreme number with its direction. *rows*
+draws every row in its cluster's band; *row* draws the selected row against its
+cluster's typical values and its nearest peers. Membership ids are named through
+the session's registries. The **structure ↔ values** slider moves the cells from
+presence to the values themselves, and **each row on its own ↔ one frame** from
+each row listing its own attributes to every row drawn against one set of
+columns. A row that shares under half of its cluster's attributes is read with
+the unclustered rows, though the graph keeps it in its cluster.
 
 **Why these clusters** (a collapsible section under the status line, present when
 HDBSCAN found any) reads the clusters back off the feature set the run used: the
@@ -713,6 +746,9 @@ page of points with their row, cluster, probability and position.
 `explain_clusters` returns "why these clusters", by features (at a rule depth, one
 tree per cluster or the one partition) or by attributes: per cluster the SQL rule,
 its fit and what sets the cluster apart — the same text the section shows.
+`get_archetypes` returns the archetypes view as data: per cluster its rule, the
+attributes every row holds with one value, what it typically holds, its
+extremes, and the exception rows with their departures and result rows.
 `list_panes` says up front when a result is not leeway-shaped.
 
 ### Timeline
@@ -1565,27 +1601,10 @@ matched but lost: a later directive behind an earlier one, an affinity behind
 a directive, any rule behind an alias. **Raw cells** on the Table toolbar
 bypasses every gloss for the session.
 
-### Model
+### A language model
 
-A prompt book over the buffer (ADR-0254), which asks a language model the host
-provides. The host needs `BOXER_LLM_ENDPOINT` and `BOXER_LLM_MODEL` set. Without
-them, or in a window with no host to ask, the pane says why and offers nothing.
-Two prompts:
-
-- **Explain this query** sends the buffer and returns prose.
-- **Fix this error** sends the buffer and the last Run's error, and returns a
-  corrected query. With no error, it runs over the buffer alone.
-
-Fix is grounded in the endpoint's schema (`system.columns` of the current
-database, capped) and may call tools: list tables, describe a table, check a
-statement against boxer's grammar, and read `keelson('sql_passes')`. It
-retries up to three times on a statement that does not validate. **Nothing
-runs on its own**: a returned query is text with **Insert** (at the caret) and
-**Replace** (the whole buffer), and Run is still yours. The header shows the
-model, elapsed time, attempts and tokens, and marks an answer cut short by
-`BOXER_LLM_MAXTOKENS`.
-
-Turning a question into a query is the chat app's, which works in a play
+Play has no model pane of its own. Explaining a query, fixing its error or
+turning a question into a query is the chat app's, which works in a play
 window you share with it. Its model reads the endpoint through play's
 operations without touching the buffer: `list_tables`, `describe_table` (for
 a leeway table, its sections, the handles to write and the membership
@@ -1598,21 +1617,6 @@ window has bound, which the model reads with `keelson('<alias>')`; a grant
 names one as `keelson:<alias>`. `bind_dataset` binds an alias another window
 published — the window waits for it when nothing is published under it yet,
 and `list_datasets` lists a waiting alias with why — and runs nothing.
-
-### Experiments
-
-Drives one leeway batch through a chosen rendering **sink** and shows what it
-draws, which is the same catalogue the vizeval harness scores (the
-`vizeval-score-renderings` how-to). **source** picks the batch: `fixture`, a small
-built-in batch with plain sections, a co-section group and a repeated tagged
-section, or `result`, the active result. The `result` source must be
-leeway-shaped (`id:…` / `tv:…` columns, as from `SELECT * FROM anchor.facts`), or
-the pane says it has no section structure to drive. **sink** picks the rendering
-(`card`, `topology`, `json`, `unicode`, `topo`, `braille`, `treemap`, `chart`,
-`graph`, `hierarchy`, `lens`), and the controls under it are that sink's own
-options. Each sink takes the first rows up to its own cap, from 16 to 128, and the
-pane says when it cut. `BOXER_PLAY_EXPERIMENTS` seeds the source, sink and options
-as JSON for a scripted capture.
 
 ## Configuration
 

@@ -91,3 +91,15 @@ func TestLiveToHiddenSkipsImmediately(t *testing.T) {
 	skips, _ := steps(p, false, true, true, false)
 	expectTrace(t, "skip", skips, []bool{true, false, false, true})
 }
+
+// Live follows the body: false while hidden or warming, true once the body
+// draws, false again the frame the host stops rendering it.
+func TestLiveFollowsTheBody(t *testing.T) {
+	p := &Pane{HoldFrames: 1}
+	var live []bool
+	for _, r := range []bool{false, true, true, true, false} {
+		p.step(r)
+		live = append(live, p.Live())
+	}
+	expectTrace(t, "live", live, []bool{false, false, true, true, false})
+}

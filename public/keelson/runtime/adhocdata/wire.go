@@ -25,6 +25,21 @@ const (
 	SubjectResolve = "adhoc.resolve"
 )
 
+// Bundle subjects (ADR-0288 §SD2): the same request and reply
+// kinds, carrying a bundle. Bundle events sit outside `adhoc.event.>`, so
+// a consumer that follows datasets never decodes one; a consumer that
+// follows bundles declares `Sub adhoc.bundle.event.>`
+// (SubjectBundleEventAll). Each dataset of a bundle still announces its
+// own publish and retract on `adhoc.event.*`, naming the bundle.
+const (
+	SubjectBundlePublish        = "adhoc.bundle.publish"
+	SubjectBundleRetract        = "adhoc.bundle.retract"
+	SubjectBundleResolve        = "adhoc.bundle.resolve"
+	SubjectBundleEventPublished = "adhoc.bundle.event.published"
+	SubjectBundleEventRetracted = "adhoc.bundle.event.retracted"
+	SubjectBundleEventAll       = "adhoc.bundle.event.>"
+)
+
 // Event subjects (fire-and-forget, the generated adhocevent codec —
 // ADR-0188 §SD3). The service
 // publishes one event per dataset transition so consumers react in a frame
@@ -52,8 +67,12 @@ type Event struct {
 	// Publisher is the app that published it (bus sender or embedder stamp).
 	Publisher string
 	// Revision is the dataset revision after a publish, or the last live
-	// revision at a retract.
+	// revision at a retract; the bundle's revision on a bundle event.
 	Revision uint64
+	// Bundle is the bundle the dataset belongs to, empty for a dataset
+	// published on its own; on a bundle event, the bundle that moved, with
+	// Handle and Alias empty.
+	Bundle string
 }
 
 // EventOpE names the dataset transition an Event carries.
@@ -86,9 +105,9 @@ func DecodeEvent(subject string, payload []byte) (ev Event, err error) {
 		return
 	}
 	switch subject {
-	case SubjectEventPublished:
+	case SubjectEventPublished, SubjectBundleEventPublished:
 		ev.Op = EventOpPublished
-	case SubjectEventRetracted:
+	case SubjectEventRetracted, SubjectBundleEventRetracted:
 		ev.Op = EventOpRetracted
 	default:
 		err = eb.Build().Str("subject", subject).Errorf("adhocdata: unknown event subject")
@@ -98,6 +117,7 @@ func DecodeEvent(subject string, payload []byte) (ev Event, err error) {
 	ev.Alias = w.Alias
 	ev.Publisher = w.Publisher
 	ev.Revision = w.Revision
+	ev.Bundle = w.Bundle
 	return
 }
 
@@ -111,7 +131,7 @@ func (inst *Service) publishEvent(subject string, ev Event) {
 	}
 	payload, err := buscodec.Encode(adhocevent.AdhocEvent{
 		At: time.Now().UTC(), Op: ev.Op.String(), Handle: ev.Handle, Alias: ev.Alias,
-		Publisher: ev.Publisher, Revision: ev.Revision,
+		Publisher: ev.Publisher, Revision: ev.Revision, Bundle: ev.Bundle,
 	})
 	if err != nil {
 		inst.log.Warn().Err(err).Str("subject", subject).Msg("adhocdata: encode event")
@@ -131,7 +151,12 @@ func (inst *Service) subscribe(bus *inprocbus.Inst) (err error) {
 		{Pattern: SubjectPublish, Direction: app.CapDirectionSub, Reason: "adhoc capability: publish"},
 		{Pattern: SubjectRetract, Direction: app.CapDirectionSub, Reason: "adhoc capability: retract"},
 		{Pattern: SubjectResolve, Direction: app.CapDirectionSub, Reason: "adhoc capability: resolve"},
+		{Pattern: SubjectBundlePublish, Direction: app.CapDirectionSub, Reason: "adhoc capability: publish a bundle (ADR-0288)"},
+		{Pattern: SubjectBundleRetract, Direction: app.CapDirectionSub, Reason: "adhoc capability: retract a bundle (ADR-0288)"},
+		{Pattern: SubjectBundleResolve, Direction: app.CapDirectionSub, Reason: "adhoc capability: resolve a bundle (ADR-0288)"},
+		{Pattern: SubjectRead, Direction: app.CapDirectionSub, Reason: "adhoc capability: read a dataset whole (ADR-0288)"},
 		{Pattern: SubjectEventAll, Direction: app.CapDirectionPub, Reason: "adhoc: announce publish and retract"},
+		{Pattern: SubjectBundleEventAll, Direction: app.CapDirectionPub, Reason: "adhoc: announce bundle publish and retract (ADR-0288)"},
 		{Pattern: app.SubjectInstanceClosed, Direction: app.CapDirectionSub, Reason: "adhoc: retract what a closed instance published (ADR-0240 §SD5)"},
 		{Pattern: inprocbus.InboxPrefix + ">", Direction: app.CapDirectionPub, Reason: "adhoc: reply to caller inboxes"},
 	}
@@ -143,6 +168,10 @@ func (inst *Service) subscribe(bus *inprocbus.Inst) (err error) {
 		{SubjectPublish, inst.handleRequest},
 		{SubjectRetract, inst.handleRequest},
 		{SubjectResolve, inst.handleRequest},
+		{SubjectBundlePublish, inst.handleRequest},
+		{SubjectBundleRetract, inst.handleRequest},
+		{SubjectBundleResolve, inst.handleRequest},
+		{SubjectRead, inst.handleRequest},
 		{app.SubjectInstanceClosed, inst.handleInstanceClosed},
 	}
 	for _, sub := range subs {
@@ -192,6 +221,14 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 		inst.handleRetract(msg)
 	case SubjectResolve:
 		inst.handleResolve(msg)
+	case SubjectBundlePublish:
+		inst.handleBundlePublish(msg)
+	case SubjectBundleRetract:
+		inst.handleBundleRetract(msg)
+	case SubjectBundleResolve:
+		inst.handleBundleResolve(msg)
+	case SubjectRead:
+		inst.handleRead(msg)
 	default:
 		inst.refuse(msg, "unknown adhoc subject: "+msg.Subject)
 	}
@@ -219,14 +256,14 @@ func (inst *Service) handlePublish(msg *app.Msg) {
 	// The publisher is the envelope's sender, never a client-supplied field.
 	res, pErr := inst.Publish(PublishInput{
 		Alias: req.Alias, Handle: req.Handle, ArrowIPCStream: req.ArrowStream,
-		KeepAfterClose: req.KeepAfterClose, By: sender(msg),
+		KeepAfterClose: req.KeepAfterClose, By: sender(msg), WindowScoped: req.WindowScoped,
 	})
 	if pErr != nil {
 		inst.refuse(msg, pErr.Error())
 		return
 	}
 	inst.reply(msg.Reply, adhocreply.AdhocReply{
-		At: time.Now().UTC(), Ok: true, Handle: res.Handle, Revision: res.Revision, Rows: res.Rows, Bytes: res.Bytes,
+		At: time.Now().UTC(), Ok: true, Alias: res.Alias, Handle: res.Handle, Revision: res.Revision, Rows: res.Rows, Bytes: res.Bytes,
 	})
 }
 
@@ -247,6 +284,7 @@ func (inst *Service) handleResolve(msg *app.Msg) {
 	inst.reply(msg.Reply, adhocreply.AdhocReply{
 		At: time.Now().UTC(), Ok: true, Handle: res.Handle, Revision: res.Revision,
 		Rows: res.Rows, Bytes: res.Bytes, CreatedAtUs: res.CreatedAtUnixUs, HandleLive: live,
+		Bundle: res.Origin.Bundle, PublisherTask: res.Origin.PublisherTask,
 	})
 }
 
@@ -276,4 +314,89 @@ func (inst *Service) reply(replySubject string, rep adhocreply.AdhocReply) {
 	if pubErr := inst.busClient.Publish(replySubject, payload); pubErr != nil {
 		inst.log.Warn().Err(pubErr).Str("reply", replySubject).Msg("adhocdata: publish reply")
 	}
+}
+
+// maxBundlePublishPayload bounds an encoded bundle publish before it is
+// decoded: the store's byte quota, which every dataset of it counts
+// against, plus the document and an allowance for the envelope.
+const maxBundlePublishPayload = StoreMaxBytes + MaxBundleDocumentBytes + 64<<10
+
+func (inst *Service) handleBundlePublish(msg *app.Msg) {
+	if len(msg.Payload) > maxBundlePublishPayload {
+		inst.refuse(msg, "bundle publish payload exceeds the store quota")
+		return
+	}
+	req, err := buscodec.Decode[adhocrequest.AdhocRequest](msg.Payload)
+	if err != nil {
+		inst.refuse(msg, "decode: "+err.Error())
+		return
+	}
+	if len(req.LocalNames) != len(req.ArrowStreams) {
+		inst.refuse(msg, "a bundle publish carries one stream per local name")
+		return
+	}
+	datasets := make([]BundleDatasetInput, 0, len(req.LocalNames))
+	for i, name := range req.LocalNames {
+		datasets = append(datasets, BundleDatasetInput{LocalName: name, ArrowIPCStream: req.ArrowStreams[i]})
+	}
+	res, pErr := inst.PublishBundle(BundlePublishInput{
+		Alias: req.Bundle, Document: req.Document, Datasets: datasets,
+		KeepAfterClose: req.KeepAfterClose, By: sender(msg),
+		Provenance: BundleProvenance{SourceSql: req.SourceSql, InputHandles: req.InputHandles},
+		OnBehalfOf: callContextFields(req.OboTask, req.OboEpoch, req.OboCall),
+	})
+	if pErr != nil {
+		inst.refuse(msg, pErr.Error())
+		return
+	}
+	inst.reply(msg.Reply, bundleReply(res, false))
+}
+
+func (inst *Service) handleBundleResolve(msg *app.Msg) {
+	req, err := buscodec.Decode[adhocrequest.AdhocRequest](msg.Payload)
+	if err != nil {
+		inst.refuse(msg, "decode: "+err.Error())
+		return
+	}
+	res, rErr := inst.ResolveBundle(req.Bundle, sender(msg), callContextFields(req.OboTask, req.OboEpoch, req.OboCall))
+	if rErr != nil {
+		inst.reply(msg.Reply, adhocreply.AdhocReply{
+			At: time.Now().UTC(), Reason: rErr.Error(), Bundle: req.Bundle, NoLive: errors.Is(rErr, ErrNoLiveBundle),
+		})
+		return
+	}
+	inst.reply(msg.Reply, bundleReply(res, true))
+}
+
+func (inst *Service) handleBundleRetract(msg *app.Msg) {
+	req, err := buscodec.Decode[adhocrequest.AdhocRequest](msg.Payload)
+	if err != nil {
+		inst.refuse(msg, "decode: "+err.Error())
+		return
+	}
+	if rErr := inst.RetractBundle(req.Bundle, sender(msg), callContextFields(req.OboTask, req.OboEpoch, req.OboCall)); rErr != nil {
+		inst.refuse(msg, rErr.Error())
+		return
+	}
+	inst.reply(msg.Reply, adhocreply.AdhocReply{At: time.Now().UTC(), Ok: true, Bundle: req.Bundle})
+}
+
+// bundleReply renders a live bundle; withDocument adds the document, which
+// a resolve needs and a publish's caller already has.
+func bundleReply(res BundleResult, withDocument bool) (rep adhocreply.AdhocReply) {
+	rep = adhocreply.AdhocReply{
+		At: time.Now().UTC(), Ok: true, Bundle: res.Alias, Revision: res.Revision, CreatedAtUs: res.CreatedAtUs,
+		PublisherTask: res.PublisherTask,
+		LocalNames:    make([]string, 0, len(res.Datasets)), Handles: make([]string, 0, len(res.Datasets)),
+	}
+	if withDocument {
+		rep.Document = res.Document
+	}
+	for _, d := range res.Datasets {
+		rep.LocalNames = append(rep.LocalNames, d.LocalName)
+		rep.Handles = append(rep.Handles, d.Handle)
+		rep.Rows += d.Rows
+		rep.Bytes += d.Bytes
+	}
+	return
 }

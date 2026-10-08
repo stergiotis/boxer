@@ -38,6 +38,7 @@ var (
 	kindAdhocAlias    uint64
 	kindAppId         uint64
 	kindAdhocRevision uint64
+	kindAdhocBundle   uint64
 )
 
 func init() {
@@ -46,6 +47,7 @@ func init() {
 	kindAdhocAlias = vdd.MembAdhocAlias.GetId().Value()
 	kindAppId = vdd.MembAppId.GetId().Value()
 	kindAdhocRevision = vdd.MembAdhocRevision.GetId().Value()
+	kindAdhocBundle = vdd.MembAdhocBundle.GetId().Value()
 	buscodec.Register[AdhocEvent](adhocEventBusCodec)
 }
 
@@ -114,6 +116,7 @@ type AdhocEventColumns struct {
 	Alias     []string
 	Publisher []string
 	Revision  []uint64
+	Bundle    []string
 }
 
 // Len returns the number of rows currently in the batch.
@@ -134,6 +137,7 @@ func (c *AdhocEventColumns) Append(row AdhocEvent) {
 	c.Alias = append(c.Alias, row.Alias)
 	c.Publisher = append(c.Publisher, row.Publisher)
 	c.Revision = append(c.Revision, row.Revision)
+	c.Bundle = append(c.Bundle, row.Bundle)
 }
 
 // Row reconstructs entity i as an AoS AdhocEvent record. Inverse of
@@ -148,6 +152,7 @@ func (c *AdhocEventColumns) Row(i int) (row AdhocEvent) {
 	row.Alias = c.Alias[i]
 	row.Publisher = c.Publisher[i]
 	row.Revision = c.Revision[i]
+	row.Bundle = c.Bundle[i]
 	return
 }
 
@@ -266,6 +271,9 @@ func AdhocEventBuildEntities[
 		symbolSecAttr_Alias := symbolSec.BeginAttribute(c.Alias[i])
 		symbolSecAttr_Alias.AddMembershipLowCardRefP(kindAdhocAlias)
 		symbolSecAttr_Alias.EndAttributeP()
+		symbolSecAttr_Bundle := symbolSec.BeginAttribute(c.Bundle[i])
+		symbolSecAttr_Bundle.AddMembershipLowCardRefP(kindAdhocBundle)
+		symbolSecAttr_Bundle.EndAttributeP()
 		symbolSec.EndSection()
 		// --- stringArray. ---
 		stringArraySec := dml.GetSectionStringArray()
@@ -306,6 +314,9 @@ func AdhocEventEmitSectionSymbol[
 	symbolSecAttr_Alias := symbolSec.BeginAttribute(row.Alias)
 	symbolSecAttr_Alias.AddMembershipLowCardRefP(kindAdhocAlias)
 	symbolSecAttr_Alias.EndAttributeP()
+	symbolSecAttr_Bundle := symbolSec.BeginAttribute(row.Bundle)
+	symbolSecAttr_Bundle.AddMembershipLowCardRefP(kindAdhocBundle)
+	symbolSecAttr_Bundle.EndAttributeP()
 	return
 }
 
@@ -464,6 +475,9 @@ func AdhocEventFillFromArrow[
 		var symbolAliasVal string
 		var symbolAliasCount int
 		var symbolAliasLastAttr int64
+		var symbolBundleVal string
+		var symbolBundleCount int
+		var symbolBundleLastAttr int64
 		nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 		for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 			for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -482,6 +496,13 @@ func AdhocEventFillFromArrow[
 					}
 					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 					symbolAliasVal = val
+				case kindAdhocBundle:
+					if symbolBundleLastAttr != attrJ+1 {
+						symbolBundleLastAttr = attrJ + 1
+						symbolBundleCount++
+					}
+					val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+					symbolBundleVal = val
 				}
 			}
 		}
@@ -495,6 +516,11 @@ func AdhocEventFillFromArrow[
 			return
 		}
 		c.Alias = append(c.Alias, symbolAliasVal)
+		if symbolBundleCount != 1 {
+			err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "adhocBundle").Int("got", symbolBundleCount).Errorf("slot symbol@adhocBundle (field Bundle) carries %d attributes but the DTO admits exactly 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolBundleCount)
+			return
+		}
+		c.Bundle = append(c.Bundle, symbolBundleVal)
 		// --- stringArray. ---
 		var stringArrayHandleVal string
 		var stringArrayHandleCount int
@@ -603,6 +629,9 @@ func AdhocEventReadRow[
 	var symbolAliasVal string
 	var symbolAliasCount int
 	var symbolAliasLastAttr int64
+	var symbolBundleVal string
+	var symbolBundleCount int
+	var symbolBundleLastAttr int64
 	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -621,6 +650,13 @@ func AdhocEventReadRow[
 				}
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolAliasVal = val
+			case kindAdhocBundle:
+				if symbolBundleLastAttr != attrJ+1 {
+					symbolBundleLastAttr = attrJ + 1
+					symbolBundleCount++
+				}
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolBundleVal = val
 			}
 		}
 	}
@@ -638,6 +674,14 @@ func AdhocEventReadRow[
 	}
 	if symbolAliasCount == 1 {
 		row.Alias = symbolAliasVal
+		present = true
+	}
+	if symbolBundleCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "adhocBundle").Int("got", symbolBundleCount).Errorf("slot symbol@adhocBundle (field Bundle) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolBundleCount)
+		return
+	}
+	if symbolBundleCount == 1 {
+		row.Bundle = symbolBundleVal
 		present = true
 	}
 	// --- stringArray. ---

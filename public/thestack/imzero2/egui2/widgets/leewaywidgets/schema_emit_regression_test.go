@@ -13,21 +13,21 @@ import (
 
 // TestSchemaPathEmitsTaggedSections guards the data layer behind the play
 // app's leeway detail pane: discovering a TableDesc from Arrow column names
-// (as CardDriver.EnsureFor does), then driving the fixture batch through a
-// Table2CardEmitter, must buffer rows for the tagged / co-sections too — not
-// just the plain section.
+// (as CardDriver.EnsureFor does), then reading the fixture batch into the
+// record card, must lay out rows for the tagged / co-sections too — not just
+// the plain section.
 //
 // This exercises the schema-resolution path (NewDriverFromSchema), the one the
 // play app actually uses; the demo uses the dense NewDriver path. It
 // complements apps/play TestAnchorDriverRoundTrip, which only checks that
-// physical names resolve, not that the emitter produces tagged-section content.
+// physical names resolve, not that the card lays out tagged-section content.
 //
 // Note: the user-reported "only plain value sections are shown" pane bug was an
 // egui layout regression — the self-scrolling card table was nested in an outer
 // ScrollArea, which crops its tail rows (the tagged/co sections come after the
 // plain one). That fix lives in apps/play/play_detail.go and can't be exercised
 // without a live egui context; this test guards the orthogonal data-layer
-// invariant that the rows reach the emitter in the first place.
+// invariant that the rows reach the card in the first place.
 func TestSchemaPathEmitsTaggedSections(t *testing.T) {
 	batches, err := BuildFixtureBatches(memory.NewGoAllocator())
 	if err != nil {
@@ -76,17 +76,16 @@ func TestSchemaPathEmitsTaggedSections(t *testing.T) {
 		t.Fatalf("schema driver: %v", err)
 	}
 
-	// Drive the real emitter, but swallow EndBatch so flushUnified (which needs
-	// a live egui context) is skipped, leaving `unified` populated for
-	// inspection.
-	emitter := NewTable2CardEmitter(nil, "", ColorPaletteViridis, nil)
-	if err = driver.DriveRecordBatch(noFlushSink{emitter}, rec); err != nil {
+	// Read the batch into the card's rows; drawing them needs a live egui
+	// context, the rows do not.
+	card := NewRecordCard(nil, "", ColorPaletteViridis)
+	if err = card.PrepareFrom(func(sink streamreadaccess.SinkI) error { return driver.DriveRecordBatch(sink, rec) }, nil); err != nil {
 		t.Fatalf("drive: %v", err)
 	}
 
 	var plain, tagged int
-	for i := range emitter.unified {
-		row := &emitter.unified[i]
+	for i := range card.unified {
+		row := &card.unified[i]
 		if row.kind != rowKindData {
 			continue
 		}
@@ -105,10 +104,3 @@ func TestSchemaPathEmitsTaggedSections(t *testing.T) {
 	}
 	t.Logf("buffered data rows: plain=%d tagged/co=%d", plain, tagged)
 }
-
-// noFlushSink wraps a Table2CardEmitter and swallows EndBatch so flushUnified
-// (which needs a live egui context) is skipped, leaving `unified` populated for
-// inspection.
-type noFlushSink struct{ *Table2CardEmitter }
-
-func (noFlushSink) EndBatch() (err error) { return nil }

@@ -15,18 +15,24 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"strconv"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog"
+	"lukechampine.com/blake3"
 
+	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sealed"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -40,8 +46,15 @@ const (
 	PerDatasetMaxBytes = 256 << 20 // 256 MiB
 	// StoreMaxBytes caps the live datasets' ciphertext together.
 	StoreMaxBytes = 1 << 30 // 1 GiB
-	// MaxDatasets caps how many datasets may be live at once.
-	MaxDatasets = 64
+	// MaxDatasets caps how many datasets may be live at once in the
+	// process; each holds a sealed file open.
+	MaxDatasets = 1024
+	// MaxDatasetsPerOwner caps the datasets one owner — a window, or an
+	// app for what it keeps after close — may hold live, so a receiver
+	// that publishes a bundle per item it shows cannot take the process's
+	// whole count (ADR-0288 §SD9). The byte quota bounds the
+	// store whatever the count.
+	MaxDatasetsPerOwner = 256
 )
 
 // ServiceAppId is the synthetic identity the capability service speaks
@@ -97,6 +110,10 @@ type Config struct {
 	Log zerolog.Logger
 	// RetractGrace overrides DefaultRetractGrace; zero keeps the default.
 	RetractGrace time.Duration
+	// Trail is the host's audit trail (ADR-0277); every bundle operation
+	// lands there (ADR-0288 §SD5). Nil keeps only the
+	// in-process record.
+	Trail *trail.Recorder
 }
 
 // PublishInput is the in-process shape of a publish (the bus wire mirrors
@@ -114,10 +131,18 @@ type PublishInput struct {
 	// republish or retract it, and it survives the publishing window
 	// (ADR-0240 §SD5). Sticky across republishes.
 	KeepAfterClose bool
+	// WindowScoped publishes under the window's own alias,
+	// WindowAlias(Alias, By.Instance), so two windows of one app never
+	// hold one alias (ADR-0288 §SD3). The result names the
+	// alias used.
+	WindowScoped bool
 }
 
 // PublishResult reports the minted (or reused) handle and dataset stats.
 type PublishResult struct {
+	// Alias is the alias the dataset went under: the window's own for a
+	// window-scoped publish.
+	Alias    string
 	Handle   string
 	Revision uint64
 	Rows     uint64
@@ -131,6 +156,18 @@ type ResolveResult struct {
 	Rows            uint64
 	Bytes           uint64
 	CreatedAtUnixUs int64
+	// Origin is the bundle the dataset belongs to and the task that
+	// published its live revision (ADR-0288 §SD3, §SD4).
+	Origin DatasetOrigin
+}
+
+// DatasetOrigin is where a dataset comes from, as the grant judges it: its
+// bundle, empty for a dataset published on its own, and the task whose
+// attested call published its live revision, empty when no agent's call
+// did.
+type DatasetOrigin struct {
+	Bundle        string
+	PublisherTask string
 }
 
 // record is the one record of a dataset: the registry provider, the owner,
@@ -142,6 +179,7 @@ type record struct {
 
 	mu             sync.RWMutex
 	alias          string
+	bundle         string // the bundle it belongs to; empty when published on its own
 	owner          Identity
 	keepAfterClose bool
 	schema         *arrow.Schema
@@ -151,6 +189,16 @@ type record struct {
 	bytes          uint64 // ciphertext
 	createdAt      int64  // unix µs
 	file           *sealed.File
+	// streamDigest is the content digest of the stream as sealed, and
+	// plainBytes its length: what a reader receives, where bytes is the
+	// ciphertext the quotas count.
+	streamDigest string
+	plainBytes   uint64
+	// columns summarise the live revision's columns (§SD5).
+	columns ColumnSummaries
+	// context is the attested call that published the live revision; set
+	// for a bundle's datasets an agent's call published.
+	context option.Option[app.CallContext]
 }
 
 var _ introspect.EncryptedDatasetI = (*record)(nil)
@@ -216,11 +264,22 @@ type Service struct {
 	busClient *inprocbus.Client
 	unsubs    []func()
 
-	mu         sync.RWMutex
-	live       map[string]*record
-	leaving    map[string]*time.Timer // left, still registered until the timer unloads
-	totalBytes uint64
-	closed     bool
+	trail   *trail.Recorder
+	callCtx atomic.Pointer[callContextRef]
+	// auditHook, when set, sees every audit record as it is made; the
+	// package's tests set it, production leaves the trail the one record.
+	auditHook atomic.Pointer[func(AuditRecord)]
+
+	mu      sync.RWMutex
+	live    map[string]*record
+	bundles map[string]*bundleRec // by bundle alias
+	// retiredRevisions keep each retracted bundle alias's last revision, so
+	// a later publish under it continues the count: a follower that saw
+	// revision n before a retract must not take the next publish for it.
+	retiredRevisions map[string]uint64
+	leaving          map[string]*time.Timer // left, still registered until the timer unloads
+	totalBytes       uint64
+	closed           bool
 }
 
 // NewService builds the Service and, when a bus is supplied, subscribes to
@@ -239,12 +298,15 @@ func NewService(cfg Config) (inst *Service, err error) {
 		grace = DefaultRetractGrace
 	}
 	inst = &Service{
-		reg:          reg,
-		dir:          dir,
-		log:          cfg.Log,
-		retractGrace: grace,
-		live:         make(map[string]*record),
-		leaving:      make(map[string]*time.Timer),
+		reg:              reg,
+		dir:              dir,
+		log:              cfg.Log,
+		retractGrace:     grace,
+		trail:            cfg.Trail,
+		live:             make(map[string]*record),
+		bundles:          make(map[string]*bundleRec),
+		retiredRevisions: make(map[string]uint64),
+		leaving:          make(map[string]*time.Timer),
 	}
 	// A probe publish is not worth a start-up dependency on the base
 	// directory, but an unusable one must not surface as the first app's
@@ -256,6 +318,10 @@ func NewService(cfg Config) (inst *Service, err error) {
 	_ = probe.Close()
 	if regErr := reg.Register(newCatalogProvider(inst)); regErr != nil {
 		return nil, eb.Build().Str("catalogTableName", CatalogTableName).Errorf("adhocdata: register catalog: %w", regErr)
+	}
+	if regErr := reg.Register(newBundleCatalogProvider(inst)); regErr != nil {
+		reg.Unregister(CatalogTableName)
+		return nil, eb.Build().Str("catalogTableName", BundleCatalogTableName).Errorf("register bundle catalog: %w", regErr)
 	}
 	if cfg.Bus != nil {
 		if subErr := inst.subscribe(cfg.Bus); subErr != nil {
@@ -288,6 +354,7 @@ func (inst *Service) Close(context.Context) (err error) {
 		}
 	}
 	inst.live = make(map[string]*record)
+	inst.bundles = make(map[string]*bundleRec)
 	inst.leaving = make(map[string]*time.Timer)
 	inst.totalBytes = 0
 	unsubs := inst.unsubs
@@ -305,6 +372,7 @@ func (inst *Service) Close(context.Context) (err error) {
 		_ = f.Close()
 	}
 	inst.reg.Unregister(CatalogTableName)
+	inst.reg.Unregister(BundleCatalogTableName)
 	inst.log.Info().Int("datasets", len(recs)).Msg("adhocdata: closed")
 	return nil
 }
@@ -333,6 +401,9 @@ func (inst *Service) FlushRetracts() {
 // held. A republish or a publish onto an unknown, retracted or foreign
 // handle is refused before any byte is sealed.
 func (inst *Service) Publish(in PublishInput) (res PublishResult, err error) {
+	if in.WindowScoped {
+		in.Alias = WindowAlias(in.Alias, in.By.Instance)
+	}
 	if !validAlias(in.Alias) {
 		return res, eb.Build().Str("alias", in.Alias).Errorf("adhocdata: invalid alias (want [A-Za-z_][A-Za-z0-9_]*, <=64)")
 	}
@@ -361,7 +432,10 @@ func (inst *Service) Publish(in PublishInput) (res PublishResult, err error) {
 			return res, ownErr
 		}
 	}
-	err = inst.checkQuotaLocked(existing, uint64(len(in.ArrowIPCStream)))
+	err = inst.checkSoloPublishLocked(existing, in.Alias, in.By)
+	if err == nil {
+		err = inst.checkQuotaLocked(existing, uint64(len(in.ArrowIPCStream)), in.By)
+	}
 	inst.mu.RUnlock()
 	if err != nil {
 		return res, err
@@ -371,7 +445,7 @@ func (inst *Service) Publish(in PublishInput) (res PublishResult, err error) {
 	if err != nil {
 		return res, eh.Errorf("adhocdata: allocate sealed file: %w", err)
 	}
-	schema, structure, rows, err := sealStream(f, in.ArrowIPCStream)
+	ss, err := sealStream(f, in.ArrowIPCStream)
 	if err != nil {
 		_ = f.Close()
 		return res, err
@@ -399,7 +473,11 @@ func (inst *Service) Publish(in PublishInput) (res PublishResult, err error) {
 			return res, eb.Build().Str("handle", in.Handle).Errorf("adhocdata: handle retracted during publish")
 		}
 	}
-	if quErr := inst.checkQuotaLocked(rec, nbytes); quErr != nil {
+	quErr := inst.checkSoloPublishLocked(rec, in.Alias, in.By)
+	if quErr == nil {
+		quErr = inst.checkQuotaLocked(rec, nbytes, in.By)
+	}
+	if quErr != nil {
 		inst.mu.Unlock()
 		_ = f.Close()
 		return res, quErr
@@ -411,10 +489,11 @@ func (inst *Service) Publish(in PublishInput) (res PublishResult, err error) {
 		old = rec.file
 		inst.totalBytes -= rec.bytes
 		rec.alias = in.Alias
-		rec.schema, rec.structure = schema, structure
+		rec.schema, rec.structure = ss.schema, ss.structure
 		rec.revision++
-		rec.rows, rec.bytes = rows, nbytes
+		rec.rows, rec.bytes = ss.rows, nbytes
 		rec.file = f
+		rec.streamDigest, rec.plainBytes, rec.columns = ss.digest, ss.plain, ss.columns
 		rec.keepAfterClose = rec.keepAfterClose || in.KeepAfterClose
 		revision, publisher = rec.revision, rec.owner
 		rec.mu.Unlock()
@@ -428,8 +507,8 @@ func (inst *Service) Publish(in PublishInput) (res PublishResult, err error) {
 		}
 		rec = &record{
 			handle: handle, alias: in.Alias, owner: in.By, keepAfterClose: in.KeepAfterClose,
-			schema: schema, structure: structure, revision: 1, rows: rows, bytes: nbytes,
-			createdAt: time.Now().UnixMicro(), file: f,
+			schema: ss.schema, structure: ss.structure, revision: 1, rows: ss.rows, bytes: nbytes,
+			createdAt: time.Now().UnixMicro(), file: f, streamDigest: ss.digest, plainBytes: ss.plain, columns: ss.columns,
 		}
 		if regErr := inst.reg.Register(rec); regErr != nil {
 			inst.mu.Unlock()
@@ -453,7 +532,7 @@ func (inst *Service) Publish(in PublishInput) (res PublishResult, err error) {
 	inst.publishEvent(SubjectEventPublished, Event{
 		Op: EventOpPublished, Handle: handle, Alias: in.Alias, Publisher: string(publisher.App), Revision: revision,
 	})
-	return PublishResult{Handle: handle, Revision: revision, Rows: rows, Bytes: nbytes}, nil
+	return PublishResult{Alias: in.Alias, Handle: handle, Revision: revision, Rows: ss.rows, Bytes: nbytes}, nil
 }
 
 // checkOwner is the ownership rule (ADR-0240 §SD2/§SD5): the runtime may
@@ -522,6 +601,10 @@ func (inst *Service) Resolve(alias string) (res ResolveResult, err error) {
 	best.mu.RLock()
 	res = ResolveResult{
 		Handle: best.handle, Revision: best.revision, Rows: best.rows, Bytes: best.bytes, CreatedAtUnixUs: best.createdAt,
+		Origin: DatasetOrigin{Bundle: best.bundle},
+	}
+	if best.context.Has {
+		res.Origin.PublisherTask = best.context.Val.Task
 	}
 	best.mu.RUnlock()
 	inst.mu.RUnlock()
@@ -552,9 +635,28 @@ func (inst *Service) Retract(handle string, by Identity) (err error) {
 		inst.mu.Unlock()
 		return ownErr
 	}
+	if rec.bundle != "" {
+		inst.mu.Unlock()
+		return eb.Build().Str("handle", handle).Str("bundle", rec.bundle).Errorf("retract: %w", ErrBundleMember)
+	}
+	ev := inst.leaveLocked(rec)
+	inst.mu.Unlock()
+
+	inst.emitAudit("retract", ev.Handle, ev.Alias, ev.Revision)
+	inst.publishEvent(SubjectEventRetracted, ev)
+	return nil
+}
+
+// leaveLocked is the LEAVE step for rec: it leaves the live set, its
+// quota is released, and its UNLOAD is scheduled after the grace. The
+// caller holds inst.mu and emits the returned event once it has released
+// it.
+func (inst *Service) leaveLocked(rec *record) (ev Event) {
+	handle := rec.handle
 	delete(inst.live, handle)
 	rec.mu.RLock()
-	alias, revision, publisher, nbytes := rec.alias, rec.revision, rec.owner, rec.bytes
+	ev = Event{Op: EventOpRetracted, Handle: handle, Alias: rec.alias, Bundle: rec.bundle, Publisher: string(rec.owner.App), Revision: rec.revision}
+	nbytes := rec.bytes
 	rec.mu.RUnlock()
 	inst.totalBytes -= nbytes
 	grace := inst.retractGrace
@@ -568,13 +670,44 @@ func (inst *Service) Retract(handle string, by Identity) (err error) {
 		inst.mu.Unlock()
 		inst.unload(handle, grace)
 	})
-	inst.mu.Unlock()
+	return
+}
 
-	inst.emitAudit("retract", handle, alias, revision)
-	inst.publishEvent(SubjectEventRetracted, Event{
-		Op: EventOpRetracted, Handle: handle, Alias: alias, Publisher: string(publisher.App), Revision: revision,
-	})
+// checkSoloPublishLocked refuses a publish of one dataset that would
+// reach into a bundle: a republish onto one of its datasets, or a new
+// dataset under an alias a bundle holds (ADR-0288 §SD2, §SD3).
+// existing is the record a republish names, nil for a new dataset. The
+// caller holds inst.mu.
+func (inst *Service) checkSoloPublishLocked(existing *record, alias string, by Identity) (err error) {
+	if existing != nil && existing.bundle != "" {
+		return eb.Build().Str("handle", existing.handle).Str("bundle", existing.bundle).Errorf("republish: %w", ErrBundleMember)
+	}
+	if b := inst.bundles[alias]; b != nil {
+		return eb.Build().Str("alias", alias).Str("holder", string(b.owner.App)).Uint64("holderInstance", b.owner.Instance).
+			Errorf("%w", ErrAliasHeld)
+	}
+	for _, r := range inst.live {
+		switch {
+		case r == existing || r.alias != alias:
+		case r.bundle != "":
+			return eb.Build().Str("alias", alias).Str("bundle", r.bundle).Errorf("%w", ErrAliasHeld)
+		case r.checkOwner(by) != nil:
+			// An alias has one owner (§SD3): another window's dataset under
+			// it would be replaced in every consumer that resolves it.
+			return eb.Build().Str("alias", alias).Str("holder", string(r.owner.App)).Uint64("holderInstance", r.owner.Instance).
+				Errorf("%w", ErrAliasHeld)
+		}
+	}
 	return nil
+}
+
+// WindowAlias is the alias a window-scoped publish goes under:
+// `<alias>_w<instance>`, or alias itself for the runtime (instance 0).
+func WindowAlias(alias string, instance uint64) (scoped string) {
+	if instance == 0 {
+		return alias
+	}
+	return alias + "_w" + strconv.FormatUint(instance, 10)
 }
 
 // retractOwnedBy withdraws every dataset the instance published and did
@@ -583,16 +716,27 @@ func (inst *Service) Retract(handle string, by Identity) (err error) {
 // lives until Close.
 func (inst *Service) retractOwnedBy(who Identity) (retracted int) {
 	inst.mu.RLock()
+	var bundles []string
+	for alias, b := range inst.bundles {
+		if b.owner == who && !b.keepAfterClose {
+			bundles = append(bundles, alias)
+		}
+	}
 	var handles []string
 	for h, r := range inst.live {
 		r.mu.RLock()
-		mine := r.owner == who && !r.keepAfterClose
+		mine := r.owner == who && !r.keepAfterClose && r.bundle == ""
 		r.mu.RUnlock()
 		if mine {
 			handles = append(handles, h)
 		}
 	}
 	inst.mu.RUnlock()
+	for _, alias := range bundles {
+		if err := inst.retractBundle(alias, Identity{}, option.None[app.CallContext](), AuditWithdraw); err == nil {
+			retracted++
+		}
+	}
 	for _, h := range handles {
 		if err := inst.Retract(h, Identity{}); err == nil {
 			retracted++
@@ -621,11 +765,15 @@ func (inst *Service) unload(handle string, ceiling time.Duration) {
 }
 
 // checkQuotaLocked verifies the count and byte budgets for a publish of
-// newBytes, treating existing (nil for a new dataset) as being replaced.
-// The caller holds inst.mu.
-func (inst *Service) checkQuotaLocked(existing *record, newBytes uint64) (err error) {
+// newBytes by by, treating existing (nil for a new dataset) as being
+// replaced. The caller holds inst.mu.
+func (inst *Service) checkQuotaLocked(existing *record, newBytes uint64, by Identity) (err error) {
 	if existing == nil && len(inst.live) >= MaxDatasets {
 		return eb.Build().Int("quotaCount", MaxDatasets).Errorf("adhocdata: dataset count quota exceeded")
+	}
+	if existing == nil && !by.IsRuntime() && inst.ownedCountLocked(by) >= MaxDatasetsPerOwner {
+		return eb.Build().Int("quotaCount", MaxDatasetsPerOwner).Str("app", string(by.App)).Uint64("instance", by.Instance).
+			Errorf("per-owner dataset count quota exceeded")
 	}
 	total := inst.totalBytes
 	if existing != nil {
@@ -673,8 +821,54 @@ func (inst *Service) emitAudit(op, handle, alias string, revision uint64) {
 // writes it batch by batch into the sealed file — one pass, no canonical
 // copy — returning the schema, its ClickHouse structure and the row count.
 // The writer is closed on success; on failure the caller closes the file.
-func sealStream(f *sealed.File, streamBytes []byte) (schema *arrow.Schema, structure string, rows uint64, err error) {
-	return sealStreamCapped(f, streamBytes, PerDatasetMaxBytes)
+//
+// digest is the content digest of the stream as sealed — the bytes every
+// reader of the dataset reads — in the trail's form (trail.ContentDigest).
+//
+// plain is the stream's length as sealed, the size a reader receives.
+// sealedStream is what sealing a stream learnt about it.
+type sealedStream struct {
+	schema    *arrow.Schema
+	structure string
+	rows      uint64
+	// digest is over the plaintext as sealed, plain its length: what a
+	// reader receives.
+	digest  string
+	plain   uint64
+	columns ColumnSummaries
+}
+
+func sealStream(f *sealed.File, streamBytes []byte) (out sealedStream, err error) {
+	h := blake3.New(32, nil)
+	cw := &countingWriter{w: h}
+	var summ *summarizer
+	out.schema, out.structure, out.rows, err = sealStreamTo(f, streamBytes, PerDatasetMaxBytes, cw, func(rec arrow.RecordBatch) {
+		if summ == nil {
+			summ = newSummarizer(rec.Schema())
+		}
+		summ.observe(rec)
+	})
+	if err != nil {
+		return
+	}
+	if summ == nil {
+		summ = newSummarizer(out.schema)
+	}
+	sum := h.Sum(nil)
+	out.digest, out.plain, out.columns = hex.EncodeToString(sum[:16]), cw.n, summ.result()
+	return
+}
+
+// countingWriter counts what passes through to w.
+type countingWriter struct {
+	w io.Writer
+	n uint64
+}
+
+func (inst *countingWriter) Write(p []byte) (n int, err error) {
+	n, err = inst.w.Write(p)
+	inst.n += uint64(n)
+	return
 }
 
 // sealStreamCapped is sealStream with the plaintext bounded by limit. A
@@ -687,6 +881,13 @@ func sealStream(f *sealed.File, streamBytes []byte) (schema *arrow.Schema, struc
 // counted, and a budget of limit alone would refuse a compressed stream
 // that decodes to well under the quota.
 func sealStreamCapped(f *sealed.File, streamBytes []byte, limit uint64) (schema *arrow.Schema, structure string, rows uint64, err error) {
+	return sealStreamTo(f, streamBytes, limit, nil, nil)
+}
+
+// sealStreamTo is sealStreamCapped writing every sealed plaintext byte to
+// tee as well, when tee is set, and showing every batch to observe, when
+// observe is set.
+func sealStreamTo(f *sealed.File, streamBytes []byte, limit uint64, tee io.Writer, observe func(rec arrow.RecordBatch)) (schema *arrow.Schema, structure string, rows uint64, err error) {
 	budget := &budgetAllocator{limit: limit + uint64(len(streamBytes))}
 	rdr, err := ipc.NewReader(bytes.NewReader(streamBytes), ipc.WithAllocator(budget))
 	if err != nil {
@@ -702,10 +903,17 @@ func sealStreamCapped(f *sealed.File, streamBytes []byte, limit uint64) (schema 
 	if err != nil {
 		return nil, "", 0, err
 	}
-	w := ipc.NewWriter(&cappedWriter{w: sw, limit: limit}, ipc.WithSchema(schema))
+	var out io.Writer = sw
+	if tee != nil {
+		out = io.MultiWriter(sw, tee)
+	}
+	w := ipc.NewWriter(&cappedWriter{w: out, limit: limit}, ipc.WithSchema(schema))
 	for rdr.Next() {
 		rec := rdr.RecordBatch()
 		rows += uint64(rec.NumRows())
+		if observe != nil {
+			observe(rec)
+		}
 		if wErr := w.Write(rec); wErr != nil {
 			_ = w.Close()
 			return nil, "", 0, eh.Errorf("adhocdata: seal arrow stream: %w", wErr)
@@ -781,9 +989,39 @@ func newHandle() (handle string, err error) {
 	if _, err = rand.Read(b[:]); err != nil {
 		return "", eh.Errorf("adhocdata: random handle: %w", err)
 	}
-	return "adhoc_" + hex.EncodeToString(b[:]), nil
+	return handlePrefix + hex.EncodeToString(b[:]), nil
+}
+
+const handlePrefix = "adhoc_"
+
+// IsHandle reports whether name has a dataset handle's shape: "adhoc_" and
+// sixteen lowercase hex digits. Introspection tables of the capability
+// itself (`adhoc`, `adhoc_bundles`) share the prefix but not the shape.
+func IsHandle(name string) (yes bool) {
+	rest, ok := strings.CutPrefix(name, handlePrefix)
+	if !ok || len(rest) != 16 {
+		return false
+	}
+	for i := range len(rest) {
+		c := rest[i]
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 // validAlias reports whether s is a bare identifier usable as a stable
 // alias in an applet's frontmatter and rewrite — the table-name rule.
 func validAlias(s string) bool { return introspect.ValidTableName(s) }
+
+// ownedCountLocked counts the live datasets owned by by. The caller holds
+// inst.mu.
+func (inst *Service) ownedCountLocked(by Identity) (n int) {
+	for _, r := range inst.live {
+		if r.owner == by {
+			n++
+		}
+	}
+	return
+}

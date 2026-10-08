@@ -107,7 +107,7 @@ func (inst *PlayApp) renderGraphNode(ids *c.WidgetIdStack, n splitNode) {
 				c.Atoms().Text(obsLabel).Keep()).
 				Selected(observed).
 				SendResp().HasPrimaryClicked() {
-				inst.observedNode = n.ID
+				inst.personObserveNode(n.ID)
 			}
 			// Channel eligibility (4c): observing fills the main channels
 			// (Table/Projection/Detail); a _tl_*-shaped node also fills the
@@ -125,7 +125,7 @@ func (inst *PlayApp) renderGraphNode(ids *c.WidgetIdStack, n splitNode) {
 					rt.Small().Weak()
 				}
 				for _, ts := range inst.tabs.all() {
-					if ts.Panel == nil {
+					if ts.Panel == nil || ts.Frameless {
 						continue
 					}
 					bound := inst.tabBindings[ts.ID] == n.ID
@@ -232,7 +232,7 @@ func (inst *PlayApp) renderSignalRow(r signalChromeRow) {
 		if r.Held {
 			if c.Button(ids.PrepareStr("sigClear-"+r.Name), c.Atoms().Text("×").Keep()).
 				SendResp().HasPrimaryClicked() {
-				inst.graph.deleteSignal(r.Name)
+				inst.personDeleteSignal(r.Name)
 			}
 		}
 		var notes []string

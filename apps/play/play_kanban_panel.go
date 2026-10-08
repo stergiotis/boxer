@@ -103,6 +103,11 @@ type KanbanDriver struct {
 	// reverting the board to row-derived lanes.
 	lanesLoading bool
 	lanesErr     error
+	// lanesNode is whether the last Run's buffer has a `lanes` CTE.
+	lanesNode bool
+	// declaredN is how many of the model's lanes, from the first, the
+	// lanes CTE declared; the rest came from the rows.
+	declaredN int
 
 	// Fold cache key: the result identity (executed timestamp — the same
 	// freshness token the pager and the World pane use) + the schema the claim
@@ -427,6 +432,7 @@ func (inst *KanbanDriver) rebuild(rec arrow.RecordBatch, schema *arrow.Schema, k
 			addLane(name)
 		}
 	}
+	inst.declaredN = len(cols)
 	cards := make([]kanban.Card, 0, rows)
 	for row := range rows {
 		lane := formatCell(rec, k.laneCol, row)

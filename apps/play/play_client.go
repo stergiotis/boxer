@@ -7,6 +7,7 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -20,6 +21,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
+	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
@@ -137,6 +139,21 @@ type Client struct {
 	// render thread. keelson('<alias>') rewrites to keelson('<handle>')
 	// before the request leaves play; unbound names pass through.
 	datasetBindings map[string]string
+	// datasetOrigins maps a bound name to where the dataset comes from,
+	// when the name is a local one (ADR-0288 §SD3): its global
+	// alias and the bundle it belongs to. A grant names a dataset by
+	// those, never by a local name, which means another dataset in
+	// another window. Guarded by mu.
+	datasetOrigins map[string]datasetOrigin
+}
+
+// datasetOrigin is where a dataset bound under a local name comes from.
+type datasetOrigin struct {
+	alias  string
+	bundle string
+	// publisherTask is the task whose attested call published the
+	// bundle's live revision; that task runs on it without a grant entry.
+	publisherTask string
 }
 
 func NewClient(cfg ClientConfig, httpClient *http.Client) *Client {
@@ -271,7 +288,9 @@ func newExecOptions(label string) *ExecOptions {
 //     SQL is outside Grammar1.
 //
 // Every step degrades rather than fails, so a usable body always comes
-// back and the server reports the real problem to the user. The Preview
+// back and the server reports the real problem to the user. A run that
+// then fails names the steps it went without (failedRewrites), because the
+// server can only report their leftovers. The Preview
 // tab's "as sent" view calls this too, so what it shows can never drift
 // from what executes.
 func (inst *Client) BuildStatement(sql string) (body string, params map[string]string) {
@@ -704,17 +723,96 @@ func (inst *Client) buildResidualWith(sql string, observe func(passreg.ApplyObse
 
 // datasetAliasOf maps each bound dataset handle to its alias: the name a
 // grant lists, since the handle is ephemeral and the person never sees it.
-func (inst *Client) datasetAliasOf() (aliasOf map[string]string) {
+func (inst *Client) datasetAliasOf() (aliasOf map[string]datasetName) {
 	inst.mu.RLock()
 	defer inst.mu.RUnlock()
 	if len(inst.datasetBindings) == 0 {
 		return
 	}
-	aliasOf = make(map[string]string, len(inst.datasetBindings))
-	for alias, handle := range inst.datasetBindings {
-		aliasOf[handle] = alias
+	aliasOf = make(map[string]datasetName, len(inst.datasetBindings))
+	for local, handle := range inst.datasetBindings {
+		aliasOf[handle] = inst.datasetNameLocked(local)
 	}
 	return
+}
+
+// inputHandlesOf is the handles of the datasets sql reads: each
+// keelson('…') name that is a handle, or a name bound in this window, as
+// bound now. A name bound to nothing reads no dataset and is left out.
+func (inst *Client) inputHandlesOf(sql string) (handles []string) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	for _, name := range keelsonsql.References(sql) {
+		h := name
+		if bound, ok := inst.datasetBindings[name]; ok {
+			h = bound
+		}
+		if adhocdata.IsHandle(h) && !slices.Contains(handles, h) {
+			handles = append(handles, h)
+		}
+	}
+	return
+}
+
+// datasetName is a bound dataset as a grant names it: the name the buffer
+// reads, its global alias, and its bundle when it has one.
+type datasetName struct {
+	local         string
+	alias         string
+	bundle        string
+	publisherTask string
+}
+
+// destinations are the grant entries that cover the dataset, the one a
+// refusal asks for first.
+func (inst datasetName) destinations() (dests []string) {
+	if inst.bundle != "" {
+		dests = append(dests, DestinationKeelsonBundle(inst.bundle))
+	}
+	return append(dests, DestinationKeelson(inst.alias))
+}
+
+func (inst *Client) datasetNameLocked(local string) (n datasetName) {
+	n = datasetName{local: local, alias: local}
+	if o, ok := inst.datasetOrigins[local]; ok {
+		n.alias, n.bundle, n.publisherTask = o.alias, o.bundle, o.publisherTask
+	}
+	return
+}
+
+// datasetNameOf is the grant's view of a bound name.
+func (inst *Client) datasetNameOf(local string) (n datasetName) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	return inst.datasetNameLocked(local)
+}
+
+// setBundleOrigin is setDatasetOrigin for a bundle's dataset, with the task
+// that published the bundle's live revision, empty when no agent's call
+// did (ADR-0288 §SD4).
+func (inst *Client) setBundleOrigin(local string, alias string, bundle string, publisherTask string) {
+	inst.setDatasetOrigin(local, alias, bundle)
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if o, ok := inst.datasetOrigins[local]; ok {
+		o.publisherTask = publisherTask
+		inst.datasetOrigins[local] = o
+	}
+}
+
+// setDatasetOrigin records that local stands for the dataset published
+// under alias, in bundle when it is not empty; an empty alias forgets it.
+func (inst *Client) setDatasetOrigin(local string, alias string, bundle string) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if alias == "" {
+		delete(inst.datasetOrigins, local)
+		return
+	}
+	if inst.datasetOrigins == nil {
+		inst.datasetOrigins = make(map[string]datasetOrigin)
+	}
+	inst.datasetOrigins[local] = datasetOrigin{alias: alias, bundle: bundle}
 }
 
 // applyExprSplice substitutes the buffer's SQL-valued placeholders (ADR-0187
@@ -1026,7 +1124,8 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 	if opts != nil && opts.Agent != nil {
 		agent = opts.Agent
 	}
-	residual, params, _ := inst.rewriteFor(agent, sql, nil)
+	var skipped failedRewrites
+	residual, params, _ := inst.rewriteFor(agent, sql, skipped.observe)
 	var q string
 	rowCap := readResultRowCap(sql)
 	if opts != nil && opts.WrapStatement != nil {
@@ -1134,6 +1233,7 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 		err = deliver()
 	}
 	if err != nil {
+		err = skipped.explain(ctx, err)
 		return
 	}
 	rdr, err = ipc.NewReader(rs, ipc.WithAllocator(alloc))
@@ -1144,6 +1244,42 @@ func (inst *Client) ExecuteArrowStream(ctx context.Context, sql string, alloc me
 		return
 	}
 	return
+}
+
+// failedRewrites collects the client-side rewrite steps a run skipped, so a
+// failed run can say so. Every step degrades rather than fails (ADR-0108
+// §SD3), which leaves the statement that ships carrying whatever the skipped
+// step would have rewritten — an LW_GET call, say — and the server then
+// reports that leftover ("function does not exist") instead of the reason it
+// was left over. The skip is already in the rewrite trace; a person or agent
+// reading the run's error should not need to open it to find the cause.
+type failedRewrites []passreg.ApplyObservation
+
+func (inst *failedRewrites) observe(o passreg.ApplyObservation) {
+	if o.Outcome == passreg.ApplyOutcomeSkipped {
+		*inst = append(*inst, o)
+	}
+}
+
+// explain appends the skipped steps to a run's error. A cancelled run is left
+// alone: it failed because it was stopped, not because of what it sent. The
+// server's diagnostic stays first and wrapped, so what keys on it still does.
+func (inst failedRewrites) explain(ctx context.Context, err error) error {
+	if err == nil || len(inst) == 0 || ctx.Err() != nil {
+		return err
+	}
+	var b strings.Builder
+	for i, o := range inst {
+		if i > 0 {
+			b.WriteString("; ")
+		}
+		b.WriteString(o.Name)
+		if o.Err != nil {
+			b.WriteString(": ")
+			b.WriteString(o.Err.Error())
+		}
+	}
+	return eh.Errorf("%w\n(the statement was sent without %d client-side rewrite(s) that failed, which may be the cause: %s)", err, len(inst), b.String())
 }
 
 // summaryFrom lifts the engine's counters into play's display shape. The two

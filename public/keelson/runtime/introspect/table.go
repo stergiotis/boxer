@@ -85,6 +85,17 @@ func (t *Table) StringList(name string, get func(row int) []string) *Table {
 		})
 }
 
+// Uint64List declares an Array(UInt64) column with non-nullable elements
+// filled by get.
+func (t *Table) Uint64List(name string, get func(row int) []uint64) *Table {
+	return t.add(arrow.Field{Name: name, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		func(b array.Builder, i int) {
+			lb := b.(*array.ListBuilder)
+			lb.Append(true)
+			lb.ValueBuilder().(*array.Uint64Builder).AppendValues(get(i), nil)
+		})
+}
+
 // Schema returns the full, unprojected Arrow schema in declaration
 // order.
 func (t *Table) Schema() *arrow.Schema {

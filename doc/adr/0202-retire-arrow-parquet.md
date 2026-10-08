@@ -119,7 +119,7 @@ discover it.
   `public/app/commands/protogen`, not reached through parquet, so only the gRPC
   half of that tail leaves.
 - Background work that counted this module graph keeps its numbers as written.
-  [ADR-0173](./0173-code-volume-self-inspection.md) (proposed) uses
+  [ADR-0173](./0173-code-volume-self-inspection.md) uses
   `andybalholm/brotli` as its worked example of third-party lines that are data
   rather than logic; that row will be absent from the next code-volume run.
 

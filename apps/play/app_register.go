@@ -23,7 +23,6 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/help"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
-	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/basemap"
@@ -89,12 +88,6 @@ var (
 	AppWrites = env.NewString(env.Spec{
 		Name:        "BOXER_PLAY_APP_WRITES",
 		Description: "\"off\" stops play writing its own tables — the Series verdicts in boxer.tslabels; unset or anything else lets it (ADR-0270 §SD7). BOXER_PLAY_ALLOW_WRITES does not govern them",
-		Category:    env.CategoryE("boxer-play"),
-	})
-
-	ExperimentsSeed = env.NewString(env.Spec{
-		Name:        "BOXER_PLAY_EXPERIMENTS",
-		Description: "seed the Experiments pane with one vizeval candidate as JSON, {\"source\":\"fixture|result\",\"sink\":…,\"options\":{…},\"box\":[w,h]} (ADR-0266); box, optional, fixes the artifact's size in points whatever room the pane has; a seed that does not resolve against the sink catalogue fails the mount",
 		Category:    env.CategoryE("boxer-play"),
 	})
 
@@ -193,8 +186,13 @@ type PlayLauncher struct {
 	// bind_dataset on a window whose config declared none.
 	follower      *adhocdata.Follower
 	launchAliases []string
-	bus           app.BusI
-	log           zerolog.Logger
+	// bundle is the ad-hoc bundle the window follows (ADR-0288
+	// §SD4), from its launch config or open_bundle; nil when none.
+	bundle *bundleState
+	// publish is the window's last publish_result (play_publish_result.go).
+	publish publishState
+	bus     app.BusI
+	log     zerolog.Logger
 	// Rules is the gloss rule repository every window this launcher opens is
 	// built over (ADR-0186); nil takes DefaultRepository. The factory
 	// registered in init leaves it nil, so a deployment that links play
@@ -287,6 +285,18 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 				Reason:    "and follows their publish and retract events",
 			},
 			{
+				Pattern:   adhocdata.SubjectBundleResolve,
+				Direction: app.CapDirectionPub,
+				Reason:    "a window opens an ad-hoc bundle: its document and the datasets it reads (ADR-0288 §SD4)",
+			},
+			{
+				Pattern:   adhocdata.SubjectBundleEventAll,
+				Direction: app.CapDirectionSub,
+				Reason:    "and follows the bundle's republish and retract",
+			},
+			// list_bundles reads the bundle catalog (ADR-0288 §SD4).
+			keelsonquery.ClientCaps(adhocdata.BundleCatalogTableName)[0],
+			{
 				Pattern:   regexsummary.ChLocalCapPattern,
 				Direction: app.CapDirectionPub,
 				Reason:    "gloss/regexp's block face embeds the regex explorer, whose match, list and replace tabs run on clickhouse-local (ADR-0186 Update 2026-09-03)",
@@ -296,13 +306,6 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 				Direction: app.CapDirectionPub,
 				Reason:    "Copy buttons: the Definition pane's SQL fences and gloss/taggedid's block face (ADR-0026 Update 2026-05-30)",
 			},
-			// The Model tab's prompts (ADR-0254 §SD6): explain, fix this
-			// error, ask. Not sticky, with the purpose in the reason.
-			llm.ClientCaps("play: explain, fix or generate the editor's SQL through the host's model")[0],
-			// The introspection tables a model's tool calls may read while
-			// composing a query (ADR-0139 §SD8 under ADR-0254 §SD5): run here,
-			// under this grant, never by the service.
-			keelsonquery.ClientCaps(modelToolTables...)[0],
 			// The Map, Graph and Vector field panes' basemap tiles, fetched
 			// through the host's egress service (ADR-0262 §SD6).
 			basemap.ClientCaps("play: basemap tiles under the Map, Graph and Vector field panes")[0],
@@ -407,7 +410,7 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 	// toolbar switcher reflects the retarget with no further wiring. A
 	// request with no such endpoint up degrades to the env default with a
 	// warning — a degraded open, not a failed one, like the Tab tier.
-	if launch != nil && launch.Endpoint == launchcfg.EndpointIntrospection {
+	if bundleLaunchEndpoint(launch) {
 		if ep := introspect.LocalQueryEndpoint(); ep != "" {
 			cfg.URL = ep
 		} else {
@@ -438,14 +441,6 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 	if zones := TabZonesOverride.Get(); zones != "" {
 		if err = inner.Tabs().ApplyTabZones(zones); err != nil {
 			err = eh.Errorf("BOXER_PLAY_TAB_ZONES does not describe a layout: %w", err)
-			return
-		}
-	}
-	if seed := ExperimentsSeed.Get(); seed != "" {
-		// Refused rather than defaulted: a scripted capture of the wrong
-		// candidate would be scored under the right one's name.
-		if err = inner.experiments.applySeed(seed); err != nil {
-			err = eh.Errorf("BOXER_PLAY_EXPERIMENTS does not name a candidate: %w", err)
 			return
 		}
 	}
@@ -513,10 +508,21 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 	// and the follower picks the dataset up when it is published.
 	inst.bus, inst.log = ctx.Bus(), ctx.Log()
 	if launch != nil && len(launch.Datasets) > 0 {
-		inst.launchAliases = launch.Datasets
+		names := launchDatasetNames(launch)
+		inst.launchAliases = make([]string, 0, len(launch.Datasets))
+		for _, alias := range launch.Datasets {
+			inst.launchAliases = append(inst.launchAliases, names[alias])
+		}
 		follower, bindings := adhocdata.NewFollower(adhocdata.FollowerConfig{
-			Bus: ctx.Bus(), Log: ctx.Log(), Aliases: launch.Datasets,
+			Bus: ctx.Bus(), Log: ctx.Log(), Aliases: launch.Datasets, LocalNames: names,
 		})
+		for alias, local := range names {
+			if local != alias {
+				// A grant names the dataset by its alias, never by the
+				// name this window reads it under (ADR-0288 §SD3).
+				inner.client.setDatasetOrigin(local, alias, "")
+			}
+		}
 		for alias, handle := range bindings {
 			if bErr := inner.BindDataset(alias, handle); bErr != nil {
 				logger := ctx.Log()
@@ -525,7 +531,11 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 		}
 		inst.follower = follower
 	}
+	inner.publish.last = inst.lastPublish
 	inst.inner = inner
+	if launch != nil && launch.Bundle != "" {
+		inst.openBundle(launch.Bundle, nil)
+	}
 	return
 }
 
@@ -534,6 +544,7 @@ func (inst *PlayLauncher) Frame(ctx app.FrameContextI) (err error) {
 		err = eh.Errorf("playlauncher: Frame called before Mount")
 		return
 	}
+	inst.syncBundle()
 	if inst.follower != nil {
 		before := inst.boundLaunchAliases()
 		bound, pendingChanged := inst.follower.Sync(inst.inner)
@@ -558,6 +569,19 @@ func (inst *PlayLauncher) Frame(ctx app.FrameContextI) (err error) {
 	err = inst.inner.Frame(ctx)
 	inst.inner.gestureCtx = nil
 	inst.inner.settleAgentMark()
+	return
+}
+
+// launchDatasetNames maps each of the launch's dataset aliases to the name
+// the window binds it under: its DatasetNames entry, or itself.
+func launchDatasetNames(launch *launchcfg.PlayLaunch) (names map[string]string) {
+	names = make(map[string]string, len(launch.Datasets))
+	for i, alias := range launch.Datasets {
+		names[alias] = alias
+		if i < len(launch.DatasetNames) && launch.DatasetNames[i] != "" {
+			names[alias] = launch.DatasetNames[i]
+		}
+	}
 	return
 }
 
@@ -603,6 +627,7 @@ func (inst *PlayLauncher) Unmount(ctx app.MountContextI) (err error) {
 		inst.follower.Close()
 		inst.follower = nil
 	}
+	inst.closeBundle()
 	if inst.inner != nil {
 		// Tear down the async machinery: cancel in-flight queries and the
 		// projector, release held results, close every lane.

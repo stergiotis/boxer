@@ -414,7 +414,7 @@ Two restrictions are the decision here:
 
 ### 2026-09-28 — the pane says what its picture means
 
-A reader of shadow-boxer's windvane app, two days of ICON-EU wind on this
+A reader of a downstream wind app, two days of ICON-EU wind on this
 pane, could not tell which of a trail's colour, length and number was the
 data. Nothing on the pane said: the hover line read the field under the
 pointer, and the idle line said the animation showed direction and relative

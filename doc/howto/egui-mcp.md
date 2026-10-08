@@ -58,9 +58,10 @@ EGUI_INSPECTION=1 ./hmi.sh          # binds 127.0.0.1:5719
 On startup you should see `egui_inspection: listening on 127.0.0.1:5719` in the
 client's stderr. If instead you see *"Inspection env var set but app was compiled
 without eframe/inspection feature"*, the client binary was built without the
-feature — which for the desktop build only happens if you disabled defaults
-(`--no-default-features`) or built a headless target; rebuild with defaults
-(a plain `./build_rust.sh` or `cargo build --release` includes it).
+feature — the production build (`build_rust_dist.sh`) leaves it out, as do
+`--no-default-features` and every headless target. `hmi.sh` builds and runs the
+development host when `EGUI_INSPECTION` is set; elsewhere, rebuild with
+`./build_rust.sh` (or `cargo build --release`, which keeps the defaults).
 
 The Go launcher passes its environment through to the client process, so any
 launch path (`hmi.sh`, `app imzero2 demo --clientBinary …`) that inherits

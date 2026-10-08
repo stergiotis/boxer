@@ -566,6 +566,7 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 			Bus:      rt.Bus,
 			Registry: rt.Introspect,
 			Log:      logger,
+			Trail:    rt.Trail,
 		})
 		if adhocErr != nil {
 			logger.Warn().Err(adhocErr).Msg("adhocdata: service start failed; adhoc.* will be unbound")
@@ -831,6 +832,11 @@ func (rt *Runtime) bootAgent() {
 	}
 	if rt.LLM != nil {
 		rt.LLM.SetDelegation(svc)
+	}
+	// The dataset service records an agent-caused bundle operation under
+	// the call context the dispatcher attests (ADR-0288 §SD5).
+	if rt.Adhoc != nil {
+		rt.Adhoc.SetDispatcher(svc)
 	}
 	if rt.Host != nil {
 		// The person's side: the badge in each window a task works in and

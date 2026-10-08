@@ -4,6 +4,8 @@ pub mod appconfig;
 pub mod apphost;
 #[cfg(feature = "browser")]
 pub mod browser;
+#[cfg(feature = "capture_raster")]
+pub mod captureraster;
 pub mod clock;
 pub mod code_view;
 #[cfg(feature = "headless")]
@@ -41,8 +43,6 @@ pub mod nutreader;
 pub mod scrolling_texture;
 #[cfg(feature = "headless_soft")]
 pub mod softraster;
-#[cfg(feature = "capture_raster")]
-pub mod captureraster;
 pub mod svgexport;
 pub mod text_edit_highlight;
 pub mod time_range_picker;

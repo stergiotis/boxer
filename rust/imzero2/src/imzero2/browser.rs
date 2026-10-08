@@ -49,6 +49,13 @@ pub const FONT_SLOTS: [&str; 4] = ["main", "mono", "phosphor", "fallback"];
 /// One optional TTF/OTF per slot of [`FONT_SLOTS`].
 pub type FontBytes = [Option<Vec<u8>>; 4];
 
+/// Fixes the colour theme from an `IMZERO2_THEME` value before the host is
+/// created; a wasm32 module has no environment for the style overlay to read
+/// it from (ADR-0258). False when the theme was already fixed.
+pub fn preset_theme(name: &str) -> bool {
+    imzero2_egui::style::tokens::theme::preset(imzero2_egui::style::tokens::theme::parse(name))
+}
+
 /// The interpreter's reader: whole messages the host admitted, read to a
 /// boundary. Empty, it reports `WouldBlock`, which the interpreter maps to
 /// "nothing more to interpret now".
@@ -390,6 +397,14 @@ impl Host {
         let fffi = &mut self.fffi;
         let mut err = None;
         let out = self.ctx.run_ui(raw_input, |ui| {
+            // The page's painter clears to black; the native host clears to
+            // the theme's panel fill (`App::clear_color`), which a light
+            // theme needs under everything an app draws.
+            ui.ctx().layer_painter(egui::LayerId::background()).rect_filled(
+                ui.max_rect(),
+                0.0,
+                ui.visuals().panel_fill,
+            );
             if let Err(e) = fffi.interpret_commands_outer(ui.ctx()) {
                 err = Some(format!("frame: {e}"));
             }

@@ -168,7 +168,7 @@ horizon and no GC.
 
 **Architecture for actual erasure.** Designed in
 [ADR-0025](../../../../doc/adr/0025-pushout-forget-architecture.md)
-(proposed): **Architecture A** (vault-by-design, per-occurrence nonce
+(accepted; counsel sign-off gates production): **Architecture A** (vault-by-design, per-occurrence nonce
 commitments — ADR-0025 SD6) is the selected erasure architecture for a
 greenfield, multi-actor deployment. It is a design, not shipped code:
 no vault, nonce, commitment or Forget code exists in the tree. The one

@@ -1,12 +1,18 @@
 ---
 type: adr
-status: proposed
+status: withdrawn
 date: 2026-09-25
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+withdrawn-date: 2026-10-07
 ---
 
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
+> **Status: withdrawn (2026-10-07).** Retracted before acceptance. The
+> renderings it scored — the Experiments pane's sinks — are removed by
+> [ADR-0289](./0289-leeway-rows-for-readers-canonical-forms-a-read-model-and-kinds-in-projection.md),
+> and the harness with them. The lens it helped shape moved into
+> the Projection panel; the record of its judged rounds is the lens
+> exploration's background document. The idea worth keeping — scenario
+> questions with SQL-computed answers, posed to a reader given only the
+> rendering, beside a blurred control — is not in the tree.
 
 # ADR-0266: vizeval — scored renderings of leeway batches, for searching the encoding space
 
@@ -23,7 +29,7 @@ compared across candidates and builds.
 Most of the parts exist and are not connected:
 
 - **A venue that varies the encoding and holds the data fixed.** play's
-  Experiments pane ([play_experiments_tab.go](../../apps/play/play_experiments_tab.go))
+  Experiments pane (`play_experiments_tab.go`, removed with the pane)
   drives one leeway batch through a chosen `streamreadaccess.SinkI` —
   card table, topology treemap, card-JSON, box-drawn tables, sparks — from
   either a built-in fixture or the active query's result. Its sinks'
@@ -554,10 +560,24 @@ of their declared spaces.
 
 ## Status
 
-Proposed — awaiting review by the code owner.
+Withdrawn (2026-10-07) — see the banner. Built and used for one campaign of
+five judged rounds over the lens (2026-09-26); the harness, its scenarios, its
+scorecard store and the sinks it compared are removed. Its vocabulary ordinals
+(122–149, 243) stay unused.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
+
+## Updates
+
+### 2026-10-07 — Withdrawn with the Experiments pane
+
+The 2026-10-07 rendering of every sink over the six scenarios and the
+mixed-kinds batch found the text sinks and the topology treemap showing one
+or two entities per screen or the shape alone, the chart, graph and
+hierarchy sinks good only on batches shaped for them, and the lens's
+archetype form the one reading of a mixed batch. ADR-0289 removes the pane,
+its sinks and this harness, and moves the lens into the Projection panel.
 
 ## References
 

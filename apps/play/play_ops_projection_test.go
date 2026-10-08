@@ -3,11 +3,13 @@ package play
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opjson"
+	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
 )
 
 // projectionSnapFixture is a finished run over two clusters, its layout
@@ -144,4 +146,21 @@ func TestProjectionArgumentsTakeNumbers(t *testing.T) {
 		_, err := opjson.Decode([]byte(args), spec.Args)
 		require.NoError(t, err, op)
 	}
+}
+
+// compute_projection counts the rows of the result the pane is fed, not the
+// main result's: with the pane bound to a node that holds no result, a main
+// result of three rows does not let the command through to a draw that
+// would drop it.
+func TestComputeProjectionCountsTheRowsThePaneIsFed(t *testing.T) {
+	l, _ := opsLauncher(t)
+	p := l.inner
+	rec := int64Rec("n", 1, 2, 3)
+	p.graph.mainLane.finish("SELECT n", nil, time.Now(), rec, rec.Schema(), 3, Summary{}, nil, runstream.Terminal{})
+	require.EqualValues(t, 3, p.paneFedRows(projectionPaneId), "unbound: the result the panels draw")
+
+	p.resolvedNodes = map[string]NodeID{projectionPaneId: "edges"}
+	require.Zero(t, p.paneFedRows(projectionPaneId))
+	err := p.computeProjection(ComputeProjectionArgs{})
+	require.ErrorContains(t, err, "(edges) has 0")
 }

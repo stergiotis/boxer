@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-25
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-07
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0261: One render goroutine for every app — stated, checked and measured
 
@@ -144,7 +142,7 @@ part of the app contract:
 
 ## Status
 
-Proposed 2026-09-25. SD1–SD4 were built the same day. The app center's page
+Accepted 2026-10-07. SD1–SD4 were built the same day. The app center's page
 drew its "Frame time" section headless, with the check switched on and no
 panic. The scene runner's SIGTERM ended the host through SD4's normal path.
 The owner's answers:

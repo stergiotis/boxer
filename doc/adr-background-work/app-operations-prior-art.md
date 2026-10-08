@@ -198,7 +198,7 @@ are session-scoped.
 - **Model service and chat.** The model service is request/reply; the
   streaming reply channel of [ADR-0143](../adr/0143-bus-streaming-reply-channel.md)
   was accepted and not built. The chat app
-  ([ADR-0265](../adr/0265-chat-app-over-retained-model-calls.md), proposed)
+  ([ADR-0265](../adr/0265-chat-app-over-retained-model-calls.md), then proposed)
   has no tools.
 - **Capture.** The host owns windows, so capture is uniform:
   `RequestScreenshotRect` for PNG and `ExportSvgWindow` for SVG, both completing

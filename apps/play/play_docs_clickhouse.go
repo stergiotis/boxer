@@ -15,6 +15,8 @@ package play
 // render thread and memoises.
 
 import (
+	"context"
+	"slices"
 	"strings"
 	"time"
 
@@ -22,9 +24,14 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/chrows"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/runid"
 )
 
-var _ DocsSourceI = (*ClickHouseDocsSource)(nil)
+var (
+	_ DocsSourceI    = (*ClickHouseDocsSource)(nil)
+	_ DocsLookupNowI = (*ClickHouseDocsSource)(nil)
+)
 
 const (
 	// docsProbeTimeout bounds one lookup. The table is a few thousand rows
@@ -111,7 +118,8 @@ type ClickHouseDocsSource struct {
 	// site prefix.
 	SiteBase string
 
-	lane *nodeLane
+	lane   *nodeLane
+	client *Client
 }
 
 // NewClickHouseDocsSource builds the default Docs source: ClickHouse's own
@@ -130,6 +138,7 @@ func NewClickHouseDocsSource(client *Client) *ClickHouseDocsSource {
 		Query:    defaultDocsQuery,
 		SiteBase: defaultDocsSiteBase,
 		lane:     newNodeLane(clientExecutor{client: client, opts: opts}, memory.NewGoAllocator(), docsProbeTimeout),
+		client:   client,
 	}
 }
 
@@ -159,6 +168,38 @@ func (inst *ClickHouseDocsSource) Lookup(name string) (entries []DocsEntry, read
 		return nil, true, view.err
 	}
 	return decodeDocRows(view.rec), true, nil
+}
+
+// LookupNow runs Query for name at once, on its own request rather than the
+// pane's lane, for lookup_docs. An agent's lookup is work the agent causes,
+// so it needs the endpoint among the grant's destinations, as the schema
+// reads do, and the request carries the agent's context; the person's goes
+// as the pane's does, as play's own statement (ADR-0270, update of
+// 2026-10-05).
+func (inst *ClickHouseDocsSource) LookupNow(ctx context.Context, name string, obo *app.OnBehalfOf) (entries []DocsEntry, err error) {
+	if inst.client == nil {
+		return nil, app.RefuseOperation("the window has no endpoint")
+	}
+	if obo != nil {
+		if dest := endpointDestination(inst.client); !slices.Contains(obo.Destinations, dest) {
+			return nil, app.RefuseForDestinations("the grant does not list "+dest+", whose documentation this reads", dest)
+		}
+	}
+	opts := &ExecOptions{QueryID: runid.Mint("play", "docs-op"), Label: "docs-op", Agent: obo, OwnStatement: obo == nil}
+	if _, has := ctx.Deadline(); !has {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, docsProbeTimeout)
+		defer cancel()
+	}
+	rec, _, _, _, err := clientExecutor{client: inst.client, opts: opts}.executeLabelled(ctx,
+		compiledNode{SQL: inst.Query, Params: map[string]string{"n": name}}, memory.NewGoAllocator(), nil)
+	if err != nil {
+		return nil, err
+	}
+	if rec != nil {
+		defer rec.Release()
+	}
+	return decodeDocRows(rec), nil
 }
 
 // EmptyHint names this source so a reader knows what a blank pane is waiting

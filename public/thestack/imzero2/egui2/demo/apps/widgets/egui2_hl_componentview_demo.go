@@ -20,7 +20,7 @@ import (
 //     own widget (identity→toned pill badge, battery→radial gauge, tasked→tag
 //     chips); registered-but-absent components are dimmed so the archetype is
 //     legible.
-//   - the generic leewaywidgets.Table2CardEmitter over the same row, every
+//   - the generic leewaywidgets.RecordCard over the same row, every
 //     attribute unfiltered — including the delivery-window (timeRange) section
 //     that no typed renderer claims. The typed view is the specific complement;
 //     the generic card is the fallback that always works.
@@ -34,7 +34,7 @@ var componentViewReg = componentview.DefaultRegistry()
 type componentViewDemoState struct {
 	data     *cvDroneData
 	cvDriver *streamreadaccess.Driver
-	emitter  *leewaywidgets.Table2CardEmitter
+	card     *leewaywidgets.RecordCard
 	comps    [][]componentview.Component
 	pager    *pager.Pager
 	ready    bool
@@ -81,7 +81,7 @@ func newComponentViewState(ids *c.WidgetIdStack) (st *componentViewDemoState) {
 		return
 	}
 	st.cvDriver = driver
-	st.emitter = leewaywidgets.NewTable2CardEmitter(ids, "card", leewaywidgets.ColorPaletteViridis, nil)
+	st.card = leewaywidgets.NewRecordCard(ids, "card", leewaywidgets.ColorPaletteViridis)
 	// Page size 1: each page is exactly one drone, so the pager selects the
 	// single record whose report is shown.
 	st.pager = pager.New(c.NewWidgetIdStack(), "pager", pager.Options{PageSize: 1, Unit: "drones", HideSizeCombo: true})
@@ -102,7 +102,7 @@ func init() {
 			"complement, one record at a time. A pager (page size 1) selects the " +
 			"active drone; the typed report (identity→badge, battery→gauge, " +
 			"tasked→chips; absent components dimmed) sits above the generic " +
-			"Table2CardEmitter showing every attribute of the same row — including " +
+			"record card showing every attribute of the same row — including " +
 			"the delivery-window section no typed renderer claims.",
 		Init: func(ids *c.WidgetIdStack) (state any) {
 			return newComponentViewState(ids)
@@ -138,12 +138,15 @@ func renderComponentViewDemo(ids *c.WidgetIdStack, st *componentViewDemoState) {
 	})
 
 	c.Separator().Horizontal().Send()
-	for rt := range c.RichTextLabel("generic · Table2CardEmitter — every attribute") {
+	for rt := range c.RichTextLabel("generic · record card — every attribute") {
 		rt.Weak().Small()
 	}
 	slice := st.data.rec.NewSlice(int64(active), int64(active)+1)
-	if err := st.cvDriver.DriveRecordBatch(st.emitter, slice); err != nil {
+	if err := st.card.PrepareFrom(func(sink streamreadaccess.SinkI) error {
+		return st.cvDriver.DriveRecordBatch(sink, slice)
+	}, nil); err != nil {
 		c.Label("card render error: " + err.Error()).Wrap().Send()
 	}
 	slice.Release()
+	st.card.Render()
 }

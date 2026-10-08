@@ -111,6 +111,19 @@ type TabSpec struct {
 	// dispatcher stamps (`selection_node`, `selection_id`) are implied by
 	// declaring `selection` — see declaredWrites.
 	Writes []SignalID
+	// Frameless marks a panel that reads its named CTEs off the split and
+	// ignores the frame it is handed — Network, Graphview, Sankey, Vector
+	// field. A binding would not reach what it draws, so bind_pane refuses
+	// one and the Graph pane offers none (ADR-0270, update of 2026-10-05).
+	Frameless bool
+	// Status is the pane's own reading of what it last drew: its status
+	// line, and the reason it drew nothing when the data — not the schema —
+	// broke its contract (a repeated heatmap cell, no country column that
+	// resolves). It is called on the render goroutine between frames, so it
+	// reads the driver's state as the last draw left it. Nil for a pane
+	// without one; list_panes then reports no status (ADR-0270, update of
+	// 2026-10-05).
+	Status func() (line string, reject string)
 }
 
 // TabRegistry is a PlayApp instance's tab set (D4): mutate between
@@ -335,11 +348,6 @@ var builtinTabDefs = []builtinTabDef{
 	// caller that ever does owes it the ActivateTab-then-queue pattern the
 	// lazypane docs describe, because a skipped body runs no delivery.
 	{id: "snippets", dockID: dockTabSnippets, title: "Snippets", zone: TabZoneTools, lazy: true},
-	// Model is the prompt book over the buffer (ADR-0254 §SD6): explain,
-	// fix this error, ask — an editor tool like Snippets, delivering into
-	// the editor through the same ops. Lazy: a session that never opens it
-	// never asks the host for a model.
-	{id: "model", dockID: dockTabModel, title: "Model", zone: TabZoneTools, lazy: true},
 	// Vocabulary is Snippets' sibling: same zone, same filter language, same
 	// Insert seam — a snippet is a statement you want, a vocabulary entry is a
 	// name you can use. Lazy, so a session that never opens it never runs the
@@ -370,11 +378,6 @@ var builtinTabDefs = []builtinTabDef{
 	// resolution and the catalog, and a session that never opens it needs
 	// neither on screen.
 	{id: "glosses", dockID: dockTabGlosses, title: "Glosses", zone: TabZoneTools, lazy: true},
-	// Experiments drives one batch through a chosen leeway sink. It is a tool
-	// pane, not a result view: its default source is a built-in fixture, so it
-	// says something before a query has run and keeps saying it when the
-	// result is not leeway-shaped. Lazy — a hidden pane must not drive a sink.
-	{id: "experiments", dockID: dockTabExperiments, title: "Experiments", zone: TabZoneTools, lazy: true},
 
 	{id: "table", dockID: dockTabTable, title: "Table", writes: []SignalID{signalSelection}},
 	{id: "projection", dockID: dockTabProjection, title: "Projection", lazy: true,
@@ -492,9 +495,7 @@ var TabZoneNames = map[string]TabZoneE{
 
 // TabZonesOverride is the launch-time re-zoning knob. Its use is a scripted
 // capture that needs one pane large: "*=body" puts every tab in one leaf, the
-// whole central panel, and a BOXER_PLAY_FOCUS_* knob raises the pane to draw
-// (ADR-0266, proposed — the vizeval harness captures the Experiments pane
-// this way).
+// whole central panel, and a BOXER_PLAY_FOCUS_* knob raises the pane to draw.
 var TabZonesOverride = env.NewString(env.Spec{
 	Name:        "BOXER_PLAY_TAB_ZONES",
 	Description: "re-zone tabs at launch, as comma-separated id=zone pairs (zones: body, editor, tools, side, bottom; id * names every tab; later pairs win), e.g. \"*=body\" for one full-panel leaf; a pair naming an unknown tab or zone fails the mount",
@@ -710,22 +711,14 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 			spec.Render = func(f *TabFrame) { inst.renderTimelineTab(f.Rec, f.Schema, f.Loading, f.Err) }
 		case "snippets":
 			spec.Render = func(f *TabFrame) { inst.renderSnippetsTab() }
-		case "model":
-			spec.Render = func(f *TabFrame) { inst.renderModelTab(f) }
-		case "experiments":
-			// Scrolled: the text sinks emit an unbounded run of lines, and the
-			// topology treemap floors its own height rather than shrinking to
-			// fit a short leaf.
-			spec.Render = func(f *TabFrame) {
-				scrollTab(func() { inst.renderExperimentsTab(f.Rec, f.Schema) })
-			}
 		case "map":
 			// The Map is a panel-authored node on its own lane (5c), not a
 			// PanelI: it renders the driver directly.
-			spec.Render = func(f *TabFrame) { inst.mapDriver.Render(f.Sig, inst.sigEmit.as(signalWriterMap)) }
+			spec.Render = func(f *TabFrame) { inst.mapDriver.Render(f.Sig, inst.sigEmit.as(inst.mapDriver.emitWriter())) }
 		case "vectorfield":
 			spec.Panel = vectorFieldPanel{driver: inst.vectorFieldDriver}
 			spec.Render = func(f *TabFrame) { inst.renderVectorFieldTab() }
+			spec.Frameless = true
 		case "world":
 			spec.Panel = worldPanel{driver: inst.worldDriver}
 			spec.Render = func(f *TabFrame) { inst.renderWorldTab(f.Rec, f.Schema, f.Loading, f.Err, f.Executed) }
@@ -745,6 +738,7 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 			// ScrollArea.
 			spec.Panel = layeredGraphPanel{driver: inst.networkDriver}
 			spec.Render = func(f *TabFrame) { scrollTab(inst.renderNetworkTab) }
+			spec.Frameless = true
 		case "graphview":
 			// Reads the same two named CTEs off the split as the Network tab,
 			// so the body ignores the frame. Scrolled for the Network tab's
@@ -753,6 +747,7 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 			// while the pointer is over its canvas (ADR-0140).
 			spec.Panel = graphviewPanel{driver: inst.graphviewDriver}
 			spec.Render = func(f *TabFrame) { scrollTab(inst.renderGraphviewTab) }
+			spec.Frameless = true
 		case "sankey":
 			// Reads its two named CTEs off the split, not the active result, so
 			// the body ignores the frame. Scrolled, like the Network tab: the
@@ -763,6 +758,7 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 			// zeroes the delta the ScrollArea would read (ADR-0140).
 			spec.Panel = sankeyPanel{driver: inst.sankeyDriver}
 			spec.Render = func(f *TabFrame) { scrollTab(inst.renderSankeyTab) }
+			spec.Frameless = true
 		case "dist":
 			// Scrolled like its neighbours, but it does NOT rely on the scroll
 			// to reach its own content: the plot box is sized from the pane's
@@ -866,6 +862,7 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 			spec.Panel = detailPanel{app: inst}
 			spec.Render = func(f *TabFrame) { inst.renderDetailTab(f.Rec, f.Schema, f.Executed, f.Result) }
 		}
+		attachPaneStatus(inst, &spec)
 		if err := reg.Add(spec); err != nil {
 			// The defs are a static table; a duplicate here is a
 			// programming error, not a runtime condition.

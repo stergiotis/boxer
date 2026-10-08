@@ -266,6 +266,9 @@ type treemapDriver struct {
 	// selected is the click-pinned LEAF label, published as selection_key. The
 	// drill position is the widget's and is deliberately not mirrored here.
 	selected string
+	// onSelect routes a leaf click through select_treemap_node (ADR-0270
+	// §SD6); nil pins directly.
+	onSelect func(SelectTreemapNodeArgs)
 
 	// pendingExecuted is stashed by renderTreemapTab before dispatch — the
 	// PanelI Render signature carries no result metadata (the World pane's
@@ -325,14 +328,7 @@ func (inst treemapPanel) Render(filled map[ChannelID]ChannelResult, emit SignalE
 // render builds the tree (cached on the result identity), projects it onto the
 // widget's pointer tree, draws it, and tracks the pinned leaf.
 func (inst *treemapDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, cl hierClaim, emit SignalEmitterI) {
-	if schema != inst.forSchema || !inst.pendingExecuted.Equal(inst.forExecuted) || inst.treeGen == 0 {
-		inst.tree, inst.stats = buildHierarchy(rec, cl)
-		inst.forSchema, inst.forExecuted = schema, inst.pendingExecuted
-		inst.treeGen++
-		inst.rebuildTree()
-		// A new tree invalidates a pin taken against the old one.
-		inst.selected = ""
-	}
+	inst.syncTree(rec, schema, cl, emit)
 	inst.renderControls()
 
 	if inst.tree.Len() == 0 || inst.root == nil {
@@ -381,13 +377,48 @@ func (inst *treemapDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, c
 	// never reach here. An empty key is the honest "nothing focused" value a
 	// query reading {selection_key:String} sees before anything is clicked.
 	if leaf := inst.events.ClickedLeaf; leaf != nil {
+		in := SelectTreemapNodeArgs{Label: leaf.Name}
 		if leaf.Name == inst.selected {
-			inst.selected = ""
-		} else {
-			inst.selected = leaf.Name
+			in = SelectTreemapNodeArgs{Clear: true}
 		}
+		inst.requestSelect(in, emit)
+	}
+}
+
+// requestSelect is a leaf click: through select_treemap_node when play's
+// launcher routes it, directly through the pane's emitter otherwise.
+func (inst *treemapDriver) requestSelect(in SelectTreemapNodeArgs, emit SignalEmitterI) {
+	if inst.onSelect != nil {
+		inst.onSelect(in)
+		return
+	}
+	label, err := inst.pinFor(in)
+	if err != nil {
+		return
+	}
+	inst.selected = label
+	if emit != nil {
+		emit.Emit(signalSelectionKey, label)
+	}
+}
+
+// syncTree rebuilds the tree when the result is new. A new tree invalidates a
+// pin taken against the old one, and the dropped pin is published as an empty
+// selection_key: the key is the pin's only reader outside the pane, and a
+// Live query filtering on it would otherwise keep the label the pane no
+// longer shows.
+func (inst *treemapDriver) syncTree(rec arrow.RecordBatch, schema *arrow.Schema, cl hierClaim, emit SignalEmitterI) {
+	if schema == inst.forSchema && inst.pendingExecuted.Equal(inst.forExecuted) && inst.treeGen != 0 {
+		return
+	}
+	inst.tree, inst.stats = buildHierarchy(rec, cl)
+	inst.forSchema, inst.forExecuted = schema, inst.pendingExecuted
+	inst.treeGen++
+	inst.rebuildTree()
+	if inst.selected != "" {
+		inst.selected = ""
 		if emit != nil {
-			emit.Emit(signalSelectionKey, inst.selected)
+			emit.Emit(signalSelectionKey, "")
 		}
 	}
 }

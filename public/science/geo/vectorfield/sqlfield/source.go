@@ -107,7 +107,11 @@ func NewSourceE(ctx context.Context, queryer QueryerI, rel Relation, opts Option
 		err = eh.Errorf("a source needs a queryer")
 		return
 	}
-	if rel.From == "" {
+	switch {
+	case rel.Family != "" && !familyPattern.MatchString(rel.Family):
+		err = eb.Build().Str("family", rel.Family).Errorf("a field family's name must be an identifier")
+		return
+	case rel.Family == "" && rel.From == "":
 		err = eh.Errorf("a relation needs something to read from")
 		return
 	}

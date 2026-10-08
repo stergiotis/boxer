@@ -77,10 +77,10 @@ func TestIdentity_RowItemsAreTheDigestedBytes(t *testing.T) {
 	require.Equal(t, v.wire, cwruntime.Fingerprint(wireItem))
 	require.Equal(t, v.wireLen, len(wireItem))
 
-	text, err := diag.String(canonItems, diag.Options{Sequence: true, Annotate: annotateCanonform})
+	text, err := diag.String(canonItems, comp.notes.canonformOptions())
 	require.NoError(t, err)
-	require.Contains(t, text, "/ leaf digests /", "the entity item's key 1 is labelled")
-	text, err = diag.String(wireItem, diag.Options{TagComments: true, Annotate: annotateCanonwire})
+	require.Contains(t, text, "/ leaf digests, sorted bytewise", "the entity item's key 1 is labelled")
+	text, err = diag.String(wireItem, comp.notes.canonwireOptions())
 	require.NoError(t, err)
 	require.Contains(t, text, "/ version /")
 	require.Contains(t, text, "/ tagged /")

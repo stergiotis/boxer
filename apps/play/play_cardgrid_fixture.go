@@ -362,7 +362,7 @@ type cardgridFixtureState struct {
 }
 
 func newCardgridFixtureState() *cardgridFixtureState {
-	return &cardgridFixtureState{publisher: adhocdata.NewPublisher(cardgridFixtureAlias, false)}
+	return &cardgridFixtureState{publisher: adhocdata.NewWindowPublisher(cardgridFixtureAlias)}
 }
 
 func (inst *cardgridFixtureState) status() (publishing bool, summary string, gen uint64, err error) {
@@ -433,6 +433,8 @@ func (inst *PlayApp) syncCardgridFixture() {
 		if err := inst.BindDataset(cardgridFixtureAlias, handle); err != nil {
 			return
 		}
+		// The window's own alias stands behind the name (ADR-0288 §SD3).
+		inst.client.setDatasetOrigin(cardgridFixtureAlias, inst.cardFixtures.publisher.Alias(), "")
 	}
 	// A buffer that already queries the fixture — restored from a previous
 	// session, or published a second time — needs the binding, not a second

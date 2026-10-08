@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-04
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-07
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0281: Window captures — pixels beside SVG, replayed from the granted windows' stream, through one policy enforcement point
 
@@ -385,26 +383,28 @@ their flag.
 
 ## Status
 
-Proposed — awaiting review by the code owner.
+Accepted 2026-10-07.
 
 Milestones:
 
 - **M1 — Replay in the interpreter**: the capture context, isolation, the
-  effect marks. Built 2026-10-04, uncommitted.
+  effect marks. Built 2026-10-04.
 - **M2 — Spans**: recording in the FFFI2 runtime, span marks in the window
   host, the replay opcode and its fetch; the wire's `format` field, so an
-  agent can ask for `png` before the PEP exists. Built 2026-10-04,
-  uncommitted.
+  agent can ask for `png` before the PEP exists. Built 2026-10-04.
 - **M3 — The PEP, PDP and `scope` handler**; SVG moved behind it (SD1–SD4).
-  Built 2026-10-04, uncommitted: `runtime/capture`, the window host as its
+  Built 2026-10-04: `runtime/capture`, the window host as its
   source, the agent's capture, status and read through it. Open from SD1:
   the host does not yet refuse the `RequestScreenshot*` opcodes without a
   development flag.
-- **M4 — Records and labels** (SD6), and the wire fields. Built 2026-10-04,
-  uncommitted: the `agentCapture` trail kind, the label over the windows
+- **M4 — Records and labels** (SD6), and the wire fields. Built 2026-10-04: the `agentCapture` trail kind, the label over the windows
   drawn, `capture`'s `instances` and `crop`.
-- **M5 — The mesh-only and desktop hosts.** Built 2026-10-04, uncommitted,
+- **M5 — The mesh-only and desktop hosts.** Built 2026-10-04,
   with the sealed artifacts and SVG from the replay.
+
+The one open item is M3's: an app can still call `RequestScreenshot*` and
+write pixels outside the PEP. Play's legacy capture knobs and the gallery's
+test driver do; an agent cannot, since its captures go through the PEP.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

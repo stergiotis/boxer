@@ -24,12 +24,12 @@ func tabsTestApp() *PlayApp {
 func TestDefaultTabsEnumeration(t *testing.T) {
 	reg := tabsTestApp().Tabs()
 	specs := reg.all()
-	require.Len(t, specs, 34)
+	require.Len(t, specs, 32)
 
 	wantDockID := map[string]uint64{
 		"editor": dockTabEditor, "history": dockTabHistory, "preview": dockTabPreview,
 		"table": dockTabTable, "projection": dockTabProjection, "timeline": dockTabTimeline,
-		"snippets": dockTabSnippets, "model": dockTabModel, "map": dockTabMap, "vectorfield": dockTabVectorField, "world": dockTabWorld,
+		"snippets": dockTabSnippets, "map": dockTabMap, "vectorfield": dockTabVectorField, "world": dockTabWorld,
 		"kanban": dockTabKanban, "chat": dockTabChat, "cards": dockTabCards, "network": dockTabNetwork, "graphview": dockTabGraphview,
 		"sankey": dockTabSankey,
 		"dist":   dockTabDist, "icicle": dockTabIcicle, "series": dockTabSeries,
@@ -37,8 +37,8 @@ func TestDefaultTabsEnumeration(t *testing.T) {
 		"graph":  dockTabGraph,
 		"schema": dockTabSchema, "diagnostics": dockTabDiagnostics, "passes": dockTabPasses,
 		"docs": dockTabDocs, "flow": dockTabFlow, "detail": dockTabDetail,
-		"experiments": dockTabExperiments, "vocabulary": dockTabVocabulary,
-		"glosses": dockTabGlosses, "completion": dockTabCompletion,
+		"vocabulary": dockTabVocabulary,
+		"glosses":    dockTabGlosses, "completion": dockTabCompletion,
 	}
 	seen := make(map[string]TabSpec, len(specs))
 	for _, s := range specs {
@@ -57,7 +57,7 @@ func TestDefaultTabsEnumeration(t *testing.T) {
 	// (ADR-0097 Update 2026-08-01). Graph is deliberately NOT among them —
 	// it qualifies by input and stays in the body for room — and Schema is
 	// not one at all, its input being the result's own schema.
-	for _, id := range []string{"docs", "preview", "flow", "passes", "diagnostics", "snippets", "model"} {
+	for _, id := range []string{"docs", "preview", "flow", "passes", "diagnostics", "snippets"} {
 		assert.Equal(t, TabZoneTools, seen[id].Zone, "tab %q is a tool pane", id)
 		assert.Nil(t, seen[id].Panel, "a tool pane carries no PanelI (SD7)")
 	}
@@ -95,8 +95,7 @@ func TestDefaultTabsEnumeration(t *testing.T) {
 		dockTabSeries, dockTabTreemap, dockTabChart, dockTabFiles, dockTabGraph, dockTabSchema},
 		dockIDsOf(reg.byZone(TabZoneBody)))
 	assert.Equal(t, []uint64{dockTabDocs, dockTabPreview, dockTabFlow, dockTabPasses,
-		dockTabDiagnostics, dockTabSnippets, dockTabModel, dockTabVocabulary, dockTabCompletion, dockTabGlosses,
-		dockTabExperiments},
+		dockTabDiagnostics, dockTabSnippets, dockTabVocabulary, dockTabCompletion, dockTabGlosses},
 		dockIDsOf(reg.byZone(TabZoneTools)))
 }
 
@@ -113,18 +112,18 @@ func TestTabRegistryMutationAndFreeze(t *testing.T) {
 	require.Error(t, reg.Add(TabSpec{ID: "x", DockID: dockTabTable, Render: noop}), "duplicate DockID")
 
 	require.NoError(t, reg.Add(TabSpec{ID: "x", DockID: 64, Title: "X", Render: noop}))
-	require.Len(t, reg.all(), 35)
-	assert.Equal(t, TabZoneBody, reg.all()[34].Zone, "embedder tabs default to the body zone")
+	require.Len(t, reg.all(), 33)
+	assert.Equal(t, TabZoneBody, reg.all()[32].Zone, "embedder tabs default to the body zone")
 
 	// Replace keeps the position and re-validates against the others.
 	require.Error(t, reg.Replace("x", TabSpec{ID: "table", DockID: 64, Render: noop}),
 		"replacement must not collide with another tab")
 	require.NoError(t, reg.Replace("x", TabSpec{ID: "y", DockID: 65, Title: "Y", Render: noop}))
-	assert.Equal(t, "y", reg.all()[34].ID)
+	assert.Equal(t, "y", reg.all()[32].ID)
 	require.Error(t, reg.Replace("x", TabSpec{ID: "z", DockID: 66, Render: noop}), "x is gone")
 
 	require.NoError(t, reg.Remove("y"))
-	require.Len(t, reg.all(), 34)
+	require.Len(t, reg.all(), 32)
 	require.Error(t, reg.Remove("y"), "already removed")
 
 	reg.freeze()

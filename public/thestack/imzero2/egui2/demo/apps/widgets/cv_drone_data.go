@@ -102,8 +102,8 @@ func ensureCvDroneData() *cvDroneData {
 }
 
 // newCvCardDriver builds a streamreadaccess.Driver for the shared drone record,
-// mirroring play's CardDriver wiring. The Driver feeds a Table2CardEmitter the
-// same Begin*/End* stream the HTML/JSON card emitters consume.
+// mirroring play's CardDriver wiring. The Driver feeds the read model the
+// record card draws.
 func newCvCardDriver(d *cvDroneData) (driver *streamreadaccess.Driver, err error) {
 	tech := clickhouse.NewTechnologySpecificCodeGenerator()
 	ir := common.NewIntermediateTableRepresentation()

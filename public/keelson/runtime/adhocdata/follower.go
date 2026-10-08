@@ -75,6 +75,15 @@ type TargetI interface {
 	NotifyDatasetRevision(alias string, revision uint64)
 }
 
+// OriginTargetI is a target that also records where each bound dataset
+// comes from — the name it is bound under, its alias, its bundle and the
+// task that published its live revision — so its consumer's grant checks
+// judge it by those (ADR-0288 §SD3, §SD4). The follower tells it
+// on every bind and every revision.
+type OriginTargetI interface {
+	SetDatasetOrigin(local string, alias string, bundle string, publisherTask string)
+}
+
 // EventsModeE says how the follower uses the service's events. It exists
 // for fault injection — the headless lane shows the reconcile working
 // against a running host — and is not an operating knob.
@@ -112,6 +121,10 @@ type FollowerConfig struct {
 	// Aliases are the declared aliases to keep bound. Empty builds no
 	// follower.
 	Aliases []string
+	// LocalNames maps an alias to the name the consumer binds it under
+	// (ADR-0288 §SD3): the name its SQL reads in
+	// `keelson('…')`. An alias without an entry is bound under itself.
+	LocalNames map[string]string
 	// Reconcile overrides DefaultReconcileInterval; zero keeps it.
 	Reconcile time.Duration
 	// Poll overrides DefaultPollInterval; zero keeps it.
@@ -128,12 +141,12 @@ type resolverI interface {
 	// when nothing is live under it) with its revision, and whether
 	// boundHandle — when non-empty — is itself still live. err is a
 	// transport failure only.
-	resolveVerify(alias string, boundHandle string) (handle string, revision uint64, boundLive bool, err error)
+	resolveVerify(alias string, boundHandle string) (handle string, revision uint64, boundLive bool, origin DatasetOrigin, err error)
 }
 
 type busResolver struct{ bus app.BusI }
 
-func (r busResolver) resolveVerify(alias string, boundHandle string) (handle string, revision uint64, boundLive bool, err error) {
+func (r busResolver) resolveVerify(alias string, boundHandle string) (handle string, revision uint64, boundLive bool, origin DatasetOrigin, err error) {
 	res, live, rErr := ResolveVerifyRequest(r.bus, alias, boundHandle)
 	// "no live dataset under alias" is an answer, not a transport failure:
 	// the service replied, and boundLive is meaningful on that reply.
@@ -148,6 +161,7 @@ func (r busResolver) resolveVerify(alias string, boundHandle string) (handle str
 	handle = res.Handle
 	revision = res.Revision
 	boundLive = live
+	origin = res.Origin
 	return
 }
 
@@ -161,6 +175,7 @@ type verdict struct {
 	revision    uint64 // revision of that handle
 	askedHandle string // the bound handle the question was about; "" for a pending alias
 	askedLive   bool
+	origin      DatasetOrigin // of the newest live handle
 }
 
 // Follower keeps declared aliases bound to live datasets for the life of a
@@ -170,6 +185,11 @@ type Follower struct {
 	resolver resolverI
 	log      zerolog.Logger
 	interval time.Duration
+
+	// localMu guards local, which the target adapter reads while Sync
+	// may hold mu.
+	localMu sync.RWMutex
+	local   map[string]string // alias → local name; absent = the alias
 
 	mu       sync.Mutex
 	bound    map[string]string   // alias → handle currently bound
@@ -218,6 +238,7 @@ func NewFollower(cfg FollowerConfig) (f *Follower, bindings map[string]string) {
 	f = subscribedFollower(cfg)
 	bindings, unresolved := resolveAliases(cfg.Bus, cfg.Log, cfg.Aliases)
 	f.seed(bindings, unresolved)
+	bindings = f.localBindings(bindings)
 	return
 }
 
@@ -242,6 +263,7 @@ func NewDeferredFollower(cfg FollowerConfig) (f *Follower) {
 // dataset events; where it cannot, the tick polls instead.
 func subscribedFollower(cfg FollowerConfig) (f *Follower) {
 	f = newFollowerWith(busResolver{bus: cfg.Bus}, cfg.Log)
+	maps.Copy(f.local, cfg.LocalNames)
 	if cfg.Reconcile > 0 {
 		f.interval = cfg.Reconcile
 	}
@@ -276,6 +298,27 @@ func subscribedFollower(cfg FollowerConfig) (f *Follower) {
 // then on like a declared one. It reports false for an alias already
 // followed, bound or pending.
 func (f *Follower) Follow(alias string) (added bool) {
+	return f.FollowAs(alias, "")
+}
+
+// FollowAs is Follow binding the alias under local, the name the consumer's
+// SQL reads (ADR-0288 §SD3); an empty local binds it under the
+// alias. It reports false, and changes nothing, for an alias already
+// followed or a local name another alias is bound under.
+func (f *Follower) FollowAs(alias string, local string) (added bool) {
+	if local != "" && local != alias {
+		f.localMu.Lock()
+		for a, l := range f.local {
+			if l == local && a != alias {
+				f.localMu.Unlock()
+				return false
+			}
+		}
+		if _, taken := f.local[alias]; !taken {
+			f.local[alias] = local
+		}
+		f.localMu.Unlock()
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	_, isBound := f.bound[alias]
@@ -302,6 +345,7 @@ func newFollowerWith(resolver resolverI, logger zerolog.Logger) (f *Follower) {
 		pending:  make(map[string]struct{}),
 		why:      make(map[string]string),
 		dirty:    make(map[string]struct{}),
+		local:    make(map[string]string),
 
 		retracted: make(map[string]struct{}),
 	}
@@ -354,6 +398,12 @@ func (f *Follower) onEvent(ev Event) {
 // A verdict about a handle the alias no longer holds is stale and ignored,
 // and so is one that names a handle retracted since its round began.
 func (f *Follower) Sync(target TargetI) (bound bool, pendingChanged bool) {
+	f.localMu.RLock()
+	renamed := len(f.local) > 0
+	f.localMu.RUnlock()
+	if renamed {
+		target = localTarget{f: f, inner: target}
+	}
 	f.mu.Lock()
 	events := f.events
 	verdicts := f.verdicts
@@ -399,6 +449,7 @@ func (f *Follower) Sync(target TargetI) (bound bool, pendingChanged bool) {
 		switch {
 		case waiting && v.handle != "" && !gone:
 			if f.bindAlias(target, v.alias, v.handle, v.revision) {
+				f.recordOrigin(target, v.alias, v.origin)
 				bound = true
 			}
 		case isBound && v.askedHandle == held && !v.askedLive:
@@ -406,6 +457,7 @@ func (f *Follower) Sync(target TargetI) (bound bool, pendingChanged bool) {
 			f.unbindHandle(target, held)
 			if v.handle != "" && v.handle != held && !gone {
 				if f.bindAlias(target, v.alias, v.handle, v.revision) {
+					f.recordOrigin(target, v.alias, v.origin)
 					bound = true
 				}
 			}
@@ -417,6 +469,9 @@ func (f *Follower) Sync(target TargetI) (bound bool, pendingChanged bool) {
 			f.mu.Lock()
 			f.revision[v.alias] = v.revision
 			f.mu.Unlock()
+			// A republish may be another task's: its publisher is the
+			// live revision's.
+			f.recordOrigin(target, v.alias, v.origin)
 			if known != 0 {
 				target.NotifyDatasetRevision(v.alias, v.revision)
 			}
@@ -482,6 +537,19 @@ func (f *Follower) bindAlias(target TargetI, alias string, handle string, revisi
 	return
 }
 
+// recordOrigin tells a target that records origins where the dataset bound
+// under alias comes from, under the name the consumer binds it by.
+func (f *Follower) recordOrigin(target TargetI, alias string, origin DatasetOrigin) {
+	switch t := target.(type) {
+	case localTarget:
+		if o, ok := t.inner.(OriginTargetI); ok {
+			o.SetDatasetOrigin(f.LocalName(alias), alias, origin.Bundle, origin.PublisherTask)
+		}
+	case OriginTargetI:
+		t.SetDatasetOrigin(alias, alias, origin.Bundle, origin.PublisherTask)
+	}
+}
+
 // unbindHandle returns every alias bound to handle to pending, on the
 // caller's thread; false when nothing held it.
 func (f *Follower) unbindHandle(target TargetI, handle string) (changed bool) {
@@ -520,7 +588,7 @@ func (f *Follower) reconcile(pending []string, bound map[string]string) {
 	var out []verdict
 	why := make(map[string]string, len(pending))
 	for _, alias := range pending {
-		handle, rev, _, err := f.resolver.resolveVerify(alias, "")
+		handle, rev, _, origin, err := f.resolver.resolveVerify(alias, "")
 		if err != nil {
 			f.log.Debug().Err(err).Str("alias", alias).Msg("adhocdata: dataset alias still unresolved")
 			why[alias] = WaitUnanswered + ": " + err.Error()
@@ -530,16 +598,16 @@ func (f *Follower) reconcile(pending []string, bound map[string]string) {
 			why[alias] = WaitNoLive
 			continue
 		}
-		out = append(out, verdict{alias: alias, handle: handle, revision: rev})
+		out = append(out, verdict{alias: alias, handle: handle, revision: rev, origin: origin})
 	}
 	for _, alias := range slices.Sorted(maps.Keys(bound)) {
 		held := bound[alias]
-		handle, rev, live, err := f.resolver.resolveVerify(alias, held)
+		handle, rev, live, origin, err := f.resolver.resolveVerify(alias, held)
 		if err != nil {
 			f.log.Debug().Err(err).Str("alias", alias).Msg("adhocdata: dataset binding not verified this round")
 			continue
 		}
-		out = append(out, verdict{alias: alias, handle: handle, revision: rev, askedHandle: held, askedLive: live})
+		out = append(out, verdict{alias: alias, handle: handle, revision: rev, askedHandle: held, askedLive: live, origin: origin})
 	}
 	f.mu.Lock()
 	f.verdicts = append(f.verdicts, out...)
@@ -620,4 +688,43 @@ func resolveAliases(bus app.BusI, logger zerolog.Logger, aliases []string) (bind
 		bindings[alias] = res.Handle
 	}
 	return
+}
+
+// LocalName is the name alias is bound under in the consumer.
+func (f *Follower) LocalName(alias string) (local string) {
+	f.localMu.RLock()
+	local, ok := f.local[alias]
+	f.localMu.RUnlock()
+	if !ok {
+		local = alias
+	}
+	return
+}
+
+// localBindings re-keys alias → handle bindings by local name.
+func (f *Follower) localBindings(bindings map[string]string) (out map[string]string) {
+	out = make(map[string]string, len(bindings))
+	for alias, handle := range bindings {
+		out[f.LocalName(alias)] = handle
+	}
+	return
+}
+
+// localTarget is the consumer's target seen through the follower's local
+// names: the follower speaks aliases, the consumer binds local names.
+type localTarget struct {
+	f     *Follower
+	inner TargetI
+}
+
+func (inst localTarget) BindDataset(alias, handle string) error {
+	return inst.inner.BindDataset(inst.f.LocalName(alias), handle)
+}
+
+func (inst localTarget) UnbindDataset(alias string) error {
+	return inst.inner.UnbindDataset(inst.f.LocalName(alias))
+}
+
+func (inst localTarget) NotifyDatasetRevision(alias string, revision uint64) {
+	inst.inner.NotifyDatasetRevision(inst.f.LocalName(alias), revision)
 }

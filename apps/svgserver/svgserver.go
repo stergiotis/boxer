@@ -287,7 +287,7 @@ func main() {
 				},
 				&cli.StringFlag{
 					Name:  "clientBinary",
-					Value: "rust/imzero2/target/headless_svg/release/imzero2",
+					Value: "rust/imzero2/target/headless_svg/dist/imzero2",
 					Usage: "path to the headless_svg imzero2 client binary",
 				},
 				&cli.StringFlag{

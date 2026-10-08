@@ -1,21 +1,18 @@
 package anchor
 
 import (
-	"bytes"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
 
-	"encoding/json/jsontext"
-
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stretchr/testify/require"
 
-	card2 "github.com/stergiotis/boxer/public/semistructured/leeway/card"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/lwlens"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/membership"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/membershiprole"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
@@ -80,14 +77,13 @@ func buildMembershipDemoBatch(t *testing.T) []arrow.RecordBatch {
 	return recs
 }
 
-// TestMembershipRendererGeneration emits the same two-entity batch through
-// the JSON card emitter twice — once with the default renderer (hex refs)
-// and once with the anchor domain formatter injected via WithRenderer — and
-// asserts the swap end to end: the default output keys memberships by hex id,
-// the injected output by domain name, on identical wire bytes. Naming an id
-// is a read-side, per-consumer decision (ADR-0072).
-// card_anchor_membership_renderer.out.md records the rendering table; the
-// full card JSON is asserted, not dumped.
+// TestMembershipRendererGeneration reads the same two-entity batch through
+// the lens sink twice — once with the default renderer (hex refs) and once
+// with the anchor domain formatter injected — and asserts the swap end to
+// end: the default reading names its attributes by hex id, the injected one
+// by domain name, on identical wire bytes. Naming an id is a read-side,
+// per-consumer decision (ADR-0072).
+// card_anchor_membership_renderer.out.md records the rendering table.
 func TestMembershipRendererGeneration(t *testing.T) {
 	tblDesc, err := GetAnchorTableDesc()
 	require.NoError(t, err)
@@ -105,35 +101,36 @@ func TestMembershipRendererGeneration(t *testing.T) {
 		}
 	}()
 
-	emit := func(opts ...card2.JsonCardEmitterOption) string {
-		b := bytes.NewBuffer(nil)
-		enc := jsontext.NewEncoder(b, jsontext.Multiline(true), jsontext.WithIndent("  "))
-		sink := card2.NewJsonCardEmitter(enc, ir, opts...)
+	// The attributes the lens reads, one per (section, membership).
+	attributes := func(r *membership.Renderer) (names []string) {
+		sink := lwlens.NewSink(r)
 		require.NoError(t, driver.DriveRecordBatch(sink, recs[0]))
-		return b.String()
+		for _, sl := range sink.Model().Slots {
+			names = append(names, sl.Member)
+		}
+		return
 	}
 
 	renderer := membership.NewRenderer(anchorRefFormatter{}, nil, nil)
-	plain := emit()
-	named := emit(card2.WithRenderer(renderer))
-	for _, hexKey := range []string{`"0x5"`, `"0xf3e82"`, `"0x16"`, `"0x1bb"`} {
-		require.Contains(t, plain, hexKey, "default renderer keys memberships by hex id")
-		require.NotContains(t, named, hexKey, "injected formatter must replace the hex id")
+	plain := attributes(nil)
+	named := attributes(renderer)
+	for _, hexKey := range []string{"0x5", "0xf3e82", "0x16", "0x1bb"} {
+		require.Contains(t, plain, hexKey, "the default renderer names attributes by hex id")
+		require.NotContains(t, named, hexKey, "the injected formatter must replace the hex id")
 	}
-	for _, name := range []string{`"model:AeroQuad"`, `"customer:42"`, `"port:22"`, `"port:443"`} {
-		require.Contains(t, named, name, "injected formatter keys memberships by domain name")
+	for _, name := range []string{"model:AeroQuad", "customer:42", "port:22", "port:443"} {
+		require.Contains(t, named, name, "the injected formatter names attributes by domain name")
 		require.NotContains(t, plain, name)
 	}
 
 	doc := &strings.Builder{}
 	doc.WriteString(dqlDocHeader("anchor — membership rendering: ids on the wire, names at read time", "TestMembershipRendererGeneration"))
 	doc.WriteString("The batch carries membership ids; how an id displays is decided at read\n")
-	doc.WriteString("time by the consumer's renderer (ADR-0072). The test drives the same batch\n")
-	doc.WriteString("through the JSON card emitter with the default renderer and with an anchor\n")
-	doc.WriteString("domain formatter injected via WithRenderer, and asserts the card's\n")
-	doc.WriteString("membership keys swap from the hex column to the named column below. The\n")
-	doc.WriteString("formatter is a demo-local stand-in for the deferred registry-backed\n")
-	doc.WriteString("ref-to-name formatter (the seam's intended first-class injector).\n\n")
+	doc.WriteString("time by the consumer's renderer (ADR-0072). The test reads the same batch\n")
+	doc.WriteString("through the lens sink with the default renderer and with an anchor domain\n")
+	doc.WriteString("formatter injected, and asserts the attribute names swap from the hex\n")
+	doc.WriteString("column to the named column below. The formatter is a demo-local stand-in\n")
+	doc.WriteString("for the registry-backed ref-to-name formatter play injects.\n\n")
 	doc.WriteString("| ref id (wire) | default renderer | anchor formatter |\n|---|---|---|\n")
 	def := membership.DefaultRenderer()
 	for _, ref := range []uint64{5, 999042, 22, 443, 0xdeadbeef} {
@@ -144,10 +141,10 @@ func TestMembershipRendererGeneration(t *testing.T) {
 
 // TestMembershipRoleClassifierGeneration tabulates the PathPrefixClassifier's
 // verdicts for representative membership values against anchor sections in
-// card_anchor_membership_roles.out.md. The same classifier runs inside the
-// card emitters (it keys their byAttribute grouping); the table makes the
-// default policy inspectable: refs are primary, verbatim names are primary
-// only under the path prefix, parameters mean identity.
+// card_anchor_membership_roles.out.md. The same classifier splits the Detail
+// card's memberships into primary and secondary; the table makes the default
+// policy inspectable: refs are primary, verbatim names are primary only under
+// the path prefix, parameters mean identity.
 func TestMembershipRoleClassifierGeneration(t *testing.T) {
 	tblDesc, err := GetAnchorTableDesc()
 	require.NoError(t, err)

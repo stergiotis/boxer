@@ -42,8 +42,8 @@ CGO_ENABLED=0 go build -tags "$(tr -d '\n' < ./tags),binary_log" \
 
 Do not overwrite `rust/imzero2/main_go`: it belongs to whoever is running
 the desktop from this checkout. The headless client is
-`rust/imzero2/target/headless/release/imzero2`, built by
-[rust/imzero2/build_rust_headless.sh](../../rust/imzero2/build_rust_headless.sh);
+`rust/imzero2/target/headless/dist/imzero2`, built by
+[`rust/imzero2/build_rust_dist.sh headless`](../../rust/imzero2/build_rust_dist.sh);
 if `rust/imzero2/src/imzero2/interpreter.rs` or `enums_out.rs` is newer
 than it, rebuild it first.
 
@@ -104,7 +104,7 @@ env -u DISPLAY -u WAYLAND_DISPLAY \
   BOXER_PLAY_SQL="SELECT app_id, instance_key, pattern FROM keelson('subscriptions') WHERE NOT is_inbox ORDER BY 1, 2" \
   BOXER_PLAY_AUTORUN=1 \
   "$S/main_go" --logFormat=console --logLevel=info imzero2 demo \
-    --clientBinary rust/imzero2/target/headless/release/imzero2 \
+    --clientBinary rust/imzero2/target/headless/dist/imzero2 \
     --clientInitialMainWindowWidth 1400 --clientInitialMainWindowHeight 900 \
     --mainFontTTF "$MAIN_FONT" --monoFontTTF "$MONO_FONT" \
     --phosphorFontTTF rust/imzero2/assets/fonts/phosphor/Phosphor.ttf \

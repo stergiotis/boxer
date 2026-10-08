@@ -29,7 +29,7 @@ import (
 // resolves against the gloss catalog (public/hmi/gloss — the parser, the
 // gate and every inline face live there); the content family's block faces —
 // the markdown widget, the code view, the decoded image — are bound here,
-// for the ad-hoc Detail pane and, through Table2CardEmitter's block seam,
+// for the ad-hoc Detail pane and, through RecordCard's block seam,
 // for the leeway card:
 //
 //	SELECT body AS `notes@text/markdown`, thumb AS `shot@image/png` FROM t

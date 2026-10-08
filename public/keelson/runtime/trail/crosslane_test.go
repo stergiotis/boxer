@@ -127,3 +127,69 @@ func TestRowsOfThreeLanesJoinByKey(t *testing.T) {
 	assert.Equal(t, conversation, calls[0].Conversation.Val.Conversation)
 	assert.Equal(t, turn, action.Conversation.Val.Turn.Val)
 }
+
+// A bundle operation an agent's call caused joins that call's action on
+// (task, call) and the turn's model call on (conversation, turn), and keeps
+// its per-dataset lists and digests (ADR-0288 §SD5).
+func TestBundleRowJoinsTheActionThatCausedIt(t *testing.T) {
+	exec, err := chexec.NewLocalExecutor(t.TempDir(), nil)
+	if err != nil {
+		t.Skipf("clickhouse unavailable: %v", err)
+	}
+	ctx := context.Background()
+	setup, err := chstore.ComposeSetupSQL(chstore.Config{Database: factsschema.DatabaseName, Table: factsschema.TableName}, "")
+	require.NoError(t, err)
+	for stmt := range strings.SplitSeq(setup, ";") {
+		if stmt = strings.TrimSpace(stmt); stmt != "" {
+			require.NoError(t, exec.Exec(ctx, stmt))
+		}
+	}
+	const (
+		run, chat, play = "run-8", "apps/chat", "apps/play"
+		conversation    = "chat-2"
+		turn            = "turn-5"
+		modelCall       = "llm-9"
+		task            = "task-cd"
+		call            = "task-cd-1"
+	)
+	rec := trail.NewRecorder(exec, run, zerolog.Nop())
+	defer rec.Close()
+	at := time.Unix(1700000100, 0).UTC()
+	conv := option.Some(trail.Conversation{Conversation: conversation, Turn: option.Some(turn)})
+	deleg := option.Some(trail.Delegation{Task: task, Epoch: 2, Call: option.Some(call)})
+	cause := option.Some(trail.Cause{ModelCall: modelCall, ToolCall: option.Some("call_3"), ToolIndex: 1})
+
+	require.NoError(t, rec.AgentAction(at, trail.Context{Origin: rec.OriginOf(chat, 4), Conversation: conv, Delegation: deleg}, cause,
+		trail.AgentAction{Key: trail.ToolKey(modelCall, 1), Instance: 9, App: play, Operation: "publish_result", Decision: "final", Phase: "applied"}))
+	require.NoError(t, rec.AdhocDataset(at.Add(time.Second), trail.Context{Origin: rec.OriginOf(play, 9), Conversation: conv, Delegation: deleg}, cause,
+		trail.AdhocDataset{Operation: "publish", Outcome: "applied", Bundle: "sales", Revision: 1, OwnerApp: play, OwnerInstance: 9,
+			LocalNames: []string{"orders", "regions"}, Aliases: []string{"sales__orders", "sales__regions"},
+			Handles: []string{"adhoc_0000000000000001", "adhoc_0000000000000002"}, Rows: []uint64{3, 1}, Bytes: []uint64{512, 256},
+			StreamDigests: []string{"aa", "bb"}, DocumentDigest: "cc", Attested: true}))
+	require.NoError(t, rec.Flush(ctx))
+
+	ents, err := rec.Scan(func(st *trail.TrailStore) iter.Seq2[*trail.TrailEntity, error] {
+		return st.ScanAdhocDataset(ctx, recordstore.ScanOpts{})
+	})
+	require.NoError(t, err)
+	require.Len(t, ents, 1)
+	row := ents[0]
+	assert.Equal(t, uint64(9), row.Origin.Val.Instance, "the window that published")
+	assert.Equal(t, call, row.Delegation.Val.Call.Val)
+	assert.Equal(t, turn, row.Conversation.Val.Turn.Val)
+	assert.Equal(t, modelCall, row.Cause.Val.ModelCall)
+	b := row.AdhocDataset.Val
+	assert.Equal(t, []string{"orders", "regions"}, b.LocalNames)
+	assert.Equal(t, []uint64{3, 1}, b.Rows)
+	assert.Equal(t, []string{"aa", "bb"}, b.StreamDigests)
+	assert.True(t, b.Attested)
+
+	actions, err := rec.Scan(func(st *trail.TrailStore) iter.Seq2[*trail.TrailEntity, error] {
+		return st.ScanAgentAction(ctx, recordstore.ScanOpts{})
+	})
+	require.NoError(t, err)
+	require.Len(t, actions, 1)
+	assert.Equal(t, actions[0].Delegation.Val.Task, row.Delegation.Val.Task, "joins the action on (task, call)")
+	assert.Equal(t, actions[0].Delegation.Val.Call, row.Delegation.Val.Call)
+	assert.Equal(t, actions[0].Conversation.Val.Turn, row.Conversation.Val.Turn)
+}

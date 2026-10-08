@@ -3,11 +3,13 @@ package play
 import (
 	"math"
 	"testing"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/icicle"
+	icicleview "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/icicle/view"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -465,4 +467,28 @@ func icicleNodeInLayout(t *testing.T, lay *icicle.Layout, label string) int {
 	}
 	t.Fatalf("no node labelled %q in the layout", label)
 	return -1
+}
+
+// A new result drops the pin, and the dropped pin is published as an empty
+// selection_key, as the Treemap's is.
+func TestIcicleNewTreePublishesTheDroppedPin(t *testing.T) {
+	rec := icicleTestRec(t,
+		icicleTestCol{name: "stack", paths: [][]string{{"main", "run"}, {"main", "emit"}}},
+		icicleTestCol{name: "value", num: []float64{1, 2}},
+	)
+	defer rec.Release()
+	cl, reason := resolveIcicleColumns(rec.Schema())
+	require.Empty(t, reason)
+
+	inst := &IcicleDriver{}
+	probe := &emitProbe{}
+	inst.syncTree(rec, rec.Schema(), cl, probe)
+	assert.Empty(t, probe.ids)
+
+	inst.selected = icicleview.NodeHit(1)
+	inst.pendingExecuted = inst.forExecuted.Add(time.Second)
+	inst.syncTree(rec, rec.Schema(), cl, probe)
+	assert.Equal(t, icicleview.Hit{}, inst.selected)
+	require.Equal(t, []SignalID{signalSelectionKey}, probe.ids)
+	assert.Equal(t, "", probe.vals[0])
 }

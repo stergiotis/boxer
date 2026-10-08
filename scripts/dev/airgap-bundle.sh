@@ -117,15 +117,16 @@ case "$scope" in
 esac
 
 tags="$(tr -d '\n' < "$repo/tags")"
-# The render head THIS repo ships, in both scopes: rust/imzero2/build_rust_headless.sh
-# is what the unbundler runs (full scope) and what produced the prebuilt binary
-# (go-only), and it builds `headless_wgpu`. Declared here rather than
+# The render head THIS repo ships, in both scopes: `rust/imzero2/build_rust_dist.sh
+# headless` is what the unbundler runs (full scope) and what produced the prebuilt
+# binary (go-only), and it builds `headless_wgpu` under the `dist` profile. Declared here rather than
 # taken from the library default, which is the lean head hackathon2026 uses — the
 # difference decides whether the target is told it needs a Vulkan ICD and a C
 # compiler, and boxer's answer is yes to both.
 #
-# Keep this in step with build_rust_headless.sh. The offline verify below compiles
-# THIS string, so a drift between the two shows up as a verify that tested
+# Keep this in step with build_rust_dist.sh's `headless` host. The offline verify
+# below compiles THIS string (under `release`: the profile changes codegen, not
+# which vendored crates must be present), so a drift between the two shows up as a verify that tested
 # something other than what the target will build.
 AIRGAP_IMZERO2_FEATURES="${AIRGAP_IMZERO2_FEATURES:-headless_wgpu}"
 # No menu here: the unbundler runs a fixed build script rather than taking a head
@@ -204,7 +205,7 @@ if [ "$scope" = full ]; then
     # primitive hackathon2026 uses, so the toolchain pinning, the graded failure
     # and the timing report do not exist in two versions.
     #
-    # This now compiles `headless_wgpu`, i.e. what build_rust_headless.sh
+    # This now compiles `headless_wgpu`, i.e. what build_rust_dist.sh headless
     # actually builds on the target. It previously compiled a hardcoded `headless`,
     # so the verify was testing a feature set the bundle does not ship — the check
     # passed while saying nothing about the binary the target would produce.
@@ -229,8 +230,8 @@ if [ "$scope" = full ]; then
 else  # go-only: ship imzero2 prebuilt, drop the Rust toolchain + crates
     airgap_step "build prebuilt imzero2 (Rust headless render host)"
     if command -v cargo >/dev/null 2>&1; then
-        ( cd rust/imzero2 && ./build_rust_headless.sh )
-        prebuilt="rust/imzero2/target/headless/release/imzero2"
+        ( cd rust/imzero2 && ./build_rust_dist.sh headless )
+        prebuilt="rust/imzero2/target/headless/dist/imzero2"
         [ -x "$prebuilt" ] || airgap_die "expected $prebuilt after build."
         mkdir -p "$src/_airgap/prebuilt"
         cp "$prebuilt" "$src/_airgap/prebuilt/imzero2"

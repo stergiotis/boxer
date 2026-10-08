@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-10
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-07
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 The reference cut of the seam — `AllocatorI`, the `leased` generator and its
 in-memory allocator under [`public/identity/identgen`](../../public/identity/identgen)
@@ -147,9 +145,7 @@ it when they bump their pin.
 
 ## Status
 
-Proposed (2026-07-10) — pre-human-review. Awaiting review by a code owner of
-[`public/identity/identgen`](../../public/identity/identgen). Decision under
-consideration; do not implement as if accepted.
+Accepted 2026-10-07.
 
 Built (noted 2026-09-25, `2a2106c2`): SD1's `AllocatorI` seam, SD2/SD3's
 leased generators and internalizer, SD4's `memalloc` reference backend, and

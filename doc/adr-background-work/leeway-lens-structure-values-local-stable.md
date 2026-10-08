@@ -8,9 +8,18 @@ status: draft
 
 > **Status: draft — pre-human-review.** An exploration dated 2026-09-26, done
 > with the vizeval harness ([ADR-0266](../adr/0266-vizeval-scored-renderings-of-leeway-batches.md),
-> proposed). Every quality judgement below is one reader's reading of
+> withdrawn). Every quality judgement below is one reader's reading of
 > captures plus vizeval's geometry gates, except §Judged rounds, which
 > report five task-accuracy rounds by blind agent readers.
+>
+> **2026-10-07.** The lens has moved into the Projection panel
+> ([ADR-0289](../adr/0289-leeway-rows-for-readers-canonical-forms-a-read-model-and-kinds-in-projection.md)):
+> its bands are the panel's clusters, its own clustering is gone,
+> the archetype form is data in `lwlens` that play's `get_archetypes`
+> returns, and the view scrolls. The Experiments pane and vizeval are
+> removed. Below, "the Experiments pane" and the lens's K are the state this
+> exploration ran under; the first two items of §Open are settled by that
+> ADR.
 
 # A lens over leeway rows: structure↔values, local↔stable
 
@@ -31,7 +40,7 @@ The prototype is the `lens` sink of play's Experiments pane:
 [`lwlens`](../../public/semistructured/leeway/lwlens) (model, analysis, plan)
 and `LensView` in [leewaywidgets](../../public/thestack/imzero2/egui2/widgets/leewaywidgets)
 (drawing). The scenario
-[60_mixed_kinds](../../apps/play/vizeval/60_mixed_kinds.vizeval.md) was
+`60_mixed_kinds` (a vizeval scenario, removed with the harness) was
 written for it; it was also run against the facts store and three other
 local leeway tables through scratch scenarios that are not in the tree.
 

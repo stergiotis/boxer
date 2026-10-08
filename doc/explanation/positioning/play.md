@@ -84,11 +84,12 @@ a desktop app rather than a web page.
 
 ## Boundary
 
-- **The Model tab** ([ADR-0254](../../adr/0254-model-inference-as-a-keelson-capability.md))
-  is built and, per that ADR's Status, not checked live against a model;
-  it is not a clause. The natural-language ask panel
+- Play has no model pane of its own. The Model tab of
+  [ADR-0254](../../adr/0254-model-inference-as-a-keelson-capability.md) was
+  removed (that ADR's Updates, 2026-10-07) and the natural-language ask panel
   ([ADR-0120](../../adr/0120-play-natural-language-ask-panel.md)) is
-  withdrawn.
+  withdrawn; a model reaches play through the chat app
+  ([ADR-0265](../../adr/0265-chat-app-over-retained-model-calls.md)).
 - Proposed and unbuilt, absent from the clauses: canonical record identity
   ([ADR-0219](../../adr/0219-play-canonical-record-identity.md)), the time
   strip ([ADR-0251](../../adr/0251-a-time-strip-for-stepped-series.md)).

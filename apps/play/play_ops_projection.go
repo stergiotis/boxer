@@ -38,8 +38,8 @@ const (
 // keeps the pane's setting.
 type ComputeProjectionArgs struct {
 	Neighbours int32  `json:",omitzero" desc:"neighbours per row in the graph, 2 to 50; the pane's setting when left out (15 by default)"`
-	MinCluster int32  `json:",omitzero" desc:"the smallest group HDBSCAN calls a cluster, 2 to 100; the pane's setting when left out (10 by default)"`
-	Features   string `json:",omitzero" desc:"what rows are compared by: shape (how big and skewed a record is), structure (which sections and attributes it has) or components (which registered components it carries; facts-shaped results only); the pane's setting when left out"`
+	MinCluster int32  `json:",omitzero" desc:"the smallest group HDBSCAN calls a cluster, 2 to 100; the pane's setting when left out (5 by default)"`
+	Features   string `json:",omitzero" desc:"what rows are compared by: structure (which sections and attributes it has; the default), shape (how big and skewed a record is) or components (which registered components it carries; facts-shaped results only); the pane's setting when left out"`
 }
 
 // ProjectionArgs is get_projection's argument.
@@ -74,7 +74,7 @@ type ProjectionState struct {
 	Neighbours int32         `desc:"the run's neighbours per row, or the pane's setting before a run"`
 	MinCluster int32         `desc:"the run's minimum cluster size, or the pane's setting before a run"`
 	Features   string        `desc:"the run's feature set, or the pane's setting before a run"`
-	Clusters   []ClusterSize `desc:"the clusters with their sizes; explain_clusters says what sets them apart"`
+	Clusters   []ClusterSize `desc:"the clusters with their sizes; explain_clusters says what sets them apart, get_archetypes what each holds and which rows break it"`
 	Noise      int32         `desc:"projected rows in no cluster"`
 	// Summary is the pane's status line.
 	Summary string            `json:",omitzero" desc:"the pane's status line: the graph, the clustering and how far the layout has got"`
@@ -82,6 +82,12 @@ type ProjectionState struct {
 	Points  []ProjectionPoint `desc:"the requested page of points"`
 	// PointsTotal is how many points there are to page through.
 	PointsTotal int32 `desc:"how many points there are to page through"`
+	// RunBy names who asked for the run, which cancel_projection checks.
+	RunBy string `json:",omitzero" desc:"who asked for the run: person, or task:<id>; cancel_projection stops only the calling task's own"`
+	// The publish's outcome (publish_projection).
+	Publishing   bool   `json:",omitzero" desc:"true while a publish_projection is in flight"`
+	Published    string `json:",omitzero" desc:"the last publish: each dataset's handle, rows and revision; the window binds them as keelson('projection') and keelson('projection_rules')"`
+	PublishError string `json:",omitzero" desc:"why the last publish failed"`
 }
 
 // ExplainClustersArgs is explain_clusters' argument.
@@ -123,6 +129,10 @@ type projectionOpsSnap struct {
 	x, y       []float32
 	rows       int64
 	cannotDraw string
+	runBy      string
+	publishing bool
+	published  string
+	publishErr string
 }
 
 // snapshotProjection copies the projector for the operations. The layout
@@ -141,7 +151,20 @@ func snapshotProjection(p *PlayApp, panes PanesState) (out projectionOpsSnap) {
 			out.cannotDraw = pn.Reason
 		}
 	}
-	out.rows = mainRows(p.graph)
+	out.rows = p.paneFedRows(projectionPaneId)
+	if out.snap.status != projectorStatusIdle {
+		out.runBy = "person"
+		if pj.runTask != "" {
+			out.runBy = "task:" + pj.runTask
+		}
+	}
+	if p.projPublish != nil {
+		var perr error
+		out.publishing, out.published, _, perr = p.projPublish.status()
+		if perr != nil {
+			out.publishErr = perr.Error()
+		}
+	}
 	res := out.snap.result
 	if res == nil {
 		return
@@ -179,7 +202,8 @@ func snapshotProjection(p *PlayApp, panes PanesState) (out projectionOpsSnap) {
 // projectionState is get_projection's reading of a snapshot.
 func projectionState(ps projectionOpsSnap, in ProjectionArgs) (out ProjectionState, err error) {
 	out = ProjectionState{Status: ps.snap.status.String(), CannotDraw: ps.cannotDraw, Rows: ps.rows,
-		Neighbours: int32(ps.neighbours), MinCluster: int32(ps.minCluster), Features: ps.features.String(), Layout: "not drawn"}
+		Neighbours: int32(ps.neighbours), MinCluster: int32(ps.minCluster), Features: ps.features.String(), Layout: "not drawn",
+		RunBy: ps.runBy, Publishing: ps.publishing, Published: ps.published, PublishError: ps.publishErr}
 	if ps.snap.err != nil {
 		out.Error = ps.snap.err.Error()
 	}
@@ -281,10 +305,16 @@ func explainClusters(ps projectionOpsSnap, in ExplainClustersArgs) (out ClusterE
 	return
 }
 
-// mainRows is the main result's row count.
-func mainRows(g *queryGraph) (n int64) {
-	rec, _, n, _, _, _, _, _, _ := g.MainSnapshot()
+// paneFedRows is the row count of the result a pane is fed: the node it is
+// bound to, or the result the panels draw (the main result, or the node
+// observed in the panels). A bound node without a result counts 0.
+func (inst *PlayApp) paneFedRows(pane string) (n int64) {
+	if inst.graph == nil {
+		return
+	}
+	rec, _ := inst.selectionRecord(inst.resolvedTabNode(pane))
 	if rec != nil {
+		n = rec.NumRows()
 		rec.Release()
 	}
 	return
@@ -317,9 +347,13 @@ func (inst *PlayApp) computeProjection(in ComputeProjectionArgs) (err error) {
 	case projectorStatusExtracting, projectorStatusRunning, projectorStatusCancelling:
 		return app.ConflictOperation("a projection is running; get_projection says when it is done")
 	}
-	rows := mainRows(inst.graph)
+	// The rows of the result the pane draws, which a binding or an observed
+	// node may make other than the main result's: the pane checks the same
+	// count before it starts a run, and drops the request below it.
+	rows := inst.paneFedRows(projectionPaneId)
 	if rows < projectionMinRows {
-		return app.RefuseOperation("a projection needs at least " + strconv.Itoa(projectionMinRows) + " rows; the result has " + strconv.FormatInt(rows, 10))
+		return app.RefuseOperation("a projection needs at least " + strconv.Itoa(projectionMinRows) + " rows; the result the pane is fed (" +
+			string(inst.resolvedTabNode(projectionPaneId)) + ") has " + strconv.FormatInt(rows, 10))
 	}
 	if in.Neighbours != 0 && (in.Neighbours < 2 || in.Neighbours > 50) {
 		return app.RefuseOperation("neighbours runs from 2 to 50")
@@ -381,9 +415,13 @@ func addProjectionOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 			if inst.inner == nil {
 				return appops.None{}, app.RefuseOperation("the window has not mounted")
 			}
-			return appops.None{}, inst.inner.computeProjection(in)
+			if err := inst.inner.computeProjection(in); err != nil {
+				return appops.None{}, err
+			}
+			inst.inner.projector.runTask = callTask(call)
+			return appops.None{}, nil
 		})
-	appops.Query(s, app.OperationSpec{Name: opGetProjection, Version: 1,
+	appops.Query(s, app.OperationSpec{Name: opGetProjection, Version: 2,
 		Summary: "read the Projection pane: the run's status, its clusters and sizes, the layout, and a page of points with their cluster and position",
 		Reads:   []string{opsResProjection, opsResResult}, Agents: true, Untrusted: true},
 		func(sn opsSnap, in ProjectionArgs) (ProjectionState, error) {

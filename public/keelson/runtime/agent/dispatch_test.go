@@ -42,6 +42,9 @@ type setTextArgs struct {
 	Text string `desc:"the new text"`
 }
 type textResult struct{ Text string }
+type publishArgs struct {
+	Name string `desc:"the name to publish under"`
+}
 type useRefArgs struct {
 	Source string `desc:"a result reference"`
 }
@@ -70,6 +73,10 @@ var docOps = func() *appops.Set[*doc, docSnap] {
 	appops.Command(s, app.OperationSpec{Name: "export", Version: 1, Summary: "export the text",
 		Effect: app.OperationEffectConsequential, Reads: []string{"text"}, Agents: true},
 		func(d *doc, call app.OperationCall, in appops.None) (appops.None, error) { return appops.None{}, nil })
+	appops.Command(s, app.OperationSpec{Name: "publish_text", Version: 1, Summary: "publish the text under a name",
+		Effect: app.OperationEffectConsequential, Reads: []string{"text"}, Agents: true,
+		Consent: app.OperationConsent{Class: app.ConsentClassPublish, Arg: "name"}},
+		func(d *doc, call app.OperationCall, in publishArgs) (appops.None, error) { return appops.None{}, nil })
 	appops.Command(s, app.OperationSpec{Name: "wipe", Version: 1, Summary: "clear everything",
 		Effect: app.OperationEffectDocument, Writes: []string{"text"}},
 		func(d *doc, call app.OperationCall, in appops.None) (appops.None, error) {
@@ -94,6 +101,17 @@ type fakeHost struct {
 	loads      map[uint64]opwire.InstanceInfo
 	// windowActs are the window verbs the host was asked to queue.
 	windowActs []string
+	// apps names the app of a window that is not a doc; a window absent
+	// from it is a doc.
+	apps map[uint64]app.AppIdT
+}
+
+// appOf is the app instance k belongs to. The caller holds mu.
+func (inst *fakeHost) appOf(k uint64) (a app.AppIdT) {
+	if a = inst.apps[k]; a == "" {
+		a = docAppId
+	}
+	return
 }
 
 func (inst *fakeHost) OpsInstances() (out []opwire.InstanceInfo) {
@@ -101,7 +119,8 @@ func (inst *fakeHost) OpsInstances() (out []opwire.InstanceInfo) {
 	defer inst.mu.Unlock()
 	for k, e := range inst.engines {
 		l := inst.loads[k]
-		out = append(out, opwire.InstanceInfo{App: docAppId, Alias: docAppId.SubjectAlias(), Key: k, Title: "Doc", Ops: true,
+		a := inst.appOf(k)
+		out = append(out, opwire.InstanceInfo{App: a, Alias: a.SubjectAlias(), Key: k, Title: "Doc", Ops: true,
 			Confined: e.Confined(), Load: l.Load, Reason: l.Reason})
 	}
 	return
@@ -188,13 +207,21 @@ func (inst *fakeHost) SourceStatus(job string) (capture.SourceResult, bool) {
 
 // frame runs one frame of instance k; person runs where the write-back
 // would land.
-func (inst *fakeHost) frame(k uint64) {
+func (inst *fakeHost) frame(k uint64) { inst.frameWith(k, nil) }
+
+// frameWith runs one frame of instance k with app as the app's own frame,
+// where the window host runs it: after the snapshot, before EndFrame, so
+// what it changes is the app's, not the person's.
+func (inst *fakeHost) frameWith(k uint64, app func()) {
 	inst.frameMu.Lock()
 	defer inst.frameMu.Unlock()
 	e := inst.eng(k)
 	e.BeginFrame()
 	e.ApplyQueued()
 	e.TakeSnapshot()
+	if app != nil {
+		app()
+	}
 	e.EndFrame()
 }
 

@@ -21,7 +21,7 @@ Observed on 2026-09-30, the runtime's pieces do not add up to this.
 - **A model's tools run in the caller's process under the caller's grants**
   ([ADR-0254](./0254-model-inference-as-a-keelson-capability.md) §SD5). Play's
   tool loop is private to play and must end in SQL; the chat app has no tools
-  ([ADR-0265](./0265-chat-app-over-retained-model-calls.md), proposed, §SD5).
+  ([ADR-0265](./0265-chat-app-over-retained-model-calls.md) §SD5).
   No mechanism lets a model act on another app.
 - **The bus grants by subject, minted at Mount without a prompt.**
   [ADR-0026](./0026-app-runtime-and-capability-subjects.md) states its threat
@@ -30,7 +30,7 @@ Observed on 2026-09-30, the runtime's pieces do not add up to this.
   on it. A service answering there would act with its own authority on behalf
   of whoever asked.
 - **Every imzero2 call runs on one render goroutine**
-  ([ADR-0261](./0261-one-render-goroutine-for-every-app.md), proposed). Work
+  ([ADR-0261](./0261-one-render-goroutine-for-every-app.md)). Work
   from elsewhere hands its result to a later frame, with no generic mechanism
   for it, and an in-process bus handler runs on the requester's goroutine. A
   bound widget's value reaches Go state one frame later, and programmatic
@@ -68,7 +68,7 @@ the probes behind the figures here are in
 |---|---|
 | person | the human at the windows |
 | model | the language model; it acts only through tool calls |
-| coordinator | an app instance that runs a model's tool loop for one conversation, presents that conversation's grant handle and is the grant's actor — the chat app ([ADR-0265](./0265-chat-app-over-retained-model-calls.md), proposed) |
+| coordinator | an app instance that runs a model's tool loop for one conversation, presents that conversation's grant handle and is the grant's actor — the chat app ([ADR-0265](./0265-chat-app-over-retained-model-calls.md)) |
 | agent | a model acting through a coordinator; ADR-0154's agents with a shell are called development agents here |
 | caller | any client of the host's `runtime.agent.*` services: a coordinator, or a scene or test holding a test grant (SD6) |
 | instance | one window of an app, addressed by its host-minted, numeric instance key |
@@ -244,7 +244,7 @@ still registers. The host may withdraw
 an operation from agents or declare it consequential; it never loosens a
 catalog. A `keelson('app_operations')` table lists every registered catalog,
 so a caller discovers what an app can do before any window is open; the app
-center ([ADR-0260](./0260-app-center-one-page-per-app.md), proposed) shows the
+center ([ADR-0260](./0260-app-center-one-page-per-app.md)) shows the
 list to people. What a running instance adds is availability — whether an
 operation can run now, and why not — through `describe` (SD3).
 
@@ -490,8 +490,8 @@ one.
   text a task wrote stays marked in the window until the person edits or runs
   it. The app carries the on-behalf-of context with agent-caused work and on
   every onward request it makes for it; host services that reach outside —
-  the HTTP egress service ([ADR-0262](./0262-http-egress-as-a-keelson-capability.md),
-  proposed) and the model service — refuse a destination the grant does not
+  the HTTP egress service ([ADR-0262](./0262-http-egress-as-a-keelson-capability.md))
+  and the model service — refuse a destination the grant does not
   list. For runs against a database:
   - the endpoint is one of the grant's destinations;
   - the statement classifies as a read that names nothing outside the
@@ -555,7 +555,7 @@ one.
 - **Declaration.** On every `llm.*` call the coordinator declares the highest
   label its context holds, as ADR-0254 §SD3 requires of callers; keeping a
   conversation that holds confined content follows
-  [ADR-0264](./0264-retained-model-conversations-on-facts.md) (proposed) §SD5.
+  [ADR-0264](./0264-retained-model-conversations-on-facts.md) §SD5.
 
 ### SD8 — The person keeps control
 
@@ -630,7 +630,7 @@ given synthetic input.
   Rust-to-Go tree fetch; development agents keep ADR-0154's driver.
 - A wake from outside the render goroutine, replacing SD4's repaint interval.
 - A SQL read surface over the catalog and state tables (the
-  [ADR-0139](./0139-semantic-layer-text2dsl.md), proposed, grain).
+  [ADR-0139](./0139-semantic-layer-text2dsl.md), deferred, grain).
 - An MCP adapter over the host services, with the costs ADR-0154's
   2026-09-18 Update recorded against one.
 - Operations for pane options beyond a first set, and setters for view state
@@ -650,11 +650,11 @@ given synthetic input.
 | Surface | Change | Moves with it |
 | --- | --- | --- |
 | `app.Manifest` in [`github.com/stergiotis/boxer/public/keelson/runtime/app`](../../public/keelson/runtime/app) | added: an optional operations catalog; a catalog failing validation is withdrawn, the app kept | registration; the manifest tests; the capslock app set |
-| App contract | added: the interface through which the window host calls an app's operation handlers; apps report changes, a window's label, and agent-caused work to the host | ADR-0261 (proposed), which it extends; ADR-0267 W10 for writes to bound values |
+| App contract | added: the interface through which the window host calls an app's operation handlers; apps report changes, a window's label, and agent-caused work to the host | ADR-0261, which it extends; ADR-0267 W10 for writes to bound values |
 | Capability subjects (ADR-0026 §SD3) | added: `app.{id}.{instance}.op.>`, `runtime.agent.>`, `runtime.agent.event.>`; the `request` reservation withdrawn; overlapping app capabilities rejected | a dated Update on ADR-0026; capinspector's registry, classifier and help |
 | Bus wire (`buscodec`) | added: the `runtime.agent.*` requests and replies, operation calls and outcomes, events, and the on-behalf-of context on onward requests | the codec registrations |
-| Host services that reach outside | added: a check of the on-behalf-of context against the grant's destinations | ADR-0262 (proposed) `runtime.http`; ADR-0254 `runtime.llm` |
-| Window host | added: the dispatcher, a queue per instance applied after the write-back, the repaint interval, host capture, badges, host chrome for sharing, proposals, confirmations, undo and modes, the coordinator registry | ADR-0261 (proposed) |
+| Host services that reach outside | added: a check of the on-behalf-of context against the grant's destinations | ADR-0262 `runtime.http`; ADR-0254 `runtime.llm` |
+| Window host | added: the dispatcher, a queue per instance applied after the write-back, the repaint interval, host capture, badges, host chrome for sharing, proposals, confirmations, undo and modes, the coordinator registry | ADR-0261 |
 | Play's run path | added: agent limits for agent-caused work; `readonly = 2` on every agent run | ADR-0141's endpoint seam |
 | Deployment | added: an optional database user for agent runs that reaches the host's plane and no other URL, file or remote source | the endpoint configuration |
 | Signal writer (ADR-0097) | added: the task as a writer | play's Live breaker |
@@ -662,7 +662,7 @@ given synthetic input.
 | `boxer.facts` kinds | added: the action record | the runtime vocabulary cohort and its golden |
 | ADR-0254 §SD5 | amended: a call from another app runs under the grant and the agent limits — the delegation primitive ADR-0254's Q2 declined to invent | a dated Update on ADR-0254 |
 | ADR-0154's 2026-09-18 Update | scoped: the driver is the surface for development agents, not for models in a person's windows | a dated Update on ADR-0154 |
-| ADR-0265 (proposed) | revised in place: the chat gains tools and becomes a coordinator; its title changes | ADR-0265 |
+| ADR-0265 (then proposed) | revised in place: the chat gains tools and becomes a coordinator; its title changes | ADR-0265 |
 
 ## Alternatives
 
@@ -1045,8 +1045,8 @@ modal, and a check that a modal blocks clicks uses `"pointer":true`.
 ### 2026-10-04 — captures through one policy enforcement point
 
 §SD11's capture now goes through the capture service of
-[ADR-0281](./0281-window-captures-through-one-policy-enforcement-point.md)
-(proposed), SVG and PNG alike. `capture` takes a format, several windows
+[ADR-0281](./0281-window-captures-through-one-policy-enforcement-point.md),
+SVG and PNG alike. `capture` takes a format, several windows
 and a crop. A PNG is drawn from a replay of the windows' own messages, so
 it holds those windows and their popups and nothing else; it is not what
 the person saw.
@@ -1069,6 +1069,20 @@ into the range; a budget asked for outside the range is clamped there on
 every path, test grants included. What a spent budget's approval adds is
 unchanged.
 
+### 2026-10-07 — standing consent for a consequential command
+
+§SD5 confirms a consequential command each time. A command may now
+declare a consent (`app.OperationConsent`): a destination class the
+platform defines (`app.ConsentClasses`) and the argument it matches. When
+the task's grant lists `<class>:<prefix>` and the argument starts with the
+prefix, the call applies as the task's mode applies a document command —
+without a proposal in act mode, as a proposal the person accepts in
+suggest mode. The person approved that destination as any other (§SD6),
+so the consent is theirs, per task and scoped by name; the action record
+names the destination that admitted the call, and a test grant never
+applies a consequential command. The one class so far, `publish`, is
+ADR-0288's (§SD4).
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — the subject taxonomy SD3 extends; the threat model SD6 keeps.
@@ -1076,19 +1090,19 @@ unchanged.
 - [ADR-0094](./0094-keelson-introspection-tables.md) — the tables SD2 and SD9 add to.
 - [ADR-0097](./0097-play-reactive-query-graph.md) — play's signal store and its writer field.
 - [ADR-0135](./0135-app-launch-requests.md) — launch requests behind `launch`.
-- [ADR-0139](./0139-semantic-layer-text2dsl.md) (proposed) — the grain of the deferred SQL read surface.
+- [ADR-0139](./0139-semantic-layer-text2dsl.md) (deferred) — the grain of the deferred SQL read surface.
 - [ADR-0141](./0141-play-endpoint-dispatch-seam.md) — play's endpoint dispatch, where agent limits attach.
 - [ADR-0143](./0143-bus-streaming-reply-channel.md) — accepted, not built on 2026-09-30; progress is read with `status` until it is.
 - [ADR-0145](./0145-sealed-app-data.md) — labels, locality, the sealed wall.
 - [ADR-0154](./0154-headless-carrier-tree-and-driver.md) — the driver, scoped to development agents.
 - [ADR-0254](./0254-model-inference-as-a-keelson-capability.md) — the model service; §SD3 labels, §SD5 amended.
 - [ADR-0257](./0257-clickhouse-arrow-results-into-column-structs.md) — `chrows`.
-- [ADR-0260](./0260-app-center-one-page-per-app.md) (proposed) — where people see a catalog.
-- [ADR-0261](./0261-one-render-goroutine-for-every-app.md) (proposed) — the render goroutine rule SD4 builds on.
-- [ADR-0262](./0262-http-egress-as-a-keelson-capability.md) (proposed) — the HTTP egress service that checks destinations.
+- [ADR-0260](./0260-app-center-one-page-per-app.md) — where people see a catalog.
+- [ADR-0261](./0261-one-render-goroutine-for-every-app.md) — the render goroutine rule SD4 builds on.
+- [ADR-0262](./0262-http-egress-as-a-keelson-capability.md) — the HTTP egress service that checks destinations.
 - [ADR-0263](./0263-imzero2-browser-both-modules-in-one-worker-mesh-to-the-painter.md) — a future process boundary.
-- [ADR-0264](./0264-retained-model-conversations-on-facts.md) (proposed) — keeping conversations that hold confined content.
-- [ADR-0265](./0265-chat-app-over-retained-model-calls.md) (proposed) — the chat app that becomes the coordinator.
+- [ADR-0264](./0264-retained-model-conversations-on-facts.md) — keeping conversations that hold confined content.
+- [ADR-0265](./0265-chat-app-over-retained-model-calls.md) — the chat app that becomes the coordinator.
 - [ADR-0267](./0267-imzero2-go-widget-api-contract-immediate-and-semi-retained.md) — W10, writes to bound values.
 - [ADR-0270](./0270-play-operations-catalog-and-agent-limits.md) — play's catalog, the first participant.
 - [app-operations-prior-art](../adr-background-work/app-operations-prior-art.md) — play and the runtime read, surveys, the options weighed, probes, sources for every external claim above (Hardy, Meyer, Fowler, Dolt, AIP-216, TN2106, the OpenAI system card, CaMeL, FIDES, OpenTelemetry).

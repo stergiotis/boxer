@@ -3,6 +3,7 @@ package play
 import (
 	"math"
 	"testing"
+	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/treemap"
@@ -633,4 +634,38 @@ func TestTreemapNestingLadder(t *testing.T) {
 	assert.Equal(t, 3, treemapNestFour.depth())
 	assert.Less(t, treemapNestDrill.depth(), treemapNestThree.depth())
 	assert.Less(t, treemapNestThree.depth(), treemapNestFour.depth())
+}
+
+// A new result drops the pin, and the dropped pin is published: a Live query
+// filtering on selection_key would otherwise keep the label the pane no
+// longer shows. Without a pin, a new result publishes nothing.
+func TestTreemapNewTreePublishesTheDroppedPin(t *testing.T) {
+	rec := icicleTestRec(t,
+		icicleTestCol{name: "stack", paths: [][]string{{"disk", "db"}, {"disk", "other"}}},
+		icicleTestCol{name: "value", num: []float64{1, 2}},
+	)
+	defer rec.Release()
+	cl, reason := resolveHierarchy(rec.Schema(), treemapForm)
+	require.Empty(t, reason)
+
+	inst := &treemapDriver{}
+	probe := &emitProbe{}
+	inst.syncTree(rec, rec.Schema(), cl, probe)
+	assert.Empty(t, probe.ids, "a first tree with nothing pinned publishes nothing")
+
+	inst.selected = "db"
+	inst.syncTree(rec, rec.Schema(), cl, probe)
+	assert.Empty(t, probe.ids, "the same result keeps the pin")
+	assert.Equal(t, "db", inst.selected)
+
+	inst.pendingExecuted = inst.forExecuted.Add(time.Second)
+	inst.syncTree(rec, rec.Schema(), cl, probe)
+	assert.Empty(t, inst.selected)
+	require.Equal(t, []SignalID{signalSelectionKey}, probe.ids)
+	assert.Equal(t, "", probe.vals[0])
+
+	probe = &emitProbe{}
+	inst.pendingExecuted = inst.pendingExecuted.Add(time.Second)
+	inst.syncTree(rec, rec.Schema(), cl, probe)
+	assert.Empty(t, probe.ids, "no pin to drop, nothing to publish")
 }

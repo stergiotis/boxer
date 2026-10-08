@@ -197,3 +197,50 @@ func TestACaptureIsScopedAndLabelledByItsWindows(t *testing.T) {
 	require.True(t, errors.As(err, &refused))
 	assert.Contains(t, refused.Reason, "confined capture")
 }
+
+// A host service asking about a call gets the dispatcher's record of it —
+// conversation, turn and cause as the coordinator stated them — and only
+// for the window the call was sent to, in a live task (ADR-0288
+// §SD5).
+func TestCallContextIsTheDispatchersRecord(t *testing.T) {
+	r := newRig(t, true)
+	ctx := context.Background()
+	g, err := r.cli.Request(ctx, GrantRequest{Conversation: "conv-1", Entries: []GrantEntry{{Instance: r.docKey, Mode: ModeAct}}})
+	require.NoError(t, err)
+	out, err := r.cli.Call(ctx, CallRequest{Handle: g.Handle, Instance: r.docKey, Operation: "get_text", Args: "{}", Key: "k1",
+		Turn: "turn-3", ModelCall: "llm-5", ToolCall: "call_x", ToolIndex: 2})
+	require.NoError(t, err)
+	require.Equal(t, "completed", out.Phase, out.Reason)
+	var callId string
+	for _, a := range r.svc.Actions() {
+		if a.Key == "k1" && a.CallId != "" {
+			callId = a.CallId
+		}
+	}
+	require.NotEmpty(t, callId)
+
+	cc, ok, why := r.svc.CallContext(g.Task, 1, callId, docAppId, r.docKey)
+	require.True(t, ok, why)
+	assert.Equal(t, "conv-1", cc.Conversation)
+	assert.Equal(t, "turn-3", cc.Turn)
+	assert.Equal(t, "llm-5", cc.ModelCall)
+	assert.Equal(t, "call_x", cc.ToolCall)
+	assert.Equal(t, uint32(2), cc.ToolIndex)
+	assert.Equal(t, "get_text", cc.Operation)
+	assert.False(t, cc.InFlight, "the call was answered before the service asked")
+
+	_, ok, why = r.svc.CallContext(g.Task, 1, callId, docAppId, r.docKey+1)
+	assert.False(t, ok, "another window cannot claim the call")
+	assert.Contains(t, why, "another window")
+	_, ok, _ = r.svc.CallContext(g.Task, 1, callId, "github.com/x/apps/other", r.docKey)
+	assert.False(t, ok, "nor another app")
+	_, ok, why = r.svc.CallContext(g.Task, 1, g.Task+"-999", docAppId, r.docKey)
+	assert.False(t, ok, "a call the dispatcher never sent")
+	assert.Contains(t, why, "no call")
+	_, ok, _ = r.svc.CallContext(g.Task, 2, callId, docAppId, r.docKey)
+	assert.False(t, ok, "a moved epoch refuses")
+	require.NoError(t, r.cli.Stop(ctx, g.Handle))
+	_, ok, why = r.svc.CallContext(g.Task, 1, callId, docAppId, r.docKey)
+	assert.False(t, ok)
+	assert.Contains(t, why, "ended")
+}

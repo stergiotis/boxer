@@ -1,0 +1,96 @@
+Fixtures of public/science/geo/grib (ADR-0292 §R11). Producer messages fetched
+2026-09-27 by HTTP byte range where a sidecar index exists, otherwise cut
+at message boundaries; unmodified except as noted. The expectations in
+expect.tsv were produced by gen_fixtures.py.txt with ecCodes 2.49.0.
+
+Only files whose licences are clear are carried (ADR-0292 SD2): NOAA's,
+which are US Government works, ecCodes' test files under Apache-2.0, and
+fixtures synthesised from those. Producer files from DWD and MeteoSwiss
+(CC BY 4.0) and from ECCC (Open Government Licence – Canada) are not, and
+gen_fixtures.py.txt no longer names them.
+
+gefs_tmp850.grib2
+    NOAA GEFS 0.5°, member 1, 850 hPa temperature, 2026-09-27 00 UTC.
+    s3://noaa-gefs-pds/gefs.20260927/00/atmos/pgrb2ap5/gep01.t00z.pgrb2a.0p50.f000
+    US Government work.
+    Corner: template 4.1 ensemble; 5.3 second-order spatial differencing, 8 bits.
+
+gfs_apcp6.grib2
+    NOAA GFS 0.25°, 0–6 h accumulated precipitation, 2026-09-27 00 UTC.
+    s3://noaa-gfs-bdp-pds/gfs.20260927/00/atmos/gfs.t00z.pgrb2.0p25.f006
+    US Government work.
+    Corner: template 4.8 statistical interval; 5.3 with 11 bits.
+
+hrrr_refc.grib2
+    NOAA HRRR CONUS, composite reflectivity, 2026-09-27 00 UTC +1 h.
+    s3://noaa-hrrr-bdp-pds/hrrr.20260927/conus/hrrr.t00z.wrfsfcf01.grib2
+    US Government work.
+    Corner: Lambert conformal 3.30, scan flags 0x40, uv relative to grid.
+
+mrms_refl.grib2
+    NOAA MRMS composite reflectivity, 2026-09-27 20:30:35 UTC (gz removed).
+    https://mrms.ncep.noaa.gov/2D/MergedReflectivityQCComposite/
+    US Government work.
+    Corner: PNG 5.41, 16-bit, 24.5 M points; basic angle 1 with 10^6
+    subdivisions; reference second 35; centre 161.
+
+ndfd_temp_msg1.bin
+    NOAA NDFD CONUS temperature, first message of the 1–3 day file,
+    2026-09-27 20:30 UTC, with its 80-byte blocking record and the 40 bytes
+    that precede the second message.
+    https://tgftp.nws.noaa.gov/SL.us008001/ST.opnl/DF.gr2/DC.ndfd/AR.conus/VP.001-003/ds.temp.bin
+    US Government work.
+    Corner: boustrophedonic rows (scan 0x50); 5.3 with missing-value
+    management 1; Lambert; forecast time in minutes.
+
+ec_*.grib*, ec_*.grib2
+    ecCodes public test data, https://sites.ecmwf.int/repository/eccodes/test-data/data/,
+    under the ecCodes project's Apache-2.0 licence (ECMWF); the data files
+    carry no separate notice. Prefixed ec_ here, otherwise unmodified.
+    ec_bad.grib: an edition 1 message whose declared length is one short.
+    ec_constant_field.grib2: rotated 3.1, bits per value 0, NV = 2.
+    ec_gfs.c255.grib2: 5.3 order 1 with 3 descriptor octets, bitmap.
+    ec_gfs.complex.mvmu.grib2: 5.3 with missing-value management 1.
+    ec_grid_complex_spatial_differencing.grib2: JMA 5.3 with a bitmap.
+    ec_grid_ieee.grib: 5.4 IEEE, product template 4.40 (chemistry prefix).
+    ec_gts.grib: four edition 1 messages inside GTS bulletin headers.
+    ec_mercator.grib2: template 3.10.
+    ec_multi_created.grib2: one message with 21 fields sharing sections 0–2.
+    ec_pad.grib: edition 1 with leading text and zero padding between messages.
+    ec_reduced_gaussian_pressure_level_constant.grib2, ec_reduced_gaussian_surface.grib2:
+        reduced Gaussian N32, global.
+    ec_reduced_gaussian_sub_area.grib2: reduced Gaussian sub-area, template 4.11.
+    ec_reduced_latlon_surface.grib2: reduced lat/lon with a bitmap.
+    ec_regular_gaussian_surface.grib2: regular Gaussian N32.
+    ec_regular_latlon_surface.grib2, ec_regular_latlon_surface_constant.grib2: 3.0, 16 and 0 bits.
+    ec_run_length_packing.grib2: JMA 5.200 (refused).
+    ec_spherical_pressure_level.grib2: spherical harmonics 3.50 with 5.51 (refused).
+    ec_test_uuid.grib2: two DWD messages with NV = 6 vertical coordinates.
+    ec_tigge_pf_ecmwf.grib2: 38 messages, templates 4.1 and 4.11.
+    ec_jpeg.grib2: NCEP, JPEG 2000 by JasPer 1.700.2, 14-bit.
+    ec_reduced_gaussian_surface_jpeg.grib2: ECMWF, JPEG 2000 on a reduced
+        Gaussian grid coded as a 6114×1 image, with a QCC marker.
+    Edition 1 (M3): ec_regular_latlon_surface.grib1 and _constant.grib1,
+        ec_regular_gaussian_surface.grib1, ec_reduced_gaussian_surface.grib1,
+        ec_reduced_gaussian_pressure_level_constant.grib1 (ECMWF local
+        definition 1 on all), ec_constant_field.grib1 (rotated, NV = 2),
+        ec_timeRangeIndicator_5.grib and _10.grib (interval, two-octet P1),
+        ec_tp_ecmwf.grib (four accumulations), ec_simple_bitmap.grib and
+        ec_simple.grib (Météo-France), ec_gen_ext_spd_2.grib (second-order,
+        refused), ec_spherical_pressure_level.grib1 (spectral, refused),
+        ec_missing_field.grib1 (DWD, the all-ones missing-field convention),
+        ec_msl.octa.glob.grib1 (octahedral O1280, 6.6 M points, bits 0),
+        ec_reduced_gaussian_sub_area.grib1 (global row lengths, smaller count).
+
+syn_ccsds_*.grib2
+    Synthesised by gen_fixtures.py.txt: the 496-point regular_latlon_surface
+    field re-packed by ecCodes 2.49.0 (libaec) as template 5.42 under every
+    coder parameter the reader decodes — 1 to 32 bits, block sizes 8 to 64,
+    reference intervals 1, 2, 7 and 128, the preprocessor off (flags 4), the
+    restricted option set (flags 30), interval padding (flags 46), a
+    high-entropy field and a field of all-zero blocks. Each is about 1 KB.
+
+syn_jpeg_*.grib2
+    Synthesised by gen_fixtures.py.txt: fields re-packed by ecCodes 2.49.0
+    (OpenJPEG 2.5.2) as template 5.40 at 1, 4, 8, 12 and 16 bits, a 16-bit
+    high-entropy field, and the JMA soil-moisture field with its bitmap.

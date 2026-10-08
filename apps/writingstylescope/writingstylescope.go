@@ -229,7 +229,7 @@ func newApp() (inst *App) {
 		docB:            sampleDocB,
 		minSectionBytes: defaultMinSectionBytes,
 		pending:         true,
-		pub:             adhocdata.NewPublisher(datasetAlias, false),
+		pub:             adhocdata.NewWindowPublisher(datasetAlias),
 	}
 	return
 }

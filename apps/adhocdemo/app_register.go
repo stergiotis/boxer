@@ -3,11 +3,10 @@ package adhocdemo
 import (
 	"github.com/rs/zerolog/log"
 
+	"github.com/stergiotis/boxer/apps/sqlapplet"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
-	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 )
 
 // ManifestId is this app's identity — its Go import path (ADR-0026 id rule).
@@ -25,39 +24,18 @@ var manifest = app.Manifest{
 	Kind:         app.KindDemo,
 	Surface:      app.SurfaceWindowed,
 	SurfaceHints: app.SurfaceHints{PreferredWidth: 900, PreferredHeight: 700},
-	Caps: []app.SubjectFilter{
+	// The bundle publish, and what a bundle view needs (ADR-0288 §SD7) —
+	// its resolve and events, and the embedded play's two escape hatches:
+	// Copy in the Definition drawer and Open in Playground, which also
+	// opens tally on the published tree (ADR-0222 §SD7).
+	Caps: append([]app.SubjectFilter{
 		{
-			Pattern:   adhocdata.SubjectPublish,
+			Pattern:   adhocdata.SubjectBundlePublish,
 			Direction: app.CapDirectionPub,
-			Reason:    "adhocdemo: publish and republish an ephemeral dataset the embedded applet queries (ADR-0240)",
+			Reason:    "adhocdemo: publish and republish the computed series as an ad-hoc bundle (ADR-0288)",
 		},
-		{
-			Pattern:   adhocdata.SubjectResolve,
-			Direction: app.CapDirectionPub,
-			Reason:    "adhocdemo: the embedded applet's follower resolves the alias it declares (ADR-0240 §SD6)",
-		},
-		{
-			Pattern:   adhocdata.SubjectEventAll,
-			Direction: app.CapDirectionSub,
-			Reason:    "adhocdemo: the follower hears publish and retract events for the alias",
-		},
-		// The embedded applet's two escape hatches ride this manifest
-		// (ADR-0132 §SD8: an embedded applet's capabilities are the
-		// embedder's). Without them the surface still offers both — the
-		// Definition drawer's per-fence Copy no-ops silently, Open in
-		// Playground shows a permission refusal — so the caps are what makes
-		// it honest.
-		{
-			Pattern:   clipboardbroker.SubjectWrite,
-			Direction: app.CapDirectionPub,
-			Reason:    "adhocdemo: copy a fenced block out of the embedded applet's Definition drawer (ADR-0132 §SD3)",
-		},
-		{
-			Pattern:   windowhost.OpenSubject,
-			Direction: app.CapDirectionPub,
-			Reason:    "adhocdemo: Open in Playground — reopen the applet buffer in a full play window (ADR-0135 §SD7); and open tally on the published ad-hoc tree (ADR-0222 §SD7)",
-		},
-	},
+	}, sqlapplet.BundleViewCaps...),
+	Operations: adhocOps.Catalog(),
 }
 
 func init() {

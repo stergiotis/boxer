@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-24
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-07
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0258: imzero2 — a light theme, `fresh`, chosen at launch
 
@@ -52,6 +50,14 @@ were found by looking at captures rather than at code:
 is the IDS dark palette. Both sides read the variable on their own — the
 Rust overlay when it first needs it, the Go token package in its `init`
 — so no opcode carries the choice and the two halves cannot disagree.
+
+In a browser tab ([ADR-0263](./0263-imzero2-browser-both-modules-in-one-worker-mesh-to-the-painter.md))
+the Rust host is a wasm32 module with no environment to read. The worker
+hands it the `IMZERO2_THEME` value the Go module gets from its own
+environment, before the host starts (`host_theme`), so the two halves
+still agree. The tab's painter clears to black, so the browser host paints
+the theme's panel fill under each frame, as the native host's clear colour
+does.
 
 There is **no runtime switch**, unlike density
 ([ADR-0032 §SD1](./0032-imzero2-design-system-spacing-density-motion.md)).
@@ -155,6 +161,6 @@ the flip; a hand-tuned light palette per language is a later refinement.
 
 ## Status
 
-Proposed. Built and captured behind `IMZERO2_THEME=fresh`: the widgets
+Accepted 2026-10-07. Built and captured behind `IMZERO2_THEME=fresh`: the widgets
 gallery tour under both themes, and the play scene tour under both, with
 identical pass and skip sets.

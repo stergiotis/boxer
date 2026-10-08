@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-18
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-07
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0131: Systematic adversarial code review
 
@@ -189,23 +187,23 @@ type Review struct {
 
 ## Status
 
-Proposed — awaiting review by @spx.
+Accepted 2026-10-07, reviewed by the owner rather than the @spx the proposal
+named. The open questions closed as SD3, SD6 and CODINGSTANDARDS
+§ Adversarial Code Review already state them:
 
-Open questions:
+1. **Scope mechanism** — opt-in, plus a review-critical designation (SD6).
+2. **Normalized-hash definition** — gofmt-normalized bytes (SD3); comment
+   edits still fire.
+3. **Sidecar format and the facts bridge** — the bridge is ADR-0080's
+   `props harvest`, which exists; the sidecar is the findings blob SD2
+   names, its format settled when the marker is built.
+4. **CLI home** — the existing `props` group, as a review-aware
+   `props verify` (SD3).
 
-1. **Scope mechanism** — a distinct `review-critical` designation that `verify`
-   hard-requires (errors when such a package is unreviewed *or* stale), versus
-   pure opt-in (only ever-reviewed packages are reconciled). Leaning
-   opt-in-plus-a-flag.
-2. **Normalized-hash definition** — gofmt-normalized bytes (conservative;
-   comment edits still fire) versus AST-structural (comment-insensitive).
-3. **Sidecar format and the facts bridge** — defer to ADR-0080 open-Q#4.
-4. **CLI home** — a review-aware pass under the existing `props` command group
-   versus a new `boxer review` entry point.
-
-On acceptance: ADR-0080 gains a dated `## Update` introducing the `Review` field
-group (mirroring the 2026-07-02 `Kind` update), and the rule lands in
-CODINGSTANDARDS § Adversarial Code Review.
+Not built: the `Review` field group, the review-aware `props verify` and the
+sidecar. The practice — adversarial review scaled to blast radius, a
+disposition for every finding — applies without them. ADR-0080's 2026-07-18
+Update is the signpost; its full field-group entry lands when the field does.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.

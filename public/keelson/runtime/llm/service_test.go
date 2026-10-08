@@ -157,6 +157,26 @@ func TestCompleteThroughTheHostsModel(t *testing.T) {
 	assert.True(t, seen, "the call is a request the bus audits with the app as sender")
 }
 
+// A request's provider-specific members reach the provider as the app sent
+// them, nested members included; a request without any sends none.
+func TestExtraReachesTheProvider(t *testing.T) {
+	p := &fakeProvider{resp: openaichat.CompletionResponse{Content: "out", FinishReason: "stop"}}
+	cli, _, _ := serve(t, localCfg(p))
+	msg := []openaichat.Message{{Role: openaichat.ChatRoleUser, Content: "hi"}}
+
+	_, err := cli.Complete(context.Background(), Request{Purpose: "test-extra", Messages: msg,
+		Extra: map[string]any{"dry_multiplier": 0.0, "chat_template_kwargs": map[string]any{"enable_thinking": false}}})
+	require.NoError(t, err)
+	assert.EqualValues(t, 0, p.seen.Extra["dry_multiplier"])
+	kwargs, ok := p.seen.Extra["chat_template_kwargs"].(map[string]any)
+	require.True(t, ok, "a nested member stays an object: %T", p.seen.Extra["chat_template_kwargs"])
+	assert.Equal(t, false, kwargs["enable_thinking"])
+
+	_, err = cli.Complete(context.Background(), Request{Purpose: "test-extra", Messages: msg})
+	require.NoError(t, err)
+	assert.Empty(t, p.seen.Extra)
+}
+
 // The sensitivity wall: confined content is refused against a remote
 // endpoint and served against a loopback one.
 func TestConfinedContentStaysOnTheBox(t *testing.T) {

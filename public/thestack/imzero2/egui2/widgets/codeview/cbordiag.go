@@ -65,10 +65,10 @@ func BuildCborDiag(b []byte, opts diag.Options) typed.RetainedFffiHolderTyped[c.
 
 // PrepareCborDiag renders through the package memo: the same bytes under
 // the same options prepared again return the same retained holder without
-// a second walk (ADR-0125). An Annotate hook is not part of any key, so a
-// call that carries one bypasses the memo and builds.
+// a second walk (ADR-0125). An Annotate or AnnotateItem hook is not part of
+// any key, so a call that carries one bypasses the memo and builds.
 func PrepareCborDiag(b []byte, opts diag.Options) typed.RetainedFffiHolderTyped[c.CodeViewJobS] {
-	if opts.Annotate != nil {
+	if opts.Annotate != nil || opts.AnnotateItem != nil {
 		return BuildCborDiag(b, opts)
 	}
 	return memo.prepare(memoKey{lang: langCborDiag, src: cborDiagKey(b, opts)}, func() typed.RetainedFffiHolderTyped[c.CodeViewJobS] {

@@ -189,6 +189,9 @@ func (inst *rowNode) sortedChildren() []*rowNode {
 type rowFS struct {
 	root   *rowNode
 	byPath map[string]*rowNode
+	// byRow is each interned row's path, so the pane can follow a selection
+	// that arrives as a row (a repeated path's later rows included).
+	byRow map[int64]string
 
 	// Counted for the status line: what was interned, what the cap dropped,
 	// and what could not be read as a path at all.
@@ -204,6 +207,7 @@ type rowFS struct {
 func buildPathFS(rec arrow.RecordBatch, k pathClaim) (out *rowFS) {
 	out = &rowFS{root: &rowNode{name: ".", fullPath: ".", isDir: true, row: -1}}
 	out.byPath = map[string]*rowNode{".": out.root}
+	out.byRow = make(map[int64]string)
 	if rec == nil || k.pathCol < 0 {
 		return
 	}
@@ -225,10 +229,12 @@ func buildPathFS(rec arrow.RecordBatch, k pathClaim) (out *rowFS) {
 			// attributes land on the root so the columns have a row to read,
 			// and it lists nowhere.
 			out.root.row, out.root.mtime, out.root.size = row, e.mtime, e.size
+			out.byRow[row] = "."
 			out.interned++
 			continue
 		}
 		out.intern(p, row, e)
+		out.byRow[row] = p
 		out.interned++
 	}
 	out.count(out.root)
@@ -339,6 +345,16 @@ func (inst *rowFS) rowOf(p string) int64 {
 		return -1
 	}
 	return n.row
+}
+
+// pathOf reports the path a result row was interned under; false for a row
+// the cap dropped, a row with no usable path, or a row outside the result.
+func (inst *rowFS) pathOf(row int64) (p string, ok bool) {
+	if inst == nil {
+		return
+	}
+	p, ok = inst.byRow[row]
+	return
 }
 
 func (inst *rowFS) node(op string, name string) (n *rowNode, err error) {

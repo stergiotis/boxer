@@ -66,6 +66,7 @@ func newTestService(t *testing.T) *Service {
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = svc.Close(context.Background()) })
+	captureAudits(svc)
 	return svc
 }
 
@@ -203,16 +204,31 @@ func TestCheckQuotaLocked(t *testing.T) {
 
 	// Byte budget.
 	svc.totalBytes = StoreMaxBytes - 10
-	require.NoError(t, svc.checkQuotaLocked(nil, 10))
-	require.Error(t, svc.checkQuotaLocked(nil, 11))
+	require.NoError(t, svc.checkQuotaLocked(nil, 10, Identity{}))
+	require.Error(t, svc.checkQuotaLocked(nil, 11, Identity{}))
 
 	// Count budget; a republish (existing != nil) does not add to the count.
 	svc.totalBytes = 0
 	for i := range MaxDatasets {
 		svc.live[fmt.Sprintf("d%d", i)] = &record{}
 	}
-	require.Error(t, svc.checkQuotaLocked(nil, 1), "a new dataset past the count exceeds")
-	require.NoError(t, svc.checkQuotaLocked(svc.live["d0"], 1), "republish keeps the count")
+	require.Error(t, svc.checkQuotaLocked(nil, 1, Identity{}), "a new dataset past the count exceeds")
+	require.NoError(t, svc.checkQuotaLocked(svc.live["d0"], 1, Identity{}), "republish keeps the count")
+}
+
+// One owner cannot take the process's whole count (ADR-0288
+// §SD9): its datasets stop at MaxDatasetsPerOwner while another owner's
+// still go in, and a republish never counts.
+func TestCheckQuotaLockedPerOwner(t *testing.T) {
+	svc := &Service{live: make(map[string]*record)}
+	owner := Identity{App: "test.app", Instance: 1}
+	for i := range MaxDatasetsPerOwner {
+		svc.live[fmt.Sprintf("d%d", i)] = &record{owner: owner}
+	}
+	require.Error(t, svc.checkQuotaLocked(nil, 1, owner))
+	require.NoError(t, svc.checkQuotaLocked(svc.live["d0"], 1, owner), "republish keeps the count")
+	require.NoError(t, svc.checkQuotaLocked(nil, 1, Identity{App: "test.app", Instance: 2}), "another window still publishes")
+	require.NoError(t, svc.checkQuotaLocked(nil, 1, Identity{}), "the runtime has no per-owner count")
 }
 
 // TestQuotaAccountingSurvivesRetractAndRepublish pins the invariant the v1
@@ -356,4 +372,35 @@ func TestOpenRacingRepublish(t *testing.T) {
 	close(done)
 	readers.Wait()
 	assert.Zero(t, failures.Load(), "opens that found the file already retired")
+}
+
+// A window-scoped publish goes under the window's own alias, so two
+// windows of one app each hold theirs; a plain alias held by one window is
+// refused to the other (ADR-0288 §SD3).
+func TestWindowScopedAliasesAndOwnership(t *testing.T) {
+	svc := newTestService(t)
+	w1, w2 := Identity{App: "test.app", Instance: 3}, Identity{App: "test.app", Instance: 4}
+	a, err := svc.Publish(PublishInput{Alias: "stats", By: w1, WindowScoped: true, ArrowIPCStream: int64Stream(t, false, 1)})
+	require.NoError(t, err)
+	assert.Equal(t, "stats_w3", a.Alias)
+	b, err := svc.Publish(PublishInput{Alias: "stats", By: w2, WindowScoped: true, ArrowIPCStream: int64Stream(t, false, 2)})
+	require.NoError(t, err)
+	assert.Equal(t, "stats_w4", b.Alias)
+	got, err := svc.Resolve("stats_w3")
+	require.NoError(t, err)
+	assert.Equal(t, a.Handle, got.Handle, "each window resolves its own")
+
+	re, err := svc.Publish(PublishInput{Alias: "stats", Handle: a.Handle, By: w1, WindowScoped: true, ArrowIPCStream: int64Stream(t, false, 5)})
+	require.NoError(t, err)
+	assert.Equal(t, "stats_w3", re.Alias, "a republish keeps the window's alias")
+
+	_, err = svc.Publish(PublishInput{Alias: "plain", By: w1, ArrowIPCStream: int64Stream(t, false, 1)})
+	require.NoError(t, err)
+	_, err = svc.Publish(PublishInput{Alias: "plain", By: w2, ArrowIPCStream: int64Stream(t, false, 1)})
+	assert.ErrorIs(t, err, ErrAliasHeld)
+	_, err = svc.Publish(PublishInput{Alias: "plain", By: w1, ArrowIPCStream: int64Stream(t, false, 2)})
+	assert.NoError(t, err, "the owner may publish another dataset under its alias")
+	_, err = svc.Publish(PublishInput{Alias: "plain", ArrowIPCStream: int64Stream(t, false, 3)})
+	assert.NoError(t, err, "the runtime may")
+	assert.Equal(t, "plain", WindowAlias("plain", 0))
 }

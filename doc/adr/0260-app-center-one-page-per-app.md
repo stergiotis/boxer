@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-09-25
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-07
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0260: The app center — one page per app over the tables that name it
 
@@ -147,7 +145,11 @@ bounded by construction:
   cannot be paired.
 - `app_logs` holds the newest N log rows per app (`LIMIT n BY app_id`).
   Columns are level, message, caller, error, time, app, instance and run. It
-  has no fields and no stack.
+  has no fields and no stack. A reader sees its own app's rows; another
+  app's rows need a second grant on the table, which the app center
+  declares. Log messages can quote what an app was handling, and agents
+  read keelson tables under a task grant (ADR-0276), so reading across apps
+  is asked for rather than implied by the read grant.
 - `app_audit` holds audited requests aggregated per (app, subject, result)
   over the same window: count, first and last seen, and latency.
 
@@ -239,13 +241,20 @@ Whether a reader should see only its own trail unless separately granted is
 
 ## Status
 
-Proposed 2026-09-25. SD1–SD5 were built the same day and checked headless by
-the app center's scene against a host whose store holds a real trail. Open
-for the owner:
+Accepted 2026-10-07. SD1–SD5 were built 2026-09-25 and checked headless by
+the app center's scene against a host whose store holds a real trail. The
+owner's answers:
 
 - **Q1.** Should `app_logs` show another app's messages without a separate
-  grant, or should it default to the reader's own trail?
-- **Q2.** Should unregistered ids be listed (SD2)?
+  grant, or should it default to the reader's own trail? **The reader's own
+  trail** — other apps' rows need a second grant, which the app center
+  declares (SD5).
+- **Q2.** Should unregistered ids be listed (SD2)? **No** — they stay
+  reachable through the tables and the app-state manager (ADR-0185).
+
+Open: Q1's answer is not built. `app_logs` still returns every app's rows to
+a holder of its read grant, and the second grant's subject is chosen when it
+is.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)

@@ -29,6 +29,7 @@ const (
 	kindAgentActionTest        uint64 = 9223372049739677880
 	kindAgentActionTainted     uint64 = 9223372049739677881
 	kindAgentActionConfined    uint64 = 9223372049739677882
+	kindAgentActionConsent     uint64 = 9223372049739677984
 )
 
 // agentActionSymbolAttrI is the InAttr-side view of the symbol section. P-variants only —
@@ -203,6 +204,14 @@ func agentActionEmitSectionStringArray[
 		}
 		stringArraySecAttr_CallReason.AddMembershipLowCardRefP(kindAgentActionCallReason)
 		stringArraySecAttr_CallReason.EndAttributeP()
+	}
+	if len(row.Consent) > 0 {
+		stringArraySecAttr_Consent := stringArraySec.BeginAttribute()
+		for _, v := range row.Consent {
+			stringArraySecAttr_Consent.AddToContainerP(v)
+		}
+		stringArraySecAttr_Consent.AddMembershipLowCardRefP(kindAgentActionConsent)
+		stringArraySecAttr_Consent.EndAttributeP()
 	}
 	return
 }
@@ -540,6 +549,9 @@ func agentActionReadRow[
 	var stringArrayCallReasonSlice []string
 	var stringArrayCallReasonCount int
 	var stringArrayCallReasonLastAttr int64
+	var stringArrayConsentSlice []string
+	var stringArrayConsentCount int
+	var stringArrayConsentLastAttr int64
 	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -590,6 +602,14 @@ func agentActionReadRow[
 				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					stringArrayCallReasonSlice = append(stringArrayCallReasonSlice, v)
 				}
+			case kindAgentActionConsent:
+				if stringArrayConsentLastAttr != attrJ+1 {
+					stringArrayConsentLastAttr = attrJ + 1
+					stringArrayConsentCount++
+				}
+				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					stringArrayConsentSlice = append(stringArrayConsentSlice, v)
+				}
 			}
 		}
 	}
@@ -631,6 +651,14 @@ func agentActionReadRow[
 	}
 	if stringArrayCallReasonSlice != nil {
 		row.CallReason = stringArrayCallReasonSlice
+		present = true
+	}
+	if stringArrayConsentCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentActionConsent").Int("got", stringArrayConsentCount).Errorf("slot stringArray@agentActionConsent (field Consent) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayConsentCount)
+		return
+	}
+	if stringArrayConsentSlice != nil {
+		row.Consent = stringArrayConsentSlice
 		present = true
 	}
 	// --- u64Array. ---

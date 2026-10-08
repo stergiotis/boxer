@@ -78,14 +78,14 @@ that cannot be grepped, and no un-record past the purge horizon.
 | that | one `Guarantees` value; a retention mode checked at open — *proposed* | [ADR-0220](../../adr/0220-pushout-storage-capabilities-and-retention-mode.md) (code landed, ADR proposed) |
 | unlike | a snapshot VCS chained to its ancestry, erasure by history rewrite | [ADR-0025](../../adr/0025-pushout-forget-architecture.md) Forces and Alternative E (history rewrite destroys the hash = patch invariant; no data-protection authority endorses it); [pushout-distributed-operation](../pushout-distributed-operation.md) §5 |
 | pushout | sweep and purge, durable and auditable | [ADR-0025 §SD8](../../adr/0025-pushout-forget-architecture.md) (the one built sub-item); [ADR-0079](../../adr/0079-pushout-production-storage-codec-exchange.md) Q5 |
-| pushout | subject-level forget by vault commitments — *designed, unbuilt* | [ADR-0025](../../adr/0025-pushout-forget-architecture.md), proposed; its Update records that no vault, nonce, commitment or forget symbol exists |
+| pushout | subject-level forget by vault commitments — *designed, unbuilt* | [ADR-0025](../../adr/0025-pushout-forget-architecture.md), accepted without counsel review; its Update records that no vault, nonce, commitment or forget symbol exists |
 | trade | no value-level convergence, no value diffs for vaulted fields; envelopes not greppable; unrecord blocked past the horizon | [ADR-0025](../../adr/0025-pushout-forget-architecture.md) Consequences; [ADR-0209](../../adr/0209-pushout-cbor-identity-and-wire.md) Consequences; [ADR-0220](../../adr/0220-pushout-storage-capabilities-and-retention-mode.md) |
 
 ## Boundary
 
 - **Designed, not built:** the vault, commitments and the forget verbs
-  ([ADR-0025](../../adr/0025-pushout-forget-architecture.md), proposed,
-  waiting on counsel); antiquing
+  ([ADR-0025](../../adr/0025-pushout-forget-architecture.md), accepted;
+  counsel sign-off gates production); antiquing
   ([ADR-0039](../../adr/0039-pushout-antiquing.md), deferred, Decision
   empty); frontier sync, signatures, a NATS transport. The statement's
   erasure clause is qualified accordingly and should not be read as shipped.

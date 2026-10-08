@@ -22,8 +22,9 @@ import (
 // Safe for concurrent use; a publish is a blocking bus round trip and
 // belongs off the render thread.
 type Publisher struct {
-	alias string
-	keep  bool
+	alias  string
+	keep   bool
+	scoped bool
 
 	mu   sync.Mutex
 	last PublishResult
@@ -39,8 +40,28 @@ func NewPublisher(alias string, keepAfterClose bool) (inst *Publisher) {
 	return &Publisher{alias: alias, keep: keepAfterClose}
 }
 
-// Alias is the alias every publish goes under.
-func (inst *Publisher) Alias() (s string) { return inst.alias }
+// NewWindowPublisher builds a publisher that publishes under its window's
+// own alias, `<base>_w<instance>` (ADR-0288 §SD3): two windows
+// of one app each hold their own dataset, and a consumer binds it under
+// base. [Publisher.Alias] names the window's alias once a publish landed.
+func NewWindowPublisher(base string) (inst *Publisher) {
+	return &Publisher{alias: base, scoped: true}
+}
+
+// Alias is the alias the datasets go under: the window's own for a window
+// publisher once a publish landed, the base before.
+func (inst *Publisher) Alias() (s string) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if inst.scoped && inst.last.Alias != "" {
+		return inst.last.Alias
+	}
+	return inst.alias
+}
+
+// Base is the alias the publisher was built with, the name a consumer
+// binds a window publisher's dataset under.
+func (inst *Publisher) Base() (s string) { return inst.alias }
 
 // Publish sends stream over bus, republishing onto the held handle when
 // there is one. On success the handle is recorded before anything else,
@@ -54,7 +75,7 @@ func (inst *Publisher) Publish(bus app.BusI, stream []byte) (res PublishResult, 
 	handle := inst.last.Handle
 	inst.mu.Unlock()
 	res, err = PublishRequest(bus, PublishInput{
-		Alias: inst.alias, Handle: handle, ArrowIPCStream: stream, KeepAfterClose: inst.keep,
+		Alias: inst.alias, Handle: handle, ArrowIPCStream: stream, KeepAfterClose: inst.keep, WindowScoped: inst.scoped,
 	})
 	inst.mu.Lock()
 	inst.err = err

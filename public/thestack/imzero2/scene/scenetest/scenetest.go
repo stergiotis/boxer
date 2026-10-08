@@ -124,8 +124,8 @@ func buildHost(host Host) (b *builtHost, err error) {
 }
 
 // BuildHost builds the host once per test process and returns its path, for a
-// test that runs scenes through a library of its own (vizeval's harness,
-// ADR-0266) rather than through Launch.
+// test that runs scenes through a library of its own rather than through
+// Launch.
 func BuildHost(t testing.TB, host Host) (path string, root string) {
 	t.Helper()
 	b, err := buildHost(host)

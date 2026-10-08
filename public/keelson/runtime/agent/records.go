@@ -57,6 +57,9 @@ type ActionRecord struct {
 	// Confined that the call's outcome carried confined content.
 	Tainted  bool
 	Confined bool
+	// Consent is the grant destination that admitted a consequential call
+	// without the person's confirmation; empty when none did.
+	Consent string
 }
 
 // GrantRow is one task grant as the grants table shows it.
@@ -100,6 +103,7 @@ func (inst *Service) record(t *task, rec *callRec, decision string, out opwire.O
 	if decision == "dispatch" {
 		r.CallTitle, r.CallReason = rec.title, rec.why
 	}
+	r.Consent = rec.consent
 	if c := rec.cause; c.Has {
 		r.ModelCall, r.ToolCallId, r.ToolIndex = c.Val.ModelCall, c.Val.ToolCall.Val, c.Val.ToolIndex
 	}
@@ -249,6 +253,9 @@ func TrailRowOf(rec *trail.Recorder, r ActionRecord) (c trail.Context, cause opt
 	}
 	if r.CallReason != "" {
 		row.CallReason = []string{r.CallReason}
+	}
+	if r.Consent != "" {
+		row.Consent = []string{r.Consent}
 	}
 	return
 }
@@ -498,5 +505,8 @@ func actionsTable(rows []ActionRecord) *introspect.Table {
 		Int32("budget_left", func(i int) int32 { return r(i).BudgetLeft }).
 		Bool("test", func(i int) bool { return r(i).Test }).
 		Bool("tainted", func(i int) bool { return r(i).Tainted }).
-		Bool("confined", func(i int) bool { return r(i).Confined })
+		Bool("confined", func(i int) bool { return r(i).Confined }).
+		// The grant destination that admitted a consequential call without
+		// the person's confirmation; empty when none did.
+		String("consent", func(i int) string { return r(i).Consent })
 }

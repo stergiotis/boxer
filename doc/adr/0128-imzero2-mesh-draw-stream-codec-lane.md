@@ -1,10 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-07-18
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-07
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0128: imzero2 remote access — a mesh draw-stream codec lane beside video
 
@@ -272,7 +272,7 @@ id) keep the clickhouse-local path.
 
 ## Status
 
-Proposed. Spike evidence measured 2026-07-17/18 on the demo carousel at
+Accepted 2026-10-07. Spike evidence measured 2026-07-17/18 on the demo carousel at
 1280×800 @ 30 fps; interactive loopback session exercised input, scrolling,
 multi-viewer fan-out, and the viewer-density fix (verified crisp). M1 is the
 acceptance gate — **landed 2026-07-18** (`3567db31`: `VideoCodec::Mesh`
@@ -295,7 +295,7 @@ of pixels beyond 2/255, all AA-edge rasterization minutiae). The spike-era
 "dull" was entirely the viewer-density issue already fixed at M1's DPR
 adoption. Reconnect reviewed: content-addressed bodies stay valid across
 reconnects and the fresh-connection bootstrap covers the rest — no code
-needed. Awaiting acceptance review.
+needed.
 
 **M3 in progress (2026-07-18).** The host split landed (SD6): wgpu moved behind
 a `headless_wgpu` Cargo feature, and the bare `headless` feature is the lean
@@ -321,8 +321,7 @@ records itself as discharging this ADR's M3 deferral, beside the CPU-rasterized
 pixel host of [ADR-0205](./0205-imzero2-cpu-rasterized-pixel-host.md). M1–M3
 are built. **M4 — the runtime fallback policy — is the open item:** the
 callback sentinel is a warn-once in the headless host and the bandwidth guard
-has not landed. Acceptance can take M4 as a follow-up or split it out; that is
-the reviewer's call.
+has not landed. Accepted 2026-10-07 with M4 as a follow-up.
 
 ## References
 

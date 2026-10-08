@@ -23,11 +23,11 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
-	"github.com/stergiotis/boxer/public/db/clickhouse/text2sql2/orchestrator"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
+	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwextract"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 )
@@ -58,7 +58,7 @@ const leewayReading = "Write handles, never physical names: `section:column` rea
 
 // ValidateArgs is validate_sql's argument.
 type ValidateArgs struct {
-	Sql string `json:",omitzero" desc:"the statement to check; the buffer when left out"`
+	Sql string `json:",omitzero" desc:"the statement to check; when left out, what run would ship: the buffer, or for a buffer of several statements the one at the caret, with the SET prelude"`
 }
 
 // ValidateResult is validate_sql's result.
@@ -76,6 +76,10 @@ type ValidateResult struct {
 	Run      string   `json:",omitzero" desc:"allowed when run would accept this statement under the grant, else the agent limit it would hit"`
 	Needs    []string `json:",omitzero" desc:"destinations request_access would have to add: for a run, and the endpoint for the whole rewrite"`
 	Confined bool     `desc:"true when the statement reads confined data, which a run would carry into the window's label"`
+	// Literals are the editor's red underlines: string literals at an
+	// argument whose domain this build knows whole.
+	Literals          []string `json:",omitzero" desc:"string literals that name no member of their argument's domain — a component kind or field, section, channel, aspect, gloss or gloss key, introspection table — each with candidates; complete_sql lists a domain at an offset"`
+	LiteralsTruncated bool     `json:",omitzero" desc:"true when the bound of 50 cut literals"`
 }
 
 // TablesArgs is list_tables' argument.
@@ -153,19 +157,33 @@ type TableDescription struct {
 }
 
 func addSchemaOps(s *appops.Set[*PlayLauncher, opsSnap]) {
-	appops.ExternalRead(s, app.OperationSpec{Name: opValidateSql, Version: 1,
+	appops.ExternalRead(s, app.OperationSpec{Name: opValidateSql, Version: 3,
 		Summary: "check a statement without running it: grammar, canonical form, play's rewrite of it, and whether run would accept it",
 		Reads:   []string{opsResSql}, Agents: true,
-		Follows: []string{"nothing runs and the buffer is unchanged; set_sql and run when it is right"}},
+		// Untrusted: without sql it quotes the person's buffer back.
+		Untrusted: true,
+		Follows:   []string{"nothing runs and the buffer is unchanged; set_sql and run when it is right"}},
 		func(sn opsSnap, call app.OperationCall, in ValidateArgs) (ValidateResult, error) {
 			if !sn.mounted {
 				return ValidateResult{}, app.RefuseOperation("the window has not mounted")
 			}
 			stmt := in.Sql
 			if strings.TrimSpace(stmt) == "" {
-				stmt = sn.state.Sql
+				// What run would ship, not the whole buffer: a
+				// multi-statement buffer runs the caret's statement.
+				stmt = sn.runSql
 			}
-			return validateStatement(sn.client, call.OnBehalfOf, stmt)
+			out, err := validateStatement(sn.client, call.OnBehalfOf, stmt)
+			if err != nil || out.Canonical == "" {
+				return out, err
+			}
+			// The literal check needs no endpoint: its domains are this
+			// build's registries.
+			out.Literals, out.LiteralsTruncated = literalFindings(sn.completion, stmt)
+			if len(out.Literals) > 0 && out.Valid {
+				out.Valid, out.Error = false, "a string literal names no member of its argument's domain"
+			}
+			return out, nil
 		})
 	appops.ExternalRead(s, app.OperationSpec{Name: opListTables, Version: 1,
 		Summary: "list the endpoint's tables with their engine, row count and comment, and which are leeway tables",
@@ -219,7 +237,7 @@ func validateStatement(client *Client, obo *app.OnBehalfOf, stmt string) (out Va
 	if err = statementBounds(stmt); err != nil {
 		return
 	}
-	out.Canonical, err = orchestrator.Validate(stmt)
+	out.Canonical, err = canonicalStatement(stmt)
 	if err != nil {
 		out.Error, err = err.Error(), nil
 		return
@@ -289,6 +307,22 @@ func unresolvedHandles(client *Client, stmt string) (out []string) {
 		}
 		out = append(out, line)
 	}).Run(stmt)
+	return
+}
+
+// canonicalStatement checks stmt against boxer's grammar and returns its
+// canonical form, which must parse in turn under the canonical grammar.
+func canonicalStatement(stmt string) (canonical string, err error) {
+	if _, err = nanopass.Parse(stmt); err != nil {
+		return "", eh.Errorf("SQL syntax error: %w", err)
+	}
+	canonical, err = passes.CanonicalizeFull(128).Run(stmt)
+	if err != nil {
+		return "", eh.Errorf("normalization error: %w", err)
+	}
+	if _, err = nanopass.ParseCanonical(canonical); err != nil {
+		return "", eh.Errorf("canonical validation error: %w", err)
+	}
 	return
 }
 

@@ -290,18 +290,24 @@ func (inst *PlayApp) renderVocabFilterRow(entries []vocabEntry) {
 	// the thing, not saying which field carries which word.
 	st.accepted = make(map[string]bool, len(entries))
 	for _, e := range entries {
-		hay := e.Name + " " + e.Doc + " " + e.Family
-		all := true
-		for i := range battery.Patterns {
-			if !battery.Patterns[i].Matches(hay) {
-				all = false
-				break
-			}
-		}
-		if all {
+		if vocabMatches(&battery, e) {
 			st.accepted[strings.ToLower(e.Name)] = true
 		}
 	}
+}
+
+// vocabMatches reports whether every pattern of the battery matches the
+// entry's name, doc line and family taken together (space = AND). The pane's
+// filter and list_functions' search both judge an entry here, so a search
+// the pane finds something for finds the same in the operation.
+func vocabMatches(battery *search.Battery, e vocabEntry) bool {
+	hay := e.Name + " " + e.Doc + " " + e.Family
+	for i := range battery.Patterns {
+		if !battery.Patterns[i].Matches(hay) {
+			return false
+		}
+	}
+	return true
 }
 
 // renderVocabStatus is the line under the filter saying what is known about

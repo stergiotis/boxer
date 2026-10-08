@@ -30,10 +30,55 @@ func TestBuscodecRoundTripResolve(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
-	got.At, got.NaturalKey = orig.At, orig.NaturalKey // At compared by Equal; NaturalKey travels nil or empty
-	if !reflect.DeepEqual(got, orig) {
+	if !reflect.DeepEqual(normalized(got, orig), orig) {
 		t.Errorf("got %+v, want %+v", got, orig)
 	}
+}
+
+func TestBuscodecRoundTripBundleResolve(t *testing.T) {
+	orig := adhocreply.AdhocReply{
+		FactId: 2, At: time.Unix(0, 1_700_000_000_000_000_000).UTC(),
+		Ok: true, Bundle: "sales", Revision: 3, Document: []byte("---\ntabs: [table]\n---\n"),
+		LocalNames: []string{"orders", "regions"}, Handles: []string{"adhoc_0123456789abcdef", "adhoc_fedcba9876543210"},
+	}
+	wire, err := buscodec.Encode(orig)
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	got, err := buscodec.Decode[adhocreply.AdhocReply](wire)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if !reflect.DeepEqual(normalized(got, orig), orig) {
+		t.Errorf("got %+v, want %+v", got, orig)
+	}
+}
+
+// normalized copies onto got what the wire does not distinguish: At is
+// compared by Equal, and a nil slice travels as an empty one.
+func normalized(got adhocreply.AdhocReply, orig adhocreply.AdhocReply) adhocreply.AdhocReply {
+	if got.At.Equal(orig.At) {
+		got.At = orig.At
+	}
+	if len(got.NaturalKey) == 0 {
+		got.NaturalKey = orig.NaturalKey
+	}
+	if len(got.Document) == 0 {
+		got.Document = orig.Document
+	}
+	if len(got.LocalNames) == 0 {
+		got.LocalNames = orig.LocalNames
+	}
+	if len(got.Handles) == 0 {
+		got.Handles = orig.Handles
+	}
+	if len(got.ArrowStream) == 0 {
+		got.ArrowStream = orig.ArrowStream
+	}
+	if len(got.ColumnSummaries) == 0 {
+		got.ColumnSummaries = orig.ColumnSummaries
+	}
+	return got
 }
 
 func TestBuscodecRoundTripRefusal(t *testing.T) {

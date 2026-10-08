@@ -1,0 +1,24 @@
+Fixtures of public/science/geo/grib/jpeg2000. Synthesised 2026-09-28 with OpenJPEG 2.5.3
+(opj_compress) from a 47×39 16-bit gradient with pseudo-random texture
+(src16.i32 holds the samples, little-endian int32; src8.i32 the same
+shifted to 8 bits). Every ok_* file decodes to those samples; every no_*
+file carries one feature outside the profile and is refused by name.
+
+ok_default.j2k       defaults: 5 levels, 64×64 code-blocks, 5/3, LRCP, one layer
+ok_reset.j2k         -M 2   context reset after each pass
+ok_vcausal.j2k       -M 8   vertically causal context formation
+ok_pterm.j2k         -M 16  predictable termination
+ok_segsym.j2k        -M 32  segmentation symbols
+ok_sop_eph.j2k       -SOP -EPH marker segments around the packets
+ok_rpcl.j2k          -p RPCL progression (the same packet order with one layer)
+ok_nolevels.j2k      -n 1   no decomposition
+ok_cb32.j2k          -b 32,32
+ok_3levels_cb16.j2k  -n 4 -b 16,16
+ok_precincts.j2k     -c [16,16],…  a 16×16 precinct partition at every resolution
+ok_jp2.jp2           the JP2 file wrapper
+ok_8bit.j2k          the 8-bit source
+no_97.j2k            -I     the 9/7 irreversible wavelet (refused as quantization style 2)
+no_layers.j2k        -r 20,10  two quality layers
+no_tiles.j2k         -t 32,32  four tiles
+no_bypass.j2k        -M 1   arithmetic coder bypass
+no_termall.j2k       -M 4   termination on each coding pass

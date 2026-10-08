@@ -1,12 +1,9 @@
 package leewaywidgets_demo
 
 import (
-	"bytes"
-	"encoding/json/jsontext"
-
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/card"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/streamreadaccess"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
@@ -19,22 +16,16 @@ type viewKeyE uint8
 
 const (
 	viewKeyTable2 viewKeyE = iota
-	viewKeyJSON
 	viewKeySchemaGo
 	viewKeyFixtureGo
 )
 
 // Package-scoped state survives across render-loop frames. Per-window
-// state (selectedView, ids, table2Emitter) lives on the *App value the
+// state (selectedView, ids, card) lives on the *App value the
 // registry hands back from each Open(); the codeview holders below
 // stay package-level because they hold expensive-to-build text that
 // every window can share.
 var (
-	// JSON view cache — built once on first access (driving RunFixture
-	// against a JsonCardEmitter then highlighting the bytes).
-	jsonViewReady bool
-	jsonView      typed.RetainedFffiHolderTyped[c.CodeViewJobS]
-
 	// Go-source view caches — built once from the embedded sources.
 	// schemaGoView mirrors fixture_schema.go (the declarative TableDesc);
 	// fixtureGoView mirrors fixture.go (the data populator + driver wiring).
@@ -56,10 +47,10 @@ type App struct {
 	// Mount still have a non-nil stack.
 	ids *c.WidgetIdStack
 
-	// table2Emitter binds the Table2 card view to the App's ids
-	// stack; per-instance so two open windows emit widget ids under
-	// distinct host salts.
-	table2Emitter *leewaywidgets.Table2CardEmitter
+	// card binds the record card view to the App's ids stack;
+	// per-instance so two open windows emit widget ids under distinct
+	// host salts.
+	card *leewaywidgets.RecordCard
 
 	selectedView viewKeyE
 }
@@ -69,9 +60,9 @@ var _ runtimeapp.AppI = (*App)(nil)
 func newApp() (inst *App) {
 	ids := c.NewWidgetIdStack()
 	inst = &App{
-		ids:           ids,
-		table2Emitter: leewaywidgets.NewTable2CardEmitter(ids, "card", leewaywidgets.ColorPaletteViridis, nil),
-		selectedView:  viewKeyTable2,
+		ids:          ids,
+		card:         leewaywidgets.NewRecordCard(ids, "card", leewaywidgets.ColorPaletteViridis),
+		selectedView: viewKeyTable2,
 	}
 	return
 }
@@ -79,11 +70,11 @@ func newApp() (inst *App) {
 func (inst *App) Manifest() (m runtimeapp.Manifest) { m = manifest; return }
 func (inst *App) Mount(ctx runtimeapp.MountContextI) (err error) {
 	// Pick up the host-supplied per-instance ids stack and rebuild
-	// the Table2 emitter so it emits ids under the same stack. The
-	// emitter holds a pointer to the stack so it can't just be left
-	// pointing at the ctor's fallback.
+	// the card so it emits ids under the same stack. The card holds a
+	// pointer to the stack so it can't just be left pointing at the
+	// ctor's fallback.
 	inst.ids = ctx.Ids()
-	inst.table2Emitter = leewaywidgets.NewTable2CardEmitter(inst.ids, "card", leewaywidgets.ColorPaletteViridis, nil)
+	inst.card = leewaywidgets.NewRecordCard(inst.ids, "card", leewaywidgets.ColorPaletteViridis)
 	return
 }
 func (inst *App) Unmount(ctx runtimeapp.MountContextI) (err error) { return }
@@ -165,9 +156,6 @@ func (inst *App) renderViewTree() {
 	for range c.CollapsingHeader(inst.ids.PrepareStr("catVisual"), c.WidgetText().Text("Visual").Keep()).DefaultOpen(true).KeepIter() {
 		inst.renderViewLeaf(viewKeyTable2, "leafTable2", "table2")
 	}
-	for range c.CollapsingHeader(inst.ids.PrepareStr("catCanonical"), c.WidgetText().Text("Canonical").Keep()).DefaultOpen(true).KeepIter() {
-		inst.renderViewLeaf(viewKeyJSON, "leafJson", "json")
-	}
 	for range c.CollapsingHeader(inst.ids.PrepareStr("catSource"), c.WidgetText().Text("Source").Keep()).DefaultOpen(true).KeepIter() {
 		inst.renderViewLeaf(viewKeySchemaGo, "leafSchemaGo", "schema.go")
 		inst.renderViewLeaf(viewKeyFixtureGo, "leafFixtureGo", "fixture.go")
@@ -183,7 +171,7 @@ func (inst *App) renderViewLeaf(key viewKeyE, idStr string, label string) {
 }
 
 // renderActiveView draws the central pane for the currently selected view.
-// JSON and Go views build their highlighted holders lazily on first access
+// The Go views build their highlighted holders lazily on first access
 // and reuse them across frames; the table2 emitter re-runs RunFixture each
 // frame because its output is widget commands, not text.
 //
@@ -195,11 +183,6 @@ func (inst *App) renderViewLeaf(key viewKeyE, idStr string, label string) {
 // for the windowed app, the height-clamped column for the gallery).
 func (inst *App) renderActiveView() {
 	switch inst.selectedView {
-	case viewKeyJSON:
-		ensureJSONView()
-		for range c.ScrollArea().Vscroll(true).Hscroll(true).AutoShrink(false, false).KeepIter() {
-			c.CodeView(inst.ids.PrepareStr("jsonView"), jsonView).Wrap().Send()
-		}
 	case viewKeySchemaGo:
 		ensureSchemaGoView()
 		for range c.ScrollArea().Vscroll(true).Hscroll(true).AutoShrink(false, false).KeepIter() {
@@ -211,29 +194,15 @@ func (inst *App) renderActiveView() {
 			c.CodeView(inst.ids.PrepareStr("fixtureGoView"), fixtureGoView).Wrap().Send()
 		}
 	default: // viewKeyTable2
-		// Table2CardEmitter renders into an egui_extras::TableBuilder which
+		// The record card renders into an egui_extras::TableBuilder which
 		// owns its own ScrollArea, so wrapping in another ScrollArea would
 		// supply unbounded available_size and crop the tail rows.
-		leewaywidgets.RunFixture(inst.table2Emitter)
+		_ = inst.card.PrepareFrom(func(sink streamreadaccess.SinkI) error {
+			leewaywidgets.RunFixture(sink)
+			return nil
+		}, nil)
+		inst.card.Render()
 	}
-}
-
-// ensureJSONView lazily builds the canonical card-JSON for the fixture and
-// hands it to codeview.PrepareJson. The JsonCardEmitter is one-shot so we drain
-// it into a buffer and re-highlight only when explicitly invalidated (today
-// the fixture is static, so once-per-process is enough).
-func ensureJSONView() {
-	if jsonViewReady {
-		return
-	}
-	buf := bytes.NewBuffer(make([]byte, 0, 4096))
-	enc := jsontext.NewEncoder(buf,
-		jsontext.Multiline(true),
-		jsontext.WithIndent("  "))
-	sink := card.NewJsonCardEmitter(enc, nil)
-	leewaywidgets.RunFixture(sink)
-	jsonView = codeview.PrepareJson(buf.String())
-	jsonViewReady = true
 }
 
 func ensureSchemaGoView() {

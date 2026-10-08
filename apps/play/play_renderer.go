@@ -123,7 +123,7 @@ const (
 	dockTabDocs        uint64 = 17
 	dockTabFlow        uint64 = 18
 	dockTabSankey      uint64 = 19
-	dockTabExperiments uint64 = 20
+	// 20 was the Experiments pane, removed with ADR-0289.
 	dockTabDist        uint64 = 21
 	dockTabIcicle      uint64 = 22
 	dockTabSeries      uint64 = 23
@@ -137,7 +137,7 @@ const (
 	dockTabChat        uint64 = 31
 	dockTabCards       uint64 = 32
 	dockTabVectorField uint64 = 33
-	dockTabModel       uint64 = 34
+	// 34 was the Model tab, removed 2026-10-07 (ADR-0254 Updates).
 )
 
 type PlayApp struct {
@@ -199,9 +199,7 @@ type PlayApp struct {
 	// SetDocsSource overrides it) — and docsPane its view state. A tool
 	// pane, not a result panel: its input is the editor's published caret
 	// entity, never the query result.
-	docs *docsDriver
-	// model is the Model tab's state (ADR-0254 §SD6, play_model_panel.go).
-	model    modelState
+	docs     *docsDriver
 	docsPane *docsPaneState
 
 	// snippets is the built-in Snippets tab's pane: its source and its filter
@@ -247,6 +245,10 @@ type PlayApp struct {
 	liveMain         bool
 	runIsAuto        bool
 	runBlockedReason string
+	// runBlockedUnfilled marks runBlockedReason as the unfilled-input
+	// refusal, the one whose validity is re-derived from the unfilled set;
+	// the ceiling's and the agent-write refusal stand until the next Run.
+	runBlockedUnfilled bool
 	// The write gate (ADR-0181 §SD8 M3): writeGateNotice carries Run's
 	// refusal of an ungated INSERT wrapper for the status bar — set and
 	// cleared only in executeRun, so it renders unconditionally, unlike
@@ -293,6 +295,13 @@ type PlayApp struct {
 	// panes are persistent render-thread state — each carries the
 	// hidden/warming/live phase machine across frames.
 	lazyPanes map[uint64]*lazypane.Pane
+	// paneDrawn is, per pane slug, the frame its body last drew and the
+	// result it drew; list_panes reads a pane's status line against it
+	// (ADR-0270, update of 2026-10-05). Created on first use.
+	paneDrawn map[string]paneDrawnMark
+	// paneViews caches what the get_<pane> reads copy of a pane's last
+	// fold, keyed by the driver's fold generation (play_ops_pane_views.go).
+	paneViews paneViewCache
 	// Slice-6c per-panel binding state. tabBindings maps a panel tab to the
 	// split node it renders (unbound tabs render the active result);
 	// boundLanes holds one lane per distinct bound node; boundViews and
@@ -347,6 +356,11 @@ type PlayApp struct {
 	// the caret is in (the Ctrl+Shift+Enter gesture). Consumed with the run
 	// request it qualifies.
 	requestSubquery bool
+	// requestStatement, when above 0, makes the pending requestRun ship that
+	// statement of a buffer of several (1-based) with the SET prelude,
+	// instead of the one at the caret: run's Statement argument. Consumed by
+	// executeRun.
+	requestStatement int
 	// subqueryMode is the top-bar display toggle for that gesture: while on,
 	// the editor tints the query it would run and the environment travelling
 	// with it. Off by default — the decoration is only wanted while working on
@@ -381,9 +395,6 @@ type PlayApp struct {
 	tableResult  ResultID
 	detailResult ResultID
 	projector    *Projector
-	// experiments backs the Experiments tool pane: a leeway sink playground
-	// over the fixture or the current result.
-	experiments *experimentsDriver
 
 	// tableOpts holds the Table pane's leeway display-mode configuration — the
 	// options bar's three orthogonal controls (row granularity, reveal support
@@ -395,6 +406,9 @@ type PlayApp struct {
 	// tableSort is the Table pane's header-click sort: a permutation over the
 	// record already in hand, never a re-issued query (play_table_sort.go).
 	tableSort tableSortState
+	// tableDrawn is what the Table's last draw drew from, for get_table and
+	// set_table_options (play_ops_table.go).
+	tableDrawn tableDrawnMark
 	// masterCells replays the master table's cells while nothing they depend
 	// on changes; see play_table_cells_cache.go.
 	masterCells masterCellsCache
@@ -550,6 +564,9 @@ type PlayApp struct {
 	// update); inert without the bus, like the fixture lab.
 	projPublish     *projectionPublishState
 	projPublishSeen uint64
+	// projPublishQuiet marks the publish round in flight as an agent's:
+	// its scaffold is not inserted at the person's caret (ADR-0270).
+	projPublishQuiet bool
 
 	// tsCollisions caches whether the server has functions whose names play's
 	// own `ts*` vocabulary shadows (ADR-0163 §SD4). Chrome only — the answer
@@ -761,6 +778,13 @@ type PlayApp struct {
 	// hatch appears. Set via SetToolbarMinimal between construction and
 	// mount.
 	toolbarMinimal bool
+	// publish is the Publish menu (ADR-0288 §SD4), offered by the launcher.
+	publish publishMenu
+	// served is the handler ServedOperations made, kept across frames.
+	served app.OperationsHandlerI
+	// openPlaygroundBundle, when set, is the bundle "Open in Playground"
+	// opens instead of the buffer (SetOpenPlaygroundBundle).
+	openPlaygroundBundle string
 
 	// definition is the document this instance was defined by, when an
 	// embedder handed one over (SetDefinitionMarkdown) — a sqlapplet's
@@ -1201,6 +1225,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	// the editor: a pane that writes SQL into the buffer is exactly the
 	// snippet-class capability play_delivery.go was made public for.
 	inst.seriesDriver = NewSeriesDriver(mk(), func(sql string) { inst.InsertSqlAtCaret(sql) })
+	inst.routePaneOptions()
 	inst.tsCollisions = newTsCollisionProbe(client)
 	inst.vocab = newVocabProbe(client)
 	inst.seriesLabels = newTsLabelsWriter(client)
@@ -1216,16 +1241,6 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	inst.components = newComponentDetail(mk())
 	inst.projector.componentPresence = inst.components.presenceRows
 	inst.identity = newIdentityDetail(mk())
-	// The Experiments pane's card emitters get a stack on a DIFFERENT base
-	// salt, not merely a different instance. PrepareSeq maps its argument
-	// through makeHighEntropy alone and Derive XORs it with the enclosing
-	// scope, which on an empty stack is the base salt — so two stacks built by
-	// mk() produce byte-identical ids for the same argument. The pane and the
-	// Detail tab both render a Table2CardEmitter over the same result in the
-	// same frame, so sharing a salt makes every cell id a duplicate.
-	expCardIds := mk()
-	expCardIds.SetBaseSalt(salt ^ experimentsCardSaltMix)
-	inst.experiments = newExperimentsDriver(mk(), expCardIds)
 	inst.diag = NewDiagnosticsDriver(client)
 	var docsSource DocsSourceI
 	if client != nil {
@@ -1692,6 +1707,7 @@ func (inst *PlayApp) renderTabBody(spec *TabSpec, title string, f *TabFrame) {
 			return
 		}
 	}
+	inst.markPaneDrawn(spec.ID, f)
 	// A run replacing a result the pane is ALREADY showing: the body below
 	// keeps drawing the previous rows (last-good, no flicker — see
 	// nodeLane.demand), and without this strip nothing in the pane says a
@@ -1761,6 +1777,7 @@ func (inst *PlayApp) applyRunShortcut(run, sub bool) {
 	inst.requestRun = true
 	inst.runIsAuto = false
 	inst.requestSubquery = sub
+	inst.requestStatement = 0
 }
 
 // executeRun is the Run path (manual and, since 5e, live-toggle-fired): split
@@ -1771,8 +1788,11 @@ func (inst *PlayApp) applyRunShortcut(run, sub bool) {
 // subquery narrows what ships to the innermost query the caret is in; it is
 // the Ctrl+Shift+Enter gesture and never fires from the live toggle.
 func (inst *PlayApp) executeRun(auto bool, subquery bool) {
+	stmtN := inst.requestStatement
+	inst.requestStatement = 0
 	sql := strings.TrimSpace(inst.sql)
 	if sql == "" {
+		inst.runBlockedReason, inst.runBlockedUnfilled = "", false
 		return
 	}
 	// Run-under-cursor (ADR-0130 L3): a multi-statement body ships the SET
@@ -1789,6 +1809,16 @@ func (inst *PlayApp) executeRun(auto bool, subquery bool) {
 	scope := runScopeWhole
 	if subquery {
 		runSQL, scope = inst.runSubqueryBuffer()
+	}
+	// run's Statement argument picks a statement by number rather than by
+	// the caret; the buffer may have moved since the call checked it.
+	if stmtN > 0 {
+		stmt, err := inst.statementBuffer(stmtN)
+		if err != nil {
+			inst.runBlockedReason, inst.runBlockedUnfilled = err.Error(), false
+			return
+		}
+		runSQL, scope = stmt, runScopeWhole
 	}
 	// Resolve the SHIPPED text's unbound param slots against the frame's
 	// signal snapshot (slice 5a): the values ride the request URL and the
@@ -1812,8 +1842,10 @@ func (inst *PlayApp) executeRun(auto bool, subquery bool) {
 		// editor stays the fallback for names the buffer does not reference.
 		inst.runBlockedReason = "unfilled parameter {" + strings.Join(unfilled, "}, {") +
 			"} — fill it in the PARAMETERS pane, or bind it with SET param_<name> = …"
+		inst.runBlockedUnfilled = true
 		return
 	}
+	inst.runBlockedUnfilled = false
 	// The class ceiling (ADR-0187 §SD5), judged on what the
 	// substitution produces rather than on what the document says. It runs
 	// after the unfilled gate — an unfilled buffer has nothing substituted to
@@ -2141,7 +2173,8 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 			c.Spinner().Size(16).Send()
 			if c.Button(ids.PrepareStr("cancel"), c.Atoms().Text("Cancel").Keep()).
 				SendResp().HasPrimaryClicked() {
-				inst.graph.CancelMain()
+				// The person's Cancel goes through the catalog (ADR-0270 §SD6).
+				inst.personCancelRun()
 			}
 			// The bar rides beside Cancel so an in-flight run is legible
 			// from any tab, with or without a result already on screen.
@@ -2221,20 +2254,24 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 				// stamps the frontmatter from it). Classified off the frame
 				// goroutine — see runsOnIntrospection.
 				sql, autoRun, live, bands := inst.sql, inst.AutoRun, inst.liveMain, inst.timelineBandsSql
-				go func() {
-					endpoint := ""
-					if inst.runsOnIntrospection(sql) {
-						endpoint = launchcfg.EndpointIntrospection
-					}
-					inst.requestOpenPlayground(launchcfg.PlayLaunch{
-						At:       time.Now().UTC(),
-						Sql:      sql,
-						AutoRun:  autoRun,
-						Live:     live,
-						BandsSql: bands,
-						Endpoint: endpoint,
-					})
-				}()
+				if bundle := inst.openPlaygroundBundle; bundle != "" {
+					go inst.requestOpenPlayground(launchcfg.PlayLaunch{At: time.Now().UTC(), Bundle: bundle, AutoRun: true})
+				} else {
+					go func() {
+						endpoint := ""
+						if inst.runsOnIntrospection(sql) {
+							endpoint = launchcfg.EndpointIntrospection
+						}
+						inst.requestOpenPlayground(launchcfg.PlayLaunch{
+							At:       time.Now().UTC(),
+							Sql:      sql,
+							AutoRun:  autoRun,
+							Live:     live,
+							BandsSql: bands,
+							Endpoint: endpoint,
+						})
+					}()
+				}
 			}
 			if openErr != "" {
 				for rt := range c.RichTextLabel("Open failed: " + openErr) {
@@ -2363,6 +2400,7 @@ func (inst *PlayApp) renderTopBar(schema *arrow.Schema) {
 		if !inst.toolbarMinimal {
 			c.Separator().Vertical().Send()
 			inst.renderPanesMenu(schema)
+			inst.renderPublishMenu()
 		}
 
 		// Hide-prelude toggle (visible only when there's at least one
@@ -3043,6 +3081,12 @@ func (inst *PlayApp) renderHistoryTab() {
 // showed "0 rows" during its first fetch (review finding). Same for the
 // Projection/Timeline/Schema tabs below.
 func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema, numRows int64, loading bool, err error, executed time.Time, result ResultID) {
+	// Set again by renderTableBody when there are rows to draw; an empty,
+	// loading or failed state leaves get_table nothing stale to read. The
+	// last draw of this same result is kept for the pager below, whose
+	// change is replayed through set_table_options before the body draws.
+	prevDrawn := inst.tableDrawn
+	inst.tableDrawn = tableDrawnMark{}
 	if loading && rec == nil {
 		inst.renderResultsLoading()
 		return
@@ -3085,7 +3129,23 @@ func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema,
 	// jammed against the table's first header row.
 	pad := styletokens.PaddingTight(inst.density)
 	c.AddSpace(pad)
-	inst.pager.Render()
+	// The pager's change is taken back and made again through
+	// set_table_options, so the person's page turn is logged as theirs
+	// (ADR-0270 §SD6).
+	if prevDrawn.schema == schema {
+		inst.tableDrawn = prevDrawn
+	}
+	page, size := inst.pager.CurrentPage(), inst.pager.PageSize()
+	if ev := inst.pager.Render(); ev.Changed {
+		newPage, newSize := inst.pager.CurrentPage()+1, inst.pager.PageSize()
+		inst.pager.SetPageSize(size)
+		inst.pager.GoToIndex(page * size)
+		in := SetTableOptionsArgs{Page: &newPage}
+		if newSize != size {
+			in.PageSize = &newSize
+		}
+		inst.requestTableOptions(in)
+	}
 	// ADR-0186 raw toggle: bypass every gloss for the session — the escape
 	// hatch a wrong rule needs. Offered only once a column is glossed.
 	inst.renderGlossControl(schema)
@@ -3275,6 +3335,7 @@ func (inst *PlayApp) demandKanbanLanes() (rec arrow.RecordBatch, schema *arrow.S
 		return
 	}
 	node, ok := findSplitNode(inst.currentSplit, kanbanLanesNodeID)
+	d.lanesNode = ok
 	if !ok {
 		d.lanesLoading = false
 		d.lanesErr = nil
@@ -3388,6 +3449,8 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 	// (not the display position) so revealing/hiding a column never shifts
 	// another column's cell identity.
 	visCols := inst.visibleTableCols(rec, schema, pageStart, pageEnd)
+	// A per-attribute grid that fell back to this one draws record rows.
+	inst.tableDrawn.visCols, inst.tableDrawn.perAttr = visCols, false
 	// The synthetic identity columns (ADR-0219 SD7) sit after the Arrow
 	// columns at positions len(visCols)+1+k; their sentinel indices take part
 	// in the column-set change detection below and in nothing that indexes
@@ -3569,7 +3632,10 @@ func (inst *PlayApp) renderMasterTable(rec arrow.RecordBatch, schema *arrow.Sche
 						Frame(false).
 						Truncate().
 						SendResp().HasPrimaryClicked() {
-						inst.tableSort.clicked(arrowCol)
+						// Through set_table_options as the person's
+						// gesture (ADR-0270 §SD6); the cycle is the
+						// one tableSortState.clicked draws.
+						inst.requestTableOptions(inst.tableSortClick(schema, arrowCol))
 					}
 				}
 				for rt := range c.RichTextLabel(shortArrowType(field.Type)) {

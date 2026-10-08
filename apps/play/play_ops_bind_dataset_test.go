@@ -164,3 +164,21 @@ func TestBoundLaunchAliasesCountsOnlyTheConfigs(t *testing.T) {
 	l.inner.client.bindDataset("added", "adhoc_2")
 	assert.Equal(t, 1, l.boundLaunchAliases())
 }
+
+// A bundle's dataset bound with bind_dataset is covered by the bundle, as
+// any other bundle dataset is: the follower records its origin on the bind
+// (ADR-0288 §SD3, §SD4).
+func TestABoundBundleDatasetIsCoveredByItsBundle(t *testing.T) {
+	l, h, publisher := bindLauncher(t)
+	publishSalesBundle(t, publisher, "doc", "orders")
+	_, err := bindDataset(t, h, "sales__orders")
+	require.NoError(t, err)
+	waitBound(t, l, "sales__orders")
+	assert.Equal(t, "sales", l.inner.client.datasetNameOf("sales__orders").bundle)
+	introspectionPlane(l)
+	stmt := "SELECT * FROM keelson('sales__orders')"
+	assert.NoError(t, refuseAgentStatement(l.inner.client, &app.OnBehalfOf{Task: "t", Destinations: []string{"keelson-bundle:sales"}}, stmt))
+	err = refuseAgentStatement(l.inner.client, &app.OnBehalfOf{Task: "t"}, stmt)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "keelson-bundle:sales", "a refusal asks for the bundle")
+}

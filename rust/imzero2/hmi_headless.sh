@@ -110,22 +110,23 @@ esac
 # serves every lane (video through ffmpeg, mesh when asked or when no encoder
 # works — the configuration the gokrazy images run, ADR-0206 SD1). The three use
 # separate --target-dirs so flipping between them does not thrash a single
-# incremental cache.
+# incremental cache. Each is built as the production host (build_rust_dist.sh);
+# the build_rust_headless*.sh scripts remain for a development build.
 case "${HMI_RASTER:-wgpu}" in
     soft)
-        rust_build=./build_rust_headless_soft.sh
+        rust_host=headless_soft
         rust_target=headless-soft
         rust_features=headless_soft
         ;;
     wgpu)
         case "${IMZERO2_HEADLESS_CODEC:-}" in
             mesh|draw-stream|drawstream)
-                rust_build=./build_rust_headless_mesh.sh
+                rust_host=headless_mesh
                 rust_target=headless_mesh
                 rust_features=headless
                 ;;
             *)
-                rust_build=./build_rust_headless.sh
+                rust_host=headless
                 rust_target=headless
                 rust_features=headless_wgpu
                 ;;
@@ -138,7 +139,7 @@ case "${HMI_RASTER:-wgpu}" in
 esac
 
 go_bin="$here/main_go"
-rust_bin="$here/target/$rust_target/release/imzero2"
+rust_bin="$here/target/$rust_target/dist/imzero2"
 if [[ "$HMI_BUILD" == 0 ]]; then
 	do_build=0
 elif [[ "$HMI_BUILD" == 1 || -t 0 ]]; then
@@ -152,7 +153,7 @@ else
 fi
 if [[ "$do_build" == 1 ]]; then
 	echo "hmi_headless.sh: codec '${IMZERO2_HEADLESS_CODEC:-h264 (default)}', raster '${HMI_RASTER:-wgpu (default)}' -> --features $rust_features" >&2
-	"$rust_build" || exit 1
+	./build_rust_dist.sh "$rust_host" || exit 1
 	./build_go.sh || exit 1
 fi
 

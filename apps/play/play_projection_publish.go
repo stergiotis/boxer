@@ -54,8 +54,8 @@ type projectionPublishState struct {
 
 func newProjectionPublishState() *projectionPublishState {
 	return &projectionPublishState{
-		rows:  adhocdata.NewPublisher(projectionAlias, false),
-		rules: adhocdata.NewPublisher(projectionRulesAlias, false),
+		rows:  adhocdata.NewWindowPublisher(projectionAlias),
+		rules: adhocdata.NewWindowPublisher(projectionRulesAlias),
 	}
 }
 
@@ -375,13 +375,25 @@ func (inst *PlayApp) syncProjectionPublish() {
 	// The scaffold names the aliases; the binding makes them this window's
 	// datasets, so the same text reads the same way in a window that
 	// follows the aliases by launch config (ADR-0240 §SD7).
-	for _, b := range []struct{ alias, handle string }{
-		{projectionAlias, rowsHandle},
-		{projectionRulesAlias, rulesHandle},
+	for _, b := range []struct {
+		alias, handle string
+		pub           *adhocdata.Publisher
+	}{
+		{projectionAlias, rowsHandle, inst.projPublish.rows},
+		{projectionRulesAlias, rulesHandle, inst.projPublish.rules},
 	} {
 		if bErr := inst.BindDataset(b.alias, b.handle); bErr != nil {
 			return
 		}
+		// The window's own alias stands behind the name (ADR-0288 §SD3).
+		inst.client.setDatasetOrigin(b.alias, b.pub.Alias(), "")
+	}
+	// An agent's round binds the aliases and leaves the person's caret
+	// alone: get_projection names the handles for it to write its own
+	// query (ADR-0270, the person's caret stays the person's).
+	if inst.projPublishQuiet {
+		inst.projPublishQuiet = false
+		return
 	}
 	inst.InsertSqlAtCaret(projectionScaffold())
 }
@@ -413,7 +425,8 @@ func (inst *PlayApp) renderProjectionPublish(in func() projectionPublishInput) {
 	}
 	if c.Button(inst.ids.PrepareStr("projectionPublish"), c.Atoms().Text(label).Keep()).
 		SendResp().HasPrimaryClicked() && !publishing {
-		inst.publishProjection(in())
+		// The person's publish goes through the catalog (ADR-0270 §SD6).
+		inst.personPublishProjection(func() { inst.publishProjection(in()) })
 	}
 	switch {
 	case err != nil:

@@ -88,7 +88,6 @@ func NewCliCommand() *cli.Command {
 				NewCliCommandDdl(),
 				NewCliCommandDml(),
 				NewCliCommandCanonWire(),
-				NewCliCommandCard(),
 				NewCliCommandId(),
 				NewCliCommandIr(),
 				NewCliCommandSqlSurface(),

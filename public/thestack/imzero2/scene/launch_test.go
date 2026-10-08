@@ -113,6 +113,33 @@ func TestChooseClient(t *testing.T) {
 	assert.Contains(t, err.Error(), "older than the generated")
 }
 
+func TestChooseClientTakesTheNewerOfDistAndRelease(t *testing.T) {
+	root := t.TempDir()
+	soft := filepath.Join(root, "rust", "imzero2", "target", "headless-soft")
+	build := func(profile string, at time.Time) string {
+		p := filepath.Join(soft, profile, "imzero2")
+		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+		require.NoError(t, os.WriteFile(p, nil, 0o755))
+		require.NoError(t, os.Chtimes(p, at, at))
+		return p
+	}
+	now := time.Now()
+	dev := build("release", now.Add(-time.Hour))
+	got, err := chooseClient(root, "", nil)
+	require.NoError(t, err)
+	assert.Equal(t, dev, got, "the development build alone is taken")
+
+	dist := build("dist", now)
+	got, err = chooseClient(root, "", nil)
+	require.NoError(t, err)
+	assert.Equal(t, dist, got, "a newer production build wins")
+
+	require.NoError(t, os.Chtimes(dev, now.Add(time.Minute), now.Add(time.Minute)))
+	got, err = chooseClient(root, "", nil)
+	require.NoError(t, err)
+	assert.Equal(t, dev, got, "an old production build does not shadow a fresh development one")
+}
+
 func TestCheckRequireRejectsWhatItDoesNotKnow(t *testing.T) {
 	_, err := CheckRequire("clickhose")
 	require.Error(t, err, "a typo must not read as a precondition that holds")

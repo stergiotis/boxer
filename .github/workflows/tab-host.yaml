@@ -14,6 +14,10 @@ name: tab-host
 # the published page reaches no third-party endpoint — bundled with this
 # commit's host and published under demo/. A run that does not build it
 # carries the published demo over unchanged, as it does the hosts.
+#
+# Runs on manual dispatch only (ADR-0278 Update 2026-10-06): a push no longer
+# builds or checks the host, so a stale browserhost.sum surfaces at the next
+# dispatch, and a host is published only when someone dispatches.
 on:
   workflow_dispatch:
     inputs:
@@ -21,14 +25,6 @@ on:
         description: 'Also build and publish the demo under demo/'
         type: boolean
         default: true
-  push:
-    branches:
-      - main
-    paths:
-      - 'rust/imzero2/**'
-      - 'public/thestack/imzero2/browserhost/tabhost/browserhost.sum'
-      - 'scripts/dev/rust-repro-env.sh'
-      - '.github/workflows/tab-host.yaml'
 
 permissions:
   contents: read
@@ -135,23 +131,15 @@ jobs:
           if [ -d site/demo ]; then
             (cd site/demo && find . -type f ! -name files.txt | sed 's|^\./||' | sort > files.txt)
           fi
-          python3 - <<'PY'
-          import os
-          from urllib.parse import quote
-          def link(app):
-              return "demo/index.html?worker=" + quote("worker.mjs?app=github.com/stergiotis/boxer/apps/" + app, safe="")
-          demo = ""
-          if os.path.isdir("site/demo"):
-              demo = ("<h2>Demo</h2><p>Two boxer apps running in this tab as WebAssembly, beside the Rust browser host "
-                      "(ADR-0263). The first visit downloads about 10 MB. "
-                      f'<a href="{link("splashscreen")}">splashscreen</a> (build, version, licence notices) · '
-                      f'<a href="{link("fibscope")}">fibscope</a> (fibonacci-tagged identifiers).</p>')
-          open("site/index.html", "w").write(
-              '<!doctype html><meta charset="utf-8"><title>boxer</title>'
-              '<p>Build artifacts of <a href="https://github.com/stergiotis/boxer">boxer</a>, addressed by content. '
-              "<code>tabhost/&lt;sha256&gt;.wasm</code> is the Rust browser host a browser tab runs (ADR-0278); "
-              '<a href="tabhost/index.txt">tabhost/index.txt</a> lists the published digests.</p>' + demo)
-          PY
+          # The landing page is .github/pages/index.html, styled by the IDS
+          # classless stylesheet (ADR-0076) published beside it; its demo
+          # section is dropped while no demo is published.
+          cp public/keelson/designsystem/web/ids.css public/keelson/designsystem/web/ids-palette.css site/
+          if [ -d site/demo ]; then
+            cp .github/pages/index.html site/index.html
+          else
+            sed '/<!-- demo -->/,/<!-- \/demo -->/d' .github/pages/index.html > site/index.html
+          fi
           echo "publish=true" >> "$GITHUB_OUTPUT"
       - name: Upload the site
         if: steps.site.outputs.publish == 'true'

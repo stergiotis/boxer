@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-08-06
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-07
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0173: code-volume self-inspection — the artifacts, the lenses, and what each can answer
 
@@ -858,7 +856,7 @@ label is ambiguous. It took a second tree to find that three of them were.
 
 ## Status
 
-Proposed — awaiting review by the boxer maintainer. Built (noted 2026-09-25):
+Accepted 2026-10-07. Built (noted 2026-09-25):
 M0–M3 — `go_modules`, `go_symbols`, the `go_packages` volume columns and the
 `generators` column, with the `bookcodevol` applet. Open: M4–M9 — the Rust
 tables, the widened book, `go_reach`, the `owner` column and the statement /

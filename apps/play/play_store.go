@@ -50,10 +50,13 @@ type QueryStore struct {
 	// nextAgent is the on-behalf-of context of the next run, taken by
 	// Execute (ADR-0270 §SD2).
 	nextAgent *app.OnBehalfOf
-	err       error
-	elapsed   time.Duration
-	summary   Summary
-	executed  time.Time
+	// runAgent is the on-behalf-of context of the run in flight, nil for
+	// the person's; read only while loading (cancel_run, ADR-0270).
+	runAgent *app.OnBehalfOf
+	err      error
+	elapsed  time.Duration
+	summary  Summary
+	executed time.Time
 	// loading mirrors isLoading but lives under mu, so Snapshot hands back a
 	// (loading, executed) pair that is always mutually consistent: a reader
 	// can never see loading=false against a pre-finish snapshot (executed not
@@ -192,6 +195,7 @@ func (inst *QueryStore) Execute(sql string, signals map[string]string, sourceBuf
 	inst.mu.Lock()
 	agent := inst.nextAgent
 	inst.nextAgent = nil
+	inst.runAgent = agent
 	inst.sourceBuffer = sourceBuffer
 	inst.loading = true
 	inst.progress = runstream.Progress{}
@@ -367,6 +371,17 @@ func (inst *QueryStore) ResultID() (id ResultID) {
 	inst.mu.RLock()
 	defer inst.mu.RUnlock()
 	return inst.resultID
+}
+
+// RunningAgent is the on-behalf-of context of the run in flight: running
+// is false when none is, and obo is nil for the person's run.
+func (inst *QueryStore) RunningAgent() (obo *app.OnBehalfOf, running bool) {
+	inst.mu.RLock()
+	defer inst.mu.RUnlock()
+	if !inst.loading {
+		return nil, false
+	}
+	return inst.runAgent, true
 }
 
 // SetNextAgent marks the next run as agent-caused (ADR-0270 §SD2).

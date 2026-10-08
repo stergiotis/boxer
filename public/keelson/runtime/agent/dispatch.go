@@ -3,6 +3,7 @@ package agent
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json/v2"
 	"image"
 	"math"
 	"reflect"
@@ -144,9 +145,16 @@ type callRec struct {
 	actor         app.AppIdT
 	actorInstance uint64
 	spec          app.OperationSpec
+	// consent is the grant destination that admitted a consequential call
+	// without the person's confirmation.
+	consent string
 	// routed is true once the call reached the instance; until then, or
 	// when the dispatcher decided it, outcome is all there is.
-	routed  bool
+	routed bool
+	// sent is true from the moment the call is put on the bus to its
+	// window, which then holds its on-behalf-of context; a call turned
+	// back into a proposal is unsent again.
+	sent    bool
 	outcome opwire.Outcome
 	// job is a capture's job id; capture what the capture record needs.
 	job     string
@@ -481,7 +489,7 @@ func (inst *Service) call(msg *app.Msg) (rep wireCallReply) {
 	var e *entry
 	var need needE
 	var mode ModeE
-	out, spec, e, need, mode = inst.check(t, req)
+	out, spec, e, need, mode, rec.consent = inst.check(t, req)
 	if late && (out.Phase == opwire.PhaseUnspecified || out.Phase == opwire.PhaseProposed) {
 		// Past its deadline, a call the grant would let through waits for
 		// the person to give the task more time, as a spent budget waits
@@ -506,7 +514,7 @@ func (inst *Service) call(msg *app.Msg) (rep wireCallReply) {
 		} else {
 			t.callsUsed++
 			rec.req, rec.entry = req, e
-			rec.proposal = &proposal{confirm: spec.Effect == app.OperationEffectConsequential,
+			rec.proposal = &proposal{confirm: spec.Effect == app.OperationEffectConsequential && rec.consent == "",
 				expects: inst.expectsFor(t, req, spec)}
 		}
 	}
@@ -581,6 +589,9 @@ func (inst *Service) route(t *task, rec *callRec, req wireCall, spec app.Operati
 		inst.record(t, rec, "dispatch", out)
 		return
 	}
+	inst.mu.Lock()
+	rec.sent = true
+	inst.mu.Unlock()
 	raw, err := inst.busClient.RequestWithTimeout(opwire.Subject(alias, req.Instance, spec.Name), payload, DefaultTimeout)
 	if err != nil {
 		out := phaseOutcome(opwire.PhaseFailed, "the instance did not answer: "+err.Error())
@@ -601,8 +612,10 @@ func (inst *Service) route(t *task, rec *callRec, req wireCall, spec app.Operati
 
 // check decides a call at the dispatcher, or returns the zero outcome when
 // it may be routed. For an input_required outcome, need says what a
-// widening would add and mode the mode it would take. The caller holds mu.
-func (inst *Service) check(t *task, req wireCall) (out opwire.Outcome, spec app.OperationSpec, e *entry, need needE, mode ModeE) {
+// widening would add and mode the mode it would take; consent is the grant
+// destination under which a consequential call needs no confirmation. The
+// caller holds mu.
+func (inst *Service) check(t *task, req wireCall) (out opwire.Outcome, spec app.OperationSpec, e *entry, need needE, mode ModeE, consent string) {
 	e = t.entries[req.Instance]
 	appId := app.AppIdT("")
 	if e != nil {
@@ -619,6 +632,9 @@ func (inst *Service) check(t *task, req wireCall) (out opwire.Outcome, spec app.
 		return
 	}
 	spec, ok = m.Operations.Lookup(req.Operation)
+	if ok && spec.Effect == app.OperationEffectConsequential {
+		consent = consentFor(t, spec.Consent, req.Args)
+	}
 	mode = ModeObserve
 	if ok && spec.Effect != app.OperationEffectNone {
 		mode = ModeAct
@@ -652,15 +668,44 @@ func (inst *Service) check(t *task, req wireCall) (out opwire.Outcome, spec app.
 	case t.callsUsed >= t.callsBudget:
 		out, need, mode = phaseOutcome(opwire.PhaseInputRequired, "the task's call budget is spent; the person is asked"), needBudget, e.mode
 	case spec.Effect == app.OperationEffectConsequential && t.test:
+		// A test grant has no person to consent, standing or not.
 		out = phaseOutcome(opwire.PhaseInputRequired, "a consequential command needs the person's confirmation")
-	case spec.Effect == app.OperationEffectConsequential:
-		out = phaseOutcome(opwire.PhaseProposed, "a consequential command: the person confirms it")
+	case spec.Effect == app.OperationEffectConsequential && consent == "":
+		reason := "a consequential command: the person confirms it"
+		if p := spec.Consent.Pattern(); p != "" {
+			reason += ", unless the grant lists " + p
+		}
+		out = phaseOutcome(opwire.PhaseProposed, reason)
 	case spec.Effect != app.OperationEffectNone && t.modeOf(e) == ModeSuggest:
 		out = phaseOutcome(opwire.PhaseProposed, "suggest mode: the person accepts or rejects it")
 	}
 	if t.test {
 		// Nobody answers a test grant's widening.
 		out.Reason = strings.TrimSuffix(strings.TrimSuffix(out.Reason, "; the person is asked"), ": the person is asked to raise the mode")
+	}
+	return
+}
+
+// consentFor is the destination of t's grant that covers a call under c:
+// "<class>:<prefix>" with a non-empty prefix the call's argument starts
+// with, and not above the task's ceiling. Empty when none does.
+func consentFor(t *task, c app.OperationConsent, args string) (destination string) {
+	if c == (app.OperationConsent{}) {
+		return
+	}
+	var fields map[string]any
+	if json.Unmarshal([]byte(args), &fields) != nil {
+		return
+	}
+	value, isString := fields[c.Arg].(string)
+	if !isString || value == "" {
+		return
+	}
+	for _, d := range t.destinations {
+		prefix, ok := strings.CutPrefix(d, c.Destination(""))
+		if ok && prefix != "" && strings.HasPrefix(value, prefix) && t.ceiling.refuseDestination(d) == "" {
+			return d
+		}
 	}
 	return
 }

@@ -44,7 +44,6 @@ the linked document wins.
 | Draw a gridded vector field (wind, currents) on a map | [doc/howto/vector-field-on-a-map.md](./doc/howto/vector-field-on-a-map.md) |
 | Run an app in a browser tab — build the bundle, serve it, what the tab lacks | [doc/howto/imzero2-in-the-browser.md](./doc/howto/imzero2-in-the-browser.md) |
 | Drive a running app, or write a headless scene that asserts and captures | [doc/skills/imzero2-drive/SKILL.md](./doc/skills/imzero2-drive/SKILL.md) |
-| Score renderings of a leeway batch — geometry metrics per candidate sink | [doc/howto/vizeval-score-renderings.md](./doc/howto/vizeval-score-renderings.md) |
 | Diagnose janky / laggy rendering | [doc/howto/imzero2-render-troubleshooting.md](./doc/howto/imzero2-render-troubleshooting.md) |
 | Report a vulnerability | [SECURITY.md](./SECURITY.md) |
 
@@ -235,7 +234,8 @@ need:
   mechanical rules over every package, with an empty allowlist.
 - **Browser host digest** — any change under `rust/imzero2/` (or a bindings
   regeneration) changes the browser tab's Rust host, whose SHA-256 is recorded
-  in `tabhost/browserhost.sum` and checked by the `tab-host` workflow on push.
+  in `tabhost/browserhost.sum` and checked by the `tab-host` workflow when it is
+  dispatched (manual only — nothing checks it on push).
   In the commit that changes it, refresh the file:
   `go run ./public/thestack/cmd/imzero2tab hostdigest --write`. Compute it from
   the commit being pushed — another session's Rust change in between makes it

@@ -466,3 +466,14 @@ func TestZeroClientIsConservativeNotFatal(t *testing.T) {
 		func(ctx context.Context, endpoint string, sql string) (e error) { return })
 	assert.Error(t, err)
 }
+
+// A window pinned to this process's introspection endpoint — an applet or a
+// bundle view — runs on the introspection plane, so an agent's run there is
+// not asked for a clickhouse: destination naming the loopback.
+func TestAPinnedIntrospectionEndpointIsTheIntrospectionPlane(t *testing.T) {
+	withQueryEndpoint(t, "http://127.0.0.1:1/query")
+	dec := staticResolver{}.resolve("SELECT 1", "http://127.0.0.1:1/query", "")
+	assert.Equal(t, dispatchClassIntrospection, dec.class)
+	dec = staticResolver{}.resolve("SELECT 1", "http://ch.example:8123/", "")
+	assert.Equal(t, dispatchClassManual, dec.class, "any other pinned endpoint is the server it names")
+}

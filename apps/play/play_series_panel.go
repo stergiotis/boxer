@@ -203,6 +203,9 @@ type SeriesDriver struct {
 	foldErr     string
 	skippedRows int64
 	droppedLane int
+	// foldGen counts the folds, so get_series' snapshot copies a fold once
+	// (play_ops_series.go).
+	foldGen uint64
 
 	forExecuted     time.Time
 	forSchema       *arrow.Schema
@@ -220,6 +223,12 @@ type SeriesDriver struct {
 	scoreCall     *tsCall
 	scoreWindow   int32
 	scoreWindowOK bool
+	// scoresGen counts the score lane's inputs (rebuildOverlays), so
+	// get_series walks a score lane once (play_ops_series.go).
+	scoresGen       uint64
+	scoresFor       arrow.RecordBatch
+	scoresForCall   *tsCall
+	scoresForWindow int32
 	// The M3 adjudication state: the current input's identity, the verdicts
 	// read back for it, and the measured comparison they make possible.
 	inputHash string
@@ -260,6 +269,9 @@ type SeriesDriver struct {
 	paneW, paneH float32
 
 	smooth *trendsmooth.State
+	// onOptions routes the smoothing stepper through set_series_options;
+	// nil applies it directly (play_ops_series.go).
+	onOptions func(in SetSeriesOptionsArgs)
 	// decimate is the §SD1 render-only envelope. Exposed as a toggle so the
 	// claim it makes — that it cannot drop an extreme — is checkable by eye
 	// against the undecimated draw, not only by its property test.
@@ -687,6 +699,13 @@ func (inst *SeriesDriver) plotHeights() (seriesH float32, scoreH float32) {
 // average — so it takes no cache of its own; the expensive fold is the series
 // itself, which rebuild memoises.
 func (inst *SeriesDriver) rebuildOverlays(scoreRec arrow.RecordBatch, spanRec arrow.RecordBatch) {
+	// scoresGen moves when the score lane's input does: another record, or
+	// another detector call or window. Holding the record keeps its address
+	// from being reused; it is compared, never read.
+	if scoreRec != inst.scoresFor || inst.scoreCall != inst.scoresForCall || inst.scoreWindow != inst.scoresForWindow {
+		inst.scoresFor, inst.scoresForCall, inst.scoresForWindow = scoreRec, inst.scoreCall, inst.scoreWindow
+		inst.scoresGen++
+	}
 	inst.scores = seriesScores{}
 	inst.spans, inst.spansSkipped = nil, 0
 	if spanRec != nil {
@@ -719,7 +738,15 @@ func (inst *SeriesDriver) rebuildOverlays(scoreRec arrow.RecordBatch, spanRec ar
 // has to be readable somewhere other than the footer's sample counts.
 func (inst *SeriesDriver) renderControls() {
 	for range c.HorizontalTop().KeepIter() {
+		// The stepper moves the half-width inside the frame; the move is
+		// taken back and made again through set_series_options (ADR-0270
+		// §SD6). The checkbox binds State.On, which the write-back records.
+		before := inst.smooth.HalfWidth()
 		trendsmooth.Render(trendsmooth.Input{Ids: inst.ids, ScopeKey: "trendsmooth", State: inst.smooth})
+		if after := inst.smooth.HalfWidth(); after != before {
+			inst.smooth.SetHalfWidth(before)
+			inst.requestOptions(SetSeriesOptionsArgs{HalfWidth: &after})
+		}
 		for range c.HoverText("Draws at most two samples per pixel column — the smallest and the largest value in it — so a long series stays cheap to draw. It cannot drop an extreme: whatever the data reaches inside a pixel, the line reaches too. Drawing only, and only when there is more than one sample per pixel; hover, selection and every analysis read the full series. Turn it off to check the drawing against the undecimated one.").KeepIter() {
 			c.Checkbox(inst.ids.PrepareStr("series-decimate"), inst.decimate, "envelope").
 				SendRespVal(&inst.decimate)
@@ -731,7 +758,26 @@ func (inst *SeriesDriver) renderControls() {
 // with the scaffold that would fix it. The chart is drawn either way — this
 // is a data-quality finding, not an error path.
 func (inst *SeriesDriver) renderGridFinding() {
-	var hint, action, sql string
+	hint, action, sql := inst.gridFinding()
+	if hint == "" {
+		return
+	}
+	for rt := range c.RichTextLabel(hint) {
+		rt.Small().Weak()
+	}
+	if inst.deliver == nil || sql == "" {
+		return
+	}
+	if c.Button(inst.ids.PrepareStr("series-scaffold"), c.Atoms().Text(action).Keep()).
+		SendResp().HasPrimaryClicked() {
+		inst.deliver(sql)
+	}
+}
+
+// gridFinding is §SD2's finding when it is worth acting on: the hint, the
+// scaffold button's label and the scaffold. hint is empty for a regular or
+// too-short series. get_series reads the same text (play_ops_series.go).
+func (inst *SeriesDriver) gridFinding() (hint string, action string, sql string) {
 	switch inst.grid.class {
 	case seriesGridUnordered:
 		hint = "Time runs backwards in this result, so every interval below is meaningless. " +
@@ -750,19 +796,8 @@ func (inst *SeriesDriver) renderGridFinding() {
 			"Aggregate to a grid in SQL — never client-side, which would invent samples a detector then scores:"
 		action = "add GROUP BY"
 		sql = inst.gridScaffold()
-	default:
-		return
 	}
-	for rt := range c.RichTextLabel(hint) {
-		rt.Small().Weak()
-	}
-	if inst.deliver == nil || sql == "" {
-		return
-	}
-	if c.Button(inst.ids.PrepareStr("series-scaffold"), c.Atoms().Text(action).Keep()).
-		SendResp().HasPrimaryClicked() {
-		inst.deliver(sql)
-	}
+	return
 }
 
 // renderPlot draws the lanes over a UTC time axis, decimating per pixel.
@@ -840,6 +875,7 @@ func (inst *SeriesDriver) rebuild(rec arrow.RecordBatch, schema *arrow.Schema, k
 	}
 	inst.forSchema = schema
 	inst.forExecuted = inst.pendingExecuted
+	inst.foldGen++
 	inst.foldErr = ""
 	inst.skippedRows = 0
 	inst.droppedLane = 0

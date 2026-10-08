@@ -3,6 +3,7 @@ package play
 import (
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 	"time"
 
@@ -59,6 +60,12 @@ const (
 // WorldDriver owns the World tab state: the worldmap widget, the value-column
 // choice, and the per-result extraction cache.
 type WorldDriver struct {
+	// drawnStatus and drawnReject are what the last draw showed: its status
+	// line, or why it drew no map although the schema was accepted.
+	// list_panes reads them (ADR-0270, update of 2026-10-05).
+	drawnStatus string
+	drawnReject string
+
 	ids    *c.WidgetIdStack
 	widget *worldmap.Map
 
@@ -74,7 +81,8 @@ type WorldDriver struct {
 	forValue    int
 	forSchema   *arrow.Schema
 
-	// Extraction outputs (render-thread only).
+	// Extraction outputs (render-thread only). rowOf is replaced, never
+	// edited, by each extraction, so get_world's fold shares it.
 	rowOf     map[worldmap.CountryIdx]int64
 	matched   int // countries with at least one resolved row
 	unmatched int // rows whose country cell resolved to nothing
@@ -92,7 +100,35 @@ type WorldDriver struct {
 	// but its outcome is stable for one result).
 	detectFor *arrow.Schema
 	detectCol int
+
+	// fold is what the last extraction found, for get_world: built fresh by
+	// every extraction and never edited, so a snapshot shares it.
+	fold *worldFold
+	// onOptions routes the value and projection combos through
+	// set_world_options (ADR-0270 §SD6); nil applies them directly.
+	onOptions func(SetWorldOptionsArgs)
 }
+
+// worldFold is one extraction as get_world reads it.
+type worldFold struct {
+	atlas         *worldmap.Atlas
+	countryCol    string
+	valueCol      string
+	numeric       []string
+	rowOf         map[worldmap.CountryIdx]int64
+	cellOf        map[worldmap.CountryIdx]string
+	valueOf       map[worldmap.CountryIdx]float64
+	vmin, vmax    float64
+	matched       int
+	unmatched     int
+	dupes         int
+	degenerate    bool
+	unmatchedSeen []string
+}
+
+// worldNoCountryReason is the data-level reject: the schema has a text
+// column, and none of them resolves to countries.
+const worldNoCountryReason = "No column resolves to countries (needs ISO 3166 alpha-2/alpha-3 codes or country names in at least half of its sampled distinct values)."
 
 // valueCol pseudo-values, distinct from a real column index (≥ 0):
 // worldValueAuto picks the first numeric column; worldValuePresence opts out of
@@ -160,22 +196,18 @@ func (inst worldPanel) Render(filled map[ChannelID]ChannelResult, emit SignalEmi
 // render is the tab body on a claimed result: detect columns, extract (cached
 // per result), draw the toolbar + widget, and emit a selection on click.
 func (inst *WorldDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, emit SignalEmitterI) {
-	atlas := inst.widget.Atlas()
-	if atlas == nil {
-		// Widget renders the load error itself.
-		inst.widget.RenderFill(worldFallbackW, worldFallbackH)
-		return
-	}
-	countryCol := inst.detectCountryColumn(rec, schema, atlas)
-	if countryCol < 0 {
-		for rt := range c.RichTextLabel("No column resolves to countries (needs ISO 3166 alpha-2/alpha-3 codes or country names in at least half of its sampled distinct values).") {
+	countryCol, _, numeric, ok := inst.syncFold(rec, schema)
+	if !ok {
+		if inst.widget.Atlas() == nil {
+			// Widget renders the load error itself.
+			inst.widget.RenderFill(worldFallbackW, worldFallbackH)
+			return
+		}
+		for rt := range c.RichTextLabel(worldNoCountryReason) {
 			rt.Small().Weak()
 		}
 		return
 	}
-	numeric := numericColumns(schema)
-	valueCol := inst.effectiveValueCol(numeric)
-	inst.extract(rec, schema, countryCol, valueCol, atlas)
 
 	// Toolbar: the country column, the value picker and the projection picker.
 	// The map sizes itself to the pane and rasterizes at that width; the
@@ -204,7 +236,7 @@ func (inst *WorldDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, emi
 	}
 	// Status on its own row — sharing the toolbar row clips it against the
 	// Detail split at common pane widths.
-	c.Label(inst.statusLine(rec.NumRows(), valueCol, schema)).Send()
+	c.Label(inst.drawnStatus).Send()
 
 	if ev := inst.widget.RenderFill(worldFallbackW, worldFallbackH); ev.ClickedOk {
 		if row, found := inst.rowOf[ev.Clicked]; found {
@@ -218,6 +250,29 @@ func (inst *WorldDriver) render(rec arrow.RecordBatch, schema *arrow.Schema, emi
 			emit.Emit(signalSelectionCountry, formatCell(rec, countryCol, row))
 		}
 	}
+}
+
+// syncFold is the data side of a draw: the country column, the value column
+// and the extraction, with the status line or the reject the draw shows.
+// ok is false when the pane draws no map. Split from render so the fold can
+// be built without a frame.
+func (inst *WorldDriver) syncFold(rec arrow.RecordBatch, schema *arrow.Schema) (countryCol int, valueCol int, numeric []int, ok bool) {
+	atlas := inst.widget.Atlas()
+	if atlas == nil {
+		inst.drawnStatus, inst.drawnReject = "", "the world atlas did not load"
+		return
+	}
+	countryCol = inst.detectCountryColumn(rec, schema, atlas)
+	if countryCol < 0 {
+		inst.drawnStatus, inst.drawnReject = "", worldNoCountryReason
+		return
+	}
+	numeric = numericColumns(schema)
+	valueCol = inst.effectiveValueCol(numeric)
+	inst.extract(rec, schema, countryCol, valueCol, atlas)
+	inst.drawnStatus, inst.drawnReject = inst.statusLine(rec.NumRows(), valueCol, schema), ""
+	ok = true
+	return
 }
 
 // effectiveValueCol maps the persisted pick onto the current schema: presence →
@@ -263,7 +318,7 @@ func (inst *WorldDriver) renderValueCombo(schema *arrow.Schema, numeric []int) {
 			Frame(false).
 			Selected(inst.valueCol == worldValueAuto).
 			SendResp().HasPrimaryClicked() {
-			inst.valueCol = worldValueAuto
+			inst.requestOptions(SetWorldOptionsArgs{Value: new(worldValueAutoName)})
 		}
 		// Opt out of grading — membership-only fill. The right default for a
 		// SELECT *, where "auto" would otherwise shade by the first numeric
@@ -273,7 +328,7 @@ func (inst *WorldDriver) renderValueCombo(schema *arrow.Schema, numeric []int) {
 			Frame(false).
 			Selected(inst.valueCol == worldValuePresence).
 			SendResp().HasPrimaryClicked() {
-			inst.valueCol = worldValuePresence
+			inst.requestOptions(SetWorldOptionsArgs{Value: new(worldValuePresenceName)})
 		}
 		for i, ci := range numeric {
 			if c.Button(inst.ids.PrepareSeq(uint64(0x5001+i)),
@@ -281,7 +336,7 @@ func (inst *WorldDriver) renderValueCombo(schema *arrow.Schema, numeric []int) {
 				Frame(false).
 				Selected(inst.valueCol == ci).
 				SendResp().HasPrimaryClicked() {
-				inst.valueCol = ci
+				inst.requestOptions(SetWorldOptionsArgs{Value: new(schema.Field(ci).Name)})
 			}
 		}
 	}
@@ -303,7 +358,7 @@ func (inst *WorldDriver) renderProjectionCombo() {
 				Frame(false).
 				Selected(p == cur).
 				SendResp().HasPrimaryClicked() {
-				inst.widget.Opts.Projection = p
+				inst.requestOptions(SetWorldOptionsArgs{Projection: new(p.String())})
 			}
 		}
 	}
@@ -407,7 +462,9 @@ func (inst *WorldDriver) extract(rec arrow.RecordBatch, schema *arrow.Schema, co
 
 	vals := make(map[worldmap.CountryIdx]float64, 64)
 	present := make(map[worldmap.CountryIdx]bool, 64)
-	clear(inst.rowOf)
+	cells := make(map[worldmap.CountryIdx]string, 64)
+	inst.rowOf = make(map[worldmap.CountryIdx]int64, 64)
+	var unmatchedSeen []string
 	inst.matched, inst.unmatched, inst.dupes = 0, 0, 0
 	inst.valueDegenerate = false
 
@@ -425,12 +482,16 @@ func (inst *WorldDriver) extract(rec arrow.RecordBatch, schema *arrow.Schema, co
 		}
 		if !ok {
 			inst.unmatched++
+			if cell != "" && len(unmatchedSeen) < worldUnmatchedSamples && !slices.Contains(unmatchedSeen, cell) {
+				unmatchedSeen = append(unmatchedSeen, cell)
+			}
 			continue
 		}
 		if _, seen := inst.rowOf[idx]; seen {
 			inst.dupes++
 		}
 		inst.rowOf[idx] = row
+		cells[idx] = cell
 		present[idx] = true
 		if valueArr != nil {
 			if v, vok := numericCellValue(valueArr, row); vok {
@@ -456,6 +517,16 @@ func (inst *WorldDriver) extract(rec arrow.RecordBatch, schema *arrow.Schema, co
 	} else {
 		inst.widget.SetPresence(present)
 	}
+	f := &worldFold{atlas: atlas, countryCol: schema.Field(countryCol).Name, rowOf: inst.rowOf, cellOf: cells,
+		vmin: vmin, vmax: vmax, matched: inst.matched, unmatched: inst.unmatched, dupes: inst.dupes,
+		degenerate: inst.valueDegenerate, unmatchedSeen: unmatchedSeen}
+	for _, ci := range numericColumns(schema) {
+		f.numeric = append(f.numeric, schema.Field(ci).Name)
+	}
+	if valueCol >= 0 {
+		f.valueCol, f.valueOf = schema.Field(valueCol).Name, vals
+	}
+	inst.fold = f
 }
 
 // isWorldStringType reports column types the country detector considers:

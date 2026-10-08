@@ -131,6 +131,51 @@ type OperationSpec struct {
 	// Gesture names the UI gesture that does the same; empty means there
 	// is none.
 	Gesture string
+	// Consent lets a consequential command run under the person's
+	// standing consent instead of a confirmation per call; zero means
+	// every call is confirmed.
+	Consent OperationConsent
+}
+
+// OperationConsent names how a task's grant covers a consequential call
+// (ADR-0288 §SD4): a grant destination "<Class>:<prefix>",
+// approved by the person as any destination is, covers a call whose
+// argument Arg is a string starting with the non-empty prefix. A covered
+// call is applied as the task's mode applies a document command, and its
+// record names the destination that admitted it.
+type OperationConsent struct {
+	// Class is the destination class, one of ConsentClasses: what the
+	// person consents to is the platform's to define, never the app's.
+	Class string
+	// Arg is the argument field, as the model's JSON names it, whose value
+	// the prefix is matched against.
+	Arg string
+}
+
+// ConsentClassPublish covers publishing an ad-hoc bundle under the name
+// the consent's argument carries (ADR-0288 §SD4).
+const ConsentClassPublish = "publish"
+
+// ConsentClasses are the consent classes a catalog may declare, each with
+// the one meaning a grant destination of that class consents to. A class
+// is a platform decision: an app that could name its own would let one
+// approved destination cover whatever any app called by that name.
+var ConsentClasses = map[string]string{
+	ConsentClassPublish: "publish an ad-hoc bundle under a name starting with the prefix",
+}
+
+// Pattern is the destination as a person or a model writes it in a
+// grant: "publish:<bundle prefix>"; empty when there is no consent.
+func (inst OperationConsent) Pattern() (pattern string) {
+	if inst == (OperationConsent{}) {
+		return ""
+	}
+	return inst.Destination("<" + inst.Arg + " prefix>")
+}
+
+// Destination is the grant destination for prefix under this consent.
+func (inst OperationConsent) Destination(prefix string) (destination string) {
+	return inst.Class + ":" + prefix
 }
 
 // OperationsCatalog is what an app declares in Manifest.Operations.
@@ -268,6 +313,23 @@ func (inst OperationSpec) problem(resources map[string]bool) (problem string) {
 			}
 		}
 	}
+	if inst.Consent != (OperationConsent{}) {
+		switch {
+		case inst.Effect != OperationEffectConsequential:
+			return "only a consequential command declares a consent"
+		case ConsentClasses[inst.Consent.Class] == "":
+			return "a consent's class is not one the platform defines: " + inst.Consent.Class
+		case inst.Args == nil:
+			return "a consent names an argument, and the command takes none"
+		}
+		fieldNames, err := opjson.FieldNames(inst.Args)
+		if err != nil {
+			return err.Error()
+		}
+		if !slices.Contains(fieldNames, inst.Consent.Arg) {
+			return "the consent's argument " + inst.Consent.Arg + " names no argument field"
+		}
+	}
 	return
 }
 
@@ -386,6 +448,42 @@ type OnBehalfOf struct {
 // list the destination? The host's dispatcher implements it.
 type DelegationI interface {
 	AllowDestination(task string, epoch uint64, destination string) (ok bool, reason string)
+}
+
+// CallContext is what the dispatcher recorded for an agent's call, as it
+// answers a host service asking about it (ADR-0288 §SD5).
+// Conversation and Turn are what the coordinator stated when it made the
+// call (ADR-0277 §SD1); ModelCall, ToolCall and ToolIndex the model call
+// whose reply asked for it. Empty where the coordinator stated none.
+type CallContext struct {
+	Task  string
+	Epoch uint64
+	Call  string
+
+	Conversation string
+	Turn         string
+	ModelCall    string
+	ToolCall     string
+	ToolIndex    uint32
+
+	App       AppIdT
+	Instance  uint64
+	Operation string
+	// InFlight is true when the window had not answered the call yet:
+	// work its handler did. False is work the window did later, under a
+	// call it had answered while the task stayed live (ADR-0288
+	// §SD5).
+	InFlight bool
+}
+
+// CallContextI attests an on-behalf-of context for a host service that
+// records agent-caused work: it answers only for a call routed to the
+// sender's window (app and instance) in a task that is live at that epoch,
+// and returns what the dispatcher recorded for it. A service that records
+// the answer records the dispatcher's word for conversation and turn, not
+// the sender's. The host's dispatcher implements it.
+type CallContextI interface {
+	CallContext(task string, epoch uint64, call string, sender AppIdT, senderInstance uint64) (cc CallContext, ok bool, reason string)
 }
 
 // OperationRefusal is an error a handler returns to decline a call without

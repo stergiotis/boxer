@@ -8,8 +8,7 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/analytics/explain"
-	"github.com/stergiotis/boxer/public/analytics/graph/algo"
-	"github.com/stergiotis/boxer/public/analytics/graph/knn"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // RuleTerm is one literal of a cluster's rule: the row has, or lacks, a slot.
@@ -21,7 +20,8 @@ type RuleTerm struct {
 // Band is a group of rows drawn together: a cluster, or the rows no cluster
 // took.
 type Band struct {
-	// Cluster is the HDBSCAN label, −1 for the unclustered rows.
+	// Cluster is the label the rows were given (AnalyzeOptions.Labels), −1
+	// for the unclustered rows.
 	Cluster int32
 	Rows    []int32
 	// Support is the share of the band's rows carrying each slot.
@@ -129,26 +129,23 @@ type Analysis struct {
 	// sections and slots ordered by the band they are most typical of, then
 	// by support. It is the order a frame shared across rows uses.
 	Order []int32
-	// Clustered is false when there were too few rows or no structural
-	// variation to cluster; every row is then in one band.
+	// Clustered is false when no row carries a cluster label; every row is
+	// then in one band.
 	Clustered bool
 }
 
 // AnalyzeOptions bounds the analysis.
 type AnalyzeOptions struct {
-	// MinClusterSize is HDBSCAN's; 0 derives it from the row count.
-	MinClusterSize int
+	// Labels is each row's cluster, −1 for a row no cluster took — the
+	// clustering the lens draws, which is the caller's: the Projection
+	// panel's run (ADR-0289 §SD4). Nil puts every row in one band.
+	Labels []int32
 	// RuleDepth bounds a cluster rule's terms; 0 takes 3.
 	RuleDepth int
 }
 
-// minRowsToCluster is the row count below which clustering says nothing a
-// reader could not see at a glance.
-const minRowsToCluster = 6
-
-// Analyze computes the analysis of m. It is a pure function of m and opts
-// and cheap at the row counts the lens draws: the neighbour graph is exact
-// and quadratic in the rows.
+// Analyze computes the analysis of m. It is a pure function of m and opts,
+// linear in the cells but for the rule trees, which are fitted per cluster.
 func Analyze(ctx context.Context, m *Model, opts AnalyzeOptions) (a Analysis, err error) {
 	a.Model = m
 	n, nSlots := len(m.Rows), len(m.Slots)
@@ -173,18 +170,34 @@ func Analyze(ctx context.Context, m *Model, opts AnalyzeOptions) (a Analysis, er
 		}
 	}
 	labels := make([]int32, n)
-	if n >= minRowsToCluster && len(feats) > 0 {
-		labels, a.Clustered, err = cluster(ctx, m, feats, opts)
-		if err != nil {
+	if opts.Labels != nil {
+		if len(opts.Labels) != n {
+			err = eb.Build().Int("labels", len(opts.Labels)).Int("rows", n).Errorf("lwlens: one label per row")
 			return
 		}
-		if a.Clustered {
+		copy(labels, opts.Labels)
+		if len(feats) > 0 {
 			refine(m, labels, feats)
 		}
+		a.Clustered = slices.ContainsFunc(labels, func(lb int32) bool { return lb >= 0 })
 	}
-	a.bands(labels, feats, opts)
+	a.bands(ctx, labels, feats, opts)
 	a.order()
 	return
+}
+
+// RuleText reads a band's rule as has/lacks literals over slot labels.
+func (inst *Analysis) RuleText(b *Band) string {
+	parts := make([]string, 0, len(b.Rule))
+	for _, t := range b.Rule {
+		lbl := inst.Model.Slots[t.Slot].Label()
+		if t.Has {
+			parts = append(parts, "has "+lbl)
+		} else {
+			parts = append(parts, "lacks "+lbl)
+		}
+	}
+	return strings.Join(parts, " ∧ ")
 }
 
 // presence is the row-major n×len(feats) matrix of slot presence.
@@ -205,58 +218,8 @@ func presence(m *Model, feats []int32) (x []float64) {
 	return
 }
 
-// cluster runs the projection panel's structural clustering: a cosine
-// neighbour graph over slot presence and HDBSCAN over it (ADR-0230,
-// ADR-0238). Rows with identical slots sit at distance zero, so a batch of
-// a few record kinds clusters into its kinds.
-func cluster(ctx context.Context, m *Model, feats []int32, opts AnalyzeOptions) (labels []int32, ok bool, err error) {
-	n, d := len(m.Rows), len(feats)
-	x64 := presence(m, feats)
-	x := make([]float32, len(x64))
-	for i, v := range x64 {
-		x[i] = float32(v)
-	}
-	ids := make([]uint64, n)
-	for i := range ids {
-		ids[i] = uint64(i)
-	}
-	mcs := opts.MinClusterSize
-	if mcs <= 0 {
-		mcs = max(3, min(8, n/12))
-	}
-	// The core distance is read at the K-th neighbour, so K must stay under
-	// the smallest cluster: with K past it, every row of a small kind finds
-	// its core distance in another kind, and kinds that are cleanly apart
-	// merge at one level.
-	res, err := knn.Build(ctx, nil, x, d, ids, knn.Options{K: min(mcs-1, n-1), Metric: knn.MetricCosine})
-	if err != nil {
-		return
-	}
-	g, err := res.DistanceGraph()
-	if err != nil {
-		return
-	}
-	hr, err := algo.HDBSCAN(ctx, g, res.CoreDist, algo.HDBSCANOptions{MinClusterSize: mcs})
-	if err != nil {
-		return
-	}
-	labels = make([]int32, n)
-	for i := range labels {
-		labels[i] = -1
-	}
-	for slot, row := range res.Rows {
-		labels[row] = hr.Label[slot]
-	}
-	ok = hr.NumClusters > 1
-	if !ok {
-		// One cluster, or none, is no grouping: every row in one band.
-		clear(labels)
-	}
-	return
-}
-
 // bands groups rows by label, orders the groups and reads a rule for each.
-func (inst *Analysis) bands(labels []int32, feats []int32, opts AnalyzeOptions) {
+func (inst *Analysis) bands(ctx context.Context, labels []int32, feats []int32, opts AnalyzeOptions) {
 	m := inst.Model
 	byLabel := map[int32][]int32{}
 	for i, lb := range labels {
@@ -305,7 +268,7 @@ func (inst *Analysis) bands(labels []int32, feats []int32, opts AnalyzeOptions) 
 		if b.Cluster < 0 {
 			continue
 		}
-		t, err := explain.FitOneVsRest(context.Background(), x, len(feats), labels, b.Cluster,
+		t, err := explain.FitOneVsRest(ctx, x, len(feats), labels, b.Cluster,
 			explain.TreeOptions{MaxDepth: depth, MinLeaf: 1})
 		if err != nil {
 			continue

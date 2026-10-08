@@ -69,3 +69,90 @@ var (
 	MembAdhocEventOp = KeelsonHrNkRegistry.MustBegin("adhocEventOp", 208).
 				MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityExactlyOne).End()
 )
+
+// Bundle memberships (ADR-0288 §SD2): `adhoc.bundle.publish`,
+// `.resolve` and `.retract` ride the same request and reply kinds, so a
+// bundle adds only what one dataset never needed — the bundle alias, the
+// applet document, and parallel lists of local names, streams and handles.
+// A dataset event carries the bundle it belongs to, empty for a dataset
+// published on its own.
+var (
+	// MembAdhocBundle is the alias of the bundle a request, reply or event
+	// concerns; empty outside bundles.
+	MembAdhocBundle = KeelsonHrNkRegistry.MustBegin("adhocBundle", 229).
+			MustAddRestriction("symbol", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
+	// MembAdhocDocument is a bundle's applet document, as published.
+	MembAdhocDocument = KeelsonHrNkRegistry.MustBegin("adhocDocument", 230).
+				MustAddRestriction("blobArray", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
+	// MembAdhocLocalNames are a bundle's dataset names as its document
+	// spells them, parallel to MembAdhocArrowStreams and MembAdhocHandles.
+	MembAdhocLocalNames = KeelsonHrNkRegistry.MustBegin("adhocLocalNames", 231).
+				MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityArbitrary).End()
+	// MembAdhocArrowStreams are a bundle publish's Arrow IPC streams, one
+	// per local name.
+	MembAdhocArrowStreams = KeelsonHrNkRegistry.MustBegin("adhocArrowStreams", 232).
+				MustAddRestriction("blobArray", common.MembershipSpecLowCardRef, registry.CardinalityArbitrary).End()
+	// MembAdhocHandles are the handles of a bundle's datasets, one per
+	// local name.
+	MembAdhocHandles = KeelsonHrNkRegistry.MustBegin("adhocHandles", 233).
+				MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityArbitrary).End()
+)
+
+// On-behalf-of memberships (ADR-0288 §SD5): the task, epoch and
+// dispatcher call an agent-caused bundle request ran under. The service
+// asks the dispatcher what they stand for; they are never recorded as the
+// sender stated them.
+var (
+	MembAdhocOboTask = KeelsonHrNkRegistry.MustBegin("adhocOboTask", 234).
+				MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
+	MembAdhocOboEpoch = KeelsonHrNkRegistry.MustBegin("adhocOboEpoch", 235).
+				MustAddRestriction("u64Array", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
+	MembAdhocOboCall = KeelsonHrNkRegistry.MustBegin("adhocOboCall", 236).
+				MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
+)
+
+// MembAdhocStreamDigest is the content digest of a dataset's stream as
+// sealed, which an `adhoc.read` reply carries beside the stream so the
+// reader can check what it received (ADR-0288 §SD6).
+var MembAdhocStreamDigest = KeelsonHrNkRegistry.MustBegin("adhocStreamDigest", 237).
+	MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
+
+// MembAdhocWindowScoped asks the service to publish under the publishing
+// window's own alias, `<alias>_w<instance>` (ADR-0288 §SD3), so
+// two windows of one app never hold one alias; the reply's alias is the
+// one the service used.
+var MembAdhocWindowScoped = KeelsonHrNkRegistry.MustBegin("adhocWindowScoped", 239).
+	MustAddRestriction("bool", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
+
+// MembAdhocDestination names the grant destination a refused read needed
+// (ADR-0288 §SD6), so the reading app can ask for it as a run in
+// play asks for its own.
+var MembAdhocDestination = KeelsonHrNkRegistry.MustBegin("adhocDestination", 241).
+	MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
+
+// Provenance memberships (ADR-0288 §SD5): a bundle publish
+// carries the statement that produced its rows and the handles of the
+// datasets that statement read, so the service records where a bundle came
+// from as data rather than as prose in its document.
+var (
+	MembAdhocSourceSql = KeelsonHrNkRegistry.MustBegin("adhocSourceSql", 242).
+				MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
+	MembAdhocInputHandles = KeelsonHrNkRegistry.MustBegin("adhocInputHandles", 243).
+				MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityArbitrary).End()
+)
+
+// MembAdhocPublisherTask is the task whose attested call published a
+// bundle's live revision (ADR-0288 §SD4): that task reads and
+// runs on the bundle without a grant entry for it.
+var MembAdhocPublisherTask = KeelsonHrNkRegistry.MustBegin("adhocPublisherTask", 244).
+	MustAddRestriction("stringArray", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
+
+// Column summaries carry values of sealed data (ADR-0288 §SD5),
+// so they are read as the data is: a read asks for them alone, held to the
+// same grant, and the reply carries them as one JSON document.
+var (
+	MembAdhocColumnsOnly = KeelsonHrNkRegistry.MustBegin("adhocColumnsOnly", 245).
+				MustAddRestriction("bool", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
+	MembAdhocColumnSummaries = KeelsonHrNkRegistry.MustBegin("adhocColumnSummaries", 246).
+					MustAddRestriction("blobArray", common.MembershipSpecLowCardRef, registry.CardinalityZeroToOne).End()
+)

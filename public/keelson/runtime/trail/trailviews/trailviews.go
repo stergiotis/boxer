@@ -103,7 +103,7 @@ import (
 // ViewsVersion is the revision of the views this package composes. Bump it
 // whenever a view's columns or meaning change, so the stamp a deployed view
 // carries tells an operator it predates the build.
-const ViewsVersion = 2
+const ViewsVersion = 8
 
 // agenticTag marks the views over what the agentic side of keelson writes —
 // model calls and their messages, and what agents did under a grant. The
@@ -130,6 +130,7 @@ const (
 	ViewAgentCaptures    = prefixDataMart + "trail_" + agenticTag + "_agent_captures"
 	ViewAgentDisclosures = prefixDataMart + "trail_" + agenticTag + "_agent_disclosures"
 	ViewHttpFetches      = prefixDataMart + "trail_http_fetches"
+	ViewAdhocBundles     = prefixDataMart + "trail_adhoc_bundles"
 	ViewTimeline         = prefixDataMart + "trail_timeline"
 	ViewActionOutcomes   = prefixAggregate + "trail_" + agenticTag + "_agent_action_outcomes"
 	ViewConversations    = prefixAggregate + "trail_" + agenticTag + "_conversations"
@@ -414,6 +415,7 @@ var kindViews = []kindView{
 		{"reason", "stringArray", vocab.MembAgentActionReason, list},
 		{"call-title", "stringArray", vocab.MembAgentActionCallTitle, list},
 		{"call-reason", "stringArray", vocab.MembAgentActionCallReason, list},
+		{"consent", "stringArray", vocab.MembAgentActionConsent, list},
 		{"budget-left", "u32Array", vocab.MembAgentActionBudgetLeft, first},
 		{"test", "bool", vocab.MembAgentActionTest, scalar},
 		{"tainted", "bool", vocab.MembAgentActionTainted, scalar},
@@ -471,6 +473,33 @@ var kindViews = []kindView{
 		{"refused", "bool", vocab.MembHttpFetchRefused, scalar},
 		{"error", "stringArray", vocab.MembHttpFetchError, list},
 	}},
+	{name: ViewAdhocBundles, kind: vocab.MembKindAdhocDataset, columns: []column{
+		{"operation", "symbol", vocab.MembAdhocDatasetOperation, scalar},
+		{"outcome", "symbol", vocab.MembAdhocDatasetOutcome, scalar},
+		{"reason", "stringArray", vocab.MembAdhocDatasetReason, list},
+		{"bundle", "symbol", vocab.MembAdhocDatasetBundle, scalar},
+		{"revision", "u64Array", vocab.MembAdhocDatasetRevision, first},
+		{"owner-app", "symbol", vocab.MembAdhocDatasetOwnerApp, scalar},
+		{"owner-instance", "u64Array", vocab.MembAdhocDatasetOwnerInstance, first},
+		{"local-names", "stringArray", vocab.MembAdhocDatasetLocalNames, list},
+		{"aliases", "stringArray", vocab.MembAdhocDatasetAliases, list},
+		{"handles", "stringArray", vocab.MembAdhocDatasetHandles, list},
+		{"rows", "u64Array", vocab.MembAdhocDatasetRows, list},
+		{"bytes", "u64Array", vocab.MembAdhocDatasetBytes, list},
+		{"stream-digests", "stringArray", vocab.MembAdhocDatasetStreamDigests, list},
+		{"document-digest", "stringArray", vocab.MembAdhocDatasetDocumentDigest, first},
+		{"attested", "bool", vocab.MembAdhocDatasetAttested, scalar},
+		{"in-flight", "bool", vocab.MembAdhocDatasetInFlight, scalar},
+		{"document", "stringArray", vocab.MembAdhocDatasetDocument, first},
+		{"source-sql", "stringArray", vocab.MembAdhocDatasetSourceSql, first},
+		{"input-handles", "stringArray", vocab.MembAdhocDatasetInputHandles, list},
+		{"input-aliases", "stringArray", vocab.MembAdhocDatasetInputAliases, list},
+		{"input-digests", "stringArray", vocab.MembAdhocDatasetInputDigests, list},
+		{"column-names", "stringArray", vocab.MembAdhocDatasetColumnNames, list},
+		{"column-types", "stringArray", vocab.MembAdhocDatasetColumnTypes, list},
+		{"column-nulls", "u64Array", vocab.MembAdhocDatasetColumnNulls, list},
+		{"column-distinct", "u64Array", vocab.MembAdhocDatasetColumnDistinct, list},
+	}},
 }
 
 // withCause names the kinds whose rows may carry a Cause component.
@@ -478,6 +507,7 @@ var withCause = map[string]bool{
 	ViewAgentActions:     true,
 	ViewAgentGrants:      true,
 	ViewAgentDisclosures: true,
+	ViewAdhocBundles:     true,
 }
 
 // composer carries what one composition needs: the database the views go
@@ -871,6 +901,14 @@ var timelineBranches = []timelineBranch{
 		"concat({method}, ' ', {destination}, ' ', {url}, ' -> ', if({refused}, 'refused', toString({status})), " +
 			"' (', toString({bytes}), ' bytes, ', toString({elapsed-ms}), ' ms)')",
 		"arrayStringConcat({error}, ' | ')", "{sensitivity} = 'confined'", "false", "0", "0", "{elapsed-ms}",
+	}},
+	{ViewAdhocBundles, "adhocDataset", [12]string{
+		"{document-digest}", "0", "{cause-model-call}", "{outcome}", "{bundle}",
+		"concat('bundle ', {bundle}, ' ', {operation}, ' r', toString({revision}), ' -> ', {outcome}, " +
+			"if(length({local-names}) > 0, concat(' [', arrayStringConcat({local-names}, ', '), ']'), ''), " +
+			"if({attested}, ' (attested)', ''), " +
+			"if(length({reason}) > 0, concat(' (', arrayStringConcat({reason}, ' | '), ')'), ''))",
+		"arrayStringConcat({reason}, ' | ')", "false", "false", "0", "0", "0",
 	}},
 }
 

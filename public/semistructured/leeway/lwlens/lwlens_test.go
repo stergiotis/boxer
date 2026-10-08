@@ -51,14 +51,30 @@ func kindsModel() *Model {
 	return m
 }
 
-func TestAnalyzeClustersKinds(t *testing.T) {
-	a, err := Analyze(context.Background(), kindsModel(), AnalyzeOptions{})
+// kindLabels labels kindsModel's rows by their kind, the clustering a
+// Projection run over them finds.
+func kindLabels(m *Model) (labels []int32) {
+	for _, r := range m.Rows {
+		labels = append(labels, int32(r.Label[1]-'0'))
+	}
+	return
+}
+
+func analyzeKinds(t *testing.T, m *Model) Analysis {
+	t.Helper()
+	a, err := Analyze(context.Background(), m, AnalyzeOptions{Labels: kindLabels(m)})
 	require.NoError(t, err)
+	return a
+}
+
+func TestAnalyzeBandsFollowTheLabels(t *testing.T) {
+	a := analyzeKinds(t, kindsModel())
 	require.True(t, a.Clustered)
 	clusters := 0
 	for _, b := range a.Bands {
 		if b.Cluster >= 0 {
 			clusters++
+			require.Len(t, b.Rows, 12)
 			require.NotEmpty(t, b.Rule, "every cluster reads as a rule")
 		}
 		t.Logf("band %d: %d rows, rule %v, precision %.2f", b.Cluster, len(b.Rows), b.Rule, b.Precision)
@@ -66,9 +82,26 @@ func TestAnalyzeClustersKinds(t *testing.T) {
 	require.Equal(t, 3, clusters)
 }
 
-func TestPlanScopes(t *testing.T) {
+func TestAnalyzeRefinesAMisfiledRow(t *testing.T) {
+	m := kindsModel()
+	labels := kindLabels(m)
+	labels[12] = 0 // a net row filed with the load rows
+	a, err := Analyze(context.Background(), m, AnalyzeOptions{Labels: labels})
+	require.NoError(t, err)
+	require.Equal(t, int32(-1), a.Bands[a.BandOf[12]].Cluster, "a row sharing under half its cluster's template is unclustered")
+}
+
+func TestAnalyzeWithoutLabelsIsOneBand(t *testing.T) {
 	a, err := Analyze(context.Background(), kindsModel(), AnalyzeOptions{})
 	require.NoError(t, err)
+	require.False(t, a.Clustered)
+	require.Len(t, a.Bands, 1)
+	_, err = Analyze(context.Background(), kindsModel(), AnalyzeOptions{Labels: []int32{0}})
+	require.Error(t, err, "one label per row")
+}
+
+func TestPlanScopes(t *testing.T) {
+	a := analyzeKinds(t, kindsModel())
 
 	global := PlanRows(&a, Intent{Values: 0, Stable: 1})
 	require.Equal(t, ScopeGlobal, global.Scope)
@@ -103,8 +136,7 @@ func TestPlanCollapsesAndHoistsConstants(t *testing.T) {
 	for i := range 12 {
 		m.Rows[i].Cells = append(m.Rows[i].Cells, Cell{Slot: os, Text: "linux", Arity: 1})
 	}
-	a, err := Analyze(context.Background(), m, AnalyzeOptions{})
-	require.NoError(t, err)
+	a := analyzeKinds(t, m)
 
 	shape := PlanRows(&a, Intent{Values: 0, Stable: 1})
 	lines := 0

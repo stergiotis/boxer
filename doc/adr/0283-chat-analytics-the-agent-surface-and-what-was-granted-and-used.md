@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-04
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-07
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0283: Chat analytics — the agent surface, and what of it was granted and used
 
@@ -158,7 +156,7 @@ meaning.
 
 ## Status
 
-Proposed 2026-10-04, built. Verified: `agent`'s classification against the
+Accepted 2026-10-07. Verified: `agent`'s classification against the
 dispatcher over the same grants, the chat's surface builder, and the scenes
 [chat-analytics](../../apps/chat/scenes/chat-analytics.scene.md) (a test
 grant, three operations and a launch) and

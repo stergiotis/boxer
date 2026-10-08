@@ -69,17 +69,20 @@ type Resource struct {
 // Operation is one operation as a caller sees it. The schemas are set only
 // when the request named the operation.
 type Operation struct {
-	Name         string
-	Version      uint16
-	Summary      string
-	Class        string
-	Effect       string
-	Reads        []string
-	Writes       []string
-	Refs         []string
-	Follows      []string
-	Untrusted    bool
-	Gesture      string
+	Name      string
+	Version   uint16
+	Summary   string
+	Class     string
+	Effect    string
+	Reads     []string
+	Writes    []string
+	Refs      []string
+	Follows   []string
+	Untrusted bool
+	Gesture   string
+	// Consent is the grant destination under which a consequential call is
+	// applied without the person's confirmation: "publish:<bundle prefix>".
+	Consent      string
 	ArgsSchema   string
 	ResultSchema string
 }

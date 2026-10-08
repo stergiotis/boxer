@@ -44,4 +44,10 @@ type AdhocEvent struct {
 	// Revision is the revision after a publish, or the last live revision
 	// at a retract.
 	Revision uint64 `lw:"adhocRevision,u64Array"`
+
+	// Bundle is the bundle the dataset belongs to, empty for one published
+	// on its own. On `adhoc.bundle.event.*` it names the bundle that moved,
+	// with Handle and Alias empty and Revision the bundle's (ADR-0288
+	// §SD2).
+	Bundle string `lw:"adhocBundle,symbol"`
 }

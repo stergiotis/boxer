@@ -1,6 +1,6 @@
 // Package leewayrender bridges a captured errkind.Error into the
-// leeway widget pipeline (Table2CardEmitter and any other
-// streamreadaccess.SinkI).
+// leeway read pipeline — any streamreadaccess.SinkI, typically the read
+// model (lwread) a leewaywidgets.RecordCard draws.
 //
 // Pipeline (per call):
 //
@@ -33,7 +33,8 @@ import (
 )
 
 // Render drives one errkind.Error through the full leeway widget
-// pipeline and into `sink` (typically a leewaywidgets.Table2CardEmitter).
+// pipeline and into `sink` (typically an lwread.Sink, through
+// leewaywidgets.RecordCard.PrepareFrom).
 // An Error with no facts (Len(Messages) == 0) renders nothing — callers
 // may invoke unconditionally.
 //

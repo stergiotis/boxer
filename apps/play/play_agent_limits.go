@@ -8,6 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
+	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
 )
@@ -29,14 +30,21 @@ func (inst *AgentLimitError) Error() string { return "agent limit: " + inst.Reas
 // DestinationKeelson is how a grant names an introspection table.
 func DestinationKeelson(table string) (name string) { return "keelson:" + table }
 
+// DestinationKeelsonBundle is how a grant names an ad-hoc bundle; it
+// covers every dataset of the bundle (ADR-0288 §SD4).
+func DestinationKeelsonBundle(bundle string) (name string) {
+	return adhocdata.DestinationBundle(bundle)
+}
+
 // DestinationClickHouse is how a grant names an endpoint, by host.
 func DestinationClickHouse(host string) (name string) { return "clickhouse:" + host }
 
 // checkAgentLimits checks a residual against the grant's destinations:
 // a plain read, keelson() tables it lists, and an endpoint it lists unless
 // the run goes to the host's introspection engine. aliasOf maps a bound
-// dataset handle to its alias, which is what the grant lists.
-func checkAgentLimits(residual string, dec dispatchDecision, obo *app.OnBehalfOf, aliasOf map[string]string) (err error) {
+// dataset handle to the names a grant lists it by: its global alias, and
+// its bundle when it belongs to one.
+func checkAgentLimits(residual string, dec dispatchDecision, obo *app.OnBehalfOf, aliasOf map[string]datasetName) (err error) {
 	pr, perr := nanopass.Parse(residual)
 	if perr != nil {
 		return &AgentLimitError{Reason: "the statement cannot be classified, so an agent cannot run it"}
@@ -51,14 +59,23 @@ func checkAgentLimits(residual string, dec dispatchDecision, obo *app.OnBehalfOf
 	}
 	for _, t := range keelsonsql.References(residual) {
 		// A bound dataset reaches the residual as its ephemeral handle; the
-		// grant names it by the alias the buffer wrote, which is also the
-		// only name a refusal can ask the person for.
-		name := t
-		if alias, bound := aliasOf[t]; bound {
-			name = alias
+		// grant names it by its global alias, or its bundle, never by the
+		// local name the buffer wrote — that names another dataset in
+		// another window — and a refusal asks for the bundle first.
+		n, bound := aliasOf[t]
+		if !bound {
+			n = datasetName{local: t, alias: t}
 		}
-		if !slices.Contains(obo.Destinations, DestinationKeelson(name)) && !slices.Contains(obo.Destinations, DestinationKeelson(t)) {
-			return &AgentLimitError{Reason: "the grant does not list " + DestinationKeelson(name), Destination: DestinationKeelson(name)}
+		dests := n.destinations()
+		// A task runs on what it published without a grant entry (ADR-0288
+		// §SD4): the dataset service attested the publish to that task.
+		covered := slices.Contains(obo.Destinations, DestinationKeelson(t)) ||
+			(n.publisherTask != "" && n.publisherTask == obo.Task)
+		for _, d := range dests {
+			covered = covered || slices.Contains(obo.Destinations, d)
+		}
+		if !covered {
+			return &AgentLimitError{Reason: "the grant does not list " + dests[0], Destination: dests[0]}
 		}
 	}
 	if dec.class == dispatchClassIntrospection {
@@ -75,11 +92,25 @@ func checkAgentLimits(residual string, dec dispatchDecision, obo *app.OnBehalfOf
 // accepted, so a run the grant does not cover is refused with the
 // destination it needs rather than failing after it was applied.
 func (inst *PlayApp) refuseAgentRun(obo *app.OnBehalfOf) (err error) {
-	if inst.client == nil {
+	return inst.refuseAgentRunOf(obo, inst.sql)
+}
+
+// refuseAgentRunOf is refuseAgentRun for a given text: a subquery run is
+// checked on the narrowed text it ships.
+func (inst *PlayApp) refuseAgentRunOf(obo *app.OnBehalfOf, sql string) (err error) {
+	return refuseAgentStatement(inst.client, obo, sql)
+}
+
+// refuseAgentStatement is the agent limits' refusal of sql as the client
+// would send it for obo, naming the destination a grant lacks: the check
+// run makes at the call, and explain_sql's for the statement it explains.
+// A nil client refuses nothing.
+func refuseAgentStatement(client *Client, obo *app.OnBehalfOf, sql string) (err error) {
+	if client == nil {
 		return
 	}
-	residual, _, _ := inst.client.rewriteFor(obo, inst.sql, nil)
-	lerr := checkAgentLimits(residual, inst.client.previewDispatch(residual, ""), obo, inst.client.datasetAliasOf())
+	residual, _, _ := client.rewriteFor(obo, sql, nil)
+	lerr := checkAgentLimits(residual, client.previewDispatch(residual, ""), obo, client.datasetAliasOf())
 	if limit, ok := lerr.(*AgentLimitError); ok {
 		if limit.Destination != "" {
 			return app.RefuseForDestinations(lerr.Error(), limit.Destination)

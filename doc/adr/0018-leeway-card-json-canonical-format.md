@@ -1,16 +1,20 @@
 ---
 type: adr
-status: accepted
+status: superseded
+superseded-by: ADR-0289
+superseded-date: 2026-10-07
 date: 2026-05-01
 reviewed-by: "p@stergiotis"
 reviewed-date: 2026-06-21
 ---
 
+> **Superseded by [ADR-0289](./0289-leeway-rows-for-readers-canonical-forms-a-read-model-and-kinds-in-projection.md) (2026-10-07).** Card JSON is removed from the tree: losslessness and identity are the canonical record forms' job (ADR-0201, ADR-0210), reading is a read model's, and the batch summary is the Projection panel's. This document remains the record of the format; do not implement from it.
+
 # ADR-0018: Canonical Card-JSON Format and JsonCardEmitter Rewrite Plan
 
 ## Context
 
-`JsonCardEmitter` ([`../../public/semistructured/leeway/card/leeway_card_json.go`](../../public/semistructured/leeway/card/leeway_card_json.go)) is Leeway's canonical lossless JSON serialization. [ADR-0007](0007-leeway-membership-role-classifier.md) introduces the `membershiprole.ClassifierI` abstraction that decides primary versus secondary memberships at value level, but pins no JSON shape. Today's `JsonCardEmitter` is section-centric, repeats per-section schema on every entity, stringifies all scalar values, and does not consume the classifier at all. The format is lossless in principle but verbose in practice, validator-hostile (stringified numbers defeat `type: integer`), and not yet isomorphic (no parser exists).
+`JsonCardEmitter` (`leeway_card_json.go` (removed, ADR-0289)) is Leeway's canonical lossless JSON serialization. [ADR-0007](0007-leeway-membership-role-classifier.md) introduces the `membershiprole.ClassifierI` abstraction that decides primary versus secondary memberships at value level, but pins no JSON shape. Today's `JsonCardEmitter` is section-centric, repeats per-section schema on every entity, stringifies all scalar values, and does not consume the classifier at all. The format is lossless in principle but verbose in practice, validator-hostile (stringified numbers defeat `type: integer`), and not yet isomorphic (no parser exists).
 
 This ADR pins the canonical JSON shape and the implementation plan to land it. The shape consumes `membershiprole.ClassifierI` to drive the primary/secondary split, separates schema from data into two artifacts (schema document + data document), and uses an attribute-centric per-entity layout rooted at primary memberships. The plan is staged so each milestone is independently shippable and the final artifact is reviewable against the existing `card_anchor_integration3_test.go` fixtures.
 
@@ -510,12 +514,24 @@ Tracked as named follow-ons:
 
 ## Status
 
-Accepted — 2026-06-21 (reviewed by @spx).
+Superseded by [ADR-0289](./0289-leeway-rows-for-readers-canonical-forms-a-read-model-and-kinds-in-projection.md) — 2026-10-07; see the banner and the Update of that date.
+
+Previously: accepted — 2026-06-21 (reviewed by @spx).
 
 Status lifecycle: `Proposed → Accepted → (Deprecated | Superseded by ADR-XXXX)`.
 ADRs are append-only; supersession is recorded, not deleted.
 
 ## Updates
+
+### 2026-10-07 — Superseded by ADR-0289; the emitters are removed
+
+`JsonCardEmitter`, `JsonCardSchemaEmitter`, `Driver.DriveSchema` and the
+`lw card inspect` command are removed (ADR-0289 §SD6). The parser
+this ADR named as a follow-on was never written, so the isomorphism it claimed
+was never tested. On data whose attribute names carry no leading `/` — the way
+a facts-style table names them — the default classifier made every attribute
+a label and the key a position (`_unidentified/<section>/<n>`); on the anchor
+fixtures 90 of 130 attributes were keyed that way (measured 2026-10-07).
 
 ### 2026-08-02 — Three of SD7's card emitters were deleted
 
@@ -536,7 +552,7 @@ list of names is simply shorter.
 ## References
 
 - [ADR-0007](0007-leeway-membership-role-classifier.md) — membership-role classifier design.
-- [`../../public/semistructured/leeway/card/leeway_card_json.go`](../../public/semistructured/leeway/card/leeway_card_json.go) — current `JsonCardEmitter`; rewrite source.
+- `leeway_card_json.go` (removed, ADR-0289) — current `JsonCardEmitter`; rewrite source.
 - [`../../public/semistructured/leeway/anchor/card_anchor_integration3_test.go`](../../public/semistructured/leeway/anchor/card_anchor_integration3_test.go) — existing fixtures.
 - [`../skills/leeway-advanced/SKILL.md`](../skills/leeway-advanced/SKILL.md) §"Membership roles" — primary/secondary semantics.
 - [`../skills/leeway-streamreadaccess/SKILL.md`](../skills/leeway-streamreadaccess/SKILL.md) §"Membership Role Classification" — classifier on the sink side.

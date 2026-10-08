@@ -14,7 +14,7 @@
 //
 // The pool mechanics — refill, watchdog, stop — are
 // [github.com/stergiotis/boxer/public/keelson/runtime/procpool]
-// (ADR-0285, proposed); this package supplies the clickhouse-local
+// (ADR-0285); this package supplies the clickhouse-local
 // worker and ADR-0028 §SD3's defaults.
 package chlocalpool
 

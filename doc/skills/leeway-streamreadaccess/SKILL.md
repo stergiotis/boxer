@@ -200,6 +200,7 @@ The five `AddMembership*` shapes map onto the five `MembershipKindE` values one-
 
 | Emitter              | File                     | Strategy | Key Technique |
 |----------------------|--------------------------|---|---|
-| `UnicodeCardEmitter` | `leeway_card_unicode.go` | Buffered per section | Accumulates `textRow` cells, flushes box-drawn table at `EndSection` |
-| `JsonCardEmitter`    | `leeway_card_json.go`    | Streaming | `jsontext.Encoder.WriteToken()` — zero buffering |
-| `TopologySink`       | `egui2/widgets/leewaywidgets/topology_sink.go` | Buffered whole-batch | Discards every value; accumulates the containment hierarchy into a `treemap/layout.Node` tree that a widget renders |
+| `lwread.Sink`        | `leeway/lwread/sink.go` | Buffered whole-batch | Reads each record as attributes named by their first membership through an injected `membership.Renderer`, values spelled once, hidden and cut values counted; `leewaywidgets.RecordCard` draws it |
+| `lwlens.Sink`        | `leeway/lwlens/sink.go` | Buffered whole-batch | Reads rows as slots — (section, first membership) — naming memberships through an injected `membership.Renderer` |
+| `card.ItemExtractor` | `leeway/card/leeway_card_items.go` | Buffered per entity | Turns an entity into the set of facts it holds, the Projection panel's structural features |
+| `StructuredOutputRecorder` | `leeway/streamreadaccess/leeway_onlineapi_debug.go` | Streaming | Records every protocol call as an indented trace, which an anchor golden pins |

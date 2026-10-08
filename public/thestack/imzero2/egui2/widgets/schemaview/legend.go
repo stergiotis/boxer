@@ -9,10 +9,9 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/inspector"
 )
 
-// The navigator borrows TopologySpark's glyph vocabulary (rebound from data to
-// schema). The legend popup is the in-widget key for it, so the same vocabulary
-// reads without consulting the demo description or doc.go. Keep these entries in
-// step with card.TopologySpark's legend and renderSections' glyph choices.
+// The legend popup is the in-widget key for the navigator's glyph vocabulary
+// (doc.go), so it reads without consulting the demo description. Keep these
+// entries in step with renderSections' glyph choices.
 type legendEntry struct {
 	glyph   string
 	tone    badge.ToneE

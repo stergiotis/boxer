@@ -180,7 +180,13 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	// The count is asserted on purpose: a capability is an authority this app
 	// is granted, so adding one has to be a deliberate edit here rather than
 	// something that rides along with a feature.
-	require.Len(t, m.Caps, 11)
+	//
+	// Three more open ad-hoc bundles (ADR-0288 §SD4): adhoc.bundle.resolve
+	// and adhoc.bundle.event.> for a window that follows one, and
+	// keelson.query.adhoc_bundles for list_bundles. The Model tab's
+	// llm.complete and keelson.query.sql_passes left with the tab
+	// (ADR-0254, Updates 2026-10-07).
+	require.Len(t, m.Caps, 12)
 	patterns := make([]string, 0, len(m.Caps))
 	for _, cap := range m.Caps {
 		patterns = append(patterns, cap.Pattern)
@@ -198,6 +204,8 @@ func TestManifest_DeclaresFsAndPersist(t *testing.T) {
 	assert.Contains(t, patterns, "ch.local.exec."+timerangepicker.PoolName)
 	assert.Contains(t, patterns, windowhost.OpenSubject)
 	assert.Contains(t, patterns, adhocdata.SubjectPublish)
+	assert.Contains(t, patterns, adhocdata.SubjectBundleResolve)
+	assert.Contains(t, patterns, adhocdata.SubjectBundleEventAll)
 	assert.Contains(t, patterns, adhocdata.SubjectResolve)
 	assert.Contains(t, patterns, adhocdata.SubjectEventAll)
 	// clipboard.write — the Definition pane's per-fence Copy buttons and

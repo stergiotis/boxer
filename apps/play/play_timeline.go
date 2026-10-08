@@ -85,7 +85,16 @@ type TimelineDriver struct {
 	seenRec       arrow.RecordBatch
 	seenContract  timelineContract
 	eventsSkipped int // rows dropped by buildEvents (nulls, inverted intervals)
-	emit          SignalEmitterI
+	eventsN       int // events buildEvents kept
+	// laneTally is the intervals per `_tl_lane` value of the last rebuild
+	// (first 50 lanes), lanesHidden the lanes past them; get_timeline
+	// shares the slice, which a rebuild replaces and never edits.
+	laneTally   []TimelineLaneReading
+	lanesHidden int
+	emit        SignalEmitterI
+	// onWindow routes the person's brush through set_timeline_window
+	// (ADR-0270 §SD6); nil applies it directly.
+	onWindow func(SetTimelineWindowArgs)
 
 	dataMinMS       int64
 	dataMaxMS       int64
@@ -184,11 +193,47 @@ func (inst *TimelineDriver) onSelect(sel timeline.SelectionInfo) {
 // empty states. Selection is published through emit (ADR-0097 SD8).
 func (inst *TimelineDriver) renderContract(rec arrow.RecordBatch, ct timelineContract, emit SignalEmitterI) {
 	inst.emit = emit
+	inst.syncEvents(rec, ct)
+	inst.publishExtent(emit)
+	inst.renderToolbar()
+	inst.renderBandsControls()
+	// Bands are set via the chBands channel (4b-2) before this render, so
+	// bandsProducer reads inst.bands directly; renderContract just paints.
+	prev, hadPrev := inst.tl.Brush()
+	ev := inst.tl.Render()
+	if ev.SelectionChanged {
+		inst.onSelect(ev.Selection)
+	}
+	if ev.BrushChanged {
+		// The widget committed the brush inside the frame; it is taken
+		// back and made again through set_timeline_window, so the person's
+		// window is logged as theirs (ADR-0270 §SD6).
+		if hadPrev {
+			inst.tl.SetBrush(prev.FromMS, prev.ToMS)
+		} else {
+			inst.tl.ClearBrush()
+		}
+		inst.requestWindow(brushWindowArgs(ev.Brush, ev.BrushOk))
+	}
+	inst.publishWindow(emit)
+}
+
+// syncEvents rebuilds the event slices when the result record or the
+// contract changed — the ADR-0097 early-cutoff property at the panel.
+func (inst *TimelineDriver) syncEvents(rec arrow.RecordBatch, ct timelineContract) {
 	if rec != inst.seenRec || ct != inst.seenContract {
 		inst.seenRec = rec
 		inst.seenContract = ct
 		ivs, pts, anns, skipped := buildEvents(rec, ct)
 		inst.eventsSkipped = skipped
+		inst.eventsN = len(ivs) + len(pts) + len(anns)
+		inst.tallyLanes(ct, func(yield func(string) bool) {
+			for _, iv := range ivs {
+				if !yield(iv.LaneHint) {
+					return
+				}
+			}
+		})
 		inst.tl.SetIntervals(ivs)
 		inst.tl.SetPoints(pts)
 		inst.tl.SetAnnotations(anns)
@@ -200,15 +245,6 @@ func (inst *TimelineDriver) renderContract(rec arrow.RecordBatch, ct timelineCon
 		inst.tl.Opts.NoIntensityEncoding = ct.ColIntensity < 0
 		inst.dataMinMS, inst.dataMaxMS, inst.dataExtentValid = extentOfEvents(ivs, pts, anns)
 	}
-	inst.publishExtent(emit)
-	inst.renderToolbar()
-	inst.renderBandsControls()
-	// Bands are set via the chBands channel (4b-2) before this render, so
-	// bandsProducer reads inst.bands directly; renderContract just paints.
-	if ev := inst.tl.Render(); ev.SelectionChanged {
-		inst.onSelect(ev.Selection)
-	}
-	inst.publishWindow(emit)
 }
 
 // publishWindow emits the brushed window as tl_from/tl_to, or the unbounded

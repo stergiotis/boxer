@@ -423,6 +423,13 @@ type GraphviewDriver struct {
 	// so a cursor emit would be clamped away and would jerk the other panels
 	// to row 0.
 	selectedID string
+
+	// onSelect and onOptions route the person's selection, the size-by
+	// combo and the fit, re-lay-out and settle buttons through
+	// select_graphview_nodes and set_graphview_options (ADR-0270 §SD6); nil
+	// applies them directly.
+	onSelect  func(SelectGraphviewNodesArgs)
+	onOptions func(SetGraphviewOptionsArgs)
 }
 
 // NewGraphviewDriver builds the driver over the shared source. src may be nil
@@ -611,6 +618,9 @@ func (inst *GraphviewDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesC
 		Legend:  graphview.AuraLegendInside,
 	}
 
+	// The selection a click makes inside the widget is taken back and made
+	// again through select_graphview_nodes, so it is the person's operation.
+	selBefore := inst.selectedKeys()
 	if inst.hosted() {
 		inst.renderHosted(w, h)
 	} else {
@@ -623,6 +633,8 @@ func (inst *GraphviewDriver) render(edgesRec arrow.RecordBatch, ec networkEdgesC
 			log.Error().Err(err).Msg("graphview render refused the declaration")
 		}
 	}
+
+	inst.replaySelection(selBefore)
 
 	if inst.pendingState {
 		// The reconcile has now given every declared id a slot, so the
@@ -662,19 +674,7 @@ func (inst *GraphviewDriver) publishGestures(emit SignalEmitterI) {
 	v := inst.view
 
 	// --- state -----------------------------------------------------------
-	sel := inst.selBuf[:0]
-	for id := range v.SelectedNodes() {
-		// A selection the query DECLARED is the query's own statement read
-		// back: publishing it would feed a query that declares `selected`
-		// from `selection_key` its own output (§SD8).
-		if _, declared := inst.declaredSel[id]; declared {
-			continue
-		}
-		if name := inst.names.name(id); name != "" {
-			sel = append(sel, name)
-		}
-	}
-	inst.selBuf = sel
+	sel := inst.publishedSelection()
 	emit.Emit(signalGvSelection, append([]string(nil), sel...))
 	// selection_key keeps its meaning: the last of the selected set, and the
 	// empty string for none. It is the cross-panel value other panes also
@@ -779,6 +779,73 @@ func (inst *GraphviewDriver) publishGestures(emit SignalEmitterI) {
 			emit.Emit(signalGvBgY, float64(ev.Y))
 		}
 	}
+}
+
+// publishedSelection is the selection as gv_selection carries it: the
+// declared ids of the selected nodes in ascending key order, without the
+// ones the query declared. A selection the query DECLARED is the query's
+// own statement read back: publishing it would feed a query that declares
+// `selected` from `selection_key` its own output (§SD8). The slice is the
+// driver's scratch.
+func (inst *GraphviewDriver) publishedSelection() []string {
+	sel := inst.selBuf[:0]
+	if inst.names == nil {
+		return sel
+	}
+	for id := range inst.view.SelectedNodes() {
+		if _, declared := inst.declaredSel[id]; declared {
+			continue
+		}
+		if name := inst.names.name(id); name != "" {
+			sel = append(sel, name)
+		}
+	}
+	inst.selBuf = sel
+	return sel
+}
+
+// selectedKeys is the widget's selection, ascending.
+func (inst *GraphviewDriver) selectedKeys() (keys []uint64) {
+	for id := range inst.view.SelectedNodes() {
+		keys = append(keys, id)
+	}
+	return
+}
+
+// replaySelection takes back a selection the person changed during this
+// frame's render and makes it again through select_graphview_nodes. A
+// change with no select or deselect event is the widget dropping ids a
+// rebuild removed, which is not a gesture. Without a router the widget's
+// change stands.
+func (inst *GraphviewDriver) replaySelection(before []uint64) {
+	if inst.onSelect == nil || inst.names == nil {
+		return
+	}
+	gesture := slices.ContainsFunc(inst.events, func(e graphview.Event) bool {
+		return e.Kind == graphview.EventKindNodeSelect || e.Kind == graphview.EventKindNodeDeselect
+	})
+	if !gesture {
+		return
+	}
+	after := inst.selectedKeys()
+	if slices.Equal(before, after) {
+		return
+	}
+	for _, id := range after {
+		if _, found := slices.BinarySearch(before, id); !found {
+			inst.view.DeselectNode(id)
+		}
+	}
+	for _, id := range before {
+		inst.view.SelectNode(id)
+	}
+	in := SelectGraphviewNodesArgs{Clear: len(after) == 0}
+	for _, id := range after {
+		if name := inst.names.name(id); name != "" {
+			in.Ids = append(in.Ids, name)
+		}
+	}
+	inst.onSelect(in)
 }
 
 // pruneSelection clears a published selection the current declaration no longer
@@ -972,18 +1039,15 @@ func (inst *GraphviewDriver) renderControls() {
 	}
 	for range c.Horizontal().KeepIter() {
 		if c.Button(ids.PrepareStr("gv-fit"), c.Atoms().Text("fit").Keep()).SendResp().HasPrimaryClicked() {
-			inst.view.FitNow()
-			inst.hostFitPending = true
+			inst.requestOptions(SetGraphviewOptionsArgs{Fit: true})
 		}
 		if c.Button(ids.PrepareStr("gv-reset"), c.Atoms().Text("re-lay-out").Keep()).SendResp().HasPrimaryClicked() {
-			inst.view.ResetLayout()
-			inst.frozen = false
+			inst.requestOptions(SetGraphviewOptionsArgs{Relayout: true})
 		}
 		// Fast-forward is what a large graph wants instead of watching it
 		// converge: the steps run before the frame paints.
 		if c.Button(ids.PrepareStr("gv-ff"), c.Atoms().Text("settle").Keep()).SendResp().HasPrimaryClicked() {
-			inst.view.FastForward(graphviewSettleBudget(inst.nodes.Len()))
-			inst.frozen = false
+			inst.requestOptions(SetGraphviewOptionsArgs{Settle: true})
 		}
 		c.Checkbox(ids.PrepareStr("gv-paused"), inst.paused, "paused").SendRespVal(&inst.paused)
 		autoCheckbox(ids, "gv-hold", "hold dropped nodes", &inst.holdCtl, &inst.holdSent,
@@ -1014,17 +1078,7 @@ func (inst *GraphviewDriver) renderControls() {
 					Frame(false).
 					Selected(cur == name).
 					SendResp().HasPrimaryClicked() {
-					switch name {
-					case "auto":
-						inst.sizeBy, inst.sizeBySet = "", false
-					case networkWeightCol:
-						inst.sizeBy, inst.sizeBySet = "", true
-					default:
-						inst.sizeBy, inst.sizeBySet = name, true
-					}
-					// The declaration carries the radius, so a change of
-					// channel is a rebuild rather than a repaint.
-					inst.keyOk = false
+					inst.requestOptions(SetGraphviewOptionsArgs{SizeBy: new(name)})
 				}
 			}
 		}
