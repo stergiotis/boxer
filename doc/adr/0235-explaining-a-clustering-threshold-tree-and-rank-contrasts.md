@@ -331,6 +331,28 @@ Accepted 2026-09-15.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
 
+## Updates
+
+### 2026-10-08 — a cluster's own tree leafs at the cluster's size
+
+The smallest leaf, a share of the clustered rows (§Decision), applied to
+§SD1a's per-cluster trees as well, and a leaf's rule goes to its majority.
+So a cluster under half that leaf had no rule at any depth: at three
+thousand rows the leaf is fifteen, and a seven-row cluster could never be the
+majority of one. The row said "no leaf at this depth", which pointed a reader
+at the depth slider; an agent reading a table of mixed device records drew
+that conclusion about its smallest clusters, which are the ones a reader most
+wants explained.
+
+A cluster's own tree now takes the smaller of the shared leaf and the
+cluster's size. The share's purpose — no rule over a handful of rows in a
+large picture — holds for the partition, where a leaf competes for every
+label; against the rest, a leaf the size of the cluster is the rule the
+question asks for, and its precision and recall are stated beside it. The
+partition keeps the shared leaf, and a cluster it cannot reach says why: its
+rows are fewer than the partition's smallest leaf, and one tree per cluster
+reads it.
+
 ## References
 
 - [ADR-0229](./0229-graph-analytics-engine.md) — the engine's determinism and budget rules.

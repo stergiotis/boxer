@@ -696,11 +696,15 @@ else, noise included — the answer to "what is in this cluster?", with each clu
 getting its own best split. Off, the rules come from one tree fitted to all the
 labels at once — a single partition of the feature space whose leaves do not
 overlap, whose summary line says how many clustered rows it reproduces, and in
-which a small cluster can lose its leaf to the larger ones' splits. **Rule
-depth** cuts the same trees shallower or deeper, live: fewer terms read easier,
-more terms fit closer. Thresholds are the shortest decimals between the two
-adjacent values, so a copied predicate partitions the rows exactly as the tree
-did. Beside the rule, the features that set the cluster apart: each is ranked by
+which a small cluster can lose its leaf to the larger ones' splits. A leaf holds
+at least 0.5 % of the clustered rows (and at least three), and its rule goes to
+the cluster most of its rows are in, so in the partition a cluster under half
+that size has no leaf at any depth — the row says so. A cluster's own tree
+allows leaves as small as the cluster, so one tree per cluster reads even the
+smallest. **Rule depth** cuts the same trees shallower or deeper, live: fewer
+terms read easier, more terms fit closer. Thresholds are the shortest decimals
+between the two adjacent values, so a copied predicate partitions the rows
+exactly as the tree did. Beside the rule, the features that set the cluster apart: each is ranked by
 the chance a member's value exceeds a non-member's (an AUC of 0.5 is no
 separation), listed with the members' median against everyone else's, and only
 when the separation is clear. The feature columns are not columns of the result
