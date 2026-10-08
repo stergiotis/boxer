@@ -153,6 +153,29 @@ SETTINGS log_comment=%s, %s, http_max_tries=1`,
 	return
 }
 
+// ExistingMvSql reads the stored definition of the capture view in
+// database, raw (FORMAT RawBLOB, so its quotes arrive unescaped); an empty
+// answer means there is no view.
+func ExistingMvSql(database string) (sql string) {
+	return "SELECT create_table_query FROM system.tables WHERE database = " + quoteLiteral(database) +
+		" AND name = " + quoteLiteral(MvBaseName) + " FORMAT RawBLOB"
+}
+
+// ParseMvPullURL returns the pull URL a stored capture view reads — the
+// first url() argument of the definition ComposeMvSql writes — or "" when
+// createQuery has none.
+func ParseMvPullURL(createQuery string) (pullURL string) {
+	_, rest, found := strings.Cut(createQuery, "url('")
+	if !found {
+		return
+	}
+	pullURL, _, found = strings.Cut(rest, "'")
+	if !found {
+		pullURL = ""
+	}
+	return
+}
+
 // ComposeDropMvSql removes the view. The reconciler drops and recreates
 // unconditionally at boot — cheaper and drift-proof compared to
 // normalizing create_table_query for comparison; the refresh schedule

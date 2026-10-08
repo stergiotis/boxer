@@ -181,8 +181,8 @@ func TestLivePipelineEndToEnd(t *testing.T) {
 }
 
 // startScratch runs a service against its own scratch database, dropped at
-// test end, and returns once the pipeline is reconciled.
-func startScratch(t *testing.T, cli *chclient.Client, db string, cfg Config) {
+// test end, and returns it once the pipeline is reconciled.
+func startScratch(t *testing.T, cli *chclient.Client, db string, cfg Config) (svc *Service) {
 	t.Helper()
 	ctx := context.Background()
 	require.NoError(t, cli.Exec(ctx, "DROP DATABASE IF EXISTS "+db))
@@ -195,6 +195,35 @@ func startScratch(t *testing.T, cli *chclient.Client, db string, cfg Config) {
 	require.NoError(t, err)
 	require.NoError(t, svc.Start(ctx))
 	t.Cleanup(func() { _ = svc.Stop(context.Background()) })
+	return
+}
+
+// TestLiveSecondInstanceRefused pins the single-owner guard: while one
+// instance serves the capture view a second one against the same database
+// is refused, instead of repointing the view at itself; once the first
+// stops, the second takes over — the restart path.
+func TestLiveSecondInstanceRefused(t *testing.T) {
+	ctx := context.Background()
+	cli := chclient.New(chclient.Defaults(), nil)
+	if cli.Ping(ctx) != nil {
+		t.Skip("no live ClickHouse at localhost:8123")
+	}
+	const db = scratchDb + "_owner"
+	first := startScratch(t, cli, db, Config{BackfillFrom: time.Now()})
+
+	cfg := Config{Listen: "127.0.0.1:0", Cadence: time.Second, Database: db, BackfillFrom: time.Now()}
+	second, err := New(cfg, zerolog.Nop())
+	require.NoError(t, err)
+	err = second.Start(ctx)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "another queryrunsd")
+	require.Equal(t, first.PullURL(), errorField(t, err, "owner"))
+
+	require.NoError(t, first.Stop(ctx))
+	second, err = New(cfg, zerolog.Nop())
+	require.NoError(t, err)
+	require.NoError(t, second.Start(ctx))
+	t.Cleanup(func() { _ = second.Stop(context.Background()) })
 }
 
 // TestLiveDenseOverlapDoesNotStall pins progress through an overlap window
