@@ -705,7 +705,7 @@ func defaultTabs(inst *PlayApp) (reg *TabRegistry) {
 			}
 		case "projection":
 			spec.Panel = projectionPanel{app: inst}
-			spec.Render = func(f *TabFrame) { inst.renderProjectionTab(f.Rec, f.Loading, f.Err, f.Executed) }
+			spec.Render = func(f *TabFrame) { inst.renderProjectionTab(f.Rec, f.Loading, f.Err) }
 		case "timeline":
 			spec.Panel = timelinePanel{driver: inst.timeline}
 			spec.Render = func(f *TabFrame) { inst.renderTimelineTab(f.Rec, f.Schema, f.Loading, f.Err) }

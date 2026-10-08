@@ -808,6 +808,7 @@ func addRunOps(playOps *appops.Set[*PlayLauncher, opsSnap]) {
 		Effect: app.OperationEffectRun, Reads: []string{opsResSql, opsResParams, opsResSignals}, Writes: []string{opsResResult},
 		Agents: true, Gesture: "the Run button",
 		Follows: []string{"the result replaces the main result; describe_result reads it",
+			"a new result drops the Projection pane's run over the old one; publish_projection keeps a run past it",
 			"a run the grant does not cover is refused, naming the destination the grant would have to list",
 			"a run the window's class ceiling would block is refused at the call, with the parameter that raised the class",
 			"statement n ships the SET prelude and that statement, and the checks judge that text; cancel_run stops the run while it is in flight"}},

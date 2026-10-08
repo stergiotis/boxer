@@ -668,6 +668,11 @@ row's density at its (min cluster − 1)-th neighbour rather than at the graph's
 last, so a record kind smaller than the neighbour count is still found; the
 defaults are 15 neighbours and a min cluster of 5.
 
+A run belongs to the result it was computed over. The next result the tab is
+fed — any run in the window, or a re-run of the same query — drops it, whether
+the tab is in view or not, and the tab says so until the next Compute.
+**Publish as dataset** (below) is how a run outlives the next query.
+
 **Show** switches what is drawn under the status line, over the same run and its
 cluster numbers. *graph* is the neighbour graph above. *archetypes* reads each
 cluster as one line of what its rows typically hold — a number's median, a
@@ -745,8 +750,11 @@ another play window reads them by the same names; they live for the session only
 **For an agent.** `compute_projection` runs the tab with optional neighbours,
 min cluster and feature set, and raises it — the layout moves only while the tab is
 drawn. `get_projection` reports the run: its status and error, the clusters with
-their sizes and the noise, the status line, whether the layout has settled, and a
-page of points with their row, cluster, probability and position.
+their sizes and the noise, the status line, whether the layout has settled,
+whether a new result dropped the last run, and, when asked for, a page of points
+with their row, cluster, probability and position. The next result drops the
+run: call `publish_projection` first when the run should outlive it, and read the
+clusters back as `keelson('projection')` and `keelson('projection_rules')`.
 `explain_clusters` returns "why these clusters", by features (at a rule depth, one
 tree per cluster or the one partition) or by attributes: per cluster the SQL rule,
 its fit and what sets the cluster apart — the same text the section shows.

@@ -41,7 +41,7 @@ func TestWorkOpsCatalogEntries(t *testing.T) {
 	run, _ := m.Operations.Lookup(opRun)
 	assert.EqualValues(t, 2, run.Version, "run gained Statement")
 	proj, _ := m.Operations.Lookup(opGetProjection)
-	assert.EqualValues(t, 2, proj.Version, "get_projection gained the publish and who ran it")
+	assert.EqualValues(t, 3, proj.Version, "get_projection returns points only on request")
 }
 
 // Every operation list_panes names for a pane is in the catalog, and the
