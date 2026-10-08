@@ -15,13 +15,13 @@ import (
 	"github.com/stergiotis/boxer/public/gov/repo"
 	"github.com/stergiotis/boxer/public/gov/skeleton"
 	cli2 "github.com/stergiotis/boxer/public/hmi/cli"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name: "gov",
-		Subcommands: cli2.CommandsNilRemoved(
+		Commands: cli2.CommandsNilRemoved(
 			doclint.NewCliCommand(),
 			codelint.NewCliCommand(),
 			buildtags.NewCliCommand(),

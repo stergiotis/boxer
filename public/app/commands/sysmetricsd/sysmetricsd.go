@@ -30,7 +30,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/topo"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 // NewCliCommand returns the `sysmetricsd` subcommand.
@@ -127,14 +127,14 @@ func startTee(ctx context.Context, bus app.BusI, host string, flushInterval time
 	return
 }
 
-func run(c *cli.Context) (err error) {
-	url := c.String("url")
+func run(cliCtx context.Context, cmd *cli.Command) (err error) {
+	url := cmd.String("url")
 	if url == "" {
 		url = sysmetricsbus.NatsURL.Get() // empty here falls through to nats.DefaultURL in Connect
 	}
 
 	host := sysmetricsbus.DefaultHostToken()
-	if h := c.String("host"); h != "" {
+	if h := cmd.String("host"); h != "" {
 		host = sysmetricsbus.HostToken(h)
 	}
 	client, err := natsbus.Connect(natsbus.Options{URL: url, AppId: sysmetricsbus.ServiceAppId})
@@ -145,12 +145,12 @@ func run(c *cli.Context) (err error) {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	stopScraper, err := sysmscrape.StartScraper(ctx, client, host, c.Duration("interval"), log.Logger)
+	stopScraper, err := sysmscrape.StartScraper(ctx, client, host, cmd.Duration("interval"), log.Logger)
 	if err != nil {
 		_ = client.Close()
 		return eh.Errorf("sysmetricsd: %w", err)
 	}
-	log.Info().Str("subject", sysmetricsbus.BundleSubject(host)).Stringer("interval", c.Duration("interval")).
+	log.Info().Str("subject", sysmetricsbus.BundleSubject(host)).Stringer("interval", cmd.Duration("interval")).
 		Str("component", topo.Self()).
 		Msg("sysmetricsd: publishing system metrics over NATS")
 
@@ -158,8 +158,8 @@ func run(c *cli.Context) (err error) {
 	// plane already known to work, and refused outright rather than leaving the
 	// service running with persistence silently off.
 	var stopTee func() error
-	if c.Bool("tee") {
-		stopTee, err = startTee(ctx, client, host, c.Duration("tee-flush-interval"), c.Bool("tee-proc-cmd"))
+	if cmd.Bool("tee") {
+		stopTee, err = startTee(ctx, client, host, cmd.Duration("tee-flush-interval"), cmd.Bool("tee-proc-cmd"))
 		if err != nil {
 			_ = stopScraper()
 			_ = client.Close()

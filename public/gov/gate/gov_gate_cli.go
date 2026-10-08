@@ -1,11 +1,12 @@
 package gate
 
 import (
+	"context"
 	"os"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func NewCliCommand() *cli.Command {
@@ -76,10 +77,10 @@ func NewCliCommand() *cli.Command {
 	}
 }
 
-func gateAction(ctx *cli.Context) (err error) {
+func gateAction(ctx context.Context, cmd *cli.Command) (err error) {
 	steps := DefaultSteps()
 
-	if ctx.Bool("list-steps") {
+	if cmd.Bool("list-steps") {
 		for _, n := range stepNames(steps) {
 			_, _ = os.Stdout.WriteString(n + "\n")
 		}
@@ -87,7 +88,7 @@ func gateAction(ctx *cli.Context) (err error) {
 	}
 
 	tags := make([]string, 0, 8)
-	if t := ctx.String("tags"); t != "" {
+	if t := cmd.String("tags"); t != "" {
 		for x := range strings.SplitSeq(t, ",") {
 			x = strings.TrimSpace(x)
 			if x != "" {
@@ -96,27 +97,27 @@ func gateAction(ctx *cli.Context) (err error) {
 		}
 	}
 
-	want := ctx.StringSlice("step")
+	want := cmd.StringSlice("step")
 	err = ValidateStepNames(steps, want)
 	if err != nil {
 		return
 	}
 
 	cfg := Config{
-		Root:                ctx.String("root"),
+		Root:                cmd.String("root"),
 		Tags:                tags,
-		TagsFile:            ctx.String("tags-file"),
-		DocRoots:            ctx.StringSlice("doc-root"),
-		CodePatterns:        ctx.StringSlice("code-pattern"),
-		EntryPointsBaseline: ctx.String("entry-points-baseline"),
-		NamingBaseline:      ctx.String("naming-baseline"),
-		NamingRoots:         ctx.StringSlice("naming-root"),
-		Exclude:             ctx.StringSlice("exclude"),
+		TagsFile:            cmd.String("tags-file"),
+		DocRoots:            cmd.StringSlice("doc-root"),
+		CodePatterns:        cmd.StringSlice("code-pattern"),
+		EntryPointsBaseline: cmd.String("entry-points-baseline"),
+		NamingBaseline:      cmd.String("naming-baseline"),
+		NamingRoots:         cmd.StringSlice("naming-root"),
+		Exclude:             cmd.StringSlice("exclude"),
 		Steps:               want,
-		TabPackages:         ctx.StringSlice("tab-pkg"),
+		TabPackages:         cmd.StringSlice("tab-pkg"),
 	}
 
-	rep := Run(ctx.Context, cfg, steps, os.Stdout)
+	rep := Run(ctx, cfg, steps, os.Stdout)
 	rep.WriteTrailer(os.Stdout)
 
 	if rep.Failed() {

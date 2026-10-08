@@ -2,13 +2,13 @@ package analysis
 
 import (
 	"github.com/stergiotis/boxer/public/code/analysis/golang"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name: "analysis",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			golang.NewCliCommand(),
 		},
 	}

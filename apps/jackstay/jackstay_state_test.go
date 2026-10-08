@@ -11,7 +11,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	jkcli "github.com/stergiotis/boxer/public/app/commands/jackstay"
 	jk "github.com/stergiotis/boxer/public/db/clickhouse/jackstay"
@@ -472,11 +472,11 @@ func TestEveryShellHintParses(t *testing.T) {
 		args := append([]string{"boxer"}, shellSplit(t, strings.ReplaceAll(cmd, "{plan}", "plan.json"))...)
 		root := jkcli.NewCliCommand()
 		ran := ""
-		for _, sub := range root.Subcommands {
-			sub.Action = func(c *cli.Context) error { ran = c.Command.Name; return nil }
+		for _, sub := range root.Commands {
+			sub.Action = func(ctx context.Context, cmd *cli.Command) error { ran = cmd.Name; return nil }
 		}
-		a := &cli.App{Commands: root.Subcommands, ExitErrHandler: func(*cli.Context, error) {}}
-		require.NoError(t, a.Run(args), cmd)
+		a := &cli.Command{Commands: root.Commands, ExitErrHandler: func(context.Context, *cli.Command, error) {}}
+		require.NoError(t, a.Run(context.Background(), args), cmd)
 		assert.Equal(t, args[1], ran, cmd)
 	}
 }

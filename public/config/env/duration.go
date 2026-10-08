@@ -1,12 +1,13 @@
 package env
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"testing"
 	"time"
 
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 )
 
 // DurationVar is the typed env-var handle for time.Duration values.
@@ -76,7 +77,7 @@ func (inst *DurationVar) setCached(value time.Duration) {
 // WithDurationAction attaches a caller-supplied Action func to the
 // cli.DurationFlag returned by AsCliFlag. The user action runs first;
 // on success the parsed value is written to the cache.
-func WithDurationAction(fn func(ctx *cli.Context, parsed time.Duration) error) (opt FlagOption) {
+func WithDurationAction(fn func(ctx context.Context, cmd *cli.Command, parsed time.Duration) error) (opt FlagOption) {
 	return func(o *flagOptions) {
 		o.actionFn = fn
 	}
@@ -84,7 +85,7 @@ func WithDurationAction(fn func(ctx *cli.Context, parsed time.Duration) error) (
 
 func (inst *DurationVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
 	fo := resolveFlagOptions(inst.spec, opts)
-	userAction, _ := fo.actionFn.(func(*cli.Context, time.Duration) error)
+	userAction, _ := fo.actionFn.(func(context.Context, *cli.Command, time.Duration) error)
 	defaultValue := time.Duration(0)
 	if inst.spec.Default != "" {
 		defaultValue = inst.parseDefault()
@@ -93,11 +94,11 @@ func (inst *DurationVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
 		Name:     fo.cliFlagName,
 		Usage:    inst.spec.Description,
 		Category: string(inst.spec.Category),
-		EnvVars:  []string{inst.spec.Name},
+		Sources:  cli.EnvVars(inst.spec.Name),
 		Value:    defaultValue,
-		Action: func(ctx *cli.Context, parsed time.Duration) (err error) {
+		Action: func(ctx context.Context, cmd *cli.Command, parsed time.Duration) (err error) {
 			if userAction != nil {
-				err = userAction(ctx, parsed)
+				err = userAction(ctx, cmd, parsed)
 				if err != nil {
 					return
 				}

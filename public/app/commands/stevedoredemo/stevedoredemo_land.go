@@ -11,7 +11,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/twmb/franz-go/pkg/kgo"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
@@ -36,18 +36,18 @@ func newLandCommand() *cli.Command {
 	}
 }
 
-func runLand(c *cli.Context) (err error) {
+func runLand(cliCtx context.Context, cmd *cli.Command) (err error) {
 	conn := pkafka.DefaultFranzConnectionDetails()
-	conn.SeedBrokers = strings.Split(c.String("brokers"), ",")
+	conn.SeedBrokers = strings.Split(cmd.String("brokers"), ",")
 	conn.ClientID = "stevedoredemo"
 	conn.Logger = &log.Logger
 	cons := pkafka.DefaultFranzConsumerDetails()
-	err = cons.SetTopicSpec([]string{c.String("topic")}, true)
+	err = cons.SetTopicSpec([]string{cmd.String("topic")}, true)
 	if err != nil {
 		return eh.Errorf("topic spec: %w", err)
 	}
 	readerOpts := pkafka.DefaultFranzReaderOrderedOpts()
-	readerOpts.ConsumerGroup = c.String("group")
+	readerOpts.ConsumerGroup = cmd.String("group")
 	readerOpts.Logger = &log.Logger
 	reader, err := pkafka.NewFranzReaderOrdered(readerOpts, func() (opts []kgo.Opt, err error) {
 		opts = append(opts, conn.FranzOpts()...)
@@ -58,14 +58,14 @@ func runLand(c *cli.Context) (err error) {
 		return eh.Errorf("reader: %w", err)
 	}
 
-	dead, closeDead, err := openDeadLetters(c)
+	dead, closeDead, err := openDeadLetters(cliCtx, cmd)
 	if err != nil {
 		return
 	}
 	defer closeDead()
 
 	l := lander.New(lander.Config{Logger: &log.Logger}, reader, printSink{}, dead)
-	ctx, stop := signal.NotifyContext(c.Context, syscall.SIGINT, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(cliCtx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	err = l.Run(ctx)
 	log.Info().Uint64("landed", l.Landed()).Uint64("deadLettered", l.DeadLettered()).Msg("stevedoredemo land ends")
@@ -81,9 +81,9 @@ func deadLetterFlags() []cli.Flag {
 }
 
 // openDeadLetters builds the dead-letter store the flags name.
-func openDeadLetters(c *cli.Context) (dead deadletter.StoreI, closeFn func(), err error) {
+func openDeadLetters(ctx context.Context, cmd *cli.Command) (dead deadletter.StoreI, closeFn func(), err error) {
 	closeFn = func() {}
-	switch c.String("dead-letters") {
+	switch cmd.String("dead-letters") {
 	case "log":
 		dead = deadletter.Log{Logger: &log.Logger}
 	case "clickhouse":
@@ -93,10 +93,10 @@ func openDeadLetters(c *cli.Context) (dead deadletter.StoreI, closeFn func(), er
 			return nil, closeFn, eh.Errorf("executor: %w", xerr)
 		}
 		cfg := stevedorefacts.StevedoreStoreConfig{}
-		if db := c.String("database"); db != "" {
+		if db := cmd.String("database"); db != "" {
 			cfg.Table = db + ".facts"
 		}
-		store, oerr := stevedorefacts.OpenStevedoreStore(c.Context, exec, nil, cfg)
+		store, oerr := stevedorefacts.OpenStevedoreStore(ctx, exec, nil, cfg)
 		if oerr != nil {
 			return nil, closeFn, eh.Errorf("open dead-letter store: %w", oerr)
 		}

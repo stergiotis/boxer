@@ -18,7 +18,7 @@ package main
 
 import (
 	"github.com/rs/zerolog/log"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers"
@@ -50,7 +50,7 @@ func newTab() (inst *tabhost.Program) {
 	inst = tabhost.New(tabhost.Options{
 		DefaultApp: "github.com/stergiotis/boxer/apps/play",
 		Services:   tabhost.Services{KeelsonSQL: reg},
-	}, &cli.App{Name: "imzero2tab", Version: vcs.BuildVersionInfo(), Before: logging.Apply})
+	}, &cli.Command{Name: "imzero2tab", Version: vcs.BuildVersionInfo(), Before: logging.Apply})
 	return
 }
 

@@ -38,7 +38,7 @@ import (
 	"text/tabwriter"
 	"time"
 
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/gov/capmapcorpus"
 	"github.com/stergiotis/boxer/public/gov/capmapfacts"
@@ -89,7 +89,7 @@ func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "capmap",
 		Usage: "read a business-capability vault; report it, rank its competences by resemblance, load it into boxer.facts as competence and relation rows, or dump it back out",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			{
 				Name:   "parse",
 				Usage:  "read the vault and report counts, skipped files and unresolved links (no database)",
@@ -127,8 +127,8 @@ func NewCliCommand() *cli.Command {
 // readVault resolves the vault and parses it, preferring an explicit --vault
 // over the environment. Unlike capmapcorpus.Load, a CLI wants the reason it
 // failed rather than an empty corpus.
-func readVault(c *cli.Context) (corpus capmapcorpus.Corpus, dir string, err error) {
-	if dir = c.String("vault"); dir == "" {
+func readVault(ctx context.Context, cmd *cli.Command) (corpus capmapcorpus.Corpus, dir string, err error) {
+	if dir = cmd.String("vault"); dir == "" {
 		if dir, err = capmapcorpus.ResolveVault(); err != nil {
 			return corpus, "", err
 		}
@@ -139,12 +139,12 @@ func readVault(c *cli.Context) (corpus capmapcorpus.Corpus, dir string, err erro
 	return corpus, dir, nil
 }
 
-func actionParse(c *cli.Context) (err error) {
+func actionParse(ctx context.Context, cmd *cli.Command) (err error) {
 	var (
 		corpus capmapcorpus.Corpus
 		dir    string
 	)
-	if corpus, dir, err = readVault(c); err != nil {
+	if corpus, dir, err = readVault(ctx, cmd); err != nil {
 		return err
 	}
 	out := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
@@ -210,12 +210,12 @@ func reportUnresolved(broken []capmapcorpus.Relation) {
 	}
 }
 
-func actionLoad(c *cli.Context) (err error) {
+func actionLoad(cliCtx context.Context, cmd *cli.Command) (err error) {
 	var (
 		corpus capmapcorpus.Corpus
 		dir    string
 	)
-	if corpus, dir, err = readVault(c); err != nil {
+	if corpus, dir, err = readVault(cliCtx, cmd); err != nil {
 		return err
 	}
 	if len(corpus.Competences) == 0 {
@@ -223,27 +223,27 @@ func actionLoad(c *cli.Context) (err error) {
 	}
 
 	ctx := context.Background()
-	database, table := c.String("database"), c.String("table")
-	if c.Bool("setup-table") {
+	database, table := cmd.String("database"), cmd.String("table")
+	if cmd.Bool("setup-table") {
 		store, sErr := chstore.New(chstore.Config{
-			URL:      c.String("clickhouse-url"),
-			User:     c.String("user"),
-			Password: c.String("password"),
+			URL:      cmd.String("clickhouse-url"),
+			User:     cmd.String("user"),
+			Password: cmd.String("password"),
 			Database: database,
 			Table:    table,
 		})
 		if sErr != nil {
 			return eh.Errorf("unable to build the store for --setup-table: %w", sErr)
 		}
-		if err = store.SetupTable(ctx, c.String("engine")); err != nil {
+		if err = store.SetupTable(ctx, cmd.String("engine")); err != nil {
 			return eb.Build().Str("database", database).Str("table", table).Errorf("unable to set up the table: %w", err)
 		}
 	}
 
 	sink := chclient.New(chclient.Config{
-		URL:      c.String("clickhouse-url"),
-		User:     c.String("user"),
-		Password: c.String("password"),
+		URL:      cmd.String("clickhouse-url"),
+		User:     cmd.String("user"),
+		Password: cmd.String("password"),
 	}, nil)
 
 	var stats capmapfacts.Stats
@@ -255,17 +255,17 @@ func actionLoad(c *cli.Context) (err error) {
 	return nil
 }
 
-func actionDump(c *cli.Context) (err error) {
-	out := c.String("out")
-	if err = checkOutputDir(out, c.Bool("force")); err != nil {
+func actionDump(cliCtx context.Context, cmd *cli.Command) (err error) {
+	out := cmd.String("out")
+	if err = checkOutputDir(out, cmd.Bool("force")); err != nil {
 		return err
 	}
 	client := chclient.New(chclient.Config{
-		URL:      c.String("clickhouse-url"),
-		User:     c.String("user"),
-		Password: c.String("password"),
+		URL:      cmd.String("clickhouse-url"),
+		User:     cmd.String("user"),
+		Password: cmd.String("password"),
 	}, nil)
-	database, table := c.String("database"), c.String("table")
+	database, table := cmd.String("database"), cmd.String("table")
 	qualified := database + "." + table
 
 	ctx := context.Background()

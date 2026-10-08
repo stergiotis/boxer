@@ -121,7 +121,7 @@ names it.
 * Use `github.com/stergiotis/boxer/public/observability/eh/eb` for structural error construction and wrapping.
 * Use `github.com/stergiotis/boxer/semistructured/leeway/canonicaltypes` for defining RPC or FFI interface descriptions.
 * Use `github.com/stergiotis/boxer/semistructured/leeway/naming` for conversions between naming schemes (e.g. snake_case to camelCase).
-* Use `github.com/urfave/cli/v2` for cli commands and flags handling (see [Entry Points](#entry-points)).
+* Use `github.com/urfave/cli/v3` for cli commands and flags handling (see [Entry Points](#entry-points)).
 * Use `github.com/dim13/colormap` for scientific color maps (Magma, Inferno, Plasma, Vidiris, Parula).
 
 ## Error Handling
@@ -390,7 +390,7 @@ Nevertheless, use stdlib functions aiming at writing portable code where it help
 
 Do not add ad-hoc `main()` functions for new utilities, linters, or compile-time code generators. Register them as subcommands under an existing entry point — in boxer this is `./public/app/main.go`, invoked via `./boxer.sh` — so that build tags, flags, the environment-variable registry, and observability wiring are shared.
 
-`github.com/urfave/cli/v2` is mandatory for every CLI surface, including small internal tools: utilities, linters, compile-time code generators. Even one-off commands expose their flags as `cli.Command` definitions; this keeps `--help` output, flag parsing, and `Spec.AsCliFlag()` integration uniform.
+`github.com/urfave/cli/v3` ([ADR-0294](./doc/adr/0294-urfave-cli-v3-for-every-cli-surface.md)) is mandatory for every CLI surface, including small internal tools: utilities, linters, compile-time code generators. Even one-off commands expose their flags as `cli.Command` definitions; this keeps `--help` output, flag parsing, and `Spec.AsCliFlag()` integration uniform.
 
 ## Configuration
 

@@ -9,6 +9,7 @@
 package drivecmd
 
 import (
+	"context"
 	"math"
 	"os"
 	"strings"
@@ -18,7 +19,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/carrierclient"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 const (
@@ -82,9 +83,10 @@ func NewCommand() *cli.Command {
 				Value: "ws://127.0.0.1:8089/",
 				Usage: "carrier WebSocket URL of the headless host",
 			},
-			&cli.PathFlag{
-				Name:  flagTrace,
-				Usage: "trace file to replay (JSON Lines); '-' reads stdin",
+			&cli.StringFlag{
+				Name:      flagTrace,
+				Usage:     "trace file to replay (JSON Lines); '-' reads stdin",
+				TakesFile: true,
 			},
 			&cli.DurationFlag{
 				Name:  flagTimeout,
@@ -106,7 +108,7 @@ func NewCommand() *cli.Command {
 				// The value is split on commas and joined back in run; a
 				// trimmed piece would lose the space after a comma inside a
 				// JSON string.
-				KeepSpace: true,
+				Config: cli.StringConfig{TrimSpace: false},
 			},
 			&cli.BoolFlag{
 				Name:  flagDumpTree,
@@ -153,14 +155,14 @@ const (
 	treeFormatJSONL = "jsonl"
 )
 
-func run(ctx *cli.Context) (err error) {
-	treeFormat := ctx.String(flagTreeFormat)
+func run(ctx context.Context, cmd *cli.Command) (err error) {
+	treeFormat := cmd.String(flagTreeFormat)
 	if treeFormat != treeFormatLines && treeFormat != treeFormatJSONL {
 		return eb.Build().Str("format", treeFormat).Errorf("unknown --" + flagTreeFormat)
 	}
-	tracePath := ctx.Path(flagTrace)
-	dumpTree := ctx.Bool(flagDumpTree)
-	inline := ctx.StringSlice(flagStep)
+	tracePath := cmd.String(flagTrace)
+	dumpTree := cmd.Bool(flagDumpTree)
+	inline := cmd.StringSlice(flagStep)
 	if tracePath == "" && len(inline) == 0 && !dumpTree {
 		return eh.Errorf("nothing to do: pass --" + flagTrace + ", --" + flagStep + " or --" + flagDumpTree)
 	}
@@ -196,9 +198,9 @@ func run(ctx *cli.Context) (err error) {
 	}
 
 	c, err := carrierclient.Connect(carrierclient.Config{
-		URL:         ctx.String(flagURL),
-		Label:       ctx.String(flagLabel),
-		DialTimeout: ctx.Duration(flagTimeout),
+		URL:         cmd.String(flagURL),
+		Label:       cmd.String(flagLabel),
+		DialTimeout: cmd.Duration(flagTimeout),
 		Logger:      log.Logger,
 	})
 	if err != nil {
@@ -213,10 +215,10 @@ func run(ctx *cli.Context) (err error) {
 		Msg("connected to the headless host")
 
 	err = carrierclient.RunTrace(c, steps, carrierclient.RunOptions{
-		Timeout:  ctx.Duration(flagTimeout),
-		SettleMs: ctx.Int(flagSettle),
-		DryRun:   ctx.Bool(flagDryRun),
-		Out:      ctx.App.Writer,
+		Timeout:  cmd.Duration(flagTimeout),
+		SettleMs: cmd.Int(flagSettle),
+		DryRun:   cmd.Bool(flagDryRun),
+		Out:      cmd.Root().Writer,
 		Logger:   log.Logger,
 	})
 	if err != nil || !dumpTree {
@@ -225,26 +227,26 @@ func run(ctx *cli.Context) (err error) {
 	// After the steps rather than instead of them: the last step has settled
 	// by now, so this is what the run left on screen, read over the connection
 	// that made it so.
-	snap, err := c.Tree(ctx.Duration(flagTimeout))
+	snap, err := c.Tree(cmd.Duration(flagTimeout))
 	if err != nil {
 		return err
 	}
-	limit := ctx.Int(flagTreeLimit)
-	if treeFormat == treeFormatJSONL && !ctx.IsSet(flagTreeLimit) {
+	limit := cmd.Int(flagTreeLimit)
+	if treeFormat == treeFormatJSONL && !cmd.IsSet(flagTreeLimit) {
 		// The lines format says so in its header when the limit cut the list;
 		// JSONL has no header, and a program reading a silently shortened list
 		// would take it for the scene. Unbounded unless the caller bounds it.
 		limit = math.MaxInt
 	}
 	view := carrierclient.SelectNodes(snap, carrierclient.TreeFilter{
-		Under:  ctx.Uint64(flagTreeUnder),
-		Text:   ctx.String(flagTreeText),
-		Role:   ctx.String(flagTreeRole),
-		Hidden: ctx.Bool(flagTreeHidden),
+		Under:  cmd.Uint64(flagTreeUnder),
+		Text:   cmd.String(flagTreeText),
+		Role:   cmd.String(flagTreeRole),
+		Hidden: cmd.Bool(flagTreeHidden),
 		Limit:  limit,
 	})
 	if treeFormat == treeFormatJSONL {
-		return carrierclient.WriteTreeJSONL(ctx.App.Writer, view)
+		return carrierclient.WriteTreeJSONL(cmd.Root().Writer, view)
 	}
-	return carrierclient.WriteTree(ctx.App.Writer, view)
+	return carrierclient.WriteTree(cmd.Root().Writer, view)
 }

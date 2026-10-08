@@ -20,7 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/hmi/progressbar"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 )
 
 const stacItemsURL = "https://data.geo.admin.ch/api/stac/v0.9/collections/ch.swisstopo.swissalti3d/items"
@@ -76,11 +76,11 @@ func newMirrorCommand() (cmd *cli.Command) {
 	return
 }
 
-func mirrorAction(c *cli.Context) (err error) {
-	dest := c.String("dest")
-	workers := c.Int("workers")
-	dryRun := c.Bool("dry-run")
-	verifyExisting := c.Bool("verify-existing")
+func mirrorAction(cliCtx context.Context, cmd *cli.Command) (err error) {
+	dest := cmd.String("dest")
+	workers := cmd.Int("workers")
+	dryRun := cmd.Bool("dry-run")
+	verifyExisting := cmd.Bool("verify-existing")
 
 	err = os.MkdirAll(dest, 0o755)
 	if err != nil {
@@ -89,7 +89,7 @@ func mirrorAction(c *cli.Context) (err error) {
 	}
 	log.Info().Str("dest", dest).Int("workers", workers).Msg("mirror starting")
 
-	ctx, cancel := context.WithCancel(c.Context)
+	ctx, cancel := context.WithCancel(cliCtx)
 	defer cancel()
 
 	// phase 1: enumerate

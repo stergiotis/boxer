@@ -2,6 +2,7 @@ package findAnchor
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -9,7 +10,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/fec/anchor"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 var (
@@ -37,7 +38,7 @@ func NewCliCommand() *cli.Command {
 			NAnchorBytes.AsCliFlag(),
 			MaxHammingDistPerByteIncl.AsCliFlag(),
 		},
-		Action: func(ctx *cli.Context) error {
+		Action: func(ctx context.Context, cmd *cli.Command) error {
 			r := bufio.NewReader(os.Stdin)
 			offset := uint64(0)
 			nAnchorBytes := int(NAnchorBytes.Get())

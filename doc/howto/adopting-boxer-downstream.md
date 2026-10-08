@@ -55,6 +55,7 @@ your binary:
 package main
 
 import (
+	"context"
 	"os"
 
 	"github.com/rs/zerolog/log"
@@ -62,18 +63,18 @@ import (
 	cli2 "github.com/stergiotis/boxer/public/hmi/cli"
 	"github.com/stergiotis/boxer/public/observability/logging"
 	"github.com/stergiotis/boxer/public/observability/vcs"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func main() {
-	app := cli.App{
+	app := cli.Command{
 		Name:     vcs.ModuleInfo(),
 		Version:  vcs.BuildVersionInfo(),
 		Flags:    cli2.FlagsNilRemoved(logging.LoggingFlags),
 		Commands: cli2.CommandsNilRemoved(gov.NewCliCommand()),
 		Before:   logging.Apply,
 	}
-	if err := app.Run(os.Args); err != nil {
+	if err := app.Run(context.Background(), os.Args); err != nil {
 		log.Error().Stack().Err(err).Msg("an error occurred")
 		os.Exit(1)
 	}
@@ -139,7 +140,7 @@ missing. The pieces are boxer's
 carries one `package main`.
 
 1. **Write the tab binary.** It names the apps a tab may open and hands its
-   `cli.App` to `tabhost`, which adds the rest — the reactor, `serve`,
+   root `cli.Command` to `tabhost`, which adds the rest — the reactor, `serve`,
    `bundle`, `tabreport`. The variable is deliberate: a wasm module built as
    a reactor runs package initialisation but never `main`.
 
@@ -148,7 +149,7 @@ carries one `package main`.
    package main
 
    import (
-   	"github.com/urfave/cli/v2"
+   	"github.com/urfave/cli/v3"
 
    	"github.com/stergiotis/boxer/public/observability/logging"
    	"github.com/stergiotis/boxer/public/observability/vcs"
@@ -159,7 +160,7 @@ carries one `package main`.
    )
 
    var tab = tabhost.New(tabhost.Options{DefaultApp: <app>.ManifestId},
-   	&cli.App{Name: "<name>tab", Version: vcs.BuildVersionInfo(), Before: logging.Apply})
+   	&cli.Command{Name: "<name>tab", Version: vcs.BuildVersionInfo(), Before: logging.Apply})
 
    func main() { tab.Main() }
    ```

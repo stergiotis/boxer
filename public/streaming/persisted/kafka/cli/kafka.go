@@ -15,7 +15,7 @@
 // kafka: kcat-style CLI subcommand layered over the streaming/persisted/kafka
 // package. [NewCliCommand] registers into a host application's own Commands
 // slice, as `<binary> kafka <subcmd>`. Three nested commands today (consume,
-// produce, list); urfave/cli/v2 leaves room to grow.
+// produce, list); urfave/cli leaves room to grow.
 //
 // Examples (substitute the host application's own binary for <binary>):
 //
@@ -46,7 +46,7 @@ import (
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/sasl"
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -59,7 +59,7 @@ func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "kafka",
 		Usage: "kcat-style operations over the streaming/persisted/kafka package",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			consumeCmd(),
 			produceCmd(),
 			listCmd(),
@@ -77,78 +77,78 @@ func commonFlags() []cli.Flag {
 			Aliases:  []string{"b"},
 			Required: true,
 			Usage:    "comma-separated list of broker addresses (host1:9092,host2:9092)",
-			EnvVars:  []string{"BOXER_KAFKA_BROKERS"},
+			Sources:  cli.EnvVars("BOXER_KAFKA_BROKERS"),
 		},
 		&cli.StringFlag{
 			Name:    "client-id",
 			Value:   "boxer",
 			Usage:   "kafka client.id",
-			EnvVars: []string{"BOXER_KAFKA_CLIENT_ID"},
+			Sources: cli.EnvVars("BOXER_KAFKA_CLIENT_ID"),
 		},
 
 		// SASL
 		&cli.StringFlag{
 			Name:    "sasl-mechanism",
 			Usage:   "SASL mechanism: none (default), PLAIN, SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER",
-			EnvVars: []string{"BOXER_KAFKA_SASL_MECHANISM"},
+			Sources: cli.EnvVars("BOXER_KAFKA_SASL_MECHANISM"),
 		},
 		&cli.StringFlag{
 			Name:    "sasl-username",
 			Usage:   "SASL username (PLAIN, SCRAM-SHA-256, SCRAM-SHA-512)",
-			EnvVars: []string{"BOXER_KAFKA_SASL_USERNAME"},
+			Sources: cli.EnvVars("BOXER_KAFKA_SASL_USERNAME"),
 		},
 		&cli.StringFlag{
 			Name:    "sasl-password",
 			Usage:   "SASL password (PLAIN, SCRAM-SHA-256, SCRAM-SHA-512); prefer the env var to avoid shell history",
-			EnvVars: []string{"BOXER_KAFKA_SASL_PASSWORD"},
+			Sources: cli.EnvVars("BOXER_KAFKA_SASL_PASSWORD"),
 		},
 		&cli.StringFlag{
 			Name:    "sasl-token",
 			Usage:   "static OAUTHBEARER token (only for --sasl-mechanism=OAUTHBEARER)",
-			EnvVars: []string{"BOXER_KAFKA_SASL_TOKEN"},
+			Sources: cli.EnvVars("BOXER_KAFKA_SASL_TOKEN"),
 		},
 
 		// TLS
 		&cli.BoolFlag{
 			Name:    "tls",
 			Usage:   "enable TLS (implicit if any --tls-* file flag is set)",
-			EnvVars: []string{"BOXER_KAFKA_TLS"},
+			Sources: cli.EnvVars("BOXER_KAFKA_TLS"),
 		},
 		&cli.StringFlag{
 			Name:    "tls-ca-file",
 			Usage:   "path to a PEM-encoded CA bundle for verifying the broker certificate",
-			EnvVars: []string{"BOXER_KAFKA_TLS_CA_FILE"},
+			Sources: cli.EnvVars("BOXER_KAFKA_TLS_CA_FILE"),
 		},
 		&cli.StringFlag{
 			Name:    "tls-cert-file",
 			Usage:   "path to a PEM-encoded client certificate (for mTLS); requires --tls-key-file",
-			EnvVars: []string{"BOXER_KAFKA_TLS_CERT_FILE"},
+			Sources: cli.EnvVars("BOXER_KAFKA_TLS_CERT_FILE"),
 		},
 		&cli.StringFlag{
 			Name:    "tls-key-file",
 			Usage:   "path to a PEM-encoded client key (for mTLS); requires --tls-cert-file",
-			EnvVars: []string{"BOXER_KAFKA_TLS_KEY_FILE"},
+			Sources: cli.EnvVars("BOXER_KAFKA_TLS_KEY_FILE"),
 		},
 		&cli.BoolFlag{
 			Name:    "tls-skip-verify",
 			Usage:   "skip broker certificate verification (insecure; useful for self-signed dev clusters)",
-			EnvVars: []string{"BOXER_KAFKA_TLS_SKIP_VERIFY"},
+			Sources: cli.EnvVars("BOXER_KAFKA_TLS_SKIP_VERIFY"),
 		},
 	}
 }
 
-func makeConnectionDetails(c *cli.Context) (d pkafka.FranzConnectionDetails, err error) {
+func makeConnectionDetails(ctx context.Context, cmd *cli.Command) (d pkafka.FranzConnectionDetails, err error) {
 	d = pkafka.DefaultFranzConnectionDetails()
-	d.SeedBrokers = strings.Split(c.String("brokers"), ",")
-	d.ClientID = c.String("client-id")
+	d.SeedBrokers = strings.Split(cmd.String("brokers"), ",")
+	d.ClientID = cmd.String("client-id")
 	d.Logger = &log.Logger
 
-	d.SASL, err = buildSASL(c)
+	d.SASL, err = buildSASL(ctx, cmd)
 	if err != nil {
 		return
 	}
 
-	d.TLSEnabled, d.TLSConf, err = buildTLS(c)
+	d.TLSEnabled, d.TLSConf, err = buildTLS(ctx, cmd)
 	if err != nil {
 		return
 	}
@@ -176,8 +176,8 @@ func parseSASLMechanism(s string) (m pkafka.SASLMechanismE, err error) {
 	return
 }
 
-func buildSASL(c *cli.Context) (mechs []sasl.Mechanism, err error) {
-	mech, err := parseSASLMechanism(c.String("sasl-mechanism"))
+func buildSASL(ctx context.Context, cmd *cli.Command) (mechs []sasl.Mechanism, err error) {
+	mech, err := parseSASLMechanism(cmd.String("sasl-mechanism"))
 	if err != nil {
 		return
 	}
@@ -186,9 +186,9 @@ func buildSASL(c *cli.Context) (mechs []sasl.Mechanism, err error) {
 	}
 	mechs, err = pkafka.SASLMechanisms([]pkafka.SASLConfig{{
 		Mechanism: mech,
-		Username:  c.String("sasl-username"),
-		Password:  c.String("sasl-password"),
-		Token:     c.String("sasl-token"),
+		Username:  cmd.String("sasl-username"),
+		Password:  cmd.String("sasl-password"),
+		Token:     cmd.String("sasl-token"),
 	}})
 	return
 }
@@ -196,12 +196,12 @@ func buildSASL(c *cli.Context) (mechs []sasl.Mechanism, err error) {
 // buildTLS constructs a *tls.Config from the --tls-* flags. Returns
 // enabled=false when no TLS-related flag is set so plaintext clusters
 // require no extra ceremony.
-func buildTLS(c *cli.Context) (enabled bool, cfg *tls.Config, err error) {
-	caFile := c.String("tls-ca-file")
-	certFile := c.String("tls-cert-file")
-	keyFile := c.String("tls-key-file")
-	skipVerify := c.Bool("tls-skip-verify")
-	enabled = c.Bool("tls") || caFile != "" || certFile != "" || keyFile != "" || skipVerify
+func buildTLS(ctx context.Context, cmd *cli.Command) (enabled bool, cfg *tls.Config, err error) {
+	caFile := cmd.String("tls-ca-file")
+	certFile := cmd.String("tls-cert-file")
+	keyFile := cmd.String("tls-key-file")
+	skipVerify := cmd.Bool("tls-skip-verify")
+	enabled = cmd.Bool("tls") || caFile != "" || certFile != "" || keyFile != "" || skipVerify
 	if !enabled {
 		return
 	}
@@ -296,25 +296,25 @@ func consumeCmd() *cli.Command {
 	}
 }
 
-func runConsume(c *cli.Context) (err error) {
-	connDetails, err := makeConnectionDetails(c)
+func runConsume(ctx context.Context, cmd *cli.Command) (err error) {
+	connDetails, err := makeConnectionDetails(ctx, cmd)
 	if err != nil {
 		err = eh.Errorf("connection: %w", err)
 		return
 	}
 
 	consDetails := pkafka.DefaultFranzConsumerDetails()
-	if err = consDetails.SetTopicSpec([]string{c.String("topic")}, true); err != nil {
+	if err = consDetails.SetTopicSpec([]string{cmd.String("topic")}, true); err != nil {
 		err = eh.Errorf("topic spec: %w", err)
 		return
 	}
-	consDetails.StartOffset, err = parseOffset(c.String("offset"))
+	consDetails.StartOffset, err = parseOffset(cmd.String("offset"))
 	if err != nil {
 		return
 	}
 
 	readerOpts := pkafka.DefaultFranzReaderOrderedOpts()
-	readerOpts.ConsumerGroup = c.String("group")
+	readerOpts.ConsumerGroup = cmd.String("group")
 	readerOpts.Logger = &log.Logger
 
 	clientOptsFn := func() (opts []kgo.Opt, err error) {
@@ -329,7 +329,7 @@ func runConsume(c *cli.Context) (err error) {
 		return
 	}
 
-	if err = reader.Connect(c.Context); err != nil {
+	if err = reader.Connect(ctx); err != nil {
 		err = eh.Errorf("connect: %w", err)
 		return
 	}
@@ -342,27 +342,27 @@ func runConsume(c *cli.Context) (err error) {
 	out := bufio.NewWriter(os.Stdout)
 	defer func() { _ = out.Flush() }()
 
-	fmtFn, err := makeRecordWriter(c)
+	fmtFn, err := makeRecordWriter(ctx, cmd)
 	if err != nil {
 		return
 	}
-	count := c.Int("count")
-	exitOnEOF := c.Bool("exit-on-eof")
+	count := cmd.Int("count")
+	exitOnEOF := cmd.Bool("exit-on-eof")
 	const eofIdleTimeout = 3 * time.Second
 	seen := 0
 
 	for {
-		readCtx := c.Context
+		readCtx := ctx
 		var idleCancel context.CancelFunc
 		if exitOnEOF {
-			readCtx, idleCancel = context.WithTimeout(c.Context, eofIdleTimeout)
+			readCtx, idleCancel = context.WithTimeout(ctx, eofIdleTimeout)
 		}
 		batch, readErr := reader.Read(readCtx)
 		if idleCancel != nil {
 			idleCancel()
 		}
 		if readErr != nil {
-			if errors.Is(readErr, context.Canceled) && c.Context.Err() != nil {
+			if errors.Is(readErr, context.Canceled) && ctx.Err() != nil {
 				return
 			}
 			if errors.Is(readErr, context.DeadlineExceeded) && exitOnEOF {
@@ -379,11 +379,11 @@ func runConsume(c *cli.Context) (err error) {
 			}
 			seen++
 			if count > 0 && seen >= count {
-				_ = batch.Ack(c.Context, nil)
+				_ = batch.Ack(ctx, nil)
 				return
 			}
 		}
-		if err = batch.Ack(c.Context, nil); err != nil {
+		if err = batch.Ack(ctx, nil); err != nil {
 			err = eh.Errorf("ack: %w", err)
 			return
 		}
@@ -422,8 +422,8 @@ func produceCmd() *cli.Command {
 	}
 }
 
-func runProduce(c *cli.Context) (err error) {
-	connDetails, err := makeConnectionDetails(c)
+func runProduce(ctx context.Context, cmd *cli.Command) (err error) {
+	connDetails, err := makeConnectionDetails(ctx, cmd)
 	if err != nil {
 		err = eh.Errorf("connection: %w", err)
 		return
@@ -433,7 +433,7 @@ func runProduce(c *cli.Context) (err error) {
 	kgoOpts := append([]kgo.Opt{}, connDetails.FranzOpts()...)
 	kgoOpts = append(kgoOpts, prodOpts.FranzOpts()...)
 
-	client, err := pkafka.NewFranzClient(c.Context, kgoOpts...)
+	client, err := pkafka.NewFranzClient(ctx, kgoOpts...)
 	if err != nil {
 		err = eh.Errorf("connect: %w", err)
 		return
@@ -445,7 +445,7 @@ func runProduce(c *cli.Context) (err error) {
 		err = eh.Errorf("writer: %w", err)
 		return
 	}
-	if err = writer.Connect(c.Context); err != nil {
+	if err = writer.Connect(ctx); err != nil {
 		err = eh.Errorf("writer connect: %w", err)
 		return
 	}
@@ -455,15 +455,15 @@ func runProduce(c *cli.Context) (err error) {
 		cancel()
 	}()
 
-	topic := c.String("topic")
-	keyDelim := c.String("key-delimiter")
+	topic := cmd.String("topic")
+	keyDelim := cmd.String("key-delimiter")
 
-	mode := c.String("input-mode")
+	mode := cmd.String("input-mode")
 	switch mode {
 	case "", "lines":
-		err = produceLines(c, writer, topic, keyDelim)
+		err = produceLines(ctx, cmd, writer, topic, keyDelim)
 	case "netstring":
-		err = produceNetstrings(c, writer, topic, keyDelim)
+		err = produceNetstrings(ctx, cmd, writer, topic, keyDelim)
 	default:
 		err = eb.Build().Str("mode", mode).Errorf("invalid --input-mode (try lines, netstring)")
 	}
@@ -473,17 +473,17 @@ func runProduce(c *cli.Context) (err error) {
 // produceLines reads newline-delimited records from stdin and produces
 // them. Each line's bytes (without the trailing \n) become one record,
 // optionally split into key/value at keyDelim's first occurrence.
-func produceLines(c *cli.Context, writer *pkafka.FranzWriter, topic, keyDelim string) (err error) {
+func produceLines(ctx context.Context, cmd *cli.Command, writer *pkafka.FranzWriter, topic, keyDelim string) (err error) {
 	scanner := bufio.NewScanner(os.Stdin)
 	// Allow lines up to 64 MiB; brokers reject larger anyway.
 	scanner.Buffer(make([]byte, 64*1024), 64*1024*1024)
 	for scanner.Scan() {
 		rec := buildRecord(topic, scanner.Bytes(), keyDelim)
-		if err = writer.Write(c.Context, rec); err != nil {
+		if err = writer.Write(ctx, rec); err != nil {
 			err = eh.Errorf("write: %w", err)
 			return
 		}
-		if c.Context.Err() != nil {
+		if ctx.Err() != nil {
 			return
 		}
 	}
@@ -498,7 +498,7 @@ func produceLines(c *cli.Context, writer *pkafka.FranzWriter, topic, keyDelim st
 // record payload, optionally split into key/value at keyDelim's
 // first occurrence — the netstring framing is binary-safe so the
 // payload may contain newlines, NULs, or any other byte.
-func produceNetstrings(c *cli.Context, writer *pkafka.FranzWriter, topic, keyDelim string) (err error) {
+func produceNetstrings(ctx context.Context, cmd *cli.Command, writer *pkafka.FranzWriter, topic, keyDelim string) (err error) {
 	reader := bufio.NewReaderSize(os.Stdin, 64*1024)
 	for {
 		var (
@@ -514,11 +514,11 @@ func produceNetstrings(c *cli.Context, writer *pkafka.FranzWriter, topic, keyDel
 			return
 		}
 		rec := buildRecord(topic, payload, keyDelim)
-		if err = writer.Write(c.Context, rec); err != nil {
+		if err = writer.Write(ctx, rec); err != nil {
 			err = eh.Errorf("write: %w", err)
 			return
 		}
-		if c.Context.Err() != nil {
+		if ctx.Err() != nil {
 			return
 		}
 	}
@@ -602,14 +602,14 @@ func listCmd() *cli.Command {
 	}
 }
 
-func runList(c *cli.Context) (err error) {
-	connDetails, err := makeConnectionDetails(c)
+func runList(ctx context.Context, cmd *cli.Command) (err error) {
+	connDetails, err := makeConnectionDetails(ctx, cmd)
 	if err != nil {
 		err = eh.Errorf("connection: %w", err)
 		return
 	}
 
-	client, err := pkafka.NewFranzClient(c.Context, connDetails.FranzOpts()...)
+	client, err := pkafka.NewFranzClient(ctx, connDetails.FranzOpts()...)
 	if err != nil {
 		err = eh.Errorf("connect: %w", err)
 		return
@@ -617,7 +617,7 @@ func runList(c *cli.Context) (err error) {
 	defer client.Close()
 
 	adm := kadm.NewClient(client)
-	md, err := adm.Metadata(c.Context)
+	md, err := adm.Metadata(ctx)
 	if err != nil {
 		err = eh.Errorf("metadata: %w", err)
 		return
@@ -693,11 +693,11 @@ type formatter func(w io.Writer, r *kgo.Record) (err error)
 // makeRecordWriter returns the formatter selected by --output-mode.
 // 'format' uses the --format string; 'cbor' emits a CBOR map per
 // record; 'netstring' emits a netstring of record.Value.
-func makeRecordWriter(c *cli.Context) (fn formatter, err error) {
-	mode := c.String("output-mode")
+func makeRecordWriter(ctx context.Context, cmd *cli.Command) (fn formatter, err error) {
+	mode := cmd.String("output-mode")
 	switch mode {
 	case "", "format":
-		fn = compileFormat(c.String("format"))
+		fn = compileFormat(cmd.String("format"))
 	case "cbor":
 		fn = cborWriter
 	case "netstring":

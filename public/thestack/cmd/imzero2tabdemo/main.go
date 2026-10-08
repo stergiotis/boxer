@@ -9,7 +9,7 @@ package main
 
 import (
 	"github.com/rs/zerolog/log"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/apps/splashscreen"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
@@ -87,7 +87,7 @@ func newTab() (inst *tabhost.Program) {
 		DefaultApp: splashscreen.ManifestId,
 		Services:   tabhost.Services{KeelsonSQL: keelsonTables(), NoEgress: true},
 	},
-		&cli.App{Name: "imzero2tabdemo", Version: vcs.BuildVersionInfo(), Before: logging.Apply})
+		&cli.Command{Name: "imzero2tabdemo", Version: vcs.BuildVersionInfo(), Before: logging.Apply})
 	return
 }
 

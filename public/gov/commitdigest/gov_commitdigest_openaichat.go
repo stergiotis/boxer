@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -25,9 +25,9 @@ import (
 //  4. --llm-apikey (or LLM_API_KEY env) → use it
 //
 // Returns an empty key for local Ollama / LM Studio runs that need no auth.
-func resolveLlmApiKey(c *cli.Context) (key string, err error) {
-	if c.IsSet("gemini-api-key") {
-		explicit := c.String("gemini-api-key")
+func resolveLlmApiKey(ctx context.Context, cmd *cli.Command) (key string, err error) {
+	if cmd.IsSet("gemini-api-key") {
+		explicit := cmd.String("gemini-api-key")
 		if explicit != "" {
 			key = explicit
 			return
@@ -36,7 +36,7 @@ func resolveLlmApiKey(c *cli.Context) (key string, err error) {
 		return
 	}
 
-	endpoint := c.String("llm-endpoint")
+	endpoint := cmd.String("llm-endpoint")
 	if isGeminiEndpoint(endpoint) {
 		var chainKey string
 		var chainErr error
@@ -48,7 +48,7 @@ func resolveLlmApiKey(c *cli.Context) (key string, err error) {
 		// chain failed silently → fall through to generic flag
 	}
 
-	key = c.String("llm-apikey")
+	key = cmd.String("llm-apikey")
 	return
 }
 

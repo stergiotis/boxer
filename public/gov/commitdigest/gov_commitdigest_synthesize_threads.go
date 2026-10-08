@@ -1,6 +1,7 @@
 package commitdigest
 
 import (
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -12,7 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 // Thread is one durable narrative arc identified over a chunk window. The
@@ -74,7 +75,7 @@ func newSynthesizeThreadsCommand() *cli.Command {
 			},
 			&cli.StringFlag{
 				Name:    "llm-apikey",
-				EnvVars: []string{"LLM_API_KEY"},
+				Sources: cli.EnvVars("LLM_API_KEY"),
 				Usage:   "API key for non-Gemini LLM providers (LM Studio, generic OpenAI-compat). Prefer LLM_API_KEY env to avoid exposing the secret in process argv.",
 			},
 			&cli.StringFlag{
@@ -96,7 +97,7 @@ func newSynthesizeThreadsCommand() *cli.Command {
 				Usage: "Print the prompt that would be sent to the LLM and exit without calling",
 			},
 		},
-		Action: func(c *cli.Context) error {
+		Action: func(ctx context.Context, cmd *cli.Command) error {
 			inputData, err := io.ReadAll(os.Stdin)
 			if err != nil {
 				return eh.Errorf("unable to read stdin: %w", err)
@@ -105,8 +106,8 @@ func newSynthesizeThreadsCommand() *cli.Command {
 				return eh.Errorf("empty trend digest on stdin: %w", errors.New("no input"))
 			}
 
-			dryRun := c.Bool("dry-run")
-			llmModel := c.String("llm-model")
+			dryRun := cmd.Bool("dry-run")
+			llmModel := cmd.String("llm-model")
 			if llmModel == "" && !dryRun {
 				return eh.Errorf("--llm-model is required unless --dry-run is set: %w", errors.New("missing required flag"))
 			}
@@ -133,25 +134,25 @@ func newSynthesizeThreadsCommand() *cli.Command {
 				return nil
 			}
 
-			apiKey, err := resolveLlmApiKey(c)
+			apiKey, err := resolveLlmApiKey(ctx, cmd)
 			if err != nil {
 				return eh.Errorf("resolve api key: %w", err)
 			}
 			// Retry transient provider failures (429 / 5xx); Gemini rate-limits
 			// under load. The per-call --llm-timeout still bounds total time,
 			// since the backoff is context-aware.
-			llm, err := openaichat.NewClient(c.String("llm-endpoint"), apiKey,
+			llm, err := openaichat.NewClient(cmd.String("llm-endpoint"), apiKey,
 				openaichat.WithRetry(openaichat.DefaultRetryPolicy()))
 			if err != nil {
 				return eh.Errorf("new llm client: %w", err)
 			}
 			defer func() { _ = llm.Close() }()
-			timeoutSec := c.Int("llm-timeout")
+			timeoutSec := cmd.Int("llm-timeout")
 			if timeoutSec <= 0 {
 				timeoutSec = 120
 			}
 
-			raw, err := summarizeOnce(c.Context, llm, llmModel, int32(c.Int("num-ctx")), timeoutSec, ThreadSynthesisSystemPrompt, user)
+			raw, err := summarizeOnce(ctx, llm, llmModel, int32(cmd.Int("num-ctx")), timeoutSec, ThreadSynthesisSystemPrompt, user)
 			if err != nil {
 				return eh.Errorf("LLM thread synthesis failed: %w", err)
 			}

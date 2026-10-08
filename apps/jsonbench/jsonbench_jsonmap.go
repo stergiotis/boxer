@@ -21,11 +21,12 @@ package main
 // and is recorded as a property of the load, not hidden.
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	"github.com/rs/zerolog/log"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/code/synthesis/golang/align"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
@@ -68,7 +69,7 @@ func jsonmapCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "jsonmap",
 		Usage: "the canonical leeway JSON mapping arm: codegen, DDL, ingest",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			jsonmapCodegenCommand(),
 			jsonmapDdlCommand(),
 			jsonmapIngestCommand(),
@@ -87,7 +88,7 @@ func jsonmapCodegenCommand() *cli.Command {
 	}
 }
 
-func runJsonmapCodegen(cCtx *cli.Context) (err error) {
+func runJsonmapCodegen(ctx context.Context, cmd *cli.Command) (err error) {
 	var tbl common.TableDesc
 	tbl, err = mapping.NewJsonMapping()
 	if err != nil {
@@ -113,7 +114,7 @@ func runJsonmapCodegen(cCtx *cli.Context) (err error) {
 		err = eh.Errorf("generate dml go classes: %w", err)
 		return
 	}
-	out := cCtx.String("out")
+	out := cmd.String("out")
 	err = align.WriteAligned(out, code)
 	if err != nil {
 		err = eb.Build().Str("out", out).Errorf("write: %w", err)
@@ -149,31 +150,30 @@ func jsonmapDdlCommand() *cli.Command {
 	}
 }
 
-func runJsonmapDdl(cCtx *cli.Context) (err error) {
-	db := cCtx.String("database")
+func runJsonmapDdl(ctx context.Context, cmd *cli.Command) (err error) {
+	db := cmd.String("database")
 	// The same guard the facts DDL command carries: this drops databases, and
 	// the live store must never be a target.
 	if db == "boxer" {
 		err = eb.Build().Str("db", db).Errorf("refusing to target the live facts database")
 		return
 	}
-	table := cCtx.String("table")
+	table := cmd.String("table")
 	var sql string
-	sql, err = composeJsonmapCreateTableSQL(db, table, cCtx.String("engine"))
+	sql, err = composeJsonmapCreateTableSQL(db, table, cmd.String("engine"))
 	if err != nil {
 		return
 	}
-	if !cCtx.Bool("apply") {
+	if !cmd.Bool("apply") {
 		fmt.Println(sql)
 		return
 	}
 	cli0 := chclient.New(chclient.Config{
-		URL:      cCtx.String("url"),
-		User:     cCtx.String("user"),
-		Password: cCtx.String("password"),
+		URL:      cmd.String("url"),
+		User:     cmd.String("user"),
+		Password: cmd.String("password"),
 	}, nil)
-	ctx := cCtx.Context
-	if cCtx.Bool("drop") {
+	if cmd.Bool("drop") {
 		err = cli0.Exec(ctx, "DROP DATABASE IF EXISTS "+db)
 		if err != nil {
 			err = eb.Build().Str("db", db).Errorf("drop database: %w", err)

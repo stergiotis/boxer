@@ -2,13 +2,13 @@ package golang
 
 import (
 	"github.com/stergiotis/boxer/public/code/analysis/golang/wasmsurvey"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name: "golang",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			wasmsurvey.NewCliCommand(),
 		},
 	}

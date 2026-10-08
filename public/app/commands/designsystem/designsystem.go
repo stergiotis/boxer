@@ -11,6 +11,7 @@
 package designsystem
 
 import (
+	"context"
 	"fmt"
 	"image"
 	_ "image/jpeg"
@@ -19,7 +20,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/colors/gen"
 	"github.com/stergiotis/boxer/public/keelson/designsystem/colors/vendor"
@@ -32,9 +33,9 @@ import (
 // wants the subcommands directly, without the `designsystem` prefix.
 func NewCliCommand() (cmd *cli.Command) {
 	cmd = &cli.Command{
-		Name:        "designsystem",
-		Usage:       "IDS toolchain — color generation, palette vendoring, screenshot review (ADR-0029)",
-		Subcommands: Subcommands(),
+		Name:     "designsystem",
+		Usage:    "IDS toolchain — color generation, palette vendoring, screenshot review (ADR-0029)",
+		Commands: Subcommands(),
 	}
 	return
 }
@@ -55,7 +56,7 @@ func newColorsCommand() (cmd *cli.Command) {
 	cmd = &cli.Command{
 		Name:  "colors",
 		Usage: "IDS semantic-palette generator + scientific-palette vendoring",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			newColorsGenCommand(),
 			newColorsVendorCommand(),
 		},
@@ -74,13 +75,13 @@ func newColorsGenCommand() (cmd *cli.Command) {
 				Usage: "re-emit to memory and byte-compare against committed palette_generated.rs / palette.out.go; non-zero exit on drift",
 			},
 		},
-		Action: func(ctx *cli.Context) (err error) {
-			res, err := gen.Run(ctx.Context, gen.Config{Verify: ctx.Bool("verify")})
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
+			res, err := gen.Run(ctx, gen.Config{Verify: cmd.Bool("verify")})
 			if err != nil {
 				err = eh.Errorf("colors gen failed: %w", err)
 				return
 			}
-			if ctx.Bool("verify") {
+			if cmd.Bool("verify") {
 				fmt.Printf("designsystem colors gen: verify ok (%d tokens, %d pairs)\n",
 					res.TokenCount, res.PairCount)
 			} else {
@@ -108,8 +109,8 @@ func newColorsVendorCommand() (cmd *cli.Command) {
 	cmd = &cli.Command{
 		Name:  "vendor",
 		Usage: "re-vendor Crameri / viridis data-encoding LUTs (ADR-0033 §SD4)",
-		Action: func(ctx *cli.Context) (err error) {
-			res, err := vendor.Run(ctx.Context, vendor.Config{})
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
+			res, err := vendor.Run(ctx, vendor.Config{})
 			if err != nil {
 				err = eh.Errorf("colors vendor failed: %w", err)
 				return
@@ -130,7 +131,7 @@ func newReviewCommand() (cmd *cli.Command) {
 	cmd = &cli.Command{
 		Name:  "review",
 		Usage: "Tier 2 deterministic pre-filter and (future) LLM-rubric driver (ADR-0029 §SD9)",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			newReviewSsimCommand(),
 			newReviewTourCommand(),
 		},
@@ -160,23 +161,23 @@ func newReviewSsimCommand() (cmd *cli.Command) {
 				Usage: "suppress all stdout output",
 			},
 		},
-		Action: func(ctx *cli.Context) (err error) {
-			if ctx.NArg() != 2 {
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
+			if cmd.NArg() != 2 {
 				err = cli.Exit("usage: designsystem review ssim BASELINE CANDIDATE [flags]", 2)
 				return
 			}
-			a, err := loadImage(ctx.Args().Get(0))
+			a, err := loadImage(cmd.Args().Get(0))
 			if err != nil {
 				err = cli.Exit(err.Error(), 2)
 				return
 			}
-			b, err := loadImage(ctx.Args().Get(1))
+			b, err := loadImage(cmd.Args().Get(1))
 			if err != nil {
 				err = cli.Exit(err.Error(), 2)
 				return
 			}
-			window := ctx.Int("window")
-			threshold := ctx.Float64("threshold")
+			window := cmd.Int("window")
+			threshold := cmd.Float64("threshold")
 			s, err := ssim.Compute(a, b, window)
 			if err != nil {
 				err = cli.Exit(err.Error(), 2)
@@ -189,7 +190,7 @@ func newReviewSsimCommand() (cmd *cli.Command) {
 				verdict = "llm-grade-warranted"
 				exitCode = 1
 			}
-			if !ctx.Bool("quiet") {
+			if !cmd.Bool("quiet") {
 				fmt.Printf("ssim=%.6f dssim=%.6f threshold=%.6f verdict=%s\n",
 					s, d, threshold, verdict)
 			}
@@ -236,18 +237,18 @@ func newReviewTourCommand() (cmd *cli.Command) {
 				Usage: "suppress per-scene rows; print only the summary line",
 			},
 		},
-		Action: func(ctx *cli.Context) (err error) {
-			if ctx.NArg() != 2 {
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
+			if cmd.NArg() != 2 {
 				err = cli.Exit("usage: designsystem review tour BASELINE_DIR CANDIDATE_DIR [flags]", 2)
 				return
 			}
-			baselineDir := ctx.Args().Get(0)
-			candidateDir := ctx.Args().Get(1)
-			threshold := ctx.Float64("threshold")
-			gateBelow := ctx.Float64("gate-below")
-			window := ctx.Int("window")
+			baselineDir := cmd.Args().Get(0)
+			candidateDir := cmd.Args().Get(1)
+			threshold := cmd.Float64("threshold")
+			gateBelow := cmd.Float64("gate-below")
+			window := cmd.Int("window")
 
-			res, err := tour.Compare(ctx.Context, baselineDir, candidateDir, tour.Config{
+			res, err := tour.Compare(ctx, baselineDir, candidateDir, tour.Config{
 				Window:    window,
 				Threshold: threshold,
 			})
@@ -256,7 +257,7 @@ func newReviewTourCommand() (cmd *cli.Command) {
 				return
 			}
 
-			printTourResult(res, baselineDir, candidateDir, threshold, gateBelow, window, ctx.Bool("quiet"))
+			printTourResult(res, baselineDir, candidateDir, threshold, gateBelow, window, cmd.Bool("quiet"))
 
 			gated := false
 			if gateBelow > 0 {

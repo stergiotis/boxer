@@ -1,6 +1,7 @@
 package callsites
 
 import (
+	"context"
 	"slices"
 	"strings"
 
@@ -9,7 +10,7 @@ import (
 	cli2 "github.com/stergiotis/boxer/public/hmi/cli"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 // failOnRules maps --fail-on rule names to their site predicate
@@ -62,15 +63,15 @@ func NewCliCommand() *cli.Command {
 		},
 			f.ToCliFlags(),
 		),
-		Action: func(cctx *cli.Context) error {
-			return callsitesAction(cctx, f)
+		Action: func(ctx context.Context, cmd *cli.Command) error {
+			return callsitesAction(ctx, cmd, f)
 		},
 	}
 }
 
-func callsitesAction(cctx *cli.Context, f *cli2.UniversalCliFormatter) (err error) {
+func callsitesAction(ctx context.Context, cmd *cli.Command, f *cli2.UniversalCliFormatter) (err error) {
 	var tags []string
-	if t := cctx.String("tags"); t != "" {
+	if t := cmd.String("tags"); t != "" {
 		for x := range strings.SplitSeq(t, ",") {
 			x = strings.TrimSpace(x)
 			if x != "" {
@@ -79,7 +80,7 @@ func callsitesAction(cctx *cli.Context, f *cli2.UniversalCliFormatter) (err erro
 		}
 	}
 	failPredicates := make(map[string]func(CallSite) bool, 4)
-	for _, name := range cctx.StringSlice("fail-on") {
+	for _, name := range cmd.StringSlice("fail-on") {
 		pred, known := failOnRules[name]
 		if !known {
 			err = eb.Build().Str("rule", name).Errorf("callsites: unknown --fail-on rule")
@@ -88,19 +89,19 @@ func callsitesAction(cctx *cli.Context, f *cli2.UniversalCliFormatter) (err erro
 		failPredicates[name] = pred
 	}
 
-	patterns := cctx.Args().Slice()
+	patterns := cmd.Args().Slice()
 	var stats LoadStats
 	svc := &AnalyzerService{
 		Patterns:     patterns,
 		BuildTags:    tags,
-		Adjudicate:   cctx.Bool("adjudicate"),
-		IncludeTests: cctx.Bool("include-tests"),
+		Adjudicate:   cmd.Bool("adjudicate"),
+		IncludeTests: cmd.Bool("include-tests"),
 		OnLoadStats:  func(s LoadStats) { stats = s },
 	}
 
 	var summary Summary
 	violations := make(map[string]uint64, len(failPredicates))
-	for site, runErr := range svc.All(cctx.Context) {
+	for site, runErr := range svc.All(ctx) {
 		if runErr != nil {
 			err = eh.Errorf("callsites: %w", runErr)
 			return
@@ -111,7 +112,7 @@ func callsitesAction(cctx *cli.Context, f *cli2.UniversalCliFormatter) (err erro
 				violations[name]++
 			}
 		}
-		err = f.FormatValue(cctx, site)
+		err = f.FormatValue(ctx, cmd, site)
 		if err != nil {
 			err = eh.Errorf("callsites: unable to format value: %w", err)
 			return

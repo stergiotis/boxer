@@ -12,7 +12,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
@@ -111,9 +111,9 @@ func reportCommand(inst *Program) (cmd *cli.Command) {
 		Flags: []cli.Flag{
 			&cli.BoolFlag{Name: "json", Usage: "print the report as JSON"},
 		},
-		Action: func(ctx *cli.Context) (err error) {
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
 			rep := Report(app.DefaultRegistry, inst.opts.Services)
-			if !ctx.Bool("json") {
+			if !cmd.Bool("json") {
 				WriteReport(os.Stdout, rep)
 				return
 			}

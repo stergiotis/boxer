@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryrunfacts"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryrunsvc"
@@ -53,8 +53,8 @@ func NewCliCommand() *cli.Command {
 	}
 }
 
-func run(c *cli.Context) (err error) {
-	backfillSpec := c.String("backfill")
+func run(cliCtx context.Context, cmd *cli.Command) (err error) {
+	backfillSpec := cmd.String("backfill")
 	if backfillSpec == "" {
 		backfillSpec = queryrunsvc.Backfill.Get()
 	}
@@ -63,10 +63,10 @@ func run(c *cli.Context) (err error) {
 		return eh.Errorf("queryrunsd: %w", err)
 	}
 	svc, err := queryrunsvc.New(queryrunsvc.Config{
-		Listen:       c.String("listen"),
-		ChURL:        c.String("ch-url"),
-		Cadence:      c.Duration("cadence"),
-		Scope:        queryrunfacts.ScopeE(c.String("scope")),
+		Listen:       cmd.String("listen"),
+		ChURL:        cmd.String("ch-url"),
+		Cadence:      cmd.Duration("cadence"),
+		Scope:        queryrunfacts.ScopeE(cmd.String("scope")),
 		BackfillFrom: backfillFrom,
 	}, log.Logger)
 	if err != nil {

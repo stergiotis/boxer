@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -63,12 +63,12 @@ func bundleCommand() (cmd *cli.Command) {
 	}
 }
 
-func bundle(ctx *cli.Context) (err error) {
-	out := ctx.String("out")
+func bundle(ctx context.Context, cmd *cli.Command) (err error) {
+	out := cmd.String("out")
 	if err = os.MkdirAll(filepath.Join(out, "fonts"), 0o755); err != nil {
 		return eh.Errorf("bundle: output directory: %w", err)
 	}
-	pkg := ctx.String("pkg")
+	pkg := cmd.String("pkg")
 	if pkg == "" {
 		bi, ok := debug.ReadBuildInfo()
 		if !ok || bi.Path == "" || bi.Path == "command-line-arguments" {
@@ -84,14 +84,14 @@ func bundle(ctx *cli.Context) (err error) {
 	if err != nil {
 		return
 	}
-	if err = buildGoModule(mainDir, pkg, filepath.Join(out, "imzero2tab.wasm"), ctx.Bool("wasmOpt"), os.Stderr); err != nil {
+	if err = buildGoModule(mainDir, pkg, filepath.Join(out, "imzero2tab.wasm"), cmd.Bool("wasmOpt"), os.Stderr); err != nil {
 		return
 	}
-	if err = placeHost(ctx.String("host"), ctx.String("hostFrom"), boxerDir, mainDir, filepath.Join(out, "imzero2_browser.wasm")); err != nil {
+	if err = placeHost(cmd.String("host"), cmd.String("hostFrom"), boxerDir, mainDir, filepath.Join(out, "imzero2_browser.wasm")); err != nil {
 		return
 	}
-	placeFonts(ctx.String("fonts"), boxerDir, filepath.Join(out, "fonts"))
-	if ctx.Bool("withAssets") {
+	placeFonts(cmd.String("fonts"), boxerDir, filepath.Join(out, "fonts"))
+	if cmd.Bool("withAssets") {
 		for name, b := range web.Assets() {
 			if err = os.WriteFile(filepath.Join(out, name), b, 0o644); err != nil {
 				return eb.Build().Str("asset", name).Errorf("bundle: write asset: %w", err)

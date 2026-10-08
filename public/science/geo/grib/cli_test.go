@@ -2,19 +2,20 @@ package grib
 
 import (
 	"bytes"
+	"context"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func runCli(t *testing.T, args ...string) (out string) {
 	t.Helper()
 	var buf bytes.Buffer
-	app := &cli.App{Name: "test", Writer: &buf, ErrWriter: &buf, Commands: []*cli.Command{NewCliCommand()}}
-	require.NoError(t, app.Run(append([]string{"test", "grib"}, args...)))
+	app := &cli.Command{Name: "test", Writer: &buf, ErrWriter: &buf, Commands: []*cli.Command{NewCliCommand()}}
+	require.NoError(t, app.Run(context.Background(), append([]string{"test", "grib"}, args...)))
 	out = buf.String()
 	return
 }

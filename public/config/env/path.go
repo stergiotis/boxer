@@ -1,12 +1,13 @@
 package env
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 )
 
 // PathVar is the typed env-var handle for filesystem path values. Get
@@ -61,7 +62,7 @@ func (inst *PathVar) setCached(value string) {
 // cli.PathFlag returned by AsCliFlag. The user action runs first; on
 // success the parsed (and ~-expanded by the cache) value is written to
 // the cache.
-func WithPathAction(fn func(ctx *cli.Context, parsed string) error) (opt FlagOption) {
+func WithPathAction(fn func(ctx context.Context, cmd *cli.Command, parsed string) error) (opt FlagOption) {
 	return func(o *flagOptions) {
 		o.actionFn = fn
 	}
@@ -69,21 +70,21 @@ func WithPathAction(fn func(ctx *cli.Context, parsed string) error) (opt FlagOpt
 
 func (inst *PathVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
 	fo := resolveFlagOptions(inst.spec, opts)
-	userAction, _ := fo.actionFn.(func(*cli.Context, string) error)
-	return &cli.PathFlag{
+	userAction, _ := fo.actionFn.(func(context.Context, *cli.Command, string) error)
+	return &cli.StringFlag{
 		Name:     fo.cliFlagName,
 		Usage:    inst.spec.Description,
 		Category: string(inst.spec.Category),
-		EnvVars:  []string{inst.spec.Name},
+		Sources:  cli.EnvVars(inst.spec.Name),
 		Value:    inst.spec.Default,
-		Action: func(ctx *cli.Context, parsed string) (err error) {
+		Action: func(ctx context.Context, cmd *cli.Command, parsed string) (err error) {
 			// Empty means unset; see StringVar.AsCliFlag.
 			if parsed == "" {
 				inst.res.clearCache()
 				return
 			}
 			if userAction != nil {
-				err = userAction(ctx, parsed)
+				err = userAction(ctx, cmd, parsed)
 				if err != nil {
 					return
 				}
@@ -91,6 +92,7 @@ func (inst *PathVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
 			inst.setCached(parsed)
 			return
 		},
+		TakesFile: true,
 	}
 }
 

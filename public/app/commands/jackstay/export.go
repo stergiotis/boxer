@@ -1,11 +1,12 @@
 package jackstay
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"time"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	jk "github.com/stergiotis/boxer/public/db/clickhouse/jackstay"
 	"github.com/stergiotis/boxer/public/hmi/progressest"
@@ -22,7 +23,7 @@ func newExportCommand() *cli.Command {
 		Flags: []cli.Flag{
 			endpointFlags()[0],
 			endpointFlags()[1],
-			&cli.PathFlag{Name: "pack", Required: true, Usage: "pack directory to write (created when missing)"},
+			&cli.StringFlag{Name: "pack", Required: true, Usage: "pack directory to write (created when missing)", TakesFile: true},
 			&cli.StringSliceFlag{Name: "database", Usage: "source database to include (repeatable); default: every non-system database"},
 			&cli.BoolFlag{Name: "leeway-only", Usage: "export only the tables that classify as leeway (ADR-0170)"},
 			filterFlag(),
@@ -30,25 +31,24 @@ func newExportCommand() *cli.Command {
 			&cli.StringFlag{Name: "compression", Value: "zstd", Usage: "compression of the stored chunks: zstd, gzip or none"},
 			&cli.BoolFlag{Name: "restart", Usage: "discard the pack's earlier export and begin a new one"},
 		},
-		Action: func(c *cli.Context) (err error) {
-			ctx := c.Context
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
 			w := os.Stdout
 			req := jk.ExportRequest{
-				Selection: jk.Selection{Databases: c.StringSlice("database"), LeewayOnly: c.Bool("leeway-only")},
-				Restart:   c.Bool("restart"),
+				Selection: jk.Selection{Databases: cmd.StringSlice("database"), LeewayOnly: cmd.Bool("leeway-only")},
+				Restart:   cmd.Bool("restart"),
 				Chunking:  jk.DefaultChunkingOptions(),
 			}
-			req.Selection.Filters, err = parseFilters(filterValues(c))
+			req.Selection.Filters, err = parseFilters(filterValues(ctx, cmd))
 			if err != nil {
 				return
 			}
-			if s := c.String("sample"); s != "" {
+			if s := cmd.String("sample"); s != "" {
 				req.SampleNum, req.SampleDen, err = jk.ParseFraction(s)
 				if err != nil {
 					return
 				}
 			}
-			req.Compression, err = jk.ParseCompression(c.String("compression"))
+			req.Compression, err = jk.ParseCompression(cmd.String("compression"))
 			if err != nil {
 				return
 			}
@@ -62,7 +62,7 @@ func newExportCommand() *cli.Command {
 				_, _ = fmt.Fprintln(w, chunkLine(r))
 			}
 			srcEp := jk.SourceEndpoint()
-			dir := c.Path("pack")
+			dir := cmd.String("pack")
 			var out jk.ExportOutcome
 			out, err = jk.Export(ctx, scanClient(jk.SourceClientConfig(srcEp)), srcEp, dir, req, time.Now)
 			for _, s := range out.Skipped {

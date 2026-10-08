@@ -1,11 +1,12 @@
 package tabhost
 
 import (
+	"context"
 	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/thestack/imzero2/browserhost"
 )
@@ -13,7 +14,7 @@ import (
 // New keeps the binary's own name and version and adds the tab's flags, its
 // action and `serve`; an Usage the binary set is kept.
 func TestNewDecoratesTheBinarysApp(t *testing.T) {
-	a := &cli.App{Name: "acmetab", Version: "v0", Usage: "acme's tab"}
+	a := &cli.Command{Name: "acmetab", Version: "v0", Usage: "acme's tab"}
 	p := New(Options{DefaultApp: "example.com/acme/apps/dashboard"}, a)
 	require.Same(t, a, p.app)
 	require.Equal(t, "acmetab", a.Name)
@@ -33,9 +34,9 @@ func TestNewDecoratesTheBinarysApp(t *testing.T) {
 // An app id no linked package registered is refused before anything starts,
 // and a native run leaves no reactor step behind.
 func TestUnknownAppIsRefused(t *testing.T) {
-	a := &cli.App{Name: "acmetab"}
+	a := &cli.Command{Name: "acmetab"}
 	p := New(Options{DefaultApp: "example.com/acme/apps/none"}, a)
-	err := a.Run([]string{"acmetab"})
+	err := a.Run(context.Background(), []string{"acmetab"})
 	require.True(t, errors.Is(err, browserhost.ErrNoSuchApp), "got %v", err)
 	require.Nil(t, p.run([]string{}))
 }

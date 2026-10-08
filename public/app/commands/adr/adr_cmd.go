@@ -18,6 +18,7 @@
 package adr
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,7 +28,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 const (
@@ -49,7 +50,7 @@ func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "adr",
 		Usage: "overview of doc/adr ADRs as ClickHouse-queryable Arrow tables (decision status × code-evidence implementation degree)",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			{
 				Name:   "build",
 				Usage:  "parse ADRs, scan code references, and emit adr.arrow + coderef.arrow + subtask.arrow + adrcontent.arrow",
@@ -73,9 +74,9 @@ func NewCliCommand() *cli.Command {
 	}
 }
 
-func resolvePaths(c *cli.Context) (root, adrDir string) {
-	root = c.String("root")
-	adrDir = c.String("adr-dir")
+func resolvePaths(ctx context.Context, cmd *cli.Command) (root, adrDir string) {
+	root = cmd.String("root")
+	adrDir = cmd.String("adr-dir")
 	if !filepath.IsAbs(adrDir) {
 		adrDir = filepath.Join(root, adrDir)
 	}
@@ -90,8 +91,8 @@ func resolvePaths(c *cli.Context) (root, adrDir string) {
 // source and so is the one artifact whose size tracks the corpus rather than
 // its shape. Callers that run only canned queries pass false and skip both the
 // re-read and the write.
-func buildArtifacts(c *cli.Context, outDir string, withContent bool) (adrs []adrcorpus.Adr, refs []adrcorpus.CodeRef, subs []adrcorpus.Subtask, tables ArrowTables, err error) {
-	root, adrDir := resolvePaths(c)
+func buildArtifacts(ctx context.Context, cmd *cli.Command, outDir string, withContent bool) (adrs []adrcorpus.Adr, refs []adrcorpus.CodeRef, subs []adrcorpus.Subtask, tables ArrowTables, err error) {
+	root, adrDir := resolvePaths(ctx, cmd)
 	if adrs, err = adrcorpus.ParseDir(adrDir); err != nil {
 		return nil, nil, nil, tables, err
 	}
@@ -126,13 +127,13 @@ func buildArtifacts(c *cli.Context, outDir string, withContent bool) (adrs []adr
 	return adrs, refs, subs, tables, nil
 }
 
-func actionBuild(c *cli.Context) error {
-	root, _ := resolvePaths(c)
-	outDir := c.String("out")
+func actionBuild(ctx context.Context, cmd *cli.Command) error {
+	root, _ := resolvePaths(ctx, cmd)
+	outDir := cmd.String("out")
 	if !filepath.IsAbs(outDir) {
 		outDir = filepath.Join(root, outDir)
 	}
-	adrs, refs, subs, tables, err := buildArtifacts(c, outDir, true)
+	adrs, refs, subs, tables, err := buildArtifacts(ctx, cmd, outDir, true)
 	if err != nil {
 		return err
 	}
@@ -143,7 +144,7 @@ func actionBuild(c *cli.Context) error {
 	return nil
 }
 
-func actionOverview(c *cli.Context) error {
+func actionOverview(ctx context.Context, cmd *cli.Command) error {
 	tmp, err := os.MkdirTemp("", "boxer-adr-")
 	if err != nil {
 		return eh.Errorf("unable to create temp dir: %w", err)
@@ -151,7 +152,7 @@ func actionOverview(c *cli.Context) error {
 	defer func() { _ = os.RemoveAll(tmp) }()
 	// The canned queries read only the metadata tables, so the source text is
 	// not emitted for them.
-	adrs, _, _, tables, err := buildArtifacts(c, tmp, false)
+	adrs, _, _, tables, err := buildArtifacts(ctx, cmd, tmp, false)
 	if err != nil {
 		return err
 	}
@@ -170,8 +171,8 @@ func actionOverview(c *cli.Context) error {
 	return nil
 }
 
-func actionQuery(c *cli.Context) error {
-	sql := c.Args().First()
+func actionQuery(ctx context.Context, cmd *cli.Command) error {
+	sql := cmd.Args().First()
 	if sql == "" {
 		return eh.Errorf("provide a SQL query as the argument, e.g. boxer adr query \"SELECT num,status,impl_evidence,title FROM adr ORDER BY code_refs DESC LIMIT 10\"")
 	}
@@ -180,11 +181,11 @@ func actionQuery(c *cli.Context) error {
 		return eh.Errorf("unable to create temp dir: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
-	_, _, _, tables, err := buildArtifacts(c, tmp, true)
+	_, _, _, tables, err := buildArtifacts(ctx, cmd, tmp, true)
 	if err != nil {
 		return err
 	}
-	ok, err := RunQuery(tables, sql, c.String("format"), os.Stdout)
+	ok, err := RunQuery(tables, sql, cmd.String("format"), os.Stdout)
 	if err != nil {
 		return err
 	}

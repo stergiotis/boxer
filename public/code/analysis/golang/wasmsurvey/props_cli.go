@@ -2,6 +2,7 @@ package wasmsurvey
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,7 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/packageprops"
 	"github.com/stergiotis/boxer/public/packageprops/proptable"
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 )
 
 // newPropsCommand is the `props` group (ADR-0080): generate seeds per-package
@@ -23,7 +24,7 @@ func newPropsCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "props",
 		Usage: "Seed/harvest/verify co-located PackageProps declarations (ADR-0080)",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			{
 				Name:   "generate",
 				Usage:  "Seed a package_props.go in each in-scope package from the survey verdict (idempotent-create; --overwrite re-seeds)",
@@ -35,7 +36,7 @@ func newPropsCommand() *cli.Command {
 				Usage: "Read committed PackageProps declarations into a table or a Go Table literal (no survey, no TinyGo)",
 				Flags: []cli.Flag{
 					&cli.StringFlag{Name: "dir", Usage: "module dir; empty resolves nearest go.mod above wd"},
-					&cli.StringSliceFlag{Name: "patterns", Usage: "scope, e.g. ./public/math/...", Value: cli.NewStringSlice("./...")},
+					&cli.StringSliceFlag{Name: "patterns", Usage: "scope, e.g. ./public/math/...", Value: []string{"./..."}},
 					&cli.StringFlag{Name: "emit", Usage: "output format: table | go", Value: "table"},
 					&cli.StringFlag{Name: "out", Usage: "output path for --emit go (\"-\" or empty = stdout)"},
 					&cli.StringFlag{Name: "package", Usage: "package clause for --emit go", Value: "proptable"},
@@ -64,13 +65,13 @@ func newPropsCommand() *cli.Command {
 	}
 }
 
-func runPropsGenerate(c *cli.Context) (err error) {
+func runPropsGenerate(ctx context.Context, cmd *cli.Command) (err error) {
 	var opts Options
-	if opts, err = wasmSurveyOptions(c); err != nil {
+	if opts, err = wasmSurveyOptions(ctx, cmd); err != nil {
 		return err
 	}
 	var res GenerateResult
-	if res, err = GenerateProps(c.Context, opts, c.Bool("overwrite")); err != nil {
+	if res, err = GenerateProps(ctx, opts, cmd.Bool("overwrite")); err != nil {
 		return err
 	}
 	for _, p := range res.WrittenPaths {
@@ -80,8 +81,8 @@ func runPropsGenerate(c *cli.Context) (err error) {
 	return nil
 }
 
-func runPropsHarvest(c *cli.Context) (err error) {
-	dir := c.String("dir")
+func runPropsHarvest(ctx context.Context, cmd *cli.Command) (err error) {
+	dir := cmd.String("dir")
 	if dir == "" {
 		if wd, e := os.Getwd(); e == nil {
 			if root, ok := godepcollect.ModuleRoot(wd); ok {
@@ -101,15 +102,15 @@ func runPropsHarvest(c *cli.Context) (err error) {
 	// the human `--emit table` overview, where seeing your own in-flight
 	// package is the point.
 	var rows []HarvestRow
-	if c.Bool("tracked") {
-		rows, err = HarvestTracked(c.Context, dir, modPath)
+	if cmd.Bool("tracked") {
+		rows, err = HarvestTracked(ctx, dir, modPath)
 	} else {
 		rows, err = HarvestProps(dir, modPath)
 	}
 	if err != nil {
 		return err
 	}
-	prefixes := patternsToPrefixes(modPath, c.StringSlice("patterns"))
+	prefixes := patternsToPrefixes(modPath, cmd.StringSlice("patterns"))
 	scoped := make([]HarvestRow, 0, len(rows))
 	for _, r := range rows {
 		if inScope(r.ImportPath, prefixes) {
@@ -117,13 +118,13 @@ func runPropsHarvest(c *cli.Context) (err error) {
 		}
 	}
 
-	switch c.String("emit") {
+	switch cmd.String("emit") {
 	case "go":
 		var src []byte
-		if src, err = renderHarvestGo(scoped, c.String("package")); err != nil {
+		if src, err = renderHarvestGo(scoped, cmd.String("package")); err != nil {
 			return err
 		}
-		out := c.String("out")
+		out := cmd.String("out")
 		if out == "" || out == "-" {
 			_, err = os.Stdout.Write(src)
 			return err
@@ -151,7 +152,7 @@ func runPropsHarvest(c *cli.Context) (err error) {
 		fmt.Fprintf(os.Stdout, "%d declared package(s)\n", len(scoped))
 		return nil
 	default:
-		return eb.Build().Str("emit", c.String("emit")).Errorf("unknown --emit (want table|go)")
+		return eb.Build().Str("emit", cmd.String("emit")).Errorf("unknown --emit (want table|go)")
 	}
 }
 
@@ -160,8 +161,8 @@ func runPropsHarvest(c *cli.Context) (err error) {
 // It needs neither the survey nor TinyGo — it parses declarations and compares
 // them to the compiled-in table — so it is cheap enough to run on every lint
 // pass, which is the property that makes it a gate rather than a chore.
-func runPropsDrift(c *cli.Context) (err error) {
-	root := c.String("dir")
+func runPropsDrift(ctx context.Context, cmd *cli.Command) (err error) {
+	root := cmd.String("dir")
 	if root == "" {
 		wd, e := os.Getwd()
 		if e != nil {
@@ -177,7 +178,7 @@ func runPropsDrift(c *cli.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	declared, err := HarvestTracked(c.Context, root, modPath)
+	declared, err := HarvestTracked(ctx, root, modPath)
 	if err != nil {
 		return err
 	}
@@ -222,21 +223,21 @@ func verifyFlags() (flags []cli.Flag) {
 	return
 }
 
-func runPropsVerify(c *cli.Context) (err error) {
+func runPropsVerify(ctx context.Context, cmd *cli.Command) (err error) {
 	// Refuse rather than guess. See [verifyFlags] for why this command has no
 	// mode default; the error names the gate's answer so a caller who hit this
 	// by dropping the flag can put back the right one rather than the fast one.
-	if !c.IsSet("mode") {
+	if !cmd.IsSet("mode") {
 		return eb.Build().Errorf("props verify: --mode is required and has no default. " +
 			"Use `--mode static` for a gate: it needs no TinyGo, runs in seconds, and proves only red — " +
 			"the sound signal ADR-0078 established. `--mode empirical|both` runs `tinygo build` per candidate package.")
 	}
 	var opts Options
-	if opts, err = wasmSurveyOptions(c); err != nil {
+	if opts, err = wasmSurveyOptions(ctx, cmd); err != nil {
 		return err
 	}
 	var mismatches []Mismatch
-	if mismatches, err = VerifyProps(c.Context, opts, opts.Dir); err != nil {
+	if mismatches, err = VerifyProps(ctx, opts, opts.Dir); err != nil {
 		return err
 	}
 	if len(mismatches) == 0 {
@@ -251,7 +252,7 @@ func runPropsVerify(c *cli.Context) (err error) {
 	// abstentions and 12 were the regressions that mattered. They are counted
 	// here and listed only on request, because a gate whose output is mostly
 	// noise is a gate that gets tuned out.
-	showUnjudged := c.Bool("show-unjudged")
+	showUnjudged := cmd.Bool("show-unjudged")
 	regressions, drifts, unjudged := 0, 0, 0
 	for _, m := range mismatches {
 		tag := "drift"

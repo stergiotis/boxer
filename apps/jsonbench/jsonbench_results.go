@@ -12,7 +12,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog/log"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"lukechampine.com/blake3"
 
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
@@ -48,9 +48,9 @@ func resultsCommand() *cli.Command {
 	}
 }
 
-func runResults(cCtx *cli.Context) (err error) {
-	runDir := cCtx.String("run-dir")
-	runID := cCtx.String("run-id")
+func runResults(ctx context.Context, cmd *cli.Command) (err error) {
+	runDir := cmd.String("run-dir")
+	runID := cmd.String("run-id")
 	if runID == "" {
 		runID = filepath.Base(strings.TrimRight(runDir, "/"))
 	}
@@ -72,11 +72,11 @@ func runResults(cCtx *cli.Context) (err error) {
 	}
 
 	cli0 := chclient.New(chclient.Config{
-		URL:      cCtx.String("url"),
-		User:     cCtx.String("user"),
-		Password: cCtx.String("password"),
+		URL:      cmd.String("url"),
+		User:     cmd.String("user"),
+		Password: cmd.String("password"),
 	}, nil)
-	table := cCtx.String("database") + "." + cCtx.String("table")
+	table := cmd.String("database") + "." + cmd.String("table")
 
 	ent := dml.NewInEntityFacts(memory.NewGoAllocator(), 512)
 	var id uint64
@@ -220,7 +220,7 @@ func vocabCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "vocab",
 		Usage: "print the trial's membership natural keys and their ids",
-		Action: func(*cli.Context) error {
+		Action: func(context.Context, *cli.Command) error {
 			for _, m := range []struct {
 				name string
 				id   uint64

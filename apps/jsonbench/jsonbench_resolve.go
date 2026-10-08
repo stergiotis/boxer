@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/rs/zerolog/log"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
@@ -51,9 +51,9 @@ func resolveCommand() *cli.Command {
 	}
 }
 
-func runResolve(cCtx *cli.Context) (err error) {
+func runResolve(cliCtx context.Context, cmd *cli.Command) (err error) {
 	var src []byte
-	if p := cCtx.Args().First(); p != "" {
+	if p := cmd.Args().First(); p != "" {
 		src, err = os.ReadFile(p)
 	} else {
 		src, err = io.ReadAll(os.Stdin)
@@ -64,12 +64,12 @@ func runResolve(cCtx *cli.Context) (err error) {
 	}
 
 	client := chclient.New(chclient.Config{
-		URL:      cCtx.String("url"),
-		User:     cCtx.String("user"),
-		Password: cCtx.String("password"),
+		URL:      cmd.String("url"),
+		User:     cmd.String("user"),
+		Password: cmd.String("password"),
 	}, nil)
-	db := cCtx.String("database")
-	resolver := lwsql.NewResolver(&chSchemaProvider{cli: client, ctx: cCtx.Context, fallbackDB: db})
+	db := cmd.String("database")
+	resolver := lwsql.NewResolver(&chSchemaProvider{cli: client, ctx: cliCtx, fallbackDB: db})
 
 	var bad []passes.ColumnDiagnostic
 	pass := passes.ResolveColumnNames(resolver, db, func(d passes.ColumnDiagnostic) {
@@ -93,7 +93,7 @@ func runResolve(cCtx *cli.Context) (err error) {
 		log.Warn().Str("handle", d.Handle).Str("msg", d.Message).
 			Strs("candidates", d.Candidates).Msg("unresolved column handle")
 	}
-	if len(bad) > 0 && cCtx.Bool("strict") {
+	if len(bad) > 0 && cmd.Bool("strict") {
 		err = eb.Build().Int("unresolved", len(bad)).Errorf("some column handles did not resolve")
 		return
 	}

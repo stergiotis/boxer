@@ -12,13 +12,14 @@
 package profiling
 
 import (
+	"context"
 	"os"
 	"runtime/pprof"
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 )
 
 const (
@@ -32,23 +33,22 @@ var ProfilingFlags = []cli.Flag{
 		Name:        flagNameCpuOutputFile,
 		Category:    "profiling",
 		DefaultText: "",
-		FilePath:    "",
+		Sources:     cli.Files(""),
 		Usage:       "",
 		Required:    false,
 		Hidden:      false,
-		HasBeenSet:  false,
 		Value:       "",
 		Action:      cpuProfileFileAction,
 	},
 }
 
-func ProfilingHandleExit(context *cli.Context) {
-	if context.IsSet(flagNameCpuOutputFile) {
+func ProfilingHandleExit(ctx context.Context, cmd *cli.Command) {
+	if cmd.IsSet(flagNameCpuOutputFile) {
 		pprof.StopCPUProfile()
 	}
 }
 
-func cpuProfileFileAction(context *cli.Context, s string) error {
+func cpuProfileFileAction(ctx context.Context, cmd *cli.Command, s string) error {
 	f, err := os.Create(s)
 	if err != nil {
 		return eb.Build().Str("file", s).Errorf("unable to create cpu profiling file: %w", err)

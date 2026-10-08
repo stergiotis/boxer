@@ -1,13 +1,14 @@
 package doclint
 
 import (
+	"context"
 	"os"
 	"strings"
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func NewCliCommand() *cli.Command {
@@ -35,25 +36,25 @@ func NewCliCommand() *cli.Command {
 	}
 }
 
-func doclintAction(ctx *cli.Context) (err error) {
+func doclintAction(ctx context.Context, cmd *cli.Command) (err error) {
 	var format FormatE
-	format, err = ParseFormat(ctx.String("format"))
+	format, err = ParseFormat(cmd.String("format"))
 	if err != nil {
 		return
 	}
 	var minSev FindingSeverityE
-	minSev, err = ParseSeverity(ctx.String("min-severity"))
+	minSev, err = ParseSeverity(cmd.String("min-severity"))
 	if err != nil {
 		return
 	}
 
-	roots := ctx.Args().Slice()
+	roots := cmd.Args().Slice()
 	if len(roots) == 0 {
 		roots = []string{"."}
 	}
 
 	linter := NewDefaultLinter()
-	linter.SetExclude(ctx.StringSlice("exclude"))
+	linter.SetExclude(cmd.StringSlice("exclude"))
 
 	var rep ReporterI
 	rep, err = NewReporter(format, os.Stdout)

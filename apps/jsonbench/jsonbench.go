@@ -25,7 +25,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog/log"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"lukechampine.com/blake3"
 
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
@@ -37,7 +37,7 @@ import (
 )
 
 func main() {
-	app := &cli.App{
+	app := &cli.Command{
 		Name:    "jsonbench",
 		Usage:   "shred the JSONBench Bluesky corpus into a boxer.facts-shaped table",
 		Version: vcs.BuildVersionInfo(),
@@ -53,7 +53,7 @@ func main() {
 		},
 		Before: logging.Apply,
 	}
-	if err := app.Run(os.Args); err != nil {
+	if err := app.Run(context.Background(), os.Args); err != nil {
 		log.Fatal().Err(err).Msg("jsonbench failed")
 	}
 }
@@ -79,9 +79,9 @@ func ingestCommand() *cli.Command {
 	}
 }
 
-func runIngest(cCtx *cli.Context) (err error) {
-	dataDir := cCtx.String("data-dir")
-	nFiles := cCtx.Int("files")
+func runIngest(ctx context.Context, cmd *cli.Command) (err error) {
+	dataDir := cmd.String("data-dir")
+	nFiles := cmd.Int("files")
 	files, err := tierFiles(dataDir, nFiles)
 	if err != nil {
 		return
@@ -91,8 +91,8 @@ func runIngest(cCtx *cli.Context) (err error) {
 	// canonical leeway scheme splits `string` from `symbol` on exactly this
 	// judgement and notes it "can be inferred appreciatively from sample
 	// data"; this is that inference, made explicit and recorded.
-	log.Info().Int("sample", cCtx.Int("sample")).Msg("sampling for symbol routing")
-	symbolPaths, err := sampleSymbolPaths(files[0], cCtx.Int("sample"), cCtx.Float64("symbol-ratio"))
+	log.Info().Int("sample", cmd.Int("sample")).Msg("sampling for symbol routing")
+	symbolPaths, err := sampleSymbolPaths(files[0], cmd.Int("sample"), cmd.Float64("symbol-ratio"))
 	if err != nil {
 		return
 	}
@@ -107,29 +107,29 @@ func runIngest(cCtx *cli.Context) (err error) {
 	undecodable = 0
 
 	cli0 := chclient.New(chclient.Config{
-		URL:      cCtx.String("url"),
-		User:     cCtx.String("user"),
-		Password: cCtx.String("password"),
+		URL:      cmd.String("url"),
+		User:     cmd.String("user"),
+		Password: cmd.String("password"),
 	}, nil)
-	table := cCtx.String("database") + "." + cCtx.String("table")
+	table := cmd.String("database") + "." + cmd.String("table")
 
 	ing := &ingester{
 		cli:         cli0,
 		table:       table,
 		alloc:       memory.NewGoAllocator(),
-		batch:       cCtx.Int("batch"),
+		batch:       cmd.Int("batch"),
 		symbolPaths: symbolPaths,
-		limit:       uint64(cCtx.Int("limit")),
+		limit:       uint64(cmd.Int("limit")),
 	}
 	start := time.Now()
 	for _, f := range files {
 		log.Info().Str("file", filepath.Base(f)).Msg("ingesting")
-		err = ing.ingestFile(cCtx.Context, f)
+		err = ing.ingestFile(ctx, f)
 		if err != nil {
 			return
 		}
 	}
-	err = ing.flush(cCtx.Context)
+	err = ing.flush(ctx)
 	if err != nil {
 		return
 	}

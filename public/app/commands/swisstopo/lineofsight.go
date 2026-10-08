@@ -1,6 +1,7 @@
 package swisstopo
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,7 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	swisstopoLib "github.com/stergiotis/boxer/public/science/geo/swisstopo"
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 )
 
 func newLineOfSightCommand() (cmd *cli.Command) {
@@ -68,18 +69,18 @@ func newLineOfSightCommand() (cmd *cli.Command) {
 	return
 }
 
-func lineOfSightAction(c *cli.Context) (err error) {
+func lineOfSightAction(ctx context.Context, cmd *cli.Command) (err error) {
 	fromWGS := swisstopoLib.WGS84Coord{
-		Lat: c.Float64("from-lat"),
-		Lon: c.Float64("from-lon"),
+		Lat: cmd.Float64("from-lat"),
+		Lon: cmd.Float64("from-lon"),
 	}
 	toWGS := swisstopoLib.WGS84Coord{
-		Lat: c.Float64("to-lat"),
-		Lon: c.Float64("to-lon"),
+		Lat: cmd.Float64("to-lat"),
+		Lon: cmd.Float64("to-lon"),
 	}
-	fromHeight := c.Float64("from-height")
-	toHeight := c.Float64("to-height")
-	tilesDir := c.String("tiles-dir")
+	fromHeight := cmd.Float64("from-height")
+	toHeight := cmd.Float64("to-height")
+	tilesDir := cmd.String("tiles-dir")
 
 	fromLV := swisstopoLib.WGS84ToLV95(fromWGS)
 	toLV := swisstopoLib.WGS84ToLV95(toWGS)
@@ -94,7 +95,7 @@ func lineOfSightAction(c *cli.Context) (err error) {
 		Msg("line-of-sight analysis")
 
 	var sampler *swisstopoLib.ElevationSampler
-	sampler, err = swisstopoLib.NewElevationSampler(c.Context, tilesDir)
+	sampler, err = swisstopoLib.NewElevationSampler(ctx, tilesDir)
 	if err != nil {
 		err = eh.Errorf("unable to create elevation sampler: %w", err)
 		return
@@ -135,7 +136,7 @@ func lineOfSightAction(c *cli.Context) (err error) {
 	// write CSV
 	{ // CSV output
 		var w *os.File
-		csvPath := c.String("csv")
+		csvPath := cmd.String("csv")
 		if csvPath != "" {
 			w, err = os.Create(csvPath)
 			if err != nil {

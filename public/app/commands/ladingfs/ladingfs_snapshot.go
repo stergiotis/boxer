@@ -1,6 +1,7 @@
 package ladingfs
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"os"
@@ -8,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/fs/lading"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingdata"
@@ -63,37 +64,37 @@ func newSnapshotCommand() *cli.Command {
 	}
 }
 
-func runSnapshot(c *cli.Context) (err error) {
-	if c.NArg() != 1 {
+func runSnapshot(ctx context.Context, cmd *cli.Command) (err error) {
+	if cmd.NArg() != 1 {
 		return eh.Errorf("exactly one argument: a directory, or with --remote an rclone remote")
 	}
-	mount, err := parseMount(c.String("mount"))
+	mount, err := parseMount(cmd.String("mount"))
 	if err != nil {
 		return
 	}
 	pol := ladingingest.DefaultPolicy()
-	pol.Ttl = ladingingest.TtlClassE(c.Uint("ttl-days"))
-	pol.InlineMax = c.Uint64("inline-max")
-	pol.MetaOnly = c.Bool("meta-only")
-	switch strings.ToLower(c.String("text-rule")) {
+	pol.Ttl = ladingingest.TtlClassE(cmd.Uint("ttl-days"))
+	pol.InlineMax = cmd.Uint64("inline-max")
+	pol.MetaOnly = cmd.Bool("meta-only")
+	switch strings.ToLower(cmd.String("text-rule")) {
 	case "sniff":
 		pol.Text = ladingingest.TextRuleSniff
 	case "never":
 		pol.Text = ladingingest.TextRuleNever
 	default:
-		return eb.Build().Str("text-rule", c.String("text-rule")).Errorf("--text-rule must be sniff or never")
+		return eb.Build().Str("text-rule", cmd.String("text-rule")).Errorf("--text-rule must be sniff or never")
 	}
-	switch strings.ToLower(c.String("profile")) {
+	switch strings.ToLower(cmd.String("profile")) {
 	case "corpus":
 		pol.Profile = ladingschema.ProfileCorpus
 	case "fleet":
 		pol.Profile = ladingschema.ProfileFleet
 	default:
-		return eb.Build().Str("profile", c.String("profile")).Errorf("--profile must be corpus or fleet")
+		return eb.Build().Str("profile", cmd.String("profile")).Errorf("--profile must be corpus or fleet")
 	}
 
 	client := chclient.New(chclient.ConfigFromEnv(), nil)
-	err = client.Ping(c.Context)
+	err = client.Ping(ctx)
 	if err != nil {
 		return eh.Errorf("ClickHouse not reachable: %w", err)
 	}
@@ -101,13 +102,13 @@ func runSnapshot(c *cli.Context) (err error) {
 	if err != nil {
 		return eh.Errorf("executor: %w", err)
 	}
-	if !c.Bool("no-provision") {
-		err = lading.Provision(c.Context, exec, pol.Profile)
+	if !cmd.Bool("no-provision") {
+		err = lading.Provision(ctx, exec, pol.Profile)
 		if err != nil {
 			return eh.Errorf("provision: %w", err)
 		}
 	}
-	err = lading.Verify(c.Context, exec)
+	err = lading.Verify(ctx, exec)
 	if err != nil {
 		return eh.Errorf("%w", err)
 	}
@@ -116,18 +117,18 @@ func runSnapshot(c *cli.Context) (err error) {
 	data := ladingdata.NewDataStore(exec, nil, ladingdata.DataStoreConfig{})
 	defer data.Close()
 
-	arg := c.Args().First()
+	arg := cmd.Args().First()
 	var src fs.FS
-	if c.Bool("remote") {
+	if cmd.Bool("remote") {
 		if !strings.Contains(arg, ":") {
 			return eb.Build().Str("arg", arg).Errorf("--remote takes an rclone remote of the form remote:path; a bare path is a local directory, name it without --remote")
 		}
 		opts := []ladingremote.Option{}
-		if filters := c.StringSlice("filter"); len(filters) > 0 {
+		if filters := cmd.StringSlice("filter"); len(filters) > 0 {
 			opts = append(opts, ladingremote.WithFilters(filters...))
 		}
 		var rem *ladingremote.Remote
-		rem, err = ladingremote.Serve(c.Context, arg, opts...)
+		rem, err = ladingremote.Serve(ctx, arg, opts...)
 		if err != nil {
 			return eh.Errorf("rclone serve: %w", err)
 		}
@@ -150,21 +151,21 @@ func runSnapshot(c *cli.Context) (err error) {
 		src = os.DirFS(abs)
 	}
 
-	if name := c.String("name"); name != "" {
+	if name := cmd.String("name"); name != "" {
 		policies := ladingpolicy.NewPolicyStore(exec, nil, ladingpolicy.PolicyStoreConfig{})
 		defer policies.Close()
-		err = ladingingest.RecordPolicy(c.Context, policies, mount, pol, name, c.String("store"))
+		err = ladingingest.RecordPolicy(ctx, policies, mount, pol, name, cmd.String("store"))
 		if err != nil {
 			return eh.Errorf("record policy: %w", err)
 		}
 	}
 
 	started := time.Now()
-	res, err := ladingingest.Snapshot(c.Context, src, mount, pol, lading.Stores{Meta: meta, Data: data})
+	res, err := ladingingest.Snapshot(ctx, src, mount, pol, lading.Stores{Meta: meta, Data: data})
 	if err != nil {
 		return eh.Errorf("snapshot: %w", err)
 	}
-	_, err = fmt.Fprintf(c.App.Writer,
+	_, err = fmt.Fprintf(cmd.Root().Writer,
 		"mount=0x%X snapshot=%s expires=%s entries=%d bytes=%d blocks=%d stored=%d referenced=%d skipped=%d errors=%d took=%s\n",
 		mount.Value(), res.Snap.UTC().Format(time.RFC3339Nano), res.ExpiresAt.UTC().Format(time.RFC3339),
 		res.Entries, res.Bytes, res.Blocks, res.Stored, res.Referenced, res.Skipped, res.Errors,

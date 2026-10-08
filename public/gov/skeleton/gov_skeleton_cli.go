@@ -1,11 +1,12 @@
 package skeleton
 
 import (
+	"context"
 	"fmt"
 	"os"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func NewCliCommand() *cli.Command {
@@ -54,26 +55,26 @@ func NewCliCommand() *cli.Command {
 	}
 }
 
-func skeletonAction(ctx *cli.Context) (err error) {
+func skeletonAction(ctx context.Context, cmd *cli.Command) (err error) {
 	files := DefaultFiles()
-	root := ctx.String("root")
+	root := cmd.String("root")
 
 	var p Params
 	p, err = DeriveParams(root)
 	if err != nil {
 		return
 	}
-	if v := ctx.String("module"); v != "" {
+	if v := cmd.String("module"); v != "" {
 		p.Module = v
 	}
-	if v := ctx.String("name"); v != "" {
+	if v := cmd.String("name"); v != "" {
 		p.Name = v
 	}
-	if v := ctx.String("app-package"); v != "" {
+	if v := cmd.String("app-package"); v != "" {
 		p.AppPackage = v
 	}
 
-	if ctx.Bool("list") {
+	if cmd.Bool("list") {
 		for _, f := range files {
 			var rel string
 			rel, _, err = Render(f, p)
@@ -85,7 +86,7 @@ func skeletonAction(ctx *cli.Context) (err error) {
 		return
 	}
 
-	if ctx.Bool("write") {
+	if cmd.Bool("write") {
 		var written []string
 		written, err = Write(root, files, p)
 		if err != nil {

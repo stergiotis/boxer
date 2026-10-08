@@ -1,12 +1,13 @@
 package env
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
 	"testing"
 
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 )
 
 // BoolVar is the typed env-var handle for boolean values.
@@ -78,7 +79,7 @@ func (inst *BoolVar) setCached(value bool) {
 // WithBoolAction attaches a caller-supplied Action func to the
 // cli.BoolFlag returned by AsCliFlag. The user action runs first; on
 // success the parsed value is written to the cache.
-func WithBoolAction(fn func(ctx *cli.Context, parsed bool) error) (opt FlagOption) {
+func WithBoolAction(fn func(ctx context.Context, cmd *cli.Command, parsed bool) error) (opt FlagOption) {
 	return func(o *flagOptions) {
 		o.actionFn = fn
 	}
@@ -86,7 +87,7 @@ func WithBoolAction(fn func(ctx *cli.Context, parsed bool) error) (opt FlagOptio
 
 func (inst *BoolVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
 	fo := resolveFlagOptions(inst.spec, opts)
-	userAction, _ := fo.actionFn.(func(*cli.Context, bool) error)
+	userAction, _ := fo.actionFn.(func(context.Context, *cli.Command, bool) error)
 	defaultValue := false
 	if inst.spec.Default != "" {
 		defaultValue = inst.parseDefault()
@@ -95,11 +96,11 @@ func (inst *BoolVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
 		Name:     fo.cliFlagName,
 		Usage:    inst.spec.Description,
 		Category: string(inst.spec.Category),
-		EnvVars:  []string{inst.spec.Name},
+		Sources:  cli.EnvVars(inst.spec.Name),
 		Value:    defaultValue,
-		Action: func(ctx *cli.Context, parsed bool) (err error) {
+		Action: func(ctx context.Context, cmd *cli.Command, parsed bool) (err error) {
 			if userAction != nil {
-				err = userAction(ctx, parsed)
+				err = userAction(ctx, cmd, parsed)
 				if err != nil {
 					return
 				}

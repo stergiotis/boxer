@@ -1,29 +1,30 @@
 package logging
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/require"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
-// runApply runs a minimal cli.App whose Before is logging.Apply (the real
+// runApply runs a minimal cli.Command whose Before is logging.Apply (the real
 // flag/env resolution path) and whose Action emits one info event, so the
 // test exercises exactly what a host does at startup.
 func runApply(t *testing.T, args []string, msg string) {
 	t.Helper()
-	app := &cli.App{
-		Flags:  LoggingFlags,
+	app := &cli.Command{
+		Flags:  NewLoggingFlags(),
 		Before: Apply,
-		Action: func(c *cli.Context) error {
+		Action: func(ctx context.Context, cmd *cli.Command) error {
 			log.Info().Str("k", "v").Msg(msg)
 			return nil
 		},
 	}
-	require.NoError(t, app.Run(append([]string{"prog"}, args...)))
+	require.NoError(t, app.Run(context.Background(), append([]string{"prog"}, args...)))
 }
 
 // Test_Apply_HonorsLogFileFormatColor proves the primary logger (and thus

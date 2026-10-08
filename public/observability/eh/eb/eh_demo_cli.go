@@ -1,18 +1,19 @@
 package eb
 
 import (
+	"context"
 	"io"
 	"math"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name: "error",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			{Name: "demo",
-				Action: func(c *cli.Context) error {
+				Action: func(ctx context.Context, cmd *cli.Command) error {
 					err1 := Build().Uint64("aLargeUint64", math.MaxUint64/2).Str("myString", "this is a string value").Type("myType", struct {
 						FieldA string
 						FieldB int

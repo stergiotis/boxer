@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -8,33 +9,34 @@ import (
 	badger2 "github.com/stergiotis/boxer/public/db/badger"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func NewCliCommandBadger() *cli.Command {
 	return &cli.Command{
 		Name: "badger",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			{
 				Name: "dump",
 				Flags: []cli.Flag{
-					&cli.PathFlag{
-						Name:     "path",
-						Required: true,
+					&cli.StringFlag{
+						Name:      "path",
+						Required:  true,
+						TakesFile: true,
 					},
 					&cli.IntFlag{
 						Name:  "prefetchSize",
 						Value: 1024,
 					},
 				},
-				Action: func(context *cli.Context) error {
-					storePath := context.Path("path")
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					storePath := cmd.String("path")
 					opts := badger.DefaultOptions(storePath).WithLogger(&badger2.ZerologLoggerAdapter{})
 					kv, err := badger.Open(opts)
 					if err != nil {
 						return eb.Build().Str("storePath", storePath).Errorf("unable to open key value store database: %w", err)
 					}
-					prefetchSize := context.Int("prefetchSize")
+					prefetchSize := cmd.Int("prefetchSize")
 					err = kv.View(func(txn *badger.Txn) error {
 						iter := txn.NewIterator(badger.IteratorOptions{
 							PrefetchSize:   prefetchSize,
