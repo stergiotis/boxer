@@ -1,0 +1,6 @@
+# The scripted model of chat-afk-grant-expiry.scene.md: the same request
+# in two turns, each followed by an answer.
+{"tool":"request_access","args":{"plan":"show the apps in play","open":[{"app":"play"}]}}
+{"content":"The request expired before you decided."}
+{"tool":"request_access","args":{"plan":"show the apps in play","open":[{"app":"play"}]}}
+{"content":"Asked again."}
