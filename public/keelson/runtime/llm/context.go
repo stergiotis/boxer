@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // contextSize is the model's context size and where it came from.
@@ -71,7 +72,7 @@ func ProbeContextTokens(ctx context.Context, hc *http.Client, endpoint string, a
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		err = eh.Errorf("llm: model list: HTTP %d", resp.StatusCode)
+		err = eb.Build().Int("status", resp.StatusCode).Errorf("llm: model list: the endpoint did not answer 200")
 		return
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))

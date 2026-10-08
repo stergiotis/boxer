@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
-	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
 )
 
@@ -46,14 +46,14 @@ func surfaceStatements(ctx context.Context, conn lwsqlsurface.Conn) (stmts []str
 func tableExists(ctx context.Context, conn lwsqlsurface.Conn, database string, table string) (exists bool, err error) {
 	body, err := conn.Query(ctx, "EXISTS TABLE "+database+"."+table)
 	if err != nil {
-		return false, eh.Errorf("trailviews: ask whether %s.%s exists: %w", database, table, err)
+		return false, eb.Build().Str("database", database).Str("table", table).Errorf("trailviews: ask whether the table exists: %w", err)
 	}
 	defer func() {
 		_ = body.Close()
 	}()
 	b, err := io.ReadAll(body)
 	if err != nil {
-		return false, eh.Errorf("trailviews: read whether %s.%s exists: %w", database, table, err)
+		return false, eb.Build().Str("database", database).Str("table", table).Errorf("trailviews: read whether the table exists: %w", err)
 	}
 	return strings.TrimSpace(string(b)) == "1", nil
 }

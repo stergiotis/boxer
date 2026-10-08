@@ -504,7 +504,7 @@ func (inst *extractState) bindIn(section string, scope *nanopass.SelectScope, de
 			// The reasons go in the message, not only in a field: the
 			// person reading it is often an agent that sees the text alone.
 			b = b.Str("derivedSources", strings.Join(opaque, "; "))
-			err = b.Errorf("no table in scope carries that section (%s); a CTE or subquery passes a section through only when every branch projects the carrying table's * without EXCEPT or ARRAY JOIN — project it, or call the extraction inside the CTE", strings.Join(opaque, "; "))
+			err = b.Errorf("no table in scope carries that section (%s); a CTE or subquery passes a section through only when every branch projects the carrying table's * without EXCEPT or ARRAY JOIN — project it, or call the extraction inside the CTE", strings.Join(opaque, "; ")) //boxer:lint disable=CS013 reason="shape 1: an agent reading the refusal sees the text alone, as the comment above says; derivedSources carries the same list"
 			return
 		}
 		err = b.Errorf("no table in scope carries that section")

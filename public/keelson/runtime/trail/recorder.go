@@ -16,6 +16,7 @@ import (
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
@@ -148,7 +149,7 @@ func (inst *Recorder) write(key string, at time.Time, c Context, add func(b *Tra
 	b, id := inst.begin(key, at, c)
 	add(b, id)
 	if err = b.Commit(); err != nil {
-		err = eh.Errorf("trail: buffer row %q: %w", key, err)
+		err = eb.Build().Str("key", key).Errorf("trail: buffer row: %w", err)
 	}
 	return
 }
@@ -303,7 +304,7 @@ func (inst *Recorder) WriteAhead(ctx context.Context) (durable bool, refuse erro
 		}
 	}
 	if inst != nil && inst.required {
-		return false, eh.Errorf("the audit trail could not be written and %s is set: %s", RequiredEnv.Spec().Name, why)
+		return false, eb.Build().Str("env", RequiredEnv.Spec().Name).Str("why", why).Errorf("the audit trail could not be written and %s is set: %s", RequiredEnv.Spec().Name, why) //boxer:lint disable=CS013 reason="shape 1 and 3: the services send this refusal across the bus as text, and the variable's name is what the reader changes"
 	}
 	if inst != nil && inst.Durable() {
 		inst.log.Warn().Str("reason", why).Msg("trail: write-ahead failed; the work proceeds without a durable row")
@@ -316,7 +317,7 @@ func (inst *Recorder) WriteAhead(ctx context.Context) (durable bool, refuse erro
 // not where BOXER_TRAIL_REQUIRED is set and the host has no durable backend.
 func (inst *Recorder) Admit() (refuse error) {
 	if inst != nil && inst.required && !inst.Durable() {
-		return eh.Errorf("the audit trail is not durable on this host and %s is set", RequiredEnv.Spec().Name)
+		return eb.Build().Str("env", RequiredEnv.Spec().Name).Errorf("the audit trail is not durable on this host and %s is set", RequiredEnv.Spec().Name) //boxer:lint disable=CS013 reason="shape 1 and 3: the services send this refusal across the bus as text, and the variable's name is what the reader changes"
 	}
 	return nil
 }

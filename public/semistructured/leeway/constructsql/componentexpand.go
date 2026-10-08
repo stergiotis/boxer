@@ -249,9 +249,9 @@ func (inst *componentState) checkBinding(scope *nanopass.SelectScope, b componen
 			label = "(subquery)"
 		}
 		if why := inst.derivedCarries(scope, &ts, table, db, 0); why != "" {
-			err = inst.errCall(spelled, funcExpr).Str("kind", b.Kind).Str("wants", b.Table).
-				Str("found", label).
-				Errorf("this SELECT reads %s, which does not pass the component's table through: %s; project * from %s in it, or call the component inside it", label, why, b.Table)
+			refusal := inst.errCall(spelled, funcExpr).Str("kind", b.Kind).Str("wants", b.Table).
+				Str("found", label).Str("why", why)
+			err = refusal.Errorf("this SELECT reads %s, which does not pass the component's table through: %s; project * from %s in it, or call the component inside it", label, why, b.Table) //boxer:lint disable=CS013 reason="shape 3: the remedy names the table to project, and an agent reading the refusal sees the text alone"
 		}
 		return
 	}
