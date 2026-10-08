@@ -2,6 +2,7 @@ package queryrunfacts
 
 import (
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
@@ -21,6 +22,17 @@ const (
 	ScopeStamped ScopeE = "stamped"
 	ScopeOff     ScopeE = "off"
 )
+
+// AllScopes lists every scope, in the order the knob documents them — the
+// one list the env registry's allowed values and Valid read.
+func AllScopes() (scopes []ScopeE) {
+	return []ScopeE{ScopeAll, ScopeStamped, ScopeOff}
+}
+
+// Valid says inst is one of AllScopes.
+func (inst ScopeE) Valid() (ok bool) {
+	return slices.Contains(AllScopes(), inst)
+}
 
 // Self-identification tags: every query the pipeline itself issues is
 // excluded from capture by log_comment, or the pipeline would feed on

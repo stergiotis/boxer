@@ -70,12 +70,17 @@ var (
 		Default:     string(queryrunfacts.ScopeAll),
 		Description: "capture scope: every terminal query_log event, only boxer-stamped ones, or off (the endpoint serves empty batches)",
 		Category:    env.CategoryObservability,
-	}, []string{
-		string(queryrunfacts.ScopeAll),
-		string(queryrunfacts.ScopeStamped),
-		string(queryrunfacts.ScopeOff),
-	})
+	}, scopeNames())
 )
+
+// scopeNames spells queryrunfacts.AllScopes for the registry's allowed
+// values.
+func scopeNames() (names []string) {
+	for _, sc := range queryrunfacts.AllScopes() {
+		names = append(names, string(sc))
+	}
+	return
+}
 
 // Backfill modes for ParseBackfill / the IMZERO2_QUERYRUNS_BACKFILL knob.
 const (
@@ -171,9 +176,7 @@ func New(cfg Config, log zerolog.Logger) (s *Service, err error) {
 	if cfg.Scope == "" {
 		cfg.Scope = queryrunfacts.ScopeE(Scope.Get())
 	}
-	switch cfg.Scope {
-	case queryrunfacts.ScopeAll, queryrunfacts.ScopeStamped, queryrunfacts.ScopeOff:
-	default:
+	if !cfg.Scope.Valid() {
 		err = eb.Build().Str("scope", string(cfg.Scope)).Errorf("queryrunsvc: unknown scope")
 		return
 	}

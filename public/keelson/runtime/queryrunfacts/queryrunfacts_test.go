@@ -78,6 +78,22 @@ func TestComposeExtractSql(t *testing.T) {
 	require.Error(t, err)
 }
 
+// Every listed scope is either composable or off, so a scope added to the
+// list cannot reach the extract without a predicate of its own.
+func TestScopesAreAllHandled(t *testing.T) {
+	for _, sc := range AllScopes() {
+		require.True(t, sc.Valid())
+		_, err := ComposeExtractSql("boxer.facts", "http://127.0.0.1:8127/pull", sc, 0, time.Time{})
+		if sc == ScopeOff {
+			require.Error(t, err)
+		} else {
+			require.NoError(t, err, "scope %q", sc)
+		}
+	}
+	require.False(t, ScopeE("").Valid())
+	require.False(t, ScopeE("everything").Valid())
+}
+
 func TestUrlStructureMatchesBuilderSchema(t *testing.T) {
 	structure, err := UrlStructure()
 	require.NoError(t, err)
