@@ -25,7 +25,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/apache/arrow-go/v18/arrow/ipc"
@@ -36,6 +35,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
+	"github.com/stergiotis/boxer/public/keelson/runtime/loopback"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryrunfacts"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -241,7 +241,7 @@ func (s *Service) Start(ctx context.Context) (err error) {
 		err = eb.Build().Str("chURL", s.cfg.ChURL).Errorf("queryrunsvc: bad ClickHouse url: %w", parseErr)
 		return
 	}
-	if !isLoopbackHost(chURL.Hostname()) {
+	if !loopback.IsHost(chURL.Hostname()) {
 		err = eb.Build().Str("chURL", s.cfg.ChURL).Errorf("queryrunsvc: refusing a ClickHouse endpoint off this host; the materialized view reaches /pull over loopback")
 		return
 	}
@@ -250,7 +250,7 @@ func (s *Service) Start(ctx context.Context) (err error) {
 		err = eb.Build().Str("listen", s.cfg.Listen).Errorf("queryrunsvc: bad listen addr: %w", splitErr)
 		return
 	}
-	if !isLoopbackHost(host) {
+	if !loopback.IsHost(host) {
 		err = eb.Build().Str("listen", s.cfg.Listen).Errorf("queryrunsvc: refusing non-loopback bind; remote exposure (token+TLS) is deferred to ADR-0082 §SD1")
 		return
 	}
@@ -397,14 +397,4 @@ func (s *Service) extract(ctx context.Context) (rows []queryrunfacts.Row, err er
 		rows = append(rows, row)
 	}
 	return
-}
-
-// isLoopbackHost mirrors the introspecthttp bind-gate (ADR-0082 §SD1).
-// An empty host is not loopback: ":8127" binds every interface.
-func isLoopbackHost(host string) (ok bool) {
-	if strings.EqualFold(host, "localhost") {
-		return true
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
 }

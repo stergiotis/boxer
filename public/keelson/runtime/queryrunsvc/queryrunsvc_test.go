@@ -155,16 +155,6 @@ func TestHealthz(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
-func TestIsLoopbackHost(t *testing.T) {
-	require.True(t, isLoopbackHost("127.0.0.1"))
-	require.True(t, isLoopbackHost("::1"))
-	require.True(t, isLoopbackHost("localhost"))
-	require.False(t, isLoopbackHost(""), "an empty host binds every interface")
-	require.False(t, isLoopbackHost("0.0.0.0"))
-	require.False(t, isLoopbackHost("192.168.1.10"))
-	require.False(t, isLoopbackHost("example.com"))
-}
-
 // ParseBackfill resolves the operator-facing spelling. "all" must stay the
 // zero time: that is what keeps the original unbounded first-boot reach for
 // every existing deployment.
