@@ -43,9 +43,6 @@ const (
 	// runsHistoryTimeout bounds one fetch round-trip (diagProbeTimeout's
 	// rationale: generous for remote links, finite for hangs).
 	runsHistoryTimeout = 15 * time.Second
-	// runsDetailTextRunes caps the detail pane's inline query text; the
-	// full text is one "open as query" away.
-	runsDetailTextRunes = 2000
 )
 
 // runsHistoryDriver owns the async fetch and its render-thread snapshot.
@@ -68,6 +65,10 @@ type runsHistoryDriver struct {
 
 	// selected is the chosen run's fact id (0 = none). Render-thread-only.
 	selected uint64
+	// secFor is the fact id sec classifies (0 = none): one parse per
+	// selection, not per frame. Render-thread-only.
+	secFor uint64
+	sec    securityVerdict
 }
 
 // newRunsHistoryDriver wires the driver against the live endpoint. A nil
@@ -300,100 +301,34 @@ func (inst *PlayApp) renderRecordedRuns() {
 			return
 		}
 		diagWeak(fmt.Sprintf("%d runs · fetched %s", len(rows), humanizeAgo(asOf)))
+		present := false
 		for i := range rows {
 			for range c.IdScope(ids.PrepareSeq(uint64(i))) {
+				open := d.selected == rows[i].Id
 				if c.Button(ids.PrepareStr("run"),
 					c.Atoms().Text(runRowLabel(rows[i])).Keep()).
 					Frame(false).
+					Selected(open).
 					Truncate().
 					SendResp().HasPrimaryClicked() {
-					if d.selected == rows[i].Id {
+					if open {
 						d.selected = 0
 					} else {
 						d.selected = rows[i].Id
 					}
+					open = !open
+				}
+				if open {
+					present = true
+					for range c.Indent(ids.PrepareStr("detail")).KeepIter() {
+						inst.renderRunDetail(rows[i])
+					}
 				}
 			}
 		}
-		if d.selected == 0 {
-			return
-		}
-		for i := range rows {
-			if rows[i].Id == d.selected {
-				inst.renderRunDetail(rows[i])
-				return
-			}
-		}
-		// The selection aged out of the fetched window; drop it silently.
-		d.selected = 0
-	}
-}
-
-// renderRunDetail is the selected run's accounting plus the two editor
-// hand-offs. Deliberately label-shaped (not a table): the numbers are
-// one-per-line facts, and anything deeper is a query away.
-func (inst *PlayApp) renderRunDetail(row queryrunfacts.HistoryRow) {
-	ids := inst.ids
-	c.Separator().Send()
-	for rt := range c.RichTextLabel("Run detail") {
-		rt.Strong()
-	}
-	diagWeak(row.Ts.UTC().Format("2006-01-02 15:04:05") + " UTC · " + row.Event + " · " + row.Kind)
-	diagWeak("query_id " + row.QueryId)
-	line := fmt.Sprintf("duration %s ms · read %s rows / %s · result %s rows / %s · peak memory %s",
-		humanize.Comma(int64(row.DurationMs)), humanize.Comma(int64(row.ReadRows)), humanize.IBytes(row.ReadBytes),
-		humanize.Comma(int64(row.ResultRows)), humanize.IBytes(row.ResultBytes), humanize.IBytes(row.MemoryPeak))
-	if row.WrittenRows > 0 || row.WrittenBytes > 0 {
-		line += fmt.Sprintf(" · wrote %s rows / %s",
-			humanize.Comma(int64(row.WrittenRows)), humanize.IBytes(row.WrittenBytes))
-	}
-	diagWeak(line)
-	diagWeak(fmt.Sprintf("normalized hash %016x", row.NormalizedHash))
-	if row.App != "" || row.RunId != "" || row.Lane != "" || row.Instance != 0 {
-		parts := make([]string, 0, 3)
-		if row.App != "" {
-			parts = append(parts, "app "+row.App)
-		}
-		if row.Lane != "" {
-			parts = append(parts, "lane "+row.Lane)
-		}
-		if row.RunId != "" {
-			parts = append(parts, "run "+row.RunId)
-		}
-		if row.Instance != 0 {
-			parts = append(parts, fmt.Sprintf("window %d", row.Instance))
-		}
-		diagWeak(strings.Join(parts, " · "))
-	}
-	if row.Delegated() {
-		line := "agent task " + row.Task
-		if row.TaskEpoch != 0 {
-			line += fmt.Sprintf(" (epoch %d)", row.TaskEpoch)
-		}
-		if row.TaskCall != "" {
-			line += " · call " + row.TaskCall
-		}
-		diagWeak(line)
-	} else {
-		diagWeak("no agent task: not caused by an agent call")
-	}
-	if row.ExceptionCode != 0 || row.Exception != "" {
-		c.Label(fmt.Sprintf("exception %d: %s", row.ExceptionCode, row.Exception)).
-			Wrap().Selectable(true).Send()
-	}
-	for rt := range c.RichTextLabel(truncateRunes(row.QueryText, runsDetailTextRunes)) {
-		rt.Monospace()
-	}
-	for range c.Horizontal().KeepIter() {
-		if c.Button(ids.PrepareStr("open-as-query"), c.Atoms().Text("Open as query").Keep()).
-			SendResp().HasPrimaryClicked() {
-			inst.ReplaceSql(row.QueryText)
-		}
-		if c.Button(ids.PrepareStr("profile-as-query"), c.Atoms().Text("Profile events as query").Keep()).
-			SendResp().HasPrimaryClicked() {
-			if sql, err := queryrunfacts.ComposeProfileEventsSql(runsHistoryFactsTable, row.Id); err == nil {
-				inst.ReplaceSql(sql)
-			}
+		if !present {
+			// The selection aged out of the fetched window; drop it silently.
+			d.selected = 0
 		}
 	}
 }

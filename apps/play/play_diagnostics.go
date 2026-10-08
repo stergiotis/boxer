@@ -263,22 +263,10 @@ func (inst *DiagnosticsDriver) armSecurityContext(raw string, parseErr error) {
 	// Substitution only: the pass registry must NOT have run, because
 	// ADR-0132 §SD5 classifies before it so a `keelson('…')` macro is not
 	// mistaken for the `url()` it may expand into.
-	if inst.substitute != nil {
-		if out, serr := inst.substitute(raw); serr == nil {
-			raw = out
-		}
-	}
-	pr, err := nanopass.Parse(raw)
-	if err != nil {
+	sec, pr := classifySecurity(raw, inst.substitute)
+	inst.secKnown, inst.secClass, inst.secWitnesses = sec.known, sec.class, sec.witnesses
+	if pr == nil {
 		return
-	}
-	// The ADR-0132 §SD5 class rides the same parse. A classifier error (a
-	// malformed tree) leaves secKnown=false — rendered, and to be treated,
-	// as the strongest class.
-	if class, wits, cerr := analysis.ClassifyQuerySecurity(pr); cerr == nil {
-		inst.secKnown = true
-		inst.secClass = class
-		inst.secWitnesses = wits
 	}
 	// defaultDatabase is "": play has no configured connection default (the
 	// server resolves unqualified reads via currentDatabase()), so unqualified
@@ -288,6 +276,39 @@ func (inst *DiagnosticsDriver) armSecurityContext(raw string, parseErr error) {
 		return
 	}
 	inst.passthruTables = refs
+}
+
+// securityVerdict is one statement's ADR-0132 §SD5 class. known=false means
+// the statement could not be classified, and class then already holds the
+// strongest value (mutating) — the enum's fail-closed zero value — which is
+// how a consumer must treat it.
+type securityVerdict struct {
+	known     bool
+	class     analysis.QuerySecurityClassE
+	witnesses []analysis.SecurityWitness
+}
+
+// classifySecurity judges raw's ADR-0132 §SD5 class on the body substitute
+// produces (nil = no substitution), and hands back the parse it judged so a
+// caller can run its other structural lenses over the same tree. pr is nil
+// when the statement did not parse; a classifier error on a parsed tree
+// leaves the verdict unknown with pr set.
+func classifySecurity(raw string, substitute func(string) (string, error)) (v securityVerdict, pr *nanopass.ParseResult) {
+	v.class = analysis.QuerySecurityMutating
+	if substitute != nil {
+		if out, serr := substitute(raw); serr == nil {
+			raw = out
+		}
+	}
+	pr, err := nanopass.Parse(raw)
+	if err != nil {
+		pr = nil
+		return
+	}
+	if class, wits, cerr := analysis.ClassifyQuerySecurity(pr); cerr == nil {
+		v = securityVerdict{known: true, class: class, witnesses: wits}
+	}
+	return
 }
 
 // securityContext returns the latest passthrough-table classification of the
@@ -595,26 +616,36 @@ func (inst *PlayApp) renderDiagSecurityContext() {
 // direction.
 func (inst *PlayApp) renderDiagSecurityClass() {
 	class, witnesses, known := inst.diag.securityClass()
-	label := class.String()
+	for range c.Horizontal().KeepIter() {
+		securityClassBadge(inst.ids.PrepareStr("sec-class"), securityVerdict{known: known, class: class})
+	}
+	renderSecurityWitnesses(witnesses)
+}
+
+// securityClassBadge draws a verdict's class as a toned badge, the tooltip
+// saying what the class promises. The Diagnostics tab and the History tab's
+// run details share it, so one class never reads two ways.
+func securityClassBadge(id c.WidgetIdCreatorI, v securityVerdict) {
+	label := v.class.String()
 	tone := badge.ToneError
-	tooltip := "The buffer changes state — the witnesses below name the construct (ADR-0132 §SD5)."
+	tooltip := "The statement changes state — the witnesses name the construct (ADR-0132 §SD5)."
 	switch {
-	case !known:
+	case !v.known:
 		label = "mutating (unclassified)"
-		tooltip = "Boxer's grammar does not parse this buffer, so it cannot be classified; the conservative direction treats it as the strongest class (ADR-0132 §SD5)."
-	case class == analysis.QuerySecurityRead:
+		tooltip = "Boxer's grammar does not parse this statement, so it cannot be classified; the conservative direction treats it as the strongest class (ADR-0132 §SD5)."
+	case v.class == analysis.QuerySecurityRead:
 		tone = badge.ToneSuccess
 		tooltip = "Provably retrieval-only against the endpoint's own data — the class a readonly setting can enforce on the wire (ADR-0132 §SD5)."
-	case class == analysis.QuerySecurityReadEgress:
+	case v.class == analysis.QuerySecurityReadEgress:
 		tone = badge.ToneWarning
-		tooltip = "Retrieval-only, but it reaches beyond the endpoint — the witnesses below name the egress constructs (ADR-0132 §SD5)."
+		tooltip = "Retrieval-only, but it reaches beyond the endpoint — the witnesses name the egress constructs (ADR-0132 §SD5)."
 	}
-	for range c.Horizontal().KeepIter() {
-		badge.New(inst.ids.PrepareStr("sec-class"), label).
-			Tone(tone).Size(badge.SizeSm).
-			Tooltip(tooltip).
-			Send()
-	}
+	badge.New(id, label).Tone(tone).Size(badge.SizeSm).Tooltip(tooltip).Send()
+}
+
+// renderSecurityWitnesses is one monospace line per witness that forced a
+// class below "read".
+func renderSecurityWitnesses(witnesses []analysis.SecurityWitness) {
 	for _, w := range witnesses {
 		for rt := range c.RichTextLabel(w.Name + " — " + w.Describe()) {
 			rt.Monospace()

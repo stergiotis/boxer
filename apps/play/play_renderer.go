@@ -286,6 +286,10 @@ type PlayApp struct {
 	// S2): captured KindQueryRun facts read back from the live endpoint,
 	// fetched manually and on first reveal (play_runs_history.go).
 	runsHist *runsHistoryDriver
+	// histSelected names the session run whose detail the History tab has
+	// open, by its Executed stamp (zero = none). The ring trims from the
+	// front, so an index would drift onto another run. Render-thread-only.
+	histSelected time.Time
 	// tabs is the instance's dock-tab set (ADR-0097 slice 6a): every tab a
 	// registered TabSpec, frozen at the first Render. Embedders customize
 	// it via Tabs() between construction and mounting (D4).
@@ -3051,30 +3055,6 @@ func (inst *PlayApp) renderStatus(numRows int64, elapsed time.Duration, summary 
 	}
 	inst.queryFSMWidget.Opts.Summary = func() { inst.renderQuerySummary(numRows, elapsed, summary, executed, err, truncation) }
 	inst.queryFSMWidget.Render()
-}
-
-// renderHistoryTab is the History dock tab body. The tab title already
-// labels the pane so the legacy heading and inner ScrollArea are gone;
-// the outer ScrollArea wrap lives in Render().
-func (inst *PlayApp) renderHistoryTab() {
-	ids := inst.ids
-	hist := inst.graph.MainHistory()
-	// Newest first.
-	for i := len(hist) - 1; i >= 0; i-- {
-		entry := hist[i]
-		label := historyLabel(entry)
-		for range c.IdScope(ids.PrepareSeq(uint64(i))) {
-			if c.Button(ids.PrepareStr("entry"),
-				c.Atoms().Text(label).Keep()).
-				Frame(false).
-				Truncate().
-				SendResp().HasPrimaryClicked() {
-				inst.restoreHistoryEntry(entry)
-			}
-		}
-	}
-	// The durable half: captured runs from boxer.facts (ADR-0115 S2).
-	inst.renderRecordedRuns()
 }
 
 // renderTableTab is the Table dock tab body: pager strip atop the master

@@ -11,6 +11,8 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
 )
 
 // arrowStreamBytes encodes a one-column Int64 record as an Arrow IPC stream —
@@ -97,7 +99,39 @@ func TestQueryStoreExecuteRows(t *testing.T) {
 	}
 	hist := store.History()
 	if len(hist) != 1 || hist[0].NumRows != 2 || hist[0].ErrorText != "" {
-		t.Errorf("history=%+v, want one 2-row entry with no error", hist)
+		t.Fatalf("history=%+v, want one 2-row entry with no error", hist)
+	}
+	// The entry carries what the History tab's detail shows: the server's
+	// accounting, where the run went, and the class of what ran.
+	e := hist[0]
+	if e.Summary.ReadRows != 2 || e.Summary.ReadBytes != 16 {
+		t.Errorf("entry summary=%+v, want read 2 rows / 16 bytes", e.Summary)
+	}
+	if e.Dispatch == "" {
+		t.Error("entry dispatch should describe the decision")
+	}
+	if !e.Security.known || e.Security.class != analysis.QuerySecurityRead {
+		t.Errorf("entry security=%+v, want a known read", e.Security)
+	}
+	if e.Agent != nil {
+		t.Errorf("entry agent=%+v, want nil for the person's run", e.Agent)
+	}
+}
+
+// classifySecurity fails closed: a statement that does not parse is unknown
+// and holds the strongest class.
+func TestClassifySecurity(t *testing.T) {
+	v, pr := classifySecurity("SELECT 1", nil)
+	if pr == nil || !v.known || v.class != analysis.QuerySecurityRead {
+		t.Errorf("SELECT 1: verdict=%+v pr=%v, want a known read", v, pr)
+	}
+	v, _ = classifySecurity("SELECT * FROM url('http://example.invalid/x', CSV)", nil)
+	if !v.known || v.class != analysis.QuerySecurityReadEgress || len(v.witnesses) == 0 {
+		t.Errorf("url(): verdict=%+v, want read-egress with a witness", v)
+	}
+	v, pr = classifySecurity("SELEC nope (", nil)
+	if pr != nil || v.known || v.class != analysis.QuerySecurityMutating {
+		t.Errorf("unparseable: verdict=%+v pr=%v, want unknown mutating", v, pr)
 	}
 }
 
