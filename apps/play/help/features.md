@@ -712,11 +712,15 @@ between the two adjacent values, so a copied predicate partitions the rows
 exactly as the tree did. Beside the rule, the features that set the cluster apart: each is ranked by
 the chance a member's value exceeds a non-member's (an AUC of 0.5 is no
 separation), listed with the members' median against everyone else's, and only
-when the separation is clear. The feature columns are not columns of the result
-today, so a copied predicate runs once they are (a client-side features call is
-the planned route); the section is a description of what the clustering did, not
-a recomputation, and its fit is stated so a rule can be read with the trust it
-earned.
+when the separation is clear. Which rules run where depends on the feature set:
+under *structure* and *components* a rule is a predicate over column handles —
+`` has(`geoPoint:lv`, 'home') ``, `LW_COMPONENT_FILTER('Kind')` — which
+runs against the result as it is; under *shape* it is thresholds over the sixteen
+shape features, which are not columns of the result, so it runs against the
+published rows dataset (below), where they are. Handles are spelled as the
+physical columns spell them, as the Table's headers do; play folds both spellings
+to one column. Either way the fit is stated, so a rule can be read with the
+trust it earned.
 
 **By attributes** switches the same table to what the clusters' entities *are*:
 each entity becomes a set of items — its tagged sections and co-groups, short
