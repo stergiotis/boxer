@@ -523,6 +523,23 @@ Separately, the loopback bind gate accepted an empty host, which binds every
 interface (`--listen :8127`); it no longer does, in `queryrunsvc` and in the
 `introspecthttp` gate it mirrors.
 
+## Update — 2026-10-08: shared ClickHouse coordinates; the server must be on this host
+
+`IMZERO2_QUERYRUNS_CH_URL` is retired. The endpoint and credentials come from
+the shared `CLICKHOUSE_*` entries through `chclient.ConfigFromEnv`, as every
+other client reads them; before this the daemon had no way to authenticate
+at all. `--ch-url` is now the CLI face of `CLICKHOUSE_ENDPOINT`, and the
+daemon's other flags are the CLI faces of their `IMZERO2_QUERYRUNS_*`
+entries, so each setting resolves in one place. The daemon also exits when
+its HTTP server stops serving, rather than living on without an endpoint,
+so the unit's `Restart=always` recovers it.
+
+The endpoint must be on this host, and `Start` refuses one that is not. The
+materialized view pulls a loopback URL from ClickHouse's side, so against a
+remote server every refresh failed while the daemon reported nothing. A
+server in a container on the same host passes the check and fails the same
+way: its loopback is not the host's.
+
 ## References
 
 - [doc/explanation/query-observability.md](../explanation/query-observability.md)

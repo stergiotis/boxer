@@ -2,7 +2,6 @@ package queryrunsvc
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"math"
 	"strings"
@@ -97,10 +96,7 @@ func (s *Service) checkDestinationSchema(ctx context.Context) (err error) {
 	if err != nil {
 		return
 	}
-	sql := fmt.Sprintf(
-		"SELECT name FROM system.columns WHERE database = '%s' AND table = '%s' FORMAT TabSeparated",
-		strings.ReplaceAll(s.cfg.Database, "'", "''"), strings.ReplaceAll(s.cfg.Table, "'", "''"))
-	body, err := s.cli.Query(ctx, sql)
+	body, err := s.cli.Query(ctx, queryrunfacts.DestinationColumnsSql(s.cfg.Database, s.cfg.Table))
 	if err != nil {
 		err = eh.Errorf("queryrunsvc: reconcile: destination columns: %w", err)
 		return
@@ -131,18 +127,6 @@ func (s *Service) checkDestinationSchema(ctx context.Context) (err error) {
 			Errorf("queryrunsvc: the destination exists but lacks some current facts columns — an older schema generation; migrate it or move it aside, this service will not mutate an existing table")
 		return
 	}
-	return
-}
-
-// Teardown removes the MV — the integration tests' cleanup; the
-// destination table is left alone (it is shared with every other facts
-// writer).
-func (s *Service) Teardown(ctx context.Context) (err error) {
-	drop, err := queryrunfacts.ComposeDropMvSql(s.MvName())
-	if err != nil {
-		return
-	}
-	err = s.cli.Exec(ctx, drop)
 	return
 }
 

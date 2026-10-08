@@ -69,6 +69,14 @@ func DdlColumnNames() (names []string, err error) {
 	return
 }
 
+// DestinationColumnsSql lists the live destination's column names, one
+// per line, for the reconciler's schema-generation check against
+// DdlColumnNames.
+func DestinationColumnsSql(database string, table string) (sql string) {
+	return "SELECT name FROM system.columns WHERE database = " + quoteLiteral(database) +
+		" AND table = " + quoteLiteral(table) + " FORMAT TabSeparated"
+}
+
 // UrlStructure derives the url() structure clause from the generated
 // boxer.facts DDL — every leeway wire column with its ClickHouse type,
 // names backtick-quoted: "`id:id:u64:47::0:` UInt64, …". Deriving
@@ -137,11 +145,11 @@ WHERE %s NOT IN (
 SETTINGS log_comment=%s, %s, http_max_tries=1`,
 		mvName,
 		cadenceSeconds, factsTable,
-		quoteSqlString(pullURL), quoteSqlString(structure),
+		quoteLiteral(pullURL), quoteLiteral(structure),
 		ColId,
 		ColId, factsTable,
 		ColTs, watermarkSql(factsTable), WatermarkOverlap, ColSymbolLr, vocab.MembKindQueryRun.GetId().Value(),
-		quoteSqlString(RefreshTag), factsddl.SettingsClause)
+		quoteLiteral(RefreshTag), factsddl.SettingsClause)
 	return
 }
 

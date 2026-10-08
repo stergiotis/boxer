@@ -4,7 +4,7 @@ audience: contributor
 status: draft
 generated: true
 generator: public/app env gen-docs
-generated-at: 2026-10-07T15:05:11Z
+generated-at: 2026-10-08T12:21:55Z
 ---
 
 > **Status: draft — pre-human-review.** Machine-generated registry snapshot;
@@ -62,7 +62,7 @@ generated-at: 2026-10-07T15:05:11Z
 | `BOXER_MAP_TILE_MAX_ZOOM` | int64 | `19` | — |  | highest zoom level served by BOXER_MAP_TILE_URL (1..255); 0 keeps the widget default. Defaults to 19, which is what OpenStreetMap serves. |
 | `BOXER_MAP_TILE_URL` | string | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` | — |  | XYZ tile-server URL template for slippy-map basemaps, e.g. "http://mygis/{z}/{x}/{y}.png"; must contain the {z}/{x}/{y} placeholders. Defaults to OpenStreetMap, which fetches tiles from tile.openstreetmap.org over the public internet — set this to a self-hosted GIS to keep basemap traffic inside the deployment. Setting it is also what enables the BOXER_MAP_TILE_*_TLS / _CA_FILE knobs. |
 
-## boxer-play (49)
+## boxer-play (48)
 
 | Name | Type | Default | CLI flag | Sensitive | Description |
 |------|------|---------|----------|-----------|-------------|
@@ -88,7 +88,6 @@ generated-at: 2026-10-07T15:05:11Z
 | `BOXER_PLAY_FOCUS_ICICLE` | string | — | — |  | non-empty makes Icicle the default-active tab in its dock leaf (scripted screenshots) |
 | `BOXER_PLAY_FOCUS_KANBAN` | string | — | — |  | non-empty makes Kanban the default-active tab in its dock leaf (scripted screenshots) |
 | `BOXER_PLAY_FOCUS_MAP` | string | — | — |  | non-empty makes Map the default-active tab in its dock leaf (scripted screenshots) |
-| `BOXER_PLAY_FOCUS_MODEL` | string | — | — |  | non-empty makes Model the default-active tab in its dock leaf (scripted screenshots) |
 | `BOXER_PLAY_FOCUS_NETWORK` | string | — | — |  | non-empty makes Network the default-active tab in its dock leaf (scripted screenshots) |
 | `BOXER_PLAY_FOCUS_PASSES` | string | — | — |  | non-empty makes Passes the default-active tab in its dock leaf (scripted screenshots) |
 | `BOXER_PLAY_FOCUS_PREVIEW` | string | — | — |  | non-empty makes Preview the default-active tab in its dock leaf (scripted screenshots) |
@@ -144,7 +143,7 @@ generated-at: 2026-10-07T15:05:11Z
 | `CLICKHOUSE_URL` | string | `http://localhost:8123/` | — |  | ClickHouse HTTP URL used by the play HMI; defaults to localhost |
 | `CLICKHOUSE_USER` | string | `default` | — |  | ClickHouse user; defaults to the unauthenticated "default" account |
 
-## dev (47)
+## dev (48)
 
 | Name | Type | Default | CLI flag | Sensitive | Description |
 |------|------|---------|----------|-----------|-------------|
@@ -155,6 +154,7 @@ generated-at: 2026-10-07T15:05:11Z
 | `BOXER_AGENT_CALLS_MIN` | int64 | `20` | — |  | the least call budget the person can give a new runtime.agent task in the host's approval dialog; a budget a coordinator asks for below it is raised to it |
 | `BOXER_AGENT_DEADLINE` | duration | `30m` | — |  | how long a runtime.agent task runs before its calls wait for the person to give it more time, and how much more an approval gives |
 | `BOXER_AGENT_PACE` | duration | `750ms` | — |  | the least time between two visible changes — a change to a window, a window opened, an arrangement — of a runtime.agent task whose coordinator's ceiling does not let the model work unpaced |
+| `BOXER_AGENT_REQUEST_TIMEOUT` | duration | `30m` | — |  | how long a runtime.agent grant request or widening waits in the person's dialog before it expires; the coordinator's call waits as long |
 | `BOXER_AGENT_TEST_GRANTS` | bool | `false` | — |  | issue runtime.agent task grants without the person's approval, for scenes and tests (ADR-0269); honoured only on the headless host |
 | `BOXER_CAPMAP_VAULT` | path | — | — |  | business-capability vault directory to read as the corpus; empty finds the nearest doc/competences at or above the working directory |
 | `BOXER_GODEP_ROOT` | path | — | — |  | module directory the keelson go_packages/go_imports tables collect from; empty resolves the nearest go.mod above the working directory |
@@ -223,7 +223,7 @@ generated-at: 2026-10-07T15:05:11Z
 | `BOXER_LLM_TRUSTED_HOSTS` | string | — | — |  | comma-separated endpoint host names or IPs, without port, that the llm service treats like loopback: confined (sealed) content may be sent to them; list only machines under your own control, and prefer an https endpoint |
 | `GEMINI_API_KEY` | string | — | — | yes | Google AI Studio / Gemini API key |
 
-## observability (20)
+## observability (19)
 
 | Name | Type | Default | CLI flag | Sensitive | Description |
 |------|------|---------|----------|-----------|-------------|
@@ -242,11 +242,10 @@ generated-at: 2026-10-07T15:05:11Z
 | `BOXER_LOG_OS_HOST_ON_START` | bool | — | `--logOsHostOnStart` |  | log the host name on application startup |
 | `BOXER_LOG_OS_PID_ON_START` | bool | — | `--logOsPidOnStart` |  | log the OS process id on application startup |
 | `BOXER_LOG_VCS_REVISION_ON_START` | bool | — | `--logVcsRevisionOnStart` |  | log the VCS revision on application startup |
-| `IMZERO2_QUERYRUNS_BACKFILL` | string | `all` | — |  | how far a FIRST-BOOT backfill reaches: `all` (the source's whole retention), `none` (start at service start), or a duration such as `24h`; ignored once the destination holds facts, so downtime catch-up is unaffected (ADR-0115) |
-| `IMZERO2_QUERYRUNS_CADENCE` | duration | `5s` | — |  | refresh cadence of the capture materialized view (whole seconds, minimum 1s); ClickHouse owns the schedule (ADR-0115 SD2) |
-| `IMZERO2_QUERYRUNS_CH_URL` | string | `http://localhost:8123/` | — |  | ClickHouse HTTP endpoint queryrunsd extracts system.query_log from and reconciles the pipeline objects against (ADR-0115) |
-| `IMZERO2_QUERYRUNS_LISTEN` | string | `127.0.0.1:8127` | — |  | bind address for the queryrunsd /pull endpoint (ADR-0115); must be a loopback host — the refreshable MV reads it via url() |
-| `IMZERO2_QUERYRUNS_SCOPE` | categorial-string | `all` | — |  | capture scope: every terminal query_log event, only boxer-stamped ones, or off (the endpoint serves empty batches)<br>**Allowed:** `all` \| `stamped` \| `off` |
+| `IMZERO2_QUERYRUNS_BACKFILL` | string | `all` | `--backfill` |  | how far a FIRST-BOOT backfill reaches: all (the source's whole retention), none (start at service start), or a duration such as 24h; ignored once the destination holds facts, so downtime catch-up is unaffected (ADR-0115) |
+| `IMZERO2_QUERYRUNS_CADENCE` | duration | `5s` | `--cadence` |  | refresh cadence of the capture materialized view (whole seconds, minimum 1s); ClickHouse owns the schedule (ADR-0115 SD2) |
+| `IMZERO2_QUERYRUNS_LISTEN` | string | `127.0.0.1:8127` | `--listen` |  | bind address for the queryrunsd /pull endpoint (ADR-0115); must be a loopback host — the refreshable MV reads it via url() |
+| `IMZERO2_QUERYRUNS_SCOPE` | categorial-string | `all` | `--scope` |  | capture scope: every terminal query_log event, only boxer-stamped ones, or off (the endpoint serves empty batches)<br>**Allowed:** `all` \| `stamped` \| `off` |
 
 ## runinfo (1)
 
@@ -316,6 +315,7 @@ generated-at: 2026-10-07T15:05:11Z
 | `BOXER_AGENT_COORDINATORS` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/agent` |
 | `BOXER_AGENT_DEADLINE` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/agent` |
 | `BOXER_AGENT_PACE` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/agent` |
+| `BOXER_AGENT_REQUEST_TIMEOUT` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/agent` |
 | `BOXER_AGENT_TEST_GRANTS` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/agent` |
 | `BOXER_AUDIO_PEAKS_CACHE_DIR` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/science/audio/track` |
 | `BOXER_CAPMAP_VAULT` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/gov/capmapcorpus` |
@@ -399,7 +399,6 @@ generated-at: 2026-10-07T15:05:11Z
 | `BOXER_PLAY_FOCUS_ICICLE` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
 | `BOXER_PLAY_FOCUS_KANBAN` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
 | `BOXER_PLAY_FOCUS_MAP` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
-| `BOXER_PLAY_FOCUS_MODEL` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
 | `BOXER_PLAY_FOCUS_NETWORK` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
 | `BOXER_PLAY_FOCUS_PASSES` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
 | `BOXER_PLAY_FOCUS_PREVIEW` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/apps/play` |
@@ -481,7 +480,6 @@ generated-at: 2026-10-07T15:05:11Z
 | `IMZERO2_PUFFIN` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env` |
 | `IMZERO2_QUERYRUNS_BACKFILL` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/queryrunsvc` |
 | `IMZERO2_QUERYRUNS_CADENCE` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/queryrunsvc` |
-| `IMZERO2_QUERYRUNS_CH_URL` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/queryrunsvc` |
 | `IMZERO2_QUERYRUNS_LISTEN` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/queryrunsvc` |
 | `IMZERO2_QUERYRUNS_SCOPE` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/keelson/runtime/queryrunsvc` |
 | `IMZERO2_RENDER_CADENCE` | `github.com/stergiotis/boxer` | `github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env` |

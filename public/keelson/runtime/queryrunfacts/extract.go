@@ -2,7 +2,6 @@ package queryrunfacts
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
@@ -156,18 +155,11 @@ SETTINGS output_format_json_quote_64bit_integers=0, log_comment=%s
 FORMAT JSONEachRow`,
 		watermarkSql(factsTable), floor, WatermarkOverlap,
 		QueryTextCap,
-		quoteSqlString(ExtractTag), quoteSqlString(RefreshTag),
-		quoteSqlString(pullURL), scopePredicate,
+		quoteLiteral(ExtractTag), quoteLiteral(RefreshTag),
+		quoteLiteral(pullURL), scopePredicate,
 		ColNaturalKey, ColTs, factsTable,
 		ColTs, ColSymbolLr, vocab.MembKindQueryRun.GetId().Value(),
 		batchCap,
-		quoteSqlString(ExtractTag))
+		quoteLiteral(ExtractTag))
 	return
-}
-
-// quoteSqlString single-quotes s for inline SQL, escaping single quotes
-// by doubling (the chstore convention — these values are not amenable
-// to parameter binding inside DDL / MV bodies).
-func quoteSqlString(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }

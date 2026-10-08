@@ -2,6 +2,7 @@ package queryrunsvc
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -101,6 +102,46 @@ func TestStartRefusesWildcardBind(t *testing.T) {
 	err = s.Start(context.Background())
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "refusing non-loopback")
+}
+
+// The materialized view pulls a loopback URL from ClickHouse's side, so a
+// server elsewhere can never reach it; Start must say so instead of
+// succeeding into refreshes that all fail.
+func TestStartRefusesRemoteClickHouse(t *testing.T) {
+	s, err := New(Config{Listen: "127.0.0.1:0", ChURL: "http://10.1.2.3:8123/"}, zerolog.Nop())
+	require.NoError(t, err)
+	err = s.Start(context.Background())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "off this host")
+}
+
+// A serve loop that ends other than by Stop surfaces on Failed, so the
+// daemon can exit and its supervisor restart it; a graceful Stop does not.
+func TestServeFailureSurfaces(t *testing.T) {
+	s, err := New(Config{}, zerolog.Nop())
+	require.NoError(t, err)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	go s.serve(ln)
+	require.NoError(t, ln.Close())
+	select {
+	case err = <-s.Failed():
+		require.Error(t, err)
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "a dead listener must surface on Failed")
+	}
+
+	s, err = New(Config{}, zerolog.Nop())
+	require.NoError(t, err)
+	ln, err = net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	go s.serve(ln)
+	require.NoError(t, s.Stop(context.Background()))
+	select {
+	case err = <-s.Failed():
+		require.Failf(t, "graceful stop reported", "%v", err)
+	case <-time.After(200 * time.Millisecond):
+	}
 }
 
 func TestHealthz(t *testing.T) {

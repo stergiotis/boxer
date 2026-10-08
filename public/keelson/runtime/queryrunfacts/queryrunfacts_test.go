@@ -111,8 +111,8 @@ func TestComposeMvSql(t *testing.T) {
 	require.NotContains(t, sql, "now64")
 	require.Contains(t, sql, "log_comment='queryrunsd-refresh'")
 	// DateTime64(9,'UTC') carries single quotes — inside the structure
-	// string literal they must arrive doubled.
-	require.Contains(t, sql, "DateTime64(9,''UTC'')")
+	// string literal they must arrive escaped.
+	require.Contains(t, sql, `DateTime64(9,\'UTC\')`)
 
 	_, err = ComposeMvSql("", "boxer.facts", "u", 5)
 	require.Error(t, err)

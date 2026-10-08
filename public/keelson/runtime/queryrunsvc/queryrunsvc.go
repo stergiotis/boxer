@@ -21,8 +21,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -43,30 +45,28 @@ import (
 var (
 	ListenAddr = env.NewString(env.Spec{
 		Name:        "IMZERO2_QUERYRUNS_LISTEN",
+		CliFlagName: "listen",
 		Default:     "127.0.0.1:8127",
 		Description: "bind address for the queryrunsd /pull endpoint (ADR-0115); must be a loopback host — the refreshable MV reads it via url()",
 		Category:    env.CategoryObservability,
 	})
-	ChURL = env.NewString(env.Spec{
-		Name:        "IMZERO2_QUERYRUNS_CH_URL",
-		Default:     "http://localhost:8123/",
-		Description: "ClickHouse HTTP endpoint queryrunsd extracts system.query_log from and reconciles the pipeline objects against (ADR-0115)",
-		Category:    env.CategoryObservability,
-	})
 	Cadence = env.NewDuration(env.Spec{
 		Name:        "IMZERO2_QUERYRUNS_CADENCE",
+		CliFlagName: "cadence",
 		Default:     "5s",
 		Description: "refresh cadence of the capture materialized view (whole seconds, minimum 1s); ClickHouse owns the schedule (ADR-0115 SD2)",
 		Category:    env.CategoryObservability,
 	})
 	Backfill = env.NewString(env.Spec{
 		Name:        "IMZERO2_QUERYRUNS_BACKFILL",
+		CliFlagName: "backfill",
 		Default:     BackfillAll,
-		Description: "how far a FIRST-BOOT backfill reaches: `all` (the source's whole retention), `none` (start at service start), or a duration such as `24h`; ignored once the destination holds facts, so downtime catch-up is unaffected (ADR-0115)",
+		Description: "how far a FIRST-BOOT backfill reaches: all (the source's whole retention), none (start at service start), or a duration such as 24h; ignored once the destination holds facts, so downtime catch-up is unaffected (ADR-0115)",
 		Category:    env.CategoryObservability,
 	})
 	Scope = env.NewCategorialString(env.Spec{
 		Name:        "IMZERO2_QUERYRUNS_SCOPE",
+		CliFlagName: "scope",
 		Default:     string(queryrunfacts.ScopeAll),
 		Description: "capture scope: every terminal query_log event, only boxer-stamped ones, or off (the endpoint serves empty batches)",
 		Category:    env.CategoryObservability,
@@ -111,9 +111,10 @@ func ParseBackfill(spec string, now time.Time) (from time.Time, err error) {
 }
 
 // Config parameterises a Service. Zero values fall back to the env
-// registry (Listen/ChURL/Cadence/Scope) and the conventional
-// boxer.facts coordinates; tests point Database/Table at a scratch
-// database.
+// registry — this package's IMZERO2_QUERYRUNS_* entries, and the shared
+// CLICKHOUSE_* coordinates through chclient.ConfigFromEnv for the
+// endpoint and credentials — and to the conventional boxer.facts
+// coordinates; tests point Database/Table at a scratch database.
 type Config struct {
 	Listen   string
 	ChURL    string
@@ -128,7 +129,8 @@ type Config struct {
 	// the extract has no watermark to be newer than and otherwise reaches
 	// the source's whole retention. Zero keeps that behaviour; a non-zero
 	// value starts there instead. Ignored once the destination holds facts,
-	// so a restart after downtime still catches up over the gap.
+	// so a restart after downtime still catches up over the gap. Left zero,
+	// New resolves IMZERO2_QUERYRUNS_BACKFILL against the current time.
 	BackfillFrom time.Time
 }
 
@@ -142,6 +144,10 @@ type Service struct {
 	log zerolog.Logger
 	srv *http.Server
 	ln  net.Listener
+	// failed carries a serve error after Start: the endpoint is gone while
+	// the process lives on, which a supervisor cannot see unless the
+	// caller exits on it.
+	failed chan error
 }
 
 // New fills cfg defaults and constructs the service.
@@ -149,8 +155,15 @@ func New(cfg Config, log zerolog.Logger) (s *Service, err error) {
 	if cfg.Listen == "" {
 		cfg.Listen = ListenAddr.Get()
 	}
+	ch := chclient.ConfigFromEnv()
 	if cfg.ChURL == "" {
-		cfg.ChURL = ChURL.Get()
+		cfg.ChURL = ch.URL
+	}
+	if cfg.ChUser == "" {
+		cfg.ChUser = ch.User
+	}
+	if cfg.Password == "" {
+		cfg.Password = ch.Password
 	}
 	if cfg.Cadence <= 0 {
 		cfg.Cadence = Cadence.Get()
@@ -173,10 +186,17 @@ func New(cfg Config, log zerolog.Logger) (s *Service, err error) {
 	if cfg.BatchCap <= 0 {
 		cfg.BatchCap = queryrunfacts.DefaultBatchCap
 	}
+	if cfg.BackfillFrom.IsZero() {
+		cfg.BackfillFrom, err = ParseBackfill(Backfill.Get(), time.Now())
+		if err != nil {
+			return
+		}
+	}
 	s = &Service{
-		cfg: cfg,
-		cli: chclient.New(chclient.Config{URL: cfg.ChURL, User: cfg.ChUser, Password: cfg.Password}, nil),
-		log: log,
+		cfg:    cfg,
+		cli:    chclient.New(chclient.Config{URL: cfg.ChURL, User: cfg.ChUser, Password: cfg.Password}, nil),
+		log:    log,
+		failed: make(chan error, 1),
 	}
 	s.srv = &http.Server{Handler: s.handler(), ReadHeaderTimeout: 5 * time.Second}
 	return
@@ -206,7 +226,22 @@ func (s *Service) PullURL() string { return "http://" + s.Addr() + "/pull" }
 // background goroutine. A failed reconciliation fails Start: under
 // systemd Restart=always the unit retries until ClickHouse is up, and
 // pull-shape means nothing is lost while it waits.
+//
+// The ClickHouse endpoint must be on this host too: the materialized view
+// pulls PullURL, a loopback address, from the server's side, so against a
+// remote server every refresh would fail while Start succeeded. A server
+// in a container on this host passes the check and fails the same way,
+// since its loopback is not the host's.
 func (s *Service) Start(ctx context.Context) (err error) {
+	chURL, parseErr := url.Parse(s.cfg.ChURL)
+	if parseErr != nil {
+		err = eb.Build().Str("chURL", s.cfg.ChURL).Errorf("queryrunsvc: bad ClickHouse url: %w", parseErr)
+		return
+	}
+	if !isLoopbackHost(chURL.Hostname()) {
+		err = eb.Build().Str("chURL", s.cfg.ChURL).Errorf("queryrunsvc: refusing a ClickHouse endpoint off this host; the materialized view reaches /pull over loopback")
+		return
+	}
 	host, _, splitErr := net.SplitHostPort(s.cfg.Listen)
 	if splitErr != nil {
 		err = eb.Build().Str("listen", s.cfg.Listen).Errorf("queryrunsvc: bad listen addr: %w", splitErr)
@@ -228,15 +263,23 @@ func (s *Service) Start(ctx context.Context) (err error) {
 		s.ln = nil
 		return
 	}
-	go func() {
-		if serveErr := s.srv.Serve(ln); serveErr != nil && serveErr != http.ErrServerClosed {
-			s.log.Warn().Err(serveErr).Msg("queryrunsvc: serve")
-		}
-	}()
+	go s.serve(ln)
 	s.log.Info().Str("addr", s.Addr()).Str("mv", s.MvName()).Str("scope", string(s.cfg.Scope)).
 		Msg("queryrunsvc: /pull listening; refreshable MV reconciled")
 	return
 }
+
+// serve runs the HTTP server on ln until Stop, reporting any other end on
+// failed.
+func (s *Service) serve(ln net.Listener) {
+	if serveErr := s.srv.Serve(ln); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+		s.failed <- eh.Errorf("queryrunsvc: serve: %w", serveErr)
+	}
+}
+
+// Failed delivers the error that stopped the endpoint serving, if one
+// does; a graceful Stop sends nothing.
+func (s *Service) Failed() <-chan error { return s.failed }
 
 // Stop gracefully shuts the HTTP server down.
 func (s *Service) Stop(ctx context.Context) (err error) {
