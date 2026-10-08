@@ -228,7 +228,7 @@ func demoFlowOnMap(ids *c.WidgetIdStack, st *flowOnMapState) {
 			c.Label(fmt.Sprintf("at %.2f, %.2f:   no data", ll.Lat, ll.Lng)).Send()
 		}
 	} else {
-		c.Label("hover the map to read the field").Send()
+		c.Label("Hover the map to read the field").Send()
 	}
 	c.Label("ADR-0249: the animation shows direction and relative speed, not transport — a particle's pace is a screen quantity, " +
 		"the same at every zoom, and a trail is a streamlet of the field at the display time, not a trajectory. " +

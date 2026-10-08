@@ -163,7 +163,7 @@ func Render(in Input) (res Result) {
 		res.Err = eh.Errorf("bandscale: no id stack")
 		return
 	case len(in.Bands) == 0:
-		c.Label("bandscale: no bands").Send()
+		c.Label("No bands").Send()
 		res.Err = eh.Errorf("bandscale: no bands")
 		return
 	}

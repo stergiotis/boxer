@@ -62,6 +62,6 @@ func demoBandscale(ids *c.WidgetIdStack) {
 	for range c.HorizontalTop().KeepIter() {
 		bandscale.Render(bandscale.Input{Ids: ids, ScopeKey: "bandscale-compact", Bands: bandscaleDemoLadder, Width: 140, Compact: true,
 			Markers: []bandscale.Marker{{Position: 0.78, Hollow: true}, {Position: bandscaleDemoNow}}})
-		c.Label("compact, with the position named beside it").Selectable(false).Send()
+		c.Label("Compact, with the position named beside it").Selectable(false).Send()
 	}
 }
