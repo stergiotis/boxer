@@ -519,6 +519,24 @@ var (
 	// The request a grant event answers, so what was asked joins what was
 	// decided (ADR-0277 §SD2).
 	MembAgentGrantRequest = NkRegistry.MustBegin("agentGrantRequest", 289).End()
+	// The audit event (ADR-0296 §SD1): a consumer's own vocabulary as
+	// values on one generic component — domain and action, outcome, the
+	// principal and who vouched for it, the subject, a retention class,
+	// typed references and bounded attributes as parallel lists.
+	MembKindAuditEvent        = NkRegistry.MustBegin("runtimeKindAuditEvent", 290).End()
+	MembAuditEventDomain      = NkRegistry.MustBegin("auditEventDomain", 291).End()
+	MembAuditEventAction      = NkRegistry.MustBegin("auditEventAction", 292).End()
+	MembAuditEventOutcome     = NkRegistry.MustBegin("auditEventOutcome", 293).End()
+	MembAuditEventPrincipal   = NkRegistry.MustBegin("auditEventPrincipal", 294).End()
+	MembAuditEventPrincipalBy = NkRegistry.MustBegin("auditEventPrincipalBy", 295).End()
+	MembAuditEventPurpose     = NkRegistry.MustBegin("auditEventPurpose", 296).End()
+	MembAuditEventNode        = NkRegistry.MustBegin("auditEventNode", 297).End()
+	MembAuditEventSubject     = NkRegistry.MustBegin("auditEventSubject", 298).End()
+	MembAuditEventRetention   = NkRegistry.MustBegin("auditEventRetention", 299).End()
+	MembAuditEventRefTypes    = NkRegistry.MustBegin("auditEventRefTypes", 300).End()
+	MembAuditEventRefValues   = NkRegistry.MustBegin("auditEventRefValues", 301).End()
+	MembAuditEventAttrKeys    = NkRegistry.MustBegin("auditEventAttrKeys", 302).End()
+	MembAuditEventAttrValues  = NkRegistry.MustBegin("auditEventAttrValues", 303).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -587,4 +605,8 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembAdhocDatasetInputAliases, MembAdhocDatasetInputDigests, MembAdhocDatasetColumnDatasets,
 	MembAdhocDatasetColumnNames, MembAdhocDatasetColumnTypes, MembAdhocDatasetColumnNulls,
 	MembAdhocDatasetColumnDistinct, MembAgentActionConsent, MembAgentGrantRequest,
+	MembKindAuditEvent, MembAuditEventDomain, MembAuditEventAction, MembAuditEventOutcome,
+	MembAuditEventPrincipal, MembAuditEventPrincipalBy, MembAuditEventPurpose, MembAuditEventNode,
+	MembAuditEventSubject, MembAuditEventRetention, MembAuditEventRefTypes, MembAuditEventRefValues,
+	MembAuditEventAttrKeys, MembAuditEventAttrValues,
 }

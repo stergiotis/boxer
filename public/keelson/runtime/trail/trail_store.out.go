@@ -233,6 +233,22 @@ var TrailMembershipIds = map[string]map[string]uint64{
 		"adhocDatasetColumnNulls":    9223372049739677979,
 		"adhocDatasetColumnDistinct": 9223372049739677982,
 	},
+	"AuditEvent": {
+		"runtimeKindAuditEvent": 9223372049739677986,
+		"auditEventDomain":      9223372049739677987,
+		"auditEventAction":      9223372049739677988,
+		"auditEventOutcome":     9223372049739677989,
+		"auditEventPrincipal":   9223372049739677990,
+		"auditEventPrincipalBy": 9223372049739677991,
+		"auditEventPurpose":     9223372049739677992,
+		"auditEventNode":        9223372049739677993,
+		"auditEventSubject":     9223372049739677994,
+		"auditEventRetention":   9223372049739677995,
+		"auditEventRefTypes":    9223372049739677996,
+		"auditEventRefValues":   9223372049739677997,
+		"auditEventAttrKeys":    9223372049739677998,
+		"auditEventAttrValues":  9223372049739677999,
+	},
 }
 
 // TrailEnvelope carries the pass-through backbone columns — every plain
@@ -267,6 +283,7 @@ type TrailEntity struct {
 	AgentCapture    option.Option[AgentCapture]
 	AgentDisclosure option.Option[AgentDisclosure]
 	AdhocDataset    option.Option[AdhocDataset]
+	AuditEvent      option.Option[AuditEvent]
 }
 
 // Archetype reports which components the entity carries, in schema order.
@@ -310,19 +327,30 @@ func (inst *TrailEntity) Archetype() (a []string) {
 	if inst.AdhocDataset.Has {
 		a = append(a, "adhocDataset")
 	}
+	if inst.AuditEvent.Has {
+		a = append(a, "auditEvent")
+	}
 	return
 }
 
 type TrailStoreConfig struct {
 	// Table overrides the ClickHouse table this store binds — the baked
-	// TrailTableName — for every statement it issues (DDL, DESCRIBE, INSERT,
-	// SELECT). Optionally database-qualified ("<db>.<table>"), unquoted-
-	// identifier shape only ([A-Za-z_][A-Za-z0-9_]* per part; the
-	// constructor panics otherwise). Empty (the default) binds the baked
-	// name. The schema is unchanged — this moves WHERE the rows land, not
-	// what they look like — so a scratch table for a test or a per-
-	// deployment table needs no regeneration.
+	// TrailTableName — for every statement it issues (DDL, INSERT, and the
+	// reads unless ReadTable names another). Optionally database-qualified
+	// ("<db>.<table>"), unquoted-identifier shape only
+	// ([A-Za-z_][A-Za-z0-9_]* per part; the constructor panics otherwise).
+	// Empty (the default) binds the baked name. The schema is unchanged —
+	// this moves WHERE the rows land, not what they look like — so a
+	// scratch table for a test or a per-deployment table needs no
+	// regeneration.
 	Table string
+	// ReadTable, when set, is the table every SELECT and DESCRIBE goes to
+	// (ADR-0296 §SD8): a storage table that materialized views fill from
+	// the written one, or a Merge over several. Same shape rules as Table;
+	// empty (the default) reads the table written to. The schema must be
+	// the same on both — VerifySchema checks the read side, which is the
+	// one the positional decode runs against.
+	ReadTable string
 	// Stampers are consulted on every Begin (ADR-0112 M1): each yields
 	// surrogate ids stamped as additive HighCardRef memberships onto the
 	// entity's attributes. Empty (the default) leaves the store unstamped
@@ -391,6 +419,11 @@ func NewTrailStore(exec recordstore.ExecutorI, alloc memory.Allocator, cfg Trail
 			panic("TrailStore: " + terr.Error())
 		}
 	}
+	if cfg.ReadTable != "" {
+		if terr := recordstore.CheckTableRef(cfg.ReadTable); terr != nil {
+			panic("TrailStore: ReadTable: " + terr.Error())
+		}
+	}
 	if alloc == nil {
 		alloc = memory.NewGoAllocator()
 	}
@@ -398,13 +431,22 @@ func NewTrailStore(exec recordstore.ExecutorI, alloc memory.Allocator, cfg Trail
 	return
 }
 
-// tableName is the table reference every statement uses: the configured
+// writeTable is the table reference DDL and INSERT use: the configured
 // override when set, else the baked TrailTableName.
-func (inst *TrailStore) tableName() string {
+func (inst *TrailStore) writeTable() string {
 	if inst.cfg.Table != "" {
 		return inst.cfg.Table
 	}
 	return TrailTableName
+}
+
+// readTable is the table reference SELECT and DESCRIBE use: ReadTable
+// when set, else the table written to (ADR-0296 §SD8).
+func (inst *TrailStore) readTable() string {
+	if inst.cfg.ReadTable != "" {
+		return inst.cfg.ReadTable
+	}
+	return inst.writeTable()
 }
 
 // applyStampers consults the configured stampers and pushes their surrogate
@@ -501,14 +543,14 @@ func (inst *TrailStore) takeWritten() iter.Seq[recordstore.WrittenKey[uint64, ti
 // where a column-kind filter would have blessed the mis-decode.
 func (inst *TrailStore) VerifySchema(ctx context.Context) (err error) {
 	live := make([]string, 0, 64)
-	for rec, rerr := range inst.exec.QueryArrow(ctx, "DESCRIBE (SELECT * FROM "+inst.tableName()+")"+factsArrowOutputSettings) {
+	for rec, rerr := range inst.exec.QueryArrow(ctx, "DESCRIBE (SELECT * FROM "+inst.readTable()+")"+factsArrowOutputSettings) {
 		if rerr != nil {
-			err = eh.Errorf("describe table %s: %w", inst.tableName(), rerr)
+			err = eh.Errorf("describe table %s: %w", inst.readTable(), rerr)
 			return
 		}
 		names, ok := rec.Column(0).(*array.String)
 		if !ok {
-			err = eh.Errorf("describe table %s: name column is %s, not a string", inst.tableName(), rec.Column(0).DataType())
+			err = eh.Errorf("describe table %s: name column is %s, not a string", inst.readTable(), rec.Column(0).DataType())
 			rec.Release()
 			return
 		}
@@ -519,12 +561,12 @@ func (inst *TrailStore) VerifySchema(ctx context.Context) (err error) {
 	}
 	want := lowlevel.CreateSchemaFactsTable().Fields()
 	if len(live) != len(want) {
-		err = eh.Errorf("schema drift on %s: table has %d columns, the generated schema expects %d — regenerated code against an old table (or vice versa); migrate or regenerate", inst.tableName(), len(live), len(want))
+		err = eh.Errorf("schema drift on %s: table has %d columns, the generated schema expects %d — regenerated code against an old table (or vice versa); migrate or regenerate", inst.readTable(), len(live), len(want))
 		return
 	}
 	for i, f := range want {
 		if live[i] != f.Name {
-			err = eh.Errorf("schema drift on %s: column %d is %q, the generated schema expects %q — the decode is positional; migrate or regenerate", inst.tableName(), i, live[i], f.Name)
+			err = eh.Errorf("schema drift on %s: column %d is %q, the generated schema expects %q — the decode is positional; migrate or regenerate", inst.readTable(), i, live[i], f.Name)
 			return
 		}
 	}
@@ -1023,6 +1065,35 @@ func (inst *TrailEntityBuilder) AddAdhocDataset(row AdhocDataset) *TrailEntityBu
 	return inst
 }
 
+// AddAuditEvent contributes the AuditEvent component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
+func (inst *TrailEntityBuilder) AddAuditEvent(row AuditEvent) *TrailEntityBuilder {
+	if err := inst.buf.StartKind("AuditEvent"); err != nil {
+		inst.store.dml.AppendError(err)
+		return inst
+	}
+	inst.buf.Enqueue("symbol", "AuditEvent", func() error {
+		return auditEventEmitSectionSymbol(inst.store.dml.GetSectionSymbol(), row)
+	})
+	inst.buf.Enqueue("stringArray", "AuditEvent", func() error {
+		return auditEventEmitSectionStringArray(inst.store.dml.GetSectionStringArray(), row)
+	})
+	inst.buf.Enqueue("u64Array", "AuditEvent", func() error {
+		return auditEventEmitSectionU64Array(inst.store.dml.GetSectionU64Array(), row)
+	})
+	inst.ent.AuditEvent = option.Some(row)
+	return inst
+}
+
 // Raw exposes the underlying DML entity for direct attribute
 // manipulation within the same entity frame. The type lives in
 // internal/lowlevel: callers outside the generated package hold the
@@ -1491,6 +1562,38 @@ func (inst *TrailStore) IngestAdhocDatasetCtx(ctx context.Context, ts time.Time,
 	return
 }
 
+// IngestAuditEvent buffers one whole entity per row carrying only the
+// AuditEvent component, all stamped with ts — rows ship on the next Flush,
+// like every write. The envelope carries the pass-through columns
+// the row binds; the others are written zero — use Begin with a
+// filled envelope to set them. Keys must be distinct within one call (rows
+// share ts, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
+func (inst *TrailStore) IngestAuditEvent(ts time.Time, rows []AuditEvent) (err error) {
+	return inst.IngestAuditEventCtx(context.Background(), ts, rows)
+}
+
+// IngestAuditEventCtx is IngestAuditEvent with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *TrailStore) IngestAuditEventCtx(ctx context.Context, ts time.Time, rows []AuditEvent) (err error) {
+	seen := make(map[uint64]struct{}, len(rows))
+	for i := range rows {
+		if _, dup := seen[rows[i].Id]; dup {
+			err = eh.Errorf("ingest auditEvent row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].Id)
+			return
+		}
+		seen[rows[i].Id] = struct{}{}
+		err = inst.BeginCtx(ctx, rows[i].Id, ts, TrailEnvelope{}).AddAuditEvent(rows[i]).Commit()
+		if err != nil {
+			err = eh.Errorf("ingest auditEvent row %d: %w", i, err)
+			return
+		}
+	}
+	return
+}
+
 // Buffered reports the number of committed-but-unflushed rows.
 func (inst *TrailStore) Buffered() int { return inst.buffered }
 
@@ -1533,10 +1636,10 @@ func (inst *TrailStore) Flush(ctx context.Context) (n int, err error) {
 	batch := recordstore.NewBatchId()
 	bctx := recordstore.WithBatchId(ctx, batch)
 	if len(records) > 0 {
-		err = inst.exec.InsertArrow(bctx, inst.tableName(), records)
+		err = inst.exec.InsertArrow(bctx, inst.writeTable(), records)
 		if err != nil {
 			inst.pending = records
-			err = eh.Errorf("insert into %s: %w", inst.tableName(), err)
+			err = eh.Errorf("insert into %s: %w", inst.writeTable(), err)
 			return
 		}
 	}
@@ -1795,7 +1898,7 @@ func (inst *TrailCache[W]) InvalidateAll() {
 func (inst *TrailStore) fetchLatestSQL(keys []uint64) string {
 	var sb strings.Builder
 	sb.WriteString("SELECT * FROM ")
-	sb.WriteString(inst.tableName())
+	sb.WriteString(inst.readTable())
 	sb.WriteString(" WHERE " + TrailColKey + " IN (")
 	for i, k := range keys {
 		if i > 0 {
@@ -1858,6 +1961,7 @@ const (
 	factsScanAgentCaptureFilter    = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [9223372049739677925, 9223372049739677926, 9223372049739677928, 9223372049739677929, 9223372049739677934]) AND hasAll(\"tv:stringArray:lr:lr:u64:1247:::0::data\", [9223372049739677931, 9223372049739677932]) AND has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677933) AND has(\"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739677936) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677925) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677926) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677927) <= 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677928) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677929) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677930) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677931) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677931), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677931), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677932) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677932), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677932), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677933) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677933), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677933), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677934) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677935) <= 1 AND countEqual(\"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739677936) = 1"
 	factsScanAgentDisclosureFilter = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [9223372049739677940, 9223372049739677944, 9223372049739677948, 9223372049739677950, 9223372049739677951]) AND hasAll(\"tv:stringArray:lr:lr:u64:1247:::0::data\", [9223372049739677941, 9223372049739677942, 9223372049739677943]) AND hasAll(\"tv:u32Array:lr:lr:u64:1247:::0::data\", [9223372049739677945, 9223372049739677946]) AND has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677947) AND has(\"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739677949) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677940) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677941) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677941), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677941), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677942) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677942), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677942), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677943) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677943), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677943), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677944) = 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739677945) = 1 AND if(has(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739677945), \"tv:u32Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739677945), arrayCumSum(\"tv:u32Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739677946) = 1 AND if(has(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739677946), \"tv:u32Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739677946), arrayCumSum(\"tv:u32Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677947) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677947), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677947), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677948) = 1 AND countEqual(\"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739677949) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677950) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677951) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677952) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677953) <= 1"
 	factsScanAdhocDatasetFilter    = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [9223372049739677954, 9223372049739677955, 9223372049739677956, 9223372049739677958, 9223372049739677960]) AND hasAll(\"tv:u64Array:lr:lr:u64:1247:::0::data\", [9223372049739677959, 9223372049739677961]) AND hasAll(\"tv:stringArray:lr:lr:u64:1247:::0::data\", [9223372049739677968, 9223372049739677971, 9223372049739677972]) AND hasAll(\"tv:bool:lr:lr:u64:1247:::0::data\", [9223372049739677969, 9223372049739677970]) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677954) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677955) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677956) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677957) <= 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677958) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677959) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677959), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677959), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677960) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677961) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677961), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677961), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677962) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677963) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677964) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677965) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677966) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677967) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677968) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677968), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677968), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739677969) = 1 AND countEqual(\"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739677970) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677971) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677971), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677971), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677972) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677972), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677972), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677973) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677974) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677975) <= 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739677976) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677977) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677978) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677979) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677982) <= 1"
+	factsScanAuditEventFilter      = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [9223372049739677986, 9223372049739677987, 9223372049739677988, 9223372049739677989, 9223372049739677991, 9223372049739677995]) AND has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677994) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677986) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677987) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677988) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677989) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677990) <= 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677990), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677990), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) <= 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677991) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677992) <= 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677993) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677994) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677994), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677994), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677995) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677996) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677997) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677998) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677999) <= 1"
 )
 
 // ScanOrigin iterates the entities whose rows carry a conforming Origin
@@ -1884,7 +1988,7 @@ func (inst *TrailStore) ScanOrigin(ctx context.Context, opts recordstore.ScanOpt
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + where +
 		" ORDER BY " + TrailColOrder + " ASC, " + TrailColKey + " ASC"
 	if opts.Limit > 0 {
@@ -1918,7 +2022,7 @@ func (inst *TrailStore) ScanConversation(ctx context.Context, opts recordstore.S
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + where +
 		" ORDER BY " + TrailColOrder + " ASC, " + TrailColKey + " ASC"
 	if opts.Limit > 0 {
@@ -1952,7 +2056,7 @@ func (inst *TrailStore) ScanDelegation(ctx context.Context, opts recordstore.Sca
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + where +
 		" ORDER BY " + TrailColOrder + " ASC, " + TrailColKey + " ASC"
 	if opts.Limit > 0 {
@@ -1986,7 +2090,7 @@ func (inst *TrailStore) ScanCause(ctx context.Context, opts recordstore.ScanOpts
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + where +
 		" ORDER BY " + TrailColOrder + " ASC, " + TrailColKey + " ASC"
 	if opts.Limit > 0 {
@@ -2020,7 +2124,7 @@ func (inst *TrailStore) ScanLlmCall(ctx context.Context, opts recordstore.ScanOp
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + where +
 		" ORDER BY " + TrailColOrder + " ASC, " + TrailColKey + " ASC"
 	if opts.Limit > 0 {
@@ -2054,7 +2158,7 @@ func (inst *TrailStore) ScanLlmMessage(ctx context.Context, opts recordstore.Sca
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + where +
 		" ORDER BY " + TrailColOrder + " ASC, " + TrailColKey + " ASC"
 	if opts.Limit > 0 {
@@ -2088,7 +2192,7 @@ func (inst *TrailStore) ScanLlmMessageBody(ctx context.Context, opts recordstore
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + where +
 		" ORDER BY " + TrailColOrder + " ASC, " + TrailColKey + " ASC"
 	if opts.Limit > 0 {
@@ -2122,7 +2226,7 @@ func (inst *TrailStore) ScanAgentAction(ctx context.Context, opts recordstore.Sc
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + where +
 		" ORDER BY " + TrailColOrder + " ASC, " + TrailColKey + " ASC"
 	if opts.Limit > 0 {
@@ -2156,7 +2260,7 @@ func (inst *TrailStore) ScanAgentGrant(ctx context.Context, opts recordstore.Sca
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + where +
 		" ORDER BY " + TrailColOrder + " ASC, " + TrailColKey + " ASC"
 	if opts.Limit > 0 {
@@ -2190,7 +2294,7 @@ func (inst *TrailStore) ScanHttpFetch(ctx context.Context, opts recordstore.Scan
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + where +
 		" ORDER BY " + TrailColOrder + " ASC, " + TrailColKey + " ASC"
 	if opts.Limit > 0 {
@@ -2224,7 +2328,7 @@ func (inst *TrailStore) ScanAgentCapture(ctx context.Context, opts recordstore.S
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + where +
 		" ORDER BY " + TrailColOrder + " ASC, " + TrailColKey + " ASC"
 	if opts.Limit > 0 {
@@ -2258,7 +2362,7 @@ func (inst *TrailStore) ScanAgentDisclosure(ctx context.Context, opts recordstor
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + where +
 		" ORDER BY " + TrailColOrder + " ASC, " + TrailColKey + " ASC"
 	if opts.Limit > 0 {
@@ -2292,7 +2396,41 @@ func (inst *TrailStore) ScanAdhocDataset(ctx context.Context, opts recordstore.S
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
+		" WHERE " + where +
+		" ORDER BY " + TrailColOrder + " ASC, " + TrailColKey + " ASC"
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += factsArrowOutputSettings
+	return inst.iterateEntities(ctx, sql)
+}
+
+// ScanAuditEvent iterates the entities whose rows carry a conforming AuditEvent
+// component, ordered by (Order, Key) — so entities sharing an Order
+// still come out in a fixed sequence. Rows that tie on BOTH (the same
+// key written twice at the same Order) are not ordered against each
+// other by this clause; the table keeps newest-per-key, so which of
+// them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
+// built-ins only, so this is a single SELECT — no helper UDFs, no
+// multi-statement script (the ExecutorI contract). The sequence is
+// single-use; ctx must stay valid until iteration completes; an
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
+func (inst *TrailStore) ScanAuditEvent(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*TrailEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*TrailEntity]()
+	}
+	where := factsScanAuditEventFilter
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + where +
 		" ORDER BY " + TrailColOrder + " ASC, " + TrailColKey + " ASC"
 	if opts.Limit > 0 {
@@ -2307,7 +2445,7 @@ func (inst *TrailStore) ScanAdhocDataset(ctx context.Context, opts recordstore.S
 // row; GetLive is the interpreted state-view read). Reads see only
 // flushed rows.
 func (inst *TrailStore) Latest(ctx context.Context, key uint64) (ent *TrailEntity, found bool, err error) {
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + TrailColKey + " = " + factsKeyLiteral(key) +
 		" ORDER BY " + TrailColOrder + " DESC LIMIT 1" + factsArrowOutputSettings
 	ents, err := inst.queryEntities(ctx, sql)
@@ -2330,7 +2468,7 @@ func (inst *TrailStore) Latest(ctx context.Context, key uint64) (ent *TrailEntit
 // streaming executor changes nothing visible); an error ends the
 // sequence as a final (nil, err) pair. Reads see only flushed rows.
 func (inst *TrailStore) Replay(ctx context.Context, key uint64, fromOrder time.Time, opts recordstore.ReplayOpts) iter.Seq2[*TrailEntity, error] {
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + TrailColKey + " = " + factsKeyLiteral(key)
 	if !fromOrder.IsZero() {
 		sql += " AND " + TrailColOrder + " >= fromUnixTimestamp64Nano(" + strconv.FormatInt(fromOrder.UnixNano(), 10) + ")"
@@ -2440,6 +2578,12 @@ var TrailComponentSQL = componentsql.Set{
 			Validator:  "countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677954) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677955) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677956) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677957) <= 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677958) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677959) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677959), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677959), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677960) = 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677961) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677961), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677961), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677962) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677963) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677964) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677965) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677966) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677967) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677968) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677968), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677968), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739677969) = 1 AND countEqual(\"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739677970) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677971) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677971), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677971), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677972) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677972), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677972), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677973) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677974) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677975) <= 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739677976) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677977) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677978) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677979) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677982) <= 1",
 			Filter:     factsScanAdhocDatasetFilter,
 			Projection: "CAST(tuple(\"id:id:u64:47::0:\", LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677954, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677955, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677956, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677957, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677958, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:u64Array:value:val:u64h:4:::0::data\", \"tv:u64Array:len:len:u64:4D:::0::data\", \"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677959, LW_RAGGED_PARENT_IDS(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677960, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:u64Array:value:val:u64h:4:::0::data\", \"tv:u64Array:len:len:u64:4D:::0::data\", \"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677961, LW_RAGGED_PARENT_IDS(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677962, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677963, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677964, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:u64Array:value:val:u64h:4:::0::data\", \"tv:u64Array:len:len:u64:4D:::0::data\", \"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677965, LW_RAGGED_PARENT_IDS(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:u64Array:value:val:u64h:4:::0::data\", \"tv:u64Array:len:len:u64:4D:::0::data\", \"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677966, LW_RAGGED_PARENT_IDS(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677967, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677968, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_VALUE_BY_TAG_EQUAL(\"tv:bool:value:val:b:4:::0::data\", \"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739677969, LW_RAGGED_PARENT_IDS(\"tv:bool:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:bool:value:val:b:4:::0::data\", \"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739677970, LW_RAGGED_PARENT_IDS(\"tv:bool:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677971, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677972, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677973, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677974, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677975, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:u32Array:value:val:u32h:4:::0::data\", \"tv:u32Array:len:len:u64:4D:::0::data\", \"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739677976, LW_RAGGED_PARENT_IDS(\"tv:u32Array:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677977, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677978, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:u64Array:value:val:u64h:4:::0::data\", \"tv:u64Array:len:len:u64:4D:::0::data\", \"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677979, LW_RAGGED_PARENT_IDS(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:u64Array:value:val:u64h:4:::0::data\", \"tv:u64Array:len:len:u64:4D:::0::data\", \"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677982, LW_RAGGED_PARENT_IDS(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(Id UInt64, Kind String, Operation String, Outcome String, Reason Array(String), Bundle String, Revision UInt64, OwnerApp String, OwnerInstance UInt64, LocalNames Array(String), Aliases Array(String), Handles Array(String), Rows Array(UInt64), Bytes Array(UInt64), StreamDigests Array(String), DocumentDigest String, Attested Bool, InFlight Bool, Document String, SourceSql String, InputHandles Array(String), InputAliases Array(String), InputDigests Array(String), ColumnDatasets Array(UInt32), ColumnNames Array(String), ColumnTypes Array(String), ColumnNulls Array(UInt64), ColumnDistinct Array(UInt64))')",
+		},
+		"AuditEvent": {
+			Presence:   "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [9223372049739677986, 9223372049739677987, 9223372049739677988, 9223372049739677989, 9223372049739677991, 9223372049739677995]) AND has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677994)",
+			Validator:  "countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677986) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677987) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677988) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677989) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677990) <= 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677990), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677990), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) <= 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677991) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677992) <= 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677993) <= 1 AND countEqual(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677994) = 1 AND if(has(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677994), \"tv:u64Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677994), arrayCumSum(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677995) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677996) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677997) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677998) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677999) <= 1",
+			Filter:     factsScanAuditEventFilter,
+			Projection: "CAST(tuple(\"id:id:u64:47::0:\", LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677986, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677987, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677988, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677989, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677990), LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677990, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1], NULL), LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677991, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), if(has(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677992), LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677992, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), NULL), if(has(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677993), LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677993, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), NULL), LW_LIST_BY_TAG_EQUAL(\"tv:u64Array:value:val:u64h:4:::0::data\", \"tv:u64Array:len:len:u64:4D:::0::data\", \"tv:u64Array:lr:lr:u64:1247:::0::data\", 9223372049739677994, LW_RAGGED_PARENT_IDS(\"tv:u64Array:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739677995, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677996, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677997, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677998, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739677999, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(Id UInt64, Kind String, Domain String, Action String, Outcome String, Principal Nullable(String), PrincipalBy String, Purpose Nullable(String), Node Nullable(String), Subject UInt64, Retention String, RefTypes Array(String), RefValues Array(String), AttrKeys Array(String), AttrValues Array(String))')",
 		},
 	},
 }
@@ -2675,6 +2819,17 @@ func decodeTrailRecord(rec arrow.RecordBatch) (ents []*TrailEntity, err error) {
 			if ok {
 				row.Id = ent.ID
 				ent.AdhocDataset = option.Some(row)
+			}
+		}
+		{
+			row, ok, e := auditEventReadRow(i, symbolR.GetAttributes(), symbolR.GetMemberships(), stringArrayR.GetAttributes(), stringArrayR.GetMemberships(), u64ArrayR.GetAttributes(), u64ArrayR.GetMemberships())
+			if e != nil {
+				err = eh.Errorf("read auditEvent component: %w", e)
+				return
+			}
+			if ok {
+				row.Id = ent.ID
+				ent.AuditEvent = option.Some(row)
 			}
 		}
 		ents = append(ents, ent)

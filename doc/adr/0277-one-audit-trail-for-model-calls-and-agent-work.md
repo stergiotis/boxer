@@ -493,6 +493,28 @@ Recorded, not changed:
 - `AdhocDataset.Attested` is the presence of `Delegation` on a bundle row;
   kept, since a bundle row says so in one column.
 
+### 2026-10-08 — audit events, and the scope of a vouched `Origin`
+
+[ADR-0296](./0296-audit-events-as-a-trail-component.md) adds a generic
+`AuditEvent` component to the store and the first verb that takes a
+context, `Recorder.Event`. Two rows of this ADR change with it:
+
+- **§SD1's "`Origin` cannot be claimed by an app"** holds for the verbs
+  whose origin is a bus envelope. An audit event's `Origin` comes from the
+  context's call identity, which the writing process sets itself, so a
+  reader weighs it as a claim — the same weight the table gives
+  `Conversation` and `Cause`.
+- **§SD10's person identity and correlation index.** A person is now named
+  on an audit event's `Principal`, a pseudonymous reference from the
+  context's claims; the other kinds still name none. The correlation index
+  stays open, with two facts added: the u64 value column is shared by every
+  u64 slot of every kind, and the facts DDL does not alter a deployed
+  table, so an index reaches only fresh tables until an `ALTER` path exists.
+
+Loss accounting now covers every verb: dropped batches are counted and
+written back as an `audit-gap` row once the server takes rows again, and
+`Close` counts what it loses.
+
 ## References
 
 - [ADR-0191](./0191-runtime-instance-attribution.md) — the `(run id, instance key)` decision this extends to the generated kinds.

@@ -271,6 +271,23 @@ place, and their existing verbs keep their signatures.
 Accepted 2026-10-08. M1–M5 were built and then revised after an adversarial
 review the same day.
 
+## Updates
+
+### 2026-10-08 — host wiring decided against, for now
+
+[ADR-0296](./0296-audit-events-as-a-trail-component.md) §SD7 takes the
+deferred *host wiring* item: the host attaches no `CallIdentity` to the
+contexts it hands apps, because `MountContextI` hands an app no
+`context.Context` to attach one to. Each process sets its own identity
+with `WithCallIdentity` and adds claims with `WithClaims`. The item stays
+open on the question it depends on — where a context reaches an app — and
+is not closed by this.
+
+The trail's recorder is the first consumer of `BeginCtx` and the write
+observer: `Recorder.Event` commits under the caller's context, and
+`trail.WithWriteObserver` attaches an observer to every store the recorder
+builds.
+
 ## References
 
 - [ADR-0027](./0027-pushout-forget-swiss-fadp.md) — the FADP reading this repository uses.
