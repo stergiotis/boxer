@@ -13,6 +13,14 @@ import (
 
 type fakeDelegation struct{ allow map[string]bool }
 
+// CallContext attests every call but "made-up".
+func (inst *fakeDelegation) CallContext(task string, epoch uint64, call string, sender app.AppIdT, senderInstance uint64) (cc app.CallContext, ok bool, reason string) {
+	if call == "made-up" {
+		return cc, false, "the task has no call by that id"
+	}
+	return app.CallContext{Task: task, Epoch: epoch, Call: call, App: sender, Instance: senderInstance}, true, ""
+}
+
 func (inst *fakeDelegation) AllowDestination(task string, epoch uint64, destination string) (bool, string) {
 	if inst.allow[task+"|"+destination] {
 		return true, ""
@@ -47,4 +55,12 @@ func TestAgentCausedFetchNeedsTheGrant(t *testing.T) {
 	calls := svc.Calls()
 	require.NotEmpty(t, calls)
 	assert.Equal(t, "task-2", calls[len(calls)-2].Task)
+
+	// ADR-0277 §SD1: a call the dispatcher does not attest is refused, and
+	// its row does not carry the task it claimed.
+	_, err = cli.Fetch(ctx, "tiles", Request{URL: srv.URL + "/tiles/a", OnBehalfOf: &app.OnBehalfOf{Task: "task-1", Epoch: 1, Call: "made-up"}})
+	require.True(t, errors.As(err, &refused))
+	assert.Contains(t, refused.Reason, "does not attest")
+	calls = svc.Calls()
+	assert.Empty(t, calls[len(calls)-1].Task)
 }

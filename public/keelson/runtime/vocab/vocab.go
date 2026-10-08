@@ -516,6 +516,9 @@ var (
 	// §SD5). Retired before they were ever pushed; never reuse them.
 	MembAdhocDatasetColumnDistinct = NkRegistry.MustBegin("adhocDatasetColumnDistinct", 286).End()
 	MembAgentActionConsent         = NkRegistry.MustBegin("agentActionConsent", 288).End()
+	// The request a grant event answers, so what was asked joins what was
+	// decided (ADR-0277 §SD2).
+	MembAgentGrantRequest = NkRegistry.MustBegin("agentGrantRequest", 289).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -583,5 +586,5 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembAdhocDatasetInFlight, MembAdhocDatasetDocument, MembAdhocDatasetSourceSql, MembAdhocDatasetInputHandles,
 	MembAdhocDatasetInputAliases, MembAdhocDatasetInputDigests, MembAdhocDatasetColumnDatasets,
 	MembAdhocDatasetColumnNames, MembAdhocDatasetColumnTypes, MembAdhocDatasetColumnNulls,
-	MembAdhocDatasetColumnDistinct, MembAgentActionConsent,
+	MembAdhocDatasetColumnDistinct, MembAgentActionConsent, MembAgentGrantRequest,
 }

@@ -144,9 +144,9 @@ type App struct {
 type pendingTurn struct {
 	req     llm.Request
 	started time.Time
-	// trail is the coordinator's trail as last copied, at trailVer.
-	trail    []trailStep
-	trailVer uint64
+	// steps are the coordinator's steps as last copied, at stepsVer.
+	steps    []turnStep
+	stepsVer uint64
 }
 
 var _ app.AppI = (*App)(nil)
@@ -266,16 +266,27 @@ func (inst *App) drain() {
 		if err == nil {
 			err = errors.New("the turn failed")
 		}
-		inst.stats.addTurn(inst.conv.id, p.req.Turn, p.started, now, nil, err)
+		inst.stats.addTurn(inst.conv.id, p.req.Turn, p.started, now, inst.answeredSoFar(), err)
 		inst.conv.land(p.req, nil, err, now)
 		inst.pending = nil
 	case bgjob.StateIdle:
 		// A cancelled run resets to idle without a result or an error
 		// (bgjob's contract), so idle with a turn pending is the cancel.
-		inst.stats.addTurn(inst.conv.id, p.req.Turn, p.started, now, nil, context.Canceled)
+		inst.stats.addTurn(inst.conv.id, p.req.Turn, p.started, now, inst.answeredSoFar(), context.Canceled)
 		inst.conv.land(p.req, nil, context.Canceled, now)
 		inst.pending = nil
 	}
+}
+
+// answeredSoFar is what a turn that failed or was stopped had answered
+// before it ended: its model calls, which the host's trail holds too and
+// the statistics must not drop. Nil when the turn ran without the
+// coordinator, whose one call did not answer.
+func (inst *App) answeredSoFar() (res *turnResult) {
+	if inst.coord == nil || !inst.conv.usesCoordinator() {
+		return nil
+	}
+	return &turnResult{calls: inst.coord.answeredCalls()}
 }
 
 // send starts a turn for the draft and clears the composer.
@@ -300,10 +311,10 @@ func (inst *App) startTurn(text string) (started bool) {
 	req := conv.request(text)
 	cli := inst.cli
 	var coord *coordinator
-	if (conv.apps || conv.questions || conv.artefact) && inst.coord != nil {
+	if conv.usesCoordinator() && inst.coord != nil {
 		coord = inst.coord
 		// The last turn's steps are not this one's.
-		coord.trail.reset()
+		coord.steps.reset()
 		coord.forgetRefusals()
 		coord.offer(conv.apps, conv.questions)
 		if conv.artefact {

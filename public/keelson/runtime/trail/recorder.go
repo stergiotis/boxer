@@ -41,37 +41,72 @@ type Context struct {
 // then, so the bound is what keeps a slow server from stalling the next.
 const flushTimeout = 5 * time.Second
 
-// Recorder is the one writer of the trail: it stamps the origin, composes
+// MaxBacklogRows bounds the rows the recorder holds for a server that does
+// not take them. Past it the oldest held batches are dropped, and logged:
+// a host whose trail is down for hours must not grow without bound, and
+// what is dropped is what BOXER_TRAIL_REQUIRED exists to refuse.
+const MaxBacklogRows = 50_000
+
+// Recorder is the one writer of the trail: it stamps the run, composes
 // each row's natural key and components, and owns the buffer and its
-// flushes. It is safe for concurrent use. A nil Recorder, and one built
+// flushes. App and window come from the caller: every writer takes them
+// from the bus envelope's sender ([Recorder.Origin], or [Recorder.OriginOf]
+// over the sender it kept), never from a payload. It is safe for concurrent use. A nil Recorder, and one built
 // without an executor, record nothing and report not durable.
+//
+// Rows are built into the current store under mu. A flush swaps in a fresh
+// one and inserts the batch outside mu, so a slow or absent server stalls
+// other flushes but never the writers; a batch the server did not take is
+// held, oldest first, until a later flush lands it or MaxBacklogRows drops
+// it. Reads go through a store of their own.
 type Recorder struct {
 	run      string
 	required bool
 	log      zerolog.Logger
+	exec     recordstore.ExecutorI
 
-	mu    sync.Mutex
-	store *TrailStore
-	seq   uint64
+	mu  sync.Mutex
+	cur *TrailStore
+	seq uint64
+
+	// flushMu serialises flushes; backlog is the batches a flush did not
+	// land, oldest first, with their row counts. Both under flushMu.
+	flushMu    sync.Mutex
+	backlog    []heldBatch
+	maxBacklog int
+
+	readMu sync.Mutex
+	read   *TrailStore
 
 	wake chan struct{}
 	stop chan struct{}
 	done chan struct{}
 }
 
+// heldBatch is one swapped-out store and the rows it holds.
+type heldBatch struct {
+	store *TrailStore
+	rows  int
+}
+
 // NewRecorder builds the recorder of the run named run. exec reaches the
 // server holding boxer.facts; nil is a host without a durable backend.
 func NewRecorder(exec recordstore.ExecutorI, run string, log zerolog.Logger) (inst *Recorder) {
-	inst = &Recorder{run: run, required: RequiredEnv.Get(), log: log,
+	inst = &Recorder{run: run, required: RequiredEnv.Get(), log: log, exec: exec, maxBacklog: MaxBacklogRows,
 		wake: make(chan struct{}, 1), stop: make(chan struct{}), done: make(chan struct{})}
 	if exec != nil {
-		inst.store = NewTrailStore(exec, nil, TrailStoreConfig{})
+		inst.cur = inst.newStore()
+		inst.read = inst.newStore()
 	}
 	go inst.flusher()
 	return
 }
 
-// Close flushes what is buffered and releases the store.
+func (inst *Recorder) newStore() (st *TrailStore) {
+	return NewTrailStore(inst.exec, nil, TrailStoreConfig{})
+}
+
+// Close flushes what is buffered and releases the stores.
 func (inst *Recorder) Close() {
 	if inst == nil {
 		return
@@ -79,11 +114,24 @@ func (inst *Recorder) Close() {
 	close(inst.stop)
 	<-inst.done
 	inst.mu.Lock()
-	defer inst.mu.Unlock()
-	if inst.store != nil {
-		inst.store.Close()
-		inst.store = nil
+	cur := inst.cur
+	inst.cur = nil
+	inst.mu.Unlock()
+	inst.flushMu.Lock()
+	for _, b := range inst.backlog {
+		b.store.Close()
 	}
+	inst.backlog = nil
+	inst.flushMu.Unlock()
+	if cur != nil {
+		cur.Close()
+	}
+	inst.readMu.Lock()
+	if inst.read != nil {
+		inst.read.Close()
+		inst.read = nil
+	}
+	inst.readMu.Unlock()
 }
 
 // Durable says rows land on boxer.facts.
@@ -93,7 +141,7 @@ func (inst *Recorder) Durable() (durable bool) {
 	}
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	return inst.store != nil
+	return inst.cur != nil
 }
 
 // Origin is the origin of a bus message: this run, and the app and window
@@ -115,7 +163,7 @@ func (inst *Recorder) OriginOf(appId app.AppIdT, instance uint64) (o Origin) {
 // holds mu and has checked the store.
 func (inst *Recorder) begin(key string, at time.Time, c Context) (b *TrailEntityBuilder, id uint64) {
 	id = xxh3.HashString(key)
-	b = inst.store.Begin(id, at.UTC(), TrailEnvelope{NaturalKey: []byte(key)})
+	b = inst.cur.Begin(id, at.UTC(), TrailEnvelope{NaturalKey: []byte(key)})
 	o := c.Origin
 	o.Id = id
 	if o.Run == "" {
@@ -142,7 +190,7 @@ func (inst *Recorder) write(key string, at time.Time, c Context, add func(b *Tra
 	}
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	if inst.store == nil {
+	if inst.cur == nil {
 		return nil
 	}
 	b, id := inst.begin(key, at, c)
@@ -176,11 +224,11 @@ func (inst *Recorder) LlmMessage(at time.Time, c Context, row LlmMessage, body o
 	})
 }
 
-// AgentAction buffers one action-record row. Its natural key is task, key,
-// decision and time, so the dispatcher's row and the final row of one call
-// are two rows.
+// AgentAction buffers one action-record row. Its natural key names the
+// task, the call's key and the decision, and is unique like every event's,
+// so the dispatcher's row and the final row of one call are two rows.
 func (inst *Recorder) AgentAction(at time.Time, c Context, cause option.Option[Cause], row AgentAction) (err error) {
-	key := c.Delegation.Val.Task + "|" + row.Key + "|" + row.Decision + "|" + strconv.FormatInt(at.UnixNano(), 10)
+	key := "action|" + c.Delegation.Val.Task + "|" + row.Key + "|" + row.Decision + "|" + inst.unique(at)
 	return inst.write(key, at, c, func(b *TrailEntityBuilder, id uint64) {
 		if cause.Has {
 			v := cause.Val
@@ -207,10 +255,16 @@ func (inst *Recorder) AgentGrant(at time.Time, c Context, cause option.Option[Ca
 	})
 }
 
-// AgentCapture buffers one capture's row.
-func (inst *Recorder) AgentCapture(at time.Time, c Context, row AgentCapture) (err error) {
+// AgentCapture buffers one capture's row; cause names the model call that
+// asked for the capture, when one did.
+func (inst *Recorder) AgentCapture(at time.Time, c Context, cause option.Option[Cause], row AgentCapture) (err error) {
 	key := "capture|" + inst.unique(at)
 	return inst.write(key, at, c, func(b *TrailEntityBuilder, id uint64) {
+		if cause.Has {
+			v := cause.Val
+			v.Id = id
+			b.AddCause(v)
+		}
 		row.Id, row.Kind = id, "agentCapture"
 		b.AddAgentCapture(row)
 	})
@@ -267,23 +321,58 @@ func (inst *Recorder) unique(at time.Time) (s string) {
 	return inst.run + "|" + strconv.FormatInt(at.UnixNano(), 36) + "|" + strconv.FormatUint(n, 36)
 }
 
-// Flush lands what is buffered. On failure the rows stay buffered and the
-// next flush ships them.
+// Flush lands what is buffered, and what earlier flushes could not. It
+// returns nil only when every row buffered before the call is on the
+// server; on failure the rows are held for the next flush.
 func (inst *Recorder) Flush(ctx context.Context) (err error) {
 	if inst == nil {
 		return nil
 	}
+	inst.flushMu.Lock()
+	defer inst.flushMu.Unlock()
 	inst.mu.Lock()
-	defer inst.mu.Unlock()
-	if inst.store == nil {
+	if inst.cur == nil {
+		inst.mu.Unlock()
 		return nil
 	}
+	if n := inst.cur.Buffered(); n > 0 {
+		inst.backlog = append(inst.backlog, heldBatch{store: inst.cur, rows: n})
+		inst.cur = inst.newStore()
+	}
+	inst.mu.Unlock()
 	ctx, cancel := context.WithTimeout(ctx, flushTimeout)
 	defer cancel()
-	if _, err = inst.store.Flush(ctx); err != nil {
-		err = eh.Errorf("trail: flush: %w", err)
+	for len(inst.backlog) > 0 {
+		b := inst.backlog[0]
+		if _, ferr := b.store.Flush(ctx); ferr != nil {
+			err = eh.Errorf("trail: flush: %w", ferr)
+			break
+		}
+		b.store.Close()
+		inst.backlog = inst.backlog[1:]
 	}
+	inst.capBacklog()
 	return
+}
+
+// capBacklog drops the oldest held batches past maxBacklog rows. The caller
+// holds flushMu.
+func (inst *Recorder) capBacklog() {
+	var held int
+	for _, b := range inst.backlog {
+		held += b.rows
+	}
+	var dropped int
+	for held > inst.maxBacklog && len(inst.backlog) > 1 {
+		b := inst.backlog[0]
+		b.store.Close()
+		inst.backlog = inst.backlog[1:]
+		held -= b.rows
+		dropped += b.rows
+	}
+	if dropped > 0 {
+		inst.log.Error().Int("dropped", dropped).Int("held", held).Msg("trail: the server has not taken the trail's rows; the oldest are dropped")
+	}
 }
 
 // WriteAhead makes what is buffered durable before work leaves the machine
@@ -354,17 +443,17 @@ func (inst *Recorder) flusher() {
 // Scan reads rows through one of the store's scans — pick it in scan, e.g.
 // st.ScanLlmMessage(ctx, opts) — and returns the entities, each with every
 // component its row carries. Nil without a store. Buffered rows are not
-// seen until a flush.
+// seen until a flush; a scan does not hold up writers.
 func (inst *Recorder) Scan(scan func(st *TrailStore) iter.Seq2[*TrailEntity, error]) (ents []*TrailEntity, err error) {
 	if inst == nil {
 		return nil, nil
 	}
-	inst.mu.Lock()
-	defer inst.mu.Unlock()
-	if inst.store == nil {
+	inst.readMu.Lock()
+	defer inst.readMu.Unlock()
+	if inst.read == nil {
 		return nil, nil
 	}
-	for ent, serr := range scan(inst.store) {
+	for ent, serr := range scan(inst.read) {
 		if serr != nil {
 			return nil, eh.Errorf("trail: scan: %w", serr)
 		}
@@ -373,16 +462,6 @@ func (inst *Recorder) Scan(scan func(st *TrailStore) iter.Seq2[*TrailEntity, err
 		}
 	}
 	return
-}
-
-// LlmCalls reads the durable call rows since a point in time, oldest first,
-// up to limit; nil without a store.
-func (inst *Recorder) LlmCalls(ctx context.Context, since time.Time, limit int) (ents []*TrailEntity, err error) {
-	opts := recordstore.ScanOpts{
-		ExtraPredicate: TrailColOrder + " >= fromUnixTimestamp64Nano(" + strconv.FormatInt(since.UTC().UnixNano(), 10) + ")",
-		Limit:          limit,
-	}
-	return inst.Scan(func(st *TrailStore) iter.Seq2[*TrailEntity, error] { return st.ScanLlmCall(ctx, opts) })
 }
 
 // ContentDigest is the digest of a message's content, a tool catalog or a

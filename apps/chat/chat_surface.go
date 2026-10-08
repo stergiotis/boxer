@@ -24,6 +24,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providersgui"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -54,37 +55,46 @@ func (inst surfaceGroupE) String() (s string) {
 	return
 }
 
-// useE buckets a call's last phase: what became of it.
+// useE buckets a call's last phase: what became of it. The buckets refine
+// opwire.ResultE, the classification the trail views count by.
 type useE uint8
 
 const (
-	// useDone got through the gate: queued, applied, completed.
+	// useDone got through: applied, rendered or completed.
 	useDone useE = iota
 	// useProposed waits on, or went to, the person as a proposal.
 	useProposed
 	// useAsked was outside the grant: the person was asked to widen it.
 	useAsked
-	// useRefused was refused, denied, rejected or lost a conflict.
+	// useRefused was refused, denied, rejected, stale or lost a conflict.
 	useRefused
 	// useFailed failed, expired or was cancelled.
 	useFailed
+	// useRunning is accepted or running: no outcome yet.
+	useRunning
 	useCount
 )
 
-var useNames = [useCount]string{"done", "proposed", "asked", "refused", "failed"}
+var useNames = [useCount]string{"done", "proposed", "asked", "refused", "failed", "running"}
 
 func useOf(phase string) (u useE) {
-	switch phase {
-	case "completed", "applied", "rendered", "accepted", "running":
+	p, _ := opwire.ParsePhase(phase)
+	switch p.Result() {
+	case opwire.ResultDone:
 		return useDone
-	case "proposed":
-		return useProposed
-	case "input_required":
+	case opwire.ResultWaiting:
+		if p == opwire.PhaseProposed {
+			return useProposed
+		}
 		return useAsked
-	case "refused", "denied", "rejected", "conflict", "stale":
+	case opwire.ResultNotDone:
+		switch p {
+		case opwire.PhaseFailed, opwire.PhaseExpired, opwire.PhaseCancelled:
+			return useFailed
+		}
 		return useRefused
 	}
-	return useFailed
+	return useRunning
 }
 
 // surfaceCell is one thing the model could do.
@@ -232,7 +242,9 @@ func buildSurface(in surfaceInput) (m surfaceModel) {
 		}
 		wins[k] = &winInfo{app: w.App, name: name, open: true}
 	}
-	calls := lastPhases(in.actions)
+	// The dispatcher's own reads, captures and disclosures are recorded
+	// against the conversation but are no cell of the surface.
+	calls := slices.DeleteFunc(lastPhases(in.actions), func(a actionRow) bool { return !agent.OnSurface(a.Operation) })
 	used := map[uint64]bool{}
 	for _, a := range calls {
 		if k, _ := strconv.ParseUint(a.Instance, 10, 64); k != 0 && a.Operation != agent.ActionOpenWindow {
@@ -444,6 +456,7 @@ var surfaceSchema = arrow.NewSchema([]arrow.Field{
 	{Name: "asked", Type: arrow.PrimitiveTypes.Uint32},
 	{Name: "refused", Type: arrow.PrimitiveTypes.Uint32},
 	{Name: "failed", Type: arrow.PrimitiveTypes.Uint32},
+	{Name: "running", Type: arrow.PrimitiveTypes.Uint32},
 }, nil)
 
 // surfaceArrow is the cells as an Arrow IPC stream.

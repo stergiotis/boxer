@@ -584,7 +584,7 @@ func (inst *App) renderWaiting() {
 		}
 		c.Label(line).Selectable(false).Send()
 	}
-	inst.renderTrail()
+	inst.renderSteps()
 	c.RequestRepaint()
 }
 

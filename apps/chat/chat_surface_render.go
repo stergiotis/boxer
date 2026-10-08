@@ -61,7 +61,7 @@ func statusTone(s agent.CellStatusE) (tone styletokens.RGBA8) {
 }
 
 var useTones = [useCount]styletokens.RGBA8{styletokens.SuccessDefault, styletokens.InfoDefault, styletokens.WarningDefault,
-	styletokens.ErrorDefault, styletokens.NeutralStrong}
+	styletokens.ErrorDefault, styletokens.NeutralStrong, styletokens.NeutralTextDisabled}
 
 // statusLabel is the status as the person reads it.
 func statusLabel(s agent.CellStatusE) (l string) {
@@ -335,8 +335,9 @@ var useTips = [useCount]string{
 	"The host let the call through: queued, applied or completed.",
 	"The call waits on you, or went to you, as a proposal you accept or reject in the window.",
 	"The call was outside the grant: you were asked to widen it.",
-	"The call was refused, denied, rejected by you, or lost a conflict with a newer change.",
+	"The call was refused, denied, rejected by you, went stale, or lost a conflict with a newer change.",
 	"The call failed, expired or was cancelled.",
+	"The call was let through and has no outcome yet: accepted or running.",
 }
 
 func surfaceLegend() (groups []legendGroup) {

@@ -16,7 +16,7 @@ func TestALaunchNameIsResolvedLeniently(t *testing.T) {
 		r := newRig(t, true)
 		g, err := r.cli.Request(context.Background(), GrantRequest{Launches: []GrantLaunch{{App: name, Mode: ModeAct, Count: 1}}})
 		require.NoError(t, err, name)
-		got, err := r.cli.Launch(context.Background(), g.Handle, name, "", nil)
+		got, err := r.cli.Launch(context.Background(), g.Handle, "l1", name, "", nil)
 		require.NoError(t, err, name)
 		assert.NotZero(t, got.Instance, name)
 	}
@@ -41,7 +41,7 @@ func TestLaunchingAnUnknownAppNamesIt(t *testing.T) {
 	r := newRig(t, true)
 	g, err := r.cli.Request(context.Background(), GrantRequest{Launches: []GrantLaunch{{App: "doc", Mode: ModeAct, Count: 1}}})
 	require.NoError(t, err)
-	_, err = r.cli.Launch(context.Background(), g.Handle, "notepad", "", nil)
+	_, err = r.cli.Launch(context.Background(), g.Handle, "l1", "notepad", "", nil)
 	var refused *RefusedError
 	require.True(t, errors.As(err, &refused))
 	assert.Contains(t, refused.Reason, `no app named "notepad"`)

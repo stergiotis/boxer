@@ -12,17 +12,17 @@ import (
 )
 
 const (
-	// trailShown is how many of the latest steps the waiting bubble lists
+	// stepsShown is how many of the latest steps the waiting bubble lists
 	// one by one; the earlier ones fold under one header.
-	trailShown = 8
-	// trailTextH bounds a step's arguments, result or reasoning; each
+	stepsShown = 8
+	// stepsTextH bounds a step's arguments, result or reasoning; each
 	// scrolls on its own.
-	trailTextH float32 = 160
+	stepsTextH float32 = 160
 	// waitShown is the least wait on the person a finished step names: a
 	// shorter one was no decision of theirs, a grant issued without asking.
 	waitShown = time.Second
 
-	tipTrail = "What the model did this turn, as it happens: each model call and each tool call, with how long it took. Open a step for its arguments and what came back."
+	tipSteps = "What the model did this turn, as it happens: each model call and each tool call, with how long it took. Open a step for its arguments and what came back."
 	tipStep  = "Open for what was sent and what came back."
 
 	tipWaitingForYou = "The call waits on your decision — in the host's dialog, or as a proposal in the window — and the turn goes on once you decide."
@@ -30,31 +30,31 @@ const (
 
 var atomsCopyStep = c.Atoms().Text(icons.PhCopy + " Copy step").Keep()
 
-// trailNow is the running turn's trail, copied from the coordinator when it
+// stepsNow is the running turn's steps, copied from the coordinator when it
 // moved.
-func (inst *App) trailNow() (steps []trailStep) {
+func (inst *App) stepsNow() (steps []turnStep) {
 	p := inst.pending
 	if p == nil || inst.coord == nil {
 		return nil
 	}
-	if got, ver, changed := inst.coord.trail.snapshot(p.trailVer); changed {
-		p.trail, p.trailVer = got, ver
+	if got, ver, changed := inst.coord.steps.snapshot(p.stepsVer); changed {
+		p.steps, p.stepsVer = got, ver
 	}
-	return p.trail
+	return p.steps
 }
 
-// renderTrail lists the running turn's steps under the waiting line: the
+// renderSteps lists the running turn's steps under the waiting line: the
 // latest one by one, the earlier folded, each openable to its details.
-func (inst *App) renderTrail() {
-	steps := inst.trailNow()
+func (inst *App) renderSteps() {
+	steps := inst.stepsNow()
 	if len(steps) == 0 {
 		return
 	}
-	for range c.IdScope(inst.ids.PrepareStr("trail")) {
-		for range c.HoverText(tipTrail).KeepIter() {
-			weak(trailSummary(steps))
+	for range c.IdScope(inst.ids.PrepareStr("steps")) {
+		for range c.HoverText(tipSteps).KeepIter() {
+			weak(stepsSummary(steps))
 		}
-		first := max(0, len(steps)-trailShown)
+		first := max(0, len(steps)-stepsShown)
 		if first > 0 {
 			for range c.CollapsingHeader(inst.ids.PrepareStr("earlier"), c.WidgetText().Text(plural(first, "earlier step")).Keep()).KeepIter() {
 				for i := range first {
@@ -68,8 +68,8 @@ func (inst *App) renderTrail() {
 	}
 }
 
-// trailSummary is the trail in a line: calls by kind, refusals, tokens.
-func trailSummary(steps []trailStep) (s string) {
+// stepsSummary is the steps in a line: calls by kind, refusals, tokens.
+func stepsSummary(steps []turnStep) (s string) {
 	var models, tools, refused int
 	var in, out int64
 	for i := range steps {
@@ -96,7 +96,7 @@ func trailSummary(steps []trailStep) (s string) {
 
 // renderStep is one step: its line, and under it, when opened, what was
 // sent and what came back.
-func (inst *App) renderStep(i int, s *trailStep) {
+func (inst *App) renderStep(i int, s *turnStep) {
 	for range c.IdScope(inst.ids.PrepareSeq(uint64(i))) {
 		if s.waitingOnPerson() {
 			// Not working: waiting on a decision of the person's, in the
@@ -136,7 +136,7 @@ func (inst *App) renderStep(i int, s *trailStep) {
 }
 
 // stepLabel is a step with nothing to open, in its tone.
-func (inst *App) stepLabel(s *trailStep) {
+func (inst *App) stepLabel(s *turnStep) {
 	tone := styletokens.NeutralTextSecondary
 	if s.refused || s.failed {
 		tone = styletokens.ErrorDefault
@@ -146,13 +146,13 @@ func (inst *App) stepLabel(s *trailStep) {
 	}
 }
 
-func (inst *trailStep) hasDetail() bool {
+func (inst *turnStep) hasDetail() bool {
 	return inst.args != "" || inst.result != "" || inst.content != "" || inst.reasoning != ""
 }
 
 // stepLine is a step in a line: what it is, how long it took or has run,
 // and how it ended.
-func stepLine(s *trailStep) (line string) {
+func stepLine(s *turnStep) (line string) {
 	took := s.took
 	if !s.done {
 		took = time.Since(s.started)
@@ -198,7 +198,7 @@ func stepLine(s *trailStep) (line string) {
 // renderStepDetail is what a step sent and got: a model call's text and
 // reasoning, a tool call's arguments and result, each bounded and
 // selectable, and Copy for the whole step.
-func (inst *App) renderStepDetail(s *trailStep) {
+func (inst *App) renderStepDetail(s *turnStep) {
 	if s.activity != "" {
 		weak(s.activity)
 	}
@@ -219,14 +219,14 @@ func (inst *App) stepText(key string, caption string, text string) {
 	}
 	weak(caption)
 	for range c.PushId(inst.ids.PrepareStr("step-" + key)).KeepIter() {
-		for range c.ScrollArea().Vscroll(true).Hscroll(false).MaxHeight(trailTextH).KeepIter() {
+		for range c.ScrollArea().Vscroll(true).Hscroll(false).MaxHeight(stepsTextH).KeepIter() {
 			c.LabelAtoms(c.Atoms().BeginRichText(text).Small().Monospace().End().Keep()).Wrap().Selectable(true).Send()
 		}
 	}
 }
 
 // stepCopy is a step as copied: its line and every part it has.
-func stepCopy(s *trailStep) string {
+func stepCopy(s *turnStep) string {
 	var b strings.Builder
 	b.WriteString(stepLine(s))
 	part := func(caption, text string) {

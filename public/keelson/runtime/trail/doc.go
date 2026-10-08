@@ -10,7 +10,7 @@
 // [Cause] (the model call that asked for a tool call — stated by the
 // coordinator).
 //
-// [Recorder] is the one place rows are built: it stamps the origin, composes
+// [Recorder] is the one place rows are built: it stamps the run, composes
 // natural keys, and owns the buffer and its flushes. Services hold the
 // recorder and call its verbs; none of them touches the store.
 //

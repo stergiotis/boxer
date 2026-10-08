@@ -173,4 +173,24 @@ grant and widening, and a real model.
 
 ## Updates
 
-None.
+### 2026-10-08 — cells, buckets and stopped turns
+
+- §SD1 names `agent.ClassifyCell`. No such function was written: the
+  classification is `ClassifyOperation`, `ClassifyLaunch`,
+  `ClassifyArrange` and `ClassifyWindowVerb` in `runtime/agent`.
+- **Only cells are counted.** The dispatcher's own reads (`describe`,
+  `help`, `list`), captures and disclosures leave action rows against the
+  conversation, and each became a cell of its own, window 0 for the reads.
+  `agent.OnSurface` names what is a cell; the surface skips the rest.
+- **Use follows the trail views' classification** (`opwire.ResultE`,
+  ADR-0277). Accepted and running were counted done; they are now a
+  `running` bucket of their own. Stale joins refused; expired and
+  cancelled stay failed.
+- **A stopped or failed turn keeps the calls that answered.** The
+  statistics took a turn's calls from its result, which a failed or
+  cancelled turn does not have, so its answered rounds were on the trail
+  and missing from `chat_calls`. The coordinator keeps them as they
+  answer.
+- Grant statuses come from `keelson('agent_grants')`, which holds this
+  run's grants: a conversation reopened in a later run shows its calls and
+  no grant.

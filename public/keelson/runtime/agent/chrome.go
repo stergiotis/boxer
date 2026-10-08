@@ -123,7 +123,7 @@ func (inst *Chrome) renderTaskMenu(key uint64, wt windowTask, ids *c.WidgetIdSta
 	for range c.HorizontalTop().KeepIter() {
 		if c.Button(ids.PrepareStr("agent-detach-"+t.id+"-"+strconv.FormatUint(key, 10)),
 			c.Atoms().Text("Detach this window").Keep()).SendResp().HasPrimaryClicked() {
-			svc.detachEntry(t, key, "the person detached the window")
+			svc.detachEntry(t, key, "the person detached the window", "person")
 		}
 		if c.Button(ids.PrepareStr("agent-stop-"+t.id+"-"+strconv.FormatUint(key, 10)),
 			c.Atoms().Text("Stop the task").Keep()).SendResp().HasPrimaryClicked() {

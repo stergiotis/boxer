@@ -215,13 +215,21 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 		return
 	}
 	if req.OnBehalfTask != "" {
-		rec.Task, rec.TaskEpoch, rec.TaskCall = req.OnBehalfTask, req.OnBehalfEpoch, req.OnBehalfCall
 		ref := inst.delegation.Load()
 		if ref == nil {
 			inst.refuse(msg, "agent-caused work, and no dispatcher to check its grant", rec)
 			return
 		}
-		if ok, why := ref.d.AllowDestination(req.OnBehalfTask, req.OnBehalfEpoch, DelegationDestination(name)); !ok {
+		// The task goes on the row only as the dispatcher attests it
+		// (ADR-0277 §SD1): a context it does not confirm is refused and
+		// recorded as the sender's own fetch.
+		cc, ok, why := ref.d.CallContext(req.OnBehalfTask, req.OnBehalfEpoch, req.OnBehalfCall, msg.Sender, msg.SenderInstance)
+		if !ok {
+			inst.refuse(msg, "agent-caused work the dispatcher does not attest: "+why, rec)
+			return
+		}
+		rec.Task, rec.TaskEpoch, rec.TaskCall = cc.Task, cc.Epoch, cc.Call
+		if ok, why := ref.d.AllowDestination(cc.Task, cc.Epoch, DelegationDestination(name)); !ok {
 			inst.refuse(msg, "agent-caused work: "+why, rec)
 			return
 		}

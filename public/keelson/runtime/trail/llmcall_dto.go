@@ -43,7 +43,9 @@ type LlmCall struct {
 	FinishReason    string `lw:"llmCallFinishReason,symbol"`
 	ElapsedMs       uint64 `lw:"llmCallElapsedMs,u64Array,unit"`
 	// How it ended: truncated at the ceiling, refused by the service, or
-	// the provider's error text — one element when there is one.
+	// the provider's error text — one element when there is one. A
+	// truncated call that had nothing to hand over is Incomplete and
+	// carries an Error: it failed.
 	Incomplete bool     `lw:"llmCallIncomplete,bool"`
 	Refused    bool     `lw:"llmCallRefused,bool"`
 	Error      []string `lw:"llmCallError,stringArray"`

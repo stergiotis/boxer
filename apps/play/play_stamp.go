@@ -2,7 +2,6 @@ package play
 
 import (
 	"encoding/hex"
-	"encoding/json"
 	"maps"
 	"sort"
 	"strconv"
@@ -10,9 +9,9 @@ import (
 
 	"lukechampine.com/blake3"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/logcomment"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/queryrunfacts"
 )
 
 // play_stamp.go is the SD7 identity stamp (ADR-0115): every query the
@@ -20,8 +19,9 @@ import (
 // {run_id, app, lane, authored_fp, sent_fp, chain_fp, env_fp}, so the
 // server's own query_log is attributable with no boxer process running,
 // and the queryrunsd capture pipeline lifts the identity into
-// boxer.facts memberships (queryrunfacts.ParseStamp — the same struct
-// serialised here, single-sourcing the keys).
+// boxer.facts memberships (queryrunfacts.ParseStamp — the same
+// logcomment.Stamp serialised here, single-sourcing the keys; ADR-0295
+// §SD2).
 //
 // The four fingerprints are the entity spine's day-one anchors
 // (doc/explanation/query-observability.md): authored = the buffer as
@@ -127,7 +127,7 @@ func envFingerprint(params map[string]string, signals map[string]string) string 
 // marshalling fails (structurally impossible for this struct).
 func (inst *Client) composeLogComment(authored string, sent string, params map[string]string, signals map[string]string, opts *ExecOptions, agent *app.OnBehalfOf) string {
 	runId, appId, instanceKey := inst.stampIdentity()
-	st := queryrunfacts.Stamp{
+	st := logcomment.Stamp{
 		RunId:      runId,
 		App:        appId,
 		Instance:   instanceKey,
@@ -154,20 +154,16 @@ func (inst *Client) composeLogComment(authored string, sent string, params map[s
 // identity to stamp at all.
 func (inst *Client) composeProbeLogComment(opts *ExecOptions) string {
 	runId, appId, instanceKey := inst.stampIdentity()
-	st := queryrunfacts.Stamp{RunId: runId, App: appId, Instance: instanceKey}
+	st := logcomment.Stamp{RunId: runId, App: appId, Instance: instanceKey}
 	if opts != nil {
 		st.Lane = opts.Label
 	}
-	if st == (queryrunfacts.Stamp{}) {
+	if st == (logcomment.Stamp{}) {
 		return ""
 	}
 	return marshalStamp(st)
 }
 
-func marshalStamp(st queryrunfacts.Stamp) string {
-	b, err := json.Marshal(st)
-	if err != nil {
-		return ""
-	}
-	return string(b)
+func marshalStamp(st logcomment.Stamp) string {
+	return logcomment.Marshal(st)
 }

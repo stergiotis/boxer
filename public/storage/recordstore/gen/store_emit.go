@@ -954,6 +954,7 @@ func (inst emitter) emitStoreHeader(sb *strings.Builder, key, order, lifecycle e
 	if inst.hasComps {
 		p("\t%q", "github.com/stergiotis/boxer/public/functional/option")
 	}
+	p("\t%q", "github.com/stergiotis/boxer/public/identity/callident")
 	p("\t%q", "github.com/stergiotis/boxer/public/observability/eh")
 	if inst.hasComps {
 		// The published artefact Set (ADR-0189 §SD1); emitted only with
@@ -1105,6 +1106,12 @@ func (inst emitter) emitStoreType(sb *strings.Builder) {
 	p("\t// Nothing flushes behind the caller's back: Commit takes no context and")
 	p("\t// never inserts, so the due check runs where the caller asks for it.")
 	p("\tFlushEvery int")
+	p("\t// WriteObserver, when set, is told each row a Commit or Delete")
+	p("\t// buffers, then — after the successful Flush that made them durable —")
+	p("\t// the batch id of that insert and its keys, or the keys DiscardPending")
+	p("\t// dropped (ADR-0295 §SD7). It is notification-only and independent of")
+	p("\t// attached cache views. Nil (the default) tracks nothing.")
+	p("\tWriteObserver recordstore.WriteObserverI[%s, %s]", inst.keyGoType, inst.orderGoType)
 	if inst.stateViewOn() {
 		p("\t// TombstoneDetect is the read half of the state-view tombstone pair")
 		p("\t// (ADR-0100 Update 2026-08-30): GetLive — the store's and the cache")
@@ -1165,6 +1172,10 @@ func (inst emitter) emitStoreType(sb *strings.Builder) {
 	p("\tonFlush []func(%s)", inst.keyGoType)
 	p("\t// stampers is cfg.Stampers, consulted per Begin (ADR-0112 M1).")
 	p("\tstampers []recordstore.ReferenceStamper")
+	p("\t// written holds the rows the write observer was told were committed and")
+	p("\t// has not yet been told are durable or discarded (ADR-0295 §SD7); empty")
+	p("\t// without an observer.")
+	p("\twritten []recordstore.WrittenKey[%s, %s]", inst.keyGoType, inst.orderGoType)
 	p("}")
 	p("")
 	p("// New%s wires the store. A nil alloc selects the Go allocator.", inst.storeType())
@@ -1235,13 +1246,12 @@ func (inst emitter) emitStoreType(sb *strings.Builder) {
 	}
 	p("// applyStampers consults the configured stampers and pushes their surrogate")
 	p("// ids as ambient HighCardRef memberships onto the open entity (ADR-0112 M1),")
-	p("// returning the count so Commit/Rollback pop exactly that many.")
-	p("// context.Background() bounds the interning — the in-memory interner ignores")
-	p("// it; a ctx-carrying Begin is the future seam for a durable one. No stampers")
-	p("// means no pushes: inert.")
-	p("func (inst *%s) applyStampers() (pushed int) {", inst.storeType())
+	p("// returning the count so Commit/Rollback pop exactly that many. ctx is")
+	p("// BeginCtx's — the call identity a stamper interns rides on it (ADR-0295")
+	p("// §SD7). No stampers means no pushes: inert.")
+	p("func (inst *%s) applyStampers(ctx context.Context) (pushed int) {", inst.storeType())
 	p("\tfor _, s := range inst.stampers {")
-	p("\t\tfor id, err := range s.Current(context.Background()) {")
+	p("\t\tfor id, err := range s.Current(ctx) {")
 	p("\t\t\tif err != nil {")
 	p("\t\t\t\tinst.dml.AppendError(err)")
 	p("\t\t\t\tcontinue")
@@ -1269,6 +1279,32 @@ func (inst emitter) emitStoreType(sb *strings.Builder) {
 	p("func (inst *%s) notifyFlush(key %s) {", inst.storeType(), inst.keyGoType)
 	p("\tfor _, f := range inst.onFlush {")
 	p("\t\tf(key)")
+	p("\t}")
+	p("}")
+	p("")
+	p("// noteCommitted tells the write observer about a buffered row and keeps")
+	p("// it until the observer is told its fate (ADR-0295 §SD7).")
+	p("func (inst *%s) noteCommitted(w recordstore.WrittenKey[%s, %s]) {", inst.storeType(), inst.keyGoType, inst.orderGoType)
+	p("\tif inst.cfg.WriteObserver == nil {")
+	p("\t\treturn")
+	p("\t}")
+	p("\tinst.written = append(inst.written, w)")
+	p("\tinst.cfg.WriteObserver.Committed(w)")
+	p("}")
+	p("")
+	p("// takeWritten detaches the rows noteCommitted kept and ranges over them.")
+	p("// Detaching before the observer runs means a row it commits from its")
+	p("// callback lands in a fresh buffer, reported with a later flush, and a")
+	p("// panicking observer cannot have the same rows reported twice.")
+	p("func (inst *%s) takeWritten() iter.Seq[recordstore.WrittenKey[%s, %s]] {", inst.storeType(), inst.keyGoType, inst.orderGoType)
+	p("\twritten := inst.written")
+	p("\tinst.written = nil")
+	p("\treturn func(yield func(recordstore.WrittenKey[%s, %s]) bool) {", inst.keyGoType, inst.orderGoType)
+	p("\t\tfor _, w := range written {")
+	p("\t\t\tif !yield(w) {")
+	p("\t\t\t\treturn")
+	p("\t\t\t}")
+	p("\t\t}")
 	p("\t}")
 	p("}")
 	p("")
@@ -1464,6 +1500,15 @@ func (inst emitter) emitBuilder(sb *strings.Builder, comps []storeComponent, sta
 	p("\t// pushed counts the ambient memberships Begin pushed via the stampers;")
 	p("\t// Commit/Rollback pop exactly that many (ADR-0112 M1).")
 	p("\tpushed int")
+	p("\t// ident is BeginCtx's call identity: who committed the row, which the")
+	p("\t// write observer is told — the flush that ships it may run for someone")
+	p("\t// else (ADR-0295 §SD7).")
+	p("\tident callident.CallIdentity")
+	if inst.stateViewOn() {
+		p("\t// tombstone marks the frame Delete opened for a configured tombstone")
+		p("\t// pair, so the write observer is told the row is a deletion.")
+		p("\ttombstone bool")
+	}
 	p("}")
 	p("")
 	inst.emitBuilderEndSection(sb, comps)
@@ -1483,12 +1528,22 @@ func (inst emitter) emitBuilder(sb *strings.Builder, comps []storeComponent, sta
 	case 2:
 		beginSuffix = ", " + extras[0] + " and " + extras[1]
 	}
-	p("// (Key, Order)%s.", beginSuffix)
-	sig := fmt.Sprintf("func (inst *%s) Begin(id %s, %s %s", inst.storeType(), inst.keyGoType, inst.orderArg(), inst.orderGoType)
+	p("// (Key, Order)%s, under context.Background(): a configured stamper", beginSuffix)
+	p("// that reads a call identity off the context finds none. See BeginCtx.")
+	params := fmt.Sprintf("id %s, %s %s", inst.keyGoType, inst.orderArg(), inst.orderGoType)
+	args := "id, " + inst.orderArg()
 	if hasPT {
-		sig += fmt.Sprintf(", env %sEnvelope", inst.StoreName)
+		params += fmt.Sprintf(", env %sEnvelope", inst.StoreName)
+		args += ", env"
 	}
-	p("%s) *%s {", sig, inst.builderType())
+	p("func (inst *%s) Begin(%s) *%s {", inst.storeType(), params, inst.builderType())
+	p("\treturn inst.BeginCtx(context.Background(), %s)", args)
+	p("}")
+	p("")
+	p("// BeginCtx is Begin with the context the configured stampers consult")
+	p("// (ADR-0295 §SD7) — where a call identity reaches an actor stamper. The")
+	p("// store stays single-goroutine; ctx is read during this call only.")
+	p("func (inst *%s) BeginCtx(ctx context.Context, %s) *%s {", inst.storeType(), params, inst.builderType())
 	lit := fmt.Sprintf("%s{ID: id, %s: %s", inst.entityType(), inst.orderEntityField(), inst.orderArg())
 	if inst.model.stateView {
 		lit += ", Lifecycle: recordstore.LifecycleLive"
@@ -1499,7 +1554,8 @@ func (inst emitter) emitBuilder(sb *strings.Builder, comps []storeComponent, sta
 	lit += "}"
 	inst.emitBeginFrame(p, "inst.dml", "recordstore.LifecycleLive", "env")
 	p("\tb := &%s{store: inst, key: id, ent: %s}", inst.builderType(), lit)
-	p("\tb.pushed = inst.applyStampers()")
+	p("\tb.ident, _ = callident.CallIdentityFrom(ctx)")
+	p("\tb.pushed = inst.applyStampers(ctx)")
 	p("\treturn b")
 	p("}")
 	p("")
@@ -1573,6 +1629,15 @@ func (inst emitter) emitBuilder(sb *strings.Builder, comps []storeComponent, sta
 	p("\t\tent := inst.ent")
 	p("\t\tinst.store.notifyWrite(inst.key, &ent)")
 	p("\t}")
+	lifecycle := "recordstore.LifecycleLive"
+	if inst.model.stateView {
+		lifecycle = "inst.ent.Lifecycle"
+	}
+	tombstone := "false"
+	if inst.stateViewOn() {
+		tombstone = "inst.tombstone"
+	}
+	p("\tinst.store.noteCommitted(recordstore.WrittenKey[%s, %s]{Key: inst.key, Order: inst.ent.%s, Lifecycle: %s, Tombstone: %s, Identity: inst.ident})", inst.keyGoType, inst.orderGoType, inst.orderEntityField(), lifecycle, tombstone)
 	p("\treturn")
 	p("}")
 	p("")
@@ -1619,6 +1684,12 @@ func (inst emitter) emitIngest(sb *strings.Builder, comps []storeComponent) (err
 		p("// so far remain buffered — Flush ships them, DiscardPending drops")
 		p("// them.")
 		p("func (inst *%s) Ingest%s(%s %s, rows []%s) (err error) {", inst.storeType(), c.Kind, ord, inst.orderGoType, c.Kind)
+		p("\treturn inst.Ingest%sCtx(context.Background(), %s, rows)", c.Kind, ord)
+		p("}")
+		p("")
+		p("// Ingest%sCtx is Ingest%s with the context BeginCtx hands the", c.Kind, c.Kind)
+		p("// configured stampers (ADR-0295 §SD7).")
+		p("func (inst *%s) Ingest%sCtx(ctx context.Context, %s %s, rows []%s) (err error) {", inst.storeType(), c.Kind, ord, inst.orderGoType, c.Kind)
 		p("\tseen := make(map[%s]struct{}, len(rows))", inst.keyGoType)
 		p("\tfor i := range rows {")
 		p("\t\tif _, dup := seen[rows[i].%s]; dup {", idCol.GoField)
@@ -1639,7 +1710,7 @@ func (inst emitter) emitIngest(sb *strings.Builder, comps []storeComponent) (err
 			}
 			beginArgs += fmt.Sprintf(", %sEnvelope{%s}", inst.StoreName, strings.Join(fields, ", "))
 		}
-		p("\t\terr = inst.Begin(%s).Add%s(rows[i]).Commit()", beginArgs, c.Kind)
+		p("\t\terr = inst.BeginCtx(ctx, %s).Add%s(rows[i]).Commit()", beginArgs, c.Kind)
 		p("\t\tif err != nil {")
 		p("\t\t\terr = eh.Errorf(\"ingest %s row %%d: %%w\", i, err)", lowerFirst(c.Kind))
 		p("\t\t\treturn")
@@ -1691,8 +1762,12 @@ func (inst emitter) emitFlush(sb *strings.Builder) {
 	p("\t}")
 	p("\trecords = append(inst.pending, records...)")
 	p("\tinst.pending = nil")
+	p("\t// One batch id per insert attempt (ADR-0295 §SD6): the executor stamps")
+	p("\t// it, an observing executor reports it, the write observer is told it.")
+	p("\tbatch := recordstore.NewBatchId()")
+	p("\tbctx := recordstore.WithBatchId(ctx, batch)")
 	p("\tif len(records) > 0 {")
-	p("\t\terr = inst.exec.InsertArrow(ctx, inst.tableName(), records)")
+	p("\t\terr = inst.exec.InsertArrow(bctx, inst.tableName(), records)")
 	p("\t\tif err != nil {")
 	p("\t\t\tinst.pending = records")
 	p("\t\t\terr = eh.Errorf(\"insert into %%s: %%w\", inst.tableName(), err)")
@@ -1708,6 +1783,9 @@ func (inst emitter) emitFlush(sb *strings.Builder) {
 	p("\t\tinst.notifyFlush(k) // durable now — release the views' dirty-window pins")
 	p("\t}")
 	p("\tclear(inst.dirty) // flushed — ClickHouse now serves the written state")
+	p("\tif len(inst.written) > 0 {")
+	p("\t\tinst.cfg.WriteObserver.Durable(bctx, batch, inst.takeWritten())")
+	p("\t}")
 	p("\treturn")
 	p("}")
 	p("")
@@ -1748,6 +1826,9 @@ func (inst emitter) emitFlush(sb *strings.Builder) {
 	p("\t\tinst.notifyWrite(k, nil) // the cached write never became durable — invalidate")
 	p("\t}")
 	p("\tclear(inst.dirty) // nothing local remains — ClickHouse is the truth")
+	p("\tif len(inst.written) > 0 {")
+	p("\t\tinst.cfg.WriteObserver.Discarded(inst.takeWritten())")
+	p("\t}")
 	p("}")
 	p("")
 	p("// Close discards everything unflushed and releases the store's Arrow")
@@ -2185,9 +2266,11 @@ func (inst emitter) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, 
 		p("// pair is the marker). Either way the deletion writes through to")
 		p("// attached cache views like any commit — versioned, so GetLive reads")
 		p("// the key as absent immediately.")
-		p("func (inst *%s) Delete(id %s, %s %s) (err error) {", inst.storeType(), inst.keyGoType, inst.orderArg(), inst.orderGoType)
+		inst.emitDeleteWrapper(p)
+		p("func (inst *%s) DeleteCtx(ctx context.Context, id %s, %s %s) (err error) {", inst.storeType(), inst.keyGoType, inst.orderArg(), inst.orderGoType)
 		p("\tif inst.cfg.TombstoneWrite != nil {")
-		p("\t\tb := inst.Begin(%s)", beginArgs)
+		p("\t\tb := inst.BeginCtx(ctx, %s)", beginArgs)
+		p("\t\tb.tombstone = true")
 		p("\t\tinst.cfg.TombstoneWrite(b)")
 		p("\t\treturn b.Commit()")
 		p("\t}")
@@ -2195,7 +2278,12 @@ func (inst emitter) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, 
 			p("\tvar env %sEnvelope // a tombstone carries no pass-through payload", inst.StoreName)
 		}
 		inst.emitBeginFrame(p, "inst.dml", "recordstore.LifecycleTombstone", "env")
+		p("\t// The marker row has no attribute to carry a stamp, but the stampers")
+		p("\t// are consulted all the same: one that refuses (an actor stamper with")
+		p("\t// no principal on ctx) refuses the deletion too (ADR-0295 §SD8).")
+		p("\tpushed := inst.applyStampers(ctx)")
 		p("\terr = %s", inst.ctrlCall("inst.dml", "CommitEntity"))
+		p("\tinst.dml.PopMembershipsHighCardRef(pushed)")
 		p("\tif err != nil {")
 		p("\t\t_ = %s // discard the failed frame; the store stays usable", inst.ctrlCall("inst.dml", "RollbackEntity"))
 		p("\t\treturn")
@@ -2203,6 +2291,8 @@ func (inst emitter) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, 
 		p("\tinst.buffered++")
 		p("\tinst.dirty[id] = struct{}{}")
 		p("\tinst.notifyWrite(id, &%s{ID: id, %s: %s, Lifecycle: recordstore.LifecycleTombstone})", inst.entityType(), inst.orderEntityField(), inst.orderArg())
+		p("\tci, _ := callident.CallIdentityFrom(ctx)")
+		p("\tinst.noteCommitted(recordstore.WrittenKey[%s, %s]{Key: id, Order: %s, Lifecycle: recordstore.LifecycleTombstone, Tombstone: true, Identity: ci})", inst.keyGoType, inst.orderGoType, inst.orderArg())
 		p("\treturn")
 		p("}")
 	} else {
@@ -2212,8 +2302,10 @@ func (inst emitter) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, 
 		p("// Lifecycle role; the pair is the whole marker). The deletion writes")
 		p("// through to attached cache views like any commit — versioned, so")
 		p("// GetLive reads the key as absent immediately.")
-		p("func (inst *%s) Delete(id %s, %s %s) (err error) {", inst.storeType(), inst.keyGoType, inst.orderArg(), inst.orderGoType)
-		p("\tb := inst.Begin(%s)", beginArgs)
+		inst.emitDeleteWrapper(p)
+		p("func (inst *%s) DeleteCtx(ctx context.Context, id %s, %s %s) (err error) {", inst.storeType(), inst.keyGoType, inst.orderArg(), inst.orderGoType)
+		p("\tb := inst.BeginCtx(ctx, %s)", beginArgs)
+		p("\tb.tombstone = true")
 		p("\tinst.cfg.TombstoneWrite(b)")
 		p("\treturn b.Commit()")
 		p("}")
@@ -2238,6 +2330,17 @@ func (inst emitter) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, 
 	for _, c := range comps {
 		inst.emitScanLive(p, c)
 	}
+}
+
+// emitDeleteWrapper renders the context-free Delete over DeleteCtx; the
+// caller follows it with DeleteCtx's own doc line and signature.
+func (inst emitter) emitDeleteWrapper(p func(string, ...any)) {
+	p("func (inst *%s) Delete(id %s, %s %s) (err error) {", inst.storeType(), inst.keyGoType, inst.orderArg(), inst.orderGoType)
+	p("\treturn inst.DeleteCtx(context.Background(), id, %s)", inst.orderArg())
+	p("}")
+	p("")
+	p("// DeleteCtx is Delete with the context BeginCtx hands the configured")
+	p("// stampers (ADR-0295 §SD7).")
 }
 
 // emitRefuseKeyPrefix opens a scan verb on a non-string-keyed store with

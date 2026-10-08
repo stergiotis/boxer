@@ -22,6 +22,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/functional"
 	"github.com/stergiotis/boxer/public/functional/option"
+	"github.com/stergiotis/boxer/public/identity/callident"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist/persiststore/internal/lowlevel"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
@@ -174,6 +175,12 @@ type PersistStoreConfig struct {
 	// Nothing flushes behind the caller's back: Commit takes no context and
 	// never inserts, so the due check runs where the caller asks for it.
 	FlushEvery int
+	// WriteObserver, when set, is told each row a Commit or Delete
+	// buffers, then — after the successful Flush that made them durable —
+	// the batch id of that insert and its keys, or the keys DiscardPending
+	// dropped (ADR-0295 §SD7). It is notification-only and independent of
+	// attached cache views. Nil (the default) tracks nothing.
+	WriteObserver recordstore.WriteObserverI[string, time.Time]
 	// TombstoneDetect is the read half of the state-view tombstone pair
 	// (ADR-0100 Update 2026-08-30): GetLive — the store's and the cache
 	// views' — reads a detected row as absent. It may consult any entity
@@ -224,6 +231,10 @@ type PersistStore struct {
 	onFlush []func(string)
 	// stampers is cfg.Stampers, consulted per Begin (ADR-0112 M1).
 	stampers []recordstore.ReferenceStamper
+	// written holds the rows the write observer was told were committed and
+	// has not yet been told are durable or discarded (ADR-0295 §SD7); empty
+	// without an observer.
+	written []recordstore.WrittenKey[string, time.Time]
 }
 
 // NewPersistStore wires the store. A nil alloc selects the Go allocator.
@@ -264,13 +275,12 @@ func (inst *PersistStore) isTombstone(e *PersistEntity) bool {
 
 // applyStampers consults the configured stampers and pushes their surrogate
 // ids as ambient HighCardRef memberships onto the open entity (ADR-0112 M1),
-// returning the count so Commit/Rollback pop exactly that many.
-// context.Background() bounds the interning — the in-memory interner ignores
-// it; a ctx-carrying Begin is the future seam for a durable one. No stampers
-// means no pushes: inert.
-func (inst *PersistStore) applyStampers() (pushed int) {
+// returning the count so Commit/Rollback pop exactly that many. ctx is
+// BeginCtx's — the call identity a stamper interns rides on it (ADR-0295
+// §SD7). No stampers means no pushes: inert.
+func (inst *PersistStore) applyStampers(ctx context.Context) (pushed int) {
 	for _, s := range inst.stampers {
-		for id, err := range s.Current(context.Background()) {
+		for id, err := range s.Current(ctx) {
 			if err != nil {
 				inst.dml.AppendError(err)
 				continue
@@ -298,6 +308,32 @@ func (inst *PersistStore) notifyWrite(key string, ent *PersistEntity) {
 func (inst *PersistStore) notifyFlush(key string) {
 	for _, f := range inst.onFlush {
 		f(key)
+	}
+}
+
+// noteCommitted tells the write observer about a buffered row and keeps
+// it until the observer is told its fate (ADR-0295 §SD7).
+func (inst *PersistStore) noteCommitted(w recordstore.WrittenKey[string, time.Time]) {
+	if inst.cfg.WriteObserver == nil {
+		return
+	}
+	inst.written = append(inst.written, w)
+	inst.cfg.WriteObserver.Committed(w)
+}
+
+// takeWritten detaches the rows noteCommitted kept and ranges over them.
+// Detaching before the observer runs means a row it commits from its
+// callback lands in a fresh buffer, reported with a later flush, and a
+// panicking observer cannot have the same rows reported twice.
+func (inst *PersistStore) takeWritten() iter.Seq[recordstore.WrittenKey[string, time.Time]] {
+	written := inst.written
+	inst.written = nil
+	return func(yield func(recordstore.WrittenKey[string, time.Time]) bool) {
+		for _, w := range written {
+			if !yield(w) {
+				return
+			}
+		}
 	}
 }
 
@@ -433,6 +469,13 @@ type PersistEntityBuilder struct {
 	// pushed counts the ambient memberships Begin pushed via the stampers;
 	// Commit/Rollback pop exactly that many (ADR-0112 M1).
 	pushed int
+	// ident is BeginCtx's call identity: who committed the row, which the
+	// write observer is told — the flush that ships it may run for someone
+	// else (ADR-0295 §SD7).
+	ident callident.CallIdentity
+	// tombstone marks the frame Delete opened for a configured tombstone
+	// pair, so the write observer is told the row is a deletion.
+	tombstone bool
 }
 
 // endSection closes one section's frame. The buffer calls it once per
@@ -454,14 +497,23 @@ func (inst *PersistEntityBuilder) endSection(section string) error {
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
-// (Key, Order) and a live lifecycle.
+// (Key, Order) and a live lifecycle, under context.Background(): a configured stamper
+// that reads a call identity off the context finds none. See BeginCtx.
 func (inst *PersistStore) Begin(id string, ts time.Time) *PersistEntityBuilder {
+	return inst.BeginCtx(context.Background(), id, ts)
+}
+
+// BeginCtx is Begin with the context the configured stampers consult
+// (ADR-0295 §SD7) — where a call identity reaches an actor stamper. The
+// store stays single-goroutine; ctx is read during this call only.
+func (inst *PersistStore) BeginCtx(ctx context.Context, id string, ts time.Time) *PersistEntityBuilder {
 	lowlevel.InEntityPersiststateTableBeginEntity(inst.dml)
 	lowlevel.InEntityPersiststateTableSetId(inst.dml, id)
 	lowlevel.InEntityPersiststateTableSetTimestamp(inst.dml, ts)
 	lowlevel.InEntityPersiststateTableSetLifecycle(inst.dml, recordstore.LifecycleLive)
 	b := &PersistEntityBuilder{store: inst, key: id, ent: PersistEntity{ID: id, Ts: ts, Lifecycle: recordstore.LifecycleLive}}
-	b.pushed = inst.applyStampers()
+	b.ident, _ = callident.CallIdentityFrom(ctx)
+	b.pushed = inst.applyStampers(ctx)
 	return b
 }
 
@@ -612,6 +664,7 @@ func (inst *PersistEntityBuilder) Commit() (err error) {
 		ent := inst.ent
 		inst.store.notifyWrite(inst.key, &ent)
 	}
+	inst.store.noteCommitted(recordstore.WrittenKey[string, time.Time]{Key: inst.key, Order: inst.ent.Ts, Lifecycle: inst.ent.Lifecycle, Tombstone: inst.tombstone, Identity: inst.ident})
 	return
 }
 
@@ -631,6 +684,12 @@ func (inst *PersistEntityBuilder) Rollback() (err error) {
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
 func (inst *PersistStore) IngestOwner(ts time.Time, rows []Owner) (err error) {
+	return inst.IngestOwnerCtx(context.Background(), ts, rows)
+}
+
+// IngestOwnerCtx is IngestOwner with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *PersistStore) IngestOwnerCtx(ctx context.Context, ts time.Time, rows []Owner) (err error) {
 	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -638,7 +697,7 @@ func (inst *PersistStore) IngestOwner(ts time.Time, rows []Owner) (err error) {
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.Begin(rows[i].ID, ts).AddOwner(rows[i]).Commit()
+		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddOwner(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest owner row %d: %w", i, err)
 			return
@@ -655,6 +714,12 @@ func (inst *PersistStore) IngestOwner(ts time.Time, rows []Owner) (err error) {
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
 func (inst *PersistStore) IngestState(ts time.Time, rows []State) (err error) {
+	return inst.IngestStateCtx(context.Background(), ts, rows)
+}
+
+// IngestStateCtx is IngestState with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *PersistStore) IngestStateCtx(ctx context.Context, ts time.Time, rows []State) (err error) {
 	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -662,7 +727,7 @@ func (inst *PersistStore) IngestState(ts time.Time, rows []State) (err error) {
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.Begin(rows[i].ID, ts).AddState(rows[i]).Commit()
+		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddState(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest state row %d: %w", i, err)
 			return
@@ -679,6 +744,12 @@ func (inst *PersistStore) IngestState(ts time.Time, rows []State) (err error) {
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
 func (inst *PersistStore) IngestWorkingset(ts time.Time, rows []Workingset) (err error) {
+	return inst.IngestWorkingsetCtx(context.Background(), ts, rows)
+}
+
+// IngestWorkingsetCtx is IngestWorkingset with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *PersistStore) IngestWorkingsetCtx(ctx context.Context, ts time.Time, rows []Workingset) (err error) {
 	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -686,7 +757,7 @@ func (inst *PersistStore) IngestWorkingset(ts time.Time, rows []Workingset) (err
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.Begin(rows[i].ID, ts).AddWorkingset(rows[i]).Commit()
+		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddWorkingset(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest workingset row %d: %w", i, err)
 			return
@@ -703,6 +774,12 @@ func (inst *PersistStore) IngestWorkingset(ts time.Time, rows []Workingset) (err
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
 func (inst *PersistStore) IngestColumnWidth(ts time.Time, rows []ColumnWidth) (err error) {
+	return inst.IngestColumnWidthCtx(context.Background(), ts, rows)
+}
+
+// IngestColumnWidthCtx is IngestColumnWidth with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *PersistStore) IngestColumnWidthCtx(ctx context.Context, ts time.Time, rows []ColumnWidth) (err error) {
 	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -710,7 +787,7 @@ func (inst *PersistStore) IngestColumnWidth(ts time.Time, rows []ColumnWidth) (e
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.Begin(rows[i].ID, ts).AddColumnWidth(rows[i]).Commit()
+		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddColumnWidth(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest columnWidth row %d: %w", i, err)
 			return
@@ -756,8 +833,12 @@ func (inst *PersistStore) Flush(ctx context.Context) (n int, err error) {
 	}
 	records = append(inst.pending, records...)
 	inst.pending = nil
+	// One batch id per insert attempt (ADR-0295 §SD6): the executor stamps
+	// it, an observing executor reports it, the write observer is told it.
+	batch := recordstore.NewBatchId()
+	bctx := recordstore.WithBatchId(ctx, batch)
 	if len(records) > 0 {
-		err = inst.exec.InsertArrow(ctx, inst.tableName(), records)
+		err = inst.exec.InsertArrow(bctx, inst.tableName(), records)
 		if err != nil {
 			inst.pending = records
 			err = eh.Errorf("insert into %s: %w", inst.tableName(), err)
@@ -773,6 +854,9 @@ func (inst *PersistStore) Flush(ctx context.Context) (n int, err error) {
 		inst.notifyFlush(k) // durable now — release the views' dirty-window pins
 	}
 	clear(inst.dirty) // flushed — ClickHouse now serves the written state
+	if len(inst.written) > 0 {
+		inst.cfg.WriteObserver.Durable(bctx, batch, inst.takeWritten())
+	}
 	return
 }
 
@@ -813,6 +897,9 @@ func (inst *PersistStore) DiscardPending() {
 		inst.notifyWrite(k, nil) // the cached write never became durable — invalidate
 	}
 	clear(inst.dirty) // nothing local remains — ClickHouse is the truth
+	if len(inst.written) > 0 {
+		inst.cfg.WriteObserver.Discarded(inst.takeWritten())
+	}
 }
 
 // Close discards everything unflushed and releases the store's Arrow
@@ -1289,8 +1376,15 @@ func (inst *PersistStore) Replay(ctx context.Context, key string, fromOrder time
 // attached cache views like any commit — versioned, so GetLive reads
 // the key as absent immediately.
 func (inst *PersistStore) Delete(id string, ts time.Time) (err error) {
+	return inst.DeleteCtx(context.Background(), id, ts)
+}
+
+// DeleteCtx is Delete with the context BeginCtx hands the configured
+// stampers (ADR-0295 §SD7).
+func (inst *PersistStore) DeleteCtx(ctx context.Context, id string, ts time.Time) (err error) {
 	if inst.cfg.TombstoneWrite != nil {
-		b := inst.Begin(id, ts)
+		b := inst.BeginCtx(ctx, id, ts)
+		b.tombstone = true
 		inst.cfg.TombstoneWrite(b)
 		return b.Commit()
 	}
@@ -1298,7 +1392,12 @@ func (inst *PersistStore) Delete(id string, ts time.Time) (err error) {
 	lowlevel.InEntityPersiststateTableSetId(inst.dml, id)
 	lowlevel.InEntityPersiststateTableSetTimestamp(inst.dml, ts)
 	lowlevel.InEntityPersiststateTableSetLifecycle(inst.dml, recordstore.LifecycleTombstone)
+	// The marker row has no attribute to carry a stamp, but the stampers
+	// are consulted all the same: one that refuses (an actor stamper with
+	// no principal on ctx) refuses the deletion too (ADR-0295 §SD8).
+	pushed := inst.applyStampers(ctx)
 	err = lowlevel.InEntityPersiststateTableCommitEntity(inst.dml)
+	inst.dml.PopMembershipsHighCardRef(pushed)
 	if err != nil {
 		_ = lowlevel.InEntityPersiststateTableRollbackEntity(inst.dml) // discard the failed frame; the store stays usable
 		return
@@ -1306,6 +1405,8 @@ func (inst *PersistStore) Delete(id string, ts time.Time) (err error) {
 	inst.buffered++
 	inst.dirty[id] = struct{}{}
 	inst.notifyWrite(id, &PersistEntity{ID: id, Ts: ts, Lifecycle: recordstore.LifecycleTombstone})
+	ci, _ := callident.CallIdentityFrom(ctx)
+	inst.noteCommitted(recordstore.WrittenKey[string, time.Time]{Key: id, Order: ts, Lifecycle: recordstore.LifecycleTombstone, Tombstone: true, Identity: ci})
 	return
 }
 

@@ -22,6 +22,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/functional"
 	"github.com/stergiotis/boxer/public/functional/option"
+	"github.com/stergiotis/boxer/public/identity/callident"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
@@ -168,6 +169,12 @@ type PushoutStoreConfig struct {
 	// Nothing flushes behind the caller's back: Commit takes no context and
 	// never inserts, so the due check runs where the caller asks for it.
 	FlushEvery int
+	// WriteObserver, when set, is told each row a Commit or Delete
+	// buffers, then — after the successful Flush that made them durable —
+	// the batch id of that insert and its keys, or the keys DiscardPending
+	// dropped (ADR-0295 §SD7). It is notification-only and independent of
+	// attached cache views. Nil (the default) tracks nothing.
+	WriteObserver recordstore.WriteObserverI[string, time.Time]
 	// TombstoneDetect is the read half of the state-view tombstone pair
 	// (ADR-0100 Update 2026-08-30): GetLive — the store's and the cache
 	// views' — reads a detected row as absent. It may consult any entity
@@ -218,6 +225,10 @@ type PushoutStore struct {
 	onFlush []func(string)
 	// stampers is cfg.Stampers, consulted per Begin (ADR-0112 M1).
 	stampers []recordstore.ReferenceStamper
+	// written holds the rows the write observer was told were committed and
+	// has not yet been told are durable or discarded (ADR-0295 §SD7); empty
+	// without an observer.
+	written []recordstore.WrittenKey[string, time.Time]
 }
 
 // NewPushoutStore wires the store. A nil alloc selects the Go allocator.
@@ -258,13 +269,12 @@ func (inst *PushoutStore) isTombstone(e *PushoutEntity) bool {
 
 // applyStampers consults the configured stampers and pushes their surrogate
 // ids as ambient HighCardRef memberships onto the open entity (ADR-0112 M1),
-// returning the count so Commit/Rollback pop exactly that many.
-// context.Background() bounds the interning — the in-memory interner ignores
-// it; a ctx-carrying Begin is the future seam for a durable one. No stampers
-// means no pushes: inert.
-func (inst *PushoutStore) applyStampers() (pushed int) {
+// returning the count so Commit/Rollback pop exactly that many. ctx is
+// BeginCtx's — the call identity a stamper interns rides on it (ADR-0295
+// §SD7). No stampers means no pushes: inert.
+func (inst *PushoutStore) applyStampers(ctx context.Context) (pushed int) {
 	for _, s := range inst.stampers {
-		for id, err := range s.Current(context.Background()) {
+		for id, err := range s.Current(ctx) {
 			if err != nil {
 				inst.dml.AppendError(err)
 				continue
@@ -292,6 +302,32 @@ func (inst *PushoutStore) notifyWrite(key string, ent *PushoutEntity) {
 func (inst *PushoutStore) notifyFlush(key string) {
 	for _, f := range inst.onFlush {
 		f(key)
+	}
+}
+
+// noteCommitted tells the write observer about a buffered row and keeps
+// it until the observer is told its fate (ADR-0295 §SD7).
+func (inst *PushoutStore) noteCommitted(w recordstore.WrittenKey[string, time.Time]) {
+	if inst.cfg.WriteObserver == nil {
+		return
+	}
+	inst.written = append(inst.written, w)
+	inst.cfg.WriteObserver.Committed(w)
+}
+
+// takeWritten detaches the rows noteCommitted kept and ranges over them.
+// Detaching before the observer runs means a row it commits from its
+// callback lands in a fresh buffer, reported with a later flush, and a
+// panicking observer cannot have the same rows reported twice.
+func (inst *PushoutStore) takeWritten() iter.Seq[recordstore.WrittenKey[string, time.Time]] {
+	written := inst.written
+	inst.written = nil
+	return func(yield func(recordstore.WrittenKey[string, time.Time]) bool) {
+		for _, w := range written {
+			if !yield(w) {
+				return
+			}
+		}
 	}
 }
 
@@ -427,6 +463,13 @@ type PushoutEntityBuilder struct {
 	// pushed counts the ambient memberships Begin pushed via the stampers;
 	// Commit/Rollback pop exactly that many (ADR-0112 M1).
 	pushed int
+	// ident is BeginCtx's call identity: who committed the row, which the
+	// write observer is told — the flush that ships it may run for someone
+	// else (ADR-0295 §SD7).
+	ident callident.CallIdentity
+	// tombstone marks the frame Delete opened for a configured tombstone
+	// pair, so the write observer is told the row is a deletion.
+	tombstone bool
 }
 
 // endSection closes one section's frame. The buffer calls it once per
@@ -454,14 +497,23 @@ func (inst *PushoutEntityBuilder) endSection(section string) error {
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
-// (Key, Order) and a live lifecycle.
+// (Key, Order) and a live lifecycle, under context.Background(): a configured stamper
+// that reads a call identity off the context finds none. See BeginCtx.
 func (inst *PushoutStore) Begin(id string, ts time.Time) *PushoutEntityBuilder {
+	return inst.BeginCtx(context.Background(), id, ts)
+}
+
+// BeginCtx is Begin with the context the configured stampers consult
+// (ADR-0295 §SD7) — where a call identity reaches an actor stamper. The
+// store stays single-goroutine; ctx is read during this call only.
+func (inst *PushoutStore) BeginCtx(ctx context.Context, id string, ts time.Time) *PushoutEntityBuilder {
 	lowlevel.InEntityPushoutTableBeginEntity(inst.dml)
 	lowlevel.InEntityPushoutTableSetId(inst.dml, id)
 	lowlevel.InEntityPushoutTableSetTimestamp(inst.dml, ts)
 	lowlevel.InEntityPushoutTableSetLifecycle(inst.dml, recordstore.LifecycleLive)
 	b := &PushoutEntityBuilder{store: inst, key: id, ent: PushoutEntity{ID: id, Ts: ts, Lifecycle: recordstore.LifecycleLive}}
-	b.pushed = inst.applyStampers()
+	b.ident, _ = callident.CallIdentityFrom(ctx)
+	b.pushed = inst.applyStampers(ctx)
 	return b
 }
 
@@ -609,6 +661,7 @@ func (inst *PushoutEntityBuilder) Commit() (err error) {
 		ent := inst.ent
 		inst.store.notifyWrite(inst.key, &ent)
 	}
+	inst.store.noteCommitted(recordstore.WrittenKey[string, time.Time]{Key: inst.key, Order: inst.ent.Ts, Lifecycle: inst.ent.Lifecycle, Tombstone: inst.tombstone, Identity: inst.ident})
 	return
 }
 
@@ -628,6 +681,12 @@ func (inst *PushoutEntityBuilder) Rollback() (err error) {
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
 func (inst *PushoutStore) IngestEnvelope(ts time.Time, rows []Envelope) (err error) {
+	return inst.IngestEnvelopeCtx(context.Background(), ts, rows)
+}
+
+// IngestEnvelopeCtx is IngestEnvelope with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *PushoutStore) IngestEnvelopeCtx(ctx context.Context, ts time.Time, rows []Envelope) (err error) {
 	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -635,7 +694,7 @@ func (inst *PushoutStore) IngestEnvelope(ts time.Time, rows []Envelope) (err err
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.Begin(rows[i].ID, ts).AddEnvelope(rows[i]).Commit()
+		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddEnvelope(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest envelope row %d: %w", i, err)
 			return
@@ -652,6 +711,12 @@ func (inst *PushoutStore) IngestEnvelope(ts time.Time, rows []Envelope) (err err
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
 func (inst *PushoutStore) IngestLogEntry(ts time.Time, rows []LogEntry) (err error) {
+	return inst.IngestLogEntryCtx(context.Background(), ts, rows)
+}
+
+// IngestLogEntryCtx is IngestLogEntry with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *PushoutStore) IngestLogEntryCtx(ctx context.Context, ts time.Time, rows []LogEntry) (err error) {
 	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -659,7 +724,7 @@ func (inst *PushoutStore) IngestLogEntry(ts time.Time, rows []LogEntry) (err err
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.Begin(rows[i].ID, ts).AddLogEntry(rows[i]).Commit()
+		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddLogEntry(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest logEntry row %d: %w", i, err)
 			return
@@ -676,6 +741,12 @@ func (inst *PushoutStore) IngestLogEntry(ts time.Time, rows []LogEntry) (err err
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
 func (inst *PushoutStore) IngestSnapshot(ts time.Time, rows []Snapshot) (err error) {
+	return inst.IngestSnapshotCtx(context.Background(), ts, rows)
+}
+
+// IngestSnapshotCtx is IngestSnapshot with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *PushoutStore) IngestSnapshotCtx(ctx context.Context, ts time.Time, rows []Snapshot) (err error) {
 	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -683,7 +754,7 @@ func (inst *PushoutStore) IngestSnapshot(ts time.Time, rows []Snapshot) (err err
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.Begin(rows[i].ID, ts).AddSnapshot(rows[i]).Commit()
+		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddSnapshot(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest snapshot row %d: %w", i, err)
 			return
@@ -700,6 +771,12 @@ func (inst *PushoutStore) IngestSnapshot(ts time.Time, rows []Snapshot) (err err
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
 func (inst *PushoutStore) IngestRetention(ts time.Time, rows []Retention) (err error) {
+	return inst.IngestRetentionCtx(context.Background(), ts, rows)
+}
+
+// IngestRetentionCtx is IngestRetention with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *PushoutStore) IngestRetentionCtx(ctx context.Context, ts time.Time, rows []Retention) (err error) {
 	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -707,7 +784,7 @@ func (inst *PushoutStore) IngestRetention(ts time.Time, rows []Retention) (err e
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.Begin(rows[i].ID, ts).AddRetention(rows[i]).Commit()
+		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddRetention(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest retention row %d: %w", i, err)
 			return
@@ -753,8 +830,12 @@ func (inst *PushoutStore) Flush(ctx context.Context) (n int, err error) {
 	}
 	records = append(inst.pending, records...)
 	inst.pending = nil
+	// One batch id per insert attempt (ADR-0295 §SD6): the executor stamps
+	// it, an observing executor reports it, the write observer is told it.
+	batch := recordstore.NewBatchId()
+	bctx := recordstore.WithBatchId(ctx, batch)
 	if len(records) > 0 {
-		err = inst.exec.InsertArrow(ctx, inst.tableName(), records)
+		err = inst.exec.InsertArrow(bctx, inst.tableName(), records)
 		if err != nil {
 			inst.pending = records
 			err = eh.Errorf("insert into %s: %w", inst.tableName(), err)
@@ -770,6 +851,9 @@ func (inst *PushoutStore) Flush(ctx context.Context) (n int, err error) {
 		inst.notifyFlush(k) // durable now — release the views' dirty-window pins
 	}
 	clear(inst.dirty) // flushed — ClickHouse now serves the written state
+	if len(inst.written) > 0 {
+		inst.cfg.WriteObserver.Durable(bctx, batch, inst.takeWritten())
+	}
 	return
 }
 
@@ -810,6 +894,9 @@ func (inst *PushoutStore) DiscardPending() {
 		inst.notifyWrite(k, nil) // the cached write never became durable — invalidate
 	}
 	clear(inst.dirty) // nothing local remains — ClickHouse is the truth
+	if len(inst.written) > 0 {
+		inst.cfg.WriteObserver.Discarded(inst.takeWritten())
+	}
 }
 
 // Close discards everything unflushed and releases the store's Arrow
@@ -1286,8 +1373,15 @@ func (inst *PushoutStore) Replay(ctx context.Context, key string, fromOrder time
 // attached cache views like any commit — versioned, so GetLive reads
 // the key as absent immediately.
 func (inst *PushoutStore) Delete(id string, ts time.Time) (err error) {
+	return inst.DeleteCtx(context.Background(), id, ts)
+}
+
+// DeleteCtx is Delete with the context BeginCtx hands the configured
+// stampers (ADR-0295 §SD7).
+func (inst *PushoutStore) DeleteCtx(ctx context.Context, id string, ts time.Time) (err error) {
 	if inst.cfg.TombstoneWrite != nil {
-		b := inst.Begin(id, ts)
+		b := inst.BeginCtx(ctx, id, ts)
+		b.tombstone = true
 		inst.cfg.TombstoneWrite(b)
 		return b.Commit()
 	}
@@ -1295,7 +1389,12 @@ func (inst *PushoutStore) Delete(id string, ts time.Time) (err error) {
 	lowlevel.InEntityPushoutTableSetId(inst.dml, id)
 	lowlevel.InEntityPushoutTableSetTimestamp(inst.dml, ts)
 	lowlevel.InEntityPushoutTableSetLifecycle(inst.dml, recordstore.LifecycleTombstone)
+	// The marker row has no attribute to carry a stamp, but the stampers
+	// are consulted all the same: one that refuses (an actor stamper with
+	// no principal on ctx) refuses the deletion too (ADR-0295 §SD8).
+	pushed := inst.applyStampers(ctx)
 	err = lowlevel.InEntityPushoutTableCommitEntity(inst.dml)
+	inst.dml.PopMembershipsHighCardRef(pushed)
 	if err != nil {
 		_ = lowlevel.InEntityPushoutTableRollbackEntity(inst.dml) // discard the failed frame; the store stays usable
 		return
@@ -1303,6 +1402,8 @@ func (inst *PushoutStore) Delete(id string, ts time.Time) (err error) {
 	inst.buffered++
 	inst.dirty[id] = struct{}{}
 	inst.notifyWrite(id, &PushoutEntity{ID: id, Ts: ts, Lifecycle: recordstore.LifecycleTombstone})
+	ci, _ := callident.CallIdentityFrom(ctx)
+	inst.noteCommitted(recordstore.WrittenKey[string, time.Time]{Key: id, Order: ts, Lifecycle: recordstore.LifecycleTombstone, Tombstone: true, Identity: ci})
 	return
 }
 

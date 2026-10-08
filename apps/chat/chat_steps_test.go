@@ -16,7 +16,7 @@ import (
 
 // The tool loop records each model call and each tool call as it happens,
 // and a landed turn's tool entries keep their steps to inspect.
-func TestTheTrailRecordsEveryStep(t *testing.T) {
+func TestTheStepsRecordEveryStep(t *testing.T) {
 	bus := inprocbus.NewInst(zerolog.Nop())
 	model := &scriptedModel{replies: []openaichat.CompletionResponse{
 		toolCall("c1", "request_access", `{"plan":"tidy the note","open":[{"app":"notes"}],"title":"Asking"}`),
@@ -63,7 +63,7 @@ func TestTheTrailRecordsEveryStep(t *testing.T) {
 }
 
 func TestStepsOfToolsPairsARoundsFirstToolWithItsModelCall(t *testing.T) {
-	steps := []trailStep{{kind: stepModel, round: 0}, {kind: stepTool, name: "a"}, {kind: stepTool, name: "b"}, {kind: stepModel, round: 1}}
+	steps := []turnStep{{kind: stepModel, round: 0}, {kind: stepTool, name: "a"}, {kind: stepTool, name: "b"}, {kind: stepModel, round: 1}}
 	got := stepsOfTools(steps)
 	require.Len(t, got, 2)
 	assert.Len(t, got[0], 2)
@@ -81,11 +81,11 @@ func TestClipKeepsWholeRunes(t *testing.T) {
 	assert.Equal(t, "short", clip("short", 5))
 }
 
-func TestANilTrailRecordsNothing(t *testing.T) {
-	var tr *turnTrail
+func TestNilStepsRecordNothing(t *testing.T) {
+	var tr *turnSteps
 	tr.reset()
-	i := tr.begin(trailStep{})
-	tr.finish(i, func(s *trailStep) { s.name = "x" })
+	i := tr.begin(turnStep{})
+	tr.finish(i, func(s *turnStep) { s.name = "x" })
 	steps, _, changed := tr.snapshot(0)
 	assert.Nil(t, steps)
 	assert.False(t, changed)
@@ -118,10 +118,10 @@ func TestAChatsRoundLimitBoundsTheTurn(t *testing.T) {
 
 // A tool call waiting on the person says so while it waits, and keeps how
 // long it waited once it is done.
-func TestATrailStepWaitsOnThePerson(t *testing.T) {
-	tr := &turnTrail{}
-	tr.begin(trailStep{kind: stepModel})
-	i := tr.begin(trailStep{kind: stepTool, name: "call_operation"})
+func TestATurnStepWaitsOnThePerson(t *testing.T) {
+	tr := &turnSteps{}
+	tr.begin(turnStep{kind: stepModel})
+	i := tr.begin(turnStep{kind: stepTool, name: "call_operation"})
 	tr.personWait(true)
 	steps, _, _ := tr.snapshot(0)
 	assert.True(t, steps[i].waitingOnPerson())
@@ -133,7 +133,7 @@ func TestATrailStepWaitsOnThePerson(t *testing.T) {
 	assert.False(t, steps[i].waitingOnPerson())
 	assert.GreaterOrEqual(t, steps[i].waited, 5*time.Millisecond)
 	tr.personWait(true)
-	tr.finish(i, func(*trailStep) {})
+	tr.finish(i, func(*turnStep) {})
 	steps, _, _ = tr.snapshot(0)
 	assert.False(t, steps[i].waitingOnPerson(), "a finished step waits no more")
 	assert.NotContains(t, stepLine(&steps[i]), "waited", "a wait under a second is no decision")
@@ -143,6 +143,6 @@ func TestATrailStepWaitsOnThePerson(t *testing.T) {
 
 // A step with nothing to show has nothing to copy.
 func TestAStepWithoutDetailHasNone(t *testing.T) {
-	assert.False(t, (&trailStep{kind: stepModel, tools: 1}).hasDetail())
-	assert.True(t, (&trailStep{kind: stepModel, reasoning: "x"}).hasDetail())
+	assert.False(t, (&turnStep{kind: stepModel, tools: 1}).hasDetail())
+	assert.True(t, (&turnStep{kind: stepModel, reasoning: "x"}).hasDetail())
 }

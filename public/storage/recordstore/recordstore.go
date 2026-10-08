@@ -8,7 +8,10 @@
 //
 // This package holds only what generated code and adapters share: the
 // executor seam, the Scan options and the synthetic-sequence Order
-// helpers. The store types themselves are emitted per schema by
+// helpers — and the mechanics an audit trail needs at that seam
+// (ADR-0295): the per-call batch id, the log_comment stamp executors attach,
+// the observing executor decorator, and the write-observer contract of
+// generated stores. The store types themselves are emitted per schema by
 // recordstore/gen; concrete ClickHouse executors live in
 // recordstore/chexec (clickhouse local) and keelson/data/storeexec (HTTP),
 // and recordstore/ipcexec is the write-only Arrow IPC stream executor for
@@ -29,7 +32,8 @@ import (
 )
 
 // ReferenceStamper is the ADR-0112 M1 seam. A generated store consults its
-// configured stampers once per Begin; each yields the surrogate ids to stamp as
+// configured stampers once per Begin, with BeginCtx's context (ADR-0295
+// §SD7); each yields the surrogate ids to stamp as
 // additive HighCardRef memberships onto every attribute the entity writes (via
 // the DML ambient-membership primitive). Current captures whatever context it
 // needs at that point — for provenance, the writer's host and call stack — and

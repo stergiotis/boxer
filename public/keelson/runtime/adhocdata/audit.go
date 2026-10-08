@@ -73,7 +73,6 @@ type AuditRecord struct {
 // dispatcher: who an agent-caused request is work of (§SD5), and whether
 // the task's grant lists what a read reaches (§SD6).
 type DispatcherI interface {
-	app.CallContextI
 	app.DelegationI
 }
 

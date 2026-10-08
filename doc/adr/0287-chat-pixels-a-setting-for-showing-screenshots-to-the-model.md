@@ -353,7 +353,14 @@ a test.
 
 ## Updates
 
-None.
+### 2026-10-08 — what a shown row records
+
+A `shown` row records the decision to show, not that the pixels were sent.
+The host buffers it when the coordinator reports it. The write-ahead of the
+next model call — the one that carries the pixels — lands it before that
+request leaves (ADR-0277 §SD3), and that call's `llmMessage` row names the
+digest. A turn stopped between the decision and that call leaves a `shown`
+row that no message row names.
 
 ## References
 

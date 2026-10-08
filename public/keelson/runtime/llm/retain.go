@@ -40,9 +40,11 @@ type turn struct {
 	parentHashes []string
 	reqHashes    []string
 	// requested says the request's rows were buffered; failed is the first
-	// error buffering any row.
+	// error buffering any row. notAhead says they were not on the trail
+	// when the request left (ADR-0277 §SD3).
 	requested bool
 	failed    error
+	notAhead  bool
 }
 
 // logical is the logical conversation after the turn, one hash per message:

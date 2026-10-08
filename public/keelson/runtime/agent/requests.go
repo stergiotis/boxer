@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -373,7 +374,7 @@ func (inst *Service) approve(r *request) (route *held) {
 		t.desktop = r.desktop
 	}
 	r.state = reqStateApproved
-	inst.grantEvent(event, inst.decider(), "", t, nil)
+	inst.grantEvent(event, inst.decider(), "", t, r)
 	route = r.held
 	return
 }
@@ -534,12 +535,16 @@ func (inst *Service) endTaskAsked(t *task, why string, by string, asked wireCaus
 }
 
 // detachEntry removes one instance from a task.
-func (inst *Service) detachEntry(t *task, key uint64, why string) {
+func (inst *Service) detachEntry(t *task, key uint64, why string, decidedBy string) {
 	inst.mu.Lock()
 	e := t.entries[key]
 	delete(t.entries, key)
 	ids := t.queuedOn(key)
 	inst.discardProposals(t, key, why)
+	if e != nil {
+		// The grant shrinks: its history on the trail says so (ADR-0277 §SD2).
+		inst.grantEvent(trail.GrantEventDetached, decidedBy, "window "+strconv.FormatUint(key, 10)+": "+why, t, nil)
+	}
 	inst.mu.Unlock()
 	if e == nil || inst.cfg.Host == nil {
 		return
@@ -572,7 +577,7 @@ func (inst *Service) instanceClosed(msg *app.Msg) {
 		inst.endTask(t, "the coordinator closed", "host")
 	}
 	for _, t := range detaches {
-		inst.detachEntry(t, ev.InstanceKey, "the window closed")
+		inst.detachEntry(t, ev.InstanceKey, "the window closed", "host")
 	}
 }
 
