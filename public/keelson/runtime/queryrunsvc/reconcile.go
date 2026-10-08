@@ -23,21 +23,19 @@ import (
 // the resolved pull URL. It is also callable on its own for a
 // dry-run-style setup against a scratch database.
 func (s *Service) Reconcile(ctx context.Context) (err error) {
-	store, err := chstore.New(chstore.Config{
-		URL:      s.cfg.ChURL,
-		User:     s.cfg.ChUser,
-		Password: s.cfg.Password,
-		Database: s.cfg.Database,
-		Table:    s.cfg.Table,
-	})
+	// chstore's own DDL, run through this service's client so it carries
+	// the reconcile tag like everything else the service sends.
+	stmts, err := chstore.SetupStatements(chstore.Config{Database: s.cfg.Database, Table: s.cfg.Table}, "")
 	if err != nil {
 		err = eh.Errorf("queryrunsvc: reconcile: %w", err)
 		return
 	}
-	err = store.SetupTable(ctx, "")
-	if err != nil {
-		err = eh.Errorf("queryrunsvc: reconcile: facts ddl: %w", err)
-		return
+	for _, stmt := range stmts {
+		err = s.cli.Exec(ctx, stmt)
+		if err != nil {
+			err = eh.Errorf("queryrunsvc: reconcile: facts ddl: %w", err)
+			return
+		}
 	}
 	// SetupTable is CREATE IF NOT EXISTS — it cannot reconcile a table
 	// from an older schema generation. Verify the destination actually

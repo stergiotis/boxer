@@ -217,20 +217,32 @@ func ComposeSetupSQL(cfg Config, engineClause string) (sql string, err error) {
 // means ALTER TABLE ... RENAME COLUMN per renamed column, or dropping and
 // re-creating the table if the trail is expendable.
 func (inst *Store) SetupTable(ctx context.Context, engineClause string) (err error) {
-	var ddl string
-	ddl, err = ComposeSetupSQL(inst.cfg, engineClause)
+	var stmts []string
+	stmts, err = SetupStatements(inst.cfg, engineClause)
 	if err != nil {
 		return
 	}
-	for _, stmt := range splitOnSemicolon(ddl) {
-		stmt = strings.TrimSpace(stmt)
-		if stmt == "" {
-			continue
-		}
+	for _, stmt := range stmts {
 		err = inst.cli.Exec(ctx, stmt)
 		if err != nil {
 			err = eh.Errorf("chstore: setup: exec: %w", err)
 			return
+		}
+	}
+	return
+}
+
+// SetupStatements is ComposeSetupSQL split into the statements SetupTable
+// executes one by one, for a caller that runs them through its own client
+// (queryrunsvc, which tags every query it sends).
+func SetupStatements(cfg Config, engineClause string) (stmts []string, err error) {
+	ddl, err := ComposeSetupSQL(cfg, engineClause)
+	if err != nil {
+		return
+	}
+	for _, stmt := range splitOnSemicolon(ddl) {
+		if stmt = strings.TrimSpace(stmt); stmt != "" {
+			stmts = append(stmts, stmt)
 		}
 	}
 	return

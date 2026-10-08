@@ -54,7 +54,7 @@ func TestComposeExtractSql(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, sql, "FROM system.query_log")
 	require.Contains(t, sql, "type != 'QueryStart'")
-	require.Contains(t, sql, "'queryrunsd-extract', 'queryrunsd-refresh'")
+	require.Contains(t, sql, "'queryrunsd-extract', 'queryrunsd-refresh', 'queryrunsd-reconcile'")
 	require.Contains(t, sql, "position(query, 'http://127.0.0.1:8127/pull') = 0")
 	require.Contains(t, sql, "SELECT max("+ColTs+") FROM boxer.facts")
 	require.Contains(t, sql, WatermarkOverlap)

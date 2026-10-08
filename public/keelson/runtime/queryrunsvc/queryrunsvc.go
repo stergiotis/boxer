@@ -197,12 +197,39 @@ func New(cfg Config, log zerolog.Logger) (s *Service, err error) {
 	}
 	s = &Service{
 		cfg:    cfg,
-		cli:    chclient.New(chclient.Config{URL: cfg.ChURL, User: cfg.ChUser, Password: cfg.Password}, nil),
+		cli:    chclient.New(chclient.Config{URL: cfg.ChURL, User: cfg.ChUser, Password: cfg.Password}, taggedHTTPClient(queryrunfacts.ReconcileTag)),
 		log:    log,
 		failed: make(chan error, 1),
 	}
 	s.srv = &http.Server{Handler: s.handler(), ReadHeaderTimeout: 5 * time.Second}
 	return
+}
+
+// taggedHTTPClient sends every query with log_comment set to tag, so the
+// service's own traffic stays out of what it captures. A query's own
+// SETTINGS log_comment — the extract's — takes precedence over the URL
+// parameter. The response-header bound matches chclient's default client.
+func taggedHTTPClient(tag string) (c *http.Client) {
+	base := http.DefaultTransport
+	if tr, ok := base.(*http.Transport); ok {
+		tr = tr.Clone()
+		tr.ResponseHeaderTimeout = 30 * time.Second
+		base = tr
+	}
+	return &http.Client{Transport: logCommentTransport{base: base, tag: tag}}
+}
+
+type logCommentTransport struct {
+	base http.RoundTripper
+	tag  string
+}
+
+func (inst logCommentTransport) RoundTrip(req *http.Request) (resp *http.Response, err error) {
+	req = req.Clone(req.Context())
+	q := req.URL.Query()
+	q.Set("log_comment", inst.tag)
+	req.URL.RawQuery = q.Encode()
+	return inst.base.RoundTrip(req)
 }
 
 // FactsTable is the qualified destination table.
