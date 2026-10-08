@@ -395,6 +395,16 @@ func TestIsVectorScanRejection_RealBroker(t *testing.T) {
 		t.Errorf("tripwireVectorScanAccepts(a+) = %v, %v; want true, nil", accepted, err)
 	}
 
+	// The Multi tab's wording of a real refusal: the pattern as typed, and
+	// the index pointing into it.
+	_, err := runMultiMatchBlocking(ctx, inst, "xa", []string{inst.effectivePattern(`(?U)a+`)})
+	if err == nil {
+		t.Fatalf("VectorScan accepted (?U)a+")
+	}
+	if got := rejectionText(clickHouseMessage(err)); !strings.Contains(got, "Pattern '(?U)a+'") || !strings.Contains(got, "at index 0") {
+		t.Errorf("rejection worded as %q; want the typed pattern and an index into it", got)
+	}
+
 	inst.setBus(nil)
 	if _, err := inst.tripwireVectorScanAccepts(ctx, `(?U)a+`, "xa"); err == nil {
 		t.Errorf("no bus: want a transport error, got nil")

@@ -696,3 +696,38 @@ func TestInsertTokenQueuesForTheFocusedInput(t *testing.T) {
 		t.Errorf("a token for another input disturbed the pattern's queue")
 	}
 }
+
+// TestErrorTextsLeaveOutTheAddedFlags pins that a message about a pattern
+// quotes the pattern as the person wrote it: the flag group the app puts
+// in front is removed — one group, so one the person typed stays — and a
+// byte index VectorScan reports moves back with it.
+func TestErrorTextsLeaveOutTheAddedFlags(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		typed string
+		want  string
+	}{
+		{`(unclosed`, "missing closing ): `(unclosed`"},
+		{`(?s)(`, "missing closing ): `(?s)(`"},
+		{`a\2`, "invalid escape sequence: `\\2`"},
+	} {
+		inst := newTestApp(t)
+		inst.caseInsensitive = true
+		_, err := regexp.Compile(inst.effectivePattern(tc.typed))
+		if err == nil {
+			t.Fatalf("%q compiled", tc.typed)
+		}
+		if got := compileErrorText(err); !strings.HasSuffix(got, tc.want) {
+			t.Errorf("compileErrorText for %q = %q; want it to end in %q", tc.typed, got, tc.want)
+		}
+	}
+
+	sent := "Pattern '(?is)(?U)a+' failed with error 'Unrecognised character after (? at index 5.' (BAD_ARGUMENTS)"
+	want := "Pattern '(?U)a+' failed with error 'Unrecognised character after (? at index 0.' (BAD_ARGUMENTS)"
+	if got := rejectionText(sent); got != want {
+		t.Errorf("rejectionText = %q; want %q", got, want)
+	}
+	if got := rejectionText("Substitution '\\9' is invalid"); got != "Substitution '\\9' is invalid" {
+		t.Errorf("a message quoting no pattern changed: %q", got)
+	}
+}

@@ -1,0 +1,10 @@
+# The scripted model of chat-regex-explorer.scene.md (ADR-0269): one reply
+# per line, picked by the conversation's position.
+{"tool":"request_access","args":{"plan":"try a capture-group pattern in the regex explorer and compare with ClickHouse","open":[{"app":"regex_explorer"}],"destinations":[]}}
+{"tool":"open_window","args":{"app":"regex_explorer"}}
+{"tool":"call_operation","args":{"window":"$window","operation":"get_state","args":{},"title":"Reading the explorer"}}
+{"tool":"call_operation","args":{"window":"$window","operation":"set_inputs","args":{"pattern":"(\\w+)@([\\w.]+)","haystack":"alice@example.com bob@test.org"},"reason":"a capture-group pattern over two addresses"}}
+{"tool":"call_operation","args":{"window":"$window","operation":"show_tab","args":{"tab":"functions"}}}
+{"tool":"call_operation","args":{"window":"$window","operation":"get_matches","args":{}}}
+{"tool":"call_operation","args":{"window":"$window","operation":"get_functions","args":{}}}
+{"content":"extractAll returns the user names, not the whole addresses: the pattern captures, so ClickHouse gives group 1."}

@@ -42,7 +42,7 @@ report hits.
 {"do":"capture","text":"regex-explorer-functions"}
 {"do":"click","name":"Multi-pattern (VectorScan)"}
 {"do":"type","role":"multiline_text_input","nth":1,"text":"@test\\.\n(?U)a+\n[0-9]{2}"}
-{"do":"wait","valueContains":"failed with error","role":"label","settleMs":1500}
+{"do":"wait","valueContains":"Pattern '(?U)a+' failed with error","role":"label","settleMs":1500,"comment":"the pattern as typed, without the flag group the app sends"}
 {"do":"read","valueContains":"refused by VectorScan","role":"label","pattern":"(?P<hits>\\d+) of (?P<sent>\\d+) line\\(s\\) hit · (?P<refused>\\d+) refused"}
 {"do":"expect","of":"hits","eq":1}
 {"do":"expect","of":"refused","eq":1}

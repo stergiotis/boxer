@@ -43,6 +43,9 @@ const (
 	// RefreshTag marks the refreshable MV's tick queries via the
 	// SETTINGS clause in the MV body.
 	RefreshTag = "queryrunsd-refresh"
+	// ReconcileTag marks everything else the service sends: the boot
+	// reconciliation's DDL, flush and schema checks.
+	ReconcileTag = "queryrunsd-reconcile"
 )
 
 // Physical leeway wire-column names of boxer.facts the pipeline SQL
@@ -142,19 +145,19 @@ SELECT
   type,
   toUnixTimestamp64Micro(event_time_microseconds) AS event_us,
   query_id,
-  substring(query, 1, %d) AS query,
+  substringUTF8(query, 1, %d) AS query,
   normalized_query_hash,
   query_kind,
   query_duration_ms,
   read_rows, read_bytes, written_rows, written_bytes, result_rows, result_bytes,
   memory_usage,
   exception_code,
-  exception,
+  substringUTF8(exception, 1, %d) AS exception,
   ProfileEvents,
   log_comment
 FROM system.query_log
 WHERE type != 'QueryStart'
-  AND log_comment NOT IN (%s, %s)
+  AND log_comment NOT IN (%s, %s, %s)
   AND position(query, %s) = 0%s
   AND event_time_microseconds >= lo
   AND (query_id, toUnixTimestamp64Micro(event_time_microseconds)) NOT IN (
@@ -166,8 +169,8 @@ LIMIT %d
 SETTINGS output_format_json_quote_64bit_integers=0, log_comment=%s
 FORMAT JSONEachRow`,
 		watermarkSql(factsTable), floor, WatermarkOverlap,
-		QueryTextCap,
-		quoteLiteral(ExtractTag), quoteLiteral(RefreshTag),
+		QueryTextCap, ExceptionTextCap,
+		quoteLiteral(ExtractTag), quoteLiteral(RefreshTag), quoteLiteral(ReconcileTag),
 		quoteLiteral(pullURL), scopePredicate,
 		ColNaturalKey, ColTs, factsTable,
 		ColTs, ColSymbolLr, vocab.MembKindQueryRun.GetId().Value(),

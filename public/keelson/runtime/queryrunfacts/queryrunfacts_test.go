@@ -54,7 +54,10 @@ func TestComposeExtractSql(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, sql, "FROM system.query_log")
 	require.Contains(t, sql, "type != 'QueryStart'")
-	require.Contains(t, sql, "'queryrunsd-extract', 'queryrunsd-refresh'")
+	require.Contains(t, sql, "'queryrunsd-extract', 'queryrunsd-refresh', 'queryrunsd-reconcile'")
+	// Cuts land between characters, not inside one.
+	require.Contains(t, sql, "substringUTF8(query, 1, 16384)")
+	require.Contains(t, sql, "substringUTF8(exception, 1, 4096)")
 	require.Contains(t, sql, "position(query, 'http://127.0.0.1:8127/pull') = 0")
 	require.Contains(t, sql, "SELECT max("+ColTs+") FROM boxer.facts")
 	require.Contains(t, sql, WatermarkOverlap)
@@ -138,6 +141,17 @@ func TestComposeMvSql(t *testing.T) {
 	drop, err := ComposeDropMvSql("boxer.mv_queryruns")
 	require.NoError(t, err)
 	require.Equal(t, "DROP TABLE IF EXISTS boxer.mv_queryruns", drop)
+}
+
+// The reconciler reads the pull URL back out of the stored view to tell
+// whether another instance owns it; the parse must invert ComposeMvSql.
+func TestParseMvPullURL(t *testing.T) {
+	sql, err := ComposeMvSql("boxer.mv_queryruns", "boxer.facts", "http://127.0.0.1:8127/pull", 5)
+	require.NoError(t, err)
+	require.Equal(t, "http://127.0.0.1:8127/pull", ParseMvPullURL(sql))
+	require.Empty(t, ParseMvPullURL(""))
+	require.Empty(t, ParseMvPullURL("CREATE TABLE x (a UInt8) ENGINE Memory"))
+	require.Contains(t, ExistingMvSql("boxer"), "name = 'mv_queryruns'")
 }
 
 func TestBuildEntitiesEncodesRows(t *testing.T) {

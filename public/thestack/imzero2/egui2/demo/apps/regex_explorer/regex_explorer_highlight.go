@@ -421,7 +421,7 @@ func countValidMultiLines(lines []multiLine) (n int) {
 // hint text already communicates "enter something").
 func (inst *App) renderPatternCompileError() {
 	if err := inst.analysis().err; err != nil {
-		regexedit.ErrorLabel("regex compile error: " + err.Error())
+		regexedit.ErrorLabel("regex compile error: " + compileErrorText(err))
 	}
 }
 
@@ -457,9 +457,9 @@ func (inst *App) renderPatternListCompileErrors(lines []multiLine) {
 	}
 	var msg string
 	if badCount == 1 {
-		msg = "line " + strconv.Itoa(firstBadLine) + ": " + firstErr.Error()
+		msg = "line " + strconv.Itoa(firstBadLine) + ": " + compileErrorText(firstErr)
 	} else {
-		msg = "line " + strconv.Itoa(firstBadLine) + ": " + firstErr.Error() + " (and " + strconv.Itoa(badCount-1) + " more line(s) invalid)"
+		msg = "line " + strconv.Itoa(firstBadLine) + ": " + compileErrorText(firstErr) + " (and " + strconv.Itoa(badCount-1) + " more line(s) invalid)"
 	}
 	// The error affordance moved to widgets/regexedit with the editor
 	// itself (ADR-0164 §SD4), so every regex input renders compile

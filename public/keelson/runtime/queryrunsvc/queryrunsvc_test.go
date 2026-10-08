@@ -144,6 +144,20 @@ func TestServeFailureSurfaces(t *testing.T) {
 	}
 }
 
+// Everything the service sends carries the reconcile tag, so its boot DDL
+// and checks stay out of what it captures.
+func TestClientTagsEveryQuery(t *testing.T) {
+	got := make(chan string, 1)
+	ch := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got <- r.URL.Query().Get("log_comment")
+	}))
+	defer ch.Close()
+	s, err := New(Config{ChURL: ch.URL + "/"}, zerolog.Nop())
+	require.NoError(t, err)
+	require.NoError(t, s.cli.Exec(context.Background(), "SYSTEM FLUSH LOGS"))
+	require.Equal(t, queryrunfacts.ReconcileTag, <-got)
+}
+
 func TestHealthz(t *testing.T) {
 	s, err := New(Config{}, zerolog.Nop())
 	require.NoError(t, err)
