@@ -258,7 +258,7 @@ a dataset whole, through a read that takes no statement.
     | Offered | Not offered |
     | --- | --- |
     | reading state, results and history | changing the SQL, binding datasets, publishing — the document is the publisher's; a changed document is a new bundle, made in play |
-    | `run`, `cancel_run`, `set_param` | authoring tools: explain, trace, flow, completion |
+    | `run`, `cancel_run`, `set_param`, `show_pane` | authoring tools: explain, trace, flow, completion |
     | the read, option and select operations of the panes the document names | the operations of panes it does not show |
     | pane verdicts (`list_panes`) and the last run's error | the rest of play's diagnostics |
 
@@ -553,6 +553,16 @@ corrections, all made:
 - **The record.** ADR-0269 §SD5's "confirmed each time" now has the
   consent exception in its own Updates; SD1, SD3, SD5 and SD6 say what
   the code does.
+
+### 2026-10-08 — `show_pane` offered
+
+A view offered `get_<pane>` for its lazy panes (graphview among them) but
+not `show_pane`. A lazy pane draws only when its tab is in front, and its
+read refuses it until it has ("not drawn: show_pane …"), so an agent
+could set such a pane's options and never read it, and had to ask the
+person to click the tab. `bundle_show_pane` is now offered with the
+common operations. It is a view effect, and the embedded play's tabs are
+the view's panes, so it raises nothing the document does not show.
 
 ## References
 

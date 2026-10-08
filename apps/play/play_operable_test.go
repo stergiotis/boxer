@@ -51,6 +51,7 @@ func TestOperableOperationsAreTheSubset(t *testing.T) {
 		assert.NotEqual(t, app.OperationClassExternalRead, o.Spec.Class, "a view serves commands and queries")
 	}
 	assert.Subset(t, names, operableCommon)
+	assert.Contains(t, names, opShowPane, "a lazy pane draws only when raised, and get_<pane> refuses it until then")
 	assert.NotContains(t, names, opSetSql)
 	assert.NotContains(t, names, opPublishResult)
 	assert.NotContains(t, names, opBindDataset)
