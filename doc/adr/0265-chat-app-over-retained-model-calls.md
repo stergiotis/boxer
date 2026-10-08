@@ -508,6 +508,23 @@ or its handle is unknown (ADR-0269 `TaskGone`), the coordinator forgets the
 grant and the next `request_access` asks for a new task; a late task is
 extended by `request_access` instead (ADR-0269, update of this date).
 
+### 2026-10-08 — a call that waits on the person waits with the turn
+
+A held call — a widening, a late task's request for more time, a
+proposal — was watched for ten seconds, after which the model read
+`input_required` and went on; the person's later approval ran the call,
+and no turn read its outcome. A model that retried then made it twice. A
+call that waits on the person now waits as long as the turn runs, as
+`ask_user` does: the host expires an undecided widening, and stopping the
+turn withdraws the call (`cancel`, ADR-0269, update of this date). The
+ten-second bound stays for a call that does not wait on the person,
+counted from the person's decision.
+
+The repeat check now holds within a turn: a new turn starts without the
+calls refused before it. The person's message is a change, and a grant
+request that expired while they were away must reach their dialog again
+when they ask for it.
+
 ## References
 
 - [ADR-0264](./0264-retained-model-conversations-on-facts.md) — what the app sends and why it reads nothing back.

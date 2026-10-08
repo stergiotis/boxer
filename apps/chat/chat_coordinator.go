@@ -74,7 +74,8 @@ func clampRounds(n int) int {
 // lastRoundNote is the host's word to the model on the last round.
 const lastRoundNote = "You have used every round of tool calls this turn allows. Answer the person now with what you found, and say what is still open; no tool can be called."
 
-// callWait bounds how long a tool call waits for its call to settle.
+// callWait bounds how long a tool call waits for its call to settle while
+// the call does not wait on the person.
 const callWait = 10 * time.Second
 
 // coordinatorPrompt is the system message of a conversation with Apps on.
@@ -156,8 +157,9 @@ type coordinator struct {
 	tasks    []string
 	tainted  bool
 	confined bool
-	// refused holds the calls refused since the last call that was not, by
-	// tool and arguments; refusal is the current call's, set while it runs.
+	// refused holds the calls refused in this turn since the last call that
+	// was not, by tool and arguments; refusal is the current call's, set
+	// while it runs.
 	refused map[string]string
 	refusal string
 	// typed names the operation tools of the latest model call; opCache
@@ -525,6 +527,58 @@ func (inst *coordinator) exec(ctx context.Context, o toolOrigin, call openaichat
 	return
 }
 
+// waitsOnPerson reports whether a call waits on the person: a widening to
+// decide, or a proposal to accept.
+func waitsOnPerson(out agent.Outcome) bool {
+	return out.Held || out.Phase == "proposed"
+}
+
+// settle polls the call key until it is final. While the call waits on the
+// person it waits as long as the turn runs, as ask_user does: the host
+// expires an undecided widening, and the person can stop the turn.
+// Otherwise it waits at most callWait, counted from when the person last
+// decided. A call still waiting on the person when the wait ends — the turn
+// stopped, the host did not answer — is withdrawn, so nobody can approve
+// later a call whose outcome no turn reads.
+func (inst *coordinator) settle(ctx context.Context, h string, key string, out agent.Outcome) (last agent.Outcome, err error) {
+	last = out
+	deadline := time.Now().Add(callWait)
+	personDone := func() {}
+	waiting := false
+	defer func() {
+		personDone()
+		if waitsOnPerson(last) {
+			wctx, cancel := context.WithTimeout(context.Background(), agent.DefaultTimeout)
+			defer cancel()
+			_, _ = inst.cli.Cancel(wctx, h, key)
+			if err == nil {
+				err = ctx.Err()
+			}
+		}
+	}()
+	for !last.Final() && ctx.Err() == nil {
+		switch on := waitsOnPerson(last); {
+		case on && !waiting:
+			personDone, waiting = inst.awaitPerson(), true
+		case !on && waiting:
+			personDone()
+			personDone, waiting = func() {}, false
+			deadline = time.Now().Add(callWait)
+		}
+		if !waiting && !time.Now().Before(deadline) {
+			break
+		}
+		next, serr := inst.cli.Status(ctx, h, key, agent.MaxStatusWait)
+		if serr != nil {
+			// last stays what the host said, for the withdrawal.
+			err = serr
+			return
+		}
+		last = next
+	}
+	return
+}
+
 // dropGrant forgets a task that ended; it reports whether there was one.
 func (inst *coordinator) dropGrant() (dropped bool) {
 	inst.mu.Lock()
@@ -533,6 +587,15 @@ func (inst *coordinator) dropGrant() (dropped bool) {
 	inst.grant = agent.Grant{}
 	clear(inst.typed)
 	return
+}
+
+// forgetRefusals clears the refused calls at a turn's start: the person's
+// message is a change, and a request that expired while they were away
+// must reach their dialog again when they ask for it.
+func (inst *coordinator) forgetRefusals() {
+	inst.mu.Lock()
+	clear(inst.refused)
+	inst.mu.Unlock()
 }
 
 // refuse marks the running call as refused.
@@ -851,20 +914,8 @@ func (inst *coordinator) call(ctx context.Context, o toolOrigin, toolCall string
 	if err != nil {
 		return "error: " + err.Error(), where + ": " + err.Error()
 	}
-	deadline := time.Now().Add(callWait)
-	personDone := func() {}
-	defer func() { personDone() }()
-	for !out.Final() && time.Now().Before(deadline) && ctx.Err() == nil {
-		if out.Held || out.Phase == "proposed" {
-			// The call waits on the person: a widening to decide, or a
-			// proposal to accept.
-			personDone()
-			personDone = inst.awaitPerson()
-		}
-		out, err = inst.cli.Status(ctx, h, key, agent.MaxStatusWait)
-		if err != nil {
-			return "error: " + err.Error(), where + ": " + err.Error()
-		}
+	if out, err = inst.settle(ctx, h, key, out); err != nil {
+		return "error: " + err.Error(), where + ": " + err.Error()
 	}
 	co := callOutcome{Phase: out.Phase, Reason: out.Reason, Revisions: out.Revisions, Next: inst.nextFor(instance, op, out.Remedy)}
 	switch out.Phase {

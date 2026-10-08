@@ -303,6 +303,22 @@ func TestRefusalsSayWhatToDoNextAndARepeatIsNotMade(t *testing.T) {
 	assert.Contains(t, replies["d1"], `"args_schema":{`, "schemas are JSON objects, not text")
 }
 
+// A refused call is not made again within its turn, and is made again in
+// the next one: the person's message is a change, and a request that
+// expired while they were away reaches their dialog again.
+func TestARefusalIsForgottenWhenTheNextTurnStarts(t *testing.T) {
+	bus := inprocbus.NewInst(zerolog.Nop())
+	_, coord, _, _, ctx := coordRig(t, bus, &scriptedModel{}, false)
+	call := openaichat.ToolCall{Id: "r", Name: "request_access", Arguments: `{"plan":"tidy the note"}`}
+	first, _ := coord.exec(ctx, toolOrigin{}, call)
+	require.Contains(t, first, "next:", "a grant with nothing to open is refused")
+	again, _ := coord.exec(ctx, toolOrigin{}, call)
+	assert.Contains(t, again, "same call that was just refused")
+	coord.forgetRefusals()
+	next, _ := coord.exec(ctx, toolOrigin{}, call)
+	assert.NotContains(t, next, "same call that was just refused")
+}
+
 // With operation tools on, a window's operations are typed tools of their
 // own, and calling one goes through the dispatcher like call_operation.
 func TestOperationToolsCallAWindowsOperationDirectly(t *testing.T) {
