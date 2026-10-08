@@ -261,3 +261,22 @@ func TestHistorySqlCut(t *testing.T) {
 		t.Errorf("runes: cut=%v valid=%v", cut, utf8.ValidString(got))
 	}
 }
+
+// The History tab holds one open run across both halves: opening a
+// recorded run closes a session run and the reverse; a second click closes.
+func TestHistoryOpenIsExclusive(t *testing.T) {
+	var o historyOpen
+	at := time.Unix(100, 0)
+	o.toggle(historyOpen{executed: at}, false)
+	if !o.executed.Equal(at) || o.fact != 0 {
+		t.Fatalf("session open: %+v", o)
+	}
+	o.toggle(historyOpen{fact: 7}, false)
+	if !o.executed.IsZero() || o.fact != 7 {
+		t.Fatalf("recorded open should close the session run: %+v", o)
+	}
+	o.toggle(historyOpen{fact: 7}, true)
+	if o != (historyOpen{}) {
+		t.Fatalf("second click should close: %+v", o)
+	}
+}

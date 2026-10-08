@@ -24,6 +24,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/codeview"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryrunfacts"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runstream"
 )
@@ -38,18 +39,10 @@ func (inst *PlayApp) renderHistoryTab() {
 	for i := len(hist) - 1; i >= 0; i-- {
 		entry := hist[i]
 		for range c.IdScope(ids.PrepareSeq(uint64(i))) {
-			open := !inst.histSelected.IsZero() && entry.Executed.Equal(inst.histSelected)
-			if c.Button(ids.PrepareStr("entry"),
-				c.Atoms().Text(historyLabel(entry)).Keep()).
-				Frame(false).
-				Selected(open).
-				Truncate().
-				SendResp().HasPrimaryClicked() {
-				if open {
-					inst.histSelected = time.Time{}
-				} else {
-					inst.histSelected = entry.Executed
-				}
+			open := !inst.histOpen.executed.IsZero() && entry.Executed.Equal(inst.histOpen.executed)
+			if historyRow(ids.PrepareStr("entry"), historyLabel(entry), open,
+				"Click to inspect the run — Restore is inside") {
+				inst.histOpen.toggle(historyOpen{executed: entry.Executed}, open)
 				open = !open
 			}
 			if open {
@@ -62,10 +55,46 @@ func (inst *PlayApp) renderHistoryTab() {
 	}
 	if !present {
 		// Trimmed off the ring; nothing left to show.
-		inst.histSelected = time.Time{}
+		inst.histOpen.executed = time.Time{}
 	}
 	// The durable half: captured runs from boxer.facts (ADR-0115 S2).
 	inst.renderRecordedRuns()
+}
+
+// historyOpen names the one run the History tab has open: a session run by
+// its Executed stamp (the ring trims from the front, so an index would
+// drift onto another run) or a recorded run by its fact id. At most one is
+// set, so the tab draws at most one detail — opening a run closes the
+// other, whichever half it is in.
+type historyOpen struct {
+	executed time.Time
+	fact     uint64
+}
+
+// toggle opens run, closing whatever was open, or closes it when it was.
+func (inst *historyOpen) toggle(run historyOpen, wasOpen bool) {
+	if wasOpen {
+		*inst = historyOpen{}
+		return
+	}
+	*inst = run
+}
+
+// historyRow is one list row: a frameless button led by a caret that says
+// whether its detail is open, with a hover hint. Reports a click.
+func historyRow(id c.WidgetIdCreatorI, label string, open bool, hint string) (clicked bool) {
+	caret := icons.PhCaretRight
+	if open {
+		caret = icons.PhCaretDown
+	}
+	for range c.HoverText(hint).KeepIter() {
+		clicked = c.Button(id, c.Atoms().Text(caret+" "+label).Keep()).
+			Frame(false).
+			Selected(open).
+			Truncate().
+			SendResp().HasPrimaryClicked()
+	}
+	return
 }
 
 // renderHistoryEntryDetail is a session run opened in place.

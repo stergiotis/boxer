@@ -63,8 +63,6 @@ type runsHistoryDriver struct {
 	err      error
 	capture  queryrunfacts.CaptureStatus
 
-	// selected is the chosen run's fact id (0 = none). Render-thread-only.
-	selected uint64
 	// secFor is the fact id sec classifies (0 = none): one parse per
 	// selection, not per frame. Render-thread-only.
 	secFor uint64
@@ -304,18 +302,10 @@ func (inst *PlayApp) renderRecordedRuns() {
 		present := false
 		for i := range rows {
 			for range c.IdScope(ids.PrepareSeq(uint64(i))) {
-				open := d.selected == rows[i].Id
-				if c.Button(ids.PrepareStr("run"),
-					c.Atoms().Text(runRowLabel(rows[i])).Keep()).
-					Frame(false).
-					Selected(open).
-					Truncate().
-					SendResp().HasPrimaryClicked() {
-					if open {
-						d.selected = 0
-					} else {
-						d.selected = rows[i].Id
-					}
+				open := inst.histOpen.fact == rows[i].Id
+				if historyRow(ids.PrepareStr("run"), runRowLabel(rows[i]), open,
+					"Click to inspect the run as the server recorded it") {
+					inst.histOpen.toggle(historyOpen{fact: rows[i].Id}, open)
 					open = !open
 				}
 				if open {
@@ -328,7 +318,7 @@ func (inst *PlayApp) renderRecordedRuns() {
 		}
 		if !present {
 			// The selection aged out of the fetched window; drop it silently.
-			d.selected = 0
+			inst.histOpen.fact = 0
 		}
 	}
 }
