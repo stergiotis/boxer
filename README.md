@@ -10,7 +10,7 @@ Working in this tree, human or agent? [`AGENTS.md`](AGENTS.md) is the router: it
   <img alt="boxer's play with a GFS wind forecast drawn as particles over the North Atlantic, its SQL in the editor above a storm off Newfoundland" src="doc/images/demo-wind-in-play-fresh.png">
 </picture></a>
 
-A NOAA GFS 10 m wind forecast, read with `SELECT * FROM keelson('gfs_wind')` and drawn by play's Vector field pane — in a browser tab, where Go answers the SQL and no database runs. The picture follows GitHub's light or dark setting with imzero2's `fresh` or `dark` theme (`IMZERO2_THEME`). Click the picture to open it, or see the [demo page](https://stergiotis.github.io/boxer/) for the other apps that run in a tab (a first visit downloads about 27 MB).
+A NOAA GFS 10 m wind forecast as example dataset, read with `SELECT * FROM keelson('gfs_wind')` and drawn by play's Vector field pane — in a browser tab, where Go answers the SQL and no database runs. Click the picture to open it, or see the [demo page](https://stergiotis.github.io/boxer/) for the other apps that run in a tab (a first visit downloads about 27 MB).
 
 ## Maturity
 Alpha, incomplete test coverage, unstable, API may still change heavily.
