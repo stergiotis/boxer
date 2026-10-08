@@ -320,6 +320,8 @@ type BundleInfo struct {
 	Columns        []BundleColumn `desc:"every dataset's columns, summarised when the dataset was sealed"`
 	// ValuesNeed is set when the columns' values were withheld.
 	ValuesNeed string `json:",omitzero" desc:"the grant destination that would show the columns' min, max and sample, which are values of the data; absent when they are shown"`
+	// ValuesError is why the values could not be read for another reason.
+	ValuesError string `json:",omitzero" desc:"why the columns' values could not be read, when it was not the grant"`
 }
 
 // BundleColumn is one column of a bundle's dataset as the seal summarised
@@ -483,6 +485,8 @@ func withColumnValues(bus app.BusI, obo *app.OnBehalfOf, bundles []BundleInfo) {
 				var ge *adhocdata.GrantError
 				if errors.As(err, &ge) {
 					info.ValuesNeed = ge.Destination
+				} else {
+					info.ValuesError = err.Error()
 				}
 				continue
 			}

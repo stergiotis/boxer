@@ -294,6 +294,16 @@ func (inst *PlayLauncher) Manifest() (m app.Manifest) {
 				Direction: app.CapDirectionSub,
 				Reason:    "and follows the bundle's republish and retract",
 			},
+			{
+				Pattern:   adhocdata.SubjectBundlePublish,
+				Direction: app.CapDirectionPub,
+				Reason:    "publish_result and the Publish menu publish the main result as an ad-hoc bundle (ADR-0288 §SD4)",
+			},
+			{
+				Pattern:   adhocdata.SubjectRead,
+				Direction: app.CapDirectionPub,
+				Reason:    "list_bundles reads a bundle's column values as a read of the data, held to the task's grant (ADR-0288 §SD5)",
+			},
 			// list_bundles reads the bundle catalog (ADR-0288 §SD4).
 			keelsonquery.ClientCaps(adhocdata.BundleCatalogTableName)[0],
 			{
