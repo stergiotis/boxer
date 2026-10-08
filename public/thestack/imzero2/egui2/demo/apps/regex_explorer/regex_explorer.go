@@ -104,10 +104,11 @@ type App struct {
 	multiline       bool
 	dotAll          bool
 
-	// lastFocusedInput is the text input cheatsheet token-clicks append
-	// into. True cursor-position insertion is not exposed through the
-	// current FFFI2 binding.
+	// lastFocusedInput is the text input a cheatsheet token goes into, and
+	// pendingInsert the tokens waiting for each input's next build — see
+	// [App.insertToken].
 	lastFocusedInput inputFieldE
+	pendingInsert    [inputFieldCount]string
 
 	// Extraction hand-off state (ADR-0017). Written by the worker
 	// goroutine that publishes and opens, read by the render thread —
@@ -174,6 +175,7 @@ const (
 	inputHaystack
 	inputPatternList
 	inputReplacement
+	inputFieldCount
 )
 
 // resultTabE names the result tabs. The zero value, Matches, is the tab a
@@ -334,7 +336,7 @@ func (inst *App) renderBody() {
 	// regexedit sets CodeEditor() and attaches the highlight job (the
 	// monospace requirement is ADR-0015 §SD6, documented on
 	// regexedit.Cache.Prepare).
-	resp := inst.patternHl.TextEdit(inst.ids.PrepareStr("pattern"), inst.pattern, false, regexedit.ModeSingle).
+	resp := inst.withInsert(inputPattern, inst.patternHl.TextEdit(inst.ids.PrepareStr("pattern"), inst.pattern, false, regexedit.ModeSingle)).
 		DesiredWidth(editorWidth).
 		HintText("regular expression").
 		SendRespVal(&inst.pattern)
@@ -344,7 +346,7 @@ func (inst *App) renderBody() {
 	inst.renderPatternCompileError()
 
 	c.Label("Haystack").Send()
-	haystackResp := c.TextEdit(inst.ids.PrepareStr("haystack"), inst.haystack, true).
+	haystackResp := inst.withInsert(inputHaystack, c.TextEdit(inst.ids.PrepareStr("haystack"), inst.haystack, true)).
 		CodeEditor().
 		DesiredWidth(editorWidth).
 		DesiredRows(4).
@@ -541,7 +543,7 @@ func (inst *App) renderFunctionsTab() {
 			c.Label("replacement").Send()
 			c.Label("").Send()
 			c.Label("").Send()
-			resp := c.TextEdit(inst.ids.PrepareStr("replacement"), inst.replacement, false).
+			resp := inst.withInsert(inputReplacement, c.TextEdit(inst.ids.PrepareStr("replacement"), inst.replacement, false)).
 				CodeEditor().
 				DesiredWidth(320).
 				HintText(`\1, \2 … for groups, \0 for the match`).
@@ -829,7 +831,7 @@ func (inst *App) multiKey() (key queryKey) {
 // results is what ADR-0054 asked of it.
 func (inst *App) renderMultiTab() {
 	weakLabel("One pattern per line, matched as a set by multiMatchAllIndices. VectorScan is a different engine from the RE2 functions, with its own limits on syntax; the flags above apply to every line.")
-	listResp := inst.patternListHl.TextEdit(inst.ids.PrepareStr("patternList"), inst.patternList, true, regexedit.ModeList).
+	listResp := inst.withInsert(inputPatternList, inst.patternListHl.TextEdit(inst.ids.PrepareStr("patternList"), inst.patternList, true, regexedit.ModeList)).
 		DesiredWidth(editorWidth).
 		DesiredRows(5).
 		HintText("pattern 1\npattern 2\n...").
@@ -916,24 +918,38 @@ func (inst *App) renderMultiLines(lines []multiLine) {
 	}
 }
 
-// insertToken appends tok to the last-focused text input. True
-// cursor-position insertion is not exposed through the current FFFI2
-// binding; appending is the closest accurate approximation for the
-// cheatsheet's intended left-to-right pattern construction flow.
+// insertToken puts tok into the last-focused text input at its caret,
+// replacing any selection — the editor's own caret, which it keeps across
+// losing focus to the cheatsheet click. An input that has never had a caret
+// takes the token at its end.
 //
-// No dispatch here: the lanes pick the edit up when renderBody
-// reconciles at the end of this frame.
+// The token waits in pendingInsert for the input's next build, which hands
+// it to the widget ([App.withInsert]); the widget splices it and the text
+// comes back through the binding a frame later. Tokens clicked before that
+// build queue up in order. The replacement and pattern-list inputs live on
+// tabs, so their tab is brought up: the token lands where it can be seen,
+// and it lands at all only once the input is drawn.
 func (inst *App) insertToken(tok string) {
-	switch inst.lastFocusedInput {
-	case inputHaystack:
-		inst.haystack += tok
-	case inputPatternList:
-		inst.patternList += tok
+	field := inst.lastFocusedInput
+	inst.pendingInsert[field] += tok
+	switch field {
 	case inputReplacement:
-		inst.replacement += tok
-	default:
-		inst.pattern += tok
+		inst.tab = tabFunctions
+	case inputPatternList:
+		inst.tab = tabMulti
 	}
+}
+
+// withInsert hands field's pending tokens to its editor's build and clears
+// them. Cleared here, when the build carries them, rather than on the
+// click: a token for an input that was not drawn this frame is kept, not
+// dropped.
+func (inst *App) withInsert(field inputFieldE, edit c.TextEditFluid) c.TextEditFluid {
+	if tok := inst.pendingInsert[field]; tok != "" {
+		edit = edit.InsertAtCursor(tok)
+		inst.pendingInsert[field] = ""
+	}
+	return edit
 }
 
 // applyShowcase sets both the pattern and haystack inputs to showcase

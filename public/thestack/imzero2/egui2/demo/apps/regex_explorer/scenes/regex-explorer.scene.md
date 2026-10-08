@@ -13,16 +13,24 @@ scene:
 # regex explorer — the three result tabs
 
 The regex explorer of ADR-0054, at a small window size, where the layout
-is tightest. It waits for the engine check, loads the capture-group
-showcase, and walks the three result tabs: the Go matches, the ClickHouse
-functions with the Go model's prediction beside each, and the
-multi-pattern tab with one line VectorScan refuses. It asserts that every
-modelled function agrees with ClickHouse, that a replacement reaches the
-replace functions, and that the refused line is named with ClickHouse's
-message while the other lines still report hits.
+is tightest. It waits for the engine check, builds a pattern from
+cheatsheet tokens inserted at the caret, loads the capture-group showcase,
+and walks the three result tabs: the Go matches, the ClickHouse functions
+with the Go model's prediction beside each, and the multi-pattern tab with
+one line VectorScan refuses. It asserts that a token lands at the caret
+rather than at the end, that every modelled function agrees with
+ClickHouse, that a replacement reaches the replace functions, and that the
+refused line is named with ClickHouse's message while the other lines still
+report hits.
 
 ```jsonl trace
 {"do":"wait","valueContains":"engine check ✓","role":"label","settleMs":1500}
+{"do":"type","id":11728253319578034029,"text":"ab"}
+{"do":"key","text":"ArrowLeft"}
+{"do":"click","name":"Character classes"}
+{"do":"click","name":"\\d","role":"button"}
+{"do":"click","name":"\\w","role":"button"}
+{"do":"read","id":11728253319578034029,"pattern":"^(?P<built>a\\\\d\\\\wb)$"}
 {"do":"click","name":"capture groups (user@host)","role":"button"}
 {"do":"wait","name":"Matches (3)","settleMs":500}
 {"do":"capture","text":"regex-explorer-matches"}

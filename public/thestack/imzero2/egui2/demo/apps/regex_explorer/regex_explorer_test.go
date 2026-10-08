@@ -673,3 +673,26 @@ func TestClickHouseMessageNamesARefusedCapability(t *testing.T) {
 		t.Errorf("clickHouseMessage(%v) = %q; want the capability named and the transport chain gone", err, got)
 	}
 }
+
+// TestInsertTokenQueuesForTheFocusedInput pins the hand-off between a
+// cheatsheet click and the editor: the token waits for the focused input's
+// next build, queues behind earlier ones, brings up the tab the input lives
+// on, and is cleared only by that input's build.
+func TestInsertTokenQueuesForTheFocusedInput(t *testing.T) {
+	t.Parallel()
+	inst := newTestApp(t)
+	inst.insertToken(`\d`)
+	inst.insertToken(`+`)
+	if got := inst.pendingInsert[inputPattern]; got != `\d+` {
+		t.Errorf("pending for the pattern = %q; want queued tokens", got)
+	}
+
+	inst.lastFocusedInput = inputReplacement
+	inst.insertToken(`\1`)
+	if inst.tab != tabFunctions {
+		t.Errorf("tab = %v; a replacement token should bring up the functions tab", inst.tab)
+	}
+	if inst.pendingInsert[inputPattern] != `\d+` {
+		t.Errorf("a token for another input disturbed the pattern's queue")
+	}
+}

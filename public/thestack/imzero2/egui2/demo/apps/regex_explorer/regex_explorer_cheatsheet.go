@@ -6,8 +6,8 @@ package regex_explorer
 // tokens, ClickHouse regex function names, and a curated set of
 // showcase (pattern, haystack) pairs. Syntax and showcase rows are
 // clickable; the function rows are reference only:
-//   - syntax tokens append to the last-focused text input via
-//     [insertToken];
+//   - syntax tokens go into the last-focused text input at its caret via
+//     [App.insertToken];
 //   - showcase rows replace both pattern and haystack via [applyShowcase]
 //     the query lanes pick the new inputs up on the same frame.
 //
@@ -233,7 +233,7 @@ func referenceRow(row cheatToken) {
 
 // cheatRow draws one clickable token row: a small button labelled with
 // the token text, followed by a plain description. Clicking the button
-// appends the token into the last-focused text input via [App.insertToken].
+// puts the token into the last-focused text input at its caret ([App.insertToken]).
 func (inst *App) cheatRow(seq uint64, token string, desc string) {
 	for range c.IdScope(inst.ids.PrepareSeq(seq)) {
 		for range c.Horizontal().KeepIter() {
