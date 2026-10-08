@@ -22,6 +22,9 @@ var manifest = runtimeapp.Manifest{
 	Topics:   []runtimeapp.TopicT{runtimeapp.TopicCode},
 	Keywords: []string{"regex", "regexp", "pattern", "match", "text"},
 	Surface:  runtimeapp.SurfaceWindowed,
+	// ADR-0269: what an agent holding a grant for a window can do in it —
+	// regex_explorer_ops.go.
+	Operations: ops.Catalog(),
 	SurfaceHints: runtimeapp.SurfaceHints{
 		PreferredWidth:  styletokens.SurfaceWorkspace.W,
 		PreferredHeight: styletokens.SurfaceWorkspace.H,

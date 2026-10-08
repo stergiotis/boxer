@@ -197,7 +197,7 @@ func (inst *App) renderCheatsheet() {
 					for range c.IdScope(inst.ids.PrepareSeq(uint64(i))) {
 						btnAtoms := c.Atoms().Text(sc.Title).Keep()
 						if c.Button(inst.ids.PrepareStr("btn"), btnAtoms).Small().SendResp().HasPrimaryClicked() {
-							inst.applyShowcase(sc.Pattern, sc.Haystack)
+							gesture(inst, opApplyShowcase, ApplyShowcaseArgs{Name: sc.Title}, func() { inst.applyShowcase(sc.Pattern, sc.Haystack) })
 						}
 					}
 				}

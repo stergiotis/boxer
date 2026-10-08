@@ -110,6 +110,13 @@ type App struct {
 	lastFocusedInput inputFieldE
 	pendingInsert    [inputFieldCount]string
 
+	// The inputs' widget handles for the operations' Editing check, and
+	// the frame context while AppInstance.Frame draws, for routing a
+	// click through its operation ([gesture]). nil outside that frame
+	// and in hosts without operations. Render-thread-confined.
+	patternEdit, haystackEdit, replacementEdit, patternListEdit widgetEdit
+	frameCtx                                                    runtimeapp.FrameContextI
+
 	// Extraction hand-off state (ADR-0017). Written by the worker
 	// goroutine that publishes and opens, read by the render thread —
 	// so it belongs to the mu group above.
@@ -288,7 +295,9 @@ func (inst *AppInstance) Unmount(ctx runtimeapp.MountContextI) (err error) {
 // (once per process — see [App.RunTripwire]).
 func (inst *AppInstance) Frame(ctx runtimeapp.FrameContextI) (err error) {
 	inst.state.RunTripwire(context.Background())
+	inst.state.frameCtx = ctx
 	inst.state.RenderWindow()
+	inst.state.frameCtx = nil
 	return
 }
 
@@ -336,6 +345,7 @@ func (inst *App) renderBody() {
 	// regexedit sets CodeEditor() and attaches the highlight job (the
 	// monospace requirement is ADR-0015 §SD6, documented on
 	// regexedit.Cache.Prepare).
+	inst.patternEdit.set(inst.ids.PrepareStr("pattern").Derive())
 	resp := inst.withInsert(inputPattern, inst.patternHl.TextEdit(inst.ids.PrepareStr("pattern"), inst.pattern, false, regexedit.ModeSingle)).
 		DesiredWidth(editorWidth).
 		HintText("regular expression").
@@ -346,6 +356,7 @@ func (inst *App) renderBody() {
 	inst.renderPatternCompileError()
 
 	c.Label("Haystack").Send()
+	inst.haystackEdit.set(inst.ids.PrepareStr("haystack").Derive())
 	haystackResp := inst.withInsert(inputHaystack, c.TextEdit(inst.ids.PrepareStr("haystack"), inst.haystack, true)).
 		CodeEditor().
 		DesiredWidth(editorWidth).
@@ -397,7 +408,8 @@ func (inst *App) renderTabRow() {
 	for range c.Horizontal().KeepIter() {
 		for _, t := range tabs {
 			if c.SelectableLabel(inst.ids.PrepareStr(t.id), inst.tab == t.tab, t.title).SendResp().HasPrimaryClicked() {
-				inst.tab = t.tab
+				tab := t.tab
+				gesture(inst, opShowTab, ShowTabArgs{Tab: tabNames[tab]}, func() { inst.tab = tab })
 			}
 		}
 	}
@@ -543,6 +555,7 @@ func (inst *App) renderFunctionsTab() {
 			c.Label("replacement").Send()
 			c.Label("").Send()
 			c.Label("").Send()
+			inst.replacementEdit.set(inst.ids.PrepareStr("replacement").Derive())
 			resp := inst.withInsert(inputReplacement, c.TextEdit(inst.ids.PrepareStr("replacement"), inst.replacement, false)).
 				CodeEditor().
 				DesiredWidth(320).
@@ -831,6 +844,7 @@ func (inst *App) multiKey() (key queryKey) {
 // results is what ADR-0054 asked of it.
 func (inst *App) renderMultiTab() {
 	weakLabel("One pattern per line, matched as a set by multiMatchAllIndices. VectorScan is a different engine from the RE2 functions, with its own limits on syntax; the flags above apply to every line.")
+	inst.patternListEdit.set(inst.ids.PrepareStr("patternList").Derive())
 	listResp := inst.withInsert(inputPatternList, inst.patternListHl.TextEdit(inst.ids.PrepareStr("patternList"), inst.patternList, true, regexedit.ModeList)).
 		DesiredWidth(editorWidth).
 		DesiredRows(5).
