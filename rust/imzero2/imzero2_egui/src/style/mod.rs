@@ -76,6 +76,41 @@ pub fn slider_rail() -> egui::Color32 {
     }
 }
 
+/// Run `add` — a checkbox — with the widget table's corner radius narrowed
+/// to the active theme's checkbox radius. egui has no checkbox radius of its
+/// own: `Style::checkbox_style` borrows `widgets.*.corner_radius`, so a theme
+/// that rounds its buttons generously rounds the checkbox's box into a
+/// circle. The dark theme's radius is small enough that `add` runs as is.
+pub fn with_checkbox_radius<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    let radius = match tokens::theme::active() {
+        tokens::Theme::Fresh => egui::CornerRadius::same(fresh::ROUND_CHECKBOX),
+        tokens::Theme::Dark => return add(ui),
+    };
+    let saved = set_widget_radius(&mut ui.style_mut().visuals.widgets, [radius; 5]);
+    let r = add(ui);
+    set_widget_radius(&mut ui.style_mut().visuals.widgets, saved);
+    r
+}
+
+/// Overwrite the five widget states' corner radii; returns the previous ones.
+fn set_widget_radius(
+    w: &mut egui::style::Widgets,
+    radii: [egui::CornerRadius; 5],
+) -> [egui::CornerRadius; 5] {
+    let states = [
+        &mut w.noninteractive,
+        &mut w.inactive,
+        &mut w.hovered,
+        &mut w.active,
+        &mut w.open,
+    ];
+    let mut saved = radii;
+    for ((state, radius), old) in states.into_iter().zip(radii).zip(saved.iter_mut()) {
+        *old = std::mem::replace(&mut state.corner_radius, radius);
+    }
+    saved
+}
+
 /// Tour-mode neutralization: make hover and active look like inactive.
 ///
 /// Collapses `widgets.hovered.bg_stroke` and `widgets.active.bg_stroke` onto

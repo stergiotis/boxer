@@ -10387,18 +10387,23 @@ egui::Window::new(label).id(i);
         }
     }
 
-    // `_f` is the opcode the widget came from. Unused here, but every
-    // generated call site passes it, so the parameter stays rather than
-    // churning the dispatch template for one argument.
+    // `f` is the opcode the widget came from. A checkbox gets its theme's
+    // own corner radius (`style::with_checkbox_radius`), which egui has no
+    // slot for.
     pub fn apply_widget(
         &mut self,
         w: impl egui::Widget,
         u: &mut Option<&mut egui::Ui>,
-        _f: &FuncProcId,
+        f: &FuncProcId,
         i: Option<egui::Id>,
     ) -> Option<egui::Response> {
         if u.is_some() {
-            let r = w.ui(u.as_mut().unwrap());
+            let ui = u.as_mut().unwrap();
+            let r = if *f == FuncProcId::Checkbox {
+                imzero2_egui::style::with_checkbox_radius(ui, |ui| w.ui(ui))
+            } else {
+                w.ui(ui)
+            };
             if let Some(i) = i
                 && self.r8_response_flags_filter.match_response_any(&r)
             {

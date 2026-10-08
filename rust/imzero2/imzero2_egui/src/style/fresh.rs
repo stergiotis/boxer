@@ -16,7 +16,8 @@
 //! - **An orchid accent** (h = 315), far from all four status hues, so a
 //!   hover ring or a selection never reads as info / success / warning /
 //!   error.
-//! - **Rounder.** Widgets 8 px, windows and menus 12 px.
+//! - **Rounder.** Widgets 8 px, windows and menus 12 px; checkboxes 4 px,
+//!   so they stay squares (`style::with_checkbox_radius`).
 //! - **A hard offset shadow** on windows and popups — no blur — which is
 //!   the one thing meant to be recognisable from across the room.
 //! - **Sliders fill their trailing rail** in the accent tint.
@@ -39,6 +40,10 @@ use super::tokens::stroke as s;
 pub const ROUND_WIDGET: u8 = 8;
 /// Floating windows, menus, popups.
 pub const ROUND_WINDOW: u8 = 12;
+/// A checkbox's box. egui draws it with the widget radius, and
+/// `ROUND_WIDGET` on its 14 px box is a circle — a radio button. Kept under
+/// a third of the box so the corner still reads as a corner.
+pub const ROUND_CHECKBOX: u8 = 4;
 
 /// The hard shadow's offset, in px, right and down.
 pub const SHADOW_OFFSET: i8 = 4;
@@ -242,6 +247,15 @@ mod tests {
         assert_eq!(v.widgets.hovered.bg_stroke.width.fract(), 0.0);
         assert_eq!(v.widgets.active.bg_stroke.width.fract(), 0.0);
         assert_eq!(v.widgets.hovered.expansion, 1.0);
+    }
+
+    #[test]
+    fn a_checkbox_keeps_its_corners() {
+        // At half the box or more egui's rounded rect is a circle: the
+        // checkbox would read as a radio button.
+        let icon = Style::default().spacing.icon_width;
+        assert!(f32::from(ROUND_CHECKBOX) * 3.0 <= icon + 2.0);
+        assert!(f32::from(ROUND_WIDGET) * 2.0 >= icon, "the override is still needed");
     }
 
     #[test]
