@@ -62,6 +62,10 @@ func TestComposeExtractSql(t *testing.T) {
 	require.Contains(t, sql, "log_comment='queryrunsd-extract'")
 	require.Contains(t, sql, "FORMAT JSONEachRow")
 	require.NotContains(t, sql, "JSONHas")
+	// Already-captured overlap rows are dropped before the LIMIT, or a dense
+	// overlap window fills every batch with discards and capture stalls.
+	require.Contains(t, sql, "(query_id, toUnixTimestamp64Micro(event_time_microseconds)) NOT IN (")
+	require.Less(t, strings.Index(sql, "NOT IN ("), strings.Index(sql, "LIMIT "))
 
 	sql, err = ComposeExtractSql("boxer.facts", "http://127.0.0.1:8127/pull", ScopeStamped, 500, time.Time{})
 	require.NoError(t, err)
@@ -100,7 +104,11 @@ func TestComposeMvSql(t *testing.T) {
 	require.Contains(t, sql, "REFRESH EVERY 5 SECOND APPEND TO boxer.facts")
 	require.Contains(t, sql, "url('http://127.0.0.1:8127/pull', 'ArrowStream', '")
 	require.Contains(t, sql, ColId+" NOT IN")
-	require.Contains(t, sql, AntiJoinWindow)
+	// Anchored on the watermark, not now(): re-served backfill rows are
+	// days old and must still fall inside the window.
+	require.Contains(t, sql, ColTs+" >= (SELECT max("+ColTs+") FROM boxer.facts")
+	require.Contains(t, sql, ") - "+WatermarkOverlap)
+	require.NotContains(t, sql, "now64")
 	require.Contains(t, sql, "log_comment='queryrunsd-refresh'")
 	// DateTime64(9,'UTC') carries single quotes — inside the structure
 	// string literal they must arrive doubled.
@@ -214,7 +222,7 @@ func TestComposeExtractSql_BackfillFrom(t *testing.T) {
 	// It is a FLOOR ON EMPTINESS, not a filter: the watermark still governs
 	// once the destination holds facts, or a restart after downtime would skip
 	// exactly the gap the pipeline exists to close.
-	require.Contains(t, sql, "watermark - "+WatermarkOverlap)
+	require.Contains(t, sql, "watermark - "+WatermarkOverlap+") AS lo")
 	require.Contains(t, sql, "watermark = toDateTime64(0, 9, 'UTC')")
 
 	// The zero value keeps the original unbounded reach.

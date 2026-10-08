@@ -18,6 +18,8 @@ package queryrunsvc
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -307,6 +309,13 @@ func (s *Service) handlePull(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, cErr.Error(), http.StatusInternalServerError)
 		return
 	}
+	// The body is not stable across requests — query_log grows and an
+	// append moves the watermark — so a ranged continuation must be able
+	// to tell it is reading a different answer. The content hash as ETag
+	// makes a stale If-Range fall back to a full 200 instead of splicing
+	// two streams (the /table precedent, ADR-0134 update 2026-08-01).
+	sum := sha256.Sum256(buf.Bytes())
+	w.Header().Set("ETag", `"`+hex.EncodeToString(sum[:16])+`"`)
 	w.Header().Set("Content-Type", "application/vnd.apache.arrow.stream")
 	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(buf.Bytes()))
 	if len(rows) > 0 {
@@ -345,8 +354,9 @@ func (s *Service) extract(ctx context.Context) (rows []queryrunfacts.Row, err er
 }
 
 // isLoopbackHost mirrors the introspecthttp bind-gate (ADR-0082 §SD1).
+// An empty host is not loopback: ":8127" binds every interface.
 func isLoopbackHost(host string) (ok bool) {
-	if host == "" || strings.EqualFold(host, "localhost") {
+	if strings.EqualFold(host, "localhost") {
 		return true
 	}
 	ip := net.ParseIP(host)

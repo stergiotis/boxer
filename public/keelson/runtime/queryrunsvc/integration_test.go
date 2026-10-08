@@ -179,6 +179,85 @@ func TestLivePipelineEndToEnd(t *testing.T) {
 		fmt.Sprintf("SELECT count() FROM %s.facts WHERE `id:naturalKey:y:4::0:` = '%s'", scratchDb, probe2)))
 }
 
+// startScratch runs a service against its own scratch database, dropped at
+// test end, and returns once the pipeline is reconciled.
+func startScratch(t *testing.T, cli *chclient.Client, db string, cfg Config) {
+	t.Helper()
+	ctx := context.Background()
+	require.NoError(t, cli.Exec(ctx, "DROP DATABASE IF EXISTS "+db))
+	t.Cleanup(func() { _ = cli.Exec(context.Background(), "DROP DATABASE IF EXISTS "+db) })
+	cfg.Listen = "127.0.0.1:0"
+	cfg.Cadence = time.Second
+	cfg.Scope = queryrunfacts.ScopeAll
+	cfg.Database = db
+	svc, err := New(cfg, zerolog.Nop())
+	require.NoError(t, err)
+	require.NoError(t, svc.Start(ctx))
+	t.Cleanup(func() { _ = svc.Stop(context.Background()) })
+}
+
+// TestLiveDenseOverlapDoesNotStall pins progress through an overlap window
+// holding more events than one batch: with the already-captured rows
+// counted against the LIMIT, every batch after the first re-served the same
+// rows and the watermark never moved. BatchCap stands in for load — 60
+// probes inside a second against a cap of 20.
+func TestLiveDenseOverlapDoesNotStall(t *testing.T) {
+	ctx := context.Background()
+	cli := chclient.New(chclient.Defaults(), nil)
+	if cli.Ping(ctx) != nil {
+		t.Skip("no live ClickHouse at localhost:8123")
+	}
+	const probes = 60
+	from := time.Now().Add(-time.Second)
+	prefix := fmt.Sprintf("it-queryruns-dense-%d-", time.Now().UnixNano())
+	for i := range probes {
+		runTaggedQuery(t, fmt.Sprintf("%s%d", prefix, i), "")
+	}
+	require.NoError(t, cli.Exec(ctx, "SYSTEM FLUSH LOGS"))
+
+	const db = scratchDb + "_dense"
+	startScratch(t, cli, db, Config{BatchCap: 20, BackfillFrom: from})
+	sql := fmt.Sprintf("SELECT count() FROM %s.facts WHERE startsWith(`id:naturalKey:y:4::0:`, '%s')", db, prefix)
+	require.Eventually(t, func() bool {
+		return queryScalar(t, cli, sql) == fmt.Sprint(probes)
+	}, factWaitBudget, 500*time.Millisecond, "capture must advance past a window denser than BatchCap")
+}
+
+// TestLiveOldBackfillStaysDuplicateFree pins the MV anti-join window to the
+// watermark: backfilling history days old, every refresh re-serves at least
+// the row at the watermark, and a window anchored on now() missed all of
+// them — one permanent duplicate or more per tick. Needs query_log history
+// older than a day; skips otherwise.
+func TestLiveOldBackfillStaysDuplicateFree(t *testing.T) {
+	ctx := context.Background()
+	cli := chclient.New(chclient.Defaults(), nil)
+	if cli.Ping(ctx) != nil {
+		t.Skip("no live ClickHouse at localhost:8123")
+	}
+	oldest := queryScalar(t, cli,
+		"SELECT toUnixTimestamp(min(event_time)) FROM system.query_log WHERE type != 'QueryStart' AND event_time < now() - INTERVAL 2 DAY")
+	if oldest == "" || oldest == "0" {
+		t.Skip("query_log holds no history older than two days")
+	}
+	var sec int64
+	_, err := fmt.Sscan(oldest, &sec)
+	require.NoError(t, err)
+
+	const db = scratchDb + "_old"
+	const batchCap = 50
+	startScratch(t, cli, db, Config{BatchCap: batchCap, BackfillFrom: time.Unix(sec, 0)})
+	count := fmt.Sprintf("SELECT count() FROM %s.facts", db)
+	// Several refreshes' worth, each re-serving its predecessor's overlap.
+	require.Eventually(t, func() bool {
+		var n int
+		_, _ = fmt.Sscan(queryScalar(t, cli, count), &n)
+		return n >= 5*batchCap
+	}, factWaitBudget, 500*time.Millisecond, "backfill did not advance")
+	require.Equal(t, "0", queryScalar(t, cli,
+		fmt.Sprintf("SELECT count() - uniqExact(`id:id:u64:47::0:`) FROM %s.facts", db)),
+		"re-served backfill rows must not land twice")
+}
+
 // TestLiveReconcileRefusesDriftedDestination pins the schema-drift
 // guard: a destination table from an older schema generation (here: one
 // missing every current column) must fail reconciliation with the

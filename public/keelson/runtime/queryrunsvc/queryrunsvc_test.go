@@ -66,6 +66,43 @@ func TestPullScopeOffServesSchemaOnlyStream(t *testing.T) {
 	require.NoError(t, rd.Err())
 }
 
+// The ETag lets a ranged continuation detect that the answer changed
+// underneath it: a matching If-Range gets the range, a stale one the full
+// body, never a splice.
+func TestPullETagGuardsRangedReads(t *testing.T) {
+	s, err := New(Config{Scope: queryrunfacts.ScopeOff, ChURL: "http://127.0.0.1:1/"}, zerolog.Nop())
+	require.NoError(t, err)
+	srv := httptest.NewServer(s.handler())
+	defer srv.Close()
+
+	get := func(hdr map[string]string) (resp *http.Response) {
+		req, rErr := http.NewRequest(http.MethodGet, srv.URL+"/pull", nil)
+		require.NoError(t, rErr)
+		for k, v := range hdr {
+			req.Header.Set(k, v)
+		}
+		resp, rErr = http.DefaultClient.Do(req)
+		require.NoError(t, rErr)
+		_ = resp.Body.Close()
+		return
+	}
+	first := get(nil)
+	etag := first.Header.Get("ETag")
+	require.NotEmpty(t, etag)
+	require.Equal(t, etag, get(nil).Header.Get("ETag"), "an unchanged answer keeps its ETag")
+
+	require.Equal(t, http.StatusPartialContent, get(map[string]string{"Range": "bytes=8-", "If-Range": etag}).StatusCode)
+	require.Equal(t, http.StatusOK, get(map[string]string{"Range": "bytes=8-", "If-Range": `"stale"`}).StatusCode)
+}
+
+func TestStartRefusesWildcardBind(t *testing.T) {
+	s, err := New(Config{Listen: ":0"}, zerolog.Nop())
+	require.NoError(t, err)
+	err = s.Start(context.Background())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "refusing non-loopback")
+}
+
 func TestHealthz(t *testing.T) {
 	s, err := New(Config{}, zerolog.Nop())
 	require.NoError(t, err)
@@ -81,7 +118,7 @@ func TestIsLoopbackHost(t *testing.T) {
 	require.True(t, isLoopbackHost("127.0.0.1"))
 	require.True(t, isLoopbackHost("::1"))
 	require.True(t, isLoopbackHost("localhost"))
-	require.True(t, isLoopbackHost(""))
+	require.False(t, isLoopbackHost(""), "an empty host binds every interface")
 	require.False(t, isLoopbackHost("0.0.0.0"))
 	require.False(t, isLoopbackHost("192.168.1.10"))
 	require.False(t, isLoopbackHost("example.com"))

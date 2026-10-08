@@ -368,8 +368,10 @@ func splitCols(s string) (out []string) {
 	return
 }
 
+// isLoopbackHost gates the bind (ADR-0082 §SD1). An empty host is not
+// loopback: ":port" binds every interface.
 func isLoopbackHost(host string) (ok bool) {
-	if host == "" || host == "localhost" {
+	if strings.EqualFold(host, "localhost") {
 		return true
 	}
 	ip := net.ParseIP(host)
