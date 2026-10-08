@@ -85,16 +85,19 @@ type Recorder struct {
 	// earliest and latest row timestamps among them. Under flushMu.
 	gap gap
 
-	// The counters of ADR-0296 §SD4, read through Counts.
-	buffered, written, dropped, invalid atomic.Uint64
+	// The counters of ADR-0296 §SD4 and §SD6, read through Counts.
+	buffered, written, dropped, invalid, forwarded, forwardDropped atomic.Uint64
 
 	readMu sync.Mutex
 	read   *TrailStore
 
-	// observer and readTable are the options: an observer on every store
-	// rows are built into, and the table the read store scans.
+	// observer, readTable and forwarder are the options: an observer on
+	// every store rows are built into, the table the read store scans, and
+	// the forwarder the prompt path feeds (fwd is its state).
 	observer  recordstore.WriteObserverI[uint64, time.Time]
 	readTable string
+	forwarder ForwarderI
+	fwd       *forwardState
 
 	wake chan struct{}
 	stop chan struct{}
@@ -133,6 +136,11 @@ type Counts struct {
 	Written  uint64
 	Dropped  uint64
 	Invalid  uint64
+	// Forwarded is the audit events a forwarder took, by either path;
+	// ForwardDropped those the prompt path gave up on — a full queue or a
+	// refused batch — and left to the backstop.
+	Forwarded      uint64
+	ForwardDropped uint64
 }
 
 // Counts reads the counters. Zero for a nil recorder.
@@ -140,7 +148,8 @@ func (inst *Recorder) Counts() (c Counts) {
 	if inst == nil {
 		return
 	}
-	return Counts{Buffered: inst.buffered.Load(), Written: inst.written.Load(), Dropped: inst.dropped.Load(), Invalid: inst.invalid.Load()}
+	return Counts{Buffered: inst.buffered.Load(), Written: inst.written.Load(), Dropped: inst.dropped.Load(), Invalid: inst.invalid.Load(),
+		Forwarded: inst.forwarded.Load(), ForwardDropped: inst.forwardDropped.Load()}
 }
 
 // RecorderOption configures NewRecorder.
@@ -171,18 +180,24 @@ func NewRecorder(exec recordstore.ExecutorI, run string, log zerolog.Logger, opt
 	for _, o := range opts {
 		o(inst)
 	}
+	if inst.forwarder != nil && exec != nil {
+		inst.fwd = newForwardState()
+	}
 	if exec != nil {
 		inst.cur = inst.newStore()
 		inst.read = NewTrailStore(inst.exec, nil, TrailStoreConfig{ReadTable: inst.readTable})
 	}
 	go inst.flusher()
+	if inst.fwd != nil {
+		go inst.forwardLoop()
+	}
 	return
 }
 
 // newStore is a store rows are built into: the current one, and each
 // batch a flush swaps out.
 func (inst *Recorder) newStore() (st *TrailStore) {
-	return NewTrailStore(inst.exec, nil, TrailStoreConfig{WriteObserver: inst.observer})
+	return NewTrailStore(inst.exec, nil, TrailStoreConfig{WriteObserver: inst.storeObserver()})
 }
 
 // Close flushes what is buffered, within the flush's bound, and releases
@@ -195,6 +210,10 @@ func (inst *Recorder) Close() {
 	}
 	close(inst.stop)
 	<-inst.done
+	if inst.fwd != nil {
+		close(inst.fwd.queue)
+		<-inst.fwd.done
+	}
 	inst.mu.Lock()
 	cur := inst.cur
 	inst.cur = nil
@@ -451,10 +470,36 @@ func (inst *Recorder) Event(ctx context.Context, at time.Time, c Context, row Au
 		row = inst.invalidEvent(row, verr)
 		inst.invalid.Add(1)
 	}
+	return inst.writeEvent(ctx, at, c, row)
+}
+
+// writeEvent buffers an audit event row and, when a forwarder is
+// attached, keeps its entity until the row is durable.
+func (inst *Recorder) writeEvent(ctx context.Context, at time.Time, c Context, row AuditEvent) (err error) {
 	key := "event|" + row.Domain + "|" + row.Action + "|" + strconv.FormatUint(row.Subject, 10) + "|" + inst.unique(at)
 	return inst.write(ctx, key, at, c, func(b *TrailEntityBuilder, id uint64) {
 		row.Id, row.Kind = id, "auditEvent"
 		b.AddAuditEvent(row)
+		if inst.fwd != nil {
+			ent := &TrailEntity{ID: id, Ts: at.UTC(), TrailEnvelope: TrailEnvelope{NaturalKey: []byte(key)}, AuditEvent: option.Some(row)}
+			o := c.Origin
+			o.Id = id
+			if o.Run == "" {
+				o.Run = inst.run
+			}
+			ent.Origin = option.Some(o)
+			if c.Conversation.Has {
+				v := c.Conversation.Val
+				v.Id = id
+				ent.Conversation = option.Some(v)
+			}
+			if c.Delegation.Has {
+				v := c.Delegation.Val
+				v.Id = id
+				ent.Delegation = option.Some(v)
+			}
+			inst.keepForForward(ent)
+		}
 	})
 }
 
@@ -565,12 +610,7 @@ func (inst *Recorder) writeGap() {
 		AttrKeys:   []string{"rows", "from", "to"},
 		AttrValues: []string{strconv.Itoa(g.rows), g.first.Format(time.RFC3339Nano), g.last.Format(time.RFC3339Nano)},
 	}
-	at := time.Now()
-	key := "event|" + TrailDomain + "|" + ActionAuditGap + "|0|" + inst.unique(at)
-	if err := inst.write(context.Background(), key, at, Context{}, func(b *TrailEntityBuilder, id uint64) {
-		row.Id, row.Kind = id, "auditEvent"
-		b.AddAuditEvent(row)
-	}); err != nil {
+	if err := inst.writeEvent(context.Background(), time.Now(), Context{}, row); err != nil {
 		inst.log.Error().Err(err).Int("rows", g.rows).Msg("trail: the audit-gap row could not be buffered")
 		return
 	}

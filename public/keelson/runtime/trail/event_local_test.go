@@ -6,6 +6,7 @@ import (
 	"iter"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -256,4 +257,108 @@ func TestReadHelpersByPrincipalAndSubject(t *testing.T) {
 	ents, err = none.EventsBySubject(ctx, 42, time.Time{}, time.Time{}, 0)
 	require.NoError(t, err)
 	assert.Nil(t, ents)
+}
+
+// pageForwarder keeps what it is handed, by call, and can refuse.
+type pageForwarder struct {
+	mu     sync.Mutex
+	pages  [][]uint64
+	refuse bool
+}
+
+func (inst *pageForwarder) Forward(_ context.Context, events []*trail.TrailEntity) error {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if inst.refuse {
+		return errors.New("carrier down")
+	}
+	var ids []uint64
+	for _, e := range events {
+		ids = append(ids, e.ID)
+	}
+	inst.pages = append(inst.pages, ids)
+	return nil
+}
+
+func (inst *pageForwarder) all() (ids []uint64) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	for _, p := range inst.pages {
+		ids = append(ids, p...)
+	}
+	return
+}
+
+// Over clickhouse-local: the backstop after a restart sends what the
+// prompt path of the old process sent, in pages; skips what this process's
+// prompt path sent lately; sees a row that landed late with an old
+// timestamp; and reports a refusing forwarder.
+func TestBackstopAfterRestart(t *testing.T) {
+	local, ctx := localFacts(t)
+	exec := &outageExec{ExecutorI: local}
+	at := time.Unix(1_700_000_000, 0).UTC()
+	ev := func(i int) trail.AuditEvent {
+		return trail.AuditEvent{Domain: "dmdm", Action: "vault-resolve", Outcome: trail.OutcomeOk, PrincipalBy: trail.PrincipalByNone, Subject: uint64(i), Retention: "disclosure"}
+	}
+
+	// The old process: three events, forwarded promptly, then gone.
+	fA := &pageForwarder{}
+	recA := trail.NewRecorder(exec, "run-a", zerolog.Nop(), trail.WithForwarder(fA))
+	for i := 1; i <= 3; i++ {
+		require.NoError(t, recA.Event(ctx, at.Add(time.Duration(i)*time.Minute), trail.Context{}, ev(i)))
+	}
+	require.NoError(t, recA.Flush(ctx))
+	recA.Close()
+	require.Len(t, fA.all(), 3)
+
+	// The new process knows nothing of what was forwarded: the backstop
+	// sends the three again, in pages of two.
+	fB := &pageForwarder{}
+	recB := trail.NewRecorder(exec, "run-b", zerolog.Nop(), trail.WithForwarder(fB))
+	defer recB.Close()
+	n, err := recB.ForwardWindow(ctx, at, at.Add(time.Hour), 2)
+	require.NoError(t, err)
+	assert.Equal(t, 3, n)
+	assert.ElementsMatch(t, fA.all(), fB.all(), "at least once: the receiver deduplicates by id")
+	fB.mu.Lock()
+	assert.Len(t, fB.pages, 2, "paged")
+	fB.mu.Unlock()
+
+	// A fourth event, forwarded promptly by this process, is skipped by the
+	// next backstop pass; the three older ones were sent by this process's
+	// backstop lately, so they are skipped too.
+	require.NoError(t, recB.Event(ctx, at.Add(4*time.Minute), trail.Context{}, ev(4)))
+	require.NoError(t, recB.Flush(ctx))
+	require.Eventually(t, func() bool { return len(fB.all()) == 4 }, 5*time.Second, 10*time.Millisecond, "the prompt path forwards the fourth")
+	n, err = recB.ForwardWindow(ctx, at, at.Add(time.Hour), 0)
+	require.NoError(t, err)
+	assert.Equal(t, 0, n, "everything in the window was forwarded lately")
+
+	// A row with an old timestamp that lands late — held through an outage
+	// — is inside the window a backstop pass rescans, though a cursor that
+	// had passed its timestamp would miss it.
+	exec.down.Store(true)
+	require.NoError(t, recB.Event(ctx, at.Add(30*time.Second), trail.Context{}, ev(5)))
+	require.Error(t, recB.Flush(ctx))
+	n, err = recB.ForwardWindow(ctx, at, at.Add(time.Hour), 0)
+	require.NoError(t, err)
+	assert.Equal(t, 0, n, "not durable yet, so not forwarded")
+	exec.down.Store(false)
+	// Forget the prompt path's memory of this one, as a crash between the
+	// write and the hand-over would, by letting a fresh recorder run the
+	// backstop.
+	require.NoError(t, recB.Flush(ctx))
+	fC := &pageForwarder{}
+	recC := trail.NewRecorder(exec, "run-c", zerolog.Nop(), trail.WithForwarder(fC))
+	defer recC.Close()
+	n, err = recC.ForwardWindow(ctx, at, at.Add(time.Minute+time.Second), 0)
+	require.NoError(t, err)
+	assert.Equal(t, 2, n, "the late row at +30s and the first event at +1m are in the window")
+
+	// A refusing forwarder: the pass errors, and the count says so.
+	fC.refuse = true
+	_, err = recC.ForwardWindow(ctx, at, at.Add(time.Hour), 0)
+	require.Error(t, err)
+	assert.EqualValues(t, 2, recC.Counts().Forwarded)
+	assert.Positive(t, recC.Counts().ForwardDropped)
 }
