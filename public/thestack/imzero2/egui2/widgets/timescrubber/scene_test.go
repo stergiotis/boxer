@@ -59,7 +59,7 @@ func (s *scene) frame(flags c.ResponseFlagsE, x, y, ox, oy float32) Events {
 }
 
 func (s *scene) x(step float64) float32 {
-	return newAxis(s.steps, padX, sceneW-padX, s.sc.Opts.ByIndex).posToX(step)
+	return newAxis(s.steps, sidePad(), sceneW-sidePad(), s.sc.Opts.ByIndex).posToX(step)
 }
 
 // drag presses at (from, y), moves to `to` and lets go.
@@ -245,10 +245,10 @@ func TestColumnsKeepTheExtremes(t *testing.T) {
 	steps[1234].Value, steps[1234].Peak = 9, 40
 	steps[2222].State = StepStateMissing
 	steps[2223].State = StepStateLoading
-	axis := newAxis(steps, padX, sceneW-padX, false)
+	axis := newAxis(steps, sidePad(), sceneW-sidePad(), false)
 	require.True(t, crowded(axis))
 	cols := columnsOf(axis, steps, nil)
-	assert.LessOrEqual(t, len(cols), (sceneW-2*padX)/columnW+1)
+	assert.LessOrEqual(t, len(cols), int((sceneW-2*sidePad())/columnW)+1)
 	var top, peak float32
 	missing, covered := 0, 0
 	for _, col := range cols {
@@ -264,7 +264,7 @@ func TestColumnsKeepTheExtremes(t *testing.T) {
 	assert.Equal(t, len(steps), covered, "every step is in a column")
 
 	// Whether a strip is crowded is the axis's to say and nothing else's.
-	assert.False(t, crowded(newAxis(stepsAt(0, 1, 2, 3, 6, 9), padX, sceneW-padX, false)))
+	assert.False(t, crowded(newAxis(stepsAt(0, 1, 2, 3, 6, 9), sidePad(), sceneW-sidePad(), false)))
 }
 
 func TestBarsAreScaledToTheValues(t *testing.T) {
