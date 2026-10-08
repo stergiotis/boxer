@@ -40,7 +40,7 @@ Forces the design must respect:
 - **C1 — M1 implementation cost.** Lines of layout code, debug surface.
 - **C2 — User mobility.** Can the user resize / rearrange / hide panels at runtime?
 - **C3 — Persistence cost.** Cross-frame state to keep coherent.
-- **C4 — Plot interaction risk.** Multi-plot Ctrl+Wheel zoom interaction (warned about in [`egui2_hl_graphs_demo.go:58-61`](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_graphs_demo.go)) compounds when each plot lives in its own scope.
+- **C4 — Plot interaction risk.** Multi-plot Ctrl+Wheel zoom interaction (warned about in [`egui2_hl_graphs_demo.go:58-61`](https://github.com/stergiotis/boxer/blob/ebb366850daa99711f2dbca044ec3b5f3dd31185/public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_graphs_demo.go#L58-L61)) compounds when each plot lives in its own scope.
 
 **Assessment.** `++` strong positive, `+` positive, `−` negative, `−−` strong negative.
 
@@ -75,7 +75,7 @@ DockArea is **deferred** to a post-M5 follow-on; once M1–M5 stabilises and per
 
 - **SD5 — Ring buffer fixed at 600 samples (10-minute window at 1 Hz).** Per-series, two `[]float64` (xs unix-seconds, ys value), pre-allocated, head + length tracked atomically. Re-sliced via `xs[:n]` / `ys[:n]` per frame. The ring's backing array does not move for the lifetime of the goroutine, satisfying the FFFI stable-memory requirement.
 
-- **SD6 — Plot library: `egui_hl_plot`.** `PlotLine` for time-series, `PlotBars` for per-core current-value columns, `ProgressBar` for MEM / SWAP snapshot bars. `egui_hl_graphs` is a force-directed node-edge graph (verified at [`egui2_hl_graphs_demo.go`](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_graphs_demo.go)) — wrong primitive for time-series.
+- **SD6 — Plot library: `egui_hl_plot`.** `PlotLine` for time-series, `PlotBars` for per-core current-value columns, `ProgressBar` for MEM / SWAP snapshot bars. `egui_hl_graphs` is a force-directed node-edge graph (verified at [`egui2_hl_graphs_demo.go`](https://github.com/stergiotis/boxer/blob/ebb366850daa99711f2dbca044ec3b5f3dd31185/public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_graphs_demo.go)) — wrong primitive for time-series.
 
 - **SD7 — Process panel: virtualized `EndETable`.** Sort + filter computed in the **sampler** (once per tick), not the renderer (every frame). Variant patterns at [`egui2_hl_etable_demo.go:53,95,146,190,246,309,368`](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_etable_demo.go) — large/sparse/varheight all sized for >1k rows. Sort-by header click is the next-tick re-sort, not an in-frame re-sort.
 
@@ -199,7 +199,7 @@ Five milestones, each independently shippable. A green `scripts/ci/lint.sh` and 
 
 - **Synchronous per-frame `Bundle.Sample` call (no goroutine).** Rejected — sysmetrics' `proc.Sample` walks `/proc/[pid]/` for every visible PID; on a 500-process box this is comfortably tens of milliseconds. At 60 fps the frame budget is 16.6 ms. Blocking the frame loop tears vsync. The cost of the goroutine is one channel-less `atomic.Pointer` swap per tick, which is free.
 
-- **`egui_hl_graphs` for time-series.** Rejected — it is a force-directed node-edge graph layout. Confirmed by inspecting [`egui2_hl_graphs_demo.go`](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_graphs_demo.go). Wrong primitive.
+- **`egui_hl_graphs` for time-series.** Rejected — it is a force-directed node-edge graph layout. Confirmed by inspecting [`egui2_hl_graphs_demo.go`](https://github.com/stergiotis/boxer/blob/ebb366850daa99711f2dbca044ec3b5f3dd31185/public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_graphs_demo.go). Wrong primitive.
 
 - **Plain `Vertical` of process rows in `ScrollArea` instead of `EndETable`.** Rejected — every row paints every frame. With 300+ rows at 60 fps this is wasteful; `EndETable` issues `BeginCells` / `EndCells` per cell and the Rust side replays only the visible window. Demo evidence at [`egui2_hl_etable_demo.go:190` (10k dense)](../../public/thestack/imzero2/egui2/demo/apps/widgets/egui2_hl_etable_demo.go) shows this is what the table widget was built for.
 
