@@ -90,6 +90,41 @@ const (
 	vectorFieldStatusGap = 8
 )
 
+// vectorFieldLook is the map's colours, 0xRRGGBBAA. The trails are drawn for
+// the ground under them: DefaultPalette's light ramp needs the dark map, and
+// on the fresh theme's light map LightPalette takes its place. The time
+// strip's bars and the legend take the same palette, so a colour means one
+// speed everywhere in the pane.
+type vectorFieldLook struct {
+	ocean, land, border uint32
+	site, siteLabel     uint32 // measurement-site marker and its label
+	ring                uint32 // a site's radius of influence
+	palette             []uint32
+}
+
+// vfLook is chosen once: the theme is fixed for the life of the process
+// (ADR-0258 §SD3) and resolved before this package initialises.
+var vfLook = vectorFieldLookFor(styletokens.ActiveTheme())
+
+func vectorFieldLookFor(th styletokens.ThemeE) (l vectorFieldLook) {
+	if th == styletokens.ThemeFresh {
+		return vectorFieldLook{
+			ocean:     styletokens.NeutralBgFaint.AsHex(),
+			land:      styletokens.NeutralBgSurface.AsHex(),
+			border:    styletokens.NeutralBorderFaint.AsHex(),
+			site:      styletokens.NeutralTextPrimary.AsHex(),
+			siteLabel: styletokens.NeutralTextPrimary.AsHex()&^0xff | 0xe0,
+			ring:      0x9a6a00a0,
+			palette:   flowoverlay.LightPalette,
+		}
+	}
+	return vectorFieldLook{
+		ocean: 0x0e141bff, land: 0x262d36ff, border: 0x4a5563ff,
+		site: 0xf2f5f8ff, siteLabel: 0xf2f5f8e0, ring: 0xe8b34aa0,
+		palette: flowoverlay.DefaultPalette,
+	}
+}
+
 // vectorFieldClaim is the relation's shape, and the frame's signals for the
 // one the pane reads back.
 type vectorFieldClaim struct {
@@ -439,6 +474,7 @@ func (inst *VectorFieldDriver) Render(claim vectorFieldClaim, opts vectorFieldOp
 	g.Opts.Opacity = float32(inst.opacity)
 	g.Opts.Paused = inst.paused
 	g.Opts.SpeedMax = opts.speedMax
+	g.Opts.Palette = vfLook.palette
 
 	meta, has := g.Meta()
 	if pos, moved := inst.followTimeSignal(claim.sig, has); moved {
@@ -460,7 +496,7 @@ func (inst *VectorFieldDriver) Render(claim vectorFieldClaim, opts vectorFieldOp
 			Center:     portolan.LL(30, 0),
 			Zoom:       2,
 			NoTiles:    inst.noTiles,
-			Background: 0x0e141bff,
+			Background: vfLook.ocean,
 		})
 	}
 	inst.pm.SetNoTiles(inst.noTiles)
@@ -480,7 +516,7 @@ func (inst *VectorFieldDriver) Render(claim vectorFieldClaim, opts vectorFieldOp
 	inst.pm.RenderFill(960, 560, func(p portolan.Projector) {
 		if inst.noTiles {
 			ls := landoverlay.DefaultStyle()
-			ls.Land, ls.Border = color.Hex(0x262d36ff), color.Hex(0x4a5563ff)
+			ls.Land, ls.Border = color.Hex(vfLook.land), color.Hex(vfLook.border)
 			inst.land.Paint(p, inst.atlas, ls)
 		}
 		g.Paint(p)
@@ -509,12 +545,12 @@ func (inst *VectorFieldDriver) drawSites(p portolan.Projector) {
 		for i := range inst.sites {
 			if r := inst.sites[i].radiusKm; r > 0 {
 				lats, lngs := ringAround(inst.sites[i].ll, r)
-				p.Polygon(lats, lngs, color.Hex(0x00000000), color.Hex(0xe8b34aa0), styletokens.StrokeHair)
+				p.Polygon(lats, lngs, color.Hex(0x00000000), color.Hex(vfLook.ring), styletokens.StrokeHair)
 			}
 		}
 	}
 	for i := range inst.sites {
-		p.Marker(inst.sites[i].ll, vectorFieldSiteMarkerPx, color.Hex(0xf2f5f8ff))
+		p.Marker(inst.sites[i].ll, vectorFieldSiteMarkerPx, color.Hex(vfLook.site))
 	}
 	if inView == 0 || inView > vectorFieldSiteLabelMax {
 		return
@@ -524,7 +560,7 @@ func (inst *VectorFieldDriver) drawSites(p portolan.Projector) {
 			continue
 		}
 		p.Label(inst.sites[i].ll, 0, -vectorFieldSiteMarkerPx-2, 1, 2,
-			inst.sites[i].label, styletokens.MicroPt, color.Hex(0xf2f5f8e0))
+			inst.sites[i].label, styletokens.MicroPt, color.Hex(vfLook.siteLabel))
 	}
 }
 
@@ -695,7 +731,7 @@ func (inst *VectorFieldDriver) renderTimeStrip(meta vectorfield.Meta, opts vecto
 		speedMax = meta.SpeedMax
 	}
 	if speedMax > 0 && (inst.barColors == nil || inst.barColorMax != speedMax) {
-		cfg := colormap.NewConfig(flowoverlay.DefaultPalette, 0, float64(speedMax))
+		cfg := colormap.NewConfig(vfLook.palette, 0, float64(speedMax))
 		inst.barColors, inst.barColorMax = cfg, speedMax
 	}
 	sc := inst.scrubber

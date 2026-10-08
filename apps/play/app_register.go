@@ -444,6 +444,14 @@ func (inst *PlayLauncher) Mount(ctx app.MountContextI) (err error) {
 			return
 		}
 	}
+	if splits := DockSplitsOverride.Get(); splits != "" {
+		var ds DockSplits
+		if ds, err = ApplyDockSplits(DefaultDockSplits, splits); err != nil {
+			err = eh.Errorf("BOXER_PLAY_DOCK_SPLITS does not describe a layout: %w", err)
+			return
+		}
+		inner.SetDockSplits(ds)
+	}
 	inner.SetCapabilities(ctx.Bus(), ctx.Storage(), ctx.Log())
 	if launch == nil {
 		// Legacy read bridge (ADR-0148 §SD8), one release: only a window
