@@ -4,9 +4,13 @@
 
 Working in this tree, human or agent? [`AGENTS.md`](AGENTS.md) is the router: it carries the few repo-specific things that are easy to miss and points at the authoritative document for everything else.
 
-[![A GFS wind forecast drawn as particles over the North Atlantic in boxer's play, with its time strip of 17 forecast steps](doc/images/demo-wind-in-play.png)](https://stergiotis.github.io/boxer/demo/index.html?worker=worker.mjs%3Fapp%3Dgithub.com%2Fstergiotis%2Fboxer%2Fapps%2Fplay%26env%3DCLICKHOUSE_URL%3Dhttp%253A%252F%252Fkeelson.invalid%252Fquery%26env%3DBOXER_PLAY_SQL%3DWITH%2520vector_field%2520AS%2520%2528SELECT%2520%252A%2520FROM%2520keelson%2528%2527gfs_wind%2527%2529%2529%252C%2520vector_field_opts%2520AS%2520%2528SELECT%2520%252A%2520FROM%2520keelson%2528%2527gfs_wind_opts%2527%2529%2529%2520SELECT%2520%252A%2520FROM%2520vector_field%2520LIMIT%25201000%26env%3DBOXER_PLAY_AUTORUN%3D1%26env%3DBOXER_PLAY_FOCUS_VECTORFIELD%3D1)
+<a href="https://stergiotis.github.io/boxer/demo/index.html?worker=worker.mjs%3Fapp%3Dgithub.com%2Fstergiotis%2Fboxer%2Fapps%2Fplay%26env%3DCLICKHOUSE_URL%3Dhttp%253A%252F%252Fkeelson.invalid%252Fquery%26env%3DBOXER_PLAY_SQL%3DWITH%2520vector_field%2520AS%2520%2528SELECT%2520%252A%2520FROM%2520keelson%2528%2527gfs_wind%2527%2529%2529%252C%2520vector_field_opts%2520AS%2520%2528SELECT%2520%252A%2520FROM%2520keelson%2528%2527gfs_wind_opts%2527%2529%2529%2520SELECT%2520%252A%2520FROM%2520vector_field%2520LIMIT%25201000%26env%3DBOXER_PLAY_AUTORUN%3D1%26env%3DBOXER_PLAY_FOCUS_VECTORFIELD%3D1"><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="doc/images/demo-wind-in-play-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="doc/images/demo-wind-in-play-fresh.png">
+  <img alt="A GFS wind forecast drawn as particles over the North Atlantic in boxer's play, with its time strip of 17 forecast steps" src="doc/images/demo-wind-in-play-fresh.png">
+</picture></a>
 
-A NOAA GFS 10 m wind forecast, read with `SELECT * FROM keelson('gfs_wind')` and drawn by play's Vector field pane — in a browser tab, where Go answers the SQL and no database runs. Click the picture to open it, or see the [demo page](https://stergiotis.github.io/boxer/) for the other apps that run in a tab (a first visit downloads about 27 MB).
+A NOAA GFS 10 m wind forecast, read with `SELECT * FROM keelson('gfs_wind')` and drawn by play's Vector field pane — in a browser tab, where Go answers the SQL and no database runs. The picture follows GitHub's light or dark setting with imzero2's `fresh` or `dark` theme (`IMZERO2_THEME`). Click the picture to open it, or see the [demo page](https://stergiotis.github.io/boxer/) for the other apps that run in a tab (a first visit downloads about 27 MB).
 
 ## Maturity
 Alpha, incomplete test coverage, unstable, API may still change heavily.
