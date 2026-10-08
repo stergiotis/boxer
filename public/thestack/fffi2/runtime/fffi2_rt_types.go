@@ -34,9 +34,11 @@ type Fffi2[U UnmarshallReaderI] struct {
 	// the pipe when the stack is empty. Supports nesting deferred-block
 	// scopes (e.g. an etable inside a dockArea tab body).
 	captureStack []captureFrame
-	// owner is the goroutine the channel is bound to, 0 when unbound; see
-	// BindToCurrentGoroutine (ADR-0261).
-	owner atomic.Uint64
+	// owner is the goroutineToken of the goroutine the channel is bound to,
+	// 0 when unbound; ownerId is that goroutine's id, read only to name it
+	// in the panic. See BindToCurrentGoroutine (ADR-0261).
+	owner   atomic.Uintptr
+	ownerId atomic.Uint64
 	// msgs counts the messages SendIntermediate took, captured or sent;
 	// see Messages.
 	msgs uint64

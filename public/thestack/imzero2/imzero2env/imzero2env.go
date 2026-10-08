@@ -98,7 +98,7 @@ var (
 	// its goroutine.
 	RenderGoroutineCheck = env.NewBool(env.Spec{
 		Name:        "IMZERO2_RENDER_GOROUTINE_CHECK",
-		Description: "true: panic when an imzero2 call reaches the FFFI channel off the render loop's goroutine (ADR-0261); costs about a microsecond per message",
+		Description: "true: panic when an imzero2 call reaches the FFFI channel off the render loop's goroutine (ADR-0261); costs about a nanosecond per message on amd64 and arm64, microseconds elsewhere",
 		Category:    env.CategoryDev,
 	})
 

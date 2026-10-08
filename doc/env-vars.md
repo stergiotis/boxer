@@ -189,7 +189,7 @@ generated-at: 2026-10-08T14:02:17Z
 | `IMZERO2_MARKDOWN_DEMO_PATH` | path | — | — |  | markdown file the widget gallery's markdown demo loads when its window opens; empty starts with nothing loaded |
 | `IMZERO2_PUFFIN` | bool | — | — |  | truthy enables the Rust client's puffin scope collection and its loopback profiler server on 127.0.0.1:8585; unset leaves the compiled-in scopes off and the port closed |
 | `IMZERO2_RENDER_CADENCE` | categorial-string | `continuous` | — |  | frame-loop repaint cadence when idle: continuous (vsync rate) \| reactive (idle heartbeat)<br>**Allowed:** `continuous` \| `reactive` |
-| `IMZERO2_RENDER_GOROUTINE_CHECK` | bool | — | — |  | true: panic when an imzero2 call reaches the FFFI channel off the render loop's goroutine (ADR-0261); costs about a microsecond per message |
+| `IMZERO2_RENDER_GOROUTINE_CHECK` | bool | — | — |  | true: panic when an imzero2 call reaches the FFFI channel off the render loop's goroutine (ADR-0261); costs about a nanosecond per message on amd64 and arm64, microseconds elsewhere |
 | `IMZERO2_SCREENSHOT_DETERMINISTIC` | string | — | — |  | non-empty: skip non-deterministic demos / tours so captures are byte-stable across runs |
 | `IMZERO2_SCREENSHOT_DIR` | path | — | — |  | destination directory for per-window PNG captures; empty disables capture |
 | `IMZERO2_SCREENSHOT_SIZE` | string | — | — |  | tour capture size as WxH (e.g. 1600x900); empty uses per-demo defaults |
