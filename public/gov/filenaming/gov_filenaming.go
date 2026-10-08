@@ -260,10 +260,12 @@ func packageNameE(dir string) (name string, err error) {
 }
 
 // n7Exempt reports whether a file directly under apps/<app>/ is excused from
-// the prefix rule.
+// the prefix rule. package_props.go is a fixed name, not a style choice: the
+// packageprops harvester and its drift check find declarations by exactly
+// that basename (ADR-0080), so a prefixed copy would drop out of the table.
 func n7Exempt(base string, app string) (ok bool) {
 	switch base {
-	case "main.go", "doc.go", "app_register.go", app + ".go":
+	case "main.go", "doc.go", "app_register.go", "package_props.go", app + ".go":
 		return true
 	}
 	return strings.HasSuffix(base, "_test.go")
