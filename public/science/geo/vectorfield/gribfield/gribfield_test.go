@@ -43,9 +43,9 @@ func file(fields ...grib.SynthField) []byte {
 	return b.Bytes()
 }
 
-func TestReadE_PairsComponentsByValidTime(t *testing.T) {
+func TestRead_PairsComponentsByValidTime(t *testing.T) {
 	buf := file(wind(numberV, 3, 0), wind(numberU, 0, 0), wind(numberU, 3, 0), wind(numberV, 0, 0))
-	f, err := ReadE(buf, Options{Name: "w", Unit: "m/s"})
+	f, err := Read(buf, Options{Name: "w", Unit: "m/s"})
 	require.NoError(t, err)
 	require.Equal(t, []time.Time{run, run.Add(3 * time.Hour)}, f.Steps)
 	g := f.Grids[0]
@@ -57,15 +57,15 @@ func TestReadE_PairsComponentsByValidTime(t *testing.T) {
 
 // A grid stored south to north comes out north to south: the raster view
 // applies the scan flags once.
-func TestReadE_AppliesScanFlags(t *testing.T) {
-	f, err := ReadE(file(wind(numberU, 0, 0x40), wind(numberV, 0, 0x40)), Options{})
+func TestRead_AppliesScanFlags(t *testing.T) {
+	f, err := Read(file(wind(numberU, 0, 0x40), wind(numberV, 0, 0x40)), Options{})
 	require.NoError(t, err)
 	g := f.Grids[0]
 	assert.Equal(t, 60.0, g.North)
 	assert.Equal(t, float32(8), g.U[0], "the first stored row is the southernmost")
 }
 
-func TestReadE_Refusals(t *testing.T) {
+func TestRead_Refusals(t *testing.T) {
 	other := wind(numberU, 0, 0)
 	other.Number = 0 // temperature's number in category 0; here a non-wind
 	other.Category = 0
@@ -81,7 +81,7 @@ func TestReadE_Refusals(t *testing.T) {
 		"twice":         file(wind(numberU, 0, 0), wind(numberU, 0, 0), wind(numberV, 0, 0)),
 		"no fields":     nil,
 	} {
-		_, err := ReadE(buf, Options{})
+		_, err := Read(buf, Options{})
 		assert.Error(t, err, name)
 	}
 }

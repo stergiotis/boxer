@@ -1,6 +1,7 @@
 package repo
 
 import (
+	"context"
 	"os"
 	"slices"
 
@@ -8,7 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/config"
 	cli2 "github.com/stergiotis/boxer/public/hmi/cli"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func sharedFlags() []cli.Flag {
@@ -36,8 +37,8 @@ func sharedFlags() []cli.Flag {
 	}
 }
 
-func gitFromContext(c *cli.Context) (git GitRunner) {
-	git = GitRunner{RepoPath: c.String("repo")}
+func gitFromContext(ctx context.Context, cmd *cli.Command) (git GitRunner) {
+	git = GitRunner{RepoPath: cmd.String("repo")}
 	return
 }
 
@@ -51,19 +52,19 @@ func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "repo",
 		Usage: "Git repository health diagnostics",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			{
 				Name:  "report",
 				Usage: "Generate a Unicode health report for embedding in project overviews",
 				Flags: sharedFlags(),
-				Action: func(c *cli.Context) error {
-					git := gitFromContext(c)
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					git := gitFromContext(ctx, cmd)
 					rpt := &ReportGenerator{
-						Since: c.String("since"),
-						Until: c.String("until"),
-						TopN:  c.Int("top"),
+						Since: cmd.String("since"),
+						Until: cmd.String("until"),
+						TopN:  cmd.Int("top"),
 					}
-					err = rpt.Generate(c.Context, &git, os.Stdout)
+					err = rpt.Generate(ctx, &git, os.Stdout)
 					if err != nil {
 						return eh.Errorf("report generation failed: %w", err)
 					}
@@ -74,18 +75,18 @@ func NewCliCommand() *cli.Command {
 				Name:  "churn",
 				Usage: "Show most frequently changed files",
 				Flags: slices.Concat(sharedFlags(), fmtFlags),
-				Action: func(c *cli.Context) error {
-					git := gitFromContext(c)
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					git := gitFromContext(ctx, cmd)
 					analyzer := &ChurnAnalyzer{
-						TopN:  c.Int("top"),
-						Since: c.String("since"),
-						Until: c.String("until"),
+						TopN:  cmd.Int("top"),
+						Since: cmd.String("since"),
+						Until: cmd.String("until"),
 					}
-					for rec, iterErr := range analyzer.Run(c.Context, &git) {
+					for rec, iterErr := range analyzer.Run(ctx, &git) {
 						if iterErr != nil {
 							return eh.Errorf("churn analysis failed: %w", iterErr)
 						}
-						err = f.FormatValue(c, rec)
+						err = f.FormatValue(ctx, cmd, rec)
 						if err != nil {
 							return eh.Errorf("unable to format value: %w", err)
 						}
@@ -97,17 +98,17 @@ func NewCliCommand() *cli.Command {
 				Name:  "velocity",
 				Usage: "Show commit frequency by month",
 				Flags: slices.Concat(sharedFlags(), fmtFlags),
-				Action: func(c *cli.Context) error {
-					git := gitFromContext(c)
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					git := gitFromContext(ctx, cmd)
 					analyzer := &VelocityAnalyzer{
-						Since: c.String("since"),
-						Until: c.String("until"),
+						Since: cmd.String("since"),
+						Until: cmd.String("until"),
 					}
-					for rec, iterErr := range analyzer.Run(c.Context, &git) {
+					for rec, iterErr := range analyzer.Run(ctx, &git) {
 						if iterErr != nil {
 							return eh.Errorf("velocity analysis failed: %w", iterErr)
 						}
-						err = f.FormatValue(c, rec)
+						err = f.FormatValue(ctx, cmd, rec)
 						if err != nil {
 							return eh.Errorf("unable to format value: %w", err)
 						}
@@ -125,19 +126,19 @@ func NewCliCommand() *cli.Command {
 						Usage: "Regex pattern for bug-related commit messages (default: ^(fix|hotfix):",
 					},
 				}),
-				Action: func(c *cli.Context) error {
-					git := gitFromContext(c)
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					git := gitFromContext(ctx, cmd)
 					analyzer := &BugHotspotAnalyzer{
-						Since:   c.String("since"),
-						Until:   c.String("until"),
-						TopN:    c.Int("top"),
-						Pattern: c.String("pattern"),
+						Since:   cmd.String("since"),
+						Until:   cmd.String("until"),
+						TopN:    cmd.Int("top"),
+						Pattern: cmd.String("pattern"),
 					}
-					for rec, iterErr := range analyzer.Run(c.Context, &git) {
+					for rec, iterErr := range analyzer.Run(ctx, &git) {
 						if iterErr != nil {
 							return eh.Errorf("bug hotspot analysis failed: %w", iterErr)
 						}
-						err = f.FormatValue(c, rec)
+						err = f.FormatValue(ctx, cmd, rec)
 						if err != nil {
 							return eh.Errorf("unable to format value: %w", err)
 						}
@@ -154,35 +155,35 @@ func NewCliCommand() *cli.Command {
 						Usage: "Show bus factor summary instead of individual contributors",
 					},
 				}),
-				Action: func(c *cli.Context) error {
-					git := gitFromContext(c)
-					mailmap, mmErr := LoadMailmap(c.Context, &git)
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					git := gitFromContext(ctx, cmd)
+					mailmap, mmErr := LoadMailmap(ctx, &git)
 					if mmErr != nil {
 						return eh.Errorf("unable to load mailmap: %w", mmErr)
 					}
 					analyzer := &ContributorAnalyzer{
-						Since:   c.String("since"),
-						Until:   c.String("until"),
-						TopN:    c.Int("top"),
+						Since:   cmd.String("since"),
+						Until:   cmd.String("until"),
+						TopN:    cmd.Int("top"),
 						Mailmap: mailmap,
 					}
-					if c.Bool("bus-factor") {
+					if cmd.Bool("bus-factor") {
 						var result BusFactorResult
-						result, err = analyzer.RunSummary(c.Context, &git)
+						result, err = analyzer.RunSummary(ctx, &git)
 						if err != nil {
 							return eh.Errorf("contributor analysis failed: %w", err)
 						}
-						err = f.FormatValue(c, result)
+						err = f.FormatValue(ctx, cmd, result)
 						if err != nil {
 							return eh.Errorf("unable to format value: %w", err)
 						}
 						return nil
 					}
-					for rec, iterErr := range analyzer.Run(c.Context, &git) {
+					for rec, iterErr := range analyzer.Run(ctx, &git) {
 						if iterErr != nil {
 							return eh.Errorf("contributor analysis failed: %w", iterErr)
 						}
-						err = f.FormatValue(c, rec)
+						err = f.FormatValue(ctx, cmd, rec)
 						if err != nil {
 							return eh.Errorf("unable to format value: %w", err)
 						}
@@ -194,14 +195,14 @@ func NewCliCommand() *cli.Command {
 				Name:  "authorship",
 				Usage: "Show human vs LLM-generated code over time",
 				Flags: slices.Concat(sharedFlags(), fmtFlags),
-				Action: func(c *cli.Context) error {
-					git := gitFromContext(c)
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					git := gitFromContext(ctx, cmd)
 					analyzer := &AuthorshipAnalyzer{}
-					for rec, iterErr := range analyzer.Run(c.Context, &git) {
+					for rec, iterErr := range analyzer.Run(ctx, &git) {
 						if iterErr != nil {
 							return eh.Errorf("authorship analysis failed: %w", iterErr)
 						}
-						err = f.FormatValue(c, rec)
+						err = f.FormatValue(ctx, cmd, rec)
 						if err != nil {
 							return eh.Errorf("unable to format value: %w", err)
 						}
@@ -232,52 +233,52 @@ func NewCliCommand() *cli.Command {
 						Usage: "Show the provenance-classified commit log instead of per-file records",
 					},
 				}, fmtFlags),
-				Action: func(c *cli.Context) error {
-					git := gitFromContext(c)
-					mailmap, mmErr := LoadMailmap(c.Context, &git)
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					git := gitFromContext(ctx, cmd)
+					mailmap, mmErr := LoadMailmap(ctx, &git)
 					if mmErr != nil {
 						return eh.Errorf("unable to load mailmap: %w", mmErr)
 					}
 					analyzer := &OwnershipAnalyzer{
-						Parallelism: c.Int("parallelism"),
+						Parallelism: cmd.Int("parallelism"),
 						Mailmap:     mailmap,
 					}
-					if c.Bool("commits") {
-						for rec, iterErr := range analyzer.RunCommits(c.Context, &git) {
+					if cmd.Bool("commits") {
+						for rec, iterErr := range analyzer.RunCommits(ctx, &git) {
 							if iterErr != nil {
 								return eh.Errorf("commit scan failed: %w", iterErr)
 							}
-							err = f.FormatValue(c, rec)
+							err = f.FormatValue(ctx, cmd, rec)
 							if err != nil {
 								return eh.Errorf("unable to format value: %w", err)
 							}
 						}
 						return nil
 					}
-					if c.Bool("summary") {
-						summary, sumErr := analyzer.RunSummary(c.Context, &git)
+					if cmd.Bool("summary") {
+						summary, sumErr := analyzer.RunSummary(ctx, &git)
 						if sumErr != nil {
 							return eh.Errorf("ownership analysis failed: %w", sumErr)
 						}
 						for _, owner := range summary.Owners {
-							err = f.FormatValue(c, owner)
+							err = f.FormatValue(ctx, cmd, owner)
 							if err != nil {
 								return eh.Errorf("unable to format value: %w", err)
 							}
 						}
 						for _, sponsor := range summary.Sponsors {
-							err = f.FormatValue(c, sponsor)
+							err = f.FormatValue(ctx, cmd, sponsor)
 							if err != nil {
 								return eh.Errorf("unable to format value: %w", err)
 							}
 						}
 						return nil
 					}
-					for rec, iterErr := range analyzer.Run(c.Context, &git) {
+					for rec, iterErr := range analyzer.Run(ctx, &git) {
 						if iterErr != nil {
 							return eh.Errorf("ownership analysis failed: %w", iterErr)
 						}
-						err = f.FormatValue(c, rec)
+						err = f.FormatValue(ctx, cmd, rec)
 						if err != nil {
 							return eh.Errorf("unable to format value: %w", err)
 						}
@@ -305,20 +306,20 @@ func NewCliCommand() *cli.Command {
 						Usage: "Regex for emergency commits",
 					},
 				}),
-				Action: func(c *cli.Context) error {
-					git := gitFromContext(c)
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					git := gitFromContext(ctx, cmd)
 					analyzer := &FirefightAnalyzer{
-						Since:            c.String("since"),
-						Until:            c.String("until"),
-						RevertPattern:    c.String("revert-pattern"),
-						HotfixPattern:    c.String("hotfix-pattern"),
-						EmergencyPattern: c.String("emergency-pattern"),
+						Since:            cmd.String("since"),
+						Until:            cmd.String("until"),
+						RevertPattern:    cmd.String("revert-pattern"),
+						HotfixPattern:    cmd.String("hotfix-pattern"),
+						EmergencyPattern: cmd.String("emergency-pattern"),
 					}
-					for rec, iterErr := range analyzer.Run(c.Context, &git) {
+					for rec, iterErr := range analyzer.Run(ctx, &git) {
 						if iterErr != nil {
 							return eh.Errorf("firefighting analysis failed: %w", iterErr)
 						}
-						err = f.FormatValue(c, rec)
+						err = f.FormatValue(ctx, cmd, rec)
 						if err != nil {
 							return eh.Errorf("unable to format value: %w", err)
 						}

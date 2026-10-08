@@ -38,9 +38,6 @@ func ParseCoordinators(s string) (names []string) {
 	return
 }
 
-// requestTimeout bounds how long a request waits for the person.
-const requestTimeout = 5 * time.Minute
-
 type reqStateE uint8
 
 const (
@@ -255,7 +252,7 @@ func (inst *Service) requestStatus(key string, msg *app.Msg) (w wireOutcome) {
 // expireRequest ends a request the person left too long. The caller holds
 // mu.
 func (inst *Service) expireRequest(r *request) {
-	if r.state != reqStatePending || time.Since(r.created) < requestTimeout {
+	if r.state != reqStatePending || time.Since(r.created) < inst.requestTimeout() {
 		return
 	}
 	r.state, r.why = reqStateExpired, "the person did not decide in time"
@@ -393,6 +390,21 @@ func (inst *Service) reject(r *request) {
 		r.held.rec.outcome = phaseOutcome(opwire.PhaseRejected, "the person declined the widening")
 		r.held.rec.heldBy = nil
 	}
+}
+
+// withdraw ends the widening a held call waits on, at its coordinator's
+// cancel: the dialog closes and the call ends cancelled, so a person who
+// comes back later cannot approve a call nobody waits for. The caller
+// holds mu.
+func (inst *Service) withdraw(rec *callRec) {
+	r := rec.heldBy
+	if r == nil || r.state != reqStatePending {
+		return
+	}
+	r.state, r.why = reqStateExpired, "withdrawn by the coordinator"
+	inst.grantEvent(trail.GrantEventRefused, "coordinator", r.why, nil, r)
+	rec.outcome = phaseOutcome(opwire.PhaseCancelled, "withdrawn by cancel")
+	rec.heldBy = nil
 }
 
 // routeHeld re-runs a call whose widening the person approved, off the

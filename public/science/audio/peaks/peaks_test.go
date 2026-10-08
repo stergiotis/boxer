@@ -174,9 +174,9 @@ func drawCase(t *rapid.T) (format pcm.Format, samples []float32, baseBin int32) 
 }
 
 func foldWhole(t require.TestingT, format pcm.Format, samples []float32, baseBin int32) (p *peaks.Pyramid) {
-	p, err := peaks.NewPyramidE(format, int64(len(samples)/int(format.Channels)), baseBin)
+	p, err := peaks.NewPyramid(format, int64(len(samples)/int(format.Channels)), baseBin)
 	require.NoError(t, err)
-	require.NoError(t, p.FoldE(samples))
+	require.NoError(t, p.Fold(samples))
 	p.Finish()
 	require.True(t, p.IsComplete())
 	return p
@@ -184,7 +184,7 @@ func foldWhole(t require.TestingT, format pcm.Format, samples []float32, baseBin
 
 func TestPyramidShape(t *testing.T) {
 	format := pcm.Format{SampleRate: 48000, Channels: 2}
-	p, err := peaks.NewPyramidE(format, 1000, 256)
+	p, err := peaks.NewPyramid(format, 1000, 256)
 	require.NoError(t, err)
 	require.Equal(t, int64(1000), p.Frames())
 	require.Equal(t, int32(256), p.BaseBin())
@@ -197,7 +197,7 @@ func TestPyramidShape(t *testing.T) {
 	require.False(t, p.IsComplete())
 
 	// An empty signal still has a level 0, with no bins.
-	empty, err := peaks.NewPyramidE(format, 0, peaks.DefaultBaseBin())
+	empty, err := peaks.NewPyramid(format, 0, peaks.DefaultBaseBin())
 	require.NoError(t, err)
 	require.Equal(t, int32(1), empty.Levels())
 	require.Equal(t, int64(0), empty.Bins(0))
@@ -210,15 +210,15 @@ func TestPyramidShape(t *testing.T) {
 func TestNewPyramidRejects(t *testing.T) {
 	format := pcm.Format{SampleRate: 48000, Channels: 2}
 	for _, baseBin := range []int32{0, 1, 8, 15, 100, -256, 1 << 25} {
-		_, err := peaks.NewPyramidE(format, 1000, baseBin)
+		_, err := peaks.NewPyramid(format, 1000, baseBin)
 		require.Error(t, err, "baseBin %d", baseBin)
 	}
-	_, err := peaks.NewPyramidE(pcm.Format{}, 1000, 256)
+	_, err := peaks.NewPyramid(pcm.Format{}, 1000, 256)
 	require.Error(t, err)
-	_, err = peaks.NewPyramidE(format, -1, 256)
+	_, err = peaks.NewPyramid(format, -1, 256)
 	require.Error(t, err)
 	// The size cap keeps a wild frame count from being an allocation.
-	_, err = peaks.NewPyramidE(format, math.MaxInt32*1024, 16)
+	_, err = peaks.NewPyramid(format, math.MaxInt32*1024, 16)
 	require.Error(t, err)
 }
 
@@ -281,13 +281,13 @@ func TestChunkInvariance(t *testing.T) {
 		format, samples, baseBin := drawCase(t)
 		channels := int(format.Channels)
 		frames := int64(len(samples) / channels)
-		chunked, err := peaks.NewPyramidE(format, frames, baseBin)
+		chunked, err := peaks.NewPyramid(format, frames, baseBin)
 		require.NoError(t, err)
 		off := 0
 		for off < len(samples) {
 			chunkFrames := rapid.IntRange(0, 700).Draw(t, "chunkFrames")
 			end := min(off+chunkFrames*channels, len(samples))
-			require.NoError(t, chunked.FoldE(samples[off:end]))
+			require.NoError(t, chunked.Fold(samples[off:end]))
 			require.Equal(t, int64(end/channels), chunked.Built())
 			off = end
 		}
@@ -297,18 +297,18 @@ func TestChunkInvariance(t *testing.T) {
 }
 
 // TestBuildPathsAgree pins the three ways to build one pyramid to the same
-// result: BuildE, NewPyramidE+FillFromE, and folding by hand.
+// result: Build, NewPyramid+FillFrom, and folding by hand.
 func TestBuildPathsAgree(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		format, samples, baseBin := drawCase(t)
 		channels := int(format.Channels)
 		frames := int64(len(samples) / channels)
-		src, err := pcm.NewMemSourceE(format, samples)
+		src, err := pcm.NewMemSource(format, samples)
 		require.NoError(t, err)
 		chunkFrames := rapid.IntRange(1, 900).Draw(t, "chunkFrames")
 
 		var lastProgress int64
-		built, err := peaks.BuildE(context.Background(), src, baseBin, chunkFrames, func(builtFrames int64) {
+		built, err := peaks.Build(context.Background(), src, baseBin, chunkFrames, func(builtFrames int64) {
 			require.GreaterOrEqual(t, builtFrames, lastProgress)
 			lastProgress = builtFrames
 		})
@@ -317,9 +317,9 @@ func TestBuildPathsAgree(t *testing.T) {
 		require.Equal(t, frames, built.Built())
 		require.True(t, built.IsComplete())
 
-		filled, err := peaks.NewPyramidE(format, frames, baseBin)
+		filled, err := peaks.NewPyramid(format, frames, baseBin)
 		require.NoError(t, err)
-		require.NoError(t, filled.FillFromE(context.Background(), src, chunkFrames, nil))
+		require.NoError(t, filled.FillFrom(context.Background(), src, chunkFrames, nil))
 
 		ref := buildRefPyramid(format, samples, baseBin)
 		requireMatchesRef(t, built, ref)
@@ -330,51 +330,51 @@ func TestBuildPathsAgree(t *testing.T) {
 
 func TestFoldRejects(t *testing.T) {
 	format := pcm.Format{SampleRate: 48000, Channels: 2}
-	p, err := peaks.NewPyramidE(format, 100, 16)
+	p, err := peaks.NewPyramid(format, 100, 16)
 	require.NoError(t, err)
-	require.Error(t, p.FoldE(make([]float32, 3)), "ragged frame")
-	require.Error(t, p.FoldE(make([]float32, 202)), "past the declared end")
-	require.NoError(t, p.FoldE(make([]float32, 200)))
-	require.Error(t, p.FoldE(make([]float32, 2)), "past the declared end")
+	require.Error(t, p.Fold(make([]float32, 3)), "ragged frame")
+	require.Error(t, p.Fold(make([]float32, 202)), "past the declared end")
+	require.NoError(t, p.Fold(make([]float32, 200)))
+	require.Error(t, p.Fold(make([]float32, 2)), "past the declared end")
 	p.Finish()
-	require.Error(t, p.FoldE(make([]float32, 0)), "after Finish")
+	require.Error(t, p.Fold(make([]float32, 0)), "after Finish")
 	p.Finish()
 	require.True(t, p.IsComplete())
 }
 
 func TestFillFromRejectsMismatchedSource(t *testing.T) {
 	format := pcm.Format{SampleRate: 48000, Channels: 2}
-	src, err := pcm.NewMemSourceE(format, make([]float32, 200))
+	src, err := pcm.NewMemSource(format, make([]float32, 200))
 	require.NoError(t, err)
 	ctx := context.Background()
 
-	other, err := peaks.NewPyramidE(pcm.Format{SampleRate: 44100, Channels: 2}, 100, 16)
+	other, err := peaks.NewPyramid(pcm.Format{SampleRate: 44100, Channels: 2}, 100, 16)
 	require.NoError(t, err)
-	require.Error(t, other.FillFromE(ctx, src, 0, nil))
+	require.Error(t, other.FillFrom(ctx, src, 0, nil))
 
-	shorter, err := peaks.NewPyramidE(format, 50, 16)
+	shorter, err := peaks.NewPyramid(format, 50, 16)
 	require.NoError(t, err)
-	require.Error(t, shorter.FillFromE(ctx, src, 0, nil))
+	require.Error(t, shorter.FillFrom(ctx, src, 0, nil))
 
-	p, err := peaks.NewPyramidE(format, 100, 16)
+	p, err := peaks.NewPyramid(format, 100, 16)
 	require.NoError(t, err)
-	require.NoError(t, p.FillFromE(ctx, src, 0, nil))
-	require.Error(t, p.FillFromE(ctx, src, 0, nil), "already complete")
+	require.NoError(t, p.FillFrom(ctx, src, 0, nil))
+	require.Error(t, p.FillFrom(ctx, src, 0, nil), "already complete")
 
-	_, err = peaks.BuildE(ctx, nil, 16, 0, nil)
+	_, err = peaks.Build(ctx, nil, 16, 0, nil)
 	require.Error(t, err)
 }
 
 func TestBuildCancellation(t *testing.T) {
 	format := pcm.Format{SampleRate: 48000, Channels: 1}
 	samples := genSamples(7, 40000)
-	src, err := pcm.NewMemSourceE(format, samples)
+	src, err := pcm.NewMemSource(format, samples)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	p, err := peaks.NewPyramidE(format, int64(len(samples)), 16)
+	p, err := peaks.NewPyramid(format, int64(len(samples)), 16)
 	require.NoError(t, err)
-	err = p.FillFromE(ctx, src, 64, func(builtFrames int64) {
+	err = p.FillFrom(ctx, src, 64, func(builtFrames int64) {
 		if builtFrames >= 640 {
 			cancel()
 		}
@@ -384,15 +384,15 @@ func TestBuildCancellation(t *testing.T) {
 	require.GreaterOrEqual(t, p.Built(), int64(640))
 	require.Less(t, p.Built(), int64(len(samples)))
 
-	// The partial pyramid is resumable, and BuildE — which owns its
+	// The partial pyramid is resumable, and Build — which owns its
 	// pyramid — reports the cancellation with nothing to show.
-	require.NoError(t, p.FillFromE(context.Background(), src, 64, nil))
+	require.NoError(t, p.FillFrom(context.Background(), src, 64, nil))
 	require.True(t, p.IsComplete())
 	requireMatchesRef(t, p, buildRefPyramid(format, samples, 16))
 
 	cancelled, cancel2 := context.WithCancel(context.Background())
 	cancel2()
-	got, err := peaks.BuildE(cancelled, src, 16, 64, nil)
+	got, err := peaks.Build(cancelled, src, 16, 64, nil)
 	require.ErrorIs(t, err, context.Canceled)
 	require.Nil(t, got)
 }
@@ -419,7 +419,7 @@ func TestQuantiseSpecials(t *testing.T) {
 
 func TestPickLevel(t *testing.T) {
 	format := pcm.Format{SampleRate: 48000, Channels: 1}
-	p, err := peaks.NewPyramidE(format, 1<<20, 256)
+	p, err := peaks.NewPyramid(format, 1<<20, 256)
 	require.NoError(t, err)
 	require.Equal(t, int32(0), p.PickLevel(0))
 	require.Equal(t, int32(0), p.PickLevel(255.9))
@@ -558,9 +558,9 @@ func TestColumnsAndQueryEdgeCases(t *testing.T) {
 func TestFinishEarlyPublishesWhatWasFolded(t *testing.T) {
 	format := pcm.Format{SampleRate: 48000, Channels: 1}
 	samples := genSamples(3, 1000)
-	p, err := peaks.NewPyramidE(format, 1000, 16)
+	p, err := peaks.NewPyramid(format, 1000, 16)
 	require.NoError(t, err)
-	require.NoError(t, p.FoldE(samples[:100]))
+	require.NoError(t, p.Fold(samples[:100]))
 	p.Finish()
 	require.True(t, p.IsComplete())
 	require.Equal(t, int64(1000), p.Frames())

@@ -23,7 +23,7 @@ const (
 	EncodingIEEEFloat EncodingE = 2
 )
 
-// AllEncodings lists the encodings a [File] decodes and [WriteE] emits.
+// AllEncodings lists the encodings a [File] decodes and [Write] emits.
 var AllEncodings = []EncodingE{EncodingPCMInt, EncodingIEEEFloat}
 
 func (inst EncodingE) String() (s string) {
@@ -92,9 +92,9 @@ func guidString(guid []byte) (s string) {
 		hex.EncodeToString(guid[10:16]))
 }
 
-// subFormatTagE resolves a WAVE_FORMAT_EXTENSIBLE SubFormat GUID to the
+// subFormatTag resolves a WAVE_FORMAT_EXTENSIBLE SubFormat GUID to the
 // format tag it stands for.
-func subFormatTagE(guid []byte) (tag uint16, err error) {
+func subFormatTag(guid []byte) (tag uint16, err error) {
 	if [12]byte(guid[4:16]) != ksDataFormatSubtypeSuffix {
 		return 0, eb.Build().
 			Str("subFormat", guidString(guid)).
@@ -116,9 +116,9 @@ func formatTagOf(enc EncodingE) (tag uint16) {
 	return formatTagPCM
 }
 
-// validateSampleFormatE rejects the encoding/width combinations that have no
+// validateSampleFormat rejects the encoding/width combinations that have no
 // conversion path in either direction.
-func validateSampleFormatE(enc EncodingE, bits uint16) (err error) {
+func validateSampleFormat(enc EncodingE, bits uint16) (err error) {
 	switch enc {
 	case EncodingPCMInt:
 		switch bits {

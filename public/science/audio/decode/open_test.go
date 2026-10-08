@@ -28,12 +28,12 @@ func testSignal() (fn pcm.SampleFunc) {
 // returns its path.
 func writeWAVFixture(t *testing.T, dir string, name string, frames int64, enc wavfile.EncodingE, bits uint16) (path string) {
 	t.Helper()
-	src, err := pcm.NewSynthSourceE(testFormat, frames, testSignal())
+	src, err := pcm.NewSynthSource(testFormat, frames, testSignal())
 	require.NoError(t, err)
 	path = filepath.Join(dir, name)
 	f, err := os.Create(path)
 	require.NoError(t, err)
-	require.NoError(t, wavfile.WriteE(context.Background(), f, testFormat, enc, bits, src))
+	require.NoError(t, wavfile.Write(context.Background(), f, testFormat, enc, bits, src))
 	require.NoError(t, f.Close())
 	return path
 }
@@ -42,10 +42,10 @@ func TestOpenWAVUsesTheNativeReader(t *testing.T) {
 	const frames int64 = 20000
 	path := writeWAVFixture(t, t.TempDir(), "tone.wav", frames, wavfile.EncodingIEEEFloat, 32)
 
-	src, kind, err := OpenE(context.Background(), path)
+	src, kind, err := Open(context.Background(), path)
 	require.NoError(t, err)
 	require.Equal(t, KindWAV, kind)
-	defer func() { require.NoError(t, src.CloseE()) }()
+	defer func() { require.NoError(t, src.Close()) }()
 
 	require.Equal(t, testFormat, src.Format())
 	require.Equal(t, frames, src.Frames())
@@ -59,32 +59,32 @@ func TestReopenerGivesIndependentSources(t *testing.T) {
 
 	first, err := reopen(context.Background())
 	require.NoError(t, err)
-	defer func() { require.NoError(t, first.CloseE()) }()
+	defer func() { require.NoError(t, first.Close()) }()
 	second, err := reopen(context.Background())
 	require.NoError(t, err)
-	defer func() { require.NoError(t, second.CloseE()) }()
+	defer func() { require.NoError(t, second.Close()) }()
 	require.NotSame(t, first, second)
 
 	channels := int(testFormat.Channels)
 	head := make([]float32, 64*channels)
 	tail := make([]float32, 64*channels)
-	n, err := first.ReadFramesAtE(context.Background(), 0, head)
+	n, err := first.ReadFramesAt(context.Background(), 0, head)
 	require.NoError(t, err)
 	require.Equal(t, 64, n)
-	n, err = second.ReadFramesAtE(context.Background(), frames-64, tail)
+	n, err = second.ReadFramesAt(context.Background(), frames-64, tail)
 	require.NoError(t, err)
 	require.Equal(t, 64, n)
 
 	// The second source's position did not disturb the first's.
 	again := make([]float32, 64*channels)
-	n, err = first.ReadFramesAtE(context.Background(), 64, again)
+	n, err = first.ReadFramesAt(context.Background(), 64, again)
 	require.NoError(t, err)
 	require.Equal(t, 64, n)
 	require.NotEqual(t, head, again)
 }
 
 func TestOpenMissingFileErrors(t *testing.T) {
-	_, kind, err := OpenE(context.Background(), filepath.Join(t.TempDir(), "absent.wav"))
+	_, kind, err := Open(context.Background(), filepath.Join(t.TempDir(), "absent.wav"))
 	require.Error(t, err)
 	require.Equal(t, KindUnknown, kind)
 }

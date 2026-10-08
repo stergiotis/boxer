@@ -23,12 +23,12 @@ func testParams() (p Params) {
 	}
 }
 
-func TestDeriveParamsE(t *testing.T) {
+func TestDeriveParams(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"),
 		[]byte("module example.com/owner/thing\n\ngo 1.26.0\n"), 0o644))
 
-	p, err := DeriveParamsE(dir)
+	p, err := DeriveParams(dir)
 	require.NoError(t, err)
 	assert.Equal(t, "example.com/owner/thing", p.Module)
 	assert.Equal(t, "thing", p.Name)
@@ -39,7 +39,7 @@ func TestDeriveParamsE(t *testing.T) {
 func TestDeriveParamsEReportsAMissingModuleLine(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("go 1.26.0\n"), 0o644))
-	_, err := DeriveParamsE(dir)
+	_, err := DeriveParams(dir)
 	require.Error(t, err)
 }
 
@@ -50,11 +50,11 @@ func TestWriteThenCheckIsClean(t *testing.T) {
 	files := DefaultFiles()
 	p := testParams()
 
-	written, err := WriteE(dir, files, p)
+	written, err := Write(dir, files, p)
 	require.NoError(t, err)
 	assert.Len(t, written, len(files))
 
-	results, err := CheckE(dir, files, p)
+	results, err := Check(dir, files, p)
 	require.NoError(t, err)
 	for _, r := range results {
 		assert.False(t, r.Blocking(), "%s should not block right after a write (%s)", r.Path, r.Status)
@@ -65,7 +65,7 @@ func TestCheckDetectsDriftInAGeneratedFile(t *testing.T) {
 	dir := t.TempDir()
 	files := DefaultFiles()
 	p := testParams()
-	_, err := WriteE(dir, files, p)
+	_, err := Write(dir, files, p)
 	require.NoError(t, err)
 
 	victim := filepath.Join(dir, "scripts", "ci", "lint.sh")
@@ -75,7 +75,7 @@ func TestCheckDetectsDriftInAGeneratedFile(t *testing.T) {
 	require.NotEqual(t, string(body), edited)
 	require.NoError(t, os.WriteFile(victim, []byte(edited), 0o755))
 
-	results, err := CheckE(dir, files, p)
+	results, err := Check(dir, files, p)
 	require.NoError(t, err)
 
 	var found bool
@@ -98,7 +98,7 @@ func TestSeededFilesAreNeverOverwrittenOrReconciled(t *testing.T) {
 	dir := t.TempDir()
 	files := DefaultFiles()
 	p := testParams()
-	_, err := WriteE(dir, files, p)
+	_, err := Write(dir, files, p)
 	require.NoError(t, err)
 
 	own := filepath.Join(dir, "AGENTS.md")
@@ -106,7 +106,7 @@ func TestSeededFilesAreNeverOverwrittenOrReconciled(t *testing.T) {
 	tagsPath := filepath.Join(dir, "tags")
 	require.NoError(t, os.WriteFile(tagsPath, []byte("goexperiment.jsonv2,thing_local\n"), 0o644))
 
-	written, err := WriteE(dir, files, p)
+	written, err := Write(dir, files, p)
 	require.NoError(t, err)
 	assert.NotContains(t, written, "AGENTS.md")
 	assert.NotContains(t, written, "tags")
@@ -115,7 +115,7 @@ func TestSeededFilesAreNeverOverwrittenOrReconciled(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "# my own router\n", string(body))
 
-	results, err := CheckE(dir, files, p)
+	results, err := Check(dir, files, p)
 	require.NoError(t, err)
 	for _, r := range results {
 		if r.Ownership == OwnershipSeeded {
@@ -129,11 +129,11 @@ func TestCheckReportsAnAbsentGeneratedFileAsBlocking(t *testing.T) {
 	dir := t.TempDir()
 	files := DefaultFiles()
 	p := testParams()
-	_, err := WriteE(dir, files, p)
+	_, err := Write(dir, files, p)
 	require.NoError(t, err)
 	require.NoError(t, os.Remove(filepath.Join(dir, "scripts", "boxer-path.sh")))
 
-	results, err := CheckE(dir, files, p)
+	results, err := Check(dir, files, p)
 	require.NoError(t, err)
 	for _, r := range results {
 		if r.Path == "scripts/boxer-path.sh" {
@@ -149,7 +149,7 @@ func TestAbsentSeededFileDoesNotBlock(t *testing.T) {
 	dir := t.TempDir()
 	files := DefaultFiles()
 	p := testParams()
-	results, err := CheckE(dir, files, p)
+	results, err := Check(dir, files, p)
 	require.NoError(t, err)
 	for _, r := range results {
 		if r.Ownership == OwnershipSeeded {
@@ -168,12 +168,12 @@ func TestEmittedShellScriptsParse(t *testing.T) {
 	dir := t.TempDir()
 	files := DefaultFiles()
 	p := testParams()
-	_, err := WriteE(dir, files, p)
+	_, err := Write(dir, files, p)
 	require.NoError(t, err)
 
 	var checked uint32
 	for _, f := range files {
-		rel, _, rErr := RenderE(f, p)
+		rel, _, rErr := Render(f, p)
 		require.NoError(t, rErr)
 		if !strings.HasSuffix(rel, ".sh") {
 			continue
@@ -188,7 +188,7 @@ func TestEmittedShellScriptsParse(t *testing.T) {
 func TestGeneratedFilesCarryTheMarkerAndSeededOnesDoNot(t *testing.T) {
 	p := testParams()
 	for _, f := range DefaultFiles() {
-		rel, content, err := RenderE(f, p)
+		rel, content, err := Render(f, p)
 		require.NoError(t, err)
 		if f.Ownership == OwnershipGenerated {
 			assert.Contains(t, string(content), GeneratedMarker,
@@ -205,7 +205,7 @@ func TestLauncherPathIsTemplated(t *testing.T) {
 	p := testParams()
 	p.Name = "sailboat"
 	for _, f := range DefaultFiles() {
-		rel, content, err := RenderE(f, p)
+		rel, content, err := Render(f, p)
 		require.NoError(t, err)
 		if !strings.HasSuffix(rel, ".sh") || strings.Contains(rel, "/") {
 			continue
@@ -219,7 +219,7 @@ func TestLauncherPathIsTemplated(t *testing.T) {
 // that emits a tags file its own gate rejects is worse than no skeleton.
 func TestSeededTagsSatisfyTheBuildTagContract(t *testing.T) {
 	dir := t.TempDir()
-	_, err := WriteE(dir, DefaultFiles(), testParams())
+	_, err := Write(dir, DefaultFiles(), testParams())
 	require.NoError(t, err)
 
 	raw, err := os.ReadFile(filepath.Join(dir, "tags"))
@@ -232,14 +232,14 @@ func TestSeededTagsSatisfyTheBuildTagContract(t *testing.T) {
 func TestRenderRejectsAnEmptyName(t *testing.T) {
 	p := testParams()
 	p.Name = ""
-	_, _, err := RenderE(DefaultFiles()[0], p)
+	_, _, err := Render(DefaultFiles()[0], p)
 	require.Error(t, err)
 }
 
 func TestRenderRejectsANameWithAPathSeparator(t *testing.T) {
 	p := testParams()
 	p.Name = "a/b"
-	_, _, err := RenderE(DefaultFiles()[0], p)
+	_, _, err := Render(DefaultFiles()[0], p)
 	require.Error(t, err)
 }
 
@@ -262,7 +262,7 @@ func TestFirstDiffPinpointsTheLine(t *testing.T) {
 // ran the gate on a freshly written skeleton.
 func TestEmittedMarkdownSatisfiesDoclint(t *testing.T) {
 	dir := t.TempDir()
-	_, err := WriteE(dir, DefaultFiles(), testParams())
+	_, err := Write(dir, DefaultFiles(), testParams())
 	require.NoError(t, err)
 
 	linter := doclint.NewDefaultLinter()
@@ -283,7 +283,7 @@ func TestLauncherHonoursTheLocalSeam(t *testing.T) {
 	}
 	dir := t.TempDir()
 	p := testParams()
-	_, err := WriteE(dir, DefaultFiles(), p)
+	_, err := Write(dir, DefaultFiles(), p)
 	require.NoError(t, err)
 
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "scripts", "dev"), 0o755))
@@ -313,7 +313,7 @@ func TestLauncherWithoutTheSeamPassesNoStrayArgument(t *testing.T) {
 		t.Skip("bash unavailable")
 	}
 	dir := t.TempDir()
-	_, err := WriteE(dir, DefaultFiles(), testParams())
+	_, err := Write(dir, DefaultFiles(), testParams())
 	require.NoError(t, err)
 
 	bin := filepath.Join(dir, "stubbin")
@@ -342,7 +342,7 @@ func TestLauncherLeavesOneBinaryHoweverOftenItRuns(t *testing.T) {
 		t.Skip("bash unavailable")
 	}
 	dir := t.TempDir()
-	_, err := WriteE(dir, DefaultFiles(), testParams())
+	_, err := Write(dir, DefaultFiles(), testParams())
 	require.NoError(t, err)
 
 	// Stub `go build`: write a runnable "app" to the -o path that records its
@@ -386,7 +386,7 @@ func TestLauncherRemovesTheOutputOfAFailedBuild(t *testing.T) {
 		t.Skip("bash unavailable")
 	}
 	dir := t.TempDir()
-	_, err := WriteE(dir, DefaultFiles(), testParams())
+	_, err := Write(dir, DefaultFiles(), testParams())
 	require.NoError(t, err)
 
 	bin := filepath.Join(dir, "stubbin")
@@ -418,14 +418,14 @@ func TestAdoptionAdrIsNotSeededIntoAnExistingCorpus(t *testing.T) {
 		filepath.Join(dir, "doc", "adr", "0001-something-else.md"),
 		[]byte("---\ntype: adr\n---\n\n# ADR-0001\n"), 0o644))
 
-	written, err := WriteE(dir, DefaultFiles(), testParams())
+	written, err := Write(dir, DefaultFiles(), testParams())
 	require.NoError(t, err)
 	assert.NotContains(t, written, "doc/adr/0001-adopt-boxer-standards.md")
 	_, statErr := os.Stat(filepath.Join(dir, "doc", "adr", "0001-adopt-boxer-standards.md"))
 	assert.True(t, os.IsNotExist(statErr), "must not collide with the existing ADR-0001")
 
 	// And a suppressed seed is not then reported as something the repository owes.
-	results, err := CheckE(dir, DefaultFiles(), testParams())
+	results, err := Check(dir, DefaultFiles(), testParams())
 	require.NoError(t, err)
 	for _, r := range results {
 		assert.NotEqual(t, "doc/adr/0001-adopt-boxer-standards.md", r.Path,
@@ -435,7 +435,7 @@ func TestAdoptionAdrIsNotSeededIntoAnExistingCorpus(t *testing.T) {
 
 func TestAdoptionAdrIsSeededIntoAnEmptyRepository(t *testing.T) {
 	dir := t.TempDir()
-	written, err := WriteE(dir, DefaultFiles(), testParams())
+	written, err := Write(dir, DefaultFiles(), testParams())
 	require.NoError(t, err)
 	assert.Contains(t, written, "doc/adr/0001-adopt-boxer-standards.md")
 }
@@ -446,7 +446,7 @@ func TestAdoptionAdrIsSeededIntoAnEmptyRepository(t *testing.T) {
 func TestLintWrapperSourcesGateFlags(t *testing.T) {
 	p := testParams()
 	for _, f := range DefaultFiles() {
-		rel, content, err := RenderE(f, p)
+		rel, content, err := Render(f, p)
 		require.NoError(t, err)
 		if rel != "scripts/ci/lint.sh" {
 			continue
@@ -467,7 +467,7 @@ func TestWriteRefusesToFollowASymlink(t *testing.T) {
 	require.NoError(t, os.WriteFile(real, []byte("#!/bin/bash\necho original\n"), 0o755))
 	require.NoError(t, os.Symlink("real-launcher.sh", filepath.Join(dir, "thing.sh")))
 
-	_, err := WriteE(dir, DefaultFiles(), testParams())
+	_, err := Write(dir, DefaultFiles(), testParams())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "symlink")
 
@@ -485,7 +485,7 @@ func TestLauncherSkipsTheBuildWhenNothingChanged(t *testing.T) {
 		t.Skip("bash unavailable")
 	}
 	dir := t.TempDir()
-	_, err := WriteE(dir, DefaultFiles(), testParams())
+	_, err := Write(dir, DefaultFiles(), testParams())
 	require.NoError(t, err)
 
 	// Stub `go`: `build` writes a runnable app and counts itself; `list`

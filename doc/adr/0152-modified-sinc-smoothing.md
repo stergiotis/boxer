@@ -234,11 +234,11 @@ Deliberately left open, each until a consumer makes it concrete:
 
 ## Updates
 
-### 2026-07-31 — smoothed derivatives ship as `DerivativeE`; live demo
+### 2026-07-31 — smoothed derivatives ship as `Derivative`; live demo
 
 The Decision above listed derivatives as "none provided; smooth first, then
 difference numerically". That guidance is now packaged rather than left to
-callers: `Kernel.DerivativeE` returns the smoothed first derivative as the
+callers: `Kernel.Derivative` returns the smoothed first derivative as the
 *centered* difference of the MS-smoothed series, computed over a one-sample
 margin of the boundary extrapolation so the ends need no special casing and
 the result stays zero-phase (no half-sample shift). What remains deliberately

@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	jk "github.com/stergiotis/boxer/public/db/clickhouse/jackstay"
 	"github.com/stergiotis/boxer/public/gov/datacatalog"
@@ -51,12 +51,12 @@ func TestParseRefs(t *testing.T) {
 func syncRequest(t *testing.T, args ...string) (req jk.SyncRequest, compression string, err error) {
 	t.Helper()
 	cmd := newSyncCommand()
-	cmd.Action = func(c *cli.Context) error {
-		req, compression, err = parseSyncRequest(c)
+	cmd.Action = func(ctx context.Context, cmd *cli.Command) error {
+		req, compression, err = parseSyncRequest(ctx, cmd)
 		return nil
 	}
-	a := &cli.App{Commands: []*cli.Command{cmd}, ExitErrHandler: func(*cli.Context, error) {}}
-	require.NoError(t, a.Run(append([]string{"boxer", "sync", "--plan", "plan.json"}, args...)))
+	a := &cli.Command{Commands: []*cli.Command{cmd}, ExitErrHandler: func(context.Context, *cli.Command, error) {}}
+	require.NoError(t, a.Run(context.Background(), append([]string{"boxer", "sync", "--plan", "plan.json"}, args...)))
 	return
 }
 
@@ -94,14 +94,14 @@ func TestParseSyncRequest(t *testing.T) {
 // A filter's commas belong to its expression, never separate entries.
 func TestFilterFlagKeepsCommas(t *testing.T) {
 	var got map[string]string
-	app := &cli.App{
+	app := &cli.Command{
 		Flags: []cli.Flag{filterFlag()},
-		Action: func(c *cli.Context) (err error) {
-			got, err = parseFilters(filterValues(c))
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
+			got, err = parseFilters(filterValues(ctx, cmd))
 			return
 		},
 	}
-	err := app.RunContext(context.Background(), []string{"jackstay",
+	err := app.Run(context.Background(), []string{"jackstay",
 		"--filter", "db.a=x IN (1, 2)",
 		"--filter", "db.b=has(tags, 'a')",
 	})

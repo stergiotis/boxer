@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"fmt"
@@ -14,7 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/unsafeperf"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"github.com/yassinebenaid/godump"
 )
 
@@ -77,9 +78,9 @@ func NewUniversalCliFormatter(nametransf config.NameTransformFunc) (inst *Univer
 func (inst *UniversalCliFormatter) ToCliFlags() []cli.Flag {
 	return inst.flags
 }
-func (inst *UniversalCliFormatter) FormatValue(context *cli.Context, v any) (err error) {
-	f := context.String(inst.nametransf("format"))
-	markdown := context.Bool(inst.nametransf("markdown"))
+func (inst *UniversalCliFormatter) FormatValue(ctx context.Context, cmd *cli.Command, v any) (err error) {
+	f := cmd.String(inst.nametransf("format"))
+	markdown := cmd.Bool(inst.nametransf("markdown"))
 	var out io.Writer
 	var buf *bytes.Buffer
 	out = os.Stdout

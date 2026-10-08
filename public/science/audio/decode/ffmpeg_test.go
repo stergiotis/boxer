@@ -42,10 +42,10 @@ func indexOf(args []string, want string) (i int) {
 
 func TestFfmpegReadAfterCloseIsAnError(t *testing.T) {
 	src := &FfmpegSource{path: "/tmp/a.flac", format: testFormat, frames: 1000}
-	require.NoError(t, src.CloseE())
-	require.NoError(t, src.CloseE(), "closing twice is not an error")
+	require.NoError(t, src.Close())
+	require.NoError(t, src.Close(), "closing twice is not an error")
 
-	n, err := src.ReadFramesAtE(context.Background(), 0, make([]float32, 8))
+	n, err := src.ReadFramesAt(context.Background(), 0, make([]float32, 8))
 	require.Error(t, err)
 	require.Zero(t, n)
 }

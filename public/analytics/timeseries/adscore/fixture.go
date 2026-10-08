@@ -20,7 +20,7 @@ import (
 // join is itself a locally detectable discontinuity and would hand the same
 // one-liners the answer.
 //
-// Use [TrivialityE] to check a generated fixture rather than trusting this
+// Use [Triviality] to check a generated fixture rather than trusting this
 // comment; the residual detectability differs by kind and is measured, not
 // assumed.
 type AnomalyKindE uint8
@@ -160,9 +160,9 @@ func (inst *Fixture) AnomalyFraction() (frac float64) {
 	return
 }
 
-// GenerateE builds a synthetic labelled series from spec. The result is a pure
+// Generate builds a synthetic labelled series from spec. The result is a pure
 // function of spec, including its Seed.
-func GenerateE(spec FixtureSpec) (inst *Fixture, err error) {
+func Generate(spec FixtureSpec) (inst *Fixture, err error) {
 	if spec.Length < 16 {
 		err = eb.Build().Int32("length", spec.Length).Errorf("series too short")
 		return
@@ -482,7 +482,7 @@ type BaselineResult struct {
 	Measures Measures
 }
 
-// TrivialityE scores every one-liner against a fixture and returns the results
+// Triviality scores every one-liner against a fixture and returns the results
 // alongside the highest VUS-PR any of them reached.
 //
 // This is the check Wu and Keogh's paper implies but no benchmark performs: a
@@ -491,7 +491,7 @@ type BaselineResult struct {
 // a defect in the fixture, not a result.
 //
 // The bar is a judgement call, not a derivation — see [TrivialityThreshold].
-func TrivialityE(fixture *Fixture, maxBuffer int32) (results []BaselineResult, worstVUSPR float64, err error) {
+func Triviality(fixture *Fixture, maxBuffer int32) (results []BaselineResult, worstVUSPR float64, err error) {
 	window := int32(16)
 	if fixture.Ranges.Len() > 0 {
 		window = DefaultMaxBuffer(fixture.Ranges)
@@ -500,7 +500,7 @@ func TrivialityE(fixture *Fixture, maxBuffer int32) (results []BaselineResult, w
 	results = make([]BaselineResult, 0, len(AllBaselines))
 	for _, b := range AllBaselines {
 		var m Measures
-		m, err = EvaluateE(BaselineScores(fixture.Values, b, window), fixture.Labels, maxBuffer)
+		m, err = Evaluate(BaselineScores(fixture.Values, b, window), fixture.Labels, maxBuffer)
 		if err != nil {
 			return
 		}

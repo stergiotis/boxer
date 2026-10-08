@@ -1,7 +1,7 @@
 // Package adhocdemo dogfoods ad-hoc bundles (ADR-0288, over
 // ADR-0240's datasets): it generates a computed series, publishes it as a
 // bundle — the rows and an applet document that reads them as `items` —
-// through play.PublishBundleE, and shows it through a sqlapplet bundle
+// through play.PublishBundle, and shows it through a sqlapplet bundle
 // view, the receiver's one constructor. A Regenerate button republishes
 // the bundle; the view follows it on the frame it is drawn, like any
 // receiver of a bundle another app published.
@@ -79,7 +79,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	// The window's own bundle alias (ADR-0288 §SD3): a second adhocdemo
 	// window publishes its own.
 	inst.bundle = adhocdata.WindowAlias(bundleBase, ctx.InstanceKey())
-	if _, pubErr := play.PublishBundleE(inst.bus, inst.itemsSpec(0)); pubErr != nil {
+	if _, pubErr := play.PublishBundle(inst.bus, inst.itemsSpec(0)); pubErr != nil {
 		inst.statusErr = "publish: " + pubErr.Error()
 		return
 	}
@@ -176,7 +176,7 @@ func (inst *App) regenerate() {
 	gen := inst.gen
 	inst.mu.Unlock()
 
-	if _, err := play.PublishBundleE(inst.bus, inst.itemsSpec(gen)); err != nil {
+	if _, err := play.PublishBundle(inst.bus, inst.itemsSpec(gen)); err != nil {
 		inst.log.Warn().Err(err).Msg("adhocdemo: regenerate failed")
 	}
 

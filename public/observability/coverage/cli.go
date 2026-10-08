@@ -1,12 +1,13 @@
 package coverage
 
 import (
+	"context"
 	"path"
 	"syscall"
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 var CoverageFlags = []cli.Flag{
@@ -14,7 +15,7 @@ var CoverageFlags = []cli.Flag{
 		Name:     "coverageTrapDir",
 		Category: "coverage",
 		Usage:    "Will write cover information to the dir whenever the program receives SIGUSR1. Use -cover -covermode=atomic to compile the program.",
-		Action: func(context *cli.Context, s string) error {
+		Action: func(ctx context.Context, cmd *cli.Command, s string) error {
 			if s != "" {
 				err := ProbeRuntimeSupport()
 				if err != nil {

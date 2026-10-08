@@ -165,7 +165,7 @@ Gaps, and what each forces:
   instance has the mirror attached is to be verified, not assumed. If it does,
   ADR-0203's Q1 gap closes for free.
 - **H3 overlays.** Cell outlines are already reachable in Go
-  (`CellsToBoundariesE`, over the `h3bridge` export `h3_cell_to_boundary`);
+  (`CellsToBoundaries`, over the `h3bridge` export `h3_cell_to_boundary`);
   what the *region* overlay needs is the dissolve (cells → multipolygon),
   which imzero2 does Rust-side with `h3o`'s `SolventBuilder`. The bridge
   already builds `h3o` with its `geo` feature, so the dissolve is one more

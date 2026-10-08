@@ -22,6 +22,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
+	"github.com/stergiotis/boxer/public/keelson/runtime/loopback"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
@@ -134,7 +135,7 @@ func (s *Server) Start() (err error) {
 	if splitErr != nil {
 		return eb.Build().Str("addr", s.addr).Errorf("introspecthttp: bad listen addr: %w", splitErr)
 	}
-	if !isLoopbackHost(host) {
+	if !loopback.IsHost(host) {
 		return eb.Build().Str("addr", s.addr).Errorf("introspecthttp: refusing non-loopback bind; remote exposure (token+TLS) is deferred to ADR-0082 §SD1")
 	}
 	ln, lnErr := net.Listen("tcp", s.addr)
@@ -366,12 +367,4 @@ func splitCols(s string) (out []string) {
 		}
 	}
 	return
-}
-
-func isLoopbackHost(host string) (ok bool) {
-	if host == "" || host == "localhost" {
-		return true
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
 }

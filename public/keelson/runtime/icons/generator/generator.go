@@ -1,6 +1,7 @@
 package generator
 
 import (
+	"context"
 	"encoding/json/v2"
 	"fmt"
 	"io"
@@ -12,7 +13,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 // AliasT is the optional alias metadata an upstream entry may carry —
@@ -196,8 +197,8 @@ func NewCommand() *cli.Command {
 			&cli.StringFlag{Name: "lookupOut", Required: true, Usage: "output path for the lookup file"},
 			&cli.StringFlag{Name: "package", Required: true, Usage: "Go package name for both output files"},
 		},
-		Action: func(c *cli.Context) (err error) {
-			jsonPath := c.String("iconsJson")
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
+			jsonPath := cmd.String("iconsJson")
 			var raw []byte
 			raw, err = os.ReadFile(jsonPath)
 			if err != nil {
@@ -211,8 +212,8 @@ func NewCommand() *cli.Command {
 			}
 			log.Info().Int("entries", len(gen.Entries())).Msg("parsed phosphor catalogue")
 
-			constsOut := c.String("constsOut")
-			lookupOut := c.String("lookupOut")
+			constsOut := cmd.String("constsOut")
+			lookupOut := cmd.String("lookupOut")
 			_ = os.MkdirAll(filepath.Dir(constsOut), 0o755)
 			_ = os.MkdirAll(filepath.Dir(lookupOut), 0o755)
 
@@ -238,7 +239,7 @@ func NewCommand() *cli.Command {
 				}
 			}()
 
-			err = gen.GenerateGo(constsW, lookupW, c.String("package"))
+			err = gen.GenerateGo(constsW, lookupW, cmd.String("package"))
 			if err != nil {
 				return
 			}

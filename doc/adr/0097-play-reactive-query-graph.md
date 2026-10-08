@@ -2147,7 +2147,7 @@ Its only route to "our tables, one click from the editor" was a whole
 embedding app, or putting its table names into this repository's corpus —
 the thing the delivery ops were exported to avoid.
 
-**The seam.** `play.RegisterSnippetLibraryE(SnippetLibrary)` — tab id, frozen
+**The seam.** `play.RegisterSnippetLibrary(SnippetLibrary)` — tab id, frozen
 dock id of 64 or above, title, and a doc of a help book — is called at init,
 the way a book or a pass is registered, and every window opened afterwards
 gains one tools-zone tab per library beside the built-in Snippets tab.

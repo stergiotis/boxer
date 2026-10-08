@@ -4,13 +4,13 @@ import (
 	"slices"
 
 	"github.com/stergiotis/boxer/public/observability/tracing"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name: "observability",
-		Subcommands: slices.Concat(
+		Commands: slices.Concat(
 			tracing.NewCliCommands(),
 		),
 	}

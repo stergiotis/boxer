@@ -24,12 +24,13 @@
 package datacatalog
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"text/tabwriter"
 
 	"github.com/rs/zerolog/log"
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/gov/datacatalog"
 	"github.com/stergiotis/boxer/public/gov/datacatalog/panelshapes"
@@ -41,7 +42,7 @@ func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "datacatalog",
 		Usage: "discover a ClickHouse instance's tables and write the leeway/opaque catalog into " + datacatalog.DatabaseName,
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			{
 				Name:  "refresh",
 				Usage: "rebuild " + datacatalog.DatabaseName + ".tables_* from the server's current schema",
@@ -68,20 +69,20 @@ func NewCliCommand() *cli.Command {
 	}
 }
 
-func actionRefresh(c *cli.Context) (err error) {
+func actionRefresh(ctx context.Context, cmd *cli.Command) (err error) {
 	client := chclient.New(chclient.Config{
-		URL:      c.String("url"),
-		User:     c.String("user"),
-		Password: c.String("password"),
+		URL:      cmd.String("url"),
+		User:     cmd.String("user"),
+		Password: cmd.String("password"),
 	}, nil)
-	target := datacatalog.TargetDatabase(c.String("database"))
-	dryRun := c.Bool("dry-run")
+	target := datacatalog.TargetDatabase(cmd.String("database"))
+	dryRun := cmd.Bool("dry-run")
 	if dryRun {
 		fmt.Print(target.DDLText())
 	}
 	// The fetcher still runs on a dry run — the point of one is to see what
 	// this server would produce, which needs the server.
-	res, err := datacatalog.Run(c.Context, datacatalog.NewChFetcher(client), client, target, dryRun, log.Logger)
+	res, err := datacatalog.Run(ctx, datacatalog.NewChFetcher(client), client, target, dryRun, log.Logger)
 	if err != nil {
 		return
 	}
@@ -103,7 +104,7 @@ func reportCounts(res datacatalog.Result, target datacatalog.TargetDatabase, dry
 	_ = out.Flush()
 }
 
-func actionShapes(_ *cli.Context) (err error) {
+func actionShapes(_ context.Context, _ *cli.Command) (err error) {
 	out := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	for _, s := range panelshapes.Shapes() {
 		for i, p := range s.Patterns {
@@ -118,7 +119,7 @@ func actionShapes(_ *cli.Context) (err error) {
 	return
 }
 
-func actionDdl(_ *cli.Context) (err error) {
+func actionDdl(_ context.Context, _ *cli.Command) (err error) {
 	fmt.Print(datacatalog.DDLText())
 	return
 }

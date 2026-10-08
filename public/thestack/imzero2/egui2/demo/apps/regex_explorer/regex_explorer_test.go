@@ -1,32 +1,26 @@
 package regex_explorer
 
-// Unit + integration tests for the regex explorer's testable surface.
+// Unit tests for the regex explorer's testable surface. The tests that need
+// a clickhouse-local are in regex_explorer_integration_test.go, behind the
+// integration build tag.
 //
 // State is per-[App]: every test allocates its own via newTestApp, so flag
 // state and the compile cache cannot leak between cases and nothing has to
 // be reset on setup.
-//
-// Integration tests that shell out to `clickhouse local` skip when the
-// binary is not on PATH, so the suite stays usable on machines without
-// ClickHouse installed.
 
 import (
 	"context"
-	"reflect"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog"
 
-	"github.com/stergiotis/boxer/public/extbin"
-	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
-	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
-	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
@@ -37,50 +31,6 @@ import (
 func newTestApp(t *testing.T) (inst *App) {
 	t.Helper()
 	inst = newApp()
-	return
-}
-
-// skipIfNoClickHouseLocal short-circuits integration tests when the
-// clickhouse binary is absent — avoids hard-failing on machines
-// that do not have ClickHouse installed.
-func skipIfNoClickHouseLocal(t *testing.T) {
-	t.Helper()
-	if _, ok := extbin.ClickHouseLocal.Resolve(); !ok {
-		t.Skip("clickhouse not on PATH")
-	}
-}
-
-// setupTestBus stands up an in-proc bus + chlocalbroker.Service and
-// returns a bus client with the regex_explorer cap. The broker (and
-// its pool) is torn down on test cleanup. Skips if clickhouse
-// is not on PATH.
-func setupTestBus(t *testing.T) (caller runtimeapp.BusI) {
-	t.Helper()
-	skipIfNoClickHouseLocal(t)
-	logger := zerolog.New(zerolog.NewTestWriter(t))
-	bus := inprocbus.NewInst(logger)
-	bus.SetRequestTimeout(15 * time.Second)
-
-	poolCfg := chlocalpool.Config{
-		BaseTmpDir:       t.TempDir(),
-		MinIdle:          1,
-		MaxConcurrent:    2,
-		SpawnConcurrency: 1,
-		SpawnTimeout:     5 * time.Second,
-	}
-	svc, err := chlocalbroker.NewService(bus, poolCfg, logger)
-	if err != nil {
-		t.Fatalf("chlocalbroker.NewService: %v", err)
-	}
-	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = svc.Stop(ctx)
-	})
-
-	caller = bus.NewClient("test.regex_explorer", []runtimeapp.SubjectFilter{
-		{Pattern: ChLocalCapPattern, Direction: runtimeapp.CapDirectionPub, Reason: "test"},
-	})
 	return
 }
 
@@ -95,15 +45,20 @@ func TestEffectivePattern(t *testing.T) {
 		base  string
 		want  string
 	}{
+		// The dot flag is always stated — on by default, as in
+		// ClickHouse — so both engines read one pattern (see inlineFlags).
 		{name: "empty-base-no-flags", setup: func(*App) {}, base: "", want: ""},
-		{name: "no-flags", setup: func(*App) {}, base: "foo", want: "foo"},
-		{name: "case-insensitive", setup: func(inst *App) { inst.caseInsensitive = true }, base: "foo", want: "(?i)foo"},
-		{name: "multiline", setup: func(inst *App) { inst.multiline = true }, base: "^x$", want: "(?m)^x$"},
-		{name: "dotall", setup: func(inst *App) { inst.dotAll = true }, base: ".", want: "(?s)."},
+		{name: "defaults", setup: func(*App) {}, base: "foo", want: "(?s)foo"},
+		{name: "case-insensitive", setup: func(inst *App) { inst.caseInsensitive = true }, base: "foo", want: "(?is)foo"},
+		{name: "multiline", setup: func(inst *App) { inst.multiline = true }, base: "^x$", want: "(?ms)^x$"},
+		{name: "dotall-off", setup: func(inst *App) { inst.dotAll = false }, base: ".", want: "(?-s)."},
+		{name: "case-insensitive-dotall-off", setup: func(inst *App) {
+			inst.caseInsensitive = true
+			inst.dotAll = false
+		}, base: "foo", want: "(?i-s)foo"},
 		{name: "all-three", setup: func(inst *App) {
 			inst.caseInsensitive = true
 			inst.multiline = true
-			inst.dotAll = true
 		}, base: "foo", want: "(?ims)foo"},
 	}
 	for _, tc := range cases {
@@ -114,6 +69,50 @@ func TestEffectivePattern(t *testing.T) {
 			got := inst.effectivePattern(tc.base)
 			if got != tc.want {
 				t.Errorf("effectivePattern(%q) = %q; want %q", tc.base, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestPredictExtractAll pins the Go-side model of ClickHouse's extractAll
+// against outputs read off clickhouse-local (26.9). Each case is one shape
+// of the enumeration rule in regex_explorer_chmodel.go; the SD1 corpus
+// re-checks the model against a live ClickHouse.
+func TestPredictExtractAll(t *testing.T) {
+	cases := []struct {
+		pattern  string
+		haystack string
+		want     []string
+	}{
+		{`\d+`, "a1 b22 c333", []string{"1", "22", "333"}},
+		// Stops at the first zero-width match …
+		{`a*`, "xyz", []string{}},
+		{`a*`, "xaay", []string{}},
+		{`a*`, "aax", []string{"aa"}},
+		// … including the one abutting a match, which FindAll skips.
+		{`a*`, "aaxa", []string{"aa"}},
+		{`\w*`, "ab cd", []string{"ab"}},
+		{`a*b?`, "abxb", []string{"ab"}},
+		{`\b\w*`, "ab cd", []string{"ab"}},
+		// No empty match is possible, so nothing stops it.
+		{`\Ba`, "aaa", []string{"a", "a"}},
+		{`(?m)^a`, "a\na", []string{"a", "a"}},
+		{`^a`, "aaa", []string{"a"}},
+		// Capturing patterns yield group 1; an unset group is "".
+		{`(a)*`, "aaxa", []string{"a"}},
+		{`b|(c)`, "bc", []string{"", "c"}},
+		{`(x)?b`, "ab", []string{""}},
+		// ClickHouse's dot matches a newline unless told otherwise.
+		{`.*`, "ab\ncd", []string{"ab\ncd"}},
+		{`(?-s).*`, "ab\ncd", []string{"ab"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.pattern+"/"+tc.haystack, func(t *testing.T) {
+			t.Parallel()
+			re := regexp.MustCompile(clickHouseDefaults(tc.pattern))
+			got := predictExtractAll(re, tc.haystack)
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("predictExtractAll(%q, %q) = %q; want %q", tc.pattern, tc.haystack, got, tc.want)
 			}
 		})
 	}
@@ -211,7 +210,9 @@ func TestCountValidMultiLines(t *testing.T) {
 	}
 }
 
-func TestCountMatches(t *testing.T) {
+// TestAnalysisMatchCount pins the match list every surface reads (status
+// bar, preview, capture groups, hand-off) — see [App.analysis].
+func TestAnalysisMatchCount(t *testing.T) {
 	cases := []struct {
 		name     string
 		pattern  string
@@ -228,24 +229,31 @@ func TestCountMatches(t *testing.T) {
 		// There is no negative sentinel: the caller distinguishes
 		// "couldn't compile" from "compiled, matched nothing" by err.
 		{"invalid-pattern", `\d(+`, "text", 0, true},
-		// Zero-width matches are not counted — ClickHouse's extractAll
-		// reports none for these, and the preview follows ClickHouse so
-		// the status bar and the List tab tell one story (ADR-0054 SD1
-		// known-difference ledger, case empty-matchable-star).
+		// Zero-width matches are not counted, as ClickHouse's
+		// countMatches does not count them: there is nothing to
+		// highlight. Which matches extractAll returns is the model's
+		// question (TestPredictExtractAll), not this count's.
 		{"empty-matchable-star", `a*`, "xyz", 0, false},
 		{"empty-matchable-opt", `q?`, "xyz", 0, false},
 		{"mixed-empty-and-real", `a*`, "xayz", 1, false},
 		{"boundary-is-zero-width", `\b`, "hi there", 0, false},
+		// The capture-group breakdown reads the same match list, so a
+		// capturing empty-matchable pattern must not grow rows the
+		// status bar does not count.
+		{"capturing-empty-matchable", `(a)*`, "xyz", 0, false},
+		{"capturing-mixed-empty-and-real", `(a)*`, "xaay", 1, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			n, err := newTestApp(t).countMatches(tc.pattern, tc.haystack)
-			if (err != nil) != tc.wantErr {
-				t.Errorf("countMatches err=%v; wantErr=%v", err, tc.wantErr)
+			inst := newTestApp(t)
+			inst.pattern, inst.haystack = tc.pattern, tc.haystack
+			a := inst.analysis()
+			if (a.err != nil) != tc.wantErr {
+				t.Errorf("analysis err=%v; wantErr=%v", a.err, tc.wantErr)
 			}
-			if n != tc.wantN {
-				t.Errorf("countMatches n=%d; want %d", n, tc.wantN)
+			if n := len(a.matches); n != tc.wantN {
+				t.Errorf("analysis matches=%d; want %d", n, tc.wantN)
 			}
 		})
 	}
@@ -440,8 +448,8 @@ func TestQueryLane_Convergence(t *testing.T) {
 }
 
 // TestQueryLane_FailureIsNotRetriedForSameInput pins the other half of the
-// contract: a lane that failed must not spin re-issuing the same doomed
-// query every frame, but must try again as soon as the input changes.
+// contract: a lane that ClickHouse refused must not spin re-issuing the
+// same doomed query, but must try again as soon as the input changes.
 func TestQueryLane_FailureIsNotRetriedForSameInput(t *testing.T) {
 	t.Parallel()
 
@@ -450,7 +458,7 @@ func TestQueryLane_FailureIsNotRetriedForSameInput(t *testing.T) {
 	fail := func(key queryKey) {
 		lane.demand(key, "test", func(ctx context.Context) (out string, err error) {
 			ran.Add(1)
-			err = eh.Errorf("nope")
+			err = eh.Errorf("Code: 427. DB::Exception: cannot compile regexp")
 			return
 		})
 	}
@@ -475,6 +483,65 @@ func TestQueryLane_FailureIsNotRetriedForSameInput(t *testing.T) {
 	keyB := makeQueryKey("B")
 	fail(keyB)
 	waitFor(t, func() bool { return ran.Load() == 2 }, "a changed input to retry")
+
+	// Final means final: an old rejection is still not re-run.
+	waitFor(t, func() bool {
+		lane.drain()
+		return lane.failedFor(keyB)
+	}, "lane to record B's failure")
+	lane.errAt = time.Now().Add(-time.Hour)
+	fail(keyB)
+	if got := ran.Load(); got != 2 {
+		t.Errorf("runs after an old final failure = %d; want 2", got)
+	}
+}
+
+// TestQueryLane_TransientFailureIsRetried covers a failure that says
+// nothing about the input — no bus, a refused capability, a pool still
+// warming up. It is held for transientRetryDelay, so the lane does not
+// spin, and then re-run for the same input without the user editing.
+func TestQueryLane_TransientFailureIsRetried(t *testing.T) {
+	t.Parallel()
+
+	var lane queryLane[string]
+	var ran atomic.Int32
+	demand := func(key queryKey) {
+		lane.demand(key, "test", func(ctx context.Context) (out string, err error) {
+			if ran.Add(1) == 1 {
+				err = eh.Errorf("chlocalbroker: bus request timed out")
+				return
+			}
+			out = "ok"
+			return
+		})
+	}
+
+	keyA := makeQueryKey("A")
+	demand(keyA)
+	waitFor(t, func() bool {
+		lane.drain()
+		return lane.failedFor(keyA)
+	}, "lane to record the failure")
+	if lane.errFinal {
+		t.Fatalf("a transport failure was classified as final")
+	}
+
+	for range 10 {
+		demand(keyA)
+	}
+	if got := ran.Load(); got != 1 {
+		t.Errorf("runs inside the retry delay = %d; want 1", got)
+	}
+
+	lane.errAt = time.Now().Add(-transientRetryDelay)
+	demand(keyA)
+	waitFor(t, func() bool {
+		lane.drain()
+		return lane.servedFor(keyA)
+	}, "the retry to succeed")
+	if v := lane.view(keyA); v.Err != nil || v.Value != "ok" {
+		t.Errorf("view after retry = %+v; want ok and no error", v)
+	}
 }
 
 // waitFor polls cond until it holds or the test times out. The lane is
@@ -496,9 +563,14 @@ func waitFor(t *testing.T, cond func() bool, what string) {
 // SQL builders — pure string composition, exact-match tests
 // ---------------------------------------------------------------------------
 
-func TestBuildMatchSQL(t *testing.T) {
-	got := buildMatchSQL("hello", `h\w+`)
-	want := `SELECT match('hello', 'h\\w+')`
+func TestBuildFnsSQL(t *testing.T) {
+	got := buildFnsSQL("it's", `h\w+`, "", []chFnE{fnMatch, fnRegexpExtract, fnExtractAll})
+	want := `WITH 'it\'s' AS haystack SELECT match(haystack, 'h\\w+'), regexpExtract(haystack, 'h\\w+', 0), extractAll(haystack, 'h\\w+')`
+	if got != want {
+		t.Errorf("got %q; want %q", got, want)
+	}
+	got = buildFnsSQL("hello", `(l+)`, `[\1]`, replaceFns)
+	want = `WITH 'hello' AS haystack SELECT replaceRegexpOne(haystack, '(l+)', '[\\1]'), replaceRegexpAll(haystack, '(l+)', '[\\1]')`
 	if got != want {
 		t.Errorf("got %q; want %q", got, want)
 	}
@@ -507,83 +579,6 @@ func TestBuildMatchSQL(t *testing.T) {
 func TestBuildExtractAllSQL(t *testing.T) {
 	got := buildExtractAllSQL("a1 b22", `\d+`)
 	want := `SELECT extractAll('a1 b22', '\\d+')`
-	if got != want {
-		t.Errorf("got %q; want %q", got, want)
-	}
-}
-
-func TestBuildExtractAllGroupsSQL(t *testing.T) {
-	got := buildExtractAllGroupsSQL("a@b.c", `(\w+)@([\w.]+)`)
-	want := `SELECT extractAllGroups('a@b.c', '(\\w+)@([\\w.]+)')`
-	if got != want {
-		t.Errorf("got %q; want %q", got, want)
-	}
-}
-
-// TestRunListOutcomeBlocking_CaptureGroups pins the two behaviours that
-// make the List tab honest about capture groups:
-//
-//   - extractAll returns capture group 1, not the full match, whenever the
-//     pattern captures — so YieldsGroups must be set and the tab must say
-//     so, or it silently contradicts the Preview tab's full-match
-//     highlighting;
-//   - extractAllGroups is only asked for when the pattern actually
-//     captures, because ClickHouse rejects it outright otherwise, and
-//     interactive typing produces group-less patterns constantly.
-func TestRunListOutcomeBlocking_CaptureGroups(t *testing.T) {
-	bus := setupTestBus(t)
-	inst := newTestApp(t)
-	inst.setBus(bus)
-	ctx := context.Background()
-
-	t.Run("with-groups", func(t *testing.T) {
-		out, err := runListOutcomeBlocking(ctx, inst, "alice@example.com bob@test.org", `(\w+)@([\w.]+)`, 2)
-		if err != nil {
-			t.Fatalf("runListOutcomeBlocking: %v", err)
-		}
-		if !out.YieldsGroups {
-			t.Errorf("YieldsGroups = false; extractAll returns group 1 for a capturing pattern")
-		}
-		// This is the divergence the tab has to explain: extractAll gives
-		// the local parts, while Go highlights the whole addresses.
-		if want := []string{"alice", "bob"}; !reflect.DeepEqual(out.Matches, want) {
-			t.Errorf("Matches = %q; want %q", out.Matches, want)
-		}
-		want := [][]string{{"alice", "example.com"}, {"bob", "test.org"}}
-		if !reflect.DeepEqual(out.Groups, want) {
-			t.Errorf("Groups = %q; want %q", out.Groups, want)
-		}
-	})
-
-	t.Run("without-groups", func(t *testing.T) {
-		out, err := runListOutcomeBlocking(ctx, inst, "a1 b22", `\d+`, 0)
-		if err != nil {
-			t.Fatalf("runListOutcomeBlocking: %v", err)
-		}
-		if out.YieldsGroups || out.Groups != nil {
-			t.Errorf("group-less pattern reported groups: YieldsGroups=%v Groups=%v", out.YieldsGroups, out.Groups)
-		}
-		if want := []string{"1", "22"}; !reflect.DeepEqual(out.Matches, want) {
-			t.Errorf("Matches = %q; want %q", out.Matches, want)
-		}
-	})
-
-	t.Run("extractAllGroups-rejects-group-less-pattern", func(t *testing.T) {
-		// The reason numGroups gates the call rather than the app just
-		// always asking. If this ever starts succeeding, the gate can go.
-		_, err := runExtractAllGroupsBlocking(ctx, inst, "abc", `a`)
-		if err == nil {
-			t.Fatalf("expected ClickHouse to reject extractAllGroups on a group-less pattern")
-		}
-		if !strings.Contains(err.Error(), "no groups in regexp") {
-			t.Errorf("err = %v; expected the BAD_ARGUMENTS 'no groups in regexp' text", err)
-		}
-	})
-}
-
-func TestBuildReplaceAllSQL(t *testing.T) {
-	got := buildReplaceAllSQL("hello", `l+`, "L")
-	want := `SELECT replaceRegexpAll('hello', 'l+', 'L')`
 	if got != want {
 		t.Errorf("got %q; want %q", got, want)
 	}
@@ -610,172 +605,94 @@ func TestBuildMultiMatchSQL(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Integration tests against `clickhouse local`
+// TestTripwireRunsOncePerProcess pins the SD1 run's sharing and retry
+// rule: a second explorer does not repeat a run, and a failed run — here
+// the no-bus failure an embedded explorer meets before its host attaches
+// one — is retried only once tripwireRetryDelay has passed.
 //
-// These tests stand up an in-proc bus + chlocalbroker.Service per test
-// and exercise the production path (executeArrowStreamViaBus). They
-// skip automatically if the binary is not on PATH.
-// ---------------------------------------------------------------------------
+// Not parallel: it resets the process-wide run.
+func TestTripwireRunsOncePerProcess(t *testing.T) {
+	sharedTripwire = tripwireRun{}
+	t.Cleanup(func() { sharedTripwire = tripwireRun{} })
+	finished := func() bool {
+		tw, started, running := tripwireSnapshot()
+		return started && !running && tw.Done
+	}
 
-// TestRunTripwireBlocking_Ledger is SD1 run for real against
-// clickhouse-local. It asserts the ledger in both directions:
-//
-//   - no corpus case diverges unless it says it will — an unexpected
-//     entry in drifts means Go and ClickHouse have actually parted
-//     company somewhere we assumed they agreed;
-//   - every case that says it will diverge still does — a KnownDrift
-//     note whose difference has since been fixed upstream is stale, and
-//     stale ledger entries silently shrink the tripwire's coverage.
-func TestRunTripwireBlocking_Ledger(t *testing.T) {
-	bus := setupTestBus(t)
+	newTestApp(t).RunTripwire(context.Background()) // no bus: fails fast
+	waitFor(t, finished, "the first run to finish")
+	if tw, _, _ := tripwireSnapshot(); tw.Err == nil {
+		t.Fatalf("a run without a bus reported no error")
+	}
+	firstAt := sharedTripwire.at
+
+	newTestApp(t).RunTripwire(context.Background())
+	if _, _, running := tripwireSnapshot(); running || sharedTripwire.at != firstAt {
+		t.Fatalf("a second explorer re-ran a failed check inside the retry delay")
+	}
+
+	sharedTripwire.mu.Lock()
+	sharedTripwire.at = time.Now().Add(-tripwireRetryDelay)
+	sharedTripwire.mu.Unlock()
+	newTestApp(t).RunTripwire(context.Background())
+	waitFor(t, func() bool {
+		sharedTripwire.mu.Lock()
+		defer sharedTripwire.mu.Unlock()
+		return !sharedTripwire.running && sharedTripwire.at.After(firstAt)
+	}, "a retry once the delay passed")
+}
+
+// TestCompileCacheIsBounded pins the cap on the compile cache: typing
+// leaves every prefix behind, so it must not grow with the session.
+func TestCompileCacheIsBounded(t *testing.T) {
+	t.Parallel()
 	inst := newTestApp(t)
-	inst.setBus(bus)
-
-	drifts, known, err := inst.runTripwireBlocking(context.Background())
-	if err != nil {
-		t.Fatalf("runTripwireBlocking: %v", err)
+	for i := range maxCompileCache + 50 {
+		_, _ = inst.getCompiledRegexp(strconv.Itoa(i) + "x")
 	}
-
-	for _, i := range drifts {
-		tc := tripwireCorpus[i]
-		t.Errorf("unexpected Go/ClickHouse divergence: case %q, pattern %q, haystack %q",
-			tc.Name, tc.effective(), tc.Haystack)
+	if n := len(inst.compileCache); n > maxCompileCache {
+		t.Errorf("compile cache holds %d entries; cap is %d", n, maxCompileCache)
 	}
-
-	inKnown := make(map[int]bool, len(known))
-	for _, i := range known {
-		inKnown[i] = true
-	}
-	for i, tc := range tripwireCorpus {
-		if tc.KnownDrift == "" {
-			continue
-		}
-		if !inKnown[i] {
-			t.Errorf("stale ledger entry: case %q declares KnownDrift (%s) but the engines now agree — drop the note",
-				tc.Name, tc.KnownDrift)
-		}
+	if _, err := inst.getCompiledRegexp(`\d+`); err != nil {
+		t.Errorf("compile after a reset: %v", err)
 	}
 }
 
-func TestExecuteArrowStreamViaBus_Match(t *testing.T) {
-	bus := setupTestBus(t)
-	ctx := context.Background()
-	alloc := memory.NewGoAllocator()
-
-	rdr, closer, err := executeArrowStreamViaBus(ctx, bus, buildMatchSQL("foobar", "foo.*"), alloc)
-	if err != nil {
-		t.Fatalf("executeArrowStreamViaBus: %v", err)
-	}
-	defer func() {
-		cErr := closer.Close()
-		if cErr != nil {
-			t.Errorf("closer.Close: %v", cErr)
-		}
-	}()
-	defer rdr.Release()
-
-	if !rdr.Next() {
-		t.Fatalf("rdr.Next returned false: err=%v", rdr.Err())
-	}
-	rec := rdr.Record()
-	u8, ok := rec.Column(0).(*array.Uint8)
-	if !ok {
-		t.Fatalf("unexpected column type %T", rec.Column(0))
-	}
-	if u8.Value(0) != 1 {
-		t.Errorf("match('foobar', 'foo.*') = %d; want 1", u8.Value(0))
-	}
-}
-
-func TestExecuteArrowStreamViaBus_MultiMatch_TwoTrivial(t *testing.T) {
-	// Reproduces the reported case: two trivial patterns should not
-	// produce a ClickHouse error. Uses the exact SQL the UI would build.
-	bus := setupTestBus(t)
-	ctx := context.Background()
-	alloc := memory.NewGoAllocator()
-
-	sql := buildMultiMatchSQL("foo bar baz", []string{"foo", "bar"})
-	rdr, closer, err := executeArrowStreamViaBus(ctx, bus, sql, alloc)
-	if err != nil {
-		t.Fatalf("executeArrowStreamViaBus: %v\nsql: %s", err, sql)
-	}
-	defer func() {
-		cErr := closer.Close()
-		if cErr != nil {
-			t.Errorf("closer.Close: %v\nsql: %s", cErr, sql)
-		}
-	}()
-	defer rdr.Release()
-
-	if !rdr.Next() {
-		t.Fatalf("rdr.Next returned false: err=%v", rdr.Err())
-	}
-	rec := rdr.Record()
-	list, ok := rec.Column(0).(*array.List)
-	if !ok {
-		t.Fatalf("unexpected column type %T", rec.Column(0))
-	}
-	inner, ok := list.ListValues().(*array.Uint64)
-	if !ok {
-		t.Fatalf("unexpected inner type %T", list.ListValues())
-	}
-	offsets := list.Offsets()
-	var hits []uint64
-	for i := int(offsets[0]); i < int(offsets[1]); i++ {
-		hits = append(hits, inner.Value(i))
-	}
-	// multiMatchAllIndices does not promise sorted output — VectorScan
-	// reports hits in match order, so ['^foo$','f.o'] over "foo" comes
-	// back as [2,1]. The UI keys hits by index rather than position, so
-	// sort before comparing instead of asserting an accidental order.
-	slices.Sort(hits)
-	wantHits := []uint64{1, 2}
-	if !reflect.DeepEqual(hits, wantHits) {
-		t.Errorf("multiMatchAllIndices hits = %v; want %v", hits, wantHits)
-	}
-}
-
-func TestExecuteArrowStreamViaBus_InvalidRegex(t *testing.T) {
-	// ClickHouse should reject `bad(regex`. With the bus path, the
-	// worker's stderr is captured by the broker and surfaced via
-	// ExecOnPool's reply.Err(); executeArrowStreamViaBus wraps that
-	// into a single error before the Arrow reader is constructed.
-	bus := setupTestBus(t)
-	ctx := context.Background()
-	alloc := memory.NewGoAllocator()
-
-	sql := buildMatchSQL("foo", "bad(regex")
-	_, _, err := executeArrowStreamViaBus(ctx, bus, sql, alloc)
+// TestClickHouseMessageNamesARefusedCapability pins the wording an
+// explorer embedded in a host without the ch.local grant shows: the
+// broker's transport chain reduced to what the user can act on.
+func TestClickHouseMessageNamesARefusedCapability(t *testing.T) {
+	t.Parallel()
+	bus := inprocbus.NewInst(zerolog.Nop())
+	caller := bus.NewClient("test.no-grant", nil)
+	_, _, err := executeArrowStreamViaBus(context.Background(), caller, "SELECT 1", memory.NewGoAllocator())
 	if err == nil {
-		t.Fatalf("expected an error for invalid regex; got nil")
+		t.Fatalf("a client without the grant reached the broker")
 	}
-	if !strings.Contains(err.Error(), "CANNOT_COMPILE_REGEXP") && !strings.Contains(err.Error(), "OptimizedRegularExpression") {
-		t.Errorf("err = %v; expected CH regex-compile error text in the message", err)
+	if got := clickHouseMessage(err); !strings.Contains(got, ChLocalCapPattern) || strings.Contains(got, "chlocalbroker") {
+		t.Errorf("clickHouseMessage(%v) = %q; want the capability named and the transport chain gone", err, got)
 	}
 }
 
-func TestExecuteArrowStreamViaBus_EmptyHaystack(t *testing.T) {
-	// Hypothesis check: empty haystack with a non-empty pattern list is
-	// a common UI state while the user is still typing. Must not error.
-	bus := setupTestBus(t)
-	ctx := context.Background()
-	alloc := memory.NewGoAllocator()
-
-	sql := buildMultiMatchSQL("", []string{"foo", "bar"})
-	rdr, closer, err := executeArrowStreamViaBus(ctx, bus, sql, alloc)
-	if err != nil {
-		t.Fatalf("executeArrowStreamViaBus: %v\nsql: %s", err, sql)
+// TestInsertTokenQueuesForTheFocusedInput pins the hand-off between a
+// cheatsheet click and the editor: the token waits for the focused input's
+// next build, queues behind earlier ones, brings up the tab the input lives
+// on, and is cleared only by that input's build.
+func TestInsertTokenQueuesForTheFocusedInput(t *testing.T) {
+	t.Parallel()
+	inst := newTestApp(t)
+	inst.insertToken(`\d`)
+	inst.insertToken(`+`)
+	if got := inst.pendingInsert[inputPattern]; got != `\d+` {
+		t.Errorf("pending for the pattern = %q; want queued tokens", got)
 	}
-	defer func() {
-		cErr := closer.Close()
-		if cErr != nil {
-			t.Errorf("closer.Close: %v", cErr)
-		}
-	}()
-	defer rdr.Release()
 
-	if !rdr.Next() {
-		t.Fatalf("rdr.Next returned false: err=%v", rdr.Err())
+	inst.lastFocusedInput = inputReplacement
+	inst.insertToken(`\1`)
+	if inst.tab != tabFunctions {
+		t.Errorf("tab = %v; a replacement token should bring up the functions tab", inst.tab)
+	}
+	if inst.pendingInsert[inputPattern] != `\d+` {
+		t.Errorf("a token for another input disturbed the pattern's queue")
 	}
 }

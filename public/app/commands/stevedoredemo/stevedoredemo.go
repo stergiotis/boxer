@@ -11,7 +11,7 @@
 package stevedoredemo
 
 import (
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 // NewCliCommand is the command group.
@@ -19,7 +19,7 @@ func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "stevedoredemo",
 		Usage: "the stevedore example: a line-splitting processor and a printing lander (ADR-0252)",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			newProcessCommand(),
 			newLandCommand(),
 			newRunCommand(),

@@ -41,10 +41,10 @@ type Identity struct {
 	ModTimeUnixNano int64
 }
 
-// WriteToE serialises a complete pyramid: the header, then the level arrays
+// WriteTo serialises a complete pyramid: the header, then the level arrays
 // verbatim (ADR-0208 §SD12 — peaks and nothing else). An incomplete
 // pyramid, or one finished short of its declared frame count, is refused.
-func (inst *Pyramid) WriteToE(w io.Writer, id Identity) (err error) {
+func (inst *Pyramid) WriteTo(w io.Writer, id Identity) (err error) {
 	built := inst.built.Load()
 	if !inst.complete.Load() || built != inst.frames {
 		return eb.Build().
@@ -86,10 +86,10 @@ func (inst *Pyramid) WriteToE(w io.Writer, id Identity) (err error) {
 	return nil
 }
 
-// ReadFromE reads a peaks file and returns the complete pyramid it holds.
+// ReadFrom reads a peaks file and returns the complete pyramid it holds.
 // The magic, the version and every [Identity] field must match want; a
 // mismatch is an error naming the field that differs.
-func ReadFromE(r io.Reader, want Identity) (inst *Pyramid, err error) {
+func ReadFrom(r io.Reader, want Identity) (inst *Pyramid, err error) {
 	var hdr [headerBytes]byte
 	_, err = io.ReadFull(r, hdr[:])
 	if err != nil {
@@ -143,7 +143,7 @@ func ReadFromE(r io.Reader, want Identity) (inst *Pyramid, err error) {
 	frames := int64(binary.LittleEndian.Uint64(hdr[64:72]))
 	baseBin := int32(binary.LittleEndian.Uint32(hdr[72:76]))
 	levels := int32(binary.LittleEndian.Uint32(hdr[76:80]))
-	inst, err = NewPyramidE(format, frames, baseBin)
+	inst, err = NewPyramid(format, frames, baseBin)
 	if err != nil {
 		return nil, eh.Errorf("peaks header does not describe a pyramid: %w", err)
 	}

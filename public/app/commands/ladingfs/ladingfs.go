@@ -13,10 +13,11 @@
 package ladingfs
 
 import (
+	"context"
 	"os"
 	"strconv"
 
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/fs/lading"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingdata"
@@ -35,7 +36,7 @@ func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "fs",
 		Usage: "the lading snapshot store: take snapshots, serve them as a file system",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			newSftpStdioCommand(),
 			newSnapshotCommand(),
 		},
@@ -79,14 +80,14 @@ func newSftpStdioCommand() *cli.Command {
 	}
 }
 
-func runSftpStdio(c *cli.Context) (err error) {
-	vis, err := visibilityOf(c)
+func runSftpStdio(ctx context.Context, cmd *cli.Command) (err error) {
+	vis, err := visibilityOf(ctx, cmd)
 	if err != nil {
 		return
 	}
 
 	client := chclient.New(chclient.ConfigFromEnv(), nil)
-	err = client.Ping(c.Context)
+	err = client.Ping(ctx)
 	if err != nil {
 		return eh.Errorf("ClickHouse not reachable: %w", err)
 	}
@@ -102,7 +103,7 @@ func runSftpStdio(c *cli.Context) (err error) {
 
 	// Read-only from here on, so the tables are verified rather than
 	// provisioned: this command must not be the thing that creates a store.
-	err = lading.Verify(c.Context, exec)
+	err = lading.Verify(ctx, exec)
 	if err != nil {
 		return eh.Errorf("%w", err)
 	}
@@ -111,7 +112,7 @@ func runSftpStdio(c *cli.Context) (err error) {
 		Exec:       exec,
 		Stores:     lading.Stores{Meta: meta, Data: data},
 		Visibility: vis,
-		Ctx:        c.Context,
+		Ctx:        ctx,
 	})
 	if err != nil {
 		return
@@ -124,15 +125,15 @@ func runSftpStdio(c *cli.Context) (err error) {
 }
 
 // visibilityOf turns the flags into the mount set this session may read.
-func visibilityOf(c *cli.Context) (vis ladingsql.MountVisibilityI, err error) {
-	if c.Bool("all-mounts") {
-		if len(c.StringSlice("mount")) > 0 {
+func visibilityOf(ctx context.Context, cmd *cli.Command) (vis ladingsql.MountVisibilityI, err error) {
+	if cmd.Bool("all-mounts") {
+		if len(cmd.StringSlice("mount")) > 0 {
 			err = eh.Errorf("--all-mounts and --mount are exclusive")
 			return
 		}
 		return ladingsql.VisibleAll{}, nil
 	}
-	raw := c.StringSlice("mount")
+	raw := cmd.StringSlice("mount")
 	if len(raw) == 0 {
 		err = eh.Errorf("no mounts named; pass --mount <id> (repeatable) or --all-mounts")
 		return

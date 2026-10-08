@@ -21,12 +21,12 @@ type LoadConfig struct {
 	Tests     bool
 }
 
-// LoadPackagesE loads the package graph rooted at the supplied patterns
+// LoadPackages loads the package graph rooted at the supplied patterns
 // (e.g. "./..."), populating the syntax + type info each analyzer needs.
 //
 // Generated files (*.out.go, *.gen.go) are filtered post-load — they
 // remain in the package graph for type resolution but are not visited.
-func LoadPackagesE(cfg LoadConfig, roots ...string) (pkgs []*packages.Package, err error) {
+func LoadPackages(cfg LoadConfig, roots ...string) (pkgs []*packages.Package, err error) {
 	if cfg.Ctx == nil {
 		cfg.Ctx = context.Background()
 	}

@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
-	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/loopback"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
@@ -497,22 +497,13 @@ func EndpointHost(endpoint string) (host string) {
 	return u.Host
 }
 
-// isLocalEndpoint says the endpoint's host is loopback: a literal loopback
-// address or "localhost". Not resolved — a name that resolves to loopback
-// through a hosts file is not a fact this process can vouch for.
+// isLocalEndpoint says the endpoint's host is loopback, by loopback.IsHost.
 func isLocalEndpoint(endpoint string) (yes bool) {
 	u, err := url.Parse(endpoint)
 	if err != nil {
 		return false
 	}
-	h := u.Hostname()
-	if strings.EqualFold(h, "localhost") {
-		return true
-	}
-	if ip := net.ParseIP(h); ip != nil {
-		return ip.IsLoopback()
-	}
-	return false
+	return loopback.IsHost(u.Hostname())
 }
 
 // isTrustedEndpoint says the endpoint's host is one the deployment lists in

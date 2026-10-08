@@ -548,7 +548,7 @@ over a dependency the tree carries, not a new algorithm — with the P1
 question of whether that dependency stays referenced or gets owned left
 where it is.
 
-**The engine.** `csr.BuildE(src, dst []uint64, w []float32, Options)`
+**The engine.** `csr.Build(src, dst []uint64, w []float32, Options)`
 takes exactly an edge list with optional weights, collapses parallel edges
 by summing, and stores undirected graphs in both rows; every `algo`
 function returns slot-aligned columns plus a `Truncation` (ADR-0229 §SD4,
@@ -610,7 +610,7 @@ is missing: an edge with a weight in (0, 1] is what `EdgeSpec.Strength` and
 `edges` contract already carries `weight` per edge (ADR-0129, 2026-08-05
 update). What is missing is the producer — a function from a feature
 matrix to an edge list `(source id, target id, weight)`, which is the shape
-`csr.BuildE` consumes and the shape the `edges` CTE has. That is an
+`csr.Build` consumes and the shape the `edges` CTE has. That is an
 **engine gap** in ADR-0229's sense — plain values in, struct-of-arrays out,
 a budget (`n_neighbors`, a row cap) and a truncation flag, IDL-expressible
 per §SD8 — but it is not a *graph* algorithm: its input is a matrix, not a
@@ -647,7 +647,7 @@ a neighbour graph, not a classifier — is unmeasured, and porting it ahead
 of a measurement is the kind of work ADR-0229's C2 counts against.
 
 Both halves feed the existing consumers unchanged: the edge list goes to
-the `edges` lane or to `csr.BuildE`, the coordinates to the Projection
+the `edges` lane or to `csr.Build`, the coordinates to the Projection
 scatter or to the graphview panel as positions (§5.2).
 
 ### 5.2 Coordinates as positions, and `play`
@@ -954,7 +954,7 @@ graph is referenced or owned.
    a function from a feature matrix (rows keyed by vertex id) to an edge
    list `(source, target, weight)` with `n_neighbors`, a metric, a row cap
    and a truncation flag, beside the graph engine under `public/analytics`.
-   Turns any table into a graph the widget, the panel and `csr.BuildE`
+   Turns any table into a graph the widget, the panel and `csr.Build`
    accept as they are (§5.1). **1 day** as an adapter over umap-go's
    `FuzzySimplicialSet`; **3–4 days** first-party (exact *k*-NN, smooth-kNN
    scaling, fuzzy union), which is the cut if the dependency is to be owned.

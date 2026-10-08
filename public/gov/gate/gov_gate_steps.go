@@ -120,7 +120,7 @@ func (inst *StepCodelint) Run(ctx context.Context, cfg Config, w io.Writer) (sta
 	}
 
 	var pkgs []*packages.Package
-	pkgs, err = codelint.LoadPackagesE(codelint.LoadConfig{
+	pkgs, err = codelint.LoadPackages(codelint.LoadConfig{
 		Ctx:       ctx,
 		BuildTags: tags,
 		Dir:       cfg.root(),
@@ -189,7 +189,7 @@ func (inst *StepEntryPoints) Run(ctx context.Context, cfg Config, w io.Writer) (
 	}
 
 	var audits []dev.EntryPointAudit
-	audits, err = dev.AuditEntryPointsE(ctx, dev.EntryPointsConfig{
+	audits, err = dev.AuditEntryPoints(ctx, dev.EntryPointsConfig{
 		Root:         cfg.root(),
 		BaselinePath: baseline,
 		Tags:         tags,
@@ -246,9 +246,9 @@ func stepNames(steps []StepI) (out []string) {
 	return
 }
 
-// ValidateStepNamesE reports names in want that no step in steps provides, so a
+// ValidateStepNames reports names in want that no step in steps provides, so a
 // typo in --steps fails loudly instead of silently running nothing.
-func ValidateStepNamesE(steps []StepI, want []string) (err error) {
+func ValidateStepNames(steps []StepI, want []string) (err error) {
 	have := make(map[string]struct{}, len(steps))
 	for _, s := range steps {
 		have[s.Name()] = struct{}{}
@@ -283,7 +283,7 @@ func (inst *StepFileNaming) Name() (s string) { return "file-naming" }
 
 func (inst *StepFileNaming) Run(ctx context.Context, cfg Config, w io.Writer) (status StatusE, err error) {
 	var findings []filenaming.Finding
-	findings, err = filenaming.CheckE(filenaming.Config{
+	findings, err = filenaming.Check(filenaming.Config{
 		Dir:     cfg.root(),
 		Roots:   cfg.NamingRoots,
 		Exclude: cfg.Exclude,
@@ -297,7 +297,7 @@ func (inst *StepFileNaming) Run(ctx context.Context, cfg Config, w io.Writer) (s
 		baselinePath = filepath.Join(cfg.root(), baselinePath)
 	}
 	var baseline []string
-	baseline, err = filenaming.LoadBaselineE(baselinePath)
+	baseline, err = filenaming.LoadBaseline(baselinePath)
 	if err != nil {
 		return
 	}

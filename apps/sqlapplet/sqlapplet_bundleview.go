@@ -30,7 +30,7 @@ import (
 // BundleViewCaps is what a receiver adds to its manifest to show bundles:
 // resolving a bundle and its datasets, hearing their events, and the
 // embedded play's two escape hatches. A bundle document may ask for
-// nothing beyond these (§SD7): play.PublishBundleE composes only documents
+// nothing beyond these (§SD7): play.PublishBundle composes only documents
 // on the introspection endpoint that read their own datasets, so every
 // bundle opens in every receiver.
 var BundleViewCaps = []app.SubjectFilter{

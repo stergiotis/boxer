@@ -1,6 +1,7 @@
 package tracing
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"slices"
@@ -13,7 +14,7 @@ import (
 	cli2 "github.com/stergiotis/boxer/public/hmi/cli"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func NewCliCommands() []*cli.Command {
@@ -29,7 +30,7 @@ func NewCliCommands() []*cli.Command {
 	return []*cli.Command{
 		{
 			Name: "tracing",
-			Subcommands: []*cli.Command{
+			Commands: []*cli.Command{
 				{
 					Name: "codelocations",
 					Flags: slices.Concat(universalFlags, []cli.Flag{
@@ -49,8 +50,8 @@ func NewCliCommands() []*cli.Command {
 							Category: "performance",
 						},
 					}),
-					Action: func(context *cli.Context) error {
-						estLoc := int(context.Uint64("estimatedLOC"))
+					Action: func(ctx context.Context, cmd *cli.Command) error {
+						estLoc := int(cmd.Uint64("estimatedLOC"))
 						u := NewTraceUtils()
 						files := make([]string, 0, estLoc)
 						lines := make([]uint64, 0, estLoc)
@@ -59,7 +60,7 @@ func NewCliCommands() []*cli.Command {
 							files = append(files, file)
 							lines = append(lines, line)
 						}
-						if context.Bool("sort") {
+						if cmd.Bool("sort") {
 							co.SortUnstable(len(files),
 								func(i, j int) bool {
 									o := strings.Compare(files[i], files[j])
@@ -74,8 +75,8 @@ func NewCliCommands() []*cli.Command {
 								},
 							)
 						}
-						if context.Bool("relativePath") {
-							basePath := context.String("relativePathBase")
+						if cmd.Bool("relativePath") {
+							basePath := cmd.String("relativePathBase")
 							if basePath == "" {
 								var err error
 								basePath, err = os.Getwd()
@@ -92,7 +93,7 @@ func NewCliCommands() []*cli.Command {
 							}
 						}
 						log.Info().Int("linesOfCode", len(lines)).Msg("code locations")
-						return universal.FormatValue(context, struct {
+						return universal.FormatValue(ctx, cmd, struct {
 							Files []string
 							Lines []uint64
 						}{

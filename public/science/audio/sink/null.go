@@ -133,13 +133,13 @@ func (inst *Null) Position() (frame int64) {
 	return frame
 }
 
-// SeekE implements [SinkI]. It is an error on a closed sink.
+// SeekFrame implements [SinkI]. It is an error on a closed sink.
 //
 // Seeking to Frames() is a position at the end, not the end of playback:
 // [Null.Ended] stays false, because only playback running into the end sets
 // it. A sink left playing there does run into it, and ends on the next
 // observation whether or not the clock has moved.
-func (inst *Null) SeekE(frame int64) (err error) {
+func (inst *Null) SeekFrame(frame int64) (err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	if inst.closed {
@@ -165,9 +165,9 @@ func (inst *Null) Rate() (rate float64) {
 	return rate
 }
 
-// SetRateE implements [SinkI]. It is an error on a closed sink, and the rate
+// SetRate implements [SinkI]. It is an error on a closed sink, and the rate
 // is left unchanged.
-func (inst *Null) SetRateE(rate float64) (err error) {
+func (inst *Null) SetRate(rate float64) (err error) {
 	if math.IsNaN(rate) || rate <= RateMinExcl || rate > RateMaxIncl {
 		return eb.Build().
 			Float64("rate", rate).
@@ -196,9 +196,9 @@ func (inst *Null) Volume() (v float64) {
 	return v
 }
 
-// SetVolumeE implements [SinkI]. It is an error on a closed sink, and the
+// SetVolume implements [SinkI]. It is an error on a closed sink, and the
 // volume is left unchanged.
-func (inst *Null) SetVolumeE(v float64) (err error) {
+func (inst *Null) SetVolume(v float64) (err error) {
 	if math.IsNaN(v) || v < VolumeMinIncl || v > VolumeMaxIncl {
 		return eb.Build().
 			Float64("volume", v).
@@ -225,11 +225,11 @@ func (inst *Null) Ended() (ended bool) {
 	return ended
 }
 
-// CloseE implements [SinkI]. It settles the position one last time and then
+// Close implements [SinkI]. It settles the position one last time and then
 // stops the transport: [Null.Play] and [Null.Pause] become no-ops,
-// [Null.SeekE], [Null.SetRateE] and [Null.SetVolumeE] return an error, and
+// [Null.SeekFrame], [Null.SetRate] and [Null.SetVolume] return an error, and
 // the getters keep answering with the frozen values.
-func (inst *Null) CloseE() (err error) {
+func (inst *Null) Close() (err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	if inst.closed {

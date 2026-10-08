@@ -1,8 +1,9 @@
 package licensegate
 
 import (
+	"context"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 )
 
 // NewCliCommand returns the `license-gate` subcommand. Mounted under
@@ -36,10 +37,10 @@ func NewCliCommand() (cmd *cli.Command) {
 	return
 }
 
-func runCli(ctx *cli.Context) (err error) {
-	sbomPath := ctx.String("sbom")
-	cargoMetadataPaths := ctx.StringSlice("cargo-metadata")
-	csvPath := ctx.String("csv")
+func runCli(ctx context.Context, cmd *cli.Command) (err error) {
+	sbomPath := cmd.String("sbom")
+	cargoMetadataPaths := cmd.StringSlice("cargo-metadata")
+	csvPath := cmd.String("csv")
 	violations, err := Run(sbomPath, cargoMetadataPaths, csvPath)
 	if err != nil {
 		return

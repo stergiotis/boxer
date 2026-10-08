@@ -69,7 +69,7 @@ func conjunctionRank(c CategoryE) (rank int) {
 	return
 }
 
-// EvaluateExpressionE classifies an SPDX license expression against the
+// EvaluateExpression classifies an SPDX license expression against the
 // policy map. elected is the expression reduced to the branches that bind —
 // `(MIT OR Apache-2.0) AND Unicode-3.0` elects `MIT AND Unicode-3.0` — and
 // category is what those branches amount to. The legacy `/` separator still
@@ -77,7 +77,7 @@ func conjunctionRank(c CategoryE) (rank int) {
 //
 // A malformed expression is an error: the caller decides what an unreadable
 // declaration means, which for the gate is the advisory block (ADR-0246 SD7).
-func EvaluateExpressionE(expression string) (category CategoryE, elected string, err error) {
+func EvaluateExpression(expression string) (category CategoryE, elected string, err error) {
 	p := expressionParserT{tokens: tokenizeExpression(expression)}
 	if len(p.tokens) == 0 {
 		err = eb.Build().Str("expression", expression).Errorf("empty license expression")

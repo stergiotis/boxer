@@ -1,11 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	"github.com/rs/zerolog/log"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
@@ -34,8 +35,8 @@ func ddlCommand() *cli.Command {
 	}
 }
 
-func runDdl(cCtx *cli.Context) (err error) {
-	db := cCtx.String("database")
+func runDdl(ctx context.Context, cmd *cli.Command) (err error) {
+	db := cmd.String("database")
 	// A guard, not a courtesy: this command drops databases, and the live
 	// facts store must never be a target.
 	if db == "boxer" {
@@ -43,26 +44,25 @@ func runDdl(cCtx *cli.Context) (err error) {
 		return
 	}
 	cfg := chstore.Config{
-		URL:      cCtx.String("url"),
-		User:     cCtx.String("user"),
-		Password: cCtx.String("password"),
+		URL:      cmd.String("url"),
+		User:     cmd.String("user"),
+		Password: cmd.String("password"),
 		Database: db,
-		Table:    cCtx.String("table"),
+		Table:    cmd.String("table"),
 	}
 	var sql string
-	sql, err = chstore.ComposeSetupSQL(cfg, cCtx.String("engine"))
+	sql, err = chstore.ComposeSetupSQL(cfg, cmd.String("engine"))
 	if err != nil {
 		return
 	}
-	if !cCtx.Bool("apply") {
+	if !cmd.Bool("apply") {
 		fmt.Println(sql)
 		return
 	}
 	cli0 := chclient.New(chclient.Config{
 		URL: cfg.URL, User: cfg.User, Password: cfg.Password,
 	}, nil)
-	ctx := cCtx.Context
-	if cCtx.Bool("drop") {
+	if cmd.Bool("drop") {
 		err = cli0.Exec(ctx, "DROP DATABASE IF EXISTS "+db)
 		if err != nil {
 			err = eb.Build().Str("db", db).Errorf("drop database: %w", err)

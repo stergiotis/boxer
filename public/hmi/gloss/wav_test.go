@@ -15,10 +15,10 @@ import (
 func testWAV(t *testing.T, format pcm.Format, seconds float64) []byte {
 	t.Helper()
 	frames := int64(seconds * float64(format.SampleRate))
-	src, err := pcm.NewSynthSourceE(format, frames, pcm.Sine(format, 440, 0.5))
+	src, err := pcm.NewSynthSource(format, frames, pcm.Sine(format, 440, 0.5))
 	require.NoError(t, err)
 	var buf bytes.Buffer
-	require.NoError(t, wavfile.WriteE(context.Background(), &buf, format, wavfile.EncodingPCMInt, 16, src))
+	require.NoError(t, wavfile.Write(context.Background(), &buf, format, wavfile.EncodingPCMInt, 16, src))
 	return buf.Bytes()
 }
 

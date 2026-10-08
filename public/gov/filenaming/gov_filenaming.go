@@ -144,11 +144,11 @@ var (
 // in the toolchain rather than each check defining it slightly differently.
 const generatedHeaderScanLines = 5
 
-// hasGeneratedHeaderE reports whether path opens with the canonical Go
+// hasGeneratedHeader reports whether path opens with the canonical Go
 // generated-code header (https://go.dev/s/generatedcode), searched within the
 // first generatedHeaderScanLines lines. A header past that window is not
 // judged either way, matching the gofmt step's own convention.
-func hasGeneratedHeaderE(path string) (ok bool, err error) {
+func hasGeneratedHeader(path string) (ok bool, err error) {
 	f, openErr := os.Open(path)
 	if openErr != nil {
 		err = eb.Build().Str("path", path).Errorf("open: %w", openErr)
@@ -179,9 +179,9 @@ func isAudited(path string) (ok bool) {
 	return !slices.Contains(strings.Split(filepath.ToSlash(path), "/"), "attic")
 }
 
-// goFilesE walks the configured roots and yields every audited .go file, as a
+// goFiles walks the configured roots and yields every audited .go file, as a
 // path relative to Dir.
-func goFilesE(cfg Config) (out []string, err error) {
+func goFiles(cfg Config) (out []string, err error) {
 	out = make([]string, 0, 512)
 	for _, root := range cfg.roots() {
 		abs := filepath.Join(cfg.dir(), root)
@@ -219,11 +219,11 @@ func goFilesE(cfg Config) (out []string, err error) {
 	return
 }
 
-// packageNameE reads the first non-external-test package declaration in dir.
+// packageName reads the first non-external-test package declaration in dir.
 //
 // An external <pkg>_test package is Go-standard and exempt, so a directory
 // holding only those yields "" and is skipped by the caller.
-func packageNameE(dir string) (name string, err error) {
+func packageName(dir string) (name string, err error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		err = eb.Build().Str("dir", dir).Errorf("read dir: %w", err)
@@ -269,10 +269,10 @@ func n7Exempt(base string, app string) (ok bool) {
 	return strings.HasSuffix(base, "_test.go")
 }
 
-// CheckE yields every naming violation under cfg, sorted and deduplicated.
-func CheckE(cfg Config) (findings []Finding, err error) {
+// Check yields every naming violation under cfg, sorted and deduplicated.
+func Check(cfg Config) (findings []Finding, err error) {
 	var files []string
-	files, err = goFilesE(cfg)
+	files, err = goFiles(cfg)
 	if err != nil {
 		return
 	}
@@ -302,7 +302,7 @@ func CheckE(cfg Config) (findings []Finding, err error) {
 	dirs = slices.Compact(dirs)
 	for _, d := range dirs {
 		var pkg string
-		pkg, err = packageNameE(filepath.Join(cfg.dir(), d))
+		pkg, err = packageName(filepath.Join(cfg.dir(), d))
 		if err != nil {
 			return
 		}
@@ -350,7 +350,7 @@ func CheckE(cfg Config) (findings []Finding, err error) {
 			continue
 		}
 		var generated bool
-		generated, err = hasGeneratedHeaderE(filepath.Join(cfg.dir(), f))
+		generated, err = hasGeneratedHeader(filepath.Join(cfg.dir(), f))
 		if err != nil {
 			return
 		}
@@ -364,12 +364,12 @@ func CheckE(cfg Config) (findings []Finding, err error) {
 	return
 }
 
-// LoadBaselineE reads a baseline file: one "<kind>:<path>" line per
+// LoadBaseline reads a baseline file: one "<kind>:<path>" line per
 // grandfathered violation, with '#' comments and blank lines ignored.
 //
 // A missing file is not an error — it means an empty baseline, which is how a
 // repository that has never needed one behaves.
-func LoadBaselineE(path string) (out []string, err error) {
+func LoadBaseline(path string) (out []string, err error) {
 	out = make([]string, 0, 16)
 	if path == "" {
 		return

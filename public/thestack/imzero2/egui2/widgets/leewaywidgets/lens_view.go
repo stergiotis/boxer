@@ -80,13 +80,13 @@ func lensRowHeight(d lwlens.DetailE) float32 {
 	return 17
 }
 
-func lensTok(v styletokens.RGBA8) color.Color { return color.RGBA(v.R, v.G, v.B, v.A) }
+func lensTok(v styletokens.RGBA8) color.Color { return color.Hex(v.AsHex()) }
 
 // lensMix is a opaque blend of two tokens, t of the way from a to b: a tint
 // that stays a tint on whichever surface the theme paints.
 func lensMix(a, b styletokens.RGBA8, t float32) color.Color {
 	m := func(x, y uint8) uint8 { return uint8(float32(x) + (float32(y)-float32(x))*t + 0.5) }
-	return color.RGBA(m(a.R, b.R), m(a.G, b.G), m(a.B, b.B), 255)
+	return color.RGBA(m(a.R, b.R), m(a.G, b.G), m(a.B, b.B), 255) // designlint:ignore=L2 (computed blend of two tokens)
 }
 
 // lensTextW is the width of s in the monospace face at size f.
@@ -392,10 +392,10 @@ func (inst *lensPainter) paintLegend() {
 		put("(n): no value holds half the rows, n distinct", sec)
 	}
 	if inst.p.Detail != lwlens.DetailValues {
-		c.PaintRectStroke(x, y-4, x+8, y+4, 1, lensTok(styletokens.ErrorDefault), 1.5).Send()
+		c.PaintRectStroke(x, y-4, x+8, y+4, 1, lensTok(styletokens.ErrorDefault), styletokens.StrokeRegular).Send()
 		x += 11
 		put("missing: its cluster nearly always has it", sec)
-		c.PaintRectStroke(x, y-4, x+8, y+4, 1, lensTok(styletokens.WarningDefault), 1.5).Send()
+		c.PaintRectStroke(x, y-4, x+8, y+4, 1, lensTok(styletokens.WarningDefault), styletokens.StrokeRegular).Send()
 		x += 11
 		put("unusual: its cluster rarely has it", sec)
 	}
@@ -977,10 +977,10 @@ func (inst *lensPainter) paintFrameCell(x, cy float32, s int32, cell *lwlens.Cel
 		case has:
 			c.PaintRectFilled(x0, cy-lensShapeCell/2, x1, cy+lensShapeCell/2, 1, inst.sectionTone[m.SectionOf(s)]).Send()
 			if unexpected {
-				c.PaintRectStroke(x0-1, cy-lensShapeCell/2-1, x1+1, cy+lensShapeCell/2+1, 1, markWarn, 1.5).Send()
+				c.PaintRectStroke(x0-1, cy-lensShapeCell/2-1, x1+1, cy+lensShapeCell/2+1, 1, markWarn, styletokens.StrokeRegular).Send()
 			}
 		case missing:
-			c.PaintRectStroke(x0+0.5, cy-lensShapeCell/2+0.5, x1-0.5, cy+lensShapeCell/2-0.5, 1, markErr, 1.5).Send()
+			c.PaintRectStroke(x0+0.5, cy-lensShapeCell/2+0.5, x1-0.5, cy+lensShapeCell/2-0.5, 1, markErr, styletokens.StrokeRegular).Send()
 		default:
 			c.PaintRectFilled(x0+3, cy-1, x1-3, cy+1, 0, lensTok(styletokens.NeutralBorderFaint)).Send()
 		}
@@ -990,16 +990,16 @@ func (inst *lensPainter) paintFrameCell(x, cy float32, s int32, cell *lwlens.Cel
 		case has:
 			inst.paintGlyph(x0, x1, cy, 4, s, cell)
 			if unexpected {
-				c.PaintRectStroke(x0-1, cy-6, x1+1, cy+6, 1, markWarn, 1.5).Send()
+				c.PaintRectStroke(x0-1, cy-6, x1+1, cy+6, 1, markWarn, styletokens.StrokeRegular).Send()
 			}
 		case missing:
-			c.PaintRectStroke(x0+0.5, cy-4.5, x1-0.5, cy+4.5, 1, markErr, 1.5).Send()
+			c.PaintRectStroke(x0+0.5, cy-4.5, x1-0.5, cy+4.5, 1, markErr, styletokens.StrokeRegular).Send()
 		}
 	default:
 		n := inst.cellChars(s)
 		if !has {
 			if missing && inst.p.Detail == lwlens.DetailGist {
-				c.PaintRectStroke(x+1, cy-6, x+w-6, cy+6, 1, markErr, 1.5).Send()
+				c.PaintRectStroke(x+1, cy-6, x+w-6, cy+6, 1, markErr, styletokens.StrokeRegular).Send()
 			}
 			return
 		}
@@ -1032,7 +1032,7 @@ func (inst *lensPainter) paintFrameCell(x, cy float32, s int32, cell *lwlens.Cel
 			inst.text(x, cy, txt, lensFont, pri)
 		}
 		if unexpected && inst.p.Detail == lwlens.DetailGist {
-			c.PaintRectStroke(x-2, cy-7, x+w-6, cy+8, 1, markWarn, 1.2).Send()
+			c.PaintRectStroke(x-2, cy-7, x+w-6, cy+8, 1, markWarn, styletokens.StrokeHair).Send()
 		}
 	}
 }
@@ -1100,7 +1100,7 @@ func (inst *lensPainter) paintInline(x, cy float32, row *lwlens.Row, slots []int
 		case lwlens.DetailShape:
 			c.PaintRectFilled(x, cy-lensShapeCell/2, x+lensShapeCell, cy+lensShapeCell/2, 1, inst.sectionTone[m.SectionOf(s)]).Send()
 			if unexpected[s] {
-				c.PaintRectStroke(x-1, cy-lensShapeCell/2-1, x+lensShapeCell+1, cy+lensShapeCell/2+1, 1, lensTok(styletokens.WarningDefault), 1.5).Send()
+				c.PaintRectStroke(x-1, cy-lensShapeCell/2-1, x+lensShapeCell+1, cy+lensShapeCell/2+1, 1, lensTok(styletokens.WarningDefault), styletokens.StrokeRegular).Send()
 			}
 			x += lensShapePitch
 		case lwlens.DetailFingerprint:
@@ -1108,7 +1108,7 @@ func (inst *lensPainter) paintInline(x, cy float32, row *lwlens.Row, slots []int
 			x += lensTextW(name, lensSmallFont) + 3
 			inst.paintGlyph(x, x+lensFingerCell, cy, 4, s, cell)
 			if unexpected[s] {
-				c.PaintRectStroke(x-1, cy-6, x+lensFingerCell+1, cy+6, 1, lensTok(styletokens.WarningDefault), 1.5).Send()
+				c.PaintRectStroke(x-1, cy-6, x+lensFingerCell+1, cy+6, 1, lensTok(styletokens.WarningDefault), styletokens.StrokeRegular).Send()
 			}
 			x += lensFingerCell + 8
 		default:
@@ -1123,7 +1123,7 @@ func (inst *lensPainter) paintInline(x, cy float32, row *lwlens.Row, slots []int
 			}
 			inst.text(x, cy, val, lensFont, inst.valueTone(s, cell))
 			if unexpected[s] && inst.p.Detail == lwlens.DetailGist {
-				c.PaintRectStroke(x-2, cy-7, x+lensTextW(val, lensFont)+2, cy+7, 1, lensTok(styletokens.WarningDefault), 1.2).Send()
+				c.PaintRectStroke(x-2, cy-7, x+lensTextW(val, lensFont)+2, cy+7, 1, lensTok(styletokens.WarningDefault), styletokens.StrokeHair).Send()
 			}
 			x += lensTextW(val, lensFont) + 12
 		}

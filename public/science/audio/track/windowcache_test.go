@@ -31,17 +31,17 @@ func newFailingSource(inner pcm.SourceI) (inst *failingSource) {
 func (inst *failingSource) Format() (format pcm.Format) { return inst.inner.Format() }
 func (inst *failingSource) Frames() (frames int64)      { return inst.inner.Frames() }
 
-func (inst *failingSource) ReadFramesAtE(ctx context.Context, frameOffset int64, dst []float32) (n int, err error) {
+func (inst *failingSource) ReadFramesAt(ctx context.Context, frameOffset int64, dst []float32) (n int, err error) {
 	inst.reads.Add(1)
 	if inst.fail.Load() {
 		return 0, eh.New("the decoder is broken")
 	}
-	return inst.inner.ReadFramesAtE(ctx, frameOffset, dst)
+	return inst.inner.ReadFramesAt(ctx, frameOffset, dst)
 }
 
-func (inst *failingSource) CloseE() (err error) {
+func (inst *failingSource) Close() (err error) {
 	inst.closes.Add(1)
-	return inst.inner.CloseE()
+	return inst.inner.Close()
 }
 
 // testingTB is what the helpers below need of a *testing.T and of a
@@ -82,9 +82,9 @@ func TestWindowFetchesOffThreadAndCaches(t *testing.T) {
 	ch := int(format.Channels)
 	ctx := context.Background()
 
-	tr, err := OpenE(ctx, newTestSource(t, format, frames), Options{ChunkFrames: 8192})
+	tr, err := Open(ctx, newTestSource(t, format, frames), Options{ChunkFrames: 8192})
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, tr.CloseE()) })
+	t.Cleanup(func() { require.NoError(t, tr.Close()) })
 
 	samples, ok := tr.Window(0, windowFrames)
 	require.False(t, ok, "the first ask is a miss")
@@ -93,7 +93,7 @@ func TestWindowFetchesOffThreadAndCaches(t *testing.T) {
 
 	got := waitForWindow(t, tr, 0, windowFrames)
 	want := make([]float32, windowFrames*int64(ch))
-	n, err := tr.ReadWindowE(ctx, 0, want)
+	n, err := tr.ReadWindow(ctx, 0, want)
 	require.NoError(t, err)
 	require.Equal(t, int(windowFrames), n)
 	require.Equal(t, want, got, "the cached window is what a synchronous read returns")
@@ -120,9 +120,9 @@ func TestWindowPastTheEndAndOutsideTheRecording(t *testing.T) {
 	const frames int64 = 5000
 	ch := int(format.Channels)
 
-	tr, err := OpenE(context.Background(), newTestSource(t, format, frames), Options{BaseBin: 16})
+	tr, err := Open(context.Background(), newTestSource(t, format, frames), Options{BaseBin: 16})
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, tr.CloseE()) })
+	t.Cleanup(func() { require.NoError(t, tr.Close()) })
 
 	// Nothing to read past the end, and nothing to wait for.
 	samples, ok := tr.Window(frames, frames+1000)
@@ -156,11 +156,11 @@ func TestWindowRefusesWhatCannotFit(t *testing.T) {
 	t.Run("longer than the cap", func(t *testing.T) {
 		format := pcm.Format{SampleRate: 8000, Channels: 1}
 		frames := MaxWindowFrames + 4096
-		src, err := pcm.NewSynthSourceE(format, frames, pcm.Silence())
+		src, err := pcm.NewSynthSource(format, frames, pcm.Silence())
 		require.NoError(t, err)
-		tr, err := OpenE(context.Background(), src, Options{ChunkFrames: 1 << 18})
+		tr, err := Open(context.Background(), src, Options{ChunkFrames: 1 << 18})
 		require.NoError(t, err)
-		t.Cleanup(func() { require.NoError(t, tr.CloseE()) })
+		t.Cleanup(func() { require.NoError(t, tr.Close()) })
 
 		samples, ok := tr.Window(0, MaxWindowFrames+1)
 		require.False(t, ok)
@@ -177,11 +177,11 @@ func TestWindowRefusesWhatCannotFit(t *testing.T) {
 	t.Run("larger than the whole cache", func(t *testing.T) {
 		format := pcm.Format{SampleRate: 48000, Channels: 2}
 		const frames int64 = 20_000
-		tr, err := OpenE(context.Background(), newTestSource(t, format, frames), Options{
+		tr, err := Open(context.Background(), newTestSource(t, format, frames), Options{
 			WindowCacheBytes: 4096,
 		})
 		require.NoError(t, err)
-		t.Cleanup(func() { require.NoError(t, tr.CloseE()) })
+		t.Cleanup(func() { require.NoError(t, tr.Close()) })
 
 		// 2048 stereo frames are 16 KiB, four times the bound.
 		for range 5 {
@@ -205,11 +205,11 @@ func TestWindowEvictsLeastRecentlyUsed(t *testing.T) {
 	// Two windows of 512 stereo frames fill the bound exactly.
 	const bound = 2 * windowFrames * 2 * 4
 
-	tr, err := OpenE(context.Background(), newTestSource(t, format, frames), Options{
+	tr, err := Open(context.Background(), newTestSource(t, format, frames), Options{
 		WindowCacheBytes: bound,
 	})
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, tr.CloseE()) })
+	t.Cleanup(func() { require.NoError(t, tr.Close()) })
 
 	first := waitForWindow(t, tr, 0, windowFrames)
 	firstCopy := append([]float32(nil), first...)
@@ -242,7 +242,7 @@ func TestWindowMailboxKeepsTheLatestRequest(t *testing.T) {
 
 	gate := make(chan struct{})
 	calls := 0
-	tr, err := OpenE(context.Background(), newTestSource(t, format, frames), Options{
+	tr, err := Open(context.Background(), newTestSource(t, format, frames), Options{
 		ChunkFrames: 8192,
 		Reopen: func(_ context.Context) (src pcm.SourceI, err error) {
 			calls++
@@ -255,7 +255,7 @@ func TestWindowMailboxKeepsTheLatestRequest(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, tr.CloseE()) })
+	t.Cleanup(func() { require.NoError(t, tr.Close()) })
 	require.Equal(t, 2, calls)
 
 	_, ok := tr.Window(0, windowFrames)
@@ -306,9 +306,9 @@ func TestWindowBacksOffAfterAFailure(t *testing.T) {
 	const windowFrames int64 = 512
 
 	src := newFailingSource(newTestSource(t, format, frames))
-	tr, err := OpenE(context.Background(), src, Options{ChunkFrames: 8192})
+	tr, err := Open(context.Background(), src, Options{ChunkFrames: 8192})
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, tr.CloseE()) })
+	t.Cleanup(func() { require.NoError(t, tr.Close()) })
 
 	src.fail.Store(true)
 	_, ok := tr.Window(0, windowFrames)
@@ -345,9 +345,9 @@ func TestWindowWhileTheBackgroundBuildRuns(t *testing.T) {
 	ch := int64(format.Channels)
 
 	raw := newScratchSource(format, frames)
-	tr, err := OpenE(context.Background(), raw, Options{Background: true, ChunkFrames: 4096})
+	tr, err := Open(context.Background(), raw, Options{Background: true, ChunkFrames: 4096})
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, tr.CloseE()) })
+	t.Cleanup(func() { require.NoError(t, tr.Close()) })
 
 	dstMin := make([]int8, 128)
 	dstMax := make([]int8, 128)
@@ -383,10 +383,10 @@ func TestWindowAfterCloseIsRefused(t *testing.T) {
 	format := pcm.Format{SampleRate: 48000, Channels: 2}
 	const frames int64 = 20_000
 
-	tr, err := OpenE(context.Background(), newTestSource(t, format, frames), Options{})
+	tr, err := Open(context.Background(), newTestSource(t, format, frames), Options{})
 	require.NoError(t, err)
 	cached := waitForWindow(t, tr, 0, 512)
-	require.NoError(t, tr.CloseE())
+	require.NoError(t, tr.Close())
 
 	// A cached window outlives the source it was read from; an uncached one
 	// is never scheduled again.
@@ -413,11 +413,11 @@ func TestWindowMatchesTheSynchronousPath(t *testing.T) {
 	ctx := context.Background()
 
 	rapid.Check(t, func(rt *rapid.T) {
-		src, err := pcm.NewSynthSourceE(format, frames, testSignal(format, frames))
+		src, err := pcm.NewSynthSource(format, frames, testSignal(format, frames))
 		require.NoError(rt, err)
-		tr, err := OpenE(ctx, src, Options{BaseBin: 16, ChunkFrames: 8192, WindowCacheBytes: bound})
+		tr, err := Open(ctx, src, Options{BaseBin: 16, ChunkFrames: 8192, WindowCacheBytes: bound})
 		require.NoError(rt, err)
-		defer func() { require.NoError(rt, tr.CloseE()) }()
+		defer func() { require.NoError(rt, tr.Close()) }()
 
 		for range rapid.IntRange(1, 4).Draw(rt, "requests") {
 			from := rapid.Int64Range(0, frames-1).Draw(rt, "from")
@@ -425,7 +425,7 @@ func TestWindowMatchesTheSynchronousPath(t *testing.T) {
 			got := waitForWindow(rt, tr, from, to)
 
 			want := make([]float32, (min(to, frames)-from)*ch)
-			n, err := tr.ReadWindowE(ctx, from, want)
+			n, err := tr.ReadWindow(ctx, from, want)
 			require.NoError(rt, err)
 			require.Equal(rt, len(want)/int(ch), n)
 			require.Equal(rt, want, got)

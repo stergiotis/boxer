@@ -35,7 +35,7 @@ func (l *Layer) Cells(ctx context.Context, p portolan.Projector, h *h3.Handle, c
 	if len(cells) == 0 || len(fills) == 0 {
 		return
 	}
-	l.lats, l.lngs, l.offsets, l.status, err = h.CellsToBoundariesE(ctx, cells, l.lats, l.lngs, l.offsets, l.status)
+	l.lats, l.lngs, l.offsets, l.status, err = h.CellsToBoundaries(ctx, cells, l.lats, l.lngs, l.offsets, l.status)
 	if err != nil {
 		return eh.Errorf("h3overlay: cell boundaries: %w", err)
 	}
@@ -60,7 +60,7 @@ func ViewportCells(ctx context.Context, h *h3.Handle, b portolan.LatLngBounds, r
 	// A closed exterior ring, no holes — the scalar convenience wrapper.
 	lats := []float64{s, s, n, n, s}
 	lngs := []float64{w, e, e, w, w}
-	cells, err := h.PolygonToCellsSimpleE(ctx, res, h3.ContainmentIntersectsBoundary, lats, lngs)
+	cells, err := h.PolygonToCellsSimple(ctx, res, h3.ContainmentIntersectsBoundary, lats, lngs)
 	if err != nil {
 		return nil, eh.Errorf("h3overlay: viewport cells: %w", err)
 	}

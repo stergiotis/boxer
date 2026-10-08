@@ -1,11 +1,12 @@
 package buildtags
 
 import (
+	"context"
 	"fmt"
 	"os"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func NewCliCommand() *cli.Command {
@@ -34,8 +35,8 @@ func NewCliCommand() *cli.Command {
 	}
 }
 
-func buildtagsAction(ctx *cli.Context) (err error) {
-	file := ctx.String("file")
+func buildtagsAction(ctx context.Context, cmd *cli.Command) (err error) {
+	file := cmd.String("file")
 
 	// --list reads nothing: it prints the contract this binary publishes, and
 	// the caller most likely to ask is a repository that has no tags file yet.
@@ -43,7 +44,7 @@ func buildtagsAction(ctx *cli.Context) (err error) {
 	// a consumer needs no tags file at all, and answering "what does boxer
 	// require?" with "open tags: no such file or directory" is the wrong
 	// answer to the right question.
-	if ctx.Bool("list") {
+	if cmd.Bool("list") {
 		printContract()
 		return
 	}
@@ -56,7 +57,7 @@ func buildtagsAction(ctx *cli.Context) (err error) {
 	}
 	tags := ParseTags(string(raw))
 
-	if ctx.Bool("print-env") {
+	if cmd.Bool("print-env") {
 		fmt.Println(GoFlags(tags))
 		return
 	}

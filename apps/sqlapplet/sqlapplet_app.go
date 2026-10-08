@@ -25,7 +25,7 @@ const appletMaxHistory = 25
 // glosses themselves still render in an applet's Table and Detail. Model
 // (ADR-0254 §SD6) is chrome by the Snippets criterion: its prompts read the
 // buffer and its Insert and Replace write into the editor.
-// A snippet library a host contributed (ADR-0097's RegisterSnippetLibraryE)
+// A snippet library a host contributed (ADR-0097's RegisterSnippetLibrary)
 // is chrome by the same criterion as Snippets and goes with it, but it cannot
 // be listed here: its slug is the contributor's, chosen in another repository
 // and unknown at this line. attenuateTabs removes it by its Contributed mark.

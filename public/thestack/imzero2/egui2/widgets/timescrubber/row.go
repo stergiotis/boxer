@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -64,19 +66,24 @@ func (inst *Scrubber) renderTransportRow(steps []Step) (moved bool) {
 		if !(rate > 0) {
 			rate = defaultRate
 		}
-		for range c.ComboBox(inst.ids.PrepareStr("rate"),
-			c.WidgetText().Text("").Keep(),
-			c.WidgetText().Text(formatRate(rate)).Keep()).KeepIter() {
-			for range c.IdScope(inst.ids.PrepareStr("rates")) {
-				for i, r := range rates {
-					if c.Button(inst.ids.PrepareSeq(uint64(i)), c.Atoms().Text(formatRate(r)).Keep()).
-						Frame(false).Selected(r == rate).SendResp().HasPrimaryClicked() {
-						t.Rate = r
+		for range c.Scope().KeepIter() {
+			if !some {
+				c.UiDisable()
+			}
+			for range c.ComboBox(inst.ids.PrepareStr("rate"),
+				c.WidgetText().Text("").Keep(),
+				c.WidgetText().Text(formatRate(rate)).Keep()).KeepIter() {
+				for range c.IdScope(inst.ids.PrepareStr("rates")) {
+					for i, r := range rates {
+						if c.Button(inst.ids.PrepareSeq(uint64(i)), c.Atoms().Text(formatRate(r)).Keep()).
+							Frame(false).Selected(r == rate).SendResp().HasPrimaryClicked() {
+							t.Rate = r
+						}
 					}
 				}
 			}
 		}
-		if inst.button("mode", modeIcon(t.Mode)+" "+t.Mode.label(), "What playback does at the end: loop, bounce, or stop", true, false) {
+		if inst.button("mode", modeIcon(t.Mode)+" "+t.Mode.label(), "What playback does at the end: loop, bounce, or stop", some, false) {
 			t.Mode = AllModes[(int(t.Mode)+1)%len(AllModes)]
 		}
 		c.Separator().Vertical().Send()
@@ -87,7 +94,7 @@ func (inst *Scrubber) renderTransportRow(steps []Step) (moved bool) {
 		if inst.button("range-out", "Out", "End the range at the playhead · Shift+End", some && at > 0, false) {
 			t.SetOut(at, n)
 		}
-		if inst.button("clear-range", "Clear range", "Play every step again · Delete, or a double click on the band", t.RangeOn, false) {
+		if inst.button("clear-range", "Clear range", "Play every step again · Delete, or a double click on the band", some && t.RangeOn, false) {
 			t.ClearRange()
 		}
 		c.Separator().Vertical().Send()
@@ -127,7 +134,7 @@ func (inst *Scrubber) renderCompact(w float32, steps []Step) (ev Events) {
 			t.Toggle(n)
 			inst.focusKeys()
 		}
-		ev = inst.keyed(func() Events { return inst.strip(max(w-compactReserve, 2*padX+40), compactHeight, steps, true) })
+		ev = inst.keyed(func() Events { return inst.strip(max(w-compactReserve, 2*sidePad()+40), compactHeight, steps, true) })
 		c.Label(inst.compactReadout(steps)).Send()
 	}
 	return
@@ -226,7 +233,7 @@ func formatRate(r float64) string {
 func (inst *Scrubber) readout(steps []Step) string {
 	n := len(steps)
 	if n == 0 {
-		return "no steps"
+		return "No steps"
 	}
 	t := &inst.Transport
 	axis := newAxis(steps, 0, 1, false)
@@ -276,18 +283,28 @@ func (inst *Scrubber) readout(steps []Step) string {
 		}
 		s += fmt.Sprintf(" · playing at %.2g of %g steps/s", rate*(1-t.WaitShare), rate)
 	}
-	return s
+	return sentence(s)
+}
+
+// sentence starts s with a capital, as a label that is read alone does
+// (ADR-0029 §SD8): the readout opens with "step" when the series has no times.
+func sentence(s string) string {
+	r, size := utf8.DecodeRuneInString(s)
+	if size == 0 || !unicode.IsLower(r) {
+		return s
+	}
+	return string(unicode.ToUpper(r)) + s[size:]
 }
 
 func (inst *Scrubber) compactReadout(steps []Step) string {
 	n := len(steps)
 	if n == 0 {
-		return "no steps"
+		return "No steps"
 	}
 	t := &inst.Transport
 	axis := newAxis(steps, 0, 1, false)
 	if !axis.ordered() {
-		return fmt.Sprintf("step %d of %d", int(math.Round(t.Pos))+1, n)
+		return fmt.Sprintf("Step %d of %d", int(math.Round(t.Pos))+1, n)
 	}
 	s := newLabels(axis.ms, inst.location()).short(axis.timeAt(t.Pos, inst.location()))
 	if t.Buffering && t.BufferingFor >= waitingAfter {

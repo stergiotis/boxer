@@ -66,7 +66,7 @@ func buildAudioArtifact(raw string) (a *audioArtifact) {
 		return
 	}
 	// A strings.Reader is an io.ReaderAt over the string itself: no copy.
-	f, err := wavfile.NewReaderE(strings.NewReader(raw), int64(len(raw)))
+	f, err := wavfile.NewReader(strings.NewReader(raw), int64(len(raw)))
 	if err != nil {
 		a.reason = "not a readable WAVE file: " + err.Error()
 		return
@@ -76,7 +76,7 @@ func buildAudioArtifact(raw string) (a *audioArtifact) {
 		SampleRate: format.SampleRate, Channels: format.Channels, Bits: f.BitsPerSample(),
 		Frames: f.Frames(), Duration: format.FramesToDuration(f.Frames()), Truncated: f.IsTruncated(),
 	}
-	a.overview, err = peaks.OverviewE(context.Background(), f, audioOverviewColumns)
+	a.overview, err = peaks.ComputeOverview(context.Background(), f, audioOverviewColumns)
 	if err != nil {
 		a.overview = nil
 		a.reason = "unable to read the samples: " + err.Error()
@@ -150,7 +150,7 @@ func (inst *PlayApp) audioToggle(key string, raw func() string) {
 		case s.sink.State() == sink.StatePlaying:
 			s.sink.Pause()
 		case s.sink.Ended():
-			_ = s.sink.SeekE(0)
+			_ = s.sink.SeekFrame(0)
 			s.sink.Play()
 		default:
 			s.sink.Play()
@@ -174,14 +174,14 @@ func (inst *audioSession) open(data string, noDevice bool) {
 	// faces read the session's state every frame.
 	var out sink.SinkI
 	deviceErr := ""
-	f, err := wavfile.NewReaderE(strings.NewReader(data), int64(len(data)))
+	f, err := wavfile.NewReader(strings.NewReader(data), int64(len(data)))
 	switch {
 	case err != nil:
 		deviceErr = "not a readable WAVE file: " + err.Error()
 	case noDevice:
 		deviceErr = "no output device (disabled)"
 	default:
-		dev, oerr := pulsesink.OpenE(f, pulsesink.Options{AppName: "boxer play"})
+		dev, oerr := pulsesink.Open(f, pulsesink.Options{AppName: "boxer play"})
 		if oerr != nil {
 			deviceErr = "no output device: " + oerr.Error()
 		} else {
@@ -198,10 +198,10 @@ func (inst *audioSession) open(data string, noDevice bool) {
 	if inst.closed {
 		// Stopped while opening: the session is gone, so is what it opened.
 		if out != nil {
-			_ = out.CloseE()
+			_ = out.Close()
 		}
 		if f != nil {
-			_ = f.CloseE()
+			_ = f.Close()
 		}
 		return
 	}
@@ -220,7 +220,7 @@ func (inst *PlayApp) audioSeek(key string, fraction float64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.sink != nil {
-		_ = s.sink.SeekE(int64(fraction * float64(s.sink.Frames())))
+		_ = s.sink.SeekFrame(int64(fraction * float64(s.sink.Frames())))
 	}
 }
 
@@ -235,11 +235,11 @@ func (inst *PlayApp) audioStop() {
 	defer s.mu.Unlock()
 	s.closed = true
 	if s.sink != nil {
-		_ = s.sink.CloseE()
+		_ = s.sink.Close()
 		s.sink = nil
 	}
 	if s.file != nil {
-		_ = s.file.CloseE()
+		_ = s.file.Close()
 		s.file = nil
 	}
 }

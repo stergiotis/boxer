@@ -29,8 +29,8 @@ func TestCheckOutputDirRefusesAPopulatedDirectory(t *testing.T) {
 // scripted, so renaming the verb must not break it.
 func TestLoadKeepsTheIngestAlias(t *testing.T) {
 	cmd := NewCliCommand()
-	byName := make(map[string][]string, len(cmd.Subcommands))
-	for _, sub := range cmd.Subcommands {
+	byName := make(map[string][]string, len(cmd.Commands))
+	for _, sub := range cmd.Commands {
 		byName[sub.Name] = sub.Aliases
 	}
 	require.Contains(t, byName, "load")

@@ -32,11 +32,11 @@ func requireServer(t *testing.T) {
 func openSilence(t *testing.T, seconds int) (s *pulsesink.Sink, format pcm.Format) {
 	t.Helper()
 	format = pcm.Format{SampleRate: 48000, Channels: 2}
-	src, err := pcm.NewSynthSourceE(format, format.DurationToFrames(time.Duration(seconds)*time.Second), pcm.Silence())
+	src, err := pcm.NewSynthSource(format, format.DurationToFrames(time.Duration(seconds)*time.Second), pcm.Silence())
 	require.NoError(t, err)
-	s, err = pulsesink.OpenE(src, pulsesink.Options{AppName: "boxer-test", Latency: 40 * time.Millisecond})
+	s, err = pulsesink.Open(src, pulsesink.Options{AppName: "boxer-test", Latency: 40 * time.Millisecond})
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, s.CloseE()) })
+	t.Cleanup(func() { require.NoError(t, s.Close()) })
 	return s, format
 }
 
@@ -78,9 +78,9 @@ func TestPlayAdvancesPauseHolds(t *testing.T) {
 func TestPauseResumeCyclesKeepTheStreamAlive(t *testing.T) {
 	requireServer(t)
 	format := pcm.Format{SampleRate: 48000, Channels: 2}
-	src, err := pcm.NewSynthSourceE(format, format.DurationToFrames(30*time.Second), pcm.Silence())
+	src, err := pcm.NewSynthSource(format, format.DurationToFrames(30*time.Second), pcm.Silence())
 	require.NoError(t, err)
-	s, err := pulsesink.OpenE(src, pulsesink.Options{AppName: "boxer-test", Latency: 40 * time.Millisecond})
+	s, err := pulsesink.Open(src, pulsesink.Options{AppName: "boxer-test", Latency: 40 * time.Millisecond})
 	require.NoError(t, err)
 	s.Play()
 	time.Sleep(150 * time.Millisecond)
@@ -98,7 +98,7 @@ func TestPauseResumeCyclesKeepTheStreamAlive(t *testing.T) {
 	s.Pause()
 	time.Sleep(100 * time.Millisecond)
 	target := format.DurationToFrames(20 * time.Second)
-	require.NoError(t, s.SeekE(target))
+	require.NoError(t, s.SeekFrame(target))
 	require.Equal(t, target, s.Position())
 	s.Play()
 	time.Sleep(300 * time.Millisecond)
@@ -108,7 +108,7 @@ func TestPauseResumeCyclesKeepTheStreamAlive(t *testing.T) {
 	// trip; a blocked read loop shows as the one-second request timeout.
 	s.Pause()
 	started := time.Now()
-	require.NoError(t, s.CloseE())
+	require.NoError(t, s.Close())
 	require.Less(t, time.Since(started), 500*time.Millisecond, "close waited on a blocked read loop")
 }
 
@@ -118,7 +118,7 @@ func TestSeekFlushesAndEndStops(t *testing.T) {
 	s.Play()
 	time.Sleep(150 * time.Millisecond)
 	target := format.DurationToFrames(1700 * time.Millisecond)
-	require.NoError(t, s.SeekE(target))
+	require.NoError(t, s.SeekFrame(target))
 	pos := s.Position()
 	require.GreaterOrEqual(t, pos, target, "position after a seek starts at the target")
 	require.Less(t, pos, target+format.DurationToFrames(150*time.Millisecond))
@@ -142,10 +142,10 @@ func TestSeekFlushesAndEndStops(t *testing.T) {
 func TestRateAndVolume(t *testing.T) {
 	requireServer(t)
 	s, format := openSilence(t, 10)
-	require.NoError(t, s.SetVolumeE(0.25))
+	require.NoError(t, s.SetVolume(0.25))
 	require.Equal(t, 0.25, s.Volume())
-	require.Error(t, s.SetRateE(0))
-	require.NoError(t, s.SetRateE(2))
+	require.Error(t, s.SetRate(0))
+	require.NoError(t, s.SetRate(2))
 	s.Play()
 	time.Sleep(600 * time.Millisecond)
 	pos := s.Position()
@@ -168,17 +168,17 @@ func TestNonUnityRateNeverRestartsTheDecoder(t *testing.T) {
 	out, err := extbin.Ffmpeg.CombinedOutput(context.Background(), extbin.Opts{},
 		"-y", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=6", "-ac", "2", "-ar", "48000", "-c:a", "flac", flac)
 	require.NoError(t, err, string(out))
-	src, err := decode.OpenFfmpegE(context.Background(), flac)
+	src, err := decode.OpenFfmpeg(context.Background(), flac)
 	require.NoError(t, err)
-	defer func() { _ = src.CloseE() }()
-	s, err := pulsesink.OpenE(src, pulsesink.Options{AppName: "boxer-test", Latency: 40 * time.Millisecond})
+	defer func() { _ = src.Close() }()
+	s, err := pulsesink.Open(src, pulsesink.Options{AppName: "boxer-test", Latency: 40 * time.Millisecond})
 	require.NoError(t, err)
-	defer func() { require.NoError(t, s.CloseE()) }()
-	require.NoError(t, s.SetVolumeE(0.05))
-	require.NoError(t, s.SetRateE(1.31))
+	defer func() { require.NoError(t, s.Close()) }()
+	require.NoError(t, s.SetVolume(0.05))
+	require.NoError(t, s.SetRate(1.31))
 	s.Play()
 	time.Sleep(700 * time.Millisecond)
-	require.NoError(t, s.SetRateE(1))
+	require.NoError(t, s.SetRate(1))
 	time.Sleep(400 * time.Millisecond)
 	s.Pause()
 	require.Zero(t, src.Restarts(), "playback at any rate reads the decoder forwards only")

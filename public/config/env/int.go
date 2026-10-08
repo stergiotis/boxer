@@ -1,12 +1,13 @@
 package env
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
 	"testing"
 
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 )
 
 // IntVar is the typed env-var handle for 64-bit signed integer values.
@@ -76,7 +77,7 @@ func (inst *IntVar) setCached(value int64) {
 // WithInt64Action attaches a caller-supplied Action func to the
 // cli.Int64Flag returned by AsCliFlag. The user action runs first; on
 // success the parsed value is written to the cache.
-func WithInt64Action(fn func(ctx *cli.Context, parsed int64) error) (opt FlagOption) {
+func WithInt64Action(fn func(ctx context.Context, cmd *cli.Command, parsed int64) error) (opt FlagOption) {
 	return func(o *flagOptions) {
 		o.actionFn = fn
 	}
@@ -84,7 +85,7 @@ func WithInt64Action(fn func(ctx *cli.Context, parsed int64) error) (opt FlagOpt
 
 func (inst *IntVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
 	fo := resolveFlagOptions(inst.spec, opts)
-	userAction, _ := fo.actionFn.(func(*cli.Context, int64) error)
+	userAction, _ := fo.actionFn.(func(context.Context, *cli.Command, int64) error)
 	defaultValue := int64(0)
 	if inst.spec.Default != "" {
 		defaultValue = inst.parseDefault()
@@ -93,11 +94,11 @@ func (inst *IntVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
 		Name:     fo.cliFlagName,
 		Usage:    inst.spec.Description,
 		Category: string(inst.spec.Category),
-		EnvVars:  []string{inst.spec.Name},
+		Sources:  cli.EnvVars(inst.spec.Name),
 		Value:    defaultValue,
-		Action: func(ctx *cli.Context, parsed int64) (err error) {
+		Action: func(ctx context.Context, cmd *cli.Command, parsed int64) (err error) {
 			if userAction != nil {
-				err = userAction(ctx, parsed)
+				err = userAction(ctx, cmd, parsed)
 				if err != nil {
 					return
 				}

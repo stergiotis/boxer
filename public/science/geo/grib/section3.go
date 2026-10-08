@@ -8,8 +8,8 @@ import (
 )
 
 // ScanFlags are the four independent bits of flag table 3.4, as coded. They
-// say how the stored values are laid out; [Field.ValuesE] does not apply
-// them, [Grid.PointsE] follows them, and [Field.RasterE] applies them once
+// say how the stored values are laid out; [Field.Values] does not apply
+// them, [Grid.Points] follows them, and [Field.Raster] applies them once
 // (ADR-0292 §R2).
 type ScanFlags struct {
 	// INegative: points in the first row run in the −i direction (east to
@@ -183,19 +183,19 @@ const microDegrees = 1e-6
 // 2³² points at 8 bytes is 32 GB, and no producer's field is that large.
 const maxPoints = 1 << 31
 
-func parseGridE(body []byte) (g Grid, err error) {
+func parseGrid(body []byte) (g Grid, err error) {
 	r := rd{b: body}
 	g.Source = r.u8()
 	g.NumPoints = r.u32()
 	g.OctetsPerPoint = r.u8()
 	g.Interpretation = r.u8()
 	g.Template = r.u16()
-	err = r.errE("grid definition section")
+	err = r.truncation("grid definition section")
 	if err != nil {
 		return
 	}
 	if g.Source != 0 {
-		err = unsupportedE("grid definition source " + strconv.Itoa(int(g.Source)))
+		err = unsupported("grid definition source " + strconv.Itoa(int(g.Source)))
 		return
 	}
 	if g.NumPoints == 0 || g.NumPoints > maxPoints {
@@ -207,21 +207,21 @@ func parseGridE(body []byte) (g Grid, err error) {
 	// only from the template's own Nj, so each layout takes it.
 	switch g.Template {
 	case 0, 1, 40:
-		err = g.parseLatLonE(tpl)
+		err = g.parseLatLon(tpl)
 	case 10:
-		err = g.parseMercatorE(tpl)
+		err = g.parseMercator(tpl)
 	case 20:
-		err = g.parsePolarStereographicE(tpl)
+		err = g.parsePolarStereographic(tpl)
 	case 30:
-		err = g.parseLambertE(tpl)
+		err = g.parseLambert(tpl)
 	case 90:
-		err = g.parseSpaceViewE(tpl)
+		err = g.parseSpaceView(tpl)
 	case 101:
-		err = g.parseUnstructuredE(tpl)
+		err = g.parseUnstructured(tpl)
 	default:
 		g.Raw = tpl
 		if g.OctetsPerPoint != 0 {
-			err = unsupportedE("grid template 3." + strconv.Itoa(int(g.Template)) + " with a point list")
+			err = unsupported("grid template 3." + strconv.Itoa(int(g.Template)) + " with a point list")
 		}
 	}
 	return
@@ -272,7 +272,7 @@ func scaled(value uint32, scale uint8) (v float64) {
 	return
 }
 
-func (inst *Grid) parseLatLonE(tpl []byte) (err error) {
+func (inst *Grid) parseLatLon(tpl []byte) (err error) {
 	r := rd{b: tpl}
 	inst.parseShape(&r)
 	g := &LatLonGrid{}
@@ -304,7 +304,7 @@ func (inst *Grid) parseLatLonE(tpl []byte) (err error) {
 		rot.Angle = float64(angle) * microDegrees
 		g.Rotated = rot
 	}
-	err = r.errE("grid template 3." + strconv.Itoa(int(inst.Template)))
+	err = r.truncation("grid template 3." + strconv.Itoa(int(inst.Template)))
 	if err != nil {
 		return
 	}
@@ -339,7 +339,7 @@ func (inst *Grid) parseLatLonE(tpl []byte) (err error) {
 			return
 		}
 		if inst.Interpretation != 1 {
-			err = unsupportedE("point list interpretation " + strconv.Itoa(int(inst.Interpretation)))
+			err = unsupported("point list interpretation " + strconv.Itoa(int(inst.Interpretation)))
 			return
 		}
 		if inst.OctetsPerPoint < 1 || inst.OctetsPerPoint > 4 {
@@ -359,7 +359,7 @@ func (inst *Grid) parseLatLonE(tpl []byte) (err error) {
 		// The rows sum to the point count on a global grid. ECMWF codes a
 		// sub-area of a reduced Gaussian grid with the global row lengths
 		// and a smaller count, so a mismatch marks a sub-area rather than
-		// a defect; PointsE refuses it by name.
+		// a defect; Points refuses it by name.
 		g.PLSum = total
 	} else {
 		if niMissing {
@@ -380,7 +380,7 @@ func (inst *Grid) parseLatLonE(tpl []byte) (err error) {
 	return
 }
 
-func (inst *Grid) parseMercatorE(tpl []byte) (err error) {
+func (inst *Grid) parseMercator(tpl []byte) (err error) {
 	r := rd{b: tpl}
 	inst.parseShape(&r)
 	g := &MercatorGrid{}
@@ -396,18 +396,18 @@ func (inst *Grid) parseMercatorE(tpl []byte) (err error) {
 	g.Orientation = float64(r.u32()) * microDegrees
 	g.Dx = float64(r.u32()) * 1e-3
 	g.Dy = float64(r.u32()) * 1e-3
-	err = r.errE("grid template 3.10")
+	err = r.truncation("grid template 3.10")
 	if err != nil {
 		return
 	}
 	g.UVRelativeToGrid = g.ResolutionFlags&0x08 != 0
 	inst.Raw = tpl
-	err = inst.checkRectangularE(g.Ni, g.Nj, r.remaining())
+	err = inst.checkRectangular(g.Ni, g.Nj, r.remaining())
 	inst.Mercator = g
 	return
 }
 
-func (inst *Grid) parsePolarStereographicE(tpl []byte) (err error) {
+func (inst *Grid) parsePolarStereographic(tpl []byte) (err error) {
 	r := rd{b: tpl}
 	inst.parseShape(&r)
 	g := &PolarStereographicGrid{}
@@ -422,18 +422,18 @@ func (inst *Grid) parsePolarStereographicE(tpl []byte) (err error) {
 	g.Dy = float64(r.u32()) * 1e-3
 	g.ProjectionCentre = r.u8()
 	inst.Scan = parseScanFlags(r.u8())
-	err = r.errE("grid template 3.20")
+	err = r.truncation("grid template 3.20")
 	if err != nil {
 		return
 	}
 	g.UVRelativeToGrid = g.ResolutionFlags&0x08 != 0
 	inst.Raw = tpl
-	err = inst.checkRectangularE(g.Nx, g.Ny, r.remaining())
+	err = inst.checkRectangular(g.Nx, g.Ny, r.remaining())
 	inst.PolarStereographic = g
 	return
 }
 
-func (inst *Grid) parseLambertE(tpl []byte) (err error) {
+func (inst *Grid) parseLambert(tpl []byte) (err error) {
 	r := rd{b: tpl}
 	inst.parseShape(&r)
 	g := &LambertGrid{}
@@ -452,18 +452,18 @@ func (inst *Grid) parseLambertE(tpl []byte) (err error) {
 	g.Latin2 = float64(r.s32()) * microDegrees
 	g.SouthPoleLat = float64(r.s32()) * microDegrees
 	g.SouthPoleLon = float64(r.s32()) * microDegrees
-	err = r.errE("grid template 3.30")
+	err = r.truncation("grid template 3.30")
 	if err != nil {
 		return
 	}
 	g.UVRelativeToGrid = g.ResolutionFlags&0x08 != 0
 	inst.Raw = tpl
-	err = inst.checkRectangularE(g.Nx, g.Ny, r.remaining())
+	err = inst.checkRectangular(g.Nx, g.Ny, r.remaining())
 	inst.Lambert = g
 	return
 }
 
-func (inst *Grid) parseSpaceViewE(tpl []byte) (err error) {
+func (inst *Grid) parseSpaceView(tpl []byte) (err error) {
 	r := rd{b: tpl}
 	inst.parseShape(&r)
 	g := &SpaceViewGrid{}
@@ -481,46 +481,46 @@ func (inst *Grid) parseSpaceViewE(tpl []byte) (err error) {
 	g.Nr = float64(r.u32()) * 1e-6
 	g.Xo = r.u32()
 	g.Yo = r.u32()
-	err = r.errE("grid template 3.90")
+	err = r.truncation("grid template 3.90")
 	if err != nil {
 		return
 	}
 	g.UVRelativeToGrid = g.ResolutionFlags&0x08 != 0
 	inst.Raw = tpl
-	err = inst.checkRectangularE(g.Nx, g.Ny, r.remaining())
+	err = inst.checkRectangular(g.Nx, g.Ny, r.remaining())
 	inst.SpaceView = g
 	return
 }
 
-func (inst *Grid) parseUnstructuredE(tpl []byte) (err error) {
+func (inst *Grid) parseUnstructured(tpl []byte) (err error) {
 	r := rd{b: tpl}
 	g := &UnstructuredGrid{}
 	g.NumberOfGridUsed = r.u8()
 	g.NumberOfGridInReference = r.u8()
 	copy(g.UUID[:], r.take(16))
-	err = r.errE("grid template 3.101")
+	err = r.truncation("grid template 3.101")
 	if err != nil {
 		return
 	}
 	inst.Raw = tpl
 	if inst.OctetsPerPoint != 0 {
-		err = unsupportedE("grid template 3.101 with a point list")
+		err = unsupported("grid template 3.101 with a point list")
 		return
 	}
 	inst.Unstructured = g
 	return
 }
 
-// checkRectangularE holds a template's Nx × Ny against the section's point
+// checkRectangular holds a template's Nx × Ny against the section's point
 // count and refuses a point list, which the rectangular templates do not
 // define.
-func (inst *Grid) checkRectangularE(nx, ny uint32, extra int) (err error) {
+func (inst *Grid) checkRectangular(nx, ny uint32, extra int) (err error) {
 	if uint64(nx)*uint64(ny) != uint64(inst.NumPoints) {
 		err = eb.Build().Uint32("nx", nx).Uint32("ny", ny).Uint32("points", inst.NumPoints).Errorf("Nx × Ny is not the point count: %w", ErrInconsistent)
 		return
 	}
 	if inst.OctetsPerPoint != 0 {
-		err = unsupportedE("grid template 3." + strconv.Itoa(int(inst.Template)) + " with a point list")
+		err = unsupported("grid template 3." + strconv.Itoa(int(inst.Template)) + " with a point list")
 		return
 	}
 	if extra != 0 {

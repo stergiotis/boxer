@@ -489,6 +489,57 @@ pin. Tables an earlier build
 wrote stay on the endpoint; nothing in the tree reads them. The weave
 (Tier 2) and the other slices are unaffected.
 
+## Update — 2026-10-08: dedup windows anchored on the watermark; `/pull` carries an ETag
+
+Three defects in the S1 pipeline, each pinned by a test named with its fix.
+
+**The MV anti-join window was anchored on wall-clock time.** The Implementation
+outline's body anti-joins destination ids with `ts > now64(9) - INTERVAL 1 DAY`,
+but `ts` is the event's own time. Every extract re-serves the overlap
+(`watermark - WatermarkOverlap` onward) by design, and during a backfill or a
+catch-up older than a day those rows fall outside a now-anchored window. Each
+refresh therefore appended them again; `boxer.facts` is a plain `MergeTree`, so
+the duplicates are permanent. The default backfill (`all`) hit this on every
+first boot against a server with more than a day of `query_log`. The window is
+now the extract's own lower bound, `ts >= <watermark> - WatermarkOverlap`, which
+covers a re-served row however old it is (`TestLiveOldBackfillStaysDuplicateFree`).
+
+**The extract counted already-captured rows against its `LIMIT`.** With the
+batch cap applied before dedup, an overlap window holding at least a batch of
+events filled every batch with rows the MV discards: the watermark never
+advanced, and every refresh reported success while capture had stopped. The
+extract now drops events already in the destination — by `(query_id`, event
+microsecond`)`, against the same lower bound — before the `LIMIT`. The MV's id
+anti-join stays as the exact backstop (`TestLiveDenseOverlapDoesNotStall`).
+
+**`/pull` answered range requests without a validator.** It serves through
+`http.ServeContent` for ClickHouse's offset and resumed reads (the ADR-0134
+update of 2026-08-01), but its body is not stable across requests: `query_log`
+grows and an append moves the watermark. A continuation could splice two
+answers. The response now carries the content hash as `ETag`, so a stale
+`If-Range` gets the full body — the `/table` precedent.
+
+Separately, the loopback bind gate accepted an empty host, which binds every
+interface (`--listen :8127`); it no longer does, in `queryrunsvc` and in the
+`introspecthttp` gate it mirrors.
+
+## Update — 2026-10-08: shared ClickHouse coordinates; the server must be on this host
+
+`IMZERO2_QUERYRUNS_CH_URL` is retired. The endpoint and credentials come from
+the shared `CLICKHOUSE_*` entries through `chclient.ConfigFromEnv`, as every
+other client reads them; before this the daemon had no way to authenticate
+at all. `--ch-url` is now the CLI face of `CLICKHOUSE_ENDPOINT`, and the
+daemon's other flags are the CLI faces of their `IMZERO2_QUERYRUNS_*`
+entries, so each setting resolves in one place. The daemon also exits when
+its HTTP server stops serving, rather than living on without an endpoint,
+so the unit's `Restart=always` recovers it.
+
+The endpoint must be on this host, and `Start` refuses one that is not. The
+materialized view pulls a loopback URL from ClickHouse's side, so against a
+remote server every refresh failed while the daemon reported nothing. A
+server in a container on the same host passes the check and fails the same
+way: its loopback is not the host's.
+
 ## References
 
 - [doc/explanation/query-observability.md](../explanation/query-observability.md)

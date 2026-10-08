@@ -52,7 +52,7 @@ func publishView(t *testing.T, bus app.BusI, sql string, locals ...string) (res 
 	for i, l := range locals {
 		spec.Datasets = append(spec.Datasets, adhocdata.BundleDatasetInput{LocalName: l, ArrowIPCStream: viewInts(t, int64(i))})
 	}
-	res, err := play.PublishBundleE(bus, spec)
+	res, err := play.PublishBundle(bus, spec)
 	require.NoError(t, err)
 	return
 }
@@ -154,7 +154,7 @@ func TestAnAgentsDocumentRunsAsItsTask(t *testing.T) {
 	spec := play.BundleSpec{Alias: "counts", Sql: "SELECT * FROM keelson('result')", Tabs: []string{"table"},
 		Datasets:   []adhocdata.BundleDatasetInput{{LocalName: "result", ArrowIPCStream: viewInts(t, 1)}},
 		OnBehalfOf: &app.OnBehalfOf{Task: "task-9", Epoch: 1, Call: "task-9-1"}}
-	_, err = play.PublishBundleE(publisher, spec)
+	_, err = play.PublishBundle(publisher, spec)
 	require.NoError(t, err)
 
 	viewBus := bus.NewClient("test.receiver", BundleViewCaps)
@@ -166,7 +166,7 @@ func TestAnAgentsDocumentRunsAsItsTask(t *testing.T) {
 	assert.Equal(t, "task-9", v.Inner().AgentMark().Task)
 
 	spec.OnBehalfOf, spec.Alias = nil, "mine"
-	_, err = play.PublishBundleE(publisher, spec)
+	_, err = play.PublishBundle(publisher, spec)
 	require.NoError(t, err)
 	mine := NewBundleView("mine", BundleViewConfig{Bus: viewBus, Log: zerolog.Nop(), StampAppId: "test.receiver#mine"})
 	t.Cleanup(mine.Close)

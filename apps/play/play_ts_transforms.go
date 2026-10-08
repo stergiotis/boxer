@@ -50,12 +50,12 @@ func tsApplySmooth(call *tsCall, ts []int64, vals []float64, params map[string]s
 		err = eh.Errorf("tsSmooth: halfWidth %s needs at least %s samples; the input has %s", humanize.Comma(int64(halfWidth)), humanize.Comma(int64(halfWidth)*2+1), humanize.Comma(int64(len(vals)))) //boxer:lint disable=CS013 reason="the comment above records that all three numbers deliberately take the readout register"
 		return
 	}
-	kernel, err := mssmooth.NewKernelE(tsSmoothDegree, halfWidth)
+	kernel, err := mssmooth.NewKernel(tsSmoothDegree, halfWidth)
 	if err != nil {
 		err = eh.Errorf("tsSmooth: %w", err)
 		return
 	}
-	smoothed, err := kernel.SmoothE(vals, nil)
+	smoothed, err := kernel.Smooth(vals, nil)
 	if err != nil {
 		err = eh.Errorf("tsSmooth: %w", err)
 		return
@@ -74,7 +74,7 @@ func tsApplyProfile(call *tsCall, ts []int64, vals []float64, params map[string]
 	if err != nil {
 		return
 	}
-	series, err := matrixprofile.NewSeriesE(vals, window, matrixprofile.DefaultStdDevFloorRel)
+	series, err := matrixprofile.NewSeries(vals, window, matrixprofile.DefaultStdDevFloorRel)
 	if err != nil {
 		err = eh.Errorf("tsProfile: %w", err)
 		return
@@ -124,7 +124,7 @@ func tsApplyScores(call *tsCall, ts []int64, vals []float64, params map[string]s
 // at its centre. Shared by the score and span transforms so the spans are
 // provably the extents of the scores the other one reports.
 func tsScoreSeries(vals []float64, window int32, n int) (scores []float64, warm []bool, err error) {
-	det, dErr := damp.NewDetectorE(damp.Config{Window: window, Exact: true})
+	det, dErr := damp.NewDetector(damp.Config{Window: window, Exact: true})
 	if dErr != nil {
 		err = eh.Errorf("tsAnomalyScores: %w", dErr)
 		return

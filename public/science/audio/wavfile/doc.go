@@ -41,7 +41,7 @@
 //
 // # Reading
 //
-// Opening reads the header and nothing else. ReadFramesAtE reads exactly the
+// Opening reads the header and nothing else. ReadFramesAt reads exactly the
 // bytes one request needs through io.ReaderAt, so the resident cost of an
 // 8 GB file is the window the caller asked for. Sequential and random access
 // are equally cheap.

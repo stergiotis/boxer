@@ -3,6 +3,7 @@ package example
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json/jsontext"
 	"errors"
 	"hash"
@@ -22,7 +23,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/dml"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/membership"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"lukechampine.com/blake3"
 )
 
@@ -206,7 +207,7 @@ var allCompressions = []string{compressionUncompressed, compressionZstd}
 var compressionFlag = &cli.StringFlag{
 	Name:  "compression",
 	Value: compressionUncompressed,
-	Action: func(context *cli.Context, s string) error {
+	Action: func(ctx context.Context, cmd *cli.Command, s string) error {
 		if slices.Index(allCompressions, s) < 0 {
 			return eb.Build().Str("compression", s).Strs("possibleValues", allCompressions).Errorf("unknown compression flag")
 		}
@@ -217,11 +218,11 @@ var compressionFlag = &cli.StringFlag{
 func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name: "example",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			{
 				Name:  "ndjson",
 				Usage: "a poor mans ndjson cleanup routine",
-				Subcommands: []*cli.Command{
+				Commands: []*cli.Command{
 					{
 						Name: "cleanup",
 						Flags: []cli.Flag{
@@ -234,11 +235,11 @@ func NewCliCommand() *cli.Command {
 								Value: 32 * 1024 * 1024,
 							},
 						},
-						Action: func(context *cli.Context) (err error) {
+						Action: func(ctx context.Context, cmd *cli.Command) (err error) {
 							sc := bufio.NewScanner(os.Stdin)
 							sc.Split(bufio.ScanLines)
-							maxInputJsonSize := context.Uint("maxInputJsonSize")
-							maxOutputJsonSize := context.Uint("maxOutputJsonSize")
+							maxInputJsonSize := cmd.Uint("maxInputJsonSize")
+							maxOutputJsonSize := cmd.Uint("maxOutputJsonSize")
 							sc.Buffer(make([]byte, 0, maxInputJsonSize), int(maxInputJsonSize))
 							dec := jsontext.NewDecoder(io.MultiReader())
 							out := bufio.NewWriter(os.Stdout)
@@ -312,7 +313,7 @@ func NewCliCommand() *cli.Command {
 						Value: 32 * 1024 * 1024,
 					},
 				},
-				Action: func(context *cli.Context) (err error) {
+				Action: func(ctx context.Context, cmd *cli.Command) (err error) {
 					var schema *arrow.Schema
 					var w *ipc.FileWriter
 					stdoutBuf := bufio.NewWriter(os.Stdout)
@@ -327,9 +328,9 @@ func NewCliCommand() *cli.Command {
 					const batchSize = 4096
 					ent := NewInEntityJson(allocator, 1)
 					schema = ent.GetSchema()
-					compression := context.String(compressionFlag.Name)
-					maxInputJsonSize := context.Uint("maxInputJsonSize")
-					maxOutputJsonSize := context.Uint("maxOutputJsonSize")
+					compression := cmd.String(compressionFlag.Name)
+					maxInputJsonSize := cmd.Uint("maxInputJsonSize")
+					maxOutputJsonSize := cmd.Uint("maxOutputJsonSize")
 
 					opts := make([]ipc.Option, 0, 8)
 					opts = append(opts, ipc.WithAllocator(allocator))

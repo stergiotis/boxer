@@ -40,14 +40,14 @@ func TestPublishResultIsConsequential(t *testing.T) {
 // The constructor refuses a document that reads a dataset the bundle does
 // not carry, under sqlapplet's parser.
 func TestComposeBundleDocRefusesAForeignDataset(t *testing.T) {
-	_, err := play.ComposeBundleDocE(play.BundleSpec{Alias: "b", Sql: "SELECT * FROM keelson('other')",
+	_, err := play.ComposeBundleDoc(play.BundleSpec{Alias: "b", Sql: "SELECT * FROM keelson('other')",
 		Datasets: []adhocdata.BundleDatasetInput{{LocalName: "result"}}})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "keelson('other')")
-	_, err = play.ComposeBundleDocE(play.BundleSpec{Alias: "b", Prose: "```sql\nSELECT 1\n```",
+	_, err = play.ComposeBundleDoc(play.BundleSpec{Alias: "b", Prose: "```sql\nSELECT 1\n```",
 		Datasets: []adhocdata.BundleDatasetInput{{LocalName: "result"}}})
 	assert.Error(t, err, "a fence in the prose would become a buffer")
-	doc, err := play.ComposeBundleDocE(play.BundleSpec{Alias: "b", Datasets: []adhocdata.BundleDatasetInput{{LocalName: "result"}, {LocalName: "rules"}},
+	doc, err := play.ComposeBundleDoc(play.BundleSpec{Alias: "b", Datasets: []adhocdata.BundleDatasetInput{{LocalName: "result"}, {LocalName: "rules"}},
 		Sql: "SELECT * FROM keelson('result') JOIN keelson('rules') USING (k)"})
 	require.NoError(t, err)
 	assert.Contains(t, string(doc), "datasets: [result, rules]")
@@ -56,6 +56,6 @@ func TestComposeBundleDocRefusesAForeignDataset(t *testing.T) {
 // A bundle alias with capitals and underscores composes and parses: the
 // applet slug rule is a book's file-name rule, not a bundle's.
 func TestComposeBundleDocTakesAnyAlias(t *testing.T) {
-	_, err := play.ComposeBundleDocE(play.BundleSpec{Alias: "Sales_Q3", Datasets: []adhocdata.BundleDatasetInput{{LocalName: "result"}}})
+	_, err := play.ComposeBundleDoc(play.BundleSpec{Alias: "Sales_Q3", Datasets: []adhocdata.BundleDatasetInput{{LocalName: "result"}}})
 	require.NoError(t, err)
 }

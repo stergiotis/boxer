@@ -14,14 +14,14 @@ import (
 func TestGenerateIsDeterministic(t *testing.T) {
 	for _, kind := range adscore.AllAnomalyKinds {
 		t.Run(kind.String(), func(t *testing.T) {
-			a, err := adscore.GenerateE(adscore.DefaultFixtureSpec(kind, 42))
+			a, err := adscore.Generate(adscore.DefaultFixtureSpec(kind, 42))
 			require.NoError(t, err)
-			b, err := adscore.GenerateE(adscore.DefaultFixtureSpec(kind, 42))
+			b, err := adscore.Generate(adscore.DefaultFixtureSpec(kind, 42))
 			require.NoError(t, err)
 			assert.Equal(t, a.Values, b.Values, "same seed must give the same series")
 			assert.Equal(t, a.Labels, b.Labels)
 
-			c, err := adscore.GenerateE(adscore.DefaultFixtureSpec(kind, 43))
+			c, err := adscore.Generate(adscore.DefaultFixtureSpec(kind, 43))
 			require.NoError(t, err)
 			assert.NotEqual(t, a.Values, c.Values, "a different seed must give a different series")
 		})
@@ -35,7 +35,7 @@ func TestGenerateAvoidsTheFourFlaws(t *testing.T) {
 	for _, kind := range adscore.AllAnomalyKinds {
 		t.Run(kind.String(), func(t *testing.T) {
 			spec := adscore.DefaultFixtureSpec(kind, 7)
-			f, err := adscore.GenerateE(spec)
+			f, err := adscore.Generate(spec)
 			require.NoError(t, err)
 
 			t.Run("anomaly density is realistic", func(t *testing.T) {
@@ -76,10 +76,10 @@ func TestFixturesResistOneLiners(t *testing.T) {
 	// one-liner scores well here, the fixture is measuring the wrong thing.
 	for _, kind := range adscore.AllAnomalyKinds {
 		t.Run(kind.String(), func(t *testing.T) {
-			f, err := adscore.GenerateE(adscore.DefaultFixtureSpec(kind, 11))
+			f, err := adscore.Generate(adscore.DefaultFixtureSpec(kind, 11))
 			require.NoError(t, err)
 
-			results, worst, err := adscore.TrivialityE(f, 0)
+			results, worst, err := adscore.Triviality(f, 0)
 			require.NoError(t, err)
 			require.Len(t, results, len(adscore.AllBaselines))
 
@@ -97,7 +97,7 @@ func TestFixturesResistOneLiners(t *testing.T) {
 }
 
 func TestBaselineScoresAreFinite(t *testing.T) {
-	f, err := adscore.GenerateE(adscore.DefaultFixtureSpec(adscore.AnomalyKindTransplant, 3))
+	f, err := adscore.Generate(adscore.DefaultFixtureSpec(adscore.AnomalyKindTransplant, 3))
 	require.NoError(t, err)
 
 	for _, b := range adscore.AllBaselines {
@@ -127,7 +127,7 @@ func TestBaselineScoresAreFinite(t *testing.T) {
 // regardless of alignment, which is barely above the one-liners.
 func matrixProfileScores(t *testing.T, values []float64, window int32) (scores []float64) {
 	t.Helper()
-	series, err := matrixprofile.NewSeriesE(values, window, 0.0)
+	series, err := matrixprofile.NewSeries(values, window, 0.0)
 	require.NoError(t, err)
 	scores = series.Compute().PositionScores(int32(len(values)), nil)
 	return
@@ -140,14 +140,14 @@ func TestMatrixProfileBeatsTheOneLiners(t *testing.T) {
 	for _, kind := range adscore.AllAnomalyKinds {
 		t.Run(kind.String(), func(t *testing.T) {
 			spec := adscore.DefaultFixtureSpec(kind, 23)
-			f, err := adscore.GenerateE(spec)
+			f, err := adscore.Generate(spec)
 			require.NoError(t, err)
 
 			scores := matrixProfileScores(t, f.Values, int32(spec.Period))
-			m, err := adscore.EvaluateE(scores, f.Labels, 0)
+			m, err := adscore.Evaluate(scores, f.Labels, 0)
 			require.NoError(t, err)
 
-			_, worst, err := adscore.TrivialityE(f, 0)
+			_, worst, err := adscore.Triviality(f, 0)
 			require.NoError(t, err)
 
 			t.Logf("matrix profile VUS-PR=%.4f, best one-liner VUS-PR=%.4f", m.VUSPR, worst)
@@ -162,32 +162,32 @@ func TestGenerateRejectsBadSpec(t *testing.T) {
 
 	short := base
 	short.Length = 8
-	_, err := adscore.GenerateE(short)
+	_, err := adscore.Generate(short)
 	assert.Error(t, err, "series too short")
 
 	badPeriod := base
 	badPeriod.Period = 1.0
-	_, err = adscore.GenerateE(badPeriod)
+	_, err = adscore.Generate(badPeriod)
 	assert.Error(t, err, "degenerate period")
 
 	badLen := base
 	badLen.AnomalyLength = 1
-	_, err = adscore.GenerateE(badLen)
+	_, err = adscore.Generate(badLen)
 	assert.Error(t, err, "anomaly too short")
 
 	badCount := base
 	badCount.AnomalyCount = 0
-	_, err = adscore.GenerateE(badCount)
+	_, err = adscore.Generate(badCount)
 	assert.Error(t, err, "no anomalies requested")
 
 	badTail := base
 	badTail.TailExclusionFrac = 1.0
-	_, err = adscore.GenerateE(badTail)
+	_, err = adscore.Generate(badTail)
 	assert.Error(t, err, "tail exclusion of the whole series")
 
 	crowded := base
 	crowded.AnomalyCount = 200
-	_, err = adscore.GenerateE(crowded)
+	_, err = adscore.Generate(crowded)
 	assert.Error(t, err, "too many anomalies to place disjointly")
 }
 

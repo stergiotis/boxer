@@ -62,7 +62,7 @@ func TestCorpusMatchesTheOracleDumps(t *testing.T) {
 						break
 					}
 					for _, f := range m.Fields {
-						values, err := f.ValuesE(nil)
+						values, err := f.Values(nil)
 						if err != nil {
 							if feature, named := UnsupportedFeature(err); named {
 								t.Logf("%s message at %d: refuses %s", name, m.Offset, feature)
@@ -87,7 +87,7 @@ func TestCorpusMatchesTheOracleDumps(t *testing.T) {
 							compared++
 						}
 						first = false
-						if points, err := f.Grid.PointsE(); err == nil {
+						if points, err := f.Grid.Points(); err == nil {
 							n := 0
 							for range points {
 								n++

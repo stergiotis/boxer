@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
@@ -52,7 +52,7 @@ func NewCliCommand() *cli.Command {
 		Name:  "watchbill",
 		Usage: "durable work as job rows: run a worker, add, list, cancel and retry jobs (ADR-0223)",
 		Flags: []cli.Flag{database},
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			newRunCommand(),
 			newAddCommand(),
 			newListCommand(),
@@ -63,14 +63,14 @@ func NewCliCommand() *cli.Command {
 }
 
 // open connects to the server and provisions the tables in the layout.
-func open(c *cli.Context) (store *watchbill.SqlStore, err error) {
+func open(ctx context.Context, cmd *cli.Command) (store *watchbill.SqlStore, err error) {
 	client := chclient.New(chclient.ConfigFromEnv(), nil)
 	exec, err := storeexec.New(client, nil)
 	if err != nil {
 		return nil, eh.Errorf("executor: %w", err)
 	}
-	layout := watchbillstore.Layout{Database: c.String("database")}
-	if err = watchbillstore.ProvisionIn(c.Context, exec, layout); err != nil {
+	layout := watchbillstore.Layout{Database: cmd.String("database")}
+	if err = watchbillstore.ProvisionIn(ctx, exec, layout); err != nil {
 		return nil, eh.Errorf("provision: %w", err)
 	}
 	store = watchbill.NewSqlStore(exec, layout)
@@ -86,8 +86,8 @@ func newRunCommand() *cli.Command {
 			&cli.DurationFlag{Name: "poll", Usage: "queue read interval (default: $KEELSON_WATCHBILL_POLL)"},
 			&cli.StringSliceFlag{Name: "queue", Usage: "drain only these queues (repeatable; default: every queue)"},
 		},
-		Action: func(c *cli.Context) (err error) {
-			store, err := open(c)
+		Action: func(cliCtx context.Context, cmd *cli.Command) (err error) {
+			store, err := open(cliCtx, cmd)
 			if err != nil {
 				return
 			}
@@ -96,7 +96,7 @@ func newRunCommand() *cli.Command {
 			if len(kinds) == 0 {
 				return eh.Errorf("no handler is registered in this binary; there is nothing to run")
 			}
-			ctx, stop := signal.NotifyContext(c.Context, syscall.SIGINT, syscall.SIGTERM)
+			ctx, stop := signal.NotifyContext(cliCtx, syscall.SIGINT, syscall.SIGTERM)
 			defer stop()
 
 			// The run's identity and its liveness, the host's way: a
@@ -112,7 +112,7 @@ func newRunCommand() *cli.Command {
 			facts, isCh := chstore.NewWithFallback(factsCfg, logger, factsPingTimeout)
 			cfg := watchbill.Config{
 				Store: store, RunId: runInst.RunId, Log: logger,
-				MaxWorkers: c.Int("max-workers"), Poll: c.Duration("poll"), Queues: c.StringSlice("queue"),
+				MaxWorkers: cmd.Int("max-workers"), Poll: cmd.Duration("poll"), Queues: cmd.StringSlice("queue"),
 			}
 			if isCh {
 				if _, werr := facts.WriteRuntimeStart(factsstore.RuntimeStartRow{
@@ -168,29 +168,29 @@ func newAddCommand() *cli.Command {
 			&cli.DurationFlag{Name: "timeout", Usage: "per attempt; zero is none"},
 			&cli.DurationFlag{Name: "after", Usage: "due this long from now; zero is now"},
 		},
-		Action: func(c *cli.Context) (err error) {
-			if c.NArg() < 1 {
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
+			if cmd.NArg() < 1 {
 				return eh.Errorf("a kind is required")
 			}
-			store, err := open(c)
+			store, err := open(ctx, cmd)
 			if err != nil {
 				return
 			}
 			defer store.Close()
 			req := watchbill.Request{
-				Kind: c.Args().Get(0), Subject: c.Args().Get(1), Queue: c.String("queue"),
-				Priority: uint32(c.Uint("priority")), MaxAttempts: uint32(c.Uint("max-attempts")),
-				Backoff: c.String("backoff"), BackoffBase: c.Duration("backoff-base"), Timeout: c.Duration("timeout"),
+				Kind: cmd.Args().Get(0), Subject: cmd.Args().Get(1), Queue: cmd.String("queue"),
+				Priority: uint32(cmd.Uint("priority")), MaxAttempts: uint32(cmd.Uint("max-attempts")),
+				Backoff: cmd.String("backoff"), BackoffBase: cmd.Duration("backoff-base"), Timeout: cmd.Duration("timeout"),
 				RequesterRun: runid.Mint("watchbill", "cli"),
 			}
-			if d := c.Duration("after"); d > 0 {
+			if d := cmd.Duration("after"); d > 0 {
 				req.RunAfter = time.Now().Add(d)
 			}
-			id, err := watchbill.Enqueue(c.Context, store, req)
+			id, err := watchbill.Enqueue(ctx, store, req)
 			if err != nil {
 				return
 			}
-			_, err = fmt.Fprintln(c.App.Writer, id)
+			_, err = fmt.Fprintln(cmd.Root().Writer, id)
 			return
 		},
 	}
@@ -207,18 +207,18 @@ func newListCommand() *cli.Command {
 			&cli.StringSliceFlag{Name: "queue", Usage: "only these queues (repeatable)"},
 			&cli.StringFlag{Name: "owner", Usage: "only jobs this app id enqueued"},
 		},
-		Action: func(c *cli.Context) (err error) {
-			store, err := open(c)
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
+			store, err := open(ctx, cmd)
 			if err != nil {
 				return
 			}
 			defer store.Close()
-			filter := watchbillstore.ListFilter{States: c.StringSlice("state"), Kinds: c.StringSlice("kind"), Queues: c.StringSlice("queue"), OwnerAppId: c.String("owner")}
-			jobs, err := store.List(c.Context, filter, c.Int("limit"))
+			filter := watchbillstore.ListFilter{States: cmd.StringSlice("state"), Kinds: cmd.StringSlice("kind"), Queues: cmd.StringSlice("queue"), OwnerAppId: cmd.String("owner")}
+			jobs, err := store.List(ctx, filter, cmd.Int("limit"))
 			if err != nil {
 				return
 			}
-			tw := tabwriter.NewWriter(c.App.Writer, 0, 0, 2, ' ', 0)
+			tw := tabwriter.NewWriter(cmd.Root().Writer, 0, 0, 2, ' ', 0)
 			if _, err = fmt.Fprintln(tw, "id\tkind\tqueue\tstate\tattempt\trun_after\tworker_run\tsubject\tlast_error"); err != nil {
 				return
 			}
@@ -231,7 +231,7 @@ func newListCommand() *cli.Command {
 			if err = tw.Flush(); err != nil {
 				return
 			}
-			_, err = fmt.Fprintf(c.App.Writer, "\n%d job(s)\n", len(jobs))
+			_, err = fmt.Fprintf(cmd.Root().Writer, "\n%d job(s)\n", len(jobs))
 			return
 		},
 	}
@@ -262,23 +262,23 @@ func noteFlag() *cli.StringFlag {
 }
 
 func verb(name string, fn func(context.Context, watchbill.StoreI, string, string, string, time.Time) (bool, error)) cli.ActionFunc {
-	return func(c *cli.Context) (err error) {
-		if c.NArg() != 1 {
+	return func(ctx context.Context, cmd *cli.Command) (err error) {
+		if cmd.NArg() != 1 {
 			return eh.Errorf("exactly one job id")
 		}
-		store, err := open(c)
+		store, err := open(ctx, cmd)
 		if err != nil {
 			return
 		}
 		defer store.Close()
-		ok, err := fn(c.Context, store, c.Args().Get(0), runid.Mint("watchbill", "cli"), c.String("note"), time.Now())
+		ok, err := fn(ctx, store, cmd.Args().Get(0), runid.Mint("watchbill", "cli"), cmd.String("note"), time.Now())
 		if err != nil {
 			return
 		}
 		if !ok {
 			return eh.Errorf("the job is not in a state this verb applies to")
 		}
-		_, err = fmt.Fprintf(c.App.Writer, "%s: %s\n", name, c.Args().Get(0))
+		_, err = fmt.Fprintf(cmd.Root().Writer, "%s: %s\n", name, cmd.Args().Get(0))
 		return
 	}
 }

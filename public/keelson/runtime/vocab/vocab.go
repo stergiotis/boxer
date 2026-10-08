@@ -97,9 +97,9 @@ var (
 
 	// Runtime-run identity (kind + per-run fields). MembKindRuntimeRun
 	// tags a row that records one process boot — the runtime-started
-	// event. MembRuntimeRun is the mixed-low-card-ref + high-card-param
-	// membership carrying the run_id bytes; app-lifecycle rows tag
-	// themselves with this so a JOIN-by-run_id is a single column scan.
+	// event. MembRuntimeRun is the low-card-ref membership whose symbol
+	// value is the run_id; app-lifecycle and captured query-run rows tag
+	// themselves with it, so every run-id reader matches one shape.
 	MembKindRuntimeRun  = NkRegistry.MustBegin("runtimeKindRuntimeRun", 19).End()
 	MembRuntimeRun      = NkRegistry.MustBegin("runtimeRun", 20).End()
 	MembRunHostname     = NkRegistry.MustBegin("runtimeRunHostname", 21).End()

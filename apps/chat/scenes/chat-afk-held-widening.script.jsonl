@@ -1,0 +1,9 @@
+# The scripted model of chat-afk-held-widening.scene.md. The write is held
+# back so the person can lower play to observe first; ask_user shows the
+# phase the write returned, as the model read it.
+{"tool":"request_access","args":{"plan":"show the apps in play","open":[{"app":"play"}]}}
+{"tool":"open_window","args":{"app":"play"}}
+{"tool":"call_operation","args":{"window":"$window","operation":"get_state","args":{},"title":"Reading play's buffer"}}
+{"tool":"call_operation","args":{"window":"$window","operation":"set_sql","args":{"sql":"SELECT 5252 AS chat_afk_marker"},"reason":"the marker","title":"Writing the marker"},"delayMs":8000}
+{"tool":"ask_user","args":{"questions":[{"question":"What did the write return?","header":"Outcome","options":[{"label":"$phase"},{"label":"something else"}]}]}}
+{"content":"The write went through."}

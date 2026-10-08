@@ -1,16 +1,17 @@
 package cli
 
 import (
+	"context"
 	"os"
 
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/codegen"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func NewCliCommandCanonicalTypes() *cli.Command {
 	return &cli.Command{
 		Name: "ct",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			{
 				Name: "abbrevs",
 				Flags: []cli.Flag{
@@ -27,10 +28,10 @@ func NewCliCommandCanonicalTypes() *cli.Command {
 						Value: "",
 					},
 				},
-				Action: func(context *cli.Context) error {
-					return codegen.GenerateGoAbbrev(context.String("packageName"),
-						context.String("import"),
-						context.String("astPackage"),
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					return codegen.GenerateGoAbbrev(cmd.String("packageName"),
+						cmd.String("import"),
+						cmd.String("astPackage"),
 						os.Stdout, nil)
 				},
 			},

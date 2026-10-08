@@ -83,15 +83,15 @@ func Float64sAsArrowFloat64(vals []float64) (out *array.Float64) {
 	return
 }
 
-// CSRAsArrowListUint64E zero-copy-wraps CSR (values, offsets) as an arrow
+// CSRAsArrowListUint64 zero-copy-wraps CSR (values, offsets) as an arrow
 // List<Uint64> array with N = len(offsets)-1 rows. offsets must have
 // offsets[0] == 0 and offsets[N] == len(values); these are the standard
 // CSR invariants emitted by the h3 package's variable-arity bulk methods
-// (e.g., [h3.Handle.CellsToChildrenE], [h3.Handle.GridDisksE]).
+// (e.g., [h3.Handle.CellsToChildren], [h3.Handle.GridDisks]).
 //
 // Returns the wrapped array or nil on invariant violation. The caller must
 // keep values and offsets reachable until the array is Released.
-func CSRAsArrowListUint64E(values []uint64, offsets []int32) (out *array.List, err error) {
+func CSRAsArrowListUint64(values []uint64, offsets []int32) (out *array.List, err error) {
 	err = validateCSR(offsets, len(values))
 	if err != nil {
 		return
@@ -121,11 +121,11 @@ func CSRAsArrowListUint64E(values []uint64, offsets []int32) (out *array.List, e
 	return
 }
 
-// CSRAsArrowListFloat64E zero-copy-wraps CSR (values, offsets) as an arrow
+// CSRAsArrowListFloat64 zero-copy-wraps CSR (values, offsets) as an arrow
 // List<Float64> array with N = len(offsets)-1 rows. Used by consumers of
-// [h3.Handle.CellsToBoundariesE] to hand lat and lng ring rows into arrow
+// [h3.Handle.CellsToBoundaries] to hand lat and lng ring rows into arrow
 // pipelines.
-func CSRAsArrowListFloat64E(values []float64, offsets []int32) (out *array.List, err error) {
+func CSRAsArrowListFloat64(values []float64, offsets []int32) (out *array.List, err error) {
 	err = validateCSR(offsets, len(values))
 	if err != nil {
 		return

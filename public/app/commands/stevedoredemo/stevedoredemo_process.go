@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/streaming/stevedore"
@@ -34,21 +34,21 @@ func newProcessCommand() *cli.Command {
 	}
 }
 
-func runProcess(c *cli.Context) (err error) {
-	codec, err := wire.ParseCodec(c.String("codec"))
+func runProcess(ctx context.Context, cmd *cli.Command) (err error) {
+	codec, err := wire.ParseCodec(cmd.String("codec"))
 	if err != nil {
 		return
 	}
-	reply, err := host.ParseReplyMode(c.String("reply"))
+	reply, err := host.ParseReplyMode(cmd.String("reply"))
 	if err != nil {
 		return
 	}
-	level, err := zerolog.ParseLevel(c.String("log-level"))
+	level, err := zerolog.ParseLevel(cmd.String("log-level"))
 	if err != nil {
 		return eh.Errorf("log level: %w", err)
 	}
 	var logOut io.Writer
-	if path := c.String("log-file"); path != "" {
+	if path := cmd.String("log-file"); path != "" {
 		f, oerr := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 		if oerr != nil {
 			return eh.Errorf("open log file: %w", oerr)
@@ -59,14 +59,14 @@ func runProcess(c *cli.Context) (err error) {
 	cfg := host.Config{
 		Codec:     codec,
 		Reply:     reply,
-		BareBody:  c.Bool("bare-body"),
-		MaxFrame:  c.Int("max-frame"),
-		MaxBody:   c.Int("max-body"),
-		Deadline:  c.Duration("deadline"),
+		BareBody:  cmd.Bool("bare-body"),
+		MaxFrame:  cmd.Int("max-frame"),
+		MaxBody:   cmd.Int("max-body"),
+		Deadline:  cmd.Duration("deadline"),
 		LogLevel:  level,
 		LogOutput: logOut,
 	}
-	return host.RunStdio(c.Context, cfg, stevedore.HandlerFunc(splitLines))
+	return host.RunStdio(ctx, cfg, stevedore.HandlerFunc(splitLines))
 }
 
 // splitLines is the example handler: one item per line, the line's number

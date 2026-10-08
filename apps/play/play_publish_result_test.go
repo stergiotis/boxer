@@ -72,7 +72,7 @@ func TestPublishResultPublishesTheMainResultAsABundle(t *testing.T) {
 	assert.Contains(t, doc, "SELECT n FROM keelson('result') ORDER BY n")
 	assert.Contains(t, doc, "SELECT number AS n FROM numbers(3)", "the query that produced the rows rides along")
 
-	read, err := adhocdata.ReadAllE(reader, "counts__result", nil)
+	read, err := adhocdata.ReadAll(reader, "counts__result", nil)
 	require.NoError(t, err)
 	rdr, err := ipc.NewReader(bytes.NewReader(read.ArrowIPCStream))
 	require.NoError(t, err)

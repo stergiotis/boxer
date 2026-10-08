@@ -1,7 +1,8 @@
 package genbuildertest
 
 import (
-	cli "github.com/urfave/cli/v2"
+	"context"
+	cli "github.com/urfave/cli/v3"
 )
 
 // NewCliCommand returns the `gen-builder-tests` subcommand. Mounted
@@ -34,7 +35,7 @@ func NewCliCommand() (cmd *cli.Command) {
 	return
 }
 
-func runCli(ctx *cli.Context) (err error) {
-	err = Run(ctx.String("out"), ctx.String("pkg"))
+func runCli(ctx context.Context, cmd *cli.Command) (err error) {
+	err = Run(cmd.String("out"), cmd.String("pkg"))
 	return
 }

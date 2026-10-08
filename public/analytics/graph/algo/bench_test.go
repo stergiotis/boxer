@@ -23,7 +23,7 @@ func BenchmarkBuild(b *testing.B) {
 	src, dst := rmat(benchScale, benchEPV, 42)
 	b.ReportAllocs()
 	for b.Loop() {
-		_, _ = csr.BuildE(src, dst, nil, csr.Options{})
+		_, _ = csr.Build(src, dst, nil, csr.Options{})
 	}
 }
 

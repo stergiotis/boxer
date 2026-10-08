@@ -49,7 +49,7 @@ func (inst *AnalyzerService) All(ctx context.Context) iter.Seq2[CallSite, error]
 		var decisions map[posKey]CompilerDecision
 		var err error
 
-		pkgs, err = inst.loadE(ctx)
+		pkgs, err = inst.load(ctx)
 		if err != nil {
 			yield(CallSite{}, err)
 			return
@@ -58,7 +58,7 @@ func (inst *AnalyzerService) All(ctx context.Context) iter.Seq2[CallSite, error]
 			inst.OnLoadStats(loadStats(pkgs))
 		}
 		if inst.Adjudicate {
-			decisions, err = inst.adjudicateE(ctx, hasSingleMainRoot(pkgs))
+			decisions, err = inst.adjudicate(ctx, hasSingleMainRoot(pkgs))
 			if err != nil {
 				yield(CallSite{}, err)
 				return
@@ -80,7 +80,7 @@ func (inst *AnalyzerService) All(ctx context.Context) iter.Seq2[CallSite, error]
 	}
 }
 
-func (inst *AnalyzerService) loadE(ctx context.Context) (pkgs []*packages.Package, err error) {
+func (inst *AnalyzerService) load(ctx context.Context) (pkgs []*packages.Package, err error) {
 	patterns := inst.patterns()
 	cfg := &packages.Config{
 		Mode: packages.NeedName |

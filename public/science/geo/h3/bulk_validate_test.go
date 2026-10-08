@@ -20,7 +20,7 @@ func TestAreValidCells_Golden(t *testing.T) {
 
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
@@ -28,7 +28,7 @@ func TestAreValidCells_Golden(t *testing.T) {
 	for i, r := range recs {
 		cells[i] = r.Cell
 	}
-	valid, err := h.AreValidCellsE(ctx, cells, nil)
+	valid, err := h.AreValidCells(ctx, cells, nil)
 	require.NoError(t, err)
 	for i, r := range recs {
 		require.Equal(t, r.Valid, valid[i], "name=%s", r.Name)
@@ -41,7 +41,7 @@ func TestGetResolutions_Golden(t *testing.T) {
 
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
@@ -49,7 +49,7 @@ func TestGetResolutions_Golden(t *testing.T) {
 	for i, r := range recs {
 		cells[i] = r.Cell
 	}
-	res, status, err := h.GetResolutionsE(ctx, cells, nil, nil)
+	res, status, err := h.GetResolutions(ctx, cells, nil, nil)
 	require.NoError(t, err)
 	for i, r := range recs {
 		if r.Valid {

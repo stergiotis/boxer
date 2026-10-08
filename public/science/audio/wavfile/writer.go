@@ -16,7 +16,7 @@ import (
 // twelve-hour recording costs the same memory as writing a second of one.
 const writeChunkFrames int64 = 4096
 
-// WriteE writes every frame of src to w as a canonical little-endian WAVE
+// Write writes every frame of src to w as a canonical little-endian WAVE
 // stream: a 16-byte fmt chunk followed by the data chunk. When the byte
 // counts would not fit RIFF's 32-bit size fields the RF64 form with a ds64
 // chunk is written instead, so a recording past 4 GiB needs no decision from
@@ -25,14 +25,14 @@ const writeChunkFrames int64 = 4096
 // src.Frames() is the length written and must not change during the call; w
 // is not closed. Supported widths are 8, 16, 24 and 32 bits for
 // [EncodingPCMInt] and 32 or 64 for [EncodingIEEEFloat].
-func WriteE(ctx context.Context, w io.Writer, format pcm.Format, enc EncodingE, bits uint16, src pcm.SourceI) (err error) {
+func Write(ctx context.Context, w io.Writer, format pcm.Format, enc EncodingE, bits uint16, src pcm.SourceI) (err error) {
 	if w == nil {
 		return eh.New("nil writer")
 	}
 	if src == nil {
 		return eh.New("nil source")
 	}
-	return writeSpecE(ctx, w, headerSpec{
+	return writeSpec(ctx, w, headerSpec{
 		format:   format,
 		frames:   src.Frames(),
 		encoding: enc,
@@ -40,9 +40,9 @@ func WriteE(ctx context.Context, w io.Writer, format pcm.Format, enc EncodingE, 
 	}, src)
 }
 
-// writeSpecE is WriteE over an explicit header spec, so a test can ask for
+// writeSpec is Write over an explicit header spec, so a test can ask for
 // the RF64 form at a size that fits in RIFF.
-func writeSpecE(ctx context.Context, w io.Writer, spec headerSpec, src pcm.SourceI) (err error) {
+func writeSpec(ctx context.Context, w io.Writer, spec headerSpec, src pcm.SourceI) (err error) {
 	header, _, err := appendHeader(make([]byte, 0, 64), spec)
 	if err != nil {
 		return err
@@ -61,7 +61,7 @@ func writeSpecE(ctx context.Context, w io.Writer, spec headerSpec, src pcm.Sourc
 	for remaining > 0 {
 		want := min(writeChunkFrames, remaining)
 		var n int
-		n, err = src.ReadFramesAtE(ctx, offset, samples[:int(want)*ch])
+		n, err = src.ReadFramesAt(ctx, offset, samples[:int(want)*ch])
 		if err != nil {
 			return eb.Build().Int64("frameOffset", offset).Errorf("read source frames: %w", err)
 		}

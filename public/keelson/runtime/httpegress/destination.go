@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/loopback"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -153,9 +154,8 @@ func matchURL(prefixes []prefix, raw string) (u *url.URL, err error) {
 	return nil, eh.Errorf("the url lies outside the destination")
 }
 
-// localPrefixes says every prefix's host is loopback — the sensitivity
-// wall's "local" (ADR-0262 §SD4). Not resolved: a name that resolves to
-// loopback through a hosts file is not a fact this process can vouch for.
+// localPrefixes says every prefix's host is loopback, by loopback.IsHost —
+// the sensitivity wall's "local" (ADR-0262 §SD4).
 func localPrefixes(prefixes []prefix) (yes bool) {
 	if len(prefixes) == 0 {
 		return false
@@ -165,14 +165,9 @@ func localPrefixes(prefixes []prefix) (yes bool) {
 		if hh, _, err := net.SplitHostPort(h); err == nil {
 			h = hh
 		}
-		h = strings.Trim(h, "[]")
-		if strings.EqualFold(h, "localhost") {
-			continue
+		if !loopback.IsHost(h) {
+			return false
 		}
-		if ip := net.ParseIP(h); ip != nil && ip.IsLoopback() {
-			continue
-		}
-		return false
 	}
 	return true
 }

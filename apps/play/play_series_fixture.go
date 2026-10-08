@@ -237,7 +237,7 @@ func generateFixture(spec fixtureSpec) (fixture *adscore.Fixture, err error) {
 		return nil, eb.Build().Uint8("kind", uint8(spec.kind)).Errorf("play: fixture: unknown anomaly kind")
 	}
 	gen := adscore.DefaultFixtureSpec(spec.kind, spec.seed)
-	fixture, err = adscore.GenerateE(gen)
+	fixture, err = adscore.Generate(gen)
 	if err != nil {
 		return nil, eh.Errorf("play: fixture: generate: %w", err)
 	}

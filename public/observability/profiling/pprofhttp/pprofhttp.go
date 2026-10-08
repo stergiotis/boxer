@@ -17,11 +17,12 @@
 package pprofhttp
 
 import (
+	"context"
 	"net/http"
 	"net/http/pprof"
 
 	"github.com/rs/zerolog/log"
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 )
 
 const flagNameHttpListenAddress = "pprofHttpListenAddress"
@@ -46,7 +47,7 @@ func NewServeMux() (mux *http.ServeMux) {
 	return
 }
 
-func httpServerAddressAction(context *cli.Context, s string) error {
+func httpServerAddressAction(ctx context.Context, cmd *cli.Command, s string) error {
 	// No WriteTimeout: /debug/pprof/profile?seconds=N and the delta profiles
 	// hold the response open for the requested duration, and any deadline
 	// here would truncate exactly the long capture worth taking.

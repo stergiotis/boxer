@@ -315,6 +315,7 @@ func (inst *App) startTurn(text string) (started bool) {
 		coord = inst.coord
 		// The last turn's steps are not this one's.
 		coord.steps.reset()
+		coord.forgetRefusals()
 		coord.offer(conv.apps, conv.questions)
 		if conv.artefact {
 			coord.offerArtefact(conv.art)

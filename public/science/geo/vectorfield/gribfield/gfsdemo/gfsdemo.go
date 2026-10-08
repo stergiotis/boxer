@@ -19,7 +19,7 @@ var GRIB []byte
 // Name is what a legend shows for it.
 const Name = "GFS 10 m wind, run 2026-10-07 00 UTC"
 
-// FieldE decodes the forecast into a field.
-func FieldE() (f keelsonfield.Field, err error) {
-	return gribfield.ReadE(GRIB, gribfield.Options{Name: Name, Unit: "m/s", SpeedMax: 25})
+// Field decodes the forecast into a field.
+func Field() (f keelsonfield.Field, err error) {
+	return gribfield.Read(GRIB, gribfield.Options{Name: Name, Unit: "m/s", SpeedMax: 25})
 }

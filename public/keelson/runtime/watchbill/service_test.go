@@ -36,7 +36,7 @@ func newServiceFixture(t *testing.T) (f *serviceFixture) {
 	t.Helper()
 	f = &serviceFixture{bus: inprocbus.NewInst(zerolog.Nop()), store: NewMemStore(), release: make(chan struct{}), fail: make(chan struct{})}
 	reg := NewRegistry()
-	require.NoError(t, reg.Register(HandlerFunc{KindName: "svc.kind", Run: func(ctx context.Context, job watchbillstore.Job, h task.HandleI) error {
+	require.NoError(t, reg.Register(HandlerFunc{KindName: "svc.kind", RunFunc: func(ctx context.Context, job watchbillstore.Job, h task.HandleI) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()

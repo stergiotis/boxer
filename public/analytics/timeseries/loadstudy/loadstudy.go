@@ -45,8 +45,8 @@ func NewClientFromEnv() (inst *Client) {
 	return
 }
 
-// QueryTSVE runs sql and returns the TSV body, one row per line.
-func (inst *Client) QueryTSVE(ctx context.Context, sql string) (rows []string, err error) {
+// QueryTSV runs sql and returns the TSV body, one row per line.
+func (inst *Client) QueryTSV(ctx context.Context, sql string) (rows []string, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, inst.Endpoint, strings.NewReader(sql))
 	if err != nil {
 		err = eb.Build().Str("endpoint", inst.Endpoint).Errorf("build request: %w", err)
@@ -207,9 +207,9 @@ type Span struct {
 	Events int32
 }
 
-// FindSpansE returns the gap-free spans of the metric grid over the lookback,
+// FindSpans returns the gap-free spans of the metric grid over the lookback,
 // longest first, keeping those with at least minBins bins and minEvents events.
-func FindSpansE(ctx context.Context, client *Client, lookback time.Duration, step int32, minBins int32, minEvents int32, kinds []string) (spans []Span, err error) {
+func FindSpans(ctx context.Context, client *Client, lookback time.Duration, step int32, minBins int32, minEvents int32, kinds []string) (spans []Span, err error) {
 	if step < 1 {
 		err = eb.Build().Int32("step", step).Errorf("step must be at least one second")
 		return
@@ -219,11 +219,11 @@ func FindSpansE(ctx context.Context, client *Client, lookback time.Duration, ste
 	}
 	from := time.Now().UTC().Add(-lookback)
 
-	rows, err := client.QueryTSVE(ctx, spanSQL(from, step, minBins))
+	rows, err := client.QueryTSV(ctx, spanSQL(from, step, minBins))
 	if err != nil {
 		return
 	}
-	stamps, err := eventStampsE(ctx, client, from, kinds)
+	stamps, err := eventStamps(ctx, client, from, kinds)
 	if err != nil {
 		return
 	}
@@ -300,8 +300,8 @@ FORMAT TSV`, step, chTime(from), step, minBins)
 	return
 }
 
-// eventStampsE returns every event timestamp since from.
-func eventStampsE(ctx context.Context, client *Client, from time.Time, kinds []string) (stamps []time.Time, err error) {
+// eventStamps returns every event timestamp since from.
+func eventStamps(ctx context.Context, client *Client, from time.Time, kinds []string) (stamps []time.Time, err error) {
 	quoted := make([]string, 0, len(kinds))
 	for _, k := range kinds {
 		quoted = append(quoted, quote(k))
@@ -311,7 +311,7 @@ WHERE %s >= %s AND hasAny(%s, [%s]) ORDER BY 1 FORMAT TSV`,
 		factsTimestampColumn, factsTimestampColumn, chTime64(from),
 		factsSymbolColumn, strings.Join(quoted, ", "))
 
-	rows, err := client.QueryTSVE(ctx, sql)
+	rows, err := client.QueryTSV(ctx, sql)
 	if err != nil {
 		return
 	}
@@ -331,12 +331,12 @@ func (inst *Series) Len() (n int32) {
 	return
 }
 
-// ExtractE pulls the study series out of ClickHouse.
+// Extract pulls the study series out of ClickHouse.
 //
 // Metric values are averaged within each bin. Per-device families are summed
 // across devices at each source timestamp *before* averaging, so a machine with
 // three disks and one with one produce comparable numbers.
-func ExtractE(ctx context.Context, client *Client, spec Spec) (inst *Series, err error) {
+func Extract(ctx context.Context, client *Client, spec Spec) (inst *Series, err error) {
 	if spec.StepSeconds < 1 {
 		err = eb.Build().Int32("stepSeconds", spec.StepSeconds).Errorf("step must be at least one second")
 		return
@@ -380,7 +380,7 @@ func ExtractE(ctx context.Context, client *Client, spec Spec) (inst *Series, err
 		EventBins:   make([]bool, bins),
 	}
 
-	metricRows, err := client.QueryTSVE(ctx, metricSQL(channels, start, to, spec.StepSeconds))
+	metricRows, err := client.QueryTSV(ctx, metricSQL(channels, start, to, spec.StepSeconds))
 	if err != nil {
 		return
 	}
@@ -430,7 +430,7 @@ func ExtractE(ctx context.Context, client *Client, spec Spec) (inst *Series, err
 	}
 	inst.Gaps = worstGaps
 
-	eventRows, err := client.QueryTSVE(ctx, eventSQL(kinds, start, to, spec.StepSeconds))
+	eventRows, err := client.QueryTSV(ctx, eventSQL(kinds, start, to, spec.StepSeconds))
 	if err != nil {
 		return
 	}

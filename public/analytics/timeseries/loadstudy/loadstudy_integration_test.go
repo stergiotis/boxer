@@ -60,7 +60,7 @@ func extractSpan(t *testing.T, client *loadstudy.Client, span loadstudy.Span, st
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	series, err := loadstudy.ExtractE(ctx, client, loadstudy.Spec{
+	series, err := loadstudy.Extract(ctx, client, loadstudy.Spec{
 		From:        span.From,
 		To:          span.To,
 		StepSeconds: step,
@@ -74,7 +74,7 @@ func findSpans(t *testing.T, client *loadstudy.Client, g grid) (spans []loadstud
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	spans, err := loadstudy.FindSpansE(ctx, client, studyLookback, g.step, g.minBins, minSpanEvents, nil)
+	spans, err := loadstudy.FindSpans(ctx, client, studyLookback, g.step, g.minBins, minSpanEvents, nil)
 	require.NoError(t, err)
 	if len(spans) > maxSpans {
 		spans = spans[:maxSpans]
@@ -161,7 +161,7 @@ func TestWindowSweep(t *testing.T) {
 					if int32(len(values)) < window*12 {
 						continue
 					}
-					readings, err := damp.ScoreE(values, damp.Config{
+					readings, err := damp.Score(values, damp.Config{
 						Window:      window,
 						TrainLength: window * 8,
 						Exact:       true,
@@ -169,7 +169,7 @@ func TestWindowSweep(t *testing.T) {
 					require.NoError(t, err)
 
 					scores := damp.PositionScores(readings, int32(len(values)), nil)
-					m, err := adscore.EvaluateE(scores, labels, 0)
+					m, err := adscore.Evaluate(scores, labels, 0)
 					require.NoError(t, err)
 					require.False(t, math.IsNaN(m.VUSPR), "%s window %d produced NaN", name, window)
 
@@ -190,7 +190,7 @@ func TestWindowSweep(t *testing.T) {
 func baselines(t *testing.T, values []float64, labels []bool) (results []adscore.BaselineResult, worst float64) {
 	t.Helper()
 	for _, b := range adscore.AllBaselines {
-		m, err := adscore.EvaluateE(adscore.BaselineScores(values, b, 30), labels, 0)
+		m, err := adscore.Evaluate(adscore.BaselineScores(values, b, 30), labels, 0)
 		require.NoError(t, err)
 		results = append(results, adscore.BaselineResult{Baseline: b, Measures: m})
 		if m.VUSPR > worst {
@@ -211,9 +211,9 @@ func TestExtractionIsReproducible(t *testing.T) {
 	to := time.Now().UTC()
 	spec := loadstudy.Spec{From: to.Add(-6 * time.Hour), To: to, StepSeconds: 60}
 
-	first, err := loadstudy.ExtractE(ctx, client, spec)
+	first, err := loadstudy.Extract(ctx, client, spec)
 	require.NoError(t, err)
-	second, err := loadstudy.ExtractE(ctx, client, spec)
+	second, err := loadstudy.Extract(ctx, client, spec)
 	require.NoError(t, err)
 
 	require.Equal(t, first.Len(), second.Len())

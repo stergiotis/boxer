@@ -2,11 +2,11 @@ package regex_explorer
 
 // Extraction hand-off to the SQL playground (ADR-0017).
 //
-// The Preview tab knows every match and capture group with byte offsets
-// (Go's regexp, the ADR-0054 offset authority); the List tab knows what
-// ClickHouse returned from extractAll / extractAllGroups. Neither is
-// queryable, and the two can disagree — extractAll returns capture group
-// 1, not the full match, whenever the pattern captures.
+// The Matches tab knows every match and capture group with byte offsets
+// (Go's regexp, the ADR-0054 offset authority); the ClickHouse functions
+// tab knows what ClickHouse returned from extractAll / extractAllGroups.
+// Neither is queryable, and the two can disagree — extractAll returns
+// capture group 1, not the full match, whenever the pattern captures.
 //
 // This publishes *both* as ad-hoc datasets (ADR-0134) and opens a play
 // window (ADR-0135) seeded with a FULL OUTER JOIN over them, so the
@@ -85,22 +85,23 @@ type evalSnapshot struct {
 }
 
 // snapshotEval gathers both engines' current extraction into plain data.
-// Render-thread only: it reads the input fields and the CH lane, and it
-// recomputes the Go side through the compile cache.
+// Render-thread only: it reads [App.analysis] and the CH lane.
 //
-// The Go side drops zero-width whole matches, exactly as
-// [nonEmptyMatches] does for the preview and the status bar. That is not
-// cosmetic here: Go enumerates repeated empty matches and ClickHouse does
-// not (pattern `a*` over "xyz" — four for Go, none for ClickHouse), so
-// keeping them would shift every match_idx and make the join compare
-// unrelated rows. A capture group that participated but matched the
-// empty string still gets a row, with matched=1 and an empty text.
+// The Go side numbers the non-empty matches — the ones the Matches tab
+// highlights. extractAll returns a prefix of exactly those (it stops at
+// the first empty match, regex_explorer_chmodel.go), so its rows line up,
+// and where it stopped early the join shows Go rows with no ClickHouse
+// partner: the difference to look at, not an artefact of numbering.
+// extractAllGroups' rows line up as long as the pattern meets no empty
+// match; when it does, ClickHouse numbers empty matches Go does not, and
+// the seeded SQL says so.
 func (inst *App) snapshotEval() (snap evalSnapshot, err error) {
-	if inst.haystack == "" {
+	a := inst.analysis()
+	if a.haystack == "" {
 		err = eh.Errorf("nothing to hand off: the haystack is empty")
 		return
 	}
-	switch inst.patternState() {
+	switch a.state {
 	case patternEmpty:
 		err = eh.Errorf("nothing to hand off: no pattern entered")
 		return
@@ -110,25 +111,15 @@ func (inst *App) snapshotEval() (snap evalSnapshot, err error) {
 	}
 
 	snap.key = inst.singleKey()
-	snap.pattern = inst.effectivePattern(inst.pattern)
-	snap.haystack = inst.haystack
+	snap.pattern = a.pattern
+	snap.haystack = a.haystack
 
-	re, compileErr := inst.getCompiledRegexp(snap.pattern)
-	if compileErr != nil || re == nil {
-		err = eh.Errorf("compile pattern: %w", compileErr)
-		return
-	}
-	names := re.SubexpNames()
-	matchIdx := int32(0)
-	for _, m := range re.FindAllStringSubmatchIndex(snap.haystack, -1) {
-		if len(m) < 2 || m[0] == m[1] {
-			// Zero-width whole match — see the doc comment.
-			continue
-		}
+	names := a.re.SubexpNames()
+	for matchIdx, m := range a.matches {
 		for k := 0; k*2+1 < len(m); k++ {
 			start, stop := m[2*k], m[2*k+1]
 			row := goMatchRow{
-				MatchIdx:  matchIdx,
+				MatchIdx:  int32(matchIdx),
 				GroupIdx:  int32(k),
 				GroupName: subexpName(names, k),
 				StartByte: -1,
@@ -142,32 +133,23 @@ func (inst *App) snapshotEval() (snap evalSnapshot, err error) {
 			}
 			snap.goRows = append(snap.goRows, row)
 		}
-		matchIdx++
 	}
 
 	// The CH half, only when the lane's result describes what is on
 	// screen. A stale answer joined against a fresh Go side would report
 	// disagreements that are really just latency.
-	if view := inst.listLane.view(inst.singleKey()); view.Has && view.Fresh && view.Err == nil {
+	if view := inst.fnLane.view(inst.singleKey()); view.Has && view.Fresh && view.Err == nil {
 		snap.hasCH = true
 		snap.chRows = chExtractRows(view.Value)
 	}
 	return
 }
 
-// subexpName returns group k's (?P<name>…) name, or "" when it has none.
-// names[0] is always empty — the whole match has no name.
-func subexpName(names []string, k int) (name string) {
-	if k < len(names) {
-		name = names[k]
-	}
-	return
-}
-
-// chExtractRows flattens a [listOutcome] into join-shaped rows.
-func chExtractRows(out listOutcome) (rows []chExtractRow) {
-	rows = make([]chExtractRow, 0, len(out.Matches))
-	for i, m := range out.Matches {
+// chExtractRows flattens a [fnOutcome]'s extractAll and extractAllGroups
+// into join-shaped rows.
+func chExtractRows(out fnOutcome) (rows []chExtractRow) {
+	rows = make([]chExtractRow, 0, len(out.ExtractAll))
+	for i, m := range out.ExtractAll {
 		rows = append(rows, chExtractRow{MatchIdx: int32(i), GroupIdx: 0, Text: m})
 	}
 	for i, groups := range out.Groups {
@@ -345,7 +327,7 @@ func buildEvalSQL(snap evalSnapshot, handles evalHandles) (sql string) {
 		b.WriteString("--\n")
 		b.WriteString("-- ClickHouse had no result for this input when the hand-off ran\n")
 		b.WriteString("-- (query in flight, or no bus), so only the Go side was published.\n")
-		b.WriteString("-- Re-run the hand-off once the List tab shows a result to get the join.\n")
+		b.WriteString("-- Re-run the hand-off once the functions tab shows a result to get the join.\n")
 		b.WriteString("SELECT match_idx, group_idx, group_name, text, start_byte, stop_byte, matched\n")
 		b.WriteString("FROM keelson('" + goDatasetAlias + "')\n")
 		b.WriteString("ORDER BY match_idx, group_idx\n")
@@ -357,7 +339,11 @@ func buildEvalSQL(snap evalSnapshot, handles evalHandles) (sql string) {
 	b.WriteString("--   ch_* — ClickHouse extractAll/extractAllGroups, the engine being predicted\n")
 	b.WriteString("-- A NULL on either side is a disagreement worth looking at. Note that\n")
 	b.WriteString("-- extractAll returns capture group 1 — not the full match — whenever the\n")
-	b.WriteString("-- pattern captures, so group_idx 0 lines up only for group-less patterns.\n")
+	b.WriteString("-- pattern captures, so group_idx 0 lines up only for group-less patterns,\n")
+	b.WriteString("-- and extractAll stops at the first match of the empty string, so a\n")
+	b.WriteString("-- trailing run of group_idx 0 rows with no ch_text is that stop. Where the\n")
+	b.WriteString("-- pattern matches the empty string, extractAllGroups also counts empty\n")
+	b.WriteString("-- matches Go leaves out, and group rows past the first one shift.\n")
 	b.WriteString("SELECT coalesce(g.match_idx, c.match_idx) AS match_idx,\n")
 	b.WriteString("       coalesce(g.group_idx, c.group_idx) AS group_idx,\n")
 	b.WriteString("       g.group_name,\n")

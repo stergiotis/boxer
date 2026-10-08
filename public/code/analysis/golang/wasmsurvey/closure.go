@@ -18,11 +18,11 @@ type targetClosure struct {
 	index    *godep.Index
 }
 
-// loadClosureE collects the transitive package closure for one target. It
+// loadClosure collects the transitive package closure for one target. It
 // drives the existing godepcollect.LiveCollector (ADR-0064) under the
 // target's GOOS/GOARCH=wasm, so build-constraint file selection matches what
 // TinyGo would compile. tags are the load-bearing repo build tags.
-func loadClosureE(ctx context.Context, dir string, patterns []string, tags []string, target TargetID) (tc targetClosure, err error) {
+func loadClosure(ctx context.Context, dir string, patterns []string, tags []string, target TargetID) (tc targetClosure, err error) {
 	cfg := godepcollect.Config{
 		Dir:      dir,
 		Patterns: patterns,

@@ -54,23 +54,23 @@ type File struct {
 
 var _ pcm.SourceI = (*File)(nil)
 
-// NewReaderE reads the header of the size-byte stream ra and returns a File
+// NewReader reads the header of the size-byte stream ra and returns a File
 // positioned to decode from its data chunk. ra is retained and not owned:
-// CloseE closes nothing that was not opened by [OpenE].
-func NewReaderE(ra io.ReaderAt, size int64) (file *File, err error) {
+// Close closes nothing that was not opened by [Open].
+func NewReader(ra io.ReaderAt, size int64) (file *File, err error) {
 	if ra == nil {
 		return nil, eh.New("nil reader")
 	}
 	file = &File{ra: ra}
-	err = file.parseE(size)
+	err = file.parse(size)
 	if err != nil {
 		return nil, err
 	}
 	return file, nil
 }
 
-// OpenE opens path and reads its header. CloseE closes the file.
-func OpenE(path string) (file *File, err error) {
+// Open opens path and reads its header. Close closes the file.
+func Open(path string) (file *File, err error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, eb.Build().Str("path", path).Errorf("open wave file: %w", err)
@@ -80,7 +80,7 @@ func OpenE(path string) (file *File, err error) {
 		_ = f.Close()
 		return nil, eb.Build().Str("path", path).Errorf("stat wave file: %w", err)
 	}
-	file, err = NewReaderE(f, st.Size())
+	file, err = NewReader(f, st.Size())
 	if err != nil {
 		_ = f.Close()
 		return nil, eb.Build().Str("path", path).Errorf("read wave header: %w", err)
@@ -117,10 +117,10 @@ func (inst *File) IsRF64() (yes bool) { return inst.rf64 }
 // of the recording is simply absent.
 func (inst *File) IsTruncated() (yes bool) { return inst.truncated }
 
-// CloseE implements [pcm.SourceI]. It closes the underlying file when this
-// File came from [OpenE], and does nothing for a reader handed to
-// [NewReaderE].
-func (inst *File) CloseE() (err error) {
+// Close implements [pcm.SourceI]. It closes the underlying file when this
+// File came from [Open], and does nothing for a reader handed to
+// [NewReader].
+func (inst *File) Close() (err error) {
 	if inst.closer == nil {
 		return nil
 	}
@@ -133,10 +133,10 @@ func (inst *File) CloseE() (err error) {
 	return nil
 }
 
-// ReadFramesAtE implements [pcm.SourceI]: it reads exactly the bytes the
+// ReadFramesAt implements [pcm.SourceI]: it reads exactly the bytes the
 // request needs and converts them to interleaved float32.
-func (inst *File) ReadFramesAtE(ctx context.Context, frameOffset int64, dst []float32) (n int, err error) {
-	n, err = pcm.ClampReadE(inst.format, inst.frames, frameOffset, dst)
+func (inst *File) ReadFramesAt(ctx context.Context, frameOffset int64, dst []float32) (n int, err error) {
+	n, err = pcm.ClampRead(inst.format, inst.frames, frameOffset, dst)
 	if err != nil || n == 0 {
 		return n, err
 	}
@@ -201,8 +201,8 @@ func (inst *File) decode(src []byte, dst []float32) {
 	}
 }
 
-// parseE walks the container and fills in everything the read path needs.
-func (inst *File) parseE(size int64) (err error) {
+// parse walks the container and fills in everything the read path needs.
+func (inst *File) parse(size int64) (err error) {
 	if size < riffHeaderSize {
 		return eb.Build().Int64("size", size).Errorf("stream is too short to hold a riff header")
 	}
@@ -237,24 +237,24 @@ func (inst *File) parseE(size int64) (err error) {
 		}
 		id := readFourCC(buf[0:4])
 		var chunkSize int64
-		chunkSize, err = inst.resolveChunkSizeE(id, binary.LittleEndian.Uint32(buf[4:8]))
+		chunkSize, err = inst.resolveChunkSize(id, binary.LittleEndian.Uint32(buf[4:8]))
 		if err != nil {
 			return err
 		}
 		body := pos + chunkHeaderSize
 		switch id {
 		case ccDs64:
-			err = inst.checkChunkFitsE(id, body, chunkSize, size)
+			err = inst.checkChunkFits(id, body, chunkSize, size)
 			if err != nil {
 				return err
 			}
-			err = inst.parseDs64E(body, chunkSize)
+			err = inst.parseDs64(body, chunkSize)
 		case ccFmt:
-			err = inst.checkChunkFitsE(id, body, chunkSize, size)
+			err = inst.checkChunkFits(id, body, chunkSize, size)
 			if err != nil {
 				return err
 			}
-			err = inst.parseFmtE(body, chunkSize)
+			err = inst.parseFmt(body, chunkSize)
 		case ccData:
 			// A stream with several data chunks is not something this
 			// decoder models; the first one is the recording.
@@ -296,11 +296,11 @@ func (inst *File) parseE(size int64) (err error) {
 	return nil
 }
 
-// checkChunkFitsE compares against the bytes remaining after body rather than
+// checkChunkFits compares against the bytes remaining after body rather than
 // summing body and chunkSize, which a ds64 table entry near MaxInt64 would
 // wrap negative. Callers that size a read or an allocation from the chunk
 // body rely on it: the ds64 table length is bounded by chunkSize.
-func (inst *File) checkChunkFitsE(id uint32, body int64, chunkSize int64, size int64) (err error) {
+func (inst *File) checkChunkFits(id uint32, body int64, chunkSize int64, size int64) (err error) {
 	if chunkSize > size-body {
 		return eb.Build().
 			Str("chunk", fourCCString(id)).
@@ -312,9 +312,9 @@ func (inst *File) checkChunkFitsE(id uint32, body int64, chunkSize int64, size i
 	return nil
 }
 
-// resolveChunkSizeE turns a chunk's 32-bit size field into a real size,
+// resolveChunkSize turns a chunk's 32-bit size field into a real size,
 // following the RF64 escape into ds64 where it is set.
-func (inst *File) resolveChunkSizeE(id uint32, size32 uint32) (n int64, err error) {
+func (inst *File) resolveChunkSize(id uint32, size32 uint32) (n int64, err error) {
 	if !inst.rf64 || size32 != maxUint32 {
 		return int64(size32), nil
 	}
@@ -328,7 +328,7 @@ func (inst *File) resolveChunkSizeE(id uint32, size32 uint32) (n int64, err erro
 	}
 	for i, cc := range inst.ds64Ids {
 		if cc == id {
-			return toInt64E("ds64TableSize", inst.ds64Sizes[i])
+			return toInt64("ds64TableSize", inst.ds64Sizes[i])
 		}
 	}
 	return 0, eb.Build().
@@ -336,11 +336,11 @@ func (inst *File) resolveChunkSizeE(id uint32, size32 uint32) (n int64, err erro
 		Errorf("chunk escapes to a 64-bit size but the ds64 table does not list it")
 }
 
-// parseDs64E reads EBU Tech 3306's ds64 chunk. Of its three 64-bit counts
+// parseDs64 reads EBU Tech 3306's ds64 chunk. Of its three 64-bit counts
 // only dataSize is load-bearing here: riffSize describes a total this reader
 // derives from the stream, and sampleCount is advisory — the frame count
 // comes from the bytes that exist.
-func (inst *File) parseDs64E(off int64, chunkSize int64) (err error) {
+func (inst *File) parseDs64(off int64, chunkSize int64) (err error) {
 	if chunkSize < ds64BodySize {
 		return eb.Build().Int64("chunkSize", chunkSize).Errorf("ds64 chunk is too short")
 	}
@@ -349,7 +349,7 @@ func (inst *File) parseDs64E(off int64, chunkSize int64) (err error) {
 	if err != nil {
 		return eh.Errorf("read ds64 chunk: %w", err)
 	}
-	inst.ds64DataSize, err = toInt64E("dataSize", binary.LittleEndian.Uint64(buf[8:16]))
+	inst.ds64DataSize, err = toInt64("dataSize", binary.LittleEndian.Uint64(buf[8:16]))
 	if err != nil {
 		return err
 	}
@@ -377,9 +377,9 @@ func (inst *File) parseDs64E(off int64, chunkSize int64) (err error) {
 	return nil
 }
 
-// parseFmtE reads WAVEFORMAT, WAVEFORMATEX or WAVEFORMATEXTENSIBLE, whichever
+// parseFmt reads WAVEFORMAT, WAVEFORMATEX or WAVEFORMATEXTENSIBLE, whichever
 // the chunk's length says it is.
-func (inst *File) parseFmtE(off int64, chunkSize int64) (err error) {
+func (inst *File) parseFmt(off int64, chunkSize int64) (err error) {
 	if chunkSize < fmtChunkSize {
 		return eb.Build().Int64("chunkSize", chunkSize).Errorf("fmt chunk is too short")
 	}
@@ -413,7 +413,7 @@ func (inst *File) parseFmtE(off int64, chunkSize int64) (err error) {
 		validBits = binary.LittleEndian.Uint16(buf[18:20])
 		// buf[20:24] is dwChannelMask, the speaker layout, which nothing
 		// downstream reads yet.
-		tag, err = subFormatTagE(buf[24:40])
+		tag, err = subFormatTag(buf[24:40])
 		if err != nil {
 			return err
 		}
@@ -428,7 +428,7 @@ func (inst *File) parseFmtE(off int64, chunkSize int64) (err error) {
 			Uint16("formatTag", tag).
 			Errorf("unsupported wave format tag")
 	}
-	err = validateSampleFormatE(inst.encoding, bits)
+	err = validateSampleFormat(inst.encoding, bits)
 	if err != nil {
 		return err
 	}
@@ -439,7 +439,7 @@ func (inst *File) parseFmtE(off int64, chunkSize int64) (err error) {
 			Errorf("valid bits per sample does not fit its container")
 	}
 	format := pcm.Format{SampleRate: sampleRate, Channels: channels}
-	err = format.ValidateE()
+	err = format.Validate()
 	if err != nil {
 		return err
 	}
@@ -463,7 +463,7 @@ func (inst *File) parseFmtE(off int64, chunkSize int64) (err error) {
 	return nil
 }
 
-func toInt64E(field string, v uint64) (n int64, err error) {
+func toInt64(field string, v uint64) (n int64, err error) {
 	if v > uint64(math.MaxInt64) {
 		return 0, eb.Build().
 			Str("field", field).

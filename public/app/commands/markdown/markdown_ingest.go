@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
@@ -47,23 +47,23 @@ func newIngestCommand() *cli.Command {
 	}
 }
 
-func runIngest(c *cli.Context) (err error) {
-	if c.NArg() == 0 {
+func runIngest(cliCtx context.Context, cmd *cli.Command) (err error) {
+	if cmd.NArg() == 0 {
 		return eh.Errorf("at least one file or directory is required")
 	}
-	sources, err := walkSources(c.Args().Slice())
+	sources, err := walkSources(cmd.Args().Slice())
 	if err != nil {
 		return
 	}
-	batch := c.Int("batch")
+	batch := cmd.Int("batch")
 	if batch < 1 {
 		batch = 1
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), c.Duration("timeout"))
+	ctx, cancel := context.WithTimeout(context.Background(), cmd.Duration("timeout"))
 	defer cancel()
 
 	var store *mddocfacts.MddocStore
-	if !c.Bool("dry-run") {
+	if !cmd.Bool("dry-run") {
 		client := chclient.New(chclient.ConfigFromEnv(), nil)
 		if err = client.Ping(ctx); err != nil {
 			return eh.Errorf("ping clickhouse: %w", err)
@@ -116,6 +116,6 @@ func runIngest(c *cli.Context) (err error) {
 	if store == nil {
 		verb = "would ingest"
 	}
-	_, err = fmt.Fprintf(c.App.Writer, "%s %d documents as %d rows\n", verb, docs, rows)
+	_, err = fmt.Fprintf(cmd.Root().Writer, "%s %d documents as %d rows\n", verb, docs, rows)
 	return
 }

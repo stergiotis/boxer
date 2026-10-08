@@ -47,7 +47,7 @@ func completeGraph(t testingT, pts [][2]float64, k int) (*csr.Graph, []float32, 
 			core[i] = ds[n-1]
 		}
 	}
-	g, err := csr.BuildE(src, dst, w, csr.Options{})
+	g, err := csr.Build(src, dst, w, csr.Options{})
 	require.NoError(t, err)
 	return g, core, dist
 }
@@ -199,7 +199,7 @@ func TestHDBSCANSingleClusterOptionAndErrors(t *testing.T) {
 	}
 
 	// An unweighted graph is refused; a mismatched core column is refused.
-	ug, _ := csr.BuildE([]uint64{1, 2}, []uint64{2, 3}, nil, csr.Options{})
+	ug, _ := csr.Build([]uint64{1, 2}, []uint64{2, 3}, nil, csr.Options{})
 	_, err = HDBSCAN(context.Background(), ug, nil, HDBSCANOptions{})
 	require.Error(t, err)
 	_, err = HDBSCAN(context.Background(), g, core[:3], HDBSCANOptions{})
@@ -228,7 +228,7 @@ func TestHDBSCANDisconnectedComponentsAreClusters(t *testing.T) {
 			}
 		}
 	}
-	g, err := csr.BuildE(src, dst, w, csr.Options{})
+	g, err := csr.Build(src, dst, w, csr.Options{})
 	require.NoError(t, err)
 	r, err := HDBSCAN(context.Background(), g, nil, HDBSCANOptions{MinClusterSize: 4})
 	require.NoError(t, err)

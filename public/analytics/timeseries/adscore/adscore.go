@@ -153,7 +153,7 @@ type evaluator struct {
 	curve     Curve
 }
 
-func newEvaluatorE(scores []float64, ranges Ranges, n int32) (inst *evaluator, err error) {
+func newEvaluator(scores []float64, ranges Ranges, n int32) (inst *evaluator, err error) {
 	inst = &evaluator{
 		n:      n,
 		scores: scores,
@@ -293,7 +293,7 @@ func (inst *evaluator) areas() (rocArea float64, prArea float64) {
 	return
 }
 
-func validateE(scores []float64, labels []bool) (ranges Ranges, n int32, err error) {
+func validate(scores []float64, labels []bool) (ranges Ranges, n int32, err error) {
 	n = int32(len(scores))
 	if n == 0 {
 		err = eb.Build().Errorf("empty score vector")
@@ -320,11 +320,11 @@ func validateE(scores []float64, labels []bool) (ranges Ranges, n int32, err err
 	return
 }
 
-// RangeAUCE computes the range-based ROC and PR areas at a single buffer
+// RangeAUC computes the range-based ROC and PR areas at a single buffer
 // length. A buffer of 0 reduces the continuous label to the binary one, leaving
 // the existence reward as the only difference from the point-wise measures.
-func RangeAUCE(scores []float64, labels []bool, buffer int32) (rocArea float64, prArea float64, err error) {
-	ranges, n, err := validateE(scores, labels)
+func RangeAUC(scores []float64, labels []bool, buffer int32) (rocArea float64, prArea float64, err error) {
+	ranges, n, err := validate(scores, labels)
 	if err != nil {
 		return
 	}
@@ -332,7 +332,7 @@ func RangeAUCE(scores []float64, labels []bool, buffer int32) (rocArea float64, 
 		err = eb.Build().Int32("buffer", buffer).Errorf("buffer length must not be negative")
 		return
 	}
-	ev, err := newEvaluatorE(scores, ranges, n)
+	ev, err := newEvaluator(scores, ranges, n)
 	if err != nil {
 		return
 	}
@@ -341,7 +341,7 @@ func RangeAUCE(scores []float64, labels []bool, buffer int32) (rocArea float64, 
 	return
 }
 
-// EvaluateE scores a detector's output against labelled anomalies, returning
+// Evaluate scores a detector's output against labelled anomalies, returning
 // both the classic point-wise measures and the VUS measures.
 //
 // VUS averages the range-based area over every buffer length from 0 to
@@ -352,8 +352,8 @@ func RangeAUCE(scores []float64, labels []bool, buffer int32) (rocArea float64, 
 // The averaging is a plain mean over buffer lengths, matching the reference
 // implementation. The paper states a trapezoidal rule over that axis too; the
 // two differ only in how they weight the endpoints.
-func EvaluateE(scores []float64, labels []bool, maxBuffer int32) (m Measures, err error) {
-	ranges, n, err := validateE(scores, labels)
+func Evaluate(scores []float64, labels []bool, maxBuffer int32) (m Measures, err error) {
+	ranges, n, err := validate(scores, labels)
 	if err != nil {
 		return
 	}
@@ -365,7 +365,7 @@ func EvaluateE(scores []float64, labels []bool, maxBuffer int32) (m Measures, er
 		maxBuffer = DefaultMaxBuffer(ranges)
 	}
 
-	ev, err := newEvaluatorE(scores, ranges, n)
+	ev, err := newEvaluator(scores, ranges, n)
 	if err != nil {
 		return
 	}
@@ -386,10 +386,10 @@ func EvaluateE(scores []float64, labels []bool, maxBuffer int32) (m Measures, er
 	return
 }
 
-// CurveE returns the range-based curve at one buffer length, for inspection and
+// CurveAt returns the range-based curve at one buffer length, for inspection and
 // plotting. The returned slices are freshly allocated.
-func CurveE(scores []float64, labels []bool, buffer int32) (c Curve, err error) {
-	ranges, n, err := validateE(scores, labels)
+func CurveAt(scores []float64, labels []bool, buffer int32) (c Curve, err error) {
+	ranges, n, err := validate(scores, labels)
 	if err != nil {
 		return
 	}
@@ -397,7 +397,7 @@ func CurveE(scores []float64, labels []bool, buffer int32) (c Curve, err error) 
 		err = eb.Build().Int32("buffer", buffer).Errorf("buffer length must not be negative")
 		return
 	}
-	ev, err := newEvaluatorE(scores, ranges, n)
+	ev, err := newEvaluator(scores, ranges, n)
 	if err != nil {
 		return
 	}

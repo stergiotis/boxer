@@ -80,7 +80,7 @@ func newFlowBenchState(ids *c.WidgetIdStack) *flowBenchState {
 		written:      make([]int64, 0, flowBenchWindow),
 	}
 	t0 := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
-	src, err := vectorfield.NewPyramidE(context.Background(), vectorfield.Meta{
+	src, err := vectorfield.NewPyramid(context.Background(), vectorfield.Meta{
 		Name: "synthetic jet and vortices", Unit: "m/s", SpeedMax: flowOnMapSpeedMax,
 		// The geometry is given, so nothing is loaded while the gallery mounts.
 		West: -180, East: 179.5, South: -90, North: 90, DLon: 0.5, DLat: 0.5, PeriodicLon: true,

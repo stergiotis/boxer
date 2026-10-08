@@ -25,7 +25,7 @@ func hourly(n int) (out []vectorfield.Step) {
 
 func globalSource(t *testing.T, fn vectorfield.FieldFunc, nSteps int) *vectorfield.Pyramid {
 	t.Helper()
-	p, err := vectorfield.NewPyramidE(context.Background(),
+	p, err := vectorfield.NewPyramid(context.Background(),
 		vectorfield.Meta{Name: "test", Unit: "m/s", SpeedMax: 30, Steps: hourly(nSteps)},
 		vectorfield.NewGlobalAnalyticLoader(1, fn), vectorfield.PyramidOptions{})
 	require.NoError(t, err)
@@ -186,14 +186,14 @@ type gatedSource struct {
 
 func (g *gatedSource) Describe() vectorfield.Meta { return g.inner.Describe() }
 
-func (g *gatedSource) SampleE(_ context.Context, req vectorfield.Request) (vectorfield.Window, error) {
+func (g *gatedSource) Sample(_ context.Context, req vectorfield.Request) (vectorfield.Window, error) {
 	gate := make(chan struct{})
 	g.mu.Lock()
 	g.gates = append(g.gates, gate)
 	g.reqs = append(g.reqs, req)
 	g.mu.Unlock()
 	<-gate
-	return g.inner.SampleE(context.Background(), req)
+	return g.inner.Sample(context.Background(), req)
 }
 
 func (g *gatedSource) pending() int {
@@ -274,7 +274,7 @@ func TestPanInsideTheWindowAsksForNothing(t *testing.T) {
 func TestZoomNearALevelBoundaryDoesNotAlternate(t *testing.T) {
 	// A quarter-degree field, so that zoom 4 is served from a coarser level
 	// and there is a finer one to zoom into.
-	src, err := vectorfield.NewPyramidE(context.Background(),
+	src, err := vectorfield.NewPyramid(context.Background(),
 		vectorfield.Meta{SpeedMax: 30, Steps: hourly(1)},
 		vectorfield.NewGlobalAnalyticLoader(0.25, vectorfield.Uniform(8, 3)), vectorfield.PyramidOptions{})
 	require.NoError(t, err)
@@ -341,11 +341,11 @@ type missingStep struct {
 	step int
 }
 
-func (m missingStep) SampleE(ctx context.Context, req vectorfield.Request) (vectorfield.Window, error) {
+func (m missingStep) Sample(ctx context.Context, req vectorfield.Request) (vectorfield.Window, error) {
 	if req.Step == m.step {
 		return vectorfield.Window{}, vectorfield.ErrStepMissing
 	}
-	return m.SourceI.SampleE(ctx, req)
+	return m.SourceI.Sample(ctx, req)
 }
 
 func TestMissingStepShowsTheOtherAlone(t *testing.T) {
@@ -368,7 +368,7 @@ func TestMissingStepShowsTheOtherAlone(t *testing.T) {
 func TestSetTimeWithUnevenSteps(t *testing.T) {
 	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	steps := []vectorfield.Step{{Valid: t0}, {Valid: t0.Add(time.Hour)}, {Valid: t0.Add(4 * time.Hour)}, {Valid: t0.Add(10 * time.Hour)}}
-	p, err := vectorfield.NewPyramidE(context.Background(), vectorfield.Meta{Steps: steps, SpeedMax: 30},
+	p, err := vectorfield.NewPyramid(context.Background(), vectorfield.Meta{Steps: steps, SpeedMax: 30},
 		vectorfield.NewGlobalAnalyticLoader(2, vectorfield.Uniform(1, 0)), vectorfield.PyramidOptions{})
 	require.NoError(t, err)
 	layer := New(p, Options{})
@@ -409,11 +409,11 @@ type countingSource struct {
 	asked map[int]int
 }
 
-func (inst *countingSource) SampleE(ctx context.Context, req vectorfield.Request) (vectorfield.Window, error) {
+func (inst *countingSource) Sample(ctx context.Context, req vectorfield.Request) (vectorfield.Window, error) {
 	inst.mu.Lock()
 	inst.asked[req.Step]++
 	inst.mu.Unlock()
-	return inst.SourceI.SampleE(ctx, req)
+	return inst.SourceI.Sample(ctx, req)
 }
 
 func (inst *countingSource) count(step int) int {

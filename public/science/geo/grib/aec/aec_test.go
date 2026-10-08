@@ -10,7 +10,7 @@ import (
 
 func TestParamsOutsideTheStandardAreRefused(t *testing.T) {
 	good := Params{Bits: 12, BlockSize: 32, ReferenceInterval: 128, Preprocess: true}
-	require.NoError(t, good.checkE())
+	require.NoError(t, good.check())
 	for _, bad := range []Params{
 		{Bits: 0, BlockSize: 32, ReferenceInterval: 128},
 		{Bits: 33, BlockSize: 32, ReferenceInterval: 128},

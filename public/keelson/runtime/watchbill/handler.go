@@ -11,7 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// HandlerI runs the jobs of one kind (ADR-0223 §SD5). RunE receives the
+// HandlerI runs the jobs of one kind (ADR-0223 §SD5). Run receives the
 // job row as claimed and the keelson task the run is reported through —
 // Report and Note for progress, Ctx for the cancel — and returns the
 // outcome: nil succeeds, an error fails the attempt under the job's
@@ -22,7 +22,7 @@ import (
 // be run again and must tolerate it.
 type HandlerI interface {
 	Kind() string
-	RunE(ctx context.Context, job watchbillstore.Job, h task.HandleI) (err error)
+	Run(ctx context.Context, job watchbillstore.Job, h task.HandleI) (err error)
 }
 
 // Registry maps a kind to its handler. A binary that links a consumer's
@@ -84,13 +84,13 @@ func Register(h HandlerI) (err error) { return DefaultRegistry.Register(h) }
 // HandlerFunc adapts a function to [HandlerI].
 type HandlerFunc struct {
 	KindName string
-	Run      func(ctx context.Context, job watchbillstore.Job, h task.HandleI) error
+	RunFunc  func(ctx context.Context, job watchbillstore.Job, h task.HandleI) error
 }
 
 var _ HandlerI = HandlerFunc{}
 
 func (inst HandlerFunc) Kind() (kind string) { return inst.KindName }
 
-func (inst HandlerFunc) RunE(ctx context.Context, job watchbillstore.Job, h task.HandleI) (err error) {
-	return inst.Run(ctx, job, h)
+func (inst HandlerFunc) Run(ctx context.Context, job watchbillstore.Job, h task.HandleI) (err error) {
+	return inst.RunFunc(ctx, job, h)
 }

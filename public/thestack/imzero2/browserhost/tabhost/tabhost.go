@@ -4,14 +4,14 @@
 // (ADR-0263), runs the same app natively against a client binary over the
 // pipe, builds a bundle and serves one, and reports what its apps declare
 // that a tab does not serve. A tab binary is a `package main`
-// that imports the apps it may open and hands its cli.App to [New]:
+// that imports the apps it may open and hands its root cli.Command to [New]:
 //
 //	var tab = tabhost.New(tabhost.Options{DefaultApp: "example.com/acme/apps/dashboard"},
-//		&cli.App{Name: "acmetab", Version: vcs.BuildVersionInfo(), Before: logging.Apply})
+//		&cli.Command{Name: "acmetab", Version: vcs.BuildVersionInfo(), Before: logging.Apply})
 //
 //	func main() { tab.Main() }
 //
-// The cli.App stays the binary's own, so its name and version are the
+// The root cli.Command stays the binary's own, so its name and version are the
 // binary's and the entry-point standard holds where it is checked, in the
 // main package. [New] adds the flags, the action and the subcommands.
 //
@@ -29,7 +29,7 @@ import (
 	"runtime"
 
 	"github.com/rs/zerolog/log"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
@@ -104,11 +104,11 @@ type Options struct {
 	Services Services
 }
 
-// Program is one tab binary: its options, its cli.App, and the per-tick
+// Program is one tab binary: its options, its root cli.Command, and the per-tick
 // step the reactor leaves behind.
 type Program struct {
 	opts Options
-	app  *cli.App
+	app  *cli.Command
 	step func() int32
 	err  error
 }
@@ -118,7 +118,7 @@ type Program struct {
 // and sets its action and subcommands. Under wasip1 it also registers the
 // program as the reactor's setup. Call it once, from a package-level
 // variable of the main package.
-func New(opts Options, cliApp *cli.App) (inst *Program) {
+func New(opts Options, cliApp *cli.Command) (inst *Program) {
 	inst = &Program{opts: opts, app: cliApp}
 	if cliApp.Usage == "" {
 		cliApp.Usage = "the keelson host for a browser tab: one registered app on an in-process bus"
@@ -155,13 +155,13 @@ func (inst *Program) Main() {
 // run is the program on args; it returns the per-tick step when the action
 // left one (the reactor), nil otherwise, and keeps the error for Main.
 func (inst *Program) run(args []string) (step func() int32) {
-	if inst.err = inst.app.Run(append([]string{inst.app.Name}, args...)); inst.err != nil {
+	if inst.err = inst.app.Run(context.Background(), append([]string{inst.app.Name}, args...)); inst.err != nil {
 		log.Error().Err(inst.err).Str("binary", inst.app.Name).Msg("tabhost")
 	}
 	return inst.step
 }
 
-func (inst *Program) tab(ctx *cli.Context) (err error) {
+func (inst *Program) tab(ctx context.Context, cmd *cli.Command) (err error) {
 	// Deliberate and once: the module's HTTP leaves through the host.
 	browserhost.InstallHostTransport()
 	if inst.opts.Services.NoEgress {
@@ -172,11 +172,11 @@ func (inst *Program) tab(ctx *cli.Context) (err error) {
 			return
 		}
 	}
-	appId := app.AppIdT(ctx.String("app"))
+	appId := app.AppIdT(cmd.String("app"))
 	if _, ok := app.DefaultRegistry.LookupManifest(appId); !ok {
 		return browserhost.ErrNoSuchApp
 	}
-	cfg := &application.Config{ClientBinary: ctx.String("clientBinary")}
+	cfg := &application.Config{ClientBinary: cmd.String("clientBinary")}
 	cfg.Validate(true)
 	u := fffiruntime.NewUnmarshaller(nil, binary.NativeEndian, nil, nil)
 	host, err := application.NewApplication(cfg, u)
@@ -228,14 +228,14 @@ func (inst *Program) tab(ctx *cli.Context) (err error) {
 	return
 }
 
-func serve(ctx *cli.Context) (err error) {
-	sigCtx, stop := signal.NotifyContext(ctx.Context, os.Interrupt)
+func serve(ctx context.Context, cmd *cli.Command) (err error) {
+	sigCtx, stop := signal.NotifyContext(ctx, os.Interrupt)
 	defer stop()
 	return browserhost.Serve(sigCtx, browserhost.ServeConfig{
-		Dir:          ctx.String("dir"),
-		Listen:       ctx.String("listen"),
-		ChURL:        ctx.String("chURL"),
-		ExitOnReport: ctx.Bool("exitOnReport"),
+		Dir:          cmd.String("dir"),
+		Listen:       cmd.String("listen"),
+		ChURL:        cmd.String("chURL"),
+		ExitOnReport: cmd.Bool("exitOnReport"),
 		Assets:       web.Assets(),
 	}, log.Logger)
 }

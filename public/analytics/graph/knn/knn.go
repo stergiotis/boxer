@@ -90,7 +90,7 @@ type Result struct {
 // DistanceGraph builds the same topology weighted by distance rather than
 // membership: the input of the density-based algorithms.
 func (r *Result) DistanceGraph() (*csr.Graph, error) {
-	return csr.BuildE(r.pairSrc, r.pairDst, r.pairDist, csr.Options{})
+	return csr.Build(r.pairSrc, r.pairDst, r.pairDist, csr.Options{})
 }
 
 // smoothKTolerance and minKDistScale are umap-learn's SMOOTH_K_TOLERANCE
@@ -277,7 +277,7 @@ func Build(ctx context.Context, e *engine.Engine, x []float32, d int, ids []uint
 	}
 	// Every kept row is a vertex, with or without a mutual neighbour: the
 	// intersection can leave a row without arcs.
-	g, err := csr.BuildE(src, dst, wgt, csr.Options{Vertices: kept})
+	g, err := csr.Build(src, dst, wgt, csr.Options{Vertices: kept})
 	if err != nil {
 		err = eh.Errorf("knn: build graph: %w", err)
 		return

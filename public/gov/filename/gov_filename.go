@@ -10,7 +10,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -140,15 +140,15 @@ func NewCliCommand() *cli.Command {
 			},
 		},
 		// Convention: Context is mandatory.
-		Action: func(c *cli.Context) error {
+		Action: func(ctx context.Context, cmd *cli.Command) error {
 			renamer := &Renamer{
 				RenameOp: RenameOpRename,
 			}
-			if c.Bool("dry-run") {
+			if cmd.Bool("dry-run") {
 				renamer.RenameOp = RenameOpDryRun
 			}
 
-			return renamer.Run(c.Context, c.String("root"))
+			return renamer.Run(ctx, cmd.String("root"))
 		},
 	}
 }

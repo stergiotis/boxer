@@ -73,7 +73,7 @@ func (inst *lensPainter) paintTemplateCell(x, cy float32, s int32, b *lwlens.Ban
 		// How typical: the square fills from the bottom by the band's
 		// support, over a rim the full square's size.
 		h := lensShapeCell
-		c.PaintRectStroke(x+0.5, cy-h/2+0.5, x+h-0.5, cy+h/2-0.5, 1, inst.sectionTone[m.SectionOf(s)], 1).Send()
+		c.PaintRectStroke(x+0.5, cy-h/2+0.5, x+h-0.5, cy+h/2-0.5, 1, inst.sectionTone[m.SectionOf(s)], styletokens.StrokeHair).Send()
 		c.PaintRectFilled(x, cy+h/2-h*support, x+h, cy+h/2, 1, inst.sectionTone[m.SectionOf(s)]).Send()
 	case lwlens.DetailFingerprint:
 		inst.paintDistribution(x, x+lensFingerCell, cy, s, b)

@@ -23,7 +23,7 @@ func BenchmarkDraw(b *testing.B) {
 	level := zerolog.GlobalLevel()
 	zerolog.SetGlobalLevel(zerolog.ErrorLevel)
 	defer zerolog.SetGlobalLevel(level)
-	src, err := vectorfield.NewPyramidE(context.Background(),
+	src, err := vectorfield.NewPyramid(context.Background(),
 		vectorfield.Meta{SpeedMax: 30, Steps: hourly(1)},
 		vectorfield.NewGlobalAnalyticLoader(1, vectorfield.Swirl(0)), vectorfield.PyramidOptions{})
 	if err != nil {

@@ -37,7 +37,7 @@ Decoding GRIB or NetCDF is not in the tree. Whatever reads your file hands the
 pyramid one step at a time through `vectorfield.StepLoaderI`:
 
 ```go
-func (l *myLoader) LoadStepE(ctx context.Context, step int) (vectorfield.Grid, error)
+func (l *myLoader) LoadStep(ctx context.Context, step int) (vectorfield.Grid, error)
 ```
 
 A `Grid` is rows north to south, columns west to east, `U` east and `V` north,
@@ -64,7 +64,7 @@ The [survey behind the ADR](../adr-background-work/vector-field-flow-visualizati
 ## 2 Build the source
 
 ```go
-src, err := vectorfield.NewPyramidE(ctx, vectorfield.Meta{
+src, err := vectorfield.NewPyramid(ctx, vectorfield.Meta{
 	Name: "GFS 10 m wind", Quantity: "wind", Unit: "m/s",
 	Surface:  vectorfield.Surface{Kind: vectorfield.SurfaceKindHeightAboveGround, Value: 10, Unit: "m"},
 	Steps:    steps,   // valid times; they need not be evenly spaced
@@ -99,7 +99,7 @@ size. It costs a query per step for each settled view, where the pyramid
 costs none.
 
 ```go
-src, err := sqlfield.NewSourceE(ctx, queryer, sqlfield.Relation{From: "weather.wind_10m"},
+src, err := sqlfield.NewSource(ctx, queryer, sqlfield.Relation{From: "weather.wind_10m"},
 	sqlfield.Options{Meta: vectorfield.Meta{Name: "10 m wind", Unit: "m/s", SpeedMax: 40}})
 ```
 
@@ -107,7 +107,7 @@ The relation yields `lat`, `lon`, `u`, `v` and optionally `t`, one row per node
 per step, on a grid regular in latitude and longitude. Everything §1 makes the
 loader's job is the relation's here — rotate, filter to one level and run,
 `nullIf` the sentinels — and `Relation.Head` carries a `WITH` list when that
-takes a query. `NewSourceE` refuses a step with more rows than the grid has
+takes a query. `NewSource` refuses a step with more rows than the grid has
 nodes and nodes off a regular grid; it cannot tell whether components were
 rotated. `queryer` is whatever runs a statement with parameters and returns
 Arrow. Run the conformance suite of §2 against your relation and a real

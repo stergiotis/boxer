@@ -2,6 +2,7 @@ package queryrunsvc
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -66,6 +67,83 @@ func TestPullScopeOffServesSchemaOnlyStream(t *testing.T) {
 	require.NoError(t, rd.Err())
 }
 
+// The ETag lets a ranged continuation detect that the answer changed
+// underneath it: a matching If-Range gets the range, a stale one the full
+// body, never a splice.
+func TestPullETagGuardsRangedReads(t *testing.T) {
+	s, err := New(Config{Scope: queryrunfacts.ScopeOff, ChURL: "http://127.0.0.1:1/"}, zerolog.Nop())
+	require.NoError(t, err)
+	srv := httptest.NewServer(s.handler())
+	defer srv.Close()
+
+	get := func(hdr map[string]string) (resp *http.Response) {
+		req, rErr := http.NewRequest(http.MethodGet, srv.URL+"/pull", nil)
+		require.NoError(t, rErr)
+		for k, v := range hdr {
+			req.Header.Set(k, v)
+		}
+		resp, rErr = http.DefaultClient.Do(req)
+		require.NoError(t, rErr)
+		_ = resp.Body.Close()
+		return
+	}
+	first := get(nil)
+	etag := first.Header.Get("ETag")
+	require.NotEmpty(t, etag)
+	require.Equal(t, etag, get(nil).Header.Get("ETag"), "an unchanged answer keeps its ETag")
+
+	require.Equal(t, http.StatusPartialContent, get(map[string]string{"Range": "bytes=8-", "If-Range": etag}).StatusCode)
+	require.Equal(t, http.StatusOK, get(map[string]string{"Range": "bytes=8-", "If-Range": `"stale"`}).StatusCode)
+}
+
+func TestStartRefusesWildcardBind(t *testing.T) {
+	s, err := New(Config{Listen: ":0"}, zerolog.Nop())
+	require.NoError(t, err)
+	err = s.Start(context.Background())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "refusing non-loopback")
+}
+
+// The materialized view pulls a loopback URL from ClickHouse's side, so a
+// server elsewhere can never reach it; Start must say so instead of
+// succeeding into refreshes that all fail.
+func TestStartRefusesRemoteClickHouse(t *testing.T) {
+	s, err := New(Config{Listen: "127.0.0.1:0", ChURL: "http://10.1.2.3:8123/"}, zerolog.Nop())
+	require.NoError(t, err)
+	err = s.Start(context.Background())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "off this host")
+}
+
+// A serve loop that ends other than by Stop surfaces on Failed, so the
+// daemon can exit and its supervisor restart it; a graceful Stop does not.
+func TestServeFailureSurfaces(t *testing.T) {
+	s, err := New(Config{}, zerolog.Nop())
+	require.NoError(t, err)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	go s.serve(ln)
+	require.NoError(t, ln.Close())
+	select {
+	case err = <-s.Failed():
+		require.Error(t, err)
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "a dead listener must surface on Failed")
+	}
+
+	s, err = New(Config{}, zerolog.Nop())
+	require.NoError(t, err)
+	ln, err = net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	go s.serve(ln)
+	require.NoError(t, s.Stop(context.Background()))
+	select {
+	case err = <-s.Failed():
+		require.Failf(t, "graceful stop reported", "%v", err)
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
 func TestHealthz(t *testing.T) {
 	s, err := New(Config{}, zerolog.Nop())
 	require.NoError(t, err)
@@ -75,16 +153,6 @@ func TestHealthz(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-}
-
-func TestIsLoopbackHost(t *testing.T) {
-	require.True(t, isLoopbackHost("127.0.0.1"))
-	require.True(t, isLoopbackHost("::1"))
-	require.True(t, isLoopbackHost("localhost"))
-	require.True(t, isLoopbackHost(""))
-	require.False(t, isLoopbackHost("0.0.0.0"))
-	require.False(t, isLoopbackHost("192.168.1.10"))
-	require.False(t, isLoopbackHost("example.com"))
 }
 
 // ParseBackfill resolves the operator-facing spelling. "all" must stay the

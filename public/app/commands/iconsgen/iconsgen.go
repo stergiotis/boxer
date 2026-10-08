@@ -6,7 +6,7 @@ package iconsgen
 
 import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons/generator"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 // NewCliCommand returns the `iconsgen` subcommand. The generator command is
@@ -14,8 +14,8 @@ import (
 // clash with other "generate" commands.
 func NewCliCommand() *cli.Command {
 	return &cli.Command{
-		Name:        "iconsgen",
-		Usage:       "generate the keelson phosphor-icon lookup table",
-		Subcommands: []*cli.Command{generator.NewCommand()},
+		Name:     "iconsgen",
+		Usage:    "generate the keelson phosphor-icon lookup table",
+		Commands: []*cli.Command{generator.NewCommand()},
 	}
 }

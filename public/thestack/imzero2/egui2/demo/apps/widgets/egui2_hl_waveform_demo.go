@@ -185,12 +185,12 @@ func newWaveformDemoState(ids *c.WidgetIdStack, tasks task.TaskApiI) (st *wavefo
 	st = &waveformDemoState{ids: ids, rate: 1, volume: 1, tasks: tasks}
 	format := pcm.Format{SampleRate: 48000, Channels: 2}
 	frames := format.DurationToFrames(waveformDemoSeconds * time.Second)
-	src, err := pcm.NewSynthSourceE(format, frames, waveformDemoSignal(format, frames))
+	src, err := pcm.NewSynthSource(format, frames, waveformDemoSignal(format, frames))
 	if err != nil {
 		st.err = err
 		return st
 	}
-	tr, err := track.OpenE(context.Background(), src, track.Options{
+	tr, err := track.Open(context.Background(), src, track.Options{
 		Epoch:   waveformDemoEpoch,
 		NewSink: func(s pcm.SourceI) sink.SinkI { return sink.NewNull(s, nil) },
 	})
@@ -211,7 +211,7 @@ func newWaveformDemoState(ids *c.WidgetIdStack, tasks task.TaskApiI) (st *wavefo
 // closed. The player keeps its scope key, so egui state under it survives.
 func (st *waveformDemoState) setTrack(tr *track.Track, source string, synthetic bool) {
 	if st.tr != nil {
-		if err := st.tr.CloseE(); err != nil {
+		if err := st.tr.Close(); err != nil {
 			log.Warn().Err(err).Msg("waveform demo: closing the previous track")
 		}
 	}
@@ -258,13 +258,13 @@ func (st *waveformDemoState) openTwelveHours() {
 	format := pcm.Format{SampleRate: 48000, Channels: 2}
 	frames := format.DurationToFrames(12 * time.Hour)
 	fn := waveformDemoSignal(format, frames)
-	reopen := func(_ context.Context) (pcm.SourceI, error) { return pcm.NewSynthSourceE(format, frames, fn) }
+	reopen := func(_ context.Context) (pcm.SourceI, error) { return pcm.NewSynthSource(format, frames, fn) }
 	src, err := reopen(context.Background())
 	if err != nil {
 		st.openErr = err.Error()
 		return
 	}
-	tr, err := track.OpenE(context.Background(), src, track.Options{
+	tr, err := track.Open(context.Background(), src, track.Options{
 		Background: true,
 		Reopen:     reopen,
 		Epoch:      waveformDemoEpoch,
@@ -283,7 +283,7 @@ func (st *waveformDemoState) openFile() {
 		st.openErr = "no path"
 		return
 	}
-	tr, kind, err := track.OpenFileE(context.Background(), st.path, track.Options{
+	tr, kind, err := track.OpenFile(context.Background(), st.path, track.Options{
 		NewSink: func(s pcm.SourceI) sink.SinkI { return sink.NewNull(s, nil) },
 	})
 	if err != nil {
@@ -336,11 +336,11 @@ func demoWaveform(ids *c.WidgetIdStack, st *waveformDemoState) {
 			st.deviceErr = ""
 			var err error
 			if st.device {
-				err = st.tr.ReplaceSinkE(func(src pcm.SourceI) (sink.SinkI, error) {
-					return pulsesink.OpenE(src, pulsesink.Options{AppName: "boxer widget gallery"})
+				err = st.tr.ReplaceSink(func(src pcm.SourceI) (sink.SinkI, error) {
+					return pulsesink.Open(src, pulsesink.Options{AppName: "boxer widget gallery"})
 				})
 			} else {
-				err = st.tr.ReplaceSinkE(func(src pcm.SourceI) (sink.SinkI, error) { return sink.NewNull(src, nil), nil })
+				err = st.tr.ReplaceSink(func(src pcm.SourceI) (sink.SinkI, error) { return sink.NewNull(src, nil), nil })
 			}
 			if err != nil {
 				// The old sink stays; put the checkbox back and say why.
@@ -354,12 +354,12 @@ func demoWaveform(ids *c.WidgetIdStack, st *waveformDemoState) {
 			// 1.0, since a rate a hair off unity keeps the sink resampling.
 			st.rate = math.Round(st.rate*20) / 20
 			c.CurrentApplicationState.StateManager.OverrideDatabindingF64Ptr(&st.rate)
-			if err := st.tr.Sink().SetRateE(st.rate); err != nil {
+			if err := st.tr.Sink().SetRate(st.rate); err != nil {
 				log.Warn().Err(err).Msg("waveform demo: rate rejected")
 			}
 		}
 		if c.SliderF64(ids.PrepareStr("wf-volume"), st.volume, 0, 1).Text("volume").SendRespVal(&st.volume).HasChanged() {
-			if err := st.tr.Sink().SetVolumeE(st.volume); err != nil {
+			if err := st.tr.Sink().SetVolume(st.volume); err != nil {
 				log.Warn().Err(err).Msg("waveform demo: volume rejected")
 			}
 		}

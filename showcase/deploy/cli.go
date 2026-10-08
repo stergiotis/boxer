@@ -1,11 +1,12 @@
 package deploy
 
 import (
+	"context"
 	"path/filepath"
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 const defaultEncoderArgs = "-c:v libx264 -preset veryfast -tune zerolatency -bf 0 -g 100000"
@@ -49,29 +50,29 @@ func NewCommand() *cli.Command {
 			&cli.StringFlag{Name: "fallback-font", Usage: "fallback font TTF (default: fc-match 'Noto Sans CJK JP')"},
 			&cli.BoolFlag{Name: "dry-run", Usage: "build + gate but skip the swap + restart"},
 		},
-		Action: func(c *cli.Context) error {
-			root := c.String("root")
+		Action: func(ctx context.Context, cmd *cli.Command) error {
+			root := cmd.String("root")
 			cfg := Config{
-				Remote:            c.String("remote"),
-				Workspace:         orDefault(c.String("workspace"), filepath.Join(root, "workspace")),
-				ReleasesDir:       orDefault(c.String("releases-dir"), filepath.Join(root, "releases")),
-				CurrentLink:       orDefault(c.String("current"), filepath.Join(root, "current")),
-				ServiceName:       c.String("service"),
-				ScratchPort:       c.Int("scratch-port"),
-				LivePort:          c.Int("live-port"),
-				GateAUs:           c.Int("gate-aus"),
-				GateTimeout:       c.Duration("gate-timeout"),
-				KeepReleases:      c.Int("keep"),
-				RequireSignedTags: c.Bool("require-signed-tags"),
-				EncoderArgs:       c.String("encoder-args"),
-				MainFont:          c.String("main-font"),
-				PhosphorFont:      c.String("phosphor-font"),
-				FallbackFont:      c.String("fallback-font"),
-				DryRun:            c.Bool("dry-run"),
-				Ref:               c.String("ref"),
+				Remote:            cmd.String("remote"),
+				Workspace:         orDefault(cmd.String("workspace"), filepath.Join(root, "workspace")),
+				ReleasesDir:       orDefault(cmd.String("releases-dir"), filepath.Join(root, "releases")),
+				CurrentLink:       orDefault(cmd.String("current"), filepath.Join(root, "current")),
+				ServiceName:       cmd.String("service"),
+				ScratchPort:       cmd.Int("scratch-port"),
+				LivePort:          cmd.Int("live-port"),
+				GateAUs:           cmd.Int("gate-aus"),
+				GateTimeout:       cmd.Duration("gate-timeout"),
+				KeepReleases:      cmd.Int("keep"),
+				RequireSignedTags: cmd.Bool("require-signed-tags"),
+				EncoderArgs:       cmd.String("encoder-args"),
+				MainFont:          cmd.String("main-font"),
+				PhosphorFont:      cmd.String("phosphor-font"),
+				FallbackFont:      cmd.String("fallback-font"),
+				DryRun:            cmd.Bool("dry-run"),
+				Ref:               cmd.String("ref"),
 				Root:              root,
 			}
-			_, err := Run(c.Context, log.Logger, cfg)
+			_, err := Run(ctx, log.Logger, cfg)
 			return err
 		},
 	}

@@ -1,6 +1,7 @@
 package commitdigest
 
 import (
+	"context"
 	_ "embed"
 	"io"
 	"os"
@@ -11,7 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 //go:embed sql/trend_mining.sql
@@ -32,8 +33,8 @@ func newMineTrendsCommand() *cli.Command {
 				Usage: "Path to the multi-call clickhouse executable (looked up in PATH if not absolute); the `local` subcommand is added",
 			},
 		},
-		Action: func(c *cli.Context) error {
-			bin := c.String("clickhouse-binary")
+		Action: func(ctx context.Context, cliCmd *cli.Command) error {
+			bin := cliCmd.String("clickhouse-binary")
 
 			inputData, err := io.ReadAll(os.Stdin)
 			if err != nil {
@@ -70,7 +71,7 @@ func newMineTrendsCommand() *cli.Command {
 				return eh.Errorf("unable to close flat-rows tempfile: %w", closeErr)
 			}
 
-			cmd, cmdErr := extbin.ClickHouseLocal.Command(c.Context, extbin.Opts{Path: bin},
+			cmd, cmdErr := extbin.ClickHouseLocal.Command(ctx, extbin.Opts{Path: bin},
 				"--input-format=JSONEachRow",
 				"--structure="+FlatCommitChangeStructure,
 				"--file="+flatFile.Name(),

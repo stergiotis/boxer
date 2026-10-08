@@ -40,7 +40,7 @@ type Params struct {
 	PadInterval bool
 }
 
-func (inst Params) checkE() (err error) {
+func (inst Params) check() (err error) {
 	if inst.Bits < 1 || inst.Bits > 32 {
 		err = eb.Build().Uint8("bits", inst.Bits).Errorf("resolution: %w", ErrParams)
 		return
@@ -151,7 +151,7 @@ func (inst *reader) fs(limit uint64) (m uint64) {
 // needed). Trailing fill bits after the last block are ignored, as the
 // standard permits at the end of a packet or file (§5.3.2.1).
 func Decode(dst []uint32, data []byte, count int, p Params) (samples []uint32, err error) {
-	err = p.checkE()
+	err = p.check()
 	if err != nil {
 		return
 	}
@@ -191,7 +191,7 @@ func Decode(dst []uint32, data []byte, count int, p Params) (samples []uint32, e
 		} else {
 			id := r.bits(idLen)
 			if r.bad {
-				err = corruptE(produced, "identifier past the end of the stream")
+				err = corrupt(produced, "identifier past the end of the stream")
 				return
 			}
 			var ref uint64
@@ -211,7 +211,7 @@ func Decode(dst []uint32, data []byte, count int, p Params) (samples []uint32, e
 					readRef()
 					m := r.fs(fsLimit)
 					if r.bad {
-						err = corruptE(produced, "zero-block run codeword")
+						err = corrupt(produced, "zero-block run codeword")
 						return
 					}
 					segPos := blockInInterval % segmentBlocks
@@ -226,7 +226,7 @@ func Decode(dst []uint32, data []byte, count int, p Params) (samples []uint32, e
 						run = int(m)
 					}
 					if run < 1 || segPos+run > segLen {
-						err = corruptE(produced, "zero-block run beyond its segment")
+						err = corrupt(produced, "zero-block run beyond its segment")
 						return
 					}
 					zeroRun = run - 1
@@ -243,7 +243,7 @@ func Decode(dst []uint32, data []byte, count int, p Params) (samples []uint32, e
 					for pair := 0; pair < j/2; pair++ {
 						gamma := r.fs(fsLimit)
 						if r.bad {
-							err = corruptE(produced, "second-extension codeword")
+							err = corrupt(produced, "second-extension codeword")
 							return
 						}
 						// Invert γ = (a+b)(a+b+1)/2 + b: the largest s with
@@ -272,7 +272,7 @@ func Decode(dst []uint32, data []byte, count int, p Params) (samples []uint32, e
 					block[i] = r.bits(n)
 				}
 				if r.bad {
-					err = corruptE(produced, "uncoded samples past the end of the stream")
+					err = corrupt(produced, "uncoded samples past the end of the stream")
 					return
 				}
 			default:
@@ -280,7 +280,7 @@ func Decode(dst []uint32, data []byte, count int, p Params) (samples []uint32, e
 				// sequence): the FS codes of all samples, then k LSBs each.
 				k := uint8(id - 1)
 				if k >= n {
-					err = corruptE(produced, "split-sample identifier beyond the resolution")
+					err = corrupt(produced, "split-sample identifier beyond the resolution")
 					return
 				}
 				readRef()
@@ -292,14 +292,14 @@ func Decode(dst []uint32, data []byte, count int, p Params) (samples []uint32, e
 					block[i] = r.fs(fsLimit)
 				}
 				if r.bad {
-					err = corruptE(produced, "fundamental-sequence codeword")
+					err = corrupt(produced, "fundamental-sequence codeword")
 					return
 				}
 				for i := start; i < j; i++ {
 					block[i] = block[i]<<k | r.bits(k)
 				}
 				if r.bad {
-					err = corruptE(produced, "split bits past the end of the stream")
+					err = corrupt(produced, "split bits past the end of the stream")
 					return
 				}
 			}
@@ -325,7 +325,7 @@ func Decode(dst []uint32, data []byte, count int, p Params) (samples []uint32, e
 	return
 }
 
-func corruptE(at int, what string) (err error) {
+func corrupt(at int, what string) (err error) {
 	err = eb.Build().Int("samplesDecoded", at).Str("failure", what).Errorf("stream: %w", ErrCorrupt)
 	return
 }
@@ -354,7 +354,7 @@ func (inst *decoder) emit(out []uint32, produced int, block []uint64, withRef bo
 			x = block[0]
 		default:
 			if !inst.havePrev {
-				err = corruptE(next, "preprocessed sample before any reference sample")
+				err = corrupt(next, "preprocessed sample before any reference sample")
 				return
 			}
 			x, err = inst.unmap(block[i], inst.prev)
@@ -363,7 +363,7 @@ func (inst *decoder) emit(out []uint32, produced int, block []uint64, withRef bo
 			}
 		}
 		if x > inst.sampleMax {
-			err = corruptE(next, "sample exceeds the resolution")
+			err = corrupt(next, "sample exceeds the resolution")
 			return
 		}
 		out[next] = uint32(x)
@@ -410,7 +410,7 @@ func (inst *decoder) unmap(delta uint64, pred uint64) (x uint64, err error) {
 	}
 	v := predS + errv
 	if v < xmin || v > xmax {
-		err = corruptE(0, "mapped prediction error leaves the sample range")
+		err = corrupt(0, "mapped prediction error leaves the sample range")
 		return
 	}
 	if v < 0 {

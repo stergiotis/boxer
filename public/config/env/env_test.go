@@ -1,11 +1,12 @@
 package env
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
 
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 )
 
 func TestPackageFromFuncName(t *testing.T) {
@@ -352,7 +353,7 @@ func TestCategorialStringVarAsCliFlagRejectsExplicitInvalidValue(t *testing.T) {
 	}, []string{"a", "b", "c"})
 	sf := v.AsCliFlag().(*cli.StringFlag)
 	// env unset; the only source of "invalid" is the explicit flag.
-	err := sf.Action(nil, "invalid")
+	err := sf.Action(context.Background(), nil, "invalid")
 	if err == nil {
 		t.Fatalf("expected error for explicit invalid --flag value")
 	}
@@ -374,7 +375,7 @@ func TestCategorialStringVarAsCliFlagSilentFallbackOnInvalidEnv(t *testing.T) {
 	sf := v.AsCliFlag().(*cli.StringFlag)
 	// urfave/cli passes parsed=envValue when env is set and no explicit
 	// flag is supplied; replicate that shape directly.
-	err := sf.Action(nil, "invalid")
+	err := sf.Action(context.Background(), nil, "invalid")
 	if err != nil {
 		t.Fatalf("expected silent fallback for env-supplied invalid value, got error: %v", err)
 	}
@@ -393,12 +394,12 @@ func TestCategorialStringVarAsCliFlagUserActionRunsAfterValidation(t *testing.T)
 		Category:    CategoryDev,
 		CliFlagName: "testCat",
 	}, []string{"a", "b", "c"})
-	sf := v.AsCliFlag(WithStringAction(func(ctx *cli.Context, parsed string) error {
+	sf := v.AsCliFlag(WithStringAction(func(ctx context.Context, cmd *cli.Command, parsed string) error {
 		captured = parsed
 		return nil
 	})).(*cli.StringFlag)
 	// Valid input: user action runs and the cache reflects the value.
-	if err := sf.Action(nil, "b"); err != nil {
+	if err := sf.Action(context.Background(), nil, "b"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if captured != "b" {
@@ -409,7 +410,7 @@ func TestCategorialStringVarAsCliFlagUserActionRunsAfterValidation(t *testing.T)
 	}
 	// Invalid explicit input: user action must NOT run.
 	captured = ""
-	if err := sf.Action(nil, "invalid"); err == nil {
+	if err := sf.Action(context.Background(), nil, "invalid"); err == nil {
 		t.Fatalf("expected rejection of explicit invalid value")
 	}
 	if captured != "" {

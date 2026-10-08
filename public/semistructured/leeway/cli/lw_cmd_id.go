@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"os"
 	"slices"
 	"strconv"
@@ -13,7 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/identity/identsql"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func NewCliCommandId() *cli.Command {
@@ -28,11 +29,11 @@ func NewCliCommandId() *cli.Command {
 	universalFlags := universal.ToCliFlags()
 	return &cli.Command{
 		Name: "id",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			{
 				Name:  "udf",
 				Usage: "print the LW_ID_* CREATE FUNCTION statements (ADR-0106 SD5) for installing the tagged-id decoders on a ClickHouse server",
-				Action: func(context *cli.Context) error {
+				Action: func(ctx context.Context, cmd *cli.Command) error {
 					for _, stmt := range identsql.UdfDdlStatements() {
 						_, err := os.Stdout.WriteString(stmt + ";\n")
 						if err != nil {
@@ -44,14 +45,14 @@ func NewCliCommandId() *cli.Command {
 			},
 			{
 				Name: "tagvalue",
-				Subcommands: []*cli.Command{
+				Commands: []*cli.Command{
 					{
 						Name: "leadingzero",
 						Flags: slices.Concat([]cli.Flag{
 							&cli.UintFlag{
 								Name:  "tagWidth",
 								Value: 3,
-								Action: func(context *cli.Context, u uint) error {
+								Action: func(ctx context.Context, cmd *cli.Command, u uint) error {
 									if u < fibonacci.MinTagWidth || u > fibonacci.MaxTagWidthUint32 {
 										return eb.Build().Uint64("minTagWidth", fibonacci.MinTagWidth).Uint64("maxTagWidth", fibonacci.MaxTagWidthUint32).Errorf("tagWidth is out of range")
 									}
@@ -63,9 +64,9 @@ func NewCliCommandId() *cli.Command {
 								Value: 1,
 							},
 						}, universalFlags),
-						Action: func(context *cli.Context) error {
-							tagWidth := context.Uint("tagWidth")
-							leadingZeros := context.Uint("leadingZeros")
+						Action: func(ctx context.Context, cmd *cli.Command) error {
+							tagWidth := cmd.Uint("tagWidth")
+							leadingZeros := cmd.Uint("leadingZeros")
 							if leadingZeros > tagWidth-2 {
 								return eh.Errorf("leading zeros must be smaller or equal to tagWidth-2")
 							}
@@ -87,7 +88,7 @@ func NewCliCommandId() *cli.Command {
 								r.LeadingZeros = u
 								r.IdTagBin = "0b" + strconv.FormatUint(uint64(idTag), 2)
 								r.IdTagHex = "0x" + strconv.FormatUint(uint64(idTag), 16)
-								err = universal.FormatValue(context, r)
+								err = universal.FormatValue(ctx, cmd, r)
 								if err != nil {
 									return err
 								}

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"io"
 	"os"
 	"slices"
@@ -17,7 +18,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/gocodegen"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 // leeway canonwire (ADR-0210 §SD6): the canonical-wire generator's CLI, plus
@@ -45,13 +46,13 @@ func NewCliCommandCanonWire() *cli.Command {
 	return &cli.Command{
 		Name:  "canonwire",
 		Usage: "generate the canonical-wire codecs for a table, inspect its slot table, and verify wire bytes (ADR-0210)",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			{
 				Name: "table",
-				Subcommands: []*cli.Command{
+				Commands: []*cli.Command{
 					{
 						Name: "generate",
-						Subcommands: []*cli.Command{
+						Commands: []*cli.Command{
 							{
 								Name:  "go",
 								Usage: "read a CBOR table description from stdin, write the table's canonical-wire Go classes to stdout",
@@ -65,7 +66,7 @@ func NewCliCommandCanonWire() *cli.Command {
 										Required: true,
 									},
 								},
-								Action: func(context *cli.Context) error {
+								Action: func(ctx context.Context, cmd *cli.Command) error {
 									tblDesc, err := decodeCanonWireTableDesc(os.Stdin)
 									if err != nil {
 										return err
@@ -80,8 +81,8 @@ func NewCliCommandCanonWire() *cli.Command {
 									driver := canonwire.NewGoCodeGeneratorDriver(conv, chTech)
 
 									tableRowConfig := common.TableRowConfigMultiAttributesPerRow
-									tableName := context.String("tableName")
-									packageName := context.String("packageName")
+									tableName := cmd.String("tableName")
+									packageName := cmd.String("packageName")
 									var wellFormed bool
 									var sourceCode []byte
 									namingStyle := gocodegen.NewDefaultGoClassNamer()
@@ -111,12 +112,12 @@ func NewCliCommandCanonWire() *cli.Command {
 								Usage: "label for the report; defaults to the description's own dictionary entry name",
 							},
 						}, universalFlags),
-						Action: func(context *cli.Context) error {
-							rep, err := canonWireSlots(os.Stdin, context.String("tableName"))
+						Action: func(ctx context.Context, cmd *cli.Command) error {
+							rep, err := canonWireSlots(os.Stdin, cmd.String("tableName"))
 							if err != nil {
 								return err
 							}
-							return universal.FormatValue(context, rep)
+							return universal.FormatValue(ctx, cmd, rep)
 						},
 					},
 				},
@@ -134,20 +135,20 @@ func NewCliCommandCanonWire() *cli.Command {
 						Usage: "read the bytes from this path instead of stdin",
 					},
 				}, universalFlags),
-				Action: func(context *cli.Context) error {
-					b, err := readCanonWireBytes(context.String("file"))
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					b, err := readCanonWireBytes(cmd.String("file"))
 					if err != nil {
 						return err
 					}
 					var rep canonWireVerifyReport
-					rep, err = canonWireVerify(b, context.Bool("sequence"))
+					rep, err = canonWireVerify(b, cmd.Bool("sequence"))
 					if err != nil {
 						// Returned, not printed: a verification failure must
 						// leave a non-zero exit status behind, which is the
 						// only part of this a script reads.
 						return err
 					}
-					return universal.FormatValue(context, rep)
+					return universal.FormatValue(ctx, cmd, rep)
 				},
 			},
 		},

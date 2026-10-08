@@ -28,7 +28,7 @@ func ExampleRuntime() {
 	}
 	defer func() { _ = rt.Close() }()
 
-	handle, err := rt.AcquireE(ctx)
+	handle, err := rt.Acquire(ctx)
 	if err != nil {
 		fmt.Println("acquire:", err)
 		return
@@ -37,7 +37,7 @@ func ExampleRuntime() {
 
 	lats := []float64{37.7749}
 	lngs := []float64{-122.4194}
-	cells, status, err := handle.LatLngsToCellsE(ctx, h3.ResolutionR9, lats, lngs, nil, nil)
+	cells, status, err := handle.LatLngsToCells(ctx, h3.ResolutionR9, lats, lngs, nil, nil)
 	if err != nil {
 		fmt.Println("err:", err)
 		return
@@ -78,7 +78,7 @@ func ExampleAllCSRRowsU64() {
 // common "one point → one cell" UI-glue case. Returns the cell index
 // and per-element status directly, without the caller having to build
 // a 1-element slice or index [0] on return.
-func ExampleHandle_LatLngToCellE() {
+func ExampleHandle_LatLngToCell() {
 	ctx := context.Background()
 	rt, err := h3.NewRuntime(ctx, h3.RuntimeConfig{PoolSize: 1})
 	if err != nil {
@@ -91,14 +91,14 @@ func ExampleHandle_LatLngToCellE() {
 	}
 	defer func() { _ = rt.Close() }()
 
-	handle, err := rt.AcquireE(ctx)
+	handle, err := rt.Acquire(ctx)
 	if err != nil {
 		fmt.Println("acquire:", err)
 		return
 	}
 	defer handle.Release()
 
-	cell, status, err := handle.LatLngToCellE(ctx, h3.ResolutionR9, 37.7749, -122.4194)
+	cell, status, err := handle.LatLngToCell(ctx, h3.ResolutionR9, 37.7749, -122.4194)
 	if err != nil {
 		fmt.Println("err:", err)
 		return
@@ -109,7 +109,7 @@ func ExampleHandle_LatLngToCellE() {
 // ExampleHandle_GridDiskE shows the scalar k-ring wrapper — returns a
 // flat []uint64 for single-cell inputs, skipping the CSR offsets[] that
 // the bulk form produces for N-cell batches.
-func ExampleHandle_GridDiskE() {
+func ExampleHandle_GridDisk() {
 	ctx := context.Background()
 	rt, err := h3.NewRuntime(ctx, h3.RuntimeConfig{PoolSize: 1})
 	if err != nil {
@@ -122,19 +122,19 @@ func ExampleHandle_GridDiskE() {
 	}
 	defer func() { _ = rt.Close() }()
 
-	handle, err := rt.AcquireE(ctx)
+	handle, err := rt.Acquire(ctx)
 	if err != nil {
 		fmt.Println("acquire:", err)
 		return
 	}
 	defer handle.Release()
 
-	cell, _, err := handle.LatLngToCellE(ctx, h3.ResolutionR7, 51.0992, 17.0366)
+	cell, _, err := handle.LatLngToCell(ctx, h3.ResolutionR7, 51.0992, 17.0366)
 	if err != nil {
 		fmt.Println("err:", err)
 		return
 	}
-	ring, _, err := handle.GridDiskE(ctx, 2, cell)
+	ring, _, err := handle.GridDisk(ctx, 2, cell)
 	if err != nil {
 		fmt.Println("err:", err)
 		return

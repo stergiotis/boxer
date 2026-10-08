@@ -1,10 +1,11 @@
 package changelogindex
 
 import (
+	"context"
 	"path/filepath"
 
 	"github.com/rs/zerolog/log"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func NewCliCommand() *cli.Command {
@@ -30,13 +31,13 @@ func NewCliCommand() *cli.Command {
 	}
 }
 
-func changelogIndexAction(ctx *cli.Context) (err error) {
-	dir := ctx.String("dir")
-	out := ctx.String("out")
+func changelogIndexAction(ctx context.Context, cmd *cli.Command) (err error) {
+	dir := cmd.String("dir")
+	out := cmd.String("out")
 	if out == "" {
 		out = filepath.Join(dir, "INDEX.md")
 	}
-	if ctx.Bool("check") {
+	if cmd.Bool("check") {
 		err = Check(dir, out)
 		if err == nil {
 			log.Info().Str("out", out).Msg("changelogindex check passed")

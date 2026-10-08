@@ -79,11 +79,11 @@ func TestAppendHeaderChoosesRF64PastFourGiB(t *testing.T) {
 func TestRF64HeaderRoundTripsThroughTheReader(t *testing.T) {
 	format := pcm.Format{SampleRate: 48000, Channels: 2}
 	want := []float32{0, 0.5, -0.5, 0.25, 1, -1}
-	src, err := pcm.NewMemSourceE(format, want)
+	src, err := pcm.NewMemSource(format, want)
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
-	err = writeSpecE(context.Background(), &buf, headerSpec{
+	err = writeSpec(context.Background(), &buf, headerSpec{
 		format:   format,
 		frames:   src.Frames(),
 		encoding: EncodingIEEEFloat,
@@ -94,13 +94,13 @@ func TestRF64HeaderRoundTripsThroughTheReader(t *testing.T) {
 	raw := buf.Bytes()
 	require.Equal(t, "RF64", string(raw[0:4]))
 
-	file, err := NewReaderE(bytes.NewReader(raw), int64(len(raw)))
+	file, err := NewReader(bytes.NewReader(raw), int64(len(raw)))
 	require.NoError(t, err)
 	require.True(t, file.IsRF64())
 	require.False(t, file.IsTruncated())
 	require.Equal(t, int64(3), file.Frames())
 	got := make([]float32, len(want))
-	n, err := file.ReadFramesAtE(context.Background(), 0, got)
+	n, err := file.ReadFramesAt(context.Background(), 0, got)
 	require.NoError(t, err)
 	require.Equal(t, 3, n)
 	require.Equal(t, want, got)

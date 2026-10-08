@@ -118,12 +118,12 @@ type buildJob struct {
 // the body of the background build's goroutine (ADR-0208 §SD4) and runs
 // [Options.Progress] on that goroutine.
 //
-// Its context is the track's, not the [OpenE] caller's, so the build outlives
-// the open call and is ended by [Track.CloseE]; cancellation is honoured
-// between chunks, which is what makes CloseE prompt.
+// Its context is the track's, not the [Open] caller's, so the build outlives
+// the open call and is ended by [Track.Close]; cancellation is honoured
+// between chunks, which is what makes Close prompt.
 func (inst *Track) runBuild(ctx context.Context, job buildJob) {
 	defer close(inst.buildDone)
-	err := inst.pyramid.FillFromE(ctx, job.src, job.chunkFrames, job.progress)
+	err := inst.pyramid.FillFrom(ctx, job.src, job.chunkFrames, job.progress)
 	var cacheErr error
 	switch {
 	case err == nil:
@@ -140,7 +140,7 @@ func (inst *Track) runBuild(ctx context.Context, job buildJob) {
 			Msg("audio peaks build failed; the pyramid stays partial")
 	}
 	if job.owned {
-		closeErr := job.src.CloseE()
+		closeErr := job.src.Close()
 		if closeErr != nil {
 			log.Warn().Err(closeErr).Msg("unable to close the peaks build source")
 		}
@@ -154,7 +154,7 @@ func (inst *Track) writePeaksCache(job buildJob) (err error) {
 	if job.identity == nil || job.cachePath == "" {
 		return nil
 	}
-	err = writePeaksFileE(job.cachePath, inst.pyramid, *job.identity)
+	err = writePeaksFile(job.cachePath, inst.pyramid, *job.identity)
 	if err != nil {
 		log.Warn().Err(err).Str("path", job.cachePath).Msg("unable to write the audio peaks cache")
 		return err
@@ -174,17 +174,17 @@ func cacheFileName(id peaks.Identity, baseBin int32) (name string) {
 	return hex.EncodeToString(id.Hash[:16]) + "-b" + strconv.FormatInt(int64(baseBin), 10) + CacheFileExt
 }
 
-// readPeaksFileE loads a cached pyramid and checks that it describes the
+// readPeaksFile loads a cached pyramid and checks that it describes the
 // recording the caller has open. Every failure — no file, another
 // recording's identity, a truncated body, a pyramid of another shape — is a
 // cache miss for the caller to build over, never a reason to fail an open.
-func readPeaksFileE(path string, id peaks.Identity, format pcm.Format, frames int64, baseBin int32) (p *peaks.Pyramid, err error) {
+func readPeaksFile(path string, id peaks.Identity, format pcm.Format, frames int64, baseBin int32) (p *peaks.Pyramid, err error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, eh.Errorf("unable to open the peaks cache: %w", err)
 	}
 	defer func() { _ = f.Close() }()
-	p, err = peaks.ReadFromE(f, id)
+	p, err = peaks.ReadFrom(f, id)
 	if err != nil {
 		return nil, err
 	}
@@ -199,13 +199,13 @@ func readPeaksFileE(path string, id peaks.Identity, format pcm.Format, frames in
 	return p, nil
 }
 
-// writePeaksFileE writes the pyramid to a temporary file in the target's own
+// writePeaksFile writes the pyramid to a temporary file in the target's own
 // directory and renames it into place, so a reader either finds the previous
 // file or the whole new one — never the half of one this call had written
 // when it was interrupted. The contents are flushed before the rename for
 // the same reason: an all-zero body recovered after a crash is a silent
 // waveform, which no reader could tell from a real one.
-func writePeaksFileE(path string, p *peaks.Pyramid, id peaks.Identity) (err error) {
+func writePeaksFile(path string, p *peaks.Pyramid, id peaks.Identity) (err error) {
 	dir := filepath.Dir(path)
 	err = os.MkdirAll(dir, 0o755)
 	if err != nil {
@@ -221,7 +221,7 @@ func writePeaksFileE(path string, p *peaks.Pyramid, id peaks.Identity) (err erro
 			_ = os.Remove(tmp.Name())
 		}
 	}()
-	err = p.WriteToE(tmp, id)
+	err = p.WriteTo(tmp, id)
 	if err != nil {
 		return eb.Build().Str("path", tmp.Name()).Errorf("unable to write the peaks file: %w", err)
 	}

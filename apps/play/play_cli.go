@@ -1,6 +1,7 @@
 package play
 
 import (
+	"context"
 	"encoding/binary"
 	"os"
 	"slices"
@@ -14,7 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/application"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 const (
@@ -43,20 +44,21 @@ func NewCliCommand() *cli.Command {
 				&cli.StringFlag{
 					Name:    flagUser,
 					Value:   "default",
-					EnvVars: []string{"CLICKHOUSE_USER"},
+					Sources: cli.EnvVars("CLICKHOUSE_USER"),
 				},
 				&cli.StringFlag{
 					Name:    flagPassword,
-					EnvVars: []string{"CLICKHOUSE_PASSWORD"},
+					Sources: cli.EnvVars("CLICKHOUSE_PASSWORD"),
 				},
-				&cli.PathFlag{
-					Name:  flagInitSQL,
-					Usage: "path to a .sql file pre-loaded into the editor",
+				&cli.StringFlag{
+					Name:      flagInitSQL,
+					Usage:     "path to a .sql file pre-loaded into the editor",
+					TakesFile: true,
 				},
 			},
 		),
-		Action: func(ctx *cli.Context) error {
-			nMessages := appCfg.FromContext(config.IdentityNameTransf, ctx)
+		Action: func(ctx context.Context, cmd *cli.Command) error {
+			nMessages := appCfg.FromContext(ctx, config.IdentityNameTransf, cmd)
 			if nMessages > 0 {
 				return eb.Build().Int("nMessages", nMessages).Errorf("unable to load application config")
 			}
@@ -67,16 +69,16 @@ func NewCliCommand() *cli.Command {
 			RegisterHostSql(log.Logger)
 
 			clientCfg := ClientConfig{
-				URL:          ctx.String(flagURL),
-				User:         ctx.String(flagUser),
-				Password:     ctx.String(flagPassword),
+				URL:          cmd.String(flagURL),
+				User:         cmd.String(flagUser),
+				Password:     cmd.String(flagPassword),
 				AllowWrites:  AllowWrites.Get() != "",
 				AppWritesOff: AppWrites.Get() == "off",
 			}
 			client := NewClient(clientCfg, nil)
 
 			var initSQL string
-			if p := ctx.Path(flagInitSQL); p != "" {
+			if p := cmd.String(flagInitSQL); p != "" {
 				b, err := os.ReadFile(p)
 				if err != nil {
 					return eh.Errorf("unable to read initial sql file: %w", err)

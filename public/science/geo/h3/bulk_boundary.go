@@ -8,7 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// CellsToBoundariesE returns the polygonal boundary of each H3 cell in CSR
+// CellsToBoundaries returns the polygonal boundary of each H3 cell in CSR
 // layout: latsDeg and lngsDeg are parallel flat []float64 slices of
 // vertices, offsets has length N+1 with offsets[0]==0 and
 // offsets[N]==len(latsDeg). Row i's open ring is
@@ -20,7 +20,7 @@ import (
 // Typical vertex count is 6 (hexagon) or 5 (pentagon); pentagons whose
 // boundary crosses an icosahedron face edge can reach up to 10. Uses the
 // one-retry grow protocol; the initial heuristic cap is 6*n vertices.
-func (inst *Handle) CellsToBoundariesE(
+func (inst *Handle) CellsToBoundaries(
 	ctx context.Context,
 	cells []uint64,
 	latsDegDst []float64,
@@ -51,7 +51,7 @@ func (inst *Handle) CellsToBoundariesE(
 		total := int(statusRel) + n
 
 		var base uint32
-		base, err = inst.ensureScratchE(ctx, total)
+		base, err = inst.ensureScratch(ctx, total)
 		if err != nil {
 			return
 		}
@@ -62,13 +62,13 @@ func (inst *Handle) CellsToBoundariesE(
 		neededOff := base + neededRel
 		statusOff := base + statusRel
 
-		err = inst.writeU64sE(cellsOff, cells)
+		err = inst.writeU64s(cellsOff, cells)
 		if err != nil {
 			return
 		}
 
 		var rc uint32
-		rc, err = inst.callE(ctx, inst.fnCellToBoundary,
+		rc, err = inst.call(ctx, inst.fnCellToBoundary,
 			uint64(cellsOff), uint64(n32),
 			uint64(latsOff), uint64(lngsOff), uint64(offsetsOff),
 			uint64(uint32(vertexCap)),
@@ -82,26 +82,26 @@ func (inst *Handle) CellsToBoundariesE(
 		switch rc {
 		case growOK:
 			var needed uint32
-			needed, err = inst.readU32E(neededOff)
+			needed, err = inst.readU32(neededOff)
 			if err != nil {
 				return
 			}
-			err = inst.readI32sE(offsetsOff, offsets)
+			err = inst.readI32s(offsetsOff, offsets)
 			if err != nil {
 				return
 			}
-			err = inst.readStatusE(statusOff, status)
+			err = inst.readStatus(statusOff, status)
 			if err != nil {
 				return
 			}
 			total := min(int(needed), vertexCap)
 			latsDeg = slices.Grow(latsDegDst[:0], total)[:total]
 			lngsDeg = slices.Grow(lngsDegDst[:0], total)[:total]
-			err = inst.readF64sE(latsOff, latsDeg)
+			err = inst.readF64s(latsOff, latsDeg)
 			if err != nil {
 				return
 			}
-			err = inst.readF64sE(lngsOff, lngsDeg)
+			err = inst.readF64s(lngsOff, lngsDeg)
 			return
 
 		case growNeedMore:
@@ -110,7 +110,7 @@ func (inst *Handle) CellsToBoundariesE(
 				return
 			}
 			var needed uint32
-			needed, err = inst.readU32E(neededOff)
+			needed, err = inst.readU32(neededOff)
 			if err != nil {
 				return
 			}

@@ -96,7 +96,7 @@ a dataset whole, through a read that takes no statement.
   withdraws the bundle whole, and a bundle's datasets are reached only
   through it. Bundle events have subjects of their own, outside
   `adhoc.event.>`, so a consumer following datasets never decodes one. The
-  service stores the document without parsing it; `play.PublishBundleE` is
+  service stores the document without parsing it; `play.PublishBundle` is
   the checked constructor: a producer states the bundle — SQL, panes,
   datasets by local name, provenance — and the constructor composes the
   document one way, parses it with the applet parser, and refuses one that
@@ -201,7 +201,7 @@ a dataset whole, through a read that takes no statement.
   column: nulls and an approximate distinct count, which describe the
   data, and its minimum, maximum and first values, which are the data.
   The statistics are in `keelson('adhoc_bundles')` and on the publish's
-  trail row. The values stay with the dataset: `adhocdata.ReadColumnsE`
+  trail row. The values stay with the dataset: `adhocdata.ReadColumns`
   reads them over `adhoc.read`, attested, audited and held to the grant a
   read is, and `list_bundles` shows them for the bundles the task may
   read and names the destination that would show the rest — sealed values
@@ -209,7 +209,7 @@ a dataset whole, through a read that takes no statement.
   sees.
 
 - **SD6 — Only play queries a dataset.** Any other app reads a dataset whole
-  with `adhocdata.ReadAllE`: the stream as sealed, with its digest, which
+  with `adhocdata.ReadAll`: the stream as sealed, with its digest, which
   the reader checks. No statement travels, so filtering, joining and
   aggregating stay play's, and their result is a `publish_result`. An
   agent's read is held to its task's grant as a run in play is, and a
@@ -327,9 +327,9 @@ a dataset whole, through a read that takes no statement.
 | Introspection tables | added: `keelson('adhoc_bundles')` with column summaries; `keelson('adhoc')` gains the bundle and call context; `keelson('agent_actions')` and `keelson('operations')` gain `consent` | catalog providers |
 | The trail store (ADR-0277) | added: the `AdhocDataset` component, its archetype and view; the agent action row's `Consent` | `runtime/trail` regeneration; `trailviews`; the runtime vocabulary's golden |
 | `app` exported API | added: `CallContext`, `CallContextI`; `OperationSpec.Consent` (`OperationConsent`, `ConsentClasses`) | the dispatcher; every view of a catalog the model reads, and `keelson('operations').consent` |
-| `adhocdata` exported API | bundles, provenance, `ReadAllE`, `ReadColumnsE`, grant errors, window-scoped publishers, local names and origins on `Follower` (`DatasetOrigin`, `OriginTargetI`); publish refuses a held alias | every publisher of a fixed alias |
+| `adhocdata` exported API | bundles, provenance, `ReadAll`, `ReadColumns`, grant errors, window-scoped publishers, local names and origins on `Follower` (`DatasetOrigin`, `OriginTargetI`); publish refuses a held alias | every publisher of a fixed alias |
 | `launchcfg.PlayLaunch` | added: `Bundle`, `DatasetNames` | leeway codec regeneration |
-| play | catalog: `list_bundles`, `open_bundle`, `publish_result`, `bind_dataset as`; API: `PublishBundleE`, `SetAppletDocParser`; the Publish menu | play's ops and caps tests; the chat's guidance |
+| play | catalog: `list_bundles`, `open_bundle`, `publish_result`, `bind_dataset as`; API: `PublishBundle`, `SetAppletDocParser`; the Publish menu | play's ops and caps tests; the chat's guidance |
 | Agent grant destinations | added: `keelson-bundle:<bundle>` and `publish:<prefix>`, host reach | play's agent limits; the dataset read's check |
 | keelson.query gate (ADR-0253) | refuses sealed tables | `keelsonquery.Gate` |
 | `sqlapplet` | added: `NewBundleView`, `BundleViewCaps`, `BundleViewOps` | receivers' manifests and catalogs |

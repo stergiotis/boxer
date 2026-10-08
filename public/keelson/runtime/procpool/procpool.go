@@ -25,12 +25,12 @@ type WorkerI interface {
 // that is how the pool learns an idle worker is dead.
 type ReleaseFunc func()
 
-// SpawnerI makes workers. SpawnE returns once the worker can serve, not merely
+// SpawnerI makes workers. Spawn returns once the worker can serve, not merely
 // once its process started; a worker that takes seconds to become ready is
-// what the pool exists to hide. On error SpawnE must have freed everything
+// what the pool exists to hide. On error Spawn must have freed everything
 // and must not call release.
 type SpawnerI[W WorkerI] interface {
-	SpawnE(ctx context.Context, release ReleaseFunc) (w W, err error)
+	Spawn(ctx context.Context, release ReleaseFunc) (w W, err error)
 }
 
 // Config parameterises a Pool. Every zero value is meaningful rather than a
@@ -72,7 +72,7 @@ type slot[W WorkerI] struct {
 }
 
 // Pool keeps pre-spawned workers per ADR-0285 §SD1. New starts its background
-// goroutines; the caller must call StopE.
+// goroutines; the caller must call Stop.
 type Pool[W WorkerI] struct {
 	cfg     Config
 	spawner SpawnerI[W]
@@ -129,10 +129,10 @@ func New[W WorkerI](cfg Config, spawner SpawnerI[W], logger zerolog.Logger) (p *
 	return
 }
 
-// AcquireE hands out a worker: an idle one if there is one, else one spawned
+// Acquire hands out a worker: an idle one if there is one, else one spawned
 // for this caller while MaxConcurrent allows, else the next one to turn idle.
 // The caller must Close the worker.
-func (inst *Pool[W]) AcquireE(ctx context.Context) (w W, err error) {
+func (inst *Pool[W]) Acquire(ctx context.Context) (w W, err error) {
 	for {
 		inst.mu.Lock()
 		if inst.stopped {
@@ -175,10 +175,10 @@ func (inst *Pool[W]) AcquireE(ctx context.Context) (w W, err error) {
 	}
 }
 
-// StopE closes every worker, including those callers still hold, and joins
+// Stop closes every worker, including those callers still hold, and joins
 // the pool's goroutines. The teardown runs once; every call waits for it
 // under its own ctx, so a caller whose deadline expired can call again.
-func (inst *Pool[W]) StopE(ctx context.Context) (err error) {
+func (inst *Pool[W]) Stop(ctx context.Context) (err error) {
 	inst.stopOnce.Do(inst.beginStop)
 	select {
 	case <-inst.stopDone:
@@ -289,7 +289,7 @@ func (inst *Pool[W]) spawnAndRegister(ctx context.Context, acquire bool) (s *slo
 		defer cancel()
 	}
 	s = &slot[W]{}
-	w, err := inst.spawner.SpawnE(spawnCtx, func() { inst.release(s) })
+	w, err := inst.spawner.Spawn(spawnCtx, func() { inst.release(s) })
 	if err != nil {
 		inst.decPendingSpawns()
 		s = nil
@@ -334,7 +334,7 @@ func (inst *Pool[W]) decPendingSpawns() {
 
 // refillLoop keeps idle + pendingSpawns at MinIdle, bounded by
 // MaxConcurrent. A failed spawn is not retried until the next nudge — an
-// AcquireE, a release — so a worker that cannot start costs one attempt per
+// Acquire, a release — so a worker that cannot start costs one attempt per
 // demand rather than a loop.
 func (inst *Pool[W]) refillLoop() {
 	defer inst.bg.Done()

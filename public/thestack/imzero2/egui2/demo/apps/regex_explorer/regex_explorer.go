@@ -3,15 +3,19 @@ package regex_explorer
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
+	"time"
+	"unicode/utf8"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
+	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/lazypane"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/regexedit"
 )
 
@@ -53,45 +57,29 @@ const (
 	maxMatchRows          = 200
 )
 
-// Dock tab ids. Stable across frames by contract — they name entries in
-// the persistent egui_dock layout state, so renumbering them discards a
-// user's splits and drag-order. They also key the per-tab [lazypane.Pane],
-// which is why they are declared rather than spelled at the call site.
-const (
-	tabIDPreview uint64 = 1
-	tabIDList    uint64 = 2
-	tabIDReplace uint64 = 3
-)
-
-// appInstanceSeq hands each [newApp] a process-unique number for its
-// lazypane probe keys. Not persisted and not stable across runs: it seeds
-// per-run probe state only, never a widget id or a stored layout.
-var appInstanceSeq atomic.Uint64
-
 // App holds per-window state for the regex explorer: the current pattern
 // and haystack bound to the UI text-edit widgets, the last result of each
 // kind of ClickHouse query, and the compiled-regexp cache the Go-side
 // highlight painter uses.
 //
-// Each query kind (match, extractAll, replaceRegexpAll, multiMatchAllIndices)
-// has its own atomic-bool coalescer so all four can be in flight
-// concurrently as independent broker requests.
+// The ClickHouse queries run on three [queryLane]s — the pattern
+// functions, the replace functions, and multiMatchAllIndices — so they can
+// be in flight concurrently as independent broker requests.
 //
 // Concurrency, precisely — the fields fall into three groups:
 //
 //   - Input and view state (pattern, haystack, replacement, patternList,
-//     the flag toggles, lastFocusedInput, ids) is confined to the render
-//     thread. The egui bindings write several of these through pointers
-//     handed to SendRespVal, which no lock could cover anyway, so the
-//     confinement is the invariant, not the lock.
-//   - Query results, errors, stats, the tripwire outcome, and bus are
-//     written by worker goroutines and read by the render thread; mu
-//     covers those. Input state is also read under mu when a dispatcher
-//     snapshots it for a worker, which is harmless and keeps the snapshot
-//     in one place.
+//     the flag toggles, lastFocusedInput, ids, the lanes, the analysis
+//     memo) is confined to the render thread. The egui bindings write
+//     several of these through pointers handed to SendRespVal, which no
+//     lock could cover anyway, so the confinement is the invariant, not a
+//     lock. A lane's worker touches only its bgjob.Runner, which carries
+//     its own lock.
+//   - The hand-off state (eval*) and bus are written off the render thread
+//     or read from it by workers; mu covers those. The SD1 tripwire's
+//     outcome is the process's, not an App's ([sharedTripwire]).
 //   - compileCache has its own mutex (compileCacheMu) because the
-//     tripwire goroutine shares it with the render thread and must not
-//     contend on mu with the query workers.
+//     tripwire goroutine shares it with the render thread.
 type App struct {
 	mu       sync.RWMutex
 	pattern  string
@@ -100,27 +88,27 @@ type App struct {
 	replacement string
 	patternList string
 
-	// One lane per ClickHouse call. Each owns its own in-flight state,
-	// last-good result, input fingerprint, and error — so "is this
-	// showing the current input?" is one comparison rather than a
-	// convention every result surface has to remember to follow.
-	matchLane   queryLane[bool]
-	listLane    queryLane[listOutcome]
-	replaceLane queryLane[string]
+	// One lane per query. Each owns its own in-flight state, last-good
+	// result, input fingerprint, and error — so "is this showing the
+	// current input?" is one comparison rather than a convention every
+	// result surface has to remember to follow.
+	fnLane      queryLane[fnOutcome]
+	replaceLane queryLane[replaceOutcome]
 	multiLane   queryLane[[]multiLine]
+
+	// tab is the result tab on screen. Only its body is drawn; the lanes
+	// converge whichever tab is showing.
+	tab resultTabE
 
 	caseInsensitive bool
 	multiline       bool
 	dotAll          bool
 
-	// lastFocusedInput is 0 for pattern, 1 for haystack, 2 for patternList,
-	// 3 for replacement. Cheatsheet token-clicks append into the field with
-	// this index. True cursor-position insertion is not exposed through the
-	// current FFFI2 binding.
-	lastFocusedInput int
-
-	tripwireRan atomic.Bool
-	tripwire    tripwireResult
+	// lastFocusedInput is the text input a cheatsheet token goes into, and
+	// pendingInsert the tokens waiting for each input's next build — see
+	// [App.insertToken].
+	lastFocusedInput inputFieldE
+	pendingInsert    [inputFieldCount]string
 
 	// Extraction hand-off state (ADR-0017). Written by the worker
 	// goroutine that publishes and opens, read by the render thread —
@@ -139,8 +127,7 @@ type App struct {
 	alloc memory.Allocator
 
 	// bus is the per-instance BusI captured at Mount. All SQL goes
-	// through ch.local.exec.regex_explorer via the broker; the
-	// subprocess-shell-out path has been retired.
+	// through ch.local.exec.regex_explorer via the broker.
 	//
 	// Guarded by mu: a host may re-attach a bus between frames
 	// (regexsummary pushes one on every open frame) while query
@@ -161,37 +148,45 @@ type App struct {
 	// mu comment above.
 	ids *c.WidgetIdStack
 
-	// One [lazypane.Pane] per dock tab, keyed by tab id and persistent
-	// across frames (each carries a visibility phase machine). The dock
-	// helper runs every tab's body every frame and ships all of them,
-	// while the client keeps only the active tab's buffer and discards
-	// the rest uninterpreted — so without these gates two hidden tabs'
-	// widgets are built, serialised and written to the wire for nothing.
-	// Render-thread-confined, like [App.ids].
-	tabPanes map[uint64]*lazypane.Pane
-
-	// instanceSeq disambiguates this App's lazypane probe keys from
-	// another live instance's. [lazypane.New] hashes its key into an r21
-	// probe seq that is NOT salted by [App.ids], so two explorers alive at
-	// once — two windows, or two demo scenes in one gallery frame — would
-	// otherwise share one probe and read each other's visibility.
-	instanceSeq uint64
-
 	compileCacheMu sync.Mutex
 	compileCache   map[string]compileResult
 
+	// analysisMemo backs [App.analysis]. Render-thread-confined, like the
+	// inputs it is keyed on.
+	analysisMemo patternAnalysis
+
 	// Retained syntax-highlight jobs for the two pattern editors
-	// (ADR-0015), rebuilt only when their buffer changes. Render-thread-
-	// confined, like the input state they mirror — see the mu comment
-	// above.
-	// The two pattern editors' highlight-job caches (one per box; the
-	// widget doc explains why they must not be shared). The syntax
-	// painting itself lives in widgets/regexedit since ADR-0164 §SD4
-	// made it reusable; validity stays with getCompiledRegexp
-	// (ADR-0054), not the painter.
+	// (ADR-0015), one per box — the regexedit widget doc explains why they
+	// must not be shared — rebuilt only when their buffer changes. The
+	// painting lives in widgets/regexedit (ADR-0164 §SD4); validity stays
+	// with getCompiledRegexp (ADR-0054), not the painter.
+	// Render-thread-confined.
 	patternHl     regexedit.Cache
 	patternListHl regexedit.Cache
 }
+
+// inputFieldE names the text inputs a cheatsheet token can be appended
+// to. The zero value is the pattern, which is where a token goes before
+// any input has had focus.
+type inputFieldE uint8
+
+const (
+	inputPattern inputFieldE = iota
+	inputHaystack
+	inputPatternList
+	inputReplacement
+	inputFieldCount
+)
+
+// resultTabE names the result tabs. The zero value, Matches, is the tab a
+// window opens on.
+type resultTabE uint8
+
+const (
+	tabMatches resultTabE = iota
+	tabFunctions
+	tabMulti
+)
 
 // newApp builds one [App] — the unit of per-window state. clickhouse-local
 // is reached via the chlocalbroker subject `ch.local.exec.regex_explorer`;
@@ -201,12 +196,12 @@ type App struct {
 // stack so interactive multi-window renders don't collide.
 func newApp() (inst *App) {
 	inst = &App{
-		ids:         c.NewWidgetIdStack(),
-		alloc:       memory.NewGoAllocator(),
-		goPub:       adhocdata.NewWindowPublisher(goDatasetAlias),
-		chPub:       adhocdata.NewWindowPublisher(chDatasetAlias),
-		tabPanes:    make(map[uint64]*lazypane.Pane, 3),
-		instanceSeq: appInstanceSeq.Add(1),
+		ids:   c.NewWidgetIdStack(),
+		alloc: memory.NewGoAllocator(),
+		goPub: adhocdata.NewWindowPublisher(goDatasetAlias),
+		chPub: adhocdata.NewWindowPublisher(chDatasetAlias),
+		// ClickHouse's own default — see [inlineFlags].
+		dotAll: true,
 	}
 	return
 }
@@ -290,7 +285,7 @@ func (inst *AppInstance) Unmount(ctx runtimeapp.MountContextI) (err error) {
 // open app's ids.
 //
 // Kicks off the SD1 engine-fidelity tripwire on the first call
-// (coalesced by [App.tripwireRan] on the per-instance state).
+// (once per process — see [App.RunTripwire]).
 func (inst *AppInstance) Frame(ctx runtimeapp.FrameContextI) (err error) {
 	inst.state.RunTripwire(context.Background())
 	inst.state.RenderWindow()
@@ -304,13 +299,12 @@ func (inst *AppInstance) Frame(ctx runtimeapp.FrameContextI) (err error) {
 // captures the result.
 
 // RenderWindow draws the regex-explorer body into the caller's UI scope:
-// left cheatsheet panel, central body with pattern / haystack inputs and
-// tabbed results, and a bottom status bar. Per ADR-0026 Amendment
-// 2026-05-12, the host wraps this in a runtime-created c.Window using
-// Manifest.WindowTitle/Icon; the body uses only *Inside panel variants.
-// PanelCentralInside is retained so the body has an owned layout scope —
-// without it, the inputs flicker and steal width unpredictably from the
-// left panel.
+// left cheatsheet panel, central body with the inputs and the result tabs,
+// and a bottom status bar. Per ADR-0026 Amendment 2026-05-12, the host
+// wraps this in a runtime-created c.Window using Manifest.WindowTitle/Icon;
+// the body uses only *Inside panel variants. PanelCentralInside is retained
+// so the body has an owned layout scope — without it, the inputs flicker
+// and steal width unpredictably from the left panel.
 func (inst *App) RenderWindow() {
 	for range c.PanelBottomInside(inst.ids.PrepareStr("btm")).DefaultSize(24).Resizable(false).KeepIter() {
 		inst.renderStatusBar()
@@ -325,181 +319,464 @@ func (inst *App) RenderWindow() {
 	}
 }
 
-// renderBody draws the pattern input, haystack input, and the tabbed
-// results area. The Go-side highlight preview repaints every frame; the
-// ClickHouse-backed tabs read whatever their lane currently holds and the
-// lanes converge on the inputs at the end of the frame.
+// renderBody draws the two inputs every tab reads — pattern and haystack,
+// kept together because editing one while watching the other is the whole
+// loop — then the tab row and the selected tab in a scroll area, which
+// takes the rest of the height. Whatever a tab grows to, it scrolls inside
+// that area rather than pushing anything off the window.
 func (inst *App) renderBody() {
 	for range c.Horizontal().KeepIter() {
 		c.Label("Flags:").Send()
 		c.Checkbox(inst.ids.PrepareStr("ci"), inst.caseInsensitive, "case-insensitive (?i)").SendRespVal(&inst.caseInsensitive)
 		c.Checkbox(inst.ids.PrepareStr("ml"), inst.multiline, "multiline (?m)").SendRespVal(&inst.multiline)
-		c.Checkbox(inst.ids.PrepareStr("dot"), inst.dotAll, "dot-all (?s)").SendRespVal(&inst.dotAll)
+		c.Checkbox(inst.ids.PrepareStr("dot"), inst.dotAll, "dot matches newline (?s)").SendRespVal(&inst.dotAll)
 	}
 
-	for range c.CollapsingHeader(inst.ids.PrepareStr("hdr-pattern"), c.WidgetText().Text("Pattern (single regex — RE2 tabs)").Keep()).DefaultOpen(true).KeepIter() {
-		// regexedit sets CodeEditor() and attaches the highlight job
-		// (the monospace requirement is ADR-0015 §SD6, documented on
-		// regexedit.Cache.Prepare).
-		resp := inst.patternHl.TextEdit(inst.ids.PrepareStr("pattern"), inst.pattern, false, regexedit.ModeSingle).
-			DesiredWidth(editorWidth).
-			HintText("regular expression").
-			SendRespVal(&inst.pattern)
-		if resp.HasGainedFocus() || resp.HasFocus() {
-			inst.lastFocusedInput = 0
-		}
-		inst.renderPatternCompileError(inst.pattern)
+	c.Label("Pattern").Send()
+	// regexedit sets CodeEditor() and attaches the highlight job (the
+	// monospace requirement is ADR-0015 §SD6, documented on
+	// regexedit.Cache.Prepare).
+	resp := inst.withInsert(inputPattern, inst.patternHl.TextEdit(inst.ids.PrepareStr("pattern"), inst.pattern, false, regexedit.ModeSingle)).
+		DesiredWidth(editorWidth).
+		HintText("regular expression").
+		SendRespVal(&inst.pattern)
+	if resp.HasGainedFocus() || resp.HasFocus() {
+		inst.lastFocusedInput = inputPattern
 	}
+	inst.renderPatternCompileError()
 
-	for range c.CollapsingHeader(inst.ids.PrepareStr("hdr-patternlist"), c.WidgetText().Text("Multi patterns (one regex per line — VectorScan multiMatchAllIndices)").Keep()).DefaultOpen(true).KeepIter() {
-		listResp := inst.patternListHl.TextEdit(inst.ids.PrepareStr("patternList"), inst.patternList, true, regexedit.ModeList).
-			DesiredWidth(editorWidth).
-			DesiredRows(4).
-			HintText("pattern 1\npattern 2\n...").
-			SendRespVal(&inst.patternList)
-		if listResp.HasGainedFocus() || listResp.HasFocus() {
-			inst.lastFocusedInput = 2
-		}
-		// One parse feeds both the error summary and the per-line rows.
-		lines := inst.parseAndValidatePatternList(inst.patternList)
-		inst.renderPatternListCompileErrors(lines)
-		inst.renderMultiInline(lines)
-	}
-
-	c.Separator().Horizontal().Send()
-
-	c.Label("Haystack (trial text):").Send()
-	haystackResp := c.TextEdit(inst.ids.PrepareStr("haystack"), inst.haystack, true).
+	c.Label("Haystack").Send()
+	haystackResp := inst.withInsert(inputHaystack, c.TextEdit(inst.ids.PrepareStr("haystack"), inst.haystack, true)).
 		CodeEditor().
 		DesiredWidth(editorWidth).
-		DesiredRows(6).
-		HintText("test string").
+		DesiredRows(4).
+		HintText("text to match against").
 		SendRespVal(&inst.haystack)
 	if haystackResp.HasGainedFocus() || haystackResp.HasFocus() {
-		inst.lastFocusedInput = 1
+		inst.lastFocusedInput = inputHaystack
 	}
 
 	c.Separator().Horizontal().Send()
-
-	inst.renderEvalHandoff()
-
-	c.UiSetMinHeight(260)
-	for dock := range c.DockArea(inst.ids.PrepareStr("tabs")) {
-		inst.renderTab(dock, tabIDPreview, "Preview (Go)", inst.renderPreviewTab)
-		inst.renderTab(dock, tabIDList, "List", inst.renderListTab)
-		inst.renderTab(dock, tabIDReplace, "Replace", inst.renderReplaceTab)
+	inst.renderTabRow()
+	for range c.ScrollArea().Vscroll(true).KeepIter() {
+		switch inst.tab {
+		case tabFunctions:
+			inst.renderFunctionsTab()
+		case tabMulti:
+			inst.renderMultiTab()
+		default:
+			inst.renderMatchesTab()
+		}
 	}
 
 	// Converge the lanes on whatever is in the editors now. Runs every
-	// frame rather than on a change edge: an edit that lands while a
-	// query is in flight is not lost, it is simply picked up by the next
-	// frame that finds a lane free (see [queryLane]).
+	// frame rather than on a change edge, and whichever tab is showing: an
+	// edit that lands while a query is in flight is not lost, it is simply
+	// picked up by the next frame that finds a lane free (see [queryLane]).
 	inst.reconcileQueries()
 }
 
-// renderTab emits one dock tab, gating its body behind that tab's
-// [lazypane.Pane]: while the tab is hidden the body is replaced by a
-// visibility probe and a loading placeholder, and the real content lands
-// one frame after activation.
-//
-// The saving is not cosmetic. [c.DockAreaFluid.Tab] runs every declared
-// tab's body every frame and ships all of them in one deferred block map,
-// but the client keeps only the active tab's buffer and discards the rest
-// uninterpreted — so the two hidden tabs' widgets were being built,
-// serialised and written to the wire to be thrown away. All three bodies
-// also fan out per match (one styled atom per match in Preview, one row
-// per match in List), so the waste scales with the match count rather
-// than with the size of the UI.
-//
-// Queries are unaffected: the lanes are level-triggered and converge in
-// reconcileQueries after this block, not from the tab bodies, so a hidden
-// tab's result still tracks the current inputs (see [queryLane]).
-func (inst *App) renderTab(dock *c.DockAreaFluid, tabID uint64, title string, body func()) {
-	for range dock.Tab(tabID, title) {
-		if inst.tabPane(tabID, title).Skip() {
-			continue
+// renderTabRow draws the result-tab selector: plain selectable labels, not
+// a dock. Three fixed tabs gain nothing from splitting, dragging or
+// closing, and a dock's close and collapse controls read as actions that
+// lose the results.
+func (inst *App) renderTabRow() {
+	matches := "Matches"
+	if a := inst.analysis(); a.state == patternValid {
+		matches = fmt.Sprintf("Matches (%d)", len(a.matches))
+	}
+	tabs := []struct {
+		tab   resultTabE
+		id    string
+		title string
+	}{
+		{tabMatches, "tab-matches", matches},
+		{tabFunctions, "tab-functions", "ClickHouse functions"},
+		{tabMulti, "tab-multi", "Multi-pattern (VectorScan)"},
+	}
+	for range c.Horizontal().KeepIter() {
+		for _, t := range tabs {
+			if c.SelectableLabel(inst.ids.PrepareStr(t.id), inst.tab == t.tab, t.title).SendResp().HasPrimaryClicked() {
+				inst.tab = t.tab
+			}
 		}
-		body()
 	}
 }
 
-// tabPane returns the persistent lazypane gate for one tab, constructing
-// it on first use. The key namespaces the probe seq by instance and tab
-// (see [App.instanceSeq]); Title is refreshed every frame because it is
-// what the placeholder names. The nil-map branch keeps a zero-value App
-// renderable; every current caller comes through newApp.
-func (inst *App) tabPane(tabID uint64, title string) (pane *lazypane.Pane) {
-	if inst.tabPanes == nil {
-		inst.tabPanes = make(map[uint64]*lazypane.Pane, 3)
+// renderMatchesTab draws what Go's regexp finds: the highlighted haystack,
+// where ClickHouse's extractAll would stop, and the capture groups. No
+// ClickHouse interaction — it repaints on every keystroke.
+func (inst *App) renderMatchesTab() {
+	a := inst.analysis()
+	switch a.state {
+	case patternEmpty:
+		weakLabel("Enter a pattern; its matches are highlighted here.")
+		return
+	case patternInvalid:
+		weakLabel("The pattern does not compile — the error is under the Pattern input.")
+		return
 	}
-	pane = inst.tabPanes[tabID]
-	if pane == nil {
-		pane = lazypane.New(fmt.Sprintf("regex-explorer-tab-%d-%d", inst.instanceSeq, tabID), title)
-		inst.tabPanes[tabID] = pane
+	inst.renderHighlightedHaystack()
+	inst.renderExtractAllStopNote()
+	inst.renderCaptureGroups()
+	c.Separator().Horizontal().Send()
+	weakLabel("Highlighted by Go's regexp, which reads the pattern as ClickHouse's RE2 functions do (ADR-0054). The ClickHouse functions tab shows what ClickHouse itself returns.")
+}
+
+// weakLabel draws a de-emphasised line of explanatory text.
+func weakLabel(text string) {
+	for rt := range c.RichTextLabel(text) {
+		rt.Weak()
 	}
-	pane.Title = title
-	return
 }
 
 // renderTruncationNote states what a per-match surface left undrawn. Weak
-// and terse: every caller already prints the exact total in the heading
-// above it, so this line only has to say that the drawing stopped early
-// and by how much. Silent when nothing was dropped.
+// and terse: every caller already states the exact total, so this line
+// only has to say that the drawing stopped early and by how much. Silent
+// when nothing was dropped.
 func renderTruncationNote(shown int, total int) {
 	if shown >= total {
 		return
 	}
-	c.LabelAtoms(c.Atoms().BeginRichText(
-		fmt.Sprintf("… %d more not shown (display capped at %d)", total-shown, shown),
-	).Weak().End().Keep()).Send()
+	weakLabel(fmt.Sprintf("… %d more not shown (display capped at %d)", total-shown, shown))
 }
 
-// renderEvalHandoff draws the extraction hand-off row (ADR-0017 §SD6):
-// one button that publishes both engines' extraction as ad-hoc datasets
-// and opens a play window joined over them.
+// renderExtractAllStopNote says, when it applies, that ClickHouse's
+// extractAll returns fewer matches than Go highlights, and why: it stops
+// at the first place the pattern matches the empty string (see
+// [extractAllCount]). Silent when extractAll loses no non-empty match —
+// stopping on a trailing empty match changes nothing a user can see.
+func (inst *App) renderExtractAllStopNote() {
+	a := inst.analysis()
+	if a.extractAllStop < 0 || a.extractAllN >= len(a.matches) {
+		return
+	}
+	weakLabel(fmt.Sprintf(
+		"ClickHouse's extractAll stops at byte %d, where the pattern matches the empty string: it returns %d of these %d match(es). countMatches and extractAllGroups see all of them.",
+		a.extractAllStop, a.extractAllN, len(a.matches)))
+}
+
+// Colours the tabs use for verdicts: agreement, and disagreement or error.
+var (
+	agreeFg = color.Hex(styletokens.SuccessDefault.AsHex()).Keep()
+	warnFg  = color.Hex(styletokens.WarningDefault.AsHex()).Keep()
+)
+
+// coloredLabel draws text in fg on no background.
+func coloredLabel(fg color.Color, text string) {
+	for range c.RichTextLabelColored(fg, color.Transparent, text) {
+	}
+}
+
+// renderLaneStatus draws the one-line state of a ClickHouse query above
+// the result it feeds: a spinner while it runs, ClickHouse's own message
+// when it failed (wrapped — it can be long), a wait marker when the lane
+// holds nothing current, and otherwise the round-trip time and done. An
+// answer the lane served without a query (zero elapsed) shows done alone.
+func renderLaneStatus[T any](view laneView[T], done string) {
+	switch {
+	case view.Running:
+		for range c.Horizontal().KeepIter() {
+			c.Spinner().Size(14).Send()
+			weakLabel("asking ClickHouse…")
+		}
+	case view.Err != nil:
+		coloredLabel(warnFg, "ClickHouse: "+clickHouseMessage(view.Err))
+	case !view.Fresh:
+		weakLabel("waiting for ClickHouse…")
+	default:
+		text := done
+		if view.Elapsed > 0 {
+			if text != "" {
+				text += " · "
+			}
+			text += "ClickHouse answered in " + fmtElapsed(view.Elapsed)
+		}
+		weakLabel(text)
+	}
+}
+
+// fmtElapsed renders a round-trip time at the precision a person reads.
+func fmtElapsed(d time.Duration) (s string) {
+	if d < time.Millisecond {
+		s = "<1 ms"
+		return
+	}
+	s = strconv.FormatInt(d.Round(time.Millisecond).Milliseconds(), 10) + " ms"
+	return
+}
+
+// renderFunctionsTab draws one row per ClickHouse regex function: what
+// ClickHouse returns for the input, what the Go model predicts, and the
+// expression itself to copy into a query. It is where the app answers its
+// question — what will ClickHouse return? — and the playground hand-off,
+// which compares the two engines in SQL, sits at its foot.
+func (inst *App) renderFunctionsTab() {
+	if inst.renderPatternNotReady() {
+		return
+	}
+	a := inst.analysis()
+	fnView := inst.fnLane.view(inst.singleKey())
+	repView := inst.replaceLane.view(inst.replaceKey())
+	predicted := predictFunctions(a)
+
+	renderLaneStatus(fnView, "")
+	for range c.Grid(inst.ids.PrepareStr("fns")).NumColumns(4).Striped(true).KeepIter() {
+		for _, h := range []string{"function", "Go predicts", "", "ClickHouse returns"} {
+			for rt := range c.RichTextLabel(h) {
+				rt.Strong()
+			}
+		}
+		c.EndRow()
+		for _, fn := range patternFns {
+			if fn == fnExtractAllGroups && !predicted.YieldsGroups {
+				continue // ClickHouse rejects it for a pattern without a group
+			}
+			chText, chHas := "", fnView.Fresh && fnView.Err == nil
+			if chHas {
+				chText = fnValue(fn, fnView.Value)
+			}
+			modelled := fn != fnExtractAllGroups || a.groupsModelled()
+			inst.renderFnRow(fn, a.pattern, chText, chHas, fnValue(fn, predicted), modelled)
+		}
+		for range c.IdScope(inst.ids.PrepareStr("replace-row")) {
+			c.Label("replacement").Send()
+			c.Label("").Send()
+			c.Label("").Send()
+			resp := inst.withInsert(inputReplacement, c.TextEdit(inst.ids.PrepareStr("replacement"), inst.replacement, false)).
+				CodeEditor().
+				DesiredWidth(320).
+				HintText(`\1, \2 … for groups, \0 for the match`).
+				SendRespVal(&inst.replacement)
+			if resp.HasGainedFocus() || resp.HasFocus() {
+				inst.lastFocusedInput = inputReplacement
+			}
+			c.EndRow()
+		}
+		for _, fn := range replaceFns {
+			chText, chHas := "", repView.Fresh && repView.Err == nil
+			switch {
+			case chHas:
+				chText = fnReplaceValue(fn, repView.Value)
+			case isEngineRejection(repView.Err):
+				// ClickHouse refused the replacement (`\9` with one
+				// group): the row is where to say so. A transport
+				// failure is the pattern lane's too, and the line above
+				// the table already carries it.
+				chText = clickHouseMessage(repView.Err)
+			}
+			inst.renderFnRow(fn, a.pattern, chText, chHas, "", false)
+		}
+	}
+	if predicted.YieldsGroups {
+		weakLabel("The pattern captures, so extract and extractAll return capture group 1, not the whole match; regexpExtract with index 0 and extractAllGroups show the rest.")
+	}
+	inst.renderExtractAllStopNote()
+	if predicted.YieldsGroups && !a.groupsModelled() {
+		weakLabel("extractAllGroups is not predicted here: the pattern matches the empty string, and ClickHouse walks empty matches differently from Go (byte by byte, and including the one right after a match).")
+	}
+	weakLabel("The replace functions are not modelled: replaceRegexpAll also replaces the empty match right after a match, which Go's regexp skips.")
+
+	c.Separator().Horizontal().Send()
+	inst.renderEvalHandoff()
+}
+
+// fnValue renders one pattern function's value the way ClickHouse prints
+// it: numbers bare, strings and array elements as quoted literals — so an
+// empty string reads as ” rather than as nothing. Equal values render
+// equal, which is what the Functions tab compares.
+func fnValue(fn chFnE, o fnOutcome) (text string) {
+	switch fn {
+	case fnMatch:
+		text = "0"
+		if o.Match {
+			text = "1"
+		}
+	case fnCountMatches:
+		text = strconv.FormatUint(o.Count, 10)
+	case fnExtract:
+		text = marshalling.EscapeString(o.Extract)
+	case fnRegexpExtract:
+		text = marshalling.EscapeString(o.RegexpExtract)
+	case fnExtractAll:
+		text = fmtStrings(o.ExtractAll)
+	case fnExtractAllGroups:
+		parts := make([]string, 0, len(o.Groups))
+		for _, g := range o.Groups {
+			parts = append(parts, fmtStrings(g))
+		}
+		text = "[" + strings.Join(parts, ",") + "]"
+	}
+	return
+}
+
+// fnReplaceValue renders a replace function's value as a quoted literal.
+func fnReplaceValue(fn chFnE, o replaceOutcome) (text string) {
+	if fn == fnReplaceRegexpOne {
+		text = marshalling.EscapeString(o.One)
+		return
+	}
+	text = marshalling.EscapeString(o.All)
+	return
+}
+
+// fmtStrings renders an Array(String) as ClickHouse prints it.
+func fmtStrings(ss []string) (text string) {
+	parts := make([]string, 0, len(ss))
+	for _, s := range ss {
+		parts = append(parts, marshalling.EscapeString(s))
+	}
+	text = "[" + strings.Join(parts, ",") + "]"
+	return
+}
+
+// maxCellRunes caps a ClickHouse value drawn in a Functions row, and
+// maxVerdictRunes the Go value shown beside a disagreement; the whole
+// value is in the cell's tooltip. A table row that wraps a long haystack
+// is no longer a table.
+const (
+	maxCellRunes    = 120
+	maxVerdictRunes = 40
+)
+
+// renderFnRow draws one function's row: name, the Go verdict, the copy
+// action, then ClickHouse's value. The value goes last because it is the
+// one column of unbounded width — on a narrow window it clips its own
+// tail rather than pushing the verdict and the copy action out of view.
+// chHas says whether chText is a current ClickHouse answer (otherwise it
+// is an error message, or empty while waiting); modelled says whether
+// goText is a prediction at all.
+func (inst *App) renderFnRow(fn chFnE, pattern string, chText string, chHas bool, goText string, modelled bool) {
+	expr := fn.expr(pattern, inst.replacement)
+	for range c.IdScope(inst.ids.PrepareSeq(uint64(fn))) {
+		for range c.HoverText(expr).KeepIter() {
+			for rt := range c.RichTextLabel(fn.name()) {
+				rt.Monospace()
+			}
+		}
+
+		switch {
+		case !modelled:
+			weakLabel("—")
+		case chHas && goText == chText:
+			coloredLabel(agreeFg, "✓ same")
+		case chHas:
+			cellLabel(&warnFg, "≠ "+goText, maxVerdictRunes)
+		default:
+			cellLabel(nil, goText, maxVerdictRunes)
+		}
+
+		for range c.HoverText("copy " + expr).KeepIter() {
+			if c.Button(inst.ids.PrepareStr("copy"), c.Atoms().Text("copy SQL").Keep()).Small().SendResp().HasPrimaryClicked() {
+				c.CopyTextToClipboard(expr)
+			}
+		}
+
+		switch {
+		case chHas:
+			cellLabel(nil, chText, maxCellRunes)
+		case chText != "":
+			cellLabel(&warnFg, chText, maxCellRunes)
+		default:
+			weakLabel("…")
+		}
+		c.EndRow()
+	}
+}
+
+// cellLabel draws a table value in monospace, cut at limit runes with the
+// whole value in a tooltip; fg, when set, colours it.
+func cellLabel(fg *color.Color, text string, limit int) {
+	shown, cut := truncateRunes(text, limit)
+	draw := func() {
+		var atoms c.AtomsFluid
+		if fg != nil {
+			atoms = c.Atoms().BeginRichTextColored(*fg, color.Transparent, shown).Monospace().End()
+		} else {
+			atoms = c.Atoms().BeginRichText(shown).Monospace().End()
+		}
+		// Truncate to the room left as well: the rune cap bounds the
+		// wire, this keeps a long value from widening the table — and so
+		// the notes under it — past a narrow window.
+		c.LabelAtoms(atoms.Keep()).Truncate().Send()
+	}
+	if !cut {
+		draw()
+		return
+	}
+	full, _ := truncateRunes(text, 4000)
+	for range c.HoverText(full).KeepIter() {
+		draw()
+	}
+}
+
+// truncateRunes cuts s to at most n runes, marking a cut with "…".
+func truncateRunes(s string, n int) (out string, cut bool) {
+	if utf8.RuneCountInString(s) <= n {
+		out = s
+		return
+	}
+	i := 0
+	for range n {
+		_, size := utf8.DecodeRuneInString(s[i:])
+		i += size
+	}
+	out = s[:i] + "…"
+	cut = true
+	return
+}
+
+// renderEvalHandoff draws the playground hand-off (ADR-0017 §SD6): one
+// button that publishes both engines' extraction as ad-hoc datasets and
+// opens a play window joined over them. Disabled, with the reason beside
+// it, when there is nothing to hand off — a button that can only fail
+// should not invite the click.
 //
-// It sits outside the tab DockArea rather than inside either tab —
-// deliberate neutral ground, since the Go half comes from Preview and the
-// ClickHouse half from List, and placing it in one would imply that tab
-// owns the hand-off.
-//
-// Above the DockArea, not below it: the DockArea takes the rest of the
-// body's height, so a row emitted after it is pushed off the bottom of
-// the window and the button cannot be clicked (seen in the
-// regex-explorer-highlighting demo capture).
-//
-// The snapshot is taken here, on the render thread; the goroutine gets
-// plain data and never touches c.* or a lane. A re-click while a
-// hand-off is in flight is dropped.
+// The snapshot is taken on the render thread; the goroutine gets plain
+// data and never touches c.* or a lane. A re-click while a hand-off is in
+// flight is dropped.
 func (inst *App) renderEvalHandoff() {
 	// Keyed on the inputs on screen: an outcome describing a pattern the
-	// user has since edited is dropped, not shown. The lanes beside it
-	// say "(stale)" for the same reason.
+	// user has since edited is dropped, not shown.
 	busy, status, evalErr := inst.evalStatusView(inst.singleKey())
+	notReady := ""
+	if inst.haystack == "" {
+		notReady = "enter a haystack to compare"
+	}
 
 	for range c.Horizontal().KeepIter() {
-		label := "Query this extraction in the playground"
+		label := "Compare both engines in the SQL playground"
 		if busy {
 			label = "Publishing…"
 		}
-		if c.Button(inst.ids.PrepareStr("evalplay"), c.Atoms().Text(label).Keep()).
-			SendResp().HasPrimaryClicked() && !busy {
+		enabled := notReady == "" && !busy
+		clicked := false
+		for range c.HoverText("Publishes Go's matches and ClickHouse's extractAll / extractAllGroups output as two tables and opens a playground joined over them.").KeepIter() {
+			for range c.Scope().KeepIter() {
+				if !enabled {
+					c.UiDisable()
+				}
+				clicked = c.Button(inst.ids.PrepareStr("evalplay"), c.Atoms().Text(label).Keep()).SendResp().HasPrimaryClicked()
+			}
+		}
+		if clicked && enabled {
 			inst.startEvalHandoff()
 		}
 		switch {
 		case busy:
 			c.Spinner().Size(14).Send()
+		case notReady != "":
+			weakLabel(notReady)
 		case evalErr != "":
-			c.Label("hand-off failed: " + evalErr).Send()
+			coloredLabel(warnFg, "hand-off failed: "+evalErr)
 		case status != "":
-			c.Label(status).Send()
+			weakLabel(status)
 		}
 	}
 }
 
 // startEvalHandoff snapshots both result sets and dispatches the worker.
-// Render-thread only. A snapshot failure (no pattern, no haystack, a
-// pattern that does not compile) is reported in place rather than
+// Render-thread only. A snapshot failure is reported in place rather than
 // dispatched — there is nothing to publish.
 func (inst *App) startEvalHandoff() {
 	snap, err := inst.snapshotEval()
@@ -527,9 +804,8 @@ func (inst *App) startEvalHandoff() {
 	go inst.requestEvalInPlay(snap)
 }
 
-// singleKey is the query fingerprint for the two lanes driven purely by
-// the single pattern and the haystack. Render-side mirror of the key
-// [App.reconcileSingle] builds, so a result surface can ask its lane
+// singleKey is the query fingerprint for the lane driven purely by the
+// single pattern and the haystack, so a result surface can ask its lane
 // whether what it holds describes what is on screen.
 func (inst *App) singleKey() (key queryKey) {
 	key = makeQueryKey(inst.effectivePattern(inst.pattern), inst.haystack)
@@ -548,36 +824,43 @@ func (inst *App) multiKey() (key queryKey) {
 	return
 }
 
-// renderPreviewTab draws the Go-side highlight preview and, when the
-// pattern captures, the per-match group breakdown. No ClickHouse
-// interaction: offsets are recomputed per frame from the cached compiled
-// pattern, so the preview is always in sync with the current input — which
-// is exactly why it is the tab that can afford to repaint on every
-// keystroke.
-func (inst *App) renderPreviewTab() {
-	c.Label("Preview (Go RE2, byte offsets computed locally):").Send()
-	inst.renderHighlightedHaystack(inst.pattern, inst.haystack)
-	inst.renderCaptureGroups(inst.pattern, inst.haystack)
+// renderMultiTab draws the multi-pattern input and its results together:
+// one pattern per line, matched as a set by multiMatchAllIndices. The input
+// lives in the tab rather than beside the single pattern because it is a
+// separate tool on a separate engine, and keeping it next to its own
+// results is what ADR-0054 asked of it.
+func (inst *App) renderMultiTab() {
+	weakLabel("One pattern per line, matched as a set by multiMatchAllIndices. VectorScan is a different engine from the RE2 functions, with its own limits on syntax; the flags above apply to every line.")
+	listResp := inst.withInsert(inputPatternList, inst.patternListHl.TextEdit(inst.ids.PrepareStr("patternList"), inst.patternList, true, regexedit.ModeList)).
+		DesiredWidth(editorWidth).
+		DesiredRows(5).
+		HintText("pattern 1\npattern 2\n...").
+		SendRespVal(&inst.patternList)
+	if listResp.HasGainedFocus() || listResp.HasFocus() {
+		inst.lastFocusedInput = inputPatternList
+	}
+	// One parse feeds both the error summary and the per-line rows.
+	lines := inst.parseAndValidatePatternList(inst.patternList)
+	inst.renderPatternListCompileErrors(lines)
+	inst.renderMultiLines(lines)
 }
 
-// renderMultiInline draws the per-line result rows for the Multi patterns
-// input, right below the patternList TextEdit and its compile-error label.
-// Each non-empty line of the current input gets:
+// renderMultiLines draws the per-line results under the pattern list:
 //
-//	<line-number> <marker>  |  <pattern text>
+//	<line-number> <marker>  |  <pattern text>  [ClickHouse's message]
 //
 // where marker is one of:
 //
-//	✓  pattern hit the haystack (ClickHouse multiMatchAllIndices result)
-//	·  pattern did not hit
-//	⚠  pattern does not compile under Go regexp (skipped on CH dispatch)
-//	…  pending — waiting on ClickHouse for the current input
+//	✓  the pattern hit the haystack
+//	·  it did not
+//	⚠  Go's regexp rejects it, so it is not sent (see [multiLine])
+//	⛔ VectorScan refused it; the message says why
+//	…  waiting on ClickHouse for the current input
 //
-// lines is the caller's live parse, so ⚠ markers appear as soon as the
-// user types an invalid line. Hit state comes from the lane, and only when
-// the lane's result describes the current input — otherwise the row shows
-// … rather than presenting an older answer as this one.
-func (inst *App) renderMultiInline(lines []multiLine) {
+// lines is the caller's live parse, so ⚠ appears as the user types. Hits
+// come from the lane, and only when its result describes the current
+// input — otherwise the row shows … rather than an older answer.
+func (inst *App) renderMultiLines(lines []multiLine) {
 	if len(lines) == 0 {
 		return
 	}
@@ -586,30 +869,27 @@ func (inst *App) renderMultiInline(lines []multiLine) {
 	if view.Fresh {
 		lines = view.Value
 	}
-	validCount := countValidMultiLines(lines)
-
-	for range c.Horizontal().KeepIter() {
+	validCount, hits, rejected := 0, 0, 0
+	for _, l := range lines {
 		switch {
-		case view.Running:
-			c.Spinner().Size(14).Send()
-			c.Label(fmt.Sprintf("multiMatchAllIndices over %d valid line(s)…", validCount)).Send()
-		case view.Err != nil:
-			c.Label(fmt.Sprintf("CH error: %v", view.Err)).Send()
-		case !view.Fresh:
-			c.Label(fmt.Sprintf("pending… %d valid / %d total line(s)", validCount, len(lines))).Send()
-		case validCount == 0:
-			c.Label(fmt.Sprintf("%d line(s), all invalid (see errors above)", len(lines))).Send()
+		case l.Invalid:
+		case l.Rejected != "":
+			rejected++
 		default:
-			hits := 0
-			for _, l := range lines {
-				if l.Hit {
-					hits++
-				}
+			validCount++
+			if l.Hit {
+				hits++
 			}
-			c.Label(fmt.Sprintf("hits: %d / %d valid (%d total)  elapsed: %s",
-				hits, validCount, len(lines), view.Elapsed)).Send()
 		}
 	}
+	done := fmt.Sprintf("%d line(s), none sendable (see errors above)", len(lines))
+	if validCount > 0 {
+		done = fmt.Sprintf("%d of %d line(s) hit", hits, validCount)
+		if rejected > 0 {
+			done += fmt.Sprintf(" · %d refused by VectorScan", rejected)
+		}
+	}
+	renderLaneStatus(view, done)
 
 	for i, line := range lines {
 		for range c.IdScope(inst.ids.PrepareSeq(uint64(i))) {
@@ -620,35 +900,56 @@ func (inst *App) renderMultiInline(lines []multiLine) {
 					mark = "⚠"
 				case !view.Fresh:
 					mark = "…"
+				case line.Rejected != "":
+					mark = "⛔"
 				case line.Hit:
 					mark = "✓"
 				}
 				c.Label(fmt.Sprintf("%d %s", i+1, mark)).Send()
 				c.Separator().Vertical().Send()
-				c.Label(line.Text).Send()
+				for rt := range c.RichTextLabel(line.Text) {
+					rt.Monospace()
+				}
+				if view.Fresh && line.Rejected != "" {
+					coloredLabel(warnFg, line.Rejected)
+				}
 			}
 		}
 	}
 }
 
-// insertToken appends tok to the last-focused text input. True
-// cursor-position insertion is not exposed through the current FFFI2
-// binding; appending is the closest accurate approximation for the
-// cheatsheet's intended left-to-right pattern construction flow.
+// insertToken puts tok into the last-focused text input at its caret,
+// replacing any selection — the editor's own caret, which it keeps across
+// losing focus to the cheatsheet click. An input that has never had a caret
+// takes the token at its end.
 //
-// No dispatch here: the lanes pick the edit up when renderBody
-// reconciles at the end of this frame.
+// The token waits in pendingInsert for the input's next build, which hands
+// it to the widget ([App.withInsert]); the widget splices it and the text
+// comes back through the binding a frame later. Tokens clicked before that
+// build queue up in order. The replacement and pattern-list inputs live on
+// tabs, so their tab is brought up: the token lands where it can be seen,
+// and it lands at all only once the input is drawn.
 func (inst *App) insertToken(tok string) {
-	switch inst.lastFocusedInput {
-	case 1:
-		inst.haystack += tok
-	case 2:
-		inst.patternList += tok
-	case 3:
-		inst.replacement += tok
-	default:
-		inst.pattern += tok
+	field := inst.lastFocusedInput
+	inst.pendingInsert[field] += tok
+	switch field {
+	case inputReplacement:
+		inst.tab = tabFunctions
+	case inputPatternList:
+		inst.tab = tabMulti
 	}
+}
+
+// withInsert hands field's pending tokens to its editor's build and clears
+// them. Cleared here, when the build carries them, rather than on the
+// click: a token for an input that was not drawn this frame is kept, not
+// dropped.
+func (inst *App) withInsert(field inputFieldE, edit c.TextEditFluid) c.TextEditFluid {
+	if tok := inst.pendingInsert[field]; tok != "" {
+		edit = edit.InsertAtCursor(tok)
+		inst.pendingInsert[field] = ""
+	}
+	return edit
 }
 
 // applyShowcase sets both the pattern and haystack inputs to showcase
@@ -660,168 +961,59 @@ func (inst *App) applyShowcase(pattern string, haystack string) {
 	inst.haystack = haystack
 }
 
-// renderReplaceTab draws the replacement TextEdit and the
-// replaceRegexpAll result.
-func (inst *App) renderReplaceTab() {
-	for range c.Horizontal().KeepIter() {
-		c.Label("Replacement:").Send()
-		resp := c.TextEdit(inst.ids.PrepareStr("replacement"), inst.replacement, false).
-			DesiredWidth(editorWidth).
-			HintText("replacement pattern (use \\1, \\2, ... for capture groups)").
-			SendRespVal(&inst.replacement)
-		if resp.HasGainedFocus() || resp.HasFocus() {
-			inst.lastFocusedInput = 3
-		}
-	}
-
-	if inst.renderPatternNotReady() {
-		return
-	}
-
-	view := inst.replaceLane.view(inst.replaceKey())
-
-	for range c.Horizontal().KeepIter() {
-		switch {
-		case view.Running:
-			c.Spinner().Size(14).Send()
-			c.Label("Querying ClickHouse replaceRegexpAll...").Send()
-		case view.Err != nil:
-			c.Label(fmt.Sprintf("CH error: %v", view.Err)).Send()
-		case !view.Has:
-			c.Label("Result: (enter a haystack)").Send()
-		case !view.Fresh:
-			c.Label("Result (stale — refreshing):").Send()
-		default:
-			c.Label(fmt.Sprintf("Result:  elapsed: %s", view.Elapsed)).Send()
-		}
-	}
-
-	if view.Has && view.Err == nil {
-		for range c.ScrollArea().Vscroll(true).KeepIter() {
-			c.Label(view.Value).Send()
-		}
-	}
-}
-
-// renderListTab draws the ClickHouse extractAll result — one row per
-// element. Rendered as a ScrollArea with sequential labels, capped at
-// maxMatchRows: the rows are plain widgets rather than a culling table,
-// so a pattern that matches thousands of times would otherwise emit
-// thousands of them every frame. The heading keeps the exact count.
-//
-// When the pattern captures, extractAll returns capture group 1 rather
-// than the full match, and the tab says so and shows the full
-// extractAllGroups breakdown alongside. Silently listing group values
-// under a "matches" heading would contradict the Preview tab, which
-// highlights full matches.
-func (inst *App) renderListTab() {
-	if inst.renderPatternNotReady() {
-		return
-	}
-
-	view := inst.listLane.view(inst.singleKey())
-	out := view.Value
-
-	for range c.Horizontal().KeepIter() {
-		switch {
-		case view.Running:
-			c.Spinner().Size(14).Send()
-			c.Label("Querying ClickHouse extractAll...").Send()
-		case view.Err != nil:
-			c.Label(fmt.Sprintf("CH error: %v", view.Err)).Send()
-		case !view.Has:
-			c.Label("ClickHouse extractAll: (enter a haystack)").Send()
-		case !view.Fresh:
-			c.Label("ClickHouse extractAll: (stale — refreshing)").Send()
-		default:
-			c.Label(fmt.Sprintf("ClickHouse extractAll: %d element(s)  elapsed: %s", len(out.Matches), view.Elapsed)).Send()
-		}
-	}
-
-	if !view.Has || view.Err != nil {
-		return
-	}
-
-	if out.YieldsGroups {
-		c.Label("Note: the pattern captures, so extractAll returns capture group 1 — not the full match. Full matches are highlighted in the Preview tab.").Send()
-	}
-
-	for range c.ScrollArea().Vscroll(true).KeepIter() {
-		for i, m := range out.Matches {
-			if i >= maxMatchRows {
-				break
-			}
-			for range c.IdScope(inst.ids.PrepareSeq(uint64(i))) {
-				for range c.Horizontal().KeepIter() {
-					c.Label(fmt.Sprintf("%d:", i)).Send()
-					c.Label(m).Send()
-					if i < len(out.Groups) {
-						c.Separator().Vertical().Send()
-						c.Label("groups: " + strings.Join(out.Groups[i], " | ")).Send()
-					}
-				}
-			}
-		}
-		renderTruncationNote(min(maxMatchRows, len(out.Matches)), len(out.Matches))
-	}
-}
-
-// renderStatusBar draws the bottom status bar: Go-side match count, SD1
-// tripwire state, the ClickHouse match boolean, and the wall-clock elapsed
-// for the query that produced it.
+// renderStatusBar draws the bottom status bar: the Go match count and the
+// SD1 engine check, whose tooltip says what it checks and how it went.
 func (inst *App) renderStatusBar() {
 	for range c.Horizontal().KeepIter() {
-		localCount, localErr := inst.countMatches(inst.pattern, inst.haystack)
-		switch {
-		case localErr != nil:
-			c.Label(fmt.Sprintf("Go: compile error — %v", localErr)).Send()
+		a := inst.analysis()
+		switch a.state {
+		case patternEmpty:
+			c.Label("no pattern").Send()
+		case patternInvalid:
+			coloredLabel(warnFg, "pattern does not compile")
 		default:
-			c.Label(fmt.Sprintf("Go: %d match(es)", localCount)).Send()
+			c.Label(fmt.Sprintf("%d match(es)", len(a.matches))).Send()
 		}
 		c.Separator().Vertical().Send()
 
-		tw := inst.tripwireSnapshot()
-		switch {
-		case !tw.Done:
-			c.Label("SD1: running...").Send()
-		case tw.Err != nil:
-			c.Label(fmt.Sprintf("SD1: blocked (%v)", tw.Err)).Send()
-		case len(tw.Drifts) > 0:
-			c.Label(fmt.Sprintf("SD1: DRIFT (%d case(s))", len(tw.Drifts))).Send()
-		case len(tw.Known) > 0:
-			// Green, with the ledger count alongside: the engines agree
-			// everywhere we expect them to, and differ only where we
-			// already know they do.
-			c.Label(fmt.Sprintf("SD1: ✓ (%d known)", len(tw.Known))).Send()
-		default:
-			c.Label("SD1: ✓").Send()
-		}
-		c.Separator().Vertical().Send()
-
-		view := inst.matchLane.view(inst.singleKey())
-		switch {
-		case inst.patternState() == patternEmpty:
-			c.Label("CH: (no pattern)").Send()
-		case inst.patternState() == patternInvalid:
-			c.Label("CH: (pattern invalid)").Send()
-		case view.Err != nil:
-			c.Label(fmt.Sprintf("CH: error — %v", view.Err)).Send()
-		case !view.Has:
-			c.Label("CH: —").Send()
-		default:
-			label := "CH: match=false"
-			if view.Value {
-				label = "CH: match=true"
-			}
-			if !view.Fresh {
-				// The lane is holding an older answer while a newer query
-				// runs. Saying so beats presenting it as current, which is
-				// the failure this whole lane arrangement exists to stop.
-				label += " (stale)"
-			}
+		label, tip := inst.engineCheckText()
+		for range c.HoverText(tip).KeepIter() {
 			c.Label(label).Send()
-			c.Separator().Vertical().Send()
-			c.Label(fmt.Sprintf("elapsed: %s", view.Elapsed)).Send()
 		}
 	}
+}
+
+// engineCheckText words the SD1 tripwire's outcome for the status bar: a
+// short label, and a tooltip that says what the check is and names the
+// cases behind a non-green result.
+func (inst *App) engineCheckText() (label string, tip string) {
+	const about = "Engine check (ADR-0054 SD1): at startup a fixed set of patterns runs through Go's regexp and ClickHouse, and the app's predictions of ClickHouse are compared with what ClickHouse returns."
+	tw, started, running := tripwireSnapshot()
+	names := func(idx []int) (out string) {
+		parts := make([]string, 0, len(idx))
+		for _, i := range idx {
+			parts = append(parts, tripwireCorpus[i].Name)
+		}
+		out = strings.Join(parts, ", ")
+		return
+	}
+	switch {
+	case !started:
+		label, tip = "engine check: not started", about
+	case running:
+		label, tip = "engine check: running…", about
+	case tw.Err != nil:
+		label = "engine check: could not run"
+		tip = about + "\n\nIt could not reach ClickHouse: " + clickHouseMessage(tw.Err)
+	case len(tw.Drifts) > 0:
+		label = fmt.Sprintf("engine check: %d mismatch(es)", len(tw.Drifts))
+		tip = about + "\n\nMismatches — the app's prediction is wrong for: " + names(tw.Drifts) + ". The log has the details."
+	default:
+		label = "engine check ✓"
+		tip = about + "\n\nAll predictions held."
+		if len(tw.Known) > 0 {
+			tip += fmt.Sprintf(" %d documented engine difference(s), each modelled: %s.", len(tw.Known), names(tw.Known))
+		}
+	}
+	return
 }

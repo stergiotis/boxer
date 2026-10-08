@@ -21,7 +21,7 @@ var endMarker = []byte("7777")
 // grib1LargeFlag is the top bit of edition 1's 24-bit total length. When
 // set, ECMWF's convention for messages past 2²³−1 bytes applies: the field
 // holds the length in units of 120, and the data section's coded length
-// carries the remainder (see grib1LengthE).
+// carries the remainder (see grib1Length).
 const grib1LargeFlag = 0x800000
 
 // maxSectionLength bounds any single section. A GRIB2 section length is a
@@ -30,10 +30,10 @@ const grib1LargeFlag = 0x800000
 // allocation.
 const maxMessageLength = 1 << 40
 
-// sourceI is random access to a file's bytes. sliceE may alias the
+// sourceI is random access to a file's bytes. slice may alias the
 // underlying storage; callers never write through the result.
 type sourceI interface {
-	sliceE(off int64, n int64) (b []byte, err error)
+	slice(off int64, n int64) (b []byte, err error)
 	size() (n int64)
 }
 
@@ -47,7 +47,7 @@ func (inst bytesSource) size() (n int64) {
 	return int64(len(inst.buf))
 }
 
-func (inst bytesSource) sliceE(off int64, n int64) (b []byte, err error) {
+func (inst bytesSource) slice(off int64, n int64) (b []byte, err error) {
 	size := int64(len(inst.buf))
 	if off < 0 || n < 0 || off > size || n > size-off {
 		err = eb.Build().Int64("offset", off).Int64("length", n).Int64("size", size).Errorf("read past end of file: %w", ErrMalformed)
@@ -68,7 +68,7 @@ func (inst readerAtSource) size() (n int64) {
 	return inst.n
 }
 
-func (inst readerAtSource) sliceE(off int64, n int64) (b []byte, err error) {
+func (inst readerAtSource) slice(off int64, n int64) (b []byte, err error) {
 	if off < 0 || n < 0 || off > inst.n || n > inst.n-off {
 		err = eb.Build().Int64("offset", off).Int64("length", n).Int64("size", inst.n).Errorf("read past end of file: %w", ErrMalformed)
 		return
@@ -121,7 +121,7 @@ func scan(src sourceI, start int64) iter.Seq2[*Message, error] {
 		}
 		for pos < size {
 			// Find the next indicator.
-			at, skipped, err := findIndicatorE(src, pos)
+			at, skipped, err := findIndicator(src, pos)
 			if err != nil {
 				yield(nil, err)
 				return
@@ -129,7 +129,7 @@ func scan(src sourceI, start int64) iter.Seq2[*Message, error] {
 			if at < 0 {
 				return
 			}
-			m, length, err := readMessageE(src, at)
+			m, length, err := readMessage(src, at)
 			if err != nil {
 				yield(nil, err)
 				return
@@ -143,15 +143,15 @@ func scan(src sourceI, start int64) iter.Seq2[*Message, error] {
 	}
 }
 
-// findIndicatorE returns the offset of the next "GRIB" at or after pos, or
+// findIndicator returns the offset of the next "GRIB" at or after pos, or
 // −1 when none remains, and how many bytes were skipped to reach it.
-func findIndicatorE(src sourceI, pos int64) (at int64, skipped int64, err error) {
+func findIndicator(src sourceI, pos int64) (at int64, skipped int64, err error) {
 	size := src.size()
 	at = -1
 	for pos < size {
 		n := min(int64(scanWindow), size-pos)
 		var b []byte
-		b, err = src.sliceE(pos, n)
+		b, err = src.slice(pos, n)
 		if err != nil {
 			return
 		}
@@ -174,11 +174,11 @@ func findIndicatorE(src sourceI, pos int64) (at int64, skipped int64, err error)
 	return
 }
 
-// readMessageE reads the message whose indicator is at off and parses its
+// readMessage reads the message whose indicator is at off and parses its
 // sections. length is the number of bytes the message occupies in the
 // file, which is what the scan advances by.
-func readMessageE(src sourceI, off int64) (m *Message, length int64, err error) {
-	head, err := src.sliceE(off, min(16, src.size()-off))
+func readMessage(src sourceI, off int64) (m *Message, length int64, err error) {
+	head, err := src.slice(off, min(16, src.size()-off))
 	if err != nil {
 		return
 	}
@@ -189,7 +189,7 @@ func readMessageE(src sourceI, off int64) (m *Message, length int64, err error) 
 	edition := head[7]
 	switch edition {
 	case 1:
-		length, err = grib1LengthE(src, off, head)
+		length, err = grib1Length(src, off, head)
 		if err != nil {
 			return
 		}
@@ -215,7 +215,7 @@ func readMessageE(src sourceI, off int64) (m *Message, length int64, err error) 
 		err = eb.Build().Int64("offset", off).Int64("length", length).Int64("available", src.size()-off).Errorf("message truncated: %w", ErrMalformed)
 		return
 	}
-	raw, err := src.sliceE(off, length)
+	raw, err := src.slice(off, length)
 	if err != nil {
 		return
 	}
@@ -230,9 +230,9 @@ func readMessageE(src sourceI, off int64) (m *Message, length int64, err error) 
 	switch edition {
 	case 1:
 		m.grib1Large = int64(head[4])&(grib1LargeFlag>>16) != 0
-		err = m.parseGrib1E()
+		err = m.parseGrib1()
 	case 2:
-		err = m.parseGrib2E()
+		err = m.parseGrib2()
 	}
 	if err != nil {
 		m = nil
@@ -240,14 +240,14 @@ func readMessageE(src sourceI, off int64) (m *Message, length int64, err error) 
 	return
 }
 
-// grib1LengthE decodes edition 1's total length. The field is 24 bits; a
+// grib1Length decodes edition 1's total length. The field is 24 bits; a
 // message past 2²³−1 bytes uses ECMWF's convention: the top bit is set, the
 // low 23 bits hold the length in units of 120 bytes, and the data section's
 // own coded length (which is then under 120) carries what to subtract:
 // total = units × 120 − codedDataLength + 4. Measured on an 11.4 MB NCEP
 // sea-surface-temperature field in the survey corpus (2026-09-27), where
 // the field read 8 483 560 and the file was 11 394 230 bytes.
-func grib1LengthE(src sourceI, off int64, head []byte) (length int64, err error) {
+func grib1Length(src sourceI, off int64, head []byte) (length int64, err error) {
 	coded := int64(head[4])<<16 | int64(head[5])<<8 | int64(head[6])
 	if coded&grib1LargeFlag == 0 {
 		length = coded
@@ -256,11 +256,11 @@ func grib1LengthE(src sourceI, off int64, head []byte) (length int64, err error)
 	// Walk the section lengths to the data section.
 	units := coded &^ grib1LargeFlag
 	pos := off + 8
-	pds, err := grib1SectionLengthE(src, pos)
+	pds, err := grib1SectionLength(src, pos)
 	if err != nil {
 		return
 	}
-	flagsB, err := src.sliceE(pos+7, 1)
+	flagsB, err := src.slice(pos+7, 1)
 	if err != nil {
 		return
 	}
@@ -268,7 +268,7 @@ func grib1LengthE(src sourceI, off int64, head []byte) (length int64, err error)
 	pos += pds
 	if flags&0x80 != 0 {
 		var gds int64
-		gds, err = grib1SectionLengthE(src, pos)
+		gds, err = grib1SectionLength(src, pos)
 		if err != nil {
 			return
 		}
@@ -276,13 +276,13 @@ func grib1LengthE(src sourceI, off int64, head []byte) (length int64, err error)
 	}
 	if flags&0x40 != 0 {
 		var bms int64
-		bms, err = grib1SectionLengthE(src, pos)
+		bms, err = grib1SectionLength(src, pos)
 		if err != nil {
 			return
 		}
 		pos += bms
 	}
-	bds, err := grib1SectionLengthE(src, pos)
+	bds, err := grib1SectionLength(src, pos)
 	if err != nil {
 		return
 	}
@@ -294,8 +294,8 @@ func grib1LengthE(src sourceI, off int64, head []byte) (length int64, err error)
 	return
 }
 
-func grib1SectionLengthE(src sourceI, pos int64) (n int64, err error) {
-	b, err := src.sliceE(pos, 3)
+func grib1SectionLength(src sourceI, pos int64) (n int64, err error) {
+	b, err := src.slice(pos, 3)
 	if err != nil {
 		return
 	}

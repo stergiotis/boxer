@@ -42,7 +42,7 @@ func rmat(scale, edgesPerVertex int, seed uint64) (src, dst []uint64) {
 
 func rmatGraph(t testing.TB, scale, epv int, directed bool) *csr.Graph {
 	src, dst := rmat(scale, epv, 42)
-	g, err := csr.BuildE(src, dst, nil, csr.Options{Directed: directed})
+	g, err := csr.Build(src, dst, nil, csr.Options{Directed: directed})
 	require.NoError(t, err)
 	return g
 }

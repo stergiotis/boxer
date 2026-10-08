@@ -6,6 +6,7 @@
 package scenecmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,7 +17,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/scene"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 const (
@@ -30,6 +31,7 @@ const (
 	flagRoot    = "repoRoot"
 	flagHostDir = "hostDir"
 	flagIgnore  = "ignoreRequires"
+	flagSlow    = "slow"
 )
 
 // NewCommand builds the `scene` subcommand.
@@ -48,30 +50,31 @@ func NewCommand() *cli.Command {
 			"Exit status is the assertion: non-zero when any scene failed. A scene whose\n" +
 			"precondition does not hold is skipped, reported as skipped, and is not a pass.",
 		Flags: []cli.Flag{
-			&cli.PathFlag{Name: flagOut, Value: "tmp/scenes", Usage: "directory for captures, logs and the gallery index"},
+			&cli.StringFlag{Name: flagOut, Value: "tmp/scenes", Usage: "directory for captures, logs and the gallery index", TakesFile: true},
 			&cli.DurationFlag{Name: flagTimeout, Value: 60 * time.Second, Usage: "bound on the wait for the carrier and on each driver request"},
 			&cli.IntFlag{Name: flagSettle, Value: 300, Usage: "milliseconds to settle after a step that sets no settleMs of its own"},
 			&cli.BoolFlag{Name: flagDryRun, Usage: "launch and resolve every anchor, without sending input or capturing"},
 			&cli.BoolFlag{Name: flagList, Usage: "list the scenes and exit"},
+			&cli.BoolFlag{Name: flagSlow, Usage: "also run scenes tagged slow, which are skipped otherwise"},
 			&cli.BoolFlag{Name: flagIgnore, Usage: "run scenes whose preconditions do not hold instead of skipping them"},
 			&cli.StringSliceFlag{Name: flagOnly, Usage: "run only scenes whose name contains this; repeatable"},
-			&cli.PathFlag{Name: flagClient, Usage: "headless Rust client; default: the CPU rasterizer build, then the wgpu build"},
-			&cli.PathFlag{Name: flagRoot, Usage: "checkout holding rust/imzero2 (the client, the fonts); default: found from the working directory"},
-			&cli.PathFlag{Name: flagHostDir, Usage: "working directory of the launched host; default: --" + flagRoot},
+			&cli.StringFlag{Name: flagClient, Usage: "headless Rust client; default: the CPU rasterizer build, then the wgpu build", TakesFile: true},
+			&cli.StringFlag{Name: flagRoot, Usage: "checkout holding rust/imzero2 (the client, the fonts); default: found from the working directory", TakesFile: true},
+			&cli.StringFlag{Name: flagHostDir, Usage: "working directory of the launched host; default: --" + flagRoot, TakesFile: true},
 		},
 		Action: run,
 	}
 }
 
-func run(ctx *cli.Context) (err error) {
-	if ctx.NArg() == 0 {
+func run(ctx context.Context, cmd *cli.Command) (err error) {
+	if cmd.NArg() == 0 {
 		return eh.Errorf("nothing to run: pass scene documents or directories")
 	}
-	docs, err := scene.CollectDocs(ctx.Args().Slice())
+	docs, err := scene.CollectDocs(cmd.Args().Slice())
 	if err != nil {
 		return err
 	}
-	if only := ctx.StringSlice(flagOnly); len(only) > 0 {
+	if only := cmd.StringSlice(flagOnly); len(only) > 0 {
 		kept := docs[:0]
 		for _, d := range docs {
 			for _, o := range only {
@@ -86,21 +89,21 @@ func run(ctx *cli.Context) (err error) {
 	if len(docs) == 0 {
 		return eh.Errorf("no scene documents selected")
 	}
-	w := ctx.App.Writer
-	if ctx.Bool(flagList) {
+	w := cmd.Root().Writer
+	if cmd.Bool(flagList) {
 		for _, d := range docs {
 			_, _ = fmt.Fprintf(w, "%-40s %s\n", d.Name, d.Title())
 		}
 		return nil
 	}
 
-	root := ctx.Path(flagRoot)
+	root := cmd.String(flagRoot)
 	if root == "" {
 		if root, err = scene.FindRepoRoot("."); err != nil {
 			return err
 		}
 	}
-	out, err := filepath.Abs(ctx.Path(flagOut))
+	out, err := filepath.Abs(cmd.String(flagOut))
 	if err != nil {
 		return eh.Errorf("unable to resolve --"+flagOut+": %w", err)
 	}
@@ -114,12 +117,13 @@ func run(ctx *cli.Context) (err error) {
 		res := scene.RunDoc(d, scene.Options{
 			OutDir:         out,
 			RepoRoot:       root,
-			HostDir:        ctx.Path(flagHostDir),
-			ClientBinary:   ctx.Path(flagClient),
-			Timeout:        ctx.Duration(flagTimeout),
-			SettleMs:       ctx.Int(flagSettle),
-			DryRun:         ctx.Bool(flagDryRun),
-			IgnoreRequires: ctx.Bool(flagIgnore),
+			HostDir:        cmd.String(flagHostDir),
+			ClientBinary:   cmd.String(flagClient),
+			Timeout:        cmd.Duration(flagTimeout),
+			SettleMs:       cmd.Int(flagSettle),
+			DryRun:         cmd.Bool(flagDryRun),
+			IgnoreRequires: cmd.Bool(flagIgnore),
+			Slow:           cmd.Bool(flagSlow),
 			Out:            w,
 			Logger:         log.Logger,
 		})

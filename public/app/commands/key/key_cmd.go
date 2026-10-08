@@ -1,19 +1,20 @@
 package key
 
 import (
+	"context"
 	cryptorand "crypto/rand"
 	"encoding/hex"
 	"os"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 )
 
 func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "key",
 		Usage: "cipher key related commands",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			{
 				Name:  "random",
 				Usage: "writes a cryptographically safe random key hex encoded to stdout",
@@ -23,8 +24,8 @@ func NewCliCommand() *cli.Command {
 						Value: 32,
 					},
 				},
-				Action: func(context *cli.Context) error {
-					l := context.Uint("length")
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					l := cmd.Uint("length")
 					key := make([]byte, l)
 					var err error
 					_, err = cryptorand.Read(key)

@@ -1,23 +1,24 @@
 package env
 
 import (
+	"context"
 	"io"
 	"testing"
 
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 )
 
-// runWithFlag parses args through a real cli.App carrying v's derived flag,
+// runWithFlag parses args through a real cli.Command carrying v's derived flag,
 // so the test sees exactly what urfave/cli hands the flag Action.
 func runWithFlag(t *testing.T, flag cli.Flag, args ...string) {
 	t.Helper()
-	app := &cli.App{
+	app := &cli.Command{
 		Name:   "fixture",
 		Flags:  []cli.Flag{flag},
 		Writer: io.Discard,
-		Action: func(*cli.Context) error { return nil },
+		Action: func(context.Context, *cli.Command) error { return nil },
 	}
-	if err := app.Run(append([]string{"fixture"}, args...)); err != nil {
+	if err := app.Run(context.Background(), append([]string{"fixture"}, args...)); err != nil {
 		t.Fatalf("app.Run: %v", err)
 	}
 }
@@ -72,7 +73,7 @@ func TestStringVarEmptyMeansUnset(t *testing.T) {
 func TestStringVarEmptyFlagDoesNotRunUserAction(t *testing.T) {
 	v := newStringFixture(t, "BOXER_TEST_RESOLVE_STR_ACTION")
 	ran := false
-	flag := v.AsCliFlag(WithStringAction(func(*cli.Context, string) error {
+	flag := v.AsCliFlag(WithStringAction(func(context.Context, *cli.Command, string) error {
 		ran = true
 		return nil
 	}))

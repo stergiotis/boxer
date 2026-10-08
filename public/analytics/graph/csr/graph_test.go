@@ -12,7 +12,7 @@ func TestBuildUndirectedCollapsesAndSortsRows(t *testing.T) {
 	src := []uint64{7, 3, 7, 42, 42, 3}
 	dst := []uint64{3, 7, 3, 42, 42, 9}
 	w := []float32{1, 2, 4, 8, 16, 32}
-	g, err := BuildE(src, dst, w, Options{})
+	g, err := Build(src, dst, w, Options{})
 	require.NoError(t, err)
 	require.Equal(t, []uint64{3, 7, 9, 42}, g.IDs())
 	require.Equal(t, 4, g.NumVertices())
@@ -36,7 +36,7 @@ func TestBuildUndirectedCollapsesAndSortsRows(t *testing.T) {
 }
 
 func TestBuildDirectedKeepsDirection(t *testing.T) {
-	g, err := BuildE([]uint64{1, 2, 2}, []uint64{2, 3, 3}, nil, Options{Directed: true})
+	g, err := Build([]uint64{1, 2, 2}, []uint64{2, 3, 3}, nil, Options{Directed: true})
 	require.NoError(t, err)
 	require.True(t, g.IsDirected())
 	require.EqualValues(t, 2, g.NumEdges())
@@ -53,31 +53,31 @@ func TestBuildDirectedKeepsDirection(t *testing.T) {
 }
 
 func TestFingerprintDependsOnTopologyOnly(t *testing.T) {
-	a, _ := BuildE([]uint64{1, 2}, []uint64{2, 3}, []float32{1, 1}, Options{})
-	b, _ := BuildE([]uint64{2, 3}, []uint64{1, 2}, []float32{5, 9}, Options{}) // same edges, other order and weights
-	c, _ := BuildE([]uint64{1, 2}, []uint64{2, 3}, nil, Options{Directed: true})
-	d, _ := BuildE([]uint64{1, 1}, []uint64{2, 3}, nil, Options{}) // a star, not a path
+	a, _ := Build([]uint64{1, 2}, []uint64{2, 3}, []float32{1, 1}, Options{})
+	b, _ := Build([]uint64{2, 3}, []uint64{1, 2}, []float32{5, 9}, Options{}) // same edges, other order and weights
+	c, _ := Build([]uint64{1, 2}, []uint64{2, 3}, nil, Options{Directed: true})
+	d, _ := Build([]uint64{1, 1}, []uint64{2, 3}, nil, Options{}) // a star, not a path
 	require.Equal(t, a.Fingerprint(), b.Fingerprint())
 	require.NotEqual(t, a.Fingerprint(), c.Fingerprint())
 	require.NotEqual(t, a.Fingerprint(), d.Fingerprint())
 }
 
 func TestBuildRejectsMismatchedColumns(t *testing.T) {
-	_, err := BuildE([]uint64{1}, []uint64{1, 2}, nil, Options{})
+	_, err := Build([]uint64{1}, []uint64{1, 2}, nil, Options{})
 	require.Error(t, err)
-	_, err = BuildE([]uint64{1}, []uint64{2}, []float32{1, 2}, Options{})
+	_, err = Build([]uint64{1}, []uint64{2}, []float32{1, 2}, Options{})
 	require.Error(t, err)
 }
 
 func TestEmptyGraph(t *testing.T) {
-	g, err := BuildE(nil, nil, nil, Options{})
+	g, err := Build(nil, nil, nil, Options{})
 	require.NoError(t, err)
 	require.Equal(t, 0, g.NumVertices())
 	require.EqualValues(t, 0, g.NumEdges())
 }
 
 func TestBuildEDeclaresIsolatedVertices(t *testing.T) {
-	g, err := BuildE([]uint64{1}, []uint64{2}, nil, Options{Vertices: []uint64{7, 2}})
+	g, err := Build([]uint64{1}, []uint64{2}, nil, Options{Vertices: []uint64{7, 2}})
 	require.NoError(t, err)
 	require.Equal(t, 3, g.NumVertices())
 	s, ok := g.Slot(7)

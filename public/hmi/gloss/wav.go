@@ -72,7 +72,7 @@ func ReadWavInfo(raw string) (info WavInfo, err error) {
 	// the cell. The size handed over is the cell's, so the reader sees a data
 	// chunk that runs past the prefix as one that is there — it never reads
 	// it — and one that runs past the CELL as truncated.
-	f, err := wavfile.NewReaderE(strings.NewReader(head), int64(len(raw)))
+	f, err := wavfile.NewReader(strings.NewReader(head), int64(len(raw)))
 	if err != nil {
 		return info, err
 	}

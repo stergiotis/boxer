@@ -91,7 +91,7 @@ func readAll(t *testing.T, file *File) (samples []float32) {
 	if total == 0 {
 		return samples
 	}
-	n, err := file.ReadFramesAtE(context.Background(), 0, samples)
+	n, err := file.ReadFramesAt(context.Background(), 0, samples)
 	require.NoError(t, err)
 	require.Equal(t, int(file.Frames()), n)
 	return samples
@@ -103,7 +103,7 @@ func TestReadExtensiblePCMGUID(t *testing.T) {
 	chunks = appendChunk(chunks, "data", pcm16Body(samples))
 	raw := riffContainer(chunks)
 
-	file, err := NewReaderE(bytes.NewReader(raw), int64(len(raw)))
+	file, err := NewReader(bytes.NewReader(raw), int64(len(raw)))
 	require.NoError(t, err)
 	require.Equal(t, EncodingPCMInt, file.Encoding())
 	require.Equal(t, uint16(16), file.BitsPerSample())
@@ -118,7 +118,7 @@ func TestReadExtensiblePCMGUID(t *testing.T) {
 		require.InDelta(t, float64(s)/32768, float64(got[i]), 1e-9, "sample %d", i)
 	}
 	pcmtest.CheckSourceContract(t, file, 2000)
-	require.NoError(t, file.CloseE())
+	require.NoError(t, file.Close())
 }
 
 func TestReadExtensibleFloatGUID(t *testing.T) {
@@ -128,7 +128,7 @@ func TestReadExtensibleFloatGUID(t *testing.T) {
 	chunks = appendChunk(chunks, "data", body)
 	raw := riffContainer(chunks)
 
-	file, err := NewReaderE(bytes.NewReader(raw), int64(len(raw)))
+	file, err := NewReader(bytes.NewReader(raw), int64(len(raw)))
 	require.NoError(t, err)
 	require.Equal(t, EncodingIEEEFloat, file.Encoding())
 	require.Equal(t, int64(2), file.Frames())
@@ -144,7 +144,7 @@ func TestReadExtensibleNarrowValidBits(t *testing.T) {
 	chunks = appendChunk(chunks, "data", pcm24Body(samples))
 	raw := riffContainer(chunks)
 
-	file, err := NewReaderE(bytes.NewReader(raw), int64(len(raw)))
+	file, err := NewReader(bytes.NewReader(raw), int64(len(raw)))
 	require.NoError(t, err)
 	require.Equal(t, uint16(24), file.BitsPerSample())
 	require.Equal(t, uint16(20), file.ValidBitsPerSample())
@@ -166,7 +166,7 @@ func TestReadTolerateUnknownAndOddSizedChunks(t *testing.T) {
 	chunks = appendChunk(chunks, "data", pcm16Body(samples))
 	raw := riffContainer(chunks)
 
-	file, err := NewReaderE(bytes.NewReader(raw), int64(len(raw)))
+	file, err := NewReader(bytes.NewReader(raw), int64(len(raw)))
 	require.NoError(t, err)
 	require.Equal(t, int64(4), file.Frames())
 	got := readAll(t, file)
@@ -188,7 +188,7 @@ func TestReadTruncatedDataChunk(t *testing.T) {
 	chunks = append(chunks, pcm16Body(samples)...)
 	raw := riffContainer(chunks)
 
-	file, err := NewReaderE(bytes.NewReader(raw), int64(len(raw)))
+	file, err := NewReader(bytes.NewReader(raw), int64(len(raw)))
 	require.NoError(t, err)
 	require.True(t, file.IsTruncated())
 	require.Equal(t, int64(20), file.Frames())
@@ -226,7 +226,7 @@ func TestReadRF64EscapedDataSize(t *testing.T) {
 	for _, form := range []string{"RF64", "BW64"} {
 		t.Run(form, func(t *testing.T) {
 			raw := rf64Fixture(t, form, uint64(2*len(samples)), samples, nil)
-			file, err := NewReaderE(bytes.NewReader(raw), int64(len(raw)))
+			file, err := NewReader(bytes.NewReader(raw), int64(len(raw)))
 			require.NoError(t, err)
 			require.True(t, file.IsRF64())
 			require.False(t, file.IsTruncated())
@@ -244,7 +244,7 @@ func TestReadRF64EscapedDataSize(t *testing.T) {
 func TestReadRF64Ds64DeclaresMoreThanTheStreamHolds(t *testing.T) {
 	samples := []int16{1, -1, 300, -300, 4000, -4000, 32767, -32768}
 	raw := rf64Fixture(t, "RF64", 12*3600*48000*4, samples, nil)
-	file, err := NewReaderE(bytes.NewReader(raw), int64(len(raw)))
+	file, err := NewReader(bytes.NewReader(raw), int64(len(raw)))
 	require.NoError(t, err)
 	require.True(t, file.IsRF64())
 	require.True(t, file.IsTruncated())
@@ -270,7 +270,7 @@ func TestReadRF64TableSizedChunk(t *testing.T) {
 	chunks = append(chunks, pcm16Body(samples)...)
 	raw := container("RF64", maxUint32, chunks)
 
-	file, err := NewReaderE(bytes.NewReader(raw), int64(len(raw)))
+	file, err := NewReader(bytes.NewReader(raw), int64(len(raw)))
 	require.NoError(t, err)
 	require.Equal(t, int64(2), file.Frames())
 	pcmtest.CheckSourceContract(t, file, 2000)
@@ -281,7 +281,7 @@ func TestReadZeroFrameFixture(t *testing.T) {
 	chunks = appendChunk(chunks, "data", nil)
 	raw := riffContainer(chunks)
 
-	file, err := NewReaderE(bytes.NewReader(raw), int64(len(raw)))
+	file, err := NewReader(bytes.NewReader(raw), int64(len(raw)))
 	require.NoError(t, err)
 	require.Equal(t, int64(0), file.Frames())
 	require.False(t, file.IsTruncated())
@@ -355,7 +355,7 @@ func TestReadRejects(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := NewReaderE(bytes.NewReader(tc.raw), int64(len(tc.raw)))
+			_, err := NewReader(bytes.NewReader(tc.raw), int64(len(tc.raw)))
 			require.Error(t, err)
 			require.Contains(t, err.Error(), tc.error)
 		})
@@ -364,21 +364,21 @@ func TestReadRejects(t *testing.T) {
 
 func TestOpenEClosesTheFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "tone.wav")
-	src, err := pcm.NewMemSourceE(pcm.Format{SampleRate: 8000, Channels: 1}, []float32{0, 0.5, -0.5, 1})
+	src, err := pcm.NewMemSource(pcm.Format{SampleRate: 8000, Channels: 1}, []float32{0, 0.5, -0.5, 1})
 	require.NoError(t, err)
 	var buf bytes.Buffer
-	require.NoError(t, WriteE(context.Background(), &buf, src.Format(), EncodingPCMInt, 16, src))
+	require.NoError(t, Write(context.Background(), &buf, src.Format(), EncodingPCMInt, 16, src))
 	require.NoError(t, os.WriteFile(path, buf.Bytes(), 0o600))
 
-	file, err := OpenE(path)
+	file, err := Open(path)
 	require.NoError(t, err)
 	require.Equal(t, int64(4), file.Frames())
 	pcmtest.CheckSourceContract(t, file, 2000)
-	require.NoError(t, file.CloseE())
-	// CloseE is idempotent, and the second call must not close a file it no
+	require.NoError(t, file.Close())
+	// Close is idempotent, and the second call must not close a file it no
 	// longer owns.
-	require.NoError(t, file.CloseE())
+	require.NoError(t, file.Close())
 
-	_, err = OpenE(filepath.Join(t.TempDir(), "absent.wav"))
+	_, err = Open(filepath.Join(t.TempDir(), "absent.wav"))
 	require.Error(t, err)
 }

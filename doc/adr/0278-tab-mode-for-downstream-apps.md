@@ -87,7 +87,7 @@ is a `package main` of blank imports — the apps it may open — a package-leve
 `tabhost.New(options, cliApp)`, and a `main` that calls the result's `Main`.
 boxer's `cmd/imzero2tab` is such a binary.
 
-The cli.App is the binary's own: its name and version are the binary's, and
+The root cli.Command is the binary's own: its name and version are the binary's, and
 the entry-point standard (urfave/cli, `logging.Apply`, `vcs.BuildVersionInfo`)
 is checked in the main package, so that is where they stay; `New` adds the
 flags, the action and the subcommands. `New` runs at package initialisation

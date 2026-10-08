@@ -22,18 +22,18 @@ import (
 // (ADR-0250 §SD4): whatever a host applies to its statements — rewrites,
 // routing, a log stamp — it applies here too.
 type QueryerI interface {
-	QueryE(ctx context.Context, statement string, params map[string]string) (rec arrow.RecordBatch, err error)
+	Query(ctx context.Context, statement string, params map[string]string) (rec arrow.RecordBatch, err error)
 }
 
 // PurposeE is what a statement the source sends is for.
 type PurposeE uint8
 
 const (
-	// PurposeDescribe is a statement of [NewSourceE].
+	// PurposeDescribe is a statement of [NewSource].
 	PurposeDescribe PurposeE = iota
-	// PurposeWindow is a statement of [Source.SampleE].
+	// PurposeWindow is a statement of [Source.Sample].
 	PurposeWindow
-	// PurposeSummary is a statement of [Source.SummarizeE].
+	// PurposeSummary is a statement of [Source.Summarize].
 	PurposeSummary
 )
 
@@ -98,11 +98,11 @@ type Source struct {
 
 var _ vectorfield.SourceI = (*Source)(nil)
 
-// NewSourceE describes the relation — its steps, then the geometry of the
+// NewSource describes the relation — its steps, then the geometry of the
 // first — and refuses what a reduction would hide: a step with more rows than
 // the grid has nodes, which is an unfiltered level or run that a mean would
 // merge, and nodes off a regular grid.
-func NewSourceE(ctx context.Context, queryer QueryerI, rel Relation, opts Options) (inst *Source, err error) {
+func NewSource(ctx context.Context, queryer QueryerI, rel Relation, opts Options) (inst *Source, err error) {
 	if queryer == nil {
 		err = eh.Errorf("a source needs a queryer")
 		return
@@ -119,7 +119,7 @@ func NewSourceE(ctx context.Context, queryer QueryerI, rel Relation, opts Option
 	if inst.meta.ValidFraction <= 0 || inst.meta.ValidFraction > 1 {
 		inst.meta.ValidFraction = defaultValidFraction
 	}
-	err = inst.describeE(ctx, opts)
+	err = inst.describe(ctx, opts)
 	if err != nil {
 		inst = nil
 		return
@@ -128,11 +128,11 @@ func NewSourceE(ctx context.Context, queryer QueryerI, rel Relation, opts Option
 	return
 }
 
-func (inst *Source) describeE(ctx context.Context, opts Options) (err error) {
+func (inst *Source) describe(ctx context.Context, opts Options) (err error) {
 	shape := opts.Shape
 	if shape == nil {
 		var rec arrow.RecordBatch
-		rec, err = inst.queryE(ctx, PurposeDescribe, ProbeStatement(inst.rel), nil)
+		rec, err = inst.query(ctx, PurposeDescribe, ProbeStatement(inst.rel), nil)
 		if err != nil {
 			return
 		}
@@ -150,7 +150,7 @@ func (inst *Source) describeE(ctx context.Context, opts Options) (err error) {
 	inst.meta.Steps = []vectorfield.Step{{}}
 	inst.stepText = []string{""}
 	if inst.hasTime {
-		stepCounts, err = inst.describeStepsE(ctx, opts)
+		stepCounts, err = inst.describeSteps(ctx, opts)
 		if err != nil {
 			return
 		}
@@ -161,7 +161,7 @@ func (inst *Source) describeE(ctx context.Context, opts Options) (err error) {
 		params["ff_t"] = inst.stepText[0]
 	}
 	var rec arrow.RecordBatch
-	rec, err = inst.queryE(ctx, PurposeDescribe, geometryStatement(inst.rel, inst.timeType), params)
+	rec, err = inst.query(ctx, PurposeDescribe, geometryStatement(inst.rel, inst.timeType), params)
 	if err != nil {
 		return
 	}
@@ -225,7 +225,7 @@ func (inst *Source) describeE(ctx context.Context, opts Options) (err error) {
 		g.periodic = true
 		g.cols--
 	}
-	err = inst.checkRegularE(ctx, g, params)
+	err = inst.checkRegular(ctx, g, params)
 	if err != nil {
 		return
 	}
@@ -240,13 +240,13 @@ func (inst *Source) describeE(ctx context.Context, opts Options) (err error) {
 	return
 }
 
-func (inst *Source) describeStepsE(ctx context.Context, opts Options) (counts []uint64, err error) {
+func (inst *Source) describeSteps(ctx context.Context, opts Options) (counts []uint64, err error) {
 	maxSteps := opts.MaxSteps
 	if maxSteps <= 0 {
 		maxSteps = defaultMaxSteps
 	}
 	var rec arrow.RecordBatch
-	rec, err = inst.queryE(ctx, PurposeDescribe, stepsStatement(inst.rel), map[string]string{"ff_cap": formatInt(int64(maxSteps) + 1)})
+	rec, err = inst.query(ctx, PurposeDescribe, stepsStatement(inst.rel), map[string]string{"ff_cap": formatInt(int64(maxSteps) + 1)})
 	if err != nil {
 		return
 	}
@@ -296,7 +296,7 @@ func (inst *Source) describeStepsE(ctx context.Context, opts Options) (counts []
 	return
 }
 
-func (inst *Source) checkRegularE(ctx context.Context, g grid, stepParams map[string]string) (err error) {
+func (inst *Source) checkRegular(ctx context.Context, g grid, stepParams map[string]string) (err error) {
 	params := map[string]string{
 		"ff_west":  formatFloat(g.west),
 		"ff_north": formatFloat(g.north),
@@ -307,7 +307,7 @@ func (inst *Source) checkRegularE(ctx context.Context, g grid, stepParams map[st
 		params[k] = v
 	}
 	var rec arrow.RecordBatch
-	rec, err = inst.queryE(ctx, PurposeDescribe, regularityStatement(inst.rel, inst.timeType), params)
+	rec, err = inst.query(ctx, PurposeDescribe, regularityStatement(inst.rel, inst.timeType), params)
 	if err != nil {
 		return
 	}
@@ -347,10 +347,10 @@ func (inst *Source) LastServed(purpose PurposeE) (served Served, queries uint64)
 // WindowStatement is the text every window request of this source sends.
 func (inst *Source) WindowStatement() string { return inst.windowQ }
 
-// SampleE implements [vectorfield.SourceI]. Window.Version is constant: the
+// Sample implements [vectorfield.SourceI]. Window.Version is constant: the
 // source cannot see the relation's data change, and a host that knows it has
 // builds a new source.
-func (inst *Source) SampleE(ctx context.Context, req vectorfield.Request) (win vectorfield.Window, err error) {
+func (inst *Source) Sample(ctx context.Context, req vectorfield.Request) (win vectorfield.Window, err error) {
 	if !(req.West < req.East) || !(req.South < req.North) {
 		err = eb.Build().
 			Float64("west", req.West).Float64("east", req.East).
@@ -372,12 +372,12 @@ func (inst *Source) SampleE(ctx context.Context, req vectorfield.Request) (win v
 		return
 	}
 	var rec arrow.RecordBatch
-	rec, err = inst.queryE(ctx, PurposeWindow, inst.windowQ, inst.grid.windowParams(&p, inst.stepText[req.Step], inst.hasTime))
+	rec, err = inst.query(ctx, PurposeWindow, inst.windowQ, inst.grid.windowParams(&p, inst.stepText[req.Step], inst.hasTime))
 	if err != nil {
 		return
 	}
 	defer rec.Release()
-	win, err = inst.grid.decodeWindowE(&p, rec, inst.meta.ValidFraction)
+	win, err = inst.grid.decodeWindow(&p, rec, inst.meta.ValidFraction)
 	if err != nil {
 		return
 	}
@@ -386,9 +386,9 @@ func (inst *Source) SampleE(ctx context.Context, req vectorfield.Request) (win v
 	return
 }
 
-func (inst *Source) queryE(ctx context.Context, purpose PurposeE, statement string, params map[string]string) (rec arrow.RecordBatch, err error) {
+func (inst *Source) query(ctx context.Context, purpose PurposeE, statement string, params map[string]string) (rec arrow.RecordBatch, err error) {
 	started := time.Now()
-	rec, err = inst.queryer.QueryE(context.WithValue(ctx, purposeKey{}, purpose), statement, params)
+	rec, err = inst.queryer.Query(context.WithValue(ctx, purposeKey{}, purpose), statement, params)
 	served := Served{Statement: statement, Params: params, Took: time.Since(started), Err: err}
 	if err == nil {
 		served.Rows = int(rec.NumRows())

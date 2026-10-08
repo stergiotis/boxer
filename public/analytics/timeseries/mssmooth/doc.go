@@ -37,7 +37,7 @@
 //
 // # Boundaries
 //
-// Convolution is undefined within m of the data ends. [Kernel.SmoothE] first
+// Convolution is undefined within m of the data ends. [Kernel.Smooth] first
 // extends the series by a weighted linear fit anchored at each end (paper
 // eq 17–18, one-sided Hann weights). Mirroring would force a zero slope at
 // the ends; quadratic extrapolation the paper measured as much worse. With
@@ -50,16 +50,16 @@
 //
 // Three routes to the smoothing strength, strongest claim first:
 //
-//   - [HalfWidthForPeakE]: preserve a Gaussian-like peak of known FWHM to a
+//   - [HalfWidthForPeak]: preserve a Gaussian-like peak of known FWHM to a
 //     chosen height fidelity (paper eq 19, Table 2).
-//   - [HalfWidthForSGE]: replace an existing Savitzky–Golay filter of the
+//   - [HalfWidthForSG]: replace an existing Savitzky–Golay filter of the
 //     same degree at equal −3 dB cutoff (paper eq 14 + 16).
-//   - [HalfWidthForBandwidthE]: hit a −3 dB cutoff given as a fraction of the
+//   - [HalfWidthForBandwidth]: hit a −3 dB cutoff given as a fraction of the
 //     sampling frequency (paper eq 16).
 //
 // # Derivatives
 //
-// [Kernel.DerivativeE] returns the smoothed first derivative: smooth first,
+// [Kernel.Derivative] returns the smoothed first derivative: smooth first,
 // then difference numerically — the operations commute in the interior, and
 // this order has both the lower noise and the smaller boundary artifacts of
 // the two (paper §3.2). The difference is centered, so the derivative is

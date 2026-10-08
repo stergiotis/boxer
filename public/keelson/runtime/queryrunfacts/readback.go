@@ -361,7 +361,9 @@ func filterTerms(filter HistoryFilter, sym func(registry.RegisteredNaturalKey) s
 	return b.String()
 }
 
-// quoteLiteral renders s as a ClickHouse string literal.
+// quoteLiteral renders s as a ClickHouse string literal, backslashes and
+// quotes escaped — the package's one quoter, for values that cannot be
+// bound as parameters (DDL, MV bodies, the extract's SETTINGS).
 func quoteLiteral(s string) (lit string) {
 	return "'" + strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(s) + "'"
 }

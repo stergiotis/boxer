@@ -1,7 +1,7 @@
 package http
 
 import (
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/app/commands/http/serve"
 )
@@ -9,7 +9,7 @@ import (
 func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name: "http",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			serve.NewCommand(),
 		},
 	}

@@ -48,9 +48,9 @@ func patchByte(t *testing.T, path string, off int64) {
 
 func TestIdentityIsStableForTheSameFile(t *testing.T) {
 	path := writeFixture(t, t.TempDir(), "a.bin", 3<<20)
-	first, err := IdentityE(path)
+	first, err := Identity(path)
 	require.NoError(t, err)
-	second, err := IdentityE(path)
+	second, err := Identity(path)
 	require.NoError(t, err)
 	require.Equal(t, first, second)
 	require.Equal(t, int64(3<<20), first.SizeBytes)
@@ -75,10 +75,10 @@ func TestIdentityDetectsAChangedEnd(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			path := writeFixture(t, t.TempDir(), "a.bin", c.size)
-			before, err := IdentityE(path)
+			before, err := Identity(path)
 			require.NoError(t, err)
 			patchByte(t, path, c.off)
-			after, err := IdentityE(path)
+			after, err := Identity(path)
 			require.NoError(t, err)
 			require.Equal(t, before.SizeBytes, after.SizeBytes)
 			require.Equal(t, before.ModTimeUnixNano, after.ModTimeUnixNano)
@@ -96,10 +96,10 @@ func TestIdentityMissesAChangeInTheMiddleOfALargeFile(t *testing.T) {
 	// mistaken for a defect.
 	const size = 8 << 20
 	path := writeFixture(t, t.TempDir(), "a.bin", size)
-	before, err := IdentityE(path)
+	before, err := Identity(path)
 	require.NoError(t, err)
 	patchByte(t, path, size/2)
-	after, err := IdentityE(path)
+	after, err := Identity(path)
 	require.NoError(t, err)
 	require.Equal(t, before, after)
 }
@@ -107,7 +107,7 @@ func TestIdentityMissesAChangeInTheMiddleOfALargeFile(t *testing.T) {
 func TestIdentityDetectsSizeAndMTime(t *testing.T) {
 	dir := t.TempDir()
 	path := writeFixture(t, dir, "a.bin", 2048)
-	before, err := IdentityE(path)
+	before, err := Identity(path)
 	require.NoError(t, err)
 
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0o644)
@@ -117,14 +117,14 @@ func TestIdentityDetectsSizeAndMTime(t *testing.T) {
 	require.NoError(t, f.Close())
 	pinMTime(t, path)
 
-	grown, err := IdentityE(path)
+	grown, err := Identity(path)
 	require.NoError(t, err)
 	require.Equal(t, before.SizeBytes+1, grown.SizeBytes)
 	require.NotEqual(t, before.Hash, grown.Hash)
 
 	touched := time.Unix(1_700_000_001, 0)
 	require.NoError(t, os.Chtimes(path, touched, touched))
-	retouched, err := IdentityE(path)
+	retouched, err := Identity(path)
 	require.NoError(t, err)
 	require.Equal(t, grown.SizeBytes, retouched.SizeBytes)
 	require.NotEqual(t, grown.ModTimeUnixNano, retouched.ModTimeUnixNano)
@@ -132,6 +132,6 @@ func TestIdentityDetectsSizeAndMTime(t *testing.T) {
 }
 
 func TestIdentityOfAMissingFileErrors(t *testing.T) {
-	_, err := IdentityE(filepath.Join(t.TempDir(), "absent.bin"))
+	_, err := Identity(filepath.Join(t.TempDir(), "absent.bin"))
 	require.Error(t, err)
 }

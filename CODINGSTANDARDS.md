@@ -3,7 +3,7 @@ type: reference
 audience: contributor
 status: stable
 reviewed-by: "p@stergiotis"
-reviewed-date: 2026-08-27
+reviewed-date: 2026-10-08
 ---
 
 # Go Coding Standard
@@ -121,7 +121,7 @@ names it.
 * Use `github.com/stergiotis/boxer/public/observability/eh/eb` for structural error construction and wrapping.
 * Use `github.com/stergiotis/boxer/semistructured/leeway/canonicaltypes` for defining RPC or FFI interface descriptions.
 * Use `github.com/stergiotis/boxer/semistructured/leeway/naming` for conversions between naming schemes (e.g. snake_case to camelCase).
-* Use `github.com/urfave/cli/v2` for cli commands and flags handling (see [Entry Points](#entry-points)).
+* Use `github.com/urfave/cli/v3` for cli commands and flags handling (see [Entry Points](#entry-points)).
 * Use `github.com/dim13/colormap` for scientific color maps (Magma, Inferno, Plasma, Vidiris, Parula).
 
 ## Error Handling
@@ -253,8 +253,9 @@ The override only affects the value-prefix rule; the type itself must still end 
 
 ### Function & Method Naming
 
-**Suffixes.**
-*   `E` — functions returning an error (e.g. `OpenE`). E = Error. Distinct from the enum type-suffix `E` above; types and functions are disambiguated by Go's identifier conventions.
+**No error suffix.** A function returning an error is named like any other; the `error` in its signature says so. A trailing `E` belongs to enum types alone ([ADR-0293](./doc/adr/0293-retire-the-e-suffix-on-error-returning-functions.md)).
+
+**Receivers.** There is no house rule for receiver names. `inst` is a legacy convention found throughout the tree; it is neither required for new code nor a reason to rename old code.
 
 **Prefixes.**
 *   `Set` — only idempotent setters may use this prefix.
@@ -389,7 +390,7 @@ Nevertheless, use stdlib functions aiming at writing portable code where it help
 
 Do not add ad-hoc `main()` functions for new utilities, linters, or compile-time code generators. Register them as subcommands under an existing entry point — in boxer this is `./public/app/main.go`, invoked via `./boxer.sh` — so that build tags, flags, the environment-variable registry, and observability wiring are shared.
 
-`github.com/urfave/cli/v2` is mandatory for every CLI surface, including small internal tools: utilities, linters, compile-time code generators. Even one-off commands expose their flags as `cli.Command` definitions; this keeps `--help` output, flag parsing, and `Spec.AsCliFlag()` integration uniform.
+`github.com/urfave/cli/v3` ([ADR-0294](./doc/adr/0294-urfave-cli-v3-for-every-cli-surface.md)) is mandatory for every CLI surface, including small internal tools: utilities, linters, compile-time code generators. Even one-off commands expose their flags as `cli.Command` definitions; this keeps `--help` output, flag parsing, and `Spec.AsCliFlag()` integration uniform.
 
 ## Configuration
 

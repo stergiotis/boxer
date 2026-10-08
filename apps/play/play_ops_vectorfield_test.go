@@ -17,7 +17,7 @@ import (
 type describedField struct{ meta vectorfield.Meta }
 
 func (inst describedField) Describe() vectorfield.Meta { return inst.meta }
-func (inst describedField) SampleE(ctx context.Context, req vectorfield.Request) (vectorfield.Window, error) {
+func (inst describedField) Sample(ctx context.Context, req vectorfield.Request) (vectorfield.Window, error) {
 	return vectorfield.Window{}, context.Canceled
 }
 

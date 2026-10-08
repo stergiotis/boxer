@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"context"
 	"os"
 	"slices"
 	"strings"
@@ -12,7 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/config"
 	cli2 "github.com/stergiotis/boxer/public/hmi/cli"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func NewCommand() *cli.Command {
@@ -37,13 +38,13 @@ func NewCommand() *cli.Command {
 				Value: "",
 			},
 		}, universalFlags),
-		Action: func(context *cli.Context) error {
+		Action: func(ctx context.Context, cmd *cli.Command) error {
 			watcher, err := fsnotify.NewWatcher()
 			if err != nil {
 				return eh.Errorf("unable to create watcher: %w", err)
 			}
-			dir := context.String("dir")
-			suffix := context.String("suffix")
+			dir := cmd.String("dir")
+			suffix := cmd.String("suffix")
 			err = fs.WalkDir(os.DirFS(dir), ".", func(path string, d fs.DirEntry, err error) error {
 				if d.IsDir() {
 					log.Debug().Str("dir", path).Str("suffix", suffix).Msg("watching directory")
@@ -66,7 +67,7 @@ func NewCommand() *cli.Command {
 					}
 					if strings.HasSuffix(event.Name, suffix) {
 						op := event.Op
-						err = universal.FormatValue(context, struct {
+						err = universal.FormatValue(ctx, cmd, struct {
 							Event     string
 							EventName string
 							Operation struct {

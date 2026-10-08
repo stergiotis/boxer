@@ -18,7 +18,8 @@
 package capslock
 
 import (
-	"github.com/urfave/cli/v2"
+	"context"
+	"github.com/urfave/cli/v3"
 
 	capslocklib "github.com/stergiotis/boxer/public/keelson/security/capslock"
 )
@@ -44,9 +45,9 @@ func NewCliCommand() (cmd *cli.Command) {
 				Usage: "build tags to load with (default: the root's tags file)",
 			},
 		},
-		Action: func(ctx *cli.Context) (err error) {
-			args := []string{"capslock-check", "-root", ctx.String("root")}
-			if t := ctx.String("tags"); t != "" {
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
+			args := []string{"capslock-check", "-root", cmd.String("root")}
+			if t := cmd.String("tags"); t != "" {
 				args = append(args, "-tags", t)
 			}
 			exit := capslocklib.Run(args)

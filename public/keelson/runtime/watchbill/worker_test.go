@@ -49,7 +49,7 @@ func newFixture(t *testing.T, runId string, opts ...func(*Config)) (f *fixture) 
 	t.Helper()
 	f = &fixture{store: NewMemStore(), reg: NewRegistry(), clk: &clock{t: t0}, release: make(chan struct{})}
 	f.outcome = func(watchbillstore.Job) error { return nil }
-	require.NoError(t, f.reg.Register(HandlerFunc{KindName: "test.kind", Run: func(ctx context.Context, job watchbillstore.Job, h task.HandleI) error {
+	require.NoError(t, f.reg.Register(HandlerFunc{KindName: "test.kind", RunFunc: func(ctx context.Context, job watchbillstore.Job, h task.HandleI) error {
 		f.ranMu.Lock()
 		f.ran = append(f.ran, job.ID)
 		f.ranMu.Unlock()

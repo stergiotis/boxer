@@ -1,10 +1,11 @@
 package env
 
 import (
+	"context"
 	"os"
 	"testing"
 
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 )
 
 // StringVar is the typed env-var handle for string values.
@@ -64,7 +65,7 @@ func (inst *StringVar) setCached(value string) {
 // cli.StringFlag returned by AsCliFlag. The user action runs first; on
 // success the parsed value is written to the cache so subsequent
 // inst.Get() calls observe it.
-func WithStringAction(fn func(ctx *cli.Context, parsed string) error) (opt FlagOption) {
+func WithStringAction(fn func(ctx context.Context, cmd *cli.Command, parsed string) error) (opt FlagOption) {
 	return func(o *flagOptions) {
 		o.actionFn = fn
 	}
@@ -80,20 +81,20 @@ func WithStringAction(fn func(ctx *cli.Context, parsed string) error) (opt FlagO
 // does not run.
 func (inst *StringVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
 	fo := resolveFlagOptions(inst.spec, opts)
-	userAction, _ := fo.actionFn.(func(*cli.Context, string) error)
+	userAction, _ := fo.actionFn.(func(context.Context, *cli.Command, string) error)
 	return &cli.StringFlag{
 		Name:     fo.cliFlagName,
 		Usage:    inst.spec.Description,
 		Category: string(inst.spec.Category),
-		EnvVars:  []string{inst.spec.Name},
+		Sources:  cli.EnvVars(inst.spec.Name),
 		Value:    inst.spec.Default,
-		Action: func(ctx *cli.Context, parsed string) (err error) {
+		Action: func(ctx context.Context, cmd *cli.Command, parsed string) (err error) {
 			if parsed == "" {
 				inst.res.clearCache()
 				return
 			}
 			if userAction != nil {
-				err = userAction(ctx, parsed)
+				err = userAction(ctx, cmd, parsed)
 				if err != nil {
 					return
 				}

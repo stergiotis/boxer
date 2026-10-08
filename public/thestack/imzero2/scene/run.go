@@ -73,6 +73,10 @@ func RunDoc(doc *Doc, opts Options) (res Result) {
 	res = Result{Doc: doc, Status: StatusFail}
 	defer func() { res.Duration = time.Since(start) }()
 
+	if doc.Spec.HasTag(TagSlow) && !opts.Slow {
+		res.Status, res.Reason = StatusSkip, "tagged slow; --slow runs it"
+		return res
+	}
 	for _, name := range doc.Spec.Requires {
 		unmet, err := CheckRequire(name)
 		if err != nil {

@@ -120,17 +120,17 @@ func (inst *rd) s24() (v int32) {
 	return
 }
 
-// parseGrib1E reads an edition 1 message's four sections into one [Field]:
+// parseGrib1 reads an edition 1 message's four sections into one [Field]:
 // the product definition into [Message.Grib1], the grid description into
 // the field's [Grid] mapped onto the equivalent edition 2 template, the
 // bitmap, and the data section's simple grid-point packing into a
 // [Packing] whose values decode through the same path as template 5.0.
-func (inst *Message) parseGrib1E() (err error) {
+func (inst *Message) parseGrib1() (err error) {
 	raw := inst.raw
 	end := len(raw) - 4
 	pos := 8
 	// Product definition section.
-	pdsLen, err := inst.grib1SectionE(pos, end, 28, "product definition")
+	pdsLen, err := inst.grib1Section(pos, end, 28, "product definition")
 	if err != nil {
 		return
 	}
@@ -161,13 +161,13 @@ func (inst *Message) parseGrib1E() (err error) {
 	century := int(r.u8())
 	inst.Ident.SubCentre = uint16(r.u8())
 	h.DecimalScale = r.s16()
-	err = r.errE("grib1 product definition section")
+	err = r.truncation("grib1 product definition section")
 	if err != nil {
 		return
 	}
 	// Year 2000 is coded as year 100 of century 20.
 	year := (century-1)*100 + yearOfCentury
-	inst.Ident.RefTime, err = makeTimeE(year, month, day, hour, minute, 0)
+	inst.Ident.RefTime, err = makeTime(year, month, day, hour, minute, 0)
 	if err != nil {
 		return
 	}
@@ -207,25 +207,25 @@ func (inst *Message) parseGrib1E() (err error) {
 	// Grid description section.
 	if h.HasGDS {
 		var gdsLen int
-		gdsLen, err = inst.grib1SectionE(pos, end, 32, "grid description")
+		gdsLen, err = inst.grib1Section(pos, end, 32, "grid description")
 		if err != nil {
 			return
 		}
 		f.Section3Offset = inst.Offset + int64(pos)
-		f.Grid, h.VerticalCoordinates, err = parseGrib1GridE(raw[pos : pos+gdsLen])
+		f.Grid, h.VerticalCoordinates, err = parseGrib1Grid(raw[pos : pos+gdsLen])
 		if err != nil {
 			return
 		}
 		pos += gdsLen
 	} else {
-		err = unsupportedE("grib1 grid from catalogue " + strconv.Itoa(int(h.GridID)))
+		err = unsupported("grib1 grid from catalogue " + strconv.Itoa(int(h.GridID)))
 		return
 	}
 	// Bitmap section.
 	f.Bitmap = Bitmap{Indicator: 255, numPoints: f.Grid.NumPoints}
 	if h.HasBMS {
 		var bmsLen int
-		bmsLen, err = inst.grib1SectionE(pos, end, 6, "bitmap")
+		bmsLen, err = inst.grib1Section(pos, end, 6, "bitmap")
 		if err != nil {
 			return
 		}
@@ -233,7 +233,7 @@ func (inst *Message) parseGrib1E() (err error) {
 		bms := raw[pos : pos+bmsLen]
 		tableRef := uint16(bms[4])<<8 | uint16(bms[5])
 		if tableRef != 0 {
-			err = unsupportedE("grib1 predefined bitmap " + strconv.Itoa(int(tableRef)))
+			err = unsupported("grib1 predefined bitmap " + strconv.Itoa(int(tableRef)))
 			return
 		}
 		// The bitmap's bit count is the point count, which a reduced
@@ -275,7 +275,7 @@ func (inst *Message) parseGrib1E() (err error) {
 	}
 	p.Reference = ibmFloat(rawR)
 	p.Bits = b.u8()
-	err = b.errE("grib1 data section")
+	err = b.truncation("grib1 data section")
 	if err != nil {
 		return
 	}
@@ -321,9 +321,9 @@ func (inst *Message) parseGrib1E() (err error) {
 	return
 }
 
-// grib1SectionE reads a section's 3-octet length at pos and checks it
+// grib1Section reads a section's 3-octet length at pos and checks it
 // against the message and the section's minimum.
-func (inst *Message) grib1SectionE(pos, end, minLen int, what string) (n int, err error) {
+func (inst *Message) grib1Section(pos, end, minLen int, what string) (n int, err error) {
 	if end-pos < 3 {
 		err = eb.Build().Int64("offset", inst.Offset).Str("section", what).Errorf("grib1 section truncated: %w", ErrMalformed)
 		return
@@ -336,11 +336,11 @@ func (inst *Message) grib1SectionE(pos, end, minLen int, what string) (n int, er
 	return
 }
 
-// parseGrib1GridE lays out edition 1's grid description section onto the
+// parseGrib1Grid lays out edition 1's grid description section onto the
 // edition 2 [Grid] that describes the same geometry. Coordinates are
 // millidegrees; a Ni of all ones marks a reduced grid whose row counts
 // follow the vertical coordinates at octet PV, two octets each.
-func parseGrib1GridE(gds []byte) (g Grid, vertical []float64, err error) {
+func parseGrib1Grid(gds []byte) (g Grid, vertical []float64, err error) {
 	r := rd{b: gds[3:]}
 	nv := int(r.u8())
 	pv := int(r.u8())
@@ -377,7 +377,7 @@ func parseGrib1GridE(gds []byte) (g Grid, vertical []float64, err error) {
 			rot.Angle = ibmFloat(r.u32())
 			ll.Rotated = rot
 		}
-		err = r.errE("grib1 grid description type " + strconv.Itoa(int(typ)))
+		err = r.truncation("grib1 grid description type " + strconv.Itoa(int(typ)))
 		if err != nil {
 			return
 		}
@@ -452,7 +452,7 @@ func parseGrib1GridE(gds []byte) (g Grid, vertical []float64, err error) {
 		}
 		nx := uint64(r.u16())
 		ny := uint64(r.u16())
-		err = r.errE("grib1 grid description type " + strconv.Itoa(int(typ)))
+		err = r.truncation("grib1 grid description type " + strconv.Itoa(int(typ)))
 		if err != nil {
 			return
 		}
@@ -467,7 +467,7 @@ func parseGrib1GridE(gds []byte) (g Grid, vertical []float64, err error) {
 		jt := uint64(r.u16())
 		kt := uint64(r.u16())
 		mt := uint64(r.u16())
-		err = r.errE("grib1 grid description type 50")
+		err = r.truncation("grib1 grid description type 50")
 		if err != nil {
 			return
 		}
@@ -477,7 +477,7 @@ func parseGrib1GridE(gds []byte) (g Grid, vertical []float64, err error) {
 		}
 		g.Raw = gds[6:]
 	default:
-		err = unsupportedE("grib1 grid type " + strconv.Itoa(int(typ)))
+		err = unsupported("grib1 grid type " + strconv.Itoa(int(typ)))
 	}
 	return
 }

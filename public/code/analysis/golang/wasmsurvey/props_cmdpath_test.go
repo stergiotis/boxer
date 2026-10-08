@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/stergiotis/boxer/public/packageprops"
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 )
 
 // cmdPathPrefix is the part of the invocation that lives above this package:
@@ -67,12 +67,12 @@ func TestNamedVerbsExistInTheCommandTree(t *testing.T) {
 	}
 	verbs := map[string]bool{}
 	found := false
-	for _, sub := range root.Subcommands {
+	for _, sub := range root.Commands {
 		if sub.Name != "props" {
 			continue
 		}
 		found = true
-		for _, v := range sub.Subcommands {
+		for _, v := range sub.Commands {
 			verbs[v.Name] = true
 		}
 	}
@@ -105,11 +105,11 @@ func modeFlagOf(flags []cli.Flag) (f *cli.StringFlag) {
 // version. Without a default the same edit fails before any work starts.
 func TestVerifyHasNoModeDefault(t *testing.T) {
 	root := NewCliCommand()
-	for _, sub := range root.Subcommands {
+	for _, sub := range root.Commands {
 		if sub.Name != "props" {
 			continue
 		}
-		for _, verb := range sub.Subcommands {
+		for _, verb := range sub.Commands {
 			if verb.Name != "verify" {
 				continue
 			}

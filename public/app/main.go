@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 
 	"github.com/rs/zerolog/log"
@@ -53,7 +54,7 @@ import (
 	"github.com/stergiotis/boxer/public/science/geo/grib"
 	"github.com/stergiotis/boxer/public/semistructured/cbor"
 	lw "github.com/stergiotis/boxer/public/semistructured/leeway/cli"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	// Side-effect imports: load env-var Specs from packages that are not
 	// otherwise referenced by this binary, so `boxer env list` and the
@@ -83,17 +84,16 @@ import (
 
 func mainC() (exitCode int) {
 	defer ph.PanicHandler(2, nil, nil)
-	app := cli.App{
-		Name:                 vcs.ModuleInfo(),
-		Copyright:            vcs.CopyrightInfo(),
-		HelpName:             "",
-		Usage:                "",
-		UsageText:            "",
-		ArgsUsage:            "",
-		Version:              vcs.BuildVersionInfo(),
-		Description:          "",
-		DefaultCommand:       "",
-		EnableBashCompletion: false,
+	app := cli.Command{
+		Name:                  vcs.ModuleInfo(),
+		Copyright:             vcs.CopyrightInfo(),
+		Usage:                 "",
+		UsageText:             "",
+		ArgsUsage:             "",
+		Version:               vcs.BuildVersionInfo(),
+		Description:           "",
+		DefaultCommand:        "",
+		EnableShellCompletion: false,
 		Flags: cli2.FlagsNilRemoved(
 			logging.LoggingFlags,
 			profiling.ProfilingFlags,
@@ -153,13 +153,13 @@ func mainC() (exitCode int) {
 			protogen.NewCliCommand(),
 		),
 		Before: logging.Apply,
-		After: func(context *cli.Context) error {
-			profiling.ProfilingHandleExit(context)
-			tracing.TracingHandleExit(context)
+		After: func(ctx context.Context, cmd *cli.Command) error {
+			profiling.ProfilingHandleExit(ctx, cmd)
+			tracing.TracingHandleExit(ctx, cmd)
 			return nil
 		},
 	}
-	err := app.Run(os.Args)
+	err := app.Run(context.Background(), os.Args)
 	if err != nil {
 		exitCode = 1
 		log.Error().Stack().Err(err).Msg("an error occurred")

@@ -15,10 +15,10 @@ type MemSource struct {
 
 var _ SourceI = (*MemSource)(nil)
 
-// NewMemSourceE wraps interleaved samples; len(samples) must be a whole
+// NewMemSource wraps interleaved samples; len(samples) must be a whole
 // number of frames. The slice is retained, not copied.
-func NewMemSourceE(format Format, samples []float32) (src *MemSource, err error) {
-	err = format.ValidateE()
+func NewMemSource(format Format, samples []float32) (src *MemSource, err error) {
+	err = format.Validate()
 	if err != nil {
 		return nil, err
 	}
@@ -39,9 +39,9 @@ func (inst *MemSource) Frames() (frames int64) {
 	return int64(len(inst.samples) / int(inst.format.Channels))
 }
 
-// ReadFramesAtE implements [SourceI].
-func (inst *MemSource) ReadFramesAtE(_ context.Context, frameOffset int64, dst []float32) (n int, err error) {
-	n, err = ClampReadE(inst.format, inst.Frames(), frameOffset, dst)
+// ReadFramesAt implements [SourceI].
+func (inst *MemSource) ReadFramesAt(_ context.Context, frameOffset int64, dst []float32) (n int, err error) {
+	n, err = ClampRead(inst.format, inst.Frames(), frameOffset, dst)
 	if err != nil || n == 0 {
 		return n, err
 	}
@@ -51,5 +51,5 @@ func (inst *MemSource) ReadFramesAtE(_ context.Context, frameOffset int64, dst [
 	return n, nil
 }
 
-// CloseE implements [SourceI]; a memory source holds nothing to release.
-func (inst *MemSource) CloseE() (err error) { return nil }
+// Close implements [SourceI]; a memory source holds nothing to release.
+func (inst *MemSource) Close() (err error) { return nil }

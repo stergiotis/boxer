@@ -66,7 +66,7 @@ func (r *Region) dissolve(ctx context.Context, h *h3.Handle, cells []uint64) err
 	if key == r.key && len(cells) == r.n && r.ringLats != nil {
 		return nil
 	}
-	lats, lngs, ringOffsets, polygonOffsets, err := h.DissolveE(ctx, cells)
+	lats, lngs, ringOffsets, polygonOffsets, err := h.Dissolve(ctx, cells)
 	if err != nil {
 		return eh.Errorf("h3overlay: dissolve: %w", err)
 	}

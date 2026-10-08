@@ -2,6 +2,7 @@ package compression
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -19,7 +20,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/identity/fibonaccicode"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func splitInRunes(str string) (r []string) {
@@ -242,12 +243,12 @@ func NewDictCommand() *cli.Command {
 				Value: false,
 			},
 		},
-		Action: func(context *cli.Context) (err error) {
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
 			corpus, err := io.ReadAll(bufio.NewReader(os.Stdin))
 			if err != nil {
 				return err
 			}
-			lowercase := context.Bool("lowercase")
+			lowercase := cmd.Bool("lowercase")
 			var corpusStr string
 			if lowercase {
 				corpusStr = strings.ToLower(string(corpus))
@@ -293,7 +294,7 @@ func NewDictCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			nGramN := int(context.Uint("nGramN"))
+			nGramN := int(cmd.Uint("nGramN"))
 			h := NewNGramHist(len(cleaned) * 6)
 			for k := range cleaned {
 				_, _ = fCleaned.WriteString(k)
@@ -316,7 +317,7 @@ func NewDictCommand() *cli.Command {
 			h.AddN("-", hyphen)
 			h.AddN(".", dots)
 
-			encoding := context.String("encoding")
+			encoding := cmd.String("encoding")
 			switch encoding {
 			case "fibonacci":
 				h.CalcCodewords(func(rank uint64, total uint64) (code uint64, nBits int) {
@@ -342,7 +343,7 @@ func NewDictCommand() *cli.Command {
 				return errors.New("unkown encoding")
 			}
 
-			output := context.String("output")
+			output := cmd.String("output")
 			switch output {
 			case "dict":
 				for s, n := range h.Codewords() {

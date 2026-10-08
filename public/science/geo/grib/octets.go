@@ -152,7 +152,7 @@ func (inst *rd) f32() (v float32) {
 	return
 }
 
-func (inst *rd) errE(what string) (err error) {
+func (inst *rd) truncation(what string) (err error) {
 	if inst.bad {
 		err = eb.Build().Str("structure", what).Int("length", len(inst.b)).Errorf("structure truncated: %w", ErrMalformed)
 	}

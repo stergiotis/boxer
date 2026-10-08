@@ -86,22 +86,22 @@ type slowSource struct {
 	delay time.Duration
 }
 
-func (inst slowSource) ReadFramesAtE(ctx context.Context, off int64, dst []float32) (n int, err error) {
+func (inst slowSource) ReadFramesAt(ctx context.Context, off int64, dst []float32) (n int, err error) {
 	time.Sleep(inst.delay)
-	return inst.SourceI.ReadFramesAtE(ctx, off, dst)
+	return inst.SourceI.ReadFramesAt(ctx, off, dst)
 }
 
 func openSlowBackgroundTrack(t *testing.T) (tr *track.Track) {
 	t.Helper()
 	format := pcm.Format{SampleRate: 8000, Channels: 1}
 	frames := format.DurationToFrames(20 * time.Second)
-	src, err := pcm.NewSynthSourceE(format, frames, pcm.Silence())
+	src, err := pcm.NewSynthSource(format, frames, pcm.Silence())
 	require.NoError(t, err)
-	tr, err = track.OpenE(context.Background(), slowSource{SourceI: src, delay: 5 * time.Millisecond}, track.Options{
+	tr, err = track.Open(context.Background(), slowSource{SourceI: src, delay: 5 * time.Millisecond}, track.Options{
 		Background: true, ChunkFrames: 4000, NoCache: true,
 	})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = tr.CloseE() })
+	t.Cleanup(func() { _ = tr.Close() })
 	return tr
 }
 
@@ -157,11 +157,11 @@ func TestSpawnBuildTaskCancelStopsTheBuild(t *testing.T) {
 
 func TestSpawnBuildTaskOnACompleteBuildIsNoop(t *testing.T) {
 	format := pcm.Format{SampleRate: 8000, Channels: 1}
-	src, err := pcm.NewSynthSourceE(format, 8000, pcm.Silence())
+	src, err := pcm.NewSynthSource(format, 8000, pcm.Silence())
 	require.NoError(t, err)
-	tr, err := track.OpenE(context.Background(), src, track.Options{NoCache: true})
+	tr, err := track.Open(context.Background(), src, track.Options{NoCache: true})
 	require.NoError(t, err)
-	defer func() { _ = tr.CloseE() }()
+	defer func() { _ = tr.Close() }()
 	h, err := waveform.SpawnBuildTask(context.Background(), &fakeTasks{}, tr, "")
 	require.NoError(t, err)
 	require.Nil(t, h)

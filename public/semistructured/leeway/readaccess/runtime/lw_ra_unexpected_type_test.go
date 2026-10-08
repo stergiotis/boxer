@@ -17,7 +17,7 @@ func TestUnexpectedDataTypeMessageNamesTheColumn(t *testing.T) {
 		{Name: "id:kid:u64:g:1hW82H8FG:0:", Type: arrow.PrimitiveTypes.Uint64},
 	}, nil)
 
-	err := unexpectedDataTypeE(schema, 0, arrow.BinaryTypes.String, arrow.UINT64)
+	err := unexpectedDataType(schema, 0, arrow.BinaryTypes.String, arrow.UINT64)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrUnexpectedArrowDataType, "callers match on the sentinel")
 
@@ -48,7 +48,7 @@ func TestUnexpectedDataTypeToleratesAnUndescribedColumn(t *testing.T) {
 		{"no schema at all", nil, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			err := unexpectedDataTypeE(tc.schema, tc.idx, arrow.BinaryTypes.String, arrow.UINT64)
+			err := unexpectedDataType(tc.schema, tc.idx, arrow.BinaryTypes.String, arrow.UINT64)
 			require.Error(t, err)
 			assert.ErrorIs(t, err, ErrUnexpectedArrowDataType)
 			assert.Contains(t, err.Error(), "<unknown>")

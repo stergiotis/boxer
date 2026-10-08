@@ -15,7 +15,6 @@ import (
 	"encoding/json/v2"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
@@ -427,11 +426,8 @@ func (inst *coordinator) capturePNG(ctx context.Context, o toolOrigin, windows [
 	if err != nil {
 		return nil, err.Error()
 	}
-	deadline := time.Now().Add(callWait)
-	for !out.Final() && time.Now().Before(deadline) && ctx.Err() == nil {
-		if out, err = inst.cli.Status(ctx, h, key, agent.MaxStatusWait); err != nil {
-			return nil, err.Error()
-		}
+	if out, err = inst.settle(ctx, h, key, out); err != nil {
+		return nil, err.Error()
 	}
 	if out.Phase != "completed" || out.Job == "" {
 		why := strings.TrimSpace(out.Phase + " " + out.Reason)

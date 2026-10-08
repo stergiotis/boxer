@@ -1083,6 +1083,24 @@ names the destination that admitted the call, and a test grant never
 applies a consequential command. The one class so far, `publish`, is
 ADR-0288's (§SD4).
 
+### 2026-10-08 — a late call's status, and withdrawing a held call
+
+`status` resolved a late task as the other services do and answered
+`denied`, while the call itself stayed held for more time: the
+coordinator read a refusal, and the person's approval ran the call
+anyway. `status` and `cancel` now accept a late task — both act on a call
+already made and give the task nothing. `cancel` of a held call withdraws
+its widening: the dialog closes and the call ends `cancelled`, so a
+coordinator that stops waiting leaves nothing for the person to approve
+later. The other services still deny a late task.
+
+A request the person leaves undecided expired after five minutes, fixed.
+It is now `Config.RequestTimeout`, which the host takes from
+`BOXER_AGENT_REQUEST_TIMEOUT`, and defaults to 30 minutes, the task
+duration: a coordinator's call now waits with its widening (ADR-0265,
+update of this date), so the timeout is how long a person may be away
+before their dialog lapses.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — the subject taxonomy SD3 extends; the threat model SD6 keeps.

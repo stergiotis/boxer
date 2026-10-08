@@ -23,17 +23,17 @@ func latLngSlicesAsSeq(lats, lngs []float64) iter.Seq2[int, LatLng] {
 func TestLatLngsIterToCells_MatchesBatch(t *testing.T) {
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
 	lats := []float64{0, 37.7749, 48.8566, -33.8688}
 	lngs := []float64{0, -122.4194, 2.3522, 151.2093}
 
-	batchCells, batchStatus, err := h.LatLngsToCellsE(ctx, ResolutionR9, lats, lngs, nil, nil)
+	batchCells, batchStatus, err := h.LatLngsToCells(ctx, ResolutionR9, lats, lngs, nil, nil)
 	require.NoError(t, err)
 
-	iterCells, iterStatus, err := h.LatLngsIterToCellsE(ctx, ResolutionR9,
+	iterCells, iterStatus, err := h.LatLngsIterToCells(ctx, ResolutionR9,
 		len(lats), latLngSlicesAsSeq(lats, lngs), nil, nil)
 	require.NoError(t, err)
 
@@ -44,7 +44,7 @@ func TestLatLngsIterToCells_MatchesBatch(t *testing.T) {
 func TestLatLngsIterToCells_OutOfOrderIndices(t *testing.T) {
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
@@ -63,9 +63,9 @@ func TestLatLngsIterToCells_OutOfOrderIndices(t *testing.T) {
 		}
 	}
 
-	want, _, err := h.LatLngsToCellsE(ctx, ResolutionR7, lats, lngs, nil, nil)
+	want, _, err := h.LatLngsToCells(ctx, ResolutionR7, lats, lngs, nil, nil)
 	require.NoError(t, err)
-	got, _, err := h.LatLngsIterToCellsE(ctx, ResolutionR7, len(lats), shuffled, nil, nil)
+	got, _, err := h.LatLngsIterToCells(ctx, ResolutionR7, len(lats), shuffled, nil, nil)
 	require.NoError(t, err)
 	require.Equal(t, want, got)
 }
@@ -73,7 +73,7 @@ func TestLatLngsIterToCells_OutOfOrderIndices(t *testing.T) {
 func TestLatLngsIterToCells_DuplicateIndexRejected(t *testing.T) {
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
@@ -81,28 +81,28 @@ func TestLatLngsIterToCells_DuplicateIndexRejected(t *testing.T) {
 		_ = yield(0, LatLng{})
 		_ = yield(0, LatLng{}) // duplicate
 	}
-	_, _, err = h.LatLngsIterToCellsE(ctx, ResolutionR5, 2, dup, nil, nil)
+	_, _, err = h.LatLngsIterToCells(ctx, ResolutionR5, 2, dup, nil, nil)
 	require.Error(t, err)
 }
 
 func TestLatLngsIterToCells_OutOfRangeIndex(t *testing.T) {
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
 	oor := func(yield func(int, LatLng) bool) {
 		_ = yield(5, LatLng{})
 	}
-	_, _, err = h.LatLngsIterToCellsE(ctx, ResolutionR5, 3, oor, nil, nil)
+	_, _, err = h.LatLngsIterToCells(ctx, ResolutionR5, 3, oor, nil, nil)
 	require.Error(t, err)
 }
 
 func TestLatLngsIterToCells_IncompleteIterRejected(t *testing.T) {
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
@@ -110,19 +110,19 @@ func TestLatLngsIterToCells_IncompleteIterRejected(t *testing.T) {
 		_ = yield(0, LatLng{})
 		// never yields index 1
 	}
-	_, _, err = h.LatLngsIterToCellsE(ctx, ResolutionR5, 2, short, nil, nil)
+	_, _, err = h.LatLngsIterToCells(ctx, ResolutionR5, 2, short, nil, nil)
 	require.Error(t, err)
 }
 
 func TestLatLngsIterToCells_Empty(t *testing.T) {
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
 	empty := func(yield func(int, LatLng) bool) {}
-	cells, status, err := h.LatLngsIterToCellsE(ctx, ResolutionR5, 0, empty, nil, nil)
+	cells, status, err := h.LatLngsIterToCells(ctx, ResolutionR5, 0, empty, nil, nil)
 	require.NoError(t, err)
 	require.Empty(t, cells)
 	require.Empty(t, status)

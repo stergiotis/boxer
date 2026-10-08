@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"slices"
@@ -17,7 +18,7 @@ import (
 	arrow2 "github.com/stergiotis/boxer/public/semistructured/leeway/ddl/arrow"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/golang"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func NewCliCommandIr() *cli.Command {
@@ -41,7 +42,7 @@ func NewCliCommandIr() *cli.Command {
 	}
 	return &cli.Command{
 		Name: "ir",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			{
 				Name: "load",
 				Flags: slices.Concat([]cli.Flag{
@@ -51,7 +52,7 @@ func NewCliCommandIr() *cli.Command {
 						Usage: fmt.Sprintf("possible values: %q", techIds),
 					},
 				}, universalFlags),
-				Action: func(context *cli.Context) error {
+				Action: func(ctx context.Context, cmd *cli.Command) error {
 					marshaller, err := common.NewTableMarshaller()
 					if err != nil {
 						return eh.Errorf("unable to create table marshaller: %w", err)
@@ -69,13 +70,13 @@ func NewCliCommandIr() *cli.Command {
 
 					var tech common.TechnologySpecificGeneratorI
 					{
-						techIdx := slices.Index(techIds, context.String("technology"))
+						techIdx := slices.Index(techIds, cmd.String("technology"))
 						if techIdx >= 0 {
 							tech = techs[techIdx]
 						}
 					}
 					if tech == nil {
-						return eb.Build().Str("given", context.String("technology")).Strs("possible", techIds).Errorf("unable to resolve technology")
+						return eb.Build().Str("given", cmd.String("technology")).Strs("possible", techIds).Errorf("unable to resolve technology")
 					}
 					ir := common.NewIntermediateTableRepresentation()
 					err = ir.LoadFromTable(&table, tech)

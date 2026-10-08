@@ -1,13 +1,14 @@
 package env
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"slices"
 	"strings"
 	"testing"
 
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 )
 
 // CategorialStringVar is the typed env-var handle for string values
@@ -120,16 +121,16 @@ func (inst *CategorialStringVar) setCached(value string) {
 // supplied explicitly via `--flag=…` it surfaces as a CLI error.
 func (inst *CategorialStringVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
 	fo := resolveFlagOptions(inst.spec, opts)
-	userAction, _ := fo.actionFn.(func(*cli.Context, string) error)
+	userAction, _ := fo.actionFn.(func(context.Context, *cli.Command, string) error)
 	usage := inst.spec.Description
 	usage += fmt.Sprintf(" (one of: %s)", strings.Join(inst.allowed, "|"))
 	return &cli.StringFlag{
 		Name:     fo.cliFlagName,
 		Usage:    usage,
 		Category: string(inst.spec.Category),
-		EnvVars:  []string{inst.spec.Name},
+		Sources:  cli.EnvVars(inst.spec.Name),
 		Value:    inst.spec.Default,
-		Action: func(ctx *cli.Context, parsed string) (err error) {
+		Action: func(ctx context.Context, cmd *cli.Command, parsed string) (err error) {
 			// Empty means unset; see StringVar.AsCliFlag.
 			if parsed == "" {
 				inst.res.clearCache()
@@ -152,7 +153,7 @@ func (inst *CategorialStringVar) AsCliFlag(opts ...FlagOption) (out cli.Flag) {
 				}
 			}
 			if userAction != nil {
-				err = userAction(ctx, effective)
+				err = userAction(ctx, cmd, effective)
 				if err != nil {
 					return
 				}

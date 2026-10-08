@@ -8,13 +8,13 @@
 // anomaly density, mislabelled ground truth, and anomalies bunched at the end
 // of the series — and that trivial heuristics reached state-of-the-art scores
 // on them. A measure is therefore only half of an evaluation: without data that
-// resists triviality, a good score means nothing. [GenerateE] produces series
-// designed against those four flaws and [TrivialityE] checks the result by
+// resists triviality, a good score means nothing. [Generate] produces series
+// designed against those four flaws and [Triviality] checks the result by
 // running the same one-liners.
 //
 // # The measures
 //
-// [EvaluateE] returns the classic point-wise AUC-ROC and AUC-PR alongside
+// [Evaluate] returns the classic point-wise AUC-ROC and AUC-PR alongside
 // VUS-ROC and VUS-PR (Paparrizos et al., 2022), the measures TSB-AD settled on.
 //
 // Point-wise measures punish a detector for flagging an anomaly slightly early
@@ -30,7 +30,7 @@
 //
 // # Cost
 //
-// [EvaluateE] is O(n log n) for the sort plus O(n) per buffer length, so
+// [Evaluate] is O(n log n) for the sort plus O(n) per buffer length, so
 // O(n log n + n·maxBuffer) overall. The sort is paid once and reused across
 // buffers. The reference implementation re-derives the curve per threshold;
 // this one sweeps thresholds incrementally, which is exact rather than

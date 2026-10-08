@@ -2,13 +2,13 @@ package wavfile
 
 // Fuzz targets for the WAVE reader and writer:
 //
-//	FuzzNewReader           — NewReaderE is total on arbitrary bytes: no
+//	FuzzNewReader           — NewReader is total on arbitrary bytes: no
 //	                          panic, and header parsing allocates in
 //	                          proportion to the stream, never to a size or
 //	                          count a field declares. An accepted stream's
 //	                          frames lie inside it and satisfy the
 //	                          pcm.SourceI read contract.
-//	FuzzWriteReadRoundTrip  — WriteE∘NewReaderE∘ReadFramesAtE returns every
+//	FuzzWriteReadRoundTrip  — Write∘NewReader∘ReadFramesAt returns every
 //	                          sample, in both the RIFF and the RF64 form:
 //	                          float containers bit-for-bit (NaN as NaN),
 //	                          integer containers within one quantisation step
@@ -37,18 +37,18 @@ import (
 // needs more than a few hundred bytes to reach.
 const fuzzMaxInput = 1 << 16
 
-// fuzzAllocSlack is the fixed allocation headroom NewReaderE gets on top of
+// fuzzAllocSlack is the fixed allocation headroom NewReader gets on top of
 // the stream-proportional part: the File itself and error construction.
 const fuzzAllocSlack = 64 << 10
 
 func fuzzWritten(f *testing.F, spec headerSpec, samples []float32) {
-	src, err := pcm.NewMemSourceE(spec.format, samples)
+	src, err := pcm.NewMemSource(spec.format, samples)
 	if err != nil {
 		f.Fatal(err)
 	}
 	spec.frames = src.Frames()
 	var buf bytes.Buffer
-	err = writeSpecE(context.Background(), &buf, spec, src)
+	err = writeSpec(context.Background(), &buf, spec, src)
 	if err != nil {
 		f.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func FuzzNewReader(f *testing.F) {
 		}
 		var before, after runtime.MemStats
 		runtime.ReadMemStats(&before)
-		file, err := NewReaderE(bytes.NewReader(data), int64(len(data)))
+		file, err := NewReader(bytes.NewReader(data), int64(len(data)))
 		runtime.ReadMemStats(&after)
 		allocated := after.TotalAlloc - before.TotalAlloc
 		if limit := uint64(4*len(data) + fuzzAllocSlack); allocated > limit {
@@ -93,7 +93,7 @@ func FuzzNewReader(f *testing.F) {
 			return // rejection is fine; panics and runaway allocation are not
 		}
 
-		require.NoError(t, file.Format().ValidateE())
+		require.NoError(t, file.Format().Validate())
 		require.GreaterOrEqual(t, file.Frames(), int64(0))
 		end := file.dataOff + file.Frames()*int64(file.blockAlign)
 		require.LessOrEqual(t, end, int64(len(data)), "frames extend past the stream")
@@ -120,14 +120,14 @@ func FuzzWriteReadRoundTrip(f *testing.F) {
 			samples[i] = math.Float32frombits(binary.LittleEndian.Uint32(raw[i*4:]))
 		}
 
-		src, err := pcm.NewMemSourceE(format, samples)
+		src, err := pcm.NewMemSource(format, samples)
 		require.NoError(t, err)
 		var buf bytes.Buffer
 		spec := headerSpec{format: format, frames: src.Frames(), encoding: sf.encoding, bits: sf.bits, rf64: rf64}
-		require.NoError(t, writeSpecE(ctx, &buf, spec, src))
+		require.NoError(t, writeSpec(ctx, &buf, spec, src))
 
 		written := buf.Bytes()
-		file, err := NewReaderE(bytes.NewReader(written), int64(len(written)))
+		file, err := NewReader(bytes.NewReader(written), int64(len(written)))
 		require.NoError(t, err)
 		require.Equal(t, format, file.Format())
 		require.Equal(t, src.Frames(), file.Frames())
@@ -136,7 +136,7 @@ func FuzzWriteReadRoundTrip(f *testing.F) {
 
 		got := make([]float32, len(samples))
 		if len(got) > 0 {
-			n, rerr := file.ReadFramesAtE(ctx, 0, got)
+			n, rerr := file.ReadFramesAt(ctx, 0, got)
 			require.NoError(t, rerr)
 			require.Equal(t, int(src.Frames()), n)
 		}

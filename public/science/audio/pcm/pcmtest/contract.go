@@ -34,20 +34,20 @@ func CheckSourceContract(t TestingI, src pcm.SourceI, maxFrames int64) {
 	t.Helper()
 	ctx := context.Background()
 	format := src.Format()
-	require.NoError(t, format.ValidateE())
+	require.NoError(t, format.Validate())
 	frames := src.Frames()
 	require.GreaterOrEqual(t, frames, int64(0))
 	ch := int(format.Channels)
 
 	// End-of-source semantics.
 	tail := make([]float32, 4*ch)
-	n, err := src.ReadFramesAtE(ctx, frames, tail)
+	n, err := src.ReadFramesAt(ctx, frames, tail)
 	require.Equal(t, 0, n, "read at Frames() must return no frames")
 	require.ErrorIs(t, err, io.EOF, "read at Frames() must return io.EOF")
-	n, err = src.ReadFramesAtE(ctx, frames+1000, tail)
+	n, err = src.ReadFramesAt(ctx, frames+1000, tail)
 	require.Equal(t, 0, n)
 	require.ErrorIs(t, err, io.EOF)
-	n, err = src.ReadFramesAtE(ctx, -1, tail)
+	n, err = src.ReadFramesAt(ctx, -1, tail)
 	require.Equal(t, 0, n)
 	require.Error(t, err)
 	require.NotErrorIs(t, err, io.EOF, "a negative offset is not end-of-source")
@@ -56,7 +56,7 @@ func CheckSourceContract(t TestingI, src pcm.SourceI, maxFrames int64) {
 	// offset.
 	if frames > 0 && ch > 1 {
 		short := make([]float32, ch-1)
-		n, err = src.ReadFramesAtE(ctx, 0, short)
+		n, err = src.ReadFramesAt(ctx, 0, short)
 		require.Equal(t, 0, n)
 		require.NoError(t, err)
 	}
@@ -85,7 +85,7 @@ func CheckSourceContract(t TestingI, src pcm.SourceI, maxFrames int64) {
 			buf := make([]float32, int(chunk)*ch)
 			for off := start; off < start+win; {
 				want := min(chunk, start+win-off)
-				n, err = src.ReadFramesAtE(ctx, off, buf[:int(want)*ch])
+				n, err = src.ReadFramesAt(ctx, off, buf[:int(want)*ch])
 				require.NoError(t, err, "offset %d chunk %d", off, chunk)
 				require.Equal(t, int(want), n, "a read inside the source is complete (offset %d chunk %d)", off, chunk)
 				got = append(got, buf[:n*ch]...)
@@ -98,7 +98,7 @@ func CheckSourceContract(t TestingI, src pcm.SourceI, maxFrames int64) {
 	// A read that crosses the end is partial, not an error.
 	if frames >= 2 {
 		buf := make([]float32, 3*ch)
-		n, err = src.ReadFramesAtE(ctx, frames-2, buf)
+		n, err = src.ReadFramesAt(ctx, frames-2, buf)
 		require.NoError(t, err)
 		require.Equal(t, 2, n, "a read crossing the end returns the frames that exist")
 		expect := readWindow(t, src, frames-2, 2)
@@ -110,7 +110,7 @@ func readWindow(t TestingI, src pcm.SourceI, start, frames int64) (out []float32
 	t.Helper()
 	ch := int(src.Format().Channels)
 	out = make([]float32, int(frames)*ch)
-	n, err := src.ReadFramesAtE(context.Background(), start, out)
+	n, err := src.ReadFramesAt(context.Background(), start, out)
 	require.NoError(t, err)
 	require.Equal(t, int(frames), n)
 	return out

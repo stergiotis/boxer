@@ -159,7 +159,7 @@ func Run(ctx context.Context, opts Options) (survey Survey, err error) {
 
 	for _, target := range opts.Targets {
 		var tc targetClosure
-		tc, err = loadClosureE(ctx, opts.Dir, opts.Patterns, opts.Tags, target)
+		tc, err = loadClosure(ctx, opts.Dir, opts.Patterns, opts.Tags, target)
 		if err != nil {
 			return
 		}
@@ -211,7 +211,7 @@ func Run(ctx context.Context, opts Options) (survey Survey, err error) {
 				go func(cd candidate) {
 					defer wg.Done()
 					defer func() { <-sem }()
-					tier, reason, millis, perr := probePackageE(ctx, root, cd.importPath, cd.dir, target, opts.Tags, opts.ProbeTimeout)
+					tier, reason, millis, perr := probePackage(ctx, root, cd.importPath, cd.dir, target, opts.Tags, opts.ProbeTimeout)
 					out := probeOutcome{tier: tier, reason: reason, millis: millis, probed: perr == nil}
 					if perr != nil {
 						out.reason = Reason{Kind: ReasonProbeOther, Leaf: cd.importPath, Detail: "probe harness error: " + perr.Error()}

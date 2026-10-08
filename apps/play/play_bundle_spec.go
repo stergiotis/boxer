@@ -50,11 +50,11 @@ type BundleSpec struct {
 	OnBehalfOf     *app.OnBehalfOf
 }
 
-// ComposeBundleDocE writes spec's applet document and checks it with the
+// ComposeBundleDoc writes spec's applet document and checks it with the
 // installed parser: it parses, it reads its datasets under the local names
 // the bundle carries and no others, and it asks for the introspection
 // endpoint, where they resolve.
-func ComposeBundleDocE(spec BundleSpec) (doc []byte, err error) {
+func ComposeBundleDoc(spec BundleSpec) (doc []byte, err error) {
 	if len(spec.Datasets) == 0 {
 		return nil, eb.Build().Str("bundle", spec.Alias).Errorf("a bundle carries one or more datasets")
 	}
@@ -129,11 +129,11 @@ func ComposeBundleDocE(spec BundleSpec) (doc []byte, err error) {
 	return doc, nil
 }
 
-// PublishBundleE composes and checks spec's document, then publishes the
+// PublishBundle composes and checks spec's document, then publishes the
 // bundle with its provenance (ADR-0288 §SD2, §SD5). It is a bus
 // round trip: call it off the render goroutine.
-func PublishBundleE(bus app.BusI, spec BundleSpec) (res adhocdata.BundleResult, err error) {
-	doc, err := ComposeBundleDocE(spec)
+func PublishBundle(bus app.BusI, spec BundleSpec) (res adhocdata.BundleResult, err error) {
+	doc, err := ComposeBundleDoc(spec)
 	if err != nil {
 		return
 	}

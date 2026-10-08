@@ -1,13 +1,14 @@
 package wasmsurvey
 
 import (
+	"context"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/stergiotis/boxer/public/code/analysis/golang/godep/godepcollect"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 )
 
 // NewCliCommand returns the `wasmsurvey` subcommand (registered under
@@ -30,8 +31,8 @@ func NewCliCommand() *cli.Command {
 			&cli.BoolFlag{Name: "show-green", Usage: "list green packages individually instead of summarizing their count"},
 			&cli.StringFlag{Name: "json", Usage: "write machine-readable JSON here (\"-\" for stdout, suppresses the text report)"},
 		),
-		Action:      runWasmSurvey,
-		Subcommands: []*cli.Command{newPropsCommand()},
+		Action:   runWasmSurvey,
+		Commands: []*cli.Command{newPropsCommand()},
 	}
 }
 
@@ -40,7 +41,7 @@ func NewCliCommand() *cli.Command {
 func computeFlags() []cli.Flag {
 	return []cli.Flag{
 		&cli.StringFlag{Name: "dir", Usage: "module dir to survey; empty resolves the nearest go.mod above the working dir"},
-		&cli.StringSliceFlag{Name: "patterns", Usage: "go list patterns", Value: cli.NewStringSlice("./...")},
+		&cli.StringSliceFlag{Name: "patterns", Usage: "go list patterns", Value: []string{"./..."}},
 		&cli.StringFlag{Name: "tags", Usage: "comma-separated build tags; empty falls back to <root>/tags then GOFLAGS"},
 		&cli.StringFlag{Name: "target", Usage: "comma-separated targets: wasi,js,wasm-unknown", Value: "wasi,js,wasm-unknown"},
 		&cli.StringFlag{Name: "mode", Usage: "static | empirical | both", Value: "both"},
@@ -53,8 +54,8 @@ func computeFlags() []cli.Flag {
 
 // wasmSurveyOptions builds survey Options from the compute flags, resolving the
 // module dir to a concrete path (so callers like props harvest have a root).
-func wasmSurveyOptions(c *cli.Context) (opts Options, err error) {
-	dir := c.String("dir")
+func wasmSurveyOptions(ctx context.Context, cmd *cli.Command) (opts Options, err error) {
+	dir := cmd.String("dir")
 	if dir == "" {
 		if wd, e := os.Getwd(); e == nil {
 			if root, ok := godepcollect.ModuleRoot(wd); ok {
@@ -66,7 +67,7 @@ func wasmSurveyOptions(c *cli.Context) (opts Options, err error) {
 	}
 
 	var targets []TargetID
-	for name := range strings.SplitSeq(c.String("target"), ",") {
+	for name := range strings.SplitSeq(cmd.String("target"), ",") {
 		name = strings.TrimSpace(name)
 		if name == "" {
 			continue
@@ -78,39 +79,39 @@ func wasmSurveyOptions(c *cli.Context) (opts Options, err error) {
 		targets = append(targets, t)
 	}
 
-	mode, ok := ParseModeE(c.String("mode"))
+	mode, ok := ParseModeE(cmd.String("mode"))
 	if !ok {
-		return Options{}, eb.Build().Str("mode", c.String("mode")).Errorf("unknown mode (want static|empirical|both)")
+		return Options{}, eb.Build().Str("mode", cmd.String("mode")).Errorf("unknown mode (want static|empirical|both)")
 	}
 
 	opts = Options{
 		Dir:             dir,
-		Patterns:        c.StringSlice("patterns"),
-		Tags:            resolveTags(c.String("tags"), dir),
+		Patterns:        cmd.StringSlice("patterns"),
+		Tags:            resolveTags(cmd.String("tags"), dir),
 		Targets:         targets,
 		Mode:            mode,
-		IncludeExternal: c.Bool("include-external"),
-		Jobs:            c.Int("jobs"),
-		ProbeTimeout:    c.Duration("timeout"),
-		AssumeClean:     godepcollect.SplitTags(c.String("assume-clean")),
+		IncludeExternal: cmd.Bool("include-external"),
+		Jobs:            cmd.Int("jobs"),
+		ProbeTimeout:    cmd.Duration("timeout"),
+		AssumeClean:     godepcollect.SplitTags(cmd.String("assume-clean")),
 	}
 	return opts, nil
 }
 
-func runWasmSurvey(c *cli.Context) (err error) {
+func runWasmSurvey(ctx context.Context, cmd *cli.Command) (err error) {
 	var opts Options
-	opts, err = wasmSurveyOptions(c)
+	opts, err = wasmSurveyOptions(ctx, cmd)
 	if err != nil {
 		return err
 	}
 
 	var survey Survey
-	survey, err = Run(c.Context, opts)
+	survey, err = Run(ctx, opts)
 	if err != nil {
 		return err
 	}
 
-	if jsonPath := c.String("json"); jsonPath != "" {
+	if jsonPath := cmd.String("json"); jsonPath != "" {
 		if jsonPath == "-" {
 			return RenderJSON(survey, os.Stdout)
 		}
@@ -124,7 +125,7 @@ func runWasmSurvey(c *cli.Context) (err error) {
 		}
 	}
 
-	return RenderText(survey, os.Stdout, c.Bool("show-green"))
+	return RenderText(survey, os.Stdout, cmd.Bool("show-green"))
 }
 
 // resolveTags resolves the build-tag list for root. The resolution itself lives

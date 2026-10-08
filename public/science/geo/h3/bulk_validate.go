@@ -7,9 +7,9 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-// AreValidCellsE reports, for each input cell, whether it is a
+// AreValidCells reports, for each input cell, whether it is a
 // well-formed H3 index.
-func (inst *Handle) AreValidCellsE(
+func (inst *Handle) AreValidCells(
 	ctx context.Context,
 	cells []uint64,
 	validDst []bool,
@@ -27,18 +27,18 @@ func (inst *Handle) AreValidCellsE(
 	total := int(validRel) + n
 
 	var base uint32
-	base, err = inst.ensureScratchE(ctx, total)
+	base, err = inst.ensureScratch(ctx, total)
 	if err != nil {
 		return
 	}
 	cellsOff := base + cellsRel
 	validOff := base + validRel
 
-	err = inst.writeU64sE(cellsOff, cells)
+	err = inst.writeU64s(cellsOff, cells)
 	if err != nil {
 		return
 	}
-	_, err = inst.callE(ctx, inst.fnAreValid,
+	_, err = inst.call(ctx, inst.fnAreValid,
 		uint64(cellsOff), uint64(n32),
 		uint64(validOff),
 	)
@@ -47,7 +47,7 @@ func (inst *Handle) AreValidCellsE(
 		return
 	}
 	var raw []byte
-	raw, err = inst.readBytesE(validOff, n)
+	raw, err = inst.readBytes(validOff, n)
 	if err != nil {
 		return
 	}
@@ -57,8 +57,8 @@ func (inst *Handle) AreValidCellsE(
 	return
 }
 
-// GetResolutionsE returns the resolution of each input cell.
-func (inst *Handle) GetResolutionsE(
+// GetResolutions returns the resolution of each input cell.
+func (inst *Handle) GetResolutions(
 	ctx context.Context,
 	cells []uint64,
 	resDst []ResolutionE,
@@ -79,7 +79,7 @@ func (inst *Handle) GetResolutionsE(
 	total := int(statusRel) + n
 
 	var base uint32
-	base, err = inst.ensureScratchE(ctx, total)
+	base, err = inst.ensureScratch(ctx, total)
 	if err != nil {
 		return
 	}
@@ -87,11 +87,11 @@ func (inst *Handle) GetResolutionsE(
 	resOff := base + resRel
 	statusOff := base + statusRel
 
-	err = inst.writeU64sE(cellsOff, cells)
+	err = inst.writeU64s(cellsOff, cells)
 	if err != nil {
 		return
 	}
-	_, err = inst.callE(ctx, inst.fnGetResolution,
+	_, err = inst.call(ctx, inst.fnGetResolution,
 		uint64(cellsOff), uint64(n32),
 		uint64(resOff), uint64(statusOff),
 	)
@@ -100,13 +100,13 @@ func (inst *Handle) GetResolutionsE(
 		return
 	}
 	var raw []byte
-	raw, err = inst.readBytesE(resOff, n)
+	raw, err = inst.readBytes(resOff, n)
 	if err != nil {
 		return
 	}
 	for i, b := range raw {
 		res[i] = ResolutionE(b)
 	}
-	err = inst.readStatusE(statusOff, status)
+	err = inst.readStatus(statusOff, status)
 	return
 }

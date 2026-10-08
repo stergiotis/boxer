@@ -96,6 +96,9 @@ const (
 	DefaultCallsMin   = 20
 	DefaultCallsMax   = 1000
 	DefaultDeadline   = 30 * time.Minute
+	// DefaultRequestTimeout bounds how long a request waits for the person:
+	// as long as a task runs, since a coordinator's call now waits with it.
+	DefaultRequestTimeout = 30 * time.Minute
 	// MaxStatusWait bounds how long status waits for a final phase.
 	MaxStatusWait = 5 * time.Second
 	// keepRecords bounds the in-process action record.
@@ -351,6 +354,14 @@ func (inst *Service) resolveLate(handle string, msg *app.Msg, lateOk bool) (t *t
 func (inst *Service) deadline() (d time.Duration) {
 	if d = inst.cfg.Deadline; d <= 0 {
 		d = DefaultDeadline
+	}
+	return
+}
+
+// requestTimeout is how long a request waits for the person.
+func (inst *Service) requestTimeout() (d time.Duration) {
+	if d = inst.cfg.RequestTimeout; d <= 0 {
+		d = DefaultRequestTimeout
 	}
 	return
 }
@@ -860,7 +871,9 @@ func (inst *Service) status(msg *app.Msg) (rep wireCallReply) {
 			inst.mu.Lock()
 		}
 	}
-	t, out, ok := inst.resolve(req.Handle, msg)
+	// A late task's calls are held for more time, not denied: their
+	// status is theirs to report (ADR-0269, update of 2026-10-08).
+	t, out, ok, _ := inst.resolveLate(req.Handle, msg, true)
 	if !ok {
 		rep.Outcome = wireOutcomeOf(out, "", "")
 		return
@@ -884,7 +897,8 @@ func (inst *Service) cancel(msg *app.Msg) (rep wireCallReply) {
 	rep.Ok = true
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	t, out, ok := inst.resolve(req.Handle, msg)
+	// Withdrawing takes nothing from the person, late or not.
+	t, out, ok, _ := inst.resolveLate(req.Handle, msg, true)
 	if !ok {
 		rep.Outcome = wireOutcomeOf(out, "", "")
 		return
@@ -893,6 +907,9 @@ func (inst *Service) cancel(msg *app.Msg) (rep wireCallReply) {
 	if !seen {
 		rep.Outcome = wireOutcomeOf(phaseOutcome(opwire.PhaseRefused, "no call by that key"), "", "")
 		return
+	}
+	if rec.heldBy != nil && rec.outcome.Phase == opwire.PhaseInputRequired {
+		inst.withdraw(rec)
 	}
 	if rec.routed && rec.outcome.Phase == opwire.PhaseAccepted && inst.cfg.Host != nil {
 		if o, found := inst.cfg.Host.OpsCancel(rec.instance, rec.callId); found {

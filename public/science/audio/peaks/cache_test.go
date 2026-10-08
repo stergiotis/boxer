@@ -43,11 +43,11 @@ func TestCacheRoundTrip(t *testing.T) {
 		id := testIdentity()
 
 		var buf bytes.Buffer
-		require.NoError(t, p.WriteToE(&buf, id))
+		require.NoError(t, p.WriteTo(&buf, id))
 		require.Equal(t, int(headerBytes)+int(p.MemoryBytes()), buf.Len(),
 			"a peaks file is the header plus the level arrays and nothing else")
 
-		got, err := peaks.ReadFromE(&buf, id)
+		got, err := peaks.ReadFrom(&buf, id)
 		require.NoError(t, err)
 		require.Equal(t, 0, buf.Len(), "the reader must consume exactly the file")
 		require.Equal(t, p.Format(), got.Format())
@@ -65,7 +65,7 @@ func TestCacheHeaderIsStable(t *testing.T) {
 	format := pcm.Format{SampleRate: 48000, Channels: 2}
 	p := foldWhole(t, format, genSamples(5, 2*1000), 256)
 	var buf bytes.Buffer
-	require.NoError(t, p.WriteToE(&buf, testIdentity()))
+	require.NoError(t, p.WriteTo(&buf, testIdentity()))
 	hdr := buf.Bytes()[:headerBytes]
 	id := testIdentity()
 	require.Equal(t, "BXPK", string(hdr[offMagic:offMagic+4]))
@@ -84,19 +84,19 @@ func TestCacheHeaderIsStable(t *testing.T) {
 func TestCacheRefusesIncompletePyramid(t *testing.T) {
 	format := pcm.Format{SampleRate: 48000, Channels: 1}
 	samples := genSamples(9, 1000)
-	p, err := peaks.NewPyramidE(format, 1000, 16)
+	p, err := peaks.NewPyramid(format, 1000, 16)
 	require.NoError(t, err)
 	var buf bytes.Buffer
-	require.ErrorContains(t, p.WriteToE(&buf, testIdentity()), "incomplete")
-	require.NoError(t, p.FoldE(samples[:500]))
-	require.ErrorContains(t, p.WriteToE(&buf, testIdentity()), "incomplete")
+	require.ErrorContains(t, p.WriteTo(&buf, testIdentity()), "incomplete")
+	require.NoError(t, p.Fold(samples[:500]))
+	require.ErrorContains(t, p.WriteTo(&buf, testIdentity()), "incomplete")
 	// Finished short of the declared length is still not a cacheable file.
 	p.Finish()
-	require.ErrorContains(t, p.WriteToE(&buf, testIdentity()), "incomplete")
+	require.ErrorContains(t, p.WriteTo(&buf, testIdentity()), "incomplete")
 	require.Zero(t, buf.Len())
 
 	full := foldWhole(t, format, samples, 16)
-	require.NoError(t, full.WriteToE(&buf, testIdentity()))
+	require.NoError(t, full.WriteTo(&buf, testIdentity()))
 }
 
 func TestCacheIdentityMismatchNamesTheField(t *testing.T) {
@@ -104,7 +104,7 @@ func TestCacheIdentityMismatchNamesTheField(t *testing.T) {
 	p := foldWhole(t, format, genSamples(13, 2*777), 16)
 	id := testIdentity()
 	var good bytes.Buffer
-	require.NoError(t, p.WriteToE(&good, id))
+	require.NoError(t, p.WriteTo(&good, id))
 
 	for _, tc := range []struct {
 		name  string
@@ -116,12 +116,12 @@ func TestCacheIdentityMismatchNamesTheField(t *testing.T) {
 		{name: "modTime", want: func() (o peaks.Identity) { o = id; o.ModTimeUnixNano--; return o }(), field: "modification time"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := peaks.ReadFromE(bytes.NewReader(good.Bytes()), tc.want)
+			_, err := peaks.ReadFrom(bytes.NewReader(good.Bytes()), tc.want)
 			require.ErrorContains(t, err, tc.field)
 		})
 	}
 
-	got, err := peaks.ReadFromE(bytes.NewReader(good.Bytes()), id)
+	got, err := peaks.ReadFrom(bytes.NewReader(good.Bytes()), id)
 	require.NoError(t, err)
 	require.Equal(t, p.Frames(), got.Frames())
 }
@@ -131,7 +131,7 @@ func TestCacheRejectsMalformedFiles(t *testing.T) {
 	p := foldWhole(t, format, genSamples(17, 2*600), 16)
 	id := testIdentity()
 	var good bytes.Buffer
-	require.NoError(t, p.WriteToE(&good, id))
+	require.NoError(t, p.WriteTo(&good, id))
 
 	patched := func(mutate func(file []byte)) (file []byte) {
 		file = bytes.Clone(good.Bytes())
@@ -182,7 +182,7 @@ func TestCacheRejectsMalformedFiles(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := peaks.ReadFromE(bytes.NewReader(tc.file), id)
+			_, err := peaks.ReadFrom(bytes.NewReader(tc.file), id)
 			require.ErrorContains(t, err, tc.msg)
 		})
 	}
@@ -192,7 +192,7 @@ func TestCacheWriteErrorsPropagate(t *testing.T) {
 	format := pcm.Format{SampleRate: 48000, Channels: 2}
 	p := foldWhole(t, format, genSamples(19, 2*4000), 16)
 	for _, limit := range []int{0, 10, headerBytes, headerBytes + 5} {
-		err := p.WriteToE(&shortWriter{limit: limit}, testIdentity())
+		err := p.WriteTo(&shortWriter{limit: limit}, testIdentity())
 		require.Error(t, err, "limit %d", limit)
 	}
 }

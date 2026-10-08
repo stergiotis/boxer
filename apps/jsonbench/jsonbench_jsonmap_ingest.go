@@ -10,7 +10,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog/log"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"lukechampine.com/blake3"
 
 	"github.com/stergiotis/boxer/apps/jsonbench/jsonmap"
@@ -52,11 +52,11 @@ func jsonmapIngestCommand() *cli.Command {
 	}
 }
 
-func runJsonmapIngest(cCtx *cli.Context) (err error) {
-	dataDir := cCtx.String("data-dir")
-	offset := cCtx.Int("file-offset")
+func runJsonmapIngest(ctx context.Context, cmd *cli.Command) (err error) {
+	dataDir := cmd.String("data-dir")
+	offset := cmd.Int("file-offset")
 	var files []string
-	files, err = tierFilesFrom(dataDir, offset, cCtx.Int("files"))
+	files, err = tierFilesFrom(dataDir, offset, cmd.Int("files"))
 	if err != nil {
 		return
 	}
@@ -67,14 +67,14 @@ func runJsonmapIngest(cCtx *cli.Context) (err error) {
 	// put the same path in different sections — so a parallel load passes
 	// --symbol-path explicitly and only the first pass samples.
 	symbolPaths := make(map[string]struct{}, 16)
-	if forced := cCtx.StringSlice("symbol-path"); len(forced) > 0 {
+	if forced := cmd.StringSlice("symbol-path"); len(forced) > 0 {
 		for _, p := range forced {
 			symbolPaths[p] = struct{}{}
 		}
 		log.Info().Int("paths", len(symbolPaths)).Msg("symbol routing supplied by the caller")
 	} else {
-		log.Info().Int("sample", cCtx.Int("sample")).Msg("sampling for symbol routing")
-		symbolPaths, err = sampleSymbolPaths(files[0], cCtx.Int("sample"), cCtx.Float64("symbol-ratio"))
+		log.Info().Int("sample", cmd.Int("sample")).Msg("sampling for symbol routing")
+		symbolPaths, err = sampleSymbolPaths(files[0], cmd.Int("sample"), cmd.Float64("symbol-ratio"))
 		if err != nil {
 			return
 		}
@@ -91,27 +91,27 @@ func runJsonmapIngest(cCtx *cli.Context) (err error) {
 
 	ing := &jsonmapIngester{
 		alloc:       memory.NewGoAllocator(),
-		batch:       cCtx.Int("batch"),
+		batch:       cmd.Int("batch"),
 		symbolPaths: symbolPaths,
-		limit:       uint64(cCtx.Int("limit")),
+		limit:       uint64(cmd.Int("limit")),
 	}
 
 	ing.cli = chclient.New(chclient.Config{
-		URL:      cCtx.String("url"),
-		User:     cCtx.String("user"),
-		Password: cCtx.String("password"),
+		URL:      cmd.String("url"),
+		User:     cmd.String("user"),
+		Password: cmd.String("password"),
 	}, nil)
-	ing.table = cCtx.String("database") + "." + cCtx.String("table")
+	ing.table = cmd.String("database") + "." + cmd.String("table")
 
 	start := time.Now()
 	for _, f := range files {
 		log.Info().Str("file", filepath.Base(f)).Msg("ingesting")
-		err = ing.ingestFile(cCtx.Context, f)
+		err = ing.ingestFile(ctx, f)
 		if err != nil {
 			return
 		}
 	}
-	err = ing.flush(cCtx.Context)
+	err = ing.flush(ctx)
 	if err != nil {
 		return
 	}

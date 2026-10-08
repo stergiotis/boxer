@@ -14,7 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/science/geo/grib/jpeg2000"
 )
 
-// ValuesE decodes the field into dst (grown as needed) in stored order:
+// Values decodes the field into dst (grown as needed) in stored order:
 // one value per grid point, NaN where the bitmap or the packing's missing
 // value management leaves no value (ADR-0292 §R2). The result is the
 // double the reference implementation computes: (R + X·2^E) × 10^−D.
@@ -23,8 +23,8 @@ import (
 // packings among them — and bitmaps other than present or absent are
 // [ErrUnsupported]; a data section shorter than its bit count is
 // [ErrInconsistent].
-func (inst *Field) ValuesE(dst []float64) (values []float64, err error) {
-	err = inst.Packing.supportedE()
+func (inst *Field) Values(dst []float64) (values []float64, err error) {
+	err = inst.Packing.supported()
 	if err != nil {
 		return
 	}
@@ -55,17 +55,17 @@ func (inst *Field) ValuesE(dst []float64) (values []float64, err error) {
 	}
 	switch inst.Packing.Template {
 	case 0:
-		err = inst.unpackSimpleE(packed)
+		err = inst.unpackSimple(packed)
 	case 2, 3:
-		err = inst.unpackComplexE(packed)
+		err = inst.unpackComplex(packed)
 	case 4:
-		err = inst.unpackIEEEE(packed)
+		err = inst.unpackIEEE(packed)
 	case 41:
-		err = inst.unpackPNGE(packed)
+		err = inst.unpackPNG(packed)
 	case 42:
-		err = inst.unpackCCSDSE(packed)
+		err = inst.unpackCCSDS(packed)
 	case 40, jpegPreStandard:
-		err = inst.unpackJPEGE(packed)
+		err = inst.unpackJPEG(packed)
 	}
 	if err != nil {
 		return
@@ -84,10 +84,10 @@ func (inst *Field) ValuesE(dst []float64) (values []float64, err error) {
 	return
 }
 
-// unpackSimpleE is template 5.0. A width of 0 codes a constant field whose
+// unpackSimple is template 5.0. A width of 0 codes a constant field whose
 // every value is the reference, scaled: R × 10^−D, with the decimal scale
 // applied — the omission that has shipped in a reference library.
-func (inst *Field) unpackSimpleE(out []float64) (err error) {
+func (inst *Field) unpackSimple(out []float64) (err error) {
 	p := &inst.Packing
 	bin, dec := p.scaleFactors()
 	ref := float64(p.Reference)
@@ -110,8 +110,8 @@ func (inst *Field) unpackSimpleE(out []float64) (err error) {
 	return
 }
 
-// unpackIEEEE is template 5.4: raw IEEE floats, single or double.
-func (inst *Field) unpackIEEEE(out []float64) (err error) {
+// unpackIEEE is template 5.4: raw IEEE floats, single or double.
+func (inst *Field) unpackIEEE(out []float64) (err error) {
 	p := &inst.Packing
 	var width int
 	switch p.IEEEPrecision {
@@ -120,7 +120,7 @@ func (inst *Field) unpackIEEEE(out []float64) (err error) {
 	case 2:
 		width = 8
 	default:
-		err = unsupportedE("ieee precision " + strconv.Itoa(int(p.IEEEPrecision)))
+		err = unsupported("ieee precision " + strconv.Itoa(int(p.IEEEPrecision)))
 		return
 	}
 	if len(inst.data) < width*len(out) {
@@ -138,12 +138,12 @@ func (inst *Field) unpackIEEEE(out []float64) (err error) {
 	return
 }
 
-// unpackPNGE is template 5.41: the packed integers are the samples of a
+// unpackPNG is template 5.41: the packed integers are the samples of a
 // PNG image whose depth is the bit count (1–16 as greyscale, 24 as RGB, 32
 // as RGBA), read through the standard library. The image's dimensions must
 // multiply to the value count, and its depth must agree with Section 5 —
 // the mismatch that produced "invalid grid values" silently elsewhere.
-func (inst *Field) unpackPNGE(out []float64) (err error) {
+func (inst *Field) unpackPNG(out []float64) (err error) {
 	p := &inst.Packing
 	bin, dec := p.scaleFactors()
 	ref := float64(p.Reference)
@@ -226,12 +226,12 @@ func (inst *Field) unpackPNGE(out []float64) (err error) {
 			}
 		}
 	default:
-		err = unsupportedE("png colour model " + strconv.Quote(strconv.Itoa(int(p.Bits))+" bits"))
+		err = unsupported("png colour model " + strconv.Quote(strconv.Itoa(int(p.Bits))+" bits"))
 	}
 	return
 }
 
-// unpackComplexE is templates 5.2 and 5.3: the values are split into
+// unpackComplex is templates 5.2 and 5.3: the values are split into
 // groups, each with its own reference, width and length; the group
 // descriptors are packed in three runs, each padded to an octet, then the
 // values follow group by group. Template 5.3 first stores the initial
@@ -242,22 +242,22 @@ func (inst *Field) unpackPNGE(out []float64) (err error) {
 // ones at the group's width, and a whole missing group with all ones at the
 // field's width when the group has zero width. The spatial differences
 // skip missing points: the chain runs over the values that are present.
-func (inst *Field) unpackComplexE(out []float64) (err error) {
+func (inst *Field) unpackComplex(out []float64) (err error) {
 	p := &inst.Packing
 	c := p.Complex
 	bin, dec := p.scaleFactors()
 	ref := float64(p.Reference)
 	n := len(out)
 	if c.SplittingMethod != 1 {
-		err = unsupportedE("group splitting method " + strconv.Itoa(int(c.SplittingMethod)))
+		err = unsupported("group splitting method " + strconv.Itoa(int(c.SplittingMethod)))
 		return
 	}
 	if c.MissingManagement > 2 {
-		err = unsupportedE("missing value management " + strconv.Itoa(int(c.MissingManagement)))
+		err = unsupported("missing value management " + strconv.Itoa(int(c.MissingManagement)))
 		return
 	}
 	if p.Template == 3 && (c.SpatialOrder < 1 || c.SpatialOrder > 2) {
-		err = unsupportedE("spatial differencing order " + strconv.Itoa(int(c.SpatialOrder)))
+		err = unsupported("spatial differencing order " + strconv.Itoa(int(c.SpatialOrder)))
 		return
 	}
 	if p.Template == 3 && (c.SpatialOctets < 1 || c.SpatialOctets > 4) {
@@ -400,14 +400,14 @@ func (inst *Field) unpackComplexE(out []float64) (err error) {
 	return
 }
 
-// unpackCCSDSE is template 5.42: the packed integers are the samples of a
+// unpackCCSDS is template 5.42: the packed integers are the samples of a
 // CCSDS 121.0-B-3 coded stream at the field's bit width (ADR-0292 §R6,
 // M2). The options mask's data-layout bits (signed, three-byte, MSB) say
 // how the samples would be laid out in bytes and do not touch the integers
 // themselves; the coder bits (preprocessor, restricted set, interval
 // padding) do, and are passed through. A bit width of 0 is a constant
 // field as under simple packing.
-func (inst *Field) unpackCCSDSE(out []float64) (err error) {
+func (inst *Field) unpackCCSDS(out []float64) (err error) {
 	p := &inst.Packing
 	bin, dec := p.scaleFactors()
 	ref := float64(p.Reference)
@@ -419,7 +419,7 @@ func (inst *Field) unpackCCSDSE(out []float64) (err error) {
 		return
 	}
 	if p.Bits > 32 {
-		err = unsupportedE("ccsds resolution above 32 bits")
+		err = unsupported("ccsds resolution above 32 bits")
 		return
 	}
 	c := p.CCSDS
@@ -448,12 +448,12 @@ func (inst *Field) unpackCCSDSE(out []float64) (err error) {
 	return
 }
 
-// unpackJPEGE is template 5.40: the packed integers are the samples of a
+// unpackJPEG is template 5.40: the packed integers are the samples of a
 // JPEG 2000 codestream whose precision is the field's bit width
 // (ADR-0292 §R6). The image's sample count must be the coded value
 // count, and its precision must agree with Section 5 — the mismatches
 // behind silent wrong values in other decoders' PNG and JPEG paths.
-func (inst *Field) unpackJPEGE(out []float64) (err error) {
+func (inst *Field) unpackJPEG(out []float64) (err error) {
 	p := &inst.Packing
 	bin, dec := p.scaleFactors()
 	ref := float64(p.Reference)
@@ -467,7 +467,7 @@ func (inst *Field) unpackJPEGE(out []float64) (err error) {
 	img, err := jpeg2000.Decode(inst.data)
 	if err != nil {
 		if feature, ok := jpeg2000.UnsupportedFeature(err); ok {
-			err = unsupportedE("jpeg 2000 " + feature)
+			err = unsupported("jpeg 2000 " + feature)
 			return
 		}
 		err = eb.Build().Errorf("jpeg 2000 data section: %w: %w", ErrInconsistent, err)
