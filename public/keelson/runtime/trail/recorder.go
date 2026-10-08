@@ -5,8 +5,10 @@ import (
 	"encoding/hex"
 	"iter"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/rs/zerolog"
 	"github.com/zeebo/xxh3"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/functional/option"
+	"github.com/stergiotis/boxer/public/identity/callident"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
@@ -78,6 +81,11 @@ type Recorder struct {
 	readMu sync.Mutex
 	read   *TrailStore
 
+	// observer and readTable are the options: an observer on every store
+	// rows are built into, and the table the read store scans.
+	observer  recordstore.WriteObserverI[uint64, time.Time]
+	readTable string
+
 	wake chan struct{}
 	stop chan struct{}
 	done chan struct{}
@@ -89,21 +97,46 @@ type heldBatch struct {
 	rows  int
 }
 
+// RecorderOption configures NewRecorder.
+type RecorderOption func(*Recorder)
+
+// WithWriteObserver attaches o to every store the recorder builds rows
+// into (ADR-0296 §SD3): it is told each row's key when it is buffered,
+// then once either the batch that made it durable or that it was
+// discarded, as [recordstore.WriteObserverI] promises. It is called on
+// the recorder's goroutines — a writer's under the buffer lock, a flush's
+// outside it — and must not call back into the recorder.
+func WithWriteObserver(o recordstore.WriteObserverI[uint64, time.Time]) RecorderOption {
+	return func(inst *Recorder) { inst.observer = o }
+}
+
+// WithReadTable names the table the recorder's reads scan (ADR-0296
+// §SD9 d): a storage table, or a Merge over several, while writes still go
+// to the facts table. Empty reads the table written to.
+func WithReadTable(table string) RecorderOption {
+	return func(inst *Recorder) { inst.readTable = table }
+}
+
 // NewRecorder builds the recorder of the run named run. exec reaches the
 // server holding boxer.facts; nil is a host without a durable backend.
-func NewRecorder(exec recordstore.ExecutorI, run string, log zerolog.Logger) (inst *Recorder) {
+func NewRecorder(exec recordstore.ExecutorI, run string, log zerolog.Logger, opts ...RecorderOption) (inst *Recorder) {
 	inst = &Recorder{run: run, required: RequiredEnv.Get(), log: log, exec: exec, maxBacklog: MaxBacklogRows,
 		wake: make(chan struct{}, 1), stop: make(chan struct{}), done: make(chan struct{})}
+	for _, o := range opts {
+		o(inst)
+	}
 	if exec != nil {
 		inst.cur = inst.newStore()
-		inst.read = inst.newStore()
+		inst.read = NewTrailStore(inst.exec, nil, TrailStoreConfig{ReadTable: inst.readTable})
 	}
 	go inst.flusher()
 	return
 }
 
+// newStore is a store rows are built into: the current one, and each
+// batch a flush swaps out.
 func (inst *Recorder) newStore() (st *TrailStore) {
-	return NewTrailStore(inst.exec, nil, TrailStoreConfig{})
+	return NewTrailStore(inst.exec, nil, TrailStoreConfig{WriteObserver: inst.observer})
 }
 
 // Close flushes what is buffered and releases the stores.
@@ -159,11 +192,12 @@ func (inst *Recorder) OriginOf(appId app.AppIdT, instance uint64) (o Origin) {
 	return
 }
 
-// begin opens the row keyed key with its context components. The caller
+// begin opens the row keyed key with its context components, under ctx —
+// the store's write observer reads the call identity off it. The caller
 // holds mu and has checked the store.
-func (inst *Recorder) begin(key string, at time.Time, c Context) (b *TrailEntityBuilder, id uint64) {
+func (inst *Recorder) begin(ctx context.Context, key string, at time.Time, c Context) (b *TrailEntityBuilder, id uint64) {
 	id = xxh3.HashString(key)
-	b = inst.cur.Begin(id, at.UTC(), TrailEnvelope{NaturalKey: []byte(key)})
+	b = inst.cur.BeginCtx(ctx, id, at.UTC(), TrailEnvelope{NaturalKey: []byte(key)})
 	o := c.Origin
 	o.Id = id
 	if o.Run == "" {
@@ -183,8 +217,9 @@ func (inst *Recorder) begin(key string, at time.Time, c Context) (b *TrailEntity
 	return
 }
 
-// write runs add under the lock; without a store it does nothing.
-func (inst *Recorder) write(key string, at time.Time, c Context, add func(b *TrailEntityBuilder, id uint64)) (err error) {
+// write runs add under the lock; without a store it does nothing. The
+// verbs whose identity is a bus envelope pass context.Background().
+func (inst *Recorder) write(ctx context.Context, key string, at time.Time, c Context, add func(b *TrailEntityBuilder, id uint64)) (err error) {
 	if inst == nil {
 		return nil
 	}
@@ -193,7 +228,7 @@ func (inst *Recorder) write(key string, at time.Time, c Context, add func(b *Tra
 	if inst.cur == nil {
 		return nil
 	}
-	b, id := inst.begin(key, at, c)
+	b, id := inst.begin(ctx, key, at, c)
 	add(b, id)
 	if err = b.Commit(); err != nil {
 		err = eh.Errorf("trail: buffer row %q: %w", key, err)
@@ -203,7 +238,7 @@ func (inst *Recorder) write(key string, at time.Time, c Context, add func(b *Tra
 
 // LlmCall buffers a model call's row; its natural key is the call id.
 func (inst *Recorder) LlmCall(at time.Time, c Context, row LlmCall) (err error) {
-	return inst.write(row.CallId, at, c, func(b *TrailEntityBuilder, id uint64) {
+	return inst.write(context.Background(), row.CallId, at, c, func(b *TrailEntityBuilder, id uint64) {
 		row.Id, row.Kind = id, "llmCall"
 		b.AddLlmCall(row)
 	})
@@ -213,7 +248,7 @@ func (inst *Recorder) LlmCall(at time.Time, c Context, row LlmCall) (err error) 
 // its natural key is the call id and the ordinal.
 func (inst *Recorder) LlmMessage(at time.Time, c Context, row LlmMessage, body option.Option[LlmMessageBody]) (err error) {
 	key := row.CallId + "/" + strconv.FormatUint(uint64(row.Ordinal), 10)
-	return inst.write(key, at, c, func(b *TrailEntityBuilder, id uint64) {
+	return inst.write(context.Background(), key, at, c, func(b *TrailEntityBuilder, id uint64) {
 		row.Id, row.Kind = id, "llmMessage"
 		b.AddLlmMessage(row)
 		if body.Has {
@@ -229,7 +264,7 @@ func (inst *Recorder) LlmMessage(at time.Time, c Context, row LlmMessage, body o
 // so the dispatcher's row and the final row of one call are two rows.
 func (inst *Recorder) AgentAction(at time.Time, c Context, cause option.Option[Cause], row AgentAction) (err error) {
 	key := "action|" + c.Delegation.Val.Task + "|" + row.Key + "|" + row.Decision + "|" + inst.unique(at)
-	return inst.write(key, at, c, func(b *TrailEntityBuilder, id uint64) {
+	return inst.write(context.Background(), key, at, c, func(b *TrailEntityBuilder, id uint64) {
 		if cause.Has {
 			v := cause.Val
 			v.Id = id
@@ -244,7 +279,7 @@ func (inst *Recorder) AgentAction(at time.Time, c Context, cause option.Option[C
 // for it, when one did.
 func (inst *Recorder) AgentGrant(at time.Time, c Context, cause option.Option[Cause], row AgentGrant) (err error) {
 	key := "grant|" + c.Delegation.Val.Task + "|" + row.Event + "|" + inst.unique(at)
-	return inst.write(key, at, c, func(b *TrailEntityBuilder, id uint64) {
+	return inst.write(context.Background(), key, at, c, func(b *TrailEntityBuilder, id uint64) {
 		if cause.Has {
 			v := cause.Val
 			v.Id = id
@@ -259,7 +294,7 @@ func (inst *Recorder) AgentGrant(at time.Time, c Context, cause option.Option[Ca
 // asked for the capture, when one did.
 func (inst *Recorder) AgentCapture(at time.Time, c Context, cause option.Option[Cause], row AgentCapture) (err error) {
 	key := "capture|" + inst.unique(at)
-	return inst.write(key, at, c, func(b *TrailEntityBuilder, id uint64) {
+	return inst.write(context.Background(), key, at, c, func(b *TrailEntityBuilder, id uint64) {
 		if cause.Has {
 			v := cause.Val
 			v.Id = id
@@ -273,7 +308,7 @@ func (inst *Recorder) AgentCapture(at time.Time, c Context, cause option.Option[
 // AgentDisclosure buffers one view's row (ADR-0287 §SD6).
 func (inst *Recorder) AgentDisclosure(at time.Time, c Context, cause option.Option[Cause], row AgentDisclosure) (err error) {
 	key := "disclosure|" + inst.unique(at)
-	return inst.write(key, at, c, func(b *TrailEntityBuilder, id uint64) {
+	return inst.write(context.Background(), key, at, c, func(b *TrailEntityBuilder, id uint64) {
 		if cause.Has {
 			v := cause.Val
 			v.Id = id
@@ -287,7 +322,7 @@ func (inst *Recorder) AgentDisclosure(at time.Time, c Context, cause option.Opti
 // HttpFetch buffers one egress fetch's row.
 func (inst *Recorder) HttpFetch(at time.Time, c Context, row HttpFetch) (err error) {
 	key := "fetch|" + inst.unique(at)
-	return inst.write(key, at, c, func(b *TrailEntityBuilder, id uint64) {
+	return inst.write(context.Background(), key, at, c, func(b *TrailEntityBuilder, id uint64) {
 		row.Id, row.Kind = id, "httpFetch"
 		b.AddHttpFetch(row)
 	})
@@ -298,7 +333,7 @@ func (inst *Recorder) HttpFetch(at time.Time, c Context, row HttpFetch) (err err
 // when the dispatcher recorded one.
 func (inst *Recorder) AdhocDataset(at time.Time, c Context, cause option.Option[Cause], row AdhocDataset) (err error) {
 	key := "adhoc|" + inst.unique(at)
-	return inst.write(key, at, c, func(b *TrailEntityBuilder, id uint64) {
+	return inst.write(context.Background(), key, at, c, func(b *TrailEntityBuilder, id uint64) {
 		if cause.Has {
 			v := cause.Val
 			v.Id = id
@@ -307,6 +342,85 @@ func (inst *Recorder) AdhocDataset(at time.Time, c Context, cause option.Option[
 		row.Id, row.Kind = id, "adhocDataset"
 		b.AddAdhocDataset(row)
 	})
+}
+
+// Event buffers one audit event (ADR-0296 §SD2), the one verb whose row
+// carries the call identity on ctx: the origin from its vouched part when
+// one is there, else from c, else the run alone; the principal and the
+// purpose from its claims, replacing whatever row carried. With no
+// principal the row's PrincipalBy becomes none. A row outside the bounds
+// of [AuditEvent.Validate] is replaced by an audit-invalid row naming the
+// attempted domain and action, and logged; the call does not fail for it.
+// The row's natural key names the domain, the action and the subject.
+func (inst *Recorder) Event(ctx context.Context, at time.Time, c Context, row AuditEvent) (err error) {
+	if inst == nil {
+		return nil
+	}
+	if ci, ok := callident.CallIdentityFrom(ctx); ok {
+		if ci.Origin != (callident.Origin{}) {
+			c.Origin = Origin{Run: ci.Origin.Run, App: ci.Origin.App, Instance: ci.Origin.Instance}
+		}
+		row.Principal = option.None[string]()
+		if ci.Claims.Principal != "" {
+			row.Principal = option.Some(ci.Claims.Principal)
+		}
+		row.Purpose = option.None[string]()
+		if ci.Claims.Purpose != "" {
+			row.Purpose = option.Some(ci.Claims.Purpose)
+		}
+	} else {
+		row.Principal = option.None[string]()
+		row.Purpose = option.None[string]()
+	}
+	if !row.Principal.Has {
+		row.PrincipalBy = PrincipalByNone
+	}
+	if verr := row.Validate(); verr != nil {
+		inst.log.Error().Err(verr).Str("domain", bounded(row.Domain)).Str("action", bounded(row.Action)).Msg("trail: an audit event is outside its bounds; an audit-invalid row is written in its place")
+		row = inst.invalidEvent(row, verr)
+	}
+	key := "event|" + row.Domain + "|" + row.Action + "|" + strconv.FormatUint(row.Subject, 10) + "|" + inst.unique(at)
+	return inst.write(ctx, key, at, c, func(b *TrailEntityBuilder, id uint64) {
+		row.Id, row.Kind = id, "auditEvent"
+		b.AddAuditEvent(row)
+	})
+}
+
+// invalidEvent is the row written in place of one that failed validation
+// (ADR-0296 §SD4): the recorder's own domain, naming what was attempted
+// and why it was refused, keeping the subject and whatever principal the
+// context vouched for. Built from bounded values, so it needs no check.
+func (inst *Recorder) invalidEvent(row AuditEvent, verr error) (out AuditEvent) {
+	out = AuditEvent{
+		Domain: TrailDomain, Action: ActionAuditInvalid, Outcome: OutcomeFailed,
+		PrincipalBy: PrincipalByNone, Subject: row.Subject, Retention: RetentionTrail,
+		AttrKeys:   []string{"domain", "action", "reason"},
+		AttrValues: []string{bounded(row.Domain), bounded(row.Action), bounded(verr.Error())},
+	}
+	if row.Principal.Has && checkValue("principal", row.Principal.Val) == nil {
+		out.Principal = row.Principal
+		switch row.PrincipalBy {
+		case PrincipalBySystem, PrincipalByEnv, PrincipalByOs:
+			out.PrincipalBy = row.PrincipalBy
+		default:
+			out.PrincipalBy = PrincipalByEnv
+		}
+	}
+	return
+}
+
+// bounded is s as an attribute value: valid UTF-8, non-empty, under the
+// bound.
+func bounded(s string) (out string) {
+	out = strings.ToValidUTF8(s, "\uFFFD")
+	if out == "" {
+		return "-"
+	}
+	if utf8.RuneCountInString(out) > MaxValueRunes {
+		r := []rune(out)
+		out = string(r[:MaxValueRunes])
+	}
+	return
 }
 
 // unique is a key part no other row of this run shares.
