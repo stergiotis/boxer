@@ -508,7 +508,10 @@ func definitionsWidget() (widgets []*ir.BuilderFactoryNode) {
 			// visuals.selection.bg_fill — which IDS pins at ACCENT_SUBTLE (L=0.20) for
 			// SelectableLabel text contrast (ADR-0037), giving a near-invisible bar over
 			// extreme_bg_color (L=0.06). Explicit `.fill(col)` from Go still overrides.
-			WithConstructionCodeClientRust(rustClientCode("egui::ProgressBar::new(progress).fill(imzero2_egui::style::accent_default());\n")).
+			// Default height to a button's (style::progress_bar_height): egui's
+			// interact_size.y is shorter than the text the bar paints inside it.
+			// Explicit `.desiredHeight(h)` from Go still overrides.
+			WithConstructionCodeClientRust(rustClientCode("egui::ProgressBar::new(progress).fill(imzero2_egui::style::accent_default()).desired_height(imzero2_egui::style::progress_bar_height(c));\n")).
 			WithSettingImmediate(true).
 			WithSettingRetained(true).
 			WithReturnType(structProgressBar()).

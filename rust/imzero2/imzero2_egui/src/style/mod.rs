@@ -68,6 +68,18 @@ pub fn accent_default() -> egui::Color32 {
     }
 }
 
+/// The default `ProgressBar` height: a button's, i.e. one row of button text
+/// plus the button padding above and below. egui's own default is
+/// `interact_size.y`, which the IDS spacing sets to `padding_outer` — shorter
+/// than the text a bar paints inside it. Follows density, font size and theme
+/// (fresh pads its buttons more).
+pub fn progress_bar_height(ctx: &Context) -> f32 {
+    let style = ctx.global_style();
+    let font = egui::TextStyle::Button.resolve(&style);
+    let row = ctx.fonts_mut(|f| f.row_height(&font));
+    row + 2.0 * style.spacing.button_padding.y
+}
+
 /// The slider rail's colour for the active theme; see [`slider`].
 pub fn slider_rail() -> egui::Color32 {
     match tokens::theme::active() {

@@ -7478,8 +7478,9 @@ egui::Panel::top(i);
                 let mut progress = self.io.read_plain_f32()?;
                 // construct
 
-                let mut w =
-                    egui::ProgressBar::new(progress).fill(imzero2_egui::style::accent_default());
+                let mut w = egui::ProgressBar::new(progress)
+                    .fill(imzero2_egui::style::accent_default())
+                    .desired_height(imzero2_egui::style::progress_bar_height(c));
                 // methods
                 loop {
                     let (m, _) = self.read_from_repr(ProgressBarBuilderMethodId::from_repr)?;
