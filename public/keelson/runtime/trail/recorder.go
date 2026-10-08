@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -71,12 +72,21 @@ type Recorder struct {
 	mu  sync.Mutex
 	cur *TrailStore
 	seq uint64
+	// curFirst and curLast are the earliest and latest row timestamps in
+	// cur, for the gap window should its batch be dropped. Under mu.
+	curFirst, curLast time.Time
 
 	// flushMu serialises flushes; backlog is the batches a flush did not
 	// land, oldest first, with their row counts. Both under flushMu.
 	flushMu    sync.Mutex
 	backlog    []heldBatch
 	maxBacklog int
+	// gap is what the cap dropped since the last gap row: rows, and the
+	// earliest and latest row timestamps among them. Under flushMu.
+	gap gap
+
+	// The counters of ADR-0296 §SD4, read through Counts.
+	buffered, written, dropped, invalid atomic.Uint64
 
 	readMu sync.Mutex
 	read   *TrailStore
@@ -91,10 +101,46 @@ type Recorder struct {
 	done chan struct{}
 }
 
-// heldBatch is one swapped-out store and the rows it holds.
+// heldBatch is one swapped-out store, the rows it holds, and the earliest
+// and latest row timestamps among them.
 type heldBatch struct {
-	store *TrailStore
-	rows  int
+	store       *TrailStore
+	rows        int
+	first, last time.Time
+}
+
+// gap is loss not yet written back as a row.
+type gap struct {
+	rows        int
+	first, last time.Time
+}
+
+func (inst *gap) add(b heldBatch) {
+	inst.rows += b.rows
+	if inst.first.IsZero() || b.first.Before(inst.first) {
+		inst.first = b.first
+	}
+	if b.last.After(inst.last) {
+		inst.last = b.last
+	}
+}
+
+// Counts are the recorder's counters (ADR-0296 §SD4), over every verb:
+// rows buffered, rows the server took, rows dropped — by the backlog cap
+// or at Close — and audit events replaced by an audit-invalid row.
+type Counts struct {
+	Buffered uint64
+	Written  uint64
+	Dropped  uint64
+	Invalid  uint64
+}
+
+// Counts reads the counters. Zero for a nil recorder.
+func (inst *Recorder) Counts() (c Counts) {
+	if inst == nil {
+		return
+	}
+	return Counts{Buffered: inst.buffered.Load(), Written: inst.written.Load(), Dropped: inst.dropped.Load(), Invalid: inst.invalid.Load()}
 }
 
 // RecorderOption configures NewRecorder.
@@ -139,7 +185,10 @@ func (inst *Recorder) newStore() (st *TrailStore) {
 	return NewTrailStore(inst.exec, nil, TrailStoreConfig{WriteObserver: inst.observer})
 }
 
-// Close flushes what is buffered and releases the stores.
+// Close flushes what is buffered, within the flush's bound, and releases
+// the stores. What the server did not take by then is lost: counted as
+// dropped and logged (ADR-0296 §SD4), with no gap row, since nothing runs
+// afterwards.
 func (inst *Recorder) Close() {
 	if inst == nil {
 		return
@@ -149,13 +198,26 @@ func (inst *Recorder) Close() {
 	inst.mu.Lock()
 	cur := inst.cur
 	inst.cur = nil
+	lost := 0
+	if cur != nil {
+		lost += cur.Buffered()
+	}
 	inst.mu.Unlock()
 	inst.flushMu.Lock()
 	for _, b := range inst.backlog {
 		b.store.Close()
+		lost += b.rows
 	}
 	inst.backlog = nil
+	if inst.gap.rows > 0 {
+		inst.log.Error().Int("rows", inst.gap.rows).Msg("trail: closed with a gap no row records")
+		inst.gap = gap{}
+	}
 	inst.flushMu.Unlock()
+	if lost > 0 {
+		inst.dropped.Add(uint64(lost))
+		inst.log.Error().Int("lost", lost).Msg("trail: closed with rows the server had not taken; they are lost")
+	}
 	if cur != nil {
 		cur.Close()
 	}
@@ -232,6 +294,15 @@ func (inst *Recorder) write(ctx context.Context, key string, at time.Time, c Con
 	add(b, id)
 	if err = b.Commit(); err != nil {
 		err = eh.Errorf("trail: buffer row %q: %w", key, err)
+		return
+	}
+	inst.buffered.Add(1)
+	at = at.UTC()
+	if inst.curFirst.IsZero() || at.Before(inst.curFirst) {
+		inst.curFirst = at
+	}
+	if at.After(inst.curLast) {
+		inst.curLast = at
 	}
 	return
 }
@@ -378,6 +449,7 @@ func (inst *Recorder) Event(ctx context.Context, at time.Time, c Context, row Au
 	if verr := row.Validate(); verr != nil {
 		inst.log.Error().Err(verr).Str("domain", bounded(row.Domain)).Str("action", bounded(row.Action)).Msg("trail: an audit event is outside its bounds; an audit-invalid row is written in its place")
 		row = inst.invalidEvent(row, verr)
+		inst.invalid.Add(1)
 	}
 	key := "event|" + row.Domain + "|" + row.Action + "|" + strconv.FormatUint(row.Subject, 10) + "|" + inst.unique(at)
 	return inst.write(ctx, key, at, c, func(b *TrailEntityBuilder, id uint64) {
@@ -449,10 +521,7 @@ func (inst *Recorder) Flush(ctx context.Context) (err error) {
 		inst.mu.Unlock()
 		return nil
 	}
-	if n := inst.cur.Buffered(); n > 0 {
-		inst.backlog = append(inst.backlog, heldBatch{store: inst.cur, rows: n})
-		inst.cur = inst.newStore()
-	}
+	inst.swapLocked()
 	inst.mu.Unlock()
 	ctx, cancel := context.WithTimeout(ctx, flushTimeout)
 	defer cancel()
@@ -463,10 +532,49 @@ func (inst *Recorder) Flush(ctx context.Context) (err error) {
 			break
 		}
 		b.store.Close()
+		inst.written.Add(uint64(b.rows))
 		inst.backlog = inst.backlog[1:]
 	}
 	inst.capBacklog()
+	if err == nil && inst.gap.rows > 0 {
+		inst.writeGap()
+	}
 	return
+}
+
+// swapLocked moves a non-empty current store onto the backlog and opens a
+// fresh one. The caller holds mu.
+func (inst *Recorder) swapLocked() {
+	if n := inst.cur.Buffered(); n > 0 {
+		inst.backlog = append(inst.backlog, heldBatch{store: inst.cur, rows: n, first: inst.curFirst, last: inst.curLast})
+		inst.cur = inst.newStore()
+		inst.curFirst, inst.curLast = time.Time{}, time.Time{}
+	}
+}
+
+// writeGap writes the audit-gap row for what the cap dropped (ADR-0296
+// §SD4), now that the server takes rows again: the count and the window
+// of the lost rows' timestamps, in the recorder's own domain. It rides the
+// next flush. The caller holds flushMu.
+func (inst *Recorder) writeGap() {
+	g := inst.gap
+	inst.gap = gap{}
+	row := AuditEvent{
+		Domain: TrailDomain, Action: ActionAuditGap, Outcome: OutcomeFailed,
+		PrincipalBy: PrincipalByNone, Retention: RetentionTrail,
+		AttrKeys:   []string{"rows", "from", "to"},
+		AttrValues: []string{strconv.Itoa(g.rows), g.first.Format(time.RFC3339Nano), g.last.Format(time.RFC3339Nano)},
+	}
+	at := time.Now()
+	key := "event|" + TrailDomain + "|" + ActionAuditGap + "|0|" + inst.unique(at)
+	if err := inst.write(context.Background(), key, at, Context{}, func(b *TrailEntityBuilder, id uint64) {
+		row.Id, row.Kind = id, "auditEvent"
+		b.AddAuditEvent(row)
+	}); err != nil {
+		inst.log.Error().Err(err).Int("rows", g.rows).Msg("trail: the audit-gap row could not be buffered")
+		return
+	}
+	inst.FlushSoon()
 }
 
 // capBacklog drops the oldest held batches past maxBacklog rows. The caller
@@ -483,8 +591,10 @@ func (inst *Recorder) capBacklog() {
 		inst.backlog = inst.backlog[1:]
 		held -= b.rows
 		dropped += b.rows
+		inst.gap.add(b)
 	}
 	if dropped > 0 {
+		inst.dropped.Add(uint64(dropped))
 		inst.log.Error().Int("dropped", dropped).Int("held", held).Msg("trail: the server has not taken the trail's rows; the oldest are dropped")
 	}
 }

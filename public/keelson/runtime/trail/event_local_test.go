@@ -2,11 +2,14 @@ package trail_test
 
 import (
 	"context"
+	"errors"
 	"iter"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -127,4 +130,64 @@ func TestEventRowsReadBackWithTheirIdentity(t *testing.T) {
 		assert.NotEmpty(t, e.NaturalKey)
 	}
 	assert.Len(t, ids, 3)
+}
+
+// outageExec is a server that refuses inserts while down.
+type outageExec struct {
+	recordstore.ExecutorI
+	down atomic.Bool
+}
+
+func (inst *outageExec) InsertArrow(ctx context.Context, table string, records []arrow.RecordBatch) error {
+	if inst.down.Load() {
+		return errors.New("server down")
+	}
+	return inst.ExecutorI.InsertArrow(ctx, table, records)
+}
+
+// Over clickhouse-local: the audit-gap row the recorder writes after an
+// outage reads back with the count and the window of what was lost.
+func TestGapRowReadsBack(t *testing.T) {
+	local, ctx := localFacts(t)
+	exec := &outageExec{ExecutorI: local}
+	rec := trail.NewRecorder(exec, "run-9", zerolog.Nop())
+	defer rec.Close()
+	// The cap is internal; three batches of 30_000 rows would be slow, so
+	// the window is asserted on what the counters and the row agree on.
+	exec.down.Store(true)
+	at := time.Unix(1_700_000_000, 0).UTC()
+	for i := range 3 {
+		require.NoError(t, rec.Event(ctx, at.Add(time.Duration(i)*time.Minute), trail.Context{}, trail.AuditEvent{
+			Domain: "dmdm", Action: "vault-resolve", Outcome: trail.OutcomeOk, PrincipalBy: trail.PrincipalByNone, Subject: uint64(i), Retention: "disclosure"}))
+		require.Error(t, rec.Flush(ctx))
+	}
+	// Force the cap: drop everything held but the newest batch.
+	dropped := rec.DropHeldForTest(1)
+	require.Equal(t, 2, dropped)
+	exec.down.Store(false)
+	require.NoError(t, rec.Flush(ctx))
+	require.NoError(t, rec.Flush(ctx))
+
+	ents := scanEvents(t, rec, ctx, recordstore.ScanOpts{})
+	var gapRow *trail.AuditEvent
+	kept := 0
+	for _, e := range ents {
+		switch e.AuditEvent.Val.Action {
+		case trail.ActionAuditGap:
+			v := e.AuditEvent.Val
+			gapRow = &v
+		case "vault-resolve":
+			kept++
+		}
+	}
+	assert.Equal(t, 1, kept, "the newest batch landed")
+	require.NotNil(t, gapRow, "the gap is a row")
+	assert.Equal(t, trail.TrailDomain, gapRow.Domain)
+	assert.Equal(t, trail.OutcomeFailed, gapRow.Outcome)
+	assert.Equal(t, trail.PrincipalByNone, gapRow.PrincipalBy)
+	assert.Equal(t, []string{"rows", "from", "to"}, gapRow.AttrKeys)
+	assert.Equal(t, "2", gapRow.AttrValues[0])
+	assert.Equal(t, at.Format(time.RFC3339Nano), gapRow.AttrValues[1])
+	assert.Equal(t, at.Add(time.Minute).Format(time.RFC3339Nano), gapRow.AttrValues[2])
+	assert.EqualValues(t, 2, rec.Counts().Dropped)
 }
