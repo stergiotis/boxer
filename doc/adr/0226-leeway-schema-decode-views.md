@@ -379,6 +379,18 @@ The chapters' SQL is verified against a live server by the book's own
 integration lane, knobs included — the views are generated SQL, and a Go test
 can check the shape of what they emit but not what it means.
 
+### 2026-10-08 — `columns` parses bare as a table name
+
+The §Consequences entry on the `COLUMNS('…')` collision is narrower than it
+reads. Commit 6d931babc (2026-09-25) admitted the `COLUMNS` token as a table
+name in grammar1, so `leeway.columns` and `system.columns` parse without
+backticks; only a result alias named `columns` still fails. The play snippets
+and [leeway-sql-read-surface](../explanation/leeway-sql-read-surface.md) said
+backticks were required for the view name, and an agent repeated that as a
+property of the surface; both now say alias. The books and snippets keep
+their backticks, which are harmless, and
+`TestLeewayBookBackticksTheColumnsView` stays.
+
 ## References
 
 - [ADR-0162](./0162-leeway-co-ragged-function-pack.md) — the `LW_` namespace and the pack.
