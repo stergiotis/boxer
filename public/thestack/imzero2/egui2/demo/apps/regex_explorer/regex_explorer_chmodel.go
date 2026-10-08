@@ -27,8 +27,10 @@ package regex_explorer
 // will return, and what the SD1 tripwire checks ClickHouse against.
 
 import (
+	"errors"
 	"regexp"
 	"regexp/syntax"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 )
@@ -55,6 +57,58 @@ func inlineFlags(caseInsensitive bool, multiline bool, dotAll bool) (prefix stri
 	}
 	b.WriteByte(')')
 	prefix = b.String()
+	return
+}
+
+// leadingFlags matches the group [inlineFlags] puts in front of every
+// pattern the app compiles or sends, and nothing else: one group, its
+// letters in inlineFlags' order, the dot flag always stated.
+var leadingFlags = regexp.MustCompile(`^\(\?i?m?(?:s|-s)\)`)
+
+// compileErrorText words a Go compile error of an effective pattern the
+// way the person wrote the pattern. regexp quotes the whole expression for
+// some errors (`missing closing )`), and that expression starts with the
+// flag group the app added, which the person never typed. Exactly one
+// leading group is removed, so a group the person did type stays.
+func compileErrorText(err error) (text string) {
+	var se *syntax.Error
+	if !errors.As(err, &se) {
+		text = err.Error()
+		return
+	}
+	e := *se
+	e.Expr = leadingFlags.ReplaceAllString(e.Expr, "")
+	text = e.Error()
+	return
+}
+
+// sentPattern and atIndex find, in a ClickHouse message, the pattern as
+// it was sent and the byte offset VectorScan reports into it.
+var (
+	sentPattern = regexp.MustCompile(`Pattern '(\(\?i?m?(?:s|-s)\))`)
+	atIndex     = regexp.MustCompile(`at index (\d+)`)
+)
+
+// rejectionText words a ClickHouse rejection of a sent pattern the way the
+// person wrote it: the leading flag group comes out of the quoted pattern,
+// and the "at index N" VectorScan reports — a byte offset into what was
+// sent — moves back by the group's length so it still points at the same
+// character. Messages that quote no pattern are returned as they are.
+func rejectionText(msg string) (text string) {
+	loc := sentPattern.FindStringSubmatchIndex(msg)
+	if loc == nil {
+		text = msg
+		return
+	}
+	n := loc[3] - loc[2]
+	text = msg[:loc[2]] + msg[loc[3]:]
+	text = atIndex.ReplaceAllStringFunc(text, func(m string) string {
+		i, err := strconv.Atoi(strings.TrimPrefix(m, "at index "))
+		if err != nil || i < n {
+			return m
+		}
+		return "at index " + strconv.Itoa(i-n)
+	})
 	return
 }
 

@@ -226,7 +226,7 @@ var ops = func() (s *appops.Set[*App, opsSnap]) {
 				Tab:              tabNames[sn.tab],
 			}
 			if sn.analysis.err != nil {
-				out.CompileError = sn.analysis.err.Error()
+				out.CompileError = compileErrorText(sn.analysis.err)
 			}
 			for _, sc := range showcaseCases {
 				out.Showcases = append(out.Showcases, sc.Title)
@@ -446,7 +446,7 @@ func multiResult(sn *opsSnap) (out MultiResult) {
 			// Recompiled here, off the render goroutine, for the message
 			// alone: the compile cache belongs to the window.
 			if _, err := regexp.Compile(inlineFlags(sn.caseInsensitive, sn.multiline, sn.dotAll) + l.Text); err != nil {
-				ml.Message = err.Error()
+				ml.Message = compileErrorText(err)
 			}
 		case out.Error != "":
 			ml.Status = "failed"

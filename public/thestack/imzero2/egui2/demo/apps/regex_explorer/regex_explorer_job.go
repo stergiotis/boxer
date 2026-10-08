@@ -334,7 +334,7 @@ func runMultiLinesBlocking(ctx context.Context, inst *App, haystack string, line
 			keep = append(keep, p)
 			keepIdx = append(keepIdx, origIdx[i])
 		case isEngineRejection(probeErr):
-			out[origIdx[i]].Rejected = clickHouseMessage(probeErr)
+			out[origIdx[i]].Rejected = rejectionText(clickHouseMessage(probeErr))
 		default:
 			err = probeErr
 			return
