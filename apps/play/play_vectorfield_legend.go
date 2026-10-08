@@ -9,7 +9,6 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/colormap"
-	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/portolan/flowoverlay"
 )
 
 // The legend row says what the picture encodes, because nothing else on the
@@ -132,7 +131,7 @@ func niceStep(span float64, n float64) (step float64) {
 func (inst *VectorFieldDriver) renderVectorFieldLegend(has bool, unit string) {
 	g := inst.guest
 	var floorSpeed, fullSpeed float32
-	palette := flowoverlay.DefaultPalette
+	palette := vfLook.palette
 	if has && g.layer != nil {
 		floorSpeed, fullSpeed = g.layer.Pace()
 		if g.Opts.Palette != nil {
