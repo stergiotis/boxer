@@ -10,6 +10,7 @@ package regex_explorer
 import (
 	"context"
 	"io"
+	"regexp"
 	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow/ipc"
@@ -32,7 +33,7 @@ const chLocalPoolName = "regex_explorer"
 // embeds [EmbeddedApp] carries no manifest of its own, so the capability
 // has to be declared by whichever app hosts the widget. Without it the
 // explorer's ClickHouse tabs and its SD1 tripwire are denied by the
-// broker, with the reason in the status bar — the honest degradation, but
+// broker, with the reason on the tabs — the honest degradation, but
 // only the grant makes them work.
 const ChLocalCapPattern = chlocalbroker.SubjectExecPrefix + chLocalPoolName
 
@@ -78,4 +79,37 @@ func executeArrowStreamViaBus(ctx context.Context, bus runtimeapp.BusI, sql stri
 // error text.
 func isEngineRejection(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "DB::Exception")
+}
+
+// exceptionCode matches the error-code name ClickHouse puts in parentheses
+// at the end of an exception, "(BAD_ARGUMENTS)".
+var exceptionCode = regexp.MustCompile(`\(([A-Z][A-Z0-9_]+)\)`)
+
+// clickHouseMessage reduces err to what a user needs to read: ClickHouse's
+// own exception text and its code, without the transport chain the broker
+// wraps it in ("execute query: … chlocalpool: worker exit: exit status 36
+// (stderr: Code: 36. DB::Exception: …") or the echoed query ("In scope
+// SELECT …"). Anything that is not a ClickHouse exception comes back
+// whole.
+func clickHouseMessage(err error) (msg string) {
+	msg = err.Error()
+	const marker = "DB::Exception: "
+	i := strings.Index(msg, marker)
+	if i < 0 {
+		return
+	}
+	rest := msg[i+len(marker):]
+	text := rest
+	if j := strings.Index(text, ": In scope "); j >= 0 {
+		text = text[:j]
+	}
+	if j := strings.IndexByte(text, '\n'); j >= 0 {
+		text = text[:j]
+	}
+	text = strings.TrimSuffix(strings.TrimSpace(text), ".")
+	if m := exceptionCode.FindStringSubmatch(rest); m != nil && !strings.Contains(text, m[0]) {
+		text += " " + m[0]
+	}
+	msg = text
+	return
 }

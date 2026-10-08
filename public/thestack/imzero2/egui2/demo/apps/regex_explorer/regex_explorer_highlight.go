@@ -50,25 +50,11 @@ func (inst *App) getCompiledRegexp(pattern string) (re *regexp.Regexp, err error
 	return
 }
 
-// flagPrefix returns the RE2 inline-flag group for the current toggle
-// state — "(?i)", "(?ims)", … — or the empty string when no flag is set.
-// Also serves as the flag component of a query key, so a lane re-runs when
-// a toggle changes even though the raw input text did not.
+// flagPrefix returns the inline-flag group for the current toggle state —
+// see [inlineFlags]. Also serves as the flag component of a query key, so a
+// lane re-runs when a toggle changes even though the raw input text did not.
 func (inst *App) flagPrefix() (prefix string) {
-	var flags strings.Builder
-	if inst.caseInsensitive {
-		flags.WriteByte('i')
-	}
-	if inst.multiline {
-		flags.WriteByte('m')
-	}
-	if inst.dotAll {
-		flags.WriteByte('s')
-	}
-	if flags.Len() == 0 {
-		return
-	}
-	prefix = "(?" + flags.String() + ")"
+	prefix = inlineFlags(inst.caseInsensitive, inst.multiline, inst.dotAll)
 	return
 }
 
@@ -85,27 +71,19 @@ func (inst *App) effectivePattern(base string) (out string) {
 	return
 }
 
-// nonEmptySubmatches returns re's non-overlapping matches in haystack in
-// FindAllStringSubmatchIndex form — m[0],m[1] the whole match, m[2k],m[2k+1]
-// capture group k (-1 for a group that did not participate) — with
-// zero-width whole matches dropped.
+// nonEmptySubmatches returns the matches in all — FindAllStringSubmatchIndex
+// form: m[0],m[1] the whole match, m[2k],m[2k+1] capture group k (-1 for a
+// group that did not participate) — with zero-width whole matches dropped.
 //
-// The filter is what makes the preview predictive. Go and ClickHouse
-// enumerate repeated empty matches differently: for pattern `a*` over
-// "xyz", Go's FindAllStringSubmatchIndex yields one zero-width match at
-// every position (4 of them) while ClickHouse's extractAll yields none.
-// RE2 specifies what matches, not how a caller enumerates repeated empty
-// matches, so neither engine is wrong — but this app exists to predict
-// ClickHouse, so the preview follows ClickHouse. Without the filter the
-// status bar would claim "Go: 4 match(es)" while the List tab shows 0.
+// These are the matches the preview highlights and counts, the way
+// ClickHouse's countMatches counts them: a zero-width match has nothing to
+// highlight, and counting it would have the status bar report "4 matches"
+// for `a*` over "xyz". Which of them extractAll returns is a different
+// question — see [extractAllCount].
 //
 // A capture group that participated but matched the empty string is kept:
 // only the whole match decides.
-//
-// The SD1 tripwire deliberately does NOT go through here — see
-// [App.tripwireGoMatches].
-func nonEmptySubmatches(re *regexp.Regexp, haystack string) (matches [][]int) {
-	all := re.FindAllStringSubmatchIndex(haystack, -1)
+func nonEmptySubmatches(all [][]int) (matches [][]int) {
 	matches = make([][]int, 0, len(all))
 	for _, m := range all {
 		if m[0] == m[1] {
@@ -133,9 +111,19 @@ type patternAnalysis struct {
 	re    *regexp.Regexp
 	// err is the compile error when state is patternInvalid.
 	err error
-	// matches is [nonEmptySubmatches] over haystack; nil when the pattern
-	// is not valid or the haystack is empty.
+	// all is every match FindAll reports, zero-width ones included — the
+	// enumeration extractAllGroups shares, and the match_idx numbering of
+	// the playground hand-off. matches is its non-empty subset, which the
+	// preview highlights and counts. Both nil when the pattern is not
+	// valid.
+	all     [][]int
 	matches [][]int
+	// extractAllN is how many leading entries of all ClickHouse's
+	// extractAll returns, and extractAllStop the byte offset of the
+	// zero-width match it stopped on, -1 when it did not stop early — see
+	// [extractAllCount].
+	extractAllN    int
+	extractAllStop int
 }
 
 // analysis returns the [patternAnalysis] for the inputs as they are now,
@@ -148,7 +136,7 @@ func (inst *App) analysis() (a *patternAnalysis) {
 	if a.computed && a.pattern == pattern && a.haystack == inst.haystack {
 		return
 	}
-	*a = patternAnalysis{pattern: pattern, haystack: inst.haystack, computed: true}
+	*a = patternAnalysis{pattern: pattern, haystack: inst.haystack, computed: true, extractAllStop: -1}
 	if pattern == "" {
 		a.state = patternEmpty
 		return
@@ -159,17 +147,19 @@ func (inst *App) analysis() (a *patternAnalysis) {
 		return
 	}
 	a.state = patternValid
-	if a.haystack != "" {
-		a.matches = nonEmptySubmatches(a.re, a.haystack)
-	}
+	// An empty haystack is analysed like any other: `^$` matches it, and
+	// the Functions tab asks ClickHouse about it.
+	a.all = a.re.FindAllStringSubmatchIndex(a.haystack, -1)
+	a.matches = nonEmptySubmatches(a.all)
+	a.extractAllN, a.extractAllStop = extractAllCount(a.re, a.haystack, a.all)
 	return
 }
 
-// renderHighlightedHaystack paints the haystack as a LabelAtoms with match
-// ranges highlighted. Plain segments between matches use AtomsFluid.Text;
-// match segments use StyledTextColored with the IDS accent fill. An
-// invalid pattern yields the unstyled haystack — the compile error is
-// surfaced next to the pattern input (see [App.renderPatternCompileError]).
+// renderHighlightedHaystack paints the haystack as one LabelAtoms with the
+// matches highlighted, in monospace like the editor above it, so a matched
+// space or tab has a width to show. Consecutive matches alternate between
+// two accent tones: with one tone, `\w` over "abc" is a single block and
+// reads as one match. The caller handles the empty and invalid pattern.
 //
 // Highlighting stops after maxHighlightedMatches. The haystack itself is
 // still painted in full: the tail simply falls into the trailing plain
@@ -178,11 +168,14 @@ func (inst *App) renderHighlightedHaystack() {
 	a := inst.analysis()
 	haystack := a.haystack
 	if haystack == "" {
-		c.Label("(empty haystack)").Send()
+		weakLabel("(empty haystack)")
 		return
 	}
 	if len(a.matches) == 0 {
-		c.Label(haystack).Send()
+		weakLabel("No match.")
+		for rt := range c.RichTextLabel(haystack) {
+			rt.Monospace()
+		}
 		return
 	}
 
@@ -192,7 +185,14 @@ func (inst *App) renderHighlightedHaystack() {
 	// 85cb26d4). Dark text on the bright accent fill keeps the match
 	// visually pop without the saturation of the pre-IDS yellow.
 	matchFg := color.Hex(styletokens.NeutralBgExtreme.AsHex()).Keep()
-	matchBg := color.Hex(styletokens.AccentDefault.AsHex()).Keep()
+	matchBg := [2]color.Color{
+		color.Hex(styletokens.AccentDefault.AsHex()).Keep(),
+		// Strong, not Subtle: Subtle is the dark palette's near-black
+		// surface tint, and the match text on it is dark too. Default and
+		// Strong are both light under the dark palette and both mid-to-dark
+		// under the light one, so the match text reads on either.
+		color.Hex(styletokens.AccentStrong.AsHex()).Keep(),
+	}
 
 	// Past maxHighlightedMatches the tail falls into the trailing plain
 	// segment below, so the haystack still reads in full — only the
@@ -203,26 +203,28 @@ func (inst *App) renderHighlightedHaystack() {
 	}
 
 	atoms := c.Atoms()
+	plain := func(text string) {
+		atoms = atoms.BeginRichText(text).Monospace().End()
+	}
 	cursor := 0
-	for _, match := range styled {
+	for i, match := range styled {
 		start, end := match[0], match[1]
 		if start > cursor {
-			atoms.Text(haystack[cursor:start])
+			plain(haystack[cursor:start])
 		}
-		for range atoms.StyledTextColored(matchFg, matchBg, haystack[start:end]) {
+		for rt := range atoms.StyledTextColored(matchFg, matchBg[i%2], haystack[start:end]) {
+			rt.Monospace()
 		}
 		cursor = end
 	}
 	if cursor < len(haystack) {
-		atoms.Text(haystack[cursor:])
+		plain(haystack[cursor:])
 	}
 	c.LabelAtoms(atoms.Keep()).Send()
 
 	if len(styled) < len(a.matches) {
-		c.LabelAtoms(c.Atoms().BeginRichText(
-			fmt.Sprintf("highlighting the first %d of %d matches — the rest of the haystack is shown unstyled",
-				len(styled), len(a.matches)),
-		).Weak().End().Keep()).Send()
+		weakLabel(fmt.Sprintf("highlighting the first %d of %d matches — the rest of the haystack is shown unstyled",
+			len(styled), len(a.matches)))
 	}
 }
 
@@ -240,8 +242,7 @@ func (inst *App) renderHighlightedHaystack() {
 //
 // Silent when the pattern has no capture group: there is nothing to say,
 // and an empty table below every plain pattern is noise. Rows are the
-// analysis' matches, so zero-width whole matches are absent here as they
-// are everywhere else, and row i is match_idx i in the playground hand-off.
+// analysis' non-empty matches, the ones the status bar counts.
 func (inst *App) renderCaptureGroups() {
 	a := inst.analysis()
 	if len(a.matches) == 0 || a.re.NumSubexp() == 0 {
@@ -338,10 +339,10 @@ func (inst *App) patternState() (state patternStateE) {
 func (inst *App) renderPatternNotReady() (drew bool) {
 	switch inst.patternState() {
 	case patternEmpty:
-		c.Label("(enter a pattern above)").Send()
+		weakLabel("Enter a pattern to ask ClickHouse about it.")
 		drew = true
 	case patternInvalid:
-		c.Label("(pattern invalid — see the error under the Pattern input)").Send()
+		weakLabel("The pattern does not compile — the error is under the Pattern input.")
 		drew = true
 	}
 	return
@@ -363,12 +364,15 @@ func (inst *App) renderPatternNotReady() (drew bool) {
 //
 // The SD1 tripwire checks that VectorScan accepts every pattern in its
 // fixed corpus, not the user's lines, so nothing proves the two languages
-// agree on any given line. When ClickHouse refuses the set, the error is
-// the lane's, shown once in the block header, not carried per line.
+// agree on any given line. When VectorScan refuses one, the query finds
+// which and says so on that line (Rejected), rather than failing the set.
 type multiLine struct {
 	Text    string
 	Invalid bool
 	Hit     bool
+	// Rejected is ClickHouse's message when VectorScan refused this line
+	// (see [runMultiLinesBlocking]); empty otherwise.
+	Rejected string
 }
 
 // parseAndValidatePatternList splits the patternList textarea into
@@ -413,7 +417,7 @@ func (inst *App) renderPatternCompileError() {
 // multi-pattern input summarising any invalid lines. Reports the first
 // bad line's message plus the count of bad lines overall, so the user
 // has one concrete message to read and the scope of the damage. Per-line
-// ⚠ markers in [App.renderMultiInline] are the visual counterpart; this
+// ⚠ markers in [App.renderMultiLines] are the visual counterpart; this
 // label carries the full Go regexp error text.
 //
 // Walks the lines [App.parseAndValidatePatternList] already produced

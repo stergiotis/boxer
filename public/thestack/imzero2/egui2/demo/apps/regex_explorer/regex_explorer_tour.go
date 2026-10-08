@@ -27,7 +27,7 @@ import (
 )
 
 // regexScenes is one entry per registered Demo: a name plus the inputs to
-// seed before rendering.
+// seed before rendering, and the result tab to open on.
 var regexScenes = []struct {
 	name        string
 	title       string
@@ -35,22 +35,24 @@ var regexScenes = []struct {
 	pattern     string
 	haystack    string
 	patternList string
+	tab         resultTabE
 }{
 	{"regex-explorer-empty", icons.IconSearch + " Regex explorer — empty",
-		"The regex explorer with empty inputs — the pattern/haystack editors, cheatsheet panel, and result tabs in their initial state.", "", "", ""},
+		"The regex explorer with empty inputs — the pattern/haystack editors, cheatsheet panel, and result tabs in their initial state.", "", "", "", tabMatches},
 	{"regex-explorer-populated", icons.IconSearch + " Regex explorer — populated",
-		"The regex explorer evaluating \\w+ against \"hello world 123\" — highlighted matches with the result tabs populated.", `\w+`, "hello world 123", ""},
+		"The regex explorer evaluating \\w+ against \"hello world 123\" — highlighted matches.", `\w+`, "hello world 123", "", tabMatches},
 	// The ADR-0015 syntax-highlighting surface. The pattern nests three
 	// group levels so the depth-cycled parens are visible, and mixes a
 	// named group, a character class, a Perl class, an escape and a
 	// repeat so every category is on screen at once. The pattern list's
 	// second line is deliberately unclosed: per-line lexing means it must
-	// not colour the third line (ADR-0015 §SD3).
+	// not colour the third line (ADR-0015 §SD3). Opens on the Multi tab,
+	// where the pattern-list editor lives.
 	{"regex-explorer-highlighting", icons.IconSearch + " Regex explorer — pattern highlighting",
 		"The regex explorer's syntax-highlighted pattern editors (ADR-0015) — depth-cycled group parens, character classes, escapes and inline flags.",
 		`(?i)(?P<host>[a-z0-9\-]+)\.((com|org)\.?)+\b`,
 		"visit Example.COM or lists.example.org. now",
-		"^\\d{3}-\\d{4}$\n(unclosed[a-z\n[[:alpha:]]+"},
+		"^\\d{3}-\\d{4}$\n(unclosed[a-z\n[[:alpha:]]+", tabMulti},
 }
 
 func init() {
@@ -63,7 +65,7 @@ func init() {
 			Flags:          registry.DemoFlagNonDeterministic | registry.DemoFlagNeedsLargeArea,
 			Kind:           registry.DemoKindMixed,
 			Description:    sc.desc,
-			BusInit:        makeTourInit(sc.pattern, sc.haystack, sc.patternList),
+			BusInit:        makeTourInit(sc.pattern, sc.haystack, sc.patternList, sc.tab),
 			RenderStateful: renderTourScene,
 			SourceFunc:     (*App).RenderWindow,
 		})
@@ -74,7 +76,7 @@ func init() {
 // seeded with the scene's inputs and wired to the host's id stack and bus.
 // Called once per Mount, so the seeding happens before any frame rather
 // than being re-applied on every one.
-func makeTourInit(pattern string, haystack string, patternList string) func(ids *c.WidgetIdStack, bus runtimeapp.BusI) (state any) {
+func makeTourInit(pattern string, haystack string, patternList string, tab resultTabE) func(ids *c.WidgetIdStack, bus runtimeapp.BusI) (state any) {
 	return func(ids *c.WidgetIdStack, bus runtimeapp.BusI) (state any) {
 		inst := newApp()
 		inst.ids = ids
@@ -82,6 +84,7 @@ func makeTourInit(pattern string, haystack string, patternList string) func(ids 
 		inst.pattern = pattern
 		inst.haystack = haystack
 		inst.patternList = patternList
+		inst.tab = tab
 		state = inst
 		return
 	}

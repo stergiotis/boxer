@@ -14,7 +14,6 @@ package regex_explorer
 import (
 	"context"
 	"slices"
-	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
@@ -24,11 +23,19 @@ import (
 // runQueryBlocking executes sql via the bus and hands the first column of
 // the first result record to decode. label names the query in error
 // messages.
+func runQueryBlocking[T any](ctx context.Context, inst *App, label string, sql string, decode func(col arrow.Array) (out T, err error)) (out T, err error) {
+	return runRecordBlocking(ctx, inst, label, sql, func(rec arrow.RecordBatch) (out T, err error) {
+		return decode(rec.Column(0))
+	})
+}
+
+// runRecordBlocking executes sql via the bus and hands the first result
+// record — one row, any number of columns — to decode.
 //
 // A free function rather than a method because Go methods cannot take type
 // parameters; inst is used only for the transport and the allocator, both
 // of which are goroutine-safe.
-func runQueryBlocking[T any](ctx context.Context, inst *App, label string, sql string, decode func(col arrow.Array) (out T, err error)) (out T, err error) {
+func runRecordBlocking[T any](ctx context.Context, inst *App, label string, sql string, decode func(rec arrow.RecordBatch) (out T, err error)) (out T, err error) {
 	rdr, closer, execErr := executeArrowStreamViaBus(ctx, inst.busSnapshot(), sql, inst.alloc)
 	if execErr != nil {
 		err = eb.Build().Str("label", label).Errorf("execute query: %w", execErr)
@@ -51,12 +58,12 @@ func runQueryBlocking[T any](ctx context.Context, inst *App, label string, sql s
 		err = eb.Build().Str("label", label).Errorf("query returned no records")
 		return
 	}
-	rec := rdr.Record()
+	rec := rdr.RecordBatch()
 	if rec.NumRows() == 0 || rec.NumCols() == 0 {
 		err = eb.Build().Str("label", label).Int64("rows", rec.NumRows()).Int64("cols", rec.NumCols()).Errorf("query returned an empty record")
 		return
 	}
-	out, err = decode(rec.Column(0))
+	out, err = decode(rec)
 	return
 }
 
@@ -88,51 +95,19 @@ func asList(label string, col arrow.Array) (list *array.List, err error) {
 	return
 }
 
-// runMatchBlocking evaluates match(haystack, pattern) — UInt8, 0 or 1.
-func runMatchBlocking(ctx context.Context, inst *App, haystack string, pattern string) (val bool, err error) {
-	return runQueryBlocking(ctx, inst, "match", buildMatchSQL(haystack, pattern), func(col arrow.Array) (out bool, err error) {
-		u8, ok := col.(*array.Uint8)
-		if !ok {
-			err = eb.Build().Type("col", col).Errorf("match query returned unexpected column type (expected *array.Uint8)")
-			return
-		}
-		out = u8.Value(0) != 0
-		return
-	})
-}
-
-// runReplaceAllBlocking evaluates replaceRegexpAll(haystack, pattern,
-// replacement) — the haystack with every match replaced.
-func runReplaceAllBlocking(ctx context.Context, inst *App, haystack string, pattern string, replacement string) (result string, err error) {
-	return runQueryBlocking(ctx, inst, "replaceRegexpAll", buildReplaceAllSQL(haystack, pattern, replacement), func(col arrow.Array) (out string, err error) {
-		strCol, ok := col.(*array.String)
-		if !ok {
-			err = eb.Build().Type("col", col).Errorf("replaceRegexpAll returned unexpected column type (expected *array.String)")
-			return
-		}
-		out = strCol.Value(0)
-		return
-	})
-}
-
-// runExtractAllBlocking evaluates extractAll(haystack, pattern) —
-// Array(String).
-//
-// Note that ClickHouse returns capture group 1 rather than the full match
-// when the pattern has a capture group; see [listOutcome.YieldsGroups] for
-// how the UI accounts for that.
-func runExtractAllBlocking(ctx context.Context, inst *App, haystack string, pattern string) (matches []string, err error) {
-	return runQueryBlocking(ctx, inst, "extractAll", buildExtractAllSQL(haystack, pattern), func(col arrow.Array) (out []string, err error) {
-		list, err := asList("extractAll", col)
+// decodeStrings decodes an Array(String) cell.
+func decodeStrings(label string) func(col arrow.Array) (out []string, err error) {
+	return func(col arrow.Array) (out []string, err error) {
+		list, err := asList(label, col)
 		if err != nil {
 			return
 		}
 		inner, ok := list.ListValues().(*array.String)
 		if !ok {
-			err = eb.Build().Type("array", list.ListValues()).Errorf("extractAll inner column type (expected *array.String)")
+			err = eb.Build().Str("label", label).Type("array", list.ListValues()).Errorf("inner column type (expected *array.String)")
 			return
 		}
-		start, end, err := listRowRange("extractAll", list)
+		start, end, err := listRowRange(label, list)
 		if err != nil {
 			return
 		}
@@ -141,40 +116,72 @@ func runExtractAllBlocking(ctx context.Context, inst *App, haystack string, patt
 			out = append(out, inner.Value(i))
 		}
 		return
-	})
+	}
 }
 
-// runExtractAllGroupsBlocking evaluates extractAllGroups(haystack, pattern)
-// — Array(Array(String)), one inner array of capture-group values per
-// match. The full match is not included; extractAllGroups reports groups
-// only.
-//
-// ClickHouse rejects a pattern with no capture group outright (BAD_ARGUMENTS
-// "There are no groups in regexp"), so callers must check that the pattern
-// has at least one before asking.
-func runExtractAllGroupsBlocking(ctx context.Context, inst *App, haystack string, pattern string) (groups [][]string, err error) {
-	return runQueryBlocking(ctx, inst, "extractAllGroups", buildExtractAllGroupsSQL(haystack, pattern), func(col arrow.Array) (out [][]string, err error) {
-		outer, err := asList("extractAllGroups", col)
+// decodeString, decodeUint8 and decodeUint64 decode a scalar cell.
+func decodeString(label string, col arrow.Array) (out string, err error) {
+	s, ok := col.(*array.String)
+	if !ok {
+		err = eb.Build().Str("label", label).Type("col", col).Errorf("unexpected column type (expected *array.String)")
+		return
+	}
+	out = s.Value(0)
+	return
+}
+
+func decodeUint8(label string, col arrow.Array) (out uint8, err error) {
+	u, ok := col.(*array.Uint8)
+	if !ok {
+		err = eb.Build().Str("label", label).Type("col", col).Errorf("unexpected column type (expected *array.Uint8)")
+		return
+	}
+	out = u.Value(0)
+	return
+}
+
+func decodeUint64(label string, col arrow.Array) (out uint64, err error) {
+	u, ok := col.(*array.Uint64)
+	if !ok {
+		err = eb.Build().Str("label", label).Type("col", col).Errorf("unexpected column type (expected *array.Uint64)")
+		return
+	}
+	out = u.Value(0)
+	return
+}
+
+// runExtractAllBlocking evaluates extractAll(haystack, pattern) —
+// Array(String). The SD1 tripwire's query; the Functions tab evaluates
+// extractAll with the other pattern functions in [runPatternFnsBlocking].
+func runExtractAllBlocking(ctx context.Context, inst *App, haystack string, pattern string) (matches []string, err error) {
+	return runQueryBlocking(ctx, inst, "extractAll", buildExtractAllSQL(haystack, pattern), decodeStrings("extractAll"))
+}
+
+// decodeStringLists returns a decoder for an Array(Array(String)) cell —
+// one inner list per outer element. label names the query in errors.
+func decodeStringLists(label string) func(col arrow.Array) (out [][]string, err error) {
+	return func(col arrow.Array) (out [][]string, err error) {
+		outer, err := asList(label, col)
 		if err != nil {
 			return
 		}
 		inner, ok := outer.ListValues().(*array.List)
 		if !ok {
-			err = eb.Build().Type("array", outer.ListValues()).Errorf("extractAllGroups inner column type (expected *array.List)")
+			err = eb.Build().Str("label", label).Type("array", outer.ListValues()).Errorf("inner column type (expected *array.List)")
 			return
 		}
 		leaf, ok := inner.ListValues().(*array.String)
 		if !ok {
-			err = eb.Build().Type("array", inner.ListValues()).Errorf("extractAllGroups leaf column type (expected *array.String)")
+			err = eb.Build().Str("label", label).Type("array", inner.ListValues()).Errorf("leaf column type (expected *array.String)")
 			return
 		}
-		matchStart, matchEnd, err := listRowRange("extractAllGroups", outer)
+		matchStart, matchEnd, err := listRowRange(label, outer)
 		if err != nil {
 			return
 		}
 		innerOffsets := inner.Offsets()
 		if len(innerOffsets) < matchEnd+1 {
-			err = eb.Build().Int("offsets", len(innerOffsets)).Int("matches", matchEnd-matchStart).Errorf("extractAllGroups: inner offset count does not match the match count")
+			err = eb.Build().Str("label", label).Int("offsets", len(innerOffsets)).Int("elements", matchEnd-matchStart).Errorf("inner offset count does not match the element count")
 			return
 		}
 		out = make([][]string, 0, matchEnd-matchStart)
@@ -188,40 +195,88 @@ func runExtractAllGroupsBlocking(ctx context.Context, inst *App, haystack string
 			out = append(out, row)
 		}
 		return
-	})
+	}
 }
 
-// listOutcome is everything the List tab draws for one input.
-type listOutcome struct {
-	// Matches is extractAll's output, verbatim.
-	Matches []string
-	// Groups is extractAllGroups' output — one row of capture-group
-	// values per match — or nil when the pattern has no capture group.
+// fnOutcome is what the pattern functions return for one input — from
+// ClickHouse ([runPatternFnsBlocking]) or as the Go model predicts it
+// ([predictFunctions]); one type, so the Functions tab compares like with
+// like.
+type fnOutcome struct {
+	Match         bool
+	Count         uint64
+	Extract       string
+	RegexpExtract string
+	ExtractAll    []string
+	// Groups is extractAllGroups' output — one row of capture-group values
+	// per match — or nil when the pattern has no capture group (ClickHouse
+	// rejects the call then, so it is not made).
 	Groups [][]string
-	// YieldsGroups records that Matches holds capture-group-1 values
-	// rather than full matches, which is what extractAll returns whenever
-	// the pattern has a capture group. The tab says so rather than
-	// letting the reader assume otherwise: the Preview tab highlights full
-	// matches, so without the caveat the two tabs look like they
-	// disagree.
+	// YieldsGroups records that the pattern captures, which makes
+	// ExtractAll and Extract hold capture group 1 rather than whole
+	// matches.
 	YieldsGroups bool
 }
 
-// runListOutcomeBlocking gathers the List tab's results. numGroups is the
-// pattern's capture-group count, determined by the caller on the render
-// thread — it decides whether the extractAllGroups call is legal at all
-// (ClickHouse rejects it outright for a group-less pattern).
-func runListOutcomeBlocking(ctx context.Context, inst *App, haystack string, pattern string, numGroups int) (out listOutcome, err error) {
-	out.Matches, err = runExtractAllBlocking(ctx, inst, haystack, pattern)
-	if err != nil {
-		return
-	}
+// runPatternFnsBlocking evaluates every pattern function in one query.
+// numGroups is the pattern's capture-group count, determined by the caller
+// on the render thread; it decides whether extractAllGroups is asked at
+// all.
+func runPatternFnsBlocking(ctx context.Context, inst *App, haystack string, pattern string, numGroups int) (out fnOutcome, err error) {
+	fns := patternFns
 	if numGroups == 0 {
-		return
+		fns = fns[:len(fns)-1] // drop extractAllGroups — see fnExtractAllGroups
 	}
-	out.YieldsGroups = true
-	out.Groups, err = runExtractAllGroupsBlocking(ctx, inst, haystack, pattern)
-	return
+	const label = "pattern functions"
+	return runRecordBlocking(ctx, inst, label, buildFnsSQL(haystack, pattern, "", fns), func(rec arrow.RecordBatch) (out fnOutcome, err error) {
+		if int(rec.NumCols()) != len(fns) {
+			err = eb.Build().Int64("cols", rec.NumCols()).Int("want", len(fns)).Errorf("pattern functions: column count")
+			return
+		}
+		match, err := decodeUint8("match", rec.Column(int(fnMatch)))
+		if err != nil {
+			return
+		}
+		out.Match = match != 0
+		if out.Count, err = decodeUint64("countMatches", rec.Column(int(fnCountMatches))); err != nil {
+			return
+		}
+		if out.Extract, err = decodeString("extract", rec.Column(int(fnExtract))); err != nil {
+			return
+		}
+		if out.RegexpExtract, err = decodeString("regexpExtract", rec.Column(int(fnRegexpExtract))); err != nil {
+			return
+		}
+		if out.ExtractAll, err = decodeStrings("extractAll")(rec.Column(int(fnExtractAll))); err != nil {
+			return
+		}
+		if numGroups > 0 {
+			out.YieldsGroups = true
+			out.Groups, err = decodeStringLists("extractAllGroups")(rec.Column(int(fnExtractAllGroups)))
+		}
+		return
+	})
+}
+
+// replaceOutcome is what replaceRegexpOne and replaceRegexpAll return.
+type replaceOutcome struct {
+	One string
+	All string
+}
+
+// runReplaceFnsBlocking evaluates the two replace functions in one query.
+func runReplaceFnsBlocking(ctx context.Context, inst *App, haystack string, pattern string, replacement string) (out replaceOutcome, err error) {
+	return runRecordBlocking(ctx, inst, "replace functions", buildFnsSQL(haystack, pattern, replacement, replaceFns), func(rec arrow.RecordBatch) (out replaceOutcome, err error) {
+		if rec.NumCols() != 2 {
+			err = eb.Build().Int64("cols", rec.NumCols()).Errorf("replace functions: column count")
+			return
+		}
+		if out.One, err = decodeString("replaceRegexpOne", rec.Column(0)); err != nil {
+			return
+		}
+		out.All, err = decodeString("replaceRegexpAll", rec.Column(1))
+		return
+	})
 }
 
 // runMultiMatchBlocking evaluates multiMatchAllIndices(haystack, [p...]) —
@@ -250,6 +305,57 @@ func runMultiMatchBlocking(ctx context.Context, inst *App, haystack string, patt
 	})
 }
 
+// runMultiLinesBlocking evaluates the multi-pattern input and maps the hits
+// back onto its lines. sent holds the patterns sent, origIdx the line each
+// came from.
+//
+// multiMatchAllIndices is one call over the whole set, so a single pattern
+// VectorScan refuses fails every line. When that happens this asks again
+// one pattern at a time to find the refused ones, marks them with
+// ClickHouse's message, and re-runs the rest — so the user sees which
+// line to fix and still gets hits for the others. A failure no single
+// pattern reproduces is returned as it came.
+func runMultiLinesBlocking(ctx context.Context, inst *App, haystack string, lines []multiLine, sent []string, origIdx []int) (out []multiLine, err error) {
+	hits, err := runMultiMatchBlocking(ctx, inst, haystack, sent)
+	if err == nil || !isEngineRejection(err) {
+		if err == nil {
+			out = applyMultiHits(lines, origIdx, hits)
+		}
+		return
+	}
+	setErr := err
+	out = slices.Clone(lines)
+	var keep []string
+	var keepIdx []int
+	for i, p := range sent {
+		_, probeErr := runMultiMatchBlocking(ctx, inst, haystack, []string{p})
+		switch {
+		case probeErr == nil:
+			keep = append(keep, p)
+			keepIdx = append(keepIdx, origIdx[i])
+		case isEngineRejection(probeErr):
+			out[origIdx[i]].Rejected = clickHouseMessage(probeErr)
+		default:
+			err = probeErr
+			return
+		}
+	}
+	if len(keep) == len(sent) {
+		err = setErr
+		return
+	}
+	err = nil
+	if len(keep) == 0 {
+		return
+	}
+	hits, err = runMultiMatchBlocking(ctx, inst, haystack, keep)
+	if err != nil {
+		return
+	}
+	out = applyMultiHits(out, keepIdx, hits)
+	return
+}
+
 // ---------------------------------------------------------------------------
 // Lane reconciliation — the render thread's once-per-frame convergence step
 // ---------------------------------------------------------------------------
@@ -259,49 +365,40 @@ func runMultiMatchBlocking(ctx context.Context, inst *App, haystack string, patt
 // written this frame's values.
 //
 // There is no "did anything change" flag: the lanes compare keys
-// themselves, so a frame where nothing changed costs four key builds and
-// four string comparisons, and a frame where something changed cannot lose
-// the change (see [queryLane]).
+// themselves, so a frame where nothing changed costs three key builds and
+// three string comparisons, and a frame where something changed cannot
+// lose the change (see [queryLane]). An empty haystack is an input like
+// any other — match(”, '^$') is 1.
 func (inst *App) reconcileQueries() {
 	inst.reconcileSingle()
 	inst.reconcileMulti()
 }
 
-// reconcileSingle drives the three RE2-backed lanes off the single-pattern
-// input. All three go idle when there is nothing dispatchable — a cleared
-// or broken pattern must drop the previous answer, not keep showing it.
+// reconcileSingle drives the two lanes off the single-pattern input. Both
+// go idle when the pattern is empty or does not compile — a cleared or
+// broken pattern must drop the previous answer, not keep showing it.
 func (inst *App) reconcileSingle() {
 	a := inst.analysis()
-	if a.haystack == "" || a.state != patternValid {
-		inst.matchLane.reset()
-		inst.listLane.reset()
+	if a.state != patternValid {
+		inst.fnLane.reset()
 		inst.replaceLane.reset()
 		return
 	}
 
 	pattern := a.pattern
 	haystack := a.haystack
-	singleKey := inst.singleKey()
-
-	inst.matchLane.demand(singleKey, "regex_explorer.match", func(ctx context.Context) (out bool, err error) {
-		return runMatchBlocking(ctx, inst, haystack, pattern)
-	})
-
-	// The capture-group count is read here, on the render thread, because
-	// it needs the compiled pattern — and because it decides whether the
-	// extractAllGroups call is legal at all.
+	// Read here, on the render thread, because it needs the compiled
+	// pattern — and because it decides whether extractAllGroups is legal.
 	numGroups := a.re.NumSubexp()
-	inst.listLane.demand(singleKey, "regex_explorer.extractAll", func(ctx context.Context) (out listOutcome, err error) {
-		return runListOutcomeBlocking(ctx, inst, haystack, pattern, numGroups)
+	inst.fnLane.demand(inst.singleKey(), "regex_explorer.functions", func(ctx context.Context) (out fnOutcome, err error) {
+		return runPatternFnsBlocking(ctx, inst, haystack, pattern, numGroups)
 	})
 
-	// The replacement text feeds only this lane, so an edit to it must
-	// not re-run match and extractAll — hence its own key rather than a
-	// shared "something changed" trigger.
+	// The replacement feeds only this lane, so an edit to it must not
+	// re-run the pattern functions — hence its own key.
 	replacement := inst.replacement
-	replaceKey := inst.replaceKey()
-	inst.replaceLane.demand(replaceKey, "regex_explorer.replaceRegexpAll", func(ctx context.Context) (out string, err error) {
-		return runReplaceAllBlocking(ctx, inst, haystack, pattern, replacement)
+	inst.replaceLane.demand(inst.replaceKey(), "regex_explorer.replace", func(ctx context.Context) (out replaceOutcome, err error) {
+		return runReplaceFnsBlocking(ctx, inst, haystack, pattern, replacement)
 	})
 }
 
@@ -311,31 +408,23 @@ func (inst *App) reconcileSingle() {
 // parseAndValidatePatternList reads the flag toggles; the worker gets the
 // parsed lines by value.
 func (inst *App) reconcileMulti() {
-	if inst.haystack == "" || strings.TrimSpace(inst.patternList) == "" {
-		inst.multiLane.reset()
-		return
-	}
 	lines := inst.parseAndValidatePatternList(inst.patternList)
 	if len(lines) == 0 {
 		inst.multiLane.reset()
 		return
 	}
-
-	// The haystack and the flags are part of the key, not just the
-	// pattern-list text: editing either changes which patterns hit, and
-	// keying on the text alone would present the old hits as current.
 	key := inst.multiKey()
 
-	var validPatterns []string
-	var validOrigIdx []int
+	var sent []string
+	var origIdx []int
 	for i, l := range lines {
 		if l.Invalid {
 			continue
 		}
-		validPatterns = append(validPatterns, inst.effectivePattern(l.Text))
-		validOrigIdx = append(validOrigIdx, i)
+		sent = append(sent, inst.effectivePattern(l.Text))
+		origIdx = append(origIdx, i)
 	}
-	if len(validPatterns) == 0 {
+	if len(sent) == 0 {
 		// multiMatchAllIndices rejects an empty pattern array with
 		// ILLEGAL_TYPE_OF_ARGUMENT, and there is nothing to ask anyway:
 		// no line can hit. Serve the parsed lines so the markers render
@@ -346,21 +435,14 @@ func (inst *App) reconcileMulti() {
 
 	haystack := inst.haystack
 	inst.multiLane.demand(key, "regex_explorer.multiMatchAllIndices", func(ctx context.Context) (out []multiLine, err error) {
-		hits, hitErr := runMultiMatchBlocking(ctx, inst, haystack, validPatterns)
-		if hitErr != nil {
-			err = hitErr
-			return
-		}
-		out = applyMultiHits(lines, validOrigIdx, hits)
-		return
+		return runMultiLinesBlocking(ctx, inst, haystack, lines, sent, origIdx)
 	})
 }
 
 // cancelQueries abandons every lane's in-flight run and drops what the
 // lanes hold. Called from Unmount; safe to call more than once.
 func (inst *App) cancelQueries() {
-	inst.matchLane.reset()
-	inst.listLane.reset()
+	inst.fnLane.reset()
 	inst.replaceLane.reset()
 	inst.multiLane.reset()
 }

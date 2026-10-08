@@ -16,8 +16,8 @@ package regex_explorer
 //     edit that arrives while a query is in flight, and nothing re-fires
 //     when that query lands. The displayed result then describes an input
 //     the user has already moved on from, with no indication that it does.
-//     The status bar would happily report "CH: match=true" for a pattern
-//     that no longer matches.
+//     The UI would happily report match = 1 for a pattern that no longer
+//     matches.
 //   - Level-triggered dispatch cannot strand a result that way. If the
 //     wanted key still differs from the served key on the next frame, the
 //     lane simply starts the query again — for the *latest* input, not the

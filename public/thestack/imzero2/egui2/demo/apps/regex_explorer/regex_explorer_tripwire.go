@@ -8,12 +8,17 @@ package regex_explorer
 // divergences are logged and surfaced in the status bar. See ADR-0054
 // section "Subsidiary design decisions" for the rationale.
 //
-// Disagreements are partitioned. A case carrying a [tripwireCase.KnownDrift]
-// note is a difference we have already investigated and decided to live
-// with — it is counted separately and does not light the DRIFT indicator.
-// Everything else is unexpected and does. Without that split the indicator
-// degrades into a permanent warning the moment the corpus covers a real
-// engine difference, and a permanent warning conveys nothing.
+// Each case is checked twice against ClickHouse's extractAll. The check
+// that gates is the *model*: what the app predicts extractAll returns
+// (regex_explorer_chmodel.go — Go's matches, ClickHouse's enumeration and
+// defaults) must equal what it returns. A miss there means the app is
+// telling the user something false, and lights DRIFT. The second check is
+// the raw engines — Go's FindAllString against the same output — and a
+// difference there is expected only where a [tripwireCase.KnownDrift] note
+// says so: a documented raw difference the model accounts for is counted
+// as *known*, an undocumented one is drift. Without that split the
+// indicator degrades into a permanent warning the moment the corpus covers
+// a real engine difference, and a permanent warning conveys nothing.
 //
 // The tripwire is not gating: a drift does not block the app. Users can
 // still type and run queries; the expectation is that unexpected divergence
@@ -22,7 +27,6 @@ package regex_explorer
 
 import (
 	"context"
-	"reflect"
 	"slices"
 	"strings"
 
@@ -32,24 +36,25 @@ import (
 )
 
 // tripwireCase is one triple-tuple for engine-fidelity comparison: a
-// pattern applied to a haystack must produce the same match list under
-// Go's regexp.Regexp.FindAllString and ClickHouse's extractAll.
+// pattern applied to a haystack, whose ClickHouse extractAll output must
+// equal the model's prediction and — unless KnownDrift says otherwise — Go's
+// FindAllString.
 //
 // Flags carries the RE2 inline-flag letters ("i", "m", "s", or a
 // combination) the case is evaluated under. The corpus states them
 // explicitly rather than reading the live UI toggles: SD1 compares two
 // engines against a *fixed* corpus, so a case whose meaning changed with
 // whatever the user last clicked would compare two moving targets.
-// [App.effectivePattern] builds the same "(?ims)"-prefixed string for
-// the interactive path, so the flag prefix itself is on both paths.
+// Unlike the interactive path ([inlineFlags]), a case states only the
+// flags it names and leaves the dot flag to each engine's default, so the
+// corpus can pin those defaults too.
 //
-// KnownDrift documents an engine difference that is real, understood,
-// and not a regression. A case with a non-empty KnownDrift is still
-// evaluated and still logged when the engines disagree, but the
-// disagreement is counted as *known* rather than reported as drift —
-// otherwise every widened corpus permanently pins the status bar to
-// "DRIFT" and the indicator stops carrying information. An empty
-// KnownDrift means the engines must agree exactly.
+// KnownDrift documents a raw engine difference that is real, understood,
+// and modelled. A case with a non-empty KnownDrift is still evaluated and
+// logged, and its raw disagreement is counted as *known* rather than
+// reported as drift — otherwise every widened corpus permanently pins the
+// status bar to "DRIFT" and the indicator stops carrying information. An
+// empty KnownDrift means the raw engines must agree exactly.
 type tripwireCase struct {
 	Name       string
 	Haystack   string
@@ -93,7 +98,7 @@ var tripwireCorpus = []tripwireCase{
 		// was written and left it unable to signal anything else. It is
 		// documented here rather than removed: it is the single most
 		// load-bearing difference between the two engines for this app,
-		// because the List tab renders extractAll output directly.
+		// because extract and extractAll both return group 1.
 		Name:       "group-capture",
 		Haystack:   "(x) (yz)",
 		Pattern:    `\(([^)]+)\)`,
@@ -118,25 +123,59 @@ var tripwireCorpus = []tripwireCase{
 	{Name: "multiline-anchor-flag", Haystack: "foo\nbar\nfoo", Pattern: `^foo$`, Flags: "m"},
 	{Name: "dotall-flag", Haystack: "a\nb", Pattern: `a.b`, Flags: "s"},
 	{
-		// The empty-match enumeration policy is where the two engines
-		// genuinely part company: Go's FindAllString reports one
-		// zero-width match at every position (4 for a 3-byte haystack),
-		// ClickHouse's extractAll reports none. Neither is wrong —
-		// RE2 specifies the match, not how a caller enumerates repeated
-		// empty matches. The app sides with ClickHouse in the preview
-		// (see nonEmptySubmatches) because predicting ClickHouse is the
-		// product; the corpus records the raw-engine difference so it
-		// stays visible if either side ever changes its mind.
+		// Empty-match enumeration is where the two engines part company.
+		// RE2 specifies the match, not how a caller walks repeated
+		// matches: Go's FindAllString reports a zero-width match at every
+		// position where one is found, ClickHouse's extractAll stops at
+		// the first one (regex_explorer_chmodel.go). Here the first match
+		// is already empty, so extractAll returns nothing.
 		Name:       "empty-matchable-star",
 		Haystack:   "xyz",
 		Pattern:    `a*`,
-		KnownDrift: "Go enumerates a zero-width match per position; ClickHouse extractAll reports none",
+		KnownDrift: "Go enumerates zero-width matches; ClickHouse extractAll stops at the first one",
 	},
 	{
 		Name:       "empty-matchable-opt",
 		Haystack:   "xyz",
 		Pattern:    `q?`,
 		KnownDrift: "zero-width matches, as empty-matchable-star",
+	},
+	{
+		// The stop also drops real matches after it: Go reports "",
+		// "aa", "", "" and extractAll stops on the first "" before it
+		// reaches "aa".
+		Name:       "empty-before-match",
+		Haystack:   "xaay",
+		Pattern:    `a*`,
+		KnownDrift: "extractAll stops at the zero-width match at byte 0, before the real match",
+	},
+	{
+		// The subtle half of the rule: the zero-width match right where
+		// "ab" ends is one Go's FindAll skips, so Go reports "ab" and
+		// "cd" with no empty match between them — and extractAll still
+		// stops there. The model has to recover a match FindAll hid.
+		Name:       "empty-abutting-match",
+		Haystack:   "ab cd",
+		Pattern:    `\w*`,
+		KnownDrift: "extractAll stops at the zero-width match abutting \"ab\" that FindAll skips",
+	},
+	{
+		// ClickHouse compiles RE2 with dot-matches-newline on; Go has it
+		// off. The interactive path states the flag either way
+		// ([inlineFlags]); the corpus sends the pattern bare so the default
+		// itself stays pinned.
+		Name:       "dot-newline-default",
+		Haystack:   "a\nb",
+		Pattern:    `a.b`,
+		KnownDrift: "ClickHouse's dot matches a newline by default; Go's does not",
+	},
+	{
+		// The explicit flag the interactive path sends when the dot-all
+		// box is cleared: both engines must honour it.
+		Name:     "dot-newline-off",
+		Haystack: "a\nb",
+		Pattern:  `a.b`,
+		Flags:    "-s",
 	},
 }
 
@@ -175,15 +214,15 @@ func (inst *App) RunTripwire(ctx context.Context) {
 }
 
 // runTripwireBlocking runs each corpus case through both engines and
-// partitions the disagreements: drifts are unexpected (the case declares no
-// KnownDrift and the engines still differ), known are the documented
-// differences from the ledger. Short-circuits on the first ClickHouse
+// partitions the disagreements: drifts are unexpected (the model mispredicts
+// ClickHouse, or the raw engines differ where no KnownDrift says they do),
+// known are the documented raw differences the model accounts for. Short-circuits on the first ClickHouse
 // transport error — if CH is unreachable the whole tripwire is considered
 // un-run (err set, both slices empty).
 func (inst *App) runTripwireBlocking(ctx context.Context) (drifts []int, known []int, err error) {
 	for i, tc := range tripwireCorpus {
 		pattern := tc.effective()
-		goMatches, goErr := inst.tripwireGoMatches(pattern, tc.Haystack)
+		goMatches, predicted, goErr := inst.tripwireGoMatches(pattern, tc.Haystack)
 		if goErr != nil {
 			err = eb.Build().Int("tripwire", i).Str("name", tc.Name).Errorf("tripwire: Go compile: %w", goErr)
 			return
@@ -211,7 +250,12 @@ func (inst *App) runTripwireBlocking(ctx context.Context) (drifts []int, known [
 			continue
 		}
 
-		if reflect.DeepEqual(goMatches, chMatches) {
+		if !slices.Equal(predicted, chMatches) {
+			log.Warn().Str("case", tc.Name).Str("pattern", pattern).Str("haystack", tc.Haystack).Strs("predicted", predicted).Strs("ch", chMatches).Msg("regex_explorer: tripwire model miss — the app predicts extractAll wrongly")
+			drifts = append(drifts, i)
+			continue
+		}
+		if slices.Equal(goMatches, chMatches) {
 			continue
 		}
 		if tc.KnownDrift != "" {
@@ -226,29 +270,34 @@ func (inst *App) runTripwireBlocking(ctx context.Context) (drifts []int, known [
 	return
 }
 
-// tripwireGoMatches is the Go-side reference for a tripwire case: all
-// non-overlapping matches as full-match strings (not capture groups).
+// tripwireGoMatches is the Go side of a tripwire case: raw is every match
+// FindAllString reports, as full-match strings; predicted is what the app's
+// model says ClickHouse's extractAll returns ([predictExtractAll], with
+// ClickHouse's dot default applied).
 //
-// Deliberately raw — this is the one place that must NOT go through
-// nonEmptySubmatches. The preview mirrors ClickHouse's empty-match policy so
-// the UI tells one story; the tripwire compares the engines as they
-// actually behave, which is what makes the ledger's KnownDrift entries
-// mean something. Filtering here would make the tripwire agree with
-// itself by construction.
+// raw is deliberately unfiltered and unmodelled: it is the engine as it
+// behaves, which is what makes the ledger's KnownDrift entries mean
+// something. Comparing only the model would make the tripwire agree with
+// itself wherever the model is right and say nothing about why.
 //
 // Shares the receiver's compile cache so patterns reused by the tripwire
 // and the main loop are compiled only once. Reaching the cache through
 // the receiver rather than a package-level pointer is what keeps this
 // goroutine off the render thread's toes.
-func (inst *App) tripwireGoMatches(pattern string, haystack string) (matches []string, err error) {
+func (inst *App) tripwireGoMatches(pattern string, haystack string) (raw []string, predicted []string, err error) {
 	re, err := inst.getCompiledRegexp(pattern)
 	if err != nil {
 		return
 	}
-	matches = re.FindAllString(haystack, -1)
-	if matches == nil {
-		matches = []string{}
+	raw = re.FindAllString(haystack, -1)
+	if raw == nil {
+		raw = []string{}
 	}
+	chRe, err := inst.getCompiledRegexp(clickHouseDefaults(pattern))
+	if err != nil {
+		return
+	}
+	predicted = predictExtractAll(chRe, haystack)
 	return
 }
 

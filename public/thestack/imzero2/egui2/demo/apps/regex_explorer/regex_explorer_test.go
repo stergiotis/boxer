@@ -13,6 +13,7 @@ package regex_explorer
 import (
 	"context"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -23,6 +24,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
@@ -95,15 +97,20 @@ func TestEffectivePattern(t *testing.T) {
 		base  string
 		want  string
 	}{
+		// The dot flag is always stated — on by default, as in
+		// ClickHouse — so both engines read one pattern (see inlineFlags).
 		{name: "empty-base-no-flags", setup: func(*App) {}, base: "", want: ""},
-		{name: "no-flags", setup: func(*App) {}, base: "foo", want: "foo"},
-		{name: "case-insensitive", setup: func(inst *App) { inst.caseInsensitive = true }, base: "foo", want: "(?i)foo"},
-		{name: "multiline", setup: func(inst *App) { inst.multiline = true }, base: "^x$", want: "(?m)^x$"},
-		{name: "dotall", setup: func(inst *App) { inst.dotAll = true }, base: ".", want: "(?s)."},
+		{name: "defaults", setup: func(*App) {}, base: "foo", want: "(?s)foo"},
+		{name: "case-insensitive", setup: func(inst *App) { inst.caseInsensitive = true }, base: "foo", want: "(?is)foo"},
+		{name: "multiline", setup: func(inst *App) { inst.multiline = true }, base: "^x$", want: "(?ms)^x$"},
+		{name: "dotall-off", setup: func(inst *App) { inst.dotAll = false }, base: ".", want: "(?-s)."},
+		{name: "case-insensitive-dotall-off", setup: func(inst *App) {
+			inst.caseInsensitive = true
+			inst.dotAll = false
+		}, base: "foo", want: "(?i-s)foo"},
 		{name: "all-three", setup: func(inst *App) {
 			inst.caseInsensitive = true
 			inst.multiline = true
-			inst.dotAll = true
 		}, base: "foo", want: "(?ims)foo"},
 	}
 	for _, tc := range cases {
@@ -114,6 +121,50 @@ func TestEffectivePattern(t *testing.T) {
 			got := inst.effectivePattern(tc.base)
 			if got != tc.want {
 				t.Errorf("effectivePattern(%q) = %q; want %q", tc.base, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestPredictExtractAll pins the Go-side model of ClickHouse's extractAll
+// against outputs read off clickhouse-local (26.9). Each case is one shape
+// of the enumeration rule in regex_explorer_chmodel.go; the SD1 corpus
+// re-checks the model against a live ClickHouse.
+func TestPredictExtractAll(t *testing.T) {
+	cases := []struct {
+		pattern  string
+		haystack string
+		want     []string
+	}{
+		{`\d+`, "a1 b22 c333", []string{"1", "22", "333"}},
+		// Stops at the first zero-width match …
+		{`a*`, "xyz", []string{}},
+		{`a*`, "xaay", []string{}},
+		{`a*`, "aax", []string{"aa"}},
+		// … including the one abutting a match, which FindAll skips.
+		{`a*`, "aaxa", []string{"aa"}},
+		{`\w*`, "ab cd", []string{"ab"}},
+		{`a*b?`, "abxb", []string{"ab"}},
+		{`\b\w*`, "ab cd", []string{"ab"}},
+		// No empty match is possible, so nothing stops it.
+		{`\Ba`, "aaa", []string{"a", "a"}},
+		{`(?m)^a`, "a\na", []string{"a", "a"}},
+		{`^a`, "aaa", []string{"a"}},
+		// Capturing patterns yield group 1; an unset group is "".
+		{`(a)*`, "aaxa", []string{"a"}},
+		{`b|(c)`, "bc", []string{"", "c"}},
+		{`(x)?b`, "ab", []string{""}},
+		// ClickHouse's dot matches a newline unless told otherwise.
+		{`.*`, "ab\ncd", []string{"ab\ncd"}},
+		{`(?-s).*`, "ab\ncd", []string{"ab"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.pattern+"/"+tc.haystack, func(t *testing.T) {
+			t.Parallel()
+			re := regexp.MustCompile(clickHouseDefaults(tc.pattern))
+			got := predictExtractAll(re, tc.haystack)
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("predictExtractAll(%q, %q) = %q; want %q", tc.pattern, tc.haystack, got, tc.want)
 			}
 		})
 	}
@@ -230,10 +281,10 @@ func TestAnalysisMatchCount(t *testing.T) {
 		// There is no negative sentinel: the caller distinguishes
 		// "couldn't compile" from "compiled, matched nothing" by err.
 		{"invalid-pattern", `\d(+`, "text", 0, true},
-		// Zero-width matches are not counted — ClickHouse's extractAll
-		// reports none for these, and the preview follows ClickHouse so
-		// the status bar and the List tab tell one story (ADR-0054 SD1
-		// known-difference ledger, case empty-matchable-star).
+		// Zero-width matches are not counted, as ClickHouse's
+		// countMatches does not count them: there is nothing to
+		// highlight. Which matches extractAll returns is the model's
+		// question (TestPredictExtractAll), not this count's.
 		{"empty-matchable-star", `a*`, "xyz", 0, false},
 		{"empty-matchable-opt", `q?`, "xyz", 0, false},
 		{"mixed-empty-and-real", `a*`, "xayz", 1, false},
@@ -564,9 +615,14 @@ func waitFor(t *testing.T, cond func() bool, what string) {
 // SQL builders — pure string composition, exact-match tests
 // ---------------------------------------------------------------------------
 
-func TestBuildMatchSQL(t *testing.T) {
-	got := buildMatchSQL("hello", `h\w+`)
-	want := `SELECT match('hello', 'h\\w+')`
+func TestBuildFnsSQL(t *testing.T) {
+	got := buildFnsSQL("it's", `h\w+`, "", []chFnE{fnMatch, fnRegexpExtract, fnExtractAll})
+	want := `WITH 'it\'s' AS haystack SELECT match(haystack, 'h\\w+'), regexpExtract(haystack, 'h\\w+', 0), extractAll(haystack, 'h\\w+')`
+	if got != want {
+		t.Errorf("got %q; want %q", got, want)
+	}
+	got = buildFnsSQL("hello", `(l+)`, `[\1]`, replaceFns)
+	want = `WITH 'hello' AS haystack SELECT replaceRegexpOne(haystack, '(l+)', '[\\1]'), replaceRegexpAll(haystack, '(l+)', '[\\1]')`
 	if got != want {
 		t.Errorf("got %q; want %q", got, want)
 	}
@@ -580,66 +636,52 @@ func TestBuildExtractAllSQL(t *testing.T) {
 	}
 }
 
-func TestBuildExtractAllGroupsSQL(t *testing.T) {
-	got := buildExtractAllGroupsSQL("a@b.c", `(\w+)@([\w.]+)`)
-	want := `SELECT extractAllGroups('a@b.c', '(\\w+)@([\\w.]+)')`
-	if got != want {
-		t.Errorf("got %q; want %q", got, want)
-	}
-}
-
-// TestRunListOutcomeBlocking_CaptureGroups pins the two behaviours that
-// make the List tab honest about capture groups:
-//
-//   - extractAll returns capture group 1, not the full match, whenever the
-//     pattern captures — so YieldsGroups must be set and the tab must say
-//     so, or it silently contradicts the Preview tab's full-match
-//     highlighting;
-//   - extractAllGroups is only asked for when the pattern actually
-//     captures, because ClickHouse rejects it outright otherwise, and
-//     interactive typing produces group-less patterns constantly.
-func TestRunListOutcomeBlocking_CaptureGroups(t *testing.T) {
+// TestRunPatternFnsBlocking pins what the pattern-functions query returns
+// and the gate in front of extractAllGroups, which ClickHouse rejects for
+// a pattern without a capture group — and interactive typing produces
+// group-less patterns constantly.
+func TestRunPatternFnsBlocking(t *testing.T) {
 	bus := setupTestBus(t)
 	inst := newTestApp(t)
 	inst.setBus(bus)
 	ctx := context.Background()
 
 	t.Run("with-groups", func(t *testing.T) {
-		out, err := runListOutcomeBlocking(ctx, inst, "alice@example.com bob@test.org", `(\w+)@([\w.]+)`, 2)
+		out, err := runPatternFnsBlocking(ctx, inst, "alice@example.com bob@test.org", `(\w+)@([\w.]+)`, 2)
 		if err != nil {
-			t.Fatalf("runListOutcomeBlocking: %v", err)
+			t.Fatalf("runPatternFnsBlocking: %v", err)
 		}
-		if !out.YieldsGroups {
-			t.Errorf("YieldsGroups = false; extractAll returns group 1 for a capturing pattern")
+		want := fnOutcome{
+			Match:         true,
+			Count:         2,
+			Extract:       "alice",
+			RegexpExtract: "alice@example.com",
+			ExtractAll:    []string{"alice", "bob"},
+			Groups:        [][]string{{"alice", "example.com"}, {"bob", "test.org"}},
+			YieldsGroups:  true,
 		}
-		// This is the divergence the tab has to explain: extractAll gives
-		// the local parts, while Go highlights the whole addresses.
-		if want := []string{"alice", "bob"}; !reflect.DeepEqual(out.Matches, want) {
-			t.Errorf("Matches = %q; want %q", out.Matches, want)
-		}
-		want := [][]string{{"alice", "example.com"}, {"bob", "test.org"}}
-		if !reflect.DeepEqual(out.Groups, want) {
-			t.Errorf("Groups = %q; want %q", out.Groups, want)
+		if !reflect.DeepEqual(out, want) {
+			t.Errorf("got %+v; want %+v", out, want)
 		}
 	})
 
 	t.Run("without-groups", func(t *testing.T) {
-		out, err := runListOutcomeBlocking(ctx, inst, "a1 b22", `\d+`, 0)
+		out, err := runPatternFnsBlocking(ctx, inst, "a1 b22", `\d+`, 0)
 		if err != nil {
-			t.Fatalf("runListOutcomeBlocking: %v", err)
+			t.Fatalf("runPatternFnsBlocking: %v", err)
 		}
 		if out.YieldsGroups || out.Groups != nil {
-			t.Errorf("group-less pattern reported groups: YieldsGroups=%v Groups=%v", out.YieldsGroups, out.Groups)
+			t.Errorf("group-less pattern reported groups: %+v", out)
 		}
-		if want := []string{"1", "22"}; !reflect.DeepEqual(out.Matches, want) {
-			t.Errorf("Matches = %q; want %q", out.Matches, want)
+		if want := []string{"1", "22"}; !reflect.DeepEqual(out.ExtractAll, want) {
+			t.Errorf("ExtractAll = %q; want %q", out.ExtractAll, want)
 		}
 	})
 
 	t.Run("extractAllGroups-rejects-group-less-pattern", func(t *testing.T) {
 		// The reason numGroups gates the call rather than the app just
 		// always asking. If this ever starts succeeding, the gate can go.
-		_, err := runExtractAllGroupsBlocking(ctx, inst, "abc", `a`)
+		_, err := runQueryBlocking(ctx, inst, "groups", buildFnsSQL("abc", `a`, "", []chFnE{fnExtractAllGroups}), decodeStringLists("groups"))
 		if err == nil {
 			t.Fatalf("expected ClickHouse to reject extractAllGroups on a group-less pattern")
 		}
@@ -647,14 +689,16 @@ func TestRunListOutcomeBlocking_CaptureGroups(t *testing.T) {
 			t.Errorf("err = %v; expected the BAD_ARGUMENTS 'no groups in regexp' text", err)
 		}
 	})
-}
 
-func TestBuildReplaceAllSQL(t *testing.T) {
-	got := buildReplaceAllSQL("hello", `l+`, "L")
-	want := `SELECT replaceRegexpAll('hello', 'l+', 'L')`
-	if got != want {
-		t.Errorf("got %q; want %q", got, want)
-	}
+	t.Run("replace", func(t *testing.T) {
+		out, err := runReplaceFnsBlocking(ctx, inst, "hello", `l`, `[\0]`)
+		if err != nil {
+			t.Fatalf("runReplaceFnsBlocking: %v", err)
+		}
+		if want := (replaceOutcome{One: "he[l]lo", All: "he[l][l]o"}); out != want {
+			t.Errorf("got %+v; want %+v", out, want)
+		}
+	})
 }
 
 func TestBuildMultiMatchSQL(t *testing.T) {
@@ -726,12 +770,102 @@ func TestRunTripwireBlocking_Ledger(t *testing.T) {
 	}
 }
 
+// TestPredictFunctions_AgainstClickHouse checks the Go model of every
+// modelled function — and the way the Functions tab prints its values —
+// over a grid of patterns that can match the empty string, or lean on the
+// context around a match, against haystacks chosen to put empty matches
+// first, last, between and abutting real ones. Each cell asks ClickHouse
+// to print its own value with toString, so one query carries the grid,
+// and a cell agrees only if the model's value and its rendering both do.
+func TestPredictFunctions_AgainstClickHouse(t *testing.T) {
+	inst := newTestApp(t)
+	inst.setBus(setupTestBus(t))
+
+	patterns := []string{
+		`a*`, `a*?`, `a+`, `\w*`, `\s*`, `[^a]*`, `.?`, `a?b?`, `(?:ab)*`,
+		`\b`, `\B`, `\b\w*`, `\w*\b`, `^`, `$`, `^a*`, `a*$`,
+		`(?m)^`, `(?m)$`, `(?m)^\w*`, `x*|a`, `a|`, `(a)*`, `(a*)(b*)`, `(b)|a*`, `(x)?a`,
+	}
+	haystacks := []string{
+		"", "a", "aa", "aax", "xaa", "aaxa", "a a", "ab cd", "ab\ncd", "aba", "\n\n", "ü a", "b", "xyz", "it's",
+	}
+	type cell struct {
+		pattern, haystack string
+		fn                chFnE
+	}
+	var cells []cell
+	var sql strings.Builder
+	sql.WriteString("SELECT [")
+	for _, p := range patterns {
+		groups := regexp.MustCompile(p).NumSubexp() > 0
+		for _, h := range haystacks {
+			for _, fn := range patternFns {
+				if fn == fnExtractAllGroups && !groups {
+					continue
+				}
+				if len(cells) > 0 {
+					sql.WriteString(", ")
+				}
+				cells = append(cells, cell{p, h, fn})
+				expr := strings.ReplaceAll(fn.expr(p, ""), "haystack", marshalling.EscapeString(h))
+				switch fn {
+				case fnExtract, fnRegexpExtract:
+					expr = "[" + expr + "]" // so the string prints quoted
+				}
+				sql.WriteString("toString(" + expr + ")")
+			}
+		}
+	}
+	sql.WriteString("]")
+
+	got, err := runQueryBlocking(context.Background(), inst, "grid", sql.String(), decodeStrings("grid"))
+	if err != nil {
+		t.Fatalf("grid query: %v", err)
+	}
+	if len(got) != len(cells) {
+		t.Fatalf("grid returned %d results for %d cells", len(got), len(cells))
+	}
+	type prediction struct {
+		out            fnOutcome
+		groupsModelled bool
+	}
+	analyses := map[[2]string]prediction{}
+	compared := 0
+	for i, c := range cells {
+		k := [2]string{c.pattern, c.haystack}
+		pr, ok := analyses[k]
+		if !ok {
+			a := newTestApp(t)
+			a.pattern, a.haystack = c.pattern, c.haystack
+			// The interactive path states the dot flag; ClickHouse here
+			// reads the bare pattern under its own default, which is on.
+			an := a.analysis()
+			pr = prediction{predictFunctions(an), an.groupsModelled()}
+			analyses[k] = pr
+		}
+		if c.fn == fnExtractAllGroups && !pr.groupsModelled {
+			continue // the model declines here, and the tab says so
+		}
+		compared++
+		predicted := pr.out
+		want := fnValue(c.fn, predicted)
+		switch c.fn {
+		case fnExtract, fnRegexpExtract:
+			want = "[" + want + "]"
+		}
+		if got[i] != want {
+			t.Errorf("%s over %q: ClickHouse %s, model %s", c.fn.expr(c.pattern, ""), c.haystack, got[i], want)
+		}
+	}
+	t.Logf("%d of %d cells compared", compared, len(cells))
+}
+
 func TestExecuteArrowStreamViaBus_Match(t *testing.T) {
 	bus := setupTestBus(t)
 	ctx := context.Background()
 	alloc := memory.NewGoAllocator()
 
-	rdr, closer, err := executeArrowStreamViaBus(ctx, bus, buildMatchSQL("foobar", "foo.*"), alloc)
+	rdr, closer, err := executeArrowStreamViaBus(ctx, bus, "SELECT match('foobar', 'foo.*')", alloc)
 	if err != nil {
 		t.Fatalf("executeArrowStreamViaBus: %v", err)
 	}
@@ -813,7 +947,7 @@ func TestExecuteArrowStreamViaBus_InvalidRegex(t *testing.T) {
 	ctx := context.Background()
 	alloc := memory.NewGoAllocator()
 
-	sql := buildMatchSQL("foo", "bad(regex")
+	sql := "SELECT match('foo', 'bad(regex')"
 	_, _, err := executeArrowStreamViaBus(ctx, bus, sql, alloc)
 	if err == nil {
 		t.Fatalf("expected an error for invalid regex; got nil")
