@@ -32,9 +32,18 @@ type compileResult struct {
 	err error
 }
 
+// maxCompileCache bounds the compile cache. Typing a pattern leaves every
+// prefix of it behind — under each flag combination, and once per line of
+// the pattern list — so an uncapped cache grows for the life of the
+// window. The patterns on screen are a handful; the cap only has to sit
+// well above that.
+const maxCompileCache = 256
+
 // getCompiledRegexp returns the cached compile for pattern, compiling it on
 // the first call. Errors are cached too; a compile failure is the expected
-// case during interactive typing and must not stall the UI.
+// case during interactive typing and must not stall the UI. A full cache
+// is emptied rather than evicted from: what is on screen recompiles once,
+// on the next frame, which is cheaper than keeping an eviction order.
 func (inst *App) getCompiledRegexp(pattern string) (re *regexp.Regexp, err error) {
 	inst.compileCacheMu.Lock()
 	defer inst.compileCacheMu.Unlock()
@@ -44,6 +53,9 @@ func (inst *App) getCompiledRegexp(pattern string) (re *regexp.Regexp, err error
 	if r, ok := inst.compileCache[pattern]; ok {
 		re, err = r.re, r.err
 		return
+	}
+	if len(inst.compileCache) >= maxCompileCache {
+		clear(inst.compileCache)
 	}
 	re, err = regexp.Compile(pattern)
 	inst.compileCache[pattern] = compileResult{re: re, err: err}

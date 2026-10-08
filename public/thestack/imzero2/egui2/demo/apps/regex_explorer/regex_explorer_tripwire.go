@@ -29,6 +29,8 @@ import (
 	"context"
 	"slices"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -180,8 +182,7 @@ var tripwireCorpus = []tripwireCase{
 }
 
 // tripwireState is the SD1 tripwire outcome the status bar renders. The
-// zero value means "not finished"; [App.tripwireRan] says whether it has
-// started.
+// zero value means "not finished".
 type tripwireState struct {
 	Done   bool
 	Drifts []int // corpus indices where the engines disagreed unexpectedly
@@ -189,18 +190,58 @@ type tripwireState struct {
 	Err    error // the tripwire itself failed (e.g., ClickHouse unreachable)
 }
 
-// RunTripwire launches the SD1 engine-fidelity tripwire if it has not yet
-// run this session. One-shot: subsequent calls are no-ops. The result is
-// stored on the [App] and read by the status bar.
+// tripwireTimeout bounds one SD1 run. The corpus is a few dozen queries
+// against a warm pool — about a second; a run still going after this is
+// wedged, and failing it frees the goroutine and the pool slots it holds.
+const tripwireTimeout = 60 * time.Second
+
+// tripwireRetryDelay is how long a run that failed — no bus yet, a refused
+// capability, ClickHouse unreachable — stands before the next frame may
+// start another. An embedded explorer's first frame can come before its
+// host attaches a bus; without a retry that window would report "could
+// not run" for the life of the process.
+const tripwireRetryDelay = 30 * time.Second
+
+// tripwireRun is the process's SD1 run. The corpus is fixed and every
+// explorer reaches the same ClickHouse, so one outcome describes them all:
+// opening a window does not repeat the check, and closing one does not
+// abandon it. Its own lock, not an App's, because no App owns it.
+type tripwireRun struct {
+	mu      sync.Mutex
+	started bool
+	running bool
+	state   tripwireState
+	// at is when the last run finished, for the retry delay.
+	at time.Time
+}
+
+var sharedTripwire tripwireRun
+
+// RunTripwire starts the SD1 engine-fidelity tripwire if the process has
+// not run it yet, or if the last run failed at least tripwireRetryDelay
+// ago; otherwise it does nothing, so it is safe to call every frame. The
+// run goes through this App's bus and compile cache, under
+// tripwireTimeout, and its outcome is shared by every App.
 func (inst *App) RunTripwire(ctx context.Context) {
-	if inst.tripwireRan.Swap(true) {
+	t := &sharedTripwire
+	t.mu.Lock()
+	due := !t.started || (!t.running && t.state.Err != nil && time.Since(t.at) >= tripwireRetryDelay)
+	if !due {
+		t.mu.Unlock()
 		return
 	}
+	t.started, t.running = true, true
+	t.mu.Unlock()
+
 	go func() {
+		ctx, cancel := context.WithTimeout(ctx, tripwireTimeout)
+		defer cancel()
 		drifts, known, err := inst.runTripwireBlocking(ctx)
-		inst.mu.Lock()
-		defer inst.mu.Unlock()
-		inst.tripwire = tripwireState{Done: true, Drifts: drifts, Known: known, Err: err}
+		t.mu.Lock()
+		t.running = false
+		t.at = time.Now()
+		t.state = tripwireState{Done: true, Drifts: drifts, Known: known, Err: err}
+		t.mu.Unlock()
 		if err != nil {
 			log.Warn().Err(err).Msg("regex_explorer: tripwire failed to complete")
 			return
@@ -347,12 +388,15 @@ func isVectorScanRejection(err error) bool {
 		strings.Contains(msg, "CANNOT_COMPILE_REGEXP")
 }
 
-// tripwireSnapshot exposes a thread-safe snapshot of the SD1 outcome.
-func (inst *App) tripwireSnapshot() (state tripwireState) {
-	inst.mu.RLock()
-	defer inst.mu.RUnlock()
-	state = inst.tripwire
+// tripwireSnapshot returns the shared SD1 outcome, and whether a run has
+// started and whether one is in progress.
+func tripwireSnapshot() (state tripwireState, started bool, running bool) {
+	t := &sharedTripwire
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	state = t.state
 	state.Drifts = slices.Clone(state.Drifts)
 	state.Known = slices.Clone(state.Known)
+	started, running = t.started, t.running
 	return
 }

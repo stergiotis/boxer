@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -76,8 +75,9 @@ const (
 //     lock could cover anyway, so the confinement is the invariant, not a
 //     lock. A lane's worker touches only its bgjob.Runner, which carries
 //     its own lock.
-//   - The tripwire outcome, the hand-off state (eval*) and bus are written
-//     off the render thread or read from it by workers; mu covers those.
+//   - The hand-off state (eval*) and bus are written off the render thread
+//     or read from it by workers; mu covers those. The SD1 tripwire's
+//     outcome is the process's, not an App's ([sharedTripwire]).
 //   - compileCache has its own mutex (compileCacheMu) because the
 //     tripwire goroutine shares it with the render thread.
 type App struct {
@@ -108,9 +108,6 @@ type App struct {
 	// into. True cursor-position insertion is not exposed through the
 	// current FFFI2 binding.
 	lastFocusedInput inputFieldE
-
-	tripwireRan atomic.Bool
-	tripwire    tripwireState
 
 	// Extraction hand-off state (ADR-0017). Written by the worker
 	// goroutine that publishes and opens, read by the render thread —
@@ -286,7 +283,7 @@ func (inst *AppInstance) Unmount(ctx runtimeapp.MountContextI) (err error) {
 // open app's ids.
 //
 // Kicks off the SD1 engine-fidelity tripwire on the first call
-// (coalesced by [App.tripwireRan] on the per-instance state).
+// (once per process — see [App.RunTripwire]).
 func (inst *AppInstance) Frame(ctx runtimeapp.FrameContextI) (err error) {
 	inst.state.RunTripwire(context.Background())
 	inst.state.RenderWindow()
@@ -971,7 +968,7 @@ func (inst *App) renderStatusBar() {
 // cases behind a non-green result.
 func (inst *App) engineCheckText() (label string, tip string) {
 	const about = "Engine check (ADR-0054 SD1): at startup a fixed set of patterns runs through Go's regexp and ClickHouse, and the app's predictions of ClickHouse are compared with what ClickHouse returns."
-	tw := inst.tripwireSnapshot()
+	tw, started, running := tripwireSnapshot()
 	names := func(idx []int) (out string) {
 		parts := make([]string, 0, len(idx))
 		for _, i := range idx {
@@ -981,9 +978,9 @@ func (inst *App) engineCheckText() (label string, tip string) {
 		return
 	}
 	switch {
-	case !inst.tripwireRan.Load():
+	case !started:
 		label, tip = "engine check: not started", about
-	case !tw.Done:
+	case running:
 		label, tip = "engine check: running…", about
 	case tw.Err != nil:
 		label = "engine check: could not run"

@@ -111,7 +111,7 @@ func (inst *EmbeddedApp) SetPattern(p string) {
 // own id namespace.
 //
 // Kicks off the SD1 engine-fidelity tripwire on the first call
-// (coalesced by [App.tripwireRan] on the per-instance state) so the
+// (once per process — see [App.RunTripwire]) so the
 // status bar's engine-check indicator reflects the
 // embedded explorer just like the standalone window does.
 func (inst *EmbeddedApp) Render() {
