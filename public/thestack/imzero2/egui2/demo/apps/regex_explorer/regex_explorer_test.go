@@ -211,7 +211,9 @@ func TestCountValidMultiLines(t *testing.T) {
 	}
 }
 
-func TestCountMatches(t *testing.T) {
+// TestAnalysisMatchCount pins the match list every surface reads (status
+// bar, preview, capture groups, hand-off) — see [App.analysis].
+func TestAnalysisMatchCount(t *testing.T) {
 	cases := []struct {
 		name     string
 		pattern  string
@@ -236,16 +238,23 @@ func TestCountMatches(t *testing.T) {
 		{"empty-matchable-opt", `q?`, "xyz", 0, false},
 		{"mixed-empty-and-real", `a*`, "xayz", 1, false},
 		{"boundary-is-zero-width", `\b`, "hi there", 0, false},
+		// The capture-group breakdown reads the same match list, so a
+		// capturing empty-matchable pattern must not grow rows the
+		// status bar does not count.
+		{"capturing-empty-matchable", `(a)*`, "xyz", 0, false},
+		{"capturing-mixed-empty-and-real", `(a)*`, "xaay", 1, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			n, err := newTestApp(t).countMatches(tc.pattern, tc.haystack)
-			if (err != nil) != tc.wantErr {
-				t.Errorf("countMatches err=%v; wantErr=%v", err, tc.wantErr)
+			inst := newTestApp(t)
+			inst.pattern, inst.haystack = tc.pattern, tc.haystack
+			a := inst.analysis()
+			if (a.err != nil) != tc.wantErr {
+				t.Errorf("analysis err=%v; wantErr=%v", a.err, tc.wantErr)
 			}
-			if n != tc.wantN {
-				t.Errorf("countMatches n=%d; want %d", n, tc.wantN)
+			if n := len(a.matches); n != tc.wantN {
+				t.Errorf("analysis matches=%d; want %d", n, tc.wantN)
 			}
 		})
 	}
@@ -440,8 +449,8 @@ func TestQueryLane_Convergence(t *testing.T) {
 }
 
 // TestQueryLane_FailureIsNotRetriedForSameInput pins the other half of the
-// contract: a lane that failed must not spin re-issuing the same doomed
-// query every frame, but must try again as soon as the input changes.
+// contract: a lane that ClickHouse refused must not spin re-issuing the
+// same doomed query, but must try again as soon as the input changes.
 func TestQueryLane_FailureIsNotRetriedForSameInput(t *testing.T) {
 	t.Parallel()
 
@@ -450,7 +459,7 @@ func TestQueryLane_FailureIsNotRetriedForSameInput(t *testing.T) {
 	fail := func(key queryKey) {
 		lane.demand(key, "test", func(ctx context.Context) (out string, err error) {
 			ran.Add(1)
-			err = eh.Errorf("nope")
+			err = eh.Errorf("Code: 427. DB::Exception: cannot compile regexp")
 			return
 		})
 	}
@@ -475,6 +484,65 @@ func TestQueryLane_FailureIsNotRetriedForSameInput(t *testing.T) {
 	keyB := makeQueryKey("B")
 	fail(keyB)
 	waitFor(t, func() bool { return ran.Load() == 2 }, "a changed input to retry")
+
+	// Final means final: an old rejection is still not re-run.
+	waitFor(t, func() bool {
+		lane.drain()
+		return lane.failedFor(keyB)
+	}, "lane to record B's failure")
+	lane.errAt = time.Now().Add(-time.Hour)
+	fail(keyB)
+	if got := ran.Load(); got != 2 {
+		t.Errorf("runs after an old final failure = %d; want 2", got)
+	}
+}
+
+// TestQueryLane_TransientFailureIsRetried covers a failure that says
+// nothing about the input — no bus, a refused capability, a pool still
+// warming up. It is held for transientRetryDelay, so the lane does not
+// spin, and then re-run for the same input without the user editing.
+func TestQueryLane_TransientFailureIsRetried(t *testing.T) {
+	t.Parallel()
+
+	var lane queryLane[string]
+	var ran atomic.Int32
+	demand := func(key queryKey) {
+		lane.demand(key, "test", func(ctx context.Context) (out string, err error) {
+			if ran.Add(1) == 1 {
+				err = eh.Errorf("chlocalbroker: bus request timed out")
+				return
+			}
+			out = "ok"
+			return
+		})
+	}
+
+	keyA := makeQueryKey("A")
+	demand(keyA)
+	waitFor(t, func() bool {
+		lane.drain()
+		return lane.failedFor(keyA)
+	}, "lane to record the failure")
+	if lane.errFinal {
+		t.Fatalf("a transport failure was classified as final")
+	}
+
+	for range 10 {
+		demand(keyA)
+	}
+	if got := ran.Load(); got != 1 {
+		t.Errorf("runs inside the retry delay = %d; want 1", got)
+	}
+
+	lane.errAt = time.Now().Add(-transientRetryDelay)
+	demand(keyA)
+	waitFor(t, func() bool {
+		lane.drain()
+		return lane.servedFor(keyA)
+	}, "the retry to succeed")
+	if v := lane.view(keyA); v.Err != nil || v.Value != "ok" {
+		t.Errorf("view after retry = %+v; want ok and no error", v)
+	}
 }
 
 // waitFor polls cond until it holds or the test times out. The lane is
@@ -752,6 +820,36 @@ func TestExecuteArrowStreamViaBus_InvalidRegex(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "CANNOT_COMPILE_REGEXP") && !strings.Contains(err.Error(), "OptimizedRegularExpression") {
 		t.Errorf("err = %v; expected CH regex-compile error text in the message", err)
+	}
+	// The lane's retry policy keys on this: a rejection is final for its
+	// input, so it must classify as one through the real broker.
+	if !isEngineRejection(err) {
+		t.Errorf("isEngineRejection(%v) = false; want true", err)
+	}
+}
+
+// TestIsVectorScanRejection_RealBroker pins the text-based classifier the
+// SD1 VectorScan probe uses against what the broker actually returns: a
+// pattern Go accepts but VectorScan refuses is a rejection (accepted=false,
+// no error), and a missing bus is a transport failure, not a rejection.
+func TestIsVectorScanRejection_RealBroker(t *testing.T) {
+	inst := newTestApp(t)
+	inst.setBus(setupTestBus(t))
+	ctx := context.Background()
+
+	for _, pattern := range []string{`(?U)a+`, `a{1001}`} {
+		accepted, err := inst.tripwireVectorScanAccepts(ctx, pattern, "xa")
+		if err != nil || accepted {
+			t.Errorf("tripwireVectorScanAccepts(%q) = %v, %v; want false, nil", pattern, accepted, err)
+		}
+	}
+	if accepted, err := inst.tripwireVectorScanAccepts(ctx, `a+`, "xa"); err != nil || !accepted {
+		t.Errorf("tripwireVectorScanAccepts(a+) = %v, %v; want true, nil", accepted, err)
+	}
+
+	inst.setBus(nil)
+	if _, err := inst.tripwireVectorScanAccepts(ctx, `(?U)a+`, "xa"); err == nil {
+		t.Errorf("no bus: want a transport error, got nil")
 	}
 }
 

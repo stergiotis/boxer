@@ -85,22 +85,22 @@ type evalSnapshot struct {
 }
 
 // snapshotEval gathers both engines' current extraction into plain data.
-// Render-thread only: it reads the input fields and the CH lane, and it
-// recomputes the Go side through the compile cache.
+// Render-thread only: it reads [App.analysis] and the CH lane.
 //
-// The Go side drops zero-width whole matches, exactly as
-// [nonEmptyMatches] does for the preview and the status bar. That is not
+// The Go side drops zero-width whole matches, because the analysis does
+// ([nonEmptySubmatches]) for every surface in this window. That is not
 // cosmetic here: Go enumerates repeated empty matches and ClickHouse does
 // not (pattern `a*` over "xyz" — four for Go, none for ClickHouse), so
 // keeping them would shift every match_idx and make the join compare
 // unrelated rows. A capture group that participated but matched the
 // empty string still gets a row, with matched=1 and an empty text.
 func (inst *App) snapshotEval() (snap evalSnapshot, err error) {
-	if inst.haystack == "" {
+	a := inst.analysis()
+	if a.haystack == "" {
 		err = eh.Errorf("nothing to hand off: the haystack is empty")
 		return
 	}
-	switch inst.patternState() {
+	switch a.state {
 	case patternEmpty:
 		err = eh.Errorf("nothing to hand off: no pattern entered")
 		return
@@ -110,25 +110,15 @@ func (inst *App) snapshotEval() (snap evalSnapshot, err error) {
 	}
 
 	snap.key = inst.singleKey()
-	snap.pattern = inst.effectivePattern(inst.pattern)
-	snap.haystack = inst.haystack
+	snap.pattern = a.pattern
+	snap.haystack = a.haystack
 
-	re, compileErr := inst.getCompiledRegexp(snap.pattern)
-	if compileErr != nil || re == nil {
-		err = eh.Errorf("compile pattern: %w", compileErr)
-		return
-	}
-	names := re.SubexpNames()
-	matchIdx := int32(0)
-	for _, m := range re.FindAllStringSubmatchIndex(snap.haystack, -1) {
-		if len(m) < 2 || m[0] == m[1] {
-			// Zero-width whole match — see the doc comment.
-			continue
-		}
+	names := a.re.SubexpNames()
+	for matchIdx, m := range a.matches {
 		for k := 0; k*2+1 < len(m); k++ {
 			start, stop := m[2*k], m[2*k+1]
 			row := goMatchRow{
-				MatchIdx:  matchIdx,
+				MatchIdx:  int32(matchIdx),
 				GroupIdx:  int32(k),
 				GroupName: subexpName(names, k),
 				StartByte: -1,
@@ -142,7 +132,6 @@ func (inst *App) snapshotEval() (snap evalSnapshot, err error) {
 			}
 			snap.goRows = append(snap.goRows, row)
 		}
-		matchIdx++
 	}
 
 	// The CH half, only when the lane's result describes what is on
@@ -151,15 +140,6 @@ func (inst *App) snapshotEval() (snap evalSnapshot, err error) {
 	if view := inst.listLane.view(inst.singleKey()); view.Has && view.Fresh && view.Err == nil {
 		snap.hasCH = true
 		snap.chRows = chExtractRows(view.Value)
-	}
-	return
-}
-
-// subexpName returns group k's (?P<name>…) name, or "" when it has none.
-// names[0] is always empty — the whole match has no name.
-func subexpName(names []string, k int) (name string) {
-	if k < len(names) {
-		name = names[k]
 	}
 	return
 }

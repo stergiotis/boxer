@@ -10,6 +10,7 @@ package regex_explorer
 import (
 	"context"
 	"io"
+	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
@@ -67,4 +68,14 @@ func executeArrowStreamViaBus(ctx context.Context, bus runtimeapp.BusI, sql stri
 	rdr = rdrObj
 	closer = rep
 	return
+}
+
+// isEngineRejection reports whether err is ClickHouse itself refusing the
+// query — a `DB::Exception` from the worker — as opposed to a failure on
+// the way there (bus timeout, refused capability, no bus, pool trouble).
+// The broker carries no typed error, so this keys on the exception marker
+// clickhouse-local writes to stderr, which the broker forwards in the
+// error text.
+func isEngineRejection(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "DB::Exception")
 }

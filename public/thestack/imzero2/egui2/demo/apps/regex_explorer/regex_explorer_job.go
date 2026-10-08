@@ -201,7 +201,7 @@ type listOutcome struct {
 	// YieldsGroups records that Matches holds capture-group-1 values
 	// rather than full matches, which is what extractAll returns whenever
 	// the pattern has a capture group. The tab says so rather than
-	// letting the reader assume otherwise: the Test tab highlights full
+	// letting the reader assume otherwise: the Preview tab highlights full
 	// matches, so without the caveat the two tabs look like they
 	// disagree.
 	YieldsGroups bool
@@ -271,16 +271,17 @@ func (inst *App) reconcileQueries() {
 // input. All three go idle when there is nothing dispatchable — a cleared
 // or broken pattern must drop the previous answer, not keep showing it.
 func (inst *App) reconcileSingle() {
-	if inst.haystack == "" || !inst.isPatternValid() {
+	a := inst.analysis()
+	if a.haystack == "" || a.state != patternValid {
 		inst.matchLane.reset()
 		inst.listLane.reset()
 		inst.replaceLane.reset()
 		return
 	}
 
-	pattern := inst.effectivePattern(inst.pattern)
-	haystack := inst.haystack
-	singleKey := makeQueryKey(pattern, haystack)
+	pattern := a.pattern
+	haystack := a.haystack
+	singleKey := inst.singleKey()
 
 	inst.matchLane.demand(singleKey, "regex_explorer.match", func(ctx context.Context) (out bool, err error) {
 		return runMatchBlocking(ctx, inst, haystack, pattern)
@@ -289,7 +290,7 @@ func (inst *App) reconcileSingle() {
 	// The capture-group count is read here, on the render thread, because
 	// it needs the compiled pattern — and because it decides whether the
 	// extractAllGroups call is legal at all.
-	numGroups := inst.patternNumSubexp()
+	numGroups := a.re.NumSubexp()
 	inst.listLane.demand(singleKey, "regex_explorer.extractAll", func(ctx context.Context) (out listOutcome, err error) {
 		return runListOutcomeBlocking(ctx, inst, haystack, pattern, numGroups)
 	})
@@ -298,7 +299,7 @@ func (inst *App) reconcileSingle() {
 	// not re-run match and extractAll — hence its own key rather than a
 	// shared "something changed" trigger.
 	replacement := inst.replacement
-	replaceKey := makeQueryKey(pattern, haystack, replacement)
+	replaceKey := inst.replaceKey()
 	inst.replaceLane.demand(replaceKey, "regex_explorer.replaceRegexpAll", func(ctx context.Context) (out string, err error) {
 		return runReplaceAllBlocking(ctx, inst, haystack, pattern, replacement)
 	})
@@ -323,7 +324,7 @@ func (inst *App) reconcileMulti() {
 	// The haystack and the flags are part of the key, not just the
 	// pattern-list text: editing either changes which patterns hit, and
 	// keying on the text alone would present the old hits as current.
-	key := makeQueryKey(inst.patternList, inst.haystack, inst.flagPrefix())
+	key := inst.multiKey()
 
 	var validPatterns []string
 	var validOrigIdx []int

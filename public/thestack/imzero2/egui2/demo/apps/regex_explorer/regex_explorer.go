@@ -73,25 +73,23 @@ var appInstanceSeq atomic.Uint64
 // kind of ClickHouse query, and the compiled-regexp cache the Go-side
 // highlight painter uses.
 //
-// Each query kind (match, extractAll, replaceRegexpAll, multiMatchAllIndices)
-// has its own atomic-bool coalescer so all four can be in flight
-// concurrently as independent broker requests.
+// Each ClickHouse call (match, extractAll, replaceRegexpAll,
+// multiMatchAllIndices) has its own [queryLane], so all four can be in
+// flight concurrently as independent broker requests.
 //
 // Concurrency, precisely — the fields fall into three groups:
 //
 //   - Input and view state (pattern, haystack, replacement, patternList,
-//     the flag toggles, lastFocusedInput, ids) is confined to the render
-//     thread. The egui bindings write several of these through pointers
-//     handed to SendRespVal, which no lock could cover anyway, so the
-//     confinement is the invariant, not the lock.
-//   - Query results, errors, stats, the tripwire outcome, and bus are
-//     written by worker goroutines and read by the render thread; mu
-//     covers those. Input state is also read under mu when a dispatcher
-//     snapshots it for a worker, which is harmless and keeps the snapshot
-//     in one place.
+//     the flag toggles, lastFocusedInput, ids, the lanes, the analysis
+//     memo) is confined to the render thread. The egui bindings write
+//     several of these through pointers handed to SendRespVal, which no
+//     lock could cover anyway, so the confinement is the invariant, not a
+//     lock. A lane's worker touches only its bgjob.Runner, which carries
+//     its own lock.
+//   - The tripwire outcome, the hand-off state (eval*) and bus are written
+//     off the render thread or read from it by workers; mu covers those.
 //   - compileCache has its own mutex (compileCacheMu) because the
-//     tripwire goroutine shares it with the render thread and must not
-//     contend on mu with the query workers.
+//     tripwire goroutine shares it with the render thread.
 type App struct {
 	mu       sync.RWMutex
 	pattern  string
@@ -113,14 +111,13 @@ type App struct {
 	multiline       bool
 	dotAll          bool
 
-	// lastFocusedInput is 0 for pattern, 1 for haystack, 2 for patternList,
-	// 3 for replacement. Cheatsheet token-clicks append into the field with
-	// this index. True cursor-position insertion is not exposed through the
+	// lastFocusedInput is the text input cheatsheet token-clicks append
+	// into. True cursor-position insertion is not exposed through the
 	// current FFFI2 binding.
-	lastFocusedInput int
+	lastFocusedInput inputFieldE
 
 	tripwireRan atomic.Bool
-	tripwire    tripwireResult
+	tripwire    tripwireState
 
 	// Extraction hand-off state (ADR-0017). Written by the worker
 	// goroutine that publishes and opens, read by the render thread —
@@ -139,8 +136,7 @@ type App struct {
 	alloc memory.Allocator
 
 	// bus is the per-instance BusI captured at Mount. All SQL goes
-	// through ch.local.exec.regex_explorer via the broker; the
-	// subprocess-shell-out path has been retired.
+	// through ch.local.exec.regex_explorer via the broker.
 	//
 	// Guarded by mu: a host may re-attach a bus between frames
 	// (regexsummary pushes one on every open frame) while query
@@ -180,18 +176,31 @@ type App struct {
 	compileCacheMu sync.Mutex
 	compileCache   map[string]compileResult
 
+	// analysisMemo backs [App.analysis]. Render-thread-confined, like the
+	// inputs it is keyed on.
+	analysisMemo patternAnalysis
+
 	// Retained syntax-highlight jobs for the two pattern editors
-	// (ADR-0015), rebuilt only when their buffer changes. Render-thread-
-	// confined, like the input state they mirror — see the mu comment
-	// above.
-	// The two pattern editors' highlight-job caches (one per box; the
-	// widget doc explains why they must not be shared). The syntax
-	// painting itself lives in widgets/regexedit since ADR-0164 §SD4
-	// made it reusable; validity stays with getCompiledRegexp
-	// (ADR-0054), not the painter.
+	// (ADR-0015), one per box — the regexedit widget doc explains why they
+	// must not be shared — rebuilt only when their buffer changes. The
+	// painting lives in widgets/regexedit (ADR-0164 §SD4); validity stays
+	// with getCompiledRegexp (ADR-0054), not the painter.
+	// Render-thread-confined.
 	patternHl     regexedit.Cache
 	patternListHl regexedit.Cache
 }
+
+// inputFieldE names the text inputs a cheatsheet token can be appended
+// to. The zero value is the pattern, which is where a token goes before
+// any input has had focus.
+type inputFieldE uint8
+
+const (
+	inputPattern inputFieldE = iota
+	inputHaystack
+	inputPatternList
+	inputReplacement
+)
 
 // newApp builds one [App] — the unit of per-window state. clickhouse-local
 // is reached via the chlocalbroker subject `ch.local.exec.regex_explorer`;
@@ -331,7 +340,9 @@ func (inst *App) RenderWindow() {
 // lanes converge on the inputs at the end of the frame.
 func (inst *App) renderBody() {
 	for range c.Horizontal().KeepIter() {
-		c.Label("Flags:").Send()
+		// Above both pattern inputs because the flags apply to both: the
+		// single pattern and every line of the multi-pattern list.
+		c.Label("Flags (both pattern inputs):").Send()
 		c.Checkbox(inst.ids.PrepareStr("ci"), inst.caseInsensitive, "case-insensitive (?i)").SendRespVal(&inst.caseInsensitive)
 		c.Checkbox(inst.ids.PrepareStr("ml"), inst.multiline, "multiline (?m)").SendRespVal(&inst.multiline)
 		c.Checkbox(inst.ids.PrepareStr("dot"), inst.dotAll, "dot-all (?s)").SendRespVal(&inst.dotAll)
@@ -346,9 +357,9 @@ func (inst *App) renderBody() {
 			HintText("regular expression").
 			SendRespVal(&inst.pattern)
 		if resp.HasGainedFocus() || resp.HasFocus() {
-			inst.lastFocusedInput = 0
+			inst.lastFocusedInput = inputPattern
 		}
-		inst.renderPatternCompileError(inst.pattern)
+		inst.renderPatternCompileError()
 	}
 
 	for range c.CollapsingHeader(inst.ids.PrepareStr("hdr-patternlist"), c.WidgetText().Text("Multi patterns (one regex per line — VectorScan multiMatchAllIndices)").Keep()).DefaultOpen(true).KeepIter() {
@@ -358,7 +369,7 @@ func (inst *App) renderBody() {
 			HintText("pattern 1\npattern 2\n...").
 			SendRespVal(&inst.patternList)
 		if listResp.HasGainedFocus() || listResp.HasFocus() {
-			inst.lastFocusedInput = 2
+			inst.lastFocusedInput = inputPatternList
 		}
 		// One parse feeds both the error summary and the per-line rows.
 		lines := inst.parseAndValidatePatternList(inst.patternList)
@@ -376,7 +387,7 @@ func (inst *App) renderBody() {
 		HintText("test string").
 		SendRespVal(&inst.haystack)
 	if haystackResp.HasGainedFocus() || haystackResp.HasFocus() {
-		inst.lastFocusedInput = 1
+		inst.lastFocusedInput = inputHaystack
 	}
 
 	c.Separator().Horizontal().Send()
@@ -452,6 +463,37 @@ func renderTruncationNote(shown int, total int) {
 	c.LabelAtoms(c.Atoms().BeginRichText(
 		fmt.Sprintf("… %d more not shown (display capped at %d)", total-shown, shown),
 	).Weak().End().Keep()).Send()
+}
+
+// renderLaneHeader draws the one-line state header a ClickHouse-backed
+// surface puts above its result: a spinner while the lane runs, the error
+// when it failed for the current input, a prompt when it holds nothing,
+// a stale marker when it holds an older input's answer, and otherwise
+// done plus the elapsed time. what names the ClickHouse function. Elapsed
+// is left out when zero — an answer the lane served without a query.
+func renderLaneHeader[T any](view laneView[T], what string, done string) {
+	for range c.Horizontal().KeepIter() {
+		switch {
+		case view.Running:
+			c.Spinner().Size(14).Send()
+			c.Label("Querying ClickHouse " + what + "…").Send()
+		case view.Err != nil:
+			c.Label(fmt.Sprintf("CH error: %v", view.Err)).Send()
+		case !view.Has:
+			c.Label("ClickHouse " + what + ": (enter a haystack)").Send()
+		case !view.Fresh:
+			c.Label("ClickHouse " + what + ": (stale — refreshing)").Send()
+		default:
+			label := "ClickHouse " + what + ":"
+			if done != "" {
+				label += " " + done
+			}
+			if view.Elapsed > 0 {
+				label += fmt.Sprintf("  elapsed: %s", view.Elapsed)
+			}
+			c.Label(label).Send()
+		}
+	}
 }
 
 // renderEvalHandoff draws the extraction hand-off row (ADR-0017 §SD6):
@@ -556,8 +598,8 @@ func (inst *App) multiKey() (key queryKey) {
 // keystroke.
 func (inst *App) renderPreviewTab() {
 	c.Label("Preview (Go RE2, byte offsets computed locally):").Send()
-	inst.renderHighlightedHaystack(inst.pattern, inst.haystack)
-	inst.renderCaptureGroups(inst.pattern, inst.haystack)
+	inst.renderHighlightedHaystack()
+	inst.renderCaptureGroups()
 }
 
 // renderMultiInline draws the per-line result rows for the Multi patterns
@@ -571,6 +613,7 @@ func (inst *App) renderPreviewTab() {
 //	✓  pattern hit the haystack (ClickHouse multiMatchAllIndices result)
 //	·  pattern did not hit
 //	⚠  pattern does not compile under Go regexp (skipped on CH dispatch)
+//	–  not tested — the haystack is empty
 //	…  pending — waiting on ClickHouse for the current input
 //
 // lines is the caller's live parse, so ⚠ markers appear as soon as the
@@ -587,29 +630,17 @@ func (inst *App) renderMultiInline(lines []multiLine) {
 		lines = view.Value
 	}
 	validCount := countValidMultiLines(lines)
-
-	for range c.Horizontal().KeepIter() {
-		switch {
-		case view.Running:
-			c.Spinner().Size(14).Send()
-			c.Label(fmt.Sprintf("multiMatchAllIndices over %d valid line(s)…", validCount)).Send()
-		case view.Err != nil:
-			c.Label(fmt.Sprintf("CH error: %v", view.Err)).Send()
-		case !view.Fresh:
-			c.Label(fmt.Sprintf("pending… %d valid / %d total line(s)", validCount, len(lines))).Send()
-		case validCount == 0:
-			c.Label(fmt.Sprintf("%d line(s), all invalid (see errors above)", len(lines))).Send()
-		default:
-			hits := 0
-			for _, l := range lines {
-				if l.Hit {
-					hits++
-				}
+	done := fmt.Sprintf("%d line(s), all invalid (see errors above)", len(lines))
+	if validCount > 0 {
+		hits := 0
+		for _, l := range lines {
+			if l.Hit {
+				hits++
 			}
-			c.Label(fmt.Sprintf("hits: %d / %d valid (%d total)  elapsed: %s",
-				hits, validCount, len(lines), view.Elapsed)).Send()
 		}
+		done = fmt.Sprintf("hits %d / %d valid (%d total)", hits, validCount, len(lines))
 	}
+	renderLaneHeader(view, "multiMatchAllIndices", done)
 
 	for i, line := range lines {
 		for range c.IdScope(inst.ids.PrepareSeq(uint64(i))) {
@@ -618,6 +649,8 @@ func (inst *App) renderMultiInline(lines []multiLine) {
 				switch {
 				case line.Invalid:
 					mark = "⚠"
+				case inst.haystack == "":
+					mark = "–"
 				case !view.Fresh:
 					mark = "…"
 				case line.Hit:
@@ -640,11 +673,11 @@ func (inst *App) renderMultiInline(lines []multiLine) {
 // reconciles at the end of this frame.
 func (inst *App) insertToken(tok string) {
 	switch inst.lastFocusedInput {
-	case 1:
+	case inputHaystack:
 		inst.haystack += tok
-	case 2:
+	case inputPatternList:
 		inst.patternList += tok
-	case 3:
+	case inputReplacement:
 		inst.replacement += tok
 	default:
 		inst.pattern += tok
@@ -670,7 +703,7 @@ func (inst *App) renderReplaceTab() {
 			HintText("replacement pattern (use \\1, \\2, ... for capture groups)").
 			SendRespVal(&inst.replacement)
 		if resp.HasGainedFocus() || resp.HasFocus() {
-			inst.lastFocusedInput = 3
+			inst.lastFocusedInput = inputReplacement
 		}
 	}
 
@@ -679,22 +712,7 @@ func (inst *App) renderReplaceTab() {
 	}
 
 	view := inst.replaceLane.view(inst.replaceKey())
-
-	for range c.Horizontal().KeepIter() {
-		switch {
-		case view.Running:
-			c.Spinner().Size(14).Send()
-			c.Label("Querying ClickHouse replaceRegexpAll...").Send()
-		case view.Err != nil:
-			c.Label(fmt.Sprintf("CH error: %v", view.Err)).Send()
-		case !view.Has:
-			c.Label("Result: (enter a haystack)").Send()
-		case !view.Fresh:
-			c.Label("Result (stale — refreshing):").Send()
-		default:
-			c.Label(fmt.Sprintf("Result:  elapsed: %s", view.Elapsed)).Send()
-		}
-	}
+	renderLaneHeader(view, "replaceRegexpAll", "")
 
 	if view.Has && view.Err == nil {
 		for range c.ScrollArea().Vscroll(true).KeepIter() {
@@ -721,22 +739,7 @@ func (inst *App) renderListTab() {
 
 	view := inst.listLane.view(inst.singleKey())
 	out := view.Value
-
-	for range c.Horizontal().KeepIter() {
-		switch {
-		case view.Running:
-			c.Spinner().Size(14).Send()
-			c.Label("Querying ClickHouse extractAll...").Send()
-		case view.Err != nil:
-			c.Label(fmt.Sprintf("CH error: %v", view.Err)).Send()
-		case !view.Has:
-			c.Label("ClickHouse extractAll: (enter a haystack)").Send()
-		case !view.Fresh:
-			c.Label("ClickHouse extractAll: (stale — refreshing)").Send()
-		default:
-			c.Label(fmt.Sprintf("ClickHouse extractAll: %d element(s)  elapsed: %s", len(out.Matches), view.Elapsed)).Send()
-		}
-	}
+	renderLaneHeader(view, "extractAll", fmt.Sprintf("%d element(s)", len(out.Matches)))
 
 	if !view.Has || view.Err != nil {
 		return
@@ -771,17 +774,19 @@ func (inst *App) renderListTab() {
 // for the query that produced it.
 func (inst *App) renderStatusBar() {
 	for range c.Horizontal().KeepIter() {
-		localCount, localErr := inst.countMatches(inst.pattern, inst.haystack)
+		a := inst.analysis()
 		switch {
-		case localErr != nil:
-			c.Label(fmt.Sprintf("Go: compile error — %v", localErr)).Send()
+		case a.err != nil:
+			c.Label(fmt.Sprintf("Go: compile error — %v", a.err)).Send()
 		default:
-			c.Label(fmt.Sprintf("Go: %d match(es)", localCount)).Send()
+			c.Label(fmt.Sprintf("Go: %d match(es)", len(a.matches))).Send()
 		}
 		c.Separator().Vertical().Send()
 
 		tw := inst.tripwireSnapshot()
 		switch {
+		case !inst.tripwireRan.Load():
+			c.Label("SD1: not started").Send()
 		case !tw.Done:
 			c.Label("SD1: running...").Send()
 		case tw.Err != nil:

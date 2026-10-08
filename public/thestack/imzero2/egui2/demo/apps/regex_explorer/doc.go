@@ -5,7 +5,7 @@
 // (multiMatchAllIndices).
 //
 // Registered with the app runtime as a windowed app, and with the demo
-// registry as two gallery scenes (regex_explorer_tour.go). Queries execute
+// registry as three gallery scenes (regex_explorer_tour.go). Queries execute
 // against a pooled `clickhouse-local` worker reached over the chlocalbroker
 // capability subject `ch.local.exec.regex_explorer` — no server, no auth, no
 // network, and no subprocess management in this package. User-supplied strings

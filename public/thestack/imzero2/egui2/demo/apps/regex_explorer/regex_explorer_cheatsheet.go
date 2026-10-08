@@ -8,7 +8,7 @@ package regex_explorer
 //   - syntax/function tokens append to the last-focused text input via
 //     [insertToken];
 //   - showcase rows replace both pattern and haystack via [applyShowcase]
-//     and trigger the per-tab query cascade.
+//     the query lanes pick the new inputs up on the same frame.
 //
 // Organised as CollapsingHeader sections so users can fold away the
 // topics they don't need; all start closed to keep the initial panel

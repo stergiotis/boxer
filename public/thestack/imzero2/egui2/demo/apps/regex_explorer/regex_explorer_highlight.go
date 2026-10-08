@@ -85,23 +85,27 @@ func (inst *App) effectivePattern(base string) (out string) {
 	return
 }
 
-// nonEmptyMatches returns re's non-overlapping matches in haystack as
-// (start, end) byte-offset pairs, with zero-width matches dropped.
+// nonEmptySubmatches returns re's non-overlapping matches in haystack in
+// FindAllStringSubmatchIndex form — m[0],m[1] the whole match, m[2k],m[2k+1]
+// capture group k (-1 for a group that did not participate) — with
+// zero-width whole matches dropped.
 //
 // The filter is what makes the preview predictive. Go and ClickHouse
 // enumerate repeated empty matches differently: for pattern `a*` over
-// "xyz", Go's FindAllStringIndex yields one zero-width match at every
-// position (4 of them) while ClickHouse's extractAll yields none. RE2
-// specifies what matches, not how a caller enumerates repeated empty
+// "xyz", Go's FindAllStringSubmatchIndex yields one zero-width match at
+// every position (4 of them) while ClickHouse's extractAll yields none.
+// RE2 specifies what matches, not how a caller enumerates repeated empty
 // matches, so neither engine is wrong — but this app exists to predict
 // ClickHouse, so the preview follows ClickHouse. Without the filter the
-// status bar claims "Go: 4 match(es)" while the List tab shows 0, and
-// the highlighter emits four invisible zero-width spans.
+// status bar would claim "Go: 4 match(es)" while the List tab shows 0.
+//
+// A capture group that participated but matched the empty string is kept:
+// only the whole match decides.
 //
 // The SD1 tripwire deliberately does NOT go through here — see
 // [App.tripwireGoMatches].
-func nonEmptyMatches(re *regexp.Regexp, haystack string) (matches [][]int) {
-	all := re.FindAllStringIndex(haystack, -1)
+func nonEmptySubmatches(re *regexp.Regexp, haystack string) (matches [][]int) {
+	all := re.FindAllStringSubmatchIndex(haystack, -1)
 	matches = make([][]int, 0, len(all))
 	for _, m := range all {
 		if m[0] == m[1] {
@@ -112,33 +116,72 @@ func nonEmptyMatches(re *regexp.Regexp, haystack string) (matches [][]int) {
 	return
 }
 
-// renderHighlightedHaystack paints haystack as a LabelAtoms with match
+// patternAnalysis is what Go's regexp says about the single-pattern input
+// over the haystack: whether the pattern is usable, and every match with
+// its capture groups. The preview, the capture-group breakdown, the status
+// bar, the query dispatch and the playground hand-off all read this one
+// value, so they cannot disagree about which matches exist.
+type patternAnalysis struct {
+	// pattern is the effective pattern (flag prefix applied), "" when
+	// nothing is entered; haystack is the haystack it was run over. Both
+	// together are the memo key.
+	pattern  string
+	haystack string
+	computed bool
+
+	state patternStateE
+	re    *regexp.Regexp
+	// err is the compile error when state is patternInvalid.
+	err error
+	// matches is [nonEmptySubmatches] over haystack; nil when the pattern
+	// is not valid or the haystack is empty.
+	matches [][]int
+}
+
+// analysis returns the [patternAnalysis] for the inputs as they are now,
+// recomputing it only when the effective pattern or the haystack changed —
+// so a frame with no edit runs no regexp at all. Render-thread only, like
+// the inputs it reads.
+func (inst *App) analysis() (a *patternAnalysis) {
+	a = &inst.analysisMemo
+	pattern := inst.effectivePattern(inst.pattern)
+	if a.computed && a.pattern == pattern && a.haystack == inst.haystack {
+		return
+	}
+	*a = patternAnalysis{pattern: pattern, haystack: inst.haystack, computed: true}
+	if pattern == "" {
+		a.state = patternEmpty
+		return
+	}
+	a.re, a.err = inst.getCompiledRegexp(pattern)
+	if a.err != nil {
+		a.state = patternInvalid
+		return
+	}
+	a.state = patternValid
+	if a.haystack != "" {
+		a.matches = nonEmptySubmatches(a.re, a.haystack)
+	}
+	return
+}
+
+// renderHighlightedHaystack paints the haystack as a LabelAtoms with match
 // ranges highlighted. Plain segments between matches use AtomsFluid.Text;
 // match segments use StyledTextColored with the IDS accent fill. An
 // invalid pattern yields the unstyled haystack — the compile error is
-// surfaced next to the pattern input (see [renderPatternCompileError]).
+// surfaced next to the pattern input (see [App.renderPatternCompileError]).
 //
 // Highlighting stops after maxHighlightedMatches. The haystack itself is
 // still painted in full: the tail simply falls into the trailing plain
 // segment, and a weak note says so.
-func (inst *App) renderHighlightedHaystack(pattern string, haystack string) {
+func (inst *App) renderHighlightedHaystack() {
+	a := inst.analysis()
+	haystack := a.haystack
 	if haystack == "" {
 		c.Label("(empty haystack)").Send()
 		return
 	}
-	if pattern == "" {
-		c.Label(haystack).Send()
-		return
-	}
-
-	re, compileErr := inst.getCompiledRegexp(inst.effectivePattern(pattern))
-	if compileErr != nil {
-		c.Label(haystack).Send()
-		return
-	}
-
-	matches := nonEmptyMatches(re, haystack)
-	if len(matches) == 0 {
+	if len(a.matches) == 0 {
 		c.Label(haystack).Send()
 		return
 	}
@@ -154,7 +197,7 @@ func (inst *App) renderHighlightedHaystack(pattern string, haystack string) {
 	// Past maxHighlightedMatches the tail falls into the trailing plain
 	// segment below, so the haystack still reads in full — only the
 	// styling stops. Unlike the row caps, this one drops no content.
-	styled := matches
+	styled := a.matches
 	if len(styled) > maxHighlightedMatches {
 		styled = styled[:maxHighlightedMatches]
 	}
@@ -175,10 +218,10 @@ func (inst *App) renderHighlightedHaystack(pattern string, haystack string) {
 	}
 	c.LabelAtoms(atoms.Keep()).Send()
 
-	if len(styled) < len(matches) {
+	if len(styled) < len(a.matches) {
 		c.LabelAtoms(c.Atoms().BeginRichText(
 			fmt.Sprintf("highlighting the first %d of %d matches — the rest of the haystack is shown unstyled",
-				len(styled), len(matches)),
+				len(styled), len(a.matches)),
 		).Weak().End().Keep()).Send()
 	}
 }
@@ -196,19 +239,15 @@ func (inst *App) renderHighlightedHaystack(pattern string, haystack string) {
 // capture-group-numbering parity assumption had nothing to compare.
 //
 // Silent when the pattern has no capture group: there is nothing to say,
-// and an empty table below every plain pattern is noise.
-func (inst *App) renderCaptureGroups(pattern string, haystack string) {
-	if pattern == "" || haystack == "" {
+// and an empty table below every plain pattern is noise. Rows are the
+// analysis' matches, so zero-width whole matches are absent here as they
+// are everywhere else, and row i is match_idx i in the playground hand-off.
+func (inst *App) renderCaptureGroups() {
+	a := inst.analysis()
+	if len(a.matches) == 0 || a.re.NumSubexp() == 0 {
 		return
 	}
-	re, err := inst.getCompiledRegexp(inst.effectivePattern(pattern))
-	if err != nil || re == nil || re.NumSubexp() == 0 {
-		return
-	}
-	matches := re.FindAllStringSubmatchIndex(haystack, -1)
-	if len(matches) == 0 {
-		return
-	}
+	re, matches, haystack := a.re, a.matches, a.haystack
 
 	names := re.SubexpNames()
 	c.Separator().Horizontal().Send()
@@ -250,31 +289,22 @@ func (inst *App) renderCaptureGroups(pattern string, haystack string) {
 	renderTruncationNote(min(maxMatchRows, len(matches)), len(matches))
 }
 
-// groupLabel names capture group k: its (?P<name>…) name when it has one,
-// otherwise its number.
+// groupLabel names capture group k for display: its (?P<name>…) name when
+// it has one, otherwise its number.
 func groupLabel(names []string, k int) (label string) {
-	if k < len(names) && names[k] != "" {
-		label = names[k]
-		return
+	label = subexpName(names, k)
+	if label == "" {
+		label = strconv.Itoa(k)
 	}
-	label = strconv.Itoa(k)
 	return
 }
 
-// countMatches returns the number of matches of pattern in haystack via
-// Go's regexp, counted the way ClickHouse's extractAll counts them (see
-// [nonEmptyMatches]). A compile failure is returned as the error with a
-// zero count; the caller keys on err, not on the count.
-func (inst *App) countMatches(pattern string, haystack string) (n int, err error) {
-	if pattern == "" || haystack == "" {
-		return
+// subexpName returns group k's (?P<name>…) name, or "" when it has none.
+// names[0] is always empty — the whole match has no name.
+func subexpName(names []string, k int) (name string) {
+	if k < len(names) {
+		name = names[k]
 	}
-	re, compileErr := inst.getCompiledRegexp(inst.effectivePattern(pattern))
-	if compileErr != nil {
-		err = compileErr
-		return
-	}
-	n = len(nonEmptyMatches(re, haystack))
 	return
 }
 
@@ -295,18 +325,9 @@ const (
 )
 
 // patternState classifies the single-pattern input under the current flag
-// set. Uses the compile cache, so the check is O(1) per call after the
-// first frame that touched the pattern.
+// set — see [App.analysis].
 func (inst *App) patternState() (state patternStateE) {
-	if inst.pattern == "" {
-		state = patternEmpty
-		return
-	}
-	if _, err := inst.getCompiledRegexp(inst.effectivePattern(inst.pattern)); err != nil {
-		state = patternInvalid
-		return
-	}
-	state = patternValid
+	state = inst.analysis().state
 	return
 }
 
@@ -326,29 +347,11 @@ func (inst *App) renderPatternNotReady() (drew bool) {
 	return
 }
 
-// isPatternValid reports whether the single-pattern input is ready to
-// dispatch — non-empty and compiling under the current flag set.
-func (inst *App) isPatternValid() bool {
-	return inst.patternState() == patternValid
-}
-
-// patternNumSubexp returns the single-pattern input's capture-group count,
-// or 0 if it does not compile. Decides whether extractAllGroups may be
-// asked at all: ClickHouse rejects it for a group-less pattern.
-func (inst *App) patternNumSubexp() (n int) {
-	re, err := inst.getCompiledRegexp(inst.effectivePattern(inst.pattern))
-	if err != nil || re == nil {
-		return
-	}
-	n = re.NumSubexp()
-	return
-}
-
 // multiLine is one non-empty line of the multi-pattern input together
 // with its per-line state.
 //
 // Invalid means Go's regexp rejected the line, which is a *proxy* for what
-// the Multi tab actually runs on. That tab is VectorScan-backed
+// the multi-pattern query actually runs on. That query is VectorScan-backed
 // (multiMatchAllIndices), and VectorScan is a different engine accepting a
 // different language from RE2 — so Go-validity is a useful pre-filter, not
 // an authority. Two consequences the UI has to live with:
@@ -358,10 +361,10 @@ func (inst *App) patternNumSubexp() (n int) {
 //     multiMatchAllIndices is a single call over the whole set;
 //   - a line Go rejects is skipped, even if VectorScan would have taken it.
 //
-// The SD1 tripwire covers the RE2 path only, so nothing currently proves
-// the two languages agree on any given line. Err carries the ClickHouse
-// error when a dispatch failed, so the per-line marker can distinguish
-// "Go could not compile this" from "ClickHouse refused the set".
+// The SD1 tripwire checks that VectorScan accepts every pattern in its
+// fixed corpus, not the user's lines, so nothing proves the two languages
+// agree on any given line. When ClickHouse refuses the set, the error is
+// the lane's, shown once in the block header, not carried per line.
 type multiLine struct {
 	Text    string
 	Invalid bool
@@ -397,15 +400,11 @@ func countValidMultiLines(lines []multiLine) (n int) {
 	return
 }
 
-// renderPatternCompileError draws a red-on-white error label below the
-// single-pattern input if the pattern fails to compile. Empty patterns
-// are silent (the hint-text already communicates "enter something").
-// Uses the compile cache so no re-compile happens per frame.
-func (inst *App) renderPatternCompileError(pattern string) {
-	if pattern == "" {
-		return
-	}
-	if _, err := inst.getCompiledRegexp(inst.effectivePattern(pattern)); err != nil {
+// renderPatternCompileError draws an error label below the single-pattern
+// input if the pattern fails to compile. Empty patterns are silent (the
+// hint text already communicates "enter something").
+func (inst *App) renderPatternCompileError() {
+	if err := inst.analysis().err; err != nil {
 		regexedit.ErrorLabel("regex compile error: " + err.Error())
 	}
 }

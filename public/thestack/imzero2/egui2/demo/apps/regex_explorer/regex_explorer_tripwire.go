@@ -23,10 +23,9 @@ package regex_explorer
 import (
 	"context"
 	"reflect"
+	"slices"
 	"strings"
 
-	"github.com/apache/arrow-go/v18/arrow/array"
-	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -125,7 +124,7 @@ var tripwireCorpus = []tripwireCase{
 		// ClickHouse's extractAll reports none. Neither is wrong —
 		// RE2 specifies the match, not how a caller enumerates repeated
 		// empty matches. The app sides with ClickHouse in the preview
-		// (see nonEmptyMatches) because predicting ClickHouse is the
+		// (see nonEmptySubmatches) because predicting ClickHouse is the
 		// product; the corpus records the raw-engine difference so it
 		// stays visible if either side ever changes its mind.
 		Name:       "empty-matchable-star",
@@ -141,22 +140,14 @@ var tripwireCorpus = []tripwireCase{
 	},
 }
 
-// TripwireState is a snapshot of the SD1 tripwire outcome rendered in the
-// status bar. Zero value means "not yet started".
-type TripwireState struct {
+// tripwireState is the SD1 tripwire outcome the status bar renders. The
+// zero value means "not finished"; [App.tripwireRan] says whether it has
+// started.
+type tripwireState struct {
 	Done   bool
 	Drifts []int // corpus indices where the engines disagreed unexpectedly
 	Known  []int // corpus indices where they disagreed as documented (KnownDrift)
 	Err    error // the tripwire itself failed (e.g., ClickHouse unreachable)
-}
-
-// tripwireResult holds the SD1 outcome on the [App] once RunTripwire
-// completes. Read under App.mu.RLock.
-type tripwireResult struct {
-	done   bool
-	drifts []int
-	known  []int
-	err    error
 }
 
 // RunTripwire launches the SD1 engine-fidelity tripwire if it has not yet
@@ -170,7 +161,7 @@ func (inst *App) RunTripwire(ctx context.Context) {
 		drifts, known, err := inst.runTripwireBlocking(ctx)
 		inst.mu.Lock()
 		defer inst.mu.Unlock()
-		inst.tripwire = tripwireResult{done: true, drifts: drifts, known: known, err: err}
+		inst.tripwire = tripwireState{Done: true, Drifts: drifts, Known: known, Err: err}
 		if err != nil {
 			log.Warn().Err(err).Msg("regex_explorer: tripwire failed to complete")
 			return
@@ -190,7 +181,6 @@ func (inst *App) RunTripwire(ctx context.Context) {
 // transport error — if CH is unreachable the whole tripwire is considered
 // un-run (err set, both slices empty).
 func (inst *App) runTripwireBlocking(ctx context.Context) (drifts []int, known []int, err error) {
-	alloc := memory.NewGoAllocator()
 	for i, tc := range tripwireCorpus {
 		pattern := tc.effective()
 		goMatches, goErr := inst.tripwireGoMatches(pattern, tc.Haystack)
@@ -198,25 +188,25 @@ func (inst *App) runTripwireBlocking(ctx context.Context) (drifts []int, known [
 			err = eb.Build().Int("tripwire", i).Str("name", tc.Name).Errorf("tripwire: Go compile: %w", goErr)
 			return
 		}
-		chMatches, chErr := inst.tripwireCHMatches(ctx, alloc, pattern, tc.Haystack)
+		chMatches, chErr := runExtractAllBlocking(ctx, inst, tc.Haystack, pattern)
 		if chErr != nil {
 			err = eb.Build().Int("tripwire", i).Str("name", tc.Name).Errorf("tripwire: ClickHouse: %w", chErr)
 			return
 		}
 
-		// The Multi tab runs this pattern through VectorScan, not RE2, and
+		// The multi-pattern input runs through VectorScan, not RE2, and
 		// the app decides which lines to send there using Go's regexp —
 		// a different engine's opinion. Checking that VectorScan at least
 		// accepts every pattern Go accepts is what keeps that proxy
 		// honest; a rejection here is a genuine engine disagreement, not a
 		// mismatched result, so it is reported as a drift on its own.
-		vsAccepted, vsErr := inst.tripwireVectorScanAccepts(ctx, alloc, pattern, tc.Haystack)
+		vsAccepted, vsErr := inst.tripwireVectorScanAccepts(ctx, pattern, tc.Haystack)
 		if vsErr != nil {
 			err = eb.Build().Int("tripwire", i).Str("name", tc.Name).Errorf("tripwire: VectorScan: %w", vsErr)
 			return
 		}
 		if !vsAccepted {
-			log.Warn().Str("case", tc.Name).Str("pattern", pattern).Msg("regex_explorer: VectorScan rejected a pattern Go accepts — the Multi tab's per-line validity marker is unreliable for it")
+			log.Warn().Str("case", tc.Name).Str("pattern", pattern).Msg("regex_explorer: VectorScan rejected a pattern Go accepts — the multi-pattern per-line validity marker is unreliable for it")
 			drifts = append(drifts, i)
 			continue
 		}
@@ -240,7 +230,7 @@ func (inst *App) runTripwireBlocking(ctx context.Context) (drifts []int, known [
 // non-overlapping matches as full-match strings (not capture groups).
 //
 // Deliberately raw — this is the one place that must NOT go through
-// nonEmptyMatches. The preview mirrors ClickHouse's empty-match policy so
+// nonEmptySubmatches. The preview mirrors ClickHouse's empty-match policy so
 // the UI tells one story; the tripwire compares the engines as they
 // actually behave, which is what makes the ledger's KnownDrift entries
 // mean something. Filtering here would make the tripwire agree with
@@ -262,75 +252,19 @@ func (inst *App) tripwireGoMatches(pattern string, haystack string) (matches []s
 	return
 }
 
-// tripwireCHMatches runs ClickHouse's extractAll over a `clickhouse
-// local` subprocess and returns the string matches, mirroring the shape
-// of tripwireGoMatches. Allocates a fresh [memory.Allocator] so the
-// tripwire does not share memory bookkeeping with live UI queries.
-func (inst *App) tripwireCHMatches(ctx context.Context, alloc memory.Allocator, pattern string, haystack string) (matches []string, err error) {
-	sql := buildExtractAllSQL(haystack, pattern)
-	rdr, closer, execErr := executeArrowStreamViaBus(ctx, inst.busSnapshot(), sql, alloc)
-	if execErr != nil {
-		err = eh.Errorf("execute tripwire query: %w", execErr)
-		return
-	}
-	defer func() {
-		cErr := closer.Close()
-		if cErr != nil && err == nil {
-			err = eh.Errorf("close tripwire query: %w", cErr)
-		}
-	}()
-	defer rdr.Release()
-	if !rdr.Next() {
-		rErr := rdr.Err()
-		if rErr != nil {
-			err = eh.Errorf("read tripwire result: %w", rErr)
-			return
-		}
-		err = eh.Errorf("tripwire query returned no records")
-		return
-	}
-	rec := rdr.Record()
-	if rec.NumRows() == 0 || rec.NumCols() == 0 {
-		err = eh.Errorf("tripwire query returned empty record")
-		return
-	}
-	col := rec.Column(0)
-	list, ok := col.(*array.List)
-	if !ok {
-		err = eb.Build().Type("col", col).Errorf("tripwire unexpected column type")
-		return
-	}
-	inner, ok := list.ListValues().(*array.String)
-	if !ok {
-		err = eb.Build().Type("array", list.ListValues()).Errorf("tripwire inner column type")
-		return
-	}
-	offsets := list.Offsets()
-	start := int(offsets[0])
-	end := int(offsets[1])
-	matches = make([]string, 0, end-start)
-	for i := start; i < end; i++ {
-		matches = append(matches, inner.Value(i))
-	}
-	return
-}
-
 // tripwireVectorScanAccepts reports whether ClickHouse's VectorScan
 // backend compiles pattern at all, by asking multiMatchAllIndices for a
 // one-element pattern set. Only acceptance matters here, not the hits:
-// the Multi tab's failure mode is a pattern that Go compiles and
+// the multi-pattern input's failure mode is a pattern that Go compiles and
 // VectorScan refuses, which takes down the whole set's query with it.
 //
 // A transport failure is returned as an error (the tripwire is un-run); a
 // query ClickHouse answers with a rejection returns accepted=false.
-func (inst *App) tripwireVectorScanAccepts(ctx context.Context, alloc memory.Allocator, pattern string, haystack string) (accepted bool, err error) {
+func (inst *App) tripwireVectorScanAccepts(ctx context.Context, pattern string, haystack string) (accepted bool, err error) {
 	sql := buildMultiMatchSQL(haystack, []string{pattern})
-	rdr, closer, execErr := executeArrowStreamViaBus(ctx, inst.busSnapshot(), sql, alloc)
+	rdr, closer, execErr := executeArrowStreamViaBus(ctx, inst.busSnapshot(), sql, inst.alloc)
 	if execErr != nil {
-		// The broker surfaces a ClickHouse-side rejection through the same
-		// channel as a transport failure, so tell them apart by whether
-		// the message names the pattern compiler.
-		if isRegexRejection(execErr) {
+		if isVectorScanRejection(execErr) {
 			return
 		}
 		err = eh.Errorf("execute VectorScan probe: %w", execErr)
@@ -346,37 +280,30 @@ func (inst *App) tripwireVectorScanAccepts(ctx context.Context, alloc memory.All
 	return
 }
 
-// isRegexRejection reports whether err is ClickHouse refusing to compile a
-// pattern rather than a transport or pool failure.
-func isRegexRejection(err error) bool {
-	msg := err.Error()
-	for _, marker := range []string{
-		"CANNOT_COMPILE_REGEXP",
-		"OptimizedRegularExpression",
-		"Hyperscan",
-		"hyperscan",
-		"BAD_ARGUMENTS",
-	} {
-		if strings.Contains(msg, marker) {
-			return true
-		}
+// isVectorScanRejection reports whether err is ClickHouse refusing to
+// compile a pattern for VectorScan, rather than a transport failure or an
+// unrelated exception. The shapes seen from clickhouse-local:
+// BAD_ARGUMENTS "Pattern '…' failed with error '…'" for syntax VectorScan
+// does not support (`\C`, `(?U)`), and HYPERSCAN_CANNOT_SCAN_TEXT for a
+// pattern it deems too expensive (`a{1001}`); CANNOT_COMPILE_REGEXP is
+// ClickHouse's dedicated regex-compile code. BAD_ARGUMENTS alone is not
+// enough — it is ClickHouse's general-purpose code.
+func isVectorScanRejection(err error) bool {
+	if !isEngineRejection(err) {
+		return false
 	}
-	return false
+	msg := err.Error()
+	return strings.Contains(msg, "failed with error") ||
+		strings.Contains(msg, "HYPERSCAN_CANNOT_SCAN_TEXT") ||
+		strings.Contains(msg, "CANNOT_COMPILE_REGEXP")
 }
 
 // tripwireSnapshot exposes a thread-safe snapshot of the SD1 outcome.
-func (inst *App) tripwireSnapshot() (state TripwireState) {
+func (inst *App) tripwireSnapshot() (state tripwireState) {
 	inst.mu.RLock()
 	defer inst.mu.RUnlock()
-	state.Done = inst.tripwire.done
-	if len(inst.tripwire.drifts) > 0 {
-		state.Drifts = make([]int, len(inst.tripwire.drifts))
-		copy(state.Drifts, inst.tripwire.drifts)
-	}
-	if len(inst.tripwire.known) > 0 {
-		state.Known = make([]int, len(inst.tripwire.known))
-		copy(state.Known, inst.tripwire.known)
-	}
-	state.Err = inst.tripwire.err
+	state = inst.tripwire
+	state.Drifts = slices.Clone(state.Drifts)
+	state.Known = slices.Clone(state.Known)
 	return
 }

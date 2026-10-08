@@ -18,6 +18,8 @@
 package regex_explorer
 
 import (
+	"context"
+
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
@@ -88,11 +90,14 @@ func makeTourInit(pattern string, haystack string, patternList string) func(ids 
 // renderTourScene draws one scene's App. Rebinds ids every frame because
 // the gallery renders demos inside a per-demo id scope and hands the
 // current stack in; the seeded inputs persist on the App across frames.
+// Kicks the SD1 tripwire the way [AppInstance.Frame] does, so the status
+// bar in a capture reports an outcome rather than a check never started.
 func renderTourScene(ids *c.WidgetIdStack, state any) {
 	inst, ok := state.(*App)
 	if !ok {
 		return
 	}
 	inst.ids = ids
+	inst.RunTripwire(context.Background())
 	inst.RenderWindow()
 }
