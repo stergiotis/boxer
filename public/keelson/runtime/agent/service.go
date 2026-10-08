@@ -49,6 +49,9 @@ type Config struct {
 	// Deadline is how long a task runs, and how much more time an approved
 	// widening of a late task gives; zero is DefaultDeadline (DeadlineEnv).
 	Deadline time.Duration
+	// RequestTimeout is how long a request waits for the person before it
+	// expires; zero is DefaultRequestTimeout (RequestTimeoutEnv).
+	RequestTimeout time.Duration
 	// Pace is the least time between two visible changes of a paced task
 	// (ADR-0280 §SD6); zero is DefaultPace (PaceEnv).
 	Pace time.Duration

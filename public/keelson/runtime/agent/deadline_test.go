@@ -41,6 +41,10 @@ func TestALateTasksCallWaitsForMoreTime(t *testing.T) {
 	require.Len(t, open, 1)
 	assert.Contains(t, needText(open[0].held), "Approving gives it another 30m0s")
 	r.svc.mu.Unlock()
+	polled, err := r.cli.Status(ctx, g.Handle, "q", 0)
+	require.NoError(t, err)
+	assert.Equal(t, "input_required", polled.Phase, "status reports the hold, not a denial of the late task")
+	assert.True(t, polled.Held)
 
 	r.person(true, nil)
 	require.Eventually(t, func() bool {
@@ -112,5 +116,30 @@ func TestALateCallIsCheckedBeforeItWaitsForTime(t *testing.T) {
 	open := r.svc.pending()
 	require.Len(t, open, 1)
 	assert.Equal(t, needInstance, open[0].held.need, "the person is asked to share window 9")
+	r.svc.mu.Unlock()
+}
+
+// A coordinator that stops waiting withdraws its held call: the dialog
+// closes, and nothing is left for the person to approve later.
+func TestCancelWithdrawsAHeldCall(t *testing.T) {
+	r := coordinatorRig(t)
+	ctx := context.Background()
+	got := make(chan Grant, 1)
+	go func() {
+		g, _ := r.cli.Request(ctx, GrantRequest{Entries: []GrantEntry{{Instance: 7, Mode: ModeAct}}})
+		got <- g
+	}()
+	r.person(true, nil)
+	g := <-got
+	r.expire(g)
+
+	held := r.call(g, "q", "get_text", "{}")
+	require.True(t, held.Held)
+	out, err := r.cli.Cancel(ctx, g.Handle, "q")
+	require.NoError(t, err)
+	assert.Equal(t, "cancelled", out.Phase)
+	assert.False(t, out.Held)
+	r.svc.mu.Lock()
+	assert.Empty(t, r.svc.pending(), "the widening's dialog closed")
 	r.svc.mu.Unlock()
 }

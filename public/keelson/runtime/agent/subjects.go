@@ -102,6 +102,15 @@ var DeadlineEnv = env.NewDuration(env.Spec{
 	Category:    env.CategoryDev,
 })
 
+// RequestTimeoutEnv is how long a grant request or a widening waits for the
+// person before it expires.
+var RequestTimeoutEnv = env.NewDuration(env.Spec{
+	Name:        "BOXER_AGENT_REQUEST_TIMEOUT",
+	Default:     "30m",
+	Description: "how long a runtime.agent grant request or widening waits in the person's dialog before it expires; the coordinator's call waits as long",
+	Category:    env.CategoryDev,
+})
+
 // CallsMinEnv and CallsMaxEnv bound the call budget the person picks for a
 // new task in the host's dialog; a budget a coordinator asks for is clamped
 // into the range.
