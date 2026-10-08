@@ -126,14 +126,22 @@ func (inst *DeviceEntity) IsTombstone() bool {
 
 type DeviceStoreConfig struct {
 	// Table overrides the ClickHouse table this store binds — the baked
-	// DeviceTableName — for every statement it issues (DDL, DESCRIBE, INSERT,
-	// SELECT). Optionally database-qualified ("<db>.<table>"), unquoted-
-	// identifier shape only ([A-Za-z_][A-Za-z0-9_]* per part; the
-	// constructor panics otherwise). Empty (the default) binds the baked
-	// name. The schema is unchanged — this moves WHERE the rows land, not
-	// what they look like — so a scratch table for a test or a per-
-	// deployment table needs no regeneration.
+	// DeviceTableName — for every statement it issues (DDL, INSERT, and the
+	// reads unless ReadTable names another). Optionally database-qualified
+	// ("<db>.<table>"), unquoted-identifier shape only
+	// ([A-Za-z_][A-Za-z0-9_]* per part; the constructor panics otherwise).
+	// Empty (the default) binds the baked name. The schema is unchanged —
+	// this moves WHERE the rows land, not what they look like — so a
+	// scratch table for a test or a per-deployment table needs no
+	// regeneration.
 	Table string
+	// ReadTable, when set, is the table every SELECT and DESCRIBE goes to
+	// (ADR-0296 §SD8): a storage table that materialized views fill from
+	// the written one, or a Merge over several. Same shape rules as Table;
+	// empty (the default) reads the table written to. The schema must be
+	// the same on both — VerifySchema checks the read side, which is the
+	// one the positional decode runs against.
+	ReadTable string
 	// DDLTail is a raw suffix appended verbatim after the composed
 	// CREATE TABLE at EnsureTable time — the escape hatch for clauses
 	// the generation-time table options (ADR-0102) do not carry.
@@ -230,6 +238,11 @@ func NewDeviceStore(exec recordstore.ExecutorI, alloc memory.Allocator, cfg Devi
 			panic("DeviceStore: " + terr.Error())
 		}
 	}
+	if cfg.ReadTable != "" {
+		if terr := recordstore.CheckTableRef(cfg.ReadTable); terr != nil {
+			panic("DeviceStore: ReadTable: " + terr.Error())
+		}
+	}
 	if alloc == nil {
 		alloc = memory.NewGoAllocator()
 	}
@@ -237,13 +250,22 @@ func NewDeviceStore(exec recordstore.ExecutorI, alloc memory.Allocator, cfg Devi
 	return
 }
 
-// tableName is the table reference every statement uses: the configured
+// writeTable is the table reference DDL and INSERT use: the configured
 // override when set, else the baked DeviceTableName.
-func (inst *DeviceStore) tableName() string {
+func (inst *DeviceStore) writeTable() string {
 	if inst.cfg.Table != "" {
 		return inst.cfg.Table
 	}
 	return DeviceTableName
+}
+
+// readTable is the table reference SELECT and DESCRIBE use: ReadTable
+// when set, else the table written to (ADR-0296 §SD8).
+func (inst *DeviceStore) readTable() string {
+	if inst.cfg.ReadTable != "" {
+		return inst.cfg.ReadTable
+	}
+	return inst.writeTable()
 }
 
 // isTombstone applies the tombstone pair's read half — the interpreted
@@ -331,7 +353,7 @@ func (inst *DeviceStore) takeWritten() iter.Seq[recordstore.WrittenKey[uint64, t
 func (inst *DeviceStore) EnsureTable(ctx context.Context) (err error) {
 	stmts, err := recordstore.ProvisioningStatements(deviceDDLCreate, DeviceTableName, inst.cfg.Table)
 	if err != nil {
-		err = eh.Errorf("ensure table %s: %w", inst.tableName(), err)
+		err = eh.Errorf("ensure table %s: %w", inst.writeTable(), err)
 		return
 	}
 	if inst.cfg.DDLTail != "" {
@@ -340,7 +362,7 @@ func (inst *DeviceStore) EnsureTable(ctx context.Context) (err error) {
 	for _, sql := range stmts {
 		err = inst.exec.Exec(ctx, sql)
 		if err != nil {
-			err = eh.Errorf("ensure table %s: %w", inst.tableName(), err)
+			err = eh.Errorf("ensure table %s: %w", inst.writeTable(), err)
 			return
 		}
 	}
@@ -376,14 +398,14 @@ func (inst *DeviceStore) EnsureTable(ctx context.Context) (err error) {
 // where a column-kind filter would have blessed the mis-decode.
 func (inst *DeviceStore) VerifySchema(ctx context.Context) (err error) {
 	live := make([]string, 0, 64)
-	for rec, rerr := range inst.exec.QueryArrow(ctx, "DESCRIBE (SELECT * FROM "+inst.tableName()+")"+deviceArrowOutputSettings) {
+	for rec, rerr := range inst.exec.QueryArrow(ctx, "DESCRIBE (SELECT * FROM "+inst.readTable()+")"+deviceArrowOutputSettings) {
 		if rerr != nil {
-			err = eh.Errorf("describe table %s: %w", inst.tableName(), rerr)
+			err = eh.Errorf("describe table %s: %w", inst.readTable(), rerr)
 			return
 		}
 		names, ok := rec.Column(0).(*array.String)
 		if !ok {
-			err = eh.Errorf("describe table %s: name column is %s, not a string", inst.tableName(), rec.Column(0).DataType())
+			err = eh.Errorf("describe table %s: name column is %s, not a string", inst.readTable(), rec.Column(0).DataType())
 			rec.Release()
 			return
 		}
@@ -394,12 +416,12 @@ func (inst *DeviceStore) VerifySchema(ctx context.Context) (err error) {
 	}
 	want := lowlevel.CreateSchemaDeviceTable().Fields()
 	if len(live) != len(want) {
-		err = eh.Errorf("schema drift on %s: table has %d columns, the generated schema expects %d — regenerated code against an old table (or vice versa); migrate or regenerate", inst.tableName(), len(live), len(want))
+		err = eh.Errorf("schema drift on %s: table has %d columns, the generated schema expects %d — regenerated code against an old table (or vice versa); migrate or regenerate", inst.readTable(), len(live), len(want))
 		return
 	}
 	for i, f := range want {
 		if live[i] != f.Name {
-			err = eh.Errorf("schema drift on %s: column %d is %q, the generated schema expects %q — the decode is positional; migrate or regenerate", inst.tableName(), i, live[i], f.Name)
+			err = eh.Errorf("schema drift on %s: column %d is %q, the generated schema expects %q — the decode is positional; migrate or regenerate", inst.readTable(), i, live[i], f.Name)
 			return
 		}
 	}
@@ -804,10 +826,10 @@ func (inst *DeviceStore) Flush(ctx context.Context) (n int, err error) {
 	batch := recordstore.NewBatchId()
 	bctx := recordstore.WithBatchId(ctx, batch)
 	if len(records) > 0 {
-		err = inst.exec.InsertArrow(bctx, inst.tableName(), records)
+		err = inst.exec.InsertArrow(bctx, inst.writeTable(), records)
 		if err != nil {
 			inst.pending = records
-			err = eh.Errorf("insert into %s: %w", inst.tableName(), err)
+			err = eh.Errorf("insert into %s: %w", inst.writeTable(), err)
 			return
 		}
 	}
@@ -1094,7 +1116,7 @@ func (inst *DeviceCache[W]) GetLiveAcceptStale(key uint64) (ent *DeviceEntity, f
 func (inst *DeviceStore) fetchLatestSQL(keys []uint64) string {
 	var sb strings.Builder
 	sb.WriteString("SELECT * FROM ")
-	sb.WriteString(inst.tableName())
+	sb.WriteString(inst.readTable())
 	sb.WriteString(" WHERE " + DeviceColKey + " IN (")
 	for i, k := range keys {
 		if i > 0 {
@@ -1174,7 +1196,7 @@ func (inst *DeviceStore) ScanIdentity(ctx context.Context, opts recordstore.Scan
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + where +
 		" ORDER BY " + DeviceColOrder + " ASC, " + DeviceColKey + " ASC"
 	if opts.Limit > 0 {
@@ -1208,7 +1230,7 @@ func (inst *DeviceStore) ScanBattery(ctx context.Context, opts recordstore.ScanO
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + where +
 		" ORDER BY " + DeviceColOrder + " ASC, " + DeviceColKey + " ASC"
 	if opts.Limit > 0 {
@@ -1242,7 +1264,7 @@ func (inst *DeviceStore) ScanTagged(ctx context.Context, opts recordstore.ScanOp
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + where +
 		" ORDER BY " + DeviceColOrder + " ASC, " + DeviceColKey + " ASC"
 	if opts.Limit > 0 {
@@ -1276,7 +1298,7 @@ func (inst *DeviceStore) ScanLocated(ctx context.Context, opts recordstore.ScanO
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + where +
 		" ORDER BY " + DeviceColOrder + " ASC, " + DeviceColKey + " ASC"
 	if opts.Limit > 0 {
@@ -1291,7 +1313,7 @@ func (inst *DeviceStore) ScanLocated(ctx context.Context, opts recordstore.ScanO
 // row; GetLive is the interpreted state-view read). Reads see only
 // flushed rows.
 func (inst *DeviceStore) Latest(ctx context.Context, key uint64) (ent *DeviceEntity, found bool, err error) {
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + DeviceColKey + " = " + deviceKeyLiteral(key) +
 		" ORDER BY " + DeviceColOrder + " DESC LIMIT 1" + deviceArrowOutputSettings
 	ents, err := inst.queryEntities(ctx, sql)
@@ -1314,7 +1336,7 @@ func (inst *DeviceStore) Latest(ctx context.Context, key uint64) (ent *DeviceEnt
 // streaming executor changes nothing visible); an error ends the
 // sequence as a final (nil, err) pair. Reads see only flushed rows.
 func (inst *DeviceStore) Replay(ctx context.Context, key uint64, fromOrder time.Time, opts recordstore.ReplayOpts) iter.Seq2[*DeviceEntity, error] {
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + DeviceColKey + " = " + deviceKeyLiteral(key)
 	if !fromOrder.IsZero() {
 		sql += " AND " + DeviceColOrder + " >= fromUnixTimestamp64Nano(" + strconv.FormatInt(fromOrder.UnixNano(), 10) + ")"
@@ -1413,7 +1435,7 @@ func (inst *DeviceStore) ScanLiveIdentity(ctx context.Context, opts recordstore.
 	if opts.KeyPrefix != "" {
 		return recordstore.RefuseKeyPrefix[*DeviceEntity]()
 	}
-	inner := "SELECT * FROM " + inst.tableName()
+	inner := "SELECT * FROM " + inst.readTable()
 	inner += " ORDER BY " + DeviceColOrder + " DESC LIMIT 1 BY " + DeviceColKey
 	where := "(" + deviceScanIdentityFilter + ")"
 	if opts.ExtraPredicate != "" {
@@ -1461,7 +1483,7 @@ func (inst *DeviceStore) ScanLiveBattery(ctx context.Context, opts recordstore.S
 	if opts.KeyPrefix != "" {
 		return recordstore.RefuseKeyPrefix[*DeviceEntity]()
 	}
-	inner := "SELECT * FROM " + inst.tableName()
+	inner := "SELECT * FROM " + inst.readTable()
 	inner += " ORDER BY " + DeviceColOrder + " DESC LIMIT 1 BY " + DeviceColKey
 	where := "(" + deviceScanBatteryFilter + ")"
 	if opts.ExtraPredicate != "" {
@@ -1509,7 +1531,7 @@ func (inst *DeviceStore) ScanLiveTagged(ctx context.Context, opts recordstore.Sc
 	if opts.KeyPrefix != "" {
 		return recordstore.RefuseKeyPrefix[*DeviceEntity]()
 	}
-	inner := "SELECT * FROM " + inst.tableName()
+	inner := "SELECT * FROM " + inst.readTable()
 	inner += " ORDER BY " + DeviceColOrder + " DESC LIMIT 1 BY " + DeviceColKey
 	where := "(" + deviceScanTaggedFilter + ")"
 	if opts.ExtraPredicate != "" {
@@ -1557,7 +1579,7 @@ func (inst *DeviceStore) ScanLiveLocated(ctx context.Context, opts recordstore.S
 	if opts.KeyPrefix != "" {
 		return recordstore.RefuseKeyPrefix[*DeviceEntity]()
 	}
-	inner := "SELECT * FROM " + inst.tableName()
+	inner := "SELECT * FROM " + inst.readTable()
 	inner += " ORDER BY " + DeviceColOrder + " DESC LIMIT 1 BY " + DeviceColKey
 	where := "(" + deviceScanLocatedFilter + ")"
 	if opts.ExtraPredicate != "" {

@@ -128,14 +128,22 @@ func (inst *MetaEntity) Archetype() (a []string) {
 
 type MetaStoreConfig struct {
 	// Table overrides the ClickHouse table this store binds — the baked
-	// MetaTableName — for every statement it issues (DDL, DESCRIBE, INSERT,
-	// SELECT). Optionally database-qualified ("<db>.<table>"), unquoted-
-	// identifier shape only ([A-Za-z_][A-Za-z0-9_]* per part; the
-	// constructor panics otherwise). Empty (the default) binds the baked
-	// name. The schema is unchanged — this moves WHERE the rows land, not
-	// what they look like — so a scratch table for a test or a per-
-	// deployment table needs no regeneration.
+	// MetaTableName — for every statement it issues (DDL, INSERT, and the
+	// reads unless ReadTable names another). Optionally database-qualified
+	// ("<db>.<table>"), unquoted-identifier shape only
+	// ([A-Za-z_][A-Za-z0-9_]* per part; the constructor panics otherwise).
+	// Empty (the default) binds the baked name. The schema is unchanged —
+	// this moves WHERE the rows land, not what they look like — so a
+	// scratch table for a test or a per-deployment table needs no
+	// regeneration.
 	Table string
+	// ReadTable, when set, is the table every SELECT and DESCRIBE goes to
+	// (ADR-0296 §SD8): a storage table that materialized views fill from
+	// the written one, or a Merge over several. Same shape rules as Table;
+	// empty (the default) reads the table written to. The schema must be
+	// the same on both — VerifySchema checks the read side, which is the
+	// one the positional decode runs against.
+	ReadTable string
 	// DDLTail is a raw suffix appended verbatim after the composed
 	// CREATE TABLE at EnsureTable time — the escape hatch for clauses
 	// the generation-time table options (ADR-0102) do not carry.
@@ -208,6 +216,11 @@ func NewMetaStore(exec recordstore.ExecutorI, alloc memory.Allocator, cfg MetaSt
 			panic("MetaStore: " + terr.Error())
 		}
 	}
+	if cfg.ReadTable != "" {
+		if terr := recordstore.CheckTableRef(cfg.ReadTable); terr != nil {
+			panic("MetaStore: ReadTable: " + terr.Error())
+		}
+	}
 	if alloc == nil {
 		alloc = memory.NewGoAllocator()
 	}
@@ -215,13 +228,22 @@ func NewMetaStore(exec recordstore.ExecutorI, alloc memory.Allocator, cfg MetaSt
 	return
 }
 
-// tableName is the table reference every statement uses: the configured
+// writeTable is the table reference DDL and INSERT use: the configured
 // override when set, else the baked MetaTableName.
-func (inst *MetaStore) tableName() string {
+func (inst *MetaStore) writeTable() string {
 	if inst.cfg.Table != "" {
 		return inst.cfg.Table
 	}
 	return MetaTableName
+}
+
+// readTable is the table reference SELECT and DESCRIBE use: ReadTable
+// when set, else the table written to (ADR-0296 §SD8).
+func (inst *MetaStore) readTable() string {
+	if inst.cfg.ReadTable != "" {
+		return inst.cfg.ReadTable
+	}
+	return inst.writeTable()
 }
 
 // applyStampers consults the configured stampers and pushes their surrogate
@@ -299,7 +321,7 @@ func (inst *MetaStore) takeWritten() iter.Seq[recordstore.WrittenKey[uint64, tim
 func (inst *MetaStore) EnsureTable(ctx context.Context) (err error) {
 	stmts, err := recordstore.ProvisioningStatements(fsmetaDDLCreate, MetaTableName, inst.cfg.Table)
 	if err != nil {
-		err = eh.Errorf("ensure table %s: %w", inst.tableName(), err)
+		err = eh.Errorf("ensure table %s: %w", inst.writeTable(), err)
 		return
 	}
 	if inst.cfg.DDLTail != "" {
@@ -308,7 +330,7 @@ func (inst *MetaStore) EnsureTable(ctx context.Context) (err error) {
 	for _, sql := range stmts {
 		err = inst.exec.Exec(ctx, sql)
 		if err != nil {
-			err = eh.Errorf("ensure table %s: %w", inst.tableName(), err)
+			err = eh.Errorf("ensure table %s: %w", inst.writeTable(), err)
 			return
 		}
 	}
@@ -344,14 +366,14 @@ func (inst *MetaStore) EnsureTable(ctx context.Context) (err error) {
 // where a column-kind filter would have blessed the mis-decode.
 func (inst *MetaStore) VerifySchema(ctx context.Context) (err error) {
 	live := make([]string, 0, 64)
-	for rec, rerr := range inst.exec.QueryArrow(ctx, "DESCRIBE (SELECT * FROM "+inst.tableName()+")"+fsmetaArrowOutputSettings) {
+	for rec, rerr := range inst.exec.QueryArrow(ctx, "DESCRIBE (SELECT * FROM "+inst.readTable()+")"+fsmetaArrowOutputSettings) {
 		if rerr != nil {
-			err = eh.Errorf("describe table %s: %w", inst.tableName(), rerr)
+			err = eh.Errorf("describe table %s: %w", inst.readTable(), rerr)
 			return
 		}
 		names, ok := rec.Column(0).(*array.String)
 		if !ok {
-			err = eh.Errorf("describe table %s: name column is %s, not a string", inst.tableName(), rec.Column(0).DataType())
+			err = eh.Errorf("describe table %s: name column is %s, not a string", inst.readTable(), rec.Column(0).DataType())
 			rec.Release()
 			return
 		}
@@ -362,12 +384,12 @@ func (inst *MetaStore) VerifySchema(ctx context.Context) (err error) {
 	}
 	want := lowlevel.CreateSchemaFsmetaTable().Fields()
 	if len(live) != len(want) {
-		err = eh.Errorf("schema drift on %s: table has %d columns, the generated schema expects %d — regenerated code against an old table (or vice versa); migrate or regenerate", inst.tableName(), len(live), len(want))
+		err = eh.Errorf("schema drift on %s: table has %d columns, the generated schema expects %d — regenerated code against an old table (or vice versa); migrate or regenerate", inst.readTable(), len(live), len(want))
 		return
 	}
 	for i, f := range want {
 		if live[i] != f.Name {
-			err = eh.Errorf("schema drift on %s: column %d is %q, the generated schema expects %q — the decode is positional; migrate or regenerate", inst.tableName(), i, live[i], f.Name)
+			err = eh.Errorf("schema drift on %s: column %d is %q, the generated schema expects %q — the decode is positional; migrate or regenerate", inst.readTable(), i, live[i], f.Name)
 			return
 		}
 	}
@@ -694,10 +716,10 @@ func (inst *MetaStore) Flush(ctx context.Context) (n int, err error) {
 	batch := recordstore.NewBatchId()
 	bctx := recordstore.WithBatchId(ctx, batch)
 	if len(records) > 0 {
-		err = inst.exec.InsertArrow(bctx, inst.tableName(), records)
+		err = inst.exec.InsertArrow(bctx, inst.writeTable(), records)
 		if err != nil {
 			inst.pending = records
-			err = eh.Errorf("insert into %s: %w", inst.tableName(), err)
+			err = eh.Errorf("insert into %s: %w", inst.writeTable(), err)
 			return
 		}
 	}
@@ -956,7 +978,7 @@ func (inst *MetaCache[W]) InvalidateAll() {
 func (inst *MetaStore) fetchLatestSQL(keys []uint64) string {
 	var sb strings.Builder
 	sb.WriteString("SELECT * FROM ")
-	sb.WriteString(inst.tableName())
+	sb.WriteString(inst.readTable())
 	sb.WriteString(" WHERE " + MetaColKey + " IN (")
 	for i, k := range keys {
 		if i > 0 {
@@ -1034,7 +1056,7 @@ func (inst *MetaStore) ScanLadingEntry(ctx context.Context, opts recordstore.Sca
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + where +
 		" ORDER BY " + MetaColOrder + " ASC, " + MetaColKey + " ASC"
 	if opts.Limit > 0 {
@@ -1068,7 +1090,7 @@ func (inst *MetaStore) ScanLadingSnapshot(ctx context.Context, opts recordstore.
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + where +
 		" ORDER BY " + MetaColOrder + " ASC, " + MetaColKey + " ASC"
 	if opts.Limit > 0 {
@@ -1083,7 +1105,7 @@ func (inst *MetaStore) ScanLadingSnapshot(ctx context.Context, opts recordstore.
 // row; GetLive is the interpreted state-view read). Reads see only
 // flushed rows.
 func (inst *MetaStore) Latest(ctx context.Context, key uint64) (ent *MetaEntity, found bool, err error) {
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + MetaColKey + " = " + fsmetaKeyLiteral(key) +
 		" ORDER BY " + MetaColOrder + " DESC LIMIT 1" + fsmetaArrowOutputSettings
 	ents, err := inst.queryEntities(ctx, sql)
@@ -1106,7 +1128,7 @@ func (inst *MetaStore) Latest(ctx context.Context, key uint64) (ent *MetaEntity,
 // streaming executor changes nothing visible); an error ends the
 // sequence as a final (nil, err) pair. Reads see only flushed rows.
 func (inst *MetaStore) Replay(ctx context.Context, key uint64, fromOrder time.Time, opts recordstore.ReplayOpts) iter.Seq2[*MetaEntity, error] {
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + MetaColKey + " = " + fsmetaKeyLiteral(key)
 	if !fromOrder.IsZero() {
 		sql += " AND " + MetaColOrder + " >= fromUnixTimestamp64Nano(" + strconv.FormatInt(fromOrder.UnixNano(), 10) + ")"
