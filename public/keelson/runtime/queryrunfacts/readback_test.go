@@ -234,3 +234,14 @@ func TestSurfaceVersionSql(t *testing.T) {
 	require.Contains(t, SurfaceVersionSql(), lwsqlsurface.VersionFunctionName+"()")
 	require.Contains(t, SurfaceVersionSql(), "FORMAT TabSeparated")
 }
+
+// The server's TabSeparated output escapes a quote as \' — every query
+// text with a string literal in it carries one — plus \b, \f and \r.
+// Captured from a live server: SELECT concat('q”', char(8), char(12),
+// char(13), char(9), char(10), char(0), '\\') FORMAT TSV.
+func TestUnescapeTabSeparatedServerSet(t *testing.T) {
+	require.Equal(t, "q'\b\f\r\t\n\x00\\", UnescapeTabSeparated(`q\'\b\f\r\t\n\0\\`))
+	require.Equal(t, "WHERE t = 'B738'", UnescapeTabSeparated(`WHERE t = \'B738\'`))
+	// An escape the server does not write passes through.
+	require.Equal(t, `\x`, UnescapeTabSeparated(`\x`))
+}

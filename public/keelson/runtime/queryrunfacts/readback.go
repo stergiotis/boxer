@@ -569,8 +569,10 @@ func ParseHistoryRows(raw []byte) (rows []HistoryRow, err error) {
 }
 
 // UnescapeTabSeparated reverses ClickHouse's TabSeparated string
-// escaping (the chstore recentlogs convention): \\, \t, \n, \0; other
-// escapes pass through unchanged.
+// escaping (the chstore recentlogs convention): \\, \t, \n, \0, \', \b,
+// \f, \r — the set the server writes; other escapes pass through unchanged.
+// A query text with a string literal in it carries \' on the wire, so a
+// reader that left it would hand back SQL that no longer parses.
 func UnescapeTabSeparated(s string) (out string) {
 	if !strings.ContainsRune(s, '\\') {
 		out = s
@@ -592,6 +594,14 @@ func UnescapeTabSeparated(s string) (out string) {
 			b.WriteByte('\\')
 		case '0':
 			b.WriteByte(0)
+		case '\'':
+			b.WriteByte('\'')
+		case 'b':
+			b.WriteByte('\b')
+		case 'f':
+			b.WriteByte('\f')
+		case 'r':
+			b.WriteByte('\r')
 		default:
 			b.WriteByte(s[i])
 			b.WriteByte(s[i+1])
