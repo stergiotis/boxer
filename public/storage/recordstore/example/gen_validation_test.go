@@ -450,7 +450,7 @@ type KindA struct {
 	}.Generate())
 	store, err := os.ReadFile(filepath.Join(outDir, "valcheck_store.out.go"))
 	require.NoError(t, err)
-	require.Contains(t, string(store), "inst.Begin(rows[i].Node, ts)")
+	require.Contains(t, string(store), "inst.BeginCtx(ctx, rows[i].Node, ts)")
 }
 
 // TestGenerateTrimmedCodecs: the default emission is the store-support

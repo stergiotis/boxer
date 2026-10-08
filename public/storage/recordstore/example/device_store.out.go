@@ -21,6 +21,7 @@ import (
 	"github.com/stergiotis/boxer/public/caching"
 	"github.com/stergiotis/boxer/public/functional"
 	"github.com/stergiotis/boxer/public/functional/option"
+	"github.com/stergiotis/boxer/public/identity/callident"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
@@ -157,6 +158,12 @@ type DeviceStoreConfig struct {
 	// Nothing flushes behind the caller's back: Commit takes no context and
 	// never inserts, so the due check runs where the caller asks for it.
 	FlushEvery int
+	// WriteObserver, when set, is told each row a Commit or Delete
+	// buffers, then — after the successful Flush that made them durable —
+	// the batch id of that insert and its keys, or the keys DiscardPending
+	// dropped (ADR-0295 §SD7). It is notification-only and independent of
+	// attached cache views. Nil (the default) tracks nothing.
+	WriteObserver recordstore.WriteObserverI[uint64, time.Time]
 	// TombstoneDetect is the read half of the state-view tombstone pair
 	// (ADR-0100 Update 2026-08-30): GetLive — the store's and the cache
 	// views' — reads a detected row as absent. It may consult any entity
@@ -207,6 +214,10 @@ type DeviceStore struct {
 	onFlush []func(uint64)
 	// stampers is cfg.Stampers, consulted per Begin (ADR-0112 M1).
 	stampers []recordstore.ReferenceStamper
+	// written holds the rows the write observer was told were committed and
+	// has not yet been told are durable or discarded (ADR-0295 §SD7); empty
+	// without an observer.
+	written []recordstore.WrittenKey[uint64, time.Time]
 }
 
 // NewDeviceStore wires the store. A nil alloc selects the Go allocator.
@@ -247,13 +258,12 @@ func (inst *DeviceStore) isTombstone(e *DeviceEntity) bool {
 
 // applyStampers consults the configured stampers and pushes their surrogate
 // ids as ambient HighCardRef memberships onto the open entity (ADR-0112 M1),
-// returning the count so Commit/Rollback pop exactly that many.
-// context.Background() bounds the interning — the in-memory interner ignores
-// it; a ctx-carrying Begin is the future seam for a durable one. No stampers
-// means no pushes: inert.
-func (inst *DeviceStore) applyStampers() (pushed int) {
+// returning the count so Commit/Rollback pop exactly that many. ctx is
+// BeginCtx's — the call identity a stamper interns rides on it (ADR-0295
+// §SD7). No stampers means no pushes: inert.
+func (inst *DeviceStore) applyStampers(ctx context.Context) (pushed int) {
 	for _, s := range inst.stampers {
-		for id, err := range s.Current(context.Background()) {
+		for id, err := range s.Current(ctx) {
 			if err != nil {
 				inst.dml.AppendError(err)
 				continue
@@ -281,6 +291,32 @@ func (inst *DeviceStore) notifyWrite(key uint64, ent *DeviceEntity) {
 func (inst *DeviceStore) notifyFlush(key uint64) {
 	for _, f := range inst.onFlush {
 		f(key)
+	}
+}
+
+// noteCommitted tells the write observer about a buffered row and keeps
+// it until the observer is told its fate (ADR-0295 §SD7).
+func (inst *DeviceStore) noteCommitted(w recordstore.WrittenKey[uint64, time.Time]) {
+	if inst.cfg.WriteObserver == nil {
+		return
+	}
+	inst.written = append(inst.written, w)
+	inst.cfg.WriteObserver.Committed(w)
+}
+
+// takeWritten detaches the rows noteCommitted kept and ranges over them.
+// Detaching before the observer runs means a row it commits from its
+// callback lands in a fresh buffer, reported with a later flush, and a
+// panicking observer cannot have the same rows reported twice.
+func (inst *DeviceStore) takeWritten() iter.Seq[recordstore.WrittenKey[uint64, time.Time]] {
+	written := inst.written
+	inst.written = nil
+	return func(yield func(recordstore.WrittenKey[uint64, time.Time]) bool) {
+		for _, w := range written {
+			if !yield(w) {
+				return
+			}
+		}
 	}
 }
 
@@ -416,6 +452,13 @@ type DeviceEntityBuilder struct {
 	// pushed counts the ambient memberships Begin pushed via the stampers;
 	// Commit/Rollback pop exactly that many (ADR-0112 M1).
 	pushed int
+	// ident is BeginCtx's call identity: who committed the row, which the
+	// write observer is told — the flush that ships it may run for someone
+	// else (ADR-0295 §SD7).
+	ident callident.CallIdentity
+	// tombstone marks the frame Delete opened for a configured tombstone
+	// pair, so the write observer is told the row is a deletion.
+	tombstone bool
 }
 
 // endSection closes one section's frame. The buffer calls it once per
@@ -435,14 +478,23 @@ func (inst *DeviceEntityBuilder) endSection(section string) error {
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
-// (Key, Order) and a live lifecycle.
+// (Key, Order) and a live lifecycle, under context.Background(): a configured stamper
+// that reads a call identity off the context finds none. See BeginCtx.
 func (inst *DeviceStore) Begin(id uint64, ts time.Time) *DeviceEntityBuilder {
+	return inst.BeginCtx(context.Background(), id, ts)
+}
+
+// BeginCtx is Begin with the context the configured stampers consult
+// (ADR-0295 §SD7) — where a call identity reaches an actor stamper. The
+// store stays single-goroutine; ctx is read during this call only.
+func (inst *DeviceStore) BeginCtx(ctx context.Context, id uint64, ts time.Time) *DeviceEntityBuilder {
 	lowlevel.InEntityDeviceTableBeginEntity(inst.dml)
 	lowlevel.InEntityDeviceTableSetId(inst.dml, id)
 	lowlevel.InEntityDeviceTableSetTimestamp(inst.dml, ts)
 	lowlevel.InEntityDeviceTableSetLifecycle(inst.dml, recordstore.LifecycleLive)
 	b := &DeviceEntityBuilder{store: inst, key: id, ent: DeviceEntity{ID: id, Ts: ts, Lifecycle: recordstore.LifecycleLive}}
-	b.pushed = inst.applyStampers()
+	b.ident, _ = callident.CallIdentityFrom(ctx)
+	b.pushed = inst.applyStampers(ctx)
 	return b
 }
 
@@ -578,6 +630,7 @@ func (inst *DeviceEntityBuilder) Commit() (err error) {
 		ent := inst.ent
 		inst.store.notifyWrite(inst.key, &ent)
 	}
+	inst.store.noteCommitted(recordstore.WrittenKey[uint64, time.Time]{Key: inst.key, Order: inst.ent.Ts, Lifecycle: inst.ent.Lifecycle, Tombstone: inst.tombstone, Identity: inst.ident})
 	return
 }
 
@@ -597,6 +650,12 @@ func (inst *DeviceEntityBuilder) Rollback() (err error) {
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
 func (inst *DeviceStore) IngestIdentity(ts time.Time, rows []Identity) (err error) {
+	return inst.IngestIdentityCtx(context.Background(), ts, rows)
+}
+
+// IngestIdentityCtx is IngestIdentity with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *DeviceStore) IngestIdentityCtx(ctx context.Context, ts time.Time, rows []Identity) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -604,7 +663,7 @@ func (inst *DeviceStore) IngestIdentity(ts time.Time, rows []Identity) (err erro
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.Begin(rows[i].ID, ts).AddIdentity(rows[i]).Commit()
+		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddIdentity(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest identity row %d: %w", i, err)
 			return
@@ -621,6 +680,12 @@ func (inst *DeviceStore) IngestIdentity(ts time.Time, rows []Identity) (err erro
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
 func (inst *DeviceStore) IngestBattery(ts time.Time, rows []Battery) (err error) {
+	return inst.IngestBatteryCtx(context.Background(), ts, rows)
+}
+
+// IngestBatteryCtx is IngestBattery with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *DeviceStore) IngestBatteryCtx(ctx context.Context, ts time.Time, rows []Battery) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -628,7 +693,7 @@ func (inst *DeviceStore) IngestBattery(ts time.Time, rows []Battery) (err error)
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.Begin(rows[i].ID, ts).AddBattery(rows[i]).Commit()
+		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddBattery(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest battery row %d: %w", i, err)
 			return
@@ -645,6 +710,12 @@ func (inst *DeviceStore) IngestBattery(ts time.Time, rows []Battery) (err error)
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
 func (inst *DeviceStore) IngestTagged(ts time.Time, rows []Tagged) (err error) {
+	return inst.IngestTaggedCtx(context.Background(), ts, rows)
+}
+
+// IngestTaggedCtx is IngestTagged with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *DeviceStore) IngestTaggedCtx(ctx context.Context, ts time.Time, rows []Tagged) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -652,7 +723,7 @@ func (inst *DeviceStore) IngestTagged(ts time.Time, rows []Tagged) (err error) {
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.Begin(rows[i].ID, ts).AddTagged(rows[i]).Commit()
+		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddTagged(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest tagged row %d: %w", i, err)
 			return
@@ -669,6 +740,12 @@ func (inst *DeviceStore) IngestTagged(ts time.Time, rows []Tagged) (err error) {
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
 func (inst *DeviceStore) IngestLocated(ts time.Time, rows []Located) (err error) {
+	return inst.IngestLocatedCtx(context.Background(), ts, rows)
+}
+
+// IngestLocatedCtx is IngestLocated with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *DeviceStore) IngestLocatedCtx(ctx context.Context, ts time.Time, rows []Located) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -676,7 +753,7 @@ func (inst *DeviceStore) IngestLocated(ts time.Time, rows []Located) (err error)
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.Begin(rows[i].ID, ts).AddLocated(rows[i]).Commit()
+		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddLocated(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest located row %d: %w", i, err)
 			return
@@ -722,8 +799,12 @@ func (inst *DeviceStore) Flush(ctx context.Context) (n int, err error) {
 	}
 	records = append(inst.pending, records...)
 	inst.pending = nil
+	// One batch id per insert attempt (ADR-0295 §SD6): the executor stamps
+	// it, an observing executor reports it, the write observer is told it.
+	batch := recordstore.NewBatchId()
+	bctx := recordstore.WithBatchId(ctx, batch)
 	if len(records) > 0 {
-		err = inst.exec.InsertArrow(ctx, inst.tableName(), records)
+		err = inst.exec.InsertArrow(bctx, inst.tableName(), records)
 		if err != nil {
 			inst.pending = records
 			err = eh.Errorf("insert into %s: %w", inst.tableName(), err)
@@ -739,6 +820,9 @@ func (inst *DeviceStore) Flush(ctx context.Context) (n int, err error) {
 		inst.notifyFlush(k) // durable now — release the views' dirty-window pins
 	}
 	clear(inst.dirty) // flushed — ClickHouse now serves the written state
+	if len(inst.written) > 0 {
+		inst.cfg.WriteObserver.Durable(bctx, batch, inst.takeWritten())
+	}
 	return
 }
 
@@ -779,6 +863,9 @@ func (inst *DeviceStore) DiscardPending() {
 		inst.notifyWrite(k, nil) // the cached write never became durable — invalidate
 	}
 	clear(inst.dirty) // nothing local remains — ClickHouse is the truth
+	if len(inst.written) > 0 {
+		inst.cfg.WriteObserver.Discarded(inst.takeWritten())
+	}
 }
 
 // Close discards everything unflushed and releases the store's Arrow
@@ -1255,8 +1342,15 @@ func (inst *DeviceStore) Replay(ctx context.Context, key uint64, fromOrder time.
 // attached cache views like any commit — versioned, so GetLive reads
 // the key as absent immediately.
 func (inst *DeviceStore) Delete(id uint64, ts time.Time) (err error) {
+	return inst.DeleteCtx(context.Background(), id, ts)
+}
+
+// DeleteCtx is Delete with the context BeginCtx hands the configured
+// stampers (ADR-0295 §SD7).
+func (inst *DeviceStore) DeleteCtx(ctx context.Context, id uint64, ts time.Time) (err error) {
 	if inst.cfg.TombstoneWrite != nil {
-		b := inst.Begin(id, ts)
+		b := inst.BeginCtx(ctx, id, ts)
+		b.tombstone = true
 		inst.cfg.TombstoneWrite(b)
 		return b.Commit()
 	}
@@ -1264,7 +1358,12 @@ func (inst *DeviceStore) Delete(id uint64, ts time.Time) (err error) {
 	lowlevel.InEntityDeviceTableSetId(inst.dml, id)
 	lowlevel.InEntityDeviceTableSetTimestamp(inst.dml, ts)
 	lowlevel.InEntityDeviceTableSetLifecycle(inst.dml, recordstore.LifecycleTombstone)
+	// The marker row has no attribute to carry a stamp, but the stampers
+	// are consulted all the same: one that refuses (an actor stamper with
+	// no principal on ctx) refuses the deletion too (ADR-0295 §SD8).
+	pushed := inst.applyStampers(ctx)
 	err = lowlevel.InEntityDeviceTableCommitEntity(inst.dml)
+	inst.dml.PopMembershipsHighCardRef(pushed)
 	if err != nil {
 		_ = lowlevel.InEntityDeviceTableRollbackEntity(inst.dml) // discard the failed frame; the store stays usable
 		return
@@ -1272,6 +1371,8 @@ func (inst *DeviceStore) Delete(id uint64, ts time.Time) (err error) {
 	inst.buffered++
 	inst.dirty[id] = struct{}{}
 	inst.notifyWrite(id, &DeviceEntity{ID: id, Ts: ts, Lifecycle: recordstore.LifecycleTombstone})
+	ci, _ := callident.CallIdentityFrom(ctx)
+	inst.noteCommitted(recordstore.WrittenKey[uint64, time.Time]{Key: id, Order: ts, Lifecycle: recordstore.LifecycleTombstone, Tombstone: true, Identity: ci})
 	return
 }
 

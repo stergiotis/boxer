@@ -22,6 +22,7 @@ import (
 	"github.com/stergiotis/boxer/public/fs/lading/ladingmeta/internal/lowlevel"
 	"github.com/stergiotis/boxer/public/functional"
 	"github.com/stergiotis/boxer/public/functional/option"
+	"github.com/stergiotis/boxer/public/identity/callident"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/ra"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
@@ -159,6 +160,12 @@ type MetaStoreConfig struct {
 	// Nothing flushes behind the caller's back: Commit takes no context and
 	// never inserts, so the due check runs where the caller asks for it.
 	FlushEvery int
+	// WriteObserver, when set, is told each row a Commit or Delete
+	// buffers, then — after the successful Flush that made them durable —
+	// the batch id of that insert and its keys, or the keys DiscardPending
+	// dropped (ADR-0295 §SD7). It is notification-only and independent of
+	// attached cache views. Nil (the default) tracks nothing.
+	WriteObserver recordstore.WriteObserverI[uint64, time.Time]
 }
 
 // MetaStore is single-goroutine, like every part it composes. Batched
@@ -188,6 +195,10 @@ type MetaStore struct {
 	onFlush []func(uint64)
 	// stampers is cfg.Stampers, consulted per Begin (ADR-0112 M1).
 	stampers []recordstore.ReferenceStamper
+	// written holds the rows the write observer was told were committed and
+	// has not yet been told are durable or discarded (ADR-0295 §SD7); empty
+	// without an observer.
+	written []recordstore.WrittenKey[uint64, time.Time]
 }
 
 // NewMetaStore wires the store. A nil alloc selects the Go allocator.
@@ -215,13 +226,12 @@ func (inst *MetaStore) tableName() string {
 
 // applyStampers consults the configured stampers and pushes their surrogate
 // ids as ambient HighCardRef memberships onto the open entity (ADR-0112 M1),
-// returning the count so Commit/Rollback pop exactly that many.
-// context.Background() bounds the interning — the in-memory interner ignores
-// it; a ctx-carrying Begin is the future seam for a durable one. No stampers
-// means no pushes: inert.
-func (inst *MetaStore) applyStampers() (pushed int) {
+// returning the count so Commit/Rollback pop exactly that many. ctx is
+// BeginCtx's — the call identity a stamper interns rides on it (ADR-0295
+// §SD7). No stampers means no pushes: inert.
+func (inst *MetaStore) applyStampers(ctx context.Context) (pushed int) {
 	for _, s := range inst.stampers {
-		for id, err := range s.Current(context.Background()) {
+		for id, err := range s.Current(ctx) {
 			if err != nil {
 				inst.dml.AppendError(err)
 				continue
@@ -249,6 +259,32 @@ func (inst *MetaStore) notifyWrite(key uint64, ent *MetaEntity) {
 func (inst *MetaStore) notifyFlush(key uint64) {
 	for _, f := range inst.onFlush {
 		f(key)
+	}
+}
+
+// noteCommitted tells the write observer about a buffered row and keeps
+// it until the observer is told its fate (ADR-0295 §SD7).
+func (inst *MetaStore) noteCommitted(w recordstore.WrittenKey[uint64, time.Time]) {
+	if inst.cfg.WriteObserver == nil {
+		return
+	}
+	inst.written = append(inst.written, w)
+	inst.cfg.WriteObserver.Committed(w)
+}
+
+// takeWritten detaches the rows noteCommitted kept and ranges over them.
+// Detaching before the observer runs means a row it commits from its
+// callback lands in a fresh buffer, reported with a later flush, and a
+// panicking observer cannot have the same rows reported twice.
+func (inst *MetaStore) takeWritten() iter.Seq[recordstore.WrittenKey[uint64, time.Time]] {
+	written := inst.written
+	inst.written = nil
+	return func(yield func(recordstore.WrittenKey[uint64, time.Time]) bool) {
+		for _, w := range written {
+			if !yield(w) {
+				return
+			}
+		}
 	}
 }
 
@@ -384,6 +420,10 @@ type MetaEntityBuilder struct {
 	// pushed counts the ambient memberships Begin pushed via the stampers;
 	// Commit/Rollback pop exactly that many (ADR-0112 M1).
 	pushed int
+	// ident is BeginCtx's call identity: who committed the row, which the
+	// write observer is told — the flush that ships it may run for someone
+	// else (ADR-0295 §SD7).
+	ident callident.CallIdentity
 }
 
 // endSection closes one section's frame. The buffer calls it once per
@@ -409,14 +449,23 @@ func (inst *MetaEntityBuilder) endSection(section string) error {
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
-// (Key, Order) and the pass-through envelope.
+// (Key, Order) and the pass-through envelope, under context.Background(): a configured stamper
+// that reads a call identity off the context finds none. See BeginCtx.
 func (inst *MetaStore) Begin(id uint64, ts time.Time, env MetaEnvelope) *MetaEntityBuilder {
+	return inst.BeginCtx(context.Background(), id, ts, env)
+}
+
+// BeginCtx is Begin with the context the configured stampers consult
+// (ADR-0295 §SD7) — where a call identity reaches an actor stamper. The
+// store stays single-goroutine; ctx is read during this call only.
+func (inst *MetaStore) BeginCtx(ctx context.Context, id uint64, ts time.Time, env MetaEnvelope) *MetaEntityBuilder {
 	lowlevel.InEntityFsmetaTableBeginEntity(inst.dml)
 	lowlevel.InEntityFsmetaTableSetId(inst.dml, id, env.NaturalKey)
 	lowlevel.InEntityFsmetaTableSetTimestamp(inst.dml, ts)
 	lowlevel.InEntityFsmetaTableSetLifecycle(inst.dml, env.ExpiresAt)
 	b := &MetaEntityBuilder{store: inst, key: id, ent: MetaEntity{ID: id, Ts: ts, MetaEnvelope: env}}
-	b.pushed = inst.applyStampers()
+	b.ident, _ = callident.CallIdentityFrom(ctx)
+	b.pushed = inst.applyStampers(ctx)
 	return b
 }
 
@@ -527,6 +576,7 @@ func (inst *MetaEntityBuilder) Commit() (err error) {
 		ent := inst.ent
 		inst.store.notifyWrite(inst.key, &ent)
 	}
+	inst.store.noteCommitted(recordstore.WrittenKey[uint64, time.Time]{Key: inst.key, Order: inst.ent.Ts, Lifecycle: recordstore.LifecycleLive, Tombstone: false, Identity: inst.ident})
 	return
 }
 
@@ -548,6 +598,12 @@ func (inst *MetaEntityBuilder) Rollback() (err error) {
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
 func (inst *MetaStore) IngestLadingEntry(ts time.Time, rows []LadingEntry) (err error) {
+	return inst.IngestLadingEntryCtx(context.Background(), ts, rows)
+}
+
+// IngestLadingEntryCtx is IngestLadingEntry with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *MetaStore) IngestLadingEntryCtx(ctx context.Context, ts time.Time, rows []LadingEntry) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -555,7 +611,7 @@ func (inst *MetaStore) IngestLadingEntry(ts time.Time, rows []LadingEntry) (err 
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.Begin(rows[i].Id, ts, MetaEnvelope{NaturalKey: rows[i].NaturalKey}).AddLadingEntry(rows[i]).Commit()
+		err = inst.BeginCtx(ctx, rows[i].Id, ts, MetaEnvelope{NaturalKey: rows[i].NaturalKey}).AddLadingEntry(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest ladingEntry row %d: %w", i, err)
 			return
@@ -574,6 +630,12 @@ func (inst *MetaStore) IngestLadingEntry(ts time.Time, rows []LadingEntry) (err 
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
 func (inst *MetaStore) IngestLadingSnapshot(ts time.Time, rows []LadingSnapshot) (err error) {
+	return inst.IngestLadingSnapshotCtx(context.Background(), ts, rows)
+}
+
+// IngestLadingSnapshotCtx is IngestLadingSnapshot with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *MetaStore) IngestLadingSnapshotCtx(ctx context.Context, ts time.Time, rows []LadingSnapshot) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -581,7 +643,7 @@ func (inst *MetaStore) IngestLadingSnapshot(ts time.Time, rows []LadingSnapshot)
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.Begin(rows[i].Id, ts, MetaEnvelope{NaturalKey: rows[i].NaturalKey}).AddLadingSnapshot(rows[i]).Commit()
+		err = inst.BeginCtx(ctx, rows[i].Id, ts, MetaEnvelope{NaturalKey: rows[i].NaturalKey}).AddLadingSnapshot(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest ladingSnapshot row %d: %w", i, err)
 			return
@@ -627,8 +689,12 @@ func (inst *MetaStore) Flush(ctx context.Context) (n int, err error) {
 	}
 	records = append(inst.pending, records...)
 	inst.pending = nil
+	// One batch id per insert attempt (ADR-0295 §SD6): the executor stamps
+	// it, an observing executor reports it, the write observer is told it.
+	batch := recordstore.NewBatchId()
+	bctx := recordstore.WithBatchId(ctx, batch)
 	if len(records) > 0 {
-		err = inst.exec.InsertArrow(ctx, inst.tableName(), records)
+		err = inst.exec.InsertArrow(bctx, inst.tableName(), records)
 		if err != nil {
 			inst.pending = records
 			err = eh.Errorf("insert into %s: %w", inst.tableName(), err)
@@ -644,6 +710,9 @@ func (inst *MetaStore) Flush(ctx context.Context) (n int, err error) {
 		inst.notifyFlush(k) // durable now — release the views' dirty-window pins
 	}
 	clear(inst.dirty) // flushed — ClickHouse now serves the written state
+	if len(inst.written) > 0 {
+		inst.cfg.WriteObserver.Durable(bctx, batch, inst.takeWritten())
+	}
 	return
 }
 
@@ -684,6 +753,9 @@ func (inst *MetaStore) DiscardPending() {
 		inst.notifyWrite(k, nil) // the cached write never became durable — invalidate
 	}
 	clear(inst.dirty) // nothing local remains — ClickHouse is the truth
+	if len(inst.written) > 0 {
+		inst.cfg.WriteObserver.Discarded(inst.takeWritten())
+	}
 }
 
 // Close discards everything unflushed and releases the store's Arrow

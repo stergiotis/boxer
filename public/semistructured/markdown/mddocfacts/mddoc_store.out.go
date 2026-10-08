@@ -20,6 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/caching"
 	"github.com/stergiotis/boxer/public/functional"
 	"github.com/stergiotis/boxer/public/functional/option"
+	"github.com/stergiotis/boxer/public/identity/callident"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/ra"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
@@ -207,6 +208,12 @@ type MddocStoreConfig struct {
 	// Nothing flushes behind the caller's back: Commit takes no context and
 	// never inserts, so the due check runs where the caller asks for it.
 	FlushEvery int
+	// WriteObserver, when set, is told each row a Commit or Delete
+	// buffers, then — after the successful Flush that made them durable —
+	// the batch id of that insert and its keys, or the keys DiscardPending
+	// dropped (ADR-0295 §SD7). It is notification-only and independent of
+	// attached cache views. Nil (the default) tracks nothing.
+	WriteObserver recordstore.WriteObserverI[uint64, time.Time]
 }
 
 // MddocStore is single-goroutine, like every part it composes. Batched
@@ -236,6 +243,10 @@ type MddocStore struct {
 	onFlush []func(uint64)
 	// stampers is cfg.Stampers, consulted per Begin (ADR-0112 M1).
 	stampers []recordstore.ReferenceStamper
+	// written holds the rows the write observer was told were committed and
+	// has not yet been told are durable or discarded (ADR-0295 §SD7); empty
+	// without an observer.
+	written []recordstore.WrittenKey[uint64, time.Time]
 }
 
 // NewMddocStore wires the store. A nil alloc selects the Go allocator.
@@ -263,13 +274,12 @@ func (inst *MddocStore) tableName() string {
 
 // applyStampers consults the configured stampers and pushes their surrogate
 // ids as ambient HighCardRef memberships onto the open entity (ADR-0112 M1),
-// returning the count so Commit/Rollback pop exactly that many.
-// context.Background() bounds the interning — the in-memory interner ignores
-// it; a ctx-carrying Begin is the future seam for a durable one. No stampers
-// means no pushes: inert.
-func (inst *MddocStore) applyStampers() (pushed int) {
+// returning the count so Commit/Rollback pop exactly that many. ctx is
+// BeginCtx's — the call identity a stamper interns rides on it (ADR-0295
+// §SD7). No stampers means no pushes: inert.
+func (inst *MddocStore) applyStampers(ctx context.Context) (pushed int) {
 	for _, s := range inst.stampers {
-		for id, err := range s.Current(context.Background()) {
+		for id, err := range s.Current(ctx) {
 			if err != nil {
 				inst.dml.AppendError(err)
 				continue
@@ -297,6 +307,32 @@ func (inst *MddocStore) notifyWrite(key uint64, ent *MddocEntity) {
 func (inst *MddocStore) notifyFlush(key uint64) {
 	for _, f := range inst.onFlush {
 		f(key)
+	}
+}
+
+// noteCommitted tells the write observer about a buffered row and keeps
+// it until the observer is told its fate (ADR-0295 §SD7).
+func (inst *MddocStore) noteCommitted(w recordstore.WrittenKey[uint64, time.Time]) {
+	if inst.cfg.WriteObserver == nil {
+		return
+	}
+	inst.written = append(inst.written, w)
+	inst.cfg.WriteObserver.Committed(w)
+}
+
+// takeWritten detaches the rows noteCommitted kept and ranges over them.
+// Detaching before the observer runs means a row it commits from its
+// callback lands in a fresh buffer, reported with a later flush, and a
+// panicking observer cannot have the same rows reported twice.
+func (inst *MddocStore) takeWritten() iter.Seq[recordstore.WrittenKey[uint64, time.Time]] {
+	written := inst.written
+	inst.written = nil
+	return func(yield func(recordstore.WrittenKey[uint64, time.Time]) bool) {
+		for _, w := range written {
+			if !yield(w) {
+				return
+			}
+		}
 	}
 }
 
@@ -400,6 +436,10 @@ type MddocEntityBuilder struct {
 	// pushed counts the ambient memberships Begin pushed via the stampers;
 	// Commit/Rollback pop exactly that many (ADR-0112 M1).
 	pushed int
+	// ident is BeginCtx's call identity: who committed the row, which the
+	// write observer is told — the flush that ships it may run for someone
+	// else (ADR-0295 §SD7).
+	ident callident.CallIdentity
 }
 
 // endSection closes one section's frame. The buffer calls it once per
@@ -427,14 +467,23 @@ func (inst *MddocEntityBuilder) endSection(section string) error {
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
-// (Key, Order) and the pass-through envelope.
+// (Key, Order) and the pass-through envelope, under context.Background(): a configured stamper
+// that reads a call identity off the context finds none. See BeginCtx.
 func (inst *MddocStore) Begin(id uint64, ts time.Time, env MddocEnvelope) *MddocEntityBuilder {
+	return inst.BeginCtx(context.Background(), id, ts, env)
+}
+
+// BeginCtx is Begin with the context the configured stampers consult
+// (ADR-0295 §SD7) — where a call identity reaches an actor stamper. The
+// store stays single-goroutine; ctx is read during this call only.
+func (inst *MddocStore) BeginCtx(ctx context.Context, id uint64, ts time.Time, env MddocEnvelope) *MddocEntityBuilder {
 	lowlevel.InEntityFactsTableBeginEntity(inst.dml)
 	lowlevel.InEntityFactsTableSetId(inst.dml, id, env.NaturalKey)
 	lowlevel.InEntityFactsTableSetTimestamp(inst.dml, ts)
 	lowlevel.InEntityFactsTableSetLifecycle(inst.dml, env.ExpiresAt)
 	b := &MddocEntityBuilder{store: inst, key: id, ent: MddocEntity{ID: id, Ts: ts, MddocEnvelope: env}}
-	b.pushed = inst.applyStampers()
+	b.ident, _ = callident.CallIdentityFrom(ctx)
+	b.pushed = inst.applyStampers(ctx)
 	return b
 }
 
@@ -691,6 +740,7 @@ func (inst *MddocEntityBuilder) Commit() (err error) {
 		ent := inst.ent
 		inst.store.notifyWrite(inst.key, &ent)
 	}
+	inst.store.noteCommitted(recordstore.WrittenKey[uint64, time.Time]{Key: inst.key, Order: inst.ent.Ts, Lifecycle: recordstore.LifecycleLive, Tombstone: false, Identity: inst.ident})
 	return
 }
 
@@ -712,6 +762,12 @@ func (inst *MddocEntityBuilder) Rollback() (err error) {
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
 func (inst *MddocStore) IngestMdDoc(ts time.Time, rows []MdDoc) (err error) {
+	return inst.IngestMdDocCtx(context.Background(), ts, rows)
+}
+
+// IngestMdDocCtx is IngestMdDoc with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *MddocStore) IngestMdDocCtx(ctx context.Context, ts time.Time, rows []MdDoc) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -719,7 +775,7 @@ func (inst *MddocStore) IngestMdDoc(ts time.Time, rows []MdDoc) (err error) {
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.Begin(rows[i].Id, ts, MddocEnvelope{NaturalKey: rows[i].NaturalKey}).AddMdDoc(rows[i]).Commit()
+		err = inst.BeginCtx(ctx, rows[i].Id, ts, MddocEnvelope{NaturalKey: rows[i].NaturalKey}).AddMdDoc(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest mdDoc row %d: %w", i, err)
 			return
@@ -738,6 +794,12 @@ func (inst *MddocStore) IngestMdDoc(ts time.Time, rows []MdDoc) (err error) {
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
 func (inst *MddocStore) IngestMdHeading(ts time.Time, rows []MdHeading) (err error) {
+	return inst.IngestMdHeadingCtx(context.Background(), ts, rows)
+}
+
+// IngestMdHeadingCtx is IngestMdHeading with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *MddocStore) IngestMdHeadingCtx(ctx context.Context, ts time.Time, rows []MdHeading) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -745,7 +807,7 @@ func (inst *MddocStore) IngestMdHeading(ts time.Time, rows []MdHeading) (err err
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.Begin(rows[i].Id, ts, MddocEnvelope{NaturalKey: rows[i].NaturalKey}).AddMdHeading(rows[i]).Commit()
+		err = inst.BeginCtx(ctx, rows[i].Id, ts, MddocEnvelope{NaturalKey: rows[i].NaturalKey}).AddMdHeading(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest mdHeading row %d: %w", i, err)
 			return
@@ -764,6 +826,12 @@ func (inst *MddocStore) IngestMdHeading(ts time.Time, rows []MdHeading) (err err
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
 func (inst *MddocStore) IngestMdCodeBlock(ts time.Time, rows []MdCodeBlock) (err error) {
+	return inst.IngestMdCodeBlockCtx(context.Background(), ts, rows)
+}
+
+// IngestMdCodeBlockCtx is IngestMdCodeBlock with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *MddocStore) IngestMdCodeBlockCtx(ctx context.Context, ts time.Time, rows []MdCodeBlock) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -771,7 +839,7 @@ func (inst *MddocStore) IngestMdCodeBlock(ts time.Time, rows []MdCodeBlock) (err
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.Begin(rows[i].Id, ts, MddocEnvelope{NaturalKey: rows[i].NaturalKey}).AddMdCodeBlock(rows[i]).Commit()
+		err = inst.BeginCtx(ctx, rows[i].Id, ts, MddocEnvelope{NaturalKey: rows[i].NaturalKey}).AddMdCodeBlock(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest mdCodeBlock row %d: %w", i, err)
 			return
@@ -790,6 +858,12 @@ func (inst *MddocStore) IngestMdCodeBlock(ts time.Time, rows []MdCodeBlock) (err
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
 func (inst *MddocStore) IngestMdLink(ts time.Time, rows []MdLink) (err error) {
+	return inst.IngestMdLinkCtx(context.Background(), ts, rows)
+}
+
+// IngestMdLinkCtx is IngestMdLink with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *MddocStore) IngestMdLinkCtx(ctx context.Context, ts time.Time, rows []MdLink) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -797,7 +871,7 @@ func (inst *MddocStore) IngestMdLink(ts time.Time, rows []MdLink) (err error) {
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.Begin(rows[i].Id, ts, MddocEnvelope{NaturalKey: rows[i].NaturalKey}).AddMdLink(rows[i]).Commit()
+		err = inst.BeginCtx(ctx, rows[i].Id, ts, MddocEnvelope{NaturalKey: rows[i].NaturalKey}).AddMdLink(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest mdLink row %d: %w", i, err)
 			return
@@ -816,6 +890,12 @@ func (inst *MddocStore) IngestMdLink(ts time.Time, rows []MdLink) (err error) {
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
 func (inst *MddocStore) IngestMdEmphasis(ts time.Time, rows []MdEmphasis) (err error) {
+	return inst.IngestMdEmphasisCtx(context.Background(), ts, rows)
+}
+
+// IngestMdEmphasisCtx is IngestMdEmphasis with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *MddocStore) IngestMdEmphasisCtx(ctx context.Context, ts time.Time, rows []MdEmphasis) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -823,7 +903,7 @@ func (inst *MddocStore) IngestMdEmphasis(ts time.Time, rows []MdEmphasis) (err e
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.Begin(rows[i].Id, ts, MddocEnvelope{NaturalKey: rows[i].NaturalKey}).AddMdEmphasis(rows[i]).Commit()
+		err = inst.BeginCtx(ctx, rows[i].Id, ts, MddocEnvelope{NaturalKey: rows[i].NaturalKey}).AddMdEmphasis(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest mdEmphasis row %d: %w", i, err)
 			return
@@ -842,6 +922,12 @@ func (inst *MddocStore) IngestMdEmphasis(ts time.Time, rows []MdEmphasis) (err e
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
 func (inst *MddocStore) IngestMdTag(ts time.Time, rows []MdTag) (err error) {
+	return inst.IngestMdTagCtx(context.Background(), ts, rows)
+}
+
+// IngestMdTagCtx is IngestMdTag with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *MddocStore) IngestMdTagCtx(ctx context.Context, ts time.Time, rows []MdTag) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].Id]; dup {
@@ -849,7 +935,7 @@ func (inst *MddocStore) IngestMdTag(ts time.Time, rows []MdTag) (err error) {
 			return
 		}
 		seen[rows[i].Id] = struct{}{}
-		err = inst.Begin(rows[i].Id, ts, MddocEnvelope{NaturalKey: rows[i].NaturalKey}).AddMdTag(rows[i]).Commit()
+		err = inst.BeginCtx(ctx, rows[i].Id, ts, MddocEnvelope{NaturalKey: rows[i].NaturalKey}).AddMdTag(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest mdTag row %d: %w", i, err)
 			return
@@ -895,8 +981,12 @@ func (inst *MddocStore) Flush(ctx context.Context) (n int, err error) {
 	}
 	records = append(inst.pending, records...)
 	inst.pending = nil
+	// One batch id per insert attempt (ADR-0295 §SD6): the executor stamps
+	// it, an observing executor reports it, the write observer is told it.
+	batch := recordstore.NewBatchId()
+	bctx := recordstore.WithBatchId(ctx, batch)
 	if len(records) > 0 {
-		err = inst.exec.InsertArrow(ctx, inst.tableName(), records)
+		err = inst.exec.InsertArrow(bctx, inst.tableName(), records)
 		if err != nil {
 			inst.pending = records
 			err = eh.Errorf("insert into %s: %w", inst.tableName(), err)
@@ -912,6 +1002,9 @@ func (inst *MddocStore) Flush(ctx context.Context) (n int, err error) {
 		inst.notifyFlush(k) // durable now — release the views' dirty-window pins
 	}
 	clear(inst.dirty) // flushed — ClickHouse now serves the written state
+	if len(inst.written) > 0 {
+		inst.cfg.WriteObserver.Durable(bctx, batch, inst.takeWritten())
+	}
 	return
 }
 
@@ -952,6 +1045,9 @@ func (inst *MddocStore) DiscardPending() {
 		inst.notifyWrite(k, nil) // the cached write never became durable — invalidate
 	}
 	clear(inst.dirty) // nothing local remains — ClickHouse is the truth
+	if len(inst.written) > 0 {
+		inst.cfg.WriteObserver.Discarded(inst.takeWritten())
+	}
 }
 
 // Close discards everything unflushed and releases the store's Arrow
