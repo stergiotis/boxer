@@ -316,7 +316,10 @@ mod tests {
     #[test]
     fn phosphor_alone_does_not_lead_the_chains() {
         let phosphor = include_bytes!("../../assets/fonts/phosphor/Phosphor.ttf").to_vec();
-        let config = AppConfig { phosphor_font_ttf: "phosphor".to_owned(), ..AppConfig::default() };
+        let config = AppConfig {
+            phosphor_font_ttf: "phosphor".to_owned(),
+            ..AppConfig::default()
+        };
         let ctx = egui::Context::default();
         let mut read = |_: &str| -> std::io::Result<Vec<u8>> { Ok(phosphor.clone()) };
         load_custom_fonts_with(&ctx, &config, &mut read);
@@ -324,7 +327,10 @@ mod tests {
         let defaults = egui::FontDefinitions::default();
         for family in [egui::FontFamily::Proportional, egui::FontFamily::Monospace] {
             let chain = ctx.fonts(|f| f.definitions().families[&family].clone());
-            assert_eq!(chain[0], defaults.families[&family][0], "{family:?}: {chain:?}");
+            assert_eq!(
+                chain[0], defaults.families[&family][0],
+                "{family:?}: {chain:?}"
+            );
             assert_eq!(chain[1], "phosphor", "{family:?}: {chain:?}");
         }
     }
