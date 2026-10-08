@@ -195,8 +195,16 @@ func (inst *Client) Ping(ctx context.Context) (err error) {
 // body shape, and `wait_end_of_query=1` makes the case impossible at the cost
 // of buffering the whole reply server-side.
 func (inst *Client) Exec(ctx context.Context, sql string) (err error) {
+	return inst.ExecSettings(ctx, sql, nil)
+}
+
+// ExecSettings is Exec with ClickHouse settings riding the request URL — the
+// channel a client-side setting such as log_comment takes (ADR-0295 §SD3). A
+// setting in the statement's own SETTINGS clause wins over one sent here. Nil
+// or empty settings behave exactly like Exec.
+func (inst *Client) ExecSettings(ctx context.Context, sql string, settings map[string]string) (err error) {
 	var body io.ReadCloser
-	body, err = inst.postSQL(ctx, sql, nil)
+	body, err = inst.postSQL(ctx, sql, nil, settings)
 	if err != nil {
 		return
 	}
@@ -208,7 +216,14 @@ func (inst *Client) Exec(ctx context.Context, sql string) (err error) {
 // Query POSTs sql and returns the response body for caller consumption.
 // Caller MUST close. Format is whatever the SQL FORMAT clause specifies.
 func (inst *Client) Query(ctx context.Context, sql string) (body io.ReadCloser, err error) {
-	body, err = inst.postSQL(ctx, sql, nil)
+	body, err = inst.postSQL(ctx, sql, nil, nil)
+	return
+}
+
+// QuerySettings is Query with ClickHouse settings riding the request URL, as
+// ExecSettings. Caller MUST close the returned body.
+func (inst *Client) QuerySettings(ctx context.Context, sql string, settings map[string]string) (body io.ReadCloser, err error) {
+	body, err = inst.postSQL(ctx, sql, nil, settings)
 	return
 }
 
@@ -225,7 +240,7 @@ func (inst *Client) Query(ctx context.Context, sql string) (body io.ReadCloser, 
 //
 // Caller MUST close the returned body.
 func (inst *Client) QueryParams(ctx context.Context, sql string, params map[string]string) (body io.ReadCloser, err error) {
-	body, err = inst.postSQL(ctx, sql, params)
+	body, err = inst.postSQL(ctx, sql, params, nil)
 	return
 }
 
@@ -233,6 +248,12 @@ func (inst *Client) QueryParams(ctx context.Context, sql string, params map[stri
 // The records slice may be empty (no-op). Caller is responsible for
 // releasing the records after the call returns.
 func (inst *Client) InsertArrow(ctx context.Context, table string, records []arrow.RecordBatch) (err error) {
+	return inst.InsertArrowSettings(ctx, table, records, nil)
+}
+
+// InsertArrowSettings is InsertArrow with ClickHouse settings riding the
+// request URL, as ExecSettings.
+func (inst *Client) InsertArrowSettings(ctx context.Context, table string, records []arrow.RecordBatch, settings map[string]string) (err error) {
 	if len(records) == 0 {
 		return
 	}
@@ -255,7 +276,7 @@ func (inst *Client) InsertArrow(ctx context.Context, table string, records []arr
 		err = eh.Errorf("chclient insertArrow: close writer: %w", err)
 		return
 	}
-	fullURL := inst.queryURL("INSERT INTO " + table + " FORMAT Arrow")
+	fullURL := withSettings(inst.queryURL("INSERT INTO "+table+" FORMAT Arrow"), settings)
 	var req *http.Request
 	req, err = http.NewRequestWithContext(ctx, http.MethodPost, fullURL, buf)
 	if err != nil {
@@ -267,7 +288,9 @@ func (inst *Client) InsertArrow(ctx context.Context, table string, records []arr
 	var resp *http.Response
 	resp, err = inst.http.Do(req)
 	if err != nil {
-		err = eb.Build().Str("url", fullURL).Errorf("chclient insertArrow: do: %w", err)
+		// cfg.URL, not fullURL: the latter carries the settings, and a stamp
+		// names a principal that has no place in a log line.
+		err = eb.Build().Str("url", inst.cfg.URL).Str("table", table).Errorf("chclient insertArrow: do: %w", err)
 		return
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -413,8 +436,26 @@ func (inst *Client) paramsURL(params map[string]string) (u string) {
 	return
 }
 
-func (inst *Client) postSQL(ctx context.Context, sql string, params map[string]string) (body io.ReadCloser, err error) {
-	reqURL := inst.paramsURL(params)
+// withSettings appends settings to u as URL query fields, the channel the
+// ClickHouse HTTP interface reads request-level settings from. Empty settings
+// leave u untouched.
+func withSettings(u string, settings map[string]string) string {
+	if len(settings) == 0 {
+		return u
+	}
+	vals := make(url.Values, len(settings))
+	for k, v := range settings {
+		vals.Set(k, v)
+	}
+	sep := "?"
+	if strings.Contains(u, "?") {
+		sep = "&"
+	}
+	return u + sep + vals.Encode()
+}
+
+func (inst *Client) postSQL(ctx context.Context, sql string, params map[string]string, settings map[string]string) (body io.ReadCloser, err error) {
+	reqURL := withSettings(inst.paramsURL(params), settings)
 	var req *http.Request
 	req, err = http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader(sql))
 	if err != nil {

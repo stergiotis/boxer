@@ -41,6 +41,16 @@
 // `wait_end_of_query=1` setting would trade streaming (and server memory) for
 // a clean error code; it is deliberately not set here.
 //
+// # Identity stamp
+//
+// Every call stamps the context's call identity and batch id into the
+// log_comment setting (ADR-0295 §SD3, [recordstore.LogComment]), so a statement
+// a store issues is attributable in system.query_log. A context carrying
+// neither sends no setting. A statement's own SETTINGS log_comment wins over
+// the stamp, which is what keeps the queryrunsd self-capture exclusion intact.
+// A server user held at readonly=1 refuses any request that changes a setting;
+// build the executor with [Options.DisableStamp] for such a user.
+//
 // # Concurrency
 //
 // A Client is goroutine-safe and so is this wrapper, but a generated store is
@@ -77,10 +87,23 @@ const arrowStreamFormat = " FORMAT ArrowStream"
 type Executor struct {
 	client *chclient.Client
 	alloc  memory.Allocator
+	opts   Options
+}
+
+// Options parameterizes [NewWithOptions]. The zero value is what [New] uses.
+type Options struct {
+	// DisableStamp sends no log_comment, whatever the context carries — for a
+	// server user held at readonly=1, which refuses the setting.
+	DisableStamp bool
 }
 
 // New wraps client. A nil alloc takes the Go allocator, matching chexec.
 func New(client *chclient.Client, alloc memory.Allocator) (inst *Executor, err error) {
+	return NewWithOptions(client, alloc, Options{})
+}
+
+// NewWithOptions is New with options.
+func NewWithOptions(client *chclient.Client, alloc memory.Allocator, opts Options) (inst *Executor, err error) {
 	if client == nil {
 		err = eh.Errorf("storeexec: nil client")
 		return
@@ -88,8 +111,21 @@ func New(client *chclient.Client, alloc memory.Allocator) (inst *Executor, err e
 	if alloc == nil {
 		alloc = memory.NewGoAllocator()
 	}
-	inst = &Executor{client: client, alloc: alloc}
+	inst = &Executor{client: client, alloc: alloc, opts: opts}
 	return
+}
+
+// settings is the request-level settings of a call made under ctx: the
+// identity stamp, or nil when there is nothing to stamp.
+func (inst *Executor) settings(ctx context.Context) map[string]string {
+	if inst.opts.DisableStamp {
+		return nil
+	}
+	lc := recordstore.LogComment(ctx)
+	if lc == "" {
+		return nil
+	}
+	return map[string]string{"log_comment": lc}
 }
 
 // Exec runs sql for its side effect. See the package comment on single
@@ -102,7 +138,7 @@ func New(client *chclient.Client, alloc memory.Allocator) (inst *Executor, err e
 // discards, so it reads here as success. That doc carries the detail and the
 // reason nothing catches it yet.
 func (inst *Executor) Exec(ctx context.Context, sql string) (err error) {
-	err = inst.client.Exec(ctx, sql)
+	err = inst.client.ExecSettings(ctx, sql, inst.settings(ctx))
 	if err != nil {
 		err = eh.Errorf("storeexec: exec: %w", err)
 	}
@@ -118,7 +154,7 @@ func (inst *Executor) Exec(ctx context.Context, sql string) (err error) {
 // (nil, err) pair.
 func (inst *Executor) QueryArrow(ctx context.Context, sql string) iter.Seq2[arrow.RecordBatch, error] {
 	return func(yield func(arrow.RecordBatch, error) bool) {
-		body, err := inst.client.Query(ctx, withArrowStreamFormat(sql))
+		body, err := inst.client.QuerySettings(ctx, withArrowStreamFormat(sql), inst.settings(ctx))
 		if err != nil {
 			yield(nil, eh.Errorf("storeexec: query: %w", err))
 			return
@@ -169,7 +205,7 @@ func (inst *Executor) QueryArrow(ctx context.Context, sql string) iter.Seq2[arro
 // acknowledged. The records are not retained; the caller releases them after
 // return.
 func (inst *Executor) InsertArrow(ctx context.Context, table string, records []arrow.RecordBatch) (err error) {
-	err = inst.client.InsertArrow(ctx, table, records)
+	err = inst.client.InsertArrowSettings(ctx, table, records, inst.settings(ctx))
 	if err != nil {
 		err = eb.Build().Str("table", table).Errorf("storeexec: insert failed: %w", err)
 	}

@@ -6,13 +6,18 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/db/clickhouse/logcomment"
+	"github.com/stergiotis/boxer/public/identity/callident"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
+	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -175,4 +180,64 @@ func TestExec_PropagatesServerError(t *testing.T) {
 func TestNewRejectsNilClient(t *testing.T) {
 	_, err := New(nil, nil)
 	require.Error(t, err)
+}
+
+// Each verb carries the context's identity as the log_comment URL setting
+// (ADR-0295 §SD3); a bare context, or DisableStamp, carries none.
+func TestExecutor_StampsLogComment(t *testing.T) {
+	var got []url.Values
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		got = append(got, r.URL.Query())
+		if strings.Contains(r.URL.Query().Get("query"), "INSERT") {
+			return
+		}
+		_, _ = w.Write(arrowStreamFixture(t, 1))
+	}
+	exec, alloc := newTestExecutor(t, handler)
+	defer alloc.AssertSize(t, 0)
+
+	ci := callident.CallIdentity{
+		Origin: callident.Origin{Run: "r1", App: "example.grant"},
+		Claims: callident.Claims{Principal: "p:1", Purpose: "audit"},
+	}
+	ctx := recordstore.WithBatchId(callident.WithCallIdentity(context.Background(), ci), "B9")
+	want := logcomment.Stamp{RunId: "r1", App: "example.grant", Principal: "p:1", Purpose: "audit", Batch: "B9"}
+
+	require.NoError(t, exec.Exec(ctx, "SELECT 1"))
+	for rec, err := range exec.QueryArrow(ctx, "SELECT 1") {
+		require.NoError(t, err)
+		rec.Release()
+	}
+	rec := arrowRecord(t)
+	require.NoError(t, exec.InsertArrow(ctx, "db.t", []arrow.RecordBatch{rec}))
+	rec.Release()
+	require.Len(t, got, 3)
+	for i, q := range got {
+		st, ok := logcomment.Parse(q.Get("log_comment"))
+		require.True(t, ok, "call %d: %q", i, q.Get("log_comment"))
+		assert.Equal(t, want, st, "call %d", i)
+	}
+
+	got = nil
+	require.NoError(t, exec.Exec(context.Background(), "SELECT 1"))
+	assert.False(t, got[0].Has("log_comment"), "nothing to stamp, no setting")
+
+	got = nil
+	quiet, err := NewWithOptions(exec.client, alloc, Options{DisableStamp: true})
+	require.NoError(t, err)
+	require.NoError(t, quiet.Exec(ctx, "SELECT 1"))
+	assert.False(t, got[0].Has("log_comment"), "DisableStamp sends none")
+}
+
+func arrowRecord(t *testing.T) arrow.RecordBatch {
+	t.Helper()
+	alloc := memory.NewGoAllocator()
+	b := array.NewInt64Builder(alloc)
+	defer b.Release()
+	b.Append(1)
+	arr := b.NewArray()
+	defer arr.Release()
+	schema := arrow.NewSchema([]arrow.Field{{Name: "v", Type: arrow.PrimitiveTypes.Int64}}, nil)
+	return array.NewRecordBatch(schema, []arrow.Array{arr}, 1)
 }
