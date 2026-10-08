@@ -85,14 +85,15 @@ func TestLivePipelineEndToEnd(t *testing.T) {
 	require.NoError(t, cli.Exec(ctx, "SYSTEM FLUSH LOGS"))
 	waitForFactCount(t, cli, probe1, 1)
 
-	// The lifted stamp: the run_id must be queryable via the
-	// MembRuntimeRun mixed membership's high-card parameter.
-	lmrCol := "`tv:symbol:lmr:lmr:u64:1247:::0::data`"
-	mrhpCol := "`tv:symbol:mrhp:mrhp:y:4:::0::data`"
+	// The lifted stamp: the run_id is a symbol value under the
+	// MembRuntimeRun low-card membership, the shape chstore writes it in and
+	// every run-id reader matches on.
+	lrCol := "`tv:symbol:lr:lr:u64:1247:::0::data`"
+	valCol := "`tv:symbol:value:val:s:124::I:0::data`"
 	sql := fmt.Sprintf(
 		"SELECT count() FROM %s.facts WHERE `id:naturalKey:y:4::0:` = '%s' AND has(%s, %d) AND has(%s, '%s')",
-		scratchDb, probe1, lmrCol, vocab.MembRuntimeRun.GetId().Value(), mrhpCol, runId)
-	require.Equal(t, "1", queryScalar(t, cli, sql), "the stamp's run_id must be lifted into the mixed membership")
+		scratchDb, probe1, lrCol, vocab.MembRuntimeRun.GetId().Value(), valCol, runId)
+	require.Equal(t, "1", queryScalar(t, cli, sql), "the stamp's run_id must be lifted into the run membership")
 
 	// --- S2 readback: the history pivots reconstruct the captured run ---
 	// Read the full cap, not a small window. The scratch database is this
