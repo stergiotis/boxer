@@ -45,6 +45,9 @@ func TestBuildSurface(t *testing.T) {
 			{At: "260", Task: "task-2", Key: "b", Instance: "12", App: "play", Operation: "set_sql", Effect: "document", Decision: "final", Phase: "rendered"},
 			{At: "270", Task: "task-2", Key: "c", Instance: "12", App: "play", Operation: "get_sql", Effect: "none", Decision: "dispatch", Phase: "input_required"},
 			{At: "280", Task: "task-2", Key: "d", App: "mdedit", Operation: agent.ActionOpenWindow, Decision: "final", Phase: "completed"},
+			// The dispatcher's own read and a capture are no cell (ADR-0283 §SD1).
+			{At: "285", Key: "e", Instance: "0", Operation: agent.ActionDescribe, Decision: "final", Phase: "completed"},
+			{At: "286", Task: "task-2", Key: "f", Instance: "12", Operation: agent.ActionCapture, Decision: "final", Phase: "completed"},
 		},
 	}
 	m := buildSurface(in)
@@ -75,6 +78,7 @@ func TestBuildSurface(t *testing.T) {
 
 	for _, c := range m.cells {
 		assert.NotEqual(t, uint64(3), c.instance, "a window whose app offers no operation, neither granted nor used, is not drawn")
+		assert.True(t, agent.OnSurface(c.op), "%s is no cell", c.op)
 	}
 	n, used, calls := m.statusCounts()
 	assert.Equal(t, 4, calls)
@@ -95,4 +99,16 @@ func TestBuildSurface(t *testing.T) {
 
 func TestSqlStringQuotes(t *testing.T) {
 	assert.Equal(t, `'a\'b\\c'`, sqlString(`a'b\c`))
+}
+
+// A call bucketed as done has an outcome: accepted and running are in
+// flight, as the trail views count them (opwire.ResultE).
+func TestUseFollowsTheSharedClassification(t *testing.T) {
+	assert.Equal(t, useRunning, useOf("accepted"))
+	assert.Equal(t, useRunning, useOf("running"))
+	assert.Equal(t, useDone, useOf("applied"))
+	assert.Equal(t, useAsked, useOf("input_required"))
+	assert.Equal(t, useProposed, useOf("proposed"))
+	assert.Equal(t, useRefused, useOf("stale"))
+	assert.Equal(t, useFailed, useOf("expired"))
 }

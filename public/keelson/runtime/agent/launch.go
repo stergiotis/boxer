@@ -122,16 +122,29 @@ func (inst *Service) launch(msg *app.Msg) (rep wireLaunchReply) {
 		rep.Reason = out.Reason
 		return
 	}
+	if req.Key == "" {
+		inst.mu.Unlock()
+		rep.Reason = "every call carries a key"
+		return
+	}
+	// A repeat of a key answers with the first launch, and opens nothing
+	// (ADR-0277 §SD6).
+	if prev, seen := t.keys[req.Key]; seen {
+		rep = launchReplyOf(prev)
+		inst.mu.Unlock()
+		return
+	}
 	id, known := inst.resolveApp(req.App)
 	le := t.launches[id]
 	// The launch leaves an action row naming the window it opened, so which
 	// task opened a window is a join on the window's key (ADR-0277 §SD7).
-	inst.nextCall++
-	rec := &callRec{key: req.Key, callId: t.id + "-" + strconv.FormatUint(inst.nextCall, 10), app: id,
+	rec := &callRec{key: req.Key, callId: inst.mintCallId(t), app: id,
 		spec: app.OperationSpec{Name: launchOperation}, turn: req.Turn,
 		cause: causeOf(wireCall{ModelCall: req.ModelCall, ToolCall: req.ToolCall, ToolIndex: req.ToolIndex}), created: time.Now()}
+	t.keys[req.Key] = rec
 	defer func() {
 		phase := opwire.PhaseCompleted
+		inst.mu.Lock()
 		switch {
 		case rep.Ok:
 			rec.instance = rep.Instance
@@ -140,7 +153,10 @@ func (inst *Service) launch(msg *app.Msg) (rep wireLaunchReply) {
 		default:
 			phase = opwire.PhaseRefused
 		}
-		inst.record(t, rec, "final", phaseOutcome(phase, rep.Reason))
+		rec.outcome = phaseOutcome(phase, rep.Reason)
+		out := rec.outcome
+		inst.mu.Unlock()
+		inst.record(t, rec, "final", out)
 	}()
 	switch {
 	case t.ceiling.refuseLaunch() != "":
@@ -165,9 +181,9 @@ func (inst *Service) launch(msg *app.Msg) (rep wireLaunchReply) {
 	if err != nil {
 		inst.mu.Lock()
 		le.used--
-		inst.mu.Unlock()
 		rep.Reason = "the host did not open it: " + err.Error()
 		rec.outcome = phaseOutcome(opwire.PhaseFailed, rep.Reason)
+		inst.mu.Unlock()
 		return
 	}
 	load, loadReason := inst.waitLoaded(key)
@@ -183,6 +199,21 @@ func (inst *Service) launch(msg *app.Msg) (rep wireLaunchReply) {
 	}
 	rep.Ok, rep.Instance = true, key
 	rep.Load, rep.LoadReason = load.String(), loadReason
+	return
+}
+
+// launchReplyOf is the reply to a repeated launch key: the first launch's
+// outcome, or that it has not finished. The caller holds mu.
+func launchReplyOf(prev *callRec) (rep wireLaunchReply) {
+	rep.V = wireVersion
+	switch prev.outcome.Phase {
+	case opwire.PhaseCompleted:
+		rep.Ok, rep.Instance = true, prev.instance
+	case opwire.PhaseUnspecified:
+		rep.Reason = "a launch with this key is still opening"
+	default:
+		rep.Reason = prev.outcome.Reason
+	}
 	return
 }
 
@@ -262,9 +293,10 @@ type Launched struct {
 
 // Launch opens a window of an app the grant names (an id or a subject
 // alias), with an optional launch config in the app's LaunchKind; the
-// window joins the task.
-func (inst *Client) Launch(ctx context.Context, handle string, appName string, kind string, config []byte) (out Launched, err error) {
-	return inst.LaunchFrom(ctx, CallRequest{Handle: handle}, appName, kind, config)
+// window joins the task. key is the call's key: a repeat answers with the
+// first launch and opens nothing (ADR-0277 §SD6).
+func (inst *Client) Launch(ctx context.Context, handle string, key string, appName string, kind string, config []byte) (out Launched, err error) {
+	return inst.LaunchFrom(ctx, CallRequest{Handle: handle, Key: key}, appName, kind, config)
 }
 
 // LaunchFrom is Launch for a model's tool call: from names the task's

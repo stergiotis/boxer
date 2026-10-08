@@ -183,6 +183,7 @@ func TestTheTrailNamesWhatAskedAndWhoDecided(t *testing.T) {
 	r.host.frame(r.docKey)
 	_, err = r.cli.TurnAsked(ctx, g.Handle, Asked{Conversation: "chat-1", Turn: "turn-2"})
 	require.NoError(t, err)
+	require.NoError(t, r.cli.Detach(ctx, g.Handle, r.docKey))
 	require.NoError(t, r.cli.StopWith(ctx, g.Handle, StopRequest{ByPerson: true, Reason: "the person stopped it in the chat"}))
 	r.svc.Close()
 
@@ -230,6 +231,16 @@ func TestTheTrailNamesWhatAskedAndWhoDecided(t *testing.T) {
 	require.True(t, req.Cause.Has, "the request names the model call that asked")
 	assert.Equal(t, uint32(2), req.Cause.Val.ToolIndex)
 	assert.Equal(t, "turn-1", req.Conversation.Val.Turn.Val)
+	require.True(t, req.AgentGrant.Val.Request.Has, "the request names itself")
+	assert.False(t, req.Delegation.Has, "no task yet")
+	require.Len(t, byEvent[trail.GrantEventApproved], 1)
+	approved := byEvent[trail.GrantEventApproved][0]
+	assert.Equal(t, req.AgentGrant.Val.Request, approved.AgentGrant.Val.Request, "the decision names the request it answers")
+	require.True(t, approved.Cause.Has, "and the model call that asked")
+	assert.Equal(t, uint32(2), approved.Cause.Val.ToolIndex)
+	require.True(t, approved.Delegation.Has)
+	assert.Equal(t, g.Task, approved.Delegation.Val.Task, "so the request joins the task it started")
+	assert.Equal(t, "edit the doc", approved.AgentGrant.Val.Plan)
 	require.Len(t, byEvent[trail.GrantEventPaused], 1, "two changes, one pause")
 	paused := byEvent[trail.GrantEventPaused][0].AgentGrant.Val
 	assert.Equal(t, "person", paused.DecidedBy)
@@ -238,6 +249,10 @@ func TestTheTrailNamesWhatAskedAndWhoDecided(t *testing.T) {
 	resumed := byEvent[trail.GrantEventResumed][0]
 	assert.Equal(t, "coordinator", resumed.AgentGrant.Val.DecidedBy)
 	assert.Equal(t, "turn-2", resumed.Conversation.Val.Turn.Val)
+	require.Len(t, byEvent[trail.GrantEventDetached], 1, "the window left the grant")
+	detached := byEvent[trail.GrantEventDetached][0].AgentGrant.Val
+	assert.Equal(t, "coordinator", detached.DecidedBy)
+	assert.Empty(t, detached.Entries, "the grant as it stands after")
 	require.Len(t, byEvent[trail.GrantEventEnded], 1)
 	ended := byEvent[trail.GrantEventEnded][0].AgentGrant.Val
 	assert.Equal(t, "person", ended.DecidedBy)
@@ -264,7 +279,8 @@ func TestTheCaptureRecordLandsOnTheTrail(t *testing.T) {
 	defer rec.Close()
 	r := newRigWith(t, func(cfg *Config) { cfg.TestGrants, cfg.Trail = true, rec })
 	g := r.grant(ModeObserve)
-	out, err := r.cli.CaptureWith(ctx, CaptureRequest{Handle: g.Handle, Instances: []uint64{7}, Format: CaptureFormatPng, Key: "png"})
+	out, err := r.cli.CaptureWith(ctx, CaptureRequest{Handle: g.Handle, Instances: []uint64{7}, Format: CaptureFormatPng, Key: "png",
+		Asked: Asked{Conversation: "chat-1", Turn: "turn-1", ModelCall: "llm-1", ToolCall: "call_0", ToolIndex: 1}})
 	require.NoError(t, err)
 	require.Equal(t, "completed", out.Phase, out.Reason)
 	out, err = r.cli.CaptureWith(ctx, CaptureRequest{Handle: g.Handle, Instances: []uint64{7}, Format: "gif", Key: "gif"})
@@ -284,6 +300,30 @@ func TestTheCaptureRecordLandsOnTheTrail(t *testing.T) {
 		assert.Equal(t, g.Task, ent.Delegation.Val.Task)
 	}
 	png := byFormat["png"]
+	// The capture row joins its action rows on the dispatcher's call, and
+	// the model call that asked through its Cause.
+	actions, err := rec.Scan(func(st *trail.TrailStore) iter.Seq2[*trail.TrailEntity, error] {
+		return st.ScanAgentAction(ctx, recordstore.ScanOpts{})
+	})
+	require.NoError(t, err)
+	for _, ent := range rows {
+		if ent.AgentCapture.Val.Format != CaptureFormatPng {
+			continue
+		}
+		require.True(t, ent.Delegation.Val.Call.Has, "the capture names the dispatcher's call")
+		require.True(t, ent.Cause.Has)
+		assert.Equal(t, "llm-1", ent.Cause.Val.ModelCall)
+		assert.Equal(t, uint32(1), ent.Cause.Val.ToolIndex)
+		var joined int
+		for _, a := range actions {
+			if a.AgentAction.Val.Key == "png" {
+				require.True(t, a.Delegation.Val.Call.Has)
+				assert.Equal(t, ent.Delegation.Val.Call.Val, a.Delegation.Val.Call.Val)
+				joined++
+			}
+		}
+		assert.Positive(t, joined, "the capture's action rows share its call")
+	}
 	assert.Equal(t, "permit", png.Decision)
 	assert.Equal(t, "grant", png.Policy)
 	assert.Equal(t, []string{"scope@1"}, png.Obligations)

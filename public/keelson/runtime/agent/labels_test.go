@@ -116,7 +116,7 @@ func TestLaunchReportsAWindowThatFailedOrIsStillOpening(t *testing.T) {
 	r.host.mu.Lock()
 	r.host.openAs, r.host.openReason = opwire.LoadFailed, "no database"
 	r.host.mu.Unlock()
-	got, err := r.cli.Launch(ctx, g.Handle, "doc", "", nil)
+	got, err := r.cli.Launch(ctx, g.Handle, "l1", "doc", "", nil)
 	require.NoError(t, err, "the window exists: it shows the person the failure")
 	assert.Equal(t, "failed", got.Load)
 	assert.Equal(t, "no database", got.LoadReason)
@@ -125,7 +125,7 @@ func TestLaunchReportsAWindowThatFailedOrIsStillOpening(t *testing.T) {
 	r.host.openAs, r.host.openReason = opwire.LoadOpening, ""
 	r.host.mu.Unlock()
 	start := time.Now()
-	got2, err := r.cli.Launch(ctx, g.Handle, "doc", "", nil)
+	got2, err := r.cli.Launch(ctx, g.Handle, "l2", "doc", "", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "opening", got2.Load)
 	assert.GreaterOrEqual(t, time.Since(start), launchSettle, "launch waited its bound")
@@ -145,7 +145,7 @@ func TestATaskOpensTheWindowsItsGrantAllows(t *testing.T) {
 	ctx := context.Background()
 	g, err := r.cli.Request(ctx, GrantRequest{Launches: []GrantLaunch{{App: "doc", Mode: ModeAct, Count: 1}}})
 	require.NoError(t, err)
-	got, err := r.cli.Launch(ctx, g.Handle, "doc", "", nil)
+	got, err := r.cli.Launch(ctx, g.Handle, "l3", "doc", "", nil)
 	require.NoError(t, err)
 	key := got.Instance
 	assert.Equal(t, "ready", got.Load, "a host that does not track loading reports its windows ready")
@@ -154,9 +154,17 @@ func TestATaskOpensTheWindowsItsGrantAllows(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "completed", out.Phase, "the opened window joins the task")
 
-	_, err = r.cli.Launch(ctx, g.Handle, "doc", "", nil)
+	again, err := r.cli.Launch(ctx, g.Handle, "l3", "doc", "", nil)
+	require.NoError(t, err, "a repeated key answers with the first launch")
+	assert.Equal(t, key, again.Instance, "and opens nothing")
+
+	_, err = r.cli.Launch(ctx, g.Handle, "l4", "doc", "", nil)
 	var refused *RefusedError
 	require.True(t, errors.As(err, &refused), "one window was allowed")
+
+	_, err = r.cli.Launch(ctx, g.Handle, "", "doc", "", nil)
+	require.True(t, errors.As(err, &refused))
+	assert.Contains(t, refused.Reason, "key")
 
 	require.NoError(t, r.cli.Stop(ctx, g.Handle))
 	assert.Equal(t, g.Task, r.svc.leftByTask(key), "the window passes to the person")

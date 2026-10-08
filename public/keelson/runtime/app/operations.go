@@ -444,9 +444,12 @@ type OnBehalfOf struct {
 }
 
 // DelegationI is what a host service that reaches outside asks about an
-// on-behalf-of context: is the task live at this epoch, and does its grant
-// list the destination? The host's dispatcher implements it.
+// on-behalf-of context: is the call one the dispatcher sent to the sender's
+// window ([CallContextI]), and does the task's grant list the destination?
+// A service records the task on its row only once the dispatcher has
+// attested it (ADR-0277 §SD1). The host's dispatcher implements it.
 type DelegationI interface {
+	CallContextI
 	AllowDestination(task string, epoch uint64, destination string) (ok bool, reason string)
 }
 

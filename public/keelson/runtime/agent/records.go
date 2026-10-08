@@ -186,12 +186,17 @@ func (inst *Service) recordCapture(t *task, rec *callRec, d capture.Decision, in
 	}
 	rec.capture.recorded = true
 	r := ActionRecord{At: time.Now(), Key: rec.key, CallId: rec.callId, Instance: rec.instance, App: rec.app,
-		Turn: rec.turn, Actor: rec.actor, ActorInstance: rec.actorInstance}
+		Turn: rec.turn, Actor: rec.actor, ActorInstance: rec.actorInstance, Conversation: rec.conversation}
+	if c := rec.cause; c.Has {
+		r.ModelCall, r.ToolCallId, r.ToolIndex = c.Val.ModelCall, c.Val.ToolCall.Val, c.Val.ToolIndex
+	}
 	if t != nil {
 		// The caller holds mu.
 		r.Task, r.Actor, r.ActorInstance, r.Epoch, r.Conversation = t.id, t.actor, t.actorInstance, t.epoch, t.conversation
 	}
-	c, _, _ := TrailRowOf(inst.cfg.Trail, r)
+	// The capture row joins its action rows on the task and the
+	// dispatcher's call, and the model call that asked through its Cause.
+	c, cause, _ := TrailRowOf(inst.cfg.Trail, r)
 	decision := "deny"
 	if d.Effect == capture.EffectPermit {
 		decision = "permit"
@@ -204,7 +209,7 @@ func (inst *Service) recordCapture(t *task, rec *callRec, d capture.Decision, in
 	if reason != "" {
 		row.Reason = []string{reason}
 	}
-	if err := inst.cfg.Trail.AgentCapture(r.At, c, row); err != nil {
+	if err := inst.cfg.Trail.AgentCapture(r.At, c, cause, row); err != nil {
 		inst.log.Warn().Err(err).Str("task", r.Task).Str("key", r.Key).Msg("agent: buffer capture row")
 		return
 	}
@@ -299,8 +304,12 @@ func (inst *Service) grantEventAsked(event string, decidedBy string, reason stri
 		row.Plan, row.Entries, row.Launches, row.Destinations = t.plan, t.entryStrings(), t.launchStrings(), slices.Clone(t.destinations)
 		row.CallsBudget, row.DeadlineMs = uint32(max(t.callsBudget, 0)), t.deadline.UnixMilli()
 	}
-	if r != nil {
-		// What was asked for: not yet decided, or declined.
+	if r != nil && r.key != "" {
+		row.Request = option.Some(r.key)
+	}
+	if r != nil && event != trail.GrantEventApproved && event != trail.GrantEventWidened {
+		// What was asked for: not yet decided, or declined. A decision
+		// carries the grant as it stands after it.
 		row.Plan, row.Entries, row.Launches, row.Destinations = r.plan, r.wantedStrings(), nil, slices.Clone(r.destinations)
 		for _, l := range r.launches {
 			row.Launches = append(row.Launches, l.App+":"+l.Mode+":"+strconv.FormatUint(uint64(l.Count), 10))
@@ -313,7 +322,9 @@ func (inst *Service) grantEventAsked(event string, decidedBy string, reason stri
 		}
 		c.Conversation = option.Some(conv)
 	}
-	row.PlanDigest = trail.ContentDigest(row.Plan)
+	if row.Plan != "" {
+		row.PlanDigest = trail.ContentDigest(row.Plan)
+	}
 	if reason != "" {
 		row.Reason = []string{reason}
 	}

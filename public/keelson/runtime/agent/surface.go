@@ -174,4 +174,24 @@ const (
 	ActionRaise = verbRaise
 	// ActionPlace is placing one window.
 	ActionPlace = verbPlace
+	// ActionDescribe, ActionHelp and ActionList are the coordinator's reads
+	// of the surface, ActionCapture a capture and ActionDisclose a
+	// screenshot's view: the dispatcher's own, recorded but no cell of the
+	// surface (ADR-0283 §SD1).
+	ActionDescribe = "describe"
+	ActionHelp     = "help"
+	ActionList     = "list"
+	ActionCapture  = "capture"
+	ActionDisclose = "disclose"
 )
+
+// OnSurface says whether an action row's operation is a cell of the agent
+// surface (ADR-0283 §SD1): an app's operation, a launch or a desktop verb —
+// not one of the dispatcher's own reads, captures or disclosures.
+func OnSurface(operation string) (on bool) {
+	switch operation {
+	case ActionDescribe, ActionHelp, ActionList, ActionCapture, ActionDisclose:
+		return false
+	}
+	return true
+}

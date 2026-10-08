@@ -73,7 +73,7 @@ func (inst *Service) accept(p proposalRef) {
 	req.Expects = rec.proposal.expects
 	rec.proposal.taken = true
 	e := rec.entry
-	inst.grantEvent(trail.GrantEventConfirmed, "person", proposalReason(rec), p.t, nil)
+	inst.grantEventAsked(trail.GrantEventConfirmed, "person", proposalReason(rec), p.t, nil, rec.asked())
 	inst.mu.Unlock()
 	go inst.route(p.t, rec, req, rec.spec, e)
 }
@@ -84,8 +84,19 @@ func (inst *Service) rejectProposal(p proposalRef) {
 	defer inst.mu.Unlock()
 	if p.rec.outcome.Phase == opwire.PhaseProposed {
 		p.rec.outcome = phaseOutcome(opwire.PhaseRejected, "rejected by the person")
-		inst.grantEvent(trail.GrantEventDeclined, "person", proposalReason(p.rec), p.t, nil)
+		inst.grantEventAsked(trail.GrantEventDeclined, "person", proposalReason(p.rec), p.t, nil, p.rec.asked())
 	}
+}
+
+// asked is the turn and the model call that asked for the call, as a
+// grant event about it carries them: a confirmation or a decline joins its
+// action rows on the model call and the tool index (ADR-0277 §SD1).
+func (inst *callRec) asked() (w wireCause) {
+	w.Turn = inst.turn
+	if c := inst.cause; c.Has {
+		w.ModelCall, w.ToolCall, w.ToolIndex = c.Val.ModelCall, c.Val.ToolCall.Val, c.Val.ToolIndex
+	}
+	return
 }
 
 // proposalReason names the proposal a confirmation or a decline was about:

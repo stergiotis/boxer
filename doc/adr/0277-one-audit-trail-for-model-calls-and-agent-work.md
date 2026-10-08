@@ -419,6 +419,80 @@ Query runs reach the trail only while `queryrunsd` runs (ADR-0115). Play's
 history pane reports whether the capture view is refreshing, and its
 reader returns the task, call, epoch and window a run carries.
 
+### 2026-10-08 — a review of what the trail promises against what it writes
+
+A review of the trail for correctness, completeness, orthogonality and
+conciseness found places where the rows did not keep §SD1–§SD6. Each is now
+kept as follows.
+
+- **`Delegation` on a completion or a fetch is attested.** The model and
+  egress services took the task from the request and asked only whether
+  it was live and listed the destination, so any app knowing a task id
+  could stamp its work with it. Both now ask the dispatcher's
+  `CallContext` — the call must be one it sent to the sender's window —
+  as the bundle service does, and write the task only from that answer. A
+  context the dispatcher does not confirm is refused, and its row carries
+  no task. `app.DelegationI` includes the check.
+- **A flush does not hold up writers.** The recorder built rows and
+  inserted them under one lock, so a server that was down stalled every
+  writer for the flush's bound. A flush now swaps the buffer out and
+  inserts outside that lock. A batch the server did not take is held for
+  the next flush, up to `trail.MaxBacklogRows`; past it the oldest batches
+  are dropped and logged. Reads use a store of their own.
+- **A call whose write-ahead failed reads not durable**, even when a later
+  flush lands its rows: the request left first (§SD3).
+- **A repeated launch key opens nothing** (§SD6). `launch` answers a
+  repeat with the first launch, and refuses a call with no key, as the
+  other verbs do.
+- **Captures and window verbs carry the dispatcher's call**, and a capture
+  row carries the `Cause` of the model call that asked. A capture joins its
+  action rows on `(task, call)`.
+- **Grant events name their request.** `AgentGrant.Request` (membership
+  `agentGrantRequest`) is on the `requested`, `approved`, `widened` and
+  `refused` rows of one request; a request the host refuses on arrival was
+  never pending and has none. An approval or a widening carries the
+  request's `Cause` and turn beside the task it starts, so what was asked
+  joins the task by key. Confirmations and declines carry the proposed
+  call's `Cause`.
+- **A window leaving a grant is an event**: `detached`, decided by the
+  person, the coordinator or the host (a closed window). An event with no
+  plan has no plan digest.
+- **A failed model call reads as failed.** The call views' status is
+  `failed` when the row carries an error. `failed` counts as not done, as
+  `refused` and `incomplete` do. A truncation with nothing to hand over is
+  `Incomplete` too.
+- **One classification of phases.** `opwire.ResultE` sorts phases into
+  done, waiting, not done and in flight. The trail views' outcome columns
+  and the chat's analytics both bucket by it. Accepted and running are in
+  flight, never done.
+- **The views** (version 9) carry what the rows hold and they lacked: a
+  call's omitted range, a bundle's `column-datasets`, a grant's request
+  and a capture's cause. The call view's `retained-from` is
+  `messages-from`, the field's name.
+- **Test-only readers left the production API.** `Recorder.LlmCalls`,
+  `llm.ScanCalls` and `llm.RecordOf` had no caller outside tests.
+
+Recorded, not changed:
+
+- A message's digest and bytes cover its content. A tool call's arguments
+  and an image are not in them. An image has its own digest in
+  `LlmMessage.Images`, and a dispatched call's arguments have
+  `AgentAction.ArgsDigest`. A tool-only assistant message with Keep off
+  therefore has the digest of the empty string.
+- Two digest widths: `ContentDigest` keeps 128 bits; image, capture and
+  disclosure digests keep 256. Within each family a digest is compared
+  only with digests of the same width.
+- `LlmMessage.Images` packs media type, digest and size into one string;
+  a join to `AgentDisclosure.Digest` splits it.
+- Action, grant and disclosure rows carry the conversation and turn, not
+  the round; the round is the `Cause`'s model call's.
+- Which calls a conversation continues is kept in the model service's
+  memory, bounded by `KeepCalls`. After a restart, an eviction or a
+  write-ahead that failed, the next call writes the conversation from the
+  start, its text twice under Keep.
+- `AdhocDataset.Attested` is the presence of `Delegation` on a bundle row;
+  kept, since a bundle row says so in one column.
+
 ## References
 
 - [ADR-0191](./0191-runtime-instance-attribution.md) — the `(run id, instance key)` decision this extends to the generated kinds.

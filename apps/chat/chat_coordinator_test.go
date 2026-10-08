@@ -133,17 +133,22 @@ func (inst *noteHost) frames(ctx context.Context) {
 	}
 }
 
-// scriptedModel answers with one scripted reply per call.
+// scriptedModel answers with one scripted reply per call; past failAfter
+// calls, when set, it fails them as a cancelled turn would.
 type scriptedModel struct {
-	mu      sync.Mutex
-	replies []openaichat.CompletionResponse
-	seen    []openaichat.CompletionRequest
+	mu        sync.Mutex
+	replies   []openaichat.CompletionResponse
+	seen      []openaichat.CompletionRequest
+	failAfter int
 }
 
 func (inst *scriptedModel) Complete(_ context.Context, req openaichat.CompletionRequest) (openaichat.CompletionResponse, error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	inst.seen = append(inst.seen, req)
+	if inst.failAfter > 0 && len(inst.seen) > inst.failAfter {
+		return openaichat.CompletionResponse{}, context.Canceled
+	}
 	if len(inst.replies) == 0 {
 		return openaichat.CompletionResponse{Content: "nothing more", FinishReason: "stop"}, nil
 	}
@@ -640,4 +645,26 @@ func TestACallOnTheLastRoundIsNotMade(t *testing.T) {
 	assert.Contains(t, res.stopped, "past 24 rounds")
 	assert.Len(t, res.activity, defaultRounds-1, "the last round's call is not made")
 	assert.Len(t, res.calls, defaultRounds)
+}
+
+// A turn stopped after a round answered keeps that round's call in the
+// statistics: the host's trail holds it, and the panel must not drop it.
+func TestAStoppedTurnKeepsItsAnsweredCalls(t *testing.T) {
+	bus := inprocbus.NewInst(zerolog.Nop())
+	model := &scriptedModel{failAfter: 1, replies: []openaichat.CompletionResponse{
+		toolCall("c1", "request_access", `{"plan":"tidy the note","open":[{"app":"notes"}]}`),
+	}}
+	_, coord, cli, req, ctx := coordRig(t, bus, model, false)
+
+	_, err := runTurn(ctx, cli, coord, req, nil)
+	require.ErrorIs(t, err, context.Canceled)
+	answered := coord.answeredCalls()
+	require.Len(t, answered, 1, "the round that answered")
+
+	var st chatStats
+	st.addTurn("conv", "turn-1", time.Now(), time.Now().UnixMilli(), &turnResult{calls: answered}, context.Canceled)
+	require.Len(t, st.turns, 1)
+	assert.Equal(t, outcomeCancelled, st.turns[0].outcome)
+	assert.Equal(t, 1, st.turns[0].rounds)
+	assert.Len(t, st.calls, 1)
 }

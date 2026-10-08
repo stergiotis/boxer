@@ -184,11 +184,11 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	case SubjectDescribe:
 		rep, req := inst.describe(msg)
 		inst.reply(msg.Reply, rep)
-		inst.recordAsked(msg, nil, "describe", req.Key, req.Conversation, req.wireCause, req.App, rep.Ok, rep.Reason)
+		inst.recordAsked(msg, nil, ActionDescribe, req.Key, req.Conversation, req.wireCause, req.App, rep.Ok, rep.Reason)
 	case SubjectHelp:
 		rep, req := inst.help(msg)
 		inst.reply(msg.Reply, rep)
-		inst.recordAsked(msg, nil, "help", req.Key, req.Conversation, req.wireCause, req.App, rep.Ok, rep.Reason)
+		inst.recordAsked(msg, nil, ActionHelp, req.Key, req.Conversation, req.wireCause, req.App, rep.Ok, rep.Reason)
 	case SubjectRequest:
 		inst.reply(msg.Reply, inst.requestGrant(msg))
 	case SubjectCall:

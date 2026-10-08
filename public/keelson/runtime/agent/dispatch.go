@@ -555,12 +555,19 @@ func (inst *Service) expectsFor(t *task, req wireCall, spec app.OperationSpec) (
 	return
 }
 
+// mintCallId is the dispatcher's id for a call of t: the Delegation.Call
+// its action rows and what it causes carry (ADR-0277 §SD7). The caller
+// holds mu.
+func (inst *Service) mintCallId(t *task) (id string) {
+	inst.nextCall++
+	return t.id + "-" + strconv.FormatUint(inst.nextCall, 10)
+}
+
 // route sends a checked call to its instance and settles what it answers.
 func (inst *Service) route(t *task, rec *callRec, req wireCall, spec app.OperationSpec, e *entry) {
 	inst.mu.Lock()
 	expects := inst.expectsFor(t, req, spec)
-	inst.nextCall++
-	rec.callId = t.id + "-" + strconv.FormatUint(inst.nextCall, 10)
+	rec.callId = inst.mintCallId(t)
 	rec.req, rec.entry = req, e
 	rec.req.Expects = expects
 	alias := e.alias
@@ -999,7 +1006,8 @@ func (inst *Service) capture(msg *app.Msg) (rep wireCallReply) {
 	if len(windows) == 0 {
 		windows = []uint64{req.Instance}
 	}
-	rec := &callRec{key: req.Key, instance: windows[0], spec: app.OperationSpec{Name: "capture"}, turn: req.Turn, cause: req.cause()}
+	rec := &callRec{key: req.Key, callId: inst.mintCallId(t), instance: windows[0], spec: app.OperationSpec{Name: ActionCapture},
+		turn: req.Turn, cause: req.cause()}
 	t.keys[req.Key] = rec
 	var uncovered []string
 	for _, w := range windows {
@@ -1096,7 +1104,7 @@ func (inst *Service) list(msg *app.Msg) (rep wireListReply) {
 	inst.mu.Unlock()
 	if !ok {
 		rep.Reason = out.Reason
-		inst.recordAsked(msg, nil, "list", req.Key, "", req.wireCause, "", false, out.Reason)
+		inst.recordAsked(msg, nil, ActionList, req.Key, "", req.wireCause, "", false, out.Reason)
 		return
 	}
 	tainted := false
@@ -1120,7 +1128,7 @@ func (inst *Service) list(msg *app.Msg) (rep wireListReply) {
 		inst.taint(t)
 	}
 	rep.Ok = true
-	inst.recordAsked(msg, t, "list", req.Key, "", req.wireCause, "", true, "")
+	inst.recordAsked(msg, t, ActionList, req.Key, "", req.wireCause, "", true, "")
 	return
 }
 
@@ -1144,7 +1152,7 @@ func (inst *Service) detach(msg *app.Msg) (rep wireAck) {
 		rep.Reason = "the grant does not cover this instance"
 		return
 	}
-	inst.detachEntry(t, req.Instance, "detached")
+	inst.detachEntry(t, req.Instance, "detached", "coordinator")
 	rep.Ok = true
 	return
 }

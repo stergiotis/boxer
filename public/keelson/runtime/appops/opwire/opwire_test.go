@@ -48,3 +48,22 @@ func TestGoroutineIdDiffersAcrossGoroutines(t *testing.T) {
 	go func() { ch <- GoroutineId() }()
 	assert.NotEqual(t, here, <-ch)
 }
+
+// Every phase has one result, and only applied, rendered and completed count
+// as done: accepted and running are in flight (ADR-0277).
+func TestEveryPhaseHasOneResult(t *testing.T) {
+	var n int
+	for _, r := range []ResultE{ResultInFlight, ResultDone, ResultWaiting, ResultNotDone} {
+		n += len(PhasesOf(r))
+	}
+	assert.Equal(t, len(AllPhases), n)
+	assert.Equal(t, []PhaseE{PhaseApplied, PhaseRendered, PhaseCompleted}, PhasesOf(ResultDone))
+	assert.Equal(t, []PhaseE{PhaseAccepted, PhaseRunning}, PhasesOf(ResultInFlight))
+	for _, p := range AllPhases {
+		back, ok := ParsePhase(p.String())
+		assert.True(t, ok)
+		assert.Equal(t, p, back)
+	}
+	_, ok := ParsePhase("unspecified")
+	assert.False(t, ok)
+}

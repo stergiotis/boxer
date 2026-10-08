@@ -15,6 +15,7 @@ import (
 const (
 	kindRuntimeKindAgentGrant  uint64 = 9223372049739677902
 	kindAgentGrantEvent        uint64 = 9223372049739677903
+	kindAgentGrantRequest      uint64 = 9223372049739677985
 	kindAgentGrantPlan         uint64 = 9223372049739677904
 	kindAgentGrantPlanDigest   uint64 = 9223372049739677905
 	kindAgentGrantEntries      uint64 = 9223372049739677906
@@ -142,6 +143,11 @@ func agentGrantEmitSectionStringArray[
 	StringArraySec agentGrantStringArraySecI[StringArrayAttr, Ent],
 	Ent any,
 ](stringArraySec StringArraySec, row AgentGrant) (err error) {
+	if row.Request.Has {
+		stringArraySecAttr_Request := stringArraySec.BeginAttributeSingle(row.Request.Val)
+		stringArraySecAttr_Request.AddMembershipLowCardRefP(kindAgentGrantRequest)
+		stringArraySecAttr_Request.EndAttributeP()
+	}
 	stringArraySecAttr_Plan := stringArraySec.BeginAttributeSingle(row.Plan)
 	stringArraySecAttr_Plan.AddMembershipLowCardRefP(kindAgentGrantPlan)
 	stringArraySecAttr_Plan.EndAttributeP()
@@ -401,6 +407,9 @@ func agentGrantReadRow[
 		present = true
 	}
 	// --- stringArray. ---
+	var stringArrayRequestVal string
+	var stringArrayRequestCount int
+	var stringArrayRequestLastAttr int64
 	var stringArrayPlanVal string
 	var stringArrayPlanCount int
 	var stringArrayPlanLastAttr int64
@@ -423,6 +432,17 @@ func agentGrantReadRow[
 	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
+			case kindAgentGrantRequest:
+				if stringArrayRequestLastAttr != attrJ+1 {
+					stringArrayRequestLastAttr = attrJ + 1
+					stringArrayRequestCount++
+				}
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentGrantRequest").Str("field", "Request").Errorf("slot stringArray@agentGrantRequest (field Request) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				stringArrayRequestVal = val
 			case kindAgentGrantPlan:
 				if stringArrayPlanLastAttr != attrJ+1 {
 					stringArrayPlanLastAttr = attrJ + 1
@@ -479,6 +499,15 @@ func agentGrantReadRow[
 				}
 			}
 		}
+	}
+	if stringArrayRequestCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentGrantRequest").Int("got", stringArrayRequestCount).Errorf("slot stringArray@agentGrantRequest (field Request) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayRequestCount)
+		return
+	}
+	if stringArrayRequestCount == 1 {
+		row.Request.Val = stringArrayRequestVal
+		row.Request.Has = true
+		present = true
 	}
 	if stringArrayPlanCount > 1 {
 		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentGrantPlan").Int("got", stringArrayPlanCount).Errorf("slot stringArray@agentGrantPlan (field Plan) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayPlanCount)

@@ -3,7 +3,8 @@ package trail
 // AgentCapture is one window capture (ADR-0281 §SD6): what the policy
 // enforcement point decided and what it handed out. The coordinator window
 // is the row's [Origin], the task and the dispatcher's call its
-// [Delegation], the conversation its [Conversation].
+// [Delegation] — the call its action rows carry too — the conversation its
+// [Conversation], and the model call that asked for it its [Cause].
 type AgentCapture struct {
 	_ struct{} `kind:"agentCapture"`
 

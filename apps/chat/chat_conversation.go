@@ -45,9 +45,9 @@ type entry struct {
 	stopped bool
 	// doc is the reply parsed as markdown, built on first draw.
 	doc *markdown.Doc
-	// steps are a tool entry's steps of the trail: the model call that
+	// steps are a tool entry's steps of the turn: the model call that
 	// asked for it, on a round's first tool, and the tool call itself.
-	steps []trailStep
+	steps []turnStep
 }
 
 // failure is what a failed turn leaves to inspect: the error's whole text,
@@ -228,6 +228,12 @@ func (inst *conversation) begin(text string, atMs int64, edited bool) {
 	inst.started = true
 	inst.artBefore, _ = inst.art.head()
 	inst.entries = append(inst.entries, entry{speaker: speakerUser, text: text, atMs: atMs, edited: edited})
+}
+
+// usesCoordinator says whether the conversation's turns run the coordinator's
+// tool loop: it offers the windows, questions or an artefact.
+func (inst *conversation) usesCoordinator() (uses bool) {
+	return inst.apps || inst.questions || inst.artefact
 }
 
 // lastUser is the index of the last user entry, -1 for none.

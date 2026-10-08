@@ -132,6 +132,57 @@ func (inst PhaseE) Final() (final bool) {
 	return
 }
 
+// ResultE is what a call's phase means to a reader of the action record
+// (ADR-0277): the call went through, it waits on someone, it did not
+// happen, or it is still in flight. The trail views and the chat's
+// analytics both bucket phases by it, so the two count alike.
+type ResultE uint8
+
+const (
+	// ResultInFlight is accepted or running: no outcome yet.
+	ResultInFlight ResultE = 0
+	// ResultDone is applied, rendered or completed.
+	ResultDone ResultE = 1
+	// ResultWaiting waits on the person: a proposal, or a widening.
+	ResultWaiting ResultE = 2
+	// ResultNotDone is denied, refused, rejected, stale, conflicting,
+	// expired, cancelled or failed.
+	ResultNotDone ResultE = 3
+)
+
+// Result is what the phase means to a reader (see [ResultE]).
+func (inst PhaseE) Result() (r ResultE) {
+	switch inst {
+	case PhaseApplied, PhaseRendered, PhaseCompleted:
+		return ResultDone
+	case PhaseProposed, PhaseInputRequired:
+		return ResultWaiting
+	case PhaseDenied, PhaseRefused, PhaseRejected, PhaseStale, PhaseConflict, PhaseExpired, PhaseCancelled, PhaseFailed:
+		return ResultNotDone
+	}
+	return ResultInFlight
+}
+
+// PhasesOf lists the phases whose Result is r, in AllPhases order.
+func PhasesOf(r ResultE) (phases []PhaseE) {
+	for _, p := range AllPhases {
+		if p.Result() == r {
+			phases = append(phases, p)
+		}
+	}
+	return
+}
+
+// ParsePhase is the phase whose String is s; false for none.
+func ParsePhase(s string) (p PhaseE, ok bool) {
+	for _, p = range AllPhases {
+		if p.String() == s {
+			return p, true
+		}
+	}
+	return PhaseUnspecified, false
+}
+
 // Outcome is a call's state as the window host reports it.
 type Outcome struct {
 	Phase  PhaseE `json:"phase"`

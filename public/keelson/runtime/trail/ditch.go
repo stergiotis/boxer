@@ -14,7 +14,7 @@ const (
 )
 
 // textSectionCols are the columns of the text section, the one section a
-// message row's text lives on ([LlmMessageBody]). ditch_test.go checks them
+// message row's text lives on ([LlmMessageBody]). trail_test.go checks them
 // against the table's DDL.
 var textSectionCols = []string{
 	`"tv:textArray:value:val:sh:5::7:0::data"`,
