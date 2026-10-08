@@ -267,7 +267,7 @@ UDFs it expands into are not something the store may assume is installed.
 | `persiststore.State` (generated-code input) | `RunId`, `InstanceKey` | `schema.go` sections; `TestGeneratePersistStore` output; `PersistMembershipIds` |
 | `boxer.persiststate` (CH DDL) | two sections' worth of columns, additive | `EnsureTable` on an existing deployment |
 | `persist.StorageRef` (exported API) | `InstanceKey`, additive | `persist.Service.handleSet` / `handleDelete` |
-| `queryrunfacts.Stamp` (wire, additive) | `instance`, an omitempty JSON key on log_comment | `play.Client.SetStampIdentity` (signature); `queryrunfacts.EncodeEntity` |
+| `logcomment.Stamp` (wire, additive; `queryrunfacts.Stamp` until ADR-0295) | `instance`, an omitempty JSON key on log_comment | `play.Client.SetStampIdentity` (signature); `queryrunfacts.EncodeEntity` |
 | `colwidth.Opts` (exported API) | `InstanceKey`, additive | play's resolver construction |
 | `keelson('memberships')` (introspection table) | rows for three more vocabularies | `providers.MembershipLookup`, and every `LW_GET` that can now take a name |
 | `keelson('runtime_events')` (introspection table) | added | `providers.RegisterRunEvents`; `introspecthost.Deps.PersistExec`; the applet that projects it |
@@ -328,7 +328,7 @@ UDFs it expands into are not something the store may assume is installed.
   instance argument, and `Client.stampIdentity` returns three values. Every
   other change is an added struct field whose zero value means what absence
   meant, so nothing else stops compiling. `app.Msg` gains a field and stays
-  comparable-free; `queryrunfacts.Stamp` gains one and stays comparable, which
+  comparable-free; `logcomment.Stamp` gains one and stays comparable, which
   `ParseStamp` relies on.
 
   On disk, **`boxer.persiststate` is a breaking migration**, not an additive
