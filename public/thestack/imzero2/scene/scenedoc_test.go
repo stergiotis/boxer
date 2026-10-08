@@ -64,12 +64,25 @@ func TestParseDocRejects(t *testing.T) {
 		"bad size":          "---\nscene:\n  launch: play\n  size: big\n---\n",
 		"bad trace":         "---\nscene:\n  launch: play\n---\n```jsonl trace\n{\"name\":\"Run\"}\n```\n",
 		"two traces":        "---\nscene:\n  launch: play\n---\n```jsonl trace\n{\"do\":\"note\"}\n```\n```jsonl trace\n{\"do\":\"note\"}\n```\n",
+		"unknown tag":       "---\nscene:\n  launch: play\n  tags: [sluggish]\n---\n",
+		"slow and fast":     "---\nscene:\n  launch: play\n  tags: [slow, fast]\n---\n",
 	} {
 		_, err := ParseDoc("a.scene.md", []byte(src))
 		require.Error(t, err, name)
 	}
 	_, err := ParseDoc("a.md", []byte("---\nscene:\n  launch: play\n---\n"))
 	require.Error(t, err, "wrong suffix")
+}
+
+// A scene tagged slow is skipped unless the run asks for slow scenes; it
+// is skipped before anything launches.
+func TestASlowSceneIsSkippedUnlessAskedFor(t *testing.T) {
+	doc, err := ParseDoc("a.scene.md", []byte("---\nscene:\n  launch: play\n  tags: [slow]\n---\nprose\n"))
+	require.NoError(t, err)
+	assert.True(t, doc.Spec.HasTag(TagSlow))
+	res := RunDoc(doc, Options{})
+	assert.Equal(t, StatusSkip, res.Status)
+	assert.Contains(t, res.Reason, "--slow")
 }
 
 func TestCaptureFilesListsSidecars(t *testing.T) {

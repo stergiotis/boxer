@@ -31,6 +31,7 @@ const (
 	flagRoot    = "repoRoot"
 	flagHostDir = "hostDir"
 	flagIgnore  = "ignoreRequires"
+	flagSlow    = "slow"
 )
 
 // NewCommand builds the `scene` subcommand.
@@ -54,6 +55,7 @@ func NewCommand() *cli.Command {
 			&cli.IntFlag{Name: flagSettle, Value: 300, Usage: "milliseconds to settle after a step that sets no settleMs of its own"},
 			&cli.BoolFlag{Name: flagDryRun, Usage: "launch and resolve every anchor, without sending input or capturing"},
 			&cli.BoolFlag{Name: flagList, Usage: "list the scenes and exit"},
+			&cli.BoolFlag{Name: flagSlow, Usage: "also run scenes tagged slow, which are skipped otherwise"},
 			&cli.BoolFlag{Name: flagIgnore, Usage: "run scenes whose preconditions do not hold instead of skipping them"},
 			&cli.StringSliceFlag{Name: flagOnly, Usage: "run only scenes whose name contains this; repeatable"},
 			&cli.StringFlag{Name: flagClient, Usage: "headless Rust client; default: the CPU rasterizer build, then the wgpu build", TakesFile: true},
@@ -121,6 +123,7 @@ func run(ctx context.Context, cmd *cli.Command) (err error) {
 			SettleMs:       cmd.Int(flagSettle),
 			DryRun:         cmd.Bool(flagDryRun),
 			IgnoreRequires: cmd.Bool(flagIgnore),
+			Slow:           cmd.Bool(flagSlow),
 			Out:            w,
 			Logger:         log.Logger,
 		})

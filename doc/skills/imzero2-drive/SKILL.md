@@ -206,7 +206,8 @@ maintained scene by being pasted into a `jsonl trace` fence.
 
 Other spec keys: `fps`, `needs: [raster]` (implied by a `capture`), `services:
 [tilestub]` for a map scene, `settleMs` (held before the first step),
-`stepSettleMs` (the default pause after a step). A document cannot run
+`stepSettleMs` (the default pause after a step), `tags: [slow]` for a scene
+that waits out a timer — skipped unless the run passes `--slow`. A document cannot run
 commands; preconditions and services are names the runner knows.
 
 A scene whose oracle is a computation is a Go test instead, in the

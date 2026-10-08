@@ -366,6 +366,16 @@ runs from, the client root and the tags, and `scenetest.LaunchOn` launches on
 it. `scenetest.Launch` is `LaunchOn` with the zero `Host`, which is boxer's own.
 No decision changes.
 
+### 2026-10-08 — slow scenes are skipped unless asked for
+
+A scene that waits out a timer — a grant request's expiry, a task's
+deadline — takes tens of seconds where the others take a few. `tags:` in
+the `scene:` spec classifies a scene, `slow` or `fast` (an untagged scene
+is fast); a scene tagged `slow` is reported as skipped unless the run
+passes `--slow` (`Options.Slow`). An unknown tag is a parse error, as a
+misspelt spec key is. The chat's scenes of the person being away are the
+first slow ones.
+
 ## References
 
 - [ADR-0154](./0154-headless-carrier-tree-and-driver.md) — the carrier, the
