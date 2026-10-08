@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-08
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-08
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0296: Audit events as a trail component — a generic `AuditEvent`, loss that is visible, a forwarder seam, and what keeps `boxer.facts` dispatchable
 
@@ -284,10 +282,10 @@ makes the switch states that for each writer.
 
 ### Milestones
 
-- **M1 — The component, the verb, the options (SD1, SD2, SD3, SD8).**
-- **M2 — Loss accounting (SD4).**
-- **M3 — Reads and the view (SD5).**
-- **M4 — The forwarder (SD6).**
+- **M1 — The component, the verb, the options (SD1, SD2, SD3, SD8).** ✓
+- **M2 — Loss accounting (SD4).** ✓
+- **M3 — Reads and the view (SD5).** ✓
+- **M4 — The forwarder (SD6).** ✓
 
 ## Surfaces — Tier 1
 
@@ -295,7 +293,7 @@ makes the switch states that for each writer.
 | --- | --- | --- |
 | runtime vocabulary | `runtimeKindAuditEvent` and the `auditEvent*` memberships added, ordinals from 290 | the membership golden |
 | `trail` generated store | `AuditEvent` in `ComponentPaths`; `TrailComponentSQL` gains the kind | regenerated store and DDL file |
-| `trail.Recorder` | `Event`; `NewRecorder` options; `Counts`; read helpers; `ForwardWindow` | hostboot's construction is unchanged |
+| `trail.Recorder` | `Event`; `NewRecorder` options (`WithWriteObserver`, `WithReadTable`, `WithForwarder`); `Counts`; `EventsByPrincipal`, `EventsBySubject`; `ForwardWindow` | hostboot's construction is unchanged |
 | `<Store>StoreConfig` (every generated store) | `ReadTable` added | all stores regenerated in one commit |
 | trailviews | `dm_trail_audit_events`; the timeline; `ViewsVersion` 10 | the views golden; deployed servers re-run the views half of keelsonddl |
 | ADR-0277 §SD1, §SD10; ADR-0295 deferred items | dated Updates | — |
@@ -373,7 +371,21 @@ property.
 
 ## Status
 
-Proposed — awaiting review by p@stergiotis.
+Accepted 2026-10-08, with M1–M4 built. What the verification plan asks for
+holds on the gated executor and on `clickhouse local`: a row outside the
+bounds reads back as the audit-invalid row with the attempted names; the
+origin, principal and purpose on a row are the context's, and a row written
+without a principal reads `none`; the observer's `Committed` carries the
+identity and each key is reported durable once across a failed flush; a
+forced outage past the cap yields one gap row with the count and window;
+`Close` under a closed server counts what it loses; the read helpers hold
+their window, limit and slot; the prompt path forwards only durable audit
+events, a refused batch is counted, and a fresh recorder's backstop
+re-sends in pages, skips what its own prompt path sent, and sees a row
+that landed late with an old timestamp.
+
+Not verified: a forwarder under a real carrier, and any of SD9's deferred
+items.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
