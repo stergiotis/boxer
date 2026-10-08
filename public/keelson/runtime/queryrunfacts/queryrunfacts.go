@@ -34,11 +34,15 @@ const KindLabel = "query-run"
 // trim). Interning full texts is deferred to the DimensionStore substrate
 // (ADR-0112); until then a run carries a capped inline copy plus the
 // fingerprints from the log_comment stamp. The extract SQL pre-caps
-// server-side with substring() so oversized texts never cross the wire.
+// server-side with substringUTF8() so oversized texts never cross the wire
+// and a cut never lands inside a character; the cap there counts code
+// points, so the bytes that cross are at most four times it, and the
+// rune-safe trim here makes the byte bound exact.
 const QueryTextCap = 16384
 
 // ExceptionTextCap bounds the inline exception text (bytes, before the
 // rune-safe trim) — ClickHouse exception strings can embed stack traces.
+// Pre-capped server-side the same way as QueryTextCap.
 const ExceptionTextCap = 4096
 
 // IdBand is the reserved deterministic-id band (ADR-0115 SD2): capture

@@ -55,6 +55,9 @@ func TestComposeExtractSql(t *testing.T) {
 	require.Contains(t, sql, "FROM system.query_log")
 	require.Contains(t, sql, "type != 'QueryStart'")
 	require.Contains(t, sql, "'queryrunsd-extract', 'queryrunsd-refresh', 'queryrunsd-reconcile'")
+	// Cuts land between characters, not inside one.
+	require.Contains(t, sql, "substringUTF8(query, 1, 16384)")
+	require.Contains(t, sql, "substringUTF8(exception, 1, 4096)")
 	require.Contains(t, sql, "position(query, 'http://127.0.0.1:8127/pull') = 0")
 	require.Contains(t, sql, "SELECT max("+ColTs+") FROM boxer.facts")
 	require.Contains(t, sql, WatermarkOverlap)

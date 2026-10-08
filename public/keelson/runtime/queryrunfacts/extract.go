@@ -145,14 +145,14 @@ SELECT
   type,
   toUnixTimestamp64Micro(event_time_microseconds) AS event_us,
   query_id,
-  substring(query, 1, %d) AS query,
+  substringUTF8(query, 1, %d) AS query,
   normalized_query_hash,
   query_kind,
   query_duration_ms,
   read_rows, read_bytes, written_rows, written_bytes, result_rows, result_bytes,
   memory_usage,
   exception_code,
-  exception,
+  substringUTF8(exception, 1, %d) AS exception,
   ProfileEvents,
   log_comment
 FROM system.query_log
@@ -169,7 +169,7 @@ LIMIT %d
 SETTINGS output_format_json_quote_64bit_integers=0, log_comment=%s
 FORMAT JSONEachRow`,
 		watermarkSql(factsTable), floor, WatermarkOverlap,
-		QueryTextCap,
+		QueryTextCap, ExceptionTextCap,
 		quoteLiteral(ExtractTag), quoteLiteral(RefreshTag), quoteLiteral(ReconcileTag),
 		quoteLiteral(pullURL), scopePredicate,
 		ColNaturalKey, ColTs, factsTable,
