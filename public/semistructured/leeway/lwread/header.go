@@ -43,7 +43,8 @@ type AttributeSpec struct {
 	Records int
 	// Handle reads the attribute in SQL: LW_GET('section', name or ref id),
 	// LW_GET_LIST for a list column, with 'col:<column>' when the section
-	// has several value columns. Empty for a plain column, whose handle is
+	// has several value columns, the section and column spelled as the
+	// physical names spell them. Empty for a plain column, whose handle is
 	// its column's, and for an attribute no membership names or whose name
 	// carries parameters.
 	Handle string
@@ -97,9 +98,17 @@ func handle(a *Attribute) string {
 	if m.IsRef {
 		member = strconv.FormatUint(m.Ref, 10)
 	}
-	h := fn + "(" + sqlString(a.Section) + ", " + member
+	section := a.HandleSection
+	if section == "" {
+		section = a.Section
+	}
+	h := fn + "(" + sqlString(section) + ", " + member
 	if a.SectionColumns > 1 {
-		h += ", " + sqlString("col:"+a.Values[0].Column)
+		column := a.Values[0].HandleColumn
+		if column == "" {
+			column = a.Values[0].Column
+		}
+		h += ", " + sqlString("col:"+column)
 	}
 	return h + ")"
 }

@@ -224,3 +224,42 @@ func TestQualifyAndHeader(t *testing.T) {
 	assert.Equal(t, "LW_GET_LIST('bins', 5)", handles["model"], "a ref is read by its id")
 	assert.Empty(t, handles["id"], "a plain column's handle is its column's")
 }
+
+// A handle names the section and column as the physical names spell them,
+// which is how leeway.columns and the Table's headers print them; the
+// styled names stay the attribute's.
+func TestHandleSpellsPhysically(t *testing.T) {
+	s := NewSink(Options{})
+	s.BeginBatch()
+	s.BeginEntity()
+	s.BeginTaggedSections()
+	s.BeginSection(sn("geo-point"), []naming.StylableName{sn("point-lat"), sn("point-lon")}, nil, useaspects.EmptyAspectSet, 1)
+	s.BeginTaggedValue()
+	for i, col := range []string{"point-lat", "point-lon"} {
+		phys := []string{"tv:geoPoint:pointLat:val:f64:4A:::0::data", "tv:geoPoint:pointLon:val:f64:4A:::0::data"}[i]
+		s.BeginColumn(streamreadaccess.PhysicalColumnAddr{Index: i, FullColumnName: phys}, sn(col), tF64, valueaspects.EmptyAspectSet)
+		s.BeginScalarValue()
+		_, _ = s.WriteString("47")
+		_ = s.EndScalarValue()
+		s.EndColumn()
+	}
+	s.BeginTags(1)
+	s.AddMembershipVerbatim(true, "home")
+	s.EndTags()
+	_ = s.EndTaggedValue()
+	_ = s.EndSection()
+	_ = s.EndTaggedSections()
+	_ = s.EndEntity()
+	_ = s.EndBatch()
+	m := s.Model()
+	require.Len(t, m.Records, 1)
+	a := byName(&m.Records[0], "home")
+	require.NotNil(t, a)
+	assert.Equal(t, "geo-point", a.Section)
+	assert.Equal(t, "geoPoint", a.HandleSection)
+	assert.Equal(t, "point-lat", a.Values[0].Column)
+	assert.Equal(t, "pointLat", a.Values[0].HandleColumn)
+	specs := m.Header()
+	require.Len(t, specs, 1)
+	assert.Equal(t, "LW_GET('geoPoint', 'home', 'col:pointLat')", specs[0].Handle)
+}

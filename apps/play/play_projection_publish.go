@@ -236,7 +236,7 @@ func buildProjectionRows(in projectionPublishInput, alloc memory.Allocator) (rec
 		items.Append(true)
 		if s < len(sets.Rows) {
 			for _, it := range sets.Rows[s] {
-				vb.Append(sets.Items[it].Name)
+				vb.Append(sets.Items[it].Label())
 			}
 		}
 	}
@@ -327,7 +327,7 @@ func buildProjectionRules(in projectionPublishInput, alloc memory.Allocator) arr
 			}
 			return "", false
 		}
-		itemName := func(item int32) string { return pi.sets.Items[item].Name }
+		itemName := func(item int32) string { return pi.sets.Items[item].Label() }
 		for lb, sg := range pi.subgroups {
 			if len(sg.Literals) == 0 {
 				continue

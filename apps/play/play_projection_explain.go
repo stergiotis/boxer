@@ -129,7 +129,7 @@ func structureFeatureDesc(sets card.ItemSets) projectionFeatureDesc {
 	names := make([]string, len(keep))
 	for c, i := range keep {
 		col[i] = int32(c)
-		names[c] = sets.Items[i].Name
+		names[c] = sets.Items[i].Label()
 	}
 	rows := make([][]int32, len(sets.Rows))
 	for r, row := range sets.Rows {

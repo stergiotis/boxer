@@ -57,7 +57,11 @@ type Item struct {
 	// same column as the authoring surface names it, `section:column`
 	// (ADR-0116), which is how a predicate over the item should be spelled;
 	// for a membership it names the section's low-cardinality ref or
-	// verbatim column, `section:lr` or `section:lv`.
+	// verbatim column, `section:lr` or `section:lv`. It is spelled as the
+	// physical column names spell it — `u32Array:lv`, where the styled name
+	// is u32-array — so a rule reads as leeway.columns, describe_table and
+	// the Table's headers print the handle. Play's handle pass folds both
+	// spellings to one column.
 	Column string
 	Handle string
 	// Value is the value text, or the verbatim membership; Ref the
@@ -65,6 +69,30 @@ type Item struct {
 	Value  string
 	Ref    uint64
 	Quoted bool
+}
+
+// Label is the item's name as a reader is shown it: Name with the section
+// and column spelled as Handle spells them — tag:geoPoint=home beside
+// has(`geoPoint:lv`, 'home') — where Name, the item's
+// identity, keeps the styled names. An item without a physical spelling is
+// labelled by its Name.
+func (inst Item) Label() string {
+	sec := inst.PhysicalSection
+	if sec == "" {
+		return inst.Name
+	}
+	switch inst.Kind {
+	case ItemKindSection:
+		return "section:" + sec
+	case ItemKindTaggedValue:
+		col := inst.Handle[strings.IndexByte(inst.Handle, ':')+1:]
+		return "value:" + sec + "." + col + "=" + inst.Value
+	case ItemKindTagRef:
+		return "tag:" + sec + "#" + strconv.FormatUint(inst.Ref, 10)
+	case ItemKindTagVerbatim:
+		return "tag:" + sec + "=" + inst.Value
+	}
+	return inst.Name
 }
 
 // ItemSets is the per-entity item sets over a vocabulary.
@@ -153,6 +181,7 @@ type ItemExtractor struct {
 	inPlain    bool
 	curColumn  string
 	curColName string
+	curColPhys string
 	curQuoted  bool
 	// MaxItems caps the vocabulary: past it new items are dropped and the
 	// entity keeps only what is already known.
@@ -256,13 +285,17 @@ func (inst *ItemExtractor) EndTaggedValue() error { return nil }
 func (inst *ItemExtractor) BeginColumn(colAddr streamreadaccess.PhysicalColumnAddr, name naming.StylableName, canonicalType canonicaltypes.PrimitiveAstNodeI, _ valueaspects.AspectSet) {
 	inst.curColumn = colAddr.FullColumnName
 	inst.curColName = name.String()
+	inst.curColPhys = physicalColumn(inst.curColumn)
+	if inst.curColPhys == "" {
+		inst.curColPhys = inst.curColName
+	}
 	inst.curQuoted = canonicalType == nil || !canonicalType.IsMachineNumericNode()
 	if inst.curSecPhys == "" && !inst.inPlain {
 		inst.curSecPhys = physicalSection(inst.curColumn)
 	}
 	if inst.curSecItem >= 0 && inst.items[inst.curSecItem].Column == "" {
 		inst.items[inst.curSecItem].Column = inst.curColumn
-		inst.items[inst.curSecItem].Handle = inst.curSection + ":" + inst.curColName
+		inst.items[inst.curSecItem].Handle = inst.handleSection() + ":" + inst.curColPhys
 		inst.items[inst.curSecItem].PhysicalSection = inst.curSecPhys
 	}
 }
@@ -275,6 +308,26 @@ func physicalSection(fullColumnName string) string {
 		return ""
 	}
 	return parts[1]
+}
+
+// physicalColumn is the column component of a tagged section's physical
+// column name, `tv:<section>:<column>:…`, or empty when the name is not
+// that shape.
+func physicalColumn(fullColumnName string) string {
+	parts := strings.SplitN(fullColumnName, ":", 4)
+	if len(parts) < 3 || parts[0] != "tv" {
+		return ""
+	}
+	return parts[2]
+}
+
+// handleSection is the current section as handles spell it: the physical
+// spelling once a column has shown it, else the styled name.
+func (inst *ItemExtractor) handleSection() string {
+	if inst.curSecPhys != "" {
+		return inst.curSecPhys
+	}
+	return inst.curSection
 }
 func (inst *ItemExtractor) EndColumn() {}
 
@@ -307,7 +360,7 @@ func (inst *ItemExtractor) value(s string) {
 	}
 	inst.add(Item{
 		Name: "value:" + inst.curSection + "." + inst.curColName + "=" + s,
-		Kind: ItemKindTaggedValue, Column: inst.curColumn, Handle: inst.curSection + ":" + inst.curColName,
+		Kind: ItemKindTaggedValue, Column: inst.curColumn, Handle: inst.handleSection() + ":" + inst.curColPhys,
 		Value: s, Quoted: inst.curQuoted, Section: inst.curSection, PhysicalSection: inst.curSecPhys,
 	})
 }
@@ -338,7 +391,7 @@ func (inst *ItemExtractor) AddMembershipRef(lowCard bool, ref uint64) {
 	inst.add(Item{
 		Name: "tag:" + inst.curSection + "#" + strconv.FormatUint(ref, 10),
 		Kind: ItemKindTagRef, Section: inst.curSection, PhysicalSection: inst.curSecPhys, Ref: ref,
-		Handle: inst.curSection + ":lr",
+		Handle: inst.handleSection() + ":lr",
 	})
 }
 
@@ -349,7 +402,7 @@ func (inst *ItemExtractor) AddMembershipVerbatim(lowCard bool, verbatim string) 
 	inst.add(Item{
 		Name: "tag:" + inst.curSection + "=" + verbatim,
 		Kind: ItemKindTagVerbatim, Section: inst.curSection, PhysicalSection: inst.curSecPhys, Value: verbatim, Quoted: true,
-		Handle: inst.curSection + ":lv",
+		Handle: inst.handleSection() + ":lv",
 	})
 }
 

@@ -176,7 +176,7 @@ func itemsRows(pi projectionItems, numLabels int) (rows []explanationRow) {
 			row.rule = "no item combination beats the base rate"
 		default:
 			sg := pi.subgroups[lb]
-			sql, ok := sg.SQL(spell, func(item int32) string { return pi.sets.Items[item].Name })
+			sql, ok := sg.SQL(spell, func(item int32) string { return pi.sets.Items[item].Label() })
 			row.rule = sql
 			if !ok {
 				row.rule += "  -- an item has no SQL spelling"
@@ -197,7 +197,7 @@ func itemsRows(pi projectionItems, numLabels int) (rows []explanationRow) {
 			if cell.WRAcc < 0 {
 				arrow = "↓"
 			}
-			fmt.Fprintf(&b, "%s %s (%.0f%% vs %.0f%%; lift %.1f)", pi.sets.Items[it].Name, arrow, 100*cell.In, 100*cell.Rest, cell.Lift)
+			fmt.Fprintf(&b, "%s %s (%.0f%% vs %.0f%%; lift %.1f)", pi.sets.Items[it].Label(), arrow, 100*cell.In, 100*cell.Rest, cell.Lift)
 			listed++
 		}
 		if listed == 0 {
