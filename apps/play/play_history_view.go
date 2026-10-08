@@ -241,8 +241,25 @@ func (inst *PlayApp) renderRunDetail(row queryrunfacts.HistoryRow) {
 		}
 		historyField("fact id", fmt.Sprintf("%d", row.Id))
 	}
+	var authored string
+	var haveAuthored bool
+	if inst.client != nil {
+		authored, haveAuthored = inst.client.AuthoredText(row.AuthoredFp)
+	}
+	switch {
+	case haveAuthored:
+		inst.historySqlBlock("authored", "Query as authored", authored)
+	case row.AuthoredFp != "":
+		diagWeak("Query as authored: not known here — the capture keeps only its fingerprint, and this process did not issue the run (or has let the text go).")
+	default:
+		diagWeak("Query as authored: the run carried no stamp, so there is nothing to match it by.")
+	}
 	inst.historySqlBlock("sql", "Query as the server ran it", row.QueryText)
 	for range c.Horizontal().KeepIter() {
+		if haveAuthored && c.Button(ids.PrepareStr("open-authored"), c.Atoms().Text("Open authored as query").Keep()).
+			SendResp().HasPrimaryClicked() {
+			inst.ReplaceSql(authored)
+		}
 		if c.Button(ids.PrepareStr("open-as-query"), c.Atoms().Text("Open as query").Keep()).
 			SendResp().HasPrimaryClicked() {
 			inst.ReplaceSql(row.QueryText)
@@ -257,12 +274,35 @@ func (inst *PlayApp) renderRunDetail(row queryrunfacts.HistoryRow) {
 	c.Separator().Send()
 }
 
+// historySqlShowBytes caps the statement a detail draws. A generated
+// statement — a long IN list, an inlined dataset — can run to megabytes, and
+// highlighting and laying that out every frame the detail is open costs more
+// than anyone reads. Copy and "Open as query" still take the whole text.
+const historySqlShowBytes = 16 << 10
+
+// historySqlCut is the part of sql a detail draws: all of it up to the cap,
+// otherwise a prefix ending at a line break where one falls in the last
+// quarter of the cap (a cut mid-line splits a token more often), and never
+// inside a UTF-8 sequence.
+func historySqlCut(sql string) (shown string, cut bool) {
+	if len(sql) <= historySqlShowBytes {
+		return sql, false
+	}
+	shown = truncateBytes(sql, historySqlShowBytes)
+	if i := strings.LastIndexByte(shown, '\n'); i >= historySqlShowBytes*3/4 {
+		shown = shown[:i]
+	}
+	return shown, true
+}
+
 // historySqlBlock is a caption with a Copy button, then the statement
-// highlighted in full. The button is withheld without a clipboard rather
-// than rendered dead (CanCopy). key scopes the widget ids; an empty caption
-// draws the button alone.
+// highlighted — up to historySqlShowBytes, with a note when it is cut. The
+// button is withheld without a clipboard rather than rendered dead
+// (CanCopy), and copies the whole statement either way. key scopes the
+// widget ids; an empty caption draws the button alone.
 func (inst *PlayApp) historySqlBlock(key string, caption string, sql string) {
 	ids := inst.ids
+	shown, cut := historySqlCut(sql)
 	for range c.IdScope(ids.PrepareStr(key)) {
 		for range c.Horizontal().KeepIter() {
 			if caption != "" {
@@ -277,9 +317,13 @@ func (inst *PlayApp) historySqlBlock(key string, caption string, sql string) {
 		}
 		// PrepareSql: the detail redraws every frame it is open and the text
 		// never changes under it (ADR-0125).
-		c.CodeView(ids.PrepareStr("code"), codeview.PrepareSql(sql)).
+		c.CodeView(ids.PrepareStr("code"), codeview.PrepareSql(shown)).
 			Wrap().
 			Send()
+		if cut {
+			diagWeak(fmt.Sprintf("… cut: showing %s of %s — Copy, Restore and Open as query take the whole statement.",
+				humanize.IBytes(uint64(len(shown))), humanize.IBytes(uint64(len(sql)))))
+		}
 	}
 }
 

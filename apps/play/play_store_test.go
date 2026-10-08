@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
@@ -238,5 +240,24 @@ func TestQueryStoreHistoryCap(t *testing.T) {
 	}
 	if got := len(store.History()); got != 2 {
 		t.Errorf("history len=%d, want 2 (capped at maxHist)", got)
+	}
+}
+
+// A detail draws a statement up to historySqlShowBytes, cut at a line
+// break near the cap where there is one, never inside a rune.
+func TestHistorySqlCut(t *testing.T) {
+	short := "SELECT 1"
+	if got, cut := historySqlCut(short); cut || got != short {
+		t.Errorf("short: got %q cut=%v", got, cut)
+	}
+	lines := strings.Repeat("SELECT 1 UNION ALL\n", historySqlShowBytes/10)
+	got, cut := historySqlCut(lines)
+	if !cut || len(got) > historySqlShowBytes || len(got) < historySqlShowBytes*3/4 || !strings.HasSuffix(got, "ALL") {
+		t.Errorf("lines: len=%d cut=%v suffix=%q", len(got), cut, got[len(got)-3:])
+	}
+	runes := strings.Repeat("ä", historySqlShowBytes)
+	got, cut = historySqlCut(runes)
+	if !cut || !utf8.ValidString(got) {
+		t.Errorf("runes: cut=%v valid=%v", cut, utf8.ValidString(got))
 	}
 }

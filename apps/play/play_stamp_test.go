@@ -2,8 +2,10 @@ package play
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/apache/arrow-go/v18/arrow/memory"
@@ -123,4 +125,44 @@ func TestExecuteArrowStreamCarriesStamp(t *testing.T) {
 	require.NotEmpty(t, st.AuthoredFp)
 	require.NotEmpty(t, st.SentFp)
 	require.NotEmpty(t, st.ChainFp)
+}
+
+// Composing a stamp remembers the authored text under its fingerprint, so
+// the History tab can show what a captured run looked like before the
+// rewrites; a fingerprint this client never stamped finds nothing.
+func TestStampRemembersAuthoredText(t *testing.T) {
+	c := NewClient(ClientConfig{URL: "http://localhost:8123/"}, nil)
+	authored := "SELECT 1 -- as typed"
+	_ = c.composeLogComment(authored, "SELECT 1 FORMAT ArrowStream", nil, nil, newExecOptions("main"), nil)
+	text, ok := c.AuthoredText(stampFp(authored))
+	require.True(t, ok)
+	require.Equal(t, authored, text)
+	_, ok = c.AuthoredText(stampFp("SELECT 2"))
+	require.False(t, ok)
+	_, ok = c.AuthoredText("")
+	require.False(t, ok)
+}
+
+// The memo lets the oldest text go first, by entry count and by bytes.
+func TestAuthoredMemoBounds(t *testing.T) {
+	var m authoredMemo
+	for i := range authoredMemoMaxEntries + 1 {
+		m.note(fmt.Sprintf("fp%d", i), "x")
+	}
+	_, ok := m.lookup("fp0")
+	require.False(t, ok, "the oldest entry goes past the entry bound")
+	_, ok = m.lookup(fmt.Sprintf("fp%d", authoredMemoMaxEntries))
+	require.True(t, ok)
+
+	var b authoredMemo
+	half := strings.Repeat("y", authoredMemoMaxBytes/2+1)
+	b.note("a", half)
+	b.note("b", half)
+	_, ok = b.lookup("a")
+	require.False(t, ok, "the oldest entry goes past the byte bound")
+	_, ok = b.lookup("b")
+	require.True(t, ok)
+	b.note("huge", strings.Repeat("z", authoredMemoMaxBytes+1))
+	_, ok = b.lookup("huge")
+	require.False(t, ok, "a text over the whole budget is not kept")
 }
