@@ -540,6 +540,33 @@ remote server every refresh failed while the daemon reported nothing. A
 server in a container on the same host passes the check and fails the same
 way: its loopback is not the host's.
 
+## Update — 2026-10-08: own traffic tagged; one instance per view; retention stays with the operator
+
+**The service's own queries are excluded from capture.** The extract and
+the refresh were tagged, but the boot reconciliation's DDL, schema check
+and flush were not, so each boot captured them as query runs. Every query
+the service sends now carries `log_comment=queryrunsd-reconcile`, set as a
+URL parameter by its HTTP client (a query's own `SETTINGS log_comment`, the
+extract's, takes precedence), and the extract excludes that tag too.
+
+**A second live instance is refused.** Two daemons against one server
+dropped and recreated each other's view on every boot, each pointing it at
+itself. Before the drop, the reconciler reads the stored view's pull URL;
+when it is another instance's and that instance's `/healthz` answers,
+`Start` fails and names it. A dead owner's view is taken over, which is the
+ordinary restart path.
+
+**Text caps cut between characters.** The extract caps `query` and
+`exception` server-side with `substringUTF8`; `substring` cut by bytes and
+could split a character, which reached the fact as U+FFFD. The exception
+text had no server-side cap at all.
+
+**Retention is not this service's to impose.** The Negative consequence
+above stays open by decision: the daemon still never changes an existing
+table, and chstore still leaves deleting data to the operator. The
+explanation page now gives the operator's form, a row TTL on `boxer.facts`
+that deletes only `KindQueryRun` rows.
+
 ## References
 
 - [doc/explanation/query-observability.md](../explanation/query-observability.md)
