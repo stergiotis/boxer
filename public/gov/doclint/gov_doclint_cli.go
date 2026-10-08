@@ -37,12 +37,12 @@ func NewCliCommand() *cli.Command {
 
 func doclintAction(ctx *cli.Context) (err error) {
 	var format FormatE
-	format, err = ParseFormatE(ctx.String("format"))
+	format, err = ParseFormat(ctx.String("format"))
 	if err != nil {
 		return
 	}
 	var minSev FindingSeverityE
-	minSev, err = ParseSeverityE(ctx.String("min-severity"))
+	minSev, err = ParseSeverity(ctx.String("min-severity"))
 	if err != nil {
 		return
 	}
@@ -56,7 +56,7 @@ func doclintAction(ctx *cli.Context) (err error) {
 	linter.SetExclude(ctx.StringSlice("exclude"))
 
 	var rep ReporterI
-	rep, err = NewReporterE(format, os.Stdout)
+	rep, err = NewReporter(format, os.Stdout)
 	if err != nil {
 		return
 	}
@@ -83,7 +83,7 @@ func doclintAction(ctx *cli.Context) (err error) {
 		}
 	}
 
-	err = rep.FinishE()
+	err = rep.Finish()
 	if err != nil {
 		return
 	}
@@ -103,7 +103,7 @@ func doclintAction(ctx *cli.Context) (err error) {
 	return
 }
 
-func ParseFormatE(s string) (f FormatE, err error) {
+func ParseFormat(s string) (f FormatE, err error) {
 	switch strings.ToLower(s) {
 	case "human", "":
 		f = FormatHuman
@@ -115,7 +115,7 @@ func ParseFormatE(s string) (f FormatE, err error) {
 	return
 }
 
-func ParseSeverityE(s string) (sev FindingSeverityE, err error) {
+func ParseSeverity(s string) (sev FindingSeverityE, err error) {
 	switch strings.ToLower(s) {
 	case "info":
 		sev = FindingSeverityInfo

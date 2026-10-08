@@ -568,7 +568,7 @@ func editInsert(text string, add string, line int, hasLine bool, heading []strin
 		off = idx.LineStart(line)
 	case len(heading) > 0:
 		d := mdspan.Parse(src)
-		i, err := d.FindHeadingE(heading)
+		i, err := d.ResolveHeading(heading)
 		if err != nil {
 			return ch, headingReason(err)
 		}
@@ -595,7 +595,7 @@ func editSection(text string, heading []string, body string, withHeading bool) (
 		return ch, "heading is required: the path of the section"
 	}
 	d := mdspan.Parse([]byte(text))
-	i, err := d.FindHeadingE(heading)
+	i, err := d.ResolveHeading(heading)
 	if err != nil {
 		return ch, headingReason(err)
 	}

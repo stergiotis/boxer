@@ -41,7 +41,7 @@ func TestReadRF64Ds64TableSizeNearMaxInt64(t *testing.T) {
 	raw := ds64TableOverflowFixture()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
-	_, err := NewReaderE(bytes.NewReader(raw), int64(len(raw)))
+	_, err := NewReader(bytes.NewReader(raw), int64(len(raw)))
 	runtime.ReadMemStats(&after)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "chunk extends past the end of the stream")
@@ -56,7 +56,7 @@ func TestReadRF64FmtSizeNearMaxInt64(t *testing.T) {
 	chunks = appendChunk(chunks, "data", pcm16Body([]int16{1, -1}))
 	raw := container("RF64", maxUint32, chunks)
 
-	_, err := NewReaderE(bytes.NewReader(raw), int64(len(raw)))
+	_, err := NewReader(bytes.NewReader(raw), int64(len(raw)))
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "chunk extends past the end of the stream")
 }
@@ -68,7 +68,7 @@ func TestReadRF64TruncatedDataSizeNearMaxInt64(t *testing.T) {
 	samples := []int16{1, -1, 300, -300}
 	for _, declared := range []uint64{math.MaxInt64 - 1, math.MaxInt64} {
 		raw := rf64Fixture(t, "RF64", declared, samples, nil)
-		file, err := NewReaderE(bytes.NewReader(raw), int64(len(raw)))
+		file, err := NewReader(bytes.NewReader(raw), int64(len(raw)))
 		require.NoError(t, err, "declared %d", declared)
 		require.True(t, file.IsTruncated())
 		require.Equal(t, int64(2), file.Frames())

@@ -26,14 +26,14 @@ func TestConcurrentReadWhileBuilding(t *testing.T) {
 		pcm.Gate(pcm.Sine(format, 440, 0.9), 4800, 2400),
 		pcm.Chirp(format, frames, 50, 8000, 0.7),
 	)
-	src, err := pcm.NewSynthSourceE(format, frames, fn)
+	src, err := pcm.NewSynthSource(format, frames, fn)
 	require.NoError(t, err)
 
-	ref, err := peaks.BuildE(context.Background(), src, baseBin, 4096, nil)
+	ref, err := peaks.Build(context.Background(), src, baseBin, 4096, nil)
 	require.NoError(t, err)
 	require.True(t, ref.IsComplete())
 
-	live, err := peaks.NewPyramidE(format, frames, baseBin)
+	live, err := peaks.NewPyramid(format, frames, baseBin)
 	require.NoError(t, err)
 
 	var wg sync.WaitGroup
@@ -43,7 +43,7 @@ func TestConcurrentReadWhileBuilding(t *testing.T) {
 		// A chunk size that divides neither the base bin nor the frame
 		// count, so bins are published mid-chunk and the last one is
 		// partial.
-		assert.NoError(t, live.FillFromE(context.Background(), src, 373, nil))
+		assert.NoError(t, live.FillFrom(context.Background(), src, 373, nil))
 	}()
 
 	r := rand.New(rand.NewPCG(0x51ce, 0xf00d))

@@ -18,9 +18,9 @@ type Order struct {
 // NumNodes is the order's length.
 func (inst Order) NumNodes() int32 { return int32(len(inst.Rank)) }
 
-// OrderFromRanksE rebuilds an [Order] from a stored rank array, checking
+// OrderFromRanks rebuilds an [Order] from a stored rank array, checking
 // that it is a permutation.
-func OrderFromRanksE(rank []int32) (o Order, err error) {
+func OrderFromRanks(rank []int32) (o Order, err error) {
 	n := len(rank)
 	node := make([]int32, n)
 	seen := make([]bool, n)

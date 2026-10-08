@@ -138,7 +138,7 @@ func init() {
 
 			mi := max(int32(math.Round(st.m)), mssmooth.MinHalfWidth(st.degree))
 			if st.kernel == nil || st.kDeg != st.degree || st.kM != mi {
-				if k, err := mssmooth.NewKernelE(st.degree, mi); err == nil {
+				if k, err := mssmooth.NewKernel(st.degree, mi); err == nil {
 					st.kernel = k
 					st.kDeg = st.degree
 					st.kM = mi
@@ -161,9 +161,9 @@ func init() {
 				st.rawD[i] = (st.noisy[hi] - st.noisy[lo]) / float64(hi-lo)
 			}
 			var err error
-			st.smooth, err = st.kernel.SmoothE(st.noisy, st.smooth)
+			st.smooth, err = st.kernel.Smooth(st.noisy, st.smooth)
 			if err == nil {
-				st.deriv, err = st.kernel.DerivativeE(st.noisy, st.deriv)
+				st.deriv, err = st.kernel.Derivative(st.noisy, st.deriv)
 			}
 			if err != nil {
 				c.Label("smoothing failed: " + err.Error()).Send()

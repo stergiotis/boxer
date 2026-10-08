@@ -20,7 +20,7 @@ func TestCellsToStrings_Golden(t *testing.T) {
 
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
@@ -28,7 +28,7 @@ func TestCellsToStrings_Golden(t *testing.T) {
 	for i, r := range recs {
 		cells[i] = r.Cell
 	}
-	buf, offsets, status, err := h.CellsToStringsE(ctx, cells, nil, nil, nil)
+	buf, offsets, status, err := h.CellsToStrings(ctx, cells, nil, nil, nil)
 	require.NoError(t, err)
 	require.Equal(t, int32(0), offsets[0])
 	require.Equal(t, int32(len(buf)), offsets[len(cells)])
@@ -45,7 +45,7 @@ func TestStringsToCells_RoundTrip(t *testing.T) {
 
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
@@ -54,10 +54,10 @@ func TestStringsToCells_RoundTrip(t *testing.T) {
 		cells[i] = r.Cell
 	}
 
-	buf, offsets, _, err := h.CellsToStringsE(ctx, cells, nil, nil, nil)
+	buf, offsets, _, err := h.CellsToStrings(ctx, cells, nil, nil, nil)
 	require.NoError(t, err)
 
-	decoded, status, err := h.StringsToCellsE(ctx, buf, offsets, nil, nil)
+	decoded, status, err := h.StringsToCells(ctx, buf, offsets, nil, nil)
 	require.NoError(t, err)
 	for i, r := range recs {
 		require.Equal(t, StatusOk, status[i], "name=%s", r.Name)
@@ -68,13 +68,13 @@ func TestStringsToCells_RoundTrip(t *testing.T) {
 func TestStringsToCells_InvalidInputFlagsStatus(t *testing.T) {
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
 	buf := []byte("garbage!")
 	offsets := []int32{0, int32(len(buf))}
-	_, status, err := h.StringsToCellsE(ctx, buf, offsets, nil, nil)
+	_, status, err := h.StringsToCells(ctx, buf, offsets, nil, nil)
 	require.NoError(t, err)
 	require.Equal(t, StatusInvalidString, status[0])
 }

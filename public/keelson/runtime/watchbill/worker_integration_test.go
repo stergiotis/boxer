@@ -51,7 +51,7 @@ func TestTwentyWorkersRaceOneJobOnTheServer(t *testing.T) {
 	var runs atomic.Int32
 	var ranBy sync.Map
 	reg := NewRegistry()
-	require.NoError(t, reg.Register(HandlerFunc{KindName: "race.kind", Run: func(_ context.Context, job watchbillstore.Job, _ task.HandleI) error {
+	require.NoError(t, reg.Register(HandlerFunc{KindName: "race.kind", RunFunc: func(_ context.Context, job watchbillstore.Job, _ task.HandleI) error {
 		runs.Add(1)
 		ranBy.Store(job.ID, job.WorkerRun)
 		time.Sleep(50 * time.Millisecond)
@@ -127,7 +127,7 @@ func TestSweepOnTheServer(t *testing.T) {
 
 	reg := NewRegistry()
 	var ran atomic.Int32
-	require.NoError(t, reg.Register(HandlerFunc{KindName: "sweep.kind", Run: func(context.Context, watchbillstore.Job, task.HandleI) error { ran.Add(1); return nil }}))
+	require.NoError(t, reg.Register(HandlerFunc{KindName: "sweep.kind", RunFunc: func(context.Context, watchbillstore.Job, task.HandleI) error { ran.Add(1); return nil }}))
 	w, err := New(Config{Store: st, Handlers: reg, RunId: "run-live", Liveness: MemLiveness{Live: map[string]bool{"run-live": true}}, Poll: time.Hour, Keep: time.Hour, AbandonAfter: time.Minute, Log: zerolog.Nop()})
 	require.NoError(t, err)
 	var wg sync.WaitGroup

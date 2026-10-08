@@ -53,7 +53,7 @@ func gridGraph(t *testing.T, rng *rand.Rand, w, h int) (g *Graph, x, y []float64
 			}
 		}
 	}
-	g, err := BuildE(int32(n), tail, head, edge)
+	g, err := Build(int32(n), tail, head, edge)
 	require.NoError(t, err)
 	return g, x, y, g.MetricFromInput(in)
 }
@@ -100,15 +100,15 @@ func TestInertialFlowOrderIsAPermutationAndSeparates(t *testing.T) {
 
 func mustOrder(t *testing.T, rank []int32) Order {
 	t.Helper()
-	o, err := OrderFromRanksE(rank)
+	o, err := OrderFromRanks(rank)
 	require.NoError(t, err)
 	return o
 }
 
 func TestOrderFromRanksRefusesNonPermutations(t *testing.T) {
-	_, err := OrderFromRanksE([]int32{0, 0})
+	_, err := OrderFromRanks([]int32{0, 0})
 	require.Error(t, err)
-	_, err = OrderFromRanksE([]int32{0, 2})
+	_, err = OrderFromRanks([]int32{0, 2})
 	require.Error(t, err)
 }
 
@@ -117,7 +117,7 @@ func TestDisconnectedGraphOrders(t *testing.T) {
 	tail := []int32{0, 1, 3, 4}
 	head := []int32{1, 2, 4, 5}
 	edge := []int32{0, 1, 2, 3}
-	g, err := BuildE(7, tail, head, edge)
+	g, err := Build(7, tail, head, edge)
 	require.NoError(t, err)
 	x := []float64{0, 1, 2, 10, 11, 12, 20}
 	y := []float64{0, 0, 0, 0, 0, 0, 0}

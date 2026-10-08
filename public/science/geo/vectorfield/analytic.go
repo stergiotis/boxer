@@ -35,8 +35,8 @@ func NewGlobalAnalyticLoader(spacing float64, fn FieldFunc) (inst *AnalyticLoade
 	}
 }
 
-// LoadStepE implements [StepLoaderI].
-func (inst *AnalyticLoader) LoadStepE(ctx context.Context, step int) (grid Grid, err error) {
+// LoadStep implements [StepLoaderI].
+func (inst *AnalyticLoader) LoadStep(ctx context.Context, step int) (grid Grid, err error) {
 	if inst.Fn == nil || inst.Cols < 2 || inst.Rows < 2 {
 		err = eb.Build().Int("cols", inst.Cols).Int("rows", inst.Rows).Errorf("an analytic loader needs a field and a grid")
 		return

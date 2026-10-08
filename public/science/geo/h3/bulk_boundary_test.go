@@ -22,7 +22,7 @@ func TestCellsToBoundaries_Golden(t *testing.T) {
 
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
@@ -30,7 +30,7 @@ func TestCellsToBoundaries_Golden(t *testing.T) {
 	for i, r := range recs {
 		cells[i] = r.Cell
 	}
-	lats, lngs, offsets, status, err := h.CellsToBoundariesE(ctx, cells, nil, nil, nil, nil)
+	lats, lngs, offsets, status, err := h.CellsToBoundaries(ctx, cells, nil, nil, nil, nil)
 	require.NoError(t, err)
 	requireCSRInvariants(t, offsets, len(cells), len(lats))
 	require.Equal(t, len(lats), len(lngs))
@@ -53,16 +53,16 @@ func TestCellsToBoundaries_VertexCountBounds(t *testing.T) {
 	// Every valid cell produces 5 <= vertex_count <= 10 vertices per h3o.
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
 	lats := []float64{0.0, 37.7749, 48.8566, -33.8688, 89.9, -89.9}
 	lngs := []float64{0.0, -122.4194, 2.3522, 151.2093, 0.0, 0.0}
 	for _, res := range []ResolutionE{ResolutionR0, ResolutionR5, ResolutionR10} {
-		cells, _, err := h.LatLngsToCellsE(ctx, res, lats, lngs, nil, nil)
+		cells, _, err := h.LatLngsToCells(ctx, res, lats, lngs, nil, nil)
 		require.NoError(t, err)
-		_, _, offsets, status, err := h.CellsToBoundariesE(ctx, cells, nil, nil, nil, nil)
+		_, _, offsets, status, err := h.CellsToBoundaries(ctx, cells, nil, nil, nil, nil)
 		require.NoError(t, err)
 		for i, c := range cells {
 			require.Equal(t, StatusOk, status[i], "cell=%d res=%d", c, res)
@@ -76,12 +76,12 @@ func TestCellsToBoundaries_VertexCountBounds(t *testing.T) {
 func TestCellsToBoundaries_InvalidCell(t *testing.T) {
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
 	cells := []uint64{0, 0xdeadbeef_cafebabe}
-	_, _, offsets, status, err := h.CellsToBoundariesE(ctx, cells, nil, nil, nil, nil)
+	_, _, offsets, status, err := h.CellsToBoundaries(ctx, cells, nil, nil, nil, nil)
 	require.NoError(t, err)
 	for i := range cells {
 		require.Equal(t, StatusInvalidCell, status[i])
@@ -92,17 +92,17 @@ func TestCellsToBoundaries_InvalidCell(t *testing.T) {
 func TestCellsToBoundaries_GrowProtocol(t *testing.T) {
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
 	lats := []float64{37.7749, 48.8566}
 	lngs := []float64{-122.4194, 2.3522}
-	cells, _, err := h.LatLngsToCellsE(ctx, ResolutionR5, lats, lngs, nil, nil)
+	cells, _, err := h.LatLngsToCells(ctx, ResolutionR5, lats, lngs, nil, nil)
 	require.NoError(t, err)
 	undersizedLat := make([]float64, 0, 1)
 	undersizedLng := make([]float64, 0, 1)
-	outLats, outLngs, offsets, _, err := h.CellsToBoundariesE(ctx, cells,
+	outLats, outLngs, offsets, _, err := h.CellsToBoundaries(ctx, cells,
 		undersizedLat, undersizedLng, nil, nil)
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(outLats), 10)

@@ -179,7 +179,7 @@ func Render(in Input) (res Result) {
 func (inst *State) Line(p *implot.Plot, label string, t []float64, vals []float64, cl color.Color, weight float32) {
 	if inst.On {
 		if k := inst.ensureKernel(); k != nil {
-			smoothed, err := k.SmoothE(vals, inst.buf(len(vals)))
+			smoothed, err := k.Smooth(vals, inst.buf(len(vals)))
 			if err == nil {
 				p.SetNextColor(cl.Literal()&^uint32(0xff) | faintAlpha).SetNextWeight(1.0)
 				p.Line(label, t, vals)
@@ -195,7 +195,7 @@ func (inst *State) Line(p *implot.Plot, label string, t []float64, vals []float6
 
 // LineWithEdge is [State.Line] with the extrapolation-backed tail drawn
 // distinctly. Convolution is undefined within a half-width of the data ends,
-// so [mssmooth.Kernel.SmoothE] extends the series by a weighted linear fit to
+// so [mssmooth.Kernel.Smooth] extends the series by a weighted linear fit to
 // define them (ADR-0152, the paper's eq 17–18). On a series whose right edge
 // is the present, those trailing halfWidth values are therefore partly a
 // projection of the trend rather than a reading of it — and they are exactly
@@ -220,7 +220,7 @@ func (inst *State) LineWithEdge(p *implot.Plot, label string, t []float64, vals 
 		inst.Line(p, label, t, vals, cl, weight)
 		return
 	}
-	smoothed, err := k.SmoothE(vals, inst.buf(len(vals)))
+	smoothed, err := k.Smooth(vals, inst.buf(len(vals)))
 	if err != nil {
 		inst.Line(p, label, t, vals, cl, weight)
 		return
@@ -240,7 +240,7 @@ func (inst *State) LineWithEdge(p *implot.Plot, label string, t []float64, vals 
 // changed. Parameters are clamped, so construction cannot fail.
 func (inst *State) ensureKernel() (k *mssmooth.Kernel) {
 	if inst.kernel == nil || inst.kernel.HalfWidth() != inst.halfWidth {
-		if built, err := mssmooth.NewKernelE(degree, inst.halfWidth); err == nil {
+		if built, err := mssmooth.NewKernel(degree, inst.halfWidth); err == nil {
 			inst.kernel = built
 		}
 	}

@@ -138,7 +138,7 @@ missing, and a missing step does not hold playback.
 
 #### SD4 — play's bars are the field's speed inside the view
 
-`sqlfield.Source.SummarizeE` reduces every step inside some bounds to a mean
+`sqlfield.Source.Summarize` reduces every step inside some bounds to a mean
 and a maximum of the magnitude in one statement, fixed per relation like the
 window's (ADR-0250 §SD3). The mean is weighted by the cosine of latitude — an
 unweighted mean over a lat/lon grid lets the crowded polar rows outvote the
@@ -221,7 +221,7 @@ waiting rule was most of what a reader saw. `Layer.SetAhead` takes the steps
 fetches them after the bracket in the order given, and lets go of what is in
 neither. A request in flight that will answer what the display time has moved
 on to is left to finish. With no list the layer is what it was. This takes up
-the `PrefetchE` deferral of ADR-0250.
+the `Prefetch` deferral of ADR-0250.
 
 #### SD10 — many steps, and little room
 
@@ -239,7 +239,7 @@ playhead and the range on it, and the time. It keeps the mode indicators
 ### Milestones
 
 - **M1 — the widget.** ✓ Axis mapping, transport, strip, transport row, keys.
-- **M2 — what feeds it.** ✓ `Layer.StepState`, `SummarizeE` in both test
+- **M2 — what feeds it.** ✓ `Layer.StepState`, `Summarize` in both test
   lanes, the purpose tag.
 - **M3 — adoption.** ✓ The gallery demo and its scene; play's pane, its scene
   and its help page.

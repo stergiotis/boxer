@@ -26,19 +26,19 @@ const audioFixtureFrames int64 = 24000
 // writeWavFixture writes a 16-bit PCM WAV into dir and returns its bytes.
 func writeWavFixture(t *testing.T, dir string, name string) (path string, want []float32) {
 	t.Helper()
-	src, err := pcm.NewSynthSourceE(audioFixtureFormat, audioFixtureFrames,
+	src, err := pcm.NewSynthSource(audioFixtureFormat, audioFixtureFrames,
 		pcm.Sine(audioFixtureFormat, 440, 0.7))
 	require.NoError(t, err)
 	var buf bytes.Buffer
-	require.NoError(t, wavfile.WriteE(context.Background(), &buf, audioFixtureFormat, wavfile.EncodingPCMInt, 16, src))
+	require.NoError(t, wavfile.Write(context.Background(), &buf, audioFixtureFormat, wavfile.EncodingPCMInt, 16, src))
 	path = filepath.Join(dir, name)
 	require.NoError(t, os.WriteFile(path, buf.Bytes(), 0o600))
 
-	file, err := wavfile.OpenE(path)
+	file, err := wavfile.Open(path)
 	require.NoError(t, err)
-	defer func() { require.NoError(t, file.CloseE()) }()
+	defer func() { require.NoError(t, file.Close()) }()
 	want = make([]float32, audioFixtureFrames*int64(audioFixtureFormat.Channels))
-	n, err := file.ReadFramesAtE(context.Background(), 0, want)
+	n, err := file.ReadFramesAt(context.Background(), 0, want)
 	require.NoError(t, err)
 	require.Equal(t, int(audioFixtureFrames), n)
 	return path, want
@@ -72,35 +72,35 @@ func TestStagedWavIsSealedAndReadsBack(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, entries, "the sealed file has no name in the store directory")
 
-	src, err := staged.openSourceE(context.Background())
+	src, err := staged.openSource(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, audioFixtureFormat, src.Format())
 	require.Equal(t, audioFixtureFrames, src.Frames())
 	got := make([]float32, len(want))
-	n, err := src.ReadFramesAtE(context.Background(), 0, got)
+	n, err := src.ReadFramesAt(context.Background(), 0, got)
 	require.NoError(t, err)
 	require.Equal(t, int(audioFixtureFrames), n)
 	assert.Equal(t, want, got)
 
 	// A track opens several readers over one staged recording; a second must
 	// not disturb the first, and a positioned read must land where it says.
-	other, err := staged.openSourceE(context.Background())
+	other, err := staged.openSource(context.Background())
 	require.NoError(t, err)
 	const at, span = 10000, 512
 	channels := int64(audioFixtureFormat.Channels)
 	buf := make([]float32, span*channels)
-	n, err = other.ReadFramesAtE(context.Background(), at, buf)
+	n, err = other.ReadFramesAt(context.Background(), at, buf)
 	require.NoError(t, err)
 	require.Equal(t, span, n)
 	assert.Equal(t, want[at*channels:(at+span)*channels], buf)
-	require.NoError(t, other.CloseE())
-	require.NoError(t, src.CloseE())
+	require.NoError(t, other.Close())
+	require.NoError(t, src.Close())
 
 	seal := staged.seal
-	require.NoError(t, staged.closeE())
+	require.NoError(t, staged.close())
 	assert.True(t, seal.Closed(), "closing a staged recording closes the sealed file, and the inode goes with it")
 	assert.Nil(t, staged.seal, "and forgets it")
-	assert.NoError(t, staged.closeE(), "closing twice is not an error")
+	assert.NoError(t, staged.close(), "closing twice is not an error")
 }
 
 // TestStagedRecordingRefusesAnOversizeFile keeps the store's quota where the
@@ -130,7 +130,7 @@ func TestStagedCompressedRecordingIsAnonymous(t *testing.T) {
 
 	staged, err := stageRecording(context.Background(), os.DirFS(dir), "tone.flac", int64(len(body)))
 	require.NoError(t, err)
-	defer func() { require.NoError(t, staged.closeE()) }()
+	defer func() { require.NoError(t, staged.close()) }()
 	require.Equal(t, decode.KindFfmpeg, staged.kind)
 	assert.Nil(t, staged.seal, "nothing is sealed for the external decoder")
 	if entries, rerr := os.ReadDir(store); rerr == nil {
@@ -139,14 +139,14 @@ func TestStagedCompressedRecordingIsAnonymous(t *testing.T) {
 
 	// The decoder's view of it: a fresh handle each time, holding the whole
 	// recording, each with an offset of its own.
-	first, err := staged.OpenE()
+	first, err := staged.Open()
 	require.NoError(t, err)
 	defer func() { _ = first.Close() }()
 	head := make([]byte, 4)
 	_, err = first.Read(head)
 	require.NoError(t, err)
 	assert.Equal(t, "fLaC", string(head))
-	second, err := staged.OpenE()
+	second, err := staged.Open()
 	require.NoError(t, err)
 	defer func() { _ = second.Close() }()
 	_, err = second.Read(head)

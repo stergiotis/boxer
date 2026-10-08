@@ -8,8 +8,8 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// PointsE returns an iterator over the geographic (latitude, longitude) of
-// every grid point in stored order — the order of [Field.ValuesE] — for the
+// Points returns an iterator over the geographic (latitude, longitude) of
+// every grid point in stored order — the order of [Field.Values] — for the
 // grid templates the reader lays out: 3.0 regular and reduced lat/lon, 3.1
 // rotated lat/lon and 3.40 regular and reduced Gaussian, all global or
 // rectangular sub-areas of a regular grid. Longitudes are in the range the
@@ -17,10 +17,10 @@ import (
 // un-rotated to geographic coordinates. Every other template, and a reduced
 // grid that is not global, is [ErrUnsupported] naming the template
 // (ADR-0292 §R2, §R10).
-func (inst *Grid) PointsE() (points iter.Seq2[float64, float64], err error) {
+func (inst *Grid) Points() (points iter.Seq2[float64, float64], err error) {
 	g := inst.LatLon
 	if g == nil {
-		err = unsupportedE("grid template 3." + strconv.Itoa(int(inst.Template)) + " points")
+		err = unsupported("grid template 3." + strconv.Itoa(int(inst.Template)) + " points")
 		return
 	}
 	if g.PL != nil {
@@ -38,11 +38,11 @@ func (inst *Grid) PointsE() (points iter.Seq2[float64, float64], err error) {
 		// one plus a full circle; a sub-area never does.
 		fullCircle := span < 1e-3 || span > 360-1e-3
 		if g.PLSum != uint64(inst.NumPoints) || maxPL == 0 || (math.Abs(span-spanWant) > 1e-3 && !fullCircle) {
-			err = unsupportedE("grid template 3." + strconv.Itoa(int(inst.Template)) + " points on a reduced sub-area")
+			err = unsupported("grid template 3." + strconv.Itoa(int(inst.Template)) + " points on a reduced sub-area")
 			return
 		}
 	}
-	rows, err := inst.rowLatitudesE()
+	rows, err := inst.rowLatitudes()
 	if err != nil {
 		return
 	}
@@ -100,10 +100,10 @@ func incrementSlack(unit float64) (slack float64) {
 	return
 }
 
-// rowLatitudesE returns the latitude of each row in stored order (row 0 is
+// rowLatitudes returns the latitude of each row in stored order (row 0 is
 // the first stored row), from the corners for lat/lon and from the Legendre
 // roots for Gaussian grids.
-func (inst *Grid) rowLatitudesE() (rows []float64, err error) {
+func (inst *Grid) rowLatitudes() (rows []float64, err error) {
 	g := inst.LatLon
 	nj := int(g.Nj)
 	rows = make([]float64, nj)
@@ -257,19 +257,19 @@ func unrotate(rlat, rlon float64, rot *Rotation) (lat, lon float64) {
 	return
 }
 
-// RasterE returns the field's values re-ordered to a west-to-east,
+// Raster returns the field's values re-ordered to a west-to-east,
 // north-to-south raster of Nj rows of Ni values, with the scan flags
 // applied exactly once (ADR-0292 §R2). It exists for grids with
 // rectangular dimensions; reduced and unstructured grids are
-// [ErrUnsupported]. The values themselves come from [Field.ValuesE].
-func (inst *Field) RasterE(dst []float64) (raster []float64, ni, nj int, err error) {
+// [ErrUnsupported]. The values themselves come from [Field.Values].
+func (inst *Field) Raster(dst []float64) (raster []float64, ni, nj int, err error) {
 	niU, njU, ok := inst.Grid.Dims()
 	if !ok {
-		err = unsupportedE("grid template 3." + strconv.Itoa(int(inst.Grid.Template)) + " raster")
+		err = unsupported("grid template 3." + strconv.Itoa(int(inst.Grid.Template)) + " raster")
 		return
 	}
 	ni, nj = int(niU), int(njU)
-	stored, err := inst.ValuesE(nil)
+	stored, err := inst.Values(nil)
 	if err != nil {
 		return
 	}
@@ -317,7 +317,7 @@ func (inst *Field) RasterE(dst []float64) (raster []float64, ni, nj int, err err
 	return
 }
 
-// LatLonRaster describes the raster [Field.RasterE] returns for a regular,
+// LatLonRaster describes the raster [Field.Raster] returns for a regular,
 // unrotated lat/lon grid (templates 3.0 and 3.40 with a constant row
 // length): the longitude of its western column and the latitude of its
 // northern row, the increments, and the dimensions. Longitudes are in the
@@ -332,15 +332,15 @@ type LatLonRaster struct {
 	Rows        []float64
 }
 
-// LatLonRasterE returns the raster geometry, or [ErrUnsupported] for a
+// LatLonRaster returns the raster geometry, or [ErrUnsupported] for a
 // grid that is not a regular unrotated lat/lon or Gaussian grid.
-func (inst *Grid) LatLonRasterE() (r LatLonRaster, err error) {
+func (inst *Grid) LatLonRaster() (r LatLonRaster, err error) {
 	g := inst.LatLon
 	if g == nil || g.PL != nil || g.Rotated != nil || g.Ni < 1 || g.Nj < 1 {
-		err = unsupportedE("grid template 3." + strconv.Itoa(int(inst.Template)) + " raster geometry")
+		err = unsupported("grid template 3." + strconv.Itoa(int(inst.Template)) + " raster geometry")
 		return
 	}
-	rows, err := inst.rowLatitudesE()
+	rows, err := inst.rowLatitudes()
 	if err != nil {
 		return
 	}

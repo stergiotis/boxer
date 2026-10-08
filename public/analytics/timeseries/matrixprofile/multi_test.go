@@ -153,7 +153,7 @@ func TestMultiComputeMatchesBruteForceOracle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ms, err := matrixprofile.NewMultiSeriesE(tt.channels, tt.window, 0.0)
+			ms, err := matrixprofile.NewMultiSeries(tt.channels, tt.window, 0.0)
 			require.NoError(t, err)
 			assertMultiProfileMatchesOracle(t, tt.channels, tt.window, ms.Compute())
 		})
@@ -171,11 +171,11 @@ func TestSingleChannelReproducesUnivariateProfile(t *testing.T) {
 	values := syntheticSine(300, 24, 0.08)
 	const window = int32(20)
 
-	s, err := matrixprofile.NewSeriesE(values, window, 0.0)
+	s, err := matrixprofile.NewSeries(values, window, 0.0)
 	require.NoError(t, err)
 	want := s.Compute()
 
-	ms, err := matrixprofile.NewMultiSeriesE([][]float64{values}, window, 0.0)
+	ms, err := matrixprofile.NewMultiSeries([][]float64{values}, window, 0.0)
 	require.NoError(t, err)
 
 	got := ms.Compute()
@@ -192,29 +192,29 @@ func TestSingleChannelReproducesUnivariateProfile(t *testing.T) {
 func TestNewMultiSeriesRejectsBadInput(t *testing.T) {
 	ok := syntheticSine(50, 9, 0.0)
 
-	_, err := matrixprofile.NewMultiSeriesE(nil, 5, 0.0)
+	_, err := matrixprofile.NewMultiSeries(nil, 5, 0.0)
 	assert.Error(t, err, "no channels")
 
-	_, err = matrixprofile.NewMultiSeriesE([][]float64{ok, ok[:40]}, 5, 0.0)
+	_, err = matrixprofile.NewMultiSeries([][]float64{ok, ok[:40]}, 5, 0.0)
 	assert.Error(t, err, "ragged channels must not be silently truncated")
 
-	_, err = matrixprofile.NewMultiSeriesE([][]float64{ok}, 1, 0.0)
+	_, err = matrixprofile.NewMultiSeries([][]float64{ok}, 1, 0.0)
 	assert.Error(t, err, "window below 2")
 
-	_, err = matrixprofile.NewMultiSeriesE([][]float64{ok}, 60, 0.0)
+	_, err = matrixprofile.NewMultiSeries([][]float64{ok}, 60, 0.0)
 	assert.Error(t, err, "window longer than the series")
 
 	tooMany := make([][]float64, matrixprofile.MaxChannels+1)
 	for i := range tooMany {
 		tooMany[i] = ok
 	}
-	_, err = matrixprofile.NewMultiSeriesE(tooMany, 5, 0.0)
+	_, err = matrixprofile.NewMultiSeries(tooMany, 5, 0.0)
 	assert.Error(t, err, "the bitmask cannot carry more than MaxChannels")
 
 	withNaN := make([]float64, len(ok))
 	copy(withNaN, ok)
 	withNaN[3] = math.NaN()
-	_, err = matrixprofile.NewMultiSeriesE([][]float64{ok, withNaN}, 5, 0.0)
+	_, err = matrixprofile.NewMultiSeries([][]float64{ok, withNaN}, 5, 0.0)
 	assert.Error(t, err, "a non-finite value in any channel")
 }
 
@@ -262,7 +262,7 @@ func TestPlantedSubdimensionalMotif(t *testing.T) {
 	carriers := []int32{1, 3, 4}
 	channels := plantedSubdimensional(n, d, carriers, window, at1, at2)
 
-	ms, err := matrixprofile.NewMultiSeriesE(channels, window, 0.0)
+	ms, err := matrixprofile.NewMultiSeries(channels, window, 0.0)
 	require.NoError(t, err)
 	prof := ms.Compute()
 
@@ -296,11 +296,11 @@ func TestMDLSelectsThePlantedDimensionality(t *testing.T) {
 	carriers := []int32{1, 3, 4}
 	channels := plantedSubdimensional(n, d, carriers, window, at1, at2)
 
-	ms, err := matrixprofile.NewMultiSeriesE(channels, window, 0.0)
+	ms, err := matrixprofile.NewMultiSeries(channels, window, 0.0)
 	require.NoError(t, err)
 	prof := ms.Compute()
 
-	k, dims, bitSize, err := ms.SelectDimsMDLE(prof, 0)
+	k, dims, bitSize, err := ms.SelectDimsMDL(prof, 0)
 	require.NoError(t, err)
 	t.Logf("bit size by k: %v", bitSize)
 
@@ -337,11 +337,11 @@ func TestMDLChargesTheReferenceSide(t *testing.T) {
 	)
 	channels := plantedSubdimensional(n, 1, []int32{0}, window, at1, at2)
 
-	ms, err := matrixprofile.NewMultiSeriesE(channels, window, 0.0)
+	ms, err := matrixprofile.NewMultiSeries(channels, window, 0.0)
 	require.NoError(t, err)
 	prof := ms.Compute()
 
-	k, _, bitSize, err := ms.SelectDimsMDLE(prof, bits)
+	k, _, bitSize, err := ms.SelectDimsMDL(prof, bits)
 	require.NoError(t, err)
 	require.Equal(t, int32(1), k)
 	assert.InDelta(t, float64(window*bits), bitSize[0], 1.0e-9,
@@ -377,7 +377,7 @@ func TestPropertyProfileIsMonotoneInK(t *testing.T) {
 			}
 		}
 
-		ms, err := matrixprofile.NewMultiSeriesE(channels, window, 0.0)
+		ms, err := matrixprofile.NewMultiSeries(channels, window, 0.0)
 		require.NoError(rt, err)
 		prof := ms.Compute()
 
@@ -421,9 +421,9 @@ func TestPropertyPerChannelAffineInvariance(t *testing.T) {
 		copy(transformed, base)
 		transformed[target] = withOffset(withScale(base[target], scale), offset)
 
-		msBase, err := matrixprofile.NewMultiSeriesE(base, window, 0.0)
+		msBase, err := matrixprofile.NewMultiSeries(base, window, 0.0)
 		require.NoError(rt, err)
-		msTransformed, err := matrixprofile.NewMultiSeriesE(transformed, window, 0.0)
+		msTransformed, err := matrixprofile.NewMultiSeries(transformed, window, 0.0)
 		require.NoError(rt, err)
 
 		profBase := msBase.Compute()
@@ -471,9 +471,9 @@ func TestPropertyChannelPermutationInvariance(t *testing.T) {
 			permuted[newIdx] = base[oldIdx]
 		}
 
-		msBase, err := matrixprofile.NewMultiSeriesE(base, window, 0.0)
+		msBase, err := matrixprofile.NewMultiSeries(base, window, 0.0)
 		require.NoError(rt, err)
-		msPermuted, err := matrixprofile.NewMultiSeriesE(permuted, window, 0.0)
+		msPermuted, err := matrixprofile.NewMultiSeries(permuted, window, 0.0)
 		require.NoError(rt, err)
 
 		profBase := msBase.Compute()
@@ -509,7 +509,7 @@ func TestDimsAreNestedWhenTheNeighbourIsShared(t *testing.T) {
 	)
 	channels := plantedSubdimensional(n, d, []int32{0, 2}, window, 40, 190)
 
-	ms, err := matrixprofile.NewMultiSeriesE(channels, window, 0.0)
+	ms, err := matrixprofile.NewMultiSeries(channels, window, 0.0)
 	require.NoError(t, err)
 	prof := ms.Compute()
 
@@ -531,7 +531,7 @@ func TestPositionScoresUsesCentres(t *testing.T) {
 	values := syntheticSine(200, 20, 0.05)
 	const window = int32(20)
 
-	s, err := matrixprofile.NewSeriesE(values, window, 0.0)
+	s, err := matrixprofile.NewSeries(values, window, 0.0)
 	require.NoError(t, err)
 	prof := s.Compute()
 
@@ -562,7 +562,7 @@ func TestMultiPositionScores(t *testing.T) {
 		window = int32(30)
 	)
 	channels := plantedSubdimensional(n, d, []int32{0, 2}, int(window), 40, 190)
-	ms, err := matrixprofile.NewMultiSeriesE(channels, window, 0.0)
+	ms, err := matrixprofile.NewMultiSeries(channels, window, 0.0)
 	require.NoError(t, err)
 	prof := ms.Compute()
 
@@ -633,7 +633,7 @@ func multivariateFixture(t *testing.T, kind adscore.AnomalyKindE, length int32, 
 		spec.Length = length
 		// A different background per carrier, leaving placement untouched.
 		spec.Period = period * (1.0 + 0.11*float64(ci))
-		f, err := adscore.GenerateE(spec)
+		f, err := adscore.Generate(spec)
 		require.NoError(t, err)
 		channels[c] = f.Values
 		if labels == nil {
@@ -658,7 +658,7 @@ func bestOneLiner(t *testing.T, channels [][]float64, labels []bool, window int3
 	t.Helper()
 	for c, values := range channels {
 		for _, baseline := range adscore.AllBaselines {
-			m, err := adscore.EvaluateE(adscore.BaselineScores(values, baseline, window), labels, 0)
+			m, err := adscore.Evaluate(adscore.BaselineScores(values, baseline, window), labels, 0)
 			require.NoError(t, err)
 			if m.VUSPR > best {
 				best = m.VUSPR
@@ -678,7 +678,7 @@ func perChannelMaxScores(t *testing.T, channels [][]float64, window int32, n int
 	t.Helper()
 	scores = make([]float64, n)
 	for _, values := range channels {
-		s, err := matrixprofile.NewSeriesE(values, window, 0.0)
+		s, err := matrixprofile.NewSeries(values, window, 0.0)
 		require.NoError(t, err)
 		for i, v := range s.Compute().PositionScores(n, nil) {
 			if v > scores[i] {
@@ -708,14 +708,14 @@ func TestSubdimensionalDiscordPeaksAtTheAffectedChannelCount(t *testing.T) {
 			channels, labels, period := multivariateFixture(t, kind, length, d, carriers, 41)
 			window := int32(period)
 
-			ms, err := matrixprofile.NewMultiSeriesE(channels, window, 0.0)
+			ms, err := matrixprofile.NewMultiSeries(channels, window, 0.0)
 			require.NoError(t, err)
 			prof := ms.Compute()
 
 			var best float64
 			var bestK int32
 			for k := int32(1); k <= d; k++ {
-				m, err := adscore.EvaluateE(prof.PositionScores(k, length, nil), labels, 0)
+				m, err := adscore.Evaluate(prof.PositionScores(k, length, nil), labels, 0)
 				require.NoError(t, err)
 				t.Logf("k=%d VUS-PR=%.4f", k, m.VUSPR)
 				if m.VUSPR > best {
@@ -757,17 +757,17 @@ func TestSubdimensionalDiscordAgainstOneLiners(t *testing.T) {
 			channels, labels, period := multivariateFixture(t, kind, length, d, carriers, 41)
 			window := int32(period)
 
-			ms, err := matrixprofile.NewMultiSeriesE(channels, window, 0.0)
+			ms, err := matrixprofile.NewMultiSeries(channels, window, 0.0)
 			require.NoError(t, err)
 			prof := ms.Compute()
 
 			baseline, which := bestOneLiner(t, channels, labels, window)
-			reference, err := adscore.EvaluateE(perChannelMaxScores(t, channels, window, length), labels, 0)
+			reference, err := adscore.Evaluate(perChannelMaxScores(t, channels, window, length), labels, 0)
 			require.NoError(t, err)
 
 			var best float64
 			for k := int32(1); k <= d; k++ {
-				m, err := adscore.EvaluateE(prof.PositionScores(k, length, nil), labels, 0)
+				m, err := adscore.Evaluate(prof.PositionScores(k, length, nil), labels, 0)
 				require.NoError(t, err)
 				if m.VUSPR > best {
 					best = m.VUSPR

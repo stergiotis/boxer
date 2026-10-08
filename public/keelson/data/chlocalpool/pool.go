@@ -74,7 +74,7 @@ func New(cfg Config, logger zerolog.Logger) (p *Pool, err error) {
 // The caller MUST eventually Close the returned worker to release
 // its slot in the pool and free OS resources.
 func (inst *Pool) Acquire(ctx context.Context) (w *Worker, err error) {
-	return inst.inner.AcquireE(ctx)
+	return inst.inner.Acquire(ctx)
 }
 
 // Stop drains the pool: closes every worker, joins the refill and
@@ -82,7 +82,7 @@ func (inst *Pool) Acquire(ctx context.Context) (w *Worker, err error) {
 // is terminated under it. Every call waits for the one teardown under
 // its own ctx, so a caller whose deadline expired can call again.
 func (inst *Pool) Stop(ctx context.Context) (err error) {
-	return inst.inner.StopE(ctx)
+	return inst.inner.Stop(ctx)
 }
 
 // Stats snapshots the pool's current cardinality. Useful for tests
@@ -111,7 +111,7 @@ type spawner struct {
 	cfg Config
 }
 
-func (inst spawner) SpawnE(ctx context.Context, release procpool.ReleaseFunc) (w *Worker, err error) {
+func (inst spawner) Spawn(ctx context.Context, release procpool.ReleaseFunc) (w *Worker, err error) {
 	return newWorker(ctx, inst.cfg, release)
 }
 

@@ -20,46 +20,46 @@ The design is fixed by [ADR-0003](../../../../doc/adr/0003-h3-wasm-bridge.md).
 
 - **Struct-of-Arrays API.** Inputs and outputs are parallel slices
   (`lats []float64`, `lngs []float64`, `cells []uint64`, ...). No `struct{Lat,Lng}` values on the hot path.
-- **CSR for variable-arity outputs.** `CellsToChildrenE`, `GridDisksE`,
-  `CellsToStringsE`, and `CellsToBoundariesE` return a flat values slice
+- **CSR for variable-arity outputs.** `CellsToChildren`, `GridDisks`,
+  `CellsToStrings`, and `CellsToBoundaries` return a flat values slice
   plus a `[]int32` offsets slice with `len(offsets) == N+1`,
-  `offsets[0] == 0`, monotone non-decreasing. `PolygonToCellsE` (SD11) and
-  `UncompactCellsE` (SD14) are flat — see [`EXPLANATION.md`](EXPLANATION.md)
+  `offsets[0] == 0`, monotone non-decreasing. `PolygonToCells` (SD11) and
+  `UncompactCells` (SD14) are flat — see [`EXPLANATION.md`](EXPLANATION.md)
   for the deviations.
 - **Per-element `StatusE`.** Bulk-level `error` is reserved for WASM traps,
   use-after-release, and whole-batch semantic errors (e.g., mixed-resolution
-  input to `CompactCellsE` per SD13); per-element failures set a `StatusE`
+  input to `CompactCells` per SD13); per-element failures set a `StatusE`
   byte so partial batches survive.
 - **Pool of WASM modules.** `wazero.Runtime` is shared across goroutines;
-  instantiated modules are not — check one out via [`Runtime.AcquireE`] and
+  instantiated modules are not — check one out via [`Runtime.Acquire`] and
   return it via [`Handle.Release`].
 
 ## Available bulk operations
 
 | Method                   | In                                           | Out                                                         |
 |--------------------------|----------------------------------------------|-------------------------------------------------------------|
-| `LatLngsToCellsE`        | `[]float64` lats, lngs, `ResolutionE`         | `[]uint64` cells, `[]StatusE`                               |
-| `LatLngsIterToCellsE`    | `iter.Seq2[int, LatLng]`, `n`, `ResolutionE`  | `[]uint64` cells, `[]StatusE` (SD16)                        |
-| `CellsToLatLngsE`        | `[]uint64` cells                              | `[]float64` lats, lngs, `[]StatusE`                         |
-| `CellsToParentsE`        | `[]uint64` cells, `ResolutionE`               | `[]uint64` parents, `[]StatusE`                             |
-| `CellsToChildrenE`       | `[]uint64` cells, `ResolutionE`               | CSR `[]uint64` + `[]int32` offsets, `[]StatusE`             |
-| `GridDisksE`             | `[]uint64` cells, `k`                         | CSR `[]uint64` + `[]int32` offsets, `[]StatusE`             |
-| `CellsToStringsE`        | `[]uint64` cells                              | CSR `[]byte` + `[]int32` offsets, `[]StatusE`               |
-| `StringsToCellsE`        | CSR `[]byte` + `[]int32` offsets              | `[]uint64` cells, `[]StatusE`                               |
-| `AreValidCellsE`         | `[]uint64` cells                              | `[]bool` valid                                              |
-| `GetResolutionsE`        | `[]uint64` cells                              | `[]ResolutionE`, `[]StatusE`                                |
-| `PolygonToCellsE`        | flat vert lats/lngs + ring offsets, `ResolutionE`, `ContainmentModeE` | flat `[]uint64` cells                  |
-| `CellsToBoundariesE`     | `[]uint64` cells                              | CSR `[]float64` lats + `[]float64` lngs + `[]int32` offsets, `[]StatusE` |
-| `DissolveE`              | `[]uint64` same-resolution cells              | two-level CSR `[]float64` lats + `[]float64` lngs + `[]int32` ring offsets + `[]int32` polygon offsets (bulk error only, SD17) |
-| `CompactCellsE`          | `[]uint64` same-resolution cells              | `[]uint64` compacted (bulk error only, SD13)                |
-| `UncompactCellsE`        | `[]uint64` cells, target `ResolutionE`        | flat `[]uint64` expanded, `[]StatusE` (SD14)                |
+| `LatLngsToCells`        | `[]float64` lats, lngs, `ResolutionE`         | `[]uint64` cells, `[]StatusE`                               |
+| `LatLngsIterToCells`    | `iter.Seq2[int, LatLng]`, `n`, `ResolutionE`  | `[]uint64` cells, `[]StatusE` (SD16)                        |
+| `CellsToLatLngs`        | `[]uint64` cells                              | `[]float64` lats, lngs, `[]StatusE`                         |
+| `CellsToParents`        | `[]uint64` cells, `ResolutionE`               | `[]uint64` parents, `[]StatusE`                             |
+| `CellsToChildren`       | `[]uint64` cells, `ResolutionE`               | CSR `[]uint64` + `[]int32` offsets, `[]StatusE`             |
+| `GridDisks`             | `[]uint64` cells, `k`                         | CSR `[]uint64` + `[]int32` offsets, `[]StatusE`             |
+| `CellsToStrings`        | `[]uint64` cells                              | CSR `[]byte` + `[]int32` offsets, `[]StatusE`               |
+| `StringsToCells`        | CSR `[]byte` + `[]int32` offsets              | `[]uint64` cells, `[]StatusE`                               |
+| `AreValidCells`         | `[]uint64` cells                              | `[]bool` valid                                              |
+| `GetResolutions`        | `[]uint64` cells                              | `[]ResolutionE`, `[]StatusE`                                |
+| `PolygonToCells`        | flat vert lats/lngs + ring offsets, `ResolutionE`, `ContainmentModeE` | flat `[]uint64` cells                  |
+| `CellsToBoundaries`     | `[]uint64` cells                              | CSR `[]float64` lats + `[]float64` lngs + `[]int32` offsets, `[]StatusE` |
+| `Dissolve`              | `[]uint64` same-resolution cells              | two-level CSR `[]float64` lats + `[]float64` lngs + `[]int32` ring offsets + `[]int32` polygon offsets (bulk error only, SD17) |
+| `CompactCells`          | `[]uint64` same-resolution cells              | `[]uint64` compacted (bulk error only, SD13)                |
+| `UncompactCells`        | `[]uint64` cells, target `ResolutionE`        | flat `[]uint64` expanded, `[]StatusE` (SD14)                |
 
 ## Arrow interop
 
 The companion subpackage [`h3arrow`](h3arrow) provides zero-copy adapters
 from this package's slice / CSR outputs to `arrow-go` arrays
-(`CellsAsArrowUint64`, `Float64sAsArrowFloat64`, `CSRAsArrowListUint64E`,
-`CSRAsArrowListFloat64E`). The returned arrow arrays wrap the caller's
+(`CellsAsArrowUint64`, `Float64sAsArrowFloat64`, `CSRAsArrowListUint64`,
+`CSRAsArrowListFloat64`). The returned arrow arrays wrap the caller's
 `[]uint64` / `[]float64` / `[]int32` backing arrays directly, so the
 caller must keep those slices reachable until the arrow arrays are
 `Release()`d. Kept as a subpackage so consumers who do not use arrow-go

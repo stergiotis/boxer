@@ -24,7 +24,7 @@ func steps(n int) (out []vectorfield.Step) {
 
 func newPyramid(t *testing.T, loader vectorfield.StepLoaderI, nSteps int, opts vectorfield.PyramidOptions) *vectorfield.Pyramid {
 	t.Helper()
-	p, err := vectorfield.NewPyramidE(context.Background(), vectorfield.Meta{Name: "test", Unit: "m/s", Steps: steps(nSteps)}, loader, opts)
+	p, err := vectorfield.NewPyramid(context.Background(), vectorfield.Meta{Name: "test", Unit: "m/s", Steps: steps(nSteps)}, loader, opts)
 	require.NoError(t, err)
 	return p
 }
@@ -42,7 +42,7 @@ func everyLevel(t *testing.T, p *vectorfield.Pyramid, visit func(win *vectorfiel
 	meta := p.Describe()
 	levels := map[float64]bool{}
 	for _, maxCols := range []int{4096, 200, 100, 50, 25, 12, 6, 3} {
-		win, err := p.SampleE(context.Background(), vectorfield.Request{
+		win, err := p.Sample(context.Background(), vectorfield.Request{
 			West: meta.West, East: meta.East, South: meta.South, North: meta.North,
 			MaxCols: maxCols, MaxRows: maxCols,
 		})
@@ -81,11 +81,11 @@ type missingStepLoader struct {
 	missing int
 }
 
-func (inst *missingStepLoader) LoadStepE(ctx context.Context, step int) (vectorfield.Grid, error) {
+func (inst *missingStepLoader) LoadStep(ctx context.Context, step int) (vectorfield.Grid, error) {
 	if step == inst.missing {
 		return vectorfield.Grid{}, vectorfield.ErrStepMissing
 	}
-	return inst.inner.LoadStepE(ctx, step)
+	return inst.inner.LoadStep(ctx, step)
 }
 
 func TestConstantFieldIsConstantAtEveryLevel(t *testing.T) {
@@ -131,7 +131,7 @@ func TestWindowAcrossTheSeamIsContiguous(t *testing.T) {
 	}
 	p := newPyramid(t, vectorfield.NewGlobalAnalyticLoader(0.5, fn), 1, vectorfield.PyramidOptions{})
 	for _, maxCols := range []int{4096, 60, 20} {
-		win, err := p.SampleE(context.Background(), vectorfield.Request{West: 140, East: 230, South: -30, North: 30, MaxCols: maxCols, MaxRows: maxCols})
+		win, err := p.Sample(context.Background(), vectorfield.Request{West: 140, East: 230, South: -30, North: 30, MaxCols: maxCols, MaxRows: maxCols})
 		require.NoError(t, err)
 		require.Less(t, win.West, 140.0)
 		require.Greater(t, win.East(), 230.0)
@@ -155,9 +155,9 @@ func TestRepeatedCyclicColumnIsDropped(t *testing.T) {
 	require.True(t, repeated.Describe().PeriodicLon)
 	require.Equal(t, plain.Describe().East, repeated.Describe().East)
 	req := vectorfield.Request{West: 300, East: 420, South: -60, North: 60, MaxCols: 50, MaxRows: 50}
-	a, err := plain.SampleE(context.Background(), req)
+	a, err := plain.Sample(context.Background(), req)
 	require.NoError(t, err)
-	b, err := repeated.SampleE(context.Background(), req)
+	b, err := repeated.Sample(context.Background(), req)
 	require.NoError(t, err)
 	require.Equal(t, a.Cols, b.Cols)
 	require.Equal(t, a.U, b.U)
@@ -177,7 +177,7 @@ func TestIncoherentFieldDoesNotAliasIntoAFlow(t *testing.T) {
 	}
 	p := newPyramid(t, regional(fn), 1, vectorfield.PyramidOptions{})
 	meta := p.Describe()
-	win, err := p.SampleE(context.Background(), vectorfield.Request{West: meta.West, East: meta.East, South: meta.South, North: meta.North, MaxCols: 30, MaxRows: 30})
+	win, err := p.Sample(context.Background(), vectorfield.Request{West: meta.West, East: meta.East, South: meta.South, North: meta.North, MaxCols: 30, MaxRows: 30})
 	require.NoError(t, err)
 	require.Greater(t, win.Level, 0)
 	for i := range win.U {
@@ -219,24 +219,24 @@ type countingLoader struct {
 	gate  chan struct{}
 }
 
-func (inst *countingLoader) LoadStepE(ctx context.Context, step int) (vectorfield.Grid, error) {
+func (inst *countingLoader) LoadStep(ctx context.Context, step int) (vectorfield.Grid, error) {
 	inst.loads.Add(1)
 	if inst.gate != nil {
 		<-inst.gate
 	}
-	return inst.inner.LoadStepE(ctx, step)
+	return inst.inner.LoadStep(ctx, step)
 }
 
 func TestCacheIsBoundedInBytes(t *testing.T) {
 	loader := &countingLoader{inner: regional(vectorfield.Uniform(1, 0))}
 	meta := vectorfield.Meta{Steps: steps(6), West: 0, East: 51, South: 20, North: 45.4, DLon: 0.2, DLat: 0.2}
-	p, err := vectorfield.NewPyramidE(context.Background(), meta, loader, vectorfield.PyramidOptions{CacheBytes: 1})
+	p, err := vectorfield.NewPyramid(context.Background(), meta, loader, vectorfield.PyramidOptions{CacheBytes: 1})
 	require.NoError(t, err)
 	req := vectorfield.Request{West: 10, East: 20, South: 30, North: 40, MaxCols: 50, MaxRows: 50}
 	var oneStep int64
 	for step := range 6 {
 		req.Step = step
-		_, err = p.SampleE(context.Background(), req)
+		_, err = p.Sample(context.Background(), req)
 		require.NoError(t, err)
 		if step == 0 {
 			oneStep = p.HeldBytes()
@@ -246,14 +246,14 @@ func TestCacheIsBoundedInBytes(t *testing.T) {
 	}
 	require.EqualValues(t, 6, loader.loads.Load())
 	req.Step = 5
-	_, err = p.SampleE(context.Background(), req)
+	_, err = p.Sample(context.Background(), req)
 	require.NoError(t, err)
 	req.Step = 4
-	_, err = p.SampleE(context.Background(), req)
+	_, err = p.Sample(context.Background(), req)
 	require.NoError(t, err)
 	require.EqualValues(t, 6, loader.loads.Load(), "the two most recent steps were held")
 	req.Step = 0
-	_, err = p.SampleE(context.Background(), req)
+	_, err = p.Sample(context.Background(), req)
 	require.NoError(t, err)
 	require.EqualValues(t, 7, loader.loads.Load(), "an evicted step is read again")
 }
@@ -261,14 +261,14 @@ func TestCacheIsBoundedInBytes(t *testing.T) {
 func TestConcurrentRequestsLoadAStepOnce(t *testing.T) {
 	loader := &countingLoader{inner: regional(vectorfield.Uniform(1, 0)), gate: make(chan struct{})}
 	meta := vectorfield.Meta{Steps: steps(1), West: 0, East: 51, South: 20, North: 45.4, DLon: 0.2, DLat: 0.2}
-	p, err := vectorfield.NewPyramidE(context.Background(), meta, loader, vectorfield.PyramidOptions{})
+	p, err := vectorfield.NewPyramid(context.Background(), meta, loader, vectorfield.PyramidOptions{})
 	require.NoError(t, err)
 	var wg sync.WaitGroup
 	for range 8 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := p.SampleE(context.Background(), vectorfield.Request{West: 10, East: 20, South: 30, North: 40, MaxCols: 50, MaxRows: 50})
+			_, err := p.Sample(context.Background(), vectorfield.Request{West: 10, East: 20, South: 30, North: 40, MaxCols: 50, MaxRows: 50})
 			require.NoError(t, err)
 		}()
 	}
@@ -281,20 +281,20 @@ func TestConcurrentRequestsLoadAStepOnce(t *testing.T) {
 func TestWaitingForALoadHonoursTheContext(t *testing.T) {
 	loader := &countingLoader{inner: regional(vectorfield.Uniform(1, 0)), gate: make(chan struct{})}
 	meta := vectorfield.Meta{Steps: steps(1), West: 0, East: 51, South: 20, North: 45.4, DLon: 0.2, DLat: 0.2}
-	p, err := vectorfield.NewPyramidE(context.Background(), meta, loader, vectorfield.PyramidOptions{})
+	p, err := vectorfield.NewPyramid(context.Background(), meta, loader, vectorfield.PyramidOptions{})
 	require.NoError(t, err)
 	req := vectorfield.Request{West: 10, East: 20, South: 30, North: 40, MaxCols: 50, MaxRows: 50}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		_, _ = p.SampleE(context.Background(), req)
+		_, _ = p.Sample(context.Background(), req)
 	}()
 	for loader.loads.Load() == 0 {
 		time.Sleep(time.Millisecond)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
-	_, err = p.SampleE(ctx, req)
+	_, err = p.Sample(ctx, req)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	close(loader.gate)
 	<-done
@@ -303,9 +303,9 @@ func TestWaitingForALoadHonoursTheContext(t *testing.T) {
 func TestStepThatDiffersFromTheGeometryIsRefused(t *testing.T) {
 	meta := vectorfield.Meta{Steps: steps(1), West: 0, East: 10, South: 0, North: 10, DLon: 1, DLat: 1}
 	_, err := func() (vectorfield.Window, error) {
-		p, err := vectorfield.NewPyramidE(context.Background(), meta, regional(vectorfield.Uniform(1, 0)), vectorfield.PyramidOptions{})
+		p, err := vectorfield.NewPyramid(context.Background(), meta, regional(vectorfield.Uniform(1, 0)), vectorfield.PyramidOptions{})
 		require.NoError(t, err)
-		return p.SampleE(context.Background(), vectorfield.Request{West: 1, East: 2, South: 1, North: 2, MaxCols: 8, MaxRows: 8})
+		return p.Sample(context.Background(), vectorfield.Request{West: 1, East: 2, South: 1, North: 2, MaxCols: 8, MaxRows: 8})
 	}()
 	require.Error(t, err)
 }

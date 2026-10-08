@@ -18,31 +18,31 @@ import (
 // ADR-0134 crossed with a named pipe, widened to a seekable object because
 // ffprobe cannot determine a duration from a stream it may not re-read).
 //
-// A path-shaped input has no reason to go through here; [OpenE] is for that.
+// A path-shaped input has no reason to go through here; [Open] is for that.
 type FdInputI interface {
 	// Name is what errors and logs call the recording. It is not opened and
 	// need not exist.
 	Name() string
-	// OpenE returns a new read handle on the recording, positioned at the
+	// Open returns a new read handle on the recording, positioned at the
 	// start. Every call must return an independent handle: two decoder
 	// processes sharing one open file description would share its offset and
 	// seek each other off course. The caller closes what it gets.
-	OpenE() (f *os.File, err error)
+	Open() (f *os.File, err error)
 }
 
-// OpenFfmpegFdE is [OpenFfmpegE] over an [FdInputI]: every ffprobe and ffmpeg
+// OpenFfmpegFd is [OpenFfmpeg] over an [FdInputI]: every ffprobe and ffmpeg
 // the source spawns inherits a handle of its own from in and addresses it as
 // [childFdPath]. The source owns nothing of in and closes nothing of it; the
 // caller keeps it alive for as long as the source is read.
-func OpenFfmpegFdE(ctx context.Context, in FdInputI) (inst *FfmpegSource, err error) {
+func OpenFfmpegFd(ctx context.Context, in FdInputI) (inst *FfmpegSource, err error) {
 	if in == nil {
 		return nil, eb.Build().Errorf("no input")
 	}
-	format, frames, err := probeFdE(ctx, in)
+	format, frames, err := probeFd(ctx, in)
 	if err != nil {
 		return nil, err
 	}
-	err = format.ValidateE()
+	err = format.Validate()
 	if err != nil {
 		return nil, eb.Build().Str("path", in.Name()).Errorf("probed format is unusable: %w", err)
 	}
@@ -63,7 +63,7 @@ func OpenFfmpegFdE(ctx context.Context, in FdInputI) (inst *FfmpegSource, err er
 // the peaks build and the window cache.
 func ReopenerFd(in FdInputI) (reopen func(ctx context.Context) (src pcm.SourceI, err error)) {
 	return func(ctx context.Context) (src pcm.SourceI, err error) {
-		return OpenFfmpegFdE(ctx, in)
+		return OpenFfmpegFd(ctx, in)
 	}
 }
 

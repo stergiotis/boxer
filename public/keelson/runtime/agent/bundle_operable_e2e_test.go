@@ -52,7 +52,7 @@ func TestAnAgentDrivesAnOperableBundleView(t *testing.T) {
 	t.Cleanup(func() { _ = svc.Close(ctx) })
 	svc.SetDispatcher(r.svc)
 	publisher := r.bus.NewClient("test.producer", []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
-	_, err = play.PublishBundleE(publisher, play.BundleSpec{Alias: "counts", Sql: "SELECT * FROM keelson('result')", Tabs: []string{"table"},
+	_, err = play.PublishBundle(publisher, play.BundleSpec{Alias: "counts", Sql: "SELECT * FROM keelson('result')", Tabs: []string{"table"},
 		Datasets: []adhocdata.BundleDatasetInput{{LocalName: "result", ArrowIPCStream: e2eStream(t, 1, 2, 3)}}})
 	require.NoError(t, err)
 

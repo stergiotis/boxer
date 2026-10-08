@@ -659,7 +659,7 @@ the family graph underneath, and the map puts its table under the picture.
 
 ## Update (2026-09-19) — a contributed snippet library is chrome an applet cannot name
 
-ADR-0097's contributed snippet libraries (`play.RegisterSnippetLibraryE`) give
+ADR-0097's contributed snippet libraries (`play.RegisterSnippetLibrary`) give
 every play window opened after the registration a tools-zone tab beside the
 built-in Snippets tab. A consuming repository registers one at init, and its
 applet windows then carried it too: the tab is play's to add and the host's to

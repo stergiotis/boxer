@@ -61,14 +61,14 @@ func TestWriteReadRoundTrip(t *testing.T) {
 		total := frames * ch
 		want := rapid.SliceOfN(rapid.Float32Range(-1, 1), total, total).Draw(rt, "samples")
 
-		src, err := pcm.NewMemSourceE(format, want)
+		src, err := pcm.NewMemSource(format, want)
 		require.NoError(rt, err)
 		var buf bytes.Buffer
-		err = WriteE(ctx, &buf, format, sf.encoding, sf.bits, src)
+		err = Write(ctx, &buf, format, sf.encoding, sf.bits, src)
 		require.NoError(rt, err)
 
 		raw := buf.Bytes()
-		file, err := NewReaderE(bytes.NewReader(raw), int64(len(raw)))
+		file, err := NewReader(bytes.NewReader(raw), int64(len(raw)))
 		require.NoError(rt, err)
 		require.Equal(rt, format, file.Format())
 		require.Equal(rt, int64(frames), file.Frames())
@@ -81,7 +81,7 @@ func TestWriteReadRoundTrip(t *testing.T) {
 		got := make([]float32, total)
 		if total > 0 {
 			var n int
-			n, err = file.ReadFramesAtE(ctx, 0, got)
+			n, err = file.ReadFramesAt(ctx, 0, got)
 			require.NoError(rt, err)
 			require.Equal(rt, frames, n)
 		}
@@ -94,7 +94,7 @@ func TestWriteReadRoundTrip(t *testing.T) {
 			}
 		}
 		pcmtest.CheckSourceContract(rt, file, 2000)
-		require.NoError(rt, file.CloseE())
+		require.NoError(rt, file.Close())
 	})
 }
 
@@ -105,13 +105,13 @@ func TestWriteReadZeroFrames(t *testing.T) {
 	for _, sf := range allSampleFormats {
 		t.Run(fmt.Sprintf("%s%d", sf.encoding, sf.bits), func(t *testing.T) {
 			format := pcm.Format{SampleRate: 44100, Channels: 2}
-			src, err := pcm.NewMemSourceE(format, nil)
+			src, err := pcm.NewMemSource(format, nil)
 			require.NoError(t, err)
 			var buf bytes.Buffer
-			require.NoError(t, WriteE(ctx, &buf, format, sf.encoding, sf.bits, src))
+			require.NoError(t, Write(ctx, &buf, format, sf.encoding, sf.bits, src))
 
 			raw := buf.Bytes()
-			file, err := NewReaderE(bytes.NewReader(raw), int64(len(raw)))
+			file, err := NewReader(bytes.NewReader(raw), int64(len(raw)))
 			require.NoError(t, err)
 			require.Equal(t, int64(0), file.Frames())
 			require.Equal(t, format, file.Format())
@@ -125,14 +125,14 @@ func TestWriteReadZeroFrames(t *testing.T) {
 // samples looking for a chunk header.
 func TestWriteOddDataSizePadsTheChunk(t *testing.T) {
 	format := pcm.Format{SampleRate: 8000, Channels: 1}
-	src, err := pcm.NewMemSourceE(format, []float32{0.5, -0.5, 0.25})
+	src, err := pcm.NewMemSource(format, []float32{0.5, -0.5, 0.25})
 	require.NoError(t, err)
 	var buf bytes.Buffer
-	require.NoError(t, WriteE(context.Background(), &buf, format, EncodingPCMInt, 8, src))
+	require.NoError(t, Write(context.Background(), &buf, format, EncodingPCMInt, 8, src))
 	require.Equal(t, int(riffHeaderSize+chunkHeaderSize+fmtChunkSize+chunkHeaderSize)+3+1, buf.Len())
 
 	raw := buf.Bytes()
-	file, err := NewReaderE(bytes.NewReader(raw), int64(len(raw)))
+	file, err := NewReader(bytes.NewReader(raw), int64(len(raw)))
 	require.NoError(t, err)
 	require.Equal(t, int64(3), file.Frames())
 }
@@ -145,42 +145,42 @@ func TestReadFramesReusesScratch(t *testing.T) {
 	for i := range samples {
 		samples[i] = float32(i%97)/97 - 0.5
 	}
-	src, err := pcm.NewMemSourceE(format, samples)
+	src, err := pcm.NewMemSource(format, samples)
 	require.NoError(t, err)
 	var buf bytes.Buffer
-	require.NoError(t, WriteE(context.Background(), &buf, format, EncodingPCMInt, 24, src))
+	require.NoError(t, Write(context.Background(), &buf, format, EncodingPCMInt, 24, src))
 	raw := buf.Bytes()
-	file, err := NewReaderE(bytes.NewReader(raw), int64(len(raw)))
+	file, err := NewReader(bytes.NewReader(raw), int64(len(raw)))
 	require.NoError(t, err)
 
 	big := make([]float32, 2*256)
-	_, err = file.ReadFramesAtE(context.Background(), 0, big)
+	_, err = file.ReadFramesAt(context.Background(), 0, big)
 	require.NoError(t, err)
 	grown := cap(file.scratch)
 	require.Equal(t, 256*2*3, grown)
 	small := make([]float32, 2*4)
-	_, err = file.ReadFramesAtE(context.Background(), 100, small)
+	_, err = file.ReadFramesAt(context.Background(), 100, small)
 	require.NoError(t, err)
 	require.Equal(t, grown, cap(file.scratch))
-	_, err = file.ReadFramesAtE(context.Background(), 0, big)
+	_, err = file.ReadFramesAt(context.Background(), 0, big)
 	require.NoError(t, err)
 	require.Equal(t, grown, cap(file.scratch))
 }
 
 func TestReadFramesHonoursContextCancellation(t *testing.T) {
 	format := pcm.Format{SampleRate: 8000, Channels: 1}
-	src, err := pcm.NewMemSourceE(format, []float32{0, 0.5, -0.5, 1})
+	src, err := pcm.NewMemSource(format, []float32{0, 0.5, -0.5, 1})
 	require.NoError(t, err)
 	var buf bytes.Buffer
-	require.NoError(t, WriteE(context.Background(), &buf, format, EncodingPCMInt, 16, src))
+	require.NoError(t, Write(context.Background(), &buf, format, EncodingPCMInt, 16, src))
 	raw := buf.Bytes()
-	file, err := NewReaderE(bytes.NewReader(raw), int64(len(raw)))
+	file, err := NewReader(bytes.NewReader(raw), int64(len(raw)))
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	dst := make([]float32, 4)
-	n, err := file.ReadFramesAtE(ctx, 0, dst)
+	n, err := file.ReadFramesAt(ctx, 0, dst)
 	require.Equal(t, 0, n)
 	require.ErrorIs(t, err, context.Canceled)
 }
@@ -188,13 +188,13 @@ func TestReadFramesHonoursContextCancellation(t *testing.T) {
 func TestWriteRejects(t *testing.T) {
 	ctx := context.Background()
 	format := pcm.Format{SampleRate: 8000, Channels: 1}
-	src, err := pcm.NewMemSourceE(format, []float32{0, 1})
+	src, err := pcm.NewMemSource(format, []float32{0, 1})
 	require.NoError(t, err)
 
-	require.Error(t, WriteE(ctx, nil, format, EncodingPCMInt, 16, src))
-	require.Error(t, WriteE(ctx, &bytes.Buffer{}, format, EncodingPCMInt, 16, nil))
-	require.Error(t, WriteE(ctx, &bytes.Buffer{}, format, EncodingPCMInt, 12, src))
-	require.Error(t, WriteE(ctx, &bytes.Buffer{}, pcm.Format{}, EncodingPCMInt, 16, src))
+	require.Error(t, Write(ctx, nil, format, EncodingPCMInt, 16, src))
+	require.Error(t, Write(ctx, &bytes.Buffer{}, format, EncodingPCMInt, 16, nil))
+	require.Error(t, Write(ctx, &bytes.Buffer{}, format, EncodingPCMInt, 12, src))
+	require.Error(t, Write(ctx, &bytes.Buffer{}, pcm.Format{}, EncodingPCMInt, 16, src))
 }
 
 func TestEncodingString(t *testing.T) {

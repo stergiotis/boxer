@@ -59,7 +59,7 @@ func newEntryPointsSubcommand() *cli.Command {
 	}
 }
 
-// EntryPointsConfig parameterises [AuditEntryPointsE].
+// EntryPointsConfig parameterises [AuditEntryPoints].
 //
 // Root is the directory packages are loaded from; BaselinePath, when non-empty,
 // names a file of grandfathered package import paths (see [loadBaseline]).
@@ -92,14 +92,14 @@ func (inst EntryPointAudit) Failing() (bad bool) {
 	return !inst.Conformant() && !inst.Baselined
 }
 
-// AuditEntryPointsE loads every package under cfg.Root and measures each
+// AuditEntryPoints loads every package under cfg.Root and measures each
 // `package main` against the entry-point standard.
 //
 // Results are sorted by import path so callers render a stable table. The
 // audit is reported, not enforced: deciding what a failure costs belongs to
 // the caller, which is what lets the CLI, the composite gate and a consuming
 // repository share one implementation.
-func AuditEntryPointsE(ctx context.Context, cfg EntryPointsConfig) (audits []EntryPointAudit, err error) {
+func AuditEntryPoints(ctx context.Context, cfg EntryPointsConfig) (audits []EntryPointAudit, err error) {
 	root := cfg.Root
 	if root == "" {
 		root = "."
@@ -195,7 +195,7 @@ func entryPointsAction(ctx *cli.Context) (err error) {
 	}
 
 	var audits []EntryPointAudit
-	audits, err = AuditEntryPointsE(ctx.Context, EntryPointsConfig{
+	audits, err = AuditEntryPoints(ctx.Context, EntryPointsConfig{
 		Root:         root,
 		BaselinePath: ctx.String("baseline"),
 		Tags:         tags,

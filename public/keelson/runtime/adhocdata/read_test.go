@@ -51,7 +51,7 @@ func TestReadAllEReturnsTheSealedStream(t *testing.T) {
 	pub, err := PublishBundleRequest(producer, BundlePublishInput{Alias: "sales", Document: []byte(testDoc), Datasets: twoDatasets(t)})
 	require.NoError(t, err)
 
-	got, err := ReadAllE(reader, "sales__orders", nil)
+	got, err := ReadAll(reader, "sales__orders", nil)
 	require.NoError(t, err)
 	assert.Equal(t, []int64{1, 2, 3}, int64Values(t, got.ArrowIPCStream))
 	assert.Equal(t, "sales", got.Bundle)
@@ -66,7 +66,7 @@ func TestReadAllEReturnsTheSealedStream(t *testing.T) {
 	assert.Equal(t, Identity{App: "test.notebook", Instance: 2}, audits[1].By)
 	assert.Equal(t, audits[0].StreamDigests[0], audits[1].StreamDigests[0], "the read and the publish name the same bytes")
 
-	_, err = ReadAllE(reader, "nothing", nil)
+	_, err = ReadAll(reader, "nothing", nil)
 	assert.ErrorIs(t, err, ErrNoLiveDataset)
 }
 
@@ -81,7 +81,7 @@ func TestReadAllECatchesADigestMismatch(t *testing.T) {
 	rec.mu.Lock()
 	rec.streamDigest = "00000000000000000000000000000000"
 	rec.mu.Unlock()
-	_, err = ReadAllE(c, "items", nil)
+	_, err = ReadAll(c, "items", nil)
 	assert.ErrorIs(t, err, ErrDigestMismatch)
 }
 
@@ -97,7 +97,7 @@ func TestAnAgentsReadIsAttested(t *testing.T) {
 
 	// Held to the grant as a run in play is (§SD6): refused, naming what
 	// the grant would have to list, until it lists it.
-	_, err = ReadAllE(reader, "items", oboOf(d.call))
+	_, err = ReadAll(reader, "items", oboOf(d.call))
 	var ge *GrantError
 	require.ErrorAs(t, err, &ge)
 	assert.Equal(t, "keelson:items", ge.Destination)
@@ -105,7 +105,7 @@ func TestAnAgentsReadIsAttested(t *testing.T) {
 	d.mu.Lock()
 	d.grants = []string{"keelson:items"}
 	d.mu.Unlock()
-	_, err = ReadAllE(reader, "items", oboOf(d.call))
+	_, err = ReadAll(reader, "items", oboOf(d.call))
 	require.NoError(t, err)
 	audits := svc.auditRecords()
 	require.Len(t, audits, 2)
@@ -115,7 +115,7 @@ func TestAnAgentsReadIsAttested(t *testing.T) {
 	assert.Equal(t, "turn-2", audits[0].Context.Val.Turn)
 
 	other := bus.NewClient("test.other", []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
-	_, err = ReadAllE(other, "items", oboOf(d.call))
+	_, err = ReadAll(other, "items", oboOf(d.call))
 	require.Error(t, err, "another app cannot read under the call")
 }
 
@@ -130,14 +130,14 @@ func TestAnAgentsReadOfABundleNeedsTheBundle(t *testing.T) {
 	require.NoError(t, err)
 	reader := bus.NewClient("test.notebook", []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
 	reader.SetInstanceKey(2)
-	_, err = ReadAllE(reader, "sales__orders", oboOf(d.call))
+	_, err = ReadAll(reader, "sales__orders", oboOf(d.call))
 	var ge *GrantError
 	require.ErrorAs(t, err, &ge)
 	assert.Equal(t, "keelson-bundle:sales", ge.Destination)
 	d.mu.Lock()
 	d.grants = []string{"keelson-bundle:sales"}
 	d.mu.Unlock()
-	got, err := ReadAllE(reader, "sales__regions", oboOf(d.call))
+	got, err := ReadAll(reader, "sales__regions", oboOf(d.call))
 	require.NoError(t, err)
 	assert.Equal(t, []int64{7}, int64Values(t, got.ArrowIPCStream))
 }
@@ -160,7 +160,7 @@ func TestATaskReadsWhatItPublished(t *testing.T) {
 	window := bus.NewClient(windowA.App, []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
 	window.SetInstanceKey(windowA.Instance)
 
-	got, err := ReadAllE(window, "sales__orders", oboOf(d.call))
+	got, err := ReadAll(window, "sales__orders", oboOf(d.call))
 	require.NoError(t, err, "no grant entry: the task published it")
 	assert.Equal(t, "task-1", got.PublisherTask)
 	res, err := ResolveBundleRequest(window, "sales", nil)
@@ -170,7 +170,7 @@ func TestATaskReadsWhatItPublished(t *testing.T) {
 	d.mu.Lock()
 	d.call.Task, d.call.Call = "task-2", "task-2-1"
 	d.mu.Unlock()
-	_, err = ReadAllE(window, "sales__orders", oboOf(d.call))
+	_, err = ReadAll(window, "sales__orders", oboOf(d.call))
 	var ge *GrantError
 	require.ErrorAs(t, err, &ge, "another task still needs the grant")
 	assert.Equal(t, "keelson-bundle:sales", ge.Destination)
@@ -190,20 +190,20 @@ func TestColumnValuesAreReadAsTheDataIs(t *testing.T) {
 	window := bus.NewClient(windowA.App, []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}})
 	window.SetInstanceKey(windowA.Instance)
 
-	got, err := ReadColumnsE(window, "sales__orders", nil)
+	got, err := ReadColumns(window, "sales__orders", nil)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"1"}, got.Columns.Min)
 	assert.Equal(t, []string{"3"}, got.Columns.Max)
 	assert.Equal(t, []string{"[1,2,3]"}, got.Columns.Sample)
 
-	got, err = ReadColumnsE(window, "sales__orders", oboOf(d.call))
+	got, err = ReadColumns(window, "sales__orders", oboOf(d.call))
 	require.NoError(t, err, "the task that published it")
 	assert.Equal(t, []string{"3"}, got.Columns.Max)
 
 	d.mu.Lock()
 	d.call.Task, d.call.Call = "task-2", "task-2-1"
 	d.mu.Unlock()
-	_, err = ReadColumnsE(window, "sales__orders", oboOf(d.call))
+	_, err = ReadColumns(window, "sales__orders", oboOf(d.call))
 	var ge *GrantError
 	require.ErrorAs(t, err, &ge, "another task needs the grant for the values")
 	assert.Equal(t, "keelson-bundle:sales", ge.Destination)

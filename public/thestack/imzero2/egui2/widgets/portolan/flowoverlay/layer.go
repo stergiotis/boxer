@@ -863,7 +863,7 @@ func (inst *Layer) fetch(ctx context.Context, gen uint64, geom geometry, steps [
 	for _, step := range steps {
 		req := geom.req
 		req.Step = step
-		win, err := inst.src.SampleE(ctx, req)
+		win, err := inst.src.Sample(ctx, req)
 		reply := fetchReply{gen: gen, geom: geom, step: step, err: err}
 		if err == nil {
 			reply.data = stepData{win: win, grid: newFieldGrid(&win, proj)}
@@ -881,7 +881,7 @@ func (inst *Layer) fetch(ctx context.Context, gen uint64, geom geometry, steps [
 
 // prefetcherI is a source that can load a step ahead of its first request.
 type prefetcherI interface {
-	PrefetchE(ctx context.Context, step int) (err error)
+	Prefetch(ctx context.Context, step int) (err error)
 }
 
 // prefetch loads the step after the bracket in the direction the display
@@ -909,5 +909,5 @@ func (inst *Layer) prefetch(a, b int) {
 		clear(inst.prefetched)
 	}
 	inst.prefetched[next] = true
-	go func() { _ = pre.PrefetchE(context.Background(), next) }()
+	go func() { _ = pre.Prefetch(context.Background(), next) }()
 }

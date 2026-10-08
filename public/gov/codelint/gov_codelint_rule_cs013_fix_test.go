@@ -89,7 +89,7 @@ func TestCS013OffersAFixWhenMechanical(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs013/fixable")
 	require.NoError(t, err)
 
-	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
 	require.NoError(t, err)
 	require.NotEmpty(t, pkgs)
 
@@ -124,7 +124,7 @@ func TestCS013ReportsWhyItDeclined(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs013/bad")
 	require.NoError(t, err)
 
-	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
 	require.NoError(t, err)
 	require.NotEmpty(t, pkgs)
 

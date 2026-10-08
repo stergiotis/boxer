@@ -24,7 +24,7 @@ const probeStereoWAV = `{
 }`
 
 func TestParseProbeStreamDuration(t *testing.T) {
-	format, frames, err := parseProbeE([]byte(probeStereoWAV))
+	format, frames, err := parseProbe([]byte(probeStereoWAV))
 	require.NoError(t, err)
 	require.EqualValues(t, 48000, format.SampleRate)
 	require.EqualValues(t, 2, format.Channels)
@@ -34,7 +34,7 @@ func TestParseProbeStreamDuration(t *testing.T) {
 func TestParseProbeFallsBackToFormatDuration(t *testing.T) {
 	const fixture = `{"streams":[{"sample_rate":"44100","channels":1,"duration":"N/A"}],
 	                 "format":{"duration":"2.5"}}`
-	format, frames, err := parseProbeE([]byte(fixture))
+	format, frames, err := parseProbe([]byte(fixture))
 	require.NoError(t, err)
 	require.EqualValues(t, 44100, format.SampleRate)
 	require.EqualValues(t, 1, format.Channels)
@@ -43,7 +43,7 @@ func TestParseProbeFallsBackToFormatDuration(t *testing.T) {
 
 func TestParseProbeAcceptsBareNumbers(t *testing.T) {
 	const fixture = `{"streams":[{"sample_rate":16000,"channels":6,"duration":1.5}],"format":{}}`
-	format, frames, err := parseProbeE([]byte(fixture))
+	format, frames, err := parseProbe([]byte(fixture))
 	require.NoError(t, err)
 	require.EqualValues(t, 16000, format.SampleRate)
 	require.EqualValues(t, 6, format.Channels, "more than two channels is decoded as it is")
@@ -52,7 +52,7 @@ func TestParseProbeAcceptsBareNumbers(t *testing.T) {
 
 func TestParseProbeRoundsTheFrameCount(t *testing.T) {
 	const fixture = `{"streams":[{"sample_rate":"48000","channels":2,"duration":"0.123456789"}],"format":{}}`
-	_, frames, err := parseProbeE([]byte(fixture))
+	_, frames, err := parseProbe([]byte(fixture))
 	require.NoError(t, err)
 	require.Equal(t, int64(5926), frames)
 }
@@ -72,7 +72,7 @@ func TestParseProbeRejectsUnusableOutput(t *testing.T) {
 	}
 	for name, fixture := range cases {
 		t.Run(name, func(t *testing.T) {
-			_, frames, err := parseProbeE([]byte(fixture))
+			_, frames, err := parseProbe([]byte(fixture))
 			require.Error(t, err)
 			require.Zero(t, frames)
 		})

@@ -19,7 +19,7 @@ func smallGraph(t *testing.T) (g *Graph, w Metric) {
 	tail := []int32{0, 1, 0, 1, 2, 3, 1}
 	head := []int32{1, 2, 2, 2, 3, 3, 3}
 	edge := []int32{0, 1, 2, 3, 4, 5, 6}
-	g, err := BuildE(4, tail, head, edge)
+	g, err := Build(4, tail, head, edge)
 	require.NoError(t, err)
 	w = g.MetricFromInput([]uint32{5, 2, 9, 1, 1, 7, Inf})
 	return
@@ -53,15 +53,15 @@ func TestBuildKeepsParallelArcsAndDropsLoops(t *testing.T) {
 }
 
 func TestBuildRefusesSlotsOutsideTheGraph(t *testing.T) {
-	_, err := BuildE(2, []int32{0}, []int32{2}, []int32{0})
+	_, err := Build(2, []int32{0}, []int32{2}, []int32{0})
 	require.Error(t, err)
-	_, err = BuildE(2, []int32{0, 1}, []int32{1}, []int32{0, 1})
+	_, err = Build(2, []int32{0, 1}, []int32{1}, []int32{0, 1})
 	require.Error(t, err)
 }
 
 func TestFromRowsRoundTrips(t *testing.T) {
 	g, _ := smallGraph(t)
-	h, err := FromRowsE(g.FirstOut(), g.Heads(), g.Edges())
+	h, err := FromRows(g.FirstOut(), g.Heads(), g.Edges())
 	require.NoError(t, err)
 	require.Equal(t, g.NumArcs(), h.NumArcs())
 	for v := range g.NumNodes() {
@@ -69,7 +69,7 @@ func TestFromRowsRoundTrips(t *testing.T) {
 		hf, hl := h.In(v)
 		require.Equal(t, g.inArc[gf:gl], h.inArc[hf:hl])
 	}
-	_, err = FromRowsE([]int32{0, 2}, []int32{0}, []int32{0})
+	_, err = FromRows([]int32{0, 2}, []int32{0}, []int32{0})
 	require.Error(t, err)
 }
 
@@ -137,7 +137,7 @@ func randomGraph(t *testing.T, rng *rand.Rand, n, m int) (g *Graph, w Metric) {
 			in[i] = Inf
 		}
 	}
-	g, err := BuildE(int32(n), tail, head, edge)
+	g, err := Build(int32(n), tail, head, edge)
 	require.NoError(t, err)
 	return g, g.MetricFromInput(in)
 }
@@ -216,7 +216,7 @@ func TestIndexAgainstLinearScan(t *testing.T) {
 		}
 		lines.First = append(lines.First, int32(len(lines.X)))
 	}
-	idx, err := NewIndexE(lines, 50)
+	idx, err := NewIndex(lines, 50)
 	require.NoError(t, err)
 	for range 300 {
 		qx, qy := rng.Float64()*1100-50, rng.Float64()*1100-50
@@ -243,7 +243,7 @@ func TestIndexAgainstLinearScan(t *testing.T) {
 	// The closest point on a two-vertex line is the projection, and the
 	// fraction is where along it.
 	one := Polylines{First: []int32{0, 2}, X: []float32{0, 10}, Y: []float32{0, 0}}
-	idx, err = NewIndexE(one, 5)
+	idx, err = NewIndex(one, 5)
 	require.NoError(t, err)
 	s, ok := idx.Nearest(2.5, 3, 10)
 	require.True(t, ok)
@@ -254,12 +254,12 @@ func TestIndexAgainstLinearScan(t *testing.T) {
 	require.InDelta(t, 10, one.Length(0), 1e-12)
 	// A filter skips the nearest when it is not admitted.
 	two := Polylines{First: []int32{0, 2, 4}, X: []float32{0, 10, 0, 10}, Y: []float32{0, 0, 5, 5}}
-	idx, err = NewIndexE(two, 5)
+	idx, err = NewIndex(two, 5)
 	require.NoError(t, err)
 	s, ok = idx.NearestWhere(5, 1, 10, func(i int32) bool { return i == 1 })
 	require.True(t, ok)
 	require.EqualValues(t, 1, s.Polyline)
 	require.InDelta(t, 4, s.Dist, 1e-6)
-	_, err = NewIndexE(Polylines{First: []int32{0, 0}}, 5)
+	_, err = NewIndex(Polylines{First: []int32{0, 0}}, 5)
 	require.Error(t, err)
 }

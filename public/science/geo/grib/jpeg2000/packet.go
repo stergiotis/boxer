@@ -6,17 +6,17 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// readPacketsE walks the tile's packets in the order the resolution-major
+// readPackets walks the tile's packets in the order the resolution-major
 // progressions give with one layer and one component: resolution 0
 // upwards, precincts in raster order (B.12). Each packet's header assigns
 // the included code-blocks their pass count, missing bit-planes and
 // segment bytes.
-func (inst *header) readPacketsE(res []*resolution) (err error) {
+func (inst *header) readPackets(res []*resolution) (err error) {
 	data := inst.data
 	pos := 0
 	for r, rs := range res {
 		for k := 0; k < rs.npw*rs.nph; k++ {
-			pos, err = inst.readPacketE(data, pos, r, k, rs)
+			pos, err = inst.readPacket(data, pos, r, k, rs)
 			if err != nil {
 				return
 			}
@@ -25,9 +25,9 @@ func (inst *header) readPacketsE(res []*resolution) (err error) {
 	return
 }
 
-// readPacketE reads the packet of precinct k at resolution r starting at
+// readPacket reads the packet of precinct k at resolution r starting at
 // pos and returns where the next packet begins.
-func (inst *header) readPacketE(data []byte, pos int, r int, k int, rs *resolution) (next int, err error) {
+func (inst *header) readPacket(data []byte, pos int, r int, k int, rs *resolution) (next int, err error) {
 	if inst.cod.sop {
 		// Optional SOP marker segment before the packet.
 		if pos+6 <= len(data) && be16(data[pos:]) == mkSOP {
@@ -63,7 +63,7 @@ func (inst *header) readPacketE(data []byte, pos int, r int, k int, rs *resoluti
 					}
 					nbits := lblock + bits.Len(uint(cb.passes)) - 1
 					if nbits > 31 {
-						err = corruptE("code-block length field wider than 31 bits")
+						err = corrupt("code-block length field wider than 31 bits")
 						return
 					}
 					length := int(br.bits(nbits))

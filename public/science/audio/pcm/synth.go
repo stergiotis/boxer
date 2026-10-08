@@ -21,9 +21,9 @@ type SynthSource struct {
 
 var _ SourceI = (*SynthSource)(nil)
 
-// NewSynthSourceE builds a source of the given length over fn.
-func NewSynthSourceE(format Format, frames int64, fn SampleFunc) (src *SynthSource, err error) {
-	err = format.ValidateE()
+// NewSynthSource builds a source of the given length over fn.
+func NewSynthSource(format Format, frames int64, fn SampleFunc) (src *SynthSource, err error) {
+	err = format.Validate()
 	if err != nil {
 		return nil, err
 	}
@@ -42,9 +42,9 @@ func (inst *SynthSource) Format() (format Format) { return inst.format }
 // Frames implements [SourceI].
 func (inst *SynthSource) Frames() (frames int64) { return inst.frames }
 
-// ReadFramesAtE implements [SourceI].
-func (inst *SynthSource) ReadFramesAtE(_ context.Context, frameOffset int64, dst []float32) (n int, err error) {
-	n, err = ClampReadE(inst.format, inst.frames, frameOffset, dst)
+// ReadFramesAt implements [SourceI].
+func (inst *SynthSource) ReadFramesAt(_ context.Context, frameOffset int64, dst []float32) (n int, err error) {
+	n, err = ClampRead(inst.format, inst.frames, frameOffset, dst)
 	if err != nil || n == 0 {
 		return n, err
 	}
@@ -60,8 +60,8 @@ func (inst *SynthSource) ReadFramesAtE(_ context.Context, frameOffset int64, dst
 	return n, nil
 }
 
-// CloseE implements [SourceI]; a procedural source holds nothing to release.
-func (inst *SynthSource) CloseE() (err error) { return nil }
+// Close implements [SourceI]; a procedural source holds nothing to release.
+func (inst *SynthSource) Close() (err error) { return nil }
 
 // Silence is the all-zero signal.
 func Silence() (fn SampleFunc) {

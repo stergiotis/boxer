@@ -54,7 +54,7 @@ func ensureH3() error {
 			log.Error().Err(err).Msg("h3 runtime init failed")
 			return
 		}
-		handle, err := rt.AcquireE(ctx)
+		handle, err := rt.Acquire(ctx)
 		if err != nil {
 			h3InitErr = err
 			log.Error().Err(err).Msg("h3 handle acquire failed")
@@ -75,11 +75,11 @@ func demoDisk(k uint8, once *sync.Once, dst *[]uint64) []uint64 {
 			return
 		}
 		ctx := context.Background()
-		center, _, err := h3Handle.LatLngToCellE(ctx, h3.ResolutionR7, demoMapCenterLat, demoMapCenterLon)
+		center, _, err := h3Handle.LatLngToCell(ctx, h3.ResolutionR7, demoMapCenterLat, demoMapCenterLon)
 		if err != nil {
 			return
 		}
-		out, _, err := h3Handle.GridDiskE(ctx, k, center)
+		out, _, err := h3Handle.GridDisk(ctx, k, center)
 		if err != nil {
 			return
 		}
@@ -444,7 +444,7 @@ func computeHeatmapColors(cells []uint64) []uint32 {
 	if len(cells) == 0 {
 		return nil
 	}
-	lats, lngs, _, err := h3Handle.CellsToLatLngsE(context.Background(), cells, nil, nil, nil)
+	lats, lngs, _, err := h3Handle.CellsToLatLngs(context.Background(), cells, nil, nil, nil)
 	if err != nil {
 		log.Warn().Err(err).Msg("heatmap cellsToLatLngs failed")
 		return nil

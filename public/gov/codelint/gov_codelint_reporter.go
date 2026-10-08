@@ -31,10 +31,10 @@ func (inst FormatE) String() (s string) {
 }
 
 // ReporterI receives findings as they are produced and writes them out
-// when FinishE is called.
+// when Finish is called.
 type ReporterI interface {
 	Add(f Finding)
-	FinishE() (err error)
+	Finish() (err error)
 }
 
 type humanReporter struct {
@@ -51,7 +51,7 @@ func (inst *humanReporter) Add(f Finding) {
 	}
 }
 
-func (inst *humanReporter) FinishE() (err error) { return }
+func (inst *humanReporter) Finish() (err error) { return }
 
 type jsonReporter struct {
 	w        io.Writer
@@ -62,7 +62,7 @@ func (inst *jsonReporter) Add(f Finding) {
 	inst.findings = append(inst.findings, f)
 }
 
-func (inst *jsonReporter) FinishE() (err error) {
+func (inst *jsonReporter) Finish() (err error) {
 	if inst.findings == nil {
 		inst.findings = []Finding{}
 	}
@@ -74,7 +74,7 @@ func (inst *jsonReporter) FinishE() (err error) {
 	return
 }
 
-func NewReporterE(format FormatE, w io.Writer) (r ReporterI, err error) {
+func NewReporter(format FormatE, w io.Writer) (r ReporterI, err error) {
 	switch format {
 	case FormatHuman:
 		r = &humanReporter{w: w}

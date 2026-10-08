@@ -55,7 +55,7 @@ the output values. Bulk-level `error` is reserved for three categories:
 - **Caller-visible invariants violated.** Length mismatches between
   parallel input slices, invalid CSR offsets on input, use-after-release
   on a handle (`ErrHandleReleased`, caught centrally in
-  `ensureScratchE`), malformed polygon geometry
+  `ensureScratch`), malformed polygon geometry
   (`ErrBadPolygonGeometry`), out-of-enum containment mode
   (`ErrBadContainmentMode`).
 - **Whole-batch semantic failures** — operations whose output has no
@@ -64,34 +64,34 @@ the output values. Bulk-level `error` is reserved for three categories:
 
 A well-formed call with partially invalid data (out-of-range lat/lng,
 bit-garbage cell indices, finer-than-target cells in
-`UncompactCellsE`) returns `nil` bulk error and per-element `StatusE`
+`UncompactCells`) returns `nil` bulk error and per-element `StatusE`
 codes. Callers filter rows by status.
 
 ### Two local deviations from the status-code default
 
-- **`CompactCellsE` (SD13).** `compact_cells` collapses N input cells at
+- **`CompactCells` (SD13).** `compact_cells` collapses N input cells at
   one resolution into M ≤ N outputs at mixed (coarser) resolutions,
   with deduplication and reordering on the Rust side. There is no
   stable input→output mapping, so a per-element `StatusE` has no
   natural interpretation. Whole-batch failures (mixed-resolution input,
   duplicate cells) surface as `ErrCompactMixedResolution` /
   `ErrCompactDuplicateInput`.
-- **`UncompactCellsE` (SD14).** Output is a flat `[]uint64` + per-input
+- **`UncompactCells` (SD14).** Output is a flat `[]uint64` + per-input
   `StatusE`, not CSR. Consumers almost always want the expanded set as
   a unit; per-input → children provenance, when genuinely needed, is
-  already available via `CellsToChildrenE`'s CSR output.
+  already available via `CellsToChildren`'s CSR output.
 
 ### CSR (Compressed Sparse Row) layout
 
 Variable-arity outputs use CSR. The full set of CSR-shaped methods:
 
-- `CellsToChildrenE` — one `values []uint64` + `offsets`.
-- `GridDisksE` — one `values []uint64` + `offsets`.
-- `CellsToStringsE` — one `buf []byte` + `offsets` (H3 hex strings, no separators, no NUL).
-- `CellsToBoundariesE` — two parallel `lats []float64` / `lngs []float64` sharing one `offsets` (SD15; open rings, typically 5–6 vertices per row, up to 10 for pentagons whose boundary crosses an icosahedron face edge).
-- `DissolveE` — two levels (SD17): `ringOffsets` indexes the parallel `lats` / `lngs` vertex slices, `polygonOffsets` indexes rings; each polygon's first ring is its exterior, the rest are holes; rings are open as for boundaries. Whole-batch error model as for `CompactCellsE`.
+- `CellsToChildren` — one `values []uint64` + `offsets`.
+- `GridDisks` — one `values []uint64` + `offsets`.
+- `CellsToStrings` — one `buf []byte` + `offsets` (H3 hex strings, no separators, no NUL).
+- `CellsToBoundaries` — two parallel `lats []float64` / `lngs []float64` sharing one `offsets` (SD15; open rings, typically 5–6 vertices per row, up to 10 for pentagons whose boundary crosses an icosahedron face edge).
+- `Dissolve` — two levels (SD17): `ringOffsets` indexes the parallel `lats` / `lngs` vertex slices, `polygonOffsets` indexes rings; each polygon's first ring is its exterior, the rest are holes; rings are open as for boundaries. Whole-batch error model as for `CompactCells`.
 
-CSR invariants (identical across all of them; for `DissolveE` they hold at each level):
+CSR invariants (identical across all of them; for `Dissolve` they hold at each level):
 
 - `values` holds the flat concatenation of all rows' payloads.
 - `offsets` has length N+1 where N is the batch size.
@@ -106,7 +106,7 @@ has `offsets[i] == offsets[i+1]`. Consumers should iterate through
 [iter.AllCSRRowsU64], [iter.AllCSRRowsString], or
 [iter.AllCSRRowsLatLng] rather than recomputing row bounds by hand.
 
-`PolygonToCellsE` (SD11) and `UncompactCellsE` (SD14) return flat
+`PolygonToCells` (SD11) and `UncompactCells` (SD14) return flat
 `[]uint64` rather than CSR — see the deviations note above.
 
 ### Grow protocol
@@ -145,7 +145,7 @@ single `wazero.api.Memory.Write` call — one `memmove`. The alternative
 (encoding one value at a time via `encoding/binary`) multiplies per-call
 CPU cost by batch size and defeats the bulk ABI.
 
-The `readF64sE` helper keeps a small `encoding/binary`-based decode loop
+The `readF64s` helper keeps a small `encoding/binary`-based decode loop
 because `wazero.api.Memory.Read` returns a byte slice that aliases the
 guest memory — the returned float view must be a Go-owned copy so that
 subsequent calls into the guest do not race with the caller's reading.
@@ -153,7 +153,7 @@ subsequent calls into the guest do not race with the caller's reading.
 ### Module pool concurrency contract
 
 - `*Runtime` is safe for concurrent use. Multiple goroutines can call
-  `AcquireE` simultaneously.
+  `Acquire` simultaneously.
 - `*Handle` is **not** safe for concurrent use. A goroutine that acquires
   a handle owns it until it calls `Release`; two concurrent bulk calls on
   the same handle are undefined behaviour.
@@ -176,7 +176,7 @@ parallelise a single batch.
 The canonical input shape is Struct-of-Arrays: parallel `[]float64`
 lat/lng slices, or `[]uint64` cell slices. For callers whose source is
 naturally Array-of-Structs (an Arrow column extractor, a channel, a
-parsed event stream), `LatLngsIterToCellsE` (SD16) accepts an
+parsed event stream), `LatLngsIterToCells` (SD16) accepts an
 `iter.Seq2[int, LatLng]` plus an explicit `n` and drains into
 reusable Handle-local staging buffers before a single batch write into
 wasm scratch. This is an ergonomic convenience — there is still one
@@ -192,8 +192,8 @@ until a real consumer exposes AoS input for them.
 The companion subpackage
 [`h3arrow`](h3arrow) provides zero-copy adapters from the h3 package's
 slice / CSR outputs to arrow-go arrays (`CellsAsArrowUint64`,
-`Float64sAsArrowFloat64`, `CSRAsArrowListUint64E`,
-`CSRAsArrowListFloat64E`). The adapters wrap caller slices without
+`Float64sAsArrowFloat64`, `CSRAsArrowListUint64`,
+`CSRAsArrowListFloat64`). The adapters wrap caller slices without
 copying: the returned arrow arrays hold memory.Buffer references over
 the underlying Go backing arrays, so the caller must keep those
 slices reachable until the arrow arrays are Released. The subpackage

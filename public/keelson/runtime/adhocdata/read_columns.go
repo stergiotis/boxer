@@ -78,11 +78,11 @@ func (inst *Service) handleReadColumns(msg *app.Msg, req adhocrequest.AdhocReque
 		Revision: res.Revision, PublisherTask: res.PublisherTask, ColumnSummaries: doc})
 }
 
-// ReadColumnsE reads the column summaries of the newest live dataset under
-// alias, values included, over adhoc.read: the read ReadAllE makes, held
+// ReadColumns reads the column summaries of the newest live dataset under
+// alias, values included, over adhoc.read: the read ReadAll makes, held
 // to the same grant, without the stream. obo is the agent's call the read
 // is work of, nil when it is none.
-func ReadColumnsE(bus app.BusI, alias string, obo *app.OnBehalfOf) (res ColumnsResult, err error) {
+func ReadColumns(bus app.BusI, alias string, obo *app.OnBehalfOf) (res ColumnsResult, err error) {
 	payload, err := buscodec.Encode(adhocrequest.AdhocRequest{
 		At: time.Now().UTC(), Op: adhocrequest.OpRead, Alias: alias, ColumnsOnly: true,
 		OboTask: oboTask(obo), OboEpoch: oboEpoch(obo), OboCall: oboCall(obo),

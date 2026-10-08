@@ -56,8 +56,8 @@ func newIndexCommand() (cmd *cli.Command) {
 			if err != nil {
 				return
 			}
-			entries, scanErr := IndexE(f, st.Size())
-			err = WriteIndexE(c.App.Writer, entries)
+			entries, scanErr := Index(f, st.Size())
+			err = WriteIndex(c.App.Writer, entries)
 			if err != nil {
 				return
 			}
@@ -79,11 +79,11 @@ func newTablesCommand() (cmd *cli.Command) {
 			&cli.PathFlag{Name: "out", Usage: "directory to write into", Value: "public/science/geo/grib/tables/wmo"},
 		},
 		Action: func(c *cli.Context) (err error) {
-			g, err := tables.GenerateE(c.Path("grib2"), c.Path("cct"), c.String("version"))
+			g, err := tables.Generate(c.Path("grib2"), c.Path("cct"), c.String("version"))
 			if err != nil {
 				return
 			}
-			err = g.WriteE(c.Path("out"))
+			err = g.Write(c.Path("out"))
 			if err != nil {
 				return
 			}
@@ -110,7 +110,7 @@ func newLsCommand() (cmd *cli.Command) {
 				return
 			}
 			for _, path := range c.Args().Slice() {
-				err = lsFileE(c, path)
+				err = lsFile(c, path)
 				if err != nil {
 					return
 				}
@@ -121,7 +121,7 @@ func newLsCommand() (cmd *cli.Command) {
 	return
 }
 
-func lsFileE(c *cli.Context, path string) (err error) {
+func lsFile(c *cli.Context, path string) (err error) {
 	f, err := os.Open(path)
 	if err != nil {
 		err = eb.Build().Str("path", path).Errorf("open: %w", err)
@@ -171,7 +171,7 @@ func lsLine(n int, m *Message, f *Field) (s string) {
 		if f.Bitmap.Present {
 			b.WriteString("\tbitmap")
 		}
-		if err := f.Packing.supportedE(); err != nil {
+		if err := f.Packing.supported(); err != nil {
 			feature, _ := UnsupportedFeature(err)
 			fmt.Fprintf(&b, "\trefuse: %s", feature)
 		}
@@ -213,7 +213,7 @@ func lsLine(n int, m *Message, f *Field) (s string) {
 	if f.Bitmap.Present {
 		b.WriteString("\tbitmap")
 	}
-	if err := f.Packing.supportedE(); err != nil {
+	if err := f.Packing.supported(); err != nil {
 		feature, _ := UnsupportedFeature(err)
 		fmt.Fprintf(&b, "\trefuse: %s", feature)
 	} else if f.Bitmap.Indicator != 0 && f.Bitmap.Indicator != 255 {
@@ -238,14 +238,14 @@ func newDumpCommand() (cmd *cli.Command) {
 				err = eb.Build().Errorf("exactly one file is required")
 				return
 			}
-			err = dumpFileE(c, c.Args().First(), c.Int("field"), c.Bool("values"), c.Bool("points"))
+			err = dumpFile(c, c.Args().First(), c.Int("field"), c.Bool("values"), c.Bool("points"))
 			return
 		},
 	}
 	return
 }
 
-func dumpFileE(c *cli.Context, path string, only int, printValues bool, printPoints bool) (err error) {
+func dumpFile(c *cli.Context, path string, only int, printValues bool, printPoints bool) (err error) {
 	buf, err := os.ReadFile(path)
 	if err != nil {
 		err = eb.Build().Str("path", path).Errorf("read: %w", err)
@@ -366,7 +366,7 @@ func dumpField(c *cli.Context, n, k int, m *Message, f *Field, printValues bool,
 	}
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "  bitmap: indicator %d\n", f.Bitmap.Indicator)
-	values, err := f.ValuesE(nil)
+	values, err := f.Values(nil)
 	if err != nil {
 		if feature, ok := UnsupportedFeature(err); ok {
 			fmt.Fprintf(w, "  values: refused — %s\n", feature)
@@ -397,7 +397,7 @@ func dumpField(c *cli.Context, n, k int, m *Message, f *Field, printValues bool,
 	var next func() (float64, float64, bool)
 	if printPoints {
 		var points func(func(float64, float64) bool)
-		points, pointsErr = f.Grid.PointsE()
+		points, pointsErr = f.Grid.Points()
 		if pointsErr == nil {
 			next, _ = iterPull(points)
 		} else {

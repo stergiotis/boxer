@@ -24,7 +24,7 @@ const (
 )
 
 // headerSpec is the shape a canonical header describes. It is the input of
-// both [appendHeader] and [WriteE], so the RF64 branch can be exercised at
+// both [appendHeader] and [Write], so the RF64 branch can be exercised at
 // header scale without writing gigabytes of samples.
 type headerSpec struct {
 	format   pcm.Format
@@ -50,11 +50,11 @@ func (inst headerSpec) dataSize() (n int64) {
 // and reports whether the RF64 form was chosen. Exactly dataSize() bytes of
 // samples follow, plus a pad byte when that count is odd.
 func appendHeader(dst []byte, spec headerSpec) (out []byte, rf64 bool, err error) {
-	err = spec.format.ValidateE()
+	err = spec.format.Validate()
 	if err != nil {
 		return dst, false, err
 	}
-	err = validateSampleFormatE(spec.encoding, spec.bits)
+	err = validateSampleFormat(spec.encoding, spec.bits)
 	if err != nil {
 		return dst, false, err
 	}

@@ -41,7 +41,7 @@ func newGatedSource(inner pcm.SourceI, release chan struct{}, delay time.Duratio
 func (inst *gatedSource) Format() (format pcm.Format) { return inst.inner.Format() }
 func (inst *gatedSource) Frames() (frames int64)      { return inst.inner.Frames() }
 
-func (inst *gatedSource) ReadFramesAtE(ctx context.Context, frameOffset int64, dst []float32) (n int, err error) {
+func (inst *gatedSource) ReadFramesAt(ctx context.Context, frameOffset int64, dst []float32) (n int, err error) {
 	select {
 	case <-inst.release:
 	case <-ctx.Done():
@@ -51,12 +51,12 @@ func (inst *gatedSource) ReadFramesAtE(ctx context.Context, frameOffset int64, d
 		time.Sleep(inst.delay)
 	}
 	inst.reads.Add(1)
-	return inst.inner.ReadFramesAtE(ctx, frameOffset, dst)
+	return inst.inner.ReadFramesAt(ctx, frameOffset, dst)
 }
 
-func (inst *gatedSource) CloseE() (err error) {
+func (inst *gatedSource) Close() (err error) {
 	inst.closes.Add(1)
-	return inst.inner.CloseE()
+	return inst.inner.Close()
 }
 
 // testIdentity is a synthetic [peaks.Identity]: the decoder layer derives one
@@ -108,7 +108,7 @@ func TestBackgroundBuildPublishesItsPrefix(t *testing.T) {
 
 	var progressMu sync.Mutex
 	var reported []int64
-	tr, err := OpenE(context.Background(), src, Options{
+	tr, err := Open(context.Background(), src, Options{
 		ChunkFrames: chunkFrames,
 		Background:  true,
 		Progress: func(builtFrames int64, totalFrames int64) {
@@ -119,9 +119,9 @@ func TestBackgroundBuildPublishesItsPrefix(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, tr.CloseE()) })
+	t.Cleanup(func() { require.NoError(t, tr.Close()) })
 
-	// OpenE has returned with nothing read: the levels are allocated, the
+	// Open has returned with nothing read: the levels are allocated, the
 	// pyramid is drawable and empty.
 	require.NotNil(t, tr.Peaks())
 	require.Zero(t, src.reads.Load(), "the background build has not been let through the gate yet")
@@ -175,7 +175,7 @@ func TestBackgroundBuildPublishesItsPrefix(t *testing.T) {
 
 // TestCloseDuringABackgroundBuildIsPrompt is what makes a background build
 // safe to start: the track can be closed while the build is parked in a read,
-// and the goroutine is gone by the time CloseE returns.
+// and the goroutine is gone by the time Close returns.
 func TestCloseDuringABackgroundBuildIsPrompt(t *testing.T) {
 	format := pcm.Format{SampleRate: 48000, Channels: 2}
 	frames := 60 * int64(format.SampleRate)
@@ -183,12 +183,12 @@ func TestCloseDuringABackgroundBuildIsPrompt(t *testing.T) {
 	before := runtime.NumGoroutine()
 	// The gate is never released, so the build is stuck in its first read.
 	src := newGatedSource(newTestSource(t, format, frames), make(chan struct{}), 0)
-	tr, err := OpenE(context.Background(), src, Options{ChunkFrames: 4096, Background: true})
+	tr, err := Open(context.Background(), src, Options{ChunkFrames: 4096, Background: true})
 	require.NoError(t, err)
 
 	start := time.Now()
-	require.NoError(t, tr.CloseE())
-	require.Less(t, time.Since(start), time.Second, "CloseE waited on the parked read")
+	require.NoError(t, tr.Close())
+	require.Less(t, time.Since(start), time.Second, "Close waited on the parked read")
 	require.Equal(t, int64(1), src.closes.Load())
 
 	bp := tr.BuildProgress()
@@ -205,7 +205,7 @@ func TestCloseDuringABackgroundBuildIsPrompt(t *testing.T) {
 	require.LessOrEqual(t, runtime.NumGoroutine(), before, "a goroutine outlived the track")
 
 	// Idempotent, and still prompt.
-	require.NoError(t, tr.CloseE())
+	require.NoError(t, tr.Close())
 }
 
 // TestPeaksCacheRoundTrip is ADR-0208 §SD4's second open: the pyramid comes
@@ -217,7 +217,7 @@ func TestPeaksCacheRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	id := testIdentity(1)
 
-	tr, err := OpenE(ctx, newTestSource(t, format, frames), Options{
+	tr, err := Open(ctx, newTestSource(t, format, frames), Options{
 		Identity:    &id,
 		CacheDir:    dir,
 		ChunkFrames: 8192,
@@ -229,7 +229,7 @@ func TestPeaksCacheRoundTrip(t *testing.T) {
 	require.NoError(t, bp.Err)
 	require.NoError(t, bp.CacheErr)
 	want := peaksProfile(tr.Peaks(), frames)
-	require.NoError(t, tr.CloseE())
+	require.NoError(t, tr.Close())
 
 	written := cacheFiles(t, dir)
 	require.Len(t, written, 1)
@@ -237,9 +237,9 @@ func TestPeaksCacheRoundTrip(t *testing.T) {
 
 	t.Run("the second open loads it", func(t *testing.T) {
 		src := newCountingSource(newTestSource(t, format, frames))
-		tr, err := OpenE(ctx, src, Options{Identity: &id, CacheDir: dir})
+		tr, err := Open(ctx, src, Options{Identity: &id, CacheDir: dir})
 		require.NoError(t, err)
-		t.Cleanup(func() { require.NoError(t, tr.CloseE()) })
+		t.Cleanup(func() { require.NoError(t, tr.Close()) })
 
 		bp := tr.BuildProgress()
 		require.True(t, bp.FromCache)
@@ -254,9 +254,9 @@ func TestPeaksCacheRoundTrip(t *testing.T) {
 	t.Run("another identity misses", func(t *testing.T) {
 		other := testIdentity(9)
 		src := newCountingSource(newTestSource(t, format, frames))
-		tr, err := OpenE(ctx, src, Options{Identity: &other, CacheDir: dir, ChunkFrames: 8192})
+		tr, err := Open(ctx, src, Options{Identity: &other, CacheDir: dir, ChunkFrames: 8192})
 		require.NoError(t, err)
-		t.Cleanup(func() { require.NoError(t, tr.CloseE()) })
+		t.Cleanup(func() { require.NoError(t, tr.Close()) })
 
 		require.False(t, tr.BuildProgress().FromCache)
 		require.True(t, tr.BuildProgress().Complete)
@@ -268,12 +268,12 @@ func TestPeaksCacheRoundTrip(t *testing.T) {
 	t.Run("another base bin is another file", func(t *testing.T) {
 		dir := t.TempDir()
 		for _, baseBin := range []int32{64, 256} {
-			tr, err := OpenE(ctx, newTestSource(t, format, frames), Options{
+			tr, err := Open(ctx, newTestSource(t, format, frames), Options{
 				Identity: &id, CacheDir: dir, BaseBin: baseBin, ChunkFrames: 8192,
 			})
 			require.NoError(t, err)
 			require.False(t, tr.BuildProgress().FromCache)
-			require.NoError(t, tr.CloseE())
+			require.NoError(t, tr.Close())
 		}
 		require.Len(t, cacheFiles(t, dir), 2)
 	})
@@ -286,19 +286,19 @@ func TestPeaksCacheIsWrittenByABackgroundBuild(t *testing.T) {
 	dir := t.TempDir()
 	id := testIdentity(4)
 
-	tr, err := OpenE(ctx, newTestSource(t, format, frames), Options{
+	tr, err := Open(ctx, newTestSource(t, format, frames), Options{
 		Identity: &id, CacheDir: dir, Background: true, ChunkFrames: 4096,
 	})
 	require.NoError(t, err)
 	require.Eventually(t, func() bool { return tr.BuildProgress().Complete },
 		30*time.Second, time.Millisecond)
 	require.NoError(t, tr.BuildProgress().CacheErr)
-	require.NoError(t, tr.CloseE())
+	require.NoError(t, tr.Close())
 	require.Len(t, cacheFiles(t, dir), 1)
 
-	tr, err = OpenE(ctx, newTestSource(t, format, frames), Options{Identity: &id, CacheDir: dir, Background: true})
+	tr, err = Open(ctx, newTestSource(t, format, frames), Options{Identity: &id, CacheDir: dir, Background: true})
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, tr.CloseE()) })
+	t.Cleanup(func() { require.NoError(t, tr.Close()) })
 	bp := tr.BuildProgress()
 	require.True(t, bp.FromCache, "a cache hit skips the background build")
 	require.True(t, bp.Complete)
@@ -314,28 +314,28 @@ func TestNoCacheNeitherReadsNorWrites(t *testing.T) {
 
 	t.Run("nothing is written", func(t *testing.T) {
 		dir := t.TempDir()
-		tr, err := OpenE(ctx, newTestSource(t, format, frames), Options{
+		tr, err := Open(ctx, newTestSource(t, format, frames), Options{
 			Identity: &id, CacheDir: dir, NoCache: true,
 		})
 		require.NoError(t, err)
-		require.NoError(t, tr.CloseE())
+		require.NoError(t, tr.Close())
 		require.Empty(t, cacheFiles(t, dir))
 	})
 
 	t.Run("a file that is there is ignored", func(t *testing.T) {
 		dir := t.TempDir()
-		tr, err := OpenE(ctx, newTestSource(t, format, frames), Options{Identity: &id, CacheDir: dir})
+		tr, err := Open(ctx, newTestSource(t, format, frames), Options{Identity: &id, CacheDir: dir})
 		require.NoError(t, err)
-		require.NoError(t, tr.CloseE())
+		require.NoError(t, tr.Close())
 		primed := cacheFiles(t, dir)
 		require.Len(t, primed, 1)
 		info, err := os.Stat(primed[0])
 		require.NoError(t, err)
 
 		src := newCountingSource(newTestSource(t, format, frames))
-		tr, err = OpenE(ctx, src, Options{Identity: &id, CacheDir: dir, NoCache: true})
+		tr, err = Open(ctx, src, Options{Identity: &id, CacheDir: dir, NoCache: true})
 		require.NoError(t, err)
-		require.NoError(t, tr.CloseE())
+		require.NoError(t, tr.Close())
 		require.False(t, tr.BuildProgress().FromCache)
 		require.Positive(t, src.reads.Load())
 
@@ -346,9 +346,9 @@ func TestNoCacheNeitherReadsNorWrites(t *testing.T) {
 
 	t.Run("no identity is no cache", func(t *testing.T) {
 		dir := t.TempDir()
-		tr, err := OpenE(ctx, newTestSource(t, format, frames), Options{CacheDir: dir})
+		tr, err := Open(ctx, newTestSource(t, format, frames), Options{CacheDir: dir})
 		require.NoError(t, err)
-		require.NoError(t, tr.CloseE())
+		require.NoError(t, tr.Close())
 		require.Empty(t, cacheFiles(t, dir))
 	})
 }
@@ -365,15 +365,15 @@ func TestCacheDirComesFromTheEnvVar(t *testing.T) {
 	PeaksCacheDir.SetForTest(t, filepath.Join(dir, "peaks"))
 	require.Equal(t, filepath.Join(dir, "peaks"), ResolvePeaksCacheDir())
 
-	tr, err := OpenE(ctx, newTestSource(t, format, frames), Options{Identity: &id})
+	tr, err := Open(ctx, newTestSource(t, format, frames), Options{Identity: &id})
 	require.NoError(t, err)
 	require.NoError(t, tr.BuildProgress().CacheErr)
-	require.NoError(t, tr.CloseE())
+	require.NoError(t, tr.Close())
 	require.Len(t, cacheFiles(t, filepath.Join(dir, "peaks")), 1, "the directory is created and written to")
 
-	tr, err = OpenE(ctx, newTestSource(t, format, frames), Options{Identity: &id})
+	tr, err = Open(ctx, newTestSource(t, format, frames), Options{Identity: &id})
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, tr.CloseE()) })
+	t.Cleanup(func() { require.NoError(t, tr.Close()) })
 	require.True(t, tr.BuildProgress().FromCache)
 }
 
@@ -391,9 +391,9 @@ func TestPeaksCacheMissesRatherThanFails(t *testing.T) {
 		require.NoError(t, os.WriteFile(path, []byte("not a peaks file at all"), 0o644))
 
 		src := newCountingSource(newTestSource(t, format, frames))
-		tr, err := OpenE(ctx, src, Options{Identity: &id, CacheDir: dir})
+		tr, err := Open(ctx, src, Options{Identity: &id, CacheDir: dir})
 		require.NoError(t, err)
-		t.Cleanup(func() { require.NoError(t, tr.CloseE()) })
+		t.Cleanup(func() { require.NoError(t, tr.Close()) })
 		require.False(t, tr.BuildProgress().FromCache)
 		require.True(t, tr.BuildProgress().Complete)
 		require.Positive(t, src.reads.Load())
@@ -407,9 +407,9 @@ func TestPeaksCacheMissesRatherThanFails(t *testing.T) {
 		dir := filepath.Join(t.TempDir(), "blocked")
 		require.NoError(t, os.WriteFile(dir, nil, 0o644))
 
-		tr, err := OpenE(ctx, newTestSource(t, format, frames), Options{Identity: &id, CacheDir: dir})
+		tr, err := Open(ctx, newTestSource(t, format, frames), Options{Identity: &id, CacheDir: dir})
 		require.NoError(t, err)
-		t.Cleanup(func() { require.NoError(t, tr.CloseE()) })
+		t.Cleanup(func() { require.NoError(t, tr.Close()) })
 		bp := tr.BuildProgress()
 		require.True(t, bp.Complete, "a cache that cannot be written is not a failed build")
 		require.NoError(t, bp.Err)
@@ -420,11 +420,11 @@ func TestPeaksCacheMissesRatherThanFails(t *testing.T) {
 		dir := filepath.Join(t.TempDir(), "blocked")
 		require.NoError(t, os.WriteFile(dir, nil, 0o644))
 
-		tr, err := OpenE(ctx, newTestSource(t, format, frames), Options{
+		tr, err := Open(ctx, newTestSource(t, format, frames), Options{
 			Identity: &id, CacheDir: dir, Background: true, ChunkFrames: 4096,
 		})
 		require.NoError(t, err)
-		t.Cleanup(func() { require.NoError(t, tr.CloseE()) })
+		t.Cleanup(func() { require.NoError(t, tr.Close()) })
 		require.Eventually(t, func() bool { return tr.BuildProgress().Complete },
 			30*time.Second, time.Millisecond)
 		bp := tr.BuildProgress()
@@ -443,7 +443,7 @@ func TestReopenGivesEachReaderItsOwnSource(t *testing.T) {
 
 	var reopened []*countingSource
 	primary := newCountingSource(newTestSource(t, format, frames))
-	tr, err := OpenE(ctx, primary, Options{
+	tr, err := Open(ctx, primary, Options{
 		ChunkFrames: 8192,
 		Reopen: func(_ context.Context) (src pcm.SourceI, err error) {
 			s := newCountingSource(newTestSource(t, format, frames))
@@ -457,7 +457,7 @@ func TestReopenGivesEachReaderItsOwnSource(t *testing.T) {
 	build, window := reopened[0], reopened[1]
 	require.Positive(t, build.reads.Load(), "the build read through its own source")
 	require.Equal(t, int64(1), build.closes.Load(), "a finished build closes its source at once")
-	require.Zero(t, primary.reads.Load(), "the source OpenE was given is the sink's")
+	require.Zero(t, primary.reads.Load(), "the source Open was given is the sink's")
 	require.Zero(t, window.closes.Load())
 
 	// The window cache reads through its own source, not the sink's.
@@ -467,7 +467,7 @@ func TestReopenGivesEachReaderItsOwnSource(t *testing.T) {
 	require.Positive(t, window.reads.Load())
 	require.Zero(t, primary.reads.Load())
 
-	require.NoError(t, tr.CloseE())
+	require.NoError(t, tr.Close())
 	require.Equal(t, int64(1), window.closes.Load())
 	require.Equal(t, int64(1), primary.closes.Load())
 	require.Equal(t, int64(1), build.closes.Load(), "the build's source is not closed twice")
@@ -480,12 +480,12 @@ func TestReopenSkipsTheBuildSourceOnACacheHit(t *testing.T) {
 	dir := t.TempDir()
 	id := testIdentity(17)
 
-	tr, err := OpenE(ctx, newTestSource(t, format, frames), Options{Identity: &id, CacheDir: dir})
+	tr, err := Open(ctx, newTestSource(t, format, frames), Options{Identity: &id, CacheDir: dir})
 	require.NoError(t, err)
-	require.NoError(t, tr.CloseE())
+	require.NoError(t, tr.Close())
 
 	calls := 0
-	tr, err = OpenE(ctx, newTestSource(t, format, frames), Options{
+	tr, err = Open(ctx, newTestSource(t, format, frames), Options{
 		Identity: &id,
 		CacheDir: dir,
 		Reopen: func(_ context.Context) (src pcm.SourceI, err error) {
@@ -494,7 +494,7 @@ func TestReopenSkipsTheBuildSourceOnACacheHit(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, tr.CloseE()) })
+	t.Cleanup(func() { require.NoError(t, tr.Close()) })
 	require.True(t, tr.BuildProgress().FromCache)
 	require.Equal(t, 1, calls, "only the window cache needs a source of its own")
 }
@@ -506,7 +506,7 @@ func TestReopenFailuresCloseWhatWasOpened(t *testing.T) {
 
 	t.Run("the first call fails", func(t *testing.T) {
 		primary := newCountingSource(newTestSource(t, format, frames))
-		tr, err := OpenE(ctx, primary, Options{
+		tr, err := Open(ctx, primary, Options{
 			Reopen: func(_ context.Context) (src pcm.SourceI, err error) {
 				return nil, eh.New("the decoder is not there")
 			},
@@ -519,7 +519,7 @@ func TestReopenFailuresCloseWhatWasOpened(t *testing.T) {
 	t.Run("the second call fails", func(t *testing.T) {
 		primary := newCountingSource(newTestSource(t, format, frames))
 		var first *countingSource
-		tr, err := OpenE(ctx, primary, Options{
+		tr, err := Open(ctx, primary, Options{
 			Reopen: func(_ context.Context) (src pcm.SourceI, err error) {
 				if first == nil {
 					first = newCountingSource(newTestSource(t, format, frames))
@@ -536,7 +536,7 @@ func TestReopenFailuresCloseWhatWasOpened(t *testing.T) {
 
 	t.Run("no source", func(t *testing.T) {
 		primary := newCountingSource(newTestSource(t, format, frames))
-		tr, err := OpenE(ctx, primary, Options{
+		tr, err := Open(ctx, primary, Options{
 			Reopen: func(_ context.Context) (src pcm.SourceI, err error) { return nil, nil },
 		})
 		require.Error(t, err)
@@ -547,7 +547,7 @@ func TestReopenFailuresCloseWhatWasOpened(t *testing.T) {
 	t.Run("another recording", func(t *testing.T) {
 		primary := newCountingSource(newTestSource(t, format, frames))
 		other := newCountingSource(newTestSource(t, format, frames*2))
-		tr, err := OpenE(ctx, primary, Options{
+		tr, err := Open(ctx, primary, Options{
 			Reopen: func(_ context.Context) (src pcm.SourceI, err error) { return other, nil },
 		})
 		require.Error(t, err)
@@ -562,7 +562,7 @@ func TestBackgroundBuildOfAnEmptyRecording(t *testing.T) {
 	dir := t.TempDir()
 	id := testIdentity(23)
 
-	tr, err := OpenE(context.Background(), newTestSource(t, format, 0), Options{
+	tr, err := Open(context.Background(), newTestSource(t, format, 0), Options{
 		Background: true, Identity: &id, CacheDir: dir,
 	})
 	require.NoError(t, err)
@@ -577,6 +577,6 @@ func TestBackgroundBuildOfAnEmptyRecording(t *testing.T) {
 	samples, ok := tr.Window(0, 1024)
 	require.True(t, ok)
 	require.Empty(t, samples)
-	require.NoError(t, tr.CloseE())
+	require.NoError(t, tr.Close())
 	require.Len(t, cacheFiles(t, dir), 1)
 }

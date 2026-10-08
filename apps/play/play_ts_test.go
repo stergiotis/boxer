@@ -267,9 +267,9 @@ func TestTsSmoothMatchesTheKernel(t *testing.T) {
 	require.NoError(t, err)
 	defer rec.Release()
 
-	kernel, kErr := mssmooth.NewKernelE(tsSmoothDegree, 12)
+	kernel, kErr := mssmooth.NewKernel(tsSmoothDegree, 12)
 	require.NoError(t, kErr)
-	want, sErr := kernel.SmoothE(vals, nil)
+	want, sErr := kernel.Smooth(vals, nil)
 	require.NoError(t, sErr)
 
 	assert.Equal(t, int64(len(vals)), rec.NumRows(), "smoothing is length-preserving")
@@ -283,7 +283,7 @@ func TestTsProfileMatchesTheMatrixProfile(t *testing.T) {
 	require.NoError(t, err)
 	defer rec.Release()
 
-	series, sErr := matrixprofile.NewSeriesE(vals, 32, matrixprofile.DefaultStdDevFloorRel)
+	series, sErr := matrixprofile.NewSeries(vals, 32, matrixprofile.DefaultStdDevFloorRel)
 	require.NoError(t, sErr)
 	want := series.Compute()
 
@@ -299,7 +299,7 @@ func TestTsAnomalyScoresMatchTheDetector(t *testing.T) {
 	require.NoError(t, err)
 	defer rec.Release()
 
-	det, dErr := damp.NewDetectorE(damp.Config{Window: 32, Exact: true})
+	det, dErr := damp.NewDetector(damp.Config{Window: 32, Exact: true})
 	require.NoError(t, dErr)
 	want := make([]float64, len(vals))
 	for _, v := range vals {
@@ -333,7 +333,7 @@ func TestTsAnomalySpansCoverAPlantedAnomaly(t *testing.T) {
 	spec := adscore.DefaultFixtureSpec(adscore.AnomalyKindTransplant, 42)
 	spec.Length = 1500
 	spec.AnomalyCount = 1
-	fixture, err := adscore.GenerateE(spec)
+	fixture, err := adscore.Generate(spec)
 	require.NoError(t, err)
 
 	rec, aErr := tsRunCall(t,

@@ -65,7 +65,7 @@ func TestTabPolicyCoversEveryRegisteredTab(t *testing.T) {
 // the condition the other cases here should hold under anyway.
 func TestAttenuateTabsDropsAContributedLibrary(t *testing.T) {
 	const tabID = "contributed-snippets"
-	require.NoError(t, play.RegisterSnippetLibraryE(play.SnippetLibrary{
+	require.NoError(t, play.RegisterSnippetLibrary(play.SnippetLibrary{
 		TabID: tabID, DockID: 4096, Title: "Contributed", AppId: "example.test/lib", Doc: "snippets",
 		Help: fstest.MapFS{"snippets.md": &fstest.MapFile{Data: []byte("# Contributed\n")}},
 	}))

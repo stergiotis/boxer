@@ -1623,7 +1623,7 @@ headless scene `TestSceneWaveformPlayer` (`widgets/waveform`, integration lane) 
 ### 19.1 Usage
 
 ```go
-tr, err := track.OpenE(ctx, src, track.Options{})        // src: any pcm.SourceI (wavfile.OpenE, pcm.NewSynthSourceE, …)
+tr, err := track.Open(ctx, src, track.Options{})        // src: any pcm.SourceI (wavfile.Open, pcm.NewSynthSource, …)
 p := waveform.New(ids, tr, waveform.Options{ScopeKey: "my-player"})
 // each frame, on the frame goroutine:
 p.RenderFillWidth(220, 1000)                               // or p.Render(w, h) / p.RenderFill(fw, fh)
@@ -1633,11 +1633,11 @@ if f, ok := p.Clicked(); ok { /* a click seeked to frame f */ }
 `track` owns source, peaks pyramid, sink and `TimeBase`; the player owns
 only the view. A track opens on whatever sink `Options.NewSink` builds
 (`sink.NewNull` by default — silent, headless-safe) and
-`track.ReplaceSinkE(func(src) (sink.SinkI, error))` swaps a device in later;
-`sink/pulsesink.OpenE` is the PulseAudio/PipeWire sink (pure Go, no cgo). Do
+`track.ReplaceSink(func(src) (sink.SinkI, error))` swaps a device in later;
+`sink/pulsesink.Open` is the PulseAudio/PipeWire sink (pure Go, no cgo). Do
 not import `pulsesink` into a widget: the swap is the host's decision, and a
 headless scene or the tour must keep the null sink. A recording on disk opens
-with `track.OpenFileE(ctx, path, opts)` — sniffed format, one decoder per
+with `track.OpenFile(ctx, path, opts)` — sniffed format, one decoder per
 reader, peaks cached under `BOXER_AUDIO_PEAKS_CACHE_DIR`, built in the
 background; poll `tr.BuildProgress()` for a progress bar (it carries
 `EtaMs`), and where the host has a task API report the build as a keelson
@@ -1645,7 +1645,7 @@ task with `waveform.SpawnBuildTask(ctx, tasks, tr, title)` — the task monitor
 then lists it and its cancel calls `tr.CancelBuild()`. Raw windows come
 from `tr.Window(from, to)`, which returns `ok=false` on a miss and fetches
 off-thread — draw the pyramid that frame and ask again; never call
-`ReadWindowE` from a frame.
+`ReadWindow` from a frame.
 
 Annotations (SD8) are host-owned: `p.SetLayers(&layers)` with sorted
 `Regions` / `Markers` / `Curves`; read the `Events` that `Render` returns and apply a
@@ -1666,7 +1666,7 @@ the readbacks (one frame behind, like every canvas register).
 - **Two draw paths, no third** (ADR-0208 SD2/SD3): at ≥ 1 frame per column
   each channel is one `PaintRectsFilled` of min/max columns — from
   `peaks.Pyramid.Columns` when a column spans a base bin, reduced from a raw
-  window (`track.ReadWindowE`) otherwise; below 1 frame per column the raw
+  window (`track.ReadWindow`) otherwise; below 1 frame per column the raw
   window is a `PaintPolyline` with markers. The per-column colour array
   carries the played/unplayed split, so progress costs no second batch.
 - **Input is the portolan recipe** (§16.2): a sense region emitted last owns

@@ -311,14 +311,14 @@ func buildSeriesReadout(scores []float64, baseline []float64, t []float64,
 	}
 	ranges := adscore.RangesFromLabels(truth)
 	maxBuffer := adscore.DefaultMaxBuffer(ranges)
-	m, err := adscore.EvaluateE(scores, truth, maxBuffer)
+	m, err := adscore.Evaluate(scores, truth, maxBuffer)
 	if err != nil {
 		out.err = err.Error()
 		return out, true
 	}
 	out.detector = m
 	if len(baseline) == len(scores) {
-		if bm, bErr := adscore.EvaluateE(baseline, truth, maxBuffer); bErr == nil {
+		if bm, bErr := adscore.Evaluate(baseline, truth, maxBuffer); bErr == nil {
 			out.baseline = bm
 			out.haveBaseline = true
 		}

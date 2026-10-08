@@ -9,9 +9,9 @@
 //
 // # Ownership
 //
-// [OpenE] is handed an already-open source and takes ownership of it:
-// [Track.CloseE] closes the sink and then the source, and every error path
-// out of [OpenE] closes the source — and anything [Options.Reopen] opened —
+// [Open] is handed an already-open source and takes ownership of it:
+// [Track.Close] closes the sink and then the source, and every error path
+// out of [Open] closes the source — and anything [Options.Reopen] opened —
 // before returning. A caller therefore never has to reason about whether a
 // failed open left a file descriptor behind, and must not close the source it
 // passed in.
@@ -27,7 +27,7 @@
 // walks the recording once from front to back, the window cache jumps to
 // wherever the view is zoomed in, and the sink reads forward from the
 // playhead. A [pcm.SourceI] is safe for one goroutine at a time, so the
-// source [OpenE] is given is wrapped once in an unexported adapter that
+// source [Open] is given is wrapped once in an unexported adapter that
 // serialises every read and the close behind a mutex; format and frame count
 // are immutable and answered without the lock, since the frame thread asks
 // for them per rendered frame and must not queue behind a decoder.
@@ -38,13 +38,13 @@
 // restart it against each other indefinitely. [Options.Reopen] is the seam
 // for that case: it opens an independent source over the same recording, and
 // the build and the window cache each get one, so each keeps its own file
-// position. The sink keeps the source [OpenE] was given. The build's source
+// position. The sink keeps the source [Open] was given. The build's source
 // is closed as soon as the build ends; the window cache's lives until
-// [Track.CloseE].
+// [Track.Close].
 //
 // # The build and its progress
 //
-// The pyramid is preallocated before [OpenE] returns, so [Track.Peaks] is
+// The pyramid is preallocated before [Open] returns, so [Track.Peaks] is
 // never nil, and it is filled in one sequential pass — synchronously by
 // default, or on a goroutine of its own under [Options.Background]
 // (ADR-0208 §SD4). A background build publishes the built prefix as one
@@ -55,13 +55,13 @@
 // itself.
 //
 // A background build's lifetime is the track's, not the open call's:
-// [Track.CloseE] cancels it and waits for the goroutine to leave the source
+// [Track.Close] cancels it and waits for the goroutine to leave the source
 // alone before closing anything.
 //
 // # The peaks cache
 //
 // With an [Options.Identity] — a hash of the recording's size, modification
-// time and head/tail bytes — [OpenE] first looks for a finished pyramid in
+// time and head/tail bytes — [Open] first looks for a finished pyramid in
 // the cache directory ([Options.CacheDir], else [ResolvePeaksCacheDir], which
 // reads [PeaksCacheDir]). The file is `<hex of the identity hash's first 16
 // bytes>-b<base bin>` plus [CacheFileExt], written through a temporary file
@@ -79,7 +79,7 @@
 // # Windows for the deepest zoom
 //
 // Below the base bin there are no peaks to draw and the raw frames are what
-// the view needs (ADR-0208 §SD3). [Track.ReadWindowE] reads them
+// the view needs (ADR-0208 §SD3). [Track.ReadWindow] reads them
 // synchronously, which is what a batch job wants; the frame thread uses
 // [Track.Window], whose contract is the portolan tile one:
 //

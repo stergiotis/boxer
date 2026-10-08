@@ -13,8 +13,8 @@ import (
 
 // The committed forecast reads as ADR-0292 SD5 describes it: 17 steps three
 // hours apart on a 360 × 181 global grid, plausible 10 m winds, none missing.
-func TestFieldE(t *testing.T) {
-	f, err := FieldE()
+func TestField(t *testing.T) {
+	f, err := Field()
 	require.NoError(t, err)
 	require.Len(t, f.Steps, 17)
 	for i := 1; i < len(f.Steps); i++ {
@@ -41,7 +41,7 @@ func TestFamilyParity(t *testing.T) {
 	if testing.Short() {
 		t.Skip("ships the 1.1 M-row relation to clickhouse-local per statement")
 	}
-	f, err := FieldE()
+	f, err := Field()
 	require.NoError(t, err)
 	keelsonfieldtest.Parity(t, "gfs_wind", f, keelsonfieldtest.Options{Steps: []int{0, 8, 16}})
 }

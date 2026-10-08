@@ -30,7 +30,7 @@ func TestLatLngsToCells_Golden(t *testing.T) {
 
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
@@ -48,7 +48,7 @@ func TestLatLngsToCells_Golden(t *testing.T) {
 			lngs[i] = r.Lng
 		}
 
-		cells, status, err := h.LatLngsToCellsE(ctx, ResolutionE(res), lats, lngs, nil, nil)
+		cells, status, err := h.LatLngsToCells(ctx, ResolutionE(res), lats, lngs, nil, nil)
 		require.NoError(t, err, "res=%d", res)
 		require.Len(t, cells, len(group))
 		require.Len(t, status, len(group))
@@ -66,7 +66,7 @@ func TestCellsToLatLngs_Golden(t *testing.T) {
 
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
@@ -75,7 +75,7 @@ func TestCellsToLatLngs_Golden(t *testing.T) {
 		cells[i] = r.Cell
 	}
 
-	lats, lngs, status, err := h.CellsToLatLngsE(ctx, cells, nil, nil, nil)
+	lats, lngs, status, err := h.CellsToLatLngs(ctx, cells, nil, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, lats, len(recs))
 	require.Len(t, lngs, len(recs))
@@ -91,7 +91,7 @@ func TestCellsToLatLngs_Golden(t *testing.T) {
 func TestLatLngsToCells_RoundTrip(t *testing.T) {
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
@@ -108,17 +108,17 @@ func TestLatLngsToCells_RoundTrip(t *testing.T) {
 	// back to the same cell id. This is stronger than a degree-based
 	// tolerance check and doesn't depend on the shape of the Earth.
 	for _, res := range []ResolutionE{ResolutionR0, ResolutionR3, ResolutionR6, ResolutionR9, ResolutionR12} {
-		cells, status, err := h.LatLngsToCellsE(ctx, res, lats, lngs, nil, nil)
+		cells, status, err := h.LatLngsToCells(ctx, res, lats, lngs, nil, nil)
 		require.NoError(t, err)
 		for _, s := range status {
 			require.Equal(t, StatusOk, s)
 		}
-		latsBack, lngsBack, status2, err := h.CellsToLatLngsE(ctx, cells, nil, nil, nil)
+		latsBack, lngsBack, status2, err := h.CellsToLatLngs(ctx, cells, nil, nil, nil)
 		require.NoError(t, err)
 		for _, s := range status2 {
 			require.Equal(t, StatusOk, s)
 		}
-		cells2, status3, err := h.LatLngsToCellsE(ctx, res, latsBack, lngsBack, nil, nil)
+		cells2, status3, err := h.LatLngsToCells(ctx, res, latsBack, lngsBack, nil, nil)
 		require.NoError(t, err)
 		for i := range cells {
 			require.Equal(t, StatusOk, status3[i])
@@ -131,11 +131,11 @@ func TestLatLngsToCells_RoundTrip(t *testing.T) {
 func TestLatLngsToCells_EmptyInput(t *testing.T) {
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
-	cells, status, err := h.LatLngsToCellsE(ctx, ResolutionR9, nil, nil, nil, nil)
+	cells, status, err := h.LatLngsToCells(ctx, ResolutionR9, nil, nil, nil, nil)
 	require.NoError(t, err)
 	require.Empty(t, cells)
 	require.Empty(t, status)
@@ -144,11 +144,11 @@ func TestLatLngsToCells_EmptyInput(t *testing.T) {
 func TestLatLngsToCells_LengthMismatch(t *testing.T) {
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
-	_, _, err = h.LatLngsToCellsE(ctx, ResolutionR9,
+	_, _, err = h.LatLngsToCells(ctx, ResolutionR9,
 		[]float64{1, 2, 3}, []float64{1, 2}, nil, nil)
 	require.Error(t, err)
 }
@@ -156,7 +156,7 @@ func TestLatLngsToCells_LengthMismatch(t *testing.T) {
 func TestLatLngsToCells_InvalidInputFlagsStatus(t *testing.T) {
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
@@ -165,7 +165,7 @@ func TestLatLngsToCells_InvalidInputFlagsStatus(t *testing.T) {
 	// non-finite value to exercise the invalid-latlng path deterministically.
 	lats := []float64{math.NaN(), 37.7749}
 	lngs := []float64{0.0, -122.4194}
-	_, status, err := h.LatLngsToCellsE(ctx, ResolutionR9, lats, lngs, nil, nil)
+	_, status, err := h.LatLngsToCells(ctx, ResolutionR9, lats, lngs, nil, nil)
 	require.NoError(t, err)
 	require.Equal(t, StatusInvalidLatLng, status[0])
 	require.Equal(t, StatusOk, status[1])

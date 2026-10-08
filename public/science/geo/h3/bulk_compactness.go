@@ -16,7 +16,7 @@ const (
 	compactInvalidCellInput uint32 = 3
 )
 
-// CompactCellsE collapses a set of H3 cells at a single resolution into the
+// CompactCells collapses a set of H3 cells at a single resolution into the
 // smallest equivalent set possible at mixed (coarser) resolutions. Input
 // cells must all be at the same resolution and must be unique; both
 // conditions surface as [ErrCompactMixedResolution] or
@@ -24,7 +24,7 @@ const (
 //
 // No per-element status slice: compact has no stable 1:1 mapping from input
 // to output (by design). See ADR-0003 Updates SD13 for the rationale.
-func (inst *Handle) CompactCellsE(
+func (inst *Handle) CompactCells(
 	ctx context.Context,
 	cells []uint64,
 	compactedDst []uint64,
@@ -43,7 +43,7 @@ func (inst *Handle) CompactCellsE(
 	total := int(alignUp8(countRel + 4))
 
 	var base uint32
-	base, err = inst.ensureScratchE(ctx, total)
+	base, err = inst.ensureScratch(ctx, total)
 	if err != nil {
 		return
 	}
@@ -51,13 +51,13 @@ func (inst *Handle) CompactCellsE(
 	outOff := base + outRel
 	countOff := base + countRel
 
-	err = inst.writeU64sE(cellsOff, cells)
+	err = inst.writeU64s(cellsOff, cells)
 	if err != nil {
 		return
 	}
 
 	var rc uint32
-	rc, err = inst.callE(ctx, inst.fnCompactCells,
+	rc, err = inst.call(ctx, inst.fnCompactCells,
 		uint64(cellsOff), uint64(n32),
 		uint64(outOff), uint64(countOff),
 	)
@@ -69,7 +69,7 @@ func (inst *Handle) CompactCellsE(
 	switch rc {
 	case compactOK:
 		var count uint32
-		count, err = inst.readU32E(countOff)
+		count, err = inst.readU32(countOff)
 		if err != nil {
 			return
 		}
@@ -77,7 +77,7 @@ func (inst *Handle) CompactCellsE(
 			count = uint32(n)
 		}
 		compacted = slices.Grow(compactedDst[:0], int(count))[:count]
-		err = inst.readU64sE(outOff, compacted)
+		err = inst.readU64s(outOff, compacted)
 		return
 	case compactMixedResolution:
 		err = eb.Build().Int("n", n).Errorf("%w", ErrCompactMixedResolution)
@@ -94,16 +94,16 @@ func (inst *Handle) CompactCellsE(
 	}
 }
 
-// UncompactCellsE expands a (possibly mixed-resolution) set of cells into
+// UncompactCells expands a (possibly mixed-resolution) set of cells into
 // a flat set of cells at the target resolution res. Each input cell whose
 // resolution is finer than res is skipped and flagged
 // [StatusInvalidResolution] in statusDst; invalid cell inputs are flagged
 // [StatusInvalidCell]. The output is flat — not CSR — so consumers lose
-// per-input provenance; use [Handle.CellsToChildrenE] when provenance
+// per-input provenance; use [Handle.CellsToChildren] when provenance
 // matters (see ADR-0003 Updates SD14).
 //
-// Uses the one-retry grow protocol identical to [Handle.CellsToChildrenE].
-func (inst *Handle) UncompactCellsE(
+// Uses the one-retry grow protocol identical to [Handle.CellsToChildren].
+func (inst *Handle) UncompactCells(
 	ctx context.Context,
 	res ResolutionE,
 	cells []uint64,
@@ -128,7 +128,7 @@ func (inst *Handle) UncompactCellsE(
 		total := int(statusRel) + n
 
 		var base uint32
-		base, err = inst.ensureScratchE(ctx, total)
+		base, err = inst.ensureScratch(ctx, total)
 		if err != nil {
 			return
 		}
@@ -137,13 +137,13 @@ func (inst *Handle) UncompactCellsE(
 		neededOff := base + neededRel
 		statusOff := base + statusRel
 
-		err = inst.writeU64sE(cellsOff, cells)
+		err = inst.writeU64s(cellsOff, cells)
 		if err != nil {
 			return
 		}
 
 		var rc uint32
-		rc, err = inst.callE(ctx, inst.fnUncompactCells,
+		rc, err = inst.call(ctx, inst.fnUncompactCells,
 			uint64(cellsOff), uint64(n32),
 			uint64(uint32(res)),
 			uint64(outOff),
@@ -158,17 +158,17 @@ func (inst *Handle) UncompactCellsE(
 		switch rc {
 		case growOK:
 			var needed uint32
-			needed, err = inst.readU32E(neededOff)
+			needed, err = inst.readU32(neededOff)
 			if err != nil {
 				return
 			}
-			err = inst.readStatusE(statusOff, status)
+			err = inst.readStatus(statusOff, status)
 			if err != nil {
 				return
 			}
 			total := min(int(needed), outCap)
 			expanded = slices.Grow(expandedDst[:0], total)[:total]
-			err = inst.readU64sE(outOff, expanded)
+			err = inst.readU64s(outOff, expanded)
 			return
 
 		case growNeedMore:
@@ -177,7 +177,7 @@ func (inst *Handle) UncompactCellsE(
 				return
 			}
 			var needed uint32
-			needed, err = inst.readU32E(neededOff)
+			needed, err = inst.readU32(neededOff)
 			if err != nil {
 				return
 			}

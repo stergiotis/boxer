@@ -52,35 +52,35 @@ func TestDumpPrintsStatisticsAndValues(t *testing.T) {
 // entry fetches its field again from the file.
 func TestIndexRoundTrips(t *testing.T) {
 	buf := readFixture(t, "ec_tigge_pf_ecmwf.grib2")
-	entries, err := IndexBytesE(buf)
+	entries, err := IndexBytes(buf)
 	require.NoError(t, err)
 	require.Len(t, entries, 38)
 	var out bytes.Buffer
-	require.NoError(t, WriteIndexE(&out, entries))
+	require.NoError(t, WriteIndex(&out, entries))
 	lines := out.String()
-	back, err := ReadIndexE(strings.NewReader(lines))
+	back, err := ReadIndex(strings.NewReader(lines))
 	require.NoError(t, err)
 	require.Equal(t, entries, back)
 	e := back[5]
 	require.EqualValues(t, 11, e.ProductTemplate)
-	f, err := e.ReadE(bytes.NewReader(buf), int64(len(buf)))
+	f, err := e.Read(bytes.NewReader(buf), int64(len(buf)))
 	require.NoError(t, err)
 	require.EqualValues(t, 11, f.Product.Template)
 	require.Equal(t, e.RefTime, f.Message.Ident.RefTime)
 	// A message fetched on its own, by range, is read at offset zero.
 	own := buf[e.Offset : e.Offset+e.Length]
-	f, err = e.At(0).ReadE(bytes.NewReader(own), int64(len(own)))
+	f, err = e.At(0).Read(bytes.NewReader(own), int64(len(own)))
 	require.NoError(t, err)
 	require.EqualValues(t, 11, f.Product.Template)
 	// The command prints the same lines.
 	printed := runCli(t, "index", filepath.Join("testdata", "ec_tigge_pf_ecmwf.grib2"))
 	require.Equal(t, lines, printed)
 	// Refusals are named in the index.
-	entries, err = IndexBytesE(readFixture(t, "ec_run_length_packing.grib2"))
+	entries, err = IndexBytes(readFixture(t, "ec_run_length_packing.grib2"))
 	require.NoError(t, err)
 	require.Equal(t, "packing template 5.200", entries[0].Refuses)
 	// A truncated tail ends the listing with an error after the good entries.
-	entries, err = IndexBytesE(buf[:len(buf)-100])
+	entries, err = IndexBytes(buf[:len(buf)-100])
 	require.ErrorIs(t, err, ErrMalformed)
 	require.Len(t, entries, 37)
 }

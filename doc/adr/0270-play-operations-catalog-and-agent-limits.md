@@ -305,7 +305,7 @@ subquery run and for a buffer that changes before the run starts.
 Play's catalog gains three queries over what the build carries rather than
 what the window holds. `list_snippets` lists the worked queries of every
 snippet library — play's own and each one a repository contributes
-(`RegisterSnippetLibraryE`) — or finds them through the Snippets pane's
+(`RegisterSnippetLibrary`) — or finds them through the Snippets pane's
 search; `read_snippet` returns one section's text and its SQL blocks, each
 ready for `set_sql`. `list_functions` is the Vocabulary pane's corpus: each
 function's call template, doc, where it runs (server, client or host),

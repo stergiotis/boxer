@@ -19,7 +19,7 @@ type SourceI interface {
 	// every source in scope (a WAV header, an ffprobe run); streams of
 	// unknown length are not part of this contract.
 	Frames() int64
-	// ReadFramesAtE fills dst with interleaved frames starting at
+	// ReadFramesAt fills dst with interleaved frames starting at
 	// frameOffset and returns the number of frames read.
 	//
 	//   - dst is consumed in whole frames: len(dst)/Channels frames at most,
@@ -31,17 +31,17 @@ type SourceI interface {
 	//
 	// Reads may be expensive when frameOffset moves backwards; see the
 	// package documentation.
-	ReadFramesAtE(ctx context.Context, frameOffset int64, dst []float32) (n int, err error)
-	// CloseE releases whatever the source holds. Reading after CloseE is
+	ReadFramesAt(ctx context.Context, frameOffset int64, dst []float32) (n int, err error)
+	// Close releases whatever the source holds. Reading after Close is
 	// undefined.
-	CloseE() (err error)
+	Close() (err error)
 }
 
-// ClampReadE applies the shared bounds arithmetic of the read contract: it
+// ClampRead applies the shared bounds arithmetic of the read contract: it
 // validates frameOffset against frames and returns how many whole frames of
 // dst may be filled. Decoders call it first so every implementation agrees
 // on the edge cases; it returns (0, io.EOF) at or past the end.
-func ClampReadE(format Format, frames int64, frameOffset int64, dst []float32) (n int, err error) {
+func ClampRead(format Format, frames int64, frameOffset int64, dst []float32) (n int, err error) {
 	if frameOffset < 0 {
 		return 0, eb.Build().Int64("frameOffset", frameOffset).Errorf("negative frame offset")
 	}

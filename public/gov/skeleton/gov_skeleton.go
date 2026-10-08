@@ -69,7 +69,7 @@ func (inst OwnershipE) String() (s string) {
 
 // Params is what a template needs to know about the repository.
 //
-// Everything here is derivable from go.mod; [DeriveParamsE] does that, and the
+// Everything here is derivable from go.mod; [DeriveParams] does that, and the
 // CLI lets each field be overridden.
 type Params struct {
 	// Module is the Go module path, e.g. github.com/owner/thing.
@@ -85,7 +85,7 @@ type Params struct {
 	RequiredTags string
 }
 
-func (inst Params) validateE() (err error) {
+func (inst Params) validate() (err error) {
 	if inst.Module == "" {
 		err = eb.Build().Errorf("module path is empty")
 		return
@@ -101,8 +101,8 @@ func (inst Params) validateE() (err error) {
 	return
 }
 
-// DeriveParamsE reads go.mod under dir and fills in the defaults.
-func DeriveParamsE(dir string) (p Params, err error) {
+// DeriveParams reads go.mod under dir and fills in the defaults.
+func DeriveParams(dir string) (p Params, err error) {
 	if dir == "" {
 		dir = "."
 	}
@@ -226,20 +226,20 @@ func (inst Result) Blocking() (bad bool) {
 	return inst.Status == StatusDrift || inst.Status == StatusAbsent
 }
 
-// RenderE expands one file's template and its path against p.
-func RenderE(f File, p Params) (path string, content []byte, err error) {
-	err = p.validateE()
+// Render expands one file's template and its path against p.
+func Render(f File, p Params) (path string, content []byte, err error) {
+	err = p.validate()
 	if err != nil {
 		return
 	}
 
-	path, err = expandE("path:"+f.Path, f.Path, p)
+	path, err = expand("path:"+f.Path, f.Path, p)
 	if err != nil {
 		return
 	}
 
 	var s string
-	s, err = expandE("body:"+f.Path, f.Template, p)
+	s, err = expand("body:"+f.Path, f.Template, p)
 	if err != nil {
 		return
 	}
@@ -247,7 +247,7 @@ func RenderE(f File, p Params) (path string, content []byte, err error) {
 	return
 }
 
-func expandE(name string, text string, p Params) (out string, err error) {
+func expand(name string, text string, p Params) (out string, err error) {
 	// Missingkey=error turns a template referring to a field that does not
 	// exist into a loud failure rather than a file containing "<no value>".
 	t, parseErr := template.New(name).Option("missingkey=error").Parse(text)
@@ -287,9 +287,9 @@ func firstDiff(want []byte, got []byte) (line int32, wantLine string, gotLine st
 	return int32(n + 1), "(end of file)", g[n]
 }
 
-// CheckE reconciles the on-disk skeleton under dir against what boxer would
+// Check reconciles the on-disk skeleton under dir against what boxer would
 // emit, returning one Result per file in files order.
-func CheckE(dir string, files []File, p Params) (results []Result, err error) {
+func Check(dir string, files []File, p Params) (results []Result, err error) {
 	if dir == "" {
 		dir = "."
 	}
@@ -297,7 +297,7 @@ func CheckE(dir string, files []File, p Params) (results []Result, err error) {
 	for _, f := range files {
 		var rel string
 		var want []byte
-		rel, want, err = RenderE(f, p)
+		rel, want, err = Render(f, p)
 		if err != nil {
 			return
 		}
@@ -327,12 +327,12 @@ func CheckE(dir string, files []File, p Params) (results []Result, err error) {
 	return
 }
 
-// WriteE materialises the skeleton under dir.
+// Write materialises the skeleton under dir.
 //
 // Generated files are written unconditionally. Seeded files are written only
 // when absent, so a consumer's own entry point, tag manifest and AGENTS.md are
 // never clobbered by a reconciliation. Returns the paths actually written.
-func WriteE(dir string, files []File, p Params) (written []string, err error) {
+func Write(dir string, files []File, p Params) (written []string, err error) {
 	if dir == "" {
 		dir = "."
 	}
@@ -340,7 +340,7 @@ func WriteE(dir string, files []File, p Params) (written []string, err error) {
 	for _, f := range files {
 		var rel string
 		var content []byte
-		rel, content, err = RenderE(f, p)
+		rel, content, err = Render(f, p)
 		if err != nil {
 			return
 		}

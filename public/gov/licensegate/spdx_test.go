@@ -56,7 +56,7 @@ func TestEvaluateExpression(t *testing.T) {
 		{"MIT or Apache-2.0", CategoryNotice, "MIT"},
 	}
 	for _, tc := range cases {
-		category, elected, err := EvaluateExpressionE(tc.expression)
+		category, elected, err := EvaluateExpression(tc.expression)
 		require.NoError(t, err, tc.expression)
 		assert.Equal(t, tc.category, category, tc.expression)
 		assert.Equal(t, tc.elected, elected, tc.expression)
@@ -77,7 +77,7 @@ func TestEvaluateExpressionMalformed(t *testing.T) {
 		"MIT Apache-2.0",
 		"()",
 	} {
-		_, _, err := EvaluateExpressionE(expression)
+		_, _, err := EvaluateExpression(expression)
 		assert.Error(t, err, "%q", expression)
 	}
 }
@@ -104,7 +104,7 @@ func drawExpression(t *rapid.T, depth int) (expression string) {
 }
 
 func evaluate(t *rapid.T, expression string) (category CategoryE) {
-	category, _, err := EvaluateExpressionE(expression)
+	category, _, err := EvaluateExpression(expression)
 	if err != nil {
 		t.Fatalf("well-formed expression %q failed to parse: %v", expression, err)
 	}

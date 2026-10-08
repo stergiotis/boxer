@@ -24,11 +24,11 @@
 // [Scan], [ScanBytes] and [ScanFrom] yield [Message] values in file order,
 // skipping the GTS headers, blocking records and padding that surround
 // messages in the wild and reporting a truncated tail as that message's
-// error. A message's [Field] values hold their sections parsed; [Field.ValuesE]
+// error. A message's [Field] values hold their sections parsed; [Field.Values]
 // decodes the data in the order it is stored, with NaN for missing points,
 // and nothing is reordered for the caller (ADR-0292 §R2): the scan flags
-// are exposed, [Grid.PointsE] follows them to give each stored point its
-// latitude and longitude, and [Field.RasterE] applies them once, on
+// are exposed, [Grid.Points] follows them to give each stored point its
+// latitude and longitude, and [Field.Raster] applies them once, on
 // request, for grids with rectangular dimensions.
 //
 // Every signed octet is decoded sign-magnitude with all ones as missing
@@ -36,7 +36,7 @@
 // offset, converted to a duration only when the unit has one (§R7);
 // parameters are their coded triplet, never named (§R8).
 //
-// [IndexE] lists every field with its offset and identity as JSON lines
+// [Index] lists every field with its offset and identity as JSON lines
 // for readers that fetch by byte range (§R9); the sub-package tables
 // names parameters, centres and code-table values from the WMO's own
 // tables (§R8).

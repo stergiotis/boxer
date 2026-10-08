@@ -22,9 +22,9 @@ func TestRenderThumbnail(t *testing.T) {
 	ids := c.NewWidgetIdStack()
 
 	format := pcm.Format{SampleRate: 8000, Channels: 2}
-	src, err := pcm.NewSynthSourceE(format, 80000, pcm.Sine(format, 440, 0.5))
+	src, err := pcm.NewSynthSource(format, 80000, pcm.Sine(format, 440, 0.5))
 	require.NoError(t, err)
-	ov, err := peaks.OverviewE(context.Background(), src, 512)
+	ov, err := peaks.ComputeOverview(context.Background(), src, 512)
 	require.NoError(t, err)
 
 	zero()

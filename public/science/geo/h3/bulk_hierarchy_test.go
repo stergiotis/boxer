@@ -27,7 +27,7 @@ func TestCellsToParents_Golden(t *testing.T) {
 
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
@@ -40,7 +40,7 @@ func TestCellsToParents_Golden(t *testing.T) {
 		for i, r := range group {
 			cells[i] = r.Cell
 		}
-		parents, status, err := h.CellsToParentsE(ctx, ResolutionE(res), cells, nil, nil)
+		parents, status, err := h.CellsToParents(ctx, ResolutionE(res), cells, nil, nil)
 		require.NoError(t, err)
 		for i, r := range group {
 			require.Equal(t, StatusOk, status[i], "name=%s res=%d", r.Name, res)
@@ -55,7 +55,7 @@ func TestCellsToChildren_Golden(t *testing.T) {
 
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
@@ -63,7 +63,7 @@ func TestCellsToChildren_Golden(t *testing.T) {
 	for i, r := range recs {
 		cells[i] = r.Cell
 	}
-	children, offsets, status, err := h.CellsToChildrenE(ctx, ResolutionR4, cells, nil, nil, nil)
+	children, offsets, status, err := h.CellsToChildren(ctx, ResolutionR4, cells, nil, nil, nil)
 	require.NoError(t, err)
 	requireCSRInvariants(t, offsets, len(cells), len(children))
 	for i, r := range recs {
@@ -76,19 +76,19 @@ func TestCellsToChildren_Golden(t *testing.T) {
 func TestCellsToChildren_GrowProtocol(t *testing.T) {
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
 	// Use a resolution-0 cell so the child count is large.
 	lats := []float64{37.7749}
 	lngs := []float64{-122.4194}
-	cells, _, err := h.LatLngsToCellsE(ctx, ResolutionR0, lats, lngs, nil, nil)
+	cells, _, err := h.LatLngsToCells(ctx, ResolutionR0, lats, lngs, nil, nil)
 	require.NoError(t, err)
 
 	// Pass an obviously-undersized dst so the grow protocol fires.
 	undersized := make([]uint64, 0, 1)
-	children, offsets, status, err := h.CellsToChildrenE(ctx, ResolutionR3, cells, undersized, nil, nil)
+	children, offsets, status, err := h.CellsToChildren(ctx, ResolutionR3, cells, undersized, nil, nil)
 	require.NoError(t, err)
 	require.Equal(t, StatusOk, status[0])
 	require.GreaterOrEqual(t, len(children), 1)
@@ -99,17 +99,17 @@ func TestCellsToChildren_GrowProtocol(t *testing.T) {
 func TestParentOfChildIsIdentity(t *testing.T) {
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
 	lats := []float64{0.0, 37.7749, 48.8566, -33.8688}
 	lngs := []float64{0.0, -122.4194, 2.3522, 151.2093}
 
-	parents, _, err := h.LatLngsToCellsE(ctx, ResolutionR3, lats, lngs, nil, nil)
+	parents, _, err := h.LatLngsToCells(ctx, ResolutionR3, lats, lngs, nil, nil)
 	require.NoError(t, err)
 
-	children, offsets, _, err := h.CellsToChildrenE(ctx, ResolutionR5, parents, nil, nil, nil)
+	children, offsets, _, err := h.CellsToChildren(ctx, ResolutionR5, parents, nil, nil, nil)
 	require.NoError(t, err)
 	requireCSRInvariants(t, offsets, len(parents), len(children))
 
@@ -117,7 +117,7 @@ func TestParentOfChildIsIdentity(t *testing.T) {
 	for i := range parents {
 		row := children[offsets[i]:offsets[i+1]]
 		require.NotEmpty(t, row, "parent idx=%d", i)
-		computedParents, _, err := h.CellsToParentsE(ctx, ResolutionR3, row, nil, nil)
+		computedParents, _, err := h.CellsToParents(ctx, ResolutionR3, row, nil, nil)
 		require.NoError(t, err)
 		for _, p := range computedParents {
 			require.Equal(t, parents[i], p)

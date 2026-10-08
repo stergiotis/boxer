@@ -66,7 +66,7 @@ func keelsonTables() (reg *introspect.Registry) {
 		return nil
 	}
 	// Decoded on first read, so the demo's other apps start without it.
-	if err := keelsonfield.RegisterLazy(reg, "gfs_wind", gfsdemo.FieldE); err != nil {
+	if err := keelsonfield.RegisterLazy(reg, "gfs_wind", gfsdemo.Field); err != nil {
 		log.Error().Err(err).Msg("imzero2tabdemo: the GFS wind did not register")
 	}
 	return

@@ -114,10 +114,10 @@ type Request struct {
 
 // SourceI is one two-component field over the steps it lists.
 //
-// SampleE may be slow — a disk read, a regrid — and is called off the render
+// Sample may be slow — a disk read, a regrid — and is called off the render
 // thread; it must be safe for concurrent use and must honour ctx. What the
 // returned [Window] promises is on that type.
 type SourceI interface {
 	Describe() (meta Meta)
-	SampleE(ctx context.Context, req Request) (win Window, err error)
+	Sample(ctx context.Context, req Request) (win Window, err error)
 }

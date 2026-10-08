@@ -38,7 +38,7 @@ import (
 func init() {
     _ = watchbill.Register(watchbill.HandlerFunc{
         KindName: "tender.download",
-        Run: func(ctx context.Context, job watchbillstore.Job, h task.HandleI) error {
+        RunFunc: func(ctx context.Context, job watchbillstore.Job, h task.HandleI) error {
             // job.Subject is the id of the row in your own table that says
             // what to download. Report progress on h; check ctx.
             return download(ctx, job.Subject, h)

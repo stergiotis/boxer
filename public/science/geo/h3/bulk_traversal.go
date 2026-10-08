@@ -8,7 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// GridDisksE returns the k-ring neighbourhood of each input cell in CSR
+// GridDisks returns the k-ring neighbourhood of each input cell in CSR
 // layout: outCells holds all neighbours concatenated, offsets has length
 // N+1 with offsets[0]==0 and offsets[i+1]-offsets[i] == ringSize(cells[i]).
 // Row i's neighbours occupy outCells[offsets[i]:offsets[i+1]].
@@ -16,7 +16,7 @@ import (
 // k==0 returns each cell itself.
 //
 // Uses the one-retry grow protocol.
-func (inst *Handle) GridDisksE(
+func (inst *Handle) GridDisks(
 	ctx context.Context,
 	k uint8,
 	cells []uint64,
@@ -47,7 +47,7 @@ func (inst *Handle) GridDisksE(
 		total := int(statusRel) + n
 
 		var base uint32
-		base, err = inst.ensureScratchE(ctx, total)
+		base, err = inst.ensureScratch(ctx, total)
 		if err != nil {
 			return
 		}
@@ -57,13 +57,13 @@ func (inst *Handle) GridDisksE(
 		neededOff := base + neededRel
 		statusOff := base + statusRel
 
-		err = inst.writeU64sE(cellsOff, cells)
+		err = inst.writeU64s(cellsOff, cells)
 		if err != nil {
 			return
 		}
 
 		var rc uint32
-		rc, err = inst.callE(ctx, inst.fnGridDisk,
+		rc, err = inst.call(ctx, inst.fnGridDisk,
 			uint64(cellsOff), uint64(n32),
 			uint64(uint32(k)),
 			uint64(outOff), uint64(offsetsOff),
@@ -78,21 +78,21 @@ func (inst *Handle) GridDisksE(
 		switch rc {
 		case growOK:
 			var needed uint32
-			needed, err = inst.readU32E(neededOff)
+			needed, err = inst.readU32(neededOff)
 			if err != nil {
 				return
 			}
-			err = inst.readI32sE(offsetsOff, offsets)
+			err = inst.readI32s(offsetsOff, offsets)
 			if err != nil {
 				return
 			}
-			err = inst.readStatusE(statusOff, status)
+			err = inst.readStatus(statusOff, status)
 			if err != nil {
 				return
 			}
 			total := min(int(needed), outCap)
 			outCells = slices.Grow(outCellsDst[:0], total)[:total]
-			err = inst.readU64sE(outOff, outCells)
+			err = inst.readU64s(outOff, outCells)
 			return
 
 		case growNeedMore:
@@ -101,7 +101,7 @@ func (inst *Handle) GridDisksE(
 				return
 			}
 			var needed uint32
-			needed, err = inst.readU32E(neededOff)
+			needed, err = inst.readU32(neededOff)
 			if err != nil {
 				return
 			}

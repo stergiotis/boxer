@@ -253,8 +253,9 @@ The override only affects the value-prefix rule; the type itself must still end 
 
 ### Function & Method Naming
 
-**Suffixes.**
-*   `E` — functions returning an error (e.g. `OpenE`). E = Error. Distinct from the enum type-suffix `E` above; types and functions are disambiguated by Go's identifier conventions.
+**No error suffix.** A function returning an error is named like any other; the `error` in its signature says so. A trailing `E` belongs to enum types alone ([ADR-0293](./doc/adr/0293-retire-the-e-suffix-on-error-returning-functions.md)).
+
+**Receivers.** There is no house rule for receiver names. `inst` is a legacy convention found throughout the tree; it is neither required for new code nor a reason to rename old code.
 
 **Prefixes.**
 *   `Set` — only idempotent setters may use this prefix.

@@ -35,12 +35,12 @@ type Graph struct {
 	inputArc []int32
 }
 
-// BuildE reads parallel tail, head and edge columns into a [Graph] over n
+// Build reads parallel tail, head and edge columns into a [Graph] over n
 // nodes. Every value must be a slot below n; edge is any int32 the caller
 // uses to name the arc's origin, and may repeat (a two-way segment is two
 // arcs with one edge). A self-loop is dropped, because no shortest path
 // uses one and the hierarchy has no place for it.
-func BuildE(n int32, tail, head, edge []int32) (g *Graph, err error) {
+func Build(n int32, tail, head, edge []int32) (g *Graph, err error) {
 	if len(tail) != len(head) || len(tail) != len(edge) {
 		err = eb.Build().Int("tail", len(tail)).Int("head", len(head)).Int("edge", len(edge)).Errorf("the arc columns differ in length")
 		return
@@ -195,7 +195,7 @@ func (g *Graph) Tail(a int32) int32 {
 	return lo
 }
 
-// InputArc maps the i-th input arc of [BuildE] to its arc index, or -1 for
+// InputArc maps the i-th input arc of [Build] to its arc index, or -1 for
 // a dropped self-loop.
 func (g *Graph) InputArc(i int) int32 { return g.inputArc[i] }
 
@@ -209,10 +209,10 @@ func (g *Graph) Heads() []int32 { return g.head }
 // not modify.
 func (g *Graph) Edges() []int32 { return g.arcEdge }
 
-// FromRowsE rebuilds a graph from the arrays [Graph.FirstOut], [Graph.Heads]
+// FromRows rebuilds a graph from the arrays [Graph.FirstOut], [Graph.Heads]
 // and [Graph.Edges] exposed, as a caller persisting the topology stores
-// them. The rows must be sorted by head as [BuildE] leaves them.
-func FromRowsE(firstOut, head, edge []int32) (g *Graph, err error) {
+// them. The rows must be sorted by head as [Build] leaves them.
+func FromRows(firstOut, head, edge []int32) (g *Graph, err error) {
 	if len(firstOut) == 0 || len(head) != len(edge) || int(firstOut[len(firstOut)-1]) != len(head) {
 		err = eb.Build().Int("offsets", len(firstOut)).Int("heads", len(head)).Int("edges", len(edge)).Errorf("the row arrays do not describe a graph")
 		return
@@ -236,7 +236,7 @@ func FromRowsE(firstOut, head, edge []int32) (g *Graph, err error) {
 }
 
 // MetricFromInput spreads a per-input-arc weight column over the arcs, in
-// the order [BuildE] was given them; dropped self-loops are skipped.
+// the order [Build] was given them; dropped self-loops are skipped.
 func (g *Graph) MetricFromInput(w []uint32) (m Metric) {
 	m = make(Metric, len(g.head))
 	for i, a := range g.inputArc {

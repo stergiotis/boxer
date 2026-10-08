@@ -26,7 +26,7 @@ func bridgeAvailable(tb testing.TB) (rt *h3.Runtime, handle *h3.Handle) {
 		require.NoError(tb, err)
 	}
 	tb.Cleanup(func() { _ = rt.Close() })
-	handle, err = rt.AcquireE(context.Background())
+	handle, err = rt.Acquire(context.Background())
 	require.NoError(tb, err)
 	tb.Cleanup(handle.Release)
 	return
@@ -71,12 +71,12 @@ func TestCellsAsArrowUint64_Empty(t *testing.T) {
 	require.Equal(t, 0, arr.Len())
 }
 
-func TestCSRAsArrowListUint64E_RoundTrip(t *testing.T) {
+func TestCSRAsArrowListUint64_RoundTrip(t *testing.T) {
 	// Three rows: [100, 101, 102], [200], [300, 301].
 	values := []uint64{100, 101, 102, 200, 300, 301}
 	offsets := []int32{0, 3, 4, 6}
 
-	arr, err := h3arrow.CSRAsArrowListUint64E(values, offsets)
+	arr, err := h3arrow.CSRAsArrowListUint64(values, offsets)
 	require.NoError(t, err)
 	defer arr.Release()
 
@@ -94,11 +94,11 @@ func TestCSRAsArrowListUint64E_RoundTrip(t *testing.T) {
 	require.Equal(t, len(values), valuesArr.Len())
 }
 
-func TestCSRAsArrowListFloat64E_RoundTrip(t *testing.T) {
+func TestCSRAsArrowListFloat64_RoundTrip(t *testing.T) {
 	values := []float64{0, 0, 1, 0, 1, 1, 0, 1}
 	offsets := []int32{0, 4, 8} // two 4-vertex rings
 
-	arr, err := h3arrow.CSRAsArrowListFloat64E(values, offsets)
+	arr, err := h3arrow.CSRAsArrowListFloat64(values, offsets)
 	require.NoError(t, err)
 	defer arr.Release()
 
@@ -106,13 +106,13 @@ func TestCSRAsArrowListFloat64E_RoundTrip(t *testing.T) {
 }
 
 func TestCSR_InvariantViolations(t *testing.T) {
-	_, err := h3arrow.CSRAsArrowListUint64E(nil, nil)
+	_, err := h3arrow.CSRAsArrowListUint64(nil, nil)
 	require.ErrorIs(t, err, h3arrow.ErrEmptyOffsets)
 
-	_, err = h3arrow.CSRAsArrowListUint64E([]uint64{1, 2}, []int32{0, 5}) // offsets[1] > len(values)
+	_, err = h3arrow.CSRAsArrowListUint64([]uint64{1, 2}, []int32{0, 5}) // offsets[1] > len(values)
 	require.ErrorIs(t, err, h3arrow.ErrOffsetsOutOfRange)
 
-	_, err = h3arrow.CSRAsArrowListFloat64E(nil, []int32{})
+	_, err = h3arrow.CSRAsArrowListFloat64(nil, []int32{})
 	require.ErrorIs(t, err, h3arrow.ErrEmptyOffsets)
 }
 
@@ -125,7 +125,7 @@ func TestEndToEnd_H3ToArrow(t *testing.T) {
 
 	lats := []float64{0, 37.7749, 48.8566, -33.8688}
 	lngs := []float64{0, -122.4194, 2.3522, 151.2093}
-	cells, _, err := h.LatLngsToCellsE(ctx, h3.ResolutionR7, lats, lngs, nil, nil)
+	cells, _, err := h.LatLngsToCells(ctx, h3.ResolutionR7, lats, lngs, nil, nil)
 	require.NoError(t, err)
 
 	arr := h3arrow.CellsAsArrowUint64(cells)
@@ -136,10 +136,10 @@ func TestEndToEnd_H3ToArrow(t *testing.T) {
 	}
 
 	// Variable-arity: children → List<Uint64>.
-	children, childOffsets, _, err := h.CellsToChildrenE(ctx, h3.ResolutionR9, cells, nil, nil, nil)
+	children, childOffsets, _, err := h.CellsToChildren(ctx, h3.ResolutionR9, cells, nil, nil, nil)
 	require.NoError(t, err)
 
-	list, err := h3arrow.CSRAsArrowListUint64E(children, childOffsets)
+	list, err := h3arrow.CSRAsArrowListUint64(children, childOffsets)
 	require.NoError(t, err)
 	defer list.Release()
 	require.Equal(t, len(cells), list.Len())

@@ -59,7 +59,7 @@ func skeletonAction(ctx *cli.Context) (err error) {
 	root := ctx.String("root")
 
 	var p Params
-	p, err = DeriveParamsE(root)
+	p, err = DeriveParams(root)
 	if err != nil {
 		return
 	}
@@ -76,7 +76,7 @@ func skeletonAction(ctx *cli.Context) (err error) {
 	if ctx.Bool("list") {
 		for _, f := range files {
 			var rel string
-			rel, _, err = RenderE(f, p)
+			rel, _, err = Render(f, p)
 			if err != nil {
 				return
 			}
@@ -87,7 +87,7 @@ func skeletonAction(ctx *cli.Context) (err error) {
 
 	if ctx.Bool("write") {
 		var written []string
-		written, err = WriteE(root, files, p)
+		written, err = Write(root, files, p)
 		if err != nil {
 			return
 		}
@@ -101,7 +101,7 @@ func skeletonAction(ctx *cli.Context) (err error) {
 	}
 
 	var results []Result
-	results, err = CheckE(root, files, p)
+	results, err = Check(root, files, p)
 	if err != nil {
 		return
 	}

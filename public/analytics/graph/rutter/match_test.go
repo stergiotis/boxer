@@ -59,10 +59,10 @@ func newLineGraph(t *testing.T, w, h int, spacing float64) (lg lineGraph) {
 		}
 	}
 	var err error
-	lg.g, err = BuildE(int32(n), tail, head, edge)
+	lg.g, err = Build(int32(n), tail, head, edge)
 	require.NoError(t, err)
 	lg.length = lg.g.MetricFromInput(lengths)
-	lg.index, err = NewIndexE(lg.lines, spacing)
+	lg.index, err = NewIndex(lg.lines, spacing)
 	require.NoError(t, err)
 	lg.arcs = make([][2]int32, len(lg.ends))
 	for i := range lg.arcs {

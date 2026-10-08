@@ -73,14 +73,14 @@ func TestScanFlagsPlaceEveryStoredValue(t *testing.T) {
 		s := SynthField{Ni: ni, Nj: nj, Scan: scan, Lat1: lat1, Lon1: lon1, Lat2: lat2, Lon2: lon2, Ref: 0, Bits: 8, X: x, TimeUnit: 1}
 		f := decodeOne(t, s.Encode())
 		require.Equal(t, sc, f.Grid.Scan)
-		values, err := f.ValuesE(nil)
+		values, err := f.Values(nil)
 		require.NoError(t, err)
 		for k, ij := range order {
 			require.Equal(t, float64(10*ij[0]+ij[1]), values[k], "flags %#x stored index %d", scan, k)
 		}
 		// Points: coded i counts from lon1 in the coded direction, so the
 		// geographic column is i when east-running and ni−1−i otherwise.
-		points, err := f.Grid.PointsE()
+		points, err := f.Grid.Points()
 		require.NoError(t, err)
 		k := 0
 		for lat, lon := range points {
@@ -99,7 +99,7 @@ func TestScanFlagsPlaceEveryStoredValue(t *testing.T) {
 		}
 		require.Equal(t, ni*nj, k)
 		// Raster: row 0 is the northern row, column 0 the western one.
-		raster, rni, rnj, err := f.RasterE(nil)
+		raster, rni, rnj, err := f.Raster(nil)
 		require.NoError(t, err)
 		require.Equal(t, ni, rni)
 		require.Equal(t, nj, rnj)
@@ -131,7 +131,7 @@ func TestConstantFieldHonoursBothScales(t *testing.T) {
 	}{{0, 0, 1234.5}, {1, 0, 123.45}, {-2, 0, 123450}, {2, 3, 12.345}} {
 		s := base
 		s.DecScale, s.BinScale = tc.dec, tc.bin
-		values, err := decodeOne(t, s.Encode()).ValuesE(nil)
+		values, err := decodeOne(t, s.Encode()).Values(nil)
 		require.NoError(t, err)
 		for _, v := range values {
 			require.InDelta(t, tc.want, v, 1e-9*tc.want, "D=%d", tc.dec)
@@ -140,7 +140,7 @@ func TestConstantFieldHonoursBothScales(t *testing.T) {
 	s := base
 	s.DecScale = 1
 	s.Bitmap = []bool{true, false, false, true}
-	values, err := decodeOne(t, s.Encode()).ValuesE(nil)
+	values, err := decodeOne(t, s.Encode()).Values(nil)
 	require.NoError(t, err)
 	require.InDelta(t, 123.45, values[0], 1e-9)
 	require.True(t, math.IsNaN(values[1]))
@@ -152,7 +152,7 @@ func TestConstantFieldHonoursBothScales(t *testing.T) {
 // 10⁻², so a coded 949.22 hPa becomes 94 922 Pa.
 func TestNegativeDecimalScaleMultiplies(t *testing.T) {
 	s := SynthField{Ni: 1, Nj: 1, Lat1: 0, Lon1: 0, Lat2: 0, Lon2: 0, Ref: 949.22314453125, BinScale: -4, DecScale: -2, Bits: 12, X: []uint64{16}, TimeUnit: 1}
-	values, err := decodeOne(t, s.Encode()).ValuesE(nil)
+	values, err := decodeOne(t, s.Encode()).Values(nil)
 	require.NoError(t, err)
 	require.InDelta(t, (949.22314453125+1)*100, values[0], 1e-9)
 }
@@ -168,10 +168,10 @@ func TestSignedOctetsAreSignMagnitude(t *testing.T) {
 	require.True(t, missing)
 	require.EqualValues(t, 0, v)
 	require.EqualValues(t, 127, r.s8())
-	require.NoError(t, r.errE("test"))
+	require.NoError(t, r.truncation("test"))
 	short := rd{b: []byte{0x01}}
 	short.u16()
-	require.ErrorIs(t, short.errE("short"), ErrMalformed)
+	require.ErrorIs(t, short.truncation("short"), ErrMalformed)
 }
 
 // TestForecastTimeSignAndUnit: a negative forecast time in minutes stays
@@ -196,7 +196,7 @@ func TestForecastTimeSignAndUnit(t *testing.T) {
 // says where the message ends.
 func TestDataEndingInEndMarkerIsNotTheEnd(t *testing.T) {
 	s := SynthField{Ni: 4, Nj: 1, Ref: 0, Bits: 8, X: []uint64{'7', '7', '7', '7'}, TimeUnit: 1}
-	values, err := decodeOne(t, s.Encode()).ValuesE(nil)
+	values, err := decodeOne(t, s.Encode()).Values(nil)
 	require.NoError(t, err)
 	require.Equal(t, []float64{55, 55, 55, 55}, values)
 }
@@ -215,7 +215,7 @@ func TestShortDataSectionIsInconsistent(t *testing.T) {
 	for i := 0; i < 8; i++ {
 		msg[15-i] = byte(total >> (8 * i))
 	}
-	_, err := decodeOne(t, msg).ValuesE(nil)
+	_, err := decodeOne(t, msg).Values(nil)
 	require.ErrorIs(t, err, ErrInconsistent)
 }
 
@@ -234,12 +234,12 @@ func TestGrib1LargeMessageLength(t *testing.T) {
 	bms[0], bms[1], bms[2] = 0x11, 0xcc, 0x46
 	bds := []byte{0, 0, 14}
 	src := bytesSource{buf: append(append(append(append(head, pds...), gds...), bms...), bds...)}
-	length, err := grib1LengthE(src, 0, head)
+	length, err := grib1Length(src, 0, head)
 	require.NoError(t, err)
 	require.EqualValues(t, 11394230, length)
 	// Without the flag the field is the length.
 	small := []byte{'G', 'R', 'I', 'B', 0x00, 0x27, 0x6e, 1}
-	length, err = grib1LengthE(bytesSource{buf: small}, 0, small)
+	length, err = grib1Length(bytesSource{buf: small}, 0, small)
 	require.NoError(t, err)
 	require.EqualValues(t, 10094, length)
 }
@@ -252,7 +252,7 @@ func TestScanFromOffsetFindsTheMessage(t *testing.T) {
 	var seen []float64
 	for m, err := range ScanFrom(bytes.NewReader(buf), int64(len(buf)), int64(len(a)+2)) {
 		require.NoError(t, err)
-		v, err := m.Fields[0].ValuesE(nil)
+		v, err := m.Fields[0].Values(nil)
 		require.NoError(t, err)
 		seen = append(seen, v[0])
 		require.EqualValues(t, 5, m.Skipped)
@@ -318,16 +318,16 @@ func TestDamagedMessagesFailWithoutPanicking(t *testing.T) {
 				break
 			}
 			for _, f := range m.Fields {
-				_, err = f.ValuesE(nil)
+				_, err = f.Values(nil)
 				if err != nil && !errors.Is(err, ErrMalformed) && !errors.Is(err, ErrUnsupported) && !errors.Is(err, ErrInconsistent) {
 					rt.Fatalf("values failed outside the documented errors: %v", err)
 				}
-				points, err := f.Grid.PointsE()
+				points, err := f.Grid.Points()
 				if err == nil {
 					for range points {
 					}
 				}
-				_, _, _, _ = f.RasterE(nil)
+				_, _, _, _ = f.Raster(nil)
 			}
 		}
 	})

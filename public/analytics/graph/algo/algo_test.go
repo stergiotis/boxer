@@ -25,7 +25,7 @@ func drawGraph(t *rapid.T, directed bool) (*csr.Graph, []uint64, []uint64) {
 		src[i] = uint64(rapid.IntRange(0, n-1).Draw(t, "s")) * 7
 		dst[i] = uint64(rapid.IntRange(0, n-1).Draw(t, "d")) * 7
 	}
-	g, err := csr.BuildE(src, dst, nil, csr.Options{Directed: directed})
+	g, err := csr.Build(src, dst, nil, csr.Options{Directed: directed})
 	require.NoError(t, err)
 	return g, src, dst
 }
@@ -93,7 +93,7 @@ func TestBFSMatchesOracle(t *testing.T) {
 }
 
 func TestBFSMaxDepth(t *testing.T) {
-	g, _ := csr.BuildE([]uint64{0, 1, 2}, []uint64{1, 2, 3}, nil, csr.Options{Directed: true})
+	g, _ := csr.Build([]uint64{0, 1, 2}, []uint64{1, 2, 3}, nil, csr.Options{Directed: true})
 	r, err := BFS(context.Background(), nil, g, []int32{0}, BFSOptions{MaxDepth: 2})
 	require.NoError(t, err)
 	require.Equal(t, []int32{0, 1, 2, -1}, r.Depth)
@@ -160,7 +160,7 @@ func TestPageRankMatchesOracle(t *testing.T) {
 }
 
 func TestPageRankConvergenceAndBudget(t *testing.T) {
-	g, _ := csr.BuildE([]uint64{0, 1, 2, 3, 0}, []uint64{1, 2, 3, 0, 2}, nil, csr.Options{Directed: true})
+	g, _ := csr.Build([]uint64{0, 1, 2, 3, 0}, []uint64{1, 2, 3, 0, 2}, nil, csr.Options{Directed: true})
 	r := PageRank(context.Background(), nil, g, PageRankOptions{Tolerance: 1e-12, Iterations: 100})
 	require.True(t, r.Converged)
 	require.False(t, r.Truncated)
@@ -248,7 +248,7 @@ func TestBetweennessSampling(t *testing.T) {
 		src = append(src, i, i)
 		dst = append(dst, (i+1)%200, (i*7+3)%200)
 	}
-	g, _ := csr.BuildE(src, dst, nil, csr.Options{})
+	g, _ := csr.Build(src, dst, nil, csr.Options{})
 	exact, _ := Betweenness(context.Background(), engine.New(4), g, BetweennessOptions{})
 	est, err := Betweenness(context.Background(), engine.New(4), g, BetweennessOptions{ExactMaxVertices: 100, Pivots: 60, Seed: 5})
 	require.NoError(t, err)
@@ -328,7 +328,7 @@ func TestContextCancellationTruncates(t *testing.T) {
 		src = append(src, i, i)
 		dst = append(dst, (i+1)%1000, (i*13+5)%1000)
 	}
-	g, _ := csr.BuildE(src, dst, nil, csr.Options{})
+	g, _ := csr.Build(src, dst, nil, csr.Options{})
 	r, _ := BFS(ctx, nil, g, []int32{0}, BFSOptions{})
 	require.Equal(t, LimitContext, r.By)
 	pr := PageRank(ctx, nil, g, PageRankOptions{})
@@ -346,14 +346,14 @@ func TestContextCancellationTruncates(t *testing.T) {
 }
 
 func TestDegrees(t *testing.T) {
-	g, _ := csr.BuildE([]uint64{0, 0, 1}, []uint64{1, 2, 2}, nil, csr.Options{Directed: true})
+	g, _ := csr.Build([]uint64{0, 0, 1}, []uint64{1, 2, 2}, nil, csr.Options{Directed: true})
 	out, in := Degrees(g)
 	require.Equal(t, []int32{2, 1, 0}, out)
 	require.Equal(t, []int32{0, 1, 2}, in)
 }
 
 func TestConnectedComponentsTruncatedStillLabels(t *testing.T) {
-	g, err := csr.BuildE([]uint64{1, 2, 4}, []uint64{2, 3, 5}, nil, csr.Options{})
+	g, err := csr.Build([]uint64{1, 2, 4}, []uint64{2, 3, 5}, nil, csr.Options{})
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

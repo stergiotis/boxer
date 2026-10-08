@@ -139,12 +139,12 @@ func TestWriteTrailerCleanRunExitsZero(t *testing.T) {
 	assert.NotContains(t, buf.String(), "failing:")
 }
 
-func TestValidateStepNamesE(t *testing.T) {
+func TestValidateStepNames(t *testing.T) {
 	steps := DefaultSteps()
-	assert.NoError(t, ValidateStepNamesE(steps, nil))
-	assert.NoError(t, ValidateStepNamesE(steps, []string{"doclint", "buildtags"}))
+	assert.NoError(t, ValidateStepNames(steps, nil))
+	assert.NoError(t, ValidateStepNames(steps, []string{"doclint", "buildtags"}))
 
-	err := ValidateStepNamesE(steps, []string{"doclint", "nosuch"})
+	err := ValidateStepNames(steps, []string{"doclint", "nosuch"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown gate step")
 }

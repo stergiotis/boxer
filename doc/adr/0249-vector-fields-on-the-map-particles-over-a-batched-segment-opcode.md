@@ -120,7 +120,7 @@ than asked, with `NaN` for missing, and a version.
 ```go
 type SourceI interface {
 	Describe() (meta Meta)
-	SampleE(ctx context.Context, req Request) (win Window, err error)
+	Sample(ctx context.Context, req Request) (win Window, err error)
 }
 ```
 
@@ -167,7 +167,7 @@ quantity, the unit, the vertical surface by kind and value (a 10 m wind and a
 10 hPa wind share a number), the native grid and what the source did to reach
 lat/lon, the policy at coasts — and the magnitude range the palette spans.
 
-`SampleE` runs off the render thread. The layer keeps the last good window on
+`Sample` runs off the render thread. The layer keeps the last good window on
 screen and asks again when the view leaves the window's margin or crosses to
 another level, with separate thresholds up and down so a view resting on a
 boundary does not alternate, and no more often than a debounce allows. A
@@ -181,7 +181,7 @@ assignment. Removing the layer cancels what is in flight.
 
 Each level halves the one below by a box mean of the components — the
 **vector mean**, meteorology's *resultant* wind, and what the surveyed systems
-that document a vector-aware downsampling do. `SampleE` serves from the
+that document a vector-aware downsampling do. `Sample` serves from the
 finest level no finer than the request, so a window's spacing is between one
 and two times what was asked and a world view of a ten-million-vector grid
 reads a few thousand cells. A request coarser than the top level is reduced on

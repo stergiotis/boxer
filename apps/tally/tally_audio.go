@@ -127,19 +127,19 @@ func stageRecording(ctx context.Context, fsys fs.FS, p string, size int64) (inst
 	}
 	inst = &stagedRecording{name: path.Base(p), kind: decode.Sniff(head)}
 	if inst.kind == decode.KindWAV {
-		err = inst.sealE(ctx, br)
+		err = inst.writeSealed(ctx, br)
 	} else {
-		err = inst.holdPlainE(ctx, br)
+		err = inst.holdPlain(ctx, br)
 	}
 	if err != nil {
-		_ = inst.closeE()
+		_ = inst.close()
 		return nil, err
 	}
 	return inst, nil
 }
 
-// sealE writes the recording into an unnamed sealed file.
-func (inst *stagedRecording) sealE(ctx context.Context, r io.Reader) (err error) {
+// writeSealed writes the recording into an unnamed sealed file.
+func (inst *stagedRecording) writeSealed(ctx context.Context, r io.Reader) (err error) {
 	f, err := sealed.Create()
 	if err != nil {
 		return eh.Errorf("unable to stage: %w", err)
@@ -160,10 +160,10 @@ func (inst *stagedRecording) sealE(ctx context.Context, r io.Reader) (err error)
 	return nil
 }
 
-// holdPlainE copies the recording into anonymous memory for the external
+// holdPlain copies the recording into anonymous memory for the external
 // decoder. The descriptor is the only way to it: the memfd is unnamed, so
 // there is nothing on disk to clean up and nothing to find after a crash.
-func (inst *stagedRecording) holdPlainE(ctx context.Context, r io.Reader) (err error) {
+func (inst *stagedRecording) holdPlain(ctx context.Context, r io.Reader) (err error) {
 	fd, err := unix.MemfdCreate(audioStagePrefix+inst.name, unix.MFD_CLOEXEC)
 	if err != nil {
 		return eb.Build().Str("name", inst.name).Errorf("unable to hold the recording for the decoder: %w", err)
@@ -203,11 +203,11 @@ func copyChunked(ctx context.Context, w io.Writer, r io.Reader) (n int64, err er
 // Name implements [decode.FdInputI].
 func (inst *stagedRecording) Name() (s string) { return inst.name }
 
-// OpenE implements [decode.FdInputI]: a fresh handle on the anonymous file
+// Open implements [decode.FdInputI]: a fresh handle on the anonymous file
 // for one decoder process. Re-opening through the descriptor's own procfs
 // entry is what makes it fresh — handing out duplicates of the one handle
 // would have two ffmpeg processes sharing a file offset.
-func (inst *stagedRecording) OpenE() (f *os.File, err error) {
+func (inst *stagedRecording) Open() (f *os.File, err error) {
 	if inst.plain == nil {
 		return nil, eb.Build().Str("name", inst.name).Errorf("the recording is not staged for an external decoder")
 	}
@@ -218,19 +218,19 @@ func (inst *stagedRecording) OpenE() (f *os.File, err error) {
 	return f, nil
 }
 
-// openSourceE opens one independent reader over the staged recording. A track
+// openSource opens one independent reader over the staged recording. A track
 // takes several — the sink, the peaks build, the window cache — and each gets
 // its own decoder here.
-func (inst *stagedRecording) openSourceE(ctx context.Context) (src pcm.SourceI, err error) {
+func (inst *stagedRecording) openSource(ctx context.Context) (src pcm.SourceI, err error) {
 	if inst.kind == decode.KindWAV {
-		return inst.openSealedWavE()
+		return inst.openSealedWav()
 	}
-	return decode.OpenFfmpegFdE(ctx, inst)
+	return decode.OpenFfmpegFd(ctx, inst)
 }
 
-// openSealedWavE reads the WAV out of the sealed file: one independent
+// openSealedWav reads the WAV out of the sealed file: one independent
 // reader over the plaintext, and the native WAV reader on top.
-func (inst *stagedRecording) openSealedWavE() (src pcm.SourceI, err error) {
+func (inst *stagedRecording) openSealedWav() (src pcm.SourceI, err error) {
 	if inst.seal == nil {
 		return nil, eb.Build().Str("name", inst.name).Errorf("the recording is not staged")
 	}
@@ -238,7 +238,7 @@ func (inst *stagedRecording) openSealedWavE() (src pcm.SourceI, err error) {
 	if err != nil {
 		return nil, eb.Build().Str("name", inst.name).Errorf("unable to unseal: %w", err)
 	}
-	file, err := wavfile.NewReaderE(r, r.PlaintextSize())
+	file, err := wavfile.NewReader(r, r.PlaintextSize())
 	if err != nil {
 		_ = r.Close()
 		return nil, err
@@ -249,7 +249,7 @@ func (inst *stagedRecording) openSealedWavE() (src pcm.SourceI, err error) {
 // closeE releases everything staging took: the sealed file — its inode
 // goes with the last descriptor, its key with it — or the anonymous one.
 // It is idempotent.
-func (inst *stagedRecording) closeE() (err error) {
+func (inst *stagedRecording) close() (err error) {
 	if inst.seal != nil {
 		err = inst.seal.Close()
 		inst.seal = nil
@@ -269,9 +269,9 @@ type sealedWav struct {
 	seal io.Closer
 }
 
-// CloseE closes the WAV reader and then the sealed reader under it.
-func (inst *sealedWav) CloseE() (err error) {
-	err = inst.File.CloseE()
+// Close closes the WAV reader and then the sealed reader under it.
+func (inst *sealedWav) Close() (err error) {
+	err = inst.File.Close()
 	if cerr := inst.seal.Close(); err == nil {
 		err = cerr
 	}
@@ -306,9 +306,9 @@ func openAudioSession(ctx context.Context, fsys fs.FS, p string, size int64, mod
 	if err != nil {
 		return nil, err
 	}
-	src, err := staged.openSourceE(ctx)
+	src, err := staged.openSource(ctx)
 	if err != nil {
-		_ = staged.closeE()
+		_ = staged.close()
 		return nil, err
 	}
 	inst = &audioSession{staged: staged}
@@ -325,14 +325,14 @@ func openAudioSession(ctx context.Context, fsys fs.FS, p string, size int64, mod
 	opts := track.Options{
 		Epoch: epoch,
 		Reopen: func(rctx context.Context) (pcm.SourceI, error) {
-			return staged.openSourceE(rctx)
+			return staged.openSource(rctx)
 		},
 		Background: true,
 		// The peaks cache is a plaintext derivative of a recording staged
 		// precisely so it leaves nothing behind; it is not written.
 		NoCache: true,
 		NewSink: func(s pcm.SourceI) sink.SinkI {
-			out, oerr := pulsesink.OpenE(s, pulsesink.Options{AppName: "boxer tally"})
+			out, oerr := pulsesink.Open(s, pulsesink.Options{AppName: "boxer tally"})
 			if oerr != nil {
 				inst.deviceErr = oerr.Error()
 				return sink.NewNull(s, nil)
@@ -340,9 +340,9 @@ func openAudioSession(ctx context.Context, fsys fs.FS, p string, size int64, mod
 			return out
 		},
 	}
-	tr, err := track.OpenE(ctx, src, opts)
+	tr, err := track.Open(ctx, src, opts)
 	if err != nil {
-		_ = staged.closeE()
+		_ = staged.close()
 		return nil, err
 	}
 	inst.tr = tr
@@ -350,16 +350,16 @@ func openAudioSession(ctx context.Context, fsys fs.FS, p string, size int64, mod
 }
 
 // closeE closes the track and then releases the staged bytes.
-func (inst *audioSession) closeE() (err error) {
+func (inst *audioSession) close() (err error) {
 	if inst == nil {
 		return nil
 	}
 	if inst.tr != nil {
-		err = inst.tr.CloseE()
+		err = inst.tr.Close()
 		inst.tr = nil
 	}
 	if inst.staged != nil {
-		if serr := inst.staged.closeE(); err == nil {
+		if serr := inst.staged.close(); err == nil {
 			err = serr
 		}
 		inst.staged = nil
@@ -424,7 +424,7 @@ func (inst *App) renderAudioPreview(s *audioSession) {
 		}
 		c.AddSpace(gap)
 		if c.SliderF64(inst.ids.PrepareStr("audio-volume"), s.volume, 0, 1).Text("volume").SendRespVal(&s.volume).HasChanged() {
-			if err := s.tr.Sink().SetVolumeE(s.volume); err != nil {
+			if err := s.tr.Sink().SetVolume(s.volume); err != nil {
 				inst.log.Warn().Err(err).Msg("tally: volume rejected")
 			}
 		}

@@ -249,8 +249,8 @@ func (inst *transformScanner) slidingDot(query []float64, series []float64, dst 
 	return
 }
 
-// NewDetectorE validates cfg and returns a detector.
-func NewDetectorE(cfg Config) (inst *Detector, err error) {
+// NewDetector validates cfg and returns a detector.
+func NewDetector(cfg Config) (inst *Detector, err error) {
 	if cfg.Window < 2 {
 		err = eb.Build().Int32("window", cfg.Window).Errorf("window must be at least 2")
 		return
@@ -704,10 +704,10 @@ func (inst *Detector) Push(v float64) (reading Reading, ok bool) {
 	return
 }
 
-// ScoreE drives a detector over a stored series and returns every reading, for
+// Score drives a detector over a stored series and returns every reading, for
 // evaluation and testing. Streaming callers use [Detector.Push] directly.
-func ScoreE(values []float64, cfg Config) (readings []Reading, err error) {
-	inst, err := NewDetectorE(cfg)
+func Score(values []float64, cfg Config) (readings []Reading, err error) {
+	inst, err := NewDetector(cfg)
 	if err != nil {
 		return
 	}

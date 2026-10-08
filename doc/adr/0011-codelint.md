@@ -102,6 +102,13 @@ Accepted 2026-05-18. Phase 1 lands incrementally; CS001 ships with this ADR. The
 
 ## Updates
 
+### 2026-10-08 — the `*E`-suffix rule leaves phase 2
+
+Phase 2's "`*E`-suffix returns error last" has no convention left to check:
+[ADR-0293](./0293-retire-the-e-suffix-on-error-returning-functions.md) retires
+the `E` suffix on error-returning functions. The enum-type suffix rules CS006 and
+CS007 are unaffected.
+
 ### 2026-09-01 — CS013 lands, and the phase-2 %w rule is done
 
 Phase 2's "always-`%w` for error args" is implemented as `CS013` and promoted to

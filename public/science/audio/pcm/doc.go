@@ -8,7 +8,7 @@
 // the widget's time bases (ADR-0208 SD9) derive from frames, not the other
 // way round.
 //
-// The read contract is [SourceI.ReadFramesAtE]; a decoder is allowed to be
+// The read contract is [SourceI.ReadFramesAt]; a decoder is allowed to be
 // expensive on a backwards seek (an ffmpeg-backed source restarts the
 // process), so callers that need random access cache windows above this
 // interface rather than expecting it to be cheap. Sequential callers — the

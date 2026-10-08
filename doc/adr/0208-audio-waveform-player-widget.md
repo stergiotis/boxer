@@ -366,7 +366,7 @@ here so the additions are found.
 | `extbin` program registry | added: `Ffmpeg`, `Ffprobe` | the airgap bundle's binary list; `doc/env-vars.md` regenerates if an override variable is declared |
 | Environment-variable registry (ADR-0009) | added: `BOXER_AUDIO_PEAKS_CACHE_DIR` | `doc/env-vars.md` regenerates |
 | `go.mod` | added: `github.com/jfreymuth/pulse` (MIT, no transitive dependencies) | license gate SBOM (ADR-0004) |
-| `decode` package API | added: `FdInputI`, `OpenFfmpegFdE`, `ReopenerFd` (2026-08-28 update) | nothing — a leaf library's own surface |
+| `decode` package API | added: `FdInputI`, `OpenFfmpegFd`, `ReopenerFd` (2026-08-28 update) | nothing — a leaf library's own surface |
 
 ## Alternatives
 
@@ -487,7 +487,7 @@ which asserts hover, click-to-seek, an exact 300 px drag and the null-sink
 transport through the demo's readouts; M3 as `sink/pulsesink` — the stream is
 opened at the source's own rate and the server resamples, so the `pcm`
 resampler SD6 anticipated is only the playback-rate one, a linear
-interpolation in the pull callback — with `track.ReplaceSinkE` as the seam
+interpolation in the pull callback — with `track.ReplaceSink` as the seam
 that swaps a device in after open, which is how the demo goes from silent to
 audible and how a brokered capability would hand a sink out. M4 as `decode`
 (the sniffing opener, `ffmpeg`/`ffprobe` through `extbin`, the file identity)
@@ -533,7 +533,7 @@ tally plays the recordings in a lading snapshot (ADR-0200's update of the same
 date), which is the first host whose recordings have no filesystem path: they
 are rows in ClickHouse, and staging them as plain files would outlive the
 window. SD5 routed a recording by sniffing a path, and the native reader was
-already path-free — `wavfile.NewReaderE` takes an `io.ReaderAt`, so a decrypting
+already path-free — `wavfile.NewReader` takes an `io.ReaderAt`, so a decrypting
 reader satisfies it. ffmpeg was not: `-i` needs something openable, and ffprobe
 needs to seek it, so a pipe is not a substitute: ffprobe prints `N/A` for a
 duration it cannot establish, and SD5 makes a missing frame count an error
@@ -550,7 +550,7 @@ an fd-backed source sample-for-sample against a path-backed one across a
 restart.
 
 This does not change SD5's routing, only what an input may be. A path-shaped
-recording still goes through `OpenE` and pays nothing for the seam.
+recording still goes through `Open` and pays nothing for the seam.
 
 ### 2026-09-19 — the peaks build's ETA is the shared estimator (ADR-0247)
 

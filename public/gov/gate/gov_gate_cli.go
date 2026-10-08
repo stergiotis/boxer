@@ -97,7 +97,7 @@ func gateAction(ctx *cli.Context) (err error) {
 	}
 
 	want := ctx.StringSlice("step")
-	err = ValidateStepNamesE(steps, want)
+	err = ValidateStepNames(steps, want)
 	if err != nil {
 		return
 	}

@@ -4,7 +4,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-// ErrClosed is returned by [Runtime.AcquireE] after the runtime has been
+// ErrClosed is returned by [Runtime.Acquire] after the runtime has been
 // closed.
 var ErrClosed = eh.New("h3: runtime closed")
 
@@ -33,31 +33,31 @@ var ErrMemoryOOB = eh.New("h3: wasm memory access out of bounds")
 // guest reported `needed` incorrectly.
 var ErrGrowProtocol = eh.New("h3: variable-arity grow protocol did not settle in one retry")
 
-// ErrBadContainmentMode is returned by [Handle.PolygonToCellsE] when the
+// ErrBadContainmentMode is returned by [Handle.PolygonToCells] when the
 // mode argument is outside the [ContainmentModeE] enum.
 var ErrBadContainmentMode = eh.New("h3: bad containment mode")
 
-// ErrBadPolygonGeometry is returned by [Handle.PolygonToCellsE] for a
+// ErrBadPolygonGeometry is returned by [Handle.PolygonToCells] for a
 // malformed polygon (non-monotone ring offsets, rings not closed under
 // h3o's acceptance criteria).
 var ErrBadPolygonGeometry = eh.New("h3: bad polygon geometry")
 
-// ErrCompactMixedResolution is returned by [Handle.CompactCellsE] when the
+// ErrCompactMixedResolution is returned by [Handle.CompactCells] when the
 // input set mixes H3 resolutions.
 var ErrCompactMixedResolution = eh.New("h3: compact input mixes resolutions")
 
-// ErrCompactDuplicateInput is returned by [Handle.CompactCellsE] when the
+// ErrCompactDuplicateInput is returned by [Handle.CompactCells] when the
 // input set contains duplicate cells.
 var ErrCompactDuplicateInput = eh.New("h3: compact input contains duplicates")
 
-// ErrDissolveInvalidCell is returned by [Handle.DissolveE] when the input
+// ErrDissolveInvalidCell is returned by [Handle.Dissolve] when the input
 // contains a non-H3 cell.
 var ErrDissolveInvalidCell = eh.New("h3: dissolve input contains a non-H3 cell")
 
-// ErrDissolveMixedResolution is returned by [Handle.DissolveE] when the
+// ErrDissolveMixedResolution is returned by [Handle.Dissolve] when the
 // input set mixes H3 resolutions.
 var ErrDissolveMixedResolution = eh.New("h3: dissolve input mixes resolutions")
 
-// ErrDissolveDuplicateInput is returned by [Handle.DissolveE] when the
+// ErrDissolveDuplicateInput is returned by [Handle.Dissolve] when the
 // input set contains duplicate cells.
 var ErrDissolveDuplicateInput = eh.New("h3: dissolve input contains duplicates")

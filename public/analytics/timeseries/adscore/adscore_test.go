@@ -160,7 +160,7 @@ func TestPerfectDetectorCapsBelowOneUnderVUS(t *testing.T) {
 	// approximate localisation and treats exactness as one point on that scale.
 	// Anyone reading a VUS value as a fraction of attainable skill needs this.
 	labels := labelsFrom(4000, [2]int{500, 549}, [2]int{1500, 1549}, [2]int{2500, 2549})
-	m, err := adscore.EvaluateE(scoresFromLabels(labels), labels, 0)
+	m, err := adscore.Evaluate(scoresFromLabels(labels), labels, 0)
 	require.NoError(t, err)
 
 	assert.InDelta(t, 1.0, m.AUCROC, 1.0e-9, "point-wise ROC is exactly 1")
@@ -178,7 +178,7 @@ func TestInvertedDetectorScoresNearZero(t *testing.T) {
 		scores[i] = 1.0 - scores[i]
 	}
 
-	m, err := adscore.EvaluateE(scores, labels, 0)
+	m, err := adscore.Evaluate(scores, labels, 0)
 	require.NoError(t, err)
 	assert.Less(t, m.AUCROC, 0.05, "an inverted detector should sit far below chance")
 	assert.Less(t, m.VUSROC, 0.15)
@@ -193,7 +193,7 @@ func TestConstantScoreIsChanceLevel(t *testing.T) {
 		scores[i] = 0.7
 	}
 
-	m, err := adscore.EvaluateE(scores, labels, 0)
+	m, err := adscore.Evaluate(scores, labels, 0)
 	require.NoError(t, err)
 	assert.InDelta(t, 0.5, m.AUCROC, 1.0e-9, "a constant score is exactly chance under ROC")
 
@@ -221,13 +221,13 @@ func TestChanceLevelDriftsUpwardWithBuffer(t *testing.T) {
 		scores[i] = rng.Float64()
 	}
 
-	m, err := adscore.EvaluateE(scores, labels, 0)
+	m, err := adscore.Evaluate(scores, labels, 0)
 	require.NoError(t, err)
 	assert.InDelta(t, 0.5, m.AUCROC, 0.05, "point-wise ROC is unbiased at chance")
 
 	var prev float64
 	for _, buffer := range []int32{0, 10, 25, 50, 100} {
-		roc, _, rerr := adscore.RangeAUCE(scores, labels, buffer)
+		roc, _, rerr := adscore.RangeAUC(scores, labels, buffer)
 		require.NoError(t, rerr)
 		if buffer > 0 {
 			assert.Greater(t, roc, prev, "chance level should rise with the buffer (buffer %d)", buffer)
@@ -251,7 +251,7 @@ func TestEarlyDetectionIsRewardedByBufferButNotByPointwise(t *testing.T) {
 		scores[i] = 1.0
 	}
 
-	m, err := adscore.EvaluateE(scores, labels, 0)
+	m, err := adscore.Evaluate(scores, labels, 0)
 	require.NoError(t, err)
 
 	assert.Less(t, m.AUCPR, 0.05, "point-wise PR sees no overlap at all")
@@ -262,7 +262,7 @@ func TestEarlyDetectionIsRewardedByBufferButNotByPointwise(t *testing.T) {
 func TestVUSIsTheMeanOfRangeAUCOverBuffers(t *testing.T) {
 	// The defining relation: VUS averages the range-based area over every buffer
 	// length from 0 to maxBuffer inclusive. Computing that average directly from
-	// RangeAUCE must reproduce it.
+	// RangeAUC must reproduce it.
 	const maxBuffer = int32(24)
 	labels := labelsFrom(600, [2]int{100, 129}, [2]int{400, 419})
 	rng := rand.New(rand.NewPCG(3, 5))
@@ -273,14 +273,14 @@ func TestVUSIsTheMeanOfRangeAUCOverBuffers(t *testing.T) {
 
 	var rocSum, prSum float64
 	for buffer := int32(0); buffer <= maxBuffer; buffer++ {
-		roc, pr, err := adscore.RangeAUCE(scores, labels, buffer)
+		roc, pr, err := adscore.RangeAUC(scores, labels, buffer)
 		require.NoError(t, err)
 		rocSum += roc
 		prSum += pr
 	}
 	count := float64(maxBuffer + 1)
 
-	m, err := adscore.EvaluateE(scores, labels, maxBuffer)
+	m, err := adscore.Evaluate(scores, labels, maxBuffer)
 	require.NoError(t, err)
 	assert.InDelta(t, rocSum/count, m.VUSROC, 1.0e-12)
 	assert.InDelta(t, prSum/count, m.VUSPR, 1.0e-12)
@@ -306,7 +306,7 @@ func TestRangeAUCGrowsWithBufferForANearMiss(t *testing.T) {
 
 	var prev float64
 	for _, buffer := range []int32{0, 4, 8, 16, 24, 32, 48, 64} {
-		_, pr, err := adscore.RangeAUCE(scores, labels, buffer)
+		_, pr, err := adscore.RangeAUC(scores, labels, buffer)
 		require.NoError(t, err)
 		assert.GreaterOrEqual(t, pr, prev-1.0e-12,
 			"widening the buffer reduced credit for a zero-overlap near miss (buffer %d)", buffer)
@@ -323,7 +323,7 @@ func TestCurveIsMonotone(t *testing.T) {
 		scores[i] = rng.Float64()
 	}
 
-	c, err := adscore.CurveE(scores, labels, 12)
+	c, err := adscore.CurveAt(scores, labels, 12)
 	require.NoError(t, err)
 	require.NotEmpty(t, c.FPR)
 
@@ -351,7 +351,7 @@ func TestTiedScoresDoNotDependOnOrder(t *testing.T) {
 			scores[i] = 0.5
 		}
 	}
-	m, err := adscore.EvaluateE(scores, labels, 0)
+	m, err := adscore.Evaluate(scores, labels, 0)
 	require.NoError(t, err)
 	assert.InDelta(t, 0.5, m.AUCROC, 1.0e-9, "all scores tied is exactly chance")
 }
@@ -359,28 +359,28 @@ func TestTiedScoresDoNotDependOnOrder(t *testing.T) {
 func TestEvaluateRejectsBadInput(t *testing.T) {
 	labels := labelsFrom(20, [2]int{5, 7})
 
-	_, err := adscore.EvaluateE(nil, nil, 0)
+	_, err := adscore.Evaluate(nil, nil, 0)
 	assert.Error(t, err, "empty input")
 
-	_, err = adscore.EvaluateE(make([]float64, 19), labels, 0)
+	_, err = adscore.Evaluate(make([]float64, 19), labels, 0)
 	assert.Error(t, err, "length mismatch")
 
-	_, err = adscore.EvaluateE(make([]float64, 20), make([]bool, 20), 0)
+	_, err = adscore.Evaluate(make([]float64, 20), make([]bool, 20), 0)
 	assert.Error(t, err, "no anomaly labelled")
 
 	allAnomaly := make([]bool, 20)
 	for i := range allAnomaly {
 		allAnomaly[i] = true
 	}
-	_, err = adscore.EvaluateE(make([]float64, 20), allAnomaly, 0)
+	_, err = adscore.Evaluate(make([]float64, 20), allAnomaly, 0)
 	assert.Error(t, err, "everything labelled anomalous")
 
 	nan := make([]float64, 20)
 	nan[3] = math.NaN()
-	_, err = adscore.EvaluateE(nan, labels, 0)
+	_, err = adscore.Evaluate(nan, labels, 0)
 	assert.Error(t, err, "NaN score")
 
-	_, err = adscore.EvaluateE(make([]float64, 20), labels, -1)
+	_, err = adscore.Evaluate(make([]float64, 20), labels, -1)
 	assert.Error(t, err, "negative buffer")
 }
 
@@ -394,7 +394,7 @@ func TestPropertyMeasuresStayInRange(t *testing.T) {
 		scores := rapid.SliceOfN(rapid.Float64Range(-5.0, 5.0), n, n).Draw(rt, "scores")
 		maxBuffer := int32(rapid.IntRange(0, 20).Draw(rt, "maxBuffer"))
 
-		m, err := adscore.EvaluateE(scores, labels, maxBuffer)
+		m, err := adscore.Evaluate(scores, labels, maxBuffer)
 		require.NoError(rt, err)
 
 		for _, v := range []float64{m.AUCROC, m.AUCPR, m.VUSROC, m.VUSPR} {
@@ -432,9 +432,9 @@ func TestPropertyMonotoneInScoreOrder(t *testing.T) {
 			transformed[i] = math.Exp(v)
 		}
 
-		base, err := adscore.EvaluateE(scores, labels, maxBuffer)
+		base, err := adscore.Evaluate(scores, labels, maxBuffer)
 		require.NoError(rt, err)
-		other, err := adscore.EvaluateE(transformed, labels, maxBuffer)
+		other, err := adscore.Evaluate(transformed, labels, maxBuffer)
 		require.NoError(rt, err)
 
 		require.InDelta(rt, base.AUCROC, other.AUCROC, 1.0e-9)
@@ -458,9 +458,9 @@ func TestPropertyPerfectBeatsRandom(t *testing.T) {
 			random[i] = rng.Float64()
 		}
 
-		perfect, err := adscore.EvaluateE(scoresFromLabels(labels), labels, 0)
+		perfect, err := adscore.Evaluate(scoresFromLabels(labels), labels, 0)
 		require.NoError(rt, err)
-		noise, err := adscore.EvaluateE(random, labels, 0)
+		noise, err := adscore.Evaluate(random, labels, 0)
 		require.NoError(rt, err)
 
 		require.Greater(rt, perfect.VUSPR, noise.VUSPR, "a perfect detector must beat noise under VUS-PR")

@@ -19,7 +19,7 @@ const identityEdgeBytes int64 = 1 << 20
 // identityHashBytes is the blake3 digest width, matching peaks.Identity.Hash.
 const identityHashBytes int = 32
 
-// IdentityE computes the peaks-cache identity of the file at path (ADR-0208
+// Identity computes the peaks-cache identity of the file at path (ADR-0208
 // §SD4): its size in bytes, its modification time in unix nanoseconds, and a
 // blake3-256 over the size, the mtime and the file's first and last
 // identityEdgeBytes — the whole file when it is short enough that those
@@ -30,7 +30,7 @@ const identityHashBytes int = 32
 // to the middle of a large recording that also preserves size and mtime goes
 // undetected. Hashing a twelve-hour file in full would cost more than
 // rebuilding the pyramid the cache exists to skip.
-func IdentityE(path string) (id peaks.Identity, err error) {
+func Identity(path string) (id peaks.Identity, err error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return id, eb.Build().Str("path", path).Errorf("open recording for identity: %w", err)

@@ -59,7 +59,7 @@ type GrantError struct {
 
 func (inst *GrantError) Error() (s string) { return "agent limit: " + inst.Reason }
 
-// ErrDigestMismatch is ReadAllE's answer when the stream it received does
+// ErrDigestMismatch is ReadAll's answer when the stream it received does
 // not hash to the digest the service sealed it under.
 var ErrDigestMismatch = errors.New("dataset stream does not match its digest")
 
@@ -208,14 +208,14 @@ func readReplyError(alias string, rep adhocreply.AdhocReply) (err error) {
 	return eb.Build().Str("alias", alias).Errorf("read rejected: %s", rep.Reason) //boxer:lint disable=CS013 reason="the service's refusal crosses the bus as text and is what a reader shows"
 }
 
-// ReadAllE reads the newest live dataset under alias whole, via
+// ReadAll reads the newest live dataset under alias whole, via
 // adhoc.read (ADR-0288 §SD6), and checks the stream against
 // the digest it was sealed under. It is how an app other than play takes a
 // dataset in: no statement travels, so filtering, joining and aggregating
 // stay play's, and what arrives is what was published. obo is the agent's
 // call the read is work of, nil when it is none. The caller's bus client
 // needs Pub on adhoc.read. Nothing live is a typed ErrNoLiveDataset.
-func ReadAllE(bus app.BusI, alias string, obo *app.OnBehalfOf) (res ReadResult, err error) {
+func ReadAll(bus app.BusI, alias string, obo *app.OnBehalfOf) (res ReadResult, err error) {
 	payload, err := buscodec.Encode(adhocrequest.AdhocRequest{
 		At: time.Now().UTC(), Op: adhocrequest.OpRead, Alias: alias,
 		OboTask: oboTask(obo), OboEpoch: oboEpoch(obo), OboCall: oboCall(obo),

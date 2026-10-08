@@ -61,14 +61,14 @@ func responseScan(coeffs []float64) (f3dB float64, peak float64, sidelobe float6
 // sidelobe of −71.7 dB, and a −3 dB cutoff equal to that of the SG filter
 // with n = 6, m = 50 it was constructed to replace.
 func TestKernelAgainstPaperFigure1(t *testing.T) {
-	inst, err := mssmooth.NewKernelE(6, 96)
+	inst, err := mssmooth.NewKernel(6, 96)
 	require.NoError(t, err)
 
 	f3dB, _, sidelobe := responseScan(inst.Coeffs())
 	sidelobeDb := 20.0 * math.Log10(sidelobe)
 	assert.InDelta(t, -71.7, sidelobeDb, 0.5, "first sidelobe (dB)")
 
-	sgBandwidth, err := mssmooth.SGBandwidthE(6, 50)
+	sgBandwidth, err := mssmooth.SGBandwidth(6, 50)
 	require.NoError(t, err)
 	assert.InEpsilon(t, sgBandwidth, f3dB, 0.01, "cutoff must match the replaced SG filter")
 	assert.InEpsilon(t, inst.Bandwidth(), f3dB, 0.01, "eq 16 fit must match the measured cutoff")
@@ -84,7 +84,7 @@ func TestFrequencyResponseInvariants(t *testing.T) {
 	for _, degree := range []int32{2, 4, 6, 8, 10} {
 		for _, m := range []int32{mssmooth.MinHalfWidth(degree) + 6, 25, 80} {
 			t.Run(fmt.Sprintf("n=%d/m=%d", degree, m), func(t *testing.T) {
-				inst, err := mssmooth.NewKernelE(degree, m)
+				inst, err := mssmooth.NewKernel(degree, m)
 				require.NoError(t, err)
 				coeffs := inst.Coeffs()
 
@@ -110,7 +110,7 @@ func TestFrequencyResponseInvariants(t *testing.T) {
 // paper prints in Figure 1: the SG filter n = 6, m = 50 is replaced by the MS
 // kernel with m = 96.
 func TestHalfWidthForSGAnchor(t *testing.T) {
-	halfWidth, err := mssmooth.HalfWidthForSGE(6, 50)
+	halfWidth, err := mssmooth.HalfWidthForSG(6, 50)
 	require.NoError(t, err)
 	assert.Equal(t, int32(96), halfWidth)
 }
@@ -134,13 +134,13 @@ func TestLineReproducedExactly(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(fmt.Sprintf("n=%d/m=%d/len=%d", tc.degree, tc.m, tc.n), func(t *testing.T) {
-			inst, err := mssmooth.NewKernelE(tc.degree, tc.m)
+			inst, err := mssmooth.NewKernel(tc.degree, tc.m)
 			require.NoError(t, err)
 			values := make([]float64, tc.n)
 			for i := range values {
 				values[i] = 3.25 - 0.7*float64(i)
 			}
-			out, err := inst.SmoothE(values, nil)
+			out, err := inst.Smooth(values, nil)
 			require.NoError(t, err)
 			require.Len(t, out, tc.n)
 			for i := range values {
@@ -150,7 +150,7 @@ func TestLineReproducedExactly(t *testing.T) {
 	}
 }
 
-// TestGaussianPeakFidelity closes the loop on HalfWidthForPeakE: smoothing a
+// TestGaussianPeakFidelity closes the loop on HalfWidthForPeak: smoothing a
 // Gaussian of fwhm 20 with the half-width the fidelity fit prescribes must
 // attenuate its peak to the promised height. Table 2 is a fit, so the check
 // carries half a percent of slack.
@@ -167,9 +167,9 @@ func TestGaussianPeakFidelity(t *testing.T) {
 	const fwhm = 20.0
 	for _, tc := range cases {
 		t.Run(fmt.Sprintf("n=%d/%s", tc.degree, tc.fidelity), func(t *testing.T) {
-			halfWidth, err := mssmooth.HalfWidthForPeakE(tc.degree, fwhm, tc.fidelity)
+			halfWidth, err := mssmooth.HalfWidthForPeak(tc.degree, fwhm, tc.fidelity)
 			require.NoError(t, err)
-			inst, err := mssmooth.NewKernelE(tc.degree, halfWidth)
+			inst, err := mssmooth.NewKernel(tc.degree, halfWidth)
 			require.NoError(t, err)
 
 			// Peak in the middle of a series long enough that the boundary
@@ -180,7 +180,7 @@ func TestGaussianPeakFidelity(t *testing.T) {
 				x := float64(i - n/2)
 				values[i] = math.Exp(-4.0 * math.Ln2 * x * x / (fwhm * fwhm))
 			}
-			out, err := inst.SmoothE(values, nil)
+			out, err := inst.Smooth(values, nil)
 			require.NoError(t, err)
 			assert.InDelta(t, tc.want, out[n/2], 0.005, "smoothed peak height")
 		})
@@ -193,13 +193,13 @@ func TestGaussianPeakFidelity(t *testing.T) {
 // of a linear series must be the slope at every point, boundaries included.
 func TestDerivativeOfLineIsExactSlope(t *testing.T) {
 	for _, n := range []int{1, 2, 40, 200} {
-		inst, err := mssmooth.NewKernelE(6, 25)
+		inst, err := mssmooth.NewKernel(6, 25)
 		require.NoError(t, err)
 		values := make([]float64, n)
 		for i := range values {
 			values[i] = -2.5 + 0.375*float64(i)
 		}
-		out, err := inst.DerivativeE(values, nil)
+		out, err := inst.Derivative(values, nil)
 		require.NoError(t, err)
 		require.Len(t, out, n)
 		want := 0.375
@@ -218,9 +218,9 @@ func TestDerivativeOfLineIsExactSlope(t *testing.T) {
 // derivative to about 90%.
 func TestDerivativeGaussianAttenuation(t *testing.T) {
 	const fwhm = 20.0
-	halfWidth, err := mssmooth.HalfWidthForPeakE(4, fwhm, mssmooth.Fidelity95)
+	halfWidth, err := mssmooth.HalfWidthForPeak(4, fwhm, mssmooth.Fidelity95)
 	require.NoError(t, err)
-	inst, err := mssmooth.NewKernelE(4, halfWidth)
+	inst, err := mssmooth.NewKernel(4, halfWidth)
 	require.NoError(t, err)
 
 	const n = 601
@@ -232,7 +232,7 @@ func TestDerivativeGaussianAttenuation(t *testing.T) {
 		values[i] = math.Exp(-c * x * x)
 		analytic[i] = -2.0 * c * x * values[i]
 	}
-	out, err := inst.DerivativeE(values, nil)
+	out, err := inst.Derivative(values, nil)
 	require.NoError(t, err)
 
 	var gotMax, wantMax float64
@@ -245,52 +245,52 @@ func TestDerivativeGaussianAttenuation(t *testing.T) {
 
 // TestSmoothReusesDst covers the destination-buffer contract.
 func TestSmoothReusesDst(t *testing.T) {
-	inst, err := mssmooth.NewKernelE(4, 10)
+	inst, err := mssmooth.NewKernel(4, 10)
 	require.NoError(t, err)
 	values := []float64{1, 2, 4, 8, 4, 2, 1, 0, 1, 2}
 	dst := make([]float64, 0, len(values))
-	out, err := inst.SmoothE(values, dst)
+	out, err := inst.Smooth(values, dst)
 	require.NoError(t, err)
 	require.Len(t, out, len(values))
 	assert.Same(t, &dst[:1][0], &out[0], "dst with sufficient capacity must be reused")
 
-	fresh, err := inst.SmoothE(values, make([]float64, 2))
+	fresh, err := inst.Smooth(values, make([]float64, 2))
 	require.NoError(t, err)
 	require.Len(t, fresh, len(values))
 }
 
 func TestErrors(t *testing.T) {
-	_, err := mssmooth.NewKernelE(3, 20)
+	_, err := mssmooth.NewKernel(3, 20)
 	assert.Error(t, err, "odd degree")
-	_, err = mssmooth.NewKernelE(12, 20)
+	_, err = mssmooth.NewKernel(12, 20)
 	assert.Error(t, err, "degree beyond Table 1")
-	_, err = mssmooth.NewKernelE(6, 4)
+	_, err = mssmooth.NewKernel(6, 4)
 	assert.Error(t, err, "half-width below minimum")
 
-	inst, err := mssmooth.NewKernelE(4, 10)
+	inst, err := mssmooth.NewKernel(4, 10)
 	require.NoError(t, err)
-	_, err = inst.SmoothE(nil, nil)
+	_, err = inst.Smooth(nil, nil)
 	assert.Error(t, err, "empty series")
-	_, err = inst.SmoothE([]float64{1, math.NaN(), 3}, nil)
+	_, err = inst.Smooth([]float64{1, math.NaN(), 3}, nil)
 	assert.Error(t, err, "NaN in series")
-	_, err = inst.SmoothE([]float64{1, math.Inf(1), 3}, nil)
+	_, err = inst.Smooth([]float64{1, math.Inf(1), 3}, nil)
 	assert.Error(t, err, "Inf in series")
 
-	_, err = mssmooth.HalfWidthForBandwidthE(4, 0.0)
+	_, err = mssmooth.HalfWidthForBandwidth(4, 0.0)
 	assert.Error(t, err, "zero bandwidth")
-	_, err = mssmooth.HalfWidthForBandwidthE(4, 0.7)
+	_, err = mssmooth.HalfWidthForBandwidth(4, 0.7)
 	assert.Error(t, err, "bandwidth beyond Nyquist")
-	_, err = mssmooth.HalfWidthForBandwidthE(10, 0.45)
+	_, err = mssmooth.HalfWidthForBandwidth(10, 0.45)
 	assert.Error(t, err, "bandwidth unreachable for the degree")
 
-	_, err = mssmooth.HalfWidthForPeakE(4, 0.0, mssmooth.Fidelity90)
+	_, err = mssmooth.HalfWidthForPeak(4, 0.0, mssmooth.Fidelity90)
 	assert.Error(t, err, "non-positive fwhm")
-	_, err = mssmooth.HalfWidthForPeakE(4, 20.0, mssmooth.FidelityE(93))
+	_, err = mssmooth.HalfWidthForPeak(4, 20.0, mssmooth.FidelityE(93))
 	assert.Error(t, err, "fidelity level not in Table 2")
-	_, err = mssmooth.HalfWidthForPeakE(10, 1.0, mssmooth.Fidelity99)
+	_, err = mssmooth.HalfWidthForPeak(10, 1.0, mssmooth.Fidelity99)
 	assert.Error(t, err, "peak too narrow for the degree")
 
-	_, err = mssmooth.SGBandwidthE(4, 1)
+	_, err = mssmooth.SGBandwidth(4, 1)
 	assert.Error(t, err, "SG half-width below fit order")
 }
 
@@ -302,7 +302,7 @@ func TestPropertyAffineEquivariance(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		degree := rapid.SampledFrom([]int32{2, 4, 6, 8, 10}).Draw(t, "degree")
 		m := rapid.Int32Range(mssmooth.MinHalfWidth(degree), 40).Draw(t, "m")
-		inst, err := mssmooth.NewKernelE(degree, m)
+		inst, err := mssmooth.NewKernel(degree, m)
 		require.NoError(t, err)
 
 		n := rapid.IntRange(1, 200).Draw(t, "len")
@@ -313,7 +313,7 @@ func TestPropertyAffineEquivariance(t *testing.T) {
 		scale := rapid.Float64Range(-8.0, 8.0).Draw(t, "scale")
 		offset := rapid.Float64Range(-1e4, 1e4).Draw(t, "offset")
 
-		base, err := inst.SmoothE(values, nil)
+		base, err := inst.Smooth(values, nil)
 		require.NoError(t, err)
 		require.Len(t, base, n)
 
@@ -321,7 +321,7 @@ func TestPropertyAffineEquivariance(t *testing.T) {
 		for i, v := range values {
 			transformed[i] = scale*v + offset
 		}
-		got, err := inst.SmoothE(transformed, nil)
+		got, err := inst.Smooth(transformed, nil)
 		require.NoError(t, err)
 
 		for i := range base {
@@ -334,9 +334,9 @@ func TestPropertyAffineEquivariance(t *testing.T) {
 
 		// The derivative is linear too, and the offset must vanish:
 		// D(a·y + b) = a·D(y).
-		baseD, err := inst.DerivativeE(values, nil)
+		baseD, err := inst.Derivative(values, nil)
 		require.NoError(t, err)
-		gotD, err := inst.DerivativeE(transformed, nil)
+		gotD, err := inst.Derivative(transformed, nil)
 		require.NoError(t, err)
 		for i := range baseD {
 			want := scale * baseD[i]
@@ -358,7 +358,7 @@ func TestFidelityStrings(t *testing.T) {
 }
 
 func BenchmarkSmooth(b *testing.B) {
-	inst, err := mssmooth.NewKernelE(6, 25)
+	inst, err := mssmooth.NewKernel(6, 25)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -369,7 +369,7 @@ func BenchmarkSmooth(b *testing.B) {
 	dst := make([]float64, len(values))
 	b.ReportAllocs()
 	for b.Loop() {
-		_, err = inst.SmoothE(values, dst)
+		_, err = inst.Smooth(values, dst)
 		if err != nil {
 			b.Fatal(err)
 		}

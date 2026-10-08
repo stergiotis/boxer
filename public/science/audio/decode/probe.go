@@ -30,27 +30,27 @@ func probeArgs(input string) (args []string) {
 	}
 }
 
-// probeE runs ffprobe over path and returns the format and frame count of its
+// probe runs ffprobe over path and returns the format and frame count of its
 // first audio stream (ADR-0208 §SD5).
-func probeE(ctx context.Context, path string) (format pcm.Format, frames int64, err error) {
+func probe(ctx context.Context, path string) (format pcm.Format, frames int64, err error) {
 	out, err := extbin.Ffprobe.Output(ctx, extbin.Opts{}, probeArgs(path)...)
 	if err != nil {
 		return format, 0, eb.Build().Str("path", path).Errorf("probe recording: %w", err)
 	}
-	format, frames, err = parseProbeE(out)
+	format, frames, err = parseProbe(out)
 	if err != nil {
 		return format, 0, eb.Build().Str("path", path).Errorf("%w", err)
 	}
 	return format, frames, nil
 }
 
-// probeFdE is [probeE] over an [FdInputI]: ffprobe inherits a handle of its
+// probeFd is [probe] over an [FdInputI]: ffprobe inherits a handle of its
 // own and is asked about it by its name inside the child. It needs the same
 // seeks a path gives it — a duration read from a container's tail, a header
 // re-read after inference — which is why the input is a descriptor on a
 // seekable object and not a pipe.
-func probeFdE(ctx context.Context, in FdInputI) (format pcm.Format, frames int64, err error) {
-	handle, err := in.OpenE()
+func probeFd(ctx context.Context, in FdInputI) (format pcm.Format, frames int64, err error) {
+	handle, err := in.Open()
 	if err != nil {
 		return format, 0, eb.Build().Str("path", in.Name()).Errorf("unable to open the recording for ffprobe: %w", err)
 	}
@@ -69,7 +69,7 @@ func probeFdE(ctx context.Context, in FdInputI) (format pcm.Format, frames int64
 			Str("stderr", strings.TrimSpace(stderr.String())).
 			Errorf("probe recording: %w", err)
 	}
-	format, frames, err = parseProbeE(stdout.Bytes())
+	format, frames, err = parseProbe(stdout.Bytes())
 	if err != nil {
 		return format, 0, eb.Build().Str("path", in.Name()).Errorf("%w", err)
 	}
@@ -126,13 +126,13 @@ func (inst *probeNumber) UnmarshalJSON(data []byte) (err error) {
 	return nil
 }
 
-// parseProbeE derives the format and frame count from ffprobe's JSON. The
+// parseProbe derives the format and frame count from ffprobe's JSON. The
 // sample rate and channel count come from the stream; the frame count is
 // round(duration × rate) over the stream's duration, falling back to the
 // container's. A duration that is absent or zero is an error: the frame count
 // is part of the [pcm.SourceI] contract, so a stream of unknown length has no
 // representation here.
-func parseProbeE(data []byte) (format pcm.Format, frames int64, err error) {
+func parseProbe(data []byte) (format pcm.Format, frames int64, err error) {
 	var out probeOutput
 	err = json.Unmarshal(data, &out)
 	if err != nil {

@@ -113,10 +113,10 @@ func TestFindHeading(t *testing.T) {
 	i, ok, _ := d.FindHeading([]string{"b", "GOALS"})
 	require.True(t, ok)
 	assert.Equal(t, 3, i)
-	i, err := d.FindHeadingE([]string{"## X"})
+	i, err := d.ResolveHeading([]string{"## X"})
 	require.NoError(t, err)
 	assert.Equal(t, 4, i)
-	_, err = d.FindHeadingE([]string{"A", "X"})
+	_, err = d.ResolveHeading([]string{"A", "X"})
 	assert.Error(t, err)
 }
 

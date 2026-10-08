@@ -13,7 +13,7 @@ const (
 	KindFfmpeg KindE = 2
 )
 
-// AllKinds lists the decoders [OpenE] can route to, KindUnknown excluded.
+// AllKinds lists the decoders [Open] can route to, KindUnknown excluded.
 var AllKinds = []KindE{KindWAV, KindFfmpeg}
 
 func (inst KindE) String() (s string) {
@@ -33,7 +33,7 @@ const sniffBytes = 12
 // Sniff reports which decoder head's container belongs to. It recognises the
 // three spellings of the WAVE container the native reader handles and routes
 // everything else to ffmpeg; fewer than sniffBytes bytes is [KindUnknown],
-// which [OpenE] also hands to ffmpeg. It opens nothing and runs nothing, so a
+// which [Open] also hands to ffmpeg. It opens nothing and runs nothing, so a
 // test or a tool can ask about bytes it already has.
 func Sniff(head []byte) (kind KindE) {
 	if len(head) < sniffBytes {

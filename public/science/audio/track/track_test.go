@@ -18,7 +18,7 @@ import (
 )
 
 // countingSource counts the closes and reads it forwards, so a test can
-// assert the ownership rule of [OpenE]. A nil inner source with a zero
+// assert the ownership rule of [Open]. A nil inner source with a zero
 // format is the invalid source that reaches the pre-build error path.
 type countingSource struct {
 	inner  pcm.SourceI
@@ -37,20 +37,20 @@ func newCountingSource(inner pcm.SourceI) (inst *countingSource) {
 func (inst *countingSource) Format() (format pcm.Format) { return inst.format }
 func (inst *countingSource) Frames() (frames int64)      { return inst.frames }
 
-func (inst *countingSource) ReadFramesAtE(ctx context.Context, frameOffset int64, dst []float32) (n int, err error) {
+func (inst *countingSource) ReadFramesAt(ctx context.Context, frameOffset int64, dst []float32) (n int, err error) {
 	inst.reads.Add(1)
 	if inst.inner == nil {
 		return 0, io.EOF
 	}
-	return inst.inner.ReadFramesAtE(ctx, frameOffset, dst)
+	return inst.inner.ReadFramesAt(ctx, frameOffset, dst)
 }
 
-func (inst *countingSource) CloseE() (err error) {
+func (inst *countingSource) Close() (err error) {
 	inst.closes.Add(1)
 	if inst.inner == nil {
 		return nil
 	}
-	return inst.inner.CloseE()
+	return inst.inner.Close()
 }
 
 // testSignal is a two-channel signal with a gated tone on the left and a
@@ -65,7 +65,7 @@ func testSignal(format pcm.Format, frames int64) (fn pcm.SampleFunc) {
 
 func newTestSource(t *testing.T, format pcm.Format, frames int64) (src *pcm.SynthSource) {
 	t.Helper()
-	src, err := pcm.NewSynthSourceE(format, frames, testSignal(format, frames))
+	src, err := pcm.NewSynthSource(format, frames, testSignal(format, frames))
 	require.NoError(t, err)
 	return src
 }
@@ -80,14 +80,14 @@ func TestOpenBuildsACompleteTrack(t *testing.T) {
 		total int64
 	}
 	var progress []step
-	tr, err := OpenE(context.Background(), newTestSource(t, format, frames), Options{
+	tr, err := Open(context.Background(), newTestSource(t, format, frames), Options{
 		ChunkFrames: 4096,
 		Progress: func(builtFrames int64, totalFrames int64) {
 			progress = append(progress, step{built: builtFrames, total: totalFrames})
 		},
 	})
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, tr.CloseE()) })
+	t.Cleanup(func() { require.NoError(t, tr.Close()) })
 
 	require.Equal(t, format, tr.Format())
 	require.Equal(t, frames, tr.Frames())
@@ -132,12 +132,12 @@ func TestOpenRespectsTheBaseBinAndTheEpoch(t *testing.T) {
 	const frames int64 = 4000
 	epoch := time.Date(2026, time.August, 28, 9, 30, 0, 0, time.UTC)
 
-	tr, err := OpenE(context.Background(), newTestSource(t, format, frames), Options{
+	tr, err := Open(context.Background(), newTestSource(t, format, frames), Options{
 		BaseBin: 64,
 		Epoch:   epoch,
 	})
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, tr.CloseE()) })
+	t.Cleanup(func() { require.NoError(t, tr.Close()) })
 
 	require.Equal(t, int32(64), tr.Peaks().BaseBin())
 	tb := tr.TimeBase()
@@ -152,21 +152,21 @@ func TestOpenRespectsTheBaseBinAndTheEpoch(t *testing.T) {
 
 func TestOpenAnEmptyRecording(t *testing.T) {
 	format := pcm.Format{SampleRate: 48000, Channels: 2}
-	tr, err := OpenE(context.Background(), newTestSource(t, format, 0), Options{})
+	tr, err := Open(context.Background(), newTestSource(t, format, 0), Options{})
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, tr.CloseE()) })
+	t.Cleanup(func() { require.NoError(t, tr.Close()) })
 
 	require.Equal(t, int64(0), tr.Frames())
 	require.Equal(t, time.Duration(0), tr.Duration())
 	require.True(t, tr.Peaks().IsComplete())
 
-	n, err := tr.ReadWindowE(context.Background(), 0, make([]float32, 64))
+	n, err := tr.ReadWindow(context.Background(), 0, make([]float32, 64))
 	require.NoError(t, err)
 	require.Zero(t, n)
 }
 
 // TestOpenClosesTheSourceOnEveryErrorPath is the ownership rule: whatever
-// fails, the source OpenE was handed is closed before it returns, so a caller
+// fails, the source Open was handed is closed before it returns, so a caller
 // never has to guess.
 func TestOpenClosesTheSourceOnEveryErrorPath(t *testing.T) {
 	format := pcm.Format{SampleRate: 48000, Channels: 2}
@@ -176,7 +176,7 @@ func TestOpenClosesTheSourceOnEveryErrorPath(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		src := newCountingSource(newTestSource(t, format, frames))
-		tr, err := OpenE(ctx, src, Options{})
+		tr, err := Open(ctx, src, Options{})
 		require.Error(t, err)
 		require.Nil(t, tr)
 		require.ErrorIs(t, err, context.Canceled)
@@ -185,7 +185,7 @@ func TestOpenClosesTheSourceOnEveryErrorPath(t *testing.T) {
 
 	t.Run("invalid format", func(t *testing.T) {
 		src := &countingSource{}
-		tr, err := OpenE(context.Background(), src, Options{})
+		tr, err := Open(context.Background(), src, Options{})
 		require.Error(t, err)
 		require.Nil(t, tr)
 		require.Zero(t, src.reads.Load(), "an invalid format is rejected before the build reads")
@@ -194,7 +194,7 @@ func TestOpenClosesTheSourceOnEveryErrorPath(t *testing.T) {
 
 	t.Run("rejected base bin", func(t *testing.T) {
 		src := newCountingSource(newTestSource(t, format, frames))
-		tr, err := OpenE(context.Background(), src, Options{BaseBin: 100})
+		tr, err := Open(context.Background(), src, Options{BaseBin: 100})
 		require.Error(t, err)
 		require.Nil(t, tr)
 		require.Equal(t, int64(1), src.closes.Load())
@@ -202,7 +202,7 @@ func TestOpenClosesTheSourceOnEveryErrorPath(t *testing.T) {
 
 	t.Run("sink constructor returns nothing", func(t *testing.T) {
 		src := newCountingSource(newTestSource(t, format, 4096))
-		tr, err := OpenE(context.Background(), src, Options{
+		tr, err := Open(context.Background(), src, Options{
 			NewSink: func(_ pcm.SourceI) sink.SinkI { return nil },
 		})
 		require.Error(t, err)
@@ -211,7 +211,7 @@ func TestOpenClosesTheSourceOnEveryErrorPath(t *testing.T) {
 	})
 
 	t.Run("nil source", func(t *testing.T) {
-		tr, err := OpenE(context.Background(), nil, Options{})
+		tr, err := Open(context.Background(), nil, Options{})
 		require.Error(t, err)
 		require.Nil(t, tr)
 	})
@@ -223,14 +223,14 @@ func TestNewSinkIsHandedTheLockedAdapter(t *testing.T) {
 	format := pcm.Format{SampleRate: 48000, Channels: 2}
 	const frames int64 = 4096
 	var handed pcm.SourceI
-	tr, err := OpenE(context.Background(), newTestSource(t, format, frames), Options{
+	tr, err := Open(context.Background(), newTestSource(t, format, frames), Options{
 		NewSink: func(src pcm.SourceI) sink.SinkI {
 			handed = src
 			return sink.NewNull(src, sink.NewManualClock(time.Unix(0, 0)))
 		},
 	})
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, tr.CloseE()) })
+	t.Cleanup(func() { require.NoError(t, tr.Close()) })
 	require.IsType(t, (*lockedSource)(nil), handed)
 	require.Equal(t, frames, handed.Frames())
 }
@@ -241,9 +241,9 @@ func TestReadWindowMatchesADirectRead(t *testing.T) {
 	ch := int(format.Channels)
 	ctx := context.Background()
 
-	tr, err := OpenE(ctx, newTestSource(t, format, frames), Options{})
+	tr, err := Open(ctx, newTestSource(t, format, frames), Options{})
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, tr.CloseE()) })
+	t.Cleanup(func() { require.NoError(t, tr.Close()) })
 	reference := newTestSource(t, format, frames)
 
 	for _, tc := range []struct {
@@ -257,12 +257,12 @@ func TestReadWindowMatchesADirectRead(t *testing.T) {
 		{from: frames - 4096, count: 4096},
 	} {
 		got := make([]float32, tc.count*ch)
-		n, err := tr.ReadWindowE(ctx, tc.from, got)
+		n, err := tr.ReadWindow(ctx, tc.from, got)
 		require.NoError(t, err)
 		require.Equal(t, tc.count, n, "window of %d frames from %d", tc.count, tc.from)
 
 		want := make([]float32, tc.count*ch)
-		rn, err := reference.ReadFramesAtE(ctx, tc.from, want)
+		rn, err := reference.ReadFramesAt(ctx, tc.from, want)
 		require.NoError(t, err)
 		require.Equal(t, tc.count, rn)
 		require.Equal(t, want, got, "window from %d", tc.from)
@@ -275,19 +275,19 @@ func TestReadWindowClampsAtTheEnd(t *testing.T) {
 	ch := int(format.Channels)
 	ctx := context.Background()
 
-	tr, err := OpenE(ctx, newTestSource(t, format, frames), Options{BaseBin: 16})
+	tr, err := Open(ctx, newTestSource(t, format, frames), Options{BaseBin: 16})
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, tr.CloseE()) })
+	t.Cleanup(func() { require.NoError(t, tr.Close()) })
 	reference := newTestSource(t, format, frames)
 
 	// A window straddling the end reads the frames that exist, and the
 	// remainder of dst is untouched.
 	dst := make([]float32, 100*ch)
-	n, err := tr.ReadWindowE(ctx, frames-10, dst)
+	n, err := tr.ReadWindow(ctx, frames-10, dst)
 	require.NoError(t, err)
 	require.Equal(t, 10, n)
 	want := make([]float32, 10*ch)
-	_, err = reference.ReadFramesAtE(ctx, frames-10, want)
+	_, err = reference.ReadFramesAt(ctx, frames-10, want)
 	require.NoError(t, err)
 	require.Equal(t, want, dst[:10*ch])
 	require.Equal(t, make([]float32, 90*ch), dst[10*ch:])
@@ -295,18 +295,18 @@ func TestReadWindowClampsAtTheEnd(t *testing.T) {
 	// At and past the end there is nothing to read, and that is not an
 	// error: a view is clamped, not refused.
 	for _, from := range []int64{frames, frames + 1, frames + 10_000} {
-		n, err = tr.ReadWindowE(ctx, from, dst)
+		n, err = tr.ReadWindow(ctx, from, dst)
 		require.NoError(t, err, "window from %d", from)
 		require.Zero(t, n, "window from %d", from)
 	}
 
 	// A dst that cannot hold a whole frame reads nothing.
-	n, err = tr.ReadWindowE(ctx, 0, dst[:ch-1])
+	n, err = tr.ReadWindow(ctx, 0, dst[:ch-1])
 	require.NoError(t, err)
 	require.Zero(t, n)
 
 	// A negative start is an error rather than a silently shifted window.
-	n, err = tr.ReadWindowE(ctx, -1, dst)
+	n, err = tr.ReadWindow(ctx, -1, dst)
 	require.Error(t, err)
 	require.Zero(t, n)
 }
@@ -321,12 +321,12 @@ func TestReadWindowConcurrentWhilePlaying(t *testing.T) {
 	clock := sink.NewManualClock(time.Unix(0, 0))
 
 	raw := newScratchSource(format, frames)
-	tr, err := OpenE(context.Background(), raw, Options{
+	tr, err := Open(context.Background(), raw, Options{
 		BaseBin: 64,
 		NewSink: func(src pcm.SourceI) sink.SinkI { return sink.NewNull(src, clock) },
 	})
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, tr.CloseE()) })
+	t.Cleanup(func() { require.NoError(t, tr.Close()) })
 
 	tr.Sink().Play()
 	require.Equal(t, sink.StatePlaying, tr.Sink().State())
@@ -343,7 +343,7 @@ func TestReadWindowConcurrentWhilePlaying(t *testing.T) {
 			for range readsPerGoroutine {
 				from := r.Int64N(frames)
 				want := 1 + r.IntN(256)
-				n, err := tr.ReadWindowE(context.Background(), from, dst[:want*ch])
+				n, err := tr.ReadWindow(context.Background(), from, dst[:want*ch])
 				if !assert.NoError(t, err) {
 					return
 				}
@@ -378,17 +378,17 @@ func TestReadWindowConcurrentWhilePlaying(t *testing.T) {
 func TestCloseClosesBothAndIsIdempotent(t *testing.T) {
 	format := pcm.Format{SampleRate: 48000, Channels: 2}
 	src := newCountingSource(newTestSource(t, format, 8192))
-	tr, err := OpenE(context.Background(), src, Options{BaseBin: 16})
+	tr, err := Open(context.Background(), src, Options{BaseBin: 16})
 	require.NoError(t, err)
 
-	require.NoError(t, tr.CloseE())
-	require.NoError(t, tr.CloseE())
+	require.NoError(t, tr.Close())
+	require.NoError(t, tr.Close())
 	require.Equal(t, int64(1), src.closes.Load(), "the source is closed once")
 
 	// The transport went with it.
-	require.Error(t, tr.Sink().SeekE(0))
+	require.Error(t, tr.Sink().SeekFrame(0))
 
-	n, err := tr.ReadWindowE(context.Background(), 0, make([]float32, 64))
+	n, err := tr.ReadWindow(context.Background(), 0, make([]float32, 64))
 	require.Error(t, err)
 	require.Zero(t, n)
 

@@ -4,7 +4,7 @@
 // The implementation drives the h3o Rust crate compiled to
 // wasm32-unknown-unknown through [github.com/tetratelabs/wazero]. Consumers
 // allocate a shared [Runtime], check out a per-goroutine [Handle] via
-// [Runtime.AcquireE], and call bulk methods that take Struct-of-Arrays inputs
+// [Runtime.Acquire], and call bulk methods that take Struct-of-Arrays inputs
 // and write Struct-of-Arrays outputs. Variable-arity results use a CSR layout
 // (flat values + []int32 offsets); per-element failures are reported through
 // a [StatusE] slice that parallels the output values.
@@ -13,12 +13,12 @@
 //
 // Two access patterns, same underlying WASM calls:
 //
-//   - Bulk methods ([Handle.LatLngsToCellsE], [Handle.GridDisksE],
-//     [Handle.PolygonToCellsE], …) take Struct-of-Arrays inputs and
+//   - Bulk methods ([Handle.LatLngsToCells], [Handle.GridDisks],
+//     [Handle.PolygonToCells], …) take Struct-of-Arrays inputs and
 //     reusable destination buffers. Primary API; use when N > ~8 elements.
-//   - Scalar convenience wrappers ([Handle.LatLngToCellE],
-//     [Handle.CellToLatLngE], [Handle.GridDiskE],
-//     [Handle.PolygonToCellsSimpleE]) cover the common "one input /
+//   - Scalar convenience wrappers ([Handle.LatLngToCell],
+//     [Handle.CellToLatLng], [Handle.GridDisk],
+//     [Handle.PolygonToCellsSimple]) cover the common "one input /
 //     one output" case without the 1-element-slice ceremony. Thin shims
 //     over the bulk form; suitable for UI glue, REPL-style scripting,
 //     and anywhere the call-site clarity matters more than per-call

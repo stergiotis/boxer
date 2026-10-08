@@ -52,13 +52,13 @@ func resetSnippetLibraries(t *testing.T) {
 
 func TestSnippetLibraryRegistrationIsValidated(t *testing.T) {
 	resetSnippetLibraries(t)
-	require.NoError(t, RegisterSnippetLibraryE(testLibrary("lib-a", 96)))
-	require.Error(t, RegisterSnippetLibraryE(testLibrary("lib-a", 97)), "a tab id registers once")
-	require.Error(t, RegisterSnippetLibraryE(testLibrary("lib-b", 96)), "a dock id registers once")
-	require.Error(t, RegisterSnippetLibraryE(testLibrary("lib-c", 13)), "dock ids below 64 are the built-ins'")
+	require.NoError(t, RegisterSnippetLibrary(testLibrary("lib-a", 96)))
+	require.Error(t, RegisterSnippetLibrary(testLibrary("lib-a", 97)), "a tab id registers once")
+	require.Error(t, RegisterSnippetLibrary(testLibrary("lib-b", 96)), "a dock id registers once")
+	require.Error(t, RegisterSnippetLibrary(testLibrary("lib-c", 13)), "dock ids below 64 are the built-ins'")
 	bad := testLibrary("lib-d", 98)
 	bad.Help = nil
-	require.Error(t, RegisterSnippetLibraryE(bad))
+	require.Error(t, RegisterSnippetLibrary(bad))
 	require.Len(t, registeredSnippetLibraries(), 1)
 }
 
@@ -67,7 +67,7 @@ func TestSnippetLibraryRegistrationIsValidated(t *testing.T) {
 func TestRegisteredLibraryBecomesATabOfNewWindows(t *testing.T) {
 	resetSnippetLibraries(t)
 	before := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), "-- x", nil)
-	require.NoError(t, RegisterSnippetLibraryE(testLibrary("lib-a", 96)))
+	require.NoError(t, RegisterSnippetLibrary(testLibrary("lib-a", 96)))
 	after := NewPlayApp(nil, newLiveQueryGraph(nil, memory.NewGoAllocator(), 4), "-- x", nil)
 
 	find := func(inst *PlayApp, id string) (spec TabSpec, ok bool) {

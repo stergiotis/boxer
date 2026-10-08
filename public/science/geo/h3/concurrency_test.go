@@ -26,24 +26,24 @@ func TestConcurrentMixedBulkCalls(t *testing.T) {
 			lats := []float64{float64(id), float64(-id), 37.7749, 48.8566}
 			lngs := []float64{float64(id), float64(id * 2), -122.4194, 2.3522}
 			for range opsPerWorker {
-				h, err := rt.AcquireE(ctx)
+				h, err := rt.Acquire(ctx)
 				if err != nil {
 					errCh <- err
 					return
 				}
-				cells, _, err := h.LatLngsToCellsE(ctx, ResolutionR7, lats, lngs, nil, nil)
-				if err != nil {
-					h.Release()
-					errCh <- err
-					return
-				}
-				_, _, _, err = h.CellsToLatLngsE(ctx, cells, nil, nil, nil)
+				cells, _, err := h.LatLngsToCells(ctx, ResolutionR7, lats, lngs, nil, nil)
 				if err != nil {
 					h.Release()
 					errCh <- err
 					return
 				}
-				_, _, _, err = h.GridDisksE(ctx, 1, cells, nil, nil, nil)
+				_, _, _, err = h.CellsToLatLngs(ctx, cells, nil, nil, nil)
+				if err != nil {
+					h.Release()
+					errCh <- err
+					return
+				}
+				_, _, _, err = h.GridDisks(ctx, 1, cells, nil, nil, nil)
 				if err != nil {
 					h.Release()
 					errCh <- err

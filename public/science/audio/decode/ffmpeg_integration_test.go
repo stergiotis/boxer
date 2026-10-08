@@ -76,7 +76,7 @@ func readAll(t *testing.T, src pcm.SourceI, frames int64, chunk int64) (samples 
 	buf := make([]float32, chunk*channels)
 	for off := int64(0); off < frames; {
 		want := min(chunk, frames-off)
-		n, err := src.ReadFramesAtE(context.Background(), off, buf[:want*channels])
+		n, err := src.ReadFramesAt(context.Background(), off, buf[:want*channels])
 		require.NoError(t, err)
 		require.Equal(t, int(want), n)
 		samples = append(samples, buf[:int64(n)*channels]...)
@@ -87,12 +87,12 @@ func readAll(t *testing.T, src pcm.SourceI, frames int64, chunk int64) (samples 
 
 func openFfmpegFixtureE(t *testing.T, path string) (src *FfmpegSource) {
 	t.Helper()
-	generic, kind, err := OpenE(context.Background(), path)
+	generic, kind, err := Open(context.Background(), path)
 	require.NoError(t, err)
 	require.Equal(t, KindFfmpeg, kind)
 	src, ok := generic.(*FfmpegSource)
 	require.True(t, ok, "a compressed file is decoded by FfmpegSource")
-	t.Cleanup(func() { require.NoError(t, src.CloseE()) })
+	t.Cleanup(func() { require.NoError(t, src.Close()) })
 	require.Equal(t, testFormat, src.Format())
 	return src
 }
@@ -110,9 +110,9 @@ func TestFfmpegFlacMatchesTheWAVSampleForSample(t *testing.T) {
 	requireFfmpeg(t)
 	set := newFixtureSet(t)
 
-	reference, err := wavfile.OpenE(set.wav)
+	reference, err := wavfile.Open(set.wav)
 	require.NoError(t, err)
-	defer func() { require.NoError(t, reference.CloseE()) }()
+	defer func() { require.NoError(t, reference.Close()) }()
 	src := openFfmpegFixtureE(t, set.flac)
 	requireLengthAgrees(t, src)
 
@@ -130,9 +130,9 @@ func TestFfmpegVorbisIsCloseToTheWAVAwayFromTheEdges(t *testing.T) {
 	requireFfmpeg(t)
 	set := newFixtureSet(t)
 
-	reference, err := wavfile.OpenE(set.wav)
+	reference, err := wavfile.Open(set.wav)
 	require.NoError(t, err)
-	defer func() { require.NoError(t, reference.CloseE()) }()
+	defer func() { require.NoError(t, reference.Close()) }()
 	src := openFfmpegFixtureE(t, set.vorbis)
 	requireLengthAgrees(t, src)
 
@@ -178,13 +178,13 @@ func TestFfmpegReadHonoursACancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	buf := make([]float32, 4096*int(testFormat.Channels))
-	n, err := src.ReadFramesAtE(ctx, 0, buf)
+	n, err := src.ReadFramesAt(ctx, 0, buf)
 	require.Error(t, err)
 	require.ErrorIs(t, err, context.Canceled)
 	require.Zero(t, n)
 
 	// The source is still usable with a live context.
-	n, err = src.ReadFramesAtE(context.Background(), 0, buf)
+	n, err = src.ReadFramesAt(context.Background(), 0, buf)
 	require.NoError(t, err)
 	require.Equal(t, 4096, n)
 }
@@ -194,9 +194,9 @@ func TestFfmpegReopenerSourcesReadConcurrently(t *testing.T) {
 	set := newFixtureSet(t)
 	reopen := Reopener(set.flac)
 
-	reference, err := wavfile.OpenE(set.wav)
+	reference, err := wavfile.Open(set.wav)
 	require.NoError(t, err)
-	defer func() { require.NoError(t, reference.CloseE()) }()
+	defer func() { require.NoError(t, reference.Close()) }()
 	shared := min(reference.Frames(), integrationFrames)
 	want := readAll(t, reference, shared, 4096)
 
@@ -208,7 +208,7 @@ func TestFfmpegReopenerSourcesReadConcurrently(t *testing.T) {
 			defer wg.Done()
 			src, oerr := reopen(context.Background())
 			require.NoError(t, oerr)
-			defer func() { require.NoError(t, src.CloseE()) }()
+			defer func() { require.NoError(t, src.Close()) }()
 			results[i] = readAll(t, src, shared, 4096)
 		}()
 	}
@@ -239,7 +239,7 @@ func TestFfmpegPadsWhenTheCodecFallsShortOfTheDeclaredLength(t *testing.T) {
 
 	channels := int(testFormat.Channels)
 	tail := make([]float32, (shortfall+delivered)*int64(channels))
-	n, err := src.ReadFramesAtE(context.Background(), declared-shortfall-delivered, tail)
+	n, err := src.ReadFramesAt(context.Background(), declared-shortfall-delivered, tail)
 	require.NoError(t, err)
 	require.Equal(t, int(shortfall+delivered), n, "the declared length is delivered in full")
 	require.Equal(t, shortfall, src.Padded())
@@ -248,6 +248,6 @@ func TestFfmpegPadsWhenTheCodecFallsShortOfTheDeclaredLength(t *testing.T) {
 	}
 
 	// And the source still ends where it declared it would.
-	_, err = src.ReadFramesAtE(context.Background(), declared, tail)
+	_, err = src.ReadFramesAt(context.Background(), declared, tail)
 	require.ErrorIs(t, err, io.EOF)
 }

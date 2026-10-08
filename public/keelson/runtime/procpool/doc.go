@@ -8,7 +8,7 @@
 // for a scarce resource — a licence seat, a sandbox — rather than a process
 // count.
 //
-// What a worker is used for between AcquireE and Close is the caller's
+// What a worker is used for between Acquire and Close is the caller's
 // business: one request and exit, as
 // [github.com/stergiotis/boxer/public/keelson/data/chlocalpool] does
 // (ADR-0028 §SD3), or a conversation of many round trips.

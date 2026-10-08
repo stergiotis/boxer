@@ -11,7 +11,7 @@
 // row per node, nodes off a regular grid — and cannot detect a component that
 // was never rotated.
 //
-//	src, err := sqlfield.NewSourceE(ctx, queryer, sqlfield.Relation{From: "gfs.wind10m"},
+//	src, err := sqlfield.NewSource(ctx, queryer, sqlfield.Relation{From: "gfs.wind10m"},
 //		sqlfield.Options{Meta: vectorfield.Meta{Name: "10 m wind", Unit: "m/s"}})
 //
 // Values never reach the statement text: bounds, factors and the step ride

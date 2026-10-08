@@ -42,7 +42,7 @@ func newFixture(t *testing.T) (f *fixture) {
 	bus := inprocbus.NewInst(zerolog.Nop())
 	f = &fixture{store: wb.NewMemStore(), release: make(chan struct{})}
 	reg := wb.NewRegistry()
-	require.NoError(t, reg.Register(wb.HandlerFunc{KindName: "mgr.kind", Run: func(ctx context.Context, job watchbillstore.Job, h task.HandleI) error {
+	require.NoError(t, reg.Register(wb.HandlerFunc{KindName: "mgr.kind", RunFunc: func(ctx context.Context, job watchbillstore.Job, h task.HandleI) error {
 		if job.Subject == "fail" {
 			return context.DeadlineExceeded
 		}

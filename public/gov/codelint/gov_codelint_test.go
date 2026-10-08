@@ -13,7 +13,7 @@ func TestCS001_FlagsFmtErrorfOutsideEh(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs001/bad")
 	require.NoError(t, err)
 
-	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
 	require.NoError(t, err)
 	require.NotEmpty(t, pkgs)
 
@@ -37,7 +37,7 @@ func TestCS002_FlagsMisplacedCtx(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs002/bad")
 	require.NoError(t, err)
 
-	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
 	require.NoError(t, err)
 	require.NotEmpty(t, pkgs)
 
@@ -62,7 +62,7 @@ func TestCS002_PassesGoodFile(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs002/good")
 	require.NoError(t, err)
 
-	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
 	require.NoError(t, err)
 	require.NotEmpty(t, pkgs)
 
@@ -79,7 +79,7 @@ func TestCS003_FlagsPointerMutexFields(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs003/bad")
 	require.NoError(t, err)
 
-	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
 	require.NoError(t, err)
 	require.NotEmpty(t, pkgs)
 
@@ -104,7 +104,7 @@ func TestCS003_PassesGoodFile(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs003/good")
 	require.NoError(t, err)
 
-	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
 	require.NoError(t, err)
 	require.NotEmpty(t, pkgs)
 
@@ -121,7 +121,7 @@ func TestCS004_FlagsLegacyAtomicAPI(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs004/bad")
 	require.NoError(t, err)
 
-	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
 	require.NoError(t, err)
 	require.NotEmpty(t, pkgs)
 
@@ -146,7 +146,7 @@ func TestCS004_PassesGoodFile(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs004/good")
 	require.NoError(t, err)
 
-	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
 	require.NoError(t, err)
 	require.NotEmpty(t, pkgs)
 
@@ -163,7 +163,7 @@ func TestCS005_FlagsInterfaceWithoutISuffix(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs005/bad")
 	require.NoError(t, err)
 
-	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
 	require.NoError(t, err)
 	require.NotEmpty(t, pkgs)
 
@@ -188,7 +188,7 @@ func TestCS005_PassesGoodFile(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs005/good")
 	require.NoError(t, err)
 
-	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
 	require.NoError(t, err)
 	require.NotEmpty(t, pkgs)
 
@@ -205,7 +205,7 @@ func TestCS006_FlagsEnumWithoutESuffix(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs006/bad")
 	require.NoError(t, err)
 
-	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
 	require.NoError(t, err)
 	require.NotEmpty(t, pkgs)
 
@@ -234,7 +234,7 @@ func TestCS006_PassesGoodFile(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs006/good")
 	require.NoError(t, err)
 
-	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
 	require.NoError(t, err)
 	require.NotEmpty(t, pkgs)
 
@@ -251,7 +251,7 @@ func TestCS007_FlagsUnprefixedEnumValues(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs007/bad")
 	require.NoError(t, err)
 
-	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
 	require.NoError(t, err)
 	require.NotEmpty(t, pkgs)
 
@@ -276,7 +276,7 @@ func TestCS007_PassesGoodFile(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs007/good")
 	require.NoError(t, err)
 
-	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
 	require.NoError(t, err)
 	require.NotEmpty(t, pkgs)
 
@@ -293,7 +293,7 @@ func TestCS008_FlagsTypeAliases(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs008/bad")
 	require.NoError(t, err)
 
-	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
 	require.NoError(t, err)
 	require.NotEmpty(t, pkgs)
 
@@ -318,7 +318,7 @@ func TestCS008_PassesGoodFile(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs008/good")
 	require.NoError(t, err)
 
-	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
 	require.NoError(t, err)
 	require.NotEmpty(t, pkgs)
 
@@ -335,7 +335,7 @@ func TestCS009_FlagsBannedImports(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs009/bad")
 	require.NoError(t, err)
 
-	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
 	require.NoError(t, err)
 	require.NotEmpty(t, pkgs)
 
@@ -360,7 +360,7 @@ func TestCS009_PassesGoodFile(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs009/good")
 	require.NoError(t, err)
 
-	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
 	require.NoError(t, err)
 	require.NotEmpty(t, pkgs)
 
@@ -377,7 +377,7 @@ func TestCS010_FlagsIterMethodNaming(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs010/bad")
 	require.NoError(t, err)
 
-	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
 	require.NoError(t, err)
 	require.NotEmpty(t, pkgs)
 
@@ -402,7 +402,7 @@ func TestCS010_PassesGoodFile(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs010/good")
 	require.NoError(t, err)
 
-	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
 	require.NoError(t, err)
 	require.NotEmpty(t, pkgs)
 
@@ -419,7 +419,7 @@ func TestCS011_FlagsStrayEnvAccess(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs011/bad")
 	require.NoError(t, err)
 
-	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
 	require.NoError(t, err)
 	require.NotEmpty(t, pkgs)
 
@@ -444,7 +444,7 @@ func TestCS011_PassesGoodFile(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs011/good")
 	require.NoError(t, err)
 
-	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
 	require.NoError(t, err)
 	require.NotEmpty(t, pkgs)
 
@@ -461,7 +461,7 @@ func TestCS001_PassesGoodFile(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs001/good")
 	require.NoError(t, err)
 
-	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
 	require.NoError(t, err)
 	require.NotEmpty(t, pkgs)
 
@@ -478,7 +478,7 @@ func TestCS012_FlagsDirectOsExec(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs012/bad")
 	require.NoError(t, err)
 
-	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
 	require.NoError(t, err)
 	require.NotEmpty(t, pkgs)
 
@@ -505,7 +505,7 @@ func TestCS012_PassesGoodFile(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs012/good")
 	require.NoError(t, err)
 
-	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
 	require.NoError(t, err)
 	require.NotEmpty(t, pkgs)
 
@@ -522,7 +522,7 @@ func TestCS013_FlagsNonWrapVerbs(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs013/bad")
 	require.NoError(t, err)
 
-	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
 	require.NoError(t, err)
 	require.NotEmpty(t, pkgs)
 
@@ -559,7 +559,7 @@ func TestCS013_PassesGoodFile(t *testing.T) {
 	root, err := filepath.Abs("./testdata/cs013/good")
 	require.NoError(t, err)
 
-	pkgs, err := codelint.LoadPackagesE(codelint.LoadConfig{}, root)
+	pkgs, err := codelint.LoadPackages(codelint.LoadConfig{}, root)
 	require.NoError(t, err)
 	require.NotEmpty(t, pkgs)
 

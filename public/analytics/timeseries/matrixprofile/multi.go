@@ -6,7 +6,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// MaxChannels is the largest number of channels [NewMultiSeriesE] accepts.
+// MaxChannels is the largest number of channels [NewMultiSeries] accepts.
 //
 // The ceiling comes from [MultiProfile.Dims], which records the selected
 // channel subset as a bitmask. It sits well past the point where the method
@@ -16,13 +16,13 @@ import (
 // limit wants a different algorithm rather than a wider mask.
 const MaxChannels = 64
 
-// DefaultMDLBits is the discretization width [MultiSeries.SelectDimsMDLE] uses
+// DefaultMDLBits is the discretization width [MultiSeries.SelectDimsMDL] uses
 // when none is given: each z-normalized subsequence is quantized to 2⁸ levels
 // before its description length is measured.
 //
 // The value is not critical, but it is not free either. It sets the cost of a
 // channel that does *not* join the subset, and so the bar a channel must clear
-// to join one — see [MultiSeries.SelectDimsMDLE].
+// to join one — see [MultiSeries.SelectDimsMDL].
 const DefaultMDLBits = 8
 
 // MultiSeries is a multivariate series: d channels of equal length, sharing one
@@ -38,7 +38,7 @@ type MultiSeries struct {
 	window   int32
 }
 
-// NewMultiSeriesE precomputes the per-window statistics of every channel under
+// NewMultiSeries precomputes the per-window statistics of every channel under
 // a shared subsequence length. stdDevFloorRel may be 0 to accept
 // [DefaultStdDevFloorRel].
 //
@@ -47,7 +47,7 @@ type MultiSeries struct {
 // channel against the whole of another would misalign every reported index.
 //
 // The returned MultiSeries aliases nothing.
-func NewMultiSeriesE(channels [][]float64, window int32, stdDevFloorRel float64) (inst *MultiSeries, err error) {
+func NewMultiSeries(channels [][]float64, window int32, stdDevFloorRel float64) (inst *MultiSeries, err error) {
 	d := int32(len(channels))
 	if d < 1 {
 		err = eb.Build().Errorf("need at least one channel")
@@ -68,7 +68,7 @@ func NewMultiSeriesE(channels [][]float64, window int32, stdDevFloorRel float64)
 	series := make([]*Series, d)
 	for i, ch := range channels {
 		var s *Series
-		s, err = NewSeriesE(ch, window, stdDevFloorRel)
+		s, err = NewSeries(ch, window, stdDevFloorRel)
 		if err != nil {
 			err = eb.Build().Int32("channel", int32(i)).Errorf("unable to prepare channel: %w", err)
 			return
@@ -136,7 +136,7 @@ func (inst *MultiSeries) Channel(idx int32) (series *Series) {
 //
 // The distance at k is the *mean* of the k smallest per-channel distances, not
 // their sum, so values are comparable across k — which is what makes the elbow
-// in k readable, and what [MultiSeries.SelectDimsMDLE] exists to locate
+// in k readable, and what [MultiSeries.SelectDimsMDL] exists to locate
 // automatically.
 //
 // # What is not true of it
@@ -431,7 +431,7 @@ func DimChannels(dims uint64, dst []int32) (out []int32) {
 	return
 }
 
-// SelectDimsMDLE chooses k — the natural number of channels a motif spans —
+// SelectDimsMDL chooses k — the natural number of channels a motif spans —
 // by the Minimum Description Length principle, and returns the channel subset
 // at that k.
 //
@@ -483,7 +483,7 @@ func DimChannels(dims uint64, dst []int32) (out []int32) {
 // This is defined on the *motif* pair — the most similar pair at each k — which
 // is what the paper defines it on. It says nothing about a discord, whose
 // dimensionality has no compression argument behind it.
-func (inst *MultiSeries) SelectDimsMDLE(prof *MultiProfile, bits int32) (k int32, dims uint64, bitSize []float64, err error) {
+func (inst *MultiSeries) SelectDimsMDL(prof *MultiProfile, bits int32) (k int32, dims uint64, bitSize []float64, err error) {
 	if prof == nil {
 		err = eb.Build().Errorf("nil profile")
 		return

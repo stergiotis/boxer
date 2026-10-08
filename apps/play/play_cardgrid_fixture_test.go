@@ -45,7 +45,7 @@ func TestCardgridFixtureRows(t *testing.T) {
 
 	for _, name := range []string{"Sine sweep", "Gated tone, stereo", "Silence", "Eight-bit telephone tone", "Float samples"} {
 		r := byName[name]
-		f, wErr := wavfile.NewReaderE(bytes.NewReader(r.content), int64(len(r.content)))
+		f, wErr := wavfile.NewReader(bytes.NewReader(r.content), int64(len(r.content)))
 		require.NoError(t, wErr, name)
 		assert.Equal(t, r.sampleRate, int64(f.Format().SampleRate), name)
 		assert.Equal(t, r.channels, int64(f.Format().Channels), name)

@@ -46,8 +46,8 @@ func scratchSample(index int64) (sample float32) {
 func (inst *scratchSource) Format() (format pcm.Format) { return inst.format }
 func (inst *scratchSource) Frames() (frames int64)      { return inst.frames }
 
-func (inst *scratchSource) ReadFramesAtE(_ context.Context, frameOffset int64, dst []float32) (n int, err error) {
-	n, err = pcm.ClampReadE(inst.format, inst.frames, frameOffset, dst)
+func (inst *scratchSource) ReadFramesAt(_ context.Context, frameOffset int64, dst []float32) (n int, err error) {
+	n, err = pcm.ClampRead(inst.format, inst.frames, frameOffset, dst)
 	if err != nil || n == 0 {
 		return n, err
 	}
@@ -68,7 +68,7 @@ func (inst *scratchSource) ReadFramesAtE(_ context.Context, frameOffset int64, d
 	return n, nil
 }
 
-func (inst *scratchSource) CloseE() (err error) {
+func (inst *scratchSource) Close() (err error) {
 	inst.closes++
 	return nil
 }
@@ -108,7 +108,7 @@ func TestLockedSourceSerialisesConcurrentReads(t *testing.T) {
 			for range readsPerGoroutine {
 				from := r.Int64N(frames)
 				want := 1 + r.IntN(512)
-				n, err := locked.ReadFramesAtE(context.Background(), from, dst[:want*ch])
+				n, err := locked.ReadFramesAt(context.Background(), from, dst[:want*ch])
 				if !assert.NoError(t, err) {
 					return
 				}
@@ -127,7 +127,7 @@ func TestLockedSourceSerialisesConcurrentReads(t *testing.T) {
 
 	// Read under the lock, which is also the assertion that the counter the
 	// readers bumped was never bumped concurrently.
-	require.NoError(t, locked.CloseE())
+	require.NoError(t, locked.Close())
 	require.Equal(t, int64(readers*readsPerGoroutine), raw.reads)
 }
 
@@ -137,15 +137,15 @@ func TestLockedSourceCloseIsIdempotentAndRefusesReads(t *testing.T) {
 	locked := newLockedSource(raw)
 
 	dst := make([]float32, 16)
-	n, err := locked.ReadFramesAtE(context.Background(), 0, dst)
+	n, err := locked.ReadFramesAt(context.Background(), 0, dst)
 	require.NoError(t, err)
 	require.Equal(t, 16, n)
 
-	require.NoError(t, locked.CloseE())
-	require.NoError(t, locked.CloseE())
+	require.NoError(t, locked.Close())
+	require.NoError(t, locked.Close())
 	require.Equal(t, int64(1), raw.closes, "the wrapped source is closed once")
 
-	n, err = locked.ReadFramesAtE(context.Background(), 0, dst)
+	n, err = locked.ReadFramesAt(context.Background(), 0, dst)
 	require.Zero(t, n)
 	require.Error(t, err)
 	require.NotErrorIs(t, err, io.EOF, "a closed source is not an ended one")

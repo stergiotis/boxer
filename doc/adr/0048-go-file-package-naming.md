@@ -126,7 +126,7 @@ See [DOCUMENTATION_STANDARD §1 ADR](../../doc/DOCUMENTATION_STANDARD.md#archite
   (`.out.go`) and N3 (`.gen.go`) were decided here but, unlike N1/N6/N7, had
   no check: `gov/filenaming`'s port only ever excluded already-correctly-named
   generated files from N1, never asked whether a file that *isn't* named that
-  way claims to be generated anyway. `CheckE` now scans every file's leading
+  way claims to be generated anyway. `Check` now scans every file's leading
   lines for the canonical `// Code generated ... DO NOT EDIT.` header (the
   same convention the gofmt step already reads, and the same 5-line window)
   and flags one that isn't suffixed `.out.go` or `.gen.go`, reported as a

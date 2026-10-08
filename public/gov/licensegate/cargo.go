@@ -82,7 +82,7 @@ func cargoRows(paths []string) (rows []rowT, unresolved []string, err error) {
 				unresolved = append(unresolved, key+" (cargo: "+reason+")")
 				continue
 			}
-			category, elected, evalErr := EvaluateExpressionE(declared)
+			category, elected, evalErr := EvaluateExpression(declared)
 			if evalErr != nil {
 				unresolved = append(unresolved, key+" (cargo: unreadable expression "+declared+")")
 				continue

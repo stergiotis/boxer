@@ -73,7 +73,7 @@ func (inst *graphviewMetrics) buildGraph(m *netModel, undirected bool) (err erro
 	if m.NumVertices() == 0 {
 		return
 	}
-	g, err := csr.BuildE(m.From, m.To, nil, csr.Options{Directed: !undirected, Vertices: m.Key})
+	g, err := csr.Build(m.From, m.To, nil, csr.Options{Directed: !undirected, Vertices: m.Key})
 	if err != nil {
 		return eb.Build().Errorf("graphview: building the metric graph: %w", err)
 	}

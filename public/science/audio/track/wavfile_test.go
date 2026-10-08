@@ -30,7 +30,7 @@ func TestOpenOverAWavFile(t *testing.T) {
 		pcm.Gate(pcm.Sine(format, 440, 0.9), 4410, 2205),
 		pcm.Chirp(format, frames, 50, 8000, 0.7),
 	)
-	written, err := pcm.NewSynthSourceE(format, frames, fn)
+	written, err := pcm.NewSynthSource(format, frames, fn)
 	require.NoError(t, err)
 
 	path := filepath.Join(t.TempDir(), "clip.wav")
@@ -38,16 +38,16 @@ func TestOpenOverAWavFile(t *testing.T) {
 	require.NoError(t, err)
 	// 32-bit IEEE float is what the source already holds, so the comparison
 	// below is exact rather than within a quantisation step.
-	err = wavfile.WriteE(ctx, f, format, wavfile.EncodingIEEEFloat, 32, written)
+	err = wavfile.Write(ctx, f, format, wavfile.EncodingIEEEFloat, 32, written)
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
 
-	file, err := wavfile.OpenE(path)
+	file, err := wavfile.Open(path)
 	require.NoError(t, err)
 	require.Equal(t, frames, file.Frames())
 
 	clock := sink.NewManualClock(time.Unix(0, 0))
-	tr, err := track.OpenE(ctx, file, track.Options{
+	tr, err := track.Open(ctx, file, track.Options{
 		BaseBin: 128,
 		Epoch:   epoch,
 		NewSink: func(src pcm.SourceI) sink.SinkI { return sink.NewNull(src, clock) },
@@ -65,11 +65,11 @@ func TestOpenOverAWavFile(t *testing.T) {
 	// The raw window is the samples the file holds, byte for byte.
 	const window = 2048
 	got := make([]float32, window*ch)
-	n, err := tr.ReadWindowE(ctx, 1000, got)
+	n, err := tr.ReadWindow(ctx, 1000, got)
 	require.NoError(t, err)
 	require.Equal(t, window, n)
 	want := make([]float32, window*ch)
-	_, err = written.ReadFramesAtE(ctx, 1000, want)
+	_, err = written.ReadFramesAt(ctx, 1000, want)
 	require.NoError(t, err)
 	require.Equal(t, want, got)
 
@@ -81,10 +81,10 @@ func TestOpenOverAWavFile(t *testing.T) {
 	require.True(t, ok)
 	require.True(t, at.Equal(epoch.Add(250*time.Millisecond)))
 
-	// CloseE owns the descriptor the track was handed.
-	require.NoError(t, tr.CloseE())
-	n, err = tr.ReadWindowE(ctx, 0, got)
+	// Close owns the descriptor the track was handed.
+	require.NoError(t, tr.Close())
+	n, err = tr.ReadWindow(ctx, 0, got)
 	require.Error(t, err)
 	require.Zero(t, n)
-	require.NoError(t, tr.CloseE())
+	require.NoError(t, tr.Close())
 }
