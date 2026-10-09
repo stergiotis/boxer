@@ -23,7 +23,8 @@ the chat opens the operations demo under a test grant and reads its window
 tree with `read_window_tree`. The capture goes through the capture service
 like a PNG, replayed on the client; the transcript's tool line counts the
 messages of the stream the tree holds, and its details show the outline the
-model read, with the demo's Clear button by role and name.
+model read: its reference, the demo's window by key, and the demo's Clear
+button by role and name.
 
 ```jsonl trace
 {"do":"note","text":"chat: the coordinator reads a window tree"}
@@ -33,5 +34,7 @@ model read, with the demo's Clear button by role and name.
 {"do":"wait","valueContains":"⚙ Reading the demo's window · read the window tree of windows","role":"label"}
 {"do":"click","name":"Details","nth":2,"settleMs":600,"comment":"the read's details hold the outline the model got"}
 {"do":"wait","valueContains":"button \"Clear\"","comment":"the demo's Clear button, by role and name"}
+{"do":"wait","valueContains":"tree t1","comment":"the reference an anchor cites"}
+{"do":"wait","valueContains":"· Window · window ","comment":"the top-level message names its window (ADR-0301)"}
 {"do":"capture","text":"chat-coordinator-window-tree","settleMs":800}
 ```

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/capture"
 )
@@ -50,8 +51,8 @@ func TestTreeOutlinePrintsATablesBlocksAsRows(t *testing.T) {
 	cell(50, 20, "1998")
 	got := treeOutline(capture.Tree{V: capture.TreeVersion, Ops: ops}, 1<<10)
 	assert.Equal(t, `#0 [0,0 200x40] · EndETable · 2 of 6 parts not shown
-  row [0,0 100x18]: "A320" | "2005"
-  row [0,20 100x18]: "B738" | "1998"`, got)
+  row [0,0 100x18]: #3 "A320" | #1 "2005"
+  row [0,20 100x18]: #5 "B738" | #7 "1998"`, got)
 	assert.NotContains(t, got, "button", "cells print as data, not as controls")
 }
 
@@ -64,4 +65,26 @@ func TestTreeOutlineIsCutAtTheLimit(t *testing.T) {
 	got := treeOutline(tr, 200)
 	assert.LessOrEqual(t, len(got), 260)
 	assert.True(t, strings.HasSuffix(got, "read fewer windows"))
+}
+
+func TestANodeAnchorIsRelativeToItsWindowAsRecorded(t *testing.T) {
+	wr := rect(100, 50, 400, 300)
+	tr := capture.Tree{V: capture.TreeVersion, Ops: []capture.TreeOp{
+		{Op: "Window", Parent: -1, Rect: rect(100, 50, 400, 300), Window: 7, WindowRect: &wr},
+		{Op: "Button", Parent: 0, Rect: rect(120, 90, 40, 18), Widgets: []capture.TreeWidget{
+			{Rect: rect(120, 90, 40, 18), Role: "button", Name: "Save"},
+			{Rect: rect(170, 90, 30, 18), Role: "label", Name: "saved"},
+		}},
+	}}
+	w, local, err := nodeAnchor(tr, "#1.1")
+	require.NoError(t, err)
+	assert.Equal(t, uint64(7), w)
+	assert.Equal(t, rect(70, 40, 30, 18), local)
+	_, local, err = nodeAnchor(tr, "#1")
+	require.NoError(t, err)
+	assert.Equal(t, rect(20, 40, 40, 18), local)
+	for _, bad := range []string{"#9", "#1.5", "x"} {
+		_, _, err = nodeAnchor(tr, bad)
+		assert.Error(t, err, bad)
+	}
 }

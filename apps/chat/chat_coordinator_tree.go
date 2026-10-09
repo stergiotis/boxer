@@ -3,6 +3,7 @@ package chat
 import (
 	"cmp"
 	"context"
+	"errors"
 	"math"
 	"slices"
 	"strconv"
@@ -63,8 +64,76 @@ func (inst *coordinator) readWindowTree(ctx context.Context, o toolOrigin, windo
 	if err != nil {
 		return "error: " + err.Error(), "window tree: " + err.Error()
 	}
-	return wrapUntrusted("window tree of "+windowsText(windows), treeOutline(t, maxTreeBytes)),
+	ref := inst.keepTree(t)
+	return wrapUntrusted("window tree of "+windowsText(windows), "tree "+ref+"\n"+treeOutline(t, maxTreeBytes)),
 		"read the window tree of " + windowsText(windows) + " (" + strconv.Itoa(len(t.Ops)) + " messages)"
+}
+
+// maxTrees bounds the window trees a conversation keeps for anchors.
+const maxTrees = 8
+
+// namedTree is a window tree with the reference the model was given.
+type namedTree struct {
+	ref  string
+	tree capture.Tree
+}
+
+// keepTree stores a tree for later anchors and returns its reference.
+func (inst *coordinator) keepTree(t capture.Tree) (ref string) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	inst.treeSeq++
+	ref = "t" + strconv.Itoa(inst.treeSeq)
+	inst.trees = append(inst.trees, namedTree{ref: ref, tree: t})
+	if len(inst.trees) > maxTrees {
+		inst.trees = inst.trees[len(inst.trees)-maxTrees:]
+	}
+	return
+}
+
+// treeAnchor resolves a part of a kept tree — "#12" for a message, "#12.3"
+// for its fourth widget — to the window it lies in and its rect relative to
+// that window's top-left corner, as the window stood when the tree was
+// taken. Code does the arithmetic, not the model.
+func (inst *coordinator) treeAnchor(ref string, node string) (window uint64, local [4]float32, err error) {
+	inst.mu.Lock()
+	var t *capture.Tree
+	for i := range inst.trees {
+		if inst.trees[i].ref == ref {
+			t = &inst.trees[i].tree
+		}
+	}
+	inst.mu.Unlock()
+	if t == nil {
+		err = errors.New("no window tree " + strconv.Quote(ref) + "; read_window_tree gives one")
+		return
+	}
+	return nodeAnchor(*t, node)
+}
+
+func nodeAnchor(t capture.Tree, node string) (window uint64, local [4]float32, err error) {
+	opPart, widgetPart, hasWidget := strings.Cut(strings.TrimPrefix(node, "#"), ".")
+	op, e := strconv.Atoi(opPart)
+	if e != nil || op < 0 || op >= len(t.Ops) {
+		err = errors.New("no part " + strconv.Quote(node) + " in the tree")
+		return
+	}
+	r := t.Ops[op].Rect
+	if hasWidget {
+		k, e := strconv.Atoi(widgetPart)
+		if e != nil || k < 0 || k >= len(t.Ops[op].Widgets) {
+			err = errors.New("no widget " + strconv.Quote(node) + " in the tree")
+			return
+		}
+		r = t.Ops[op].Widgets[k].Rect
+	}
+	window, wr, ok := t.WindowOf(op)
+	if !ok {
+		err = errors.New("the tree does not say which window " + strconv.Quote(node) + " is in")
+		return
+	}
+	local = [4]float32{r[0] - wr[0], r[1] - wr[1], r[2], r[3]}
+	return
 }
 
 // noiseRoles are roles that name no content: layout wrappers, resize
@@ -76,12 +145,16 @@ var noiseRoles = map[string]bool{"": true, "unknown": true, "generic_container":
 // treeOutline renders a window tree for the model, one line per part that
 // shows something:
 //
-//	#2 button "Save" [20,60 40x18] · Button
-//	#5 [20,90 300x140] · EndETable · 13 of 20 parts not shown
-//	  row [20,92 300x18]: "A320" | "2005"
+//	#0 window "Notes" [10,20 300x24] · Window · window 7
+//	  #2 button "Save" [20,60 40x18] · Button
+//	    #2.1 label "saved" [70,60 40x18]
+//	  #5 [20,90 300x140] · EndETable · 13 of 20 parts not shown
+//	    row [20,92 300x18]: #6 "A320" | #8 "2005"
 //
 // Lines lead with the widget's role and name; the message that drew it comes
-// last. A message that shows nothing of its own and holds one shown part is
+// last, and a top-level message names its window's key. Every line starts
+// with the reference an anchor cites (treeAnchor): #op for a message, #op.k
+// for its widget k, a row's cells by their block's #op. A message that shows nothing of its own and holds one shown part is
 // folded into it. Sibling deferred blocks sharing a top edge are a table's
 // cells: they print as one row of their texts, so data does not read as
 // controls. A message's counts say what is not shown: widgets clipped out of
@@ -98,12 +171,12 @@ func treeOutline(t capture.Tree, limit int) (s string) {
 			roots = append(roots, i)
 		}
 	}
-	own := make([][]capture.TreeWidget, n)
+	own := make([][]shownWidget, n)
 	shown := make([]bool, n)
 	for i := n - 1; i >= 0; i-- {
-		for _, w := range t.Ops[i].Widgets {
+		for k, w := range t.Ops[i].Widgets {
 			if !noiseRoles[w.Role] || w.Name != "" || w.Value != "" {
-				own[i] = append(own[i], w)
+				own[i] = append(own[i], shownWidget{k: k, w: w})
 			}
 		}
 		if len(own[i]) > 0 || t.Ops[i].Clipped > 0 || t.Ops[i].Blocks > 0 {
@@ -161,11 +234,14 @@ func treeOutline(t capture.Tree, limit int) (s string) {
 		pad := strings.Repeat("  ", depth)
 		head := pad + "#" + strconv.Itoa(i)
 		if len(own[i]) > 0 {
-			head += " " + widgetText(own[i][0]) + " " + rectText(own[i][0].Rect)
+			head += " " + widgetText(own[i][0].w) + " " + rectText(own[i][0].w.Rect)
 		} else {
 			head += " " + rectText(op.Rect)
 		}
 		head += " · " + op.Op
+		if op.Parent < 0 && op.Window != 0 {
+			head += " · window " + strconv.FormatUint(op.Window, 10)
+		}
 		if op.Clipped > 0 {
 			head += " · " + strconv.Itoa(op.Clipped) + " out of view"
 		}
@@ -182,7 +258,7 @@ func treeOutline(t capture.Tree, limit int) (s string) {
 		}
 		emit(head)
 		for _, w := range own[i][min(1, len(own[i])):] {
-			emit(pad + "  - " + widgetText(w) + " " + rectText(w.Rect))
+			emit(pad + "  #" + strconv.Itoa(i) + "." + strconv.Itoa(w.k) + " " + widgetText(w.w) + " " + rectText(w.w.Rect))
 		}
 		walkAll(children[i], depth+1)
 	}
@@ -228,7 +304,7 @@ func tableRows(t capture.Tree, ids []int) (rows [][]int, rest []int) {
 }
 
 // rowText is one table row: the rect the cells span, and each cell's texts.
-func rowText(t capture.Tree, cells []int, children [][]int, own [][]capture.TreeWidget) string {
+func rowText(t capture.Tree, cells []int, children [][]int, own [][]shownWidget) string {
 	r := t.Ops[cells[0]].Rect
 	minX, minY, maxX, maxY := r[0], r[1], r[0]+r[2], r[1]+r[3]
 	texts := make([]string, 0, len(cells))
@@ -239,12 +315,12 @@ func rowText(t capture.Tree, cells []int, children [][]int, own [][]capture.Tree
 		var parts []string
 		var collect func(i int)
 		collect = func(i int) {
-			for _, w := range own[i] {
-				if w.Name != "" {
-					parts = append(parts, quoteAppText(w.Name))
+			for _, sw := range own[i] {
+				if sw.w.Name != "" {
+					parts = append(parts, quoteAppText(sw.w.Name))
 				}
-				if w.Value != "" {
-					parts = append(parts, quoteAppText(w.Value))
+				if sw.w.Value != "" {
+					parts = append(parts, quoteAppText(sw.w.Value))
 				}
 			}
 			for _, k := range children[i] {
@@ -255,9 +331,15 @@ func rowText(t capture.Tree, cells []int, children [][]int, own [][]capture.Tree
 		if len(parts) == 0 {
 			parts = append(parts, "∅")
 		}
-		texts = append(texts, strings.Join(parts, " "))
+		texts = append(texts, "#"+strconv.Itoa(c)+" "+strings.Join(parts, " "))
 	}
 	return "row " + rectText([4]float32{minX, minY, maxX - minX, maxY - minY}) + ": " + strings.Join(texts, " | ")
+}
+
+// shownWidget is a widget the outline shows, with its index in its op.
+type shownWidget struct {
+	k int
+	w capture.TreeWidget
 }
 
 func widgetText(w capture.TreeWidget) (s string) {

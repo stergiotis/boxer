@@ -40,9 +40,15 @@ type pixelJob struct {
 	recheck   func() bool
 	phase     pixelPhaseE
 	requestId uint64
-	// spans are offsets into the frame's recording, per granted window.
-	spans  [][2]int
-	stream []byte
+	// spans are offsets into the frame's recording, per granted window, in
+	// the order emitted; spanKeys and spanRects are each span's window and
+	// its outer rect.
+	spans     [][2]int
+	spanKeys  []WindowKeyT
+	spanRects []Rect
+	// spanWindows locate each window in the replayed stream.
+	spanWindows []capture.SpanWindow
+	stream      []byte
 	// spansDigest names the stream replayed (ADR-0281 §SD4).
 	spansDigest string
 	// recordedAt is when the recording of the frame ended.
@@ -167,7 +173,7 @@ func (inst *Inst) pixelRecordingPosition() int {
 
 // pixelWindowSpan notes the span a window's emission took, when the window
 // is one the capture draws.
-func (inst *Inst) pixelWindowSpan(key WindowKeyT, begin int, end int) {
+func (inst *Inst) pixelWindowSpan(key WindowKeyT, begin int, end int, rect Rect) {
 	if begin < 0 || end < begin {
 		return
 	}
@@ -178,6 +184,8 @@ func (inst *Inst) pixelWindowSpan(key WindowKeyT, begin int, end int) {
 		return
 	}
 	j.pixel.spans = append(j.pixel.spans, [2]int{begin, end})
+	j.pixel.spanKeys = append(j.pixel.spanKeys, key)
+	j.pixel.spanRects = append(j.pixel.spanRects, rect)
 }
 
 // pixelFrameEnd closes the recording after the windows were emitted and
@@ -210,11 +218,16 @@ func (inst *Inst) pixelFrameEnd() {
 		n += s[1] - s[0]
 	}
 	stream := make([]byte, 0, n)
-	for _, s := range p.spans {
+	p.spanWindows = p.spanWindows[:0]
+	for k, s := range p.spans {
+		r := p.spanRects[k]
+		p.spanWindows = append(p.spanWindows, capture.SpanWindow{Window: uint64(p.spanKeys[k]),
+			Begin: len(stream), End: len(stream) + s[1] - s[0], Rect: [4]float32{r.MinX, r.MinY, r.W(), r.H()}})
 		stream = append(stream, rec[s[0]:s[1]]...)
 	}
 	sum := blake3.Sum256(stream)
 	p.stream, p.spans, p.spansDigest = stream, nil, hex.EncodeToString(sum[:])
+	p.spanKeys, p.spanRects = nil, nil
 	p.phase = pixelPhaseReplayPending
 }
 
@@ -231,7 +244,7 @@ func (inst *Inst) finishPixelJobLocked(j *captureJob, r c.CaptureResultValue, pp
 	}
 	if j.pixel.format == replayFormatTree {
 		j.result = capture.SourceResult{Phase: opwire.PhaseCompleted, Tree: r.Data, SpansDigest: j.pixel.spansDigest,
-			RecordedAt: j.pixel.recordedAt}
+			RecordedAt: j.pixel.recordedAt, Spans: j.pixel.spanWindows}
 		j.status = opwire.CaptureStatus{Phase: opwire.PhaseCompleted}
 		return
 	}

@@ -1239,7 +1239,9 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 			}
 			renderWindowBody(w, inst.closeRequested(w), inst.logger, &inst.frameTimes, inst.opsListener)
 		}
-		inst.pixelWindowSpan(w.key, spanBegin, inst.pixelRecordingPosition())
+		// The rect is the last completed frame's, one frame before the one
+		// recorded.
+		inst.pixelWindowSpan(w.key, spanBegin, inst.pixelRecordingPosition(), w.geom.Rect)
 	}
 	// Render the SVG-save picker once per Frame. It draws its own
 	// egui::Window so it sits at top level; Render returns

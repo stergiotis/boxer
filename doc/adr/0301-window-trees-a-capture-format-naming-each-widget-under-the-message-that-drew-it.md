@@ -200,6 +200,13 @@ The client now logs one `capture cost` line per capture, for every format, with 
 
 These run inside the client's frame, so a capture delays the frame it runs in by that much. The three frames a capture takes (record, replay, collect) are separate and dominate a tool call's wall time.
 
+### 2026-10-09 — top-level rows name their window; outline lines carry references
+
+ADR-0297 anchors an annotation on a part of a tree, which needs the window the part lies in and that window's place when the tree was taken.
+
+- **The window.** The client writes, on each top-level row, where its message starts in the replayed stream (`at`). The window host reports each granted window's span in that stream with the window's outer rect from the frame before the one recorded. The capture service names the window of every top-level row whose `at` lies in a span (`window`, `window_rect`) and drops `at`, so no stream offset leaves it (SD5 stands). `Tree.WindowOf` gives any row's window through its top-level ancestor.
+- **References.** Each outline line starts with what an anchor cites: `#12` for a message, `#12.3` for its widget 3, a table cell by its block's `#12`. A top-level line names the window's key. `read_window_tree` heads its result with the tree's reference (`tree t3`); the chat keeps a conversation's last eight trees and resolves `{tree, #ref}` to the window and a rect relative to the window's top-left corner, in code.
+
 ## References
 
 - [ADR-0154](./0154-headless-carrier-tree-and-driver.md) — the driver's tree and its role vocabulary.

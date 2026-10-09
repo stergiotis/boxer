@@ -166,6 +166,13 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
         }
     }
 
+    /// The position in the outermost replay's bytes while reading at that
+    /// level, and `None` at any other: a window tree (ADR-0301) places each
+    /// top-level message of a capture replay in the stream it replays.
+    pub fn replay_position(&self) -> Option<usize> {
+        (self.replay_depth == 1).then(|| self.replay_readers[0].pos)
+    }
+
     /// Pop the top overlay reader, restoring the previous replay level (or pipe).
     /// The reader is NOT deallocated — its buffer stays for reuse next frame.
     /// Restores `read_bytes_count` to its pre-replay value.

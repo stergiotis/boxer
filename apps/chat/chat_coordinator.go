@@ -179,6 +179,11 @@ type coordinator struct {
 	// holds each app's operations with their schemas.
 	typed   map[string]typedOp
 	opCache map[string][]agent.Operation
+	// trees are the window trees read in this conversation, by the
+	// reference read_window_tree gave the model (ADR-0301), oldest first;
+	// at most maxTrees.
+	trees   []namedTree
+	treeSeq int
 }
 
 func newCoordinator(cli *agent.Client, kq *keelsonquery.Client, conversation string) (inst *coordinator) {

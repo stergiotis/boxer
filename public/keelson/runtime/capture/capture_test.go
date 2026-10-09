@@ -225,3 +225,29 @@ func TestATreeTheClientGotWrongFailsTheCapture(t *testing.T) {
 		assert.Equal(t, opwire.PhaseFailed, st.Phase, doc)
 	}
 }
+
+func TestATreesTopLevelRowsAreStampedWithTheirWindows(t *testing.T) {
+	at := func(v int) *int { return &v }
+	tr := Tree{V: TreeVersion, Ops: []TreeOp{
+		{Op: "Window", Parent: -1, At: at(8)},
+		{Op: "Button", Parent: 0},
+		{Op: "Window", Parent: -1, At: at(130)},
+		{Op: "Window", Parent: -1, At: at(900)},
+	}}
+	StampWindows(&tr, []SpanWindow{
+		{Window: 7, Begin: 0, End: 100, Rect: [4]float32{10, 20, 300, 200}},
+		{Window: 9, Begin: 100, End: 400, Rect: [4]float32{400, 20, 300, 200}},
+	})
+	for _, op := range tr.Ops {
+		assert.Nil(t, op.At, "no stream offset leaves the capture service")
+	}
+	w, r, ok := tr.WindowOf(1)
+	require.True(t, ok)
+	assert.Equal(t, uint64(7), w)
+	assert.Equal(t, [4]float32{10, 20, 300, 200}, r)
+	w, _, ok = tr.WindowOf(2)
+	require.True(t, ok)
+	assert.Equal(t, uint64(9), w)
+	_, _, ok = tr.WindowOf(3)
+	assert.False(t, ok, "an offset outside every span names no window")
+}

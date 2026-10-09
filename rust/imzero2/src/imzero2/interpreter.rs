@@ -1605,8 +1605,9 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             // A `tree` capture (ADR-0301): bracket the message so the
             // widgets egui registers while it runs are attributed to it.
             let blocks = self.io.deferred_blocks_read;
+            let at = self.io.replay_position();
             if let Some(t) = self.op_tree.as_mut() {
-                t.begin(c, format!("{func_proc_id:?}"), blocks);
+                t.begin(c, format!("{func_proc_id:?}"), blocks, at);
             }
             let r = self.interpret_inner(c, u, &func_proc_id, 0);
             let blocks = self.io.deferred_blocks_read;

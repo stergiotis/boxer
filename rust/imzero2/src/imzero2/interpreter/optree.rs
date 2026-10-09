@@ -43,6 +43,10 @@ struct Row {
     blocks: u64,
     /// Deferred blocks the row's children read.
     blocks_in_children: u64,
+    /// Where the row's top-level message starts in the replayed stream —
+    /// the offset after its header — so the host can say which window's
+    /// span it lies in.
+    root_at: Option<usize>,
 }
 
 #[derive(Default)]
@@ -67,16 +71,23 @@ const SEEN_SLACK: usize = 8;
 impl OpTreeRecorder {
     /// Opens a row for a message. `blocks_read` is the io's deferred-block
     /// count.
-    pub fn begin(&mut self, ctx: &egui::Context, name: String, blocks_read: u64) {
-        self.open(ctx, name, blocks_read);
+    /// `at` is the replay position, used when the message is top-level.
+    pub fn begin(
+        &mut self,
+        ctx: &egui::Context,
+        name: String,
+        blocks_read: u64,
+        at: Option<usize>,
+    ) {
+        self.open(ctx, name, blocks_read, at);
     }
 
     /// Opens a row for one replay of a deferred block.
     pub fn begin_block(&mut self, ctx: &egui::Context, blocks_read: u64) {
-        self.open(ctx, BLOCK_OP.to_string(), blocks_read);
+        self.open(ctx, BLOCK_OP.to_string(), blocks_read, None);
     }
 
-    fn open(&mut self, ctx: &egui::Context, name: String, blocks_read: u64) {
+    fn open(&mut self, ctx: &egui::Context, name: String, blocks_read: u64, at: Option<usize>) {
         if self.primed {
             // What was registered since the last bracket belongs to the row
             // still open: a container's own widgets, drawn before or between
@@ -88,9 +99,15 @@ impl OpTreeRecorder {
             self.sweep(ctx, None);
             self.primed = true;
         }
+        let parent = self.stack.last().copied();
+        let root_at = match parent {
+            Some(p) => self.rows[p].root_at,
+            None => at,
+        };
         self.rows.push(Row {
             name,
-            parent: self.stack.last().copied(),
+            parent,
+            root_at,
             subtree: None,
             own: Vec::new(),
             clipped: 0,
@@ -260,6 +277,11 @@ impl OpTreeRecorder {
                 escape(&r.name)
             );
             write_rect(out, sub);
+            if parent == -1 {
+                if let Some(at) = r.root_at {
+                    let _ = write!(out, ",\"at\":{at}");
+                }
+            }
             if clipped[i] > 0 {
                 let _ = write!(out, ",\"clipped\":{}", clipped[i]);
             }
@@ -381,11 +403,11 @@ mod tests {
     fn a_widget_belongs_to_the_innermost_message() {
         let d = record(|ui, rec| {
             let ctx = ui.ctx().clone();
-            rec.begin(&ctx, "Group".into(), 0);
-            rec.begin(&ctx, "Button".into(), 0);
+            rec.begin(&ctx, "Group".into(), 0, Some(40));
+            rec.begin(&ctx, "Button".into(), 0, None);
             let _ = ui.button("Ok");
             rec.end(&ctx, false, 0);
-            rec.begin(&ctx, "Label".into(), 0);
+            rec.begin(&ctx, "Label".into(), 0, None);
             ui.label("note");
             rec.end(&ctx, false, 0);
             rec.end(&ctx, false, 0);
@@ -393,6 +415,15 @@ mod tests {
         assert_eq!(d.ops.len(), 3);
         assert_eq!(d.ops[0].op, "Group");
         assert_eq!(d.ops[0].parent, -1);
+        assert!(
+            d.raw.contains("\"at\":40"),
+            "a top-level row says where it starts"
+        );
+        assert_eq!(
+            d.raw.matches("\"at\":").count(),
+            1,
+            "only top-level rows do"
+        );
         assert!(d.ops[0].widgets.is_empty());
         assert_eq!(d.ops[1].op, "Button");
         assert_eq!(d.ops[1].parent, 0);
@@ -414,13 +445,13 @@ mod tests {
     fn what_a_container_draws_before_or_between_its_children_is_the_containers() {
         let d = record(|ui, rec| {
             let ctx = ui.ctx().clone();
-            rec.begin(&ctx, "Tabs".into(), 0);
+            rec.begin(&ctx, "Tabs".into(), 0, None);
             let _ = ui.button("first tab");
-            rec.begin(&ctx, "AddSpace".into(), 0);
+            rec.begin(&ctx, "AddSpace".into(), 0, None);
             ui.add_space(4.0);
             rec.end(&ctx, false, 0);
             let _ = ui.button("second tab");
-            rec.begin(&ctx, "Body".into(), 0);
+            rec.begin(&ctx, "Body".into(), 0, None);
             ui.label("body");
             rec.end(&ctx, false, 0);
             rec.end(&ctx, false, 0);
@@ -439,12 +470,12 @@ mod tests {
     fn rows_without_widgets_are_left_out_and_parents_skip_them() {
         let d = record(|ui, rec| {
             let ctx = ui.ctx().clone();
-            rec.begin(&ctx, "Outer".into(), 0);
-            rec.begin(&ctx, "AddSpace".into(), 0);
+            rec.begin(&ctx, "Outer".into(), 0, None);
+            rec.begin(&ctx, "AddSpace".into(), 0, None);
             ui.add_space(4.0);
             rec.end(&ctx, false, 0);
-            rec.begin(&ctx, "Middle".into(), 0);
-            rec.begin(&ctx, "Button".into(), 0);
+            rec.begin(&ctx, "Middle".into(), 0, None);
+            rec.begin(&ctx, "Button".into(), 0, None);
             let _ = ui.button("x");
             rec.end(&ctx, false, 0);
             rec.end(&ctx, false, 0);
@@ -459,8 +490,8 @@ mod tests {
     fn an_end_marker_leaves_its_widgets_to_the_enclosing_message() {
         let d = record(|ui, rec| {
             let ctx = ui.ctx().clone();
-            rec.begin(&ctx, "Block".into(), 0);
-            rec.begin(&ctx, "End".into(), 0);
+            rec.begin(&ctx, "Block".into(), 0, None);
+            rec.begin(&ctx, "End".into(), 0, None);
             let _ = ui.button("late");
             rec.end(&ctx, true, 0);
             rec.end(&ctx, false, 0);
@@ -474,9 +505,9 @@ mod tests {
     fn a_clipped_widget_is_counted_on_the_nearest_row_kept() {
         let d = record(|ui, rec| {
             let ctx = ui.ctx().clone();
-            rec.begin(&ctx, "Panel".into(), 0);
+            rec.begin(&ctx, "Panel".into(), 0, None);
             let _ = ui.button("seen");
-            rec.begin(&ctx, "Hidden".into(), 0);
+            rec.begin(&ctx, "Hidden".into(), 0, None);
             ui.scope(|ui| {
                 ui.set_clip_rect(egui::Rect::NOTHING);
                 let _ = ui.button("secret");
@@ -495,10 +526,10 @@ mod tests {
         let d = record(|ui, rec| {
             let ctx = ui.ctx().clone();
             // A table message reads 5 blocks and replays 2 of them.
-            rec.begin(&ctx, "Table".into(), 10);
+            rec.begin(&ctx, "Table".into(), 10, None);
             for cell in ["A320", "2005"] {
                 rec.begin_block(&ctx, 15);
-                rec.begin(&ctx, "Label".into(), 15);
+                rec.begin(&ctx, "Label".into(), 15, None);
                 ui.label(cell);
                 rec.end(&ctx, false, 15);
                 rec.end(&ctx, false, 15);
@@ -516,14 +547,14 @@ mod tests {
     fn a_widget_shifted_past_the_slack_is_still_its_messages() {
         let d = record(|ui, rec| {
             let ctx = ui.ctx().clone();
-            rec.begin(&ctx, "Old".into(), 0);
+            rec.begin(&ctx, "Old".into(), 0, None);
             let ids: Vec<egui::Id> = (0..20).map(|k| egui::Id::new(("old", k))).collect();
             for (k, id) in ids.iter().enumerate() {
                 let r = egui::Rect::from_min_size(egui::pos2(0.0, k as f32), egui::vec2(5.0, 1.0));
                 let _ = ui.interact(r, *id, egui::Sense::click());
             }
             rec.end(&ctx, false, 0);
-            rec.begin(&ctx, "New".into(), 0);
+            rec.begin(&ctx, "New".into(), 0, None);
             let _ = ui.button("fresh");
             // Re-registering older widgets with move_to_top shifts "fresh"
             // down one place each time, past the slack.
