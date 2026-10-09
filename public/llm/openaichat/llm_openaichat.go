@@ -61,6 +61,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -205,6 +206,12 @@ type CompletionResponse struct {
 	ToolCalls    []ToolCall // function calls the model requested, if any
 	InputTokens  int32
 	OutputTokens int32 // includes reasoning tokens for reasoning models
+	// CachedInputTokens is the part of InputTokens the provider served from
+	// its prompt cache, and ReasoningTokens the part of OutputTokens spent
+	// reasoning — each absent when the provider does not report it, which is
+	// not the same as zero.
+	CachedInputTokens option.Option[int32]
+	ReasoningTokens   option.Option[int32]
 	// Id is the provider's id for the completion and Model the model name it
 	// answered with — the keys into the provider's own records. Either is
 	// empty when the provider sent none.
@@ -474,9 +481,22 @@ type wireChoice struct {
 }
 
 type wireUsage struct {
-	PromptTokens     int32 `json:"prompt_tokens"`
-	CompletionTokens int32 `json:"completion_tokens"`
-	TotalTokens      int32 `json:"total_tokens"`
+	PromptTokens            int32                    `json:"prompt_tokens"`
+	CompletionTokens        int32                    `json:"completion_tokens"`
+	TotalTokens             int32                    `json:"total_tokens"`
+	PromptTokensDetails     *wirePromptTokensDetails `json:"prompt_tokens_details,omitempty"`
+	CompletionTokensDetails *wireCompletionDetails   `json:"completion_tokens_details,omitempty"`
+}
+
+// wirePromptTokensDetails and wireCompletionDetails are the usage breakdown
+// OpenAI introduced and some local servers copy; a member the server omits
+// stays nil, so "not reported" survives decoding.
+type wirePromptTokensDetails struct {
+	CachedTokens *int32 `json:"cached_tokens,omitempty"`
+}
+
+type wireCompletionDetails struct {
+	ReasoningTokens *int32 `json:"reasoning_tokens,omitempty"`
 }
 
 type wireResponse struct {
@@ -584,6 +604,12 @@ func (inst *Client) Complete(ctx context.Context, req CompletionRequest) (resp C
 		OutputTokens: wresp.Usage.CompletionTokens,
 		Id:           wresp.Id,
 		Model:        wresp.Model,
+	}
+	if d := wresp.Usage.PromptTokensDetails; d != nil && d.CachedTokens != nil {
+		resp.CachedInputTokens = option.Some(*d.CachedTokens)
+	}
+	if d := wresp.Usage.CompletionTokensDetails; d != nil && d.ReasoningTokens != nil {
+		resp.ReasoningTokens = option.Some(*d.ReasoningTokens)
 	}
 
 	// A truncated or content-filtered answer must not masquerade as a complete
