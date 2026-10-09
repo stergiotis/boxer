@@ -31,6 +31,7 @@ import (
 	introspectprovidersgui "github.com/stergiotis/boxer/public/keelson/runtime/introspect/providersgui"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm/promptbook"
+	"github.com/stergiotis/boxer/public/keelson/runtime/moderator"
 	"github.com/stergiotis/boxer/public/keelson/runtime/statestore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/sysmetricsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/task/supervisor"
@@ -127,6 +128,11 @@ type Deps struct {
 	// keelson.llm_calls (ADR-0254 §SD4). nil leaves it empty rather than
 	// absent. Same typed-nil trap: assign only a service that started.
 	LLMCalls llm.CallsI
+	// Moderator is the built-in moderator as a read side, backing
+	// keelson.moderator_signals (ADR-0302 §SD3). nil leaves it empty
+	// rather than absent. Same typed-nil trap: assign only one that
+	// started.
+	Moderator moderator.StatesI
 	// HTTPCalls is the host's egress service as a read side, backing
 	// keelson.http_calls and keelson.http_destinations (ADR-0262 §SD5).
 	// Same typed-nil trap: assign only a service that started.
@@ -252,6 +258,11 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	// table.
 	if e := llm.RegisterIntrospect(reg, deps.LLMCalls); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: llm_calls provider registration failed")
+	}
+	// ADR-0302 §SD3: the windows the built-in moderator watches. Registered
+	// unconditionally — a host without it answers with an empty table.
+	if e := moderator.RegisterIntrospect(reg, deps.Moderator); e != nil {
+		deps.Log.Warn().Err(e).Msg("introspecthost: moderator_signals provider registration failed")
 	}
 	// ADR-0262 §SD2, §SD5: the fetches this process answered, and every
 	// destination any app could name. Registered unconditionally.
