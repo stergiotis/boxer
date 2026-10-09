@@ -100,9 +100,11 @@ boxer fs snapshot --mount 0x3BFE363BCF148002 --remote s3:bucket/prefix   # any r
 
 `--name` also writes the policy record, so the `lading` sqlapplet book and the
 browser show the mount by that name; `--meta-only`, `--inline-max`,
-`--text-rule` and `--profile` mirror the policy fields above, and the tables are
-provisioned idempotently first unless `--no-provision` is given. The command
-prints the snapshot's instant and the walk's totals.
+`--text-rule`, `--skip-ref-hash` and `--profile` mirror the policy fields
+below, and the tables are provisioned idempotently first unless
+`--no-provision` is given. `--database` names a store that lives outside the
+default database (§1); every `boxer fs` verb takes it. The command prints the
+snapshot's instant and the walk's totals.
 
 What the policy decides:
 
@@ -110,6 +112,7 @@ What the policy decides:
 |---|---|
 | `Ttl` | retention class, **in whole days**. Rows expire at the end of the snapshot's day plus the class. |
 | `InlineMax` | files up to this size have their content stored; larger ones record `ref` — size, mtime and hash, no bytes. It is also the walker's memory bound per file. |
+| `SkipRefHash` | leave files above `InlineMax` unread: `ref` with size and mtime and an empty hash. The default streams each through BLAKE3, which is a full read of every large file per walk. |
 | `Text` | `TextRuleSniff` cuts text at newlines; `TextRuleNever` cuts everything at fixed offsets. |
 | `MetaOnly` | stat only: no blocks at all, one row per node. |
 | `Profile` | block size, and whether each block carries its own BLAKE3 digest. |
@@ -123,6 +126,9 @@ merge. `Policy` refuses a zero class for the same reason.
 everything else is durable — and a snapshot is complete exactly when that row
 exists. A walk that dies half way leaves rows no query can reach, which `TTL`
 then removes. Retry by taking a new snapshot; there is nothing to roll back.
+Every read path applies the rule: the macros resolve snapshots from the index,
+the adapter refuses an instant with no root row on its first call, and the
+SFTP head lists only what the index lists.
 
 **A node that cannot be read becomes a row, not an error.** Its `err` column
 carries the failure and the walk continues, so a tree with one unreadable
@@ -186,6 +192,9 @@ statement through the expansion directly:
 ```go
 sql, err := ladingsql.Expand(ladingsql.Config{Visibility: vis}, userSQL)
 ```
+
+`Config.Layout` is the same `ladingschema.Layout` the store was provisioned
+under; the zero value is the default database.
 
 A host that applies the registry instead binds a `MountVisibilityI` into the
 value it hands `ApplyBestEffortBound`; without one the factory declines, the
@@ -267,15 +276,18 @@ rclone's backends — is an `fs.FS` like any other:
 
 ```go
 src, err := ladingremote.Serve(ctx, "s3:bucket/prefix",
-    ladingremote.WithFilters("--exclude", "*.tmp"))
+    ladingremote.WithArgs("--exclude", "*.tmp", "--links"))
 defer src.Close()
 
 res, err := ladingingest.Snapshot(ctx, src, mount, pol, stores)
 ```
 
-Filters run at the *source*, so what they exclude never reaches this process.
+`WithArgs` hands flags to the `rclone serve sftp` on the other side of the
+pipe: filters run at the *source*, so what they exclude never reaches this
+process, and `--links` is what makes a symlink arrive at all (§10).
 `WithSubdir` roots the walk inside what rclone serves. **`Close` is not
-optional**: it shuts the pipe and reaps the process.
+optional**: it shuts the pipe and reaps the process. On the command line the
+same flags are `--rclone-arg`, repeatable.
 
 ## 8. Publish a scratch tree and browse it
 
@@ -314,13 +326,18 @@ and whole parts drop. When you need it gone sooner, a per-mount purge is one
 lightweight statement per table, because nothing is shared and nothing is
 reference-counted:
 
-```sql
-DELETE FROM boxer.fsmeta WHERE "id:id:u64:47::0:" = <mount>;
--- and the same for boxer.fsdata and boxer.fssnap
+```go
+err := lading.Purge(ctx, exec, mount)        // PurgeIn(ctx, exec, layout, mount) for another database
 ```
 
-Resolve the physical column name with `ladingschema.PhysicalPlainName("id")`
-rather than typing it.
+```sh
+boxer fs purge --mount 0x3BFE363BCF148002
+```
+
+Both issue `DELETE FROM <table> WHERE <id column> = <mount>` against the three
+tables, with the physical column name resolved rather than typed. The mount's
+policy record in `boxer.facts` is left alone: it describes the mount, not a
+snapshot of it, and the next walk will want it.
 
 ## 10. What does not work, and why
 
@@ -361,9 +378,20 @@ somebody else's limit rather than the store's.
   an `FS`, and two handles on one, are not.
 - **A snapshot is addressable only once it is complete.** `ladingingest.
   Snapshot` returns its `Result` even when the walk failed, so a caller can
-  hold the instant of a walk that never committed — but neither the adapter nor
-  the head will open it, and no macro will select it. A walk whose root could
-  not be stat'd writes no snapshot at all rather than one nothing can list.
+  hold the instant of a walk that never committed — but the adapter answers
+  "not found" for every name under it, the head does not list it, and no macro
+  selects it. A walk whose root could not be stat'd writes no snapshot at all
+  rather than one nothing can list.
+- **`latest` over SFTP lags by a few seconds.** The head re-reads a mount's
+  snapshot list once it is older than five seconds, so a walk that finishes
+  under a running `rclone mount` shows up on the next directory read after
+  that, not instantly. The views themselves never go stale: a snapshot cannot
+  change.
+- **Compare pins `join_use_nulls = 0`.** The diff idiom reads a missing join
+  side as an empty path, which is how ClickHouse fills a `FULL OUTER JOIN`
+  under that setting. It is the default, but a session can change it, and
+  under `1` the idiom classifies nothing rather than failing — so the chapter,
+  the browser and the operations test carry the `SETTINGS` clause.
 - **A profile only applies at creation.** `Provision` renders the granularity
   into the `CREATE TABLE`, and `IF NOT EXISTS` means an existing table keeps
   the profile it was made under. Changing one is a migration.

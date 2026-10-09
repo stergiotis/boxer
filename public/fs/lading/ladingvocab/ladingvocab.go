@@ -195,7 +195,9 @@ var (
 	// applied-policy ones above: the two say different things (declared now
 	// versus applied then), and keeping them apart also keeps the two kinds
 	// generatable into one package should that ever be wanted.
-	MembMountName  = NkRegistry.MustBegin("ladingMountName", 23).End()
+	MembMountName = NkRegistry.MustBegin("ladingMountName", 23).End()
+	// MountStore is an origin label a mount list shows — the database for a
+	// recorded mount, `adhoc:<publisher>` for a published tree. Display only.
 	MembMountStore = NkRegistry.MustBegin("ladingMountStore", 24).End()
 	// The mount's retention class — a class, not a free duration, and whole
 	// days only: an expiry within a day would leave a partition partially

@@ -29,8 +29,10 @@ type LadingMount struct {
 	// the application or to whatever registers the mount; the store accepts
 	// ids, and this field is what a name-as-sugar macro would read.
 	Name string `lw:"ladingMountName,stringArray,unit"`
-	// Store names which set of tables the mount's rows live in — the unit a
-	// capability grant covers.
+	// Store is a free-form origin label for a mount list: the database the
+	// mount's tables live in for a recorded mount, `adhoc:<publisher>` for a
+	// published tree. Display only — no code path reads it to find a table;
+	// the layout a reader was opened under does that.
 	Store string `lw:"ladingMountStore,symbol"`
 
 	// TtlClass is a retention class, not a free duration, and whole days
