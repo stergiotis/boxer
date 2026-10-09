@@ -8,16 +8,16 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 )
 
-// The coordinator's annotation tools (ADR-0297): annotate puts a mark on the
-// overlay the host draws above every window, clear_annotations removes the
+// The coordinator's mark tools (ADR-0297): point_out puts a mark on the
+// overlay the host draws above every window, clear_marks removes the
 // task's. A target is a part of a window tree the model read — resolved
 // here, by code, to its window and a rect relative to it (§SD4) — or a whole
 // window. The model never sends a coordinate.
 
-func (inst *coordinator) annotate(ctx context.Context, asked agent.Asked, args map[string]any) (content string, activity string) {
+func (inst *coordinator) pointOut(ctx context.Context, asked agent.Asked, args map[string]any) (content string, activity string) {
 	h := inst.handle()
 	if h == "" {
-		return "error: no task yet; call request_access first", "annotate: no task"
+		return "error: no task yet; call request_access first", "point_out: no task"
 	}
 	str := func(k string) (s string) { s, _ = args[k].(string); return }
 	raw, _ := args["targets"].([]any)
@@ -31,18 +31,18 @@ func (inst *coordinator) annotate(ctx context.Context, asked agent.Asked, args m
 		case tree != "" || node != "":
 			w, local, err := inst.treeAnchor(tree, node)
 			if err != nil {
-				return "error: target " + strconv.Itoa(i+1) + ": " + err.Error(), "annotate: " + err.Error()
+				return "error: target " + strconv.Itoa(i+1) + ": " + err.Error(), "point_out: " + err.Error()
 			}
 			targets = append(targets, agent.Target{Window: w, Rect: &local})
 		case window > 0:
 			targets = append(targets, agent.Target{Window: uint64(window)})
 		default:
 			return "error: target " + strconv.Itoa(i+1) + " names a tree part (tree and node) or a window",
-				"annotate: a target names nothing"
+				"point_out: a target names nothing"
 		}
 	}
 	op := str("op")
-	out, err := inst.cli.Annotate(ctx, agent.AnnotateRequest{Handle: h, Asked: asked, Id: str("id"), Op: op,
+	out, err := inst.cli.Mark(ctx, agent.MarkRequest{Handle: h, Asked: asked, Id: str("id"), Op: op,
 		Targets: targets, Text: str("text")})
 	activity = op + " " + strconv.Quote(str("id"))
 	if err != nil {
@@ -58,15 +58,15 @@ func (inst *coordinator) annotate(ctx context.Context, asked agent.Asked, args m
 	return content, activity
 }
 
-func (inst *coordinator) clearAnnotations(ctx context.Context, asked agent.Asked, id string) (content string, activity string) {
+func (inst *coordinator) clearMarks(ctx context.Context, asked agent.Asked, id string) (content string, activity string) {
 	h := inst.handle()
 	if h == "" {
-		return "error: no task yet", "clear annotations: no task"
+		return "error: no task yet", "clear marks: no task"
 	}
-	out, err := inst.cli.ClearAnnotations(ctx, h, asked, id)
+	out, err := inst.cli.Unmark(ctx, h, asked, id)
 	if err != nil {
-		return "error: " + err.Error(), "clear annotations: " + err.Error()
+		return "error: " + err.Error(), "clear marks: " + err.Error()
 	}
 	b, _ := json.Marshal(callOutcome{Phase: out.Phase, Reason: out.Reason})
-	return string(b), "clear annotations: " + out.Reason
+	return string(b), "clear marks: " + out.Reason
 }

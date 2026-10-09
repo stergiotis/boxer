@@ -141,7 +141,7 @@ type AgentChromeI interface {
 	RenderWindowChrome(key uint64, ids *c.WidgetIdStack)
 	// RenderDialogs draws the host's dialogs at top level: approvals,
 	// confirmations. modal is whether it drew a modal, which hides the
-	// annotation overlay this frame (ADR-0297 §SD8).
+	// mark overlay this frame (ADR-0297 §SD8).
 	RenderDialogs(ids *c.WidgetIdStack) (modal bool)
 }
 

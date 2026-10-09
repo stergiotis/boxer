@@ -10,7 +10,7 @@ type GeomEntry struct {
 	Geom WindowGeom
 }
 
-// Resolve turns an annotation's anchor into a viewport rect against the
+// Resolve turns a mark's anchor into a viewport rect against the
 // windows' geometry of the last completed frame (ADR-0297 §SD3). A pure
 // function: the overlay calls it every frame, so a mark follows its window.
 //

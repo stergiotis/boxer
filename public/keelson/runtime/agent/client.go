@@ -456,7 +456,7 @@ func (inst *Client) Place(ctx context.Context, handle string, asked Asked, insta
 		wireWindowAct{V: wireVersion, Handle: handle, Key: asked.Key, Instance: instance, X: x, Y: y, W: w, H: h, wireCause: asked.wire()}))
 }
 
-// Target is an annotation's target (ADR-0297 §SD2): a window (Window
+// Target is a mark's target (ADR-0297 §SD2): a window (Window
 // alone); a rect relative to a window's top-left corner (Window and Rect);
 // or a rect of the viewport (Viewport and Rect, Window zero). Rect is x, y,
 // w, h in logical points.
@@ -466,10 +466,10 @@ type Target struct {
 	Viewport bool
 }
 
-// AnnotateRequest is one annotation: Op is highlight, callout, arrow, step
-// or spotlight; Id names it within the task, and annotating an Id again
+// MarkRequest is one mark: Op is highlight, callout, arrow, step
+// or spotlight; Id names it within the task, and marking an Id again
 // replaces it.
-type AnnotateRequest struct {
+type MarkRequest struct {
 	Handle  string
 	Asked   Asked
 	Id      string
@@ -478,10 +478,10 @@ type AnnotateRequest struct {
 	Text    string
 }
 
-// Annotate puts an annotation on the host's overlay. It needs suggest mode
+// Mark puts a mark on the host's overlay. It needs suggest mode
 // on every window it points at, and the desktop in suggest mode for a
 // viewport rect.
-func (inst *Client) Annotate(ctx context.Context, r AnnotateRequest) (out Outcome, err error) {
+func (inst *Client) Mark(ctx context.Context, r MarkRequest) (out Outcome, err error) {
 	anchors := make([]wireAnchor, 0, len(r.Targets))
 	for _, t := range r.Targets {
 		a := wireAnchor{Window: t.Window, Viewport: t.Viewport}
@@ -491,16 +491,16 @@ func (inst *Client) Annotate(ctx context.Context, r AnnotateRequest) (out Outcom
 		}
 		anchors = append(anchors, a)
 	}
-	return callReply(roundTrip[wireAnnotate, wireCallReply](ctx, inst, SubjectAnnotate,
-		wireAnnotate{V: wireVersion, Handle: r.Handle, Key: r.Asked.Key, Id: r.Id, Op: r.Op, Anchors: anchors, Text: r.Text,
+	return callReply(roundTrip[wireMark, wireCallReply](ctx, inst, SubjectMark,
+		wireMark{V: wireVersion, Handle: r.Handle, Key: r.Asked.Key, Id: r.Id, Op: r.Op, Anchors: anchors, Text: r.Text,
 			wireCause: r.Asked.wire()}))
 }
 
-// ClearAnnotations removes the task's annotation by id, or all of the
+// Unmark removes the task's mark by id, or all of the
 // task's with an empty id.
-func (inst *Client) ClearAnnotations(ctx context.Context, handle string, asked Asked, id string) (out Outcome, err error) {
-	return callReply(roundTrip[wireAnnotate, wireCallReply](ctx, inst, SubjectClear,
-		wireAnnotate{V: wireVersion, Handle: handle, Key: asked.Key, Id: id, wireCause: asked.wire()}))
+func (inst *Client) Unmark(ctx context.Context, handle string, asked Asked, id string) (out Outcome, err error) {
+	return callReply(roundTrip[wireMark, wireCallReply](ctx, inst, SubjectUnmark,
+		wireMark{V: wireVersion, Handle: handle, Key: asked.Key, Id: id, wireCause: asked.wire()}))
 }
 
 // ReadResult is a result as JSON, or an artifact by media type and path.

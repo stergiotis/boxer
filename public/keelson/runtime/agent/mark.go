@@ -9,19 +9,19 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/inscribe"
 )
 
-// The annotation verbs (ADR-0297 §SD8): annotate puts a mark on the overlay
-// the window host draws above every window, clear removes the task's. Like
+// The mark verbs (ADR-0297 §SD8): mark puts a mark on the overlay
+// the window host draws above every window, unmark removes the task's. Like
 // the window verbs they change what the person sees, not an app's state, so
 // they go to the host; each is a keyed call, recorded with effect view.
 
 const (
-	verbAnnotate = "annotate"
-	verbClear    = "clear"
+	verbMark   = "mark"
+	verbUnmark = "unmark"
 )
 
-func (inst *Service) annotate(msg *app.Msg) (rep wireCallReply) {
+func (inst *Service) mark(msg *app.Msg) (rep wireCallReply) {
 	rep.V = wireVersion
-	req, err := decode[wireAnnotate](msg.Payload)
+	req, err := decode[wireMark](msg.Payload)
 	if err != nil {
 		rep.Reason = err.Error()
 		return
@@ -58,8 +58,8 @@ func (inst *Service) annotate(msg *app.Msg) (rep wireCallReply) {
 	if e := t.entries[first]; e != nil {
 		rec.app = e.app
 	}
-	if verb == verbAnnotate {
-		out = annotateCheck(t, req)
+	if verb == verbMark {
+		out = markCheck(t, req)
 	} else if t.callsUsed >= t.callsBudget {
 		out = phaseOutcome(opwire.PhaseInputRequired, "the task's call budget is spent; request more")
 	}
@@ -71,12 +71,12 @@ func (inst *Service) annotate(msg *app.Msg) (rep wireCallReply) {
 	if out.Phase == opwire.PhaseUnspecified {
 		switch {
 		case inst.cfg.Host == nil:
-			out = phaseOutcome(opwire.PhaseRefused, "no window host draws annotations")
-		case verb == verbAnnotate:
-			out = inst.putAnnotation(task, req)
+			out = phaseOutcome(opwire.PhaseRefused, "no window host draws marks")
+		case verb == verbMark:
+			out = inst.putMark(task, req)
 		default:
-			n := inst.cfg.Host.Annotations().Clear(task, req.Id)
-			out = phaseOutcome(opwire.PhaseCompleted, "cleared "+strconv.Itoa(n)+" annotation(s)")
+			n := inst.cfg.Host.Marks().Clear(task, req.Id)
+			out = phaseOutcome(opwire.PhaseCompleted, "cleared "+strconv.Itoa(n)+" mark(s)")
 		}
 	}
 	inst.settle(t, rec, out, false)
@@ -85,10 +85,10 @@ func (inst *Service) annotate(msg *app.Msg) (rep wireCallReply) {
 	return
 }
 
-func (inst *Service) putAnnotation(task string, req wireAnnotate) (out opwire.Outcome) {
+func (inst *Service) putMark(task string, req wireMark) (out opwire.Outcome) {
 	op, ok := inscribe.ParseOp(req.Op)
 	if !ok {
-		return phaseOutcome(opwire.PhaseRefused, "no annotation op "+strconv.Quote(req.Op)+"; highlight, callout, arrow, step or spotlight")
+		return phaseOutcome(opwire.PhaseRefused, "no mark op "+strconv.Quote(req.Op)+"; highlight, callout, arrow, step or spotlight")
 	}
 	targets := make([]inscribe.Anchor, 0, len(req.Anchors))
 	for _, a := range req.Anchors {
@@ -102,22 +102,22 @@ func (inst *Service) putAnnotation(task string, req wireAnnotate) (out opwire.Ou
 			targets = append(targets, inscribe.Anchor{Window: a.Window})
 		}
 	}
-	if err := inst.cfg.Host.Annotations().Put(inscribe.Annotation{Task: task, Id: req.Id, Op: op, Targets: targets, Text: req.Text}); err != nil {
+	if err := inst.cfg.Host.Marks().Put(inscribe.Mark{Task: task, Id: req.Id, Op: op, Targets: targets, Text: req.Text}); err != nil {
 		return phaseOutcome(opwire.PhaseRefused, err.Error())
 	}
 	return phaseOutcome(opwire.PhaseCompleted, "drawn; it follows its window until the person clears it")
 }
 
-// annotateCheck is what the grant allows of an annotation (ADR-0297 §SD8):
+// markCheck is what the grant allows of a mark (ADR-0297 §SD8):
 // suggest or act on every window it points at, the desktop in suggest or act
 // for a viewport rect. An unspecified phase lets the call through. The
 // caller holds mu.
-func annotateCheck(t *task, req wireAnnotate) (out opwire.Outcome) {
+func markCheck(t *task, req wireMark) (out opwire.Outcome) {
 	if t.callsUsed >= t.callsBudget {
 		return phaseOutcome(opwire.PhaseInputRequired, "the task's call budget is spent; request more")
 	}
 	if len(req.Anchors) == 0 {
-		return phaseOutcome(opwire.PhaseRefused, "an annotation names at least one target")
+		return phaseOutcome(opwire.PhaseRefused, "a mark names at least one target")
 	}
 	for _, a := range req.Anchors {
 		if a.Viewport {
@@ -125,7 +125,7 @@ func annotateCheck(t *task, req wireAnnotate) (out opwire.Outcome) {
 			case t.ceiling.refuseDesktop() != "":
 				return phaseOutcome(opwire.PhaseRefused, t.ceiling.refuseDesktop())
 			case t.desktop < ModeSuggest:
-				return phaseOutcome(opwire.PhaseInputRequired, "annotating the desktop needs the desktop in suggest mode; request it")
+				return phaseOutcome(opwire.PhaseInputRequired, "marking the desktop needs the desktop in suggest mode; request it")
 			}
 			continue
 		}
@@ -137,7 +137,7 @@ func annotateCheck(t *task, req wireAnnotate) (out opwire.Outcome) {
 		case e.mode >= ModeSuggest && t.modeOf(e) < ModeSuggest:
 			return phaseOutcome(opwire.PhaseRefused, t.ceiling.refuseMode(ModeSuggest))
 		case e.mode < ModeSuggest:
-			return phaseOutcome(opwire.PhaseInputRequired, "annotating window "+w+" needs suggest mode on it; request it")
+			return phaseOutcome(opwire.PhaseInputRequired, "marking window "+w+" needs suggest mode on it; request it")
 		}
 	}
 	return

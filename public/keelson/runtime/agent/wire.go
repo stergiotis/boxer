@@ -289,7 +289,7 @@ type wireRect struct {
 	H float32 `json:"h"`
 }
 
-// wireAnchor is an annotation's target (ADR-0297 §SD2): a window; a window
+// wireAnchor is a mark's target (ADR-0297 §SD2): a window; a window
 // and a rect relative to its top-left corner (Rect set); or a viewport rect
 // (Viewport set, Window zero). X, Y, W, H are logical points.
 type wireAnchor struct {
@@ -302,10 +302,10 @@ type wireAnchor struct {
 	H        float32 `json:"h,omitempty"`
 }
 
-// wireAnnotate is annotate or clear. Op, Anchors and Text are annotate's;
-// Id names the annotation, and an empty Id to clear is every one of the
+// wireMark is mark or unmark. Op, Anchors and Text are mark's;
+// Id names the mark, and an empty Id to unmark is every one of the
 // task's.
-type wireAnnotate struct {
+type wireMark struct {
 	V       uint8        `json:"v"`
 	Handle  string       `json:"handle"`
 	Key     string       `json:"key"`

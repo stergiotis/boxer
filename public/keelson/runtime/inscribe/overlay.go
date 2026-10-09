@@ -9,7 +9,7 @@ import (
 )
 
 // Overlay draws a scene once per frame, on the render goroutine, after every
-// window and the shell chrome (ADR-0297 §SD1). It holds no annotations of
+// window and the shell chrome (ADR-0297 §SD1). It holds no marks of
 // its own: those are the scene's.
 type Overlay struct {
 	scene *Scene
@@ -31,7 +31,7 @@ func NewOverlay(scene *Scene) *Overlay {
 // Scene is the scene the overlay draws.
 func (inst *Overlay) Scene() *Scene { return inst.scene }
 
-// Frame resolves every annotation against this frame's geometry, retires
+// Frame resolves every mark against this frame's geometry, retires
 // those whose window is gone, and draws the rest inside bounds — unless
 // hidden, while a host modal is open (ADR-0297 §SD8). Render goroutine only.
 func (inst *Overlay) Frame(r ResolverI, bounds Rect, hidden bool) {

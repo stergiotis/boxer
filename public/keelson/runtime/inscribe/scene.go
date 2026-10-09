@@ -9,7 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// OpE is what an annotation draws (ADR-0297 §SD5).
+// OpE is what a mark draws (ADR-0297 §SD5).
 type OpE uint8
 
 const (
@@ -40,18 +40,18 @@ func (inst OpE) String() string {
 
 // The scene's bounds (ADR-0297 §SD7, §SD5).
 const (
-	// MaxPerTask is how many annotations one task may hold.
+	// MaxPerTask is how many marks one task may hold.
 	MaxPerTask = 16
 	// MaxScene is how many the scene holds across tasks.
 	MaxScene = 64
 	// MaxText is the longest note or label, in characters.
 	MaxText = 120
-	// MaxTargets is the most targets one annotation names.
+	// MaxTargets is the most targets one mark names.
 	MaxTargets = 8
 )
 
-// Annotation is one mark a task asked for.
-type Annotation struct {
+// Mark is one mark a task asked for.
+type Mark struct {
 	Task    string
 	Id      string
 	Op      OpE
@@ -60,22 +60,22 @@ type Annotation struct {
 	Text string
 }
 
-// Item is an annotation as the scene holds it: with its task's hue, its
+// Item is a mark as the scene holds it: with its task's hue, its
 // step number when it is a step, and its arrival order.
 type Item struct {
-	Annotation
+	Mark
 	Hue  int
 	Step int
 	Seq  uint64
 }
 
-// Scene holds every task's annotations. Safe for concurrent use: the agent
+// Scene holds every task's marks. Safe for concurrent use: the agent
 // service writes from the bus, the overlay reads on the render goroutine.
 type Scene struct {
 	mu    sync.Mutex
 	items []Item
 	seq   uint64
-	// hues are the hues of tasks holding annotations; steps the last step
+	// hues are the hues of tasks holding marks; steps the last step
 	// number each task drew.
 	hues  map[string]int
 	steps map[string]int
@@ -86,7 +86,7 @@ func NewScene() *Scene {
 	return &Scene{hues: map[string]int{}, steps: map[string]int{}}
 }
 
-// Len is the number of annotations held.
+// Len is the number of marks held.
 func (inst *Scene) Len() (n int) {
 	inst.mu.Lock()
 	n = len(inst.items)
@@ -94,13 +94,13 @@ func (inst *Scene) Len() (n int) {
 	return
 }
 
-// Put adds an annotation, or replaces the task's annotation with the same
+// Put adds a mark, or replaces the task's mark with the same
 // id. It refuses what the op does not take, text past MaxText, and what
 // would take the task past MaxPerTask or the scene past MaxScene; it never
-// evicts another annotation.
-func (inst *Scene) Put(a Annotation) (err error) {
+// evicts another mark.
+func (inst *Scene) Put(a Mark) (err error) {
 	if a.Task == "" || a.Id == "" {
-		err = eh.Errorf("inscribe: an annotation names its task and an id")
+		err = eh.Errorf("inscribe: a mark names its task and an id")
 		return
 	}
 	if err = checkTargets(a.Op, a.Targets); err != nil {
@@ -131,7 +131,7 @@ func (inst *Scene) Put(a Annotation) (err error) {
 				inst.steps[a.Task]++
 				step = inst.steps[a.Task]
 			}
-			*it = Item{Annotation: a, Hue: it.Hue, Step: step, Seq: inst.seq}
+			*it = Item{Mark: a, Hue: it.Hue, Step: step, Seq: inst.seq}
 			return
 		}
 	}
@@ -143,7 +143,7 @@ func (inst *Scene) Put(a Annotation) (err error) {
 	}
 	switch {
 	case held >= MaxPerTask:
-		err = eb.Build().Int("max", MaxPerTask).Errorf("inscribe: the task holds as many annotations as it may; clear some")
+		err = eb.Build().Int("max", MaxPerTask).Errorf("inscribe: the task holds as many marks as it may; clear some")
 		return
 	case len(inst.items) >= MaxScene:
 		err = eb.Build().Int("max", MaxScene).Errorf("inscribe: the overlay is full; the person clears it")
@@ -159,7 +159,7 @@ func (inst *Scene) Put(a Annotation) (err error) {
 		inst.steps[a.Task]++
 		step = inst.steps[a.Task]
 	}
-	inst.items = append(inst.items, Item{Annotation: a, Hue: hue, Step: step, Seq: inst.seq})
+	inst.items = append(inst.items, Item{Mark: a, Hue: hue, Step: step, Seq: inst.seq})
 	return
 }
 
@@ -211,18 +211,18 @@ func checkTargets(op OpE, targets []Anchor) (err error) {
 	return
 }
 
-// Clear removes the task's annotation by id, or all of the task's when id
+// Clear removes the task's mark by id, or all of the task's when id
 // is empty, and returns how many went.
 func (inst *Scene) Clear(task string, id string) (n int) {
 	return inst.removeWhere(func(it Item) bool { return it.Task == task && (id == "" || it.Id == id) })
 }
 
-// ClearAll removes every annotation: the person's clear.
+// ClearAll removes every mark: the person's clear.
 func (inst *Scene) ClearAll() (n int) {
 	return inst.removeWhere(func(Item) bool { return true })
 }
 
-// ClearWindow removes the annotations of task — of every task when task is
+// ClearWindow removes the marks of task — of every task when task is
 // empty — that point at window: it left the grant, or closed.
 func (inst *Scene) ClearWindow(task string, window uint64) (n int) {
 	return inst.removeWhere(func(it Item) bool {
@@ -238,7 +238,7 @@ func (inst *Scene) ClearWindow(task string, window uint64) (n int) {
 	})
 }
 
-// Count is the number of annotations task holds.
+// Count is the number of marks task holds.
 func (inst *Scene) Count(task string) (n int) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
@@ -250,7 +250,7 @@ func (inst *Scene) Count(task string) (n int) {
 	return
 }
 
-// Tasks lists the tasks holding annotations, in order of their first.
+// Tasks lists the tasks holding marks, in order of their first.
 func (inst *Scene) Tasks() (tasks []string) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
@@ -262,7 +262,7 @@ func (inst *Scene) Tasks() (tasks []string) {
 	return
 }
 
-// Snapshot copies the annotations in arrival order of their latest put.
+// Snapshot copies the marks in arrival order of their latest put.
 func (inst *Scene) Snapshot() (items []Item) {
 	inst.mu.Lock()
 	items = slices.Clone(inst.items)
@@ -300,7 +300,7 @@ func (inst *Scene) removeWhere(drop func(Item) bool) (n int) {
 			}
 		}
 		if !held {
-			// A task's hue and step numbers last while it has annotations.
+			// A task's hue and step numbers last while it has marks.
 			delete(inst.hues, task)
 			delete(inst.steps, task)
 		}

@@ -729,7 +729,7 @@ func (rt *Runtime) bootWindowHost() (err error) {
 			fsBridge.Render(bridgeIds)
 			fileDialog = fsBridge.CurrentRequestId() != ""
 		}
-		// Annotations last, over every window and dialog, and hidden while
+		// Marks last, over every window and dialog, and hidden while
 		// one of the host's dialogs asks the person to decide (ADR-0297).
 		host.FrameOverlay(fileDialog)
 		if dialogWidths != nil {

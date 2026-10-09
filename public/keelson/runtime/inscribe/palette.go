@@ -2,7 +2,7 @@ package inscribe
 
 import "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 
-// The overlay's colours (ADR-0297 §SD6). Annotations are drawn in a neon
+// The overlay's colours (ADR-0297 §SD6). Marks are drawn in a neon
 // palette outside the design system on purpose: a mark must not read as part
 // of any app. They are named here and used nowhere else; each carries the
 // design lint's per-line exception with that decision as its reason.

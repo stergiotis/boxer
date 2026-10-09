@@ -8,7 +8,7 @@ date: 2026-10-09
 
 > **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
-# ADR-0297: inscribe — an overlay agents annotate the desktop through, anchored to windows rather than coordinates
+# ADR-0297: inscribe — an overlay agents point things out through, anchored to windows rather than coordinates
 
 ## Context
 
@@ -28,23 +28,24 @@ Facts that bound the design:
 
 The owner's answers to the policy questions (2026-10-09):
 
-- annotating a window requires **suggest** mode on it;
+- marking a window requires **suggest** mode on it;
 - a target hidden behind another window is drawn in a **dashed "behind" style**;
-- annotations stay until **the person clears them**;
-- captures stay clean of annotations;
-- inscribe is a **singleton**: one instance, shared by every agent, whose annotations it merges;
+- marks stay until **the person clears them**;
+- captures stay clean of marks;
+- inscribe is a **singleton**: one instance, shared by every agent, whose marks it merges;
 - the marks use a **neon palette**, outside the design system's palettes;
-- inscribe is a **host component**, not an app with a surface of its own (SD1).
+- inscribe is a **host component**, not an app with a surface of its own (SD1);
+- the model's tool is **`point_out`**, and what it draws is a **mark** — in the verbs (`runtime.agent.mark`, `.unmark`), the code and what the person reads ("Clear agent marks").
 
 ## Decision
 
-We will add **inscribe**, a component of the window host under `runtime/inscribe` that paints annotations above every window. Agents name what they mean by anchors — a window, a rect inside a window, a part of a window tree — never by viewport coordinates they computed. The window host turns an anchor into a viewport rect every frame, with a pure function. Agents reach inscribe through `runtime.agent.*` verbs, and the person clears what was drawn.
+We will add **inscribe**, a component of the window host under `runtime/inscribe` that paints marks above every window. Agents name what they mean by anchors — a window, a rect inside a window, a part of a window tree — never by viewport coordinates they computed. The window host turns an anchor into a viewport rect every frame, with a pure function. Agents reach inscribe through `runtime.agent.*` verbs, and the person clears what was drawn.
 
 ```text
- model ── annotate {op, targets: [{tree, "#12.3"} | {window} | …], text}
+ model ── point_out {op, targets: [{tree, "#12.3"} | {window} | …], text}
    │  chat: tree part → {window, rect relative to the window}       (SD4)
    ↓
- runtime.agent.annotate {handle, id, op, anchors, text}
+ runtime.agent.mark {handle, id, op, anchors, text}
    │  grant: suggest on every anchored window                       (SD8)
    ↓
  window host ─ inscribe: one scene, keyed (task, id)                (SD1, SD7)
@@ -84,7 +85,7 @@ A model never computes the rect of the second kind; SD4 says where it comes from
 
 - A model points at a widget by a part of a window tree it read: `{tree: "t3", node: "#12.3"}`. The chat holds the trees it read and turns such a target into `{window, rect}`: the part's rect less the origin of its window's rect when the tree was taken (ADR-0301, `Tree.WindowOf`). The arithmetic is code. From then on the mark follows the window.
 - A widget that moves inside its window — scrolled, re-laid out — is not followed; the mark keeps the place it had when the tree was taken.
-- inscribe draws after every window, outside every window's span, so the capture replay (ADR-0281 SD4) never contains an annotation. An agent's own marks never reach what it observes. Development captures of the whole viewport do show them.
+- inscribe draws after every window, outside every window's span, so the capture replay (ADR-0281 SD4) never contains a mark. An agent's own marks never reach what it observes. Development captures of the whole viewport do show them.
 
 ### SD5 — Operations
 
@@ -95,9 +96,9 @@ A model never computes the rect of the second kind; SD4 says where it comes from
 | `arrow(from, to, label?)` | an arrow from one target to another |
 | `step(target, text)` | a numbered marker with a note; numbers run per task in arrival order |
 | `spotlight(targets)` | dims the viewport outside the targets |
-| `clear(id?)` | removes one of the task's annotations, or all of them |
+| `unmark(id?)` | removes one of the task's marks, or all of them |
 
-- Each annotation has a caller-chosen `id`. Annotating an existing `(task, id)` replaces it.
+- Each mark has a caller-chosen `id`. Marking an existing `(task, id)` replaces it.
 - No op takes a colour, width, font or position. Style and placement are inscribe's (SD6).
 - Text is untrusted, plain (no markdown), single-line, and capped in length.
 
@@ -105,43 +106,43 @@ A model never computes the rect of the second kind; SD4 says where it comes from
 
 - **The palette is neon, deliberately outside the design system** ([ADR-0031](./0031-imzero2-design-system-color.md), [ADR-0040](./0040-imzero2-design-system-palette-consolidated.md)). A mark must not read as part of any app. Colours the design system gives apps would let a mark pass for app UI, and a mark that looks like UI is the spoofing case. The design lint's L2 rule ([ADR-0029](./0029-imzero2-design-system-and-policy-as-code.md) §SD8) flags raw colours outside the token module; the neon colours are named in one file of `runtime/inscribe`, each line carrying the rule's per-line exception with this decision as its reason, and are used nowhere else.
 - Each neon stroke is drawn over a dark halo, and each note sits on a dark plate, so the same colours read on the light and the dark theme.
-- **Behind** draws the outline dashed. **Collapsed** places the mark on the window's title bar. **Gone** retires the annotation.
-- inscribe places notes and labels: one pass over every annotation tries the sides of each target in turn and keeps the first place clear of the notes already placed and inside the viewport. A note's size comes from egui's measure of its text a frame later; in the first frame it is estimated from the text's length, so a new note can shift by a few points once.
+- **Behind** draws the outline dashed. **Collapsed** places the mark on the window's title bar. **Gone** retires the mark.
+- inscribe places notes and labels: one pass over every mark tries the sides of each target in turn and keeps the first place clear of the notes already placed and inside the viewport. A note's size comes from egui's measure of its text a frame later; in the first frame it is estimated from the text's length, so a new note can shift by a few points once.
 - Every note and label carries its task's attribution tag, so the person can tell who drew it.
 
-### SD7 — Merging annotations from several agents
+### SD7 — Merging marks from several agents
 
-- One scene holds every annotation, keyed by `(task, id)`. Paint order is arrival order.
-- A task is given a neon hue when it first annotates. The hue is kept while the task has annotations. With more tasks than hues, hues repeat and the attribution tag tells tasks apart. Everything else about the style is the same for every task.
-- The layout pass of SD6 runs over all tasks' annotations together.
-- A task can replace and clear only its own annotations.
-- Each task has a budget of annotations, and the scene has a ceiling. An annotation over either is refused. It never evicts another task's marks.
+- One scene holds every mark, keyed by `(task, id)`. Paint order is arrival order.
+- A task is given a neon hue when it first marks something. The hue is kept while the task has marks. With more tasks than hues, hues repeat and the attribution tag tells tasks apart. Everything else about the style is the same for every task.
+- The layout pass of SD6 runs over all tasks' marks together.
+- A task can replace and clear only its own marks.
+- Each task has a budget of marks, and the scene has a ceiling. A mark over either is refused. It never evicts another task's marks.
 - `spotlight` from several tasks combines: everything outside the union of their targets is dimmed once.
 
 ### SD8 — Authority and lifetime
 
-- `runtime.agent.annotate` and `runtime.agent.clear` are `runtime.agent.*` verbs, so they inherit the grant check, action records and taint handling ([ADR-0276](./0276-agents-read-and-arrange-windows.md) SD3/SD4).
-- Annotating requires suggest or act on every anchored window's entry. A viewport anchor requires desktop mode suggest or act.
-- Each accepted call is an action record (ADR-0269 SD9) with effect `view`. An annotation changes what the person sees, not any app's state, so ADR-0269 SD11 is unaffected.
-- **Annotations stay until the person clears them**: one task's from that task's badge, or all at once from the **Window** menu. Agents can clear their own. A task's annotations are retired when the task ends or its grant is revoked, and an annotation is retired when its window leaves the grant or closes, since the authority it was drawn under is gone.
+- `runtime.agent.mark` and `runtime.agent.unmark` are `runtime.agent.*` verbs, so they inherit the grant check, action records and taint handling ([ADR-0276](./0276-agents-read-and-arrange-windows.md) SD3/SD4).
+- Marking requires suggest or act on every anchored window's entry. A viewport anchor requires desktop mode suggest or act.
+- Each accepted call is an action record (ADR-0269 SD9) with effect `view`. A mark changes what the person sees, not any app's state, so ADR-0269 SD11 is unaffected.
+- **Marks stay until the person clears them**: one task's from that task's badge, or all at once from the **Window** menu. Agents can clear their own. A task's marks are retired when the task ends or its grant is revoked, and a mark is retired when its window leaves the grant or closes, since the authority it was drawn under is gone.
 - While a host modal is open, inscribe draws nothing. The chrome that draws a host modal tells the window host so in that frame, and inscribe, framed after it, reads the flag. No mark can stand beside a decision the person is making.
 
 ### SD9 — Deferred
 
 - Anchors on pixels of a PNG capture. A model can point at a tree part instead.
 - Following a widget inside its window (SD4), and anchors on ADR-0269 resources.
-- Animation, freehand drawing, and annotations the person makes.
-- A capture that includes the annotations, on request.
+- Animation, freehand drawing, and marks the person makes.
+- A capture that includes the marks, on request.
 
 ## Surfaces — Tier 1
 
 | Surface | Change | Moves with it |
 | --- | --- | --- |
 | Exported Go API (`inscribe`) | the scene, anchors, ops and the overlay | — |
-| Exported Go API (`windowhost`) | `Resolve`, the visibility enum; the overlay framed after the shell chrome; the host-modal flag; "Clear annotations" in the **Window** menu | Agent chrome sets the host-modal flag |
-| `runtime.agent.annotate`, `.clear` | Added | `agent.Service` dispatch, wire types, `HostI`, `agent.Client`, the dispatch test host and the chat's test host |
+| Exported Go API (`windowhost`) | `Resolve`, the visibility enum; the overlay framed after the shell chrome; the host-modal flag; "Clear agent marks" in the **Window** menu | Agent chrome sets the host-modal flag |
+| `runtime.agent.mark`, `.unmark` | Added | `agent.Service` dispatch, wire types, `HostI`, `agent.Client`, the dispatch test host and the chat's test host |
 | Agent chrome | a per-task clear on the task badge | — |
-| Chat coordinator | `annotate` and `clear_annotations` tools; tree parts as targets | Coordinator prompt |
+| Chat coordinator | `point_out` and `clear_marks` tools; tree parts as targets | Coordinator prompt |
 
 ## Alternatives
 
@@ -154,14 +155,15 @@ A model never computes the rect of the second kind; SD4 says where it comes from
 - **Paint primitives (line, rect, text, colour) instead of semantic ops.** Each agent would invent its own style, and the merge of SD7 would have nothing to lay out.
 - **Design-system colours.** Marks would look like app UI, which is both less visible and the spoofing case.
 - **One overlay per agent.** Overlapping labels from separate overlays cannot be laid out together, and the person would have several things to clear.
-- **Observe mode for annotating.** Annotation proposes something to the person, which is what suggest means. Capture stays at observe.
-- **Annotations end with the turn.** The owner chose to leave clearing to the person.
+- **Naming the tool `annotate`.** It names the act, not its purpose, and in a data repository it reads as attaching metadata or labelling data; a model could take it for a write into the app. `point_out` says the mark is for the person to see.
+- **Observe mode for marking.** Mark proposes something to the person, which is what suggest means. Capture stays at observe.
+- **Marks end with the turn.** The owner chose to leave clearing to the person.
 
 ## Consequences
 
 ### Positive
 
-- An annotation follows its window through drags and arrangements without the agent re-sending it.
+- A mark follows its window through drags and arrangements without the agent re-sending it.
 - Every mark looks the same and names its author, whichever agent drew it.
 - What an agent observes through capture is never altered by its own marks.
 

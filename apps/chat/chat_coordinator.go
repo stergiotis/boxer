@@ -104,7 +104,7 @@ const coordinatorPrompt = `You can work in app windows the person shares with yo
 - A task runs for a limited time. When a call says its deadline passed, request_access asks the person for more time; when it says the task ended, request_access starts a new one.
 - keelson('windows') lists every open window — its key, app, title, rect (x, y, w, h), stacking rank, whether it is active or maximized, and the tasks holding it — and keelson('desktop') the work area windows are laid out in; query_windows reads either with a SELECT. arrange_windows lays windows out (cascade, tile, columns, rows, gather), all of them or the ones you name, and needs request_access with desktop true; raise_window and place_window act on a window of your task shared in act mode. A move takes a frame or more: query again to see where windows ended.
 - read_window_tree shows what windows of your task display — buttons, labels, fields, table rows, each with its rect — as of the frame it reads. Use it to see what the person sees; use the app's operations for its state, which the screen may not show.
-- annotate points the person at what you mean — a highlight, a note, an arrow, numbered steps — on parts of a window tree you read, by their tree reference and #node. Marks stay until the person clears them; clear yours when they no longer apply.
+- point_out points the person at what you mean — a highlight, a note, an arrow, numbered steps — on parts of a window tree you read, by their tree reference and #node. Marks stay until the person clears them; clear yours when they no longer apply.
 - A turn has a limited number of rounds of tool calls, and on the last one no tool can be called. Answer as soon as you know enough; when you cannot finish, say what you found and what is left.`
 
 const (
@@ -459,9 +459,9 @@ func (inst *coordinator) fixedTools() (out []openaichat.Tool) {
 			Parameters: toolSchema(`{"type":"object","properties":{"window":{"type":"integer"},"x":{"type":"number"},"y":{"type":"number"},"w":{"type":"number"},"h":{"type":"number"}},"required":["window","x","y","w","h"],"additionalProperties":false}`)},
 		{Name: "read_window_tree", Description: "Read what windows of your task show on screen, as an outline taken from one frame when you call it: each line is a widget — role, name, value — with its rect [x,y wxh] in the coordinates query_windows reports, and last the kind of part that drew it. A table's visible cells print as rows of data. Counts say what is out of view or not drawn; their contents are not in the outline. It shows the pixels, not the app's state: revisions, phase, signals and results come from the app's operations. Observe mode suffices.",
 			Parameters: toolSchema(`{"type":"object","properties":{"windows":{"type":"array","items":{"type":"integer"},"minItems":1,"description":"window numbers, as list_windows gives them"}},"required":["windows"],"additionalProperties":false}`)},
-		{Name: "annotate", Description: "Show the person something on screen: highlight parts, attach a note (callout), draw an arrow from one part to another, mark a numbered step, or dim everything else (spotlight). Name parts by a window tree you read — tree and node, e.g. {\"tree\":\"t1\",\"node\":\"#12.3\"} — or a whole window. The mark follows its window and stays until the person clears it; annotating the same id replaces it. Needs suggest or act mode on the windows. The style is the host's: you choose no colour or position.",
+		{Name: "point_out", Description: "Show the person something on screen: highlight parts, attach a note (callout), draw an arrow from one part to another, mark a numbered step, or dim everything else (spotlight). Name parts by a window tree you read — tree and node, e.g. {\"tree\":\"t1\",\"node\":\"#12.3\"} — or a whole window. The mark follows its window and stays until the person clears it; marking the same id replaces it. Needs suggest or act mode on the windows. The style is the host's: you choose no colour or position.",
 			Parameters: toolSchema(`{"type":"object","properties":{"id":{"type":"string","description":"names the mark within your task"},"op":{"type":"string","enum":["highlight","callout","arrow","step","spotlight"]},"targets":{"type":"array","minItems":1,"maxItems":8,"description":"callout and step take one, arrow two (from, to)","items":{"type":"object","properties":{"tree":{"type":"string","description":"a tree reference, as read_window_tree gave it"},"node":{"type":"string","description":"a part of that tree: #12 or #12.3"},"window":{"type":"integer","description":"a whole window, instead of a tree part"}},"additionalProperties":false}},"text":{"type":"string","description":"the note or label, one short line; callout and step need it"}},"required":["id","op","targets"],"additionalProperties":false}`)},
-		{Name: "clear_annotations", Description: "Remove one of your annotations by id, or all of yours without an id.",
+		{Name: "clear_marks", Description: "Remove one of your marks by id, or all of yours without an id.",
 			Parameters: toolSchema(`{"type":"object","properties":{"id":{"type":"string"}},"additionalProperties":false}`)},
 		{Name: "stop_task", Description: "End your task; the windows you opened pass to the person.",
 			Parameters: toolSchema(`{"type":"object","properties":{},"additionalProperties":false}`)},
@@ -716,10 +716,10 @@ func (inst *coordinator) dispatch(ctx context.Context, o toolOrigin, call openai
 		return inst.readWindowTree(ctx, o, keys)
 	case "arrange_windows", "raise_window", "place_window":
 		return inst.windowVerb(ctx, inst.asked(o, call.Id), call.Name, args)
-	case "annotate":
-		return inst.annotate(ctx, inst.asked(o, call.Id), args)
-	case "clear_annotations":
-		return inst.clearAnnotations(ctx, inst.asked(o, call.Id), str("id"))
+	case "point_out":
+		return inst.pointOut(ctx, inst.asked(o, call.Id), args)
+	case "clear_marks":
+		return inst.clearMarks(ctx, inst.asked(o, call.Id), str("id"))
 	case "stop_task":
 		h := inst.handle()
 		if h == "" {

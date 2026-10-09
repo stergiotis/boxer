@@ -239,8 +239,8 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 		inst.reply(msg.Reply, inst.disclose(msg))
 	case SubjectArrange, SubjectRaise, SubjectPlace:
 		inst.reply(msg.Reply, inst.windowAct(msg))
-	case SubjectAnnotate, SubjectClear:
-		inst.reply(msg.Reply, inst.annotate(msg))
+	case SubjectMark, SubjectUnmark:
+		inst.reply(msg.Reply, inst.mark(msg))
 	default:
 		inst.reply(msg.Reply, wireAck{V: wireVersion, Reason: "no such service"})
 	}

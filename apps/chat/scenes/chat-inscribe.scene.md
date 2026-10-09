@@ -15,7 +15,7 @@ scene:
 
 > **Status: draft — pre-human-review.** Not verified; do not cite as authoritative.
 
-# chat — the coordinator annotates a window
+# chat — the coordinator points out the demo's Clear button
 
 ADR-0297 against the scripted model in
 [chat-inscribe.script.jsonl](./chat-inscribe.script.jsonl): the chat opens
@@ -33,7 +33,7 @@ button as `#8` of the tree; a change to the demo's layout moves it, which
 the first capture shows.
 
 ```jsonl trace
-{"do":"note","text":"chat: the coordinator annotates the demo window"}
+{"do":"note","text":"chat: the coordinator points out the demo's Clear button"}
 {"do":"wait","valueContains":"→ scripted","role":"label"}
 {"do":"click","contains":"Send","role":"button"}
 {"do":"wait","valueContains":"I marked the Clear button","role":"label","settleMs":1500}
@@ -46,7 +46,7 @@ the first capture shows.
 {"do":"click","x":620,"y":34,"settleMs":800,"comment":"raise the chat by the strip of its title bar the cascade leaves uncovered"}
 {"do":"capture","text":"chat-inscribe-behind","settleMs":800}
 {"do":"click","name":"Window","role":"button"}
-{"do":"click","name":"Clear annotations","role":"button","settleMs":600}
+{"do":"click","name":"Clear agent marks","role":"button","settleMs":600}
 {"do":"key","text":"Escape"}
 {"do":"capture","text":"chat-inscribe-cleared","settleMs":800}
 ```

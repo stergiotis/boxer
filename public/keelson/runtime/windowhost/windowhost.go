@@ -317,7 +317,7 @@ type Inst struct {
 	// §SD8); nil hears nothing. Set before the first Frame.
 	opsListener func(key uint64, e opengine.LogEntry)
 
-	// overlay draws the annotations agents ask for (ADR-0297), after every
+	// overlay draws the marks agents ask for (ADR-0297), after every
 	// window; dialogModal is whether the agent chrome drew a modal this
 	// frame, which hides it. Render goroutine.
 	overlay     *inscribe.Overlay

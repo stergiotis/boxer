@@ -215,11 +215,11 @@ func DecorateRenderer(inner func() error, cc ChromeConfig) func() error {
 						c.MemoryResetAreas()
 					}
 					if cc.Host != nil {
-						// Every agent's annotations at once; a task's own
+						// Every agent's marks at once; a task's own
 						// clear is on its badge (ADR-0297 §SD8).
 						c.Separator().Horizontal().Send()
-						if c.Button(ids.PrepareStr("clearAnnotations"), c.Atoms().Text("Clear annotations").Keep()).SendResp().HasPrimaryClicked() {
-							cc.Host.Annotations().ClearAll()
+						if c.Button(ids.PrepareStr("clearMarks"), c.Atoms().Text("Clear agent marks").Keep()).SendResp().HasPrimaryClicked() {
+							cc.Host.Marks().ClearAll()
 						}
 					}
 				}

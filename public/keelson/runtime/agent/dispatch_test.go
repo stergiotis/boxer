@@ -157,7 +157,7 @@ func (inst *fakeHost) RenderSvg(k uint64, recheck func() bool) (string, error) {
 func (inst *fakeHost) RenderPixels(k []uint64, recheck func() bool) (string, error) {
 	return "cap-2", nil
 }
-func (inst *fakeHost) Annotations() *inscribe.Scene {
+func (inst *fakeHost) Marks() *inscribe.Scene {
 	inst.sceneOnce.Do(func() { inst.scene = inscribe.NewScene() })
 	return inst.scene
 }

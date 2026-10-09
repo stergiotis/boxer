@@ -136,10 +136,10 @@ func (inst *Chrome) renderTaskMenu(key uint64, wt windowTask, ids *c.WidgetIdSta
 		// The task's marks on the overlay, cleared by the person (ADR-0297
 		// §SD8); the Window menu clears every task's.
 		if svc.cfg.Host != nil {
-			if n := svc.cfg.Host.Annotations().Count(t.id); n > 0 {
+			if n := svc.cfg.Host.Marks().Count(t.id); n > 0 {
 				if c.Button(ids.PrepareStr("agent-clear-marks-"+t.id+"-"+strconv.FormatUint(key, 10)),
-					c.Atoms().Text("Clear its annotations ("+strconv.Itoa(n)+")").Keep()).SendResp().HasPrimaryClicked() {
-					svc.cfg.Host.Annotations().Clear(t.id, "")
+					c.Atoms().Text("Clear its marks ("+strconv.Itoa(n)+")").Keep()).SendResp().HasPrimaryClicked() {
+					svc.cfg.Host.Marks().Clear(t.id, "")
 				}
 			}
 		}

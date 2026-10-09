@@ -50,8 +50,8 @@ type HostI interface {
 	OpsArrange(command string, keys []uint64) (err error)
 	OpsRaise(key uint64) (err error)
 	OpsPlace(key uint64, x, y, w, h float32) (err error)
-	// Annotations is the overlay's scene (ADR-0297).
-	Annotations() *inscribe.Scene
+	// Marks is the overlay's scene (ADR-0297).
+	Marks() *inscribe.Scene
 }
 
 // ModeE is how far a task may act in one instance (ADR-0269 §SD5).

@@ -60,7 +60,7 @@ type noteHost struct {
 	scene   *inscribe.Scene
 }
 
-func (inst *noteHost) Annotations() *inscribe.Scene {
+func (inst *noteHost) Marks() *inscribe.Scene {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	if inst.scene == nil {

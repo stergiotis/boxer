@@ -12,34 +12,34 @@ func win(k uint64) Anchor { return Anchor{Window: k} }
 
 func TestAPutReplacesByTaskAndIdAndRefusesWhatTheOpDoesNotTake(t *testing.T) {
 	s := NewScene()
-	require.NoError(t, s.Put(Annotation{Task: "a", Id: "x", Op: OpHighlight, Targets: []Anchor{win(1)}}))
-	require.NoError(t, s.Put(Annotation{Task: "a", Id: "x", Op: OpCallout, Targets: []Anchor{win(1)}, Text: "look\nhere"}))
+	require.NoError(t, s.Put(Mark{Task: "a", Id: "x", Op: OpHighlight, Targets: []Anchor{win(1)}}))
+	require.NoError(t, s.Put(Mark{Task: "a", Id: "x", Op: OpCallout, Targets: []Anchor{win(1)}, Text: "look\nhere"}))
 	items := s.Snapshot()
 	require.Len(t, items, 1)
 	assert.Equal(t, OpCallout, items[0].Op)
 	assert.Equal(t, "look here", items[0].Text, "text is single-line")
 
-	assert.Error(t, s.Put(Annotation{Task: "a", Id: "y", Op: OpArrow, Targets: []Anchor{win(1)}}), "an arrow takes two")
-	assert.Error(t, s.Put(Annotation{Task: "a", Id: "y", Op: OpCallout, Targets: []Anchor{win(1)}}), "a callout needs text")
-	assert.Error(t, s.Put(Annotation{Task: "a", Id: "y", Op: OpHighlight, Targets: []Anchor{{}}}), "an anchor has a form")
-	assert.Error(t, s.Put(Annotation{Task: "a", Id: "y", Op: OpHighlight, Targets: []Anchor{win(1)},
+	assert.Error(t, s.Put(Mark{Task: "a", Id: "y", Op: OpArrow, Targets: []Anchor{win(1)}}), "an arrow takes two")
+	assert.Error(t, s.Put(Mark{Task: "a", Id: "y", Op: OpCallout, Targets: []Anchor{win(1)}}), "a callout needs text")
+	assert.Error(t, s.Put(Mark{Task: "a", Id: "y", Op: OpHighlight, Targets: []Anchor{{}}}), "an anchor has a form")
+	assert.Error(t, s.Put(Mark{Task: "a", Id: "y", Op: OpHighlight, Targets: []Anchor{win(1)},
 		Text: strings.Repeat("x", MaxText+1)}))
 }
 
 func TestBudgetsRefuseAndNeverEvict(t *testing.T) {
 	s := NewScene()
 	for i := 0; i < MaxPerTask; i++ {
-		require.NoError(t, s.Put(Annotation{Task: "a", Id: string(rune('a' + i)), Op: OpHighlight, Targets: []Anchor{win(1)}}))
+		require.NoError(t, s.Put(Mark{Task: "a", Id: string(rune('a' + i)), Op: OpHighlight, Targets: []Anchor{win(1)}}))
 	}
-	assert.Error(t, s.Put(Annotation{Task: "a", Id: "over", Op: OpHighlight, Targets: []Anchor{win(1)}}))
-	require.NoError(t, s.Put(Annotation{Task: "b", Id: "x", Op: OpHighlight, Targets: []Anchor{win(1)}}))
+	assert.Error(t, s.Put(Mark{Task: "a", Id: "over", Op: OpHighlight, Targets: []Anchor{win(1)}}))
+	require.NoError(t, s.Put(Mark{Task: "b", Id: "x", Op: OpHighlight, Targets: []Anchor{win(1)}}))
 	assert.Equal(t, MaxPerTask+1, s.Len())
 }
 
 func TestATaskClearsOnlyItsOwnAndKeepsItsHueWhileItHoldsAny(t *testing.T) {
 	s := NewScene()
-	require.NoError(t, s.Put(Annotation{Task: "a", Id: "x", Op: OpHighlight, Targets: []Anchor{win(1)}}))
-	require.NoError(t, s.Put(Annotation{Task: "b", Id: "x", Op: OpHighlight, Targets: []Anchor{win(2)}}))
+	require.NoError(t, s.Put(Mark{Task: "a", Id: "x", Op: OpHighlight, Targets: []Anchor{win(1)}}))
+	require.NoError(t, s.Put(Mark{Task: "b", Id: "x", Op: OpHighlight, Targets: []Anchor{win(2)}}))
 	hues := map[string]int{}
 	for _, it := range s.Snapshot() {
 		hues[it.Task] = it.Hue
@@ -47,7 +47,7 @@ func TestATaskClearsOnlyItsOwnAndKeepsItsHueWhileItHoldsAny(t *testing.T) {
 	assert.NotEqual(t, hues["a"], hues["b"], "two tasks, two hues")
 	assert.Equal(t, 1, s.Clear("a", ""))
 	assert.Equal(t, []string{"b"}, s.Tasks())
-	require.NoError(t, s.Put(Annotation{Task: "b", Id: "y", Op: OpHighlight, Targets: []Anchor{win(2)}}))
+	require.NoError(t, s.Put(Mark{Task: "b", Id: "y", Op: OpHighlight, Targets: []Anchor{win(2)}}))
 	for _, it := range s.Snapshot() {
 		assert.Equal(t, hues["b"], it.Hue)
 	}
@@ -56,7 +56,7 @@ func TestATaskClearsOnlyItsOwnAndKeepsItsHueWhileItHoldsAny(t *testing.T) {
 func TestStepsNumberPerTaskAndAReplacedStepKeepsItsNumber(t *testing.T) {
 	s := NewScene()
 	put := func(task, id string) {
-		require.NoError(t, s.Put(Annotation{Task: task, Id: id, Op: OpStep, Targets: []Anchor{win(1)}, Text: id}))
+		require.NoError(t, s.Put(Mark{Task: task, Id: id, Op: OpStep, Targets: []Anchor{win(1)}, Text: id}))
 	}
 	put("a", "one")
 	put("b", "one")
@@ -71,9 +71,9 @@ func TestStepsNumberPerTaskAndAReplacedStepKeepsItsNumber(t *testing.T) {
 
 func TestClearWindowRetiresWhatPointsAtIt(t *testing.T) {
 	s := NewScene()
-	require.NoError(t, s.Put(Annotation{Task: "a", Id: "x", Op: OpArrow, Targets: []Anchor{win(1), win(2)}}))
-	require.NoError(t, s.Put(Annotation{Task: "a", Id: "y", Op: OpHighlight, Targets: []Anchor{win(3)}}))
-	require.NoError(t, s.Put(Annotation{Task: "b", Id: "x", Op: OpHighlight, Targets: []Anchor{win(2)}}))
+	require.NoError(t, s.Put(Mark{Task: "a", Id: "x", Op: OpArrow, Targets: []Anchor{win(1), win(2)}}))
+	require.NoError(t, s.Put(Mark{Task: "a", Id: "y", Op: OpHighlight, Targets: []Anchor{win(3)}}))
+	require.NoError(t, s.Put(Mark{Task: "b", Id: "x", Op: OpHighlight, Targets: []Anchor{win(2)}}))
 	assert.Equal(t, 1, s.ClearWindow("a", 2))
 	assert.Equal(t, 1, s.ClearWindow("", 2))
 	assert.Equal(t, 1, s.Len())
@@ -83,8 +83,8 @@ func TestNotesOfTwoTasksAreLaidOutClearOfEachOther(t *testing.T) {
 	bounds := Rect{X: 0, Y: 0, W: 1000, H: 800}
 	target := Rect{X: 400, Y: 300, W: 100, H: 40}
 	items := []Resolved{
-		{Item: Item{Annotation: Annotation{Task: "a", Id: "x", Op: OpCallout, Text: "first"}, Hue: 0}, Rects: []Rect{target}, Vis: []VisibilityE{VisibilityShown}},
-		{Item: Item{Annotation: Annotation{Task: "b", Id: "x", Op: OpCallout, Text: "second"}, Hue: 1}, Rects: []Rect{target}, Vis: []VisibilityE{VisibilityShown}},
+		{Item: Item{Mark: Mark{Task: "a", Id: "x", Op: OpCallout, Text: "first"}, Hue: 0}, Rects: []Rect{target}, Vis: []VisibilityE{VisibilityShown}},
+		{Item: Item{Mark: Mark{Task: "b", Id: "x", Op: OpCallout, Text: "second"}, Hue: 1}, Rects: []Rect{target}, Vis: []VisibilityE{VisibilityShown}},
 	}
 	var notes []Rect
 	for _, s := range Layout(items, bounds, EstimateMeasure) {
@@ -101,8 +101,8 @@ func TestNotesOfTwoTasksAreLaidOutClearOfEachOther(t *testing.T) {
 func TestABehindTargetIsDashedAndSpotlightsDimOnceOutsideEveryTarget(t *testing.T) {
 	bounds := Rect{X: 0, Y: 0, W: 100, H: 100}
 	items := []Resolved{
-		{Item: Item{Annotation: Annotation{Task: "a", Op: OpSpotlight}}, Rects: []Rect{{X: 10, Y: 10, W: 10, H: 10}}, Vis: []VisibilityE{VisibilityBehind}},
-		{Item: Item{Annotation: Annotation{Task: "b", Op: OpSpotlight}}, Rects: []Rect{{X: 60, Y: 60, W: 10, H: 10}}, Vis: []VisibilityE{VisibilityShown}},
+		{Item: Item{Mark: Mark{Task: "a", Op: OpSpotlight}}, Rects: []Rect{{X: 10, Y: 10, W: 10, H: 10}}, Vis: []VisibilityE{VisibilityBehind}},
+		{Item: Item{Mark: Mark{Task: "b", Op: OpSpotlight}}, Rects: []Rect{{X: 60, Y: 60, W: 10, H: 10}}, Vis: []VisibilityE{VisibilityShown}},
 	}
 	var dimArea float32
 	dashed := 0

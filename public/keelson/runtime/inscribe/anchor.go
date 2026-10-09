@@ -26,7 +26,7 @@ func (inst Rect) Inside(o Rect) bool {
 	return inst.X >= o.X && inst.Y >= o.Y && inst.MaxX() <= o.MaxX() && inst.MaxY() <= o.MaxY()
 }
 
-// Anchor names what an annotation points at (ADR-0297 §SD2). Exactly one
+// Anchor names what a mark points at (ADR-0297 §SD2). Exactly one
 // form is set: Window alone is the window's outer rect; Window with Local a
 // rect relative to the window's top-left corner; Viewport a rect of the
 // viewport, with Window zero.
@@ -59,7 +59,7 @@ const (
 	// VisibilityPending is a window not shown yet — opened this frame: not
 	// drawn, not retired.
 	VisibilityPending
-	// VisibilityGone is a window that closed: the annotation is retired.
+	// VisibilityGone is a window that closed: the mark is retired.
 	VisibilityGone
 )
 
