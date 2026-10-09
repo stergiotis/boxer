@@ -167,3 +167,64 @@ func dashes(p polyline, dash, gap float32) (x0s, y0s, x1s, y1s []float32) {
 	}
 	return
 }
+
+// sketchEllipse circles a rect the way a pen does: one stroke round an
+// ellipse a little larger than the rect, its radius wandering slowly, ending
+// past where it started.
+func sketchEllipse(rc Rect, r *sketchRng) (out []polyline) {
+	cx, cy := rc.Center()
+	rx := rc.W/2 + min(10, 4+rc.W*0.06)
+	ry := rc.H/2 + min(8, 4+rc.H*0.12)
+	start := float64(r.next()) * math.Pi
+	sweep := 2*math.Pi + 0.35 + float64(r.next())*0.15
+	// Two slow wobbles of the radius, of random phase.
+	p1, p2 := float64(r.next())*math.Pi, float64(r.next())*math.Pi
+	a1, a2 := 0.05+0.02*float64(r.next()), 0.03+0.015*float64(r.next())
+	tilt := float64(r.next()) * 0.05
+	n := int(min(max((rx+ry)/3, 32), 96))
+	p := make(polyline, 0, n+1)
+	for i := 0; i <= n; i++ {
+		t := float64(i) / float64(n)
+		a := start + sweep*t
+		k := 1 + a1*math.Sin(2*a+p1) + a2*math.Sin(3*a+p2)
+		// The last stretch drifts outward a little: the pen overshoots.
+		k += 0.06 * max(0, t-0.85) / 0.15
+		x := float64(rx) * k * math.Cos(a)
+		y := float64(ry) * k * math.Sin(a)
+		xr := x*math.Cos(tilt) - y*math.Sin(tilt)
+		yr := x*math.Sin(tilt) + y*math.Cos(tilt)
+		p = append(p, pt{cx + float32(xr), cy + float32(yr)})
+	}
+	return []polyline{p}
+}
+
+// sketchBrackets marks a large rect — a whole window — by its four corners,
+// each a sketched L.
+func sketchBrackets(rc Rect, r *sketchRng) (out []polyline) {
+	arm := min(40, max(14, min(rc.W, rc.H)*0.12))
+	x0, y0, x1, y1 := rc.X, rc.Y, rc.MaxX(), rc.MaxY()
+	corners := [][4]float32{
+		{x0, y0, 1, 1}, {x1, y0, -1, 1}, {x1, y1, -1, -1}, {x0, y1, 1, -1},
+	}
+	for _, c := range corners {
+		out = append(out, sketchLine(c[0], c[1], c[0]+c[2]*arm, c[1], r)...)
+		out = append(out, sketchLine(c[0], c[1], c[0], c[1]+c[3]*arm, r)...)
+	}
+	return
+}
+
+// swipe is a highlighter's stroke over a row or a line of text: a band a
+// little taller than the rect, slightly slanted, with ragged ends, as a
+// filled polygon.
+func swipe(rc Rect, r *sketchRng) (xs, ys []float32) {
+	padX, padY := float32(6), float32(3)
+	x0, x1 := rc.X-padX, rc.MaxX()+padX
+	top, bottom := rc.Y-padY, rc.MaxY()+padY
+	slant := r.next() * min(3, rc.H*0.15)
+	jag := func() float32 { return r.next() * 3 }
+	// Top edge left to right, ragged right end, bottom edge back, ragged
+	// left end.
+	xs = []float32{x0 + jag(), x1 + jag(), x1 + 3 + jag(), x1 + jag(), x0 + jag(), x0 - 3 + jag()}
+	ys = []float32{top + slant, top - slant, (top+bottom)/2 - slant, bottom - slant, bottom + slant, (top+bottom)/2 + slant}
+	return
+}

@@ -112,6 +112,7 @@ const (
 	dashLen       float32 = 7
 	gapLen        float32 = 5
 	headSize      float32 = 13
+	leaderHead    float32 = 8
 )
 
 func (inst *Overlay) draw(shapes []Shape) {
@@ -121,45 +122,79 @@ func (inst *Overlay) draw(shapes []Shape) {
 		case ShapeDim:
 			c.PaintRectFilled(s.Rect.X, s.Rect.Y, s.Rect.MaxX(), s.Rect.MaxY(), 0, dim).Send()
 		case ShapeOutline:
-			strokes(sketchRect(s.Rect, r), s.Hue, strokeWidth, s.Dashed)
+			drawOutline(s, r)
 		case ShapeArrow:
-			shaft := sketchBow(s.X0, s.Y0, s.X1, s.Y1, r)
-			if len(shaft) == 0 {
-				continue
-			}
-			strokes(shaft, s.Hue, strokeWidth, s.Dashed)
-			// The head follows the shaft's last stretch, solid even when the
-			// shaft is dashed, so the direction still reads.
-			p := shaft[0]
-			a, b := p[len(p)-2], p[len(p)-1]
-			dx, dy := b.X-a.X, b.Y-a.Y
-			n := float32(math.Hypot(float64(dx), float64(dy)))
-			if n > 0 {
-				strokes(sketchHead(s.X1, s.Y1, dx/n, dy/n, headSize, r), s.Hue, strokeWidth, false)
-			}
+			drawArrow(s.X0, s.Y0, s.X1, s.Y1, s.Hue, strokeWidth, headSize, s.Dashed, r)
 		case ShapeLeader:
-			strokes(sketchLine(s.X0, s.Y0, s.X1, s.Y1, r), s.Hue, leaderWidth, false)
+			// A short curved arrow from the note to what it is about.
+			drawArrow(s.X0, s.Y0, s.X1, s.Y1, s.Hue, leaderWidth, leaderHead, false, r)
 		case ShapeBadge:
 			c.PaintCircleFilled(s.X0, s.Y0, badgeR+underlayExtra, underlay).Send()
 			c.PaintCircleFilled(s.X0, s.Y0, badgeR, hueColor(s.Hue)).Send()
 			c.PaintText(s.X0, s.Y0, 1, 1, s.Text, badgeFont, plate).Send()
 		case ShapeTab:
 			rc := s.Rect
-			c.PaintRectFilled(rc.X, rc.Y, rc.MaxX(), rc.MaxY(), 2, plate).Send()
-			c.PaintText(rc.X+tabPad, rc.Y+tabPad, 0, 0, s.Tag, tagFont, hueColor(s.Hue)).Send()
+			c.PaintRectFilled(rc.X+2, rc.Y+2, rc.MaxX()+2, rc.MaxY()+2, 4, shadow).Send()
+			c.PaintRectFilled(rc.X, rc.Y, rc.MaxX(), rc.MaxY(), 4, plate).Send()
+			drawTag(rc.X+tabPad, rc.Y+tabPad, s.Tag, s.Hue)
 		case ShapeNote:
 			rc := s.Rect
-			col := hueColor(s.Hue)
-			c.PaintRectFilled(rc.X, rc.Y, rc.MaxX(), rc.MaxY(), 3, plate).Send()
-			strokes(sketchRect(rc, r), s.Hue, noteBorder, false)
-			c.PaintText(rc.X+notePad, rc.Y+notePad, 0, 0, s.Tag, tagFont, col).Send()
-			if s.Text != "" {
-				_, th := EstimateMeasure(s.Tag, tagFont)
-				c.PaintText(rc.X+notePad, rc.Y+notePad+th+tagRowGap, 0, 0, s.Text, noteFont, plateText).Send()
-			}
+			// A soft shadow, the plate, and the task's hue down its left
+			// edge.
+			c.PaintRectFilled(rc.X+3, rc.Y+4, rc.MaxX()+3, rc.MaxY()+4, 6, shadow).Send()
+			c.PaintRectFilled(rc.X, rc.Y, rc.MaxX(), rc.MaxY(), 6, plate).Send()
+			c.PaintRectFilled(rc.X, rc.Y+3, rc.X+noteAccent, rc.MaxY()-3, 2, hueColor(s.Hue)).Send()
+			x := rc.X + noteAccent + notePad
+			c.PaintText(x, rc.Y+notePad, 0, 0, s.Text, noteFont, plateText).Send()
+			_, th := EstimateMeasure(s.Text, noteFont)
+			drawTag(x, rc.Y+notePad+th+tagRowGap, s.Tag, s.Hue)
 		}
 	}
 	c.PaintAbsoluteOverlay()
+}
+
+// drawTag is a mark's attribution: a dot in the task's hue and the tag,
+// dimmed, so it says who drew the mark without competing with it.
+func drawTag(x, y float32, tag string, hue int) {
+	_, h := EstimateMeasure(tag, tagFont)
+	c.PaintCircleFilled(x+3, y+h/2, 3, hueColor(hue)).Send()
+	c.PaintText(x+tagDot, y, 0, 0, tag, tagFont, tagText).Send()
+}
+
+// drawOutline marks a target in its style: a pen circle, a highlighter
+// swipe, or corner brackets. A target behind another window is a dashed
+// sketch, so it reads as covered.
+func drawOutline(s Shape, r *sketchRng) {
+	switch s.Style {
+	case OutlineSwipe:
+		if s.Dashed {
+			strokes(sketchRect(s.Rect, r), s.Hue, leaderWidth, true)
+			return
+		}
+		xs, ys := swipe(s.Rect, r)
+		c.PaintPolygonFilled(xs, ys, swipeColor(s.Hue)).Send()
+	case OutlineBrackets:
+		strokes(sketchBrackets(s.Rect, r), s.Hue, strokeWidth, s.Dashed)
+	default:
+		strokes(sketchEllipse(s.Rect, r), s.Hue, strokeWidth, s.Dashed)
+	}
+}
+
+// drawArrow is a bowed, sketched shaft with an open head; the head is solid
+// even when the shaft is dashed, so the direction still reads.
+func drawArrow(x0, y0, x1, y1 float32, hue int, w float32, head float32, dashed bool, r *sketchRng) {
+	shaft := sketchBow(x0, y0, x1, y1, r)
+	if len(shaft) == 0 {
+		return
+	}
+	strokes(shaft, hue, w, dashed)
+	p := shaft[0]
+	a, b := p[len(p)-2], p[len(p)-1]
+	dx, dy := b.X-a.X, b.Y-a.Y
+	n := float32(math.Hypot(float64(dx), float64(dy)))
+	if n > 0 {
+		strokes(sketchHead(x1, y1, dx/n, dy/n, head, r), hue, w, false)
+	}
 }
 
 // strokes draws sketched polylines in a hue over a faint underlay, solid or

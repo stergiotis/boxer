@@ -219,3 +219,62 @@ func TestAMarkWithoutTextGetsATabOnItsCornerAndANoteGoesBesideItsWindow(t *testi
 	assert.False(t, note.Rect.Intersects(window), "with desktop beside the window, the note covers none of it")
 	assert.GreaterOrEqual(t, note.Rect.X, window.MaxX())
 }
+
+func TestATargetIsMarkedByWhatItIs(t *testing.T) {
+	button := Rect{X: 0, Y: 0, W: 60, H: 22}
+	row := Rect{X: 0, Y: 0, W: 400, H: 18}
+	assert.Equal(t, OutlineCircle, styleFor(Anchor{Window: 1, Local: &button}, button))
+	assert.Equal(t, OutlineSwipe, styleFor(Anchor{Window: 1, Local: &row}, row))
+	assert.Equal(t, OutlineBrackets, styleFor(Anchor{Window: 1}, Rect{W: 600, H: 400}), "a whole window")
+	big := Rect{W: 500, H: 300}
+	assert.Equal(t, OutlineBrackets, styleFor(Anchor{Window: 1, Local: &big}, big))
+}
+
+func TestACircleAndASwipeCoverTheirTarget(t *testing.T) {
+	rc := Rect{X: 100, Y: 100, W: 80, H: 24}
+	for seed := uint64(1); seed < 20; seed++ {
+		minX, minY, maxX, maxY := float32(1e9), float32(1e9), float32(-1e9), float32(-1e9)
+		for _, p := range sketchEllipse(rc, newSketchRng(seed)) {
+			for _, q := range p {
+				minX, minY, maxX, maxY = min(minX, q.X), min(minY, q.Y), max(maxX, q.X), max(maxY, q.Y)
+			}
+		}
+		assert.True(t, minX <= rc.X && minY <= rc.Y && maxX >= rc.MaxX() && maxY >= rc.MaxY(), "the circle goes round the target")
+		xs, ys := swipe(rc, newSketchRng(seed))
+		assert.LessOrEqual(t, slicesMin(xs), rc.X)
+		assert.GreaterOrEqual(t, slicesMax(xs), rc.MaxX())
+		assert.LessOrEqual(t, slicesMin(ys), rc.Y+3, "the swipe covers the line, give or take its slant")
+		assert.GreaterOrEqual(t, slicesMax(ys), rc.MaxY()-3)
+	}
+}
+
+func slicesMin(v []float32) float32 {
+	m := v[0]
+	for _, x := range v {
+		m = min(m, x)
+	}
+	return m
+}
+
+func slicesMax(v []float32) float32 {
+	m := v[0]
+	for _, x := range v {
+		m = max(m, x)
+	}
+	return m
+}
+
+func TestATabKeepsOffAnotherMarksTarget(t *testing.T) {
+	bounds := Rect{X: 0, Y: 0, W: 1000, H: 800}
+	button := Rect{X: 100, Y: 280, W: 50, H: 22}
+	status := Rect{X: 100, Y: 310, W: 200, H: 18}
+	items := []Resolved{
+		{Item: Item{Mark: Mark{Task: "a", Id: "b", Op: OpCallout, Text: "press"}}, Rects: []Rect{button}, Vis: []VisibilityE{VisibilityShown}},
+		{Item: Item{Mark: Mark{Task: "a", Id: "s", Op: OpHighlight}}, Rects: []Rect{status}, Vis: []VisibilityE{VisibilityShown}},
+	}
+	for _, s := range Layout(items, bounds, nil, EstimateMeasure) {
+		if s.Kind == ShapeTab {
+			assert.False(t, s.Rect.Intersects(button.Inflate(outlineGap)), "the status line's tab is not on the button above it")
+		}
+	}
+}

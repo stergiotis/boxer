@@ -8,7 +8,7 @@ import (
 
 // The overlay's measures, in logical points.
 const (
-	noteFont   float32 = 13
+	noteFont   float32 = 14
 	tagFont    float32 = 10
 	badgeFont  float32 = 11
 	notePad    float32 = 6
@@ -17,6 +17,10 @@ const (
 	badgeR     float32 = 9
 	tagRowGap  float32 = 2
 	tabPad     float32 = 3
+	// noteAccent is the hue bar down a note's left edge; tagDot the hue dot
+	// and gap before the attribution.
+	noteAccent float32 = 4
+	tagDot     float32 = 10
 )
 
 // ShapeKindE is what a Shape draws.
@@ -49,6 +53,34 @@ type Shape struct {
 	// Seed nudges the shape's sketched strokes: from the mark's identity,
 	// so the shape keeps its look from frame to frame.
 	Seed uint64
+	// Style is how an outline marks its target.
+	Style OutlineStyleE
+}
+
+// OutlineStyleE is how a target is marked, by what it is (ADR-0297 §SD6).
+type OutlineStyleE uint8
+
+const (
+	// OutlineCircle is a pen circle round a small target: a button, a cell.
+	OutlineCircle OutlineStyleE = iota
+	// OutlineSwipe is a highlighter swipe over a row or a line of text.
+	OutlineSwipe
+	// OutlineBrackets marks a whole window, or another large target, by its
+	// corners.
+	OutlineBrackets
+)
+
+// styleFor is the outline a target gets: brackets for a whole window or a
+// large area, a swipe for something wide and one line tall, a circle
+// otherwise.
+func styleFor(a Anchor, r Rect) OutlineStyleE {
+	switch {
+	case a.Window != 0 && a.Local == nil, r.W > 320 && r.H > 160:
+		return OutlineBrackets
+	case r.W >= 3*r.H && r.H <= 48:
+		return OutlineSwipe
+	}
+	return OutlineCircle
 }
 
 // Resolved is an item with its targets resolved this frame.
@@ -105,18 +137,15 @@ func Layout(items []Resolved, bounds Rect, windows []Rect, measure MeasureFunc) 
 		if text == "" {
 			// A tab hugging the outline's top-left corner, above it when
 			// there is room.
-			w, h := gw+2*tabPad, gh+2*tabPad
-			box := Rect{X: target.X, Y: target.Y - h, W: w, H: h}
-			if box.Y < bounds.Y {
-				box.Y = target.Y
-			}
+			w, h := tagDot+gw+2*tabPad, gh+2*tabPad
+			box := placeTab(target, w, h, bounds, append(slices.Clone(placed), obstacles(targets, target)...))
 			placed = append(placed, box)
 			notes = append(notes, Shape{Kind: ShapeTab, Hue: it.Hue, Rect: box, Tag: tag})
 			return
 		}
 		tw, th := measure(text, noteFont)
-		w := max(tw, gw) + 2*notePad
-		h := gh + tagRowGap + th + 2*notePad
+		w := max(tw, tagDot+gw) + 2*notePad + noteAccent
+		h := th + tagRowGap + gh + 2*notePad
 		in := append(slices.Clone(placed), obstacles(targets, target)...)
 		box, ok := placeOutside(target, win, w, h, bounds, in, windows)
 		if !ok {
@@ -136,7 +165,12 @@ func Layout(items []Resolved, bounds Rect, windows []Rect, measure MeasureFunc) 
 		leader0, note0 := len(leaders), len(notes)
 		dashed := func(k int) bool { return it.Vis[k] == VisibilityBehind }
 		outline := func(k int) {
-			marks = append(marks, Shape{Kind: ShapeOutline, Hue: it.Hue, Rect: it.Rects[k].Inflate(outlineGap), Dashed: dashed(k)})
+			var a Anchor
+			if k < len(it.Targets) {
+				a = it.Targets[k]
+			}
+			marks = append(marks, Shape{Kind: ShapeOutline, Hue: it.Hue, Rect: it.Rects[k].Inflate(outlineGap), Dashed: dashed(k),
+				Style: styleFor(a, it.Rects[k])})
 		}
 		win := func(k int) Rect {
 			if k < len(it.Windows) {
@@ -206,6 +240,27 @@ func obstacles(targets []Rect, target Rect) (out []Rect) {
 		}
 	}
 	return
+}
+
+// placeTab puts a w × h tab on a corner of target — above its left end,
+// below it, above its right end, below that — the first inside bounds and
+// clear of avoid; otherwise the first, moved inside bounds.
+func placeTab(target Rect, w, h float32, bounds Rect, avoid []Rect) Rect {
+	cands := []Rect{
+		{X: target.X, Y: target.Y - h, W: w, H: h},
+		{X: target.X, Y: target.MaxY(), W: w, H: h},
+		{X: target.MaxX() - w, Y: target.Y - h, W: w, H: h},
+		{X: target.MaxX() - w, Y: target.MaxY(), W: w, H: h},
+	}
+	for _, c := range cands {
+		if c.Inside(bounds) && !hits(c, avoid, 1) {
+			return c
+		}
+	}
+	c := cands[0]
+	c.X = min(max(c.X, bounds.X), bounds.MaxX()-c.W)
+	c.Y = min(max(c.Y, bounds.Y), bounds.MaxY()-c.H)
+	return c
 }
 
 // placeOutside puts a w × h box beside the window holding target, level
