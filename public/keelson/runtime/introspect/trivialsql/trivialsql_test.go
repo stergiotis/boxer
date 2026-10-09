@@ -140,6 +140,17 @@ func TestRun_RefusesWhatNeedsClickHouse(t *testing.T) {
 		"SELECT * FROM values(1, 'a')",
 		"SELECT * FROM values(18446744073709551615, 1.5)",
 		"SELECT * FROM values(NULL, NULL)",
+		// Review of bed494954: a number abutting letters, a point-led
+		// number, an alias without AS, a parenthesised parameter, and a
+		// parameter a SET binds to a value not modelled here.
+		"SELECT 0b11",
+		"SELECT 1_000",
+		"SELECT 1a",
+		"SELECT .5",
+		"SELECT 1 a",
+		"SELECT ({k:UInt64})",
+		"SET param_k = [1]; SELECT {k:UInt8} AS k",
+		"SET param_k = NULL; SELECT * FROM keelson('seq', n = {k:UInt64})",
 		"SELECT v FROM keelson('plain')",
 		"SELECT * FROM keelson('plain') WHERE v = 1",
 		"SELECT * FROM keelson('plain') ORDER BY v",
@@ -167,6 +178,10 @@ func TestRun_RefusesWhatNeedsClickHouse(t *testing.T) {
 func TestRun_CallErrorsAreNotRefusals(t *testing.T) {
 	for _, sql := range []string{
 		"SELECT * FROM values('a UInt8', 300)",
+		"SELECT * FROM values('a Float32', 1e40)",
+		"SELECT * FROM values('a Float32', -3.4028236e38)",
+		"SELECT * FROM values('a UInt64', 1.8446744073709552e19)",
+		"SELECT * FROM values('a Int64', 9.223372036854776e18)",
 		"SELECT * FROM values('a UInt8', -1)",
 		"SELECT * FROM values('a Int32', 1.5)",
 		"SELECT * FROM values('a UInt8', NULL)",

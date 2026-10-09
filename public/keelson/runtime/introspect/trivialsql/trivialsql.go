@@ -126,10 +126,7 @@ func read(reg *introspect.Registry, sql string, params map[string]string, settin
 			return nil, "", err
 		}
 	}
-	params, err = keelsonsql.PreludeParams(sets, params)
-	if err != nil {
-		return nil, "", err
-	}
+	// The scope binds the SET param_ prelude itself.
 	scope, err := keelsonsql.NewConstScope(pr, params)
 	if err != nil {
 		return nil, "", err

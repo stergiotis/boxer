@@ -10,6 +10,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/array"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
+	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
 )
 
 // The formats Run encodes. A text format writes each value as clickhouse-local
@@ -226,67 +227,14 @@ func writeList(buf *bytes.Buffer, a array.ListLike, i int, st styleE) {
 	buf.WriteByte(']')
 }
 
-// writeFloat writes v as ClickHouse does: the shortest text that reads back
-// as v, in positional notation from 1e-6 up to below 1e21 and in exponent
-// notation outside it, with no '+' in an exponent; inf, -inf and nan by
-// name, and null in JSON.
+// writeFloat writes v as ClickHouse's text formats do
+// (keelsonsql.FormatFloat), and a non-finite one as null in JSON.
 func writeFloat(buf *bytes.Buffer, v float64, bits int, st styleE) {
-	switch {
-	case math.IsNaN(v), math.IsInf(v, 0):
-		if st == styleJSON {
-			buf.WriteString("null")
-		} else if math.IsNaN(v) {
-			buf.WriteString("nan")
-		} else if v > 0 {
-			buf.WriteString("inf")
-		} else {
-			buf.WriteString("-inf")
-		}
-		return
-	case v == 0:
-		if math.Signbit(v) {
-			buf.WriteString("-0")
-		} else {
-			buf.WriteByte('0')
-		}
+	if st == styleJSON && (math.IsNaN(v) || math.IsInf(v, 0)) {
+		buf.WriteString("null")
 		return
 	}
-	if v < 0 {
-		buf.WriteByte('-')
-		v = -v
-	}
-	// d.ddde±x: the shortest digits and the exponent of the first one.
-	e := strconv.FormatFloat(v, 'e', -1, bits)
-	mant, expText, _ := strings.Cut(e, "e")
-	exp, _ := strconv.Atoi(expText)
-	digits := strings.Replace(mant, ".", "", 1)
-	k := len(digits)
-	n := exp + 1 // the decimal point's position after the first digit
-	switch {
-	case n > 21 || n <= -6:
-		buf.WriteByte(digits[0])
-		if k > 1 {
-			buf.WriteByte('.')
-			buf.WriteString(digits[1:])
-		}
-		buf.WriteByte('e')
-		buf.WriteString(strconv.Itoa(n - 1))
-	case n >= k:
-		buf.WriteString(digits)
-		for range n - k {
-			buf.WriteByte('0')
-		}
-	case n > 0:
-		buf.WriteString(digits[:n])
-		buf.WriteByte('.')
-		buf.WriteString(digits[n:])
-	default:
-		buf.WriteString("0.")
-		for range -n {
-			buf.WriteByte('0')
-		}
-		buf.WriteString(digits)
-	}
+	buf.WriteString(keelsonsql.FormatFloat(v, bits))
 }
 
 // writeBytes writes a string or binary value: backslash-escaped in

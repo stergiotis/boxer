@@ -87,7 +87,7 @@ func TestTrivialSQL_AnswersAsClickHouseDoes(t *testing.T) {
 	e := newEngineWithBroker(t)
 	require.NoError(t, e.reg.Register(seqProvider{}))
 	require.NoError(t, e.reg.Register(mixProvider{}))
-	params := map[string]string{"k": "4"}
+	params := map[string]string{"k": "4", "f": "0.1"}
 	for _, sql := range []string{
 		"SELECT * FROM keelson('seq', n = 3) FORMAT TabSeparated",
 		"SELECT * FROM keelson('seq', n = {k:UInt64}) LIMIT 2 OFFSET 1 FORMAT TabSeparated",
@@ -126,6 +126,17 @@ func TestTrivialSQL_AnswersAsClickHouseDoes(t *testing.T) {
 		"WITH 'a UInt8' AS s, 4 AS k SELECT *, 'v' AS t FROM values(s, k, {k:UInt8}) FORMAT TabSeparatedWithNames",
 		"WITH t AS (SELECT * FROM values('a String', 'p', 'q')) SELECT * FROM t LIMIT 1, 1 FORMAT TabSeparated",
 		"SET param_k = 3; SELECT {k:UInt8} AS k, * FROM values('a UInt8', {k:UInt8}) FORMAT TabSeparatedWithNames",
+		// Review of bed494954.
+		"SET param_ids = [1, 2], param_k = 2; SELECT * FROM keelson('seq', n = {k:UInt64}) FORMAT TabSeparated",
+		"SET param_k = 1.50; SELECT {k:String} AS k FORMAT TabSeparated",
+		"SET param_k = 1e3, param_j = -0.0, param_i = 0x10; SELECT {k:String} AS k, {j:String} AS j, {i:String} AS i FORMAT TabSeparated",
+		"SELECT * FROM values('a Float32', 3.4028234e38, inf, -inf, 1e-50, 16777217) FORMAT TabSeparated",
+		"SELECT * FROM values('a UInt64', 1.8446744073709550e19, 0.0) FORMAT TabSeparated",
+		"SELECT * FROM values('a Int8, b Int64', (-128.0, -9.223372036854775e18)) FORMAT TabSeparated",
+		"SELECT * FROM values({f:Float32}, 1) FORMAT TabSeparatedWithNames",
+		"SELECT * FROM values({f:Float32}, 300, NULL) FORMAT JSONEachRow",
+		"SELECT * FROM values({f:Float32}, 70000) FORMAT TabSeparatedWithNames",
+		"SELECT * FROM values({f:Float32}, 2.5) FORMAT TabSeparatedWithNames",
 	} {
 		want, _, err := e.QueryParams(context.Background(), sql, "", params)
 		require.NoError(t, err, sql)

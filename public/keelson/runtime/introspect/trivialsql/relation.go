@@ -2,6 +2,7 @@ package trivialsql
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 
 	"github.com/apache/arrow-go/v18/arrow"
@@ -140,8 +141,11 @@ func (inst *evaluator) projection(sel *grammar1.SelectStmtContext) (items []proj
 			}
 			items = append(items, projItem{star: true})
 		case *grammar1.ColumnsExprColumnContext:
+			if keelsonsql.IsBareAlias(col.ColumnExpr()) {
+				return nil, refuse("an alias without AS (" + col.GetText() + ")")
+			}
 			expr, name, aliased := keelsonsql.Aliased(col.ColumnExpr())
-			if _, isParam := expr.(*grammar1.ColumnExprParamSlotContext); isParam && !aliased {
+			if !aliased && isParam(expr) {
 				return nil, refuse("a parameter without AS, which ClickHouse names _CAST(…)")
 			}
 			var v keelsonsql.Constant
@@ -163,10 +167,25 @@ func (inst *evaluator) projection(sel *grammar1.SelectStmtContext) (items []proj
 	return
 }
 
+// isParam reports a {slot:Type} parameter, parenthesised or not.
+func isParam(e grammar1.IColumnExprContext) bool {
+	for {
+		switch v := e.(type) {
+		case *grammar1.ColumnExprParensContext:
+			e = v.ColumnExpr()
+		case *grammar1.ColumnExprParamSlotContext:
+			return true
+		default:
+			return false
+		}
+	}
+}
+
 // constantErr is a refusal for an expression that is not a constant, and
 // err itself otherwise.
 func constantErr(err error) error {
-	if nc, ok := err.(*keelsonsql.NotConstantError); ok {
+	var nc *keelsonsql.NotConstantError
+	if errors.As(err, &nc) {
 		return refuse(nc.Found)
 	}
 	return err
@@ -183,10 +202,7 @@ func defaultName(v keelsonsql.Constant) (name string) {
 	var buf bytes.Buffer
 	switch {
 	case v.Type.IsFloat():
-		writeFloat(&buf, v.Float, 64, styleTSV)
-		if strings.Trim(buf.String(), "-0123456789") == "" {
-			buf.WriteByte('.')
-		}
+		buf.WriteString(keelsonsql.FloatFieldText(v.Float))
 	case v.Type == keelsonsql.ScalarTypeString:
 		writeBytes(&buf, []byte(v.Str), styleQuoted)
 	default:
@@ -220,7 +236,7 @@ func (inst *evaluator) from(fc *grammar1.FromClauseContext, visible int) (batch 
 		case keelsonsql.IsCall(f):
 			p, raw, rErr := keelsonsql.ResolveCall(inst.reg, f, inst.scope)
 			if rErr != nil {
-				return nil, rErr
+				return nil, constantErr(rErr)
 			}
 			return introspect.SnapshotCall(p, introspect.AllColumns(), raw)
 		case f.Identifier() != nil && strings.EqualFold(f.Identifier().GetText(), "values"):

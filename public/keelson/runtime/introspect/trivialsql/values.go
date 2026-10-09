@@ -168,15 +168,16 @@ func splitTopLevel(s string) (parts []string) {
 
 // inferColumns is values() without a structure: columns c1, c2, … whose
 // type is the least type every row's value converts to, as ClickHouse finds
-// it — a UInt wide enough, an Int when one is negative, Float64 when a
-// float joins integers of at most 32 bits — and Nullable when one is NULL.
+// it — a UInt wide enough, an Int when one is negative, Float32 when every
+// float is one and the integers are at most 16 bits, Float64 when a float
+// joins integers of at most 32 bits — and Nullable when one is NULL.
 // Types with no such common type are refused, where ClickHouse would fail.
 func inferColumns(rows [][]keelsonsql.Constant) (cols []valuesColumn, err error) {
 	width := len(rows[0])
 	for c := range width {
 		col := valuesColumn{name: "c" + strconv.Itoa(c+1)}
-		var uBits, sBits, intBits int
-		var hasFloat, hasString, hasBool, hasValue bool
+		var uBits, sBits, intBits, floatBits int
+		var hasString, hasBool, hasValue bool
 		for _, row := range rows {
 			if c >= len(row) {
 				return nil, eb.Build().Errorf("trivialsql: values() rows differ in their number of values")
@@ -195,14 +196,14 @@ func inferColumns(rows [][]keelsonsql.Constant) (cols []valuesColumn, err error)
 				sBits = max(sBits, v.Type.Bits())
 				intBits = max(intBits, v.Type.Bits())
 			case v.Type.IsFloat():
-				hasFloat = true
+				floatBits = max(floatBits, v.Type.Bits())
 			case v.Type == keelsonsql.ScalarTypeString:
 				hasString = true
 			case v.Type == keelsonsql.ScalarTypeBool:
 				hasBool = true
 			}
 		}
-		hasInt := intBits > 0
+		hasInt, hasFloat := intBits > 0, floatBits > 0
 		switch {
 		case !hasValue:
 			return nil, refuse("a values() column holding only NULL")
@@ -214,6 +215,10 @@ func inferColumns(rows [][]keelsonsql.Constant) (cols []valuesColumn, err error)
 			return nil, refuse("a values() column mixing " + mixed(hasInt, hasFloat, hasString, hasBool))
 		case hasFloat && intBits == 64:
 			return nil, refuse("a values() column mixing 64-bit integers and floats")
+		case floatBits == 32 && intBits <= 16:
+			// Float32 holds every value when the integers need at most
+			// its 24 mantissa bits, and ClickHouse keeps it.
+			col.t = keelsonsql.ScalarTypeFloat32
 		case hasFloat:
 			col.t = keelsonsql.ScalarTypeFloat64
 		case sBits == 0:
@@ -269,9 +274,9 @@ func signedOfBits(bits int) keelsonsql.ScalarTypeE {
 
 // convert is v as a value of col, as ClickHouse converts a values() row: an
 // integer or an integral float into an integer type it fits, a number into
-// a float, a string into any type by reading it, an integer into String by
-// its digits, 0 and 1 into Bool, and NULL only into a Nullable column. Any
-// other pairing is refused.
+// a float (a finite one only within Float32's range), a string into any
+// type by reading it, an integer into String by its digits, 0 and 1 into
+// Bool, and NULL only into a Nullable column. Any other pairing is refused.
 func convert(v keelsonsql.Constant, col valuesColumn) (out keelsonsql.Constant, err error) {
 	t := col.t
 	out = keelsonsql.Constant{Type: t}
@@ -327,13 +332,15 @@ func convert(v keelsonsql.Constant, col valuesColumn) (out keelsonsql.Constant, 
 		if f != math.Trunc(f) || math.IsInf(f, 0) || math.IsNaN(f) {
 			return out, outOfRange(v, col)
 		}
+		// The bounds are powers of two, exact as float64; MaxUint64 and
+		// MaxInt64 are not, and round up to them.
 		if t.IsUnsigned() {
-			if f < 0 || f > float64(maxUnsigned(t)) {
+			if f < 0 || f >= math.Ldexp(1, t.Bits()) {
 				return out, outOfRange(v, col)
 			}
 			out.Uint = uint64(f)
 		} else {
-			if f < float64(-maxSigned(t)-1) || f > float64(maxSigned(t)) {
+			if f < -math.Ldexp(1, t.Bits()-1) || f >= math.Ldexp(1, t.Bits()-1) {
 				return out, outOfRange(v, col)
 			}
 			out.Int = int64(f)
@@ -351,6 +358,11 @@ func convert(v keelsonsql.Constant, col valuesColumn) (out keelsonsql.Constant, 
 			return out, refuse("a values() " + v.Type.String() + " in a " + t.String() + " column")
 		}
 		if t == keelsonsql.ScalarTypeFloat32 {
+			// A finite value beyond Float32's range is ClickHouse's error,
+			// not an infinity; a smaller one rounds, to 0 if need be.
+			if !math.IsInf(out.Float, 0) && math.Abs(out.Float) > math.MaxFloat32 {
+				return out, outOfRange(v, col)
+			}
 			out.Float = float64(float32(out.Float))
 		}
 		return out, nil

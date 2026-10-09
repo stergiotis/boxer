@@ -126,11 +126,15 @@ func TopLevelSets(pr *nanopass.ParseResult) (sets []grammar1.ISetStmtContext) {
 // copy of params, as ClickHouse binds them: a later SET wins over an earlier
 // one and over the request's own param_<name>. A string literal's value is
 // the literal decoded, which paramText then reads again as the parameter's
-// text, as ClickHouse does. A SET of anything but a parameter is skipped;
-// whether it is allowed is the caller's policy.
-func PreludeParams(sets []grammar1.ISetStmtContext, params map[string]string) (out map[string]string, err error) {
+// text, as ClickHouse does; a number's is its value as ClickHouse spells it
+// (1.50 binds 1.5, 1e3 binds 1000.). A value that is not a scalar literal —
+// an array, a tuple, NULL — is not modelled: its slot is returned in opaque
+// instead, so that only a constant that reads it fails, and the statement
+// otherwise runs. A SET of anything but a parameter is skipped; whether it
+// is allowed is the caller's policy.
+func PreludeParams(sets []grammar1.ISetStmtContext, params map[string]string) (out map[string]string, opaque map[string]struct{}, err error) {
 	if len(sets) == 0 {
-		return params, nil
+		return params, nil, nil
 	}
 	out = make(map[string]string, len(params)+len(sets))
 	for k, v := range params {
@@ -142,44 +146,47 @@ func PreludeParams(sets []grammar1.ISetStmtContext, params map[string]string) (o
 			if !isParam {
 				continue
 			}
-			var v string
-			v, err = settingText(se.SettingValue())
-			if err != nil {
-				return nil, eb.Build().Str("param", slot).Errorf("%w", err)
+			v, scalar, sErr := settingText(se.SettingValue())
+			if sErr != nil {
+				return nil, nil, eb.Build().Str("param", slot).Errorf("%w", sErr)
 			}
+			if !scalar {
+				delete(out, slot)
+				if opaque == nil {
+					opaque = make(map[string]struct{})
+				}
+				opaque[slot] = struct{}{}
+				continue
+			}
+			delete(opaque, slot)
 			out[slot] = v
 		}
 	}
 	return
 }
 
-// settingText is a SET's literal value as text: a string decoded, a number
-// as written, a hexadecimal one in decimal.
-func settingText(sv grammar1.ISettingValueContext) (text string, err error) {
+// settingText is a SET's scalar literal value as the text ClickHouse binds:
+// a string decoded, a number as its value spelled — an integer in decimal,
+// a float as FloatFieldText. scalar is false for any other value.
+func settingText(sv grammar1.ISettingValueContext) (text string, scalar bool, err error) {
 	sl, ok := sv.(*grammar1.SettingLiteralContext)
 	if !ok {
-		return "", eb.Build().Str("value", sv.GetText()).Errorf("keelsonsql: a SET param_ value must be a literal")
+		return "", false, nil
 	}
 	lit := sl.Literal()
 	switch {
 	case lit.STRING_LITERAL() != nil:
-		return unquoteString(lit.GetText()), nil
+		return unquoteString(lit.GetText()), true, nil
 	case lit.NumberLiteral() != nil:
-		text = lit.GetText()
-		if nl := lit.NumberLiteral(); nl.HEXADECIMAL_LITERAL() != nil {
-			neg := nl.DASH() != nil
-			digits := nl.HEXADECIMAL_LITERAL().GetText()
-			u, pErr := strconv.ParseUint(digits, 0, 64)
-			if pErr != nil {
-				return "", eb.Build().Str("value", text).Errorf("keelsonsql: a SET param_ value does not read as a number: %w", pErr)
-			}
-			text = strconv.FormatUint(u, 10)
-			if neg {
-				text = "-" + text
-			}
+		c, nErr := numberConstant(lit.GetText())
+		if nErr != nil {
+			return "", false, eb.Build().Str("value", lit.GetText()).Errorf("keelsonsql: a SET param_ value does not read as a number: %w", nErr)
 		}
-		return text, nil
-	default:
-		return "", eb.Build().Str("value", lit.GetText()).Errorf("keelsonsql: a SET param_ value cannot be NULL")
+		if c.Type.IsFloat() {
+			return FloatFieldText(c.Float), true, nil
+		}
+		text, err = c.Text()
+		return text, true, err
 	}
+	return "", false, nil
 }

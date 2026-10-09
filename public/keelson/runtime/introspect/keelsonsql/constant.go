@@ -207,21 +207,28 @@ func (inst *NotConstantError) Is(target error) bool { return target == ErrNotCon
 func notConstant(found string) error { return &NotConstantError{Found: found} }
 
 // ConstScope is what a constant expression may name: the run's parameters,
-// already folded with any SET prelude (PreludeParams), and the statement's
-// WITH constants.
+// folded with the statement's SET prelude (PreludeParams), and its WITH
+// constants.
 type ConstScope struct {
 	Params map[string]string
+	// opaque are parameters a SET bound to a value not modelled here.
+	opaque map[string]struct{}
 	with   map[string]Constant
 	// notConst are WITH aliases of expressions that are not constants.
 	notConst map[string]struct{}
 }
 
-// NewConstScope reads the WITH constants of the statement pr parsed —
-// `WITH <constant> AS name`, each able to name the ones before it — into a
-// scope over params. A WITH item that is not a constant is no error here;
-// naming it where a constant is needed is.
+// NewConstScope reads the statement pr parsed into a scope over params: its
+// `SET param_` prelude folded in (PreludeParams), then its WITH constants —
+// `WITH <constant> AS name`, each able to name the ones before it. A WITH
+// item that is not a constant is no error here; naming it where a constant
+// is needed is.
 func NewConstScope(pr *nanopass.ParseResult, params map[string]string) (scope *ConstScope, err error) {
-	scope = &ConstScope{Params: params}
+	scope = &ConstScope{}
+	scope.Params, scope.opaque, err = PreludeParams(TopLevelSets(pr), params)
+	if err != nil {
+		return nil, err
+	}
 	qs, ok := pr.Tree.(*grammar1.QueryStmtContext)
 	if !ok {
 		return
@@ -284,20 +291,23 @@ func IsNotConstant(err error) bool {
 	return ok
 }
 
-// Aliased splits `expr AS name` (or `expr name`); aliased is false for an
-// expression without one.
+// Aliased splits `expr AS name`; aliased is false for an expression without
+// one. An alias without AS (`expr name`) is not split, so it is no constant:
+// the grammar reads 0b11 and 1_000 as a number and such an alias (b11,
+// _000), which ClickHouse reads as one number, and only AS keeps the two
+// apart.
 func Aliased(e grammar1.IColumnExprContext) (expr grammar1.IColumnExprContext, name string, aliased bool) {
 	a, ok := e.(*grammar1.ColumnExprAliasContext)
-	if !ok {
+	if !ok || a.AS() == nil || a.Identifier() == nil {
 		return e, "", false
 	}
-	switch {
-	case a.Identifier() != nil:
-		name = a.Identifier().GetText()
-	case a.Alias() != nil:
-		name = a.Alias().GetText()
-	}
-	return a.ColumnExpr(), nanopass.DecodeIdentifier(name), true
+	return a.ColumnExpr(), nanopass.DecodeIdentifier(a.Identifier().GetText()), true
+}
+
+// IsBareAlias reports `expr name`, an alias without AS.
+func IsBareAlias(e grammar1.IColumnExprContext) bool {
+	a, ok := e.(*grammar1.ColumnExprAliasContext)
+	return ok && a.AS() == nil
 }
 
 // EvalConstant evaluates e, which must be an inline constant: a number or
@@ -379,6 +389,9 @@ func numberConstant(text string) (c Constant, err error) {
 		body = body[1:]
 	}
 	lower := strings.ToLower(body)
+	if strings.HasPrefix(body, ".") {
+		return c, notConstant("the number " + text + ", which starts with a point")
+	}
 	switch {
 	case lower == "inf" || lower == "nan":
 		c = Constant{Type: ScalarTypeFloat64, Float: math.Inf(1)}
@@ -437,6 +450,9 @@ func paramConstant(ps *grammar1.ParamSlotContext, scope *ConstScope) (c Constant
 	}
 	var raw string
 	if scope != nil {
+		if _, isOpaque := scope.opaque[slot]; isOpaque {
+			return c, notConstant("the parameter " + slot + ", which a SET binds to a value that is not a scalar literal")
+		}
 		raw, ok = scope.Params[slot]
 	}
 	if !ok {
@@ -452,6 +468,72 @@ func paramConstant(ps *grammar1.ParamSlotContext, scope *ConstScope) (c Constant
 	}
 	c.Origin = ConstOriginParam
 	return
+}
+
+// FormatFloat writes v as ClickHouse's text formats do: the shortest text
+// that reads back as v at its width, in positional notation from 1e-6 up to
+// below 1e21 and in exponent notation outside it, with no '+' in an
+// exponent; inf, -inf and nan by name, and -0 keeping its sign.
+func FormatFloat(v float64, bits int) string {
+	switch {
+	case math.IsNaN(v):
+		return "nan"
+	case math.IsInf(v, 1):
+		return "inf"
+	case math.IsInf(v, -1):
+		return "-inf"
+	case v == 0:
+		if math.Signbit(v) {
+			return "-0"
+		}
+		return "0"
+	}
+	var sb strings.Builder
+	if v < 0 {
+		sb.WriteByte('-')
+		v = -v
+	}
+	// d.ddde±x: the shortest digits and the exponent of the first one.
+	e := strconv.FormatFloat(v, 'e', -1, bits)
+	mant, expText, _ := strings.Cut(e, "e")
+	exp, _ := strconv.Atoi(expText)
+	digits := strings.Replace(mant, ".", "", 1)
+	k := len(digits)
+	n := exp + 1 // the decimal point's position after the first digit
+	switch {
+	case n > 21 || n <= -6:
+		sb.WriteByte(digits[0])
+		if k > 1 {
+			sb.WriteByte('.')
+			sb.WriteString(digits[1:])
+		}
+		sb.WriteByte('e')
+		sb.WriteString(strconv.Itoa(n - 1))
+	case n >= k:
+		sb.WriteString(digits)
+		sb.WriteString(strings.Repeat("0", n-k))
+	case n > 0:
+		sb.WriteString(digits[:n])
+		sb.WriteByte('.')
+		sb.WriteString(digits[n:])
+	default:
+		sb.WriteString("0.")
+		sb.WriteString(strings.Repeat("0", -n))
+		sb.WriteString(digits)
+	}
+	return sb.String()
+}
+
+// FloatFieldText is a float literal's value as ClickHouse spells it outside
+// a text format — a column's default name, a SET param_ value bound as
+// text: FormatFloat with a trailing point when that reads as an integer
+// (1000., -0.).
+func FloatFieldText(v float64) string {
+	s := FormatFloat(v, 64)
+	if strings.Trim(s, "-0123456789") == "" {
+		s += "."
+	}
+	return s
 }
 
 // ParseAs reads text as a value of t.

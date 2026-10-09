@@ -103,8 +103,10 @@ natively through the introspection engine.
   than leaving it out. It evaluates nothing: it resolves arguments (SD2),
   calls the provider and encodes the record.
 
-  What it does answer, it answers as clickhouse-local does, and what it
-  cannot answer that way it refuses rather than approximates:
+  It supports a known, strict subset of what ClickHouse accepts. What it
+  answers, it answers as clickhouse-local does; a statement it cannot show
+  it answers that way is refused, not approximated — a refusal costs one
+  statement, a divergence costs trust in every answer:
   - **Formats** are a closed set: ArrowStream, TabSeparated and CSV (each
     also `WithNames`), and JSONEachRow, matched as ClickHouse matches a
     format name. The text formats render a value as clickhouse-local renders
@@ -134,7 +136,13 @@ natively through the introspection engine.
     error of the statement. A shape whose ClickHouse answer is not modelled
     is refused: NULL as a column, an unaliased parameter (named `_CAST(…)`),
     a name given twice, a WITH constant named like a column, a `values()`
-    type outside the scalars above.
+    type outside the scalars above. An alias needs `AS`: without it the
+    grammar reads `0b11` or `1_000` as a number and an alias, where
+    ClickHouse reads one number.
+  - **A `SET param_` value** binds as ClickHouse binds it — a string decoded,
+    a number as its value spelled (`1.50` binds `1.5`). A value that is not
+    a scalar literal (an array, a tuple, NULL) is not modelled: the
+    statement runs, on both paths, unless a constant reads that parameter.
   - **A WITH constant is a keelson() argument value** as a literal is, on
     both paths (SD2), so `WITH 4 AS k SELECT * FROM keelson('t', n = k)`
     runs the same natively.

@@ -286,12 +286,9 @@ func ExpandWithArgs(reg *introspect.Registry, sealedBaseURL, sql string, params 
 	if len(calls) == 0 {
 		return sql, nil, nil
 	}
-	// A `SET param_<name>` prelude binds as a request's param_<name> does;
-	// it stays in the statement for the engine, which binds it too.
-	params, err = PreludeParams(TopLevelSets(pr), params)
-	if err != nil {
-		return "", nil, err
-	}
+	// A `SET param_<name>` prelude binds as a request's param_<name> does
+	// (NewConstScope); it stays in the statement for the engine, which
+	// binds it too.
 	scope, err := NewConstScope(pr, params)
 	if err != nil {
 		return "", nil, err
