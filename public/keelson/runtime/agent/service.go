@@ -110,6 +110,10 @@ type Service struct {
 	// events carries what hear queues to the publisher.
 	events     chan wireEvent
 	eventsDone chan struct{}
+
+	// moderation is the moderators' levers and questions (ADR-0300 §SD8,
+	// §SD9).
+	moderation moderation
 }
 
 // NewService subscribes the service. The caller MUST invoke Close.
@@ -145,6 +149,12 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 		err = eh.Errorf("agent: subscribe to closing instances: %w", err)
 		return nil, err
 	}
+	if err = s.subscribeModerate(); err != nil {
+		s.unsub()
+		s.unsubClosed()
+		_ = s.busClient.Close()
+		return nil, err
+	}
 	return
 }
 
@@ -160,6 +170,9 @@ func (inst *Service) Close() {
 		}
 		if inst.unsubClosed != nil {
 			inst.unsubClosed()
+		}
+		if inst.moderation.unsub != nil {
+			inst.moderation.unsub()
 		}
 		close(inst.events)
 		<-inst.eventsDone

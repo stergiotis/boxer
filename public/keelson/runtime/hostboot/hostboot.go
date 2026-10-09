@@ -678,6 +678,10 @@ func (rt *Runtime) bootWindowHost() (err error) {
 		logger.Info().Str("id", string(s.AppId)).Str("kind", s.Kind).Msg("windowhost seed: opened configured window")
 	}
 	rt.Host = host
+	// The model service orders its queue by window state (ADR-0300 §SD6).
+	if rt.LLM != nil {
+		rt.LLM.SetWindows(llmWindowClass{host: host})
+	}
 
 	// Distinct id stacks for the body (reset at the top of each Frame), the
 	// Apps menu (rendered in the top bar before the body's reset) and the
@@ -845,7 +849,13 @@ func (rt *Runtime) bootAgent() {
 	}
 	if rt.LLM != nil {
 		rt.LLM.SetDelegation(svc)
+		// A moderator's questions to the person go through the dispatcher's
+		// dialog (ADR-0300 §SD9).
+		rt.LLM.SetAsker(llmAsker{svc: svc})
 	}
+	// The moderators may stop tasks and lower their ceilings (ADR-0300
+	// §SD8), as they may write the model service's rules.
+	svc.SetModerators(llm.ParseTrustedHosts(llm.Moderators.Get()))
 	// The dataset service records an agent-caused bundle operation under
 	// the call context the dispatcher attests (ADR-0288 §SD5).
 	if rt.Adhoc != nil {

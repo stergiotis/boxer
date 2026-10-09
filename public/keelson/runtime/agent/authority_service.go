@@ -80,6 +80,13 @@ func (inst *Service) authority(msg *app.Msg) (rep wireAuthorityReply) {
 // checked against it as they arrive, and proposals waiting on the person
 // that it no longer allows end. The caller holds mu.
 func (inst *Service) setCeiling(t *task, c Ceiling) {
+	inst.setCeilingBy(t, c, "person", "")
+}
+
+// setCeilingBy is setCeiling recording who moved the ceiling and why: the
+// person through the coordinator's settings, or a moderator lowering it
+// (ADR-0300 §SD8). The caller holds mu.
+func (inst *Service) setCeilingBy(t *task, c Ceiling, by string, why string) {
 	c = c.normal()
 	if t.ceiling != nil && *t.ceiling == c {
 		return
@@ -93,7 +100,10 @@ func (inst *Service) setCeiling(t *task, c Ceiling) {
 			rec.outcome = phaseOutcome(opwire.PhaseRefused, why)
 		}
 	}
-	inst.grantEvent(trail.GrantEventCeiling, "person", "the chat's settings: "+c.Level().String(), t, nil)
+	if why == "" {
+		why = "the chat's settings"
+	}
+	inst.grantEvent(trail.GrantEventCeiling, by, why+": "+c.Level().String(), t, nil)
 }
 
 // modeOf is the mode an entry acts in: its own, and no higher than the

@@ -276,6 +276,11 @@ func dialogHeading(title string, width float32) {
 // cover the dialog asking for it).
 func (inst *Chrome) RenderDialogs(ids *c.WidgetIdStack) {
 	svc := inst.svc
+	// One modal at a time: a moderator's question waits behind nothing
+	// and holds the others back until it is answered.
+	if inst.renderQuestion(ids) {
+		return
+	}
 	svc.mu.Lock()
 	open := svc.pending()
 	confirms := svc.proposals(0, true)
