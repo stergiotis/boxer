@@ -167,6 +167,14 @@ See [DOCUMENTATION_STANDARD §1 ADR](../../doc/DOCUMENTATION_STANDARD.md#archite
   what's committed (16 files, column-alignment padding only) — left as found
   rather than folded into a rename commit; recorded here so it isn't lost.
 
+- **2026-10-08 — N7 exempts `package_props.go`.** ADR-0080 fixes that
+  basename: the packageprops harvester and its drift check find a package's
+  declarations by it, so an app-prefixed copy would leave the generated table.
+  The first apps to carry one (agentconsole, appstate, opsdemo) failed N7 for
+  following ADR-0080. The exemption joins `main.go`, `doc.go` and
+  `app_register.go` in `n7Exempt` rather than the baseline, since a baseline
+  entry would grandfather three files and fail the next app that adds one.
+
 ## References
 
 - [ADR-0035 — keelson namespace introduction](0035-keelson-namespace-introduction.md) — motivates `apps/` top-level layout enforced by rule N7.

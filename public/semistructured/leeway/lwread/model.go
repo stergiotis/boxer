@@ -33,6 +33,9 @@ type Item struct {
 type Value struct {
 	// Column is the value column's name.
 	Column string
+	// HandleColumn is the column as its physical name spells it, which a
+	// handle names it by; Column when the name does not say.
+	HandleColumn string
 	// Type is the canonical type of the column, of one item for a list or
 	// set.
 	Type  string
@@ -66,6 +69,11 @@ type Attribute struct {
 	// Section is the section the attribute is in; for a plain column, the
 	// plain item type.
 	Section string
+	// HandleSection is the section as the physical column names spell it —
+	// u32Array where Section is u32-array — which is what a handle and
+	// LW_GET name it by, as leeway.columns and the Table's headers do;
+	// Section when the names do not say.
+	HandleSection string
 	// CoGroup is the co-section group the section belongs to.
 	CoGroup string
 	// Plain is set for a plain column, which every record carries once.

@@ -36,8 +36,9 @@ func projectionSnapFixture(t *testing.T) (ps projectionOpsSnap) {
 		neighbours: 15, minCluster: 10, summary: "60 nodes"}
 }
 
-// get_projection reads the clusters with their sizes and noise, and a page
-// of points with their row, cluster, probability and position.
+// get_projection reads the clusters with their sizes and noise, and on
+// request a page of points with their row, cluster, probability and
+// position.
 func TestGetProjectionReadsClustersAndPoints(t *testing.T) {
 	ps := projectionSnapFixture(t)
 	st, err := projectionState(ps, ProjectionArgs{})
@@ -47,7 +48,13 @@ func TestGetProjectionReadsClustersAndPoints(t *testing.T) {
 	require.EqualValues(t, 10, st.Noise)
 	require.EqualValues(t, 60, st.Projected)
 	require.Equal(t, "settled", st.Layout)
-	require.Len(t, st.Points, 60, "the default page holds them all")
+	require.Empty(t, st.Points, "points come only on request")
+	require.EqualValues(t, 60, st.PointsTotal)
+	require.Empty(t, st.Discarded)
+
+	st, err = projectionState(ps, ProjectionArgs{Points: 60})
+	require.NoError(t, err)
+	require.Len(t, st.Points, 60)
 	require.Equal(t, ProjectionPoint{Row: 100, Cluster: 1, Probability: 0.5, X: 0, Y: 0}, st.Points[0])
 
 	st, err = projectionState(ps, ProjectionArgs{Points: 2, Offset: 30})
@@ -68,6 +75,33 @@ func TestGetProjectionReadsClustersAndPoints(t *testing.T) {
 	require.Equal(t, "idle", idle.Status)
 	require.Equal(t, "not leeway-shaped", idle.CannotDraw)
 	require.Equal(t, "not drawn", idle.Layout)
+
+	dropped, err := projectionState(projectionOpsSnap{snap: projectorSnapshot{discarded: true}}, ProjectionArgs{})
+	require.NoError(t, err)
+	require.Equal(t, projectionDiscardedNote, dropped.Discarded)
+}
+
+// A new result drops the run over the old one and says so; the first
+// result has nothing to drop, and the next Start clears the note.
+func TestProjectorInvalidateRemembersADiscard(t *testing.T) {
+	pj := &Projector{}
+	s1 := arrow.NewSchema([]arrow.Field{{Name: "a", Type: arrow.PrimitiveTypes.Int64}}, nil)
+	s2 := arrow.NewSchema([]arrow.Field{{Name: "a", Type: arrow.PrimitiveTypes.Int64}}, nil)
+	at := time.Unix(1, 0)
+	pj.Invalidate(s1, at)
+	require.False(t, pj.Snapshot().discarded, "the first result has no run before it")
+	pj.Invalidate(s2, at)
+	require.False(t, pj.Snapshot().discarded, "no run to drop")
+	pj.mu.Lock()
+	pj.result, pj.status = &projectionResult{}, projectorStatusDone
+	pj.mu.Unlock()
+	require.True(t, pj.Invalidate(s2, at), "the same result keeps the run")
+	require.False(t, pj.Snapshot().discarded)
+	pj.Invalidate(s1, at.Add(time.Second))
+	snap := pj.Snapshot()
+	require.True(t, snap.discarded)
+	require.Nil(t, snap.result)
+	require.Equal(t, projectorStatusIdle, snap.status)
 }
 
 // explain_clusters reads the pane's explanation: per cluster a SQL rule,

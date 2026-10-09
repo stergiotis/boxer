@@ -74,7 +74,7 @@ un-scoped global, none of which fix it:
   walkers reads the wheel without consuming
   ([podusowski/walkers#544](https://github.com/podusowski/walkers/issues/544)).
 - The graph's inline consume
-  ([`egui2_definition_d_graphs.go:305`](../../public/thestack/imzero2/egui2/definition/egui2_definition_d_graphs.go)):
+  ([`egui2_definition_d_graphs.go:305`](https://github.com/stergiotis/boxer/blob/ebb366850daa99711f2dbca044ec3b5f3dd31185/public/thestack/imzero2/egui2/definition/egui2_definition_d_graphs.go#L305)):
   `if zoom_and_pan && graph_resp.contains_pointer() { input_mut(smooth_scroll_delta = ZERO) }`.
   This is the *correct* pattern — a hover-gated consume — but it is hand-rolled,
   graph-only, and covers `smooth_scroll_delta` only.

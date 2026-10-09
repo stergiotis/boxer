@@ -564,6 +564,21 @@ person to click the tab. `bundle_show_pane` is now offered with the
 common operations. It is a view effect, and the embedded play's tabs are
 the view's panes, so it raises nothing the document does not show.
 
+### 2026-10-09 — `publish` covers a projection's datasets
+
+`publish_projection` declares the `publish` consent on a new `name`
+argument: its two datasets go under `<name>` and `<name>_rules`
+(`projection` when no name is given), and a grant listing
+`publish:<prefix>` covers a name starting with the prefix as it covers a
+bundle's alias. The class's meaning widens from a bundle to ad-hoc data
+published under a name, and `app.ConsentClasses` says so: both put data on
+the bus under a name any window can read, and that is what the person
+approving `publish:<prefix>` consents to, not one operation. An agent that
+wanted a Projection run to outlive its next query could not have the
+publish approved ahead, and skipped it. SD4's limits hold: a prefix is at
+least one character, consent waives the confirmation and not the mode, and
+a test grant applies no consequential command.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — capability subjects.

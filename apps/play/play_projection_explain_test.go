@@ -99,6 +99,28 @@ func TestExplanationRowsWithoutALeaf(t *testing.T) {
 	require.Equal(t, "no leaf at this depth", own[0].rule)
 }
 
+func TestExplanationRowsSmallCluster(t *testing.T) {
+	// 1200 clustered rows put the partition's smallest leaf at six, twice
+	// the planted cluster: no leaf can go to it in the partition, at any
+	// depth, while its own tree leafs at its size and reads it whole.
+	features, cl := twoClusterFeatures(1440)
+	for i := range 3 {
+		features[i].MeanValueLength = 500
+		cl.Label[i] = 2
+	}
+	cl.NumClusters = 3
+	ex := explainProjection(context.Background(), shapeFeatureDesc(features), cl)
+	require.NoError(t, ex.err)
+	require.Equal(t, 6, ex.minLeaf)
+	require.Equal(t, 3, ex.clusterMinLeaf(2))
+	require.Equal(t, 6, ex.clusterMinLeaf(0))
+	part := explanationRows(ex, projectionExplainFitDepth, false)
+	require.Equal(t, "no leaf: its 3 rows are fewer than the partition's smallest leaf (6 rows); one tree per cluster reads it", part[2].rule)
+	own := explanationRows(ex, projectionExplainDefaultDepth, true)
+	require.Contains(t, own[2].rule, "mean_value_length > ")
+	require.Equal(t, "precision 100% · recall 100%", own[2].fit)
+}
+
 func TestItemPredicateSpellings(t *testing.T) {
 	cases := []struct {
 		it   card.Item
@@ -247,8 +269,8 @@ func TestBuildProjectionDatasets(t *testing.T) {
 		}
 	}
 	require.True(t, sawFeatures)
-	require.Contains(t, projectionScaffold(), "keelson('"+projectionAlias+"')")
-	require.Contains(t, projectionScaffold(), "keelson('"+projectionRulesAlias+"')")
+	require.Contains(t, projectionScaffold("kinds"), "keelson('kinds')")
+	require.Contains(t, projectionScaffold("kinds"), "keelson('kinds_rules')")
 }
 
 func TestExplainProjectionOverComponents(t *testing.T) {

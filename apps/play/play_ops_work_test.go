@@ -2,6 +2,7 @@ package play
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -41,7 +42,11 @@ func TestWorkOpsCatalogEntries(t *testing.T) {
 	run, _ := m.Operations.Lookup(opRun)
 	assert.EqualValues(t, 2, run.Version, "run gained Statement")
 	proj, _ := m.Operations.Lookup(opGetProjection)
-	assert.EqualValues(t, 2, proj.Version, "get_projection gained the publish and who ran it")
+	assert.EqualValues(t, 3, proj.Version, "get_projection returns points only on request")
+	pub, _ := m.Operations.Lookup(opPublishProjection)
+	assert.EqualValues(t, 2, pub.Version, "publish_projection gained a name")
+	assert.Equal(t, app.OperationConsent{Class: app.ConsentClassPublish, Arg: "name"}, pub.Consent,
+		"a grant listing publish:<prefix> covers a name starting with it")
 }
 
 // Every operation list_panes names for a pane is in the catalog, and the
@@ -247,7 +252,16 @@ func TestPublishProjectionIsAnAgentsRoundWithoutTheScaffold(t *testing.T) {
 		_, err := h.ApplyCommand(app.OperationCall{Writer: "task:t", OnBehalfOf: &app.OnBehalfOf{Task: "t", Epoch: 1}}, opPublishProjection, nil)
 		return err
 	}
+	publishAs := func(name string) error {
+		_, err := h.ApplyCommand(app.OperationCall{Writer: "task:t", OnBehalfOf: &app.OnBehalfOf{Task: "t", Epoch: 1}}, opPublishProjection,
+			mustEncode(t, PublishProjectionArgs{Name: name}))
+		return err
+	}
 	var refusal *app.OperationRefusal
+	for _, bad := range []string{"two words", "a__b", "1st", strings.Repeat("n", projectionNameMaxLen+1)} {
+		require.ErrorAs(t, publishAs(bad), &refusal, bad)
+		assert.Contains(t, refusal.Error(), "bare identifier", bad)
+	}
 	require.ErrorAs(t, publish(), &refusal)
 	assert.Contains(t, refusal.Error(), "no bus")
 
@@ -280,10 +294,21 @@ func TestPublishProjectionIsAnAgentsRoundWithoutTheScaffold(t *testing.T) {
 	p.graph.mainLane.finish("SELECT n", nil, time.Now(), rec, rec.Schema(), int64(len(vals)), Summary{}, nil, runstream.Terminal{})
 	require.NoError(t, publish())
 	assert.True(t, p.projPublishQuiet)
-	require.Eventually(t, func() bool {
+	settled := func() bool {
 		publishing, _, _, _ := p.projPublish.status()
 		return !publishing
-	}, 5*time.Second, 10*time.Millisecond)
+	}
+	require.Eventually(t, settled, 5*time.Second, 10*time.Millisecond)
+	name, pubs := p.projPublish.last()
+	assert.Equal(t, projectionDefaultName, name, "no name publishes under projection")
+	assert.Equal(t, "projection_rules", pubs.rules.Base())
+	require.NoError(t, publishAs("kinds"))
+	require.Eventually(t, settled, 5*time.Second, 10*time.Millisecond)
+	name, pubs = p.projPublish.last()
+	assert.Equal(t, "kinds", name)
+	assert.Equal(t, "kinds", pubs.rows.Base())
+	assert.Equal(t, "kinds_rules", pubs.rules.Base())
+	assert.Len(t, p.projPublish.pubs, 2, "the earlier name keeps its publishers")
 	// The fixture's run carries no graph for the pane's status line; the
 	// reading's publish fields do not depend on it.
 	pj.mu.Lock()

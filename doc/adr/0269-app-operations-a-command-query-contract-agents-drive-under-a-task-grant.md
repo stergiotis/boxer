@@ -1110,6 +1110,18 @@ widget's rect, role and name under the message of the stream that drew it.
 It is a snapshot through the capture facility, not a live tree; the live
 tree stays deferred. Agents still get no synthetic input (§SD11).
 
+### 2026-10-09 — the grant's answer states its terms
+
+An approved request answers with the task's bounds — its call budget and
+the calls made, its deadline, its destinations — on the request's status
+and on a test grant (`agent.Grant.Terms`). The figures a coordinator asked
+for are not the grant's: the person sets the budget with the slider
+(2026-10-05), and a widening's destinations join those the task already
+had. The chat coordinator's answer to `request_access` states them. An
+agent that characterised a table through play had learned its budget only
+by querying `keelson('agent_grants')`, and had spent its calls sparingly
+for want of it.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — the subject taxonomy SD3 extends; the threat model SD6 keeps.

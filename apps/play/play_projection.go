@@ -43,6 +43,10 @@ const projectionMinRows = 3
 // subsampled uniformly and reported as "X of Y entities · sampled".
 const projectionMaxRows = 10000
 
+// projectionDiscardedNote is what the pane and get_projection say once a
+// new result has dropped the run over the old one.
+const projectionDiscardedNote = "The last run was over an earlier result and was dropped when the result changed: publishing a run as a dataset keeps it past the next query."
+
 // projectionParams are the run's knobs, read by the goroutine at Start.
 type projectionParams struct {
 	// K is the neighbour count of the graph (ADR-0230 §SD1); the umap-learn
@@ -199,6 +203,9 @@ type projectorSnapshot struct {
 	totalRows int64
 	err       error
 	startedAt time.Time
+	// discarded says a run, finished or in flight, was dropped because
+	// the result it was over changed; cleared by the next Start.
+	discarded bool
 }
 
 // Projector owns the projection state for the current result batch. A
@@ -207,8 +214,8 @@ type projectorSnapshot struct {
 // frame and drives the widget.
 //
 // Lifecycle: Invalidate(schema, executed) is called every frame from the
-// renderer; if the underlying result changed it cancels any in-flight run
-// and resets to idle. Start(rec) spawns the goroutine (no-op if one is
+// renderer, drawn or not; if the underlying result changed it cancels any
+// in-flight run, resets to idle and remembers that a run was discarded. Start(rec) spawns the goroutine (no-op if one is
 // already running). Cancel() signals abort.
 //
 // Concurrency: all mutable fields are guarded by mu. The cancel chan is
@@ -228,6 +235,7 @@ type Projector struct {
 	totalRows int64
 	err       error
 	startedAt time.Time
+	discarded bool
 	params    projectionParams
 
 	cancel chan struct{}
@@ -351,6 +359,8 @@ func (inst *Projector) Invalidate(schema *arrow.Schema, executed time.Time) (mat
 		matches = true
 		return
 	}
+	// The first result has no run before it to lose.
+	inst.discarded = inst.forSchema != nil && (inst.result != nil || inst.cancel != nil)
 	inst.detachCurrentRunLocked()
 	inst.forSchema = schema
 	inst.forExec = executed
@@ -385,6 +395,7 @@ func (inst *Projector) Start(rec arrow.RecordBatch) {
 	inst.totalRows = 0
 	inst.err = nil
 	inst.startedAt = time.Now()
+	inst.discarded = false
 	params := inst.params
 	inst.mu.Unlock()
 
@@ -458,6 +469,7 @@ func (inst *Projector) Snapshot() (snap projectorSnapshot) {
 		totalRows: inst.totalRows,
 		err:       inst.err,
 		startedAt: inst.startedAt,
+		discarded: inst.discarded,
 	}
 	return
 }
@@ -923,6 +935,11 @@ func (inst *PlayApp) renderProjection(rec arrow.RecordBatch, selectedRow int64, 
 		} else {
 			for rt := range c.RichTextLabel(
 				"Click Compute to build the result's neighbour graph and lay it out.") {
+				rt.Small().Weak()
+			}
+		}
+		if snap.discarded {
+			for rt := range c.RichTextLabel(projectionDiscardedNote) {
 				rt.Small().Weak()
 			}
 		}

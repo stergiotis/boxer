@@ -106,10 +106,21 @@ func (inst *PlayApp) personCancelProjection() {
 	playGesture(inst, opCancelProjection, appops.None{}, func() { _ = inst.cancelProjection("") })
 }
 
-// projectionPublishNow is what a publish round reads, taken from the run and
-// the result the pane is fed. release gives back the record.
-func (inst *PlayApp) projectionPublishNow() (in projectionPublishInput, release func(), err error) {
+// PublishProjectionArgs is publish_projection's argument.
+type PublishProjectionArgs struct {
+	Name string `json:",omitzero" desc:"what the datasets go under: the rows as keelson('<name>'), the rules as keelson('<name>_rules'); a bare identifier of at most 32 bytes without a double underscore; projection when left out. A grant listing publish:<prefix> covers a name starting with the prefix, so the person need not confirm each publish"`
+}
+
+// projectionPublishNow is what a publish round under name reads, taken from
+// the run and the result the pane is fed. release gives back the record.
+func (inst *PlayApp) projectionPublishNow(name string) (in projectionPublishInput, release func(), err error) {
 	release = func() {}
+	if name == "" {
+		name = projectionDefaultName
+	}
+	if !validProjectionName(name) {
+		return in, release, app.RefuseOperation("a projection's name is a bare identifier without a double underscore: letters, digits and _, at most 32 bytes")
+	}
 	pj := inst.projector
 	if pj == nil {
 		return in, release, app.RefuseOperation("this window has no Projection pane")
@@ -141,14 +152,14 @@ func (inst *PlayApp) projectionPublishNow() (in projectionPublishInput, release 
 		}
 	}
 	_, x, y := pj.view.PositionColumns(nil, nil, nil)
-	in = projectionPublishInput{rec: rec, res: res, depth: pj.explainDepth, perCluster: pj.explainPerCluster, x: x, y: y}
+	in = projectionPublishInput{name: name, rec: rec, res: res, depth: pj.explainDepth, perCluster: pj.explainPerCluster, x: x, y: y}
 	return in, rec.Release, nil
 }
 
 // personPublishProjection is the pane's publish button; direct is the
 // round without a host serving the catalog.
 func (inst *PlayApp) personPublishProjection(direct func()) {
-	playGesture(inst, opPublishProjection, appops.None{}, func() {
+	playGesture(inst, opPublishProjection, PublishProjectionArgs{}, func() {
 		inst.projPublishQuiet = false
 		direct()
 	})
@@ -212,18 +223,20 @@ func addWorkOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 		})
 	// Consequential: the datasets leave the window, onto the bus, where any
 	// window can read them; the person confirms each publish.
-	appops.Command(s, app.OperationSpec{Name: opPublishProjection, Version: 1,
-		Summary: "publish the finished projection as two ad-hoc datasets, one row per entity and one per cluster rule, and bind them in this window as keelson('projection') and keelson('projection_rules')",
+	appops.Command(s, app.OperationSpec{Name: opPublishProjection, Version: 2,
+		Summary: "publish the finished projection as two ad-hoc datasets under a name, one row per entity and one per cluster rule, and bind them in this window as keelson('<name>') and keelson('<name>_rules'); the person confirms each publish unless the grant lists publish:<name prefix>",
 		Effect:  app.OperationEffectConsequential, Reads: []string{opsResProjection}, Writes: []string{opsResDatasets}, Agents: true,
-		Gesture: "the publish as dataset button of the Projection pane",
+		Consent: app.OperationConsent{Class: app.ConsentClassPublish, Arg: "name"},
+		Gesture: "the publish as dataset button of the Projection pane, which publishes under projection",
 		Follows: []string{"get_projection's published names the handles and row counts once the publish lands, or why it failed",
-			"for an agent the scaffold query is not inserted into the buffer; write one with set_sql over keelson('projection')"}},
-		func(inst *PlayLauncher, call app.OperationCall, in appops.None) (appops.None, error) {
+			"publishing again under a name republishes its datasets; under another name, the earlier ones stay until the window closes",
+			"for an agent the scaffold query is not inserted into the buffer; write one with set_sql over keelson('<name>')"}},
+		func(inst *PlayLauncher, call app.OperationCall, in PublishProjectionArgs) (appops.None, error) {
 			p := inst.inner
 			if p == nil {
 				return appops.None{}, app.RefuseOperation("the window has not mounted")
 			}
-			pin, release, err := p.projectionPublishNow()
+			pin, release, err := p.projectionPublishNow(in.Name)
 			if err != nil {
 				return appops.None{}, err
 			}

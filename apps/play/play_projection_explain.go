@@ -28,8 +28,11 @@ const (
 	// is what a rule can carry and still read as a sentence.
 	projectionExplainDefaultDepth = 3
 	// projectionExplainMinLeafShare and projectionExplainMinLeafFloor size
-	// the smallest leaf as a share of the clustered rows, floored, so a
-	// ten-thousand-row picture does not read rules over a handful of rows.
+	// the partition's smallest leaf as a share of the clustered rows,
+	// floored, so a ten-thousand-row picture does not read rules over a
+	// handful of rows. A cluster's own tree takes the smaller of that and
+	// the cluster's size: a leaf's rule goes to its majority, so a cluster
+	// under half the smallest leaf could never be read at any depth.
 	projectionExplainMinLeafShare = 0.005
 	projectionExplainMinLeafFloor = 3
 	// projectionExplainTopFeatures is how many contrasts a cluster lists.
@@ -57,6 +60,10 @@ type projectionExplanation struct {
 	// feature set the clustering ran on — and labels the clustering.
 	desc   projectionFeatureDesc
 	labels []int32
+	// minLeaf is the partition's smallest leaf; sizes the clustered rows
+	// per label.
+	minLeaf int
+	sizes   []int
 	// items is the attribute-level reading (play_projection_items.go).
 	items projectionItems
 }
@@ -129,7 +136,7 @@ func structureFeatureDesc(sets card.ItemSets) projectionFeatureDesc {
 	names := make([]string, len(keep))
 	for c, i := range keep {
 		col[i] = int32(c)
-		names[c] = sets.Items[i].Name
+		names[c] = sets.Items[i].Label()
 	}
 	rows := make([][]int32, len(sets.Rows))
 	for r, row := range sets.Rows {
@@ -162,12 +169,17 @@ func explainProjection(ctx context.Context, desc projectionFeatureDesc, cl algo.
 	x := desc.x
 	labels := cl.Label
 	fitted := 0
+	ex.sizes = make([]int, cl.NumClusters)
 	for _, lb := range labels {
 		if lb >= 0 {
 			fitted++
+			if int(lb) < len(ex.sizes) {
+				ex.sizes[lb]++
+			}
 		}
 	}
 	minLeaf := max(projectionExplainMinLeafFloor, int(math.Round(projectionExplainMinLeafShare*float64(fitted))))
+	ex.minLeaf = minLeaf
 	tree, err := explain.FitTree(ctx, x, desc.d, labels, explain.TreeOptions{
 		MaxDepth: projectionExplainFitDepth,
 		MinLeaf:  minLeaf,
@@ -192,7 +204,7 @@ func explainProjection(ctx context.Context, desc projectionFeatureDesc, cl algo.
 		}
 		t, err := explain.FitOneVsRest(ctx, x, desc.d, labels, lb, explain.TreeOptions{
 			MaxDepth: projectionExplainFitDepth,
-			MinLeaf:  minLeaf,
+			MinLeaf:  ex.clusterMinLeaf(lb),
 		})
 		if err != nil {
 			continue
@@ -200,6 +212,15 @@ func explainProjection(ctx context.Context, desc projectionFeatureDesc, cl algo.
 		ex.perCluster[lb] = t
 	}
 	return
+}
+
+// clusterMinLeaf is the smallest leaf of label lb's own tree: the
+// partition's, or the cluster's size when that is smaller.
+func (inst projectionExplanation) clusterMinLeaf(lb int32) int {
+	if int(lb) < len(inst.sizes) && inst.sizes[lb] > 0 {
+		return min(inst.minLeaf, inst.sizes[lb])
+	}
+	return inst.minLeaf
 }
 
 // explanationRow is one cluster's line of the explanation table, text
@@ -249,6 +270,11 @@ func explanationRows(ex projectionExplanation, depth int, perCluster bool) (rows
 		switch {
 		case !fitted:
 			row.rule = "not fitted (cut short)"
+		case len(rules) == 0 && !perCluster && int(lb) < len(ex.sizes) && ex.sizes[lb] < ex.minLeaf:
+			// The partition's leaves go to their majority: a cluster this
+			// small loses its rows to its neighbours' leaves at any depth.
+			row.rule = fmt.Sprintf("no leaf: its %d rows are fewer than the partition's smallest leaf (%d rows); one tree per cluster reads it",
+				ex.sizes[lb], ex.minLeaf)
 		case len(rules) == 0:
 			row.rule = "no leaf at this depth"
 		default:
@@ -369,7 +395,7 @@ func explanationSummary(ex projectionExplanation, depth int, perCluster bool) st
 	}
 	var s string
 	if perCluster {
-		s = fmt.Sprintf("one tree per cluster against the rest, noise included, read at depth %d · smallest leaf %d rows",
+		s = fmt.Sprintf("one tree per cluster against the rest, noise included, read at depth %d · smallest leaf %d rows, or the cluster's size when smaller",
 			depth, ex.tree.Options.MinLeaf)
 	} else {
 		agree, fitted := ex.tree.Fidelity(depth)

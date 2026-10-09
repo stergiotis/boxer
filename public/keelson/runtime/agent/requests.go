@@ -257,8 +257,20 @@ func (inst *Service) requestStatus(key string, msg *app.Msg) (w wireOutcome) {
 	if r.state == reqStateApproved {
 		t := r.task
 		if t != nil {
-			w.Task, w.Handle = t.id, t.handle
+			w.Task, w.Handle, w.Terms = t.id, t.handle, termsOf(t)
 		}
+	}
+	return
+}
+
+// termsOf is t's bounds for the answer to its grant. The caller holds mu.
+func termsOf(t *task) (w *wireGrantTerms) {
+	if t == nil {
+		return nil
+	}
+	w = &wireGrantTerms{Calls: int32(max(t.callsBudget, 0)), CallsUsed: int32(t.callsUsed), Destinations: slices.Clone(t.destinations)}
+	if !t.deadline.IsZero() {
+		w.DeadlineMs = t.deadline.UnixMilli()
 	}
 	return
 }
@@ -327,11 +339,12 @@ func (inst *Service) testWiden(r *request) (rep wireGrantReply) {
 	inst.mu.Lock()
 	route := inst.approve(r)
 	t := r.task
+	terms := termsOf(t)
 	inst.mu.Unlock()
 	if route != nil {
 		inst.routeHeld(route)
 	}
-	rep.Ok, rep.Task, rep.Handle, rep.Phase = true, t.id, t.handle, reqStateApproved.String()
+	rep.Ok, rep.Task, rep.Handle, rep.Phase, rep.Terms = true, t.id, t.handle, reqStateApproved.String(), terms
 	return
 }
 
@@ -646,7 +659,7 @@ func (inst *Client) AwaitGrant(ctx context.Context, key string) (g Grant, err er
 		}
 		switch out.Phase {
 		case reqStateApproved.String():
-			g = Grant{Task: out.Task, Handle: out.Handle}
+			g = Grant{Task: out.Task, Handle: out.Handle, Terms: out.Terms}
 			return
 		case reqStatePending.String():
 			if err = ctx.Err(); err != nil {

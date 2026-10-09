@@ -56,7 +56,7 @@ type DetailValue struct {
 // DetailAttribute is one attribute of the row.
 type DetailAttribute struct {
 	Name    string        `desc:"what the attribute is: its first membership, a ref named through the session's registries, parameters in brackets; the section when no membership names it; a plain column's name; section·name when two sections give one name"`
-	Section string        `desc:"its section; for a plain column, the plain item type; for a result that is not leeway-shaped, the group the pane draws it in (pinned, relations, data, meta)"`
+	Section string        `desc:"its section, spelled as the result's physical names and its handle spell it; for a plain column, the plain item type; for a result that is not leeway-shaped, the group the pane draws it in (pinned, relations, data, meta)"`
 	Plain   bool          `json:",omitzero" desc:"true for a plain column, which every row carries once"`
 	Labels  []string      `json:",omitzero" desc:"its further memberships"`
 	Values  []DetailValue `json:",omitzero" desc:"its value columns the card shows"`
@@ -216,6 +216,9 @@ func detailAttributes(m *lwread.Model) (out []DetailAttribute) {
 	}
 	for _, a := range m.Records[0].Attributes {
 		da := DetailAttribute{Name: a.Name, Section: a.Section, Plain: a.Plain, Hidden: a.Hidden, Handle: handles[a.Section+"\x00"+a.Name]}
+		if !a.Plain && a.HandleSection != "" {
+			da.Section = a.HandleSection
+		}
 		for _, l := range a.Labels {
 			da.Labels = append(da.Labels, l.Text)
 		}

@@ -128,6 +128,44 @@ func TestItemExtractorVocabularyAndSupport(t *testing.T) {
 	require.Equal(t, int32(2), sel.Support[byName["section:sym"]])
 }
 
+// A handle is spelled as the physical columns spell the section and the
+// column, not as the styled names the driver hands the sink.
+func TestItemExtractorHandlesSpellPhysically(t *testing.T) {
+	ie := NewItemExtractor()
+	ie.BeginBatch()
+	ie.BeginEntity()
+	ie.BeginTaggedSections()
+	ie.BeginSection(naming.StylableName("geo-point"), nil, nil, "", 1)
+	ie.BeginTaggedValue()
+	ie.BeginColumn(streamreadaccess.PhysicalColumnAddr{FullColumnName: "tv:geoPoint:pointLat:val:f64:4A:::0::data"}, naming.StylableName("point-lat"), canonical(true), "")
+	ie.BeginScalarValue()
+	_, _ = ie.WriteString("47")
+	require.NoError(t, ie.EndScalarValue())
+	ie.EndColumn()
+	ie.BeginTags(2)
+	ie.AddMembershipVerbatim(true, "latitude")
+	ie.AddMembershipRef(true, 9)
+	ie.EndTags()
+	require.NoError(t, ie.EndTaggedValue())
+	require.NoError(t, ie.EndSection())
+	require.NoError(t, ie.EndTaggedSections())
+	require.NoError(t, ie.EndEntity())
+	require.NoError(t, ie.EndBatch())
+	byName := map[string]Item{}
+	for _, it := range ie.Results().Items {
+		byName[it.Name] = it
+	}
+	require.Equal(t, "geoPoint:pointLat", byName["section:geo-point"].Handle)
+	require.Equal(t, "geoPoint:pointLat", byName["value:geo-point.point-lat=47"].Handle)
+	require.Equal(t, "geoPoint:lv", byName["tag:geo-point=latitude"].Handle)
+	require.Equal(t, "geoPoint:lr", byName["tag:geo-point#9"].Handle)
+	require.Equal(t, "section:geoPoint", byName["section:geo-point"].Label())
+	require.Equal(t, "value:geoPoint.pointLat=47", byName["value:geo-point.point-lat=47"].Label())
+	require.Equal(t, "tag:geoPoint=latitude", byName["tag:geo-point=latitude"].Label())
+	require.Equal(t, "tag:geoPoint#9", byName["tag:geo-point#9"].Label())
+	require.Equal(t, "cogroup:g", Item{Name: "cogroup:g", Kind: ItemKindCoGroup}.Label(), "no physical spelling: the name")
+}
+
 func TestItemExtractorCaps(t *testing.T) {
 	ie := NewItemExtractor()
 	ie.MaxItems = 1

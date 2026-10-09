@@ -26,9 +26,11 @@ const (
 	// projectionPaneId is the Projection pane's slug.
 	projectionPaneId = "projection"
 
-	// Bounds on get_projection's points.
-	opsProjectionDefaultPoints = 100
-	opsProjectionMaxPoints     = 1000
+	// opsProjectionMaxPoints bounds a page of get_projection's points,
+	// which it returns only on request: the clusters and their sizes are
+	// what a reading usually wants, and a hundred inlined points were most
+	// of every reply.
+	opsProjectionMaxPoints = 1000
 	// projectionPositionsEvery is how often the snapshot copies the layout
 	// while it is still moving; a settled layout is copied once.
 	projectionPositionsEvery = 250 * time.Millisecond
@@ -44,7 +46,7 @@ type ComputeProjectionArgs struct {
 
 // ProjectionArgs is get_projection's argument.
 type ProjectionArgs struct {
-	Points int32 `json:",omitzero" desc:"how many points to return with their cluster and layout position, at most 1000; 100 when left out, -1 for none"`
+	Points int32 `json:",omitzero" desc:"how many points to return with their row, cluster and layout position, at most 1000; none when left out"`
 	Offset int32 `json:",omitzero" desc:"the first point to return"`
 }
 
@@ -67,6 +69,8 @@ type ProjectionPoint struct {
 type ProjectionState struct {
 	Status string `desc:"idle, extracting, running, done, failed, cancelling or cancelled"`
 	Error  string `json:",omitzero" desc:"why the run failed"`
+	// Discarded says why an idle pane has no run.
+	Discarded string `json:",omitzero" desc:"set when a new result dropped the run over the earlier one; publish_projection keeps a run past the next query"`
 	// CannotDraw is the pane's own reason it cannot draw the result.
 	CannotDraw string        `json:",omitzero" desc:"why the pane cannot draw the result it is fed; compute_projection refuses while it says so"`
 	Rows       int64         `desc:"rows in the result the pane is fed"`
@@ -86,7 +90,7 @@ type ProjectionState struct {
 	RunBy string `json:",omitzero" desc:"who asked for the run: person, or task:<id>; cancel_projection stops only the calling task's own"`
 	// The publish's outcome (publish_projection).
 	Publishing   bool   `json:",omitzero" desc:"true while a publish_projection is in flight"`
-	Published    string `json:",omitzero" desc:"the last publish: each dataset's handle, rows and revision; the window binds them as keelson('projection') and keelson('projection_rules')"`
+	Published    string `json:",omitzero" desc:"the last publish: each dataset's name and handle, rows and revision; the window binds the names, keelson('<name>') and keelson('<name>_rules')"`
 	PublishError string `json:",omitzero" desc:"why the last publish failed"`
 }
 
@@ -207,6 +211,9 @@ func projectionState(ps projectionOpsSnap, in ProjectionArgs) (out ProjectionSta
 	if ps.snap.err != nil {
 		out.Error = ps.snap.err.Error()
 	}
+	if ps.snap.discarded {
+		out.Discarded = projectionDiscardedNote
+	}
 	res := ps.snap.result
 	if res == nil {
 		return
@@ -228,9 +235,8 @@ func projectionState(ps projectionOpsSnap, in ProjectionArgs) (out ProjectionSta
 	out.PointsTotal = int32(len(res.rows))
 	limit := int(in.Points)
 	switch {
-	case limit == 0:
-		limit = opsProjectionDefaultPoints
-	case limit < 0:
+	case limit <= 0:
+		// None asked for; a negative count is version 2's "none".
 		return
 	case limit > opsProjectionMaxPoints:
 		return out, app.RefuseOperation("at most " + strconv.Itoa(opsProjectionMaxPoints) + " points per call; page with offset")
@@ -410,7 +416,8 @@ func addProjectionOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 		Summary: "compute the Projection pane over the result it is fed: the rows' neighbour graph, its clusters and a 2-D layout",
 		Effect:  app.OperationEffectView, Writes: []string{opsResProjection, opsResPanes}, Reads: []string{opsResResult}, Agents: true,
 		Gesture: "the Compute projection button",
-		Follows: []string{"the run takes from a moment to a minute; get_projection reports it until done or failed", "the pane is raised: the layout moves only while it is drawn"}},
+		Follows: []string{"the run takes from a moment to a minute; get_projection reports it until done or failed", "the pane is raised: the layout moves only while it is drawn",
+			"the next result the pane is fed — any run in this window, yours or the person's — drops the run; publish_projection keeps it as keelson('<name>') and keelson('<name>_rules')"}},
 		func(inst *PlayLauncher, call app.OperationCall, in ComputeProjectionArgs) (appops.None, error) {
 			if inst.inner == nil {
 				return appops.None{}, app.RefuseOperation("the window has not mounted")
@@ -421,8 +428,8 @@ func addProjectionOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 			inst.inner.projector.runTask = callTask(call)
 			return appops.None{}, nil
 		})
-	appops.Query(s, app.OperationSpec{Name: opGetProjection, Version: 2,
-		Summary: "read the Projection pane: the run's status, its clusters and sizes, the layout, and a page of points with their cluster and position",
+	appops.Query(s, app.OperationSpec{Name: opGetProjection, Version: 3,
+		Summary: "read the Projection pane: the run's status, its clusters and sizes, the layout, and on request a page of points with their cluster and position",
 		Reads:   []string{opsResProjection, opsResResult}, Agents: true, Untrusted: true},
 		func(sn opsSnap, in ProjectionArgs) (ProjectionState, error) {
 			if !sn.mounted {

@@ -1119,6 +1119,48 @@ spelled once, its further memberships as labels and the `LW_GET` handle that
 reads it; columns the card hides as machine-readable only are counted. The
 sections-with-roles shape of version 1 is gone.
 
+### 2026-10-08 — a dropped projection says so; the Schema pane reads
+
+An agent characterising a leeway table through play reported where the
+catalog cost it; these follow from that report.
+
+- **`get_projection` (version 3) returns points only when asked.** `points`
+  left out is none; a negative count, version 2's "none", still is. A hundred
+  inlined points were most of every reply, and the clusters with their sizes
+  are what a reading wants.
+- **A run is dropped by the next result, visibly.** The projector syncs
+  against the result its tab is fed every frame, drawn or not; before, a
+  hidden lazy tab never synced, so `get_projection` and `explain_clusters`
+  read a run over an earlier result against the new one until the tab was
+  raised. `get_projection` gains `discarded`, set when a new result dropped
+  a run, and the idle pane says the same. `compute_projection` and `run`
+  name the drop in their follow-ups, with `publish_projection` as the way to
+  keep a run.
+- **`get_schema` reads the Schema pane**: the schema it infers from the
+  column names of the result it is fed, or of a named node — plain columns,
+  tagged sections with their membership channels, each column's handle and
+  canonical type. The pane had only the catalog reads (`list_tables`,
+  `describe_table`), which describe a table on the endpoint rather than the
+  result the pane draws; `list_panes` names `get_schema` first.
+- **`get_detail` names a section as its handle does**, spelled as the
+  physical columns spell it ([ADR-0116](./0116-play-leeway-column-handle-resolution.md),
+  update of 2026-10-08).
+
+### 2026-10-09 — `publish_projection` takes a name
+
+`publish_projection` (version 2) takes an optional `name`: the rows go
+under `<name>`, the rules under `<name>_rules`, and the window binds both,
+`projection` when it is left out, which is what the pane's button
+publishes. A name is a bare identifier of at most 32 bytes without a
+double underscore, leaving room for the suffixes under the catalogue's
+64. Publishing again under a name republishes its datasets; under another
+name the earlier ones stay until the window closes. The command declares
+the `publish` consent on `name`
+([ADR-0288](./0288-adhoc-bundles-datasets-published-with-the-applet-that-reads-them.md), update of 2026-10-09), so a grant
+listing `publish:<prefix>` spares the person a confirmation for each name
+starting with the prefix. `get_projection`'s `published` names each
+dataset with its handle.
+
 ## References
 
 - [ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md) — the contract this catalog serves.

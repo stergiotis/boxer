@@ -369,12 +369,12 @@ convention did not compose, so that filter is how you ask for leeway columns
 only, and `lane_kind` separates the data from the membership machinery that
 rides beside it.
 
-**Keep the backticks on `` `columns` ``.** The editor's client-side parser reads
-a bare `columns` as the start of a `COLUMNS('…')` matcher — as a table name and
-as a result alias alike — and a block it cannot parse is shipped verbatim, which
-silently skips handle resolution and every other pre-execute pass.
-`system.columns` needs them for the same reason; `leeway.sections` and
-`leeway.tables` do not.
+**`columns` as an alias needs backticks.** As a table name a bare `columns`
+parses — `leeway.columns`, `system.columns` — but as a result alias the editor's
+client-side parser reads it as the start of a `COLUMNS('…')` matcher, and a block
+it cannot parse is shipped verbatim, which silently skips handle resolution and
+every other pre-execute pass. The snippets backtick the view name as well, which
+is harmless.
 
 ```sql
 SELECT handle,

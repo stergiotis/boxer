@@ -30,20 +30,41 @@ import (
 // or another, reads it the same way.
 
 const (
-	// projectionAlias and projectionRulesAlias label the datasets in the
-	// ad-hoc catalogue; a query names them by handle.
-	projectionAlias      = "projection"
-	projectionRulesAlias = "projection_rules"
+	// projectionDefaultName names the datasets when the publish names none
+	// — the person's button always: the rows go under it and the rules
+	// under it with projectionRulesSuffix.
+	projectionDefaultName = "projection"
+	projectionRulesSuffix = "_rules"
+	// projectionNameMaxLen leaves an alias room for the rules suffix and
+	// the window's own suffix, `_w<instance>`, under the catalogue's 64
+	// bytes.
+	projectionNameMaxLen = 32
 )
 
-// projectionPublishState is the publish round's state: the two publishers
-// — one handle each across rounds, republished onto rather than replaced —
-// and the round's outcome, shared between the render thread and the
-// goroutine under mu.
-type projectionPublishState struct {
-	rows, rules *adhocdata.Publisher
+// validProjectionName says whether name may name a publish: a bare
+// identifier, short enough for its aliases, without a bundle's separator.
+func validProjectionName(name string) bool {
+	return len(name) <= projectionNameMaxLen && validDatasetIdentifier(name) && !strings.Contains(name, adhocdata.BundleAliasSeparator)
+}
 
-	mu         sync.Mutex
+// projectionRulesName is the alias the rules go under for name.
+func projectionRulesName(name string) string { return name + projectionRulesSuffix }
+
+// projectionPublishers are one name's two publishers: one handle each
+// across rounds, republished onto rather than replaced.
+type projectionPublishers struct {
+	rows, rules *adhocdata.Publisher
+}
+
+// projectionPublishState is the publish rounds' state: the publishers per
+// name, the name of the last round, and its outcome, shared between the
+// render thread and the goroutine under mu.
+type projectionPublishState struct {
+	mu   sync.Mutex
+	pubs map[string]*projectionPublishers
+	// name is the last round's: what get_projection reports and what the
+	// window binds once it lands.
+	name       string
 	publishing bool
 	err        error
 	summary    string
@@ -53,10 +74,25 @@ type projectionPublishState struct {
 }
 
 func newProjectionPublishState() *projectionPublishState {
-	return &projectionPublishState{
-		rows:  adhocdata.NewWindowPublisher(projectionAlias),
-		rules: adhocdata.NewWindowPublisher(projectionRulesAlias),
+	return &projectionPublishState{pubs: map[string]*projectionPublishers{}}
+}
+
+// publishersFor is name's publishers, made on its first publish. The
+// caller holds mu.
+func (inst *projectionPublishState) publishersFor(name string) (p *projectionPublishers) {
+	p = inst.pubs[name]
+	if p == nil {
+		p = &projectionPublishers{rows: adhocdata.NewWindowPublisher(name), rules: adhocdata.NewWindowPublisher(projectionRulesName(name))}
+		inst.pubs[name] = p
 	}
+	return
+}
+
+// last is the last round's name and publishers; nil before any round.
+func (inst *projectionPublishState) last() (name string, p *projectionPublishers) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	return inst.name, inst.pubs[inst.name]
 }
 
 func (inst *projectionPublishState) status() (publishing bool, summary string, gen uint64, err error) {
@@ -68,6 +104,8 @@ func (inst *projectionPublishState) status() (publishing bool, summary string, g
 // projectionPublishInput is what one round reads off the run, captured
 // on the render thread so the goroutine touches no render state.
 type projectionPublishInput struct {
+	// name is what the datasets go under: name and name_rules.
+	name       string
 	rec        arrow.RecordBatch
 	res        *projectionResult
 	depth      int
@@ -88,13 +126,18 @@ func (inst *PlayApp) publishProjection(in projectionPublishInput) {
 		st.mu.Unlock()
 		return
 	}
+	if in.name == "" {
+		in.name = projectionDefaultName
+	}
 	st.publishing = true
 	st.err = nil
+	st.name = in.name
+	pubs := st.publishersFor(in.name)
 	st.mu.Unlock()
 	in.rec.Retain()
 	go func() {
 		defer in.rec.Release()
-		summary, err := doPublishProjection(inst.bus, in, st)
+		summary, err := doPublishProjection(inst.bus, in, pubs)
 		st.mu.Lock()
 		st.publishing = false
 		st.err = err
@@ -108,7 +151,7 @@ func (inst *PlayApp) publishProjection(in projectionPublishInput) {
 
 // doPublishProjection is one round: encode both datasets, publish both onto
 // the publishers' held handles.
-func doPublishProjection(bus busPublisherI, in projectionPublishInput, st *projectionPublishState) (summary string, err error) {
+func doPublishProjection(bus busPublisherI, in projectionPublishInput, st *projectionPublishers) (summary string, err error) {
 	alloc := memory.NewGoAllocator()
 	rows, err := buildProjectionRows(in, alloc)
 	if err != nil {
@@ -127,14 +170,14 @@ func doPublishProjection(bus busPublisherI, in projectionPublishInput, st *proje
 	}
 	rowsRes, err := st.rows.Publish(bus, rowsIPC)
 	if err != nil {
-		return "", eb.Build().Str("alias", projectionAlias).Errorf("play: projection: publish: %w", err)
+		return "", eb.Build().Str("alias", st.rows.Base()).Errorf("play: projection: publish: %w", err)
 	}
 	rulesRes, err := st.rules.Publish(bus, rulesIPC)
 	if err != nil {
-		return "", eb.Build().Str("alias", projectionRulesAlias).Errorf("play: projection: publish: %w", err)
+		return "", eb.Build().Str("alias", st.rules.Base()).Errorf("play: projection: publish: %w", err)
 	}
-	summary = fmt.Sprintf("keelson('%s'): %d rows (rev %d) · keelson('%s'): %d rules (rev %d)",
-		rowsRes.Handle, rowsRes.Rows, rowsRes.Revision, rulesRes.Handle, rulesRes.Rows, rulesRes.Revision)
+	summary = fmt.Sprintf("keelson('%s') is %s: %d rows (rev %d) · keelson('%s') is %s: %d rules (rev %d)",
+		st.rows.Base(), rowsRes.Handle, rowsRes.Rows, rowsRes.Revision, st.rules.Base(), rulesRes.Handle, rulesRes.Rows, rulesRes.Revision)
 	return summary, nil
 }
 
@@ -236,7 +279,7 @@ func buildProjectionRows(in projectionPublishInput, alloc memory.Allocator) (rec
 		items.Append(true)
 		if s < len(sets.Rows) {
 			for _, it := range sets.Rows[s] {
-				vb.Append(sets.Items[it].Name)
+				vb.Append(sets.Items[it].Label())
 			}
 		}
 	}
@@ -327,7 +370,7 @@ func buildProjectionRules(in projectionPublishInput, alloc memory.Allocator) arr
 			}
 			return "", false
 		}
-		itemName := func(item int32) string { return pi.sets.Items[item].Name }
+		itemName := func(item int32) string { return pi.sets.Items[item].Label() }
 		for lb, sg := range pi.subgroups {
 			if len(sg.Literals) == 0 {
 				continue
@@ -368,7 +411,11 @@ func (inst *PlayApp) syncProjectionPublish() {
 		return
 	}
 	inst.projPublishSeen = gen
-	rowsHandle, rulesHandle := inst.projPublish.rows.Handle(), inst.projPublish.rules.Handle()
+	name, pubs := inst.projPublish.last()
+	if pubs == nil {
+		return
+	}
+	rowsHandle, rulesHandle := pubs.rows.Handle(), pubs.rules.Handle()
 	if rowsHandle == "" || rulesHandle == "" {
 		return
 	}
@@ -379,8 +426,8 @@ func (inst *PlayApp) syncProjectionPublish() {
 		alias, handle string
 		pub           *adhocdata.Publisher
 	}{
-		{projectionAlias, rowsHandle, inst.projPublish.rows},
-		{projectionRulesAlias, rulesHandle, inst.projPublish.rules},
+		{name, rowsHandle, pubs.rows},
+		{projectionRulesName(name), rulesHandle, pubs.rules},
 	} {
 		if bErr := inst.BindDataset(b.alias, b.handle); bErr != nil {
 			return
@@ -395,20 +442,20 @@ func (inst *PlayApp) syncProjectionPublish() {
 		inst.projPublishQuiet = false
 		return
 	}
-	inst.InsertSqlAtCaret(projectionScaffold())
+	inst.InsertSqlAtCaret(projectionScaffold(name))
 }
 
-// projectionScaffold is the query offered after a publish: the clusters
-// with their sizes and rules, ready to narrow to one. It names the
-// aliases, which this window binds to the handles it minted.
-func projectionScaffold() string {
+// projectionScaffold is the query offered after a publish under name: the
+// clusters with their sizes and rules, ready to narrow to one. It names
+// the aliases, which this window binds to the handles it minted.
+func projectionScaffold(name string) string {
 	return fmt.Sprintf(`
 -- the projection as data: one row per entity, one per cluster and rule
 SELECT p.cluster, count() AS entities, any(r.rule) AS rule
 FROM keelson('%s') AS p
 LEFT JOIN keelson('%s') AS r ON r.cluster = p.cluster AND r.kind = 'attributes'
 GROUP BY p.cluster ORDER BY entities DESC
-`, projectionAlias, projectionRulesAlias)
+`, name, projectionRulesName(name))
 }
 
 // renderProjectionPublish is the toolbar affordance: the button while a

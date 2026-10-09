@@ -1612,15 +1612,21 @@ func (inst *PlayApp) render() error {
 			// the same per-frame view. First Render freezes the set (D4).
 			inst.tabs.freeze()
 			inst.audioFollowResult(resultID)
-			// The projection's run lands on its own goroutine; its revision
-			// moves here, inside a frame, where the change is the app's.
-			inst.projFrameDigest = inst.projectionDigest()
 			frame := TabFrame{
 				Rec: rec, Schema: schema, NumRows: numRows,
 				Loading: loading, Elapsed: elapsed, Summary: summary,
 				Executed: executed, Err: err, Result: resultID,
 				Sig: inst.frameSig, Emit: inst.sigEmit,
 			}
+			// The projector drops a run over an earlier result whether its
+			// tab is drawn or not: a lazy tab out of view never renders, and
+			// get_projection would read the old run against the new result.
+			if pf := inst.frameFor(projectionPaneId, &frame); pf.Rec != nil && inst.projector != nil {
+				inst.projector.Invalidate(pf.Rec.Schema(), pf.Executed)
+			}
+			// The projection's run lands on its own goroutine; its revision
+			// moves here, inside a frame, where the change is the app's.
+			inst.projFrameDigest = inst.projectionDigest()
 			// Every zone runs through the same reorder: a fresh leaf
 			// activates its first tab, so raising the focused one is what a
 			// BOXER_PLAY_FOCUS_* knob means in any of them (ADR-0097 Update
@@ -3140,7 +3146,7 @@ func (inst *PlayApp) renderTableTab(rec arrow.RecordBatch, schema *arrow.Schema,
 
 // renderProjectionTab is the Projection dock tab body: the neighbour embedding
 // with its own toolbar/status. Same empty/error guards as the Table tab.
-func (inst *PlayApp) renderProjectionTab(rec arrow.RecordBatch, loading bool, err error, executed time.Time) {
+func (inst *PlayApp) renderProjectionTab(rec arrow.RecordBatch, loading bool, err error) {
 	if loading && rec == nil {
 		inst.renderResultsLoading()
 		return
@@ -3153,9 +3159,8 @@ func (inst *PlayApp) renderProjectionTab(rec arrow.RecordBatch, loading bool, er
 		inst.renderResultsEmpty()
 		return
 	}
-	// The projector invalidates against the result THIS tab renders (which
-	// since 6c may be a bound node's) — sync moved here from Render.
-	inst.projector.Invalidate(rec.Schema(), executed)
+	// The frame loop has synced the projector against the result this tab
+	// renders (a bound node's, when the tab is bound), drawn or not.
 	dispatchPanel(projectionPanel{app: inst}, map[ChannelID]channelInput{
 		chMain: {node: inst.resolvedTabNode("projection"), rec: rec, schema: rec.Schema(), sig: inst.frameSig},
 	}, inst.sigEmit)

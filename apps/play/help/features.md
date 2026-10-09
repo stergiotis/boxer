@@ -668,6 +668,11 @@ row's density at its (min cluster − 1)-th neighbour rather than at the graph's
 last, so a record kind smaller than the neighbour count is still found; the
 defaults are 15 neighbours and a min cluster of 5.
 
+A run belongs to the result it was computed over. The next result the tab is
+fed — any run in the window, or a re-run of the same query — drops it, whether
+the tab is in view or not, and the tab says so until the next Compute.
+**Publish as dataset** (below) is how a run outlives the next query.
+
 **Show** switches what is drawn under the status line, over the same run and its
 cluster numbers. *graph* is the neighbour graph above. *archetypes* reads each
 cluster as one line of what its rows typically hold — a number's median, a
@@ -696,18 +701,26 @@ else, noise included — the answer to "what is in this cluster?", with each clu
 getting its own best split. Off, the rules come from one tree fitted to all the
 labels at once — a single partition of the feature space whose leaves do not
 overlap, whose summary line says how many clustered rows it reproduces, and in
-which a small cluster can lose its leaf to the larger ones' splits. **Rule
-depth** cuts the same trees shallower or deeper, live: fewer terms read easier,
-more terms fit closer. Thresholds are the shortest decimals between the two
-adjacent values, so a copied predicate partitions the rows exactly as the tree
-did. Beside the rule, the features that set the cluster apart: each is ranked by
+which a small cluster can lose its leaf to the larger ones' splits. A leaf holds
+at least 0.5 % of the clustered rows (and at least three), and its rule goes to
+the cluster most of its rows are in, so in the partition a cluster under half
+that size has no leaf at any depth — the row says so. A cluster's own tree
+allows leaves as small as the cluster, so one tree per cluster reads even the
+smallest. **Rule depth** cuts the same trees shallower or deeper, live: fewer
+terms read easier, more terms fit closer. Thresholds are the shortest decimals
+between the two adjacent values, so a copied predicate partitions the rows
+exactly as the tree did. Beside the rule, the features that set the cluster apart: each is ranked by
 the chance a member's value exceeds a non-member's (an AUC of 0.5 is no
 separation), listed with the members' median against everyone else's, and only
-when the separation is clear. The feature columns are not columns of the result
-today, so a copied predicate runs once they are (a client-side features call is
-the planned route); the section is a description of what the clustering did, not
-a recomputation, and its fit is stated so a rule can be read with the trust it
-earned.
+when the separation is clear. Which rules run where depends on the feature set:
+under *structure* and *components* a rule is a predicate over column handles —
+`` has(`geoPoint:lv`, 'home') ``, `LW_COMPONENT_FILTER('Kind')` — which
+runs against the result as it is; under *shape* it is thresholds over the sixteen
+shape features, which are not columns of the result, so it runs against the
+published rows dataset (below), where they are. Handles are spelled as the
+physical columns spell them, as the Table's headers do; play folds both spellings
+to one column. Either way the fit is stated, so a rule can be read with the
+trust it earned.
 
 **By attributes** switches the same table to what the clusters' entities *are*:
 each entity becomes a set of items — its tagged sections and co-groups, short
@@ -725,14 +738,15 @@ number of tests. Unlike the feature rules these run against the result as it
 is; a rule whose item has no column in the result says so.
 
 **Publish as dataset** (in the toolbar once a run is done, when the session has
-capabilities) writes the run as two ad-hoc datasets, each on a stable handle of
-its own that a query names as `keelson('<handle>')` — the scaffold that lands at
-the caret spells both, and the summary beside the button shows them with their
-revision. The rows dataset holds one row per projected entity — the result's row
-index and its plain identity columns, the sixteen features under the names the
-rules use, `cluster` (numbered as the tab shows, noise at −1), `probability`, the
-layout `x` and `y`, `feature_set`, and `items`, the entity's item names as an
-array — and the rules dataset one row per cluster and reading with the rule as
+capabilities) writes the run as two ad-hoc datasets, `projection` and
+`projection_rules`, each on a stable handle of its own; the window binds the
+names, so a query reads them as `keelson('projection')` — the scaffold that lands
+at the caret spells both, and the summary beside the button shows each name with
+its handle and revision. The rows dataset holds one row per projected entity —
+the result's row index and its plain identity columns, the sixteen features under
+the names the rules use, `cluster` (numbered as the tab shows, noise at −1),
+`probability`, the layout `x` and `y`, `feature_set`, and `items`, the entity's
+item names as an array — and the rules dataset one row per cluster and reading with the rule as
 SQL, its precision, recall and coverage. A copied feature rule runs as written
 against the rows dataset, and the attribute contrasts are an `arrayJoin(items)`
 with a `GROUP BY cluster`. Publishing again republishes onto the same handles;
@@ -741,8 +755,15 @@ another play window reads them by the same names; they live for the session only
 **For an agent.** `compute_projection` runs the tab with optional neighbours,
 min cluster and feature set, and raises it — the layout moves only while the tab is
 drawn. `get_projection` reports the run: its status and error, the clusters with
-their sizes and the noise, the status line, whether the layout has settled, and a
-page of points with their row, cluster, probability and position.
+their sizes and the noise, the status line, whether the layout has settled,
+whether a new result dropped the last run, and, when asked for, a page of points
+with their row, cluster, probability and position. The next result drops the
+run: call `publish_projection` first when the run should outlive it, and read the
+clusters back as `keelson('<name>')` and `keelson('<name>_rules')`. It takes a
+`name` (`projection` when left out); a publish under another name leaves the
+earlier datasets in place. Publishing is consequential, so the person confirms
+each one — unless the task's grant lists `publish:<prefix>` and the name starts
+with the prefix, the standing consent `publish_result` takes for its bundles.
 `explain_clusters` returns "why these clusters", by features (at a rule depth, one
 tree per cluster or the one partition) or by attributes: per cluster the SQL rule,
 its fit and what sets the cluster apart — the same text the section shows.
@@ -1289,6 +1310,18 @@ half-typed statement keeps the last answer instead of streaming errors.
 A leeway `TableDesc` inspector over the active result's Arrow schema — column
 types and inferred structure in a master-detail view (ad-hoc results show plain
 opaque columns; tagged sections aren't recoverable from an arbitrary result).
+The structure is read off the physical column names, so a column subset that
+keeps the names is still read as leeway, with each section's membership
+channels (`low-card-verbatim`, `low-card-ref`, …) as the badge beside it; an
+alias or an aggregate is not. Section and column names are spelled as the
+columns spell them (`u32Array`, where leeway's canonical style is `u32-array`),
+as the Table's headers, `leeway.columns` and `describe_table` print them.
+
+**For an agent.** `get_schema` reads what the pane draws, for the result the
+pane is fed or a named node: the plain columns and the tagged sections, each
+section's membership channels, and each column's handle and canonical type.
+`list_tables` and `describe_table` read the endpoint's catalog instead, with the
+tables' comments.
 
 ### Docs
 

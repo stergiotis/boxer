@@ -72,7 +72,9 @@ func TestABundleCrossesWindowsWithItsProvenance(t *testing.T) {
 
 	caps := []app.SubjectFilter{{Pattern: "adhoc.>", Direction: app.CapDirectionBoth, Reason: "test"}}
 	window := func(key uint64) (l *play.PlayLauncher) {
-		c := r.bus.NewClient(manifest.Id, caps)
+		// play's own capabilities, as its manifest declares them: a lane
+		// on blanket ones passed while play could not publish at all.
+		c := r.bus.NewClient(manifest.Id, manifest.Caps)
 		c.SetInstanceKey(key)
 		l = play.NewHeadlessLauncherForTest(c, zerolog.Nop(), "http://ch.example:8123/")
 		e := opengine.New(manifest.Operations, l.Operations())

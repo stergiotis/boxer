@@ -161,7 +161,7 @@ WHERE database = 'boxer' AND layout != 'foreign'
 GROUP BY hint ORDER BY ratio
 ```
 
-Two things to keep straight:
+Things to keep straight:
 
 - **The views decode names; they do not classify tables.** `layout` is
   `foreign | plain | tagged` and `name_shape` is `foreign | mixed | leeway |
@@ -173,11 +173,11 @@ Two things to keep straight:
   and a snapshot.
 - **A name composed with another separator reads as `foreign`.** Only `:` is
   decoded, which is every leeway table in this tree.
-- **Backtick `` `columns` `` in the playground.** A bare `columns` reads as the
-  start of a `COLUMNS('…')` matcher to the client-side parser, and an
-  unparseable statement ships verbatim — skipping handle resolution and every
-  other pre-execute pass. `system.columns` has always needed the same; the
-  other two views do not.
+- **Backtick `columns` as an alias in the playground.** As a table name a
+  bare `columns` parses (`leeway.columns`, `system.columns`); as a result
+  alias the client-side parser reads it as the start of a `COLUMNS('…')`
+  matcher, and an unparseable statement ships verbatim — skipping handle
+  resolution and every other pre-execute pass.
 - **After a vocabulary change, re-install.** The views hold an expanded copy of
   the aspect tables; `status` says which endpoints are still on the old one.
 

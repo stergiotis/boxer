@@ -305,3 +305,24 @@ A qualified handle (``e.`symbol:value` ``) keeps its qualifier. A misspelt
 handle read through a CTE gets the unknown-column diagnostic it would get
 from the table; a derived source that does not pass the columns through is
 named in the diagnostic with the reason.
+
+## Update 2026-10-08 — the handles play prints are spelled as the columns spell them
+
+SD1 folds both sides, so `u32Array:lv` and `u32-array:lv` are one handle and
+both resolve. The surfaces that print handles had not agreed on a spelling:
+the Table's headers, `leeway.columns`, `describe_table` and `describe_result`
+take it from the physical names (`u32Array`), while the surfaces built on
+leeway's card — the Projection's rules, the Detail card's `LW_GET`, the
+Schema pane — print the canonical style discovery folds names to
+(`u32-array`). An agent read the two as a copyable spelling and a runnable
+one, and re-ran every rule to find out which was which.
+
+Every handle play prints is now spelled as the physical column names spell
+the section and the column: the card's items and the read model's `LW_GET`
+handle read the spelling off the column name, the Schema pane and
+`get_schema` show a copy of the discovered schema renamed the same way, and
+`get_detail` names an attribute's section that way. The Projection's item
+labels, which sit beside its rules and in its published `items`, follow
+(`card.Item.Label`); an item's identity, `Name`, keeps the canonical style,
+since the structure features hash it. The archetype view's attribute labels
+come from the lens's own reader, are not SQL, and keep the canonical style.

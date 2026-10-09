@@ -41,6 +41,11 @@ type Sink struct {
 	allSec   bool
 	nCols    int
 
+	// secPhys and colPhys are the section and column as the physical
+	// column names spell them.
+	secPhys string
+	colPhys string
+
 	col      string
 	colType  canonicaltypes.PrimitiveAstNodeI
 	colIdx   int
@@ -97,6 +102,7 @@ func (inst *Sink) EndCoSectionGroup() (err error)   { inst.coGroup = ""; return 
 
 func (inst *Sink) BeginSection(name naming.StylableName, valueNames []naming.StylableName, _ []canonicaltypes.PrimitiveAstNodeI, aspects useaspects.AspectSet, _ int) {
 	inst.section, inst.nCols = name.String(), len(valueNames)
+	inst.secPhys = ""
 	inst.allSec = aspects.Contains(useaspects.AspectSectionMembershipsAllSecondary)
 }
 func (inst *Sink) EndSection() (err error) { inst.section = ""; return nil }
@@ -116,6 +122,10 @@ func (inst *Sink) EndTaggedValue() (err error) {
 		} else {
 			a.Name = a.Section
 		}
+		a.HandleSection = inst.secPhys
+		if a.HandleSection == "" {
+			a.HandleSection = a.Section
+		}
 		inst.rec.Hidden += a.Hidden
 	}
 	inst.attr = nil
@@ -124,6 +134,13 @@ func (inst *Sink) EndTaggedValue() (err error) {
 
 func (inst *Sink) BeginColumn(colAddr streamreadaccess.PhysicalColumnAddr, name naming.StylableName, ct canonicaltypes.PrimitiveAstNodeI, aspects valueaspects.AspectSet) {
 	inst.col, inst.colType, inst.colIdx = name.String(), ct, colAddr.Index
+	inst.colPhys = inst.col
+	if sec, col, ok := taggedSpelling(colAddr.FullColumnName); ok && !inst.plain {
+		inst.colPhys = col
+		if inst.secPhys == "" {
+			inst.secPhys = sec
+		}
+	}
 	inst.colShown = !(aspects.Contains(valueaspects.AspectMachineReadable) && !aspects.Contains(valueaspects.AspectHumanReadable))
 	inst.shape, inst.items, inst.more = ShapeScalar, nil, 0
 	inst.text.Reset()
@@ -157,7 +174,7 @@ func (inst *Sink) addValue(a *Attribute) {
 	if inst.shape == ShapeSet {
 		sortItems(inst.items, itemType(inst.colType))
 	}
-	v := Value{Column: inst.col, Shape: inst.shape, Items: inst.items, More: inst.more, ArrowIdx: inst.colIdx}
+	v := Value{Column: inst.col, HandleColumn: inst.colPhys, Shape: inst.shape, Items: inst.items, More: inst.more, ArrowIdx: inst.colIdx}
 	if t := itemType(inst.colType); t != nil {
 		v.Type = t.String()
 	}
@@ -270,4 +287,14 @@ func recordLabel(r *Record) string {
 		}
 	}
 	return best
+}
+
+// taggedSpelling reads the section and column off a tagged value column's
+// physical name, `tv:<section>:<column>:…`, as the table spells them.
+func taggedSpelling(fullColumnName string) (section, column string, ok bool) {
+	parts := strings.SplitN(fullColumnName, ":", 4)
+	if len(parts) < 3 || parts[0] != "tv" || parts[1] == "" || parts[2] == "" {
+		return
+	}
+	return parts[1], parts[2], true
 }

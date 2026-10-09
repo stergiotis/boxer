@@ -108,7 +108,7 @@ Completion ([play_completion_panel.go](../../apps/play/play_completion_panel.go)
 reads the call and argument at the caret and answers from component kinds,
 introspection tables, session datasets and endpoint catalogs; an unanswered
 probe reads "waiting for the endpoint", never as an empty list. The Model pane
-([play_model_panel.go](../../apps/play/play_model_panel.go), ADR-0254 §SD6) is
+([play_model_panel.go](https://github.com/stergiotis/boxer/blob/d1010551e0413e63590417b50b9bcfcc0abea278/apps/play/play_model_panel.go), ADR-0254 §SD6) is
 an explain, fix and ask workflow whose tool loop over introspection reads ends
 in SQL; it is not a general controller.
 

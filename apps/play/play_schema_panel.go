@@ -1,8 +1,13 @@
 package play
 
 import (
+	"strings"
+
 	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/stergiotis/boxer/public/gov/datacatalog"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/schemaview"
 )
@@ -104,7 +109,8 @@ func (inst *PlayApp) syncSchemaModel(schema *arrow.Schema) {
 // column names — the SAME derivation the Detail card uses, so the schema is
 // computed once in the play core, not re-run here. Only a non-leeway result
 // (an aggregation, a join, a non-leeway table) whose names don't parse falls
-// back to the shallow opaque inference off the Arrow types.
+// back to the shallow opaque inference off the Arrow types. The names are
+// spelled as the result stores them (spelledAsStored).
 func (inst *PlayApp) resultTableDesc(schema *arrow.Schema) *common.TableDesc {
 	if schema == nil {
 		return nil
@@ -112,8 +118,81 @@ func (inst *PlayApp) resultTableDesc(schema *arrow.Schema) *common.TableDesc {
 	if inst.cards != nil {
 		inst.cards.EnsureFor(schema)
 		if td := inst.cards.TableDesc(); td != nil {
-			return td
+			return spelledAsStored(td, schema.Fields())
 		}
 	}
 	return inferOpaqueTableDesc(schema.Fields())
+}
+
+// resultSchemaDesc is resultTableDesc without the card driver, for a read
+// off the render goroutine: the same classifier over the same names, so
+// the two cannot disagree. leeway says the names carry leeway's encoding.
+func resultSchemaDesc(schema *arrow.Schema) (td *common.TableDesc, leeway bool) {
+	names := make([]string, 0, schema.NumFields())
+	for _, f := range schema.Fields() {
+		names = append(names, f.Name)
+	}
+	if cl := datacatalog.Classify(names); cl.Kind == datacatalog.KindLeeway && cl.Table != nil {
+		return spelledAsStored(cl.Table, schema.Fields()), true
+	}
+	return inferOpaqueTableDesc(schema.Fields()), false
+}
+
+// spelledAsStored returns td with its section and column names spelled as
+// the result's physical column names spell them. Discovery folds a name to
+// leeway's canonical style — u32-array — while the columns, the Table's
+// headers, leeway.columns and describe_table say u32Array; the pane names a
+// section the way the rest of the surface does. td is left as it is; the
+// copy shares everything but the names. A name the result does not spell
+// keeps its canonical form.
+func spelledAsStored(td *common.TableDesc, fields []arrow.Field) *common.TableDesc {
+	if td == nil {
+		return nil
+	}
+	names := make([]string, 0, len(fields))
+	for i := range fields {
+		names = append(names, fields[i].Name)
+	}
+	labels := lwsql.BuildLabels(names)
+	if len(labels) == 0 {
+		return td
+	}
+	fold := func(s string) string {
+		return string(naming.ConvertNameStyle(naming.StylableName(s), naming.LowerSpinalCase))
+	}
+	sections := make(map[string]string, len(td.TaggedValuesSections))
+	columns := make(map[string]string, len(labels))
+	plain := make(map[string]string, len(td.PlainValuesNames))
+	for _, l := range labels {
+		sec, col, ok := strings.Cut(l, ":")
+		if !ok {
+			continue
+		}
+		fs := fold(sec)
+		sections[fs] = sec
+		columns[fs+"\x00"+fold(col)] = col
+		plain[fold(col)] = col
+	}
+	spell := func(m map[string]string, key string, n naming.StylableName) naming.StylableName {
+		if s, ok := m[key]; ok {
+			return naming.StylableName(s)
+		}
+		return n
+	}
+	out := *td
+	out.PlainValuesNames = make([]naming.StylableName, len(td.PlainValuesNames))
+	for i, n := range td.PlainValuesNames {
+		out.PlainValuesNames[i] = spell(plain, fold(n.String()), n)
+	}
+	out.TaggedValuesSections = make([]common.TaggedValuesSection, len(td.TaggedValuesSections))
+	for i, sec := range td.TaggedValuesSections {
+		fs := fold(sec.Name.String())
+		cols := make([]naming.StylableName, len(sec.ValueColumnNames))
+		for j, cn := range sec.ValueColumnNames {
+			cols[j] = spell(columns, fs+"\x00"+fold(cn.String()), cn)
+		}
+		sec.Name, sec.ValueColumnNames = spell(sections, fs, sec.Name), cols
+		out.TaggedValuesSections[i] = sec
+	}
+	return &out
 }

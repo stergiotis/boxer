@@ -123,11 +123,12 @@ func TestN7AppPrefix(t *testing.T) {
 		"apps/play/play_thing.go": "package main\n",
 		"apps/play/loose.go":      "package main\n",
 		// Exemptions.
-		"apps/play/main.go":         "package main\n",
-		"apps/play/doc.go":          "package main\n",
-		"apps/play/app_register.go": "package main\n",
-		"apps/play/play.go":         "package main\n",
-		"apps/play/play_test.go":    "package main\n",
+		"apps/play/main.go":          "package main\n",
+		"apps/play/doc.go":           "package main\n",
+		"apps/play/app_register.go":  "package main\n",
+		"apps/play/package_props.go": "package main\n",
+		"apps/play/play.go":          "package main\n",
+		"apps/play/play_test.go":     "package main\n",
 		// Nested files are not "directly under" apps/<n>/.
 		"apps/play/sub/loose.go": "package sub\n",
 	})

@@ -66,12 +66,18 @@ func TestGetDetailReadsALeewayRow(t *testing.T) {
 	}
 	assert.True(t, tagged)
 	assert.Equal(t, 3, out.Hidden, "the doc's machine-readable-only columns are counted, as the card hides them")
+	sawList := false
 	for _, a := range out.Attributes {
-		if a.Section == "u64-array" {
+		// The section and the handle are spelled as the physical columns
+		// spell them (u64Array, where leeway's canonical style is
+		// u64-array), as leeway.columns and the Table's headers print them.
+		if a.Section == "u64Array" {
+			sawList = true
 			assert.Equal(t, []string{"1"}, a.Values[0].Items, "a list-valued attribute reads as a list")
-			assert.Contains(t, a.Handle, "LW_GET_LIST('u64-array', ")
+			assert.Contains(t, a.Handle, "LW_GET_LIST('u64Array', ")
 		}
 	}
+	assert.True(t, sawList, "the list-valued attribute is read")
 	require.NotNil(t, out.Identity)
 	assert.Empty(t, out.Identity.Error)
 	assert.Len(t, out.Identity.Canonform, 64)
