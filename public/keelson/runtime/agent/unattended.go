@@ -46,6 +46,23 @@ func (inst *Service) autoDecides(r *request) (yes bool) {
 	return true
 }
 
+// leftToPerson is why the host, running unattended, left request r to
+// the person — for the dialog to say; "" when the mode is off. The caller
+// holds mu.
+func (inst *Service) leftToPerson(r *request) (why string) {
+	switch {
+	case !inst.Unattended():
+		return ""
+	case r.ceiling == nil && (r.task == nil || r.task.ceiling == nil):
+		return "its coordinator set no ceiling to bound what the host may approve"
+	case r.held != nil && r.held.need == needBudget:
+		return "the task's call budget is spent, and more calls are yours to give"
+	case r.held != nil && r.held.need == needDeadline, r.task != nil && time.Now().After(r.task.deadline):
+		return "the task's deadline passed, and more time is yours to give"
+	}
+	return "it is not one the host decides"
+}
+
 // autoAccepts reports whether a proposal is accepted on arrival: one the
 // window's grant made by sharing it in suggest mode, under a ceiling that
 // allows act. A proposal the ceiling forced — a suggest ceiling, or none to

@@ -50,6 +50,7 @@ func (inst *rig) unattendedGrant(mode ModeE, calls uint32) Grant {
 	g, err := inst.cli.Request(ctx, GrantRequest{Plan: "work alone", Calls: calls, Entries: []GrantEntry{{Instance: 7, Mode: mode}},
 		Ceiling: &ceiling})
 	require.NoError(inst.t, err, "the host approves without the person")
+	assert.True(inst.t, g.Unattended, "the grant says the host decided it")
 	return g
 }
 
@@ -124,10 +125,15 @@ func TestUnattendedLeavesMoreTimeToThePerson(t *testing.T) {
 
 func TestUnattendedLeavesARequestWithoutACeilingToThePerson(t *testing.T) {
 	r := unattendedRig(t, nil)
+	got := make(chan Grant, 1)
 	go func() {
-		_, _ = r.cli.Request(context.Background(), GrantRequest{Entries: []GrantEntry{{Instance: 7, Mode: ModeAct}}})
+		g, _ := r.cli.Request(context.Background(), GrantRequest{Entries: []GrantEntry{{Instance: 7, Mode: ModeAct}}})
+		got <- g
 	}()
-	r.person(true, nil)
+	r.person(true, func(req *request) {
+		assert.Contains(t, r.svc.leftToPerson(req), "no ceiling", "the dialog says why it is the person's")
+	})
+	assert.False(t, (<-got).Unattended, "the person decided it")
 }
 
 // A suggest ceiling forces proposals on a window granted act; the mode
@@ -176,6 +182,10 @@ func TestUnattendedAsksForTheBudgetAWideningRevealed(t *testing.T) {
 	r.call(g, "w", "set_text", `{"text":"x"}`)
 	require.Eventually(t, func() bool { return !r.nothingPending() }, 2*time.Second, 10*time.Millisecond,
 		"the spent budget reaches the person")
+	r.svc.mu.Lock()
+	why := r.svc.leftToPerson(r.svc.pending()[0])
+	r.svc.mu.Unlock()
+	assert.Contains(t, why, "budget")
 	st, err := r.cli.Status(context.Background(), g.Handle, "w", 0)
 	require.NoError(t, err)
 	assert.Equal(t, "input_required", st.Phase)

@@ -114,12 +114,22 @@ The grant events record `DecidedBy: "host"` with the reason `unattended`
 These wait in the dialog and expire as before. A task left alone runs until
 its budget or its deadline, whichever comes first, and then waits.
 
-### SD4 — Visible in the status bar
+### SD4 — Visible to the person and told to the model
 
 The host's bottom status bar carries a segment for the mode: absent in a
 binary built without it, `unattended:off` in one built with it, and a
 warning-toned `UNATTENDED — agents act without asking` when it is on. The
 words carry the state; the tone is not the only channel (ADR-0031 §SD5).
+
+With the mode on, the badge in each window a task works in adds
+`unattended`. A request the host leaves to the person says in the dialog
+why it was left — no ceiling, a spent budget, a passed deadline — and a
+confirmation says the host still asks for every change outside the app.
+
+A grant the host approved says so in its reply. The chat passes that on to
+the model with the grant: what fits the settings is approved at once, what
+is left to the person may wait for hours, so the model works on rather than
+waiting for them, and names in its answer what is left for them.
 
 ### SD5 — Deferred, recorded
 
@@ -128,7 +138,6 @@ words carry the state; the tone is not the only channel (ADR-0031 §SD5).
 - **An unattended budget and lifetime**: more calls and more time granted
   automatically up to a host-wide cap, which is what a task longer than one
   deadline needs.
-- **The mode in the approval dialog and the window badge.**
 
 ## Consequences
 

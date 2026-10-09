@@ -806,6 +806,9 @@ func (inst *coordinator) requestAccess(ctx context.Context, asked agent.Asked, p
 	// Part of the request's answer, not a call the model made: no row of its own.
 	listing, _ := inst.listWindows(ctx, agent.Asked{})
 	content = "access granted.\n"
+	if g.Unattended {
+		content += unattendedNote + "\n"
+	}
 	if len(launches) > 0 {
 		names := make([]string, 0, len(launches))
 		for _, l := range launches {
@@ -815,6 +818,11 @@ func (inst *coordinator) requestAccess(ctx context.Context, asked agent.Asked, p
 	}
 	return content + listing, "access granted for task " + inst.grantTask()
 }
+
+// unattendedNote tells the model the host granted access in the person's
+// place (ADR-0298): what fits the settings is approved at once, and what is
+// left to the person may wait for hours.
+const unattendedNote = "The host runs unattended: it approved this in the person's place, and nobody may be watching. A widening within the settings is approved at once. More calls, more time and changes outside the app still wait for the person, who may be away for hours: do not wait on them or ask them questions; keep working on what you can, and say in your answer what is left for them."
 
 // openItem is one app request_access asks to open windows of.
 type openItem struct {

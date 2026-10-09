@@ -168,6 +168,9 @@ type wireGrantReply struct {
 	Phase  string `json:"phase,omitempty"`
 	Task   string `json:"task,omitempty"`
 	Handle string `json:"handle,omitempty"`
+	// Unattended says the host approved the grant in the person's place
+	// (ADR-0298).
+	Unattended bool `json:"unattended,omitempty"`
 }
 
 // wireCall is the envelope on runtime.agent.call. Args is the model's JSON.

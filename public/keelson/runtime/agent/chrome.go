@@ -86,6 +86,10 @@ func (inst *Chrome) RenderWindowChrome(key uint64, ids *c.WidgetIdStack) {
 	if confirming > 0 {
 		label += " · confirmation due"
 	}
+	if svc.Unattended() {
+		// The host approves in the person's place (ADR-0298).
+		label += " · unattended"
+	}
 	for range c.MenuButton(c.Atoms().Text(label).Keep()).KeepIter() {
 		for _, wt := range here {
 			inst.renderTaskMenu(key, wt, ids)
@@ -338,6 +342,9 @@ func (inst *Chrome) renderConfirmation(p proposalRef, waiting int, ids *c.Widget
 		c.Label(who + " asks to " + rec.spec.Summary + " (" + rec.spec.Name + ") in window " +
 			strconv.FormatUint(rec.instance, 10) + ".").Wrap().Send()
 		c.Label("This writes outside the app and cannot be undone from here.").Wrap().Send()
+		if svc.Unattended() {
+			c.Label("The host runs unattended, and still asks a person to confirm every change outside the app (ADR-0298).").Wrap().Send()
+		}
 		if rec.req.Reason != "" {
 			bounded(ids.PrepareStr("agent-confirm-reason-"+rec.key), modelTextHeight, func() {
 				for rt := range c.RichTextLabel("its reason, as the model wrote it: " + rec.req.Reason) {
@@ -385,7 +392,11 @@ func (inst *Chrome) renderRequest(r *request, windows []windowRow, waiting int, 
 	}
 	svc.mu.Lock()
 	taintedConv := r.task != nil && svc.tainted(r.task)
+	left := svc.leftToPerson(r)
 	svc.mu.Unlock()
+	if left != "" {
+		c.Label("The host runs unattended and left this to you: " + left + " (ADR-0298).").Wrap().Send()
+	}
 	if taintedConv {
 		c.Label("This conversation has read untrusted content: what the model writes may have been steered by it.").Wrap().Send()
 	}

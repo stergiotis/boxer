@@ -218,6 +218,10 @@ type GrantLaunch struct {
 type Grant struct {
 	Task   string
 	Handle string
+	// Unattended says the host approved it in the person's place
+	// (ADR-0298): nobody may be there to answer what it leaves to the
+	// person.
+	Unattended bool
 }
 
 // Request asks for a grant and waits until the person decides or ctx ends.
@@ -261,7 +265,7 @@ func (inst *Client) RequestKey(ctx context.Context, r GrantRequest) (key string,
 		err = &RefusedError{Reason: rep.Reason}
 		return
 	}
-	key, g = rep.Key, Grant{Task: rep.Task, Handle: rep.Handle}
+	key, g = rep.Key, Grant{Task: rep.Task, Handle: rep.Handle, Unattended: rep.Unattended}
 	return
 }
 
