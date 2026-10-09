@@ -61,4 +61,16 @@ type LlmCall struct {
 	HistoryHash  string                `lw:"llmCallHistoryHash,stringArray,unit"`
 	OmitFrom     option.Option[uint32] `lw:"llmCallOmitFrom,u32Array,unit"`
 	OmitTo       option.Option[uint32] `lw:"llmCallOmitTo,u32Array,unit"`
+	// CachedInputTokens and ReasoningTokens are the parts of InputTokens
+	// and OutputTokens the provider reports as served from its prompt cache
+	// and spent reasoning; absent when it reports none (ADR-0300 §SD2).
+	CachedInputTokens option.Option[uint32] `lw:"llmCallCachedInputTokens,u32Array,unit"`
+	ReasoningTokens   option.Option[uint32] `lw:"llmCallReasoningTokens,u32Array,unit"`
+	// Admission is how the metering rules decided the call (ADR-0300
+	// §SD5): "admitted", "clamped", "queued" or "refused"; AdmissionRule
+	// the rule that decided it when one did, and QueuedMs how long the call
+	// waited for a slot. Absent on a call refused before admission ran.
+	Admission     option.Option[string] `lw:"llmCallAdmission,symbol"`
+	AdmissionRule option.Option[string] `lw:"llmCallAdmissionRule,symbol"`
+	QueuedMs      option.Option[uint64] `lw:"llmCallQueuedMs,u64Array,unit"`
 }
