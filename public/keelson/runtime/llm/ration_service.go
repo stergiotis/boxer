@@ -182,6 +182,7 @@ func (inst *Service) publish(subject string, v any) {
 func (inst *Service) publishCall(rec CallRecord, chain ration.Chain, class ration.ClassE, d ration.Decision, u ration.Usage) {
 	inst.publish(SubjectEventCall, wireCallEvent{V: wireVersion, CallId: rec.CallId, At: unixNs(rec.At), App: chain.App,
 		Instance: chain.Instance, Task: chain.Task, Purpose: chain.Purpose, Class: class.String(),
+		Conversation: rec.Conversation, Turn: rec.Turn, Round: uint32(max(rec.Round, 0)),
 		Admission: d.Outcome.String(), Rule: d.Rule, Refusal: refusalName(d.Refusal), Reason: d.Reason, QueuedNs: int64(d.Queued),
 		Usage: wireOfUsage(u), Failed: rec.Error != "" && !rec.Refused})
 }
@@ -346,6 +347,11 @@ func loosens(old ration.Rule, r ration.Rule) (yes bool) {
 	if r.Raise > 0 && (r.Raise > old.Raise || r.RaiseUntil.After(old.RaiseUntil)) {
 		return true
 	}
+	// A rule restricts, so one that lapses sooner — or lapses at all where
+	// the old one did not — loosens.
+	if !r.Until.IsZero() && (old.Until.IsZero() || r.Until.Before(old.Until)) {
+		return true
+	}
 	return r.Kind == ration.RuleKindBudget && r.Window < old.Window || r.Kind == ration.RuleKindRate && r.Window != old.Window
 }
 
@@ -481,6 +487,9 @@ func (inst *Service) auditRule(msg *app.Msg, action string, r ration.Rule, outco
 	}
 	if r.Raise > 0 {
 		attrs = append(attrs, "raise", strconv.FormatInt(r.Raise, 10), "raise-until", r.RaiseUntil.UTC().Format(time.RFC3339))
+	}
+	if !r.Until.IsZero() {
+		attrs = append(attrs, "until", r.Until.UTC().Format(time.RFC3339))
 	}
 	if r.Author != "" {
 		attrs = append(attrs, "author", r.Author)

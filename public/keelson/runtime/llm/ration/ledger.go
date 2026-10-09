@@ -139,6 +139,7 @@ func (inst *Ledger) Remove(id string) (removed bool) {
 func (inst *Ledger) Rule(id string) (r Rule, ok bool) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
+	inst.dropLapsed(inst.now())
 	r, ok = inst.rules[id]
 	return
 }
@@ -147,6 +148,7 @@ func (inst *Ledger) Rule(id string) (r Rule, ok bool) {
 func (inst *Ledger) Rules() (rules []Rule) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
+	inst.dropLapsed(inst.now())
 	for _, id := range inst.order {
 		rules = append(rules, inst.rules[id])
 	}
@@ -390,6 +392,7 @@ func need(r Request, maxOut int64) (u Usage) {
 // blocked says only a concurrency rule holds it; d.Rule then names that
 // rule.
 func (inst *Ledger) check(r Request, now time.Time) (d Decision, u Usage, blocked bool) {
+	inst.dropLapsed(now)
 	accts := r.Chain.Accounts()
 	if inst.refuseAll != "" {
 		d = Decision{Outcome: OutcomeRefused, Refusal: RefusalStop, Reason: inst.refuseAll}
@@ -626,6 +629,21 @@ func (inst *Ledger) Accounts() (out []AccountUsage) {
 	return
 }
 
+// dropLapsed removes the rules whose Until has passed. The caller holds
+// the mutex.
+func (inst *Ledger) dropLapsed(now time.Time) {
+	dropped := false
+	for id, r := range inst.rules {
+		if r.lapsed(now) {
+			delete(inst.rules, id)
+			dropped = true
+		}
+	}
+	if dropped {
+		inst.order = sortedRuleIds(inst.rules)
+	}
+}
+
 // RuleState is a rule on one account, as llm.ration.list and
 // keelson('llm_rations') show it.
 type RuleState struct {
@@ -642,6 +660,7 @@ func (inst *Ledger) States() (out []RuleState) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	now := inst.now()
+	inst.dropLapsed(now)
 	for _, id := range inst.order {
 		rule := inst.rules[id]
 		var accts []Account

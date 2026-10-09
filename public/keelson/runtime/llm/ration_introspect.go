@@ -81,6 +81,7 @@ func rationsTable(rows []ration.RuleState) (t *introspect.Table) {
 		Int64("window_ms", func(i int) int64 { return rows[i].Rule.Window.Milliseconds() }).
 		Bool("aligned", func(i int) bool { return rows[i].Rule.Aligned }).
 		String("raise_until", func(i int) string { return formatTime(rows[i].Rule.RaiseUntil) }).
+		String("until", func(i int) string { return formatTime(rows[i].Rule.Until) }).
 		String("author", func(i int) string { return rows[i].Rule.Author }).
 		String("reason", func(i int) string { return rows[i].Rule.Reason }).
 		String("set_at", func(i int) string { return formatTime(rows[i].Rule.SetAt) })

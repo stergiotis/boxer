@@ -336,3 +336,17 @@ func TestPruneDropsIdleAccounts(t *testing.T) {
 	}
 	assert.NotEmpty(t, l.Accounts(), "the live ones stay")
 }
+
+// A rule with Until lapses: from then on it refuses nothing and is gone.
+func TestRuleLapses(t *testing.T) {
+	l, c := newTestLedger(t)
+	require.NoError(t, l.Set(Rule{Id: "d", Select: Selector{Kind: AccountKindApp, Key: "a"}, Kind: RuleKindDeny,
+		Until: c.now().Add(time.Minute)}))
+	_, tk := l.Admit(context.Background(), call("a", 1, 10))
+	assert.Nil(t, tk)
+	c.advance(time.Minute)
+	_, tk = l.Admit(context.Background(), call("a", 1, 10))
+	assert.NotNil(t, tk, "lapsed")
+	_, ok := l.Rule("d")
+	assert.False(t, ok, "and dropped")
+}
