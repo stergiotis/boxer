@@ -194,7 +194,9 @@ func TestOpHistory(t *testing.T) {
 // TestOpDiffBetweenTwoSnapshots is §7's diff, and it rests on a property of
 // the join rather than of the store: with join_use_nulls = 0 the missing side
 // fills with ”, which is never a valid io/fs path and is therefore a safe
-// "absent" marker.
+// "absent" marker. The statement pins the setting, because it is a session
+// setting a caller can change and under 1 the idiom stops classifying rather
+// than failing (ADR-0198 Updates 2026-08-19).
 func TestOpDiffBetweenTwoSnapshots(t *testing.T) {
 	s := seedCorpus(t)
 	rows := run(t, fmt.Sprintf(`
@@ -204,7 +206,8 @@ func TestOpDiffBetweenTwoSnapshots(t *testing.T) {
 		FROM fs(%d, %d) AS n
 		FULL OUTER JOIN fs(%d, %d) AS o ON n.path = o.path
 		WHERE change != 'same'
-		ORDER BY path`,
+		ORDER BY path
+		SETTINGS join_use_nulls = 0`,
 		m(), s.second.Snap.UnixNano(), m(), s.first.Snap.UnixNano()))
 
 	got := map[string]string{}
@@ -218,13 +221,16 @@ func TestOpDiffBetweenTwoSnapshots(t *testing.T) {
 	}, got)
 }
 
-// TestOpDu — every directory's recursive size in one pass.
+// TestOpDu — every directory's recursive size in one pass, the root included:
+// a file at depth 1 has no proper ancestor, so without the explicit '.' arm
+// root-level files would be in no directory's total and the root would have
+// no row.
 func TestOpDu(t *testing.T) {
 	seedCorpus(t)
 	rows := run(t, fmt.Sprintf(`
 		SELECT anc, sum(size) AS bytes, count() AS files
 		FROM fs(%d)
-		ARRAY JOIN arrayMap(k -> arrayStringConcat(arraySlice(splitByChar('/', path), 1, k), '/'), range(1, depth)) AS anc
+		ARRAY JOIN arrayConcat(['.'], arrayMap(k -> arrayStringConcat(arraySlice(splitByChar('/', path), 1, k), '/'), range(1, depth))) AS anc
 		WHERE NOT is_dir
 		GROUP BY anc
 		ORDER BY anc`, m()))
@@ -235,6 +241,9 @@ func TestOpDu(t *testing.T) {
 	}
 	assert.Equal(t, "1", got["bin"], "one file under bin in the newest snapshot")
 	assert.Equal(t, "4", got["docs"], "notes, readme, copy and new")
+	all := run(t, fmt.Sprintf(`SELECT count() FROM fs(%d) WHERE NOT is_dir`, m()))
+	require.Len(t, all, 1)
+	assert.Equal(t, all[0][0], got["."], "the root row counts every file of the snapshot")
 }
 
 // TestOpWhatIsWhere — the four one-liners of §7.

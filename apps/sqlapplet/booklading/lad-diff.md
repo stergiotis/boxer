@@ -45,4 +45,10 @@ FROM fs({m:String}, {s2:String}) AS n
 FULL OUTER JOIN fs({m:String}, {s1:String}) AS o ON n.mount = o.mount AND n.path = o.path
 WHERE change != 'same'
 ORDER BY path
+SETTINGS join_use_nulls = 0
 ```
+
+The `SETTINGS` line is load-bearing: the classification reads a missing side
+as an empty path, which is how ClickHouse fills a `FULL OUTER JOIN` under
+`join_use_nulls = 0`. That is the server default, but it is a session setting,
+and under `1` the chapter would classify nothing rather than fail.
