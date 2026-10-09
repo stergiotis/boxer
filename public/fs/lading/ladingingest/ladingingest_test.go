@@ -599,3 +599,34 @@ func TestInlineMaxBoundsTheReadNotOnlyTheStat(t *testing.T) {
 	assert.Equal(t, want[:], got["big.bin"].ContentHash, "the whole file is hashed")
 	assert.Len(t, h.blocksOf(t, res.Snap, "big.bin"), 0, "a referenced file stores no blocks")
 }
+
+// TestSkipRefHashLeavesReferencedFilesUnread. The default streams every file
+// above InlineMax through BLAKE3, which is a full read of every large file
+// per walk; a mount that wants only names and sizes for those can opt out,
+// and the empty hash on the row is how a reader tells.
+func TestSkipRefHashLeavesReferencedFilesUnread(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+
+	hashed, err := ladingingest.Snapshot(ctx, tree(), testMount, testPolicy(), h.stores())
+	require.NoError(t, err)
+	pol := testPolicy()
+	pol.SkipRefHash = true
+	unhashed, err := ladingingest.Snapshot(ctx, tree(), testMount, pol, h.stores())
+	require.NoError(t, err)
+
+	big := h.entries(t, hashed)["big.bin"]
+	assert.Equal(t, "ref", big.Content)
+	assert.Len(t, big.ContentHash, 32, "by default a ref entry is hashed")
+
+	big = h.entries(t, unhashed)["big.bin"]
+	assert.Equal(t, "ref", big.Content, "still referenced")
+	assert.Equal(t, uint64(4096), big.Size, "size and mtime come from the stat")
+	assert.Empty(t, big.ContentHash, "and nothing was read")
+	assert.Equal(t, hashed.Referenced, unhashed.Referenced)
+
+	// Stored files are unaffected by the knob.
+	small := h.entries(t, unhashed)["top.md"]
+	assert.Equal(t, "blocks", small.Content)
+	assert.Len(t, small.ContentHash, 32)
+}

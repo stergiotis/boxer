@@ -301,6 +301,12 @@ func (inst *walk) flushPending() (err error) {
 // so the row and the blocks agree even when the source did not hold still.
 func (inst *walk) content(path string, row *ladingmeta.LadingEntry) (err error) {
 	if row.Size > inst.policy.InlineMax {
+		if inst.policy.SkipRefHash {
+			// Referenced, unread: size and mtime from the stat, no hash.
+			row.Content = contentRef
+			inst.res.Referenced++
+			return nil
+		}
 		// Referenced, not stored — but still hashed, so `identical content`
 		// and change detection work across the whole mount rather than only
 		// its small half. Streamed: a ref file is not held.
