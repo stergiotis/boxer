@@ -51,6 +51,8 @@ func (inst *rig) unattendedGrant(mode ModeE, calls uint32) Grant {
 		Ceiling: &ceiling})
 	require.NoError(inst.t, err, "the host approves without the person")
 	assert.True(inst.t, g.Unattended, "the grant says the host decided it")
+	require.NotNil(inst.t, g.Terms, "an unattended grant states its terms as an approved one does")
+	assert.Positive(inst.t, g.Terms.CallsBudget)
 	return g
 }
 
