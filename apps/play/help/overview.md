@@ -107,6 +107,10 @@ column names:
   columns), columns are grouped by name prefix into pinned / relations / data /
   meta sections.
 
+The how-to *Reading a leeway table you have not seen* puts the panes that read
+a leeway result — Schema, Detail, Projection — in the order that characterises
+an unfamiliar table, with the operation an agent calls for each.
+
 On both paths a column can carry a **gloss** — a named rendering such as
 `` `t@gloss/temperature;unit=C` `` or `` `notes@text/markdown` `` — declared by
 alias, by the `gloss(…)` macro, or by a `-- play: gloss` rule; the Table shows
