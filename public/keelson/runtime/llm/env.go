@@ -80,6 +80,34 @@ var (
 		Description: "ceiling on keeping model message text: off (sizes and counts only), ring (text on this process's keelson('llm_calls') rows), durable (ring, plus the messages of llm.retain.* requests on boxer.facts, kept until removed by hand)",
 		Category:    env.CategoryLLM,
 	}, []string{string(RetainOff), string(RetainRing), string(RetainDurable)})
+
+	// Moderators are the apps that may write the metering rules (ADR-0300
+	// §SD7). The bus checks the capability an app declares; the service
+	// checks this list as well, so a manifest alone does not make a
+	// moderator.
+	Moderators = env.NewString(env.Spec{
+		Name:        "BOXER_LLM_MODERATORS",
+		Description: "comma-separated app ids that may set, list and cancel through llm.ration.* (ADR-0300): the moderators that throttle and refuse model calls; empty means no app may",
+		Category:    env.CategoryLLM,
+	})
+
+	// Unruled decides calls when the ledger could not be rebuilt from the
+	// trail at start (ADR-0300 §SD5): allow keeps serving with counts that
+	// start from zero, refuse holds every call until the host restarts.
+	Unruled = env.NewCategorialString(env.Spec{
+		Name:        "BOXER_LLM_RATION_UNRULED",
+		Default:     string(UnruledAllow),
+		Description: "what the llm service does when its usage ledger could not be rebuilt from boxer.facts at start: allow (serve, counting from zero) or refuse (refuse every model call until restart)",
+		Category:    env.CategoryLLM,
+	}, []string{string(UnruledAllow), string(UnruledRefuse)})
+)
+
+// UnruledE is a BOXER_LLM_RATION_UNRULED value.
+type UnruledE string
+
+const (
+	UnruledAllow  UnruledE = "allow"
+	UnruledRefuse UnruledE = "refuse"
 )
 
 // RetainE is a BOXER_LLM_RETAIN level, ordered: each keeps what the one

@@ -51,6 +51,43 @@ const (
 	SubjectRetainComplete = "llm.retain.complete"
 	// SubjectRetainAll is the service's subscription pattern for them.
 	SubjectRetainAll = "llm.retain.*"
+
+	// SubjectRationPrefix precedes the moderator's verbs (ADR-0300 §SD4,
+	// §SD7). Two tokens, so no `llm.*` grant covers them: only an app that
+	// declares [ModeratorCaps] and is listed in BOXER_LLM_MODERATORS
+	// reaches them.
+	SubjectRationPrefix = "llm.ration."
+	// SubjectRationSet sets or removes a rule.
+	SubjectRationSet = "llm.ration.set"
+	// SubjectRationList lists the rules and their state on each account.
+	SubjectRationList = "llm.ration.list"
+	// SubjectRationCancel cancels the calls in flight of a call id or an
+	// account, those waiting in the queue included.
+	SubjectRationCancel = "llm.ration.cancel"
+	// SubjectRationAsk proposes a rule for the person to decide.
+	SubjectRationAsk = "llm.ration.ask"
+	// SubjectRationAll is the service's subscription pattern for them.
+	SubjectRationAll = "llm.ration.*"
+
+	// SubjectEventPrefix precedes what the service publishes for
+	// moderators: one event per call admission decided, and one per soft
+	// threshold a call crossed. Publish only; nothing replies.
+	SubjectEventPrefix = "llm.event."
+	// SubjectEventCall is one call: who it was charged to, how admission
+	// decided it, and what it used.
+	SubjectEventCall = "llm.event.call"
+	// SubjectEventThreshold is a soft threshold a call crossed.
+	SubjectEventThreshold = "llm.event.threshold"
+	// SubjectEventAll is a moderator's subscription pattern.
+	SubjectEventAll = "llm.event.*"
+)
+
+// The introspection tables of the ledger (ADR-0300 §SD3).
+const (
+	// TableUsage is use per account.
+	TableUsage = "llm_usage"
+	// TableRations is each rule's state on each account it applies to.
+	TableRations = "llm_rations"
 )
 
 // TableCalls is the introspection table of completions this process has
@@ -71,7 +108,21 @@ func ServiceCaps() (caps []app.SubjectFilter) {
 	caps = []app.SubjectFilter{
 		{Pattern: SubjectAll, Direction: app.CapDirectionSub, Reason: "llm: serve describe and complete requests"},
 		{Pattern: SubjectRetainAll, Direction: app.CapDirectionSub, Reason: "llm: serve retained complete requests"},
+		{Pattern: SubjectRationAll, Direction: app.CapDirectionSub, Reason: "llm: serve the moderators' rule requests"},
 		{Pattern: inprocbus.InboxPrefix + ">", Direction: app.CapDirectionPub, Reason: "llm: reply to inboxes"},
+		{Pattern: SubjectEventAll, Direction: app.CapDirectionPub, Reason: "llm: publish usage and threshold events to moderators"},
+	}
+	return
+}
+
+// ModeratorCaps is what a moderator declares beside [ClientCaps] (ADR-0300
+// §SD7): the rule verbs, and the events. The service also requires the
+// app to be listed in BOXER_LLM_MODERATORS. reason names what the
+// moderator does, e.g. "budget: throttle runaway agent loops".
+func ModeratorCaps(reason string) (caps []app.SubjectFilter) {
+	caps = []app.SubjectFilter{
+		{Pattern: SubjectRationAll, Direction: app.CapDirectionPub, Reason: reason},
+		{Pattern: SubjectEventAll, Direction: app.CapDirectionSub, Reason: reason},
 	}
 	return
 }

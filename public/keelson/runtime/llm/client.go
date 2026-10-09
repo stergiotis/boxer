@@ -9,7 +9,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/llm/ration"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -153,6 +155,19 @@ type Response struct {
 	// RetentionReason why not (ADR-0264 §SD4).
 	Retention       RetentionE
 	RetentionReason string
+	// CachedInputTokens and ReasoningTokens are the provider's breakdown of
+	// the counts, absent when it reports none (ADR-0300 §SD2).
+	CachedInputTokens option.Option[int32]
+	ReasoningTokens   option.Option[int32]
+	// Admission is how the metering rules decided the call — admitted,
+	// clamped (MaxTokens lowered) or queued — Rule the rule that did, and
+	// Queued how long the call waited for a slot (ADR-0300 §SD5).
+	Admission string
+	Rule      string
+	Queued    time.Duration
+	// Remaining is what each budget and rate rule on the call's accounts
+	// leaves after it: what a loop reads to slow down before it is refused.
+	Remaining []ration.Remaining
 }
 
 // RetentionE is the verdict on a request's text.
@@ -180,6 +195,13 @@ type RefusedError struct {
 	// (keelson('llm_calls')); empty for a request the service could not
 	// read.
 	CallId string
+	// Refusal is set when a metering rule refused the call (ADR-0300
+	// §SD5): RefusalWait for a rate or a full queue — RetryAfter says when
+	// trying again may succeed — and RefusalStop for a spent budget or a
+	// deny rule. Rule names the rule.
+	Refusal    ration.RefusalE
+	Rule       string
+	RetryAfter time.Duration
 }
 
 func (inst *RefusedError) Error() string { return "llm: refused: " + inst.Reason }
@@ -304,6 +326,13 @@ func (inst *Client) Complete(ctx context.Context, r Request) (res Response, err 
 		InputTokens: w.InputTokens, OutputTokens: w.OutputTokens, Incomplete: w.Incomplete,
 		Elapsed: time.Duration(w.ElapsedNs), CallId: w.CallId,
 		Retention: RetentionE(w.Retention), RetentionReason: w.RetentionReason,
+		Admission: w.Admission, Rule: w.Rule, Queued: time.Duration(w.QueuedNs), Remaining: remainingOfWire(w.Remaining),
+	}
+	if w.CachedInputTokens != nil {
+		res.CachedInputTokens = option.Some(*w.CachedInputTokens)
+	}
+	if w.ReasoningTokens != nil {
+		res.ReasoningTokens = option.Some(*w.ReasoningTokens)
 	}
 	return
 }
@@ -384,7 +413,8 @@ func failureOf(w wireReply) (err error) {
 	var sentinel error
 	switch w.ErrorKind {
 	case errKindRefused, "":
-		return &RefusedError{Reason: w.Reason, CallId: w.CallId}
+		return &RefusedError{Reason: w.Reason, CallId: w.CallId, Refusal: ration.ParseRefusal(w.Refusal), Rule: w.Rule,
+			RetryAfter: time.Duration(w.RetryAfterNs)}
 	case errKindAuth:
 		sentinel = openaichat.ErrAuth
 	case errKindModelNotFound:

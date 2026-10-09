@@ -17,6 +17,7 @@ import (
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/llm/ration"
 	"github.com/stergiotis/boxer/public/keelson/runtime/loopback"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
@@ -60,6 +61,14 @@ type Config struct {
 	// or a recorder without a backend, keeps the record alone — the
 	// in-memory host's case.
 	Trail *trail.Recorder
+	// Moderators are the app ids that may use llm.ration.* (ADR-0300 §SD7).
+	Moderators []string
+	// Unruled decides calls when the ledger could not be rebuilt from the
+	// trail; empty is allow.
+	Unruled UnruledE
+	// Ledger, when set, replaces the ledger the service would build — a
+	// test's, with its own clock.
+	Ledger *ration.Ledger
 }
 
 // ConfigFromEnv resolves the config from the ADR-0009 registry.
@@ -68,11 +77,12 @@ func ConfigFromEnv() (cfg Config) {
 		Endpoint: Endpoint.Get(), Model: Model.Get(), ApiKey: ApiKey.Get(),
 		MaxTokens: int32(MaxTokens.Get()), ContextTokens: int32(ContextTokens.Get()), Timeout: Timeout.Get(), Retain: RetainE(Retain.Get()),
 		TrustedHosts: ParseTrustedHosts(TrustedHosts.Get()),
+		Moderators:   ParseTrustedHosts(Moderators.Get()), Unruled: UnruledE(Unruled.Get()),
 	}
 	return
 }
 
-// ParseTrustedHosts splits TrustedHosts' value.
+// ParseTrustedHosts splits TrustedHosts' value, and Moderators'.
 func ParseTrustedHosts(s string) (hosts []string) {
 	for _, h := range strings.Split(s, ",") {
 		if h = strings.TrimSpace(h); h != "" {
@@ -96,10 +106,17 @@ type Service struct {
 	// delegation checks agent-caused completions (ADR-0269 §SD6); set once
 	// the host's dispatcher runs.
 	delegation atomic.Pointer[delegationRef]
-	cfg        Config
-	client     openaichat.ClientI
-	host       string
-	local      bool
+	// windows orders the queue (ADR-0300 §SD6) and asker puts a
+	// moderator's questions to the person (§SD9); both set once the host's
+	// window host runs.
+	windows atomic.Pointer[windowsRef]
+	asker   atomic.Pointer[askerRef]
+	// ledger meters and admits every call (ADR-0300 §SD3–§SD5).
+	ledger *ration.Ledger
+	cfg    Config
+	client openaichat.ClientI
+	host   string
+	local  bool
 	// trusted says local holds by TrustedHosts, not loopback.
 	trusted bool
 	// context is the model's context size and where it came from, set
@@ -131,6 +148,9 @@ type Service struct {
 	// of a conversation keeps its whole history again.
 	seen      map[string]seen
 	seenOrder []string
+	// active holds each call between admission and its reply, by call id,
+	// for llm.ration.cancel.
+	active map[string]activeCall
 }
 
 // NewService constructs and subscribes a Service. The caller MUST invoke
@@ -146,8 +166,22 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 	if cfg.Timeout <= 0 {
 		cfg.Timeout = DefaultTimeout
 	}
-	s = &Service{cfg: cfg, log: log.With().Str("app", string(ServiceAppId)).Logger(), seen: map[string]seen{}, running: map[cancelKey]context.CancelFunc{}}
+	s = &Service{cfg: cfg, log: log.With().Str("app", string(ServiceAppId)).Logger(), seen: map[string]seen{}, running: map[cancelKey]context.CancelFunc{},
+		active: map[string]activeCall{}, ledger: cfg.Ledger}
+	if s.ledger == nil {
+		s.ledger = ration.NewLedger()
+	}
 	s.base, s.cancelBase = context.WithCancel(context.Background())
+	if rows, rerr := s.rebuildLedger(); rerr != nil {
+		if cfg.Unruled == UnruledRefuse {
+			s.ledger.SetRefuseAll("the usage ledger could not be rebuilt from boxer.facts and BOXER_LLM_RATION_UNRULED is refuse: " + rerr.Error())
+			s.log.Error().Err(rerr).Msg("llm: the usage ledger could not be rebuilt; every model call is refused until restart")
+		} else {
+			s.log.Warn().Err(rerr).Msg("llm: the usage ledger could not be rebuilt; it counts from zero")
+		}
+	} else if rows > 0 {
+		s.log.Info().Int("calls", rows).Msg("llm: the usage ledger was rebuilt from the trail")
+	}
 	if cfg.Configured() {
 		s.host = EndpointHost(cfg.Endpoint)
 		s.local = isLocalEndpoint(cfg.Endpoint)
@@ -176,9 +210,13 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 		}
 	}
 	s.busClient = bus.NewClient(ServiceAppId, ServiceCaps())
-	for _, pattern := range []string{SubjectAll, SubjectRetainAll} {
+	for _, pattern := range []string{SubjectAll, SubjectRetainAll, SubjectRationAll} {
+		handler := s.handleRequest
+		if pattern == SubjectRationAll {
+			handler = s.handleRation
+		}
 		var unsub func()
-		unsub, err = s.busClient.Subscribe(pattern, s.handleRequest)
+		unsub, err = s.busClient.Subscribe(pattern, handler)
 		if err != nil {
 			s.Close()
 			err = eb.Build().Str("pattern", pattern).Errorf("llm: subscribe: %w", err)
@@ -378,16 +416,8 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 		maxTokens = inst.cfg.MaxTokens
 	}
 	rec.MaxTokens = maxTokens
-	// Written ahead: what the request adds to the conversation is on the
-	// trail before the request leaves the machine, so a process that dies
-	// mid-call leaves "sent, outcome unknown" rather than nothing.
-	inst.writeRequest(&rec, t)
-	ahead, refuse := inst.cfg.Trail.WriteAhead(inst.base)
-	if refuse != nil {
-		inst.refuse(msg, refuse.Error(), rec, t)
-		return
-	}
-	t.notAhead = !ahead
+	// The call's bound starts here, so time spent waiting in the queue
+	// counts against it, and a cancel reaches a call still waiting.
 	ctx, cancel := context.WithTimeout(inst.base, inst.cfg.Timeout)
 	defer cancel()
 	if req.CancelKey != "" {
@@ -408,6 +438,40 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 			defer c2()
 		}
 	}
+	// Admission (ADR-0300 §SD5): after the delegation check and the
+	// sensitivity wall, before anything leaves the machine.
+	chain := ration.Chain{App: string(msg.Sender), Instance: msg.SenderInstance, Task: rec.Task, Purpose: req.Purpose}
+	class := inst.classOf(msg.SenderInstance)
+	inst.track(rec.CallId, activeCall{chain: chain, cancel: cancel})
+	defer inst.untrack(rec.CallId)
+	decision, ticket := inst.ledger.Admit(ctx, ration.Request{Chain: chain, Class: class,
+		EstimatedInput: estimateInput(req.Messages), MaxOutput: int64(maxTokens)})
+	rec.Admission, rec.AdmissionRule, rec.Queued = decision.Outcome.String(), decision.Rule, decision.Queued
+	if decision.Outcome == ration.OutcomeRefused {
+		inst.refuseAdmission(msg, decision, rec, t, chain, class)
+		return
+	}
+	var used ration.Usage
+	settled := false
+	defer func() {
+		if !settled {
+			inst.publishThresholds(inst.ledger.Settle(ticket, used))
+		}
+	}()
+	if decision.MaxOutput > 0 && decision.MaxOutput < int64(maxTokens) {
+		maxTokens = int32(decision.MaxOutput)
+		rec.MaxTokens = maxTokens
+	}
+	// Written ahead: what the request adds to the conversation is on the
+	// trail before the request leaves the machine, so a process that dies
+	// mid-call leaves "sent, outcome unknown" rather than nothing.
+	inst.writeRequest(&rec, t)
+	ahead, refuse := inst.cfg.Trail.WriteAhead(inst.base)
+	if refuse != nil {
+		inst.refuse(msg, refuse.Error(), rec, t)
+		return
+	}
+	t.notAhead = !ahead
 	started := time.Now()
 	resp, cerr := inst.client.Complete(ctx, openaichat.CompletionRequest{
 		ModelId: inst.cfg.Model, Messages: req.Messages, Temperature: req.Temperature, MaxTokens: maxTokens,
@@ -416,6 +480,10 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 	})
 	rec.Elapsed = time.Since(started)
 	rec.InputTokens, rec.OutputTokens = resp.InputTokens, resp.OutputTokens
+	rec.CachedInputTokens, rec.ReasoningTokens = resp.CachedInputTokens, resp.ReasoningTokens
+	used = usageOf(resp, rec.Elapsed)
+	settled = true
+	inst.publishThresholds(inst.ledger.Settle(ticket, used))
 	rec.CompletionBytes = len(resp.Content)
 	rec.ToolCalls = len(resp.ToolCalls)
 	rec.FinishReason = resp.FinishReason
@@ -426,6 +494,14 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 	rep := wireReply{
 		Ok: true, Content: resp.Content, Reasoning: resp.Reasoning, FinishReason: resp.FinishReason, ToolCalls: resp.ToolCalls,
 		InputTokens: resp.InputTokens, OutputTokens: resp.OutputTokens, ElapsedNs: int64(rec.Elapsed), CallId: rec.CallId,
+		Admission: decision.Outcome.String(), Rule: decision.Rule, QueuedNs: int64(decision.Queued),
+		Remaining: wireOfRemaining(decision.Remaining),
+	}
+	if resp.CachedInputTokens.Has {
+		rep.CachedInputTokens = &resp.CachedInputTokens.Val
+	}
+	if resp.ReasoningTokens.Has {
+		rep.ReasoningTokens = &resp.ReasoningTokens.Val
 	}
 	if cerr != nil {
 		if errors.Is(cerr, openaichat.ErrIncompleteCompletion) && resp.Content != "" {
@@ -450,6 +526,7 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 		t.reasoning = resp.Reasoning
 	}
 	rep.Retention, rep.RetentionReason = inst.record(rec, t)
+	inst.publishCall(rec, chain, class, decision, used)
 	lg := inst.log.Debug()
 	if !rep.Ok {
 		lg = inst.log.Warn()
@@ -473,6 +550,18 @@ func (inst *Service) refuse(msg *app.Msg, reason string, rec CallRecord, t *turn
 	inst.record(rec, t)
 	inst.log.Warn().Str("sender", string(msg.Sender)).Str("purpose", rec.Purpose).Str("reason", reason).Msg("llm: refused")
 	inst.reply(msg.Reply, wireReply{ErrorKind: errKindRefused, Reason: reason, CallId: rec.CallId})
+}
+
+// refuseAdmission is refuse for a call the metering rules refused: the
+// reply says whether to wait or stop, which rule, and when to retry.
+func (inst *Service) refuseAdmission(msg *app.Msg, d ration.Decision, rec CallRecord, t *turn, chain ration.Chain, class ration.ClassE) {
+	rec.Refused, rec.Error = true, d.Reason
+	inst.record(rec, t)
+	inst.log.Info().Str("sender", string(msg.Sender)).Str("purpose", rec.Purpose).Str("rule", d.Rule).Str("refusal", d.Refusal.String()).
+		Str("reason", d.Reason).Msg("llm: refused by a metering rule")
+	inst.publishCall(rec, chain, class, d, nil)
+	inst.reply(msg.Reply, wireReply{ErrorKind: errKindRefused, Reason: d.Reason, CallId: rec.CallId, Admission: d.Outcome.String(),
+		Rule: d.Rule, Refusal: refusalName(d.Refusal), RetryAfterNs: int64(d.RetryAfter)})
 }
 
 func (inst *Service) reply(inbox string, v any) {
