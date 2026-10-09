@@ -129,6 +129,7 @@ func (inst *Service) record(t *task, rec *callRec, decision string, out opwire.O
 	}
 	inst.recMu.Unlock()
 	inst.persist(r)
+	inst.queueAction(r)
 }
 
 // actionLine is a row of the actions file: the record, and under a test

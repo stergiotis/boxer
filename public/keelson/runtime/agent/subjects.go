@@ -170,6 +170,7 @@ func ServiceCaps() (caps []app.SubjectFilter) {
 		{Pattern: opwire.Pattern, Direction: app.CapDirectionPub, Reason: "agent: call operations of instances"},
 		{Pattern: app.SubjectInstanceClosed, Direction: app.CapDirectionSub, Reason: "agent: end a task when its coordinator closes"},
 		{Pattern: SubjectModerateAll, Direction: app.CapDirectionSub, Reason: "agent: serve the moderators' stop and lower-ceiling requests (ADR-0300 §SD8)"},
+		{Pattern: SubjectActionRecorded, Direction: app.CapDirectionPub, Reason: "agent: publish each action record for moderators (ADR-0302 §SD2)"},
 		{Pattern: SubjectEvents, Direction: app.CapDirectionPub, Reason: "agent: announce a task's events"},
 		{Pattern: inprocbus.InboxPrefix + ">", Direction: app.CapDirectionPub, Reason: "agent: reply to inboxes"},
 	}

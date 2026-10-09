@@ -114,6 +114,8 @@ type Service struct {
 	// moderation is the moderators' levers and questions (ADR-0300 §SD8,
 	// §SD9).
 	moderation moderation
+	// actionEvents publishes each action record (ADR-0302 §SD2).
+	actionEvents actionQueue
 }
 
 // NewService subscribes the service. The caller MUST invoke Close.
@@ -155,6 +157,7 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 		_ = s.busClient.Close()
 		return nil, err
 	}
+	s.startActionEvents()
 	return
 }
 
@@ -174,6 +177,7 @@ func (inst *Service) Close() {
 		if inst.moderation.unsub != nil {
 			inst.moderation.unsub()
 		}
+		inst.stopActionEvents()
 		close(inst.events)
 		<-inst.eventsDone
 		if err := inst.busClient.Close(); err != nil {

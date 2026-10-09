@@ -30,9 +30,13 @@ const (
 	SubjectModerateAll = SubjectModeratePrefix + "*"
 )
 
-// ModeratorCaps is what a moderator declares to reach the verbs.
+// ModeratorCaps is what a moderator declares to reach the verbs, and to
+// follow the action records (ADR-0302 §SD2).
 func ModeratorCaps(reason string) (caps []app.SubjectFilter) {
-	caps = []app.SubjectFilter{{Pattern: SubjectModerateAll, Direction: app.CapDirectionPub, Reason: reason}}
+	caps = []app.SubjectFilter{
+		{Pattern: SubjectModerateAll, Direction: app.CapDirectionPub, Reason: reason},
+		{Pattern: SubjectActionRecorded, Direction: app.CapDirectionSub, Reason: reason},
+	}
 	return
 }
 

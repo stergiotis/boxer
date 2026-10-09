@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 )
 
 const moderatorApp app.AppIdT = "test.moderator"
@@ -121,4 +122,40 @@ func TestAskPersonWaitsForTheAnswer(t *testing.T) {
 	r.svc.moderation.mu.Lock()
 	assert.Empty(t, r.svc.moderation.questions, "an expired question leaves the queue")
 	r.svc.moderation.mu.Unlock()
+}
+
+// Each action record is published as it is recorded, without the model's
+// words, for a moderator to follow (ADR-0302 §SD2).
+func TestActionRecordsArePublished(t *testing.T) {
+	r := newRig(t, true)
+	bc := r.bus.NewClient(moderatorApp, ModeratorCaps("test: follow actions"))
+	got := make(chan ActionRecord, 16)
+	unsub, err := bc.Subscribe(SubjectActionRecorded, func(m *app.Msg) {
+		rec, derr := DecodeActionEvent(m.Payload)
+		assert.NoError(t, derr)
+		got <- rec
+	})
+	require.NoError(t, err)
+	t.Cleanup(unsub)
+	g := r.grant(ModeAct)
+	// A query completes as it is dispatched.
+	require.Equal(t, "completed", r.call(g, "q1", "get_text", "{}").Phase)
+	var final *ActionRecord
+	deadline := time.After(2 * time.Second)
+	for final == nil {
+		select {
+		case rec := <-got:
+			if p, ok := opwire.ParsePhase(rec.Phase); ok && p.Result() == opwire.ResultDone {
+				final = &rec
+			}
+		case <-deadline:
+			t.Fatal("no action event for the done call")
+		}
+	}
+	assert.Equal(t, g.Task, final.Task)
+	assert.Equal(t, "get_text", final.Operation)
+	assert.Equal(t, r.docKey, final.Instance)
+	assert.NotEmpty(t, final.ArgsDigest)
+	assert.Equal(t, "q1", final.Key)
+	assert.Empty(t, final.CallTitle, "the model's words stay off the event")
 }
