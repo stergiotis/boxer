@@ -598,3 +598,36 @@ func TestMatchPathsRunsThePatternInOneQuery(t *testing.T) {
 	_, _, err = fsys.MatchPaths("../x", "a", true, 0)
 	assert.ErrorIs(t, err, fs.ErrInvalid)
 }
+
+// TestAPartialWalkIsNotAView. The commit rule (ADR-0198 §SD6): a snapshot
+// exists exactly when its root row carries the commit record. The macros
+// resolve it from the index and the SFTP head checks it before opening a
+// view; this pins that the Go surface applies it too, because an instant with
+// rows and no root row is exactly what a walk that died leaves behind, and
+// the failed call's Result hands its caller that instant.
+func TestAPartialWalkIsNotAView(t *testing.T) {
+	h := seed(t)
+	ctx := context.Background()
+	partial := h.res.Snap.Add(time.Minute)
+	require.NoError(t, h.stores.Meta.Begin(testMount.Value(), partial, ladingmeta.MetaEnvelope{
+		NaturalKey: []byte("orphan.txt"), ExpiresAt: h.res.ExpiresAt,
+	}).AddLadingEntry(ladingmeta.LadingEntry{
+		Kind: "entry", NodeKind: "file", Content: "none", Mode: 0o644,
+	}).Commit())
+	_, err := h.stores.Meta.Flush(ctx)
+	require.NoError(t, err)
+
+	fsys, err := ladingadapter.Open(h.stores, testMount, partial)
+	require.NoError(t, err, "Open reads nothing; the refusal is the first call's")
+	_, err = fsys.Stat("orphan.txt")
+	assert.ErrorIs(t, err, fs.ErrNotExist, "a row under an instant with no root row is not a file")
+	_, err = fs.ReadDir(fsys, ".")
+	assert.ErrorIs(t, err, fs.ErrNotExist, "nor is the instant a directory")
+	_, err = fs.ReadFile(fsys, "orphan.txt")
+	assert.ErrorIs(t, err, fs.ErrNotExist)
+
+	// The complete snapshot beside it is unaffected.
+	kids, err := fs.ReadDir(h.open(t), ".")
+	require.NoError(t, err)
+	assert.NotEmpty(t, kids)
+}

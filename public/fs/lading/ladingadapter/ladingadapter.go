@@ -117,6 +117,19 @@ type FS struct {
 	// working set is the caller's own access pattern.
 	entries map[string]*entry
 	dirs    map[string][]*entry
+
+	// complete is whether the pinned instant is a complete snapshot — whether
+	// its root row carries the commit record (ADR-0198 §SD6). Answered once,
+	// by the first query, and shared with every Sub: a pointer so the copy
+	// Sub makes sees the same answer.
+	complete *completeness
+}
+
+// completeness is the once-asked answer to "does this snapshot have a root
+// row". Nil answer means not asked yet.
+type completeness struct {
+	asked bool
+	yes   bool
 }
 
 var (
@@ -151,8 +164,9 @@ func Open(st lading.Stores, mount identifier.TaggedId, snap time.Time, opts ...O
 	}
 	inst = &FS{
 		st: st, mount: mount, snap: snap.UTC(), ctx: context.Background(),
-		entries: map[string]*entry{},
-		dirs:    map[string][]*entry{},
+		entries:  map[string]*entry{},
+		dirs:     map[string][]*entry{},
+		complete: &completeness{},
 	}
 	for _, o := range opts {
 		o(inst)
@@ -539,7 +553,9 @@ func (inst *FS) children(full string) ([]*entry, error) {
 // Every predicate is ANDed onto the pinning — mount, snapshot and the expiry
 // cutoff — so a caller of this package cannot reach another mount's rows,
 // another snapshot's, or a snapshot the rest of the store has stopped
-// offering, whatever it asks for.
+// offering, whatever it asks for. The first scan also asks whether the
+// snapshot is complete at all ([FS.ensureComplete]); a walk that died before
+// its root row is not a view, however many rows it left behind.
 //
 // The cutoff is [ladingschema.NotExpired], the same spelling the macros use.
 // Without it this adapter — and therefore the SFTP head above it — would keep
@@ -547,6 +563,10 @@ func (inst *FS) children(full string) ([]*entry, error) {
 // because `ttl_only_drop_parts = 1` leaves a partly expired part on disk until
 // an explicit OPTIMIZE FINAL.
 func (inst *FS) scan(pred string, limit int) (out []*entry, err error) {
+	err = inst.ensureComplete()
+	if err != nil {
+		return nil, err
+	}
 	where := fmt.Sprintf("%s = %d AND %s = %s AND %s AND (%s)",
 		ladingschema.ColID, inst.mount.Value(),
 		ladingschema.ColTs, tsLiteral(inst.snap),
@@ -578,15 +598,45 @@ func tsLiteral(t time.Time) string {
 	return fmt.Sprintf("fromUnixTimestamp64Nano(toInt64(%d), 'UTC')", t.UTC().UnixNano())
 }
 
-// quote renders a SQL string literal.
+// ensureComplete applies the commit rule (ADR-0198 §SD6) to the pinned
+// instant: a snapshot exists exactly when its root row carries the commit
+// record, and a view of anything else answers [fs.ErrNotExist] for every name.
 //
-// Paths reach here from a caller and the ScanOpts predicate is spliced
-// verbatim, so they are escaped rather than trusted. NUL is escaped as well as
-// the obvious two, and not only for tidiness: a block's natural key carries a
-// literal NUL between the path and the ordinal, and an executor that hands the
-// statement to a process as an argument cannot carry a raw NUL at all — the
-// exec fails with EINVAL before ClickHouse sees anything. `\0` in the literal
-// travels as two ordinary characters and arrives as the byte.
+// The macros resolve completeness from the index and the SFTP head checks it
+// before opening a view; without this, the Go surface was the one path that
+// read a half-written walk back as a file system. Asked once per snapshot —
+// the answer cannot change, so it is cached beside the entries — and asked of
+// the entry table rather than the index, so the adapter needs no layout: the
+// root row is a row of the table it already reads.
+func (inst *FS) ensureComplete() (err error) {
+	if inst.complete.asked {
+		if !inst.complete.yes {
+			return fs.ErrNotExist
+		}
+		return nil
+	}
+	pred := fmt.Sprintf("%s = %d AND %s = %s AND %s AND %s = '.'",
+		ladingschema.ColID, inst.mount.Value(),
+		ladingschema.ColTs, tsLiteral(inst.snap),
+		ladingschema.NotExpired,
+		ladingschema.ColNaturalKey)
+	found := false
+	for ent, serr := range inst.st.Meta.ScanLadingSnapshot(inst.ctx, recordstore.ScanOpts{
+		ExtraPredicate: pred, Limit: 1,
+	}) {
+		if serr != nil {
+			return serr
+		}
+		if ent.LadingSnapshot.Has {
+			found = true
+		}
+	}
+	inst.complete.asked, inst.complete.yes = true, found
+	if !found {
+		return fs.ErrNotExist
+	}
+	return nil
+}
 
 func isSymlink(e *entry) bool { return modeOf(e)&fs.ModeSymlink != 0 }
 
