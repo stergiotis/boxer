@@ -490,16 +490,16 @@ func TestFindDL008CandidatesSkipsBacktickSpans(t *testing.T) {
 }
 
 func TestParseFormatAndSeverity(t *testing.T) {
-	f, err := ParseFormatE("json")
+	f, err := ParseFormat("json")
 	require.NoError(t, err)
 	require.Equal(t, FormatJson, f)
-	_, err = ParseFormatE("xml")
+	_, err = ParseFormat("xml")
 	require.Error(t, err)
 
-	s, err := ParseSeverityE("error")
+	s, err := ParseSeverity("error")
 	require.NoError(t, err)
 	require.Equal(t, FindingSeverityError, s)
-	_, err = ParseSeverityE("panic")
+	_, err = ParseSeverity("panic")
 	require.Error(t, err)
 }
 

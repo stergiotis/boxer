@@ -199,7 +199,7 @@ func TestComputeMatchesBruteForceOracle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s, err := matrixprofile.NewSeriesE(tt.values, tt.window, 0.0)
+			s, err := matrixprofile.NewSeries(tt.values, tt.window, 0.0)
 			require.NoError(t, err)
 			assertProfileMatchesOracle(t, tt.values, tt.window, s.Compute())
 		})
@@ -210,7 +210,7 @@ func TestDistanceProfileMatchesOracle(t *testing.T) {
 	values := syntheticSine(140, 19, 0.03)
 	const window = int32(15)
 
-	s, err := matrixprofile.NewSeriesE(values, window, 0.0)
+	s, err := matrixprofile.NewSeries(values, window, 0.0)
 	require.NoError(t, err)
 
 	for _, q := range []int32{0, 1, 37, s.NumWindows() - 1} {
@@ -225,7 +225,7 @@ func TestDistanceProfileMatchesOracle(t *testing.T) {
 }
 
 func TestDistanceProfileReusesDestination(t *testing.T) {
-	s, err := matrixprofile.NewSeriesE(syntheticSine(80, 9, 0.01), 10, 0.0)
+	s, err := matrixprofile.NewSeries(syntheticSine(80, 9, 0.01), 10, 0.0)
 	require.NoError(t, err)
 
 	dst := make([]float64, 0, s.NumWindows())
@@ -244,7 +244,7 @@ func TestSelfDistanceIsNearZero(t *testing.T) {
 	// the identity's floor, several orders below any real match.
 	const window = int32(12)
 	values := syntheticSine(90, 11, 0.02)
-	s, err := matrixprofile.NewSeriesE(values, window, 0.0)
+	s, err := matrixprofile.NewSeries(values, window, 0.0)
 	require.NoError(t, err)
 
 	prof := s.DistanceProfile(20, nil)
@@ -256,7 +256,7 @@ func TestExclusionZoneIsRespected(t *testing.T) {
 	values := syntheticSine(120, 13, 0.01)
 	const window = int32(20)
 
-	s, err := matrixprofile.NewSeriesE(values, window, 0.0)
+	s, err := matrixprofile.NewSeries(values, window, 0.0)
 	require.NoError(t, err)
 	prof := s.Compute()
 
@@ -280,7 +280,7 @@ func TestConstantSeries(t *testing.T) {
 		values[i] = 42.0
 	}
 
-	s, err := matrixprofile.NewSeriesE(values, 8, 0.0)
+	s, err := matrixprofile.NewSeries(values, 8, 0.0)
 	require.NoError(t, err)
 	assert.True(t, s.IsConstantAt(0))
 
@@ -300,7 +300,7 @@ func TestConstantSegmentAgainstVaryingSegment(t *testing.T) {
 		values[i] = float64(i - 40)
 	}
 
-	s, err := matrixprofile.NewSeriesE(values, window, 0.0)
+	s, err := matrixprofile.NewSeries(values, window, 0.0)
 	require.NoError(t, err)
 	require.True(t, s.IsConstantAt(0), "leading window should read as constant")
 	require.False(t, s.IsConstantAt(50), "ramp window should not read as constant")
@@ -320,7 +320,7 @@ func TestPlantedMotifIsFound(t *testing.T) {
 	copy(values[50:], pattern)
 	copy(values[200:], pattern)
 
-	s, err := matrixprofile.NewSeriesE(values, int32(len(pattern)), 0.0)
+	s, err := matrixprofile.NewSeries(values, int32(len(pattern)), 0.0)
 	require.NoError(t, err)
 
 	first, second, dist, found := s.Compute().Motif()
@@ -344,7 +344,7 @@ func TestPlantedDiscordIsFound(t *testing.T) {
 		values[180+i] = 5.0 * math.Cos(float64(i)*0.7)
 	}
 
-	s, err := matrixprofile.NewSeriesE(values, window, 0.0)
+	s, err := matrixprofile.NewSeries(values, window, 0.0)
 	require.NoError(t, err)
 
 	idx, dist, found := s.Compute().Discord()
@@ -355,21 +355,21 @@ func TestPlantedDiscordIsFound(t *testing.T) {
 }
 
 func TestNewSeriesRejectsBadInput(t *testing.T) {
-	_, err := matrixprofile.NewSeriesE([]float64{1, 2, 3}, 1, 0.0)
+	_, err := matrixprofile.NewSeries([]float64{1, 2, 3}, 1, 0.0)
 	assert.Error(t, err, "window below 2")
 
-	_, err = matrixprofile.NewSeriesE([]float64{1, 2, 3}, 8, 0.0)
+	_, err = matrixprofile.NewSeries([]float64{1, 2, 3}, 8, 0.0)
 	assert.Error(t, err, "series shorter than window")
 
-	_, err = matrixprofile.NewSeriesE([]float64{1, 2, math.NaN(), 4}, 2, 0.0)
+	_, err = matrixprofile.NewSeries([]float64{1, 2, math.NaN(), 4}, 2, 0.0)
 	assert.Error(t, err, "NaN in series")
 
-	_, err = matrixprofile.NewSeriesE([]float64{1, 2, math.Inf(1), 4}, 2, 0.0)
+	_, err = matrixprofile.NewSeries([]float64{1, 2, math.Inf(1), 4}, 2, 0.0)
 	assert.Error(t, err, "infinity in series")
 }
 
 func TestSeriesExactlyOneWindow(t *testing.T) {
-	s, err := matrixprofile.NewSeriesE([]float64{1, 2, 3, 4}, 4, 0.0)
+	s, err := matrixprofile.NewSeries([]float64{1, 2, 3, 4}, 4, 0.0)
 	require.NoError(t, err)
 	require.Equal(t, int32(1), s.NumWindows())
 
@@ -388,7 +388,7 @@ func TestNewSeriesDoesNotMutateInput(t *testing.T) {
 	before := make([]float64, len(values))
 	copy(before, values)
 
-	_, err := matrixprofile.NewSeriesE(values, 3, 0.0)
+	_, err := matrixprofile.NewSeries(values, 3, 0.0)
 	require.NoError(t, err)
 	assert.Equal(t, before, values, "centering must not touch the caller's slice")
 }
@@ -416,7 +416,7 @@ func TestPropertySoundOnAnyInput(t *testing.T) {
 			rapid.Float64Range(-50.0, 50.0), n, n,
 		).Draw(rt, "values")
 
-		s, err := matrixprofile.NewSeriesE(values, window, 0.0)
+		s, err := matrixprofile.NewSeries(values, window, 0.0)
 		require.NoError(rt, err)
 		prof := s.Compute()
 
@@ -455,7 +455,7 @@ func TestPropertyOptimalOnWellConditioned(t *testing.T) {
 			values[i] = float64(q) / 100.0
 		}
 
-		s, err := matrixprofile.NewSeriesE(values, window, 0.0)
+		s, err := matrixprofile.NewSeries(values, window, 0.0)
 		require.NoError(rt, err)
 		prof := s.Compute()
 
@@ -505,9 +505,9 @@ func TestPropertyAffineInvariance(t *testing.T) {
 			transformed[i] = v*scale + offset
 		}
 
-		base, err := matrixprofile.NewSeriesE(values, window, 0.0)
+		base, err := matrixprofile.NewSeries(values, window, 0.0)
 		require.NoError(rt, err)
-		other, err := matrixprofile.NewSeriesE(transformed, window, 0.0)
+		other, err := matrixprofile.NewSeries(transformed, window, 0.0)
 		require.NoError(rt, err)
 
 		baseProf := base.Compute()
@@ -533,7 +533,7 @@ func TestPropertyDistanceBounds(t *testing.T) {
 			rapid.Float64Range(-100.0, 100.0), n, n,
 		).Draw(rt, "values")
 
-		s, err := matrixprofile.NewSeriesE(values, window, 0.0)
+		s, err := matrixprofile.NewSeries(values, window, 0.0)
 		require.NoError(rt, err)
 
 		maxDist := 2.0 * math.Sqrt(float64(window))

@@ -54,7 +54,10 @@ func TestComposeExtractSql(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, sql, "FROM system.query_log")
 	require.Contains(t, sql, "type != 'QueryStart'")
-	require.Contains(t, sql, "'queryrunsd-extract', 'queryrunsd-refresh'")
+	require.Contains(t, sql, "'queryrunsd-extract', 'queryrunsd-refresh', 'queryrunsd-reconcile'")
+	// Cuts land between characters, not inside one.
+	require.Contains(t, sql, "substringUTF8(query, 1, 16384)")
+	require.Contains(t, sql, "substringUTF8(exception, 1, 4096)")
 	require.Contains(t, sql, "position(query, 'http://127.0.0.1:8127/pull') = 0")
 	require.Contains(t, sql, "SELECT max("+ColTs+") FROM boxer.facts")
 	require.Contains(t, sql, WatermarkOverlap)
@@ -62,6 +65,10 @@ func TestComposeExtractSql(t *testing.T) {
 	require.Contains(t, sql, "log_comment='queryrunsd-extract'")
 	require.Contains(t, sql, "FORMAT JSONEachRow")
 	require.NotContains(t, sql, "JSONHas")
+	// Already-captured overlap rows are dropped before the LIMIT, or a dense
+	// overlap window fills every batch with discards and capture stalls.
+	require.Contains(t, sql, "(query_id, toUnixTimestamp64Micro(event_time_microseconds)) NOT IN (")
+	require.Less(t, strings.Index(sql, "NOT IN ("), strings.Index(sql, "LIMIT "))
 
 	sql, err = ComposeExtractSql("boxer.facts", "http://127.0.0.1:8127/pull", ScopeStamped, 500, time.Time{})
 	require.NoError(t, err)
@@ -72,6 +79,22 @@ func TestComposeExtractSql(t *testing.T) {
 	require.Error(t, err, "off must not compose an extract")
 	_, err = ComposeExtractSql("", "http://127.0.0.1:8127/pull", ScopeAll, 0, time.Time{})
 	require.Error(t, err)
+}
+
+// Every listed scope is either composable or off, so a scope added to the
+// list cannot reach the extract without a predicate of its own.
+func TestScopesAreAllHandled(t *testing.T) {
+	for _, sc := range AllScopes() {
+		require.True(t, sc.Valid())
+		_, err := ComposeExtractSql("boxer.facts", "http://127.0.0.1:8127/pull", sc, 0, time.Time{})
+		if sc == ScopeOff {
+			require.Error(t, err)
+		} else {
+			require.NoError(t, err, "scope %q", sc)
+		}
+	}
+	require.False(t, ScopeE("").Valid())
+	require.False(t, ScopeE("everything").Valid())
 }
 
 func TestUrlStructureMatchesBuilderSchema(t *testing.T) {
@@ -100,11 +123,15 @@ func TestComposeMvSql(t *testing.T) {
 	require.Contains(t, sql, "REFRESH EVERY 5 SECOND APPEND TO boxer.facts")
 	require.Contains(t, sql, "url('http://127.0.0.1:8127/pull', 'ArrowStream', '")
 	require.Contains(t, sql, ColId+" NOT IN")
-	require.Contains(t, sql, AntiJoinWindow)
+	// Anchored on the watermark, not now(): re-served backfill rows are
+	// days old and must still fall inside the window.
+	require.Contains(t, sql, ColTs+" >= (SELECT max("+ColTs+") FROM boxer.facts")
+	require.Contains(t, sql, ") - "+WatermarkOverlap)
+	require.NotContains(t, sql, "now64")
 	require.Contains(t, sql, "log_comment='queryrunsd-refresh'")
 	// DateTime64(9,'UTC') carries single quotes — inside the structure
-	// string literal they must arrive doubled.
-	require.Contains(t, sql, "DateTime64(9,''UTC'')")
+	// string literal they must arrive escaped.
+	require.Contains(t, sql, `DateTime64(9,\'UTC\')`)
 
 	_, err = ComposeMvSql("", "boxer.facts", "u", 5)
 	require.Error(t, err)
@@ -114,6 +141,17 @@ func TestComposeMvSql(t *testing.T) {
 	drop, err := ComposeDropMvSql("boxer.mv_queryruns")
 	require.NoError(t, err)
 	require.Equal(t, "DROP TABLE IF EXISTS boxer.mv_queryruns", drop)
+}
+
+// The reconciler reads the pull URL back out of the stored view to tell
+// whether another instance owns it; the parse must invert ComposeMvSql.
+func TestParseMvPullURL(t *testing.T) {
+	sql, err := ComposeMvSql("boxer.mv_queryruns", "boxer.facts", "http://127.0.0.1:8127/pull", 5)
+	require.NoError(t, err)
+	require.Equal(t, "http://127.0.0.1:8127/pull", ParseMvPullURL(sql))
+	require.Empty(t, ParseMvPullURL(""))
+	require.Empty(t, ParseMvPullURL("CREATE TABLE x (a UInt8) ENGINE Memory"))
+	require.Contains(t, ExistingMvSql("boxer"), "name = 'mv_queryruns'")
 }
 
 func TestBuildEntitiesEncodesRows(t *testing.T) {
@@ -214,7 +252,7 @@ func TestComposeExtractSql_BackfillFrom(t *testing.T) {
 	// It is a FLOOR ON EMPTINESS, not a filter: the watermark still governs
 	// once the destination holds facts, or a restart after downtime would skip
 	// exactly the gap the pipeline exists to close.
-	require.Contains(t, sql, "watermark - "+WatermarkOverlap)
+	require.Contains(t, sql, "watermark - "+WatermarkOverlap+") AS lo")
 	require.Contains(t, sql, "watermark = toDateTime64(0, 9, 'UTC')")
 
 	// The zero value keeps the original unbounded reach.

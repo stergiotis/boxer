@@ -235,7 +235,7 @@ README § House names with this ADR.
   ```go
   type HandlerI interface {
       Kind() string
-      RunE(ctx context.Context, job Job, h task.HandleI) (err error)
+      Run(ctx context.Context, job Job, h task.HandleI) (err error)
   }
   ```
 

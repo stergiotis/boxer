@@ -1,7 +1,8 @@
 package config
 
 import (
-	cli "github.com/urfave/cli/v2"
+	"context"
+	cli "github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -14,7 +15,7 @@ func IdentityNameTransf(name string) (newName string) {
 
 type ConfigerI interface {
 	ToCliFlags(nameTransf NameTransformFunc, envVarNameTransf NameTransformFunc) []cli.Flag
-	FromContext(nameTransf NameTransformFunc, ctx *cli.Context) (nMessages int)
+	FromContext(ctx context.Context, nameTransf NameTransformFunc, cmd *cli.Command) (nMessages int)
 	Validate(force bool) (nMessages int)
 }
 

@@ -101,7 +101,7 @@ func (inst *Service) disclose(msg *app.Msg) (rep wireAck) {
 		if !rep.Ok {
 			inst.record(nil, &callRec{key: "disclose|" + strconv.FormatInt(time.Now().UnixNano(), 36), turn: req.Turn,
 				cause: req.wireCause.cause(), conversation: req.Conversation, actor: msg.Sender, actorInstance: msg.SenderInstance,
-				spec: app.OperationSpec{Name: "disclose", Effect: app.OperationEffectNone}}, "final", phaseOutcome(opwire.PhaseRefused, rep.Reason))
+				spec: app.OperationSpec{Name: ActionDisclose, Effect: app.OperationEffectNone}}, "final", phaseOutcome(opwire.PhaseRefused, rep.Reason))
 		}
 	}()
 	if err != nil {

@@ -1,6 +1,7 @@
 package tracing
 
 import (
+	"context"
 	"os"
 	"os/signal"
 	"runtime/trace"
@@ -13,7 +14,7 @@ import (
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 var flightRecorder *trace.FlightRecorder
@@ -40,7 +41,7 @@ var (
 )
 
 var TracingFlags = []cli.Flag{
-	FlightRecorder.AsCliFlag(env.WithBoolAction(func(context *cli.Context, b bool) error {
+	FlightRecorder.AsCliFlag(env.WithBoolAction(func(ctx context.Context, cmd *cli.Command, b bool) error {
 		if !b {
 			return nil
 		}
@@ -58,7 +59,7 @@ var TracingFlags = []cli.Flag{
 	})),
 	&cli.StringSliceFlag{
 		Name: "flightRecorderFlushOnSignal",
-		Action: func(context *cli.Context, signalNames []string) error {
+		Action: func(ctx context.Context, cmd *cli.Command, signalNames []string) error {
 			if len(signalNames) == 0 {
 				return nil
 			}
@@ -131,7 +132,7 @@ func writeFlightRecorderTrace(d string) {
 		err = nil
 	}
 }
-func TracingHandleExit(context *cli.Context) {
+func TracingHandleExit(ctx context.Context, cmd *cli.Command) {
 	if flightRecorder == nil {
 		return
 	}

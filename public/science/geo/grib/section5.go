@@ -83,31 +83,31 @@ type CCSDSPacking struct {
 
 // supported reports whether the reader decodes this template's data, and
 // otherwise names the feature (ADR-0292 §R1, §R6).
-func (inst *Packing) supportedE() (err error) {
+func (inst *Packing) supported() (err error) {
 	if inst.Grib1 {
 		switch {
 		case inst.Grib1Flags&0x80 != 0:
-			err = unsupportedE("grib1 spectral packing")
+			err = unsupported("grib1 spectral packing")
 		case inst.Grib1Flags&0x40 != 0:
-			err = unsupportedE("grib1 second-order packing")
+			err = unsupported("grib1 second-order packing")
 		case inst.Grib1Flags&0x10 != 0:
-			err = unsupportedE("grib1 additional data flags")
+			err = unsupported("grib1 additional data flags")
 		}
 		return
 	}
 	switch inst.Template {
 	case 0, 2, 3, 4, 40, 41, 42, jpegPreStandard:
 	default:
-		err = unsupportedE("packing template 5." + strconv.Itoa(int(inst.Template)))
+		err = unsupported("packing template 5." + strconv.Itoa(int(inst.Template)))
 	}
 	return
 }
 
-func parsePackingE(body []byte) (p Packing, err error) {
+func parsePacking(body []byte) (p Packing, err error) {
 	r := rd{b: body}
 	p.NumValues = r.u32()
 	p.Template = r.u16()
-	err = r.errE("data representation section")
+	err = r.truncation("data representation section")
 	if err != nil {
 		return
 	}
@@ -147,7 +147,7 @@ func parsePackingE(body []byte) (p Packing, err error) {
 	case 40, jpegPreStandard:
 		p.JPEG = &JPEGPacking{CompressionType: t.u8(), TargetRatio: t.u8()}
 	}
-	err = t.errE("data representation template 5." + strconv.Itoa(int(p.Template)))
+	err = t.truncation("data representation template 5." + strconv.Itoa(int(p.Template)))
 	if err != nil {
 		return
 	}

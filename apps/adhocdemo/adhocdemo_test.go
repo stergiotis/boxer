@@ -23,7 +23,7 @@ import (
 // rows read as items on the introspection endpoint (ADR-0288 §SD2).
 func TestItemsBundleComposes(t *testing.T) {
 	inst := &App{log: zerolog.Nop(), bundle: adhocdata.WindowAlias(bundleBase, 7)}
-	doc, err := play.ComposeBundleDocE(inst.itemsSpec(0))
+	doc, err := play.ComposeBundleDoc(inst.itemsSpec(0))
 	require.NoError(t, err)
 	def, err := sqlapplet.ParseDocSource(string(ManifestId), "items.md", doc)
 	require.NoError(t, err)

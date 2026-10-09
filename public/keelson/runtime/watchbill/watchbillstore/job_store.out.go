@@ -22,6 +22,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/functional"
 	"github.com/stergiotis/boxer/public/functional/option"
+	"github.com/stergiotis/boxer/public/identity/callident"
 	"github.com/stergiotis/boxer/public/keelson/runtime/watchbill/watchbillstore/internal/lowlevel"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
@@ -116,14 +117,22 @@ func (inst *JobEntity) Archetype() (a []string) {
 
 type JobStoreConfig struct {
 	// Table overrides the ClickHouse table this store binds — the baked
-	// JobTableName — for every statement it issues (DDL, DESCRIBE, INSERT,
-	// SELECT). Optionally database-qualified ("<db>.<table>"), unquoted-
-	// identifier shape only ([A-Za-z_][A-Za-z0-9_]* per part; the
-	// constructor panics otherwise). Empty (the default) binds the baked
-	// name. The schema is unchanged — this moves WHERE the rows land, not
-	// what they look like — so a scratch table for a test or a per-
-	// deployment table needs no regeneration.
+	// JobTableName — for every statement it issues (DDL, INSERT, and the
+	// reads unless ReadTable names another). Optionally database-qualified
+	// ("<db>.<table>"), unquoted-identifier shape only
+	// ([A-Za-z_][A-Za-z0-9_]* per part; the constructor panics otherwise).
+	// Empty (the default) binds the baked name. The schema is unchanged —
+	// this moves WHERE the rows land, not what they look like — so a
+	// scratch table for a test or a per-deployment table needs no
+	// regeneration.
 	Table string
+	// ReadTable, when set, is the table every SELECT and DESCRIBE goes to
+	// (ADR-0296 §SD8): a storage table that materialized views fill from
+	// the written one, or a Merge over several. Same shape rules as Table;
+	// empty (the default) reads the table written to. The schema must be
+	// the same on both — VerifySchema checks the read side, which is the
+	// one the positional decode runs against.
+	ReadTable string
 	// DDLTail is a raw suffix appended verbatim after the composed
 	// CREATE TABLE at EnsureTable time — the escape hatch for clauses
 	// the generation-time table options (ADR-0102) do not carry.
@@ -148,6 +157,12 @@ type JobStoreConfig struct {
 	// Nothing flushes behind the caller's back: Commit takes no context and
 	// never inserts, so the due check runs where the caller asks for it.
 	FlushEvery int
+	// WriteObserver, when set, is told each row a Commit or Delete
+	// buffers, then — after the successful Flush that made them durable —
+	// the batch id of that insert and its keys, or the keys DiscardPending
+	// dropped (ADR-0295 §SD7). It is notification-only and independent of
+	// attached cache views. Nil (the default) tracks nothing.
+	WriteObserver recordstore.WriteObserverI[string, time.Time]
 }
 
 // JobStore is single-goroutine, like every part it composes. Batched
@@ -177,6 +192,10 @@ type JobStore struct {
 	onFlush []func(string)
 	// stampers is cfg.Stampers, consulted per Begin (ADR-0112 M1).
 	stampers []recordstore.ReferenceStamper
+	// written holds the rows the write observer was told were committed and
+	// has not yet been told are durable or discarded (ADR-0295 §SD7); empty
+	// without an observer.
+	written []recordstore.WrittenKey[string, time.Time]
 }
 
 // NewJobStore wires the store. A nil alloc selects the Go allocator.
@@ -186,6 +205,11 @@ func NewJobStore(exec recordstore.ExecutorI, alloc memory.Allocator, cfg JobStor
 			panic("JobStore: " + terr.Error())
 		}
 	}
+	if cfg.ReadTable != "" {
+		if terr := recordstore.CheckTableRef(cfg.ReadTable); terr != nil {
+			panic("JobStore: ReadTable: " + terr.Error())
+		}
+	}
 	if alloc == nil {
 		alloc = memory.NewGoAllocator()
 	}
@@ -193,24 +217,32 @@ func NewJobStore(exec recordstore.ExecutorI, alloc memory.Allocator, cfg JobStor
 	return
 }
 
-// tableName is the table reference every statement uses: the configured
+// writeTable is the table reference DDL and INSERT use: the configured
 // override when set, else the baked JobTableName.
-func (inst *JobStore) tableName() string {
+func (inst *JobStore) writeTable() string {
 	if inst.cfg.Table != "" {
 		return inst.cfg.Table
 	}
 	return JobTableName
 }
 
+// readTable is the table reference SELECT and DESCRIBE use: ReadTable
+// when set, else the table written to (ADR-0296 §SD8).
+func (inst *JobStore) readTable() string {
+	if inst.cfg.ReadTable != "" {
+		return inst.cfg.ReadTable
+	}
+	return inst.writeTable()
+}
+
 // applyStampers consults the configured stampers and pushes their surrogate
 // ids as ambient HighCardRef memberships onto the open entity (ADR-0112 M1),
-// returning the count so Commit/Rollback pop exactly that many.
-// context.Background() bounds the interning — the in-memory interner ignores
-// it; a ctx-carrying Begin is the future seam for a durable one. No stampers
-// means no pushes: inert.
-func (inst *JobStore) applyStampers() (pushed int) {
+// returning the count so Commit/Rollback pop exactly that many. ctx is
+// BeginCtx's — the call identity a stamper interns rides on it (ADR-0295
+// §SD7). No stampers means no pushes: inert.
+func (inst *JobStore) applyStampers(ctx context.Context) (pushed int) {
 	for _, s := range inst.stampers {
-		for id, err := range s.Current(context.Background()) {
+		for id, err := range s.Current(ctx) {
 			if err != nil {
 				inst.dml.AppendError(err)
 				continue
@@ -241,6 +273,32 @@ func (inst *JobStore) notifyFlush(key string) {
 	}
 }
 
+// noteCommitted tells the write observer about a buffered row and keeps
+// it until the observer is told its fate (ADR-0295 §SD7).
+func (inst *JobStore) noteCommitted(w recordstore.WrittenKey[string, time.Time]) {
+	if inst.cfg.WriteObserver == nil {
+		return
+	}
+	inst.written = append(inst.written, w)
+	inst.cfg.WriteObserver.Committed(w)
+}
+
+// takeWritten detaches the rows noteCommitted kept and ranges over them.
+// Detaching before the observer runs means a row it commits from its
+// callback lands in a fresh buffer, reported with a later flush, and a
+// panicking observer cannot have the same rows reported twice.
+func (inst *JobStore) takeWritten() iter.Seq[recordstore.WrittenKey[string, time.Time]] {
+	written := inst.written
+	inst.written = nil
+	return func(yield func(recordstore.WrittenKey[string, time.Time]) bool) {
+		for _, w := range written {
+			if !yield(w) {
+				return
+			}
+		}
+	}
+}
+
 // EnsureTable applies the composed CREATE TABLE (plus the DDLTail
 // suffix, when configured). Idempotent (CREATE TABLE IF NOT EXISTS).
 // The embedded script is issued one statement per Exec — the
@@ -252,7 +310,7 @@ func (inst *JobStore) notifyFlush(key string) {
 func (inst *JobStore) EnsureTable(ctx context.Context) (err error) {
 	stmts, err := recordstore.ProvisioningStatements(watchbillDDLCreate, JobTableName, inst.cfg.Table)
 	if err != nil {
-		err = eh.Errorf("ensure table %s: %w", inst.tableName(), err)
+		err = eh.Errorf("ensure table %s: %w", inst.writeTable(), err)
 		return
 	}
 	if inst.cfg.DDLTail != "" {
@@ -261,7 +319,7 @@ func (inst *JobStore) EnsureTable(ctx context.Context) (err error) {
 	for _, sql := range stmts {
 		err = inst.exec.Exec(ctx, sql)
 		if err != nil {
-			err = eh.Errorf("ensure table %s: %w", inst.tableName(), err)
+			err = eh.Errorf("ensure table %s: %w", inst.writeTable(), err)
 			return
 		}
 	}
@@ -297,14 +355,14 @@ func (inst *JobStore) EnsureTable(ctx context.Context) (err error) {
 // where a column-kind filter would have blessed the mis-decode.
 func (inst *JobStore) VerifySchema(ctx context.Context) (err error) {
 	live := make([]string, 0, 64)
-	for rec, rerr := range inst.exec.QueryArrow(ctx, "DESCRIBE (SELECT * FROM "+inst.tableName()+")"+watchbillArrowOutputSettings) {
+	for rec, rerr := range inst.exec.QueryArrow(ctx, "DESCRIBE (SELECT * FROM "+inst.readTable()+")"+watchbillArrowOutputSettings) {
 		if rerr != nil {
-			err = eh.Errorf("describe table %s: %w", inst.tableName(), rerr)
+			err = eh.Errorf("describe table %s: %w", inst.readTable(), rerr)
 			return
 		}
 		names, ok := rec.Column(0).(*array.String)
 		if !ok {
-			err = eh.Errorf("describe table %s: name column is %s, not a string", inst.tableName(), rec.Column(0).DataType())
+			err = eh.Errorf("describe table %s: name column is %s, not a string", inst.readTable(), rec.Column(0).DataType())
 			rec.Release()
 			return
 		}
@@ -315,12 +373,12 @@ func (inst *JobStore) VerifySchema(ctx context.Context) (err error) {
 	}
 	want := lowlevel.CreateSchemaWatchbillTable().Fields()
 	if len(live) != len(want) {
-		err = eh.Errorf("schema drift on %s: table has %d columns, the generated schema expects %d — regenerated code against an old table (or vice versa); migrate or regenerate", inst.tableName(), len(live), len(want))
+		err = eh.Errorf("schema drift on %s: table has %d columns, the generated schema expects %d — regenerated code against an old table (or vice versa); migrate or regenerate", inst.readTable(), len(live), len(want))
 		return
 	}
 	for i, f := range want {
 		if live[i] != f.Name {
-			err = eh.Errorf("schema drift on %s: column %d is %q, the generated schema expects %q — the decode is positional; migrate or regenerate", inst.tableName(), i, live[i], f.Name)
+			err = eh.Errorf("schema drift on %s: column %d is %q, the generated schema expects %q — the decode is positional; migrate or regenerate", inst.readTable(), i, live[i], f.Name)
 			return
 		}
 	}
@@ -373,6 +431,10 @@ type JobEntityBuilder struct {
 	// pushed counts the ambient memberships Begin pushed via the stampers;
 	// Commit/Rollback pop exactly that many (ADR-0112 M1).
 	pushed int
+	// ident is BeginCtx's call identity: who committed the row, which the
+	// write observer is told — the flush that ships it may run for someone
+	// else (ADR-0295 §SD7).
+	ident callident.CallIdentity
 }
 
 // endSection closes one section's frame. The buffer calls it once per
@@ -420,13 +482,22 @@ func (inst *JobEntityBuilder) endSection(section string) error {
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
-// (Key, Order).
+// (Key, Order), under context.Background(): a configured stamper
+// that reads a call identity off the context finds none. See BeginCtx.
 func (inst *JobStore) Begin(id string, ts time.Time) *JobEntityBuilder {
+	return inst.BeginCtx(context.Background(), id, ts)
+}
+
+// BeginCtx is Begin with the context the configured stampers consult
+// (ADR-0295 §SD7) — where a call identity reaches an actor stamper. The
+// store stays single-goroutine; ctx is read during this call only.
+func (inst *JobStore) BeginCtx(ctx context.Context, id string, ts time.Time) *JobEntityBuilder {
 	lowlevel.InEntityWatchbillTableBeginEntity(inst.dml)
 	lowlevel.InEntityWatchbillTableSetId(inst.dml, id)
 	lowlevel.InEntityWatchbillTableSetTimestamp(inst.dml, ts)
 	b := &JobEntityBuilder{store: inst, key: id, ent: JobEntity{ID: id, Ts: ts}}
-	b.pushed = inst.applyStampers()
+	b.ident, _ = callident.CallIdentityFrom(ctx)
+	b.pushed = inst.applyStampers(ctx)
 	return b
 }
 
@@ -544,6 +615,7 @@ func (inst *JobEntityBuilder) Commit() (err error) {
 		ent := inst.ent
 		inst.store.notifyWrite(inst.key, &ent)
 	}
+	inst.store.noteCommitted(recordstore.WrittenKey[string, time.Time]{Key: inst.key, Order: inst.ent.Ts, Lifecycle: recordstore.LifecycleLive, Tombstone: false, Identity: inst.ident})
 	return
 }
 
@@ -563,6 +635,12 @@ func (inst *JobEntityBuilder) Rollback() (err error) {
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
 func (inst *JobStore) IngestJob(ts time.Time, rows []Job) (err error) {
+	return inst.IngestJobCtx(context.Background(), ts, rows)
+}
+
+// IngestJobCtx is IngestJob with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *JobStore) IngestJobCtx(ctx context.Context, ts time.Time, rows []Job) (err error) {
 	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -570,7 +648,7 @@ func (inst *JobStore) IngestJob(ts time.Time, rows []Job) (err error) {
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.Begin(rows[i].ID, ts).AddJob(rows[i]).Commit()
+		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddJob(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest job row %d: %w", i, err)
 			return
@@ -616,11 +694,15 @@ func (inst *JobStore) Flush(ctx context.Context) (n int, err error) {
 	}
 	records = append(inst.pending, records...)
 	inst.pending = nil
+	// One batch id per insert attempt (ADR-0295 §SD6): the executor stamps
+	// it, an observing executor reports it, the write observer is told it.
+	batch := recordstore.NewBatchId()
+	bctx := recordstore.WithBatchId(ctx, batch)
 	if len(records) > 0 {
-		err = inst.exec.InsertArrow(ctx, inst.tableName(), records)
+		err = inst.exec.InsertArrow(bctx, inst.writeTable(), records)
 		if err != nil {
 			inst.pending = records
-			err = eh.Errorf("insert into %s: %w", inst.tableName(), err)
+			err = eh.Errorf("insert into %s: %w", inst.writeTable(), err)
 			return
 		}
 	}
@@ -633,6 +715,9 @@ func (inst *JobStore) Flush(ctx context.Context) (n int, err error) {
 		inst.notifyFlush(k) // durable now — release the views' dirty-window pins
 	}
 	clear(inst.dirty) // flushed — ClickHouse now serves the written state
+	if len(inst.written) > 0 {
+		inst.cfg.WriteObserver.Durable(bctx, batch, inst.takeWritten())
+	}
 	return
 }
 
@@ -673,6 +758,9 @@ func (inst *JobStore) DiscardPending() {
 		inst.notifyWrite(k, nil) // the cached write never became durable — invalidate
 	}
 	clear(inst.dirty) // nothing local remains — ClickHouse is the truth
+	if len(inst.written) > 0 {
+		inst.cfg.WriteObserver.Discarded(inst.takeWritten())
+	}
 }
 
 // Close discards everything unflushed and releases the store's Arrow
@@ -873,7 +961,7 @@ func (inst *JobCache[W]) InvalidateAll() {
 func (inst *JobStore) fetchLatestSQL(keys []string) string {
 	var sb strings.Builder
 	sb.WriteString("SELECT * FROM ")
-	sb.WriteString(inst.tableName())
+	sb.WriteString(inst.readTable())
 	sb.WriteString(" WHERE " + JobColKey + " IN (")
 	for i, k := range keys {
 		if i > 0 {
@@ -950,7 +1038,7 @@ func (inst *JobStore) ScanJob(ctx context.Context, opts recordstore.ScanOpts) it
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + where +
 		" ORDER BY " + JobColOrder + " ASC, " + JobColKey + " ASC"
 	if opts.Limit > 0 {
@@ -965,7 +1053,7 @@ func (inst *JobStore) ScanJob(ctx context.Context, opts recordstore.ScanOpts) it
 // row; GetLive is the interpreted state-view read). Reads see only
 // flushed rows.
 func (inst *JobStore) Latest(ctx context.Context, key string) (ent *JobEntity, found bool, err error) {
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + JobColKey + " = " + watchbillKeyLiteral(key) +
 		" ORDER BY " + JobColOrder + " DESC LIMIT 1" + watchbillArrowOutputSettings
 	ents, err := inst.queryEntities(ctx, sql)
@@ -988,7 +1076,7 @@ func (inst *JobStore) Latest(ctx context.Context, key string) (ent *JobEntity, f
 // streaming executor changes nothing visible); an error ends the
 // sequence as a final (nil, err) pair. Reads see only flushed rows.
 func (inst *JobStore) Replay(ctx context.Context, key string, fromOrder time.Time, opts recordstore.ReplayOpts) iter.Seq2[*JobEntity, error] {
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + JobColKey + " = " + watchbillKeyLiteral(key)
 	if !fromOrder.IsZero() {
 		sql += " AND " + JobColOrder + " >= fromUnixTimestamp64Nano(" + strconv.FormatInt(fromOrder.UnixNano(), 10) + ")"

@@ -37,9 +37,9 @@ func TestFormatTwelveHoursDoesNotOverflow(t *testing.T) {
 }
 
 func TestFormatValidate(t *testing.T) {
-	require.Error(t, pcm.Format{}.ValidateE())
-	require.Error(t, pcm.Format{SampleRate: 48000}.ValidateE())
-	require.NoError(t, pcm.Format{SampleRate: 48000, Channels: 1}.ValidateE())
+	require.Error(t, pcm.Format{}.Validate())
+	require.Error(t, pcm.Format{SampleRate: 48000}.Validate())
+	require.NoError(t, pcm.Format{SampleRate: 48000, Channels: 1}.Validate())
 }
 
 func TestMemSourceContract(t *testing.T) {
@@ -50,14 +50,14 @@ func TestMemSourceContract(t *testing.T) {
 		}
 		frames := rapid.IntRange(0, 300).Draw(t, "frames")
 		samples := rapid.SliceOfN(rapid.Float32Range(-1, 1), frames*int(format.Channels), frames*int(format.Channels)).Draw(t, "samples")
-		src, err := pcm.NewMemSourceE(format, samples)
+		src, err := pcm.NewMemSource(format, samples)
 		require.NoError(t, err)
 		pcmtest.CheckSourceContract(t, src, 300)
 	})
 }
 
 func TestMemSourceRejectsRaggedFrames(t *testing.T) {
-	_, err := pcm.NewMemSourceE(pcm.Format{SampleRate: 8000, Channels: 2}, make([]float32, 3))
+	_, err := pcm.NewMemSource(pcm.Format{SampleRate: 8000, Channels: 2}, make([]float32, 3))
 	require.Error(t, err)
 }
 
@@ -68,7 +68,7 @@ func TestSynthSourceContract(t *testing.T) {
 		pcm.Gate(pcm.Sine(format, 440, 0.8), 4800, 4800),
 		pcm.Chirp(format, frames, 100, 4000, 0.5),
 	)
-	src, err := pcm.NewSynthSourceE(format, frames, fn)
+	src, err := pcm.NewSynthSource(format, frames, fn)
 	require.NoError(t, err)
 	pcmtest.CheckSourceContract(t, src, 2000)
 }
@@ -78,10 +78,10 @@ func TestSynthSourceLongLengthIsFree(t *testing.T) {
 	// nothing proportional to the length.
 	format := pcm.Format{SampleRate: 48000, Channels: 2}
 	frames := format.DurationToFrames(12 * time.Hour)
-	src, err := pcm.NewSynthSourceE(format, frames, pcm.Sine(format, 1000, 0.5))
+	src, err := pcm.NewSynthSource(format, frames, pcm.Sine(format, 1000, 0.5))
 	require.NoError(t, err)
 	buf := make([]float32, 8)
-	n, err := src.ReadFramesAtE(context.Background(), frames-2, buf)
+	n, err := src.ReadFramesAt(context.Background(), frames-2, buf)
 	require.NoError(t, err)
 	require.Equal(t, 2, n)
 	pcmtest.CheckSourceContract(t, src, 500)

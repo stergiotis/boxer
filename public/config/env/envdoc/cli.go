@@ -1,10 +1,11 @@
 package envdoc
 
 import (
+	"context"
 	"os"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 )
 
 // NewGenDocsCommand returns the `gen-docs` subcommand. It is mounted
@@ -27,8 +28,8 @@ func NewGenDocsCommand() (cmd *cli.Command) {
 	return
 }
 
-func runGenDocs(ctx *cli.Context) (err error) {
-	outPath := ctx.String("out")
+func runGenDocs(ctx context.Context, cmd *cli.Command) (err error) {
+	outPath := cmd.String("out")
 	body := Render(Options{
 		GeneratorPath:  "public/app env gen-docs",
 		RegenerateHint: "go generate ./public/config/env/...",

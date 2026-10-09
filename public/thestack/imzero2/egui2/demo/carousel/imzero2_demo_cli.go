@@ -9,7 +9,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/widgets"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/config"
 
@@ -81,22 +81,22 @@ func NewCommand() *cli.Command {
 				},
 			},
 		),
-		Action: func(context *cli.Context) error {
-			if context.Bool("list") {
+		Action: func(ctx gocontext.Context, cmd *cli.Command) error {
+			if cmd.Bool("list") {
 				return renderManifestList(
 					runtimeapp.AllManifests(),
-					context.String("list-output"),
-					context.String("list-format"),
+					cmd.String("list-output"),
+					cmd.String("list-format"),
 					os.Stdout,
 				)
 			}
-			nMessages := cfg.FromContext(config.IdentityNameTransf, context)
+			nMessages := cfg.FromContext(ctx, config.IdentityNameTransf, cmd)
 			if nMessages > 0 {
 				return eb.Build().Int("nMessages", nMessages).Errorf("unable to create config")
 			}
-			return Run(context.Context, cfg, RunOptions{
-				Launch:        context.String("launch"),
-				LaunchConfigs: context.StringSlice("launch-config"),
+			return Run(ctx, cfg, RunOptions{
+				Launch:        cmd.String("launch"),
+				LaunchConfigs: cmd.StringSlice("launch-config"),
 			})
 		},
 	}

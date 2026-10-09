@@ -27,7 +27,7 @@ type Grid struct {
 // thread, at most once at a time per step, and the pyramid keeps what it
 // returns: the loader must not reuse the slices.
 type StepLoaderI interface {
-	LoadStepE(ctx context.Context, step int) (grid Grid, err error)
+	LoadStep(ctx context.Context, step int) (grid Grid, err error)
 }
 
 // PyramidOptions tunes a [Pyramid]; the zero value is usable.
@@ -101,11 +101,11 @@ type stepEntry struct {
 
 var _ SourceI = (*Pyramid)(nil)
 
-// NewPyramidE builds a pyramid over loader. meta names the field and lists
+// NewPyramid builds a pyramid over loader. meta names the field and lists
 // its steps; its geometry (West, East, South, North, DLon, DLat, PeriodicLon)
 // is taken from the first step loaded when left zero, and every later step
 // must match it. A zero ValidFraction takes one half.
-func NewPyramidE(ctx context.Context, meta Meta, loader StepLoaderI, opts PyramidOptions) (inst *Pyramid, err error) {
+func NewPyramid(ctx context.Context, meta Meta, loader StepLoaderI, opts PyramidOptions) (inst *Pyramid, err error) {
 	if loader == nil {
 		err = eh.Errorf("a pyramid needs a step loader")
 		return
@@ -133,7 +133,7 @@ func NewPyramidE(ctx context.Context, meta Meta, loader StepLoaderI, opts Pyrami
 	// Geometry was left to the data: read the first step that exists.
 	var entry *stepEntry
 	for step := range meta.Steps {
-		entry, err = inst.entryE(ctx, step)
+		entry, err = inst.entry(ctx, step)
 		if err == nil {
 			break
 		}
@@ -175,15 +175,15 @@ func (inst *Pyramid) HeldBytes() (held int64) {
 	return
 }
 
-// PrefetchE loads a step so that a later SampleE finds it; a renderer calls it
+// Prefetch loads a step so that a later Sample finds it; a renderer calls it
 // for the next step in the direction of play.
-func (inst *Pyramid) PrefetchE(ctx context.Context, step int) (err error) {
-	_, err = inst.entryE(ctx, step)
+func (inst *Pyramid) Prefetch(ctx context.Context, step int) (err error) {
+	_, err = inst.entry(ctx, step)
 	return
 }
 
-// SampleE implements [SourceI].
-func (inst *Pyramid) SampleE(ctx context.Context, req Request) (win Window, err error) {
+// Sample implements [SourceI].
+func (inst *Pyramid) Sample(ctx context.Context, req Request) (win Window, err error) {
 	if !(req.West < req.East) || !(req.South < req.North) {
 		err = eb.Build().
 			Float64("west", req.West).Float64("east", req.East).
@@ -197,7 +197,7 @@ func (inst *Pyramid) SampleE(ctx context.Context, req Request) (win Window, err 
 		return
 	}
 	var entry *stepEntry
-	entry, err = inst.entryE(ctx, req.Step)
+	entry, err = inst.entry(ctx, req.Step)
 	if err != nil {
 		return
 	}
@@ -335,8 +335,8 @@ func extract(lv *level, req Request, fx, fy int, periodic bool, validFraction fl
 	return
 }
 
-// buildLevelsE turns a loaded grid into the step's levels.
-func buildLevelsE(grid Grid, meta *Meta) (levels []level, err error) {
+// buildLevels turns a loaded grid into the step's levels.
+func buildLevels(grid Grid, meta *Meta) (levels []level, err error) {
 	n := grid.Cols * grid.Rows
 	if grid.Cols < 2 || grid.Rows < 2 || !(grid.DLon > 0) || !(grid.DLat > 0) {
 		err = eb.Build().Int("cols", grid.Cols).Int("rows", grid.Rows).
@@ -489,10 +489,10 @@ func levelsBytes(levels []level) (bytes int64) {
 	return
 }
 
-// entryE returns a step's levels, loading them if they are not held. Loading
+// entry returns a step's levels, loading them if they are not held. Loading
 // happens outside the lock; a second caller for the same step waits for the
 // first.
-func (inst *Pyramid) entryE(ctx context.Context, step int) (entry *stepEntry, err error) {
+func (inst *Pyramid) entry(ctx context.Context, step int) (entry *stepEntry, err error) {
 	if step < 0 || step >= len(inst.meta.Steps) {
 		err = eb.Build().Int("step", step).Int("steps", len(inst.meta.Steps)).Errorf("%w", ErrStepOutOfRange)
 		return
@@ -511,9 +511,9 @@ func (inst *Pyramid) entryE(ctx context.Context, step int) (entry *stepEntry, er
 
 	if owner {
 		var grid Grid
-		grid, err = inst.loader.LoadStepE(ctx, step)
+		grid, err = inst.loader.LoadStep(ctx, step)
 		if err == nil {
-			entry.levels, err = buildLevelsE(grid, &meta)
+			entry.levels, err = buildLevels(grid, &meta)
 		}
 		entry.err = err
 		inst.mu.Lock()

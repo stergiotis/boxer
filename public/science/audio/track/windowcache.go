@@ -82,7 +82,7 @@ type windowCache struct {
 // newWindowCache prepares the cache; its worker starts on the first miss, so
 // a track whose caller never zooms past the base bin costs no goroutine. The
 // context is the track's rather than the open call's, and cancelling it is
-// what unblocks a decoder read at [Track.CloseE].
+// what unblocks a decoder read at [Track.Close].
 func newWindowCache(ctx context.Context, src pcm.SourceI, maxBytes int64) (inst *windowCache) {
 	if maxBytes <= 0 {
 		maxBytes = DefaultWindowCacheBytes
@@ -232,7 +232,7 @@ func (inst *windowCache) worker() {
 		inst.fetches++
 		inst.mu.Unlock()
 
-		samples, err := inst.fetchE(key)
+		samples, err := inst.fetch(key)
 
 		inst.mu.Lock()
 		inst.hasInflight = false
@@ -252,10 +252,10 @@ func (inst *windowCache) worker() {
 	}
 }
 
-func (inst *windowCache) fetchE(key windowKey) (samples []float32, err error) {
+func (inst *windowCache) fetch(key windowKey) (samples []float32, err error) {
 	channels := int(inst.format.Channels)
 	dst := make([]float32, (key.to-key.from)*int64(channels))
-	n, err := readWindowE(inst.ctx, inst.src, inst.format, inst.frames, key.from, dst)
+	n, err := readWindow(inst.ctx, inst.src, inst.format, inst.frames, key.from, dst)
 	if err != nil {
 		return nil, err
 	}

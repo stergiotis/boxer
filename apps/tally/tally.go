@@ -212,7 +212,7 @@ func newApp() (inst *App) {
 		if content.audio == nil {
 			return
 		}
-		if err := content.audio.closeE(); err != nil {
+		if err := content.audio.close(); err != nil {
 			inst.log.Warn().Err(err).Msg("tally: closing a recording")
 		}
 	})

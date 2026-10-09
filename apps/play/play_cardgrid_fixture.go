@@ -252,12 +252,12 @@ func cardgridFixtureHeaderOnlyPNG(w, h uint32) []byte {
 }
 
 func cardgridFixtureWAV(format pcm.Format, frames int64, enc wavfile.EncodingE, bits uint16, fn pcm.SampleFunc) ([]byte, error) {
-	src, err := pcm.NewSynthSourceE(format, frames, fn)
+	src, err := pcm.NewSynthSource(format, frames, fn)
 	if err != nil {
 		return nil, eh.Errorf("play: cards fixture: %w", err)
 	}
 	var buf bytes.Buffer
-	if err = wavfile.WriteE(context.Background(), &buf, format, enc, bits, src); err != nil {
+	if err = wavfile.Write(context.Background(), &buf, format, enc, bits, src); err != nil {
 		return nil, eh.Errorf("play: cards fixture: wav: %w", err)
 	}
 	return buf.Bytes(), nil

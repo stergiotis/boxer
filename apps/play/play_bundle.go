@@ -480,7 +480,7 @@ func withColumnValues(bus app.BusI, obo *app.OnBehalfOf, bundles []BundleInfo) {
 				info.ValuesNeed = DestinationKeelsonBundle(info.Alias)
 				continue
 			}
-			res, err := adhocdata.ReadColumnsE(bus, alias, obo)
+			res, err := adhocdata.ReadColumns(bus, alias, obo)
 			if err != nil {
 				var ge *adhocdata.GrantError
 				if errors.As(err, &ge) {

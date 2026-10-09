@@ -174,11 +174,11 @@ func prefixInsert(n uint16) (insert int, ok bool) {
 	return
 }
 
-func parseProductE(body []byte) (p Product, err error) {
+func parseProduct(body []byte) (p Product, err error) {
 	r := rd{b: body}
 	nv := r.u16()
 	p.Template = r.u16()
-	err = r.errE("product definition section")
+	err = r.truncation("product definition section")
 	if err != nil {
 		return
 	}
@@ -215,7 +215,7 @@ func parseProductE(body []byte) (p Product, err error) {
 	p.ForecastTime = ft
 	p.Surface1 = parseSurface(&t)
 	p.Surface2 = parseSurface(&t)
-	err = t.errE("product template 4." + strconv.Itoa(int(p.Template)))
+	err = t.truncation("product template 4." + strconv.Itoa(int(p.Template)))
 	if err != nil {
 		return
 	}
@@ -244,7 +244,7 @@ func parseProductE(body []byte) (p Product, err error) {
 			t.skip(13)
 		}
 		if p.Template == 13 || p.Template == 14 {
-			err = unsupportedE("product template 4." + strconv.Itoa(int(p.Template)))
+			err = unsupported("product template 4." + strconv.Itoa(int(p.Template)))
 			return
 		}
 		var st Statistics
@@ -266,20 +266,20 @@ func parseProductE(body []byte) (p Product, err error) {
 			tr.IncrementUnit = TimeUnit(t.u8())
 			tr.Increment = t.s32()
 		}
-		err = t.errE("product template 4." + strconv.Itoa(int(p.Template)))
+		err = t.truncation("product template 4." + strconv.Itoa(int(p.Template)))
 		if err != nil {
 			return
 		}
 		// An interval end of all zeros is how some producers code "not
 		// applicable"; it is left as the zero time rather than refused.
 		if year != 0 || month != 0 || day != 0 {
-			st.IntervalEnd, err = makeTimeE(year, month, day, hour, minute, second)
+			st.IntervalEnd, err = makeTime(year, month, day, hour, minute, second)
 			if err != nil {
 				return
 			}
 		}
 		p.Statistics = &st
 	}
-	err = t.errE("product template 4." + strconv.Itoa(int(p.Template)))
+	err = t.truncation("product template 4." + strconv.Itoa(int(p.Template)))
 	return
 }

@@ -3,9 +3,9 @@ package play
 // list_history: the History pane's session half for an agent — the runs of
 // this window, newest first, each with the SQL it shipped, the buffer it
 // came from when that differs, and the signal values it sent. Restoring an
-// entry stays set_sql and set_signal, as the pane's click does through the
-// same commands (ADR-0270 §SD6). The durable half, the captured runs on
-// boxer.facts, is not read here.
+// entry stays set_sql and set_signal, as the pane's Restore button does
+// through the same commands (ADR-0270 §SD6). The durable half, the captured
+// runs on boxer.facts, is not read here.
 
 import (
 	"maps"

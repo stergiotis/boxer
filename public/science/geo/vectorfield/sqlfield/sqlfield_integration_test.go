@@ -48,7 +48,7 @@ func (inst localQueryer) run(ctx context.Context, statement string, params map[s
 	return
 }
 
-func (inst localQueryer) QueryE(ctx context.Context, statement string, params map[string]string) (rec arrow.RecordBatch, err error) {
+func (inst localQueryer) Query(ctx context.Context, statement string, params map[string]string) (rec arrow.RecordBatch, err error) {
 	out, err := inst.run(ctx, statement, params, "ArrowStream")
 	if err != nil {
 		return
@@ -109,11 +109,11 @@ type canonicalQueryer struct {
 	t     *testing.T
 }
 
-func (inst canonicalQueryer) QueryE(ctx context.Context, statement string, params map[string]string) (rec arrow.RecordBatch, err error) {
+func (inst canonicalQueryer) Query(ctx context.Context, statement string, params map[string]string) (rec arrow.RecordBatch, err error) {
 	canonical, err := passes.CanonicalizeFull(100).Run(statement)
 	require.NoError(inst.t, err)
 	require.NotEqual(inst.t, statement, canonical)
-	return inst.inner.QueryE(ctx, canonical, params)
+	return inst.inner.Query(ctx, canonical, params)
 }
 
 func emptyColumns(schema *arrow.Schema) (cols []arrow.Array) {
@@ -159,7 +159,7 @@ type gridLoader struct {
 	cols, rows              int
 }
 
-func (inst gridLoader) LoadStepE(_ context.Context, step int) (g vectorfield.Grid, err error) {
+func (inst gridLoader) LoadStep(_ context.Context, step int) (g vectorfield.Grid, err error) {
 	g = vectorfield.Grid{West: inst.west, North: inst.north, DLon: inst.dLon, DLat: inst.dLat, Cols: inst.cols, Rows: inst.rows,
 		U: make([]float32, inst.cols*inst.rows), V: make([]float32, inst.cols*inst.rows)}
 	for r := range inst.rows {
@@ -185,7 +185,7 @@ FROM (SELECT number AS s FROM numbers(3)) AS a, (SELECT number AS r FROM numbers
 		From: "vector_field",
 	}
 	ctx := context.Background()
-	src, err := NewSourceE(ctx, q, rel, Options{})
+	src, err := NewSource(ctx, q, rel, Options{})
 	require.NoError(t, err)
 
 	meta := src.Describe()
@@ -199,7 +199,7 @@ FROM (SELECT number AS s FROM numbers(3)) AS a, (SELECT number AS r FROM numbers
 
 	// The same field through the in-memory pyramid is the same window, where
 	// the pyramid serves a level it built by halving.
-	pyr, err := vectorfield.NewPyramidE(ctx, vectorfield.Meta{Steps: meta.Steps},
+	pyr, err := vectorfield.NewPyramid(ctx, vectorfield.Meta{Steps: meta.Steps},
 		gridLoader{west: -180, north: 90, dLon: 1, dLat: 1, cols: 360, rows: 181}, vectorfield.PyramidOptions{})
 	require.NoError(t, err)
 	for _, req := range []vectorfield.Request{
@@ -207,9 +207,9 @@ FROM (SELECT number AS s FROM numbers(3)) AS a, (SELECT number AS r FROM numbers
 		{West: -30, East: 40, South: 30, North: 70, Step: 2, MaxCols: 20, MaxRows: 12},
 		{West: 150, East: 215, South: -40, North: 10, Step: 0, MaxCols: 18, MaxRows: 14},
 	} {
-		got, err := src.SampleE(ctx, req)
+		got, err := src.Sample(ctx, req)
 		require.NoError(t, err)
-		want, err := pyr.SampleE(ctx, req)
+		want, err := pyr.Sample(ctx, req)
 		require.NoError(t, err)
 		require.Equal(t, want.Cols, got.Cols)
 		require.Equal(t, want.Rows, got.Rows)
@@ -225,7 +225,7 @@ FROM (SELECT number AS s FROM numbers(3)) AS a, (SELECT number AS r FROM numbers
 
 	t.Run("a summary is the area-weighted mean of the decimated nodes, per step", func(t *testing.T) {
 		req := vectorfield.Request{West: -30, East: 40, South: 30, North: 70, MaxCols: 20, MaxRows: 12}
-		sums, err := src.SummarizeE(ctx, req)
+		sums, err := src.Summarize(ctx, req)
 		require.NoError(t, err)
 		require.Len(t, sums, 3)
 		p := src.grid.plan(req)
@@ -255,7 +255,7 @@ FROM (SELECT number AS s FROM numbers(3)) AS a, (SELECT number AS r FROM numbers
 	})
 
 	t.Run("the statement text does not change with the request", func(t *testing.T) {
-		_, err := src.SampleE(ctx, vectorfield.Request{West: 0, East: 20, South: 0, North: 20, Step: 1, MaxCols: 50, MaxRows: 50})
+		_, err := src.Sample(ctx, vectorfield.Request{West: 0, East: 20, South: 0, North: 20, Step: 1, MaxCols: 50, MaxRows: 50})
 		require.NoError(t, err)
 		served, _ := src.LastServed(PurposeWindow)
 		require.Equal(t, src.WindowStatement(), served.Statement)
@@ -287,7 +287,7 @@ SELECT 60 - r * 0.1 AS lat, 340 + c * 0.1 AS lon,
 FROM (SELECT number AS r, 0 AS s FROM numbers(200)) AS b, (SELECT number AS c FROM numbers(150)) AS d`)
 
 	ctx := context.Background()
-	src, err := NewSourceE(ctx, q, Relation{From: "current"}, Options{})
+	src, err := NewSource(ctx, q, Relation{From: "current"}, Options{})
 	require.NoError(t, err)
 	meta := src.Describe()
 	require.False(t, meta.PeriodicLon)
@@ -297,7 +297,7 @@ FROM (SELECT number AS r, 0 AS s FROM numbers(200)) AS b, (SELECT number AS c FR
 	vectorfieldtest.Run(t, src, vectorfieldtest.Options{MissingStep: -1})
 
 	t.Run("in canonical form", func(t *testing.T) {
-		canonical, err := NewSourceE(ctx, canonicalQueryer{inner: q, t: t}, Relation{
+		canonical, err := NewSource(ctx, canonicalQueryer{inner: q, t: t}, Relation{
 			Head: "WITH vector_field AS (SELECT toDateTime64('2026-01-01 00:00:00', 3, 'UTC') AS t, lat, lon, u, v FROM current)",
 			From: "vector_field",
 		}, Options{})
@@ -306,7 +306,7 @@ FROM (SELECT number AS r, 0 AS s FROM numbers(200)) AS b, (SELECT number AS c FR
 	})
 
 	// A request in the -180…180 convention finds the field stored in 0…360.
-	win, err := src.SampleE(ctx, vectorfield.Request{West: -20, East: -5, South: 40, North: 60, MaxCols: 400, MaxRows: 400})
+	win, err := src.Sample(ctx, vectorfield.Request{West: -20, East: -5, South: 40, North: 60, MaxCols: 400, MaxRows: 400})
 	require.NoError(t, err)
 	require.False(t, win.IsEmpty())
 	require.InDelta(t, -20.1, win.West, 0.11)
@@ -326,7 +326,7 @@ func TestRepeatedSeamColumnIsDropped(t *testing.T) {
 	q.exec(t, `CREATE TABLE g (lat Float64, lon Float64, u Float64, v Float64) ENGINE = MergeTree ORDER BY (lat, lon)`)
 	q.exec(t, `INSERT INTO g SELECT 80 - r * 2 AS lat, c * 2 AS lon, `+fieldU+`, `+fieldV+`
 FROM (SELECT number AS r, 0 AS s FROM numbers(81)) AS b, (SELECT number AS c FROM numbers(181)) AS d`)
-	src, err := NewSourceE(context.Background(), q, Relation{From: "g"}, Options{})
+	src, err := NewSource(context.Background(), q, Relation{From: "g"}, Options{})
 	require.NoError(t, err)
 	meta := src.Describe()
 	require.True(t, meta.PeriodicLon)
@@ -341,18 +341,18 @@ func TestWhatAReductionWouldHideIsRefused(t *testing.T) {
 	q.exec(t, `INSERT INTO levels SELECT l, 10 - r, c, 1, 1
 FROM (SELECT number AS l FROM numbers(2)) AS a, (SELECT number AS r FROM numbers(10)) AS b, (SELECT number AS c FROM numbers(10)) AS d`)
 
-	_, err := NewSourceE(ctx, q, Relation{From: "levels"}, Options{})
+	_, err := NewSource(ctx, q, Relation{From: "levels"}, Options{})
 	require.ErrorContains(t, err, "more rows than the grid has nodes")
 
-	_, err = NewSourceE(ctx, q, Relation{From: "(SELECT lat, lon, u, v FROM levels WHERE level = 1)"}, Options{})
+	_, err = NewSource(ctx, q, Relation{From: "(SELECT lat, lon, u, v FROM levels WHERE level = 1)"}, Options{})
 	require.NoError(t, err)
 
-	_, err = NewSourceE(ctx, q, Relation{From: "(SELECT lat + sin(lat) * 0.3 AS lat, lon, u, v FROM levels WHERE level = 1)"}, Options{})
+	_, err = NewSource(ctx, q, Relation{From: "(SELECT lat + sin(lat) * 0.3 AS lat, lon, u, v FROM levels WHERE level = 1)"}, Options{})
 	require.ErrorContains(t, err, "not on a grid regular")
 
-	_, err = NewSourceE(ctx, q, Relation{From: "(SELECT level AS t, lat, lon, u, v FROM levels)"}, Options{})
+	_, err = NewSource(ctx, q, Relation{From: "(SELECT level AS t, lat, lon, u, v FROM levels)"}, Options{})
 	require.ErrorContains(t, err, "must be a Date, DateTime or DateTime64")
 
-	_, err = NewSourceE(ctx, q, Relation{From: "(SELECT lat, lon, u FROM levels)"}, Options{})
+	_, err = NewSource(ctx, q, Relation{From: "(SELECT lat, lon, u FROM levels)"}, Options{})
 	require.ErrorContains(t, err, "not a field")
 }

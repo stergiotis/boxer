@@ -206,7 +206,7 @@ func (inst *lensPainter) paintFocus(r int32) {
 		switch {
 		case !has:
 			if isMissing && valueChars == 0 {
-				c.PaintRectStroke(xVal+0.5, cy-3.5, xVal+7.5, cy+3.5, 1, lensTok(styletokens.ErrorDefault), 1.5).Send()
+				c.PaintRectStroke(xVal+0.5, cy-3.5, xVal+7.5, cy+3.5, 1, lensTok(styletokens.ErrorDefault), styletokens.StrokeRegular).Send()
 			} else if isMissing {
 				inst.text(xVal, cy, "missing", lensSmallFont, lensTok(styletokens.ErrorDefault))
 			}
@@ -303,7 +303,7 @@ func (inst *lensPainter) paintStanding(x0, x1, cy float32, s int32, cell *lwlens
 	for _, k := range keys {
 		w := (x1 - x0) * float32(counts[k]) / float32(len(texts))
 		if k == cell.Text {
-			c.PaintRectStroke(x-1, cy-6, x+max(w-1, 1)+1, cy+6, 1, lensTok(styletokens.NeutralTextExtreme), 1.5).Send()
+			c.PaintRectStroke(x-1, cy-6, x+max(w-1, 1)+1, cy+6, 1, lensTok(styletokens.NeutralTextExtreme), styletokens.StrokeRegular).Send()
 		}
 		x += w
 	}

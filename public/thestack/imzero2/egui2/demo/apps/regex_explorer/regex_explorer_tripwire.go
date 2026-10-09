@@ -8,12 +8,17 @@ package regex_explorer
 // divergences are logged and surfaced in the status bar. See ADR-0054
 // section "Subsidiary design decisions" for the rationale.
 //
-// Disagreements are partitioned. A case carrying a [tripwireCase.KnownDrift]
-// note is a difference we have already investigated and decided to live
-// with — it is counted separately and does not light the DRIFT indicator.
-// Everything else is unexpected and does. Without that split the indicator
-// degrades into a permanent warning the moment the corpus covers a real
-// engine difference, and a permanent warning conveys nothing.
+// Each case is checked twice against ClickHouse's extractAll. The check
+// that gates is the *model*: what the app predicts extractAll returns
+// (regex_explorer_chmodel.go — Go's matches, ClickHouse's enumeration and
+// defaults) must equal what it returns. A miss there means the app is
+// telling the user something false, and lights DRIFT. The second check is
+// the raw engines — Go's FindAllString against the same output — and a
+// difference there is expected only where a [tripwireCase.KnownDrift] note
+// says so: a documented raw difference the model accounts for is counted
+// as *known*, an undocumented one is drift. Without that split the
+// indicator degrades into a permanent warning the moment the corpus covers
+// a real engine difference, and a permanent warning conveys nothing.
 //
 // The tripwire is not gating: a drift does not block the app. Users can
 // still type and run queries; the expectation is that unexpected divergence
@@ -22,35 +27,36 @@ package regex_explorer
 
 import (
 	"context"
-	"reflect"
+	"slices"
 	"strings"
+	"sync"
+	"time"
 
-	"github.com/apache/arrow-go/v18/arrow/array"
-	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // tripwireCase is one triple-tuple for engine-fidelity comparison: a
-// pattern applied to a haystack must produce the same match list under
-// Go's regexp.Regexp.FindAllString and ClickHouse's extractAll.
+// pattern applied to a haystack, whose ClickHouse extractAll output must
+// equal the model's prediction and — unless KnownDrift says otherwise — Go's
+// FindAllString.
 //
 // Flags carries the RE2 inline-flag letters ("i", "m", "s", or a
 // combination) the case is evaluated under. The corpus states them
 // explicitly rather than reading the live UI toggles: SD1 compares two
 // engines against a *fixed* corpus, so a case whose meaning changed with
 // whatever the user last clicked would compare two moving targets.
-// [App.effectivePattern] builds the same "(?ims)"-prefixed string for
-// the interactive path, so the flag prefix itself is on both paths.
+// Unlike the interactive path ([inlineFlags]), a case states only the
+// flags it names and leaves the dot flag to each engine's default, so the
+// corpus can pin those defaults too.
 //
-// KnownDrift documents an engine difference that is real, understood,
-// and not a regression. A case with a non-empty KnownDrift is still
-// evaluated and still logged when the engines disagree, but the
-// disagreement is counted as *known* rather than reported as drift —
-// otherwise every widened corpus permanently pins the status bar to
-// "DRIFT" and the indicator stops carrying information. An empty
-// KnownDrift means the engines must agree exactly.
+// KnownDrift documents a raw engine difference that is real, understood,
+// and modelled. A case with a non-empty KnownDrift is still evaluated and
+// logged, and its raw disagreement is counted as *known* rather than
+// reported as drift — otherwise every widened corpus permanently pins the
+// status bar to "DRIFT" and the indicator stops carrying information. An
+// empty KnownDrift means the raw engines must agree exactly.
 type tripwireCase struct {
 	Name       string
 	Haystack   string
@@ -94,7 +100,7 @@ var tripwireCorpus = []tripwireCase{
 		// was written and left it unable to signal anything else. It is
 		// documented here rather than removed: it is the single most
 		// load-bearing difference between the two engines for this app,
-		// because the List tab renders extractAll output directly.
+		// because extract and extractAll both return group 1.
 		Name:       "group-capture",
 		Haystack:   "(x) (yz)",
 		Pattern:    `\(([^)]+)\)`,
@@ -119,19 +125,16 @@ var tripwireCorpus = []tripwireCase{
 	{Name: "multiline-anchor-flag", Haystack: "foo\nbar\nfoo", Pattern: `^foo$`, Flags: "m"},
 	{Name: "dotall-flag", Haystack: "a\nb", Pattern: `a.b`, Flags: "s"},
 	{
-		// The empty-match enumeration policy is where the two engines
-		// genuinely part company: Go's FindAllString reports one
-		// zero-width match at every position (4 for a 3-byte haystack),
-		// ClickHouse's extractAll reports none. Neither is wrong —
-		// RE2 specifies the match, not how a caller enumerates repeated
-		// empty matches. The app sides with ClickHouse in the preview
-		// (see nonEmptyMatches) because predicting ClickHouse is the
-		// product; the corpus records the raw-engine difference so it
-		// stays visible if either side ever changes its mind.
+		// Empty-match enumeration is where the two engines part company.
+		// RE2 specifies the match, not how a caller walks repeated
+		// matches: Go's FindAllString reports a zero-width match at every
+		// position where one is found, ClickHouse's extractAll stops at
+		// the first one (regex_explorer_chmodel.go). Here the first match
+		// is already empty, so extractAll returns nothing.
 		Name:       "empty-matchable-star",
 		Haystack:   "xyz",
 		Pattern:    `a*`,
-		KnownDrift: "Go enumerates a zero-width match per position; ClickHouse extractAll reports none",
+		KnownDrift: "Go enumerates zero-width matches; ClickHouse extractAll stops at the first one",
 	},
 	{
 		Name:       "empty-matchable-opt",
@@ -139,38 +142,106 @@ var tripwireCorpus = []tripwireCase{
 		Pattern:    `q?`,
 		KnownDrift: "zero-width matches, as empty-matchable-star",
 	},
+	{
+		// The stop also drops real matches after it: Go reports "",
+		// "aa", "", "" and extractAll stops on the first "" before it
+		// reaches "aa".
+		Name:       "empty-before-match",
+		Haystack:   "xaay",
+		Pattern:    `a*`,
+		KnownDrift: "extractAll stops at the zero-width match at byte 0, before the real match",
+	},
+	{
+		// The subtle half of the rule: the zero-width match right where
+		// "ab" ends is one Go's FindAll skips, so Go reports "ab" and
+		// "cd" with no empty match between them — and extractAll still
+		// stops there. The model has to recover a match FindAll hid.
+		Name:       "empty-abutting-match",
+		Haystack:   "ab cd",
+		Pattern:    `\w*`,
+		KnownDrift: "extractAll stops at the zero-width match abutting \"ab\" that FindAll skips",
+	},
+	{
+		// ClickHouse compiles RE2 with dot-matches-newline on; Go has it
+		// off. The interactive path states the flag either way
+		// ([inlineFlags]); the corpus sends the pattern bare so the default
+		// itself stays pinned.
+		Name:       "dot-newline-default",
+		Haystack:   "a\nb",
+		Pattern:    `a.b`,
+		KnownDrift: "ClickHouse's dot matches a newline by default; Go's does not",
+	},
+	{
+		// The explicit flag the interactive path sends when the dot-all
+		// box is cleared: both engines must honour it.
+		Name:     "dot-newline-off",
+		Haystack: "a\nb",
+		Pattern:  `a.b`,
+		Flags:    "-s",
+	},
 }
 
-// TripwireState is a snapshot of the SD1 tripwire outcome rendered in the
-// status bar. Zero value means "not yet started".
-type TripwireState struct {
+// tripwireState is the SD1 tripwire outcome the status bar renders. The
+// zero value means "not finished".
+type tripwireState struct {
 	Done   bool
 	Drifts []int // corpus indices where the engines disagreed unexpectedly
 	Known  []int // corpus indices where they disagreed as documented (KnownDrift)
 	Err    error // the tripwire itself failed (e.g., ClickHouse unreachable)
 }
 
-// tripwireResult holds the SD1 outcome on the [App] once RunTripwire
-// completes. Read under App.mu.RLock.
-type tripwireResult struct {
-	done   bool
-	drifts []int
-	known  []int
-	err    error
+// tripwireTimeout bounds one SD1 run. The corpus is a few dozen queries
+// against a warm pool — about a second; a run still going after this is
+// wedged, and failing it frees the goroutine and the pool slots it holds.
+const tripwireTimeout = 60 * time.Second
+
+// tripwireRetryDelay is how long a run that failed — no bus yet, a refused
+// capability, ClickHouse unreachable — stands before the next frame may
+// start another. An embedded explorer's first frame can come before its
+// host attaches a bus; without a retry that window would report "could
+// not run" for the life of the process.
+const tripwireRetryDelay = 30 * time.Second
+
+// tripwireRun is the process's SD1 run. The corpus is fixed and every
+// explorer reaches the same ClickHouse, so one outcome describes them all:
+// opening a window does not repeat the check, and closing one does not
+// abandon it. Its own lock, not an App's, because no App owns it.
+type tripwireRun struct {
+	mu      sync.Mutex
+	started bool
+	running bool
+	state   tripwireState
+	// at is when the last run finished, for the retry delay.
+	at time.Time
 }
 
-// RunTripwire launches the SD1 engine-fidelity tripwire if it has not yet
-// run this session. One-shot: subsequent calls are no-ops. The result is
-// stored on the [App] and read by the status bar.
+var sharedTripwire tripwireRun
+
+// RunTripwire starts the SD1 engine-fidelity tripwire if the process has
+// not run it yet, or if the last run failed at least tripwireRetryDelay
+// ago; otherwise it does nothing, so it is safe to call every frame. The
+// run goes through this App's bus and compile cache, under
+// tripwireTimeout, and its outcome is shared by every App.
 func (inst *App) RunTripwire(ctx context.Context) {
-	if inst.tripwireRan.Swap(true) {
+	t := &sharedTripwire
+	t.mu.Lock()
+	due := !t.started || (!t.running && t.state.Err != nil && time.Since(t.at) >= tripwireRetryDelay)
+	if !due {
+		t.mu.Unlock()
 		return
 	}
+	t.started, t.running = true, true
+	t.mu.Unlock()
+
 	go func() {
+		ctx, cancel := context.WithTimeout(ctx, tripwireTimeout)
+		defer cancel()
 		drifts, known, err := inst.runTripwireBlocking(ctx)
-		inst.mu.Lock()
-		defer inst.mu.Unlock()
-		inst.tripwire = tripwireResult{done: true, drifts: drifts, known: known, err: err}
+		t.mu.Lock()
+		t.running = false
+		t.at = time.Now()
+		t.state = tripwireState{Done: true, Drifts: drifts, Known: known, Err: err}
+		t.mu.Unlock()
 		if err != nil {
 			log.Warn().Err(err).Msg("regex_explorer: tripwire failed to complete")
 			return
@@ -184,44 +255,48 @@ func (inst *App) RunTripwire(ctx context.Context) {
 }
 
 // runTripwireBlocking runs each corpus case through both engines and
-// partitions the disagreements: drifts are unexpected (the case declares no
-// KnownDrift and the engines still differ), known are the documented
-// differences from the ledger. Short-circuits on the first ClickHouse
+// partitions the disagreements: drifts are unexpected (the model mispredicts
+// ClickHouse, or the raw engines differ where no KnownDrift says they do),
+// known are the documented raw differences the model accounts for. Short-circuits on the first ClickHouse
 // transport error — if CH is unreachable the whole tripwire is considered
 // un-run (err set, both slices empty).
 func (inst *App) runTripwireBlocking(ctx context.Context) (drifts []int, known []int, err error) {
-	alloc := memory.NewGoAllocator()
 	for i, tc := range tripwireCorpus {
 		pattern := tc.effective()
-		goMatches, goErr := inst.tripwireGoMatches(pattern, tc.Haystack)
+		goMatches, predicted, goErr := inst.tripwireGoMatches(pattern, tc.Haystack)
 		if goErr != nil {
 			err = eb.Build().Int("tripwire", i).Str("name", tc.Name).Errorf("tripwire: Go compile: %w", goErr)
 			return
 		}
-		chMatches, chErr := inst.tripwireCHMatches(ctx, alloc, pattern, tc.Haystack)
+		chMatches, chErr := runExtractAllBlocking(ctx, inst, tc.Haystack, pattern)
 		if chErr != nil {
 			err = eb.Build().Int("tripwire", i).Str("name", tc.Name).Errorf("tripwire: ClickHouse: %w", chErr)
 			return
 		}
 
-		// The Multi tab runs this pattern through VectorScan, not RE2, and
+		// The multi-pattern input runs through VectorScan, not RE2, and
 		// the app decides which lines to send there using Go's regexp —
 		// a different engine's opinion. Checking that VectorScan at least
 		// accepts every pattern Go accepts is what keeps that proxy
 		// honest; a rejection here is a genuine engine disagreement, not a
 		// mismatched result, so it is reported as a drift on its own.
-		vsAccepted, vsErr := inst.tripwireVectorScanAccepts(ctx, alloc, pattern, tc.Haystack)
+		vsAccepted, vsErr := inst.tripwireVectorScanAccepts(ctx, pattern, tc.Haystack)
 		if vsErr != nil {
 			err = eb.Build().Int("tripwire", i).Str("name", tc.Name).Errorf("tripwire: VectorScan: %w", vsErr)
 			return
 		}
 		if !vsAccepted {
-			log.Warn().Str("case", tc.Name).Str("pattern", pattern).Msg("regex_explorer: VectorScan rejected a pattern Go accepts — the Multi tab's per-line validity marker is unreliable for it")
+			log.Warn().Str("case", tc.Name).Str("pattern", pattern).Msg("regex_explorer: VectorScan rejected a pattern Go accepts — the multi-pattern per-line validity marker is unreliable for it")
 			drifts = append(drifts, i)
 			continue
 		}
 
-		if reflect.DeepEqual(goMatches, chMatches) {
+		if !slices.Equal(predicted, chMatches) {
+			log.Warn().Str("case", tc.Name).Str("pattern", pattern).Str("haystack", tc.Haystack).Strs("predicted", predicted).Strs("ch", chMatches).Msg("regex_explorer: tripwire model miss — the app predicts extractAll wrongly")
+			drifts = append(drifts, i)
+			continue
+		}
+		if slices.Equal(goMatches, chMatches) {
 			continue
 		}
 		if tc.KnownDrift != "" {
@@ -236,101 +311,50 @@ func (inst *App) runTripwireBlocking(ctx context.Context) (drifts []int, known [
 	return
 }
 
-// tripwireGoMatches is the Go-side reference for a tripwire case: all
-// non-overlapping matches as full-match strings (not capture groups).
+// tripwireGoMatches is the Go side of a tripwire case: raw is every match
+// FindAllString reports, as full-match strings; predicted is what the app's
+// model says ClickHouse's extractAll returns ([predictExtractAll], with
+// ClickHouse's dot default applied).
 //
-// Deliberately raw — this is the one place that must NOT go through
-// nonEmptyMatches. The preview mirrors ClickHouse's empty-match policy so
-// the UI tells one story; the tripwire compares the engines as they
-// actually behave, which is what makes the ledger's KnownDrift entries
-// mean something. Filtering here would make the tripwire agree with
-// itself by construction.
+// raw is deliberately unfiltered and unmodelled: it is the engine as it
+// behaves, which is what makes the ledger's KnownDrift entries mean
+// something. Comparing only the model would make the tripwire agree with
+// itself wherever the model is right and say nothing about why.
 //
 // Shares the receiver's compile cache so patterns reused by the tripwire
 // and the main loop are compiled only once. Reaching the cache through
 // the receiver rather than a package-level pointer is what keeps this
 // goroutine off the render thread's toes.
-func (inst *App) tripwireGoMatches(pattern string, haystack string) (matches []string, err error) {
+func (inst *App) tripwireGoMatches(pattern string, haystack string) (raw []string, predicted []string, err error) {
 	re, err := inst.getCompiledRegexp(pattern)
 	if err != nil {
 		return
 	}
-	matches = re.FindAllString(haystack, -1)
-	if matches == nil {
-		matches = []string{}
+	raw = re.FindAllString(haystack, -1)
+	if raw == nil {
+		raw = []string{}
 	}
-	return
-}
-
-// tripwireCHMatches runs ClickHouse's extractAll over a `clickhouse
-// local` subprocess and returns the string matches, mirroring the shape
-// of tripwireGoMatches. Allocates a fresh [memory.Allocator] so the
-// tripwire does not share memory bookkeeping with live UI queries.
-func (inst *App) tripwireCHMatches(ctx context.Context, alloc memory.Allocator, pattern string, haystack string) (matches []string, err error) {
-	sql := buildExtractAllSQL(haystack, pattern)
-	rdr, closer, execErr := executeArrowStreamViaBus(ctx, inst.busSnapshot(), sql, alloc)
-	if execErr != nil {
-		err = eh.Errorf("execute tripwire query: %w", execErr)
+	chRe, err := inst.getCompiledRegexp(clickHouseDefaults(pattern))
+	if err != nil {
 		return
 	}
-	defer func() {
-		cErr := closer.Close()
-		if cErr != nil && err == nil {
-			err = eh.Errorf("close tripwire query: %w", cErr)
-		}
-	}()
-	defer rdr.Release()
-	if !rdr.Next() {
-		rErr := rdr.Err()
-		if rErr != nil {
-			err = eh.Errorf("read tripwire result: %w", rErr)
-			return
-		}
-		err = eh.Errorf("tripwire query returned no records")
-		return
-	}
-	rec := rdr.Record()
-	if rec.NumRows() == 0 || rec.NumCols() == 0 {
-		err = eh.Errorf("tripwire query returned empty record")
-		return
-	}
-	col := rec.Column(0)
-	list, ok := col.(*array.List)
-	if !ok {
-		err = eb.Build().Type("col", col).Errorf("tripwire unexpected column type")
-		return
-	}
-	inner, ok := list.ListValues().(*array.String)
-	if !ok {
-		err = eb.Build().Type("array", list.ListValues()).Errorf("tripwire inner column type")
-		return
-	}
-	offsets := list.Offsets()
-	start := int(offsets[0])
-	end := int(offsets[1])
-	matches = make([]string, 0, end-start)
-	for i := start; i < end; i++ {
-		matches = append(matches, inner.Value(i))
-	}
+	predicted = predictExtractAll(chRe, haystack)
 	return
 }
 
 // tripwireVectorScanAccepts reports whether ClickHouse's VectorScan
 // backend compiles pattern at all, by asking multiMatchAllIndices for a
 // one-element pattern set. Only acceptance matters here, not the hits:
-// the Multi tab's failure mode is a pattern that Go compiles and
+// the multi-pattern input's failure mode is a pattern that Go compiles and
 // VectorScan refuses, which takes down the whole set's query with it.
 //
 // A transport failure is returned as an error (the tripwire is un-run); a
 // query ClickHouse answers with a rejection returns accepted=false.
-func (inst *App) tripwireVectorScanAccepts(ctx context.Context, alloc memory.Allocator, pattern string, haystack string) (accepted bool, err error) {
+func (inst *App) tripwireVectorScanAccepts(ctx context.Context, pattern string, haystack string) (accepted bool, err error) {
 	sql := buildMultiMatchSQL(haystack, []string{pattern})
-	rdr, closer, execErr := executeArrowStreamViaBus(ctx, inst.busSnapshot(), sql, alloc)
+	rdr, closer, execErr := executeArrowStreamViaBus(ctx, inst.busSnapshot(), sql, inst.alloc)
 	if execErr != nil {
-		// The broker surfaces a ClickHouse-side rejection through the same
-		// channel as a transport failure, so tell them apart by whether
-		// the message names the pattern compiler.
-		if isRegexRejection(execErr) {
+		if isVectorScanRejection(execErr) {
 			return
 		}
 		err = eh.Errorf("execute VectorScan probe: %w", execErr)
@@ -346,37 +370,33 @@ func (inst *App) tripwireVectorScanAccepts(ctx context.Context, alloc memory.All
 	return
 }
 
-// isRegexRejection reports whether err is ClickHouse refusing to compile a
-// pattern rather than a transport or pool failure.
-func isRegexRejection(err error) bool {
-	msg := err.Error()
-	for _, marker := range []string{
-		"CANNOT_COMPILE_REGEXP",
-		"OptimizedRegularExpression",
-		"Hyperscan",
-		"hyperscan",
-		"BAD_ARGUMENTS",
-	} {
-		if strings.Contains(msg, marker) {
-			return true
-		}
+// isVectorScanRejection reports whether err is ClickHouse refusing to
+// compile a pattern for VectorScan, rather than a transport failure or an
+// unrelated exception. The shapes seen from clickhouse-local:
+// BAD_ARGUMENTS "Pattern '…' failed with error '…'" for syntax VectorScan
+// does not support (`\C`, `(?U)`), and HYPERSCAN_CANNOT_SCAN_TEXT for a
+// pattern it deems too expensive (`a{1001}`); CANNOT_COMPILE_REGEXP is
+// ClickHouse's dedicated regex-compile code. BAD_ARGUMENTS alone is not
+// enough — it is ClickHouse's general-purpose code.
+func isVectorScanRejection(err error) bool {
+	if !isEngineRejection(err) {
+		return false
 	}
-	return false
+	msg := err.Error()
+	return strings.Contains(msg, "failed with error") ||
+		strings.Contains(msg, "HYPERSCAN_CANNOT_SCAN_TEXT") ||
+		strings.Contains(msg, "CANNOT_COMPILE_REGEXP")
 }
 
-// tripwireSnapshot exposes a thread-safe snapshot of the SD1 outcome.
-func (inst *App) tripwireSnapshot() (state TripwireState) {
-	inst.mu.RLock()
-	defer inst.mu.RUnlock()
-	state.Done = inst.tripwire.done
-	if len(inst.tripwire.drifts) > 0 {
-		state.Drifts = make([]int, len(inst.tripwire.drifts))
-		copy(state.Drifts, inst.tripwire.drifts)
-	}
-	if len(inst.tripwire.known) > 0 {
-		state.Known = make([]int, len(inst.tripwire.known))
-		copy(state.Known, inst.tripwire.known)
-	}
-	state.Err = inst.tripwire.err
+// tripwireSnapshot returns the shared SD1 outcome, and whether a run has
+// started and whether one is in progress.
+func tripwireSnapshot() (state tripwireState, started bool, running bool) {
+	t := &sharedTripwire
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	state = t.state
+	state.Drifts = slices.Clone(state.Drifts)
+	state.Known = slices.Clone(state.Known)
+	started, running = t.started, t.running
 	return
 }

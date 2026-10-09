@@ -14,6 +14,14 @@ import (
 
 type fakeDelegation struct{ allow bool }
 
+// CallContext attests only the call "call-1" of task-1.
+func (inst *fakeDelegation) CallContext(task string, epoch uint64, call string, sender app.AppIdT, senderInstance uint64) (cc app.CallContext, ok bool, reason string) {
+	if task != "task-1" || call != "call-1" {
+		return cc, false, "the task has no call by that id"
+	}
+	return app.CallContext{Task: task, Epoch: epoch, Call: call, App: sender, Instance: senderInstance}, true, ""
+}
+
 func (inst *fakeDelegation) AllowDestination(task string, epoch uint64, destination string) (bool, string) {
 	if inst.allow && destination == DelegationDestination {
 		return true, ""
@@ -28,7 +36,7 @@ func TestAgentCausedCompletionNeedsTheGrant(t *testing.T) {
 	cli, svc, _ := serve(t, localCfg(p))
 	ctx := context.Background()
 	msgs := []openaichat.Message{{Role: openaichat.ChatRoleUser, Content: "hi"}}
-	obo := &app.OnBehalfOf{Task: "task-1", Epoch: 1}
+	obo := &app.OnBehalfOf{Task: "task-1", Epoch: 1, Call: "call-1"}
 	var refused *RefusedError
 
 	_, err := cli.Complete(ctx, Request{Messages: msgs, OnBehalfOf: obo})
@@ -44,6 +52,17 @@ func TestAgentCausedCompletionNeedsTheGrant(t *testing.T) {
 	res, err := cli.Complete(ctx, Request{Messages: msgs, OnBehalfOf: obo})
 	require.NoError(t, err)
 	assert.Equal(t, "ok", res.Content)
+	calls := svc.Calls()
+	assert.Equal(t, "task-1", calls[len(calls)-1].Task)
+	assert.Equal(t, "call-1", calls[len(calls)-1].TaskCall)
+
+	// ADR-0277 §SD1: a call the dispatcher does not attest is refused, and
+	// its row does not carry the task it claimed.
+	_, err = cli.Complete(ctx, Request{Messages: msgs, OnBehalfOf: &app.OnBehalfOf{Task: "task-1", Epoch: 1, Call: "made-up"}})
+	require.True(t, errors.As(err, &refused))
+	assert.Contains(t, refused.Reason, "does not attest")
+	calls = svc.Calls()
+	assert.Empty(t, calls[len(calls)-1].Task)
 
 	_, err = cli.Complete(ctx, Request{Messages: msgs})
 	require.NoError(t, err, "the app's own completion is not an agent's")

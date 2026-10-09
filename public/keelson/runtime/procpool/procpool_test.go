@@ -45,13 +45,13 @@ type fakeSpawner struct {
 	failWith   error
 	readyAfter time.Duration
 	closeDelay time.Duration
-	// dieDuringSpawn releases the slot before SpawnE returns, as a worker
+	// dieDuringSpawn releases the slot before Spawn returns, as a worker
 	// whose process died while it was being readied would.
 	dieDuringSpawn bool
 	lastDeadline   atomic.Pointer[time.Time]
 }
 
-func (inst *fakeSpawner) SpawnE(ctx context.Context, release ReleaseFunc) (w *fakeWorker, err error) {
+func (inst *fakeSpawner) Spawn(ctx context.Context, release ReleaseFunc) (w *fakeWorker, err error) {
 	n := inst.spawns.Add(1)
 	if d, ok := ctx.Deadline(); ok {
 		inst.lastDeadline.Store(&d)
@@ -91,7 +91,7 @@ func newPool(t *testing.T, cfg Config, sp *fakeSpawner, logger zerolog.Logger) (
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = p.StopE(ctx)
+		_ = p.Stop(ctx)
 	})
 	return
 }
@@ -121,7 +121,7 @@ func TestPool_MinIdleZeroSpawnsOnDemandOnly(t *testing.T) {
 		assert.Zero(t, sp.spawns.Load(), "no spares were asked for")
 
 		start := time.Now()
-		w, err := p.AcquireE(t.Context())
+		w, err := p.Acquire(t.Context())
 		require.NoError(t, err)
 		assert.Equal(t, 7*time.Second, time.Since(start), "the caller pays the readiness time")
 		require.NoError(t, w.Close())
@@ -138,7 +138,7 @@ func TestPool_RefillKeepsMinIdleReady(t *testing.T) {
 		require.Equal(t, 1, p.Stats().Idle)
 
 		start := time.Now()
-		w, err := p.AcquireE(t.Context())
+		w, err := p.Acquire(t.Context())
 		require.NoError(t, err)
 		assert.Zero(t, time.Since(start), "a warm spare costs nothing")
 
@@ -163,7 +163,7 @@ func TestPool_DeadSpareIsNotHandedOut(t *testing.T) {
 		require.NoError(t, spare.Close())
 		synctest.Wait()
 
-		w, err := p.AcquireE(t.Context())
+		w, err := p.Acquire(t.Context())
 		require.NoError(t, err)
 		assert.NotSame(t, spare, w)
 		assert.Equal(t, int64(2), sp.spawns.Load())
@@ -177,12 +177,12 @@ func TestPool_SlotIsBusyUntilReleased(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		sp := &fakeSpawner{closeDelay: 3 * time.Second}
 		p := newPool(t, Config{MaxConcurrent: 1}, sp, zerolog.Nop())
-		w, err := p.AcquireE(t.Context())
+		w, err := p.Acquire(t.Context())
 		require.NoError(t, err)
 
 		go func() { _ = w.Close() }()
 		start := time.Now()
-		w2, err := p.AcquireE(t.Context())
+		w2, err := p.Acquire(t.Context())
 		require.NoError(t, err)
 		assert.Equal(t, 3*time.Second, time.Since(start))
 		assert.Equal(t, int64(1), sp.maxAlive.Load())
@@ -194,7 +194,7 @@ func TestPool_WorkerDyingDuringSpawnIsAnError(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		sp := &fakeSpawner{dieDuringSpawn: true}
 		p := newPool(t, Config{MaxConcurrent: 1}, sp, zerolog.Nop())
-		_, err := p.AcquireE(t.Context())
+		_, err := p.Acquire(t.Context())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "exited")
 		assert.Equal(t, Stats{}, p.Stats())
@@ -209,7 +209,7 @@ func TestPool_SpawnFailureIsReturnedAndNotRetriedInALoop(t *testing.T) {
 		time.Sleep(time.Minute)
 		assert.Equal(t, int64(1), sp.spawns.Load(), "one refill attempt, then quiet")
 
-		_, err := p.AcquireE(t.Context())
+		_, err := p.Acquire(t.Context())
 		require.ErrorIs(t, err, boom)
 		assert.Equal(t, Stats{}, p.Stats())
 	})
@@ -220,7 +220,7 @@ func TestPool_SpawnTimeoutIsTheSpawnersDeadline(t *testing.T) {
 		sp := &fakeSpawner{readyAfter: time.Hour}
 		p := newPool(t, Config{MaxConcurrent: 1, SpawnTimeout: 30 * time.Second}, sp, zerolog.Nop())
 		start := time.Now()
-		_, err := p.AcquireE(t.Context())
+		_, err := p.Acquire(t.Context())
 		require.ErrorIs(t, err, context.DeadlineExceeded)
 		assert.Equal(t, 30*time.Second, time.Since(start))
 		require.NotNil(t, sp.lastDeadline.Load())
@@ -231,7 +231,7 @@ func TestPool_WatchdogZeroLetsAWorkerBeHeld(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		sp := &fakeSpawner{}
 		p := newPool(t, Config{MaxConcurrent: 1}, sp, zerolog.Nop())
-		w, err := p.AcquireE(t.Context())
+		w, err := p.Acquire(t.Context())
 		require.NoError(t, err)
 		time.Sleep(24 * time.Hour)
 		select {
@@ -254,7 +254,7 @@ func TestPool_WatchdogReportsAgeSinceAcquisition(t *testing.T) {
 		synctest.Wait()
 		time.Sleep(time.Second)
 
-		w, err := p.AcquireE(t.Context())
+		w, err := p.Acquire(t.Context())
 		require.NoError(t, err)
 		<-w.closed
 
@@ -272,18 +272,18 @@ func TestPool_StopClosesHeldWorkersAndRefusesAcquire(t *testing.T) {
 		sp := &fakeSpawner{closeDelay: time.Second}
 		p, err := New(Config{MinIdle: 1, MaxConcurrent: 2}, SpawnerI[*fakeWorker](sp), zerolog.Nop())
 		require.NoError(t, err)
-		w, err := p.AcquireE(t.Context())
+		w, err := p.Acquire(t.Context())
 		require.NoError(t, err)
 		synctest.Wait()
 
 		ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 		defer cancel()
-		require.Error(t, p.StopE(ctx), "teardown outlasts this deadline")
-		require.NoError(t, p.StopE(t.Context()), "and a second call waits it out")
+		require.Error(t, p.Stop(ctx), "teardown outlasts this deadline")
+		require.NoError(t, p.Stop(t.Context()), "and a second call waits it out")
 		<-w.closed
 		assert.Zero(t, sp.alive.Load())
 
-		_, err = p.AcquireE(t.Context())
+		_, err = p.Acquire(t.Context())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "stopped")
 	})
@@ -293,12 +293,12 @@ func TestPool_AcquireWaitsAndHonoursCancel(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		sp := &fakeSpawner{}
 		p := newPool(t, Config{MaxConcurrent: 1}, sp, zerolog.Nop())
-		w, err := p.AcquireE(t.Context())
+		w, err := p.Acquire(t.Context())
 		require.NoError(t, err)
 
 		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 		defer cancel()
-		_, err = p.AcquireE(ctx)
+		_, err = p.Acquire(ctx)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "cancelled")
 		require.NoError(t, w.Close())
@@ -319,7 +319,7 @@ func TestPool_ConcurrencyNeverExceedsMax(t *testing.T) {
 			r := rand.New(rand.NewPCG(uint64(g), 7))
 			for range 50 {
 				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-				w, err := p.AcquireE(ctx)
+				w, err := p.Acquire(ctx)
 				cancel()
 				if err != nil {
 					continue
@@ -332,7 +332,7 @@ func TestPool_ConcurrencyNeverExceedsMax(t *testing.T) {
 	wg.Wait()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	require.NoError(t, p.StopE(ctx))
+	require.NoError(t, p.Stop(ctx))
 	assert.LessOrEqual(t, sp.maxAlive.Load(), int64(maxConcurrent))
 	assert.Zero(t, sp.alive.Load())
 	assert.Equal(t, Stats{Stopped: true}, p.Stats())

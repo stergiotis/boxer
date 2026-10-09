@@ -38,12 +38,12 @@ func UnsupportedFeature(err error) (feature string, ok bool) {
 	return
 }
 
-func unsupportedE(feature string) (err error) {
+func unsupported(feature string) (err error) {
 	err = &unsupportedError{feature: feature, err: eb.Build().Str("feature", feature).Errorf("refused: %w", ErrUnsupported)}
 	return
 }
 
-func corruptE(what string) (err error) {
+func corrupt(what string) (err error) {
 	err = eb.Build().Str("failure", what).Errorf("codestream: %w", ErrCorrupt)
 	return
 }

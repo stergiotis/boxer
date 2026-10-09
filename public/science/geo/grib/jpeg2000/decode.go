@@ -17,19 +17,19 @@ type Image struct {
 // Decode decodes a raw codestream or a JP2 file whose codestream fits the
 // profile the package documents.
 func Decode(cs []byte) (img Image, err error) {
-	h, err := parseHeaderE(cs)
+	h, err := parseHeader(cs)
 	if err != nil {
 		return
 	}
-	err = h.checkProfileE()
+	err = h.checkProfile()
 	if err != nil {
 		return
 	}
-	res, err := h.layoutE()
+	res, err := h.layout()
 	if err != nil {
 		return
 	}
-	err = h.readPacketsE(res)
+	err = h.readPackets(res)
 	if err != nil {
 		return
 	}

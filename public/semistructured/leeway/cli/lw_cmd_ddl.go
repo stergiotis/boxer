@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"math/rand/v2"
 	"os"
@@ -19,7 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/golang"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func NewCliCommandDdl() *cli.Command {
@@ -49,11 +50,11 @@ func NewCliCommandDdl() *cli.Command {
 	tableRowConfigFlag, tableRowConfigGetter := cli2.BuildEnumStringFlag(common.AllTableRowConfigs, common.TableRowConfigMultiAttributesPerRow, "tableRowConfig")
 	return &cli.Command{
 		Name: "ddl",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			newCliCommandDdlCompose(),
 			{
 				Name: "table",
-				Subcommands: []*cli.Command{
+				Commands: []*cli.Command{
 					{
 						Name: "generate",
 						Flags: []cli.Flag{
@@ -68,7 +69,7 @@ func NewCliCommandDdl() *cli.Command {
 							},
 							tableRowConfigFlag,
 						},
-						Action: func(context *cli.Context) error {
+						Action: func(ctx context.Context, cmd *cli.Command) error {
 							var dto common.TableDescDto
 							err = marshaller.DecodeDtoCbor(os.Stdin, &dto)
 							if err != nil {
@@ -76,17 +77,17 @@ func NewCliCommandDdl() *cli.Command {
 							}
 							var tech common.TechnologySpecificGeneratorI
 							{
-								techIdx := slices.Index(techIds, context.String("technology"))
+								techIdx := slices.Index(techIds, cmd.String("technology"))
 								if techIdx >= 0 {
 									tech = techs[techIdx]
 								}
 							}
 
 							if tech == nil {
-								return eb.Build().Str("given", context.String("technology")).Strs("possible", techIds).Errorf("unable to resolve technology")
+								return eb.Build().Str("given", cmd.String("technology")).Strs("possible", techIds).Errorf("unable to resolve technology")
 							}
 							var conv common.NamingConventionI
-							conv, err = ddl2.NewHumanReadableNamingConvention(context.String("separator"))
+							conv, err = ddl2.NewHumanReadableNamingConvention(cmd.String("separator"))
 							if err != nil {
 								return eh.Errorf("unable to create human readable name convention object: %w", err)
 							}
@@ -104,7 +105,7 @@ func NewCliCommandDdl() *cli.Command {
 							if err != nil {
 								return eh.Errorf("unable to create intermediate table representation: %w", err)
 							}
-							tableRowConfig := tableRowConfigGetter(context)
+							tableRowConfig := tableRowConfigGetter(ctx, cmd)
 
 							tech.ResetCodeBuilder()
 							err = generator.GenerateColumnsCode(ir.IterateColumnProps(), tableRowConfig, conv, tech, func(hint encodingaspects.AspectE) (ok bool, msg string) {
@@ -123,8 +124,8 @@ func NewCliCommandDdl() *cli.Command {
 					{
 						Name:  "normalize",
 						Flags: slices.Concat([]cli.Flag{namingStyleFlag}, universalFlags),
-						Action: func(context *cli.Context) error {
-							namingStyle := namingStyleFunc(context)
+						Action: func(ctx context.Context, cmd *cli.Command) error {
+							namingStyle := namingStyleFunc(ctx, cmd)
 							normalizer := common.NewTableNormalizer(namingStyle)
 
 							var table common.TableDesc
@@ -144,7 +145,7 @@ func NewCliCommandDdl() *cli.Command {
 							if err != nil {
 								return eh.Errorf("unable to convert to dto: %w", err)
 							}
-							return universal.FormatValue(context, dto)
+							return universal.FormatValue(ctx, cmd, dto)
 						},
 					},
 					{
@@ -154,8 +155,8 @@ func NewCliCommandDdl() *cli.Command {
 						},
 							rndFlags,
 							universalFlags),
-						Action: func(context *cli.Context) error {
-							namingStyle := namingStyleFunc(context)
+						Action: func(ctx context.Context, cmd *cli.Command) error {
+							namingStyle := namingStyleFunc(ctx, cmd)
 							normalizer := common.NewTableNormalizer(namingStyle)
 
 							var table common.TableDesc
@@ -164,19 +165,19 @@ func NewCliCommandDdl() *cli.Command {
 								return eh.Errorf("unable to decode table description encoded in CBOR: %w", err)
 							}
 
-							rnd := rand.New(rndFunc(context))
+							rnd := rand.New(rndFunc(ctx, cmd))
 							normalizer.Scramble(&table, rnd)
 							var dto common.TableDescDto
 							err = table.LoadTo(&dto)
 							if err != nil {
 								return eh.Errorf("unable to convert to dto: %w", err)
 							}
-							return universal.FormatValue(context, dto)
+							return universal.FormatValue(ctx, cmd, dto)
 						},
 					},
 					{
 						Name: "validate",
-						Action: func(context *cli.Context) error {
+						Action: func(ctx context.Context, cmd *cli.Command) error {
 							var table common.TableDesc
 							err = marshaller.DecodeTableCbor(os.Stdin, &table)
 							if err != nil {

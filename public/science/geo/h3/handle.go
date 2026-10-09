@@ -12,7 +12,7 @@ import (
 )
 
 // Handle is a pool-checked-out wasm module instance. Not safe for
-// concurrent use by multiple goroutines. Acquire via [Runtime.AcquireE],
+// concurrent use by multiple goroutines. Acquire via [Runtime.Acquire],
 // return via [Handle.Release].
 //
 // Assumes little-endian host (x86-64, arm64). The reinterpret-cast memory
@@ -54,7 +54,7 @@ type Handle struct {
 	callStack [16]uint64
 
 	// iterLats / iterLngs are reusable Go-side staging buffers used by the
-	// iter.Seq2-input bulk variants (e.g., [Handle.LatLngsIterToCellsE]) to
+	// iter.Seq2-input bulk variants (e.g., [Handle.LatLngsIterToCells]) to
 	// collect streamed Array-of-Structs inputs before the single batch
 	// write into wasm scratch. Grown via slices.Grow on demand.
 	iterLats []float64
@@ -66,7 +66,7 @@ type Handle struct {
 // alignUp8 rounds n up to the next multiple of 8.
 func alignUp8(n uint32) uint32 { return (n + 7) &^ 7 }
 
-// ensureScratchE ensures the handle's scratch region has at least n bytes
+// ensureScratch ensures the handle's scratch region has at least n bytes
 // of capacity. The returned base offset is stable when n fits in the
 // current scratch; otherwise the region is reallocated and any previously
 // staged contents are discarded (callers must re-stage inputs after a
@@ -76,7 +76,7 @@ func alignUp8(n uint32) uint32 { return (n + 7) &^ 7 }
 // passes through this helper before its first call, so a released handle
 // surfaces as [ErrHandleReleased] at a predictable point rather than as a
 // WASM trap.
-func (inst *Handle) ensureScratchE(ctx context.Context, n int) (base uint32, err error) {
+func (inst *Handle) ensureScratch(ctx context.Context, n int) (base uint32, err error) {
 	if inst.released.Load() {
 		err = ErrHandleReleased
 		return
@@ -92,7 +92,7 @@ func (inst *Handle) ensureScratchE(ctx context.Context, n int) (base uint32, err
 		inst.scratchCap = 0
 	}
 	var off uint32
-	off, err = inst.allocE(ctx, newCap)
+	off, err = inst.alloc(ctx, newCap)
 	if err != nil {
 		return
 	}
@@ -123,7 +123,7 @@ func (inst *Handle) Release() {
 
 // --- allocation ---------------------------------------------------------
 
-func (inst *Handle) allocE(ctx context.Context, n int) (off uint32, err error) {
+func (inst *Handle) alloc(ctx context.Context, n int) (off uint32, err error) {
 	if n == 0 {
 		return
 	}
@@ -132,7 +132,7 @@ func (inst *Handle) allocE(ctx context.Context, n int) (off uint32, err error) {
 		return
 	}
 	var rc uint32
-	rc, err = inst.callE(ctx, inst.fnExtAlloc, uint64(uint32(n)))
+	rc, err = inst.call(ctx, inst.fnExtAlloc, uint64(uint32(n)))
 	if err != nil {
 		err = eh.Errorf("ext_alloc: %w", err)
 		return
@@ -148,14 +148,14 @@ func (inst *Handle) freeNoE(ctx context.Context, off uint32, n int) {
 	if off == 0 || n <= 0 {
 		return
 	}
-	_, _ = inst.callE(ctx, inst.fnExtFree, uint64(off), uint64(uint32(n)))
+	_, _ = inst.call(ctx, inst.fnExtFree, uint64(off), uint64(uint32(n)))
 }
 
-// callE invokes fn with the given args via wazero's CallWithStack, reusing
+// call invokes fn with the given args via wazero's CallWithStack, reusing
 // the per-handle callStack to avoid the per-call []uint64 result allocation
 // that the variadic Call performs. rc is the first slot of the stack after
 // return; for void-return exports the caller ignores it.
-func (inst *Handle) callE(ctx context.Context, fn api.Function, args ...uint64) (rc uint32, err error) {
+func (inst *Handle) call(ctx context.Context, fn api.Function, args ...uint64) (rc uint32, err error) {
 	n := len(args)
 	if n > len(inst.callStack) {
 		err = eb.Build().Int("n", n).Int("cap", len(inst.callStack)).Errorf("h3: callStack too small")
@@ -177,7 +177,7 @@ func (inst *Handle) callE(ctx context.Context, fn api.Function, args ...uint64) 
 // paths where the zero-copy path is awkward (single scalars, small
 // batches) and for documentation of intent.
 
-func (inst *Handle) writeF64sE(off uint32, vals []float64) (err error) {
+func (inst *Handle) writeF64s(off uint32, vals []float64) (err error) {
 	if len(vals) == 0 {
 		return
 	}
@@ -188,7 +188,7 @@ func (inst *Handle) writeF64sE(off uint32, vals []float64) (err error) {
 	return
 }
 
-func (inst *Handle) readF64sE(off uint32, dst []float64) (err error) {
+func (inst *Handle) readF64s(off uint32, dst []float64) (err error) {
 	if len(dst) == 0 {
 		return
 	}
@@ -203,7 +203,7 @@ func (inst *Handle) readF64sE(off uint32, dst []float64) (err error) {
 	return
 }
 
-func (inst *Handle) writeU64sE(off uint32, vals []uint64) (err error) {
+func (inst *Handle) writeU64s(off uint32, vals []uint64) (err error) {
 	if len(vals) == 0 {
 		return
 	}
@@ -214,7 +214,7 @@ func (inst *Handle) writeU64sE(off uint32, vals []uint64) (err error) {
 	return
 }
 
-func (inst *Handle) readU64sE(off uint32, dst []uint64) (err error) {
+func (inst *Handle) readU64s(off uint32, dst []uint64) (err error) {
 	if len(dst) == 0 {
 		return
 	}
@@ -229,7 +229,7 @@ func (inst *Handle) readU64sE(off uint32, dst []uint64) (err error) {
 	return
 }
 
-func (inst *Handle) writeI32sE(off uint32, vals []int32) (err error) {
+func (inst *Handle) writeI32s(off uint32, vals []int32) (err error) {
 	if len(vals) == 0 {
 		return
 	}
@@ -240,7 +240,7 @@ func (inst *Handle) writeI32sE(off uint32, vals []int32) (err error) {
 	return
 }
 
-func (inst *Handle) readI32sE(off uint32, dst []int32) (err error) {
+func (inst *Handle) readI32s(off uint32, dst []int32) (err error) {
 	if len(dst) == 0 {
 		return
 	}
@@ -255,7 +255,7 @@ func (inst *Handle) readI32sE(off uint32, dst []int32) (err error) {
 	return
 }
 
-func (inst *Handle) writeBytesE(off uint32, buf []byte) (err error) {
+func (inst *Handle) writeBytes(off uint32, buf []byte) (err error) {
 	if len(buf) == 0 {
 		return
 	}
@@ -265,7 +265,7 @@ func (inst *Handle) writeBytesE(off uint32, buf []byte) (err error) {
 	return
 }
 
-func (inst *Handle) readBytesE(off uint32, n int) (out []byte, err error) {
+func (inst *Handle) readBytes(off uint32, n int) (out []byte, err error) {
 	if n == 0 {
 		return
 	}
@@ -278,7 +278,7 @@ func (inst *Handle) readBytesE(off uint32, n int) (out []byte, err error) {
 	return
 }
 
-func (inst *Handle) readU32E(off uint32) (v uint32, err error) {
+func (inst *Handle) readU32(off uint32) (v uint32, err error) {
 	buf, ok := inst.mem.Read(off, 4)
 	if !ok {
 		err = eb.Build().Uint32("off", off).Errorf("%w", ErrMemoryOOB)
@@ -288,7 +288,7 @@ func (inst *Handle) readU32E(off uint32) (v uint32, err error) {
 	return
 }
 
-func (inst *Handle) readStatusE(off uint32, dst []StatusE) (err error) {
+func (inst *Handle) readStatus(off uint32, dst []StatusE) (err error) {
 	if len(dst) == 0 {
 		return
 	}

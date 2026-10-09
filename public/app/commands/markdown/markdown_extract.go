@@ -1,10 +1,11 @@
 package markdown
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -27,11 +28,11 @@ func newExtractCommand() *cli.Command {
 	}
 }
 
-func runExtract(c *cli.Context) (err error) {
-	if c.NArg() == 0 {
+func runExtract(ctx context.Context, cmd *cli.Command) (err error) {
+	if cmd.NArg() == 0 {
 		return eh.Errorf("at least one file or directory is required")
 	}
-	sources, err := walkSources(c.Args().Slice())
+	sources, err := walkSources(cmd.Args().Slice())
 	if err != nil {
 		return
 	}
@@ -48,7 +49,7 @@ func runExtract(c *cli.Context) (err error) {
 		}
 		out = append(out, entry{File: s.name, Doc: mdextract.Extract(src)})
 	}
-	enc := json.NewEncoder(c.App.Writer)
+	enc := json.NewEncoder(cmd.Root().Writer)
 	enc.SetIndent("", "  ")
 	return enc.Encode(out)
 }

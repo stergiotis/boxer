@@ -11,7 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/chviews"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 // leeway sqlsurface (ADR-0171 §SD2): provision and inspect leeway's SQL read
@@ -34,7 +34,7 @@ func NewCliCommandSqlSurface() *cli.Command {
 	return &cli.Command{
 		Name:  "sqlsurface",
 		Usage: "provision and inspect leeway's SQL read surface — the co/ragged pack, the read-back family and the identity UDFs (ADR-0171 §SD2)",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			newCliCommandSqlSurfacePrint(),
 			newCliCommandSqlSurfaceInstall(),
 			newCliCommandSqlSurfaceStatus(),
@@ -63,18 +63,18 @@ func sqlSurfaceConnFlags() []cli.Flag {
 // IsSet is what makes that layering work — a flag left at its default must
 // not clobber a value the environment supplied, and reading the flag value
 // alone cannot tell "unset" from "set to the default".
-func sqlSurfaceClient(cCtx *cli.Context) (client *chclient.Client, url string, ctx context.Context, cancel context.CancelFunc) {
+func sqlSurfaceClient(cliCtx context.Context, cmd *cli.Command) (client *chclient.Client, url string, ctx context.Context, cancel context.CancelFunc) {
 	cfg := chclient.ConfigFromEnv()
-	if cCtx.IsSet("url") {
-		cfg.URL = cCtx.String("url")
+	if cmd.IsSet("url") {
+		cfg.URL = cmd.String("url")
 	}
-	if cCtx.IsSet("user") {
-		cfg.User = cCtx.String("user")
+	if cmd.IsSet("user") {
+		cfg.User = cmd.String("user")
 	}
-	if cCtx.IsSet("password") {
-		cfg.Password = cCtx.String("password")
+	if cmd.IsSet("password") {
+		cfg.Password = cmd.String("password")
 	}
-	ctx, cancel = context.WithTimeout(cCtx.Context, cCtx.Duration("timeout"))
+	ctx, cancel = context.WithTimeout(cliCtx, cmd.Duration("timeout"))
 	client = chclient.New(cfg, nil)
 	url = cfg.URL
 	return
@@ -91,8 +91,8 @@ func sqlSurfaceViewsFlag() cli.Flag {
 	}
 }
 
-func sqlSurfaceViewTarget(cCtx *cli.Context) (target chviews.TargetDatabase) {
-	return chviews.TargetDatabase(cCtx.String("views-database"))
+func sqlSurfaceViewTarget(ctx context.Context, cmd *cli.Command) (target chviews.TargetDatabase) {
+	return chviews.TargetDatabase(cmd.String("views-database"))
 }
 
 func newCliCommandSqlSurfacePrint() *cli.Command {
@@ -100,9 +100,9 @@ func newCliCommandSqlSurfacePrint() *cli.Command {
 		Name:  "print",
 		Usage: "print the whole surface — the CREATE FUNCTION statements, the version marker and the schema-decode views — for provisioning by hand or offline",
 		Flags: []cli.Flag{sqlSurfaceViewsFlag()},
-		Action: func(cCtx *cli.Context) error {
+		Action: func(ctx context.Context, cmd *cli.Command) error {
 			var b strings.Builder
-			for _, stmt := range lwsqlsurface.AllStatements(sqlSurfaceViewTarget(cCtx)) {
+			for _, stmt := range lwsqlsurface.AllStatements(sqlSurfaceViewTarget(ctx, cmd)) {
 				b.WriteString(stmt)
 				b.WriteString(";\n")
 			}
@@ -117,10 +117,10 @@ func newCliCommandSqlSurfaceInstall() *cli.Command {
 		Name:  "install",
 		Usage: "install the function families, the version marker and the schema-decode views, verify the marker, drop this repository's withdrawn spellings, and re-create the dependent view families this binary links (e.g. the keelson trail views)",
 		Flags: append(sqlSurfaceConnFlags(), sqlSurfaceViewsFlag()),
-		Action: func(cCtx *cli.Context) error {
-			client, url, ctx, cancel := sqlSurfaceClient(cCtx)
+		Action: func(cliCtx context.Context, cmd *cli.Command) error {
+			client, url, ctx, cancel := sqlSurfaceClient(cliCtx, cmd)
 			defer cancel()
-			target := sqlSurfaceViewTarget(cCtx)
+			target := sqlSurfaceViewTarget(cliCtx, cmd)
 			err := lwsqlsurface.InstallInto(ctx, client, target)
 			if err != nil {
 				return err
@@ -140,10 +140,10 @@ func newCliCommandSqlSurfaceStatus() *cli.Command {
 		Usage: "report what the server carries against what this build declares; changes nothing",
 		Flags: append(sqlSurfaceConnFlags(), sqlSurfaceViewsFlag(),
 			&cli.BoolFlag{Name: "fail-on-drift", Usage: "exit non-zero unless the server matches this build exactly"}),
-		Action: func(cCtx *cli.Context) error {
-			client, url, ctx, cancel := sqlSurfaceClient(cCtx)
+		Action: func(cliCtx context.Context, cmd *cli.Command) error {
+			client, url, ctx, cancel := sqlSurfaceClient(cliCtx, cmd)
 			defer cancel()
-			rep, err := lwsqlsurface.ReconcileInto(ctx, client, sqlSurfaceViewTarget(cCtx), lwsqlsurface.ReconcileReport)
+			rep, err := lwsqlsurface.ReconcileInto(ctx, client, sqlSurfaceViewTarget(cliCtx, cmd), lwsqlsurface.ReconcileReport)
 			if err != nil {
 				return err
 			}
@@ -151,7 +151,7 @@ func newCliCommandSqlSurfaceStatus() *cli.Command {
 			if err != nil {
 				return err
 			}
-			if cCtx.Bool("fail-on-drift") && !rep.InSync() {
+			if cmd.Bool("fail-on-drift") && !rep.InSync() {
 				return eh.Errorf("the endpoint does not match this build")
 			}
 			return nil
@@ -165,8 +165,8 @@ func newCliCommandSqlSurfaceDropUndeclared() *cli.Command {
 		Usage: "drop leeway-namespaced functions the server carries that NO build declares — they may be a fork's; run status first",
 		Flags: append(sqlSurfaceConnFlags(),
 			&cli.BoolFlag{Name: "confirm", Usage: "required: without it the command reports what it would drop and stops"}),
-		Action: func(cCtx *cli.Context) error {
-			client, url, ctx, cancel := sqlSurfaceClient(cCtx)
+		Action: func(cliCtx context.Context, cmd *cli.Command) error {
+			client, url, ctx, cancel := sqlSurfaceClient(cliCtx, cmd)
 			defer cancel()
 
 			// Always look before deleting, and print the list either way.
@@ -186,7 +186,7 @@ func newCliCommandSqlSurfaceDropUndeclared() *cli.Command {
 			if err != nil {
 				return err
 			}
-			if !cCtx.Bool("confirm") {
+			if !cmd.Bool("confirm") {
 				_, err = os.Stdout.WriteString("not dropping anything — pass --confirm to remove them\n")
 				return err
 			}

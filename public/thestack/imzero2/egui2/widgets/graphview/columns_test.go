@@ -19,7 +19,7 @@ var nan = float32(math.NaN())
 // labels, and edges with ids, labels, colours, widths, lengths, strengths,
 // opacity, no-pick, a parallel pair and a self-loop.
 func richSpecs() (nodes []NodeSpec, edges []EdgeSpec) {
-	red := color.RGBA(0xff, 0, 0, 0xff)
+	red := rgba(0xff, 0, 0, 0xff)
 	nodes = []NodeSpec{
 		{Id: 10, Label: "ten", Color: red, Radius: 8, Auras: []string{"a"}, Donut: Donut{Values: []float32{1, 2}, Colors: color.Colors{0x00ff00ff, 0x0000ffff}, Total: 5}},
 		{Id: 20, Label: "twenty", Opacity: 0.5, NoPick: true, Auras: []string{"a", "b"}, LabelAlways: true},
@@ -40,7 +40,7 @@ func richSpecs() (nodes []NodeSpec, edges []EdgeSpec) {
 // richColumns is richSpecs hand-written in the columnar form, NaN where the
 // row form left a numeric field at zero.
 func richColumns() (nc NodeColumns, ec EdgeColumns) {
-	red := color.RGBA(0xff, 0, 0, 0xff)
+	red := rgba(0xff, 0, 0, 0xff)
 	nc = NodeColumns{
 		Ids:           []uint64{10, 20, 30, 40, 50},
 		Label:         []string{"ten", "twenty", "", "forty", ""},
@@ -380,7 +380,7 @@ func TestSceneUndirectedPaintsNoHeadAndStillPicks(t *testing.T) {
 // last slot moved into the hole (ADR-0232 §SD3).
 func TestScenePaintOrderFollowsTheDeclarationAfterARemoval(t *testing.T) {
 	s := newScene(t, "order", Options{Layout: LayoutRandom}, 400, 300)
-	col := func(i uint8) color.Color { return color.RGBA(i, 0, 0, 0xff) }
+	col := func(i uint8) color.Color { return rgba(i, 0, 0, 0xff) }
 	nodes := []NodeSpec{{Id: 1, Color: col(1)}, {Id: 2, Color: col(2)}, {Id: 3, Color: col(3)}, {Id: 4, Color: col(4)}}
 	s.frame(nodes, nil)
 	s.frame([]NodeSpec{nodes[0], nodes[2], nodes[3]}, nil)

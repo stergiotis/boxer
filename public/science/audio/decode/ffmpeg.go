@@ -80,16 +80,16 @@ type FfmpegSource struct {
 
 var _ pcm.SourceI = (*FfmpegSource)(nil)
 
-// OpenFfmpegE probes path with ffprobe and returns a source ready to read; the
+// OpenFfmpeg probes path with ffprobe and returns a source ready to read; the
 // decoder process starts on the first read. ctx bounds every process the
 // source spawns, so cancelling it ends playback and any build reading through
 // this source.
-func OpenFfmpegE(ctx context.Context, path string) (inst *FfmpegSource, err error) {
-	format, frames, err := probeE(ctx, path)
+func OpenFfmpeg(ctx context.Context, path string) (inst *FfmpegSource, err error) {
+	format, frames, err := probe(ctx, path)
 	if err != nil {
 		return nil, err
 	}
-	err = format.ValidateE()
+	err = format.Validate()
 	if err != nil {
 		return nil, eb.Build().Str("path", path).Errorf("probed format is unusable: %w", err)
 	}
@@ -132,18 +132,18 @@ func (inst *FfmpegSource) Restarts() (n int64) { return inst.restarts.Load() }
 // disagree.
 func (inst *FfmpegSource) Padded() (n int64) { return inst.padded.Load() }
 
-// ReadFramesAtE implements [pcm.SourceI]. A read at the stream's current
+// ReadFramesAt implements [pcm.SourceI]. A read at the stream's current
 // position continues it; any other offset restarts the process there, which
 // costs a spawn plus ffmpeg's decode-and-discard up to the seek point.
 //
 // ctx is checked before the first chunk and between chunks, so a cancellation
 // is observed within one buffer of audio; the process itself dies with the
-// context given to [OpenFfmpegE].
-func (inst *FfmpegSource) ReadFramesAtE(ctx context.Context, frameOffset int64, dst []float32) (n int, err error) {
+// context given to [OpenFfmpeg].
+func (inst *FfmpegSource) ReadFramesAt(ctx context.Context, frameOffset int64, dst []float32) (n int, err error) {
 	if inst.closed {
 		return 0, eb.Build().Str("path", inst.name).Errorf("read from a closed source")
 	}
-	want, err := pcm.ClampReadE(inst.format, inst.frames, frameOffset, dst)
+	want, err := pcm.ClampRead(inst.format, inst.frames, frameOffset, dst)
 	if err != nil || want == 0 {
 		return want, err
 	}
@@ -155,7 +155,7 @@ func (inst *FfmpegSource) ReadFramesAtE(ctx context.Context, frameOffset int64, 
 	samples := want * channels
 
 	if frameOffset != inst.pos || (inst.cmd == nil && !inst.eos) {
-		err = inst.startAtE(frameOffset)
+		err = inst.startAt(frameOffset)
 		if err != nil {
 			return 0, err
 		}
@@ -181,7 +181,7 @@ func (inst *FfmpegSource) ReadFramesAtE(ctx context.Context, frameOffset int64, 
 			_, perr := inst.reader.Peek(1)
 			avail = inst.reader.Buffered()
 			if avail == 0 {
-				err = inst.endStreamE(perr)
+				err = inst.endStream(perr)
 				if err != nil {
 					// A stream that failed must not read as silence on the
 					// next call, so the source is left ready to start over
@@ -209,9 +209,9 @@ func (inst *FfmpegSource) ReadFramesAtE(ctx context.Context, frameOffset int64, 
 	return want, nil
 }
 
-// CloseE implements [pcm.SourceI]: it kills the decoder, reaps it and closes
+// Close implements [pcm.SourceI]: it kills the decoder, reaps it and closes
 // its pipes. It is idempotent, and reading after it is an error.
-func (inst *FfmpegSource) CloseE() (err error) {
+func (inst *FfmpegSource) Close() (err error) {
 	if inst.closed {
 		return nil
 	}
@@ -221,10 +221,10 @@ func (inst *FfmpegSource) CloseE() (err error) {
 	return nil
 }
 
-// startAtE tears down whatever stream is open and starts a decoder that
+// startAt tears down whatever stream is open and starts a decoder that
 // delivers frameOffset first. A stream that existed — running or ended — makes
 // this a restart and is counted.
-func (inst *FfmpegSource) startAtE(frameOffset int64) (err error) {
+func (inst *FfmpegSource) startAt(frameOffset int64) (err error) {
 	restart := inst.cmd != nil || inst.eos
 	inst.stop()
 	// From here there is no stream: a failure below must leave the source
@@ -234,7 +234,7 @@ func (inst *FfmpegSource) startAtE(frameOffset int64) (err error) {
 	input := inst.path
 	var handle *os.File
 	if inst.in != nil {
-		handle, err = inst.in.OpenE()
+		handle, err = inst.in.Open()
 		if err != nil {
 			return eb.Build().Str("path", inst.name).Errorf("unable to open the recording for ffmpeg: %w", err)
 		}
@@ -298,10 +298,10 @@ func (inst *FfmpegSource) appendArgs(dst []string, frameOffset int64, input stri
 	return out
 }
 
-// endStreamE marks the stream ended and reaps the process, folding its exit
+// endStream marks the stream ended and reaps the process, folding its exit
 // status and the tail of its stderr into the error. cause is what the pipe
 // reported; io.EOF is the normal end.
-func (inst *FfmpegSource) endStreamE(cause error) (err error) {
+func (inst *FfmpegSource) endStream(cause error) (err error) {
 	inst.eos = true
 	cmd := inst.cmd
 	inst.cmd = nil

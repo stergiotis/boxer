@@ -2,6 +2,7 @@ package docgen
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"slices"
@@ -11,7 +12,7 @@ import (
 	"github.com/stergiotis/boxer/public/config/env"
 	cli2 "github.com/stergiotis/boxer/public/hmi/cli"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 var MarkdownEcho = env.NewBool(env.Spec{
@@ -22,7 +23,7 @@ var MarkdownEcho = env.NewBool(env.Spec{
 })
 
 var DocFlags = []cli.Flag{
-	MarkdownEcho.AsCliFlag(env.WithBoolAction(func(context *cli.Context, b bool) error {
+	MarkdownEcho.AsCliFlag(env.WithBoolAction(func(ctx context.Context, cmd *cli.Command, b bool) error {
 		if b {
 			args := slices.Clone(os.Args)
 			cwd, err := os.Getwd()
@@ -90,21 +91,21 @@ func NewDocCli() *cli.Command {
 	}, md.SyntaxHighlightNone, "syntaxHighlight")
 	return &cli.Command{
 		Name: "doc",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			{
 				Name: "markdown",
-				Subcommands: []*cli.Command{
+				Commands: []*cli.Command{
 					{
 						Name:  "codeblock",
 						Usage: "wraps text from stdin in a markdown code block",
 						Flags: []cli.Flag{syntaxHighlightFlag},
-						Action: func(context *cli.Context) error {
+						Action: func(ctx context.Context, cmd *cli.Command) error {
 							buf := bytes.NewBuffer(make([]byte, 0, 4*4096))
 							_, err := buf.ReadFrom(os.Stdin)
 							if err != nil {
 								return eh.Errorf("unable to read from stdin: %w", err)
 							}
-							return md.NewMarkdown(os.Stdout).CodeBlocks(syntaxHighlightFunc(context), buf.String()).Build()
+							return md.NewMarkdown(os.Stdout).CodeBlocks(syntaxHighlightFunc(ctx, cmd), buf.String()).Build()
 						},
 					},
 				},

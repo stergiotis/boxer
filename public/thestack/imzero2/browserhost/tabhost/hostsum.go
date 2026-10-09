@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/rs/zerolog/log"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -89,12 +89,12 @@ func hostDigestCommand() (cmd *cli.Command) {
 	}
 }
 
-func hostDigest(ctx *cli.Context) (err error) {
+func hostDigest(ctx context.Context, cmd *cli.Command) (err error) {
 	boxerDir, err := moduleDir(boxerModule)
 	if err != nil {
 		return
 	}
-	path := ctx.String("host")
+	path := cmd.String("host")
 	if path == "" {
 		if path, err = buildHost(boxerDir, boxerDir); err != nil {
 			return
@@ -105,7 +105,7 @@ func hostDigest(ctx *cli.Context) (err error) {
 		return eb.Build().Str("host", path).Errorf("hostdigest: %w", err)
 	}
 	fmt.Printf("sha256 %s\nidl %016x\n", hs.sha256, hs.idl)
-	if !ctx.Bool("write") {
+	if !cmd.Bool("write") {
 		return
 	}
 	if inCache, cErr := inModuleCache(boxerDir); cErr != nil || inCache {

@@ -8,14 +8,14 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// LatLngsToCellsE converts parallel latitude/longitude slices (degrees)
+// LatLngsToCells converts parallel latitude/longitude slices (degrees)
 // into H3 cell indices at the given resolution. Per-element validity is
 // reported in statusDst. Bulk-level error is reserved for WASM traps and
 // memory-bound violations.
 //
 // latsDeg and lngsDeg must have the same length. cellsDst and statusDst
 // are grown via [slices.Grow] and returned.
-func (inst *Handle) LatLngsToCellsE(
+func (inst *Handle) LatLngsToCells(
 	ctx context.Context,
 	res ResolutionE,
 	latsDeg []float64,
@@ -43,7 +43,7 @@ func (inst *Handle) LatLngsToCellsE(
 	total := int(statusRel) + n
 
 	var base uint32
-	base, err = inst.ensureScratchE(ctx, total)
+	base, err = inst.ensureScratch(ctx, total)
 	if err != nil {
 		return
 	}
@@ -52,15 +52,15 @@ func (inst *Handle) LatLngsToCellsE(
 	cellsOff := base + cellsRel
 	statusOff := base + statusRel
 
-	err = inst.writeF64sE(latsOff, latsDeg)
+	err = inst.writeF64s(latsOff, latsDeg)
 	if err != nil {
 		return
 	}
-	err = inst.writeF64sE(lngsOff, lngsDeg)
+	err = inst.writeF64s(lngsOff, lngsDeg)
 	if err != nil {
 		return
 	}
-	_, err = inst.callE(ctx, inst.fnLatLngToCell,
+	_, err = inst.call(ctx, inst.fnLatLngToCell,
 		uint64(latsOff), uint64(lngsOff),
 		uint64(n32),
 		uint64(uint32(res)),
@@ -70,17 +70,17 @@ func (inst *Handle) LatLngsToCellsE(
 		err = eh.Errorf("h3_latlng_to_cell: %w", err)
 		return
 	}
-	err = inst.readU64sE(cellsOff, cells)
+	err = inst.readU64s(cellsOff, cells)
 	if err != nil {
 		return
 	}
-	err = inst.readStatusE(statusOff, status)
+	err = inst.readStatus(statusOff, status)
 	return
 }
 
-// CellsToLatLngsE returns the lat/lng (in degrees) of each H3 cell's center
+// CellsToLatLngs returns the lat/lng (in degrees) of each H3 cell's center
 // point. latsDegDst and lngsDegDst are grown via [slices.Grow] and returned.
-func (inst *Handle) CellsToLatLngsE(
+func (inst *Handle) CellsToLatLngs(
 	ctx context.Context,
 	cells []uint64,
 	latsDegDst []float64,
@@ -104,7 +104,7 @@ func (inst *Handle) CellsToLatLngsE(
 	total := int(statusRel) + n
 
 	var base uint32
-	base, err = inst.ensureScratchE(ctx, total)
+	base, err = inst.ensureScratch(ctx, total)
 	if err != nil {
 		return
 	}
@@ -113,11 +113,11 @@ func (inst *Handle) CellsToLatLngsE(
 	lngsOff := base + lngsRel
 	statusOff := base + statusRel
 
-	err = inst.writeU64sE(cellsOff, cells)
+	err = inst.writeU64s(cellsOff, cells)
 	if err != nil {
 		return
 	}
-	_, err = inst.callE(ctx, inst.fnCellToLatLng,
+	_, err = inst.call(ctx, inst.fnCellToLatLng,
 		uint64(cellsOff), uint64(n32),
 		uint64(latsOff), uint64(lngsOff), uint64(statusOff),
 	)
@@ -125,14 +125,14 @@ func (inst *Handle) CellsToLatLngsE(
 		err = eh.Errorf("h3_cell_to_latlng: %w", err)
 		return
 	}
-	err = inst.readF64sE(latsOff, latsDeg)
+	err = inst.readF64s(latsOff, latsDeg)
 	if err != nil {
 		return
 	}
-	err = inst.readF64sE(lngsOff, lngsDeg)
+	err = inst.readF64s(lngsOff, lngsDeg)
 	if err != nil {
 		return
 	}
-	err = inst.readStatusE(statusOff, status)
+	err = inst.readStatus(statusOff, status)
 	return
 }

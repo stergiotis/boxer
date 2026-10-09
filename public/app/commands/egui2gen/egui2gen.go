@@ -7,7 +7,7 @@ package egui2gen
 
 import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/driver"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 // NewCliCommand returns the `egui2gen` subcommand, namespacing the egui2 driver
@@ -15,8 +15,8 @@ import (
 // other generators) under a tool-named parent.
 func NewCliCommand() *cli.Command {
 	return &cli.Command{
-		Name:        "egui2gen",
-		Usage:       "FFFI2 code generator for egui2 widgets",
-		Subcommands: []*cli.Command{driver.NewCliCommand()},
+		Name:     "egui2gen",
+		Usage:    "FFFI2 code generator for egui2 widgets",
+		Commands: []*cli.Command{driver.NewCliCommand()},
 	}
 }

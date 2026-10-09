@@ -24,12 +24,12 @@ func TestPolygonToCells_Golden(t *testing.T) {
 
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
 	for _, r := range recs {
-		cells, err := h.PolygonToCellsE(ctx, ResolutionE(r.Res), ContainmentModeE(r.Mode),
+		cells, err := h.PolygonToCells(ctx, ResolutionE(r.Res), ContainmentModeE(r.Mode),
 			r.VertsLat, r.VertsLng, r.RingOffsets, nil)
 		require.NoError(t, err, "name=%s res=%d mode=%d", r.Name, r.Res, r.Mode)
 
@@ -44,11 +44,11 @@ func TestPolygonToCells_Golden(t *testing.T) {
 func TestPolygonToCells_EmptyRingsRejected(t *testing.T) {
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
-	_, err = h.PolygonToCellsE(ctx, ResolutionR5, ContainmentContainsCentroid,
+	_, err = h.PolygonToCells(ctx, ResolutionR5, ContainmentContainsCentroid,
 		nil, nil, []int32{0}, nil)
 	require.Error(t, err)
 }
@@ -56,13 +56,13 @@ func TestPolygonToCells_EmptyRingsRejected(t *testing.T) {
 func TestPolygonToCells_BadMode(t *testing.T) {
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
 	lats := []float64{0, 0, 1, 1, 0}
 	lngs := []float64{0, 1, 1, 0, 0}
-	_, err = h.PolygonToCellsE(ctx, ResolutionR5, ContainmentModeE(99),
+	_, err = h.PolygonToCells(ctx, ResolutionR5, ContainmentModeE(99),
 		lats, lngs, []int32{0, 5}, nil)
 	require.ErrorIs(t, err, ErrBadContainmentMode)
 }
@@ -70,7 +70,7 @@ func TestPolygonToCells_BadMode(t *testing.T) {
 func TestPolygonToCells_GrowProtocol(t *testing.T) {
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
@@ -78,7 +78,7 @@ func TestPolygonToCells_GrowProtocol(t *testing.T) {
 	lngs := []float64{0, 1, 1, 0, 0}
 	// Passing an undersized dst forces the grow protocol.
 	undersized := make([]uint64, 0, 1)
-	cells, err := h.PolygonToCellsE(ctx, ResolutionR7, ContainmentCovers,
+	cells, err := h.PolygonToCells(ctx, ResolutionR7, ContainmentCovers,
 		lats, lngs, []int32{0, 5}, undersized)
 	require.NoError(t, err)
 	require.NotEmpty(t, cells)
@@ -90,18 +90,18 @@ func TestPolygonToCells_CentroidsInside(t *testing.T) {
 	// so point-in-polygon is a trivial axis-aligned check.
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
 	lats := []float64{0, 0, 1, 1, 0}
 	lngs := []float64{0, 1, 1, 0, 0}
-	cells, err := h.PolygonToCellsE(ctx, ResolutionR6,
+	cells, err := h.PolygonToCells(ctx, ResolutionR6,
 		ContainmentContainsCentroid, lats, lngs, []int32{0, 5}, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, cells)
 
-	centreLats, centreLngs, _, err := h.CellsToLatLngsE(ctx, cells, nil, nil, nil)
+	centreLats, centreLngs, _, err := h.CellsToLatLngs(ctx, cells, nil, nil, nil)
 	require.NoError(t, err)
 	for i := range cells {
 		require.GreaterOrEqual(t, centreLats[i], 0.0, "cell %d lat=%g", i, centreLats[i])

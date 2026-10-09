@@ -21,7 +21,7 @@ func TestGridDisks_Golden(t *testing.T) {
 
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
@@ -34,7 +34,7 @@ func TestGridDisks_Golden(t *testing.T) {
 		for i, r := range group {
 			cells[i] = r.Cell
 		}
-		out, offsets, status, err := h.GridDisksE(ctx, uint8(k), cells, nil, nil, nil)
+		out, offsets, status, err := h.GridDisks(ctx, uint8(k), cells, nil, nil, nil)
 		require.NoError(t, err)
 		requireCSRInvariants(t, offsets, len(cells), len(out))
 		for i, r := range group {
@@ -52,16 +52,16 @@ func TestGridDisks_Golden(t *testing.T) {
 func TestGridDisks_KZeroReturnsCellItself(t *testing.T) {
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
 	lats := []float64{0.0, 37.7749, 48.8566}
 	lngs := []float64{0.0, -122.4194, 2.3522}
-	cells, _, err := h.LatLngsToCellsE(ctx, ResolutionR5, lats, lngs, nil, nil)
+	cells, _, err := h.LatLngsToCells(ctx, ResolutionR5, lats, lngs, nil, nil)
 	require.NoError(t, err)
 
-	out, offsets, status, err := h.GridDisksE(ctx, 0, cells, nil, nil, nil)
+	out, offsets, status, err := h.GridDisks(ctx, 0, cells, nil, nil, nil)
 	require.NoError(t, err)
 	requireCSRInvariants(t, offsets, len(cells), len(out))
 	for i, c := range cells {
@@ -74,18 +74,18 @@ func TestGridDisks_KZeroReturnsCellItself(t *testing.T) {
 func TestGridDisks_GrowProtocol(t *testing.T) {
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
 	lats := []float64{37.7749}
 	lngs := []float64{-122.4194}
-	cells, _, err := h.LatLngsToCellsE(ctx, ResolutionR5, lats, lngs, nil, nil)
+	cells, _, err := h.LatLngsToCells(ctx, ResolutionR5, lats, lngs, nil, nil)
 	require.NoError(t, err)
 
 	// Undersized dst forces a retry.
 	undersized := make([]uint64, 0, 1)
-	out, offsets, _, err := h.GridDisksE(ctx, 2, cells, undersized, nil, nil)
+	out, offsets, _, err := h.GridDisks(ctx, 2, cells, undersized, nil, nil)
 	require.NoError(t, err)
 	require.Equal(t, int32(len(out)), offsets[1])
 	require.GreaterOrEqual(t, len(out), 7)

@@ -113,7 +113,7 @@ func TestExactModeMatchesBruteForceOracle(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := damp.Config{Window: tt.window, TrainLength: tt.window * 4, Exact: true}
-			readings, err := damp.ScoreE(tt.values, cfg)
+			readings, err := damp.Score(tt.values, cfg)
 			require.NoError(t, err)
 			require.NotEmpty(t, readings)
 
@@ -138,9 +138,9 @@ func TestDAMPFindsTheSameDiscordAsExact(t *testing.T) {
 	}
 	const window = int32(30)
 
-	exact, err := damp.ScoreE(values, damp.Config{Window: window, TrainLength: 120, Exact: true})
+	exact, err := damp.Score(values, damp.Config{Window: window, TrainLength: 120, Exact: true})
 	require.NoError(t, err)
-	fast, err := damp.ScoreE(values, damp.Config{Window: window, TrainLength: 120})
+	fast, err := damp.Score(values, damp.Config{Window: window, TrainLength: 120})
 	require.NoError(t, err)
 	require.Len(t, fast, len(exact))
 
@@ -156,7 +156,7 @@ func TestDAMPScoresAreUpperBounds(t *testing.T) {
 	values := quasiPeriodic(500, 31, 0.05)
 	const window = int32(24)
 
-	readings, err := damp.ScoreE(values, damp.Config{Window: window, TrainLength: 100})
+	readings, err := damp.Score(values, damp.Config{Window: window, TrainLength: 100})
 	require.NoError(t, err)
 	want := oracleLeftMP(values, window)
 
@@ -184,7 +184,7 @@ func TestDAMPScoresAreUpperBounds(t *testing.T) {
 func TestCentreIsHalfAWindowAfterStart(t *testing.T) {
 	values := quasiPeriodic(300, 29, 0.03)
 	const window = int32(20)
-	readings, err := damp.ScoreE(values, damp.Config{Window: window, TrainLength: 80, Exact: true})
+	readings, err := damp.Score(values, damp.Config{Window: window, TrainLength: 80, Exact: true})
 	require.NoError(t, err)
 	require.NotEmpty(t, readings)
 
@@ -201,10 +201,10 @@ func TestPushMatchesScore(t *testing.T) {
 	values := quasiPeriodic(350, 31, 0.04)
 	cfg := damp.Config{Window: 18, TrainLength: 90, Exact: true}
 
-	want, err := damp.ScoreE(values, cfg)
+	want, err := damp.Score(values, cfg)
 	require.NoError(t, err)
 
-	inst, err := damp.NewDetectorE(cfg)
+	inst, err := damp.NewDetector(cfg)
 	require.NoError(t, err)
 	got := make([]damp.Reading, 0, len(want))
 	for _, v := range values {
@@ -212,7 +212,7 @@ func TestPushMatchesScore(t *testing.T) {
 			got = append(got, r)
 		}
 	}
-	assert.Equal(t, want, got, "ScoreE must be exactly the push loop")
+	assert.Equal(t, want, got, "Score must be exactly the push loop")
 	assert.Equal(t, int64(len(values)), inst.Count())
 
 	best, found := inst.BestSoFar()
@@ -224,12 +224,12 @@ func TestHistoryLimitLargeEnoughChangesNothing(t *testing.T) {
 	values := quasiPeriodic(500, 37, 0.04)
 	cfg := damp.Config{Window: 20, TrainLength: 100, Exact: true}
 
-	unlimited, err := damp.ScoreE(values, cfg)
+	unlimited, err := damp.Score(values, cfg)
 	require.NoError(t, err)
 
 	capped := cfg
 	capped.HistoryLimit = int32(len(values))
-	limited, err := damp.ScoreE(values, capped)
+	limited, err := damp.Score(values, capped)
 	require.NoError(t, err)
 
 	assert.Equal(t, unlimited, limited, "a limit above the stream length must be inert")
@@ -242,12 +242,12 @@ func TestHistoryLimitBoundsMemoryAndNarrowsTheGuarantee(t *testing.T) {
 	values := quasiPeriodic(900, 31, 0.03)
 	cfg := damp.Config{Window: 20, TrainLength: 100, Exact: true}
 
-	unlimited, err := damp.ScoreE(values, cfg)
+	unlimited, err := damp.Score(values, cfg)
 	require.NoError(t, err)
 
 	capped := cfg
 	capped.HistoryLimit = 150
-	limited, err := damp.ScoreE(values, capped)
+	limited, err := damp.Score(values, capped)
 	require.NoError(t, err)
 	require.Len(t, limited, len(unlimited))
 
@@ -267,7 +267,7 @@ func TestConstantHistory(t *testing.T) {
 	for i := range values {
 		values[i] = 7.0
 	}
-	readings, err := damp.ScoreE(values, damp.Config{Window: 16, TrainLength: 64, Exact: true})
+	readings, err := damp.Score(values, damp.Config{Window: 16, TrainLength: 64, Exact: true})
 	require.NoError(t, err)
 	require.NotEmpty(t, readings)
 
@@ -278,21 +278,21 @@ func TestConstantHistory(t *testing.T) {
 }
 
 func TestNewDetectorRejectsBadConfig(t *testing.T) {
-	_, err := damp.NewDetectorE(damp.Config{Window: 1})
+	_, err := damp.NewDetector(damp.Config{Window: 1})
 	assert.Error(t, err, "window below 2")
 
-	_, err = damp.NewDetectorE(damp.Config{Window: 20, TrainLength: 30})
+	_, err = damp.NewDetector(damp.Config{Window: 20, TrainLength: 30})
 	assert.Error(t, err, "train length below two windows")
 
-	_, err = damp.NewDetectorE(damp.Config{Window: 20, TrainLength: 200, HistoryLimit: 100})
+	_, err = damp.NewDetector(damp.Config{Window: 20, TrainLength: 200, HistoryLimit: 100})
 	assert.Error(t, err, "history limit below train length")
 
-	_, err = damp.NewDetectorE(damp.Config{Window: 20})
+	_, err = damp.NewDetector(damp.Config{Window: 20})
 	assert.NoError(t, err, "train length should default")
 }
 
 func TestNoReadingsBeforeTraining(t *testing.T) {
-	inst, err := damp.NewDetectorE(damp.Config{Window: 10, TrainLength: 100})
+	inst, err := damp.NewDetector(damp.Config{Window: 10, TrainLength: 100})
 	require.NoError(t, err)
 
 	values := quasiPeriodic(200, 23, 0.02)
@@ -314,11 +314,11 @@ func TestExactModeScoresTheADScoreFixtures(t *testing.T) {
 	for _, kind := range adscore.AllAnomalyKinds {
 		t.Run(kind.String(), func(t *testing.T) {
 			spec := adscore.DefaultFixtureSpec(kind, 23)
-			f, err := adscore.GenerateE(spec)
+			f, err := adscore.Generate(spec)
 			require.NoError(t, err)
 
 			window := int32(spec.Period)
-			readings, err := damp.ScoreE(f.Values, damp.Config{
+			readings, err := damp.Score(f.Values, damp.Config{
 				Window:      window,
 				TrainLength: window * 8,
 				Exact:       true,
@@ -326,10 +326,10 @@ func TestExactModeScoresTheADScoreFixtures(t *testing.T) {
 			require.NoError(t, err)
 
 			scores := damp.PositionScores(readings, int32(len(f.Values)), nil)
-			m, err := adscore.EvaluateE(scores, f.Labels, 0)
+			m, err := adscore.Evaluate(scores, f.Labels, 0)
 			require.NoError(t, err)
 
-			_, worst, err := adscore.TrivialityE(f, 0)
+			_, worst, err := adscore.Triviality(f, 0)
 			require.NoError(t, err)
 
 			t.Logf("left-discord VUS-PR=%.4f, best one-liner VUS-PR=%.4f", m.VUSPR, worst)
@@ -345,17 +345,17 @@ func TestDAMPLocatesTheAnomalyEvenThoughItsScoreVectorIsMeaningless(t *testing.T
 	// worse than exact mode's under VUS-PR because abandoned positions carry
 	// upper bounds instead of distances.
 	spec := adscore.DefaultFixtureSpec(adscore.AnomalyKindTransplant, 23)
-	f, err := adscore.GenerateE(spec)
+	f, err := adscore.Generate(spec)
 	require.NoError(t, err)
 
 	window := int32(spec.Period)
 	cfg := damp.Config{Window: window, TrainLength: window * 8}
 
-	fast, err := damp.ScoreE(f.Values, cfg)
+	fast, err := damp.Score(f.Values, cfg)
 	require.NoError(t, err)
 	exactCfg := cfg
 	exactCfg.Exact = true
-	exact, err := damp.ScoreE(f.Values, exactCfg)
+	exact, err := damp.Score(f.Values, exactCfg)
 	require.NoError(t, err)
 
 	// The located discord's window overlaps a labelled range.
@@ -371,9 +371,9 @@ func TestDAMPLocatesTheAnomalyEvenThoughItsScoreVectorIsMeaningless(t *testing.T
 	assert.True(t, overlapsLabel(f.Labels, at, int64(window)),
 		"the window DAMP reports as the discord should overlap a labelled range")
 
-	fastM, err := adscore.EvaluateE(damp.PositionScores(fast, int32(len(f.Values)), nil), f.Labels, 0)
+	fastM, err := adscore.Evaluate(damp.PositionScores(fast, int32(len(f.Values)), nil), f.Labels, 0)
 	require.NoError(t, err)
-	exactM, err := adscore.EvaluateE(damp.PositionScores(exact, int32(len(f.Values)), nil), f.Labels, 0)
+	exactM, err := adscore.Evaluate(damp.PositionScores(exact, int32(len(f.Values)), nil), f.Labels, 0)
 	require.NoError(t, err)
 
 	t.Logf("VUS-PR: damp=%.4f exact=%.4f", fastM.VUSPR, exactM.VUSPR)
@@ -406,11 +406,11 @@ func TestPropertyDAMPAgreesWithExactOnTheDiscord(t *testing.T) {
 		values := quasiPeriodic(n, period, 0.05)
 
 		cfg := damp.Config{Window: window, TrainLength: window * 4}
-		fast, err := damp.ScoreE(values, cfg)
+		fast, err := damp.Score(values, cfg)
 		require.NoError(rt, err)
 		exactCfg := cfg
 		exactCfg.Exact = true
-		exact, err := damp.ScoreE(values, exactCfg)
+		exact, err := damp.Score(values, exactCfg)
 		require.NoError(rt, err)
 		require.Len(rt, fast, len(exact))
 		if len(exact) == 0 {
@@ -432,7 +432,7 @@ func TestPropertyExactScoresAreNonNegativeAndBounded(t *testing.T) {
 			values[i] = float64(q) / 100.0
 		}
 
-		readings, err := damp.ScoreE(values, damp.Config{
+		readings, err := damp.Score(values, damp.Config{
 			Window: window, TrainLength: window * 4, Exact: true,
 		})
 		require.NoError(rt, err)
@@ -463,7 +463,7 @@ func benchmarkPush(b *testing.B, values []float64, cfg damp.Config) {
 	guardThrottling(b)
 	b.ReportAllocs()
 	for b.Loop() {
-		inst, err := damp.NewDetectorE(cfg)
+		inst, err := damp.NewDetector(cfg)
 		if err != nil {
 			b.Fatal(err)
 		}

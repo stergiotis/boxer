@@ -31,9 +31,9 @@ func TestGenerateWmoTables(t *testing.T) {
 	grib2Dir, cctDir := sourceDirs(t)
 	v, err := os.ReadFile(filepath.Join("wmo", "VERSION"))
 	require.NoError(t, err)
-	g, err := GenerateE(grib2Dir, cctDir, string(bytesTrim(v)))
+	g, err := Generate(grib2Dir, cctDir, string(bytesTrim(v)))
 	require.NoError(t, err)
-	require.NoError(t, g.WriteE("wmo"))
+	require.NoError(t, g.Write("wmo"))
 }
 
 func bytesTrim(b []byte) (out []byte) {
@@ -49,7 +49,7 @@ func bytesTrim(b []byte) (out []byte) {
 // regeneration is caught.
 func TestEmbeddedTablesMatchTheCheckout(t *testing.T) {
 	grib2Dir, cctDir := sourceDirs(t)
-	g, err := GenerateE(grib2Dir, cctDir, Version())
+	g, err := Generate(grib2Dir, cctDir, Version())
 	require.NoError(t, err)
 	for name, want := range map[string][]byte{"codes.tsv": g.Codes, "flags.tsv": g.Flags, "templates.tsv": g.Templates, "centres.tsv": g.Centres} {
 		got, err := wmoFS.ReadFile("wmo/" + name)

@@ -16,10 +16,10 @@ func TestOverviewOfAKnownSignal(t *testing.T) {
 	const frames = 8000
 	// Left: a tone for the first half, then silence. Right: silence.
 	left := pcm.Gate(pcm.Sine(format, 440, 0.5), frames/2, frames/2)
-	src, err := pcm.NewSynthSourceE(format, frames, pcm.PerChannel(left, pcm.Silence()))
+	src, err := pcm.NewSynthSource(format, frames, pcm.PerChannel(left, pcm.Silence()))
 	require.NoError(t, err)
 
-	ov, err := OverviewE(context.Background(), src, 100)
+	ov, err := ComputeOverview(context.Background(), src, 100)
 	require.NoError(t, err)
 	require.Equal(t, 100, ov.Columns())
 	assert.Equal(t, int64(frames), ov.Frames)
@@ -43,21 +43,21 @@ func TestOverviewOfAKnownSignal(t *testing.T) {
 
 func TestOverviewEdges(t *testing.T) {
 	format := pcm.Format{SampleRate: 8000, Channels: 1}
-	empty, err := pcm.NewSynthSourceE(format, 0, nil)
+	empty, err := pcm.NewSynthSource(format, 0, nil)
 	require.NoError(t, err)
-	ov, err := OverviewE(context.Background(), empty, 64)
+	ov, err := ComputeOverview(context.Background(), empty, 64)
 	require.NoError(t, err)
 	assert.Zero(t, ov.Columns(), "nothing to draw is not an error")
 
-	short, err := pcm.NewSynthSourceE(format, 10, pcm.Sine(format, 1000, 1))
+	short, err := pcm.NewSynthSource(format, 10, pcm.Sine(format, 1000, 1))
 	require.NoError(t, err)
-	ov, err = OverviewE(context.Background(), short, 64)
+	ov, err = ComputeOverview(context.Background(), short, 64)
 	require.NoError(t, err)
 	assert.Equal(t, 10, ov.Columns(), "never more columns than frames")
 
-	_, err = OverviewE(context.Background(), short, 0)
+	_, err = ComputeOverview(context.Background(), short, 0)
 	assert.Error(t, err)
-	_, err = OverviewE(context.Background(), nil, 8)
+	_, err = ComputeOverview(context.Background(), nil, 8)
 	assert.Error(t, err)
 	var none *Overview
 	assert.Zero(t, none.Columns())

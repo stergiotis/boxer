@@ -35,9 +35,9 @@ func (inst *Overview) Columns() int {
 	return len(inst.Min[0])
 }
 
-// OverviewE reduces src to at most columns min/max columns per channel in one
-// sequential pass. The context is honoured between chunks, as in [BuildE].
-func OverviewE(ctx context.Context, src pcm.SourceI, columns int) (inst *Overview, err error) {
+// ComputeOverview reduces src to at most columns min/max columns per channel in one
+// sequential pass. The context is honoured between chunks, as in [Build].
+func ComputeOverview(ctx context.Context, src pcm.SourceI, columns int) (inst *Overview, err error) {
 	if src == nil {
 		return nil, eb.Build().Errorf("nil source")
 	}
@@ -51,7 +51,7 @@ func OverviewE(ctx context.Context, src pcm.SourceI, columns int) (inst *Overvie
 	if frames <= 0 {
 		return inst, nil
 	}
-	p, err := BuildE(ctx, src, DefaultBaseBin(), 0, nil)
+	p, err := Build(ctx, src, DefaultBaseBin(), 0, nil)
 	if err != nil {
 		return nil, err
 	}

@@ -47,9 +47,9 @@ type geometry struct {
 	ni, nj              int
 }
 
-// ReadE reads every u and v field of buf into a field, its steps in time
+// Read reads every u and v field of buf into a field, its steps in time
 // order.
-func ReadE(buf []byte, opts Options) (f keelsonfield.Field, err error) {
+func Read(buf []byte, opts Options) (f keelsonfield.Field, err error) {
 	var (
 		run     time.Time
 		level   grib.Surface
@@ -84,7 +84,7 @@ func ReadE(buf []byte, opts Options) (f keelsonfield.Field, err error) {
 			if ll := fld.Grid.LatLon; ll != nil && ll.UVRelativeToGrid {
 				return f, eh.Errorf("gribfield: components relative to the grid need a rotation this reader does not do")
 			}
-			r, gErr := fld.Grid.LatLonRasterE()
+			r, gErr := fld.Grid.LatLonRaster()
 			if gErr != nil {
 				return f, eh.Errorf("gribfield: %w", gErr)
 			}
@@ -97,7 +97,7 @@ func ReadE(buf []byte, opts Options) (f keelsonfield.Field, err error) {
 			} else if g != geo {
 				return f, eh.Errorf("gribfield: fields on different grids")
 			}
-			values, _, _, vErr := fld.RasterE(nil)
+			values, _, _, vErr := fld.Raster(nil)
 			if vErr != nil {
 				return f, eh.Errorf("gribfield: %w", vErr)
 			}

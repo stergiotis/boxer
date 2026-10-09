@@ -1,5 +1,5 @@
 Embedded tables of public/science/geo/grib/tables (ADR-0292 §R8), derived by
-tables.GenerateE from:
+tables.Generate from:
 
 wmo-im/GRIB2 at tag v37 (master table version 37, valid from 2026-06-01)
     https://github.com/wmo-im/GRIB2 — MIT licence, © World Meteorological

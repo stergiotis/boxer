@@ -6,30 +6,41 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/math/numerical/timeticks"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/axisruler"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 )
 
+// visuals are the strip's colours and sizes, all read from the IDS tokens at
+// the active density. A step's state is told by shape (ADR-0251 §SD6), so its
+// colour follows the status mapping and never stands alone: held is neutral,
+// loading info, missing error. The loop range is a selection and so the
+// accent; the playhead carries no hue, because the bars behind it are of any
+// colour the caller picks (ADR-0031 §SD2, patterns/status-and-legends.md).
 type visuals struct {
 	background, band, rangeFill, rangeEdge, shade color.Color
-	bar, peak, playhead, playheadText, hover      color.Color
+	bar, playhead, playheadText, hover            color.Color
 	hoverText, context, now, past, day, mark      color.Color
 	held, loading, missing, idle, hint, textPlate color.Color
+	headline, body                                color.Color
+
+	caption, micro, heading, bodyPt float32
+	pad, gap                        float32
 }
 
 func newVisuals() visuals {
 	hex := func(t styletokens.RGBA8) color.Color { return color.Hex(t.AsHex()) }
+	d := styletokens.ActiveDensity()
 	return visuals{
 		background:   hex(styletokens.NeutralBgPanel),
 		band:         hex(styletokens.NeutralBorderFaint),
-		rangeFill:    withAlpha(hex(styletokens.SuccessDefault), 0x70),
-		rangeEdge:    hex(styletokens.SuccessDefault),
+		rangeFill:    hex(styletokens.AccentSubtle),
+		rangeEdge:    hex(styletokens.AccentDefault),
 		shade:        withAlpha(hex(styletokens.NeutralBgPanel), 0xb8),
-		bar:          hex(styletokens.AccentDefault),
-		peak:         hex(styletokens.NeutralTextSecondary),
-		playhead:     hex(styletokens.WarningDefault),
+		bar:          hex(styletokens.QualitativeCycle(0)),
+		playhead:     hex(styletokens.NeutralTextExtreme),
 		playheadText: hex(styletokens.NeutralTextPrimary),
 		hover:        withAlpha(hex(styletokens.NeutralTextSecondary), 0x90),
 		hoverText:    hex(styletokens.NeutralTextPrimary),
@@ -37,15 +48,26 @@ func newVisuals() visuals {
 		context:      hex(styletokens.NeutralTextSecondary),
 		now:          hex(styletokens.InfoDefault),
 		past:         withAlpha(hex(styletokens.NeutralTextSecondary), 0x22),
-		day:          withAlpha(hex(styletokens.NeutralTextSecondary), 0x16),
+		day:          hex(styletokens.NeutralBgFaint),
 		mark:         hex(styletokens.InfoDefault),
-		held:         hex(styletokens.AccentStrong),
-		loading:      hex(styletokens.WarningStrong),
+		held:         hex(styletokens.NeutralDefault),
+		loading:      hex(styletokens.InfoDefault),
 		missing:      hex(styletokens.ErrorDefault),
 		idle:         hex(styletokens.NeutralBorderFaint),
 		hint:         hex(styletokens.NeutralTextSecondary),
+		headline:     hex(styletokens.NeutralTextPrimary),
+		body:         hex(styletokens.NeutralTextSecondary),
+		caption:      styletokens.ScaledPt(styletokens.CaptionPt, d),
+		micro:        styletokens.ScaledPt(styletokens.MicroPt, d),
+		heading:      styletokens.ScaledPt(styletokens.HeadingPt, d),
+		bodyPt:       styletokens.ScaledPt(styletokens.BodyPt, d),
+		pad:          sidePad(),
+		gap:          styletokens.GapItems(d),
 	}
 }
+
+// sidePad is the room left and right of the axis, at the active density.
+func sidePad() float32 { return styletokens.PaddingLoose(styletokens.ActiveDensity()) }
 
 func withAlpha(col color.Color, alpha uint8) color.Color {
 	return color.Hex(col.Literal()&^0xff | uint32(alpha))
@@ -149,9 +171,9 @@ func (inst *Scrubber) paintBand(axis timeAxis, steps []Step, g geometry, vis vis
 	}
 	lo, hi := t.Bounds(len(steps))
 	xa, xb := axis.posToX(float64(lo)), axis.posToX(float64(hi))
-	c.PaintRectFilled(xa, 2, xb, g.band-2, 2, vis.rangeFill).Send()
+	c.PaintRectFilled(xa, 2, xb, g.band-2, styletokens.RoundingSm, vis.rangeFill).Send()
 	for _, x := range []float32{xa, xb} {
-		c.PaintRectFilled(x-2, 0, x+2, g.band, 1.5, vis.rangeEdge).Send()
+		c.PaintRectFilled(x-2, 0, x+2, g.band, styletokens.RoundingSm, vis.rangeEdge).Send()
 		c.PaintLine(x, g.band, x, g.baseY, vis.rangeEdge, styletokens.StrokeHair).Send()
 	}
 }
@@ -163,17 +185,17 @@ func (inst *Scrubber) paintCompactRange(axis timeAxis, steps []Step, g geometry,
 	}
 	lo, hi := t.Bounds(len(steps))
 	xa, xb := axis.posToX(float64(lo)), axis.posToX(float64(hi))
-	c.PaintRectFilled(xa, 2, xb, g.baseY-notchH-3, 2, vis.rangeFill).Send()
+	c.PaintRectFilled(xa, 2, xb, g.baseY-notchH-3, styletokens.RoundingSm, vis.rangeFill).Send()
 }
 
 // paintBandHint says what the band is for while the pointer is on it: the
 // gesture is otherwise found by accident (ADR-0251 §SD5).
 func (inst *Scrubber) paintBandHint(g geometry, vis visuals) {
-	text := "drag to set the range playback loops over"
+	text := "Drag to set the range playback loops over"
 	if inst.Transport.RangeOn {
-		text = "drag an edge or the body · double click clears"
+		text = "Drag an edge or the body · double click clears"
 	}
-	c.PaintText(g.w-padX, g.band+2, 2, 0, text, 10, vis.hint).Send()
+	c.PaintText(g.w-vis.pad, g.band+2, 2, 0, text, vis.micro, vis.hint).Send()
 }
 
 // paintShade dims what playback leaves out. It goes over the bars, which is
@@ -295,10 +317,11 @@ func (inst *Scrubber) paintBars(axis timeAxis, steps []Step, cols []column, g ge
 // the day, usually — once along the top of the bars where it changes.
 func (inst *Scrubber) paintAxis(axis timeAxis, steps []Step, g geometry, vis visuals) {
 	st := axisruler.DefaultStyle()
+	st.FontSize = vis.caption
 	inst.ticks = inst.ticks[:0]
 	n := len(steps)
 	if axis.byIndex {
-		every := max(int(math.Ceil(float64(n)*tickSpacingPx/float64(max(g.w-2*padX, 1)))), 1)
+		every := max(int(math.Ceil(float64(n)*tickSpacingPx/float64(max(g.w-2*vis.pad, 1)))), 1)
 		for i := 0; i < n; i += every {
 			label := fmt.Sprintf("%d", i+1)
 			if axis.ordered() {
@@ -310,7 +333,7 @@ func (inst *Scrubber) paintAxis(axis timeAxis, steps []Step, g geometry, vis vis
 		return
 	}
 	layout := timeticks.TimeTicks(steps[0].At, steps[n-1].At, timeticks.TimeTickOptions{
-		PanelWidthPx:    int32(g.w - 2*padX),
+		PanelWidthPx:    int32(g.w - 2*vis.pad),
 		TargetSpacingPx: tickSpacingPx,
 		Location:        inst.location(),
 		PrevStep:        inst.prevTick,
@@ -356,6 +379,7 @@ func (inst *Scrubber) paintMarks(axis timeAxis, steps []Step, g geometry, vis vi
 		return
 	}
 	f0, f1 := flagSpan(axis.posToX(inst.Transport.Pos), g.w)
+	inst.markSpans = inst.markSpans[:0]
 	for i := range inst.Marks {
 		ms := inst.Marks[i].At.UnixMilli()
 		if ms < axis.ms[0] || ms > axis.ms[n-1] {
@@ -367,13 +391,14 @@ func (inst *Scrubber) paintMarks(axis timeAxis, steps []Step, g geometry, vis vi
 		if inst.Marks[i].Label == "" {
 			continue
 		}
-		mw := textWidth(inst.Marks[i].Label, 10)
+		mw := textWidth(inst.Marks[i].Label, vis.caption)
 		anchorH, tx, m0 := uint8(0), x+6, x+6
-		if x > g.w-padX-mw {
+		if x > g.w-vis.pad-mw {
 			anchorH, tx, m0 = 2, x-6, x-6-mw
 		}
 		if apart(m0, m0+mw, f0, f1) {
-			c.PaintText(tx, g.band+2, anchorH, 0, inst.Marks[i].Label, 10, vis.mark).Send()
+			c.PaintText(tx, g.band+2, anchorH, 0, inst.Marks[i].Label, vis.caption, vis.mark).Send()
+			inst.markSpans = append(inst.markSpans, m0, m0+mw)
 		}
 	}
 }
@@ -427,7 +452,7 @@ func (inst *Scrubber) paintHover(axis timeAxis, steps []Step, step int, g geomet
 	if g.compact {
 		return
 	}
-	text := fmt.Sprintf("step %d", i+1)
+	text := fmt.Sprintf("Step %d", i+1)
 	if axis.ordered() {
 		text = newLabels(axis.ms, inst.location()).short(steps[i].At)
 	}
@@ -446,14 +471,14 @@ func (inst *Scrubber) paintHover(axis timeAxis, steps []Step, step int, g geomet
 	}
 	// The readout sits over the bars, whose colour is the caller's, so its
 	// contrast comes from a plate in the panel's and not from its own hue.
-	const size = 11
+	size := vis.caption
 	ty := g.baseY - notchH - 5
 	w := textWidth(text, size)
 	x0 := tx - 3
 	if anchorH == 2 {
 		x0 = tx - w - 3
 	}
-	c.PaintRectFilled(x0, ty-size-4, x0+w+6, ty+1, 2, vis.textPlate).Send()
+	c.PaintRectFilled(x0, ty-size-4, x0+w+6, ty+1, styletokens.RoundingSm, vis.textPlate).Send()
 	c.PaintText(tx, ty, anchorH, 2, text, size, vis.hoverText).Send()
 }
 
@@ -467,8 +492,8 @@ func (inst *Scrubber) paintPlayhead(axis timeAxis, steps []Step, g geometry, vis
 			xn := axis.posToX(axis.msToPos(float64(nowMS)))
 			c.PaintLine(xn, g.band, xn, g.baseY, vis.now, styletokens.StrokeHair).Send()
 			f0, f1 := flagSpan(x, g.w)
-			if w := textWidth("now", 10); apart(xn+3, xn+3+w, f0, f1) {
-				c.PaintText(xn+3, g.band+2, 0, 0, "now", 10, vis.now).Send()
+			if w := textWidth("Now", vis.caption); apart(xn+3, xn+3+w, f0, f1) && inst.clearOfMarks(xn+3, xn+3+w) {
+				c.PaintText(xn+3, g.band+2, 0, 0, "Now", vis.caption, vis.now).Send()
 			}
 		}
 	}
@@ -494,8 +519,18 @@ func (inst *Scrubber) paintPlayhead(axis timeAxis, steps []Step, g geometry, vis
 	if x > g.w-flagReach-8 {
 		anchorH, tx = 2, x-6
 	}
-	c.PaintText(tx, g.band+2, anchorH, 0, text, 11, vis.playheadText).Send()
+	c.PaintText(tx, g.band+2, anchorH, 0, text, vis.caption, vis.playheadText).Send()
 	inst.paintKey(steps, x, g, vis)
+}
+
+// clearOfMarks says the span [x0, x1] meets no mark's word drawn this frame.
+func (inst *Scrubber) clearOfMarks(x0, x1 float32) bool {
+	for i := 0; i+1 < len(inst.markSpans); i += 2 {
+		if !apart(x0, x1, inst.markSpans[i], inst.markSpans[i+1]) {
+			return false
+		}
+	}
+	return true
 }
 
 // paintKey says what the bar and the cap are, at the end of the label row,
@@ -504,14 +539,38 @@ func (inst *Scrubber) paintKey(steps []Step, playheadX float32, g geometry, vis 
 	if inst.Opts.ValueName == "" || !(valueScale(steps) > 0) || inst.hoverTop && inst.hoverValid {
 		return
 	}
-	text := "bar " + inst.Opts.ValueName + " · cap " + inst.peakName()
+	text := "Bar " + inst.Opts.ValueName + " · cap " + inst.peakName()
 	if inst.Opts.ValueUnit != "" {
 		text += " · " + inst.Opts.ValueUnit
 	}
-	kw := textWidth(text, 10)
+	kw := textWidth(text, vis.micro)
 	f0, f1 := flagSpan(playheadX, g.w)
-	if g.w < kw+2*padX+contextReach || !apart(g.w-padX-kw, g.w-padX, f0, f1) {
+	if g.w < kw+2*vis.pad+contextReach || !apart(g.w-vis.pad-kw, g.w-vis.pad, f0, f1) {
 		return
 	}
-	c.PaintText(g.w-padX, g.band+2, 2, 0, text, 10, vis.hint).Send()
+	c.PaintText(g.w-vis.pad, g.band+2, 2, 0, text, vis.micro, vis.hint).Send()
+}
+
+// paintEmpty is the strip with no steps to show: the info empty state of
+// patterns/empty-states.md — an icon, a headline and the caller's reason,
+// centred where the strip would be, so the page does not move when the steps
+// arrive. The compact form has room for the headline alone.
+func (inst *Scrubber) paintEmpty(g geometry, vis visuals) {
+	cx := g.w / 2
+	if g.compact {
+		c.PaintText(cx, g.h/2, 1, 1, "No steps yet", vis.caption, vis.body).Send()
+		return
+	}
+	body := inst.Opts.EmptyText
+	if body == "" {
+		body = "The series has no steps to show."
+	}
+	iconPt := 2 * vis.heading
+	stackH := iconPt + vis.gap + vis.heading + vis.gap + vis.bodyPt
+	y := max((g.h-stackH)/2, 0)
+	c.PaintText(cx, y, 1, 0, icons.PhInfo, iconPt, vis.now).Send()
+	y += iconPt + vis.gap
+	c.PaintText(cx, y, 1, 0, "No steps yet", vis.heading, vis.headline).Send()
+	y += vis.heading + vis.gap
+	c.PaintText(cx, y, 1, 0, body, vis.bodyPt, vis.body).Send()
 }

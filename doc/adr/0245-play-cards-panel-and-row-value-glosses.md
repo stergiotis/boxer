@@ -418,7 +418,7 @@ for one that is not.
 | result-column convention (ADR-0123 §SD2, ADR-0186 §SD3) | + reserved `card_*` labels; + `<label>_gloss` companion as the top binding tier | `features.md`, `snippets.md`; the Glosses tab's source column; an ADR-0186 Update at M6 |
 | `public/hmi/gloss` catalog | + the four WAVE spellings in the content family, registered after `application/cbor` so its pinned prefix does not move | the presentation family's pinned offset; the `gloss(…)` round-trip over the default catalog |
 | `widgets/waveform` (exported API) | + `RenderThumbnail` | a headless scene test |
-| `science/audio/peaks` (exported API) | + `Overview`, `OverviewE` | — |
+| `science/audio/peaks` (exported API) | + `Overview`, `ComputeOverview` | — |
 | `widgets/imagedecode` (exported API) | + `DecodeThumbnailRGBA8`, `ThumbnailSize` | — |
 | `widgets/pager` (exported API) | + `GoToIndex` | — |
 | `gloss.FormatArrowElem` | binary values past `FormatBinaryMaxBytes` render as head plus size (SD9) | any consumer that read a large blob's full hex from display text |

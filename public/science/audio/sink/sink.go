@@ -68,22 +68,22 @@ type SinkI interface {
 	// Position returns the audible frame, clamped to [0, Frames()]. While
 	// State is StatePlaying, consecutive calls advance.
 	Position() (frame int64)
-	// SeekE moves the audible position and keeps State. A frame outside
+	// SeekFrame moves the audible position and keeps State. A frame outside
 	// [0, Frames()] is clamped rather than rejected — only a closed sink is
 	// an error. It clears Ended.
-	SeekE(frame int64) (err error)
+	SeekFrame(frame int64) (err error)
 	// Rate returns the playback rate; 1 plays the source at its own rate.
 	Rate() (rate float64)
-	// SetRateE sets the playback rate, which must lie in (RateMinExcl,
+	// SetRate sets the playback rate, which must lie in (RateMinExcl,
 	// RateMaxIncl]. The position does not jump when the rate changes during
 	// playback.
-	SetRateE(rate float64) (err error)
+	SetRate(rate float64) (err error)
 	// Volume returns the output gain, in [VolumeMinIncl, VolumeMaxIncl].
 	Volume() (v float64)
-	SetVolumeE(v float64) (err error)
+	SetVolume(v float64) (err error)
 	// Ended reports whether playback ran into the end of the source and
-	// stopped there. Play and SeekE clear it.
+	// stopped there. Play and SeekFrame clear it.
 	Ended() (ended bool)
-	// CloseE releases whatever the sink holds and is idempotent.
-	CloseE() (err error)
+	// Close releases whatever the sink holds and is idempotent.
+	Close() (err error)
 }

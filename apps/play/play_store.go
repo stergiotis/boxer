@@ -31,6 +31,23 @@ type HistoryEntry struct {
 	// the caret (ADR-0130 L3). Restoring the entry restores this, so the
 	// siblings come back with it. Empty means SQL is the whole buffer.
 	Buffer string
+	// Summary is the server's accounting of the run; zero where the
+	// endpoint reported none.
+	Summary Summary
+	// Terminal and TerminalReason say how the run ended (runstream).
+	Terminal       runstream.TerminalStateE
+	TerminalReason string
+	// Agent is the on-behalf-of context of a run an agent's work caused
+	// (ADR-0270 §SD2); nil for the person's.
+	Agent *app.OnBehalfOf
+	// Confined is the dispatch decision's label (ADR-0270 §SD4), and
+	// Dispatch where the run went and why (dispatchDecision.describe).
+	Confined bool
+	Dispatch string
+	// Security is the ADR-0132 §SD5 class of the statement as it ran,
+	// judged on the run's goroutine after the SQL-valued knobs substituted —
+	// so a later edit of a knob does not rewrite what the entry claims.
+	Security securityVerdict
 }
 
 type QueryStore struct {
@@ -53,10 +70,15 @@ type QueryStore struct {
 	// runAgent is the on-behalf-of context of the run in flight, nil for
 	// the person's; read only while loading (cancel_run, ADR-0270).
 	runAgent *app.OnBehalfOf
-	err      error
-	elapsed  time.Duration
-	summary  Summary
-	executed time.Time
+	// runDispatch and runSecurity are the in-flight run's dispatch
+	// description and security class, set on its goroutine and moved onto
+	// the history entry by finish.
+	runDispatch string
+	runSecurity securityVerdict
+	err         error
+	elapsed     time.Duration
+	summary     Summary
+	executed    time.Time
 	// loading mirrors isLoading but lives under mu, so Snapshot hands back a
 	// (loading, executed) pair that is always mutually consistent: a reader
 	// can never see loading=false against a pre-finish snapshot (executed not
@@ -197,6 +219,7 @@ func (inst *QueryStore) Execute(sql string, signals map[string]string, sourceBuf
 	inst.nextAgent = nil
 	inst.runAgent = agent
 	inst.sourceBuffer = sourceBuffer
+	inst.runDispatch, inst.runSecurity = "", securityVerdict{}
 	inst.loading = true
 	inst.progress = runstream.Progress{}
 	inst.progressFresh = false
@@ -241,8 +264,11 @@ func (inst *QueryStore) Execute(sql string, signals map[string]string, sourceBuf
 		// One resolution per run (play_dispatch.go). Taken on this goroutine,
 		// not on the render thread, because it runs the client-side rewrites.
 		dec := inst.client.dispatchFor(agent, sql, "")
+		sec, _ := classifySecurity(sql, inst.client.ExprSubstituted)
 		inst.mu.Lock()
 		inst.runConfined = dec.sensitivity == queryengine.SensitivityConfined
+		inst.runDispatch = dec.describe()
+		inst.runSecurity = sec
 		inst.mu.Unlock()
 
 		start := time.Now()
@@ -347,6 +373,15 @@ func (inst *QueryStore) finish(sql string, sigs map[string]string, start time.Ti
 		NumRows:   rows,
 		SigParams: sigs,
 		Buffer:    inst.sourceBuffer,
+		Summary:   summary,
+		Terminal:  term.State,
+		Agent:     inst.runAgent,
+		Confined:  inst.runConfined,
+		Dispatch:  inst.runDispatch,
+		Security:  inst.runSecurity,
+	}
+	if term.State == runstream.TerminalTruncated {
+		entry.TerminalReason = term.Reason
 	}
 	if err != nil {
 		entry.ErrorText = err.Error()

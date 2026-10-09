@@ -58,6 +58,8 @@ type Options struct {
 	// skipping it: a missing fixture then shows as whatever the app draws
 	// without it, which is sometimes the thing to look at.
 	IgnoreRequires bool
+	// Slow runs scenes tagged TagSlow, which are skipped otherwise.
+	Slow bool
 	// Out receives what `tree` steps print; nil means os.Stdout.
 	Out    io.Writer
 	Logger zerolog.Logger

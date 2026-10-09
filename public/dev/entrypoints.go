@@ -13,14 +13,14 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"golang.org/x/tools/go/packages"
 )
 
 const (
-	urfaveCliV2ImportPath = "github.com/urfave/cli/v2"
+	urfaveCliImportPath = "github.com/urfave/cli/v3"
 	// loggingApplyFQN is referenced by every main that wires
-	// `Before: logging.Apply` on its cli.App. The logging package
+	// `Before: logging.Apply` on its root cli.Command. The logging package
 	// installs eh.MarshalError via init(), so no explicit
 	// setup-call is needed; what mains must do instead is hook
 	// Apply into the cli lifecycle so the writer/level/startup
@@ -59,7 +59,7 @@ func newEntryPointsSubcommand() *cli.Command {
 	}
 }
 
-// EntryPointsConfig parameterises [AuditEntryPointsE].
+// EntryPointsConfig parameterises [AuditEntryPoints].
 //
 // Root is the directory packages are loaded from; BaselinePath, when non-empty,
 // names a file of grandfathered package import paths (see [loadBaseline]).
@@ -92,14 +92,14 @@ func (inst EntryPointAudit) Failing() (bad bool) {
 	return !inst.Conformant() && !inst.Baselined
 }
 
-// AuditEntryPointsE loads every package under cfg.Root and measures each
+// AuditEntryPoints loads every package under cfg.Root and measures each
 // `package main` against the entry-point standard.
 //
 // Results are sorted by import path so callers render a stable table. The
 // audit is reported, not enforced: deciding what a failure costs belongs to
 // the caller, which is what lets the CLI, the composite gate and a consuming
 // repository share one implementation.
-func AuditEntryPointsE(ctx context.Context, cfg EntryPointsConfig) (audits []EntryPointAudit, err error) {
+func AuditEntryPoints(ctx context.Context, cfg EntryPointsConfig) (audits []EntryPointAudit, err error) {
 	root := cfg.Root
 	if root == "" {
 		root = "."
@@ -146,7 +146,7 @@ func AuditEntryPointsE(ctx context.Context, cfg EntryPointsConfig) (audits []Ent
 				Str("firstErr", p.Errors[0].Msg).
 				Msg("package has load errors; audit may be incomplete")
 		}
-		_, cliOK := p.Imports[urfaveCliV2ImportPath]
+		_, cliOK := p.Imports[urfaveCliImportPath]
 		_, isBaselined := baseline[p.PkgPath]
 		audits = append(audits, EntryPointAudit{
 			PkgPath:   p.PkgPath,
@@ -180,12 +180,12 @@ func WriteEntryPointsTable(w io.Writer, audits []EntryPointAudit) {
 	_ = tw.Flush()
 }
 
-func entryPointsAction(ctx *cli.Context) (err error) {
-	root := ctx.String("root")
-	strict := ctx.Bool("strict")
+func entryPointsAction(ctx context.Context, cmd *cli.Command) (err error) {
+	root := cmd.String("root")
+	strict := cmd.Bool("strict")
 
 	tags := make([]string, 0, 8)
-	if t := ctx.String("tags"); t != "" {
+	if t := cmd.String("tags"); t != "" {
 		for x := range strings.SplitSeq(t, ",") {
 			x = strings.TrimSpace(x)
 			if x != "" {
@@ -195,9 +195,9 @@ func entryPointsAction(ctx *cli.Context) (err error) {
 	}
 
 	var audits []EntryPointAudit
-	audits, err = AuditEntryPointsE(ctx.Context, EntryPointsConfig{
+	audits, err = AuditEntryPoints(ctx, EntryPointsConfig{
 		Root:         root,
-		BaselinePath: ctx.String("baseline"),
+		BaselinePath: cmd.String("baseline"),
 		Tags:         tags,
 	})
 	if err != nil {
@@ -299,7 +299,7 @@ func packageCallsFunc(p *packages.Package, fullName string) (found bool) {
 // function identified by fullName. Unlike packageCallsFunc this matches
 // value uses (e.g. `Before: logging.Apply` — assigning the function
 // value to a struct field, not invoking it), which is the shape mains
-// must use to hook logging.Apply into cli.App.Before.
+// must use to hook logging.Apply into the root cli.Command's Before.
 func packageReferencesFunc(p *packages.Package, fullName string) (found bool) {
 	if p == nil || p.TypesInfo == nil {
 		return

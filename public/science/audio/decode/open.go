@@ -11,7 +11,7 @@ import (
 	"github.com/stergiotis/boxer/public/science/audio/wavfile"
 )
 
-// OpenE opens the recording at path, sniffing its header to pick the decoder
+// Open opens the recording at path, sniffing its header to pick the decoder
 // (ADR-0208 §SD5): a WAVE container goes to the native wavfile reader, every
 // other header — and one too short to classify — to ffmpeg. kind reports which
 // decoder was used and is meaningful even when err is non-nil, so a failure
@@ -20,16 +20,16 @@ import (
 // The returned source is owned by the caller and must be closed. ctx bounds
 // the lifetime of the ffmpeg process for a [KindFfmpeg] source; it is not used
 // by a [KindWAV] one.
-func OpenE(ctx context.Context, path string) (src pcm.SourceI, kind KindE, err error) {
+func Open(ctx context.Context, path string) (src pcm.SourceI, kind KindE, err error) {
 	var head [sniffBytes]byte
-	n, err := readHeadE(path, head[:])
+	n, err := readHead(path, head[:])
 	if err != nil {
 		return nil, KindUnknown, err
 	}
 	kind = Sniff(head[:n])
 	if kind == KindWAV {
 		var file *wavfile.File
-		file, err = wavfile.OpenE(path)
+		file, err = wavfile.Open(path)
 		if err != nil {
 			return nil, KindWAV, err
 		}
@@ -37,7 +37,7 @@ func OpenE(ctx context.Context, path string) (src pcm.SourceI, kind KindE, err e
 	}
 	kind = KindFfmpeg
 	var ff *FfmpegSource
-	ff, err = OpenFfmpegE(ctx, path)
+	ff, err = OpenFfmpeg(ctx, path)
 	if err != nil {
 		return nil, KindFfmpeg, err
 	}
@@ -55,15 +55,15 @@ func OpenE(ctx context.Context, path string) (src pcm.SourceI, kind KindE, err e
 // than reading the old bytes.
 func Reopener(path string) (reopen func(ctx context.Context) (src pcm.SourceI, err error)) {
 	return func(ctx context.Context) (src pcm.SourceI, err error) {
-		src, _, err = OpenE(ctx, path)
+		src, _, err = Open(ctx, path)
 		return
 	}
 }
 
-// readHeadE fills dst with up to len(dst) leading bytes of path. A file
+// readHead fills dst with up to len(dst) leading bytes of path. A file
 // shorter than dst is not an error — [Sniff] answers KindUnknown for a short
 // head and the decoder reports what is actually wrong with the file.
-func readHeadE(path string, dst []byte) (n int, err error) {
+func readHead(path string, dst []byte) (n int, err error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return 0, eb.Build().Str("path", path).Errorf("open recording: %w", err)

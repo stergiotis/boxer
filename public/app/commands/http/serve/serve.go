@@ -1,6 +1,7 @@
 package serve
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -12,7 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/config"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 )
 
 type FileDumpService struct {
@@ -122,10 +123,10 @@ func (inst *Config) ToCliFlags(nameTransf config.NameTransformFunc, envVarNameTr
 	}
 }
 
-func (inst *Config) FromContext(nameTransf config.NameTransformFunc, ctx *cli.Context) (nMessages int) {
-	inst.Listen = ctx.String(nameTransf("listen"))
-	inst.OutputDirectory = ctx.String(nameTransf("outputDirectory"))
-	inst.FilePattern = ctx.String(nameTransf("filePattern"))
+func (inst *Config) FromContext(ctx context.Context, nameTransf config.NameTransformFunc, cmd *cli.Command) (nMessages int) {
+	inst.Listen = cmd.String(nameTransf("listen"))
+	inst.OutputDirectory = cmd.String(nameTransf("outputDirectory"))
+	inst.FilePattern = cmd.String(nameTransf("filePattern"))
 	nMessages = inst.Validate(true)
 	return
 }
@@ -153,8 +154,8 @@ func NewCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "serve",
 		Flags: cfg.ToCliFlags(config.IdentityNameTransf, config.IdentityNameTransf),
-		Action: func(context *cli.Context) error {
-			nMessages := cfg.FromContext(config.IdentityNameTransf, context)
+		Action: func(ctx context.Context, cmd *cli.Command) error {
+			nMessages := cfg.FromContext(ctx, config.IdentityNameTransf, cmd)
 			if nMessages > 0 {
 				return eb.Build().Int("nMessages", nMessages).Errorf("invalid configuration: message count out of range")
 			}

@@ -9,7 +9,7 @@ import (
 	"pgregory.net/rapid"
 )
 
-func TestLoadPaletteDirE(t *testing.T) {
+func TestLoadPaletteDir(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name, body string) {
 		t.Helper()
@@ -21,7 +21,7 @@ func TestLoadPaletteDirE(t *testing.T) {
 	write("a_one.json", `{"map":["#000000","#ffffff"]}`)
 	write("ignored.txt", `not a palette`)
 
-	ps, err := LoadPaletteDirE(dir)
+	ps, err := LoadPaletteDir(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func TestLoadPaletteDirE(t *testing.T) {
 }
 
 func TestLoadPaletteDirEMissingDirIsEmpty(t *testing.T) {
-	ps, err := LoadPaletteDirE(filepath.Join(t.TempDir(), "does-not-exist"))
+	ps, err := LoadPaletteDir(filepath.Join(t.TempDir(), "does-not-exist"))
 	if err != nil || ps != nil {
 		t.Errorf("got (%v, %v), want (nil, nil)", ps, err)
 	}
@@ -61,13 +61,13 @@ func TestLoadPaletteDirERejectsBad(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := LoadPaletteDirE(dir); err == nil {
+		if _, err := LoadPaletteDir(dir); err == nil {
 			t.Errorf("%s: want an error", name)
 		}
 	}
 }
 
-func TestParseHexRGBAE(t *testing.T) {
+func TestParseHexRGBA(t *testing.T) {
 	cases := map[string]uint32{
 		"#ff0000":   0xff0000ff,
 		"ff0000":    0xff0000ff,
@@ -75,14 +75,14 @@ func TestParseHexRGBAE(t *testing.T) {
 		"#12345678": 0x12345678,
 	}
 	for in, want := range cases {
-		got, err := ParseHexRGBAE(in)
+		got, err := ParseHexRGBA(in)
 		if err != nil || got != want {
-			t.Errorf("ParseHexRGBAE(%q) = (%#x, %v), want %#x", in, got, err, want)
+			t.Errorf("ParseHexRGBA(%q) = (%#x, %v), want %#x", in, got, err, want)
 		}
 	}
 	for _, bad := range []string{"", "#fff", "#gggggg", "#123456789"} {
-		if _, err := ParseHexRGBAE(bad); err == nil {
-			t.Errorf("ParseHexRGBAE(%q): want an error", bad)
+		if _, err := ParseHexRGBA(bad); err == nil {
+			t.Errorf("ParseHexRGBA(%q): want an error", bad)
 		}
 	}
 }
@@ -92,12 +92,12 @@ func TestParseHexRGBAE(t *testing.T) {
 func TestParseHexRGBAERoundTrip(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		v := rapid.Uint32().Draw(t, "rgba")
-		got, err := ParseHexRGBAE(fmt.Sprintf("#%08x", v))
+		got, err := ParseHexRGBA(fmt.Sprintf("#%08x", v))
 		if err != nil || got != v {
 			t.Fatalf("8-digit round trip of %#08x: (%#08x, %v)", v, got, err)
 		}
 		rgb := v >> 8
-		got, err = ParseHexRGBAE(fmt.Sprintf("%06X", rgb))
+		got, err = ParseHexRGBA(fmt.Sprintf("%06X", rgb))
 		if err != nil || got != rgb<<8|0xff {
 			t.Fatalf("6-digit round trip of %#06x: (%#08x, %v)", rgb, got, err)
 		}

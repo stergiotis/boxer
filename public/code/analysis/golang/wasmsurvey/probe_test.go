@@ -51,7 +51,7 @@ func TestWriteProbeMain(t *testing.T) {
 	dir := t.TempDir()
 
 	// Blank-import form when no exported funcs.
-	if err := writeProbeMainE(dir, "example.com/pkg", nil); err != nil {
+	if err := writeProbeMain(dir, "example.com/pkg", nil); err != nil {
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(filepath.Join(dir, "main.go"))
@@ -60,7 +60,7 @@ func TestWriteProbeMain(t *testing.T) {
 	}
 
 	// Exported-func reference form.
-	if err := writeProbeMainE(dir, "example.com/pkg", []string{"Foo", "Bar"}); err != nil {
+	if err := writeProbeMain(dir, "example.com/pkg", []string{"Foo", "Bar"}); err != nil {
 		t.Fatal(err)
 	}
 	data, _ = os.ReadFile(filepath.Join(dir, "main.go"))
@@ -113,7 +113,7 @@ func TestProbeBuild_Smoke(t *testing.T) {
 	dir := filepath.Join(root, "public/analytics/stats/tdigest")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	tier, reason, millis, perr := probePackageE(ctx, root, pkg, dir, TargetWASI, tags, 3*time.Minute)
+	tier, reason, millis, perr := probePackage(ctx, root, pkg, dir, TargetWASI, tags, 3*time.Minute)
 	if perr != nil {
 		t.Fatalf("probe harness error: %v", perr)
 	}

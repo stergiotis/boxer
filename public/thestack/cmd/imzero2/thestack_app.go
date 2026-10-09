@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"slices"
 
@@ -20,23 +21,22 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/driver"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/scene/scenecmd"
 	"github.com/stergiotis/boxer/showcase/deploy"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func mainC() (exitCode int) {
 	//defer ph.PanicHandler(2, nil, nil)
 	closeLogBridge := logbridge.NopCloser()
-	app := cli.App{
-		Name:                 vcs.ModuleInfo(),
-		Copyright:            vcs.CopyrightInfo(),
-		HelpName:             "",
-		Usage:                "",
-		UsageText:            "",
-		ArgsUsage:            "",
-		Version:              vcs.BuildVersionInfo(),
-		Description:          "",
-		DefaultCommand:       "",
-		EnableBashCompletion: false,
+	app := cli.Command{
+		Name:                  vcs.ModuleInfo(),
+		Copyright:             vcs.CopyrightInfo(),
+		Usage:                 "",
+		UsageText:             "",
+		ArgsUsage:             "",
+		Version:               vcs.BuildVersionInfo(),
+		Description:           "",
+		DefaultCommand:        "",
+		EnableShellCompletion: false,
 		Flags: slices.Concat(
 			logging.LoggingFlags,
 			profiling.ProfilingFlags,
@@ -53,11 +53,11 @@ func mainC() (exitCode int) {
 				// log.Logger via logging.Apply. The bridge wraps the
 				// final writer; running here keeps the wrap order
 				// (writer → bridge) regardless of --logFormat.
-				Before: func(c *cli.Context) (err error) {
-					closeLogBridge = loghost.Install(c.Context)
+				Before: func(ctx context.Context, cmd *cli.Command) (_ context.Context, err error) {
+					closeLogBridge = loghost.Install(ctx)
 					return
 				},
-				Subcommands: []*cli.Command{
+				Commands: []*cli.Command{
 					demo2.NewCommand(),
 					driver.NewCliCommand(),
 					deploy.NewCommand(),
@@ -68,14 +68,14 @@ func mainC() (exitCode int) {
 			observability.NewCliCommand(),
 		},
 		Before: logging.Apply,
-		After: func(context *cli.Context) error {
-			profiling.ProfilingHandleExit(context)
-			tracing.TracingHandleExit(context)
+		After: func(ctx context.Context, cmd *cli.Command) error {
+			profiling.ProfilingHandleExit(ctx, cmd)
+			tracing.TracingHandleExit(ctx, cmd)
 			_ = closeLogBridge()
 			return nil
 		},
 	}
-	err := app.Run(os.Args)
+	err := app.Run(context.Background(), os.Args)
 	if err != nil {
 		exitCode = 1
 		log.Error().Stack().Err(err).Msg("an error occurred")

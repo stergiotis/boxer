@@ -104,7 +104,7 @@ func (inst *Chrome) renderTaskMenu(key uint64, wt windowTask, ids *c.WidgetIdSta
 	}
 	busy := svc.busyFor(key, t)
 	for range c.HorizontalTop().KeepIter() {
-		c.Label("mode").Send()
+		c.Label("Mode").Send()
 		for _, m := range AllModes {
 			id := ids.PrepareStr("agent-mode-" + t.id + "-" + strconv.FormatUint(key, 10) + "-" + m.String())
 			if c.SelectableLabel(id, wt.mode == m, m.String()).SendResp().HasPrimaryClicked() && m != wt.mode {
@@ -116,14 +116,14 @@ func (inst *Chrome) renderTaskMenu(key uint64, wt windowTask, ids *c.WidgetIdSta
 		}
 	}
 	if busy {
-		c.Label("another task suggests or acts here; this one may only observe").Send()
+		c.Label("Another task suggests or acts here; this one may only observe").Send()
 	}
 	inst.renderProposals(key, t, ids)
 	inst.renderUndo(key, t, ids)
 	for range c.HorizontalTop().KeepIter() {
 		if c.Button(ids.PrepareStr("agent-detach-"+t.id+"-"+strconv.FormatUint(key, 10)),
 			c.Atoms().Text("Detach this window").Keep()).SendResp().HasPrimaryClicked() {
-			svc.detachEntry(t, key, "the person detached the window")
+			svc.detachEntry(t, key, "the person detached the window", "person")
 		}
 		if c.Button(ids.PrepareStr("agent-stop-"+t.id+"-"+strconv.FormatUint(key, 10)),
 			c.Atoms().Text("Stop the task").Keep()).SendResp().HasPrimaryClicked() {
@@ -388,7 +388,7 @@ func (inst *Chrome) renderRequest(r *request, windows []windowRow, waiting int, 
 		c.Separator().Send()
 		c.Label("Share these windows, in the mode you pick:").Send()
 		if len(windows) == 0 {
-			c.Label("no other window is open").Send()
+			c.Label("No other window is open").Send()
 		}
 		// One row per window: whether it is shared, the mode, and what the
 		// mode lets the task do — the columns aligned across windows.

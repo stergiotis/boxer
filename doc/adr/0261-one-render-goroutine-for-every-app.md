@@ -155,3 +155,30 @@ The owner's answers:
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way)
 for the edit-policy tiers.
+
+## Updates
+
+### 2026-10-08 — The check's cost was understated; it now reads the goroutine descriptor
+
+SD2 put the check at about a microsecond per message. That holds only for a
+shallow stack. `runtime.Stack` symbolizes every frame — file, line and
+arguments — however small the buffer it is given, so the cost grows with
+depth: about 15 µs per message at the ~45 frames a dock tab body sits under.
+A profile of the window host with the check on had about 85 % of Go CPU in
+stack formatting, and Go render time per frame of 18 ms and more, which
+surfaced as `imzero2: slow frame` warnings
+([ADR-0062](./0062-imzero2-render-cadence.md)) that were the check's own
+cost.
+
+On amd64 and arm64 the check now compares the address of the runtime's
+goroutine descriptor, read by a three-instruction assembly function
+(`goroutineToken` in `public/thestack/fffi2/runtime`), at about a nanosecond
+regardless of depth. A descriptor is recycled after its goroutine exits,
+never freed, so the address identifies a live goroutine; the bound one is
+the render loop, which lives as long as the channel. Goroutine ids are
+formatted only on the panic path, to name both goroutines. Other
+architectures, wasm among them, keep the stack-parsing read and its cost.
+
+No decision change: the check stays opt-in. The cost that made the
+always-on alternative a rejection no longer holds on amd64 and arm64, so
+that alternative is open to revisit there.

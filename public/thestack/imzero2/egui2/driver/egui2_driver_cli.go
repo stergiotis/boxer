@@ -1,18 +1,19 @@
 package driver
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name: "generate",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			{
 				Name: "go",
 				Flags: []cli.Flag{
@@ -22,8 +23,8 @@ func NewCliCommand() *cli.Command {
 						Usage:    "go code output directory",
 					},
 				},
-				Action: func(context *cli.Context) error {
-					goOutputBasePath := context.String("goOutputBasePath")
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					goOutputBasePath := cmd.String("goOutputBasePath")
 					goOutputBasePathAbs, err := filepath.Abs(goOutputBasePath)
 					if err != nil {
 						return eh.Errorf("unable to resolve absolute path of supplied goOutputBasePath")
@@ -45,8 +46,8 @@ func NewCliCommand() *cli.Command {
 						Usage:    "rust code output directory",
 					},
 				},
-				Action: func(context *cli.Context) error {
-					rustOutputBasePath := context.String("rustOutputBasePath")
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					rustOutputBasePath := cmd.String("rustOutputBasePath")
 					return GenerateRustFiles(rustOutputBasePath)
 				},
 			},
@@ -59,8 +60,8 @@ func NewCliCommand() *cli.Command {
 						Usage:    "path to the output markdown file",
 					},
 				},
-				Action: func(context *cli.Context) error {
-					docOutputPath := context.String("docOutputPath")
+				Action: func(ctx context.Context, cmd *cli.Command) error {
+					docOutputPath := cmd.String("docOutputPath")
 					docOutputPathAbs, err := filepath.Abs(docOutputPath)
 					if err != nil {
 						return eh.Errorf("unable to resolve absolute path of supplied docOutputPath")

@@ -14,7 +14,7 @@ var AccelEstimatedInitialLength = 128
 
 var ErrUnexpectedArrowDataType = eh.Errorf("unexpected arrow data type")
 
-// unexpectedDataTypeE reports a column whose Arrow type does not match what the
+// unexpectedDataType reports a column whose Arrow type does not match what the
 // generated read access expects at that position.
 //
 // The column name, the index and both types go into the message, not only into
@@ -28,7 +28,7 @@ var ErrUnexpectedArrowDataType = eh.Errorf("unexpected arrow data type")
 // the usual cause is a projection that is not a plain `SELECT *` — one extra
 // expression before the table's columns shifts every one of them, and seeing
 // which column landed in the slot is what makes that obvious.
-func unexpectedDataTypeE(schema *arrow.Schema, idx uint32, effective arrow.DataType, expected arrow.Type) (err error) {
+func unexpectedDataType(schema *arrow.Schema, idx uint32, effective arrow.DataType, expected arrow.Type) (err error) {
 	name := "<unknown>"
 	if schema != nil && int(idx) < schema.NumFields() {
 		name = schema.Field(int(idx)).Name
@@ -64,7 +64,7 @@ type recordShapeI interface {
 // GUI label or a CLI line.
 const outOfRangeColumnNames = 8
 
-// checkColumnIndexE guards the positional column lookup the generated read
+// checkColumnIndex guards the positional column lookup the generated read
 // access performs.
 //
 // Read access binds by position, so a record narrower than the table it was
@@ -72,15 +72,15 @@ const outOfRangeColumnNames = 8
 // indexes a slice and panics rather than reporting it. That is not a corrupt
 // program: a record reaches read access straight from whatever query a person
 // typed, and `SELECT count() FROM facts11` is one column wide. It has to come
-// back as an error so the callers that already handle unexpectedDataTypeE — the
+// back as an error so the callers that already handle unexpectedDataType — the
 // facts viewer's detail pane falls back to its generic renderer — handle this
 // the same way instead of taking the process down.
 //
 // The record's own column names go into the message alongside the count, for
-// the same reason unexpectedDataTypeE names the column it found: seeing
+// the same reason unexpectedDataType names the column it found: seeing
 // "count()" in a record read access expected to be facts11-shaped is what makes
 // the mismatch obvious, and a caller cannot read eb's fields back.
-func checkColumnIndexE(rec recordShapeI, idx uint32) (err error) {
+func checkColumnIndex(rec recordShapeI, idx uint32) (err error) {
 	n := rec.NumCols()
 	if int64(idx) < n {
 		return

@@ -22,7 +22,7 @@ func twelveHourStereo(d time.Duration) (format pcm.Format, src pcm.SourceI, fram
 		pcm.Gate(pcm.Sine(format, 440, 0.9), 4800, 43200),
 		pcm.Gate(pcm.Sine(format, 220, 0.6), 2400, 45600),
 	)
-	synth, err := pcm.NewSynthSourceE(format, frames, fn)
+	synth, err := pcm.NewSynthSource(format, frames, fn)
 	if err != nil {
 		return format, nil, 0, err
 	}
@@ -38,7 +38,7 @@ func TestBuildTenMinutes(t *testing.T) {
 	}
 	format, src, frames, err := twelveHourStereo(10 * time.Minute)
 	require.NoError(t, err)
-	p, err := peaks.BuildE(context.Background(), src, peaks.DefaultBaseBin(), 0, nil)
+	p, err := peaks.Build(context.Background(), src, peaks.DefaultBaseBin(), 0, nil)
 	require.NoError(t, err)
 	require.True(t, p.IsComplete())
 	require.Equal(t, frames, p.Built())
@@ -73,7 +73,7 @@ func TestMemoryAccountingTwelveHoursStereo(t *testing.T) {
 	format := pcm.Format{SampleRate: 48000, Channels: 2}
 	frames := format.DurationToFrames(12 * time.Hour)
 	require.Equal(t, int64(2_073_600_000), frames)
-	p, err := peaks.NewPyramidE(format, frames, peaks.DefaultBaseBin())
+	p, err := peaks.NewPyramid(format, frames, peaks.DefaultBaseBin())
 	require.NoError(t, err)
 	require.Equal(t, int64(8_100_000), p.Bins(0))
 	require.Equal(t, int32(24), p.Levels())
@@ -91,12 +91,12 @@ func BenchmarkFoldStereo(b *testing.B) {
 	format := pcm.Format{SampleRate: 48000, Channels: 2}
 	const chunkFrames = 1 << 14
 	samples := genSamples(23, chunkFrames*int(format.Channels))
-	p, err := peaks.NewPyramidE(format, int64(chunkFrames)*int64(b.N), peaks.DefaultBaseBin())
+	p, err := peaks.NewPyramid(format, int64(chunkFrames)*int64(b.N), peaks.DefaultBaseBin())
 	require.NoError(b, err)
 	b.SetBytes(chunkFrames * int64(format.Channels) * 4)
 	b.ResetTimer()
 	for range b.N {
-		err = p.FoldE(samples)
+		err = p.Fold(samples)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -115,7 +115,7 @@ func BenchmarkBuildTwelveHours(b *testing.B) {
 	memoryBytes := int64(0)
 	b.ResetTimer()
 	for range b.N {
-		p, err := peaks.BuildE(ctx, src, peaks.DefaultBaseBin(), 0, nil)
+		p, err := peaks.Build(ctx, src, peaks.DefaultBaseBin(), 0, nil)
 		if err != nil {
 			b.Fatal(err)
 		}

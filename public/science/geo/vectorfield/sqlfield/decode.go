@@ -51,7 +51,7 @@ func isNumeric(dt arrow.DataType) bool {
 	return chrows.IsNumeric(dt) || chrows.IsDecimal(dt)
 }
 
-func columnE(rec arrow.RecordBatch, name string) (col arrow.Array, err error) {
+func column(rec arrow.RecordBatch, name string) (col arrow.Array, err error) {
 	idx := rec.Schema().FieldIndices(name)
 	if len(idx) == 0 {
 		err = eb.Build().Str("column", name).Errorf("the reply lacks a column")
@@ -63,7 +63,7 @@ func columnE(rec arrow.RecordBatch, name string) (col arrow.Array, err error) {
 
 // floatAt reads a floating cell; ok is false for NULL.
 func floatAt(rec arrow.RecordBatch, name string, row int) (v float64, ok bool, err error) {
-	col, err := columnE(rec, name)
+	col, err := column(rec, name)
 	if err != nil {
 		return
 	}
@@ -85,7 +85,7 @@ func floatAt(rec arrow.RecordBatch, name string, row int) (v float64, ok bool, e
 }
 
 func intAt(rec arrow.RecordBatch, name string, row int) (v int64, err error) {
-	col, err := columnE(rec, name)
+	col, err := column(rec, name)
 	if err != nil {
 		return
 	}
@@ -103,7 +103,7 @@ func intAt(rec arrow.RecordBatch, name string, row int) (v int64, err error) {
 // stringAt reads a text cell, in either of the spellings ClickHouse writes
 // a String as.
 func stringAt(rec arrow.RecordBatch, name string, row int) (v string, err error) {
-	col, err := columnE(rec, name)
+	col, err := column(rec, name)
 	if err != nil {
 		return
 	}
@@ -115,7 +115,7 @@ func stringAt(rec arrow.RecordBatch, name string, row int) (v string, err error)
 	return
 }
 
-// decodeWindowE lays a window statement's reply into planes. Every sample
+// decodeWindow lays a window statement's reply into planes. Every sample
 // starts missing; a bin is kept where its valid nodes reach validFraction of
 // the nodes it covers, the policy at coasts and edges the pyramid applies
 // level by level.
@@ -123,7 +123,7 @@ func stringAt(rec arrow.RecordBatch, name string, row int) (v string, err error)
 // The reply is not trusted to fit the plan (ADR-0250 §SD2): a bin outside it,
 // more bins than it holds, or more valid nodes in a bin than the bin covers —
 // two rows for one node — is an error and not a picture.
-func (inst grid) decodeWindowE(p *windowPlan, rec arrow.RecordBatch, validFraction float32) (win vectorfield.Window, err error) {
+func (inst grid) decodeWindow(p *windowPlan, rec arrow.RecordBatch, validFraction float32) (win vectorfield.Window, err error) {
 	n := p.cols * p.rows
 	if rec.NumRows() > int64(n) {
 		err = eb.Build().Int64("rows", rec.NumRows()).Int("bins", n).Errorf("the reply holds more bins than the window asked for")

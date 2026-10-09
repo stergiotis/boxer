@@ -59,7 +59,7 @@ WHERE modulo(ff_ri, {ff_factor:Int64}) = 0 AND modulo(ff_ci, {ff_factor:Int64}) 
 LIMIT {ff_cap:UInt64}`)
 }
 
-// SummarizeE reduces every step inside the request's bounds to a
+// Summarize reduces every step inside the request's bounds to a
 // [StepSummary], one per step of [Source.Describe] and in that order. The
 // request's Step is ignored; MaxCols and MaxRows choose the decimation, as
 // they choose a window's resolution.
@@ -67,7 +67,7 @@ LIMIT {ff_cap:UInt64}`)
 // It is one query over all steps. On a table ordered by time first it reads
 // the bounds' share of every step, which is what a time control showing "when
 // is it strong here" costs per settled view.
-func (inst *Source) SummarizeE(ctx context.Context, req vectorfield.Request) (out []StepSummary, err error) {
+func (inst *Source) Summarize(ctx context.Context, req vectorfield.Request) (out []StepSummary, err error) {
 	if !(req.West < req.East) || !(req.South < req.North) || req.MaxCols < 2 || req.MaxRows < 2 {
 		err = eb.Build().
 			Float64("west", req.West).Float64("east", req.East).
@@ -92,7 +92,7 @@ func (inst *Source) SummarizeE(ctx context.Context, req vectorfield.Request) (ou
 	params["ff_cap"] = formatInt(int64(len(out)) + 1)
 
 	var rec arrow.RecordBatch
-	rec, err = inst.queryE(ctx, PurposeSummary, summaryStatement(inst.rel, inst.timeType), params)
+	rec, err = inst.query(ctx, PurposeSummary, summaryStatement(inst.rel, inst.timeType), params)
 	if err != nil {
 		return
 	}

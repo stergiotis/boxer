@@ -45,7 +45,7 @@ func TestSnapshotEvalBuildsGoRows(t *testing.T) {
 
 	snap, err := inst.snapshotEval()
 	require.NoError(t, err)
-	assert.Equal(t, `(a)(b)?`, snap.pattern)
+	assert.Equal(t, `(?s)(a)(b)?`, snap.pattern, "the effective pattern, dot flag stated")
 	assert.False(t, snap.hasCH, "no lane result, so the CH half must be absent")
 
 	// Two matches, three rows each (group 0, 1, 2). The second match has
@@ -78,6 +78,8 @@ func TestSnapshotEvalCarriesGroupNames(t *testing.T) {
 // Go enumerates a zero-width match at every position for `a*` over "xyz"
 // while ClickHouse's extractAll yields none — keeping them would shift
 // every match_idx and make the join compare unrelated rows.
+// TestSnapshotEvalDropsZeroWidthMatches pins the Go side's match_idx to
+// the non-empty matches, the numbering extractAll's elements share.
 func TestSnapshotEvalDropsZeroWidthMatches(t *testing.T) {
 	inst := newApp()
 	inst.pattern = `a*`
@@ -113,9 +115,9 @@ func TestSnapshotEvalRefusesUnusableInput(t *testing.T) {
 	}
 }
 
-func TestChExtractRowsFlattensListOutcome(t *testing.T) {
-	out := listOutcome{
-		Matches:      []string{"a", "c"},
+func TestChExtractRowsFlattensFnOutcome(t *testing.T) {
+	out := fnOutcome{
+		ExtractAll:   []string{"a", "c"},
 		Groups:       [][]string{{"a", "b"}, {"c", "d"}},
 		YieldsGroups: true,
 	}
@@ -362,7 +364,7 @@ func TestEvalHandoffPublishesBothAndOpensPlay(t *testing.T) {
 	// Stand in for a fresh CH lane result: the lane itself needs a live
 	// broker, and what matters here is that the second dataset ships.
 	snap.hasCH = true
-	snap.chRows = chExtractRows(listOutcome{Matches: []string{"a", "a"}, YieldsGroups: true})
+	snap.chRows = chExtractRows(fnOutcome{ExtractAll: []string{"a", "a"}, YieldsGroups: true})
 
 	inst.requestEvalInPlay(snap)
 
@@ -412,7 +414,7 @@ func TestEvalHandoffReusesHandles(t *testing.T) {
 		snap, err := inst.snapshotEval()
 		require.NoError(t, err)
 		snap.hasCH = true
-		snap.chRows = chExtractRows(listOutcome{Matches: []string{"a"}})
+		snap.chRows = chExtractRows(fnOutcome{ExtractAll: []string{"a"}})
 		inst.requestEvalInPlay(snap)
 		inst.mu.RLock()
 		defer inst.mu.RUnlock()
@@ -468,7 +470,7 @@ func TestClosingTheWindowRetractsBothHandles(t *testing.T) {
 	snap, err := inst.snapshotEval()
 	require.NoError(t, err)
 	snap.hasCH = true
-	snap.chRows = chExtractRows(listOutcome{Matches: []string{"a"}})
+	snap.chRows = chExtractRows(fnOutcome{ExtractAll: []string{"a"}})
 	inst.requestEvalInPlay(snap)
 	require.Equal(t, 2, rig.svc.LiveCount())
 
@@ -511,7 +513,7 @@ func TestPartialPublishRetainsTheHandleItMinted(t *testing.T) {
 	snap, err := inst.snapshotEval()
 	require.NoError(t, err)
 	snap.hasCH = true
-	snap.chRows = chExtractRows(listOutcome{Matches: []string{"a"}})
+	snap.chRows = chExtractRows(fnOutcome{ExtractAll: []string{"a"}})
 
 	inst.requestEvalInPlay(snap)
 

@@ -59,7 +59,7 @@ type Options struct {
 
 	// Palette colours a trail by the scalar mean of the magnitude, 0xRRGGBBAA
 	// stops from zero to SpeedMax. nil takes DefaultPalette, which is made for
-	// a dark basemap; over light tiles pass a darker ramp.
+	// a dark basemap; over a light one pass LightPalette.
 	Palette []uint32
 	// Opacity scales every trail's alpha. Zero takes 0.9.
 	Opacity float32
@@ -95,6 +95,15 @@ type Options struct {
 // dark map, and a trail's tail already fades into the background by alpha.
 var DefaultPalette = []uint32{
 	0x8fb8deff, 0x7fd6c2ff, 0xb5e48cff, 0xf3e17aff, 0xf6ae4eff, 0xee6c4dff, 0xd83f87ff,
+}
+
+// LightPalette is DefaultPalette's hues for a light map: slate blue, teal,
+// green, ochre, orange, red and a deep magenta, each at least 3.3:1 against
+// the fresh theme's surface and faint backgrounds. It has no pale yellow,
+// because no yellow reaches that against white, and its fast end is the
+// darkest, so on paper more wind is more ink.
+var LightPalette = []uint32{
+	0x4f86b5ff, 0x22897eff, 0x5b8a1fff, 0x9a7a00ff, 0xc25a12ff, 0xb8323aff, 0x8e1b6bff,
 }
 
 // Stats is what the layer did last frame.
@@ -863,7 +872,7 @@ func (inst *Layer) fetch(ctx context.Context, gen uint64, geom geometry, steps [
 	for _, step := range steps {
 		req := geom.req
 		req.Step = step
-		win, err := inst.src.SampleE(ctx, req)
+		win, err := inst.src.Sample(ctx, req)
 		reply := fetchReply{gen: gen, geom: geom, step: step, err: err}
 		if err == nil {
 			reply.data = stepData{win: win, grid: newFieldGrid(&win, proj)}
@@ -881,7 +890,7 @@ func (inst *Layer) fetch(ctx context.Context, gen uint64, geom geometry, steps [
 
 // prefetcherI is a source that can load a step ahead of its first request.
 type prefetcherI interface {
-	PrefetchE(ctx context.Context, step int) (err error)
+	Prefetch(ctx context.Context, step int) (err error)
 }
 
 // prefetch loads the step after the bracket in the direction the display
@@ -909,5 +918,5 @@ func (inst *Layer) prefetch(a, b int) {
 		clear(inst.prefetched)
 	}
 	inst.prefetched[next] = true
-	go func() { _ = pre.PrefetchE(context.Background(), next) }()
+	go func() { _ = pre.Prefetch(context.Background(), next) }()
 }

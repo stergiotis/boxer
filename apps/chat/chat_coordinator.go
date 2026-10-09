@@ -74,7 +74,8 @@ func clampRounds(n int) int {
 // lastRoundNote is the host's word to the model on the last round.
 const lastRoundNote = "You have used every round of tool calls this turn allows. Answer the person now with what you found, and say what is still open; no tool can be called."
 
-// callWait bounds how long a tool call waits for its call to settle.
+// callWait bounds how long a tool call waits for its call to settle while
+// the call does not wait on the person.
 const callWait = 10 * time.Second
 
 // coordinatorPrompt is the system message of a conversation with Apps on.
@@ -136,11 +137,16 @@ type coordinator struct {
 	// state (chat_turnstate.go).
 	stage   stageE
 	waiting int
-	// trail is the running turn's steps (chat_trail.go), for the window.
-	trail *turnTrail
+	// steps are the running turn's steps (chat_steps.go), for the window —
+	// the waiting bubble's account, not the host's audit trail.
+	steps *turnSteps
 	// rounds is the person's limit on a turn's rounds, read when a turn
 	// starts; zero is defaultRounds. Guarded by mu.
 	rounds int
+	// answered are the running turn's answered model calls, kept as they
+	// answer so a turn that fails or is stopped later still counts them.
+	// Guarded by mu.
+	answered []callStat
 	// pix is the Pixels setting and what it holds: consents, a view waiting
 	// on the person, the turn's shown screenshots (ADR-0287). Guarded by mu.
 	pix pixelState
@@ -156,8 +162,9 @@ type coordinator struct {
 	tasks    []string
 	tainted  bool
 	confined bool
-	// refused holds the calls refused since the last call that was not, by
-	// tool and arguments; refusal is the current call's, set while it runs.
+	// refused holds the calls refused in this turn since the last call that
+	// was not, by tool and arguments; refusal is the current call's, set
+	// while it runs.
 	refused map[string]string
 	refusal string
 	// typed names the operation tools of the latest model call; opCache
@@ -167,7 +174,7 @@ type coordinator struct {
 }
 
 func newCoordinator(cli *agent.Client, kq *keelsonquery.Client, conversation string) (inst *coordinator) {
-	return &coordinator{cli: cli, kq: kq, conversation: conversation, opTools: OperationToolsSeed.Get(), ask: &asker{}, trail: &turnTrail{},
+	return &coordinator{cli: cli, kq: kq, conversation: conversation, opTools: OperationToolsSeed.Get(), ask: &asker{}, steps: &turnSteps{},
 		ceiling: defaultPermissions().ceiling(true),
 		refused: make(map[string]string), typed: make(map[string]typedOp), opCache: make(map[string][]agent.Operation)}
 }
@@ -186,6 +193,20 @@ func (inst *coordinator) setRounds(n int) {
 	inst.mu.Lock()
 	inst.rounds = n
 	inst.mu.Unlock()
+}
+
+// noteAnswered keeps an answered model call of the running turn.
+func (inst *coordinator) noteAnswered(cs callStat) {
+	inst.mu.Lock()
+	inst.answered = append(inst.answered, cs)
+	inst.mu.Unlock()
+}
+
+// answeredCalls are the running, or last, turn's answered model calls.
+func (inst *coordinator) answeredCalls() (calls []callStat) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	return slices.Clone(inst.answered)
 }
 
 // roundLimit is the rounds a turn starting now may take.
@@ -243,19 +264,19 @@ func (inst *coordinator) setStage(s stageE) {
 }
 
 // awaitPerson marks a call as waiting on the person until done is called.
-// The running call's step in the trail says so while it waits.
+// The running call's step says so while it waits.
 func (inst *coordinator) awaitPerson() (done func()) {
 	inst.mu.Lock()
 	inst.waiting++
 	if inst.waiting == 1 {
-		inst.trail.personWait(true)
+		inst.steps.personWait(true)
 	}
 	inst.mu.Unlock()
 	return func() {
 		inst.mu.Lock()
 		inst.waiting--
 		if inst.waiting == 0 {
-			inst.trail.personWait(false)
+			inst.steps.personWait(false)
 		}
 		inst.mu.Unlock()
 	}
@@ -525,6 +546,58 @@ func (inst *coordinator) exec(ctx context.Context, o toolOrigin, call openaichat
 	return
 }
 
+// waitsOnPerson reports whether a call waits on the person: a widening to
+// decide, or a proposal to accept.
+func waitsOnPerson(out agent.Outcome) bool {
+	return out.Held || out.Phase == "proposed"
+}
+
+// settle polls the call key until it is final. While the call waits on the
+// person it waits as long as the turn runs, as ask_user does: the host
+// expires an undecided widening, and the person can stop the turn.
+// Otherwise it waits at most callWait, counted from when the person last
+// decided. A call still waiting on the person when the wait ends — the turn
+// stopped, the host did not answer — is withdrawn, so nobody can approve
+// later a call whose outcome no turn reads.
+func (inst *coordinator) settle(ctx context.Context, h string, key string, out agent.Outcome) (last agent.Outcome, err error) {
+	last = out
+	deadline := time.Now().Add(callWait)
+	personDone := func() {}
+	waiting := false
+	defer func() {
+		personDone()
+		if waitsOnPerson(last) {
+			wctx, cancel := context.WithTimeout(context.Background(), agent.DefaultTimeout)
+			defer cancel()
+			_, _ = inst.cli.Cancel(wctx, h, key)
+			if err == nil {
+				err = ctx.Err()
+			}
+		}
+	}()
+	for !last.Final() && ctx.Err() == nil {
+		switch on := waitsOnPerson(last); {
+		case on && !waiting:
+			personDone, waiting = inst.awaitPerson(), true
+		case !on && waiting:
+			personDone()
+			personDone, waiting = func() {}, false
+			deadline = time.Now().Add(callWait)
+		}
+		if !waiting && !time.Now().Before(deadline) {
+			break
+		}
+		next, serr := inst.cli.Status(ctx, h, key, agent.MaxStatusWait)
+		if serr != nil {
+			// last stays what the host said, for the withdrawal.
+			err = serr
+			return
+		}
+		last = next
+	}
+	return
+}
+
 // dropGrant forgets a task that ended; it reports whether there was one.
 func (inst *coordinator) dropGrant() (dropped bool) {
 	inst.mu.Lock()
@@ -533,6 +606,15 @@ func (inst *coordinator) dropGrant() (dropped bool) {
 	inst.grant = agent.Grant{}
 	clear(inst.typed)
 	return
+}
+
+// forgetRefusals clears the refused calls at a turn's start: the person's
+// message is a change, and a request that expired while they were away
+// must reach their dialog again when they ask for it.
+func (inst *coordinator) forgetRefusals() {
+	inst.mu.Lock()
+	clear(inst.refused)
+	inst.mu.Unlock()
 }
 
 // refuse marks the running call as refused.
@@ -851,20 +933,8 @@ func (inst *coordinator) call(ctx context.Context, o toolOrigin, toolCall string
 	if err != nil {
 		return "error: " + err.Error(), where + ": " + err.Error()
 	}
-	deadline := time.Now().Add(callWait)
-	personDone := func() {}
-	defer func() { personDone() }()
-	for !out.Final() && time.Now().Before(deadline) && ctx.Err() == nil {
-		if out.Held || out.Phase == "proposed" {
-			// The call waits on the person: a widening to decide, or a
-			// proposal to accept.
-			personDone()
-			personDone = inst.awaitPerson()
-		}
-		out, err = inst.cli.Status(ctx, h, key, agent.MaxStatusWait)
-		if err != nil {
-			return "error: " + err.Error(), where + ": " + err.Error()
-		}
+	if out, err = inst.settle(ctx, h, key, out); err != nil {
+		return "error: " + err.Error(), where + ": " + err.Error()
 	}
 	co := callOutcome{Phase: out.Phase, Reason: out.Reason, Revisions: out.Revisions, Next: inst.nextFor(instance, op, out.Remedy)}
 	switch out.Phase {
@@ -923,8 +993,8 @@ type turnResult struct {
 	omitTo   int
 	final    llm.Response
 	activity []string
-	// steps is the turn's trail, every model and tool call in order.
-	steps   []trailStep
+	// steps are the turn's steps, every model and tool call in order.
+	steps   []turnStep
 	stopped string
 	// stoppedErr is the model call's error behind stopped, nil when the
 	// rounds ran out.
@@ -959,10 +1029,13 @@ func runTurn(ctx context.Context, cli *llm.Client, coord *coordinator, req llm.R
 		msgs = append(msgs[:len(msgs)-1], openaichat.Message{Role: openaichat.ChatRoleSystem, Content: note}, last)
 	}
 	out = &turnResult{}
-	coord.trail.reset()
+	coord.steps.reset()
+	coord.mu.Lock()
+	coord.answered = nil
+	coord.mu.Unlock()
 	coord.beginPixelTurn()
 	defer func() {
-		out.steps, _, _ = coord.trail.snapshot(0)
+		out.steps, _, _ = coord.steps.snapshot(0)
 	}()
 	parent := req.ParentCallId
 	limit := coord.roundLimit()
@@ -989,11 +1062,11 @@ func runTurn(ctx context.Context, cli *llm.Client, coord *coordinator, req llm.R
 			out.omitTo = len(msgs) + 1
 		}
 		coord.setStage(stageModel)
-		step := coord.trail.begin(trailStep{kind: stepModel, round: round})
+		step := coord.steps.begin(turnStep{kind: stepModel, round: round})
 		var res llm.Response
 		res, err = cli.Complete(ctx, r)
-		coord.trail.finish(step, func(s *trailStep) {
-			s.content, s.reasoning = clip(res.Content, trailContentMax), clipTail(res.Reasoning, trailReasoningMax)
+		coord.steps.finish(step, func(s *turnStep) {
+			s.content, s.reasoning = clip(res.Content, stepContentMax), clipTail(res.Reasoning, stepReasoningMax)
 			s.tools, s.inTokens, s.outTokens, s.failed = len(res.ToolCalls), res.InputTokens, res.OutputTokens, err != nil
 		})
 		if err != nil {
@@ -1004,7 +1077,9 @@ func runTurn(ctx context.Context, cli *llm.Client, coord *coordinator, req llm.R
 		}
 		parent = res.CallId
 		out.final = res
-		out.calls = append(out.calls, callStatOf(round, res))
+		cs := callStatOf(round, res)
+		out.calls = append(out.calls, cs)
+		coord.noteAnswered(cs)
 		msgs = append(msgs, openaichat.Message{Role: openaichat.ChatRoleAssistant, Content: res.Content, ToolCalls: res.ToolCalls})
 		if len(res.ToolCalls) == 0 {
 			break
@@ -1020,10 +1095,10 @@ func runTurn(ctx context.Context, cli *llm.Client, coord *coordinator, req llm.R
 				progress(round, coord.peekTitle(tc))
 			}
 			coord.setStage(stageTool)
-			step := coord.trail.begin(trailStep{kind: stepTool, round: round, name: tc.Name, title: coord.peekTitle(tc), args: indentArgs(tc.Arguments)})
+			step := coord.steps.begin(turnStep{kind: stepTool, round: round, name: tc.Name, title: coord.peekTitle(tc), args: indentArgs(tc.Arguments)})
 			content, activity := coord.exec(ctx, toolOrigin{turn: req.Turn, modelCall: res.CallId, index: i}, tc)
-			coord.trail.finish(step, func(s *trailStep) {
-				s.result, s.activity, s.refused = clip(content, trailResultMax), activity, strings.HasPrefix(content, "error:")
+			coord.steps.finish(step, func(s *turnStep) {
+				s.result, s.activity, s.refused = clip(content, stepResultMax), activity, strings.HasPrefix(content, "error:")
 			})
 			out.activity = append(out.activity, activity)
 			msgs = append(msgs, openaichat.Message{Role: openaichat.ChatRoleTool, ToolCallId: tc.Id, Content: content})

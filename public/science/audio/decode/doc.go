@@ -14,7 +14,7 @@
 // which decoder gets the file, not whether the file is valid, and ffmpeg's
 // own probe is a better judge of the long tail of containers than a magic
 // table maintained here would be. Fewer than twelve bytes is
-// [KindUnknown] — too little to tell — and [OpenE] hands those to ffmpeg
+// [KindUnknown] — too little to tell — and [Open] hands those to ffmpeg
 // too, so the error a reader sees names the format, not the sniff.
 //
 // # The declared length is the length
@@ -50,7 +50,7 @@
 //
 // # Identity
 //
-// [IdentityE] fingerprints a file for the peaks cache: its size, its
+// [Identity] fingerprints a file for the peaks cache: its size, its
 // modification time, and a blake3 over those two plus its first and last
 // 1 MiB — at most 2 MiB of reads however long the recording. It is a
 // fingerprint, not a checksum. A file re-encoded to the same length, or

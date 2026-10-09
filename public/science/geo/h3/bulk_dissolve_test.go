@@ -23,12 +23,12 @@ func TestDissolve_Golden(t *testing.T) {
 
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
 	for _, r := range recs {
-		lats, lngs, ringOffsets, polygonOffsets, err := h.DissolveE(ctx, r.Cells)
+		lats, lngs, ringOffsets, polygonOffsets, err := h.Dissolve(ctx, r.Cells)
 		require.NoError(t, err, "name=%s", r.Name)
 		require.Equal(t, r.RingOffsets, ringOffsets, "name=%s", r.Name)
 		require.Equal(t, r.PolygonOffsets, polygonOffsets, "name=%s", r.Name)
@@ -45,10 +45,10 @@ func TestDissolve_Golden(t *testing.T) {
 // distortion vertices) hexagon near San Francisco and its six neighbours.
 func dissolveFixture(t *testing.T, ctx context.Context, h *Handle) (centre uint64, neighbours []uint64) {
 	t.Helper()
-	centre, status, err := h.LatLngToCellE(ctx, ResolutionR8, 37.7749, -122.4194)
+	centre, status, err := h.LatLngToCell(ctx, ResolutionR8, 37.7749, -122.4194)
 	require.NoError(t, err)
 	require.Equal(t, StatusOk, status)
-	disk, status, err := h.GridDiskE(ctx, 1, centre)
+	disk, status, err := h.GridDisk(ctx, 1, centre)
 	require.NoError(t, err)
 	require.Equal(t, StatusOk, status)
 	require.Len(t, disk, 7)
@@ -76,7 +76,7 @@ func requireDissolveShape(t *testing.T, ctx context.Context, h *Handle, cells []
 	requireCSRInvariants(t, polygonOffsets, wantPolygons, wantRings)
 	requireCSRInvariants(t, ringOffsets, wantRings, wantVertices)
 
-	bLats, bLngs, _, status, err := h.CellsToBoundariesE(ctx, cells, nil, nil, nil, nil)
+	bLats, bLngs, _, status, err := h.CellsToBoundaries(ctx, cells, nil, nil, nil, nil)
 	require.NoError(t, err)
 	require.False(t, AnyFailure(status))
 	for i := range lats {
@@ -113,13 +113,13 @@ func shoelace(lats, lngs []float64) (sum float64) {
 func TestDissolve_SingleCell(t *testing.T) {
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
 	centre, _ := dissolveFixture(t, ctx, h)
 	cells := []uint64{centre}
-	lats, lngs, ringOffsets, polygonOffsets, err := h.DissolveE(ctx, cells)
+	lats, lngs, ringOffsets, polygonOffsets, err := h.Dissolve(ctx, cells)
 	require.NoError(t, err)
 	requireDissolveShape(t, ctx, h, cells, lats, lngs, ringOffsets, polygonOffsets, 1, 1, 6)
 	require.Greater(t, shoelace(lats, lngs), 0.0, "exterior must wind counter-clockwise")
@@ -128,13 +128,13 @@ func TestDissolve_SingleCell(t *testing.T) {
 func TestDissolve_Disk(t *testing.T) {
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
 	centre, neighbours := dissolveFixture(t, ctx, h)
 	cells := append([]uint64{centre}, neighbours...)
-	lats, lngs, ringOffsets, polygonOffsets, err := h.DissolveE(ctx, cells)
+	lats, lngs, ringOffsets, polygonOffsets, err := h.Dissolve(ctx, cells)
 	require.NoError(t, err)
 	// Seven hexagons: every centre vertex is interior; each outer hexagon
 	// keeps three vertices of its own on the outline.
@@ -145,12 +145,12 @@ func TestDissolve_Disk(t *testing.T) {
 func TestDissolve_RingWithHole(t *testing.T) {
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
 	_, neighbours := dissolveFixture(t, ctx, h)
-	lats, lngs, ringOffsets, polygonOffsets, err := h.DissolveE(ctx, neighbours)
+	lats, lngs, ringOffsets, polygonOffsets, err := h.Dissolve(ctx, neighbours)
 	require.NoError(t, err)
 	// One polygon: the 18-vertex outline plus the 6-vertex hole left by
 	// the missing centre.
@@ -166,16 +166,16 @@ func TestDissolve_RingWithHole(t *testing.T) {
 func TestDissolve_TwoDisjointCells(t *testing.T) {
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
 	centre, _ := dissolveFixture(t, ctx, h)
-	far, status, err := h.LatLngToCellE(ctx, ResolutionR8, 48.8566, 2.3522)
+	far, status, err := h.LatLngToCell(ctx, ResolutionR8, 48.8566, 2.3522)
 	require.NoError(t, err)
 	require.Equal(t, StatusOk, status)
 	cells := []uint64{centre, far}
-	lats, lngs, ringOffsets, polygonOffsets, err := h.DissolveE(ctx, cells)
+	lats, lngs, ringOffsets, polygonOffsets, err := h.Dissolve(ctx, cells)
 	require.NoError(t, err)
 	requireDissolveShape(t, ctx, h, cells, lats, lngs, ringOffsets, polygonOffsets, 2, 2, 12)
 	for p := range 2 {
@@ -186,11 +186,11 @@ func TestDissolve_TwoDisjointCells(t *testing.T) {
 func TestDissolve_Empty(t *testing.T) {
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
-	lats, lngs, ringOffsets, polygonOffsets, err := h.DissolveE(ctx, nil)
+	lats, lngs, ringOffsets, polygonOffsets, err := h.Dissolve(ctx, nil)
 	require.NoError(t, err)
 	require.Empty(t, lats)
 	require.Empty(t, lngs)
@@ -201,39 +201,39 @@ func TestDissolve_Empty(t *testing.T) {
 func TestDissolve_InvalidCell(t *testing.T) {
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
 	centre, _ := dissolveFixture(t, ctx, h)
-	_, _, _, _, err = h.DissolveE(ctx, []uint64{centre, 0xdeadbeef_cafebabe})
+	_, _, _, _, err = h.Dissolve(ctx, []uint64{centre, 0xdeadbeef_cafebabe})
 	require.ErrorIs(t, err, ErrDissolveInvalidCell)
 }
 
 func TestDissolve_MixedResolutionRejected(t *testing.T) {
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
 	centre, _ := dissolveFixture(t, ctx, h)
-	coarse, status, err := h.LatLngToCellE(ctx, ResolutionR7, 48.8566, 2.3522)
+	coarse, status, err := h.LatLngToCell(ctx, ResolutionR7, 48.8566, 2.3522)
 	require.NoError(t, err)
 	require.Equal(t, StatusOk, status)
-	_, _, _, _, err = h.DissolveE(ctx, []uint64{centre, coarse})
+	_, _, _, _, err = h.Dissolve(ctx, []uint64{centre, coarse})
 	require.ErrorIs(t, err, ErrDissolveMixedResolution)
 }
 
 func TestDissolve_DuplicateRejected(t *testing.T) {
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
 	centre, _ := dissolveFixture(t, ctx, h)
-	_, _, _, _, err = h.DissolveE(ctx, []uint64{centre, centre})
+	_, _, _, _, err = h.Dissolve(ctx, []uint64{centre, centre})
 	require.ErrorIs(t, err, ErrDissolveDuplicateInput)
 }
 
@@ -245,7 +245,7 @@ func TestDissolve_GrowProtocol(t *testing.T) {
 	// a coarse lat/lng grid finds one.
 	rt := newTestRuntime(t, 1)
 	ctx := context.Background()
-	h, err := rt.AcquireE(ctx)
+	h, err := rt.Acquire(ctx)
 	require.NoError(t, err)
 	defer h.Release()
 
@@ -256,9 +256,9 @@ func TestDissolve_GrowProtocol(t *testing.T) {
 			lngs = append(lngs, lng)
 		}
 	}
-	cells, _, err := h.LatLngsToCellsE(ctx, ResolutionR1, lats, lngs, nil, nil)
+	cells, _, err := h.LatLngsToCells(ctx, ResolutionR1, lats, lngs, nil, nil)
 	require.NoError(t, err)
-	_, _, offsets, _, err := h.CellsToBoundariesE(ctx, cells, nil, nil, nil, nil)
+	_, _, offsets, _, err := h.CellsToBoundaries(ctx, cells, nil, nil, nil, nil)
 	require.NoError(t, err)
 	var distorted uint64
 	var wantVertices int
@@ -271,7 +271,7 @@ func TestDissolve_GrowProtocol(t *testing.T) {
 	}
 	require.NotZero(t, distorted, "no res-1 cell with a distortion vertex found")
 
-	outLats, outLngs, ringOffsets, polygonOffsets, err := h.DissolveE(ctx, []uint64{distorted})
+	outLats, outLngs, ringOffsets, polygonOffsets, err := h.Dissolve(ctx, []uint64{distorted})
 	require.NoError(t, err)
 	requireDissolveShape(t, ctx, h, []uint64{distorted}, outLats, outLngs, ringOffsets, polygonOffsets, 1, 1, wantVertices)
 }

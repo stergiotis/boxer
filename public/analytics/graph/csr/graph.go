@@ -43,12 +43,12 @@ type Graph struct {
 	fingerprint uint64
 }
 
-// BuildE reads an edge list into a [Graph]. src and dst are parallel; w is
+// Build reads an edge list into a [Graph]. src and dst are parallel; w is
 // either nil (unweighted) or parallel to them. Ids need no particular range
 // or order. A parallel edge collapses into the arc it duplicates and its
 // weight is added to the survivor's. A self-loop is kept as an arc of its
 // vertex and counted in [Graph.SelfLoops].
-func BuildE(src, dst []uint64, w []float32, opts Options) (g *Graph, err error) {
+func Build(src, dst []uint64, w []float32, opts Options) (g *Graph, err error) {
 	if len(src) != len(dst) {
 		err = eb.Build().Int("src", len(src)).Int("dst", len(dst)).Errorf("source and target columns differ in length")
 		return

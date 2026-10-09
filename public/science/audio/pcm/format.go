@@ -19,9 +19,9 @@ func (inst Format) IsValid() (valid bool) {
 	return inst.SampleRate > 0 && inst.Channels > 0
 }
 
-// ValidateE returns an error carrying the offending fields when the format
+// Validate returns an error carrying the offending fields when the format
 // is not valid.
-func (inst Format) ValidateE() (err error) {
+func (inst Format) Validate() (err error) {
 	if inst.IsValid() {
 		return nil
 	}

@@ -1,6 +1,7 @@
 package capmap
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -8,7 +9,7 @@ import (
 	"sort"
 	"text/tabwriter"
 
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/gov/capmapcorpus"
 	"github.com/stergiotis/boxer/public/gov/capmapsimilarity"
@@ -44,26 +45,26 @@ func similarCommand() *cli.Command {
 	}
 }
 
-func actionSimilar(c *cli.Context) (err error) {
+func actionSimilar(ctx context.Context, cmd *cli.Command) (err error) {
 	var (
 		corpus capmapcorpus.Corpus
 		dir    string
 	)
-	if corpus, dir, err = readVault(c); err != nil {
+	if corpus, dir, err = readVault(ctx, cmd); err != nil {
 		return err
 	}
 	var res capmapsimilarity.Result
 	if res, err = capmapsimilarity.Rank(corpus, capmapsimilarity.Options{
-		Threshold: c.Float64("threshold"),
-		Top:       c.Int("top"),
-		Cross:     c.Bool("cross"),
-		Workers:   c.Int("workers"),
+		Threshold: cmd.Float64("threshold"),
+		Top:       cmd.Int("top"),
+		Cross:     cmd.Bool("cross"),
+		Workers:   cmd.Int("workers"),
 	}); err != nil {
 		return err
 	}
 
 	written, unchanged := 0, 0
-	if !c.Bool("dry-run") {
+	if !cmd.Bool("dry-run") {
 		if written, unchanged, err = writeSimilar(dir, corpus, res); err != nil {
 			return err
 		}
@@ -76,7 +77,7 @@ func actionSimilar(c *cli.Context) (err error) {
 	fmt.Fprintf(out, "  without prose\t%d\n", res.Unwritten)
 	fmt.Fprintf(out, "pairs measured\t%d\n", res.Compared)
 	fmt.Fprintf(out, "  under threshold %.2f\t%d\n", res.Threshold, res.Kept)
-	if c.Bool("dry-run") {
+	if cmd.Bool("dry-run") {
 		fmt.Fprintf(out, "notes written\t0 (dry run)\n")
 	} else {
 		fmt.Fprintf(out, "notes written\t%d\n", written)
@@ -85,7 +86,7 @@ func actionSimilar(c *cli.Context) (err error) {
 	_ = out.Flush()
 	reportNearest(res)
 
-	if path := c.String("out"); path != "" {
+	if path := cmd.String("out"); path != "" {
 		var data []byte
 		if data, err = json.MarshalIndent(res, "", "  "); err != nil {
 			return eh.Errorf("unable to encode the report: %w", err)

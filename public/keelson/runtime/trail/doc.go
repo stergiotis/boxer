@@ -1,7 +1,9 @@
 // Package trail is the host's audit trail on `boxer.facts` (ADR-0277): model
 // calls and their messages, agent actions, grant decisions and egress
 // fetches, each a row composed from shared context components and one
-// domain component.
+// domain component — and, for a consumer's own records of processing, the
+// generic [AuditEvent] (ADR-0296), whose vocabulary is values rather than
+// memberships.
 //
 // The context components carry the identifiers a join needs, one membership
 // per identifier whoever writes it: [Origin] (run, app, window — stamped by
@@ -10,9 +12,11 @@
 // [Cause] (the model call that asked for a tool call — stated by the
 // coordinator).
 //
-// [Recorder] is the one place rows are built: it stamps the origin, composes
+// [Recorder] is the one place rows are built: it stamps the run, composes
 // natural keys, and owns the buffer and its flushes. Services hold the
 // recorder and call its verbs; none of them touches the store.
+// [Recorder.Event] is the one verb that takes a context: the call identity
+// on it (ADR-0295) supplies the row's origin, principal and purpose.
 //
 // The store is generated from the DTOs over the runtime vocabulary by
 // gen_test.go, the lane doc/explanation/facts-bound-record-stores.md

@@ -1,13 +1,14 @@
 package codelint
 
 import (
+	"context"
 	"os"
 	"strings"
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"golang.org/x/tools/go/packages"
 )
 
@@ -37,25 +38,25 @@ func NewCliCommand() *cli.Command {
 	}
 }
 
-func codelintAction(ctx *cli.Context) (err error) {
+func codelintAction(ctx context.Context, cmd *cli.Command) (err error) {
 	var format FormatE
-	format, err = ParseFormatE(ctx.String("format"))
+	format, err = ParseFormat(cmd.String("format"))
 	if err != nil {
 		return
 	}
 	var minSev FindingSeverityE
-	minSev, err = ParseSeverityE(ctx.String("min-severity"))
+	minSev, err = ParseSeverity(cmd.String("min-severity"))
 	if err != nil {
 		return
 	}
 
-	patterns := ctx.Args().Slice()
+	patterns := cmd.Args().Slice()
 	if len(patterns) == 0 {
 		patterns = []string{"./public/..."}
 	}
 
 	var tags []string
-	if t := ctx.String("tags"); t != "" {
+	if t := cmd.String("tags"); t != "" {
 		for x := range strings.SplitSeq(t, ",") {
 			x = strings.TrimSpace(x)
 			if x != "" {
@@ -65,7 +66,7 @@ func codelintAction(ctx *cli.Context) (err error) {
 	}
 
 	var pkgs []*packages.Package
-	pkgs, err = LoadPackagesE(LoadConfig{Ctx: ctx.Context, BuildTags: tags}, patterns...)
+	pkgs, err = LoadPackages(LoadConfig{Ctx: ctx, BuildTags: tags}, patterns...)
 	if err != nil {
 		return
 	}
@@ -73,7 +74,7 @@ func codelintAction(ctx *cli.Context) (err error) {
 	linter := NewDefaultLinter()
 
 	var rep ReporterI
-	rep, err = NewReporterE(format, os.Stdout)
+	rep, err = NewReporter(format, os.Stdout)
 	if err != nil {
 		return
 	}
@@ -98,7 +99,7 @@ func codelintAction(ctx *cli.Context) (err error) {
 		}
 	}
 
-	err = rep.FinishE()
+	err = rep.Finish()
 	if err != nil {
 		return
 	}
@@ -118,7 +119,7 @@ func codelintAction(ctx *cli.Context) (err error) {
 	return
 }
 
-func ParseFormatE(s string) (f FormatE, err error) {
+func ParseFormat(s string) (f FormatE, err error) {
 	switch strings.ToLower(s) {
 	case "human", "":
 		f = FormatHuman
@@ -130,7 +131,7 @@ func ParseFormatE(s string) (f FormatE, err error) {
 	return
 }
 
-func ParseSeverityE(s string) (sev FindingSeverityE, err error) {
+func ParseSeverity(s string) (sev FindingSeverityE, err error) {
 	switch strings.ToLower(s) {
 	case "info":
 		sev = FindingSeverityInfo

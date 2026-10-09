@@ -97,9 +97,9 @@ var (
 
 	// Runtime-run identity (kind + per-run fields). MembKindRuntimeRun
 	// tags a row that records one process boot — the runtime-started
-	// event. MembRuntimeRun is the mixed-low-card-ref + high-card-param
-	// membership carrying the run_id bytes; app-lifecycle rows tag
-	// themselves with this so a JOIN-by-run_id is a single column scan.
+	// event. MembRuntimeRun is the low-card-ref membership whose symbol
+	// value is the run_id; app-lifecycle and captured query-run rows tag
+	// themselves with it, so every run-id reader matches one shape.
 	MembKindRuntimeRun  = NkRegistry.MustBegin("runtimeKindRuntimeRun", 19).End()
 	MembRuntimeRun      = NkRegistry.MustBegin("runtimeRun", 20).End()
 	MembRunHostname     = NkRegistry.MustBegin("runtimeRunHostname", 21).End()
@@ -516,6 +516,27 @@ var (
 	// §SD5). Retired before they were ever pushed; never reuse them.
 	MembAdhocDatasetColumnDistinct = NkRegistry.MustBegin("adhocDatasetColumnDistinct", 286).End()
 	MembAgentActionConsent         = NkRegistry.MustBegin("agentActionConsent", 288).End()
+	// The request a grant event answers, so what was asked joins what was
+	// decided (ADR-0277 §SD2).
+	MembAgentGrantRequest = NkRegistry.MustBegin("agentGrantRequest", 289).End()
+	// The audit event (ADR-0296 §SD1): a consumer's own vocabulary as
+	// values on one generic component — domain and action, outcome, the
+	// principal and who vouched for it, the subject, a retention class,
+	// typed references and bounded attributes as parallel lists.
+	MembKindAuditEvent        = NkRegistry.MustBegin("runtimeKindAuditEvent", 290).End()
+	MembAuditEventDomain      = NkRegistry.MustBegin("auditEventDomain", 291).End()
+	MembAuditEventAction      = NkRegistry.MustBegin("auditEventAction", 292).End()
+	MembAuditEventOutcome     = NkRegistry.MustBegin("auditEventOutcome", 293).End()
+	MembAuditEventPrincipal   = NkRegistry.MustBegin("auditEventPrincipal", 294).End()
+	MembAuditEventPrincipalBy = NkRegistry.MustBegin("auditEventPrincipalBy", 295).End()
+	MembAuditEventPurpose     = NkRegistry.MustBegin("auditEventPurpose", 296).End()
+	MembAuditEventNode        = NkRegistry.MustBegin("auditEventNode", 297).End()
+	MembAuditEventSubject     = NkRegistry.MustBegin("auditEventSubject", 298).End()
+	MembAuditEventRetention   = NkRegistry.MustBegin("auditEventRetention", 299).End()
+	MembAuditEventRefTypes    = NkRegistry.MustBegin("auditEventRefTypes", 300).End()
+	MembAuditEventRefValues   = NkRegistry.MustBegin("auditEventRefValues", 301).End()
+	MembAuditEventAttrKeys    = NkRegistry.MustBegin("auditEventAttrKeys", 302).End()
+	MembAuditEventAttrValues  = NkRegistry.MustBegin("auditEventAttrValues", 303).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -583,5 +604,9 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembAdhocDatasetInFlight, MembAdhocDatasetDocument, MembAdhocDatasetSourceSql, MembAdhocDatasetInputHandles,
 	MembAdhocDatasetInputAliases, MembAdhocDatasetInputDigests, MembAdhocDatasetColumnDatasets,
 	MembAdhocDatasetColumnNames, MembAdhocDatasetColumnTypes, MembAdhocDatasetColumnNulls,
-	MembAdhocDatasetColumnDistinct, MembAgentActionConsent,
+	MembAdhocDatasetColumnDistinct, MembAgentActionConsent, MembAgentGrantRequest,
+	MembKindAuditEvent, MembAuditEventDomain, MembAuditEventAction, MembAuditEventOutcome,
+	MembAuditEventPrincipal, MembAuditEventPrincipalBy, MembAuditEventPurpose, MembAuditEventNode,
+	MembAuditEventSubject, MembAuditEventRetention, MembAuditEventRefTypes, MembAuditEventRefValues,
+	MembAuditEventAttrKeys, MembAuditEventAttrValues,
 }

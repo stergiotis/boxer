@@ -9,7 +9,10 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/stergiotis/boxer/public/db/clickhouse/logcomment"
+	"github.com/stergiotis/boxer/public/identity/callident"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
+	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -112,4 +115,84 @@ func TestExec_RejectsMultiStatement_LiveServer(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "Multi-statements are not allowed",
 		"the HTTP interface rejects the multi-statement DDL script a generated EnsureTable emits")
+}
+
+// TestStamp_ReachesQueryLog_LiveServer is the ADR-0295 §SD3 acceptance: a
+// QueryArrow and an InsertArrow issued with a call identity on the context
+// appear in system.query_log carrying it as log_comment, and under the batch
+// id the observing executor reported. A statement's own SETTINGS log_comment
+// wins over the stamp, which is what the queryrunsd self-capture exclusion
+// relies on.
+func TestStamp_ReachesQueryLog_LiveServer(t *testing.T) {
+	exec, alloc := liveExecutor(t)
+	const table = "default.storeexec_stamp_test"
+	bare := context.Background()
+	require.NoError(t, exec.Exec(bare, "DROP TABLE IF EXISTS "+table))
+	require.NoError(t, exec.Exec(bare, "CREATE TABLE "+table+" (k UInt64) ENGINE = MergeTree() ORDER BY k"))
+	t.Cleanup(func() { _ = exec.Exec(context.Background(), "DROP TABLE IF EXISTS "+table) })
+
+	corr := "stamp-it-" + string(recordstore.NewBatchId())
+	ci := callident.CallIdentity{
+		Origin: callident.Origin{Run: "run-it", App: "storeexec.it", Instance: 5},
+		Claims: callident.Claims{Principal: "p:it", Purpose: "acceptance", Correlation: corr},
+	}
+	ctx := callident.WithCallIdentity(bare, ci)
+	var events []recordstore.CallEvent
+	observed := recordstore.ObserveExecutor(exec, recordstore.ObserverFunc(func(ev recordstore.CallEvent) error {
+		events = append(events, ev)
+		return nil
+	}))
+
+	b := array.NewUint64Builder(memory.NewGoAllocator())
+	b.AppendValues([]uint64{1, 2}, nil)
+	col := b.NewArray()
+	rec := array.NewRecordBatch(arrow.NewSchema([]arrow.Field{{Name: "k", Type: arrow.PrimitiveTypes.Uint64}}, nil), []arrow.Array{col}, 2)
+	require.NoError(t, observed.InsertArrow(ctx, table, []arrow.RecordBatch{rec}))
+	rec.Release()
+	col.Release()
+	b.Release()
+	for batch, err := range observed.QueryArrow(ctx, "SELECT k FROM "+table+" ORDER BY k") {
+		require.NoError(t, err)
+		batch.Release()
+	}
+	ownTag := corr + "-own"
+	for batch, err := range exec.QueryArrow(ctx, "SELECT 1 SETTINGS log_comment='"+ownTag+"'") {
+		require.NoError(t, err)
+		batch.Release()
+	}
+	require.Len(t, events, 2)
+
+	require.NoError(t, exec.Exec(bare, "SYSTEM FLUSH LOGS"))
+	type row struct{ kind, comment string }
+	read := func(where string) (rows []row) {
+		sql := "SELECT query_kind, log_comment FROM system.query_log WHERE type = 'QueryFinish' AND event_date >= yesterday() AND " +
+			where + " ORDER BY event_time_microseconds SETTINGS output_format_arrow_string_as_string=1, output_format_arrow_low_cardinality_as_dictionary=0"
+		for batch, err := range exec.QueryArrow(bare, sql) {
+			require.NoError(t, err)
+			kinds := batch.Column(0).(*array.String)
+			comments := batch.Column(1).(*array.String)
+			for i := range int(batch.NumRows()) {
+				rows = append(rows, row{kinds.Value(i), comments.Value(i)})
+			}
+			batch.Release()
+		}
+		return
+	}
+
+	// A server with async_insert on logs an AsyncInsertFlush row beside the
+	// Insert, carrying the same stamp; the kinds under test are the two below.
+	rows := read("query_kind IN ('Insert', 'Select') AND log_comment LIKE '%" + corr + "\"%'")
+	require.Len(t, rows, 2, "the insert and the select, each stamped")
+	assert.Equal(t, "Insert", rows[0].kind)
+	assert.Equal(t, "Select", rows[1].kind)
+	for i, r := range rows {
+		st, ok := logcomment.Parse(r.comment)
+		require.True(t, ok, r.comment)
+		assert.Equal(t, logcomment.FromCallIdentity(ci, string(events[i].BatchId)), st,
+			"row %d carries the identity and the batch id its event reported", i)
+	}
+
+	own := read("log_comment = '" + ownTag + "'")
+	assert.Len(t, own, 1, "the statement's own SETTINGS log_comment wins over the stamp")
+	alloc.AssertSize(t, 0)
 }

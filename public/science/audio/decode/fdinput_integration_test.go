@@ -12,7 +12,7 @@ import (
 )
 
 // memfdInput is a recording held in anonymous memory, the shape a host that
-// must not put plaintext on disk stages into. Every OpenE re-opens the
+// must not put plaintext on disk stages into. Every Open re-opens the
 // descriptor through procfs, so each decoder process gets a file offset of
 // its own.
 type memfdInput struct {
@@ -35,7 +35,7 @@ func newMemfdInput(t *testing.T, path string) (in *memfdInput) {
 
 func (inst *memfdInput) Name() (s string) { return inst.name }
 
-func (inst *memfdInput) OpenE() (f *os.File, err error) {
+func (inst *memfdInput) Open() (f *os.File, err error) {
 	return os.Open(childFdPath(int(inst.f.Fd())))
 }
 
@@ -49,9 +49,9 @@ func TestFfmpegOverAnInheritedFdMatchesThePath(t *testing.T) {
 	set := newFixtureSet(t)
 
 	byPath := openFfmpegFixtureE(t, set.flac)
-	byFd, err := OpenFfmpegFdE(context.Background(), newMemfdInput(t, set.flac))
+	byFd, err := OpenFfmpegFd(context.Background(), newMemfdInput(t, set.flac))
 	require.NoError(t, err)
-	defer func() { require.NoError(t, byFd.CloseE()) }()
+	defer func() { require.NoError(t, byFd.Close()) }()
 
 	require.Equal(t, byPath.Format(), byFd.Format())
 	require.Equal(t, byPath.Frames(), byFd.Frames(), "ffprobe seeks an inherited fd as it seeks a path")
@@ -68,7 +68,7 @@ func TestFfmpegOverAnInheritedFdMatchesThePath(t *testing.T) {
 	channels := int64(byFd.Format().Channels)
 	const at, span int64 = 12000, 2048
 	buf := make([]float32, span*channels)
-	n, err := byFd.ReadFramesAtE(context.Background(), at, buf)
+	n, err := byFd.ReadFramesAt(context.Background(), at, buf)
 	require.NoError(t, err)
 	require.Equal(t, int(span), n)
 	require.Greater(t, byFd.Restarts(), restarts, "a backward read restarts the decoder")

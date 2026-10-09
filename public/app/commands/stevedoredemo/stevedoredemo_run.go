@@ -1,13 +1,14 @@
 package stevedoredemo
 
 import (
+	"context"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/rs/zerolog/log"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/streaming/stevedore"
@@ -30,34 +31,34 @@ func newRunCommand() *cli.Command {
 	}
 }
 
-func runRun(c *cli.Context) (err error) {
-	if c.NArg() == 0 {
+func runRun(cliCtx context.Context, cmd *cli.Command) (err error) {
+	if cmd.NArg() == 0 {
 		return eh.Errorf("name a directory to walk, or - for stdin lines")
 	}
-	dead, closeDead, err := openDeadLetters(c)
+	dead, closeDead, err := openDeadLetters(cliCtx, cmd)
 	if err != nil {
 		return
 	}
 	defer closeDead()
 
 	cfg := drive.Config{
-		Workers:    c.Int("workers"),
-		FlushEvery: c.Int("flush-every"),
-		Deadline:   c.Duration("deadline"),
-		MaxBody:    int(c.Int64("max-body")),
-		Skip:       c.Uint64("skip"),
+		Workers:    cmd.Int("workers"),
+		FlushEvery: cmd.Int("flush-every"),
+		Deadline:   cmd.Duration("deadline"),
+		MaxBody:    int(cmd.Int64("max-body")),
+		Skip:       cmd.Uint64("skip"),
 		Logger:     &log.Logger,
 	}
-	ctx, stop := signal.NotifyContext(c.Context, syscall.SIGINT, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(cliCtx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	handler := stevedore.HandlerFunc(splitLines)
 
-	for _, arg := range c.Args().Slice() {
+	for _, arg := range cmd.Args().Slice() {
 		var src drive.SourceI
 		if arg == "-" {
 			src = drive.Lines{R: os.Stdin, Origin: "stdin"}
 		} else {
-			src = drive.Tree{FS: os.DirFS(arg), Hint: "text", MaxBody: c.Int64("max-body")}
+			src = drive.Tree{FS: os.DirFS(arg), Hint: "text", MaxBody: cmd.Int64("max-body")}
 		}
 		res, rerr := drive.Run(ctx, cfg, src, handler, printSink{}, dead)
 		log.Info().Str("source", src.Name()).Uint64("requests", res.Requests).Uint64("items", res.Items).

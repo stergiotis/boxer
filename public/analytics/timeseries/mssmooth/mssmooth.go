@@ -90,7 +90,7 @@ func MinHalfWidth(degree int32) (halfWidth int32) {
 	return
 }
 
-func validateDegreeE(degree int32) (err error) {
+func validateDegree(degree int32) (err error) {
 	if degree < MinDegree || degree > MaxDegree || degree%2 != 0 {
 		err = eb.Build().Int32("degree", degree).Errorf("degree must be even and between 2 and 10")
 		return
@@ -111,14 +111,14 @@ type Kernel struct {
 	m      int32
 }
 
-// NewKernelE builds the MS kernel of the given degree (even, 2–10) and
+// NewKernel builds the MS kernel of the given degree (even, 2–10) and
 // half-width (≥ [MinHalfWidth]); the kernel spans 2·halfWidth+1 points.
 //
 // This is paper eq 7: a windowed sinc whose window (eq 4) brings the kernel
 // and its first derivative to exactly zero at the first point outside the
 // kernel, plus the Table 1 passband corrections for degree ≥ 6.
-func NewKernelE(degree int32, halfWidth int32) (inst *Kernel, err error) {
-	err = validateDegreeE(degree)
+func NewKernel(degree int32, halfWidth int32) (inst *Kernel, err error) {
+	err = validateDegree(degree)
 	if err != nil {
 		return
 	}
@@ -220,7 +220,7 @@ func (inst *Kernel) Coeffs() (coeffs []float64) {
 	return
 }
 
-// SmoothE convolves values with the kernel and returns a series of the same
+// Smooth convolves values with the kernel and returns a series of the same
 // length. Within m points of either end the data are first continued by a
 // weighted linear extrapolation (paper eq 17–18), so the output is defined up
 // to the boundaries; see the package documentation for what near-boundary
@@ -229,8 +229,8 @@ func (inst *Kernel) Coeffs() (coeffs []float64) {
 // dst is filled and returned when it has the capacity for len(values)
 // results; otherwise a fresh slice is allocated. values itself is not
 // modified, and dst may not alias it.
-func (inst *Kernel) SmoothE(values []float64, dst []float64) (out []float64, err error) {
-	err = validateSeriesE(values)
+func (inst *Kernel) Smooth(values []float64, dst []float64) (out []float64, err error) {
+	err = validateSeries(values)
 	if err != nil {
 		return
 	}
@@ -239,7 +239,7 @@ func (inst *Kernel) SmoothE(values []float64, dst []float64) (out []float64, err
 	return
 }
 
-// DerivativeE returns the smoothed first derivative of values, in units of
+// Derivative returns the smoothed first derivative of values, in units of
 // value change per sample step, as a series of the same length. It is the
 // centered difference of the MS-smoothed series — the paper's §3.2
 // recommendation of smoothing first and differentiating numerically, which
@@ -253,9 +253,9 @@ func (inst *Kernel) SmoothE(values []float64, dst []float64) (out []float64, err
 // Savitzky–Golay filter fails to suppress. Callers with a sample interval Δt
 // divide by Δt for physical units.
 //
-// dst follows the [Kernel.SmoothE] contract.
-func (inst *Kernel) DerivativeE(values []float64, dst []float64) (out []float64, err error) {
-	err = validateSeriesE(values)
+// dst follows the [Kernel.Smooth] contract.
+func (inst *Kernel) Derivative(values []float64, dst []float64) (out []float64, err error) {
+	err = validateSeries(values)
 	if err != nil {
 		return
 	}
@@ -269,7 +269,7 @@ func (inst *Kernel) DerivativeE(values []float64, dst []float64) (out []float64,
 	return
 }
 
-func validateSeriesE(values []float64) (err error) {
+func validateSeries(values []float64) (err error) {
 	if len(values) == 0 {
 		err = eb.Build().Errorf("empty series")
 		return
@@ -373,16 +373,16 @@ func (inst *Kernel) fitBoundary(values []float64, start int, stride int) (icept 
 	return
 }
 
-// SGBandwidthE returns the −3 dB cutoff of a traditional Savitzky–Golay
+// SGBandwidth returns the −3 dB cutoff of a traditional Savitzky–Golay
 // smoothing filter of the given degree and half-width, as a fraction of the
 // sampling frequency (paper eq 14, a fit accurate for all m).
 //
 // This is the bridge for replacing an existing Savitzky–Golay filter: its
-// (degree, halfWidth) determine a bandwidth, and [HalfWidthForBandwidthE]
-// turns that bandwidth into the MS half-width. [HalfWidthForSGE] composes the
+// (degree, halfWidth) determine a bandwidth, and [HalfWidthForBandwidth]
+// turns that bandwidth into the MS half-width. [HalfWidthForSG] composes the
 // two.
-func SGBandwidthE(degree int32, halfWidth int32) (bandwidth float64, err error) {
-	err = validateDegreeE(degree)
+func SGBandwidth(degree int32, halfWidth int32) (bandwidth float64, err error) {
+	err = validateDegree(degree)
 	if err != nil {
 		return
 	}
@@ -397,13 +397,13 @@ func SGBandwidthE(degree int32, halfWidth int32) (bandwidth float64, err error) 
 	return
 }
 
-// HalfWidthForBandwidthE returns the MS half-width whose −3 dB cutoff is
+// HalfWidthForBandwidth returns the MS half-width whose −3 dB cutoff is
 // closest to bandwidth, a fraction of the sampling frequency in (0, 0.5]
 // (paper eq 16). A bandwidth too close to Nyquist for the degree — one that
 // would need a kernel below [MinHalfWidth] — is an error: the family cannot
 // smooth that weakly, and clamping would silently smooth more than asked.
-func HalfWidthForBandwidthE(degree int32, bandwidth float64) (halfWidth int32, err error) {
-	err = validateDegreeE(degree)
+func HalfWidthForBandwidth(degree int32, bandwidth float64) (halfWidth int32, err error) {
+	err = validateDegree(degree)
 	if err != nil {
 		return
 	}
@@ -422,18 +422,18 @@ func HalfWidthForBandwidthE(degree int32, bandwidth float64) (halfWidth int32, e
 	return
 }
 
-// HalfWidthForSGE returns the MS half-width that replaces a traditional
+// HalfWidthForSG returns the MS half-width that replaces a traditional
 // Savitzky–Golay smoothing filter of the given degree and half-width at equal
-// −3 dB cutoff. Use the same degree for [NewKernelE]; the passbands then
+// −3 dB cutoff. Use the same degree for [NewKernel]; the passbands then
 // match and only the stopband improves. Expect roughly twice the
 // Savitzky–Golay half-width.
-func HalfWidthForSGE(degree int32, sgHalfWidth int32) (halfWidth int32, err error) {
+func HalfWidthForSG(degree int32, sgHalfWidth int32) (halfWidth int32, err error) {
 	var bandwidth float64
-	bandwidth, err = SGBandwidthE(degree, sgHalfWidth)
+	bandwidth, err = SGBandwidth(degree, sgHalfWidth)
 	if err != nil {
 		return
 	}
-	halfWidth, err = HalfWidthForBandwidthE(degree, bandwidth)
+	halfWidth, err = HalfWidthForBandwidth(degree, bandwidth)
 	return
 }
 
@@ -445,7 +445,7 @@ type fidelityCoeffs struct {
 	c float64
 }
 
-// HalfWidthForPeakE returns the half-width that smooths a Gaussian-like peak
+// HalfWidthForPeak returns the half-width that smooths a Gaussian-like peak
 // of the given full width at half-maximum (in samples) down to the chosen
 // height fidelity (paper eq 19, Table 2). It is the strongest smoothing that
 // still keeps the peak above that height — the right way to pick the
@@ -453,8 +453,8 @@ type fidelityCoeffs struct {
 //
 // A peak so narrow that even the weakest legal kernel of the degree would
 // undershoot the fidelity is an error; a lower degree may still admit it.
-func HalfWidthForPeakE(degree int32, fwhm float64, fidelity FidelityE) (halfWidth int32, err error) {
-	err = validateDegreeE(degree)
+func HalfWidthForPeak(degree int32, fwhm float64, fidelity FidelityE) (halfWidth int32, err error) {
+	err = validateDegree(degree)
 	if err != nil {
 		return
 	}

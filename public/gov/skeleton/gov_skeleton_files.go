@@ -336,7 +336,7 @@ recognises and has retired — it reads no files, so it answers before you have 
 
 One binary, ` + "`./{{.Name}}.sh`" + `, wired in ` + "`{{.AppPackage}}`" + `.
 New utilities, linters and code generators are registered there as
-` + "`urfave/cli/v2`" + ` subcommands — never as ad-hoc ` + "`main()`" + `
+` + "`urfave/cli/v3`" + ` subcommands — never as ad-hoc ` + "`main()`" + `
 functions.
 
 ## Generated files

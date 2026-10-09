@@ -389,3 +389,15 @@ func TestATestGrantApprovesAWidening(t *testing.T) {
 	_, err = r.cli.Request(context.Background(), GrantRequest{Handle: g.Handle, Entries: []GrantEntry{{Instance: 7, Mode: ModeSuggest}}})
 	assert.Error(t, err, "suggest needs the person's proposal surface")
 }
+
+// A request the person leaves past the configured timeout expires, and the
+// coordinator waiting on it hears so.
+func TestARequestExpiresAfterTheConfiguredTimeout(t *testing.T) {
+	r := newRigWith(t, func(cfg *Config) {
+		cfg.Coordinators, cfg.RequestTimeout = []string{"test.coordinator"}, 50*time.Millisecond
+	})
+	_, err := r.cli.Request(context.Background(), GrantRequest{Entries: []GrantEntry{{Instance: 7, Mode: ModeAct}}})
+	var refused *RefusedError
+	require.True(t, errors.As(err, &refused))
+	assert.Contains(t, refused.Reason, "the person did not decide in time")
+}

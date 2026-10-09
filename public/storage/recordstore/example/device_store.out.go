@@ -21,6 +21,7 @@ import (
 	"github.com/stergiotis/boxer/public/caching"
 	"github.com/stergiotis/boxer/public/functional"
 	"github.com/stergiotis/boxer/public/functional/option"
+	"github.com/stergiotis/boxer/public/identity/callident"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/clickhouse/componentsql"
@@ -125,14 +126,22 @@ func (inst *DeviceEntity) IsTombstone() bool {
 
 type DeviceStoreConfig struct {
 	// Table overrides the ClickHouse table this store binds — the baked
-	// DeviceTableName — for every statement it issues (DDL, DESCRIBE, INSERT,
-	// SELECT). Optionally database-qualified ("<db>.<table>"), unquoted-
-	// identifier shape only ([A-Za-z_][A-Za-z0-9_]* per part; the
-	// constructor panics otherwise). Empty (the default) binds the baked
-	// name. The schema is unchanged — this moves WHERE the rows land, not
-	// what they look like — so a scratch table for a test or a per-
-	// deployment table needs no regeneration.
+	// DeviceTableName — for every statement it issues (DDL, INSERT, and the
+	// reads unless ReadTable names another). Optionally database-qualified
+	// ("<db>.<table>"), unquoted-identifier shape only
+	// ([A-Za-z_][A-Za-z0-9_]* per part; the constructor panics otherwise).
+	// Empty (the default) binds the baked name. The schema is unchanged —
+	// this moves WHERE the rows land, not what they look like — so a
+	// scratch table for a test or a per-deployment table needs no
+	// regeneration.
 	Table string
+	// ReadTable, when set, is the table every SELECT and DESCRIBE goes to
+	// (ADR-0296 §SD8): a storage table that materialized views fill from
+	// the written one, or a Merge over several. Same shape rules as Table;
+	// empty (the default) reads the table written to. The schema must be
+	// the same on both — VerifySchema checks the read side, which is the
+	// one the positional decode runs against.
+	ReadTable string
 	// DDLTail is a raw suffix appended verbatim after the composed
 	// CREATE TABLE at EnsureTable time — the escape hatch for clauses
 	// the generation-time table options (ADR-0102) do not carry.
@@ -157,6 +166,12 @@ type DeviceStoreConfig struct {
 	// Nothing flushes behind the caller's back: Commit takes no context and
 	// never inserts, so the due check runs where the caller asks for it.
 	FlushEvery int
+	// WriteObserver, when set, is told each row a Commit or Delete
+	// buffers, then — after the successful Flush that made them durable —
+	// the batch id of that insert and its keys, or the keys DiscardPending
+	// dropped (ADR-0295 §SD7). It is notification-only and independent of
+	// attached cache views. Nil (the default) tracks nothing.
+	WriteObserver recordstore.WriteObserverI[uint64, time.Time]
 	// TombstoneDetect is the read half of the state-view tombstone pair
 	// (ADR-0100 Update 2026-08-30): GetLive — the store's and the cache
 	// views' — reads a detected row as absent. It may consult any entity
@@ -207,6 +222,10 @@ type DeviceStore struct {
 	onFlush []func(uint64)
 	// stampers is cfg.Stampers, consulted per Begin (ADR-0112 M1).
 	stampers []recordstore.ReferenceStamper
+	// written holds the rows the write observer was told were committed and
+	// has not yet been told are durable or discarded (ADR-0295 §SD7); empty
+	// without an observer.
+	written []recordstore.WrittenKey[uint64, time.Time]
 }
 
 // NewDeviceStore wires the store. A nil alloc selects the Go allocator.
@@ -219,6 +238,11 @@ func NewDeviceStore(exec recordstore.ExecutorI, alloc memory.Allocator, cfg Devi
 			panic("DeviceStore: " + terr.Error())
 		}
 	}
+	if cfg.ReadTable != "" {
+		if terr := recordstore.CheckTableRef(cfg.ReadTable); terr != nil {
+			panic("DeviceStore: ReadTable: " + terr.Error())
+		}
+	}
 	if alloc == nil {
 		alloc = memory.NewGoAllocator()
 	}
@@ -226,13 +250,22 @@ func NewDeviceStore(exec recordstore.ExecutorI, alloc memory.Allocator, cfg Devi
 	return
 }
 
-// tableName is the table reference every statement uses: the configured
+// writeTable is the table reference DDL and INSERT use: the configured
 // override when set, else the baked DeviceTableName.
-func (inst *DeviceStore) tableName() string {
+func (inst *DeviceStore) writeTable() string {
 	if inst.cfg.Table != "" {
 		return inst.cfg.Table
 	}
 	return DeviceTableName
+}
+
+// readTable is the table reference SELECT and DESCRIBE use: ReadTable
+// when set, else the table written to (ADR-0296 §SD8).
+func (inst *DeviceStore) readTable() string {
+	if inst.cfg.ReadTable != "" {
+		return inst.cfg.ReadTable
+	}
+	return inst.writeTable()
 }
 
 // isTombstone applies the tombstone pair's read half — the interpreted
@@ -247,13 +280,12 @@ func (inst *DeviceStore) isTombstone(e *DeviceEntity) bool {
 
 // applyStampers consults the configured stampers and pushes their surrogate
 // ids as ambient HighCardRef memberships onto the open entity (ADR-0112 M1),
-// returning the count so Commit/Rollback pop exactly that many.
-// context.Background() bounds the interning — the in-memory interner ignores
-// it; a ctx-carrying Begin is the future seam for a durable one. No stampers
-// means no pushes: inert.
-func (inst *DeviceStore) applyStampers() (pushed int) {
+// returning the count so Commit/Rollback pop exactly that many. ctx is
+// BeginCtx's — the call identity a stamper interns rides on it (ADR-0295
+// §SD7). No stampers means no pushes: inert.
+func (inst *DeviceStore) applyStampers(ctx context.Context) (pushed int) {
 	for _, s := range inst.stampers {
-		for id, err := range s.Current(context.Background()) {
+		for id, err := range s.Current(ctx) {
 			if err != nil {
 				inst.dml.AppendError(err)
 				continue
@@ -284,6 +316,32 @@ func (inst *DeviceStore) notifyFlush(key uint64) {
 	}
 }
 
+// noteCommitted tells the write observer about a buffered row and keeps
+// it until the observer is told its fate (ADR-0295 §SD7).
+func (inst *DeviceStore) noteCommitted(w recordstore.WrittenKey[uint64, time.Time]) {
+	if inst.cfg.WriteObserver == nil {
+		return
+	}
+	inst.written = append(inst.written, w)
+	inst.cfg.WriteObserver.Committed(w)
+}
+
+// takeWritten detaches the rows noteCommitted kept and ranges over them.
+// Detaching before the observer runs means a row it commits from its
+// callback lands in a fresh buffer, reported with a later flush, and a
+// panicking observer cannot have the same rows reported twice.
+func (inst *DeviceStore) takeWritten() iter.Seq[recordstore.WrittenKey[uint64, time.Time]] {
+	written := inst.written
+	inst.written = nil
+	return func(yield func(recordstore.WrittenKey[uint64, time.Time]) bool) {
+		for _, w := range written {
+			if !yield(w) {
+				return
+			}
+		}
+	}
+}
+
 // EnsureTable applies the composed CREATE TABLE (plus the DDLTail
 // suffix, when configured). Idempotent (CREATE TABLE IF NOT EXISTS).
 // The embedded script is issued one statement per Exec — the
@@ -295,7 +353,7 @@ func (inst *DeviceStore) notifyFlush(key uint64) {
 func (inst *DeviceStore) EnsureTable(ctx context.Context) (err error) {
 	stmts, err := recordstore.ProvisioningStatements(deviceDDLCreate, DeviceTableName, inst.cfg.Table)
 	if err != nil {
-		err = eh.Errorf("ensure table %s: %w", inst.tableName(), err)
+		err = eh.Errorf("ensure table %s: %w", inst.writeTable(), err)
 		return
 	}
 	if inst.cfg.DDLTail != "" {
@@ -304,7 +362,7 @@ func (inst *DeviceStore) EnsureTable(ctx context.Context) (err error) {
 	for _, sql := range stmts {
 		err = inst.exec.Exec(ctx, sql)
 		if err != nil {
-			err = eh.Errorf("ensure table %s: %w", inst.tableName(), err)
+			err = eh.Errorf("ensure table %s: %w", inst.writeTable(), err)
 			return
 		}
 	}
@@ -340,14 +398,14 @@ func (inst *DeviceStore) EnsureTable(ctx context.Context) (err error) {
 // where a column-kind filter would have blessed the mis-decode.
 func (inst *DeviceStore) VerifySchema(ctx context.Context) (err error) {
 	live := make([]string, 0, 64)
-	for rec, rerr := range inst.exec.QueryArrow(ctx, "DESCRIBE (SELECT * FROM "+inst.tableName()+")"+deviceArrowOutputSettings) {
+	for rec, rerr := range inst.exec.QueryArrow(ctx, "DESCRIBE (SELECT * FROM "+inst.readTable()+")"+deviceArrowOutputSettings) {
 		if rerr != nil {
-			err = eh.Errorf("describe table %s: %w", inst.tableName(), rerr)
+			err = eh.Errorf("describe table %s: %w", inst.readTable(), rerr)
 			return
 		}
 		names, ok := rec.Column(0).(*array.String)
 		if !ok {
-			err = eh.Errorf("describe table %s: name column is %s, not a string", inst.tableName(), rec.Column(0).DataType())
+			err = eh.Errorf("describe table %s: name column is %s, not a string", inst.readTable(), rec.Column(0).DataType())
 			rec.Release()
 			return
 		}
@@ -358,12 +416,12 @@ func (inst *DeviceStore) VerifySchema(ctx context.Context) (err error) {
 	}
 	want := lowlevel.CreateSchemaDeviceTable().Fields()
 	if len(live) != len(want) {
-		err = eh.Errorf("schema drift on %s: table has %d columns, the generated schema expects %d — regenerated code against an old table (or vice versa); migrate or regenerate", inst.tableName(), len(live), len(want))
+		err = eh.Errorf("schema drift on %s: table has %d columns, the generated schema expects %d — regenerated code against an old table (or vice versa); migrate or regenerate", inst.readTable(), len(live), len(want))
 		return
 	}
 	for i, f := range want {
 		if live[i] != f.Name {
-			err = eh.Errorf("schema drift on %s: column %d is %q, the generated schema expects %q — the decode is positional; migrate or regenerate", inst.tableName(), i, live[i], f.Name)
+			err = eh.Errorf("schema drift on %s: column %d is %q, the generated schema expects %q — the decode is positional; migrate or regenerate", inst.readTable(), i, live[i], f.Name)
 			return
 		}
 	}
@@ -416,6 +474,13 @@ type DeviceEntityBuilder struct {
 	// pushed counts the ambient memberships Begin pushed via the stampers;
 	// Commit/Rollback pop exactly that many (ADR-0112 M1).
 	pushed int
+	// ident is BeginCtx's call identity: who committed the row, which the
+	// write observer is told — the flush that ships it may run for someone
+	// else (ADR-0295 §SD7).
+	ident callident.CallIdentity
+	// tombstone marks the frame Delete opened for a configured tombstone
+	// pair, so the write observer is told the row is a deletion.
+	tombstone bool
 }
 
 // endSection closes one section's frame. The buffer calls it once per
@@ -435,14 +500,23 @@ func (inst *DeviceEntityBuilder) endSection(section string) error {
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
-// (Key, Order) and a live lifecycle.
+// (Key, Order) and a live lifecycle, under context.Background(): a configured stamper
+// that reads a call identity off the context finds none. See BeginCtx.
 func (inst *DeviceStore) Begin(id uint64, ts time.Time) *DeviceEntityBuilder {
+	return inst.BeginCtx(context.Background(), id, ts)
+}
+
+// BeginCtx is Begin with the context the configured stampers consult
+// (ADR-0295 §SD7) — where a call identity reaches an actor stamper. The
+// store stays single-goroutine; ctx is read during this call only.
+func (inst *DeviceStore) BeginCtx(ctx context.Context, id uint64, ts time.Time) *DeviceEntityBuilder {
 	lowlevel.InEntityDeviceTableBeginEntity(inst.dml)
 	lowlevel.InEntityDeviceTableSetId(inst.dml, id)
 	lowlevel.InEntityDeviceTableSetTimestamp(inst.dml, ts)
 	lowlevel.InEntityDeviceTableSetLifecycle(inst.dml, recordstore.LifecycleLive)
 	b := &DeviceEntityBuilder{store: inst, key: id, ent: DeviceEntity{ID: id, Ts: ts, Lifecycle: recordstore.LifecycleLive}}
-	b.pushed = inst.applyStampers()
+	b.ident, _ = callident.CallIdentityFrom(ctx)
+	b.pushed = inst.applyStampers(ctx)
 	return b
 }
 
@@ -578,6 +652,7 @@ func (inst *DeviceEntityBuilder) Commit() (err error) {
 		ent := inst.ent
 		inst.store.notifyWrite(inst.key, &ent)
 	}
+	inst.store.noteCommitted(recordstore.WrittenKey[uint64, time.Time]{Key: inst.key, Order: inst.ent.Ts, Lifecycle: inst.ent.Lifecycle, Tombstone: inst.tombstone, Identity: inst.ident})
 	return
 }
 
@@ -597,6 +672,12 @@ func (inst *DeviceEntityBuilder) Rollback() (err error) {
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
 func (inst *DeviceStore) IngestIdentity(ts time.Time, rows []Identity) (err error) {
+	return inst.IngestIdentityCtx(context.Background(), ts, rows)
+}
+
+// IngestIdentityCtx is IngestIdentity with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *DeviceStore) IngestIdentityCtx(ctx context.Context, ts time.Time, rows []Identity) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -604,7 +685,7 @@ func (inst *DeviceStore) IngestIdentity(ts time.Time, rows []Identity) (err erro
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.Begin(rows[i].ID, ts).AddIdentity(rows[i]).Commit()
+		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddIdentity(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest identity row %d: %w", i, err)
 			return
@@ -621,6 +702,12 @@ func (inst *DeviceStore) IngestIdentity(ts time.Time, rows []Identity) (err erro
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
 func (inst *DeviceStore) IngestBattery(ts time.Time, rows []Battery) (err error) {
+	return inst.IngestBatteryCtx(context.Background(), ts, rows)
+}
+
+// IngestBatteryCtx is IngestBattery with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *DeviceStore) IngestBatteryCtx(ctx context.Context, ts time.Time, rows []Battery) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -628,7 +715,7 @@ func (inst *DeviceStore) IngestBattery(ts time.Time, rows []Battery) (err error)
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.Begin(rows[i].ID, ts).AddBattery(rows[i]).Commit()
+		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddBattery(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest battery row %d: %w", i, err)
 			return
@@ -645,6 +732,12 @@ func (inst *DeviceStore) IngestBattery(ts time.Time, rows []Battery) (err error)
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
 func (inst *DeviceStore) IngestTagged(ts time.Time, rows []Tagged) (err error) {
+	return inst.IngestTaggedCtx(context.Background(), ts, rows)
+}
+
+// IngestTaggedCtx is IngestTagged with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *DeviceStore) IngestTaggedCtx(ctx context.Context, ts time.Time, rows []Tagged) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -652,7 +745,7 @@ func (inst *DeviceStore) IngestTagged(ts time.Time, rows []Tagged) (err error) {
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.Begin(rows[i].ID, ts).AddTagged(rows[i]).Commit()
+		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddTagged(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest tagged row %d: %w", i, err)
 			return
@@ -669,6 +762,12 @@ func (inst *DeviceStore) IngestTagged(ts time.Time, rows []Tagged) (err error) {
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
 func (inst *DeviceStore) IngestLocated(ts time.Time, rows []Located) (err error) {
+	return inst.IngestLocatedCtx(context.Background(), ts, rows)
+}
+
+// IngestLocatedCtx is IngestLocated with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *DeviceStore) IngestLocatedCtx(ctx context.Context, ts time.Time, rows []Located) (err error) {
 	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -676,7 +775,7 @@ func (inst *DeviceStore) IngestLocated(ts time.Time, rows []Located) (err error)
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.Begin(rows[i].ID, ts).AddLocated(rows[i]).Commit()
+		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddLocated(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest located row %d: %w", i, err)
 			return
@@ -722,11 +821,15 @@ func (inst *DeviceStore) Flush(ctx context.Context) (n int, err error) {
 	}
 	records = append(inst.pending, records...)
 	inst.pending = nil
+	// One batch id per insert attempt (ADR-0295 §SD6): the executor stamps
+	// it, an observing executor reports it, the write observer is told it.
+	batch := recordstore.NewBatchId()
+	bctx := recordstore.WithBatchId(ctx, batch)
 	if len(records) > 0 {
-		err = inst.exec.InsertArrow(ctx, inst.tableName(), records)
+		err = inst.exec.InsertArrow(bctx, inst.writeTable(), records)
 		if err != nil {
 			inst.pending = records
-			err = eh.Errorf("insert into %s: %w", inst.tableName(), err)
+			err = eh.Errorf("insert into %s: %w", inst.writeTable(), err)
 			return
 		}
 	}
@@ -739,6 +842,9 @@ func (inst *DeviceStore) Flush(ctx context.Context) (n int, err error) {
 		inst.notifyFlush(k) // durable now — release the views' dirty-window pins
 	}
 	clear(inst.dirty) // flushed — ClickHouse now serves the written state
+	if len(inst.written) > 0 {
+		inst.cfg.WriteObserver.Durable(bctx, batch, inst.takeWritten())
+	}
 	return
 }
 
@@ -779,6 +885,9 @@ func (inst *DeviceStore) DiscardPending() {
 		inst.notifyWrite(k, nil) // the cached write never became durable — invalidate
 	}
 	clear(inst.dirty) // nothing local remains — ClickHouse is the truth
+	if len(inst.written) > 0 {
+		inst.cfg.WriteObserver.Discarded(inst.takeWritten())
+	}
 }
 
 // Close discards everything unflushed and releases the store's Arrow
@@ -1007,7 +1116,7 @@ func (inst *DeviceCache[W]) GetLiveAcceptStale(key uint64) (ent *DeviceEntity, f
 func (inst *DeviceStore) fetchLatestSQL(keys []uint64) string {
 	var sb strings.Builder
 	sb.WriteString("SELECT * FROM ")
-	sb.WriteString(inst.tableName())
+	sb.WriteString(inst.readTable())
 	sb.WriteString(" WHERE " + DeviceColKey + " IN (")
 	for i, k := range keys {
 		if i > 0 {
@@ -1087,7 +1196,7 @@ func (inst *DeviceStore) ScanIdentity(ctx context.Context, opts recordstore.Scan
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + where +
 		" ORDER BY " + DeviceColOrder + " ASC, " + DeviceColKey + " ASC"
 	if opts.Limit > 0 {
@@ -1121,7 +1230,7 @@ func (inst *DeviceStore) ScanBattery(ctx context.Context, opts recordstore.ScanO
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + where +
 		" ORDER BY " + DeviceColOrder + " ASC, " + DeviceColKey + " ASC"
 	if opts.Limit > 0 {
@@ -1155,7 +1264,7 @@ func (inst *DeviceStore) ScanTagged(ctx context.Context, opts recordstore.ScanOp
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + where +
 		" ORDER BY " + DeviceColOrder + " ASC, " + DeviceColKey + " ASC"
 	if opts.Limit > 0 {
@@ -1189,7 +1298,7 @@ func (inst *DeviceStore) ScanLocated(ctx context.Context, opts recordstore.ScanO
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + where +
 		" ORDER BY " + DeviceColOrder + " ASC, " + DeviceColKey + " ASC"
 	if opts.Limit > 0 {
@@ -1204,7 +1313,7 @@ func (inst *DeviceStore) ScanLocated(ctx context.Context, opts recordstore.ScanO
 // row; GetLive is the interpreted state-view read). Reads see only
 // flushed rows.
 func (inst *DeviceStore) Latest(ctx context.Context, key uint64) (ent *DeviceEntity, found bool, err error) {
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + DeviceColKey + " = " + deviceKeyLiteral(key) +
 		" ORDER BY " + DeviceColOrder + " DESC LIMIT 1" + deviceArrowOutputSettings
 	ents, err := inst.queryEntities(ctx, sql)
@@ -1227,7 +1336,7 @@ func (inst *DeviceStore) Latest(ctx context.Context, key uint64) (ent *DeviceEnt
 // streaming executor changes nothing visible); an error ends the
 // sequence as a final (nil, err) pair. Reads see only flushed rows.
 func (inst *DeviceStore) Replay(ctx context.Context, key uint64, fromOrder time.Time, opts recordstore.ReplayOpts) iter.Seq2[*DeviceEntity, error] {
-	sql := "SELECT * FROM " + inst.tableName() +
+	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + DeviceColKey + " = " + deviceKeyLiteral(key)
 	if !fromOrder.IsZero() {
 		sql += " AND " + DeviceColOrder + " >= fromUnixTimestamp64Nano(" + strconv.FormatInt(fromOrder.UnixNano(), 10) + ")"
@@ -1255,8 +1364,15 @@ func (inst *DeviceStore) Replay(ctx context.Context, key uint64, fromOrder time.
 // attached cache views like any commit — versioned, so GetLive reads
 // the key as absent immediately.
 func (inst *DeviceStore) Delete(id uint64, ts time.Time) (err error) {
+	return inst.DeleteCtx(context.Background(), id, ts)
+}
+
+// DeleteCtx is Delete with the context BeginCtx hands the configured
+// stampers (ADR-0295 §SD7).
+func (inst *DeviceStore) DeleteCtx(ctx context.Context, id uint64, ts time.Time) (err error) {
 	if inst.cfg.TombstoneWrite != nil {
-		b := inst.Begin(id, ts)
+		b := inst.BeginCtx(ctx, id, ts)
+		b.tombstone = true
 		inst.cfg.TombstoneWrite(b)
 		return b.Commit()
 	}
@@ -1264,7 +1380,12 @@ func (inst *DeviceStore) Delete(id uint64, ts time.Time) (err error) {
 	lowlevel.InEntityDeviceTableSetId(inst.dml, id)
 	lowlevel.InEntityDeviceTableSetTimestamp(inst.dml, ts)
 	lowlevel.InEntityDeviceTableSetLifecycle(inst.dml, recordstore.LifecycleTombstone)
+	// The marker row has no attribute to carry a stamp, but the stampers
+	// are consulted all the same: one that refuses (an actor stamper with
+	// no principal on ctx) refuses the deletion too (ADR-0295 §SD8).
+	pushed := inst.applyStampers(ctx)
 	err = lowlevel.InEntityDeviceTableCommitEntity(inst.dml)
+	inst.dml.PopMembershipsHighCardRef(pushed)
 	if err != nil {
 		_ = lowlevel.InEntityDeviceTableRollbackEntity(inst.dml) // discard the failed frame; the store stays usable
 		return
@@ -1272,6 +1393,8 @@ func (inst *DeviceStore) Delete(id uint64, ts time.Time) (err error) {
 	inst.buffered++
 	inst.dirty[id] = struct{}{}
 	inst.notifyWrite(id, &DeviceEntity{ID: id, Ts: ts, Lifecycle: recordstore.LifecycleTombstone})
+	ci, _ := callident.CallIdentityFrom(ctx)
+	inst.noteCommitted(recordstore.WrittenKey[uint64, time.Time]{Key: id, Order: ts, Lifecycle: recordstore.LifecycleTombstone, Tombstone: true, Identity: ci})
 	return
 }
 
@@ -1312,7 +1435,7 @@ func (inst *DeviceStore) ScanLiveIdentity(ctx context.Context, opts recordstore.
 	if opts.KeyPrefix != "" {
 		return recordstore.RefuseKeyPrefix[*DeviceEntity]()
 	}
-	inner := "SELECT * FROM " + inst.tableName()
+	inner := "SELECT * FROM " + inst.readTable()
 	inner += " ORDER BY " + DeviceColOrder + " DESC LIMIT 1 BY " + DeviceColKey
 	where := "(" + deviceScanIdentityFilter + ")"
 	if opts.ExtraPredicate != "" {
@@ -1360,7 +1483,7 @@ func (inst *DeviceStore) ScanLiveBattery(ctx context.Context, opts recordstore.S
 	if opts.KeyPrefix != "" {
 		return recordstore.RefuseKeyPrefix[*DeviceEntity]()
 	}
-	inner := "SELECT * FROM " + inst.tableName()
+	inner := "SELECT * FROM " + inst.readTable()
 	inner += " ORDER BY " + DeviceColOrder + " DESC LIMIT 1 BY " + DeviceColKey
 	where := "(" + deviceScanBatteryFilter + ")"
 	if opts.ExtraPredicate != "" {
@@ -1408,7 +1531,7 @@ func (inst *DeviceStore) ScanLiveTagged(ctx context.Context, opts recordstore.Sc
 	if opts.KeyPrefix != "" {
 		return recordstore.RefuseKeyPrefix[*DeviceEntity]()
 	}
-	inner := "SELECT * FROM " + inst.tableName()
+	inner := "SELECT * FROM " + inst.readTable()
 	inner += " ORDER BY " + DeviceColOrder + " DESC LIMIT 1 BY " + DeviceColKey
 	where := "(" + deviceScanTaggedFilter + ")"
 	if opts.ExtraPredicate != "" {
@@ -1456,7 +1579,7 @@ func (inst *DeviceStore) ScanLiveLocated(ctx context.Context, opts recordstore.S
 	if opts.KeyPrefix != "" {
 		return recordstore.RefuseKeyPrefix[*DeviceEntity]()
 	}
-	inner := "SELECT * FROM " + inst.tableName()
+	inner := "SELECT * FROM " + inst.readTable()
 	inner += " ORDER BY " + DeviceColOrder + " DESC LIMIT 1 BY " + DeviceColKey
 	where := "(" + deviceScanLocatedFilter + ")"
 	if opts.ExtraPredicate != "" {

@@ -67,13 +67,13 @@ type Series struct {
 	stdDevFloor float64
 }
 
-// NewSeriesE precomputes the per-window statistics for values under the given
+// NewSeries precomputes the per-window statistics for values under the given
 // subsequence length. stdDevFloorRel may be 0 to accept
 // [DefaultStdDevFloorRel].
 //
 // The returned Series aliases nothing: values is copied, because centering
 // mutates it.
-func NewSeriesE(values []float64, window int32, stdDevFloorRel float64) (inst *Series, err error) {
+func NewSeries(values []float64, window int32, stdDevFloorRel float64) (inst *Series, err error) {
 	n := int32(len(values))
 	if window < 2 {
 		err = eb.Build().Int32("window", window).Errorf("window must be at least 2")

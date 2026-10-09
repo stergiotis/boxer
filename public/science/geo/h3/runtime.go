@@ -27,7 +27,7 @@ type RuntimeConfig struct {
 
 // Runtime owns a shared wazero runtime and a pool of pre-instantiated
 // modules. Safe for concurrent use: callers check out a [Handle] via
-// [Runtime.AcquireE] and return it via [Handle.Release].
+// [Runtime.Acquire] and return it via [Handle.Release].
 type Runtime struct {
 	rt       wazero.Runtime
 	compiled wazero.CompiledModule
@@ -157,10 +157,10 @@ func (inst *Runtime) newHandle(ctx context.Context, idx int) (h *Handle, err err
 	return
 }
 
-// AcquireE checks a handle out of the pool, blocking until one is available
+// Acquire checks a handle out of the pool, blocking until one is available
 // or ctx is cancelled. The returned handle is not safe for concurrent use
 // and must be returned with [Handle.Release].
-func (inst *Runtime) AcquireE(ctx context.Context) (h *Handle, err error) {
+func (inst *Runtime) Acquire(ctx context.Context) (h *Handle, err error) {
 	if inst.closed.Load() {
 		err = ErrClosed
 		return

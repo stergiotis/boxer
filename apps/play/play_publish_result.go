@@ -124,7 +124,7 @@ func (inst *PlayLauncher) publishResult(call app.OperationCall, in PublishResult
 	}
 	source := p.graph.MainSQL()
 	spec := resultBundleSpec(in, local, source)
-	doc, cerr := ComposeBundleDocE(spec)
+	doc, cerr := ComposeBundleDoc(spec)
 	if cerr != nil {
 		rec.Release()
 		return out, app.RefuseOperation(cerr.Error())

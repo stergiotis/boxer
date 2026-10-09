@@ -9,6 +9,7 @@
 package cargolicenses
 
 import (
+	"context"
 	"encoding/json/v2"
 	"fmt"
 	"io"
@@ -18,7 +19,7 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 )
 
 // licenseFilePrefixes is what counts as a notice file beside a crate's
@@ -66,12 +67,12 @@ func NewCliCommand() *cli.Command {
 				Required: true,
 			},
 		},
-		Action: func(ctx *cli.Context) (err error) {
-			n, err := Run(ctx.String("metadata"), ctx.String("out"))
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
+			n, err := Run(cmd.String("metadata"), cmd.String("out"))
 			if err != nil {
 				return
 			}
-			fmt.Printf("collected licenses for %d crates into %s\n", n, ctx.String("out"))
+			fmt.Printf("collected licenses for %d crates into %s\n", n, cmd.String("out"))
 			return
 		},
 	}

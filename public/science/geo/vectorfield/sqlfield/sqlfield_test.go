@@ -43,7 +43,7 @@ func (inst *fakeField) value(col, row, step int) (u, v float64) {
 	return 10*math.Sin(lon*math.Pi/90) + float64(step), 8 * math.Cos(lat*math.Pi/60)
 }
 
-func (inst *fakeField) QueryE(ctx context.Context, statement string, params map[string]string) (rec arrow.RecordBatch, err error) {
+func (inst *fakeField) Query(ctx context.Context, statement string, params map[string]string) (rec arrow.RecordBatch, err error) {
 	inst.mu.Lock()
 	inst.purposes = append(inst.purposes, PurposeOf(ctx))
 	inst.statements = append(inst.statements, statement)
@@ -310,7 +310,7 @@ func TestAPeriodicFieldConforms(t *testing.T) {
 		rel: Relation{From: "wind"}, timeType: "DateTime('UTC')", steps: threeSteps(),
 		g: grid{west: -180, north: 90, dLon: 1.5, dLat: 1.5, cols: 240, rows: 121, periodic: true}, storedCols: 240,
 	}
-	src, err := NewSourceE(context.Background(), fake, fake.rel, Options{Meta: vectorfield.Meta{Name: "wind"}})
+	src, err := NewSource(context.Background(), fake, fake.rel, Options{Meta: vectorfield.Meta{Name: "wind"}})
 	require.NoError(t, err)
 	meta := src.Describe()
 	require.True(t, meta.PeriodicLon)
@@ -325,7 +325,7 @@ func TestARepeatedSeamColumnIsLeftOut(t *testing.T) {
 		rel: Relation{From: "wind"},
 		g:   grid{west: 0, north: 80, dLon: 2, dLat: 2, cols: 180, rows: 81, periodic: true}, storedCols: 181,
 	}
-	src, err := NewSourceE(context.Background(), fake, fake.rel, Options{})
+	src, err := NewSource(context.Background(), fake, fake.rel, Options{})
 	require.NoError(t, err)
 	meta := src.Describe()
 	require.True(t, meta.PeriodicLon)
@@ -340,13 +340,13 @@ func TestARegionalFieldWithACoastConforms(t *testing.T) {
 		g: grid{west: 340, north: 60, dLon: 0.1, dLat: 0.1, cols: 151, rows: 203}, storedCols: 151,
 		missing: func(col, row int) bool { return col < 20 && row < 90 },
 	}
-	src, err := NewSourceE(context.Background(), fake, fake.rel, Options{})
+	src, err := NewSource(context.Background(), fake, fake.rel, Options{})
 	require.NoError(t, err)
 	require.False(t, src.Describe().PeriodicLon)
 	vectorfieldtest.Run(t, src, vectorfieldtest.Options{MissingStep: -1})
 
 	// The request's longitude convention is not the relation's.
-	win, err := src.SampleE(context.Background(), vectorfield.Request{West: -20, East: -5, South: 40, North: 60, MaxCols: 400, MaxRows: 400})
+	win, err := src.Sample(context.Background(), vectorfield.Request{West: -20, East: -5, South: 40, North: 60, MaxCols: 400, MaxRows: 400})
 	require.NoError(t, err)
 	require.InDelta(t, -20.1, win.West, 0.11)
 	_, _, _, ok := win.Sample(-19.5, 58.5)
@@ -355,7 +355,7 @@ func TestARegionalFieldWithACoastConforms(t *testing.T) {
 	require.True(t, ok)
 
 	// A coarse window keeps a bin at the coast only where half of it is data.
-	coarse, err := src.SampleE(context.Background(), vectorfield.Request{West: -20, East: -5, South: 40, North: 60, MaxCols: 10, MaxRows: 10})
+	coarse, err := src.Sample(context.Background(), vectorfield.Request{West: -20, East: -5, South: 40, North: 60, MaxCols: 10, MaxRows: 10})
 	require.NoError(t, err)
 	require.Greater(t, coarse.Level, 0)
 	missing := 0
@@ -373,14 +373,14 @@ func TestEveryRequestSendsTheSameText(t *testing.T) {
 		rel: Relation{From: "wind"}, timeType: "DateTime", steps: threeSteps(),
 		g: grid{west: -180, north: 90, dLon: 1, dLat: 1, cols: 360, rows: 181, periodic: true}, storedCols: 360,
 	}
-	src, err := NewSourceE(context.Background(), fake, fake.rel, Options{})
+	src, err := NewSource(context.Background(), fake, fake.rel, Options{})
 	require.NoError(t, err)
 	fake.statements = nil
 	for _, req := range []vectorfield.Request{
 		{West: -30, East: 40, South: 30, North: 70, Step: 1, MaxCols: 300, MaxRows: 300},
 		{West: 170, East: 200, South: -12.345, North: 7.5, Step: 2, MaxCols: 17, MaxRows: 9},
 	} {
-		_, err = src.SampleE(context.Background(), req)
+		_, err = src.Sample(context.Background(), req)
 		require.NoError(t, err)
 	}
 	require.Len(t, fake.statements, 2)
@@ -409,17 +409,17 @@ func TestAReplyThatDoesNotFitThePlanIsRefused(t *testing.T) {
 		b.add(r, c, float32(1), float32(1), float32(1.5), valid)
 		return b.record()
 	}
-	_, err := g.decodeWindowE(&p, reply(0, int64(p.cols), 4), 0.5)
+	_, err := g.decodeWindow(&p, reply(0, int64(p.cols), 4), 0.5)
 	require.ErrorContains(t, err, "outside the window")
-	_, err = g.decodeWindowE(&p, reply(-1, 0, 4), 0.5)
+	_, err = g.decodeWindow(&p, reply(-1, 0, 4), 0.5)
 	require.ErrorContains(t, err, "outside the window")
-	_, err = g.decodeWindowE(&p, reply(0, 0, 5), 0.5)
+	_, err = g.decodeWindow(&p, reply(0, 0, 5), 0.5)
 	require.ErrorContains(t, err, "more rows than it has nodes")
 
-	win, err := g.decodeWindowE(&p, reply(0, 0, 1), 0.5)
+	win, err := g.decodeWindow(&p, reply(0, 0, 1), 0.5)
 	require.NoError(t, err)
 	require.True(t, win.U[0] != win.U[0], "one valid node in four is under the valid fraction")
-	win, err = g.decodeWindowE(&p, reply(0, 0, 2), 0.5)
+	win, err = g.decodeWindow(&p, reply(0, 0, 2), 0.5)
 	require.NoError(t, err)
 	require.Equal(t, float32(1), win.U[0])
 	require.GreaterOrEqual(t, win.Speed[0], float32(math.Sqrt2))
@@ -427,7 +427,7 @@ func TestAReplyThatDoesNotFitThePlanIsRefused(t *testing.T) {
 	// The grid's last column is half a bin wide, and one node fills it.
 	last := int64(p.cols - 1)
 	require.Equal(t, 2, g.cellsIn(&p, int(last), 0)) // column 10 only, two rows
-	_, err = g.decodeWindowE(&p, reply(0, last, 3), 0.5)
+	_, err = g.decodeWindow(&p, reply(0, last, 3), 0.5)
 	require.ErrorContains(t, err, "more rows than it has nodes")
 }
 
@@ -517,10 +517,10 @@ func TestSummaryIsPerStepAndInOrder(t *testing.T) {
 		g: grid{west: -180, north: 90, dLon: 1, dLat: 1, cols: 360, rows: 181, periodic: true}, storedCols: 360,
 	}
 	ctx := context.Background()
-	src, err := NewSourceE(ctx, fake, fake.rel, Options{})
+	src, err := NewSource(ctx, fake, fake.rel, Options{})
 	require.NoError(t, err)
 
-	sums, err := src.SummarizeE(ctx, vectorfield.Request{West: -30, East: 40, South: 30, North: 70, MaxCols: 40, MaxRows: 30})
+	sums, err := src.Summarize(ctx, vectorfield.Request{West: -30, East: 40, South: 30, North: 70, MaxCols: 40, MaxRows: 30})
 	require.NoError(t, err)
 	require.Len(t, sums, 3)
 	for i, s := range sums {
@@ -536,13 +536,13 @@ func TestSummaryIsPerStepAndInOrder(t *testing.T) {
 
 	// Bounds outside a regional field hold nothing, which is not an error.
 	regional := &fakeField{rel: Relation{From: "r"}, g: grid{west: 0, north: 10, dLon: 0.5, dLat: 0.5, cols: 21, rows: 21}, storedCols: 21}
-	rsrc, err := NewSourceE(ctx, regional, regional.rel, Options{})
+	rsrc, err := NewSource(ctx, regional, regional.rel, Options{})
 	require.NoError(t, err)
-	sums, err = rsrc.SummarizeE(ctx, vectorfield.Request{West: 100, East: 120, South: 0, North: 10, MaxCols: 20, MaxRows: 20})
+	sums, err = rsrc.Summarize(ctx, vectorfield.Request{West: 100, East: 120, South: 0, North: 10, MaxCols: 20, MaxRows: 20})
 	require.NoError(t, err)
 	require.Len(t, sums, 1)
 	require.True(t, sums[0].Mean != sums[0].Mean)
 
-	_, err = src.SummarizeE(ctx, vectorfield.Request{West: 10, East: 10, South: 0, North: 1, MaxCols: 8, MaxRows: 8})
+	_, err = src.Summarize(ctx, vectorfield.Request{West: 10, East: 10, South: 0, North: 1, MaxCols: 8, MaxRows: 8})
 	require.Error(t, err)
 }

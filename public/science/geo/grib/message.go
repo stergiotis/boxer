@@ -63,7 +63,7 @@ func (inst *Message) Raw() (b []byte) {
 
 // Field is one data field of a message: its grid, product, packing, bitmap
 // and data sections, with each section's offset in the file. Values are
-// decoded by [Field.ValuesE]; nothing is decoded until then.
+// decoded by [Field.Values]; nothing is decoded until then.
 type Field struct {
 	Message *Message
 	// Index is the field's position in its message, from 0.
@@ -83,7 +83,7 @@ type Field struct {
 	data []byte
 }
 
-// NumPoints is the grid's point count: the length of [Field.ValuesE]'s
+// NumPoints is the grid's point count: the length of [Field.Values]'s
 // result, missing points included.
 func (inst *Field) NumPoints() (n int) {
 	n = int(inst.Grid.NumPoints)
@@ -102,7 +102,7 @@ func sectionHeader(b []byte) (length uint32, number uint8, ok bool) {
 	return
 }
 
-func (inst *Message) parseGrib2E() (err error) {
+func (inst *Message) parseGrib2() (err error) {
 	raw := inst.raw
 	inst.Discipline = raw[6]
 	pos := 16
@@ -154,7 +154,7 @@ func (inst *Message) parseGrib2E() (err error) {
 				err = eb.Build().Int64("offset", fileOff).Errorf("second identification section: %w", ErrMalformed)
 				return
 			}
-			err = inst.Ident.parseE(body)
+			err = inst.Ident.parse(body)
 			if err != nil {
 				return
 			}
@@ -167,7 +167,7 @@ func (inst *Message) parseGrib2E() (err error) {
 		case 3:
 			sec3 = body
 			off3 = fileOff
-			grid, err = parseGridE(body)
+			grid, err = parseGrid(body)
 			if err != nil {
 				return
 			}
@@ -178,7 +178,7 @@ func (inst *Message) parseGrib2E() (err error) {
 				err = eb.Build().Int64("offset", fileOff).Errorf("product definition before any grid definition: %w", ErrMalformed)
 				return
 			}
-			product, err = parseProductE(body)
+			product, err = parseProduct(body)
 			if err != nil {
 				return
 			}
@@ -189,7 +189,7 @@ func (inst *Message) parseGrib2E() (err error) {
 				err = eb.Build().Int64("offset", fileOff).Errorf("data representation before any product definition: %w", ErrMalformed)
 				return
 			}
-			packing, err = parsePackingE(body)
+			packing, err = parsePacking(body)
 			if err != nil {
 				return
 			}
@@ -200,7 +200,7 @@ func (inst *Message) parseGrib2E() (err error) {
 				err = eb.Build().Int64("offset", fileOff).Errorf("bitmap before any data representation: %w", ErrMalformed)
 				return
 			}
-			bitmap, err = parseBitmapE(body, grid.NumPoints)
+			bitmap, err = parseBitmap(body, grid.NumPoints)
 			if err != nil {
 				return
 			}
@@ -238,8 +238,8 @@ func (inst *Message) parseGrib2E() (err error) {
 	return
 }
 
-// parseE reads Section 1 of edition 2.
-func (inst *Identification) parseE(body []byte) (err error) {
+// parse reads Section 1 of edition 2.
+func (inst *Identification) parse(body []byte) (err error) {
 	r := rd{b: body}
 	inst.Centre = r.u16()
 	inst.SubCentre = r.u16()
@@ -250,17 +250,17 @@ func (inst *Identification) parseE(body []byte) (err error) {
 	month, day, hour, minute, second := int(r.u8()), int(r.u8()), int(r.u8()), int(r.u8()), int(r.u8())
 	inst.ProductionStatus = r.u8()
 	inst.TypeOfData = r.u8()
-	err = r.errE("identification section")
+	err = r.truncation("identification section")
 	if err != nil {
 		return
 	}
-	inst.RefTime, err = makeTimeE(year, month, day, hour, minute, second)
+	inst.RefTime, err = makeTime(year, month, day, hour, minute, second)
 	return
 }
 
-// makeTimeE builds a UTC instant from coded calendar fields, refusing what
+// makeTime builds a UTC instant from coded calendar fields, refusing what
 // no calendar holds. GRIB has no leap seconds; a second of 60 is malformed.
-func makeTimeE(year, month, day, hour, minute, second int) (t time.Time, err error) {
+func makeTime(year, month, day, hour, minute, second int) (t time.Time, err error) {
 	if month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 || second > 59 {
 		err = eb.Build().Int("year", year).Int("month", month).Int("day", day).Int("hour", hour).Int("minute", minute).Int("second", second).Errorf("reference time outside the calendar: %w", ErrMalformed)
 		return

@@ -25,7 +25,7 @@
 // [Series.Compute] is O(n²) time and O(n) space, independent of the window
 // length. Only the first distance profile is computed directly, at
 // O(n·Window); every later row follows from the STOMP dot-product recurrence
-// at O(1) per cell. [NewSeriesE] is likewise O(n·Window). This package
+// at O(1) per cell. [NewSeries] is likewise O(n·Window). This package
 // therefore needs no FFT and no linear-algebra dependency, which is what keeps
 // it inside the WASM-freestanding declaration in package_props.go (ADR-0080).
 //
@@ -38,7 +38,7 @@
 // at once, as mSTAMP: for every k from 1 to d, the nearest neighbour under the
 // best-matching k channels, and which channels those were. A pattern in a wide
 // series usually occupies a subset of its channels, and this finds the subset
-// rather than requiring it as input. [MultiSeries.SelectDimsMDLE] picks k for a
+// rather than requiring it as input. [MultiSeries.SelectDimsMDL] picks k for a
 // motif; for an anomaly, sweeping k and taking the best is what the measurement
 // in the tests does, and the sweep peaks at the number of affected channels.
 //

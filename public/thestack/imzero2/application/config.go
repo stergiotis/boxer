@@ -1,10 +1,11 @@
 package application
 
 import (
+	"context"
 	"slices"
 	"strings"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/config"
 	"github.com/stergiotis/boxer/public/config/env"
@@ -103,16 +104,16 @@ func (inst *ImZeroClientConfig) ToCliFlags(nameTransf config.NameTransformFunc, 
 	}
 }
 
-func (inst *ImZeroClientConfig) FromContext(nameTransf config.NameTransformFunc, ctx *cli.Context) (nMessages int) {
-	inst.AppTitle = ctx.String(nameTransf("appTitle"))
-	inst.Fullscreen = ctx.String(nameTransf("fullscreen"))
-	inst.InitialMainWindowWidth = ctx.String(nameTransf("initialMainWindowWidth"))
-	inst.InitialMainWindowHeight = ctx.String(nameTransf("initialMainWindowHeight"))
-	inst.AllowMainWindowResize = ctx.String(nameTransf("allowMainWindowResize"))
-	inst.ExportBasePath = ctx.String(nameTransf("exportBasePath"))
-	inst.Vsync = ctx.String(nameTransf("vsync"))
-	inst.BackgroundColorRGBA = ctx.String(nameTransf("backgroundColorRGBA"))
-	inst.BackdropFilter = ctx.String(nameTransf("backdropFilter"))
+func (inst *ImZeroClientConfig) FromContext(ctx context.Context, nameTransf config.NameTransformFunc, cmd *cli.Command) (nMessages int) {
+	inst.AppTitle = cmd.String(nameTransf("appTitle"))
+	inst.Fullscreen = cmd.String(nameTransf("fullscreen"))
+	inst.InitialMainWindowWidth = cmd.String(nameTransf("initialMainWindowWidth"))
+	inst.InitialMainWindowHeight = cmd.String(nameTransf("initialMainWindowHeight"))
+	inst.AllowMainWindowResize = cmd.String(nameTransf("allowMainWindowResize"))
+	inst.ExportBasePath = cmd.String(nameTransf("exportBasePath"))
+	inst.Vsync = cmd.String(nameTransf("vsync"))
+	inst.BackgroundColorRGBA = cmd.String(nameTransf("backgroundColorRGBA"))
+	inst.BackdropFilter = cmd.String(nameTransf("backdropFilter"))
 	return inst.Validate(true)
 }
 
@@ -225,39 +226,39 @@ func clientPrefixNameTransf(name string) (newName string) {
 	return "client" + strings.ToUpper(string(name[0])) + name[1:]
 }
 
-func (inst *Config) FromContext(nameTransf config.NameTransformFunc, ctx *cli.Context) (nMessages int) {
-	inst.MainFontTTF = ctx.String(nameTransf("mainFontTTF"))
-	inst.MonoFontTTF = ctx.String(nameTransf("monoFontTTF"))
-	inst.PhosphorFontTTF = ctx.String(nameTransf("phosphorFontTTF"))
-	inst.FallbackFontTTF = ctx.String(nameTransf("fallbackFontTTF"))
-	inst.MainFontSizeInPixels = float32(ctx.Float64(nameTransf("mainFontSizeInPixels")))
+func (inst *Config) FromContext(ctx context.Context, nameTransf config.NameTransformFunc, cmd *cli.Command) (nMessages int) {
+	inst.MainFontTTF = cmd.String(nameTransf("mainFontTTF"))
+	inst.MonoFontTTF = cmd.String(nameTransf("monoFontTTF"))
+	inst.PhosphorFontTTF = cmd.String(nameTransf("phosphorFontTTF"))
+	inst.FallbackFontTTF = cmd.String(nameTransf("fallbackFontTTF"))
+	inst.MainFontSizeInPixels = float32(cmd.Float64(nameTransf("mainFontSizeInPixels")))
 	inst.MainFontTweak = FontTweakConfig{
-		Scale:         float32(ctx.Float64(nameTransf("mainFontScale"))),
-		YOffsetFactor: float32(ctx.Float64(nameTransf("mainFontYOffsetFactor"))),
-		YOffset:       float32(ctx.Float64(nameTransf("mainFontYOffset"))),
+		Scale:         float32(cmd.Float64(nameTransf("mainFontScale"))),
+		YOffsetFactor: float32(cmd.Float64(nameTransf("mainFontYOffsetFactor"))),
+		YOffset:       float32(cmd.Float64(nameTransf("mainFontYOffset"))),
 	}
 	inst.MonoFontTweak = FontTweakConfig{
-		Scale:         float32(ctx.Float64(nameTransf("monoFontScale"))),
-		YOffsetFactor: float32(ctx.Float64(nameTransf("monoFontYOffsetFactor"))),
-		YOffset:       float32(ctx.Float64(nameTransf("monoFontYOffset"))),
+		Scale:         float32(cmd.Float64(nameTransf("monoFontScale"))),
+		YOffsetFactor: float32(cmd.Float64(nameTransf("monoFontYOffsetFactor"))),
+		YOffset:       float32(cmd.Float64(nameTransf("monoFontYOffset"))),
 	}
 	inst.PhosphorFontTweak = FontTweakConfig{
-		Scale:         float32(ctx.Float64(nameTransf("phosphorFontScale"))),
-		YOffsetFactor: float32(ctx.Float64(nameTransf("phosphorFontYOffsetFactor"))),
-		YOffset:       float32(ctx.Float64(nameTransf("phosphorFontYOffset"))),
+		Scale:         float32(cmd.Float64(nameTransf("phosphorFontScale"))),
+		YOffsetFactor: float32(cmd.Float64(nameTransf("phosphorFontYOffsetFactor"))),
+		YOffset:       float32(cmd.Float64(nameTransf("phosphorFontYOffset"))),
 	}
 	inst.FallbackFontTweak = FontTweakConfig{
-		Scale:         float32(ctx.Float64(nameTransf("fallbackFontScale"))),
-		YOffsetFactor: float32(ctx.Float64(nameTransf("fallbackFontYOffsetFactor"))),
-		YOffset:       float32(ctx.Float64(nameTransf("fallbackFontYOffset"))),
+		Scale:         float32(cmd.Float64(nameTransf("fallbackFontScale"))),
+		YOffsetFactor: float32(cmd.Float64(nameTransf("fallbackFontYOffsetFactor"))),
+		YOffset:       float32(cmd.Float64(nameTransf("fallbackFontYOffset"))),
 	}
-	inst.ClientBinary = ctx.String(nameTransf("clientBinary"))
-	inst.ImZeroCmdInFile = ctx.String(nameTransf("imZeroCmdInFile"))
-	inst.ImZeroCmdOutFile = ctx.String(nameTransf("imZeroCmdOutFile"))
+	inst.ClientBinary = cmd.String(nameTransf("clientBinary"))
+	inst.ImZeroCmdInFile = cmd.String(nameTransf("imZeroCmdInFile"))
+	inst.ImZeroCmdOutFile = cmd.String(nameTransf("imZeroCmdOutFile"))
 	if inst.ImZeroSkiaClientConfig != nil {
-		nMessages = inst.ImZeroSkiaClientConfig.FromContext(func(name string) (newName string) {
+		nMessages = inst.ImZeroSkiaClientConfig.FromContext(ctx, func(name string) (newName string) {
 			return clientPrefixNameTransf(nameTransf(name))
-		}, ctx)
+		}, cmd)
 	}
 	nMessages += inst.Validate(true)
 	return

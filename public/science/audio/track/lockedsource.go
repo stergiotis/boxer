@@ -11,7 +11,7 @@ import (
 // lockedSource makes one [pcm.SourceI] usable from several goroutines by
 // serialising the calls the contract restricts to one at a time. It is the
 // seam ADR-0208 §SD1 needs so that one open recording can serve both the
-// frame thread and the sink's callback goroutine (§SD6): [Track.ReadWindowE],
+// frame thread and the sink's callback goroutine (§SD6): [Track.ReadWindow],
 // whatever sink [Options.NewSink] returns, and — unless [Options.Reopen] gave
 // them a source of their own — the peaks build and the window cache all hold
 // this adapter rather than the source it wraps.
@@ -49,28 +49,28 @@ func (inst *lockedSource) Format() (format pcm.Format) { return inst.format }
 // Frames implements [pcm.SourceI].
 func (inst *lockedSource) Frames() (frames int64) { return inst.frames }
 
-// ReadFramesAtE implements [pcm.SourceI], delegating the whole read contract
+// ReadFramesAt implements [pcm.SourceI], delegating the whole read contract
 // — the partial read at the end, io.EOF past it, the error on a negative
 // offset — to the wrapped source. Concurrent calls are serialised, so a
 // caller waits for the read in flight; on a closed adapter it is an error
 // rather than the undefined behaviour the source contract allows.
-func (inst *lockedSource) ReadFramesAtE(ctx context.Context, frameOffset int64, dst []float32) (n int, err error) {
+func (inst *lockedSource) ReadFramesAt(ctx context.Context, frameOffset int64, dst []float32) (n int, err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	if inst.closed {
 		return 0, eb.Build().Int64("frameOffset", frameOffset).Errorf("read from a closed source")
 	}
-	return inst.src.ReadFramesAtE(ctx, frameOffset, dst)
+	return inst.src.ReadFramesAt(ctx, frameOffset, dst)
 }
 
-// CloseE implements [pcm.SourceI]. It is idempotent, and it waits for a read
+// Close implements [pcm.SourceI]. It is idempotent, and it waits for a read
 // in flight rather than closing underneath it.
-func (inst *lockedSource) CloseE() (err error) {
+func (inst *lockedSource) Close() (err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	if inst.closed {
 		return nil
 	}
 	inst.closed = true
-	return inst.src.CloseE()
+	return inst.src.Close()
 }

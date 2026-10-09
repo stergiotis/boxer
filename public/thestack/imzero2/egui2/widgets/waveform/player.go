@@ -294,7 +294,7 @@ func (inst *Player) TogglePlay() {
 // SeekTo moves the sink to frame, clamped to the track.
 func (inst *Player) SeekTo(frame int64) {
 	frame = max(0, min(frame, inst.tr.Frames()))
-	err := inst.tr.Sink().SeekE(frame)
+	err := inst.tr.Sink().SeekFrame(frame)
 	if err != nil {
 		// Only a closed sink refuses a seek; the player keeps drawing.
 		log.Debug().Err(err).Int64("frame", frame).Msg("waveform: seek refused")

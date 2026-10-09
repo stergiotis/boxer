@@ -58,7 +58,7 @@ type Sink struct {
 	// good (jfreymuth/pulse#52). The callback blocks on this instead, as
 	// oto's PulseAudio backend does; the stream stays running and the
 	// server, starved, reports one underflow per pause. Lazily made under mu
-	// so a Sink built without OpenE still reads.
+	// so a Sink built without Open still reads.
 	resumed *sync.Cond
 	// underflowFrozen latches the stream's underflow report at the first
 	// pause since the last start, because from then on the report also
@@ -88,14 +88,14 @@ type Sink struct {
 
 var _ sink.SinkI = (*Sink)(nil)
 
-// OpenE connects to the server and opens a corked playback stream over src.
+// Open connects to the server and opens a corked playback stream over src.
 // The sink does not own src.
-func OpenE(src pcm.SourceI, opts Options) (inst *Sink, err error) {
+func Open(src pcm.SourceI, opts Options) (inst *Sink, err error) {
 	if src == nil {
 		return nil, eh.New("nil source")
 	}
 	format := src.Format()
-	err = format.ValidateE()
+	err = format.Validate()
 	if err != nil {
 		return nil, err
 	}
@@ -262,10 +262,10 @@ func (inst *Sink) positionLocked(now time.Time) (frame int64) {
 	return frame
 }
 
-// SeekE implements [sink.SinkI]: moves the cursor and, while playing,
+// SeekFrame implements [sink.SinkI]: moves the cursor and, while playing,
 // restarts the stream so the server buffer is flushed and the new position
 // is heard at once.
-func (inst *Sink) SeekE(frame int64) (err error) {
+func (inst *Sink) SeekFrame(frame int64) (err error) {
 	inst.mu.Lock()
 	if inst.closed {
 		inst.mu.Unlock()
@@ -305,9 +305,9 @@ func (inst *Sink) Rate() (rate float64) {
 	return rate
 }
 
-// SetRateE implements [sink.SinkI]: the resampling ratio from the next
+// SetRate implements [sink.SinkI]: the resampling ratio from the next
 // callback on; pitch follows.
-func (inst *Sink) SetRateE(rate float64) (err error) {
+func (inst *Sink) SetRate(rate float64) (err error) {
 	if math.IsNaN(rate) || rate <= sink.RateMinExcl || rate > sink.RateMaxIncl {
 		return eb.Build().
 			Float64("rate", rate).
@@ -343,8 +343,8 @@ func (inst *Sink) Volume() (v float64) {
 	return v
 }
 
-// SetVolumeE implements [sink.SinkI]: a software gain in [0, 1].
-func (inst *Sink) SetVolumeE(v float64) (err error) {
+// SetVolume implements [sink.SinkI]: a software gain in [0, 1].
+func (inst *Sink) SetVolume(v float64) (err error) {
 	if math.IsNaN(v) || v < sink.VolumeMinIncl || v > sink.VolumeMaxIncl {
 		return eb.Build().
 			Float64("volume", v).
@@ -382,8 +382,8 @@ func (inst *Sink) Underflow() (yes bool) {
 	return inst.stream.Underflow()
 }
 
-// CloseE implements [sink.SinkI]: closes the stream and the connection.
-func (inst *Sink) CloseE() (err error) {
+// Close implements [sink.SinkI]: closes the stream and the connection.
+func (inst *Sink) Close() (err error) {
 	inst.mu.Lock()
 	if inst.closed {
 		inst.mu.Unlock()
@@ -410,7 +410,7 @@ func (inst *Sink) CloseE() (err error) {
 func (inst *Sink) read(out []float32) (n int, err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	// A pause parks the callback here; Play or CloseE releases it. The
+	// A pause parks the callback here; Play or Close releases it. The
 	// stream goroutine and, once the server asks for more, the library's
 	// read loop wait with it.
 	for inst.state == sink.StatePaused && !inst.closed {
@@ -435,7 +435,7 @@ func (inst *Sink) read(out []float32) (n int, err error) {
 		produced = pre
 		if pre < outFrames {
 			var got int
-			got, err = inst.src.ReadFramesAtE(ctx, inst.cursor, out[pre*channels:outFrames*channels])
+			got, err = inst.src.ReadFramesAt(ctx, inst.cursor, out[pre*channels:outFrames*channels])
 			if err != nil || got == 0 {
 				if produced == 0 {
 					return inst.endLocked(err)
@@ -455,7 +455,7 @@ func (inst *Sink) read(out []float32) (n int, err error) {
 		}
 		if inst.held < need {
 			var got int
-			got, err = inst.src.ReadFramesAtE(ctx, inst.cursor+int64(inst.held), inst.scratch[inst.held*channels:need*channels])
+			got, err = inst.src.ReadFramesAt(ctx, inst.cursor+int64(inst.held), inst.scratch[inst.held*channels:need*channels])
 			if err == nil {
 				inst.held += got
 			}

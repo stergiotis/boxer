@@ -35,7 +35,7 @@ func benchSetupH(b *testing.B, cfg wazero.RuntimeConfig) (h *Handle) {
 		return
 	}
 	b.Cleanup(func() { _ = rt.Close() })
-	h, err = rt.AcquireE(context.Background())
+	h, err = rt.Acquire(context.Background())
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func seedCells(b *testing.B, h *Handle, n int, res ResolutionE) (cells []uint64)
 	b.Helper()
 	lats, lngs := makeLatLngCorpus(n)
 	var err error
-	cells, _, err = h.LatLngsToCellsE(context.Background(), res, lats, lngs, nil, nil)
+	cells, _, err = h.LatLngsToCells(context.Background(), res, lats, lngs, nil, nil)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func BenchmarkLatLngsToCells(b *testing.B) {
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
 						var err error
-						cellsDst, statusDst, err = h.LatLngsToCellsE(
+						cellsDst, statusDst, err = h.LatLngsToCells(
 							context.Background(), ResolutionR9,
 							lats, lngs, cellsDst, statusDst,
 						)
@@ -106,7 +106,7 @@ func BenchmarkLatLngsToCells_PerElement(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		for j := range n {
 			var err error
-			cellsDst, statusDst, err = h.LatLngsToCellsE(
+			cellsDst, statusDst, err = h.LatLngsToCells(
 				context.Background(), ResolutionR9,
 				lats[j:j+1], lngs[j:j+1], cellsDst, statusDst,
 			)
@@ -130,7 +130,7 @@ func BenchmarkCellsToLatLngs(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				var err error
-				latsDst, lngsDst, statusDst, err = h.CellsToLatLngsE(
+				latsDst, lngsDst, statusDst, err = h.CellsToLatLngs(
 					context.Background(), cells, latsDst, lngsDst, statusDst,
 				)
 				if err != nil {
@@ -155,7 +155,7 @@ func BenchmarkCellsToChildren(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				var err error
-				childrenDst, offsetsDst, statusDst, err = h.CellsToChildrenE(
+				childrenDst, offsetsDst, statusDst, err = h.CellsToChildren(
 					context.Background(), ResolutionR6, cells,
 					childrenDst, offsetsDst, statusDst,
 				)
@@ -183,7 +183,7 @@ func BenchmarkGridDisks(b *testing.B) {
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
 						var err error
-						outDst, offsetsDst, statusDst, err = h.GridDisksE(
+						outDst, offsetsDst, statusDst, err = h.GridDisks(
 							context.Background(), k, cells,
 							outDst, offsetsDst, statusDst,
 						)
@@ -210,7 +210,7 @@ func BenchmarkCellsToStrings(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				var err error
-				bufDst, offsetsDst, statusDst, err = h.CellsToStringsE(
+				bufDst, offsetsDst, statusDst, err = h.CellsToStrings(
 					context.Background(), cells, bufDst, offsetsDst, statusDst,
 				)
 				if err != nil {
@@ -235,7 +235,7 @@ func BenchmarkCellsToBoundaries(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				var err error
-				latsDst, lngsDst, offsetsDst, statusDst, err = h.CellsToBoundariesE(
+				latsDst, lngsDst, offsetsDst, statusDst, err = h.CellsToBoundaries(
 					context.Background(), cells,
 					latsDst, lngsDst, offsetsDst, statusDst,
 				)
@@ -261,7 +261,7 @@ func BenchmarkPolygonToCells(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				var err error
-				cellsDst, err = h.PolygonToCellsE(
+				cellsDst, err = h.PolygonToCells(
 					context.Background(), res, ContainmentCovers,
 					vertsLat, vertsLng, ringOffsets, cellsDst,
 				)
@@ -280,11 +280,11 @@ func BenchmarkCompactCells(b *testing.B) {
 	// over sizes — one size, benchmark for regressions.
 	h := benchSetupH(b, nil)
 	lats, lngs := []float64{37.7749}, []float64{-122.4194}
-	anchor, _, err := h.LatLngsToCellsE(context.Background(), ResolutionR2, lats, lngs, nil, nil)
+	anchor, _, err := h.LatLngsToCells(context.Background(), ResolutionR2, lats, lngs, nil, nil)
 	if err != nil {
 		b.Fatal(err)
 	}
-	children, offsets, _, err := h.CellsToChildrenE(
+	children, offsets, _, err := h.CellsToChildren(
 		context.Background(), ResolutionR5, anchor, nil, nil, nil,
 	)
 	if err != nil {
@@ -296,7 +296,7 @@ func BenchmarkCompactCells(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		compactedDst, err = h.CompactCellsE(context.Background(), input, compactedDst)
+		compactedDst, err = h.CompactCells(context.Background(), input, compactedDst)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -318,7 +318,7 @@ func BenchmarkUncompactCells(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				var err error
-				expandedDst, statusDst, err = h.UncompactCellsE(
+				expandedDst, statusDst, err = h.UncompactCells(
 					context.Background(), ResolutionR5, cells, expandedDst, statusDst,
 				)
 				if err != nil {

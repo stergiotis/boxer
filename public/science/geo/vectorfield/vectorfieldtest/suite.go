@@ -75,11 +75,11 @@ func Run(t *testing.T, src vectorfield.SourceI, opts Options) {
 	ctx := context.Background()
 	for _, nr := range requests {
 		t.Run(nr.name, func(t *testing.T) {
-			win, err := src.SampleE(ctx, nr.req)
+			win, err := src.Sample(ctx, nr.req)
 			require.NoError(t, err)
 			checkWindow(t, meta, nr.req, &win, opts)
 
-			again, err := src.SampleE(ctx, nr.req)
+			again, err := src.Sample(ctx, nr.req)
 			require.NoError(t, err)
 			require.Equal(t, win.Version, again.Version, "the same request has the same version")
 			require.Equal(t, win.Cols, again.Cols)
@@ -89,7 +89,7 @@ func Run(t *testing.T, src vectorfield.SourceI, opts Options) {
 
 	if !meta.PeriodicLon {
 		t.Run("wholly outside a regional field", func(t *testing.T) {
-			win, err := src.SampleE(ctx, vectorfield.Request{
+			win, err := src.Sample(ctx, vectorfield.Request{
 				West: meta.East + spanLon, East: meta.East + 2*spanLon,
 				South: midLat - spanLat/8, North: midLat + spanLat/8,
 				Step: step, MaxCols: 32, MaxRows: 32,
@@ -103,7 +103,7 @@ func Run(t *testing.T, src vectorfield.SourceI, opts Options) {
 
 	t.Run("a step that is not listed", func(t *testing.T) {
 		for _, bad := range []int{-1, len(meta.Steps)} {
-			_, err := src.SampleE(ctx, vectorfield.Request{West: meta.West, East: meta.East, South: meta.South, North: meta.North, Step: bad, MaxCols: 8, MaxRows: 8})
+			_, err := src.Sample(ctx, vectorfield.Request{West: meta.West, East: meta.East, South: meta.South, North: meta.North, Step: bad, MaxCols: 8, MaxRows: 8})
 			require.Error(t, err)
 			require.True(t, errors.Is(err, vectorfield.ErrStepOutOfRange), "an unlisted step is ErrStepOutOfRange, got %v", err)
 		}
@@ -111,16 +111,16 @@ func Run(t *testing.T, src vectorfield.SourceI, opts Options) {
 
 	if opts.MissingStep >= 0 {
 		t.Run("a listed step that is missing", func(t *testing.T) {
-			_, err := src.SampleE(ctx, vectorfield.Request{West: meta.West, East: meta.East, South: meta.South, North: meta.North, Step: opts.MissingStep, MaxCols: 8, MaxRows: 8})
+			_, err := src.Sample(ctx, vectorfield.Request{West: meta.West, East: meta.East, South: meta.South, North: meta.North, Step: opts.MissingStep, MaxCols: 8, MaxRows: 8})
 			require.Error(t, err)
 			require.True(t, errors.Is(err, vectorfield.ErrStepMissing), "a missing step is an error and not an empty window, got %v", err)
 		})
 	}
 
 	t.Run("a malformed request", func(t *testing.T) {
-		_, err := src.SampleE(ctx, vectorfield.Request{West: 10, East: 10, South: 0, North: 1, Step: step, MaxCols: 8, MaxRows: 8})
+		_, err := src.Sample(ctx, vectorfield.Request{West: 10, East: 10, South: 0, North: 1, Step: step, MaxCols: 8, MaxRows: 8})
 		require.Error(t, err)
-		_, err = src.SampleE(ctx, vectorfield.Request{West: 0, East: 1, South: 0, North: 1, Step: step, MaxCols: 1, MaxRows: 8})
+		_, err = src.Sample(ctx, vectorfield.Request{West: 0, East: 1, South: 0, North: 1, Step: step, MaxCols: 1, MaxRows: 8})
 		require.Error(t, err)
 	})
 }

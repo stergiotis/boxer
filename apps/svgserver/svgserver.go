@@ -18,6 +18,7 @@
 package main
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"net/http"
@@ -38,7 +39,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/application"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 // renderJob is one unit of work handed from an HTTP handler to the render loop.
@@ -273,7 +274,7 @@ const indexHTML = `<!doctype html>
 </body>`
 
 func main() {
-	app := &cli.App{
+	app := &cli.Command{
 		Name:    "svgserver",
 		Usage:   "render imzero2 (egui) views and serve them as SVG over HTTP",
 		Version: vcs.BuildVersionInfo(),
@@ -317,7 +318,7 @@ func main() {
 		Before: logging.Apply,
 		Action: runServer,
 	}
-	if err := app.Run(os.Args); err != nil {
+	if err := app.Run(context.Background(), os.Args); err != nil {
 		log.Fatal().Err(err).Msg("svgserver exited with error")
 	}
 }
@@ -326,7 +327,7 @@ func main() {
 // server, then blocks on the imzero2 app's run loop (which owns the main
 // goroutine). The jobs channel is the only bridge between the HTTP handlers
 // and the single-threaded render loop.
-func runServer(ctx *cli.Context) (err error) {
+func runServer(ctx context.Context, cmd *cli.Command) (err error) {
 	tmpDir, err := os.MkdirTemp("", "imzero2-svgserver-")
 	if err != nil {
 		return eh.Errorf("unable to create temp dir: %w", err)
@@ -339,14 +340,14 @@ func runServer(ctx *cli.Context) (err error) {
 	}
 
 	appCfg := &application.Config{
-		ClientBinary:    ctx.String("clientBinary"),
-		MainFontTTF:     ctx.String("mainFontTTF"),
-		MonoFontTTF:     ctx.String("monoFontTTF"),
-		PhosphorFontTTF: ctx.String("phosphorFontTTF"),
+		ClientBinary:    cmd.String("clientBinary"),
+		MainFontTTF:     cmd.String("mainFontTTF"),
+		MonoFontTTF:     cmd.String("monoFontTTF"),
+		PhosphorFontTTF: cmd.String("phosphorFontTTF"),
 		ImZeroSkiaClientConfig: &application.ImZeroClientConfig{
 			AppTitle:                "svgserver",
-			InitialMainWindowWidth:  ctx.String("width"),
-			InitialMainWindowHeight: ctx.String("height"),
+			InitialMainWindowWidth:  cmd.String("width"),
+			InitialMainWindowHeight: cmd.String("height"),
 			Vsync:                   "false",
 		},
 	}
@@ -365,7 +366,7 @@ func runServer(ctx *cli.Context) (err error) {
 
 	// HTTP server on its own goroutine; the render loop owns the main goroutine
 	// (app.Run blocks). The jobs channel is the only bridge between them.
-	addr := ctx.String("addr")
+	addr := cmd.String("addr")
 	mux := http.NewServeMux()
 	mux.HandleFunc("/svg", srv.handleSVG)
 	mux.HandleFunc("/", srv.handleIndex)

@@ -1,8 +1,9 @@
 package main
 
 import (
+	"context"
 	"github.com/rs/zerolog/log"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsqlsurface"
@@ -27,13 +28,13 @@ func chpackCommand() *cli.Command {
 			&cli.StringFlag{Name: "user", Value: "default"},
 			&cli.StringFlag{Name: "password"},
 		},
-		Action: func(cCtx *cli.Context) (err error) {
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
 			client := chclient.New(chclient.Config{
-				URL:      cCtx.String("url"),
-				User:     cCtx.String("user"),
-				Password: cCtx.String("password"),
+				URL:      cmd.String("url"),
+				User:     cmd.String("user"),
+				Password: cmd.String("password"),
 			}, nil)
-			err = lwsqlsurface.Install(cCtx.Context, client)
+			err = lwsqlsurface.Install(ctx, client)
 			if err != nil {
 				return
 			}

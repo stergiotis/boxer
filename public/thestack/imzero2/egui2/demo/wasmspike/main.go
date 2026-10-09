@@ -27,6 +27,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/binary"
 	"encoding/json/v2"
 	"fmt"
@@ -53,7 +54,7 @@ import (
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/demo/apps/registry"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/metrics"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	// The registry demos that compile for wasm and emit the same frame on
 	// every target; each registers in init. sccmap compiles too but reads
@@ -436,7 +437,7 @@ var reactorStep func() int32
 // never runs main and sees no argv, so browserhost's setup export hands the
 // host's arguments to this function and calls what it returns per tick.
 func run(args []string) (step func() int32) {
-	app := &cli.App{
+	app := &cli.Command{
 		Name:    "wasmspike",
 		Usage:   "the Go frame producer of the keelson-wasm-frame-cost trial",
 		Version: vcs.BuildVersionInfo(),
@@ -463,53 +464,53 @@ func run(args []string) (step func() int32) {
 		}, logging.LoggingFlags...),
 		// The level defaults to error here, not info: a warning per widget
 		// per frame (a duplicate id, say) would dominate the wasm arms.
-		Before: func(ctx *cli.Context) error {
-			if !ctx.IsSet("logLevel") {
-				if err := ctx.Set("logLevel", "error"); err != nil {
-					return err
+		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+			if !cmd.IsSet("logLevel") {
+				if err := cmd.Set("logLevel", "error"); err != nil {
+					return nil, err
 				}
 			}
-			return logging.Apply(ctx)
+			return logging.Apply(ctx, cmd)
 		},
 		Action: spike,
 	}
-	if err := app.Run(append([]string{"wasmspike"}, args...)); err != nil {
+	if err := app.Run(context.Background(), append([]string{"wasmspike"}, args...)); err != nil {
 		fmt.Fprintln(os.Stderr, "wasmspike:", err)
 		os.Exit(1)
 	}
 	return reactorStep
 }
 
-func spike(ctx *cli.Context) (err error) {
-	if d := ctx.String("dumpOpcodes"); d != "" {
+func spike(ctx context.Context, cmd *cli.Command) (err error) {
+	if d := cmd.String("dumpOpcodes"); d != "" {
 		return dumpOpcodes(d, os.Stdout)
 	}
-	if d := ctx.String("dumpFetchTable"); d != "" {
+	if d := cmd.String("dumpFetchTable"); d != "" {
 		return dumpFetchTable(d, os.Stdout)
 	}
-	if ctx.Bool("list") {
+	if cmd.Bool("list") {
 		for _, d := range registry.All() {
 			fmt.Fprintf(os.Stderr, "%s\t%s\t%gx%g\n", d.Name, d.Category, d.Stage[0], d.Stage[1])
 		}
 		return
 	}
 	var stageW, stageH float32
-	if _, err = fmt.Sscanf(ctx.String("stage"), "%gx%g", &stageW, &stageH); err != nil {
+	if _, err = fmt.Sscanf(cmd.String("stage"), "%gx%g", &stageW, &stageH); err != nil {
 		return eh.Errorf("bad -stage: %w", err)
 	}
 
-	sceneName := ctx.String("scene")
+	sceneName := cmd.String("scene")
 	var sc sceneI
 	switch sceneName {
 	case "gallery":
-		sc = &galleryScene{only: ctx.String("demo"), pad: float32(ctx.Float64("stackPad"))}
+		sc = &galleryScene{only: cmd.String("demo"), pad: float32(cmd.Float64("stackPad"))}
 	case "labels":
-		sc = &labelsScene{rows: ctx.Int("rows")}
+		sc = &labelsScene{rows: cmd.Int("rows")}
 	default:
 		return eb.Build().Str("scene", sceneName).Errorf("unknown scene")
 	}
 
-	if p := ctx.String("cpuprofile"); p != "" {
+	if p := cmd.String("cpuprofile"); p != "" {
 		var f *os.File
 		f, err = os.Create(p)
 		if err != nil {
@@ -520,11 +521,11 @@ func spike(ctx *cli.Context) (err error) {
 		}
 		defer pprof.StopCPUProfile()
 	}
-	consumer := ctx.String("consumer")
-	lazyFlush := ctx.Bool("lazyFlush")
-	continuous := ctx.Bool("continuous")
-	nFrames, warmup := ctx.Int("frames"), ctx.Int("warmup")
-	rep := report{Arm: ctx.String("arm"), Target: ctx.String("target"), Consumer: consumer, LazyFlush: lazyFlush, Scene: sceneName, Frames: nFrames, Warmup: warmup}
+	consumer := cmd.String("consumer")
+	lazyFlush := cmd.Bool("lazyFlush")
+	continuous := cmd.Bool("continuous")
+	nFrames, warmup := cmd.Int("frames"), cmd.Int("warmup")
+	rep := report{Arm: cmd.String("arm"), Target: cmd.String("target"), Consumer: consumer, LazyFlush: lazyFlush, Scene: sceneName, Frames: nFrames, Warmup: warmup}
 	samples := make([]sample, 0, nFrames)
 	var bytesSum, msgsSum int64
 	ids := c.NewWidgetIdStack()
@@ -568,7 +569,7 @@ func spike(ctx *cli.Context) (err error) {
 
 	switch consumer {
 	case "inproc":
-		table, terr := parseFetchTable(ctx.String("fetchTable"))
+		table, terr := parseFetchTable(cmd.String("fetchTable"))
 		if terr != nil {
 			return eh.Errorf("-consumer inproc: bad -fetchTable: %w", terr)
 		}
@@ -588,7 +589,7 @@ func spike(ctx *cli.Context) (err error) {
 			}
 		}
 	case "pipe":
-		cfg := &application.Config{ClientBinary: ctx.String("clientBinary")}
+		cfg := &application.Config{ClientBinary: cmd.String("clientBinary")}
 		cfg.Validate(true)
 		u := runtime.NewUnmarshaller(nil, binary.NativeEndian, nil, nil)
 		var app *application.Application[*runtime.Unmarshaller]
@@ -616,7 +617,7 @@ func spike(ctx *cli.Context) (err error) {
 			return
 		}
 		app.Channel().SetDeferFlush(lazyFlush)
-		if ctx.Bool("reactor") {
+		if cmd.Bool("reactor") {
 			// The host owns the cadence: the action returns after Begin and
 			// the host calls the step per tick, which prints the report once
 			// the loop has stopped.

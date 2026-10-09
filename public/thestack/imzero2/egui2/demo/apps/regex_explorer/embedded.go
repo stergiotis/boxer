@@ -92,10 +92,11 @@ func (inst *EmbeddedApp) SetBus(bus runtimeapp.BusI) {
 // the host's source pattern; subsequent edits inside the inspector are
 // local to the EmbeddedApp and do not flow back. Bidirectional
 // propagation is deferred until inspector bridging lands.
+//
+// Render-thread only: the pattern is render-thread state, like every
+// other input on the [App].
 func (inst *EmbeddedApp) SetPattern(p string) {
-	inst.state.mu.Lock()
 	inst.state.pattern = p
-	inst.state.mu.Unlock()
 }
 
 // Render renders the regex explorer body into the current UI scope.
@@ -110,8 +111,8 @@ func (inst *EmbeddedApp) SetPattern(p string) {
 // own id namespace.
 //
 // Kicks off the SD1 engine-fidelity tripwire on the first call
-// (coalesced by [App.tripwireRan] on the per-instance state) so the
-// status bar's "SD1: ✓" / "SD1: DRIFT" indicator reflects the
+// (once per process — see [App.RunTripwire]) so the
+// status bar's engine-check indicator reflects the
 // embedded explorer just like the standalone window does.
 func (inst *EmbeddedApp) Render() {
 	inst.state.RunTripwire(context.Background())

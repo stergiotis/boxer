@@ -22,8 +22,9 @@
 package runtimecodegen
 
 import (
+	"context"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/codegen"
 )
@@ -36,10 +37,10 @@ func NewCliCommand() (cmd *cli.Command) {
 		Name:        "runtimecodegen",
 		Usage:       "regenerate runtime/factsschema artefacts from the leeway schema",
 		Description: "Default action (no subcommand) regenerates every artefact (dml/, dml_cbor/, ra/, ddl/).",
-		Action: func(ctx *cli.Context) error {
+		Action: func(ctx context.Context, cmd *cli.Command) error {
 			return runAll()
 		},
-		Subcommands: Subcommands(),
+		Commands: Subcommands(),
 	}
 	return
 }
@@ -68,8 +69,8 @@ func newDMLCommand() (cmd *cli.Command) {
 				Usage: "output path for the generated DML file",
 			},
 		},
-		Action: func(ctx *cli.Context) (err error) {
-			err = codegen.GenerateDML(ctx.String("out"))
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
+			err = codegen.GenerateDML(cmd.String("out"))
 			if err != nil {
 				err = eh.Errorf("runtimecodegen dml: %w", err)
 			}
@@ -90,8 +91,8 @@ func newDMLCBORCommand() (cmd *cli.Command) {
 				Usage: "output path for the generated DML (sparse CBOR backend) file",
 			},
 		},
-		Action: func(ctx *cli.Context) (err error) {
-			err = codegen.GenerateDMLCBOR(ctx.String("out"))
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
+			err = codegen.GenerateDMLCBOR(cmd.String("out"))
 			if err != nil {
 				err = eh.Errorf("runtimecodegen dml-cbor: %w", err)
 			}
@@ -113,8 +114,8 @@ func newReadAccessCommand() (cmd *cli.Command) {
 				Usage: "output path for the generated readaccess file",
 			},
 		},
-		Action: func(ctx *cli.Context) (err error) {
-			err = codegen.GenerateReadAccess(ctx.String("out"))
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
+			err = codegen.GenerateReadAccess(cmd.String("out"))
 			if err != nil {
 				err = eh.Errorf("runtimecodegen readaccess: %w", err)
 			}
@@ -135,8 +136,8 @@ func newDDLCommand() (cmd *cli.Command) {
 				Usage: "output path for the generated DDL file",
 			},
 		},
-		Action: func(ctx *cli.Context) (err error) {
-			err = codegen.GenerateDDL(ctx.String("out"))
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
+			err = codegen.GenerateDDL(cmd.String("out"))
 			if err != nil {
 				err = eh.Errorf("runtimecodegen ddl: %w", err)
 			}
@@ -150,7 +151,7 @@ func newAllCommand() (cmd *cli.Command) {
 	cmd = &cli.Command{
 		Name:  "all",
 		Usage: "regenerate every runtime/factsschema artefact",
-		Action: func(ctx *cli.Context) error {
+		Action: func(ctx context.Context, cmd *cli.Command) error {
 			return runAll()
 		},
 	}

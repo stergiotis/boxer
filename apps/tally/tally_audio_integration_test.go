@@ -37,7 +37,7 @@ func TestAudioSessionOverACompressedRecording(t *testing.T) {
 
 	s, err := openAudioSession(context.Background(), os.DirFS(dir), "tone.flac", info.Size(), info.ModTime())
 	require.NoError(t, err)
-	defer func() { require.NoError(t, s.closeE()) }()
+	defer func() { require.NoError(t, s.close()) }()
 	require.Equal(t, decode.KindFfmpeg, s.staged.kind)
 	assert.Equal(t, audioFixtureFormat, s.tr.Format())
 	assert.InEpsilon(t, audioFixtureFrames, s.tr.Frames(), 0.02)
@@ -57,7 +57,7 @@ func TestAudioSessionOverACompressedRecording(t *testing.T) {
 
 	// And the samples are the recording's own, read back through a window.
 	dst := make([]float32, 1024*int64(audioFixtureFormat.Channels))
-	n, err := s.tr.ReadWindowE(context.Background(), 4096, dst)
+	n, err := s.tr.ReadWindow(context.Background(), 4096, dst)
 	require.NoError(t, err)
 	require.Equal(t, 1024, n)
 	channels := int64(audioFixtureFormat.Channels)

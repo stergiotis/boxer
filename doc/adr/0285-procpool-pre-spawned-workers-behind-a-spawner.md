@@ -47,7 +47,7 @@ as a ClickHouse spawner over it with its exported API unchanged.
 
 ### SD1 — The seam is a spawner and a release callback
 
-`procpool.SpawnerI[W]` has one method, `SpawnE(ctx, release)`, which returns a
+`procpool.SpawnerI[W]` has one method, `Spawn(ctx, release)`, which returns a
 worker once it can serve. The worker's `Close` frees what it holds and then
 calls `release` exactly once. The pool counts a slot as free only on that
 call, so `MaxConcurrent` bounds whatever the worker stands for — a process, a
@@ -56,15 +56,15 @@ dies on its own calls `release` too; that is how a dead idle worker leaves the
 idle list and is never handed out.
 
 The pool keys its records on its own slot, not on `W`, so a release that
-arrives before `SpawnE` returns still finds its record (the spawn then fails
+arrives before `Spawn` returns still finds its record (the spawn then fails
 with "worker exited before it was handed over") and `W` need not be
 comparable.
 
 ### SD2 — Readiness belongs to the spawner, under the pool's deadline
 
-`SpawnE` returns when the worker is ready, by whatever handshake the engine
+`Spawn` returns when the worker is ready, by whatever handshake the engine
 offers. The pool applies `Config.SpawnTimeout` to the context it passes. A
-failed spawn is returned to the `AcquireE` caller that asked for it; the
+failed spawn is returned to the `Acquire` caller that asked for it; the
 refill goroutine does not retry it until the next nudge (an acquire or a
 release), so an engine that cannot start costs one attempt per demand rather
 than a loop.

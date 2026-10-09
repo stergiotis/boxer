@@ -166,10 +166,10 @@ type registeredSnippetLibrary struct {
 	src func() *snippetSource
 }
 
-// RegisterSnippetLibraryE contributes a snippet pane to every play window
+// RegisterSnippetLibrary contributes a snippet pane to every play window
 // opened afterwards. Call it at init, the way a book or a pass is registered;
 // a window already open keeps the tab set it was built with.
-func RegisterSnippetLibraryE(lib SnippetLibrary) (err error) {
+func RegisterSnippetLibrary(lib SnippetLibrary) (err error) {
 	if lib.TabID == "" || lib.Title == "" || lib.Doc == "" || lib.Help == nil || lib.DockID < 64 {
 		err = eb.Build().Str("tabId", lib.TabID).Uint64("dockId", lib.DockID).Errorf("snippet library needs a tab id, a title, a help book, a doc and a dock id of 64 or above")
 		return

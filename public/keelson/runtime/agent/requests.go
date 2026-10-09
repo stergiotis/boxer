@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -36,9 +37,6 @@ func ParseCoordinators(s string) (names []string) {
 	}
 	return
 }
-
-// requestTimeout bounds how long a request waits for the person.
-const requestTimeout = 5 * time.Minute
 
 type reqStateE uint8
 
@@ -254,7 +252,7 @@ func (inst *Service) requestStatus(key string, msg *app.Msg) (w wireOutcome) {
 // expireRequest ends a request the person left too long. The caller holds
 // mu.
 func (inst *Service) expireRequest(r *request) {
-	if r.state != reqStatePending || time.Since(r.created) < requestTimeout {
+	if r.state != reqStatePending || time.Since(r.created) < inst.requestTimeout() {
 		return
 	}
 	r.state, r.why = reqStateExpired, "the person did not decide in time"
@@ -376,7 +374,7 @@ func (inst *Service) approve(r *request) (route *held) {
 		t.desktop = r.desktop
 	}
 	r.state = reqStateApproved
-	inst.grantEvent(event, inst.decider(), "", t, nil)
+	inst.grantEvent(event, inst.decider(), "", t, r)
 	route = r.held
 	return
 }
@@ -392,6 +390,21 @@ func (inst *Service) reject(r *request) {
 		r.held.rec.outcome = phaseOutcome(opwire.PhaseRejected, "the person declined the widening")
 		r.held.rec.heldBy = nil
 	}
+}
+
+// withdraw ends the widening a held call waits on, at its coordinator's
+// cancel: the dialog closes and the call ends cancelled, so a person who
+// comes back later cannot approve a call nobody waits for. The caller
+// holds mu.
+func (inst *Service) withdraw(rec *callRec) {
+	r := rec.heldBy
+	if r == nil || r.state != reqStatePending {
+		return
+	}
+	r.state, r.why = reqStateExpired, "withdrawn by the coordinator"
+	inst.grantEvent(trail.GrantEventRefused, "coordinator", r.why, nil, r)
+	rec.outcome = phaseOutcome(opwire.PhaseCancelled, "withdrawn by cancel")
+	rec.heldBy = nil
 }
 
 // routeHeld re-runs a call whose widening the person approved, off the
@@ -522,12 +535,16 @@ func (inst *Service) endTaskAsked(t *task, why string, by string, asked wireCaus
 }
 
 // detachEntry removes one instance from a task.
-func (inst *Service) detachEntry(t *task, key uint64, why string) {
+func (inst *Service) detachEntry(t *task, key uint64, why string, decidedBy string) {
 	inst.mu.Lock()
 	e := t.entries[key]
 	delete(t.entries, key)
 	ids := t.queuedOn(key)
 	inst.discardProposals(t, key, why)
+	if e != nil {
+		// The grant shrinks: its history on the trail says so (ADR-0277 §SD2).
+		inst.grantEvent(trail.GrantEventDetached, decidedBy, "window "+strconv.FormatUint(key, 10)+": "+why, t, nil)
+	}
 	inst.mu.Unlock()
 	if e == nil || inst.cfg.Host == nil {
 		return
@@ -560,7 +577,7 @@ func (inst *Service) instanceClosed(msg *app.Msg) {
 		inst.endTask(t, "the coordinator closed", "host")
 	}
 	for _, t := range detaches {
-		inst.detachEntry(t, ev.InstanceKey, "the window closed")
+		inst.detachEntry(t, ev.InstanceKey, "the window closed", "host")
 	}
 }
 

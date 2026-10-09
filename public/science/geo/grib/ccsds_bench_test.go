@@ -18,7 +18,7 @@ func BenchmarkCCSDS(b *testing.B) {
 	b.ResetTimer()
 	for range b.N {
 		var err error
-		dst, err = f.ValuesE(dst)
+		dst, err = f.Values(dst)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -42,7 +42,7 @@ func BenchmarkComplex(b *testing.B) {
 	b.ResetTimer()
 	for range b.N {
 		var err error
-		dst, err = f.ValuesE(dst)
+		dst, err = f.Values(dst)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -53,7 +53,7 @@ func BenchmarkComplex(b *testing.B) {
 func readFixtureB(b *testing.B, name string) (buf []byte) {
 	b.Helper()
 	var err error
-	buf, err = readFixtureE(name)
+	buf, err = loadFixture(name)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func BenchmarkJPEG2000(b *testing.B) {
 	b.ResetTimer()
 	for range b.N {
 		var err error
-		dst, err = f.ValuesE(dst)
+		dst, err = f.Values(dst)
 		if err != nil {
 			b.Fatal(err)
 		}

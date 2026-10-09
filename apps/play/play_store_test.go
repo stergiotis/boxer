@@ -4,13 +4,17 @@ import (
 	"bytes"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/ipc"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
 )
 
 // arrowStreamBytes encodes a one-column Int64 record as an Arrow IPC stream —
@@ -97,7 +101,39 @@ func TestQueryStoreExecuteRows(t *testing.T) {
 	}
 	hist := store.History()
 	if len(hist) != 1 || hist[0].NumRows != 2 || hist[0].ErrorText != "" {
-		t.Errorf("history=%+v, want one 2-row entry with no error", hist)
+		t.Fatalf("history=%+v, want one 2-row entry with no error", hist)
+	}
+	// The entry carries what the History tab's detail shows: the server's
+	// accounting, where the run went, and the class of what ran.
+	e := hist[0]
+	if e.Summary.ReadRows != 2 || e.Summary.ReadBytes != 16 {
+		t.Errorf("entry summary=%+v, want read 2 rows / 16 bytes", e.Summary)
+	}
+	if e.Dispatch == "" {
+		t.Error("entry dispatch should describe the decision")
+	}
+	if !e.Security.known || e.Security.class != analysis.QuerySecurityRead {
+		t.Errorf("entry security=%+v, want a known read", e.Security)
+	}
+	if e.Agent != nil {
+		t.Errorf("entry agent=%+v, want nil for the person's run", e.Agent)
+	}
+}
+
+// classifySecurity fails closed: a statement that does not parse is unknown
+// and holds the strongest class.
+func TestClassifySecurity(t *testing.T) {
+	v, pr := classifySecurity("SELECT 1", nil)
+	if pr == nil || !v.known || v.class != analysis.QuerySecurityRead {
+		t.Errorf("SELECT 1: verdict=%+v pr=%v, want a known read", v, pr)
+	}
+	v, _ = classifySecurity("SELECT * FROM url('http://example.invalid/x', CSV)", nil)
+	if !v.known || v.class != analysis.QuerySecurityReadEgress || len(v.witnesses) == 0 {
+		t.Errorf("url(): verdict=%+v, want read-egress with a witness", v)
+	}
+	v, pr = classifySecurity("SELEC nope (", nil)
+	if pr != nil || v.known || v.class != analysis.QuerySecurityMutating {
+		t.Errorf("unparseable: verdict=%+v pr=%v, want unknown mutating", v, pr)
 	}
 }
 
@@ -204,5 +240,43 @@ func TestQueryStoreHistoryCap(t *testing.T) {
 	}
 	if got := len(store.History()); got != 2 {
 		t.Errorf("history len=%d, want 2 (capped at maxHist)", got)
+	}
+}
+
+// A detail draws a statement up to historySqlShowBytes, cut at a line
+// break near the cap where there is one, never inside a rune.
+func TestHistorySqlCut(t *testing.T) {
+	short := "SELECT 1"
+	if got, cut := historySqlCut(short); cut || got != short {
+		t.Errorf("short: got %q cut=%v", got, cut)
+	}
+	lines := strings.Repeat("SELECT 1 UNION ALL\n", historySqlShowBytes/10)
+	got, cut := historySqlCut(lines)
+	if !cut || len(got) > historySqlShowBytes || len(got) < historySqlShowBytes*3/4 || !strings.HasSuffix(got, "ALL") {
+		t.Errorf("lines: len=%d cut=%v suffix=%q", len(got), cut, got[len(got)-3:])
+	}
+	runes := strings.Repeat("ä", historySqlShowBytes)
+	got, cut = historySqlCut(runes)
+	if !cut || !utf8.ValidString(got) {
+		t.Errorf("runes: cut=%v valid=%v", cut, utf8.ValidString(got))
+	}
+}
+
+// The History tab holds one open run across both halves: opening a
+// recorded run closes a session run and the reverse; a second click closes.
+func TestHistoryOpenIsExclusive(t *testing.T) {
+	var o historyOpen
+	at := time.Unix(100, 0)
+	o.toggle(historyOpen{executed: at}, false)
+	if !o.executed.Equal(at) || o.fact != 0 {
+		t.Fatalf("session open: %+v", o)
+	}
+	o.toggle(historyOpen{fact: 7}, false)
+	if !o.executed.IsZero() || o.fact != 7 {
+		t.Fatalf("recorded open should close the session run: %+v", o)
+	}
+	o.toggle(historyOpen{fact: 7}, true)
+	if o != (historyOpen{}) {
+		t.Fatalf("second click should close: %+v", o)
 	}
 }

@@ -4,11 +4,12 @@ package regex_explorer
 //
 // Static reference material rendered in the left panel: RE2 syntax
 // tokens, ClickHouse regex function names, and a curated set of
-// showcase (pattern, haystack) pairs. All rows are clickable:
-//   - syntax/function tokens append to the last-focused text input via
-//     [insertToken];
+// showcase (pattern, haystack) pairs. Syntax and showcase rows are
+// clickable; the function rows are reference only:
+//   - syntax tokens go into the last-focused text input at its caret via
+//     [App.insertToken];
 //   - showcase rows replace both pattern and haystack via [applyShowcase]
-//     and trigger the per-tab query cascade.
+//     the query lanes pick the new inputs up on the same frame.
 //
 // Organised as CollapsingHeader sections so users can fold away the
 // topics they don't need; all start closed to keep the initial panel
@@ -92,6 +93,9 @@ type cheatSection struct {
 	Id    string
 	Title string
 	Rows  []cheatToken
+	// Reference marks a section of names to read, not tokens to insert:
+	// a function signature appended to a pattern only breaks it.
+	Reference bool
 }
 
 var cheatSections = []cheatSection{
@@ -151,24 +155,27 @@ var cheatSections = []cheatSection{
 		},
 	},
 	{
-		Id:    "cs-ch-single",
-		Title: "ClickHouse RE2 fns",
+		Id:        "cs-ch-single",
+		Title:     "ClickHouse RE2 functions",
+		Reference: true,
 		Rows: []cheatToken{
-			{`match(h, p)`, "UInt8: 1 if match, else 0"},
+			{`match(h, p)`, "UInt8: 1 if anything matches"},
+			{`countMatches(h, p)`, "UInt64: number of non-empty matches"},
+			{`extract(h, p)`, "first match — or its group 1 if the pattern captures"},
+			{`regexpExtract(h, p, i)`, "group i of the first match; 0 is the whole match"},
 			// Deliberately not "full matches": ClickHouse returns capture
 			// group 1 whenever the pattern captures, which is the single
-			// most surprising thing about this function and the reason the
-			// List tab carries a caveat.
-			{`extractAll(h, p)`, "Array(String): full matches — or group 1 if the pattern captures"},
+			// most surprising thing about this function.
+			{`extractAll(h, p)`, "Array(String): matches — or group 1 if the pattern captures; stops at the first empty match"},
 			{`extractAllGroups(h, p)`, "Array(Array(String)): groups per match (needs a group)"},
+			{`replaceRegexpOne(h, p, r)`, "replace the first match"},
 			{`replaceRegexpAll(h, p, r)`, "replace every match"},
-			{`replaceRegexpOne(h, p, r)`, "replace first match"},
-			{`countMatches(h, p)`, "number of matches"},
 		},
 	},
 	{
-		Id:    "cs-ch-multi",
-		Title: "ClickHouse VectorScan fns",
+		Id:        "cs-ch-multi",
+		Title:     "ClickHouse VectorScan functions",
+		Reference: true,
 		Rows: []cheatToken{
 			{`multiMatchAny(h, [p..])`, "UInt8: any pattern hit"},
 			{`multiMatchAnyIndex(h, [p..])`, "UInt64: index of first hit"},
@@ -190,17 +197,21 @@ func (inst *App) renderCheatsheet() {
 					for range c.IdScope(inst.ids.PrepareSeq(uint64(i))) {
 						btnAtoms := c.Atoms().Text(sc.Title).Keep()
 						if c.Button(inst.ids.PrepareStr("btn"), btnAtoms).Small().SendResp().HasPrimaryClicked() {
-							inst.applyShowcase(sc.Pattern, sc.Haystack)
+							gesture(inst, opApplyShowcase, ApplyShowcaseArgs{Name: sc.Title}, func() { inst.applyShowcase(sc.Pattern, sc.Haystack) })
 						}
 					}
 				}
 			}
 		}
 
-		for _, sec := range cheatSections {
+		for si, sec := range cheatSections {
 			for range c.CollapsingHeader(inst.ids.PrepareStr(sec.Id), c.WidgetText().Text(sec.Title).Keep()).KeepIter() {
-				for range c.IdScope(inst.ids.PrepareStr(sec.Id + "-scope")) {
+				for range c.IdScope(inst.ids.PrepareSeq(uint64(si))) {
 					for i, row := range sec.Rows {
+						if sec.Reference {
+							referenceRow(row)
+							continue
+						}
 						inst.cheatRow(uint64(i), row.Token, row.Desc)
 					}
 				}
@@ -209,9 +220,20 @@ func (inst *App) renderCheatsheet() {
 	}
 }
 
+// referenceRow draws one function row: the signature in monospace and its
+// description beneath, nothing to click.
+func referenceRow(row cheatToken) {
+	for rt := range c.RichTextLabel(row.Token) {
+		rt.Monospace()
+	}
+	for rt := range c.RichTextLabel("    " + row.Desc) {
+		rt.Weak()
+	}
+}
+
 // cheatRow draws one clickable token row: a small button labelled with
 // the token text, followed by a plain description. Clicking the button
-// appends the token into the last-focused text input via [App.insertToken].
+// puts the token into the last-focused text input at its caret ([App.insertToken]).
 func (inst *App) cheatRow(seq uint64, token string, desc string) {
 	for range c.IdScope(inst.ids.PrepareSeq(seq)) {
 		for range c.Horizontal().KeepIter() {

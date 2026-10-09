@@ -286,10 +286,15 @@ type PlayApp struct {
 	// S2): captured KindQueryRun facts read back from the live endpoint,
 	// fetched manually and on first reveal (play_runs_history.go).
 	runsHist *runsHistoryDriver
+	// histOpen is the one run the History tab has open, across both of its
+	// halves. Render-thread-only.
+	histOpen historyOpen
 	// tabs is the instance's dock-tab set (ADR-0097 slice 6a): every tab a
 	// registered TabSpec, frozen at the first Render. Embedders customize
 	// it via Tabs() between construction and mounting (D4).
 	tabs *TabRegistry
+	// dockSplits are the initial layout's split fractions (SetDockSplits).
+	dockSplits DockSplits
 	// lazyPanes holds one widgets/lazypane gate per Lazy tab, keyed by
 	// DockID and created on first use (embedder tabs land here too). The
 	// panes are persistent render-thread state — each carries the
@@ -1252,6 +1257,7 @@ func NewPlayApp(client *Client, graph *queryGraph, initialSQL string, rules *glo
 	inst.affordanceEval = newAffordanceEvaluator(&inst.observations)
 	// Last: the tab set closes over the drivers above (slice 6a).
 	inst.tabs = defaultTabs(inst)
+	inst.dockSplits = DefaultDockSplits
 	addSnippetLibraryTabs(inst, inst.tabs)
 	inst.vizSeed = nextVizSeed()
 	return inst
@@ -1635,7 +1641,7 @@ func (inst *PlayApp) render() error {
 			rootLeaf := dock.InitRoot(rootIDs...)
 			bodyLeaf := rootLeaf
 			if len(editorIDs) > 0 && len(bodyIDs) > 0 {
-				bodyLeaf = dock.Split(rootLeaf, c.DockBelow, 0.45, bodyIDs...)
+				bodyLeaf = dock.Split(rootLeaf, c.DockBelow, inst.dockSplits.Editor, bodyIDs...)
 			}
 			// Bottom before side, and the order is the layout: this split takes
 			// the whole body's width, and the side split then narrows only what
@@ -1647,13 +1653,13 @@ func (inst *PlayApp) render() error {
 			// node its own, which is the same property the tools zone relies on
 			// when it splits rootLeaf after the body already did.
 			if bottom := zoneTabOrder(inst.tabs.byZone(TabZoneBottom), focused); len(bottom) > 0 {
-				_ = dock.Split(bodyLeaf, c.DockBelow, 0.60, bottom...)
+				_ = dock.Split(bodyLeaf, c.DockBelow, inst.dockSplits.Bottom, bottom...)
 			}
 			if side := zoneTabOrder(inst.tabs.byZone(TabZoneSide), focused); len(side) > 0 {
-				_ = dock.Split(bodyLeaf, c.DockRight, 0.70, side...)
+				_ = dock.Split(bodyLeaf, c.DockRight, inst.dockSplits.Side, side...)
 			}
 			if tools := zoneTabOrder(inst.tabs.byZone(TabZoneTools), focused); len(tools) > 0 {
-				_ = dock.Split(rootLeaf, c.DockRight, 0.55, tools...)
+				_ = dock.Split(rootLeaf, c.DockRight, inst.dockSplits.Tools, tools...)
 			}
 			for _, spec := range inst.tabs.all() {
 				// Per-tab frame view (slice 6c): a bound tab renders its
@@ -3054,30 +3060,6 @@ func (inst *PlayApp) renderStatus(numRows int64, elapsed time.Duration, summary 
 	}
 	inst.queryFSMWidget.Opts.Summary = func() { inst.renderQuerySummary(numRows, elapsed, summary, executed, err, truncation) }
 	inst.queryFSMWidget.Render()
-}
-
-// renderHistoryTab is the History dock tab body. The tab title already
-// labels the pane so the legacy heading and inner ScrollArea are gone;
-// the outer ScrollArea wrap lives in Render().
-func (inst *PlayApp) renderHistoryTab() {
-	ids := inst.ids
-	hist := inst.graph.MainHistory()
-	// Newest first.
-	for i := len(hist) - 1; i >= 0; i-- {
-		entry := hist[i]
-		label := historyLabel(entry)
-		for range c.IdScope(ids.PrepareSeq(uint64(i))) {
-			if c.Button(ids.PrepareStr("entry"),
-				c.Atoms().Text(label).Keep()).
-				Frame(false).
-				Truncate().
-				SendResp().HasPrimaryClicked() {
-				inst.restoreHistoryEntry(entry)
-			}
-		}
-	}
-	// The durable half: captured runs from boxer.facts (ADR-0115 S2).
-	inst.renderRecordedRuns()
 }
 
 // renderTableTab is the Table dock tab body: pager strip atop the master

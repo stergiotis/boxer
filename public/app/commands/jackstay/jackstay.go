@@ -42,7 +42,7 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
@@ -59,7 +59,7 @@ func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "jackstay",
 		Usage: "guided sync of tables from one ClickHouse server to another (ADR-0259)",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			newDiscoverCommand(),
 			newStructureCommand(),
 			newExportCommand(),
@@ -81,7 +81,7 @@ func endpointFlags() []cli.Flag {
 }
 
 func planFlag(required bool) cli.Flag {
-	return &cli.PathFlag{Name: "plan", Usage: "plan document (JSON)", Required: required}
+	return &cli.StringFlag{Name: "plan", Usage: "plan document (JSON)", Required: required, TakesFile: true}
 }
 
 func newDiscoverCommand() *cli.Command {
@@ -89,8 +89,7 @@ func newDiscoverCommand() *cli.Command {
 		Name:  "discover",
 		Usage: "list the databases the source (and target, when given) hold, from their system tables",
 		Flags: endpointFlags(),
-		Action: func(c *cli.Context) (err error) {
-			ctx := c.Context
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
 			w := os.Stdout
 			src := jk.SourceEndpoint()
 			err = discoverAndPrint(ctx, w, "source", jk.SourceClientConfig(src))
@@ -167,22 +166,21 @@ func newStructureCommand() *cli.Command {
 			&cli.StringSliceFlag{Name: "map", Usage: "rename a database on the target, as source=target (repeatable)"},
 			&cli.BoolFlag{Name: "leeway-only", Usage: "plan only the tables that classify as leeway (ADR-0170)"},
 			filterFlag(),
-			&cli.PathFlag{Name: "pack", Usage: "read the source from this pack directory (written by export) instead of a server"},
+			&cli.StringFlag{Name: "pack", Usage: "read the source from this pack directory (written by export) instead of a server", TakesFile: true},
 		),
-		Action: func(c *cli.Context) (err error) {
-			ctx := c.Context
-			sel := jk.Selection{Databases: c.StringSlice("database"), LeewayOnly: c.Bool("leeway-only")}
-			sel.DatabaseMap, err = parseMap(c.StringSlice("map"))
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
+			sel := jk.Selection{Databases: cmd.StringSlice("database"), LeewayOnly: cmd.Bool("leeway-only")}
+			sel.DatabaseMap, err = parseMap(cmd.StringSlice("map"))
 			if err != nil {
 				return
 			}
-			sel.Filters, err = parseFilters(filterValues(c))
+			sel.Filters, err = parseFilters(filterValues(ctx, cmd))
 			if err != nil {
 				return
 			}
 			srcEp := jk.SourceEndpoint()
 			src := jk.ServerSource(metaClient(jk.SourceClientConfig(srcEp)))
-			if dir := c.Path("pack"); dir != "" {
+			if dir := cmd.String("pack"); dir != "" {
 				var p *jk.Pack
 				p, err = jk.OpenPack(dir)
 				if err != nil {
@@ -194,7 +192,7 @@ func newStructureCommand() *cli.Command {
 			if !ok {
 				return eh.Errorf("--target is required: %w", jk.ErrNoTarget)
 			}
-			path := c.Path("plan")
+			path := cmd.String("plan")
 			var old *jk.Plan
 			if o, loadErr := jk.LoadPlan(path); loadErr == nil {
 				old = &o
@@ -260,9 +258,15 @@ func (inst *filterEntries) String() string {
 	return strings.Join(*inst, " ")
 }
 
+// Get returns the receiver: cli.Command.Generic hands back what Get returns,
+// and only when that is itself a cli.Value.
+func (inst *filterEntries) Get() any {
+	return inst
+}
+
 // filterValues is what --filter collected.
-func filterValues(c *cli.Context) (entries []string) {
-	if f, ok := c.Generic("filter").(*filterEntries); ok && f != nil {
+func filterValues(ctx context.Context, cmd *cli.Command) (entries []string) {
+	if f, ok := cmd.Generic("filter").(*filterEntries); ok && f != nil {
 		entries = *f
 	}
 	return
@@ -417,10 +421,9 @@ func newApplyDDLCommand() *cli.Command {
 			planFlag(true),
 			&cli.BoolFlag{Name: "confirm", Usage: "execute the DDL (without it, only print what would run)"},
 		},
-		Action: func(c *cli.Context) (err error) {
-			ctx := c.Context
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
 			w := os.Stdout
-			path := c.Path("plan")
+			path := cmd.String("plan")
 			var plan jk.Plan
 			plan, err = jk.LoadPlan(path)
 			if err != nil {
@@ -433,7 +436,7 @@ func newApplyDDLCommand() *cli.Command {
 			}
 			dstCfg := jk.TargetClientConfig(plan.Target)
 			dstQ := metaClient(dstCfg)
-			if !c.Bool("confirm") {
+			if !cmd.Bool("confirm") {
 				var pending jk.Plan
 				var stale []string
 				pending, stale, err = jk.Recheck(ctx, srcQ, dstQ, &plan, time.Now())
@@ -504,12 +507,11 @@ func newDiffCommand() *cli.Command {
 			&cli.Uint64Flag{Name: "pair-threshold", Value: def.PairThreshold, Usage: "largest differing leaf, in rows, compared row by row"},
 			&cli.Uint64Flag{Name: "pair-budget", Value: def.PairBudget, Usage: "most rows fetched per table and side for row-by-row comparison"},
 		},
-		Action: func(c *cli.Context) (err error) {
-			ctx := c.Context
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
 			w := os.Stdout
-			path := c.Path("plan")
+			path := cmd.String("plan")
 			var only []datacatalog.TableRef
-			only, err = parseRefs(c.StringSlice("table"))
+			only, err = parseRefs(cmd.StringSlice("table"))
 			if err != nil {
 				return
 			}
@@ -527,9 +529,9 @@ func newDiffCommand() *cli.Command {
 			var prev *jk.PlanTable
 			var started time.Time
 			opts := jk.DiffOptionsAll{
-				Final:    c.Bool("final"),
+				Final:    cmd.Bool("final"),
 				Chunking: jk.DefaultChunkingOptions(),
-				Diff:     jk.DiffOptions{PairThreshold: c.Uint64("pair-threshold"), PairBudget: c.Uint64("pair-budget"), MaxExamples: def.MaxExamples},
+				Diff:     jk.DiffOptions{PairThreshold: cmd.Uint64("pair-threshold"), PairBudget: cmd.Uint64("pair-budget"), MaxExamples: def.MaxExamples},
 				Only:     only,
 				Progress: func(i int, n int, pt *jk.PlanTable) {
 					if prev != nil {
@@ -628,13 +630,12 @@ func newSyncCommand() *cli.Command {
 			&cli.Uint64Flag{Name: "min-free-bytes", Value: jk.DefaultFreeFloor().MinFreeBytes, Usage: "wait between chunks while a target disk has less free"},
 			&cli.Float64Flag{Name: "min-free-fraction", Value: jk.DefaultFreeFloor().MinFreeFraction, Usage: "wait between chunks while a target disk has less than this share of its size free"},
 		},
-		Action: func(c *cli.Context) (err error) {
-			ctx := c.Context
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
 			var w io.Writer = os.Stdout
-			path := c.Path("plan")
+			path := cmd.String("plan")
 			var req jk.SyncRequest
 			var compression string
-			req, compression, err = parseSyncRequest(c)
+			req, compression, err = parseSyncRequest(ctx, cmd)
 			if err != nil {
 				return
 			}
@@ -667,11 +668,11 @@ func newSyncCommand() *cli.Command {
 				_, _ = fmt.Fprintln(w, "nothing to sync")
 				return
 			}
-			if c.Bool("dry-run") {
+			if cmd.Bool("dry-run") {
 				printSyncPreview(w, prep.Chosen)
 			}
 			printPreflight(w, prep.Disks)
-			if c.Bool("dry-run") {
+			if cmd.Bool("dry-run") {
 				return
 			}
 
@@ -680,7 +681,7 @@ func newSyncCommand() *cli.Command {
 			mon := newSyncMonitor(ctx, dstC, prep.ExpectedRows)
 			mon.attach(&opts)
 			w = mon.bar.LogWriter()
-			floor := jk.FreeFloor{MinFreeBytes: c.Uint64("min-free-bytes"), MinFreeFraction: c.Float64("min-free-fraction"), Poll: jk.DefaultFreeFloor().Poll}
+			floor := jk.FreeFloor{MinFreeBytes: cmd.Uint64("min-free-bytes"), MinFreeFraction: cmd.Float64("min-free-fraction"), Poll: jk.DefaultFreeFloor().Poll}
 			opts.FreeFloor = &floor
 			opts.OnLowDisk = func(low []jk.DiskInfo) {
 				for _, d := range low {
@@ -731,29 +732,29 @@ func newSyncCommand() *cli.Command {
 }
 
 // parseSyncRequest reads the sync command's flags.
-func parseSyncRequest(c *cli.Context) (req jk.SyncRequest, compression string, err error) {
-	err = req.Mode.UnmarshalText([]byte(c.String("mode")))
+func parseSyncRequest(ctx context.Context, cmd *cli.Command) (req jk.SyncRequest, compression string, err error) {
+	err = req.Mode.UnmarshalText([]byte(cmd.String("mode")))
 	if err != nil {
 		return
 	}
-	err = req.Existing.UnmarshalText([]byte(c.String("existing")))
+	err = req.Existing.UnmarshalText([]byte(cmd.String("existing")))
 	if err != nil {
 		return
 	}
 	if req.Mode == jk.SyncModeSample {
-		req.SampleNum, req.SampleDen, err = jk.ParseFraction(c.String("sample"))
+		req.SampleNum, req.SampleDen, err = jk.ParseFraction(cmd.String("sample"))
 		if err != nil {
 			return
 		}
 	}
-	req.Only, err = parseRefs(c.StringSlice("table"))
+	req.Only, err = parseRefs(cmd.StringSlice("table"))
 	if err != nil {
 		return
 	}
-	req.Restart = c.Bool("restart")
+	req.Restart = cmd.Bool("restart")
 	req.Chunking = jk.DefaultChunkingOptions()
-	req.Headroom = c.Float64("headroom")
-	compression, err = jk.ParseCompression(c.String("compression"))
+	req.Headroom = cmd.Float64("headroom")
+	compression, err = jk.ParseCompression(cmd.String("compression"))
 	return
 }
 
@@ -923,9 +924,9 @@ func newStatusCommand() *cli.Command {
 			planFlag(true),
 			&cli.BoolFlag{Name: "disk", Usage: "also read the target's disks and table footprints"},
 		},
-		Action: func(c *cli.Context) (err error) {
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
 			w := os.Stdout
-			path := c.Path("plan")
+			path := cmd.String("plan")
 			var plan jk.Plan
 			plan, err = jk.LoadPlan(path)
 			if err != nil {
@@ -981,7 +982,7 @@ func newStatusCommand() *cli.Command {
 					}
 				}
 			}
-			if !c.Bool("disk") {
+			if !cmd.Bool("disk") {
 				return
 			}
 			refs := make([]datacatalog.TableRef, 0, len(plan.Tables))
@@ -993,7 +994,7 @@ func newStatusCommand() *cli.Command {
 				}
 			}
 			var rep jk.DiskReport
-			rep, err = jk.ReadDisks(c.Context, chclient.New(jk.TargetClientConfig(plan.Target), nil), refs)
+			rep, err = jk.ReadDisks(ctx, chclient.New(jk.TargetClientConfig(plan.Target), nil), refs)
 			if err != nil {
 				return
 			}

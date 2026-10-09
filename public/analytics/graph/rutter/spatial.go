@@ -46,9 +46,9 @@ type Index struct {
 	gen    uint32
 }
 
-// NewIndexE builds the grid with the given cell size. A polyline with no
+// NewIndex builds the grid with the given cell size. A polyline with no
 // vertex is refused, because it has no box.
-func NewIndexE(lines Polylines, cell float64) (inst *Index, err error) {
+func NewIndex(lines Polylines, cell float64) (inst *Index, err error) {
 	if len(lines.First) < 1 || int(lines.First[len(lines.First)-1]) != len(lines.X) || len(lines.X) != len(lines.Y) {
 		err = eb.Build().Int("offsets", len(lines.First)).Int("x", len(lines.X)).Int("y", len(lines.Y)).Errorf("the polyline arrays do not describe a set")
 		return

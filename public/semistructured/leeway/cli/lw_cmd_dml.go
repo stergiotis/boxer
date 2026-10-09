@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"os"
 
 	"github.com/rs/zerolog/log"
@@ -11,18 +12,18 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/dml"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/gocodegen"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func NewCliCommandDml() *cli.Command {
 	return &cli.Command{
 		Name: "dml",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			{Name: "table",
-				Subcommands: []*cli.Command{
+				Commands: []*cli.Command{
 					{
 						Name: "generate",
-						Subcommands: []*cli.Command{
+						Commands: []*cli.Command{
 							{Name: "go",
 								Flags: []cli.Flag{
 									&cli.StringFlag{
@@ -34,7 +35,7 @@ func NewCliCommandDml() *cli.Command {
 										Required: true,
 									},
 								},
-								Action: func(context *cli.Context) error {
+								Action: func(ctx context.Context, cmd *cli.Command) error {
 									marshaller, err := common.NewTableMarshaller()
 									if err != nil {
 										return eh.Errorf("unable to create table marshaller: %w", err)
@@ -59,8 +60,8 @@ func NewCliCommandDml() *cli.Command {
 									driver := dml.NewGoCodeGeneratorDriver(conv, chTech)
 
 									tableRowConfig := common.TableRowConfigMultiAttributesPerRow
-									tableName := context.String("tableName")
-									packageName := context.String("packageName")
+									tableName := cmd.String("tableName")
+									packageName := cmd.String("packageName")
 									var wellFormed bool
 									var sourceCode []byte
 									namingStyle := gocodegen.NewDefaultGoClassNamer()

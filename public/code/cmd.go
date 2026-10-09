@@ -2,7 +2,7 @@ package code
 
 import (
 	"github.com/stergiotis/boxer/public/code/analysis"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 // NewCliCommand returns the `code` parent command. Currently exposes
@@ -14,7 +14,7 @@ func NewCliCommand(extraSubcommands ...*cli.Command) *cli.Command {
 	subs = append(subs, analysis.NewCliCommand())
 	subs = append(subs, extraSubcommands...)
 	return &cli.Command{
-		Name:        "code",
-		Subcommands: subs,
+		Name:     "code",
+		Commands: subs,
 	}
 }

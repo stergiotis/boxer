@@ -96,6 +96,9 @@ const (
 	DefaultCallsMin   = 20
 	DefaultCallsMax   = 1000
 	DefaultDeadline   = 30 * time.Minute
+	// DefaultRequestTimeout bounds how long a request waits for the person:
+	// as long as a task runs, since a coordinator's call now waits with it.
+	DefaultRequestTimeout = 30 * time.Minute
 	// MaxStatusWait bounds how long status waits for a final phase.
 	MaxStatusWait = 5 * time.Second
 	// keepRecords bounds the in-process action record.
@@ -355,6 +358,14 @@ func (inst *Service) deadline() (d time.Duration) {
 	return
 }
 
+// requestTimeout is how long a request waits for the person.
+func (inst *Service) requestTimeout() (d time.Duration) {
+	if d = inst.cfg.RequestTimeout; d <= 0 {
+		d = DefaultRequestTimeout
+	}
+	return
+}
+
 // callRange is the range a new task's call budget lies in.
 func (inst *Service) callRange() (lo int, hi int) {
 	if lo = inst.cfg.CallsMin; lo <= 0 {
@@ -555,12 +566,19 @@ func (inst *Service) expectsFor(t *task, req wireCall, spec app.OperationSpec) (
 	return
 }
 
+// mintCallId is the dispatcher's id for a call of t: the Delegation.Call
+// its action rows and what it causes carry (ADR-0277 §SD7). The caller
+// holds mu.
+func (inst *Service) mintCallId(t *task) (id string) {
+	inst.nextCall++
+	return t.id + "-" + strconv.FormatUint(inst.nextCall, 10)
+}
+
 // route sends a checked call to its instance and settles what it answers.
 func (inst *Service) route(t *task, rec *callRec, req wireCall, spec app.OperationSpec, e *entry) {
 	inst.mu.Lock()
 	expects := inst.expectsFor(t, req, spec)
-	inst.nextCall++
-	rec.callId = t.id + "-" + strconv.FormatUint(inst.nextCall, 10)
+	rec.callId = inst.mintCallId(t)
 	rec.req, rec.entry = req, e
 	rec.req.Expects = expects
 	alias := e.alias
@@ -853,7 +871,9 @@ func (inst *Service) status(msg *app.Msg) (rep wireCallReply) {
 			inst.mu.Lock()
 		}
 	}
-	t, out, ok := inst.resolve(req.Handle, msg)
+	// A late task's calls are held for more time, not denied: their
+	// status is theirs to report (ADR-0269, update of 2026-10-08).
+	t, out, ok, _ := inst.resolveLate(req.Handle, msg, true)
 	if !ok {
 		rep.Outcome = wireOutcomeOf(out, "", "")
 		return
@@ -877,7 +897,8 @@ func (inst *Service) cancel(msg *app.Msg) (rep wireCallReply) {
 	rep.Ok = true
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	t, out, ok := inst.resolve(req.Handle, msg)
+	// Withdrawing takes nothing from the person, late or not.
+	t, out, ok, _ := inst.resolveLate(req.Handle, msg, true)
 	if !ok {
 		rep.Outcome = wireOutcomeOf(out, "", "")
 		return
@@ -886,6 +907,9 @@ func (inst *Service) cancel(msg *app.Msg) (rep wireCallReply) {
 	if !seen {
 		rep.Outcome = wireOutcomeOf(phaseOutcome(opwire.PhaseRefused, "no call by that key"), "", "")
 		return
+	}
+	if rec.heldBy != nil && rec.outcome.Phase == opwire.PhaseInputRequired {
+		inst.withdraw(rec)
 	}
 	if rec.routed && rec.outcome.Phase == opwire.PhaseAccepted && inst.cfg.Host != nil {
 		if o, found := inst.cfg.Host.OpsCancel(rec.instance, rec.callId); found {
@@ -999,7 +1023,8 @@ func (inst *Service) capture(msg *app.Msg) (rep wireCallReply) {
 	if len(windows) == 0 {
 		windows = []uint64{req.Instance}
 	}
-	rec := &callRec{key: req.Key, instance: windows[0], spec: app.OperationSpec{Name: "capture"}, turn: req.Turn, cause: req.cause()}
+	rec := &callRec{key: req.Key, callId: inst.mintCallId(t), instance: windows[0], spec: app.OperationSpec{Name: ActionCapture},
+		turn: req.Turn, cause: req.cause()}
 	t.keys[req.Key] = rec
 	var uncovered []string
 	for _, w := range windows {
@@ -1096,7 +1121,7 @@ func (inst *Service) list(msg *app.Msg) (rep wireListReply) {
 	inst.mu.Unlock()
 	if !ok {
 		rep.Reason = out.Reason
-		inst.recordAsked(msg, nil, "list", req.Key, "", req.wireCause, "", false, out.Reason)
+		inst.recordAsked(msg, nil, ActionList, req.Key, "", req.wireCause, "", false, out.Reason)
 		return
 	}
 	tainted := false
@@ -1120,7 +1145,7 @@ func (inst *Service) list(msg *app.Msg) (rep wireListReply) {
 		inst.taint(t)
 	}
 	rep.Ok = true
-	inst.recordAsked(msg, t, "list", req.Key, "", req.wireCause, "", true, "")
+	inst.recordAsked(msg, t, ActionList, req.Key, "", req.wireCause, "", true, "")
 	return
 }
 
@@ -1144,7 +1169,7 @@ func (inst *Service) detach(msg *app.Msg) (rep wireAck) {
 		rep.Reason = "the grant does not cover this instance"
 		return
 	}
-	inst.detachEntry(t, req.Instance, "detached")
+	inst.detachEntry(t, req.Instance, "detached", "coordinator")
 	rep.Ok = true
 	return
 }

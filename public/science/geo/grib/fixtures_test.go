@@ -74,12 +74,12 @@ func readExpectations(t *testing.T) (exp []expectation) {
 
 func readFixture(t *testing.T, name string) (buf []byte) {
 	t.Helper()
-	buf, err := readFixtureE(name)
+	buf, err := loadFixture(name)
 	require.NoError(t, err)
 	return
 }
 
-func readFixtureE(name string) (buf []byte, err error) {
+func loadFixture(name string) (buf []byte, err error) {
 	buf, err = os.ReadFile(filepath.Join("testdata", name))
 	if err != nil {
 		return
@@ -226,7 +226,7 @@ func checkField(t *testing.T, where string, m *Message, f *Field, e expectation)
 			require.Equal(t, e.intervalEnd, f.Product.Statistics.IntervalEnd.Format("20060102150405"), where)
 		}
 	}
-	values, err := f.ValuesE(nil)
+	values, err := f.Values(nil)
 	if feature, ok := strings.CutPrefix(e.result, "unsupported:"); ok {
 		require.ErrorIs(t, err, ErrUnsupported, where)
 		got, named := UnsupportedFeature(err)
@@ -258,7 +258,7 @@ func checkField(t *testing.T, where string, m *Message, f *Field, e expectation)
 }
 
 func checkPoints(t *testing.T, where string, f *Field, want string) {
-	points, err := f.Grid.PointsE()
+	points, err := f.Grid.Points()
 	if want == "" {
 		return
 	}
@@ -306,7 +306,7 @@ func checkPoints(t *testing.T, where string, f *Field, want string) {
 // TestUnsupportedIsNamed checks the refusal contract on a message the reader
 // parses but does not decode, and that the error chain is the documented one.
 func TestUnsupportedIsNamed(t *testing.T) {
-	err := unsupportedE("packing template 5.42")
+	err := unsupported("packing template 5.42")
 	require.ErrorIs(t, err, ErrUnsupported)
 	feature, ok := UnsupportedFeature(err)
 	require.True(t, ok)

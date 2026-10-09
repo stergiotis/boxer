@@ -2,30 +2,31 @@ package profiling
 
 import (
 	"compress/gzip"
+	"context"
 	"io"
 	"os"
 	"path/filepath"
 	"testing"
 
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 )
 
-// TestCpuProfileStopPath runs the flags through a cli.App wired like the
+// TestCpuProfileStopPath runs the flags through a cli.Command wired like the
 // real hosts (After calls ProfilingHandleExit) and then requires the
 // output to be a complete gzip stream. runtime/pprof serializes the
 // profile only in StopCPUProfile, so an unreadable or empty file means
 // the exit handler did not recognise the flag.
 func TestCpuProfileStopPath(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "cpu.pb.gz")
-	app := &cli.App{
+	app := &cli.Command{
 		Flags:  ProfilingFlags,
-		Action: func(*cli.Context) error { return nil },
-		After: func(context *cli.Context) error {
-			ProfilingHandleExit(context)
+		Action: func(context.Context, *cli.Command) error { return nil },
+		After: func(ctx context.Context, cmd *cli.Command) error {
+			ProfilingHandleExit(ctx, cmd)
 			return nil
 		},
 	}
-	err := app.Run([]string{"prog", "--" + flagNameCpuOutputFile, path})
+	err := app.Run(context.Background(), []string{"prog", "--" + flagNameCpuOutputFile, path})
 	if err != nil {
 		t.Fatalf("app run: %v", err)
 	}

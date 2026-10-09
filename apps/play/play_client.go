@@ -127,6 +127,10 @@ type Client struct {
 	// stampInstance is the window (ADR-0191 §SD4): with two windows of one
 	// app open, run + app alone cannot say which one issued a query.
 	stampInstance uint64
+	// authored remembers the texts behind the authored fingerprints this
+	// client stamped (play_stamp.go), so a captured run it issued can show
+	// its authored statement; the capture itself keeps only the fp.
+	authored authoredMemo
 
 	// reach remembers which endpoints have demonstrated they can fetch from
 	// this process's loopback plane (ADR-0145 §SD5). Consulted by the

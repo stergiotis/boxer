@@ -9,8 +9,8 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// LatLngsIterToCellsE is the [iter.Seq2]-input variant of
-// [Handle.LatLngsToCellsE]. It accepts a stream of (index, LatLng)
+// LatLngsIterToCells is the [iter.Seq2]-input variant of
+// [Handle.LatLngsToCells]. It accepts a stream of (index, LatLng)
 // pairs where index is the row index in [0, n) — useful when the caller
 // already has an Array-of-Structs source (an Arrow column, a channel,
 // a parsed event stream) and materialising parallel []float64 slices
@@ -27,7 +27,7 @@ import (
 // materialisation on reusable Handle-local buffers.
 //
 // Resolves ADR-0003 Q-W1 (SD16).
-func (inst *Handle) LatLngsIterToCellsE(
+func (inst *Handle) LatLngsIterToCells(
 	ctx context.Context,
 	res ResolutionE,
 	n int,
@@ -95,7 +95,7 @@ func (inst *Handle) LatLngsIterToCellsE(
 	total := int(statusRel) + n
 
 	var base uint32
-	base, err = inst.ensureScratchE(ctx, total)
+	base, err = inst.ensureScratch(ctx, total)
 	if err != nil {
 		return
 	}
@@ -104,15 +104,15 @@ func (inst *Handle) LatLngsIterToCellsE(
 	cellsOff := base + cellsRel
 	statusOff := base + statusRel
 
-	err = inst.writeF64sE(latsOff, inst.iterLats)
+	err = inst.writeF64s(latsOff, inst.iterLats)
 	if err != nil {
 		return
 	}
-	err = inst.writeF64sE(lngsOff, inst.iterLngs)
+	err = inst.writeF64s(lngsOff, inst.iterLngs)
 	if err != nil {
 		return
 	}
-	_, err = inst.callE(ctx, inst.fnLatLngToCell,
+	_, err = inst.call(ctx, inst.fnLatLngToCell,
 		uint64(latsOff), uint64(lngsOff),
 		uint64(n32),
 		uint64(uint32(res)),
@@ -122,10 +122,10 @@ func (inst *Handle) LatLngsIterToCellsE(
 		err = eh.Errorf("h3_latlng_to_cell: %w", err)
 		return
 	}
-	err = inst.readU64sE(cellsOff, cells)
+	err = inst.readU64s(cellsOff, cells)
 	if err != nil {
 		return
 	}
-	err = inst.readStatusE(statusOff, status)
+	err = inst.readStatus(statusOff, status)
 	return
 }

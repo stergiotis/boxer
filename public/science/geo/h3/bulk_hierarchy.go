@@ -15,10 +15,10 @@ const (
 	growBadResolution uint32 = 2
 )
 
-// CellsToParentsE returns the parent cell at the given coarser resolution
+// CellsToParents returns the parent cell at the given coarser resolution
 // for each input cell. res must be <= each cell's resolution; otherwise
 // the corresponding statusDst entry is [StatusInvalidResolution].
-func (inst *Handle) CellsToParentsE(
+func (inst *Handle) CellsToParents(
 	ctx context.Context,
 	res ResolutionE,
 	cells []uint64,
@@ -40,7 +40,7 @@ func (inst *Handle) CellsToParentsE(
 	total := int(statusRel) + n
 
 	var base uint32
-	base, err = inst.ensureScratchE(ctx, total)
+	base, err = inst.ensureScratch(ctx, total)
 	if err != nil {
 		return
 	}
@@ -48,11 +48,11 @@ func (inst *Handle) CellsToParentsE(
 	parentsOff := base + parentsRel
 	statusOff := base + statusRel
 
-	err = inst.writeU64sE(cellsOff, cells)
+	err = inst.writeU64s(cellsOff, cells)
 	if err != nil {
 		return
 	}
-	_, err = inst.callE(ctx, inst.fnCellToParent,
+	_, err = inst.call(ctx, inst.fnCellToParent,
 		uint64(cellsOff), uint64(n32),
 		uint64(uint32(res)),
 		uint64(parentsOff), uint64(statusOff),
@@ -61,15 +61,15 @@ func (inst *Handle) CellsToParentsE(
 		err = eh.Errorf("h3_cell_to_parent: %w", err)
 		return
 	}
-	err = inst.readU64sE(parentsOff, parents)
+	err = inst.readU64s(parentsOff, parents)
 	if err != nil {
 		return
 	}
-	err = inst.readStatusE(statusOff, status)
+	err = inst.readStatus(statusOff, status)
 	return
 }
 
-// CellsToChildrenE returns the children cells at the given finer
+// CellsToChildren returns the children cells at the given finer
 // resolution for each input cell in CSR layout: children is the flat
 // values slice, offsets has length N+1 with offsets[0]==0 and
 // offsets[N]==len(children). Row i's children occupy
@@ -80,7 +80,7 @@ func (inst *Handle) CellsToParentsE(
 // Uses the one-retry grow protocol: if the provided childrenDst capacity
 // is insufficient, the Rust side reports the required size and the call
 // is re-issued once with a grown buffer.
-func (inst *Handle) CellsToChildrenE(
+func (inst *Handle) CellsToChildren(
 	ctx context.Context,
 	res ResolutionE,
 	cells []uint64,
@@ -113,7 +113,7 @@ func (inst *Handle) CellsToChildrenE(
 		total := int(statusRel) + n
 
 		var base uint32
-		base, err = inst.ensureScratchE(ctx, total)
+		base, err = inst.ensureScratch(ctx, total)
 		if err != nil {
 			return
 		}
@@ -124,13 +124,13 @@ func (inst *Handle) CellsToChildrenE(
 		statusOff := base + statusRel
 
 		// Inputs may be lost on scratch grow; rewrite each attempt.
-		err = inst.writeU64sE(cellsOff, cells)
+		err = inst.writeU64s(cellsOff, cells)
 		if err != nil {
 			return
 		}
 
 		var rc uint32
-		rc, err = inst.callE(ctx, inst.fnCellToChildren,
+		rc, err = inst.call(ctx, inst.fnCellToChildren,
 			uint64(cellsOff), uint64(n32),
 			uint64(uint32(res)),
 			uint64(childrenOff), uint64(offsetsOff),
@@ -155,21 +155,21 @@ func (inst *Handle) CellsToChildrenE(
 
 		case growOK:
 			var needed uint32
-			needed, err = inst.readU32E(neededOff)
+			needed, err = inst.readU32(neededOff)
 			if err != nil {
 				return
 			}
-			err = inst.readI32sE(offsetsOff, offsets)
+			err = inst.readI32s(offsetsOff, offsets)
 			if err != nil {
 				return
 			}
-			err = inst.readStatusE(statusOff, status)
+			err = inst.readStatus(statusOff, status)
 			if err != nil {
 				return
 			}
 			total := min(int(needed), outCap)
 			children = slices.Grow(childrenDst[:0], total)[:total]
-			err = inst.readU64sE(childrenOff, children)
+			err = inst.readU64s(childrenOff, children)
 			return
 
 		case growNeedMore:
@@ -178,7 +178,7 @@ func (inst *Handle) CellsToChildrenE(
 				return
 			}
 			var needed uint32
-			needed, err = inst.readU32E(neededOff)
+			needed, err = inst.readU32(neededOff)
 			if err != nil {
 				return
 			}

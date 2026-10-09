@@ -3,6 +3,7 @@ package scene
 import (
 	"bytes"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -46,6 +47,25 @@ type Spec struct {
 	// 0 means the runner's default. A scene tuned against one value keeps it
 	// here, where a change to the runner's default cannot move it.
 	StepSettleMs int `yaml:"stepSettleMs"`
+	// Tags classify the scene; KnownTags lists the ones there are. A scene
+	// tagged TagSlow runs only when asked for (Options.Slow).
+	Tags []string `yaml:"tags"`
+}
+
+const (
+	// TagSlow marks a scene that takes long enough — a timeout it waits
+	// out, a long sleep — to be left out of a default run.
+	TagSlow = "slow"
+	// TagFast marks a scene as fast, which an untagged scene is too.
+	TagFast = "fast"
+)
+
+// KnownTags are the tags a scene may carry.
+var KnownTags = []string{TagSlow, TagFast}
+
+// HasTag reports whether the scene carries tag.
+func (inst Spec) HasTag(tag string) bool {
+	return slices.Contains(inst.Tags, tag)
 }
 
 const (
@@ -183,6 +203,14 @@ func ParseDoc(path string, src []byte) (doc *Doc, err error) {
 	}
 	if _, _, err = doc.Spec.Dimensions(); err != nil {
 		return nil, err
+	}
+	for _, tag := range doc.Spec.Tags {
+		if !slices.Contains(KnownTags, tag) {
+			return nil, eb.Build().Str("path", path).Str("tag", tag).Str("known", strings.Join(KnownTags, ", ")).Errorf("unknown scene tag")
+		}
+	}
+	if doc.Spec.HasTag(TagSlow) && doc.Spec.HasTag(TagFast) {
+		return nil, eb.Build().Str("path", path).Errorf("a scene is tagged slow or fast, not both")
 	}
 	for _, f := range fences {
 		switch {

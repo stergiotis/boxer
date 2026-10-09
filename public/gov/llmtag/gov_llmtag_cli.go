@@ -1,6 +1,7 @@
 package llmtag
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"slices"
@@ -12,7 +13,7 @@ import (
 	cli2 "github.com/stergiotis/boxer/public/hmi/cli"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 // NewCliCommand returns the `gov llmtag` subcommand that annotates Go
@@ -65,22 +66,22 @@ func NewCliCommand() *cli.Command {
 		Name:  "llmtag",
 		Usage: "Apply //go:build llm_generated_<model> build tags based on git Co-Authored-By trailers",
 		Flags: slices.Concat(baseFlags, fmtFlags),
-		Action: func(c *cli.Context) (err error) {
-			if c.Bool("diff") && c.Bool("apply") {
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
+			if cmd.Bool("diff") && cmd.Bool("apply") {
 				err = eh.Errorf("llmtag: --diff and --apply are mutually exclusive")
 				return
 			}
 			applier := &Applier{
 				ApplyOp:     ApplyOpDryRun,
-				Threshold:   c.Float64("threshold"),
-				MinLLMLines: int32(c.Int("min-lines")),
+				Threshold:   cmd.Float64("threshold"),
+				MinLLMLines: int32(cmd.Int("min-lines")),
 			}
-			if c.Bool("apply") {
+			if cmd.Bool("apply") {
 				applier.ApplyOp = ApplyOpApply
 			}
-			git := &repo.GitRunner{RepoPath: c.String("repo")}
+			git := &repo.GitRunner{RepoPath: cmd.String("repo")}
 
-			if cutoffStr := c.String("trailer-cutoff"); cutoffStr != "" {
+			if cutoffStr := cmd.String("trailer-cutoff"); cutoffStr != "" {
 				var t time.Time
 				t, err = time.Parse(time.RFC3339, cutoffStr)
 				if err != nil {
@@ -90,7 +91,7 @@ func NewCliCommand() *cli.Command {
 				applier.TrailerCutoff = t
 			} else {
 				var t time.Time
-				t, err = applier.AutoDetectCutoff(c.Context, git)
+				t, err = applier.AutoDetectCutoff(ctx, git)
 				if err != nil {
 					err = eh.Errorf("trailer-cutoff auto-detect failed: %w", err)
 					return
@@ -103,17 +104,17 @@ func NewCliCommand() *cli.Command {
 				log.Info().Time("trailerCutoff", applier.TrailerCutoff).Msg("llmtag: pre-cutoff trailerless commits will be attributed to existing simple tag")
 			}
 
-			if c.Bool("diff") {
-				err = runDiff(c, applier, git)
+			if cmd.Bool("diff") {
+				err = runDiff(ctx, cmd, applier, git)
 				return
 			}
 
-			for rec, iterErr := range applier.Run(c.Context, git, c.String("root")) {
+			for rec, iterErr := range applier.Run(ctx, git, cmd.String("root")) {
 				if iterErr != nil {
 					err = eh.Errorf("llmtag run failed: %w", iterErr)
 					return
 				}
-				err = f.FormatValue(c, rec)
+				err = f.FormatValue(ctx, cmd, rec)
 				if err != nil {
 					err = eh.Errorf("unable to format record: %w", err)
 					return
@@ -128,12 +129,12 @@ func NewCliCommand() *cli.Command {
 // returns a non-nil error (so the CLI exits non-zero) when any are found.
 // Silently ignores skips that are not actionable (already tagged, below
 // threshold, uncommitted, complex llm directives).
-func runDiff(c *cli.Context, applier *Applier, git *repo.GitRunner) (err error) {
+func runDiff(ctx context.Context, cmd *cli.Command, applier *Applier, git *repo.GitRunner) (err error) {
 	var missing uint64
 	var stale uint64
 	var orphan uint64
 	var conflict uint64
-	for rec, iterErr := range applier.Run(c.Context, git, c.String("root")) {
+	for rec, iterErr := range applier.Run(ctx, git, cmd.String("root")) {
 		if iterErr != nil {
 			err = eh.Errorf("llmtag run failed: %w", iterErr)
 			return

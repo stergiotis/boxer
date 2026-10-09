@@ -54,7 +54,7 @@ func UnsupportedFeature(err error) (feature string, ok bool) {
 	return
 }
 
-func unsupportedE(feature string) (err error) {
+func unsupported(feature string) (err error) {
 	err = &unsupportedError{
 		feature: feature,
 		err:     eb.Build().Str("feature", feature).Errorf("refused: %w", ErrUnsupported),

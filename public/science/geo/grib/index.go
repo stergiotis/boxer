@@ -9,7 +9,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// Entry is one field's line in an index ([IndexE]): where it is and what identifies
+// Entry is one field's line in an index ([Index]): where it is and what identifies
 // it, enough for a consumer to choose fields and fetch their bytes by range
 // without decoding anything (ADR-0292 §R9). Times are UTC; a zero
 // ForecastSeconds with ForecastKnown false means the unit had no duration.
@@ -46,9 +46,9 @@ type Entry struct {
 	Refuses string `json:"refuses,omitempty"`
 }
 
-// IndexE lists every field of r in file order. A malformed message ends
+// Index lists every field of r in file order. A malformed message ends
 // the listing and is returned as the error beside the entries before it.
-func IndexE(r io.ReaderAt, size int64) (entries []Entry, err error) {
+func Index(r io.ReaderAt, size int64) (entries []Entry, err error) {
 	for m, scanErr := range Scan(r, size) {
 		if scanErr != nil {
 			err = scanErr
@@ -61,8 +61,8 @@ func IndexE(r io.ReaderAt, size int64) (entries []Entry, err error) {
 	return
 }
 
-// IndexBytesE is [IndexE] over a buffer.
-func IndexBytesE(buf []byte) (entries []Entry, err error) {
+// IndexBytes is [Index] over a buffer.
+func IndexBytes(buf []byte) (entries []Entry, err error) {
 	for m, scanErr := range ScanBytes(buf) {
 		if scanErr != nil {
 			err = scanErr
@@ -115,7 +115,7 @@ func entryOf(m *Message, f *Field) (e Entry) {
 			}
 		}
 	}
-	if err := f.Packing.supportedE(); err != nil {
+	if err := f.Packing.supported(); err != nil {
 		e.Refuses, _ = UnsupportedFeature(err)
 	} else if f.Bitmap.Indicator != 0 && f.Bitmap.Indicator != 255 {
 		e.Refuses = "bitmap indicator " + itoa(int(f.Bitmap.Indicator))
@@ -131,9 +131,9 @@ func itoa(n int) (s string) {
 	return
 }
 
-// WriteIndexE writes entries as JSON lines, one field per line, in a
+// WriteIndex writes entries as JSON lines, one field per line, in a
 // deterministic key order.
-func WriteIndexE(w io.Writer, entries []Entry) (err error) {
+func WriteIndex(w io.Writer, entries []Entry) (err error) {
 	bw := bufio.NewWriter(w)
 	for _, e := range entries {
 		err = json.MarshalWrite(bw, e, json.Deterministic(true))
@@ -150,8 +150,8 @@ func WriteIndexE(w io.Writer, entries []Entry) (err error) {
 	return
 }
 
-// ReadIndexE reads what [WriteIndexE] wrote.
-func ReadIndexE(r io.Reader) (entries []Entry, err error) {
+// ReadIndex reads what [WriteIndex] wrote.
+func ReadIndex(r io.Reader) (entries []Entry, err error) {
 	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 1<<16), 1<<20)
 	for sc.Scan() {
@@ -171,11 +171,11 @@ func ReadIndexE(r io.Reader) (entries []Entry, err error) {
 	return
 }
 
-// ReadE reads the field an entry names from r: the message at the entry's
+// Read reads the field an entry names from r: the message at the entry's
 // offset, and the field at its index. size bounds r; a reader that holds
 // only the message's own bytes passes its length and an offset of zero
 // through [Entry.At].
-func (inst Entry) ReadE(r io.ReaderAt, size int64) (f *Field, err error) {
+func (inst Entry) Read(r io.ReaderAt, size int64) (f *Field, err error) {
 	for m, scanErr := range ScanFrom(r, size, inst.Offset) {
 		if scanErr != nil {
 			err = scanErr

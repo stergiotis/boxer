@@ -24,7 +24,7 @@ func TestNullTransportInvariants(t *testing.T) {
 		}
 		// Up to an hour at the drawn rate, plus the empty source.
 		frames := rapid.Int64Range(0, 3600*int64(format.SampleRate)).Draw(rt, "frames")
-		src, err := pcm.NewSynthSourceE(format, frames, nil)
+		src, err := pcm.NewSynthSource(format, frames, nil)
 		require.NoError(rt, err)
 		clock := sink.NewManualClock(time.Unix(0, 0))
 		s := sink.NewNull(src, clock)
@@ -45,11 +45,11 @@ func TestNullTransportInvariants(t *testing.T) {
 				clock.Advance(time.Duration(d))
 			case "seek":
 				frame := rapid.Int64Range(-frames-1024, 2*frames+1024).Draw(rt, "frame")
-				require.NoError(rt, s.SeekE(frame))
+				require.NoError(rt, s.SeekFrame(frame))
 				mayDrop = true
 			case "rate":
 				rate := rapid.Float64Range(sink.RateMinExcl+0.01, sink.RateMaxIncl).Draw(rt, "rate")
-				require.NoError(rt, s.SetRateE(rate))
+				require.NoError(rt, s.SetRate(rate))
 			}
 
 			// One observation, in this order: Position settles the transport,
@@ -73,7 +73,7 @@ func TestNullTransportInvariants(t *testing.T) {
 			prev = pos
 			mayDrop = false
 		}
-		require.NoError(rt, s.CloseE())
+		require.NoError(rt, s.Close())
 	})
 }
 
@@ -93,11 +93,11 @@ func TestNullProjectionIsIndependentOfPolling(t *testing.T) {
 		step := time.Duration(rapid.Int64Range(1, int64(time.Second)).Draw(rt, "step"))
 
 		build := func(poll bool) (pos int64) {
-			src, err := pcm.NewSynthSourceE(format, frames, nil)
+			src, err := pcm.NewSynthSource(format, frames, nil)
 			require.NoError(rt, err)
 			clock := sink.NewManualClock(time.Unix(0, 0))
 			s := sink.NewNull(src, clock)
-			require.NoError(rt, s.SetRateE(rate))
+			require.NoError(rt, s.SetRate(rate))
 			s.Play()
 			for range polls {
 				clock.Advance(step)

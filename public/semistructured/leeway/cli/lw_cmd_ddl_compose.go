@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"os"
 	"strings"
 
@@ -14,7 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/lwsql"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/useaspects"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 // leeway ddl compose (ADR-0181 §SD6): a durable CREATE TABLE from the same
@@ -364,21 +365,21 @@ func newCliCommandDdlCompose() *cli.Command {
 			&cli.BoolFlag{Name: "skip-indexes", Usage: "derive data-skipping indexes (bloom_filter on membership lanes, ADR-0181 §SD4 defaults)"},
 			tableRowConfigFlag,
 		},
-		Action: func(context *cli.Context) error {
+		Action: func(ctx context.Context, cmd *cli.Command) error {
 			sql, err := composeDdl(composeDdlInput{
-				Table:          context.String("table"),
-				Plain:          context.StringSlice("plain"),
-				Tagged:         context.StringSlice("tv"),
-				Memberships:    context.StringSlice("memb"),
-				StreamGroups:   context.StringSlice("stream-group"),
-				CoGroups:       context.StringSlice("co-group"),
-				Engine:         context.String("engine"),
-				OrderBy:        context.StringSlice("order-by"),
-				PartitionBy:    context.String("partition-by"),
-				Settings:       context.StringSlice("settings"),
-				IfNotExists:    context.Bool("if-not-exists"),
-				SkipIndexes:    context.Bool("skip-indexes"),
-				TableRowConfig: tableRowConfigGetter(context),
+				Table:          cmd.String("table"),
+				Plain:          cmd.StringSlice("plain"),
+				Tagged:         cmd.StringSlice("tv"),
+				Memberships:    cmd.StringSlice("memb"),
+				StreamGroups:   cmd.StringSlice("stream-group"),
+				CoGroups:       cmd.StringSlice("co-group"),
+				Engine:         cmd.String("engine"),
+				OrderBy:        cmd.StringSlice("order-by"),
+				PartitionBy:    cmd.String("partition-by"),
+				Settings:       cmd.StringSlice("settings"),
+				IfNotExists:    cmd.Bool("if-not-exists"),
+				SkipIndexes:    cmd.Bool("skip-indexes"),
+				TableRowConfig: tableRowConfigGetter(ctx, cmd),
 			})
 			if err != nil {
 				return err

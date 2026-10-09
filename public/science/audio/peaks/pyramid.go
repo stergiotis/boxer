@@ -22,7 +22,7 @@ const (
 )
 
 // Pyramid is a multi-resolution min/max summary of one audio signal
-// (ADR-0208 §SD2). Build it with [NewPyramidE], [BuildE] or [ReadFromE];
+// (ADR-0208 §SD2). Build it with [NewPyramid], [Build] or [ReadFrom];
 // the zero value carries no arrays and answers nothing useful.
 //
 // One goroutine builds while any number read; see the package
@@ -66,11 +66,11 @@ func DefaultBaseBin() (baseBin int32) {
 	return 256
 }
 
-// NewPyramidE preallocates every level of a pyramid over frames frames of
+// NewPyramid preallocates every level of a pyramid over frames frames of
 // format. Nothing is folded yet, so [Pyramid.Built] is 0. baseBin must be a
 // power of two in [MinBaseBin, MaxBaseBin].
-func NewPyramidE(format pcm.Format, frames int64, baseBin int32) (inst *Pyramid, err error) {
-	err = format.ValidateE()
+func NewPyramid(format pcm.Format, frames int64, baseBin int32) (inst *Pyramid, err error) {
+	err = format.Validate()
 	if err != nil {
 		return nil, err
 	}

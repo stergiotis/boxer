@@ -5,6 +5,9 @@
 // across calls (use a durable engine such as MergeTree; Memory tables
 // vanish with each process). It is meant for tests and local tooling, not
 // servers — each call pays process startup.
+//
+// Like the HTTP executor, it stamps the context's call identity and batch id
+// into log_comment (ADR-0295 §SD3).
 package chexec
 
 import (
@@ -49,6 +52,11 @@ func NewLocalExecutor(path string, alloc memory.Allocator) (inst *LocalExecutor,
 
 func (inst *LocalExecutor) run(ctx context.Context, sql string, outputFormat string, stdin []byte) (stdout []byte, err error) {
 	args := []string{"--path", inst.path, "--multiquery"}
+	// The identity stamp (ADR-0295 §SD3) as a command-line setting; a
+	// statement's own SETTINGS log_comment still wins over it.
+	if lc := recordstore.LogComment(ctx); lc != "" {
+		args = append(args, "--log_comment", lc)
+	}
 	if outputFormat != "" {
 		args = append(args, "--output-format", outputFormat)
 	}

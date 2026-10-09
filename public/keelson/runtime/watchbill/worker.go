@@ -539,7 +539,7 @@ func (inst *Worker) runHandler(ctx context.Context, h HandlerI, job watchbillsto
 			err = eb.Build().Str("panic", fmt.Sprint(r)).Errorf("handler panicked")
 		}
 	}()
-	return h.RunE(ctx, job, handle)
+	return h.Run(ctx, job, handle)
 }
 
 // spawnTask reports the run as a keelson task with the job's id; without

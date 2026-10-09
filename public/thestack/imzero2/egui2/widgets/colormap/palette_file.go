@@ -30,11 +30,11 @@ type paletteFile struct {
 	Map    []string `json:"map"`
 }
 
-// LoadPaletteDirE reads every *.json palette in dir, sorted by file name. A
+// LoadPaletteDir reads every *.json palette in dir, sorted by file name. A
 // nonexistent dir yields no palettes and no error, so a caller can point at
 // an optional user directory; a malformed file is an error naming the
 // offending path. A file without a name takes its file-name stem.
-func LoadPaletteDirE(dir string) (out []NamedPalette, err error) {
+func LoadPaletteDir(dir string) (out []NamedPalette, err error) {
 	entries, e := os.ReadDir(dir)
 	if e != nil {
 		if os.IsNotExist(e) {
@@ -56,7 +56,7 @@ func LoadPaletteDirE(dir string) (out []NamedPalette, err error) {
 		if re != nil {
 			return nil, eb.Build().Str("path", path).Errorf("read palette: %w", re)
 		}
-		p, pe := ParsePaletteJSONE(raw, strings.TrimSuffix(name, ".json"))
+		p, pe := ParsePaletteJSON(raw, strings.TrimSuffix(name, ".json"))
 		if pe != nil {
 			return nil, eb.Build().Str("path", path).Errorf("palette file: %w", pe)
 		}
@@ -65,10 +65,10 @@ func LoadPaletteDirE(dir string) (out []NamedPalette, err error) {
 	return out, nil
 }
 
-// ParsePaletteJSONE parses one SDR++-style palette document. fallbackName is
+// ParsePaletteJSON parses one SDR++-style palette document. fallbackName is
 // used when the document carries no name. Fewer than two valid stops is an
 // error, since Config needs at least two.
-func ParsePaletteJSONE(raw []byte, fallbackName string) (p NamedPalette, err error) {
+func ParsePaletteJSON(raw []byte, fallbackName string) (p NamedPalette, err error) {
 	var pf paletteFile
 	if e := json.Unmarshal(raw, &pf); e != nil {
 		err = eh.Errorf("parse palette json: %w", e)
@@ -76,7 +76,7 @@ func ParsePaletteJSONE(raw []byte, fallbackName string) (p NamedPalette, err err
 	}
 	stops := make([]uint32, 0, len(pf.Map))
 	for _, h := range pf.Map {
-		rgba, he := ParseHexRGBAE(h)
+		rgba, he := ParseHexRGBA(h)
 		if he != nil {
 			err = eb.Build().Str("hex", h).Errorf("palette stop: %w", he)
 			return
@@ -95,10 +95,10 @@ func ParsePaletteJSONE(raw []byte, fallbackName string) (p NamedPalette, err err
 	return
 }
 
-// ParseHexRGBAE parses "#RRGGBB" or "#RRGGBBAA" (leading # optional,
+// ParseHexRGBA parses "#RRGGBB" or "#RRGGBBAA" (leading # optional,
 // surrounding whitespace ignored) into the 0xRRGGBBAA layout Config uses; a
 // six-digit value is taken as fully opaque.
-func ParseHexRGBAE(s string) (rgba uint32, err error) {
+func ParseHexRGBA(s string) (rgba uint32, err error) {
 	t := strings.TrimPrefix(strings.TrimSpace(s), "#")
 	switch len(t) {
 	case 6:

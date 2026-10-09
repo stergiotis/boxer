@@ -19,7 +19,7 @@ import (
 	"github.com/stergiotis/boxer/public/science/audio/sink"
 )
 
-// Options configures [OpenE]. The zero value is what a caller with no
+// Options configures [Open]. The zero value is what a caller with no
 // opinion passes: the default base bin, a relative time base, a
 // [sink.Null] with the process clock, one shared source, a synchronous
 // build, no peaks cache and no progress reporting.
@@ -31,14 +31,14 @@ type Options struct {
 	// time base (ADR-0208 §SD9).
 	Epoch time.Time
 	// NewSink builds the transport over the track's source. It is handed the
-	// locked adapter, not the source [OpenE] was given, so a sink that reads
+	// locked adapter, not the source [Open] was given, so a sink that reads
 	// from its own goroutine needs no locking of its own. Nil takes a
 	// [sink.Null] over [sink.RealClock]; a device-backed sink (ADR-0208 M3)
 	// and a capability-brokered one are both supplied here, which is why the
 	// track never opens a device itself (§SD6).
 	NewSink func(src pcm.SourceI) sink.SinkI
 	// ChunkFrames is how many frames one read of the peaks build moves; zero
-	// takes the default of [peaks.BuildE] rather than a second one here.
+	// takes the default of [peaks.Build] rather than a second one here.
 	ChunkFrames int
 	// Progress, when set, is called after every build chunk with the frames
 	// folded so far and the recording's length. It runs on the goroutine
@@ -52,7 +52,7 @@ type Options struct {
 	// set, the peaks builder and the window cache each get their own source,
 	// so a decoder whose random access is a process restart (ffmpeg,
 	// ADR-0208 §SD5) is never thrashed by three readers; the sink keeps the
-	// source given to [OpenE]. Nil makes every reader share that one source
+	// source given to [Open]. Nil makes every reader share that one source
 	// through the locked adapter, which is what a memory or WAV source
 	// wants.
 	//
@@ -62,7 +62,7 @@ type Options struct {
 	// the open fails.
 	Reopen func(ctx context.Context) (src pcm.SourceI, err error)
 	// Background builds the pyramid on a goroutine of its own (ADR-0208
-	// §SD4): [OpenE] returns as soon as the levels are allocated, and
+	// §SD4): [Open] returns as soon as the levels are allocated, and
 	// [Track.Peaks] is a pyramid that fills while the caller draws it.
 	// [Track.BuildProgress] follows it.
 	Background bool
@@ -82,7 +82,7 @@ type Options struct {
 
 // Track is one open recording: its sources, its peaks pyramid, its window
 // cache, its transport and its time base (ADR-0208 §SD1). Build one with
-// [OpenE]; the zero value answers nothing and must not be used.
+// [Open]; the zero value answers nothing and must not be used.
 //
 // Every method is safe to call from any goroutine, except [Track.Window],
 // which is the frame thread's.
@@ -116,25 +116,25 @@ type Track struct {
 	closed bool
 }
 
-// OpenE composes a track over an already-open source and takes ownership of
-// it: [Track.CloseE] closes the source, and every error return from OpenE has
+// Open composes a track over an already-open source and takes ownership of
+// it: [Track.Close] closes the source, and every error return from Open has
 // already closed it — along with anything [Options.Reopen] opened — so the
 // caller neither closes it on failure nor keeps using it on success.
 //
-// The pyramid exists by the time OpenE returns, so [Track.Peaks] is never
+// The pyramid exists by the time Open returns, so [Track.Peaks] is never
 // nil, but it holds audio only once it has been built or loaded:
 //
 //   - [Options.Identity] set and no [Options.NoCache]: a matching peaks file
 //     makes the track complete at once. A missing file, another recording's
 //     identity or an unreadable one is a miss, not an error, and the build
 //     runs.
-//   - [Options.Background] unset: the build runs to completion before OpenE
+//   - [Options.Background] unset: the build runs to completion before Open
 //     returns, and a cancelled or failed build is an error like any other.
-//   - [Options.Background] set: OpenE returns immediately and the build runs
+//   - [Options.Background] set: Open returns immediately and the build runs
 //     on its own goroutine, publishing the prefix the caller may draw
 //     ([Track.BuildProgress]). Its lifetime is the track's, not this call's,
-//     so ctx here bounds the open and [Track.CloseE] ends the build.
-func OpenE(ctx context.Context, src pcm.SourceI, opts Options) (inst *Track, err error) {
+//     so ctx here bounds the open and [Track.Close] ends the build.
+func Open(ctx context.Context, src pcm.SourceI, opts Options) (inst *Track, err error) {
 	if src == nil {
 		return nil, eh.New("nil source")
 	}
@@ -147,12 +147,12 @@ func OpenE(ctx context.Context, src pcm.SourceI, opts Options) (inst *Track, err
 			// for the caller to close.
 			closeReopened(buildOwned)
 			closeReopened(windowOwned)
-			_ = locked.CloseE()
+			_ = locked.Close()
 		}
 	}()
 
 	format := locked.Format()
-	err = format.ValidateE()
+	err = format.Validate()
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +172,7 @@ func OpenE(ctx context.Context, src pcm.SourceI, opts Options) (inst *Track, err
 	}
 	pyramid, fromCache := readPeaksCache(cachePath, opts.Identity, format, frames, baseBin)
 	if pyramid == nil {
-		pyramid, err = peaks.NewPyramidE(format, frames, baseBin)
+		pyramid, err = peaks.NewPyramid(format, frames, baseBin)
 		if err != nil {
 			return nil, err
 		}
@@ -180,12 +180,12 @@ func OpenE(ctx context.Context, src pcm.SourceI, opts Options) (inst *Track, err
 
 	if opts.Reopen != nil {
 		if !fromCache {
-			buildOwned, err = openReopenedE(ctx, opts.Reopen, format, frames, "peaks build")
+			buildOwned, err = openReopened(ctx, opts.Reopen, format, frames, "peaks build")
 			if err != nil {
 				return nil, err
 			}
 		}
-		windowOwned, err = openReopenedE(ctx, opts.Reopen, format, frames, "window cache")
+		windowOwned, err = openReopened(ctx, opts.Reopen, format, frames, "window cache")
 		if err != nil {
 			return nil, err
 		}
@@ -222,12 +222,12 @@ func OpenE(ctx context.Context, src pcm.SourceI, opts Options) (inst *Track, err
 	}
 	if !background {
 		if !fromCache {
-			err = pyramid.FillFromE(ctx, job.src, job.chunkFrames, job.progress)
+			err = pyramid.FillFrom(ctx, job.src, job.chunkFrames, job.progress)
 			if err != nil {
 				return nil, eh.Errorf("unable to build the peaks pyramid: %w", err)
 			}
 			if cachePath != "" {
-				syncCacheErr = writePeaksFileE(cachePath, pyramid, *opts.Identity)
+				syncCacheErr = writePeaksFile(cachePath, pyramid, *opts.Identity)
 				if syncCacheErr != nil {
 					log.Warn().Err(syncCacheErr).Str("path", cachePath).Msg("unable to write the audio peaks cache")
 				}
@@ -249,7 +249,7 @@ func OpenE(ctx context.Context, src pcm.SourceI, opts Options) (inst *Track, err
 	}
 
 	// The track's own context outlives this call, so a background build and a
-	// window fetch are ended by CloseE rather than by the open returning.
+	// window fetch are ended by Close rather than by the open returning.
 	trackCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	windowSrc := pcm.SourceI(locked)
 	if windowOwned != nil {
@@ -285,7 +285,7 @@ func readPeaksCache(cachePath string, id *peaks.Identity, format pcm.Format, fra
 	if cachePath == "" || id == nil {
 		return nil, false
 	}
-	pyramid, err := readPeaksFileE(cachePath, *id, format, frames, baseBin)
+	pyramid, err := readPeaksFile(cachePath, *id, format, frames, baseBin)
 	if err != nil {
 		log.Debug().Err(err).Str("path", cachePath).Msg("audio peaks cache miss")
 		return nil, false
@@ -293,10 +293,10 @@ func readPeaksCache(cachePath string, id *peaks.Identity, format pcm.Format, fra
 	return pyramid, true
 }
 
-// openReopenedE opens one more source over the same recording and refuses one
+// openReopened opens one more source over the same recording and refuses one
 // that describes a different recording, so a mis-wired [Options.Reopen] fails
 // the open rather than a read three frames later.
-func openReopenedE(ctx context.Context, reopen func(ctx context.Context) (src pcm.SourceI, err error), format pcm.Format, frames int64, role string) (src pcm.SourceI, err error) {
+func openReopened(ctx context.Context, reopen func(ctx context.Context) (src pcm.SourceI, err error), format pcm.Format, frames int64, role string) (src pcm.SourceI, err error) {
 	src, err = reopen(ctx)
 	if err != nil {
 		return nil, eb.Build().Str("role", role).Errorf("unable to reopen the recording: %w", err)
@@ -327,7 +327,7 @@ func closeReopened(src pcm.SourceI) {
 	if src == nil {
 		return
 	}
-	err := src.CloseE()
+	err := src.Close()
 	if err != nil {
 		log.Warn().Err(err).Msg("unable to close a reopened audio source")
 	}
@@ -358,13 +358,13 @@ func (inst *Track) Sink() (s sink.SinkI) {
 	return s
 }
 
-// ReplaceSinkE swaps the transport for one built by newSink over the track's
+// ReplaceSink swaps the transport for one built by newSink over the track's
 // shared source — the seam through which an output device arrives after the
 // track was opened (ADR-0208 SD6: a keelson-brokered capability hands out a
 // Sink, the player never opens a device). The new sink takes over the old
 // one's position, rate and volume and starts paused; the old sink is closed
 // afterwards. When newSink fails the old sink stays in place, paused.
-func (inst *Track) ReplaceSinkE(newSink func(src pcm.SourceI) (s sink.SinkI, err error)) (err error) {
+func (inst *Track) ReplaceSink(newSink func(src pcm.SourceI) (s sink.SinkI, err error)) (err error) {
 	if newSink == nil {
 		return eh.New("nil sink constructor")
 	}
@@ -384,19 +384,19 @@ func (inst *Track) ReplaceSinkE(newSink func(src pcm.SourceI) (s sink.SinkI, err
 		return eh.New("sink constructor returned no sink")
 	}
 	var errs []error
-	errs = eh.AppendError(errs, next.SeekE(pos))
-	errs = eh.AppendError(errs, next.SetRateE(rate))
-	errs = eh.AppendError(errs, next.SetVolumeE(volume))
+	errs = eh.AppendError(errs, next.SeekFrame(pos))
+	errs = eh.AppendError(errs, next.SetRate(rate))
+	errs = eh.AppendError(errs, next.SetVolume(volume))
 	inst.transport = next
-	errs = eh.AppendError(errs, old.CloseE())
+	errs = eh.AppendError(errs, old.Close())
 	return eh.CheckErrors(errs)
 }
 
-// ReadWindowE fills dst with the interleaved frames of
+// ReadWindow fills dst with the interleaved frames of
 // [fromFrame, fromFrame+len(dst)/Channels) and returns how many frames it
 // read, which is fewer than asked for when the window runs past the end of
 // the recording and zero when it starts at or past it. Running off the end is
-// not an error — a view is clamped, unlike [pcm.SourceI.ReadFramesAtE], which
+// not an error — a view is clamped, unlike [pcm.SourceI.ReadFramesAt], which
 // reports io.EOF there — but a negative fromFrame is, because clamping it
 // would silently shift dst against the frames the caller means to draw.
 //
@@ -405,16 +405,16 @@ func (inst *Track) ReplaceSinkE(newSink func(src pcm.SourceI) (s sink.SinkI, err
 // a frame thread must not do. The frame thread's path is [Track.Window],
 // where a window that is not cached is fetched off-thread (ADR-0208 §SD3).
 // Safe to call from any goroutine, and concurrent calls are serialised by the
-// locked source. It reads through the source [OpenE] was given, not through
+// locked source. It reads through the source [Open] was given, not through
 // an [Options.Reopen]ed one.
-func (inst *Track) ReadWindowE(ctx context.Context, fromFrame int64, dst []float32) (n int, err error) {
-	return readWindowE(ctx, inst.src, inst.tb.Format, inst.frames, fromFrame, dst)
+func (inst *Track) ReadWindow(ctx context.Context, fromFrame int64, dst []float32) (n int, err error) {
+	return readWindow(ctx, inst.src, inst.tb.Format, inst.frames, fromFrame, dst)
 }
 
-// readWindowE is the read loop behind both [Track.ReadWindowE] and the window
+// readWindow is the read loop behind both [Track.ReadWindow] and the window
 // cache's worker: it clamps the window to the recording and stitches a short
 // read rather than reporting a truncated window.
-func readWindowE(ctx context.Context, src pcm.SourceI, format pcm.Format, frames int64, fromFrame int64, dst []float32) (n int, err error) {
+func readWindow(ctx context.Context, src pcm.SourceI, format pcm.Format, frames int64, fromFrame int64, dst []float32) (n int, err error) {
 	if fromFrame < 0 {
 		return 0, eb.Build().Int64("fromFrame", fromFrame).Errorf("negative window start")
 	}
@@ -432,7 +432,7 @@ func readWindowE(ctx context.Context, src pcm.SourceI, format pcm.Format, frames
 	// short read is stitched rather than reported as a truncated window.
 	for n < want {
 		var got int
-		got, err = src.ReadFramesAtE(ctx, fromFrame+int64(n), dst[n*channels:want*channels])
+		got, err = src.ReadFramesAt(ctx, fromFrame+int64(n), dst[n*channels:want*channels])
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				return n, nil
@@ -454,13 +454,13 @@ func readWindowE(ctx context.Context, src pcm.SourceI, format pcm.Format, frames
 	return n, nil
 }
 
-// CloseE ends the background build and the window cache's worker, waits for
+// Close ends the background build and the window cache's worker, waits for
 // both to have left the sources alone, and then closes the transport and
 // every source the track owns. It is idempotent. It waits for a
-// [Track.ReadWindowE] in flight rather than closing underneath it; reads
+// [Track.ReadWindow] in flight rather than closing underneath it; reads
 // after it return an error, and windows already cached stay readable. Every
 // error is reported, joined.
-func (inst *Track) CloseE() (err error) {
+func (inst *Track) Close() (err error) {
 	inst.mu.Lock()
 	if inst.closed {
 		inst.mu.Unlock()
@@ -480,10 +480,10 @@ func (inst *Track) CloseE() (err error) {
 	inst.wc.close()
 
 	var errs []error
-	errs = eh.AppendError(errs, transport.CloseE())
+	errs = eh.AppendError(errs, transport.Close())
 	if inst.windowOwned != nil {
-		errs = eh.AppendError(errs, inst.windowOwned.CloseE())
+		errs = eh.AppendError(errs, inst.windowOwned.Close())
 	}
-	errs = eh.AppendError(errs, inst.src.CloseE())
+	errs = eh.AppendError(errs, inst.src.Close())
 	return eh.CheckErrors(errs)
 }

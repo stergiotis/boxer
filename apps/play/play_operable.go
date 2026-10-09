@@ -21,12 +21,15 @@ type OperableOperation struct {
 }
 
 // operableCommon are the operations that belong to no pane: reading the
-// window's state, its result and history, running, and its parameters.
+// window's state, its result and history, running, its parameters, and
+// raising a pane — a lazy pane draws only in front, and get_<pane> refuses
+// it until then, so without show_pane an agent could never read one. The
+// embedded play's tabs are the view's panes, so show_pane reaches no other.
 // Changing the SQL, binding datasets and publishing are not offered — the
 // document is the publisher's — nor are the authoring tools.
 var operableCommon = []string{
 	opGetState, opDescribeResult, opSampleRows, opListHistory, opListPanes,
-	opRun, opCancelRun, opSetParam,
+	opRun, opCancelRun, opSetParam, opShowPane,
 }
 
 // operablePanes are, per pane, the operations an operable view offers for

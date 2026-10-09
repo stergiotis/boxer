@@ -1,6 +1,7 @@
 package grib
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"os"
@@ -8,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/science/geo/grib/tables"
 )
@@ -23,7 +24,7 @@ func NewCliCommand() (cmd *cli.Command) {
 	cmd = &cli.Command{
 		Name:  "grib",
 		Usage: "inventory, index and decode GRIB files with the clean-room reader (ADR-0292)",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			newLsCommand(),
 			newDumpCommand(),
 			newIndexCommand(),
@@ -42,12 +43,12 @@ func newIndexCommand() (cmd *cli.Command) {
 			"consumer can fetch it by HTTP range; the parameter triplet, templates, level, reference and\n" +
 			"forecast times, ensemble member, and the feature the reader would refuse, if any. A malformed\n" +
 			"message ends the listing with an error after the good entries.",
-		Action: func(c *cli.Context) (err error) {
-			if c.NArg() != 1 {
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
+			if cmd.NArg() != 1 {
 				err = eb.Build().Errorf("exactly one file is required")
 				return
 			}
-			f, err := os.Open(c.Args().First())
+			f, err := os.Open(cmd.Args().First())
 			if err != nil {
 				return
 			}
@@ -56,8 +57,8 @@ func newIndexCommand() (cmd *cli.Command) {
 			if err != nil {
 				return
 			}
-			entries, scanErr := IndexE(f, st.Size())
-			err = WriteIndexE(c.App.Writer, entries)
+			entries, scanErr := Index(f, st.Size())
+			err = WriteIndex(cmd.Root().Writer, entries)
 			if err != nil {
 				return
 			}
@@ -73,21 +74,21 @@ func newTablesCommand() (cmd *cli.Command) {
 		Name:  "tables",
 		Usage: "regenerate the embedded WMO tables from checkouts of wmo-im/GRIB2 and wmo-im/CCT",
 		Flags: []cli.Flag{
-			&cli.PathFlag{Name: "grib2", Usage: "checkout of wmo-im/GRIB2 at the wanted tag", Required: true},
-			&cli.PathFlag{Name: "cct", Usage: "checkout of wmo-im/CCT", Required: true},
+			&cli.StringFlag{Name: "grib2", Usage: "checkout of wmo-im/GRIB2 at the wanted tag", Required: true, TakesFile: true},
+			&cli.StringFlag{Name: "cct", Usage: "checkout of wmo-im/CCT", Required: true, TakesFile: true},
 			&cli.StringFlag{Name: "version", Usage: "the GRIB2 tag the checkout is at, recorded in the output", Required: true},
-			&cli.PathFlag{Name: "out", Usage: "directory to write into", Value: "public/science/geo/grib/tables/wmo"},
+			&cli.StringFlag{Name: "out", Usage: "directory to write into", Value: "public/science/geo/grib/tables/wmo", TakesFile: true},
 		},
-		Action: func(c *cli.Context) (err error) {
-			g, err := tables.GenerateE(c.Path("grib2"), c.Path("cct"), c.String("version"))
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
+			g, err := tables.Generate(cmd.String("grib2"), cmd.String("cct"), cmd.String("version"))
 			if err != nil {
 				return
 			}
-			err = g.WriteE(c.Path("out"))
+			err = g.Write(cmd.String("out"))
 			if err != nil {
 				return
 			}
-			fmt.Fprintf(c.App.Writer, "wrote %s (%d bytes of codes, %d of templates)\n", c.Path("out"), len(g.Codes), len(g.Templates))
+			fmt.Fprintf(cmd.Root().Writer, "wrote %s (%d bytes of codes, %d of templates)\n", cmd.String("out"), len(g.Codes), len(g.Templates))
 			return
 		},
 	}
@@ -104,13 +105,13 @@ func newLsCommand() (cmd *cli.Command) {
 			"point count, first surface, reference time, forecast offset. A field the reader would\n" +
 			"refuse to decode is listed with the feature it would refuse; a malformed message ends the\n" +
 			"file's listing with the error.",
-		Action: func(c *cli.Context) (err error) {
-			if c.NArg() == 0 {
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
+			if cmd.NArg() == 0 {
 				err = eb.Build().Errorf("at least one file is required")
 				return
 			}
-			for _, path := range c.Args().Slice() {
-				err = lsFileE(c, path)
+			for _, path := range cmd.Args().Slice() {
+				err = lsFile(ctx, cmd, path)
 				if err != nil {
 					return
 				}
@@ -121,7 +122,7 @@ func newLsCommand() (cmd *cli.Command) {
 	return
 }
 
-func lsFileE(c *cli.Context, path string) (err error) {
+func lsFile(ctx context.Context, cmd *cli.Command, path string) (err error) {
 	f, err := os.Open(path)
 	if err != nil {
 		err = eb.Build().Str("path", path).Errorf("open: %w", err)
@@ -132,8 +133,8 @@ func lsFileE(c *cli.Context, path string) (err error) {
 	if err != nil {
 		return
 	}
-	w := c.App.Writer
-	if c.NArg() > 1 {
+	w := cmd.Root().Writer
+	if cmd.NArg() > 1 {
 		fmt.Fprintf(w, "== %s\n", path)
 	}
 	n := 0
@@ -171,7 +172,7 @@ func lsLine(n int, m *Message, f *Field) (s string) {
 		if f.Bitmap.Present {
 			b.WriteString("\tbitmap")
 		}
-		if err := f.Packing.supportedE(); err != nil {
+		if err := f.Packing.supported(); err != nil {
 			feature, _ := UnsupportedFeature(err)
 			fmt.Fprintf(&b, "\trefuse: %s", feature)
 		}
@@ -213,7 +214,7 @@ func lsLine(n int, m *Message, f *Field) (s string) {
 	if f.Bitmap.Present {
 		b.WriteString("\tbitmap")
 	}
-	if err := f.Packing.supportedE(); err != nil {
+	if err := f.Packing.supported(); err != nil {
 		feature, _ := UnsupportedFeature(err)
 		fmt.Fprintf(&b, "\trefuse: %s", feature)
 	} else if f.Bitmap.Indicator != 0 && f.Bitmap.Indicator != 255 {
@@ -233,25 +234,25 @@ func newDumpCommand() (cmd *cli.Command) {
 			&cli.BoolFlag{Name: "values", Usage: "print every value in stored order, one per line, NaN for missing"},
 			&cli.BoolFlag{Name: "points", Usage: "with --values, prefix each value with its latitude and longitude"},
 		},
-		Action: func(c *cli.Context) (err error) {
-			if c.NArg() != 1 {
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
+			if cmd.NArg() != 1 {
 				err = eb.Build().Errorf("exactly one file is required")
 				return
 			}
-			err = dumpFileE(c, c.Args().First(), c.Int("field"), c.Bool("values"), c.Bool("points"))
+			err = dumpFile(ctx, cmd, cmd.Args().First(), cmd.Int("field"), cmd.Bool("values"), cmd.Bool("points"))
 			return
 		},
 	}
 	return
 }
 
-func dumpFileE(c *cli.Context, path string, only int, printValues bool, printPoints bool) (err error) {
+func dumpFile(ctx context.Context, cmd *cli.Command, path string, only int, printValues bool, printPoints bool) (err error) {
 	buf, err := os.ReadFile(path)
 	if err != nil {
 		err = eb.Build().Str("path", path).Errorf("read: %w", err)
 		return
 	}
-	w := c.App.Writer
+	w := cmd.Root().Writer
 	n, k := 0, 0
 	for m, scanErr := range ScanBytes(buf) {
 		if scanErr != nil {
@@ -264,14 +265,14 @@ func dumpFileE(c *cli.Context, path string, only int, printValues bool, printPoi
 			if only != 0 && only != k {
 				continue
 			}
-			dumpField(c, n, k, m, f, printValues, printPoints)
+			dumpField(ctx, cmd, n, k, m, f, printValues, printPoints)
 		}
 	}
 	return
 }
 
-func dumpField(c *cli.Context, n, k int, m *Message, f *Field, printValues bool, printPoints bool) {
-	w := c.App.Writer
+func dumpField(ctx context.Context, cmd *cli.Command, n, k int, m *Message, f *Field, printValues bool, printPoints bool) {
+	w := cmd.Root().Writer
 	fmt.Fprintf(w, "message %d field %d (#%d) at %d, %d bytes, %d skipped before\n", n, f.Index+1, k, m.Offset, m.Length, m.Skipped)
 	centre := ""
 	if name, ok := tables.Centre(m.Ident.Centre); ok {
@@ -366,7 +367,7 @@ func dumpField(c *cli.Context, n, k int, m *Message, f *Field, printValues bool,
 	}
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "  bitmap: indicator %d\n", f.Bitmap.Indicator)
-	values, err := f.ValuesE(nil)
+	values, err := f.Values(nil)
 	if err != nil {
 		if feature, ok := UnsupportedFeature(err); ok {
 			fmt.Fprintf(w, "  values: refused — %s\n", feature)
@@ -397,7 +398,7 @@ func dumpField(c *cli.Context, n, k int, m *Message, f *Field, printValues bool,
 	var next func() (float64, float64, bool)
 	if printPoints {
 		var points func(func(float64, float64) bool)
-		points, pointsErr = f.Grid.PointsE()
+		points, pointsErr = f.Grid.Points()
 		if pointsErr == nil {
 			next, _ = iterPull(points)
 		} else {

@@ -31,13 +31,13 @@ func TestScanMethodsAgree(t *testing.T) {
 
 				direct := base
 				direct.ScanMethod = damp.ScanMethodDirect
-				want, err := damp.ScoreE(values, direct)
+				want, err := damp.Score(values, direct)
 				require.NoError(t, err)
 				require.NotEmpty(t, want)
 
 				transform := base
 				transform.ScanMethod = damp.ScanMethodTransform
-				got, err := damp.ScoreE(values, transform)
+				got, err := damp.Score(values, transform)
 				require.NoError(t, err)
 				require.Len(t, got, len(want))
 
@@ -150,7 +150,7 @@ func benchmarkScan(b *testing.B, window int32, method damp.ScanMethodE) {
 	}
 	b.ReportAllocs()
 	for b.Loop() {
-		inst, err := damp.NewDetectorE(cfg)
+		inst, err := damp.NewDetector(cfg)
 		if err != nil {
 			b.Fatal(err)
 		}

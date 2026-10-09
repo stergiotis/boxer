@@ -21,16 +21,16 @@ func TestOpenFileWAVBuildsThenLoadsFromCache(t *testing.T) {
 	dir := t.TempDir()
 	format := pcm.Format{SampleRate: 8000, Channels: 1}
 	frames := format.DurationToFrames(3 * time.Second)
-	src, err := pcm.NewSynthSourceE(format, frames, pcm.Sine(format, 220, 0.5))
+	src, err := pcm.NewSynthSource(format, frames, pcm.Sine(format, 220, 0.5))
 	require.NoError(t, err)
 	path := filepath.Join(dir, "tone.wav")
 	f, err := os.Create(path)
 	require.NoError(t, err)
-	require.NoError(t, wavfile.WriteE(context.Background(), f, format, wavfile.EncodingPCMInt, 16, src))
+	require.NoError(t, wavfile.Write(context.Background(), f, format, wavfile.EncodingPCMInt, 16, src))
 	require.NoError(t, f.Close())
 
 	cacheDir := filepath.Join(dir, "peaks")
-	tr, kind, err := track.OpenFileE(context.Background(), path, track.Options{CacheDir: cacheDir})
+	tr, kind, err := track.OpenFile(context.Background(), path, track.Options{CacheDir: cacheDir})
 	require.NoError(t, err)
 	require.Equal(t, decode.KindWAV, kind)
 	require.Equal(t, frames, tr.Frames())
@@ -43,15 +43,15 @@ func TestOpenFileWAVBuildsThenLoadsFromCache(t *testing.T) {
 	require.NoError(t, bp.Err)
 	require.NoError(t, bp.CacheErr)
 	require.False(t, bp.FromCache)
-	require.NoError(t, tr.CloseE())
+	require.NoError(t, tr.Close())
 
 	entries, err := os.ReadDir(cacheDir)
 	require.NoError(t, err)
 	require.Len(t, entries, 1, "one peaks file written")
 
-	tr2, _, err := track.OpenFileE(context.Background(), path, track.Options{CacheDir: cacheDir})
+	tr2, _, err := track.OpenFile(context.Background(), path, track.Options{CacheDir: cacheDir})
 	require.NoError(t, err)
-	defer func() { require.NoError(t, tr2.CloseE()) }()
+	defer func() { require.NoError(t, tr2.Close()) }()
 	bp2 := tr2.BuildProgress()
 	require.True(t, bp2.Complete)
 	require.True(t, bp2.FromCache, "the second open must come from the cache")
@@ -71,6 +71,6 @@ func TestOpenFileWAVBuildsThenLoadsFromCache(t *testing.T) {
 }
 
 func TestOpenFileMissingPathFails(t *testing.T) {
-	_, _, err := track.OpenFileE(context.Background(), filepath.Join(t.TempDir(), "absent.wav"), track.Options{NoCache: true})
+	_, _, err := track.OpenFile(context.Background(), filepath.Join(t.TempDir(), "absent.wav"), track.Options{NoCache: true})
 	require.Error(t, err)
 }

@@ -69,6 +69,10 @@ type Options struct {
 	// which always runs on elapsed real time — a capture that fixes this to
 	// get the same picture every run still plays.
 	Now func() time.Time
+	// EmptyText says why there are no steps, under the "No steps yet"
+	// headline the strip shows in their place: "Pick a layer to load its
+	// forecast". Empty takes a generic sentence.
+	EmptyText string
 }
 
 // Events is what a frame did to the position.
@@ -88,7 +92,6 @@ type Events struct {
 const (
 	defaultHeight = 104
 	compactHeight = 24
-	padX          = 16
 	bandH         = 14
 	// labelRowH is kept free under the band for the playhead's time, the
 	// marks and the calendar context, so none is drawn across a bar.
@@ -182,6 +185,9 @@ type Scrubber struct {
 	cols               color.Colors
 	ticks              []axisruler.Tick
 	columns            []column
+	// markSpans are the x extents of the marks' words drawn this frame, in
+	// pairs, which the now label stands out of the way of.
+	markSpans []float32
 }
 
 // New makes a scrubber. Every id it derives is scoped under scopeKey on ids,
@@ -381,14 +387,21 @@ func newGeometry(w, h float32, compact bool) (g geometry) {
 // drawing.
 func (inst *Scrubber) strip(w, h float32, steps []Step, compact bool) (ev Events) {
 	n := len(steps)
-	if w < 2*padX+8 || n == 0 {
+	vis := newVisuals()
+	if w < 2*vis.pad+8 {
+		return
+	}
+	g := newGeometry(w, h, compact)
+	if n == 0 {
+		c.PaintClipPush(0, 0, g.w, g.h).Send()
+		inst.paintEmpty(g, vis)
+		c.PaintClipPop().Send()
+		c.PaintCanvas(inst.ids.PrepareStr(canvasKey), w, h).Background(vis.background).Send()
 		return
 	}
 	sm := c.CurrentApplicationState.StateManager
 	t := &inst.Transport
-	g := newGeometry(w, h, compact)
-	axis := newAxis(steps, padX, w-padX, inst.Opts.ByIndex)
-	vis := newVisuals()
+	axis := newAxis(steps, vis.pad, w-vis.pad, inst.Opts.ByIndex)
 
 	canvasH := widgethandle.Make(inst.ids.PrepareStr(canvasKey).Derive())
 	areaH := widgethandle.Make(inst.ids.PrepareStr(areaKey).Derive())

@@ -45,11 +45,11 @@ func quantise(sample float32) (lo int32, hi int32) {
 	return lo, hi
 }
 
-// FoldE folds interleaved frames in at the current build position. Chunks
+// Fold folds interleaved frames in at the current build position. Chunks
 // may be any length; a bin that a chunk leaves incomplete is buffered and
 // continued by the next call. Exactly one goroutine may call this, and it
 // must not call it after [Pyramid.Finish].
-func (inst *Pyramid) FoldE(samples []float32) (err error) {
+func (inst *Pyramid) Fold(samples []float32) (err error) {
 	if inst.complete.Load() {
 		return eb.Build().Int64("built", inst.built.Load()).Errorf("pyramid is already complete")
 	}
@@ -240,7 +240,7 @@ func (inst *Pyramid) finishCascade() {
 // after which every bin is readable and folding is refused. It is
 // idempotent. Finishing before the declared frame count has been folded
 // publishes what was folded — the pyramid is then complete over a shorter
-// signal, and [Pyramid.WriteToE] refuses it.
+// signal, and [Pyramid.WriteTo] refuses it.
 func (inst *Pyramid) Finish() {
 	if inst.complete.Load() {
 		return
@@ -254,37 +254,37 @@ func (inst *Pyramid) Finish() {
 	inst.complete.Store(true)
 }
 
-// BuildE builds a complete pyramid over src in one sequential pass
+// Build builds a complete pyramid over src in one sequential pass
 // (ADR-0208 §SD4). chunkFrames of zero or less picks a default; progress may
 // be nil and is called with the published frame count after every chunk.
 //
 // The context is honoured between chunks and inside the source's reads. On
-// cancellation BuildE returns (nil, ctx.Err()) and the half-built pyramid is
+// cancellation Build returns (nil, ctx.Err()) and the half-built pyramid is
 // dropped — a caller that wants to render a partial build owns the pyramid
-// itself and uses [Pyramid.FillFromE].
-func BuildE(ctx context.Context, src pcm.SourceI, baseBin int32, chunkFrames int, progress func(builtFrames int64)) (inst *Pyramid, err error) {
+// itself and uses [Pyramid.FillFrom].
+func Build(ctx context.Context, src pcm.SourceI, baseBin int32, chunkFrames int, progress func(builtFrames int64)) (inst *Pyramid, err error) {
 	if src == nil {
 		return nil, eb.Build().Errorf("nil source")
 	}
-	inst, err = NewPyramidE(src.Format(), src.Frames(), baseBin)
+	inst, err = NewPyramid(src.Format(), src.Frames(), baseBin)
 	if err != nil {
 		return nil, err
 	}
-	err = inst.FillFromE(ctx, src, chunkFrames, progress)
+	err = inst.FillFrom(ctx, src, chunkFrames, progress)
 	if err != nil {
 		return nil, err
 	}
 	return inst, nil
 }
 
-// FillFromE folds src into the pyramid from its current build position to
+// FillFrom folds src into the pyramid from its current build position to
 // the declared end and then calls [Pyramid.Finish]. It is the progressive
-// form of [BuildE]: the caller holds the pyramid and may read the built
+// form of [Build]: the caller holds the pyramid and may read the built
 // prefix from another goroutine while this runs.
 //
 // It returns ctx.Err() when cancelled, leaving the pyramid unfinished and
 // resumable by another call.
-func (inst *Pyramid) FillFromE(ctx context.Context, src pcm.SourceI, chunkFrames int, progress func(builtFrames int64)) (err error) {
+func (inst *Pyramid) FillFrom(ctx context.Context, src pcm.SourceI, chunkFrames int, progress func(builtFrames int64)) (err error) {
 	if src == nil {
 		return eb.Build().Errorf("nil source")
 	}
@@ -326,7 +326,7 @@ func (inst *Pyramid) FillFromE(ctx context.Context, src pcm.SourceI, chunkFrames
 			want = remaining
 		}
 		var n int
-		n, err = src.ReadFramesAtE(ctx, inst.folded, buf[:want*int64(channels)])
+		n, err = src.ReadFramesAt(ctx, inst.folded, buf[:want*int64(channels)])
 		if err != nil && !errors.Is(err, io.EOF) {
 			return eh.Errorf("unable to read frames for the peaks build: %w", err)
 		}
@@ -336,7 +336,7 @@ func (inst *Pyramid) FillFromE(ctx context.Context, src pcm.SourceI, chunkFrames
 				Int64("frames", inst.frames).
 				Errorf("source ended before the declared frame count")
 		}
-		err = inst.FoldE(buf[:n*channels])
+		err = inst.Fold(buf[:n*channels])
 		if err != nil {
 			return err
 		}

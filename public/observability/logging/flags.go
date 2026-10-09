@@ -1,6 +1,7 @@
 package logging
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -19,7 +20,7 @@ import (
 
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func getBuildTags(info *debug.BuildInfo) []string {
@@ -425,22 +426,30 @@ var (
 	})
 )
 
-var LoggingFlags = []cli.Flag{
-	LogFile.AsCliFlag(),
-	LogCaller.AsCliFlag(),
-	LogOsHostOnStart.AsCliFlag(),
-	LogOsArgsOnStart.AsCliFlag(),
-	LogOsPidOnStart.AsCliFlag(),
-	LogVcsRevisionOnStart.AsCliFlag(),
-	LogModuleInfoOnStart.AsCliFlag(),
-	LogCorrelationId.AsCliFlag(),
-	LogLevel.AsCliFlag(),
-	LogFormat.AsCliFlag(),
-	LogColor.AsCliFlag(),
+// LoggingFlags is the flag set a main mounts. A urfave/cli v3 flag keeps its
+// parsed state after a run, so a caller that runs a command more than once in
+// one process takes a fresh set from [NewLoggingFlags] per run.
+var LoggingFlags = NewLoggingFlags()
+
+// NewLoggingFlags returns a fresh instance of every logging flag.
+func NewLoggingFlags() []cli.Flag {
+	return []cli.Flag{
+		LogFile.AsCliFlag(),
+		LogCaller.AsCliFlag(),
+		LogOsHostOnStart.AsCliFlag(),
+		LogOsArgsOnStart.AsCliFlag(),
+		LogOsPidOnStart.AsCliFlag(),
+		LogVcsRevisionOnStart.AsCliFlag(),
+		LogModuleInfoOnStart.AsCliFlag(),
+		LogCorrelationId.AsCliFlag(),
+		LogLevel.AsCliFlag(),
+		LogFormat.AsCliFlag(),
+		LogColor.AsCliFlag(),
+	}
 }
 
-// Apply configures zerolog from the parsed cli.Context. Wire it as
-// cli.App.Before so it runs for every invocation regardless of which
+// Apply configures zerolog from the parsed command line. Wire it as the
+// root cli.Command's Before so it runs for every invocation regardless of which
 // flags the user supplied — flag-level Action closures only fire when
 // the flag is explicitly set, which silently swallowed startup-info
 // logging before this refactor.
@@ -448,36 +457,35 @@ var LoggingFlags = []cli.Flag{
 // Order of effects: writer → global level → caller frame → correlation
 // id → "application startup" record. The startup record is emitted
 // only when at least one of the host/pid/args/vcs/module flags is set.
-func Apply(ctx *cli.Context) (err error) {
-	if err = applyWriter(ctx); err != nil {
+func Apply(ctx context.Context, cmd *cli.Command) (_ context.Context, err error) {
+	if err = applyWriter(ctx, cmd); err != nil {
 		return
 	}
-	if err = applyLevel(ctx); err != nil {
+	if err = applyLevel(ctx, cmd); err != nil {
 		return
 	}
-	if ctx.Bool("logCaller") {
+	if cmd.Bool("logCaller") {
 		log.Logger = log.Logger.With().Caller().Logger()
 	}
-	applyCorrelationId(ctx)
-	if err = emitStartupRecord(ctx); err != nil {
+	applyCorrelationId(ctx, cmd)
+	if err = emitStartupRecord(ctx, cmd); err != nil {
 		return
 	}
 	return
 }
 
-func applyWriter(ctx *cli.Context) (err error) {
+func applyWriter(ctx context.Context, cmd *cli.Command) (err error) {
 	// Resolve format: prefer the CLI/env-bound flag value, fall back
 	// to LogFormat.Get() when the flag is absent from the app. A
 	// non-empty ctx.String reliably means the flag is present (no
 	// allowed value is the empty string), so an empty result here
 	// distinguishes "flag not on app" from "flag on app, defaulted".
 	// This lets smaller mains wire Before: logging.Apply without
-	// having to also list LoggingFlags. urfave/cli v2 runs
-	// App.Before before flag Actions (command.go:215-226 in v2.27.7),
-	// so the categorial Action inside env.CategorialStringVar.AsCliFlag
+	// having to also list LoggingFlags. urfave/cli runs Before before
+	// flag Actions, so the categorial Action inside env.CategorialStringVar.AsCliFlag
 	// fires too late to catch invalid CLI values before Apply runs —
 	// we re-validate here.
-	format := ctx.String("logFormat")
+	format := cmd.String("logFormat")
 	if format == "" {
 		format = LogFormat.Get()
 	} else if !LogFormat.IsAllowed(format) {
@@ -485,7 +493,7 @@ func applyWriter(ctx *cli.Context) (err error) {
 			Errorf("invalid --logFormat value")
 	}
 
-	logFile := ctx.String("logFile")
+	logFile := cmd.String("logFile")
 	var dest io.Writer
 	destIsFile := false
 	if logFile == "" || logFile == "-" {
@@ -500,7 +508,7 @@ func applyWriter(ctx *cli.Context) (err error) {
 		destIsFile = true
 	}
 
-	noColor := resolveNoColor(ctx, destIsFile)
+	noColor := resolveNoColor(ctx, cmd, destIsFile)
 
 	if format == "cbor" {
 		checkZeroLogCborBuild()
@@ -531,19 +539,19 @@ func applyWriter(ctx *cli.Context) (err error) {
 // auto-detects from whether stderr is a terminal. A file destination
 // always forces no-color — color escapes in a log file are noise — which
 // also keeps piped/redirected output clean by default.
-func resolveNoColor(ctx *cli.Context, destIsFile bool) bool {
+func resolveNoColor(ctx context.Context, cmd *cli.Command, destIsFile bool) bool {
 	if destIsFile {
 		return true
 	}
-	if ctx.IsSet("logColor") {
-		return !ctx.Bool("logColor")
+	if cmd.IsSet("logColor") {
+		return !cmd.Bool("logColor")
 	}
 	return !isatty.IsTerminal(os.Stderr.Fd())
 }
 
-func applyLevel(ctx *cli.Context) (err error) {
+func applyLevel(ctx context.Context, cmd *cli.Command) (err error) {
 	// See applyWriter for the empty-string fallback rationale.
-	level := ctx.String("logLevel")
+	level := cmd.String("logLevel")
 	if level == "" {
 		level = LogLevel.Get()
 	} else if !LogLevel.IsAllowed(level) {
@@ -573,11 +581,11 @@ func applyLevel(ctx *cli.Context) (err error) {
 	return
 }
 
-func applyCorrelationId(ctx *cli.Context) {
-	if !ctx.IsSet("logCorrelationId") {
+func applyCorrelationId(ctx context.Context, cmd *cli.Command) {
+	if !cmd.IsSet("logCorrelationId") {
 		return
 	}
-	runInstanceId := ctx.String("logCorrelationId")
+	runInstanceId := cmd.String("logCorrelationId")
 	if runInstanceId == "" {
 		runInstanceId = gonanoid.Must(21)
 	}
@@ -589,10 +597,10 @@ func applyCorrelationId(ctx *cli.Context) {
 	log.Logger = log.Logger.With().Str("correlationId", runInstanceId).Logger()
 }
 
-func emitStartupRecord(ctx *cli.Context) (err error) {
+func emitStartupRecord(ctx context.Context, cmd *cli.Command) (err error) {
 	o := zerolog.Dict()
 	any := false
-	if ctx.Bool("logOsHostOnStart") {
+	if cmd.Bool("logOsHostOnStart") {
 		var host string
 		host, err = os.Hostname()
 		if err != nil {
@@ -601,15 +609,15 @@ func emitStartupRecord(ctx *cli.Context) (err error) {
 		o = o.Str("host", host)
 		any = true
 	}
-	if ctx.Bool("logOsPidOnStart") {
+	if cmd.Bool("logOsPidOnStart") {
 		o = o.Int("pid", os.Getpid())
 		any = true
 	}
-	if ctx.Bool("logOsArgsOnStart") {
+	if cmd.Bool("logOsArgsOnStart") {
 		o = o.Strs("args", os.Args)
 		any = true
 	}
-	if ctx.Bool("logVcsRevisionOnStart") {
+	if cmd.Bool("logVcsRevisionOnStart") {
 		var rev string
 		var mod bool
 		rev, mod, err = vcs.GetVcsRevision()
@@ -619,7 +627,7 @@ func emitStartupRecord(ctx *cli.Context) (err error) {
 		o = o.Str("vcsRevision", rev).Bool("vcsModified", mod)
 		any = true
 	}
-	if ctx.Bool("logModuleInfoOnStart") {
+	if cmd.Bool("logModuleInfoOnStart") {
 		mod := vcs.ModuleInfo()
 		if mod == vcs.NoBuildInfo {
 			return eb.Build().Errorf("unable to use -logModuleInfoOnStart: no build information available")

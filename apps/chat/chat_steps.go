@@ -9,13 +9,13 @@ import (
 	"unicode/utf8"
 )
 
-// The trail is what a turn with tools did, step by step, as it happens: each
+// The steps are what a turn with tools did, step by step, as it happens: each
 // model call with what it wrote and how long it took, each tool call with
-// its arguments and what came back. The tool loop records it on the
-// coordinator; the waiting bubble draws it while the turn runs, and the
+// its arguments and what came back. The tool loop records them on the
+// coordinator; the waiting bubble draws them while the turn runs, and the
 // tool entries of a landed turn keep their steps to inspect.
 
-// stepKindE is what a step of the trail is.
+// stepKindE is what a step of a turn is.
 type stepKindE uint8
 
 const (
@@ -26,16 +26,16 @@ const (
 // Bounds on what a step keeps of the text it shows: a result or a
 // reasoning can be long, and a turn keeps every step.
 const (
-	trailArgsMax      = 4 << 10
-	trailResultMax    = 16 << 10
-	trailReasoningMax = 4 << 10
-	trailContentMax   = 4 << 10
+	stepArgsMax      = 4 << 10
+	stepResultMax    = 16 << 10
+	stepReasoningMax = 4 << 10
+	stepContentMax   = 4 << 10
 )
 
-// trailStep is one step: a model call (round, text, reasoning, tokens, the
+// turnStep is one step: a model call (round, text, reasoning, tokens, the
 // tools it asked for) or a tool call (name, title, arguments, result, the
 // transcript's line).
-type trailStep struct {
+type turnStep struct {
 	kind  stepKindE
 	round int
 	// name is a tool's name; title the person's title the model gave it.
@@ -68,17 +68,17 @@ type trailStep struct {
 	failed  bool
 }
 
-// turnTrail is the running turn's steps, written by the tool loop and read
+// turnSteps is the running turn's steps, written by the tool loop and read
 // by the window; ver moves with every change so the window copies only on
-// news. A nil trail records nothing.
-type turnTrail struct {
+// news. A nil turnSteps records nothing.
+type turnSteps struct {
 	mu    sync.Mutex
-	steps []trailStep
+	steps []turnStep
 	ver   uint64
 }
 
-// reset starts a turn's trail.
-func (inst *turnTrail) reset() {
+// reset starts a turn's steps.
+func (inst *turnSteps) reset() {
 	if inst == nil {
 		return
 	}
@@ -89,7 +89,7 @@ func (inst *turnTrail) reset() {
 }
 
 // begin appends a running step and returns its index.
-func (inst *turnTrail) begin(s trailStep) (i int) {
+func (inst *turnSteps) begin(s turnStep) (i int) {
 	if inst == nil {
 		return -1
 	}
@@ -102,7 +102,7 @@ func (inst *turnTrail) begin(s trailStep) (i int) {
 }
 
 // finish completes step i through f.
-func (inst *turnTrail) finish(i int, f func(s *trailStep)) {
+func (inst *turnSteps) finish(i int, f func(s *turnStep)) {
 	if inst == nil || i < 0 {
 		return
 	}
@@ -123,7 +123,7 @@ func (inst *turnTrail) finish(i int, f func(s *trailStep)) {
 
 // personWait marks the running tool call as waiting on the person, or as
 // no longer waiting, adding the wait to what it waited.
-func (inst *turnTrail) personWait(on bool) {
+func (inst *turnSteps) personWait(on bool) {
 	if inst == nil {
 		return
 	}
@@ -147,13 +147,13 @@ func (inst *turnTrail) personWait(on bool) {
 }
 
 // waitingOnPerson says the step waits on the person now.
-func (inst *trailStep) waitingOnPerson() bool {
+func (inst *turnStep) waitingOnPerson() bool {
 	return !inst.done && !inst.waitSince.IsZero()
 }
 
 // snapshot copies the steps when they moved past ver; changed says whether
 // they did.
-func (inst *turnTrail) snapshot(ver uint64) (steps []trailStep, now uint64, changed bool) {
+func (inst *turnSteps) snapshot(ver uint64) (steps []turnStep, now uint64, changed bool) {
 	if inst == nil {
 		return nil, ver, false
 	}
@@ -162,7 +162,7 @@ func (inst *turnTrail) snapshot(ver uint64) (steps []trailStep, now uint64, chan
 	if inst.ver == ver {
 		return nil, ver, false
 	}
-	return append([]trailStep(nil), inst.steps...), inst.ver, true
+	return append([]turnStep(nil), inst.steps...), inst.ver, true
 }
 
 // clip keeps the first n bytes of s, saying how much it left out.
@@ -194,24 +194,24 @@ func clipTail(s string, n int) string {
 func indentArgs(raw string) string {
 	var buf bytes.Buffer
 	if json.Indent(&buf, []byte(raw), "", "  ") != nil {
-		return clip(raw, trailArgsMax)
+		return clip(raw, stepArgsMax)
 	}
-	return clip(buf.String(), trailArgsMax)
+	return clip(buf.String(), stepArgsMax)
 }
 
 // stepsOfTools pairs each tool step of a landed turn with the model step
 // that asked for it, the latter only on the round's first tool step: the
 // details a tool entry keeps. The tool steps are in the order of the
 // turn's activity lines.
-func stepsOfTools(steps []trailStep) (out [][]trailStep) {
-	var model *trailStep
+func stepsOfTools(steps []turnStep) (out [][]turnStep) {
+	var model *turnStep
 	for i := range steps {
 		s := &steps[i]
 		if s.kind == stepModel {
 			model = s
 			continue
 		}
-		var own []trailStep
+		var own []turnStep
 		if model != nil {
 			own = append(own, *model)
 			model = nil

@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
-	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/loopback"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
@@ -319,7 +319,6 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 		Model: inst.cfg.Model, EndpointHost: inst.host, Messages: len(req.Messages), Tools: len(req.Tools),
 		ToolsDigest:  toolsDigest(req.Tools),
 		Conversation: req.Conversation, Turn: req.Turn, Round: int(req.Round), ParentCallId: req.ParentCallId,
-		Task: req.OnBehalfTask, TaskEpoch: req.OnBehalfEpoch, TaskCall: req.OnBehalfCall,
 		OmitFrom: int(req.OmitFrom), OmitTo: int(req.OmitTo), RetainAsked: retained,
 	}
 	// The call's messages reach the trail whether it is answered, refused or
@@ -354,7 +353,16 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 			inst.refuse(msg, "agent-caused work, and no dispatcher to check its grant", rec, t)
 			return
 		}
-		if ok, why := ref.d.AllowDestination(req.OnBehalfTask, req.OnBehalfEpoch, DelegationDestination); !ok {
+		// The task goes on the row only as the dispatcher attests it
+		// (ADR-0277 §SD1): a context it does not confirm is refused and
+		// recorded as the sender's own call.
+		cc, ok, why := ref.d.CallContext(req.OnBehalfTask, req.OnBehalfEpoch, req.OnBehalfCall, msg.Sender, msg.SenderInstance)
+		if !ok {
+			inst.refuse(msg, "agent-caused work the dispatcher does not attest: "+why, rec, t)
+			return
+		}
+		rec.Task, rec.TaskEpoch, rec.TaskCall = cc.Task, cc.Epoch, cc.Call
+		if ok, why := ref.d.AllowDestination(cc.Task, cc.Epoch, DelegationDestination); !ok {
 			inst.refuse(msg, "agent-caused work: "+why, rec, t)
 			return
 		}
@@ -374,10 +382,12 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 	// trail before the request leaves the machine, so a process that dies
 	// mid-call leaves "sent, outcome unknown" rather than nothing.
 	inst.writeRequest(&rec, t)
-	if _, refuse := inst.cfg.Trail.WriteAhead(inst.base); refuse != nil {
+	ahead, refuse := inst.cfg.Trail.WriteAhead(inst.base)
+	if refuse != nil {
 		inst.refuse(msg, refuse.Error(), rec, t)
 		return
 	}
+	t.notAhead = !ahead
 	ctx, cancel := context.WithTimeout(inst.base, inst.cfg.Timeout)
 	defer cancel()
 	if req.CancelKey != "" {
@@ -426,7 +436,9 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 		} else {
 			rep.Ok, rep.Reason, rep.ErrorKind = false, cerr.Error(), kindOf(cerr)
 			if errors.Is(cerr, openaichat.ErrIncompleteCompletion) {
-				rep.Reason = incompleteReason(resp, maxTokens)
+				// Truncated with nothing to hand over: incomplete, and
+				// failed — the row's Error says so.
+				rep.Reason, rec.Incomplete = incompleteReason(resp, maxTokens), true
 			}
 			rec.Error = rep.Reason
 		}
@@ -485,22 +497,13 @@ func EndpointHost(endpoint string) (host string) {
 	return u.Host
 }
 
-// isLocalEndpoint says the endpoint's host is loopback: a literal loopback
-// address or "localhost". Not resolved — a name that resolves to loopback
-// through a hosts file is not a fact this process can vouch for.
+// isLocalEndpoint says the endpoint's host is loopback, by loopback.IsHost.
 func isLocalEndpoint(endpoint string) (yes bool) {
 	u, err := url.Parse(endpoint)
 	if err != nil {
 		return false
 	}
-	h := u.Hostname()
-	if strings.EqualFold(h, "localhost") {
-		return true
-	}
-	if ip := net.ParseIP(h); ip != nil {
-		return ip.IsLoopback()
-	}
-	return false
+	return loopback.IsHost(u.Hostname())
 }
 
 // isTrustedEndpoint says the endpoint's host is one the deployment lists in

@@ -194,7 +194,7 @@ func requireColumn(t *testing.T, ctx context.Context, e *engine.Engine, g *csr.G
 // is NaN, not zero, which a ramp would otherwise place beside the sources.
 func TestDistanceLeavesUnreachedAbsent(t *testing.T) {
 	// Two components: 0→1 and 2→3.
-	g, err := csr.BuildE([]uint64{0, 2}, []uint64{1, 3}, nil, csr.Options{Directed: true})
+	g, err := csr.Build([]uint64{0, 2}, []uint64{1, 3}, nil, csr.Options{Directed: true})
 	require.NoError(t, err)
 	c, err := Compute(context.Background(), nil, g, MetricDistance, ComputeOptions{Sources: []int32{0}})
 	require.NoError(t, err)
@@ -386,7 +386,7 @@ func TestTeleportOutOfRangeFallsBackToUniform(t *testing.T) {
 // not do.
 func TestSeededRankConcentratesOnTheSeed(t *testing.T) {
 	// 0→1→2, and an isolated 3.
-	g, err := csr.BuildE([]uint64{0, 1, 3}, []uint64{1, 2, 3}, nil, csr.Options{Directed: true})
+	g, err := csr.Build([]uint64{0, 1, 3}, []uint64{1, 2, 3}, nil, csr.Options{Directed: true})
 	require.NoError(t, err)
 	c, err := Compute(context.Background(), nil, g, MetricRelevance,
 		ComputeOptions{Sources: []int32{0}, PageRank: PageRankOptions{Iterations: 50}})

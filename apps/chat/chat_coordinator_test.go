@@ -133,17 +133,22 @@ func (inst *noteHost) frames(ctx context.Context) {
 	}
 }
 
-// scriptedModel answers with one scripted reply per call.
+// scriptedModel answers with one scripted reply per call; past failAfter
+// calls, when set, it fails them as a cancelled turn would.
 type scriptedModel struct {
-	mu      sync.Mutex
-	replies []openaichat.CompletionResponse
-	seen    []openaichat.CompletionRequest
+	mu        sync.Mutex
+	replies   []openaichat.CompletionResponse
+	seen      []openaichat.CompletionRequest
+	failAfter int
 }
 
 func (inst *scriptedModel) Complete(_ context.Context, req openaichat.CompletionRequest) (openaichat.CompletionResponse, error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	inst.seen = append(inst.seen, req)
+	if inst.failAfter > 0 && len(inst.seen) > inst.failAfter {
+		return openaichat.CompletionResponse{}, context.Canceled
+	}
 	if len(inst.replies) == 0 {
 		return openaichat.CompletionResponse{Content: "nothing more", FinishReason: "stop"}, nil
 	}
@@ -301,6 +306,22 @@ func TestRefusalsSayWhatToDoNextAndARepeatIsNotMade(t *testing.T) {
 	assert.Contains(t, string(s1.Next.ArgsSchema), `"properties"`, "a schema refusal carries the schema")
 	assert.Contains(t, replies["s2"], "same call that was just refused")
 	assert.Contains(t, replies["d1"], `"args_schema":{`, "schemas are JSON objects, not text")
+}
+
+// A refused call is not made again within its turn, and is made again in
+// the next one: the person's message is a change, and a request that
+// expired while they were away reaches their dialog again.
+func TestARefusalIsForgottenWhenTheNextTurnStarts(t *testing.T) {
+	bus := inprocbus.NewInst(zerolog.Nop())
+	_, coord, _, _, ctx := coordRig(t, bus, &scriptedModel{}, false)
+	call := openaichat.ToolCall{Id: "r", Name: "request_access", Arguments: `{"plan":"tidy the note"}`}
+	first, _ := coord.exec(ctx, toolOrigin{}, call)
+	require.Contains(t, first, "next:", "a grant with nothing to open is refused")
+	again, _ := coord.exec(ctx, toolOrigin{}, call)
+	assert.Contains(t, again, "same call that was just refused")
+	coord.forgetRefusals()
+	next, _ := coord.exec(ctx, toolOrigin{}, call)
+	assert.NotContains(t, next, "same call that was just refused")
 }
 
 // With operation tools on, a window's operations are typed tools of their
@@ -640,4 +661,26 @@ func TestACallOnTheLastRoundIsNotMade(t *testing.T) {
 	assert.Contains(t, res.stopped, "past 24 rounds")
 	assert.Len(t, res.activity, defaultRounds-1, "the last round's call is not made")
 	assert.Len(t, res.calls, defaultRounds)
+}
+
+// A turn stopped after a round answered keeps that round's call in the
+// statistics: the host's trail holds it, and the panel must not drop it.
+func TestAStoppedTurnKeepsItsAnsweredCalls(t *testing.T) {
+	bus := inprocbus.NewInst(zerolog.Nop())
+	model := &scriptedModel{failAfter: 1, replies: []openaichat.CompletionResponse{
+		toolCall("c1", "request_access", `{"plan":"tidy the note","open":[{"app":"notes"}]}`),
+	}}
+	_, coord, cli, req, ctx := coordRig(t, bus, model, false)
+
+	_, err := runTurn(ctx, cli, coord, req, nil)
+	require.ErrorIs(t, err, context.Canceled)
+	answered := coord.answeredCalls()
+	require.Len(t, answered, 1, "the round that answered")
+
+	var st chatStats
+	st.addTurn("conv", "turn-1", time.Now(), time.Now().UnixMilli(), &turnResult{calls: answered}, context.Canceled)
+	require.Len(t, st.turns, 1)
+	assert.Equal(t, outcomeCancelled, st.turns[0].outcome)
+	assert.Equal(t, 1, st.turns[0].rounds)
+	assert.Len(t, st.calls, 1)
 }

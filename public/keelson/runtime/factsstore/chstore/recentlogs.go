@@ -244,7 +244,8 @@ func parseRecentLogsRows(raw []byte) (rows []factsstore.LogRow, err error) {
 }
 
 // unescapeTabSeparated reverses ClickHouse's TabSeparated string
-// escaping: \\ → backslash, \t → tab, \n → newline, \0 → NUL. Other
+// escaping: \\ → backslash, \t → tab, \n → newline, \0 → NUL, \' → quote,
+// \b, \f, \r → their control characters — the set the server writes. Other
 // backslash-escapes pass through unchanged so unknown sequences don't
 // corrupt the data silently.
 func unescapeTabSeparated(s string) (out string) {
@@ -268,6 +269,14 @@ func unescapeTabSeparated(s string) (out string) {
 			b.WriteByte('\\')
 		case '0':
 			b.WriteByte(0)
+		case '\'':
+			b.WriteByte('\'')
+		case 'b':
+			b.WriteByte('\b')
+		case 'f':
+			b.WriteByte('\f')
+		case 'r':
+			b.WriteByte('\r')
 		default:
 			b.WriteByte(s[i])
 			b.WriteByte(s[i+1])

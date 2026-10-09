@@ -31,8 +31,8 @@
 //
 // # Concurrency
 //
-// One goroutine builds — [Pyramid.FoldE], [Pyramid.Finish],
-// [Pyramid.FillFromE] — and any number of goroutines read
+// One goroutine builds — [Pyramid.Fold], [Pyramid.Finish],
+// [Pyramid.FillFrom] — and any number of goroutines read
 // [Pyramid.Query], [Pyramid.Columns] and the progress accessors
 // concurrently with it, without a lock. What makes that sound: the level
 // arrays are allocated once and never reallocated, the builder appends bins
@@ -45,13 +45,13 @@
 //
 // # Cache file
 //
-// [Pyramid.WriteToE] serialises a complete pyramid and nothing else: an
+// [Pyramid.WriteTo] serialises a complete pyramid and nothing else: an
 // 80-byte little-endian header (magic "BXPK", format version, the
 // caller-supplied [Identity], the pcm format, the frame count, the base bin
 // and the level count) followed by the level arrays in level-major then
 // channel-major order, minima before maxima, one byte per bin, no
 // compression. Identity is opaque here — the caller computes it from the
 // source file and this package stores it verbatim and compares it on load,
-// so [ReadFromE] rejects a cache that belongs to a different file.
+// so [ReadFrom] rejects a cache that belongs to a different file.
 // Derived products other than peaks get their own file (§SD12).
 package peaks

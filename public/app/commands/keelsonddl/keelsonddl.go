@@ -30,12 +30,13 @@
 package keelsonddl
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail/trailviews"
@@ -125,16 +126,16 @@ func NewCliCommand() *cli.Command {
 				Usage: "with --trail-views: print leeway's SQL read surface before the views, which inline it at CREATE time",
 			},
 		},
-		Action: func(c *cli.Context) (err error) {
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
 			var sql string
 			sql, err = compose(options{
 				cfg: chstore.Config{
-					Database: c.String("database"),
-					Table:    c.String("table"),
+					Database: cmd.String("database"),
+					Table:    cmd.String("table"),
 				},
-				engineClause: c.String("engine"),
-				trailViews:   c.Bool("trail-views"),
-				withSurface:  c.Bool("with-surface"),
+				engineClause: cmd.String("engine"),
+				trailViews:   cmd.Bool("trail-views"),
+				withSurface:  cmd.Bool("with-surface"),
 			})
 			if err != nil {
 				return err

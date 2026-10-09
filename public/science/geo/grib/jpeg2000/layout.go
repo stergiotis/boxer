@@ -59,9 +59,9 @@ func floorDivPow2(a int64, s uint) (v int32) {
 	return
 }
 
-// layoutE builds the resolutions, precincts and sub-bands of the
+// layout builds the resolutions, precincts and sub-bands of the
 // tile-component (tcx0, tcy0)–(tcx1, tcy1) for NL decomposition levels.
-func (inst *header) layoutE() (res []*resolution, err error) {
+func (inst *header) layout() (res []*resolution, err error) {
 	c := &inst.cod
 	nl := uint(c.levels)
 	tcx0, tcy0 := int64(inst.x0), int64(inst.y0)
@@ -79,7 +79,7 @@ func (inst *header) layoutE() (res []*resolution, err error) {
 			rs.ppy = uint(c.precincts[r] >> 4)
 		}
 		if r > 0 && (rs.ppx == 0 || rs.ppy == 0) {
-			err = corruptE("precinct size zero above resolution 0")
+			err = corrupt("precinct size zero above resolution 0")
 			return
 		}
 		// (B-16): precincts across and down.
@@ -88,7 +88,7 @@ func (inst *header) layoutE() (res []*resolution, err error) {
 			rs.nph = int(ceilDivPow2(int64(rs.y1), rs.ppy) - floorDivPow2(int64(rs.y0), rs.ppy))
 		}
 		if rs.npw*rs.nph > 1<<20 {
-			err = corruptE("more than a million precincts at one resolution")
+			err = corrupt("more than a million precincts at one resolution")
 			return
 		}
 		var kinds []bandKindE
@@ -136,12 +136,12 @@ func (inst *header) layoutE() (res []*resolution, err error) {
 				qi = 3*int(nl-nb) + int(k)
 			}
 			if qi >= len(inst.qcd.exponents) {
-				err = corruptE("no quantization exponent for a sub-band")
+				err = corrupt("no quantization exponent for a sub-band")
 				return
 			}
 			b.mb = int32(inst.qcd.guard) + int32(inst.qcd.exponents[qi]) - 1
 			if b.mb < 0 || b.mb > 37 {
-				err = corruptE("bit-plane count outside 0…37")
+				err = corrupt("bit-plane count outside 0…37")
 				return
 			}
 			w, h := int64(b.x1-b.x0), int64(b.y1-b.y0)
@@ -190,7 +190,7 @@ func (inst *header) layoutE() (res []*resolution, err error) {
 	if c.progression > 2 {
 		for _, rs := range res {
 			if rs.npw*rs.nph > 1 {
-				err = unsupportedE("progression order " + strconv.Itoa(int(c.progression)) + " with several precincts")
+				err = unsupported("progression order " + strconv.Itoa(int(c.progression)) + " with several precincts")
 				return
 			}
 		}

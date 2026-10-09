@@ -8,13 +8,13 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
-// CellsToStringsE encodes cell indices as their H3 hex-string form in CSR
+// CellsToStrings encodes cell indices as their H3 hex-string form in CSR
 // layout: buf holds all strings concatenated (no separators, no NUL),
 // offsets has length N+1 with offsets[0]==0, string i occupying
 // buf[offsets[i]:offsets[i+1]].
 //
 // Uses the one-retry grow protocol.
-func (inst *Handle) CellsToStringsE(
+func (inst *Handle) CellsToStrings(
 	ctx context.Context,
 	cells []uint64,
 	bufDst []byte,
@@ -43,7 +43,7 @@ func (inst *Handle) CellsToStringsE(
 		total := int(statusRel) + n
 
 		var base uint32
-		base, err = inst.ensureScratchE(ctx, total)
+		base, err = inst.ensureScratch(ctx, total)
 		if err != nil {
 			return
 		}
@@ -53,13 +53,13 @@ func (inst *Handle) CellsToStringsE(
 		neededOff := base + neededRel
 		statusOff := base + statusRel
 
-		err = inst.writeU64sE(cellsOff, cells)
+		err = inst.writeU64s(cellsOff, cells)
 		if err != nil {
 			return
 		}
 
 		var rc uint32
-		rc, err = inst.callE(ctx, inst.fnCellToString,
+		rc, err = inst.call(ctx, inst.fnCellToString,
 			uint64(cellsOff), uint64(n32),
 			uint64(bufOff), uint64(offsetsOff),
 			uint64(uint32(outCap)),
@@ -73,21 +73,21 @@ func (inst *Handle) CellsToStringsE(
 		switch rc {
 		case growOK:
 			var needed uint32
-			needed, err = inst.readU32E(neededOff)
+			needed, err = inst.readU32(neededOff)
 			if err != nil {
 				return
 			}
-			err = inst.readI32sE(offsetsOff, offsets)
+			err = inst.readI32s(offsetsOff, offsets)
 			if err != nil {
 				return
 			}
-			err = inst.readStatusE(statusOff, status)
+			err = inst.readStatus(statusOff, status)
 			if err != nil {
 				return
 			}
 			total := min(int(needed), outCap)
 			var raw []byte
-			raw, err = inst.readBytesE(bufOff, total)
+			raw, err = inst.readBytes(bufOff, total)
 			if err != nil {
 				return
 			}
@@ -102,7 +102,7 @@ func (inst *Handle) CellsToStringsE(
 				return
 			}
 			var needed uint32
-			needed, err = inst.readU32E(neededOff)
+			needed, err = inst.readU32(neededOff)
 			if err != nil {
 				return
 			}
@@ -116,11 +116,11 @@ func (inst *Handle) CellsToStringsE(
 	return
 }
 
-// StringsToCellsE decodes cell indices from their H3 hex-string form in
+// StringsToCells decodes cell indices from their H3 hex-string form in
 // CSR layout. buf and offsets describe N strings exactly as
-// [Handle.CellsToStringsE] would emit them; offsets must have length N+1
+// [Handle.CellsToStrings] would emit them; offsets must have length N+1
 // where N is the inferred batch size (offsets[N] == len(buf)).
-func (inst *Handle) StringsToCellsE(
+func (inst *Handle) StringsToCells(
 	ctx context.Context,
 	buf []byte,
 	offsets []int32,
@@ -128,7 +128,7 @@ func (inst *Handle) StringsToCellsE(
 	statusDst []StatusE,
 ) (cells []uint64, status []StatusE, err error) {
 	if len(offsets) == 0 {
-		err = eb.Build().Errorf("h3: StringsToCellsE requires offsets of length N+1 (got 0)")
+		err = eb.Build().Errorf("h3: StringsToCells requires offsets of length N+1 (got 0)")
 		return
 	}
 	n := len(offsets) - 1
@@ -138,11 +138,11 @@ func (inst *Handle) StringsToCellsE(
 		return
 	}
 	if offsets[0] != 0 {
-		err = eb.Build().Int32("first", offsets[0]).Errorf("h3: StringsToCellsE: offsets[0] must be 0")
+		err = eb.Build().Int32("first", offsets[0]).Errorf("h3: StringsToCells: offsets[0] must be 0")
 		return
 	}
 	if int(offsets[n]) != len(buf) {
-		err = eb.Build().Int("bufLen", len(buf)).Int32("offLast", offsets[n]).Errorf("h3: StringsToCellsE: offsets[N] != len(buf)")
+		err = eb.Build().Int("bufLen", len(buf)).Int32("offLast", offsets[n]).Errorf("h3: StringsToCells: offsets[N] != len(buf)")
 		return
 	}
 
@@ -158,7 +158,7 @@ func (inst *Handle) StringsToCellsE(
 	total := int(statusRel) + n
 
 	var base uint32
-	base, err = inst.ensureScratchE(ctx, total)
+	base, err = inst.ensureScratch(ctx, total)
 	if err != nil {
 		return
 	}
@@ -167,15 +167,15 @@ func (inst *Handle) StringsToCellsE(
 	cellsOff := base + cellsRel
 	statusOff := base + statusRel
 
-	err = inst.writeBytesE(bufOff, buf)
+	err = inst.writeBytes(bufOff, buf)
 	if err != nil {
 		return
 	}
-	err = inst.writeI32sE(offsetsOff, offsets)
+	err = inst.writeI32s(offsetsOff, offsets)
 	if err != nil {
 		return
 	}
-	_, err = inst.callE(ctx, inst.fnStringToCell,
+	_, err = inst.call(ctx, inst.fnStringToCell,
 		uint64(bufOff), uint64(offsetsOff),
 		uint64(n32),
 		uint64(cellsOff), uint64(statusOff),
@@ -184,10 +184,10 @@ func (inst *Handle) StringsToCellsE(
 		err = eh.Errorf("h3_string_to_cell: %w", err)
 		return
 	}
-	err = inst.readU64sE(cellsOff, cells)
+	err = inst.readU64s(cellsOff, cells)
 	if err != nil {
 		return
 	}
-	err = inst.readStatusE(statusOff, status)
+	err = inst.readStatus(statusOff, status)
 	return
 }

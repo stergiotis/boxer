@@ -47,7 +47,7 @@ What that analysis established, and this ADR rests on:
   lane ([ADR-0128 §SD2](./0128-imzero2-mesh-draw-stream-codec-lane.md)),
   `.CaptureKeys` ([ADR-0177](./0177-imzero2-focus-scoped-keyboard-capture.md)),
   `image/png` and `image/jpeg` from the standard library, the Go H3 wrapper's
-  `CellsToBoundariesE`. The node-editor survey reached the same "nothing new
+  `CellsToBoundaries`. The node-editor survey reached the same "nothing new
   needed" conclusion for a larger widget.
 - **The precedent is ADR-0149**: ImPlot's pan, anchored zoom and box-select
   already run in Go on the painter lane with a one-frame input lag, and that
@@ -266,7 +266,7 @@ how it gets bytes, not a separate design.
   there, the pan preview stays unbuilt, and O4 stays the fallback it was
   (Q1).
 - **SD9 — H3 overlays are ported, with one bridge addition.** Cell outlines
-  are already reachable in Go (`CellsToBoundariesE` over the `h3bridge` wasm
+  are already reachable in Go (`CellsToBoundaries` over the `h3bridge` wasm
   export `h3_cell_to_boundary`); what the region overlay needs is the
   dissolve (cells → multipolygon), which imzero2 does today with `h3o`'s
   `SolventBuilder`. The bridge already builds `h3o` with its `geo` feature, so
@@ -383,10 +383,10 @@ how it gets bytes, not a separate design.
   `Source`. *H3 (§SD9):* the `h3bridge` wasm gained `h3_dissolve` (cells →
   multipolygon as CSR vertices, ring offsets, polygon offsets; open rings,
   exteriors counter-clockwise, holes clockwise; a grow-once buffer protocol
-  like `h3_polygon_to_cells`) and the Go wrapper `Handle.DissolveE`, with ten
+  like `h3_polygon_to_cells`) and the Go wrapper `Handle.Dissolve`, with ten
   tests, a parity golden and the wasm rebuilt (340,768 → 383,580 bytes; no
   existing golden moved); the new package `portolan/h3overlay` draws cells
-  (`Layer.Cells`, boundaries from `CellsToBoundariesE`, one convex fill per
+  (`Layer.Cells`, boundaries from `CellsToBoundaries`, one convex fill per
   cell) and regions (`Region.Draw`: cell fills, the dissolved outline
   stroked holes included, a label at the largest exterior ring's centroid,
   the dissolve cached by cell set), plus `ViewportCells` and
@@ -478,7 +478,7 @@ weeks, with the go/no-go after M0.
 | egui2 IDL (`egui2_definition_d_walkers.go`) | `walkersMap`, `mapMarker`, `mapPolyline`, `h3Cells`, `h3Region`, `mapRaster`, `fetchR15WalkersCameras` removed at M4 | regenerated dispatch on both sides; `SKILL.md` §16; the interpreter's walkers sections; `walkers_tiles.rs` |
 | Exported Go API under `public/` | new packages `widgets/portolan` (`Map`, overlays, view readback) and `widgets/portolan/h3overlay` (cells, regions); `c.WalkersMap*`, `c.MapMarker*`…, `StateManager.GetWalkersCamera`, `basemap.Apply(c.WalkersMapFluid)` removed at M4 | `play`, `terrainscope`, the demo gallery; `basemap` gained `PortolanSource`/`PortolanLoader` at M2 |
 | Env registry (ADR-0009) | `BOXER_MAP_TILE_*` names and meanings kept; `_CA_FILE` / `_INSECURE_TLS` now configure Go's `http.Transport` instead of the renderer | `doc/env-vars.md` regeneration; the descriptions' "renderer" wording |
-| `h3bridge` wasm exports + Go wrapper | `h3_dissolve` added (M4); `Handle.DissolveE` added | prebuilt wasm rebuilt (340,768 → 383,580 bytes); `scripts/ci/h3_wasm_parity.sh` gains the case (`golden_dissolve.ndjson`); ADR-0003 carries the dated Update |
+| `h3bridge` wasm exports + Go wrapper | `h3_dissolve` added (M4); `Handle.Dissolve` added | prebuilt wasm rebuilt (340,768 → 383,580 bytes); `scripts/ci/h3_wasm_parity.sh` gains the case (`golden_dissolve.ndjson`); ADR-0003 carries the dated Update |
 | `imzero2` Cargo manifest | `walkers`, `reqwest` removed at M4; `h3o`, `geo` if unused; `[patch.crates-io]` untouched | `Cargo.lock`; the airgap bundle's crate set; ADR-0203's Context figures re-taken |
 | Headless trace driver (ADR-0154) | `drag` verb added (M0, shipped 2026-08-22) | its verb list in `doc/howto/launch-apps-non-interactively.md`; `carrierclient` |
 | `THIRD_PARTY_NOTICES.md` | Leaflet, BSD-2-Clause | the in-package licence text (§SD3) |

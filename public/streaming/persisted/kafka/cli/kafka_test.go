@@ -20,6 +20,7 @@ package cli
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"io"
 	"os"
 	"path/filepath"
@@ -30,25 +31,24 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/twmb/franz-go/pkg/kgo"
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
 	pkafka "github.com/stergiotis/boxer/public/streaming/persisted/kafka"
 )
 
-// runWithCommonFlags constructs a cli.Context populated from args (the
-// way urfave/cli/v2 sees them in production) and invokes action with
-// it. `brokers` is required by commonFlags so a dummy is always
+// runWithCommonFlags runs action under a command parsing args (the way
+// urfave/cli sees them in production). `brokers` is required by commonFlags so a dummy is always
 // prepended; tests that examine the brokers value should override it.
-func runWithCommonFlags(t *testing.T, args []string, action func(c *cli.Context) error) {
+func runWithCommonFlags(t *testing.T, args []string, action func(ctx context.Context, cmd *cli.Command) error) {
 	t.Helper()
-	app := cli.NewApp()
+	app := &cli.Command{}
 	app.Writer = io.Discard
 	app.ErrWriter = io.Discard
 	app.Flags = commonFlags()
 	app.Action = action
 	full := append([]string{"test", "--brokers=stub:9092"}, args...)
-	if err := app.Run(full); err != nil {
+	if err := app.Run(context.Background(), full); err != nil {
 		t.Fatalf("app.Run: %v", err)
 	}
 }
@@ -84,8 +84,8 @@ func TestParseSASLMechanism(t *testing.T) {
 }
 
 func TestBuildSASL_NoneByDefault(t *testing.T) {
-	runWithCommonFlags(t, nil, func(c *cli.Context) error {
-		mechs, err := buildSASL(c)
+	runWithCommonFlags(t, nil, func(ctx context.Context, cmd *cli.Command) error {
+		mechs, err := buildSASL(ctx, cmd)
 		require.NoError(t, err)
 		assert.Empty(t, mechs)
 		return nil
@@ -95,8 +95,8 @@ func TestBuildSASL_NoneByDefault(t *testing.T) {
 func TestBuildSASL_PlainHappyPath(t *testing.T) {
 	runWithCommonFlags(t,
 		[]string{"--sasl-mechanism=PLAIN", "--sasl-username=alice", "--sasl-password=s3cret"},
-		func(c *cli.Context) error {
-			mechs, err := buildSASL(c)
+		func(ctx context.Context, cmd *cli.Command) error {
+			mechs, err := buildSASL(ctx, cmd)
 			require.NoError(t, err)
 			require.Len(t, mechs, 1)
 			assert.Equal(t, "PLAIN", mechs[0].Name())
@@ -107,8 +107,8 @@ func TestBuildSASL_PlainHappyPath(t *testing.T) {
 func TestBuildSASL_SCRAM512(t *testing.T) {
 	runWithCommonFlags(t,
 		[]string{"--sasl-mechanism=SCRAM-SHA-512", "--sasl-username=alice", "--sasl-password=s3cret"},
-		func(c *cli.Context) error {
-			mechs, err := buildSASL(c)
+		func(ctx context.Context, cmd *cli.Command) error {
+			mechs, err := buildSASL(ctx, cmd)
 			require.NoError(t, err)
 			require.Len(t, mechs, 1)
 			assert.Equal(t, "SCRAM-SHA-512", mechs[0].Name())
@@ -118,8 +118,8 @@ func TestBuildSASL_SCRAM512(t *testing.T) {
 
 func TestBuildSASL_BogusMechanism(t *testing.T) {
 	runWithCommonFlags(t, []string{"--sasl-mechanism=GSSAPI"},
-		func(c *cli.Context) error {
-			_, err := buildSASL(c)
+		func(ctx context.Context, cmd *cli.Command) error {
+			_, err := buildSASL(ctx, cmd)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "unsupported --sasl-mechanism")
 			return nil
@@ -127,8 +127,8 @@ func TestBuildSASL_BogusMechanism(t *testing.T) {
 }
 
 func TestBuildTLS_DisabledWhenNoFlags(t *testing.T) {
-	runWithCommonFlags(t, nil, func(c *cli.Context) error {
-		enabled, cfg, err := buildTLS(c)
+	runWithCommonFlags(t, nil, func(ctx context.Context, cmd *cli.Command) error {
+		enabled, cfg, err := buildTLS(ctx, cmd)
 		require.NoError(t, err)
 		assert.False(t, enabled)
 		assert.Nil(t, cfg)
@@ -137,8 +137,8 @@ func TestBuildTLS_DisabledWhenNoFlags(t *testing.T) {
 }
 
 func TestBuildTLS_EnableExplicit(t *testing.T) {
-	runWithCommonFlags(t, []string{"--tls"}, func(c *cli.Context) error {
-		enabled, cfg, err := buildTLS(c)
+	runWithCommonFlags(t, []string{"--tls"}, func(ctx context.Context, cmd *cli.Command) error {
+		enabled, cfg, err := buildTLS(ctx, cmd)
 		require.NoError(t, err)
 		assert.True(t, enabled)
 		require.NotNil(t, cfg)
@@ -149,8 +149,8 @@ func TestBuildTLS_EnableExplicit(t *testing.T) {
 }
 
 func TestBuildTLS_SkipVerifyImpliesEnable(t *testing.T) {
-	runWithCommonFlags(t, []string{"--tls-skip-verify"}, func(c *cli.Context) error {
-		enabled, cfg, err := buildTLS(c)
+	runWithCommonFlags(t, []string{"--tls-skip-verify"}, func(ctx context.Context, cmd *cli.Command) error {
+		enabled, cfg, err := buildTLS(ctx, cmd)
 		require.NoError(t, err)
 		assert.True(t, enabled, "tls-skip-verify alone should enable TLS")
 		require.NotNil(t, cfg)
@@ -160,8 +160,8 @@ func TestBuildTLS_SkipVerifyImpliesEnable(t *testing.T) {
 }
 
 func TestBuildTLS_CertWithoutKey(t *testing.T) {
-	runWithCommonFlags(t, []string{"--tls-cert-file=/tmp/cert.pem"}, func(c *cli.Context) error {
-		_, _, err := buildTLS(c)
+	runWithCommonFlags(t, []string{"--tls-cert-file=/tmp/cert.pem"}, func(ctx context.Context, cmd *cli.Command) error {
+		_, _, err := buildTLS(ctx, cmd)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "--tls-cert-file and --tls-key-file must be set together")
 		return nil
@@ -169,8 +169,8 @@ func TestBuildTLS_CertWithoutKey(t *testing.T) {
 }
 
 func TestBuildTLS_BadCAFile(t *testing.T) {
-	runWithCommonFlags(t, []string{"--tls-ca-file=/nonexistent/ca.pem"}, func(c *cli.Context) error {
-		_, _, err := buildTLS(c)
+	runWithCommonFlags(t, []string{"--tls-ca-file=/nonexistent/ca.pem"}, func(ctx context.Context, cmd *cli.Command) error {
+		_, _, err := buildTLS(ctx, cmd)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "read --tls-ca-file")
 		return nil
@@ -392,8 +392,8 @@ func TestMakeRecordWriter_Routing(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			runWithCommonAndConsumeFlags(t, tc.args, func(c *cli.Context) error {
-				fn, err := makeRecordWriter(c)
+			runWithCommonAndConsumeFlags(t, tc.args, func(ctx context.Context, cmd *cli.Command) error {
+				fn, err := makeRecordWriter(ctx, cmd)
 				if tc.wantErr != "" {
 					require.Error(t, err)
 					assert.Contains(t, err.Error(), tc.wantErr)
@@ -410,16 +410,16 @@ func TestMakeRecordWriter_Routing(t *testing.T) {
 // runWithCommonAndConsumeFlags is like runWithCommonFlags but layers
 // the consume command's own flags on top so --output-mode and
 // --format parse correctly.
-func runWithCommonAndConsumeFlags(t *testing.T, args []string, action func(c *cli.Context) error) {
+func runWithCommonAndConsumeFlags(t *testing.T, args []string, action func(ctx context.Context, cmd *cli.Command) error) {
 	t.Helper()
-	app := cli.NewApp()
+	app := &cli.Command{}
 	app.Writer = io.Discard
 	app.ErrWriter = io.Discard
 	cmd := consumeCmd()
 	cmd.Action = action
 	app.Commands = []*cli.Command{cmd}
 	full := append([]string{"test", "consume", "--brokers=stub:9092", "--topic=stub"}, args...)
-	if err := app.Run(full); err != nil {
+	if err := app.Run(context.Background(), full); err != nil {
 		t.Fatalf("app.Run: %v", err)
 	}
 }
@@ -430,8 +430,8 @@ func TestBuildTLS_EmptyCAFile(t *testing.T) {
 	emptyPath := filepath.Join(dir, "empty.pem")
 	require.NoError(t, os.WriteFile(emptyPath, []byte("not a pem block\n"), 0o600))
 
-	runWithCommonFlags(t, []string{"--tls-ca-file=" + emptyPath}, func(c *cli.Context) error {
-		_, _, err := buildTLS(c)
+	runWithCommonFlags(t, []string{"--tls-ca-file=" + emptyPath}, func(ctx context.Context, cmd *cli.Command) error {
+		_, _, err := buildTLS(ctx, cmd)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "no PEM certificates")
 		return nil

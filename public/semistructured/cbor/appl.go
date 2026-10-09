@@ -2,11 +2,12 @@ package cbor
 
 import (
 	"bufio"
+	"context"
 	"io"
 	"os"
 
 	"github.com/fxamacker/cbor/v2"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/cbor/diag"
@@ -15,7 +16,7 @@ import (
 func NewCommand() *cli.Command {
 	return &cli.Command{
 		Name: "cbor",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			diagCommand(),
 		},
 	}
@@ -36,7 +37,7 @@ func diagCommand() *cli.Command {
 				Value: diag.DefaultWidth,
 			},
 		},
-		Action: func(ctx *cli.Context) error {
+		Action: func(ctx context.Context, cmd *cli.Command) error {
 			r := bufio.NewReader(os.Stdin)
 			w := bufio.NewWriter(os.Stdout)
 
@@ -44,10 +45,10 @@ func diagCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			if ctx.Bool("pretty") {
+			if cmd.Bool("pretty") {
 				var s string
 				s, err = diag.String(b, diag.Options{
-					Width:       ctx.Int("width"),
+					Width:       cmd.Int("width"),
 					TagComments: true,
 					Sequence:    true,
 				})

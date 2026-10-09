@@ -14,7 +14,7 @@ const (
 	polyfillBadGeometry uint32 = 3
 )
 
-// PolygonToCellsE returns the H3 cells at res that cover the given polygon
+// PolygonToCells returns the H3 cells at res that cover the given polygon
 // under the requested containment mode. vertsLat and vertsLng are parallel
 // []float64 slices of all vertices across all rings; ringOffsets has
 // length ringCount+1, with ringOffsets[0] == 0, ringOffsets[ringCount] ==
@@ -23,7 +23,7 @@ const (
 //
 // Single-polygon API: callers with multiple polygons loop. Variable-arity
 // output uses the one-retry grow protocol.
-func (inst *Handle) PolygonToCellsE(
+func (inst *Handle) PolygonToCells(
 	ctx context.Context,
 	res ResolutionE,
 	mode ContainmentModeE,
@@ -37,7 +37,7 @@ func (inst *Handle) PolygonToCellsE(
 		return
 	}
 	if len(ringOffsets) < 2 {
-		err = eb.Build().Int("ringOffsets", len(ringOffsets)).Errorf("h3: PolygonToCellsE needs at least one ring (ringOffsets length >= 2)")
+		err = eb.Build().Int("ringOffsets", len(ringOffsets)).Errorf("h3: PolygonToCells needs at least one ring (ringOffsets length >= 2)")
 		return
 	}
 	ringCount := len(ringOffsets) - 1
@@ -64,7 +64,7 @@ func (inst *Handle) PolygonToCellsE(
 		total := int(alignUp8(neededRel + 4))
 
 		var base uint32
-		base, err = inst.ensureScratchE(ctx, total)
+		base, err = inst.ensureScratch(ctx, total)
 		if err != nil {
 			return
 		}
@@ -74,21 +74,21 @@ func (inst *Handle) PolygonToCellsE(
 		cellsOff := base + cellsRel
 		neededOff := base + neededRel
 
-		err = inst.writeF64sE(latsOff, vertsLat)
+		err = inst.writeF64s(latsOff, vertsLat)
 		if err != nil {
 			return
 		}
-		err = inst.writeF64sE(lngsOff, vertsLng)
+		err = inst.writeF64s(lngsOff, vertsLng)
 		if err != nil {
 			return
 		}
-		err = inst.writeI32sE(ringOff, ringOffsets)
+		err = inst.writeI32s(ringOff, ringOffsets)
 		if err != nil {
 			return
 		}
 
 		var rc uint32
-		rc, err = inst.callE(ctx, inst.fnPolygonToCells,
+		rc, err = inst.call(ctx, inst.fnPolygonToCells,
 			uint64(latsOff), uint64(lngsOff),
 			uint64(ringOff), uint64(rC),
 			uint64(uint32(res)), uint64(uint32(mode)),
@@ -104,13 +104,13 @@ func (inst *Handle) PolygonToCellsE(
 		switch rc {
 		case growOK:
 			var needed uint32
-			needed, err = inst.readU32E(neededOff)
+			needed, err = inst.readU32(neededOff)
 			if err != nil {
 				return
 			}
 			total := min(int(needed), outCap)
 			cells = slices.Grow(cellsDst[:0], total)[:total]
-			err = inst.readU64sE(cellsOff, cells)
+			err = inst.readU64s(cellsOff, cells)
 			return
 
 		case growNeedMore:
@@ -119,7 +119,7 @@ func (inst *Handle) PolygonToCellsE(
 				return
 			}
 			var needed uint32
-			needed, err = inst.readU32E(neededOff)
+			needed, err = inst.readU32(neededOff)
 			if err != nil {
 				return
 			}

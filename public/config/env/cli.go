@@ -1,13 +1,14 @@
 package env
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"slices"
 	"strings"
 	"text/tabwriter"
 
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 )
 
 // NewCliCommand returns the `env` parent command. Currently exposes
@@ -22,9 +23,9 @@ func NewCliCommand(extraSubcommands ...*cli.Command) (cmd *cli.Command) {
 	subs = append(subs, newListCommand())
 	subs = append(subs, extraSubcommands...)
 	cmd = &cli.Command{
-		Name:        "env",
-		Usage:       "introspect the env-var registry (ADR-0009)",
-		Subcommands: subs,
+		Name:     "env",
+		Usage:    "introspect the env-var registry (ADR-0009)",
+		Commands: subs,
 	}
 	return
 }
@@ -58,11 +59,11 @@ func newListCommand() (cmd *cli.Command) {
 	return
 }
 
-func runList(ctx *cli.Context) (err error) {
+func runList(ctx context.Context, cmd *cli.Command) (err error) {
 	specs := Snapshot()
-	cat := ctx.String("category")
-	origin := ctx.String("origin")
-	prefix := ctx.String("prefix")
+	cat := cmd.String("category")
+	origin := cmd.String("origin")
+	prefix := cmd.String("prefix")
 
 	filtered := make([]Spec, 0, len(specs))
 	for _, s := range specs {

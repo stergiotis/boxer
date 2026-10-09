@@ -16,8 +16,8 @@ package regex_explorer
 //     edit that arrives while a query is in flight, and nothing re-fires
 //     when that query lands. The displayed result then describes an input
 //     the user has already moved on from, with no indication that it does.
-//     The status bar would happily report "CH: match=true" for a pattern
-//     that no longer matches.
+//     The UI would happily report match = 1 for a pattern that no longer
+//     matches.
 //   - Level-triggered dispatch cannot strand a result that way. If the
 //     wanted key still differs from the served key on the next frame, the
 //     lane simply starts the query again — for the *latest* input, not the
@@ -38,6 +38,7 @@ package regex_explorer
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -48,8 +49,31 @@ import (
 // queryTimeout bounds a single ClickHouse round-trip. clickhouse-local
 // answers these in tens of milliseconds against a warm pooled worker; a
 // query still running after this long is wedged, and failing it frees the
-// lane to retry rather than pinning a pool slot forever.
+// pool slot. A timed-out input is not retried — the same query would
+// wedge the same way (see [laneError]).
 const queryTimeout = 20 * time.Second
+
+// transientRetryDelay is how long a lane holds a transient failure for an
+// input before asking again. Long enough that a refused capability or an
+// absent bus costs one cheap request every few seconds rather than one
+// per frame; short enough that a pool that was still warming up when the
+// window opened is picked up without the user having to edit anything.
+const transientRetryDelay = 3 * time.Second
+
+// laneError carries a failed run's error together with whether the
+// failure is final for its input. Final means re-running the same query
+// would fail the same way: ClickHouse answered with an exception (the
+// pattern or the query was rejected), or the run hit queryTimeout.
+// Everything else — the bus timed out, the capability was refused, no bus
+// is attached yet, the pool could not hand out a worker — says nothing
+// about the input, and the lane tries again after transientRetryDelay.
+type laneError struct {
+	err   error
+	final bool
+}
+
+func (inst *laneError) Error() string { return inst.err.Error() }
+func (inst *laneError) Unwrap() error { return inst.err }
 
 // queryKey fingerprints the inputs one query depends on. Two runs with
 // equal keys would produce equal results, so a lane whose served key
@@ -93,13 +117,17 @@ type queryLane[T any] struct {
 
 	// err is the last failure and errKey the inputs that produced it.
 	// Pairing them is what stops a failing input from being retried in a
-	// hot loop: the lane only re-runs when the wanted key differs from
-	// both the served and the failed one.
-	err    error
-	errKey queryKey
+	// hot loop: for the same key, a final failure is never re-run and a
+	// transient one only once errAt is transientRetryDelay old.
+	err      error
+	errKey   queryKey
+	errAt    time.Time
+	errFinal bool
 
 	// pendingKey is the key of the in-flight run. bgjob returns a run's
 	// Tag only on success, so the lane remembers it to attribute failures.
+	// Cleared once the run's outcome is taken, so a failure that bgjob
+	// keeps reporting until the next Start is recorded once, not per frame.
 	pendingKey queryKey
 }
 
@@ -111,7 +139,7 @@ type queryLane[T any] struct {
 // state: capture what it needs by value at the call site.
 func (lane *queryLane[T]) demand(want queryKey, kind string, compute func(ctx context.Context) (out T, err error)) {
 	lane.drain()
-	if lane.servedFor(want) || lane.failedFor(want) || lane.job.Running() {
+	if lane.servedFor(want) || lane.blockedFor(want) || lane.job.Running() {
 		return
 	}
 	lane.pendingKey = want
@@ -121,7 +149,8 @@ func (lane *queryLane[T]) demand(want queryKey, kind string, compute func(ctx co
 		start := time.Now()
 		value, computeErr := compute(ctx)
 		if computeErr != nil {
-			err = computeErr
+			final := errors.Is(ctx.Err(), context.DeadlineExceeded) || isEngineRejection(computeErr)
+			err = &laneError{err: computeErr, final: final}
 			return
 		}
 		out = &laneResult[T]{Value: value, Elapsed: time.Since(start)}
@@ -138,8 +167,7 @@ func (lane *queryLane[T]) serve(key queryKey, value T) {
 	lane.servedKey = key
 	lane.hasServed = true
 	lane.elapsed = 0
-	lane.err = nil
-	lane.errKey = ""
+	lane.clearErr()
 }
 
 // reset drops everything the lane holds and abandons any in-flight run.
@@ -155,9 +183,15 @@ func (lane *queryLane[T]) reset() {
 	lane.servedKey = ""
 	lane.hasServed = false
 	lane.elapsed = 0
+	lane.clearErr()
+	lane.pendingKey = ""
+}
+
+func (lane *queryLane[T]) clearErr() {
 	lane.err = nil
 	lane.errKey = ""
-	lane.pendingKey = ""
+	lane.errAt = time.Time{}
+	lane.errFinal = false
 }
 
 // drain moves a finished run's outcome onto the lane. Render-thread only.
@@ -167,14 +201,18 @@ func (lane *queryLane[T]) drain() {
 		lane.elapsed = res.Elapsed
 		lane.servedKey = queryKey(tag)
 		lane.hasServed = true
-		lane.err = nil
-		lane.errKey = ""
+		lane.clearErr()
+		lane.pendingKey = ""
 		return
 	}
 	snap := lane.job.Snapshot()
-	if snap.State == bgjob.StateFailed && snap.Err != nil {
+	if snap.State == bgjob.StateFailed && snap.Err != nil && lane.pendingKey != "" {
 		lane.err = snap.Err
 		lane.errKey = lane.pendingKey
+		lane.errAt = time.Now()
+		var le *laneError
+		lane.errFinal = errors.As(snap.Err, &le) && le.final
+		lane.pendingKey = ""
 	}
 }
 
@@ -183,11 +221,21 @@ func (lane *queryLane[T]) servedFor(key queryKey) bool {
 	return lane.hasServed && lane.servedKey == key
 }
 
-// failedFor reports whether the lane already failed for key. A failure is
-// as final as a success until the inputs change — retrying an input
-// ClickHouse just rejected would spin.
+// failedFor reports whether the lane holds a failure for key — what the
+// UI shows, whether or not a retry is due.
 func (lane *queryLane[T]) failedFor(key queryKey) bool {
 	return lane.err != nil && lane.errKey == key
+}
+
+// blockedFor reports whether a failure for key still stands in the way of
+// running it again: always for a final failure (retrying an input
+// ClickHouse just rejected would spin), and for a transient one until
+// transientRetryDelay has passed.
+func (lane *queryLane[T]) blockedFor(key queryKey) bool {
+	if !lane.failedFor(key) {
+		return false
+	}
+	return lane.errFinal || time.Since(lane.errAt) < transientRetryDelay
 }
 
 // running reports whether a run is in flight, for the spinner.

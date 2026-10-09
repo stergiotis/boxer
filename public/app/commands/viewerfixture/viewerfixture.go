@@ -11,12 +11,13 @@
 package viewerfixture
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"os"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 )
 
 // The IVF container: a 32-byte file header signed "DKIF", then per frame a
@@ -48,7 +49,7 @@ func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "viewer-fixture",
 		Usage: "prepare and check the imzero2-viewer smoke test's media fixtures (ADR-0243)",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			newIvfExtractCommand(),
 			newBmpCheckCommand(),
 		},
@@ -60,11 +61,11 @@ func newIvfExtractCommand() *cli.Command {
 		Name:      "ivf-extract",
 		Usage:     "write the first frame's bare bitstream out of an IVF file",
 		ArgsUsage: "IN.ivf OUT",
-		Action: func(ctx *cli.Context) (err error) {
-			if ctx.NArg() != 2 {
-				return cli.Exit("usage: "+ctx.Command.HelpName+" IN.ivf OUT", 2)
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
+			if cmd.NArg() != 2 {
+				return cli.Exit("usage: "+cmd.FullName()+" IN.ivf OUT", 2)
 			}
-			in, out := ctx.Args().Get(0), ctx.Args().Get(1)
+			in, out := cmd.Args().Get(0), cmd.Args().Get(1)
 			b, err := os.ReadFile(in)
 			if err != nil {
 				return eb.Build().Str("path", in).Errorf("read the IVF fixture: %w", err)
@@ -93,11 +94,11 @@ func newBmpCheckCommand() *cli.Command {
 				Usage: "distinct byte values the pixel array must carry",
 			},
 		},
-		Action: func(ctx *cli.Context) (err error) {
-			if ctx.NArg() != 1 {
-				return cli.Exit("usage: "+ctx.Command.HelpName+" CAPTURE.bmp", 2)
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
+			if cmd.NArg() != 1 {
+				return cli.Exit("usage: "+cmd.FullName()+" CAPTURE.bmp", 2)
 			}
-			path := ctx.Args().Get(0)
+			path := cmd.Args().Get(0)
 			b, err := os.ReadFile(path)
 			if err != nil {
 				return eb.Build().Str("path", path).Errorf("read the capture: %w", err)
@@ -106,7 +107,7 @@ func newBmpCheckCommand() *cli.Command {
 			if err != nil {
 				return eb.Build().Str("path", path).Errorf("inspect the capture: %w", err)
 			}
-			minimum := ctx.Int("min-distinct-bytes")
+			minimum := cmd.Int("min-distinct-bytes")
 			if distinct < minimum {
 				fmt.Printf("capture is blank or nearly uniform: %d distinct pixel bytes, need %d\n", distinct, minimum)
 				return cli.Exit("", 1)

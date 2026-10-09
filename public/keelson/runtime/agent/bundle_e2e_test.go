@@ -162,7 +162,7 @@ func TestABundleCrossesWindowsWithItsProvenance(t *testing.T) {
 
 	// A third party reads the dataset whole.
 	reader := r.bus.NewClient("test.notebook", caps)
-	read, err := adhocdata.ReadAllE(reader, "counts__result", nil)
+	read, err := adhocdata.ReadAll(reader, "counts__result", nil)
 	require.NoError(t, err)
 	assert.Equal(t, []int64{0, 1, 2, 3, 4}, e2eValues(t, read.ArrowIPCStream), "the producer's rows, as play held them")
 	assert.Equal(t, consumer.DatasetBindingsForTest()["result"], read.Handle, "the consumer bound the dataset that was read")

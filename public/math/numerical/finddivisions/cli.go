@@ -2,6 +2,7 @@ package finddivisions
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"image/png"
 	"math"
@@ -13,7 +14,7 @@ import (
 	"github.com/golang/freetype/truetype"
 	"github.com/stergiotis/boxer/public/containers/ragged"
 	"github.com/stergiotis/boxer/public/observability/eh"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"golang.org/x/image/font/gofont/goregular"
 )
 
@@ -27,10 +28,10 @@ type TestCase struct {
 func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name: "numerical",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			{
 				Name: "find-divisions",
-				Subcommands: []*cli.Command{
+				Commands: []*cli.Command{
 					{
 						Name: "generate",
 						Flags: []cli.Flag{
@@ -92,12 +93,12 @@ func NewCliCommand() *cli.Command {
 								Name: "log",
 							},
 						},
-						Action: func(context *cli.Context) error {
-							fontSize := context.Float64("fontSize")
-							dpi := context.Float64("dpi")
-							axisWidth := context.Float64("axisWidth")
-							rowHeight := context.Int("rowHeight")
-							W := context.Int("canvasWidth")
+						Action: func(ctx context.Context, cmd *cli.Command) error {
+							fontSize := cmd.Float64("fontSize")
+							dpi := cmd.Float64("dpi")
+							axisWidth := cmd.Float64("axisWidth")
+							rowHeight := cmd.Int("rowHeight")
+							W := cmd.Int("canvasWidth")
 							axisStartX := 50.0
 
 							face, err := font.ParseTTF(bytes.NewReader(goregular.TTF))
@@ -105,15 +106,15 @@ func NewCliCommand() *cli.Command {
 								return eh.Errorf("unable to parse ttf: %w", err)
 							}
 							textMeasurer := NewTextMeasurerGoHarfbuzz(face)
-							cachingMeasurer := NewCachingTextMeasurer(textMeasurer, context.Int("measurerCacheSize"))
-							scorer := NewExhaustiveScorer(fontSize, dpi, axisWidth, !context.Bool("nonuniformDecimals"), cachingMeasurer)
+							cachingMeasurer := NewCachingTextMeasurer(textMeasurer, cmd.Int("measurerCacheSize"))
+							scorer := NewExhaustiveScorer(fontSize, dpi, axisWidth, !cmd.Bool("nonuniformDecimals"), cachingMeasurer)
 
-							log := context.Bool("log")
+							log := cmd.Bool("log")
 
 							opts := TalbotOptions{
 								Weights:   DefaultWeights,
-								OnlyLoose: context.Bool("onlyLoose"),
-								FastMode:  context.Bool("fastMode"),
+								OnlyLoose: cmd.Bool("onlyLoose"),
+								FastMode:  cmd.Bool("fastMode"),
 								Qs:        nil,
 							}
 
@@ -152,13 +153,13 @@ func NewCliCommand() *cli.Command {
 									{"Large Range", 1e-5, 1e5, 10},   // Many decades
 									{"Close to Power", 90, 1100, 4},  // 90 is close to 100
 								}
-								if context.IsSet("min") {
+								if cmd.IsSet("min") {
 									cases = append(cases[:0],
 										TestCase{
 											Name:         "cli",
-											Min:          context.Float64("min"),
-											Max:          context.Float64("max"),
-											DesiredTicks: context.Int("desiredTicks"),
+											Min:          cmd.Float64("min"),
+											Max:          cmd.Float64("max"),
+											DesiredTicks: cmd.Int("desiredTicks"),
 										})
 								}
 								prepareDc(len(cases))
@@ -193,13 +194,13 @@ func NewCliCommand() *cli.Command {
 									// A case designed to trigger overlap if not handled:
 									{"Overlap Risk", 100000, 100005, 10},
 								}
-								if context.IsSet("min") {
+								if cmd.IsSet("min") {
 									cases = append(cases[:0],
 										TestCase{
 											Name:         "cli",
-											Min:          context.Float64("min"),
-											Max:          context.Float64("max"),
-											DesiredTicks: context.Int("desiredTicks"),
+											Min:          cmd.Float64("min"),
+											Max:          cmd.Float64("max"),
+											DesiredTicks: cmd.Int("desiredTicks"),
 										})
 								}
 								prepareDc(3 * len(cases))

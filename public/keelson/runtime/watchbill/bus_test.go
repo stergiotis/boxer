@@ -62,7 +62,7 @@ func TestBusDoorbellAnnouncementAndTaskBridge(t *testing.T) {
 	store := NewMemStore()
 	reg := NewRegistry()
 	release := make(chan struct{})
-	require.NoError(t, reg.Register(HandlerFunc{KindName: "bus.kind", Run: func(ctx context.Context, job watchbillstore.Job, h task.HandleI) error {
+	require.NoError(t, reg.Register(HandlerFunc{KindName: "bus.kind", RunFunc: func(ctx context.Context, job watchbillstore.Job, h task.HandleI) error {
 		h.Note("working")
 		select {
 		case <-ctx.Done():
@@ -121,7 +121,7 @@ func TestBusFailureIsNotReadAsCancel(t *testing.T) {
 	bus := inprocbus.NewInst(zerolog.Nop())
 	store := NewMemStore()
 	reg := NewRegistry()
-	require.NoError(t, reg.Register(HandlerFunc{KindName: "fail.kind", Run: func(context.Context, watchbillstore.Job, task.HandleI) error {
+	require.NoError(t, reg.Register(HandlerFunc{KindName: "fail.kind", RunFunc: func(context.Context, watchbillstore.Job, task.HandleI) error {
 		return errors.New("on purpose")
 	}}))
 	w, err := New(Config{Store: store, Handlers: reg, RunId: "run-fail", Bus: bus.NewClient("watchbill-worker", WorkerCaps()), Poll: time.Hour, Keep: time.Hour, AbandonAfter: time.Minute})

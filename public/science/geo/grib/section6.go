@@ -17,11 +17,11 @@ type Bitmap struct {
 	numPoints uint32
 }
 
-func parseBitmapE(body []byte, numPoints uint32) (b Bitmap, err error) {
+func parseBitmap(body []byte, numPoints uint32) (b Bitmap, err error) {
 	r := rd{b: body}
 	b.Indicator = r.u8()
 	b.numPoints = numPoints
-	err = r.errE("bitmap section")
+	err = r.truncation("bitmap section")
 	if err != nil {
 		return
 	}
@@ -38,7 +38,7 @@ func parseBitmapE(body []byte, numPoints uint32) (b Bitmap, err error) {
 			err = eb.Build().Int("bytes", len(b.bits)).Int("needed", need).Uint32("points", numPoints).Errorf("bitmap length does not match the point count: %w", ErrInconsistent)
 		}
 	default:
-		err = unsupportedE("bitmap indicator " + strconv.Itoa(int(b.Indicator)))
+		err = unsupported("bitmap indicator " + strconv.Itoa(int(b.Indicator)))
 	}
 	return
 }

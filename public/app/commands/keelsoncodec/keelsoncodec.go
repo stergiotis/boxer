@@ -12,6 +12,7 @@
 package keelsoncodec
 
 import (
+	"context"
 	"strings"
 
 	"github.com/rs/zerolog/log"
@@ -19,7 +20,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallgen"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func NewCliCommand() *cli.Command {
@@ -34,9 +35,9 @@ func NewCliCommand() *cli.Command {
 				Usage: "schema family target (facts|anchor)",
 			},
 		},
-		Action: func(c *cli.Context) (err error) {
-			target := c.String("target")
-			inputs := c.Args().Slice()
+		Action: func(ctx context.Context, cmd *cli.Command) (err error) {
+			target := cmd.String("target")
+			inputs := cmd.Args().Slice()
 			if len(inputs) < 1 {
 				return eh.Errorf("at least one input .go DTO source is required (usage: keelsoncodec [--target=facts|anchor] <dto1.go> ...)")
 			}

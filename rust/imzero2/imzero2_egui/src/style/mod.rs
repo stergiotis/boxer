@@ -12,6 +12,7 @@
 pub mod button;
 pub mod data_encoding;
 pub mod fresh;
+pub mod progress;
 pub mod slider;
 pub mod tokens;
 
@@ -68,12 +69,87 @@ pub fn accent_default() -> egui::Color32 {
     }
 }
 
+/// The default `ProgressBar` fill for the active theme — darker than
+/// [`accent_default`] on the dark palette and lighter on `fresh`, so the
+/// label can read on it and on the empty rail; see [`progress`].
+pub fn progress_fill() -> egui::Color32 {
+    match tokens::theme::active() {
+        tokens::Theme::Fresh => fresh::progress_fill(),
+        tokens::Theme::Dark => progress::fill(),
+    }
+}
+
+/// Run `add` — a progress bar — with its label colour set for the active
+/// theme. egui paints the label in `override_text_color`, else in
+/// `selection.stroke.color`: on the dark palette body text, near-white on a
+/// light accent fill; on `fresh` the strong accent, purple on purple.
+pub fn with_progress_bar_label<R>(
+    ui: &mut egui::Ui,
+    add: impl FnOnce(&mut egui::Ui) -> R,
+) -> R {
+    let label = match tokens::theme::active() {
+        tokens::Theme::Fresh => fresh::PROGRESS_LABEL,
+        tokens::Theme::Dark => progress::LABEL,
+    };
+    let saved = ui.style_mut().visuals.override_text_color.replace(label);
+    let r = add(ui);
+    ui.style_mut().visuals.override_text_color = saved;
+    r
+}
+
+/// The default `ProgressBar` height: a button's, i.e. one row of button text
+/// plus the button padding above and below. egui's own default is
+/// `interact_size.y`, which the IDS spacing sets to `padding_outer` — shorter
+/// than the text a bar paints inside it. Follows density, font size and theme
+/// (fresh pads its buttons more).
+pub fn progress_bar_height(ctx: &Context) -> f32 {
+    let style = ctx.global_style();
+    let font = egui::TextStyle::Button.resolve(&style);
+    let row = ctx.fonts_mut(|f| f.row_height(&font));
+    row + 2.0 * style.spacing.button_padding.y
+}
+
 /// The slider rail's colour for the active theme; see [`slider`].
 pub fn slider_rail() -> egui::Color32 {
     match tokens::theme::active() {
         tokens::Theme::Fresh => fresh::RAIL,
         tokens::Theme::Dark => slider::RAIL,
     }
+}
+
+/// Run `add` — a checkbox — with the widget table's corner radius narrowed
+/// to the active theme's checkbox radius. egui has no checkbox radius of its
+/// own: `Style::checkbox_style` borrows `widgets.*.corner_radius`, so a theme
+/// that rounds its buttons generously rounds the checkbox's box into a
+/// circle. The dark theme's radius is small enough that `add` runs as is.
+pub fn with_checkbox_radius<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    let radius = match tokens::theme::active() {
+        tokens::Theme::Fresh => egui::CornerRadius::same(fresh::ROUND_CHECKBOX),
+        tokens::Theme::Dark => return add(ui),
+    };
+    let saved = set_widget_radius(&mut ui.style_mut().visuals.widgets, [radius; 5]);
+    let r = add(ui);
+    set_widget_radius(&mut ui.style_mut().visuals.widgets, saved);
+    r
+}
+
+/// Overwrite the five widget states' corner radii; returns the previous ones.
+fn set_widget_radius(
+    w: &mut egui::style::Widgets,
+    radii: [egui::CornerRadius; 5],
+) -> [egui::CornerRadius; 5] {
+    let states = [
+        &mut w.noninteractive,
+        &mut w.inactive,
+        &mut w.hovered,
+        &mut w.active,
+        &mut w.open,
+    ];
+    let mut saved = radii;
+    for ((state, radius), old) in states.into_iter().zip(radii).zip(saved.iter_mut()) {
+        *old = std::mem::replace(&mut state.corner_radius, radius);
+    }
+    saved
 }
 
 /// Tour-mode neutralization: make hover and active look like inactive.

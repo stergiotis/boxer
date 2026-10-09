@@ -1,6 +1,7 @@
 package commitdigest
 
 import (
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -12,7 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 // RepoChunks is the intermediate format emitted by extract and consumed by summarize.
@@ -34,7 +35,7 @@ func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "commitdigest",
 		Usage: "Prepare recent commits from multiple repos for LLM summarization",
-		Subcommands: []*cli.Command{
+		Commands: []*cli.Command{
 			newExtractCommand(),
 			newSummarizeCommand(),
 			newMineTrendsCommand(),
@@ -106,17 +107,17 @@ func newExtractCommand() *cli.Command {
 				Usage: "Ignore existing cursor entries and fall back to --since. Cursors.json is not deleted; subsequent summarize runs will overwrite.",
 			},
 		},
-		Action: func(c *cli.Context) error {
-			repos := c.Args().Slice()
+		Action: func(ctx context.Context, cmd *cli.Command) error {
+			repos := cmd.Args().Slice()
 			if len(repos) == 0 {
 				repos = []string{"."}
 			}
-			since := c.String("since")
-			author := c.String("author")
-			noStat := c.Bool("no-stat")
-			detectCrossings := c.Bool("detect-crossings")
-			resumeDir := c.String("resume-dir")
-			resetCursor := c.Bool("reset-cursor")
+			since := cmd.String("since")
+			author := cmd.String("author")
+			noStat := cmd.Bool("no-stat")
+			detectCrossings := cmd.Bool("detect-crossings")
+			resumeDir := cmd.String("resume-dir")
+			resetCursor := cmd.Bool("reset-cursor")
 
 			var cursors CursorMap
 			if resumeDir != "" && !resetCursor {
@@ -137,14 +138,14 @@ func newExtractCommand() *cli.Command {
 
 				var fromHash string
 				if cursor, ok := cursors[repoName]; ok {
-					if validateErr := ValidateCursorHash(c.Context, absPath, cursor.LastCommitHash); validateErr != nil {
+					if validateErr := ValidateCursorHash(ctx, absPath, cursor.LastCommitHash); validateErr != nil {
 						return eb.Build().Str("repo", repoName).Str("hash", cursor.LastCommitHash).Str("cursorsFile", filepath.Join(resumeDir, cursorsFileName)).Errorf("cursor references unknown hash (history rewritten?); delete the cursors file or pass --reset-cursor: %w", validateErr)
 					}
 					fromHash = cursor.LastCommitHash
 					log.Info().Str("repo", repoName).Str("fromHash", shortHash(fromHash)).Msg("resuming from cursor")
 				}
 
-				d, err := CollectDigest(c.Context, repo, since, author, noStat, fromHash)
+				d, err := CollectDigest(ctx, repo, since, author, noStat, fromHash)
 				if err != nil {
 					if errors.Is(err, ErrNotAGitRepo) {
 						log.Warn().Str("path", repo).Msg("skipping directory: not a git repository")
@@ -160,8 +161,8 @@ func newExtractCommand() *cli.Command {
 			}
 
 			counter := &TiktokenCounter{
-				Encoding:             c.String("encoding"),
-				CorrectionMultiplier: c.Float64("correction"),
+				Encoding:             cmd.String("encoding"),
+				CorrectionMultiplier: cmd.Float64("correction"),
 			}
 			err := counter.Init()
 			if err != nil {
@@ -169,13 +170,13 @@ func newExtractCommand() *cli.Command {
 			}
 
 			chunker := &DigestChunker{
-				TokenBudget:    c.Int64("token-budget"),
-				ReservedTokens: c.Int64("reserved-tokens"),
+				TokenBudget:    cmd.Int64("token-budget"),
+				ReservedTokens: cmd.Int64("reserved-tokens"),
 				Counter:        counter,
 			}
 
 			metricsConfig := MetricsConfig{
-				HotspotTopN: int32(c.Int("hotspot-top")),
+				HotspotTopN: int32(cmd.Int("hotspot-top")),
 			}
 
 			allRepos := make([]RepoChunks, 0, len(digests))
@@ -194,7 +195,7 @@ func newExtractCommand() *cli.Command {
 
 					if detectCrossings {
 						var crossings []BoundaryCrossing
-						crossings, err = DetectBoundaryCrossings(c.Context, d.RepoPath, chunk.Commits)
+						crossings, err = DetectBoundaryCrossings(ctx, d.RepoPath, chunk.Commits)
 						if err != nil {
 							return eb.Build().Str("repo", d.RepoName).Int32("chunk", idx).Errorf("unable to detect boundary crossings: %w", err)
 						}
@@ -251,7 +252,7 @@ func newSummarizeCommand() *cli.Command {
 			},
 			&cli.StringFlag{
 				Name:    "llm-apikey",
-				EnvVars: []string{"LLM_API_KEY"},
+				Sources: cli.EnvVars("LLM_API_KEY"),
 				Usage:   "API key for non-Gemini LLM providers (LM Studio, generic OpenAI-compat). Prefer LLM_API_KEY env to avoid exposing the secret in process argv.",
 			},
 			&cli.StringFlag{
@@ -293,7 +294,7 @@ func newSummarizeCommand() *cli.Command {
 				Usage: "Show what would be sent to the LLM without calling it",
 			},
 		},
-		Action: func(c *cli.Context) error {
+		Action: func(ctx context.Context, cmd *cli.Command) error {
 			inputData, err := io.ReadAll(os.Stdin)
 			if err != nil {
 				return eh.Errorf("unable to read stdin: %w", err)
@@ -305,19 +306,19 @@ func newSummarizeCommand() *cli.Command {
 				return eh.Errorf("unable to parse extract JSON from stdin: %w", err)
 			}
 
-			dryRun := c.Bool("dry-run")
-			llmModel := c.String("llm-model")
+			dryRun := cmd.Bool("dry-run")
+			llmModel := cmd.String("llm-model")
 			if llmModel == "" && !dryRun {
 				return eh.Errorf("--llm-model is required unless --dry-run is set: %w", errors.New("missing required flag"))
 			}
 
-			systemPrompt := c.String("system-prompt")
+			systemPrompt := cmd.String("system-prompt")
 			if systemPrompt == "" {
 				systemPrompt = DefaultSystemPrompt
 			}
 
 			var renderedRegistry string
-			registryPath := c.String("thread-registry")
+			registryPath := cmd.String("thread-registry")
 			if registryPath != "" {
 				registryData, readErr := os.ReadFile(registryPath)
 				if readErr != nil {
@@ -331,9 +332,9 @@ func newSummarizeCommand() *cli.Command {
 				renderedRegistry = RenderThreadRegistry(threads)
 			}
 
-			summariesDir := c.String("summaries-dir")
+			summariesDir := cmd.String("summaries-dir")
 			window := &SlidingWindow{
-				MaxSummaries: int32(c.Int("window-size")),
+				MaxSummaries: int32(cmd.Int("window-size")),
 				Dir:          summariesDir,
 			}
 			err = window.LoadFromDir()
@@ -346,21 +347,21 @@ func newSummarizeCommand() *cli.Command {
 				return err
 			}
 
-			apiKey, err := resolveLlmApiKey(c)
+			apiKey, err := resolveLlmApiKey(ctx, cmd)
 			if err != nil {
 				return eh.Errorf("resolve api key: %w", err)
 			}
 			// Retry transient provider failures (429 / 5xx); Gemini rate-limits
 			// under load. The per-call --llm-timeout still bounds total time,
 			// since the backoff is context-aware.
-			llm, err := openaichat.NewClient(c.String("llm-endpoint"), apiKey,
+			llm, err := openaichat.NewClient(cmd.String("llm-endpoint"), apiKey,
 				openaichat.WithRetry(openaichat.DefaultRetryPolicy()))
 			if err != nil {
 				return eh.Errorf("new llm client: %w", err)
 			}
 			defer func() { _ = llm.Close() }()
-			numCtx := int32(c.Int("num-ctx"))
-			timeoutSec := c.Int("llm-timeout")
+			numCtx := int32(cmd.Int("num-ctx"))
+			timeoutSec := cmd.Int("llm-timeout")
 			if timeoutSec <= 0 {
 				timeoutSec = 120
 			}
@@ -387,7 +388,7 @@ func newSummarizeCommand() *cli.Command {
 					system, user := RenderChunkPrompt(repos[ri].RepoName, chunk.Commits, chunk.Metrics, windowContext, systemPrompt, renderedRegistry)
 
 					var summary string
-					summary, err = summarizeOnce(c.Context, llm, llmModel, numCtx, timeoutSec, system, user)
+					summary, err = summarizeOnce(ctx, llm, llmModel, numCtx, timeoutSec, system, user)
 					if err != nil {
 						return eb.Build().Str("repo", repos[ri].RepoName).Int32("chunk", chunk.Index).Errorf("LLM summarization failed: %w", err)
 					}

@@ -1,11 +1,12 @@
 package dev
 
 import (
+	"context"
 	"os"
 
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 // NewCliCommand returns the `dev` parent command. extraSubcommands lets
@@ -23,16 +24,16 @@ func NewCliCommand(extraSubcommands ...*cli.Command) *cli.Command {
 					Value: "default panic message",
 				},
 			},
-			Action: func(context *cli.Context) error {
-				log.Panic().Str("str", "strval").Uint64("uint64", 0xdeadbeef).Msg(context.String("message"))
+			Action: func(ctx context.Context, cmd *cli.Command) error {
+				log.Panic().Str("str", "strval").Uint64("uint64", 0xdeadbeef).Msg(cmd.String("message"))
 				return nil
 			},
 		},
 		newEntryPointsSubcommand())
 	subs = append(subs, extraSubcommands...)
 	return &cli.Command{
-		Name:        "dev",
-		Subcommands: subs,
+		Name:     "dev",
+		Commands: subs,
 	}
 }
 
@@ -46,7 +47,7 @@ func newRedirectFlag(flagName string, openFlags int, dst **os.File, what string,
 		Category: "override",
 		Name:     flagName,
 		Value:    "",
-		Action: func(context *cli.Context, s string) error {
+		Action: func(ctx context.Context, cmd *cli.Command, s string) error {
 			if s != "" {
 				f, err := os.OpenFile(s, openFlags, os.ModePerm)
 				if err != nil {

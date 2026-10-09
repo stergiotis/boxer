@@ -53,7 +53,7 @@ import (
 //     on exit. No external dependency.
 //
 // ctx scopes the store's setup round-trips (chstore.Ping / SetupTable);
-// hosts typically pass the cli.Context's Context.
+// hosts typically pass the context their Action received.
 //
 // Returns a closer the caller invokes at shutdown. Always safe to
 // call (closes the Sink either way).

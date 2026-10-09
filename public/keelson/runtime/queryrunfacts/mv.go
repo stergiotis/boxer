@@ -14,12 +14,6 @@ import (
 // view; the reconciler qualifies it with the destination's database.
 const MvBaseName = "mv_queryruns"
 
-// AntiJoinWindow is the recent-destination window the MV body anti-joins
-// (ADR-0115 SD2): url() read amplification and watermark overlap re-serve
-// rows; any re-served id already appended within this window is dropped
-// by the MV, so duplicates need adversarial timing beyond a day to land.
-const AntiJoinWindow = "INTERVAL 1 DAY"
-
 // ddlColumns parses the generated boxer.facts DDL column block into
 // (name, ClickHouse type) pairs, codecs stripped. The parse is strict so
 // a DDL-shape change fails loudly here instead of misdeclaring the wire.
@@ -75,6 +69,14 @@ func DdlColumnNames() (names []string, err error) {
 	return
 }
 
+// DestinationColumnsSql lists the live destination's column names, one
+// per line, for the reconciler's schema-generation check against
+// DdlColumnNames.
+func DestinationColumnsSql(database string, table string) (sql string) {
+	return "SELECT name FROM system.columns WHERE database = " + quoteLiteral(database) +
+		" AND table = " + quoteLiteral(table) + " FORMAT TabSeparated"
+}
+
 // UrlStructure derives the url() structure clause from the generated
 // boxer.facts DDL — every leeway wire column with its ClickHouse type,
 // names backtick-quoted: "`id:id:u64:47::0:` UInt64, …". Deriving
@@ -96,9 +98,16 @@ func UrlStructure() (structure string, err error) {
 // ComposeMvSql builds the refreshable materialized view that drives the
 // pipeline (ADR-0115 SD2): ClickHouse owns the schedule and the write —
 // every cadenceSeconds it GETs pullURL as ArrowStream and appends any
-// row whose deterministic id is not already in the recent destination
-// window. The SETTINGS clause tags the refresh queries so the extract
-// can exclude them (see RefreshTag).
+// row whose deterministic id is not already in the destination. The
+// SETTINGS clause tags the refresh queries so the extract can exclude
+// them (see RefreshTag).
+//
+// The anti-join window is the extract's own lower bound, watermark minus
+// WatermarkOverlap: a re-served row is by construction no older than
+// that, however old it is in wall-clock terms. A window anchored on now()
+// instead misses every re-served row of a backfill or a catch-up older
+// than the window, and the table is a plain MergeTree, so each such tick
+// lands permanent duplicates.
 //
 // mvName and factsTable are qualified ("boxer.mv_queryruns",
 // "boxer.facts") so tests can point the pipeline at a scratch
@@ -131,16 +140,39 @@ REFRESH EVERY %d SECOND APPEND TO %s
 AS SELECT * FROM url(%s, 'ArrowStream', %s)
 WHERE %s NOT IN (
   SELECT %s FROM %s
-  WHERE %s > now64(9) - %s AND has(%s, %d)
+  WHERE %s >= %s - %s AND has(%s, %d)
 )
 SETTINGS log_comment=%s, %s, http_max_tries=1`,
 		mvName,
 		cadenceSeconds, factsTable,
-		quoteSqlString(pullURL), quoteSqlString(structure),
+		quoteLiteral(pullURL), quoteLiteral(structure),
 		ColId,
 		ColId, factsTable,
-		ColTs, AntiJoinWindow, ColSymbolLr, vocab.MembKindQueryRun.GetId().Value(),
-		quoteSqlString(RefreshTag), factsddl.SettingsClause)
+		ColTs, watermarkSql(factsTable), WatermarkOverlap, ColSymbolLr, vocab.MembKindQueryRun.GetId().Value(),
+		quoteLiteral(RefreshTag), factsddl.SettingsClause)
+	return
+}
+
+// ExistingMvSql reads the stored definition of the capture view in
+// database, raw (FORMAT RawBLOB, so its quotes arrive unescaped); an empty
+// answer means there is no view.
+func ExistingMvSql(database string) (sql string) {
+	return "SELECT create_table_query FROM system.tables WHERE database = " + quoteLiteral(database) +
+		" AND name = " + quoteLiteral(MvBaseName) + " FORMAT RawBLOB"
+}
+
+// ParseMvPullURL returns the pull URL a stored capture view reads — the
+// first url() argument of the definition ComposeMvSql writes — or "" when
+// createQuery has none.
+func ParseMvPullURL(createQuery string) (pullURL string) {
+	_, rest, found := strings.Cut(createQuery, "url('")
+	if !found {
+		return
+	}
+	pullURL, _, found = strings.Cut(rest, "'")
+	if !found {
+		pullURL = ""
+	}
 	return
 }
 

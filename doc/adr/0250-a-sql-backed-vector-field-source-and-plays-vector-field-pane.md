@@ -169,7 +169,7 @@ The generated text stays inside what the canonicaliser round-trips: function
 calls, no `DIV` operator (the constraint ADR-0096's raster template records).
 A test sends the templates through play's statement builder.
 
-The source does not go through a node lane. `SampleE` is called concurrently
+The source does not go through a node lane. `Sample` is called concurrently
 and synchronously from the layer's goroutines and is cancelled through its
 context; a lane is one frame-driven slot with last-good semantics. The pane
 reports the source's last statement, parameters, duration and error itself.
@@ -240,7 +240,7 @@ deferred.
 - **A trial under `doc/trials/`** for window latency by field size and
   endpoint distance; until then no figure from the Context travels.
 - **A step ahead.** The source implements no prefetch, so playback waits on
-  each step's window; the layer's `PrefetchE` seam is there when a field is
+  each step's window; the layer's `Prefetch` seam is there when a field is
   played often enough to want it.
 
 ## Surfaces — Tier 1

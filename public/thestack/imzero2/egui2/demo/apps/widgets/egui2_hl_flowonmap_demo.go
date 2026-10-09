@@ -96,7 +96,7 @@ func newFlowOnMapState(ids *c.WidgetIdStack, bus runtimeapp.BusI) *flowOnMapStat
 	for i := range flowOnMapSteps {
 		steps = append(steps, vectorfield.Step{Valid: t0.Add(time.Duration(i*flowOnMapStepHours) * time.Hour), Reference: t0})
 	}
-	src, err := vectorfield.NewPyramidE(context.Background(), vectorfield.Meta{
+	src, err := vectorfield.NewPyramid(context.Background(), vectorfield.Meta{
 		Name: "synthetic jet and vortices", Quantity: "wind", Unit: "m/s",
 		Surface:    vectorfield.Surface{Kind: vectorfield.SurfaceKindHeightAboveGround, Value: 10, Unit: "m"},
 		Provenance: "closed form, sampled onto a half-degree global grid",
@@ -228,7 +228,7 @@ func demoFlowOnMap(ids *c.WidgetIdStack, st *flowOnMapState) {
 			c.Label(fmt.Sprintf("at %.2f, %.2f:   no data", ll.Lat, ll.Lng)).Send()
 		}
 	} else {
-		c.Label("hover the map to read the field").Send()
+		c.Label("Hover the map to read the field").Send()
 	}
 	c.Label("ADR-0249: the animation shows direction and relative speed, not transport — a particle's pace is a screen quantity, " +
 		"the same at every zoom, and a trail is a streamlet of the field at the display time, not a trajectory. " +

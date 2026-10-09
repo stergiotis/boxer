@@ -168,8 +168,25 @@ capture is flowing needs no pivot:
 SELECT count()
 FROM boxer.facts
 WHERE has(`tv:symbol:lr:lr:u64:1247:::0::data`,
-          6917529027641081896)  -- KindQueryRun (vocab.MembKindQueryRun)
+          9223372049739677736)  -- KindQueryRun (vocab.MembKindQueryRun)
 ```
+
+Captured runs accumulate until the operator bounds them. `boxer.facts` is
+shared with every other facts writer, and chstore leaves deleting data to
+the operator rather than putting a TTL in its default engine clause; the
+daemon itself never changes an existing table (ADR-0115). The capture
+scope is the coarse control. The fine one is a row TTL that matches only
+query runs, leaving every other kind alone:
+
+```sql
+ALTER TABLE boxer.facts
+  MODIFY TTL toDateTime(`ts:ts:z64:47::0:`) + INTERVAL 30 DAY
+  DELETE WHERE has(`tv:symbol:lr:lr:u64:1247:::0::data`,
+                   9223372049739677736)  -- KindQueryRun
+```
+
+A table holds one TTL clause, so `MODIFY TTL` replaces whatever the
+operator set before; several rules go into one statement, comma-separated.
 
 ### RunProfile — performance at three depths, three lifetimes
 

@@ -21,7 +21,7 @@ import (
 	"github.com/bufbuild/protocompile"
 	"github.com/bufbuild/protocompile/protoutil"
 	"github.com/rs/zerolog/log"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/pluginpb"
 
@@ -70,12 +70,12 @@ func NewCliCommand() (cmd *cli.Command) {
 	return
 }
 
-func action(c *cli.Context) (err error) {
-	err = Generate(c.Context, Opts{
-		ProtoRoot:  c.String("protoRoot"),
-		ProtoFile:  c.String("protoFile"),
-		GoPackage:  c.String("goPackage"),
-		OutputFile: c.String("out"),
+func action(ctx context.Context, cmd *cli.Command) (err error) {
+	err = Generate(ctx, Opts{
+		ProtoRoot:  cmd.String("protoRoot"),
+		ProtoFile:  cmd.String("protoFile"),
+		GoPackage:  cmd.String("goPackage"),
+		OutputFile: cmd.String("out"),
 	})
 	return
 }

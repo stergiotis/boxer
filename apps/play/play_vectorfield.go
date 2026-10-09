@@ -222,7 +222,7 @@ func newVectorFieldQueryer(client *Client, signals map[string]string, progress *
 
 var _ sqlfield.QueryerI = vectorFieldQueryer{}
 
-func (inst vectorFieldQueryer) QueryE(ctx context.Context, statement string, params map[string]string) (rec arrow.RecordBatch, err error) {
+func (inst vectorFieldQueryer) Query(ctx context.Context, statement string, params map[string]string) (rec arrow.RecordBatch, err error) {
 	merged := make(map[string]string, len(inst.signals)+len(params))
 	for k, v := range inst.signals {
 		merged[k] = v
@@ -355,7 +355,7 @@ func (inst *vectorFieldGuest) Ensure(rel sqlfield.Relation, params map[string]st
 	inst.building = b
 	queryer := newVectorFieldQueryer(inst.client, params, &inst.progress)
 	go func() {
-		src, err := sqlfield.NewSourceE(ctx, queryer, rel, sqlfield.Options{Shape: &shape})
+		src, err := sqlfield.NewSource(ctx, queryer, rel, sqlfield.Options{Shape: &shape})
 		b.mu.Lock()
 		b.done, b.src, b.err = true, src, err
 		b.mu.Unlock()
@@ -422,7 +422,7 @@ func (inst *vectorFieldGuest) EnsureSummary(req vectorfield.Request) {
 	job := &vectorFieldSummaryJob{key: key, cancel: cancel}
 	inst.summaryJob = job
 	go func() {
-		out, err := src.SummarizeE(ctx, req)
+		out, err := src.Summarize(ctx, req)
 		job.mu.Lock()
 		job.done, job.out, job.err = true, out, err
 		job.mu.Unlock()

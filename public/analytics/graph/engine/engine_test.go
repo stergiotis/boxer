@@ -16,7 +16,7 @@ func randomGraph(t *testing.T, n, m int, seed uint64, directed bool) *csr.Graph 
 		src[i] = uint64(rng.IntN(n))
 		dst[i] = uint64(rng.IntN(n))
 	}
-	g, err := csr.BuildE(src, dst, nil, csr.Options{Directed: directed})
+	g, err := csr.Build(src, dst, nil, csr.Options{Directed: directed})
 	require.NoError(t, err)
 	return g
 }

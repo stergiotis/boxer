@@ -42,9 +42,9 @@ func (inst *Doc) FindHeading(path []string) (idx int, ok bool, candidates [][]st
 	return
 }
 
-// FindHeadingE is FindHeading with the failures as errors that say what to
+// ResolveHeading is FindHeading with the failures as errors that say what to
 // do next.
-func (inst *Doc) FindHeadingE(path []string) (idx int, err error) {
+func (inst *Doc) ResolveHeading(path []string) (idx int, err error) {
 	idx, ok, cands := inst.FindHeading(path)
 	if ok {
 		return

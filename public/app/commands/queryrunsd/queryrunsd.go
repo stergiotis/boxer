@@ -15,60 +15,36 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/queryrunfacts"
+	"github.com/stergiotis/boxer/public/config/env"
+	"github.com/stergiotis/boxer/public/db/clickhouse/clickhouseenv"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryrunsvc"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-// NewCliCommand returns the `queryrunsd` subcommand.
+// NewCliCommand returns the `queryrunsd` subcommand. Each flag is the CLI
+// face of a registry entry, so a flag, its environment variable and its
+// default resolve in one place and queryrunsvc.New reads them all; --ch-url
+// is the shared CLICKHOUSE_ENDPOINT, which credentials accompany through
+// CLICKHOUSE_USER / CLICKHOUSE_PASSWORD.
 func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "queryrunsd",
 		Usage: "capture terminal system.query_log events into boxer.facts through the url()-pulled transform endpoint (ADR-0115 queryrunsd service)",
 		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:  "listen",
-				Usage: "loopback bind address for /pull (default: $IMZERO2_QUERYRUNS_LISTEN, else 127.0.0.1:8127)",
-			},
-			&cli.StringFlag{
-				Name:  "ch-url",
-				Usage: "ClickHouse HTTP endpoint (default: $IMZERO2_QUERYRUNS_CH_URL, else http://localhost:8123/)",
-			},
-			&cli.DurationFlag{
-				Name:  "cadence",
-				Usage: "materialized-view refresh cadence, whole seconds (default: $IMZERO2_QUERYRUNS_CADENCE, else 5s)",
-			},
-			&cli.StringFlag{
-				Name:  "scope",
-				Usage: "capture scope: all | stamped | off (default: $IMZERO2_QUERYRUNS_SCOPE, else all)",
-			},
-			&cli.StringFlag{
-				Name:  "backfill",
-				Usage: "how far a first-boot backfill reaches: all | none | a duration such as 24h (default: $IMZERO2_QUERYRUNS_BACKFILL, else all). Ignored once the destination holds facts, so downtime catch-up is unaffected",
-			},
+			queryrunsvc.ListenAddr.AsCliFlag(),
+			clickhouseenv.Endpoint.AsCliFlag(env.WithCliFlagName("ch-url")),
+			queryrunsvc.Cadence.AsCliFlag(),
+			queryrunsvc.Scope.AsCliFlag(),
+			queryrunsvc.Backfill.AsCliFlag(),
 		},
 		Action: run,
 	}
 }
 
-func run(c *cli.Context) (err error) {
-	backfillSpec := c.String("backfill")
-	if backfillSpec == "" {
-		backfillSpec = queryrunsvc.Backfill.Get()
-	}
-	backfillFrom, err := queryrunsvc.ParseBackfill(backfillSpec, time.Now())
-	if err != nil {
-		return eh.Errorf("queryrunsd: %w", err)
-	}
-	svc, err := queryrunsvc.New(queryrunsvc.Config{
-		Listen:       c.String("listen"),
-		ChURL:        c.String("ch-url"),
-		Cadence:      c.Duration("cadence"),
-		Scope:        queryrunfacts.ScopeE(c.String("scope")),
-		BackfillFrom: backfillFrom,
-	}, log.Logger)
+func run(_ context.Context, _ *cli.Command) (err error) {
+	svc, err := queryrunsvc.New(queryrunsvc.Config{}, log.Logger)
 	if err != nil {
 		return eh.Errorf("queryrunsd: %w", err)
 	}
@@ -80,9 +56,13 @@ func run(c *cli.Context) (err error) {
 	if err != nil {
 		return eh.Errorf("queryrunsd: %w", err)
 	}
-	log.Info().Str("pull", svc.PullURL()).Str("mv", svc.MvName()).
-		Msg("queryrunsd: capturing query runs")
-	<-ctx.Done()
+	// A dead endpoint ends the process rather than leaving it alive and
+	// deaf: the unit's Restart=always is what recovers it.
+	select {
+	case <-ctx.Done():
+	case err = <-svc.Failed():
+		return
+	}
 
 	log.Info().Msg("queryrunsd: shutting down")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

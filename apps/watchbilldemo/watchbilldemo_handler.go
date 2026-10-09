@@ -35,10 +35,10 @@ type sleepHandler struct{}
 
 func (sleepHandler) Kind() (kind string) { return KindSleep }
 
-// RunE sleeps the subject's duration, reporting progress on the task, and
+// Run sleeps the subject's duration, reporting progress on the task, and
 // returns as soon as ctx ends — the cancel or the timeout. A subject it
 // cannot read fails the attempt, so a typo is visible on the row.
-func (sleepHandler) RunE(ctx context.Context, job watchbillstore.Job, h task.HandleI) (err error) {
+func (sleepHandler) Run(ctx context.Context, job watchbillstore.Job, h task.HandleI) (err error) {
 	d, fail, err := parseSubject(job.Subject)
 	if err != nil {
 		return

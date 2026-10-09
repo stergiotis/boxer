@@ -20,7 +20,7 @@ func newTestNull(t *testing.T, seconds int64) (inst *sink.Null, clock *sink.Manu
 	t.Helper()
 	format := pcm.Format{SampleRate: testSampleRate, Channels: 2}
 	frames = seconds * int64(testSampleRate)
-	src, err := pcm.NewSynthSourceE(format, frames, nil)
+	src, err := pcm.NewSynthSource(format, frames, nil)
 	require.NoError(t, err)
 	clock = sink.NewManualClock(time.Unix(0, 0))
 	return sink.NewNull(src, clock), clock, frames
@@ -79,7 +79,7 @@ func TestNullPauseFreezesAndResumeContinues(t *testing.T) {
 
 func TestNullRateScalesAdvance(t *testing.T) {
 	s, clock, _ := newTestNull(t, 10)
-	require.NoError(t, s.SetRateE(2))
+	require.NoError(t, s.SetRate(2))
 	require.InDelta(t, 2.0, s.Rate(), 0)
 	s.Play()
 	clock.Advance(time.Second)
@@ -87,7 +87,7 @@ func TestNullRateScalesAdvance(t *testing.T) {
 
 	// A rate change during playback re-anchors: the playhead keeps the
 	// position it had and only its slope changes.
-	require.NoError(t, s.SetRateE(0.5))
+	require.NoError(t, s.SetRate(0.5))
 	require.Equal(t, 2*int64(testSampleRate), s.Position())
 	clock.Advance(time.Second)
 	require.Equal(t, 2*int64(testSampleRate)+int64(testSampleRate)/2, s.Position())
@@ -96,49 +96,49 @@ func TestNullRateScalesAdvance(t *testing.T) {
 func TestNullRateRange(t *testing.T) {
 	s, _, _ := newTestNull(t, 10)
 	for _, rate := range []float64{0, -1, 0.25, 0.1, 4.0001, 8, math.NaN(), math.Inf(1), math.Inf(-1)} {
-		require.Error(t, s.SetRateE(rate), "rate %v", rate)
+		require.Error(t, s.SetRate(rate), "rate %v", rate)
 		require.InDelta(t, 1.0, s.Rate(), 0, "a rejected rate leaves the rate alone")
 	}
 	for _, rate := range []float64{0.2501, 1, 4} {
-		require.NoError(t, s.SetRateE(rate), "rate %v", rate)
+		require.NoError(t, s.SetRate(rate), "rate %v", rate)
 		require.InDelta(t, rate, s.Rate(), 0)
 	}
 }
 
 func TestNullVolume(t *testing.T) {
 	s, _, _ := newTestNull(t, 10)
-	require.NoError(t, s.SetVolumeE(0))
+	require.NoError(t, s.SetVolume(0))
 	require.InDelta(t, 0.0, s.Volume(), 0)
-	require.NoError(t, s.SetVolumeE(0.25))
+	require.NoError(t, s.SetVolume(0.25))
 	require.InDelta(t, 0.25, s.Volume(), 0)
 	for _, v := range []float64{-0.001, 1.001, math.NaN(), math.Inf(1)} {
-		require.Error(t, s.SetVolumeE(v), "volume %v", v)
+		require.Error(t, s.SetVolume(v), "volume %v", v)
 		require.InDelta(t, 0.25, s.Volume(), 0)
 	}
 	// Volume does not touch the transport.
 	s.Play()
-	require.NoError(t, s.SetVolumeE(1))
+	require.NoError(t, s.SetVolume(1))
 	require.Equal(t, sink.StatePlaying, s.State())
 }
 
 func TestNullSeekClampsAndKeepsState(t *testing.T) {
 	s, clock, frames := newTestNull(t, 10)
-	require.NoError(t, s.SeekE(-100))
+	require.NoError(t, s.SeekFrame(-100))
 	require.Equal(t, int64(0), s.Position())
 	require.Equal(t, sink.StateStopped, s.State())
 
-	require.NoError(t, s.SeekE(frames+10_000))
+	require.NoError(t, s.SeekFrame(frames+10_000))
 	require.Equal(t, frames, s.Position())
 	require.False(t, s.Ended(), "a seek to the end is a position, not the end of playback")
 	require.Equal(t, sink.StateStopped, s.State())
 
 	// Seeking while paused keeps the sink paused and re-anchors it.
-	require.NoError(t, s.SeekE(1234))
+	require.NoError(t, s.SeekFrame(1234))
 	s.Play()
 	clock.Advance(time.Second)
 	s.Pause()
 	require.Equal(t, 1234+int64(testSampleRate), s.Position())
-	require.NoError(t, s.SeekE(7))
+	require.NoError(t, s.SeekFrame(7))
 	require.Equal(t, sink.StatePaused, s.State())
 	clock.Advance(time.Second)
 	require.Equal(t, int64(7), s.Position())
@@ -147,7 +147,7 @@ func TestNullSeekClampsAndKeepsState(t *testing.T) {
 func TestNullSeekToEndWhilePlayingEnds(t *testing.T) {
 	s, _, frames := newTestNull(t, 10)
 	s.Play()
-	require.NoError(t, s.SeekE(frames))
+	require.NoError(t, s.SeekFrame(frames))
 	// The sink is playing at the end of the source, so it runs into it on
 	// the next observation even without the clock moving.
 	require.Equal(t, frames, s.Position())
@@ -190,14 +190,14 @@ func TestNullPlayAfterEndRestartsFromZero(t *testing.T) {
 	// A seek clears Ended too.
 	clock.Advance(time.Hour)
 	require.True(t, s.Ended())
-	require.NoError(t, s.SeekE(frames/2))
+	require.NoError(t, s.SeekFrame(frames/2))
 	require.False(t, s.Ended())
 	require.Equal(t, frames/2, s.Position())
 }
 
 func TestNullPlayFromASeekToTheEndRestarts(t *testing.T) {
 	s, _, frames := newTestNull(t, 10)
-	require.NoError(t, s.SeekE(frames))
+	require.NoError(t, s.SeekFrame(frames))
 	require.False(t, s.Ended())
 	s.Play()
 	require.Equal(t, int64(0), s.Position(), "playing from a position at the end restarts")
@@ -205,7 +205,7 @@ func TestNullPlayFromASeekToTheEndRestarts(t *testing.T) {
 
 func TestNullClockMovedBackwardsProjectsBack(t *testing.T) {
 	s, clock, _ := newTestNull(t, 10)
-	require.NoError(t, s.SeekE(1000))
+	require.NoError(t, s.SeekFrame(1000))
 	s.Play()
 	clock.Advance(2 * time.Second)
 	require.Equal(t, 1000+2*int64(testSampleRate), s.Position())
@@ -235,7 +235,7 @@ func TestNullClose(t *testing.T) {
 	s, clock, _ := newTestNull(t, 10)
 	s.Play()
 	clock.Advance(time.Second)
-	require.NoError(t, s.CloseE())
+	require.NoError(t, s.Close())
 
 	require.Equal(t, sink.StateStopped, s.State())
 	require.Equal(t, int64(testSampleRate), s.Position(), "the position is frozen where it was closed")
@@ -246,19 +246,19 @@ func TestNullClose(t *testing.T) {
 	require.Equal(t, sink.StateStopped, s.State(), "play is a no-op on a closed sink")
 	s.Pause()
 	require.Equal(t, sink.StateStopped, s.State())
-	require.Error(t, s.SeekE(0))
-	require.Error(t, s.SetRateE(2))
-	require.Error(t, s.SetVolumeE(0.5))
+	require.Error(t, s.SeekFrame(0))
+	require.Error(t, s.SetRate(2))
+	require.Error(t, s.SetVolume(0.5))
 	require.InDelta(t, 1.0, s.Rate(), 0)
 	require.InDelta(t, 1.0, s.Volume(), 0)
-	require.NoError(t, s.CloseE(), "close is idempotent")
+	require.NoError(t, s.Close(), "close is idempotent")
 }
 
 func TestNullClosedWhilePlayingAtTheEndStaysEnded(t *testing.T) {
 	s, clock, frames := newTestNull(t, 10)
 	s.Play()
 	clock.Advance(11 * time.Second)
-	require.NoError(t, s.CloseE())
+	require.NoError(t, s.Close())
 	require.True(t, s.Ended())
 	require.Equal(t, frames, s.Position())
 }
@@ -271,12 +271,12 @@ func TestNullNilSourceAndNilClock(t *testing.T) {
 	require.Equal(t, int64(0), s.Position())
 	require.True(t, s.Ended(), "an empty source ends as soon as it is played")
 	require.Equal(t, sink.StateStopped, s.State())
-	require.NoError(t, s.CloseE())
+	require.NoError(t, s.Close())
 }
 
 func TestNullRealClockAdvances(t *testing.T) {
 	format := pcm.Format{SampleRate: testSampleRate, Channels: 1}
-	src, err := pcm.NewSynthSourceE(format, 3600*int64(testSampleRate), nil)
+	src, err := pcm.NewSynthSource(format, 3600*int64(testSampleRate), nil)
 	require.NoError(t, err)
 	s := sink.NewNull(src, nil)
 	s.Play()
@@ -292,7 +292,7 @@ func TestNullRealClockAdvances(t *testing.T) {
 		}
 	}
 	require.Greater(t, second, first)
-	require.NoError(t, s.CloseE())
+	require.NoError(t, s.Close())
 }
 
 func TestManualClock(t *testing.T) {
@@ -353,5 +353,5 @@ func TestNullConcurrentTransportAndPolling(t *testing.T) {
 	wg.Wait()
 
 	require.Equal(t, int64(-1), badPosition, "position left [0, Frames()]")
-	require.NoError(t, s.CloseE())
+	require.NoError(t, s.Close())
 }

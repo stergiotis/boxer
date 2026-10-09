@@ -2,17 +2,17 @@ package play
 
 import (
 	"encoding/hex"
-	"encoding/json"
 	"maps"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"lukechampine.com/blake3"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/logcomment"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
-	"github.com/stergiotis/boxer/public/keelson/runtime/queryrunfacts"
 )
 
 // play_stamp.go is the SD7 identity stamp (ADR-0115): every query the
@@ -20,8 +20,9 @@ import (
 // {run_id, app, lane, authored_fp, sent_fp, chain_fp, env_fp}, so the
 // server's own query_log is attributable with no boxer process running,
 // and the queryrunsd capture pipeline lifts the identity into
-// boxer.facts memberships (queryrunfacts.ParseStamp — the same struct
-// serialised here, single-sourcing the keys).
+// boxer.facts memberships (queryrunfacts.ParseStamp — the same
+// logcomment.Stamp serialised here, single-sourcing the keys; ADR-0295
+// §SD2).
 //
 // The four fingerprints are the entity spine's day-one anchors
 // (doc/explanation/query-observability.md): authored = the buffer as
@@ -127,11 +128,13 @@ func envFingerprint(params map[string]string, signals map[string]string) string 
 // marshalling fails (structurally impossible for this struct).
 func (inst *Client) composeLogComment(authored string, sent string, params map[string]string, signals map[string]string, opts *ExecOptions, agent *app.OnBehalfOf) string {
 	runId, appId, instanceKey := inst.stampIdentity()
-	st := queryrunfacts.Stamp{
+	authoredFp := stampFp(authored)
+	inst.authored.note(authoredFp, authored)
+	st := logcomment.Stamp{
 		RunId:      runId,
 		App:        appId,
 		Instance:   instanceKey,
-		AuthoredFp: stampFp(authored),
+		AuthoredFp: authoredFp,
 		SentFp:     stampFp(sent),
 		ChainFp:    inst.chainFingerprint(),
 		EnvFp:      envFingerprint(params, signals),
@@ -154,20 +157,80 @@ func (inst *Client) composeLogComment(authored string, sent string, params map[s
 // identity to stamp at all.
 func (inst *Client) composeProbeLogComment(opts *ExecOptions) string {
 	runId, appId, instanceKey := inst.stampIdentity()
-	st := queryrunfacts.Stamp{RunId: runId, App: appId, Instance: instanceKey}
+	st := logcomment.Stamp{RunId: runId, App: appId, Instance: instanceKey}
 	if opts != nil {
 		st.Lane = opts.Label
 	}
-	if st == (queryrunfacts.Stamp{}) {
+	if st == (logcomment.Stamp{}) {
 		return ""
 	}
 	return marshalStamp(st)
 }
 
-func marshalStamp(st queryrunfacts.Stamp) string {
-	b, err := json.Marshal(st)
-	if err != nil {
-		return ""
+func marshalStamp(st logcomment.Stamp) string {
+	return logcomment.Marshal(st)
+}
+
+// Bounds on the authored-text memo: entries and the bytes they hold.
+const (
+	authoredMemoMaxEntries = 512
+	authoredMemoMaxBytes   = 4 << 20
+)
+
+// authoredMemo maps an authored fingerprint back to the text it was taken
+// over, for the texts this process stamped. The capture keeps only the
+// fingerprint — interning the texts durably is the deferred S5 slice
+// (ADR-0115, on ADR-0112's substrate) — so this is the light cut: a run
+// this process issued shows its authored statement while the memo still
+// holds it, and any other run shows the fingerprint alone. Oldest first
+// out; a text seen again keeps its original place. The zero value is
+// ready; safe for concurrent use (stamps are composed on run goroutines).
+type authoredMemo struct {
+	mu    sync.Mutex
+	texts map[string]string
+	order []string
+	bytes int
+}
+
+// note records text under fp. A text larger than the whole budget is not
+// kept.
+func (inst *authoredMemo) note(fp string, text string) {
+	if fp == "" || len(text) > authoredMemoMaxBytes {
+		return
 	}
-	return string(b)
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if _, ok := inst.texts[fp]; ok {
+		return
+	}
+	if inst.texts == nil {
+		inst.texts = make(map[string]string)
+	}
+	for len(inst.order) > 0 && (len(inst.order) >= authoredMemoMaxEntries || inst.bytes+len(text) > authoredMemoMaxBytes) {
+		old := inst.order[0]
+		inst.order = inst.order[1:]
+		inst.bytes -= len(inst.texts[old])
+		delete(inst.texts, old)
+	}
+	inst.texts[fp] = text
+	inst.order = append(inst.order, fp)
+	inst.bytes += len(text)
+}
+
+// lookup returns the text stamped under fp, when the memo still holds it.
+func (inst *authoredMemo) lookup(fp string) (text string, ok bool) {
+	if fp == "" {
+		return
+	}
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	text, ok = inst.texts[fp]
+	return
+}
+
+// AuthoredText is the authored statement this client stamped under fp —
+// the buffer as handed to the run, before the pre-execute rewrites. ok is
+// false for a run another process issued, or one the memo has let go.
+func (inst *Client) AuthoredText(fp string) (text string, ok bool) {
+	return inst.authored.lookup(fp)
 }

@@ -7478,8 +7478,9 @@ egui::Panel::top(i);
                 let mut progress = self.io.read_plain_f32()?;
                 // construct
 
-                let mut w =
-                    egui::ProgressBar::new(progress).fill(imzero2_egui::style::accent_default());
+                let mut w = egui::ProgressBar::new(progress)
+                    .fill(imzero2_egui::style::progress_fill())
+                    .desired_height(imzero2_egui::style::progress_bar_height(c));
                 // methods
                 loop {
                     let (m, _) = self.read_from_repr(ProgressBarBuilderMethodId::from_repr)?;
@@ -10387,18 +10388,28 @@ egui::Window::new(label).id(i);
         }
     }
 
-    // `_f` is the opcode the widget came from. Unused here, but every
-    // generated call site passes it, so the parameter stays rather than
-    // churning the dispatch template for one argument.
+    // `f` is the opcode the widget came from. A checkbox gets its theme's
+    // own corner radius (`style::with_checkbox_radius`) and a progress bar
+    // its label colour (`style::with_progress_bar_label`); egui has a slot
+    // for neither.
     pub fn apply_widget(
         &mut self,
         w: impl egui::Widget,
         u: &mut Option<&mut egui::Ui>,
-        _f: &FuncProcId,
+        f: &FuncProcId,
         i: Option<egui::Id>,
     ) -> Option<egui::Response> {
         if u.is_some() {
-            let r = w.ui(u.as_mut().unwrap());
+            let ui = u.as_mut().unwrap();
+            let r = match f {
+                FuncProcId::Checkbox => {
+                    imzero2_egui::style::with_checkbox_radius(ui, |ui| w.ui(ui))
+                }
+                FuncProcId::ProgressBar => {
+                    imzero2_egui::style::with_progress_bar_label(ui, |ui| w.ui(ui))
+                }
+                _ => w.ui(ui),
+            };
             if let Some(i) = i
                 && self.r8_response_flags_filter.match_response_any(&r)
             {

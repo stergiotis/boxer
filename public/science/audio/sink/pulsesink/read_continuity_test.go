@@ -27,7 +27,7 @@ func maxJump(samples []float32, channels, ch int, prev float32) (jump float32, l
 
 func TestReadStaysContinuousAcrossARateExcursion(t *testing.T) {
 	format := pcm.Format{SampleRate: 48000, Channels: 2}
-	src, err := pcm.NewSynthSourceE(format, 48000*120, pcm.Sine(format, 440, 0.8))
+	src, err := pcm.NewSynthSource(format, 48000*120, pcm.Sine(format, 440, 0.8))
 	require.NoError(t, err)
 	inst := &Sink{format: format, frames: src.Frames(), src: src, clock: sink.RealClock{}, state: sink.StatePlaying, rate: 1, volume: 1}
 
@@ -41,7 +41,7 @@ func TestReadStaysContinuousAcrossARateExcursion(t *testing.T) {
 	for step := range 600 {
 		rate := rates[(step/50)%len(rates)]
 		if inst.rate != rate {
-			require.NoError(t, inst.SetRateE(rate))
+			require.NoError(t, inst.SetRate(rate))
 		}
 		out := make([]float32, sizes[step%len(sizes)]*2)
 		n, err := inst.read(out)
@@ -67,8 +67,8 @@ type offsetSource struct {
 	lens    []int
 }
 
-func (inst *offsetSource) ReadFramesAtE(ctx context.Context, off int64, dst []float32) (n int, err error) {
-	n, err = inst.SourceI.ReadFramesAtE(ctx, off, dst)
+func (inst *offsetSource) ReadFramesAt(ctx context.Context, off int64, dst []float32) (n int, err error) {
+	n, err = inst.SourceI.ReadFramesAt(ctx, off, dst)
 	inst.offsets = append(inst.offsets, off)
 	inst.lens = append(inst.lens, n)
 	return n, err
@@ -85,7 +85,7 @@ func (inst *offsetSource) backwardReads() (n int) {
 
 func TestReadIsSequentialAcrossARateExcursion(t *testing.T) {
 	format := pcm.Format{SampleRate: 48000, Channels: 2}
-	base, err := pcm.NewSynthSourceE(format, 48000*120, pcm.Sine(format, 440, 0.8))
+	base, err := pcm.NewSynthSource(format, 48000*120, pcm.Sine(format, 440, 0.8))
 	require.NoError(t, err)
 	src := &offsetSource{SourceI: base}
 	inst := &Sink{format: format, frames: base.Frames(), src: src, clock: sink.RealClock{}, state: sink.StatePlaying, rate: 1, volume: 1}
@@ -95,11 +95,11 @@ func TestReadIsSequentialAcrossARateExcursion(t *testing.T) {
 	for step := range 400 {
 		switch step {
 		case 100:
-			require.NoError(t, inst.SetRateE(1.31))
+			require.NoError(t, inst.SetRate(1.31))
 		case 200:
-			require.NoError(t, inst.SetRateE(0.83))
+			require.NoError(t, inst.SetRate(0.83))
 		case 300:
-			require.NoError(t, inst.SetRateE(1))
+			require.NoError(t, inst.SetRate(1))
 		}
 		out := make([]float32, sizes[step%len(sizes)]*2)
 		_, err := inst.read(out)

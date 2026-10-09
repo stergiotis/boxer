@@ -42,7 +42,7 @@ func Storm(t *testing.T) keelsonfield.Field {
 	f := keelsonfield.Field{Name: "storm", Unit: "m/s", SpeedMax: 30}
 	t0 := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
 	for s := range 3 {
-		g, err := loader.LoadStepE(context.Background(), s)
+		g, err := loader.LoadStep(context.Background(), s)
 		require.NoError(t, err)
 		f.Steps = append(f.Steps, t0.Add(time.Duration(s)*time.Hour))
 		f.Grids = append(f.Grids, g)
@@ -78,7 +78,7 @@ func newEngine(t *testing.T, reg *introspect.Registry) *introspectengine.Engine 
 // engineQueryer runs a statement through clickhouse-local.
 type engineQueryer struct{ e *introspectengine.Engine }
 
-func (inst engineQueryer) QueryE(ctx context.Context, statement string, params map[string]string) (rec arrow.RecordBatch, err error) {
+func (inst engineQueryer) Query(ctx context.Context, statement string, params map[string]string) (rec arrow.RecordBatch, err error) {
 	body, _, err := inst.e.QueryParams(ctx, statement, "ArrowStream", params)
 	if err != nil {
 		return nil, err
@@ -129,7 +129,7 @@ type trivialQueryer struct {
 	canonical bool
 }
 
-func (inst trivialQueryer) QueryE(_ context.Context, statement string, params map[string]string) (rec arrow.RecordBatch, err error) {
+func (inst trivialQueryer) Query(_ context.Context, statement string, params map[string]string) (rec arrow.RecordBatch, err error) {
 	if inst.canonical {
 		statement, err = passes.CanonicalizeFull(100).Run(statement)
 		if err != nil {
@@ -172,13 +172,13 @@ func Parity(t *testing.T, base string, f keelsonfield.Field, opts Options) {
 	e := newEngine(t, reg)
 	ctx := context.Background()
 
-	ref, err := sqlfield.NewSourceE(ctx, engineQueryer{e}, sqlfield.Relation{From: "keelson('" + base + "')"}, sqlfield.Options{})
+	ref, err := sqlfield.NewSource(ctx, engineQueryer{e}, sqlfield.Relation{From: "keelson('" + base + "')"}, sqlfield.Options{})
 	require.NoError(t, err, "the reference: the reduction statements in clickhouse-local")
-	viaEngine, err := sqlfield.NewSourceE(ctx, engineQueryer{e}, sqlfield.Relation{Family: base}, sqlfield.Options{})
+	viaEngine, err := sqlfield.NewSource(ctx, engineQueryer{e}, sqlfield.Relation{Family: base}, sqlfield.Options{})
 	require.NoError(t, err, "the family through clickhouse-local")
-	viaTrivial, err := sqlfield.NewSourceE(ctx, trivialQueryer{reg: reg}, sqlfield.Relation{Family: base}, sqlfield.Options{})
+	viaTrivial, err := sqlfield.NewSource(ctx, trivialQueryer{reg: reg}, sqlfield.Relation{Family: base}, sqlfield.Options{})
 	require.NoError(t, err, "the family with no ClickHouse")
-	viaCanonical, err := sqlfield.NewSourceE(ctx, trivialQueryer{reg: reg, canonical: true}, sqlfield.Relation{Family: base}, sqlfield.Options{})
+	viaCanonical, err := sqlfield.NewSource(ctx, trivialQueryer{reg: reg, canonical: true}, sqlfield.Relation{Family: base}, sqlfield.Options{})
 	require.NoError(t, err, "the family with no ClickHouse, canonicalized as play sends it")
 
 	want := ref.Describe()
@@ -207,7 +207,7 @@ func Parity(t *testing.T, base string, f keelsonfield.Field, opts Options) {
 	for _, req := range requests {
 		for _, step := range steps {
 			req.Step = step
-			w, err := ref.SampleE(ctx, req)
+			w, err := ref.Sample(ctx, req)
 			require.NoError(t, err)
 			for _, u := range w.U {
 				if math.IsNaN(float64(u)) {
@@ -217,15 +217,15 @@ func Parity(t *testing.T, base string, f keelsonfield.Field, opts Options) {
 				}
 			}
 			for name, src := range map[string]*sqlfield.Source{"engine": viaEngine, "trivial": viaTrivial, "canonical": viaCanonical} {
-				g, err := src.SampleE(ctx, req)
+				g, err := src.Sample(ctx, req)
 				require.NoError(t, err, name)
 				assertSameWindow(t, w, g, name, req)
 			}
 		}
-		ws, err := ref.SummarizeE(ctx, req)
+		ws, err := ref.Summarize(ctx, req)
 		require.NoError(t, err)
 		for name, src := range map[string]*sqlfield.Source{"engine": viaEngine, "trivial": viaTrivial, "canonical": viaCanonical} {
-			gs, err := src.SummarizeE(ctx, req)
+			gs, err := src.Summarize(ctx, req)
 			require.NoError(t, err, name)
 			require.Len(t, gs, len(ws), name)
 			for i := range ws {

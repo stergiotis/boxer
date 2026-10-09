@@ -87,6 +87,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail/internal/lowlevel"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
@@ -103,7 +104,7 @@ import (
 // ViewsVersion is the revision of the views this package composes. Bump it
 // whenever a view's columns or meaning change, so the stamp a deployed view
 // carries tells an operator it predates the build.
-const ViewsVersion = 8
+const ViewsVersion = 10
 
 // agenticTag marks the views over what the agentic side of keelson writes —
 // model calls and their messages, and what agents did under a grant. The
@@ -131,6 +132,7 @@ const (
 	ViewAgentDisclosures = prefixDataMart + "trail_" + agenticTag + "_agent_disclosures"
 	ViewHttpFetches      = prefixDataMart + "trail_http_fetches"
 	ViewAdhocBundles     = prefixDataMart + "trail_adhoc_bundles"
+	ViewAuditEvents      = prefixDataMart + "trail_audit_events"
 	ViewTimeline         = prefixDataMart + "trail_timeline"
 	ViewActionOutcomes   = prefixAggregate + "trail_" + agenticTag + "_agent_action_outcomes"
 	ViewConversations    = prefixAggregate + "trail_" + agenticTag + "_conversations"
@@ -187,6 +189,7 @@ var clickhouseTypes = map[string]string{
 	"u32":  "UInt32",
 	"u64":  "UInt64",
 	"i64":  "Int64",
+	"u32h": "Array(UInt32)",
 	"u64h": "Array(UInt64)",
 	"z64":  "DateTime64(9, 'UTC')",
 }
@@ -291,6 +294,8 @@ func (c column) canonicalType() (ctype string, err error) {
 	switch elem {
 	case "s":
 		return "sh", nil
+	case "u32":
+		return "u32h", nil
 	case "u64":
 		return "u64h", nil
 	}
@@ -384,8 +389,10 @@ var kindViews = []kindView{
 		{"refused", "bool", vocab.MembLlmCallRefused, scalar},
 		{"error", "stringArray", vocab.MembLlmCallError, list},
 		{"retention", "symbol", vocab.MembLlmCallRetention, scalar},
-		{"retained-from", "u32Array", vocab.MembLlmCallRetainedFrom, first},
+		{"messages-from", "u32Array", vocab.MembLlmCallRetainedFrom, first},
 		{"history-hash", "stringArray", vocab.MembLlmCallHistoryHash, first},
+		{"omit-from", "u32Array", vocab.MembLlmCallOmitFrom, first},
+		{"omit-to", "u32Array", vocab.MembLlmCallOmitTo, first},
 	}},
 	{name: ViewModelMessages, kind: vocab.MembKindLlmMessage, columns: []column{
 		{"call-id", "stringArray", vocab.MembLlmMessageCallId, first},
@@ -423,6 +430,7 @@ var kindViews = []kindView{
 	}},
 	{name: ViewAgentGrants, kind: vocab.MembKindAgentGrant, columns: []column{
 		{"event", "symbol", vocab.MembAgentGrantEvent, scalar},
+		{"request", "stringArray", vocab.MembAgentGrantRequest, first},
 		{"plan", "stringArray", vocab.MembAgentGrantPlan, first},
 		{"plan-digest", "stringArray", vocab.MembAgentGrantPlanDigest, first},
 		{"entries", "stringArray", vocab.MembAgentGrantEntries, list},
@@ -495,10 +503,26 @@ var kindViews = []kindView{
 		{"input-handles", "stringArray", vocab.MembAdhocDatasetInputHandles, list},
 		{"input-aliases", "stringArray", vocab.MembAdhocDatasetInputAliases, list},
 		{"input-digests", "stringArray", vocab.MembAdhocDatasetInputDigests, list},
+		{"column-datasets", "u32Array", vocab.MembAdhocDatasetColumnDatasets, list},
 		{"column-names", "stringArray", vocab.MembAdhocDatasetColumnNames, list},
 		{"column-types", "stringArray", vocab.MembAdhocDatasetColumnTypes, list},
 		{"column-nulls", "u64Array", vocab.MembAdhocDatasetColumnNulls, list},
 		{"column-distinct", "u64Array", vocab.MembAdhocDatasetColumnDistinct, list},
+	}},
+	{name: ViewAuditEvents, kind: vocab.MembKindAuditEvent, columns: []column{
+		{"domain", "symbol", vocab.MembAuditEventDomain, scalar},
+		{"action", "symbol", vocab.MembAuditEventAction, scalar},
+		{"outcome", "symbol", vocab.MembAuditEventOutcome, scalar},
+		{"principal", "stringArray", vocab.MembAuditEventPrincipal, first},
+		{"principal-by", "symbol", vocab.MembAuditEventPrincipalBy, scalar},
+		{"purpose", "symbol", vocab.MembAuditEventPurpose, scalar},
+		{"node", "symbol", vocab.MembAuditEventNode, scalar},
+		{"subject", "u64Array", vocab.MembAuditEventSubject, first},
+		{"retention", "symbol", vocab.MembAuditEventRetention, scalar},
+		{"ref-types", "stringArray", vocab.MembAuditEventRefTypes, list},
+		{"ref-values", "stringArray", vocab.MembAuditEventRefValues, list},
+		{"attr-keys", "stringArray", vocab.MembAuditEventAttrKeys, list},
+		{"attr-values", "stringArray", vocab.MembAuditEventAttrValues, list},
 	}},
 }
 
@@ -506,6 +530,7 @@ var kindViews = []kindView{
 var withCause = map[string]bool{
 	ViewAgentActions:     true,
 	ViewAgentGrants:      true,
+	ViewAgentCaptures:    true,
 	ViewAgentDisclosures: true,
 	ViewAdhocBundles:     true,
 }
@@ -852,11 +877,11 @@ var timelineShape = []struct{ name, ctype string }{
 var timelineBranches = []timelineBranch{
 	{ViewModelCalls, "llmCall", [12]string{
 		"{call-id}", "{round}", "{parent}",
-		"if({refused}, 'refused', if({incomplete}, 'incomplete', {finish-reason}))",
+		"multiIf({refused}, 'refused', length({error}) > 0, 'failed', {incomplete}, 'incomplete', {finish-reason})",
 		"{purpose}",
 		"concat('model call ', {purpose}, ' -> ', {model}, ' (', toString({input-tokens}), ' in / ', toString({output-tokens}), ' out, ', " +
 			"toString({tool-calls}), ' tool calls, ', toString({elapsed-ms}), ' ms, ', {finish-reason}, " +
-			"if({refused}, ', REFUSED', ''), if({incomplete}, ', INCOMPLETE', ''), ')')",
+			"if({refused}, ', REFUSED', if(length({error}) > 0, ', FAILED', '')), if({incomplete}, ', INCOMPLETE', ''), ')')",
 		"arrayStringConcat({error}, ' | ')",
 		"{sensitivity} = 'confined'", "false", "{input-tokens}", "{output-tokens}", "{elapsed-ms}",
 	}},
@@ -884,7 +909,7 @@ var timelineBranches = []timelineBranch{
 		"{plan}", "false", "false", "0", "0", "0",
 	}},
 	{ViewAgentCaptures, "agentCapture", [12]string{
-		"{digest}", "0", "''", "{phase}", "{format}",
+		"{digest}", "0", "{cause-model-call}", "{phase}", "{format}",
 		"concat('capture ', {format}, ' of ', toString(length({windows})), ' window(s) ', {decision}, ' -> ', {phase}, " +
 			"if(length({reason}) > 0, concat(' (', arrayStringConcat({reason}, ' | '), ')'), ''))",
 		"''", "{confined}", "true", "0", "0", "0",
@@ -909,6 +934,14 @@ var timelineBranches = []timelineBranch{
 			"if({attested}, ' (attested)', ''), " +
 			"if(length({reason}) > 0, concat(' (', arrayStringConcat({reason}, ' | '), ')'), ''))",
 		"arrayStringConcat({reason}, ' | ')", "false", "false", "0", "0", "0",
+	}},
+	{ViewAuditEvents, "auditEvent", [12]string{
+		"{principal}", "0", "''", "{outcome}", "concat({domain}, '.', {action})",
+		"concat({domain}, ' ', {action}, ' -> ', {outcome}, " +
+			"if({subject} != 0, concat(' subject ', toString({subject})), ''), " +
+			"if({principal} != '', concat(' by ', {principal}, ' (', {principal-by}, ')'), ''), " +
+			"if(length({ref-types}) > 0, concat(' [', arrayStringConcat(arrayMap((rt, rv) -> concat(rt, ':', rv), {ref-types}, {ref-values}), ', '), ']'), ''))",
+		"arrayStringConcat(arrayMap((k, v) -> concat(k, '=', v), {attr-keys}, {attr-values}), ' | ')", "false", "false", "0", "0", "0",
 	}},
 }
 
@@ -959,19 +992,30 @@ func (inst *composer) timeline() (v View, err error) {
 	return View{Name: ViewTimeline, Sql: inst.createView(ViewTimeline, sql), Columns: schema}, nil
 }
 
-// The terminal phases of a dispatched operation (opwire.PhaseE), grouped
-// by what they mean to a reader: it happened, it is waiting on someone, or
-// it did not happen. accepted and running are in flight and in none.
-const (
-	phasesDone    = "('applied', 'rendered', 'completed')"
-	phasesWaiting = "('proposed', 'input_required')"
-	phasesNotDone = "('denied', 'refused', 'rejected', 'stale', 'conflict', 'expired', 'failed', 'cancelled')"
+// The phases of a dispatched operation by what they mean to a reader
+// (opwire.ResultE): it happened, it is waiting on someone, or it did not
+// happen. Accepted and running are in flight and in none. The chat's
+// analytics bucket by the same classification.
+var (
+	phasesDone    = phaseTuple(opwire.ResultDone)
+	phasesWaiting = phaseTuple(opwire.ResultWaiting)
+	phasesNotDone = phaseTuple(opwire.ResultNotDone)
 )
 
-// actionKey is the outcome grouping key. Rows written before ADR-0277
-// carry no dispatcher key (it rode a per-kind membership retired with
-// them); each such row stands alone, keyed `row:<id>`, rather than all of
-// them collapsing into one.
+// phaseTuple is the SQL tuple of the phase names whose result is r.
+func phaseTuple(r opwire.ResultE) (sql string) {
+	phases := opwire.PhasesOf(r)
+	names := make([]string, 0, len(phases))
+	for _, p := range phases {
+		names = append(names, "'"+p.String()+"'")
+	}
+	return "(" + strings.Join(names, ", ") + ")"
+}
+
+// actionKey is the outcome grouping key. A row with no key — a call the
+// dispatcher refused before reading one, a read the coordinator sent
+// without one — stands alone, keyed `row:<id>`, rather than all of them
+// collapsing into one.
 const actionKey = "if({key} = '', concat('row:', toString({id})), {key})"
 
 // The action outcomes aggregate: one row per agent action — per dispatcher
@@ -1055,7 +1099,7 @@ FROM (
     groupUniqArray({app}) AS apps,
     uniqExactIf({turn}, {turn} != '') AS turns,
     countIf({kind} = 'llmCall') AS model_calls,
-    countIf({kind} = 'llmCall' AND {status} IN ('refused', 'incomplete')) AS calls_not_done,
+    countIf({kind} = 'llmCall' AND {status} IN ('refused', 'failed', 'incomplete')) AS calls_not_done,
     sum({tokens-in}) AS tokens_in,
     sum({tokens-out}) AS tokens_out,
     countIf({kind} = 'llmMessage') AS messages,

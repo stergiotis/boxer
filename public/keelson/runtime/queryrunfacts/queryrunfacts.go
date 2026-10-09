@@ -13,14 +13,13 @@ package queryrunfacts
 
 import (
 	"encoding/binary"
-	"encoding/json"
 	"sort"
-	"strings"
 	"time"
 	"unicode/utf8"
 
 	"lukechampine.com/blake3"
 
+	"github.com/stergiotis/boxer/public/db/clickhouse/logcomment"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/dml"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -34,11 +33,15 @@ const KindLabel = "query-run"
 // trim). Interning full texts is deferred to the DimensionStore substrate
 // (ADR-0112); until then a run carries a capped inline copy plus the
 // fingerprints from the log_comment stamp. The extract SQL pre-caps
-// server-side with substring() so oversized texts never cross the wire.
+// server-side with substringUTF8() so oversized texts never cross the wire
+// and a cut never lands inside a character; the cap there counts code
+// points, so the bytes that cross are at most four times it, and the
+// rune-safe trim here makes the byte bound exact.
 const QueryTextCap = 16384
 
 // ExceptionTextCap bounds the inline exception text (bytes, before the
 // rune-safe trim) — ClickHouse exception strings can embed stack traces.
+// Pre-capped server-side the same way as QueryTextCap.
 const ExceptionTextCap = 4096
 
 // IdBand is the reserved deterministic-id band (ADR-0115 SD2): capture
@@ -78,48 +81,12 @@ func (inst Row) Ts() time.Time {
 	return time.UnixMicro(inst.EventUs).UTC()
 }
 
-// Stamp is the client-side identity riding log_comment (ADR-0115 SD7).
-// All fields optional — a stamp is whatever subset the client set; rows
-// without a parseable stamp still capture, just without lifted identity.
-// Producers marshal this struct directly (play's composeLogComment), so
-// the JSON keys are single-sourced with the parser below; omitempty
-// keeps absent fields out of the wire stamp.
-type Stamp struct {
-	RunId string `json:"run_id,omitempty"`
-	App   string `json:"app,omitempty"`
-	// Instance is the window the query was run from (ADR-0191 §SD4), so a
-	// captured run attributes to the same lane as the app-lifecycle row that
-	// opened it. It rides the stamp rather than a separate channel for the
-	// reason the whole stamp does: log_comment is the only field that
-	// survives the round trip through query_log.
-	Instance   uint64 `json:"instance,omitempty"`
-	Lane       string `json:"lane,omitempty"`
-	AuthoredFp string `json:"authored_fp,omitempty"`
-	SentFp     string `json:"sent_fp,omitempty"`
-	ChainFp    string `json:"chain_fp,omitempty"`
-	EnvFp      string `json:"env_fp,omitempty"`
-	// Task, TaskEpoch and TaskCall name the agent task whose work the run
-	// was and the dispatcher's call that caused it (ADR-0277 §SD7), from
-	// the on-behalf-of context of the call; empty for the person's own run.
-	// The captured row carries them on the trail's Delegation slots, so it
-	// joins the action record on (task, call).
-	Task      string `json:"task,omitempty"`
-	TaskEpoch uint64 `json:"task_epoch,omitempty"`
-	TaskCall  string `json:"task_call,omitempty"`
-}
-
-// ParseStamp decodes a log_comment stamp. ok is false when the comment
-// is empty, not JSON, or carries none of the stamp fields.
-func ParseStamp(logComment string) (st Stamp, ok bool) {
-	if logComment == "" || !strings.HasPrefix(strings.TrimSpace(logComment), "{") {
-		return
-	}
-	if json.Unmarshal([]byte(logComment), &st) != nil {
-		st = Stamp{}
-		return
-	}
-	ok = st != Stamp{}
-	return
+// ParseStamp decodes a log_comment stamp (ADR-0115 SD7) in the one wire
+// format its producers share, logcomment.Stamp (ADR-0295 §SD2). Rows without
+// a parseable stamp still capture, just without lifted identity; ok is false
+// when the comment is empty, not JSON, or carries none of the stamp's keys.
+func ParseStamp(logComment string) (st logcomment.Stamp, ok bool) {
+	return logcomment.Parse(logComment)
 }
 
 // DeterministicId derives the fact id from the event's own identity, so

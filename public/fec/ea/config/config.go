@@ -1,10 +1,11 @@
 package config
 
 import (
+	"context"
 	"io"
 
 	"github.com/rs/zerolog/log"
-	cli "github.com/urfave/cli/v2"
+	cli "github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/config"
 	"github.com/stergiotis/boxer/public/ea"
@@ -55,7 +56,7 @@ func (inst *FecConfig) ToCliFlags(nameTransf config.NameTransformFunc, envVarNam
 			Name:     nameTransf("anchorMaxHammingDistPerByteIncl"),
 			Required: false,
 			Value:    uint(inst.AnchorMaxHammingDistPerByteIncl),
-			Action: func(context *cli.Context, u uint) error {
+			Action: func(ctx context.Context, cmd *cli.Command, u uint) error {
 				if u > 24 {
 					return eh.Errorf("out of range: can not have more than 24 bit errors per 24 bits")
 				}
@@ -70,9 +71,9 @@ func (inst *FecConfig) ToCliFlags(nameTransf config.NameTransformFunc, envVarNam
 	}
 }
 
-func (inst *FecConfig) FromContext(nameTransf config.NameTransformFunc, ctx *cli.Context) (nMessages int) {
+func (inst *FecConfig) FromContext(ctx context.Context, nameTransf config.NameTransformFunc, cmd *cli.Command) (nMessages int) {
 	{
-		a, err := AlgorithmResolveFunc(ctx.String(nameTransf("fecAlgorithm")))
+		a, err := AlgorithmResolveFunc(cmd.String(nameTransf("fecAlgorithm")))
 		if err != nil {
 			log.Error().Err(err).Msg("invalid fecAlgorithm")
 			nMessages++
@@ -81,9 +82,9 @@ func (inst *FecConfig) FromContext(nameTransf config.NameTransformFunc, ctx *cli
 			inst.FecAlgorithm = uint16(a)
 		}
 	}
-	inst.NAnchorBytes = uint8(ctx.Uint(nameTransf("nAnchorBytes")))
-	inst.AnchorMaxHammingDistPerByteIncl = uint8(ctx.Uint(nameTransf("anchorMaxHammingDistIncl")))
-	inst.MaxMessageSize = uint32(ctx.Uint(nameTransf("maxMessageSize")))
+	inst.NAnchorBytes = uint8(cmd.Uint(nameTransf("nAnchorBytes")))
+	inst.AnchorMaxHammingDistPerByteIncl = uint8(cmd.Uint(nameTransf("anchorMaxHammingDistIncl")))
+	inst.MaxMessageSize = uint32(cmd.Uint(nameTransf("maxMessageSize")))
 	// Added to, not replaced by: an unresolvable fecAlgorithm is reported here
 	// and zeroed, so Validate — which only range-checks — cannot see it again.
 	return nMessages + inst.Validate(true)
