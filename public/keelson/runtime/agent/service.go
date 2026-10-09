@@ -34,6 +34,12 @@ type Config struct {
 	// (ADR-0269 §SD6 "Test grants"). The host sets it only on the headless
 	// host and only when TestGrantsEnv asks for it.
 	TestGrants bool
+	// Unattended lets the host decide in the person's place (ADR-0298):
+	// grant requests and widenings are approved and suggest-mode proposals
+	// accepted, within the ceiling; a spent budget, a passed deadline and a
+	// consequential command still wait for the person. It takes effect only
+	// in a binary built with the boxer_unattended tag (Unattended).
+	Unattended bool
 	// ModelLocal reports whether the coordinators' model endpoint is local
 	// (ADR-0254 §SD3); confined content reaches only a local one. nil
 	// treats it as remote.
@@ -104,6 +110,10 @@ type Service struct {
 	// events carries what hear queues to the publisher.
 	events     chan wireEvent
 	eventsDone chan struct{}
+
+	// moderation is the moderators' levers and questions (ADR-0300 §SD8,
+	// §SD9).
+	moderation moderation
 }
 
 // NewService subscribes the service. The caller MUST invoke Close.
@@ -139,6 +149,12 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 		err = eh.Errorf("agent: subscribe to closing instances: %w", err)
 		return nil, err
 	}
+	if err = s.subscribeModerate(); err != nil {
+		s.unsub()
+		s.unsubClosed()
+		_ = s.busClient.Close()
+		return nil, err
+	}
 	return
 }
 
@@ -154,6 +170,9 @@ func (inst *Service) Close() {
 		}
 		if inst.unsubClosed != nil {
 			inst.unsubClosed()
+		}
+		if inst.moderation.unsub != nil {
+			inst.moderation.unsub()
 		}
 		close(inst.events)
 		<-inst.eventsDone

@@ -97,6 +97,10 @@ pub struct ImZeroFffiIo<R: std::io::BufRead, W: std::io::Write> {
     /// Set while a capture replay runs (ADR-0281 §SD5): every write and
     /// flush toward the server fails.
     pub capture_replay: bool,
+    /// Deferred blocks read or skipped so far, monotonic. A window tree
+    /// (ADR-0301) compares it with the blocks replayed to say how many
+    /// parts of a message were not drawn.
+    pub deferred_blocks_read: u64,
 }
 impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
     pub fn new(r: R, w: W) -> Self {
@@ -110,6 +114,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
             replay_depth: 0,
             replay_saved_read_bytes_counts: Vec::new(),
             capture_replay: false,
+            deferred_blocks_read: 0,
         }
     }
     pub fn reset_counts(&mut self) {
@@ -159,6 +164,13 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
                 r.buf.len() - r.pos
             }
         }
+    }
+
+    /// The position in the outermost replay's bytes while reading at that
+    /// level, and `None` at any other: a window tree (ADR-0301) places each
+    /// top-level message of a capture replay in the stream it replays.
+    pub fn replay_position(&self) -> Option<usize> {
+        (self.replay_depth == 1).then(|| self.replay_readers[0].pos)
     }
 
     /// Pop the top overlay reader, restoring the previous replay level (or pipe).
@@ -575,6 +587,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
         &mut self,
     ) -> FffiResult<std::collections::HashMap<(u64, u32), Vec<u8>>> {
         let count = self.read_plain_u32()? as usize;
+        self.deferred_blocks_read += count as u64;
         let mut map = std::collections::HashMap::with_capacity(count);
         for _ in 0..count {
             let key_0 = self.read_plain_u64()?;
@@ -603,6 +616,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
         col_count: usize,
     ) -> FffiResult<DenseBlockMap> {
         let count = self.read_plain_u32()? as usize;
+        self.deferred_blocks_read += count as u64;
         let total = num_rows as usize * col_count;
         let mut entries = vec![(0u32, 0u32); total];
         // Pre-size slab: average ~40 bytes per block is a reasonable estimate.
@@ -630,6 +644,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
     /// Skip a deferred block map with key type (u64, u32) without deserializing.
     pub fn skip_deferred_block_map_u64_u32(&mut self) -> FffiResult<()> {
         let count = self.read_plain_u32()? as usize;
+        self.deferred_blocks_read += count as u64;
         for _ in 0..count {
             let _key_0 = self.read_plain_u64()?;
             let _key_1 = self.read_plain_u32()?;
@@ -644,6 +659,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
         &mut self,
     ) -> FffiResult<std::collections::HashMap<(u32, u32), Vec<u8>>> {
         let count = self.read_plain_u32()? as usize;
+        self.deferred_blocks_read += count as u64;
         let mut map = std::collections::HashMap::with_capacity(count);
         for _ in 0..count {
             let key_0 = self.read_plain_u32()?;
@@ -659,6 +675,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
     /// Skip a deferred block map with key type (u32, u32) without deserializing.
     pub fn skip_deferred_block_map_u32_u32(&mut self) -> FffiResult<()> {
         let count = self.read_plain_u32()? as usize;
+        self.deferred_blocks_read += count as u64;
         for _ in 0..count {
             let _key_0 = self.read_plain_u32()?;
             let _key_1 = self.read_plain_u32()?;
@@ -673,6 +690,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
         &mut self,
     ) -> FffiResult<std::collections::HashMap<u32, Vec<u8>>> {
         let count = self.read_plain_u32()? as usize;
+        self.deferred_blocks_read += count as u64;
         let mut map = std::collections::HashMap::with_capacity(count);
         for _ in 0..count {
             let key = self.read_plain_u32()?;
@@ -687,6 +705,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
     /// Skip a deferred block map with key type (u32) without deserializing.
     pub fn skip_deferred_block_map_u32(&mut self) -> FffiResult<()> {
         let count = self.read_plain_u32()? as usize;
+        self.deferred_blocks_read += count as u64;
         for _ in 0..count {
             let _key = self.read_plain_u32()?;
             let buf_len = self.read_plain_u32()? as usize;
@@ -700,6 +719,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
         &mut self,
     ) -> FffiResult<std::collections::HashMap<u64, Vec<u8>>> {
         let count = self.read_plain_u32()? as usize;
+        self.deferred_blocks_read += count as u64;
         let mut map = std::collections::HashMap::with_capacity(count);
         for _ in 0..count {
             let key = self.read_plain_u64()?;
@@ -714,6 +734,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffiIo<R, W> {
     /// Skip a deferred block map with key type (u64) without deserializing.
     pub fn skip_deferred_block_map_u64(&mut self) -> FffiResult<()> {
         let count = self.read_plain_u32()? as usize;
+        self.deferred_blocks_read += count as u64;
         for _ in 0..count {
             let _key = self.read_plain_u64()?;
             let buf_len = self.read_plain_u32()? as usize;

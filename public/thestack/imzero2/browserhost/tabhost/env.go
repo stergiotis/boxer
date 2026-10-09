@@ -18,3 +18,11 @@ var HostURL = env.NewString(env.Spec{
 	Description: "base URL a tab binary's `bundle` fetches the Rust browser host from, as <base><sha256>.wasm checked against the digest in browserhost.sum; point it at a mirror or a local directory server for an offline build",
 	Category:    env.CategoryDev,
 })
+
+// PageOrigin is the origin of the page a tab runs in, which the worker passes
+// so the module can name same-origin resources (ADR-0299 §SD2, proposed).
+var PageOrigin = env.NewString(env.Spec{
+	Name:        "BOXER_TAB_ORIGIN",
+	Description: "the origin of the page a browser tab runs in, set by the tab's worker (ADR-0299, proposed); a tab binary's prepare step resolves same-origin paths against it",
+	Category:    env.CategoryDev,
+})

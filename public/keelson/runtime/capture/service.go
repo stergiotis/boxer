@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"image"
 	"image/png"
 	"io"
@@ -28,6 +29,9 @@ type SourceI interface {
 	// them. recheck is called when the spans are chosen, a frame after the
 	// decision; false fails the render (ADR-0281 §SD4).
 	RenderPixels(windows []uint64, recheck func() bool) (job string, err error)
+	// RenderTree replays the windows' spans like RenderPixels and returns
+	// their window tree (ADR-0301) instead of pixels.
+	RenderTree(windows []uint64, recheck func() bool) (job string, err error)
 	SourceStatus(job string) (r SourceResult, ok bool)
 }
 
@@ -41,6 +45,13 @@ type SourceResult struct {
 	PixelsPerPoint float32
 	// A completed SVG render: the document, held in memory.
 	Svg []byte
+	// A completed tree render: the client's window tree document.
+	Tree []byte
+	// RecordedAt is when the frame a replay drew was recorded.
+	RecordedAt time.Time
+	// Spans says which window each part of a tree render's replayed stream
+	// drew.
+	Spans []SpanWindow
 	// SpansDigest names the stream a pixel render replayed.
 	SpansDigest string
 }
@@ -152,8 +163,12 @@ func (inst *Service) Capture(req Request, facts Facts, recheck func() bool) (id 
 			if h, ok := inst.registry.svg[o.Name]; ok {
 				check = h.Check
 			}
+		case FormatTree:
+			if h, ok := inst.registry.tree[o.Name]; ok {
+				check = h.Check
+			}
 		default:
-			d = deny(d, "a capture is svg or png, not "+string(req.Format))
+			d = deny(d, "a capture is svg, png or tree, not "+string(req.Format))
 			return
 		}
 		if check == nil {
@@ -179,6 +194,8 @@ func (inst *Service) Capture(req Request, facts Facts, recheck func() bool) (id 
 		sourceJob, err = inst.source.RenderPixels(slices.Clone(scope.Windows), recheck)
 	case FormatSvg:
 		sourceJob, err = inst.source.RenderSvg(scope.Windows[0], recheck)
+	case FormatTree:
+		sourceJob, err = inst.source.RenderTree(slices.Clone(scope.Windows), recheck)
 	}
 	if err != nil {
 		return
@@ -273,6 +290,28 @@ func (inst *Service) finishLocked(id string, j *job, r SourceResult) {
 			j.info.Obligations = append(j.info.Obligations, o.String())
 		}
 		out, mediaType = svg, "image/svg+xml"
+	case FormatTree:
+		t, e := ParseTree(r.Tree)
+		if e != nil {
+			fail(e.Error())
+			return
+		}
+		if !r.RecordedAt.IsZero() {
+			t.Taken = r.RecordedAt.UTC().Format(time.RFC3339Nano)
+		}
+		StampWindows(&t, r.Spans)
+		for _, o := range obligations {
+			if e = inst.registry.tree[o.Name].Apply(&t, o); e != nil {
+				fail(o.Name + ": " + e.Error())
+				return
+			}
+			j.info.Obligations = append(j.info.Obligations, o.String())
+		}
+		if out, e = json.Marshal(t); e != nil {
+			fail("tree: " + e.Error())
+			return
+		}
+		mediaType = MediaTypeTree
 	}
 	f, e := seal(inst.dir, out)
 	if e != nil {
@@ -316,8 +355,11 @@ func seal(dir string, b []byte) (f *sealed.File, err error) {
 func sortedByPhase(obligations []Obligation, format FormatE, reg *Registry) (out []Obligation) {
 	out = slices.Clone(obligations)
 	phase := func(o Obligation) PhaseE {
-		if format == FormatPng {
+		switch format {
+		case FormatPng:
 			return reg.pixel[o.Name].Phase()
+		case FormatTree:
+			return reg.tree[o.Name].Phase()
 		}
 		return reg.svg[o.Name].Phase()
 	}

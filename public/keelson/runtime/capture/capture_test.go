@@ -7,6 +7,7 @@ import (
 	"image/png"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,6 +26,10 @@ func (inst *fakeSource) RenderSvg(w uint64, recheck func() bool) (string, error)
 	return "src-1", nil
 }
 func (inst *fakeSource) RenderPixels(ws []uint64, recheck func() bool) (string, error) {
+	inst.rendered = append(inst.rendered, ws)
+	return "src-1", nil
+}
+func (inst *fakeSource) RenderTree(ws []uint64, recheck func() bool) (string, error) {
 	inst.rendered = append(inst.rendered, ws)
 	return "src-1", nil
 }
@@ -172,4 +177,77 @@ func TestAFailedRenderFailsTheCapture(t *testing.T) {
 	st, _ := s.Status(id)
 	assert.Equal(t, opwire.PhaseFailed, st.Phase)
 	assert.Contains(t, st.Reason, "no longer covers")
+}
+
+const treeDoc = `{"v":1,"ops":[{"op":"Window","parent":-1,"rect":[10,20,300,200],"widgets":[{"id":7,"rect":[10,20,300,24],"role":"window","name":"Notes"}]},` +
+	`{"op":"Button","parent":0,"rect":[20,60,40,18],"widgets":[{"id":9,"rect":[20,60,40,18],"role":"button","name":"Save"}]}]}`
+
+func TestATreeCaptureIsOfTheScopesWindowsParsedAndSealed(t *testing.T) {
+	recorded := time.Date(2026, 10, 9, 17, 30, 0, 0, time.UTC)
+	src := &fakeSource{result: SourceResult{Phase: opwire.PhaseCompleted, Tree: []byte(treeDoc), RecordedAt: recorded}}
+	s := NewService(GrantPolicy{}, NewRegistry(), src)
+	s.SetSealedDir(t.TempDir())
+	id, d, err := s.Capture(Request{Windows: []uint64{1, 2}, Format: FormatTree}, covers(1, 2), nil)
+	require.NoError(t, err)
+	require.Equal(t, EffectPermit, d.Effect)
+	assert.Equal(t, [][]uint64{{1, 2}}, src.rendered)
+	st, _ := s.Status(id)
+	require.Equal(t, opwire.PhaseCompleted, st.Phase, st.Reason)
+	b, media, err := s.Bytes(id)
+	require.NoError(t, err)
+	assert.Equal(t, MediaTypeTree, media)
+	tr, err := ParseTree(b)
+	require.NoError(t, err)
+	require.Len(t, tr.Ops, 2)
+	assert.Equal(t, "Save", tr.Ops[1].Widgets[0].Name)
+	assert.Equal(t, 0, tr.Ops[1].Parent)
+	assert.Equal(t, "2026-10-09T17:30:00Z", tr.Taken)
+	info, _ := s.Info(id)
+	assert.Equal(t, []string{"scope@1"}, info.Obligations)
+}
+
+func TestATreeCaptureIsNotCropped(t *testing.T) {
+	src := &fakeSource{}
+	s := NewService(GrantPolicy{}, NewRegistry(), src)
+	crop := image.Rect(0, 0, 1, 1)
+	_, d, _ := s.Capture(Request{Windows: []uint64{1}, Format: FormatTree, Crop: &crop}, covers(1), nil)
+	assert.Equal(t, EffectDeny, d.Effect)
+	assert.Empty(t, src.rendered)
+}
+
+func TestATreeTheClientGotWrongFailsTheCapture(t *testing.T) {
+	for _, doc := range []string{`{"v":2,"ops":[]}`, `{"v":1,"ops":[{"op":"A","parent":0}]}`, `not json`} {
+		src := &fakeSource{result: SourceResult{Phase: opwire.PhaseCompleted, Tree: []byte(doc)}}
+		s := NewService(GrantPolicy{}, NewRegistry(), src)
+		id, _, err := s.Capture(Request{Windows: []uint64{1}, Format: FormatTree}, covers(1), nil)
+		require.NoError(t, err)
+		st, _ := s.Status(id)
+		assert.Equal(t, opwire.PhaseFailed, st.Phase, doc)
+	}
+}
+
+func TestATreesTopLevelRowsAreStampedWithTheirWindows(t *testing.T) {
+	at := func(v int) *int { return &v }
+	tr := Tree{V: TreeVersion, Ops: []TreeOp{
+		{Op: "Window", Parent: -1, At: at(8)},
+		{Op: "Button", Parent: 0},
+		{Op: "Window", Parent: -1, At: at(130)},
+		{Op: "Window", Parent: -1, At: at(900)},
+	}}
+	StampWindows(&tr, []SpanWindow{
+		{Window: 7, Begin: 0, End: 100, Rect: [4]float32{10, 20, 300, 200}},
+		{Window: 9, Begin: 100, End: 400, Rect: [4]float32{400, 20, 300, 200}},
+	})
+	for _, op := range tr.Ops {
+		assert.Nil(t, op.At, "no stream offset leaves the capture service")
+	}
+	w, r, ok := tr.WindowOf(1)
+	require.True(t, ok)
+	assert.Equal(t, uint64(7), w)
+	assert.Equal(t, [4]float32{10, 20, 300, 200}, r)
+	w, _, ok = tr.WindowOf(2)
+	require.True(t, ok)
+	assert.Equal(t, uint64(9), w)
+	_, _, ok = tr.WindowOf(3)
+	assert.False(t, ok, "an offset outside every span names no window")
 }

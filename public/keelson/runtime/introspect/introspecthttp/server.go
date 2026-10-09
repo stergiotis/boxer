@@ -94,6 +94,18 @@ type MacroRunnerI interface {
 	ResolvesMacros()
 }
 
+// SettingsRunnerI is a QueryRunner that is also handed the request's
+// query-string settings — every key that is not the statement, a param_* or
+// query_id, with its last value — and answers for them itself: a runner
+// that answers without ClickHouse must refuse a setting that would change
+// its result rather than drop it, as the dialect's tolerance does for a
+// runner that is not one (ADR-0290 §SD4). The trivial evaluator's Runner is
+// one.
+type SettingsRunnerI interface {
+	QueryRunner
+	RunSQLSettings(ctx context.Context, sql string, params map[string]string, settings map[string]string) ([]byte, error)
+}
+
 // MacroRunnerFunc adapts a function to MacroRunnerI.
 type MacroRunnerFunc func(ctx context.Context, sql string, params map[string]string) ([]byte, error)
 
@@ -342,7 +354,24 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	start := time.Now()
-	body, err := s.runner.RunSQL(r.Context(), rewritten, req.Params)
+	var body []byte
+	contentType := chhttp.ContentTypeForStatement(rewritten)
+	if sr, takes := s.runner.(SettingsRunnerI); takes {
+		settings := make(map[string]string, len(req.Ignored))
+		q := r.URL.Query()
+		for _, key := range req.Ignored {
+			v := q[key]
+			settings[key] = v[len(v)-1]
+		}
+		if df := settings["default_format"]; df != "" && contentType == "application/octet-stream" {
+			// No FORMAT clause this endpoint knows, so default_format names
+			// the format the runner answers in, or the runner refuses.
+			contentType = chhttp.ContentTypeForStatement("FORMAT " + df)
+		}
+		body, err = sr.RunSQLSettings(r.Context(), rewritten, req.Params, settings)
+	} else {
+		body, err = s.runner.RunSQL(r.Context(), rewritten, req.Params)
+	}
 	if err != nil {
 		s.log.Warn().Err(err).Str("queryId", req.QueryID).Msg("introspecthttp: /query failed")
 		// The broker error carries clickhouse-local's stderr, whose
@@ -356,7 +385,7 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 		ResultBytes: uint64(len(body)),
 		Elapsed:     time.Since(start),
 	})
-	w.Header().Set("Content-Type", chhttp.ContentTypeForStatement(rewritten))
+	w.Header().Set("Content-Type", contentType)
 	_, _ = w.Write(body)
 }
 

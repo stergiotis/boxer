@@ -45,18 +45,21 @@ type SvgHandlerI interface {
 type Registry struct {
 	pixel map[string]PixelHandlerI
 	svg   map[string]SvgHandlerI
+	tree  map[string]TreeHandlerI
 }
 
 // NewRegistry returns a registry with the scope handlers.
 func NewRegistry() (inst *Registry) {
-	inst = &Registry{pixel: map[string]PixelHandlerI{}, svg: map[string]SvgHandlerI{}}
+	inst = &Registry{pixel: map[string]PixelHandlerI{}, svg: map[string]SvgHandlerI{}, tree: map[string]TreeHandlerI{}}
 	inst.RegisterPixel(ObligationScope, scopePixels{})
 	inst.RegisterSvg(ObligationScope, scopeSvg{})
+	inst.RegisterTree(ObligationScope, scopeTree{})
 	return
 }
 
 func (inst *Registry) RegisterPixel(name string, h PixelHandlerI) { inst.pixel[name] = h }
 func (inst *Registry) RegisterSvg(name string, h SvgHandlerI)     { inst.svg[name] = h }
+func (inst *Registry) RegisterTree(name string, h TreeHandlerI)   { inst.tree[name] = h }
 
 // scopePixels: the windows are chosen before rendering (the source draws
 // only the scope's windows); the crop is applied after.

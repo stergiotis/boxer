@@ -8,6 +8,7 @@ import (
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
+	"github.com/stergiotis/boxer/public/keelson/runtime/llm/ration"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
@@ -74,6 +75,15 @@ type CallRecord struct {
 	HistoryHash  string
 	OmitFrom     int
 	OmitTo       int
+	// CachedInputTokens and ReasoningTokens are the provider's breakdown,
+	// absent when it reports none. Admission, AdmissionRule and Queued are
+	// how the metering rules decided the call (ADR-0300 §SD5); Admission is
+	// empty on a call refused before admission ran.
+	CachedInputTokens option.Option[int32]
+	ReasoningTokens   option.Option[int32]
+	Admission         string
+	AdmissionRule     string
+	Queued            time.Duration
 }
 
 // contextOf is the trail context of a call: its origin, and the
@@ -262,6 +272,16 @@ func RowOf(rec CallRecord, kept bool) (row trail.LlmCall) {
 	if rec.OmitTo > 0 {
 		row.OmitFrom, row.OmitTo = option.Some(uint32(max(rec.OmitFrom, 0))), option.Some(uint32(rec.OmitTo))
 	}
+	if rec.CachedInputTokens.Has {
+		row.CachedInputTokens = option.Some(uint32(max(rec.CachedInputTokens.Val, 0)))
+	}
+	if rec.ReasoningTokens.Has {
+		row.ReasoningTokens = option.Some(uint32(max(rec.ReasoningTokens.Val, 0)))
+	}
+	if rec.Admission != "" {
+		row.Admission, row.AdmissionRule = option.Some(rec.Admission), some(rec.AdmissionRule)
+		row.QueuedMs = option.Some(uint64(max(rec.Queued.Milliseconds(), 0)))
+	}
 	return
 }
 
@@ -270,10 +290,28 @@ type CallsI interface {
 	Calls() []CallRecord
 }
 
-// RegisterIntrospect registers keelson('llm_calls') over calls; nil
-// leaves the table empty rather than absent.
+// LedgerI is the read side of the usage tables (ADR-0300 §SD3); the
+// service implements it beside CallsI.
+type LedgerI interface {
+	Ledger() *ration.Ledger
+}
+
+// RegisterIntrospect registers keelson('llm_calls') over calls, and
+// keelson('llm_usage') and keelson('llm_rations') over its ledger when
+// calls also implements LedgerI; nil leaves the tables empty rather than
+// absent.
 func RegisterIntrospect(reg *introspect.Registry, calls CallsI) (err error) {
-	return reg.Register(callsProvider{calls: calls})
+	if err = reg.Register(callsProvider{calls: calls}); err != nil {
+		return
+	}
+	var ledger *ration.Ledger
+	if l, ok := calls.(LedgerI); ok && l != nil {
+		ledger = l.Ledger()
+	}
+	if err = reg.Register(usageProvider{ledger: ledger}); err != nil {
+		return
+	}
+	return reg.Register(rationsProvider{ledger: ledger})
 }
 
 type callsProvider struct{ calls CallsI }
@@ -331,7 +369,20 @@ func callsTable(rows []CallRecord) *introspect.Table {
 		Bool("kept", func(i int) bool { return rows[i].Kept }).
 		Int64("messages_from", func(i int) int64 { return int64(rows[i].MessagesFrom) }).
 		Int64("omit_from", func(i int) int64 { return int64(rows[i].OmitFrom) }).
-		Int64("omit_to", func(i int) int64 { return int64(rows[i].OmitTo) })
+		Int64("omit_to", func(i int) int64 { return int64(rows[i].OmitTo) }).
+		Int64("cached_input_tokens", func(i int) int64 { return optionalCount(rows[i].CachedInputTokens) }).
+		Int64("reasoning_tokens", func(i int) int64 { return optionalCount(rows[i].ReasoningTokens) }).
+		String("admission", func(i int) string { return rows[i].Admission }).
+		String("admission_rule", func(i int) string { return rows[i].AdmissionRule }).
+		Int64("queued_ms", func(i int) int64 { return rows[i].Queued.Milliseconds() })
+}
+
+// optionalCount is a count a provider may not report, -1 when it did not.
+func optionalCount(o option.Option[int32]) (n int64) {
+	if !o.Has {
+		return -1
+	}
+	return int64(o.Val)
 }
 
 func sensitivityName(s queryengine.SensitivityE) (name string) {

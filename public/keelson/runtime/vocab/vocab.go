@@ -537,6 +537,15 @@ var (
 	MembAuditEventRefValues   = NkRegistry.MustBegin("auditEventRefValues", 301).End()
 	MembAuditEventAttrKeys    = NkRegistry.MustBegin("auditEventAttrKeys", 302).End()
 	MembAuditEventAttrValues  = NkRegistry.MustBegin("auditEventAttrValues", 303).End()
+	// What the model call adds for metering and admission (ADR-0300 §SD2,
+	// §SD5): the cached and reasoning parts of its tokens as the provider
+	// reports them, how the rules admitted it, the rule that decided, and
+	// how long it waited in the queue.
+	MembLlmCallCachedInputTokens = NkRegistry.MustBegin("llmCallCachedInputTokens", 304).End()
+	MembLlmCallReasoningTokens   = NkRegistry.MustBegin("llmCallReasoningTokens", 305).End()
+	MembLlmCallAdmission         = NkRegistry.MustBegin("llmCallAdmission", 306).End()
+	MembLlmCallAdmissionRule     = NkRegistry.MustBegin("llmCallAdmissionRule", 307).End()
+	MembLlmCallQueuedMs          = NkRegistry.MustBegin("llmCallQueuedMs", 308).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -609,4 +618,6 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembAuditEventPrincipal, MembAuditEventPrincipalBy, MembAuditEventPurpose, MembAuditEventNode,
 	MembAuditEventSubject, MembAuditEventRetention, MembAuditEventRefTypes, MembAuditEventRefValues,
 	MembAuditEventAttrKeys, MembAuditEventAttrValues,
+	MembLlmCallCachedInputTokens, MembLlmCallReasoningTokens, MembLlmCallAdmission, MembLlmCallAdmissionRule,
+	MembLlmCallQueuedMs,
 }

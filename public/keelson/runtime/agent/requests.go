@@ -225,8 +225,22 @@ func (inst *Service) requestGrant(msg *app.Msg) (rep wireGrantReply) {
 	inst.mu.Lock()
 	inst.requests[r.key] = r
 	inst.requestOrder = append(inst.requestOrder, r.key)
-	inst.mu.Unlock()
+	var route *held
+	if inst.autoDecides(r) {
+		// Unattended (ADR-0298): the host approves in the person's place;
+		// the coordinator's status poll finds the request approved.
+		route = inst.autoApprove(r)
+	}
 	rep.Ok, rep.Key, rep.Phase = true, r.key, r.state.String()
+	if r.state == reqStateApproved && r.task != nil {
+		// Decided in the person's place: the coordinator has its grant
+		// without polling for it.
+		rep.Task, rep.Handle, rep.Unattended = r.task.id, r.task.handle, true
+	}
+	inst.mu.Unlock()
+	if route != nil {
+		inst.routeHeld(route)
+	}
 	return
 }
 
@@ -275,9 +289,10 @@ func (inst *Service) expireRequest(r *request) {
 }
 
 // holdForWidening turns a call outside the grant into a widening the
-// person decides; the call stays input_required until then. The caller
-// holds mu.
-func (inst *Service) holdForWidening(t *task, rec *callRec, req wireCall, need needE, mode ModeE) {
+// person decides; the call stays input_required until then. route is the
+// held call when the host approved it in the person's place, for the caller
+// to route after releasing mu. The caller holds mu.
+func (inst *Service) holdForWidening(t *task, rec *callRec, req wireCall, need needE, mode ModeE) (route *held) {
 	r := &request{key: "req-" + randomHex(8), actor: t.actor, actorInstance: t.actorInstance, task: t,
 		plan: req.Reason, wanted: map[uint64]ModeE{req.Instance: mode}, wantedOps: map[uint64][]string{},
 		created: time.Now(), share: map[uint64]bool{req.Instance: true}, shareFlag: make(map[uint64]*bool),
@@ -291,6 +306,12 @@ func (inst *Service) holdForWidening(t *task, rec *callRec, req wireCall, need n
 	inst.grantEvent(trail.GrantEventRequested, "coordinator", "a call outside the grant: "+req.Operation, nil, r)
 	inst.requests[r.key] = r
 	inst.requestOrder = append(inst.requestOrder, r.key)
+	if inst.autoDecides(r) {
+		// Unattended (ADR-0298): approved in the person's place. The
+		// caller routes the call once it has answered it as held.
+		route = inst.autoApprove(r)
+	}
+	return
 }
 
 // pending lists the undecided requests, oldest first, expiring stale ones.
@@ -330,6 +351,12 @@ func (inst *Service) testWiden(r *request) (rep wireGrantReply) {
 // approve applies the person's decision. The caller holds mu; a held call
 // is routed after it is released.
 func (inst *Service) approve(r *request) (route *held) {
+	return inst.approveAs(r, inst.decider(), "")
+}
+
+// approveAs is approve with who decided and why, as the grant event
+// records them. The caller holds mu.
+func (inst *Service) approveAs(r *request, decidedBy string, reason string) (route *held) {
 	if r.state != reqStatePending {
 		return
 	}
@@ -387,7 +414,7 @@ func (inst *Service) approve(r *request) (route *held) {
 		t.desktop = r.desktop
 	}
 	r.state = reqStateApproved
-	inst.grantEvent(event, inst.decider(), "", t, r)
+	inst.grantEvent(event, decidedBy, reason, t, r)
 	route = r.held
 	return
 }
@@ -431,21 +458,43 @@ func (inst *Service) routeHeld(h *held) {
 			inst.mu.Unlock()
 			return
 		}
-		out, spec, e, _, _, consent := inst.check(t, h.req)
+		out, spec, e, need, mode, consent := inst.check(t, h.req)
 		h.rec.spec, h.rec.consent = spec, consent
+		if time.Now().After(t.deadline) {
+			// The deadline passed between the approval and this re-check:
+			// the call waits for more time, as it would in call.
+			out, need, mode = pastDeadline(t, e, out, need, mode)
+		}
+		// Unattended (ADR-0298): accepted on arrival, as in call.
+		out, _ = inst.acceptOnArrival(t, h.rec, out)
 		if out.Phase == opwire.PhaseProposed {
 			h.rec.req, h.rec.entry = h.req, e
 			h.rec.proposal = &proposal{confirm: spec.Effect == app.OperationEffectConsequential && consent == "",
 				expects: inst.expectsFor(t, h.req, spec)}
 		}
+		var again *held
+		if out.Phase == opwire.PhaseInputRequired && need != 0 && !t.test {
+			// The widening let the call further, and it needs another — a
+			// spent budget, say: the person is asked for that one too,
+			// rather than the call ending on a question nobody saw.
+			again = inst.holdForWidening(t, h.rec, h.req, need, mode)
+		}
 		if out.Phase != opwire.PhaseUnspecified {
 			h.rec.outcome = out
 			inst.mu.Unlock()
 			inst.record(t, h.rec, "dispatch", out)
+			if again != nil {
+				inst.routeHeld(again)
+			}
 			return
 		}
 		t.callsUsed++
 		inst.mu.Unlock()
+		if spec.Effect != app.OperationEffectNone {
+			// A change the person can see, paced as in call: an approval
+			// in the person's place takes no time of its own.
+			inst.pace(t)
+		}
 		inst.route(t, h.rec, h.req, spec, e)
 	}()
 }

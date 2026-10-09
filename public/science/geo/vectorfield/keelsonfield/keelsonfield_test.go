@@ -28,7 +28,8 @@ func TestRegister_TheFamilyAndItsOptions(t *testing.T) {
 
 	body, err = trivialsql.Run(context.Background(), reg, "SELECT * FROM keelson('storm_steps', cap = 2)", nil)
 	require.NoError(t, err)
-	assert.Equal(t, "2026-03-01 00:00:00\t1772323200000\tDateTime('UTC')\t16380\n2026-03-01 01:00:00\t1772326800000\tDateTime('UTC')\t16380\n", string(body))
+	// TabSeparated escapes a quote, as ClickHouse writes it.
+	assert.Equal(t, "2026-03-01 00:00:00\t1772323200000\tDateTime(\\'UTC\\')\t16380\n2026-03-01 01:00:00\t1772326800000\tDateTime(\\'UTC\\')\t16380\n", string(body))
 }
 
 func TestRegister_Refusals(t *testing.T) {

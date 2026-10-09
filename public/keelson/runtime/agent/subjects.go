@@ -147,12 +147,25 @@ var TestGrantsEnv = env.NewBool(env.Spec{
 	Category:    env.CategoryDev,
 })
 
+// UnattendedEnv turns the unattended mode on (ADR-0298): the host decides
+// grant requests, widenings and suggest-mode proposals in the person's
+// place, inside the ceiling and the call budget and deadline knobs. It is
+// honoured only by a binary built with the boxer_unattended tag
+// (Unattended).
+var UnattendedEnv = env.NewBool(env.Spec{
+	Name:        "BOXER_AGENT_UNATTENDED",
+	Default:     "false",
+	Description: "turn on the unattended mode (ADR-0298): the host approves runtime.agent grant requests and widenings and accepts suggest-mode proposals in the person's place, within the coordinator's ceiling, BOXER_AGENT_CALLS_MAX and BOXER_AGENT_DEADLINE; a spent budget, a passed deadline and a consequential command still wait for the person; honoured only by a binary built with the boxer_unattended tag",
+	Category:    env.CategoryDev,
+})
+
 // ServiceCaps is what the host's service holds.
 func ServiceCaps() (caps []app.SubjectFilter) {
 	caps = []app.SubjectFilter{
 		{Pattern: SubjectAll, Direction: app.CapDirectionSub, Reason: "agent: serve runtime.agent requests"},
 		{Pattern: opwire.Pattern, Direction: app.CapDirectionPub, Reason: "agent: call operations of instances"},
 		{Pattern: app.SubjectInstanceClosed, Direction: app.CapDirectionSub, Reason: "agent: end a task when its coordinator closes"},
+		{Pattern: SubjectModerateAll, Direction: app.CapDirectionSub, Reason: "agent: serve the moderators' stop and lower-ceiling requests (ADR-0300 §SD8)"},
 		{Pattern: SubjectEvents, Direction: app.CapDirectionPub, Reason: "agent: announce a task's events"},
 		{Pattern: inprocbus.InboxPrefix + ">", Direction: app.CapDirectionPub, Reason: "agent: reply to inboxes"},
 	}

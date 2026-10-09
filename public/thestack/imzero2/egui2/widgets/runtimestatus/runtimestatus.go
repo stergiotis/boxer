@@ -5,7 +5,7 @@
 //
 // Layout (monospace, fixed-ish column widths):
 //
-//	run:XXXXXXXX  facts:ch  bus ✓  fs ✓  persist:mem
+//	run:XXXXXXXX  facts:ch  bus ✓  fs ✓  persist:mem  [unattended]
 //
 // Green ✓ = active, red ✗ = unavailable. The "facts" segment shows
 // "ch" when the chstore live connection succeeded and "mem" when the
@@ -88,7 +88,23 @@ type Snapshot struct {
 	// different questions — this one says which code path app state took,
 	// FactsBackend says whether that path reaches ClickHouse.
 	PersistBackend string
+	// Unattended is the state of the agent service's unattended mode
+	// (ADR-0298). It is the one segment that is not process-static: the
+	// host sets it once the service has started.
+	Unattended UnattendedE
 }
+
+// UnattendedE is the unattended mode as the bar shows it.
+type UnattendedE uint8
+
+const (
+	// UnattendedAbsent is a binary built without the mode: no segment.
+	UnattendedAbsent UnattendedE = iota
+	// UnattendedOff is a binary built with the mode, which is off.
+	UnattendedOff
+	// UnattendedOn is the host deciding in the person's place.
+	UnattendedOn
+)
 
 // Render draws the snapshot as a single horizontal row of mono labels.
 // Designed to nest inside a c.Horizontal()/MenuBar — does not open its own
@@ -127,6 +143,21 @@ func (in Input) render(ids *c.WidgetIdStack, res *Result) {
 		renderStatusSegment(ids, "persist", false, CapPersist, res)
 	} else {
 		renderSegment(ids, "persist:"+s.PersistBackend, CapPersist, res)
+	}
+	switch s.Unattended {
+	case UnattendedOff:
+		monoSpacer()
+		monoLabel("unattended:off")
+	case UnattendedOn:
+		// Never a SelectableLabel, so not clickable: it takes plain text
+		// only (see renderStatusSegment), and the warning keeps its tone in
+		// a clickable row. The words carry the state without the tone
+		// (ADR-0031 §SD5).
+		monoSpacer()
+		col := color.Hex(styletokens.WarningDefault.AsHex())
+		c.LabelAtoms(c.Atoms().
+			BeginRichTextColored(col, color.Transparent, icons.PhWarning+" UNATTENDED — agents act without asking").Monospace().Strong().End().
+			Keep()).Send()
 	}
 }
 

@@ -13,34 +13,39 @@ import (
 // --- Caller-assigned membership ids (registry-stable target). ---
 
 const (
-	kindRuntimeKindLlmCall     uint64 = 9223372049739677798
-	kindLlmCallId              uint64 = 9223372049739677799
-	kindLlmCallParent          uint64 = 9223372049739677847
-	kindLlmCallPurpose         uint64 = 9223372049739677802
-	kindLlmCallSensitivity     uint64 = 9223372049739677803
-	kindLlmCallModel           uint64 = 9223372049739677804
-	kindLlmCallEndpointHost    uint64 = 9223372049739677805
-	kindLlmCallReportedModel   uint64 = 9223372049739677894
-	kindLlmCallProviderId      uint64 = 9223372049739677893
-	kindLlmCallMessages        uint64 = 9223372049739677806
-	kindLlmCallTools           uint64 = 9223372049739677807
-	kindLlmCallToolsDigest     uint64 = 9223372049739677895
-	kindLlmCallMaxTokens       uint64 = 9223372049739677896
-	kindLlmCallPromptBytes     uint64 = 9223372049739677808
-	kindLlmCallCompletionBytes uint64 = 9223372049739677809
-	kindLlmCallInputTokens     uint64 = 9223372049739677810
-	kindLlmCallOutputTokens    uint64 = 9223372049739677811
-	kindLlmCallToolCalls       uint64 = 9223372049739677812
-	kindLlmCallFinishReason    uint64 = 9223372049739677813
-	kindLlmCallElapsedMs       uint64 = 9223372049739677814
-	kindLlmCallIncomplete      uint64 = 9223372049739677815
-	kindLlmCallRefused         uint64 = 9223372049739677816
-	kindLlmCallError           uint64 = 9223372049739677817
-	kindLlmCallRetention       uint64 = 9223372049739677892
-	kindLlmCallRetainedFrom    uint64 = 9223372049739677848
-	kindLlmCallHistoryHash     uint64 = 9223372049739677849
-	kindLlmCallOmitFrom        uint64 = 9223372049739677862
-	kindLlmCallOmitTo          uint64 = 9223372049739677863
+	kindRuntimeKindLlmCall       uint64 = 9223372049739677798
+	kindLlmCallId                uint64 = 9223372049739677799
+	kindLlmCallParent            uint64 = 9223372049739677847
+	kindLlmCallPurpose           uint64 = 9223372049739677802
+	kindLlmCallSensitivity       uint64 = 9223372049739677803
+	kindLlmCallModel             uint64 = 9223372049739677804
+	kindLlmCallEndpointHost      uint64 = 9223372049739677805
+	kindLlmCallReportedModel     uint64 = 9223372049739677894
+	kindLlmCallProviderId        uint64 = 9223372049739677893
+	kindLlmCallMessages          uint64 = 9223372049739677806
+	kindLlmCallTools             uint64 = 9223372049739677807
+	kindLlmCallToolsDigest       uint64 = 9223372049739677895
+	kindLlmCallMaxTokens         uint64 = 9223372049739677896
+	kindLlmCallPromptBytes       uint64 = 9223372049739677808
+	kindLlmCallCompletionBytes   uint64 = 9223372049739677809
+	kindLlmCallInputTokens       uint64 = 9223372049739677810
+	kindLlmCallOutputTokens      uint64 = 9223372049739677811
+	kindLlmCallToolCalls         uint64 = 9223372049739677812
+	kindLlmCallFinishReason      uint64 = 9223372049739677813
+	kindLlmCallElapsedMs         uint64 = 9223372049739677814
+	kindLlmCallIncomplete        uint64 = 9223372049739677815
+	kindLlmCallRefused           uint64 = 9223372049739677816
+	kindLlmCallError             uint64 = 9223372049739677817
+	kindLlmCallRetention         uint64 = 9223372049739677892
+	kindLlmCallRetainedFrom      uint64 = 9223372049739677848
+	kindLlmCallHistoryHash       uint64 = 9223372049739677849
+	kindLlmCallOmitFrom          uint64 = 9223372049739677862
+	kindLlmCallOmitTo            uint64 = 9223372049739677863
+	kindLlmCallCachedInputTokens uint64 = 9223372049739678000
+	kindLlmCallReasoningTokens   uint64 = 9223372049739678001
+	kindLlmCallAdmission         uint64 = 9223372049739678002
+	kindLlmCallAdmissionRule     uint64 = 9223372049739678003
+	kindLlmCallQueuedMs          uint64 = 9223372049739678004
 )
 
 // llmCallSymbolAttrI is the InAttr-side view of the symbol section. P-variants only —
@@ -182,6 +187,16 @@ func llmCallEmitSectionSymbol[
 	symbolSecAttr_Retention := symbolSec.BeginAttribute(row.Retention)
 	symbolSecAttr_Retention.AddMembershipLowCardRefP(kindLlmCallRetention)
 	symbolSecAttr_Retention.EndAttributeP()
+	if row.Admission.Has {
+		symbolSecAttr_Admission := symbolSec.BeginAttribute(row.Admission.Val)
+		symbolSecAttr_Admission.AddMembershipLowCardRefP(kindLlmCallAdmission)
+		symbolSecAttr_Admission.EndAttributeP()
+	}
+	if row.AdmissionRule.Has {
+		symbolSecAttr_AdmissionRule := symbolSec.BeginAttribute(row.AdmissionRule.Val)
+		symbolSecAttr_AdmissionRule.AddMembershipLowCardRefP(kindLlmCallAdmissionRule)
+		symbolSecAttr_AdmissionRule.EndAttributeP()
+	}
 	return
 }
 
@@ -266,6 +281,16 @@ func llmCallEmitSectionU32Array[
 		u32ArraySecAttr_OmitTo.AddMembershipLowCardRefP(kindLlmCallOmitTo)
 		u32ArraySecAttr_OmitTo.EndAttributeP()
 	}
+	if row.CachedInputTokens.Has {
+		u32ArraySecAttr_CachedInputTokens := u32ArraySec.BeginAttributeSingle(row.CachedInputTokens.Val)
+		u32ArraySecAttr_CachedInputTokens.AddMembershipLowCardRefP(kindLlmCallCachedInputTokens)
+		u32ArraySecAttr_CachedInputTokens.EndAttributeP()
+	}
+	if row.ReasoningTokens.Has {
+		u32ArraySecAttr_ReasoningTokens := u32ArraySec.BeginAttributeSingle(row.ReasoningTokens.Val)
+		u32ArraySecAttr_ReasoningTokens.AddMembershipLowCardRefP(kindLlmCallReasoningTokens)
+		u32ArraySecAttr_ReasoningTokens.EndAttributeP()
+	}
 	return
 }
 
@@ -287,6 +312,11 @@ func llmCallEmitSectionU64Array[
 	u64ArraySecAttr_ElapsedMs := u64ArraySec.BeginAttributeSingle(row.ElapsedMs)
 	u64ArraySecAttr_ElapsedMs.AddMembershipLowCardRefP(kindLlmCallElapsedMs)
 	u64ArraySecAttr_ElapsedMs.EndAttributeP()
+	if row.QueuedMs.Has {
+		u64ArraySecAttr_QueuedMs := u64ArraySec.BeginAttributeSingle(row.QueuedMs.Val)
+		u64ArraySecAttr_QueuedMs.AddMembershipLowCardRefP(kindLlmCallQueuedMs)
+		u64ArraySecAttr_QueuedMs.EndAttributeP()
+	}
 	return
 }
 
@@ -483,6 +513,12 @@ func llmCallReadRow[
 	var symbolRetentionVal string
 	var symbolRetentionCount int
 	var symbolRetentionLastAttr int64
+	var symbolAdmissionVal string
+	var symbolAdmissionCount int
+	var symbolAdmissionLastAttr int64
+	var symbolAdmissionRuleVal string
+	var symbolAdmissionRuleCount int
+	var symbolAdmissionRuleLastAttr int64
 	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -543,6 +579,20 @@ func llmCallReadRow[
 				}
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolRetentionVal = val
+			case kindLlmCallAdmission:
+				if symbolAdmissionLastAttr != attrJ+1 {
+					symbolAdmissionLastAttr = attrJ + 1
+					symbolAdmissionCount++
+				}
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolAdmissionVal = val
+			case kindLlmCallAdmissionRule:
+				if symbolAdmissionRuleLastAttr != attrJ+1 {
+					symbolAdmissionRuleLastAttr = attrJ + 1
+					symbolAdmissionRuleCount++
+				}
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolAdmissionRuleVal = val
 			}
 		}
 	}
@@ -609,6 +659,24 @@ func llmCallReadRow[
 	}
 	if symbolRetentionCount == 1 {
 		row.Retention = symbolRetentionVal
+		present = true
+	}
+	if symbolAdmissionCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "llmCallAdmission").Int("got", symbolAdmissionCount).Errorf("slot symbol@llmCallAdmission (field Admission) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolAdmissionCount)
+		return
+	}
+	if symbolAdmissionCount == 1 {
+		row.Admission.Val = symbolAdmissionVal
+		row.Admission.Has = true
+		present = true
+	}
+	if symbolAdmissionRuleCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "llmCallAdmissionRule").Int("got", symbolAdmissionRuleCount).Errorf("slot symbol@llmCallAdmissionRule (field AdmissionRule) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolAdmissionRuleCount)
+		return
+	}
+	if symbolAdmissionRuleCount == 1 {
+		row.AdmissionRule.Val = symbolAdmissionRuleVal
+		row.AdmissionRule.Has = true
 		present = true
 	}
 	// --- stringArray. ---
@@ -779,6 +847,12 @@ func llmCallReadRow[
 	var u32ArrayOmitToVal uint32
 	var u32ArrayOmitToCount int
 	var u32ArrayOmitToLastAttr int64
+	var u32ArrayCachedInputTokensVal uint32
+	var u32ArrayCachedInputTokensCount int
+	var u32ArrayCachedInputTokensLastAttr int64
+	var u32ArrayReasoningTokensVal uint32
+	var u32ArrayReasoningTokensCount int
+	var u32ArrayReasoningTokensLastAttr int64
 	nu32Array := u32ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nu32Array; attrJ++ {
 		for membID := range u32ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -882,6 +956,28 @@ func llmCallReadRow[
 					return
 				}
 				u32ArrayOmitToVal = val
+			case kindLlmCallCachedInputTokens:
+				if u32ArrayCachedInputTokensLastAttr != attrJ+1 {
+					u32ArrayCachedInputTokensLastAttr = attrJ + 1
+					u32ArrayCachedInputTokensCount++
+				}
+				val, valErr := u32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "llmCallCachedInputTokens").Str("field", "CachedInputTokens").Errorf("slot u32Array@llmCallCachedInputTokens (field CachedInputTokens) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				u32ArrayCachedInputTokensVal = val
+			case kindLlmCallReasoningTokens:
+				if u32ArrayReasoningTokensLastAttr != attrJ+1 {
+					u32ArrayReasoningTokensLastAttr = attrJ + 1
+					u32ArrayReasoningTokensCount++
+				}
+				val, valErr := u32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "llmCallReasoningTokens").Str("field", "ReasoningTokens").Errorf("slot u32Array@llmCallReasoningTokens (field ReasoningTokens) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				u32ArrayReasoningTokensVal = val
 			}
 		}
 	}
@@ -959,6 +1055,24 @@ func llmCallReadRow[
 		row.OmitTo.Has = true
 		present = true
 	}
+	if u32ArrayCachedInputTokensCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "llmCallCachedInputTokens").Int("got", u32ArrayCachedInputTokensCount).Errorf("slot u32Array@llmCallCachedInputTokens (field CachedInputTokens) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u32ArrayCachedInputTokensCount)
+		return
+	}
+	if u32ArrayCachedInputTokensCount == 1 {
+		row.CachedInputTokens.Val = u32ArrayCachedInputTokensVal
+		row.CachedInputTokens.Has = true
+		present = true
+	}
+	if u32ArrayReasoningTokensCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "llmCallReasoningTokens").Int("got", u32ArrayReasoningTokensCount).Errorf("slot u32Array@llmCallReasoningTokens (field ReasoningTokens) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u32ArrayReasoningTokensCount)
+		return
+	}
+	if u32ArrayReasoningTokensCount == 1 {
+		row.ReasoningTokens.Val = u32ArrayReasoningTokensVal
+		row.ReasoningTokens.Has = true
+		present = true
+	}
 	// --- u64Array. ---
 	var u64ArrayPromptBytesVal uint64
 	var u64ArrayPromptBytesCount int
@@ -969,6 +1083,9 @@ func llmCallReadRow[
 	var u64ArrayElapsedMsVal uint64
 	var u64ArrayElapsedMsCount int
 	var u64ArrayElapsedMsLastAttr int64
+	var u64ArrayQueuedMsVal uint64
+	var u64ArrayQueuedMsCount int
+	var u64ArrayQueuedMsLastAttr int64
 	nu64Array := u64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
 		for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -1006,6 +1123,17 @@ func llmCallReadRow[
 					return
 				}
 				u64ArrayElapsedMsVal = val
+			case kindLlmCallQueuedMs:
+				if u64ArrayQueuedMsLastAttr != attrJ+1 {
+					u64ArrayQueuedMsLastAttr = attrJ + 1
+					u64ArrayQueuedMsCount++
+				}
+				val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "llmCallQueuedMs").Str("field", "QueuedMs").Errorf("slot u64Array@llmCallQueuedMs (field QueuedMs) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				u64ArrayQueuedMsVal = val
 			}
 		}
 	}
@@ -1031,6 +1159,15 @@ func llmCallReadRow[
 	}
 	if u64ArrayElapsedMsCount == 1 {
 		row.ElapsedMs = u64ArrayElapsedMsVal
+		present = true
+	}
+	if u64ArrayQueuedMsCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "llmCallQueuedMs").Int("got", u64ArrayQueuedMsCount).Errorf("slot u64Array@llmCallQueuedMs (field QueuedMs) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u64ArrayQueuedMsCount)
+		return
+	}
+	if u64ArrayQueuedMsCount == 1 {
+		row.QueuedMs.Val = u64ArrayQueuedMsVal
+		row.QueuedMs.Has = true
 		present = true
 	}
 	// --- bool. ---

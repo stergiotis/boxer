@@ -170,6 +170,9 @@ type wireGrantReply struct {
 	Handle string `json:"handle,omitempty"`
 	// Terms are the approved task's bounds.
 	Terms *wireGrantTerms `json:"terms,omitempty"`
+	// Unattended says the host approved the grant in the person's place
+	// (ADR-0298).
+	Unattended bool `json:"unattended,omitempty"`
 }
 
 // wireGrantTerms are an approved task's bounds as the person left them:
@@ -283,7 +286,8 @@ type wireCapture struct {
 	Handle   string `json:"handle"`
 	Instance uint64 `json:"instance"`
 	Key      string `json:"key"`
-	// Format is "svg" or "png"; empty is "svg" (ADR-0281).
+	// Format is "svg", "png" or "tree"; empty is "svg" (ADR-0281,
+	// ADR-0301).
 	Format string `json:"format,omitempty"`
 	// Instances, when set, are the windows captured together, and Instance
 	// is ignored; Crop keeps a part of the frame, in logical points.

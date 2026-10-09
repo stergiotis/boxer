@@ -413,6 +413,9 @@ pub trait CaptureRasterI {
 /// `captureReplay`'s formats.
 pub const CAPTURE_FORMAT_PNG: u8 = 0;
 pub const CAPTURE_FORMAT_SVG: u8 = 1;
+/// The windows' widgets, each under the message that drew it, with its
+/// rect, role and name, as JSON (ADR-0301, [`super::optree`]).
+pub const CAPTURE_FORMAT_TREE: u8 = 2;
 
 /// `CaptureResult::status` values, as `fetchCaptureResult` reports them.
 pub const CAPTURE_COMPLETED: u8 = 1;
@@ -482,7 +485,10 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                 "this host has no rasterizer for captures".into(),
             );
         }
-        if format != CAPTURE_FORMAT_PNG && format != CAPTURE_FORMAT_SVG {
+        if format != CAPTURE_FORMAT_PNG
+            && format != CAPTURE_FORMAT_SVG
+            && format != CAPTURE_FORMAT_TREE
+        {
             return failed(CAPTURE_FAILED, format!("unknown capture format {format}"));
         }
         let ppp = live.pixels_per_point();
@@ -500,7 +506,13 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
         raw.viewports.entry(egui::ViewportId::ROOT).or_default().native_pixels_per_point =
             Some(ppp);
 
+        let t_start = crate::imzero2::clock::Instant::now();
         let ctx = capture_context(live);
+        let t_context = t_start.elapsed();
+        if format == CAPTURE_FORMAT_TREE {
+            ctx.enable_accesskit();
+            self.op_tree = Some(super::optree::OpTreeRecorder::default());
+        }
         let mut replay = None;
         let mut svg = None;
         let out = ctx.run_ui(raw, |ui| {
@@ -523,13 +535,47 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             }
             replay = Some(r);
         });
+        let t_pass = t_start.elapsed();
+        let op_tree = self.op_tree.take();
         let Some((result, report)) = replay else {
             return failed(CAPTURE_FAILED, "the capture pass did not run".into());
         };
         if let Err(e) = result {
             return failed(CAPTURE_FAILED, format!("replay: {e}"));
         }
+        if format == CAPTURE_FORMAT_TREE {
+            let Some(t) = op_tree else {
+                return failed(CAPTURE_FAILED, "the tree recorder was not installed".into());
+            };
+            let mut doc = String::new();
+            t.write_json(out.platform_output.accesskit_update.as_ref(), &mut doc);
+            // One line per capture: what the capture cost the frame it ran in.
+            tracing::info!(
+                format = "tree",
+                context_us = t_context.as_micros() as u64,
+                pass_us = (t_pass - t_context).as_micros() as u64,
+                recorder_us = t.sweep_ns / 1000,
+                write_us = (t_start.elapsed() - t_pass).as_micros() as u64,
+                bytes = doc.len(),
+                "capture cost"
+            );
+            return CaptureResult {
+                status: CAPTURE_COMPLETED,
+                width: width_px,
+                height: height_px,
+                data: doc.into_bytes(),
+                refused_uploads: report.refused_uploads,
+                ..Default::default()
+            };
+        }
         if let Some(svg) = svg {
+            tracing::info!(
+                format = "svg",
+                context_us = t_context.as_micros() as u64,
+                pass_us = (t_pass - t_context).as_micros() as u64,
+                bytes = svg.len(),
+                "capture cost"
+            );
             return CaptureResult {
                 status: CAPTURE_COMPLETED,
                 width: width_px,
@@ -572,14 +618,24 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             .filter(|p| matches!(&p.primitive, egui::epaint::Primitive::Mesh(m) if !known.contains(&m.texture_id)))
             .count() as u64;
 
+        let t_tess = t_start.elapsed();
         let raster = self.capture_raster.as_mut().expect("checked above");
-        match raster.rasterize(
+        let rgba = raster.rasterize(
             &clipped,
             &textures,
             width_px,
             height_px,
             out.pixels_per_point,
-        ) {
+        );
+        tracing::info!(
+            format = "png",
+            context_us = t_context.as_micros() as u64,
+            pass_us = (t_pass - t_context).as_micros() as u64,
+            tessellate_us = (t_tess - t_pass).as_micros() as u64,
+            raster_us = (t_start.elapsed() - t_tess).as_micros() as u64,
+            "capture cost"
+        );
+        match rgba {
             Ok(rgba) => CaptureResult {
                 status: CAPTURE_COMPLETED,
                 width: width_px,

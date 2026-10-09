@@ -153,6 +153,9 @@ func (inst *fakeHost) RenderSvg(k uint64, recheck func() bool) (string, error) {
 func (inst *fakeHost) RenderPixels(k []uint64, recheck func() bool) (string, error) {
 	return "cap-2", nil
 }
+func (inst *fakeHost) RenderTree(k []uint64, recheck func() bool) (string, error) {
+	return "cap-3", nil
+}
 func (inst *fakeHost) OpsArrange(command string, keys []uint64) error {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
@@ -201,6 +204,10 @@ func (inst *fakeHost) OpsUndoStatus(k uint64, id string) (string, bool) {
 func (inst *fakeHost) SourceStatus(job string) (capture.SourceResult, bool) {
 	if job == "cap-2" {
 		return capture.SourceResult{Phase: opwire.PhaseCompleted, Rgba: make([]byte, 2*2*4), Width: 2, Height: 2, PixelsPerPoint: 1}, true
+	}
+	if job == "cap-3" {
+		return capture.SourceResult{Phase: opwire.PhaseCompleted, Tree: []byte(`{"v":1,"ops":[{"op":"Button","parent":-1,"rect":[1,2,30,18],` +
+			`"widgets":[{"id":5,"rect":[1,2,30,18],"role":"button","name":"Save"}]}]}`)}, true
 	}
 	return capture.SourceResult{Phase: opwire.PhaseCompleted, Svg: []byte("<svg/>")}, true
 }
@@ -515,7 +522,7 @@ func TestAPngCaptureIsEncodedByTheCaptureService(t *testing.T) {
 	out, err = r.cli.CaptureAs(ctx, g.Handle, 7, Asked{Key: "gif"}, "gif")
 	require.NoError(t, err)
 	assert.Equal(t, "refused", out.Phase)
-	assert.Contains(t, out.Reason, "svg or png")
+	assert.Contains(t, out.Reason, "svg, png or tree")
 }
 
 func TestCaptureAndRecords(t *testing.T) {

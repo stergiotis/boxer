@@ -1101,6 +1101,15 @@ duration: a coordinator's call now waits with its widening (ADR-0265,
 update of this date), so the timeout is how long a person may be away
 before their dialog lapses.
 
+### 2026-10-09 — a coordinator reads captured windows as a tree
+
+§SD12 deferred an accessibility tree for coordinators. [ADR-0301](./0301-window-trees-a-capture-format-naming-each-widget-under-the-message-that-drew-it.md)
+answers it for captured windows: `tree` is a capture format beside `svg`
+and `png`, under the same grant rule, record and label, and holds each
+widget's rect, role and name under the message of the stream that drew it.
+It is a snapshot through the capture facility, not a live tree; the live
+tree stays deferred. Agents still get no synthetic input (§SD11).
+
 ### 2026-10-09 — the grant's answer states its terms
 
 An approved request answers with the task's bounds — its call budget and

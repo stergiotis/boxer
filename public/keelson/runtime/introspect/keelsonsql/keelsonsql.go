@@ -271,8 +271,9 @@ type ArgCall struct {
 // does, except a sealed dataset, which becomes url() against sealedBaseURL
 // when it is non-empty (SplitPass). A call with named arguments takes each
 // value from its literal or, for a `{slot:Type}` placeholder, from params by
-// bare name; the arguments are checked and typed against the provider's
-// declaration, and the call is renamed to a TEMPORARY table of its own, so
+// bare name, a `SET param_<name>` prelude binding as param_<name> does; the
+// arguments are checked and typed against the provider's declaration, and
+// the call is renamed to a TEMPORARY table of its own, so
 // two calls with different values are two tables. Those calls are returned
 // for the engine to snapshot; calls without arguments are not, since the
 // engine finds them by name as before.
@@ -284,6 +285,13 @@ func ExpandWithArgs(reg *introspect.Registry, sealedBaseURL, sql string, params 
 	calls := findCalls(pr)
 	if len(calls) == 0 {
 		return sql, nil, nil
+	}
+	// A `SET param_<name>` prelude binds as a request's param_<name> does
+	// (NewConstScope); it stays in the statement for the engine, which
+	// binds it too.
+	scope, err := NewConstScope(pr, params)
+	if err != nil {
+		return "", nil, err
 	}
 	var url func(string, introspect.Provider) string
 	if sealedBaseURL != "" {
@@ -313,7 +321,7 @@ func ExpandWithArgs(reg *introspect.Registry, sealedBaseURL, sql string, params 
 			return "", nil, eb.Build().Str("name", call.Name).Errorf("keelsonsql: a sealed dataset takes no arguments")
 		}
 		var raw map[string]string
-		raw, err = call.values(params)
+		raw, err = call.values(scope)
 		if err != nil {
 			return "", nil, err
 		}
@@ -366,13 +374,12 @@ func findCalls(pr *nanopass.ParseResult) (calls []*grammar1.TableFunctionExprCon
 	return
 }
 
-// callArg is one named argument of a keelson() call: its value is a
-// literal's text, or the name of the query parameter a `{slot:Type}`
-// placeholder binds.
+// callArg is one named argument of a keelson() call: its name and the
+// constant expression that is its value — a literal, a `{slot:Type}`
+// parameter or a WITH constant — evaluated when the call is resolved.
 type callArg struct {
-	key     string
-	literal string
-	slot    string
+	key  string
+	expr grammar1.IColumnExprContext
 }
 
 // call is a parsed keelson(...) call: the table name, the node that spells
@@ -383,20 +390,20 @@ type call struct {
 	nameNode antlr.ParserRuleContext
 }
 
-// values resolves the arguments' value texts, a placeholder's from params by
-// bare name.
-func (inst call) values(params map[string]string) (raw map[string]string, err error) {
+// values resolves the arguments' value texts in scope: a literal as
+// written, a placeholder from the parameters by bare name and decoded as
+// ClickHouse reads a parameter's value, a WITH constant as its value.
+func (inst call) values(scope *ConstScope) (raw map[string]string, err error) {
 	raw = make(map[string]string, len(inst.Args))
 	for _, a := range inst.Args {
-		if a.slot == "" {
-			raw[a.key] = a.literal
-			continue
+		var c Constant
+		c, err = EvalConstant(a.expr, scope)
+		if err == nil {
+			raw[a.key], err = c.Text()
 		}
-		v, ok := params[a.slot]
-		if !ok {
-			return nil, eb.Build().Str("name", inst.Name).Str("arg", a.key).Str("param", a.slot).Errorf("keelsonsql: the argument's query parameter is not bound")
+		if err != nil {
+			return nil, eb.Build().Str("name", inst.Name).Str("arg", a.key).Errorf("%w", err)
 		}
-		raw[a.key] = v
 	}
 	return
 }
@@ -444,7 +451,8 @@ func parseCall(fn *grammar1.TableFunctionExprContext) (c call, err error) {
 	return
 }
 
-// parseNamedArg reads `key = literal` or `key = {slot:Type}`.
+// parseNamedArg reads `key = value`; the value is evaluated as a constant
+// when the call is resolved (call.values).
 func parseNamedArg(a grammar1.ITableArgExprContext) (ca callArg, err error) {
 	eq, ok := a.ColumnExpr().(*grammar1.ColumnExprPrecedence3Context)
 	if !ok || eq.EQ_SINGLE() == nil || len(eq.AllColumnExpr()) != 2 {
@@ -459,58 +467,8 @@ func parseNamedArg(a grammar1.ITableArgExprContext) (ca callArg, err error) {
 	if !introspect.ValidTableName(ca.key) {
 		return ca, eb.Build().Str("arg", ca.key).Errorf("keelsonsql: a keelson() argument's name must be an identifier")
 	}
-	switch v := sides[1].(type) {
-	case *grammar1.ColumnExprParamSlotContext:
-		ca.slot = nanopass.DecodeIdentifier(v.ParamSlot().Identifier().GetText())
-	case *grammar1.ColumnExprLiteralContext:
-		ca.literal, err = literalText(v.Literal())
-	case *grammar1.ColumnExprNegateContext:
-		lit, isLit := v.ColumnExpr().(*grammar1.ColumnExprLiteralContext)
-		if !isLit || lit.Literal().NumberLiteral() == nil {
-			return ca, eb.Build().Str("arg", ca.key).Errorf("keelsonsql: a keelson() argument's value must be a literal or a {slot:Type} parameter")
-		}
-		ca.literal = "-" + lit.Literal().GetText()
-	default:
-		return ca, eb.Build().Str("arg", ca.key).Errorf("keelsonsql: a keelson() argument's value must be a literal or a {slot:Type} parameter")
-	}
+	ca.expr = sides[1]
 	return
-}
-
-// literalText is a literal's value as text: a string literal unquoted, a
-// number as written. NULL is refused; an argument has a value or is left out.
-func literalText(lit grammar1.ILiteralContext) (text string, err error) {
-	switch {
-	case lit.NumberLiteral() != nil:
-		return lit.GetText(), nil
-	case lit.STRING_LITERAL() != nil:
-		return unquoteString(lit.GetText()), nil
-	default:
-		return "", eb.Build().Str("literal", lit.GetText()).Errorf("keelsonsql: a keelson() argument cannot be NULL; leave it out")
-	}
-}
-
-// unquoteString decodes a ClickHouse single-quoted string literal: the
-// quotes are dropped, and a backslash escape or a doubled quote is undone.
-func unquoteString(s string) string {
-	if len(s) < 2 {
-		return s
-	}
-	body := s[1 : len(s)-1]
-	var sb strings.Builder
-	for i := 0; i < len(body); i++ {
-		c := body[i]
-		switch {
-		case c == '\\' && i+1 < len(body):
-			i++
-			sb.WriteByte(body[i])
-		case c == '\'' && i+1 < len(body) && body[i+1] == '\'':
-			i++
-			sb.WriteByte('\'')
-		default:
-			sb.WriteByte(c)
-		}
-	}
-	return sb.String()
 }
 
 // IsCall reports whether fn is a keelson(...) table-function call.
@@ -521,12 +479,12 @@ func IsCall(fn *grammar1.TableFunctionExprContext) (yes bool) {
 
 // ResolveCall resolves one keelson(...) call for a run without rewriting
 // anything: the registered provider it names and its arguments' value
-// texts, a placeholder's taken from params by bare name. It is what a
+// texts, each evaluated as a constant in scope. It is what a
 // reader that answers the call itself — rather than handing SQL to
 // ClickHouse — needs (ADR-0290 §SD3). Arguments are checked against the
 // provider's declaration; a sealed dataset is refused, since only the
 // loopback source can open one.
-func ResolveCall(reg *introspect.Registry, fn *grammar1.TableFunctionExprContext, params map[string]string) (p introspect.Provider, raw map[string]string, err error) {
+func ResolveCall(reg *introspect.Registry, fn *grammar1.TableFunctionExprContext, scope *ConstScope) (p introspect.Provider, raw map[string]string, err error) {
 	if !IsCall(fn) {
 		return nil, nil, eb.Build().Str("fn", fn.GetText()).Errorf("keelsonsql: not a keelson() call")
 	}
@@ -541,7 +499,7 @@ func ResolveCall(reg *introspect.Registry, fn *grammar1.TableFunctionExprContext
 	if _, sealed := p.(introspect.EncryptedDatasetI); sealed {
 		return nil, nil, eb.Build().Str("name", c.Name).Errorf("keelsonsql: a sealed dataset is read through the introspection source, not here")
 	}
-	raw, err = c.values(params)
+	raw, err = c.values(scope)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -678,6 +678,10 @@ func (rt *Runtime) bootWindowHost() (err error) {
 		logger.Info().Str("id", string(s.AppId)).Str("kind", s.Kind).Msg("windowhost seed: opened configured window")
 	}
 	rt.Host = host
+	// The model service orders its queue by window state (ADR-0300 §SD6).
+	if rt.LLM != nil {
+		rt.LLM.SetWindows(llmWindowClass{host: host})
+	}
 
 	// Distinct id stacks for the body (reset at the top of each Frame), the
 	// Apps menu (rendered in the top bar before the body's reset) and the
@@ -788,6 +792,12 @@ func (rt *Runtime) bootAgent() {
 		Trail: rt.Trail, Coordinators: agent.ParseCoordinators(agent.CoordinatorsEnv.Get()), Deadline: agent.DeadlineEnv.Get(),
 		RequestTimeout: agent.RequestTimeoutEnv.Get(),
 		Pace:           agent.PaceEnv.Get(), CallsMin: int(agent.CallsMinEnv.Get()), CallsMax: int(agent.CallsMaxEnv.Get())}
+	// The unattended mode (ADR-0298) exists only in a binary built for it;
+	// elsewhere the variable is refused, loudly.
+	cfg.Unattended = agent.Unattended && agent.UnattendedEnv.Get()
+	if agent.UnattendedEnv.Get() && !agent.Unattended {
+		logger.Warn().Msg("agent: BOXER_AGENT_UNATTENDED is honoured only by a binary built with the boxer_unattended tag; refused here")
+	}
 	if rt.LLM != nil {
 		// Confined content reaches a coordinator's model only where the host's
 		// endpoint is local (ADR-0254 §SD3, ADR-0269 §SD7).
@@ -826,6 +836,12 @@ func (rt *Runtime) bootAgent() {
 	}
 	rt.Agent = svc
 	rt.cleanups = append(rt.cleanups, svc.Close)
+	if rt.Status != nil {
+		rt.Status.Unattended = unattendedStatus(svc.Unattended())
+	}
+	if svc.Unattended() {
+		logger.Warn().Msg("agent: unattended mode on — the host approves grants and accepts suggest-mode proposals in the person's place (ADR-0298)")
+	}
 	// Host services that reach outside check agent-caused work against the
 	// task's grant (ADR-0269 §SD6).
 	if rt.HTTP != nil {
@@ -833,6 +849,16 @@ func (rt *Runtime) bootAgent() {
 	}
 	if rt.LLM != nil {
 		rt.LLM.SetDelegation(svc)
+		// A moderator's questions to the person go through the dispatcher's
+		// dialog (ADR-0300 §SD9).
+		rt.LLM.SetAsker(llmAsker{svc: svc})
+	}
+	// The moderators may stop tasks and lower their ceilings (ADR-0300
+	// §SD8): the apps the model service admits to its rules, one list.
+	if rt.LLM != nil {
+		svc.SetModerators(rt.LLM.Moderators())
+	} else {
+		svc.SetModerators(llm.ParseTrustedHosts(llm.Moderators.Get()))
 	}
 	// The dataset service records an agent-caused bundle operation under
 	// the call context the dispatcher attests (ADR-0288 §SD5).
@@ -846,6 +872,18 @@ func (rt *Runtime) bootAgent() {
 		rt.Host.SetOpsListener(svc.Listener())
 	}
 	logger.Info().Bool("testGrants", cfg.TestGrants).Bool("durable", svc.Durable()).Msg("agent: service listening on runtime.agent.*")
+}
+
+// unattendedStatus is the status bar's unattended segment: absent from a
+// binary built without the mode, so that one never advertises it.
+func unattendedStatus(on bool) (st runtimestatus.UnattendedE) {
+	switch {
+	case !agent.Unattended:
+		return runtimestatus.UnattendedAbsent
+	case on:
+		return runtimestatus.UnattendedOn
+	}
+	return runtimestatus.UnattendedOff
 }
 
 // headlessOnly decides whether a test-lane knob takes effect: only when

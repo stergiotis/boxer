@@ -335,7 +335,7 @@ func TestTheCaptureRecordLandsOnTheTrail(t *testing.T) {
 	assert.Equal(t, "deny", gif.Decision)
 	assert.Equal(t, "refused", gif.Phase)
 	require.Len(t, gif.Reason, 1)
-	assert.Contains(t, gif.Reason[0], "svg or png")
+	assert.Contains(t, gif.Reason[0], "svg, png or tree")
 }
 
 // Over clickhouse-local: a coordinator's report of a view leaves one

@@ -112,6 +112,19 @@ type wireReply struct {
 	// (ADR-0264 §SD4).
 	Retention       uint8  `json:"retention,omitempty"`
 	RetentionReason string `json:"retention_reason,omitempty"`
+	// CachedInputTokens and ReasoningTokens are nil when the provider did
+	// not report them (ADR-0300 §SD2).
+	CachedInputTokens *int32 `json:"cached_input_tokens,omitempty"`
+	ReasoningTokens   *int32 `json:"reasoning_tokens,omitempty"`
+	// Admission, Rule, Refusal and RetryAfterNs are how the metering rules
+	// decided the call (ADR-0300 §SD5); QueuedNs how long it waited and
+	// Remaining what each rule on its accounts leaves.
+	Admission    string          `json:"admission,omitempty"`
+	Rule         string          `json:"rule,omitempty"`
+	Refusal      string          `json:"refusal,omitempty"`
+	RetryAfterNs int64           `json:"retry_after_ns,omitempty"`
+	QueuedNs     int64           `json:"queued_ns,omitempty"`
+	Remaining    []wireRemaining `json:"remaining,omitempty"`
 }
 
 // The failure kinds a reply can name, mapped back onto openaichat's

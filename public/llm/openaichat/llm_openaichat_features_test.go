@@ -14,6 +14,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/stergiotis/boxer/public/functional/option"
 )
 
 // fastRetry is a tiny-delay policy so retry tests don't sleep for real.
@@ -327,6 +329,25 @@ func TestObserverReceivesStats(t *testing.T) {
 	assert.Equal(t, int32(7), stat.InputTokens)
 	assert.Equal(t, int32(11), stat.OutputTokens)
 	assert.NoError(t, stat.Err)
+}
+
+func TestUsageDetails(t *testing.T) {
+	c := newServerClientOpts(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"choices":[{"message":{"content":"hi"},"finish_reason":"stop"}],"usage":{"prompt_tokens":70,"completion_tokens":11,`+
+			`"prompt_tokens_details":{"cached_tokens":64},"completion_tokens_details":{"reasoning_tokens":0}}}`)
+	})
+	resp, err := c.Complete(context.Background(), userReq("m"))
+	require.NoError(t, err)
+	assert.Equal(t, option.Some(int32(64)), resp.CachedInputTokens)
+	assert.Equal(t, option.Some(int32(0)), resp.ReasoningTokens, "a reported zero is kept")
+
+	c = newServerClientOpts(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"choices":[{"message":{"content":"hi"},"finish_reason":"stop"}],"usage":{"prompt_tokens":7,"completion_tokens":11}}`)
+	})
+	resp, err = c.Complete(context.Background(), userReq("m"))
+	require.NoError(t, err)
+	assert.False(t, resp.CachedInputTokens.Has, "not reported is not zero")
+	assert.False(t, resp.ReasoningTokens.Has)
 }
 
 func TestMaxResponseBytesCap(t *testing.T) {

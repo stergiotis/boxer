@@ -84,9 +84,7 @@ const KeelsonSQLURL = KeelsonSQLOrigin + "/query"
 func installKeelsonSQL(reg *introspect.Registry) (err error) {
 	srv := introspecthttp.New(introspecthttp.Config{
 		Registry: reg,
-		Runner: introspecthttp.MacroRunnerFunc(func(ctx context.Context, sql string, params map[string]string) ([]byte, error) {
-			return trivialsql.Run(ctx, reg, sql, params)
-		}),
+		Runner:   trivialsql.Runner{Registry: reg},
 	}, log.Logger)
 	rt, err := introspecthttp.InProcess(KeelsonSQLOrigin, srv.Handler(), http.DefaultTransport)
 	if err != nil {
@@ -102,6 +100,12 @@ type Options struct {
 	DefaultApp app.AppIdT
 	// Services are the in-tab services to boot (none exist yet).
 	Services Services
+	// Prepare, when set, runs once at start, after the tab's HTTP transport
+	// and services are installed and before the app is looked up. origin is
+	// the page's origin (PageOrigin), empty when the worker did not pass it.
+	// A non-empty id replaces -app; an error is drawn in place of the app
+	// (ADR-0299 §SD1, proposed).
+	Prepare func(ctx context.Context, origin string) (id app.AppIdT, err error)
 }
 
 // Program is one tab binary: its options, its root cli.Command, and the per-tick
@@ -173,7 +177,16 @@ func (inst *Program) tab(ctx context.Context, cmd *cli.Command) (err error) {
 		}
 	}
 	appId := app.AppIdT(cmd.String("app"))
-	if _, ok := app.DefaultRegistry.LookupManifest(appId); !ok {
+	var prepareErr error
+	if inst.opts.Prepare != nil {
+		var prepared app.AppIdT
+		if prepared, prepareErr = inst.opts.Prepare(ctx, PageOrigin.Get()); prepareErr != nil {
+			log.Error().Err(prepareErr).Msg("tabhost: prepare")
+		} else if prepared != "" {
+			appId = prepared
+		}
+	}
+	if _, ok := app.DefaultRegistry.LookupManifest(appId); !ok && prepareErr == nil {
 		return browserhost.ErrNoSuchApp
 	}
 	cfg := &application.Config{ClientBinary: cmd.String("clientBinary")}
@@ -193,7 +206,9 @@ func (inst *Program) tab(ctx context.Context, cmd *cli.Command) (err error) {
 		st := c.CurrentApplicationState
 		st.StartServersideFrame()
 		ids.Reset()
-		if mounted == nil {
+		if prepareErr != nil {
+			c.Label("tabhost: " + prepareErr.Error()).Send()
+		} else if mounted == nil {
 			mounted, err = browserhost.Mount(appId, ids, log.Logger)
 			if err != nil {
 				c.Label("tabhost: " + err.Error()).Send()

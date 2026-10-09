@@ -1,0 +1,6 @@
+# The scripted model of chat-coordinator-window-tree.scene.md (ADR-0301):
+# open the operations demo under a test grant, read its window tree, answer.
+{"tool":"request_access","args":{"plan":"read what the demo app shows","open":[{"app":"opsdemo"}]}}
+{"tool":"open_window","args":{"app":"opsdemo"}}
+{"tool":"read_window_tree","args":{"title":"Reading the demo's window","windows":["$window"]}}
+{"content":"I read the demo window's tree."}

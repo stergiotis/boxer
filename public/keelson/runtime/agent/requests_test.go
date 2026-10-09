@@ -409,3 +409,35 @@ func TestARequestExpiresAfterTheConfiguredTimeout(t *testing.T) {
 	require.True(t, errors.As(err, &refused))
 	assert.Contains(t, refused.Reason, "the person did not decide in time")
 }
+
+// A deadline that passes between the person's approval and the re-check of
+// the held call holds the call for more time, as a call arriving late is.
+func TestAHeldCallRoutedPastTheDeadlineWaitsForMoreTime(t *testing.T) {
+	r := coordinatorRig(t)
+	ctx := context.Background()
+	got := make(chan Grant, 1)
+	go func() {
+		g, _ := r.cli.Request(ctx, GrantRequest{Entries: []GrantEntry{{Instance: 7, Mode: ModeObserve}}})
+		got <- g
+	}()
+	r.person(true, nil)
+	g := <-got
+	r.call(g, "q", "get_text", "{}")
+	require.True(t, r.call(g, "w", "set_text", `{"text":"late"}`).Held)
+
+	svc := r.svc
+	svc.mu.Lock()
+	open := svc.pending()
+	require.Len(t, open, 1)
+	route := svc.approve(open[0])
+	open[0].task.deadline = time.Now().Add(-time.Second)
+	svc.mu.Unlock()
+	svc.routeHeld(route)
+
+	require.Eventually(t, func() bool {
+		st, err := r.cli.Status(ctx, g.Handle, "w", 0)
+		return err == nil && st.Phase == "input_required" && st.Held
+	}, 2*time.Second, 10*time.Millisecond, "the call waits for more time")
+	r.host.frame(7)
+	assert.Equal(t, "start", r.host.docs[7].text, "nothing landed past the deadline")
+}

@@ -502,24 +502,20 @@ func (inst *Service) call(msg *app.Msg) (rep wireCallReply) {
 	var need needE
 	var mode ModeE
 	out, spec, e, need, mode, rec.consent = inst.check(t, req)
-	if late && (out.Phase == opwire.PhaseUnspecified || out.Phase == opwire.PhaseProposed) {
-		// Past its deadline, a call the grant would let through waits for
-		// the person to give the task more time, as a spent budget waits
-		// for more calls. A refusal stands, and a widening the call needs
-		// is asked for as it is: approving one also moves the deadline on.
-		mode, need = e.mode, needDeadline
-		out = phaseOutcome(opwire.PhaseInputRequired, reasonDeadline+"; the person is asked for more time")
-		if t.test {
-			out.Reason = reasonDeadline + "; request_access extends it"
-		}
+	if late {
+		out, need, mode = pastDeadline(t, e, out, need, mode)
 	}
 	rec.spec = spec
 	if e != nil {
 		rec.app = e.app
 	}
+	var route *held
 	if out.Phase == opwire.PhaseInputRequired && need != 0 && !t.test {
-		inst.holdForWidening(t, rec, req, need, mode)
+		route = inst.holdForWidening(t, rec, req, need, mode)
 	}
+	// Unattended (ADR-0298): a proposal the grant made may be accepted on
+	// arrival; it is then routed below like any call, and paced as one.
+	out, _ = inst.acceptOnArrival(t, rec, out)
 	if out.Phase == opwire.PhaseProposed {
 		if _, aerr := encodeArgs(spec, req.Args); aerr != nil {
 			out = schemaRefusal(spec, aerr)
@@ -532,11 +528,15 @@ func (inst *Service) call(msg *app.Msg) (rep wireCallReply) {
 	}
 	if out.Phase != opwire.PhaseUnspecified {
 		rec.outcome = out
+		heldCall := rec.heldBy != nil
 		inst.mu.Unlock()
 		inst.record(t, rec, "dispatch", out)
 		rep.Outcome = wireOutcomeOf(out, "", "")
 		// A held call is not final; the caller polls status.
-		rep.Outcome.Held = rec.heldBy != nil
+		rep.Outcome.Held = heldCall
+		if route != nil {
+			inst.routeHeld(route)
+		}
 		return
 	}
 	t.callsUsed++
@@ -551,6 +551,22 @@ func (inst *Service) call(msg *app.Msg) (rep wireCallReply) {
 	rep.Outcome = inst.outcomeOf(t, rec, 0)
 	inst.mu.Unlock()
 	return
+}
+
+// pastDeadline is a checked call's outcome once t's deadline has passed: a
+// call the grant would let through waits for the person to give the task
+// more time, as a spent budget waits for more calls. A refusal stands, and
+// a widening the call needs is asked for as it is: approving one also moves
+// the deadline on.
+func pastDeadline(t *task, e *entry, out opwire.Outcome, need needE, mode ModeE) (opwire.Outcome, needE, ModeE) {
+	if out.Phase != opwire.PhaseUnspecified && out.Phase != opwire.PhaseProposed {
+		return out, need, mode
+	}
+	out = phaseOutcome(opwire.PhaseInputRequired, reasonDeadline+"; the person is asked for more time")
+	if t.test {
+		out.Reason = reasonDeadline + "; request_access extends it"
+	}
+	return out, needDeadline, e.mode
 }
 
 // expectsFor is what a command expects of the resources it writes: what
