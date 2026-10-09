@@ -27,8 +27,9 @@ type ParseResult struct {
 	//   - ParseCanonical(): *grammar2.QueryStmtContext
 	Tree antlr.ParserRuleContext
 
-	// TokenStream is the lexed token stream including hidden-channel tokens.
-	TokenStream *antlr.CommonTokenStream
+	// TokenStream is the lexed token stream including hidden-channel tokens,
+	// with its text built in one pass (see [TokenStream]).
+	TokenStream *TokenStream
 
 	// Parser is the ANTLR parser instance used to produce the CST. Useful for
 	// accessing rule names and vocabulary during debugging.
@@ -97,7 +98,7 @@ type attempt struct {
 func parseGrammar1(sql string, predictionMode int) (a attempt, ok bool) {
 	input := antlr.NewInputStream(sql)
 	lexer := grammar1.NewClickHouseLexer(input)
-	stream := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)
+	stream := NewTokenStream(lexer)
 	parser := grammar1.NewClickHouseParserGrammar1(stream)
 
 	// Point the parser at the shared bounded DFA cache instead of the grammar's
@@ -134,7 +135,7 @@ func parseGrammar1(sql string, predictionMode int) (a attempt, ok bool) {
 func parseGrammar2(sql string, predictionMode int) (a attempt, ok bool) {
 	input := antlr.NewInputStream(sql)
 	lexer := grammar2.NewClickHouseLexer(input)
-	stream := antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel)
+	stream := NewTokenStream(lexer)
 	parser := grammar2.NewClickHouseParserGrammar2(stream)
 
 	sim, release := grammar2.SharedDFA.Acquire(parser)
