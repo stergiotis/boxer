@@ -738,14 +738,15 @@ number of tests. Unlike the feature rules these run against the result as it
 is; a rule whose item has no column in the result says so.
 
 **Publish as dataset** (in the toolbar once a run is done, when the session has
-capabilities) writes the run as two ad-hoc datasets, each on a stable handle of
-its own that a query names as `keelson('<handle>')` — the scaffold that lands at
-the caret spells both, and the summary beside the button shows them with their
-revision. The rows dataset holds one row per projected entity — the result's row
-index and its plain identity columns, the sixteen features under the names the
-rules use, `cluster` (numbered as the tab shows, noise at −1), `probability`, the
-layout `x` and `y`, `feature_set`, and `items`, the entity's item names as an
-array — and the rules dataset one row per cluster and reading with the rule as
+capabilities) writes the run as two ad-hoc datasets, `projection` and
+`projection_rules`, each on a stable handle of its own; the window binds the
+names, so a query reads them as `keelson('projection')` — the scaffold that lands
+at the caret spells both, and the summary beside the button shows each name with
+its handle and revision. The rows dataset holds one row per projected entity —
+the result's row index and its plain identity columns, the sixteen features under
+the names the rules use, `cluster` (numbered as the tab shows, noise at −1),
+`probability`, the layout `x` and `y`, `feature_set`, and `items`, the entity's
+item names as an array — and the rules dataset one row per cluster and reading with the rule as
 SQL, its precision, recall and coverage. A copied feature rule runs as written
 against the rows dataset, and the attribute contrasts are an `arrayJoin(items)`
 with a `GROUP BY cluster`. Publishing again republishes onto the same handles;
@@ -758,7 +759,11 @@ their sizes and the noise, the status line, whether the layout has settled,
 whether a new result dropped the last run, and, when asked for, a page of points
 with their row, cluster, probability and position. The next result drops the
 run: call `publish_projection` first when the run should outlive it, and read the
-clusters back as `keelson('projection')` and `keelson('projection_rules')`.
+clusters back as `keelson('<name>')` and `keelson('<name>_rules')`. It takes a
+`name` (`projection` when left out); a publish under another name leaves the
+earlier datasets in place. Publishing is consequential, so the person confirms
+each one — unless the task's grant lists `publish:<prefix>` and the name starts
+with the prefix, the standing consent `publish_result` takes for its bundles.
 `explain_clusters` returns "why these clusters", by features (at a rule depth, one
 tree per cluster or the one partition) or by attributes: per cluster the SQL rule,
 its fit and what sets the cluster apart — the same text the section shows.

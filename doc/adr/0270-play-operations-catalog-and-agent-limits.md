@@ -1146,6 +1146,21 @@ catalog cost it; these follow from that report.
   physical columns spell it ([ADR-0116](./0116-play-leeway-column-handle-resolution.md),
   update of 2026-10-08).
 
+### 2026-10-09 — `publish_projection` takes a name
+
+`publish_projection` (version 2) takes an optional `name`: the rows go
+under `<name>`, the rules under `<name>_rules`, and the window binds both,
+`projection` when it is left out, which is what the pane's button
+publishes. A name is a bare identifier of at most 32 bytes without a
+double underscore, leaving room for the suffixes under the catalogue's
+64. Publishing again under a name republishes its datasets; under another
+name the earlier ones stay until the window closes. The command declares
+the `publish` consent on `name`
+([ADR-0288](./0288-adhoc-bundles-datasets-published-with-the-applet-that-reads-them.md), update of 2026-10-09), so a grant
+listing `publish:<prefix>` spares the person a confirmation for each name
+starting with the prefix. `get_projection`'s `published` names each
+dataset with its handle.
+
 ## References
 
 - [ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md) — the contract this catalog serves.

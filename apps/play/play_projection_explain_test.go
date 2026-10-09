@@ -269,8 +269,8 @@ func TestBuildProjectionDatasets(t *testing.T) {
 		}
 	}
 	require.True(t, sawFeatures)
-	require.Contains(t, projectionScaffold(), "keelson('"+projectionAlias+"')")
-	require.Contains(t, projectionScaffold(), "keelson('"+projectionRulesAlias+"')")
+	require.Contains(t, projectionScaffold("kinds"), "keelson('kinds')")
+	require.Contains(t, projectionScaffold("kinds"), "keelson('kinds_rules')")
 }
 
 func TestExplainProjectionOverComponents(t *testing.T) {

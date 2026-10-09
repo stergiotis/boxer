@@ -90,7 +90,7 @@ type ProjectionState struct {
 	RunBy string `json:",omitzero" desc:"who asked for the run: person, or task:<id>; cancel_projection stops only the calling task's own"`
 	// The publish's outcome (publish_projection).
 	Publishing   bool   `json:",omitzero" desc:"true while a publish_projection is in flight"`
-	Published    string `json:",omitzero" desc:"the last publish: each dataset's handle, rows and revision; the window binds them as keelson('projection') and keelson('projection_rules')"`
+	Published    string `json:",omitzero" desc:"the last publish: each dataset's name and handle, rows and revision; the window binds the names, keelson('<name>') and keelson('<name>_rules')"`
 	PublishError string `json:",omitzero" desc:"why the last publish failed"`
 }
 
@@ -417,7 +417,7 @@ func addProjectionOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 		Effect:  app.OperationEffectView, Writes: []string{opsResProjection, opsResPanes}, Reads: []string{opsResResult}, Agents: true,
 		Gesture: "the Compute projection button",
 		Follows: []string{"the run takes from a moment to a minute; get_projection reports it until done or failed", "the pane is raised: the layout moves only while it is drawn",
-			"the next result the pane is fed — any run in this window, yours or the person's — drops the run; publish_projection keeps it as keelson('projection') and keelson('projection_rules')"}},
+			"the next result the pane is fed — any run in this window, yours or the person's — drops the run; publish_projection keeps it as keelson('<name>') and keelson('<name>_rules')"}},
 		func(inst *PlayLauncher, call app.OperationCall, in ComputeProjectionArgs) (appops.None, error) {
 			if inst.inner == nil {
 				return appops.None{}, app.RefuseOperation("the window has not mounted")

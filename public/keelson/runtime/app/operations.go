@@ -152,8 +152,9 @@ type OperationConsent struct {
 	Arg string
 }
 
-// ConsentClassPublish covers publishing an ad-hoc bundle under the name
-// the consent's argument carries (ADR-0288 §SD4).
+// ConsentClassPublish covers publishing ad-hoc data — a bundle, or
+// datasets such as a projection's — under the name the consent's argument
+// carries (ADR-0288 §SD4 and its update of 2026-10-09).
 const ConsentClassPublish = "publish"
 
 // ConsentClasses are the consent classes a catalog may declare, each with
@@ -161,7 +162,7 @@ const ConsentClassPublish = "publish"
 // is a platform decision: an app that could name its own would let one
 // approved destination cover whatever any app called by that name.
 var ConsentClasses = map[string]string{
-	ConsentClassPublish: "publish an ad-hoc bundle under a name starting with the prefix",
+	ConsentClassPublish: "publish ad-hoc data — a bundle or datasets — under a name starting with the prefix",
 }
 
 // Pattern is the destination as a person or a model writes it in a

@@ -108,8 +108,9 @@ names:
 2. `set_sql` with a `SELECT *`, `run`, then `list_panes` to see which panes draw it.
 3. `get_detail` on a row.
 4. `compute_projection`, `get_projection` until done, `explain_clusters`,
-   `get_archetypes`; `publish_projection` before the next run if the clusters
-   are to be checked with SQL.
+   `get_archetypes`; `publish_projection` with a `name` before the next run if
+   the clusters are to be checked with SQL. A grant listing `publish:<prefix>`
+   spares the person a confirmation for each name starting with the prefix.
 5. `list_snippets` and `read_snippet` for the SQL that reads attributes by tag.
 
 The reads are bounded: `sample_rows` returns at most 50 rows and 8 KiB of
