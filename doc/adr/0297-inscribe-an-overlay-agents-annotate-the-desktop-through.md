@@ -169,7 +169,7 @@ A model never computes the rect of the second kind; SD4 says where it comes from
 
 - An overlay that is never cleared accumulates. The budget bounds it per task, but the person carries the clean-up.
 - Behind is by window rects and stacking, not pixels. A translucent window counts as covering.
-- A widget anchor keeps the place its widget had when the tree was taken; a scroll inside the window leaves the mark behind.
+- A widget anchor keeps the place its widget had when the tree was taken; a scroll inside the window, or a re-layout, leaves the mark behind. In the scene below, a cascade widened the demo window, its text wrapped onto fewer lines, and the callout ended one line under the button it was put on.
 - The neon palette is a second colour vocabulary to keep legible as themes change, outside the design system's review.
 - inscribe has no app identity: it is not in the app center, and its marks are recorded under the agent's calls, not under an app.
 
@@ -184,7 +184,7 @@ A model never computes the rect of the second kind; SD4 says where it comes from
 - Unit tests for the scene and layout: replace by id, the ownership refusal, budgets, hue assignment, retiring by task and by window, and a layout pass over two tasks' overlapping notes.
 - Chat tests: a tree part resolves to its window and a rect relative to it.
 - Agent dispatch tests: refusals under observe and without desktop mode; a record per accepted call.
-- A scene document beside the chat's other scenes: a scripted coordinator reads a window's tree and highlights a button by its tree part; captures show the mark, the mark following the window after an arrangement moves it, and the mark dashed once another window is raised over it.
+- [chat-inscribe.scene.md](../../apps/chat/scenes/chat-inscribe.scene.md): a scripted coordinator reads the operations demo's tree, puts a callout on its Clear button by the tree part and a numbered step on the window; captures show the marks, the marks following the window after a cascade, the outlines dashed once the chat is raised over the demo, and the overlay empty after the person clears it. The scene asserts that the calls completed; where the marks fall is checked by looking at the captures. Run by `scripts/dev/scene.sh`, not on every change.
 
 ## Status
 
@@ -192,11 +192,11 @@ Proposed 2026-10-09.
 
 Milestones:
 
-- **M1 — `Resolve` in the window host.** (SD2, SD3)
-- **M2 — inscribe's scene, layout and neon style, framed by the window host, and the host-modal flag.** (SD1, SD5–SD7)
-- **M3 — The agent verbs, authority, records and retirement; the Window menu and badge clears.** (SD8)
-- **M4 — The chat's tools, with tree parts as targets.** (SD4)
-- **M5 — The scene document.**
+- **M1 — `Resolve` in the window host.** (SD2, SD3) Built.
+- **M2 — inscribe's scene, layout and neon style, framed by the window host, and the host-modal flag.** (SD1, SD5–SD7) Built.
+- **M3 — The agent verbs, authority, records and retirement; the Window menu and badge clears.** (SD8) Built.
+- **M4 — The chat's tools, with tree parts as targets.** (SD4) Built.
+- **M5 — The scene document.** Built: [chat-inscribe.scene.md](../../apps/chat/scenes/chat-inscribe.scene.md).
 
 ## References
 

@@ -4,6 +4,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rs/zerolog"
+	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/inscribe"
+	"github.com/stergiotis/boxer/public/llm/openaichat"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -87,4 +92,36 @@ func TestANodeAnchorIsRelativeToItsWindowAsRecorded(t *testing.T) {
 		_, _, err = nodeAnchor(tr, bad)
 		assert.Error(t, err, bad)
 	}
+}
+
+// A tree part reaches the host as its window and a rect relative to the
+// window as the tree recorded it; the model sends no coordinate (ADR-0297
+// §SD4).
+func TestAnnotateResolvesATreePartToItsWindow(t *testing.T) {
+	bus := inprocbus.NewInst(zerolog.Nop())
+	model := &scriptedModel{replies: []openaichat.CompletionResponse{
+		toolCall("r1", "request_access", `{"plan":"point at the note","open":[{"app":"notes"}]}`),
+		toolCall("o1", "open_window", `{"app":"notes"}`),
+		toolCall("a1", "annotate", `{"id":"save","op":"callout","targets":[{"tree":"t1","node":"#1.0"}],"text":"press Save"}`),
+		toolCall("a2", "annotate", `{"id":"bad","op":"highlight","targets":[{"tree":"t9","node":"#1"}]}`),
+		{Content: "done", FinishReason: "stop"},
+	}}
+	host, coord, cli, req, ctx := coordRig(t, bus, model, false)
+	wr := rect(100, 50, 400, 300)
+	coord.keepTree(capture.Tree{V: capture.TreeVersion, Ops: []capture.TreeOp{
+		{Op: "Window", Parent: -1, Rect: wr, Window: 100, WindowRect: &wr},
+		{Op: "Button", Parent: 0, Rect: rect(120, 90, 40, 18),
+			Widgets: []capture.TreeWidget{{Rect: rect(120, 90, 40, 18), Role: "button", Name: "Save"}}},
+	}})
+	res, err := runTurn(ctx, cli, coord, req, nil)
+	require.NoError(t, err)
+	replies := toolReplies(res.messages)
+	require.Contains(t, replies["a1"], "completed", replies["a1"])
+	assert.Contains(t, replies["a2"], "no window tree")
+	items := host.Annotations().Snapshot()
+	require.Len(t, items, 1)
+	require.Len(t, items[0].Targets, 1)
+	assert.Equal(t, uint64(100), items[0].Targets[0].Window)
+	require.NotNil(t, items[0].Targets[0].Local)
+	assert.Equal(t, inscribe.Rect{X: 20, Y: 40, W: 40, H: 18}, *items[0].Targets[0].Local)
 }
