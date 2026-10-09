@@ -39,17 +39,15 @@ type serveConfig struct {
 	subdir string
 }
 
-// WithFilters passes rclone's own filter flags to the serving side —
-// `--include`, `--exclude`, `--filter-from`, `--max-size` and the rest.
+// WithArgs passes flags to `rclone serve sftp` on the serving side: rclone's
+// own filter language — `--include`, `--exclude`, `--filter-from`,
+// `--max-size` — and its behaviour flags, `--links` above all.
 //
-// The filter runs at the source, which is the point: a mount's content policy
-// for a remote is rclone's filter language rather than anything this store
+// Filters run at the source, which is the point: a mount's content policy for
+// a remote is rclone's filter language rather than anything this store
 // invents, and what is filtered out is never transferred, let alone stored.
-func WithFilters(args ...string) Option {
-	return func(inst *serveConfig) { inst.args = append(inst.args, args...) }
-}
-
-// WithArgs passes any other flags to `rclone serve sftp`.
+// `--links` is what makes a symlink arrive as a symlink rather than not at
+// all (see the package doc).
 func WithArgs(args ...string) Option {
 	return func(inst *serveConfig) { inst.args = append(inst.args, args...) }
 }
