@@ -176,6 +176,20 @@ Accepted 2026-10-09.
 - **M3 — The coordinator's `read_window_tree`.** (SD6) Built.
 - **M4 — ADR-0297's widget anchors.** (SD7) Open: built with ADR-0297, which is still proposed.
 
+## Updates
+
+### 2026-10-09 — ownership corrected, blocks and counts in the document, a frame time, an outline for reading
+
+An agent reading play's tree reported doubled entries, table cells that read as buttons, wrappers and resize handles crowding the lines, rows gone without a marker, and no way to tell how fresh the tree was.
+
+- **SD2 was wrong about containers.** Widgets were claimed only when a message ended, so what a container registered before or between its children went to the next message to end, often one that draws nothing (`AddSpace`, `CaptureUiRect`). The recorder now also reads egui's list when a message begins and hands what is new to the row still open, so a widget belongs to the innermost row open when egui registered it. A Rust test pins the case.
+- **Deferred blocks are rows.** Each replay of a deferred block — a table cell or row, a popup's or a tooltip's body — is a row with `op` `DeferredBlock` (`capture.TreeBlockOp`), under the message that replayed it.
+- **Two counts.** `clipped` counts widgets with a size that are clipped to nothing; a widget of no size, such as a ui's placeholder, is not counted. `blocks` counts the deferred blocks a message read; its `DeferredBlock` rows are those on screen. Both move to the nearest kept row when a row is left out. Rows an app never sends — a table that sends only the rows in view — are counted by neither; the app's own text (play's "rows 1–20 of 20") is what says so.
+- **`taken`.** The capture service stamps the document with when the frame was recorded, RFC 3339 in UTC.
+- **The outline (SD6) is for reading.** A line leads with the widget's role, name and value, and ends with the message that drew it. Unnamed wrappers, splitters, scroll bars and text runs are left out. A message that shows nothing of its own and holds one shown part is folded into it. Sibling deferred blocks sharing a top edge print as one row of their texts (`row [x,y wxh]: "A320" | "2005"`), so data does not read as controls. The counts print as "N out of view" and "N of M parts not shown". The tool's description says the tree shows the pixels of one frame, not the app's state, which comes from its operations.
+
+The schema stays version 1: the new fields are optional and the new `op` is a name.
+
 ## References
 
 - [ADR-0154](./0154-headless-carrier-tree-and-driver.md) — the driver's tree and its role vocabulary.

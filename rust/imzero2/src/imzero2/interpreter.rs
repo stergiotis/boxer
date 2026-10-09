@@ -1604,12 +1604,14 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             }
             // A `tree` capture (ADR-0301): bracket the message so the
             // widgets egui registers while it runs are attributed to it.
+            let blocks = self.io.deferred_blocks_read;
             if let Some(t) = self.op_tree.as_mut() {
-                t.begin(c, format!("{func_proc_id:?}"));
+                t.begin(c, format!("{func_proc_id:?}"), blocks);
             }
             let r = self.interpret_inner(c, u, &func_proc_id, 0);
+            let blocks = self.io.deferred_blocks_read;
             if let Some(t) = self.op_tree.as_mut() {
-                t.end(c, matches!(r, Ok(true)));
+                t.end(c, matches!(r, Ok(true)), blocks);
             }
             if r? {
                 return Ok(());
@@ -1675,11 +1677,20 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             return Ok(());
         }
         let depth = self.message_offsets.len();
+        // A window tree (ADR-0301) gives each replay of a block a row.
+        let blocks = self.io.deferred_blocks_read;
+        if let Some(t) = self.op_tree.as_mut() {
+            t.begin_block(ctx, blocks);
+        }
         self.io.begin_replay(block);
         // Capture so end_replay() runs even on Err — the replay overlay state
         // must be cleaned up regardless of whether dispatch propagated an error.
         let r = self.interpret_outer(ctx, &mut Some(ui));
         self.io.end_replay();
+        let blocks = self.io.deferred_blocks_read;
+        if let Some(t) = self.op_tree.as_mut() {
+            t.end(ctx, false, blocks);
+        }
         if r.is_err() {
             // A message that errored mid-block leaves its begin_consume_message
             // entry on the frame stacks. The block is length-bounded and the

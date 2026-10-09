@@ -47,6 +47,8 @@ type SourceResult struct {
 	Svg []byte
 	// A completed tree render: the client's window tree document.
 	Tree []byte
+	// RecordedAt is when the frame a replay drew was recorded.
+	RecordedAt time.Time
 	// SpansDigest names the stream a pixel render replayed.
 	SpansDigest string
 }
@@ -290,6 +292,9 @@ func (inst *Service) finishLocked(id string, j *job, r SourceResult) {
 		if e != nil {
 			fail(e.Error())
 			return
+		}
+		if !r.RecordedAt.IsZero() {
+			t.Taken = r.RecordedAt.UTC().Format(time.RFC3339Nano)
 		}
 		for _, o := range obligations {
 			if e = inst.registry.tree[o.Name].Apply(&t, o); e != nil {

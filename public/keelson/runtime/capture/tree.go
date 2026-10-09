@@ -19,10 +19,18 @@ const MediaTypeTree = "application/vnd.boxer.window-tree+json"
 // TreeVersion is the document version this package reads and writes.
 const TreeVersion uint32 = 1
 
+// TreeBlockOp is the Op of a row standing for one replay of a deferred
+// block — a table cell or row, a popup's or a tooltip's body — rather than a
+// message of the stream.
+const TreeBlockOp = "DeferredBlock"
+
 // Tree is a window tree document.
 type Tree struct {
-	V   uint32   `json:"v"`
-	Ops []TreeOp `json:"ops"`
+	V uint32 `json:"v"`
+	// Taken is when the frame the tree was drawn from was recorded, RFC 3339
+	// in UTC; the capture service sets it.
+	Taken string   `json:"taken,omitempty"`
+	Ops   []TreeOp `json:"ops"`
 }
 
 // TreeOp is one message of the stream that drew at least one visible
@@ -36,7 +44,15 @@ type TreeOp struct {
 	Parent int `json:"parent"`
 	// Rect is the union of every visible widget below the message, in
 	// logical points of the viewport: x, y, w, h.
-	Rect    [4]float32   `json:"rect"`
+	Rect [4]float32 `json:"rect"`
+	// Clipped counts widgets drawn below the message but clipped to nothing:
+	// scrolled out of view or cut by their container. Their names are not in
+	// the tree.
+	Clipped int `json:"clipped,omitempty"`
+	// Blocks counts the deferred blocks the message received; the
+	// TreeBlockOp rows below it are the ones drawn. A table receives one per
+	// row or cell and draws those in view.
+	Blocks  int          `json:"blocks,omitempty"`
 	Widgets []TreeWidget `json:"widgets"`
 }
 

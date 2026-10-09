@@ -1,7 +1,10 @@
 package chat
 
 import (
+	"cmp"
 	"context"
+	"math"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -64,57 +67,197 @@ func (inst *coordinator) readWindowTree(ctx context.Context, o toolOrigin, windo
 		"read the window tree of " + windowsText(windows) + " (" + strconv.Itoa(len(t.Ops)) + " messages)"
 }
 
-// treeOutline renders a window tree for the model:
+// noiseRoles are roles that name no content: layout wrappers, resize
+// handles, scroll bars. A widget with one of them and no name or value is
+// left out of the outline; how much is out of view is said by the counts.
+var noiseRoles = map[string]bool{"": true, "unknown": true, "generic_container": true, "splitter": true,
+	"scroll_bar": true, "text_run": true}
+
+// treeOutline renders a window tree for the model, one line per part that
+// shows something:
 //
-//	#3 Button [20,60 40x18] button "Save"
+//	#2 button "Save" [20,60 40x18] · Button
+//	#5 [20,90 300x140] · EndETable · 13 of 20 parts not shown
+//	  row [20,92 300x18]: "A320" | "2005"
 //
-// indented two spaces per level. A message's own widgets follow on its line
-// when they share its rect, else on lines of their own below it. Widgets
-// with neither a role nor a name are left out; a message with nothing left
-// to show keeps its line when something below it is shown. The outline is
-// cut at limit bytes.
+// Lines lead with the widget's role and name; the message that drew it comes
+// last. A message that shows nothing of its own and holds one shown part is
+// folded into it. Sibling deferred blocks sharing a top edge are a table's
+// cells: they print as one row of their texts, so data does not read as
+// controls. A message's counts say what is not shown: widgets clipped out of
+// view, and deferred blocks it received that are not on screen — not drawn,
+// or drawn and scrolled away. The outline is cut at limit bytes.
 func treeOutline(t capture.Tree, limit int) (s string) {
-	depth := make([]int, len(t.Ops))
-	shown := make([]bool, len(t.Ops))
-	for i := len(t.Ops) - 1; i >= 0; i-- {
+	n := len(t.Ops)
+	children := make([][]int, n)
+	var roots []int
+	for i, op := range t.Ops {
+		if op.Parent >= 0 {
+			children[op.Parent] = append(children[op.Parent], i)
+		} else {
+			roots = append(roots, i)
+		}
+	}
+	own := make([][]capture.TreeWidget, n)
+	shown := make([]bool, n)
+	for i := n - 1; i >= 0; i-- {
 		for _, w := range t.Ops[i].Widgets {
-			if w.Role != "" || w.Name != "" {
-				shown[i] = true
+			if !noiseRoles[w.Role] || w.Name != "" || w.Value != "" {
+				own[i] = append(own[i], w)
 			}
+		}
+		if len(own[i]) > 0 || t.Ops[i].Clipped > 0 || t.Ops[i].Blocks > 0 {
+			shown[i] = true
 		}
 		if shown[i] && t.Ops[i].Parent >= 0 {
 			shown[t.Ops[i].Parent] = true
 		}
 	}
 	var b strings.Builder
-	for i, op := range t.Ops {
-		if op.Parent >= 0 {
-			depth[i] = depth[op.Parent] + 1
+	if t.Taken != "" {
+		b.WriteString("taken " + t.Taken + "\n")
+	}
+	cut := false
+	emit := func(line string) {
+		if cut {
+			return
 		}
-		if !shown[i] {
-			continue
+		if b.Len()+len(line) > limit {
+			b.WriteString("… cut at " + strconv.Itoa(limit) + " bytes; read fewer windows")
+			cut = true
+			return
 		}
-		start := b.Len()
-		pad := strings.Repeat("  ", depth[i])
-		b.WriteString(pad)
-		b.WriteString("#" + strconv.Itoa(i) + " " + op.Op + " " + rectText(op.Rect))
-		for _, w := range op.Widgets {
-			if w.Role == "" && w.Name == "" {
-				continue
+		b.WriteString(line + "\n")
+	}
+	var walk func(i int, depth int)
+	walkAll := func(ids []int, depth int) {
+		var shownIds []int
+		for _, c := range ids {
+			if shown[c] {
+				shownIds = append(shownIds, c)
 			}
-			if w.Rect == op.Rect {
-				b.WriteString(" " + widgetText(w))
-				continue
-			}
-			b.WriteString("\n" + pad + "  - " + widgetText(w) + " " + rectText(w.Rect))
 		}
-		b.WriteByte('\n')
-		if b.Len() > limit {
-			out := b.String()[:start]
-			return out + "… cut at " + strconv.Itoa(limit) + " bytes; read fewer windows"
+		rows, rest := tableRows(t, shownIds)
+		for _, r := range rows {
+			emit(strings.Repeat("  ", depth) + rowText(t, r, children, own))
+		}
+		for _, c := range rest {
+			walk(c, depth)
 		}
 	}
+	walk = func(i int, depth int) {
+		op := t.Ops[i]
+		var kids []int
+		for _, c := range children[i] {
+			if shown[c] {
+				kids = append(kids, c)
+			}
+		}
+		bare := len(own[i]) == 0 && op.Clipped == 0 && op.Blocks == 0
+		if bare && (len(kids) <= 1 || op.Op == capture.TreeBlockOp) {
+			walkAll(children[i], depth)
+			return
+		}
+		pad := strings.Repeat("  ", depth)
+		head := pad + "#" + strconv.Itoa(i)
+		if len(own[i]) > 0 {
+			head += " " + widgetText(own[i][0]) + " " + rectText(own[i][0].Rect)
+		} else {
+			head += " " + rectText(op.Rect)
+		}
+		head += " · " + op.Op
+		if op.Clipped > 0 {
+			head += " · " + strconv.Itoa(op.Clipped) + " out of view"
+		}
+		if op.Blocks > 0 {
+			drawn := 0
+			for _, c := range children[i] {
+				if t.Ops[c].Op == capture.TreeBlockOp {
+					drawn++
+				}
+			}
+			if op.Blocks > drawn {
+				head += " · " + strconv.Itoa(op.Blocks-drawn) + " of " + strconv.Itoa(op.Blocks) + " parts not shown"
+			}
+		}
+		emit(head)
+		for _, w := range own[i][min(1, len(own[i])):] {
+			emit(pad + "  - " + widgetText(w) + " " + rectText(w.Rect))
+		}
+		walkAll(children[i], depth+1)
+	}
+	walkAll(roots, 0)
 	return strings.TrimSuffix(b.String(), "\n")
+}
+
+// tableRows picks out of ids the deferred blocks that share a top edge with
+// at least one sibling block — a table's cells — grouped by row, top to
+// bottom and left to right; rest keeps every other id in order.
+func tableRows(t capture.Tree, ids []int) (rows [][]int, rest []int) {
+	byTop := map[float32][]int{}
+	var tops []float32
+	for _, i := range ids {
+		if t.Ops[i].Op != capture.TreeBlockOp {
+			continue
+		}
+		y := float32(math.Round(float64(t.Ops[i].Rect[1])))
+		if _, ok := byTop[y]; !ok {
+			tops = append(tops, y)
+		}
+		byTop[y] = append(byTop[y], i)
+	}
+	inRow := map[int]bool{}
+	slices.Sort(tops)
+	for _, y := range tops {
+		cells := byTop[y]
+		if len(cells) < 2 {
+			continue
+		}
+		slices.SortFunc(cells, func(a, b int) int { return cmp.Compare(t.Ops[a].Rect[0], t.Ops[b].Rect[0]) })
+		rows = append(rows, cells)
+		for _, c := range cells {
+			inRow[c] = true
+		}
+	}
+	for _, i := range ids {
+		if !inRow[i] {
+			rest = append(rest, i)
+		}
+	}
+	return
+}
+
+// rowText is one table row: the rect the cells span, and each cell's texts.
+func rowText(t capture.Tree, cells []int, children [][]int, own [][]capture.TreeWidget) string {
+	r := t.Ops[cells[0]].Rect
+	minX, minY, maxX, maxY := r[0], r[1], r[0]+r[2], r[1]+r[3]
+	texts := make([]string, 0, len(cells))
+	for _, c := range cells {
+		cr := t.Ops[c].Rect
+		minX, minY = min(minX, cr[0]), min(minY, cr[1])
+		maxX, maxY = max(maxX, cr[0]+cr[2]), max(maxY, cr[1]+cr[3])
+		var parts []string
+		var collect func(i int)
+		collect = func(i int) {
+			for _, w := range own[i] {
+				if w.Name != "" {
+					parts = append(parts, quoteAppText(w.Name))
+				}
+				if w.Value != "" {
+					parts = append(parts, quoteAppText(w.Value))
+				}
+			}
+			for _, k := range children[i] {
+				collect(k)
+			}
+		}
+		collect(c)
+		if len(parts) == 0 {
+			parts = append(parts, "∅")
+		}
+		texts = append(texts, strings.Join(parts, " "))
+	}
+	return "row " + rectText([4]float32{minX, minY, maxX - minX, maxY - minY}) + ": " + strings.Join(texts, " | ")
 }
 
 func widgetText(w capture.TreeWidget) (s string) {

@@ -7,6 +7,7 @@ import (
 	"image/png"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -182,7 +183,8 @@ const treeDoc = `{"v":1,"ops":[{"op":"Window","parent":-1,"rect":[10,20,300,200]
 	`{"op":"Button","parent":0,"rect":[20,60,40,18],"widgets":[{"id":9,"rect":[20,60,40,18],"role":"button","name":"Save"}]}]}`
 
 func TestATreeCaptureIsOfTheScopesWindowsParsedAndSealed(t *testing.T) {
-	src := &fakeSource{result: SourceResult{Phase: opwire.PhaseCompleted, Tree: []byte(treeDoc)}}
+	recorded := time.Date(2026, 10, 9, 17, 30, 0, 0, time.UTC)
+	src := &fakeSource{result: SourceResult{Phase: opwire.PhaseCompleted, Tree: []byte(treeDoc), RecordedAt: recorded}}
 	s := NewService(GrantPolicy{}, NewRegistry(), src)
 	s.SetSealedDir(t.TempDir())
 	id, d, err := s.Capture(Request{Windows: []uint64{1, 2}, Format: FormatTree}, covers(1, 2), nil)
@@ -199,6 +201,7 @@ func TestATreeCaptureIsOfTheScopesWindowsParsedAndSealed(t *testing.T) {
 	require.Len(t, tr.Ops, 2)
 	assert.Equal(t, "Save", tr.Ops[1].Widgets[0].Name)
 	assert.Equal(t, 0, tr.Ops[1].Parent)
+	assert.Equal(t, "2026-10-09T17:30:00Z", tr.Taken)
 	info, _ := s.Info(id)
 	assert.Equal(t, []string{"scope@1"}, info.Obligations)
 }

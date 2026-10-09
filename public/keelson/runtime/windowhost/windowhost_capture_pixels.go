@@ -45,6 +45,8 @@ type pixelJob struct {
 	stream []byte
 	// spansDigest names the stream replayed (ADR-0281 §SD4).
 	spansDigest string
+	// recordedAt is when the recording of the frame ended.
+	recordedAt time.Time
 }
 
 // The client's capture formats (captureReplay).
@@ -194,6 +196,7 @@ func (inst *Inst) pixelFrameEnd() {
 	}
 	rec := f.EndRecording()
 	p := j.pixel
+	p.recordedAt = time.Now()
 	if p.recheck != nil && !p.recheck() {
 		inst.failPixelJobLocked(j, "the grant no longer covers the windows")
 		return
@@ -227,7 +230,8 @@ func (inst *Inst) finishPixelJobLocked(j *captureJob, r c.CaptureResultValue, pp
 		return
 	}
 	if j.pixel.format == replayFormatTree {
-		j.result = capture.SourceResult{Phase: opwire.PhaseCompleted, Tree: r.Data, SpansDigest: j.pixel.spansDigest}
+		j.result = capture.SourceResult{Phase: opwire.PhaseCompleted, Tree: r.Data, SpansDigest: j.pixel.spansDigest,
+			RecordedAt: j.pixel.recordedAt}
 		j.status = opwire.CaptureStatus{Phase: opwire.PhaseCompleted}
 		return
 	}
