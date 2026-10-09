@@ -84,9 +84,7 @@ const KeelsonSQLURL = KeelsonSQLOrigin + "/query"
 func installKeelsonSQL(reg *introspect.Registry) (err error) {
 	srv := introspecthttp.New(introspecthttp.Config{
 		Registry: reg,
-		Runner: introspecthttp.MacroRunnerFunc(func(ctx context.Context, sql string, params map[string]string) ([]byte, error) {
-			return trivialsql.Run(ctx, reg, sql, params)
-		}),
+		Runner:   trivialsql.Runner{Registry: reg},
 	}, log.Logger)
 	rt, err := introspecthttp.InProcess(KeelsonSQLOrigin, srv.Handler(), http.DefaultTransport)
 	if err != nil {

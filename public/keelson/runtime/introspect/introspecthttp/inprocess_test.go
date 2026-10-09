@@ -1,7 +1,6 @@
 package introspecthttp
 
 import (
-	"context"
 	"io"
 	"net/http"
 	"strings"
@@ -27,9 +26,7 @@ func trivialClient(t *testing.T) (*http.Client, *passThrough) {
 	t.Helper()
 	reg := introspect.NewRegistry()
 	require.NoError(t, providers.RegisterStatic(reg))
-	srv := New(Config{Registry: reg, Runner: MacroRunnerFunc(func(ctx context.Context, sql string, params map[string]string) ([]byte, error) {
-		return trivialsql.Run(ctx, reg, sql, params)
-	})}, zerolog.Nop())
+	srv := New(Config{Registry: reg, Runner: trivialsql.Runner{Registry: reg}}, zerolog.Nop())
 	next := &passThrough{}
 	rt, err := InProcess("http://keelson.invalid", srv.Handler(), next)
 	require.NoError(t, err)
@@ -82,4 +79,35 @@ func TestInProcess_OtherOriginsPassThrough(t *testing.T) {
 func TestInProcess_RejectsAnOriginWithAPath(t *testing.T) {
 	_, err := InProcess("http://keelson.invalid/query", http.NotFoundHandler(), http.DefaultTransport)
 	assert.Error(t, err)
+}
+
+// A handler's panic is the request's error, not the host's end: a server's
+// net/http would recover it and drop the connection.
+func TestInProcess_APanicIsTheRequestsError(t *testing.T) {
+	rt, err := InProcess("http://keelson.invalid", http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		panic("boom")
+	}), http.DefaultTransport)
+	require.NoError(t, err)
+	_, err = (&http.Client{Transport: rt}).Get("http://keelson.invalid/query")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "panicked")
+}
+
+// The trivial runner is handed the query string's settings: default_format
+// names the format of a statement without one, and a setting that could
+// change the result is refused rather than dropped.
+func TestInProcess_TrivialQuerySettings(t *testing.T) {
+	c, _ := trivialClient(t)
+	resp, err := c.Post("http://keelson.invalid/query?default_format=JSONEachRow&readonly=2", "text/plain", strings.NewReader("SELECT * FROM keelson('env') LIMIT 1"))
+	require.NoError(t, err)
+	b, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(b))
+	assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
+	assert.True(t, strings.HasPrefix(string(b), "{"), string(b))
+
+	status, body := post(t, c, "http://keelson.invalid/query?limit=1", "SELECT * FROM keelson('env') FORMAT TabSeparated")
+	assert.GreaterOrEqual(t, status, 400)
+	assert.Contains(t, body, "the setting limit")
 }

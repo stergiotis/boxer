@@ -69,8 +69,8 @@ natively through the introspection engine.
 
 - **SD1 — Named arguments on `keelson()`.** `keelson('name', key = value, …)`:
   the first argument is the table name as today; every further argument is
-  `identifier = value`, where value is a literal or a `{slot:Type}`
-  placeholder. A provider declares its arguments (name, ClickHouse type,
+  `identifier = value`, where value is a literal, a `{slot:Type}`
+  placeholder or a WITH constant (SD3). A provider declares its arguments (name, ClickHouse type,
   required or defaulted); an undeclared, missing or ill-typed argument fails
   naming it, before anything is snapshotted. `keelson('name')` with no
   arguments is unchanged. nanopass already parses the form, slots included.
@@ -89,21 +89,66 @@ natively through the introspection engine.
   arguments, naming the engine as the path that resolves them (Q4).
 
 - **SD3 — The trivial evaluator, by shape.** It accepts, parsed by nanopass:
-  an optional `WITH` list whose items are each `alias AS (SELECT * FROM
-  keelson(…))`, then `SELECT * FROM` one keelson call or one alias, then
-  optional `LIMIT n` and `FORMAT f`. Anything else is refused with an error
-  that says the statement needs ClickHouse, in the `chhttp` error envelope a
-  client already reads for any server error — without an engine code, since
-  inventing one would be worse than leaving it out. It evaluates nothing: it
-  resolves arguments (SD2), calls the provider and streams the record.
+  optional `SET param_<name>` preludes; an optional `WITH` list of constants
+  (`<constant> AS c`) and queries (`q AS (SELECT <list> FROM <source>)`, each
+  able to name the queries before it); then `SELECT <list>`, with or without
+  `FROM <source>`; then optional `LIMIT n [OFFSET m]` and `FORMAT f`. A
+  source is a keelson call, `values()` over constants, or a WITH query; a
+  list is `*` and constants, each with an optional alias; a constant is a
+  literal, `true`, `false`, a `{slot:Type}` parameter or a WITH constant —
+  never an operator or a function, which a server evaluates. Anything else
+  is refused with an error that says the statement needs
+  ClickHouse, in the `chhttp` error envelope a client already reads for any
+  server error — without an engine code, since inventing one would be worse
+  than leaving it out. It evaluates nothing: it resolves arguments (SD2),
+  calls the provider and encodes the record.
+
+  What it does answer, it answers as clickhouse-local does, and what it
+  cannot answer that way it refuses rather than approximates:
+  - **Formats** are a closed set: ArrowStream, TabSeparated and CSV (each
+    also `WithNames`), and JSONEachRow, matched as ClickHouse matches a
+    format name. The text formats render a value as clickhouse-local renders
+    the same Arrow column — integers, floats, Bool, strings and binaries, and
+    arrays and dictionaries of those — and refuse a column of any other type
+    (a timestamp, a decimal, a tuple), whose text depends on settings this
+    evaluator does not model. ArrowStream carries every type, with the
+    provider's own Arrow types where ClickHouse would map them (a String
+    comes back LargeBinary): equal in values, not in bytes. Other formats
+    are refused; one is added when a client needs it and a parity test can
+    hold it to ClickHouse's bytes.
+  - **Settings** — a `SET`, a `SETTINGS` clause, a query-string key — are
+    accepted only when they change neither the rows nor their encoding
+    (`log_comment`, `readonly`, the query-cache flags, resource limits), and
+    every other one is refused: ignoring `limit`, `max_result_rows` or an
+    `output_format_*` setting would hand back other rows or other bytes.
+  - **Literals and parameters** decode as ClickHouse decodes them: a string
+    literal's backslash escapes, and a parameter's value read in the escaped
+    text format. This is shared with SD2, so the native path reads them the
+    same way.
+  - **Constants are typed as ClickHouse types them** — an integer as the
+    smallest UInt holding it, or Int when negative, a number with a point or
+    an exponent as Float64, a parameter as its declared type — and an
+    unaliased one takes ClickHouse's default column name. `values()` converts
+    its rows to a declared structure, or without one finds the least type
+    every row fits, as ClickHouse does; what ClickHouse rejects there is an
+    error of the statement. A shape whose ClickHouse answer is not modelled
+    is refused: NULL as a column, an unaliased parameter (named `_CAST(…)`),
+    a name given twice, a WITH constant named like a column, a `values()`
+    type outside the scalars above.
+  - **A WITH constant is a keelson() argument value** as a literal is, on
+    both paths (SD2), so `WITH 4 AS k SELECT * FROM keelson('t', n = k)`
+    runs the same natively.
 
 - **SD4 — In a tab, the endpoint is a round-tripper, not a client change.** In
   a tab, Go's default HTTP transport is already the host's fetch. The endpoint
   is an `http.RoundTripper` in front of it that answers one dedicated origin
   in-process and passes every other request through: `query` in the body or
-  URL, `param_*` pairs, `default_format` or a `FORMAT` clause (ArrowStream
-  first; others as clients need them), errors in the `chhttp` envelope. A tab binary that wants it sets `CLICKHOUSE_URL` to that origin;
-  play's client, executor and panes do not know the difference.
+  URL, `param_*` pairs, `default_format` or a `FORMAT` clause, errors in the
+  `chhttp` envelope. The evaluator is handed the query string's settings and
+  judges them as SD3 does. A handler that panics fails its request, as a
+  dropped connection would, instead of the tab. A tab binary that wants it
+  sets `CLICKHOUSE_URL` to that origin; play's client, executor and panes do
+  not know the difference.
 
 ### Deferred and open
 
@@ -111,8 +156,8 @@ natively through the introspection engine.
   that send their own SQL — completion, docs, the schema reads — are refused by
   SD3. Which of them a tab should hide, and which merely show the refusal, is
   settled by the first tab that uses the endpoint.
-- **Q2 — FORMATs.** ArrowStream is what play's lanes read; whether any lane
-  needs another format on this endpoint is found by running play against it.
+- **Q2 — FORMATs.** Settled in SD3: a closed set, each held to
+  clickhouse-local's output by a parity test.
 - **Q3 — Outside a tab.** SD4 is the tab's transport. Whether a headless binary
   or a test reaches the evaluator through the same round-tripper or by calling
   it directly is left to the first such user.
@@ -216,11 +261,14 @@ query parameter.
 
 `trivialsql` answers the shape of SD3 — CTEs only as aliases of keelson calls,
 `SET param_*` preludes bound as ClickHouse binds them, `LIMIT n`, `LIMIT n
-OFFSET m` and `LIMIT m, n` — in ArrowStream, TabSeparated and JSONEachRow, and
-refuses everything else with `ErrNeedsClickHouse`; a bad call (an unknown table,
-a missing argument) is reported as that, not as a refusal. A parity test runs
-the same statements through it and through clickhouse-local and finds the
-bodies byte-equal. `introspecthttp.InProcess` serves the existing introspection
+OFFSET m` and `LIMIT m, n` — in the formats SD3 lists, and refuses everything
+else with `ErrNeedsClickHouse`; a bad call (an unknown table, a missing
+argument) is reported as that, not as a refusal. A parity test runs the same
+statements through it and through clickhouse-local, over a table holding a
+column of each type the text formats render and the values whose spelling is
+easiest to get wrong, and over constant rows, constants beside `*`, WITH
+constants and `values()` tables, and finds the text bodies byte-equal and the
+ArrowStream records equal in values. `introspecthttp.InProcess` serves the existing introspection
 handler to a client without a socket, and `tabhost.Services.KeelsonSQL` installs
 it in a tab at `http://keelson.invalid/query`, a name that cannot resolve.
 `imzero2tab` turns it on over the static tables. In a tab with no ClickHouse,

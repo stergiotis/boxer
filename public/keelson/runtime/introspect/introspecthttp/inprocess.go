@@ -2,6 +2,7 @@ package introspecthttp
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -42,9 +43,15 @@ func (inst inProcess) RoundTrip(req *http.Request) (resp *http.Response, err err
 		in.Body = http.NoBody
 	}
 	w := &recorder{header: make(http.Header)}
-	inst.h.ServeHTTP(w, in)
+	panicked := serve(inst.h, w, in)
 	if req.Body != nil {
 		_ = req.Body.Close()
+	}
+	if panicked != nil {
+		// A server's net/http recovers a handler's panic and drops the
+		// connection; here it would end the host, so it is the request's
+		// error instead, as a dropped connection is to a client.
+		return nil, eb.Build().Str("url", req.URL.String()).Str("panic", fmt.Sprint(panicked)).Errorf("introspecthttp: the in-process handler panicked")
 	}
 	status := w.status
 	if status == 0 {
@@ -61,6 +68,13 @@ func (inst inProcess) RoundTrip(req *http.Request) (resp *http.Response, err err
 		ContentLength: int64(w.body.Len()),
 		Request:       req,
 	}
+	return
+}
+
+// serve runs h, returning what it panicked with, or nil.
+func serve(h http.Handler, w http.ResponseWriter, r *http.Request) (panicked any) {
+	defer func() { panicked = recover() }()
+	h.ServeHTTP(w, r)
 	return
 }
 
