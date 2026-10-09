@@ -190,6 +190,16 @@ An agent reading play's tree reported doubled entries, table cells that read as 
 
 The schema stays version 1: the new fields are optional and the new `op` is a name.
 
+### 2026-10-09 — what a tree capture costs, and a recorder that reads only what is new
+
+The client now logs one `capture cost` line per capture, for every format, with the time of each phase. Measured on the headless host (`headless_soft`, dist build), with a scripted coordinator reading play's window — a keelson query of 20 rows, about 1,300 widgets — three times as a tree and twice as a PNG, in two runs:
+
+- **Before:** the recorder read egui's whole widget list at every bracket and looked up the layer's transform per widget, which grows with the square of the window. It took 3.8–3.9 ms of each tree capture.
+- **After:** a read visits only what each layer appended since the last read, from a few places before (`SEEN_SLACK`), with one transform lookup per layer. When fewer widgets are claimed than egui holds, the read falls back to the whole list, so ownership stays exact; a test shifts a widget past the slack. The recorder took 0.15–0.22 ms, and the documents were byte-identical to those before.
+- **A tree against a PNG of the same window:** the tree's pass took 6.4–12.6 ms, and writing the document about 0.1 ms. The PNG's pass took 5.9–6.7 ms, then 0.1 ms to tessellate and 2.3–3.6 ms to rasterize. Setting up the capture context took under 0.05 ms for both. The pass, where egui lays the windows out, varies between runs; why was not looked into.
+
+These run inside the client's frame, so a capture delays the frame it runs in by that much. The three frames a capture takes (record, replay, collect) are separate and dominate a tool call's wall time.
+
 ## References
 
 - [ADR-0154](./0154-headless-carrier-tree-and-driver.md) — the driver's tree and its role vocabulary.

@@ -9,8 +9,9 @@
 //! (`ViewportState::this_pass.widgets`, which egui fills for every allocated
 //! rect, interactive or not) at every bracket: widgets new since the last
 //! read were registered by the row open in between, so a begin hands them to
-//! the enclosing row and an end to the row that ends. Nothing here depends on
-//! the order of egui's lists, only on ids.
+//! the enclosing row and an end to the row that ends. Ownership is by id. A
+//! read visits only what egui appended to each layer since the last one, and
+//! falls back to the whole list when the count says it missed a widget.
 //!
 //! [`OpTreeRecorder::write_json`] joins the rows with the AccessKit tree of
 //! the same pass by egui id, for roles, names and values. AccessKit is
@@ -50,27 +51,18 @@ pub struct OpTreeRecorder {
     stack: Vec<usize>,
     claimed: HashSet<u64>,
     primed: bool,
+    /// Time spent reading egui's widget list, for the capture's log line.
+    pub sweep_ns: u64,
+    /// Each layer's widget count at the last read: new widgets are appended,
+    /// so a read starts there.
+    seen: HashMap<egui::LayerId, usize>,
 }
 
-/// Every widget registered so far this pass: id, its rect, and the part of
-/// it on screen — egui's interact rect, the rect clipped to its ui — both
-/// mapped through the layer's transform.
-fn widgets(ctx: &egui::Context) -> Vec<(u64, egui::Rect, egui::Rect)> {
-    let mut raw: Vec<(u64, egui::LayerId, egui::Rect, egui::Rect)> = Vec::new();
-    ctx.viewport(|v| {
-        for (layer, ws) in v.this_pass.widgets.layers() {
-            for w in ws {
-                raw.push((w.id.value(), *layer, w.rect, w.interact_rect));
-            }
-        }
-    });
-    raw.into_iter()
-        .map(|(id, l, r, shown)| match ctx.layer_transform_to_global(l) {
-            Some(t) => (id, t * r, t * shown),
-            None => (id, r, shown),
-        })
-        .collect()
-}
+/// How far before the last count a read starts. egui moves a widget it
+/// re-registers with `move_to_top` to the end of its layer, which shifts the
+/// widgets after it one place down; a new widget can sit that much before the
+/// count. A shift past the slack is caught by the count check in `read_new`.
+const SEEN_SLACK: usize = 8;
 
 impl OpTreeRecorder {
     /// Opens a row for a message. `blocks_read` is the io's deferred-block
@@ -136,12 +128,68 @@ impl OpTreeRecorder {
         }
     }
 
+    /// The widgets registered since the last read and not claimed yet, each
+    /// with its rect and the part of it on screen — egui's interact rect, the
+    /// rect clipped to its ui — through its layer's transform; all of them
+    /// are claimed. A layer is read from just before its count at the last
+    /// read. If fewer widgets are claimed than egui holds after that, one went
+    /// past the slack, and every layer is read whole.
+    fn read_new(&mut self, ctx: &egui::Context) -> Vec<(u64, egui::Rect, egui::Rect)> {
+        let mut out: Vec<(u64, egui::LayerId, egui::Rect, egui::Rect)> = Vec::new();
+        let mut layers: Vec<egui::LayerId> = Vec::new();
+        for whole in [false, true] {
+            let mut total = 0usize;
+            ctx.viewport(|v| {
+                for (layer, ws) in v.this_pass.widgets.layers() {
+                    total += ws.len();
+                    let seen = self.seen.get(layer).copied().unwrap_or(0);
+                    if !whole && ws.len() <= seen {
+                        continue;
+                    }
+                    let from = if whole {
+                        0
+                    } else {
+                        seen.saturating_sub(SEEN_SLACK)
+                    };
+                    let mut any = false;
+                    for w in &ws[from..] {
+                        if self.claimed.insert(w.id.value()) {
+                            out.push((w.id.value(), *layer, w.rect, w.interact_rect));
+                            any = true;
+                        }
+                    }
+                    if any {
+                        layers.push(*layer);
+                    }
+                    self.seen.insert(*layer, ws.len());
+                }
+            });
+            if self.claimed.len() >= total {
+                break;
+            }
+        }
+        // A layer's transform, once per layer read, outside egui's lock.
+        let transforms: HashMap<egui::LayerId, Option<egui::emath::TSTransform>> =
+            layers.into_iter().map(|l| (l, ctx.layer_transform_to_global(l))).collect();
+        out.into_iter()
+            .map(
+                |(id, l, r, shown)| match transforms.get(&l).copied().flatten() {
+                    Some(t) => (id, t * r, t * shown),
+                    None => (id, r, shown),
+                },
+            )
+            .collect()
+    }
+
     /// Hands every widget no row has claimed yet to `row`, or to none.
     fn sweep(&mut self, ctx: &egui::Context, row: Option<usize>) {
-        for (id, full, r) in widgets(ctx) {
-            if !self.claimed.insert(id) {
-                continue;
-            }
+        let t0 = crate::imzero2::clock::Instant::now();
+        self.sweep_inner(ctx, row);
+        self.sweep_ns = self.sweep_ns.saturating_add(t0.elapsed().as_nanos() as u64);
+    }
+
+    fn sweep_inner(&mut self, ctx: &egui::Context, row: Option<usize>) {
+        for (id, full, r) in self.read_new(ctx) {
             let Some(row) = row else {
                 continue;
             };
@@ -462,6 +510,38 @@ mod tests {
         assert_eq!(d.ops[0].blocks, 5);
         assert_eq!(d.ops[1].parent, 0);
         assert_eq!(d.ops[2].widgets[0].name, "A320");
+    }
+
+    #[test]
+    fn a_widget_shifted_past_the_slack_is_still_its_messages() {
+        let d = record(|ui, rec| {
+            let ctx = ui.ctx().clone();
+            rec.begin(&ctx, "Old".into(), 0);
+            let ids: Vec<egui::Id> = (0..20).map(|k| egui::Id::new(("old", k))).collect();
+            for (k, id) in ids.iter().enumerate() {
+                let r = egui::Rect::from_min_size(egui::pos2(0.0, k as f32), egui::vec2(5.0, 1.0));
+                let _ = ui.interact(r, *id, egui::Sense::click());
+            }
+            rec.end(&ctx, false, 0);
+            rec.begin(&ctx, "New".into(), 0);
+            let _ = ui.button("fresh");
+            // Re-registering older widgets with move_to_top shifts "fresh"
+            // down one place each time, past the slack.
+            let top = egui::InteractOptions { move_to_top: true };
+            for (k, id) in ids.iter().enumerate().take(2 * SEEN_SLACK) {
+                let r = egui::Rect::from_min_size(egui::pos2(0.0, k as f32), egui::vec2(5.0, 1.0));
+                let _ = ui.interact_opt(r, *id, egui::Sense::click(), top);
+            }
+            rec.end(&ctx, false, 0);
+        });
+        let new = d.ops.iter().find(|o| o.op == "New").expect("New kept");
+        assert!(new.widgets.iter().any(|w| w.name == "fresh"));
+        let old = d.ops.iter().find(|o| o.op == "Old").expect("Old kept");
+        assert_eq!(
+            old.widgets.len(),
+            20,
+            "a moved widget stays its first message's"
+        );
     }
 
     #[test]
