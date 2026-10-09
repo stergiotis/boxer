@@ -233,9 +233,9 @@ func (inst *Service) requestGrant(msg *app.Msg) (rep wireGrantReply) {
 	}
 	rep.Ok, rep.Key, rep.Phase = true, r.key, r.state.String()
 	if r.state == reqStateApproved && r.task != nil {
-		// Decided in the person's place: the coordinator has its grant
-		// without polling for it.
-		rep.Task, rep.Handle, rep.Unattended = r.task.id, r.task.handle, true
+		// Decided in the person's place: the coordinator has its grant,
+		// and its terms, without polling for it.
+		rep.Task, rep.Handle, rep.Unattended, rep.Terms = r.task.id, r.task.handle, true, termsOf(r.task)
 	}
 	inst.mu.Unlock()
 	if route != nil {
