@@ -409,6 +409,17 @@ test driver do; an agent cannot, since its captures go through the PEP.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
+## Updates
+
+### 2026-10-09 — a third format, the window tree
+
+[ADR-0301](./0301-window-trees-a-capture-format-naming-each-widget-under-the-message-that-drew-it.md)
+adds `tree` to the request's formats. It is drawn from the same spans and
+replay as a pixel capture; the client returns a document instead of
+pixels, and the PEP parses it before sealing it. The registry gains tree
+handlers; the scope handler refuses a crop, as the SVG one does. The
+decision, obligations, label and record are those of SD2–SD6 unchanged.
+
 ## References
 
 - [ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md) — task grants, §SD7 labels, §SD11 capture.

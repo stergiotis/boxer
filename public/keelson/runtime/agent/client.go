@@ -393,13 +393,16 @@ const (
 	CaptureFormatSvg = "svg"
 	// CaptureFormatPng is the windows' pixels as PNG.
 	CaptureFormatPng = "png"
+	// CaptureFormatTree is the windows' widgets under the messages that drew
+	// them, with their rects, roles and names (ADR-0301).
+	CaptureFormatTree = "tree"
 )
 
 // CaptureRequest is a capture of one or more windows (ADR-0281).
 type CaptureRequest struct {
 	Handle string
-	// Instances are the windows captured together; a PNG draws them all,
-	// an SVG is of one.
+	// Instances are the windows captured together; a PNG or a tree draws
+	// them all, an SVG is of one.
 	Instances []uint64
 	Format    string
 	// Crop keeps x, y, w, h of the frame, in logical points; nil keeps it

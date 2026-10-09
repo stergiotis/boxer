@@ -88,6 +88,9 @@ func (inst *noteHost) RenderSvg(k uint64, recheck func() bool) (string, error) {
 func (inst *noteHost) RenderPixels(k []uint64, recheck func() bool) (string, error) {
 	return "", nil
 }
+func (inst *noteHost) RenderTree(k []uint64, recheck func() bool) (string, error) {
+	return "", nil
+}
 func (inst *noteHost) OpsArrange(string, []uint64) error                         { return nil }
 func (inst *noteHost) OpsRaise(uint64) error                                     { return nil }
 func (inst *noteHost) OpsPlace(uint64, float32, float32, float32, float32) error { return nil }

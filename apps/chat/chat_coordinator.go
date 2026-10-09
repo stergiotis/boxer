@@ -103,6 +103,7 @@ const coordinatorPrompt = `You can work in app windows the person shares with yo
 - Before writing SQL in play, look for a worked query: list_snippets finds them by words and read_snippet gives the SQL; list_functions says which functions a query may call and where each runs.
 - A task runs for a limited time. When a call says its deadline passed, request_access asks the person for more time; when it says the task ended, request_access starts a new one.
 - keelson('windows') lists every open window — its key, app, title, rect (x, y, w, h), stacking rank, whether it is active or maximized, and the tasks holding it — and keelson('desktop') the work area windows are laid out in; query_windows reads either with a SELECT. arrange_windows lays windows out (cascade, tile, columns, rows, gather), all of them or the ones you name, and needs request_access with desktop true; raise_window and place_window act on a window of your task shared in act mode. A move takes a frame or more: query again to see where windows ended.
+- read_window_tree shows what windows of your task display — their buttons, labels, fields and values, each with its rect — when an operation does not say what you need to know about a view.
 - A turn has a limited number of rounds of tool calls, and on the last one no tool can be called. Answer as soon as you know enough; when you cannot finish, say what you found and what is left.`
 
 const (
@@ -450,6 +451,8 @@ func (inst *coordinator) fixedTools() (out []openaichat.Tool) {
 			Parameters: toolSchema(`{"type":"object","properties":{"window":{"type":"integer"}},"required":["window"],"additionalProperties":false}`)},
 		{Name: "place_window", Description: "Move and size a window of your task, shared in act mode: x, y is the top-left corner and w, h the outer size, in the coordinates query_windows reports. A window whose content does not fill the height or width keeps its content's size there.",
 			Parameters: toolSchema(`{"type":"object","properties":{"window":{"type":"integer"},"x":{"type":"number"},"y":{"type":"number"},"w":{"type":"number"},"h":{"type":"number"}},"required":["window","x","y","w","h"],"additionalProperties":false}`)},
+		{Name: "read_window_tree", Description: "Read what windows of your task show as a tree: each line is a part of the window — the widget kind as the app drew it, its rect [x,y wxh] in the coordinates query_windows reports — with the widgets it drew, their role, name and value. It holds what is on screen, not what is scrolled away or hidden. Observe mode suffices.",
+			Parameters: toolSchema(`{"type":"object","properties":{"windows":{"type":"array","items":{"type":"integer"},"minItems":1,"description":"window numbers, as list_windows gives them"}},"required":["windows"],"additionalProperties":false}`)},
 		{Name: "stop_task", Description: "End your task; the windows you opened pass to the person.",
 			Parameters: toolSchema(`{"type":"object","properties":{},"additionalProperties":false}`)},
 	}
@@ -691,6 +694,16 @@ func (inst *coordinator) dispatch(ctx context.Context, o toolOrigin, call openai
 		return inst.launched(str("app"), got)
 	case "query_windows":
 		return inst.queryWindows(ctx, str("table"), str("sql"))
+	case "read_window_tree":
+		var keys []uint64
+		if ws, ok := args["windows"].([]any); ok {
+			for _, w := range ws {
+				if f, isNum := w.(float64); isNum {
+					keys = append(keys, uint64(f))
+				}
+			}
+		}
+		return inst.readWindowTree(ctx, o, keys)
 	case "arrange_windows", "raise_window", "place_window":
 		return inst.windowVerb(ctx, inst.asked(o, call.Id), call.Name, args)
 	case "stop_task":

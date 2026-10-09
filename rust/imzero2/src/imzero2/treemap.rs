@@ -22,6 +22,9 @@ use super::inputproto as pb;
 // identical to the ones egui hands us, with no version to keep in step.
 use egui::accesskit;
 
+// One role vocabulary for the driver's tree and a capture's (ADR-0301).
+use super::interpreter::optree::role_name;
+
 /// `TreeNode.flags` bits. Wire-stable: append, never renumber.
 pub const FLAG_DISABLED: u32 = 1;
 pub const FLAG_HIDDEN: u32 = 2;
@@ -96,7 +99,7 @@ pub fn snapshot(update: &accesskit::TreeUpdate, pass: u64) -> pb::TreeSnapshot {
             });
             pb::TreeNode {
                 id: id.0,
-                role: role_name(node.role()).clone(),
+                role: role_name(node.role()),
                 name: node.label().unwrap_or_default().to_owned(),
                 value: node.value().unwrap_or_default().to_owned(),
                 x,
@@ -124,22 +127,6 @@ pub fn snapshot(update: &accesskit::TreeUpdate, pass: u64) -> pb::TreeSnapshot {
 /// than a zero. `Debug` is AccessKit's own spelling of the variant, lowercased
 /// with word breaks — stable enough for matching and cheap enough to produce
 /// here, where the tree is built only on request.
-fn role_name(role: accesskit::Role) -> String {
-    let debug = format!("{role:?}");
-    let mut out = String::with_capacity(debug.len() + 4);
-    for (i, ch) in debug.char_indices() {
-        if ch.is_ascii_uppercase() {
-            if i != 0 {
-                out.push('_');
-            }
-            out.push(ch.to_ascii_lowercase());
-        } else {
-            out.push(ch);
-        }
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -15,6 +15,9 @@ const (
 	FormatSvg FormatE = "svg"
 	// FormatPng is the windows' pixels as PNG.
 	FormatPng FormatE = "png"
+	// FormatTree is the windows' widgets under the messages that drew them
+	// (ADR-0301).
+	FormatTree FormatE = "tree"
 )
 
 // Request is one capture, as the PEP receives it.

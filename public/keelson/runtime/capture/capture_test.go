@@ -28,6 +28,10 @@ func (inst *fakeSource) RenderPixels(ws []uint64, recheck func() bool) (string, 
 	inst.rendered = append(inst.rendered, ws)
 	return "src-1", nil
 }
+func (inst *fakeSource) RenderTree(ws []uint64, recheck func() bool) (string, error) {
+	inst.rendered = append(inst.rendered, ws)
+	return "src-1", nil
+}
 func (inst *fakeSource) SourceStatus(string) (SourceResult, bool) { return inst.result, true }
 
 func covers(ws ...uint64) Facts {
@@ -172,4 +176,49 @@ func TestAFailedRenderFailsTheCapture(t *testing.T) {
 	st, _ := s.Status(id)
 	assert.Equal(t, opwire.PhaseFailed, st.Phase)
 	assert.Contains(t, st.Reason, "no longer covers")
+}
+
+const treeDoc = `{"v":1,"ops":[{"op":"Window","parent":-1,"rect":[10,20,300,200],"widgets":[{"id":7,"rect":[10,20,300,24],"role":"window","name":"Notes"}]},` +
+	`{"op":"Button","parent":0,"rect":[20,60,40,18],"widgets":[{"id":9,"rect":[20,60,40,18],"role":"button","name":"Save"}]}]}`
+
+func TestATreeCaptureIsOfTheScopesWindowsParsedAndSealed(t *testing.T) {
+	src := &fakeSource{result: SourceResult{Phase: opwire.PhaseCompleted, Tree: []byte(treeDoc)}}
+	s := NewService(GrantPolicy{}, NewRegistry(), src)
+	s.SetSealedDir(t.TempDir())
+	id, d, err := s.Capture(Request{Windows: []uint64{1, 2}, Format: FormatTree}, covers(1, 2), nil)
+	require.NoError(t, err)
+	require.Equal(t, EffectPermit, d.Effect)
+	assert.Equal(t, [][]uint64{{1, 2}}, src.rendered)
+	st, _ := s.Status(id)
+	require.Equal(t, opwire.PhaseCompleted, st.Phase, st.Reason)
+	b, media, err := s.Bytes(id)
+	require.NoError(t, err)
+	assert.Equal(t, MediaTypeTree, media)
+	tr, err := ParseTree(b)
+	require.NoError(t, err)
+	require.Len(t, tr.Ops, 2)
+	assert.Equal(t, "Save", tr.Ops[1].Widgets[0].Name)
+	assert.Equal(t, 0, tr.Ops[1].Parent)
+	info, _ := s.Info(id)
+	assert.Equal(t, []string{"scope@1"}, info.Obligations)
+}
+
+func TestATreeCaptureIsNotCropped(t *testing.T) {
+	src := &fakeSource{}
+	s := NewService(GrantPolicy{}, NewRegistry(), src)
+	crop := image.Rect(0, 0, 1, 1)
+	_, d, _ := s.Capture(Request{Windows: []uint64{1}, Format: FormatTree, Crop: &crop}, covers(1), nil)
+	assert.Equal(t, EffectDeny, d.Effect)
+	assert.Empty(t, src.rendered)
+}
+
+func TestATreeTheClientGotWrongFailsTheCapture(t *testing.T) {
+	for _, doc := range []string{`{"v":2,"ops":[]}`, `{"v":1,"ops":[{"op":"A","parent":0}]}`, `not json`} {
+		src := &fakeSource{result: SourceResult{Phase: opwire.PhaseCompleted, Tree: []byte(doc)}}
+		s := NewService(GrantPolicy{}, NewRegistry(), src)
+		id, _, err := s.Capture(Request{Windows: []uint64{1}, Format: FormatTree}, covers(1), nil)
+		require.NoError(t, err)
+		st, _ := s.Status(id)
+		assert.Equal(t, opwire.PhaseFailed, st.Phase, doc)
+	}
 }

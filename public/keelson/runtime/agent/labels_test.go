@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/stergiotis/boxer/public/keelson/runtime/capture"
 	"image/png"
 	"testing"
 	"time"
@@ -204,6 +205,26 @@ func TestACaptureIsScopedAndLabelledByItsWindows(t *testing.T) {
 	var refused *RefusedError
 	require.True(t, errors.As(err, &refused))
 	assert.Contains(t, refused.Reason, "confined capture")
+}
+
+// A window tree goes through the same capture path as pixels: observe
+// suffices, and what the model reads is untrusted, under the tree's media
+// type (ADR-0301).
+func TestATreeCaptureIsReadAsAnUntrustedWindowTree(t *testing.T) {
+	r := newRig(t, true)
+	ctx := context.Background()
+	g := r.grant(ModeObserve)
+	out, err := r.cli.CaptureWith(ctx, CaptureRequest{Handle: g.Handle, Instances: []uint64{7}, Format: CaptureFormatTree, Key: "tree"})
+	require.NoError(t, err)
+	require.Equal(t, "completed", out.Phase, out.Reason)
+	res, err := r.cli.Read(ctx, g.Handle, out.Job)
+	require.NoError(t, err)
+	assert.True(t, res.Untrusted)
+	assert.Equal(t, capture.MediaTypeTree, res.MediaType)
+	tr, err := capture.ParseTree(res.Data)
+	require.NoError(t, err)
+	require.Len(t, tr.Ops, 1)
+	assert.Equal(t, "Save", tr.Ops[0].Widgets[0].Name)
 }
 
 // A host service asking about a call gets the dispatcher's record of it —

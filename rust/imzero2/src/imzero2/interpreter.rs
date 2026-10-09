@@ -4,6 +4,7 @@ use crate::fffi::common::{FffiError, FffiResult};
 use crate::fffi::io::ImZeroFffiIo;
 
 pub mod capture_replay;
+pub mod optree;
 
 // Errors produced by the interpreter dispatch. Boundary between FFFI I/O
 // (typed-error already) and the previously-panicking interpreter loop:
@@ -886,6 +887,9 @@ pub struct ImZeroFffi<'a, R: std::io::BufRead, W: std::io::Write> {
     pub(crate) capture_raster: Option<Box<dyn capture_replay::CaptureRasterI>>,
     /// The last capture's result, until `fetchCaptureResult` takes it.
     pub(crate) capture_result: Option<capture_replay::CaptureResult>,
+    /// Records which widgets each message drew while a `tree` capture
+    /// replays (ADR-0301); `None` otherwise, including on the live frame.
+    pub(crate) op_tree: Option<optree::OpTreeRecorder>,
     /// The fonts an SVG capture embeds: the export plugin's resolver.
     pub(crate) capture_fonts: Option<std::sync::Arc<crate::imzero2::svgexport::FontResolver>>,
     pub last_pass_nr: u64,
@@ -1085,6 +1089,7 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             capture_replay: false,
             capture_raster: None,
             capture_result: None,
+            op_tree: None,
             capture_fonts: None,
             last_pass_nr: 0,
             read_blocked_ns: 0,
@@ -1591,7 +1596,22 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             let Some(func_proc_id) = self.begin_consume_message(FuncProcId::from_repr)? else {
                 return Ok(());
             };
-            if self.interpret_inner(c, u, &func_proc_id, 0)? {
+            if self.op_tree.is_none() {
+                if self.interpret_inner(c, u, &func_proc_id, 0)? {
+                    return Ok(());
+                }
+                continue;
+            }
+            // A `tree` capture (ADR-0301): bracket the message so the
+            // widgets egui registers while it runs are attributed to it.
+            if let Some(t) = self.op_tree.as_mut() {
+                t.begin(c, format!("{func_proc_id:?}"));
+            }
+            let r = self.interpret_inner(c, u, &func_proc_id, 0);
+            if let Some(t) = self.op_tree.as_mut() {
+                t.end(c, matches!(r, Ok(true)));
+            }
+            if r? {
                 return Ok(());
             }
         }

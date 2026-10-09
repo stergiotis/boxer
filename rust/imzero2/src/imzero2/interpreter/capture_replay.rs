@@ -413,6 +413,9 @@ pub trait CaptureRasterI {
 /// `captureReplay`'s formats.
 pub const CAPTURE_FORMAT_PNG: u8 = 0;
 pub const CAPTURE_FORMAT_SVG: u8 = 1;
+/// The windows' widgets, each under the message that drew it, with its
+/// rect, role and name, as JSON (ADR-0301, [`super::optree`]).
+pub const CAPTURE_FORMAT_TREE: u8 = 2;
 
 /// `CaptureResult::status` values, as `fetchCaptureResult` reports them.
 pub const CAPTURE_COMPLETED: u8 = 1;
@@ -482,7 +485,10 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
                 "this host has no rasterizer for captures".into(),
             );
         }
-        if format != CAPTURE_FORMAT_PNG && format != CAPTURE_FORMAT_SVG {
+        if format != CAPTURE_FORMAT_PNG
+            && format != CAPTURE_FORMAT_SVG
+            && format != CAPTURE_FORMAT_TREE
+        {
             return failed(CAPTURE_FAILED, format!("unknown capture format {format}"));
         }
         let ppp = live.pixels_per_point();
@@ -501,6 +507,10 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             Some(ppp);
 
         let ctx = capture_context(live);
+        if format == CAPTURE_FORMAT_TREE {
+            ctx.enable_accesskit();
+            self.op_tree = Some(super::optree::OpTreeRecorder::default());
+        }
         let mut replay = None;
         let mut svg = None;
         let out = ctx.run_ui(raw, |ui| {
@@ -523,11 +533,27 @@ impl<R: std::io::BufRead, W: std::io::Write> ImZeroFffi<'_, R, W> {
             }
             replay = Some(r);
         });
+        let op_tree = self.op_tree.take();
         let Some((result, report)) = replay else {
             return failed(CAPTURE_FAILED, "the capture pass did not run".into());
         };
         if let Err(e) = result {
             return failed(CAPTURE_FAILED, format!("replay: {e}"));
+        }
+        if format == CAPTURE_FORMAT_TREE {
+            let Some(t) = op_tree else {
+                return failed(CAPTURE_FAILED, "the tree recorder was not installed".into());
+            };
+            let mut doc = String::new();
+            t.write_json(out.platform_output.accesskit_update.as_ref(), &mut doc);
+            return CaptureResult {
+                status: CAPTURE_COMPLETED,
+                width: width_px,
+                height: height_px,
+                data: doc.into_bytes(),
+                refused_uploads: report.refused_uploads,
+                ..Default::default()
+            };
         }
         if let Some(svg) = svg {
             return CaptureResult {

@@ -51,6 +51,8 @@ type pixelJob struct {
 const (
 	replayFormatPng uint8 = 0
 	replayFormatSvg uint8 = 1
+	// replayFormatTree is a window tree (ADR-0301).
+	replayFormatTree uint8 = 2
 )
 
 // RenderPixels queues a render of the windows' pixels for the capture
@@ -65,6 +67,12 @@ func (inst *Inst) RenderPixels(keys []uint64, recheck func() bool) (job string, 
 // pixel capture, so the window's popups are in it.
 func (inst *Inst) RenderSvg(key uint64, recheck func() bool) (job string, err error) {
 	return inst.renderReplay([]uint64{key}, replayFormatSvg, recheck)
+}
+
+// RenderTree queues a window tree of the windows (ADR-0301), drawn from
+// the same replay as a pixel capture.
+func (inst *Inst) RenderTree(keys []uint64, recheck func() bool) (job string, err error) {
+	return inst.renderReplay(keys, replayFormatTree, recheck)
 }
 
 func (inst *Inst) renderReplay(keys []uint64, format uint8, recheck func() bool) (job string, err error) {
@@ -216,6 +224,11 @@ func (inst *Inst) finishPixelJobLocked(j *captureJob, r c.CaptureResultValue, pp
 		return
 	default:
 		j.status = opwire.CaptureStatus{Phase: opwire.PhaseFailed, Reason: r.Reason}
+		return
+	}
+	if j.pixel.format == replayFormatTree {
+		j.result = capture.SourceResult{Phase: opwire.PhaseCompleted, Tree: r.Data, SpansDigest: j.pixel.spansDigest}
+		j.status = opwire.CaptureStatus{Phase: opwire.PhaseCompleted}
 		return
 	}
 	if j.pixel.format == replayFormatSvg {
