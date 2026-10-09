@@ -2,6 +2,7 @@ package analysis
 
 import (
 	"github.com/stergiotis/boxer/public/code/analysis/golang"
+	"github.com/stergiotis/boxer/public/code/analysis/sccapplet"
 	"github.com/urfave/cli/v3"
 )
 
@@ -10,6 +11,7 @@ func NewCliCommand() *cli.Command {
 		Name: "analysis",
 		Commands: []*cli.Command{
 			golang.NewCliCommand(),
+			sccapplet.NewCliCommand(),
 		},
 	}
 }

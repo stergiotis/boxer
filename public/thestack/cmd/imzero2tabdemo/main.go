@@ -12,6 +12,7 @@ import (
 	"github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/apps/splashscreen"
+	"github.com/stergiotis/boxer/apps/sqlapplet"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers"
 	"github.com/stergiotis/boxer/public/observability/logging"
@@ -86,6 +87,11 @@ func newTab() (inst *tabhost.Program) {
 	inst = tabhost.New(tabhost.Options{
 		DefaultApp: splashscreen.ManifestId,
 		Services:   tabhost.Services{KeelsonSQL: keelsonTables(), NoEgress: true},
+		// An applet document published beside the page — the repository's
+		// complexity map the demo build writes — opens by
+		// BOXER_SQLAPPLET_TAB_DOC (ADR-0299, proposed). The committed applets
+		// are not minted: nearly all of them read tables a tab does not have.
+		Prepare: sqlapplet.LoadTabApplet,
 	},
 		&cli.Command{Name: "imzero2tabdemo", Version: vcs.BuildVersionInfo(), Before: logging.Apply})
 	return

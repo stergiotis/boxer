@@ -400,6 +400,19 @@ the in-process keelson endpoint, so the page's claim that it loads nothing from
 elsewhere holds whatever a visitor switches on. The module grows to about
 113 MB, 24 MB compressed.
 
+### 2026-10-09 — `NoEgress` lets the page's own origin through; the demo carries a complexity map
+
+`Services.NoEgress` now refuses every site but the page's own: the worker
+passes the URL of the page's directory, and a request to its origin goes
+through the host transport as any request without `NoEgress` does. The page's
+claim is that it loads nothing from *elsewhere*, which a file served beside it
+keeps. `tabhost.Options` gains `Prepare`, a step the tab runs before the app
+is looked up. Both serve
+[ADR-0299](./0299-sql-applets-a-tab-loads-from-its-origin.md) (proposed):
+the demo build writes the repository's code volume and complexity as an
+applet document beside the page, and the demo binary opens it in place of an
+app. The demo still loads nothing from another site.
+
 ## References
 
 - [ADR-0263](./0263-imzero2-browser-both-modules-in-one-worker-mesh-to-the-painter.md) — the tab this makes reusable.

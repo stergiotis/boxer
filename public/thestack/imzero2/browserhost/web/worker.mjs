@@ -13,7 +13,8 @@
 //   arg=<flag>          extra module arguments, repeatable
 //   env=NAME=value      the module's environment, repeatable; CLICKHOUSE_URL
 //                       defaults to <origin>/ch/, which `imzero2tab serve` proxies;
-//                       BOXER_TAB_ORIGIN defaults to the page's origin;
+//                       BOXER_TAB_BASE defaults to the URL of this worker's
+//                       directory, which is the page's;
 //                       IMZERO2_THEME also reaches the Rust host
 //   stage=WxH           the initial viewport in points (the page's resize
 //                       takes over)
@@ -83,9 +84,10 @@ try {
   // how the data plane stays same-origin (ADR-0077 SD9).
   const env = q.getAll('env');
   if (!env.some((e) => e.startsWith('CLICKHOUSE_URL='))) env.push(`CLICKHOUSE_URL=${self.location.origin}/ch/`);
-  // The page's origin, which the module resolves same-origin paths against
-  // (ADR-0299, proposed): an applet document named by BOXER_SQLAPPLET_TAB_DOC.
-  if (!env.some((e) => e.startsWith('BOXER_TAB_ORIGIN='))) env.push(`BOXER_TAB_ORIGIN=${self.location.origin}`);
+  // The directory the page is served from, which the module resolves paths
+  // against (ADR-0299, proposed): an applet document named by
+  // BOXER_SQLAPPLET_TAB_DOC. The worker sits beside the page in a bundle.
+  if (!env.some((e) => e.startsWith('BOXER_TAB_BASE='))) env.push(`BOXER_TAB_BASE=${new URL('./', self.location.href).href}`);
   const r = await startReactor({ goBytes, stub, argv, env, log: (l) => { tee(l); if (!l.startsWith('{')) log(l); } });
   log('worker — running the application');
   let frames = 0, timer = null, lastTick = -Infinity, exited = false;

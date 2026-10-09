@@ -66,7 +66,7 @@ O2 with C2 given up, and nothing asks for it yet.
 
 `tabhost.Options` gains `Prepare`, a function the tab calls once at start,
 after its HTTP transport and services are installed and before the app is
-looked up. It receives the page's origin and may return an app id that
+looked up. It receives the page's base URL (SD2) and may return an app id that
 replaces `-app`; an error is drawn in place of the app, so the visitor sees
 why nothing mounted. `tabhost` stays free of any app package: the tab binary
 supplies the function.
@@ -77,18 +77,23 @@ supplies the function.
 default registry, and returns its id. The document's base name is its slug,
 as for a book; its book id is `origin`, which the Definition drawer shows.
 
-### SD2 — Same origin only
+### SD2 — Same origin only, resolved against the page
 
-The worker passes the page's origin as `BOXER_TAB_ORIGIN`. The document is
-named by an absolute path and resolved against it; a URL, a scheme-relative
-reference, a query, a fragment, or a path that does not end in `.md` is
-refused, and so is any resolution that would leave the origin. The serving
-side needs no new route: `serve` already serves the bundle directory, and a
-static host serves whatever sits beside the page.
+The worker passes the URL of the directory the page is served from as
+`BOXER_TAB_BASE`. The document is named by a path — relative to the page, as
+`applets/x.md`, or absolute on its origin — and resolved against that base; a
+URL, a scheme-relative reference, a query, a fragment, or a path that does not
+end in `.md` is refused, and so is any resolution that would leave the base's
+origin. A relative path is what lets a link survive the site it is published
+on: a page under `/boxer/demo/` names `applets/x.md`, not a path that spells
+out the repository's name. The serving side needs no new route: `serve`
+already serves the bundle directory, and a static host serves whatever sits
+beside the page.
 
-A tab with `Services.NoEgress` refuses this fetch like any other, since the
-page's origin is not answered in process. A tab that is to load applets does
-not set it.
+`Services.NoEgress` lets the base's origin through and refuses every other
+site. A page that says it loads nothing from elsewhere still holds to that
+when it reads a file served beside it, so the published demo (SD5) keeps the
+option on.
 
 ### SD3 — Read-class only
 
@@ -113,12 +118,34 @@ initialisation, so `bundle` and the other subcommands do not mint. Linking the
 applet host costs little beside play, which the binary already links: about
 0.3 MB of a 104 MB module, measured once on 2026-10-09.
 
+### SD5 — The published demo carries the repository's complexity map
+
+`boxer code analysis sccapplet` scans a git worktree with scc and writes an
+applet document whose buffer carries one row per directory as literals,
+`SELECT … FROM values(…)`, which the tab's evaluator answers with no database
+(ADR-0290 §SD3): area the directory's own lines of code, colour the
+cyclomatic complexity per 100 lines under it, generated files and tests left
+out as the repo code exploration app leaves them out, directories past a depth
+folded into their ancestor. The document states the commit it was taken at and
+nothing time-dependent, so one commit gives one document.
+
+The `tab-host` workflow's demo build runs it on the checkout, before anything
+is written into it, at depth 4 and the dispatched commit, and puts the
+document beside the demo page; the landing page links it by its relative path.
+`imzero2tabdemo` takes `LoadTabApplet` as its prepare step and mints no
+committed applet, since nearly all of them read tables a tab does not have.
+The map refreshes when the demo is rebuilt, which is a manual dispatch.
+
 ## Alternatives
 
 - **O1, O3, O4** — see the QOC above.
 - **A route of its own in `serve` (`--applets <dir>` at `/applets/`).** Not
   taken: `serve` already serves the bundle directory, and a static host has no
   such flag to honour, so the route would bind the feature to one server.
+- **Compiling the demo's document into its module as a book.** Would leave
+  `NoEgress` as it was. Not taken: `go:embed` of a file the build generates
+  needs a placeholder in the tree for every other build, and it would not
+  exercise the path SD1 adds.
 - **Admitting read-egress with an explicit Run, as a committed applet gets.**
   Not taken: the explicit Run is a guard for a reviewed document; for one
   nobody reviewed, a click on a page someone linked to is not a decision.
@@ -142,6 +169,7 @@ applet host costs little beside play, which the binary already links: about
   (ADR-0278, Deferred).
 - The fetch runs on the goroutine that runs the tab's setup and holds the
   first frame until it returns.
+- The published map is as current as the last demo dispatch, not the branch.
 
 ### Neutral
 
@@ -159,6 +187,16 @@ applet host costs little beside play, which the binary already links: about
   `CLICKHOUSE_URL` at the in-process keelson endpoint: a document reading
   `keelson('apps')` mounted as an applet and drew its rows; a document reading
   `url(…)` drew the class refusal in place of the app.
+- `sccapplet`'s tests answer a composed document with the trivial evaluator, as
+  a tab does, and check its tree, its sums, the folding and that the same scan
+  gives the same bytes; an applet test checks the document parses read-class.
+  A tabhost test pins `NoEgress` to the base's scheme, host and port.
+- On 2026-10-09 a site laid out as the published one — the generator's output
+  beside an `imzero2tabdemo` bundle under `/boxer/demo/`, served by a plain
+  static server — was opened from the landing page's link in headless
+  Chromium: the document resolved against the page, `NoEgress` let it through,
+  the server saw no request for anything outside the site, and the treemap
+  drew 574 directories.
 
 ## Deferred
 
@@ -170,7 +208,7 @@ applet host costs little beside play, which the binary already links: about
 
 ## Status
 
-Proposed 2026-10-09. SD1–SD4 were built the same day, beside this record,
+Proposed 2026-10-09. SD1–SD5 were built the same day, beside this record,
 for review together with it.
 
 ## References

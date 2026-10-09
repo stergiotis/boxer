@@ -9,7 +9,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/code/analysis/sccapplet"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/analysis"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/scctree"
 )
 
 const originReadDoc = "---\ntitle: \"Origin read\"\nsummary: \"A read-class applet served by the page's origin.\"\n---\n\n# Origin read\n\n```sql\nSELECT 1 AS x\n```\n"
@@ -52,7 +55,7 @@ func TestLoadOriginAppletRefuses(t *testing.T) {
 		"read-egress":     "/origin-egress.md",
 		"no sql fence":    "/prose.md",
 		"not served":      "/missing.md",
-		"relative path":   "origin-read.md",
+		"other scheme":    "javascript:alert(1)//x.md",
 		"absolute url":    "http://elsewhere.invalid/origin-read.md",
 		"scheme-relative": "//elsewhere.invalid/origin-read.md",
 		"not markdown":    "/origin-read.txt",
@@ -66,6 +69,22 @@ func TestLoadOriginAppletRefuses(t *testing.T) {
 			id, err := loadOriginApplet(context.Background(), reg, srv.Client(), srv.URL, p)
 			require.Error(t, err)
 			assert.Empty(t, id)
+		})
+	}
+}
+
+func TestLoadOriginAppletResolvesAgainstThePage(t *testing.T) {
+	srv := newOriginServer(t, map[string]string{
+		"/demo/applets/origin-read.md": originReadDoc,
+		"/origin-read.md":              originReadDoc,
+	})
+	// the page is served from /demo/, as a published bundle is
+	base := srv.URL + "/demo/"
+	for _, p := range []string{"applets/origin-read.md", "./applets/origin-read.md", "/demo/applets/origin-read.md", "../origin-read.md"} {
+		t.Run(p, func(t *testing.T) {
+			id, err := loadOriginApplet(context.Background(), app.NewRegistry(), srv.Client(), base, p)
+			require.NoError(t, err)
+			assert.Equal(t, app.AppIdT(appletIdPrefix+"origin-read"), id)
 		})
 	}
 }
@@ -94,4 +113,19 @@ func TestOriginDocURLRefusesNonHttpOrigin(t *testing.T) {
 		_, err := originDocURL(origin, "/a.md")
 		assert.Error(t, err, origin)
 	}
+}
+
+// A document `boxer code analysis sccapplet` writes is one a tab admits: it
+// parses, its buffer is read-class, and it names the panes it draws in.
+func TestSccAppletDocumentIsAdmitted(t *testing.T) {
+	doc, _, err := sccapplet.Compose([]scctree.SccGroup{{Name: "Go", Files: []scctree.SccFile{
+		{Filename: "a.go", Location: "./public/a/a.go", Code: 100, Complexity: 20},
+	}}}, sccapplet.Options{Depth: 4, Revision: "0123abc"})
+	require.NoError(t, err)
+	def, err := ParseDocSource(originBookID, "repo-complexity.md", doc)
+	require.NoError(t, err)
+	require.NotNil(t, def)
+	assert.Equal(t, analysis.QuerySecurityRead, def.Class)
+	require.Len(t, def.Tabs, 3)
+	assert.Equal(t, "treemap", def.Tabs[0].ID)
 }

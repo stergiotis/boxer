@@ -1,7 +1,7 @@
 // sqlapplet_origin.go loads one applet document a browser tab fetches from its
-// page's origin at start (ADR-0299, proposed): a document that is not in any committed
-// book, admitted through the same parser the books and the runtime store go
-// through, and only when its buffer is read-class.
+// page's origin at start (ADR-0299, proposed): a document that is not in any
+// committed book, admitted through the same parser the books and the runtime
+// store go through, and only when its buffer is read-class.
 
 package sqlapplet
 
@@ -24,7 +24,7 @@ import (
 // mounts in place of its default app (ADR-0299 §SD1, proposed).
 var TabDoc = env.NewString(env.Spec{
 	Name:        "BOXER_SQLAPPLET_TAB_DOC",
-	Description: "a browser tab fetches this applet document from its page's origin and mounts it (ADR-0299, proposed): an absolute path such as /applets/x.md, whose base name is the slug; only a read-class buffer is admitted",
+	Description: "a browser tab fetches this applet document from its page's origin and mounts it (ADR-0299, proposed): a path relative to the page, such as applets/x.md, or absolute on its origin, such as /applets/x.md; its base name is the slug, and only a read-class buffer is admitted",
 	Category:    env.CategoryE("boxer-sqlapplet"),
 })
 
@@ -36,22 +36,23 @@ const originBookID = "origin"
 // largest is a few kilobytes.
 const maxOriginDocBytes = 1 << 20
 
-// LoadTabApplet fetches the document [TabDoc] names from origin, mints it into
+// LoadTabApplet fetches the document [TabDoc] names, resolved against base —
+// the URL of the directory the page is served from — mints it into
 // the default registry and returns its app id; empty when [TabDoc] is unset.
 // It is a tab binary's prepare step (tabhost.Options.Prepare), run after the
 // tab's HTTP transport is installed and after [MintManifests], so a committed
 // applet of the same slug is already registered and wins.
-func LoadTabApplet(ctx context.Context, origin string) (id app.AppIdT, err error) {
+func LoadTabApplet(ctx context.Context, base string) (id app.AppIdT, err error) {
 	p := TabDoc.Get()
 	if p == "" {
 		return
 	}
-	return loadOriginApplet(ctx, app.DefaultRegistry, http.DefaultClient, origin, p)
+	return loadOriginApplet(ctx, app.DefaultRegistry, http.DefaultClient, base, p)
 }
 
 // loadOriginApplet is LoadTabApplet against an explicit registry and client.
-func loadOriginApplet(ctx context.Context, reg *app.Registry, client *http.Client, origin string, docPath string) (id app.AppIdT, err error) {
-	target, err := originDocURL(origin, docPath)
+func loadOriginApplet(ctx context.Context, reg *app.Registry, client *http.Client, base string, docPath string) (id app.AppIdT, err error) {
+	target, err := originDocURL(base, docPath)
 	if err != nil {
 		return
 	}
@@ -98,22 +99,27 @@ func loadOriginApplet(ctx context.Context, reg *app.Registry, client *http.Clien
 	return
 }
 
-// originDocURL resolves docPath against origin and refuses anything that would
-// leave it (§SD2): docPath is an absolute path, never a URL or a
-// scheme-relative reference, carries no query or fragment, and ends in .md.
-func originDocURL(origin string, docPath string) (target *url.URL, err error) {
-	base, err := url.Parse(origin)
+// originDocURL resolves docPath against the page's base URL and refuses
+// anything that would leave the base's origin (§SD2): docPath is a path —
+// relative to the page or absolute on its origin — never a URL or a
+// scheme-relative reference; it carries no query or fragment, and ends in .md.
+func originDocURL(pageBase string, docPath string) (target *url.URL, err error) {
+	base, err := url.Parse(pageBase)
 	if err != nil || (base.Scheme != "http" && base.Scheme != "https") || base.Host == "" {
-		err = eb.Build().Str("origin", origin).Errorf("sqlapplet: the page origin is not an http(s) origin")
+		err = eb.Build().Str("base", pageBase).Errorf("sqlapplet: the page base is not an http(s) URL")
 		return
 	}
-	if !strings.HasPrefix(docPath, "/") || strings.HasPrefix(docPath, "//") || strings.Contains(docPath, `\`) {
-		err = eb.Build().Str("path", docPath).Errorf("sqlapplet: the document must be named by an absolute path on the page's origin")
+	if docPath == "" || strings.HasPrefix(docPath, "//") || strings.Contains(docPath, `\`) {
+		err = eb.Build().Str("path", docPath).Errorf("sqlapplet: the document must be named by a path on the page's origin")
 		return
 	}
 	ref, err := url.Parse(docPath)
 	if err != nil {
 		err = eb.Build().Str("path", docPath).Errorf("sqlapplet: the document path does not parse: %w", err)
+		return
+	}
+	if ref.Scheme != "" || ref.Host != "" || ref.Opaque != "" {
+		err = eb.Build().Str("path", docPath).Errorf("sqlapplet: the document must be named by a path, not a URL")
 		return
 	}
 	if ref.RawQuery != "" || ref.Fragment != "" {

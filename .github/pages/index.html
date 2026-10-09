@@ -79,6 +79,12 @@ light theme of ADR-0258; the theme is chosen when an app starts, so switching op
     is answered in this tab by Go, with no database: <code>SELECT * FROM keelson('gfs_wind')</code> (ADR-0290 to
     ADR-0292). Data: NOAA GFS, a work of the US Government.</span></a>
     <a class="theme" href="demo/index.html?worker=worker.mjs%3Fapp%3Dgithub.com%2Fstergiotis%2Fboxer%2Fapps%2Fplay%26env%3DCLICKHOUSE_URL%3Dhttp%253A%252F%252Fkeelson.invalid%252Fquery%26env%3DBOXER_PLAY_SQL%3DWITH%2520vector_field%2520AS%2520%2528SELECT%2520%252A%2520FROM%2520keelson%2528%2527gfs_wind%2527%2529%2529%252C%2520vector_field_opts%2520AS%2520%2528SELECT%2520%252A%2520FROM%2520keelson%2528%2527gfs_wind_opts%2527%2529%2529%2520SELECT%2520%252A%2520FROM%2520vector_field%2520LIMIT%25201000%26env%3DBOXER_PLAY_AUTORUN%3D1%26env%3DBOXER_PLAY_FOCUS_VECTORFIELD%3D1%26env%3DIMZERO2_THEME%3Dfresh">light theme</a></li>
+  <li><a class="app" href="demo/index.html?worker=worker.mjs%3Fenv%3DCLICKHOUSE_URL%3Dhttp%253A%252F%252Fkeelson.invalid%252Fquery%26env%3DBOXER_SQLAPPLET_TAB_DOC%3Dapplets%252Frepo-complexity.md"><strong>Repository complexity map</strong>
+    <span>This repository's code, one cell per directory: area is lines of code, colour is cyclomatic complexity per
+    100 lines, counted by scc at the published commit when the demo was built. The rows are literals in one
+    <code>SELECT … FROM values(…)</code>, an applet document served beside this page and answered in this tab with
+    no database (ADR-0299).</span></a>
+    <a class="theme" href="demo/index.html?worker=worker.mjs%3Fenv%3DCLICKHOUSE_URL%3Dhttp%253A%252F%252Fkeelson.invalid%252Fquery%26env%3DBOXER_SQLAPPLET_TAB_DOC%3Dapplets%252Frepo-complexity.md%26env%3DIMZERO2_THEME%3Dfresh">light theme</a></li>
   <li><a class="app" href="demo/index.html?worker=worker.mjs%3Fapp%3Dgithub.com%2Fstergiotis%2Fboxer%2Fpublic%2Fthestack%2Fimzero2%2Fegui2%2Fdemo%2Fapps%2Fwidgets"><strong>Widget gallery</strong>
     <span>The widget demos with their source. The map demos are left out, since they load tiles from a third-party
     server, and so are a few that do not run in a tab.</span></a>

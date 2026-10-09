@@ -112,19 +112,23 @@ trial, not this page.
 4. **Or open an applet document the server holds.** Put the document — the
    [ADR-0132](../adr/0132-sqlapplet-sql-defined-applets.md) shape, its base
    name the slug — anywhere the page's server serves, for `serve` inside the
-   bundle directory, and name its path with `env=`:
+   bundle directory, and name its path with `env=`, relative to the page or
+   absolute on its origin:
 
    ```
-   http://127.0.0.1:8765/index.html?worker=worker.mjs%3Fenv%3DBOXER_SQLAPPLET_TAB_DOC%253D%252Fapplets%252Fmy-applet.md
+   http://127.0.0.1:8765/index.html?worker=worker.mjs%3Fenv%3DBOXER_SQLAPPLET_TAB_DOC%253Dapplets%252Fmy-applet.md
    ```
 
-   The tab fetches it from the page's origin at start and mounts it in place
-   of `app=`. The path must be absolute on that origin; a document whose
-   buffer is not read-class, or whose slug a committed applet holds, is
-   refused and the reason is drawn in the tab
+   The tab fetches it at start and mounts it in place of `app=`. A path that
+   leaves the page's origin, a document whose buffer is not read-class, and
+   one whose slug a committed applet holds are refused, and the reason is
+   drawn in the tab
    ([ADR-0299](../adr/0299-sql-applets-a-tab-loads-from-its-origin.md),
    proposed). An `endpoint: introspection` applet and one that declares
-   `datasets:` do not run in a tab.
+   `datasets:` do not run in a tab. A document whose rows are literals —
+   `boxer code analysis sccapplet` writes one — runs with no database when
+   `CLICKHOUSE_URL` names the in-process endpoint,
+   `http://keelson.invalid/query`.
 
 ## Verification
 

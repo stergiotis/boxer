@@ -61,14 +61,14 @@ func newTab() (inst *tabhost.Program) {
 }
 
 // prepare mints the committed applets, which then mount by id, and loads the
-// document the page's origin serves under BOXER_SQLAPPLET_TAB_DOC (ADR-0299,
+// document served beside the page under BOXER_SQLAPPLET_TAB_DOC (ADR-0299,
 // proposed). It runs in the tab's action rather than at initialisation, so
 // the bundler and the other subcommands neither mint nor log the corpus.
-func prepare(ctx context.Context, origin string) (id app.AppIdT, err error) {
+func prepare(ctx context.Context, base string) (id app.AppIdT, err error) {
 	if _, errs := sqlapplet.MintManifests(log.Logger); len(errs) > 0 {
 		log.Warn().Errs("errors", errs).Msg("imzero2tab: some committed applets did not mint")
 	}
-	return sqlapplet.LoadTabApplet(ctx, origin)
+	return sqlapplet.LoadTabApplet(ctx, base)
 }
 
 func main() {

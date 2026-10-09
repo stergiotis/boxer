@@ -19,10 +19,11 @@ var HostURL = env.NewString(env.Spec{
 	Category:    env.CategoryDev,
 })
 
-// PageOrigin is the origin of the page a tab runs in, which the worker passes
-// so the module can name same-origin resources (ADR-0299 §SD2, proposed).
-var PageOrigin = env.NewString(env.Spec{
-	Name:        "BOXER_TAB_ORIGIN",
-	Description: "the origin of the page a browser tab runs in, set by the tab's worker (ADR-0299, proposed); a tab binary's prepare step resolves same-origin paths against it",
+// PageBase is the URL of the directory the page a tab runs in is served from,
+// which the worker passes so the module can name files served beside the page
+// (ADR-0299 §SD2, proposed). Its origin is the one NoEgress lets through.
+var PageBase = env.NewString(env.Spec{
+	Name:        "BOXER_TAB_BASE",
+	Description: "the URL of the directory a browser tab's page is served from, set by the tab's worker (ADR-0299, proposed); a tab binary's prepare step resolves paths against it, and Services.NoEgress lets its origin through",
 	Category:    env.CategoryDev,
 })

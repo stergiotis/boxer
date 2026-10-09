@@ -24,6 +24,7 @@ import (
 	"context"
 	"encoding/binary"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"runtime"
@@ -57,17 +58,35 @@ type Services struct {
 	// CLICKHOUSE_URL at KeelsonSQLURL to have play read from it; every other
 	// request still leaves through the host.
 	KeelsonSQL *introspect.Registry
-	// NoEgress refuses every HTTP request the module makes, except to
-	// KeelsonSQLOrigin, which is answered in process: a tab published on a
+	// NoEgress refuses every HTTP request the module makes to another site:
+	// it lets through only the page's own origin (PageBase) and
+	// KeelsonSQLOrigin, which is answered in process. A tab published on a
 	// site that says it loads nothing from elsewhere keeps that true whatever
-	// a visitor switches on (a map's tiles, a fetch an app makes).
+	// a visitor switches on (a map's tiles, a fetch an app makes), and can
+	// still read a file served beside its page (ADR-0299 §SD2, proposed).
 	NoEgress bool
 }
 
-// noEgress is the transport of a tab with Services.NoEgress.
-type noEgress struct{}
+// noEgress is the transport of a tab with Services.NoEgress: requests to the
+// page's own origin go to next, every other one is refused. An empty or
+// unparseable base leaves no origin to allow.
+type noEgress struct {
+	scheme, host string
+	next         http.RoundTripper
+}
 
-func (noEgress) RoundTrip(req *http.Request) (*http.Response, error) {
+func newNoEgress(base string, next http.RoundTripper) (inst noEgress) {
+	inst.next = next
+	if u, err := url.Parse(base); err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != "" {
+		inst.scheme, inst.host = u.Scheme, u.Host
+	}
+	return
+}
+
+func (inst noEgress) RoundTrip(req *http.Request) (*http.Response, error) {
+	if inst.host != "" && req.URL.Scheme == inst.scheme && req.URL.Host == inst.host {
+		return inst.next.RoundTrip(req)
+	}
 	return nil, eb.Build().Str("host", req.URL.Host).Errorf("tabhost: this tab makes no requests to other sites")
 }
 
@@ -101,11 +120,12 @@ type Options struct {
 	// Services are the in-tab services to boot (none exist yet).
 	Services Services
 	// Prepare, when set, runs once at start, after the tab's HTTP transport
-	// and services are installed and before the app is looked up. origin is
-	// the page's origin (PageOrigin), empty when the worker did not pass it.
+	// and services are installed and before the app is looked up. base is
+	// the URL of the directory the page is served from (PageBase), empty when
+	// the worker did not pass it.
 	// A non-empty id replaces -app; an error is drawn in place of the app
 	// (ADR-0299 §SD1, proposed).
-	Prepare func(ctx context.Context, origin string) (id app.AppIdT, err error)
+	Prepare func(ctx context.Context, base string) (id app.AppIdT, err error)
 }
 
 // Program is one tab binary: its options, its root cli.Command, and the per-tick
@@ -169,7 +189,7 @@ func (inst *Program) tab(ctx context.Context, cmd *cli.Command) (err error) {
 	// Deliberate and once: the module's HTTP leaves through the host.
 	browserhost.InstallHostTransport()
 	if inst.opts.Services.NoEgress {
-		http.DefaultTransport = noEgress{}
+		http.DefaultTransport = newNoEgress(PageBase.Get(), http.DefaultTransport)
 	}
 	if reg := inst.opts.Services.KeelsonSQL; reg != nil {
 		if err = installKeelsonSQL(reg); err != nil {
@@ -180,7 +200,7 @@ func (inst *Program) tab(ctx context.Context, cmd *cli.Command) (err error) {
 	var prepareErr error
 	if inst.opts.Prepare != nil {
 		var prepared app.AppIdT
-		if prepared, prepareErr = inst.opts.Prepare(ctx, PageOrigin.Get()); prepareErr != nil {
+		if prepared, prepareErr = inst.opts.Prepare(ctx, PageBase.Get()); prepareErr != nil {
 			log.Error().Err(prepareErr).Msg("tabhost: prepare")
 		} else if prepared != "" {
 			appId = prepared

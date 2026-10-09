@@ -77,12 +77,19 @@ jobs:
         if: inputs.demo == true
         run: |
           set -euo pipefail
+          # The repository's complexity map, an applet the demo page serves
+          # beside itself and the tab answers without a database (ADR-0299).
+          # It scans the checkout, so it runs before anything is written
+          # into it.
+          ./boxer.sh code analysis sccapplet --out "$RUNNER_TEMP/repo-complexity.md" --depth 4 --revision "$GITHUB_SHA"
           # egui's built-in faces plus the vendored icon font: no system fonts
           # whose set and licences depend on the runner.
           mkdir -p demo-fonts
           cp rust/imzero2/assets/fonts/phosphor/Phosphor.ttf demo-fonts/phosphor.ttf
           go run ./public/thestack/cmd/imzero2tabdemo bundle --out demo --host "$HOST" --fonts demo-fonts --withAssets
           cp rust/imzero2/assets/fonts/phosphor/LICENSE demo/fonts/phosphor-LICENSE.txt
+          mkdir -p demo/applets
+          cp "$RUNNER_TEMP/repo-complexity.md" demo/applets/
       - name: Assemble the site
         id: site
         run: |
