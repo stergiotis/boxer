@@ -516,8 +516,16 @@ func (inst *Service) call(msg *app.Msg) (rep wireCallReply) {
 	if e != nil {
 		rec.app = e.app
 	}
+	var route *held
 	if out.Phase == opwire.PhaseInputRequired && need != 0 && !t.test {
-		inst.holdForWidening(t, rec, req, need, mode)
+		route = inst.holdForWidening(t, rec, req, need, mode)
+	}
+	if out.Phase == opwire.PhaseProposed && inst.autoAccepts(spec, rec.consent) {
+		// Unattended (ADR-0298): a suggest-mode proposal is accepted on
+		// arrival and routed like any call, paced as one.
+		inst.grantEventAsked(trail.GrantEventConfirmed, "host", reasonUnattended+": "+spec.Name+" in window "+
+			strconv.FormatUint(req.Instance, 10)+", call "+req.Key, t, nil, rec.asked())
+		out = opwire.Outcome{}
 	}
 	if out.Phase == opwire.PhaseProposed {
 		if _, aerr := encodeArgs(spec, req.Args); aerr != nil {
@@ -531,11 +539,15 @@ func (inst *Service) call(msg *app.Msg) (rep wireCallReply) {
 	}
 	if out.Phase != opwire.PhaseUnspecified {
 		rec.outcome = out
+		heldCall := rec.heldBy != nil
 		inst.mu.Unlock()
 		inst.record(t, rec, "dispatch", out)
 		rep.Outcome = wireOutcomeOf(out, "", "")
 		// A held call is not final; the caller polls status.
-		rep.Outcome.Held = rec.heldBy != nil
+		rep.Outcome.Held = heldCall
+		if route != nil {
+			inst.routeHeld(route)
+		}
 		return
 	}
 	t.callsUsed++

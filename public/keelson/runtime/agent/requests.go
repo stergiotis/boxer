@@ -225,7 +225,16 @@ func (inst *Service) requestGrant(msg *app.Msg) (rep wireGrantReply) {
 	inst.mu.Lock()
 	inst.requests[r.key] = r
 	inst.requestOrder = append(inst.requestOrder, r.key)
+	var route *held
+	if inst.autoDecides(r) {
+		// Unattended (ADR-0298): the host approves in the person's place;
+		// the coordinator's status poll finds the request approved.
+		route = inst.autoApprove(r)
+	}
 	inst.mu.Unlock()
+	if route != nil {
+		inst.routeHeld(route)
+	}
 	rep.Ok, rep.Key, rep.Phase = true, r.key, r.state.String()
 	return
 }
@@ -263,9 +272,10 @@ func (inst *Service) expireRequest(r *request) {
 }
 
 // holdForWidening turns a call outside the grant into a widening the
-// person decides; the call stays input_required until then. The caller
-// holds mu.
-func (inst *Service) holdForWidening(t *task, rec *callRec, req wireCall, need needE, mode ModeE) {
+// person decides; the call stays input_required until then. route is the
+// held call when the host approved it in the person's place, for the caller
+// to route after releasing mu. The caller holds mu.
+func (inst *Service) holdForWidening(t *task, rec *callRec, req wireCall, need needE, mode ModeE) (route *held) {
 	r := &request{key: "req-" + randomHex(8), actor: t.actor, actorInstance: t.actorInstance, task: t,
 		plan: req.Reason, wanted: map[uint64]ModeE{req.Instance: mode}, wantedOps: map[uint64][]string{},
 		created: time.Now(), share: map[uint64]bool{req.Instance: true}, shareFlag: make(map[uint64]*bool),
@@ -279,6 +289,12 @@ func (inst *Service) holdForWidening(t *task, rec *callRec, req wireCall, need n
 	inst.grantEvent(trail.GrantEventRequested, "coordinator", "a call outside the grant: "+req.Operation, nil, r)
 	inst.requests[r.key] = r
 	inst.requestOrder = append(inst.requestOrder, r.key)
+	if inst.autoDecides(r) {
+		// Unattended (ADR-0298): approved in the person's place. The
+		// caller routes the call once it has answered it as held.
+		route = inst.autoApprove(r)
+	}
+	return
 }
 
 // pending lists the undecided requests, oldest first, expiring stale ones.
@@ -317,6 +333,12 @@ func (inst *Service) testWiden(r *request) (rep wireGrantReply) {
 // approve applies the person's decision. The caller holds mu; a held call
 // is routed after it is released.
 func (inst *Service) approve(r *request) (route *held) {
+	return inst.approveAs(r, inst.decider(), "")
+}
+
+// approveAs is approve with who decided and why, as the grant event
+// records them. The caller holds mu.
+func (inst *Service) approveAs(r *request, decidedBy string, reason string) (route *held) {
 	if r.state != reqStatePending {
 		return
 	}
@@ -374,7 +396,7 @@ func (inst *Service) approve(r *request) (route *held) {
 		t.desktop = r.desktop
 	}
 	r.state = reqStateApproved
-	inst.grantEvent(event, inst.decider(), "", t, r)
+	inst.grantEvent(event, decidedBy, reason, t, r)
 	route = r.held
 	return
 }
@@ -420,6 +442,12 @@ func (inst *Service) routeHeld(h *held) {
 		}
 		out, spec, e, _, _, consent := inst.check(t, h.req)
 		h.rec.spec, h.rec.consent = spec, consent
+		auto := out.Phase == opwire.PhaseProposed && inst.autoAccepts(spec, consent)
+		if auto {
+			// Unattended (ADR-0298): accepted on arrival, as in call.
+			inst.grantEventAsked(trail.GrantEventConfirmed, "host", reasonUnattended+": "+proposalReason(h.rec), t, nil, h.rec.asked())
+			out = opwire.Outcome{}
+		}
 		if out.Phase == opwire.PhaseProposed {
 			h.rec.req, h.rec.entry = h.req, e
 			h.rec.proposal = &proposal{confirm: spec.Effect == app.OperationEffectConsequential && consent == "",
@@ -433,6 +461,9 @@ func (inst *Service) routeHeld(h *held) {
 		}
 		t.callsUsed++
 		inst.mu.Unlock()
+		if auto {
+			inst.pace(t)
+		}
 		inst.route(t, h.rec, h.req, spec, e)
 	}()
 }

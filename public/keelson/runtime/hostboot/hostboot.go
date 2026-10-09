@@ -788,6 +788,12 @@ func (rt *Runtime) bootAgent() {
 		Trail: rt.Trail, Coordinators: agent.ParseCoordinators(agent.CoordinatorsEnv.Get()), Deadline: agent.DeadlineEnv.Get(),
 		RequestTimeout: agent.RequestTimeoutEnv.Get(),
 		Pace:           agent.PaceEnv.Get(), CallsMin: int(agent.CallsMinEnv.Get()), CallsMax: int(agent.CallsMaxEnv.Get())}
+	// The unattended mode (ADR-0298) exists only in a binary built for it;
+	// elsewhere the variable is refused, loudly.
+	cfg.Unattended = agent.Unattended && agent.UnattendedEnv.Get()
+	if agent.UnattendedEnv.Get() && !agent.Unattended {
+		logger.Warn().Msg("agent: BOXER_AGENT_UNATTENDED is honoured only by a binary built with the boxer_unattended tag; refused here")
+	}
 	if rt.LLM != nil {
 		// Confined content reaches a coordinator's model only where the host's
 		// endpoint is local (ADR-0254 §SD3, ADR-0269 §SD7).
@@ -826,6 +832,12 @@ func (rt *Runtime) bootAgent() {
 	}
 	rt.Agent = svc
 	rt.cleanups = append(rt.cleanups, svc.Close)
+	if rt.Status != nil {
+		rt.Status.Unattended = unattendedStatus(svc.Unattended())
+	}
+	if svc.Unattended() {
+		logger.Warn().Msg("agent: unattended mode on — the host approves grants and accepts suggest-mode proposals in the person's place (ADR-0298)")
+	}
 	// Host services that reach outside check agent-caused work against the
 	// task's grant (ADR-0269 §SD6).
 	if rt.HTTP != nil {
@@ -846,6 +858,18 @@ func (rt *Runtime) bootAgent() {
 		rt.Host.SetOpsListener(svc.Listener())
 	}
 	logger.Info().Bool("testGrants", cfg.TestGrants).Bool("durable", svc.Durable()).Msg("agent: service listening on runtime.agent.*")
+}
+
+// unattendedStatus is the status bar's unattended segment: absent from a
+// binary built without the mode, so that one never advertises it.
+func unattendedStatus(on bool) (st runtimestatus.UnattendedE) {
+	switch {
+	case !agent.Unattended:
+		return runtimestatus.UnattendedAbsent
+	case on:
+		return runtimestatus.UnattendedOn
+	}
+	return runtimestatus.UnattendedOff
 }
 
 // headlessOnly decides whether a test-lane knob takes effect: only when

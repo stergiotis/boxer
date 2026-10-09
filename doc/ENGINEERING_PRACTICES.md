@@ -152,6 +152,12 @@ so an AI-free build stayed possible. That scheme was retired
 now lives in git `Co-Authored-By` trailers, surfaced by `gov repo authorship`,
 and the directives were stripped from ~1130 files.
 
+One tag is opt-in and stays out of the file: `boxer_unattended` compiles in
+the agent dispatcher's unattended mode
+([ADR-0298](adr/0298-an-unattended-mode-the-host-decides-within-preset-bounds.md)),
+added by the build that wants it — `-tags="$(cat ./tags),boxer_unattended"`.
+A binary built without it cannot be put in the mode.
+
 Centralising tags in a tracked file is uncommon — most Go projects either
 avoid tags or scatter them across per-package `Makefile` targets. The
 pattern here resembles Cockroach's env-driven `*_GOFLAGS` but more

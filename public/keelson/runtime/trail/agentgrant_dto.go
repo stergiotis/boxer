@@ -32,8 +32,9 @@ type AgentGrant struct {
 	// Unix milliseconds, as they stood after the event.
 	CallsBudget uint32 `lw:"agentGrantCallsBudget,u32Array,unit"`
 	DeadlineMs  int64  `lw:"agentGrantDeadlineMs,i64Array,unit"`
-	// DecidedBy is who decided: "person", "host" (a test grant, a refusal
-	// the host made, a window or coordinator that closed), "coordinator" (a
+	// DecidedBy is who decided: "person", "host" (a test grant, an
+	// approval in the unattended mode (ADR-0298) — reason "unattended" — a
+	// refusal the host made, a window or coordinator that closed), "coordinator" (a
 	// request, a detach, a stop the model asked for, a lifted pause) or
 	// "another task" (a pause another task's write caused). A "person"
 	// arriving through the coordinator — its Stop button — is the
