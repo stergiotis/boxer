@@ -501,16 +501,8 @@ func (inst *Service) call(msg *app.Msg) (rep wireCallReply) {
 	var need needE
 	var mode ModeE
 	out, spec, e, need, mode, rec.consent = inst.check(t, req)
-	if late && (out.Phase == opwire.PhaseUnspecified || out.Phase == opwire.PhaseProposed) {
-		// Past its deadline, a call the grant would let through waits for
-		// the person to give the task more time, as a spent budget waits
-		// for more calls. A refusal stands, and a widening the call needs
-		// is asked for as it is: approving one also moves the deadline on.
-		mode, need = e.mode, needDeadline
-		out = phaseOutcome(opwire.PhaseInputRequired, reasonDeadline+"; the person is asked for more time")
-		if t.test {
-			out.Reason = reasonDeadline + "; request_access extends it"
-		}
+	if late {
+		out, need, mode = pastDeadline(t, e, out, need, mode)
 	}
 	rec.spec = spec
 	if e != nil {
@@ -558,6 +550,22 @@ func (inst *Service) call(msg *app.Msg) (rep wireCallReply) {
 	rep.Outcome = inst.outcomeOf(t, rec, 0)
 	inst.mu.Unlock()
 	return
+}
+
+// pastDeadline is a checked call's outcome once t's deadline has passed: a
+// call the grant would let through waits for the person to give the task
+// more time, as a spent budget waits for more calls. A refusal stands, and
+// a widening the call needs is asked for as it is: approving one also moves
+// the deadline on.
+func pastDeadline(t *task, e *entry, out opwire.Outcome, need needE, mode ModeE) (opwire.Outcome, needE, ModeE) {
+	if out.Phase != opwire.PhaseUnspecified && out.Phase != opwire.PhaseProposed {
+		return out, need, mode
+	}
+	out = phaseOutcome(opwire.PhaseInputRequired, reasonDeadline+"; the person is asked for more time")
+	if t.test {
+		out.Reason = reasonDeadline + "; request_access extends it"
+	}
+	return out, needDeadline, e.mode
 }
 
 // expectsFor is what a command expects of the resources it writes: what

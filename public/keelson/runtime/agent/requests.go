@@ -447,6 +447,11 @@ func (inst *Service) routeHeld(h *held) {
 		}
 		out, spec, e, need, mode, consent := inst.check(t, h.req)
 		h.rec.spec, h.rec.consent = spec, consent
+		if time.Now().After(t.deadline) {
+			// The deadline passed between the approval and this re-check:
+			// the call waits for more time, as it would in call.
+			out, need, mode = pastDeadline(t, e, out, need, mode)
+		}
 		// Unattended (ADR-0298): accepted on arrival, as in call.
 		out, _ = inst.acceptOnArrival(t, h.rec, out)
 		if out.Phase == opwire.PhaseProposed {
