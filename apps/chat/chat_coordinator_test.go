@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"encoding/json/v2"
+	"github.com/stergiotis/boxer/public/keelson/runtime/inscribe"
 	"strconv"
 	"strings"
 	"sync"
@@ -56,6 +57,16 @@ type noteHost struct {
 	mu      sync.Mutex
 	engines map[uint64]*opengine.Engine
 	notes   map[uint64]*note
+	scene   *inscribe.Scene
+}
+
+func (inst *noteHost) Annotations() *inscribe.Scene {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if inst.scene == nil {
+		inst.scene = inscribe.NewScene()
+	}
+	return inst.scene
 }
 
 func (inst *noteHost) eng(k uint64) *opengine.Engine {

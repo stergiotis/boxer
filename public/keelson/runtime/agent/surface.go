@@ -174,6 +174,10 @@ const (
 	ActionRaise = verbRaise
 	// ActionPlace is placing one window.
 	ActionPlace = verbPlace
+	// ActionAnnotate is putting an annotation on the overlay, ActionClear
+	// removing the task's (ADR-0297).
+	ActionAnnotate = verbAnnotate
+	ActionClear    = verbClear
 	// ActionDescribe, ActionHelp and ActionList are the coordinator's reads
 	// of the surface, ActionCapture a capture and ActionDisclose a
 	// screenshot's view: the dispatcher's own, recorded but no cell of the

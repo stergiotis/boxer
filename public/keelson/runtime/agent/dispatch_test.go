@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/stergiotis/boxer/public/keelson/runtime/inscribe"
 	"image/png"
 	"maps"
 	"slices"
@@ -101,6 +102,9 @@ type fakeHost struct {
 	loads      map[uint64]opwire.InstanceInfo
 	// windowActs are the window verbs the host was asked to queue.
 	windowActs []string
+	// scene is the overlay's (ADR-0297).
+	sceneOnce sync.Once
+	scene     *inscribe.Scene
 	// apps names the app of a window that is not a doc; a window absent
 	// from it is a doc.
 	apps map[uint64]app.AppIdT
@@ -152,6 +156,10 @@ func (inst *fakeHost) RenderSvg(k uint64, recheck func() bool) (string, error) {
 }
 func (inst *fakeHost) RenderPixels(k []uint64, recheck func() bool) (string, error) {
 	return "cap-2", nil
+}
+func (inst *fakeHost) Annotations() *inscribe.Scene {
+	inst.sceneOnce.Do(func() { inst.scene = inscribe.NewScene() })
+	return inst.scene
 }
 func (inst *fakeHost) RenderTree(k []uint64, recheck func() bool) (string, error) {
 	return "cap-3", nil

@@ -57,6 +57,10 @@ const (
 	SubjectRaise = SubjectPrefix + "raise"
 	// SubjectPlace sets the outer rect of one of the task's windows.
 	SubjectPlace = SubjectPrefix + "place"
+	// SubjectAnnotate puts an annotation on the overlay (ADR-0297 §SD8).
+	SubjectAnnotate = SubjectPrefix + "annotate"
+	// SubjectClear removes the task's annotations, one or all.
+	SubjectClear = SubjectPrefix + "clear"
 	// SubjectAuthority reads a task's ceiling and what its grant allows
 	// under it, and moves the ceiling (ADR-0280).
 	SubjectAuthority = SubjectPrefix + "authority"

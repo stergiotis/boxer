@@ -214,6 +214,14 @@ func DecorateRenderer(inner func() error, cc ChromeConfig) func() error {
 					if c.Button(ids.PrepareStr("arrangeWindows"), c.Atoms().Text("Reset window positions").Keep()).SendResp().HasPrimaryClicked() {
 						c.MemoryResetAreas()
 					}
+					if cc.Host != nil {
+						// Every agent's annotations at once; a task's own
+						// clear is on its badge (ADR-0297 §SD8).
+						c.Separator().Horizontal().Send()
+						if c.Button(ids.PrepareStr("clearAnnotations"), c.Atoms().Text("Clear annotations").Keep()).SendResp().HasPrimaryClicked() {
+							cc.Host.Annotations().ClearAll()
+						}
+					}
 				}
 				if cc.ExtraMenus != nil {
 					cc.ExtraMenus()

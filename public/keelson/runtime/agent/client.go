@@ -456,6 +456,53 @@ func (inst *Client) Place(ctx context.Context, handle string, asked Asked, insta
 		wireWindowAct{V: wireVersion, Handle: handle, Key: asked.Key, Instance: instance, X: x, Y: y, W: w, H: h, wireCause: asked.wire()}))
 }
 
+// Target is an annotation's target (ADR-0297 §SD2): a window (Window
+// alone); a rect relative to a window's top-left corner (Window and Rect);
+// or a rect of the viewport (Viewport and Rect, Window zero). Rect is x, y,
+// w, h in logical points.
+type Target struct {
+	Window   uint64
+	Rect     *[4]float32
+	Viewport bool
+}
+
+// AnnotateRequest is one annotation: Op is highlight, callout, arrow, step
+// or spotlight; Id names it within the task, and annotating an Id again
+// replaces it.
+type AnnotateRequest struct {
+	Handle  string
+	Asked   Asked
+	Id      string
+	Op      string
+	Targets []Target
+	Text    string
+}
+
+// Annotate puts an annotation on the host's overlay. It needs suggest mode
+// on every window it points at, and the desktop in suggest mode for a
+// viewport rect.
+func (inst *Client) Annotate(ctx context.Context, r AnnotateRequest) (out Outcome, err error) {
+	anchors := make([]wireAnchor, 0, len(r.Targets))
+	for _, t := range r.Targets {
+		a := wireAnchor{Window: t.Window, Viewport: t.Viewport}
+		if t.Rect != nil {
+			a.Rect = !t.Viewport
+			a.X, a.Y, a.W, a.H = t.Rect[0], t.Rect[1], t.Rect[2], t.Rect[3]
+		}
+		anchors = append(anchors, a)
+	}
+	return callReply(roundTrip[wireAnnotate, wireCallReply](ctx, inst, SubjectAnnotate,
+		wireAnnotate{V: wireVersion, Handle: r.Handle, Key: r.Asked.Key, Id: r.Id, Op: r.Op, Anchors: anchors, Text: r.Text,
+			wireCause: r.Asked.wire()}))
+}
+
+// ClearAnnotations removes the task's annotation by id, or all of the
+// task's with an empty id.
+func (inst *Client) ClearAnnotations(ctx context.Context, handle string, asked Asked, id string) (out Outcome, err error) {
+	return callReply(roundTrip[wireAnnotate, wireCallReply](ctx, inst, SubjectClear,
+		wireAnnotate{V: wireVersion, Handle: handle, Key: asked.Key, Id: id, wireCause: asked.wire()}))
+}
+
 // ReadResult is a result as JSON, or an artifact by media type and path.
 // Untrusted content comes with its Source; a coordinator delimits it and
 // tells its model it is data, never instruction (ADR-0269 §SD7). Confined

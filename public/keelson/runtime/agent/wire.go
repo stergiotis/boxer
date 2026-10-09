@@ -289,6 +289,33 @@ type wireRect struct {
 	H float32 `json:"h"`
 }
 
+// wireAnchor is an annotation's target (ADR-0297 §SD2): a window; a window
+// and a rect relative to its top-left corner (Rect set); or a viewport rect
+// (Viewport set, Window zero). X, Y, W, H are logical points.
+type wireAnchor struct {
+	Window   uint64  `json:"window,omitempty"`
+	Rect     bool    `json:"rect,omitempty"`
+	Viewport bool    `json:"viewport,omitempty"`
+	X        float32 `json:"x,omitempty"`
+	Y        float32 `json:"y,omitempty"`
+	W        float32 `json:"w,omitempty"`
+	H        float32 `json:"h,omitempty"`
+}
+
+// wireAnnotate is annotate or clear. Op, Anchors and Text are annotate's;
+// Id names the annotation, and an empty Id to clear is every one of the
+// task's.
+type wireAnnotate struct {
+	V       uint8        `json:"v"`
+	Handle  string       `json:"handle"`
+	Key     string       `json:"key"`
+	Id      string       `json:"id,omitempty"`
+	Op      string       `json:"op,omitempty"`
+	Anchors []wireAnchor `json:"anchors,omitempty"`
+	Text    string       `json:"text,omitempty"`
+	wireCause
+}
+
 // wireWindowAct is arrange, raise or place (ADR-0276 §SD3). Command and
 // Instances are arrange's; Instance is raise's and place's; X, Y, W, H is
 // place's outer rect in logical points.
