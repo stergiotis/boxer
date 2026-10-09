@@ -31,13 +31,20 @@ import (
 // never stops calling tools. The host's call budget per task is what bounds
 // the calls themselves. The last round offers no tools, so a turn that
 // reaches it still ends with an answer. The person picks the limit per chat
-// in Settings, within RoundsMinEnv and RoundsMaxEnv; defaultRounds is where
-// it starts.
+// in Settings, within RoundsMinEnv and RoundsMaxEnv; RoundsEnv, by default
+// defaultRounds, is where it starts.
 const (
 	defaultRounds   = 24
 	defaultRoundsLo = 4
 	defaultRoundsHi = 96
 )
+
+var RoundsEnv = env.NewInt(env.Spec{
+	Name:        "BOXER_CHAT_ROUNDS",
+	Default:     strconv.Itoa(defaultRounds),
+	Description: "the rounds of model calls a chat turn with tools starts with in a new chat window, within BOXER_CHAT_ROUNDS_MIN and BOXER_CHAT_ROUNDS_MAX; the person can move it in the chat's Settings",
+	Category:    env.CategoryE("boxer-chat"),
+})
 
 var RoundsMinEnv = env.NewInt(env.Spec{
 	Name:        "BOXER_CHAT_ROUNDS_MIN",
@@ -62,10 +69,10 @@ func roundRange() (lo int, hi int) {
 	return lo, max(int(RoundsMaxEnv.Get()), lo)
 }
 
-// clampRounds is n within roundRange; zero is defaultRounds.
+// clampRounds is n within roundRange; zero is RoundsEnv.
 func clampRounds(n int) int {
 	if n == 0 {
-		n = defaultRounds
+		n = int(RoundsEnv.Get())
 	}
 	lo, hi := roundRange()
 	return min(max(n, lo), hi)
@@ -141,7 +148,7 @@ type coordinator struct {
 	// the waiting bubble's account, not the host's audit trail.
 	steps *turnSteps
 	// rounds is the person's limit on a turn's rounds, read when a turn
-	// starts; zero is defaultRounds. Guarded by mu.
+	// starts; zero is RoundsEnv. Guarded by mu.
 	rounds int
 	// answered are the running turn's answered model calls, kept as they
 	// answer so a turn that fails or is stopped later still counts them.
