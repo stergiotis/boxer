@@ -84,7 +84,7 @@ func TestCallsAreMeteredAndAnnounced(t *testing.T) {
 	p := &fakeProvider{resp: openaichat.CompletionResponse{Content: "hello", InputTokens: 30, OutputTokens: 5,
 		CachedInputTokens: option.Some(int32(20))}}
 	h := serveRation(t, localCfg(p))
-	res, err := h.cli.Complete(context.Background(), Request{Messages: hi(), Purpose: "book/greet"})
+	res, err := h.cli.Complete(context.Background(), Request{Messages: hi(), Purpose: "book/greet", Conversation: "c1", Turn: "t1", Round: 2})
 	require.NoError(t, err)
 	assert.Equal(t, option.Some(int32(20)), res.CachedInputTokens)
 	assert.False(t, res.ReasoningTokens.Has, "not reported stays absent")
@@ -95,6 +95,9 @@ func TestCallsAreMeteredAndAnnounced(t *testing.T) {
 	assert.Equal(t, res.CallId, e.CallId)
 	assert.Equal(t, string(appId), e.Chain.App)
 	assert.Equal(t, "book/greet", e.Chain.Purpose)
+	assert.Equal(t, "c1", e.Conversation)
+	assert.Equal(t, "t1", e.Turn)
+	assert.Equal(t, uint32(2), e.Round)
 	assert.Equal(t, int64(35), e.Usage[ration.QuantityTotalTokens])
 	assert.Equal(t, int64(20), e.Usage[ration.QuantityCachedInputTokens])
 
@@ -229,6 +232,12 @@ func TestLoosensCountsRaises(t *testing.T) {
 	shorter.Raise, shorter.RaiseUntil = 5, now.Add(-2*time.Hour)
 	assert.False(t, loosens(base, shorter))
 	assert.False(t, loosens(base, base))
+	lapsing := base
+	lapsing.Until = now.Add(time.Hour)
+	assert.True(t, loosens(base, lapsing), "a rule that now lapses")
+	longer := lapsing
+	longer.Until = now.Add(2 * time.Hour)
+	assert.False(t, loosens(lapsing, longer), "one that lapses later holds longer")
 }
 
 // A call held by a concurrency rule waits in the queue, and a moderator's

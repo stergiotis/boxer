@@ -237,6 +237,10 @@ type Rule struct {
 	// Raise adds to Limit until RaiseUntil; it never changes Limit.
 	Raise      int64
 	RaiseUntil time.Time
+	// Until, when set, is when the rule lapses: the ledger ignores it from
+	// then on and drops it. A moderator's own rules carry one (ADR-0302
+	// §SD5).
+	Until time.Time
 	// Author is who set the rule: an app id, or "person". Reason is theirs.
 	Author string
 	Reason string
@@ -275,6 +279,11 @@ func (inst Rule) Validate() (err error) {
 		}
 	}
 	return
+}
+
+// lapsed says the rule's Until has passed at now.
+func (inst Rule) lapsed(now time.Time) (yes bool) {
+	return !inst.Until.IsZero() && !now.Before(inst.Until)
 }
 
 // limitAt is the limit with any raise in force at now.

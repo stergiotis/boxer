@@ -18,6 +18,7 @@ import (
 	"testing/fstest"
 	"time"
 
+	"github.com/stergiotis/boxer/public/extbin"
 	"github.com/stergiotis/boxer/public/fs/lading"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingadapter"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingdata"
@@ -260,7 +261,7 @@ func TestFiltersRunAtTheSource(t *testing.T) {
 	ctx := context.Background()
 	dir := corpusDir(t)
 
-	src := openRemote(t, dir, ladingremote.WithFilters("--exclude", "*.bin"))
+	src := openRemote(t, dir, ladingremote.WithArgs("--exclude", "*.bin"))
 	res, err := ladingingest.Snapshot(ctx, src, mountRemote, policy(), h.stores)
 	require.NoError(t, err)
 
@@ -372,6 +373,14 @@ func TestCloseReapsTheProcess(t *testing.T) {
 func TestAMissingRemoteFailsAtServe(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
+
+	// The property under test is what Serve says when rclone refuses the
+	// remote, which needs an rclone to refuse it. Without one Serve fails one
+	// step earlier, at resolution, with no remote and no stderr to report —
+	// the same skip every other test here takes.
+	if _, rerr := extbin.Rclone.Command(ctx, extbin.Opts{}, "version"); rerr != nil {
+		t.Skipf("rclone unavailable: %v", rerr)
+	}
 
 	src, err := ladingremote.Serve(ctx, "nosuchremote:definitely/not/here")
 	if src != nil {

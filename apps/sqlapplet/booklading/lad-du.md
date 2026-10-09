@@ -21,7 +21,9 @@ each file's ancestor prefixes rather than by walking.
 
 `top` caps the table. The sizes are the files' recorded sizes, not the store's
 block storage; a `ref` entry counts its full size although the store holds no
-bytes for it.
+bytes for it. The root's own row is `.`, the total of every file in the
+snapshot; it differs from the ledger's `snap_bytes`, which also sums the
+directory entries' own sizes as the source reported them.
 
 ```sql
 SET param_m = '*';
@@ -40,7 +42,7 @@ SELECT
   sum(size) AS "bytes@gloss/bytes",
   count() AS files
 FROM fs({m:String})
-ARRAY JOIN arrayMap(k -> arrayStringConcat(arraySlice(splitByChar('/', path), 1, k), '/'), range(1, depth)) AS anc
+ARRAY JOIN arrayConcat(['.'], arrayMap(k -> arrayStringConcat(arraySlice(splitByChar('/', path), 1, k), '/'), range(1, depth))) AS anc
 WHERE NOT is_dir
 GROUP BY mount, anc
 ORDER BY sum(size) DESC

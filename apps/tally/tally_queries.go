@@ -39,7 +39,11 @@ func scopePredicate(dir string) string {
 // diffSQL is ADR-0198 §7's diff between two snapshots — or two mounts — as
 // the Diff tab runs it: newer side n, older side o, a full outer join on the
 // path, classified added / removed / modified, unchanged paths left out.
-// Both sides are optionally cut to one directory subtree first.
+// Both sides are optionally cut to one directory subtree first. The
+// classification reads the missing side as ”, which holds only under
+// join_use_nulls = 0 — a session setting a caller can change, so the
+// statement pins it rather than assuming the default (ADR-0198 Updates
+// 2026-08-19).
 func diffSQL(newer, older location, dir string) string {
 	pred := scopePredicate(dir)
 	return fmt.Sprintf(`SELECT if(n.path != '', n.path, o.path) AS path,
@@ -55,7 +59,8 @@ FROM (SELECT * FROM fs(%d, %d) WHERE %s) AS n
 FULL OUTER JOIN (SELECT * FROM fs(%d, %d) WHERE %s) AS o ON n.path = o.path
 WHERE change != 'same'
 ORDER BY path
-LIMIT 5000`,
+LIMIT 5000
+SETTINGS join_use_nulls = 0`,
 		newer.mount.Value(), newer.snap.UnixNano(), pred,
 		older.mount.Value(), older.snap.UnixNano(), pred)
 }

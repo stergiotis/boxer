@@ -112,6 +112,9 @@ func (inst *coordinator) treeAnchor(ref string, node string) (window uint64, loc
 }
 
 func nodeAnchor(t capture.Tree, node string) (window uint64, local [4]float32, err error) {
+	if row, ok := strings.CutSuffix(node, "r"); ok {
+		return rowAnchor(t, row)
+	}
 	opPart, widgetPart, hasWidget := strings.Cut(strings.TrimPrefix(node, "#"), ".")
 	op, e := strconv.Atoi(opPart)
 	if e != nil || op < 0 || op >= len(t.Ops) {
@@ -136,6 +139,34 @@ func nodeAnchor(t capture.Tree, node string) (window uint64, local [4]float32, e
 	return
 }
 
+// rowAnchor resolves a table row — "#60r", the row cell #60 is in — to the
+// union of the row's cells: the deferred blocks beside #60 under the same
+// message, sharing its top edge, as the outline groups them.
+func rowAnchor(t capture.Tree, cell string) (window uint64, local [4]float32, err error) {
+	op, e := strconv.Atoi(strings.TrimPrefix(cell, "#"))
+	if e != nil || op < 0 || op >= len(t.Ops) || t.Ops[op].Op != capture.TreeBlockOp {
+		err = errors.New("no table row " + strconv.Quote(cell+"r") + " in the tree")
+		return
+	}
+	top := math.Round(float64(t.Ops[op].Rect[1]))
+	r := t.Ops[op].Rect
+	minX, minY, maxX, maxY := r[0], r[1], r[0]+r[2], r[1]+r[3]
+	for _, o := range t.Ops {
+		if o.Op != capture.TreeBlockOp || o.Parent != t.Ops[op].Parent || math.Round(float64(o.Rect[1])) != top {
+			continue
+		}
+		minX, minY = min(minX, o.Rect[0]), min(minY, o.Rect[1])
+		maxX, maxY = max(maxX, o.Rect[0]+o.Rect[2]), max(maxY, o.Rect[1]+o.Rect[3])
+	}
+	window, wr, ok := t.WindowOf(op)
+	if !ok {
+		err = errors.New("the tree does not say which window " + strconv.Quote(cell+"r") + " is in")
+		return
+	}
+	local = [4]float32{minX - wr[0], minY - wr[1], maxX - minX, maxY - minY}
+	return
+}
+
 // noiseRoles are roles that name no content: layout wrappers, resize
 // handles, scroll bars. A widget with one of them and no name or value is
 // left out of the outline; how much is out of view is said by the counts.
@@ -149,12 +180,13 @@ var noiseRoles = map[string]bool{"": true, "unknown": true, "generic_container":
 //	  #2 button "Save" [20,60 40x18] · Button
 //	    #2.1 label "saved" [70,60 40x18]
 //	  #5 [20,90 300x140] · EndETable · 13 of 20 parts not shown
-//	    row [20,92 300x18]: #6 "A320" | #8 "2005"
+//	    #6r row [20,92 300x18]: #6 "A320" | #8 "2005"
 //
 // Lines lead with the widget's role and name; the message that drew it comes
 // last, and a top-level message names its window's key. Every line starts
 // with the reference an anchor cites (treeAnchor): #op for a message, #op.k
-// for its widget k, a row's cells by their block's #op. A message that shows nothing of its own and holds one shown part is
+// for its widget k, a row's cells by their block's #op, the whole row as
+// #opr after its first cell. A message that shows nothing of its own and holds one shown part is
 // folded into it. Sibling deferred blocks sharing a top edge are a table's
 // cells: they print as one row of their texts, so data does not read as
 // controls. A message's counts say what is not shown: widgets clipped out of
@@ -333,7 +365,7 @@ func rowText(t capture.Tree, cells []int, children [][]int, own [][]shownWidget)
 		}
 		texts = append(texts, "#"+strconv.Itoa(c)+" "+strings.Join(parts, " "))
 	}
-	return "row " + rectText([4]float32{minX, minY, maxX - minX, maxY - minY}) + ": " + strings.Join(texts, " | ")
+	return "#" + strconv.Itoa(cells[0]) + "r row " + rectText([4]float32{minX, minY, maxX - minX, maxY - minY}) + ": " + strings.Join(texts, " | ")
 }
 
 // shownWidget is a widget the outline shows, with its index in its op.

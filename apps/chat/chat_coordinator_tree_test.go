@@ -4,6 +4,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rs/zerolog"
+	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
+	"github.com/stergiotis/boxer/public/keelson/runtime/inscribe"
+	"github.com/stergiotis/boxer/public/llm/openaichat"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -51,8 +56,8 @@ func TestTreeOutlinePrintsATablesBlocksAsRows(t *testing.T) {
 	cell(50, 20, "1998")
 	got := treeOutline(capture.Tree{V: capture.TreeVersion, Ops: ops}, 1<<10)
 	assert.Equal(t, `#0 [0,0 200x40] · EndETable · 2 of 6 parts not shown
-  row [0,0 100x18]: #3 "A320" | #1 "2005"
-  row [0,20 100x18]: #5 "B738" | #7 "1998"`, got)
+  #3r row [0,0 100x18]: #3 "A320" | #1 "2005"
+  #5r row [0,20 100x18]: #5 "B738" | #7 "1998"`, got)
 	assert.NotContains(t, got, "button", "cells print as data, not as controls")
 }
 
@@ -87,4 +92,51 @@ func TestANodeAnchorIsRelativeToItsWindowAsRecorded(t *testing.T) {
 		_, _, err = nodeAnchor(tr, bad)
 		assert.Error(t, err, bad)
 	}
+}
+
+// A tree part reaches the host as its window and a rect relative to the
+// window as the tree recorded it; the model sends no coordinate (ADR-0297
+// §SD4).
+func TestPointOutResolvesATreePartToItsWindow(t *testing.T) {
+	bus := inprocbus.NewInst(zerolog.Nop())
+	model := &scriptedModel{replies: []openaichat.CompletionResponse{
+		toolCall("r1", "request_access", `{"plan":"point at the note","open":[{"app":"notes"}]}`),
+		toolCall("o1", "open_window", `{"app":"notes"}`),
+		toolCall("a1", "point_out", `{"id":"save","op":"callout","targets":[{"tree":"t1","node":"#1.0"}],"text":"press Save"}`),
+		toolCall("a2", "point_out", `{"id":"bad","op":"highlight","targets":[{"tree":"t9","node":"#1"}]}`),
+		{Content: "done", FinishReason: "stop"},
+	}}
+	host, coord, cli, req, ctx := coordRig(t, bus, model, false)
+	wr := rect(100, 50, 400, 300)
+	coord.keepTree(capture.Tree{V: capture.TreeVersion, Ops: []capture.TreeOp{
+		{Op: "Window", Parent: -1, Rect: wr, Window: 100, WindowRect: &wr},
+		{Op: "Button", Parent: 0, Rect: rect(120, 90, 40, 18),
+			Widgets: []capture.TreeWidget{{Rect: rect(120, 90, 40, 18), Role: "button", Name: "Save"}}},
+	}})
+	res, err := runTurn(ctx, cli, coord, req, nil)
+	require.NoError(t, err)
+	replies := toolReplies(res.messages)
+	require.Contains(t, replies["a1"], "completed", replies["a1"])
+	assert.Contains(t, replies["a2"], "no window tree")
+	items := host.Marks().Snapshot()
+	require.Len(t, items, 1)
+	require.Len(t, items[0].Targets, 1)
+	assert.Equal(t, uint64(100), items[0].Targets[0].Window)
+	require.NotNil(t, items[0].Targets[0].Local)
+	assert.Equal(t, inscribe.Rect{X: 20, Y: 40, W: 40, H: 18}, *items[0].Targets[0].Local)
+}
+
+func TestARowReferenceIsTheUnionOfItsCells(t *testing.T) {
+	wr := rect(100, 50, 400, 300)
+	ops := []capture.TreeOp{{Op: "Window", Parent: -1, Rect: wr, Window: 7, WindowRect: &wr},
+		{Op: "EndETable", Parent: 0, Rect: rect(110, 100, 300, 40)}}
+	for _, c := range [][2]float32{{110, 100}, {170, 100}, {110, 120}} {
+		ops = append(ops, capture.TreeOp{Op: capture.TreeBlockOp, Parent: 1, Rect: rect(c[0], c[1], 60, 18)})
+	}
+	w, local, err := nodeAnchor(capture.Tree{V: capture.TreeVersion, Ops: ops}, "#2r")
+	require.NoError(t, err)
+	assert.Equal(t, uint64(7), w)
+	assert.Equal(t, rect(10, 50, 120, 18), local, "the two cells of the first row, not the one below")
+	_, _, err = nodeAnchor(capture.Tree{V: capture.TreeVersion, Ops: ops}, "#1r")
+	assert.Error(t, err, "a row reference names a cell")
 }

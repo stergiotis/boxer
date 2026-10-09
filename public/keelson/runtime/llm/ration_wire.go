@@ -22,6 +22,7 @@ type wireRule struct {
 	SoftPercent []uint8 `json:"soft_percent,omitempty"`
 	Raise       int64   `json:"raise,omitempty"`
 	RaiseUntil  int64   `json:"raise_until,omitempty"`
+	Until       int64   `json:"until,omitempty"`
 	Reason      string  `json:"reason,omitempty"`
 	// Author and SetAt are the service's; a request's are ignored.
 	Author string `json:"author,omitempty"`
@@ -90,20 +91,25 @@ type wireRemaining struct {
 
 // wireCallEvent is the event on llm.event.call.
 type wireCallEvent struct {
-	V         uint8            `json:"v"`
-	CallId    string           `json:"call_id"`
-	At        int64            `json:"at"`
-	App       string           `json:"app"`
-	Instance  uint64           `json:"instance,omitempty"`
-	Task      string           `json:"task,omitempty"`
-	Purpose   string           `json:"purpose,omitempty"`
-	Class     string           `json:"class,omitempty"`
-	Admission string           `json:"admission"`
-	Rule      string           `json:"rule,omitempty"`
-	Refusal   string           `json:"refusal,omitempty"`
-	Reason    string           `json:"reason,omitempty"`
-	QueuedNs  int64            `json:"queued_ns,omitempty"`
-	Usage     map[string]int64 `json:"usage,omitempty"`
+	V        uint8  `json:"v"`
+	CallId   string `json:"call_id"`
+	At       int64  `json:"at"`
+	App      string `json:"app"`
+	Instance uint64 `json:"instance,omitempty"`
+	Task     string `json:"task,omitempty"`
+	Purpose  string `json:"purpose,omitempty"`
+	// Conversation, Turn and Round are what the request said the call
+	// belongs to (ADR-0302 §SD2); Round is read only beside a Turn.
+	Conversation string           `json:"conversation,omitempty"`
+	Turn         string           `json:"turn,omitempty"`
+	Round        uint32           `json:"round,omitempty"`
+	Class        string           `json:"class,omitempty"`
+	Admission    string           `json:"admission"`
+	Rule         string           `json:"rule,omitempty"`
+	Refusal      string           `json:"refusal,omitempty"`
+	Reason       string           `json:"reason,omitempty"`
+	QueuedNs     int64            `json:"queued_ns,omitempty"`
+	Usage        map[string]int64 `json:"usage,omitempty"`
 	// Failed says the provider call failed; its usage is what it reported.
 	Failed bool `json:"failed,omitempty"`
 }
@@ -137,7 +143,7 @@ func timeOfNs(ns int64) (t time.Time) {
 func wireOfRule(r ration.Rule) (w wireRule) {
 	w = wireRule{Id: r.Id, SelectKind: r.Select.Kind.String(), SelectKey: r.Select.Key, Kind: r.Kind.String(),
 		Quantity: string(r.Quantity), Limit: r.Limit, WindowNs: int64(r.Window), Aligned: r.Aligned,
-		SoftPercent: r.SoftPercent, Raise: r.Raise, RaiseUntil: unixNs(r.RaiseUntil), Reason: r.Reason,
+		SoftPercent: r.SoftPercent, Raise: r.Raise, RaiseUntil: unixNs(r.RaiseUntil), Until: unixNs(r.Until), Reason: r.Reason,
 		Author: r.Author, SetAt: unixNs(r.SetAt)}
 	return
 }
@@ -145,7 +151,7 @@ func wireOfRule(r ration.Rule) (w wireRule) {
 func ruleOfWire(w wireRule) (r ration.Rule, err error) {
 	r = ration.Rule{Id: w.Id, Select: ration.Selector{Key: w.SelectKey}, Quantity: ration.QuantityE(w.Quantity),
 		Limit: w.Limit, Window: time.Duration(w.WindowNs), Aligned: w.Aligned, SoftPercent: w.SoftPercent,
-		Raise: w.Raise, RaiseUntil: timeOfNs(w.RaiseUntil), Reason: w.Reason, Author: w.Author, SetAt: timeOfNs(w.SetAt)}
+		Raise: w.Raise, RaiseUntil: timeOfNs(w.RaiseUntil), Until: timeOfNs(w.Until), Reason: w.Reason, Author: w.Author, SetAt: timeOfNs(w.SetAt)}
 	if r.Select.Kind, err = ration.ParseAccountKind(w.SelectKind); err != nil {
 		return
 	}

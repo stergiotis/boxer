@@ -107,6 +107,21 @@ func TestInProcess_TrivialQuerySettings(t *testing.T) {
 	assert.Equal(t, "application/json", resp.Header.Get("Content-Type"))
 	assert.True(t, strings.HasPrefix(string(b), "{"), string(b))
 
+	// The Content-Type follows the format the body is in: the statement's,
+	// however spelled, over default_format.
+	for _, cse := range []struct{ url, sql, want string }{
+		{"http://keelson.invalid/query?default_format=JSONEachRow", "SELECT * FROM keelson('env') LIMIT 1 FORMAT tsv", "text/tab-separated-values"},
+		{"http://keelson.invalid/query?default_format=TSVWithNames", "SELECT * FROM keelson('env') LIMIT 1", "text/tab-separated-values"},
+		{"http://keelson.invalid/query?default_format=jsoneachrow", "SELECT * FROM keelson('env') LIMIT 1", "application/json"},
+		{"http://keelson.invalid/query", "SELECT * FROM keelson('env') LIMIT 1 FORMAT CSVWithNames", "text/csv"},
+	} {
+		resp, err := c.Post(cse.url, "text/plain", strings.NewReader(cse.sql))
+		require.NoError(t, err)
+		_ = resp.Body.Close()
+		require.Equal(t, http.StatusOK, resp.StatusCode, cse.sql)
+		assert.Equal(t, cse.want, resp.Header.Get("Content-Type"), "%s %s", cse.url, cse.sql)
+	}
+
 	status, body := post(t, c, "http://keelson.invalid/query?limit=1", "SELECT * FROM keelson('env') FORMAT TabSeparated")
 	assert.GreaterOrEqual(t, status, 400)
 	assert.Contains(t, body, "the setting limit")

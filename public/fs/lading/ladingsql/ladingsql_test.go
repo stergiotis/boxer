@@ -439,4 +439,12 @@ func TestLatestIsANameToo(t *testing.T) {
 	assert.Equal(t, omitted, named)
 	bound := expandOK(t, "SET param_s = 'latest';\nSELECT path FROM fs(4322952322827452417, {s:String})")
 	assert.True(t, strings.HasSuffix(bound, omitted))
+
+	// On fssnap the two differ: omission lists the index, which IS the set of
+	// complete snapshots; the word keeps the meaning it has everywhere else.
+	ledger := expandOK(t, "SELECT snap FROM fssnap(4322952322827452417)")
+	newest := expandOK(t, "SELECT snap FROM fssnap(4322952322827452417, 'latest')")
+	assert.NotEqual(t, ledger, newest)
+	assert.NotContains(t, ledger, "max(", "a bare fssnap(m) is every complete snapshot")
+	assert.Contains(t, newest, "max(", "fssnap(m, 'latest') is the one newest row")
 }

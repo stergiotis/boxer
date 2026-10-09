@@ -1,6 +1,7 @@
 package windowhost
 
 import (
+	"github.com/stergiotis/boxer/public/keelson/runtime/inscribe"
 	"slices"
 	"strconv"
 	"sync"
@@ -316,6 +317,11 @@ type Inst struct {
 	// §SD8); nil hears nothing. Set before the first Frame.
 	opsListener func(key uint64, e opengine.LogEntry)
 
+	// overlay draws the marks agents ask for (ADR-0297), after every
+	// window; dialogModal is whether the agent chrome drew a modal this
+	// frame, which hides it. Render goroutine.
+	overlay     *inscribe.Overlay
+	dialogModal bool
 	// agentChrome draws the host chrome of the app operations contract
 	// (ADR-0269 §SD5): a badge row in each window a task works in, and the
 	// host's dialogs. nil draws nothing. Set before the first Frame.
@@ -337,6 +343,7 @@ func NewInst(registry *app.Registry, logger zerolog.Logger) (inst *Inst) {
 		logger:     logger,
 		density:    styletokens.ActiveDensity(),
 		mountState: make(map[app.AppI]*instMount),
+		overlay:    inscribe.NewOverlay(inscribe.NewScene()),
 	}
 	return
 }
@@ -1254,8 +1261,9 @@ func (inst *Inst) Frame(ids *c.WidgetIdStack) (err error) {
 	if opsBusy(snapshot) {
 		c.RequestRepaintAfter(opsRepaintIntervalSecs)
 	}
+	inst.dialogModal = false
 	if inst.agentChrome != nil {
-		inst.agentChrome.RenderDialogs(ids)
+		inst.dialogModal = inst.agentChrome.RenderDialogs(ids)
 	}
 	saveEv := inst.saveDialog(ids).Render()
 	switch act, paths := saveEv.Action, saveEv.Paths; act {

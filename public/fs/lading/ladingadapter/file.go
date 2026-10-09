@@ -400,6 +400,9 @@ func (inst *FS) blocks(name string, first, last uint32) (map[uint32][]byte, erro
 	if inst.st.Data == nil {
 		return nil, errors.New("lading: no block store bound; this view can stat but not read")
 	}
+	if err := inst.ensureComplete(); err != nil {
+		return nil, err
+	}
 	// The expiry cutoff rides here too: a block table row outlives its expiry
 	// on disk exactly as an entry row does, and a read that omitted it would
 	// serve the bytes of a snapshot the entry side has already stopped

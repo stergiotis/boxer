@@ -54,7 +54,7 @@ type viewKey struct {
 // runs with the operator's own credentials, and ADR-0200 §SD5 leaves what
 // they may see to the server.
 func sqlConfig(layout ladingschema.Layout) (cfg ladingsql.Config) {
-	return ladingsql.Config{Database: layout.Database, Visibility: ladingsql.VisibleAll{}}
+	return ladingsql.Config{Layout: layout, Visibility: ladingsql.VisibleAll{}}
 }
 
 // connect pings the env-configured server, verifies the store's shape in the

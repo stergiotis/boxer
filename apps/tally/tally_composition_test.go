@@ -66,7 +66,7 @@ func TestLaunchDatabaseSelectsTheStore(t *testing.T) {
 	assert.Equal(t, "downstream", inst.layout.Database)
 	assert.Equal(t, "downstream.fsmeta", inst.layout.MetaTable())
 	assert.Equal(t, "downstream", inst.composeLaunch().Database)
-	assert.Equal(t, "downstream", sqlConfig(inst.layout).Database)
+	assert.Equal(t, "downstream", sqlConfig(inst.layout).Layout.Database)
 
 	inst = newApp()
 	inst.applyLaunch(launchcfg.TallyLaunch{Target: "A"})

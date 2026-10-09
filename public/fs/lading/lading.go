@@ -37,6 +37,7 @@ import (
 	"github.com/stergiotis/boxer/public/fs/lading/ladingdata"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingmeta"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
+	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
@@ -184,6 +185,40 @@ func VerifyIn(ctx context.Context, exec recordstore.ExecutorI, layout ladingsche
 	}
 
 	err = verifyFinished(ctx, exec, layout)
+	return
+}
+
+// Purge removes every row of one mount from the store's three tables: the
+// per-mount purge ADR-0198 §SD1 promises, one lightweight DELETE per table on
+// the key's leading column, which is cheap exactly because nothing in the
+// store is shared or reference-counted.
+//
+// It is the only mutation the store admits besides expiry, and it is
+// deliberately not reachable from the SFTP head, the SQL macros or the
+// adapter, each of which is read-only. The mount's policy record in
+// `boxer.facts` is not touched: it is runtime state about the mount, not a
+// snapshot of it, and the next walk will want it.
+//
+// A purge races a walk of the same mount only in the sense that rows written
+// after the DELETE stay; the commit rule still holds for them.
+func Purge(ctx context.Context, exec recordstore.ExecutorI, mount identifier.TaggedId) (err error) {
+	return PurgeIn(ctx, exec, ladingschema.Layout{}, mount)
+}
+
+// PurgeIn is [Purge] for a store whose tables live in the layout's database.
+func PurgeIn(ctx context.Context, exec recordstore.ExecutorI, layout ladingschema.Layout, mount identifier.TaggedId) (err error) {
+	if exec == nil {
+		return eh.Errorf("no executor")
+	}
+	if !mount.IsValid() {
+		return eh.Errorf("mount id is not a valid tagged id")
+	}
+	for _, table := range []string{layout.MetaTable(), layout.DataTable(), layout.SnapTable()} {
+		err = exec.Exec(ctx, fmt.Sprintf("DELETE FROM %s WHERE %s = %d", table, ladingschema.ColID, mount.Value()))
+		if err != nil {
+			return eb.Build().Str("table", table).Uint64("mount", mount.Value()).Errorf("purge: %w", err)
+		}
+	}
 	return
 }
 

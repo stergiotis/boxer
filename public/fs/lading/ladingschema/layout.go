@@ -14,10 +14,12 @@ import "github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 // and a store that renamed them would be a different store. Only the database
 // moves.
 //
-// The SQL surface has its own spelling of the same fact —
-// [github.com/stergiotis/boxer/public/fs/lading/ladingsql.Config] takes a
-// database — because it is configured where a pass registry is built, not
-// where a store is opened.
+// Every surface takes this one type — the generated stores through
+// lading.NewStores, provisioning and Verify, the adapter's index reads, the
+// SFTP head, the ad-hoc publisher, the CLI's `--database`, and the SQL
+// macros through
+// [github.com/stergiotis/boxer/public/fs/lading/ladingsql.Config] — so there
+// is one spelling of where a store lives rather than one per surface.
 type Layout struct {
 	// Database is the ClickHouse database; empty is [DatabaseName].
 	Database string

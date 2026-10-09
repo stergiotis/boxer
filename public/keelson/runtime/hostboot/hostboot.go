@@ -39,6 +39,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/launcher"
 	"github.com/stergiotis/boxer/public/keelson/runtime/launchlimit"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
+	"github.com/stergiotis/boxer/public/keelson/runtime/moderator"
 	"github.com/stergiotis/boxer/public/keelson/runtime/natsbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/persist"
 	"github.com/stergiotis/boxer/public/keelson/runtime/runinfo"
@@ -246,6 +247,9 @@ type Runtime struct {
 	// Agent is the app operations service (ADR-0269); nil when off or
 	// failed to start.
 	Agent *agent.Service
+	// Moderator is the built-in moderator (ADR-0302); nil unless
+	// BOXER_MODERATOR is set.
+	Moderator *moderator.Service
 	// State is where workingsets and column-width overrides live (ADR-0105
 	// Update 2026-08-15): the durable persist backend when ClickHouse is
 	// reachable, an in-memory twin otherwise. Never nil after Boot, and
@@ -422,6 +426,7 @@ func Boot(ctx context.Context, opts Options) (rt *Runtime, err error) {
 	}
 
 	rt.bootAgent()
+	rt.bootModerator()
 
 	if opts.AfterHost != nil {
 		if err = opts.AfterHost(rt); err != nil {
@@ -503,6 +508,7 @@ func (rt *Runtime) bootServices(ctx context.Context, factsCfg chstore.Config) {
 		// keeps the service's own record.
 		llmCfg := llm.ConfigFromEnv()
 		llmCfg.Trail = rt.Trail
+		llmCfg = withModerator(llmCfg)
 		if path := llm.ScriptEnv.Get(); path != "" {
 			// A scripted model, for scenes (ADR-0269 M6): on the headless
 			// host only, where no person reads its answers as a model's.
@@ -723,10 +729,15 @@ func (rt *Runtime) bootWindowHost() (err error) {
 	inner := func() (err error) {
 		bodyIds.Reset()
 		err = host.Frame(bodyIds)
+		fileDialog := false
 		if fsBridge != nil {
 			bridgeIds.Reset()
 			fsBridge.Render(bridgeIds)
+			fileDialog = fsBridge.CurrentRequestId() != ""
 		}
+		// Marks last, over every window and dialog, and hidden while
+		// one of the host's dialogs asks the person to decide (ADR-0297).
+		host.FrameOverlay(fileDialog)
 		if dialogWidths != nil {
 			// A failed write stays dirty and is retried next frame.
 			if _, ferr := dialogWidths.Flush(time.Now()); ferr != nil {
@@ -935,6 +946,9 @@ func (rt *Runtime) bootIntrospect() {
 	}
 	if rt.LLM != nil {
 		deps.LLMCalls = rt.LLM
+	}
+	if rt.Moderator != nil {
+		deps.Moderator = rt.Moderator
 	}
 	if rt.HTTP != nil {
 		deps.HTTPCalls = rt.HTTP

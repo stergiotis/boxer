@@ -29,6 +29,10 @@ application, not to the store.
 The Timeline tab lays the snapshots out by instant, one lane per mount, so a
 cadence that slipped or a mount that stopped being walked is visible as a gap.
 
+`bytes` is the walk's own total: the sum of every entry's recorded size,
+directories included at whatever size the source reported for them. The `du`
+chapter sums files only, so its root row is smaller by that bookkeeping.
+
 ```sql
 SET param_m = '*';
 WITH

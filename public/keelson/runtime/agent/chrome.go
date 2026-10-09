@@ -133,6 +133,16 @@ func (inst *Chrome) renderTaskMenu(key uint64, wt windowTask, ids *c.WidgetIdSta
 			c.Atoms().Text("Stop the task").Keep()).SendResp().HasPrimaryClicked() {
 			svc.endTask(t, "the person stopped it", "person")
 		}
+		// The task's marks on the overlay, cleared by the person (ADR-0297
+		// §SD8); the Window menu clears every task's.
+		if svc.cfg.Host != nil {
+			if n := svc.cfg.Host.Marks().Count(t.id); n > 0 {
+				if c.Button(ids.PrepareStr("agent-clear-marks-"+t.id+"-"+strconv.FormatUint(key, 10)),
+					c.Atoms().Text("Clear its marks ("+strconv.Itoa(n)+")").Keep()).SendResp().HasPrimaryClicked() {
+					svc.cfg.Host.Marks().Clear(t.id, "")
+				}
+			}
+		}
 	}
 	c.Separator().Send()
 }
@@ -278,11 +288,12 @@ func dialogHeading(title string, width float32) {
 // the oldest consequential command awaiting confirmation. Both are modals
 // (a grant is decided before anything else is clicked, and no window can
 // cover the dialog asking for it).
-func (inst *Chrome) RenderDialogs(ids *c.WidgetIdStack) {
+func (inst *Chrome) RenderDialogs(ids *c.WidgetIdStack) (modal bool) {
 	svc := inst.svc
 	// One modal at a time: a moderator's question waits behind nothing
 	// and holds the others back until it is answered.
 	if inst.renderQuestion(ids) {
+		modal = true
 		return
 	}
 	svc.mu.Lock()
@@ -291,10 +302,12 @@ func (inst *Chrome) RenderDialogs(ids *c.WidgetIdStack) {
 	svc.mu.Unlock()
 	if len(confirms) > 0 {
 		inst.renderConfirmation(confirms[0], len(confirms), ids)
+		modal = true
 	}
 	if len(open) == 0 {
 		return
 	}
+	modal = true
 	r := open[0]
 	var windows []windowRow
 	if svc.cfg.Host != nil {
@@ -328,6 +341,7 @@ func (inst *Chrome) RenderDialogs(ids *c.WidgetIdStack) {
 	if route != nil {
 		svc.routeHeld(route)
 	}
+	return
 }
 
 // renderConfirmation asks the person to confirm one consequential command

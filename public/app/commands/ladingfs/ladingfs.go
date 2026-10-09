@@ -3,25 +3,31 @@
 //
 // One subcommand, and it speaks SFTP on stdin/stdout:
 //
-//	rclone mount ':sftp,ssh="boxer fs sftp-stdio",shell_type=unix:/<mount>/latest' /mnt/x
+//	rclone mount ':sftp,ssh="boxer fs sftp-stdio --mount <id>",shell_type=unix:/<mount>/latest' /mnt/x
 //
 // rclone's `sftp` backend runs the `ssh=` command in place of ssh and talks to
 // its pipes, so there is no socket, no port and no credential anywhere in
-// this — possession of the pipe is the authorisation, which is what makes it
-// legal under the runtime's refusal to bind a non-loopback address before
-// ADR-0082.
+// this — possession of the pipe is the authorisation for the store, which is
+// what makes it legal under the runtime's refusal to bind a non-loopback
+// address before ADR-0082. Which of the store's mounts the pipe may see is
+// the command's own `--mount` (repeatable) or `--all-mounts`; it refuses to
+// start with neither.
+//
+// Beside it, `boxer fs snapshot` walks a tree in and `boxer fs purge` takes a
+// mount out. Every verb takes `--database` for a store that lives outside the
+// default database (ladingschema.Layout).
 package ladingfs
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strconv"
 
 	cli "github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/fs/lading"
-	"github.com/stergiotis/boxer/public/fs/lading/ladingdata"
-	"github.com/stergiotis/boxer/public/fs/lading/ladingmeta"
+	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingsftp"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingsql"
 	"github.com/stergiotis/boxer/public/identity/identifier"
@@ -29,6 +35,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
 
 // NewCliCommand is the `fs` command group.
@@ -39,8 +46,75 @@ func NewCliCommand() *cli.Command {
 		Commands: []*cli.Command{
 			newSftpStdioCommand(),
 			newSnapshotCommand(),
+			newPurgeCommand(),
 		},
 	}
+}
+
+// databaseFlag is the layout every verb takes: where the store's three tables
+// live. Empty is the default database beside boxer.facts.
+func databaseFlag() cli.Flag {
+	return &cli.StringFlag{
+		Name:  "database",
+		Usage: "the ClickHouse database the store's tables live in; empty is the default beside boxer.facts",
+	}
+}
+
+func layoutOf(cmd *cli.Command) ladingschema.Layout {
+	return ladingschema.Layout{Database: cmd.String("database")}
+}
+
+// connect reaches the server the environment names and returns the executor
+// every verb writes and reads through.
+func connect(ctx context.Context) (exec recordstore.ExecutorI, err error) {
+	client := chclient.New(chclient.ConfigFromEnv(), nil)
+	err = client.Ping(ctx)
+	if err != nil {
+		return nil, eh.Errorf("ClickHouse not reachable: %w", err)
+	}
+	exec, err = storeexec.New(client, nil)
+	if err != nil {
+		return nil, eh.Errorf("executor: %w", err)
+	}
+	return
+}
+
+func newPurgeCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "purge",
+		Usage: "remove every row of one mount from the store",
+		Description: "The per-mount purge of ADR-0198 §SD1: one lightweight DELETE per table on the mount id. " +
+			"Retention is declarative, so the normal answer is to do nothing and let the rows expire; " +
+			"this is for when a mount has to be gone sooner. The mount's policy record in boxer.facts is kept.",
+		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "mount", Required: true,
+				Usage: "the mount id to remove, decimal or 0x-prefixed hex"},
+			databaseFlag(),
+		},
+		Action: runPurge,
+	}
+}
+
+func runPurge(ctx context.Context, cmd *cli.Command) (err error) {
+	mount, err := parseMount(cmd.String("mount"))
+	if err != nil {
+		return
+	}
+	exec, err := connect(ctx)
+	if err != nil {
+		return
+	}
+	layout := layoutOf(cmd)
+	err = lading.VerifyIn(ctx, exec, layout)
+	if err != nil {
+		return eh.Errorf("%w", err)
+	}
+	err = lading.PurgeIn(ctx, exec, layout, mount)
+	if err != nil {
+		return
+	}
+	_, err = fmt.Fprintf(cmd.Root().Writer, "purged mount=0x%X database=%s\n", mount.Value(), layout.DatabaseName())
+	return
 }
 
 func newSftpStdioCommand() *cli.Command {
@@ -75,6 +149,7 @@ func newSftpStdioCommand() *cli.Command {
 				Hidden: true,
 				Usage:  "ignored; ssh's subsystem request, which rclone passes as `-s sftp`",
 			},
+			databaseFlag(),
 		},
 		Action: runSftpStdio,
 	}
@@ -86,31 +161,26 @@ func runSftpStdio(ctx context.Context, cmd *cli.Command) (err error) {
 		return
 	}
 
-	client := chclient.New(chclient.ConfigFromEnv(), nil)
-	err = client.Ping(ctx)
+	exec, err := connect(ctx)
 	if err != nil {
-		return eh.Errorf("ClickHouse not reachable: %w", err)
+		return
 	}
-	exec, err := storeexec.New(client, nil)
-	if err != nil {
-		return eh.Errorf("executor: %w", err)
-	}
-
-	meta := ladingmeta.NewMetaStore(exec, nil, ladingmeta.MetaStoreConfig{})
-	defer meta.Close()
-	data := ladingdata.NewDataStore(exec, nil, ladingdata.DataStoreConfig{})
-	defer data.Close()
+	layout := layoutOf(cmd)
+	stores := lading.NewStores(exec, layout)
+	defer stores.Meta.Close()
+	defer stores.Data.Close()
 
 	// Read-only from here on, so the tables are verified rather than
 	// provisioned: this command must not be the thing that creates a store.
-	err = lading.Verify(ctx, exec)
+	err = lading.VerifyIn(ctx, exec, layout)
 	if err != nil {
 		return eh.Errorf("%w", err)
 	}
 
 	head, err := ladingsftp.New(ladingsftp.Config{
 		Exec:       exec,
-		Stores:     lading.Stores{Meta: meta, Data: data},
+		Layout:     layout,
+		Stores:     stores,
 		Visibility: vis,
 		Ctx:        ctx,
 	})

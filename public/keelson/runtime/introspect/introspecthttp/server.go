@@ -99,11 +99,12 @@ type MacroRunnerI interface {
 // query_id, with its last value — and answers for them itself: a runner
 // that answers without ClickHouse must refuse a setting that would change
 // its result rather than drop it, as the dialect's tolerance does for a
-// runner that is not one (ADR-0290 §SD4). The trivial evaluator's Runner is
-// one.
+// runner that is not one (ADR-0290 §SD4). It returns the format it encoded
+// the body in, a ClickHouse format name, which the response's Content-Type
+// follows. The trivial evaluator's Runner is one.
 type SettingsRunnerI interface {
 	QueryRunner
-	RunSQLSettings(ctx context.Context, sql string, params map[string]string, settings map[string]string) ([]byte, error)
+	RunSQLSettings(ctx context.Context, sql string, params map[string]string, settings map[string]string) (body []byte, format string, err error)
 }
 
 // MacroRunnerFunc adapts a function to MacroRunnerI.
@@ -363,12 +364,9 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 			v := q[key]
 			settings[key] = v[len(v)-1]
 		}
-		if df := settings["default_format"]; df != "" && contentType == "application/octet-stream" {
-			// No FORMAT clause this endpoint knows, so default_format names
-			// the format the runner answers in, or the runner refuses.
-			contentType = chhttp.ContentTypeForStatement("FORMAT " + df)
-		}
-		body, err = sr.RunSQLSettings(r.Context(), rewritten, req.Params, settings)
+		var format string
+		body, format, err = sr.RunSQLSettings(r.Context(), rewritten, req.Params, settings)
+		contentType = chhttp.ContentTypeForStatement("FORMAT " + format)
 	} else {
 		body, err = s.runner.RunSQL(r.Context(), rewritten, req.Params)
 	}

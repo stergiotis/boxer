@@ -585,6 +585,11 @@ func (inst *Service) endTaskAsked(t *task, why string, by string, asked wireCaus
 		}
 	}
 	inst.mu.Unlock()
+	if inst.cfg.Host != nil {
+		// The authority the task's marks were drawn under is gone
+		// (ADR-0297 §SD8).
+		inst.cfg.Host.Marks().Clear(t.id, "")
+	}
 	for k, ids := range queued {
 		if inst.cfg.Host == nil {
 			break
@@ -611,6 +616,7 @@ func (inst *Service) detachEntry(t *task, key uint64, why string, decidedBy stri
 	if e == nil || inst.cfg.Host == nil {
 		return
 	}
+	inst.cfg.Host.Marks().ClearWindow(t.id, key)
 	inst.cfg.Host.OpsExpire(key, ids, why)
 	inst.cfg.Host.OpsAttach(key, false)
 }

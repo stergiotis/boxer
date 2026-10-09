@@ -23,8 +23,11 @@ import (
 //
 // name is the mount's human name — resolving a name to an id belongs to the
 // application, and this is the field a name-as-sugar macro would read.
-// storeName is which set of tables the mount's rows live in, the unit a
-// capability grant covers.
+// storeName is a free-form origin label a mount list shows beside the name:
+// a recorded mount writes the database its tables live in
+// (ladingschema.Layout.DatabaseName), a published tree writes
+// `adhoc:<publisher>` (ladingadhoc.StoreNamePrefix). It is not read by any
+// code path and does not select tables — the layout does that.
 func RecordPolicy(ctx context.Context, st *ladingpolicy.PolicyStore, mount identifier.TaggedId, policy Policy, name string, storeName string) (err error) {
 	err = policy.check()
 	if err != nil {

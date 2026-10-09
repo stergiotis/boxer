@@ -8,175 +8,189 @@ date: 2026-10-09
 
 > **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
-# ADR-0297: inscribe — an overlay agents annotate the desktop through, anchored to windows rather than coordinates
+# ADR-0297: inscribe — an overlay agents point things out through, anchored to windows rather than coordinates
 
 ## Context
 
-The chat's coordinator can read the windows ([ADR-0276](./0276-agents-read-and-arrange-windows.md)), capture them ([ADR-0281](./0281-window-captures-through-one-policy-enforcement-point.md)) and arrange them, but it cannot show the person anything on screen. The owner wants agents to point: highlight a region, attach a note to it, draw an arrow between two things. The marks should look the same whichever agent draws them.
+The chat's coordinator can read the windows ([ADR-0276](./0276-agents-read-and-arrange-windows.md)), capture them ([ADR-0281](./0281-window-captures-through-one-policy-enforcement-point.md)), read what they show ([ADR-0301](./0301-window-trees-a-capture-format-naming-each-widget-under-the-message-that-drew-it.md)) and arrange them, but it cannot show the person anything on screen. The owner wants agents to point: highlight a region, attach a note to it, draw an arrow between two things. The marks should look the same whichever agent draws them.
 
 The idea comes from [bigarrow](https://github.com/franzenzenhofer/big-arrow-on-the-screen), a macOS command-line tool an agent calls to draw a large arrow with a text sign over other windows. Clicks pass through to the app underneath, and each arrow removes itself after a set time or when the agent that drew it exits. It points at coordinates, windows, or UI elements by label. Here the marks are drawn inside the host's own viewport, not over the OS desktop, and they stay until the person clears them (SD8).
 
 Facts that bound the design:
 
-- **One viewport.** Every app is an `egui::Window` in a single OS viewport ([ADR-0026](./0026-app-runtime-and-capability-subjects.md)). The viewport's logical points, origin top-left, are the one global frame. `keelson('windows')` reports each window's outer rect, stacking rank and collapsed flag in that frame. The window host holds the same per-frame snapshot ([ADR-0275](./0275-imzero2-window-arrangement-rust-reports-go-decides.md) SD2).
-- **A cross-window paint path exists.** The `paintAbsoluteOverlay` op paints on an `Order::Foreground` layer above every window, in viewport coordinates, and senses nothing, so input passes through it.
-- **Geometry moves.** The person drags windows, and an arrangement settles over several frames. A keelson read sees the last completed frame. A rect an agent computes from such a read is stale after the next move.
-- **Captures do not say where they came from.** A capture is replayed with the windows where they stand, and its crop is in logical points. The artifact an agent reads does not carry the crop origin or the pixel scale. A downscale obligation (ADR-0281 SD3) would change the scale again.
-- **Agents see no widget positions.** A coordinator's accessibility tree is deferred ([ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md) SD12).
+- **One viewport.** Every app is an `egui::Window` in a single OS viewport ([ADR-0026](./0026-app-runtime-and-capability-subjects.md)). The viewport's logical points, origin top-left, are the one global frame. The window host holds each window's outer rect, stacking rank and collapsed flag from the last completed frame ([ADR-0275](./0275-imzero2-window-arrangement-rust-reports-go-decides.md) SD2); `keelson('windows')` serves the same snapshot.
+- **A cross-window paint path exists.** `paintAbsoluteOverlay` paints on an `Order::Foreground` layer above every window, in viewport coordinates, and senses nothing, so input passes through it. The paint commands include dashed lines, arrows, filled and stroked rects, and text. Apps use the same layer for their own connectors, from inside their windows.
+- **Geometry moves.** The person drags windows, and an arrangement settles over several frames. A rect computed once from a read is stale after the next move.
+- **A window tree locates widgets.** ADR-0301's tree gives each widget's rect in viewport points, names the window each top-level part lies in with that window's rect when the tree was taken, and gives the model a reference for each part (`#12`, `#12.3`) under a tree reference (`t3`).
+- **Text is measured a frame late.** egui reports a text's size through a fetcher, one frame after it was asked (`MeasureTextSize`).
 - **Marks over a window can spoof it.** An agent that draws text over another window, or beside a grant dialog, can make the person believe something the window does not say.
+- **Host modals.** The grant request, the confirmation of a consequential command and a moderator's question are modals the agent chrome draws; the Powerbox file dialog is another.
 
 The owner's answers to the policy questions (2026-10-09):
 
-- annotating a window requires **suggest** mode on it;
+- marking a window requires **suggest** mode on it;
 - a target hidden behind another window is drawn in a **dashed "behind" style**;
-- annotations stay until **the person clears them**;
-- widget and resource anchors are **deferred**, and captures stay clean of annotations;
-- inscribe is a **singleton**: one instance, shared by every agent, whose annotations it merges;
-- the marks use a **neon palette**, outside the design system's palettes.
+- marks stay until **the person clears them**;
+- captures stay clean of marks;
+- inscribe is a **singleton**: one instance, shared by every agent, whose marks it merges;
+- the marks use a **neon palette**, outside the design system's palettes;
+- inscribe is a **host component**, not an app with a surface of its own (SD1);
+- the model's tool is **`point_out`**, and what it draws is a **mark** — in the verbs (`runtime.agent.mark`, `.unmark`), the code and what the person reads ("Clear agent marks").
 
 ## Decision
 
-We will add **inscribe**, a system app under `runtime/inscribe` that paints annotations on a full-viewport overlay. Agents name what they mean by anchors — a window, a rect inside a window, a rect inside one of their captures — never by global coordinates. The window host turns an anchor into a viewport rect, every frame, with a pure function. Agents reach inscribe through `runtime.agent.*` verbs, and the person clears what was drawn.
+We will add **inscribe**, a component of the window host under `runtime/inscribe` that paints marks above every window. Agents name what they mean by anchors — a window, a rect inside a window, a part of a window tree — never by viewport coordinates they computed. The window host turns an anchor into a viewport rect every frame, with a pure function. Agents reach inscribe through `runtime.agent.*` verbs, and the person clears what was drawn.
 
 ```text
- coordinator ── runtime.agent.annotate {handle, id, op, anchors, text}
-   │  grant: suggest on every anchored window          (SD8)
-   │  capture anchor → window-local, once              (SD4)
+ model ── point_out {op, targets: [{tree, "#12.3"} | {window} | …], text}
+   │  chat: tree part → {window, rect relative to the window}       (SD4)
    ↓
- inscribe (singleton overlay)  scene keyed (task, id)  (SD1, SD7)
-   │ every frame:
-   │   windowhost.Resolve(anchor, snapshot) → rect, visibility   (SD3)
-   │   one layout pass over every task's marks                   (SD6, SD7)
+ runtime.agent.mark {handle, id, op, anchors, text}
+   │  grant: suggest on every anchored window                       (SD8)
+   ↓
+ window host ─ inscribe: one scene, keyed (task, id)                (SD1, SD7)
+   │ every frame, after every window and the shell chrome:
+   │   windowhost.Resolve(anchor, geometry) → rect, visibility      (SD3)
+   │   one layout pass over every task's marks                      (SD6, SD7)
    ↓
  paintAbsoluteOverlay  (Foreground, no sense, outside every window span)
 ```
 
-### SD1 — One overlay app per host
+### SD1 — A component of the window host
 
-- inscribe is an app with a new surface kind, `SurfaceOverlay`, beside `SurfaceHeadless` and `SurfaceWindowed`. It has no window, no chrome and no input: it draws through `paintAbsoluteOverlay` and senses nothing.
-- It is registered as a singleton (`Registry.Register`), and the window host refuses a second overlay surface. One host has one viewport, so one instance serves every agent.
-- It is not offered in the launcher. The host starts it when the first annotation arrives and stops it when its scene is empty.
+- inscribe is a package the window host holds one of and frames once per frame, after every window and the shell chrome. One host has one viewport, so one instance serves every agent.
+- It has no window, no chrome and no input: it draws through `paintAbsoluteOverlay` and senses nothing.
+- While its scene is empty it draws nothing and costs one length check per frame.
+- It has no manifest and is not offered in the launcher. An app with a surface of its own was weighed (*Alternatives*).
 
 ### SD2 — Anchors, not coordinates
 
-An annotation names its targets by anchor:
+The host takes three kinds of anchor:
 
 | Anchor | Means | Authority (SD8) |
 | --- | --- | --- |
 | `{window}` | the window's outer rect | suggest on the window |
-| `{window, rect}` | a rect in the window's local logical points, origin its top-left | suggest on the window |
-| `{capture, rect}` | a rect in pixels of a capture artifact the task holds | suggest on the window it lands in |
+| `{window, rect}` | a rect relative to the window's top-left corner, in logical points | suggest on the window |
 | `{viewport, rect}` | a rect in viewport points | desktop mode suggest |
 
-No anchor carries a coordinate the agent must compute from another reading.
+A model never computes the rect of the second kind; SD4 says where it comes from.
 
 ### SD3 — The window host resolves, every frame
 
-- `windowhost.Resolve(anchor, snapshot)` returns a viewport rect and a visibility: **shown**, **behind** (part of the rect lies under a window ranked further front), **collapsed** or **gone**. It is a pure function of the anchor and the geometry snapshot, like the arrangements, and is unit-tested the same way.
+- `windowhost.Resolve(anchor, geometry)` returns a viewport rect and a visibility: **shown**; **behind**, when a window ranked further front overlaps the rect; **collapsed**; or **gone**. It is a pure function of the anchor and the geometry snapshot, like the arrangements, and is unit-tested the same way.
 - inscribe calls it on the render goroutine every frame, so a mark follows its window as the window moves.
-- The window host owns it because it owns the snapshot and the window identities. The same function serves any later consumer — a tour, the help system — and keelson may expose it as a read, but the drawing path does not go through SQL.
+- The window host owns it because it owns the geometry and the window identities. Behind is by rects and stacking, not pixels.
 
-### SD4 — Captures carry their transform, and stay clean
+### SD4 — Widgets through window trees; captures stay clean
 
-- A capture artifact records how its pixels map to the viewport: the crop origin in points, the effective scale (pixels per point after any transform obligation), and the rect and rank of each window drawn.
-- When a `{capture, rect}` anchor arrives, the capture facility maps it to `{window, rect}` once, choosing the front-most recorded window under the rect's centre. From then on it follows that window like any other window anchor. A rect that lands on no recorded window is refused.
-- inscribe draws outside every window's span, so the capture replay (ADR-0281 SD4) never contains an annotation. An agent's own marks never reach what it observes. Development captures of the whole viewport do show them.
+- A model points at a widget by a part of a window tree it read: `{tree: "t3", node: "#12.3"}`, or at a whole table row by its row line's reference (`#60r`), which the chat resolves to the union of the row's cells. The chat holds the trees it read and turns such a target into `{window, rect}`: the part's rect less the origin of its window's rect when the tree was taken (ADR-0301, `Tree.WindowOf`). The arithmetic is code. From then on the mark follows the window.
+- A widget that moves inside its window — scrolled, re-laid out — is not followed; the mark keeps the place it had when the tree was taken.
+- inscribe draws after every window, outside every window's span, so the capture replay (ADR-0281 SD4) never contains a mark. An agent's own marks never reach what it observes. Development captures of the whole viewport do show them.
 
 ### SD5 — Operations
 
 | Op | Draws |
 | --- | --- |
-| `highlight(anchor, label?)` | an outline around the target, with an optional short label |
-| `callout(anchor, text)` | a note attached to the target by a leader line |
-| `arrow(from, to, label?)` | an arrow between two anchors |
-| `step(anchor, text)` | a numbered marker; numbers run per task in arrival order |
-| `spotlight(anchors)` | dims the viewport except the targets |
-| `clear(id?)` | removes one of the task's annotations, or all of them |
+| `highlight(targets, label?)` | an outline around each target, with an optional short label |
+| `callout(target, text)` | a note beside the target, joined to it by a leader line |
+| `arrow(from, to, label?)` | an arrow from one target to another |
+| `step(target, text)` | a numbered marker with a note; numbers run per task in arrival order |
+| `spotlight(targets)` | dims the viewport outside the targets |
+| `unmark(id?)` | removes one of the task's marks, or all of them |
 
-- Each annotation has a caller-chosen `id`. Annotating an existing `(task, id)` replaces it.
+- Each mark has a caller-chosen `id`. Marking an existing `(task, id)` replaces it.
 - No op takes a colour, width, font or position. Style and placement are inscribe's (SD6).
-- Text is untrusted, plain (no markdown), and capped in length.
+- Text is untrusted, plain (no markdown), single-line, and capped in length.
 
 ### SD6 — One visual language, in neon
 
-- **The palette is neon, deliberately outside the design system** ([ADR-0031](./0031-imzero2-design-system-color.md), [ADR-0040](./0040-imzero2-design-system-palette-consolidated.md)). A mark must not read as part of any app. Colours the design system gives apps would let a mark pass for app UI, and a mark that looks like UI is the spoofing case. The exemption is scoped to `runtime/inscribe`, through the design lints' allowlist.
-- Each neon stroke is drawn over a dark halo, so the same colours read on the light and the dark theme.
-- **Behind** draws the outline dashed where the target lies, and the leader or arrow ends at the nearest visible edge of the target's window. **Collapsed** attaches the mark to the title bar. **Gone** retires the annotation.
-- inscribe places labels and notes: one pass over every annotation keeps them clear of each other and inside the work area.
-- Every annotation carries its task's attribution marker, so the person can tell who drew it.
+- **The palette is neon, deliberately outside the design system** ([ADR-0031](./0031-imzero2-design-system-color.md), [ADR-0040](./0040-imzero2-design-system-palette-consolidated.md)). A mark must not read as part of any app. Colours the design system gives apps would let a mark pass for app UI, and a mark that looks like UI is the spoofing case. The design lint's L2 rule ([ADR-0029](./0029-imzero2-design-system-and-policy-as-code.md) §SD8) flags raw colours outside the token module; the neon colours are named in one file of `runtime/inscribe`, each line carrying the rule's per-line exception with this decision as its reason, and are used nowhere else.
+- **Strokes are sketched.** Each line is a cubic Bézier nudged off its straight path and drawn twice, the way a pen goes over a line; an outline's sides run a little past its corners, and an arrow bows slightly and ends in an open head. The nudges come from a seed of the mark's identity, not its position, so a mark keeps its look from frame to frame and as its window moves. A hand-drawn line reads as something put on top of the apps, which is the point of the palette too.
+- **A target is marked by what it is.** A small one — a button, a cell — gets a pen circle: one stroke round it, wandering a little and ending past its start. A row or a line of text gets a highlighter swipe: a translucent band of the hue, slightly slanted with ragged ends, the content readable through it. A whole window, or another large area, gets its four corners bracketed instead of a box round all of it. Behind another window, each is a dashed sketch.
+- **Notes lie on the screen.** A note is a dark plate, faintly dotted like sketchbook paper, with a soft offset shadow and the task's hue down its left edge, its text a size larger than before; its attribution is a hue dot and the tag, dimmed. A curved arrow runs from the note to what it is about.
+- Each stroke has a faint dark underlay, so the same colours keep their edge on the light theme without a heavy border on the dark one.
+- **Behind** draws the outline dashed. **Collapsed** places the mark on the window's title bar. **Gone** retires the mark.
+- inscribe places notes: one pass over every mark keeps, for each note, the first place inside the viewport that is clear of the notes already placed and of every mark's target, except a target holding the note's own — a whole window around a button in it. It tries beside the target's window first, on desktop no window covers, so the note hides nothing; then beside the target. A mark without text gets no note: its attribution is a small tab on a corner of its target, the first corner clear of other targets and notes. A note's size comes from egui's measure of its text a frame later; in the first frame it is estimated from the text's length, so a new note can shift by a few points once.
+- Every note and tab carries its task's attribution tag, so the person can tell who drew it.
 
-### SD7 — Merging annotations from several agents
+### SD7 — Merging marks from several agents
 
-- One scene holds every annotation, keyed by `(task, id)`. Paint order is arrival order.
-- A task is given a neon hue when it first annotates. The hue is kept for the task's life. With more tasks than hues, hues repeat and the attribution marker tells tasks apart. Everything else about the style is the same for every task.
-- The layout pass of SD6 runs over all tasks' annotations together. No task's marks are placed without regard to another's.
-- A task can replace and clear only its own annotations.
-- Each task has a budget of annotations, and the scene has a ceiling. An annotation over either is refused. It never evicts another task's marks.
-- `spotlight` from two tasks combines: everything outside the union of their targets is dimmed once.
+- One scene holds every mark, keyed by `(task, id)`. Paint order is arrival order.
+- A task is given a neon hue when it first marks something. The hue is kept while the task has marks. With more tasks than hues, hues repeat and the attribution tag tells tasks apart. Everything else about the style is the same for every task.
+- The layout pass of SD6 runs over all tasks' marks together.
+- A task can replace and clear only its own marks.
+- Each task has a budget of marks, and the scene has a ceiling. A mark over either is refused. It never evicts another task's marks.
+- `spotlight` from several tasks combines: everything outside the union of their targets is dimmed once.
 
 ### SD8 — Authority and lifetime
 
-- `runtime.agent.annotate` and `runtime.agent.clear` are `runtime.agent.*` verbs, so they inherit the grant check, action records and taint handling ([ADR-0276](./0276-agents-read-and-arrange-windows.md) SD3/SD4).
-- Annotating requires suggest or act on every anchored window's entry. A viewport anchor requires desktop mode suggest or act.
-- Each accepted call is an action record (ADR-0269 SD9) with effect `view`. An annotation changes what the person sees, not any app's state, so ADR-0269 SD11 is unaffected.
-- **Annotations stay until the person clears them**: one task's from that task's badge, or all at once from the shell. Agents can clear their own. An annotation whose anchored window leaves the task's grant, or whose grant ends, is retired, since the authority it was drawn under is gone.
-- While a host modal is open — a grant request, the Powerbox file dialog — inscribe draws nothing. No mark can stand beside a decision the person is making.
+- `runtime.agent.mark` and `runtime.agent.unmark` are `runtime.agent.*` verbs, so they inherit the grant check, action records and taint handling ([ADR-0276](./0276-agents-read-and-arrange-windows.md) SD3/SD4).
+- Marking requires suggest or act on every anchored window's entry. A viewport anchor requires desktop mode suggest or act.
+- Each accepted call is an action record (ADR-0269 SD9) with effect `view`. A mark changes what the person sees, not any app's state, so ADR-0269 SD11 is unaffected.
+- **Marks stay until the person clears them**: one task's from that task's badge, or all at once from the **Window** menu or the status bar, which says how many marks are up while there are any. Agents can clear their own. A task's marks are retired when the task ends or its grant is revoked, and a mark is retired when its window leaves the grant or closes, since the authority it was drawn under is gone.
+- While a host modal is open, inscribe draws nothing. The chrome that draws a host modal tells the window host so in that frame, and inscribe, framed after it, reads the flag. No mark can stand beside a decision the person is making.
 
 ### SD9 — Deferred
 
-- Anchors on widgets, as `{capture, widget id}` against a window tree ([ADR-0301](./0301-window-trees-a-capture-format-naming-each-widget-under-the-message-that-drew-it.md)): the widget's rect, taken relative to its window, then followed as a window anchor. Anchors on ADR-0269 resources stay deferred.
-- Animation, freehand drawing, and annotations the person makes.
-- A capture that includes the annotations, on request.
+- Anchors on pixels of a PNG capture. A model can point at a tree part instead.
+- Following a widget inside its window (SD4), and anchors on ADR-0269 resources.
+- Animation, freehand drawing, and marks the person makes.
+- A capture that includes the marks, on request.
 
 ## Surfaces — Tier 1
 
 | Surface | Change | Moves with it |
 | --- | --- | --- |
-| `app.SurfaceE` | `SurfaceOverlay` added | Window host: hosts one overlay, refuses a second; launcher and app center skip it |
-| Exported Go API (`windowhost`) | `Resolve`, the anchor types, the visibility enum | — |
-| Capture artifact metadata | crop origin, effective scale, drawn windows' rects and ranks (SD4) | The capture service; transform obligations update the scale |
-| `runtime.agent.annotate`, `.clear` | Added | `agent.Service` dispatch, wire types, `HostI`, `agent.Client`, the dispatch test host and the chat's test host |
-| Chat coordinator | `annotate` / `clear_annotations` tools | Coordinator prompt |
-| Shell chrome | "Clear annotations"; per-task clear on the task badge | — |
-| `designlint` allowlist | `runtime/inscribe` exempt from the palette rules | — |
+| Exported Go API (`inscribe`) | the scene, anchors, ops and the overlay | — |
+| Exported Go API (`windowhost`) | `Resolve`, the visibility enum; the overlay framed after the shell chrome; the host-modal flag; "Clear agent marks" in the **Window** menu | Agent chrome sets the host-modal flag |
+| `runtime.agent.mark`, `.unmark` | Added | `agent.Service` dispatch, wire types, `HostI`, `agent.Client`, the dispatch test host and the chat's test host |
+| Agent chrome | a per-task clear on the task badge | — |
+| Chat coordinator | `point_out` and `clear_marks` tools; tree parts as targets | Coordinator prompt |
 
 ## Alternatives
 
+- **An app with a surface of its own (`SurfaceOverlay`).** It would give inscribe an app identity — a manifest, an app-center page — at the cost of excluding it from every list of windows the window host keeps (arrangements, `keelson('windows')`, capture spans, menus, operations, frame times) and every surface check. The owner chose the host component (2026-10-09).
 - **Agents send viewport coordinates, computed from `keelson('windows')`.** The rect is a frame late when read and wrong after the next move. It also puts arithmetic on the model.
-- **inscribe resolves anchors itself.** It would hold a second copy of window identity and geometry. The capture facility and any other consumer would need the same mapping.
+- **inscribe resolves anchors itself.** It would hold a second copy of window identity and geometry.
 - **Resolution in keelson SQL.** Right for an agent reasoning about the desktop, wrong for a path that must run every frame on the render goroutine.
+- **The host resolves tree parts.** The capture service would keep each tree after it is read, and the agent wire would carry tree references. The chat already holds the trees it read, and what reaches the host is then a window and a rect the grant check understands.
+- **Pixel anchors on PNG captures.** The artifact would need to carry its crop and scale, and the model would read coordinates off an image. Deferred (SD9).
 - **Paint primitives (line, rect, text, colour) instead of semantic ops.** Each agent would invent its own style, and the merge of SD7 would have nothing to lay out.
 - **Design-system colours.** Marks would look like app UI, which is both less visible and the spoofing case.
 - **One overlay per agent.** Overlapping labels from separate overlays cannot be laid out together, and the person would have several things to clear.
-- **Observe mode for annotating.** Annotation proposes something to the person, which is what suggest means. Capture stays at observe.
-- **Annotations end with the turn.** The owner chose to leave clearing to the person.
+- **Naming the tool `annotate`.** It names the act, not its purpose, and in a data repository it reads as attaching metadata or labelling data; a model could take it for a write into the app. `point_out` says the mark is for the person to see.
+- **Observe mode for marking.** Mark proposes something to the person, which is what suggest means. Capture stays at observe.
+- **Marks end with the turn.** The owner chose to leave clearing to the person.
 
 ## Consequences
 
 ### Positive
 
-- An annotation follows its window through drags and arrangements without the agent re-sending it.
+- A mark follows its window through drags and arrangements without the agent re-sending it.
 - Every mark looks the same and names its author, whichever agent drew it.
 - What an agent observes through capture is never altered by its own marks.
 
 ### Negative
 
 - An overlay that is never cleared accumulates. The budget bounds it per task, but the person carries the clean-up.
-- Behind-detection is by window rects and stacking, not pixels. A translucent window counts as covering.
-- The neon palette is a second colour vocabulary to keep legible as themes change, outside the design system's checks.
-- A capture anchor binds to one window. A mark the agent meant to span two windows lands on one of them.
+- Behind is by window rects and stacking, not pixels. A translucent window counts as covering.
+- A widget anchor keeps the place its widget had when the tree was taken; a scroll inside the window, or a re-layout, leaves the mark behind. In the scene below, a cascade widened the demo window, its text wrapped onto fewer lines, and the callout ended one line under the button it was put on.
+- The neon palette is a second colour vocabulary to keep legible as themes change, outside the design system's review.
+- inscribe has no app identity: it is not in the app center, and its marks are recorded under the agent's calls, not under an app.
 
 ### Neutral
 
-- Hiding the overlay under host modals means marks blink out while the person decides a grant.
+- Hiding the overlay under host modals means marks blink out while the person decides.
+- A new note can move by a few points in its second frame, when its measured size replaces the estimate.
 
 ## Verification plan
 
 - Unit tests for `Resolve`: each anchor kind, each visibility, a window moved between frames.
-- Unit tests for the capture transform: a pixel rect round-trips to window-local and back under a crop and a downscale.
-- Unit tests for the scene: replace by id, the ownership refusal, budgets, hue assignment, and a layout pass over two tasks' overlapping labels.
-- Agent dispatch tests for the refusals under observe, and without desktop mode.
-- A scene document beside the chat's other scenes: a scripted coordinator highlights a window, the window is dragged, and captures before and after show the mark following it, dashed once another window is raised over it.
+- The widget gallery's `inscribe` demo draws every op, the tabs, the dashed behind state and a second agent's hue on a sample app, with the real scene, layout and drawing and no agent; [inscribe-gallery.scene.md](../../public/keelson/runtime/inscribe/scenes/inscribe-gallery.scene.md) captures its four states, and the gallery's test driver captures it with every other demo.
+- Unit tests for the scene and layout: replace by id, the ownership refusal, budgets, hue assignment, retiring by task and by window, and a layout pass over two tasks' overlapping notes.
+- Chat tests: a tree part resolves to its window and a rect relative to it.
+- Agent dispatch tests: refusals under observe and without desktop mode; a record per accepted call.
+- [chat-inscribe.scene.md](../../apps/chat/scenes/chat-inscribe.scene.md): a scripted coordinator reads the operations demo's tree, puts a callout on its Clear button by the tree part and a numbered step on the window; captures show the marks, the marks following the window after a cascade, the outlines dashed once the chat is raised over the demo, and the overlay empty after the person clears it. The scene asserts that the calls completed; where the marks fall is checked by looking at the captures. Run by `scripts/dev/scene.sh`, not on every change.
 
 ## Status
 
@@ -184,17 +198,18 @@ Proposed 2026-10-09.
 
 Milestones:
 
-- **M1 — `Resolve` and the anchor types in the window host.** (SD2, SD3)
-- **M2 — the transform on capture artifacts.** (SD4)
-- **M3 — `SurfaceOverlay`, inscribe's scene, layout and neon style.** (SD1, SD5–SD7)
-- **M4 — the agent verbs, authority, clearing and modal suppression, and the chat's tools.** (SD8)
-- **M5 — the scene document.**
+- **M1 — `Resolve` in the window host.** (SD2, SD3) Built.
+- **M2 — inscribe's scene, layout and neon style, framed by the window host, and the host-modal flag.** (SD1, SD5–SD7) Built.
+- **M3 — The agent verbs, authority, records and retirement; the Window menu and badge clears.** (SD8) Built.
+- **M4 — The chat's tools, with tree parts as targets.** (SD4) Built.
+- **M5 — The scene document.** Built: [chat-inscribe.scene.md](../../apps/chat/scenes/chat-inscribe.scene.md).
 
 ## References
 
-- [ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md) — task grants, modes, records, SD12's deferred accessibility tree.
+- [ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md) — task grants, modes, records.
 - [ADR-0275](./0275-imzero2-window-arrangement-rust-reports-go-decides.md) — the geometry report.
 - [ADR-0276](./0276-agents-read-and-arrange-windows.md) — `keelson('windows')`, desktop mode, the `runtime.agent.*` window verbs.
 - [ADR-0281](./0281-window-captures-through-one-policy-enforcement-point.md) — captures, spans and obligations.
-- [ADR-0029](./0029-imzero2-design-system-and-policy-as-code.md) — design lints and their allowlist.
+- [ADR-0029](./0029-imzero2-design-system-and-policy-as-code.md) — the design lint, its L2 colour rule and per-line exceptions.
+- [ADR-0301](./0301-window-trees-a-capture-format-naming-each-widget-under-the-message-that-drew-it.md) — window trees, the windows they name, and the references an anchor cites.
 - [bigarrow](https://github.com/franzenzenhofer/big-arrow-on-the-screen) — the tool the idea comes from: an agent-called arrow and sign over the macOS desktop.

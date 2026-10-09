@@ -140,8 +140,9 @@ type AgentChromeI interface {
 	// body; it draws nothing for a window no task works in.
 	RenderWindowChrome(key uint64, ids *c.WidgetIdStack)
 	// RenderDialogs draws the host's dialogs at top level: approvals,
-	// confirmations.
-	RenderDialogs(ids *c.WidgetIdStack)
+	// confirmations. modal is whether it drew a modal, which hides the
+	// mark overlay this frame (ADR-0297 §SD8).
+	RenderDialogs(ids *c.WidgetIdStack) (modal bool)
 }
 
 // SetAgentChrome installs the agent chrome; call it before the first Frame.

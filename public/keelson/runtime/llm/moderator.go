@@ -123,17 +123,22 @@ func (inst *Moderator) Ask(ctx context.Context, r ration.Rule, question string) 
 
 // CallEvent is one llm.event.call: a call admission decided.
 type CallEvent struct {
-	CallId    string
-	At        time.Time
-	Chain     ration.Chain
-	Class     string
-	Admission string
-	Rule      string
-	Refusal   ration.RefusalE
-	Reason    string
-	Queued    time.Duration
-	Usage     ration.Usage
-	Failed    bool
+	CallId string
+	At     time.Time
+	Chain  ration.Chain
+	// Conversation, Turn and Round are what the request said the call
+	// belongs to; Round is read only beside a Turn.
+	Conversation string
+	Turn         string
+	Round        uint32
+	Class        string
+	Admission    string
+	Rule         string
+	Refusal      ration.RefusalE
+	Reason       string
+	Queued       time.Duration
+	Usage        ration.Usage
+	Failed       bool
 }
 
 // DecodeCallEvent reads an llm.event.call payload.
@@ -144,7 +149,7 @@ func DecodeCallEvent(payload []byte) (e CallEvent, err error) {
 	}
 	e = CallEvent{CallId: w.CallId, At: timeOfNs(w.At), Chain: ration.Chain{App: w.App, Instance: w.Instance, Task: w.Task, Purpose: w.Purpose},
 		Class: w.Class, Admission: w.Admission, Rule: w.Rule, Refusal: ration.ParseRefusal(w.Refusal), Reason: w.Reason,
-		Queued: time.Duration(w.QueuedNs), Failed: w.Failed}
+		Queued: time.Duration(w.QueuedNs), Failed: w.Failed, Conversation: w.Conversation, Turn: w.Turn, Round: w.Round}
 	if len(w.Usage) > 0 {
 		e.Usage = make(ration.Usage, len(w.Usage))
 		for q, v := range w.Usage {

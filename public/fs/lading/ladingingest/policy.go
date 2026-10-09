@@ -110,6 +110,18 @@ type Policy struct {
 	// block rows are written. A stat-only mount still answers `find`-shaped
 	// questions, diffs by mtime and size, and costs one row per node.
 	MetaOnly bool
+	// SkipRefHash leaves a file above InlineMax unread: the entry records
+	// `ref` with its size and mtime and an empty content hash. The default
+	// (false) streams every such file through BLAKE3, which is what makes
+	// change detection and the identical-content question cover the whole
+	// mount — and which costs a full read of every large file per walk. A
+	// mount of a few multi-gigabyte files that only wants their names and
+	// sizes sets this; the empty hash is what tells a reader it did.
+	//
+	// A file that turns out larger than its stat said is still hashed: the
+	// walker has already read past the threshold by then, and the rest of
+	// the read is what restates the row's size.
+	SkipRefHash bool
 }
 
 // DefaultPolicy is a corpus-profile mount kept for 30 days, storing files up

@@ -1,0 +1,11 @@
+# The scripted model of chat-inscribe.scene.md (ADR-0297): open the
+# operations demo, read its window tree, put a callout on its Clear button by
+# the tree part (#8 in the demo's tree; a change to the demo's layout moves
+# it, which the first capture shows) and a numbered
+# step on the whole window, and answer.
+{"tool":"request_access","args":{"plan":"show the person the Clear button","open":[{"app":"opsdemo"}]}}
+{"tool":"open_window","args":{"app":"opsdemo"}}
+{"tool":"read_window_tree","args":{"title":"Reading the demo","windows":["$window"]}}
+{"tool":"point_out","args":{"title":"Pointing at Clear","id":"clear","op":"callout","targets":[{"tree":"t1","node":"#8"}],"text":"Clear empties the note"}}
+{"tool":"point_out","args":{"title":"Numbering the window","id":"demo","op":"step","targets":[{"window":"$window"}],"text":"the demo window"}}
+{"content":"I marked the Clear button."}

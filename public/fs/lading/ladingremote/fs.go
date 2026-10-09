@@ -21,13 +21,17 @@
 //
 // # What a remote cannot carry
 //
-// Two things the acceptance for this milestone names, and neither is fixable
-// here. **Modification times arrive at whole-second resolution** — that is
-// SFTP's attribute width, so a snapshot of a remote records seconds where a
-// snapshot of a local tree records nanoseconds. And **symlinks generally do
-// not survive**: `rclone serve sftp` only exposes them with `--links`, and
-// then as `.rclonelink` regular files rather than as links, so a snapshot
-// through this path records what rclone showed it.
+// Measured against the same directory walked directly (ADR-0198 Updates, M6).
+// **Modification times arrive at whole-second resolution** — SFTP's attribute
+// width, so a snapshot of a remote records seconds where a local walk records
+// nanoseconds. **Modes do not survive**: `rclone serve sftp` reports the same
+// permission bits for every regular file whatever the source had. **A
+// symlink is absent unless rclone is told to serve it**: without `--links` it
+// is not in the listing at all; with `WithArgs("--links")` it arrives over
+// the wire as a symlink, target and all, and the walker records it as one.
+// rclone's own `ls` renders such a node as a small `.rclonelink` file, but
+// that is its client-side convention, a different layer from what SFTP
+// carries.
 package ladingremote
 
 import (
@@ -136,9 +140,9 @@ func (inst *FS) Lstat(name string) (info fs.FileInfo, err error) {
 
 // ReadLink returns a symlink's target verbatim.
 //
-// Whether a remote has any is the remote's business: `rclone serve sftp`
-// exposes them only under `--links`, and then as `.rclonelink` regular files,
-// so this usually reports "not a link" rather than a target.
+// Whether a remote shows any is the remote's business: `rclone serve sftp`
+// exposes them only under `--links` (see [WithArgs]); without it a link is
+// not in the listing and this is never asked.
 func (inst *FS) ReadLink(name string) (target string, err error) {
 	remote, err := inst.resolve(name)
 	if err != nil {

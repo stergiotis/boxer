@@ -1231,6 +1231,93 @@ follow the directories on the way while still reporting a link in the last
 component. An exact-path hit stays one point lookup: the walker never
 descends into a link, so a row under a path means nothing above it is one.
 
+### 2026-10-09 — a second review pass: the seams between surfaces
+
+A review of the whole subsystem against correctness, completeness,
+conciseness, orthogonality and utility. The suite was green throughout; what
+it found sat where two surfaces meet and each had been checked alone.
+
+**The commit rule reached the Go adapter last.** §SD6 makes a walk without its
+root row invisible to every query. The macros resolve snapshots from the index
+and the head checks the index before opening a view (2026-08-20), but
+`ladingadapter.Open` pinned any instant and `scan` added no completeness
+predicate, so a caller holding the `Result.Snap` of a walk that died read its
+partial rows back as a file system — the one surface the rule had not reached.
+The adapter now asks once, on its first query, whether the pinned instant's
+root row carries the commit record, and answers `fs.ErrNotExist` for every
+name if not. Asked of the entry table rather than the index, so the adapter
+needs no layout. `TestAPartialWalkIsNotAView` pins it.
+
+**`latest` was pinned for the life of an SFTP session.** The head cached a
+mount's snapshot list forever, on the reasoning that "a session is short".
+Under `rclone mount` a session is as long as the mount, so a new snapshot never
+appeared and an expired one never left — while §SD9 calls `latest` the one
+mutable name in the tree. The list now ages out after five seconds
+(`snapshotCacheTTL`); the views themselves stay cached, because a snapshot
+cannot change. The head also takes a `Layout`.
+
+**The `join_use_nulls` pin existed in this record and nowhere else.** The
+2026-08-19 entry says M4 pins it in the expansion; no expansion did, and the
+diff idiom in the book, the browser and the operations test each relied on the
+server default. Under `join_use_nulls = 1` the idiom classifies nothing rather
+than failing. All three statements now carry `SETTINGS join_use_nulls = 0`.
+Pinning it in the expansion itself was rejected: a macro is a relation, and a
+relation that smuggled a session setting into the enclosing statement would
+surprise every other clause of it.
+
+**`du` dropped root-level files.** `range(1, depth)` is empty at depth 1, so a
+file at the snapshot root was in no directory's total and the root had no row.
+The ancestor unfold now starts from `'.'`.
+
+**`OpenLatest` discarded its context** for the view it returned; the context is
+now bound as `WithContext` would bind it, before the caller's options.
+
+**One spelling of where a store lives.** The 2026-09-04 entry kept
+`ladingsql.Config.Database` as the SQL surface's own spelling, beside three
+table-name overrides `Layout` had just declared not to be a degree of freedom.
+That decision is reversed: `Config` takes a `ladingschema.Layout`, and so do
+the SFTP head, the ad-hoc publisher and every `boxer fs` verb (`--database`),
+none of which could previously reach a store outside the default database.
+
+**Two readings of `Store`.** The policy record's `store` field was documented
+as "which set of tables the mount's rows live in, the unit a capability grant
+covers", written as a database name by the CLI and as `adhoc:<publisher>` by
+the publisher, and read by nothing. It is now documented as what it is: a
+free-form origin label for a mount list. Selecting tables is the layout's job.
+
+**Hashing a `ref` file is a full read, and now a choice.** Every file above
+`InlineMax` was streamed through BLAKE3, so a mount of a few multi-gigabyte
+files paid a full read per walk for the identical-content question it may
+never ask. `Policy.SkipRefHash` (CLI `--skip-ref-hash`) leaves such files
+unread; the empty hash on the row is what tells a reader it did. The default
+is unchanged.
+
+**The per-mount purge of §SD1 had no API.** It existed as SQL in the how-to,
+in the demo script and in the tests' cleanup. `lading.Purge` / `PurgeIn` and
+`boxer fs purge` are that statement, three times, with the column resolved;
+the policy record is left alone.
+
+**Smaller.** `fssnap(m, 'latest')` returned every snapshot, where `'latest'`
+means the newest everywhere else; it now returns one row, and a bare
+`fssnap(m)` still lists the index. `ladingremote.WithFilters` and `WithArgs`
+were one function under two names; `WithArgs` remains, and the CLI's
+`--filter` became `--rclone-arg`, which is what it always was and is also how
+`--links` reaches the serving side. Four doc comments had drifted onto the
+wrong declaration; `ladingremote`'s package doc said symlinks arrive as
+`.rclonelink` files when M6 and its test say they arrive as symlinks; two
+package docs showed an `ssh=` command the binary refuses to start.
+
+**Deferred, as design rather than fixes.** Three findings change shapes the
+record has already decided and want a dialogue first: one mutex in
+`lading.Stores` so the adapter is goroutine-safe and `ladingview.Locked`, the
+head's wrapper and the two apps' guards collapse into it; splitting
+`ladingschema.Profile` into table parameters fixed at `CREATE TABLE` and walk
+parameters, with a check that a walk's profile matches the table's; and a
+watchbill job kind that takes snapshots on a cadence, without which the
+history and diff surfaces depend on an operator remembering the CLI. The
+capability binding for `MountVisibilityI` and the `ref` fetcher stay where the
+earlier entries left them.
+
 ## References
 
 - [The snapshot-store note](../adr-background-work/iofs-clickhouse-snapshot-store.md)

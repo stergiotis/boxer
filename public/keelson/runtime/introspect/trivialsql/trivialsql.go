@@ -47,7 +47,8 @@ var ErrNeedsClickHouse = eh.Errorf("trivialsql: this endpoint answers only SELEC
 // params by bare name (ADR-0133 §SD2), and returns the result encoded in the
 // statement's FORMAT, TabSeparated when it names none.
 func Run(ctx context.Context, reg *introspect.Registry, sql string, params map[string]string) (body []byte, err error) {
-	return answer(ctx, reg, sql, params, nil)
+	body, _, err = answer(ctx, reg, sql, params, nil)
+	return
 }
 
 // Read is Run without the encoding: the record the statement reads, which
@@ -66,27 +67,30 @@ type Runner struct {
 
 // RunSQL answers sql as Run does.
 func (inst Runner) RunSQL(ctx context.Context, sql string, params map[string]string) (body []byte, err error) {
-	return answer(ctx, inst.Registry, sql, params, nil)
+	body, _, err = answer(ctx, inst.Registry, sql, params, nil)
+	return
 }
 
-// RunSQLSettings answers sql as Run does, with the request's settings.
-func (inst Runner) RunSQLSettings(ctx context.Context, sql string, params map[string]string, settings map[string]string) (body []byte, err error) {
+// RunSQLSettings answers sql as Run does, with the request's settings, and
+// returns the format it encoded the body in.
+func (inst Runner) RunSQLSettings(ctx context.Context, sql string, params map[string]string, settings map[string]string) (body []byte, format string, err error) {
 	return answer(ctx, inst.Registry, sql, params, settings)
 }
 
 // ResolvesMacros marks Runner as resolving keelson() calls itself.
 func (Runner) ResolvesMacros() {}
 
-func answer(ctx context.Context, reg *introspect.Registry, sql string, params map[string]string, settings map[string]string) (body []byte, err error) {
+func answer(ctx context.Context, reg *introspect.Registry, sql string, params map[string]string, settings map[string]string) (body []byte, format string, err error) {
 	if err = ctx.Err(); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	batch, format, err := read(reg, sql, params, settings)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer batch.Release()
-	return Encode(batch, format)
+	body, err = Encode(batch, format)
+	return body, format, err
 }
 
 // defaultFormatSetting names the format of a statement without a FORMAT
@@ -192,7 +196,7 @@ func checkSettings(l grammar1.ISettingExprListContext, spelled string, paramsAll
 // refused, since ignoring it could hand back other rows or other bytes.
 func ignorableSetting(name string) bool {
 	switch name {
-	case "log_comment", "readonly", "send_progress_in_http_headers", "wait_end_of_query", "database",
+	case "log_comment", "readonly", "send_progress_in_http_headers", "wait_end_of_query",
 		"replace_running_query", "use_query_cache", "enable_reads_from_query_cache", "enable_writes_to_query_cache",
 		"max_threads", "max_execution_time", "max_memory_usage",
 		"user", "password":

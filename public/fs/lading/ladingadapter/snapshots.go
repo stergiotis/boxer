@@ -147,11 +147,15 @@ func LatestIn(ctx context.Context, exec recordstore.ExecutorI, layout ladingsche
 // returns is a view of one snapshot, and that snapshot does not change. A walk
 // finishing in between means the next call picks a newer one, never that this
 // one shifts underneath its reader.
+//
+// ctx is the view's as well as the index read's — it is what [WithContext]
+// would bind, and a caller that passes one explicitly still wins, since opts
+// apply after.
 func OpenLatest(ctx context.Context, exec recordstore.ExecutorI, st lading.Stores, mount identifier.TaggedId, opts ...Option) (inst *FS, found bool, err error) {
 	latest, found, err := Latest(ctx, exec, mount)
 	if err != nil || !found {
 		return
 	}
-	inst, err = Open(st, mount, latest.Snap, opts...)
+	inst, err = Open(st, mount, latest.Snap, append([]Option{WithContext(ctx)}, opts...)...)
 	return inst, err == nil, err
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/fs/lading/ladingmeta"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingvocab"
+	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
@@ -59,20 +60,69 @@ func queryTSV(t *testing.T, sql string) (rows [][]string) {
 	return
 }
 
-// purge removes this mount's rows. It is also the only exercise of the
-// per-mount purge ADR-0198 §SD1 promises — a lightweight DELETE on a key
-// prefix, no sweep, no reference counting.
+// purge removes this mount's rows through the per-mount purge ADR-0198 §SD1
+// promises — a lightweight DELETE on the key's leading column, no sweep, no
+// reference counting. Every test here cleans up with it, so it runs several
+// times a lane; TestPurgeEmptiesAMount is the one that checks its effect.
 func purge(t *testing.T, exec recordstore.ExecutorI) {
 	t.Helper()
+	require.NoError(t, lading.Purge(context.Background(), exec, identifier.TaggedId(testMount)))
+}
+
+// TestPurgeEmptiesAMount: after Purge, the mount has no rows in any of the
+// three tables and no snapshot to list — while another mount's rows in the
+// same tables are untouched, since the DELETE is on the mount id alone.
+func TestPurgeEmptiesAMount(t *testing.T) {
+	exec := liveExec(t)
 	ctx := context.Background()
+	require.NoError(t, lading.Provision(ctx, exec, ladingschema.ProfileCorpus))
+	purge(t, exec)
+	t.Cleanup(func() { purge(t, exec) })
+
+	const other uint64 = testMount + 1
 	key, err := ladingschema.PhysicalPlainName("id")
 	require.NoError(t, err)
-	for _, tbl := range []string{
-		ladingschema.TableNameMeta, ladingschema.TableNameData, ladingschema.TableNameSnap,
-	} {
-		require.NoError(t, exec.Exec(ctx, fmt.Sprintf("DELETE FROM %s.%s WHERE %s = %d",
-			ladingschema.DatabaseName, tbl, key, testMount)))
+	otherPurge := func() {
+		for _, tbl := range []string{ladingschema.TableNameMeta, ladingschema.TableNameSnap} {
+			require.NoError(t, exec.Exec(ctx, fmt.Sprintf("DELETE FROM %s.%s WHERE %s = %d",
+				ladingschema.DatabaseName, tbl, key, other)))
+		}
 	}
+	otherPurge()
+	t.Cleanup(otherPurge)
+
+	meta := ladingmeta.NewMetaStore(exec, nil, ladingmeta.MetaStoreConfig{})
+	defer meta.Close()
+	snap := time.Now().UTC()
+	expires := snap.Add(48 * time.Hour)
+	for _, m := range []uint64{testMount, other} {
+		for _, p := range []string{"a.txt", "."} {
+			b := meta.Begin(m, snap, ladingmeta.MetaEnvelope{NaturalKey: []byte(p), ExpiresAt: expires}).
+				AddLadingEntry(ladingmeta.LadingEntry{Kind: "entry", NodeKind: "file", Content: "none", Mode: 0o644})
+			if p == "." {
+				b = b.AddLadingSnapshot(ladingmeta.LadingSnapshot{Kind: "snapshot", Entries: 2})
+			}
+			require.NoError(t, b.Commit())
+		}
+	}
+	_, err = meta.Flush(ctx)
+	require.NoError(t, err)
+
+	count := func(m uint64, tbl string) string {
+		rows := queryTSV(t, fmt.Sprintf("SELECT count() FROM %s.%s WHERE %s = %d", ladingschema.DatabaseName, tbl, key, m))
+		require.Len(t, rows, 1)
+		return rows[0][0]
+	}
+	require.Equal(t, "2", count(testMount, ladingschema.TableNameMeta))
+	require.Equal(t, "1", count(testMount, ladingschema.TableNameSnap))
+
+	require.NoError(t, lading.Purge(ctx, exec, identifier.TaggedId(testMount)))
+
+	assert.Equal(t, "0", count(testMount, ladingschema.TableNameMeta))
+	assert.Equal(t, "0", count(testMount, ladingschema.TableNameData))
+	assert.Equal(t, "0", count(testMount, ladingschema.TableNameSnap))
+	assert.Equal(t, "2", count(other, ladingschema.TableNameMeta), "the neighbour keeps its rows")
+	assert.Equal(t, "1", count(other, ladingschema.TableNameSnap))
 }
 
 // TestProvisionIsIdempotentAndVerifies is M1's acceptance: the three tables,
