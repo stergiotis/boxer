@@ -103,7 +103,7 @@ A model never computes the rect of the second kind; SD4 says where it comes from
 
 ### SD6 — One visual language, in neon
 
-- **The palette is neon, deliberately outside the design system** ([ADR-0031](./0031-imzero2-design-system-color.md), [ADR-0040](./0040-imzero2-design-system-palette-consolidated.md)). A mark must not read as part of any app. Colours the design system gives apps would let a mark pass for app UI, and a mark that looks like UI is the spoofing case. No lint enforces the palettes in code, so nothing needs an exemption; the neon colours are named in `runtime/inscribe` and used nowhere else.
+- **The palette is neon, deliberately outside the design system** ([ADR-0031](./0031-imzero2-design-system-color.md), [ADR-0040](./0040-imzero2-design-system-palette-consolidated.md)). A mark must not read as part of any app. Colours the design system gives apps would let a mark pass for app UI, and a mark that looks like UI is the spoofing case. The design lint's L2 rule ([ADR-0029](./0029-imzero2-design-system-and-policy-as-code.md) §SD8) flags raw colours outside the token module; the neon colours are named in one file of `runtime/inscribe`, each line carrying the rule's per-line exception with this decision as its reason, and are used nowhere else.
 - Each neon stroke is drawn over a dark halo, and each note sits on a dark plate, so the same colours read on the light and the dark theme.
 - **Behind** draws the outline dashed. **Collapsed** places the mark on the window's title bar. **Gone** retires the annotation.
 - inscribe places notes and labels: one pass over every annotation tries the sides of each target in turn and keeps the first place clear of the notes already placed and inside the viewport. A note's size comes from egui's measure of its text a frame later; in the first frame it is estimated from the text's length, so a new note can shift by a few points once.
@@ -204,5 +204,6 @@ Milestones:
 - [ADR-0275](./0275-imzero2-window-arrangement-rust-reports-go-decides.md) — the geometry report.
 - [ADR-0276](./0276-agents-read-and-arrange-windows.md) — `keelson('windows')`, desktop mode, the `runtime.agent.*` window verbs.
 - [ADR-0281](./0281-window-captures-through-one-policy-enforcement-point.md) — captures, spans and obligations.
+- [ADR-0029](./0029-imzero2-design-system-and-policy-as-code.md) — the design lint, its L2 colour rule and per-line exceptions.
 - [ADR-0301](./0301-window-trees-a-capture-format-naming-each-widget-under-the-message-that-drew-it.md) — window trees, the windows they name, and the references an anchor cites.
 - [bigarrow](https://github.com/franzenzenhofer/big-arrow-on-the-screen) — the tool the idea comes from: an agent-called arrow and sign over the macOS desktop.
