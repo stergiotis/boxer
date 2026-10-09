@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-09
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-09
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0301: Window trees — a capture format that names each widget under the stream message that drew it
 
@@ -154,12 +152,12 @@ We will add a third capture format, `tree`, to the capture facility of ADR-0281.
 - Widgets laid out inside Rust are attributed to the message that drew the whole: egui_dock's tab strip, for one, lands on the dock area's message.
 - egui ids are stable across frames only as egui's are; an id derived from a position in a list moves when the list does.
 - `op` names follow the IDL, so a reader matching on them breaks when the IDL renames an op.
-- A tree capture takes the pixel path's frames — record, replay, collect — and builds an AccessKit tree for the capture context. Its cost was not measured beyond one observation: a tool call reading one small window took 82 ms in the scene below.
+- A tree capture takes the pixel path's frames — record, replay, collect — and builds an AccessKit tree for the capture context. Its cost was not measured beyond one observation: a tool call reading one small window took 82 ms in the scene under *Verification plan*.
 - A name is the widget's whole text even when the widget is only partly on screen.
 
 ### Neutral
 
-- The spike (2026-10-09, headless host, two scenes): in both, every AccessKit node with bounds in the capture context either matched a message's widget by egui id or was a `text_run` whose parent did — 268 of 300 nodes and 447 of 562, the remainder text runs. Of 1303 rows in the larger scene, 998 came from deferred blocks.
+- Coverage was measured once, by a spike on 2026-10-09, with an earlier recorder: it found a message's widgets by per-layer list lengths (rejected under *Alternatives*) and kept unclipped rects. The built recorder was not measured the same way; the scene under *Verification plan* checks it on one window. On a headless host, in two scenes of three and six windows, every AccessKit node with bounds matched a recorded widget by egui id except text runs: 268 of 300 nodes, and 447 of 562. In the larger scene every text run with bounds had a matched parent; the smaller scene's were not checked.
 
 ## Verification plan
 
@@ -171,12 +169,12 @@ We will add a third capture format, `tree`, to the capture facility of ADR-0281.
 
 ## Status
 
-Proposed 2026-10-09.
+Accepted 2026-10-09.
 
 - **M1 — The recorder and format 2 in the client.** (SD2, SD3, SD4) Built.
 - **M2 — `FormatTree` in the capture facility, and `RenderTree` in the window host.** (SD1, SD5) Built.
 - **M3 — The coordinator's `read_window_tree`.** (SD6) Built.
-- **M4 — ADR-0297's widget anchors.** (SD7) With ADR-0297.
+- **M4 — ADR-0297's widget anchors.** (SD7) Open: built with ADR-0297, which is still proposed.
 
 ## References
 
