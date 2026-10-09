@@ -18,8 +18,9 @@ var neon = []color.Color{
 }
 
 var (
-	// halo goes under every stroke, so neon reads on light and dark themes.
-	halo = color.RGBA(0, 0, 0, 200) // designlint:ignore=L2 (ADR-0297 §SD6: halo under neon)
+	// underlay goes faintly under every stroke, so neon keeps its edge on a
+	// light theme without a border on a dark one.
+	underlay = color.RGBA(0, 0, 0, 90) // designlint:ignore=L2 (ADR-0297 §SD6: underlay under neon)
 	// plate is a note's background, plateText its text.
 	plate     = color.RGBA(14, 14, 18, 238) // designlint:ignore=L2 (ADR-0297 §SD6: note plate)
 	plateText = color.RGB(246, 246, 246)    // designlint:ignore=L2 (ADR-0297 §SD6: note text)

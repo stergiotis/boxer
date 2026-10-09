@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
+	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/color"
 )
 
 // Overlay draws a scene once per frame, on the render goroutine, after every
@@ -97,82 +98,94 @@ func measureId(k measureKey) uint64 {
 }
 
 // The overlay's stroke weights: part of its own visual language, outside
-// the design system's tokens like its colours (ADR-0297 §SD6).
+// the design system's tokens like its colours (ADR-0297 §SD6). A sketched
+// stroke is drawn twice, so each pass is thin.
 const (
-	noteBorder  float32 = 1.5
-	leaderWidth float32 = 1.5
+	strokeWidth   float32 = 1.8
+	leaderWidth   float32 = 1.2
+	noteBorder    float32 = 1.1
+	underlayExtra float32 = 1.5
+	dashLen       float32 = 7
+	gapLen        float32 = 5
+	headSize      float32 = 13
 )
 
 func (inst *Overlay) draw(shapes []Shape) {
-	const (
-		stroke    float32 = 2.5
-		haloExtra float32 = 3
-		dash      float32 = 7
-		gap       float32 = 5
-	)
-	line := func(x0, y0, x1, y1 float32, dashed bool, hue int, w float32) {
-		col := hueColor(hue)
-		if dashed {
-			c.PaintDashedLine(x0, y0, x1, y1, dash, gap, halo, w+haloExtra).Send()
-			c.PaintDashedLine(x0, y0, x1, y1, dash, gap, col, w).Send()
-			return
-		}
-		c.PaintLine(x0, y0, x1, y1, halo, w+haloExtra).Send()
-		c.PaintLine(x0, y0, x1, y1, col, w).Send()
-	}
 	for _, s := range shapes {
+		r := newSketchRng(s.Seed)
 		switch s.Kind {
 		case ShapeDim:
 			c.PaintRectFilled(s.Rect.X, s.Rect.Y, s.Rect.MaxX(), s.Rect.MaxY(), 0, dim).Send()
 		case ShapeOutline:
-			r := s.Rect
-			if s.Dashed {
-				line(r.X, r.Y, r.MaxX(), r.Y, true, s.Hue, stroke)
-				line(r.MaxX(), r.Y, r.MaxX(), r.MaxY(), true, s.Hue, stroke)
-				line(r.MaxX(), r.MaxY(), r.X, r.MaxY(), true, s.Hue, stroke)
-				line(r.X, r.MaxY(), r.X, r.Y, true, s.Hue, stroke)
+			strokes(sketchRect(s.Rect, r), s.Hue, strokeWidth, s.Dashed)
+		case ShapeArrow:
+			shaft := sketchBow(s.X0, s.Y0, s.X1, s.Y1, r)
+			if len(shaft) == 0 {
 				continue
 			}
-			c.PaintRectStroke(r.X, r.Y, r.MaxX(), r.MaxY(), 4, halo, stroke+haloExtra).Send()
-			c.PaintRectStroke(r.X, r.Y, r.MaxX(), r.MaxY(), 4, hueColor(s.Hue), stroke).Send()
-		case ShapeArrow:
-			inst.arrow(s, line, stroke, haloExtra)
+			strokes(shaft, s.Hue, strokeWidth, s.Dashed)
+			// The head follows the shaft's last stretch, solid even when the
+			// shaft is dashed, so the direction still reads.
+			p := shaft[0]
+			a, b := p[len(p)-2], p[len(p)-1]
+			dx, dy := b.X-a.X, b.Y-a.Y
+			n := float32(math.Hypot(float64(dx), float64(dy)))
+			if n > 0 {
+				strokes(sketchHead(s.X1, s.Y1, dx/n, dy/n, headSize, r), s.Hue, strokeWidth, false)
+			}
 		case ShapeLeader:
-			line(s.X0, s.Y0, s.X1, s.Y1, false, s.Hue, leaderWidth)
+			strokes(sketchLine(s.X0, s.Y0, s.X1, s.Y1, r), s.Hue, leaderWidth, false)
 		case ShapeBadge:
-			c.PaintCircleFilled(s.X0, s.Y0, badgeR+1.5, halo).Send()
+			c.PaintCircleFilled(s.X0, s.Y0, badgeR+underlayExtra, underlay).Send()
 			c.PaintCircleFilled(s.X0, s.Y0, badgeR, hueColor(s.Hue)).Send()
 			c.PaintText(s.X0, s.Y0, 1, 1, s.Text, badgeFont, plate).Send()
 		case ShapeNote:
-			r := s.Rect
+			rc := s.Rect
 			col := hueColor(s.Hue)
-			c.PaintRectFilled(r.X, r.Y, r.MaxX(), r.MaxY(), 4, plate).Send()
-			c.PaintRectStroke(r.X, r.Y, r.MaxX(), r.MaxY(), 4, col, noteBorder).Send()
-			c.PaintText(r.X+notePad, r.Y+notePad, 0, 0, s.Tag, tagFont, col).Send()
+			c.PaintRectFilled(rc.X, rc.Y, rc.MaxX(), rc.MaxY(), 3, plate).Send()
+			strokes(sketchRect(rc, r), s.Hue, noteBorder, false)
+			c.PaintText(rc.X+notePad, rc.Y+notePad, 0, 0, s.Tag, tagFont, col).Send()
 			if s.Text != "" {
 				_, th := EstimateMeasure(s.Tag, tagFont)
-				c.PaintText(r.X+notePad, r.Y+notePad+th+tagRowGap, 0, 0, s.Text, noteFont, plateText).Send()
+				c.PaintText(rc.X+notePad, rc.Y+notePad+th+tagRowGap, 0, 0, s.Text, noteFont, plateText).Send()
 			}
 		}
 	}
 	c.PaintAbsoluteOverlay()
 }
 
-// arrow draws a shaft and a head; a dashed arrow's shaft is dashed and its
-// head solid, so the direction still reads.
-func (inst *Overlay) arrow(s Shape, line func(x0, y0, x1, y1 float32, dashed bool, hue int, w float32), stroke, haloExtra float32) {
-	dx, dy := s.X1-s.X0, s.Y1-s.Y0
-	n := float32(math.Hypot(float64(dx), float64(dy)))
-	if n < 1 {
-		return
+// strokes draws sketched polylines in a hue over a faint underlay, solid or
+// dashed.
+func strokes(ps []polyline, hue int, w float32, dashed bool) {
+	col := hueColor(hue)
+	for _, p := range ps {
+		if len(p) < 2 {
+			continue
+		}
+		if dashed {
+			x0s, y0s, x1s, y1s := dashes(p, dashLen, gapLen)
+			if len(x0s) == 0 {
+				continue
+			}
+			c.PaintSegments(x0s, y0s, x1s, y1s, fill(len(x0s), underlay), w+underlayExtra).Send()
+			c.PaintSegments(x0s, y0s, x1s, y1s, fill(len(x0s), col), w).Send()
+			continue
+		}
+		xs := make([]float32, len(p))
+		ys := make([]float32, len(p))
+		for i, q := range p {
+			xs[i], ys[i] = q.X, q.Y
+		}
+		c.PaintPolyline(xs, ys, underlay, w+underlayExtra).Send()
+		c.PaintPolyline(xs, ys, col, w).Send()
 	}
-	ux, uy := dx/n, dy/n
-	const head float32 = 14
-	bx, by := s.X1-ux*head, s.Y1-uy*head
-	line(s.X0, s.Y0, bx, by, s.Dashed, s.Hue, stroke+0.5)
-	px, py := -uy*head*0.5, ux*head*0.5
-	xs := []float32{s.X1, bx + px, bx - px}
-	ys := []float32{s.Y1, by + py, by - py}
-	c.PaintPolyline(append(xs, xs[0]), append(ys, ys[0]), halo, haloExtra).Send()
-	c.PaintPolygonFilled(xs, ys, hueColor(s.Hue)).Send()
+}
+
+// fill is n copies of one colour, for a batch of segments.
+func fill(n int, col color.Color) color.Colors {
+	cs := make([]color.Color, n)
+	for i := range cs {
+		cs[i] = col
+	}
+	return color.ColorsFromSlice(cs)
 }

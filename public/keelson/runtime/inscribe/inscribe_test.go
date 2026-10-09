@@ -135,3 +135,61 @@ func TestASubtractedRectLeavesNoOverlap(t *testing.T) {
 	}
 	assert.InDelta(t, 84, area, 0.001)
 }
+
+func TestASketchedStrokeIsTheSameForTheSameMarkAndStaysNearItsLine(t *testing.T) {
+	seed := seedOf("task", "clear", 0)
+	a := sketchLine(10, 10, 210, 10, newSketchRng(seed))
+	b := sketchLine(10, 10, 210, 10, newSketchRng(seed))
+	assert.Equal(t, a, b, "no shimmer from frame to frame")
+	require.Len(t, a, 2, "drawn twice, as a pen goes over a line")
+	c := sketchLine(10, 10, 210, 10, newSketchRng(seedOf("task", "other", 0)))
+	assert.NotEqual(t, a, c, "another mark wobbles differently")
+	// The stroke strays by at most a few points from the line it sketches.
+	limit := 2.5 * roughness(200)
+	for _, p := range a {
+		for _, q := range p {
+			assert.LessOrEqual(t, abs(q.Y-10), limit)
+			assert.GreaterOrEqual(t, q.X, float32(10)-limit)
+			assert.LessOrEqual(t, q.X, float32(210)+limit)
+		}
+	}
+}
+
+func TestAMarkKeepsItsShapeWhenItsWindowMoves(t *testing.T) {
+	r1 := sketchRect(Rect{X: 0, Y: 0, W: 100, H: 40}, newSketchRng(7))
+	r2 := sketchRect(Rect{X: 300, Y: 200, W: 100, H: 40}, newSketchRng(7))
+	require.Equal(t, len(r1), len(r2))
+	for i := range r1 {
+		for j := range r1[i] {
+			assert.InDelta(t, r1[i][j].X+300, r2[i][j].X, 1e-3)
+			assert.InDelta(t, r1[i][j].Y+200, r2[i][j].Y, 1e-3)
+		}
+	}
+}
+
+func TestDashesCoverTheirShareOfTheLine(t *testing.T) {
+	x0s, _, x1s, _ := dashes(polyline{{0, 0}, {60, 0}, {120, 0}}, 7, 5)
+	var on float32
+	for i := range x0s {
+		on += x1s[i] - x0s[i]
+	}
+	assert.InDelta(t, 120*7.0/12.0, on, 7, "about dash/(dash+gap) of the length is drawn")
+}
+
+func TestANoteKeepsClearOfOtherMarksTargets(t *testing.T) {
+	bounds := Rect{X: 0, Y: 0, W: 1000, H: 800}
+	button := Rect{X: 400, Y: 300, W: 60, H: 20}
+	field := Rect{X: 480, Y: 300, W: 120, H: 20}
+	window := Rect{X: 300, Y: 200, W: 400, H: 300}
+	items := []Resolved{
+		{Item: Item{Mark: Mark{Task: "a", Id: "w", Op: OpHighlight}}, Rects: []Rect{window}, Vis: []VisibilityE{VisibilityShown}},
+		{Item: Item{Mark: Mark{Task: "a", Id: "f", Op: OpHighlight}}, Rects: []Rect{field}, Vis: []VisibilityE{VisibilityShown}},
+		{Item: Item{Mark: Mark{Task: "a", Id: "b", Op: OpCallout, Text: "press here"}}, Rects: []Rect{button}, Vis: []VisibilityE{VisibilityShown}},
+	}
+	for _, s := range Layout(items, bounds, EstimateMeasure) {
+		if s.Kind == ShapeNote && s.Text == "press here" {
+			assert.False(t, s.Rect.Intersects(field.Inflate(outlineGap)), "the note is not on the field another mark points at")
+			assert.False(t, s.Rect.Intersects(button), "nor on its own target")
+		}
+	}
+}

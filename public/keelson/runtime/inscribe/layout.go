@@ -2,6 +2,7 @@ package inscribe
 
 import (
 	"math"
+	"slices"
 	"strconv"
 )
 
@@ -41,6 +42,9 @@ type Shape struct {
 	Dashed bool
 	// Text is a note's text or a badge's number; Tag a note's attribution.
 	Text, Tag string
+	// Seed nudges the shape's sketched strokes: from the mark's identity,
+	// so the shape keeps its look from frame to frame.
+	Seed uint64
 }
 
 // Resolved is an item with its targets resolved this frame.
@@ -77,6 +81,14 @@ func Layout(items []Resolved, bounds Rect, measure MeasureFunc) (shapes []Shape)
 	var holes []Rect
 	var marks, leaders, notes []Shape
 	var placed []Rect
+	// Every target is in the way of a note, so a note never covers what
+	// another mark points at.
+	var targets []Rect
+	for _, it := range items {
+		for _, r := range it.Rects {
+			targets = append(targets, r.Inflate(outlineGap))
+		}
+	}
 	placeNote := func(it Resolved, target Rect, text string) {
 		tag := Tag(it.Task)
 		tw, th := measure(text, noteFont)
@@ -86,7 +98,7 @@ func Layout(items []Resolved, bounds Rect, measure MeasureFunc) (shapes []Shape)
 		if text == "" {
 			w, h = gw+2*notePad, gh+2*notePad
 		}
-		box := placeBox(target, w, h, bounds, placed)
+		box := placeBox(target, w, h, bounds, append(slices.Clone(placed), obstacles(targets, target)...))
 		placed = append(placed, box)
 		notes = append(notes, Shape{Kind: ShapeNote, Hue: it.Hue, Rect: box, Text: text, Tag: tag})
 		lx0, ly0 := nearestOnRect(box, target)
@@ -96,6 +108,9 @@ func Layout(items []Resolved, bounds Rect, measure MeasureFunc) (shapes []Shape)
 		}
 	}
 	for _, it := range items {
+		// Every shape of the mark is seeded by the mark and its place in it.
+		mark0 := len(marks)
+		leader0, note0 := len(leaders), len(notes)
 		dashed := func(k int) bool { return it.Vis[k] == VisibilityBehind }
 		outline := func(k int) {
 			marks = append(marks, Shape{Kind: ShapeOutline, Hue: it.Hue, Rect: it.Rects[k].Inflate(outlineGap), Dashed: dashed(k)})
@@ -129,6 +144,13 @@ func Layout(items []Resolved, bounds Rect, measure MeasureFunc) (shapes []Shape)
 			}
 			placeNote(it, it.Rects[0].Inflate(outlineGap), it.Text)
 		}
+		n := 0
+		for _, set := range [][]Shape{marks[mark0:], leaders[leader0:], notes[note0:]} {
+			for i := range set {
+				set[i].Seed = seedOf(it.Task, it.Id, n)
+				n++
+			}
+		}
 	}
 	if len(holes) > 0 {
 		// Spotlights from every task combine: one dimming outside them all.
@@ -139,6 +161,18 @@ func Layout(items []Resolved, bounds Rect, measure MeasureFunc) (shapes []Shape)
 	shapes = append(shapes, marks...)
 	shapes = append(shapes, leaders...)
 	shapes = append(shapes, notes...)
+	return
+}
+
+// obstacles are the targets a note for target must keep clear of: all but
+// those that hold target — a whole window around a button inside it —
+// which every place beside target would touch.
+func obstacles(targets []Rect, target Rect) (out []Rect) {
+	for _, t := range targets {
+		if !target.Inside(t.Inflate(1)) {
+			out = append(out, t)
+		}
+	}
 	return
 }
 
