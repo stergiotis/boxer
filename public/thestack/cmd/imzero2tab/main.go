@@ -1,8 +1,9 @@
 // Command imzero2tab is the keelson host for a browser tab (ADR-0263): the
 // Go module a Web Worker runs beside the Rust browser host. It links the
-// apps a tab may open; tabhost (ADR-0278, proposed) is the rest — the mount
-// on an in-process bus, the wasip1 reactor, the native pipe run that
-// exercises the tab's Go side without a browser, and `serve`.
+// apps a tab may open, the committed SQL applets among them; tabhost
+// (ADR-0278) is the rest — the mount on an in-process bus, the wasip1
+// reactor, the native pipe run that exercises the tab's Go side without a
+// browser, and `serve`.
 //
 // Built with `GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared` by
 // scripts/dev/build_tab_bundle.sh.
@@ -17,9 +18,13 @@
 package main
 
 import (
+	"context"
+
 	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v3"
 
+	"github.com/stergiotis/boxer/apps/sqlapplet"
+	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/providers"
 	"github.com/stergiotis/boxer/public/observability/logging"
@@ -50,8 +55,20 @@ func newTab() (inst *tabhost.Program) {
 	inst = tabhost.New(tabhost.Options{
 		DefaultApp: "github.com/stergiotis/boxer/apps/play",
 		Services:   tabhost.Services{KeelsonSQL: reg},
+		Prepare:    prepare,
 	}, &cli.Command{Name: "imzero2tab", Version: vcs.BuildVersionInfo(), Before: logging.Apply})
 	return
+}
+
+// prepare mints the committed applets, which then mount by id, and loads the
+// document the page's origin serves under BOXER_SQLAPPLET_TAB_DOC (ADR-0299,
+// proposed). It runs in the tab's action rather than at initialisation, so
+// the bundler and the other subcommands neither mint nor log the corpus.
+func prepare(ctx context.Context, origin string) (id app.AppIdT, err error) {
+	if _, errs := sqlapplet.MintManifests(log.Logger); len(errs) > 0 {
+		log.Warn().Errs("errors", errs).Msg("imzero2tab: some committed applets did not mint")
+	}
+	return sqlapplet.LoadTabApplet(ctx, origin)
 }
 
 func main() {

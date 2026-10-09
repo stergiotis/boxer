@@ -90,7 +90,8 @@ trial, not this page.
    ```
 
    The worker's parameters: `app=<id>` (a registered app the tab binary
-   links in; play, mdedit, taskdemo and fibscope today), `env=NAME=value`
+   links in: play, mdedit, taskdemo, fibscope and the committed SQL applets,
+   each under `github.com/stergiotis/boxer/apps/sqlapplet/<slug>`), `env=NAME=value`
    (repeatable; `CLICKHOUSE_URL` defaults to the page's `/ch/`), `arg=`
    for further module flags, `stage=WxH` for the initial viewport,
    `<slot>Font=<url>` for a font, `cadence=continuous` to tick at `fps`
@@ -107,6 +108,23 @@ trial, not this page.
    Update 2026-10-01) and drew the Map's world raster. That endpoint refused a
    connection now and then; a refused run shows its error in the pane and the
    last good raster stays.
+
+4. **Or open an applet document the server holds.** Put the document — the
+   [ADR-0132](../adr/0132-sqlapplet-sql-defined-applets.md) shape, its base
+   name the slug — anywhere the page's server serves, for `serve` inside the
+   bundle directory, and name its path with `env=`:
+
+   ```
+   http://127.0.0.1:8765/index.html?worker=worker.mjs%3Fenv%3DBOXER_SQLAPPLET_TAB_DOC%253D%252Fapplets%252Fmy-applet.md
+   ```
+
+   The tab fetches it from the page's origin at start and mounts it in place
+   of `app=`. The path must be absolute on that origin; a document whose
+   buffer is not read-class, or whose slug a committed applet holds, is
+   refused and the reason is drawn in the tab
+   ([ADR-0299](../adr/0299-sql-applets-a-tab-loads-from-its-origin.md),
+   proposed). An `endpoint: introspection` applet and one that declares
+   `datasets:` do not run in a tab.
 
 ## Verification
 
