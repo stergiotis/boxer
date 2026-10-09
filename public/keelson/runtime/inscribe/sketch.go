@@ -228,3 +228,19 @@ func swipe(rc Rect, r *sketchRng) (xs, ys []float32) {
 	ys = []float32{top + slant, top - slant, (top+bottom)/2 - slant, bottom - slant, bottom + slant, (top+bottom)/2 + slant}
 	return
 }
+
+// dotSpacing is the pitch of a note's dot grid.
+const dotSpacing float32 = 6
+
+// dotGrid is a note's sketchbook paper: dots on a fixed pitch inside rc,
+// inset from its edges and rounded corners.
+func dotGrid(rc Rect) (xs, ys []float32) {
+	const inset float32 = 4
+	for y := rc.Y + inset; y <= rc.MaxY()-inset; y += dotSpacing {
+		for x := rc.X + inset; x <= rc.MaxX()-inset; x += dotSpacing {
+			xs = append(xs, x)
+			ys = append(ys, y)
+		}
+	}
+	return
+}

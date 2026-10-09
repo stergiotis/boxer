@@ -113,6 +113,7 @@ const (
 	gapLen        float32 = 5
 	headSize      float32 = 13
 	leaderHead    float32 = 8
+	dotRadius     float32 = 0.8
 )
 
 func (inst *Overlay) draw(shapes []Shape) {
@@ -143,6 +144,9 @@ func (inst *Overlay) draw(shapes []Shape) {
 			// edge.
 			c.PaintRectFilled(rc.X+3, rc.Y+4, rc.MaxX()+3, rc.MaxY()+4, 6, shadow).Send()
 			c.PaintRectFilled(rc.X, rc.Y, rc.MaxX(), rc.MaxY(), 6, plate).Send()
+			if xs, ys := dotGrid(Rect{X: rc.X + noteAccent, Y: rc.Y, W: rc.W - noteAccent, H: rc.H}); len(xs) > 0 {
+				c.PaintMarkers(xs, ys, 0, dotRadius, noteDots, 0).Send()
+			}
 			c.PaintRectFilled(rc.X, rc.Y+3, rc.X+noteAccent, rc.MaxY()-3, 2, hueColor(s.Hue)).Send()
 			x := rc.X + noteAccent + notePad
 			c.PaintText(x, rc.Y+notePad, 0, 0, s.Text, noteFont, plateText).Send()

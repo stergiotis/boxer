@@ -48,6 +48,9 @@ var (
 	plate     = color.RGBA(16, 16, 20, 240)    // designlint:ignore=L2 (ADR-0297 §SD6: note plate)
 	plateText = color.RGB(246, 246, 246)       // designlint:ignore=L2 (ADR-0297 §SD6: note text)
 	tagText   = color.RGBA(246, 246, 246, 150) // designlint:ignore=L2 (ADR-0297 §SD6: note attribution)
+	// noteDots are the faint dot grid on a note's plate, like sketchbook
+	// paper.
+	noteDots = color.RGBA(255, 255, 255, 20) // designlint:ignore=L2 (ADR-0297 §SD6: note paper)
 	// dim covers what a spotlight leaves out.
 	dim = color.RGBA(0, 0, 0, 120) // designlint:ignore=L2 (ADR-0297 §SD6: spotlight dim)
 )

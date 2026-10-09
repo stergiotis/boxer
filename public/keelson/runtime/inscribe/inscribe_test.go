@@ -278,3 +278,13 @@ func TestATabKeepsOffAnotherMarksTarget(t *testing.T) {
 		}
 	}
 }
+
+func TestANotesDotGridStaysInsideItsPlate(t *testing.T) {
+	rc := Rect{X: 10, Y: 20, W: 120, H: 40}
+	xs, ys := dotGrid(rc)
+	require.NotEmpty(t, xs)
+	for i := range xs {
+		assert.True(t, xs[i] > rc.X && xs[i] < rc.MaxX() && ys[i] > rc.Y && ys[i] < rc.MaxY())
+	}
+	assert.Empty(t, func() []float32 { x, _ := dotGrid(Rect{W: 5, H: 5}); return x }(), "no dots on a plate too small for them")
+}

@@ -6,6 +6,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/designsystem/styletokens"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/helphost"
+	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/distsummary"
@@ -14,6 +15,7 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/selector"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/videooutput"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/imzero2env"
+	"strconv"
 )
 
 // idleRepaintIntervalSecs is the steady-state repaint cadence requested by
@@ -233,6 +235,21 @@ func DecorateRenderer(inner func() error, cc ChromeConfig) func() error {
 			for range c.PanelBottom(ids.PrepareStr("bottomPanel")).Resizable(false).KeepIter() {
 				for range c.Horizontal().KeepIter() {
 					c.AddSpace(styletokens.GapItems(density))
+					// While agents' marks are on the overlay (ADR-0297): say
+					// so where the person looks, with the way to clear them.
+					if cc.Host != nil {
+						if n := cc.Host.Marks().Len(); n > 0 {
+							label := icons.PhHighlighter + " " + strconv.Itoa(n) + " agent mark"
+							if n != 1 {
+								label += "s"
+							}
+							c.Label(label).Send()
+							if c.Button(ids.PrepareStr("statusClearMarks"), c.Atoms().Text("Clear").Keep()).SendResp().HasPrimaryClicked() {
+								cc.Host.Marks().ClearAll()
+							}
+							c.AddSpace(styletokens.GapSections(density))
+						}
+					}
 					if cc.Status != nil {
 						rs := runtimestatus.Render(runtimestatus.Input{
 							Ids: ids, ScopeKey: "runtimestatus", Snapshot: cc.Status, Clickable: cc.Host != nil,
