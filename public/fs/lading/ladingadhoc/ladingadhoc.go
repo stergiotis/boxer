@@ -34,9 +34,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/fs/lading"
-	"github.com/stergiotis/boxer/public/fs/lading/ladingdata"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingingest"
-	"github.com/stergiotis/boxer/public/fs/lading/ladingmeta"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingpolicy"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingsql"
@@ -89,6 +87,10 @@ type PublishInput struct {
 	// the text rule, the profile, metadata-only. Ttl above still wins over
 	// Policy.Ttl, so a caller can set one without restating the other.
 	Policy *ladingingest.Policy
+	// Layout is where the store's tables live; the zero value is the default
+	// database. A publisher in a repository that keeps its store elsewhere
+	// (ADR-0198 Updates 2026-09-04) hands the same layout its readers use.
+	Layout ladingschema.Layout
 }
 
 // PublishResult names the published tree. Mount and Snap together are the
@@ -142,7 +144,7 @@ func Publish(ctx context.Context, exec recordstore.ExecutorI, in PublishInput) (
 	if in.Ttl != 0 {
 		policy.Ttl = in.Ttl
 	}
-	if err = lading.Verify(ctx, exec); err != nil {
+	if err = lading.VerifyIn(ctx, exec, in.Layout); err != nil {
 		err = eh.Errorf("ladingadhoc: lading store: %w", err)
 		return
 	}
@@ -151,7 +153,7 @@ func Publish(ctx context.Context, exec recordstore.ExecutorI, in PublishInput) (
 	if name == "" {
 		name = "ad-hoc tree"
 	}
-	policies := ladingpolicy.NewPolicyStore(exec, nil, ladingpolicy.PolicyStoreConfig{})
+	policies := ladingpolicy.NewPolicyStore(exec, nil, ladingpolicy.PolicyStoreConfig{Table: in.Layout.PolicyTable()})
 	defer policies.Close()
 	// Declared once per publish. The policy log is append-only, so a
 	// republish under a changed name or class is a new declaration and the
@@ -162,14 +164,9 @@ func Publish(ctx context.Context, exec recordstore.ExecutorI, in PublishInput) (
 		return
 	}
 
-	meta := ladingmeta.NewMetaStore(exec, nil, ladingmeta.MetaStoreConfig{})
-	defer meta.Close()
-	stores := lading.Stores{Meta: meta}
-	if !policy.MetaOnly {
-		data := ladingdata.NewDataStore(exec, nil, ladingdata.DataStoreConfig{})
-		defer data.Close()
-		stores.Data = data
-	}
+	stores := lading.NewStores(exec, in.Layout)
+	defer stores.Meta.Close()
+	defer stores.Data.Close()
 	out, err := ladingingest.Snapshot(ctx, in.FS, mount, policy, stores)
 	if err != nil {
 		err = eh.Errorf("ladingadhoc: snapshot: %w", err)
@@ -234,7 +231,7 @@ func Visibility() (v ladingsql.MountVisibilityI) {
 	return ladingsql.VisibleUnderTag{MountTagValue.GetTag()}
 }
 
-// DefaultDatabase is the store name a policy record's `store` field would
-// carry for a recorded mount. It is here so a caller writing a mount list
-// can tell the two apart in one place.
+// DefaultDatabase is the store label a policy record's `store` field carries
+// for a recorded mount in the default layout. It is here so a caller writing
+// a mount list can tell the two apart in one place.
 const DefaultDatabase = ladingschema.DatabaseName

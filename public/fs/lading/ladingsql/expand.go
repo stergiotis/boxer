@@ -9,14 +9,6 @@ import (
 	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
 )
 
-// The store's own coordinates, as the defaults a Config leaves empty take.
-var (
-	defaultDatabase  = ladingschema.DatabaseName
-	defaultMetaTable = ladingschema.TableNameMeta
-	defaultDataTable = ladingschema.TableNameData
-	defaultSnapTable = ladingschema.TableNameSnap
-)
-
 // The kind names the generated stores publish their artefacts under.
 const (
 	kindEntry    = "LadingEntry"
@@ -57,7 +49,7 @@ var notExpired = colExpiresAt + " > now64(9, 'UTC')"
 func (inst Config) entriesSubquery(mount mountArg, snap snapshotArg) string {
 	art := ladingmeta.MetaComponentSQL.Kinds[kindEntry]
 	inner := fmt.Sprintf("SELECT %s AS e, name, dir, depth, ext, %s AS expires_at FROM %s WHERE %s",
-		art.Projection, colExpiresAt, inst.qualified(inst.MetaTable),
+		art.Projection, colExpiresAt, inst.Layout.MetaTable(),
 		inst.where(mount, snap, art.Presence))
 
 	cols := []string{
@@ -100,7 +92,7 @@ func (inst Config) entriesSubquery(mount mountArg, snap snapshotArg) string {
 func (inst Config) blocksSubquery(mount mountArg, snap snapshotArg) string {
 	art := ladingdata.DataComponentSQL.Kinds[kindBlock]
 	inner := fmt.Sprintf("SELECT %s AS b, %s AS nk, %s AS expires_at FROM %s WHERE %s",
-		art.Projection, colNaturalKey, colExpiresAt, inst.qualified(inst.DataTable),
+		art.Projection, colNaturalKey, colExpiresAt, inst.Layout.DataTable(),
 		inst.where(mount, snap, art.Presence))
 
 	cols := []string{
@@ -127,12 +119,14 @@ func (inst Config) snapshotsSubquery(mount mountArg, snap snapshotArg) string {
 	art := ladingmeta.MetaComponentSQL.Kinds[kindSnapshot]
 	// A pinned or '*' call still means "of these snapshots", so the same
 	// pinning applies — but the index IS the set of complete snapshots, so a
-	// bare fssnap(m) lists them all rather than resolving one.
-	if snap.latest {
+	// bare fssnap(m) lists them all rather than resolving one. The word
+	// 'latest' keeps the meaning it has everywhere else: one row, the
+	// newest.
+	if snap.latest && !snap.explicit {
 		snap = snapshotArg{all: true}
 	}
 	inner := fmt.Sprintf("SELECT %s AS s, %s AS expires_at FROM %s WHERE %s",
-		art.Projection, colExpiresAt, inst.qualified(inst.SnapTable),
+		art.Projection, colExpiresAt, inst.Layout.SnapTable(),
 		inst.where(mount, snap, art.Presence))
 
 	cols := []string{
@@ -173,13 +167,13 @@ func (inst Config) where(mount mountArg, snap snapshotArg, presence string) stri
 		// The newest complete snapshot *per mount*, as a set of pairs rather
 		// than a correlated scalar: one index read, no per-row subquery.
 		parts = append(parts, fmt.Sprintf("(%s, %s) IN (SELECT %s, max(%s) FROM %s WHERE %s GROUP BY %s)",
-			colID, colTs, colID, colTs, inst.qualified(inst.SnapTable), inst.scopeWhere(mount), colID))
+			colID, colTs, colID, colTs, inst.Layout.SnapTable(), inst.scopeWhere(mount), colID))
 	case snap.latest:
 		// max() over an empty set is the type's default rather than NULL, so a
 		// mount with no complete snapshot resolves to the epoch and matches no
 		// row — which is the answer, not an error.
 		parts = append(parts, fmt.Sprintf("%s = (SELECT max(%s) FROM %s WHERE %s = %d AND %s)",
-			colTs, colTs, inst.qualified(inst.SnapTable), colID, mount.id.Value(), notExpired))
+			colTs, colTs, inst.Layout.SnapTable(), colID, mount.id.Value(), notExpired))
 	case mount.all:
 		// A pinned instant is still "of the complete snapshots" (§SD6): a walk
 		// that died leaves rows at a ts someone can learn, and naming it must
@@ -208,7 +202,7 @@ func (inst Config) scopeWhere(mount mountArg) string {
 // `(id, ts)` pairs of every complete, unexpired snapshot in scope.
 func (inst Config) completeSnapshotsOfEvery(mount mountArg) string {
 	return fmt.Sprintf("SELECT %s, %s FROM %s WHERE %s",
-		colID, colTs, inst.qualified(inst.SnapTable), inst.scopeWhere(mount))
+		colID, colTs, inst.Layout.SnapTable(), inst.scopeWhere(mount))
 }
 
 // completeSnapshots is the set of a mount's complete snapshots.
@@ -220,5 +214,5 @@ func (inst Config) completeSnapshotsOfEvery(mount mountArg) string {
 // it left behind.
 func (inst Config) completeSnapshots(mount mountArg) string {
 	return fmt.Sprintf("SELECT %s FROM %s WHERE %s = %d AND %s",
-		colTs, inst.qualified(inst.SnapTable), colID, mount.id.Value(), notExpired)
+		colTs, inst.Layout.SnapTable(), colID, mount.id.Value(), notExpired)
 }

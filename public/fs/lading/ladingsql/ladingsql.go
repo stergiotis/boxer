@@ -1,13 +1,15 @@
 // Package ladingsql is the SQL surface of the lading store (ADR-0198 §SD7):
-// two table-function macros that turn a mount id into a readable relation.
+// three table-function macros that turn a mount id into a readable relation.
 //
 //	SELECT path, size FROM fs(12345) WHERE NOT is_dir ORDER BY size DESC LIMIT 20
 //	SELECT path, line0, data FROM fsdata(12345) WHERE match(data, 'TODO')
+//	SELECT snap, snap_entries FROM fssnap(12345) ORDER BY snap DESC
 //
-// `fs(m)` is a mount's entries, `fsdata(m)` its blocks. Both expand — before
-// the statement leaves the process — into a parenthesised subquery over the
-// store's tables, so the enclosing query keeps its own WHERE, ORDER BY and
-// LIMIT and nothing about the row shape has to be typed by hand.
+// `fs(m)` is a mount's entries, `fsdata(m)` its blocks, `fssnap(m)` its
+// complete snapshots. All three expand — before the statement leaves the
+// process — into a parenthesised subquery over the store's tables, so the
+// enclosing query keeps its own WHERE, ORDER BY and LIMIT and nothing about
+// the row shape has to be typed by hand.
 //
 // # Three things ride in every expansion
 //
@@ -85,6 +87,10 @@ const AllMounts = "*"
 // prelude-bound snapshot knob has a value that means "newest" (a bound slot
 // cannot be omitted), and it is the name the SFTP head gives the same
 // snapshot, so the two surfaces agree on the word.
+//
+// On `fssnap` the word keeps that meaning: `fssnap(m, 'latest')` is the one
+// newest row, where a bare `fssnap(m)` is every complete snapshot — the index
+// IS that set, so omission lists it rather than resolving one.
 const LatestSnapshot = "latest"
 
 // MountVisibilityI decides which mounts a statement may read.
@@ -195,13 +201,13 @@ func (inst VisibleUnderTag) EnumerateMounts() (MountScopeE, []identifier.TaggedI
 
 // Config parameterises the expansion.
 type Config struct {
-	// Database and the three table names. Zero values take the store's own,
-	// so a caller that has not moved its tables can leave the whole struct's
-	// table fields empty.
-	Database  string
-	MetaTable string
-	DataTable string
-	SnapTable string
+	// Layout is where the store's tables live. The zero value is the default
+	// database beside `boxer.facts`; a store provisioned under another
+	// layout hands the same value here, so the macros and the Go adapter
+	// cannot disagree about which tables a mount is in. The table names are
+	// not a degree of freedom — they are what every operator instruction
+	// calls them (ADR-0198 Updates 2026-09-04).
+	Layout ladingschema.Layout
 	// Visibility decides which mounts this statement may read. Nil refuses
 	// every mount — see [VisibleAll].
 	Visibility MountVisibilityI
@@ -216,7 +222,6 @@ type Config struct {
 // caller may not read — errors at expansion so it never reaches a server, the
 // same way `keelson()` and `docsearch()` refuse.
 func ExpandPass(cfg Config) nanopass.Pass {
-	cfg = cfg.withDefaults()
 	return nanopass.Pass{
 		Name: "LadingExpand",
 		// Env-aware rather than a lifted body pass: a macro argument may be a
@@ -316,28 +321,6 @@ func References(sql string) (refs []Reference) {
 	return
 }
 
-// withDefaults fills the table coordinates a caller left empty.
-func (inst Config) withDefaults() (out Config) {
-	out = inst
-	if out.Database == "" {
-		out.Database = defaultDatabase
-	}
-	if out.MetaTable == "" {
-		out.MetaTable = defaultMetaTable
-	}
-	if out.DataTable == "" {
-		out.DataTable = defaultDataTable
-	}
-	if out.SnapTable == "" {
-		out.SnapTable = defaultSnapTable
-	}
-	return
-}
-
-func (inst Config) qualified(table string) string {
-	return inst.Database + "." + table
-}
-
 // call is one macro call site with the relation it names.
 type call struct {
 	node *grammar1.TableFunctionExprContext
@@ -381,12 +364,6 @@ func expand(cfg Config, e *env.Environment, sql string) (result string, err erro
 	return nanopass.GetText(rw), nil
 }
 
-// findCalls returns every fs(...) / fsdata(...) table-function call in
-// document order.
-//
-// The predicate lives here alone so the fact extraction ([References]) and the
-// rewrite can never drift about what counts as a call — a scalar `fs(1)` in a
-// SELECT list is not a TableFunctionExpr and so is invisible to both.
 // scopeMount applies the visibility: a single mount is checked, a wildcard
 // is enumerated from a VisibleSet or left open under VisibleAll, and refused
 // under anything else — a yes/no oracle cannot yield a predicate.
@@ -424,6 +401,12 @@ func (inst Config) scopeMount(mount mountArg) (out mountArg, err error) {
 	}
 }
 
+// findCalls returns every fs(...) / fsdata(...) / fssnap(...) table-function
+// call in document order.
+//
+// The predicate lives here alone so the fact extraction ([References]) and the
+// rewrite can never drift about what counts as a call — a scalar `fs(1)` in a
+// SELECT list is not a TableFunctionExpr and so is invisible to both.
 func findCalls(pr *nanopass.ParseResult) (calls []call) {
 	nodes := nanopass.FindAll(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
 		fn, ok := ctx.(*grammar1.TableFunctionExprContext)
@@ -468,7 +451,6 @@ func relationOf(name string) relationE {
 	return relationNone
 }
 
-// snapshotArg is which snapshot (or snapshots) a call names.
 // mountArg is the resolved first argument of a call: one mount, or every
 // visible mount with the enumeration the visibility allows.
 type mountArg struct {
@@ -498,11 +480,17 @@ func (inst mountArg) predicate() (pred string, ok bool) {
 	}
 }
 
+// snapshotArg is which snapshot (or snapshots) a call names.
 type snapshotArg struct {
 	// all is fs(m, '*'): every complete snapshot of the mount.
 	all bool
-	// latest is fs(m): the newest complete one, resolved by the expansion.
+	// latest is fs(m) or fs(m, 'latest'): the newest complete one, resolved
+	// by the expansion.
 	latest bool
+	// explicit says the caller wrote 'latest' rather than omitting the
+	// argument. The two differ on fssnap only: omission lists the index,
+	// the word picks its newest row.
+	explicit bool
 	// expr is the SQL expression for one pinned snapshot, when neither.
 	expr string
 }
@@ -574,7 +562,7 @@ func callArgs(e *env.Environment, fn *grammar1.TableFunctionExprContext) (mount 
 	case isString && raw == AllSnapshots:
 		snap.all = true
 	case isString && strings.EqualFold(raw, LatestSnapshot):
-		snap.latest = true
+		snap.latest, snap.explicit = true, true
 	case isString:
 		snap.expr = "toDateTime64(" + ladingschema.QuoteLiteral(raw) + ", 9, 'UTC')"
 	default:
@@ -610,8 +598,6 @@ func parseMountID(raw string, isString bool) (mount identifier.TaggedId, err err
 	return
 }
 
-// literalOf reads one table argument as a literal, reporting whether it was
-// quoted.
 // ErrUnboundSlot is returned when a macro argument is a `{name:Type}` slot
 // the prelude does not bind. The value is needed at expansion — the
 // visibility check and the snapshot resolution both depend on it — so a
@@ -664,6 +650,8 @@ func slotOf(arg grammar1.ITableArgExprContext) (name string, ok bool) {
 	return nanopass.DecodeIdentifier(ps.ParamSlot().Identifier().GetText()), true
 }
 
+// literalOf reads one table argument as a literal, reporting whether it was
+// quoted.
 func literalOf(arg grammar1.ITableArgExprContext) (raw string, isString bool, ok bool) {
 	lit := arg.Literal()
 	if lit == nil {

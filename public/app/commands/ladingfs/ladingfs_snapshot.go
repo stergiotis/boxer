@@ -12,14 +12,10 @@ import (
 	cli "github.com/urfave/cli/v3"
 
 	"github.com/stergiotis/boxer/public/fs/lading"
-	"github.com/stergiotis/boxer/public/fs/lading/ladingdata"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingingest"
-	"github.com/stergiotis/boxer/public/fs/lading/ladingmeta"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingpolicy"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingremote"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
-	"github.com/stergiotis/boxer/public/keelson/data/chclient"
-	"github.com/stergiotis/boxer/public/keelson/data/storeexec"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -38,7 +34,8 @@ func newSnapshotCommand() *cli.Command {
 			"A failed walk leaves nothing a query can see; retry by running again. " +
 			"With --remote the argument is an rclone remote (\"remote:path\"), served " +
 			"through `rclone serve sftp --stdio`; a bare local path is refused there, " +
-			"so the only way to read an ungranted local tree is to say so with a path.",
+			"so the only way to read an ungranted local tree is to say so with a path. " +
+			"Symlinks on a remote arrive only under --rclone-arg=--links.",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "mount", Required: true,
 				Usage: "the mount id, decimal or 0x-prefixed hex — a tagged id the caller minted; the store claims none"},
@@ -49,16 +46,19 @@ func newSnapshotCommand() *cli.Command {
 			&cli.StringFlag{Name: "text-rule", Value: "sniff",
 				Usage: "sniff (cut text files at newlines; exact line numbers) or never (fixed-offset blocks)"},
 			&cli.BoolFlag{Name: "meta-only", Usage: "stat only: one row per node, no content blocks"},
+			&cli.BoolFlag{Name: "skip-ref-hash",
+				Usage: "leave files above --inline-max unread: size and mtime, no content hash. Default is to stream each through BLAKE3"},
 			&cli.StringFlag{Name: "profile", Value: "corpus",
 				Usage: "table profile for provisioning: corpus (few mounts, large files) or fleet (very many small trees); fixed at table creation"},
 			&cli.BoolFlag{Name: "no-provision", Usage: "do not create or finish the tables; only verify them"},
 			&cli.StringFlag{Name: "name",
 				Usage: "record the mount's declared policy under this name in boxer.facts (ladingingest.RecordPolicy); the book and the browser show it"},
-			&cli.StringFlag{Name: "store", Value: ladingschema.DatabaseName,
-				Usage: "the store name written into the policy record beside --name"},
+			&cli.StringFlag{Name: "store",
+				Usage: "the origin label written into the policy record beside --name; default is the database the store lives in"},
 			&cli.BoolFlag{Name: "remote", Usage: "the argument is an rclone remote (\"remote:path\"), not a local directory"},
-			&cli.StringSliceFlag{Name: "filter",
-				Usage: "with --remote: an rclone filter argument passed to the serving side (repeatable), e.g. --filter=--exclude --filter='*.tmp'"},
+			&cli.StringSliceFlag{Name: "rclone-arg",
+				Usage: "with --remote: an argument for `rclone serve sftp` (repeatable) — filters such as --rclone-arg=--exclude --rclone-arg='*.tmp', or --rclone-arg=--links"},
+			databaseFlag(),
 		},
 		Action: runSnapshot,
 	}
@@ -76,6 +76,7 @@ func runSnapshot(ctx context.Context, cmd *cli.Command) (err error) {
 	pol.Ttl = ladingingest.TtlClassE(cmd.Uint("ttl-days"))
 	pol.InlineMax = cmd.Uint64("inline-max")
 	pol.MetaOnly = cmd.Bool("meta-only")
+	pol.SkipRefHash = cmd.Bool("skip-ref-hash")
 	switch strings.ToLower(cmd.String("text-rule")) {
 	case "sniff":
 		pol.Text = ladingingest.TextRuleSniff
@@ -93,29 +94,24 @@ func runSnapshot(ctx context.Context, cmd *cli.Command) (err error) {
 		return eb.Build().Str("profile", cmd.String("profile")).Errorf("--profile must be corpus or fleet")
 	}
 
-	client := chclient.New(chclient.ConfigFromEnv(), nil)
-	err = client.Ping(ctx)
+	exec, err := connect(ctx)
 	if err != nil {
-		return eh.Errorf("ClickHouse not reachable: %w", err)
+		return
 	}
-	exec, err := storeexec.New(client, nil)
-	if err != nil {
-		return eh.Errorf("executor: %w", err)
-	}
+	layout := layoutOf(cmd)
 	if !cmd.Bool("no-provision") {
-		err = lading.Provision(ctx, exec, pol.Profile)
+		err = lading.ProvisionIn(ctx, exec, layout, pol.Profile)
 		if err != nil {
 			return eh.Errorf("provision: %w", err)
 		}
 	}
-	err = lading.Verify(ctx, exec)
+	err = lading.VerifyIn(ctx, exec, layout)
 	if err != nil {
 		return eh.Errorf("%w", err)
 	}
-	meta := ladingmeta.NewMetaStore(exec, nil, ladingmeta.MetaStoreConfig{})
-	defer meta.Close()
-	data := ladingdata.NewDataStore(exec, nil, ladingdata.DataStoreConfig{})
-	defer data.Close()
+	stores := lading.NewStores(exec, layout)
+	defer stores.Meta.Close()
+	defer stores.Data.Close()
 
 	arg := cmd.Args().First()
 	var src fs.FS
@@ -124,8 +120,8 @@ func runSnapshot(ctx context.Context, cmd *cli.Command) (err error) {
 			return eb.Build().Str("arg", arg).Errorf("--remote takes an rclone remote of the form remote:path; a bare path is a local directory, name it without --remote")
 		}
 		opts := []ladingremote.Option{}
-		if filters := cmd.StringSlice("filter"); len(filters) > 0 {
-			opts = append(opts, ladingremote.WithFilters(filters...))
+		if args := cmd.StringSlice("rclone-arg"); len(args) > 0 {
+			opts = append(opts, ladingremote.WithArgs(args...))
 		}
 		var rem *ladingremote.Remote
 		rem, err = ladingremote.Serve(ctx, arg, opts...)
@@ -152,16 +148,20 @@ func runSnapshot(ctx context.Context, cmd *cli.Command) (err error) {
 	}
 
 	if name := cmd.String("name"); name != "" {
-		policies := ladingpolicy.NewPolicyStore(exec, nil, ladingpolicy.PolicyStoreConfig{})
+		policies := ladingpolicy.NewPolicyStore(exec, nil, ladingpolicy.PolicyStoreConfig{Table: layout.PolicyTable()})
 		defer policies.Close()
-		err = ladingingest.RecordPolicy(ctx, policies, mount, pol, name, cmd.String("store"))
+		store := cmd.String("store")
+		if store == "" {
+			store = layout.DatabaseName()
+		}
+		err = ladingingest.RecordPolicy(ctx, policies, mount, pol, name, store)
 		if err != nil {
 			return eh.Errorf("record policy: %w", err)
 		}
 	}
 
 	started := time.Now()
-	res, err := ladingingest.Snapshot(ctx, src, mount, pol, lading.Stores{Meta: meta, Data: data})
+	res, err := ladingingest.Snapshot(ctx, src, mount, pol, stores)
 	if err != nil {
 		return eh.Errorf("snapshot: %w", err)
 	}
