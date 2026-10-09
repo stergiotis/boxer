@@ -453,12 +453,13 @@ func (inst *Service) testGrant(msg *app.Msg, req wireGrantRequest) (rep wireGran
 		inst.startTurnAt(t, k)
 	}
 	inst.grantEvent(trail.GrantEventApproved, "host", "a test grant", t, nil)
+	terms := termsOf(t)
 	inst.mu.Unlock()
 	for k := range t.entries {
 		inst.attach(k)
 	}
 	inst.log.Info().Str("task", t.id).Str("actor", string(t.actor)).Int("entries", len(t.entries)).Msg("agent: test grant issued")
-	rep.Ok, rep.Task, rep.Handle, rep.Phase = true, t.id, t.handle, reqStateApproved.String()
+	rep.Ok, rep.Task, rep.Handle, rep.Phase, rep.Terms = true, t.id, t.handle, reqStateApproved.String(), terms
 	return
 }
 

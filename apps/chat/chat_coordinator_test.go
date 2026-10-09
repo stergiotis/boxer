@@ -298,6 +298,7 @@ func TestRefusalsSayWhatToDoNextAndARepeatIsNotMade(t *testing.T) {
 	assert.Contains(t, replies["r1"], `next: {"tool":"request_access"`, "a grant with nothing to open says to name the app")
 	assert.Contains(t, replies["r2"], "same call that was just refused")
 	assert.Contains(t, replies["r3"], "access granted")
+	assert.Contains(t, replies["r3"], "the task may make ", "the answer states the grant's bounds")
 	var s1 callOutcome
 	require.NoError(t, json.Unmarshal([]byte(replies["s1"]), &s1))
 	assert.Equal(t, "refused", s1.Phase)

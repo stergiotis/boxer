@@ -62,13 +62,21 @@ func TestThePersonApprovesAGrant(t *testing.T) {
 	ctx := context.Background()
 	got := make(chan Grant, 1)
 	go func() {
-		g, err := r.cli.Request(ctx, GrantRequest{Plan: "tidy the doc", Entries: []GrantEntry{{Instance: 7, Mode: ModeAct}}})
+		g, err := r.cli.Request(ctx, GrantRequest{Plan: "tidy the doc", Entries: []GrantEntry{{Instance: 7, Mode: ModeAct}},
+			Destinations: []string{"clickhouse:localhost:8123"}})
 		assert.NoError(t, err)
 		got <- g
 	}()
 	r.person(true, nil)
 	g := <-got
 	require.NotEmpty(t, g.Handle)
+	// The answer carries the task's bounds, which the person may have
+	// narrowed: the caller plans by them rather than by its request.
+	require.NotNil(t, g.Terms)
+	assert.Positive(t, g.Terms.CallsBudget)
+	assert.Zero(t, g.Terms.CallsUsed)
+	assert.False(t, g.Terms.Deadline.IsZero())
+	assert.Equal(t, []string{"clickhouse:localhost:8123"}, g.Terms.Destinations)
 	assert.Equal(t, "completed", r.call(g, "q", "get_text", "{}").Phase)
 }
 

@@ -215,9 +215,36 @@ type GrantLaunch struct {
 
 // Grant is what a caller holds: the task id for the record and the handle
 // it presents. The handle is honoured only from the requesting instance.
+// Terms are the task's bounds when the grant was answered; nil when the
+// host did not report them.
 type Grant struct {
 	Task   string
 	Handle string
+	Terms  *GrantTerms
+}
+
+// GrantTerms are an approved task's bounds as the person left them, which
+// may be less than the request asked for.
+type GrantTerms struct {
+	// CallsBudget is how many calls the task may make; CallsUsed how many
+	// it has made.
+	CallsBudget int
+	CallsUsed   int
+	// Deadline is when the task ends; zero when it has none.
+	Deadline time.Time
+	// Destinations are what the task's calls may reach beyond its windows.
+	Destinations []string
+}
+
+func termsOfWire(w *wireGrantTerms) (t *GrantTerms) {
+	if w == nil {
+		return nil
+	}
+	t = &GrantTerms{CallsBudget: int(w.Calls), CallsUsed: int(w.CallsUsed), Destinations: w.Destinations}
+	if w.DeadlineMs > 0 {
+		t.Deadline = time.UnixMilli(w.DeadlineMs)
+	}
+	return
 }
 
 // Request asks for a grant and waits until the person decides or ctx ends.
@@ -230,7 +257,7 @@ func (inst *Client) Request(ctx context.Context, r GrantRequest) (g Grant, err e
 	g, err = inst.AwaitGrant(ctx, key)
 	if err == nil && g.Handle == "" && r.Handle != "" {
 		// A widening keeps the task's handle.
-		g = Grant{Handle: r.Handle}
+		g.Handle = r.Handle
 	}
 	return
 }
@@ -261,7 +288,7 @@ func (inst *Client) RequestKey(ctx context.Context, r GrantRequest) (key string,
 		err = &RefusedError{Reason: rep.Reason}
 		return
 	}
-	key, g = rep.Key, Grant{Task: rep.Task, Handle: rep.Handle}
+	key, g = rep.Key, Grant{Task: rep.Task, Handle: rep.Handle, Terms: termsOfWire(rep.Terms)}
 	return
 }
 
@@ -280,9 +307,11 @@ type Outcome struct {
 	Held bool
 	// Confined is the label of what the call returned.
 	Confined bool
-	// Task and Handle answer an approved request's key.
+	// Task and Handle answer an approved request's key, and Terms are the
+	// task's bounds.
 	Task   string
 	Handle string
+	Terms  *GrantTerms
 	// Remedy, on a refusal, is what would let the call through.
 	Remedy *Remedy
 }
@@ -335,7 +364,7 @@ type CallRequest struct {
 
 func outcomeOfWire(w wireOutcome) (out Outcome) {
 	out = Outcome{Phase: w.Phase, Reason: w.Reason, AsOf: w.AsOf, Revisions: w.Revisions, ResultRef: w.ResultRef, Job: w.Job,
-		Held: w.Held, Confined: w.Confined, Task: w.Task, Handle: w.Handle}
+		Held: w.Held, Confined: w.Confined, Task: w.Task, Handle: w.Handle, Terms: termsOfWire(w.Terms)}
 	if w.Remedy != nil {
 		out.Remedy = &Remedy{Destinations: w.Remedy.Destinations, ArgsSchema: w.Remedy.ArgsSchema}
 	}

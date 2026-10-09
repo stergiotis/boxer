@@ -798,7 +798,7 @@ func (inst *coordinator) requestAccess(ctx context.Context, asked agent.Asked, p
 	inst.mu.Unlock()
 	// Part of the request's answer, not a call the model made: no row of its own.
 	listing, _ := inst.listWindows(ctx, agent.Asked{})
-	content = "access granted.\n"
+	content = "access granted.\n" + grantTermsLine(g.Terms, time.Now())
 	if len(launches) > 0 {
 		names := make([]string, 0, len(launches))
 		for _, l := range launches {

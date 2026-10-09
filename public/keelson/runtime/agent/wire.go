@@ -168,6 +168,19 @@ type wireGrantReply struct {
 	Phase  string `json:"phase,omitempty"`
 	Task   string `json:"task,omitempty"`
 	Handle string `json:"handle,omitempty"`
+	// Terms are the approved task's bounds.
+	Terms *wireGrantTerms `json:"terms,omitempty"`
+}
+
+// wireGrantTerms are an approved task's bounds as the person left them:
+// its call budget and what is spent, its deadline, and the destinations it
+// may reach. The person may approve less than was asked, so the caller
+// reads them here rather than from its request.
+type wireGrantTerms struct {
+	Calls        int32    `json:"calls"`
+	CallsUsed    int32    `json:"calls_used,omitempty"`
+	DeadlineMs   int64    `json:"deadline_ms,omitempty"`
+	Destinations []string `json:"destinations,omitempty"`
 }
 
 // wireCall is the envelope on runtime.agent.call. Args is the model's JSON.
@@ -203,9 +216,11 @@ type wireOutcome struct {
 	Confined  bool              `json:"confined,omitempty"`
 	// Held marks an input_required call that waits on the person.
 	Held bool `json:"held,omitempty"`
-	// Task and Handle answer an approved request's key.
-	Task   string `json:"task,omitempty"`
-	Handle string `json:"handle,omitempty"`
+	// Task and Handle answer an approved request's key, and Terms are the
+	// task's bounds.
+	Task   string          `json:"task,omitempty"`
+	Handle string          `json:"handle,omitempty"`
+	Terms  *wireGrantTerms `json:"terms,omitempty"`
 	// Remedy, on a refusal, is what would let the call through.
 	Remedy *wireRemedy `json:"remedy,omitempty"`
 }
