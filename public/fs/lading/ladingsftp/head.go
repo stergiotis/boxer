@@ -17,6 +17,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/fs/lading"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingadapter"
+	"github.com/stergiotis/boxer/public/fs/lading/ladingschema"
 	"github.com/stergiotis/boxer/public/fs/lading/ladingsql"
 	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -41,19 +42,43 @@ import (
 // pinned, so nothing it has read can go stale. A head that served a hundred
 // snapshots would hold a hundred views; that is bounded by what a client
 // actually visits, and a fresh head starts empty.
+//
+// # The snapshot list is cached briefly, because `latest` does change
+//
+// Which snapshots a mount has is the one thing in this tree that moves: a
+// walk finishing adds one, expiry removes one, and `latest` follows. A head
+// under `rclone mount` lives as long as the mount does, so a list cached for
+// the head's lifetime would pin `latest` to whatever it was when the mount
+// came up. The list is therefore re-read once it is older than
+// [snapshotCacheTTL]; within that window a burst of requests for one mount
+// (a recursive listing, a copy) costs one index read rather than one per
+// request.
 type Head struct {
 	mu     sync.Mutex
 	exec   recordstore.ExecutorI
+	layout ladingschema.Layout
 	stores lading.Stores
 	vis    ladingsql.MountVisibilityI
 	ctx    context.Context
 	views  map[viewKey]*ladingadapter.FS
-	// snaps caches each mount's complete, unexpired snapshots. It is what
-	// makes a snapshot addressable by name only if it is one — a walk that
-	// died before its root row still has an addressable instant, and the
-	// caller who holds the failed Result knows it.
-	snaps map[identifier.TaggedId][]ladingadapter.Snapshot
+	// snaps caches each mount's complete, unexpired snapshots, for
+	// snapshotCacheTTL. It is what makes a snapshot addressable by name only
+	// if it is one — a walk that died before its root row still has an
+	// addressable instant, and the caller who holds the failed Result knows
+	// it.
+	snaps map[identifier.TaggedId]snapshotList
 }
+
+// snapshotList is one mount's cached snapshot list and when it was read.
+type snapshotList struct {
+	at    time.Time
+	snaps []ladingadapter.Snapshot
+}
+
+// snapshotCacheTTL bounds how stale `latest` and a mount's listing may be.
+// Short enough that a new snapshot shows up within a directory re-read;
+// long enough that one rclone operation over a mount reads the index once.
+const snapshotCacheTTL = 5 * time.Second
 
 type viewKey struct {
 	mount identifier.TaggedId
@@ -65,6 +90,10 @@ type Config struct {
 	// Exec reaches the server. Used for the snapshot index — which mounts
 	// exist, and which snapshots each has.
 	Exec recordstore.ExecutorI
+	// Layout is where the store's tables live; the zero value is the default
+	// database. It must agree with the layout Stores were opened under —
+	// lading.NewStores is the constructor that keeps the two together.
+	Layout ladingschema.Layout
 	// Stores is the pair a snapshot is read through.
 	Stores lading.Stores
 	// Visibility decides which mounts this head serves. Nil serves none:
@@ -91,9 +120,9 @@ func New(cfg Config) (inst *Head, err error) {
 		ctx = context.Background()
 	}
 	inst = &Head{
-		exec: cfg.Exec, stores: cfg.Stores, vis: cfg.Visibility, ctx: ctx,
+		exec: cfg.Exec, layout: cfg.Layout, stores: cfg.Stores, vis: cfg.Visibility, ctx: ctx,
 		views: map[viewKey]*ladingadapter.FS{},
-		snaps: map[identifier.TaggedId][]ladingadapter.Snapshot{},
+		snaps: map[identifier.TaggedId]snapshotList{},
 	}
 	return
 }
@@ -377,7 +406,7 @@ func (inst *Head) stat(p string, follow bool) (sftp.ListerAt, error) {
 // half way has rows but nothing to show, and a directory that listed it would
 // be a directory a client cannot enter.
 func (inst *Head) listMounts() (sftp.ListerAt, error) {
-	mounts, err := ladingadapter.Mounts(inst.ctx, inst.exec)
+	mounts, err := ladingadapter.MountsIn(inst.ctx, inst.exec, inst.layout)
 	if err != nil {
 		return nil, err
 	}
@@ -416,24 +445,25 @@ func (inst *Head) listSnapshots(mount identifier.TaggedId) (sftp.ListerAt, error
 }
 
 // snapshotsOf is a mount's complete, unexpired snapshots, newest first,
-// cached for the life of the head.
+// cached for [snapshotCacheTTL].
 //
-// Caching is safe for the same reason the views are: a snapshot is immutable
-// and a session is short. It can go stale in one direction — a snapshot taken
-// or expired during a session — which is the same staleness a client already
-// has from its own directory cache.
+// The views are cached for the head's lifetime because a snapshot cannot
+// change; this list can — a walk finishing adds to it, expiry removes from
+// it, and `latest` is whichever is newest — so it is the one cache here that
+// has to age out. Within the window the staleness is the kind a client
+// already has from its own directory cache.
 func (inst *Head) snapshotsOf(mount identifier.TaggedId) ([]ladingadapter.Snapshot, error) {
 	if err := inst.checkMount(mount); err != nil {
 		return nil, err
 	}
-	if s, hit := inst.snaps[mount]; hit {
-		return s, nil
+	if l, hit := inst.snaps[mount]; hit && time.Since(l.at) < snapshotCacheTTL {
+		return l.snaps, nil
 	}
-	s, err := ladingadapter.Snapshots(inst.ctx, inst.exec, mount)
+	s, err := ladingadapter.SnapshotsIn(inst.ctx, inst.exec, inst.layout, mount)
 	if err != nil {
 		return nil, err
 	}
-	inst.snaps[mount] = s
+	inst.snaps[mount] = snapshotList{at: time.Now(), snaps: s}
 	return s, nil
 }
 

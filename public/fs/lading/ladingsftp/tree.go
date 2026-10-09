@@ -5,10 +5,12 @@
 // the smallest one that could work: rclone's `sftp` backend runs a command in
 // place of ssh and speaks SFTP over its pipes, so
 //
-//	rclone mount ":sftp,ssh='boxer fs sftp-stdio':/<mount>/latest" /mnt/x
+//	rclone mount ":sftp,ssh='boxer fs sftp-stdio --mount <id>':/<mount>/latest" /mnt/x
 //
 // needs no socket, no port and no credential — possession of the pipe is the
-// authorisation. Everything else a caller might want of a file server is
+// authorisation for the store; which of its mounts the pipe may see is the
+// command's `--mount` (repeatable) or an explicit `--all-mounts`, and the
+// command refuses to start without one of them. Everything else a caller might want of a file server is
 // rclone's: VFS caching, checksums, `union`, and `serve s3/webdav/nfs/…` with
 // rclone's own users, keys and TLS in front.
 //
