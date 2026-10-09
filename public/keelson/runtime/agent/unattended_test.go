@@ -130,9 +130,54 @@ func TestUnattendedLeavesARequestWithoutACeilingToThePerson(t *testing.T) {
 	r.person(true, nil)
 }
 
-func TestUnattendedKeepsTheCeiling(t *testing.T) {
+// A suggest ceiling forces proposals on a window granted act; the mode
+// leaves them to the person, since accepting them would lift the ceiling.
+func TestUnattendedKeepsASuggestCeiling(t *testing.T) {
 	r := unattendedRig(t, nil)
-	_, err := r.cli.Request(context.Background(), GrantRequest{Entries: []GrantEntry{{Instance: 7, Mode: ModeAct}},
-		Ceiling: &Ceiling{Mode: ModeObserve}})
-	require.Error(t, err, "above the ceiling is refused before anyone decides")
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	g, err := r.cli.Request(ctx, GrantRequest{Entries: []GrantEntry{{Instance: 7, Mode: ModeSuggest}},
+		Ceiling: &Ceiling{Mode: ModeSuggest, Effect: Unlimited().Effect}})
+	require.NoError(t, err, "a request under the ceiling is approved")
+	r.call(g, "q", "get_text", "{}")
+	assert.Equal(t, "proposed", r.call(g, "w", "set_text", `{"text":"x"}`).Phase)
+	r.host.frame(7)
+	assert.Equal(t, "start", r.host.docs[7].text)
+}
+
+// Writes that each wait on a widening the host approves are paced as calls
+// the grant let through are.
+func TestUnattendedPacesAWriteAfterAWidening(t *testing.T) {
+	const pace = 150 * time.Millisecond
+	r := unattendedRig(t, func(cfg *Config) { cfg.Pace = pace })
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	paced := Unlimited()
+	paced.Unpaced = false
+	g, err := r.cli.Request(ctx, GrantRequest{Entries: []GrantEntry{{Instance: 7, Mode: ModeObserve}}, Ceiling: &paced})
+	require.NoError(t, err)
+	r.call(g, "q", "get_text", "{}")
+	start := time.Now()
+	r.call(g, "w1", "set_text", `{"text":"one"}`)
+	r.eventually(g, "w1", "accepted")
+	r.host.frame(7)
+	r.call(g, "q2", "get_text", "{}")
+	r.call(g, "w2", "set_text", `{"text":"two"}`)
+	r.eventually(g, "w2", "accepted")
+	assert.GreaterOrEqual(t, time.Since(start), pace, "the second change waits its turn")
+}
+
+// A widening the host approves can let a call reach a bound that is the
+// person's; the call then waits on the person rather than ending unasked.
+func TestUnattendedAsksForTheBudgetAWideningRevealed(t *testing.T) {
+	r := unattendedRig(t, func(cfg *Config) { cfg.CallsMin, cfg.CallsMax = 1, 1 })
+	g := r.unattendedGrant(ModeObserve, 1)
+	r.call(g, "q", "get_text", "{}")
+	r.call(g, "w", "set_text", `{"text":"x"}`)
+	require.Eventually(t, func() bool { return !r.nothingPending() }, 2*time.Second, 10*time.Millisecond,
+		"the spent budget reaches the person")
+	st, err := r.cli.Status(context.Background(), g.Handle, "w", 0)
+	require.NoError(t, err)
+	assert.Equal(t, "input_required", st.Phase)
+	assert.True(t, st.Held)
 }

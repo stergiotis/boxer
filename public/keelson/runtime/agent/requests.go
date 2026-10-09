@@ -231,11 +231,16 @@ func (inst *Service) requestGrant(msg *app.Msg) (rep wireGrantReply) {
 		// the coordinator's status poll finds the request approved.
 		route = inst.autoApprove(r)
 	}
+	rep.Ok, rep.Key, rep.Phase = true, r.key, r.state.String()
+	if r.state == reqStateApproved && r.task != nil {
+		// Decided in the person's place: the coordinator has its grant
+		// without polling for it.
+		rep.Task, rep.Handle = r.task.id, r.task.handle
+	}
 	inst.mu.Unlock()
 	if route != nil {
 		inst.routeHeld(route)
 	}
-	rep.Ok, rep.Key, rep.Phase = true, r.key, r.state.String()
 	return
 }
 
@@ -440,28 +445,36 @@ func (inst *Service) routeHeld(h *held) {
 			inst.mu.Unlock()
 			return
 		}
-		out, spec, e, _, _, consent := inst.check(t, h.req)
+		out, spec, e, need, mode, consent := inst.check(t, h.req)
 		h.rec.spec, h.rec.consent = spec, consent
-		auto := out.Phase == opwire.PhaseProposed && inst.autoAccepts(spec, consent)
-		if auto {
-			// Unattended (ADR-0298): accepted on arrival, as in call.
-			inst.grantEventAsked(trail.GrantEventConfirmed, "host", reasonUnattended+": "+proposalReason(h.rec), t, nil, h.rec.asked())
-			out = opwire.Outcome{}
-		}
+		// Unattended (ADR-0298): accepted on arrival, as in call.
+		out, _ = inst.acceptOnArrival(t, h.rec, out)
 		if out.Phase == opwire.PhaseProposed {
 			h.rec.req, h.rec.entry = h.req, e
 			h.rec.proposal = &proposal{confirm: spec.Effect == app.OperationEffectConsequential && consent == "",
 				expects: inst.expectsFor(t, h.req, spec)}
 		}
+		var again *held
+		if out.Phase == opwire.PhaseInputRequired && need != 0 && !t.test {
+			// The widening let the call further, and it needs another — a
+			// spent budget, say: the person is asked for that one too,
+			// rather than the call ending on a question nobody saw.
+			again = inst.holdForWidening(t, h.rec, h.req, need, mode)
+		}
 		if out.Phase != opwire.PhaseUnspecified {
 			h.rec.outcome = out
 			inst.mu.Unlock()
 			inst.record(t, h.rec, "dispatch", out)
+			if again != nil {
+				inst.routeHeld(again)
+			}
 			return
 		}
 		t.callsUsed++
 		inst.mu.Unlock()
-		if auto {
+		if spec.Effect != app.OperationEffectNone {
+			// A change the person can see, paced as in call: an approval
+			// in the person's place takes no time of its own.
 			inst.pace(t)
 		}
 		inst.route(t, h.rec, h.req, spec, e)

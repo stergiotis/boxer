@@ -149,8 +149,10 @@ func (in Input) render(ids *c.WidgetIdStack, res *Result) {
 		monoSpacer()
 		monoLabel("unattended:off")
 	case UnattendedOn:
-		// Never a SelectableLabel: the colour must survive the clickable
-		// row, and the words carry it without colour (ADR-0031 §SD5).
+		// Never a SelectableLabel, so not clickable: it takes plain text
+		// only (see renderStatusSegment), and the warning keeps its tone in
+		// a clickable row. The words carry the state without the tone
+		// (ADR-0031 §SD5).
 		monoSpacer()
 		col := color.Hex(styletokens.WarningDefault.AsHex())
 		c.LabelAtoms(c.Atoms().

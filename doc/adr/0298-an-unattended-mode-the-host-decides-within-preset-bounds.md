@@ -28,8 +28,8 @@ the call budget range (`BOXER_AGENT_CALLS_MIN`/`_MAX`), the deadline
 grants (`BOXER_AGENT_TEST_GRANTS`) already let the host stand in for the
 person, on the headless host only and without suggest mode.
 
-This is a first step towards long-running tasks; the owner asked for a mode
-that applies those bounds instead of asking.
+A mode that applies those bounds instead of asking is a first step towards
+long-running tasks.
 
 ## Design space (QOC)
 
@@ -40,12 +40,15 @@ that applies those bounds instead of asking.
 - *O2: a build tag alone.* A tagged binary is always unattended; going back
   takes another build.
 - *O3: a build tag that makes it possible, a variable that turns it on.*
-  **Chosen** by the owner.
+  **Chosen:** only a deliberate build can carry the mode, and that build
+  still runs attended unless a run asks otherwise.
 
 **Q2 — Which of the person's decisions does the host take?**
 
-- Grant requests and widenings. **Chosen.**
-- Suggest-mode proposals. **Chosen.**
+- Grant requests and widenings. **Chosen:** each is bounded by the ceiling
+  before anyone decides, so the person's answer adds no bound the host lacks.
+- Suggest-mode proposals. **Chosen**, where the grant made them: under a
+  ceiling that allows act, suggest is the grant's choice, not a bound.
 - More time past the deadline. *Not chosen:* the deadline is a bound the
   mode runs inside.
 - Confirming a consequential command (publishing, exporting). *Not chosen:*
@@ -55,11 +58,12 @@ that applies those bounds instead of asking.
 
 - *O1: headless only*, as test grants. Long-running work is often watched
   on the desktop.
-- *O2: both*, with the mode shown in the status bar. **Chosen** by the
-  owner.
+- *O2: both*, with the mode shown in the status bar. **Chosen:** the build
+  tag already gates the mode, and the bar says it is on.
 
 **Q4 — Name.** "YOLO" and "guardless" say the guards are gone; they are
-not, only the person's answers are. **"Unattended"**, chosen by the owner.
+not, only the person's answers are. **"Unattended"** names what changes:
+nobody is there to answer.
 
 ## Decision
 
@@ -84,8 +88,11 @@ With the mode on, the dispatcher decides in the person's place:
 - **A grant request** from a registered coordinator, and a **widening** —
   asked for, or made by a call outside the grant — is approved as asked.
 - **A suggest-mode proposal** is accepted on arrival and routed as any
-  call, paced as one. Under the mode, suggest therefore lands as act; a
-  person who wants the model only to read sets the ceiling to observe.
+  call, paced as one — when the ceiling allows act, so that the proposal is
+  the grant's and not the ceiling's. Under such a ceiling suggest lands as
+  act; a suggest ceiling keeps its proposals for the person.
+- **A call a widening let further**, which then needs another widening, is
+  held for that one too, decided by the same rules.
 
 It does so only for a request **under a ceiling**: a coordinator that sends
 none leaves the host nothing to bound what it approves, so its requests
@@ -135,7 +142,8 @@ words carry the state; the tone is not the only channel (ADR-0031 §SD5).
 
 - The ceiling a coordinator relays becomes the only bound on what a task
   holds; the coordinator is trusted to relay it, as in ADR-0280 §SD2.
-- Suggest mode loses its meaning under the mode.
+- Suggest mode, granted under a ceiling that allows act, loses its meaning
+  under the mode.
 - A task cannot outlive one budget or one deadline without the person.
 - The mode's tests run only with the tag; the default lane checks that the
   mode stays off without it.

@@ -520,13 +520,9 @@ func (inst *Service) call(msg *app.Msg) (rep wireCallReply) {
 	if out.Phase == opwire.PhaseInputRequired && need != 0 && !t.test {
 		route = inst.holdForWidening(t, rec, req, need, mode)
 	}
-	if out.Phase == opwire.PhaseProposed && inst.autoAccepts(spec, rec.consent) {
-		// Unattended (ADR-0298): a suggest-mode proposal is accepted on
-		// arrival and routed like any call, paced as one.
-		inst.grantEventAsked(trail.GrantEventConfirmed, "host", reasonUnattended+": "+spec.Name+" in window "+
-			strconv.FormatUint(req.Instance, 10)+", call "+req.Key, t, nil, rec.asked())
-		out = opwire.Outcome{}
-	}
+	// Unattended (ADR-0298): a proposal the grant made may be accepted on
+	// arrival; it is then routed below like any call, and paced as one.
+	out, _ = inst.acceptOnArrival(t, rec, out)
 	if out.Phase == opwire.PhaseProposed {
 		if _, aerr := encodeArgs(spec, req.Args); aerr != nil {
 			out = schemaRefusal(spec, aerr)

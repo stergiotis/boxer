@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
+	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
 )
 
 // The unattended mode (ADR-0298): the host decides in the person's place
@@ -44,10 +46,28 @@ func (inst *Service) autoDecides(r *request) (yes bool) {
 	return true
 }
 
-// autoAccepts reports whether a proposal is accepted on arrival: one that
-// suggest mode made, not a consequential command waiting for confirmation.
-func (inst *Service) autoAccepts(spec app.OperationSpec, consent string) (yes bool) {
-	return inst.Unattended() && !(spec.Effect == app.OperationEffectConsequential && consent == "")
+// autoAccepts reports whether a proposal is accepted on arrival: one the
+// window's grant made by sharing it in suggest mode, under a ceiling that
+// allows act. A proposal the ceiling forced — a suggest ceiling, or none to
+// bound the host — and a consequential command waiting for confirmation
+// stay the person's. The caller holds mu.
+func (inst *Service) autoAccepts(t *task, spec app.OperationSpec, consent string) (yes bool) {
+	if !inst.Unattended() || t.ceiling == nil || t.ceiling.normal().Mode < ModeAct {
+		return false
+	}
+	return !(spec.Effect == app.OperationEffectConsequential && consent == "")
+}
+
+// acceptOnArrival accepts a proposal in the person's place when
+// autoAccepts allows it and records the confirmation; accepted is then the
+// zero outcome, for the caller to route rec as any call and pace it. The
+// caller holds mu.
+func (inst *Service) acceptOnArrival(t *task, rec *callRec, out opwire.Outcome) (next opwire.Outcome, accepted bool) {
+	if out.Phase != opwire.PhaseProposed || !inst.autoAccepts(t, rec.spec, rec.consent) {
+		return out, false
+	}
+	inst.grantEventAsked(trail.GrantEventConfirmed, "host", reasonUnattended+": "+proposalReason(rec), t, nil, rec.asked())
+	return opwire.Outcome{}, true
 }
 
 // autoApprove approves r in the person's place. The caller holds mu; a held
