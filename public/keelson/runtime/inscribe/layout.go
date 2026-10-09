@@ -16,6 +16,7 @@ const (
 	outlineGap float32 = 3
 	badgeR     float32 = 9
 	tagRowGap  float32 = 2
+	tabPad     float32 = 3
 )
 
 // ShapeKindE is what a Shape draws.
@@ -28,6 +29,9 @@ const (
 	ShapeLeader
 	ShapeBadge
 	ShapeNote
+	// ShapeTab is a mark's attribution alone, a small tab on the corner of
+	// its outline: a mark without text needs no note.
+	ShapeTab
 )
 
 // Shape is one drawing instruction of the overlay, in viewport points.
@@ -52,6 +56,9 @@ type Resolved struct {
 	Item
 	Rects []Rect
 	Vis   []VisibilityE
+	// Windows are the outer rects of the targets' windows; zero for a
+	// viewport anchor.
+	Windows []Rect
 }
 
 // MeasureFunc gives a single line's size in the given font size.
@@ -73,11 +80,14 @@ func Tag(task string) string {
 }
 
 // Layout turns the resolved items into shapes, back to front: dimming,
-// outlines and arrows, leaders and badges, then notes. Notes are placed in
-// one pass over every task's items (ADR-0297 §SD6, §SD7): each tries the
-// sides of its target in turn and keeps the first place inside bounds and
-// clear of the notes already placed.
-func Layout(items []Resolved, bounds Rect, measure MeasureFunc) (shapes []Shape) {
+// outlines and arrows, leaders and badges, then notes and tabs. Notes are
+// placed in one pass over every task's items (ADR-0297 §SD6, §SD7), each in
+// the first place inside bounds and clear of the notes already placed and
+// of every mark's target: first beside its target's window, on desktop no
+// window covers, so the note hides nothing; then beside the target itself.
+// A mark without text gets a tab on its outline's corner instead of a note.
+// windows are the outer rects of every shown window.
+func Layout(items []Resolved, bounds Rect, windows []Rect, measure MeasureFunc) (shapes []Shape) {
 	var holes []Rect
 	var marks, leaders, notes []Shape
 	var placed []Rect
@@ -89,16 +99,29 @@ func Layout(items []Resolved, bounds Rect, measure MeasureFunc) (shapes []Shape)
 			targets = append(targets, r.Inflate(outlineGap))
 		}
 	}
-	placeNote := func(it Resolved, target Rect, text string) {
+	placeNote := func(it Resolved, target Rect, win Rect, text string) {
 		tag := Tag(it.Task)
-		tw, th := measure(text, noteFont)
 		gw, gh := measure(tag, tagFont)
+		if text == "" {
+			// A tab hugging the outline's top-left corner, above it when
+			// there is room.
+			w, h := gw+2*tabPad, gh+2*tabPad
+			box := Rect{X: target.X, Y: target.Y - h, W: w, H: h}
+			if box.Y < bounds.Y {
+				box.Y = target.Y
+			}
+			placed = append(placed, box)
+			notes = append(notes, Shape{Kind: ShapeTab, Hue: it.Hue, Rect: box, Tag: tag})
+			return
+		}
+		tw, th := measure(text, noteFont)
 		w := max(tw, gw) + 2*notePad
 		h := gh + tagRowGap + th + 2*notePad
-		if text == "" {
-			w, h = gw+2*notePad, gh+2*notePad
+		in := append(slices.Clone(placed), obstacles(targets, target)...)
+		box, ok := placeOutside(target, win, w, h, bounds, in, windows)
+		if !ok {
+			box = placeBox(target, w, h, bounds, in)
 		}
-		box := placeBox(target, w, h, bounds, append(slices.Clone(placed), obstacles(targets, target)...))
 		placed = append(placed, box)
 		notes = append(notes, Shape{Kind: ShapeNote, Hue: it.Hue, Rect: box, Text: text, Tag: tag})
 		lx0, ly0 := nearestOnRect(box, target)
@@ -115,34 +138,43 @@ func Layout(items []Resolved, bounds Rect, measure MeasureFunc) (shapes []Shape)
 		outline := func(k int) {
 			marks = append(marks, Shape{Kind: ShapeOutline, Hue: it.Hue, Rect: it.Rects[k].Inflate(outlineGap), Dashed: dashed(k)})
 		}
+		win := func(k int) Rect {
+			if k < len(it.Windows) {
+				return it.Windows[k]
+			}
+			return Rect{}
+		}
 		switch it.Op {
 		case OpHighlight:
 			for k := range it.Rects {
 				outline(k)
 			}
-			placeNote(it, it.Rects[0].Inflate(outlineGap), it.Text)
+			placeNote(it, it.Rects[0].Inflate(outlineGap), win(0), it.Text)
 		case OpCallout:
 			outline(0)
-			placeNote(it, it.Rects[0].Inflate(outlineGap), it.Text)
+			placeNote(it, it.Rects[0].Inflate(outlineGap), win(0), it.Text)
 		case OpStep:
 			outline(0)
 			r := it.Rects[0].Inflate(outlineGap)
 			marks = append(marks, Shape{Kind: ShapeBadge, Hue: it.Hue, X0: r.X, Y0: r.Y, Text: strconv.Itoa(it.Step)})
-			placeNote(it, r, strconv.Itoa(it.Step)+". "+it.Text)
+			placeNote(it, r, win(0), strconv.Itoa(it.Step)+". "+it.Text)
 		case OpArrow:
 			a, b := it.Rects[0], it.Rects[1]
 			x0, y0 := edgeToward(a, b)
 			x1, y1 := edgeToward(b, a)
 			marks = append(marks, Shape{Kind: ShapeArrow, Hue: it.Hue, X0: x0, Y0: y0, X1: x1, Y1: y1,
 				Dashed: dashed(0) || dashed(1)})
-			mid := Rect{X: (x0+x1)/2 - 1, Y: (y0+y1)/2 - 1, W: 2, H: 2}
-			placeNote(it, mid, it.Text)
+			if it.Text == "" {
+				placeNote(it, Rect{X: x0, Y: y0, W: 1, H: 1}, Rect{}, "")
+			} else {
+				placeNote(it, Rect{X: (x0+x1)/2 - 1, Y: (y0+y1)/2 - 1, W: 2, H: 2}, win(1), it.Text)
+			}
 		case OpSpotlight:
 			for k := range it.Rects {
 				outline(k)
 				holes = append(holes, it.Rects[k].Inflate(outlineGap+4))
 			}
-			placeNote(it, it.Rects[0].Inflate(outlineGap), it.Text)
+			placeNote(it, it.Rects[0].Inflate(outlineGap), win(0), it.Text)
 		}
 		n := 0
 		for _, set := range [][]Shape{marks[mark0:], leaders[leader0:], notes[note0:]} {
@@ -174,6 +206,39 @@ func obstacles(targets []Rect, target Rect) (out []Rect) {
 		}
 	}
 	return
+}
+
+// placeOutside puts a w × h box beside the window holding target, level
+// with the target — right, left, below, above — where it covers no window,
+// stays inside bounds and keeps clear of avoid. ok is false when no side
+// has room, or target has no window.
+func placeOutside(target Rect, win Rect, w, h float32, bounds Rect, avoid []Rect, windows []Rect) (box Rect, ok bool) {
+	if win.W <= 0 || win.H <= 0 {
+		return
+	}
+	cx, cy := target.Center()
+	cands := []Rect{
+		{X: win.MaxX() + noteGap, Y: cy - h/2, W: w, H: h},
+		{X: win.X - noteGap - w, Y: cy - h/2, W: w, H: h},
+		{X: cx - w/2, Y: win.MaxY() + noteGap, W: w, H: h},
+		{X: cx - w/2, Y: win.Y - noteGap - h, W: w, H: h},
+	}
+	for _, c := range cands {
+		if !c.Inside(bounds) || hits(c, avoid, 2) || hits(c, windows, 0) {
+			continue
+		}
+		return c, true
+	}
+	return
+}
+
+func hits(c Rect, rs []Rect, pad float32) bool {
+	for _, r := range rs {
+		if c.Intersects(r.Inflate(pad)) {
+			return true
+		}
+	}
+	return false
 }
 
 // placeBox puts a w × h box beside target: right, left, below, above, in

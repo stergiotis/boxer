@@ -45,10 +45,14 @@ func (inst *Overlay) Frame(r ResolverI, bounds Rect, hidden bool) {
 	items := inst.scene.Snapshot()
 	resolved := make([]Resolved, 0, len(items))
 	for _, it := range items {
-		rv := Resolved{Item: it, Rects: make([]Rect, len(it.Targets)), Vis: make([]VisibilityE, len(it.Targets))}
+		rv := Resolved{Item: it, Rects: make([]Rect, len(it.Targets)), Vis: make([]VisibilityE, len(it.Targets)),
+			Windows: make([]Rect, len(it.Targets))}
 		drawable := true
 		for k, a := range it.Targets {
 			rv.Rects[k], rv.Vis[k] = r.Resolve(a)
+			if a.Window != 0 {
+				rv.Windows[k], _ = r.Window(a.Window)
+			}
 			switch rv.Vis[k] {
 			case VisibilityGone:
 				// The window closed: the authority the mark was drawn
@@ -66,7 +70,7 @@ func (inst *Overlay) Frame(r ResolverI, bounds Rect, hidden bool) {
 	if hidden || len(resolved) == 0 {
 		return
 	}
-	shapes := Layout(resolved, bounds, inst.measure)
+	shapes := Layout(resolved, bounds, r.Windows(), inst.measure)
 	inst.draw(shapes)
 }
 
@@ -139,6 +143,10 @@ func (inst *Overlay) draw(shapes []Shape) {
 			c.PaintCircleFilled(s.X0, s.Y0, badgeR+underlayExtra, underlay).Send()
 			c.PaintCircleFilled(s.X0, s.Y0, badgeR, hueColor(s.Hue)).Send()
 			c.PaintText(s.X0, s.Y0, 1, 1, s.Text, badgeFont, plate).Send()
+		case ShapeTab:
+			rc := s.Rect
+			c.PaintRectFilled(rc.X, rc.Y, rc.MaxX(), rc.MaxY(), 2, plate).Send()
+			c.PaintText(rc.X+tabPad, rc.Y+tabPad, 0, 0, s.Tag, tagFont, hueColor(s.Hue)).Send()
 		case ShapeNote:
 			rc := s.Rect
 			col := hueColor(s.Hue)

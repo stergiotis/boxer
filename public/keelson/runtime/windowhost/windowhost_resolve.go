@@ -68,3 +68,23 @@ type geomResolver []GeomEntry
 func (inst geomResolver) Resolve(a inscribe.Anchor) (inscribe.Rect, inscribe.VisibilityE) {
 	return Resolve(a, inst)
 }
+
+func (inst geomResolver) Window(key uint64) (r inscribe.Rect, ok bool) {
+	for _, g := range inst {
+		if uint64(g.Key) == key && g.Geom.Shown {
+			gr := g.Geom.Rect
+			return inscribe.Rect{X: gr.MinX, Y: gr.MinY, W: gr.W(), H: gr.H()}, true
+		}
+	}
+	return
+}
+
+func (inst geomResolver) Windows() (rs []inscribe.Rect) {
+	for _, g := range inst {
+		if g.Geom.Shown {
+			gr := g.Geom.Rect
+			rs = append(rs, inscribe.Rect{X: gr.MinX, Y: gr.MinY, W: gr.W(), H: gr.H()})
+		}
+	}
+	return
+}

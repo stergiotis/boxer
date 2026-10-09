@@ -83,7 +83,7 @@ A model never computes the rect of the second kind; SD4 says where it comes from
 
 ### SD4 — Widgets through window trees; captures stay clean
 
-- A model points at a widget by a part of a window tree it read: `{tree: "t3", node: "#12.3"}`. The chat holds the trees it read and turns such a target into `{window, rect}`: the part's rect less the origin of its window's rect when the tree was taken (ADR-0301, `Tree.WindowOf`). The arithmetic is code. From then on the mark follows the window.
+- A model points at a widget by a part of a window tree it read: `{tree: "t3", node: "#12.3"}`, or at a whole table row by its row line's reference (`#60r`), which the chat resolves to the union of the row's cells. The chat holds the trees it read and turns such a target into `{window, rect}`: the part's rect less the origin of its window's rect when the tree was taken (ADR-0301, `Tree.WindowOf`). The arithmetic is code. From then on the mark follows the window.
 - A widget that moves inside its window — scrolled, re-laid out — is not followed; the mark keeps the place it had when the tree was taken.
 - inscribe draws after every window, outside every window's span, so the capture replay (ADR-0281 SD4) never contains a mark. An agent's own marks never reach what it observes. Development captures of the whole viewport do show them.
 
@@ -108,8 +108,8 @@ A model never computes the rect of the second kind; SD4 says where it comes from
 - **Strokes are sketched.** Each line is a cubic Bézier nudged off its straight path and drawn twice, the way a pen goes over a line; an outline's sides run a little past its corners, and an arrow bows slightly and ends in an open head. The nudges come from a seed of the mark's identity, not its position, so a mark keeps its look from frame to frame and as its window moves. A hand-drawn line reads as something put on top of the apps, which is the point of the palette too.
 - Each stroke has a faint dark underlay, and each note sits on a dark plate, so the same colours keep their edge on the light theme without a heavy border on the dark one.
 - **Behind** draws the outline dashed. **Collapsed** places the mark on the window's title bar. **Gone** retires the mark.
-- inscribe places notes and labels: one pass over every mark tries the sides of each target in turn and keeps the first place inside the viewport that is clear of the notes already placed and of every mark's target, except a target holding the note's own — a whole window around a button in it. A note's size comes from egui's measure of its text a frame later; in the first frame it is estimated from the text's length, so a new note can shift by a few points once.
-- Every note and label carries its task's attribution tag, so the person can tell who drew it.
+- inscribe places notes: one pass over every mark keeps, for each note, the first place inside the viewport that is clear of the notes already placed and of every mark's target, except a target holding the note's own — a whole window around a button in it. It tries beside the target's window first, on desktop no window covers, so the note hides nothing; then beside the target. A mark without text gets no note: its attribution is a small tab on its outline's corner. A note's size comes from egui's measure of its text a frame later; in the first frame it is estimated from the text's length, so a new note can shift by a few points once.
+- Every note and tab carries its task's attribution tag, so the person can tell who drew it.
 
 ### SD7 — Merging marks from several agents
 

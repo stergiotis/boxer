@@ -87,7 +87,7 @@ func TestNotesOfTwoTasksAreLaidOutClearOfEachOther(t *testing.T) {
 		{Item: Item{Mark: Mark{Task: "b", Id: "x", Op: OpCallout, Text: "second"}, Hue: 1}, Rects: []Rect{target}, Vis: []VisibilityE{VisibilityShown}},
 	}
 	var notes []Rect
-	for _, s := range Layout(items, bounds, EstimateMeasure) {
+	for _, s := range Layout(items, bounds, nil, EstimateMeasure) {
 		if s.Kind == ShapeNote {
 			notes = append(notes, s.Rect)
 			assert.True(t, s.Rect.Inside(bounds))
@@ -106,7 +106,7 @@ func TestABehindTargetIsDashedAndSpotlightsDimOnceOutsideEveryTarget(t *testing.
 	}
 	var dimArea float32
 	dashed := 0
-	for _, s := range Layout(items, bounds, EstimateMeasure) {
+	for _, s := range Layout(items, bounds, nil, EstimateMeasure) {
 		switch s.Kind {
 		case ShapeDim:
 			dimArea += s.Rect.W * s.Rect.H
@@ -186,10 +186,36 @@ func TestANoteKeepsClearOfOtherMarksTargets(t *testing.T) {
 		{Item: Item{Mark: Mark{Task: "a", Id: "f", Op: OpHighlight}}, Rects: []Rect{field}, Vis: []VisibilityE{VisibilityShown}},
 		{Item: Item{Mark: Mark{Task: "a", Id: "b", Op: OpCallout, Text: "press here"}}, Rects: []Rect{button}, Vis: []VisibilityE{VisibilityShown}},
 	}
-	for _, s := range Layout(items, bounds, EstimateMeasure) {
+	for _, s := range Layout(items, bounds, nil, EstimateMeasure) {
 		if s.Kind == ShapeNote && s.Text == "press here" {
 			assert.False(t, s.Rect.Intersects(field.Inflate(outlineGap)), "the note is not on the field another mark points at")
 			assert.False(t, s.Rect.Intersects(button), "nor on its own target")
 		}
 	}
+}
+
+func TestAMarkWithoutTextGetsATabOnItsCornerAndANoteGoesBesideItsWindow(t *testing.T) {
+	bounds := Rect{X: 0, Y: 0, W: 1600, H: 900}
+	window := Rect{X: 100, Y: 100, W: 600, H: 500}
+	cell := Rect{X: 200, Y: 300, W: 300, H: 20}
+	items := []Resolved{
+		{Item: Item{Mark: Mark{Task: "a", Id: "h", Op: OpHighlight}}, Rects: []Rect{cell}, Vis: []VisibilityE{VisibilityShown}, Windows: []Rect{window}},
+		{Item: Item{Mark: Mark{Task: "a", Id: "c", Op: OpCallout, Text: "the selected row"}}, Rects: []Rect{cell}, Vis: []VisibilityE{VisibilityShown}, Windows: []Rect{window}},
+	}
+	var tab, note *Shape
+	shapes := Layout(items, bounds, []Rect{window}, EstimateMeasure)
+	for i := range shapes {
+		switch shapes[i].Kind {
+		case ShapeTab:
+			tab = &shapes[i]
+		case ShapeNote:
+			note = &shapes[i]
+		}
+	}
+	require.NotNil(t, tab)
+	assert.InDelta(t, cell.X-outlineGap, tab.Rect.X, 0.01, "the tab sits on the outline's corner")
+	assert.InDelta(t, cell.Y-outlineGap, tab.Rect.MaxY(), 0.01)
+	require.NotNil(t, note)
+	assert.False(t, note.Rect.Intersects(window), "with desktop beside the window, the note covers none of it")
+	assert.GreaterOrEqual(t, note.Rect.X, window.MaxX())
 }

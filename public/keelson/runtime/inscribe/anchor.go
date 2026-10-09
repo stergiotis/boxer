@@ -67,4 +67,8 @@ const (
 // the last completed frame. The window host implements it.
 type ResolverI interface {
 	Resolve(a Anchor) (r Rect, v VisibilityE)
+	// Window is a shown window's outer rect.
+	Window(key uint64) (r Rect, ok bool)
+	// Windows are the outer rects of every shown window.
+	Windows() (rs []Rect)
 }
