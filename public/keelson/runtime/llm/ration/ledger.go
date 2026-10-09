@@ -3,6 +3,7 @@ package ration
 import (
 	"cmp"
 	"context"
+	"errors"
 	"slices"
 	"strconv"
 	"sync"
@@ -33,7 +34,13 @@ type Ledger struct {
 	// refuseAll, when set, refuses every call with it as the reason: the
 	// ledger could not be rebuilt and the deployment chose to refuse.
 	refuseAll string
+	// prunedAt is when idle accounts were last dropped.
+	prunedAt time.Time
 }
+
+// PruneEvery is how often Settle drops the accounts nothing can count any
+// more: idle past HourHorizon, with nothing reserved, in flight or waiting.
+const PruneEvery = 10 * time.Minute
 
 type account struct {
 	series   map[QuantityE]*series
@@ -180,7 +187,7 @@ func (inst *Ledger) Admit(ctx context.Context, r Request) (d Decision, t *Ticket
 	if ctx.Err() != nil {
 		inst.countRefused(r.Chain)
 		inst.mu.Unlock()
-		return refusedWaiting(d.Rule, inst.rules[d.Rule]), nil
+		return refusedEnded(ctx, d.Rule, inst.rules[d.Rule]), nil
 	}
 	w := &waiter{req: r, since: now, ch: make(chan grant, 1)}
 	inst.waiters = append(inst.waiters, w)
@@ -199,22 +206,34 @@ func (inst *Ledger) Admit(ctx context.Context, r Request) (d Decision, t *Ticket
 	if i := slices.Index(inst.waiters, w); i >= 0 {
 		inst.waiters = slices.Delete(inst.waiters, i, i+1)
 		inst.countRefused(r.Chain)
-		return refusedWaiting(blockedBy, inst.rules[blockedBy]), nil
+		return refusedEnded(ctx, blockedBy, inst.rules[blockedBy]), nil
 	}
-	// Granted as ctx ended: the slot goes back.
+	// pump decided the waiter as ctx ended. A refusal stands as pump made
+	// it, and is already counted; a grant's slot goes back.
 	g := <-w.ch
-	if g.t != nil {
-		inst.settle(g.t, nil, inst.now())
-		inst.pump(inst.now())
+	if g.t == nil {
+		return g.d, nil
 	}
+	inst.settle(g.t, nil, inst.now())
+	inst.pump(inst.now())
 	inst.countRefused(r.Chain)
-	return refusedWaiting(blockedBy, inst.rules[blockedBy]), nil
+	return refusedEnded(ctx, blockedBy, inst.rules[blockedBy]), nil
 }
 
-func refusedWaiting(id string, r Rule) (d Decision) {
-	d = Decision{Outcome: OutcomeRefused, Rule: id, Refusal: RefusalWait,
-		Reason: "waited for a slot until the call's deadline under the " + r.Describe()}
-	return
+// refusedEnded is the refusal of a call whose ctx ended while a
+// concurrency rule held it: at its deadline the caller may try again
+// later; cancelled — by a moderator, or by the caller — it should not, and
+// the reason carries the cancel's cause.
+func refusedEnded(ctx context.Context, id string, r Rule) (d Decision) {
+	if errors.Is(context.Cause(ctx), context.DeadlineExceeded) {
+		return Decision{Outcome: OutcomeRefused, Rule: id, Refusal: RefusalWait,
+			Reason: "waited for a slot until the call's deadline under the " + r.Describe()}
+	}
+	reason := "cancelled while waiting for a slot under the " + r.Describe()
+	if cause := context.Cause(ctx); cause != nil && !errors.Is(cause, context.Canceled) {
+		reason = cause.Error() + " (" + reason + ")"
+	}
+	return Decision{Outcome: OutcomeRefused, Rule: id, Refusal: RefusalStop, Reason: reason}
 }
 
 // Settle charges an admitted call with what it used and releases its
@@ -230,7 +249,39 @@ func (inst *Ledger) Settle(t *Ticket, actual Usage) (events []Event) {
 	now := inst.now()
 	events = inst.settle(t, actual, now)
 	inst.pump(now)
+	if now.Sub(inst.prunedAt) >= PruneEvery {
+		inst.prune(now)
+	}
 	return
+}
+
+// prune drops the accounts no window can reach and no call holds. A rule
+// naming such an account by key still lists it, at zero. The caller holds
+// the mutex.
+func (inst *Ledger) prune(now time.Time) {
+	inst.prunedAt = now
+	waiting := map[Account]bool{}
+	for _, w := range inst.waiters {
+		for _, a := range w.req.Chain.Accounts() {
+			waiting[a] = true
+		}
+	}
+	horizon := now.Add(-HourHorizon - time.Hour)
+	for a, acc := range inst.accounts {
+		if acc.inflight != 0 || waiting[a] || acc.lastAt.After(horizon) {
+			continue
+		}
+		held := false
+		for _, v := range acc.reserved {
+			if v != 0 {
+				held = true
+				break
+			}
+		}
+		if !held {
+			delete(inst.accounts, a)
+		}
+	}
 }
 
 func (inst *Ledger) settle(t *Ticket, actual Usage, now time.Time) (events []Event) {
@@ -384,15 +435,20 @@ func (inst *Ledger) check(r Request, now time.Time) (d Decision, u Usage, blocke
 		if rule.Kind != RuleKindBudget && rule.Kind != RuleKindRate {
 			continue
 		}
-		n, counted := u[rule.Quantity]
-		if !counted || n == 0 {
-			continue
-		}
+		// A quantity known only after the call — wall time, the token parts,
+		// any the service charges but cannot predict — has nothing to
+		// reserve: the call is refused once the window is spent, and the
+		// call that spends it overshoots by its own use.
+		n := u[rule.Quantity]
 		for _, a := range accts {
 			if !rule.Select.matches(a) {
 				continue
 			}
-			if over := inst.used(rule, a, now) + n - rule.limitAt(now); over > 0 {
+			over := inst.used(rule, a, now) + n - rule.limitAt(now)
+			if n == 0 {
+				over++
+			}
+			if over > 0 {
 				d = refusal(rule, "is spent on "+a.String())
 				if rule.Kind == RuleKindRate || !rule.Aligned {
 					d.RetryAfter = inst.retryAfter(rule, []Account{a}, now, over)

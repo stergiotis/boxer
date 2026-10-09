@@ -187,12 +187,48 @@ func TestModeratorBounds(t *testing.T) {
 	require.ErrorIs(t, err, ErrModeratorRefused, "loosening is the person's")
 	require.ErrorIs(t, h.mod.Remove(ctx, "own"), ErrModeratorRefused)
 
+	// A raise on its own calls is the person's, renewed or extended alike.
+	raised := ration.Rule{Id: "raised", Select: ration.Selector{Kind: ration.AccountKindApp, Key: string(moderatorId)},
+		Kind: ration.RuleKindBudget, Quantity: ration.QuantityCalls, Limit: 5, Window: time.Hour}
+	require.NoError(t, h.mod.Set(ctx, raised))
+	raised.Raise, raised.RaiseUntil = 5, time.Now().Add(time.Hour)
+	require.ErrorIs(t, h.mod.Set(ctx, raised), ErrModeratorRefused, "adding a raise")
+	_, _, err = h.mod.Ask(ctx, raised, "raise?")
+	require.ErrorIs(t, err, ErrModeratorRefused, "no dialog in this test; the rule stays as it was")
+
 	other := ration.Rule{Id: "other", Select: ration.Selector{Kind: ration.AccountKindApp, Key: string(appId)},
 		Kind: ration.RuleKindBudget, Quantity: ration.QuantityCalls, Limit: 5, Window: time.Hour}
 	require.NoError(t, h.mod.Set(ctx, other))
 	other.Limit = 50
 	require.NoError(t, h.mod.Set(ctx, other), "loosening another app's rule is the moderator's")
 	require.NoError(t, h.mod.Remove(ctx, "other"))
+
+	// A task the moderator's own calls were charged to holds the moderator
+	// too.
+	h.svc.SetDelegation(&fakeDelegation{allow: true})
+	_, err = h.modCli.Complete(ctx, Request{Messages: hi(), OnBehalfOf: &app.OnBehalfOf{Task: "task-1", Epoch: 1, Call: "call-1"}})
+	require.NoError(t, err)
+	onTask := ration.Rule{Id: "task", Select: ration.Selector{Kind: ration.AccountKindTask, Key: "task-1"},
+		Kind: ration.RuleKindBudget, Quantity: ration.QuantityCalls, Limit: 5, Window: time.Hour}
+	require.NoError(t, h.mod.Set(ctx, onTask))
+	onTask.Limit = 50
+	require.ErrorIs(t, h.mod.Set(ctx, onTask), ErrModeratorRefused)
+	require.ErrorIs(t, h.mod.Remove(ctx, "task"), ErrModeratorRefused)
+}
+
+// Renewing a lapsed raise, or extending one, loosens; a smaller or shorter
+// one does not.
+func TestLoosensCountsRaises(t *testing.T) {
+	now := time.Now()
+	base := ration.Rule{Id: "r", Select: ration.Selector{Kind: ration.AccountKindApp, Key: "a"}, Kind: ration.RuleKindBudget,
+		Quantity: ration.QuantityCalls, Limit: 5, Window: time.Hour, Raise: 10, RaiseUntil: now.Add(-time.Hour)}
+	renewed := base
+	renewed.RaiseUntil = now.Add(24 * time.Hour)
+	assert.True(t, loosens(base, renewed), "a lapsed raise renewed")
+	shorter := base
+	shorter.Raise, shorter.RaiseUntil = 5, now.Add(-2*time.Hour)
+	assert.False(t, loosens(base, shorter))
+	assert.False(t, loosens(base, base))
 }
 
 // A call held by a concurrency rule waits in the queue, and a moderator's
@@ -222,8 +258,9 @@ func TestCancelReachesAQueuedCall(t *testing.T) {
 	err = <-done
 	var refused *RefusedError
 	require.True(t, errors.As(err, &refused), "%v", err)
-	assert.Equal(t, ration.RefusalWait, refused.Refusal)
+	assert.Equal(t, ration.RefusalStop, refused.Refusal, "a moderator's cancel is not a reason to retry")
 	assert.Equal(t, "hold", refused.Rule)
+	assert.Contains(t, refused.Reason, "cancelled by the moderator "+string(moderatorId)+": test")
 }
 
 // The queue takes its class from the window state the host reports.

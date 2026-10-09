@@ -854,8 +854,12 @@ func (rt *Runtime) bootAgent() {
 		rt.LLM.SetAsker(llmAsker{svc: svc})
 	}
 	// The moderators may stop tasks and lower their ceilings (ADR-0300
-	// §SD8), as they may write the model service's rules.
-	svc.SetModerators(llm.ParseTrustedHosts(llm.Moderators.Get()))
+	// §SD8): the apps the model service admits to its rules, one list.
+	if rt.LLM != nil {
+		svc.SetModerators(rt.LLM.Moderators())
+	} else {
+		svc.SetModerators(llm.ParseTrustedHosts(llm.Moderators.Get()))
+	}
 	// The dataset service records an agent-caused bundle operation under
 	// the call context the dispatcher attests (ADR-0288 §SD5).
 	if rt.Adhoc != nil {

@@ -151,6 +151,9 @@ type Service struct {
 	// active holds each call between admission and its reply, by call id,
 	// for llm.ration.cancel.
 	active map[string]activeCall
+	// moderatorTasks are the agent tasks each moderator's own calls were
+	// charged to: rules on them hold the moderator too (ADR-0300 §SD7).
+	moderatorTasks map[app.AppIdT]map[string]bool
 }
 
 // NewService constructs and subscribes a Service. The caller MUST invoke
@@ -167,7 +170,7 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 		cfg.Timeout = DefaultTimeout
 	}
 	s = &Service{cfg: cfg, log: log.With().Str("app", string(ServiceAppId)).Logger(), seen: map[string]seen{}, running: map[cancelKey]context.CancelFunc{},
-		active: map[string]activeCall{}, ledger: cfg.Ledger}
+		active: map[string]activeCall{}, moderatorTasks: map[app.AppIdT]map[string]bool{}, ledger: cfg.Ledger}
 	if s.ledger == nil {
 		s.ledger = ration.NewLedger()
 	}
@@ -442,7 +445,14 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 	// sensitivity wall, before anything leaves the machine.
 	chain := ration.Chain{App: string(msg.Sender), Instance: msg.SenderInstance, Task: rec.Task, Purpose: req.Purpose}
 	class := inst.classOf(msg.SenderInstance)
-	inst.track(rec.CallId, activeCall{chain: chain, cancel: cancel})
+	if rec.Task != "" && inst.isModerator(msg.Sender) {
+		inst.noteModeratorTask(msg.Sender, rec.Task)
+	}
+	// A moderator's cancel carries its cause, so a call it stops in the
+	// queue is told to stop rather than to retry.
+	ctx, cancelCause := context.WithCancelCause(ctx)
+	defer cancelCause(nil)
+	inst.track(rec.CallId, activeCall{chain: chain, cancel: cancelCause})
 	defer inst.untrack(rec.CallId)
 	decision, ticket := inst.ledger.Admit(ctx, ration.Request{Chain: chain, Class: class,
 		EstimatedInput: estimateInput(req.Messages), MaxOutput: int64(maxTokens)})

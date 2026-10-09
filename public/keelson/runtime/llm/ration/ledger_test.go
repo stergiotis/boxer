@@ -2,6 +2,7 @@ package ration
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -273,4 +274,65 @@ func waiting(l *Ledger) (n int) {
 func waitFor(t *testing.T, l *Ledger, n int) {
 	t.Helper()
 	require.Eventually(t, func() bool { return waiting(l) >= n }, time.Second, time.Millisecond)
+}
+
+// A budget on a quantity known only after the call refuses once the window
+// is spent; the call that spends it overshoots by its own use.
+func TestChargeAfterQuantityRefusesOnceSpent(t *testing.T) {
+	l, _ := newTestLedger(t)
+	require.NoError(t, l.Set(Rule{Id: "wall", Select: Selector{Kind: AccountKindApp, Key: "a"}, Kind: RuleKindBudget,
+		Quantity: QuantityWallMs, Limit: 1000, Window: time.Hour}))
+	_, tk := l.Admit(context.Background(), call("a", 1, 10))
+	require.NotNil(t, tk, "nothing spent yet")
+	l.Settle(tk, Usage{QuantityCalls: 1, QuantityWallMs: 1500})
+	d, tk := l.Admit(context.Background(), call("a", 1, 10))
+	assert.Nil(t, tk, "the window is spent")
+	assert.Equal(t, RefusalStop, d.Refusal)
+	assert.Equal(t, "wall", d.Rule)
+
+	require.NoError(t, l.Set(Rule{Id: "reasoning", Select: Selector{Kind: AccountKindApp, Key: "b"}, Kind: RuleKindBudget,
+		Quantity: QuantityReasoningTokens, Limit: 100, Window: time.Hour}))
+	_, tk = l.Admit(context.Background(), call("b", 2, 10))
+	l.Settle(tk, Usage{QuantityCalls: 1, QuantityReasoningTokens: 99})
+	_, tk = l.Admit(context.Background(), call("b", 2, 10))
+	require.NotNil(t, tk, "one token left admits")
+	l.Settle(tk, Usage{QuantityCalls: 1, QuantityReasoningTokens: 1})
+	_, tk = l.Admit(context.Background(), call("b", 2, 10))
+	assert.Nil(t, tk, "exactly spent refuses")
+}
+
+// A call cancelled in the queue is told to stop, with the cancel's cause;
+// one that reached its deadline is told to wait.
+func TestQueueCancelSaysStop(t *testing.T) {
+	l, _ := newTestLedger(t)
+	require.NoError(t, l.Set(Rule{Id: "c", Select: Selector{Kind: AccountKindApp, Key: "a"}, Kind: RuleKindConcurrency, Limit: 0}))
+	ctx, cancel := context.WithCancelCause(context.Background())
+	done := make(chan Decision, 1)
+	go func() {
+		d, _ := l.Admit(ctx, call("a", 1, 10))
+		done <- d
+	}()
+	waitFor(t, l, 1)
+	cancel(errors.New("cancelled by a moderator: runaway"))
+	d := <-done
+	assert.Equal(t, RefusalStop, d.Refusal)
+	assert.Contains(t, d.Reason, "cancelled by a moderator: runaway")
+	assert.Equal(t, "c", d.Rule)
+
+	already, stop := context.WithCancel(context.Background())
+	stop()
+	d, _ = l.Admit(already, call("a", 1, 10))
+	assert.Equal(t, RefusalStop, d.Refusal, "a call cancelled before it queued stops too")
+}
+
+// Accounts idle past every window, holding nothing, are dropped.
+func TestPruneDropsIdleAccounts(t *testing.T) {
+	l, c := newTestLedger(t)
+	l.RecordPast(c.now().Add(-HourHorizon-2*time.Hour), []Account{{Kind: AccountKindTask, Key: "old"}}, Usage{QuantityCalls: 1})
+	_, tk := l.Admit(context.Background(), call("a", 1, 10))
+	l.Settle(tk, Usage{QuantityCalls: 1})
+	for _, a := range l.Accounts() {
+		assert.NotEqual(t, "old", a.Account.Key, "the idle task account is gone")
+	}
+	assert.NotEmpty(t, l.Accounts(), "the live ones stay")
 }

@@ -63,8 +63,39 @@ const rebuildTimeout = 15 * time.Second
 // llm.ration.cancel can reach.
 type activeCall struct {
 	chain  ration.Chain
-	cancel context.CancelFunc
+	cancel context.CancelCauseFunc
 }
+
+// moderatorCancel is the cause a moderator's cancel puts on a call.
+type moderatorCancel struct {
+	by     app.AppIdT
+	reason string
+}
+
+func (inst moderatorCancel) Error() string {
+	s := "cancelled by the moderator " + string(inst.by)
+	if inst.reason != "" {
+		s += ": " + inst.reason
+	}
+	return s
+}
+
+// noteModeratorTask remembers that a moderator's own call was charged to
+// task.
+func (inst *Service) noteModeratorTask(moderator app.AppIdT, task string) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	tasks := inst.moderatorTasks[moderator]
+	if tasks == nil {
+		tasks = map[string]bool{}
+		inst.moderatorTasks[moderator] = tasks
+	}
+	tasks[task] = true
+}
+
+// Moderators are the apps this service admits to llm.ration.*: the list
+// the agent dispatcher admits to its moderator verbs as well.
+func (inst *Service) Moderators() (ids []string) { return slices.Clone(inst.cfg.Moderators) }
 
 // classOf is the queue class of a sender's calls.
 func (inst *Service) classOf(instance uint64) (c ration.ClassE) {
@@ -292,6 +323,11 @@ func (inst *Service) affectsSelf(msg *app.Msg, sel ration.Selector) (yes bool) {
 		return sel.Key == "" || sel.Key == strconv.FormatUint(msg.SenderInstance, 10)
 	case ration.AccountKindPurpose:
 		return sel.Key == "" || strings.HasPrefix(sel.Key, self+"/")
+	case ration.AccountKindTask:
+		inst.mu.Lock()
+		defer inst.mu.Unlock()
+		tasks := inst.moderatorTasks[msg.Sender]
+		return sel.Key == "" && len(tasks) > 0 || tasks[sel.Key]
 	default:
 		return false
 	}
@@ -302,7 +338,12 @@ func loosens(old ration.Rule, r ration.Rule) (yes bool) {
 	if old.Kind != r.Kind || old.Select != r.Select || old.Quantity != r.Quantity || old.Aligned != r.Aligned {
 		return true
 	}
-	if r.Limit > old.Limit || r.Raise > 0 && r.Raise > old.Raise {
+	if r.Limit > old.Limit {
+		return true
+	}
+	// A raise loosens when it is larger, or lasts longer: extending one, or
+	// renewing one that has lapsed.
+	if r.Raise > 0 && (r.Raise > old.Raise || r.RaiseUntil.After(old.RaiseUntil)) {
 		return true
 	}
 	return r.Kind == ration.RuleKindBudget && r.Window < old.Window || r.Kind == ration.RuleKindRate && r.Window != old.Window
@@ -328,7 +369,7 @@ func (inst *Service) rationCancel(msg *app.Msg) (rep wireRationReply) {
 		rep.Reason = "name a call id or an account"
 		return
 	}
-	var cancels []context.CancelFunc
+	var cancels []context.CancelCauseFunc
 	inst.mu.Lock()
 	for id, a := range inst.active {
 		if id == req.CallId || target.Has && slices.Contains(a.chain.Accounts(), target.Val) {
@@ -336,8 +377,9 @@ func (inst *Service) rationCancel(msg *app.Msg) (rep wireRationReply) {
 		}
 	}
 	inst.mu.Unlock()
+	cause := moderatorCancel{by: msg.Sender, reason: req.Reason}
 	for _, c := range cancels {
-		c()
+		c(cause)
 	}
 	rep.Ok, rep.Cancelled = true, len(cancels)
 	attrs := []string{"cancelled", strconv.Itoa(len(cancels))}

@@ -140,11 +140,20 @@ otherwise. A quantity the server does not report is never filled with 0.
   estimate: input tokens from the prompt size, output tokens from
   `max_tokens`. After the call it replaces the estimate with the reported
   figures. Counters live in one process, so the reservation is exact under
-  concurrency.
+  concurrency. A quantity the ledger cannot estimate before the call —
+  wall time, the cached and reasoning parts of the tokens — has nothing to
+  reserve: a rule on it refuses once its window is spent, and the call
+  that spends it overshoots by its own use.
 - **Rebuilt on start.** On start, the ledger rebuilds from the trail rows
   inside the longest active window. Facts are the record; the ledger is a
   cache of them. If facts cannot be read, the ledger starts empty, says so
-  in the log, and SD5's setting for calls no rule covers applies.
+  in the log, and SD5's setting for calls no rule covers applies. The
+  rebuild runs before the service subscribes, so no call is admitted
+  against counts that are still loading; a slow store holds host start
+  for up to its bound (15 s). Moving it off the start path would need
+  calls held until it finishes; not done.
+- **Bounded.** An account idle past the longest window, with nothing
+  reserved, in flight or waiting, is dropped.
 - **Exposed** as `keelson('llm_usage')` and as events on `llm.event.*`:
   usage per call, a soft threshold crossed, a refusal, queueing.
 
@@ -184,9 +193,11 @@ wall, and before the write-ahead. The outcomes:
 - **admit**;
 - **clamp** — `max_tokens` lowered to what the tightest budget leaves;
 - **queue** — SD6;
-- **refuse** — typed. `RefusedError` gains a kind: *wait* (a rate or
-  concurrency limit; carries when to retry) or *stop* (a budget, or a
-  refusal rule). It also names the rule that refused.
+- **refuse** — typed. `RefusedError` gains a kind: *wait* (a rate, or a
+  call that reached its deadline in the queue; carries when to retry when
+  it can) or *stop* (a budget, a refusal rule, or a call cancelled while it
+  waited — a moderator's cancel carries its reason). It also names the
+  rule that refused.
 
 The outcome, the rule that decided it and any time spent queued go on the
 call's trail row. `Response` carries what remains of the tightest rule on
@@ -207,7 +218,9 @@ window:
 4. no window (instance 0: services, the CLI).
 
 An agent's call takes the class of its coordinator's window. A singleton
-shown in several windows takes the class of its best one. Calls are served
+shown in several windows takes the class of its best one. The class is
+read once, when the call arrives: focusing a window does not move the
+calls it already has waiting. Calls are served
 first in, first out within a class. A waiting call moves up one class after
 a fixed age, so a background loop is delayed, never starved.
 
@@ -222,8 +235,11 @@ host starts, in the same way as `SetDelegation`.
 - **What it does.** It subscribes to `llm.event.*`, reads
   `keelson('llm_usage')` and the trail, and writes rules.
 - **Its own calls** are metered and ruled like any other app's.
-- **Its own account.** A rule that raises its own app's account is not
-  taken from the moderator; it goes to the person (SD9).
+- **Its own account.** A moderator may tighten a rule that could hold its
+  own calls — on the run, its app, its window, its purposes, or a task its
+  own calls were charged to — but not loosen or remove one: a higher
+  limit, a larger or longer raise, or any other change of shape goes to
+  the person (SD9).
 
 ### SD8 — Levers on the loop and on calls in flight
 
