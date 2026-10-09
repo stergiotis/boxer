@@ -512,7 +512,10 @@ func definitionsWidget() (widgets []*ir.BuilderFactoryNode) {
 			// Default height to a button's (style::progress_bar_height): egui's
 			// interact_size.y is shorter than the text the bar paints inside it.
 			// Explicit `.desiredHeight(h)` from Go still overrides.
-			WithConstructionCodeClientRust(rustClientCode("egui::ProgressBar::new(progress).fill(imzero2_egui::style::progress_fill()).desired_height(imzero2_egui::style::progress_bar_height(c));\n")).
+			// Default corner radius to a button's (style::progress_bar_corner_radius):
+			// egui's half-height radius makes a tall, near-empty bar a toggle switch.
+			// Explicit `.cornerRadius(r)` from Go still overrides.
+			WithConstructionCodeClientRust(rustClientCode("egui::ProgressBar::new(progress).fill(imzero2_egui::style::progress_fill()).desired_height(imzero2_egui::style::progress_bar_height(c)).corner_radius(imzero2_egui::style::progress_bar_corner_radius(c));\n")).
 			WithSettingImmediate(true).
 			WithSettingRetained(true).
 			WithReturnType(structProgressBar()).

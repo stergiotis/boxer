@@ -7512,7 +7512,8 @@ egui::Panel::top(i);
 
                 let mut w = egui::ProgressBar::new(progress)
                     .fill(imzero2_egui::style::progress_fill())
-                    .desired_height(imzero2_egui::style::progress_bar_height(c));
+                    .desired_height(imzero2_egui::style::progress_bar_height(c))
+                    .corner_radius(imzero2_egui::style::progress_bar_corner_radius(c));
                 // methods
                 loop {
                     let (m, _) = self.read_from_repr(ProgressBarBuilderMethodId::from_repr)?;

@@ -109,6 +109,15 @@ pub fn progress_bar_height(ctx: &Context) -> f32 {
     row + 2.0 * style.spacing.button_padding.y
 }
 
+/// The default `ProgressBar` corner radius: a button's. egui's own default
+/// is half the bar's height, and it never fills less than twice the radius,
+/// so at a button's height a bar near empty is a pill with a full circle at
+/// one end — it reads as a toggle switch. A button's radius keeps the bar a
+/// rounded rectangle and the least fill a sliver.
+pub fn progress_bar_corner_radius(ctx: &Context) -> egui::CornerRadius {
+    ctx.global_style().visuals.widgets.inactive.corner_radius
+}
+
 /// The slider rail's colour for the active theme; see [`slider`].
 pub fn slider_rail() -> egui::Color32 {
     match tokens::theme::active() {
