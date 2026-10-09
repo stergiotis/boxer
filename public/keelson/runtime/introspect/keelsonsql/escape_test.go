@@ -24,8 +24,16 @@ func TestUnquoteString_AsClickHouseReadsALiteral(t *testing.T) {
 		{`'a\N'`, "a"},
 		{`'100\%'`, `100\%`},
 		{`'\z'`, `\z`},
+		{`'a\=b'`, "a=b"},
 	} {
-		assert.Equal(t, c.want, unquoteString(c.literal), c.literal)
+		got, err := unquoteString(c.literal)
+		require.NoError(t, err, c.literal)
+		assert.Equal(t, c.want, got, c.literal)
+	}
+	// ClickHouse reads a garbage byte, or fails: not modelled.
+	for _, lit := range []string{`'a\xZZ'`, `'a\x4'`, `'a\x'`} {
+		_, err := unquoteString(lit)
+		assert.True(t, errors.Is(err, ErrNotConstant), lit)
 	}
 }
 
@@ -38,6 +46,11 @@ func TestParamText_AsClickHouseReadsAParameter(t *testing.T) {
 	assert.Equal(t, "it''s", v, "a doubled quote is only a literal's spelling")
 	_, err = paramText("a\tb")
 	assert.Error(t, err, "a raw tab ends an escaped value")
+	_, err = paramText(`a\`)
+	assert.True(t, errors.Is(err, ErrNotConstant), "a trailing backslash")
+	v, err = paramText(`a\=b`)
+	require.NoError(t, err)
+	assert.Equal(t, "a=b", v)
 }
 
 func TestPreludeParams(t *testing.T) {

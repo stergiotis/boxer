@@ -68,9 +68,55 @@ func TestEvalConstant_ParamsAndWith(t *testing.T) {
 	assert.Equal(t, "a\tb", v.Str)
 	assert.Equal(t, ConstOriginWith, v.Origin)
 
+	// ClickHouse wraps 300 into Int8; that is not modelled.
 	_, err = firstColumn(t, "SELECT {p:Int8} AS p", map[string]string{"p": "300"})
+	assert.True(t, errors.Is(err, ErrNotConstant), "%v", err)
+	_, err = firstColumn(t, "SELECT {q:Int8} AS q", map[string]string{"p": "1"})
 	assert.Error(t, err)
-	assert.False(t, errors.Is(err, ErrNotConstant), "a value out of its type is the statement's error")
+	assert.False(t, errors.Is(err, ErrNotConstant), "an unbound parameter is the statement's error")
+}
+
+// The spellings are what clickhouse-local reads for SELECT {p:Type}; every
+// one outside them is refused, whatever ClickHouse makes of it.
+func TestParseAs_TheMeasuredSpellings(t *testing.T) {
+	inf := math.Inf(1)
+	for _, c := range []struct {
+		t    ScalarTypeE
+		text string
+		want Constant
+	}{
+		{ScalarTypeUInt8, "5", Constant{Uint: 5}}, {ScalarTypeUInt8, "+5", Constant{Uint: 5}}, {ScalarTypeUInt8, "05", Constant{Uint: 5}},
+		{ScalarTypeInt8, "+5", Constant{Int: 5}}, {ScalarTypeInt8, "-5", Constant{Int: -5}}, {ScalarTypeInt8, "-0", Constant{}},
+		{ScalarTypeFloat64, "1.5", Constant{Float: 1.5}}, {ScalarTypeFloat64, "+1.5", Constant{Float: 1.5}}, {ScalarTypeFloat64, ".5", Constant{Float: 0.5}},
+		{ScalarTypeFloat64, "5.", Constant{Float: 5}}, {ScalarTypeFloat64, "1E+3", Constant{Float: 1000}}, {ScalarTypeFloat64, "1.e3", Constant{Float: 1000}},
+		{ScalarTypeFloat64, "00.5", Constant{Float: 0.5}}, {ScalarTypeFloat64, "INF", Constant{Float: inf}}, {ScalarTypeFloat64, "-infinity", Constant{Float: -inf}},
+		{ScalarTypeFloat64, "1e400", Constant{Float: inf}}, {ScalarTypeFloat64, "-1e400", Constant{Float: -inf}}, {ScalarTypeFloat64, "1e-400", Constant{}},
+		{ScalarTypeFloat32, "1e40", Constant{Float: inf}},
+		{ScalarTypeBool, "Yes", Constant{Bool: true}}, {ScalarTypeBool, "OFF", Constant{}}, {ScalarTypeBool, "t", Constant{Bool: true}},
+		{ScalarTypeBool, "Disabled", Constant{}}, {ScalarTypeBool, "1", Constant{Bool: true}},
+	} {
+		got, err := ParseAs(c.t, c.text)
+		require.NoError(t, err, "%s %q", c.t, c.text)
+		c.want.Type = c.t
+		assert.Equal(t, c.want, got, "%s %q", c.t, c.text)
+	}
+	got, err := ParseAs(ScalarTypeFloat64, "-nan")
+	require.NoError(t, err)
+	assert.True(t, math.IsNaN(got.Float))
+
+	for _, c := range []struct {
+		t    ScalarTypeE
+		text string
+	}{
+		{ScalarTypeUInt8, "-0"}, {ScalarTypeUInt8, " 5"}, {ScalarTypeUInt8, "5 "}, {ScalarTypeUInt8, "0x10"}, {ScalarTypeUInt8, "1e2"},
+		{ScalarTypeUInt8, "1.0"}, {ScalarTypeUInt8, "5_0"}, {ScalarTypeUInt8, ""}, {ScalarTypeUInt8, "256"}, {ScalarTypeInt8, "-"}, {ScalarTypeInt8, "+-5"},
+		{ScalarTypeFloat64, "1_000"}, {ScalarTypeFloat64, "0x1p3"}, {ScalarTypeFloat64, "0x10"}, {ScalarTypeFloat64, " 1"}, {ScalarTypeFloat64, "1 "},
+		{ScalarTypeFloat64, "1.5.5"}, {ScalarTypeFloat64, "e3"}, {ScalarTypeFloat64, ""}, {ScalarTypeFloat64, "1e"}, {ScalarTypeFloat64, "."},
+		{ScalarTypeBool, "2"}, {ScalarTypeBool, "truex"}, {ScalarTypeBool, " true"}, {ScalarTypeBool, ""},
+	} {
+		_, err := ParseAs(c.t, c.text)
+		assert.True(t, errors.Is(err, ErrNotConstant), "%s %q", c.t, c.text)
+	}
 }
 
 func TestEvalConstant_NotConstants(t *testing.T) {

@@ -119,15 +119,22 @@ func (inst *evaluator) valuesRow(a grammar1.ITableArgExprContext) (row []keelson
 }
 
 // parseStructure reads `name Type, …`, a type being a ScalarTypeE or
-// Nullable of one; cols is nil when s is not shaped as a structure, and so
-// is data. A type outside that set is refused: whether ClickHouse reads it
-// as a type (DateTime) or s as data ('hello world') is not modelled here.
+// Nullable of one, and a name a plain identifier; cols is nil when s is not
+// shaped as a structure (no space, a quote in a name), and so is data. A
+// type outside that set, or a backquoted or unbalanced name, is refused:
+// whether ClickHouse reads a structure there (DateTime, `a`) or data
+// ('hello world') is not modelled here.
 func parseStructure(s string) (cols []valuesColumn, err error) {
 	for _, part := range splitTopLevel(s) {
 		part = strings.TrimSpace(part)
 		name, typ, ok := strings.Cut(part, " ")
 		if !ok || name == "" || strings.ContainsAny(name, "'\"") {
 			return nil, nil
+		}
+		if strings.ContainsAny(name, "`()") {
+			// A quoted or unbalanced name: ClickHouse may read a structure
+			// here, or data; which is not modelled.
+			return nil, refuse("a values() structure naming a column " + name)
 		}
 		col := valuesColumn{name: nanopass.DecodeIdentifier(name)}
 		typ = strings.TrimSpace(typ)
@@ -145,7 +152,8 @@ func parseStructure(s string) (cols []valuesColumn, err error) {
 	return
 }
 
-// splitTopLevel splits s at commas outside parentheses and backquotes.
+// splitTopLevel splits s at commas outside parentheses and backquotes; an
+// unbalanced s is one part, which then does not read as a structure.
 func splitTopLevel(s string) (parts []string) {
 	depth, start := 0, 0
 	quoted := false
@@ -162,6 +170,9 @@ func splitTopLevel(s string) (parts []string) {
 			parts = append(parts, s[start:i])
 			start = i + 1
 		}
+	}
+	if depth != 0 || quoted {
+		return []string{s}
 	}
 	return append(parts, s[start:])
 }
@@ -289,10 +300,7 @@ func convert(v keelsonsql.Constant, col valuesColumn) (out keelsonsql.Constant, 
 	}
 	if v.Type == keelsonsql.ScalarTypeString && t != keelsonsql.ScalarTypeString {
 		out, err = keelsonsql.ParseAs(t, v.Str)
-		if err != nil {
-			return out, eb.Build().Str("column", col.name).Str("type", t.String()).Str("value", v.Str).Errorf("trivialsql: a values() string does not read as its column's type: %w", err)
-		}
-		return out, nil
+		return out, constantErr(err)
 	}
 	isInt := v.Type.IsUnsigned() || v.Type.IsSigned()
 	switch {

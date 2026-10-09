@@ -13,6 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonsql"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
 // evaluator answers one statement: its registry, the constants and
@@ -30,8 +31,9 @@ type namedSelect struct {
 	sel  *grammar1.SelectStmtContext
 }
 
-// readCtes takes the WITH queries of su; a WITH constant is the scope's,
-// and any other WITH item is left alone unless something names it.
+// readCtes takes the WITH queries of su; a WITH constant is the scope's.
+// Any other WITH item is refused even when nothing names it: ClickHouse
+// evaluates it, and may fail on it, which is not modelled here.
 func (inst *evaluator) readCtes(su *grammar1.SelectUnionStmtContext) (err error) {
 	c := su.Ctes()
 	if c == nil {
@@ -41,9 +43,15 @@ func (inst *evaluator) readCtes(su *grammar1.SelectUnionStmtContext) (err error)
 	if cc.RECURSIVE() != nil {
 		return refuse("WITH RECURSIVE")
 	}
+	if others := inst.scope.NotConstants(); len(others) > 0 {
+		return refuse("the WITH item " + others[0] + ", which is not a constant")
+	}
 	for _, wi := range cc.AllWithItem() {
 		nq, ok := wi.(*grammar1.WithItemNamedQueryContext)
 		if !ok {
+			if col, isCol := wi.(*grammar1.WithItemColumnsExprContext).ColumnsExpr().(*grammar1.ColumnsExprColumnContext); !isCol || !isAliased(col.ColumnExpr()) {
+				return refuse("a WITH item without AS (" + wi.GetText() + ")")
+			}
 			continue
 		}
 		named := nq.NamedQuery().(*grammar1.NamedQueryContext)
@@ -65,7 +73,17 @@ func (inst *evaluator) readCtes(su *grammar1.SelectUnionStmtContext) (err error)
 		if isel.LimitClause() != nil || isel.SettingsClause() != nil {
 			return refuse("LIMIT or SETTINGS inside WITH")
 		}
-		inst.ctes = append(inst.ctes, namedSelect{name: nanopass.DecodeIdentifier(named.Identifier().GetText()), sel: isel})
+		name := nanopass.DecodeIdentifier(named.Identifier().GetText())
+		for _, prev := range inst.ctes {
+			if prev.name == name {
+				// ClickHouse: CTE with name … already exists.
+				return eb.Build().Str("with", name).Errorf("trivialsql: WITH names a query twice")
+			}
+		}
+		if inst.scope.IsWithName(name) {
+			return refuse("WITH naming a query and an expression alike (" + name + ")")
+		}
+		inst.ctes = append(inst.ctes, namedSelect{name: name, sel: isel})
 	}
 	return nil
 }
@@ -167,6 +185,11 @@ func (inst *evaluator) projection(sel *grammar1.SelectStmtContext) (items []proj
 	return
 }
 
+func isAliased(e grammar1.IColumnExprContext) bool {
+	_, _, aliased := keelsonsql.Aliased(e)
+	return aliased
+}
+
 // isParam reports a {slot:Type} parameter, parenthesised or not.
 func isParam(e grammar1.IColumnExprContext) bool {
 	for {
@@ -238,7 +261,11 @@ func (inst *evaluator) from(fc *grammar1.FromClauseContext, visible int) (batch 
 			if rErr != nil {
 				return nil, constantErr(rErr)
 			}
-			return introspect.SnapshotCall(p, introspect.AllColumns(), raw)
+			batch, err = introspect.SnapshotCall(p, introspect.AllColumns(), raw)
+			if err != nil {
+				return nil, err
+			}
+			return inst.unshadowed(batch, "keelson() column")
 		case f.Identifier() != nil && strings.EqualFold(f.Identifier().GetText(), "values"):
 			return inst.values(f)
 		}
@@ -248,14 +275,33 @@ func (inst *evaluator) from(fc *grammar1.FromClauseContext, visible int) (batch 
 		if ti.DatabaseIdentifier() == nil {
 			name := nanopass.DecodeIdentifier(ti.GetText())
 			for i := visible - 1; i >= 0; i-- {
-				if inst.ctes[i].name == name {
-					return inst.evalSelect(inst.ctes[i].sel, i)
+				if inst.ctes[i].name != name {
+					continue
 				}
+				batch, err = inst.evalSelect(inst.ctes[i].sel, i)
+				if err != nil {
+					return nil, err
+				}
+				return inst.unshadowed(batch, "WITH query's column")
 			}
 		}
 		return nil, refuse("a table other than keelson() and values() (" + ti.GetText() + ")")
 	}
 	return nil, refuse("a subquery")
+}
+
+// unshadowed refuses a table whose column a WITH expression's alias
+// shadows: ClickHouse then qualifies the column under * (q.a, and a
+// keelson() call's column under its TEMPORARY table's name), which is not
+// modelled. values() keeps the bare name, as clickhouse-local does.
+func (inst *evaluator) unshadowed(batch arrow.RecordBatch, what string) (out arrow.RecordBatch, err error) {
+	for _, f := range batch.Schema().Fields() {
+		if inst.scope.IsWithName(f.Name) {
+			batch.Release()
+			return nil, refuse("a " + what + " " + f.Name + ", which a WITH expression's alias shadows")
+		}
+	}
+	return batch, nil
 }
 
 // project builds the SELECT list over src: * is src's columns, a constant a

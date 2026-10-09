@@ -1,7 +1,9 @@
 package keelsonsql
 
 import (
+	"errors"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -265,6 +267,12 @@ func (inst *ConstScope) AddWith(ctes grammar1.ICtesContext) (err error) {
 		if !aliased {
 			continue
 		}
+		_, isConst := inst.with[name]
+		_, isOther := inst.notConst[name]
+		if isConst || isOther {
+			// ClickHouse: MULTIPLE_EXPRESSIONS_FOR_ALIAS.
+			return eb.Build().Str("with", name).Errorf("keelsonsql: WITH names an expression twice")
+		}
 		v, evalErr := EvalConstant(expr, inst)
 		switch {
 		case evalErr == nil:
@@ -285,10 +293,27 @@ func (inst *ConstScope) AddWith(ctes grammar1.ICtesContext) (err error) {
 	return nil
 }
 
-// IsNotConstant reports err is ErrNotConstant.
+// NotConstants are the aliases of WITH expressions that are not constants.
+func (inst *ConstScope) NotConstants() (names []string) {
+	for n := range inst.notConst {
+		names = append(names, n)
+	}
+	slices.Sort(names)
+	return
+}
+
+// IsWithName reports that a WITH expression, constant or not, has the alias
+// name.
+func (inst *ConstScope) IsWithName(name string) bool {
+	_, isConst := inst.with[name]
+	_, isOther := inst.notConst[name]
+	return isConst || isOther
+}
+
+// IsNotConstant reports err is, or wraps, a NotConstantError.
 func IsNotConstant(err error) bool {
-	_, ok := err.(*NotConstantError)
-	return ok
+	var nc *NotConstantError
+	return errors.As(err, &nc)
 }
 
 // Aliased splits `expr AS name`; aliased is false for an expression without
@@ -373,7 +398,11 @@ func literalConstant(lit grammar1.ILiteralContext) (c Constant, err error) {
 	case lit.NumberLiteral() != nil:
 		return numberConstant(lit.GetText())
 	case lit.STRING_LITERAL() != nil:
-		return Constant{Type: ScalarTypeString, Str: unquoteString(lit.GetText())}, nil
+		str, uErr := unquoteString(lit.GetText())
+		if uErr != nil {
+			return c, uErr
+		}
+		return Constant{Type: ScalarTypeString, Str: str}, nil
 	}
 	return Constant{Null: true}, nil
 }
@@ -536,28 +565,100 @@ func FloatFieldText(v float64) string {
 	return s
 }
 
-// ParseAs reads text as a value of t.
+// ParseAs reads text as a value of t, as ClickHouse reads a parameter's
+// value — within the spellings measured against clickhouse-local, and only
+// those: an integer is digits after an optional sign (+ only, for UInt*); a
+// float is decimal digits with an optional point and exponent, or inf,
+// infinity or nan in any case, after an optional sign, and one beyond its
+// type's range reads as an infinity or zero; a Bool is one of
+// boolSpellings in any case. Anything else is ErrNotConstant — including an
+// integer outside its type, which ClickHouse wraps — since what ClickHouse
+// makes of it is not modelled here.
 func ParseAs(t ScalarTypeE, text string) (c Constant, err error) {
 	c.Type = t
+	bad := func() error { return notConstant("the value " + strconv.Quote(text) + " read as " + t.String()) }
 	switch {
 	case t.IsUnsigned():
-		c.Uint, err = strconv.ParseUint(text, 10, t.Bits())
+		digits := strings.TrimPrefix(text, "+")
+		if !allDigits(digits) {
+			return c, bad()
+		}
+		if c.Uint, err = strconv.ParseUint(digits, 10, t.Bits()); err != nil {
+			return c, bad()
+		}
 	case t.IsSigned():
-		c.Int, err = strconv.ParseInt(text, 10, t.Bits())
+		digits := strings.TrimLeft(text, "+-")
+		if len(text)-len(digits) > 1 || !allDigits(digits) {
+			return c, bad()
+		}
+		if c.Int, err = strconv.ParseInt(strings.TrimPrefix(text, "+"), 10, t.Bits()); err != nil {
+			return c, bad()
+		}
 	case t.IsFloat():
-		c.Float, err = strconv.ParseFloat(text, t.Bits())
+		var ok bool
+		if c.Float, ok = parseFloatText(text, t.Bits()); !ok {
+			return c, bad()
+		}
 	case t == ScalarTypeString:
 		c.Str = text
 	case t == ScalarTypeBool:
-		switch strings.ToLower(text) {
-		case "1", "true":
-			c.Bool = true
-		case "0", "false":
-		default:
-			err = eh.Errorf("not a Bool")
+		v, known := boolSpellings[strings.ToLower(text)]
+		if !known {
+			return c, bad()
 		}
+		c.Bool = v
 	default:
-		err = eh.Errorf("not a value type")
+		return c, bad()
 	}
-	return
+	return c, nil
+}
+
+// boolSpellings are the Bool texts ClickHouse reads, lower-cased.
+var boolSpellings = map[string]bool{
+	"true": true, "false": false, "1": true, "0": false,
+	"yes": true, "no": false, "on": true, "off": false, "y": true, "n": false, "t": true, "f": false,
+	"enable": true, "disable": false, "enabled": true, "disabled": false,
+}
+
+func allDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// parseFloatText reads the float spellings ParseAs admits.
+func parseFloatText(text string, bits int) (f float64, ok bool) {
+	body := text
+	neg := false
+	if body != "" && (body[0] == '+' || body[0] == '-') {
+		neg, body = body[0] == '-', body[1:]
+	}
+	switch strings.ToLower(body) {
+	case "inf", "infinity":
+		if neg {
+			return math.Inf(-1), true
+		}
+		return math.Inf(1), true
+	case "nan":
+		return math.NaN(), true
+	}
+	mant, exp, hasExp := strings.Cut(strings.ToLower(body), "e")
+	intPart, frac, _ := strings.Cut(mant, ".")
+	if intPart+frac == "" || (intPart != "" && !allDigits(intPart)) || (frac != "" && !allDigits(frac)) {
+		return 0, false
+	}
+	if hasExp && !allDigits(strings.TrimLeft(exp, "+-")) || len(exp)-len(strings.TrimLeft(exp, "+-")) > 1 {
+		return 0, false
+	}
+	f, err := strconv.ParseFloat(text, bits)
+	if err != nil && !errors.Is(err, strconv.ErrRange) {
+		return 0, false
+	}
+	return f, true
 }

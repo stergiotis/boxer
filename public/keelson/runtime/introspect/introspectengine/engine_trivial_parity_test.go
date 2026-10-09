@@ -87,7 +87,7 @@ func TestTrivialSQL_AnswersAsClickHouseDoes(t *testing.T) {
 	e := newEngineWithBroker(t)
 	require.NoError(t, e.reg.Register(seqProvider{}))
 	require.NoError(t, e.reg.Register(mixProvider{}))
-	params := map[string]string{"k": "4", "f": "0.1"}
+	params := map[string]string{"k": "4", "f": "0.1", "b": "Yes", "u": "+5", "fl": "-1e400", "s": `a\=b\%`, "g": ".5"}
 	for _, sql := range []string{
 		"SELECT * FROM keelson('seq', n = 3) FORMAT TabSeparated",
 		"SELECT * FROM keelson('seq', n = {k:UInt64}) LIMIT 2 OFFSET 1 FORMAT TabSeparated",
@@ -137,6 +137,11 @@ func TestTrivialSQL_AnswersAsClickHouseDoes(t *testing.T) {
 		"SELECT * FROM values({f:Float32}, 300, NULL) FORMAT JSONEachRow",
 		"SELECT * FROM values({f:Float32}, 70000) FORMAT TabSeparatedWithNames",
 		"SELECT * FROM values({f:Float32}, 2.5) FORMAT TabSeparatedWithNames",
+		// Review of bed494954, items 7–11: the measured spellings.
+		"SELECT 'a\\=b' AS e, 'c\\%d' AS p, 'x\\x41' AS h FORMAT TabSeparated",
+		"SELECT {b:Bool} AS b, {u:UInt8} AS u, {fl:Float64} AS fl, {s:String} AS s, {g:Float32} AS g FORMAT TabSeparated",
+		"SELECT * FROM values('a UInt8, b Bool, c Float64, d Int8', ('+5', 'off', '1e400', '-0'), ('05', 'T', 'nan', '+7')) FORMAT TabSeparated",
+		"WITH 5 AS v SELECT * FROM values('v UInt8', 1) FORMAT TabSeparatedWithNames",
 	} {
 		want, _, err := e.QueryParams(context.Background(), sql, "", params)
 		require.NoError(t, err, sql)

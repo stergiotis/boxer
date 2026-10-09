@@ -123,10 +123,16 @@ natively through the introspection engine.
     (`log_comment`, `readonly`, the query-cache flags, resource limits), and
     every other one is refused: ignoring `limit`, `max_result_rows` or an
     `output_format_*` setting would hand back other rows or other bytes.
-  - **Literals and parameters** decode as ClickHouse decodes them: a string
-    literal's backslash escapes, and a parameter's value read in the escaped
-    text format. This is shared with SD2, so the native path reads them the
-    same way.
+  - **Literals and parameters** decode as ClickHouse decodes them, within
+    spellings measured against clickhouse-local: a string's backslash
+    escapes (a table over every printable character), and a parameter's
+    value read in the escaped text format — an integer as digits after a
+    sign, a float as decimal digits with a point and exponent or as
+    inf/infinity/nan, a Bool in its documented spellings. A spelling outside
+    them is refused, as are an integer outside its type (ClickHouse wraps
+    it) and a `\x` escape without two hex digits (ClickHouse reads a garbage
+    byte). This is shared with SD2, so the native path reads them the same
+    way.
   - **Constants are typed as ClickHouse types them** — an integer as the
     smallest UInt holding it, or Int when negative, a number with a point or
     an exponent as Float64, a parameter as its declared type — and an
@@ -135,8 +141,11 @@ natively through the introspection engine.
     every row fits, as ClickHouse does; what ClickHouse rejects there is an
     error of the statement. A shape whose ClickHouse answer is not modelled
     is refused: NULL as a column, an unaliased parameter (named `_CAST(…)`),
-    a name given twice, a WITH constant named like a column, a `values()`
-    type outside the scalars above. An alias needs `AS`: without it the
+    a name given twice, a WITH alias that shadows a column of a WITH query
+    or a keelson call (ClickHouse then qualifies the column under `*`), a
+    WITH item that is not a constant even when unused (ClickHouse evaluates
+    it, and may fail), a `values()` type outside the scalars above. A WITH
+    alias given twice is an error, as in ClickHouse. An alias needs `AS`: without it the
     grammar reads `0b11` or `1_000` as a number and an alias, where
     ClickHouse reads one number.
   - **A `SET param_` value** binds as ClickHouse binds it — a string decoded,
@@ -153,7 +162,8 @@ natively through the introspection engine.
   in-process and passes every other request through: `query` in the body or
   URL, `param_*` pairs, `default_format` or a `FORMAT` clause, errors in the
   `chhttp` envelope. The evaluator is handed the query string's settings and
-  judges them as SD3 does. A handler that panics fails its request, as a
+  judges them as SD3 does, and reports the format it encoded, which the
+  response's Content-Type follows. A handler that panics fails its request, as a
   dropped connection would, instead of the tab. A tab binary that wants it
   sets `CLICKHOUSE_URL` to that origin; play's client, executor and panes do
   not know the difference.

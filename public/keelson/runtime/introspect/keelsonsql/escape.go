@@ -12,23 +12,26 @@ import (
 // unquoteString decodes a ClickHouse single-quoted string literal: the
 // quotes are dropped, a doubled quote is one quote, and a backslash escape
 // is decoded as ClickHouse decodes it (decodeEscapes).
-func unquoteString(s string) string {
+func unquoteString(s string) (text string, err error) {
 	if len(s) < 2 {
-		return s
+		return s, nil
 	}
 	return decodeEscapes(s[1:len(s)-1], true)
 }
 
 // decodeEscapes undoes ClickHouse's backslash escapes in s, as its parser
 // does for a string literal and its escaped text format does for a query
-// parameter's value: \b \f \n \r \t \v \a \e and \0 are their control
-// characters, \xHH is a byte and \N is nothing. An escape of any other
-// character keeps the backslash — 'a\%' is a, backslash, percent, for LIKE —
-// except that \\ \' \" \` and \/ are the character alone. With
-// doubledQuote, a doubled single quote is one, as inside a literal.
-func decodeEscapes(s string, doubledQuote bool) string {
+// parameter's value — a table measured against clickhouse-local for every
+// printable character: \b \f \n \r \t \v \a \e and \0 are their control
+// characters, \xHH is a byte and \N is nothing; \\ \' \" \` \/ and \= are the
+// character alone; an escape of any other character keeps the backslash —
+// 'a\%' is a, backslash, percent, for LIKE. A \x without two hex digits, or
+// a trailing backslash, is not modelled (ClickHouse reads a garbage byte, or
+// fails) and is ErrNotConstant. With doubledQuote, a doubled single quote
+// is one, as inside a literal.
+func decodeEscapes(s string, doubledQuote bool) (text string, err error) {
 	if !strings.ContainsAny(s, `\'`) {
-		return s
+		return s, nil
 	}
 	var sb strings.Builder
 	sb.Grow(len(s))
@@ -38,23 +41,26 @@ func decodeEscapes(s string, doubledQuote bool) string {
 		case c == '\'' && doubledQuote && i+1 < len(s) && s[i+1] == '\'':
 			i++
 			sb.WriteByte('\'')
-		case c != '\\' || i+1 == len(s):
+		case c != '\\':
 			sb.WriteByte(c)
+		case i+1 == len(s):
+			return "", notConstant("a string ending in a backslash")
 		default:
 			i++
 			e := s[i]
 			switch e {
 			case 'x':
+				b, hErr := uint64(0), error(nil)
 				if i+2 < len(s) {
-					if b, err := strconv.ParseUint(s[i+1:i+3], 16, 8); err == nil {
-						sb.WriteByte(byte(b))
-						i += 2
-						continue
-					}
+					b, hErr = strconv.ParseUint(s[i+1:i+3], 16, 8)
 				}
-				sb.WriteString(`\x`)
+				if i+2 >= len(s) || hErr != nil {
+					return "", notConstant("a string with a \\x escape that is not two hex digits")
+				}
+				sb.WriteByte(byte(b))
+				i += 2
 			case 'N':
-			case '\\', '\'', '"', '`', '/':
+			case '\\', '\'', '"', '`', '/', '=':
 				sb.WriteByte(e)
 			default:
 				if d, isControl := controlEscape(e); isControl {
@@ -66,7 +72,7 @@ func decodeEscapes(s string, doubledQuote bool) string {
 			}
 		}
 	}
-	return sb.String()
+	return sb.String(), nil
 }
 
 func controlEscape(e byte) (d byte, ok bool) {
@@ -103,7 +109,7 @@ func paramText(v string) (text string, err error) {
 	if strings.ContainsAny(v, "\t\n") {
 		return "", eb.Build().Str("value", v).Errorf("keelsonsql: a query parameter's value holds a raw tab or newline; escape it as \\t or \\n")
 	}
-	return decodeEscapes(v, false), nil
+	return decodeEscapes(v, false)
 }
 
 // TopLevelSets returns the `SET …;` statements in front of a parsed
@@ -176,7 +182,8 @@ func settingText(sv grammar1.ISettingValueContext) (text string, scalar bool, er
 	lit := sl.Literal()
 	switch {
 	case lit.STRING_LITERAL() != nil:
-		return unquoteString(lit.GetText()), true, nil
+		text, err = unquoteString(lit.GetText())
+		return text, err == nil, err
 	case lit.NumberLiteral() != nil:
 		c, nErr := numberConstant(lit.GetText())
 		if nErr != nil {

@@ -151,6 +151,23 @@ func TestRun_RefusesWhatNeedsClickHouse(t *testing.T) {
 		"SELECT ({k:UInt64})",
 		"SET param_k = [1]; SELECT {k:UInt8} AS k",
 		"SET param_k = NULL; SELECT * FROM keelson('seq', n = {k:UInt64})",
+		// Review of bed494954, items 7–11.
+		"SELECT 'a\\xZZ' AS s",
+		"SELECT 'a\\x4' AS s",
+		"SELECT * FROM values('a UInt8', 'x')",
+		"SELECT * FROM values('a UInt8', '256')",
+		"SELECT * FROM values('a Float64', '1_000')",
+		"SELECT * FROM values('a Bool', 'maybe')",
+		"WITH q AS (SELECT 1 AS a, 2 AS b), 5 AS a SELECT * FROM q",
+		"WITH q AS (SELECT * FROM keelson('seq', n = 1)), 5 AS v SELECT * FROM q",
+		"WITH 5 AS v SELECT * FROM keelson('seq', n = 1)",
+		"WITH now() AS t SELECT * FROM keelson('plain')",
+		"WITH {k:Nope} AS x SELECT 1 AS one",
+		"WITH 1 SELECT * FROM keelson('plain')",
+		"WITH a AS (SELECT 1 AS x), 2 AS a SELECT * FROM a",
+		"SELECT * FROM values('a UInt8', 1) SETTINGS database = 'nope'",
+		"SELECT * FROM values('`a` String', 'x')",
+		"SELECT * FROM values('(a UInt8', 1)",
 		"SELECT v FROM keelson('plain')",
 		"SELECT * FROM keelson('plain') WHERE v = 1",
 		"SELECT * FROM keelson('plain') ORDER BY v",
@@ -185,9 +202,10 @@ func TestRun_CallErrorsAreNotRefusals(t *testing.T) {
 		"SELECT * FROM values('a UInt8', -1)",
 		"SELECT * FROM values('a Int32', 1.5)",
 		"SELECT * FROM values('a UInt8', NULL)",
-		"SELECT * FROM values('a UInt8', 'x')",
 		"SELECT * FROM values('a UInt8, b String', (1))",
 		"SELECT * FROM values((1, 'a'), (2))",
+		"WITH a AS (SELECT 1 AS x), a AS (SELECT 2 AS x) SELECT * FROM a",
+		"WITH 1 AS k, 2 AS k SELECT k",
 		"SELECT {k:UInt64} AS k",
 		"SELECT * FROM keelson('nope')",
 		"SELECT * FROM keelson('seq')",
@@ -202,18 +220,20 @@ func TestRun_CallErrorsAreNotRefusals(t *testing.T) {
 
 func TestRunner_Settings(t *testing.T) {
 	r := Runner{Registry: reg(t)}
-	body, err := r.RunSQLSettings(context.Background(), "SELECT * FROM keelson('plain')", nil,
+	body, format, err := r.RunSQLSettings(context.Background(), "SELECT * FROM keelson('plain')", nil,
 		map[string]string{"default_format": "JSONEachRow", "readonly": "2", "log_comment": "x"})
 	require.NoError(t, err)
+	assert.Equal(t, FormatJSONEachRow, format)
 	assert.Equal(t, "{\"v\":1,\"w\":\"a\"}\n{\"v\":2,\"w\":\"b\\tc\"}\n", string(body))
 
-	body, err = r.RunSQLSettings(context.Background(), "SELECT * FROM keelson('plain') LIMIT 1 FORMAT TabSeparated", nil,
+	body, format, err = r.RunSQLSettings(context.Background(), "SELECT * FROM keelson('plain') LIMIT 1 FORMAT tsv", nil,
 		map[string]string{"default_format": "JSONEachRow"})
 	require.NoError(t, err)
-	assert.Equal(t, "1\ta\n", string(body), "the statement's FORMAT wins")
+	assert.Equal(t, FormatTabSeparated, format, "the statement's FORMAT wins, canonicalised")
+	assert.Equal(t, "1\ta\n", string(body))
 
-	for _, s := range []map[string]string{{"limit": "1"}, {"enable_http_compression": "1"}, {"default_format": "Pretty"}} {
-		_, err = r.RunSQLSettings(context.Background(), "SELECT * FROM keelson('plain')", nil, s)
+	for _, s := range []map[string]string{{"limit": "1"}, {"enable_http_compression": "1"}, {"default_format": "Pretty"}, {"database": "nope"}} {
+		_, _, err = r.RunSQLSettings(context.Background(), "SELECT * FROM keelson('plain')", nil, s)
 		assert.True(t, errors.Is(err, ErrNeedsClickHouse), "%v: %v", s, err)
 	}
 }
