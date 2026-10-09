@@ -288,3 +288,31 @@ func TestANotesDotGridStaysInsideItsPlate(t *testing.T) {
 	}
 	assert.Empty(t, func() []float32 { x, _ := dotGrid(Rect{W: 5, H: 5}); return x }(), "no dots on a plate too small for them")
 }
+
+func TestANoteSlidesPastWhatBlocksItBesideATargetNearTheEdge(t *testing.T) {
+	// The demo's layout: Save at the stage's left edge, Cancel right beside
+	// it, both marked; two notes for Save must find room without covering
+	// Cancel or each other.
+	bounds := Rect{X: 50, Y: 332, W: 1352, H: 297}
+	save := Rect{X: 50, Y: 434, W: 44, H: 26}
+	cancel := Rect{X: 102, Y: 441, W: 56, H: 26}
+	items := []Resolved{
+		{Item: Item{Mark: Mark{Task: "a", Id: "s2", Op: OpStep, Text: "save the note"}, Step: 2}, Rects: []Rect{save}, Vis: []VisibilityE{VisibilityShown}},
+		{Item: Item{Mark: Mark{Task: "a", Id: "c", Op: OpCallout, Text: "Save writes the note"}}, Rects: []Rect{save}, Vis: []VisibilityE{VisibilityShown}},
+		{Item: Item{Mark: Mark{Task: "a", Id: "a", Op: OpArrow, Text: "this row"}}, Rects: []Rect{cancel, {X: 50, Y: 543, W: 169, H: 18}}, Vis: []VisibilityE{VisibilityShown, VisibilityShown}},
+	}
+	var notes []Rect
+	for _, s := range Layout(items, bounds, nil, EstimateMeasure) {
+		if s.Kind == ShapeNote {
+			notes = append(notes, s.Rect)
+			assert.False(t, s.Rect.Intersects(cancel), "no note covers Cancel: %+v", s.Rect)
+			assert.True(t, s.Rect.Inside(bounds))
+		}
+	}
+	require.Len(t, notes, 3)
+	for i := range notes {
+		for j := i + 1; j < len(notes); j++ {
+			assert.False(t, notes[i].Intersects(notes[j]), "notes %d and %d overlap", i, j)
+		}
+	}
+}

@@ -296,36 +296,48 @@ func hits(c Rect, rs []Rect, pad float32) bool {
 	return false
 }
 
-// placeBox puts a w × h box beside target: right, left, below, above, in
-// that order, the first inside bounds and clear of placed; otherwise the
-// first, moved inside bounds.
-func placeBox(target Rect, w, h float32, bounds Rect, placed []Rect) Rect {
+// placeBox puts a w × h box beside target: right, left, below, above, then
+// below and above aligned to the target's left and right edges. A spot
+// that runs into something slides past it, rightward, a few times. The
+// first spot inside bounds and clear of avoid wins; otherwise the first,
+// moved inside bounds.
+func placeBox(target Rect, w, h float32, bounds Rect, avoid []Rect) Rect {
 	cx, cy := target.Center()
 	cands := []Rect{
 		{X: target.MaxX() + noteGap, Y: cy - h/2, W: w, H: h},
 		{X: target.X - noteGap - w, Y: cy - h/2, W: w, H: h},
 		{X: cx - w/2, Y: target.MaxY() + noteGap, W: w, H: h},
 		{X: cx - w/2, Y: target.Y - noteGap - h, W: w, H: h},
+		{X: target.X, Y: target.MaxY() + noteGap, W: w, H: h},
+		{X: target.X, Y: target.Y - noteGap - h, W: w, H: h},
+		{X: target.MaxX() - w, Y: target.MaxY() + noteGap, W: w, H: h},
+		{X: target.MaxX() - w, Y: target.Y - noteGap - h, W: w, H: h},
 	}
 	for _, c := range cands {
-		if !c.Inside(bounds) {
-			continue
-		}
-		clear := true
-		for _, p := range placed {
-			if c.Intersects(p.Inflate(2)) {
-				clear = false
+		for slide := 0; slide < 6; slide++ {
+			if !c.Inside(bounds) {
 				break
 			}
-		}
-		if clear {
-			return c
+			blocker, hit := firstHit(c, avoid, 2)
+			if !hit {
+				return c
+			}
+			c.X = blocker.MaxX() + noteGap
 		}
 	}
 	c := cands[0]
 	c.X = min(max(c.X, bounds.X), bounds.MaxX()-c.W)
 	c.Y = min(max(c.Y, bounds.Y), bounds.MaxY()-c.H)
 	return c
+}
+
+func firstHit(c Rect, rs []Rect, pad float32) (r Rect, ok bool) {
+	for _, r = range rs {
+		if c.Intersects(r.Inflate(pad)) {
+			return r, true
+		}
+	}
+	return Rect{}, false
 }
 
 // nearestOnRect is the point of r nearest to o's centre.

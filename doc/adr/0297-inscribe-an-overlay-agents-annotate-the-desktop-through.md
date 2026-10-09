@@ -186,6 +186,7 @@ A model never computes the rect of the second kind; SD4 says where it comes from
 ## Verification plan
 
 - Unit tests for `Resolve`: each anchor kind, each visibility, a window moved between frames.
+- The widget gallery's `inscribe` demo draws every op, the tabs, the dashed behind state and a second agent's hue on a sample app, with the real scene, layout and drawing and no agent; [inscribe-gallery.scene.md](../../public/keelson/runtime/inscribe/scenes/inscribe-gallery.scene.md) captures its four states, and the gallery's test driver captures it with every other demo.
 - Unit tests for the scene and layout: replace by id, the ownership refusal, budgets, hue assignment, retiring by task and by window, and a layout pass over two tasks' overlapping notes.
 - Chat tests: a tree part resolves to its window and a rect relative to it.
 - Agent dispatch tests: refusals under observe and without desktop mode; a record per accepted call.
