@@ -33,3 +33,45 @@ func TestModuleTagsAndToolchain(t *testing.T) {
 	require.Equal(t, "a,b", readTags(dir))
 	require.Equal(t, "1.27.0", goModVersion(dir))
 }
+
+// copyFile onto the same file — `bundle --host` naming the host already in the
+// output directory, directly or through a link — keeps the file; it used to
+// truncate it before reading it, and the tab failed on an empty module.
+func TestCopyFileOntoItselfKeepsTheFile(t *testing.T) {
+	dir := t.TempDir()
+	host := filepath.Join(dir, "imzero2_browser.wasm")
+	want := []byte("\x00asm host bytes")
+	require.NoError(t, os.WriteFile(host, want, 0o644))
+	link := filepath.Join(dir, "linked.wasm")
+	require.NoError(t, os.Symlink(host, link))
+
+	require.NoError(t, copyFile(host, host))
+	require.NoError(t, copyFile(link, host))
+	got, err := os.ReadFile(host)
+	require.NoError(t, err)
+	require.Equal(t, want, got)
+}
+
+// An ordinary copy replaces dst whole, leaves no temporary file behind, and
+// gives the copy the mode the bundle's other files have.
+func TestCopyFileReplacesTheDestination(t *testing.T) {
+	dir := t.TempDir()
+	src, dst := filepath.Join(dir, "src"), filepath.Join(dir, "dst")
+	require.NoError(t, os.WriteFile(src, []byte("new"), 0o600))
+	require.NoError(t, os.WriteFile(dst, []byte("an older, longer file"), 0o644))
+	require.NoError(t, copyFile(src, dst))
+	got, err := os.ReadFile(dst)
+	require.NoError(t, err)
+	require.Equal(t, "new", string(got))
+	info, err := os.Stat(dst)
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0o644), info.Mode().Perm())
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	require.Len(t, entries, 2, "no temporary file is left")
+
+	require.Error(t, copyFile(filepath.Join(dir, "missing"), dst))
+	got, err = os.ReadFile(dst)
+	require.NoError(t, err)
+	require.Equal(t, "new", string(got), "a failed copy leaves dst as it was")
+}

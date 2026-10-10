@@ -378,19 +378,46 @@ func goModVersion(dir string) (v string) {
 	return ""
 }
 
+// copyFile copies src to dst through a temporary file beside dst, renamed into
+// place. dst is never truncated before src is read, so naming the same file
+// twice — `bundle --host` pointed at the host already in the output directory
+// — leaves it as it was, and an interrupted copy leaves no partial file.
 func copyFile(src string, dst string) (err error) {
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		return eb.Build().Str("src", src).Errorf("bundle: copy: %w", err)
+	}
+	if dstInfo, statErr := os.Stat(dst); statErr == nil && os.SameFile(srcInfo, dstInfo) {
+		return nil
+	}
 	in, err := os.Open(src)
 	if err != nil {
 		return eb.Build().Str("src", src).Errorf("bundle: copy: %w", err)
 	}
 	defer func() { _ = in.Close() }()
-	out, err := os.Create(dst)
+	out, err := os.CreateTemp(filepath.Dir(dst), "."+filepath.Base(dst)+".*")
 	if err != nil {
 		return eb.Build().Str("dst", dst).Errorf("bundle: copy: %w", err)
 	}
+	tmp := out.Name()
+	defer func() {
+		if err != nil {
+			_ = os.Remove(tmp)
+		}
+	}()
 	if _, err = io.Copy(out, in); err != nil {
 		_ = out.Close()
 		return eb.Build().Str("dst", dst).Errorf("bundle: copy: %w", err)
 	}
-	return out.Close()
+	if err = out.Chmod(0o644); err != nil {
+		_ = out.Close()
+		return eb.Build().Str("dst", dst).Errorf("bundle: copy: %w", err)
+	}
+	if err = out.Close(); err != nil {
+		return eb.Build().Str("dst", dst).Errorf("bundle: copy: %w", err)
+	}
+	if err = os.Rename(tmp, dst); err != nil {
+		return eb.Build().Str("dst", dst).Errorf("bundle: copy: %w", err)
+	}
+	return nil
 }
