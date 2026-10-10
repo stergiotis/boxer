@@ -111,6 +111,15 @@ func TestPlan_JoinUsesAllColumns(t *testing.T) {
 	assert.True(t, p.proj["apps"].IsAll())
 }
 
+// A WITH query named like a keelson table shadows it, as in ClickHouse: the
+// table is not snapshotted, while a table its body reads still is.
+func TestPlan_CTENamedLikeATableIsNotTheTable(t *testing.T) {
+	e := &Engine{reg: testRegistry(t)}
+	assert.Empty(t, e.plan("WITH env AS (SELECT 1 AS a) SELECT * FROM env").tables)
+	assert.Equal(t, []string{"env"}, e.plan("WITH c AS (SELECT name FROM env) SELECT * FROM c").tables)
+	assert.ElementsMatch(t, []string{"apps"}, e.plan("WITH env AS (SELECT 1 AS a) SELECT * FROM env, apps").tables)
+}
+
 // --- Query() integration tests (broker + clickhouse-local) ---
 
 func newEngineWithBroker(t *testing.T) *Engine {
@@ -256,3 +265,13 @@ func (s *sealedStub) Snapshot(introspect.Projection) (arrow.RecordBatch, error) 
 	return nil, assert.AnError
 }
 func (s *sealedStub) Open() (io.ReadSeekCloser, uint64, error) { return nil, 0, assert.AnError }
+
+// The reviewer's repro: a WITH query named like a provider that cannot be
+// snapshotted without arguments read the provider anyway and failed.
+func TestQuery_CTENamedLikeAProvider(t *testing.T) {
+	e := newEngineWithBroker(t)
+	require.NoError(t, e.reg.Register(seqProvider{}))
+	body, _, err := e.QueryParams(context.Background(), "WITH seq AS (SELECT 1 AS a) SELECT * FROM seq", "TabSeparated", nil)
+	require.NoError(t, err)
+	assert.Equal(t, "1", strings.TrimSpace(string(body)))
+}

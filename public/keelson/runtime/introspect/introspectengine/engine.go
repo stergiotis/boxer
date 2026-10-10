@@ -145,6 +145,37 @@ type queryPlan struct {
 	pruned bool
 }
 
+// referencedTables are the table names pr reads from: every table
+// identifier, less a name that the scopes resolve only as a reference to a
+// WITH query. A WITH query named like a keelson table shadows it, as in
+// ClickHouse, and snapshotting the table would be wasted work at best and,
+// for a table that needs arguments, a failure. Anything the scopes do not
+// settle stays in, the safe superset.
+func referencedTables(pr *nanopass.ParseResult) (tables []string) {
+	cteOnly := make(map[string]bool)
+	if scopes, err := nanopass.BuildScopes(pr, ""); err == nil {
+		for _, sc := range nanopass.FlattenScopes(scopes) {
+			for _, ts := range sc.Tables {
+				switch {
+				case ts.IsSubquery || ts.IsFunction:
+				case ts.IsCTE:
+					if _, seen := cteOnly[ts.Table]; !seen {
+						cteOnly[ts.Table] = true
+					}
+				default:
+					cteOnly[ts.Table] = false
+				}
+			}
+		}
+	}
+	for _, tr := range analysis.ExtractTables(pr) {
+		if !cteOnly[tr.Table] {
+			tables = append(tables, tr.Table)
+		}
+	}
+	return
+}
+
 // plan analyses sql best-effort. On any uncertainty it widens to a safe
 // superset rather than risk dropping data.
 func (e *Engine) plan(sql string) (p queryPlan) {
@@ -162,9 +193,9 @@ func (e *Engine) plan(sql string) (p queryPlan) {
 
 	// Referenced tables ∩ registered providers.
 	refd := make(map[string]struct{})
-	for _, tr := range analysis.ExtractTables(pr) {
-		if _, ok := e.reg.Lookup(tr.Table); ok {
-			refd[tr.Table] = struct{}{}
+	for _, t := range referencedTables(pr) {
+		if _, ok := e.reg.Lookup(t); ok {
+			refd[t] = struct{}{}
 		}
 	}
 	if len(refd) == 0 {
