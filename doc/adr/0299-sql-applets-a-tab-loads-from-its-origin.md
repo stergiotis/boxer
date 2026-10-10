@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-09
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-10
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0299: SQL applets a browser tab loads from its page's origin
 
@@ -214,8 +212,8 @@ The map refreshes when the demo is rebuilt, which is a manual dispatch.
 
 ## Status
 
-Proposed 2026-10-09. SD1–SD5 were built the same day, beside this record,
-for review together with it.
+Accepted 2026-10-10. SD1–SD5 were built on 2026-10-09, beside this record,
+and reviewed with it; the published demo has carried SD5 since.
 
 ## References
 

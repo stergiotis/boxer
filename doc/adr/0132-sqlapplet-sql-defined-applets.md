@@ -743,6 +743,16 @@ parsed before keeps its tree; its canonical form parses under grammar2. What
 the query reads is judged as in any subquery: `view(SELECT * FROM url(…))` is
 read-egress with `url` as witness.
 
+## Update (2026-10-10) — a third way in: a document a browser tab fetches beside its page
+
+[ADR-0299](./0299-sql-applets-a-tab-loads-from-its-origin.md) admits an
+applet document neither committed nor stored: a browser tab fetches it from
+its page's origin at start and mints it. It passes `ParseDocSource`, as the
+books and the O4 store do, and a slug a committed applet holds is refused, as
+in O4-D3. What it does not pass is review, so the stance of §SD5 — the
+committed corpus is the gate, `readonly` defence in depth — cannot hold for
+it, and the tab admits only a buffer §SD5 classifies **read**.
+
 ## References
 
 Internal:

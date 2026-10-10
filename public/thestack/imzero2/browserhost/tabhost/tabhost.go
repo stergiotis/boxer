@@ -63,7 +63,7 @@ type Services struct {
 	// KeelsonSQLOrigin, which is answered in process. A tab published on a
 	// site that says it loads nothing from elsewhere keeps that true whatever
 	// a visitor switches on (a map's tiles, a fetch an app makes), and can
-	// still read a file served beside its page (ADR-0299 §SD2, proposed).
+	// still read a file served beside its page (ADR-0299 §SD2).
 	NoEgress bool
 }
 
@@ -124,7 +124,7 @@ type Options struct {
 	// the URL of the directory the page is served from (PageBase), empty when
 	// the worker did not pass it.
 	// A non-empty id replaces -app; an error is drawn in place of the app
-	// (ADR-0299 §SD1, proposed).
+	// (ADR-0299 §SD1).
 	Prepare func(ctx context.Context, base string) (id app.AppIdT, err error)
 }
 

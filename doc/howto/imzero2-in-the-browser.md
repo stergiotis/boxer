@@ -123,8 +123,7 @@ trial, not this page.
    leaves the page's origin, a document whose buffer is not read-class, and
    one whose slug a committed applet holds are refused, and the reason is
    drawn in the tab
-   ([ADR-0299](../adr/0299-sql-applets-a-tab-loads-from-its-origin.md),
-   proposed). An `endpoint: introspection` applet and one that declares
+   ([ADR-0299](../adr/0299-sql-applets-a-tab-loads-from-its-origin.md)). An `endpoint: introspection` applet and one that declares
    `datasets:` do not run in a tab. A document whose rows are literals —
    `boxer code analysis sccapplet` writes one — runs with no database when
    `CLICKHOUSE_URL` names the in-process endpoint,

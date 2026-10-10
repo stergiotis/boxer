@@ -14,7 +14,7 @@ import (
 func NewCliCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "sccapplet",
-		Usage: "write a repository's code volume and complexity, as scc counts them, into a SQL applet a browser tab answers without a database (ADR-0299, proposed)",
+		Usage: "write a repository's code volume and complexity, as scc counts them, into a SQL applet a browser tab answers without a database (ADR-0299)",
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "dir", Value: ".", Usage: "a directory inside the git worktree to scan"},
 			&cli.StringFlag{Name: "out", Required: true, Usage: "the applet document to write; its base name is the applet's slug"},

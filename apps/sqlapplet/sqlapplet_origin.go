@@ -1,5 +1,5 @@
 // sqlapplet_origin.go loads one applet document a browser tab fetches from its
-// page's origin at start (ADR-0299, proposed): a document that is not in any
+// page's origin at start (ADR-0299): a document that is not in any
 // committed book, admitted through the same parser the books and the runtime
 // store go through, and only when its buffer is read-class.
 
@@ -21,10 +21,10 @@ import (
 )
 
 // TabDoc names the applet document a tab fetches from its page's origin and
-// mounts in place of its default app (ADR-0299 §SD1, proposed).
+// mounts in place of its default app (ADR-0299 §SD1).
 var TabDoc = env.NewString(env.Spec{
 	Name:        "BOXER_SQLAPPLET_TAB_DOC",
-	Description: "a browser tab fetches this applet document from its page's origin and mounts it (ADR-0299, proposed): a path relative to the page, such as applets/x.md, or absolute on its origin, such as /applets/x.md; its base name is the slug, and only a read-class buffer is admitted",
+	Description: "a browser tab fetches this applet document from its page's origin and mounts it (ADR-0299): a path relative to the page, such as applets/x.md, or absolute on its origin, such as /applets/x.md; its base name is the slug, and only a read-class buffer is admitted",
 	Category:    env.CategoryE("boxer-sqlapplet"),
 })
 

@@ -85,7 +85,7 @@ try {
   const env = q.getAll('env');
   if (!env.some((e) => e.startsWith('CLICKHOUSE_URL='))) env.push(`CLICKHOUSE_URL=${self.location.origin}/ch/`);
   // The directory the page is served from, which the module resolves paths
-  // against (ADR-0299, proposed): an applet document named by
+  // against (ADR-0299): an applet document named by
   // BOXER_SQLAPPLET_TAB_DOC. The worker sits beside the page in a bundle.
   if (!env.some((e) => e.startsWith('BOXER_TAB_BASE='))) env.push(`BOXER_TAB_BASE=${new URL('./', self.location.href).href}`);
   const r = await startReactor({ goBytes, stub, argv, env, log: (l) => { tee(l); if (!l.startsWith('{')) log(l); } });

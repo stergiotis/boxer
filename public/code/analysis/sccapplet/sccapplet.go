@@ -3,7 +3,7 @@
 // buffer carries its rows as literals: `SELECT … FROM values(…)`. A browser
 // tab answers that statement in process (ADR-0290 §SD3), so the document
 // draws as a treemap where no database and no table exist — beside a
-// published demo page, for one (ADR-0299, proposed).
+// published demo page, for one (ADR-0299).
 //
 // One row per directory. Its value is the lines of code in the files directly
 // inside it, as the treemap's node contract counts a node without its

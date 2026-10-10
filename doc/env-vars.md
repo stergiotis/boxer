@@ -4,7 +4,7 @@ audience: contributor
 status: draft
 generated: true
 generator: public/app env gen-docs
-generated-at: 2026-10-09T20:41:13Z
+generated-at: 2026-10-10T18:16:24Z
 ---
 
 > **Status: draft — pre-human-review.** Machine-generated registry snapshot;
@@ -123,7 +123,7 @@ generated-at: 2026-10-09T20:41:13Z
 |------|------|---------|----------|-----------|-------------|
 | `BOXER_SQLAPPLET_DATASET_EVENTS` | categorial-string | `on` | — |  | dataset binder event path (ADR-0188 §SD3): on = subscribe and act; drop = subscribe but discard, reconcile alone binds (fault injection); off = do not subscribe, poll<br>**Allowed:** `on` \| `drop` \| `off` |
 | `BOXER_SQLAPPLET_DATASET_RECONCILE` | duration | `30s` | — |  | dataset binder reconcile interval with events subscribed (ADR-0188 §SD3); a Go duration such as 30s or 5s |
-| `BOXER_SQLAPPLET_TAB_DOC` | string | — | — |  | a browser tab fetches this applet document from its page's origin and mounts it (ADR-0299, proposed): a path relative to the page, such as applets/x.md, or absolute on its origin, such as /applets/x.md; its base name is the slug, and only a read-class buffer is admitted |
+| `BOXER_SQLAPPLET_TAB_DOC` | string | — | — |  | a browser tab fetches this applet document from its page's origin and mounts it (ADR-0299): a path relative to the page, such as applets/x.md, or absolute on its origin, such as /applets/x.md; its base name is the slug, and only a read-class buffer is admitted |
 | `BOXER_SQLAPPLET_WINDOW_SIZE` | string | — | — |  | open an applet window at "WxH" logical points (scripted screenshots); empty or unparseable keeps the host's archetype default |
 
 ## boxer-trail (1)
@@ -164,7 +164,7 @@ generated-at: 2026-10-09T20:41:13Z
 | `BOXER_GODEP_ROOT` | path | — | — |  | module directory the keelson go_packages/go_imports tables collect from; empty resolves the nearest go.mod above the working directory |
 | `BOXER_GODEP_TAGS` | string | — | — |  | comma-separated build tags for the keelson go_packages/go_imports collection; empty falls back to <root>/tags then inherited GOFLAGS |
 | `BOXER_IMZERO_DEBUG_MODE` | string | — | — |  | imzero2 debug profile: memcheck\|massif\|flamegraph\|heaptrack; empty uses the default launcher |
-| `BOXER_TAB_BASE` | string | — | — |  | the URL of the directory a browser tab's page is served from, set by the tab's worker (ADR-0299, proposed); a tab binary's prepare step resolves paths against it, and Services.NoEgress lets its origin through |
+| `BOXER_TAB_BASE` | string | — | — |  | the URL of the directory a browser tab's page is served from, set by the tab's worker (ADR-0299); a tab binary's prepare step resolves paths against it, and Services.NoEgress lets its origin through |
 | `BOXER_TAB_HOST_URL` | string | `https://stergiotis.github.io/boxer/tabhost/` | — |  | base URL a tab binary's `bundle` fetches the Rust browser host from, as <base><sha256>.wasm checked against the digest in browserhost.sum; point it at a mirror or a local directory server for an offline build |
 | `BOXER_WAIT_FOR_DEBUGGER` | bool | — | `--waitForDebugger` |  | execution of program waits until an attached debugger is detected (linux only) |
 | `BOXER_WAVEFORM_DEMO_FILE` | path | — | — |  | recording the waveform gallery demo opens at mount, for scripted scenes; empty opens the synthetic track |
