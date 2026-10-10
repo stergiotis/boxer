@@ -59,6 +59,7 @@ type DFACache struct {
 	atn   *antlr.ATN
 	d2dfa []*antlr.DFA
 	pcc   *antlr.PredictionContextCache
+	syncs syncSets // per-ATN-state follow sets for FastSyncStrategy; never reset
 
 	maxStates     atomic.Int64 // 0 means DefaultMaxDFAStates
 	checkInterval atomic.Int64 // 0 means DefaultDFACheckInterval
@@ -97,11 +98,15 @@ func (inst *DFACache) limits() (maxStates, checkInterval int64) {
 // the read-lock. The caller must assign the returned simulator to
 // parser.Interpreter and call the returned release func when parsing is done
 // (defer it — release is panic-safe).
+//
+// Acquire also installs a [FastSyncStrategy] as the parser's error handler, so
+// a caller that wants a different strategy sets it after Acquire.
 func (inst *DFACache) Acquire(p antlr.Parser) (*antlr.ParserATNSimulator, func()) {
 	inst.once.Do(func() {
 		inst.atn = p.GetATN() // immutable; captured from the generated interpreter
 		inst.rebuild()
 	})
+	p.SetErrorHandler(&FastSyncStrategy{DefaultErrorStrategy: antlr.NewDefaultErrorStrategy(), sets: &inst.syncs})
 	inst.mu.RLock()
 	sim := antlr.NewParserATNSimulator(p, inst.atn, inst.d2dfa, inst.pcc)
 	return sim, inst.release
