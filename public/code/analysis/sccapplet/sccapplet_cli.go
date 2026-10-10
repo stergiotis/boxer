@@ -18,7 +18,7 @@ func NewCliCommand() *cli.Command {
 		Flags: []cli.Flag{
 			&cli.StringFlag{Name: "dir", Value: ".", Usage: "a directory inside the git worktree to scan"},
 			&cli.StringFlag{Name: "out", Required: true, Usage: "the applet document to write; its base name is the applet's slug"},
-			&cli.IntFlag{Name: "depth", Value: 4, Usage: "fold directories deeper than this many levels into their ancestor; 0 folds nothing"},
+			&cli.IntFlag{Name: "depth", Usage: "fold directories deeper than this many levels into their ancestor; 0 folds nothing"},
 			&cli.StringFlag{Name: "revision", Usage: "the commit the worktree is at, stated in the document; empty states none"},
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) (err error) {

@@ -81,7 +81,7 @@ jobs:
           # beside itself and the tab answers without a database (ADR-0299).
           # It scans the checkout, so it runs before anything is written
           # into it.
-          ./boxer.sh code analysis sccapplet --out "$RUNNER_TEMP/repo-complexity.md" --depth 4 --revision "$GITHUB_SHA"
+          ./boxer.sh code analysis sccapplet --out "$RUNNER_TEMP/repo-complexity.md" --depth 0 --revision "$GITHUB_SHA"
           # egui's built-in faces plus the vendored icon font: no system fonts
           # whose set and licences depend on the runner.
           mkdir -p demo-fonts

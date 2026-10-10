@@ -33,9 +33,9 @@ import (
 // Options shape the document.
 type Options struct {
 	// Depth folds every directory deeper than this many levels into its
-	// ancestor at that depth; 0 folds nothing. A tab draws a few hundred
-	// cells more readably than a thousand, and parses the shorter statement
-	// faster.
+	// ancestor at that depth; 0 folds nothing. Folding keeps every line and
+	// shortens the statement a tab parses, at the cost of the folded
+	// directories' own cells.
 	Depth int
 	// Revision names the tree the scan read — a commit id — and is stated in
 	// the document. Empty states none.

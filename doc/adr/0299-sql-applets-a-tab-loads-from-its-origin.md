@@ -125,13 +125,14 @@ applet document whose buffer carries one row per directory as literals,
 `SELECT … FROM values(…)`, which the tab's evaluator answers with no database
 (ADR-0290 §SD3): area the directory's own lines of code, colour the
 cyclomatic complexity per 100 lines under it, generated files and tests left
-out as the repo code exploration app leaves them out, directories past a depth
-folded into their ancestor. The document states the commit it was taken at and
+out as the repo code exploration app leaves them out; it can fold directories
+past a depth into their ancestor, which keeps every line and drops those
+directories' own cells. The document states the commit it was taken at and
 nothing time-dependent, so one commit gives one document.
 
 The `tab-host` workflow's demo build runs it on the checkout, before anything
-is written into it, at depth 4 and the dispatched commit, and puts the
-document beside the demo page; the landing page links it by its relative path.
+is written into it, at the dispatched commit and with nothing folded, and puts
+the document beside the demo page; the landing page links it by its relative path.
 `imzero2tabdemo` takes `LoadTabApplet` as its prepare step and mints no
 committed applet, since nearly all of them read tables a tab does not have.
 The map refreshes when the demo is rebuilt, which is a manual dispatch.
@@ -196,7 +197,12 @@ The map refreshes when the demo is rebuilt, which is a manual dispatch.
   static server — was opened from the landing page's link in headless
   Chromium: the document resolved against the page, `NoEgress` let it through,
   the server saw no request for anything outside the site, and the treemap
-  drew 574 directories.
+  drew 574 directories at depth 4. The whole tree, 976 directories with
+  nothing folded, ran out of memory in a tab before the nanopass text fix and
+  drew in about 3 s after it, against about 1.2 s at depth 4, in single runs
+  under software rendering. The published demo folds nothing: the treemap's
+  own drill and depth controls bound what is drawn, and a depth of 4 left a
+  quarter of the lines, 11% in one directory, without cells of their own.
 
 ## Deferred
 
