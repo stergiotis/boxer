@@ -278,8 +278,13 @@ type Service struct {
 	// revision n before a retract must not take the next publish for it.
 	retiredRevisions map[string]uint64
 	leaving          map[string]*time.Timer // left, still registered until the timer unloads
-	totalBytes       uint64
-	closed           bool
+	// unloading counts the timers that have taken their handle off leaving
+	// and not yet unloaded it; unloaded is signalled when it drops to zero,
+	// so FlushRetracts can wait for them (unloaded's lock is mu).
+	unloading  int
+	unloaded   *sync.Cond
+	totalBytes uint64
+	closed     bool
 }
 
 // NewService builds the Service and, when a bus is supplied, subscribes to
@@ -308,6 +313,7 @@ func NewService(cfg Config) (inst *Service, err error) {
 		retiredRevisions: make(map[string]uint64),
 		leaving:          make(map[string]*time.Timer),
 	}
+	inst.unloaded = sync.NewCond(&inst.mu)
 	// A probe publish is not worth a start-up dependency on the base
 	// directory, but an unusable one must not surface as the first app's
 	// publish error: allocate and drop one unnamed file now.
@@ -379,7 +385,9 @@ func (inst *Service) Close(context.Context) (err error) {
 
 // FlushRetracts runs the UNLOAD step now for every dataset that has left
 // but whose grace has not elapsed, closing their files regardless of open
-// readers. Tests use it to make the two-phase withdrawal synchronous.
+// readers, and waits for any unload a grace timer has already started. Tests
+// use it to make the two-phase withdrawal synchronous: when it returns, no
+// dataset that has left is still registered.
 func (inst *Service) FlushRetracts() {
 	inst.mu.Lock()
 	handles := make([]string, 0, len(inst.leaving))
@@ -392,6 +400,11 @@ func (inst *Service) FlushRetracts() {
 	for _, h := range handles {
 		inst.unload(h, 0)
 	}
+	inst.mu.Lock()
+	for inst.unloading > 0 {
+		inst.unloaded.Wait()
+	}
+	inst.mu.Unlock()
 }
 
 // Publish seals in.ArrowIPCStream into a new unnamed file and registers
@@ -667,8 +680,15 @@ func (inst *Service) leaveLocked(rec *record) (ev Event) {
 			return // flushed or closed meanwhile; that path unloaded it
 		}
 		delete(inst.leaving, handle)
+		inst.unloading++
 		inst.mu.Unlock()
 		inst.unload(handle, grace)
+		inst.mu.Lock()
+		inst.unloading--
+		if inst.unloading == 0 {
+			inst.unloaded.Broadcast()
+		}
+		inst.mu.Unlock()
 	})
 	return
 }
