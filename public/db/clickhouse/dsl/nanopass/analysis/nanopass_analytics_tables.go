@@ -13,24 +13,17 @@ type TableRef struct {
 }
 
 // ExtractTables walks the CST and returns all table references found in
-// TableIdentifier nodes, with names decoded (quoting removed). It excludes
-// TableIdentifier nodes that appear as column qualifiers inside
-// ColumnIdentifier. The walk is purely syntactic: CTE references look like
-// table references and ARE included — resolve against nanopass.BuildScopes
-// (TableSource.IsCTE) when real tables must be distinguished.
+// TableIdentifier nodes, with names decoded (quoting removed). Column
+// qualifiers are ColumnQualifier nodes and are not reported. The walk is
+// purely syntactic: CTE references look like table references and ARE
+// included — resolve against nanopass.BuildScopes (TableSource.IsCTE) when
+// real tables must be distinguished.
 func ExtractTables(pr *nanopass.ParseResult) (refs []TableRef) {
 	nodes := nanopass.FindAll(pr.Tree, func(ctx antlr.ParserRuleContext) bool {
+		// Column qualifiers ("t1" in "t1.id") are a columnQualifier node, not a
+		// tableIdentifier, so they never match here.
 		_, ok := ctx.(*grammar1.TableIdentifierContext)
-		if !ok {
-			return false
-		}
-		// Skip TableIdentifier nodes that are children of ColumnIdentifier —
-		// those are column qualifiers (e.g. "t1" in "t1.id"), not table references.
-		// A nil parent fails the type assertion, so no separate nil check.
-		if _, isColId := ctx.GetParent().(*grammar1.ColumnIdentifierContext); isColId {
-			return false
-		}
-		return true
+		return ok
 	})
 	refs = make([]TableRef, 0, len(nodes))
 	for _, n := range nodes {

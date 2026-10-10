@@ -533,7 +533,7 @@ func unresolvedRefs(pr *nanopass.ParseResult, node antlr.ParserRuleContext, oute
 		if !isCol {
 			return true
 		}
-		tbl := col.TableIdentifier()
+		tbl := col.ColumnQualifier()
 		if tbl == nil {
 			return true
 		}
@@ -687,7 +687,7 @@ func bareIdentifierOf(expr grammar1.IColumnExprContext) string {
 		return ""
 	}
 	col, isCol := ident.ColumnIdentifier().(*grammar1.ColumnIdentifierContext)
-	if !isCol || col.TableIdentifier() != nil {
+	if !isCol || col.ColumnQualifier() != nil {
 		return ""
 	}
 	nested, isNested := col.NestedIdentifier().(*grammar1.NestedIdentifierContext)

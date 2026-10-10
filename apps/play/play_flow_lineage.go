@@ -281,8 +281,8 @@ func (b *lineageBuilder) collectRefs(expr antlr.ParserRuleContext) (refs []linea
 			return true
 		}
 		ref := lineageRef{}
-		if ti := cid.TableIdentifier(); ti != nil {
-			ref.table = nanopass.DecodeIdentifier(ti.Identifier().GetText())
+		if ti := cid.ColumnQualifier(); ti != nil {
+			ref.table = nanopass.ColumnQualifierName(ti)
 		}
 		if ni := cid.NestedIdentifier(); ni != nil {
 			ids := ni.AllIdentifier()

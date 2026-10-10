@@ -18,6 +18,7 @@ package nanopass_test
 // WITH forms that carry the ambiguity over-represented on purpose.
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/antlr4-go/antlr/v4"
@@ -148,18 +149,20 @@ func TestSLLNeverDisagreesWhenItSucceeds(t *testing.T) {
 
 // TestSLLFallbackIsLoadBearing pins the reason the fallback cannot be dropped.
 //
-// Each statement below is rejected by SLL alone and parses cleanly under LL —
-// all three are `x.y` qualified references, which is where SLL's missing call
-// stack actually bites. With naive SLL and no fallback these were live test
-// failures, not a hypothetical.
+// Each statement below is rejected by SLL alone and parses cleanly under LL.
+// The fixtures used to be `x.y` qualified references; those became SLL-exact
+// when the column qualifier got its own rule (TestSLLAcceptsQualifiedNames),
+// so the witnesses are now the classes that remain: the CAST target against
+// the alias suffix, the BETWEEN operand against binary AND, and a table
+// function taking a SELECT.
 func TestSLLFallbackIsLoadBearing(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		sql  string
 	}{
-		{"aliased_subquery_in_join", "SELECT * FROM t1 JOIN (SELECT b FROM t2) AS sub ON t1.id = sub.id"},
-		{"in_subquery_correlated", "SELECT a FROM t1 WHERE a IN (SELECT 1 FROM t2 WHERE t2.id = t1.id)"},
-		{"qualified_join_target", "SELECT * FROM t1 JOIN db2.t2 ON t1.id = t2.id"},
+		{"cast_as_type", "SELECT CAST(a AS UInt64) FROM t"},
+		{"between_and", "SELECT a FROM t WHERE a BETWEEN 1 AND 10"},
+		{"view_of_select", "SELECT * FROM view(SELECT * FROM numbers(3))"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, sllClean := parseAtMode(tc.sql, antlr.PredictionModeSLL)
@@ -179,6 +182,48 @@ func TestSLLFallbackIsLoadBearing(t *testing.T) {
 				antlr.TreesStringTree(pr.Tree, pr.Parser.GetRuleNames(), pr.Parser))
 			assert.Greater(t, after.Fallbacks, before.Fallbacks,
 				"a fallback happened but PredictionStats did not count it")
+		})
+	}
+}
+
+// TestSLLAcceptsQualifiedNames pins the columnQualifier repair (ADR-0304,
+// proposed).
+//
+// When the column qualifier was a tableIdentifier, SLL left that rule through
+// every place it is invoked — FROM lists, JOIN targets, INSERT targets — so
+// `t.c` followed by anything that can follow a table (`,` `)` WHERE JOIN EOF …)
+// was read as `db.table` and the parse fell back to LL. That was 97% of all
+// SLL rejections over the test-suite corpus. Each statement here must be
+// accepted by SLL and give LL's tree.
+func TestSLLAcceptsQualifiedNames(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		sql  string
+	}{
+		{"aliased_subquery_in_join", "SELECT * FROM t1 JOIN (SELECT b FROM t2) AS sub ON t1.id = sub.id"},
+		{"in_subquery_correlated", "SELECT a FROM t1 WHERE a IN (SELECT 1 FROM t2 WHERE t2.id = t1.id)"},
+		{"qualified_join_target", "SELECT * FROM t1 JOIN db2.t2 ON t1.id = t2.id"},
+		{"qualified_before_comma", "SELECT t.a, t.b FROM t"},
+		{"qualified_before_paren", "SELECT f(t.a) FROM t"},
+		{"qualified_at_eof", "SELECT a FROM t WHERE t.a = u.b"},
+		{"qualified_before_group", "SELECT t.a FROM t WHERE x = t.a GROUP BY t.a ORDER BY t.a LIMIT 1"},
+		{"three_part", "SELECT db.t.c, db.t.c AS d FROM db.t"},
+		{"nested_field", "SELECT t.n.f, n.f FROM t"},
+		{"columns_qualifier", "SELECT columns.name FROM system.columns"},
+		{"param_qualifier", "SELECT {t:Identifier}.a FROM {t:Identifier}"},
+		{"qualified_star", "SELECT t.*, db.t.* FROM db.t AS t"},
+		// benchMediumSQL without its BETWEEN, which SLL rejects for an
+		// unrelated reason (TestSLLFallbackIsLoadBearing).
+		{"medium_without_between", strings.Replace(benchMediumSQL, "o.amount BETWEEN 10 AND 1000", "o.amount >= 10", 1)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			llTree, llClean := parseAtMode(tc.sql, antlr.PredictionModeLL)
+			require.True(t, llClean, "fixture does not parse under LL; fix the fixture, not the parser")
+
+			sllTree, sllClean := parseAtMode(tc.sql, antlr.PredictionModeSLL)
+			require.True(t, sllClean, "SLL rejects a qualified name again: the column qualifier "+
+				"must stay a rule only DOT can follow (ADR-0304, proposed)")
+			assert.Equal(t, llTree, sllTree)
 		})
 	}
 }

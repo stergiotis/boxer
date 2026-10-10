@@ -286,7 +286,7 @@ func filterColumns(pr *nanopass.ParseResult) (refs []filterColumn) {
 	}) {
 		cid := n.(*grammar1.ColumnIdentifierContext)
 		var ref filterColumn
-		if ti := cid.TableIdentifier(); ti != nil {
+		if ti := cid.ColumnQualifier(); ti != nil {
 			if db := ti.DatabaseIdentifier(); db != nil {
 				ref.path = append(ref.path, nanopass.DecodeIdentifier(db.GetText()))
 			}

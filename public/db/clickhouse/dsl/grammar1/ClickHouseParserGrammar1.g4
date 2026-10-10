@@ -278,7 +278,13 @@ columnLambdaExpr:
     )
     ARROW columnExpr
     ;
-columnIdentifier: (tableIdentifier DOT)? nestedIdentifier;
+columnIdentifier: (columnQualifier DOT)? nestedIdentifier;
+// columnQualifier spells tableIdentifier again on purpose (ADR-0304, proposed):
+// SLL prediction leaves a rule through every place the rule is invoked, so a
+// shared tableIdentifier let `t.c` in a projection be read as `db.table`
+// whenever a FROM-clause continuation (`,` `)` WHERE JOIN …) could follow it.
+// Only DOT follows columnQualifier, which makes the decision SLL-exact.
+columnQualifier: (databaseIdentifier DOT)? (identifier | COLUMNS | paramSlot);
 nestedIdentifier: identifier (DOT identifier)?;
 
 // Tables

@@ -479,6 +479,29 @@ and the regenerated grammar diff. Implemented as one change (`d56ba80b`,
 2026-08-18): two-stage prediction, the shared bounded cache, and the grammar
 repair.
 
+## Updates
+
+### 2026-10-09 — §SD2's mechanism was misnamed; §SD6's dotted-name rejects explained
+
+**§SD2.** The decision stands: `BailErrorStrategy` is unusable in antlr4-go
+v4.13.1. The reason given is wrong. It is not a nil token from `RecoverInline`
+being dereferenced. The generated error exit passes the bail strategy's
+`ParseCancellationException` to `ReportError`, whose default branch prints
+`unknown recognition error type` to stdout and then calls the exception's
+`GetMessage`, which is `panic("implement me")`. When the first error comes from
+prediction instead, the same error exit calls `SetError(nil)` and the parse
+continues in recovery mode, so the bail neither stops reliably nor panics
+reliably. A strategy that panics with its own sentinel from `Recover`,
+`RecoverInline` and `Sync` would give stage one the early abort; it only helps
+the rejected path and is not taken.
+Details in [antlr4-go — what the runtime and the generated parser cost](../adr-background-work/antlr4-go-runtime-and-codegen-review.md).
+
+**§SD6.** The dotted-name SLL rejections were one mechanism, not a
+correlation: the column qualifier reused `tableIdentifier`, so SLL continued
+past it into FROM-side contexts. [ADR-0304](./0304-sll-exact-column-qualifiers.md)
+(proposed) gives the qualifier its own rule. It leaves the three-way `t.c`
+ambiguity §SD6 kept exactly as it is.
+
 ## References
 
 - [nanopass — the full-context prediction tax on `WITH`](../adr-background-work/nanopass-full-context-prediction-tax.md)

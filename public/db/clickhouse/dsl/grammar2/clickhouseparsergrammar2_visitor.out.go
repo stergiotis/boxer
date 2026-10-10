@@ -295,6 +295,9 @@ type ClickHouseParserGrammar2Visitor interface {
 	// Visit a parse tree produced by ClickHouseParserGrammar2#columnIdentifier.
 	VisitColumnIdentifier(ctx *ColumnIdentifierContext) interface{}
 
+	// Visit a parse tree produced by ClickHouseParserGrammar2#columnQualifier.
+	VisitColumnQualifier(ctx *ColumnQualifierContext) interface{}
+
 	// Visit a parse tree produced by ClickHouseParserGrammar2#nestedIdentifier.
 	VisitNestedIdentifier(ctx *NestedIdentifierContext) interface{}
 

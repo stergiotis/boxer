@@ -1179,7 +1179,9 @@ func stripStringQuotes(s string) string {
 	return s
 }
 
-func extractTableIdentifier(ctx *grammar2.TableIdentifierContext) (database, table string) {
+// extractTableIdentifier reads a tableIdentifier or a columnQualifier: the two
+// rules spell the same children (ADR-0304, proposed).
+func extractTableIdentifier(ctx antlr.ParserRuleContext) (database, table string) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
 		if db, ok := child.(*grammar2.DatabaseIdentifierContext); ok {

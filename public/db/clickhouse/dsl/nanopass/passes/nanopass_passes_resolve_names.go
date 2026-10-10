@@ -233,7 +233,7 @@ func resolveColumnIdentifier(rw nanopass.RewriterI, scope *nanopass.SelectScope,
 
 	var aliasPrefix string
 	var res ResolveResult
-	if tid := colIdCtx.TableIdentifier(); tid != nil {
+	if tid := colIdCtx.ColumnQualifier(); tid != nil {
 		src, found := scope.ResolveAlias(nanopass.DecodeIdentifier(tid.GetText()))
 		if !found || src.IsFunction {
 			// An unknown alias is left alone: the scope may simply not model

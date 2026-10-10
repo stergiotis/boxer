@@ -66,12 +66,12 @@ func canonicalizeIdentifiersImpl(sql string) (result string, err error) {
 			// Type names (CAST targets, slot types) are not relations —
 			// ClickHouse does not accept them quoted.
 			return false
-		case *grammar1.TableIdentifierContext:
+		case *grammar1.TableIdentifierContext, *grammar1.ColumnQualifierContext:
 			// `columns` in table position is the COLUMNS token directly under
-			// tableIdentifier (the keyword rule cannot carry it), so no
-			// IdentifierContext reaches it below. Quote it here; the database
-			// qualifier is still an identifier and is reached by the walk.
-			if kw := c.COLUMNS(); kw != nil {
+			// tableIdentifier or columnQualifier (the keyword rule cannot carry
+			// it), so no IdentifierContext reaches it below. Quote it here; the
+			// database qualifier is still an identifier and is reached by the walk.
+			if kw := c.(interface{ COLUMNS() antlr.TerminalNode }).COLUMNS(); kw != nil {
 				tok := kw.GetSymbol()
 				idx := tok.GetTokenIndex()
 				if !guard.processed[idx] {

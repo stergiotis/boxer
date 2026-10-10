@@ -103,8 +103,8 @@ func convertIdentifier(pr *nanopass.ParseResult, ctx *grammar2.ColumnExprIdentif
 func extractColumnIdentifier(ctx *grammar2.ColumnIdentifierContext, ref *ColumnRefData) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)
-		if ti, ok := child.(*grammar2.TableIdentifierContext); ok {
-			ref.Database, ref.Table = extractTableIdentifier(ti)
+		if cq, ok := child.(*grammar2.ColumnQualifierContext); ok {
+			ref.Database, ref.Table = extractTableIdentifier(cq)
 		}
 		if ni, ok := child.(*grammar2.NestedIdentifierContext); ok {
 			extractNestedIdentifier(ni, ref)

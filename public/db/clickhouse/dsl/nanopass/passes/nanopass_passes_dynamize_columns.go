@@ -120,15 +120,15 @@ func extractBareColumnName(colsExpr *grammar1.ColumnsExprColumnContext) (name st
 	}
 
 	// ColumnExprIdentifier → ColumnIdentifier
-	// ColumnIdentifier may have a TableIdentifier (qualified) or just a NestedIdentifier
+	// ColumnIdentifier may have a ColumnQualifier (qualified) or just a NestedIdentifier
 	for i := 0; i < identExpr.GetChildCount(); i++ {
 		colId, isColId := identExpr.GetChild(i).(*grammar1.ColumnIdentifierContext)
 		if !isColId {
 			continue
 		}
 
-		// If it has a TableIdentifier, it's qualified (table.col) — skip
-		if colId.TableIdentifier() != nil {
+		// If it has a ColumnQualifier, it's qualified (table.col) — skip
+		if colId.ColumnQualifier() != nil {
 			return
 		}
 

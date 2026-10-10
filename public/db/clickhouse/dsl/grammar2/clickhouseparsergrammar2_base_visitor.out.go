@@ -391,6 +391,10 @@ func (v *BaseClickHouseParserGrammar2Visitor) VisitColumnIdentifier(ctx *ColumnI
 	return v.VisitChildren(ctx)
 }
 
+func (v *BaseClickHouseParserGrammar2Visitor) VisitColumnQualifier(ctx *ColumnQualifierContext) interface{} {
+	return v.VisitChildren(ctx)
+}
+
 func (v *BaseClickHouseParserGrammar2Visitor) VisitNestedIdentifier(ctx *NestedIdentifierContext) interface{} {
 	return v.VisitChildren(ctx)
 }

@@ -35,6 +35,16 @@ func TestExtractColumns(t *testing.T) {
 				{Table: "t", Column: "a"},
 			},
 		},
+		// The qualifier need not be an identifier: the COLUMNS token is legal
+		// there, and used to dereference a nil Identifier().
+		{
+			name: "columns_keyword_qualifier",
+			sql:  "SELECT columns.name, system.columns.type FROM system.columns",
+			expected: []analysis.ColumnRef{
+				{Table: "columns", Column: "name"},
+				{Table: "system.columns", Column: "type"},
+			},
+		},
 		{
 			name: "multiple_tables",
 			sql:  "SELECT t1.x, t2.y FROM t1 JOIN t2 ON t1.id = t2.id",

@@ -33,8 +33,8 @@ func ExtractColumns(pr *nanopass.ParseResult) (refs []ColumnRef) {
 	for _, n := range nodes {
 		cid := n.(*grammar1.ColumnIdentifierContext)
 		ref := ColumnRef{}
-		if ti := cid.TableIdentifier(); ti != nil {
-			ref.Table = nanopass.DecodeIdentifier(ti.Identifier().GetText())
+		if ti := cid.ColumnQualifier(); ti != nil {
+			ref.Table = nanopass.ColumnQualifierName(ti)
 			if db := ti.DatabaseIdentifier(); db != nil {
 				ref.Table = nanopass.DecodeIdentifier(db.GetText()) + "." + ref.Table
 			}
