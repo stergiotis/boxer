@@ -2,6 +2,8 @@ package passes
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/antlr4-go/antlr/v4"
@@ -50,8 +52,12 @@ func InjectParamsAsCTE(
 
 			// Params are read straight from env: a SET-text prelude re-split on
 			// "\n" would cut a string literal holding a raw newline in two.
+			// In name order: e.Params is a map, and the CTE list is built in
+			// the order params are accepted, so ranging over the map made the
+			// output differ from run to run.
 			var accepted []acceptedParam
-			for name, p := range e.Params {
+			for _, name := range slices.Sorted(maps.Keys(e.Params)) {
+				p := e.Params[name]
 				if p.Raw == "" {
 					continue
 				}

@@ -84,6 +84,17 @@ func TestInjectParamsAsCTEMultiple(t *testing.T) {
 	t.Logf("Result:\n%s", result)
 }
 
+// TestInjectParamsAsCTEDeterministic pins the CTE order. It used to follow
+// map iteration over the environment's params, so the same input produced a
+// different statement from run to run.
+func TestInjectParamsAsCTEDeterministic(t *testing.T) {
+	sql := "SELECT a FROM t WHERE name = 'hello' AND x > 100000 AND y < 3 AND z = 'w'"
+	first := extractAndInjectAsCTE(t, sql, acceptAll)
+	for range 50 {
+		require.Equal(t, first, extractAndInjectAsCTE(t, sql, acceptAll))
+	}
+}
+
 func TestInjectParamsAsCTENumber(t *testing.T) {
 	result := extractAndInjectAsCTE(t, "SELECT a FROM t WHERE x > 100000", acceptAll)
 
