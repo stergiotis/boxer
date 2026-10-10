@@ -208,8 +208,11 @@ const (
 // Environment mutations made by the pass persist — discard drops the body
 // rewrite only, matching Sequence semantics so that
 // Sequence(p).Run(x) == p.Run(x).
+//
+// Extraction, and the parses the passes run, are memoised by text
+// (ADR-0306); the environment a pass receives is still its own.
 func (p Pass) Run(sql string) (result string, err error) {
-	e, body, err := env.Extract(sql)
+	e, body, err := extractEnv(sql)
 	if err != nil {
 		err = eb.Build().Str("name", p.Name).Errorf("Run: %w", err)
 		return

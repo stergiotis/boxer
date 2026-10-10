@@ -27,10 +27,11 @@ package nanopass_test
 // on an input a person actually wrote, and how many parses that is. Divide
 // BenchmarkPlayPipelineApply/applet_9kb by BenchmarkPlayPipelineReparseFloor
 // — on the machine this was written on the ratio was about 34, against a
-// statement that a person edits as one thing. A parse memoized on the input
-// text is the obvious thing to try against it: consecutive passes are
-// frequently handed byte-identical SQL, and a pass that rewrites nothing then
-// costs nothing instead of a parse.
+// statement that a person edits as one thing. Consecutive passes are
+// frequently handed byte-identical SQL, so ADR-0306 memoises parsing and env
+// extraction by text: a pass that rewrites nothing then costs a lookup instead
+// of a parse. Each iteration starts from an empty memo, so the ratio now
+// counts the distinct texts a Run parses, plus the passes' own work.
 //
 // # Hermetic on purpose
 //
@@ -200,6 +201,7 @@ func BenchmarkPlayPipelineApply(b *testing.B) {
 		b.Run(in.name, func(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
+				coldMemo()
 				out := reg.ApplyBestEffortBound(passreg.StagePreExecute, in.sql, binding, logger)
 				if out == "" {
 					b.Fatal("pipeline produced an empty statement")
@@ -242,6 +244,7 @@ func BenchmarkPlayPipelineCanonicalizeSubPasses(b *testing.B) {
 		b.Run(sub.name, func(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
+				coldMemo()
 				if _, err := sub.pass.Run(sql); err != nil {
 					b.Fatal(err)
 				}
@@ -250,11 +253,11 @@ func BenchmarkPlayPipelineCanonicalizeSubPasses(b *testing.B) {
 	}
 }
 
-// BenchmarkPlayPipelineReparseFloor is the lower bound the pipeline cannot go
-// under as it stands: one bare parse of the fixture. Compare it against
-// BenchmarkPlayPipelineApply/applet_9kb — the ratio is how many times the
-// statement is parsed, and it is the number a shared-parse change would move.
+// BenchmarkPlayPipelineReparseFloor is one bare parse of the fixture, with the
+// memo off. Compare it against BenchmarkPlayPipelineApply/applet_9kb — the
+// ratio is about how many parses a Run still pays.
 func BenchmarkPlayPipelineReparseFloor(b *testing.B) {
+	noMemo(b)
 	b.ReportAllocs()
 	for b.Loop() {
 		if _, err := nanopass.Parse(runtimeTimelineAppletSQL); err != nil {

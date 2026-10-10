@@ -190,6 +190,10 @@ func parseWithIslands(sql string) (sexpr string, clean bool) {
 // without the islands it would fall back; with them, nanopass.Parse accepts it
 // in stage one and returns LL's tree.
 func TestLLIslandsAreLoadBearing(t *testing.T) {
+	// A memoised repeat parses nothing and counts nothing (ADR-0306), which
+	// would pass the fallback assertion below without testing it.
+	nanopass.SetMemoBudget(0)
+	t.Cleanup(func() { nanopass.SetMemoBudget(nanopass.DefaultMemoBudget) })
 	for _, tc := range llIslandFixtures {
 		t.Run(tc.name, func(t *testing.T) {
 			_, sllClean := parseAtMode(tc.sql, antlr.PredictionModeSLL)
@@ -209,6 +213,7 @@ func TestLLIslandsAreLoadBearing(t *testing.T) {
 				antlr.TreesStringTree(pr.Tree, pr.Parser.GetRuleNames(), pr.Parser))
 			assert.Equal(t, before.Fallbacks, after.Fallbacks,
 				"the statement fell back to LL: an island no longer covers it")
+			assert.Equal(t, before.Hits+1, after.Hits, "the statement was not parsed")
 		})
 	}
 }

@@ -22,7 +22,7 @@ SQL string
   → next pass repeats
 ```
 
-`Pass.Run(sql)` does the full round-trip. `Sequence` shares the env across child passes — they all observe each other's mutations to settings and params. Re-parsing each Apply preserves composability at the cost of repeated parsing (negligible for typical query sizes). Whitespace and comments are preserved on the hidden channel (`channel(HIDDEN)`), enabling lossless round-trip fidelity.
+`Pass.Run(sql)` does the full round-trip. `Sequence` shares the env across child passes — they all observe each other's mutations to settings and params. Re-parsing each Apply preserves composability; since passes are frequently handed text an earlier pass returned unchanged, `Parse`, `ParseCanonical` and `Pass.Run`'s `env.Extract` are memoised by input text ([ADR-0306](../../../../../doc/adr/0306-memoise-parsing-and-extraction-by-text.md)), so a repeat costs a lookup. A memoised `ParseResult` is shared between callers and must be treated as read-only. Whitespace and comments are preserved on the hidden channel (`channel(HIDDEN)`), enabling lossless round-trip fidelity.
 
 `Parse` collects both lexer and parser diagnostics (with `line:column` positions): input that fails to lex is rejected instead of having the offending characters silently dropped from the token stream. Panics inside a pass (e.g. conflicting token edits — the ANTLR rewriter panics at `GetText` for partially overlapping replaces) are recovered at the Pass boundary and returned as errors.
 
@@ -314,7 +314,7 @@ Embedded SQL files in `testdata/corpus/` cover SELECT features from simple liter
 
 ## Benchmarks
 
-`nanopass_test/nanopass_bench_test.go` benchmarks the core: `Parse` (the dominant per-pass cost — a pipeline re-parses per pass per fixpoint iteration), `ParseCanonical`, `BuildScopes`/`FlattenScopes`, `WalkCST`/`FindAll`, the rewrite cycle, `Pass.Run` (including the full `CanonicalizeFull` pipeline), `IsDiscardOutput`, `SourceRangeOf`, the identifier codec, and `MacroExpander`; `highlight_test` benchmarks the editor highlighter. Run:
+`nanopass_test/nanopass_bench_test.go` benchmarks the core: `Parse` (the dominant per-pass cost — a pipeline parses per pass per fixpoint iteration, memoised by text; parse benchmarks turn the memo off, pass and pipeline benchmarks empty it per iteration), `ParseCanonical`, `BuildScopes`/`FlattenScopes`, `WalkCST`/`FindAll`, the rewrite cycle, `Pass.Run` (including the full `CanonicalizeFull` pipeline), `IsDiscardOutput`, `SourceRangeOf`, the identifier codec, and `MacroExpander`; `highlight_test` benchmarks the editor highlighter. Run:
 
 ```
 go test -bench BenchmarkNanopass -benchmem -run xxx ./public/db/clickhouse/dsl/nanopass_test/

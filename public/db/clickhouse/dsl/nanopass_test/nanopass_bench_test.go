@@ -72,7 +72,23 @@ var benchSizes = []struct {
 	{"large", benchLargeSQL},
 }
 
+// noMemo turns the parse and extraction memos (ADR-0306) off for one
+// benchmark, so that it measures parsing rather than lookups.
+func noMemo(b *testing.B) {
+	nanopass.SetMemoBudget(0)
+	b.Cleanup(func() { nanopass.SetMemoBudget(nanopass.DefaultMemoBudget) })
+}
+
+// coldMemo empties the memos. A benchmark of a pass or a pipeline calls it at
+// the top of each iteration: the iteration then pays what a run of a statement
+// the process has not seen pays, sharing included within the run.
+func coldMemo() {
+	nanopass.SetMemoBudget(0)
+	nanopass.SetMemoBudget(nanopass.DefaultMemoBudget)
+}
+
 func BenchmarkNanopassParse(b *testing.B) {
+	noMemo(b)
 	for _, sz := range benchSizes {
 		b.Run(sz.name, func(b *testing.B) {
 			b.ReportAllocs()
@@ -97,6 +113,7 @@ func BenchmarkNanopassParseCorpus(b *testing.B) {
 	for _, e := range entries {
 		total += len(e.SQL)
 	}
+	noMemo(b)
 	b.ReportAllocs()
 	b.SetBytes(int64(total))
 	for b.Loop() {
@@ -113,6 +130,7 @@ func BenchmarkNanopassParseCanonical(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+	noMemo(b)
 	b.ReportAllocs()
 	b.SetBytes(int64(len(canonical)))
 	for b.Loop() {
@@ -210,6 +228,7 @@ func BenchmarkNanopassPassRun(b *testing.B) {
 	b.Run("StripComments", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
+			coldMemo()
 			if _, err := passes.StripComments.Run(benchMediumSQL); err != nil {
 				b.Fatal(err)
 			}
@@ -218,6 +237,7 @@ func BenchmarkNanopassPassRun(b *testing.B) {
 	b.Run("QualifyTables", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
+			coldMemo()
 			if _, err := passes.QualifyTables("db").Run(benchMediumSQL); err != nil {
 				b.Fatal(err)
 			}
@@ -227,6 +247,7 @@ func BenchmarkNanopassPassRun(b *testing.B) {
 		p := passes.CanonicalizeFull(16)
 		b.ReportAllocs()
 		for b.Loop() {
+			coldMemo()
 			if _, err := p.Run(benchMediumSQL); err != nil {
 				b.Fatal(err)
 			}
@@ -314,6 +335,7 @@ func BenchmarkNanopassMacroExpand(b *testing.B) {
 	sql := "SELECT a FROM t WHERE x > threshold(base()) AND y < threshold(5)"
 	b.ReportAllocs()
 	for b.Loop() {
+		coldMemo()
 		if _, err := p.Run(sql); err != nil {
 			b.Fatal(err)
 		}

@@ -148,6 +148,18 @@ today check only that the server *accepts* boxer's output and not what it
 touches the invariants above. Costed in
 [ClickHouse AST-as-JSON and the nanopass CST](../adr-background-work/clickhouse-ast-json-export.md).
 
+### 2026-10-10 — re-parsing is memoised by text
+
+The negative consequence above said to revisit re-parsing once profiling
+showed parsing dominating. It did: a play pre-execute stage parsed its
+statement 26 to 28 times per Run, mostly text it had just parsed, and parsing
+was about half the stage's CPU.
+[ADR-0306](./0306-memoise-parsing-and-extraction-by-text.md) memoises
+`Parse`, `ParseCanonical` and `Pass.Run`'s environment extraction by input
+text. Passes still receive text and still parse it; a repeat is answered from
+the memo, and the `ParseResult` it returns is shared and read-only. The
+discipline above is unchanged.
+
 ## References
 
 - [`public/db/clickhouse/dsl/nanopass/README.md`](../../public/db/clickhouse/dsl/nanopass/README.md) — package overview and component inventory.

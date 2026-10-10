@@ -85,11 +85,13 @@ func (inst StepCost) Walk(visit func(step StepCost, depth int)) {
 // the pass that failed is usually the interesting one. It is zero-valued only
 // when the failure was in env extraction, before any pass ran.
 //
-// The profile is of THIS run. Nothing is cached and nothing is amortised, so a
-// first run in a process carries the cold ANTLR DFA cost (ADR-0084) that no
-// later one pays.
+// The profile is of THIS run, and it records what this run paid. A first run
+// in a process carries the cold ANTLR DFA cost (ADR-0084) that no later one
+// pays; and since parses and extraction are memoised by text (ADR-0306), a
+// pass handed text this process has already parsed — in this run or an
+// earlier one — costs a lookup rather than a parse.
 func (p Pass) RunProfiled(sql string) (result string, cost StepCost, err error) {
-	e, body, err := env.Extract(sql)
+	e, body, err := extractEnv(sql)
 	if err != nil {
 		err = eb.Build().Str("name", p.Name).Errorf("RunProfiled: %w", err)
 		return

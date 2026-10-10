@@ -343,6 +343,16 @@ the `-- a comment` / bare `SELECT` non-prelude case — gains them too. In
 `TestExprDirectivesWorkEitherSideOfThePrelude`: both orders now bind. No
 integration lane is involved; the change is pure text handling.
 
+### 2026-10-10 — the deferred parse-once optimisation
+
+The deferral "Parse-once optimisation across a `Sequence` (CST cache)" is
+taken up by [ADR-0306](./0306-memoise-parsing-and-extraction-by-text.md),
+though not at the runner layer: parses and `Pass.Run`'s
+`Extract` are memoised by input text, because passes call `Parse` with no
+handle on the run they belong to. The environment contract here is unchanged:
+each `Pass.Run` still receives an environment of its own, cloned from the
+memoised extraction, and changed text is re-extracted.
+
 ## References
 
 - [ADR-0002: Nanopass Pipeline Discipline](0002-nanopass-discipline.md) — the substrate this ADR refines (stateless passes on CST + scopes).

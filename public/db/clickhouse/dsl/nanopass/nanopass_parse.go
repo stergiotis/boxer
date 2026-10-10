@@ -20,6 +20,11 @@ import (
 //
 // The TokenStream is shared between both grammars — it's produced by the
 // lexer which is identical in both grammar packages.
+//
+// A ParseResult is read-only. [Parse] and [ParseCanonical] memoise by input
+// text (ADR-0306), so the same result is handed to every caller that parses
+// the same text, on any goroutine; a write to its tree, tokens or stream would
+// reach all of them.
 type ParseResult struct {
 	// Tree is the root CST node. Its concrete type depends on which grammar
 	// was used for parsing:
@@ -119,6 +124,7 @@ func parseGrammar1(sql string, predictionMode int) (a attempt, ok bool) {
 	parser.AddErrorListener(a.listener)
 
 	tree := parser.QueryStmt()
+	detachPrediction(parser.BaseParser)
 	if len(a.listener.errors) > 0 {
 		return a, false
 	}
@@ -149,6 +155,7 @@ func parseGrammar2(sql string, predictionMode int) (a attempt, ok bool) {
 	parser.AddErrorListener(a.listener)
 
 	tree := parser.QueryStmt()
+	detachPrediction(parser.BaseParser)
 	if len(a.listener.errors) > 0 {
 		return a, false
 	}
@@ -179,7 +186,16 @@ func parseGrammar2(sql string, predictionMode int) (a attempt, ok bool) {
 // drive the recursive-descent parser into pathological regimes (CPU blowup
 // on deep parenthesis nesting, stack exhaustion on deep CASE nesting). See
 // MaxInputBytes / MaxNestingDepth for the limits and their rationale.
+//
+// Successful results are memoised by sql (ADR-0306): a repeat
+// returns the earlier, shared [ParseResult] without parsing, and is not
+// counted in [PredictionStats]. [SetMemoBudget] sizes or disables the memo.
 func Parse(sql string) (pr *ParseResult, err error) {
+	// Only text that passed the guards is cached, and the guards are constant.
+	if cached, hit := parseMemo1.get(sql); hit {
+		pr = cached
+		return
+	}
 	if err = CheckInputGuards(sql); err != nil {
 		return
 	}
@@ -194,6 +210,7 @@ func Parse(sql string) (pr *ParseResult, err error) {
 		return
 	}
 	pr = a.pr
+	parseMemo1.put(sql, pr)
 	return
 }
 
@@ -218,8 +235,13 @@ func Parse(sql string) (pr *ParseResult, err error) {
 // failure, so this seam falls back to LL more often than [Parse] does by
 // design — a non-canonical statement is refused by both stages.
 //
-// Used by the AST converter as its input parser.
+// Used by the AST converter as its input parser. Memoised like [Parse].
 func ParseCanonical(sql string) (pr *ParseResult, err error) {
+	// Only text that passed the guards is cached, and the guards are constant.
+	if cached, hit := parseMemo2.get(sql); hit {
+		pr = cached
+		return
+	}
 	if err = CheckInputGuards(sql); err != nil {
 		return
 	}
@@ -234,5 +256,6 @@ func ParseCanonical(sql string) (pr *ParseResult, err error) {
 		return
 	}
 	pr = a.pr
+	parseMemo2.put(sql, pr)
 	return
 }

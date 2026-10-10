@@ -16,6 +16,8 @@
 // them (and [Environment.Integrate] will emit them on output).
 package env
 
+import "maps"
+
 // Environment holds the SETTINGS / params / FORMAT context of a SELECT.
 //
 // Maps are nil-safe to read but must be allocated before write. [NewEnvironment]
@@ -89,6 +91,17 @@ func NewEnvironment() *Environment {
 		StatementSettings: make(map[string]Setting, 4),
 		Params:            make(map[string]Param, 8),
 	}
+}
+
+// Clone returns an Environment whose maps are copies of e's, so that writes to
+// the clone's maps do not reach e. Setting.Value and Param.Value are copied as
+// interface values, not deep-copied — [Extract] leaves them nil.
+func (e *Environment) Clone() *Environment {
+	c := *e
+	c.SessionSettings = maps.Clone(e.SessionSettings)
+	c.StatementSettings = maps.Clone(e.StatementSettings)
+	c.Params = maps.Clone(e.Params)
+	return &c
 }
 
 // IsResolved reports whether the param has both a slot type and a SET value.
