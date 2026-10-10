@@ -499,8 +499,8 @@ Details in [antlr4-go — what the runtime and the generated parser cost](../adr
 **§SD6.** The dotted-name SLL rejections were one mechanism, not a
 correlation: the column qualifier reused `tableIdentifier`, so SLL continued
 past it into FROM-side contexts. [ADR-0304](./0304-sll-exact-column-qualifiers.md)
-(proposed) gives the qualifier its own rule. It leaves the three-way `t.c`
-ambiguity §SD6 kept exactly as it is.
+gives the qualifier its own rule. It leaves the three-way `t.c` ambiguity §SD6
+kept exactly as it is.
 
 ## References
 

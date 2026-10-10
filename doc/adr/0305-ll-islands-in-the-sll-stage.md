@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-10
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-10
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0305: LL islands — predict in LL at the positions where SLL is known to choose wrong
 
@@ -14,7 +12,7 @@ date: 2026-10-10
 
 [ADR-0196](./0196-nanopass-two-stage-sll-parsing.md) parses under SLL first
 and re-parses under full-context LL when SLL reports anything.
-[ADR-0304](./0304-sll-exact-column-qualifiers.md) (proposed) removed the
+[ADR-0304](./0304-sll-exact-column-qualifiers.md) removed the
 largest class of SLL rejections. What remained, over every statement the test
 suite parses, were three positions — 131 of 15,302 grammar1 inputs, 14 of 282
 in grammar2 — and they are common in authored SQL:
@@ -137,7 +135,7 @@ genuine syntax error with LL's diagnostics.
 
 ## Status
 
-Proposed — awaiting review by the nanopass maintainers.
+Accepted 2026-10-10.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
@@ -145,6 +143,6 @@ See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-d
 ## References
 
 - [ADR-0196](./0196-nanopass-two-stage-sll-parsing.md) — two-stage parsing.
-- [ADR-0304](./0304-sll-exact-column-qualifiers.md) (proposed) — the grammar repair for qualified names, and the classes it left.
+- [ADR-0304](./0304-sll-exact-column-qualifiers.md) — the grammar repair for qualified names, and the classes it left.
 - [antlr4-go — what the runtime and the generated parser cost](../adr-background-work/antlr4-go-runtime-and-codegen-review.md) — measurements.
 - [Adaptive LL(\*) Parsing: The Power of Dynamic Analysis](https://www.antlr.org/papers/allstar-techreport.pdf) — Parr, Harwell, Fisher; SLL, LL and the conditions under which they differ.

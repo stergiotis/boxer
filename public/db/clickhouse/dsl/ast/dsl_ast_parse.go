@@ -1180,7 +1180,7 @@ func stripStringQuotes(s string) string {
 }
 
 // extractTableIdentifier reads a tableIdentifier or a columnQualifier: the two
-// rules spell the same children (ADR-0304, proposed).
+// rules spell the same children (ADR-0304).
 func extractTableIdentifier(ctx antlr.ParserRuleContext) (database, table string) {
 	for i := 0; i < ctx.GetChildCount(); i++ {
 		child := ctx.GetChild(i)

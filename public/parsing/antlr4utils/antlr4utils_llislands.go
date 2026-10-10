@@ -4,7 +4,7 @@ import (
 	"github.com/antlr4-go/antlr/v4"
 )
 
-// LL islands in an SLL parse (ADR-0305, proposed).
+// LL islands in an SLL parse (ADR-0305).
 //
 // SLL prediction has no call stack: when it reaches the end of a rule it
 // continues into every place that rule is invoked, and when two alternatives

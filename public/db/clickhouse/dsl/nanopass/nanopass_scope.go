@@ -569,8 +569,8 @@ func TableIdentifierName(tid *grammar1.TableIdentifierContext) (name string) {
 
 // ColumnQualifierName is [TableIdentifierName] for a column's table qualifier
 // — `t` in `t.c`. The grammar spells that position as its own rule, with the
-// same children as tableIdentifier (ADR-0304, proposed), so the same three
-// shapes occur: an identifier, a parameter slot, or the COLUMNS token.
+// same children as tableIdentifier (ADR-0304), so the same three shapes
+// occur: an identifier, a parameter slot, or the COLUMNS token.
 //
 // Returns "" for a nil node or a shape carrying none of the three children.
 func ColumnQualifierName(cq grammar1.IColumnQualifierContext) (name string) {

@@ -12,8 +12,8 @@ status: draft
 > load and machine; the ratios and the mechanisms are what this page asks you to
 > believe. Rows marked *estimate* were not measured. It feeds
 > [ADR-0304](../adr/0304-sll-exact-column-qualifiers.md) and
-> [ADR-0305](../adr/0305-ll-islands-in-the-sll-stage.md) (both proposed), which
-> took the first finding only.
+> [ADR-0305](../adr/0305-ll-islands-in-the-sll-stage.md), which took the
+> first finding only.
 
 # antlr4-go — what the runtime and the generated parser cost, and what could be better
 
@@ -130,7 +130,7 @@ and type switches that break silently rather than failing to compile.
 1. **Grammar: make SLL exact where it is not.** Taken for qualified names in
    ADR-0304. The remaining positions — `CAST`, `BETWEEN`, a table function in
    a FROM item — are predicted in LL inside the SLL stage instead
-   ([ADR-0305](../adr/0305-ll-islands-in-the-sll-stage.md), proposed), after
+   ([ADR-0305](../adr/0305-ll-islands-in-the-sll-stage.md)), after
    which no statement in the corpus falls back.
 2. **In-repo runtime workarounds, no fork:** a lock-free `Sync`, a working bail
    strategy for stage one. Small single-thread gains; the bail only helps the

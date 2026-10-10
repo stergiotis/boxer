@@ -150,7 +150,7 @@ func TestSLLNeverDisagreesWhenItSucceeds(t *testing.T) {
 }
 
 // llIslandFixtures are statements plain SLL rejects and LL accepts — one or
-// more per island (ADR-0305, proposed). Before the islands, each of them sent
+// more per island (ADR-0305). Before the islands, each of them sent
 // its statement through the LL fallback.
 var llIslandFixtures = []struct {
 	name string
@@ -248,8 +248,7 @@ func TestLLIslandsMatchLL(t *testing.T) {
 	t.Logf("compared %d statements", compared)
 }
 
-// TestSLLAcceptsQualifiedNames pins the columnQualifier repair (ADR-0304,
-// proposed).
+// TestSLLAcceptsQualifiedNames pins the columnQualifier repair (ADR-0304).
 //
 // When the column qualifier was a tableIdentifier, SLL left that rule through
 // every place it is invoked — FROM lists, JOIN targets, INSERT targets — so
@@ -284,7 +283,7 @@ func TestSLLAcceptsQualifiedNames(t *testing.T) {
 
 			sllTree, sllClean := parseAtMode(tc.sql, antlr.PredictionModeSLL)
 			require.True(t, sllClean, "SLL rejects a qualified name again: the column qualifier "+
-				"must stay a rule only DOT can follow (ADR-0304, proposed)")
+				"must stay a rule only DOT can follow (ADR-0304)")
 			assert.Equal(t, llTree, sllTree)
 		})
 	}

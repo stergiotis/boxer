@@ -24,7 +24,7 @@ func init() {
 }
 
 // LLIsland names the positions where SLL's lowest-alternative choice is the
-// wrong one for the position the parser is in (ADR-0305, proposed). Each is a
+// wrong one for the position the parser is in (ADR-0305). Each is a
 // rule invocation, identified by its parent:
 //
 //   - the operands of x BETWEEN a AND b: continuing a with a binary AND looks

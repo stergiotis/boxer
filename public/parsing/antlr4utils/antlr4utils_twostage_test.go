@@ -8,7 +8,7 @@ import (
 )
 
 // No statement in the repository's corpus reaches the LL fallback once the
-// grammar's LL islands are in place (ADR-0305, proposed), so the fallback is
+// grammar's LL islands are in place (ADR-0305), so the fallback is
 // checked here directly rather than through a parse.
 
 func TestTwoStageReturnsStageOneWhenClean(t *testing.T) {

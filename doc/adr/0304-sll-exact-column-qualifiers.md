@@ -1,12 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-09
-# reviewed-by: "@<handle>"     # fill in and uncomment when flipping to accepted
-# reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to accepted
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-10
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0304: SLL-exact column qualifiers — the table part of `t.c` gets its own rule
 
@@ -109,7 +107,7 @@ name in the tree changes.
 - The remaining 0.9% — `CAST(x AS T)` against the alias suffix, the `BETWEEN`
   operand against binary `AND`, and a table function in a FROM item — are not
   expressible as a grammar repair without changing tree types or the language;
-  [ADR-0305](./0305-ll-islands-in-the-sll-stage.md) (proposed) predicts them in
+  [ADR-0305](./0305-ll-islands-in-the-sll-stage.md) predicts them in
   LL instead.
 
 ### Neutral
@@ -150,7 +148,7 @@ name in the tree changes.
 
 ## Status
 
-Proposed — awaiting review by the nanopass maintainers.
+Accepted 2026-10-10.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).

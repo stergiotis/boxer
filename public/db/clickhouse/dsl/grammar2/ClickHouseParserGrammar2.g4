@@ -281,7 +281,7 @@ columnLambdaExpr:
     ARROW columnExpr
     ;
 columnIdentifier: (columnQualifier DOT)? nestedIdentifier;
-// columnQualifier spells tableIdentifier again on purpose (ADR-0304, proposed):
+// columnQualifier spells tableIdentifier again on purpose (ADR-0304):
 // SLL prediction leaves a rule through every place the rule is invoked, so a
 // shared tableIdentifier let `t.c` in a projection be read as `db.table`
 // whenever a FROM-clause continuation (`,` `)` WHERE JOIN …) could follow it.
