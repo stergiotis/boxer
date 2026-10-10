@@ -104,8 +104,7 @@ func parseGrammar1(sql string, predictionMode int) (a attempt, ok bool) {
 	// Point the parser at the shared bounded DFA cache instead of the grammar's
 	// unbounded package global (ADR-0084, ADR-0196 §SD3). release ends the parse
 	// and periodically rebuilds the cache if it has grown past MaxDFAStates. In
-	// the SLL stage the grammar's LL islands are predicted in LL (ADR-0305,
-	// proposed).
+	// the SLL stage the grammar's LL islands are predicted in LL (ADR-0305).
 	sim, release := grammar1.SharedDFA.AcquireMode(parser, predictionMode)
 	parser.Interpreter = sim
 	defer release()
