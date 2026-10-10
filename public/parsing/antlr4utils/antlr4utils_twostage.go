@@ -27,11 +27,17 @@ import (
 // the LL fallback below is load-bearing: without it four existing tests fail.
 //
 // ANTLR's documented recipe pairs stage one with BailErrorStrategy so it aborts
-// at the first error. antlr4-go v4.13.1's BailErrorStrategy panics
-// (RecoverInline returns a nil token the generated parser then dereferences),
-// so stage one here runs the ordinary error strategy and is judged by its
-// collected diagnostics. A rejected parse consequently runs error recovery
+// at the first error. antlr4-go v4.13.1's BailErrorStrategy is unusable: the
+// generated error exit reports its ParseCancellationException, whose
+// GetMessage is an unimplemented stub that panics, and when the first error
+// comes from prediction the exit clears it and the parse continues (ADR-0196
+// Updates). So stage one here runs the ordinary error strategy and is judged by
+// its collected diagnostics. A rejected parse consequently runs error recovery
 // before falling back.
+//
+// Stage one also predicts in LL inside the grammar's islands, where SLL's
+// choice is known to be wrong (see [DFACache.AcquireMode]); that is what keeps
+// it from being rejected in the first place.
 
 // TwoStage attempts a parse under SLL prediction and, if that attempt reports
 // any diagnostic, runs it again under LL.

@@ -394,8 +394,7 @@ func scanBodyAttempt(body string, predictionMode int) (tree antlr.ParserRuleCont
 	// cache — the growth ADR-0084 exists to prevent — and full-context LL
 	// prediction. It runs once per registry unit, so it was ten of the
 	// twenty-eight parses a pre-execute stage pays.
-	sim, release := grammar1.SharedDFA.Acquire(parser)
-	sim.SetPredictionMode(predictionMode)
+	sim, release := grammar1.SharedDFA.AcquireMode(parser, predictionMode)
 	parser.Interpreter = sim
 	defer release()
 

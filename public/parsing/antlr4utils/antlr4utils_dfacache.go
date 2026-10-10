@@ -54,12 +54,13 @@ const DefaultDFACheckInterval int64 = 256
 // The zero value is ready to use and adopts the package defaults; the ATN is
 // captured from the first parser handed to [DFACache.Acquire].
 type DFACache struct {
-	once  sync.Once
-	mu    sync.RWMutex
-	atn   *antlr.ATN
-	d2dfa []*antlr.DFA
-	pcc   *antlr.PredictionContextCache
-	syncs syncSets // per-ATN-state follow sets for FastSyncStrategy; never reset
+	once    sync.Once
+	mu      sync.RWMutex
+	atn     *antlr.ATN
+	d2dfa   []*antlr.DFA
+	pcc     *antlr.PredictionContextCache
+	syncs   syncSets   // per-ATN-state follow sets for FastSyncStrategy; never reset
+	islands IslandFunc // rule invocations predicted in LL during an SLL parse; nil for none
 
 	maxStates     atomic.Int64 // 0 means DefaultMaxDFAStates
 	checkInterval atomic.Int64 // 0 means DefaultDFACheckInterval

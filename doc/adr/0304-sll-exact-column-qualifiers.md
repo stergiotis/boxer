@@ -106,10 +106,11 @@ name in the tree changes.
   audit found four (the two `COLUMNS` canonicalisers, the AST converter, and an
   exclusion in `ExtractTables` that became dead); a differential over every
   harvested input, run once, checks the rest (Verification plan).
-- The remaining 0.9% still pay SLL + LL. They are three separate grammar
-  questions — `CAST(x AS T)` against the alias suffix, the `BETWEEN` operand
-  against binary `AND`, and a table function taking a `SELECT` — and
-  `BETWEEN` is common in real SQL. Deferred: each needs its own analysis.
+- The remaining 0.9% — `CAST(x AS T)` against the alias suffix, the `BETWEEN`
+  operand against binary `AND`, and a table function in a FROM item — are not
+  expressible as a grammar repair without changing tree types or the language;
+  [ADR-0305](./0305-ll-islands-in-the-sll-stage.md) (proposed) predicts them in
+  LL instead.
 
 ### Neutral
 

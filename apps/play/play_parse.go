@@ -38,8 +38,7 @@ func firstSyntaxErrorAttempt(sql string, predictionMode int) (listener *antlr4ut
 	// §SD3). This seam is on the editor path — play_editor_styled re-runs it as
 	// the buffer changes — and until ADR-0196 it parsed under full-context LL
 	// against grammar1's unbounded package global.
-	sim, release := grammar1.SharedDFA.Acquire(parser)
-	sim.SetPredictionMode(predictionMode)
+	sim, release := grammar1.SharedDFA.AcquireMode(parser, predictionMode)
 	parser.Interpreter = sim
 	defer release()
 

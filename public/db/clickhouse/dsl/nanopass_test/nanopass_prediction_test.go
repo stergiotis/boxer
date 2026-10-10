@@ -27,7 +27,9 @@ import (
 
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/grammar1"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/testdata"
 	"github.com/stergiotis/boxer/public/observability/eh/eb/ebtest"
+	"github.com/stergiotis/boxer/public/parsing/antlr4utils"
 )
 
 // dirtyListener records whether anything was reported.
@@ -147,43 +149,103 @@ func TestSLLNeverDisagreesWhenItSucceeds(t *testing.T) {
 	t.Logf("SLL accepted %d, rejected %d", accepted, rejected)
 }
 
-// TestSLLFallbackIsLoadBearing pins the reason the fallback cannot be dropped.
-//
-// Each statement below is rejected by SLL alone and parses cleanly under LL.
-// The fixtures used to be `x.y` qualified references; those became SLL-exact
-// when the column qualifier got its own rule (TestSLLAcceptsQualifiedNames),
-// so the witnesses are now the classes that remain: the CAST target against
-// the alias suffix, the BETWEEN operand against binary AND, and a table
-// function taking a SELECT.
-func TestSLLFallbackIsLoadBearing(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		sql  string
-	}{
-		{"cast_as_type", "SELECT CAST(a AS UInt64) FROM t"},
-		{"between_and", "SELECT a FROM t WHERE a BETWEEN 1 AND 10"},
-		{"view_of_select", "SELECT * FROM view(SELECT * FROM numbers(3))"},
-	} {
+// llIslandFixtures are statements plain SLL rejects and LL accepts — one or
+// more per island (ADR-0305, proposed). Before the islands, each of them sent
+// its statement through the LL fallback.
+var llIslandFixtures = []struct {
+	name string
+	sql  string
+}{
+	{"cast_as_type", "SELECT CAST(a AS UInt64) FROM t"},
+	{"cast_nested", "SELECT CAST(CAST(1 AS UInt32) AS UInt64)"},
+	{"between_and", "SELECT a FROM t WHERE a BETWEEN 1 AND 10"},
+	{"between_then_format", "SELECT a FROM t WHERE a BETWEEN 1 AND 10 FORMAT CSV"},
+	{"between_parenthesised_low", "SELECT a BETWEEN (b AND c) AND d FROM t"},
+	{"view_of_select", "SELECT * FROM view(SELECT * FROM numbers(3))"},
+	{"bench_medium", benchMediumSQL},
+	{"bench_large", benchLargeSQL},
+}
+
+// parseWithIslands parses under SLL with the grammar's LL islands, through a
+// private DFA cache, so it stays independent of the shared holder.
+func parseWithIslands(sql string) (sexpr string, clean bool) {
+	input := antlr.NewInputStream(sql)
+	lexer := grammar1.NewClickHouseLexer(input)
+	parser := grammar1.NewClickHouseParserGrammar1(antlr.NewCommonTokenStream(lexer, antlr.TokenDefaultChannel))
+	var holder antlr4utils.DFACache
+	holder.SetLLIslands(grammar1.LLIsland)
+	sim, release := holder.AcquireMode(parser, antlr.PredictionModeSLL)
+	defer release()
+	parser.Interpreter = sim
+	l := &dirtyListener{}
+	lexer.RemoveErrorListeners()
+	lexer.AddErrorListener(l)
+	parser.RemoveErrorListeners()
+	parser.AddErrorListener(l)
+	tree := parser.QueryStmt()
+	return antlr.TreesStringTree(tree, parser.GetRuleNames(), parser), !l.dirty
+}
+
+// TestLLIslandsAreLoadBearing: each fixture is rejected by plain SLL, so
+// without the islands it would fall back; with them, nanopass.Parse accepts it
+// in stage one and returns LL's tree.
+func TestLLIslandsAreLoadBearing(t *testing.T) {
+	for _, tc := range llIslandFixtures {
 		t.Run(tc.name, func(t *testing.T) {
 			_, sllClean := parseAtMode(tc.sql, antlr.PredictionModeSLL)
 			require.False(t, sllClean,
-				"SLL now accepts this: the fixture has stopped witnessing the fallback, "+
-					"so find another statement SLL rejects rather than deleting the case")
+				"plain SLL now accepts this: the fixture has stopped witnessing an island, "+
+					"so find another statement plain SLL rejects rather than deleting the case")
 
 			llTree, llClean := parseAtMode(tc.sql, antlr.PredictionModeLL)
 			require.True(t, llClean)
 
 			before, _ := nanopass.PredictionStats()
 			pr, err := nanopass.Parse(tc.sql)
-			require.NoError(t, err, "the LL fallback did not rescue an input SLL rejects")
+			require.NoError(t, err)
 			after, _ := nanopass.PredictionStats()
 
 			assert.Equal(t, llTree,
 				antlr.TreesStringTree(pr.Tree, pr.Parser.GetRuleNames(), pr.Parser))
-			assert.Greater(t, after.Fallbacks, before.Fallbacks,
-				"a fallback happened but PredictionStats did not count it")
+			assert.Equal(t, before.Fallbacks, after.Fallbacks,
+				"the statement fell back to LL: an island no longer covers it")
 		})
 	}
+}
+
+// TestLLIslandsMatchLL is the contract that makes the islands safe: wherever
+// LL accepts, SLL with islands must accept too and build the same tree. Over
+// every statement the test suite parses this held without exception when the
+// islands were introduced; the fixtures here keep a hermetic slice of it.
+func TestLLIslandsMatchLL(t *testing.T) {
+	entries, err := testdata.LoadCorpus()
+	require.NoError(t, err)
+	var sqls []string
+	for _, e := range entries {
+		sqls = append(sqls, e.SQL)
+	}
+	for _, tc := range predictionCorpus() {
+		sqls = append(sqls, tc.sql)
+	}
+	for _, tc := range goldenExtraInputs {
+		sqls = append(sqls, tc.sql)
+	}
+	for _, tc := range llIslandFixtures {
+		sqls = append(sqls, tc.sql)
+	}
+	var compared int
+	for _, sql := range sqls {
+		llTree, llClean := parseAtMode(sql, antlr.PredictionModeLL)
+		if !llClean {
+			continue
+		}
+		compared++
+		islTree, islClean := parseWithIslands(sql)
+		if assert.True(t, islClean, "SLL with islands rejects input LL accepts: %q", sql) {
+			assert.Equal(t, llTree, islTree, "SLL with islands built a different tree: %q", sql)
+		}
+	}
+	t.Logf("compared %d statements", compared)
 }
 
 // TestSLLAcceptsQualifiedNames pins the columnQualifier repair (ADR-0304,

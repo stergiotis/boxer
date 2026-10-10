@@ -103,9 +103,10 @@ func parseGrammar1(sql string, predictionMode int) (a attempt, ok bool) {
 
 	// Point the parser at the shared bounded DFA cache instead of the grammar's
 	// unbounded package global (ADR-0084, ADR-0196 §SD3). release ends the parse
-	// and periodically rebuilds the cache if it has grown past MaxDFAStates.
-	sim, release := grammar1.SharedDFA.Acquire(parser)
-	sim.SetPredictionMode(predictionMode)
+	// and periodically rebuilds the cache if it has grown past MaxDFAStates. In
+	// the SLL stage the grammar's LL islands are predicted in LL (ADR-0305,
+	// proposed).
+	sim, release := grammar1.SharedDFA.AcquireMode(parser, predictionMode)
 	parser.Interpreter = sim
 	defer release()
 
@@ -138,8 +139,7 @@ func parseGrammar2(sql string, predictionMode int) (a attempt, ok bool) {
 	stream := NewTokenStream(lexer)
 	parser := grammar2.NewClickHouseParserGrammar2(stream)
 
-	sim, release := grammar2.SharedDFA.Acquire(parser)
-	sim.SetPredictionMode(predictionMode)
+	sim, release := grammar2.SharedDFA.AcquireMode(parser, predictionMode)
 	parser.Interpreter = sim
 	defer release()
 
