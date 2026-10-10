@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/apps/play"
@@ -66,6 +67,22 @@ func TestLadingBookQueries_LiveServer(t *testing.T) {
 			require.NoError(t, exErr)
 			_, qErr := query(residual+"\nFORMAT TabSeparated", stripParamPrefix(params))
 			require.NoErrorf(t, qErr, "%s failed:\n%s", slug, residual)
+		})
+	}
+
+	// As a window builds it: play's client takes the `SET param_…` prelude off
+	// for the URL channel before its pre-execute stage, the order the
+	// expansion above does not exercise. A macro whose mount is a slot reads
+	// the prelude, so this is where an applet that passed above still sent
+	// `fs(…)` to the server unexpanded.
+	play.RegisterHostSql(zerolog.Nop())
+	for slug, d := range bySlug {
+		t.Run(slug+"/as-a-window-builds-it", func(t *testing.T) {
+			cl := play.NewClient(play.ClientConfig{URL: chclient.ConfigFromEnv().URL}, nil)
+			_ = play.NewLivePlayApp(cl, d.SQL, 1, nil)
+			body, params := cl.BuildStatement(d.SQL)
+			_, qErr := query(body, stripParamPrefix(params))
+			require.NoErrorf(t, qErr, "%s failed:\n%s", slug, body)
 		})
 	}
 }

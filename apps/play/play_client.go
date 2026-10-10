@@ -18,6 +18,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/db/clickhouse/chhttp"
+	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/env"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/nanopass/passes"
 	"github.com/stergiotis/boxer/public/keelson/data/passreg"
@@ -713,15 +714,67 @@ func (inst *Client) buildResidualWith(sql string, observe func(passreg.ApplyObse
 	}
 	observeStep(observe, rewriteStepExtractParams, orderExtractParams, exErr, sql, residual, stepDur(started))
 	residual = inst.applyExprSplice(residual, observe)
+	// A pass reads a parameter's value where the statement binds it: in its
+	// `SET param_…` prelude, which every pass lifts into its environment. The
+	// lading macros need it to resolve a mount slot at expansion (ADR-0200
+	// §SD6). ExtractParams has taken the prelude off for the URL channel, so
+	// the stage gets it back in front of the body and loses it again after; a
+	// statement that binds nothing pays for neither.
+	prelude := ""
+	if len(params) > 0 {
+		prelude = paramPrelude(sql)
+	}
+	var binding any
+	if catalog {
+		binding = inst.passBinding
+	}
+	residual = stripParamPrelude(prelude, residual,
+		inst.passes.ApplyBestEffortBoundObserved(passreg.StagePreExecute, prelude+residual, binding, log.Logger, observe))
 	if !catalog {
-		residual = inst.passes.ApplyBestEffortBoundObserved(passreg.StagePreExecute, residual, nil, log.Logger, observe)
 		if observe != nil && inst.exposeConditions.Load() && inst.conditionsPass.Apply != nil {
 			observe(passreg.ApplyObservation{Name: rewriteStepExposeConditions, Order: orderExposeConditions, Outcome: passreg.ApplyOutcomeDeclined})
 		}
 		return
 	}
-	residual = inst.passes.ApplyBestEffortBoundObserved(passreg.StagePreExecute, residual, inst.passBinding, log.Logger, observe)
 	residual = inst.applyExposeConditions(residual, observe)
+	return
+}
+
+// paramPrelude is sql's `SET param_…` lines as a pass finds them, or "" when
+// sql binds no parameter or its prelude does not read.
+func paramPrelude(sql string) (prelude string) {
+	e, _, err := env.Extract(sql)
+	if err != nil {
+		return ""
+	}
+	bound := env.NewEnvironment()
+	for k, p := range e.Params {
+		if p.Raw != "" {
+			bound.Params[k] = p
+		}
+	}
+	if len(bound.Params) == 0 {
+		return ""
+	}
+	prelude, err = bound.Integrate("")
+	if err != nil {
+		return ""
+	}
+	return
+}
+
+// stripParamPrelude takes the prelude the pre-execute stage was handed off its
+// output again. When it cannot — the output no longer parses — the body
+// before the stage is kept, as a pass that fails is skipped.
+func stripParamPrelude(prelude string, before string, staged string) (residual string) {
+	if prelude == "" {
+		return staged
+	}
+	residual, _, err := ExtractParams(staged)
+	if err != nil {
+		log.Debug().Err(err).Msg("play: the pre-execute output lost its parameter prelude; sending the statement as it was before the stage")
+		return before
+	}
 	return
 }
 
