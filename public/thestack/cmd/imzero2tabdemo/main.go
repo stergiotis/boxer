@@ -91,6 +91,10 @@ func newTab() (inst *tabhost.Program) {
 		// complexity map the demo build writes — opens by
 		// BOXER_SQLAPPLET_TAB_DOC (ADR-0299). The committed applets
 		// are not minted: nearly all of them read tables a tab does not have.
+		// play's SQL rewrites are not registered either, unlike imzero2tab:
+		// nothing the demo runs needs them — keelson reads and literal rows —
+		// and each pass re-parses the statement, which on the complexity
+		// map's 86 KB of rows came to about 4 s natively and stalled the tab.
 		Prepare: sqlapplet.LoadTabApplet,
 	},
 		&cli.Command{Name: "imzero2tabdemo", Version: vcs.BuildVersionInfo(), Before: logging.Apply})

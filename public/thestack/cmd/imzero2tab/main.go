@@ -23,6 +23,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v3"
 
+	"github.com/stergiotis/boxer/apps/play"
 	"github.com/stergiotis/boxer/apps/sqlapplet"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
@@ -34,7 +35,6 @@ import (
 	// the apps a tab may open; each registers itself into app.DefaultRegistry
 	_ "github.com/stergiotis/boxer/apps/fibscope"
 	_ "github.com/stergiotis/boxer/apps/mdedit"
-	_ "github.com/stergiotis/boxer/apps/play"
 	_ "github.com/stergiotis/boxer/apps/taskdemo"
 )
 
@@ -60,11 +60,14 @@ func newTab() (inst *tabhost.Program) {
 	return
 }
 
-// prepare mints the committed applets, which then mount by id, and loads the
-// document served beside the page under BOXER_SQLAPPLET_TAB_DOC (ADR-0299,
-// proposed). It runs in the tab's action rather than at initialisation, so
-// the bundler and the other subcommands neither mint nor log the corpus.
+// prepare registers play's SQL rewrites — the pass set every play host
+// registers, without which a query in a tab skips its macros, glosses and
+// name resolution — mints the committed applets, which then mount by id, and
+// loads the document served beside the page under BOXER_SQLAPPLET_TAB_DOC
+// (ADR-0299). It runs in the tab's action rather than at initialisation, so
+// the bundler and the other subcommands neither register, mint nor log.
 func prepare(ctx context.Context, base string) (id app.AppIdT, err error) {
+	play.RegisterHostSql(log.Logger)
 	if _, errs := sqlapplet.MintManifests(log.Logger); len(errs) > 0 {
 		log.Warn().Errs("errors", errs).Msg("imzero2tab: some committed applets did not mint")
 	}
