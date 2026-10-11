@@ -1,10 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-11
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-11
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0318: Model inference is the harness's — an app exposes operations instead of holding an `llm` grant
 
@@ -100,7 +100,7 @@ bodies change from system prompts to requests, and `temperature` /
 
 ## Status
 
-Proposed (2026-10-11).
+Accepted (2026-10-11). Implemented in `be7098fde`.
 
 ## References
 
