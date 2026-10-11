@@ -95,8 +95,8 @@ func TestTheSqlStoreUnderClickhouseLocal(t *testing.T) {
 	assert.Zero(t, broken, "the chain verifies after the tombstone (L31)")
 
 	// A fresh store over the same tables reads the record, not a cache:
-	// the tombstone's twins win, the row is the latest version, the chain
-	// holds, and the deleted run reopens read-only.
+	// the tombstone's revisions win, the row is the latest version, the
+	// chain holds, and the deleted run reopens read-only.
 	fresh := NewSqlStore(exec, layout)
 	defer fresh.Close()
 	reopened, err := Reopen(ctx, fresh, "cell/r1")
@@ -108,14 +108,14 @@ func TestTheSqlStoreUnderClickhouseLocal(t *testing.T) {
 	all, err := fresh.AllEntries(ctx)
 	require.NoError(t, err)
 	assert.Len(t, all, 5, "one entry per ordinal across the record")
-	assert.EqualValues(t, 5, rowCount(t, ctx, exec, layout, "cell/r1"), "the originals are deleted from the parts; the twins are the record")
+	assert.EqualValues(t, 5, rowCount(t, ctx, exec, layout, "cell/r1"), "the originals are deleted from the parts; the blanked revisions are the record")
 	of, err := fresh.EntriesOf(ctx, []string{"cell/r1", "none"})
 	require.NoError(t, err)
 	assert.Len(t, of, 5)
 }
 
 // rowCount is the raw number of rows the entry table holds for a run,
-// twins and originals alike.
+// every revision alike.
 func rowCount(t *testing.T, ctx context.Context, exec recordstore.ExecutorI, layout agentrunstore.Layout, run string) (n uint64) {
 	t.Helper()
 	for rec, err := range exec.QueryArrow(ctx, "SELECT count() FROM "+layout.EntryTable()+" WHERE "+agentrunstore.EntryColKey+" = "+marshalling.EscapeString(run)) {

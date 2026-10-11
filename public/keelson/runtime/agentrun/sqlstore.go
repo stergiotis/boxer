@@ -232,24 +232,19 @@ func runsOf(entries []Entry) (ids []string) {
 	return
 }
 
-// tombstoneOffset separates a tombstone's twin from the row it shadows
-// in the order column: an ordinal's own instant is its ordinal in
-// nanoseconds, so every original lies under the offset and every twin
-// above it, and the originals can be deleted by the column alone.
-const tombstoneOffset = time.Duration(1) << 40
-
-// orderOf is the order instant an entry row is written at.
-func orderOf(e Entry) time.Time {
-	ts := recordstore.SeqTs(uint64(e.Ordinal))
+// revisionOf is the revision an entry row is written at: a tombstone is
+// the entry at its next revision, which every read keeps over the original
+// (ADR-0308 §SD8, the store's Revision role).
+func revisionOf(e Entry) (rev agentrunstore.EntryEnvelope) {
 	if e.Tombstoned() {
-		ts = ts.Add(tombstoneOffset)
+		rev.Revision = 1
 	}
-	return ts
+	return
 }
 
 func (inst *SqlStore) appendLocked(ctx context.Context, entries []Entry) (err error) {
 	for _, e := range entries {
-		if err = inst.st.Entry.Begin(e.Run, orderOf(e)).AddEntry(entryRow(e)).Commit(); err != nil {
+		if err = inst.st.Entry.Begin(e.Run, recordstore.SeqTs(uint64(e.Ordinal)), revisionOf(e)).AddEntry(entryRow(e)).Commit(); err != nil {
 			inst.st.Entry.DiscardPending()
 			return eb.Build().Str("run", e.Run).Uint32("ordinal", e.Ordinal).Errorf("buffer entry: %w", err)
 		}
@@ -273,11 +268,7 @@ func (inst *SqlStore) Entries(ctx context.Context, run string, from uint32) (ent
 func (inst *SqlStore) entriesLocked(ctx context.Context, run string, from uint32) (entries []Entry, err error) {
 	predicate := agentrunstore.EntryColKey + " = " + marshalling.EscapeString(run)
 	if from > 0 {
-		lo := strconv.FormatInt(recordstore.SeqTs(uint64(from)).UnixNano(), 10)
-		hi := strconv.FormatInt(recordstore.SeqTs(uint64(from)).Add(tombstoneOffset).UnixNano(), 10)
-		off := strconv.FormatInt(int64(tombstoneOffset), 10)
-		predicate += " AND ((" + agentrunstore.EntryColOrder + " >= fromUnixTimestamp64Nano(" + lo + ") AND " + agentrunstore.EntryColOrder + " < fromUnixTimestamp64Nano(" + off + "))" +
-			" OR " + agentrunstore.EntryColOrder + " >= fromUnixTimestamp64Nano(" + hi + "))"
+		predicate += " AND " + agentrunstore.EntryColOrder + " >= fromUnixTimestamp64Nano(" + strconv.FormatInt(recordstore.SeqTs(uint64(from)).UnixNano(), 10) + ")"
 	}
 	entries, err = inst.scanEntriesLocked(ctx, predicate)
 	if err != nil {
@@ -303,8 +294,10 @@ func (inst *SqlStore) EntriesOf(ctx context.Context, runs []string) (entries []E
 }
 
 // scanEntriesLocked reads the entry rows a predicate selects, in (run,
-// ordinal) order, one entry per ordinal: a tombstone's body-less twin wins
-// over the row it shadows (ADR-0308 §SD8), wherever the scan put it.
+// ordinal) order. The generated scan keeps one row per ordinal, its
+// highest revision, so a tombstone hides the entry it blanks (ADR-0308
+// §SD8); the predicate must select whole ordinals, as a run and an
+// ordinal bound do.
 func (inst *SqlStore) scanEntriesLocked(ctx context.Context, predicate string) (entries []Entry, err error) {
 	for ent, serr := range inst.st.Entry.ScanEntry(ctx, recordstore.ScanOpts{ExtraPredicate: predicate}) {
 		if serr != nil {
@@ -315,27 +308,14 @@ func (inst *SqlStore) scanEntriesLocked(ctx context.Context, predicate string) (
 		}
 		entries = append(entries, entryOf(ent.Entry.Val, ent.ID))
 	}
+	// The scan orders by (ordinal, run); a several-run read wants runs whole.
 	slices.SortStableFunc(entries, func(a, b Entry) int {
 		if c := compareString(a.Run, b.Run); c != 0 {
 			return c
 		}
-		if c := int(a.Ordinal) - int(b.Ordinal); c != 0 {
-			return c
-		}
-		// The twin first, so the compaction keeps it.
-		return boolInt(b.Tombstoned()) - boolInt(a.Tombstoned())
-	})
-	entries = slices.CompactFunc(entries, func(a, b Entry) bool {
-		return a.Run == b.Run && a.Ordinal == b.Ordinal
+		return int(a.Ordinal) - int(b.Ordinal)
 	})
 	return
-}
-
-func boolInt(b bool) int {
-	if b {
-		return 1
-	}
-	return 0
 }
 
 func compareString(a, b string) int {
@@ -357,15 +337,15 @@ func (inst *SqlStore) AllEntries(ctx context.Context) (entries []Entry, err erro
 	return
 }
 
-// Tombstone appends a body-less twin of every entry of the run: the same
-// row with Body and Calls empty, which the reads prefer over the original
-// at the same ordinal, so the chain's digests and the metadata stay and
-// no row is removed first (ADR-0308 §SD8). One flush, so a failure leaves
-// the run as it was. The originals, their bodies still in the parts, are
-// then deleted best-effort: the twins are the record either way, and a
-// deletion that fails is logged and retried by nothing until the next
-// tombstone of the run. Head entries keep their body, a digest the anchor
-// law reads (ADR-0314 §SD5), not content.
+// Tombstone appends every entry of the run at its next revision with Body
+// and Calls empty, which the reads keep over the original at the same
+// ordinal, so the chain's digests and the metadata stay and no row is
+// removed first (ADR-0308 §SD8). One flush, so a failure leaves the run as
+// it was. The originals, their bodies still in the parts, are then deleted
+// best-effort by their revision: the blanked revisions are the record
+// either way, and a deletion that fails is logged and retried by nothing
+// until the next tombstone of the run. Head entries keep their body, a
+// digest the anchor law reads (ADR-0314 §SD5), not content.
 func (inst *SqlStore) Tombstone(ctx context.Context, run string) (err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
@@ -373,28 +353,27 @@ func (inst *SqlStore) Tombstone(ctx context.Context, run string) (err error) {
 	if err != nil {
 		return
 	}
-	twins := make([]Entry, 0, len(entries))
-	var shadowed []string
+	blanked := make([]Entry, 0, len(entries))
+	var ordinals []string
 	for _, e := range entries {
 		if (e.Body == "" && e.Calls == "") || e.Kind == KindHead {
 			continue
 		}
-		shadowed = append(shadowed, "fromUnixTimestamp64Nano("+strconv.FormatInt(recordstore.SeqTs(uint64(e.Ordinal)).UnixNano(), 10)+")")
+		ordinals = append(ordinals, "fromUnixTimestamp64Nano("+strconv.FormatInt(recordstore.SeqTs(uint64(e.Ordinal)).UnixNano(), 10)+")")
 		e.Body, e.Calls = "", ""
-		twins = append(twins, e)
+		blanked = append(blanked, e)
 	}
-	if len(twins) == 0 {
+	if len(blanked) == 0 {
 		return
 	}
-	if err = inst.appendLocked(ctx, twins); err != nil {
+	if err = inst.appendLocked(ctx, blanked); err != nil {
 		return
 	}
-	// The originals the twins shadow, by their order instants: a twin's
-	// lies above the offset, an original's is its ordinal.
 	where := agentrunstore.EntryColKey + " = " + marshalling.EscapeString(run) +
-		" AND " + agentrunstore.EntryColOrder + " IN (" + strings.Join(shadowed, ", ") + ")"
+		" AND " + agentrunstore.EntryColOrder + " IN (" + strings.Join(ordinals, ", ") + ")" +
+		" AND " + agentrunstore.EntryColRevision + " = 0"
 	if derr := inst.exec.Exec(ctx, "DELETE FROM "+inst.layout.EntryTable()+" WHERE "+where); derr != nil {
-		inst.Log.Warn().Err(derr).Str("run", run).Msg("the tombstoned run's original rows were not deleted; the twins are the record")
+		inst.Log.Warn().Err(derr).Str("run", run).Msg("the tombstoned run's original rows were not deleted; the blanked revisions are the record")
 	}
 	return
 }

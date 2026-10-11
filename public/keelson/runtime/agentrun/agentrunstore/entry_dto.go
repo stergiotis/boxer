@@ -3,8 +3,9 @@ package agentrunstore
 import "time"
 
 // Entry is one journal entry (ADR-0308 §SD2): appended, never rewritten;
-// a tombstone appends a body-less twin that wins over the original
-// (§SD8), the digests of body and calls staying so the chain verifies.
+// a tombstone appends the body-less entry at its next revision, which the
+// reads keep over the original (§SD8), the digests of body and calls
+// staying so the chain verifies.
 // ID is the run id; the envelope ts is the ordinal as a synthetic instant
 // (recordstore.SeqTs), so a key-prefix scan reads a run in order.
 type Entry struct {

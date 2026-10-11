@@ -95,6 +95,18 @@ type Roles struct {
 	// Lifecycle names the state-view marker column: a u8 EntityLifecycle
 	// plain column.
 	Lifecycle string
+	// Revision names a secondary order under Order, so (Key, Order) is
+	// one identity that later rows supersede in place: a plain envelope
+	// column deriving to uint32 that no other role binds. It stays a
+	// pass-through envelope field, so a writer sets it through Begin's
+	// envelope. When bound, the DDL orders by (Key, Order, Revision) and
+	// every read collapses the rows of one (Key, Order) to its highest
+	// revision in SQL — Scan<Kind>, ScanLive<Kind>, Latest, Replay and the
+	// cache fetch — so a superseding row is one insert and no read sees
+	// both. Commits invalidate attached cache views instead of writing
+	// through, since the views' version gate is the Order alone and a
+	// revision at the same Order would read as equal there.
+	Revision string
 }
 
 // Input parameterizes one store generation.
@@ -398,6 +410,9 @@ func (inst Input) tableOptions() (opts clickhouse.TableOptions) {
 		}
 		if hasOrder {
 			opts.OrderBy = append(opts.OrderBy, clickhouse.ColumnRef{Plain: orderName})
+			if inst.Roles.Revision != "" {
+				opts.OrderBy = append(opts.OrderBy, clickhouse.ColumnRef{Plain: naming.StylableName(inst.Roles.Revision)})
+			}
 		}
 	}
 	if inst.DDL == nil {

@@ -19,6 +19,10 @@ const (
 	TableNameEntry = "agentrunentry"
 )
 
+// EntryRevisionColumn is the entry table's Revision role column
+// (gen.Roles.Revision): reads keep the highest revision of each ordinal.
+const EntryRevisionColumn = "revision"
+
 // TableRowConfig matches watchbill's: several attributes per row, each in
 // a section of its own.
 const TableRowConfig = common.TableRowConfigMultiAttributesPerRow
@@ -66,7 +70,9 @@ func GetRunSchemaInManipulator() (manip *common.TableManipulator, err error) {
 }
 
 // GetEntrySchemaInManipulator builds the entry table: envelope id (the run
-// id), ts (the ordinal as an instant), and the entry's attributes.
+// id), ts (the ordinal as an instant), revision (the Revision role: a
+// tombstone is the entry at its next revision, ADR-0308 §SD8), and the
+// entry's attributes.
 func GetEntrySchemaInManipulator() (manip *common.TableManipulator, err error) {
 	manip, err = common.NewTableManipulator()
 	if err != nil {
@@ -77,6 +83,7 @@ func GetEntrySchemaInManipulator() (manip *common.TableManipulator, err error) {
 	manip.SetTableComment("agent run journal entries, one row each, append-only (ADR-0308 §SD2)")
 	manip.PlainValueColumn(common.PlainItemTypeEntityId, "id", ctabb.S).AddColumnEncodingHints(plain...)
 	manip.PlainValueColumn(common.PlainItemTypeEntityTimestamp, "ts", ctabb.Z64).AddColumnEncodingHints(easp.AspectDeltaEncoding, easp.AspectLightGeneralCompression)
+	manip.PlainValueColumn(common.PlainItemTypeEntityLifecycle, EntryRevisionColumn, ctabb.U32).AddColumnEncodingHints(plain...)
 	sec := sectionOf(manip)
 	sec("entryOrdinal", ctabb.U32, plain...)
 	sec("entryAt", ctabb.Z64, plain...)

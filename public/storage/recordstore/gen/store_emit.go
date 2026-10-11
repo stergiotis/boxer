@@ -92,6 +92,10 @@ type plainCol struct {
 	isArray  bool
 	physical string // encoded physical column name (for messages)
 	role     plainRole
+	// revision marks the column Roles.Revision binds. It keeps
+	// rolePassThrough — the writer sets it through the envelope — and is
+	// skipped by the positional role binding.
+	revision bool
 }
 
 // plainGroup is the ordered set of plain columns sharing one PlainItemType —
@@ -112,6 +116,9 @@ type plainModel struct {
 	key         *plainCol
 	order       *plainCol
 	lifecycle   *plainCol
+	// revision is the Roles.Revision column, nil when unbound; it is also
+	// one of the passthrough columns.
+	revision    *plainCol
 	passthrough []plainCol
 	stateView   bool
 }
@@ -434,7 +441,7 @@ func (inst Input) enumeratePlain(info *readback.InformationRetrieval) (m plainMo
 	for gi := range m.groups {
 		for ci := range m.groups[gi].cols {
 			c := &m.groups[gi].cols[ci]
-			if c.role != rolePassThrough {
+			if c.role != rolePassThrough || c.revision {
 				continue
 			}
 			switch c.itemType {
@@ -532,6 +539,23 @@ func (inst Input) bindDeclaredRoles(m *plainModel) (err error) {
 		}
 		c.role = roleLifecycle
 		m.lifecycle = c
+	}
+	if inst.Roles.Revision != "" {
+		c := find(inst.Roles.Revision)
+		if c == nil {
+			err = eb.Build().Str("column", inst.Roles.Revision).Errorf("Roles.Revision names no plain column in the schema")
+			return
+		}
+		if c.role != rolePassThrough {
+			err = taken("Revision", c)
+			return
+		}
+		if c.goType != "uint32" {
+			err = eb.Build().Str("name", c.name).Str("goType", c.goType).Errorf("Roles.Revision column has the wrong type — the Revision role takes a plain envelope column deriving to uint32")
+			return
+		}
+		c.revision = true
+		m.revision = c
 	}
 	return
 }
@@ -994,6 +1018,9 @@ func (inst emitter) emitStoreHeader(sb *strings.Builder, key, order, lifecycle e
 	p("\t%sColOrder = `\"%s\"`", inst.StoreName, order.physical)
 	if inst.model.stateView {
 		p("\t%sColLifecycle = `\"%s\"`", inst.StoreName, lifecycle.physical)
+	}
+	if inst.model.revision != nil {
+		p("\t%sColRevision = `\"%s\"`", inst.StoreName, inst.model.revision.physical)
 	}
 	p(")")
 	p("")
@@ -1645,12 +1672,22 @@ func (inst emitter) emitBuilder(sb *strings.Builder, comps []storeComponent, sta
 	p("\t}")
 	p("\tinst.store.buffered++")
 	p("\tinst.store.dirty[inst.key] = struct{}{}")
-	p("\tif inst.raw {")
-	p("\t\tinst.store.notifyWrite(inst.key, nil)")
-	p("\t} else {")
-	p("\t\tent := inst.ent")
-	p("\t\tinst.store.notifyWrite(inst.key, &ent)")
-	p("\t}")
+	if inst.model.revision != nil {
+		// The cache views' version gate is the Order alone; a revision at
+		// the same Order would read as equal there and keep the row it
+		// supersedes, so every commit invalidates and the refetch takes the
+		// highest revision.
+		p("\t// Roles.Revision: invalidate rather than write through — the views'")
+		p("\t// version gate is the Order alone and cannot see a revision.")
+		p("\tinst.store.notifyWrite(inst.key, nil)")
+	} else {
+		p("\tif inst.raw {")
+		p("\t\tinst.store.notifyWrite(inst.key, nil)")
+		p("\t} else {")
+		p("\t\tent := inst.ent")
+		p("\t\tinst.store.notifyWrite(inst.key, &ent)")
+		p("\t}")
+	}
 	lifecycle := "recordstore.LifecycleLive"
 	if inst.model.stateView {
 		lifecycle = "inst.ent.Lifecycle"
@@ -2114,7 +2151,11 @@ func (inst emitter) emitCacheView(sb *strings.Builder, stateView bool) {
 	p("\t\t}")
 	p("\t\tsb.WriteString(%sKeyLiteral(k))", inst.TableName)
 	p("\t}")
-	p("\tsb.WriteString(\") ORDER BY \" + %sColOrder + \" DESC LIMIT 1 BY \" + %sColKey)", inst.StoreName, inst.StoreName)
+	if inst.model.revision != nil {
+		p("\tsb.WriteString(\") ORDER BY \" + %sColOrder + \" DESC, \" + %sColRevision + \" DESC LIMIT 1 BY \" + %sColKey)", inst.StoreName, inst.StoreName, inst.StoreName)
+	} else {
+		p("\tsb.WriteString(\") ORDER BY \" + %sColOrder + \" DESC LIMIT 1 BY \" + %sColKey)", inst.StoreName, inst.StoreName)
+	}
 	p("\tsb.WriteString(%sArrowOutputSettings)", inst.TableName)
 	p("\treturn sb.String()")
 	p("}")
@@ -2187,18 +2228,43 @@ func (inst emitter) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, 
 		p("// rows.")
 		p("func (inst *%s) Scan%s(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*%s, error] {", inst.storeType(), c.Kind, inst.entityType())
 		inst.emitRefuseKeyPrefix(p)
-		p("\twhere := %sScan%sFilter", inst.TableName, c.Kind)
-		if inst.keyGoType == "string" {
-			p("\tif opts.KeyPrefix != \"\" {")
-			p("\t\twhere = \"(\" + where + \") AND \" + %sKeyPrefixPredicate(opts.KeyPrefix)", inst.TableName)
+		if inst.model.revision != nil {
+			// The collapse to the highest revision of each (Key, Order)
+			// runs before the component Filter, so a superseding row that
+			// carries no conforming component hides the one it supersedes
+			// rather than letting it through. KeyPrefix and ExtraPredicate
+			// select rows ahead of the collapse — whole positions — which
+			// keeps a run's range read a primary-key read.
+			p("\tvar inner []string")
+			if inst.keyGoType == "string" {
+				p("\tif opts.KeyPrefix != \"\" {")
+				p("\t\tinner = append(inner, %sKeyPrefixPredicate(opts.KeyPrefix))", inst.TableName)
+				p("\t}")
+			}
+			p("\tif opts.ExtraPredicate != \"\" {")
+			p("\t\tinner = append(inner, \"(\"+opts.ExtraPredicate+\")\")")
 			p("\t}")
+			p("\tsrc := \"SELECT * FROM \" + inst.readTable()")
+			p("\tif len(inner) > 0 {")
+			p("\t\tsrc += \" WHERE \" + strings.Join(inner, \" AND \")")
+			p("\t}")
+			p("\tsrc += \" ORDER BY \" + %sColKey + \" ASC, \" + %sColOrder + \" ASC, \" + %sColRevision + \" DESC LIMIT 1 BY \" + %sColKey + \", \" + %sColOrder", inst.StoreName, inst.StoreName, inst.StoreName, inst.StoreName, inst.StoreName)
+			p("\tsql := \"SELECT * FROM (\" + src + \") WHERE (\" + %sScan%sFilter + \")\" +", inst.TableName, c.Kind)
+			p("\t\t\" ORDER BY \" + %sColOrder + \" ASC, \" + %sColKey + \" ASC\"", inst.StoreName, inst.StoreName)
+		} else {
+			p("\twhere := %sScan%sFilter", inst.TableName, c.Kind)
+			if inst.keyGoType == "string" {
+				p("\tif opts.KeyPrefix != \"\" {")
+				p("\t\twhere = \"(\" + where + \") AND \" + %sKeyPrefixPredicate(opts.KeyPrefix)", inst.TableName)
+				p("\t}")
+			}
+			p("\tif opts.ExtraPredicate != \"\" {")
+			p("\t\twhere = \"(\" + where + \") AND (\" + opts.ExtraPredicate + \")\"")
+			p("\t}")
+			p("\tsql := \"SELECT * FROM \" + inst.readTable() +")
+			p("\t\t\" WHERE \" + where +")
+			p("\t\t\" ORDER BY \" + %sColOrder + \" ASC, \" + %sColKey + \" ASC\"", inst.StoreName, inst.StoreName)
 		}
-		p("\tif opts.ExtraPredicate != \"\" {")
-		p("\t\twhere = \"(\" + where + \") AND (\" + opts.ExtraPredicate + \")\"")
-		p("\t}")
-		p("\tsql := \"SELECT * FROM \" + inst.readTable() +")
-		p("\t\t\" WHERE \" + where +")
-		p("\t\t\" ORDER BY \" + %sColOrder + \" ASC, \" + %sColKey + \" ASC\"", inst.StoreName, inst.StoreName)
 		p("\tif opts.Limit > 0 {")
 		p("\t\tsql += \" LIMIT \" + strconv.Itoa(opts.Limit)")
 		p("\t}")
@@ -2214,7 +2280,11 @@ func (inst emitter) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, 
 	p("func (inst *%s) Latest(ctx context.Context, key %s) (ent *%s, found bool, err error) {", inst.storeType(), inst.keyGoType, inst.entityType())
 	p("\tsql := \"SELECT * FROM \" + inst.readTable() +")
 	p("\t\t\" WHERE \" + %sColKey + \" = \" + %sKeyLiteral(key) +", inst.StoreName, inst.TableName)
-	p("\t\t\" ORDER BY \" + %sColOrder + \" DESC LIMIT 1\" + %sArrowOutputSettings", inst.StoreName, inst.TableName)
+	if inst.model.revision != nil {
+		p("\t\t\" ORDER BY \" + %sColOrder + \" DESC, \" + %sColRevision + \" DESC LIMIT 1\" + %sArrowOutputSettings", inst.StoreName, inst.StoreName, inst.TableName)
+	} else {
+		p("\t\t\" ORDER BY \" + %sColOrder + \" DESC LIMIT 1\" + %sArrowOutputSettings", inst.StoreName, inst.TableName)
+	}
 	p("\tents, err := inst.queryEntities(ctx, sql)")
 	p("\tif err != nil || len(ents) == 0 {")
 	p("\t\treturn")
@@ -2261,7 +2331,12 @@ func (inst emitter) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, 
 		p("\t\tsql += \" AND \" + %sColOrder + \" < fromUnixTimestamp64Nano(\" + strconv.FormatInt(opts.To.UnixNano(), 10) + \")\"", inst.StoreName)
 		p("\t}")
 	}
-	p("\tsql += \" ORDER BY \" + %sColOrder + \" ASC\"", inst.StoreName)
+	if inst.model.revision != nil {
+		p("\t// One row per Order: the highest revision supersedes the rest.")
+		p("\tsql += \" ORDER BY \" + %sColOrder + \" ASC, \" + %sColRevision + \" DESC LIMIT 1 BY \" + %sColOrder", inst.StoreName, inst.StoreName, inst.StoreName)
+	} else {
+		p("\tsql += \" ORDER BY \" + %sColOrder + \" ASC\"", inst.StoreName)
+	}
 	p("\tif opts.Limit > 0 {")
 	p("\t\tsql += \" LIMIT \" + strconv.Itoa(opts.Limit)")
 	p("\t}")
@@ -2426,7 +2501,11 @@ func (inst emitter) emitScanLive(p func(string, ...any), c storeComponent) {
 		p("\t\tinner += \" WHERE \" + %sKeyPrefixPredicate(opts.KeyPrefix)", inst.TableName)
 		p("\t}")
 	}
-	p("\tinner += \" ORDER BY \" + %sColOrder + \" DESC LIMIT 1 BY \" + %sColKey", inst.StoreName, inst.StoreName)
+	if inst.model.revision != nil {
+		p("\tinner += \" ORDER BY \" + %sColOrder + \" DESC, \" + %sColRevision + \" DESC LIMIT 1 BY \" + %sColKey", inst.StoreName, inst.StoreName, inst.StoreName)
+	} else {
+		p("\tinner += \" ORDER BY \" + %sColOrder + \" DESC LIMIT 1 BY \" + %sColKey", inst.StoreName, inst.StoreName)
+	}
 	p("\twhere := \"(\" + %sScan%sFilter + \")\"", inst.TableName, c.Kind)
 	p("\tif opts.ExtraPredicate != \"\" {")
 	p("\t\twhere += \" AND (\" + opts.ExtraPredicate + \")\"")

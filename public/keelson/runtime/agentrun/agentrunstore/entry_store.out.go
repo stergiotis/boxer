@@ -46,8 +46,9 @@ const EntryTableName = "boxer.agentrunentry"
 // derived from the IR at generation time — exported so consumers can
 // address them in ScanOpts.ExtraPredicate and their own SQL.
 const (
-	EntryColKey   = `"id:id:s:4::0:"`
-	EntryColOrder = `"ts:ts:z64:47::0:"`
+	EntryColKey      = `"id:id:s:4::0:"`
+	EntryColOrder    = `"ts:ts:z64:47::0:"`
+	EntryColRevision = `"lc:revision:u32:4::0:"`
 )
 
 // Arrow output shape the read-access classes expect.
@@ -107,13 +108,24 @@ var EntryMembershipIds = map[string]map[string]uint64{
 	},
 }
 
+// EntryEnvelope carries the pass-through backbone columns — every plain
+// column that is not the Key, Order or state-view Lifecycle role. Pass
+// one to Begin; it is written verbatim onto the row and read back onto
+// the entity.
+type EntryEnvelope struct {
+	Revision uint32
+}
+
 // EntryEntity is the entity bag (ADR-0100 SD5): the envelope plus one option
 // per bound component. Arrow-free — safe to hold in the cache.
 // Entities returned by cached reads are shared with the cache (and
 // every later reader): treat them as immutable.
 type EntryEntity struct {
-	ID    string
-	Ts    time.Time
+	ID string
+	Ts time.Time
+	// EntryEnvelope is embedded: its pass-through columns read as
+	// promoted entity fields.
+	EntryEnvelope
 	Entry option.Option[Entry]
 }
 
@@ -512,20 +524,21 @@ func (inst *EntryEntityBuilder) endSection(section string) error {
 }
 
 // Begin opens one entity with the envelope roles as typed arguments
-// (Key, Order), under context.Background(): a configured stamper
+// (Key, Order) and the pass-through envelope, under context.Background(): a configured stamper
 // that reads a call identity off the context finds none. See BeginCtx.
-func (inst *EntryStore) Begin(id string, ts time.Time) *EntryEntityBuilder {
-	return inst.BeginCtx(context.Background(), id, ts)
+func (inst *EntryStore) Begin(id string, ts time.Time, env EntryEnvelope) *EntryEntityBuilder {
+	return inst.BeginCtx(context.Background(), id, ts, env)
 }
 
 // BeginCtx is Begin with the context the configured stampers consult
 // (ADR-0295 §SD7) — where a call identity reaches an actor stamper. The
 // store stays single-goroutine; ctx is read during this call only.
-func (inst *EntryStore) BeginCtx(ctx context.Context, id string, ts time.Time) *EntryEntityBuilder {
+func (inst *EntryStore) BeginCtx(ctx context.Context, id string, ts time.Time, env EntryEnvelope) *EntryEntityBuilder {
 	lowlevel.InEntityAgentrunentryTableBeginEntity(inst.dml)
 	lowlevel.InEntityAgentrunentryTableSetId(inst.dml, id)
 	lowlevel.InEntityAgentrunentryTableSetTimestamp(inst.dml, ts)
-	b := &EntryEntityBuilder{store: inst, key: id, ent: EntryEntity{ID: id, Ts: ts}}
+	lowlevel.InEntityAgentrunentryTableSetLifecycle(inst.dml, env.Revision)
+	b := &EntryEntityBuilder{store: inst, key: id, ent: EntryEntity{ID: id, Ts: ts, EntryEnvelope: env}}
 	b.ident, _ = callident.CallIdentityFrom(ctx)
 	b.pushed = inst.applyStampers(ctx)
 	return b
@@ -669,12 +682,9 @@ func (inst *EntryEntityBuilder) Commit() (err error) {
 	}
 	inst.store.buffered++
 	inst.store.dirty[inst.key] = struct{}{}
-	if inst.raw {
-		inst.store.notifyWrite(inst.key, nil)
-	} else {
-		ent := inst.ent
-		inst.store.notifyWrite(inst.key, &ent)
-	}
+	// Roles.Revision: invalidate rather than write through — the views'
+	// version gate is the Order alone and cannot see a revision.
+	inst.store.notifyWrite(inst.key, nil)
 	inst.store.noteCommitted(recordstore.WrittenKey[string, time.Time]{Key: inst.key, Order: inst.ent.Ts, Lifecycle: recordstore.LifecycleLive, Tombstone: false, Identity: inst.ident})
 	return
 }
@@ -689,7 +699,9 @@ func (inst *EntryEntityBuilder) Rollback() (err error) {
 
 // IngestEntry buffers one whole entity per row carrying only the
 // Entry component, all stamped with ts — rows ship on the next Flush,
-// like every write. Keys must be distinct within one call (rows
+// like every write. The envelope carries the pass-through columns
+// the row binds; the others are written zero — use Begin with a
+// filled envelope to set them. Keys must be distinct within one call (rows
 // share ts, so duplicates would tie on Order): a duplicate returns
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
@@ -708,7 +720,7 @@ func (inst *EntryStore) IngestEntryCtx(ctx context.Context, ts time.Time, rows [
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddEntry(rows[i]).Commit()
+		err = inst.BeginCtx(ctx, rows[i].ID, ts, EntryEnvelope{}).AddEntry(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest entry row %d: %w", i, err)
 			return
@@ -1029,7 +1041,7 @@ func (inst *EntryStore) fetchLatestSQL(keys []string) string {
 		}
 		sb.WriteString(agentrunentryKeyLiteral(k))
 	}
-	sb.WriteString(") ORDER BY " + EntryColOrder + " DESC LIMIT 1 BY " + EntryColKey)
+	sb.WriteString(") ORDER BY " + EntryColOrder + " DESC, " + EntryColRevision + " DESC LIMIT 1 BY " + EntryColKey)
 	sb.WriteString(agentrunentryArrowOutputSettings)
 	return sb.String()
 }
@@ -1091,15 +1103,19 @@ const (
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *EntryStore) ScanEntry(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*EntryEntity, error] {
-	where := agentrunentryScanEntryFilter
+	var inner []string
 	if opts.KeyPrefix != "" {
-		where = "(" + where + ") AND " + agentrunentryKeyPrefixPredicate(opts.KeyPrefix)
+		inner = append(inner, agentrunentryKeyPrefixPredicate(opts.KeyPrefix))
 	}
 	if opts.ExtraPredicate != "" {
-		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
+		inner = append(inner, "("+opts.ExtraPredicate+")")
 	}
-	sql := "SELECT * FROM " + inst.readTable() +
-		" WHERE " + where +
+	src := "SELECT * FROM " + inst.readTable()
+	if len(inner) > 0 {
+		src += " WHERE " + strings.Join(inner, " AND ")
+	}
+	src += " ORDER BY " + EntryColKey + " ASC, " + EntryColOrder + " ASC, " + EntryColRevision + " DESC LIMIT 1 BY " + EntryColKey + ", " + EntryColOrder
+	sql := "SELECT * FROM (" + src + ") WHERE (" + agentrunentryScanEntryFilter + ")" +
 		" ORDER BY " + EntryColOrder + " ASC, " + EntryColKey + " ASC"
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
@@ -1115,7 +1131,7 @@ func (inst *EntryStore) ScanEntry(ctx context.Context, opts recordstore.ScanOpts
 func (inst *EntryStore) Latest(ctx context.Context, key string) (ent *EntryEntity, found bool, err error) {
 	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + EntryColKey + " = " + agentrunentryKeyLiteral(key) +
-		" ORDER BY " + EntryColOrder + " DESC LIMIT 1" + agentrunentryArrowOutputSettings
+		" ORDER BY " + EntryColOrder + " DESC, " + EntryColRevision + " DESC LIMIT 1" + agentrunentryArrowOutputSettings
 	ents, err := inst.queryEntities(ctx, sql)
 	if err != nil || len(ents) == 0 {
 		return
@@ -1144,7 +1160,8 @@ func (inst *EntryStore) Replay(ctx context.Context, key string, fromOrder time.T
 	if !opts.To.IsZero() {
 		sql += " AND " + EntryColOrder + " < fromUnixTimestamp64Nano(" + strconv.FormatInt(opts.To.UnixNano(), 10) + ")"
 	}
-	sql += " ORDER BY " + EntryColOrder + " ASC"
+	// One row per Order: the highest revision supersedes the rest.
+	sql += " ORDER BY " + EntryColOrder + " ASC, " + EntryColRevision + " DESC LIMIT 1 BY " + EntryColOrder
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -1231,6 +1248,7 @@ func (inst *EntryStore) iterateEntities(ctx context.Context, sql string) iter.Se
 func decodeEntryRecord(rec arrow.RecordBatch) (ents []*EntryEntity, err error) {
 	idR := lowlevel.NewReadAccessAgentrunentryTablePlainEntityIdAttributes()
 	tsR := lowlevel.NewReadAccessAgentrunentryTablePlainEntityTimestampAttributes()
+	lcR := lowlevel.NewReadAccessAgentrunentryTablePlainEntityLifecycleAttributes()
 	entryOrdinalR := lowlevel.NewReadAccessAgentrunentryTableTaggedEntryOrdinal()
 	entryAtR := lowlevel.NewReadAccessAgentrunentryTableTaggedEntryAt()
 	entryKindR := lowlevel.NewReadAccessAgentrunentryTableTaggedEntryKind()
@@ -1259,7 +1277,7 @@ func decodeEntryRecord(rec arrow.RecordBatch) (ents []*EntryEntity, err error) {
 	entryKeyIdR := lowlevel.NewReadAccessAgentrunentryTableTaggedEntryKeyId()
 	entryParentR := lowlevel.NewReadAccessAgentrunentryTableTaggedEntryParent()
 	entryAttachmentsR := lowlevel.NewReadAccessAgentrunentryTableTaggedEntryAttachments()
-	readers := []agentrunentrySectionReaderI{idR, tsR, entryOrdinalR, entryAtR, entryKindR, entryKeyR, entryRoleR, entryBodyR, entryCallsR, entryBodyDigestR, entryCallsDigestR, entryNameR, entryBookR, entryFormR, entryTargetR, entryFromR, entryEffectR, entryTurnR, entryLabelLevelR, entryLabelTierR, entryLabelExposureR, entryLabelOriginR, entryWriterRunR, entryWriterTurnR, entryWriterOrdinalR, entryPrevR, entryDigestR, entryKeyIdR, entryParentR, entryAttachmentsR}
+	readers := []agentrunentrySectionReaderI{idR, tsR, lcR, entryOrdinalR, entryAtR, entryKindR, entryKeyR, entryRoleR, entryBodyR, entryCallsR, entryBodyDigestR, entryCallsDigestR, entryNameR, entryBookR, entryFormR, entryTargetR, entryFromR, entryEffectR, entryTurnR, entryLabelLevelR, entryLabelTierR, entryLabelExposureR, entryLabelOriginR, entryWriterRunR, entryWriterTurnR, entryWriterOrdinalR, entryPrevR, entryDigestR, entryKeyIdR, entryParentR, entryAttachmentsR}
 	for _, r := range readers {
 		err = r.LoadFromRecord(rec)
 		if err != nil {
@@ -1285,6 +1303,7 @@ func decodeEntryRecord(rec arrow.RecordBatch) (ents []*EntryEntity, err error) {
 			ID: idR.ValueId.Value(i),
 			Ts: tsR.ValueTs.Value(i).ToTime(tsType.Unit).UTC(),
 		}
+		ent.Revision = lcR.GetAttrValueRevision(raruntime.EntityIdx(i))
 		{
 			row, ok, e := entryReadRow(i, entryOrdinalR.GetAttributes(), entryOrdinalR.GetMemberships(), entryAtR.GetAttributes(), entryAtR.GetMemberships(), entryKindR.GetAttributes(), entryKindR.GetMemberships(), entryKeyR.GetAttributes(), entryKeyR.GetMemberships(), entryRoleR.GetAttributes(), entryRoleR.GetMemberships(), entryBodyR.GetAttributes(), entryBodyR.GetMemberships(), entryCallsR.GetAttributes(), entryCallsR.GetMemberships(), entryBodyDigestR.GetAttributes(), entryBodyDigestR.GetMemberships(), entryCallsDigestR.GetAttributes(), entryCallsDigestR.GetMemberships(), entryNameR.GetAttributes(), entryNameR.GetMemberships(), entryBookR.GetAttributes(), entryBookR.GetMemberships(), entryFormR.GetAttributes(), entryFormR.GetMemberships(), entryTargetR.GetAttributes(), entryTargetR.GetMemberships(), entryFromR.GetAttributes(), entryFromR.GetMemberships(), entryEffectR.GetAttributes(), entryEffectR.GetMemberships(), entryTurnR.GetAttributes(), entryTurnR.GetMemberships(), entryLabelLevelR.GetAttributes(), entryLabelLevelR.GetMemberships(), entryLabelTierR.GetAttributes(), entryLabelTierR.GetMemberships(), entryLabelExposureR.GetAttributes(), entryLabelExposureR.GetMemberships(), entryLabelOriginR.GetAttributes(), entryLabelOriginR.GetMemberships(), entryWriterRunR.GetAttributes(), entryWriterRunR.GetMemberships(), entryWriterTurnR.GetAttributes(), entryWriterTurnR.GetMemberships(), entryWriterOrdinalR.GetAttributes(), entryWriterOrdinalR.GetMemberships(), entryPrevR.GetAttributes(), entryPrevR.GetMemberships(), entryDigestR.GetAttributes(), entryDigestR.GetMemberships(), entryKeyIdR.GetAttributes(), entryKeyIdR.GetMemberships(), entryParentR.GetAttributes(), entryParentR.GetMemberships(), entryAttachmentsR.GetAttributes(), entryAttachmentsR.GetMemberships())
 			if e != nil {

@@ -349,13 +349,16 @@ Accepted 2026-10-11.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
-<!--
 ## Updates
 
-Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
-claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
-YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
--->
+### 2026-10-11 — SD8: a tombstone is the entry at its next revision
+
+The entry table binds the record store's Revision role (ADR-0100's Update of
+this date). A tombstone appends each entry at revision 1 with its bodies
+empty, and every read keeps the highest revision of an ordinal in SQL. The
+`1<<40` order offset the twin was written at, and the reads' twin-first
+sort, are gone. The later deletion of the originals stays best-effort and
+now names them by revision 0, so it is exact.
 
 ## References
 
