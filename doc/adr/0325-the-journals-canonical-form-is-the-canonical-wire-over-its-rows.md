@@ -318,6 +318,19 @@ written and read by the generated vault store. `agentrunstore/semi.go`
 keeps only the conversion to and from `jsonshred`'s attributes, and the
 vault store no longer needs its contribution seam.
 
+
+### 2026-10-12 — SD1, SD2, SD3: the canonical item is the profile's, on any store
+
+[ADR-0327](./0327-evidence-as-a-record-store-profile-chain-vault-marks-seals-and-anchors-any-store-opts-into.md) (proposed) §SD2 gives every store generated with `CanonWire` the
+canonical item of a stored row (`CanonicalItem`), the preimage SD2
+describes with the chain fields at zero, so the journal's form is one
+case of the generator's. SD1's chain fields are the profile's chain
+component and the revision is a role outside the item; SD3's one
+commitment per vault row is one per (ordinal, component), the component
+named in the vault row's envelope; the digest name is
+`…/agentrun-chain/v4`. The trail's row digests (ADR-0277's Update of this
+date) are over the same item.
+
 ## References
 
 - [ADR-0210](./0210-leeway-canonical-wire-generator.md) — the canonical wire and its generated encoder.

@@ -527,6 +527,22 @@ the clearance went under, from [ADR-0312](./0312-exits-sinks-from-the-cell-bound
 them as `profile`, `route`, `tier` and `approval`. A caller that declares
 none leaves the symbols absent and the tier CLEAR.
 
+
+### 2026-10-12 — §SD3: the trail seals its flushes; audit events gain write-ahead and `originBy`
+
+Under [ADR-0327](./0327-evidence-as-a-record-store-profile-chain-vault-marks-seals-and-anchors-any-store-opts-into.md) (proposed) §SD5 every batch the server takes carries one seal row
+naming the batch's other rows by the digest of their canonical items,
+chained to the run's previous durable seal (law L34); a batch the cap
+dropped yields the audit-gap row the next seal names, and each durable
+seal is anchored as the head of the run's seal stream (§SD7). The seal is
+a row of this trail, under its own kind, and is not counted among the
+rows written. §SD3's write-ahead now has a form for audit events,
+`EventWriteAhead` (§SD8). An audit event carries `originBy` beside
+`principalBy`: the host's recorder writes `host`, a row the audit subject
+took from an app says `envelope`, a recorder built without the host says
+`self` (§SD6). `keelson('evidence_checks')` serves L34 and the seal
+anchors over this run in-process.
+
 ## References
 
 - [ADR-0191](./0191-runtime-instance-attribution.md) — the `(run id, instance key)` decision this extends to the generated kinds.

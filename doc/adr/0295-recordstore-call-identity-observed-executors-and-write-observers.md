@@ -288,6 +288,19 @@ observer: `Recorder.Event` commits under the caller's context, and
 `trail.WithWriteObserver` attaches an observer to every store the recorder
 builds.
 
+
+### 2026-10-12 — host wiring: closed by the audit subject, not by a context
+
+The open item is closed by a route that needs no context handed to an app:
+[ADR-0327](./0327-evidence-as-a-record-store-profile-chain-vault-marks-seals-and-anchors-any-store-opts-into.md) (proposed) §SD8's `runtime.audit.{app}` subject, where the host's
+handler builds the context itself — the call identity's origin from the
+envelope's sender, the principal and the purpose from the app's claims —
+and marks how the origin was established with `evidence.WithAttestation`,
+which the trail's recorder reads into the row's `originBy`. The written-by
+component of a store under the evidence profile reads the same context
+(`evidence.IdentityFrom`, law L35), so who committed a row is in the row
+on every generated store that opts in.
+
 ## References
 
 - [ADR-0027](./0027-pushout-forget-swiss-fadp.md) — the FADP reading this repository uses.

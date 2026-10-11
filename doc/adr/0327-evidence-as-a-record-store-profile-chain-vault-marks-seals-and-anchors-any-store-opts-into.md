@@ -442,7 +442,7 @@ row for now, and the ledger's `Head` reads the latest row.
 - **M4a — The audit event and the forwarder below the runtime; write-ahead for events; `runtime.audit.{app}`; `originBy` on audit events (SD8, SD6).** ✓
 - **M4b — Seals (SD5).** ✓
 - **M5 — Anchors by scope; L32 generic; the verification relations served in-process (SD7).** ✓
-- **M6 — The dated Updates on the ADRs this reshapes.**
+- **M6 — The dated Updates on the ADRs this reshapes.** ✓ (ADR-0026, 0277, 0295, 0296, 0308, 0314, 0320, 0325, dated 2026-10-12)
 
 ## Surfaces — Tier 1
 

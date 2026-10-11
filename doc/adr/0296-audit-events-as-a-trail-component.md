@@ -390,6 +390,26 @@ items.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
+
+## Updates
+
+### 2026-10-12 — §SD1, §SD6, §SD7: the audit event below the runtime
+
+[ADR-0327](./0327-evidence-as-a-record-store-profile-chain-vault-marks-seals-and-anchors-any-store-opts-into.md) (proposed) §SD8 moves `AuditEvent`, its bounds and the recorder's own
+domain's constants to `storage/recordstore/evidence/audit`; the trail
+re-exports them as aliases, keeps `Event`, the gap and the invalid rows,
+and binds the component through the alias (the generator now emits a
+component's codec in the store's package). The row gains `originBy`
+beside `principalBy` (§SD6), one of `host`, `envelope`, `self`, set by the
+recorder; the audit-event view projects it. §SD6's `ForwarderI` is the
+audit package's and is handed plain `audit.Event` values — id, time,
+origin and the row — so a carrier adapter links no store. §SD7's "no" to
+host wiring stands as written; the route it left open is the
+`runtime.audit.{app}` subject, a write verb the host answers by
+recording the app's row with the envelope's sender as its origin. Audit
+events gain write-ahead, `EventWriteAhead`. §SD4's gap row is named by the
+next flush's seal (ADR-0277's Update of this date).
+
 ## References
 
 - [ADR-0277](./0277-one-audit-trail-for-model-calls-and-agent-work.md) — the trail: components, `Origin`, the backlog, the read store.

@@ -422,6 +422,25 @@ exit as they stand, so a resumed run is held to the current ones without a
 strand. The call rows and the `profile` entry keep the profile's own
 fingerprint, the one `keelson('harness_profiles')` lists.
 
+
+### 2026-10-12 — SD1, SD8, SD9: the journal is a store under the evidence profile
+
+The entry table is generated under [ADR-0327](./0327-evidence-as-a-record-store-profile-chain-vault-marks-seals-and-anchors-any-store-opts-into.md) (proposed)'s profile (§SD9): the
+chain is the profile's component on every row (`Prev`, `Digest`,
+`Scheme`, the mark, the commitments by component), the identity a row was
+committed under is the written-by component inside the digest (law L35),
+and the bodies are the vault, `agentrunentryvault`, one row per
+(run, ordinal, component) with the opening the ledger's commitment opens
+under. The digest name is `…/agentrun-chain/v4`. SD8's tombstone and the
+erasure of an entry are the profile's marks — `deleted` at the chain's
+end, `erased` naming the ordinal and the component — which the one
+verifier reads; the run row stays the journal's compare-and-set row. The
+store that writes prepares: the service hands the store unprepared
+entries with their ordinals and the head it expects, and the store draws
+the openings, commits per component and chains (wire v3). SD2's head
+entry records a receipt from the anchor store below the runtime
+(ADR-0314's Update of this date).
+
 ## References
 
 - [ADR-0303](./0303-a-conversation-outlives-its-process-a-run-journal-written-before-each-act.md) (superseded by this record) — the journal, resume fold, grant rule and pinning carried forward.

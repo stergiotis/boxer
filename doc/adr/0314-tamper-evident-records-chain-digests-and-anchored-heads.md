@@ -252,6 +252,25 @@ the chain columns at zero
 §SD2). The digest name is `…/agentrun-chain/v3`. The chain construction,
 the run row as the first predecessor, and L31 do not change.
 
+
+### 2026-10-12 — §SD1, §SD2, §SD3: the chain, the anchors and law L32 are the evidence profile's
+
+[ADR-0327](./0327-evidence-as-a-record-store-profile-chain-vault-marks-seals-and-anchors-any-store-opts-into.md) (proposed) generalises this record. §SD1's chain is the profile's
+chain component on any generated store with a uint64 scope and ordinal,
+verified by one `evidence.Verify` over the row's canonical item (law
+L31, with the mark clause of §SD5); the journal's digest name is
+`…/agentrun-chain/v4`. §SD2's anchor store is
+`storage/recordstore/evidence/anchor`, keyed `(cell, scope, ordinal,
+scheme)`: the journal's heads are scope `run` under the journal's
+scheme, the trail's durable seals are the heads of the run's seal stream
+under the seal scheme, and `keelson('anchors')` gains `scope` and
+`scheme`. `runtime.anchor.*` carries both on wire v2; the service, the
+client, the journal's view of a head, the head entry and `Ship` stay in
+`keelson/runtime/headstore`. §SD3's cadence moves with the contract. L32
+is `evidence.VerifyHeads` for a chained store and
+`evidence.VerifySealAnchors` for a sealed one; `keelson('evidence_checks')`
+serves L31, L32 and L34 over the host's stores in-process.
+
 ## References
 
 - [ADR-0201](./0201-leeway-canonical-record-form.md) — the canonical form the digest is over.

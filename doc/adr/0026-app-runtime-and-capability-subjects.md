@@ -359,6 +359,17 @@ Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded
 
 ## Updates
 
+### 2026-10-12 — §SD3: `runtime.audit.{id}` is a write verb; `runtime.anchor.*` carries scope and scheme
+
+[ADR-0327](./0327-evidence-as-a-record-store-profile-chain-vault-marks-seals-and-anchors-any-store-opts-into.md) (proposed) §SD8 turns the `runtime.audit.{id}` row of the
+taxonomy, listed as a read-only stream, into a write verb: an app sends an
+audit event to the subject that names it, and the host records it through
+the trail with the envelope's sender as its origin, which the host vouches
+for (`originBy = envelope`); a row sent to another app's subject, or in
+the recorder's own domain, is refused. Reads stay the trail's views. The
+`runtime.anchor.*` family (ADR-0314's Update) carries a scope and a scheme
+instead of a run on wire v2 (§SD7).
+
 ### 2026-10-11 — `BackgroundTickHz` is read by no host; the closing edge drains
 
 The window host runs every open window's `Frame` on every render pass,

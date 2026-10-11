@@ -310,6 +310,19 @@ the ledger column `vaultCommitment` holds it. `BodyDigest` and
 opening, erasure and L31's acceptance of an erased row do not change in
 kind.
 
+
+### 2026-10-12 — SD2, SD4, SD7: a commitment per component, erasure per component, the audit package
+
+Under [ADR-0327](./0327-evidence-as-a-record-store-profile-chain-vault-marks-seals-and-anchors-any-store-opts-into.md) (proposed) §SD4 the vault holds one row per (run, ordinal,
+component) with its own opening, and the ledger's chain component
+carries one commitment per component, so SD4's erasure names a
+component: an `erased` mark naming the ordinal and the component, the
+other components still opening. The shredded body is one component
+(ADR-0326), erased as one. SD7's audit events for vault reads are now
+possible without a runtime import — the audit event is
+`storage/recordstore/evidence/audit`'s (§SD8) — and remain a consumer's
+to turn on.
+
 ## References
 
 - [ADR-0025](./0025-pushout-forget-architecture.md) — the legal context and the vault shape.
