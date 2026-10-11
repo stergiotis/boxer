@@ -539,6 +539,13 @@ lane rather than on `clickhouse-local` tests
 ([ADR-0133](./adr/0133-chhttp-server-dialect-and-param-binding.md)) so that
 the in-process `/query` endpoint of §3.4 speaks ClickHouse to play unchanged.
 
+A deployment runs **one** server, not a replicated cluster
+([ADR-0319 §SD1](./adr/0319-tagged-id-streams-leased-through-one-row-on-the-one-clickhouse-server.md)).
+The operator gives that guarantee; nothing checks it. It is what makes a
+compare-and-set on one row linearizable — the watchbill claim, the id-stream
+lease — and on a replicated cluster those claims can both win without any
+error saying so.
+
 | Use | Engine |
 | --- | --- |
 | play and sqlapplet queries | the server, by default; the in-process plane when the statement names only `keelson()` tables (§3.4) |
@@ -558,6 +565,7 @@ and nearly all of it in one *shape*: the leeway facts table.
 | `boxer.persiststate` | app durable state of every kind — persist values, workingsets, column-width overrides: one row per write, entity keyed `<kind>/<app>/…`, newest wins, a tombstone is a delete | the generated store [`public/keelson/runtime/persist/persiststore`](../public/keelson/runtime/persist/persiststore), behind `persist.StoreBackend` | own `TableDesc` with a `u8` lifecycle, which is what lets the generator emit a state view; a small typed section set the kinds share as components; `ORDER BY (id, ts)` | [ADR-0105 §D3a and its Update of 2026-08-15](./adr/0105-keelson-adopts-generated-record-stores.md) |
 | `boxer.fsmeta` / `boxer.fsdata` / `boxer.fssnap` | the filesystem snapshot store (§3.6) | generated stores under [`public/fs/lading`](../public/fs/lading) | facts-shaped on store-owned tables; `ORDER BY (mount, snapshot, path)`; `PARTITION BY` expiry day; `TTL` | [ADR-0198](./adr/0198-fs-snapshot-store.md) |
 | `boxer.mv_queryruns` | the refreshable materialized view that pulls `queryrunsd`'s `/pull` into `boxer.facts` every 5 s — ClickHouse owns the insert | [`public/keelson/runtime/queryrunsvc`](../public/keelson/runtime/queryrunsvc) reconciles it at boot | MV over `url(…, 'ArrowStream')` | ADR-0115 |
+| `boxer.idlease` | one lease row per tagged id stream: the next body not yet leased | [`public/identity/identgen/leased/rowalloc`](../public/identity/identgen/leased/rowalloc), provisioned at host boot beside the journal | plain columns; `MergeTree ORDER BY tag` with the lightweight-update settings; written only by `rowcas` updates | [ADR-0319 §SD3](./adr/0319-tagged-id-streams-leased-through-one-row-on-the-one-clickhouse-server.md) |
 | `boxer.tables_*` | the data catalog: every discovered table classified opaque / leeway, restoration payloads, pairwise compatibility — rebuilt whole per run | the catalog command | plain columns | [ADR-0170](./adr/0170-data-catalog-competence.md) |
 
 Not tables, though they read like them: **`keelson('…')`** names are in-process

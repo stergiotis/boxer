@@ -1,0 +1,8 @@
+# name	tagValue	width	maxExpectedIds
+# The committed id-stream claims (ADR-0319 §SD2). A changed tag value
+# changes every id already minted under it; a new line does not.
+# Regenerate with BOXER_VOCAB_GOLDEN_REGEN=1 go test ./<the claiming package>/...
+agentrunEntry	46368	24	549755813888
+agentrunEntryMem	64079	24	549755813888
+agentrunRun	317811	28	34359738368
+agentrunRunMem	439204	28	34359738368

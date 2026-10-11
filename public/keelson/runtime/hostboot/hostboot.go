@@ -11,6 +11,7 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/stergiotis/boxer/public/identity/identgen/leased/rowalloc"
 	"github.com/stergiotis/boxer/public/keelson/data/chclient"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalbroker"
 	"github.com/stergiotis/boxer/public/keelson/data/chlocalpool"
@@ -1064,6 +1065,11 @@ func (rt *Runtime) bootAgentRun(ctx context.Context) {
 		layout := agentrunstore.Layout{}
 		pctx, cancel := context.WithTimeout(ctx, persistOpenTimeout)
 		err := agentrunstore.ProvisionIn(pctx, rt.PersistExec, layout)
+		// The id-stream lease table sits beside the journal's, the tables
+		// whose ids it will lease (ADR-0319 §SD3, Migration).
+		if lerr := rowalloc.ProvisionIn(pctx, rt.PersistExec, rowalloc.Layout{}); lerr != nil {
+			logger.Warn().Err(lerr).Msg("idlease: provisioning failed; no id stream can lease a block on this host")
+		}
 		cancel()
 		if err != nil {
 			logger.Warn().Err(err).Msg("agentrun: provisioning failed; runs are kept in process only")
