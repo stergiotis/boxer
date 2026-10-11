@@ -1060,6 +1060,38 @@ func (inst emitter) emitStoreHeader(sb *strings.Builder, key, order, lifecycle e
 		p("func %sKeyLiteral(k uint64) string { return strconv.FormatUint(k, 10) }", inst.TableName)
 	}
 	p("")
+	p("// %sEnvelopeColumns maps each envelope plain column, by the name the", inst.TableName)
+	p("// TableDesc authors, to its quoted physical name: what ScanOpts.OrderBy")
+	p("// may name.")
+	p("var %sEnvelopeColumns = map[string]string{", inst.TableName)
+	for _, g := range inst.model.groups {
+		for _, c := range g.cols {
+			p("\t%q: `\"%s\"`,", c.name, c.physical)
+		}
+	}
+	p("}")
+	p("")
+	p("// %sOrderBy renders a scan's ORDER BY from opts: OrderBy names an", inst.TableName)
+	p("// envelope column (empty: the Order role), Descending reverses it, and")
+	p("// the Key breaks ties in the same direction. An unknown name is refused,")
+	p("// never rendered.")
+	p("func %sOrderBy(opts recordstore.ScanOpts) (clause string, err error) {", inst.TableName)
+	p("\tcol := %sColOrder", inst.StoreName)
+	p("\tif opts.OrderBy != \"\" {")
+	p("\t\tvar ok bool")
+	p("\t\tif col, ok = %sEnvelopeColumns[opts.OrderBy]; !ok {", inst.TableName)
+	p("\t\t\terr = eh.Errorf(\"order by %%q: %%w\", opts.OrderBy, recordstore.ErrUnknownOrderColumn)")
+	p("\t\t\treturn")
+	p("\t\t}")
+	p("\t}")
+	p("\tdir := \" ASC\"")
+	p("\tif opts.Descending {")
+	p("\t\tdir = \" DESC\"")
+	p("\t}")
+	p("\tclause = \" ORDER BY \" + col + dir + \", \" + %sColKey + dir", inst.StoreName)
+	p("\treturn")
+	p("}")
+	p("")
 }
 
 func (inst emitter) emitEntityBag(sb *strings.Builder, comps []storeComponent, stateView bool) {
@@ -2237,7 +2269,8 @@ func (inst emitter) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, 
 	p("")
 	for _, c := range comps {
 		p("// Scan%s iterates the entities whose rows carry a conforming %s", c.Kind, c.Kind)
-		p("// component, ordered by (Order, Key) — so entities sharing an Order")
+		p("// component, ordered by (Order, Key) — or by opts.OrderBy's envelope")
+		p("// column, opts.Descending reversing either — so entities sharing an Order")
 		p("// still come out in a fixed sequence. Rows that tie on BOTH (the same")
 		p("// key written twice at the same Order) are not ordered against each")
 		p("// other by this clause; the table keeps newest-per-key, so which of")
@@ -2253,6 +2286,10 @@ func (inst emitter) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, 
 		p("// rows.")
 		p("func (inst *%s) Scan%s(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*%s, error] {", inst.storeType(), c.Kind, inst.entityType())
 		inst.emitRefuseKeyPrefix(p)
+		p("\torder, err := %sOrderBy(opts)", inst.TableName)
+		p("\tif err != nil {")
+		p("\t\treturn recordstore.FailScan[*%s](err)", inst.entityType())
+		p("\t}")
 		if inst.model.revision != nil {
 			// The collapse to the highest revision of each (Key, Order)
 			// runs before the component Filter, so a superseding row that
@@ -2274,8 +2311,7 @@ func (inst emitter) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, 
 			p("\t\tsrc += \" WHERE \" + strings.Join(inner, \" AND \")")
 			p("\t}")
 			p("\tsrc += \" ORDER BY \" + %sColKey + \" ASC, \" + %sColOrder + \" ASC, \" + %sColRevision + \" DESC LIMIT 1 BY \" + %sColKey + \", \" + %sColOrder", inst.StoreName, inst.StoreName, inst.StoreName, inst.StoreName, inst.StoreName)
-			p("\tsql := \"SELECT * FROM (\" + src + \") WHERE (\" + %sScan%sFilter + \")\" +", inst.TableName, c.Kind)
-			p("\t\t\" ORDER BY \" + %sColOrder + \" ASC, \" + %sColKey + \" ASC\"", inst.StoreName, inst.StoreName)
+			p("\tsql := \"SELECT * FROM (\" + src + \") WHERE (\" + %sScan%sFilter + \")\" + order", inst.TableName, c.Kind)
 		} else {
 			p("\twhere := %sScan%sFilter", inst.TableName, c.Kind)
 			if inst.keyGoType == "string" {
@@ -2287,8 +2323,7 @@ func (inst emitter) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, 
 			p("\t\twhere = \"(\" + where + \") AND (\" + opts.ExtraPredicate + \")\"")
 			p("\t}")
 			p("\tsql := \"SELECT * FROM \" + inst.readTable() +")
-			p("\t\t\" WHERE \" + where +")
-			p("\t\t\" ORDER BY \" + %sColOrder + \" ASC, \" + %sColKey + \" ASC\"", inst.StoreName, inst.StoreName)
+			p("\t\t\" WHERE \" + where + order")
 		}
 		p("\tif opts.Limit > 0 {")
 		p("\t\tsql += \" LIMIT \" + strconv.Itoa(opts.Limit)")
@@ -2512,7 +2547,8 @@ func (inst emitter) emitScanLive(p func(string, ...any), c storeComponent) {
 	inst.emitKeyPrefixDoc(p)
 	p("// opts.ExtraPredicate (trusted raw SQL over the physical columns)")
 	p("// applies to the collapsed rows, so it narrows the live set and cannot")
-	p("// uncover a superseded row. Entities come out ordered by key.")
+	p("// uncover a superseded row. Entities come out ordered by key, unless")
+	p("// opts.OrderBy or opts.Descending asks for an envelope order instead.")
 	p("// opts.Limit caps the rows the query returns before the Go-side")
 	p("// tombstone test, so under a configured tombstone pair whose marker")
 	p("// satisfies the Filter a limited scan can yield fewer than Limit.")
@@ -2535,7 +2571,15 @@ func (inst emitter) emitScanLive(p func(string, ...any), c storeComponent) {
 	p("\tif opts.ExtraPredicate != \"\" {")
 	p("\t\twhere += \" AND (\" + opts.ExtraPredicate + \")\"")
 	p("\t}")
-	p("\tsql := \"SELECT * FROM (\" + inner + \") WHERE \" + where + \" ORDER BY \" + %sColKey + \" ASC\"", inst.StoreName)
+	p("\t// Key order unless the options ask for another.")
+	p("\torder := \" ORDER BY \" + %sColKey + \" ASC\"", inst.StoreName)
+	p("\tif opts.OrderBy != \"\" || opts.Descending {")
+	p("\t\tvar err error")
+	p("\t\tif order, err = %sOrderBy(opts); err != nil {", inst.TableName)
+	p("\t\t\treturn recordstore.FailScan[*%s](err)", inst.entityType())
+	p("\t\t}")
+	p("\t}")
+	p("\tsql := \"SELECT * FROM (\" + inner + \") WHERE \" + where + order")
 	p("\tif opts.Limit > 0 {")
 	p("\t\tsql += \" LIMIT \" + strconv.Itoa(opts.Limit)")
 	p("\t}")

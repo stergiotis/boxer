@@ -48,6 +48,37 @@ const factsArrowOutputSettings = " SETTINGS output_format_arrow_string_as_string
 // factsKeyLiteral renders a Key value as a ClickHouse SQL literal.
 func factsKeyLiteral(k uint64) string { return strconv.FormatUint(k, 10) }
 
+// factsEnvelopeColumns maps each envelope plain column, by the name the
+// TableDesc authors, to its quoted physical name: what ScanOpts.OrderBy
+// may name.
+var factsEnvelopeColumns = map[string]string{
+	"id":         `"id:id:u64:47::0:"`,
+	"naturalKey": `"id:naturalKey:y:4::0:"`,
+	"ts":         `"ts:ts:z64:47::0:"`,
+	"expiresAt":  `"lc:expiresAt:z64:4::0:"`,
+}
+
+// factsOrderBy renders a scan's ORDER BY from opts: OrderBy names an
+// envelope column (empty: the Order role), Descending reverses it, and
+// the Key breaks ties in the same direction. An unknown name is refused,
+// never rendered.
+func factsOrderBy(opts recordstore.ScanOpts) (clause string, err error) {
+	col := StevedoreColOrder
+	if opts.OrderBy != "" {
+		var ok bool
+		if col, ok = factsEnvelopeColumns[opts.OrderBy]; !ok {
+			err = eh.Errorf("order by %q: %w", opts.OrderBy, recordstore.ErrUnknownOrderColumn)
+			return
+		}
+	}
+	dir := " ASC"
+	if opts.Descending {
+		dir = " DESC"
+	}
+	clause = " ORDER BY " + col + dir + ", " + StevedoreColKey + dir
+	return
+}
+
 // StevedoreMembershipIds is the membership-id assignment this store was
 // generated under: component kind -> membership name -> the uint64 id
 // carried in the membership columns. Verbatim-channel memberships embed
@@ -911,7 +942,8 @@ const (
 )
 
 // ScanDeadLetter iterates the entities whose rows carry a conforming DeadLetter
-// component, ordered by (Order, Key) — so entities sharing an Order
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
 // still come out in a fixed sequence. Rows that tie on BOTH (the same
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
@@ -930,13 +962,16 @@ func (inst *StevedoreStore) ScanDeadLetter(ctx context.Context, opts recordstore
 	if opts.KeyPrefix != "" {
 		return recordstore.RefuseKeyPrefix[*StevedoreEntity]()
 	}
+	order, err := factsOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*StevedoreEntity](err)
+	}
 	where := factsScanDeadLetterFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + inst.readTable() +
-		" WHERE " + where +
-		" ORDER BY " + StevedoreColOrder + " ASC, " + StevedoreColKey + " ASC"
+		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}

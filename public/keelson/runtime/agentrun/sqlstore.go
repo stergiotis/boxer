@@ -199,7 +199,14 @@ func (inst *SqlStore) ListRuns(ctx context.Context, ownerApp string, limit int) 
 	if limit <= 0 {
 		limit = DefaultListLimit
 	}
-	for ent, serr := range inst.st.Run.ScanLiveRun(ctx, recordstore.ScanOpts{}) {
+	// Newest first, bounded in the statement: a run row's Order is its
+	// creation instant (versionTs at version 1), and a rewrite in place
+	// never moves it.
+	opts := recordstore.ScanOpts{Descending: true, Limit: limit}
+	if ownerApp != "" {
+		opts.ExtraPredicate = agentrunstore.RunGuardOwnerApp(ownerApp)
+	}
+	for ent, serr := range inst.st.Run.ScanLiveRun(ctx, opts) {
 		if serr != nil {
 			return nil, eh.Errorf("list runs: %w", serr)
 		}
@@ -212,13 +219,7 @@ func (inst *SqlStore) ListRuns(ctx context.Context, ownerApp string, limit int) 
 		} else {
 			inst.live[r.Id], inst.stored[r.Id] = r, r.Version
 		}
-		if ownerApp == "" || r.OwnerApp == ownerApp {
-			runs = append(runs, r)
-		}
-	}
-	slices.SortFunc(runs, func(a, b Run) int { return b.Created.Compare(a.Created) })
-	if len(runs) > limit {
-		runs = runs[:limit]
+		runs = append(runs, r)
 	}
 	return
 }

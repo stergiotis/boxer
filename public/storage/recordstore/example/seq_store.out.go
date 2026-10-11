@@ -55,6 +55,35 @@ const seqArrowOutputSettings = " SETTINGS output_format_arrow_string_as_string=1
 // seqKeyLiteral renders a Key value as a ClickHouse SQL literal.
 func seqKeyLiteral(k uint64) string { return strconv.FormatUint(k, 10) }
 
+// seqEnvelopeColumns maps each envelope plain column, by the name the
+// TableDesc authors, to its quoted physical name: what ScanOpts.OrderBy
+// may name.
+var seqEnvelopeColumns = map[string]string{
+	"id":  `"id:id:u64:47::0:"`,
+	"eid": `"id:eid:u64:47::0:"`,
+}
+
+// seqOrderBy renders a scan's ORDER BY from opts: OrderBy names an
+// envelope column (empty: the Order role), Descending reverses it, and
+// the Key breaks ties in the same direction. An unknown name is refused,
+// never rendered.
+func seqOrderBy(opts recordstore.ScanOpts) (clause string, err error) {
+	col := SeqColOrder
+	if opts.OrderBy != "" {
+		var ok bool
+		if col, ok = seqEnvelopeColumns[opts.OrderBy]; !ok {
+			err = eh.Errorf("order by %q: %w", opts.OrderBy, recordstore.ErrUnknownOrderColumn)
+			return
+		}
+	}
+	dir := " ASC"
+	if opts.Descending {
+		dir = " DESC"
+	}
+	clause = " ORDER BY " + col + dir + ", " + SeqColKey + dir
+	return
+}
+
 // SeqMembershipIds is the membership-id assignment this store was
 // generated under: component kind -> membership name -> the uint64 id
 // carried in the membership columns. Verbatim-channel memberships embed
@@ -972,7 +1001,8 @@ const (
 )
 
 // ScanSeqReading iterates the entities whose rows carry a conforming SeqReading
-// component, ordered by (Order, Key) — so entities sharing an Order
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
 // still come out in a fixed sequence. Rows that tie on BOTH (the same
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
@@ -991,13 +1021,16 @@ func (inst *SeqStore) ScanSeqReading(ctx context.Context, opts recordstore.ScanO
 	if opts.KeyPrefix != "" {
 		return recordstore.RefuseKeyPrefix[*SeqEntity]()
 	}
+	order, err := seqOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*SeqEntity](err)
+	}
 	where := seqScanSeqReadingFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + inst.readTable() +
-		" WHERE " + where +
-		" ORDER BY " + SeqColOrder + " ASC, " + SeqColKey + " ASC"
+		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -1098,7 +1131,8 @@ func (inst *SeqStore) GetLive(ctx context.Context, key uint64) (ent *SeqEntity, 
 // this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns)
 // applies to the collapsed rows, so it narrows the live set and cannot
-// uncover a superseded row. Entities come out ordered by key.
+// uncover a superseded row. Entities come out ordered by key, unless
+// opts.OrderBy or opts.Descending asks for an envelope order instead.
 // opts.Limit caps the rows the query returns before the Go-side
 // tombstone test, so under a configured tombstone pair whose marker
 // satisfies the Filter a limited scan can yield fewer than Limit.
@@ -1114,7 +1148,15 @@ func (inst *SeqStore) ScanLiveSeqReading(ctx context.Context, opts recordstore.S
 	if opts.ExtraPredicate != "" {
 		where += " AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM (" + inner + ") WHERE " + where + " ORDER BY " + SeqColKey + " ASC"
+	// Key order unless the options ask for another.
+	order := " ORDER BY " + SeqColKey + " ASC"
+	if opts.OrderBy != "" || opts.Descending {
+		var err error
+		if order, err = seqOrderBy(opts); err != nil {
+			return recordstore.FailScan[*SeqEntity](err)
+		}
+	}
+	sql := "SELECT * FROM (" + inner + ") WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}

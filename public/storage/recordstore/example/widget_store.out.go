@@ -55,6 +55,39 @@ const widgetArrowOutputSettings = " SETTINGS output_format_arrow_string_as_strin
 // widgetKeyLiteral renders a Key value as a ClickHouse SQL literal.
 func widgetKeyLiteral(k uint64) string { return strconv.FormatUint(k, 10) }
 
+// widgetEnvelopeColumns maps each envelope plain column, by the name the
+// TableDesc authors, to its quoted physical name: what ScanOpts.OrderBy
+// may name.
+var widgetEnvelopeColumns = map[string]string{
+	"id":        `"id:id:u64:47::0:"`,
+	"alt":       `"id:alt:u64:4::0:"`,
+	"ts":        `"ts:ts:z64:47::0:"`,
+	"region":    `"ro:region:u64:4::0:"`,
+	"tags":      `"ro:tags:sm:4::0:"`,
+	"lifecycle": `"lc:lifecycle:u8:4::0:"`,
+}
+
+// widgetOrderBy renders a scan's ORDER BY from opts: OrderBy names an
+// envelope column (empty: the Order role), Descending reverses it, and
+// the Key breaks ties in the same direction. An unknown name is refused,
+// never rendered.
+func widgetOrderBy(opts recordstore.ScanOpts) (clause string, err error) {
+	col := WidgetColOrder
+	if opts.OrderBy != "" {
+		var ok bool
+		if col, ok = widgetEnvelopeColumns[opts.OrderBy]; !ok {
+			err = eh.Errorf("order by %q: %w", opts.OrderBy, recordstore.ErrUnknownOrderColumn)
+			return
+		}
+	}
+	dir := " ASC"
+	if opts.Descending {
+		dir = " DESC"
+	}
+	clause = " ORDER BY " + col + dir + ", " + WidgetColKey + dir
+	return
+}
+
 // WidgetEnvelope carries the pass-through backbone columns — every plain
 // column that is not the Key, Order or state-view Lifecycle role. Pass
 // one to Begin; it is written verbatim onto the row and read back onto

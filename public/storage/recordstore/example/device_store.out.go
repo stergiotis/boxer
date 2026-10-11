@@ -56,6 +56,36 @@ const deviceArrowOutputSettings = " SETTINGS output_format_arrow_string_as_strin
 // deviceKeyLiteral renders a Key value as a ClickHouse SQL literal.
 func deviceKeyLiteral(k uint64) string { return strconv.FormatUint(k, 10) }
 
+// deviceEnvelopeColumns maps each envelope plain column, by the name the
+// TableDesc authors, to its quoted physical name: what ScanOpts.OrderBy
+// may name.
+var deviceEnvelopeColumns = map[string]string{
+	"id":        `"id:id:u64:47::0:"`,
+	"ts":        `"ts:ts:z64:47::0:"`,
+	"lifecycle": `"lc:lifecycle:u8:4::0:"`,
+}
+
+// deviceOrderBy renders a scan's ORDER BY from opts: OrderBy names an
+// envelope column (empty: the Order role), Descending reverses it, and
+// the Key breaks ties in the same direction. An unknown name is refused,
+// never rendered.
+func deviceOrderBy(opts recordstore.ScanOpts) (clause string, err error) {
+	col := DeviceColOrder
+	if opts.OrderBy != "" {
+		var ok bool
+		if col, ok = deviceEnvelopeColumns[opts.OrderBy]; !ok {
+			err = eh.Errorf("order by %q: %w", opts.OrderBy, recordstore.ErrUnknownOrderColumn)
+			return
+		}
+	}
+	dir := " ASC"
+	if opts.Descending {
+		dir = " DESC"
+	}
+	clause = " ORDER BY " + col + dir + ", " + DeviceColKey + dir
+	return
+}
+
 // DeviceMembershipIds is the membership-id assignment this store was
 // generated under: component kind -> membership name -> the uint64 id
 // carried in the membership columns. Verbatim-channel memberships embed
@@ -1173,7 +1203,8 @@ const (
 )
 
 // ScanIdentity iterates the entities whose rows carry a conforming Identity
-// component, ordered by (Order, Key) — so entities sharing an Order
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
 // still come out in a fixed sequence. Rows that tie on BOTH (the same
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
@@ -1192,13 +1223,16 @@ func (inst *DeviceStore) ScanIdentity(ctx context.Context, opts recordstore.Scan
 	if opts.KeyPrefix != "" {
 		return recordstore.RefuseKeyPrefix[*DeviceEntity]()
 	}
+	order, err := deviceOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*DeviceEntity](err)
+	}
 	where := deviceScanIdentityFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + inst.readTable() +
-		" WHERE " + where +
-		" ORDER BY " + DeviceColOrder + " ASC, " + DeviceColKey + " ASC"
+		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -1207,7 +1241,8 @@ func (inst *DeviceStore) ScanIdentity(ctx context.Context, opts recordstore.Scan
 }
 
 // ScanBattery iterates the entities whose rows carry a conforming Battery
-// component, ordered by (Order, Key) — so entities sharing an Order
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
 // still come out in a fixed sequence. Rows that tie on BOTH (the same
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
@@ -1226,13 +1261,16 @@ func (inst *DeviceStore) ScanBattery(ctx context.Context, opts recordstore.ScanO
 	if opts.KeyPrefix != "" {
 		return recordstore.RefuseKeyPrefix[*DeviceEntity]()
 	}
+	order, err := deviceOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*DeviceEntity](err)
+	}
 	where := deviceScanBatteryFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + inst.readTable() +
-		" WHERE " + where +
-		" ORDER BY " + DeviceColOrder + " ASC, " + DeviceColKey + " ASC"
+		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -1241,7 +1279,8 @@ func (inst *DeviceStore) ScanBattery(ctx context.Context, opts recordstore.ScanO
 }
 
 // ScanTagged iterates the entities whose rows carry a conforming Tagged
-// component, ordered by (Order, Key) — so entities sharing an Order
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
 // still come out in a fixed sequence. Rows that tie on BOTH (the same
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
@@ -1260,13 +1299,16 @@ func (inst *DeviceStore) ScanTagged(ctx context.Context, opts recordstore.ScanOp
 	if opts.KeyPrefix != "" {
 		return recordstore.RefuseKeyPrefix[*DeviceEntity]()
 	}
+	order, err := deviceOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*DeviceEntity](err)
+	}
 	where := deviceScanTaggedFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + inst.readTable() +
-		" WHERE " + where +
-		" ORDER BY " + DeviceColOrder + " ASC, " + DeviceColKey + " ASC"
+		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -1275,7 +1317,8 @@ func (inst *DeviceStore) ScanTagged(ctx context.Context, opts recordstore.ScanOp
 }
 
 // ScanLocated iterates the entities whose rows carry a conforming Located
-// component, ordered by (Order, Key) — so entities sharing an Order
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
 // still come out in a fixed sequence. Rows that tie on BOTH (the same
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
@@ -1294,13 +1337,16 @@ func (inst *DeviceStore) ScanLocated(ctx context.Context, opts recordstore.ScanO
 	if opts.KeyPrefix != "" {
 		return recordstore.RefuseKeyPrefix[*DeviceEntity]()
 	}
+	order, err := deviceOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*DeviceEntity](err)
+	}
 	where := deviceScanLocatedFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + inst.readTable() +
-		" WHERE " + where +
-		" ORDER BY " + DeviceColOrder + " ASC, " + DeviceColKey + " ASC"
+		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -1425,7 +1471,8 @@ func (inst *DeviceStore) GetLive(ctx context.Context, key uint64) (ent *DeviceEn
 // this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns)
 // applies to the collapsed rows, so it narrows the live set and cannot
-// uncover a superseded row. Entities come out ordered by key.
+// uncover a superseded row. Entities come out ordered by key, unless
+// opts.OrderBy or opts.Descending asks for an envelope order instead.
 // opts.Limit caps the rows the query returns before the Go-side
 // tombstone test, so under a configured tombstone pair whose marker
 // satisfies the Filter a limited scan can yield fewer than Limit.
@@ -1441,7 +1488,15 @@ func (inst *DeviceStore) ScanLiveIdentity(ctx context.Context, opts recordstore.
 	if opts.ExtraPredicate != "" {
 		where += " AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM (" + inner + ") WHERE " + where + " ORDER BY " + DeviceColKey + " ASC"
+	// Key order unless the options ask for another.
+	order := " ORDER BY " + DeviceColKey + " ASC"
+	if opts.OrderBy != "" || opts.Descending {
+		var err error
+		if order, err = deviceOrderBy(opts); err != nil {
+			return recordstore.FailScan[*DeviceEntity](err)
+		}
+	}
+	sql := "SELECT * FROM (" + inner + ") WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -1473,7 +1528,8 @@ func (inst *DeviceStore) ScanLiveIdentity(ctx context.Context, opts recordstore.
 // this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns)
 // applies to the collapsed rows, so it narrows the live set and cannot
-// uncover a superseded row. Entities come out ordered by key.
+// uncover a superseded row. Entities come out ordered by key, unless
+// opts.OrderBy or opts.Descending asks for an envelope order instead.
 // opts.Limit caps the rows the query returns before the Go-side
 // tombstone test, so under a configured tombstone pair whose marker
 // satisfies the Filter a limited scan can yield fewer than Limit.
@@ -1489,7 +1545,15 @@ func (inst *DeviceStore) ScanLiveBattery(ctx context.Context, opts recordstore.S
 	if opts.ExtraPredicate != "" {
 		where += " AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM (" + inner + ") WHERE " + where + " ORDER BY " + DeviceColKey + " ASC"
+	// Key order unless the options ask for another.
+	order := " ORDER BY " + DeviceColKey + " ASC"
+	if opts.OrderBy != "" || opts.Descending {
+		var err error
+		if order, err = deviceOrderBy(opts); err != nil {
+			return recordstore.FailScan[*DeviceEntity](err)
+		}
+	}
+	sql := "SELECT * FROM (" + inner + ") WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -1521,7 +1585,8 @@ func (inst *DeviceStore) ScanLiveBattery(ctx context.Context, opts recordstore.S
 // this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns)
 // applies to the collapsed rows, so it narrows the live set and cannot
-// uncover a superseded row. Entities come out ordered by key.
+// uncover a superseded row. Entities come out ordered by key, unless
+// opts.OrderBy or opts.Descending asks for an envelope order instead.
 // opts.Limit caps the rows the query returns before the Go-side
 // tombstone test, so under a configured tombstone pair whose marker
 // satisfies the Filter a limited scan can yield fewer than Limit.
@@ -1537,7 +1602,15 @@ func (inst *DeviceStore) ScanLiveTagged(ctx context.Context, opts recordstore.Sc
 	if opts.ExtraPredicate != "" {
 		where += " AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM (" + inner + ") WHERE " + where + " ORDER BY " + DeviceColKey + " ASC"
+	// Key order unless the options ask for another.
+	order := " ORDER BY " + DeviceColKey + " ASC"
+	if opts.OrderBy != "" || opts.Descending {
+		var err error
+		if order, err = deviceOrderBy(opts); err != nil {
+			return recordstore.FailScan[*DeviceEntity](err)
+		}
+	}
+	sql := "SELECT * FROM (" + inner + ") WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -1569,7 +1642,8 @@ func (inst *DeviceStore) ScanLiveTagged(ctx context.Context, opts recordstore.Sc
 // this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns)
 // applies to the collapsed rows, so it narrows the live set and cannot
-// uncover a superseded row. Entities come out ordered by key.
+// uncover a superseded row. Entities come out ordered by key, unless
+// opts.OrderBy or opts.Descending asks for an envelope order instead.
 // opts.Limit caps the rows the query returns before the Go-side
 // tombstone test, so under a configured tombstone pair whose marker
 // satisfies the Filter a limited scan can yield fewer than Limit.
@@ -1585,7 +1659,15 @@ func (inst *DeviceStore) ScanLiveLocated(ctx context.Context, opts recordstore.S
 	if opts.ExtraPredicate != "" {
 		where += " AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM (" + inner + ") WHERE " + where + " ORDER BY " + DeviceColKey + " ASC"
+	// Key order unless the options ask for another.
+	order := " ORDER BY " + DeviceColKey + " ASC"
+	if opts.OrderBy != "" || opts.Descending {
+		var err error
+		if order, err = deviceOrderBy(opts); err != nil {
+			return recordstore.FailScan[*DeviceEntity](err)
+		}
+	}
+	sql := "SELECT * FROM (" + inner + ") WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}

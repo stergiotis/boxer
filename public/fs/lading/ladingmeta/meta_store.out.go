@@ -56,6 +56,37 @@ const fsmetaArrowOutputSettings = " SETTINGS output_format_arrow_string_as_strin
 // fsmetaKeyLiteral renders a Key value as a ClickHouse SQL literal.
 func fsmetaKeyLiteral(k uint64) string { return strconv.FormatUint(k, 10) }
 
+// fsmetaEnvelopeColumns maps each envelope plain column, by the name the
+// TableDesc authors, to its quoted physical name: what ScanOpts.OrderBy
+// may name.
+var fsmetaEnvelopeColumns = map[string]string{
+	"id":         `"id:id:u64:47::0:"`,
+	"naturalKey": `"id:naturalKey:y:4::0:"`,
+	"ts":         `"ts:ts:z64:47::0:"`,
+	"expiresAt":  `"lc:expiresAt:z64:4::0:"`,
+}
+
+// fsmetaOrderBy renders a scan's ORDER BY from opts: OrderBy names an
+// envelope column (empty: the Order role), Descending reverses it, and
+// the Key breaks ties in the same direction. An unknown name is refused,
+// never rendered.
+func fsmetaOrderBy(opts recordstore.ScanOpts) (clause string, err error) {
+	col := MetaColOrder
+	if opts.OrderBy != "" {
+		var ok bool
+		if col, ok = fsmetaEnvelopeColumns[opts.OrderBy]; !ok {
+			err = eh.Errorf("order by %q: %w", opts.OrderBy, recordstore.ErrUnknownOrderColumn)
+			return
+		}
+	}
+	dir := " ASC"
+	if opts.Descending {
+		dir = " DESC"
+	}
+	clause = " ORDER BY " + col + dir + ", " + MetaColKey + dir
+	return
+}
+
 // MetaMembershipIds is the membership-id assignment this store was
 // generated under: component kind -> membership name -> the uint64 id
 // carried in the membership columns. Verbatim-channel memberships embed
@@ -1033,7 +1064,8 @@ const (
 )
 
 // ScanLadingEntry iterates the entities whose rows carry a conforming LadingEntry
-// component, ordered by (Order, Key) — so entities sharing an Order
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
 // still come out in a fixed sequence. Rows that tie on BOTH (the same
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
@@ -1052,13 +1084,16 @@ func (inst *MetaStore) ScanLadingEntry(ctx context.Context, opts recordstore.Sca
 	if opts.KeyPrefix != "" {
 		return recordstore.RefuseKeyPrefix[*MetaEntity]()
 	}
+	order, err := fsmetaOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*MetaEntity](err)
+	}
 	where := fsmetaScanLadingEntryFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + inst.readTable() +
-		" WHERE " + where +
-		" ORDER BY " + MetaColOrder + " ASC, " + MetaColKey + " ASC"
+		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -1067,7 +1102,8 @@ func (inst *MetaStore) ScanLadingEntry(ctx context.Context, opts recordstore.Sca
 }
 
 // ScanLadingSnapshot iterates the entities whose rows carry a conforming LadingSnapshot
-// component, ordered by (Order, Key) — so entities sharing an Order
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
 // still come out in a fixed sequence. Rows that tie on BOTH (the same
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
@@ -1086,13 +1122,16 @@ func (inst *MetaStore) ScanLadingSnapshot(ctx context.Context, opts recordstore.
 	if opts.KeyPrefix != "" {
 		return recordstore.RefuseKeyPrefix[*MetaEntity]()
 	}
+	order, err := fsmetaOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*MetaEntity](err)
+	}
 	where := fsmetaScanLadingSnapshotFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + inst.readTable() +
-		" WHERE " + where +
-		" ORDER BY " + MetaColOrder + " ASC, " + MetaColKey + " ASC"
+		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}

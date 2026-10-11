@@ -48,6 +48,37 @@ const factsArrowOutputSettings = " SETTINGS output_format_arrow_string_as_string
 // factsKeyLiteral renders a Key value as a ClickHouse SQL literal.
 func factsKeyLiteral(k uint64) string { return strconv.FormatUint(k, 10) }
 
+// factsEnvelopeColumns maps each envelope plain column, by the name the
+// TableDesc authors, to its quoted physical name: what ScanOpts.OrderBy
+// may name.
+var factsEnvelopeColumns = map[string]string{
+	"id":         `"id:id:u64:47::0:"`,
+	"naturalKey": `"id:naturalKey:y:4::0:"`,
+	"ts":         `"ts:ts:z64:47::0:"`,
+	"expiresAt":  `"lc:expiresAt:z64:4::0:"`,
+}
+
+// factsOrderBy renders a scan's ORDER BY from opts: OrderBy names an
+// envelope column (empty: the Order role), Descending reverses it, and
+// the Key breaks ties in the same direction. An unknown name is refused,
+// never rendered.
+func factsOrderBy(opts recordstore.ScanOpts) (clause string, err error) {
+	col := SysmetricsColOrder
+	if opts.OrderBy != "" {
+		var ok bool
+		if col, ok = factsEnvelopeColumns[opts.OrderBy]; !ok {
+			err = eh.Errorf("order by %q: %w", opts.OrderBy, recordstore.ErrUnknownOrderColumn)
+			return
+		}
+	}
+	dir := " ASC"
+	if opts.Descending {
+		dir = " DESC"
+	}
+	clause = " ORDER BY " + col + dir + ", " + SysmetricsColKey + dir
+	return
+}
+
 // SysmetricsMembershipIds is the membership-id assignment this store was
 // generated under: component kind -> membership name -> the uint64 id
 // carried in the membership columns. Verbatim-channel memberships embed
@@ -1939,7 +1970,8 @@ const (
 )
 
 // ScanSysCpu iterates the entities whose rows carry a conforming SysCpu
-// component, ordered by (Order, Key) — so entities sharing an Order
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
 // still come out in a fixed sequence. Rows that tie on BOTH (the same
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
@@ -1958,13 +1990,16 @@ func (inst *SysmetricsStore) ScanSysCpu(ctx context.Context, opts recordstore.Sc
 	if opts.KeyPrefix != "" {
 		return recordstore.RefuseKeyPrefix[*SysmetricsEntity]()
 	}
+	order, err := factsOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*SysmetricsEntity](err)
+	}
 	where := factsScanSysCpuFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + inst.readTable() +
-		" WHERE " + where +
-		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
+		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -1973,7 +2008,8 @@ func (inst *SysmetricsStore) ScanSysCpu(ctx context.Context, opts recordstore.Sc
 }
 
 // ScanSysCpuInfo iterates the entities whose rows carry a conforming SysCpuInfo
-// component, ordered by (Order, Key) — so entities sharing an Order
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
 // still come out in a fixed sequence. Rows that tie on BOTH (the same
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
@@ -1992,13 +2028,16 @@ func (inst *SysmetricsStore) ScanSysCpuInfo(ctx context.Context, opts recordstor
 	if opts.KeyPrefix != "" {
 		return recordstore.RefuseKeyPrefix[*SysmetricsEntity]()
 	}
+	order, err := factsOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*SysmetricsEntity](err)
+	}
 	where := factsScanSysCpuInfoFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + inst.readTable() +
-		" WHERE " + where +
-		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
+		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -2007,7 +2046,8 @@ func (inst *SysmetricsStore) ScanSysCpuInfo(ctx context.Context, opts recordstor
 }
 
 // ScanSysMem iterates the entities whose rows carry a conforming SysMem
-// component, ordered by (Order, Key) — so entities sharing an Order
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
 // still come out in a fixed sequence. Rows that tie on BOTH (the same
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
@@ -2026,13 +2066,16 @@ func (inst *SysmetricsStore) ScanSysMem(ctx context.Context, opts recordstore.Sc
 	if opts.KeyPrefix != "" {
 		return recordstore.RefuseKeyPrefix[*SysmetricsEntity]()
 	}
+	order, err := factsOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*SysmetricsEntity](err)
+	}
 	where := factsScanSysMemFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + inst.readTable() +
-		" WHERE " + where +
-		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
+		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -2041,7 +2084,8 @@ func (inst *SysmetricsStore) ScanSysMem(ctx context.Context, opts recordstore.Sc
 }
 
 // ScanSysPsi iterates the entities whose rows carry a conforming SysPsi
-// component, ordered by (Order, Key) — so entities sharing an Order
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
 // still come out in a fixed sequence. Rows that tie on BOTH (the same
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
@@ -2060,13 +2104,16 @@ func (inst *SysmetricsStore) ScanSysPsi(ctx context.Context, opts recordstore.Sc
 	if opts.KeyPrefix != "" {
 		return recordstore.RefuseKeyPrefix[*SysmetricsEntity]()
 	}
+	order, err := factsOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*SysmetricsEntity](err)
+	}
 	where := factsScanSysPsiFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + inst.readTable() +
-		" WHERE " + where +
-		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
+		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -2075,7 +2122,8 @@ func (inst *SysmetricsStore) ScanSysPsi(ctx context.Context, opts recordstore.Sc
 }
 
 // ScanSysNet iterates the entities whose rows carry a conforming SysNet
-// component, ordered by (Order, Key) — so entities sharing an Order
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
 // still come out in a fixed sequence. Rows that tie on BOTH (the same
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
@@ -2094,13 +2142,16 @@ func (inst *SysmetricsStore) ScanSysNet(ctx context.Context, opts recordstore.Sc
 	if opts.KeyPrefix != "" {
 		return recordstore.RefuseKeyPrefix[*SysmetricsEntity]()
 	}
+	order, err := factsOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*SysmetricsEntity](err)
+	}
 	where := factsScanSysNetFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + inst.readTable() +
-		" WHERE " + where +
-		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
+		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -2109,7 +2160,8 @@ func (inst *SysmetricsStore) ScanSysNet(ctx context.Context, opts recordstore.Sc
 }
 
 // ScanSysDiskMount iterates the entities whose rows carry a conforming SysDiskMount
-// component, ordered by (Order, Key) — so entities sharing an Order
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
 // still come out in a fixed sequence. Rows that tie on BOTH (the same
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
@@ -2128,13 +2180,16 @@ func (inst *SysmetricsStore) ScanSysDiskMount(ctx context.Context, opts recordst
 	if opts.KeyPrefix != "" {
 		return recordstore.RefuseKeyPrefix[*SysmetricsEntity]()
 	}
+	order, err := factsOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*SysmetricsEntity](err)
+	}
 	where := factsScanSysDiskMountFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + inst.readTable() +
-		" WHERE " + where +
-		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
+		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -2143,7 +2198,8 @@ func (inst *SysmetricsStore) ScanSysDiskMount(ctx context.Context, opts recordst
 }
 
 // ScanSysDiskIo iterates the entities whose rows carry a conforming SysDiskIo
-// component, ordered by (Order, Key) — so entities sharing an Order
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
 // still come out in a fixed sequence. Rows that tie on BOTH (the same
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
@@ -2162,13 +2218,16 @@ func (inst *SysmetricsStore) ScanSysDiskIo(ctx context.Context, opts recordstore
 	if opts.KeyPrefix != "" {
 		return recordstore.RefuseKeyPrefix[*SysmetricsEntity]()
 	}
+	order, err := factsOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*SysmetricsEntity](err)
+	}
 	where := factsScanSysDiskIoFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + inst.readTable() +
-		" WHERE " + where +
-		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
+		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -2177,7 +2236,8 @@ func (inst *SysmetricsStore) ScanSysDiskIo(ctx context.Context, opts recordstore
 }
 
 // ScanSysBattery iterates the entities whose rows carry a conforming SysBattery
-// component, ordered by (Order, Key) — so entities sharing an Order
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
 // still come out in a fixed sequence. Rows that tie on BOTH (the same
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
@@ -2196,13 +2256,16 @@ func (inst *SysmetricsStore) ScanSysBattery(ctx context.Context, opts recordstor
 	if opts.KeyPrefix != "" {
 		return recordstore.RefuseKeyPrefix[*SysmetricsEntity]()
 	}
+	order, err := factsOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*SysmetricsEntity](err)
+	}
 	where := factsScanSysBatteryFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + inst.readTable() +
-		" WHERE " + where +
-		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
+		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -2211,7 +2274,8 @@ func (inst *SysmetricsStore) ScanSysBattery(ctx context.Context, opts recordstor
 }
 
 // ScanSysGpu iterates the entities whose rows carry a conforming SysGpu
-// component, ordered by (Order, Key) — so entities sharing an Order
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
 // still come out in a fixed sequence. Rows that tie on BOTH (the same
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
@@ -2230,13 +2294,16 @@ func (inst *SysmetricsStore) ScanSysGpu(ctx context.Context, opts recordstore.Sc
 	if opts.KeyPrefix != "" {
 		return recordstore.RefuseKeyPrefix[*SysmetricsEntity]()
 	}
+	order, err := factsOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*SysmetricsEntity](err)
+	}
 	where := factsScanSysGpuFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + inst.readTable() +
-		" WHERE " + where +
-		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
+		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -2245,7 +2312,8 @@ func (inst *SysmetricsStore) ScanSysGpu(ctx context.Context, opts recordstore.Sc
 }
 
 // ScanSysProc iterates the entities whose rows carry a conforming SysProc
-// component, ordered by (Order, Key) — so entities sharing an Order
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
 // still come out in a fixed sequence. Rows that tie on BOTH (the same
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
@@ -2264,13 +2332,16 @@ func (inst *SysmetricsStore) ScanSysProc(ctx context.Context, opts recordstore.S
 	if opts.KeyPrefix != "" {
 		return recordstore.RefuseKeyPrefix[*SysmetricsEntity]()
 	}
+	order, err := factsOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*SysmetricsEntity](err)
+	}
 	where := factsScanSysProcFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + inst.readTable() +
-		" WHERE " + where +
-		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
+		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -2279,7 +2350,8 @@ func (inst *SysmetricsStore) ScanSysProc(ctx context.Context, opts recordstore.S
 }
 
 // ScanSysProcCmd iterates the entities whose rows carry a conforming SysProcCmd
-// component, ordered by (Order, Key) — so entities sharing an Order
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
 // still come out in a fixed sequence. Rows that tie on BOTH (the same
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
@@ -2298,13 +2370,16 @@ func (inst *SysmetricsStore) ScanSysProcCmd(ctx context.Context, opts recordstor
 	if opts.KeyPrefix != "" {
 		return recordstore.RefuseKeyPrefix[*SysmetricsEntity]()
 	}
+	order, err := factsOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*SysmetricsEntity](err)
+	}
 	where := factsScanSysProcCmdFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + inst.readTable() +
-		" WHERE " + where +
-		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
+		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -2313,7 +2388,8 @@ func (inst *SysmetricsStore) ScanSysProcCmd(ctx context.Context, opts recordstor
 }
 
 // ScanSysSocket iterates the entities whose rows carry a conforming SysSocket
-// component, ordered by (Order, Key) — so entities sharing an Order
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
 // still come out in a fixed sequence. Rows that tie on BOTH (the same
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
@@ -2332,13 +2408,16 @@ func (inst *SysmetricsStore) ScanSysSocket(ctx context.Context, opts recordstore
 	if opts.KeyPrefix != "" {
 		return recordstore.RefuseKeyPrefix[*SysmetricsEntity]()
 	}
+	order, err := factsOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*SysmetricsEntity](err)
+	}
 	where := factsScanSysSocketFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + inst.readTable() +
-		" WHERE " + where +
-		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
+		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -2347,7 +2426,8 @@ func (inst *SysmetricsStore) ScanSysSocket(ctx context.Context, opts recordstore
 }
 
 // ScanSysTopology iterates the entities whose rows carry a conforming SysTopology
-// component, ordered by (Order, Key) — so entities sharing an Order
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
 // still come out in a fixed sequence. Rows that tie on BOTH (the same
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
@@ -2366,13 +2446,16 @@ func (inst *SysmetricsStore) ScanSysTopology(ctx context.Context, opts recordsto
 	if opts.KeyPrefix != "" {
 		return recordstore.RefuseKeyPrefix[*SysmetricsEntity]()
 	}
+	order, err := factsOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*SysmetricsEntity](err)
+	}
 	where := factsScanSysTopologyFilter
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + inst.readTable() +
-		" WHERE " + where +
-		" ORDER BY " + SysmetricsColOrder + " ASC, " + SysmetricsColKey + " ASC"
+		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}

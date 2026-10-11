@@ -6,8 +6,10 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
@@ -265,4 +267,35 @@ func bodyCount(t *testing.T, ctx context.Context, exec recordstore.ExecutorI, la
 		rec.Release()
 	}
 	return
+}
+
+// The run list reads newest first and stops at the bound in the statement,
+// scoped to an owner when one is named.
+func TestTheRunListIsNewestFirstAndBounded(t *testing.T) {
+	ctx := context.Background()
+	exec, err := chexec.NewLocalExecutor(filepath.Join(t.TempDir(), "chdb"), memory.NewGoAllocator())
+	if err != nil {
+		t.Skipf("clickhouse-local unavailable: %v", err)
+	}
+	layout := agentrunstore.Layout{Database: "artest"}
+	require.NoError(t, agentrunstore.ProvisionIn(ctx, exec, layout))
+	st := NewSqlStore(exec, layout)
+	defer st.Close()
+	base := time.Date(2026, 10, 11, 12, 0, 0, 0, time.UTC)
+	for i, owner := range []string{"chat", "other", "chat", "chat"} {
+		require.NoError(t, st.CreateRun(ctx, Run{Id: "r" + strconv.Itoa(i), OwnerApp: owner, State: StateOpen, Created: base.Add(time.Duration(i) * time.Minute)}))
+	}
+	fresh := NewSqlStore(exec, layout)
+	defer fresh.Close()
+	ids := func(owner string, limit int) (out []string) {
+		runs, lerr := fresh.ListRuns(ctx, owner, limit)
+		require.NoError(t, lerr)
+		for _, r := range runs {
+			out = append(out, r.Id)
+		}
+		return
+	}
+	assert.Equal(t, []string{"r3", "r2", "r1", "r0"}, ids("", 0))
+	assert.Equal(t, []string{"r3", "r2"}, ids("chat", 2))
+	assert.Equal(t, []string{"r1"}, ids("other", 0))
 }

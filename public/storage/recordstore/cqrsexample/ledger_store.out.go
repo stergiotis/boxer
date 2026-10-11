@@ -63,6 +63,35 @@ func ledgerKeyPrefixPredicate(prefix string) string {
 	return "startsWith(" + LedgerColKey + ", " + ledgerKeyLiteral(prefix) + ")"
 }
 
+// ledgerEnvelopeColumns maps each envelope plain column, by the name the
+// TableDesc authors, to its quoted physical name: what ScanOpts.OrderBy
+// may name.
+var ledgerEnvelopeColumns = map[string]string{
+	"id": `"id:id:s:4::0:"`,
+	"ts": `"ts:ts:z64:47::0:"`,
+}
+
+// ledgerOrderBy renders a scan's ORDER BY from opts: OrderBy names an
+// envelope column (empty: the Order role), Descending reverses it, and
+// the Key breaks ties in the same direction. An unknown name is refused,
+// never rendered.
+func ledgerOrderBy(opts recordstore.ScanOpts) (clause string, err error) {
+	col := LedgerColOrder
+	if opts.OrderBy != "" {
+		var ok bool
+		if col, ok = ledgerEnvelopeColumns[opts.OrderBy]; !ok {
+			err = eh.Errorf("order by %q: %w", opts.OrderBy, recordstore.ErrUnknownOrderColumn)
+			return
+		}
+	}
+	dir := " ASC"
+	if opts.Descending {
+		dir = " DESC"
+	}
+	clause = " ORDER BY " + col + dir + ", " + LedgerColKey + dir
+	return
+}
+
 // LedgerMembershipIds is the membership-id assignment this store was
 // generated under: component kind -> membership name -> the uint64 id
 // carried in the membership columns. Verbatim-channel memberships embed
@@ -1183,7 +1212,8 @@ const (
 )
 
 // ScanOpened iterates the entities whose rows carry a conforming Opened
-// component, ordered by (Order, Key) — so entities sharing an Order
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
 // still come out in a fixed sequence. Rows that tie on BOTH (the same
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
@@ -1199,6 +1229,10 @@ const (
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *LedgerStore) ScanOpened(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*LedgerEntity, error] {
+	order, err := ledgerOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*LedgerEntity](err)
+	}
 	where := ledgerScanOpenedFilter
 	if opts.KeyPrefix != "" {
 		where = "(" + where + ") AND " + ledgerKeyPrefixPredicate(opts.KeyPrefix)
@@ -1207,8 +1241,7 @@ func (inst *LedgerStore) ScanOpened(ctx context.Context, opts recordstore.ScanOp
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + inst.readTable() +
-		" WHERE " + where +
-		" ORDER BY " + LedgerColOrder + " ASC, " + LedgerColKey + " ASC"
+		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -1217,7 +1250,8 @@ func (inst *LedgerStore) ScanOpened(ctx context.Context, opts recordstore.ScanOp
 }
 
 // ScanDeposited iterates the entities whose rows carry a conforming Deposited
-// component, ordered by (Order, Key) — so entities sharing an Order
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
 // still come out in a fixed sequence. Rows that tie on BOTH (the same
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
@@ -1233,6 +1267,10 @@ func (inst *LedgerStore) ScanOpened(ctx context.Context, opts recordstore.ScanOp
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *LedgerStore) ScanDeposited(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*LedgerEntity, error] {
+	order, err := ledgerOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*LedgerEntity](err)
+	}
 	where := ledgerScanDepositedFilter
 	if opts.KeyPrefix != "" {
 		where = "(" + where + ") AND " + ledgerKeyPrefixPredicate(opts.KeyPrefix)
@@ -1241,8 +1279,7 @@ func (inst *LedgerStore) ScanDeposited(ctx context.Context, opts recordstore.Sca
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + inst.readTable() +
-		" WHERE " + where +
-		" ORDER BY " + LedgerColOrder + " ASC, " + LedgerColKey + " ASC"
+		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -1251,7 +1288,8 @@ func (inst *LedgerStore) ScanDeposited(ctx context.Context, opts recordstore.Sca
 }
 
 // ScanWithdrawn iterates the entities whose rows carry a conforming Withdrawn
-// component, ordered by (Order, Key) — so entities sharing an Order
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
 // still come out in a fixed sequence. Rows that tie on BOTH (the same
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
@@ -1267,6 +1305,10 @@ func (inst *LedgerStore) ScanDeposited(ctx context.Context, opts recordstore.Sca
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *LedgerStore) ScanWithdrawn(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*LedgerEntity, error] {
+	order, err := ledgerOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*LedgerEntity](err)
+	}
 	where := ledgerScanWithdrawnFilter
 	if opts.KeyPrefix != "" {
 		where = "(" + where + ") AND " + ledgerKeyPrefixPredicate(opts.KeyPrefix)
@@ -1275,8 +1317,7 @@ func (inst *LedgerStore) ScanWithdrawn(ctx context.Context, opts recordstore.Sca
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + inst.readTable() +
-		" WHERE " + where +
-		" ORDER BY " + LedgerColOrder + " ASC, " + LedgerColKey + " ASC"
+		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -1285,7 +1326,8 @@ func (inst *LedgerStore) ScanWithdrawn(ctx context.Context, opts recordstore.Sca
 }
 
 // ScanClosed iterates the entities whose rows carry a conforming Closed
-// component, ordered by (Order, Key) — so entities sharing an Order
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
 // still come out in a fixed sequence. Rows that tie on BOTH (the same
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
@@ -1301,6 +1343,10 @@ func (inst *LedgerStore) ScanWithdrawn(ctx context.Context, opts recordstore.Sca
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *LedgerStore) ScanClosed(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*LedgerEntity, error] {
+	order, err := ledgerOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*LedgerEntity](err)
+	}
 	where := ledgerScanClosedFilter
 	if opts.KeyPrefix != "" {
 		where = "(" + where + ") AND " + ledgerKeyPrefixPredicate(opts.KeyPrefix)
@@ -1309,8 +1355,7 @@ func (inst *LedgerStore) ScanClosed(ctx context.Context, opts recordstore.ScanOp
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + inst.readTable() +
-		" WHERE " + where +
-		" ORDER BY " + LedgerColOrder + " ASC, " + LedgerColKey + " ASC"
+		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -1319,7 +1364,8 @@ func (inst *LedgerStore) ScanClosed(ctx context.Context, opts recordstore.ScanOp
 }
 
 // ScanAccountState iterates the entities whose rows carry a conforming AccountState
-// component, ordered by (Order, Key) — so entities sharing an Order
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
 // still come out in a fixed sequence. Rows that tie on BOTH (the same
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
@@ -1335,6 +1381,10 @@ func (inst *LedgerStore) ScanClosed(ctx context.Context, opts recordstore.ScanOp
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *LedgerStore) ScanAccountState(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*LedgerEntity, error] {
+	order, err := ledgerOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*LedgerEntity](err)
+	}
 	where := ledgerScanAccountStateFilter
 	if opts.KeyPrefix != "" {
 		where = "(" + where + ") AND " + ledgerKeyPrefixPredicate(opts.KeyPrefix)
@@ -1343,8 +1393,7 @@ func (inst *LedgerStore) ScanAccountState(ctx context.Context, opts recordstore.
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + inst.readTable() +
-		" WHERE " + where +
-		" ORDER BY " + LedgerColOrder + " ASC, " + LedgerColKey + " ASC"
+		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}

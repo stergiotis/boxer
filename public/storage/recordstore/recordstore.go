@@ -138,12 +138,35 @@ type ScanOpts struct {
 	ExtraPredicate string
 	// Limit caps the number of returned rows; zero means no limit.
 	Limit int
+	// OrderBy names the envelope plain column the scan sorts by, as the
+	// TableDesc authors it (e.g. "ts"); empty means the Order role. A
+	// name that is not one of the store's envelope columns is refused at
+	// run time with [ErrUnknownOrderColumn], never rendered as SQL text.
+	// The Key breaks ties in the same direction.
+	OrderBy string
+	// Descending reverses the sort, so a bounded scan reads the newest
+	// rows first with Limit applied in the statement.
+	Descending bool
 }
+
+// ErrUnknownOrderColumn is what a scan yields for a [ScanOpts.OrderBy]
+// that names no envelope column of the store.
+var ErrUnknownOrderColumn = errors.New("ScanOpts.OrderBy names no envelope column of this store")
 
 // ErrKeyPrefixNumericKey is what a uint64-keyed store's scan verbs yield
 // for a non-empty [ScanOpts.KeyPrefix]. Ignoring the prefix would return
 // every key to a caller that asked for a range, so the scan refuses.
 var ErrKeyPrefixNumericKey = errors.New("ScanOpts.KeyPrefix set on a store whose key is not a string")
+
+// FailScan is the one-element sequence a scan verb returns when its
+// options are refused before any statement runs: a final (zero, err) pair,
+// the scan iterators' error convention.
+func FailScan[E any](err error) iter.Seq2[E, error] {
+	return func(yield func(E, error) bool) {
+		var zero E
+		yield(zero, err)
+	}
+}
 
 // RefuseKeyPrefix is the one-element sequence a uint64-keyed store's scan
 // verbs return when [ScanOpts.KeyPrefix] is set: a final (zero,

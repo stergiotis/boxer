@@ -64,6 +64,36 @@ func persiststateKeyPrefixPredicate(prefix string) string {
 	return "startsWith(" + PersistColKey + ", " + persiststateKeyLiteral(prefix) + ")"
 }
 
+// persiststateEnvelopeColumns maps each envelope plain column, by the name the
+// TableDesc authors, to its quoted physical name: what ScanOpts.OrderBy
+// may name.
+var persiststateEnvelopeColumns = map[string]string{
+	"id":        `"id:id:s:4::0:"`,
+	"ts":        `"ts:ts:z64:47::0:"`,
+	"lifecycle": `"lc:lifecycle:u8:4::0:"`,
+}
+
+// persiststateOrderBy renders a scan's ORDER BY from opts: OrderBy names an
+// envelope column (empty: the Order role), Descending reverses it, and
+// the Key breaks ties in the same direction. An unknown name is refused,
+// never rendered.
+func persiststateOrderBy(opts recordstore.ScanOpts) (clause string, err error) {
+	col := PersistColOrder
+	if opts.OrderBy != "" {
+		var ok bool
+		if col, ok = persiststateEnvelopeColumns[opts.OrderBy]; !ok {
+			err = eh.Errorf("order by %q: %w", opts.OrderBy, recordstore.ErrUnknownOrderColumn)
+			return
+		}
+	}
+	dir := " ASC"
+	if opts.Descending {
+		dir = " DESC"
+	}
+	clause = " ORDER BY " + col + dir + ", " + PersistColKey + dir
+	return
+}
+
 // PersistMembershipIds is the membership-id assignment this store was
 // generated under: component kind -> membership name -> the uint64 id
 // carried in the membership columns. Verbatim-channel memberships embed
@@ -1207,7 +1237,8 @@ const (
 )
 
 // ScanOwner iterates the entities whose rows carry a conforming Owner
-// component, ordered by (Order, Key) — so entities sharing an Order
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
 // still come out in a fixed sequence. Rows that tie on BOTH (the same
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
@@ -1223,6 +1254,10 @@ const (
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *PersistStore) ScanOwner(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*PersistEntity, error] {
+	order, err := persiststateOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*PersistEntity](err)
+	}
 	where := persiststateScanOwnerFilter
 	if opts.KeyPrefix != "" {
 		where = "(" + where + ") AND " + persiststateKeyPrefixPredicate(opts.KeyPrefix)
@@ -1231,8 +1266,7 @@ func (inst *PersistStore) ScanOwner(ctx context.Context, opts recordstore.ScanOp
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + inst.readTable() +
-		" WHERE " + where +
-		" ORDER BY " + PersistColOrder + " ASC, " + PersistColKey + " ASC"
+		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -1241,7 +1275,8 @@ func (inst *PersistStore) ScanOwner(ctx context.Context, opts recordstore.ScanOp
 }
 
 // ScanState iterates the entities whose rows carry a conforming State
-// component, ordered by (Order, Key) — so entities sharing an Order
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
 // still come out in a fixed sequence. Rows that tie on BOTH (the same
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
@@ -1257,6 +1292,10 @@ func (inst *PersistStore) ScanOwner(ctx context.Context, opts recordstore.ScanOp
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *PersistStore) ScanState(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*PersistEntity, error] {
+	order, err := persiststateOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*PersistEntity](err)
+	}
 	where := persiststateScanStateFilter
 	if opts.KeyPrefix != "" {
 		where = "(" + where + ") AND " + persiststateKeyPrefixPredicate(opts.KeyPrefix)
@@ -1265,8 +1304,7 @@ func (inst *PersistStore) ScanState(ctx context.Context, opts recordstore.ScanOp
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + inst.readTable() +
-		" WHERE " + where +
-		" ORDER BY " + PersistColOrder + " ASC, " + PersistColKey + " ASC"
+		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -1275,7 +1313,8 @@ func (inst *PersistStore) ScanState(ctx context.Context, opts recordstore.ScanOp
 }
 
 // ScanWorkingset iterates the entities whose rows carry a conforming Workingset
-// component, ordered by (Order, Key) — so entities sharing an Order
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
 // still come out in a fixed sequence. Rows that tie on BOTH (the same
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
@@ -1291,6 +1330,10 @@ func (inst *PersistStore) ScanState(ctx context.Context, opts recordstore.ScanOp
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *PersistStore) ScanWorkingset(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*PersistEntity, error] {
+	order, err := persiststateOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*PersistEntity](err)
+	}
 	where := persiststateScanWorkingsetFilter
 	if opts.KeyPrefix != "" {
 		where = "(" + where + ") AND " + persiststateKeyPrefixPredicate(opts.KeyPrefix)
@@ -1299,8 +1342,7 @@ func (inst *PersistStore) ScanWorkingset(ctx context.Context, opts recordstore.S
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + inst.readTable() +
-		" WHERE " + where +
-		" ORDER BY " + PersistColOrder + " ASC, " + PersistColKey + " ASC"
+		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -1309,7 +1351,8 @@ func (inst *PersistStore) ScanWorkingset(ctx context.Context, opts recordstore.S
 }
 
 // ScanColumnWidth iterates the entities whose rows carry a conforming ColumnWidth
-// component, ordered by (Order, Key) — so entities sharing an Order
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
 // still come out in a fixed sequence. Rows that tie on BOTH (the same
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
@@ -1325,6 +1368,10 @@ func (inst *PersistStore) ScanWorkingset(ctx context.Context, opts recordstore.S
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *PersistStore) ScanColumnWidth(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*PersistEntity, error] {
+	order, err := persiststateOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*PersistEntity](err)
+	}
 	where := persiststateScanColumnWidthFilter
 	if opts.KeyPrefix != "" {
 		where = "(" + where + ") AND " + persiststateKeyPrefixPredicate(opts.KeyPrefix)
@@ -1333,8 +1380,7 @@ func (inst *PersistStore) ScanColumnWidth(ctx context.Context, opts recordstore.
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + inst.readTable() +
-		" WHERE " + where +
-		" ORDER BY " + PersistColOrder + " ASC, " + PersistColKey + " ASC"
+		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -1459,7 +1505,8 @@ func (inst *PersistStore) GetLive(ctx context.Context, key string) (ent *Persist
 // primary-key range read, since the table sorts by (key, order).
 // opts.ExtraPredicate (trusted raw SQL over the physical columns)
 // applies to the collapsed rows, so it narrows the live set and cannot
-// uncover a superseded row. Entities come out ordered by key.
+// uncover a superseded row. Entities come out ordered by key, unless
+// opts.OrderBy or opts.Descending asks for an envelope order instead.
 // opts.Limit caps the rows the query returns before the Go-side
 // tombstone test, so under a configured tombstone pair whose marker
 // satisfies the Filter a limited scan can yield fewer than Limit.
@@ -1475,7 +1522,15 @@ func (inst *PersistStore) ScanLiveOwner(ctx context.Context, opts recordstore.Sc
 	if opts.ExtraPredicate != "" {
 		where += " AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM (" + inner + ") WHERE " + where + " ORDER BY " + PersistColKey + " ASC"
+	// Key order unless the options ask for another.
+	order := " ORDER BY " + PersistColKey + " ASC"
+	if opts.OrderBy != "" || opts.Descending {
+		var err error
+		if order, err = persiststateOrderBy(opts); err != nil {
+			return recordstore.FailScan[*PersistEntity](err)
+		}
+	}
+	sql := "SELECT * FROM (" + inner + ") WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -1507,7 +1562,8 @@ func (inst *PersistStore) ScanLiveOwner(ctx context.Context, opts recordstore.Sc
 // primary-key range read, since the table sorts by (key, order).
 // opts.ExtraPredicate (trusted raw SQL over the physical columns)
 // applies to the collapsed rows, so it narrows the live set and cannot
-// uncover a superseded row. Entities come out ordered by key.
+// uncover a superseded row. Entities come out ordered by key, unless
+// opts.OrderBy or opts.Descending asks for an envelope order instead.
 // opts.Limit caps the rows the query returns before the Go-side
 // tombstone test, so under a configured tombstone pair whose marker
 // satisfies the Filter a limited scan can yield fewer than Limit.
@@ -1523,7 +1579,15 @@ func (inst *PersistStore) ScanLiveState(ctx context.Context, opts recordstore.Sc
 	if opts.ExtraPredicate != "" {
 		where += " AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM (" + inner + ") WHERE " + where + " ORDER BY " + PersistColKey + " ASC"
+	// Key order unless the options ask for another.
+	order := " ORDER BY " + PersistColKey + " ASC"
+	if opts.OrderBy != "" || opts.Descending {
+		var err error
+		if order, err = persiststateOrderBy(opts); err != nil {
+			return recordstore.FailScan[*PersistEntity](err)
+		}
+	}
+	sql := "SELECT * FROM (" + inner + ") WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -1555,7 +1619,8 @@ func (inst *PersistStore) ScanLiveState(ctx context.Context, opts recordstore.Sc
 // primary-key range read, since the table sorts by (key, order).
 // opts.ExtraPredicate (trusted raw SQL over the physical columns)
 // applies to the collapsed rows, so it narrows the live set and cannot
-// uncover a superseded row. Entities come out ordered by key.
+// uncover a superseded row. Entities come out ordered by key, unless
+// opts.OrderBy or opts.Descending asks for an envelope order instead.
 // opts.Limit caps the rows the query returns before the Go-side
 // tombstone test, so under a configured tombstone pair whose marker
 // satisfies the Filter a limited scan can yield fewer than Limit.
@@ -1571,7 +1636,15 @@ func (inst *PersistStore) ScanLiveWorkingset(ctx context.Context, opts recordsto
 	if opts.ExtraPredicate != "" {
 		where += " AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM (" + inner + ") WHERE " + where + " ORDER BY " + PersistColKey + " ASC"
+	// Key order unless the options ask for another.
+	order := " ORDER BY " + PersistColKey + " ASC"
+	if opts.OrderBy != "" || opts.Descending {
+		var err error
+		if order, err = persiststateOrderBy(opts); err != nil {
+			return recordstore.FailScan[*PersistEntity](err)
+		}
+	}
+	sql := "SELECT * FROM (" + inner + ") WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
@@ -1603,7 +1676,8 @@ func (inst *PersistStore) ScanLiveWorkingset(ctx context.Context, opts recordsto
 // primary-key range read, since the table sorts by (key, order).
 // opts.ExtraPredicate (trusted raw SQL over the physical columns)
 // applies to the collapsed rows, so it narrows the live set and cannot
-// uncover a superseded row. Entities come out ordered by key.
+// uncover a superseded row. Entities come out ordered by key, unless
+// opts.OrderBy or opts.Descending asks for an envelope order instead.
 // opts.Limit caps the rows the query returns before the Go-side
 // tombstone test, so under a configured tombstone pair whose marker
 // satisfies the Filter a limited scan can yield fewer than Limit.
@@ -1619,7 +1693,15 @@ func (inst *PersistStore) ScanLiveColumnWidth(ctx context.Context, opts recordst
 	if opts.ExtraPredicate != "" {
 		where += " AND (" + opts.ExtraPredicate + ")"
 	}
-	sql := "SELECT * FROM (" + inner + ") WHERE " + where + " ORDER BY " + PersistColKey + " ASC"
+	// Key order unless the options ask for another.
+	order := " ORDER BY " + PersistColKey + " ASC"
+	if opts.OrderBy != "" || opts.Descending {
+		var err error
+		if order, err = persiststateOrderBy(opts); err != nil {
+			return recordstore.FailScan[*PersistEntity](err)
+		}
+	}
+	sql := "SELECT * FROM (" + inner + ") WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}

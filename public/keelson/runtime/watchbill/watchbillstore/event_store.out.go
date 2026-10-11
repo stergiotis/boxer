@@ -63,6 +63,35 @@ func watchbilleventKeyPrefixPredicate(prefix string) string {
 	return "startsWith(" + EventColKey + ", " + watchbilleventKeyLiteral(prefix) + ")"
 }
 
+// watchbilleventEnvelopeColumns maps each envelope plain column, by the name the
+// TableDesc authors, to its quoted physical name: what ScanOpts.OrderBy
+// may name.
+var watchbilleventEnvelopeColumns = map[string]string{
+	"id": `"id:id:s:4::0:"`,
+	"ts": `"ts:ts:z64:47::0:"`,
+}
+
+// watchbilleventOrderBy renders a scan's ORDER BY from opts: OrderBy names an
+// envelope column (empty: the Order role), Descending reverses it, and
+// the Key breaks ties in the same direction. An unknown name is refused,
+// never rendered.
+func watchbilleventOrderBy(opts recordstore.ScanOpts) (clause string, err error) {
+	col := EventColOrder
+	if opts.OrderBy != "" {
+		var ok bool
+		if col, ok = watchbilleventEnvelopeColumns[opts.OrderBy]; !ok {
+			err = eh.Errorf("order by %q: %w", opts.OrderBy, recordstore.ErrUnknownOrderColumn)
+			return
+		}
+	}
+	dir := " ASC"
+	if opts.Descending {
+		dir = " DESC"
+	}
+	clause = " ORDER BY " + col + dir + ", " + EventColKey + dir
+	return
+}
+
 // EventMembershipIds is the membership-id assignment this store was
 // generated under: component kind -> membership name -> the uint64 id
 // carried in the membership columns. Verbatim-channel memberships embed
@@ -937,7 +966,8 @@ const (
 )
 
 // ScanEvent iterates the entities whose rows carry a conforming Event
-// component, ordered by (Order, Key) — so entities sharing an Order
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
 // still come out in a fixed sequence. Rows that tie on BOTH (the same
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
@@ -953,6 +983,10 @@ const (
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *EventStore) ScanEvent(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*EventEntity, error] {
+	order, err := watchbilleventOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*EventEntity](err)
+	}
 	where := watchbilleventScanEventFilter
 	if opts.KeyPrefix != "" {
 		where = "(" + where + ") AND " + watchbilleventKeyPrefixPredicate(opts.KeyPrefix)
@@ -961,8 +995,7 @@ func (inst *EventStore) ScanEvent(ctx context.Context, opts recordstore.ScanOpts
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
 	sql := "SELECT * FROM " + inst.readTable() +
-		" WHERE " + where +
-		" ORDER BY " + EventColOrder + " ASC, " + EventColKey + " ASC"
+		" WHERE " + where + order
 	if opts.Limit > 0 {
 		sql += " LIMIT " + strconv.Itoa(opts.Limit)
 	}
