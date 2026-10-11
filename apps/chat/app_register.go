@@ -10,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/attention"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/headstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
@@ -53,6 +54,9 @@ var manifest = app.Manifest{
 		// The run journal (ADR-0308): the conversation's only input, written
 		// before each act through the host's service.
 		agentrun.ClientCaps("chat: write and read the conversation's run journal"),
+		// The model's questions also wait in the host's queue, answered
+		// there or in the window (ADR-0324, proposed).
+		attention.ClientCaps("chat: put the model's questions in the person's queue"),
 		// Chain heads to the anchor store at each turn's end (ADR-0314).
 		headstore.ClientCaps("chat: anchor the journal's chain heads"),
 		// The turn is a keelson task (ADR-0322, proposed): the task monitor

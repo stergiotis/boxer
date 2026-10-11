@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/stergiotis/boxer/public/config/env"
+	"github.com/stergiotis/boxer/public/keelson/runtime/attention"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 )
 
@@ -140,11 +141,29 @@ type asker struct {
 	mu   sync.Mutex
 	open *openAsk
 	seq  uint64
+	// host is the host's queue the question also waits in (ADR-0324,
+	// proposed); nil asks in the window alone.
+	host hostQueueI
 }
 
 // ask shows qs and waits for the answer, or for the turn to end.
 func (inst *asker) ask(ctx context.Context, qs []askQuestion) (r askReply, err error) {
-	o := &openAsk{questions: qs, reply: make(chan askReply, 1), form: newAskForm(qs)}
+	return inst.askVia(ctx, qs, hostAsk{})
+}
+
+// askVia is ask with the question also in the host's queue, as via describes
+// it, when via names a kind. The first answer, from the window or the card,
+// wins; the host's flood limit refusing it answers at once (ADR-0324 §SD6).
+// The window's form shows first: the host is asked off this goroutine.
+func (inst *asker) askVia(ctx context.Context, qs []askQuestion, via hostAsk) (r askReply, err error) {
+	// Room for an answer from each surface: the second is never read, and
+	// neither sender blocks.
+	o := &openAsk{questions: qs, reply: make(chan askReply, 2), form: newAskForm(qs)}
+	if inst.host != nil && via.kind != "" {
+		hctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		go watchHost(hctx, inst.host, qs, via, o.reply)
+	}
 	inst.mu.Lock()
 	inst.seq++
 	o.seq = inst.seq
@@ -178,7 +197,8 @@ func (inst *coordinator) askUser(ctx context.Context, args map[string]any) (cont
 	if reason != "" {
 		return "error: " + reason, "ask_user: " + reason
 	}
-	r, err := inst.ask.ask(ctx, qs)
+	_, tainted, _ := inst.state()
+	r, err := inst.ask.askVia(ctx, qs, hostAsk{kind: attention.KindQuestion, conversation: inst.conversation, tainted: tainted})
 	if err != nil {
 		return "error: the question was withdrawn: " + err.Error(), "question withdrawn"
 	}

@@ -1,0 +1,4 @@
+# The scripted model of chat-queue-quick-reply.scene.md: ask_user with one
+# single-choice question, then the answer.
+{"tool":"ask_user","args":{"title":"Asking about the threshold","questions":[{"question":"Threshold on which speed?","header":"Speed","options":[{"label":"10 m wind","description":"the mean at 10 m"},{"label":"gusts"}]}]}}
+{"content":"Drawing the layer for the speed you chose."}

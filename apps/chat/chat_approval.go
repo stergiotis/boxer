@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
+	"github.com/stergiotis/boxer/public/keelson/runtime/attention"
 	"github.com/stergiotis/boxer/public/keelson/runtime/cell"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 )
@@ -122,7 +123,8 @@ func (inst *coordinator) askExit(ctx context.Context, w *agentrun.Writer, turn s
 		if attempt > 0 {
 			q.Question = "A justification is required to send it. " + question
 		}
-		r, aerr := inst.ask.ask(ctx, []askQuestion{q})
+		_, tainted, _ := inst.state()
+		r, aerr := inst.ask.askVia(ctx, []askQuestion{q}, hostAsk{kind: attention.KindExitApproval, conversation: inst.conversation, tainted: tainted, note: true})
 		if aerr != nil {
 			return a, aerr
 		}

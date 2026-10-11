@@ -406,6 +406,9 @@ func (inst *App) startTurn(text string) (started bool) {
 // through the host's service and knowing its route.
 func (inst *App) newCoordinator(conversation string) (coord *coordinator) {
 	coord = newCoordinatorIn(inst.scope, inst.agentCli, inst.kq, conversation)
+	if inst.bus != nil {
+		coord.ask.host = busQueue{bus: inst.bus}
+	}
 	switch {
 	case inst.journals != nil:
 		coord.store = inst.journals
