@@ -18,6 +18,7 @@
 package factsschema
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -59,17 +60,24 @@ func GetSchemaInManipulator() (manip *common.TableManipulator, err error) {
 	return
 }
 
-// LoadRuntimeFactsMapping populates manip with the boxer.facts schema.
-// Exposed separately so a composite mapping (a future host combining
-// runtime facts with private columns) can extend without forking.
+// LoadRuntimeFactsMapping populates manip with the boxer.facts schema:
+// the envelope, the foreignKey section and the data sections, in that
+// order. Exposed separately so a composite mapping (a future host
+// combining runtime facts with private columns) can extend without
+// forking; a table of its own that wants only the facts sections, with an
+// envelope of its own, calls LoadFactsDataSections (plan002 B0).
 func LoadRuntimeFactsMapping(manip common.TableManipulatorFluidI) {
-	ctId := ctabb.U64
+	LoadFactsEnvelope(manip)
+	loadForeignKeySection(manip)
+	LoadFactsDataSections(manip)
+}
+
+// LoadFactsEnvelope adds boxer.facts' plain columns: id, naturalKey, ts
+// and expiresAt.
+func LoadFactsEnvelope(manip common.TableManipulatorFluidI) {
 	u64 := ctabb.U64
-	u32 := ctabb.U32
-	str := ctabb.S
 	bytes := ctabb.Y
 	dt := ctabb.Z64
-	boolType := ctabb.B
 
 	// Plain values: per-row identity, observation timestamp, eviction
 	// trigger. The runtime writes id + naturalKey at row insert; ts at
@@ -85,7 +93,11 @@ func LoadRuntimeFactsMapping(manip common.TableManipulatorFluidI) {
 		manip.PlainValueColumn(common.PlainItemTypeEntityLifecycle, "expiresAt", dt).
 			AddColumnEncodingHints(easp.AspectLightGeneralCompression)
 	}
+}
 
+// loadForeignKeySection adds boxer.facts' reference section.
+func loadForeignKeySection(manip common.TableManipulatorFluidI) {
+	ctId := ctabb.U64
 	// Relation: cross-fact references — e.g., an audit fact's link to the
 	// grant fact that authorised it, or a state-write's link back to the
 	// grant for the persistence subject.
@@ -97,16 +109,31 @@ func LoadRuntimeFactsMapping(manip common.TableManipulatorFluidI) {
 		sec.TaggedValueColumn("value", ctId).
 			AddColumnEncodingHints(easp.AspectLightGeneralCompression)
 	}
+}
 
-	// Data: per-canonical-type tagged value sections, all in one streaming
-	// group. Every section accepts the spinnaker triple of membership
-	// specs so any tagged value can carry a low-cardinality name, a
-	// high-cardinality reference, or a mixed name + parameters address.
-	membershipSpec := []common.MembershipSpecE{
-		common.MembershipSpecLowCardRef,
-		common.MembershipSpecHighCardRef,
-		common.MembershipSpecMixedLowCardRefHighCardParameters,
-	}
+// FactsMembershipSpecs is the spinnaker triple every facts data section
+// accepts, so any tagged value can carry a low-cardinality name, a
+// high-cardinality reference, or a mixed name + parameters address.
+var FactsMembershipSpecs = []common.MembershipSpecE{
+	common.MembershipSpecLowCardRef,
+	common.MembershipSpecHighCardRef,
+	common.MembershipSpecMixedLowCardRefHighCardParameters,
+}
+
+// LoadFactsDataSections adds boxer.facts' per-canonical-type data
+// sections, all in the "data" streaming group, each accepting
+// FactsMembershipSpecs and then extra. A table of its own built on them
+// shares the facts sections' names, value types and codecs, and so their
+// read surface; extra is how such a table carries a channel facts does
+// not, as the journal's vault carries the verbatim path of a shredded
+// document (plan002 B3).
+func LoadFactsDataSections(manip common.TableManipulatorFluidI, extra ...common.MembershipSpecE) {
+	u32 := ctabb.U32
+	str := ctabb.S
+	bytes := ctabb.Y
+	dt := ctabb.Z64
+	boolType := ctabb.B
+	membershipSpec := append(slices.Clone(FactsMembershipSpecs), extra...)
 	{
 		strh := canonicaltypes.PromoteScalarPrim(str, canonicaltypes.ScalarModifierHomogenousArray)
 		// text vs string: both are utf8 arrays, and before ADR-0168 §SD4 they
@@ -224,5 +251,18 @@ func LoadRuntimeFactsMapping(manip common.TableManipulatorFluidI) {
 			sec.TaggedValueColumn("value", boolType).
 				AddColumnEncodingHints(easp.AspectLightGeneralCompression)
 		}
+	}
+}
+
+// LoadValuelessSections adds the three sections of a JSON value that has
+// no value — null, {} and [] — which the lossless mode of the shredder
+// (jsonshred) writes as attributes carrying only their path (plan002 B1).
+// boxer.facts never loads them: a section there is a DDL change on every
+// host's audit table.
+func LoadValuelessSections(manip common.TableManipulatorFluidI, specs ...common.MembershipSpecE) {
+	for _, name := range []naming.StylableName{"null", "emptyObject", "emptyArray"} {
+		manip.TaggedValueSection(name).
+			SectionStreamingGroup("data").
+			AddSectionMembership(specs...)
 	}
 }

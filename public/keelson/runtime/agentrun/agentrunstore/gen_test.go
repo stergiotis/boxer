@@ -44,7 +44,7 @@ func TestGenerateAgentrunStores(t *testing.T) {
 		PackageName: "agentrunstore", StoreName: "Entry", TableName: TableNameEntry, Database: DatabaseName,
 		Table: entryTd, RowConfig: TableRowConfig, ComponentPaths: []string{"./entry_dto.go"}, OutDir: ".",
 		ImportPath: importPath, Wrapper: marshallgen.FixedIdsWrapper{Ids: ids},
-		Roles: gen.Roles{Revision: EntryRevisionColumn},
+		Roles: gen.Roles{Key: "id", Order: EntryOrdinalColumn, Revision: EntryRevisionColumn},
 		// ADR-0309 §SD4: a journal insert is durable before the act leaves.
 		InsertSettings: recordstore.InsertSettings{AsyncInsert: recordstore.ToggleOff},
 	}.Generate())

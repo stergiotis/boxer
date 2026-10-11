@@ -24,288 +24,186 @@ import (
 func CreateSchemaAgentrunentryTable() (schema *arrow.Schema) {
 	schema = arrow.NewSchema([]arrow.Field{
 		/* 000 */ arrow.Field{Name: "id:id:s:4::0:", Nullable: false, Type: &arrow.StringType{}},
-		/* 001 */ arrow.Field{Name: "ts:ts:z64:47::0:", Nullable: false, Type: &arrow.TimestampType{Unit: arrow.Nanosecond}},
+		/* 001 */ arrow.Field{Name: "id:ordinal:u64:47::0:", Nullable: false, Type: arrow.PrimitiveTypes.Uint64},
 		/* 002 */ arrow.Field{Name: "lc:revision:u32:4::0:", Nullable: false, Type: arrow.PrimitiveTypes.Uint32},
-		/* 003 */ arrow.Field{Name: "tv:entryOrdinal:value:val:u32:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint32)},
-		/* 004 */ arrow.Field{Name: "tv:entryOrdinal:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 005 */ arrow.Field{Name: "tv:entryOrdinal:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 006 */ arrow.Field{Name: "tv:entryOrdinal:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 007 */ arrow.Field{Name: "tv:entryOrdinal:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 008 */ arrow.Field{Name: "tv:entryOrdinal:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 009 */ arrow.Field{Name: "tv:entryOrdinal:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 010 */ arrow.Field{Name: "tv:entryOrdinal:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 011 */ arrow.Field{Name: "tv:entryOrdinal:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 012 */ arrow.Field{Name: "tv:entryOrdinal:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 013 */ arrow.Field{Name: "tv:entryAt:value:val:z64:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.TimestampType{Unit: arrow.Nanosecond})},
-		/* 014 */ arrow.Field{Name: "tv:entryAt:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 015 */ arrow.Field{Name: "tv:entryAt:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 016 */ arrow.Field{Name: "tv:entryAt:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 017 */ arrow.Field{Name: "tv:entryAt:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 018 */ arrow.Field{Name: "tv:entryAt:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 019 */ arrow.Field{Name: "tv:entryAt:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 020 */ arrow.Field{Name: "tv:entryAt:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 021 */ arrow.Field{Name: "tv:entryAt:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 022 */ arrow.Field{Name: "tv:entryAt:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 023 */ arrow.Field{Name: "tv:entryKind:value:val:s:24:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
-		/* 024 */ arrow.Field{Name: "tv:entryKind:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 025 */ arrow.Field{Name: "tv:entryKind:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 026 */ arrow.Field{Name: "tv:entryKind:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 027 */ arrow.Field{Name: "tv:entryKind:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 028 */ arrow.Field{Name: "tv:entryKind:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 029 */ arrow.Field{Name: "tv:entryKind:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 030 */ arrow.Field{Name: "tv:entryKind:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 031 */ arrow.Field{Name: "tv:entryKind:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 032 */ arrow.Field{Name: "tv:entryKind:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 033 */ arrow.Field{Name: "tv:entryKey:value:val:s:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
-		/* 034 */ arrow.Field{Name: "tv:entryKey:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 035 */ arrow.Field{Name: "tv:entryKey:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 036 */ arrow.Field{Name: "tv:entryKey:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 037 */ arrow.Field{Name: "tv:entryKey:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 038 */ arrow.Field{Name: "tv:entryKey:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 039 */ arrow.Field{Name: "tv:entryKey:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 040 */ arrow.Field{Name: "tv:entryKey:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 041 */ arrow.Field{Name: "tv:entryKey:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 042 */ arrow.Field{Name: "tv:entryKey:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 043 */ arrow.Field{Name: "tv:entryRole:value:val:s:24:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
-		/* 044 */ arrow.Field{Name: "tv:entryRole:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 045 */ arrow.Field{Name: "tv:entryRole:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 046 */ arrow.Field{Name: "tv:entryRole:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 047 */ arrow.Field{Name: "tv:entryRole:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 048 */ arrow.Field{Name: "tv:entryRole:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 049 */ arrow.Field{Name: "tv:entryRole:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 050 */ arrow.Field{Name: "tv:entryRole:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 051 */ arrow.Field{Name: "tv:entryRole:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 052 */ arrow.Field{Name: "tv:entryRole:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 053 */ arrow.Field{Name: "tv:entryBody:value:val:s:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
-		/* 054 */ arrow.Field{Name: "tv:entryBody:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 055 */ arrow.Field{Name: "tv:entryBody:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 056 */ arrow.Field{Name: "tv:entryBody:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 057 */ arrow.Field{Name: "tv:entryBody:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 058 */ arrow.Field{Name: "tv:entryBody:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 059 */ arrow.Field{Name: "tv:entryBody:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 060 */ arrow.Field{Name: "tv:entryBody:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 061 */ arrow.Field{Name: "tv:entryBody:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 062 */ arrow.Field{Name: "tv:entryBody:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 063 */ arrow.Field{Name: "tv:entryCalls:value:val:s:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
-		/* 064 */ arrow.Field{Name: "tv:entryCalls:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 065 */ arrow.Field{Name: "tv:entryCalls:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 066 */ arrow.Field{Name: "tv:entryCalls:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 067 */ arrow.Field{Name: "tv:entryCalls:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 068 */ arrow.Field{Name: "tv:entryCalls:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 069 */ arrow.Field{Name: "tv:entryCalls:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 070 */ arrow.Field{Name: "tv:entryCalls:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 071 */ arrow.Field{Name: "tv:entryCalls:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 072 */ arrow.Field{Name: "tv:entryCalls:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 073 */ arrow.Field{Name: "tv:entryBodyDigest:value:val:s:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
-		/* 074 */ arrow.Field{Name: "tv:entryBodyDigest:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 075 */ arrow.Field{Name: "tv:entryBodyDigest:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 076 */ arrow.Field{Name: "tv:entryBodyDigest:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 077 */ arrow.Field{Name: "tv:entryBodyDigest:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 078 */ arrow.Field{Name: "tv:entryBodyDigest:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 079 */ arrow.Field{Name: "tv:entryBodyDigest:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 080 */ arrow.Field{Name: "tv:entryBodyDigest:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 081 */ arrow.Field{Name: "tv:entryBodyDigest:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 082 */ arrow.Field{Name: "tv:entryBodyDigest:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 083 */ arrow.Field{Name: "tv:entryCallsDigest:value:val:s:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
-		/* 084 */ arrow.Field{Name: "tv:entryCallsDigest:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 085 */ arrow.Field{Name: "tv:entryCallsDigest:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 086 */ arrow.Field{Name: "tv:entryCallsDigest:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 087 */ arrow.Field{Name: "tv:entryCallsDigest:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 088 */ arrow.Field{Name: "tv:entryCallsDigest:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 089 */ arrow.Field{Name: "tv:entryCallsDigest:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 090 */ arrow.Field{Name: "tv:entryCallsDigest:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 091 */ arrow.Field{Name: "tv:entryCallsDigest:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 092 */ arrow.Field{Name: "tv:entryCallsDigest:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 093 */ arrow.Field{Name: "tv:entryName:value:val:s:24:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
-		/* 094 */ arrow.Field{Name: "tv:entryName:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 095 */ arrow.Field{Name: "tv:entryName:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 096 */ arrow.Field{Name: "tv:entryName:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 097 */ arrow.Field{Name: "tv:entryName:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 098 */ arrow.Field{Name: "tv:entryName:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 099 */ arrow.Field{Name: "tv:entryName:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 100 */ arrow.Field{Name: "tv:entryName:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 101 */ arrow.Field{Name: "tv:entryName:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 102 */ arrow.Field{Name: "tv:entryName:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 103 */ arrow.Field{Name: "tv:entryBook:value:val:s:24:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
-		/* 104 */ arrow.Field{Name: "tv:entryBook:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 105 */ arrow.Field{Name: "tv:entryBook:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 106 */ arrow.Field{Name: "tv:entryBook:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 107 */ arrow.Field{Name: "tv:entryBook:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 108 */ arrow.Field{Name: "tv:entryBook:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 109 */ arrow.Field{Name: "tv:entryBook:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 110 */ arrow.Field{Name: "tv:entryBook:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 111 */ arrow.Field{Name: "tv:entryBook:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 112 */ arrow.Field{Name: "tv:entryBook:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 113 */ arrow.Field{Name: "tv:entryForm:value:val:s:24:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
-		/* 114 */ arrow.Field{Name: "tv:entryForm:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 115 */ arrow.Field{Name: "tv:entryForm:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 116 */ arrow.Field{Name: "tv:entryForm:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 117 */ arrow.Field{Name: "tv:entryForm:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 118 */ arrow.Field{Name: "tv:entryForm:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 119 */ arrow.Field{Name: "tv:entryForm:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 120 */ arrow.Field{Name: "tv:entryForm:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 121 */ arrow.Field{Name: "tv:entryForm:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 122 */ arrow.Field{Name: "tv:entryForm:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 123 */ arrow.Field{Name: "tv:entryTarget:value:val:u32:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint32)},
-		/* 124 */ arrow.Field{Name: "tv:entryTarget:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 125 */ arrow.Field{Name: "tv:entryTarget:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 126 */ arrow.Field{Name: "tv:entryTarget:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 127 */ arrow.Field{Name: "tv:entryTarget:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 128 */ arrow.Field{Name: "tv:entryTarget:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 129 */ arrow.Field{Name: "tv:entryTarget:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 130 */ arrow.Field{Name: "tv:entryTarget:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 131 */ arrow.Field{Name: "tv:entryTarget:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 132 */ arrow.Field{Name: "tv:entryTarget:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 133 */ arrow.Field{Name: "tv:entryFrom:value:val:u32:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint32)},
-		/* 134 */ arrow.Field{Name: "tv:entryFrom:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 135 */ arrow.Field{Name: "tv:entryFrom:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 136 */ arrow.Field{Name: "tv:entryFrom:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 137 */ arrow.Field{Name: "tv:entryFrom:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 138 */ arrow.Field{Name: "tv:entryFrom:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 139 */ arrow.Field{Name: "tv:entryFrom:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 140 */ arrow.Field{Name: "tv:entryFrom:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 141 */ arrow.Field{Name: "tv:entryFrom:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 142 */ arrow.Field{Name: "tv:entryFrom:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 143 */ arrow.Field{Name: "tv:entryEffect:value:val:s:24:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
-		/* 144 */ arrow.Field{Name: "tv:entryEffect:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 145 */ arrow.Field{Name: "tv:entryEffect:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 146 */ arrow.Field{Name: "tv:entryEffect:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 147 */ arrow.Field{Name: "tv:entryEffect:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 148 */ arrow.Field{Name: "tv:entryEffect:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 149 */ arrow.Field{Name: "tv:entryEffect:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 150 */ arrow.Field{Name: "tv:entryEffect:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 151 */ arrow.Field{Name: "tv:entryEffect:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 152 */ arrow.Field{Name: "tv:entryEffect:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 153 */ arrow.Field{Name: "tv:entryTurn:value:val:s:24:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
-		/* 154 */ arrow.Field{Name: "tv:entryTurn:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 155 */ arrow.Field{Name: "tv:entryTurn:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 156 */ arrow.Field{Name: "tv:entryTurn:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 157 */ arrow.Field{Name: "tv:entryTurn:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 158 */ arrow.Field{Name: "tv:entryTurn:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 159 */ arrow.Field{Name: "tv:entryTurn:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 160 */ arrow.Field{Name: "tv:entryTurn:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 161 */ arrow.Field{Name: "tv:entryTurn:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 162 */ arrow.Field{Name: "tv:entryTurn:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 163 */ arrow.Field{Name: "tv:entryLabelLevel:value:val:u32:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint32)},
-		/* 164 */ arrow.Field{Name: "tv:entryLabelLevel:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 165 */ arrow.Field{Name: "tv:entryLabelLevel:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 166 */ arrow.Field{Name: "tv:entryLabelLevel:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 167 */ arrow.Field{Name: "tv:entryLabelLevel:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 168 */ arrow.Field{Name: "tv:entryLabelLevel:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 169 */ arrow.Field{Name: "tv:entryLabelLevel:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 170 */ arrow.Field{Name: "tv:entryLabelLevel:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 171 */ arrow.Field{Name: "tv:entryLabelLevel:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 172 */ arrow.Field{Name: "tv:entryLabelLevel:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 173 */ arrow.Field{Name: "tv:entryLabelTier:value:val:u32:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint32)},
-		/* 174 */ arrow.Field{Name: "tv:entryLabelTier:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 175 */ arrow.Field{Name: "tv:entryLabelTier:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 176 */ arrow.Field{Name: "tv:entryLabelTier:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 177 */ arrow.Field{Name: "tv:entryLabelTier:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 178 */ arrow.Field{Name: "tv:entryLabelTier:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 179 */ arrow.Field{Name: "tv:entryLabelTier:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 180 */ arrow.Field{Name: "tv:entryLabelTier:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 181 */ arrow.Field{Name: "tv:entryLabelTier:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 182 */ arrow.Field{Name: "tv:entryLabelTier:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 183 */ arrow.Field{Name: "tv:entryLabelExposure:value:val:s:24:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
-		/* 184 */ arrow.Field{Name: "tv:entryLabelExposure:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 185 */ arrow.Field{Name: "tv:entryLabelExposure:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 186 */ arrow.Field{Name: "tv:entryLabelExposure:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 187 */ arrow.Field{Name: "tv:entryLabelExposure:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 188 */ arrow.Field{Name: "tv:entryLabelExposure:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 189 */ arrow.Field{Name: "tv:entryLabelExposure:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 190 */ arrow.Field{Name: "tv:entryLabelExposure:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 191 */ arrow.Field{Name: "tv:entryLabelExposure:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 192 */ arrow.Field{Name: "tv:entryLabelExposure:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 193 */ arrow.Field{Name: "tv:entryLabelOrigin:value:val:s:24:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
-		/* 194 */ arrow.Field{Name: "tv:entryLabelOrigin:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 195 */ arrow.Field{Name: "tv:entryLabelOrigin:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 196 */ arrow.Field{Name: "tv:entryLabelOrigin:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 197 */ arrow.Field{Name: "tv:entryLabelOrigin:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 198 */ arrow.Field{Name: "tv:entryLabelOrigin:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 199 */ arrow.Field{Name: "tv:entryLabelOrigin:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 200 */ arrow.Field{Name: "tv:entryLabelOrigin:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 201 */ arrow.Field{Name: "tv:entryLabelOrigin:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 202 */ arrow.Field{Name: "tv:entryLabelOrigin:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 203 */ arrow.Field{Name: "tv:entryWriterRun:value:val:s:24:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
-		/* 204 */ arrow.Field{Name: "tv:entryWriterRun:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 205 */ arrow.Field{Name: "tv:entryWriterRun:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 206 */ arrow.Field{Name: "tv:entryWriterRun:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 207 */ arrow.Field{Name: "tv:entryWriterRun:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 208 */ arrow.Field{Name: "tv:entryWriterRun:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 209 */ arrow.Field{Name: "tv:entryWriterRun:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 210 */ arrow.Field{Name: "tv:entryWriterRun:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 211 */ arrow.Field{Name: "tv:entryWriterRun:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 212 */ arrow.Field{Name: "tv:entryWriterRun:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 213 */ arrow.Field{Name: "tv:entryWriterTurn:value:val:s:24:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
-		/* 214 */ arrow.Field{Name: "tv:entryWriterTurn:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 215 */ arrow.Field{Name: "tv:entryWriterTurn:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 216 */ arrow.Field{Name: "tv:entryWriterTurn:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 217 */ arrow.Field{Name: "tv:entryWriterTurn:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 218 */ arrow.Field{Name: "tv:entryWriterTurn:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 219 */ arrow.Field{Name: "tv:entryWriterTurn:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 220 */ arrow.Field{Name: "tv:entryWriterTurn:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 221 */ arrow.Field{Name: "tv:entryWriterTurn:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 222 */ arrow.Field{Name: "tv:entryWriterTurn:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 223 */ arrow.Field{Name: "tv:entryWriterOrdinal:value:val:u32:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint32)},
-		/* 224 */ arrow.Field{Name: "tv:entryWriterOrdinal:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 225 */ arrow.Field{Name: "tv:entryWriterOrdinal:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 226 */ arrow.Field{Name: "tv:entryWriterOrdinal:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 227 */ arrow.Field{Name: "tv:entryWriterOrdinal:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 228 */ arrow.Field{Name: "tv:entryWriterOrdinal:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 229 */ arrow.Field{Name: "tv:entryWriterOrdinal:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 230 */ arrow.Field{Name: "tv:entryWriterOrdinal:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 231 */ arrow.Field{Name: "tv:entryWriterOrdinal:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 232 */ arrow.Field{Name: "tv:entryWriterOrdinal:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 233 */ arrow.Field{Name: "tv:entryPrev:value:val:u32:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint32)},
-		/* 234 */ arrow.Field{Name: "tv:entryPrev:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 235 */ arrow.Field{Name: "tv:entryPrev:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 236 */ arrow.Field{Name: "tv:entryPrev:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 237 */ arrow.Field{Name: "tv:entryPrev:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 238 */ arrow.Field{Name: "tv:entryPrev:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 239 */ arrow.Field{Name: "tv:entryPrev:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 240 */ arrow.Field{Name: "tv:entryPrev:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 241 */ arrow.Field{Name: "tv:entryPrev:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 242 */ arrow.Field{Name: "tv:entryPrev:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 243 */ arrow.Field{Name: "tv:entryDigest:value:val:s:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
-		/* 244 */ arrow.Field{Name: "tv:entryDigest:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 245 */ arrow.Field{Name: "tv:entryDigest:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 246 */ arrow.Field{Name: "tv:entryDigest:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 247 */ arrow.Field{Name: "tv:entryDigest:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 248 */ arrow.Field{Name: "tv:entryDigest:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 249 */ arrow.Field{Name: "tv:entryDigest:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 250 */ arrow.Field{Name: "tv:entryDigest:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 251 */ arrow.Field{Name: "tv:entryDigest:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 252 */ arrow.Field{Name: "tv:entryDigest:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 253 */ arrow.Field{Name: "tv:entryKeyId:value:val:s:24:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
-		/* 254 */ arrow.Field{Name: "tv:entryKeyId:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 255 */ arrow.Field{Name: "tv:entryKeyId:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 256 */ arrow.Field{Name: "tv:entryKeyId:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 257 */ arrow.Field{Name: "tv:entryKeyId:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 258 */ arrow.Field{Name: "tv:entryKeyId:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 259 */ arrow.Field{Name: "tv:entryKeyId:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 260 */ arrow.Field{Name: "tv:entryKeyId:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 261 */ arrow.Field{Name: "tv:entryKeyId:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 262 */ arrow.Field{Name: "tv:entryKeyId:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 263 */ arrow.Field{Name: "tv:entryParent:value:val:u32:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint32)},
-		/* 264 */ arrow.Field{Name: "tv:entryParent:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 265 */ arrow.Field{Name: "tv:entryParent:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 266 */ arrow.Field{Name: "tv:entryParent:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 267 */ arrow.Field{Name: "tv:entryParent:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 268 */ arrow.Field{Name: "tv:entryParent:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 269 */ arrow.Field{Name: "tv:entryParent:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 270 */ arrow.Field{Name: "tv:entryParent:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 271 */ arrow.Field{Name: "tv:entryParent:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 272 */ arrow.Field{Name: "tv:entryParent:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 273 */ arrow.Field{Name: "tv:entryAttachments:value:val:s:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
-		/* 274 */ arrow.Field{Name: "tv:entryAttachments:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 275 */ arrow.Field{Name: "tv:entryAttachments:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 276 */ arrow.Field{Name: "tv:entryAttachments:lv:lv:y:124:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 277 */ arrow.Field{Name: "tv:entryAttachments:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 278 */ arrow.Field{Name: "tv:entryAttachments:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
-		/* 279 */ arrow.Field{Name: "tv:entryAttachments:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 280 */ arrow.Field{Name: "tv:entryAttachments:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 281 */ arrow.Field{Name: "tv:entryAttachments:lvcard:lvcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
-		/* 282 */ arrow.Field{Name: "tv:entryAttachments:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 003 */ arrow.Field{Name: "tv:textArray:value:val:sh:5::7:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
+		/* 004 */ arrow.Field{Name: "tv:textArray:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 005 */ arrow.Field{Name: "tv:textArray:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 006 */ arrow.Field{Name: "tv:textArray:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 007 */ arrow.Field{Name: "tv:textArray:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 008 */ arrow.Field{Name: "tv:textArray:len:len:u64:4D:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 009 */ arrow.Field{Name: "tv:textArray:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 010 */ arrow.Field{Name: "tv:textArray:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 011 */ arrow.Field{Name: "tv:textArray:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 012 */ arrow.Field{Name: "tv:stringArray:value:val:sh:4::8:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
+		/* 013 */ arrow.Field{Name: "tv:stringArray:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 014 */ arrow.Field{Name: "tv:stringArray:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 015 */ arrow.Field{Name: "tv:stringArray:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 016 */ arrow.Field{Name: "tv:stringArray:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 017 */ arrow.Field{Name: "tv:stringArray:len:len:u64:4D:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 018 */ arrow.Field{Name: "tv:stringArray:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 019 */ arrow.Field{Name: "tv:stringArray:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 020 */ arrow.Field{Name: "tv:stringArray:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 021 */ arrow.Field{Name: "tv:symbol:value:val:s:124::I:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
+		/* 022 */ arrow.Field{Name: "tv:symbol:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 023 */ arrow.Field{Name: "tv:symbol:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 024 */ arrow.Field{Name: "tv:symbol:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 025 */ arrow.Field{Name: "tv:symbol:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 026 */ arrow.Field{Name: "tv:symbol:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 027 */ arrow.Field{Name: "tv:symbol:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 028 */ arrow.Field{Name: "tv:symbol:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 029 */ arrow.Field{Name: "tv:symbolArray:value:val:sh:124::I:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
+		/* 030 */ arrow.Field{Name: "tv:symbolArray:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 031 */ arrow.Field{Name: "tv:symbolArray:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 032 */ arrow.Field{Name: "tv:symbolArray:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 033 */ arrow.Field{Name: "tv:symbolArray:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 034 */ arrow.Field{Name: "tv:symbolArray:len:len:u64:4D:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 035 */ arrow.Field{Name: "tv:symbolArray:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 036 */ arrow.Field{Name: "tv:symbolArray:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 037 */ arrow.Field{Name: "tv:symbolArray:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 038 */ arrow.Field{Name: "tv:blobArray:value:val:yh:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 039 */ arrow.Field{Name: "tv:blobArray:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 040 */ arrow.Field{Name: "tv:blobArray:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 041 */ arrow.Field{Name: "tv:blobArray:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 042 */ arrow.Field{Name: "tv:blobArray:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 043 */ arrow.Field{Name: "tv:blobArray:len:len:u64:4D:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 044 */ arrow.Field{Name: "tv:blobArray:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 045 */ arrow.Field{Name: "tv:blobArray:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 046 */ arrow.Field{Name: "tv:blobArray:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 047 */ arrow.Field{Name: "tv:u8Array:value:val:u8h:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint8)},
+		/* 048 */ arrow.Field{Name: "tv:u8Array:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 049 */ arrow.Field{Name: "tv:u8Array:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 050 */ arrow.Field{Name: "tv:u8Array:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 051 */ arrow.Field{Name: "tv:u8Array:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 052 */ arrow.Field{Name: "tv:u8Array:len:len:u64:4D:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 053 */ arrow.Field{Name: "tv:u8Array:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 054 */ arrow.Field{Name: "tv:u8Array:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 055 */ arrow.Field{Name: "tv:u8Array:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 056 */ arrow.Field{Name: "tv:u16Array:value:val:u16h:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint16)},
+		/* 057 */ arrow.Field{Name: "tv:u16Array:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 058 */ arrow.Field{Name: "tv:u16Array:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 059 */ arrow.Field{Name: "tv:u16Array:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 060 */ arrow.Field{Name: "tv:u16Array:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 061 */ arrow.Field{Name: "tv:u16Array:len:len:u64:4D:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 062 */ arrow.Field{Name: "tv:u16Array:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 063 */ arrow.Field{Name: "tv:u16Array:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 064 */ arrow.Field{Name: "tv:u16Array:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 065 */ arrow.Field{Name: "tv:u32Array:value:val:u32h:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint32)},
+		/* 066 */ arrow.Field{Name: "tv:u32Array:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 067 */ arrow.Field{Name: "tv:u32Array:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 068 */ arrow.Field{Name: "tv:u32Array:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 069 */ arrow.Field{Name: "tv:u32Array:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 070 */ arrow.Field{Name: "tv:u32Array:len:len:u64:4D:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 071 */ arrow.Field{Name: "tv:u32Array:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 072 */ arrow.Field{Name: "tv:u32Array:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 073 */ arrow.Field{Name: "tv:u32Array:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 074 */ arrow.Field{Name: "tv:u32Set:value:val:u32m:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint32)},
+		/* 075 */ arrow.Field{Name: "tv:u32Set:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 076 */ arrow.Field{Name: "tv:u32Set:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 077 */ arrow.Field{Name: "tv:u32Set:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 078 */ arrow.Field{Name: "tv:u32Set:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 079 */ arrow.Field{Name: "tv:u32Set:card:card:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 080 */ arrow.Field{Name: "tv:u32Set:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 081 */ arrow.Field{Name: "tv:u32Set:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 082 */ arrow.Field{Name: "tv:u32Set:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 083 */ arrow.Field{Name: "tv:u64Array:value:val:u64h:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 084 */ arrow.Field{Name: "tv:u64Array:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 085 */ arrow.Field{Name: "tv:u64Array:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 086 */ arrow.Field{Name: "tv:u64Array:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 087 */ arrow.Field{Name: "tv:u64Array:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 088 */ arrow.Field{Name: "tv:u64Array:len:len:u64:4D:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 089 */ arrow.Field{Name: "tv:u64Array:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 090 */ arrow.Field{Name: "tv:u64Array:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 091 */ arrow.Field{Name: "tv:u64Array:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 092 */ arrow.Field{Name: "tv:u64Set:value:val:u64m:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 093 */ arrow.Field{Name: "tv:u64Set:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 094 */ arrow.Field{Name: "tv:u64Set:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 095 */ arrow.Field{Name: "tv:u64Set:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 096 */ arrow.Field{Name: "tv:u64Set:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 097 */ arrow.Field{Name: "tv:u64Set:card:card:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 098 */ arrow.Field{Name: "tv:u64Set:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 099 */ arrow.Field{Name: "tv:u64Set:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 100 */ arrow.Field{Name: "tv:u64Set:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 101 */ arrow.Field{Name: "tv:i8Array:value:val:i8h:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Int8)},
+		/* 102 */ arrow.Field{Name: "tv:i8Array:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 103 */ arrow.Field{Name: "tv:i8Array:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 104 */ arrow.Field{Name: "tv:i8Array:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 105 */ arrow.Field{Name: "tv:i8Array:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 106 */ arrow.Field{Name: "tv:i8Array:len:len:u64:4D:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 107 */ arrow.Field{Name: "tv:i8Array:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 108 */ arrow.Field{Name: "tv:i8Array:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 109 */ arrow.Field{Name: "tv:i8Array:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 110 */ arrow.Field{Name: "tv:i16Array:value:val:i16h:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Int16)},
+		/* 111 */ arrow.Field{Name: "tv:i16Array:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 112 */ arrow.Field{Name: "tv:i16Array:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 113 */ arrow.Field{Name: "tv:i16Array:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 114 */ arrow.Field{Name: "tv:i16Array:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 115 */ arrow.Field{Name: "tv:i16Array:len:len:u64:4D:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 116 */ arrow.Field{Name: "tv:i16Array:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 117 */ arrow.Field{Name: "tv:i16Array:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 118 */ arrow.Field{Name: "tv:i16Array:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 119 */ arrow.Field{Name: "tv:i32Array:value:val:i32h:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Int32)},
+		/* 120 */ arrow.Field{Name: "tv:i32Array:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 121 */ arrow.Field{Name: "tv:i32Array:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 122 */ arrow.Field{Name: "tv:i32Array:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 123 */ arrow.Field{Name: "tv:i32Array:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 124 */ arrow.Field{Name: "tv:i32Array:len:len:u64:4D:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 125 */ arrow.Field{Name: "tv:i32Array:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 126 */ arrow.Field{Name: "tv:i32Array:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 127 */ arrow.Field{Name: "tv:i32Array:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 128 */ arrow.Field{Name: "tv:i64Array:value:val:i64h:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Int64)},
+		/* 129 */ arrow.Field{Name: "tv:i64Array:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 130 */ arrow.Field{Name: "tv:i64Array:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 131 */ arrow.Field{Name: "tv:i64Array:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 132 */ arrow.Field{Name: "tv:i64Array:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 133 */ arrow.Field{Name: "tv:i64Array:len:len:u64:4D:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 134 */ arrow.Field{Name: "tv:i64Array:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 135 */ arrow.Field{Name: "tv:i64Array:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 136 */ arrow.Field{Name: "tv:i64Array:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 137 */ arrow.Field{Name: "tv:f32Array:value:val:f32h:4A:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Float32)},
+		/* 138 */ arrow.Field{Name: "tv:f32Array:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 139 */ arrow.Field{Name: "tv:f32Array:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 140 */ arrow.Field{Name: "tv:f32Array:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 141 */ arrow.Field{Name: "tv:f32Array:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 142 */ arrow.Field{Name: "tv:f32Array:len:len:u64:4D:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 143 */ arrow.Field{Name: "tv:f32Array:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 144 */ arrow.Field{Name: "tv:f32Array:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 145 */ arrow.Field{Name: "tv:f32Array:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 146 */ arrow.Field{Name: "tv:f64Array:value:val:f64h:4A:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Float64)},
+		/* 147 */ arrow.Field{Name: "tv:f64Array:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 148 */ arrow.Field{Name: "tv:f64Array:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 149 */ arrow.Field{Name: "tv:f64Array:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 150 */ arrow.Field{Name: "tv:f64Array:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 151 */ arrow.Field{Name: "tv:f64Array:len:len:u64:4D:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 152 */ arrow.Field{Name: "tv:f64Array:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 153 */ arrow.Field{Name: "tv:f64Array:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 154 */ arrow.Field{Name: "tv:f64Array:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 155 */ arrow.Field{Name: "tv:u32Range:beginIncl:val:u32:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint32)},
+		/* 156 */ arrow.Field{Name: "tv:u32Range:endExcl:val:u32:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint32)},
+		/* 157 */ arrow.Field{Name: "tv:u32Range:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 158 */ arrow.Field{Name: "tv:u32Range:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 159 */ arrow.Field{Name: "tv:u32Range:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 160 */ arrow.Field{Name: "tv:u32Range:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 161 */ arrow.Field{Name: "tv:u32Range:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 162 */ arrow.Field{Name: "tv:u32Range:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 163 */ arrow.Field{Name: "tv:u32Range:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 164 */ arrow.Field{Name: "tv:timeArray:value:val:z64h:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.TimestampType{Unit: arrow.Nanosecond})},
+		/* 165 */ arrow.Field{Name: "tv:timeArray:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 166 */ arrow.Field{Name: "tv:timeArray:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 167 */ arrow.Field{Name: "tv:timeArray:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 168 */ arrow.Field{Name: "tv:timeArray:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 169 */ arrow.Field{Name: "tv:timeArray:len:len:u64:4D:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 170 */ arrow.Field{Name: "tv:timeArray:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 171 */ arrow.Field{Name: "tv:timeArray:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 172 */ arrow.Field{Name: "tv:timeArray:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 173 */ arrow.Field{Name: "tv:bool:value:val:b:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BooleanType{})},
+		/* 174 */ arrow.Field{Name: "tv:bool:hr:hr:u64:47:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 175 */ arrow.Field{Name: "tv:bool:lr:lr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 176 */ arrow.Field{Name: "tv:bool:lmr:lmr:u64:1247:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 177 */ arrow.Field{Name: "tv:bool:mrhp:mrhp:y:4:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.BinaryType{})},
+		/* 178 */ arrow.Field{Name: "tv:bool:hrcard:hrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 179 */ arrow.Field{Name: "tv:bool:lrcard:lrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
+		/* 180 */ arrow.Field{Name: "tv:bool:lmrcard:lmrcard:u64:4E:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(arrow.PrimitiveTypes.Uint64)},
 	}, nil)
 	return
 }
@@ -321,72 +219,56 @@ type InEntityAgentrunentryTable struct {
 	allocator          memory.Allocator
 	builder            *array.RecordBuilder
 	records            []arrow.RecordBatch
-	section00Inst      *InEntityAgentrunentryTableSectionEntryAt
+	section00Inst      *InEntityAgentrunentryTableSectionBlobArray
 	section00State     runtime.EntityStateE
-	section01Inst      *InEntityAgentrunentryTableSectionEntryAttachments
+	section01Inst      *InEntityAgentrunentryTableSectionBool
 	section01State     runtime.EntityStateE
-	section02Inst      *InEntityAgentrunentryTableSectionEntryBody
+	section02Inst      *InEntityAgentrunentryTableSectionF32Array
 	section02State     runtime.EntityStateE
-	section03Inst      *InEntityAgentrunentryTableSectionEntryBodyDigest
+	section03Inst      *InEntityAgentrunentryTableSectionF64Array
 	section03State     runtime.EntityStateE
-	section04Inst      *InEntityAgentrunentryTableSectionEntryBook
+	section04Inst      *InEntityAgentrunentryTableSectionI16Array
 	section04State     runtime.EntityStateE
-	section05Inst      *InEntityAgentrunentryTableSectionEntryCalls
+	section05Inst      *InEntityAgentrunentryTableSectionI32Array
 	section05State     runtime.EntityStateE
-	section06Inst      *InEntityAgentrunentryTableSectionEntryCallsDigest
+	section06Inst      *InEntityAgentrunentryTableSectionI64Array
 	section06State     runtime.EntityStateE
-	section07Inst      *InEntityAgentrunentryTableSectionEntryDigest
+	section07Inst      *InEntityAgentrunentryTableSectionI8Array
 	section07State     runtime.EntityStateE
-	section08Inst      *InEntityAgentrunentryTableSectionEntryEffect
+	section08Inst      *InEntityAgentrunentryTableSectionStringArray
 	section08State     runtime.EntityStateE
-	section09Inst      *InEntityAgentrunentryTableSectionEntryForm
+	section09Inst      *InEntityAgentrunentryTableSectionSymbol
 	section09State     runtime.EntityStateE
-	section10Inst      *InEntityAgentrunentryTableSectionEntryFrom
+	section10Inst      *InEntityAgentrunentryTableSectionSymbolArray
 	section10State     runtime.EntityStateE
-	section11Inst      *InEntityAgentrunentryTableSectionEntryKey
+	section11Inst      *InEntityAgentrunentryTableSectionTextArray
 	section11State     runtime.EntityStateE
-	section12Inst      *InEntityAgentrunentryTableSectionEntryKeyId
+	section12Inst      *InEntityAgentrunentryTableSectionTimeArray
 	section12State     runtime.EntityStateE
-	section13Inst      *InEntityAgentrunentryTableSectionEntryKind
+	section13Inst      *InEntityAgentrunentryTableSectionU16Array
 	section13State     runtime.EntityStateE
-	section14Inst      *InEntityAgentrunentryTableSectionEntryLabelExposure
+	section14Inst      *InEntityAgentrunentryTableSectionU32Array
 	section14State     runtime.EntityStateE
-	section15Inst      *InEntityAgentrunentryTableSectionEntryLabelLevel
+	section15Inst      *InEntityAgentrunentryTableSectionU32Range
 	section15State     runtime.EntityStateE
-	section16Inst      *InEntityAgentrunentryTableSectionEntryLabelOrigin
+	section16Inst      *InEntityAgentrunentryTableSectionU32Set
 	section16State     runtime.EntityStateE
-	section17Inst      *InEntityAgentrunentryTableSectionEntryLabelTier
+	section17Inst      *InEntityAgentrunentryTableSectionU64Array
 	section17State     runtime.EntityStateE
-	section18Inst      *InEntityAgentrunentryTableSectionEntryName
+	section18Inst      *InEntityAgentrunentryTableSectionU64Set
 	section18State     runtime.EntityStateE
-	section19Inst      *InEntityAgentrunentryTableSectionEntryOrdinal
+	section19Inst      *InEntityAgentrunentryTableSectionU8Array
 	section19State     runtime.EntityStateE
-	section20Inst      *InEntityAgentrunentryTableSectionEntryParent
-	section20State     runtime.EntityStateE
-	section21Inst      *InEntityAgentrunentryTableSectionEntryPrev
-	section21State     runtime.EntityStateE
-	section22Inst      *InEntityAgentrunentryTableSectionEntryRole
-	section22State     runtime.EntityStateE
-	section23Inst      *InEntityAgentrunentryTableSectionEntryTarget
-	section23State     runtime.EntityStateE
-	section24Inst      *InEntityAgentrunentryTableSectionEntryTurn
-	section24State     runtime.EntityStateE
-	section25Inst      *InEntityAgentrunentryTableSectionEntryWriterOrdinal
-	section25State     runtime.EntityStateE
-	section26Inst      *InEntityAgentrunentryTableSectionEntryWriterRun
-	section26State     runtime.EntityStateE
-	section27Inst      *InEntityAgentrunentryTableSectionEntryWriterTurn
-	section27State     runtime.EntityStateE
-	activeSections     *[28]bool
+	activeSections     *[20]bool
 	ambientHighCardRef []uint64
 	plainId0           string
 
-	plainTs1 time.Time
+	plainOrdinal1 uint64
 
 	plainRevision2        uint32
 	scalarFieldBuilder000 *array.StringBuilder
 
-	scalarFieldBuilder001 *array.TimestampBuilder
+	scalarFieldBuilder001 *array.Uint64Builder
 
 	scalarFieldBuilder002 *array.Uint32Builder
 }
@@ -402,7 +284,7 @@ func NewInEntityAgentrunentryTable(allocator memory.Allocator, estimatedNumberOf
 	inst.builder = builder
 	inst.initSections(builder)
 	inst.scalarFieldBuilder000 = builder.Field(0).(*array.StringBuilder)
-	inst.scalarFieldBuilder001 = builder.Field(1).(*array.TimestampBuilder)
+	inst.scalarFieldBuilder001 = builder.Field(1).(*array.Uint64Builder)
 	inst.scalarFieldBuilder002 = builder.Field(2).(*array.Uint32Builder)
 
 	return inst
@@ -420,7 +302,7 @@ func (inst *InEntityAgentrunentryTable) setActiveSections(idxs []int) {
 		inst.activeSections = nil
 		return
 	}
-	var mask [28]bool
+	var mask [20]bool
 	for _, i := range idxs {
 		if i >= 0 && i < len(mask) {
 			mask[i] = true
@@ -434,34 +316,26 @@ func (inst *InEntityAgentrunentryTable) setActiveSections(idxs []int) {
 // SetActiveSections inputs from section names — for example, the
 // marshallgen-driven keelson codec wrappers.
 var InEntityAgentrunentryTableSectionIndices = map[string]int{
-	"entryAt":            0,
-	"entryAttachments":   1,
-	"entryBody":          2,
-	"entryBodyDigest":    3,
-	"entryBook":          4,
-	"entryCalls":         5,
-	"entryCallsDigest":   6,
-	"entryDigest":        7,
-	"entryEffect":        8,
-	"entryForm":          9,
-	"entryFrom":          10,
-	"entryKey":           11,
-	"entryKeyId":         12,
-	"entryKind":          13,
-	"entryLabelExposure": 14,
-	"entryLabelLevel":    15,
-	"entryLabelOrigin":   16,
-	"entryLabelTier":     17,
-	"entryName":          18,
-	"entryOrdinal":       19,
-	"entryParent":        20,
-	"entryPrev":          21,
-	"entryRole":          22,
-	"entryTarget":        23,
-	"entryTurn":          24,
-	"entryWriterOrdinal": 25,
-	"entryWriterRun":     26,
-	"entryWriterTurn":    27,
+	"blobArray":   0,
+	"bool":        1,
+	"f32Array":    2,
+	"f64Array":    3,
+	"i16Array":    4,
+	"i32Array":    5,
+	"i64Array":    6,
+	"i8Array":     7,
+	"stringArray": 8,
+	"symbol":      9,
+	"symbolArray": 10,
+	"textArray":   11,
+	"timeArray":   12,
+	"u16Array":    13,
+	"u32Array":    14,
+	"u32Range":    15,
+	"u32Set":      16,
+	"u64Array":    17,
+	"u64Set":      18,
+	"u8Array":     19,
 }
 
 ///////////////////////////////////////////////////////////////////
@@ -469,27 +343,13 @@ var InEntityAgentrunentryTableSectionIndices = map[string]int{
 // dml.(*GoClassBuilder).ComposeEntityCode
 // ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
 
-func (inst *InEntityAgentrunentryTable) setId(id0 string) *InEntityAgentrunentryTable {
+func (inst *InEntityAgentrunentryTable) setId(id0 string, ordinal1 uint64) *InEntityAgentrunentryTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
 	inst.plainId0 = id0
-
-	return inst
-}
-
-///////////////////////////////////////////////////////////////////
-// code generator
-// dml.(*GoClassBuilder).ComposeEntityCode
-// ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
-
-func (inst *InEntityAgentrunentryTable) setTimestamp(ts1 time.Time) *InEntityAgentrunentryTable {
-	if inst.state != runtime.EntityStateInEntity {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.plainTs1 = ts1
+	inst.plainOrdinal1 = ordinal1
 
 	return inst
 }
@@ -539,46 +399,38 @@ func (inst *InEntityAgentrunentryTable) ClearMembershipsHighCardRef() {
 func (inst *InEntityAgentrunentryTable) appendPlainValues() {
 	inst.scalarFieldBuilder000.Append(inst.plainId0)
 
-	inst.scalarFieldBuilder001.Append(arrow.Timestamp(inst.plainTs1.UnixNano()))
+	inst.scalarFieldBuilder001.Append(inst.plainOrdinal1)
 
 	inst.scalarFieldBuilder002.Append(inst.plainRevision2)
 }
 func (inst *InEntityAgentrunentryTable) resetPlainValues() {
 	inst.plainId0 = ""
 
-	inst.plainTs1 = time.Time{}
+	inst.plainOrdinal1 = uint64(0)
 
 	inst.plainRevision2 = uint32(0)
 }
 func (inst *InEntityAgentrunentryTable) initSections(builder *array.RecordBuilder) {
-	inst.section00Inst = NewInEntityAgentrunentryTableSectionEntryAt(builder, inst)
-	inst.section01Inst = NewInEntityAgentrunentryTableSectionEntryAttachments(builder, inst)
-	inst.section02Inst = NewInEntityAgentrunentryTableSectionEntryBody(builder, inst)
-	inst.section03Inst = NewInEntityAgentrunentryTableSectionEntryBodyDigest(builder, inst)
-	inst.section04Inst = NewInEntityAgentrunentryTableSectionEntryBook(builder, inst)
-	inst.section05Inst = NewInEntityAgentrunentryTableSectionEntryCalls(builder, inst)
-	inst.section06Inst = NewInEntityAgentrunentryTableSectionEntryCallsDigest(builder, inst)
-	inst.section07Inst = NewInEntityAgentrunentryTableSectionEntryDigest(builder, inst)
-	inst.section08Inst = NewInEntityAgentrunentryTableSectionEntryEffect(builder, inst)
-	inst.section09Inst = NewInEntityAgentrunentryTableSectionEntryForm(builder, inst)
-	inst.section10Inst = NewInEntityAgentrunentryTableSectionEntryFrom(builder, inst)
-	inst.section11Inst = NewInEntityAgentrunentryTableSectionEntryKey(builder, inst)
-	inst.section12Inst = NewInEntityAgentrunentryTableSectionEntryKeyId(builder, inst)
-	inst.section13Inst = NewInEntityAgentrunentryTableSectionEntryKind(builder, inst)
-	inst.section14Inst = NewInEntityAgentrunentryTableSectionEntryLabelExposure(builder, inst)
-	inst.section15Inst = NewInEntityAgentrunentryTableSectionEntryLabelLevel(builder, inst)
-	inst.section16Inst = NewInEntityAgentrunentryTableSectionEntryLabelOrigin(builder, inst)
-	inst.section17Inst = NewInEntityAgentrunentryTableSectionEntryLabelTier(builder, inst)
-	inst.section18Inst = NewInEntityAgentrunentryTableSectionEntryName(builder, inst)
-	inst.section19Inst = NewInEntityAgentrunentryTableSectionEntryOrdinal(builder, inst)
-	inst.section20Inst = NewInEntityAgentrunentryTableSectionEntryParent(builder, inst)
-	inst.section21Inst = NewInEntityAgentrunentryTableSectionEntryPrev(builder, inst)
-	inst.section22Inst = NewInEntityAgentrunentryTableSectionEntryRole(builder, inst)
-	inst.section23Inst = NewInEntityAgentrunentryTableSectionEntryTarget(builder, inst)
-	inst.section24Inst = NewInEntityAgentrunentryTableSectionEntryTurn(builder, inst)
-	inst.section25Inst = NewInEntityAgentrunentryTableSectionEntryWriterOrdinal(builder, inst)
-	inst.section26Inst = NewInEntityAgentrunentryTableSectionEntryWriterRun(builder, inst)
-	inst.section27Inst = NewInEntityAgentrunentryTableSectionEntryWriterTurn(builder, inst)
+	inst.section00Inst = NewInEntityAgentrunentryTableSectionBlobArray(builder, inst)
+	inst.section01Inst = NewInEntityAgentrunentryTableSectionBool(builder, inst)
+	inst.section02Inst = NewInEntityAgentrunentryTableSectionF32Array(builder, inst)
+	inst.section03Inst = NewInEntityAgentrunentryTableSectionF64Array(builder, inst)
+	inst.section04Inst = NewInEntityAgentrunentryTableSectionI16Array(builder, inst)
+	inst.section05Inst = NewInEntityAgentrunentryTableSectionI32Array(builder, inst)
+	inst.section06Inst = NewInEntityAgentrunentryTableSectionI64Array(builder, inst)
+	inst.section07Inst = NewInEntityAgentrunentryTableSectionI8Array(builder, inst)
+	inst.section08Inst = NewInEntityAgentrunentryTableSectionStringArray(builder, inst)
+	inst.section09Inst = NewInEntityAgentrunentryTableSectionSymbol(builder, inst)
+	inst.section10Inst = NewInEntityAgentrunentryTableSectionSymbolArray(builder, inst)
+	inst.section11Inst = NewInEntityAgentrunentryTableSectionTextArray(builder, inst)
+	inst.section12Inst = NewInEntityAgentrunentryTableSectionTimeArray(builder, inst)
+	inst.section13Inst = NewInEntityAgentrunentryTableSectionU16Array(builder, inst)
+	inst.section14Inst = NewInEntityAgentrunentryTableSectionU32Array(builder, inst)
+	inst.section15Inst = NewInEntityAgentrunentryTableSectionU32Range(builder, inst)
+	inst.section16Inst = NewInEntityAgentrunentryTableSectionU32Set(builder, inst)
+	inst.section17Inst = NewInEntityAgentrunentryTableSectionU64Array(builder, inst)
+	inst.section18Inst = NewInEntityAgentrunentryTableSectionU64Set(builder, inst)
+	inst.section19Inst = NewInEntityAgentrunentryTableSectionU8Array(builder, inst)
 }
 func (inst *InEntityAgentrunentryTable) beginSections() {
 	inst.section00Inst.beginSection()
@@ -601,14 +453,6 @@ func (inst *InEntityAgentrunentryTable) beginSections() {
 	inst.section17Inst.beginSection()
 	inst.section18Inst.beginSection()
 	inst.section19Inst.beginSection()
-	inst.section20Inst.beginSection()
-	inst.section21Inst.beginSection()
-	inst.section22Inst.beginSection()
-	inst.section23Inst.beginSection()
-	inst.section24Inst.beginSection()
-	inst.section25Inst.beginSection()
-	inst.section26Inst.beginSection()
-	inst.section27Inst.beginSection()
 }
 func (inst *InEntityAgentrunentryTable) resetSections() {
 	inst.section00Inst.resetSection()
@@ -631,14 +475,6 @@ func (inst *InEntityAgentrunentryTable) resetSections() {
 	inst.section17Inst.resetSection()
 	inst.section18Inst.resetSection()
 	inst.section19Inst.resetSection()
-	inst.section20Inst.resetSection()
-	inst.section21Inst.resetSection()
-	inst.section22Inst.resetSection()
-	inst.section23Inst.resetSection()
-	inst.section24Inst.resetSection()
-	inst.section25Inst.resetSection()
-	inst.section26Inst.resetSection()
-	inst.section27Inst.resetSection()
 }
 func (inst *InEntityAgentrunentryTable) CheckErrors() (err error) {
 	err = eh.CheckErrors(inst.errs)
@@ -662,100 +498,68 @@ func (inst *InEntityAgentrunentryTable) CheckErrors() (err error) {
 	err = errors.Join(err, inst.section17Inst.CheckErrors())
 	err = errors.Join(err, inst.section18Inst.CheckErrors())
 	err = errors.Join(err, inst.section19Inst.CheckErrors())
-	err = errors.Join(err, inst.section20Inst.CheckErrors())
-	err = errors.Join(err, inst.section21Inst.CheckErrors())
-	err = errors.Join(err, inst.section22Inst.CheckErrors())
-	err = errors.Join(err, inst.section23Inst.CheckErrors())
-	err = errors.Join(err, inst.section24Inst.CheckErrors())
-	err = errors.Join(err, inst.section25Inst.CheckErrors())
-	err = errors.Join(err, inst.section26Inst.CheckErrors())
-	err = errors.Join(err, inst.section27Inst.CheckErrors())
 
 	return
 }
-func (inst *InEntityAgentrunentryTable) GetSectionEntryAt() *InEntityAgentrunentryTableSectionEntryAt {
+func (inst *InEntityAgentrunentryTable) GetSectionBlobArray() *InEntityAgentrunentryTableSectionBlobArray {
 	return inst.section00Inst
 }
-func (inst *InEntityAgentrunentryTable) GetSectionEntryAttachments() *InEntityAgentrunentryTableSectionEntryAttachments {
+func (inst *InEntityAgentrunentryTable) GetSectionBool() *InEntityAgentrunentryTableSectionBool {
 	return inst.section01Inst
 }
-func (inst *InEntityAgentrunentryTable) GetSectionEntryBody() *InEntityAgentrunentryTableSectionEntryBody {
+func (inst *InEntityAgentrunentryTable) GetSectionF32Array() *InEntityAgentrunentryTableSectionF32Array {
 	return inst.section02Inst
 }
-func (inst *InEntityAgentrunentryTable) GetSectionEntryBodyDigest() *InEntityAgentrunentryTableSectionEntryBodyDigest {
+func (inst *InEntityAgentrunentryTable) GetSectionF64Array() *InEntityAgentrunentryTableSectionF64Array {
 	return inst.section03Inst
 }
-func (inst *InEntityAgentrunentryTable) GetSectionEntryBook() *InEntityAgentrunentryTableSectionEntryBook {
+func (inst *InEntityAgentrunentryTable) GetSectionI16Array() *InEntityAgentrunentryTableSectionI16Array {
 	return inst.section04Inst
 }
-func (inst *InEntityAgentrunentryTable) GetSectionEntryCalls() *InEntityAgentrunentryTableSectionEntryCalls {
+func (inst *InEntityAgentrunentryTable) GetSectionI32Array() *InEntityAgentrunentryTableSectionI32Array {
 	return inst.section05Inst
 }
-func (inst *InEntityAgentrunentryTable) GetSectionEntryCallsDigest() *InEntityAgentrunentryTableSectionEntryCallsDigest {
+func (inst *InEntityAgentrunentryTable) GetSectionI64Array() *InEntityAgentrunentryTableSectionI64Array {
 	return inst.section06Inst
 }
-func (inst *InEntityAgentrunentryTable) GetSectionEntryDigest() *InEntityAgentrunentryTableSectionEntryDigest {
+func (inst *InEntityAgentrunentryTable) GetSectionI8Array() *InEntityAgentrunentryTableSectionI8Array {
 	return inst.section07Inst
 }
-func (inst *InEntityAgentrunentryTable) GetSectionEntryEffect() *InEntityAgentrunentryTableSectionEntryEffect {
+func (inst *InEntityAgentrunentryTable) GetSectionStringArray() *InEntityAgentrunentryTableSectionStringArray {
 	return inst.section08Inst
 }
-func (inst *InEntityAgentrunentryTable) GetSectionEntryForm() *InEntityAgentrunentryTableSectionEntryForm {
+func (inst *InEntityAgentrunentryTable) GetSectionSymbol() *InEntityAgentrunentryTableSectionSymbol {
 	return inst.section09Inst
 }
-func (inst *InEntityAgentrunentryTable) GetSectionEntryFrom() *InEntityAgentrunentryTableSectionEntryFrom {
+func (inst *InEntityAgentrunentryTable) GetSectionSymbolArray() *InEntityAgentrunentryTableSectionSymbolArray {
 	return inst.section10Inst
 }
-func (inst *InEntityAgentrunentryTable) GetSectionEntryKey() *InEntityAgentrunentryTableSectionEntryKey {
+func (inst *InEntityAgentrunentryTable) GetSectionTextArray() *InEntityAgentrunentryTableSectionTextArray {
 	return inst.section11Inst
 }
-func (inst *InEntityAgentrunentryTable) GetSectionEntryKeyId() *InEntityAgentrunentryTableSectionEntryKeyId {
+func (inst *InEntityAgentrunentryTable) GetSectionTimeArray() *InEntityAgentrunentryTableSectionTimeArray {
 	return inst.section12Inst
 }
-func (inst *InEntityAgentrunentryTable) GetSectionEntryKind() *InEntityAgentrunentryTableSectionEntryKind {
+func (inst *InEntityAgentrunentryTable) GetSectionU16Array() *InEntityAgentrunentryTableSectionU16Array {
 	return inst.section13Inst
 }
-func (inst *InEntityAgentrunentryTable) GetSectionEntryLabelExposure() *InEntityAgentrunentryTableSectionEntryLabelExposure {
+func (inst *InEntityAgentrunentryTable) GetSectionU32Array() *InEntityAgentrunentryTableSectionU32Array {
 	return inst.section14Inst
 }
-func (inst *InEntityAgentrunentryTable) GetSectionEntryLabelLevel() *InEntityAgentrunentryTableSectionEntryLabelLevel {
+func (inst *InEntityAgentrunentryTable) GetSectionU32Range() *InEntityAgentrunentryTableSectionU32Range {
 	return inst.section15Inst
 }
-func (inst *InEntityAgentrunentryTable) GetSectionEntryLabelOrigin() *InEntityAgentrunentryTableSectionEntryLabelOrigin {
+func (inst *InEntityAgentrunentryTable) GetSectionU32Set() *InEntityAgentrunentryTableSectionU32Set {
 	return inst.section16Inst
 }
-func (inst *InEntityAgentrunentryTable) GetSectionEntryLabelTier() *InEntityAgentrunentryTableSectionEntryLabelTier {
+func (inst *InEntityAgentrunentryTable) GetSectionU64Array() *InEntityAgentrunentryTableSectionU64Array {
 	return inst.section17Inst
 }
-func (inst *InEntityAgentrunentryTable) GetSectionEntryName() *InEntityAgentrunentryTableSectionEntryName {
+func (inst *InEntityAgentrunentryTable) GetSectionU64Set() *InEntityAgentrunentryTableSectionU64Set {
 	return inst.section18Inst
 }
-func (inst *InEntityAgentrunentryTable) GetSectionEntryOrdinal() *InEntityAgentrunentryTableSectionEntryOrdinal {
+func (inst *InEntityAgentrunentryTable) GetSectionU8Array() *InEntityAgentrunentryTableSectionU8Array {
 	return inst.section19Inst
-}
-func (inst *InEntityAgentrunentryTable) GetSectionEntryParent() *InEntityAgentrunentryTableSectionEntryParent {
-	return inst.section20Inst
-}
-func (inst *InEntityAgentrunentryTable) GetSectionEntryPrev() *InEntityAgentrunentryTableSectionEntryPrev {
-	return inst.section21Inst
-}
-func (inst *InEntityAgentrunentryTable) GetSectionEntryRole() *InEntityAgentrunentryTableSectionEntryRole {
-	return inst.section22Inst
-}
-func (inst *InEntityAgentrunentryTable) GetSectionEntryTarget() *InEntityAgentrunentryTableSectionEntryTarget {
-	return inst.section23Inst
-}
-func (inst *InEntityAgentrunentryTable) GetSectionEntryTurn() *InEntityAgentrunentryTableSectionEntryTurn {
-	return inst.section24Inst
-}
-func (inst *InEntityAgentrunentryTable) GetSectionEntryWriterOrdinal() *InEntityAgentrunentryTableSectionEntryWriterOrdinal {
-	return inst.section25Inst
-}
-func (inst *InEntityAgentrunentryTable) GetSectionEntryWriterRun() *InEntityAgentrunentryTableSectionEntryWriterRun {
-	return inst.section26Inst
-}
-func (inst *InEntityAgentrunentryTable) GetSectionEntryWriterTurn() *InEntityAgentrunentryTableSectionEntryWriterTurn {
-	return inst.section27Inst
 }
 func (inst *InEntityAgentrunentryTable) beginEntity() *InEntityAgentrunentryTable {
 	switch inst.state {
@@ -775,7 +579,7 @@ func (inst *InEntityAgentrunentryTable) validateEntity() {
 		state := inst.section00Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "entryAt").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "blobArray").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -783,7 +587,7 @@ func (inst *InEntityAgentrunentryTable) validateEntity() {
 		state := inst.section01Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "entryAttachments").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "bool").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -791,7 +595,7 @@ func (inst *InEntityAgentrunentryTable) validateEntity() {
 		state := inst.section02Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "entryBody").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "f32Array").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -799,7 +603,7 @@ func (inst *InEntityAgentrunentryTable) validateEntity() {
 		state := inst.section03Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "entryBodyDigest").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "f64Array").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -807,7 +611,7 @@ func (inst *InEntityAgentrunentryTable) validateEntity() {
 		state := inst.section04Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "entryBook").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "i16Array").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -815,7 +619,7 @@ func (inst *InEntityAgentrunentryTable) validateEntity() {
 		state := inst.section05Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "entryCalls").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "i32Array").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -823,7 +627,7 @@ func (inst *InEntityAgentrunentryTable) validateEntity() {
 		state := inst.section06Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "entryCallsDigest").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "i64Array").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -831,7 +635,7 @@ func (inst *InEntityAgentrunentryTable) validateEntity() {
 		state := inst.section07Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "entryDigest").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "i8Array").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -839,7 +643,7 @@ func (inst *InEntityAgentrunentryTable) validateEntity() {
 		state := inst.section08Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "entryEffect").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "stringArray").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -847,7 +651,7 @@ func (inst *InEntityAgentrunentryTable) validateEntity() {
 		state := inst.section09Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "entryForm").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "symbol").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -855,7 +659,7 @@ func (inst *InEntityAgentrunentryTable) validateEntity() {
 		state := inst.section10Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "entryFrom").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "symbolArray").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -863,7 +667,7 @@ func (inst *InEntityAgentrunentryTable) validateEntity() {
 		state := inst.section11Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "entryKey").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "textArray").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -871,7 +675,7 @@ func (inst *InEntityAgentrunentryTable) validateEntity() {
 		state := inst.section12Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "entryKeyId").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "timeArray").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -879,7 +683,7 @@ func (inst *InEntityAgentrunentryTable) validateEntity() {
 		state := inst.section13Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "entryKind").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "u16Array").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -887,7 +691,7 @@ func (inst *InEntityAgentrunentryTable) validateEntity() {
 		state := inst.section14Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "entryLabelExposure").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "u32Array").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -895,7 +699,7 @@ func (inst *InEntityAgentrunentryTable) validateEntity() {
 		state := inst.section15Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "entryLabelLevel").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "u32Range").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -903,7 +707,7 @@ func (inst *InEntityAgentrunentryTable) validateEntity() {
 		state := inst.section16Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "entryLabelOrigin").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "u32Set").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -911,7 +715,7 @@ func (inst *InEntityAgentrunentryTable) validateEntity() {
 		state := inst.section17Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "entryLabelTier").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "u64Array").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -919,7 +723,7 @@ func (inst *InEntityAgentrunentryTable) validateEntity() {
 		state := inst.section18Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "entryName").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "u64Set").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -927,71 +731,7 @@ func (inst *InEntityAgentrunentryTable) validateEntity() {
 		state := inst.section19Inst.state
 		switch state {
 		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "entryOrdinal").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
-			break
-		}
-	}
-	{
-		state := inst.section20Inst.state
-		switch state {
-		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "entryParent").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
-			break
-		}
-	}
-	{
-		state := inst.section21Inst.state
-		switch state {
-		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "entryPrev").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
-			break
-		}
-	}
-	{
-		state := inst.section22Inst.state
-		switch state {
-		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "entryRole").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
-			break
-		}
-	}
-	{
-		state := inst.section23Inst.state
-		switch state {
-		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "entryTarget").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
-			break
-		}
-	}
-	{
-		state := inst.section24Inst.state
-		switch state {
-		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "entryTurn").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
-			break
-		}
-	}
-	{
-		state := inst.section25Inst.state
-		switch state {
-		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "entryWriterOrdinal").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
-			break
-		}
-	}
-	{
-		state := inst.section26Inst.state
-		switch state {
-		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "entryWriterRun").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
-			break
-		}
-	}
-	{
-		state := inst.section27Inst.state
-		switch state {
-		case runtime.EntityStateInAttribute:
-			inst.AppendError(eb.Build().Str("section", "entryWriterTurn").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
+			inst.AppendError(eb.Build().Str("section", "u8Array").Stringer("state", state).Errorf("wrong state: Check that .BeginAttribute() is followed by .EndAttribute()"))
 			break
 		}
 	}
@@ -1085,11 +825,8 @@ func InEntityAgentrunentryTableSetActiveSections(e *InEntityAgentrunentryTable, 
 	e.setActiveSections(idxs)
 }
 func InEntityAgentrunentryTableReleaseBuilder(e *InEntityAgentrunentryTable) { e.builder.Release() }
-func InEntityAgentrunentryTableSetId(e *InEntityAgentrunentryTable, id0 string) *InEntityAgentrunentryTable {
-	return e.setId(id0)
-}
-func InEntityAgentrunentryTableSetTimestamp(e *InEntityAgentrunentryTable, ts1 time.Time) *InEntityAgentrunentryTable {
-	return e.setTimestamp(ts1)
+func InEntityAgentrunentryTableSetId(e *InEntityAgentrunentryTable, id0 string, ordinal1 uint64) *InEntityAgentrunentryTable {
+	return e.setId(id0, ordinal1)
 }
 func InEntityAgentrunentryTableSetLifecycle(e *InEntityAgentrunentryTable, revision2 uint32) *InEntityAgentrunentryTable {
 	return e.setLifecycle(revision2)
@@ -1102,29 +839,29 @@ func (inst *InEntityAgentrunentryTable) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 
-type InEntityAgentrunentryTableSectionEntryAt struct {
-	errs                  []error
-	inAttr                *InEntityAgentrunentryTableSectionEntryAtInAttr
-	state                 runtime.EntityStateE
-	attributeCount        int
-	parent                *InEntityAgentrunentryTable
-	scalarFieldBuilder013 *array.TimestampBuilder
-	scalarListBuilder013  *array.ListBuilder
+type InEntityAgentrunentryTableSectionBlobArray struct {
+	errs                           []error
+	inAttr                         *InEntityAgentrunentryTableSectionBlobArrayInAttr
+	state                          runtime.EntityStateE
+	attributeCount                 int
+	parent                         *InEntityAgentrunentryTable
+	homogenousArrayFieldBuilder038 *array.BinaryBuilder
+	homogenousArrayListBuilder038  *array.ListBuilder
 }
 
-func NewInEntityAgentrunentryTableSectionEntryAt(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionEntryAt) {
-	inst = &InEntityAgentrunentryTableSectionEntryAt{}
-	inAttr := NewInEntityAgentrunentryTableSectionEntryAtInAttr(builder, inst)
+func NewInEntityAgentrunentryTableSectionBlobArray(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionBlobArray) {
+	inst = &InEntityAgentrunentryTableSectionBlobArray{}
+	inAttr := NewInEntityAgentrunentryTableSectionBlobArrayInAttr(builder, inst)
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.inAttr = inAttr
 	inst.parent = parent
-	inst.scalarFieldBuilder013 = builder.Field(13).(*array.ListBuilder).ValueBuilder().(*array.TimestampBuilder)
-	inst.scalarListBuilder013 = builder.Field(13).(*array.ListBuilder)
+	inst.homogenousArrayFieldBuilder038 = builder.Field(38).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.homogenousArrayListBuilder038 = builder.Field(38).(*array.ListBuilder)
 
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryAt) endAttribute() {
+func (inst *InEntityAgentrunentryTableSectionBlobArray) endAttribute() {
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -1134,7 +871,7 @@ func (inst *InEntityAgentrunentryTableSectionEntryAt) endAttribute() {
 		return
 	}
 }
-func (inst *InEntityAgentrunentryTableSectionEntryAt) BeginAttribute(value13 time.Time) *InEntityAgentrunentryTableSectionEntryAtInAttr {
+func (inst *InEntityAgentrunentryTableSectionBlobArray) BeginAttribute() *InEntityAgentrunentryTableSectionBlobArrayInAttr {
 	switch inst.state {
 	case runtime.EntityStateInSection:
 		inst.state = runtime.EntityStateInAttribute
@@ -1143,26 +880,31 @@ func (inst *InEntityAgentrunentryTableSectionEntryAt) BeginAttribute(value13 tim
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst.inAttr
 	}
-	inst.scalarFieldBuilder013.Append(arrow.Timestamp(value13.UnixNano()))
 	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
 }
-
-type InEntityAgentrunentryTableSectionEntryAtAttr struct {
-	Value time.Time
+func (inst *InEntityAgentrunentryTableSectionBlobArray) BeginAttributeSingle(value38 []byte) *InEntityAgentrunentryTableSectionBlobArrayInAttr {
+	return inst.BeginAttribute().AddToContainer(value38)
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryAt) Add(attr InEntityAgentrunentryTableSectionEntryAtAttr) *InEntityAgentrunentryTableSectionEntryAtInAttr {
-	a := inst.BeginAttribute(attr.Value)
+type InEntityAgentrunentryTableSectionBlobArrayAttr struct {
+	Value [][]byte
+}
+
+func (inst *InEntityAgentrunentryTableSectionBlobArray) Add(attr InEntityAgentrunentryTableSectionBlobArrayAttr) *InEntityAgentrunentryTableSectionBlobArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
 	return a
 }
-func (inst *InEntityAgentrunentryTableSectionEntryAt) CheckErrors() (err error) {
+func (inst *InEntityAgentrunentryTableSectionBlobArray) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryAt) EndSection() *InEntityAgentrunentryTable {
+func (inst *InEntityAgentrunentryTableSectionBlobArray) EndSection() *InEntityAgentrunentryTable {
 	switch inst.state {
 	case runtime.EntityStateInSection:
 		inst.state = runtime.EntityStateInitial
@@ -1175,206 +917,195 @@ func (inst *InEntityAgentrunentryTableSectionEntryAt) EndSection() *InEntityAgen
 	return inst.parent
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryAt) beginSection() {
+func (inst *InEntityAgentrunentryTableSectionBlobArray) beginSection() {
 	inst.state = runtime.EntityStateInSection
 	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryAt) resetSection() {
+func (inst *InEntityAgentrunentryTableSectionBlobArray) resetSection() {
 	inst.clearErrors()
 	inst.inAttr.clearErrors()
 	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryAt) AppendError(err error) {
+func (inst *InEntityAgentrunentryTableSectionBlobArray) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
 }
-func (inst *InEntityAgentrunentryTableSectionEntryAt) clearErrors() {
+func (inst *InEntityAgentrunentryTableSectionBlobArray) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 
-type InEntityAgentrunentryTableSectionEntryAtInAttr struct {
-	errs                             []error
-	state                            runtime.EntityStateE
-	parent                           *InEntityAgentrunentryTableSectionEntryAt
-	scalarFieldBuilder013            *array.TimestampBuilder
-	scalarListBuilder013             *array.ListBuilder
-	membershipFieldBuilder014        *array.Uint64Builder
-	membershipListBuilder014         *array.ListBuilder
-	membershipFieldBuilder015        *array.Uint64Builder
-	membershipListBuilder015         *array.ListBuilder
-	membershipFieldBuilder016        *array.BinaryBuilder
-	membershipListBuilder016         *array.ListBuilder
-	membershipFieldBuilder017        *array.Uint64Builder
-	membershipListBuilder017         *array.ListBuilder
-	membershipFieldBuilder018        *array.BinaryBuilder
-	membershipListBuilder018         *array.ListBuilder
-	membershipSupportFieldBuilder019 *array.Uint64Builder
-	membershipSupportListBuilder019  *array.ListBuilder
-	membershipSupportFieldBuilder020 *array.Uint64Builder
-	membershipSupportListBuilder020  *array.ListBuilder
-	membershipSupportFieldBuilder021 *array.Uint64Builder
-	membershipSupportListBuilder021  *array.ListBuilder
-	membershipSupportFieldBuilder022 *array.Uint64Builder
-	membershipSupportListBuilder022  *array.ListBuilder
+type InEntityAgentrunentryTableSectionBlobArrayInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityAgentrunentryTableSectionBlobArray
+	homogenousArrayFieldBuilder038        *array.BinaryBuilder
+	homogenousArrayListBuilder038         *array.ListBuilder
+	membershipFieldBuilder039             *array.Uint64Builder
+	membershipListBuilder039              *array.ListBuilder
+	membershipFieldBuilder040             *array.Uint64Builder
+	membershipListBuilder040              *array.ListBuilder
+	membershipFieldBuilder041             *array.Uint64Builder
+	membershipListBuilder041              *array.ListBuilder
+	membershipFieldBuilder042             *array.BinaryBuilder
+	membershipListBuilder042              *array.ListBuilder
+	homogenousArraySupportFieldBuilder043 *array.Uint64Builder
+	homogenousArraySupportListBuilder043  *array.ListBuilder
+	membershipSupportFieldBuilder044      *array.Uint64Builder
+	membershipSupportListBuilder044       *array.ListBuilder
+	membershipSupportFieldBuilder045      *array.Uint64Builder
+	membershipSupportListBuilder045       *array.ListBuilder
+	membershipSupportFieldBuilder046      *array.Uint64Builder
+	membershipSupportListBuilder046       *array.ListBuilder
 
-	membershipContainerLength014 int
+	membershipContainerLength039 int
 
-	membershipContainerLength015 int
+	membershipContainerLength040 int
 
-	membershipContainerLength016 int
+	membershipContainerLength041 int
 
-	membershipContainerLength017 int
+	membershipContainerLength042 int
 
-	membershipContainerLength018 int
+	homogenousArrayContainerLength038 int
 }
 
-func NewInEntityAgentrunentryTableSectionEntryAtInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionEntryAt) (inst *InEntityAgentrunentryTableSectionEntryAtInAttr) {
-	inst = &InEntityAgentrunentryTableSectionEntryAtInAttr{}
+func NewInEntityAgentrunentryTableSectionBlobArrayInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionBlobArray) (inst *InEntityAgentrunentryTableSectionBlobArrayInAttr) {
+	inst = &InEntityAgentrunentryTableSectionBlobArrayInAttr{}
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.parent = parent
-	inst.scalarFieldBuilder013 = builder.Field(13).(*array.ListBuilder).ValueBuilder().(*array.TimestampBuilder)
-	inst.scalarListBuilder013 = builder.Field(13).(*array.ListBuilder)
-	inst.membershipFieldBuilder014 = builder.Field(14).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder014 = builder.Field(14).(*array.ListBuilder)
-	inst.membershipFieldBuilder015 = builder.Field(15).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder015 = builder.Field(15).(*array.ListBuilder)
-	inst.membershipFieldBuilder016 = builder.Field(16).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder016 = builder.Field(16).(*array.ListBuilder)
-	inst.membershipFieldBuilder017 = builder.Field(17).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder017 = builder.Field(17).(*array.ListBuilder)
-	inst.membershipFieldBuilder018 = builder.Field(18).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder018 = builder.Field(18).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder019 = builder.Field(19).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder019 = builder.Field(19).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder020 = builder.Field(20).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder020 = builder.Field(20).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder021 = builder.Field(21).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder021 = builder.Field(21).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder022 = builder.Field(22).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder022 = builder.Field(22).(*array.ListBuilder)
+	inst.homogenousArrayFieldBuilder038 = builder.Field(38).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.homogenousArrayListBuilder038 = builder.Field(38).(*array.ListBuilder)
+	inst.membershipFieldBuilder039 = builder.Field(39).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder039 = builder.Field(39).(*array.ListBuilder)
+	inst.membershipFieldBuilder040 = builder.Field(40).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder040 = builder.Field(40).(*array.ListBuilder)
+	inst.membershipFieldBuilder041 = builder.Field(41).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder041 = builder.Field(41).(*array.ListBuilder)
+	inst.membershipFieldBuilder042 = builder.Field(42).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder042 = builder.Field(42).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder043 = builder.Field(43).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder043 = builder.Field(43).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder044 = builder.Field(44).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder044 = builder.Field(44).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder045 = builder.Field(45).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder045 = builder.Field(45).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder046 = builder.Field(46).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder046 = builder.Field(46).(*array.ListBuilder)
 
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryAtInAttr) beginAttribute() {
-	inst.membershipListBuilder014.Append(true)
-	inst.membershipListBuilder015.Append(true)
-	inst.membershipListBuilder016.Append(true)
-	inst.membershipListBuilder017.Append(true)
-	inst.membershipListBuilder018.Append(true)
-	inst.membershipContainerLength014 = 0
-	inst.membershipContainerLength015 = 0
-	inst.membershipContainerLength016 = 0
-	inst.membershipContainerLength017 = 0
-	inst.membershipContainerLength018 = 0
-	inst.scalarListBuilder013.Append(true)
-	inst.membershipSupportListBuilder019.Append(true)
-	inst.membershipSupportListBuilder020.Append(true)
-	inst.membershipSupportListBuilder021.Append(true)
-	inst.membershipSupportListBuilder022.Append(true)
+func (inst *InEntityAgentrunentryTableSectionBlobArrayInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder038.Append(true)
+	inst.membershipListBuilder039.Append(true)
+	inst.membershipListBuilder040.Append(true)
+	inst.membershipListBuilder041.Append(true)
+	inst.membershipListBuilder042.Append(true)
+	inst.homogenousArrayContainerLength038 = 0
+	inst.membershipContainerLength039 = 0
+	inst.membershipContainerLength040 = 0
+	inst.membershipContainerLength041 = 0
+	inst.membershipContainerLength042 = 0
+	inst.homogenousArraySupportListBuilder043.Append(true)
+	inst.membershipSupportListBuilder044.Append(true)
+	inst.membershipSupportListBuilder045.Append(true)
+	inst.membershipSupportListBuilder046.Append(true)
 	inst.state = runtime.EntityStateInSection
 	inst.clearErrors()
 }
-func (inst *InEntityAgentrunentryTableSectionEntryAtInAttr) AddMembershipHighCardRef(hr14 uint64) *InEntityAgentrunentryTableSectionEntryAtInAttr {
+func (inst *InEntityAgentrunentryTableSectionBlobArrayInAttr) AddToContainer(value38 []byte) *InEntityAgentrunentryTableSectionBlobArrayInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder014.Append(hr14)
-	inst.membershipContainerLength014++
+	inst.homogenousArrayFieldBuilder038.Append(value38)
+	inst.homogenousArrayContainerLength038++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryAtInAttr) AddMembershipHighCardRefP(hr14 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder014.Append(hr14)
-	inst.membershipContainerLength014++
-	return
+func (inst *InEntityAgentrunentryTableSectionBlobArrayInAttr) AddToContainerP(value38 []byte) {
+	inst.AddToContainer(value38)
 }
-func (inst *InEntityAgentrunentryTableSectionEntryAtInAttr) AddMembershipLowCardRef(lr15 uint64) *InEntityAgentrunentryTableSectionEntryAtInAttr {
+func (inst *InEntityAgentrunentryTableSectionBlobArrayInAttr) AddMembershipHighCardRef(hr39 uint64) *InEntityAgentrunentryTableSectionBlobArrayInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder015.Append(lr15)
-	inst.membershipContainerLength015++
+	inst.membershipFieldBuilder039.Append(hr39)
+	inst.membershipContainerLength039++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryAtInAttr) AddMembershipLowCardRefP(lr15 uint64) {
+func (inst *InEntityAgentrunentryTableSectionBlobArrayInAttr) AddMembershipHighCardRefP(hr39 uint64) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder015.Append(lr15)
-	inst.membershipContainerLength015++
+	inst.membershipFieldBuilder039.Append(hr39)
+	inst.membershipContainerLength039++
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryAtInAttr) AddMembershipLowCardVerbatim(lv16 []byte) *InEntityAgentrunentryTableSectionEntryAtInAttr {
+func (inst *InEntityAgentrunentryTableSectionBlobArrayInAttr) AddMembershipLowCardRef(lr40 uint64) *InEntityAgentrunentryTableSectionBlobArrayInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder016.Append(lv16)
-	inst.membershipContainerLength016++
+	inst.membershipFieldBuilder040.Append(lr40)
+	inst.membershipContainerLength040++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryAtInAttr) AddMembershipLowCardVerbatimP(lv16 []byte) {
+func (inst *InEntityAgentrunentryTableSectionBlobArrayInAttr) AddMembershipLowCardRefP(lr40 uint64) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder016.Append(lv16)
-	inst.membershipContainerLength016++
+	inst.membershipFieldBuilder040.Append(lr40)
+	inst.membershipContainerLength040++
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryAtInAttr) AddMembershipMixedLowCardRef(lmr17 uint64, mrhp18 []byte) *InEntityAgentrunentryTableSectionEntryAtInAttr {
+func (inst *InEntityAgentrunentryTableSectionBlobArrayInAttr) AddMembershipMixedLowCardRef(lmr41 uint64, mrhp42 []byte) *InEntityAgentrunentryTableSectionBlobArrayInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder017.Append(lmr17)
-	inst.membershipFieldBuilder018.Append(mrhp18)
-	inst.membershipContainerLength017++
-	inst.membershipContainerLength018++
+	inst.membershipFieldBuilder041.Append(lmr41)
+	inst.membershipFieldBuilder042.Append(mrhp42)
+	inst.membershipContainerLength041++
+	inst.membershipContainerLength042++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryAtInAttr) AddMembershipMixedLowCardRefP(lmr17 uint64, mrhp18 []byte) {
+func (inst *InEntityAgentrunentryTableSectionBlobArrayInAttr) AddMembershipMixedLowCardRefP(lmr41 uint64, mrhp42 []byte) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder017.Append(lmr17)
-	inst.membershipFieldBuilder018.Append(mrhp18)
-	inst.membershipContainerLength017++
-	inst.membershipContainerLength018++
+	inst.membershipFieldBuilder041.Append(lmr41)
+	inst.membershipFieldBuilder042.Append(mrhp42)
+	inst.membershipContainerLength041++
+	inst.membershipContainerLength042++
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryAtInAttr) handleMembershipSupportColumns() {
+func (inst *InEntityAgentrunentryTableSectionBlobArrayInAttr) handleMembershipSupportColumns() {
 	var l int
 	var _ = l
-	l = inst.membershipContainerLength014
-	inst.membershipContainerLength014 = 0
-	inst.membershipSupportFieldBuilder019.Append(uint64(l))
-	l = inst.membershipContainerLength015
-	inst.membershipContainerLength015 = 0
-	inst.membershipSupportFieldBuilder020.Append(uint64(l))
-	l = inst.membershipContainerLength016
-	inst.membershipContainerLength016 = 0
-	inst.membershipSupportFieldBuilder021.Append(uint64(l))
-	l = inst.membershipContainerLength017
-	inst.membershipContainerLength017 = 0
-	inst.membershipSupportFieldBuilder022.Append(uint64(l))
+	l = inst.membershipContainerLength039
+	inst.membershipContainerLength039 = 0
+	inst.membershipSupportFieldBuilder044.Append(uint64(l))
+	l = inst.membershipContainerLength040
+	inst.membershipContainerLength040 = 0
+	inst.membershipSupportFieldBuilder045.Append(uint64(l))
+	l = inst.membershipContainerLength041
+	inst.membershipContainerLength041 = 0
+	inst.membershipSupportFieldBuilder046.Append(uint64(l))
 }
-func (inst *InEntityAgentrunentryTableSectionEntryAtInAttr) handleNonScalarSupportColumns() {
+func (inst *InEntityAgentrunentryTableSectionBlobArrayInAttr) handleNonScalarSupportColumns() {
 	var l int
 	var _ = l
+	l = inst.homogenousArrayContainerLength038
+	inst.homogenousArrayContainerLength038 = 0
+	inst.homogenousArraySupportFieldBuilder043.Append(uint64(l))
 }
-func (inst *InEntityAgentrunentryTableSectionEntryAtInAttr) applyAmbientMemberships() {
+func (inst *InEntityAgentrunentryTableSectionBlobArrayInAttr) applyAmbientMemberships() {
 	if inst.state != runtime.EntityStateInAttribute {
 		return
 	}
@@ -1382,11 +1113,11 @@ func (inst *InEntityAgentrunentryTableSectionEntryAtInAttr) applyAmbientMembersh
 		inst.AddMembershipHighCardRefP(v)
 	}
 }
-func (inst *InEntityAgentrunentryTableSectionEntryAtInAttr) completeAttribute() {
+func (inst *InEntityAgentrunentryTableSectionBlobArrayInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
-func (inst *InEntityAgentrunentryTableSectionEntryAtInAttr) EndSection() *InEntityAgentrunentryTable {
+func (inst *InEntityAgentrunentryTableSectionBlobArrayInAttr) EndSection() *InEntityAgentrunentryTable {
 	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
@@ -1402,7 +1133,7 @@ func (inst *InEntityAgentrunentryTableSectionEntryAtInAttr) EndSection() *InEnti
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
-func (inst *InEntityAgentrunentryTableSectionEntryAtInAttr) EndAttribute() *InEntityAgentrunentryTableSectionEntryAt {
+func (inst *InEntityAgentrunentryTableSectionBlobArrayInAttr) EndAttribute() *InEntityAgentrunentryTableSectionBlobArray {
 	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
@@ -1417,5256 +1148,40 @@ func (inst *InEntityAgentrunentryTableSectionEntryAtInAttr) EndAttribute() *InEn
 	inst.parent.endAttribute()
 	return inst.parent
 }
-func (inst *InEntityAgentrunentryTableSectionEntryAtInAttr) EndAttributeP() {
+func (inst *InEntityAgentrunentryTableSectionBlobArrayInAttr) EndAttributeP() {
 	inst.EndAttribute()
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryAtInAttr) AppendError(err error) {
+func (inst *InEntityAgentrunentryTableSectionBlobArrayInAttr) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
 }
-func (inst *InEntityAgentrunentryTableSectionEntryAtInAttr) clearErrors() {
+func (inst *InEntityAgentrunentryTableSectionBlobArrayInAttr) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 
-type InEntityAgentrunentryTableSectionEntryAttachments struct {
+type InEntityAgentrunentryTableSectionBool struct {
 	errs                  []error
-	inAttr                *InEntityAgentrunentryTableSectionEntryAttachmentsInAttr
+	inAttr                *InEntityAgentrunentryTableSectionBoolInAttr
 	state                 runtime.EntityStateE
 	attributeCount        int
 	parent                *InEntityAgentrunentryTable
-	scalarFieldBuilder273 *array.StringBuilder
-	scalarListBuilder273  *array.ListBuilder
-}
-
-func NewInEntityAgentrunentryTableSectionEntryAttachments(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionEntryAttachments) {
-	inst = &InEntityAgentrunentryTableSectionEntryAttachments{}
-	inAttr := NewInEntityAgentrunentryTableSectionEntryAttachmentsInAttr(builder, inst)
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.inAttr = inAttr
-	inst.parent = parent
-	inst.scalarFieldBuilder273 = builder.Field(273).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder273 = builder.Field(273).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryAttachments) endAttribute() {
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryAttachments) BeginAttribute(value273 string) *InEntityAgentrunentryTableSectionEntryAttachmentsInAttr {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInAttribute
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.inAttr
-	}
-	inst.scalarFieldBuilder273.Append(value273)
-	inst.attributeCount++
-
-	inst.inAttr.state = inst.state
-	return inst.inAttr
-}
-
-type InEntityAgentrunentryTableSectionEntryAttachmentsAttr struct {
-	Value string
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryAttachments) Add(attr InEntityAgentrunentryTableSectionEntryAttachmentsAttr) *InEntityAgentrunentryTableSectionEntryAttachmentsInAttr {
-	a := inst.BeginAttribute(attr.Value)
-	return a
-}
-func (inst *InEntityAgentrunentryTableSectionEntryAttachments) CheckErrors() (err error) {
-	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryAttachments) EndSection() *InEntityAgentrunentryTable {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	return inst.parent
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryAttachments) beginSection() {
-	inst.state = runtime.EntityStateInSection
-	inst.attributeCount = 0
-	inst.inAttr.beginAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryAttachments) resetSection() {
-	inst.clearErrors()
-	inst.inAttr.clearErrors()
-	inst.attributeCount = 0
-	inst.state = runtime.EntityStateInitial
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryAttachments) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryAttachments) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryAttachmentsInAttr struct {
-	errs                             []error
-	state                            runtime.EntityStateE
-	parent                           *InEntityAgentrunentryTableSectionEntryAttachments
-	scalarFieldBuilder273            *array.StringBuilder
-	scalarListBuilder273             *array.ListBuilder
-	membershipFieldBuilder274        *array.Uint64Builder
-	membershipListBuilder274         *array.ListBuilder
-	membershipFieldBuilder275        *array.Uint64Builder
-	membershipListBuilder275         *array.ListBuilder
-	membershipFieldBuilder276        *array.BinaryBuilder
-	membershipListBuilder276         *array.ListBuilder
-	membershipFieldBuilder277        *array.Uint64Builder
-	membershipListBuilder277         *array.ListBuilder
-	membershipFieldBuilder278        *array.BinaryBuilder
-	membershipListBuilder278         *array.ListBuilder
-	membershipSupportFieldBuilder279 *array.Uint64Builder
-	membershipSupportListBuilder279  *array.ListBuilder
-	membershipSupportFieldBuilder280 *array.Uint64Builder
-	membershipSupportListBuilder280  *array.ListBuilder
-	membershipSupportFieldBuilder281 *array.Uint64Builder
-	membershipSupportListBuilder281  *array.ListBuilder
-	membershipSupportFieldBuilder282 *array.Uint64Builder
-	membershipSupportListBuilder282  *array.ListBuilder
-
-	membershipContainerLength274 int
-
-	membershipContainerLength275 int
-
-	membershipContainerLength276 int
-
-	membershipContainerLength277 int
-
-	membershipContainerLength278 int
-}
-
-func NewInEntityAgentrunentryTableSectionEntryAttachmentsInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionEntryAttachments) (inst *InEntityAgentrunentryTableSectionEntryAttachmentsInAttr) {
-	inst = &InEntityAgentrunentryTableSectionEntryAttachmentsInAttr{}
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.parent = parent
-	inst.scalarFieldBuilder273 = builder.Field(273).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder273 = builder.Field(273).(*array.ListBuilder)
-	inst.membershipFieldBuilder274 = builder.Field(274).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder274 = builder.Field(274).(*array.ListBuilder)
-	inst.membershipFieldBuilder275 = builder.Field(275).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder275 = builder.Field(275).(*array.ListBuilder)
-	inst.membershipFieldBuilder276 = builder.Field(276).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder276 = builder.Field(276).(*array.ListBuilder)
-	inst.membershipFieldBuilder277 = builder.Field(277).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder277 = builder.Field(277).(*array.ListBuilder)
-	inst.membershipFieldBuilder278 = builder.Field(278).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder278 = builder.Field(278).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder279 = builder.Field(279).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder279 = builder.Field(279).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder280 = builder.Field(280).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder280 = builder.Field(280).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder281 = builder.Field(281).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder281 = builder.Field(281).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder282 = builder.Field(282).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder282 = builder.Field(282).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryAttachmentsInAttr) beginAttribute() {
-	inst.membershipListBuilder274.Append(true)
-	inst.membershipListBuilder275.Append(true)
-	inst.membershipListBuilder276.Append(true)
-	inst.membershipListBuilder277.Append(true)
-	inst.membershipListBuilder278.Append(true)
-	inst.membershipContainerLength274 = 0
-	inst.membershipContainerLength275 = 0
-	inst.membershipContainerLength276 = 0
-	inst.membershipContainerLength277 = 0
-	inst.membershipContainerLength278 = 0
-	inst.scalarListBuilder273.Append(true)
-	inst.membershipSupportListBuilder279.Append(true)
-	inst.membershipSupportListBuilder280.Append(true)
-	inst.membershipSupportListBuilder281.Append(true)
-	inst.membershipSupportListBuilder282.Append(true)
-	inst.state = runtime.EntityStateInSection
-	inst.clearErrors()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryAttachmentsInAttr) AddMembershipHighCardRef(hr274 uint64) *InEntityAgentrunentryTableSectionEntryAttachmentsInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder274.Append(hr274)
-	inst.membershipContainerLength274++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryAttachmentsInAttr) AddMembershipHighCardRefP(hr274 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder274.Append(hr274)
-	inst.membershipContainerLength274++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryAttachmentsInAttr) AddMembershipLowCardRef(lr275 uint64) *InEntityAgentrunentryTableSectionEntryAttachmentsInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder275.Append(lr275)
-	inst.membershipContainerLength275++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryAttachmentsInAttr) AddMembershipLowCardRefP(lr275 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder275.Append(lr275)
-	inst.membershipContainerLength275++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryAttachmentsInAttr) AddMembershipLowCardVerbatim(lv276 []byte) *InEntityAgentrunentryTableSectionEntryAttachmentsInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder276.Append(lv276)
-	inst.membershipContainerLength276++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryAttachmentsInAttr) AddMembershipLowCardVerbatimP(lv276 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder276.Append(lv276)
-	inst.membershipContainerLength276++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryAttachmentsInAttr) AddMembershipMixedLowCardRef(lmr277 uint64, mrhp278 []byte) *InEntityAgentrunentryTableSectionEntryAttachmentsInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder277.Append(lmr277)
-	inst.membershipFieldBuilder278.Append(mrhp278)
-	inst.membershipContainerLength277++
-	inst.membershipContainerLength278++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryAttachmentsInAttr) AddMembershipMixedLowCardRefP(lmr277 uint64, mrhp278 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder277.Append(lmr277)
-	inst.membershipFieldBuilder278.Append(mrhp278)
-	inst.membershipContainerLength277++
-	inst.membershipContainerLength278++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryAttachmentsInAttr) handleMembershipSupportColumns() {
-	var l int
-	var _ = l
-	l = inst.membershipContainerLength274
-	inst.membershipContainerLength274 = 0
-	inst.membershipSupportFieldBuilder279.Append(uint64(l))
-	l = inst.membershipContainerLength275
-	inst.membershipContainerLength275 = 0
-	inst.membershipSupportFieldBuilder280.Append(uint64(l))
-	l = inst.membershipContainerLength276
-	inst.membershipContainerLength276 = 0
-	inst.membershipSupportFieldBuilder281.Append(uint64(l))
-	l = inst.membershipContainerLength277
-	inst.membershipContainerLength277 = 0
-	inst.membershipSupportFieldBuilder282.Append(uint64(l))
-}
-func (inst *InEntityAgentrunentryTableSectionEntryAttachmentsInAttr) handleNonScalarSupportColumns() {
-	var l int
-	var _ = l
-}
-func (inst *InEntityAgentrunentryTableSectionEntryAttachmentsInAttr) applyAmbientMemberships() {
-	if inst.state != runtime.EntityStateInAttribute {
-		return
-	}
-	for _, v := range inst.parent.parent.ambientHighCardRef {
-		inst.AddMembershipHighCardRefP(v)
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryAttachmentsInAttr) completeAttribute() {
-	inst.handleMembershipSupportColumns()
-	inst.handleNonScalarSupportColumns()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryAttachmentsInAttr) EndSection() *InEntityAgentrunentryTable {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	inst.parent.EndSection()
-	return inst.parent.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryAttachmentsInAttr) EndAttribute() *InEntityAgentrunentryTableSectionEntryAttachments {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	return inst.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryAttachmentsInAttr) EndAttributeP() {
-	inst.EndAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryAttachmentsInAttr) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryAttachmentsInAttr) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryBody struct {
-	errs                  []error
-	inAttr                *InEntityAgentrunentryTableSectionEntryBodyInAttr
-	state                 runtime.EntityStateE
-	attributeCount        int
-	parent                *InEntityAgentrunentryTable
-	scalarFieldBuilder053 *array.StringBuilder
-	scalarListBuilder053  *array.ListBuilder
-}
-
-func NewInEntityAgentrunentryTableSectionEntryBody(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionEntryBody) {
-	inst = &InEntityAgentrunentryTableSectionEntryBody{}
-	inAttr := NewInEntityAgentrunentryTableSectionEntryBodyInAttr(builder, inst)
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.inAttr = inAttr
-	inst.parent = parent
-	inst.scalarFieldBuilder053 = builder.Field(53).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder053 = builder.Field(53).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBody) endAttribute() {
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBody) BeginAttribute(value53 string) *InEntityAgentrunentryTableSectionEntryBodyInAttr {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInAttribute
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.inAttr
-	}
-	inst.scalarFieldBuilder053.Append(value53)
-	inst.attributeCount++
-
-	inst.inAttr.state = inst.state
-	return inst.inAttr
-}
-
-type InEntityAgentrunentryTableSectionEntryBodyAttr struct {
-	Value string
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryBody) Add(attr InEntityAgentrunentryTableSectionEntryBodyAttr) *InEntityAgentrunentryTableSectionEntryBodyInAttr {
-	a := inst.BeginAttribute(attr.Value)
-	return a
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBody) CheckErrors() (err error) {
-	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBody) EndSection() *InEntityAgentrunentryTable {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	return inst.parent
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryBody) beginSection() {
-	inst.state = runtime.EntityStateInSection
-	inst.attributeCount = 0
-	inst.inAttr.beginAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryBody) resetSection() {
-	inst.clearErrors()
-	inst.inAttr.clearErrors()
-	inst.attributeCount = 0
-	inst.state = runtime.EntityStateInitial
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryBody) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBody) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryBodyInAttr struct {
-	errs                             []error
-	state                            runtime.EntityStateE
-	parent                           *InEntityAgentrunentryTableSectionEntryBody
-	scalarFieldBuilder053            *array.StringBuilder
-	scalarListBuilder053             *array.ListBuilder
-	membershipFieldBuilder054        *array.Uint64Builder
-	membershipListBuilder054         *array.ListBuilder
-	membershipFieldBuilder055        *array.Uint64Builder
-	membershipListBuilder055         *array.ListBuilder
-	membershipFieldBuilder056        *array.BinaryBuilder
-	membershipListBuilder056         *array.ListBuilder
-	membershipFieldBuilder057        *array.Uint64Builder
-	membershipListBuilder057         *array.ListBuilder
-	membershipFieldBuilder058        *array.BinaryBuilder
-	membershipListBuilder058         *array.ListBuilder
-	membershipSupportFieldBuilder059 *array.Uint64Builder
-	membershipSupportListBuilder059  *array.ListBuilder
-	membershipSupportFieldBuilder060 *array.Uint64Builder
-	membershipSupportListBuilder060  *array.ListBuilder
-	membershipSupportFieldBuilder061 *array.Uint64Builder
-	membershipSupportListBuilder061  *array.ListBuilder
-	membershipSupportFieldBuilder062 *array.Uint64Builder
-	membershipSupportListBuilder062  *array.ListBuilder
-
-	membershipContainerLength054 int
-
-	membershipContainerLength055 int
-
-	membershipContainerLength056 int
-
-	membershipContainerLength057 int
-
-	membershipContainerLength058 int
-}
-
-func NewInEntityAgentrunentryTableSectionEntryBodyInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionEntryBody) (inst *InEntityAgentrunentryTableSectionEntryBodyInAttr) {
-	inst = &InEntityAgentrunentryTableSectionEntryBodyInAttr{}
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.parent = parent
-	inst.scalarFieldBuilder053 = builder.Field(53).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder053 = builder.Field(53).(*array.ListBuilder)
-	inst.membershipFieldBuilder054 = builder.Field(54).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder054 = builder.Field(54).(*array.ListBuilder)
-	inst.membershipFieldBuilder055 = builder.Field(55).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder055 = builder.Field(55).(*array.ListBuilder)
-	inst.membershipFieldBuilder056 = builder.Field(56).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder056 = builder.Field(56).(*array.ListBuilder)
-	inst.membershipFieldBuilder057 = builder.Field(57).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder057 = builder.Field(57).(*array.ListBuilder)
-	inst.membershipFieldBuilder058 = builder.Field(58).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder058 = builder.Field(58).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder059 = builder.Field(59).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder059 = builder.Field(59).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder060 = builder.Field(60).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder060 = builder.Field(60).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder061 = builder.Field(61).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder061 = builder.Field(61).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder062 = builder.Field(62).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder062 = builder.Field(62).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyInAttr) beginAttribute() {
-	inst.membershipListBuilder054.Append(true)
-	inst.membershipListBuilder055.Append(true)
-	inst.membershipListBuilder056.Append(true)
-	inst.membershipListBuilder057.Append(true)
-	inst.membershipListBuilder058.Append(true)
-	inst.membershipContainerLength054 = 0
-	inst.membershipContainerLength055 = 0
-	inst.membershipContainerLength056 = 0
-	inst.membershipContainerLength057 = 0
-	inst.membershipContainerLength058 = 0
-	inst.scalarListBuilder053.Append(true)
-	inst.membershipSupportListBuilder059.Append(true)
-	inst.membershipSupportListBuilder060.Append(true)
-	inst.membershipSupportListBuilder061.Append(true)
-	inst.membershipSupportListBuilder062.Append(true)
-	inst.state = runtime.EntityStateInSection
-	inst.clearErrors()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyInAttr) AddMembershipHighCardRef(hr54 uint64) *InEntityAgentrunentryTableSectionEntryBodyInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder054.Append(hr54)
-	inst.membershipContainerLength054++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyInAttr) AddMembershipHighCardRefP(hr54 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder054.Append(hr54)
-	inst.membershipContainerLength054++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyInAttr) AddMembershipLowCardRef(lr55 uint64) *InEntityAgentrunentryTableSectionEntryBodyInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder055.Append(lr55)
-	inst.membershipContainerLength055++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyInAttr) AddMembershipLowCardRefP(lr55 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder055.Append(lr55)
-	inst.membershipContainerLength055++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyInAttr) AddMembershipLowCardVerbatim(lv56 []byte) *InEntityAgentrunentryTableSectionEntryBodyInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder056.Append(lv56)
-	inst.membershipContainerLength056++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyInAttr) AddMembershipLowCardVerbatimP(lv56 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder056.Append(lv56)
-	inst.membershipContainerLength056++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyInAttr) AddMembershipMixedLowCardRef(lmr57 uint64, mrhp58 []byte) *InEntityAgentrunentryTableSectionEntryBodyInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder057.Append(lmr57)
-	inst.membershipFieldBuilder058.Append(mrhp58)
-	inst.membershipContainerLength057++
-	inst.membershipContainerLength058++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyInAttr) AddMembershipMixedLowCardRefP(lmr57 uint64, mrhp58 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder057.Append(lmr57)
-	inst.membershipFieldBuilder058.Append(mrhp58)
-	inst.membershipContainerLength057++
-	inst.membershipContainerLength058++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyInAttr) handleMembershipSupportColumns() {
-	var l int
-	var _ = l
-	l = inst.membershipContainerLength054
-	inst.membershipContainerLength054 = 0
-	inst.membershipSupportFieldBuilder059.Append(uint64(l))
-	l = inst.membershipContainerLength055
-	inst.membershipContainerLength055 = 0
-	inst.membershipSupportFieldBuilder060.Append(uint64(l))
-	l = inst.membershipContainerLength056
-	inst.membershipContainerLength056 = 0
-	inst.membershipSupportFieldBuilder061.Append(uint64(l))
-	l = inst.membershipContainerLength057
-	inst.membershipContainerLength057 = 0
-	inst.membershipSupportFieldBuilder062.Append(uint64(l))
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyInAttr) handleNonScalarSupportColumns() {
-	var l int
-	var _ = l
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyInAttr) applyAmbientMemberships() {
-	if inst.state != runtime.EntityStateInAttribute {
-		return
-	}
-	for _, v := range inst.parent.parent.ambientHighCardRef {
-		inst.AddMembershipHighCardRefP(v)
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyInAttr) completeAttribute() {
-	inst.handleMembershipSupportColumns()
-	inst.handleNonScalarSupportColumns()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyInAttr) EndSection() *InEntityAgentrunentryTable {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	inst.parent.EndSection()
-	return inst.parent.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyInAttr) EndAttribute() *InEntityAgentrunentryTableSectionEntryBody {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	return inst.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyInAttr) EndAttributeP() {
-	inst.EndAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryBodyInAttr) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyInAttr) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryBodyDigest struct {
-	errs                  []error
-	inAttr                *InEntityAgentrunentryTableSectionEntryBodyDigestInAttr
-	state                 runtime.EntityStateE
-	attributeCount        int
-	parent                *InEntityAgentrunentryTable
-	scalarFieldBuilder073 *array.StringBuilder
-	scalarListBuilder073  *array.ListBuilder
-}
-
-func NewInEntityAgentrunentryTableSectionEntryBodyDigest(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionEntryBodyDigest) {
-	inst = &InEntityAgentrunentryTableSectionEntryBodyDigest{}
-	inAttr := NewInEntityAgentrunentryTableSectionEntryBodyDigestInAttr(builder, inst)
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.inAttr = inAttr
-	inst.parent = parent
-	inst.scalarFieldBuilder073 = builder.Field(73).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder073 = builder.Field(73).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyDigest) endAttribute() {
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyDigest) BeginAttribute(value73 string) *InEntityAgentrunentryTableSectionEntryBodyDigestInAttr {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInAttribute
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.inAttr
-	}
-	inst.scalarFieldBuilder073.Append(value73)
-	inst.attributeCount++
-
-	inst.inAttr.state = inst.state
-	return inst.inAttr
-}
-
-type InEntityAgentrunentryTableSectionEntryBodyDigestAttr struct {
-	Value string
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryBodyDigest) Add(attr InEntityAgentrunentryTableSectionEntryBodyDigestAttr) *InEntityAgentrunentryTableSectionEntryBodyDigestInAttr {
-	a := inst.BeginAttribute(attr.Value)
-	return a
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyDigest) CheckErrors() (err error) {
-	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyDigest) EndSection() *InEntityAgentrunentryTable {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	return inst.parent
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryBodyDigest) beginSection() {
-	inst.state = runtime.EntityStateInSection
-	inst.attributeCount = 0
-	inst.inAttr.beginAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryBodyDigest) resetSection() {
-	inst.clearErrors()
-	inst.inAttr.clearErrors()
-	inst.attributeCount = 0
-	inst.state = runtime.EntityStateInitial
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryBodyDigest) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyDigest) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryBodyDigestInAttr struct {
-	errs                             []error
-	state                            runtime.EntityStateE
-	parent                           *InEntityAgentrunentryTableSectionEntryBodyDigest
-	scalarFieldBuilder073            *array.StringBuilder
-	scalarListBuilder073             *array.ListBuilder
-	membershipFieldBuilder074        *array.Uint64Builder
-	membershipListBuilder074         *array.ListBuilder
-	membershipFieldBuilder075        *array.Uint64Builder
-	membershipListBuilder075         *array.ListBuilder
-	membershipFieldBuilder076        *array.BinaryBuilder
-	membershipListBuilder076         *array.ListBuilder
-	membershipFieldBuilder077        *array.Uint64Builder
-	membershipListBuilder077         *array.ListBuilder
-	membershipFieldBuilder078        *array.BinaryBuilder
-	membershipListBuilder078         *array.ListBuilder
-	membershipSupportFieldBuilder079 *array.Uint64Builder
-	membershipSupportListBuilder079  *array.ListBuilder
-	membershipSupportFieldBuilder080 *array.Uint64Builder
-	membershipSupportListBuilder080  *array.ListBuilder
-	membershipSupportFieldBuilder081 *array.Uint64Builder
-	membershipSupportListBuilder081  *array.ListBuilder
-	membershipSupportFieldBuilder082 *array.Uint64Builder
-	membershipSupportListBuilder082  *array.ListBuilder
-
-	membershipContainerLength074 int
-
-	membershipContainerLength075 int
-
-	membershipContainerLength076 int
-
-	membershipContainerLength077 int
-
-	membershipContainerLength078 int
-}
-
-func NewInEntityAgentrunentryTableSectionEntryBodyDigestInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionEntryBodyDigest) (inst *InEntityAgentrunentryTableSectionEntryBodyDigestInAttr) {
-	inst = &InEntityAgentrunentryTableSectionEntryBodyDigestInAttr{}
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.parent = parent
-	inst.scalarFieldBuilder073 = builder.Field(73).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder073 = builder.Field(73).(*array.ListBuilder)
-	inst.membershipFieldBuilder074 = builder.Field(74).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder074 = builder.Field(74).(*array.ListBuilder)
-	inst.membershipFieldBuilder075 = builder.Field(75).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder075 = builder.Field(75).(*array.ListBuilder)
-	inst.membershipFieldBuilder076 = builder.Field(76).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder076 = builder.Field(76).(*array.ListBuilder)
-	inst.membershipFieldBuilder077 = builder.Field(77).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder077 = builder.Field(77).(*array.ListBuilder)
-	inst.membershipFieldBuilder078 = builder.Field(78).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder078 = builder.Field(78).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder079 = builder.Field(79).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder079 = builder.Field(79).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder080 = builder.Field(80).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder080 = builder.Field(80).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder081 = builder.Field(81).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder081 = builder.Field(81).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder082 = builder.Field(82).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder082 = builder.Field(82).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyDigestInAttr) beginAttribute() {
-	inst.membershipListBuilder074.Append(true)
-	inst.membershipListBuilder075.Append(true)
-	inst.membershipListBuilder076.Append(true)
-	inst.membershipListBuilder077.Append(true)
-	inst.membershipListBuilder078.Append(true)
-	inst.membershipContainerLength074 = 0
-	inst.membershipContainerLength075 = 0
-	inst.membershipContainerLength076 = 0
-	inst.membershipContainerLength077 = 0
-	inst.membershipContainerLength078 = 0
-	inst.scalarListBuilder073.Append(true)
-	inst.membershipSupportListBuilder079.Append(true)
-	inst.membershipSupportListBuilder080.Append(true)
-	inst.membershipSupportListBuilder081.Append(true)
-	inst.membershipSupportListBuilder082.Append(true)
-	inst.state = runtime.EntityStateInSection
-	inst.clearErrors()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyDigestInAttr) AddMembershipHighCardRef(hr74 uint64) *InEntityAgentrunentryTableSectionEntryBodyDigestInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder074.Append(hr74)
-	inst.membershipContainerLength074++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyDigestInAttr) AddMembershipHighCardRefP(hr74 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder074.Append(hr74)
-	inst.membershipContainerLength074++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyDigestInAttr) AddMembershipLowCardRef(lr75 uint64) *InEntityAgentrunentryTableSectionEntryBodyDigestInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder075.Append(lr75)
-	inst.membershipContainerLength075++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyDigestInAttr) AddMembershipLowCardRefP(lr75 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder075.Append(lr75)
-	inst.membershipContainerLength075++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyDigestInAttr) AddMembershipLowCardVerbatim(lv76 []byte) *InEntityAgentrunentryTableSectionEntryBodyDigestInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder076.Append(lv76)
-	inst.membershipContainerLength076++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyDigestInAttr) AddMembershipLowCardVerbatimP(lv76 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder076.Append(lv76)
-	inst.membershipContainerLength076++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyDigestInAttr) AddMembershipMixedLowCardRef(lmr77 uint64, mrhp78 []byte) *InEntityAgentrunentryTableSectionEntryBodyDigestInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder077.Append(lmr77)
-	inst.membershipFieldBuilder078.Append(mrhp78)
-	inst.membershipContainerLength077++
-	inst.membershipContainerLength078++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyDigestInAttr) AddMembershipMixedLowCardRefP(lmr77 uint64, mrhp78 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder077.Append(lmr77)
-	inst.membershipFieldBuilder078.Append(mrhp78)
-	inst.membershipContainerLength077++
-	inst.membershipContainerLength078++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyDigestInAttr) handleMembershipSupportColumns() {
-	var l int
-	var _ = l
-	l = inst.membershipContainerLength074
-	inst.membershipContainerLength074 = 0
-	inst.membershipSupportFieldBuilder079.Append(uint64(l))
-	l = inst.membershipContainerLength075
-	inst.membershipContainerLength075 = 0
-	inst.membershipSupportFieldBuilder080.Append(uint64(l))
-	l = inst.membershipContainerLength076
-	inst.membershipContainerLength076 = 0
-	inst.membershipSupportFieldBuilder081.Append(uint64(l))
-	l = inst.membershipContainerLength077
-	inst.membershipContainerLength077 = 0
-	inst.membershipSupportFieldBuilder082.Append(uint64(l))
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyDigestInAttr) handleNonScalarSupportColumns() {
-	var l int
-	var _ = l
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyDigestInAttr) applyAmbientMemberships() {
-	if inst.state != runtime.EntityStateInAttribute {
-		return
-	}
-	for _, v := range inst.parent.parent.ambientHighCardRef {
-		inst.AddMembershipHighCardRefP(v)
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyDigestInAttr) completeAttribute() {
-	inst.handleMembershipSupportColumns()
-	inst.handleNonScalarSupportColumns()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyDigestInAttr) EndSection() *InEntityAgentrunentryTable {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	inst.parent.EndSection()
-	return inst.parent.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyDigestInAttr) EndAttribute() *InEntityAgentrunentryTableSectionEntryBodyDigest {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	return inst.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyDigestInAttr) EndAttributeP() {
-	inst.EndAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryBodyDigestInAttr) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBodyDigestInAttr) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryBook struct {
-	errs                  []error
-	inAttr                *InEntityAgentrunentryTableSectionEntryBookInAttr
-	state                 runtime.EntityStateE
-	attributeCount        int
-	parent                *InEntityAgentrunentryTable
-	scalarFieldBuilder103 *array.StringBuilder
-	scalarListBuilder103  *array.ListBuilder
-}
-
-func NewInEntityAgentrunentryTableSectionEntryBook(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionEntryBook) {
-	inst = &InEntityAgentrunentryTableSectionEntryBook{}
-	inAttr := NewInEntityAgentrunentryTableSectionEntryBookInAttr(builder, inst)
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.inAttr = inAttr
-	inst.parent = parent
-	inst.scalarFieldBuilder103 = builder.Field(103).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder103 = builder.Field(103).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBook) endAttribute() {
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBook) BeginAttribute(value103 string) *InEntityAgentrunentryTableSectionEntryBookInAttr {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInAttribute
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.inAttr
-	}
-	inst.scalarFieldBuilder103.Append(value103)
-	inst.attributeCount++
-
-	inst.inAttr.state = inst.state
-	return inst.inAttr
-}
-
-type InEntityAgentrunentryTableSectionEntryBookAttr struct {
-	Value string
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryBook) Add(attr InEntityAgentrunentryTableSectionEntryBookAttr) *InEntityAgentrunentryTableSectionEntryBookInAttr {
-	a := inst.BeginAttribute(attr.Value)
-	return a
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBook) CheckErrors() (err error) {
-	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBook) EndSection() *InEntityAgentrunentryTable {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	return inst.parent
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryBook) beginSection() {
-	inst.state = runtime.EntityStateInSection
-	inst.attributeCount = 0
-	inst.inAttr.beginAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryBook) resetSection() {
-	inst.clearErrors()
-	inst.inAttr.clearErrors()
-	inst.attributeCount = 0
-	inst.state = runtime.EntityStateInitial
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryBook) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBook) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryBookInAttr struct {
-	errs                             []error
-	state                            runtime.EntityStateE
-	parent                           *InEntityAgentrunentryTableSectionEntryBook
-	scalarFieldBuilder103            *array.StringBuilder
-	scalarListBuilder103             *array.ListBuilder
-	membershipFieldBuilder104        *array.Uint64Builder
-	membershipListBuilder104         *array.ListBuilder
-	membershipFieldBuilder105        *array.Uint64Builder
-	membershipListBuilder105         *array.ListBuilder
-	membershipFieldBuilder106        *array.BinaryBuilder
-	membershipListBuilder106         *array.ListBuilder
-	membershipFieldBuilder107        *array.Uint64Builder
-	membershipListBuilder107         *array.ListBuilder
-	membershipFieldBuilder108        *array.BinaryBuilder
-	membershipListBuilder108         *array.ListBuilder
-	membershipSupportFieldBuilder109 *array.Uint64Builder
-	membershipSupportListBuilder109  *array.ListBuilder
-	membershipSupportFieldBuilder110 *array.Uint64Builder
-	membershipSupportListBuilder110  *array.ListBuilder
-	membershipSupportFieldBuilder111 *array.Uint64Builder
-	membershipSupportListBuilder111  *array.ListBuilder
-	membershipSupportFieldBuilder112 *array.Uint64Builder
-	membershipSupportListBuilder112  *array.ListBuilder
-
-	membershipContainerLength104 int
-
-	membershipContainerLength105 int
-
-	membershipContainerLength106 int
-
-	membershipContainerLength107 int
-
-	membershipContainerLength108 int
-}
-
-func NewInEntityAgentrunentryTableSectionEntryBookInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionEntryBook) (inst *InEntityAgentrunentryTableSectionEntryBookInAttr) {
-	inst = &InEntityAgentrunentryTableSectionEntryBookInAttr{}
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.parent = parent
-	inst.scalarFieldBuilder103 = builder.Field(103).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder103 = builder.Field(103).(*array.ListBuilder)
-	inst.membershipFieldBuilder104 = builder.Field(104).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder104 = builder.Field(104).(*array.ListBuilder)
-	inst.membershipFieldBuilder105 = builder.Field(105).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder105 = builder.Field(105).(*array.ListBuilder)
-	inst.membershipFieldBuilder106 = builder.Field(106).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder106 = builder.Field(106).(*array.ListBuilder)
-	inst.membershipFieldBuilder107 = builder.Field(107).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder107 = builder.Field(107).(*array.ListBuilder)
-	inst.membershipFieldBuilder108 = builder.Field(108).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder108 = builder.Field(108).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder109 = builder.Field(109).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder109 = builder.Field(109).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder110 = builder.Field(110).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder110 = builder.Field(110).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder111 = builder.Field(111).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder111 = builder.Field(111).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder112 = builder.Field(112).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder112 = builder.Field(112).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBookInAttr) beginAttribute() {
-	inst.membershipListBuilder104.Append(true)
-	inst.membershipListBuilder105.Append(true)
-	inst.membershipListBuilder106.Append(true)
-	inst.membershipListBuilder107.Append(true)
-	inst.membershipListBuilder108.Append(true)
-	inst.membershipContainerLength104 = 0
-	inst.membershipContainerLength105 = 0
-	inst.membershipContainerLength106 = 0
-	inst.membershipContainerLength107 = 0
-	inst.membershipContainerLength108 = 0
-	inst.scalarListBuilder103.Append(true)
-	inst.membershipSupportListBuilder109.Append(true)
-	inst.membershipSupportListBuilder110.Append(true)
-	inst.membershipSupportListBuilder111.Append(true)
-	inst.membershipSupportListBuilder112.Append(true)
-	inst.state = runtime.EntityStateInSection
-	inst.clearErrors()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBookInAttr) AddMembershipHighCardRef(hr104 uint64) *InEntityAgentrunentryTableSectionEntryBookInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder104.Append(hr104)
-	inst.membershipContainerLength104++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBookInAttr) AddMembershipHighCardRefP(hr104 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder104.Append(hr104)
-	inst.membershipContainerLength104++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBookInAttr) AddMembershipLowCardRef(lr105 uint64) *InEntityAgentrunentryTableSectionEntryBookInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder105.Append(lr105)
-	inst.membershipContainerLength105++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBookInAttr) AddMembershipLowCardRefP(lr105 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder105.Append(lr105)
-	inst.membershipContainerLength105++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBookInAttr) AddMembershipLowCardVerbatim(lv106 []byte) *InEntityAgentrunentryTableSectionEntryBookInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder106.Append(lv106)
-	inst.membershipContainerLength106++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBookInAttr) AddMembershipLowCardVerbatimP(lv106 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder106.Append(lv106)
-	inst.membershipContainerLength106++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBookInAttr) AddMembershipMixedLowCardRef(lmr107 uint64, mrhp108 []byte) *InEntityAgentrunentryTableSectionEntryBookInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder107.Append(lmr107)
-	inst.membershipFieldBuilder108.Append(mrhp108)
-	inst.membershipContainerLength107++
-	inst.membershipContainerLength108++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBookInAttr) AddMembershipMixedLowCardRefP(lmr107 uint64, mrhp108 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder107.Append(lmr107)
-	inst.membershipFieldBuilder108.Append(mrhp108)
-	inst.membershipContainerLength107++
-	inst.membershipContainerLength108++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBookInAttr) handleMembershipSupportColumns() {
-	var l int
-	var _ = l
-	l = inst.membershipContainerLength104
-	inst.membershipContainerLength104 = 0
-	inst.membershipSupportFieldBuilder109.Append(uint64(l))
-	l = inst.membershipContainerLength105
-	inst.membershipContainerLength105 = 0
-	inst.membershipSupportFieldBuilder110.Append(uint64(l))
-	l = inst.membershipContainerLength106
-	inst.membershipContainerLength106 = 0
-	inst.membershipSupportFieldBuilder111.Append(uint64(l))
-	l = inst.membershipContainerLength107
-	inst.membershipContainerLength107 = 0
-	inst.membershipSupportFieldBuilder112.Append(uint64(l))
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBookInAttr) handleNonScalarSupportColumns() {
-	var l int
-	var _ = l
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBookInAttr) applyAmbientMemberships() {
-	if inst.state != runtime.EntityStateInAttribute {
-		return
-	}
-	for _, v := range inst.parent.parent.ambientHighCardRef {
-		inst.AddMembershipHighCardRefP(v)
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBookInAttr) completeAttribute() {
-	inst.handleMembershipSupportColumns()
-	inst.handleNonScalarSupportColumns()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBookInAttr) EndSection() *InEntityAgentrunentryTable {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	inst.parent.EndSection()
-	return inst.parent.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBookInAttr) EndAttribute() *InEntityAgentrunentryTableSectionEntryBook {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	return inst.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBookInAttr) EndAttributeP() {
-	inst.EndAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryBookInAttr) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryBookInAttr) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryCalls struct {
-	errs                  []error
-	inAttr                *InEntityAgentrunentryTableSectionEntryCallsInAttr
-	state                 runtime.EntityStateE
-	attributeCount        int
-	parent                *InEntityAgentrunentryTable
-	scalarFieldBuilder063 *array.StringBuilder
-	scalarListBuilder063  *array.ListBuilder
-}
-
-func NewInEntityAgentrunentryTableSectionEntryCalls(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionEntryCalls) {
-	inst = &InEntityAgentrunentryTableSectionEntryCalls{}
-	inAttr := NewInEntityAgentrunentryTableSectionEntryCallsInAttr(builder, inst)
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.inAttr = inAttr
-	inst.parent = parent
-	inst.scalarFieldBuilder063 = builder.Field(63).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder063 = builder.Field(63).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCalls) endAttribute() {
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCalls) BeginAttribute(value63 string) *InEntityAgentrunentryTableSectionEntryCallsInAttr {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInAttribute
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.inAttr
-	}
-	inst.scalarFieldBuilder063.Append(value63)
-	inst.attributeCount++
-
-	inst.inAttr.state = inst.state
-	return inst.inAttr
-}
-
-type InEntityAgentrunentryTableSectionEntryCallsAttr struct {
-	Value string
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryCalls) Add(attr InEntityAgentrunentryTableSectionEntryCallsAttr) *InEntityAgentrunentryTableSectionEntryCallsInAttr {
-	a := inst.BeginAttribute(attr.Value)
-	return a
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCalls) CheckErrors() (err error) {
-	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCalls) EndSection() *InEntityAgentrunentryTable {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	return inst.parent
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryCalls) beginSection() {
-	inst.state = runtime.EntityStateInSection
-	inst.attributeCount = 0
-	inst.inAttr.beginAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryCalls) resetSection() {
-	inst.clearErrors()
-	inst.inAttr.clearErrors()
-	inst.attributeCount = 0
-	inst.state = runtime.EntityStateInitial
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryCalls) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCalls) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryCallsInAttr struct {
-	errs                             []error
-	state                            runtime.EntityStateE
-	parent                           *InEntityAgentrunentryTableSectionEntryCalls
-	scalarFieldBuilder063            *array.StringBuilder
-	scalarListBuilder063             *array.ListBuilder
-	membershipFieldBuilder064        *array.Uint64Builder
-	membershipListBuilder064         *array.ListBuilder
-	membershipFieldBuilder065        *array.Uint64Builder
-	membershipListBuilder065         *array.ListBuilder
-	membershipFieldBuilder066        *array.BinaryBuilder
-	membershipListBuilder066         *array.ListBuilder
-	membershipFieldBuilder067        *array.Uint64Builder
-	membershipListBuilder067         *array.ListBuilder
-	membershipFieldBuilder068        *array.BinaryBuilder
-	membershipListBuilder068         *array.ListBuilder
-	membershipSupportFieldBuilder069 *array.Uint64Builder
-	membershipSupportListBuilder069  *array.ListBuilder
-	membershipSupportFieldBuilder070 *array.Uint64Builder
-	membershipSupportListBuilder070  *array.ListBuilder
-	membershipSupportFieldBuilder071 *array.Uint64Builder
-	membershipSupportListBuilder071  *array.ListBuilder
-	membershipSupportFieldBuilder072 *array.Uint64Builder
-	membershipSupportListBuilder072  *array.ListBuilder
-
-	membershipContainerLength064 int
-
-	membershipContainerLength065 int
-
-	membershipContainerLength066 int
-
-	membershipContainerLength067 int
-
-	membershipContainerLength068 int
-}
-
-func NewInEntityAgentrunentryTableSectionEntryCallsInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionEntryCalls) (inst *InEntityAgentrunentryTableSectionEntryCallsInAttr) {
-	inst = &InEntityAgentrunentryTableSectionEntryCallsInAttr{}
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.parent = parent
-	inst.scalarFieldBuilder063 = builder.Field(63).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder063 = builder.Field(63).(*array.ListBuilder)
-	inst.membershipFieldBuilder064 = builder.Field(64).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder064 = builder.Field(64).(*array.ListBuilder)
-	inst.membershipFieldBuilder065 = builder.Field(65).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder065 = builder.Field(65).(*array.ListBuilder)
-	inst.membershipFieldBuilder066 = builder.Field(66).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder066 = builder.Field(66).(*array.ListBuilder)
-	inst.membershipFieldBuilder067 = builder.Field(67).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder067 = builder.Field(67).(*array.ListBuilder)
-	inst.membershipFieldBuilder068 = builder.Field(68).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder068 = builder.Field(68).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder069 = builder.Field(69).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder069 = builder.Field(69).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder070 = builder.Field(70).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder070 = builder.Field(70).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder071 = builder.Field(71).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder071 = builder.Field(71).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder072 = builder.Field(72).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder072 = builder.Field(72).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsInAttr) beginAttribute() {
-	inst.membershipListBuilder064.Append(true)
-	inst.membershipListBuilder065.Append(true)
-	inst.membershipListBuilder066.Append(true)
-	inst.membershipListBuilder067.Append(true)
-	inst.membershipListBuilder068.Append(true)
-	inst.membershipContainerLength064 = 0
-	inst.membershipContainerLength065 = 0
-	inst.membershipContainerLength066 = 0
-	inst.membershipContainerLength067 = 0
-	inst.membershipContainerLength068 = 0
-	inst.scalarListBuilder063.Append(true)
-	inst.membershipSupportListBuilder069.Append(true)
-	inst.membershipSupportListBuilder070.Append(true)
-	inst.membershipSupportListBuilder071.Append(true)
-	inst.membershipSupportListBuilder072.Append(true)
-	inst.state = runtime.EntityStateInSection
-	inst.clearErrors()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsInAttr) AddMembershipHighCardRef(hr64 uint64) *InEntityAgentrunentryTableSectionEntryCallsInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder064.Append(hr64)
-	inst.membershipContainerLength064++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsInAttr) AddMembershipHighCardRefP(hr64 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder064.Append(hr64)
-	inst.membershipContainerLength064++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsInAttr) AddMembershipLowCardRef(lr65 uint64) *InEntityAgentrunentryTableSectionEntryCallsInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder065.Append(lr65)
-	inst.membershipContainerLength065++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsInAttr) AddMembershipLowCardRefP(lr65 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder065.Append(lr65)
-	inst.membershipContainerLength065++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsInAttr) AddMembershipLowCardVerbatim(lv66 []byte) *InEntityAgentrunentryTableSectionEntryCallsInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder066.Append(lv66)
-	inst.membershipContainerLength066++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsInAttr) AddMembershipLowCardVerbatimP(lv66 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder066.Append(lv66)
-	inst.membershipContainerLength066++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsInAttr) AddMembershipMixedLowCardRef(lmr67 uint64, mrhp68 []byte) *InEntityAgentrunentryTableSectionEntryCallsInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder067.Append(lmr67)
-	inst.membershipFieldBuilder068.Append(mrhp68)
-	inst.membershipContainerLength067++
-	inst.membershipContainerLength068++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsInAttr) AddMembershipMixedLowCardRefP(lmr67 uint64, mrhp68 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder067.Append(lmr67)
-	inst.membershipFieldBuilder068.Append(mrhp68)
-	inst.membershipContainerLength067++
-	inst.membershipContainerLength068++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsInAttr) handleMembershipSupportColumns() {
-	var l int
-	var _ = l
-	l = inst.membershipContainerLength064
-	inst.membershipContainerLength064 = 0
-	inst.membershipSupportFieldBuilder069.Append(uint64(l))
-	l = inst.membershipContainerLength065
-	inst.membershipContainerLength065 = 0
-	inst.membershipSupportFieldBuilder070.Append(uint64(l))
-	l = inst.membershipContainerLength066
-	inst.membershipContainerLength066 = 0
-	inst.membershipSupportFieldBuilder071.Append(uint64(l))
-	l = inst.membershipContainerLength067
-	inst.membershipContainerLength067 = 0
-	inst.membershipSupportFieldBuilder072.Append(uint64(l))
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsInAttr) handleNonScalarSupportColumns() {
-	var l int
-	var _ = l
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsInAttr) applyAmbientMemberships() {
-	if inst.state != runtime.EntityStateInAttribute {
-		return
-	}
-	for _, v := range inst.parent.parent.ambientHighCardRef {
-		inst.AddMembershipHighCardRefP(v)
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsInAttr) completeAttribute() {
-	inst.handleMembershipSupportColumns()
-	inst.handleNonScalarSupportColumns()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsInAttr) EndSection() *InEntityAgentrunentryTable {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	inst.parent.EndSection()
-	return inst.parent.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsInAttr) EndAttribute() *InEntityAgentrunentryTableSectionEntryCalls {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	return inst.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsInAttr) EndAttributeP() {
-	inst.EndAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryCallsInAttr) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsInAttr) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryCallsDigest struct {
-	errs                  []error
-	inAttr                *InEntityAgentrunentryTableSectionEntryCallsDigestInAttr
-	state                 runtime.EntityStateE
-	attributeCount        int
-	parent                *InEntityAgentrunentryTable
-	scalarFieldBuilder083 *array.StringBuilder
-	scalarListBuilder083  *array.ListBuilder
-}
-
-func NewInEntityAgentrunentryTableSectionEntryCallsDigest(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionEntryCallsDigest) {
-	inst = &InEntityAgentrunentryTableSectionEntryCallsDigest{}
-	inAttr := NewInEntityAgentrunentryTableSectionEntryCallsDigestInAttr(builder, inst)
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.inAttr = inAttr
-	inst.parent = parent
-	inst.scalarFieldBuilder083 = builder.Field(83).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder083 = builder.Field(83).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsDigest) endAttribute() {
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsDigest) BeginAttribute(value83 string) *InEntityAgentrunentryTableSectionEntryCallsDigestInAttr {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInAttribute
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.inAttr
-	}
-	inst.scalarFieldBuilder083.Append(value83)
-	inst.attributeCount++
-
-	inst.inAttr.state = inst.state
-	return inst.inAttr
-}
-
-type InEntityAgentrunentryTableSectionEntryCallsDigestAttr struct {
-	Value string
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryCallsDigest) Add(attr InEntityAgentrunentryTableSectionEntryCallsDigestAttr) *InEntityAgentrunentryTableSectionEntryCallsDigestInAttr {
-	a := inst.BeginAttribute(attr.Value)
-	return a
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsDigest) CheckErrors() (err error) {
-	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsDigest) EndSection() *InEntityAgentrunentryTable {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	return inst.parent
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryCallsDigest) beginSection() {
-	inst.state = runtime.EntityStateInSection
-	inst.attributeCount = 0
-	inst.inAttr.beginAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryCallsDigest) resetSection() {
-	inst.clearErrors()
-	inst.inAttr.clearErrors()
-	inst.attributeCount = 0
-	inst.state = runtime.EntityStateInitial
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryCallsDigest) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsDigest) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryCallsDigestInAttr struct {
-	errs                             []error
-	state                            runtime.EntityStateE
-	parent                           *InEntityAgentrunentryTableSectionEntryCallsDigest
-	scalarFieldBuilder083            *array.StringBuilder
-	scalarListBuilder083             *array.ListBuilder
-	membershipFieldBuilder084        *array.Uint64Builder
-	membershipListBuilder084         *array.ListBuilder
-	membershipFieldBuilder085        *array.Uint64Builder
-	membershipListBuilder085         *array.ListBuilder
-	membershipFieldBuilder086        *array.BinaryBuilder
-	membershipListBuilder086         *array.ListBuilder
-	membershipFieldBuilder087        *array.Uint64Builder
-	membershipListBuilder087         *array.ListBuilder
-	membershipFieldBuilder088        *array.BinaryBuilder
-	membershipListBuilder088         *array.ListBuilder
-	membershipSupportFieldBuilder089 *array.Uint64Builder
-	membershipSupportListBuilder089  *array.ListBuilder
-	membershipSupportFieldBuilder090 *array.Uint64Builder
-	membershipSupportListBuilder090  *array.ListBuilder
-	membershipSupportFieldBuilder091 *array.Uint64Builder
-	membershipSupportListBuilder091  *array.ListBuilder
-	membershipSupportFieldBuilder092 *array.Uint64Builder
-	membershipSupportListBuilder092  *array.ListBuilder
-
-	membershipContainerLength084 int
-
-	membershipContainerLength085 int
-
-	membershipContainerLength086 int
-
-	membershipContainerLength087 int
-
-	membershipContainerLength088 int
-}
-
-func NewInEntityAgentrunentryTableSectionEntryCallsDigestInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionEntryCallsDigest) (inst *InEntityAgentrunentryTableSectionEntryCallsDigestInAttr) {
-	inst = &InEntityAgentrunentryTableSectionEntryCallsDigestInAttr{}
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.parent = parent
-	inst.scalarFieldBuilder083 = builder.Field(83).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder083 = builder.Field(83).(*array.ListBuilder)
-	inst.membershipFieldBuilder084 = builder.Field(84).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder084 = builder.Field(84).(*array.ListBuilder)
-	inst.membershipFieldBuilder085 = builder.Field(85).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder085 = builder.Field(85).(*array.ListBuilder)
-	inst.membershipFieldBuilder086 = builder.Field(86).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder086 = builder.Field(86).(*array.ListBuilder)
-	inst.membershipFieldBuilder087 = builder.Field(87).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder087 = builder.Field(87).(*array.ListBuilder)
-	inst.membershipFieldBuilder088 = builder.Field(88).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder088 = builder.Field(88).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder089 = builder.Field(89).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder089 = builder.Field(89).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder090 = builder.Field(90).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder090 = builder.Field(90).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder091 = builder.Field(91).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder091 = builder.Field(91).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder092 = builder.Field(92).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder092 = builder.Field(92).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsDigestInAttr) beginAttribute() {
-	inst.membershipListBuilder084.Append(true)
-	inst.membershipListBuilder085.Append(true)
-	inst.membershipListBuilder086.Append(true)
-	inst.membershipListBuilder087.Append(true)
-	inst.membershipListBuilder088.Append(true)
-	inst.membershipContainerLength084 = 0
-	inst.membershipContainerLength085 = 0
-	inst.membershipContainerLength086 = 0
-	inst.membershipContainerLength087 = 0
-	inst.membershipContainerLength088 = 0
-	inst.scalarListBuilder083.Append(true)
-	inst.membershipSupportListBuilder089.Append(true)
-	inst.membershipSupportListBuilder090.Append(true)
-	inst.membershipSupportListBuilder091.Append(true)
-	inst.membershipSupportListBuilder092.Append(true)
-	inst.state = runtime.EntityStateInSection
-	inst.clearErrors()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsDigestInAttr) AddMembershipHighCardRef(hr84 uint64) *InEntityAgentrunentryTableSectionEntryCallsDigestInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder084.Append(hr84)
-	inst.membershipContainerLength084++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsDigestInAttr) AddMembershipHighCardRefP(hr84 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder084.Append(hr84)
-	inst.membershipContainerLength084++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsDigestInAttr) AddMembershipLowCardRef(lr85 uint64) *InEntityAgentrunentryTableSectionEntryCallsDigestInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder085.Append(lr85)
-	inst.membershipContainerLength085++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsDigestInAttr) AddMembershipLowCardRefP(lr85 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder085.Append(lr85)
-	inst.membershipContainerLength085++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsDigestInAttr) AddMembershipLowCardVerbatim(lv86 []byte) *InEntityAgentrunentryTableSectionEntryCallsDigestInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder086.Append(lv86)
-	inst.membershipContainerLength086++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsDigestInAttr) AddMembershipLowCardVerbatimP(lv86 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder086.Append(lv86)
-	inst.membershipContainerLength086++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsDigestInAttr) AddMembershipMixedLowCardRef(lmr87 uint64, mrhp88 []byte) *InEntityAgentrunentryTableSectionEntryCallsDigestInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder087.Append(lmr87)
-	inst.membershipFieldBuilder088.Append(mrhp88)
-	inst.membershipContainerLength087++
-	inst.membershipContainerLength088++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsDigestInAttr) AddMembershipMixedLowCardRefP(lmr87 uint64, mrhp88 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder087.Append(lmr87)
-	inst.membershipFieldBuilder088.Append(mrhp88)
-	inst.membershipContainerLength087++
-	inst.membershipContainerLength088++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsDigestInAttr) handleMembershipSupportColumns() {
-	var l int
-	var _ = l
-	l = inst.membershipContainerLength084
-	inst.membershipContainerLength084 = 0
-	inst.membershipSupportFieldBuilder089.Append(uint64(l))
-	l = inst.membershipContainerLength085
-	inst.membershipContainerLength085 = 0
-	inst.membershipSupportFieldBuilder090.Append(uint64(l))
-	l = inst.membershipContainerLength086
-	inst.membershipContainerLength086 = 0
-	inst.membershipSupportFieldBuilder091.Append(uint64(l))
-	l = inst.membershipContainerLength087
-	inst.membershipContainerLength087 = 0
-	inst.membershipSupportFieldBuilder092.Append(uint64(l))
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsDigestInAttr) handleNonScalarSupportColumns() {
-	var l int
-	var _ = l
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsDigestInAttr) applyAmbientMemberships() {
-	if inst.state != runtime.EntityStateInAttribute {
-		return
-	}
-	for _, v := range inst.parent.parent.ambientHighCardRef {
-		inst.AddMembershipHighCardRefP(v)
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsDigestInAttr) completeAttribute() {
-	inst.handleMembershipSupportColumns()
-	inst.handleNonScalarSupportColumns()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsDigestInAttr) EndSection() *InEntityAgentrunentryTable {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	inst.parent.EndSection()
-	return inst.parent.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsDigestInAttr) EndAttribute() *InEntityAgentrunentryTableSectionEntryCallsDigest {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	return inst.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsDigestInAttr) EndAttributeP() {
-	inst.EndAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryCallsDigestInAttr) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryCallsDigestInAttr) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryDigest struct {
-	errs                  []error
-	inAttr                *InEntityAgentrunentryTableSectionEntryDigestInAttr
-	state                 runtime.EntityStateE
-	attributeCount        int
-	parent                *InEntityAgentrunentryTable
-	scalarFieldBuilder243 *array.StringBuilder
-	scalarListBuilder243  *array.ListBuilder
-}
-
-func NewInEntityAgentrunentryTableSectionEntryDigest(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionEntryDigest) {
-	inst = &InEntityAgentrunentryTableSectionEntryDigest{}
-	inAttr := NewInEntityAgentrunentryTableSectionEntryDigestInAttr(builder, inst)
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.inAttr = inAttr
-	inst.parent = parent
-	inst.scalarFieldBuilder243 = builder.Field(243).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder243 = builder.Field(243).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryDigest) endAttribute() {
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryDigest) BeginAttribute(value243 string) *InEntityAgentrunentryTableSectionEntryDigestInAttr {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInAttribute
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.inAttr
-	}
-	inst.scalarFieldBuilder243.Append(value243)
-	inst.attributeCount++
-
-	inst.inAttr.state = inst.state
-	return inst.inAttr
-}
-
-type InEntityAgentrunentryTableSectionEntryDigestAttr struct {
-	Value string
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryDigest) Add(attr InEntityAgentrunentryTableSectionEntryDigestAttr) *InEntityAgentrunentryTableSectionEntryDigestInAttr {
-	a := inst.BeginAttribute(attr.Value)
-	return a
-}
-func (inst *InEntityAgentrunentryTableSectionEntryDigest) CheckErrors() (err error) {
-	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryDigest) EndSection() *InEntityAgentrunentryTable {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	return inst.parent
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryDigest) beginSection() {
-	inst.state = runtime.EntityStateInSection
-	inst.attributeCount = 0
-	inst.inAttr.beginAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryDigest) resetSection() {
-	inst.clearErrors()
-	inst.inAttr.clearErrors()
-	inst.attributeCount = 0
-	inst.state = runtime.EntityStateInitial
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryDigest) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryDigest) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryDigestInAttr struct {
-	errs                             []error
-	state                            runtime.EntityStateE
-	parent                           *InEntityAgentrunentryTableSectionEntryDigest
-	scalarFieldBuilder243            *array.StringBuilder
-	scalarListBuilder243             *array.ListBuilder
-	membershipFieldBuilder244        *array.Uint64Builder
-	membershipListBuilder244         *array.ListBuilder
-	membershipFieldBuilder245        *array.Uint64Builder
-	membershipListBuilder245         *array.ListBuilder
-	membershipFieldBuilder246        *array.BinaryBuilder
-	membershipListBuilder246         *array.ListBuilder
-	membershipFieldBuilder247        *array.Uint64Builder
-	membershipListBuilder247         *array.ListBuilder
-	membershipFieldBuilder248        *array.BinaryBuilder
-	membershipListBuilder248         *array.ListBuilder
-	membershipSupportFieldBuilder249 *array.Uint64Builder
-	membershipSupportListBuilder249  *array.ListBuilder
-	membershipSupportFieldBuilder250 *array.Uint64Builder
-	membershipSupportListBuilder250  *array.ListBuilder
-	membershipSupportFieldBuilder251 *array.Uint64Builder
-	membershipSupportListBuilder251  *array.ListBuilder
-	membershipSupportFieldBuilder252 *array.Uint64Builder
-	membershipSupportListBuilder252  *array.ListBuilder
-
-	membershipContainerLength244 int
-
-	membershipContainerLength245 int
-
-	membershipContainerLength246 int
-
-	membershipContainerLength247 int
-
-	membershipContainerLength248 int
-}
-
-func NewInEntityAgentrunentryTableSectionEntryDigestInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionEntryDigest) (inst *InEntityAgentrunentryTableSectionEntryDigestInAttr) {
-	inst = &InEntityAgentrunentryTableSectionEntryDigestInAttr{}
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.parent = parent
-	inst.scalarFieldBuilder243 = builder.Field(243).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder243 = builder.Field(243).(*array.ListBuilder)
-	inst.membershipFieldBuilder244 = builder.Field(244).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder244 = builder.Field(244).(*array.ListBuilder)
-	inst.membershipFieldBuilder245 = builder.Field(245).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder245 = builder.Field(245).(*array.ListBuilder)
-	inst.membershipFieldBuilder246 = builder.Field(246).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder246 = builder.Field(246).(*array.ListBuilder)
-	inst.membershipFieldBuilder247 = builder.Field(247).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder247 = builder.Field(247).(*array.ListBuilder)
-	inst.membershipFieldBuilder248 = builder.Field(248).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder248 = builder.Field(248).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder249 = builder.Field(249).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder249 = builder.Field(249).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder250 = builder.Field(250).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder250 = builder.Field(250).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder251 = builder.Field(251).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder251 = builder.Field(251).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder252 = builder.Field(252).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder252 = builder.Field(252).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryDigestInAttr) beginAttribute() {
-	inst.membershipListBuilder244.Append(true)
-	inst.membershipListBuilder245.Append(true)
-	inst.membershipListBuilder246.Append(true)
-	inst.membershipListBuilder247.Append(true)
-	inst.membershipListBuilder248.Append(true)
-	inst.membershipContainerLength244 = 0
-	inst.membershipContainerLength245 = 0
-	inst.membershipContainerLength246 = 0
-	inst.membershipContainerLength247 = 0
-	inst.membershipContainerLength248 = 0
-	inst.scalarListBuilder243.Append(true)
-	inst.membershipSupportListBuilder249.Append(true)
-	inst.membershipSupportListBuilder250.Append(true)
-	inst.membershipSupportListBuilder251.Append(true)
-	inst.membershipSupportListBuilder252.Append(true)
-	inst.state = runtime.EntityStateInSection
-	inst.clearErrors()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryDigestInAttr) AddMembershipHighCardRef(hr244 uint64) *InEntityAgentrunentryTableSectionEntryDigestInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder244.Append(hr244)
-	inst.membershipContainerLength244++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryDigestInAttr) AddMembershipHighCardRefP(hr244 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder244.Append(hr244)
-	inst.membershipContainerLength244++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryDigestInAttr) AddMembershipLowCardRef(lr245 uint64) *InEntityAgentrunentryTableSectionEntryDigestInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder245.Append(lr245)
-	inst.membershipContainerLength245++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryDigestInAttr) AddMembershipLowCardRefP(lr245 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder245.Append(lr245)
-	inst.membershipContainerLength245++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryDigestInAttr) AddMembershipLowCardVerbatim(lv246 []byte) *InEntityAgentrunentryTableSectionEntryDigestInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder246.Append(lv246)
-	inst.membershipContainerLength246++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryDigestInAttr) AddMembershipLowCardVerbatimP(lv246 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder246.Append(lv246)
-	inst.membershipContainerLength246++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryDigestInAttr) AddMembershipMixedLowCardRef(lmr247 uint64, mrhp248 []byte) *InEntityAgentrunentryTableSectionEntryDigestInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder247.Append(lmr247)
-	inst.membershipFieldBuilder248.Append(mrhp248)
-	inst.membershipContainerLength247++
-	inst.membershipContainerLength248++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryDigestInAttr) AddMembershipMixedLowCardRefP(lmr247 uint64, mrhp248 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder247.Append(lmr247)
-	inst.membershipFieldBuilder248.Append(mrhp248)
-	inst.membershipContainerLength247++
-	inst.membershipContainerLength248++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryDigestInAttr) handleMembershipSupportColumns() {
-	var l int
-	var _ = l
-	l = inst.membershipContainerLength244
-	inst.membershipContainerLength244 = 0
-	inst.membershipSupportFieldBuilder249.Append(uint64(l))
-	l = inst.membershipContainerLength245
-	inst.membershipContainerLength245 = 0
-	inst.membershipSupportFieldBuilder250.Append(uint64(l))
-	l = inst.membershipContainerLength246
-	inst.membershipContainerLength246 = 0
-	inst.membershipSupportFieldBuilder251.Append(uint64(l))
-	l = inst.membershipContainerLength247
-	inst.membershipContainerLength247 = 0
-	inst.membershipSupportFieldBuilder252.Append(uint64(l))
-}
-func (inst *InEntityAgentrunentryTableSectionEntryDigestInAttr) handleNonScalarSupportColumns() {
-	var l int
-	var _ = l
-}
-func (inst *InEntityAgentrunentryTableSectionEntryDigestInAttr) applyAmbientMemberships() {
-	if inst.state != runtime.EntityStateInAttribute {
-		return
-	}
-	for _, v := range inst.parent.parent.ambientHighCardRef {
-		inst.AddMembershipHighCardRefP(v)
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryDigestInAttr) completeAttribute() {
-	inst.handleMembershipSupportColumns()
-	inst.handleNonScalarSupportColumns()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryDigestInAttr) EndSection() *InEntityAgentrunentryTable {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	inst.parent.EndSection()
-	return inst.parent.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryDigestInAttr) EndAttribute() *InEntityAgentrunentryTableSectionEntryDigest {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	return inst.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryDigestInAttr) EndAttributeP() {
-	inst.EndAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryDigestInAttr) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryDigestInAttr) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryEffect struct {
-	errs                  []error
-	inAttr                *InEntityAgentrunentryTableSectionEntryEffectInAttr
-	state                 runtime.EntityStateE
-	attributeCount        int
-	parent                *InEntityAgentrunentryTable
-	scalarFieldBuilder143 *array.StringBuilder
-	scalarListBuilder143  *array.ListBuilder
-}
-
-func NewInEntityAgentrunentryTableSectionEntryEffect(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionEntryEffect) {
-	inst = &InEntityAgentrunentryTableSectionEntryEffect{}
-	inAttr := NewInEntityAgentrunentryTableSectionEntryEffectInAttr(builder, inst)
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.inAttr = inAttr
-	inst.parent = parent
-	inst.scalarFieldBuilder143 = builder.Field(143).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder143 = builder.Field(143).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryEffect) endAttribute() {
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryEffect) BeginAttribute(value143 string) *InEntityAgentrunentryTableSectionEntryEffectInAttr {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInAttribute
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.inAttr
-	}
-	inst.scalarFieldBuilder143.Append(value143)
-	inst.attributeCount++
-
-	inst.inAttr.state = inst.state
-	return inst.inAttr
-}
-
-type InEntityAgentrunentryTableSectionEntryEffectAttr struct {
-	Value string
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryEffect) Add(attr InEntityAgentrunentryTableSectionEntryEffectAttr) *InEntityAgentrunentryTableSectionEntryEffectInAttr {
-	a := inst.BeginAttribute(attr.Value)
-	return a
-}
-func (inst *InEntityAgentrunentryTableSectionEntryEffect) CheckErrors() (err error) {
-	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryEffect) EndSection() *InEntityAgentrunentryTable {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	return inst.parent
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryEffect) beginSection() {
-	inst.state = runtime.EntityStateInSection
-	inst.attributeCount = 0
-	inst.inAttr.beginAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryEffect) resetSection() {
-	inst.clearErrors()
-	inst.inAttr.clearErrors()
-	inst.attributeCount = 0
-	inst.state = runtime.EntityStateInitial
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryEffect) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryEffect) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryEffectInAttr struct {
-	errs                             []error
-	state                            runtime.EntityStateE
-	parent                           *InEntityAgentrunentryTableSectionEntryEffect
-	scalarFieldBuilder143            *array.StringBuilder
-	scalarListBuilder143             *array.ListBuilder
-	membershipFieldBuilder144        *array.Uint64Builder
-	membershipListBuilder144         *array.ListBuilder
-	membershipFieldBuilder145        *array.Uint64Builder
-	membershipListBuilder145         *array.ListBuilder
-	membershipFieldBuilder146        *array.BinaryBuilder
-	membershipListBuilder146         *array.ListBuilder
-	membershipFieldBuilder147        *array.Uint64Builder
-	membershipListBuilder147         *array.ListBuilder
-	membershipFieldBuilder148        *array.BinaryBuilder
-	membershipListBuilder148         *array.ListBuilder
-	membershipSupportFieldBuilder149 *array.Uint64Builder
-	membershipSupportListBuilder149  *array.ListBuilder
-	membershipSupportFieldBuilder150 *array.Uint64Builder
-	membershipSupportListBuilder150  *array.ListBuilder
-	membershipSupportFieldBuilder151 *array.Uint64Builder
-	membershipSupportListBuilder151  *array.ListBuilder
-	membershipSupportFieldBuilder152 *array.Uint64Builder
-	membershipSupportListBuilder152  *array.ListBuilder
-
-	membershipContainerLength144 int
-
-	membershipContainerLength145 int
-
-	membershipContainerLength146 int
-
-	membershipContainerLength147 int
-
-	membershipContainerLength148 int
-}
-
-func NewInEntityAgentrunentryTableSectionEntryEffectInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionEntryEffect) (inst *InEntityAgentrunentryTableSectionEntryEffectInAttr) {
-	inst = &InEntityAgentrunentryTableSectionEntryEffectInAttr{}
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.parent = parent
-	inst.scalarFieldBuilder143 = builder.Field(143).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder143 = builder.Field(143).(*array.ListBuilder)
-	inst.membershipFieldBuilder144 = builder.Field(144).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder144 = builder.Field(144).(*array.ListBuilder)
-	inst.membershipFieldBuilder145 = builder.Field(145).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder145 = builder.Field(145).(*array.ListBuilder)
-	inst.membershipFieldBuilder146 = builder.Field(146).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder146 = builder.Field(146).(*array.ListBuilder)
-	inst.membershipFieldBuilder147 = builder.Field(147).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder147 = builder.Field(147).(*array.ListBuilder)
-	inst.membershipFieldBuilder148 = builder.Field(148).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder148 = builder.Field(148).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder149 = builder.Field(149).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder149 = builder.Field(149).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder150 = builder.Field(150).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder150 = builder.Field(150).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder151 = builder.Field(151).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder151 = builder.Field(151).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder152 = builder.Field(152).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder152 = builder.Field(152).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryEffectInAttr) beginAttribute() {
-	inst.membershipListBuilder144.Append(true)
-	inst.membershipListBuilder145.Append(true)
-	inst.membershipListBuilder146.Append(true)
-	inst.membershipListBuilder147.Append(true)
-	inst.membershipListBuilder148.Append(true)
-	inst.membershipContainerLength144 = 0
-	inst.membershipContainerLength145 = 0
-	inst.membershipContainerLength146 = 0
-	inst.membershipContainerLength147 = 0
-	inst.membershipContainerLength148 = 0
-	inst.scalarListBuilder143.Append(true)
-	inst.membershipSupportListBuilder149.Append(true)
-	inst.membershipSupportListBuilder150.Append(true)
-	inst.membershipSupportListBuilder151.Append(true)
-	inst.membershipSupportListBuilder152.Append(true)
-	inst.state = runtime.EntityStateInSection
-	inst.clearErrors()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryEffectInAttr) AddMembershipHighCardRef(hr144 uint64) *InEntityAgentrunentryTableSectionEntryEffectInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder144.Append(hr144)
-	inst.membershipContainerLength144++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryEffectInAttr) AddMembershipHighCardRefP(hr144 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder144.Append(hr144)
-	inst.membershipContainerLength144++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryEffectInAttr) AddMembershipLowCardRef(lr145 uint64) *InEntityAgentrunentryTableSectionEntryEffectInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder145.Append(lr145)
-	inst.membershipContainerLength145++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryEffectInAttr) AddMembershipLowCardRefP(lr145 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder145.Append(lr145)
-	inst.membershipContainerLength145++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryEffectInAttr) AddMembershipLowCardVerbatim(lv146 []byte) *InEntityAgentrunentryTableSectionEntryEffectInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder146.Append(lv146)
-	inst.membershipContainerLength146++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryEffectInAttr) AddMembershipLowCardVerbatimP(lv146 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder146.Append(lv146)
-	inst.membershipContainerLength146++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryEffectInAttr) AddMembershipMixedLowCardRef(lmr147 uint64, mrhp148 []byte) *InEntityAgentrunentryTableSectionEntryEffectInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder147.Append(lmr147)
-	inst.membershipFieldBuilder148.Append(mrhp148)
-	inst.membershipContainerLength147++
-	inst.membershipContainerLength148++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryEffectInAttr) AddMembershipMixedLowCardRefP(lmr147 uint64, mrhp148 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder147.Append(lmr147)
-	inst.membershipFieldBuilder148.Append(mrhp148)
-	inst.membershipContainerLength147++
-	inst.membershipContainerLength148++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryEffectInAttr) handleMembershipSupportColumns() {
-	var l int
-	var _ = l
-	l = inst.membershipContainerLength144
-	inst.membershipContainerLength144 = 0
-	inst.membershipSupportFieldBuilder149.Append(uint64(l))
-	l = inst.membershipContainerLength145
-	inst.membershipContainerLength145 = 0
-	inst.membershipSupportFieldBuilder150.Append(uint64(l))
-	l = inst.membershipContainerLength146
-	inst.membershipContainerLength146 = 0
-	inst.membershipSupportFieldBuilder151.Append(uint64(l))
-	l = inst.membershipContainerLength147
-	inst.membershipContainerLength147 = 0
-	inst.membershipSupportFieldBuilder152.Append(uint64(l))
-}
-func (inst *InEntityAgentrunentryTableSectionEntryEffectInAttr) handleNonScalarSupportColumns() {
-	var l int
-	var _ = l
-}
-func (inst *InEntityAgentrunentryTableSectionEntryEffectInAttr) applyAmbientMemberships() {
-	if inst.state != runtime.EntityStateInAttribute {
-		return
-	}
-	for _, v := range inst.parent.parent.ambientHighCardRef {
-		inst.AddMembershipHighCardRefP(v)
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryEffectInAttr) completeAttribute() {
-	inst.handleMembershipSupportColumns()
-	inst.handleNonScalarSupportColumns()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryEffectInAttr) EndSection() *InEntityAgentrunentryTable {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	inst.parent.EndSection()
-	return inst.parent.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryEffectInAttr) EndAttribute() *InEntityAgentrunentryTableSectionEntryEffect {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	return inst.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryEffectInAttr) EndAttributeP() {
-	inst.EndAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryEffectInAttr) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryEffectInAttr) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryForm struct {
-	errs                  []error
-	inAttr                *InEntityAgentrunentryTableSectionEntryFormInAttr
-	state                 runtime.EntityStateE
-	attributeCount        int
-	parent                *InEntityAgentrunentryTable
-	scalarFieldBuilder113 *array.StringBuilder
-	scalarListBuilder113  *array.ListBuilder
-}
-
-func NewInEntityAgentrunentryTableSectionEntryForm(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionEntryForm) {
-	inst = &InEntityAgentrunentryTableSectionEntryForm{}
-	inAttr := NewInEntityAgentrunentryTableSectionEntryFormInAttr(builder, inst)
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.inAttr = inAttr
-	inst.parent = parent
-	inst.scalarFieldBuilder113 = builder.Field(113).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder113 = builder.Field(113).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryForm) endAttribute() {
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryForm) BeginAttribute(value113 string) *InEntityAgentrunentryTableSectionEntryFormInAttr {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInAttribute
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.inAttr
-	}
-	inst.scalarFieldBuilder113.Append(value113)
-	inst.attributeCount++
-
-	inst.inAttr.state = inst.state
-	return inst.inAttr
-}
-
-type InEntityAgentrunentryTableSectionEntryFormAttr struct {
-	Value string
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryForm) Add(attr InEntityAgentrunentryTableSectionEntryFormAttr) *InEntityAgentrunentryTableSectionEntryFormInAttr {
-	a := inst.BeginAttribute(attr.Value)
-	return a
-}
-func (inst *InEntityAgentrunentryTableSectionEntryForm) CheckErrors() (err error) {
-	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryForm) EndSection() *InEntityAgentrunentryTable {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	return inst.parent
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryForm) beginSection() {
-	inst.state = runtime.EntityStateInSection
-	inst.attributeCount = 0
-	inst.inAttr.beginAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryForm) resetSection() {
-	inst.clearErrors()
-	inst.inAttr.clearErrors()
-	inst.attributeCount = 0
-	inst.state = runtime.EntityStateInitial
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryForm) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryForm) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryFormInAttr struct {
-	errs                             []error
-	state                            runtime.EntityStateE
-	parent                           *InEntityAgentrunentryTableSectionEntryForm
-	scalarFieldBuilder113            *array.StringBuilder
-	scalarListBuilder113             *array.ListBuilder
-	membershipFieldBuilder114        *array.Uint64Builder
-	membershipListBuilder114         *array.ListBuilder
-	membershipFieldBuilder115        *array.Uint64Builder
-	membershipListBuilder115         *array.ListBuilder
-	membershipFieldBuilder116        *array.BinaryBuilder
-	membershipListBuilder116         *array.ListBuilder
-	membershipFieldBuilder117        *array.Uint64Builder
-	membershipListBuilder117         *array.ListBuilder
-	membershipFieldBuilder118        *array.BinaryBuilder
-	membershipListBuilder118         *array.ListBuilder
-	membershipSupportFieldBuilder119 *array.Uint64Builder
-	membershipSupportListBuilder119  *array.ListBuilder
-	membershipSupportFieldBuilder120 *array.Uint64Builder
-	membershipSupportListBuilder120  *array.ListBuilder
-	membershipSupportFieldBuilder121 *array.Uint64Builder
-	membershipSupportListBuilder121  *array.ListBuilder
-	membershipSupportFieldBuilder122 *array.Uint64Builder
-	membershipSupportListBuilder122  *array.ListBuilder
-
-	membershipContainerLength114 int
-
-	membershipContainerLength115 int
-
-	membershipContainerLength116 int
-
-	membershipContainerLength117 int
-
-	membershipContainerLength118 int
-}
-
-func NewInEntityAgentrunentryTableSectionEntryFormInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionEntryForm) (inst *InEntityAgentrunentryTableSectionEntryFormInAttr) {
-	inst = &InEntityAgentrunentryTableSectionEntryFormInAttr{}
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.parent = parent
-	inst.scalarFieldBuilder113 = builder.Field(113).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder113 = builder.Field(113).(*array.ListBuilder)
-	inst.membershipFieldBuilder114 = builder.Field(114).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder114 = builder.Field(114).(*array.ListBuilder)
-	inst.membershipFieldBuilder115 = builder.Field(115).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder115 = builder.Field(115).(*array.ListBuilder)
-	inst.membershipFieldBuilder116 = builder.Field(116).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder116 = builder.Field(116).(*array.ListBuilder)
-	inst.membershipFieldBuilder117 = builder.Field(117).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder117 = builder.Field(117).(*array.ListBuilder)
-	inst.membershipFieldBuilder118 = builder.Field(118).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder118 = builder.Field(118).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder119 = builder.Field(119).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder119 = builder.Field(119).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder120 = builder.Field(120).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder120 = builder.Field(120).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder121 = builder.Field(121).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder121 = builder.Field(121).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder122 = builder.Field(122).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder122 = builder.Field(122).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFormInAttr) beginAttribute() {
-	inst.membershipListBuilder114.Append(true)
-	inst.membershipListBuilder115.Append(true)
-	inst.membershipListBuilder116.Append(true)
-	inst.membershipListBuilder117.Append(true)
-	inst.membershipListBuilder118.Append(true)
-	inst.membershipContainerLength114 = 0
-	inst.membershipContainerLength115 = 0
-	inst.membershipContainerLength116 = 0
-	inst.membershipContainerLength117 = 0
-	inst.membershipContainerLength118 = 0
-	inst.scalarListBuilder113.Append(true)
-	inst.membershipSupportListBuilder119.Append(true)
-	inst.membershipSupportListBuilder120.Append(true)
-	inst.membershipSupportListBuilder121.Append(true)
-	inst.membershipSupportListBuilder122.Append(true)
-	inst.state = runtime.EntityStateInSection
-	inst.clearErrors()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFormInAttr) AddMembershipHighCardRef(hr114 uint64) *InEntityAgentrunentryTableSectionEntryFormInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder114.Append(hr114)
-	inst.membershipContainerLength114++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFormInAttr) AddMembershipHighCardRefP(hr114 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder114.Append(hr114)
-	inst.membershipContainerLength114++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFormInAttr) AddMembershipLowCardRef(lr115 uint64) *InEntityAgentrunentryTableSectionEntryFormInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder115.Append(lr115)
-	inst.membershipContainerLength115++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFormInAttr) AddMembershipLowCardRefP(lr115 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder115.Append(lr115)
-	inst.membershipContainerLength115++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFormInAttr) AddMembershipLowCardVerbatim(lv116 []byte) *InEntityAgentrunentryTableSectionEntryFormInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder116.Append(lv116)
-	inst.membershipContainerLength116++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFormInAttr) AddMembershipLowCardVerbatimP(lv116 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder116.Append(lv116)
-	inst.membershipContainerLength116++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFormInAttr) AddMembershipMixedLowCardRef(lmr117 uint64, mrhp118 []byte) *InEntityAgentrunentryTableSectionEntryFormInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder117.Append(lmr117)
-	inst.membershipFieldBuilder118.Append(mrhp118)
-	inst.membershipContainerLength117++
-	inst.membershipContainerLength118++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFormInAttr) AddMembershipMixedLowCardRefP(lmr117 uint64, mrhp118 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder117.Append(lmr117)
-	inst.membershipFieldBuilder118.Append(mrhp118)
-	inst.membershipContainerLength117++
-	inst.membershipContainerLength118++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFormInAttr) handleMembershipSupportColumns() {
-	var l int
-	var _ = l
-	l = inst.membershipContainerLength114
-	inst.membershipContainerLength114 = 0
-	inst.membershipSupportFieldBuilder119.Append(uint64(l))
-	l = inst.membershipContainerLength115
-	inst.membershipContainerLength115 = 0
-	inst.membershipSupportFieldBuilder120.Append(uint64(l))
-	l = inst.membershipContainerLength116
-	inst.membershipContainerLength116 = 0
-	inst.membershipSupportFieldBuilder121.Append(uint64(l))
-	l = inst.membershipContainerLength117
-	inst.membershipContainerLength117 = 0
-	inst.membershipSupportFieldBuilder122.Append(uint64(l))
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFormInAttr) handleNonScalarSupportColumns() {
-	var l int
-	var _ = l
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFormInAttr) applyAmbientMemberships() {
-	if inst.state != runtime.EntityStateInAttribute {
-		return
-	}
-	for _, v := range inst.parent.parent.ambientHighCardRef {
-		inst.AddMembershipHighCardRefP(v)
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFormInAttr) completeAttribute() {
-	inst.handleMembershipSupportColumns()
-	inst.handleNonScalarSupportColumns()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFormInAttr) EndSection() *InEntityAgentrunentryTable {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	inst.parent.EndSection()
-	return inst.parent.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFormInAttr) EndAttribute() *InEntityAgentrunentryTableSectionEntryForm {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	return inst.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFormInAttr) EndAttributeP() {
-	inst.EndAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryFormInAttr) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFormInAttr) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryFrom struct {
-	errs                  []error
-	inAttr                *InEntityAgentrunentryTableSectionEntryFromInAttr
-	state                 runtime.EntityStateE
-	attributeCount        int
-	parent                *InEntityAgentrunentryTable
-	scalarFieldBuilder133 *array.Uint32Builder
-	scalarListBuilder133  *array.ListBuilder
-}
-
-func NewInEntityAgentrunentryTableSectionEntryFrom(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionEntryFrom) {
-	inst = &InEntityAgentrunentryTableSectionEntryFrom{}
-	inAttr := NewInEntityAgentrunentryTableSectionEntryFromInAttr(builder, inst)
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.inAttr = inAttr
-	inst.parent = parent
-	inst.scalarFieldBuilder133 = builder.Field(133).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
-	inst.scalarListBuilder133 = builder.Field(133).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFrom) endAttribute() {
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFrom) BeginAttribute(value133 uint32) *InEntityAgentrunentryTableSectionEntryFromInAttr {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInAttribute
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.inAttr
-	}
-	inst.scalarFieldBuilder133.Append(value133)
-	inst.attributeCount++
-
-	inst.inAttr.state = inst.state
-	return inst.inAttr
-}
-
-type InEntityAgentrunentryTableSectionEntryFromAttr struct {
-	Value uint32
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryFrom) Add(attr InEntityAgentrunentryTableSectionEntryFromAttr) *InEntityAgentrunentryTableSectionEntryFromInAttr {
-	a := inst.BeginAttribute(attr.Value)
-	return a
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFrom) CheckErrors() (err error) {
-	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFrom) EndSection() *InEntityAgentrunentryTable {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	return inst.parent
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryFrom) beginSection() {
-	inst.state = runtime.EntityStateInSection
-	inst.attributeCount = 0
-	inst.inAttr.beginAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryFrom) resetSection() {
-	inst.clearErrors()
-	inst.inAttr.clearErrors()
-	inst.attributeCount = 0
-	inst.state = runtime.EntityStateInitial
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryFrom) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFrom) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryFromInAttr struct {
-	errs                             []error
-	state                            runtime.EntityStateE
-	parent                           *InEntityAgentrunentryTableSectionEntryFrom
-	scalarFieldBuilder133            *array.Uint32Builder
-	scalarListBuilder133             *array.ListBuilder
-	membershipFieldBuilder134        *array.Uint64Builder
-	membershipListBuilder134         *array.ListBuilder
-	membershipFieldBuilder135        *array.Uint64Builder
-	membershipListBuilder135         *array.ListBuilder
-	membershipFieldBuilder136        *array.BinaryBuilder
-	membershipListBuilder136         *array.ListBuilder
-	membershipFieldBuilder137        *array.Uint64Builder
-	membershipListBuilder137         *array.ListBuilder
-	membershipFieldBuilder138        *array.BinaryBuilder
-	membershipListBuilder138         *array.ListBuilder
-	membershipSupportFieldBuilder139 *array.Uint64Builder
-	membershipSupportListBuilder139  *array.ListBuilder
-	membershipSupportFieldBuilder140 *array.Uint64Builder
-	membershipSupportListBuilder140  *array.ListBuilder
-	membershipSupportFieldBuilder141 *array.Uint64Builder
-	membershipSupportListBuilder141  *array.ListBuilder
-	membershipSupportFieldBuilder142 *array.Uint64Builder
-	membershipSupportListBuilder142  *array.ListBuilder
-
-	membershipContainerLength134 int
-
-	membershipContainerLength135 int
-
-	membershipContainerLength136 int
-
-	membershipContainerLength137 int
-
-	membershipContainerLength138 int
-}
-
-func NewInEntityAgentrunentryTableSectionEntryFromInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionEntryFrom) (inst *InEntityAgentrunentryTableSectionEntryFromInAttr) {
-	inst = &InEntityAgentrunentryTableSectionEntryFromInAttr{}
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.parent = parent
-	inst.scalarFieldBuilder133 = builder.Field(133).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
-	inst.scalarListBuilder133 = builder.Field(133).(*array.ListBuilder)
-	inst.membershipFieldBuilder134 = builder.Field(134).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder134 = builder.Field(134).(*array.ListBuilder)
-	inst.membershipFieldBuilder135 = builder.Field(135).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder135 = builder.Field(135).(*array.ListBuilder)
-	inst.membershipFieldBuilder136 = builder.Field(136).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder136 = builder.Field(136).(*array.ListBuilder)
-	inst.membershipFieldBuilder137 = builder.Field(137).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder137 = builder.Field(137).(*array.ListBuilder)
-	inst.membershipFieldBuilder138 = builder.Field(138).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder138 = builder.Field(138).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder139 = builder.Field(139).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder139 = builder.Field(139).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder140 = builder.Field(140).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder140 = builder.Field(140).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder141 = builder.Field(141).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder141 = builder.Field(141).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder142 = builder.Field(142).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder142 = builder.Field(142).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFromInAttr) beginAttribute() {
-	inst.membershipListBuilder134.Append(true)
-	inst.membershipListBuilder135.Append(true)
-	inst.membershipListBuilder136.Append(true)
-	inst.membershipListBuilder137.Append(true)
-	inst.membershipListBuilder138.Append(true)
-	inst.membershipContainerLength134 = 0
-	inst.membershipContainerLength135 = 0
-	inst.membershipContainerLength136 = 0
-	inst.membershipContainerLength137 = 0
-	inst.membershipContainerLength138 = 0
-	inst.scalarListBuilder133.Append(true)
-	inst.membershipSupportListBuilder139.Append(true)
-	inst.membershipSupportListBuilder140.Append(true)
-	inst.membershipSupportListBuilder141.Append(true)
-	inst.membershipSupportListBuilder142.Append(true)
-	inst.state = runtime.EntityStateInSection
-	inst.clearErrors()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFromInAttr) AddMembershipHighCardRef(hr134 uint64) *InEntityAgentrunentryTableSectionEntryFromInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder134.Append(hr134)
-	inst.membershipContainerLength134++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFromInAttr) AddMembershipHighCardRefP(hr134 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder134.Append(hr134)
-	inst.membershipContainerLength134++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFromInAttr) AddMembershipLowCardRef(lr135 uint64) *InEntityAgentrunentryTableSectionEntryFromInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder135.Append(lr135)
-	inst.membershipContainerLength135++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFromInAttr) AddMembershipLowCardRefP(lr135 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder135.Append(lr135)
-	inst.membershipContainerLength135++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFromInAttr) AddMembershipLowCardVerbatim(lv136 []byte) *InEntityAgentrunentryTableSectionEntryFromInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder136.Append(lv136)
-	inst.membershipContainerLength136++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFromInAttr) AddMembershipLowCardVerbatimP(lv136 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder136.Append(lv136)
-	inst.membershipContainerLength136++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFromInAttr) AddMembershipMixedLowCardRef(lmr137 uint64, mrhp138 []byte) *InEntityAgentrunentryTableSectionEntryFromInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder137.Append(lmr137)
-	inst.membershipFieldBuilder138.Append(mrhp138)
-	inst.membershipContainerLength137++
-	inst.membershipContainerLength138++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFromInAttr) AddMembershipMixedLowCardRefP(lmr137 uint64, mrhp138 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder137.Append(lmr137)
-	inst.membershipFieldBuilder138.Append(mrhp138)
-	inst.membershipContainerLength137++
-	inst.membershipContainerLength138++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFromInAttr) handleMembershipSupportColumns() {
-	var l int
-	var _ = l
-	l = inst.membershipContainerLength134
-	inst.membershipContainerLength134 = 0
-	inst.membershipSupportFieldBuilder139.Append(uint64(l))
-	l = inst.membershipContainerLength135
-	inst.membershipContainerLength135 = 0
-	inst.membershipSupportFieldBuilder140.Append(uint64(l))
-	l = inst.membershipContainerLength136
-	inst.membershipContainerLength136 = 0
-	inst.membershipSupportFieldBuilder141.Append(uint64(l))
-	l = inst.membershipContainerLength137
-	inst.membershipContainerLength137 = 0
-	inst.membershipSupportFieldBuilder142.Append(uint64(l))
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFromInAttr) handleNonScalarSupportColumns() {
-	var l int
-	var _ = l
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFromInAttr) applyAmbientMemberships() {
-	if inst.state != runtime.EntityStateInAttribute {
-		return
-	}
-	for _, v := range inst.parent.parent.ambientHighCardRef {
-		inst.AddMembershipHighCardRefP(v)
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFromInAttr) completeAttribute() {
-	inst.handleMembershipSupportColumns()
-	inst.handleNonScalarSupportColumns()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFromInAttr) EndSection() *InEntityAgentrunentryTable {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	inst.parent.EndSection()
-	return inst.parent.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFromInAttr) EndAttribute() *InEntityAgentrunentryTableSectionEntryFrom {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	return inst.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFromInAttr) EndAttributeP() {
-	inst.EndAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryFromInAttr) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryFromInAttr) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryKey struct {
-	errs                  []error
-	inAttr                *InEntityAgentrunentryTableSectionEntryKeyInAttr
-	state                 runtime.EntityStateE
-	attributeCount        int
-	parent                *InEntityAgentrunentryTable
-	scalarFieldBuilder033 *array.StringBuilder
-	scalarListBuilder033  *array.ListBuilder
-}
-
-func NewInEntityAgentrunentryTableSectionEntryKey(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionEntryKey) {
-	inst = &InEntityAgentrunentryTableSectionEntryKey{}
-	inAttr := NewInEntityAgentrunentryTableSectionEntryKeyInAttr(builder, inst)
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.inAttr = inAttr
-	inst.parent = parent
-	inst.scalarFieldBuilder033 = builder.Field(33).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder033 = builder.Field(33).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKey) endAttribute() {
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKey) BeginAttribute(value33 string) *InEntityAgentrunentryTableSectionEntryKeyInAttr {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInAttribute
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.inAttr
-	}
-	inst.scalarFieldBuilder033.Append(value33)
-	inst.attributeCount++
-
-	inst.inAttr.state = inst.state
-	return inst.inAttr
-}
-
-type InEntityAgentrunentryTableSectionEntryKeyAttr struct {
-	Value string
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryKey) Add(attr InEntityAgentrunentryTableSectionEntryKeyAttr) *InEntityAgentrunentryTableSectionEntryKeyInAttr {
-	a := inst.BeginAttribute(attr.Value)
-	return a
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKey) CheckErrors() (err error) {
-	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKey) EndSection() *InEntityAgentrunentryTable {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	return inst.parent
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryKey) beginSection() {
-	inst.state = runtime.EntityStateInSection
-	inst.attributeCount = 0
-	inst.inAttr.beginAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryKey) resetSection() {
-	inst.clearErrors()
-	inst.inAttr.clearErrors()
-	inst.attributeCount = 0
-	inst.state = runtime.EntityStateInitial
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryKey) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKey) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryKeyInAttr struct {
-	errs                             []error
-	state                            runtime.EntityStateE
-	parent                           *InEntityAgentrunentryTableSectionEntryKey
-	scalarFieldBuilder033            *array.StringBuilder
-	scalarListBuilder033             *array.ListBuilder
-	membershipFieldBuilder034        *array.Uint64Builder
-	membershipListBuilder034         *array.ListBuilder
-	membershipFieldBuilder035        *array.Uint64Builder
-	membershipListBuilder035         *array.ListBuilder
-	membershipFieldBuilder036        *array.BinaryBuilder
-	membershipListBuilder036         *array.ListBuilder
-	membershipFieldBuilder037        *array.Uint64Builder
-	membershipListBuilder037         *array.ListBuilder
-	membershipFieldBuilder038        *array.BinaryBuilder
-	membershipListBuilder038         *array.ListBuilder
-	membershipSupportFieldBuilder039 *array.Uint64Builder
-	membershipSupportListBuilder039  *array.ListBuilder
-	membershipSupportFieldBuilder040 *array.Uint64Builder
-	membershipSupportListBuilder040  *array.ListBuilder
-	membershipSupportFieldBuilder041 *array.Uint64Builder
-	membershipSupportListBuilder041  *array.ListBuilder
-	membershipSupportFieldBuilder042 *array.Uint64Builder
-	membershipSupportListBuilder042  *array.ListBuilder
-
-	membershipContainerLength034 int
-
-	membershipContainerLength035 int
-
-	membershipContainerLength036 int
-
-	membershipContainerLength037 int
-
-	membershipContainerLength038 int
-}
-
-func NewInEntityAgentrunentryTableSectionEntryKeyInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionEntryKey) (inst *InEntityAgentrunentryTableSectionEntryKeyInAttr) {
-	inst = &InEntityAgentrunentryTableSectionEntryKeyInAttr{}
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.parent = parent
-	inst.scalarFieldBuilder033 = builder.Field(33).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder033 = builder.Field(33).(*array.ListBuilder)
-	inst.membershipFieldBuilder034 = builder.Field(34).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder034 = builder.Field(34).(*array.ListBuilder)
-	inst.membershipFieldBuilder035 = builder.Field(35).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder035 = builder.Field(35).(*array.ListBuilder)
-	inst.membershipFieldBuilder036 = builder.Field(36).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder036 = builder.Field(36).(*array.ListBuilder)
-	inst.membershipFieldBuilder037 = builder.Field(37).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder037 = builder.Field(37).(*array.ListBuilder)
-	inst.membershipFieldBuilder038 = builder.Field(38).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder038 = builder.Field(38).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder039 = builder.Field(39).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder039 = builder.Field(39).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder040 = builder.Field(40).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder040 = builder.Field(40).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder041 = builder.Field(41).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder041 = builder.Field(41).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder042 = builder.Field(42).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder042 = builder.Field(42).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyInAttr) beginAttribute() {
-	inst.membershipListBuilder034.Append(true)
-	inst.membershipListBuilder035.Append(true)
-	inst.membershipListBuilder036.Append(true)
-	inst.membershipListBuilder037.Append(true)
-	inst.membershipListBuilder038.Append(true)
-	inst.membershipContainerLength034 = 0
-	inst.membershipContainerLength035 = 0
-	inst.membershipContainerLength036 = 0
-	inst.membershipContainerLength037 = 0
-	inst.membershipContainerLength038 = 0
-	inst.scalarListBuilder033.Append(true)
-	inst.membershipSupportListBuilder039.Append(true)
-	inst.membershipSupportListBuilder040.Append(true)
-	inst.membershipSupportListBuilder041.Append(true)
-	inst.membershipSupportListBuilder042.Append(true)
-	inst.state = runtime.EntityStateInSection
-	inst.clearErrors()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyInAttr) AddMembershipHighCardRef(hr34 uint64) *InEntityAgentrunentryTableSectionEntryKeyInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder034.Append(hr34)
-	inst.membershipContainerLength034++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyInAttr) AddMembershipHighCardRefP(hr34 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder034.Append(hr34)
-	inst.membershipContainerLength034++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyInAttr) AddMembershipLowCardRef(lr35 uint64) *InEntityAgentrunentryTableSectionEntryKeyInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder035.Append(lr35)
-	inst.membershipContainerLength035++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyInAttr) AddMembershipLowCardRefP(lr35 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder035.Append(lr35)
-	inst.membershipContainerLength035++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyInAttr) AddMembershipLowCardVerbatim(lv36 []byte) *InEntityAgentrunentryTableSectionEntryKeyInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder036.Append(lv36)
-	inst.membershipContainerLength036++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyInAttr) AddMembershipLowCardVerbatimP(lv36 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder036.Append(lv36)
-	inst.membershipContainerLength036++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyInAttr) AddMembershipMixedLowCardRef(lmr37 uint64, mrhp38 []byte) *InEntityAgentrunentryTableSectionEntryKeyInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder037.Append(lmr37)
-	inst.membershipFieldBuilder038.Append(mrhp38)
-	inst.membershipContainerLength037++
-	inst.membershipContainerLength038++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyInAttr) AddMembershipMixedLowCardRefP(lmr37 uint64, mrhp38 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder037.Append(lmr37)
-	inst.membershipFieldBuilder038.Append(mrhp38)
-	inst.membershipContainerLength037++
-	inst.membershipContainerLength038++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyInAttr) handleMembershipSupportColumns() {
-	var l int
-	var _ = l
-	l = inst.membershipContainerLength034
-	inst.membershipContainerLength034 = 0
-	inst.membershipSupportFieldBuilder039.Append(uint64(l))
-	l = inst.membershipContainerLength035
-	inst.membershipContainerLength035 = 0
-	inst.membershipSupportFieldBuilder040.Append(uint64(l))
-	l = inst.membershipContainerLength036
-	inst.membershipContainerLength036 = 0
-	inst.membershipSupportFieldBuilder041.Append(uint64(l))
-	l = inst.membershipContainerLength037
-	inst.membershipContainerLength037 = 0
-	inst.membershipSupportFieldBuilder042.Append(uint64(l))
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyInAttr) handleNonScalarSupportColumns() {
-	var l int
-	var _ = l
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyInAttr) applyAmbientMemberships() {
-	if inst.state != runtime.EntityStateInAttribute {
-		return
-	}
-	for _, v := range inst.parent.parent.ambientHighCardRef {
-		inst.AddMembershipHighCardRefP(v)
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyInAttr) completeAttribute() {
-	inst.handleMembershipSupportColumns()
-	inst.handleNonScalarSupportColumns()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyInAttr) EndSection() *InEntityAgentrunentryTable {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	inst.parent.EndSection()
-	return inst.parent.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyInAttr) EndAttribute() *InEntityAgentrunentryTableSectionEntryKey {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	return inst.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyInAttr) EndAttributeP() {
-	inst.EndAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryKeyInAttr) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyInAttr) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryKeyId struct {
-	errs                  []error
-	inAttr                *InEntityAgentrunentryTableSectionEntryKeyIdInAttr
-	state                 runtime.EntityStateE
-	attributeCount        int
-	parent                *InEntityAgentrunentryTable
-	scalarFieldBuilder253 *array.StringBuilder
-	scalarListBuilder253  *array.ListBuilder
-}
-
-func NewInEntityAgentrunentryTableSectionEntryKeyId(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionEntryKeyId) {
-	inst = &InEntityAgentrunentryTableSectionEntryKeyId{}
-	inAttr := NewInEntityAgentrunentryTableSectionEntryKeyIdInAttr(builder, inst)
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.inAttr = inAttr
-	inst.parent = parent
-	inst.scalarFieldBuilder253 = builder.Field(253).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder253 = builder.Field(253).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyId) endAttribute() {
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyId) BeginAttribute(value253 string) *InEntityAgentrunentryTableSectionEntryKeyIdInAttr {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInAttribute
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.inAttr
-	}
-	inst.scalarFieldBuilder253.Append(value253)
-	inst.attributeCount++
-
-	inst.inAttr.state = inst.state
-	return inst.inAttr
-}
-
-type InEntityAgentrunentryTableSectionEntryKeyIdAttr struct {
-	Value string
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryKeyId) Add(attr InEntityAgentrunentryTableSectionEntryKeyIdAttr) *InEntityAgentrunentryTableSectionEntryKeyIdInAttr {
-	a := inst.BeginAttribute(attr.Value)
-	return a
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyId) CheckErrors() (err error) {
-	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyId) EndSection() *InEntityAgentrunentryTable {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	return inst.parent
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryKeyId) beginSection() {
-	inst.state = runtime.EntityStateInSection
-	inst.attributeCount = 0
-	inst.inAttr.beginAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryKeyId) resetSection() {
-	inst.clearErrors()
-	inst.inAttr.clearErrors()
-	inst.attributeCount = 0
-	inst.state = runtime.EntityStateInitial
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryKeyId) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyId) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryKeyIdInAttr struct {
-	errs                             []error
-	state                            runtime.EntityStateE
-	parent                           *InEntityAgentrunentryTableSectionEntryKeyId
-	scalarFieldBuilder253            *array.StringBuilder
-	scalarListBuilder253             *array.ListBuilder
-	membershipFieldBuilder254        *array.Uint64Builder
-	membershipListBuilder254         *array.ListBuilder
-	membershipFieldBuilder255        *array.Uint64Builder
-	membershipListBuilder255         *array.ListBuilder
-	membershipFieldBuilder256        *array.BinaryBuilder
-	membershipListBuilder256         *array.ListBuilder
-	membershipFieldBuilder257        *array.Uint64Builder
-	membershipListBuilder257         *array.ListBuilder
-	membershipFieldBuilder258        *array.BinaryBuilder
-	membershipListBuilder258         *array.ListBuilder
-	membershipSupportFieldBuilder259 *array.Uint64Builder
-	membershipSupportListBuilder259  *array.ListBuilder
-	membershipSupportFieldBuilder260 *array.Uint64Builder
-	membershipSupportListBuilder260  *array.ListBuilder
-	membershipSupportFieldBuilder261 *array.Uint64Builder
-	membershipSupportListBuilder261  *array.ListBuilder
-	membershipSupportFieldBuilder262 *array.Uint64Builder
-	membershipSupportListBuilder262  *array.ListBuilder
-
-	membershipContainerLength254 int
-
-	membershipContainerLength255 int
-
-	membershipContainerLength256 int
-
-	membershipContainerLength257 int
-
-	membershipContainerLength258 int
-}
-
-func NewInEntityAgentrunentryTableSectionEntryKeyIdInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionEntryKeyId) (inst *InEntityAgentrunentryTableSectionEntryKeyIdInAttr) {
-	inst = &InEntityAgentrunentryTableSectionEntryKeyIdInAttr{}
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.parent = parent
-	inst.scalarFieldBuilder253 = builder.Field(253).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder253 = builder.Field(253).(*array.ListBuilder)
-	inst.membershipFieldBuilder254 = builder.Field(254).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder254 = builder.Field(254).(*array.ListBuilder)
-	inst.membershipFieldBuilder255 = builder.Field(255).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder255 = builder.Field(255).(*array.ListBuilder)
-	inst.membershipFieldBuilder256 = builder.Field(256).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder256 = builder.Field(256).(*array.ListBuilder)
-	inst.membershipFieldBuilder257 = builder.Field(257).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder257 = builder.Field(257).(*array.ListBuilder)
-	inst.membershipFieldBuilder258 = builder.Field(258).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder258 = builder.Field(258).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder259 = builder.Field(259).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder259 = builder.Field(259).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder260 = builder.Field(260).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder260 = builder.Field(260).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder261 = builder.Field(261).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder261 = builder.Field(261).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder262 = builder.Field(262).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder262 = builder.Field(262).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyIdInAttr) beginAttribute() {
-	inst.membershipListBuilder254.Append(true)
-	inst.membershipListBuilder255.Append(true)
-	inst.membershipListBuilder256.Append(true)
-	inst.membershipListBuilder257.Append(true)
-	inst.membershipListBuilder258.Append(true)
-	inst.membershipContainerLength254 = 0
-	inst.membershipContainerLength255 = 0
-	inst.membershipContainerLength256 = 0
-	inst.membershipContainerLength257 = 0
-	inst.membershipContainerLength258 = 0
-	inst.scalarListBuilder253.Append(true)
-	inst.membershipSupportListBuilder259.Append(true)
-	inst.membershipSupportListBuilder260.Append(true)
-	inst.membershipSupportListBuilder261.Append(true)
-	inst.membershipSupportListBuilder262.Append(true)
-	inst.state = runtime.EntityStateInSection
-	inst.clearErrors()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyIdInAttr) AddMembershipHighCardRef(hr254 uint64) *InEntityAgentrunentryTableSectionEntryKeyIdInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder254.Append(hr254)
-	inst.membershipContainerLength254++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyIdInAttr) AddMembershipHighCardRefP(hr254 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder254.Append(hr254)
-	inst.membershipContainerLength254++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyIdInAttr) AddMembershipLowCardRef(lr255 uint64) *InEntityAgentrunentryTableSectionEntryKeyIdInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder255.Append(lr255)
-	inst.membershipContainerLength255++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyIdInAttr) AddMembershipLowCardRefP(lr255 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder255.Append(lr255)
-	inst.membershipContainerLength255++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyIdInAttr) AddMembershipLowCardVerbatim(lv256 []byte) *InEntityAgentrunentryTableSectionEntryKeyIdInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder256.Append(lv256)
-	inst.membershipContainerLength256++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyIdInAttr) AddMembershipLowCardVerbatimP(lv256 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder256.Append(lv256)
-	inst.membershipContainerLength256++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyIdInAttr) AddMembershipMixedLowCardRef(lmr257 uint64, mrhp258 []byte) *InEntityAgentrunentryTableSectionEntryKeyIdInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder257.Append(lmr257)
-	inst.membershipFieldBuilder258.Append(mrhp258)
-	inst.membershipContainerLength257++
-	inst.membershipContainerLength258++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyIdInAttr) AddMembershipMixedLowCardRefP(lmr257 uint64, mrhp258 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder257.Append(lmr257)
-	inst.membershipFieldBuilder258.Append(mrhp258)
-	inst.membershipContainerLength257++
-	inst.membershipContainerLength258++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyIdInAttr) handleMembershipSupportColumns() {
-	var l int
-	var _ = l
-	l = inst.membershipContainerLength254
-	inst.membershipContainerLength254 = 0
-	inst.membershipSupportFieldBuilder259.Append(uint64(l))
-	l = inst.membershipContainerLength255
-	inst.membershipContainerLength255 = 0
-	inst.membershipSupportFieldBuilder260.Append(uint64(l))
-	l = inst.membershipContainerLength256
-	inst.membershipContainerLength256 = 0
-	inst.membershipSupportFieldBuilder261.Append(uint64(l))
-	l = inst.membershipContainerLength257
-	inst.membershipContainerLength257 = 0
-	inst.membershipSupportFieldBuilder262.Append(uint64(l))
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyIdInAttr) handleNonScalarSupportColumns() {
-	var l int
-	var _ = l
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyIdInAttr) applyAmbientMemberships() {
-	if inst.state != runtime.EntityStateInAttribute {
-		return
-	}
-	for _, v := range inst.parent.parent.ambientHighCardRef {
-		inst.AddMembershipHighCardRefP(v)
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyIdInAttr) completeAttribute() {
-	inst.handleMembershipSupportColumns()
-	inst.handleNonScalarSupportColumns()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyIdInAttr) EndSection() *InEntityAgentrunentryTable {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	inst.parent.EndSection()
-	return inst.parent.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyIdInAttr) EndAttribute() *InEntityAgentrunentryTableSectionEntryKeyId {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	return inst.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyIdInAttr) EndAttributeP() {
-	inst.EndAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryKeyIdInAttr) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKeyIdInAttr) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryKind struct {
-	errs                  []error
-	inAttr                *InEntityAgentrunentryTableSectionEntryKindInAttr
-	state                 runtime.EntityStateE
-	attributeCount        int
-	parent                *InEntityAgentrunentryTable
-	scalarFieldBuilder023 *array.StringBuilder
-	scalarListBuilder023  *array.ListBuilder
-}
-
-func NewInEntityAgentrunentryTableSectionEntryKind(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionEntryKind) {
-	inst = &InEntityAgentrunentryTableSectionEntryKind{}
-	inAttr := NewInEntityAgentrunentryTableSectionEntryKindInAttr(builder, inst)
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.inAttr = inAttr
-	inst.parent = parent
-	inst.scalarFieldBuilder023 = builder.Field(23).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder023 = builder.Field(23).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKind) endAttribute() {
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKind) BeginAttribute(value23 string) *InEntityAgentrunentryTableSectionEntryKindInAttr {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInAttribute
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.inAttr
-	}
-	inst.scalarFieldBuilder023.Append(value23)
-	inst.attributeCount++
-
-	inst.inAttr.state = inst.state
-	return inst.inAttr
-}
-
-type InEntityAgentrunentryTableSectionEntryKindAttr struct {
-	Value string
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryKind) Add(attr InEntityAgentrunentryTableSectionEntryKindAttr) *InEntityAgentrunentryTableSectionEntryKindInAttr {
-	a := inst.BeginAttribute(attr.Value)
-	return a
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKind) CheckErrors() (err error) {
-	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKind) EndSection() *InEntityAgentrunentryTable {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	return inst.parent
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryKind) beginSection() {
-	inst.state = runtime.EntityStateInSection
-	inst.attributeCount = 0
-	inst.inAttr.beginAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryKind) resetSection() {
-	inst.clearErrors()
-	inst.inAttr.clearErrors()
-	inst.attributeCount = 0
-	inst.state = runtime.EntityStateInitial
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryKind) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKind) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryKindInAttr struct {
-	errs                             []error
-	state                            runtime.EntityStateE
-	parent                           *InEntityAgentrunentryTableSectionEntryKind
-	scalarFieldBuilder023            *array.StringBuilder
-	scalarListBuilder023             *array.ListBuilder
-	membershipFieldBuilder024        *array.Uint64Builder
-	membershipListBuilder024         *array.ListBuilder
-	membershipFieldBuilder025        *array.Uint64Builder
-	membershipListBuilder025         *array.ListBuilder
-	membershipFieldBuilder026        *array.BinaryBuilder
-	membershipListBuilder026         *array.ListBuilder
-	membershipFieldBuilder027        *array.Uint64Builder
-	membershipListBuilder027         *array.ListBuilder
-	membershipFieldBuilder028        *array.BinaryBuilder
-	membershipListBuilder028         *array.ListBuilder
-	membershipSupportFieldBuilder029 *array.Uint64Builder
-	membershipSupportListBuilder029  *array.ListBuilder
-	membershipSupportFieldBuilder030 *array.Uint64Builder
-	membershipSupportListBuilder030  *array.ListBuilder
-	membershipSupportFieldBuilder031 *array.Uint64Builder
-	membershipSupportListBuilder031  *array.ListBuilder
-	membershipSupportFieldBuilder032 *array.Uint64Builder
-	membershipSupportListBuilder032  *array.ListBuilder
-
-	membershipContainerLength024 int
-
-	membershipContainerLength025 int
-
-	membershipContainerLength026 int
-
-	membershipContainerLength027 int
-
-	membershipContainerLength028 int
-}
-
-func NewInEntityAgentrunentryTableSectionEntryKindInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionEntryKind) (inst *InEntityAgentrunentryTableSectionEntryKindInAttr) {
-	inst = &InEntityAgentrunentryTableSectionEntryKindInAttr{}
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.parent = parent
-	inst.scalarFieldBuilder023 = builder.Field(23).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder023 = builder.Field(23).(*array.ListBuilder)
-	inst.membershipFieldBuilder024 = builder.Field(24).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder024 = builder.Field(24).(*array.ListBuilder)
-	inst.membershipFieldBuilder025 = builder.Field(25).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder025 = builder.Field(25).(*array.ListBuilder)
-	inst.membershipFieldBuilder026 = builder.Field(26).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder026 = builder.Field(26).(*array.ListBuilder)
-	inst.membershipFieldBuilder027 = builder.Field(27).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder027 = builder.Field(27).(*array.ListBuilder)
-	inst.membershipFieldBuilder028 = builder.Field(28).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder028 = builder.Field(28).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder029 = builder.Field(29).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder029 = builder.Field(29).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder030 = builder.Field(30).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder030 = builder.Field(30).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder031 = builder.Field(31).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder031 = builder.Field(31).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder032 = builder.Field(32).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder032 = builder.Field(32).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKindInAttr) beginAttribute() {
-	inst.membershipListBuilder024.Append(true)
-	inst.membershipListBuilder025.Append(true)
-	inst.membershipListBuilder026.Append(true)
-	inst.membershipListBuilder027.Append(true)
-	inst.membershipListBuilder028.Append(true)
-	inst.membershipContainerLength024 = 0
-	inst.membershipContainerLength025 = 0
-	inst.membershipContainerLength026 = 0
-	inst.membershipContainerLength027 = 0
-	inst.membershipContainerLength028 = 0
-	inst.scalarListBuilder023.Append(true)
-	inst.membershipSupportListBuilder029.Append(true)
-	inst.membershipSupportListBuilder030.Append(true)
-	inst.membershipSupportListBuilder031.Append(true)
-	inst.membershipSupportListBuilder032.Append(true)
-	inst.state = runtime.EntityStateInSection
-	inst.clearErrors()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKindInAttr) AddMembershipHighCardRef(hr24 uint64) *InEntityAgentrunentryTableSectionEntryKindInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder024.Append(hr24)
-	inst.membershipContainerLength024++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKindInAttr) AddMembershipHighCardRefP(hr24 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder024.Append(hr24)
-	inst.membershipContainerLength024++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKindInAttr) AddMembershipLowCardRef(lr25 uint64) *InEntityAgentrunentryTableSectionEntryKindInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder025.Append(lr25)
-	inst.membershipContainerLength025++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKindInAttr) AddMembershipLowCardRefP(lr25 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder025.Append(lr25)
-	inst.membershipContainerLength025++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKindInAttr) AddMembershipLowCardVerbatim(lv26 []byte) *InEntityAgentrunentryTableSectionEntryKindInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder026.Append(lv26)
-	inst.membershipContainerLength026++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKindInAttr) AddMembershipLowCardVerbatimP(lv26 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder026.Append(lv26)
-	inst.membershipContainerLength026++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKindInAttr) AddMembershipMixedLowCardRef(lmr27 uint64, mrhp28 []byte) *InEntityAgentrunentryTableSectionEntryKindInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder027.Append(lmr27)
-	inst.membershipFieldBuilder028.Append(mrhp28)
-	inst.membershipContainerLength027++
-	inst.membershipContainerLength028++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKindInAttr) AddMembershipMixedLowCardRefP(lmr27 uint64, mrhp28 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder027.Append(lmr27)
-	inst.membershipFieldBuilder028.Append(mrhp28)
-	inst.membershipContainerLength027++
-	inst.membershipContainerLength028++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKindInAttr) handleMembershipSupportColumns() {
-	var l int
-	var _ = l
-	l = inst.membershipContainerLength024
-	inst.membershipContainerLength024 = 0
-	inst.membershipSupportFieldBuilder029.Append(uint64(l))
-	l = inst.membershipContainerLength025
-	inst.membershipContainerLength025 = 0
-	inst.membershipSupportFieldBuilder030.Append(uint64(l))
-	l = inst.membershipContainerLength026
-	inst.membershipContainerLength026 = 0
-	inst.membershipSupportFieldBuilder031.Append(uint64(l))
-	l = inst.membershipContainerLength027
-	inst.membershipContainerLength027 = 0
-	inst.membershipSupportFieldBuilder032.Append(uint64(l))
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKindInAttr) handleNonScalarSupportColumns() {
-	var l int
-	var _ = l
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKindInAttr) applyAmbientMemberships() {
-	if inst.state != runtime.EntityStateInAttribute {
-		return
-	}
-	for _, v := range inst.parent.parent.ambientHighCardRef {
-		inst.AddMembershipHighCardRefP(v)
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKindInAttr) completeAttribute() {
-	inst.handleMembershipSupportColumns()
-	inst.handleNonScalarSupportColumns()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKindInAttr) EndSection() *InEntityAgentrunentryTable {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	inst.parent.EndSection()
-	return inst.parent.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKindInAttr) EndAttribute() *InEntityAgentrunentryTableSectionEntryKind {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	return inst.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKindInAttr) EndAttributeP() {
-	inst.EndAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryKindInAttr) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryKindInAttr) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryLabelExposure struct {
-	errs                  []error
-	inAttr                *InEntityAgentrunentryTableSectionEntryLabelExposureInAttr
-	state                 runtime.EntityStateE
-	attributeCount        int
-	parent                *InEntityAgentrunentryTable
-	scalarFieldBuilder183 *array.StringBuilder
-	scalarListBuilder183  *array.ListBuilder
-}
-
-func NewInEntityAgentrunentryTableSectionEntryLabelExposure(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionEntryLabelExposure) {
-	inst = &InEntityAgentrunentryTableSectionEntryLabelExposure{}
-	inAttr := NewInEntityAgentrunentryTableSectionEntryLabelExposureInAttr(builder, inst)
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.inAttr = inAttr
-	inst.parent = parent
-	inst.scalarFieldBuilder183 = builder.Field(183).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder183 = builder.Field(183).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelExposure) endAttribute() {
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelExposure) BeginAttribute(value183 string) *InEntityAgentrunentryTableSectionEntryLabelExposureInAttr {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInAttribute
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.inAttr
-	}
-	inst.scalarFieldBuilder183.Append(value183)
-	inst.attributeCount++
-
-	inst.inAttr.state = inst.state
-	return inst.inAttr
-}
-
-type InEntityAgentrunentryTableSectionEntryLabelExposureAttr struct {
-	Value string
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryLabelExposure) Add(attr InEntityAgentrunentryTableSectionEntryLabelExposureAttr) *InEntityAgentrunentryTableSectionEntryLabelExposureInAttr {
-	a := inst.BeginAttribute(attr.Value)
-	return a
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelExposure) CheckErrors() (err error) {
-	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelExposure) EndSection() *InEntityAgentrunentryTable {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	return inst.parent
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryLabelExposure) beginSection() {
-	inst.state = runtime.EntityStateInSection
-	inst.attributeCount = 0
-	inst.inAttr.beginAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryLabelExposure) resetSection() {
-	inst.clearErrors()
-	inst.inAttr.clearErrors()
-	inst.attributeCount = 0
-	inst.state = runtime.EntityStateInitial
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryLabelExposure) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelExposure) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryLabelExposureInAttr struct {
-	errs                             []error
-	state                            runtime.EntityStateE
-	parent                           *InEntityAgentrunentryTableSectionEntryLabelExposure
-	scalarFieldBuilder183            *array.StringBuilder
-	scalarListBuilder183             *array.ListBuilder
-	membershipFieldBuilder184        *array.Uint64Builder
-	membershipListBuilder184         *array.ListBuilder
-	membershipFieldBuilder185        *array.Uint64Builder
-	membershipListBuilder185         *array.ListBuilder
-	membershipFieldBuilder186        *array.BinaryBuilder
-	membershipListBuilder186         *array.ListBuilder
-	membershipFieldBuilder187        *array.Uint64Builder
-	membershipListBuilder187         *array.ListBuilder
-	membershipFieldBuilder188        *array.BinaryBuilder
-	membershipListBuilder188         *array.ListBuilder
-	membershipSupportFieldBuilder189 *array.Uint64Builder
-	membershipSupportListBuilder189  *array.ListBuilder
-	membershipSupportFieldBuilder190 *array.Uint64Builder
-	membershipSupportListBuilder190  *array.ListBuilder
-	membershipSupportFieldBuilder191 *array.Uint64Builder
-	membershipSupportListBuilder191  *array.ListBuilder
-	membershipSupportFieldBuilder192 *array.Uint64Builder
-	membershipSupportListBuilder192  *array.ListBuilder
-
-	membershipContainerLength184 int
-
-	membershipContainerLength185 int
-
-	membershipContainerLength186 int
-
-	membershipContainerLength187 int
-
-	membershipContainerLength188 int
-}
-
-func NewInEntityAgentrunentryTableSectionEntryLabelExposureInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionEntryLabelExposure) (inst *InEntityAgentrunentryTableSectionEntryLabelExposureInAttr) {
-	inst = &InEntityAgentrunentryTableSectionEntryLabelExposureInAttr{}
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.parent = parent
-	inst.scalarFieldBuilder183 = builder.Field(183).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder183 = builder.Field(183).(*array.ListBuilder)
-	inst.membershipFieldBuilder184 = builder.Field(184).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder184 = builder.Field(184).(*array.ListBuilder)
-	inst.membershipFieldBuilder185 = builder.Field(185).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder185 = builder.Field(185).(*array.ListBuilder)
-	inst.membershipFieldBuilder186 = builder.Field(186).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder186 = builder.Field(186).(*array.ListBuilder)
-	inst.membershipFieldBuilder187 = builder.Field(187).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder187 = builder.Field(187).(*array.ListBuilder)
-	inst.membershipFieldBuilder188 = builder.Field(188).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder188 = builder.Field(188).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder189 = builder.Field(189).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder189 = builder.Field(189).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder190 = builder.Field(190).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder190 = builder.Field(190).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder191 = builder.Field(191).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder191 = builder.Field(191).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder192 = builder.Field(192).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder192 = builder.Field(192).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelExposureInAttr) beginAttribute() {
-	inst.membershipListBuilder184.Append(true)
-	inst.membershipListBuilder185.Append(true)
-	inst.membershipListBuilder186.Append(true)
-	inst.membershipListBuilder187.Append(true)
-	inst.membershipListBuilder188.Append(true)
-	inst.membershipContainerLength184 = 0
-	inst.membershipContainerLength185 = 0
-	inst.membershipContainerLength186 = 0
-	inst.membershipContainerLength187 = 0
-	inst.membershipContainerLength188 = 0
-	inst.scalarListBuilder183.Append(true)
-	inst.membershipSupportListBuilder189.Append(true)
-	inst.membershipSupportListBuilder190.Append(true)
-	inst.membershipSupportListBuilder191.Append(true)
-	inst.membershipSupportListBuilder192.Append(true)
-	inst.state = runtime.EntityStateInSection
-	inst.clearErrors()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelExposureInAttr) AddMembershipHighCardRef(hr184 uint64) *InEntityAgentrunentryTableSectionEntryLabelExposureInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder184.Append(hr184)
-	inst.membershipContainerLength184++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelExposureInAttr) AddMembershipHighCardRefP(hr184 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder184.Append(hr184)
-	inst.membershipContainerLength184++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelExposureInAttr) AddMembershipLowCardRef(lr185 uint64) *InEntityAgentrunentryTableSectionEntryLabelExposureInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder185.Append(lr185)
-	inst.membershipContainerLength185++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelExposureInAttr) AddMembershipLowCardRefP(lr185 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder185.Append(lr185)
-	inst.membershipContainerLength185++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelExposureInAttr) AddMembershipLowCardVerbatim(lv186 []byte) *InEntityAgentrunentryTableSectionEntryLabelExposureInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder186.Append(lv186)
-	inst.membershipContainerLength186++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelExposureInAttr) AddMembershipLowCardVerbatimP(lv186 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder186.Append(lv186)
-	inst.membershipContainerLength186++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelExposureInAttr) AddMembershipMixedLowCardRef(lmr187 uint64, mrhp188 []byte) *InEntityAgentrunentryTableSectionEntryLabelExposureInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder187.Append(lmr187)
-	inst.membershipFieldBuilder188.Append(mrhp188)
-	inst.membershipContainerLength187++
-	inst.membershipContainerLength188++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelExposureInAttr) AddMembershipMixedLowCardRefP(lmr187 uint64, mrhp188 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder187.Append(lmr187)
-	inst.membershipFieldBuilder188.Append(mrhp188)
-	inst.membershipContainerLength187++
-	inst.membershipContainerLength188++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelExposureInAttr) handleMembershipSupportColumns() {
-	var l int
-	var _ = l
-	l = inst.membershipContainerLength184
-	inst.membershipContainerLength184 = 0
-	inst.membershipSupportFieldBuilder189.Append(uint64(l))
-	l = inst.membershipContainerLength185
-	inst.membershipContainerLength185 = 0
-	inst.membershipSupportFieldBuilder190.Append(uint64(l))
-	l = inst.membershipContainerLength186
-	inst.membershipContainerLength186 = 0
-	inst.membershipSupportFieldBuilder191.Append(uint64(l))
-	l = inst.membershipContainerLength187
-	inst.membershipContainerLength187 = 0
-	inst.membershipSupportFieldBuilder192.Append(uint64(l))
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelExposureInAttr) handleNonScalarSupportColumns() {
-	var l int
-	var _ = l
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelExposureInAttr) applyAmbientMemberships() {
-	if inst.state != runtime.EntityStateInAttribute {
-		return
-	}
-	for _, v := range inst.parent.parent.ambientHighCardRef {
-		inst.AddMembershipHighCardRefP(v)
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelExposureInAttr) completeAttribute() {
-	inst.handleMembershipSupportColumns()
-	inst.handleNonScalarSupportColumns()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelExposureInAttr) EndSection() *InEntityAgentrunentryTable {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	inst.parent.EndSection()
-	return inst.parent.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelExposureInAttr) EndAttribute() *InEntityAgentrunentryTableSectionEntryLabelExposure {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	return inst.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelExposureInAttr) EndAttributeP() {
-	inst.EndAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryLabelExposureInAttr) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelExposureInAttr) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryLabelLevel struct {
-	errs                  []error
-	inAttr                *InEntityAgentrunentryTableSectionEntryLabelLevelInAttr
-	state                 runtime.EntityStateE
-	attributeCount        int
-	parent                *InEntityAgentrunentryTable
-	scalarFieldBuilder163 *array.Uint32Builder
-	scalarListBuilder163  *array.ListBuilder
-}
-
-func NewInEntityAgentrunentryTableSectionEntryLabelLevel(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionEntryLabelLevel) {
-	inst = &InEntityAgentrunentryTableSectionEntryLabelLevel{}
-	inAttr := NewInEntityAgentrunentryTableSectionEntryLabelLevelInAttr(builder, inst)
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.inAttr = inAttr
-	inst.parent = parent
-	inst.scalarFieldBuilder163 = builder.Field(163).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
-	inst.scalarListBuilder163 = builder.Field(163).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelLevel) endAttribute() {
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelLevel) BeginAttribute(value163 uint32) *InEntityAgentrunentryTableSectionEntryLabelLevelInAttr {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInAttribute
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.inAttr
-	}
-	inst.scalarFieldBuilder163.Append(value163)
-	inst.attributeCount++
-
-	inst.inAttr.state = inst.state
-	return inst.inAttr
-}
-
-type InEntityAgentrunentryTableSectionEntryLabelLevelAttr struct {
-	Value uint32
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryLabelLevel) Add(attr InEntityAgentrunentryTableSectionEntryLabelLevelAttr) *InEntityAgentrunentryTableSectionEntryLabelLevelInAttr {
-	a := inst.BeginAttribute(attr.Value)
-	return a
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelLevel) CheckErrors() (err error) {
-	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelLevel) EndSection() *InEntityAgentrunentryTable {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	return inst.parent
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryLabelLevel) beginSection() {
-	inst.state = runtime.EntityStateInSection
-	inst.attributeCount = 0
-	inst.inAttr.beginAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryLabelLevel) resetSection() {
-	inst.clearErrors()
-	inst.inAttr.clearErrors()
-	inst.attributeCount = 0
-	inst.state = runtime.EntityStateInitial
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryLabelLevel) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelLevel) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryLabelLevelInAttr struct {
-	errs                             []error
-	state                            runtime.EntityStateE
-	parent                           *InEntityAgentrunentryTableSectionEntryLabelLevel
-	scalarFieldBuilder163            *array.Uint32Builder
-	scalarListBuilder163             *array.ListBuilder
-	membershipFieldBuilder164        *array.Uint64Builder
-	membershipListBuilder164         *array.ListBuilder
-	membershipFieldBuilder165        *array.Uint64Builder
-	membershipListBuilder165         *array.ListBuilder
-	membershipFieldBuilder166        *array.BinaryBuilder
-	membershipListBuilder166         *array.ListBuilder
-	membershipFieldBuilder167        *array.Uint64Builder
-	membershipListBuilder167         *array.ListBuilder
-	membershipFieldBuilder168        *array.BinaryBuilder
-	membershipListBuilder168         *array.ListBuilder
-	membershipSupportFieldBuilder169 *array.Uint64Builder
-	membershipSupportListBuilder169  *array.ListBuilder
-	membershipSupportFieldBuilder170 *array.Uint64Builder
-	membershipSupportListBuilder170  *array.ListBuilder
-	membershipSupportFieldBuilder171 *array.Uint64Builder
-	membershipSupportListBuilder171  *array.ListBuilder
-	membershipSupportFieldBuilder172 *array.Uint64Builder
-	membershipSupportListBuilder172  *array.ListBuilder
-
-	membershipContainerLength164 int
-
-	membershipContainerLength165 int
-
-	membershipContainerLength166 int
-
-	membershipContainerLength167 int
-
-	membershipContainerLength168 int
-}
-
-func NewInEntityAgentrunentryTableSectionEntryLabelLevelInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionEntryLabelLevel) (inst *InEntityAgentrunentryTableSectionEntryLabelLevelInAttr) {
-	inst = &InEntityAgentrunentryTableSectionEntryLabelLevelInAttr{}
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.parent = parent
-	inst.scalarFieldBuilder163 = builder.Field(163).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
-	inst.scalarListBuilder163 = builder.Field(163).(*array.ListBuilder)
-	inst.membershipFieldBuilder164 = builder.Field(164).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder164 = builder.Field(164).(*array.ListBuilder)
-	inst.membershipFieldBuilder165 = builder.Field(165).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder165 = builder.Field(165).(*array.ListBuilder)
-	inst.membershipFieldBuilder166 = builder.Field(166).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder166 = builder.Field(166).(*array.ListBuilder)
-	inst.membershipFieldBuilder167 = builder.Field(167).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder167 = builder.Field(167).(*array.ListBuilder)
-	inst.membershipFieldBuilder168 = builder.Field(168).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder168 = builder.Field(168).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder169 = builder.Field(169).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder169 = builder.Field(169).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder170 = builder.Field(170).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder170 = builder.Field(170).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder171 = builder.Field(171).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder171 = builder.Field(171).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder172 = builder.Field(172).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder172 = builder.Field(172).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelLevelInAttr) beginAttribute() {
-	inst.membershipListBuilder164.Append(true)
-	inst.membershipListBuilder165.Append(true)
-	inst.membershipListBuilder166.Append(true)
-	inst.membershipListBuilder167.Append(true)
-	inst.membershipListBuilder168.Append(true)
-	inst.membershipContainerLength164 = 0
-	inst.membershipContainerLength165 = 0
-	inst.membershipContainerLength166 = 0
-	inst.membershipContainerLength167 = 0
-	inst.membershipContainerLength168 = 0
-	inst.scalarListBuilder163.Append(true)
-	inst.membershipSupportListBuilder169.Append(true)
-	inst.membershipSupportListBuilder170.Append(true)
-	inst.membershipSupportListBuilder171.Append(true)
-	inst.membershipSupportListBuilder172.Append(true)
-	inst.state = runtime.EntityStateInSection
-	inst.clearErrors()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelLevelInAttr) AddMembershipHighCardRef(hr164 uint64) *InEntityAgentrunentryTableSectionEntryLabelLevelInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder164.Append(hr164)
-	inst.membershipContainerLength164++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelLevelInAttr) AddMembershipHighCardRefP(hr164 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder164.Append(hr164)
-	inst.membershipContainerLength164++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelLevelInAttr) AddMembershipLowCardRef(lr165 uint64) *InEntityAgentrunentryTableSectionEntryLabelLevelInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder165.Append(lr165)
-	inst.membershipContainerLength165++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelLevelInAttr) AddMembershipLowCardRefP(lr165 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder165.Append(lr165)
-	inst.membershipContainerLength165++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelLevelInAttr) AddMembershipLowCardVerbatim(lv166 []byte) *InEntityAgentrunentryTableSectionEntryLabelLevelInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder166.Append(lv166)
-	inst.membershipContainerLength166++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelLevelInAttr) AddMembershipLowCardVerbatimP(lv166 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder166.Append(lv166)
-	inst.membershipContainerLength166++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelLevelInAttr) AddMembershipMixedLowCardRef(lmr167 uint64, mrhp168 []byte) *InEntityAgentrunentryTableSectionEntryLabelLevelInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder167.Append(lmr167)
-	inst.membershipFieldBuilder168.Append(mrhp168)
-	inst.membershipContainerLength167++
-	inst.membershipContainerLength168++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelLevelInAttr) AddMembershipMixedLowCardRefP(lmr167 uint64, mrhp168 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder167.Append(lmr167)
-	inst.membershipFieldBuilder168.Append(mrhp168)
-	inst.membershipContainerLength167++
-	inst.membershipContainerLength168++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelLevelInAttr) handleMembershipSupportColumns() {
-	var l int
-	var _ = l
-	l = inst.membershipContainerLength164
-	inst.membershipContainerLength164 = 0
-	inst.membershipSupportFieldBuilder169.Append(uint64(l))
-	l = inst.membershipContainerLength165
-	inst.membershipContainerLength165 = 0
-	inst.membershipSupportFieldBuilder170.Append(uint64(l))
-	l = inst.membershipContainerLength166
-	inst.membershipContainerLength166 = 0
-	inst.membershipSupportFieldBuilder171.Append(uint64(l))
-	l = inst.membershipContainerLength167
-	inst.membershipContainerLength167 = 0
-	inst.membershipSupportFieldBuilder172.Append(uint64(l))
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelLevelInAttr) handleNonScalarSupportColumns() {
-	var l int
-	var _ = l
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelLevelInAttr) applyAmbientMemberships() {
-	if inst.state != runtime.EntityStateInAttribute {
-		return
-	}
-	for _, v := range inst.parent.parent.ambientHighCardRef {
-		inst.AddMembershipHighCardRefP(v)
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelLevelInAttr) completeAttribute() {
-	inst.handleMembershipSupportColumns()
-	inst.handleNonScalarSupportColumns()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelLevelInAttr) EndSection() *InEntityAgentrunentryTable {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	inst.parent.EndSection()
-	return inst.parent.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelLevelInAttr) EndAttribute() *InEntityAgentrunentryTableSectionEntryLabelLevel {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	return inst.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelLevelInAttr) EndAttributeP() {
-	inst.EndAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryLabelLevelInAttr) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelLevelInAttr) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryLabelOrigin struct {
-	errs                  []error
-	inAttr                *InEntityAgentrunentryTableSectionEntryLabelOriginInAttr
-	state                 runtime.EntityStateE
-	attributeCount        int
-	parent                *InEntityAgentrunentryTable
-	scalarFieldBuilder193 *array.StringBuilder
-	scalarListBuilder193  *array.ListBuilder
-}
-
-func NewInEntityAgentrunentryTableSectionEntryLabelOrigin(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionEntryLabelOrigin) {
-	inst = &InEntityAgentrunentryTableSectionEntryLabelOrigin{}
-	inAttr := NewInEntityAgentrunentryTableSectionEntryLabelOriginInAttr(builder, inst)
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.inAttr = inAttr
-	inst.parent = parent
-	inst.scalarFieldBuilder193 = builder.Field(193).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder193 = builder.Field(193).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelOrigin) endAttribute() {
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelOrigin) BeginAttribute(value193 string) *InEntityAgentrunentryTableSectionEntryLabelOriginInAttr {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInAttribute
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.inAttr
-	}
-	inst.scalarFieldBuilder193.Append(value193)
-	inst.attributeCount++
-
-	inst.inAttr.state = inst.state
-	return inst.inAttr
-}
-
-type InEntityAgentrunentryTableSectionEntryLabelOriginAttr struct {
-	Value string
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryLabelOrigin) Add(attr InEntityAgentrunentryTableSectionEntryLabelOriginAttr) *InEntityAgentrunentryTableSectionEntryLabelOriginInAttr {
-	a := inst.BeginAttribute(attr.Value)
-	return a
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelOrigin) CheckErrors() (err error) {
-	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelOrigin) EndSection() *InEntityAgentrunentryTable {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	return inst.parent
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryLabelOrigin) beginSection() {
-	inst.state = runtime.EntityStateInSection
-	inst.attributeCount = 0
-	inst.inAttr.beginAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryLabelOrigin) resetSection() {
-	inst.clearErrors()
-	inst.inAttr.clearErrors()
-	inst.attributeCount = 0
-	inst.state = runtime.EntityStateInitial
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryLabelOrigin) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelOrigin) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryLabelOriginInAttr struct {
-	errs                             []error
-	state                            runtime.EntityStateE
-	parent                           *InEntityAgentrunentryTableSectionEntryLabelOrigin
-	scalarFieldBuilder193            *array.StringBuilder
-	scalarListBuilder193             *array.ListBuilder
-	membershipFieldBuilder194        *array.Uint64Builder
-	membershipListBuilder194         *array.ListBuilder
-	membershipFieldBuilder195        *array.Uint64Builder
-	membershipListBuilder195         *array.ListBuilder
-	membershipFieldBuilder196        *array.BinaryBuilder
-	membershipListBuilder196         *array.ListBuilder
-	membershipFieldBuilder197        *array.Uint64Builder
-	membershipListBuilder197         *array.ListBuilder
-	membershipFieldBuilder198        *array.BinaryBuilder
-	membershipListBuilder198         *array.ListBuilder
-	membershipSupportFieldBuilder199 *array.Uint64Builder
-	membershipSupportListBuilder199  *array.ListBuilder
-	membershipSupportFieldBuilder200 *array.Uint64Builder
-	membershipSupportListBuilder200  *array.ListBuilder
-	membershipSupportFieldBuilder201 *array.Uint64Builder
-	membershipSupportListBuilder201  *array.ListBuilder
-	membershipSupportFieldBuilder202 *array.Uint64Builder
-	membershipSupportListBuilder202  *array.ListBuilder
-
-	membershipContainerLength194 int
-
-	membershipContainerLength195 int
-
-	membershipContainerLength196 int
-
-	membershipContainerLength197 int
-
-	membershipContainerLength198 int
-}
-
-func NewInEntityAgentrunentryTableSectionEntryLabelOriginInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionEntryLabelOrigin) (inst *InEntityAgentrunentryTableSectionEntryLabelOriginInAttr) {
-	inst = &InEntityAgentrunentryTableSectionEntryLabelOriginInAttr{}
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.parent = parent
-	inst.scalarFieldBuilder193 = builder.Field(193).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder193 = builder.Field(193).(*array.ListBuilder)
-	inst.membershipFieldBuilder194 = builder.Field(194).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder194 = builder.Field(194).(*array.ListBuilder)
-	inst.membershipFieldBuilder195 = builder.Field(195).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder195 = builder.Field(195).(*array.ListBuilder)
-	inst.membershipFieldBuilder196 = builder.Field(196).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder196 = builder.Field(196).(*array.ListBuilder)
-	inst.membershipFieldBuilder197 = builder.Field(197).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder197 = builder.Field(197).(*array.ListBuilder)
-	inst.membershipFieldBuilder198 = builder.Field(198).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder198 = builder.Field(198).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder199 = builder.Field(199).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder199 = builder.Field(199).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder200 = builder.Field(200).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder200 = builder.Field(200).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder201 = builder.Field(201).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder201 = builder.Field(201).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder202 = builder.Field(202).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder202 = builder.Field(202).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelOriginInAttr) beginAttribute() {
-	inst.membershipListBuilder194.Append(true)
-	inst.membershipListBuilder195.Append(true)
-	inst.membershipListBuilder196.Append(true)
-	inst.membershipListBuilder197.Append(true)
-	inst.membershipListBuilder198.Append(true)
-	inst.membershipContainerLength194 = 0
-	inst.membershipContainerLength195 = 0
-	inst.membershipContainerLength196 = 0
-	inst.membershipContainerLength197 = 0
-	inst.membershipContainerLength198 = 0
-	inst.scalarListBuilder193.Append(true)
-	inst.membershipSupportListBuilder199.Append(true)
-	inst.membershipSupportListBuilder200.Append(true)
-	inst.membershipSupportListBuilder201.Append(true)
-	inst.membershipSupportListBuilder202.Append(true)
-	inst.state = runtime.EntityStateInSection
-	inst.clearErrors()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelOriginInAttr) AddMembershipHighCardRef(hr194 uint64) *InEntityAgentrunentryTableSectionEntryLabelOriginInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder194.Append(hr194)
-	inst.membershipContainerLength194++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelOriginInAttr) AddMembershipHighCardRefP(hr194 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder194.Append(hr194)
-	inst.membershipContainerLength194++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelOriginInAttr) AddMembershipLowCardRef(lr195 uint64) *InEntityAgentrunentryTableSectionEntryLabelOriginInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder195.Append(lr195)
-	inst.membershipContainerLength195++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelOriginInAttr) AddMembershipLowCardRefP(lr195 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder195.Append(lr195)
-	inst.membershipContainerLength195++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelOriginInAttr) AddMembershipLowCardVerbatim(lv196 []byte) *InEntityAgentrunentryTableSectionEntryLabelOriginInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder196.Append(lv196)
-	inst.membershipContainerLength196++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelOriginInAttr) AddMembershipLowCardVerbatimP(lv196 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder196.Append(lv196)
-	inst.membershipContainerLength196++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelOriginInAttr) AddMembershipMixedLowCardRef(lmr197 uint64, mrhp198 []byte) *InEntityAgentrunentryTableSectionEntryLabelOriginInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder197.Append(lmr197)
-	inst.membershipFieldBuilder198.Append(mrhp198)
-	inst.membershipContainerLength197++
-	inst.membershipContainerLength198++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelOriginInAttr) AddMembershipMixedLowCardRefP(lmr197 uint64, mrhp198 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder197.Append(lmr197)
-	inst.membershipFieldBuilder198.Append(mrhp198)
-	inst.membershipContainerLength197++
-	inst.membershipContainerLength198++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelOriginInAttr) handleMembershipSupportColumns() {
-	var l int
-	var _ = l
-	l = inst.membershipContainerLength194
-	inst.membershipContainerLength194 = 0
-	inst.membershipSupportFieldBuilder199.Append(uint64(l))
-	l = inst.membershipContainerLength195
-	inst.membershipContainerLength195 = 0
-	inst.membershipSupportFieldBuilder200.Append(uint64(l))
-	l = inst.membershipContainerLength196
-	inst.membershipContainerLength196 = 0
-	inst.membershipSupportFieldBuilder201.Append(uint64(l))
-	l = inst.membershipContainerLength197
-	inst.membershipContainerLength197 = 0
-	inst.membershipSupportFieldBuilder202.Append(uint64(l))
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelOriginInAttr) handleNonScalarSupportColumns() {
-	var l int
-	var _ = l
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelOriginInAttr) applyAmbientMemberships() {
-	if inst.state != runtime.EntityStateInAttribute {
-		return
-	}
-	for _, v := range inst.parent.parent.ambientHighCardRef {
-		inst.AddMembershipHighCardRefP(v)
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelOriginInAttr) completeAttribute() {
-	inst.handleMembershipSupportColumns()
-	inst.handleNonScalarSupportColumns()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelOriginInAttr) EndSection() *InEntityAgentrunentryTable {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	inst.parent.EndSection()
-	return inst.parent.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelOriginInAttr) EndAttribute() *InEntityAgentrunentryTableSectionEntryLabelOrigin {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	return inst.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelOriginInAttr) EndAttributeP() {
-	inst.EndAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryLabelOriginInAttr) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelOriginInAttr) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryLabelTier struct {
-	errs                  []error
-	inAttr                *InEntityAgentrunentryTableSectionEntryLabelTierInAttr
-	state                 runtime.EntityStateE
-	attributeCount        int
-	parent                *InEntityAgentrunentryTable
-	scalarFieldBuilder173 *array.Uint32Builder
+	scalarFieldBuilder173 *array.BooleanBuilder
 	scalarListBuilder173  *array.ListBuilder
 }
 
-func NewInEntityAgentrunentryTableSectionEntryLabelTier(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionEntryLabelTier) {
-	inst = &InEntityAgentrunentryTableSectionEntryLabelTier{}
-	inAttr := NewInEntityAgentrunentryTableSectionEntryLabelTierInAttr(builder, inst)
+func NewInEntityAgentrunentryTableSectionBool(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionBool) {
+	inst = &InEntityAgentrunentryTableSectionBool{}
+	inAttr := NewInEntityAgentrunentryTableSectionBoolInAttr(builder, inst)
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.inAttr = inAttr
 	inst.parent = parent
-	inst.scalarFieldBuilder173 = builder.Field(173).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
+	inst.scalarFieldBuilder173 = builder.Field(173).(*array.ListBuilder).ValueBuilder().(*array.BooleanBuilder)
 	inst.scalarListBuilder173 = builder.Field(173).(*array.ListBuilder)
 
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryLabelTier) endAttribute() {
+func (inst *InEntityAgentrunentryTableSectionBool) endAttribute() {
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -6676,7 +1191,7 @@ func (inst *InEntityAgentrunentryTableSectionEntryLabelTier) endAttribute() {
 		return
 	}
 }
-func (inst *InEntityAgentrunentryTableSectionEntryLabelTier) BeginAttribute(value173 uint32) *InEntityAgentrunentryTableSectionEntryLabelTierInAttr {
+func (inst *InEntityAgentrunentryTableSectionBool) BeginAttribute(value173 bool) *InEntityAgentrunentryTableSectionBoolInAttr {
 	switch inst.state {
 	case runtime.EntityStateInSection:
 		inst.state = runtime.EntityStateInAttribute
@@ -6692,19 +1207,19 @@ func (inst *InEntityAgentrunentryTableSectionEntryLabelTier) BeginAttribute(valu
 	return inst.inAttr
 }
 
-type InEntityAgentrunentryTableSectionEntryLabelTierAttr struct {
-	Value uint32
+type InEntityAgentrunentryTableSectionBoolAttr struct {
+	Value bool
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryLabelTier) Add(attr InEntityAgentrunentryTableSectionEntryLabelTierAttr) *InEntityAgentrunentryTableSectionEntryLabelTierInAttr {
+func (inst *InEntityAgentrunentryTableSectionBool) Add(attr InEntityAgentrunentryTableSectionBoolAttr) *InEntityAgentrunentryTableSectionBoolInAttr {
 	a := inst.BeginAttribute(attr.Value)
 	return a
 }
-func (inst *InEntityAgentrunentryTableSectionEntryLabelTier) CheckErrors() (err error) {
+func (inst *InEntityAgentrunentryTableSectionBool) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryLabelTier) EndSection() *InEntityAgentrunentryTable {
+func (inst *InEntityAgentrunentryTableSectionBool) EndSection() *InEntityAgentrunentryTable {
 	switch inst.state {
 	case runtime.EntityStateInSection:
 		inst.state = runtime.EntityStateInitial
@@ -6717,50 +1232,46 @@ func (inst *InEntityAgentrunentryTableSectionEntryLabelTier) EndSection() *InEnt
 	return inst.parent
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryLabelTier) beginSection() {
+func (inst *InEntityAgentrunentryTableSectionBool) beginSection() {
 	inst.state = runtime.EntityStateInSection
 	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryLabelTier) resetSection() {
+func (inst *InEntityAgentrunentryTableSectionBool) resetSection() {
 	inst.clearErrors()
 	inst.inAttr.clearErrors()
 	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryLabelTier) AppendError(err error) {
+func (inst *InEntityAgentrunentryTableSectionBool) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
 }
-func (inst *InEntityAgentrunentryTableSectionEntryLabelTier) clearErrors() {
+func (inst *InEntityAgentrunentryTableSectionBool) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 
-type InEntityAgentrunentryTableSectionEntryLabelTierInAttr struct {
+type InEntityAgentrunentryTableSectionBoolInAttr struct {
 	errs                             []error
 	state                            runtime.EntityStateE
-	parent                           *InEntityAgentrunentryTableSectionEntryLabelTier
-	scalarFieldBuilder173            *array.Uint32Builder
+	parent                           *InEntityAgentrunentryTableSectionBool
+	scalarFieldBuilder173            *array.BooleanBuilder
 	scalarListBuilder173             *array.ListBuilder
 	membershipFieldBuilder174        *array.Uint64Builder
 	membershipListBuilder174         *array.ListBuilder
 	membershipFieldBuilder175        *array.Uint64Builder
 	membershipListBuilder175         *array.ListBuilder
-	membershipFieldBuilder176        *array.BinaryBuilder
+	membershipFieldBuilder176        *array.Uint64Builder
 	membershipListBuilder176         *array.ListBuilder
-	membershipFieldBuilder177        *array.Uint64Builder
+	membershipFieldBuilder177        *array.BinaryBuilder
 	membershipListBuilder177         *array.ListBuilder
-	membershipFieldBuilder178        *array.BinaryBuilder
-	membershipListBuilder178         *array.ListBuilder
+	membershipSupportFieldBuilder178 *array.Uint64Builder
+	membershipSupportListBuilder178  *array.ListBuilder
 	membershipSupportFieldBuilder179 *array.Uint64Builder
 	membershipSupportListBuilder179  *array.ListBuilder
 	membershipSupportFieldBuilder180 *array.Uint64Builder
 	membershipSupportListBuilder180  *array.ListBuilder
-	membershipSupportFieldBuilder181 *array.Uint64Builder
-	membershipSupportListBuilder181  *array.ListBuilder
-	membershipSupportFieldBuilder182 *array.Uint64Builder
-	membershipSupportListBuilder182  *array.ListBuilder
 
 	membershipContainerLength174 int
 
@@ -6769,58 +1280,49 @@ type InEntityAgentrunentryTableSectionEntryLabelTierInAttr struct {
 	membershipContainerLength176 int
 
 	membershipContainerLength177 int
-
-	membershipContainerLength178 int
 }
 
-func NewInEntityAgentrunentryTableSectionEntryLabelTierInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionEntryLabelTier) (inst *InEntityAgentrunentryTableSectionEntryLabelTierInAttr) {
-	inst = &InEntityAgentrunentryTableSectionEntryLabelTierInAttr{}
+func NewInEntityAgentrunentryTableSectionBoolInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionBool) (inst *InEntityAgentrunentryTableSectionBoolInAttr) {
+	inst = &InEntityAgentrunentryTableSectionBoolInAttr{}
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.parent = parent
-	inst.scalarFieldBuilder173 = builder.Field(173).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
+	inst.scalarFieldBuilder173 = builder.Field(173).(*array.ListBuilder).ValueBuilder().(*array.BooleanBuilder)
 	inst.scalarListBuilder173 = builder.Field(173).(*array.ListBuilder)
 	inst.membershipFieldBuilder174 = builder.Field(174).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
 	inst.membershipListBuilder174 = builder.Field(174).(*array.ListBuilder)
 	inst.membershipFieldBuilder175 = builder.Field(175).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
 	inst.membershipListBuilder175 = builder.Field(175).(*array.ListBuilder)
-	inst.membershipFieldBuilder176 = builder.Field(176).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipFieldBuilder176 = builder.Field(176).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
 	inst.membershipListBuilder176 = builder.Field(176).(*array.ListBuilder)
-	inst.membershipFieldBuilder177 = builder.Field(177).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipFieldBuilder177 = builder.Field(177).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
 	inst.membershipListBuilder177 = builder.Field(177).(*array.ListBuilder)
-	inst.membershipFieldBuilder178 = builder.Field(178).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder178 = builder.Field(178).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder178 = builder.Field(178).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder178 = builder.Field(178).(*array.ListBuilder)
 	inst.membershipSupportFieldBuilder179 = builder.Field(179).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
 	inst.membershipSupportListBuilder179 = builder.Field(179).(*array.ListBuilder)
 	inst.membershipSupportFieldBuilder180 = builder.Field(180).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
 	inst.membershipSupportListBuilder180 = builder.Field(180).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder181 = builder.Field(181).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder181 = builder.Field(181).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder182 = builder.Field(182).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder182 = builder.Field(182).(*array.ListBuilder)
 
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryLabelTierInAttr) beginAttribute() {
+func (inst *InEntityAgentrunentryTableSectionBoolInAttr) beginAttribute() {
 	inst.membershipListBuilder174.Append(true)
 	inst.membershipListBuilder175.Append(true)
 	inst.membershipListBuilder176.Append(true)
 	inst.membershipListBuilder177.Append(true)
-	inst.membershipListBuilder178.Append(true)
 	inst.membershipContainerLength174 = 0
 	inst.membershipContainerLength175 = 0
 	inst.membershipContainerLength176 = 0
 	inst.membershipContainerLength177 = 0
-	inst.membershipContainerLength178 = 0
 	inst.scalarListBuilder173.Append(true)
+	inst.membershipSupportListBuilder178.Append(true)
 	inst.membershipSupportListBuilder179.Append(true)
 	inst.membershipSupportListBuilder180.Append(true)
-	inst.membershipSupportListBuilder181.Append(true)
-	inst.membershipSupportListBuilder182.Append(true)
 	inst.state = runtime.EntityStateInSection
 	inst.clearErrors()
 }
-func (inst *InEntityAgentrunentryTableSectionEntryLabelTierInAttr) AddMembershipHighCardRef(hr174 uint64) *InEntityAgentrunentryTableSectionEntryLabelTierInAttr {
+func (inst *InEntityAgentrunentryTableSectionBoolInAttr) AddMembershipHighCardRef(hr174 uint64) *InEntityAgentrunentryTableSectionBoolInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
@@ -6829,7 +1331,7 @@ func (inst *InEntityAgentrunentryTableSectionEntryLabelTierInAttr) AddMembership
 	inst.membershipContainerLength174++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryLabelTierInAttr) AddMembershipHighCardRefP(hr174 uint64) {
+func (inst *InEntityAgentrunentryTableSectionBoolInAttr) AddMembershipHighCardRefP(hr174 uint64) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
@@ -6838,7 +1340,7 @@ func (inst *InEntityAgentrunentryTableSectionEntryLabelTierInAttr) AddMembership
 	inst.membershipContainerLength174++
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryLabelTierInAttr) AddMembershipLowCardRef(lr175 uint64) *InEntityAgentrunentryTableSectionEntryLabelTierInAttr {
+func (inst *InEntityAgentrunentryTableSectionBoolInAttr) AddMembershipLowCardRef(lr175 uint64) *InEntityAgentrunentryTableSectionBoolInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
@@ -6847,7 +1349,7 @@ func (inst *InEntityAgentrunentryTableSectionEntryLabelTierInAttr) AddMembership
 	inst.membershipContainerLength175++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryLabelTierInAttr) AddMembershipLowCardRefP(lr175 uint64) {
+func (inst *InEntityAgentrunentryTableSectionBoolInAttr) AddMembershipLowCardRefP(lr175 uint64) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
@@ -6856,67 +1358,46 @@ func (inst *InEntityAgentrunentryTableSectionEntryLabelTierInAttr) AddMembership
 	inst.membershipContainerLength175++
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryLabelTierInAttr) AddMembershipLowCardVerbatim(lv176 []byte) *InEntityAgentrunentryTableSectionEntryLabelTierInAttr {
+func (inst *InEntityAgentrunentryTableSectionBoolInAttr) AddMembershipMixedLowCardRef(lmr176 uint64, mrhp177 []byte) *InEntityAgentrunentryTableSectionBoolInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder176.Append(lv176)
+	inst.membershipFieldBuilder176.Append(lmr176)
+	inst.membershipFieldBuilder177.Append(mrhp177)
 	inst.membershipContainerLength176++
+	inst.membershipContainerLength177++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryLabelTierInAttr) AddMembershipLowCardVerbatimP(lv176 []byte) {
+func (inst *InEntityAgentrunentryTableSectionBoolInAttr) AddMembershipMixedLowCardRefP(lmr176 uint64, mrhp177 []byte) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder176.Append(lv176)
+	inst.membershipFieldBuilder176.Append(lmr176)
+	inst.membershipFieldBuilder177.Append(mrhp177)
 	inst.membershipContainerLength176++
+	inst.membershipContainerLength177++
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryLabelTierInAttr) AddMembershipMixedLowCardRef(lmr177 uint64, mrhp178 []byte) *InEntityAgentrunentryTableSectionEntryLabelTierInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder177.Append(lmr177)
-	inst.membershipFieldBuilder178.Append(mrhp178)
-	inst.membershipContainerLength177++
-	inst.membershipContainerLength178++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelTierInAttr) AddMembershipMixedLowCardRefP(lmr177 uint64, mrhp178 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder177.Append(lmr177)
-	inst.membershipFieldBuilder178.Append(mrhp178)
-	inst.membershipContainerLength177++
-	inst.membershipContainerLength178++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryLabelTierInAttr) handleMembershipSupportColumns() {
+func (inst *InEntityAgentrunentryTableSectionBoolInAttr) handleMembershipSupportColumns() {
 	var l int
 	var _ = l
 	l = inst.membershipContainerLength174
 	inst.membershipContainerLength174 = 0
-	inst.membershipSupportFieldBuilder179.Append(uint64(l))
+	inst.membershipSupportFieldBuilder178.Append(uint64(l))
 	l = inst.membershipContainerLength175
 	inst.membershipContainerLength175 = 0
-	inst.membershipSupportFieldBuilder180.Append(uint64(l))
+	inst.membershipSupportFieldBuilder179.Append(uint64(l))
 	l = inst.membershipContainerLength176
 	inst.membershipContainerLength176 = 0
-	inst.membershipSupportFieldBuilder181.Append(uint64(l))
-	l = inst.membershipContainerLength177
-	inst.membershipContainerLength177 = 0
-	inst.membershipSupportFieldBuilder182.Append(uint64(l))
+	inst.membershipSupportFieldBuilder180.Append(uint64(l))
 }
-func (inst *InEntityAgentrunentryTableSectionEntryLabelTierInAttr) handleNonScalarSupportColumns() {
+func (inst *InEntityAgentrunentryTableSectionBoolInAttr) handleNonScalarSupportColumns() {
 	var l int
 	var _ = l
 }
-func (inst *InEntityAgentrunentryTableSectionEntryLabelTierInAttr) applyAmbientMemberships() {
+func (inst *InEntityAgentrunentryTableSectionBoolInAttr) applyAmbientMemberships() {
 	if inst.state != runtime.EntityStateInAttribute {
 		return
 	}
@@ -6924,11 +1405,11 @@ func (inst *InEntityAgentrunentryTableSectionEntryLabelTierInAttr) applyAmbientM
 		inst.AddMembershipHighCardRefP(v)
 	}
 }
-func (inst *InEntityAgentrunentryTableSectionEntryLabelTierInAttr) completeAttribute() {
+func (inst *InEntityAgentrunentryTableSectionBoolInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
-func (inst *InEntityAgentrunentryTableSectionEntryLabelTierInAttr) EndSection() *InEntityAgentrunentryTable {
+func (inst *InEntityAgentrunentryTableSectionBoolInAttr) EndSection() *InEntityAgentrunentryTable {
 	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
@@ -6944,7 +1425,7 @@ func (inst *InEntityAgentrunentryTableSectionEntryLabelTierInAttr) EndSection() 
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
-func (inst *InEntityAgentrunentryTableSectionEntryLabelTierInAttr) EndAttribute() *InEntityAgentrunentryTableSectionEntryLabelTier {
+func (inst *InEntityAgentrunentryTableSectionBoolInAttr) EndAttribute() *InEntityAgentrunentryTableSectionBool {
 	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
@@ -6959,40 +1440,40 @@ func (inst *InEntityAgentrunentryTableSectionEntryLabelTierInAttr) EndAttribute(
 	inst.parent.endAttribute()
 	return inst.parent
 }
-func (inst *InEntityAgentrunentryTableSectionEntryLabelTierInAttr) EndAttributeP() {
+func (inst *InEntityAgentrunentryTableSectionBoolInAttr) EndAttributeP() {
 	inst.EndAttribute()
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryLabelTierInAttr) AppendError(err error) {
+func (inst *InEntityAgentrunentryTableSectionBoolInAttr) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
 }
-func (inst *InEntityAgentrunentryTableSectionEntryLabelTierInAttr) clearErrors() {
+func (inst *InEntityAgentrunentryTableSectionBoolInAttr) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 
-type InEntityAgentrunentryTableSectionEntryName struct {
-	errs                  []error
-	inAttr                *InEntityAgentrunentryTableSectionEntryNameInAttr
-	state                 runtime.EntityStateE
-	attributeCount        int
-	parent                *InEntityAgentrunentryTable
-	scalarFieldBuilder093 *array.StringBuilder
-	scalarListBuilder093  *array.ListBuilder
+type InEntityAgentrunentryTableSectionF32Array struct {
+	errs                           []error
+	inAttr                         *InEntityAgentrunentryTableSectionF32ArrayInAttr
+	state                          runtime.EntityStateE
+	attributeCount                 int
+	parent                         *InEntityAgentrunentryTable
+	homogenousArrayFieldBuilder137 *array.Float32Builder
+	homogenousArrayListBuilder137  *array.ListBuilder
 }
 
-func NewInEntityAgentrunentryTableSectionEntryName(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionEntryName) {
-	inst = &InEntityAgentrunentryTableSectionEntryName{}
-	inAttr := NewInEntityAgentrunentryTableSectionEntryNameInAttr(builder, inst)
+func NewInEntityAgentrunentryTableSectionF32Array(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionF32Array) {
+	inst = &InEntityAgentrunentryTableSectionF32Array{}
+	inAttr := NewInEntityAgentrunentryTableSectionF32ArrayInAttr(builder, inst)
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.inAttr = inAttr
 	inst.parent = parent
-	inst.scalarFieldBuilder093 = builder.Field(93).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder093 = builder.Field(93).(*array.ListBuilder)
+	inst.homogenousArrayFieldBuilder137 = builder.Field(137).(*array.ListBuilder).ValueBuilder().(*array.Float32Builder)
+	inst.homogenousArrayListBuilder137 = builder.Field(137).(*array.ListBuilder)
 
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryName) endAttribute() {
+func (inst *InEntityAgentrunentryTableSectionF32Array) endAttribute() {
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -7002,7 +1483,7 @@ func (inst *InEntityAgentrunentryTableSectionEntryName) endAttribute() {
 		return
 	}
 }
-func (inst *InEntityAgentrunentryTableSectionEntryName) BeginAttribute(value93 string) *InEntityAgentrunentryTableSectionEntryNameInAttr {
+func (inst *InEntityAgentrunentryTableSectionF32Array) BeginAttribute() *InEntityAgentrunentryTableSectionF32ArrayInAttr {
 	switch inst.state {
 	case runtime.EntityStateInSection:
 		inst.state = runtime.EntityStateInAttribute
@@ -7011,26 +1492,2266 @@ func (inst *InEntityAgentrunentryTableSectionEntryName) BeginAttribute(value93 s
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst.inAttr
 	}
-	inst.scalarFieldBuilder093.Append(value93)
+	inst.attributeCount++
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityAgentrunentryTableSectionF32Array) BeginAttributeSingle(value137 float32) *InEntityAgentrunentryTableSectionF32ArrayInAttr {
+	return inst.BeginAttribute().AddToContainer(value137)
+}
+
+type InEntityAgentrunentryTableSectionF32ArrayAttr struct {
+	Value []float32
+}
+
+func (inst *InEntityAgentrunentryTableSectionF32Array) Add(attr InEntityAgentrunentryTableSectionF32ArrayAttr) *InEntityAgentrunentryTableSectionF32ArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
+}
+func (inst *InEntityAgentrunentryTableSectionF32Array) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionF32Array) EndSection() *InEntityAgentrunentryTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityAgentrunentryTableSectionF32Array) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityAgentrunentryTableSectionF32Array) resetSection() {
+	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityAgentrunentryTableSectionF32Array) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityAgentrunentryTableSectionF32Array) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityAgentrunentryTableSectionF32ArrayInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityAgentrunentryTableSectionF32Array
+	homogenousArrayFieldBuilder137        *array.Float32Builder
+	homogenousArrayListBuilder137         *array.ListBuilder
+	membershipFieldBuilder138             *array.Uint64Builder
+	membershipListBuilder138              *array.ListBuilder
+	membershipFieldBuilder139             *array.Uint64Builder
+	membershipListBuilder139              *array.ListBuilder
+	membershipFieldBuilder140             *array.Uint64Builder
+	membershipListBuilder140              *array.ListBuilder
+	membershipFieldBuilder141             *array.BinaryBuilder
+	membershipListBuilder141              *array.ListBuilder
+	homogenousArraySupportFieldBuilder142 *array.Uint64Builder
+	homogenousArraySupportListBuilder142  *array.ListBuilder
+	membershipSupportFieldBuilder143      *array.Uint64Builder
+	membershipSupportListBuilder143       *array.ListBuilder
+	membershipSupportFieldBuilder144      *array.Uint64Builder
+	membershipSupportListBuilder144       *array.ListBuilder
+	membershipSupportFieldBuilder145      *array.Uint64Builder
+	membershipSupportListBuilder145       *array.ListBuilder
+
+	membershipContainerLength138 int
+
+	membershipContainerLength139 int
+
+	membershipContainerLength140 int
+
+	membershipContainerLength141 int
+
+	homogenousArrayContainerLength137 int
+}
+
+func NewInEntityAgentrunentryTableSectionF32ArrayInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionF32Array) (inst *InEntityAgentrunentryTableSectionF32ArrayInAttr) {
+	inst = &InEntityAgentrunentryTableSectionF32ArrayInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder137 = builder.Field(137).(*array.ListBuilder).ValueBuilder().(*array.Float32Builder)
+	inst.homogenousArrayListBuilder137 = builder.Field(137).(*array.ListBuilder)
+	inst.membershipFieldBuilder138 = builder.Field(138).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder138 = builder.Field(138).(*array.ListBuilder)
+	inst.membershipFieldBuilder139 = builder.Field(139).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder139 = builder.Field(139).(*array.ListBuilder)
+	inst.membershipFieldBuilder140 = builder.Field(140).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder140 = builder.Field(140).(*array.ListBuilder)
+	inst.membershipFieldBuilder141 = builder.Field(141).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder141 = builder.Field(141).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder142 = builder.Field(142).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder142 = builder.Field(142).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder143 = builder.Field(143).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder143 = builder.Field(143).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder144 = builder.Field(144).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder144 = builder.Field(144).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder145 = builder.Field(145).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder145 = builder.Field(145).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionF32ArrayInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder137.Append(true)
+	inst.membershipListBuilder138.Append(true)
+	inst.membershipListBuilder139.Append(true)
+	inst.membershipListBuilder140.Append(true)
+	inst.membershipListBuilder141.Append(true)
+	inst.homogenousArrayContainerLength137 = 0
+	inst.membershipContainerLength138 = 0
+	inst.membershipContainerLength139 = 0
+	inst.membershipContainerLength140 = 0
+	inst.membershipContainerLength141 = 0
+	inst.homogenousArraySupportListBuilder142.Append(true)
+	inst.membershipSupportListBuilder143.Append(true)
+	inst.membershipSupportListBuilder144.Append(true)
+	inst.membershipSupportListBuilder145.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityAgentrunentryTableSectionF32ArrayInAttr) AddToContainer(value137 float32) *InEntityAgentrunentryTableSectionF32ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.homogenousArrayFieldBuilder137.Append(value137)
+	inst.homogenousArrayContainerLength137++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionF32ArrayInAttr) AddToContainerP(value137 float32) {
+	inst.AddToContainer(value137)
+}
+func (inst *InEntityAgentrunentryTableSectionF32ArrayInAttr) AddMembershipHighCardRef(hr138 uint64) *InEntityAgentrunentryTableSectionF32ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder138.Append(hr138)
+	inst.membershipContainerLength138++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionF32ArrayInAttr) AddMembershipHighCardRefP(hr138 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder138.Append(hr138)
+	inst.membershipContainerLength138++
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionF32ArrayInAttr) AddMembershipLowCardRef(lr139 uint64) *InEntityAgentrunentryTableSectionF32ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder139.Append(lr139)
+	inst.membershipContainerLength139++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionF32ArrayInAttr) AddMembershipLowCardRefP(lr139 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder139.Append(lr139)
+	inst.membershipContainerLength139++
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionF32ArrayInAttr) AddMembershipMixedLowCardRef(lmr140 uint64, mrhp141 []byte) *InEntityAgentrunentryTableSectionF32ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder140.Append(lmr140)
+	inst.membershipFieldBuilder141.Append(mrhp141)
+	inst.membershipContainerLength140++
+	inst.membershipContainerLength141++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionF32ArrayInAttr) AddMembershipMixedLowCardRefP(lmr140 uint64, mrhp141 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder140.Append(lmr140)
+	inst.membershipFieldBuilder141.Append(mrhp141)
+	inst.membershipContainerLength140++
+	inst.membershipContainerLength141++
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionF32ArrayInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength138
+	inst.membershipContainerLength138 = 0
+	inst.membershipSupportFieldBuilder143.Append(uint64(l))
+	l = inst.membershipContainerLength139
+	inst.membershipContainerLength139 = 0
+	inst.membershipSupportFieldBuilder144.Append(uint64(l))
+	l = inst.membershipContainerLength140
+	inst.membershipContainerLength140 = 0
+	inst.membershipSupportFieldBuilder145.Append(uint64(l))
+}
+func (inst *InEntityAgentrunentryTableSectionF32ArrayInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.homogenousArrayContainerLength137
+	inst.homogenousArrayContainerLength137 = 0
+	inst.homogenousArraySupportFieldBuilder142.Append(uint64(l))
+}
+func (inst *InEntityAgentrunentryTableSectionF32ArrayInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
+func (inst *InEntityAgentrunentryTableSectionF32ArrayInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityAgentrunentryTableSectionF32ArrayInAttr) EndSection() *InEntityAgentrunentryTable {
+	inst.applyAmbientMemberships()
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityAgentrunentryTableSectionF32ArrayInAttr) EndAttribute() *InEntityAgentrunentryTableSectionF32Array {
+	inst.applyAmbientMemberships()
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityAgentrunentryTableSectionF32ArrayInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityAgentrunentryTableSectionF32ArrayInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityAgentrunentryTableSectionF32ArrayInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityAgentrunentryTableSectionF64Array struct {
+	errs                           []error
+	inAttr                         *InEntityAgentrunentryTableSectionF64ArrayInAttr
+	state                          runtime.EntityStateE
+	attributeCount                 int
+	parent                         *InEntityAgentrunentryTable
+	homogenousArrayFieldBuilder146 *array.Float64Builder
+	homogenousArrayListBuilder146  *array.ListBuilder
+}
+
+func NewInEntityAgentrunentryTableSectionF64Array(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionF64Array) {
+	inst = &InEntityAgentrunentryTableSectionF64Array{}
+	inAttr := NewInEntityAgentrunentryTableSectionF64ArrayInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder146 = builder.Field(146).(*array.ListBuilder).ValueBuilder().(*array.Float64Builder)
+	inst.homogenousArrayListBuilder146 = builder.Field(146).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionF64Array) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityAgentrunentryTableSectionF64Array) BeginAttribute() *InEntityAgentrunentryTableSectionF64ArrayInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+	inst.attributeCount++
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityAgentrunentryTableSectionF64Array) BeginAttributeSingle(value146 float64) *InEntityAgentrunentryTableSectionF64ArrayInAttr {
+	return inst.BeginAttribute().AddToContainer(value146)
+}
+
+type InEntityAgentrunentryTableSectionF64ArrayAttr struct {
+	Value []float64
+}
+
+func (inst *InEntityAgentrunentryTableSectionF64Array) Add(attr InEntityAgentrunentryTableSectionF64ArrayAttr) *InEntityAgentrunentryTableSectionF64ArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
+}
+func (inst *InEntityAgentrunentryTableSectionF64Array) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionF64Array) EndSection() *InEntityAgentrunentryTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityAgentrunentryTableSectionF64Array) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityAgentrunentryTableSectionF64Array) resetSection() {
+	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityAgentrunentryTableSectionF64Array) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityAgentrunentryTableSectionF64Array) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityAgentrunentryTableSectionF64ArrayInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityAgentrunentryTableSectionF64Array
+	homogenousArrayFieldBuilder146        *array.Float64Builder
+	homogenousArrayListBuilder146         *array.ListBuilder
+	membershipFieldBuilder147             *array.Uint64Builder
+	membershipListBuilder147              *array.ListBuilder
+	membershipFieldBuilder148             *array.Uint64Builder
+	membershipListBuilder148              *array.ListBuilder
+	membershipFieldBuilder149             *array.Uint64Builder
+	membershipListBuilder149              *array.ListBuilder
+	membershipFieldBuilder150             *array.BinaryBuilder
+	membershipListBuilder150              *array.ListBuilder
+	homogenousArraySupportFieldBuilder151 *array.Uint64Builder
+	homogenousArraySupportListBuilder151  *array.ListBuilder
+	membershipSupportFieldBuilder152      *array.Uint64Builder
+	membershipSupportListBuilder152       *array.ListBuilder
+	membershipSupportFieldBuilder153      *array.Uint64Builder
+	membershipSupportListBuilder153       *array.ListBuilder
+	membershipSupportFieldBuilder154      *array.Uint64Builder
+	membershipSupportListBuilder154       *array.ListBuilder
+
+	membershipContainerLength147 int
+
+	membershipContainerLength148 int
+
+	membershipContainerLength149 int
+
+	membershipContainerLength150 int
+
+	homogenousArrayContainerLength146 int
+}
+
+func NewInEntityAgentrunentryTableSectionF64ArrayInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionF64Array) (inst *InEntityAgentrunentryTableSectionF64ArrayInAttr) {
+	inst = &InEntityAgentrunentryTableSectionF64ArrayInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder146 = builder.Field(146).(*array.ListBuilder).ValueBuilder().(*array.Float64Builder)
+	inst.homogenousArrayListBuilder146 = builder.Field(146).(*array.ListBuilder)
+	inst.membershipFieldBuilder147 = builder.Field(147).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder147 = builder.Field(147).(*array.ListBuilder)
+	inst.membershipFieldBuilder148 = builder.Field(148).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder148 = builder.Field(148).(*array.ListBuilder)
+	inst.membershipFieldBuilder149 = builder.Field(149).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder149 = builder.Field(149).(*array.ListBuilder)
+	inst.membershipFieldBuilder150 = builder.Field(150).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder150 = builder.Field(150).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder151 = builder.Field(151).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder151 = builder.Field(151).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder152 = builder.Field(152).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder152 = builder.Field(152).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder153 = builder.Field(153).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder153 = builder.Field(153).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder154 = builder.Field(154).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder154 = builder.Field(154).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionF64ArrayInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder146.Append(true)
+	inst.membershipListBuilder147.Append(true)
+	inst.membershipListBuilder148.Append(true)
+	inst.membershipListBuilder149.Append(true)
+	inst.membershipListBuilder150.Append(true)
+	inst.homogenousArrayContainerLength146 = 0
+	inst.membershipContainerLength147 = 0
+	inst.membershipContainerLength148 = 0
+	inst.membershipContainerLength149 = 0
+	inst.membershipContainerLength150 = 0
+	inst.homogenousArraySupportListBuilder151.Append(true)
+	inst.membershipSupportListBuilder152.Append(true)
+	inst.membershipSupportListBuilder153.Append(true)
+	inst.membershipSupportListBuilder154.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityAgentrunentryTableSectionF64ArrayInAttr) AddToContainer(value146 float64) *InEntityAgentrunentryTableSectionF64ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.homogenousArrayFieldBuilder146.Append(value146)
+	inst.homogenousArrayContainerLength146++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionF64ArrayInAttr) AddToContainerP(value146 float64) {
+	inst.AddToContainer(value146)
+}
+func (inst *InEntityAgentrunentryTableSectionF64ArrayInAttr) AddMembershipHighCardRef(hr147 uint64) *InEntityAgentrunentryTableSectionF64ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder147.Append(hr147)
+	inst.membershipContainerLength147++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionF64ArrayInAttr) AddMembershipHighCardRefP(hr147 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder147.Append(hr147)
+	inst.membershipContainerLength147++
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionF64ArrayInAttr) AddMembershipLowCardRef(lr148 uint64) *InEntityAgentrunentryTableSectionF64ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder148.Append(lr148)
+	inst.membershipContainerLength148++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionF64ArrayInAttr) AddMembershipLowCardRefP(lr148 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder148.Append(lr148)
+	inst.membershipContainerLength148++
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionF64ArrayInAttr) AddMembershipMixedLowCardRef(lmr149 uint64, mrhp150 []byte) *InEntityAgentrunentryTableSectionF64ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder149.Append(lmr149)
+	inst.membershipFieldBuilder150.Append(mrhp150)
+	inst.membershipContainerLength149++
+	inst.membershipContainerLength150++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionF64ArrayInAttr) AddMembershipMixedLowCardRefP(lmr149 uint64, mrhp150 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder149.Append(lmr149)
+	inst.membershipFieldBuilder150.Append(mrhp150)
+	inst.membershipContainerLength149++
+	inst.membershipContainerLength150++
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionF64ArrayInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength147
+	inst.membershipContainerLength147 = 0
+	inst.membershipSupportFieldBuilder152.Append(uint64(l))
+	l = inst.membershipContainerLength148
+	inst.membershipContainerLength148 = 0
+	inst.membershipSupportFieldBuilder153.Append(uint64(l))
+	l = inst.membershipContainerLength149
+	inst.membershipContainerLength149 = 0
+	inst.membershipSupportFieldBuilder154.Append(uint64(l))
+}
+func (inst *InEntityAgentrunentryTableSectionF64ArrayInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.homogenousArrayContainerLength146
+	inst.homogenousArrayContainerLength146 = 0
+	inst.homogenousArraySupportFieldBuilder151.Append(uint64(l))
+}
+func (inst *InEntityAgentrunentryTableSectionF64ArrayInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
+func (inst *InEntityAgentrunentryTableSectionF64ArrayInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityAgentrunentryTableSectionF64ArrayInAttr) EndSection() *InEntityAgentrunentryTable {
+	inst.applyAmbientMemberships()
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityAgentrunentryTableSectionF64ArrayInAttr) EndAttribute() *InEntityAgentrunentryTableSectionF64Array {
+	inst.applyAmbientMemberships()
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityAgentrunentryTableSectionF64ArrayInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityAgentrunentryTableSectionF64ArrayInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityAgentrunentryTableSectionF64ArrayInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityAgentrunentryTableSectionI16Array struct {
+	errs                           []error
+	inAttr                         *InEntityAgentrunentryTableSectionI16ArrayInAttr
+	state                          runtime.EntityStateE
+	attributeCount                 int
+	parent                         *InEntityAgentrunentryTable
+	homogenousArrayFieldBuilder110 *array.Int16Builder
+	homogenousArrayListBuilder110  *array.ListBuilder
+}
+
+func NewInEntityAgentrunentryTableSectionI16Array(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionI16Array) {
+	inst = &InEntityAgentrunentryTableSectionI16Array{}
+	inAttr := NewInEntityAgentrunentryTableSectionI16ArrayInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder110 = builder.Field(110).(*array.ListBuilder).ValueBuilder().(*array.Int16Builder)
+	inst.homogenousArrayListBuilder110 = builder.Field(110).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionI16Array) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityAgentrunentryTableSectionI16Array) BeginAttribute() *InEntityAgentrunentryTableSectionI16ArrayInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+	inst.attributeCount++
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityAgentrunentryTableSectionI16Array) BeginAttributeSingle(value110 int16) *InEntityAgentrunentryTableSectionI16ArrayInAttr {
+	return inst.BeginAttribute().AddToContainer(value110)
+}
+
+type InEntityAgentrunentryTableSectionI16ArrayAttr struct {
+	Value []int16
+}
+
+func (inst *InEntityAgentrunentryTableSectionI16Array) Add(attr InEntityAgentrunentryTableSectionI16ArrayAttr) *InEntityAgentrunentryTableSectionI16ArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
+}
+func (inst *InEntityAgentrunentryTableSectionI16Array) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionI16Array) EndSection() *InEntityAgentrunentryTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityAgentrunentryTableSectionI16Array) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityAgentrunentryTableSectionI16Array) resetSection() {
+	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityAgentrunentryTableSectionI16Array) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityAgentrunentryTableSectionI16Array) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityAgentrunentryTableSectionI16ArrayInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityAgentrunentryTableSectionI16Array
+	homogenousArrayFieldBuilder110        *array.Int16Builder
+	homogenousArrayListBuilder110         *array.ListBuilder
+	membershipFieldBuilder111             *array.Uint64Builder
+	membershipListBuilder111              *array.ListBuilder
+	membershipFieldBuilder112             *array.Uint64Builder
+	membershipListBuilder112              *array.ListBuilder
+	membershipFieldBuilder113             *array.Uint64Builder
+	membershipListBuilder113              *array.ListBuilder
+	membershipFieldBuilder114             *array.BinaryBuilder
+	membershipListBuilder114              *array.ListBuilder
+	homogenousArraySupportFieldBuilder115 *array.Uint64Builder
+	homogenousArraySupportListBuilder115  *array.ListBuilder
+	membershipSupportFieldBuilder116      *array.Uint64Builder
+	membershipSupportListBuilder116       *array.ListBuilder
+	membershipSupportFieldBuilder117      *array.Uint64Builder
+	membershipSupportListBuilder117       *array.ListBuilder
+	membershipSupportFieldBuilder118      *array.Uint64Builder
+	membershipSupportListBuilder118       *array.ListBuilder
+
+	membershipContainerLength111 int
+
+	membershipContainerLength112 int
+
+	membershipContainerLength113 int
+
+	membershipContainerLength114 int
+
+	homogenousArrayContainerLength110 int
+}
+
+func NewInEntityAgentrunentryTableSectionI16ArrayInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionI16Array) (inst *InEntityAgentrunentryTableSectionI16ArrayInAttr) {
+	inst = &InEntityAgentrunentryTableSectionI16ArrayInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder110 = builder.Field(110).(*array.ListBuilder).ValueBuilder().(*array.Int16Builder)
+	inst.homogenousArrayListBuilder110 = builder.Field(110).(*array.ListBuilder)
+	inst.membershipFieldBuilder111 = builder.Field(111).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder111 = builder.Field(111).(*array.ListBuilder)
+	inst.membershipFieldBuilder112 = builder.Field(112).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder112 = builder.Field(112).(*array.ListBuilder)
+	inst.membershipFieldBuilder113 = builder.Field(113).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder113 = builder.Field(113).(*array.ListBuilder)
+	inst.membershipFieldBuilder114 = builder.Field(114).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder114 = builder.Field(114).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder115 = builder.Field(115).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder115 = builder.Field(115).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder116 = builder.Field(116).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder116 = builder.Field(116).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder117 = builder.Field(117).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder117 = builder.Field(117).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder118 = builder.Field(118).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder118 = builder.Field(118).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionI16ArrayInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder110.Append(true)
+	inst.membershipListBuilder111.Append(true)
+	inst.membershipListBuilder112.Append(true)
+	inst.membershipListBuilder113.Append(true)
+	inst.membershipListBuilder114.Append(true)
+	inst.homogenousArrayContainerLength110 = 0
+	inst.membershipContainerLength111 = 0
+	inst.membershipContainerLength112 = 0
+	inst.membershipContainerLength113 = 0
+	inst.membershipContainerLength114 = 0
+	inst.homogenousArraySupportListBuilder115.Append(true)
+	inst.membershipSupportListBuilder116.Append(true)
+	inst.membershipSupportListBuilder117.Append(true)
+	inst.membershipSupportListBuilder118.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityAgentrunentryTableSectionI16ArrayInAttr) AddToContainer(value110 int16) *InEntityAgentrunentryTableSectionI16ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.homogenousArrayFieldBuilder110.Append(value110)
+	inst.homogenousArrayContainerLength110++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionI16ArrayInAttr) AddToContainerP(value110 int16) {
+	inst.AddToContainer(value110)
+}
+func (inst *InEntityAgentrunentryTableSectionI16ArrayInAttr) AddMembershipHighCardRef(hr111 uint64) *InEntityAgentrunentryTableSectionI16ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder111.Append(hr111)
+	inst.membershipContainerLength111++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionI16ArrayInAttr) AddMembershipHighCardRefP(hr111 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder111.Append(hr111)
+	inst.membershipContainerLength111++
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionI16ArrayInAttr) AddMembershipLowCardRef(lr112 uint64) *InEntityAgentrunentryTableSectionI16ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder112.Append(lr112)
+	inst.membershipContainerLength112++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionI16ArrayInAttr) AddMembershipLowCardRefP(lr112 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder112.Append(lr112)
+	inst.membershipContainerLength112++
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionI16ArrayInAttr) AddMembershipMixedLowCardRef(lmr113 uint64, mrhp114 []byte) *InEntityAgentrunentryTableSectionI16ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder113.Append(lmr113)
+	inst.membershipFieldBuilder114.Append(mrhp114)
+	inst.membershipContainerLength113++
+	inst.membershipContainerLength114++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionI16ArrayInAttr) AddMembershipMixedLowCardRefP(lmr113 uint64, mrhp114 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder113.Append(lmr113)
+	inst.membershipFieldBuilder114.Append(mrhp114)
+	inst.membershipContainerLength113++
+	inst.membershipContainerLength114++
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionI16ArrayInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength111
+	inst.membershipContainerLength111 = 0
+	inst.membershipSupportFieldBuilder116.Append(uint64(l))
+	l = inst.membershipContainerLength112
+	inst.membershipContainerLength112 = 0
+	inst.membershipSupportFieldBuilder117.Append(uint64(l))
+	l = inst.membershipContainerLength113
+	inst.membershipContainerLength113 = 0
+	inst.membershipSupportFieldBuilder118.Append(uint64(l))
+}
+func (inst *InEntityAgentrunentryTableSectionI16ArrayInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.homogenousArrayContainerLength110
+	inst.homogenousArrayContainerLength110 = 0
+	inst.homogenousArraySupportFieldBuilder115.Append(uint64(l))
+}
+func (inst *InEntityAgentrunentryTableSectionI16ArrayInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
+func (inst *InEntityAgentrunentryTableSectionI16ArrayInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityAgentrunentryTableSectionI16ArrayInAttr) EndSection() *InEntityAgentrunentryTable {
+	inst.applyAmbientMemberships()
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityAgentrunentryTableSectionI16ArrayInAttr) EndAttribute() *InEntityAgentrunentryTableSectionI16Array {
+	inst.applyAmbientMemberships()
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityAgentrunentryTableSectionI16ArrayInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityAgentrunentryTableSectionI16ArrayInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityAgentrunentryTableSectionI16ArrayInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityAgentrunentryTableSectionI32Array struct {
+	errs                           []error
+	inAttr                         *InEntityAgentrunentryTableSectionI32ArrayInAttr
+	state                          runtime.EntityStateE
+	attributeCount                 int
+	parent                         *InEntityAgentrunentryTable
+	homogenousArrayFieldBuilder119 *array.Int32Builder
+	homogenousArrayListBuilder119  *array.ListBuilder
+}
+
+func NewInEntityAgentrunentryTableSectionI32Array(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionI32Array) {
+	inst = &InEntityAgentrunentryTableSectionI32Array{}
+	inAttr := NewInEntityAgentrunentryTableSectionI32ArrayInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder119 = builder.Field(119).(*array.ListBuilder).ValueBuilder().(*array.Int32Builder)
+	inst.homogenousArrayListBuilder119 = builder.Field(119).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionI32Array) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityAgentrunentryTableSectionI32Array) BeginAttribute() *InEntityAgentrunentryTableSectionI32ArrayInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+	inst.attributeCount++
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityAgentrunentryTableSectionI32Array) BeginAttributeSingle(value119 int32) *InEntityAgentrunentryTableSectionI32ArrayInAttr {
+	return inst.BeginAttribute().AddToContainer(value119)
+}
+
+type InEntityAgentrunentryTableSectionI32ArrayAttr struct {
+	Value []int32
+}
+
+func (inst *InEntityAgentrunentryTableSectionI32Array) Add(attr InEntityAgentrunentryTableSectionI32ArrayAttr) *InEntityAgentrunentryTableSectionI32ArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
+}
+func (inst *InEntityAgentrunentryTableSectionI32Array) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionI32Array) EndSection() *InEntityAgentrunentryTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityAgentrunentryTableSectionI32Array) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityAgentrunentryTableSectionI32Array) resetSection() {
+	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityAgentrunentryTableSectionI32Array) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityAgentrunentryTableSectionI32Array) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityAgentrunentryTableSectionI32ArrayInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityAgentrunentryTableSectionI32Array
+	homogenousArrayFieldBuilder119        *array.Int32Builder
+	homogenousArrayListBuilder119         *array.ListBuilder
+	membershipFieldBuilder120             *array.Uint64Builder
+	membershipListBuilder120              *array.ListBuilder
+	membershipFieldBuilder121             *array.Uint64Builder
+	membershipListBuilder121              *array.ListBuilder
+	membershipFieldBuilder122             *array.Uint64Builder
+	membershipListBuilder122              *array.ListBuilder
+	membershipFieldBuilder123             *array.BinaryBuilder
+	membershipListBuilder123              *array.ListBuilder
+	homogenousArraySupportFieldBuilder124 *array.Uint64Builder
+	homogenousArraySupportListBuilder124  *array.ListBuilder
+	membershipSupportFieldBuilder125      *array.Uint64Builder
+	membershipSupportListBuilder125       *array.ListBuilder
+	membershipSupportFieldBuilder126      *array.Uint64Builder
+	membershipSupportListBuilder126       *array.ListBuilder
+	membershipSupportFieldBuilder127      *array.Uint64Builder
+	membershipSupportListBuilder127       *array.ListBuilder
+
+	membershipContainerLength120 int
+
+	membershipContainerLength121 int
+
+	membershipContainerLength122 int
+
+	membershipContainerLength123 int
+
+	homogenousArrayContainerLength119 int
+}
+
+func NewInEntityAgentrunentryTableSectionI32ArrayInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionI32Array) (inst *InEntityAgentrunentryTableSectionI32ArrayInAttr) {
+	inst = &InEntityAgentrunentryTableSectionI32ArrayInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder119 = builder.Field(119).(*array.ListBuilder).ValueBuilder().(*array.Int32Builder)
+	inst.homogenousArrayListBuilder119 = builder.Field(119).(*array.ListBuilder)
+	inst.membershipFieldBuilder120 = builder.Field(120).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder120 = builder.Field(120).(*array.ListBuilder)
+	inst.membershipFieldBuilder121 = builder.Field(121).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder121 = builder.Field(121).(*array.ListBuilder)
+	inst.membershipFieldBuilder122 = builder.Field(122).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder122 = builder.Field(122).(*array.ListBuilder)
+	inst.membershipFieldBuilder123 = builder.Field(123).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder123 = builder.Field(123).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder124 = builder.Field(124).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder124 = builder.Field(124).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder125 = builder.Field(125).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder125 = builder.Field(125).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder126 = builder.Field(126).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder126 = builder.Field(126).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder127 = builder.Field(127).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder127 = builder.Field(127).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionI32ArrayInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder119.Append(true)
+	inst.membershipListBuilder120.Append(true)
+	inst.membershipListBuilder121.Append(true)
+	inst.membershipListBuilder122.Append(true)
+	inst.membershipListBuilder123.Append(true)
+	inst.homogenousArrayContainerLength119 = 0
+	inst.membershipContainerLength120 = 0
+	inst.membershipContainerLength121 = 0
+	inst.membershipContainerLength122 = 0
+	inst.membershipContainerLength123 = 0
+	inst.homogenousArraySupportListBuilder124.Append(true)
+	inst.membershipSupportListBuilder125.Append(true)
+	inst.membershipSupportListBuilder126.Append(true)
+	inst.membershipSupportListBuilder127.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityAgentrunentryTableSectionI32ArrayInAttr) AddToContainer(value119 int32) *InEntityAgentrunentryTableSectionI32ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.homogenousArrayFieldBuilder119.Append(value119)
+	inst.homogenousArrayContainerLength119++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionI32ArrayInAttr) AddToContainerP(value119 int32) {
+	inst.AddToContainer(value119)
+}
+func (inst *InEntityAgentrunentryTableSectionI32ArrayInAttr) AddMembershipHighCardRef(hr120 uint64) *InEntityAgentrunentryTableSectionI32ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder120.Append(hr120)
+	inst.membershipContainerLength120++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionI32ArrayInAttr) AddMembershipHighCardRefP(hr120 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder120.Append(hr120)
+	inst.membershipContainerLength120++
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionI32ArrayInAttr) AddMembershipLowCardRef(lr121 uint64) *InEntityAgentrunentryTableSectionI32ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder121.Append(lr121)
+	inst.membershipContainerLength121++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionI32ArrayInAttr) AddMembershipLowCardRefP(lr121 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder121.Append(lr121)
+	inst.membershipContainerLength121++
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionI32ArrayInAttr) AddMembershipMixedLowCardRef(lmr122 uint64, mrhp123 []byte) *InEntityAgentrunentryTableSectionI32ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder122.Append(lmr122)
+	inst.membershipFieldBuilder123.Append(mrhp123)
+	inst.membershipContainerLength122++
+	inst.membershipContainerLength123++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionI32ArrayInAttr) AddMembershipMixedLowCardRefP(lmr122 uint64, mrhp123 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder122.Append(lmr122)
+	inst.membershipFieldBuilder123.Append(mrhp123)
+	inst.membershipContainerLength122++
+	inst.membershipContainerLength123++
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionI32ArrayInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength120
+	inst.membershipContainerLength120 = 0
+	inst.membershipSupportFieldBuilder125.Append(uint64(l))
+	l = inst.membershipContainerLength121
+	inst.membershipContainerLength121 = 0
+	inst.membershipSupportFieldBuilder126.Append(uint64(l))
+	l = inst.membershipContainerLength122
+	inst.membershipContainerLength122 = 0
+	inst.membershipSupportFieldBuilder127.Append(uint64(l))
+}
+func (inst *InEntityAgentrunentryTableSectionI32ArrayInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.homogenousArrayContainerLength119
+	inst.homogenousArrayContainerLength119 = 0
+	inst.homogenousArraySupportFieldBuilder124.Append(uint64(l))
+}
+func (inst *InEntityAgentrunentryTableSectionI32ArrayInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
+func (inst *InEntityAgentrunentryTableSectionI32ArrayInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityAgentrunentryTableSectionI32ArrayInAttr) EndSection() *InEntityAgentrunentryTable {
+	inst.applyAmbientMemberships()
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityAgentrunentryTableSectionI32ArrayInAttr) EndAttribute() *InEntityAgentrunentryTableSectionI32Array {
+	inst.applyAmbientMemberships()
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityAgentrunentryTableSectionI32ArrayInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityAgentrunentryTableSectionI32ArrayInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityAgentrunentryTableSectionI32ArrayInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityAgentrunentryTableSectionI64Array struct {
+	errs                           []error
+	inAttr                         *InEntityAgentrunentryTableSectionI64ArrayInAttr
+	state                          runtime.EntityStateE
+	attributeCount                 int
+	parent                         *InEntityAgentrunentryTable
+	homogenousArrayFieldBuilder128 *array.Int64Builder
+	homogenousArrayListBuilder128  *array.ListBuilder
+}
+
+func NewInEntityAgentrunentryTableSectionI64Array(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionI64Array) {
+	inst = &InEntityAgentrunentryTableSectionI64Array{}
+	inAttr := NewInEntityAgentrunentryTableSectionI64ArrayInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder128 = builder.Field(128).(*array.ListBuilder).ValueBuilder().(*array.Int64Builder)
+	inst.homogenousArrayListBuilder128 = builder.Field(128).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionI64Array) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityAgentrunentryTableSectionI64Array) BeginAttribute() *InEntityAgentrunentryTableSectionI64ArrayInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+	inst.attributeCount++
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityAgentrunentryTableSectionI64Array) BeginAttributeSingle(value128 int64) *InEntityAgentrunentryTableSectionI64ArrayInAttr {
+	return inst.BeginAttribute().AddToContainer(value128)
+}
+
+type InEntityAgentrunentryTableSectionI64ArrayAttr struct {
+	Value []int64
+}
+
+func (inst *InEntityAgentrunentryTableSectionI64Array) Add(attr InEntityAgentrunentryTableSectionI64ArrayAttr) *InEntityAgentrunentryTableSectionI64ArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
+}
+func (inst *InEntityAgentrunentryTableSectionI64Array) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionI64Array) EndSection() *InEntityAgentrunentryTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityAgentrunentryTableSectionI64Array) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityAgentrunentryTableSectionI64Array) resetSection() {
+	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityAgentrunentryTableSectionI64Array) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityAgentrunentryTableSectionI64Array) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityAgentrunentryTableSectionI64ArrayInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityAgentrunentryTableSectionI64Array
+	homogenousArrayFieldBuilder128        *array.Int64Builder
+	homogenousArrayListBuilder128         *array.ListBuilder
+	membershipFieldBuilder129             *array.Uint64Builder
+	membershipListBuilder129              *array.ListBuilder
+	membershipFieldBuilder130             *array.Uint64Builder
+	membershipListBuilder130              *array.ListBuilder
+	membershipFieldBuilder131             *array.Uint64Builder
+	membershipListBuilder131              *array.ListBuilder
+	membershipFieldBuilder132             *array.BinaryBuilder
+	membershipListBuilder132              *array.ListBuilder
+	homogenousArraySupportFieldBuilder133 *array.Uint64Builder
+	homogenousArraySupportListBuilder133  *array.ListBuilder
+	membershipSupportFieldBuilder134      *array.Uint64Builder
+	membershipSupportListBuilder134       *array.ListBuilder
+	membershipSupportFieldBuilder135      *array.Uint64Builder
+	membershipSupportListBuilder135       *array.ListBuilder
+	membershipSupportFieldBuilder136      *array.Uint64Builder
+	membershipSupportListBuilder136       *array.ListBuilder
+
+	membershipContainerLength129 int
+
+	membershipContainerLength130 int
+
+	membershipContainerLength131 int
+
+	membershipContainerLength132 int
+
+	homogenousArrayContainerLength128 int
+}
+
+func NewInEntityAgentrunentryTableSectionI64ArrayInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionI64Array) (inst *InEntityAgentrunentryTableSectionI64ArrayInAttr) {
+	inst = &InEntityAgentrunentryTableSectionI64ArrayInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder128 = builder.Field(128).(*array.ListBuilder).ValueBuilder().(*array.Int64Builder)
+	inst.homogenousArrayListBuilder128 = builder.Field(128).(*array.ListBuilder)
+	inst.membershipFieldBuilder129 = builder.Field(129).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder129 = builder.Field(129).(*array.ListBuilder)
+	inst.membershipFieldBuilder130 = builder.Field(130).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder130 = builder.Field(130).(*array.ListBuilder)
+	inst.membershipFieldBuilder131 = builder.Field(131).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder131 = builder.Field(131).(*array.ListBuilder)
+	inst.membershipFieldBuilder132 = builder.Field(132).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder132 = builder.Field(132).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder133 = builder.Field(133).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder133 = builder.Field(133).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder134 = builder.Field(134).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder134 = builder.Field(134).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder135 = builder.Field(135).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder135 = builder.Field(135).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder136 = builder.Field(136).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder136 = builder.Field(136).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionI64ArrayInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder128.Append(true)
+	inst.membershipListBuilder129.Append(true)
+	inst.membershipListBuilder130.Append(true)
+	inst.membershipListBuilder131.Append(true)
+	inst.membershipListBuilder132.Append(true)
+	inst.homogenousArrayContainerLength128 = 0
+	inst.membershipContainerLength129 = 0
+	inst.membershipContainerLength130 = 0
+	inst.membershipContainerLength131 = 0
+	inst.membershipContainerLength132 = 0
+	inst.homogenousArraySupportListBuilder133.Append(true)
+	inst.membershipSupportListBuilder134.Append(true)
+	inst.membershipSupportListBuilder135.Append(true)
+	inst.membershipSupportListBuilder136.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityAgentrunentryTableSectionI64ArrayInAttr) AddToContainer(value128 int64) *InEntityAgentrunentryTableSectionI64ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.homogenousArrayFieldBuilder128.Append(value128)
+	inst.homogenousArrayContainerLength128++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionI64ArrayInAttr) AddToContainerP(value128 int64) {
+	inst.AddToContainer(value128)
+}
+func (inst *InEntityAgentrunentryTableSectionI64ArrayInAttr) AddMembershipHighCardRef(hr129 uint64) *InEntityAgentrunentryTableSectionI64ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder129.Append(hr129)
+	inst.membershipContainerLength129++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionI64ArrayInAttr) AddMembershipHighCardRefP(hr129 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder129.Append(hr129)
+	inst.membershipContainerLength129++
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionI64ArrayInAttr) AddMembershipLowCardRef(lr130 uint64) *InEntityAgentrunentryTableSectionI64ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder130.Append(lr130)
+	inst.membershipContainerLength130++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionI64ArrayInAttr) AddMembershipLowCardRefP(lr130 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder130.Append(lr130)
+	inst.membershipContainerLength130++
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionI64ArrayInAttr) AddMembershipMixedLowCardRef(lmr131 uint64, mrhp132 []byte) *InEntityAgentrunentryTableSectionI64ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder131.Append(lmr131)
+	inst.membershipFieldBuilder132.Append(mrhp132)
+	inst.membershipContainerLength131++
+	inst.membershipContainerLength132++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionI64ArrayInAttr) AddMembershipMixedLowCardRefP(lmr131 uint64, mrhp132 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder131.Append(lmr131)
+	inst.membershipFieldBuilder132.Append(mrhp132)
+	inst.membershipContainerLength131++
+	inst.membershipContainerLength132++
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionI64ArrayInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength129
+	inst.membershipContainerLength129 = 0
+	inst.membershipSupportFieldBuilder134.Append(uint64(l))
+	l = inst.membershipContainerLength130
+	inst.membershipContainerLength130 = 0
+	inst.membershipSupportFieldBuilder135.Append(uint64(l))
+	l = inst.membershipContainerLength131
+	inst.membershipContainerLength131 = 0
+	inst.membershipSupportFieldBuilder136.Append(uint64(l))
+}
+func (inst *InEntityAgentrunentryTableSectionI64ArrayInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.homogenousArrayContainerLength128
+	inst.homogenousArrayContainerLength128 = 0
+	inst.homogenousArraySupportFieldBuilder133.Append(uint64(l))
+}
+func (inst *InEntityAgentrunentryTableSectionI64ArrayInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
+func (inst *InEntityAgentrunentryTableSectionI64ArrayInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityAgentrunentryTableSectionI64ArrayInAttr) EndSection() *InEntityAgentrunentryTable {
+	inst.applyAmbientMemberships()
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityAgentrunentryTableSectionI64ArrayInAttr) EndAttribute() *InEntityAgentrunentryTableSectionI64Array {
+	inst.applyAmbientMemberships()
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityAgentrunentryTableSectionI64ArrayInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityAgentrunentryTableSectionI64ArrayInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityAgentrunentryTableSectionI64ArrayInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityAgentrunentryTableSectionI8Array struct {
+	errs                           []error
+	inAttr                         *InEntityAgentrunentryTableSectionI8ArrayInAttr
+	state                          runtime.EntityStateE
+	attributeCount                 int
+	parent                         *InEntityAgentrunentryTable
+	homogenousArrayFieldBuilder101 *array.Int8Builder
+	homogenousArrayListBuilder101  *array.ListBuilder
+}
+
+func NewInEntityAgentrunentryTableSectionI8Array(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionI8Array) {
+	inst = &InEntityAgentrunentryTableSectionI8Array{}
+	inAttr := NewInEntityAgentrunentryTableSectionI8ArrayInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder101 = builder.Field(101).(*array.ListBuilder).ValueBuilder().(*array.Int8Builder)
+	inst.homogenousArrayListBuilder101 = builder.Field(101).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionI8Array) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityAgentrunentryTableSectionI8Array) BeginAttribute() *InEntityAgentrunentryTableSectionI8ArrayInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+	inst.attributeCount++
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityAgentrunentryTableSectionI8Array) BeginAttributeSingle(value101 int8) *InEntityAgentrunentryTableSectionI8ArrayInAttr {
+	return inst.BeginAttribute().AddToContainer(value101)
+}
+
+type InEntityAgentrunentryTableSectionI8ArrayAttr struct {
+	Value []int8
+}
+
+func (inst *InEntityAgentrunentryTableSectionI8Array) Add(attr InEntityAgentrunentryTableSectionI8ArrayAttr) *InEntityAgentrunentryTableSectionI8ArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
+}
+func (inst *InEntityAgentrunentryTableSectionI8Array) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionI8Array) EndSection() *InEntityAgentrunentryTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityAgentrunentryTableSectionI8Array) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityAgentrunentryTableSectionI8Array) resetSection() {
+	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityAgentrunentryTableSectionI8Array) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityAgentrunentryTableSectionI8Array) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityAgentrunentryTableSectionI8ArrayInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityAgentrunentryTableSectionI8Array
+	homogenousArrayFieldBuilder101        *array.Int8Builder
+	homogenousArrayListBuilder101         *array.ListBuilder
+	membershipFieldBuilder102             *array.Uint64Builder
+	membershipListBuilder102              *array.ListBuilder
+	membershipFieldBuilder103             *array.Uint64Builder
+	membershipListBuilder103              *array.ListBuilder
+	membershipFieldBuilder104             *array.Uint64Builder
+	membershipListBuilder104              *array.ListBuilder
+	membershipFieldBuilder105             *array.BinaryBuilder
+	membershipListBuilder105              *array.ListBuilder
+	homogenousArraySupportFieldBuilder106 *array.Uint64Builder
+	homogenousArraySupportListBuilder106  *array.ListBuilder
+	membershipSupportFieldBuilder107      *array.Uint64Builder
+	membershipSupportListBuilder107       *array.ListBuilder
+	membershipSupportFieldBuilder108      *array.Uint64Builder
+	membershipSupportListBuilder108       *array.ListBuilder
+	membershipSupportFieldBuilder109      *array.Uint64Builder
+	membershipSupportListBuilder109       *array.ListBuilder
+
+	membershipContainerLength102 int
+
+	membershipContainerLength103 int
+
+	membershipContainerLength104 int
+
+	membershipContainerLength105 int
+
+	homogenousArrayContainerLength101 int
+}
+
+func NewInEntityAgentrunentryTableSectionI8ArrayInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionI8Array) (inst *InEntityAgentrunentryTableSectionI8ArrayInAttr) {
+	inst = &InEntityAgentrunentryTableSectionI8ArrayInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder101 = builder.Field(101).(*array.ListBuilder).ValueBuilder().(*array.Int8Builder)
+	inst.homogenousArrayListBuilder101 = builder.Field(101).(*array.ListBuilder)
+	inst.membershipFieldBuilder102 = builder.Field(102).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder102 = builder.Field(102).(*array.ListBuilder)
+	inst.membershipFieldBuilder103 = builder.Field(103).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder103 = builder.Field(103).(*array.ListBuilder)
+	inst.membershipFieldBuilder104 = builder.Field(104).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder104 = builder.Field(104).(*array.ListBuilder)
+	inst.membershipFieldBuilder105 = builder.Field(105).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder105 = builder.Field(105).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder106 = builder.Field(106).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder106 = builder.Field(106).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder107 = builder.Field(107).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder107 = builder.Field(107).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder108 = builder.Field(108).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder108 = builder.Field(108).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder109 = builder.Field(109).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder109 = builder.Field(109).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionI8ArrayInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder101.Append(true)
+	inst.membershipListBuilder102.Append(true)
+	inst.membershipListBuilder103.Append(true)
+	inst.membershipListBuilder104.Append(true)
+	inst.membershipListBuilder105.Append(true)
+	inst.homogenousArrayContainerLength101 = 0
+	inst.membershipContainerLength102 = 0
+	inst.membershipContainerLength103 = 0
+	inst.membershipContainerLength104 = 0
+	inst.membershipContainerLength105 = 0
+	inst.homogenousArraySupportListBuilder106.Append(true)
+	inst.membershipSupportListBuilder107.Append(true)
+	inst.membershipSupportListBuilder108.Append(true)
+	inst.membershipSupportListBuilder109.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityAgentrunentryTableSectionI8ArrayInAttr) AddToContainer(value101 int8) *InEntityAgentrunentryTableSectionI8ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.homogenousArrayFieldBuilder101.Append(value101)
+	inst.homogenousArrayContainerLength101++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionI8ArrayInAttr) AddToContainerP(value101 int8) {
+	inst.AddToContainer(value101)
+}
+func (inst *InEntityAgentrunentryTableSectionI8ArrayInAttr) AddMembershipHighCardRef(hr102 uint64) *InEntityAgentrunentryTableSectionI8ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder102.Append(hr102)
+	inst.membershipContainerLength102++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionI8ArrayInAttr) AddMembershipHighCardRefP(hr102 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder102.Append(hr102)
+	inst.membershipContainerLength102++
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionI8ArrayInAttr) AddMembershipLowCardRef(lr103 uint64) *InEntityAgentrunentryTableSectionI8ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder103.Append(lr103)
+	inst.membershipContainerLength103++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionI8ArrayInAttr) AddMembershipLowCardRefP(lr103 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder103.Append(lr103)
+	inst.membershipContainerLength103++
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionI8ArrayInAttr) AddMembershipMixedLowCardRef(lmr104 uint64, mrhp105 []byte) *InEntityAgentrunentryTableSectionI8ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder104.Append(lmr104)
+	inst.membershipFieldBuilder105.Append(mrhp105)
+	inst.membershipContainerLength104++
+	inst.membershipContainerLength105++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionI8ArrayInAttr) AddMembershipMixedLowCardRefP(lmr104 uint64, mrhp105 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder104.Append(lmr104)
+	inst.membershipFieldBuilder105.Append(mrhp105)
+	inst.membershipContainerLength104++
+	inst.membershipContainerLength105++
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionI8ArrayInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength102
+	inst.membershipContainerLength102 = 0
+	inst.membershipSupportFieldBuilder107.Append(uint64(l))
+	l = inst.membershipContainerLength103
+	inst.membershipContainerLength103 = 0
+	inst.membershipSupportFieldBuilder108.Append(uint64(l))
+	l = inst.membershipContainerLength104
+	inst.membershipContainerLength104 = 0
+	inst.membershipSupportFieldBuilder109.Append(uint64(l))
+}
+func (inst *InEntityAgentrunentryTableSectionI8ArrayInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.homogenousArrayContainerLength101
+	inst.homogenousArrayContainerLength101 = 0
+	inst.homogenousArraySupportFieldBuilder106.Append(uint64(l))
+}
+func (inst *InEntityAgentrunentryTableSectionI8ArrayInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
+func (inst *InEntityAgentrunentryTableSectionI8ArrayInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityAgentrunentryTableSectionI8ArrayInAttr) EndSection() *InEntityAgentrunentryTable {
+	inst.applyAmbientMemberships()
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityAgentrunentryTableSectionI8ArrayInAttr) EndAttribute() *InEntityAgentrunentryTableSectionI8Array {
+	inst.applyAmbientMemberships()
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityAgentrunentryTableSectionI8ArrayInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityAgentrunentryTableSectionI8ArrayInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityAgentrunentryTableSectionI8ArrayInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityAgentrunentryTableSectionStringArray struct {
+	errs                           []error
+	inAttr                         *InEntityAgentrunentryTableSectionStringArrayInAttr
+	state                          runtime.EntityStateE
+	attributeCount                 int
+	parent                         *InEntityAgentrunentryTable
+	homogenousArrayFieldBuilder012 *array.StringBuilder
+	homogenousArrayListBuilder012  *array.ListBuilder
+}
+
+func NewInEntityAgentrunentryTableSectionStringArray(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionStringArray) {
+	inst = &InEntityAgentrunentryTableSectionStringArray{}
+	inAttr := NewInEntityAgentrunentryTableSectionStringArrayInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder012 = builder.Field(12).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.homogenousArrayListBuilder012 = builder.Field(12).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionStringArray) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityAgentrunentryTableSectionStringArray) BeginAttribute() *InEntityAgentrunentryTableSectionStringArrayInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+	inst.attributeCount++
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityAgentrunentryTableSectionStringArray) BeginAttributeSingle(value12 string) *InEntityAgentrunentryTableSectionStringArrayInAttr {
+	return inst.BeginAttribute().AddToContainer(value12)
+}
+
+type InEntityAgentrunentryTableSectionStringArrayAttr struct {
+	Value []string
+}
+
+func (inst *InEntityAgentrunentryTableSectionStringArray) Add(attr InEntityAgentrunentryTableSectionStringArrayAttr) *InEntityAgentrunentryTableSectionStringArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
+}
+func (inst *InEntityAgentrunentryTableSectionStringArray) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionStringArray) EndSection() *InEntityAgentrunentryTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityAgentrunentryTableSectionStringArray) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityAgentrunentryTableSectionStringArray) resetSection() {
+	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityAgentrunentryTableSectionStringArray) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityAgentrunentryTableSectionStringArray) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityAgentrunentryTableSectionStringArrayInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityAgentrunentryTableSectionStringArray
+	homogenousArrayFieldBuilder012        *array.StringBuilder
+	homogenousArrayListBuilder012         *array.ListBuilder
+	membershipFieldBuilder013             *array.Uint64Builder
+	membershipListBuilder013              *array.ListBuilder
+	membershipFieldBuilder014             *array.Uint64Builder
+	membershipListBuilder014              *array.ListBuilder
+	membershipFieldBuilder015             *array.Uint64Builder
+	membershipListBuilder015              *array.ListBuilder
+	membershipFieldBuilder016             *array.BinaryBuilder
+	membershipListBuilder016              *array.ListBuilder
+	homogenousArraySupportFieldBuilder017 *array.Uint64Builder
+	homogenousArraySupportListBuilder017  *array.ListBuilder
+	membershipSupportFieldBuilder018      *array.Uint64Builder
+	membershipSupportListBuilder018       *array.ListBuilder
+	membershipSupportFieldBuilder019      *array.Uint64Builder
+	membershipSupportListBuilder019       *array.ListBuilder
+	membershipSupportFieldBuilder020      *array.Uint64Builder
+	membershipSupportListBuilder020       *array.ListBuilder
+
+	membershipContainerLength013 int
+
+	membershipContainerLength014 int
+
+	membershipContainerLength015 int
+
+	membershipContainerLength016 int
+
+	homogenousArrayContainerLength012 int
+}
+
+func NewInEntityAgentrunentryTableSectionStringArrayInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionStringArray) (inst *InEntityAgentrunentryTableSectionStringArrayInAttr) {
+	inst = &InEntityAgentrunentryTableSectionStringArrayInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder012 = builder.Field(12).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.homogenousArrayListBuilder012 = builder.Field(12).(*array.ListBuilder)
+	inst.membershipFieldBuilder013 = builder.Field(13).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder013 = builder.Field(13).(*array.ListBuilder)
+	inst.membershipFieldBuilder014 = builder.Field(14).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder014 = builder.Field(14).(*array.ListBuilder)
+	inst.membershipFieldBuilder015 = builder.Field(15).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder015 = builder.Field(15).(*array.ListBuilder)
+	inst.membershipFieldBuilder016 = builder.Field(16).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder016 = builder.Field(16).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder017 = builder.Field(17).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder017 = builder.Field(17).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder018 = builder.Field(18).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder018 = builder.Field(18).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder019 = builder.Field(19).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder019 = builder.Field(19).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder020 = builder.Field(20).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder020 = builder.Field(20).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionStringArrayInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder012.Append(true)
+	inst.membershipListBuilder013.Append(true)
+	inst.membershipListBuilder014.Append(true)
+	inst.membershipListBuilder015.Append(true)
+	inst.membershipListBuilder016.Append(true)
+	inst.homogenousArrayContainerLength012 = 0
+	inst.membershipContainerLength013 = 0
+	inst.membershipContainerLength014 = 0
+	inst.membershipContainerLength015 = 0
+	inst.membershipContainerLength016 = 0
+	inst.homogenousArraySupportListBuilder017.Append(true)
+	inst.membershipSupportListBuilder018.Append(true)
+	inst.membershipSupportListBuilder019.Append(true)
+	inst.membershipSupportListBuilder020.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityAgentrunentryTableSectionStringArrayInAttr) AddToContainer(value12 string) *InEntityAgentrunentryTableSectionStringArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.homogenousArrayFieldBuilder012.Append(value12)
+	inst.homogenousArrayContainerLength012++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionStringArrayInAttr) AddToContainerP(value12 string) {
+	inst.AddToContainer(value12)
+}
+func (inst *InEntityAgentrunentryTableSectionStringArrayInAttr) AddMembershipHighCardRef(hr13 uint64) *InEntityAgentrunentryTableSectionStringArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder013.Append(hr13)
+	inst.membershipContainerLength013++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionStringArrayInAttr) AddMembershipHighCardRefP(hr13 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder013.Append(hr13)
+	inst.membershipContainerLength013++
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionStringArrayInAttr) AddMembershipLowCardRef(lr14 uint64) *InEntityAgentrunentryTableSectionStringArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder014.Append(lr14)
+	inst.membershipContainerLength014++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionStringArrayInAttr) AddMembershipLowCardRefP(lr14 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder014.Append(lr14)
+	inst.membershipContainerLength014++
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionStringArrayInAttr) AddMembershipMixedLowCardRef(lmr15 uint64, mrhp16 []byte) *InEntityAgentrunentryTableSectionStringArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder015.Append(lmr15)
+	inst.membershipFieldBuilder016.Append(mrhp16)
+	inst.membershipContainerLength015++
+	inst.membershipContainerLength016++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionStringArrayInAttr) AddMembershipMixedLowCardRefP(lmr15 uint64, mrhp16 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder015.Append(lmr15)
+	inst.membershipFieldBuilder016.Append(mrhp16)
+	inst.membershipContainerLength015++
+	inst.membershipContainerLength016++
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionStringArrayInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength013
+	inst.membershipContainerLength013 = 0
+	inst.membershipSupportFieldBuilder018.Append(uint64(l))
+	l = inst.membershipContainerLength014
+	inst.membershipContainerLength014 = 0
+	inst.membershipSupportFieldBuilder019.Append(uint64(l))
+	l = inst.membershipContainerLength015
+	inst.membershipContainerLength015 = 0
+	inst.membershipSupportFieldBuilder020.Append(uint64(l))
+}
+func (inst *InEntityAgentrunentryTableSectionStringArrayInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.homogenousArrayContainerLength012
+	inst.homogenousArrayContainerLength012 = 0
+	inst.homogenousArraySupportFieldBuilder017.Append(uint64(l))
+}
+func (inst *InEntityAgentrunentryTableSectionStringArrayInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
+func (inst *InEntityAgentrunentryTableSectionStringArrayInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityAgentrunentryTableSectionStringArrayInAttr) EndSection() *InEntityAgentrunentryTable {
+	inst.applyAmbientMemberships()
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityAgentrunentryTableSectionStringArrayInAttr) EndAttribute() *InEntityAgentrunentryTableSectionStringArray {
+	inst.applyAmbientMemberships()
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityAgentrunentryTableSectionStringArrayInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityAgentrunentryTableSectionStringArrayInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityAgentrunentryTableSectionStringArrayInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityAgentrunentryTableSectionSymbol struct {
+	errs                  []error
+	inAttr                *InEntityAgentrunentryTableSectionSymbolInAttr
+	state                 runtime.EntityStateE
+	attributeCount        int
+	parent                *InEntityAgentrunentryTable
+	scalarFieldBuilder021 *array.StringBuilder
+	scalarListBuilder021  *array.ListBuilder
+}
+
+func NewInEntityAgentrunentryTableSectionSymbol(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionSymbol) {
+	inst = &InEntityAgentrunentryTableSectionSymbol{}
+	inAttr := NewInEntityAgentrunentryTableSectionSymbolInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.scalarFieldBuilder021 = builder.Field(21).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.scalarListBuilder021 = builder.Field(21).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionSymbol) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityAgentrunentryTableSectionSymbol) BeginAttribute(value21 string) *InEntityAgentrunentryTableSectionSymbolInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+	inst.scalarFieldBuilder021.Append(value21)
 	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
 }
 
-type InEntityAgentrunentryTableSectionEntryNameAttr struct {
+type InEntityAgentrunentryTableSectionSymbolAttr struct {
 	Value string
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryName) Add(attr InEntityAgentrunentryTableSectionEntryNameAttr) *InEntityAgentrunentryTableSectionEntryNameInAttr {
+func (inst *InEntityAgentrunentryTableSectionSymbol) Add(attr InEntityAgentrunentryTableSectionSymbolAttr) *InEntityAgentrunentryTableSectionSymbolInAttr {
 	a := inst.BeginAttribute(attr.Value)
 	return a
 }
-func (inst *InEntityAgentrunentryTableSectionEntryName) CheckErrors() (err error) {
+func (inst *InEntityAgentrunentryTableSectionSymbol) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryName) EndSection() *InEntityAgentrunentryTable {
+func (inst *InEntityAgentrunentryTableSectionSymbol) EndSection() *InEntityAgentrunentryTable {
 	switch inst.state {
 	case runtime.EntityStateInSection:
 		inst.state = runtime.EntityStateInitial
@@ -7043,206 +3764,172 @@ func (inst *InEntityAgentrunentryTableSectionEntryName) EndSection() *InEntityAg
 	return inst.parent
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryName) beginSection() {
+func (inst *InEntityAgentrunentryTableSectionSymbol) beginSection() {
 	inst.state = runtime.EntityStateInSection
 	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryName) resetSection() {
+func (inst *InEntityAgentrunentryTableSectionSymbol) resetSection() {
 	inst.clearErrors()
 	inst.inAttr.clearErrors()
 	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryName) AppendError(err error) {
+func (inst *InEntityAgentrunentryTableSectionSymbol) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
 }
-func (inst *InEntityAgentrunentryTableSectionEntryName) clearErrors() {
+func (inst *InEntityAgentrunentryTableSectionSymbol) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 
-type InEntityAgentrunentryTableSectionEntryNameInAttr struct {
+type InEntityAgentrunentryTableSectionSymbolInAttr struct {
 	errs                             []error
 	state                            runtime.EntityStateE
-	parent                           *InEntityAgentrunentryTableSectionEntryName
-	scalarFieldBuilder093            *array.StringBuilder
-	scalarListBuilder093             *array.ListBuilder
-	membershipFieldBuilder094        *array.Uint64Builder
-	membershipListBuilder094         *array.ListBuilder
-	membershipFieldBuilder095        *array.Uint64Builder
-	membershipListBuilder095         *array.ListBuilder
-	membershipFieldBuilder096        *array.BinaryBuilder
-	membershipListBuilder096         *array.ListBuilder
-	membershipFieldBuilder097        *array.Uint64Builder
-	membershipListBuilder097         *array.ListBuilder
-	membershipFieldBuilder098        *array.BinaryBuilder
-	membershipListBuilder098         *array.ListBuilder
-	membershipSupportFieldBuilder099 *array.Uint64Builder
-	membershipSupportListBuilder099  *array.ListBuilder
-	membershipSupportFieldBuilder100 *array.Uint64Builder
-	membershipSupportListBuilder100  *array.ListBuilder
-	membershipSupportFieldBuilder101 *array.Uint64Builder
-	membershipSupportListBuilder101  *array.ListBuilder
-	membershipSupportFieldBuilder102 *array.Uint64Builder
-	membershipSupportListBuilder102  *array.ListBuilder
+	parent                           *InEntityAgentrunentryTableSectionSymbol
+	scalarFieldBuilder021            *array.StringBuilder
+	scalarListBuilder021             *array.ListBuilder
+	membershipFieldBuilder022        *array.Uint64Builder
+	membershipListBuilder022         *array.ListBuilder
+	membershipFieldBuilder023        *array.Uint64Builder
+	membershipListBuilder023         *array.ListBuilder
+	membershipFieldBuilder024        *array.Uint64Builder
+	membershipListBuilder024         *array.ListBuilder
+	membershipFieldBuilder025        *array.BinaryBuilder
+	membershipListBuilder025         *array.ListBuilder
+	membershipSupportFieldBuilder026 *array.Uint64Builder
+	membershipSupportListBuilder026  *array.ListBuilder
+	membershipSupportFieldBuilder027 *array.Uint64Builder
+	membershipSupportListBuilder027  *array.ListBuilder
+	membershipSupportFieldBuilder028 *array.Uint64Builder
+	membershipSupportListBuilder028  *array.ListBuilder
 
-	membershipContainerLength094 int
+	membershipContainerLength022 int
 
-	membershipContainerLength095 int
+	membershipContainerLength023 int
 
-	membershipContainerLength096 int
+	membershipContainerLength024 int
 
-	membershipContainerLength097 int
-
-	membershipContainerLength098 int
+	membershipContainerLength025 int
 }
 
-func NewInEntityAgentrunentryTableSectionEntryNameInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionEntryName) (inst *InEntityAgentrunentryTableSectionEntryNameInAttr) {
-	inst = &InEntityAgentrunentryTableSectionEntryNameInAttr{}
+func NewInEntityAgentrunentryTableSectionSymbolInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionSymbol) (inst *InEntityAgentrunentryTableSectionSymbolInAttr) {
+	inst = &InEntityAgentrunentryTableSectionSymbolInAttr{}
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.parent = parent
-	inst.scalarFieldBuilder093 = builder.Field(93).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder093 = builder.Field(93).(*array.ListBuilder)
-	inst.membershipFieldBuilder094 = builder.Field(94).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder094 = builder.Field(94).(*array.ListBuilder)
-	inst.membershipFieldBuilder095 = builder.Field(95).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder095 = builder.Field(95).(*array.ListBuilder)
-	inst.membershipFieldBuilder096 = builder.Field(96).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder096 = builder.Field(96).(*array.ListBuilder)
-	inst.membershipFieldBuilder097 = builder.Field(97).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder097 = builder.Field(97).(*array.ListBuilder)
-	inst.membershipFieldBuilder098 = builder.Field(98).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder098 = builder.Field(98).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder099 = builder.Field(99).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder099 = builder.Field(99).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder100 = builder.Field(100).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder100 = builder.Field(100).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder101 = builder.Field(101).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder101 = builder.Field(101).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder102 = builder.Field(102).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder102 = builder.Field(102).(*array.ListBuilder)
+	inst.scalarFieldBuilder021 = builder.Field(21).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.scalarListBuilder021 = builder.Field(21).(*array.ListBuilder)
+	inst.membershipFieldBuilder022 = builder.Field(22).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder022 = builder.Field(22).(*array.ListBuilder)
+	inst.membershipFieldBuilder023 = builder.Field(23).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder023 = builder.Field(23).(*array.ListBuilder)
+	inst.membershipFieldBuilder024 = builder.Field(24).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder024 = builder.Field(24).(*array.ListBuilder)
+	inst.membershipFieldBuilder025 = builder.Field(25).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder025 = builder.Field(25).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder026 = builder.Field(26).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder026 = builder.Field(26).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder027 = builder.Field(27).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder027 = builder.Field(27).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder028 = builder.Field(28).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder028 = builder.Field(28).(*array.ListBuilder)
 
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryNameInAttr) beginAttribute() {
-	inst.membershipListBuilder094.Append(true)
-	inst.membershipListBuilder095.Append(true)
-	inst.membershipListBuilder096.Append(true)
-	inst.membershipListBuilder097.Append(true)
-	inst.membershipListBuilder098.Append(true)
-	inst.membershipContainerLength094 = 0
-	inst.membershipContainerLength095 = 0
-	inst.membershipContainerLength096 = 0
-	inst.membershipContainerLength097 = 0
-	inst.membershipContainerLength098 = 0
-	inst.scalarListBuilder093.Append(true)
-	inst.membershipSupportListBuilder099.Append(true)
-	inst.membershipSupportListBuilder100.Append(true)
-	inst.membershipSupportListBuilder101.Append(true)
-	inst.membershipSupportListBuilder102.Append(true)
+func (inst *InEntityAgentrunentryTableSectionSymbolInAttr) beginAttribute() {
+	inst.membershipListBuilder022.Append(true)
+	inst.membershipListBuilder023.Append(true)
+	inst.membershipListBuilder024.Append(true)
+	inst.membershipListBuilder025.Append(true)
+	inst.membershipContainerLength022 = 0
+	inst.membershipContainerLength023 = 0
+	inst.membershipContainerLength024 = 0
+	inst.membershipContainerLength025 = 0
+	inst.scalarListBuilder021.Append(true)
+	inst.membershipSupportListBuilder026.Append(true)
+	inst.membershipSupportListBuilder027.Append(true)
+	inst.membershipSupportListBuilder028.Append(true)
 	inst.state = runtime.EntityStateInSection
 	inst.clearErrors()
 }
-func (inst *InEntityAgentrunentryTableSectionEntryNameInAttr) AddMembershipHighCardRef(hr94 uint64) *InEntityAgentrunentryTableSectionEntryNameInAttr {
+func (inst *InEntityAgentrunentryTableSectionSymbolInAttr) AddMembershipHighCardRef(hr22 uint64) *InEntityAgentrunentryTableSectionSymbolInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder094.Append(hr94)
-	inst.membershipContainerLength094++
+	inst.membershipFieldBuilder022.Append(hr22)
+	inst.membershipContainerLength022++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryNameInAttr) AddMembershipHighCardRefP(hr94 uint64) {
+func (inst *InEntityAgentrunentryTableSectionSymbolInAttr) AddMembershipHighCardRefP(hr22 uint64) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder094.Append(hr94)
-	inst.membershipContainerLength094++
+	inst.membershipFieldBuilder022.Append(hr22)
+	inst.membershipContainerLength022++
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryNameInAttr) AddMembershipLowCardRef(lr95 uint64) *InEntityAgentrunentryTableSectionEntryNameInAttr {
+func (inst *InEntityAgentrunentryTableSectionSymbolInAttr) AddMembershipLowCardRef(lr23 uint64) *InEntityAgentrunentryTableSectionSymbolInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder095.Append(lr95)
-	inst.membershipContainerLength095++
+	inst.membershipFieldBuilder023.Append(lr23)
+	inst.membershipContainerLength023++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryNameInAttr) AddMembershipLowCardRefP(lr95 uint64) {
+func (inst *InEntityAgentrunentryTableSectionSymbolInAttr) AddMembershipLowCardRefP(lr23 uint64) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder095.Append(lr95)
-	inst.membershipContainerLength095++
+	inst.membershipFieldBuilder023.Append(lr23)
+	inst.membershipContainerLength023++
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryNameInAttr) AddMembershipLowCardVerbatim(lv96 []byte) *InEntityAgentrunentryTableSectionEntryNameInAttr {
+func (inst *InEntityAgentrunentryTableSectionSymbolInAttr) AddMembershipMixedLowCardRef(lmr24 uint64, mrhp25 []byte) *InEntityAgentrunentryTableSectionSymbolInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder096.Append(lv96)
-	inst.membershipContainerLength096++
+	inst.membershipFieldBuilder024.Append(lmr24)
+	inst.membershipFieldBuilder025.Append(mrhp25)
+	inst.membershipContainerLength024++
+	inst.membershipContainerLength025++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryNameInAttr) AddMembershipLowCardVerbatimP(lv96 []byte) {
+func (inst *InEntityAgentrunentryTableSectionSymbolInAttr) AddMembershipMixedLowCardRefP(lmr24 uint64, mrhp25 []byte) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder096.Append(lv96)
-	inst.membershipContainerLength096++
+	inst.membershipFieldBuilder024.Append(lmr24)
+	inst.membershipFieldBuilder025.Append(mrhp25)
+	inst.membershipContainerLength024++
+	inst.membershipContainerLength025++
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryNameInAttr) AddMembershipMixedLowCardRef(lmr97 uint64, mrhp98 []byte) *InEntityAgentrunentryTableSectionEntryNameInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder097.Append(lmr97)
-	inst.membershipFieldBuilder098.Append(mrhp98)
-	inst.membershipContainerLength097++
-	inst.membershipContainerLength098++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryNameInAttr) AddMembershipMixedLowCardRefP(lmr97 uint64, mrhp98 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder097.Append(lmr97)
-	inst.membershipFieldBuilder098.Append(mrhp98)
-	inst.membershipContainerLength097++
-	inst.membershipContainerLength098++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryNameInAttr) handleMembershipSupportColumns() {
+func (inst *InEntityAgentrunentryTableSectionSymbolInAttr) handleMembershipSupportColumns() {
 	var l int
 	var _ = l
-	l = inst.membershipContainerLength094
-	inst.membershipContainerLength094 = 0
-	inst.membershipSupportFieldBuilder099.Append(uint64(l))
-	l = inst.membershipContainerLength095
-	inst.membershipContainerLength095 = 0
-	inst.membershipSupportFieldBuilder100.Append(uint64(l))
-	l = inst.membershipContainerLength096
-	inst.membershipContainerLength096 = 0
-	inst.membershipSupportFieldBuilder101.Append(uint64(l))
-	l = inst.membershipContainerLength097
-	inst.membershipContainerLength097 = 0
-	inst.membershipSupportFieldBuilder102.Append(uint64(l))
+	l = inst.membershipContainerLength022
+	inst.membershipContainerLength022 = 0
+	inst.membershipSupportFieldBuilder026.Append(uint64(l))
+	l = inst.membershipContainerLength023
+	inst.membershipContainerLength023 = 0
+	inst.membershipSupportFieldBuilder027.Append(uint64(l))
+	l = inst.membershipContainerLength024
+	inst.membershipContainerLength024 = 0
+	inst.membershipSupportFieldBuilder028.Append(uint64(l))
 }
-func (inst *InEntityAgentrunentryTableSectionEntryNameInAttr) handleNonScalarSupportColumns() {
+func (inst *InEntityAgentrunentryTableSectionSymbolInAttr) handleNonScalarSupportColumns() {
 	var l int
 	var _ = l
 }
-func (inst *InEntityAgentrunentryTableSectionEntryNameInAttr) applyAmbientMemberships() {
+func (inst *InEntityAgentrunentryTableSectionSymbolInAttr) applyAmbientMemberships() {
 	if inst.state != runtime.EntityStateInAttribute {
 		return
 	}
@@ -7250,11 +3937,11 @@ func (inst *InEntityAgentrunentryTableSectionEntryNameInAttr) applyAmbientMember
 		inst.AddMembershipHighCardRefP(v)
 	}
 }
-func (inst *InEntityAgentrunentryTableSectionEntryNameInAttr) completeAttribute() {
+func (inst *InEntityAgentrunentryTableSectionSymbolInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
-func (inst *InEntityAgentrunentryTableSectionEntryNameInAttr) EndSection() *InEntityAgentrunentryTable {
+func (inst *InEntityAgentrunentryTableSectionSymbolInAttr) EndSection() *InEntityAgentrunentryTable {
 	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
@@ -7270,7 +3957,7 @@ func (inst *InEntityAgentrunentryTableSectionEntryNameInAttr) EndSection() *InEn
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
-func (inst *InEntityAgentrunentryTableSectionEntryNameInAttr) EndAttribute() *InEntityAgentrunentryTableSectionEntryName {
+func (inst *InEntityAgentrunentryTableSectionSymbolInAttr) EndAttribute() *InEntityAgentrunentryTableSectionSymbol {
 	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
@@ -7285,40 +3972,40 @@ func (inst *InEntityAgentrunentryTableSectionEntryNameInAttr) EndAttribute() *In
 	inst.parent.endAttribute()
 	return inst.parent
 }
-func (inst *InEntityAgentrunentryTableSectionEntryNameInAttr) EndAttributeP() {
+func (inst *InEntityAgentrunentryTableSectionSymbolInAttr) EndAttributeP() {
 	inst.EndAttribute()
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryNameInAttr) AppendError(err error) {
+func (inst *InEntityAgentrunentryTableSectionSymbolInAttr) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
 }
-func (inst *InEntityAgentrunentryTableSectionEntryNameInAttr) clearErrors() {
+func (inst *InEntityAgentrunentryTableSectionSymbolInAttr) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 
-type InEntityAgentrunentryTableSectionEntryOrdinal struct {
-	errs                  []error
-	inAttr                *InEntityAgentrunentryTableSectionEntryOrdinalInAttr
-	state                 runtime.EntityStateE
-	attributeCount        int
-	parent                *InEntityAgentrunentryTable
-	scalarFieldBuilder003 *array.Uint32Builder
-	scalarListBuilder003  *array.ListBuilder
+type InEntityAgentrunentryTableSectionSymbolArray struct {
+	errs                           []error
+	inAttr                         *InEntityAgentrunentryTableSectionSymbolArrayInAttr
+	state                          runtime.EntityStateE
+	attributeCount                 int
+	parent                         *InEntityAgentrunentryTable
+	homogenousArrayFieldBuilder029 *array.StringBuilder
+	homogenousArrayListBuilder029  *array.ListBuilder
 }
 
-func NewInEntityAgentrunentryTableSectionEntryOrdinal(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionEntryOrdinal) {
-	inst = &InEntityAgentrunentryTableSectionEntryOrdinal{}
-	inAttr := NewInEntityAgentrunentryTableSectionEntryOrdinalInAttr(builder, inst)
+func NewInEntityAgentrunentryTableSectionSymbolArray(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionSymbolArray) {
+	inst = &InEntityAgentrunentryTableSectionSymbolArray{}
+	inAttr := NewInEntityAgentrunentryTableSectionSymbolArrayInAttr(builder, inst)
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.inAttr = inAttr
 	inst.parent = parent
-	inst.scalarFieldBuilder003 = builder.Field(3).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
-	inst.scalarListBuilder003 = builder.Field(3).(*array.ListBuilder)
+	inst.homogenousArrayFieldBuilder029 = builder.Field(29).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.homogenousArrayListBuilder029 = builder.Field(29).(*array.ListBuilder)
 
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryOrdinal) endAttribute() {
+func (inst *InEntityAgentrunentryTableSectionSymbolArray) endAttribute() {
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -7328,7 +4015,7 @@ func (inst *InEntityAgentrunentryTableSectionEntryOrdinal) endAttribute() {
 		return
 	}
 }
-func (inst *InEntityAgentrunentryTableSectionEntryOrdinal) BeginAttribute(value3 uint32) *InEntityAgentrunentryTableSectionEntryOrdinalInAttr {
+func (inst *InEntityAgentrunentryTableSectionSymbolArray) BeginAttribute() *InEntityAgentrunentryTableSectionSymbolArrayInAttr {
 	switch inst.state {
 	case runtime.EntityStateInSection:
 		inst.state = runtime.EntityStateInAttribute
@@ -7337,26 +4024,31 @@ func (inst *InEntityAgentrunentryTableSectionEntryOrdinal) BeginAttribute(value3
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst.inAttr
 	}
-	inst.scalarFieldBuilder003.Append(value3)
 	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
 }
-
-type InEntityAgentrunentryTableSectionEntryOrdinalAttr struct {
-	Value uint32
+func (inst *InEntityAgentrunentryTableSectionSymbolArray) BeginAttributeSingle(value29 string) *InEntityAgentrunentryTableSectionSymbolArrayInAttr {
+	return inst.BeginAttribute().AddToContainer(value29)
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryOrdinal) Add(attr InEntityAgentrunentryTableSectionEntryOrdinalAttr) *InEntityAgentrunentryTableSectionEntryOrdinalInAttr {
-	a := inst.BeginAttribute(attr.Value)
+type InEntityAgentrunentryTableSectionSymbolArrayAttr struct {
+	Value []string
+}
+
+func (inst *InEntityAgentrunentryTableSectionSymbolArray) Add(attr InEntityAgentrunentryTableSectionSymbolArrayAttr) *InEntityAgentrunentryTableSectionSymbolArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
 	return a
 }
-func (inst *InEntityAgentrunentryTableSectionEntryOrdinal) CheckErrors() (err error) {
+func (inst *InEntityAgentrunentryTableSectionSymbolArray) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryOrdinal) EndSection() *InEntityAgentrunentryTable {
+func (inst *InEntityAgentrunentryTableSectionSymbolArray) EndSection() *InEntityAgentrunentryTable {
 	switch inst.state {
 	case runtime.EntityStateInSection:
 		inst.state = runtime.EntityStateInitial
@@ -7369,50 +4061,368 @@ func (inst *InEntityAgentrunentryTableSectionEntryOrdinal) EndSection() *InEntit
 	return inst.parent
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryOrdinal) beginSection() {
+func (inst *InEntityAgentrunentryTableSectionSymbolArray) beginSection() {
 	inst.state = runtime.EntityStateInSection
 	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryOrdinal) resetSection() {
+func (inst *InEntityAgentrunentryTableSectionSymbolArray) resetSection() {
 	inst.clearErrors()
 	inst.inAttr.clearErrors()
 	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryOrdinal) AppendError(err error) {
+func (inst *InEntityAgentrunentryTableSectionSymbolArray) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
 }
-func (inst *InEntityAgentrunentryTableSectionEntryOrdinal) clearErrors() {
+func (inst *InEntityAgentrunentryTableSectionSymbolArray) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 
-type InEntityAgentrunentryTableSectionEntryOrdinalInAttr struct {
-	errs                             []error
-	state                            runtime.EntityStateE
-	parent                           *InEntityAgentrunentryTableSectionEntryOrdinal
-	scalarFieldBuilder003            *array.Uint32Builder
-	scalarListBuilder003             *array.ListBuilder
-	membershipFieldBuilder004        *array.Uint64Builder
-	membershipListBuilder004         *array.ListBuilder
-	membershipFieldBuilder005        *array.Uint64Builder
-	membershipListBuilder005         *array.ListBuilder
-	membershipFieldBuilder006        *array.BinaryBuilder
-	membershipListBuilder006         *array.ListBuilder
-	membershipFieldBuilder007        *array.Uint64Builder
-	membershipListBuilder007         *array.ListBuilder
-	membershipFieldBuilder008        *array.BinaryBuilder
-	membershipListBuilder008         *array.ListBuilder
-	membershipSupportFieldBuilder009 *array.Uint64Builder
-	membershipSupportListBuilder009  *array.ListBuilder
-	membershipSupportFieldBuilder010 *array.Uint64Builder
-	membershipSupportListBuilder010  *array.ListBuilder
-	membershipSupportFieldBuilder011 *array.Uint64Builder
-	membershipSupportListBuilder011  *array.ListBuilder
-	membershipSupportFieldBuilder012 *array.Uint64Builder
-	membershipSupportListBuilder012  *array.ListBuilder
+type InEntityAgentrunentryTableSectionSymbolArrayInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityAgentrunentryTableSectionSymbolArray
+	homogenousArrayFieldBuilder029        *array.StringBuilder
+	homogenousArrayListBuilder029         *array.ListBuilder
+	membershipFieldBuilder030             *array.Uint64Builder
+	membershipListBuilder030              *array.ListBuilder
+	membershipFieldBuilder031             *array.Uint64Builder
+	membershipListBuilder031              *array.ListBuilder
+	membershipFieldBuilder032             *array.Uint64Builder
+	membershipListBuilder032              *array.ListBuilder
+	membershipFieldBuilder033             *array.BinaryBuilder
+	membershipListBuilder033              *array.ListBuilder
+	homogenousArraySupportFieldBuilder034 *array.Uint64Builder
+	homogenousArraySupportListBuilder034  *array.ListBuilder
+	membershipSupportFieldBuilder035      *array.Uint64Builder
+	membershipSupportListBuilder035       *array.ListBuilder
+	membershipSupportFieldBuilder036      *array.Uint64Builder
+	membershipSupportListBuilder036       *array.ListBuilder
+	membershipSupportFieldBuilder037      *array.Uint64Builder
+	membershipSupportListBuilder037       *array.ListBuilder
+
+	membershipContainerLength030 int
+
+	membershipContainerLength031 int
+
+	membershipContainerLength032 int
+
+	membershipContainerLength033 int
+
+	homogenousArrayContainerLength029 int
+}
+
+func NewInEntityAgentrunentryTableSectionSymbolArrayInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionSymbolArray) (inst *InEntityAgentrunentryTableSectionSymbolArrayInAttr) {
+	inst = &InEntityAgentrunentryTableSectionSymbolArrayInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder029 = builder.Field(29).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.homogenousArrayListBuilder029 = builder.Field(29).(*array.ListBuilder)
+	inst.membershipFieldBuilder030 = builder.Field(30).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder030 = builder.Field(30).(*array.ListBuilder)
+	inst.membershipFieldBuilder031 = builder.Field(31).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder031 = builder.Field(31).(*array.ListBuilder)
+	inst.membershipFieldBuilder032 = builder.Field(32).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder032 = builder.Field(32).(*array.ListBuilder)
+	inst.membershipFieldBuilder033 = builder.Field(33).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder033 = builder.Field(33).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder034 = builder.Field(34).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder034 = builder.Field(34).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder035 = builder.Field(35).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder035 = builder.Field(35).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder036 = builder.Field(36).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder036 = builder.Field(36).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder037 = builder.Field(37).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder037 = builder.Field(37).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionSymbolArrayInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder029.Append(true)
+	inst.membershipListBuilder030.Append(true)
+	inst.membershipListBuilder031.Append(true)
+	inst.membershipListBuilder032.Append(true)
+	inst.membershipListBuilder033.Append(true)
+	inst.homogenousArrayContainerLength029 = 0
+	inst.membershipContainerLength030 = 0
+	inst.membershipContainerLength031 = 0
+	inst.membershipContainerLength032 = 0
+	inst.membershipContainerLength033 = 0
+	inst.homogenousArraySupportListBuilder034.Append(true)
+	inst.membershipSupportListBuilder035.Append(true)
+	inst.membershipSupportListBuilder036.Append(true)
+	inst.membershipSupportListBuilder037.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityAgentrunentryTableSectionSymbolArrayInAttr) AddToContainer(value29 string) *InEntityAgentrunentryTableSectionSymbolArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.homogenousArrayFieldBuilder029.Append(value29)
+	inst.homogenousArrayContainerLength029++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionSymbolArrayInAttr) AddToContainerP(value29 string) {
+	inst.AddToContainer(value29)
+}
+func (inst *InEntityAgentrunentryTableSectionSymbolArrayInAttr) AddMembershipHighCardRef(hr30 uint64) *InEntityAgentrunentryTableSectionSymbolArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder030.Append(hr30)
+	inst.membershipContainerLength030++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionSymbolArrayInAttr) AddMembershipHighCardRefP(hr30 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder030.Append(hr30)
+	inst.membershipContainerLength030++
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionSymbolArrayInAttr) AddMembershipLowCardRef(lr31 uint64) *InEntityAgentrunentryTableSectionSymbolArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder031.Append(lr31)
+	inst.membershipContainerLength031++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionSymbolArrayInAttr) AddMembershipLowCardRefP(lr31 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder031.Append(lr31)
+	inst.membershipContainerLength031++
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionSymbolArrayInAttr) AddMembershipMixedLowCardRef(lmr32 uint64, mrhp33 []byte) *InEntityAgentrunentryTableSectionSymbolArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder032.Append(lmr32)
+	inst.membershipFieldBuilder033.Append(mrhp33)
+	inst.membershipContainerLength032++
+	inst.membershipContainerLength033++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionSymbolArrayInAttr) AddMembershipMixedLowCardRefP(lmr32 uint64, mrhp33 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder032.Append(lmr32)
+	inst.membershipFieldBuilder033.Append(mrhp33)
+	inst.membershipContainerLength032++
+	inst.membershipContainerLength033++
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionSymbolArrayInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength030
+	inst.membershipContainerLength030 = 0
+	inst.membershipSupportFieldBuilder035.Append(uint64(l))
+	l = inst.membershipContainerLength031
+	inst.membershipContainerLength031 = 0
+	inst.membershipSupportFieldBuilder036.Append(uint64(l))
+	l = inst.membershipContainerLength032
+	inst.membershipContainerLength032 = 0
+	inst.membershipSupportFieldBuilder037.Append(uint64(l))
+}
+func (inst *InEntityAgentrunentryTableSectionSymbolArrayInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.homogenousArrayContainerLength029
+	inst.homogenousArrayContainerLength029 = 0
+	inst.homogenousArraySupportFieldBuilder034.Append(uint64(l))
+}
+func (inst *InEntityAgentrunentryTableSectionSymbolArrayInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
+func (inst *InEntityAgentrunentryTableSectionSymbolArrayInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityAgentrunentryTableSectionSymbolArrayInAttr) EndSection() *InEntityAgentrunentryTable {
+	inst.applyAmbientMemberships()
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityAgentrunentryTableSectionSymbolArrayInAttr) EndAttribute() *InEntityAgentrunentryTableSectionSymbolArray {
+	inst.applyAmbientMemberships()
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityAgentrunentryTableSectionSymbolArrayInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityAgentrunentryTableSectionSymbolArrayInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityAgentrunentryTableSectionSymbolArrayInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityAgentrunentryTableSectionTextArray struct {
+	errs                           []error
+	inAttr                         *InEntityAgentrunentryTableSectionTextArrayInAttr
+	state                          runtime.EntityStateE
+	attributeCount                 int
+	parent                         *InEntityAgentrunentryTable
+	homogenousArrayFieldBuilder003 *array.StringBuilder
+	homogenousArrayListBuilder003  *array.ListBuilder
+}
+
+func NewInEntityAgentrunentryTableSectionTextArray(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionTextArray) {
+	inst = &InEntityAgentrunentryTableSectionTextArray{}
+	inAttr := NewInEntityAgentrunentryTableSectionTextArrayInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder003 = builder.Field(3).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.homogenousArrayListBuilder003 = builder.Field(3).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionTextArray) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityAgentrunentryTableSectionTextArray) BeginAttribute() *InEntityAgentrunentryTableSectionTextArrayInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+	inst.attributeCount++
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityAgentrunentryTableSectionTextArray) BeginAttributeSingle(value3 string) *InEntityAgentrunentryTableSectionTextArrayInAttr {
+	return inst.BeginAttribute().AddToContainer(value3)
+}
+
+type InEntityAgentrunentryTableSectionTextArrayAttr struct {
+	Value []string
+}
+
+func (inst *InEntityAgentrunentryTableSectionTextArray) Add(attr InEntityAgentrunentryTableSectionTextArrayAttr) *InEntityAgentrunentryTableSectionTextArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
+}
+func (inst *InEntityAgentrunentryTableSectionTextArray) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionTextArray) EndSection() *InEntityAgentrunentryTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityAgentrunentryTableSectionTextArray) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityAgentrunentryTableSectionTextArray) resetSection() {
+	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityAgentrunentryTableSectionTextArray) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityAgentrunentryTableSectionTextArray) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityAgentrunentryTableSectionTextArrayInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityAgentrunentryTableSectionTextArray
+	homogenousArrayFieldBuilder003        *array.StringBuilder
+	homogenousArrayListBuilder003         *array.ListBuilder
+	membershipFieldBuilder004             *array.Uint64Builder
+	membershipListBuilder004              *array.ListBuilder
+	membershipFieldBuilder005             *array.Uint64Builder
+	membershipListBuilder005              *array.ListBuilder
+	membershipFieldBuilder006             *array.Uint64Builder
+	membershipListBuilder006              *array.ListBuilder
+	membershipFieldBuilder007             *array.BinaryBuilder
+	membershipListBuilder007              *array.ListBuilder
+	homogenousArraySupportFieldBuilder008 *array.Uint64Builder
+	homogenousArraySupportListBuilder008  *array.ListBuilder
+	membershipSupportFieldBuilder009      *array.Uint64Builder
+	membershipSupportListBuilder009       *array.ListBuilder
+	membershipSupportFieldBuilder010      *array.Uint64Builder
+	membershipSupportListBuilder010       *array.ListBuilder
+	membershipSupportFieldBuilder011      *array.Uint64Builder
+	membershipSupportListBuilder011       *array.ListBuilder
 
 	membershipContainerLength004 int
 
@@ -7422,57 +4432,66 @@ type InEntityAgentrunentryTableSectionEntryOrdinalInAttr struct {
 
 	membershipContainerLength007 int
 
-	membershipContainerLength008 int
+	homogenousArrayContainerLength003 int
 }
 
-func NewInEntityAgentrunentryTableSectionEntryOrdinalInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionEntryOrdinal) (inst *InEntityAgentrunentryTableSectionEntryOrdinalInAttr) {
-	inst = &InEntityAgentrunentryTableSectionEntryOrdinalInAttr{}
+func NewInEntityAgentrunentryTableSectionTextArrayInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionTextArray) (inst *InEntityAgentrunentryTableSectionTextArrayInAttr) {
+	inst = &InEntityAgentrunentryTableSectionTextArrayInAttr{}
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.parent = parent
-	inst.scalarFieldBuilder003 = builder.Field(3).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
-	inst.scalarListBuilder003 = builder.Field(3).(*array.ListBuilder)
+	inst.homogenousArrayFieldBuilder003 = builder.Field(3).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
+	inst.homogenousArrayListBuilder003 = builder.Field(3).(*array.ListBuilder)
 	inst.membershipFieldBuilder004 = builder.Field(4).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
 	inst.membershipListBuilder004 = builder.Field(4).(*array.ListBuilder)
 	inst.membershipFieldBuilder005 = builder.Field(5).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
 	inst.membershipListBuilder005 = builder.Field(5).(*array.ListBuilder)
-	inst.membershipFieldBuilder006 = builder.Field(6).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipFieldBuilder006 = builder.Field(6).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
 	inst.membershipListBuilder006 = builder.Field(6).(*array.ListBuilder)
-	inst.membershipFieldBuilder007 = builder.Field(7).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipFieldBuilder007 = builder.Field(7).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
 	inst.membershipListBuilder007 = builder.Field(7).(*array.ListBuilder)
-	inst.membershipFieldBuilder008 = builder.Field(8).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder008 = builder.Field(8).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder008 = builder.Field(8).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder008 = builder.Field(8).(*array.ListBuilder)
 	inst.membershipSupportFieldBuilder009 = builder.Field(9).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
 	inst.membershipSupportListBuilder009 = builder.Field(9).(*array.ListBuilder)
 	inst.membershipSupportFieldBuilder010 = builder.Field(10).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
 	inst.membershipSupportListBuilder010 = builder.Field(10).(*array.ListBuilder)
 	inst.membershipSupportFieldBuilder011 = builder.Field(11).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
 	inst.membershipSupportListBuilder011 = builder.Field(11).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder012 = builder.Field(12).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder012 = builder.Field(12).(*array.ListBuilder)
 
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryOrdinalInAttr) beginAttribute() {
+func (inst *InEntityAgentrunentryTableSectionTextArrayInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder003.Append(true)
 	inst.membershipListBuilder004.Append(true)
 	inst.membershipListBuilder005.Append(true)
 	inst.membershipListBuilder006.Append(true)
 	inst.membershipListBuilder007.Append(true)
-	inst.membershipListBuilder008.Append(true)
+	inst.homogenousArrayContainerLength003 = 0
 	inst.membershipContainerLength004 = 0
 	inst.membershipContainerLength005 = 0
 	inst.membershipContainerLength006 = 0
 	inst.membershipContainerLength007 = 0
-	inst.membershipContainerLength008 = 0
-	inst.scalarListBuilder003.Append(true)
+	inst.homogenousArraySupportListBuilder008.Append(true)
 	inst.membershipSupportListBuilder009.Append(true)
 	inst.membershipSupportListBuilder010.Append(true)
 	inst.membershipSupportListBuilder011.Append(true)
-	inst.membershipSupportListBuilder012.Append(true)
 	inst.state = runtime.EntityStateInSection
 	inst.clearErrors()
 }
-func (inst *InEntityAgentrunentryTableSectionEntryOrdinalInAttr) AddMembershipHighCardRef(hr4 uint64) *InEntityAgentrunentryTableSectionEntryOrdinalInAttr {
+func (inst *InEntityAgentrunentryTableSectionTextArrayInAttr) AddToContainer(value3 string) *InEntityAgentrunentryTableSectionTextArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.homogenousArrayFieldBuilder003.Append(value3)
+	inst.homogenousArrayContainerLength003++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionTextArrayInAttr) AddToContainerP(value3 string) {
+	inst.AddToContainer(value3)
+}
+func (inst *InEntityAgentrunentryTableSectionTextArrayInAttr) AddMembershipHighCardRef(hr4 uint64) *InEntityAgentrunentryTableSectionTextArrayInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
@@ -7481,7 +4500,7 @@ func (inst *InEntityAgentrunentryTableSectionEntryOrdinalInAttr) AddMembershipHi
 	inst.membershipContainerLength004++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryOrdinalInAttr) AddMembershipHighCardRefP(hr4 uint64) {
+func (inst *InEntityAgentrunentryTableSectionTextArrayInAttr) AddMembershipHighCardRefP(hr4 uint64) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
@@ -7490,7 +4509,7 @@ func (inst *InEntityAgentrunentryTableSectionEntryOrdinalInAttr) AddMembershipHi
 	inst.membershipContainerLength004++
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryOrdinalInAttr) AddMembershipLowCardRef(lr5 uint64) *InEntityAgentrunentryTableSectionEntryOrdinalInAttr {
+func (inst *InEntityAgentrunentryTableSectionTextArrayInAttr) AddMembershipLowCardRef(lr5 uint64) *InEntityAgentrunentryTableSectionTextArrayInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
@@ -7499,7 +4518,7 @@ func (inst *InEntityAgentrunentryTableSectionEntryOrdinalInAttr) AddMembershipLo
 	inst.membershipContainerLength005++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryOrdinalInAttr) AddMembershipLowCardRefP(lr5 uint64) {
+func (inst *InEntityAgentrunentryTableSectionTextArrayInAttr) AddMembershipLowCardRefP(lr5 uint64) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
@@ -7508,47 +4527,29 @@ func (inst *InEntityAgentrunentryTableSectionEntryOrdinalInAttr) AddMembershipLo
 	inst.membershipContainerLength005++
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryOrdinalInAttr) AddMembershipLowCardVerbatim(lv6 []byte) *InEntityAgentrunentryTableSectionEntryOrdinalInAttr {
+func (inst *InEntityAgentrunentryTableSectionTextArrayInAttr) AddMembershipMixedLowCardRef(lmr6 uint64, mrhp7 []byte) *InEntityAgentrunentryTableSectionTextArrayInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder006.Append(lv6)
+	inst.membershipFieldBuilder006.Append(lmr6)
+	inst.membershipFieldBuilder007.Append(mrhp7)
 	inst.membershipContainerLength006++
+	inst.membershipContainerLength007++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryOrdinalInAttr) AddMembershipLowCardVerbatimP(lv6 []byte) {
+func (inst *InEntityAgentrunentryTableSectionTextArrayInAttr) AddMembershipMixedLowCardRefP(lmr6 uint64, mrhp7 []byte) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder006.Append(lv6)
+	inst.membershipFieldBuilder006.Append(lmr6)
+	inst.membershipFieldBuilder007.Append(mrhp7)
 	inst.membershipContainerLength006++
+	inst.membershipContainerLength007++
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryOrdinalInAttr) AddMembershipMixedLowCardRef(lmr7 uint64, mrhp8 []byte) *InEntityAgentrunentryTableSectionEntryOrdinalInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder007.Append(lmr7)
-	inst.membershipFieldBuilder008.Append(mrhp8)
-	inst.membershipContainerLength007++
-	inst.membershipContainerLength008++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryOrdinalInAttr) AddMembershipMixedLowCardRefP(lmr7 uint64, mrhp8 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder007.Append(lmr7)
-	inst.membershipFieldBuilder008.Append(mrhp8)
-	inst.membershipContainerLength007++
-	inst.membershipContainerLength008++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryOrdinalInAttr) handleMembershipSupportColumns() {
+func (inst *InEntityAgentrunentryTableSectionTextArrayInAttr) handleMembershipSupportColumns() {
 	var l int
 	var _ = l
 	l = inst.membershipContainerLength004
@@ -7560,15 +4561,15 @@ func (inst *InEntityAgentrunentryTableSectionEntryOrdinalInAttr) handleMembershi
 	l = inst.membershipContainerLength006
 	inst.membershipContainerLength006 = 0
 	inst.membershipSupportFieldBuilder011.Append(uint64(l))
-	l = inst.membershipContainerLength007
-	inst.membershipContainerLength007 = 0
-	inst.membershipSupportFieldBuilder012.Append(uint64(l))
 }
-func (inst *InEntityAgentrunentryTableSectionEntryOrdinalInAttr) handleNonScalarSupportColumns() {
+func (inst *InEntityAgentrunentryTableSectionTextArrayInAttr) handleNonScalarSupportColumns() {
 	var l int
 	var _ = l
+	l = inst.homogenousArrayContainerLength003
+	inst.homogenousArrayContainerLength003 = 0
+	inst.homogenousArraySupportFieldBuilder008.Append(uint64(l))
 }
-func (inst *InEntityAgentrunentryTableSectionEntryOrdinalInAttr) applyAmbientMemberships() {
+func (inst *InEntityAgentrunentryTableSectionTextArrayInAttr) applyAmbientMemberships() {
 	if inst.state != runtime.EntityStateInAttribute {
 		return
 	}
@@ -7576,11 +4577,11 @@ func (inst *InEntityAgentrunentryTableSectionEntryOrdinalInAttr) applyAmbientMem
 		inst.AddMembershipHighCardRefP(v)
 	}
 }
-func (inst *InEntityAgentrunentryTableSectionEntryOrdinalInAttr) completeAttribute() {
+func (inst *InEntityAgentrunentryTableSectionTextArrayInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
-func (inst *InEntityAgentrunentryTableSectionEntryOrdinalInAttr) EndSection() *InEntityAgentrunentryTable {
+func (inst *InEntityAgentrunentryTableSectionTextArrayInAttr) EndSection() *InEntityAgentrunentryTable {
 	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
@@ -7596,7 +4597,7 @@ func (inst *InEntityAgentrunentryTableSectionEntryOrdinalInAttr) EndSection() *I
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
-func (inst *InEntityAgentrunentryTableSectionEntryOrdinalInAttr) EndAttribute() *InEntityAgentrunentryTableSectionEntryOrdinal {
+func (inst *InEntityAgentrunentryTableSectionTextArrayInAttr) EndAttribute() *InEntityAgentrunentryTableSectionTextArray {
 	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
@@ -7611,40 +4612,40 @@ func (inst *InEntityAgentrunentryTableSectionEntryOrdinalInAttr) EndAttribute() 
 	inst.parent.endAttribute()
 	return inst.parent
 }
-func (inst *InEntityAgentrunentryTableSectionEntryOrdinalInAttr) EndAttributeP() {
+func (inst *InEntityAgentrunentryTableSectionTextArrayInAttr) EndAttributeP() {
 	inst.EndAttribute()
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryOrdinalInAttr) AppendError(err error) {
+func (inst *InEntityAgentrunentryTableSectionTextArrayInAttr) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
 }
-func (inst *InEntityAgentrunentryTableSectionEntryOrdinalInAttr) clearErrors() {
+func (inst *InEntityAgentrunentryTableSectionTextArrayInAttr) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 
-type InEntityAgentrunentryTableSectionEntryParent struct {
-	errs                  []error
-	inAttr                *InEntityAgentrunentryTableSectionEntryParentInAttr
-	state                 runtime.EntityStateE
-	attributeCount        int
-	parent                *InEntityAgentrunentryTable
-	scalarFieldBuilder263 *array.Uint32Builder
-	scalarListBuilder263  *array.ListBuilder
+type InEntityAgentrunentryTableSectionTimeArray struct {
+	errs                           []error
+	inAttr                         *InEntityAgentrunentryTableSectionTimeArrayInAttr
+	state                          runtime.EntityStateE
+	attributeCount                 int
+	parent                         *InEntityAgentrunentryTable
+	homogenousArrayFieldBuilder164 *array.TimestampBuilder
+	homogenousArrayListBuilder164  *array.ListBuilder
 }
 
-func NewInEntityAgentrunentryTableSectionEntryParent(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionEntryParent) {
-	inst = &InEntityAgentrunentryTableSectionEntryParent{}
-	inAttr := NewInEntityAgentrunentryTableSectionEntryParentInAttr(builder, inst)
+func NewInEntityAgentrunentryTableSectionTimeArray(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionTimeArray) {
+	inst = &InEntityAgentrunentryTableSectionTimeArray{}
+	inAttr := NewInEntityAgentrunentryTableSectionTimeArrayInAttr(builder, inst)
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.inAttr = inAttr
 	inst.parent = parent
-	inst.scalarFieldBuilder263 = builder.Field(263).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
-	inst.scalarListBuilder263 = builder.Field(263).(*array.ListBuilder)
+	inst.homogenousArrayFieldBuilder164 = builder.Field(164).(*array.ListBuilder).ValueBuilder().(*array.TimestampBuilder)
+	inst.homogenousArrayListBuilder164 = builder.Field(164).(*array.ListBuilder)
 
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryParent) endAttribute() {
+func (inst *InEntityAgentrunentryTableSectionTimeArray) endAttribute() {
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -7654,7 +4655,7 @@ func (inst *InEntityAgentrunentryTableSectionEntryParent) endAttribute() {
 		return
 	}
 }
-func (inst *InEntityAgentrunentryTableSectionEntryParent) BeginAttribute(value263 uint32) *InEntityAgentrunentryTableSectionEntryParentInAttr {
+func (inst *InEntityAgentrunentryTableSectionTimeArray) BeginAttribute() *InEntityAgentrunentryTableSectionTimeArrayInAttr {
 	switch inst.state {
 	case runtime.EntityStateInSection:
 		inst.state = runtime.EntityStateInAttribute
@@ -7663,26 +4664,31 @@ func (inst *InEntityAgentrunentryTableSectionEntryParent) BeginAttribute(value26
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst.inAttr
 	}
-	inst.scalarFieldBuilder263.Append(value263)
 	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
 }
-
-type InEntityAgentrunentryTableSectionEntryParentAttr struct {
-	Value uint32
+func (inst *InEntityAgentrunentryTableSectionTimeArray) BeginAttributeSingle(value164 time.Time) *InEntityAgentrunentryTableSectionTimeArrayInAttr {
+	return inst.BeginAttribute().AddToContainer(value164)
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryParent) Add(attr InEntityAgentrunentryTableSectionEntryParentAttr) *InEntityAgentrunentryTableSectionEntryParentInAttr {
-	a := inst.BeginAttribute(attr.Value)
+type InEntityAgentrunentryTableSectionTimeArrayAttr struct {
+	Value []time.Time
+}
+
+func (inst *InEntityAgentrunentryTableSectionTimeArray) Add(attr InEntityAgentrunentryTableSectionTimeArrayAttr) *InEntityAgentrunentryTableSectionTimeArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
 	return a
 }
-func (inst *InEntityAgentrunentryTableSectionEntryParent) CheckErrors() (err error) {
+func (inst *InEntityAgentrunentryTableSectionTimeArray) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryParent) EndSection() *InEntityAgentrunentryTable {
+func (inst *InEntityAgentrunentryTableSectionTimeArray) EndSection() *InEntityAgentrunentryTable {
 	switch inst.state {
 	case runtime.EntityStateInSection:
 		inst.state = runtime.EntityStateInitial
@@ -7695,206 +4701,195 @@ func (inst *InEntityAgentrunentryTableSectionEntryParent) EndSection() *InEntity
 	return inst.parent
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryParent) beginSection() {
+func (inst *InEntityAgentrunentryTableSectionTimeArray) beginSection() {
 	inst.state = runtime.EntityStateInSection
 	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryParent) resetSection() {
+func (inst *InEntityAgentrunentryTableSectionTimeArray) resetSection() {
 	inst.clearErrors()
 	inst.inAttr.clearErrors()
 	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryParent) AppendError(err error) {
+func (inst *InEntityAgentrunentryTableSectionTimeArray) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
 }
-func (inst *InEntityAgentrunentryTableSectionEntryParent) clearErrors() {
+func (inst *InEntityAgentrunentryTableSectionTimeArray) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 
-type InEntityAgentrunentryTableSectionEntryParentInAttr struct {
-	errs                             []error
-	state                            runtime.EntityStateE
-	parent                           *InEntityAgentrunentryTableSectionEntryParent
-	scalarFieldBuilder263            *array.Uint32Builder
-	scalarListBuilder263             *array.ListBuilder
-	membershipFieldBuilder264        *array.Uint64Builder
-	membershipListBuilder264         *array.ListBuilder
-	membershipFieldBuilder265        *array.Uint64Builder
-	membershipListBuilder265         *array.ListBuilder
-	membershipFieldBuilder266        *array.BinaryBuilder
-	membershipListBuilder266         *array.ListBuilder
-	membershipFieldBuilder267        *array.Uint64Builder
-	membershipListBuilder267         *array.ListBuilder
-	membershipFieldBuilder268        *array.BinaryBuilder
-	membershipListBuilder268         *array.ListBuilder
-	membershipSupportFieldBuilder269 *array.Uint64Builder
-	membershipSupportListBuilder269  *array.ListBuilder
-	membershipSupportFieldBuilder270 *array.Uint64Builder
-	membershipSupportListBuilder270  *array.ListBuilder
-	membershipSupportFieldBuilder271 *array.Uint64Builder
-	membershipSupportListBuilder271  *array.ListBuilder
-	membershipSupportFieldBuilder272 *array.Uint64Builder
-	membershipSupportListBuilder272  *array.ListBuilder
+type InEntityAgentrunentryTableSectionTimeArrayInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityAgentrunentryTableSectionTimeArray
+	homogenousArrayFieldBuilder164        *array.TimestampBuilder
+	homogenousArrayListBuilder164         *array.ListBuilder
+	membershipFieldBuilder165             *array.Uint64Builder
+	membershipListBuilder165              *array.ListBuilder
+	membershipFieldBuilder166             *array.Uint64Builder
+	membershipListBuilder166              *array.ListBuilder
+	membershipFieldBuilder167             *array.Uint64Builder
+	membershipListBuilder167              *array.ListBuilder
+	membershipFieldBuilder168             *array.BinaryBuilder
+	membershipListBuilder168              *array.ListBuilder
+	homogenousArraySupportFieldBuilder169 *array.Uint64Builder
+	homogenousArraySupportListBuilder169  *array.ListBuilder
+	membershipSupportFieldBuilder170      *array.Uint64Builder
+	membershipSupportListBuilder170       *array.ListBuilder
+	membershipSupportFieldBuilder171      *array.Uint64Builder
+	membershipSupportListBuilder171       *array.ListBuilder
+	membershipSupportFieldBuilder172      *array.Uint64Builder
+	membershipSupportListBuilder172       *array.ListBuilder
 
-	membershipContainerLength264 int
+	membershipContainerLength165 int
 
-	membershipContainerLength265 int
+	membershipContainerLength166 int
 
-	membershipContainerLength266 int
+	membershipContainerLength167 int
 
-	membershipContainerLength267 int
+	membershipContainerLength168 int
 
-	membershipContainerLength268 int
+	homogenousArrayContainerLength164 int
 }
 
-func NewInEntityAgentrunentryTableSectionEntryParentInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionEntryParent) (inst *InEntityAgentrunentryTableSectionEntryParentInAttr) {
-	inst = &InEntityAgentrunentryTableSectionEntryParentInAttr{}
+func NewInEntityAgentrunentryTableSectionTimeArrayInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionTimeArray) (inst *InEntityAgentrunentryTableSectionTimeArrayInAttr) {
+	inst = &InEntityAgentrunentryTableSectionTimeArrayInAttr{}
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.parent = parent
-	inst.scalarFieldBuilder263 = builder.Field(263).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
-	inst.scalarListBuilder263 = builder.Field(263).(*array.ListBuilder)
-	inst.membershipFieldBuilder264 = builder.Field(264).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder264 = builder.Field(264).(*array.ListBuilder)
-	inst.membershipFieldBuilder265 = builder.Field(265).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder265 = builder.Field(265).(*array.ListBuilder)
-	inst.membershipFieldBuilder266 = builder.Field(266).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder266 = builder.Field(266).(*array.ListBuilder)
-	inst.membershipFieldBuilder267 = builder.Field(267).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder267 = builder.Field(267).(*array.ListBuilder)
-	inst.membershipFieldBuilder268 = builder.Field(268).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder268 = builder.Field(268).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder269 = builder.Field(269).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder269 = builder.Field(269).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder270 = builder.Field(270).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder270 = builder.Field(270).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder271 = builder.Field(271).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder271 = builder.Field(271).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder272 = builder.Field(272).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder272 = builder.Field(272).(*array.ListBuilder)
+	inst.homogenousArrayFieldBuilder164 = builder.Field(164).(*array.ListBuilder).ValueBuilder().(*array.TimestampBuilder)
+	inst.homogenousArrayListBuilder164 = builder.Field(164).(*array.ListBuilder)
+	inst.membershipFieldBuilder165 = builder.Field(165).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder165 = builder.Field(165).(*array.ListBuilder)
+	inst.membershipFieldBuilder166 = builder.Field(166).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder166 = builder.Field(166).(*array.ListBuilder)
+	inst.membershipFieldBuilder167 = builder.Field(167).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder167 = builder.Field(167).(*array.ListBuilder)
+	inst.membershipFieldBuilder168 = builder.Field(168).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder168 = builder.Field(168).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder169 = builder.Field(169).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder169 = builder.Field(169).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder170 = builder.Field(170).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder170 = builder.Field(170).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder171 = builder.Field(171).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder171 = builder.Field(171).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder172 = builder.Field(172).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder172 = builder.Field(172).(*array.ListBuilder)
 
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryParentInAttr) beginAttribute() {
-	inst.membershipListBuilder264.Append(true)
-	inst.membershipListBuilder265.Append(true)
-	inst.membershipListBuilder266.Append(true)
-	inst.membershipListBuilder267.Append(true)
-	inst.membershipListBuilder268.Append(true)
-	inst.membershipContainerLength264 = 0
-	inst.membershipContainerLength265 = 0
-	inst.membershipContainerLength266 = 0
-	inst.membershipContainerLength267 = 0
-	inst.membershipContainerLength268 = 0
-	inst.scalarListBuilder263.Append(true)
-	inst.membershipSupportListBuilder269.Append(true)
-	inst.membershipSupportListBuilder270.Append(true)
-	inst.membershipSupportListBuilder271.Append(true)
-	inst.membershipSupportListBuilder272.Append(true)
+func (inst *InEntityAgentrunentryTableSectionTimeArrayInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder164.Append(true)
+	inst.membershipListBuilder165.Append(true)
+	inst.membershipListBuilder166.Append(true)
+	inst.membershipListBuilder167.Append(true)
+	inst.membershipListBuilder168.Append(true)
+	inst.homogenousArrayContainerLength164 = 0
+	inst.membershipContainerLength165 = 0
+	inst.membershipContainerLength166 = 0
+	inst.membershipContainerLength167 = 0
+	inst.membershipContainerLength168 = 0
+	inst.homogenousArraySupportListBuilder169.Append(true)
+	inst.membershipSupportListBuilder170.Append(true)
+	inst.membershipSupportListBuilder171.Append(true)
+	inst.membershipSupportListBuilder172.Append(true)
 	inst.state = runtime.EntityStateInSection
 	inst.clearErrors()
 }
-func (inst *InEntityAgentrunentryTableSectionEntryParentInAttr) AddMembershipHighCardRef(hr264 uint64) *InEntityAgentrunentryTableSectionEntryParentInAttr {
+func (inst *InEntityAgentrunentryTableSectionTimeArrayInAttr) AddToContainer(value164 time.Time) *InEntityAgentrunentryTableSectionTimeArrayInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder264.Append(hr264)
-	inst.membershipContainerLength264++
+	inst.homogenousArrayFieldBuilder164.Append(arrow.Timestamp(value164.UnixNano()))
+	inst.homogenousArrayContainerLength164++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryParentInAttr) AddMembershipHighCardRefP(hr264 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder264.Append(hr264)
-	inst.membershipContainerLength264++
-	return
+func (inst *InEntityAgentrunentryTableSectionTimeArrayInAttr) AddToContainerP(value164 time.Time) {
+	inst.AddToContainer(value164)
 }
-func (inst *InEntityAgentrunentryTableSectionEntryParentInAttr) AddMembershipLowCardRef(lr265 uint64) *InEntityAgentrunentryTableSectionEntryParentInAttr {
+func (inst *InEntityAgentrunentryTableSectionTimeArrayInAttr) AddMembershipHighCardRef(hr165 uint64) *InEntityAgentrunentryTableSectionTimeArrayInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder265.Append(lr265)
-	inst.membershipContainerLength265++
+	inst.membershipFieldBuilder165.Append(hr165)
+	inst.membershipContainerLength165++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryParentInAttr) AddMembershipLowCardRefP(lr265 uint64) {
+func (inst *InEntityAgentrunentryTableSectionTimeArrayInAttr) AddMembershipHighCardRefP(hr165 uint64) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder265.Append(lr265)
-	inst.membershipContainerLength265++
+	inst.membershipFieldBuilder165.Append(hr165)
+	inst.membershipContainerLength165++
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryParentInAttr) AddMembershipLowCardVerbatim(lv266 []byte) *InEntityAgentrunentryTableSectionEntryParentInAttr {
+func (inst *InEntityAgentrunentryTableSectionTimeArrayInAttr) AddMembershipLowCardRef(lr166 uint64) *InEntityAgentrunentryTableSectionTimeArrayInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder266.Append(lv266)
-	inst.membershipContainerLength266++
+	inst.membershipFieldBuilder166.Append(lr166)
+	inst.membershipContainerLength166++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryParentInAttr) AddMembershipLowCardVerbatimP(lv266 []byte) {
+func (inst *InEntityAgentrunentryTableSectionTimeArrayInAttr) AddMembershipLowCardRefP(lr166 uint64) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder266.Append(lv266)
-	inst.membershipContainerLength266++
+	inst.membershipFieldBuilder166.Append(lr166)
+	inst.membershipContainerLength166++
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryParentInAttr) AddMembershipMixedLowCardRef(lmr267 uint64, mrhp268 []byte) *InEntityAgentrunentryTableSectionEntryParentInAttr {
+func (inst *InEntityAgentrunentryTableSectionTimeArrayInAttr) AddMembershipMixedLowCardRef(lmr167 uint64, mrhp168 []byte) *InEntityAgentrunentryTableSectionTimeArrayInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder267.Append(lmr267)
-	inst.membershipFieldBuilder268.Append(mrhp268)
-	inst.membershipContainerLength267++
-	inst.membershipContainerLength268++
+	inst.membershipFieldBuilder167.Append(lmr167)
+	inst.membershipFieldBuilder168.Append(mrhp168)
+	inst.membershipContainerLength167++
+	inst.membershipContainerLength168++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryParentInAttr) AddMembershipMixedLowCardRefP(lmr267 uint64, mrhp268 []byte) {
+func (inst *InEntityAgentrunentryTableSectionTimeArrayInAttr) AddMembershipMixedLowCardRefP(lmr167 uint64, mrhp168 []byte) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder267.Append(lmr267)
-	inst.membershipFieldBuilder268.Append(mrhp268)
-	inst.membershipContainerLength267++
-	inst.membershipContainerLength268++
+	inst.membershipFieldBuilder167.Append(lmr167)
+	inst.membershipFieldBuilder168.Append(mrhp168)
+	inst.membershipContainerLength167++
+	inst.membershipContainerLength168++
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryParentInAttr) handleMembershipSupportColumns() {
+func (inst *InEntityAgentrunentryTableSectionTimeArrayInAttr) handleMembershipSupportColumns() {
 	var l int
 	var _ = l
-	l = inst.membershipContainerLength264
-	inst.membershipContainerLength264 = 0
-	inst.membershipSupportFieldBuilder269.Append(uint64(l))
-	l = inst.membershipContainerLength265
-	inst.membershipContainerLength265 = 0
-	inst.membershipSupportFieldBuilder270.Append(uint64(l))
-	l = inst.membershipContainerLength266
-	inst.membershipContainerLength266 = 0
-	inst.membershipSupportFieldBuilder271.Append(uint64(l))
-	l = inst.membershipContainerLength267
-	inst.membershipContainerLength267 = 0
-	inst.membershipSupportFieldBuilder272.Append(uint64(l))
+	l = inst.membershipContainerLength165
+	inst.membershipContainerLength165 = 0
+	inst.membershipSupportFieldBuilder170.Append(uint64(l))
+	l = inst.membershipContainerLength166
+	inst.membershipContainerLength166 = 0
+	inst.membershipSupportFieldBuilder171.Append(uint64(l))
+	l = inst.membershipContainerLength167
+	inst.membershipContainerLength167 = 0
+	inst.membershipSupportFieldBuilder172.Append(uint64(l))
 }
-func (inst *InEntityAgentrunentryTableSectionEntryParentInAttr) handleNonScalarSupportColumns() {
+func (inst *InEntityAgentrunentryTableSectionTimeArrayInAttr) handleNonScalarSupportColumns() {
 	var l int
 	var _ = l
+	l = inst.homogenousArrayContainerLength164
+	inst.homogenousArrayContainerLength164 = 0
+	inst.homogenousArraySupportFieldBuilder169.Append(uint64(l))
 }
-func (inst *InEntityAgentrunentryTableSectionEntryParentInAttr) applyAmbientMemberships() {
+func (inst *InEntityAgentrunentryTableSectionTimeArrayInAttr) applyAmbientMemberships() {
 	if inst.state != runtime.EntityStateInAttribute {
 		return
 	}
@@ -7902,11 +4897,11 @@ func (inst *InEntityAgentrunentryTableSectionEntryParentInAttr) applyAmbientMemb
 		inst.AddMembershipHighCardRefP(v)
 	}
 }
-func (inst *InEntityAgentrunentryTableSectionEntryParentInAttr) completeAttribute() {
+func (inst *InEntityAgentrunentryTableSectionTimeArrayInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
-func (inst *InEntityAgentrunentryTableSectionEntryParentInAttr) EndSection() *InEntityAgentrunentryTable {
+func (inst *InEntityAgentrunentryTableSectionTimeArrayInAttr) EndSection() *InEntityAgentrunentryTable {
 	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
@@ -7922,7 +4917,7 @@ func (inst *InEntityAgentrunentryTableSectionEntryParentInAttr) EndSection() *In
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
-func (inst *InEntityAgentrunentryTableSectionEntryParentInAttr) EndAttribute() *InEntityAgentrunentryTableSectionEntryParent {
+func (inst *InEntityAgentrunentryTableSectionTimeArrayInAttr) EndAttribute() *InEntityAgentrunentryTableSectionTimeArray {
 	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
@@ -7937,40 +4932,40 @@ func (inst *InEntityAgentrunentryTableSectionEntryParentInAttr) EndAttribute() *
 	inst.parent.endAttribute()
 	return inst.parent
 }
-func (inst *InEntityAgentrunentryTableSectionEntryParentInAttr) EndAttributeP() {
+func (inst *InEntityAgentrunentryTableSectionTimeArrayInAttr) EndAttributeP() {
 	inst.EndAttribute()
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryParentInAttr) AppendError(err error) {
+func (inst *InEntityAgentrunentryTableSectionTimeArrayInAttr) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
 }
-func (inst *InEntityAgentrunentryTableSectionEntryParentInAttr) clearErrors() {
+func (inst *InEntityAgentrunentryTableSectionTimeArrayInAttr) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 
-type InEntityAgentrunentryTableSectionEntryPrev struct {
-	errs                  []error
-	inAttr                *InEntityAgentrunentryTableSectionEntryPrevInAttr
-	state                 runtime.EntityStateE
-	attributeCount        int
-	parent                *InEntityAgentrunentryTable
-	scalarFieldBuilder233 *array.Uint32Builder
-	scalarListBuilder233  *array.ListBuilder
+type InEntityAgentrunentryTableSectionU16Array struct {
+	errs                           []error
+	inAttr                         *InEntityAgentrunentryTableSectionU16ArrayInAttr
+	state                          runtime.EntityStateE
+	attributeCount                 int
+	parent                         *InEntityAgentrunentryTable
+	homogenousArrayFieldBuilder056 *array.Uint16Builder
+	homogenousArrayListBuilder056  *array.ListBuilder
 }
 
-func NewInEntityAgentrunentryTableSectionEntryPrev(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionEntryPrev) {
-	inst = &InEntityAgentrunentryTableSectionEntryPrev{}
-	inAttr := NewInEntityAgentrunentryTableSectionEntryPrevInAttr(builder, inst)
+func NewInEntityAgentrunentryTableSectionU16Array(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionU16Array) {
+	inst = &InEntityAgentrunentryTableSectionU16Array{}
+	inAttr := NewInEntityAgentrunentryTableSectionU16ArrayInAttr(builder, inst)
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.inAttr = inAttr
 	inst.parent = parent
-	inst.scalarFieldBuilder233 = builder.Field(233).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
-	inst.scalarListBuilder233 = builder.Field(233).(*array.ListBuilder)
+	inst.homogenousArrayFieldBuilder056 = builder.Field(56).(*array.ListBuilder).ValueBuilder().(*array.Uint16Builder)
+	inst.homogenousArrayListBuilder056 = builder.Field(56).(*array.ListBuilder)
 
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryPrev) endAttribute() {
+func (inst *InEntityAgentrunentryTableSectionU16Array) endAttribute() {
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -7980,7 +4975,7 @@ func (inst *InEntityAgentrunentryTableSectionEntryPrev) endAttribute() {
 		return
 	}
 }
-func (inst *InEntityAgentrunentryTableSectionEntryPrev) BeginAttribute(value233 uint32) *InEntityAgentrunentryTableSectionEntryPrevInAttr {
+func (inst *InEntityAgentrunentryTableSectionU16Array) BeginAttribute() *InEntityAgentrunentryTableSectionU16ArrayInAttr {
 	switch inst.state {
 	case runtime.EntityStateInSection:
 		inst.state = runtime.EntityStateInAttribute
@@ -7989,26 +4984,31 @@ func (inst *InEntityAgentrunentryTableSectionEntryPrev) BeginAttribute(value233 
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst.inAttr
 	}
-	inst.scalarFieldBuilder233.Append(value233)
 	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
 }
-
-type InEntityAgentrunentryTableSectionEntryPrevAttr struct {
-	Value uint32
+func (inst *InEntityAgentrunentryTableSectionU16Array) BeginAttributeSingle(value56 uint16) *InEntityAgentrunentryTableSectionU16ArrayInAttr {
+	return inst.BeginAttribute().AddToContainer(value56)
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryPrev) Add(attr InEntityAgentrunentryTableSectionEntryPrevAttr) *InEntityAgentrunentryTableSectionEntryPrevInAttr {
-	a := inst.BeginAttribute(attr.Value)
+type InEntityAgentrunentryTableSectionU16ArrayAttr struct {
+	Value []uint16
+}
+
+func (inst *InEntityAgentrunentryTableSectionU16Array) Add(attr InEntityAgentrunentryTableSectionU16ArrayAttr) *InEntityAgentrunentryTableSectionU16ArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
 	return a
 }
-func (inst *InEntityAgentrunentryTableSectionEntryPrev) CheckErrors() (err error) {
+func (inst *InEntityAgentrunentryTableSectionU16Array) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryPrev) EndSection() *InEntityAgentrunentryTable {
+func (inst *InEntityAgentrunentryTableSectionU16Array) EndSection() *InEntityAgentrunentryTable {
 	switch inst.state {
 	case runtime.EntityStateInSection:
 		inst.state = runtime.EntityStateInitial
@@ -8021,206 +5021,195 @@ func (inst *InEntityAgentrunentryTableSectionEntryPrev) EndSection() *InEntityAg
 	return inst.parent
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryPrev) beginSection() {
+func (inst *InEntityAgentrunentryTableSectionU16Array) beginSection() {
 	inst.state = runtime.EntityStateInSection
 	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryPrev) resetSection() {
+func (inst *InEntityAgentrunentryTableSectionU16Array) resetSection() {
 	inst.clearErrors()
 	inst.inAttr.clearErrors()
 	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryPrev) AppendError(err error) {
+func (inst *InEntityAgentrunentryTableSectionU16Array) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
 }
-func (inst *InEntityAgentrunentryTableSectionEntryPrev) clearErrors() {
+func (inst *InEntityAgentrunentryTableSectionU16Array) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 
-type InEntityAgentrunentryTableSectionEntryPrevInAttr struct {
-	errs                             []error
-	state                            runtime.EntityStateE
-	parent                           *InEntityAgentrunentryTableSectionEntryPrev
-	scalarFieldBuilder233            *array.Uint32Builder
-	scalarListBuilder233             *array.ListBuilder
-	membershipFieldBuilder234        *array.Uint64Builder
-	membershipListBuilder234         *array.ListBuilder
-	membershipFieldBuilder235        *array.Uint64Builder
-	membershipListBuilder235         *array.ListBuilder
-	membershipFieldBuilder236        *array.BinaryBuilder
-	membershipListBuilder236         *array.ListBuilder
-	membershipFieldBuilder237        *array.Uint64Builder
-	membershipListBuilder237         *array.ListBuilder
-	membershipFieldBuilder238        *array.BinaryBuilder
-	membershipListBuilder238         *array.ListBuilder
-	membershipSupportFieldBuilder239 *array.Uint64Builder
-	membershipSupportListBuilder239  *array.ListBuilder
-	membershipSupportFieldBuilder240 *array.Uint64Builder
-	membershipSupportListBuilder240  *array.ListBuilder
-	membershipSupportFieldBuilder241 *array.Uint64Builder
-	membershipSupportListBuilder241  *array.ListBuilder
-	membershipSupportFieldBuilder242 *array.Uint64Builder
-	membershipSupportListBuilder242  *array.ListBuilder
+type InEntityAgentrunentryTableSectionU16ArrayInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityAgentrunentryTableSectionU16Array
+	homogenousArrayFieldBuilder056        *array.Uint16Builder
+	homogenousArrayListBuilder056         *array.ListBuilder
+	membershipFieldBuilder057             *array.Uint64Builder
+	membershipListBuilder057              *array.ListBuilder
+	membershipFieldBuilder058             *array.Uint64Builder
+	membershipListBuilder058              *array.ListBuilder
+	membershipFieldBuilder059             *array.Uint64Builder
+	membershipListBuilder059              *array.ListBuilder
+	membershipFieldBuilder060             *array.BinaryBuilder
+	membershipListBuilder060              *array.ListBuilder
+	homogenousArraySupportFieldBuilder061 *array.Uint64Builder
+	homogenousArraySupportListBuilder061  *array.ListBuilder
+	membershipSupportFieldBuilder062      *array.Uint64Builder
+	membershipSupportListBuilder062       *array.ListBuilder
+	membershipSupportFieldBuilder063      *array.Uint64Builder
+	membershipSupportListBuilder063       *array.ListBuilder
+	membershipSupportFieldBuilder064      *array.Uint64Builder
+	membershipSupportListBuilder064       *array.ListBuilder
 
-	membershipContainerLength234 int
+	membershipContainerLength057 int
 
-	membershipContainerLength235 int
+	membershipContainerLength058 int
 
-	membershipContainerLength236 int
+	membershipContainerLength059 int
 
-	membershipContainerLength237 int
+	membershipContainerLength060 int
 
-	membershipContainerLength238 int
+	homogenousArrayContainerLength056 int
 }
 
-func NewInEntityAgentrunentryTableSectionEntryPrevInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionEntryPrev) (inst *InEntityAgentrunentryTableSectionEntryPrevInAttr) {
-	inst = &InEntityAgentrunentryTableSectionEntryPrevInAttr{}
+func NewInEntityAgentrunentryTableSectionU16ArrayInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionU16Array) (inst *InEntityAgentrunentryTableSectionU16ArrayInAttr) {
+	inst = &InEntityAgentrunentryTableSectionU16ArrayInAttr{}
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.parent = parent
-	inst.scalarFieldBuilder233 = builder.Field(233).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
-	inst.scalarListBuilder233 = builder.Field(233).(*array.ListBuilder)
-	inst.membershipFieldBuilder234 = builder.Field(234).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder234 = builder.Field(234).(*array.ListBuilder)
-	inst.membershipFieldBuilder235 = builder.Field(235).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder235 = builder.Field(235).(*array.ListBuilder)
-	inst.membershipFieldBuilder236 = builder.Field(236).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder236 = builder.Field(236).(*array.ListBuilder)
-	inst.membershipFieldBuilder237 = builder.Field(237).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder237 = builder.Field(237).(*array.ListBuilder)
-	inst.membershipFieldBuilder238 = builder.Field(238).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder238 = builder.Field(238).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder239 = builder.Field(239).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder239 = builder.Field(239).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder240 = builder.Field(240).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder240 = builder.Field(240).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder241 = builder.Field(241).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder241 = builder.Field(241).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder242 = builder.Field(242).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder242 = builder.Field(242).(*array.ListBuilder)
+	inst.homogenousArrayFieldBuilder056 = builder.Field(56).(*array.ListBuilder).ValueBuilder().(*array.Uint16Builder)
+	inst.homogenousArrayListBuilder056 = builder.Field(56).(*array.ListBuilder)
+	inst.membershipFieldBuilder057 = builder.Field(57).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder057 = builder.Field(57).(*array.ListBuilder)
+	inst.membershipFieldBuilder058 = builder.Field(58).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder058 = builder.Field(58).(*array.ListBuilder)
+	inst.membershipFieldBuilder059 = builder.Field(59).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder059 = builder.Field(59).(*array.ListBuilder)
+	inst.membershipFieldBuilder060 = builder.Field(60).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder060 = builder.Field(60).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder061 = builder.Field(61).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder061 = builder.Field(61).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder062 = builder.Field(62).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder062 = builder.Field(62).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder063 = builder.Field(63).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder063 = builder.Field(63).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder064 = builder.Field(64).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder064 = builder.Field(64).(*array.ListBuilder)
 
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryPrevInAttr) beginAttribute() {
-	inst.membershipListBuilder234.Append(true)
-	inst.membershipListBuilder235.Append(true)
-	inst.membershipListBuilder236.Append(true)
-	inst.membershipListBuilder237.Append(true)
-	inst.membershipListBuilder238.Append(true)
-	inst.membershipContainerLength234 = 0
-	inst.membershipContainerLength235 = 0
-	inst.membershipContainerLength236 = 0
-	inst.membershipContainerLength237 = 0
-	inst.membershipContainerLength238 = 0
-	inst.scalarListBuilder233.Append(true)
-	inst.membershipSupportListBuilder239.Append(true)
-	inst.membershipSupportListBuilder240.Append(true)
-	inst.membershipSupportListBuilder241.Append(true)
-	inst.membershipSupportListBuilder242.Append(true)
+func (inst *InEntityAgentrunentryTableSectionU16ArrayInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder056.Append(true)
+	inst.membershipListBuilder057.Append(true)
+	inst.membershipListBuilder058.Append(true)
+	inst.membershipListBuilder059.Append(true)
+	inst.membershipListBuilder060.Append(true)
+	inst.homogenousArrayContainerLength056 = 0
+	inst.membershipContainerLength057 = 0
+	inst.membershipContainerLength058 = 0
+	inst.membershipContainerLength059 = 0
+	inst.membershipContainerLength060 = 0
+	inst.homogenousArraySupportListBuilder061.Append(true)
+	inst.membershipSupportListBuilder062.Append(true)
+	inst.membershipSupportListBuilder063.Append(true)
+	inst.membershipSupportListBuilder064.Append(true)
 	inst.state = runtime.EntityStateInSection
 	inst.clearErrors()
 }
-func (inst *InEntityAgentrunentryTableSectionEntryPrevInAttr) AddMembershipHighCardRef(hr234 uint64) *InEntityAgentrunentryTableSectionEntryPrevInAttr {
+func (inst *InEntityAgentrunentryTableSectionU16ArrayInAttr) AddToContainer(value56 uint16) *InEntityAgentrunentryTableSectionU16ArrayInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder234.Append(hr234)
-	inst.membershipContainerLength234++
+	inst.homogenousArrayFieldBuilder056.Append(value56)
+	inst.homogenousArrayContainerLength056++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryPrevInAttr) AddMembershipHighCardRefP(hr234 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder234.Append(hr234)
-	inst.membershipContainerLength234++
-	return
+func (inst *InEntityAgentrunentryTableSectionU16ArrayInAttr) AddToContainerP(value56 uint16) {
+	inst.AddToContainer(value56)
 }
-func (inst *InEntityAgentrunentryTableSectionEntryPrevInAttr) AddMembershipLowCardRef(lr235 uint64) *InEntityAgentrunentryTableSectionEntryPrevInAttr {
+func (inst *InEntityAgentrunentryTableSectionU16ArrayInAttr) AddMembershipHighCardRef(hr57 uint64) *InEntityAgentrunentryTableSectionU16ArrayInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder235.Append(lr235)
-	inst.membershipContainerLength235++
+	inst.membershipFieldBuilder057.Append(hr57)
+	inst.membershipContainerLength057++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryPrevInAttr) AddMembershipLowCardRefP(lr235 uint64) {
+func (inst *InEntityAgentrunentryTableSectionU16ArrayInAttr) AddMembershipHighCardRefP(hr57 uint64) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder235.Append(lr235)
-	inst.membershipContainerLength235++
+	inst.membershipFieldBuilder057.Append(hr57)
+	inst.membershipContainerLength057++
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryPrevInAttr) AddMembershipLowCardVerbatim(lv236 []byte) *InEntityAgentrunentryTableSectionEntryPrevInAttr {
+func (inst *InEntityAgentrunentryTableSectionU16ArrayInAttr) AddMembershipLowCardRef(lr58 uint64) *InEntityAgentrunentryTableSectionU16ArrayInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder236.Append(lv236)
-	inst.membershipContainerLength236++
+	inst.membershipFieldBuilder058.Append(lr58)
+	inst.membershipContainerLength058++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryPrevInAttr) AddMembershipLowCardVerbatimP(lv236 []byte) {
+func (inst *InEntityAgentrunentryTableSectionU16ArrayInAttr) AddMembershipLowCardRefP(lr58 uint64) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder236.Append(lv236)
-	inst.membershipContainerLength236++
+	inst.membershipFieldBuilder058.Append(lr58)
+	inst.membershipContainerLength058++
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryPrevInAttr) AddMembershipMixedLowCardRef(lmr237 uint64, mrhp238 []byte) *InEntityAgentrunentryTableSectionEntryPrevInAttr {
+func (inst *InEntityAgentrunentryTableSectionU16ArrayInAttr) AddMembershipMixedLowCardRef(lmr59 uint64, mrhp60 []byte) *InEntityAgentrunentryTableSectionU16ArrayInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder237.Append(lmr237)
-	inst.membershipFieldBuilder238.Append(mrhp238)
-	inst.membershipContainerLength237++
-	inst.membershipContainerLength238++
+	inst.membershipFieldBuilder059.Append(lmr59)
+	inst.membershipFieldBuilder060.Append(mrhp60)
+	inst.membershipContainerLength059++
+	inst.membershipContainerLength060++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryPrevInAttr) AddMembershipMixedLowCardRefP(lmr237 uint64, mrhp238 []byte) {
+func (inst *InEntityAgentrunentryTableSectionU16ArrayInAttr) AddMembershipMixedLowCardRefP(lmr59 uint64, mrhp60 []byte) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder237.Append(lmr237)
-	inst.membershipFieldBuilder238.Append(mrhp238)
-	inst.membershipContainerLength237++
-	inst.membershipContainerLength238++
+	inst.membershipFieldBuilder059.Append(lmr59)
+	inst.membershipFieldBuilder060.Append(mrhp60)
+	inst.membershipContainerLength059++
+	inst.membershipContainerLength060++
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryPrevInAttr) handleMembershipSupportColumns() {
+func (inst *InEntityAgentrunentryTableSectionU16ArrayInAttr) handleMembershipSupportColumns() {
 	var l int
 	var _ = l
-	l = inst.membershipContainerLength234
-	inst.membershipContainerLength234 = 0
-	inst.membershipSupportFieldBuilder239.Append(uint64(l))
-	l = inst.membershipContainerLength235
-	inst.membershipContainerLength235 = 0
-	inst.membershipSupportFieldBuilder240.Append(uint64(l))
-	l = inst.membershipContainerLength236
-	inst.membershipContainerLength236 = 0
-	inst.membershipSupportFieldBuilder241.Append(uint64(l))
-	l = inst.membershipContainerLength237
-	inst.membershipContainerLength237 = 0
-	inst.membershipSupportFieldBuilder242.Append(uint64(l))
+	l = inst.membershipContainerLength057
+	inst.membershipContainerLength057 = 0
+	inst.membershipSupportFieldBuilder062.Append(uint64(l))
+	l = inst.membershipContainerLength058
+	inst.membershipContainerLength058 = 0
+	inst.membershipSupportFieldBuilder063.Append(uint64(l))
+	l = inst.membershipContainerLength059
+	inst.membershipContainerLength059 = 0
+	inst.membershipSupportFieldBuilder064.Append(uint64(l))
 }
-func (inst *InEntityAgentrunentryTableSectionEntryPrevInAttr) handleNonScalarSupportColumns() {
+func (inst *InEntityAgentrunentryTableSectionU16ArrayInAttr) handleNonScalarSupportColumns() {
 	var l int
 	var _ = l
+	l = inst.homogenousArrayContainerLength056
+	inst.homogenousArrayContainerLength056 = 0
+	inst.homogenousArraySupportFieldBuilder061.Append(uint64(l))
 }
-func (inst *InEntityAgentrunentryTableSectionEntryPrevInAttr) applyAmbientMemberships() {
+func (inst *InEntityAgentrunentryTableSectionU16ArrayInAttr) applyAmbientMemberships() {
 	if inst.state != runtime.EntityStateInAttribute {
 		return
 	}
@@ -8228,11 +5217,11 @@ func (inst *InEntityAgentrunentryTableSectionEntryPrevInAttr) applyAmbientMember
 		inst.AddMembershipHighCardRefP(v)
 	}
 }
-func (inst *InEntityAgentrunentryTableSectionEntryPrevInAttr) completeAttribute() {
+func (inst *InEntityAgentrunentryTableSectionU16ArrayInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
-func (inst *InEntityAgentrunentryTableSectionEntryPrevInAttr) EndSection() *InEntityAgentrunentryTable {
+func (inst *InEntityAgentrunentryTableSectionU16ArrayInAttr) EndSection() *InEntityAgentrunentryTable {
 	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
@@ -8248,7 +5237,7 @@ func (inst *InEntityAgentrunentryTableSectionEntryPrevInAttr) EndSection() *InEn
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
-func (inst *InEntityAgentrunentryTableSectionEntryPrevInAttr) EndAttribute() *InEntityAgentrunentryTableSectionEntryPrev {
+func (inst *InEntityAgentrunentryTableSectionU16ArrayInAttr) EndAttribute() *InEntityAgentrunentryTableSectionU16Array {
 	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
@@ -8263,40 +5252,40 @@ func (inst *InEntityAgentrunentryTableSectionEntryPrevInAttr) EndAttribute() *In
 	inst.parent.endAttribute()
 	return inst.parent
 }
-func (inst *InEntityAgentrunentryTableSectionEntryPrevInAttr) EndAttributeP() {
+func (inst *InEntityAgentrunentryTableSectionU16ArrayInAttr) EndAttributeP() {
 	inst.EndAttribute()
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryPrevInAttr) AppendError(err error) {
+func (inst *InEntityAgentrunentryTableSectionU16ArrayInAttr) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
 }
-func (inst *InEntityAgentrunentryTableSectionEntryPrevInAttr) clearErrors() {
+func (inst *InEntityAgentrunentryTableSectionU16ArrayInAttr) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 
-type InEntityAgentrunentryTableSectionEntryRole struct {
-	errs                  []error
-	inAttr                *InEntityAgentrunentryTableSectionEntryRoleInAttr
-	state                 runtime.EntityStateE
-	attributeCount        int
-	parent                *InEntityAgentrunentryTable
-	scalarFieldBuilder043 *array.StringBuilder
-	scalarListBuilder043  *array.ListBuilder
+type InEntityAgentrunentryTableSectionU32Array struct {
+	errs                           []error
+	inAttr                         *InEntityAgentrunentryTableSectionU32ArrayInAttr
+	state                          runtime.EntityStateE
+	attributeCount                 int
+	parent                         *InEntityAgentrunentryTable
+	homogenousArrayFieldBuilder065 *array.Uint32Builder
+	homogenousArrayListBuilder065  *array.ListBuilder
 }
 
-func NewInEntityAgentrunentryTableSectionEntryRole(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionEntryRole) {
-	inst = &InEntityAgentrunentryTableSectionEntryRole{}
-	inAttr := NewInEntityAgentrunentryTableSectionEntryRoleInAttr(builder, inst)
+func NewInEntityAgentrunentryTableSectionU32Array(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionU32Array) {
+	inst = &InEntityAgentrunentryTableSectionU32Array{}
+	inAttr := NewInEntityAgentrunentryTableSectionU32ArrayInAttr(builder, inst)
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.inAttr = inAttr
 	inst.parent = parent
-	inst.scalarFieldBuilder043 = builder.Field(43).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder043 = builder.Field(43).(*array.ListBuilder)
+	inst.homogenousArrayFieldBuilder065 = builder.Field(65).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
+	inst.homogenousArrayListBuilder065 = builder.Field(65).(*array.ListBuilder)
 
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryRole) endAttribute() {
+func (inst *InEntityAgentrunentryTableSectionU32Array) endAttribute() {
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -8306,7 +5295,7 @@ func (inst *InEntityAgentrunentryTableSectionEntryRole) endAttribute() {
 		return
 	}
 }
-func (inst *InEntityAgentrunentryTableSectionEntryRole) BeginAttribute(value43 string) *InEntityAgentrunentryTableSectionEntryRoleInAttr {
+func (inst *InEntityAgentrunentryTableSectionU32Array) BeginAttribute() *InEntityAgentrunentryTableSectionU32ArrayInAttr {
 	switch inst.state {
 	case runtime.EntityStateInSection:
 		inst.state = runtime.EntityStateInAttribute
@@ -8315,26 +5304,31 @@ func (inst *InEntityAgentrunentryTableSectionEntryRole) BeginAttribute(value43 s
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst.inAttr
 	}
-	inst.scalarFieldBuilder043.Append(value43)
 	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
 }
-
-type InEntityAgentrunentryTableSectionEntryRoleAttr struct {
-	Value string
+func (inst *InEntityAgentrunentryTableSectionU32Array) BeginAttributeSingle(value65 uint32) *InEntityAgentrunentryTableSectionU32ArrayInAttr {
+	return inst.BeginAttribute().AddToContainer(value65)
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryRole) Add(attr InEntityAgentrunentryTableSectionEntryRoleAttr) *InEntityAgentrunentryTableSectionEntryRoleInAttr {
-	a := inst.BeginAttribute(attr.Value)
+type InEntityAgentrunentryTableSectionU32ArrayAttr struct {
+	Value []uint32
+}
+
+func (inst *InEntityAgentrunentryTableSectionU32Array) Add(attr InEntityAgentrunentryTableSectionU32ArrayAttr) *InEntityAgentrunentryTableSectionU32ArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
 	return a
 }
-func (inst *InEntityAgentrunentryTableSectionEntryRole) CheckErrors() (err error) {
+func (inst *InEntityAgentrunentryTableSectionU32Array) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryRole) EndSection() *InEntityAgentrunentryTable {
+func (inst *InEntityAgentrunentryTableSectionU32Array) EndSection() *InEntityAgentrunentryTable {
 	switch inst.state {
 	case runtime.EntityStateInSection:
 		inst.state = runtime.EntityStateInitial
@@ -8347,206 +5341,195 @@ func (inst *InEntityAgentrunentryTableSectionEntryRole) EndSection() *InEntityAg
 	return inst.parent
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryRole) beginSection() {
+func (inst *InEntityAgentrunentryTableSectionU32Array) beginSection() {
 	inst.state = runtime.EntityStateInSection
 	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryRole) resetSection() {
+func (inst *InEntityAgentrunentryTableSectionU32Array) resetSection() {
 	inst.clearErrors()
 	inst.inAttr.clearErrors()
 	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryRole) AppendError(err error) {
+func (inst *InEntityAgentrunentryTableSectionU32Array) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
 }
-func (inst *InEntityAgentrunentryTableSectionEntryRole) clearErrors() {
+func (inst *InEntityAgentrunentryTableSectionU32Array) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 
-type InEntityAgentrunentryTableSectionEntryRoleInAttr struct {
-	errs                             []error
-	state                            runtime.EntityStateE
-	parent                           *InEntityAgentrunentryTableSectionEntryRole
-	scalarFieldBuilder043            *array.StringBuilder
-	scalarListBuilder043             *array.ListBuilder
-	membershipFieldBuilder044        *array.Uint64Builder
-	membershipListBuilder044         *array.ListBuilder
-	membershipFieldBuilder045        *array.Uint64Builder
-	membershipListBuilder045         *array.ListBuilder
-	membershipFieldBuilder046        *array.BinaryBuilder
-	membershipListBuilder046         *array.ListBuilder
-	membershipFieldBuilder047        *array.Uint64Builder
-	membershipListBuilder047         *array.ListBuilder
-	membershipFieldBuilder048        *array.BinaryBuilder
-	membershipListBuilder048         *array.ListBuilder
-	membershipSupportFieldBuilder049 *array.Uint64Builder
-	membershipSupportListBuilder049  *array.ListBuilder
-	membershipSupportFieldBuilder050 *array.Uint64Builder
-	membershipSupportListBuilder050  *array.ListBuilder
-	membershipSupportFieldBuilder051 *array.Uint64Builder
-	membershipSupportListBuilder051  *array.ListBuilder
-	membershipSupportFieldBuilder052 *array.Uint64Builder
-	membershipSupportListBuilder052  *array.ListBuilder
+type InEntityAgentrunentryTableSectionU32ArrayInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityAgentrunentryTableSectionU32Array
+	homogenousArrayFieldBuilder065        *array.Uint32Builder
+	homogenousArrayListBuilder065         *array.ListBuilder
+	membershipFieldBuilder066             *array.Uint64Builder
+	membershipListBuilder066              *array.ListBuilder
+	membershipFieldBuilder067             *array.Uint64Builder
+	membershipListBuilder067              *array.ListBuilder
+	membershipFieldBuilder068             *array.Uint64Builder
+	membershipListBuilder068              *array.ListBuilder
+	membershipFieldBuilder069             *array.BinaryBuilder
+	membershipListBuilder069              *array.ListBuilder
+	homogenousArraySupportFieldBuilder070 *array.Uint64Builder
+	homogenousArraySupportListBuilder070  *array.ListBuilder
+	membershipSupportFieldBuilder071      *array.Uint64Builder
+	membershipSupportListBuilder071       *array.ListBuilder
+	membershipSupportFieldBuilder072      *array.Uint64Builder
+	membershipSupportListBuilder072       *array.ListBuilder
+	membershipSupportFieldBuilder073      *array.Uint64Builder
+	membershipSupportListBuilder073       *array.ListBuilder
 
-	membershipContainerLength044 int
+	membershipContainerLength066 int
 
-	membershipContainerLength045 int
+	membershipContainerLength067 int
 
-	membershipContainerLength046 int
+	membershipContainerLength068 int
 
-	membershipContainerLength047 int
+	membershipContainerLength069 int
 
-	membershipContainerLength048 int
+	homogenousArrayContainerLength065 int
 }
 
-func NewInEntityAgentrunentryTableSectionEntryRoleInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionEntryRole) (inst *InEntityAgentrunentryTableSectionEntryRoleInAttr) {
-	inst = &InEntityAgentrunentryTableSectionEntryRoleInAttr{}
+func NewInEntityAgentrunentryTableSectionU32ArrayInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionU32Array) (inst *InEntityAgentrunentryTableSectionU32ArrayInAttr) {
+	inst = &InEntityAgentrunentryTableSectionU32ArrayInAttr{}
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.parent = parent
-	inst.scalarFieldBuilder043 = builder.Field(43).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder043 = builder.Field(43).(*array.ListBuilder)
-	inst.membershipFieldBuilder044 = builder.Field(44).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder044 = builder.Field(44).(*array.ListBuilder)
-	inst.membershipFieldBuilder045 = builder.Field(45).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder045 = builder.Field(45).(*array.ListBuilder)
-	inst.membershipFieldBuilder046 = builder.Field(46).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder046 = builder.Field(46).(*array.ListBuilder)
-	inst.membershipFieldBuilder047 = builder.Field(47).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder047 = builder.Field(47).(*array.ListBuilder)
-	inst.membershipFieldBuilder048 = builder.Field(48).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder048 = builder.Field(48).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder049 = builder.Field(49).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder049 = builder.Field(49).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder050 = builder.Field(50).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder050 = builder.Field(50).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder051 = builder.Field(51).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder051 = builder.Field(51).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder052 = builder.Field(52).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder052 = builder.Field(52).(*array.ListBuilder)
+	inst.homogenousArrayFieldBuilder065 = builder.Field(65).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
+	inst.homogenousArrayListBuilder065 = builder.Field(65).(*array.ListBuilder)
+	inst.membershipFieldBuilder066 = builder.Field(66).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder066 = builder.Field(66).(*array.ListBuilder)
+	inst.membershipFieldBuilder067 = builder.Field(67).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder067 = builder.Field(67).(*array.ListBuilder)
+	inst.membershipFieldBuilder068 = builder.Field(68).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder068 = builder.Field(68).(*array.ListBuilder)
+	inst.membershipFieldBuilder069 = builder.Field(69).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder069 = builder.Field(69).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder070 = builder.Field(70).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder070 = builder.Field(70).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder071 = builder.Field(71).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder071 = builder.Field(71).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder072 = builder.Field(72).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder072 = builder.Field(72).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder073 = builder.Field(73).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder073 = builder.Field(73).(*array.ListBuilder)
 
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryRoleInAttr) beginAttribute() {
-	inst.membershipListBuilder044.Append(true)
-	inst.membershipListBuilder045.Append(true)
-	inst.membershipListBuilder046.Append(true)
-	inst.membershipListBuilder047.Append(true)
-	inst.membershipListBuilder048.Append(true)
-	inst.membershipContainerLength044 = 0
-	inst.membershipContainerLength045 = 0
-	inst.membershipContainerLength046 = 0
-	inst.membershipContainerLength047 = 0
-	inst.membershipContainerLength048 = 0
-	inst.scalarListBuilder043.Append(true)
-	inst.membershipSupportListBuilder049.Append(true)
-	inst.membershipSupportListBuilder050.Append(true)
-	inst.membershipSupportListBuilder051.Append(true)
-	inst.membershipSupportListBuilder052.Append(true)
+func (inst *InEntityAgentrunentryTableSectionU32ArrayInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder065.Append(true)
+	inst.membershipListBuilder066.Append(true)
+	inst.membershipListBuilder067.Append(true)
+	inst.membershipListBuilder068.Append(true)
+	inst.membershipListBuilder069.Append(true)
+	inst.homogenousArrayContainerLength065 = 0
+	inst.membershipContainerLength066 = 0
+	inst.membershipContainerLength067 = 0
+	inst.membershipContainerLength068 = 0
+	inst.membershipContainerLength069 = 0
+	inst.homogenousArraySupportListBuilder070.Append(true)
+	inst.membershipSupportListBuilder071.Append(true)
+	inst.membershipSupportListBuilder072.Append(true)
+	inst.membershipSupportListBuilder073.Append(true)
 	inst.state = runtime.EntityStateInSection
 	inst.clearErrors()
 }
-func (inst *InEntityAgentrunentryTableSectionEntryRoleInAttr) AddMembershipHighCardRef(hr44 uint64) *InEntityAgentrunentryTableSectionEntryRoleInAttr {
+func (inst *InEntityAgentrunentryTableSectionU32ArrayInAttr) AddToContainer(value65 uint32) *InEntityAgentrunentryTableSectionU32ArrayInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder044.Append(hr44)
-	inst.membershipContainerLength044++
+	inst.homogenousArrayFieldBuilder065.Append(value65)
+	inst.homogenousArrayContainerLength065++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryRoleInAttr) AddMembershipHighCardRefP(hr44 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder044.Append(hr44)
-	inst.membershipContainerLength044++
-	return
+func (inst *InEntityAgentrunentryTableSectionU32ArrayInAttr) AddToContainerP(value65 uint32) {
+	inst.AddToContainer(value65)
 }
-func (inst *InEntityAgentrunentryTableSectionEntryRoleInAttr) AddMembershipLowCardRef(lr45 uint64) *InEntityAgentrunentryTableSectionEntryRoleInAttr {
+func (inst *InEntityAgentrunentryTableSectionU32ArrayInAttr) AddMembershipHighCardRef(hr66 uint64) *InEntityAgentrunentryTableSectionU32ArrayInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder045.Append(lr45)
-	inst.membershipContainerLength045++
+	inst.membershipFieldBuilder066.Append(hr66)
+	inst.membershipContainerLength066++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryRoleInAttr) AddMembershipLowCardRefP(lr45 uint64) {
+func (inst *InEntityAgentrunentryTableSectionU32ArrayInAttr) AddMembershipHighCardRefP(hr66 uint64) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder045.Append(lr45)
-	inst.membershipContainerLength045++
+	inst.membershipFieldBuilder066.Append(hr66)
+	inst.membershipContainerLength066++
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryRoleInAttr) AddMembershipLowCardVerbatim(lv46 []byte) *InEntityAgentrunentryTableSectionEntryRoleInAttr {
+func (inst *InEntityAgentrunentryTableSectionU32ArrayInAttr) AddMembershipLowCardRef(lr67 uint64) *InEntityAgentrunentryTableSectionU32ArrayInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder046.Append(lv46)
-	inst.membershipContainerLength046++
+	inst.membershipFieldBuilder067.Append(lr67)
+	inst.membershipContainerLength067++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryRoleInAttr) AddMembershipLowCardVerbatimP(lv46 []byte) {
+func (inst *InEntityAgentrunentryTableSectionU32ArrayInAttr) AddMembershipLowCardRefP(lr67 uint64) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder046.Append(lv46)
-	inst.membershipContainerLength046++
+	inst.membershipFieldBuilder067.Append(lr67)
+	inst.membershipContainerLength067++
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryRoleInAttr) AddMembershipMixedLowCardRef(lmr47 uint64, mrhp48 []byte) *InEntityAgentrunentryTableSectionEntryRoleInAttr {
+func (inst *InEntityAgentrunentryTableSectionU32ArrayInAttr) AddMembershipMixedLowCardRef(lmr68 uint64, mrhp69 []byte) *InEntityAgentrunentryTableSectionU32ArrayInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder047.Append(lmr47)
-	inst.membershipFieldBuilder048.Append(mrhp48)
-	inst.membershipContainerLength047++
-	inst.membershipContainerLength048++
+	inst.membershipFieldBuilder068.Append(lmr68)
+	inst.membershipFieldBuilder069.Append(mrhp69)
+	inst.membershipContainerLength068++
+	inst.membershipContainerLength069++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryRoleInAttr) AddMembershipMixedLowCardRefP(lmr47 uint64, mrhp48 []byte) {
+func (inst *InEntityAgentrunentryTableSectionU32ArrayInAttr) AddMembershipMixedLowCardRefP(lmr68 uint64, mrhp69 []byte) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder047.Append(lmr47)
-	inst.membershipFieldBuilder048.Append(mrhp48)
-	inst.membershipContainerLength047++
-	inst.membershipContainerLength048++
+	inst.membershipFieldBuilder068.Append(lmr68)
+	inst.membershipFieldBuilder069.Append(mrhp69)
+	inst.membershipContainerLength068++
+	inst.membershipContainerLength069++
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryRoleInAttr) handleMembershipSupportColumns() {
+func (inst *InEntityAgentrunentryTableSectionU32ArrayInAttr) handleMembershipSupportColumns() {
 	var l int
 	var _ = l
-	l = inst.membershipContainerLength044
-	inst.membershipContainerLength044 = 0
-	inst.membershipSupportFieldBuilder049.Append(uint64(l))
-	l = inst.membershipContainerLength045
-	inst.membershipContainerLength045 = 0
-	inst.membershipSupportFieldBuilder050.Append(uint64(l))
-	l = inst.membershipContainerLength046
-	inst.membershipContainerLength046 = 0
-	inst.membershipSupportFieldBuilder051.Append(uint64(l))
-	l = inst.membershipContainerLength047
-	inst.membershipContainerLength047 = 0
-	inst.membershipSupportFieldBuilder052.Append(uint64(l))
+	l = inst.membershipContainerLength066
+	inst.membershipContainerLength066 = 0
+	inst.membershipSupportFieldBuilder071.Append(uint64(l))
+	l = inst.membershipContainerLength067
+	inst.membershipContainerLength067 = 0
+	inst.membershipSupportFieldBuilder072.Append(uint64(l))
+	l = inst.membershipContainerLength068
+	inst.membershipContainerLength068 = 0
+	inst.membershipSupportFieldBuilder073.Append(uint64(l))
 }
-func (inst *InEntityAgentrunentryTableSectionEntryRoleInAttr) handleNonScalarSupportColumns() {
+func (inst *InEntityAgentrunentryTableSectionU32ArrayInAttr) handleNonScalarSupportColumns() {
 	var l int
 	var _ = l
+	l = inst.homogenousArrayContainerLength065
+	inst.homogenousArrayContainerLength065 = 0
+	inst.homogenousArraySupportFieldBuilder070.Append(uint64(l))
 }
-func (inst *InEntityAgentrunentryTableSectionEntryRoleInAttr) applyAmbientMemberships() {
+func (inst *InEntityAgentrunentryTableSectionU32ArrayInAttr) applyAmbientMemberships() {
 	if inst.state != runtime.EntityStateInAttribute {
 		return
 	}
@@ -8554,11 +5537,11 @@ func (inst *InEntityAgentrunentryTableSectionEntryRoleInAttr) applyAmbientMember
 		inst.AddMembershipHighCardRefP(v)
 	}
 }
-func (inst *InEntityAgentrunentryTableSectionEntryRoleInAttr) completeAttribute() {
+func (inst *InEntityAgentrunentryTableSectionU32ArrayInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
-func (inst *InEntityAgentrunentryTableSectionEntryRoleInAttr) EndSection() *InEntityAgentrunentryTable {
+func (inst *InEntityAgentrunentryTableSectionU32ArrayInAttr) EndSection() *InEntityAgentrunentryTable {
 	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
@@ -8574,7 +5557,7 @@ func (inst *InEntityAgentrunentryTableSectionEntryRoleInAttr) EndSection() *InEn
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
-func (inst *InEntityAgentrunentryTableSectionEntryRoleInAttr) EndAttribute() *InEntityAgentrunentryTableSectionEntryRole {
+func (inst *InEntityAgentrunentryTableSectionU32ArrayInAttr) EndAttribute() *InEntityAgentrunentryTableSectionU32Array {
 	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
@@ -8589,40 +5572,44 @@ func (inst *InEntityAgentrunentryTableSectionEntryRoleInAttr) EndAttribute() *In
 	inst.parent.endAttribute()
 	return inst.parent
 }
-func (inst *InEntityAgentrunentryTableSectionEntryRoleInAttr) EndAttributeP() {
+func (inst *InEntityAgentrunentryTableSectionU32ArrayInAttr) EndAttributeP() {
 	inst.EndAttribute()
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryRoleInAttr) AppendError(err error) {
+func (inst *InEntityAgentrunentryTableSectionU32ArrayInAttr) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
 }
-func (inst *InEntityAgentrunentryTableSectionEntryRoleInAttr) clearErrors() {
+func (inst *InEntityAgentrunentryTableSectionU32ArrayInAttr) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 
-type InEntityAgentrunentryTableSectionEntryTarget struct {
+type InEntityAgentrunentryTableSectionU32Range struct {
 	errs                  []error
-	inAttr                *InEntityAgentrunentryTableSectionEntryTargetInAttr
+	inAttr                *InEntityAgentrunentryTableSectionU32RangeInAttr
 	state                 runtime.EntityStateE
 	attributeCount        int
 	parent                *InEntityAgentrunentryTable
-	scalarFieldBuilder123 *array.Uint32Builder
-	scalarListBuilder123  *array.ListBuilder
+	scalarFieldBuilder155 *array.Uint32Builder
+	scalarListBuilder155  *array.ListBuilder
+	scalarFieldBuilder156 *array.Uint32Builder
+	scalarListBuilder156  *array.ListBuilder
 }
 
-func NewInEntityAgentrunentryTableSectionEntryTarget(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionEntryTarget) {
-	inst = &InEntityAgentrunentryTableSectionEntryTarget{}
-	inAttr := NewInEntityAgentrunentryTableSectionEntryTargetInAttr(builder, inst)
+func NewInEntityAgentrunentryTableSectionU32Range(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionU32Range) {
+	inst = &InEntityAgentrunentryTableSectionU32Range{}
+	inAttr := NewInEntityAgentrunentryTableSectionU32RangeInAttr(builder, inst)
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.inAttr = inAttr
 	inst.parent = parent
-	inst.scalarFieldBuilder123 = builder.Field(123).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
-	inst.scalarListBuilder123 = builder.Field(123).(*array.ListBuilder)
+	inst.scalarFieldBuilder155 = builder.Field(155).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
+	inst.scalarListBuilder155 = builder.Field(155).(*array.ListBuilder)
+	inst.scalarFieldBuilder156 = builder.Field(156).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
+	inst.scalarListBuilder156 = builder.Field(156).(*array.ListBuilder)
 
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryTarget) endAttribute() {
+func (inst *InEntityAgentrunentryTableSectionU32Range) endAttribute() {
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -8632,7 +5619,7 @@ func (inst *InEntityAgentrunentryTableSectionEntryTarget) endAttribute() {
 		return
 	}
 }
-func (inst *InEntityAgentrunentryTableSectionEntryTarget) BeginAttribute(value123 uint32) *InEntityAgentrunentryTableSectionEntryTargetInAttr {
+func (inst *InEntityAgentrunentryTableSectionU32Range) BeginAttribute(beginIncl155 uint32, endExcl156 uint32) *InEntityAgentrunentryTableSectionU32RangeInAttr {
 	switch inst.state {
 	case runtime.EntityStateInSection:
 		inst.state = runtime.EntityStateInAttribute
@@ -8641,26 +5628,28 @@ func (inst *InEntityAgentrunentryTableSectionEntryTarget) BeginAttribute(value12
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst.inAttr
 	}
-	inst.scalarFieldBuilder123.Append(value123)
+	inst.scalarFieldBuilder155.Append(beginIncl155)
+	inst.scalarFieldBuilder156.Append(endExcl156)
 	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
 }
 
-type InEntityAgentrunentryTableSectionEntryTargetAttr struct {
-	Value uint32
+type InEntityAgentrunentryTableSectionU32RangeAttr struct {
+	BeginIncl uint32
+	EndExcl   uint32
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryTarget) Add(attr InEntityAgentrunentryTableSectionEntryTargetAttr) *InEntityAgentrunentryTableSectionEntryTargetInAttr {
-	a := inst.BeginAttribute(attr.Value)
+func (inst *InEntityAgentrunentryTableSectionU32Range) Add(attr InEntityAgentrunentryTableSectionU32RangeAttr) *InEntityAgentrunentryTableSectionU32RangeInAttr {
+	a := inst.BeginAttribute(attr.BeginIncl, attr.EndExcl)
 	return a
 }
-func (inst *InEntityAgentrunentryTableSectionEntryTarget) CheckErrors() (err error) {
+func (inst *InEntityAgentrunentryTableSectionU32Range) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryTarget) EndSection() *InEntityAgentrunentryTable {
+func (inst *InEntityAgentrunentryTableSectionU32Range) EndSection() *InEntityAgentrunentryTable {
 	switch inst.state {
 	case runtime.EntityStateInSection:
 		inst.state = runtime.EntityStateInitial
@@ -8673,532 +5662,177 @@ func (inst *InEntityAgentrunentryTableSectionEntryTarget) EndSection() *InEntity
 	return inst.parent
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryTarget) beginSection() {
+func (inst *InEntityAgentrunentryTableSectionU32Range) beginSection() {
 	inst.state = runtime.EntityStateInSection
 	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryTarget) resetSection() {
+func (inst *InEntityAgentrunentryTableSectionU32Range) resetSection() {
 	inst.clearErrors()
 	inst.inAttr.clearErrors()
 	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryTarget) AppendError(err error) {
+func (inst *InEntityAgentrunentryTableSectionU32Range) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
 }
-func (inst *InEntityAgentrunentryTableSectionEntryTarget) clearErrors() {
+func (inst *InEntityAgentrunentryTableSectionU32Range) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 
-type InEntityAgentrunentryTableSectionEntryTargetInAttr struct {
+type InEntityAgentrunentryTableSectionU32RangeInAttr struct {
 	errs                             []error
 	state                            runtime.EntityStateE
-	parent                           *InEntityAgentrunentryTableSectionEntryTarget
-	scalarFieldBuilder123            *array.Uint32Builder
-	scalarListBuilder123             *array.ListBuilder
-	membershipFieldBuilder124        *array.Uint64Builder
-	membershipListBuilder124         *array.ListBuilder
-	membershipFieldBuilder125        *array.Uint64Builder
-	membershipListBuilder125         *array.ListBuilder
-	membershipFieldBuilder126        *array.BinaryBuilder
-	membershipListBuilder126         *array.ListBuilder
-	membershipFieldBuilder127        *array.Uint64Builder
-	membershipListBuilder127         *array.ListBuilder
-	membershipFieldBuilder128        *array.BinaryBuilder
-	membershipListBuilder128         *array.ListBuilder
-	membershipSupportFieldBuilder129 *array.Uint64Builder
-	membershipSupportListBuilder129  *array.ListBuilder
-	membershipSupportFieldBuilder130 *array.Uint64Builder
-	membershipSupportListBuilder130  *array.ListBuilder
-	membershipSupportFieldBuilder131 *array.Uint64Builder
-	membershipSupportListBuilder131  *array.ListBuilder
-	membershipSupportFieldBuilder132 *array.Uint64Builder
-	membershipSupportListBuilder132  *array.ListBuilder
-
-	membershipContainerLength124 int
-
-	membershipContainerLength125 int
-
-	membershipContainerLength126 int
-
-	membershipContainerLength127 int
-
-	membershipContainerLength128 int
-}
-
-func NewInEntityAgentrunentryTableSectionEntryTargetInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionEntryTarget) (inst *InEntityAgentrunentryTableSectionEntryTargetInAttr) {
-	inst = &InEntityAgentrunentryTableSectionEntryTargetInAttr{}
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.parent = parent
-	inst.scalarFieldBuilder123 = builder.Field(123).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
-	inst.scalarListBuilder123 = builder.Field(123).(*array.ListBuilder)
-	inst.membershipFieldBuilder124 = builder.Field(124).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder124 = builder.Field(124).(*array.ListBuilder)
-	inst.membershipFieldBuilder125 = builder.Field(125).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder125 = builder.Field(125).(*array.ListBuilder)
-	inst.membershipFieldBuilder126 = builder.Field(126).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder126 = builder.Field(126).(*array.ListBuilder)
-	inst.membershipFieldBuilder127 = builder.Field(127).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder127 = builder.Field(127).(*array.ListBuilder)
-	inst.membershipFieldBuilder128 = builder.Field(128).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder128 = builder.Field(128).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder129 = builder.Field(129).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder129 = builder.Field(129).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder130 = builder.Field(130).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder130 = builder.Field(130).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder131 = builder.Field(131).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder131 = builder.Field(131).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder132 = builder.Field(132).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder132 = builder.Field(132).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryTargetInAttr) beginAttribute() {
-	inst.membershipListBuilder124.Append(true)
-	inst.membershipListBuilder125.Append(true)
-	inst.membershipListBuilder126.Append(true)
-	inst.membershipListBuilder127.Append(true)
-	inst.membershipListBuilder128.Append(true)
-	inst.membershipContainerLength124 = 0
-	inst.membershipContainerLength125 = 0
-	inst.membershipContainerLength126 = 0
-	inst.membershipContainerLength127 = 0
-	inst.membershipContainerLength128 = 0
-	inst.scalarListBuilder123.Append(true)
-	inst.membershipSupportListBuilder129.Append(true)
-	inst.membershipSupportListBuilder130.Append(true)
-	inst.membershipSupportListBuilder131.Append(true)
-	inst.membershipSupportListBuilder132.Append(true)
-	inst.state = runtime.EntityStateInSection
-	inst.clearErrors()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryTargetInAttr) AddMembershipHighCardRef(hr124 uint64) *InEntityAgentrunentryTableSectionEntryTargetInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder124.Append(hr124)
-	inst.membershipContainerLength124++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryTargetInAttr) AddMembershipHighCardRefP(hr124 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder124.Append(hr124)
-	inst.membershipContainerLength124++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryTargetInAttr) AddMembershipLowCardRef(lr125 uint64) *InEntityAgentrunentryTableSectionEntryTargetInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder125.Append(lr125)
-	inst.membershipContainerLength125++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryTargetInAttr) AddMembershipLowCardRefP(lr125 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder125.Append(lr125)
-	inst.membershipContainerLength125++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryTargetInAttr) AddMembershipLowCardVerbatim(lv126 []byte) *InEntityAgentrunentryTableSectionEntryTargetInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder126.Append(lv126)
-	inst.membershipContainerLength126++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryTargetInAttr) AddMembershipLowCardVerbatimP(lv126 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder126.Append(lv126)
-	inst.membershipContainerLength126++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryTargetInAttr) AddMembershipMixedLowCardRef(lmr127 uint64, mrhp128 []byte) *InEntityAgentrunentryTableSectionEntryTargetInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder127.Append(lmr127)
-	inst.membershipFieldBuilder128.Append(mrhp128)
-	inst.membershipContainerLength127++
-	inst.membershipContainerLength128++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryTargetInAttr) AddMembershipMixedLowCardRefP(lmr127 uint64, mrhp128 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder127.Append(lmr127)
-	inst.membershipFieldBuilder128.Append(mrhp128)
-	inst.membershipContainerLength127++
-	inst.membershipContainerLength128++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryTargetInAttr) handleMembershipSupportColumns() {
-	var l int
-	var _ = l
-	l = inst.membershipContainerLength124
-	inst.membershipContainerLength124 = 0
-	inst.membershipSupportFieldBuilder129.Append(uint64(l))
-	l = inst.membershipContainerLength125
-	inst.membershipContainerLength125 = 0
-	inst.membershipSupportFieldBuilder130.Append(uint64(l))
-	l = inst.membershipContainerLength126
-	inst.membershipContainerLength126 = 0
-	inst.membershipSupportFieldBuilder131.Append(uint64(l))
-	l = inst.membershipContainerLength127
-	inst.membershipContainerLength127 = 0
-	inst.membershipSupportFieldBuilder132.Append(uint64(l))
-}
-func (inst *InEntityAgentrunentryTableSectionEntryTargetInAttr) handleNonScalarSupportColumns() {
-	var l int
-	var _ = l
-}
-func (inst *InEntityAgentrunentryTableSectionEntryTargetInAttr) applyAmbientMemberships() {
-	if inst.state != runtime.EntityStateInAttribute {
-		return
-	}
-	for _, v := range inst.parent.parent.ambientHighCardRef {
-		inst.AddMembershipHighCardRefP(v)
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryTargetInAttr) completeAttribute() {
-	inst.handleMembershipSupportColumns()
-	inst.handleNonScalarSupportColumns()
-}
-func (inst *InEntityAgentrunentryTableSectionEntryTargetInAttr) EndSection() *InEntityAgentrunentryTable {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	inst.parent.EndSection()
-	return inst.parent.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryTargetInAttr) EndAttribute() *InEntityAgentrunentryTableSectionEntryTarget {
-	inst.applyAmbientMemberships()
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	inst.completeAttribute()
-	inst.parent.endAttribute()
-	return inst.parent
-}
-func (inst *InEntityAgentrunentryTableSectionEntryTargetInAttr) EndAttributeP() {
-	inst.EndAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryTargetInAttr) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryTargetInAttr) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryTurn struct {
-	errs                  []error
-	inAttr                *InEntityAgentrunentryTableSectionEntryTurnInAttr
-	state                 runtime.EntityStateE
-	attributeCount        int
-	parent                *InEntityAgentrunentryTable
-	scalarFieldBuilder153 *array.StringBuilder
-	scalarListBuilder153  *array.ListBuilder
-}
-
-func NewInEntityAgentrunentryTableSectionEntryTurn(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionEntryTurn) {
-	inst = &InEntityAgentrunentryTableSectionEntryTurn{}
-	inAttr := NewInEntityAgentrunentryTableSectionEntryTurnInAttr(builder, inst)
-	inst.errs = make([]error, 0, 8)
-	inst.state = runtime.EntityStateInitial
-	inst.inAttr = inAttr
-	inst.parent = parent
-	inst.scalarFieldBuilder153 = builder.Field(153).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder153 = builder.Field(153).(*array.ListBuilder)
-
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryTurn) endAttribute() {
-	switch inst.state {
-	case runtime.EntityStateInAttribute:
-		inst.state = runtime.EntityStateInSection
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-}
-func (inst *InEntityAgentrunentryTableSectionEntryTurn) BeginAttribute(value153 string) *InEntityAgentrunentryTableSectionEntryTurnInAttr {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInAttribute
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.inAttr
-	}
-	inst.scalarFieldBuilder153.Append(value153)
-	inst.attributeCount++
-
-	inst.inAttr.state = inst.state
-	return inst.inAttr
-}
-
-type InEntityAgentrunentryTableSectionEntryTurnAttr struct {
-	Value string
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryTurn) Add(attr InEntityAgentrunentryTableSectionEntryTurnAttr) *InEntityAgentrunentryTableSectionEntryTurnInAttr {
-	a := inst.BeginAttribute(attr.Value)
-	return a
-}
-func (inst *InEntityAgentrunentryTableSectionEntryTurn) CheckErrors() (err error) {
-	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryTurn) EndSection() *InEntityAgentrunentryTable {
-	switch inst.state {
-	case runtime.EntityStateInSection:
-		inst.state = runtime.EntityStateInitial
-		break
-	default:
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst.parent
-	}
-
-	return inst.parent
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryTurn) beginSection() {
-	inst.state = runtime.EntityStateInSection
-	inst.attributeCount = 0
-	inst.inAttr.beginAttribute()
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryTurn) resetSection() {
-	inst.clearErrors()
-	inst.inAttr.clearErrors()
-	inst.attributeCount = 0
-	inst.state = runtime.EntityStateInitial
-}
-
-func (inst *InEntityAgentrunentryTableSectionEntryTurn) AppendError(err error) {
-	inst.errs = eh.AppendError(inst.errs, err)
-}
-func (inst *InEntityAgentrunentryTableSectionEntryTurn) clearErrors() {
-	inst.errs = eh.ClearErrors(inst.errs)
-}
-
-type InEntityAgentrunentryTableSectionEntryTurnInAttr struct {
-	errs                             []error
-	state                            runtime.EntityStateE
-	parent                           *InEntityAgentrunentryTableSectionEntryTurn
-	scalarFieldBuilder153            *array.StringBuilder
-	scalarListBuilder153             *array.ListBuilder
-	membershipFieldBuilder154        *array.Uint64Builder
-	membershipListBuilder154         *array.ListBuilder
-	membershipFieldBuilder155        *array.Uint64Builder
-	membershipListBuilder155         *array.ListBuilder
-	membershipFieldBuilder156        *array.BinaryBuilder
-	membershipListBuilder156         *array.ListBuilder
+	parent                           *InEntityAgentrunentryTableSectionU32Range
+	scalarFieldBuilder155            *array.Uint32Builder
+	scalarListBuilder155             *array.ListBuilder
+	scalarFieldBuilder156            *array.Uint32Builder
+	scalarListBuilder156             *array.ListBuilder
 	membershipFieldBuilder157        *array.Uint64Builder
 	membershipListBuilder157         *array.ListBuilder
-	membershipFieldBuilder158        *array.BinaryBuilder
+	membershipFieldBuilder158        *array.Uint64Builder
 	membershipListBuilder158         *array.ListBuilder
-	membershipSupportFieldBuilder159 *array.Uint64Builder
-	membershipSupportListBuilder159  *array.ListBuilder
-	membershipSupportFieldBuilder160 *array.Uint64Builder
-	membershipSupportListBuilder160  *array.ListBuilder
+	membershipFieldBuilder159        *array.Uint64Builder
+	membershipListBuilder159         *array.ListBuilder
+	membershipFieldBuilder160        *array.BinaryBuilder
+	membershipListBuilder160         *array.ListBuilder
 	membershipSupportFieldBuilder161 *array.Uint64Builder
 	membershipSupportListBuilder161  *array.ListBuilder
 	membershipSupportFieldBuilder162 *array.Uint64Builder
 	membershipSupportListBuilder162  *array.ListBuilder
-
-	membershipContainerLength154 int
-
-	membershipContainerLength155 int
-
-	membershipContainerLength156 int
+	membershipSupportFieldBuilder163 *array.Uint64Builder
+	membershipSupportListBuilder163  *array.ListBuilder
 
 	membershipContainerLength157 int
 
 	membershipContainerLength158 int
+
+	membershipContainerLength159 int
+
+	membershipContainerLength160 int
 }
 
-func NewInEntityAgentrunentryTableSectionEntryTurnInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionEntryTurn) (inst *InEntityAgentrunentryTableSectionEntryTurnInAttr) {
-	inst = &InEntityAgentrunentryTableSectionEntryTurnInAttr{}
+func NewInEntityAgentrunentryTableSectionU32RangeInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionU32Range) (inst *InEntityAgentrunentryTableSectionU32RangeInAttr) {
+	inst = &InEntityAgentrunentryTableSectionU32RangeInAttr{}
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.parent = parent
-	inst.scalarFieldBuilder153 = builder.Field(153).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder153 = builder.Field(153).(*array.ListBuilder)
-	inst.membershipFieldBuilder154 = builder.Field(154).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder154 = builder.Field(154).(*array.ListBuilder)
-	inst.membershipFieldBuilder155 = builder.Field(155).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder155 = builder.Field(155).(*array.ListBuilder)
-	inst.membershipFieldBuilder156 = builder.Field(156).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder156 = builder.Field(156).(*array.ListBuilder)
+	inst.scalarFieldBuilder155 = builder.Field(155).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
+	inst.scalarListBuilder155 = builder.Field(155).(*array.ListBuilder)
+	inst.scalarFieldBuilder156 = builder.Field(156).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
+	inst.scalarListBuilder156 = builder.Field(156).(*array.ListBuilder)
 	inst.membershipFieldBuilder157 = builder.Field(157).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
 	inst.membershipListBuilder157 = builder.Field(157).(*array.ListBuilder)
-	inst.membershipFieldBuilder158 = builder.Field(158).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipFieldBuilder158 = builder.Field(158).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
 	inst.membershipListBuilder158 = builder.Field(158).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder159 = builder.Field(159).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder159 = builder.Field(159).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder160 = builder.Field(160).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder160 = builder.Field(160).(*array.ListBuilder)
+	inst.membershipFieldBuilder159 = builder.Field(159).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder159 = builder.Field(159).(*array.ListBuilder)
+	inst.membershipFieldBuilder160 = builder.Field(160).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder160 = builder.Field(160).(*array.ListBuilder)
 	inst.membershipSupportFieldBuilder161 = builder.Field(161).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
 	inst.membershipSupportListBuilder161 = builder.Field(161).(*array.ListBuilder)
 	inst.membershipSupportFieldBuilder162 = builder.Field(162).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
 	inst.membershipSupportListBuilder162 = builder.Field(162).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder163 = builder.Field(163).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder163 = builder.Field(163).(*array.ListBuilder)
 
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryTurnInAttr) beginAttribute() {
-	inst.membershipListBuilder154.Append(true)
-	inst.membershipListBuilder155.Append(true)
-	inst.membershipListBuilder156.Append(true)
+func (inst *InEntityAgentrunentryTableSectionU32RangeInAttr) beginAttribute() {
 	inst.membershipListBuilder157.Append(true)
 	inst.membershipListBuilder158.Append(true)
-	inst.membershipContainerLength154 = 0
-	inst.membershipContainerLength155 = 0
-	inst.membershipContainerLength156 = 0
+	inst.membershipListBuilder159.Append(true)
+	inst.membershipListBuilder160.Append(true)
 	inst.membershipContainerLength157 = 0
 	inst.membershipContainerLength158 = 0
-	inst.scalarListBuilder153.Append(true)
-	inst.membershipSupportListBuilder159.Append(true)
-	inst.membershipSupportListBuilder160.Append(true)
+	inst.membershipContainerLength159 = 0
+	inst.membershipContainerLength160 = 0
+	inst.scalarListBuilder155.Append(true)
+	inst.scalarListBuilder156.Append(true)
 	inst.membershipSupportListBuilder161.Append(true)
 	inst.membershipSupportListBuilder162.Append(true)
+	inst.membershipSupportListBuilder163.Append(true)
 	inst.state = runtime.EntityStateInSection
 	inst.clearErrors()
 }
-func (inst *InEntityAgentrunentryTableSectionEntryTurnInAttr) AddMembershipHighCardRef(hr154 uint64) *InEntityAgentrunentryTableSectionEntryTurnInAttr {
+func (inst *InEntityAgentrunentryTableSectionU32RangeInAttr) AddMembershipHighCardRef(hr157 uint64) *InEntityAgentrunentryTableSectionU32RangeInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder154.Append(hr154)
-	inst.membershipContainerLength154++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryTurnInAttr) AddMembershipHighCardRefP(hr154 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder154.Append(hr154)
-	inst.membershipContainerLength154++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryTurnInAttr) AddMembershipLowCardRef(lr155 uint64) *InEntityAgentrunentryTableSectionEntryTurnInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder155.Append(lr155)
-	inst.membershipContainerLength155++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryTurnInAttr) AddMembershipLowCardRefP(lr155 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder155.Append(lr155)
-	inst.membershipContainerLength155++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryTurnInAttr) AddMembershipLowCardVerbatim(lv156 []byte) *InEntityAgentrunentryTableSectionEntryTurnInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder156.Append(lv156)
-	inst.membershipContainerLength156++
-	return inst
-}
-func (inst *InEntityAgentrunentryTableSectionEntryTurnInAttr) AddMembershipLowCardVerbatimP(lv156 []byte) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder156.Append(lv156)
-	inst.membershipContainerLength156++
-	return
-}
-func (inst *InEntityAgentrunentryTableSectionEntryTurnInAttr) AddMembershipMixedLowCardRef(lmr157 uint64, mrhp158 []byte) *InEntityAgentrunentryTableSectionEntryTurnInAttr {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return inst
-	}
-	inst.membershipFieldBuilder157.Append(lmr157)
-	inst.membershipFieldBuilder158.Append(mrhp158)
+	inst.membershipFieldBuilder157.Append(hr157)
 	inst.membershipContainerLength157++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionU32RangeInAttr) AddMembershipHighCardRefP(hr157 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder157.Append(hr157)
+	inst.membershipContainerLength157++
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionU32RangeInAttr) AddMembershipLowCardRef(lr158 uint64) *InEntityAgentrunentryTableSectionU32RangeInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder158.Append(lr158)
 	inst.membershipContainerLength158++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryTurnInAttr) AddMembershipMixedLowCardRefP(lmr157 uint64, mrhp158 []byte) {
+func (inst *InEntityAgentrunentryTableSectionU32RangeInAttr) AddMembershipLowCardRefP(lr158 uint64) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder157.Append(lmr157)
-	inst.membershipFieldBuilder158.Append(mrhp158)
-	inst.membershipContainerLength157++
+	inst.membershipFieldBuilder158.Append(lr158)
 	inst.membershipContainerLength158++
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryTurnInAttr) handleMembershipSupportColumns() {
+func (inst *InEntityAgentrunentryTableSectionU32RangeInAttr) AddMembershipMixedLowCardRef(lmr159 uint64, mrhp160 []byte) *InEntityAgentrunentryTableSectionU32RangeInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder159.Append(lmr159)
+	inst.membershipFieldBuilder160.Append(mrhp160)
+	inst.membershipContainerLength159++
+	inst.membershipContainerLength160++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionU32RangeInAttr) AddMembershipMixedLowCardRefP(lmr159 uint64, mrhp160 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder159.Append(lmr159)
+	inst.membershipFieldBuilder160.Append(mrhp160)
+	inst.membershipContainerLength159++
+	inst.membershipContainerLength160++
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionU32RangeInAttr) handleMembershipSupportColumns() {
 	var l int
 	var _ = l
-	l = inst.membershipContainerLength154
-	inst.membershipContainerLength154 = 0
-	inst.membershipSupportFieldBuilder159.Append(uint64(l))
-	l = inst.membershipContainerLength155
-	inst.membershipContainerLength155 = 0
-	inst.membershipSupportFieldBuilder160.Append(uint64(l))
-	l = inst.membershipContainerLength156
-	inst.membershipContainerLength156 = 0
-	inst.membershipSupportFieldBuilder161.Append(uint64(l))
 	l = inst.membershipContainerLength157
 	inst.membershipContainerLength157 = 0
+	inst.membershipSupportFieldBuilder161.Append(uint64(l))
+	l = inst.membershipContainerLength158
+	inst.membershipContainerLength158 = 0
 	inst.membershipSupportFieldBuilder162.Append(uint64(l))
+	l = inst.membershipContainerLength159
+	inst.membershipContainerLength159 = 0
+	inst.membershipSupportFieldBuilder163.Append(uint64(l))
 }
-func (inst *InEntityAgentrunentryTableSectionEntryTurnInAttr) handleNonScalarSupportColumns() {
+func (inst *InEntityAgentrunentryTableSectionU32RangeInAttr) handleNonScalarSupportColumns() {
 	var l int
 	var _ = l
 }
-func (inst *InEntityAgentrunentryTableSectionEntryTurnInAttr) applyAmbientMemberships() {
+func (inst *InEntityAgentrunentryTableSectionU32RangeInAttr) applyAmbientMemberships() {
 	if inst.state != runtime.EntityStateInAttribute {
 		return
 	}
@@ -9206,11 +5840,11 @@ func (inst *InEntityAgentrunentryTableSectionEntryTurnInAttr) applyAmbientMember
 		inst.AddMembershipHighCardRefP(v)
 	}
 }
-func (inst *InEntityAgentrunentryTableSectionEntryTurnInAttr) completeAttribute() {
+func (inst *InEntityAgentrunentryTableSectionU32RangeInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
-func (inst *InEntityAgentrunentryTableSectionEntryTurnInAttr) EndSection() *InEntityAgentrunentryTable {
+func (inst *InEntityAgentrunentryTableSectionU32RangeInAttr) EndSection() *InEntityAgentrunentryTable {
 	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
@@ -9226,7 +5860,7 @@ func (inst *InEntityAgentrunentryTableSectionEntryTurnInAttr) EndSection() *InEn
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
-func (inst *InEntityAgentrunentryTableSectionEntryTurnInAttr) EndAttribute() *InEntityAgentrunentryTableSectionEntryTurn {
+func (inst *InEntityAgentrunentryTableSectionU32RangeInAttr) EndAttribute() *InEntityAgentrunentryTableSectionU32Range {
 	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
@@ -9241,40 +5875,40 @@ func (inst *InEntityAgentrunentryTableSectionEntryTurnInAttr) EndAttribute() *In
 	inst.parent.endAttribute()
 	return inst.parent
 }
-func (inst *InEntityAgentrunentryTableSectionEntryTurnInAttr) EndAttributeP() {
+func (inst *InEntityAgentrunentryTableSectionU32RangeInAttr) EndAttributeP() {
 	inst.EndAttribute()
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryTurnInAttr) AppendError(err error) {
+func (inst *InEntityAgentrunentryTableSectionU32RangeInAttr) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
 }
-func (inst *InEntityAgentrunentryTableSectionEntryTurnInAttr) clearErrors() {
+func (inst *InEntityAgentrunentryTableSectionU32RangeInAttr) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 
-type InEntityAgentrunentryTableSectionEntryWriterOrdinal struct {
-	errs                  []error
-	inAttr                *InEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr
-	state                 runtime.EntityStateE
-	attributeCount        int
-	parent                *InEntityAgentrunentryTable
-	scalarFieldBuilder223 *array.Uint32Builder
-	scalarListBuilder223  *array.ListBuilder
+type InEntityAgentrunentryTableSectionU32Set struct {
+	errs               []error
+	inAttr             *InEntityAgentrunentryTableSectionU32SetInAttr
+	state              runtime.EntityStateE
+	attributeCount     int
+	parent             *InEntityAgentrunentryTable
+	setFieldBuilder074 *array.Uint32Builder
+	setListBuilder074  *array.ListBuilder
 }
 
-func NewInEntityAgentrunentryTableSectionEntryWriterOrdinal(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinal) {
-	inst = &InEntityAgentrunentryTableSectionEntryWriterOrdinal{}
-	inAttr := NewInEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr(builder, inst)
+func NewInEntityAgentrunentryTableSectionU32Set(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionU32Set) {
+	inst = &InEntityAgentrunentryTableSectionU32Set{}
+	inAttr := NewInEntityAgentrunentryTableSectionU32SetInAttr(builder, inst)
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.inAttr = inAttr
 	inst.parent = parent
-	inst.scalarFieldBuilder223 = builder.Field(223).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
-	inst.scalarListBuilder223 = builder.Field(223).(*array.ListBuilder)
+	inst.setFieldBuilder074 = builder.Field(74).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
+	inst.setListBuilder074 = builder.Field(74).(*array.ListBuilder)
 
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinal) endAttribute() {
+func (inst *InEntityAgentrunentryTableSectionU32Set) endAttribute() {
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -9284,7 +5918,7 @@ func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinal) endAttribute() 
 		return
 	}
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinal) BeginAttribute(value223 uint32) *InEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr {
+func (inst *InEntityAgentrunentryTableSectionU32Set) BeginAttribute() *InEntityAgentrunentryTableSectionU32SetInAttr {
 	switch inst.state {
 	case runtime.EntityStateInSection:
 		inst.state = runtime.EntityStateInAttribute
@@ -9293,26 +5927,31 @@ func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinal) BeginAttribute(
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst.inAttr
 	}
-	inst.scalarFieldBuilder223.Append(value223)
 	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
 }
-
-type InEntityAgentrunentryTableSectionEntryWriterOrdinalAttr struct {
-	Value uint32
+func (inst *InEntityAgentrunentryTableSectionU32Set) BeginAttributeSingle(value74 uint32) *InEntityAgentrunentryTableSectionU32SetInAttr {
+	return inst.BeginAttribute().AddToContainer(value74)
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinal) Add(attr InEntityAgentrunentryTableSectionEntryWriterOrdinalAttr) *InEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr {
-	a := inst.BeginAttribute(attr.Value)
+type InEntityAgentrunentryTableSectionU32SetAttr struct {
+	Value []uint32
+}
+
+func (inst *InEntityAgentrunentryTableSectionU32Set) Add(attr InEntityAgentrunentryTableSectionU32SetAttr) *InEntityAgentrunentryTableSectionU32SetInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
 	return a
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinal) CheckErrors() (err error) {
+func (inst *InEntityAgentrunentryTableSectionU32Set) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinal) EndSection() *InEntityAgentrunentryTable {
+func (inst *InEntityAgentrunentryTableSectionU32Set) EndSection() *InEntityAgentrunentryTable {
 	switch inst.state {
 	case runtime.EntityStateInSection:
 		inst.state = runtime.EntityStateInitial
@@ -9325,206 +5964,195 @@ func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinal) EndSection() *I
 	return inst.parent
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinal) beginSection() {
+func (inst *InEntityAgentrunentryTableSectionU32Set) beginSection() {
 	inst.state = runtime.EntityStateInSection
 	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinal) resetSection() {
+func (inst *InEntityAgentrunentryTableSectionU32Set) resetSection() {
 	inst.clearErrors()
 	inst.inAttr.clearErrors()
 	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinal) AppendError(err error) {
+func (inst *InEntityAgentrunentryTableSectionU32Set) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinal) clearErrors() {
+func (inst *InEntityAgentrunentryTableSectionU32Set) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 
-type InEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr struct {
+type InEntityAgentrunentryTableSectionU32SetInAttr struct {
 	errs                             []error
 	state                            runtime.EntityStateE
-	parent                           *InEntityAgentrunentryTableSectionEntryWriterOrdinal
-	scalarFieldBuilder223            *array.Uint32Builder
-	scalarListBuilder223             *array.ListBuilder
-	membershipFieldBuilder224        *array.Uint64Builder
-	membershipListBuilder224         *array.ListBuilder
-	membershipFieldBuilder225        *array.Uint64Builder
-	membershipListBuilder225         *array.ListBuilder
-	membershipFieldBuilder226        *array.BinaryBuilder
-	membershipListBuilder226         *array.ListBuilder
-	membershipFieldBuilder227        *array.Uint64Builder
-	membershipListBuilder227         *array.ListBuilder
-	membershipFieldBuilder228        *array.BinaryBuilder
-	membershipListBuilder228         *array.ListBuilder
-	membershipSupportFieldBuilder229 *array.Uint64Builder
-	membershipSupportListBuilder229  *array.ListBuilder
-	membershipSupportFieldBuilder230 *array.Uint64Builder
-	membershipSupportListBuilder230  *array.ListBuilder
-	membershipSupportFieldBuilder231 *array.Uint64Builder
-	membershipSupportListBuilder231  *array.ListBuilder
-	membershipSupportFieldBuilder232 *array.Uint64Builder
-	membershipSupportListBuilder232  *array.ListBuilder
+	parent                           *InEntityAgentrunentryTableSectionU32Set
+	setFieldBuilder074               *array.Uint32Builder
+	setListBuilder074                *array.ListBuilder
+	membershipFieldBuilder075        *array.Uint64Builder
+	membershipListBuilder075         *array.ListBuilder
+	membershipFieldBuilder076        *array.Uint64Builder
+	membershipListBuilder076         *array.ListBuilder
+	membershipFieldBuilder077        *array.Uint64Builder
+	membershipListBuilder077         *array.ListBuilder
+	membershipFieldBuilder078        *array.BinaryBuilder
+	membershipListBuilder078         *array.ListBuilder
+	setSupportFieldBuilder079        *array.Uint64Builder
+	setSupportListBuilder079         *array.ListBuilder
+	membershipSupportFieldBuilder080 *array.Uint64Builder
+	membershipSupportListBuilder080  *array.ListBuilder
+	membershipSupportFieldBuilder081 *array.Uint64Builder
+	membershipSupportListBuilder081  *array.ListBuilder
+	membershipSupportFieldBuilder082 *array.Uint64Builder
+	membershipSupportListBuilder082  *array.ListBuilder
 
-	membershipContainerLength224 int
+	membershipContainerLength075 int
 
-	membershipContainerLength225 int
+	membershipContainerLength076 int
 
-	membershipContainerLength226 int
+	membershipContainerLength077 int
 
-	membershipContainerLength227 int
+	membershipContainerLength078 int
 
-	membershipContainerLength228 int
+	setContainerLength074 int
 }
 
-func NewInEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionEntryWriterOrdinal) (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr) {
-	inst = &InEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr{}
+func NewInEntityAgentrunentryTableSectionU32SetInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionU32Set) (inst *InEntityAgentrunentryTableSectionU32SetInAttr) {
+	inst = &InEntityAgentrunentryTableSectionU32SetInAttr{}
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.parent = parent
-	inst.scalarFieldBuilder223 = builder.Field(223).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
-	inst.scalarListBuilder223 = builder.Field(223).(*array.ListBuilder)
-	inst.membershipFieldBuilder224 = builder.Field(224).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder224 = builder.Field(224).(*array.ListBuilder)
-	inst.membershipFieldBuilder225 = builder.Field(225).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder225 = builder.Field(225).(*array.ListBuilder)
-	inst.membershipFieldBuilder226 = builder.Field(226).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder226 = builder.Field(226).(*array.ListBuilder)
-	inst.membershipFieldBuilder227 = builder.Field(227).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder227 = builder.Field(227).(*array.ListBuilder)
-	inst.membershipFieldBuilder228 = builder.Field(228).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder228 = builder.Field(228).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder229 = builder.Field(229).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder229 = builder.Field(229).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder230 = builder.Field(230).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder230 = builder.Field(230).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder231 = builder.Field(231).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder231 = builder.Field(231).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder232 = builder.Field(232).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder232 = builder.Field(232).(*array.ListBuilder)
+	inst.setFieldBuilder074 = builder.Field(74).(*array.ListBuilder).ValueBuilder().(*array.Uint32Builder)
+	inst.setListBuilder074 = builder.Field(74).(*array.ListBuilder)
+	inst.membershipFieldBuilder075 = builder.Field(75).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder075 = builder.Field(75).(*array.ListBuilder)
+	inst.membershipFieldBuilder076 = builder.Field(76).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder076 = builder.Field(76).(*array.ListBuilder)
+	inst.membershipFieldBuilder077 = builder.Field(77).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder077 = builder.Field(77).(*array.ListBuilder)
+	inst.membershipFieldBuilder078 = builder.Field(78).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder078 = builder.Field(78).(*array.ListBuilder)
+	inst.setSupportFieldBuilder079 = builder.Field(79).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.setSupportListBuilder079 = builder.Field(79).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder080 = builder.Field(80).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder080 = builder.Field(80).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder081 = builder.Field(81).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder081 = builder.Field(81).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder082 = builder.Field(82).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder082 = builder.Field(82).(*array.ListBuilder)
 
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr) beginAttribute() {
-	inst.membershipListBuilder224.Append(true)
-	inst.membershipListBuilder225.Append(true)
-	inst.membershipListBuilder226.Append(true)
-	inst.membershipListBuilder227.Append(true)
-	inst.membershipListBuilder228.Append(true)
-	inst.membershipContainerLength224 = 0
-	inst.membershipContainerLength225 = 0
-	inst.membershipContainerLength226 = 0
-	inst.membershipContainerLength227 = 0
-	inst.membershipContainerLength228 = 0
-	inst.scalarListBuilder223.Append(true)
-	inst.membershipSupportListBuilder229.Append(true)
-	inst.membershipSupportListBuilder230.Append(true)
-	inst.membershipSupportListBuilder231.Append(true)
-	inst.membershipSupportListBuilder232.Append(true)
+func (inst *InEntityAgentrunentryTableSectionU32SetInAttr) beginAttribute() {
+	inst.setListBuilder074.Append(true)
+	inst.membershipListBuilder075.Append(true)
+	inst.membershipListBuilder076.Append(true)
+	inst.membershipListBuilder077.Append(true)
+	inst.membershipListBuilder078.Append(true)
+	inst.setContainerLength074 = 0
+	inst.membershipContainerLength075 = 0
+	inst.membershipContainerLength076 = 0
+	inst.membershipContainerLength077 = 0
+	inst.membershipContainerLength078 = 0
+	inst.setSupportListBuilder079.Append(true)
+	inst.membershipSupportListBuilder080.Append(true)
+	inst.membershipSupportListBuilder081.Append(true)
+	inst.membershipSupportListBuilder082.Append(true)
 	inst.state = runtime.EntityStateInSection
 	inst.clearErrors()
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr) AddMembershipHighCardRef(hr224 uint64) *InEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr {
+func (inst *InEntityAgentrunentryTableSectionU32SetInAttr) AddToContainer(value74 uint32) *InEntityAgentrunentryTableSectionU32SetInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder224.Append(hr224)
-	inst.membershipContainerLength224++
+	inst.setFieldBuilder074.Append(value74)
+	inst.setContainerLength074++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr) AddMembershipHighCardRefP(hr224 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder224.Append(hr224)
-	inst.membershipContainerLength224++
-	return
+func (inst *InEntityAgentrunentryTableSectionU32SetInAttr) AddToContainerP(value74 uint32) {
+	inst.AddToContainer(value74)
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr) AddMembershipLowCardRef(lr225 uint64) *InEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr {
+func (inst *InEntityAgentrunentryTableSectionU32SetInAttr) AddMembershipHighCardRef(hr75 uint64) *InEntityAgentrunentryTableSectionU32SetInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder225.Append(lr225)
-	inst.membershipContainerLength225++
+	inst.membershipFieldBuilder075.Append(hr75)
+	inst.membershipContainerLength075++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr) AddMembershipLowCardRefP(lr225 uint64) {
+func (inst *InEntityAgentrunentryTableSectionU32SetInAttr) AddMembershipHighCardRefP(hr75 uint64) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder225.Append(lr225)
-	inst.membershipContainerLength225++
+	inst.membershipFieldBuilder075.Append(hr75)
+	inst.membershipContainerLength075++
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr) AddMembershipLowCardVerbatim(lv226 []byte) *InEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr {
+func (inst *InEntityAgentrunentryTableSectionU32SetInAttr) AddMembershipLowCardRef(lr76 uint64) *InEntityAgentrunentryTableSectionU32SetInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder226.Append(lv226)
-	inst.membershipContainerLength226++
+	inst.membershipFieldBuilder076.Append(lr76)
+	inst.membershipContainerLength076++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr) AddMembershipLowCardVerbatimP(lv226 []byte) {
+func (inst *InEntityAgentrunentryTableSectionU32SetInAttr) AddMembershipLowCardRefP(lr76 uint64) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder226.Append(lv226)
-	inst.membershipContainerLength226++
+	inst.membershipFieldBuilder076.Append(lr76)
+	inst.membershipContainerLength076++
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr) AddMembershipMixedLowCardRef(lmr227 uint64, mrhp228 []byte) *InEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr {
+func (inst *InEntityAgentrunentryTableSectionU32SetInAttr) AddMembershipMixedLowCardRef(lmr77 uint64, mrhp78 []byte) *InEntityAgentrunentryTableSectionU32SetInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder227.Append(lmr227)
-	inst.membershipFieldBuilder228.Append(mrhp228)
-	inst.membershipContainerLength227++
-	inst.membershipContainerLength228++
+	inst.membershipFieldBuilder077.Append(lmr77)
+	inst.membershipFieldBuilder078.Append(mrhp78)
+	inst.membershipContainerLength077++
+	inst.membershipContainerLength078++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr) AddMembershipMixedLowCardRefP(lmr227 uint64, mrhp228 []byte) {
+func (inst *InEntityAgentrunentryTableSectionU32SetInAttr) AddMembershipMixedLowCardRefP(lmr77 uint64, mrhp78 []byte) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder227.Append(lmr227)
-	inst.membershipFieldBuilder228.Append(mrhp228)
-	inst.membershipContainerLength227++
-	inst.membershipContainerLength228++
+	inst.membershipFieldBuilder077.Append(lmr77)
+	inst.membershipFieldBuilder078.Append(mrhp78)
+	inst.membershipContainerLength077++
+	inst.membershipContainerLength078++
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr) handleMembershipSupportColumns() {
+func (inst *InEntityAgentrunentryTableSectionU32SetInAttr) handleMembershipSupportColumns() {
 	var l int
 	var _ = l
-	l = inst.membershipContainerLength224
-	inst.membershipContainerLength224 = 0
-	inst.membershipSupportFieldBuilder229.Append(uint64(l))
-	l = inst.membershipContainerLength225
-	inst.membershipContainerLength225 = 0
-	inst.membershipSupportFieldBuilder230.Append(uint64(l))
-	l = inst.membershipContainerLength226
-	inst.membershipContainerLength226 = 0
-	inst.membershipSupportFieldBuilder231.Append(uint64(l))
-	l = inst.membershipContainerLength227
-	inst.membershipContainerLength227 = 0
-	inst.membershipSupportFieldBuilder232.Append(uint64(l))
+	l = inst.membershipContainerLength075
+	inst.membershipContainerLength075 = 0
+	inst.membershipSupportFieldBuilder080.Append(uint64(l))
+	l = inst.membershipContainerLength076
+	inst.membershipContainerLength076 = 0
+	inst.membershipSupportFieldBuilder081.Append(uint64(l))
+	l = inst.membershipContainerLength077
+	inst.membershipContainerLength077 = 0
+	inst.membershipSupportFieldBuilder082.Append(uint64(l))
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr) handleNonScalarSupportColumns() {
+func (inst *InEntityAgentrunentryTableSectionU32SetInAttr) handleNonScalarSupportColumns() {
 	var l int
 	var _ = l
+	l = inst.setContainerLength074
+	inst.setContainerLength074 = 0
+	inst.setSupportFieldBuilder079.Append(uint64(l))
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr) applyAmbientMemberships() {
+func (inst *InEntityAgentrunentryTableSectionU32SetInAttr) applyAmbientMemberships() {
 	if inst.state != runtime.EntityStateInAttribute {
 		return
 	}
@@ -9532,11 +6160,11 @@ func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr) applyAmbi
 		inst.AddMembershipHighCardRefP(v)
 	}
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr) completeAttribute() {
+func (inst *InEntityAgentrunentryTableSectionU32SetInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr) EndSection() *InEntityAgentrunentryTable {
+func (inst *InEntityAgentrunentryTableSectionU32SetInAttr) EndSection() *InEntityAgentrunentryTable {
 	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
@@ -9552,7 +6180,7 @@ func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr) EndSectio
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr) EndAttribute() *InEntityAgentrunentryTableSectionEntryWriterOrdinal {
+func (inst *InEntityAgentrunentryTableSectionU32SetInAttr) EndAttribute() *InEntityAgentrunentryTableSectionU32Set {
 	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
@@ -9567,40 +6195,40 @@ func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr) EndAttrib
 	inst.parent.endAttribute()
 	return inst.parent
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr) EndAttributeP() {
+func (inst *InEntityAgentrunentryTableSectionU32SetInAttr) EndAttributeP() {
 	inst.EndAttribute()
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr) AppendError(err error) {
+func (inst *InEntityAgentrunentryTableSectionU32SetInAttr) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterOrdinalInAttr) clearErrors() {
+func (inst *InEntityAgentrunentryTableSectionU32SetInAttr) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 
-type InEntityAgentrunentryTableSectionEntryWriterRun struct {
-	errs                  []error
-	inAttr                *InEntityAgentrunentryTableSectionEntryWriterRunInAttr
-	state                 runtime.EntityStateE
-	attributeCount        int
-	parent                *InEntityAgentrunentryTable
-	scalarFieldBuilder203 *array.StringBuilder
-	scalarListBuilder203  *array.ListBuilder
+type InEntityAgentrunentryTableSectionU64Array struct {
+	errs                           []error
+	inAttr                         *InEntityAgentrunentryTableSectionU64ArrayInAttr
+	state                          runtime.EntityStateE
+	attributeCount                 int
+	parent                         *InEntityAgentrunentryTable
+	homogenousArrayFieldBuilder083 *array.Uint64Builder
+	homogenousArrayListBuilder083  *array.ListBuilder
 }
 
-func NewInEntityAgentrunentryTableSectionEntryWriterRun(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionEntryWriterRun) {
-	inst = &InEntityAgentrunentryTableSectionEntryWriterRun{}
-	inAttr := NewInEntityAgentrunentryTableSectionEntryWriterRunInAttr(builder, inst)
+func NewInEntityAgentrunentryTableSectionU64Array(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionU64Array) {
+	inst = &InEntityAgentrunentryTableSectionU64Array{}
+	inAttr := NewInEntityAgentrunentryTableSectionU64ArrayInAttr(builder, inst)
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.inAttr = inAttr
 	inst.parent = parent
-	inst.scalarFieldBuilder203 = builder.Field(203).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder203 = builder.Field(203).(*array.ListBuilder)
+	inst.homogenousArrayFieldBuilder083 = builder.Field(83).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArrayListBuilder083 = builder.Field(83).(*array.ListBuilder)
 
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterRun) endAttribute() {
+func (inst *InEntityAgentrunentryTableSectionU64Array) endAttribute() {
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -9610,7 +6238,7 @@ func (inst *InEntityAgentrunentryTableSectionEntryWriterRun) endAttribute() {
 		return
 	}
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterRun) BeginAttribute(value203 string) *InEntityAgentrunentryTableSectionEntryWriterRunInAttr {
+func (inst *InEntityAgentrunentryTableSectionU64Array) BeginAttribute() *InEntityAgentrunentryTableSectionU64ArrayInAttr {
 	switch inst.state {
 	case runtime.EntityStateInSection:
 		inst.state = runtime.EntityStateInAttribute
@@ -9619,26 +6247,31 @@ func (inst *InEntityAgentrunentryTableSectionEntryWriterRun) BeginAttribute(valu
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst.inAttr
 	}
-	inst.scalarFieldBuilder203.Append(value203)
 	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
 }
-
-type InEntityAgentrunentryTableSectionEntryWriterRunAttr struct {
-	Value string
+func (inst *InEntityAgentrunentryTableSectionU64Array) BeginAttributeSingle(value83 uint64) *InEntityAgentrunentryTableSectionU64ArrayInAttr {
+	return inst.BeginAttribute().AddToContainer(value83)
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryWriterRun) Add(attr InEntityAgentrunentryTableSectionEntryWriterRunAttr) *InEntityAgentrunentryTableSectionEntryWriterRunInAttr {
-	a := inst.BeginAttribute(attr.Value)
+type InEntityAgentrunentryTableSectionU64ArrayAttr struct {
+	Value []uint64
+}
+
+func (inst *InEntityAgentrunentryTableSectionU64Array) Add(attr InEntityAgentrunentryTableSectionU64ArrayAttr) *InEntityAgentrunentryTableSectionU64ArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
 	return a
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterRun) CheckErrors() (err error) {
+func (inst *InEntityAgentrunentryTableSectionU64Array) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterRun) EndSection() *InEntityAgentrunentryTable {
+func (inst *InEntityAgentrunentryTableSectionU64Array) EndSection() *InEntityAgentrunentryTable {
 	switch inst.state {
 	case runtime.EntityStateInSection:
 		inst.state = runtime.EntityStateInitial
@@ -9651,206 +6284,195 @@ func (inst *InEntityAgentrunentryTableSectionEntryWriterRun) EndSection() *InEnt
 	return inst.parent
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryWriterRun) beginSection() {
+func (inst *InEntityAgentrunentryTableSectionU64Array) beginSection() {
 	inst.state = runtime.EntityStateInSection
 	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryWriterRun) resetSection() {
+func (inst *InEntityAgentrunentryTableSectionU64Array) resetSection() {
 	inst.clearErrors()
 	inst.inAttr.clearErrors()
 	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryWriterRun) AppendError(err error) {
+func (inst *InEntityAgentrunentryTableSectionU64Array) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterRun) clearErrors() {
+func (inst *InEntityAgentrunentryTableSectionU64Array) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 
-type InEntityAgentrunentryTableSectionEntryWriterRunInAttr struct {
-	errs                             []error
-	state                            runtime.EntityStateE
-	parent                           *InEntityAgentrunentryTableSectionEntryWriterRun
-	scalarFieldBuilder203            *array.StringBuilder
-	scalarListBuilder203             *array.ListBuilder
-	membershipFieldBuilder204        *array.Uint64Builder
-	membershipListBuilder204         *array.ListBuilder
-	membershipFieldBuilder205        *array.Uint64Builder
-	membershipListBuilder205         *array.ListBuilder
-	membershipFieldBuilder206        *array.BinaryBuilder
-	membershipListBuilder206         *array.ListBuilder
-	membershipFieldBuilder207        *array.Uint64Builder
-	membershipListBuilder207         *array.ListBuilder
-	membershipFieldBuilder208        *array.BinaryBuilder
-	membershipListBuilder208         *array.ListBuilder
-	membershipSupportFieldBuilder209 *array.Uint64Builder
-	membershipSupportListBuilder209  *array.ListBuilder
-	membershipSupportFieldBuilder210 *array.Uint64Builder
-	membershipSupportListBuilder210  *array.ListBuilder
-	membershipSupportFieldBuilder211 *array.Uint64Builder
-	membershipSupportListBuilder211  *array.ListBuilder
-	membershipSupportFieldBuilder212 *array.Uint64Builder
-	membershipSupportListBuilder212  *array.ListBuilder
+type InEntityAgentrunentryTableSectionU64ArrayInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityAgentrunentryTableSectionU64Array
+	homogenousArrayFieldBuilder083        *array.Uint64Builder
+	homogenousArrayListBuilder083         *array.ListBuilder
+	membershipFieldBuilder084             *array.Uint64Builder
+	membershipListBuilder084              *array.ListBuilder
+	membershipFieldBuilder085             *array.Uint64Builder
+	membershipListBuilder085              *array.ListBuilder
+	membershipFieldBuilder086             *array.Uint64Builder
+	membershipListBuilder086              *array.ListBuilder
+	membershipFieldBuilder087             *array.BinaryBuilder
+	membershipListBuilder087              *array.ListBuilder
+	homogenousArraySupportFieldBuilder088 *array.Uint64Builder
+	homogenousArraySupportListBuilder088  *array.ListBuilder
+	membershipSupportFieldBuilder089      *array.Uint64Builder
+	membershipSupportListBuilder089       *array.ListBuilder
+	membershipSupportFieldBuilder090      *array.Uint64Builder
+	membershipSupportListBuilder090       *array.ListBuilder
+	membershipSupportFieldBuilder091      *array.Uint64Builder
+	membershipSupportListBuilder091       *array.ListBuilder
 
-	membershipContainerLength204 int
+	membershipContainerLength084 int
 
-	membershipContainerLength205 int
+	membershipContainerLength085 int
 
-	membershipContainerLength206 int
+	membershipContainerLength086 int
 
-	membershipContainerLength207 int
+	membershipContainerLength087 int
 
-	membershipContainerLength208 int
+	homogenousArrayContainerLength083 int
 }
 
-func NewInEntityAgentrunentryTableSectionEntryWriterRunInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionEntryWriterRun) (inst *InEntityAgentrunentryTableSectionEntryWriterRunInAttr) {
-	inst = &InEntityAgentrunentryTableSectionEntryWriterRunInAttr{}
+func NewInEntityAgentrunentryTableSectionU64ArrayInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionU64Array) (inst *InEntityAgentrunentryTableSectionU64ArrayInAttr) {
+	inst = &InEntityAgentrunentryTableSectionU64ArrayInAttr{}
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.parent = parent
-	inst.scalarFieldBuilder203 = builder.Field(203).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder203 = builder.Field(203).(*array.ListBuilder)
-	inst.membershipFieldBuilder204 = builder.Field(204).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder204 = builder.Field(204).(*array.ListBuilder)
-	inst.membershipFieldBuilder205 = builder.Field(205).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder205 = builder.Field(205).(*array.ListBuilder)
-	inst.membershipFieldBuilder206 = builder.Field(206).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder206 = builder.Field(206).(*array.ListBuilder)
-	inst.membershipFieldBuilder207 = builder.Field(207).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder207 = builder.Field(207).(*array.ListBuilder)
-	inst.membershipFieldBuilder208 = builder.Field(208).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder208 = builder.Field(208).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder209 = builder.Field(209).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder209 = builder.Field(209).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder210 = builder.Field(210).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder210 = builder.Field(210).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder211 = builder.Field(211).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder211 = builder.Field(211).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder212 = builder.Field(212).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder212 = builder.Field(212).(*array.ListBuilder)
+	inst.homogenousArrayFieldBuilder083 = builder.Field(83).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArrayListBuilder083 = builder.Field(83).(*array.ListBuilder)
+	inst.membershipFieldBuilder084 = builder.Field(84).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder084 = builder.Field(84).(*array.ListBuilder)
+	inst.membershipFieldBuilder085 = builder.Field(85).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder085 = builder.Field(85).(*array.ListBuilder)
+	inst.membershipFieldBuilder086 = builder.Field(86).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder086 = builder.Field(86).(*array.ListBuilder)
+	inst.membershipFieldBuilder087 = builder.Field(87).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder087 = builder.Field(87).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder088 = builder.Field(88).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder088 = builder.Field(88).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder089 = builder.Field(89).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder089 = builder.Field(89).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder090 = builder.Field(90).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder090 = builder.Field(90).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder091 = builder.Field(91).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder091 = builder.Field(91).(*array.ListBuilder)
 
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterRunInAttr) beginAttribute() {
-	inst.membershipListBuilder204.Append(true)
-	inst.membershipListBuilder205.Append(true)
-	inst.membershipListBuilder206.Append(true)
-	inst.membershipListBuilder207.Append(true)
-	inst.membershipListBuilder208.Append(true)
-	inst.membershipContainerLength204 = 0
-	inst.membershipContainerLength205 = 0
-	inst.membershipContainerLength206 = 0
-	inst.membershipContainerLength207 = 0
-	inst.membershipContainerLength208 = 0
-	inst.scalarListBuilder203.Append(true)
-	inst.membershipSupportListBuilder209.Append(true)
-	inst.membershipSupportListBuilder210.Append(true)
-	inst.membershipSupportListBuilder211.Append(true)
-	inst.membershipSupportListBuilder212.Append(true)
+func (inst *InEntityAgentrunentryTableSectionU64ArrayInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder083.Append(true)
+	inst.membershipListBuilder084.Append(true)
+	inst.membershipListBuilder085.Append(true)
+	inst.membershipListBuilder086.Append(true)
+	inst.membershipListBuilder087.Append(true)
+	inst.homogenousArrayContainerLength083 = 0
+	inst.membershipContainerLength084 = 0
+	inst.membershipContainerLength085 = 0
+	inst.membershipContainerLength086 = 0
+	inst.membershipContainerLength087 = 0
+	inst.homogenousArraySupportListBuilder088.Append(true)
+	inst.membershipSupportListBuilder089.Append(true)
+	inst.membershipSupportListBuilder090.Append(true)
+	inst.membershipSupportListBuilder091.Append(true)
 	inst.state = runtime.EntityStateInSection
 	inst.clearErrors()
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterRunInAttr) AddMembershipHighCardRef(hr204 uint64) *InEntityAgentrunentryTableSectionEntryWriterRunInAttr {
+func (inst *InEntityAgentrunentryTableSectionU64ArrayInAttr) AddToContainer(value83 uint64) *InEntityAgentrunentryTableSectionU64ArrayInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder204.Append(hr204)
-	inst.membershipContainerLength204++
+	inst.homogenousArrayFieldBuilder083.Append(value83)
+	inst.homogenousArrayContainerLength083++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterRunInAttr) AddMembershipHighCardRefP(hr204 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder204.Append(hr204)
-	inst.membershipContainerLength204++
-	return
+func (inst *InEntityAgentrunentryTableSectionU64ArrayInAttr) AddToContainerP(value83 uint64) {
+	inst.AddToContainer(value83)
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterRunInAttr) AddMembershipLowCardRef(lr205 uint64) *InEntityAgentrunentryTableSectionEntryWriterRunInAttr {
+func (inst *InEntityAgentrunentryTableSectionU64ArrayInAttr) AddMembershipHighCardRef(hr84 uint64) *InEntityAgentrunentryTableSectionU64ArrayInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder205.Append(lr205)
-	inst.membershipContainerLength205++
+	inst.membershipFieldBuilder084.Append(hr84)
+	inst.membershipContainerLength084++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterRunInAttr) AddMembershipLowCardRefP(lr205 uint64) {
+func (inst *InEntityAgentrunentryTableSectionU64ArrayInAttr) AddMembershipHighCardRefP(hr84 uint64) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder205.Append(lr205)
-	inst.membershipContainerLength205++
+	inst.membershipFieldBuilder084.Append(hr84)
+	inst.membershipContainerLength084++
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterRunInAttr) AddMembershipLowCardVerbatim(lv206 []byte) *InEntityAgentrunentryTableSectionEntryWriterRunInAttr {
+func (inst *InEntityAgentrunentryTableSectionU64ArrayInAttr) AddMembershipLowCardRef(lr85 uint64) *InEntityAgentrunentryTableSectionU64ArrayInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder206.Append(lv206)
-	inst.membershipContainerLength206++
+	inst.membershipFieldBuilder085.Append(lr85)
+	inst.membershipContainerLength085++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterRunInAttr) AddMembershipLowCardVerbatimP(lv206 []byte) {
+func (inst *InEntityAgentrunentryTableSectionU64ArrayInAttr) AddMembershipLowCardRefP(lr85 uint64) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder206.Append(lv206)
-	inst.membershipContainerLength206++
+	inst.membershipFieldBuilder085.Append(lr85)
+	inst.membershipContainerLength085++
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterRunInAttr) AddMembershipMixedLowCardRef(lmr207 uint64, mrhp208 []byte) *InEntityAgentrunentryTableSectionEntryWriterRunInAttr {
+func (inst *InEntityAgentrunentryTableSectionU64ArrayInAttr) AddMembershipMixedLowCardRef(lmr86 uint64, mrhp87 []byte) *InEntityAgentrunentryTableSectionU64ArrayInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder207.Append(lmr207)
-	inst.membershipFieldBuilder208.Append(mrhp208)
-	inst.membershipContainerLength207++
-	inst.membershipContainerLength208++
+	inst.membershipFieldBuilder086.Append(lmr86)
+	inst.membershipFieldBuilder087.Append(mrhp87)
+	inst.membershipContainerLength086++
+	inst.membershipContainerLength087++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterRunInAttr) AddMembershipMixedLowCardRefP(lmr207 uint64, mrhp208 []byte) {
+func (inst *InEntityAgentrunentryTableSectionU64ArrayInAttr) AddMembershipMixedLowCardRefP(lmr86 uint64, mrhp87 []byte) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder207.Append(lmr207)
-	inst.membershipFieldBuilder208.Append(mrhp208)
-	inst.membershipContainerLength207++
-	inst.membershipContainerLength208++
+	inst.membershipFieldBuilder086.Append(lmr86)
+	inst.membershipFieldBuilder087.Append(mrhp87)
+	inst.membershipContainerLength086++
+	inst.membershipContainerLength087++
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterRunInAttr) handleMembershipSupportColumns() {
+func (inst *InEntityAgentrunentryTableSectionU64ArrayInAttr) handleMembershipSupportColumns() {
 	var l int
 	var _ = l
-	l = inst.membershipContainerLength204
-	inst.membershipContainerLength204 = 0
-	inst.membershipSupportFieldBuilder209.Append(uint64(l))
-	l = inst.membershipContainerLength205
-	inst.membershipContainerLength205 = 0
-	inst.membershipSupportFieldBuilder210.Append(uint64(l))
-	l = inst.membershipContainerLength206
-	inst.membershipContainerLength206 = 0
-	inst.membershipSupportFieldBuilder211.Append(uint64(l))
-	l = inst.membershipContainerLength207
-	inst.membershipContainerLength207 = 0
-	inst.membershipSupportFieldBuilder212.Append(uint64(l))
+	l = inst.membershipContainerLength084
+	inst.membershipContainerLength084 = 0
+	inst.membershipSupportFieldBuilder089.Append(uint64(l))
+	l = inst.membershipContainerLength085
+	inst.membershipContainerLength085 = 0
+	inst.membershipSupportFieldBuilder090.Append(uint64(l))
+	l = inst.membershipContainerLength086
+	inst.membershipContainerLength086 = 0
+	inst.membershipSupportFieldBuilder091.Append(uint64(l))
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterRunInAttr) handleNonScalarSupportColumns() {
+func (inst *InEntityAgentrunentryTableSectionU64ArrayInAttr) handleNonScalarSupportColumns() {
 	var l int
 	var _ = l
+	l = inst.homogenousArrayContainerLength083
+	inst.homogenousArrayContainerLength083 = 0
+	inst.homogenousArraySupportFieldBuilder088.Append(uint64(l))
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterRunInAttr) applyAmbientMemberships() {
+func (inst *InEntityAgentrunentryTableSectionU64ArrayInAttr) applyAmbientMemberships() {
 	if inst.state != runtime.EntityStateInAttribute {
 		return
 	}
@@ -9858,11 +6480,11 @@ func (inst *InEntityAgentrunentryTableSectionEntryWriterRunInAttr) applyAmbientM
 		inst.AddMembershipHighCardRefP(v)
 	}
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterRunInAttr) completeAttribute() {
+func (inst *InEntityAgentrunentryTableSectionU64ArrayInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterRunInAttr) EndSection() *InEntityAgentrunentryTable {
+func (inst *InEntityAgentrunentryTableSectionU64ArrayInAttr) EndSection() *InEntityAgentrunentryTable {
 	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
@@ -9878,7 +6500,7 @@ func (inst *InEntityAgentrunentryTableSectionEntryWriterRunInAttr) EndSection() 
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterRunInAttr) EndAttribute() *InEntityAgentrunentryTableSectionEntryWriterRun {
+func (inst *InEntityAgentrunentryTableSectionU64ArrayInAttr) EndAttribute() *InEntityAgentrunentryTableSectionU64Array {
 	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
@@ -9893,40 +6515,40 @@ func (inst *InEntityAgentrunentryTableSectionEntryWriterRunInAttr) EndAttribute(
 	inst.parent.endAttribute()
 	return inst.parent
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterRunInAttr) EndAttributeP() {
+func (inst *InEntityAgentrunentryTableSectionU64ArrayInAttr) EndAttributeP() {
 	inst.EndAttribute()
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryWriterRunInAttr) AppendError(err error) {
+func (inst *InEntityAgentrunentryTableSectionU64ArrayInAttr) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterRunInAttr) clearErrors() {
+func (inst *InEntityAgentrunentryTableSectionU64ArrayInAttr) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 
-type InEntityAgentrunentryTableSectionEntryWriterTurn struct {
-	errs                  []error
-	inAttr                *InEntityAgentrunentryTableSectionEntryWriterTurnInAttr
-	state                 runtime.EntityStateE
-	attributeCount        int
-	parent                *InEntityAgentrunentryTable
-	scalarFieldBuilder213 *array.StringBuilder
-	scalarListBuilder213  *array.ListBuilder
+type InEntityAgentrunentryTableSectionU64Set struct {
+	errs               []error
+	inAttr             *InEntityAgentrunentryTableSectionU64SetInAttr
+	state              runtime.EntityStateE
+	attributeCount     int
+	parent             *InEntityAgentrunentryTable
+	setFieldBuilder092 *array.Uint64Builder
+	setListBuilder092  *array.ListBuilder
 }
 
-func NewInEntityAgentrunentryTableSectionEntryWriterTurn(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionEntryWriterTurn) {
-	inst = &InEntityAgentrunentryTableSectionEntryWriterTurn{}
-	inAttr := NewInEntityAgentrunentryTableSectionEntryWriterTurnInAttr(builder, inst)
+func NewInEntityAgentrunentryTableSectionU64Set(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionU64Set) {
+	inst = &InEntityAgentrunentryTableSectionU64Set{}
+	inAttr := NewInEntityAgentrunentryTableSectionU64SetInAttr(builder, inst)
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.inAttr = inAttr
 	inst.parent = parent
-	inst.scalarFieldBuilder213 = builder.Field(213).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder213 = builder.Field(213).(*array.ListBuilder)
+	inst.setFieldBuilder092 = builder.Field(92).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.setListBuilder092 = builder.Field(92).(*array.ListBuilder)
 
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterTurn) endAttribute() {
+func (inst *InEntityAgentrunentryTableSectionU64Set) endAttribute() {
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
 		inst.state = runtime.EntityStateInSection
@@ -9936,7 +6558,7 @@ func (inst *InEntityAgentrunentryTableSectionEntryWriterTurn) endAttribute() {
 		return
 	}
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterTurn) BeginAttribute(value213 string) *InEntityAgentrunentryTableSectionEntryWriterTurnInAttr {
+func (inst *InEntityAgentrunentryTableSectionU64Set) BeginAttribute() *InEntityAgentrunentryTableSectionU64SetInAttr {
 	switch inst.state {
 	case runtime.EntityStateInSection:
 		inst.state = runtime.EntityStateInAttribute
@@ -9945,26 +6567,31 @@ func (inst *InEntityAgentrunentryTableSectionEntryWriterTurn) BeginAttribute(val
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst.inAttr
 	}
-	inst.scalarFieldBuilder213.Append(value213)
 	inst.attributeCount++
 
 	inst.inAttr.state = inst.state
 	return inst.inAttr
 }
-
-type InEntityAgentrunentryTableSectionEntryWriterTurnAttr struct {
-	Value string
+func (inst *InEntityAgentrunentryTableSectionU64Set) BeginAttributeSingle(value92 uint64) *InEntityAgentrunentryTableSectionU64SetInAttr {
+	return inst.BeginAttribute().AddToContainer(value92)
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryWriterTurn) Add(attr InEntityAgentrunentryTableSectionEntryWriterTurnAttr) *InEntityAgentrunentryTableSectionEntryWriterTurnInAttr {
-	a := inst.BeginAttribute(attr.Value)
+type InEntityAgentrunentryTableSectionU64SetAttr struct {
+	Value []uint64
+}
+
+func (inst *InEntityAgentrunentryTableSectionU64Set) Add(attr InEntityAgentrunentryTableSectionU64SetAttr) *InEntityAgentrunentryTableSectionU64SetInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
 	return a
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterTurn) CheckErrors() (err error) {
+func (inst *InEntityAgentrunentryTableSectionU64Set) CheckErrors() (err error) {
 	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterTurn) EndSection() *InEntityAgentrunentryTable {
+func (inst *InEntityAgentrunentryTableSectionU64Set) EndSection() *InEntityAgentrunentryTable {
 	switch inst.state {
 	case runtime.EntityStateInSection:
 		inst.state = runtime.EntityStateInitial
@@ -9977,206 +6604,195 @@ func (inst *InEntityAgentrunentryTableSectionEntryWriterTurn) EndSection() *InEn
 	return inst.parent
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryWriterTurn) beginSection() {
+func (inst *InEntityAgentrunentryTableSectionU64Set) beginSection() {
 	inst.state = runtime.EntityStateInSection
 	inst.attributeCount = 0
 	inst.inAttr.beginAttribute()
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryWriterTurn) resetSection() {
+func (inst *InEntityAgentrunentryTableSectionU64Set) resetSection() {
 	inst.clearErrors()
 	inst.inAttr.clearErrors()
 	inst.attributeCount = 0
 	inst.state = runtime.EntityStateInitial
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryWriterTurn) AppendError(err error) {
+func (inst *InEntityAgentrunentryTableSectionU64Set) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterTurn) clearErrors() {
+func (inst *InEntityAgentrunentryTableSectionU64Set) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }
 
-type InEntityAgentrunentryTableSectionEntryWriterTurnInAttr struct {
+type InEntityAgentrunentryTableSectionU64SetInAttr struct {
 	errs                             []error
 	state                            runtime.EntityStateE
-	parent                           *InEntityAgentrunentryTableSectionEntryWriterTurn
-	scalarFieldBuilder213            *array.StringBuilder
-	scalarListBuilder213             *array.ListBuilder
-	membershipFieldBuilder214        *array.Uint64Builder
-	membershipListBuilder214         *array.ListBuilder
-	membershipFieldBuilder215        *array.Uint64Builder
-	membershipListBuilder215         *array.ListBuilder
-	membershipFieldBuilder216        *array.BinaryBuilder
-	membershipListBuilder216         *array.ListBuilder
-	membershipFieldBuilder217        *array.Uint64Builder
-	membershipListBuilder217         *array.ListBuilder
-	membershipFieldBuilder218        *array.BinaryBuilder
-	membershipListBuilder218         *array.ListBuilder
-	membershipSupportFieldBuilder219 *array.Uint64Builder
-	membershipSupportListBuilder219  *array.ListBuilder
-	membershipSupportFieldBuilder220 *array.Uint64Builder
-	membershipSupportListBuilder220  *array.ListBuilder
-	membershipSupportFieldBuilder221 *array.Uint64Builder
-	membershipSupportListBuilder221  *array.ListBuilder
-	membershipSupportFieldBuilder222 *array.Uint64Builder
-	membershipSupportListBuilder222  *array.ListBuilder
+	parent                           *InEntityAgentrunentryTableSectionU64Set
+	setFieldBuilder092               *array.Uint64Builder
+	setListBuilder092                *array.ListBuilder
+	membershipFieldBuilder093        *array.Uint64Builder
+	membershipListBuilder093         *array.ListBuilder
+	membershipFieldBuilder094        *array.Uint64Builder
+	membershipListBuilder094         *array.ListBuilder
+	membershipFieldBuilder095        *array.Uint64Builder
+	membershipListBuilder095         *array.ListBuilder
+	membershipFieldBuilder096        *array.BinaryBuilder
+	membershipListBuilder096         *array.ListBuilder
+	setSupportFieldBuilder097        *array.Uint64Builder
+	setSupportListBuilder097         *array.ListBuilder
+	membershipSupportFieldBuilder098 *array.Uint64Builder
+	membershipSupportListBuilder098  *array.ListBuilder
+	membershipSupportFieldBuilder099 *array.Uint64Builder
+	membershipSupportListBuilder099  *array.ListBuilder
+	membershipSupportFieldBuilder100 *array.Uint64Builder
+	membershipSupportListBuilder100  *array.ListBuilder
 
-	membershipContainerLength214 int
+	membershipContainerLength093 int
 
-	membershipContainerLength215 int
+	membershipContainerLength094 int
 
-	membershipContainerLength216 int
+	membershipContainerLength095 int
 
-	membershipContainerLength217 int
+	membershipContainerLength096 int
 
-	membershipContainerLength218 int
+	setContainerLength092 int
 }
 
-func NewInEntityAgentrunentryTableSectionEntryWriterTurnInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionEntryWriterTurn) (inst *InEntityAgentrunentryTableSectionEntryWriterTurnInAttr) {
-	inst = &InEntityAgentrunentryTableSectionEntryWriterTurnInAttr{}
+func NewInEntityAgentrunentryTableSectionU64SetInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionU64Set) (inst *InEntityAgentrunentryTableSectionU64SetInAttr) {
+	inst = &InEntityAgentrunentryTableSectionU64SetInAttr{}
 	inst.errs = make([]error, 0, 8)
 	inst.state = runtime.EntityStateInitial
 	inst.parent = parent
-	inst.scalarFieldBuilder213 = builder.Field(213).(*array.ListBuilder).ValueBuilder().(*array.StringBuilder)
-	inst.scalarListBuilder213 = builder.Field(213).(*array.ListBuilder)
-	inst.membershipFieldBuilder214 = builder.Field(214).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder214 = builder.Field(214).(*array.ListBuilder)
-	inst.membershipFieldBuilder215 = builder.Field(215).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder215 = builder.Field(215).(*array.ListBuilder)
-	inst.membershipFieldBuilder216 = builder.Field(216).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder216 = builder.Field(216).(*array.ListBuilder)
-	inst.membershipFieldBuilder217 = builder.Field(217).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipListBuilder217 = builder.Field(217).(*array.ListBuilder)
-	inst.membershipFieldBuilder218 = builder.Field(218).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
-	inst.membershipListBuilder218 = builder.Field(218).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder219 = builder.Field(219).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder219 = builder.Field(219).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder220 = builder.Field(220).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder220 = builder.Field(220).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder221 = builder.Field(221).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder221 = builder.Field(221).(*array.ListBuilder)
-	inst.membershipSupportFieldBuilder222 = builder.Field(222).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
-	inst.membershipSupportListBuilder222 = builder.Field(222).(*array.ListBuilder)
+	inst.setFieldBuilder092 = builder.Field(92).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.setListBuilder092 = builder.Field(92).(*array.ListBuilder)
+	inst.membershipFieldBuilder093 = builder.Field(93).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder093 = builder.Field(93).(*array.ListBuilder)
+	inst.membershipFieldBuilder094 = builder.Field(94).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder094 = builder.Field(94).(*array.ListBuilder)
+	inst.membershipFieldBuilder095 = builder.Field(95).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder095 = builder.Field(95).(*array.ListBuilder)
+	inst.membershipFieldBuilder096 = builder.Field(96).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder096 = builder.Field(96).(*array.ListBuilder)
+	inst.setSupportFieldBuilder097 = builder.Field(97).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.setSupportListBuilder097 = builder.Field(97).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder098 = builder.Field(98).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder098 = builder.Field(98).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder099 = builder.Field(99).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder099 = builder.Field(99).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder100 = builder.Field(100).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder100 = builder.Field(100).(*array.ListBuilder)
 
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterTurnInAttr) beginAttribute() {
-	inst.membershipListBuilder214.Append(true)
-	inst.membershipListBuilder215.Append(true)
-	inst.membershipListBuilder216.Append(true)
-	inst.membershipListBuilder217.Append(true)
-	inst.membershipListBuilder218.Append(true)
-	inst.membershipContainerLength214 = 0
-	inst.membershipContainerLength215 = 0
-	inst.membershipContainerLength216 = 0
-	inst.membershipContainerLength217 = 0
-	inst.membershipContainerLength218 = 0
-	inst.scalarListBuilder213.Append(true)
-	inst.membershipSupportListBuilder219.Append(true)
-	inst.membershipSupportListBuilder220.Append(true)
-	inst.membershipSupportListBuilder221.Append(true)
-	inst.membershipSupportListBuilder222.Append(true)
+func (inst *InEntityAgentrunentryTableSectionU64SetInAttr) beginAttribute() {
+	inst.setListBuilder092.Append(true)
+	inst.membershipListBuilder093.Append(true)
+	inst.membershipListBuilder094.Append(true)
+	inst.membershipListBuilder095.Append(true)
+	inst.membershipListBuilder096.Append(true)
+	inst.setContainerLength092 = 0
+	inst.membershipContainerLength093 = 0
+	inst.membershipContainerLength094 = 0
+	inst.membershipContainerLength095 = 0
+	inst.membershipContainerLength096 = 0
+	inst.setSupportListBuilder097.Append(true)
+	inst.membershipSupportListBuilder098.Append(true)
+	inst.membershipSupportListBuilder099.Append(true)
+	inst.membershipSupportListBuilder100.Append(true)
 	inst.state = runtime.EntityStateInSection
 	inst.clearErrors()
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterTurnInAttr) AddMembershipHighCardRef(hr214 uint64) *InEntityAgentrunentryTableSectionEntryWriterTurnInAttr {
+func (inst *InEntityAgentrunentryTableSectionU64SetInAttr) AddToContainer(value92 uint64) *InEntityAgentrunentryTableSectionU64SetInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder214.Append(hr214)
-	inst.membershipContainerLength214++
+	inst.setFieldBuilder092.Append(value92)
+	inst.setContainerLength092++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterTurnInAttr) AddMembershipHighCardRefP(hr214 uint64) {
-	if inst.state != runtime.EntityStateInAttribute {
-		inst.AppendError(runtime.ErrInvalidStateTransition)
-		return
-	}
-	inst.membershipFieldBuilder214.Append(hr214)
-	inst.membershipContainerLength214++
-	return
+func (inst *InEntityAgentrunentryTableSectionU64SetInAttr) AddToContainerP(value92 uint64) {
+	inst.AddToContainer(value92)
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterTurnInAttr) AddMembershipLowCardRef(lr215 uint64) *InEntityAgentrunentryTableSectionEntryWriterTurnInAttr {
+func (inst *InEntityAgentrunentryTableSectionU64SetInAttr) AddMembershipHighCardRef(hr93 uint64) *InEntityAgentrunentryTableSectionU64SetInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder215.Append(lr215)
-	inst.membershipContainerLength215++
+	inst.membershipFieldBuilder093.Append(hr93)
+	inst.membershipContainerLength093++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterTurnInAttr) AddMembershipLowCardRefP(lr215 uint64) {
+func (inst *InEntityAgentrunentryTableSectionU64SetInAttr) AddMembershipHighCardRefP(hr93 uint64) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder215.Append(lr215)
-	inst.membershipContainerLength215++
+	inst.membershipFieldBuilder093.Append(hr93)
+	inst.membershipContainerLength093++
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterTurnInAttr) AddMembershipLowCardVerbatim(lv216 []byte) *InEntityAgentrunentryTableSectionEntryWriterTurnInAttr {
+func (inst *InEntityAgentrunentryTableSectionU64SetInAttr) AddMembershipLowCardRef(lr94 uint64) *InEntityAgentrunentryTableSectionU64SetInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder216.Append(lv216)
-	inst.membershipContainerLength216++
+	inst.membershipFieldBuilder094.Append(lr94)
+	inst.membershipContainerLength094++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterTurnInAttr) AddMembershipLowCardVerbatimP(lv216 []byte) {
+func (inst *InEntityAgentrunentryTableSectionU64SetInAttr) AddMembershipLowCardRefP(lr94 uint64) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder216.Append(lv216)
-	inst.membershipContainerLength216++
+	inst.membershipFieldBuilder094.Append(lr94)
+	inst.membershipContainerLength094++
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterTurnInAttr) AddMembershipMixedLowCardRef(lmr217 uint64, mrhp218 []byte) *InEntityAgentrunentryTableSectionEntryWriterTurnInAttr {
+func (inst *InEntityAgentrunentryTableSectionU64SetInAttr) AddMembershipMixedLowCardRef(lmr95 uint64, mrhp96 []byte) *InEntityAgentrunentryTableSectionU64SetInAttr {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
 	}
-	inst.membershipFieldBuilder217.Append(lmr217)
-	inst.membershipFieldBuilder218.Append(mrhp218)
-	inst.membershipContainerLength217++
-	inst.membershipContainerLength218++
+	inst.membershipFieldBuilder095.Append(lmr95)
+	inst.membershipFieldBuilder096.Append(mrhp96)
+	inst.membershipContainerLength095++
+	inst.membershipContainerLength096++
 	return inst
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterTurnInAttr) AddMembershipMixedLowCardRefP(lmr217 uint64, mrhp218 []byte) {
+func (inst *InEntityAgentrunentryTableSectionU64SetInAttr) AddMembershipMixedLowCardRefP(lmr95 uint64, mrhp96 []byte) {
 	if inst.state != runtime.EntityStateInAttribute {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return
 	}
-	inst.membershipFieldBuilder217.Append(lmr217)
-	inst.membershipFieldBuilder218.Append(mrhp218)
-	inst.membershipContainerLength217++
-	inst.membershipContainerLength218++
+	inst.membershipFieldBuilder095.Append(lmr95)
+	inst.membershipFieldBuilder096.Append(mrhp96)
+	inst.membershipContainerLength095++
+	inst.membershipContainerLength096++
 	return
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterTurnInAttr) handleMembershipSupportColumns() {
+func (inst *InEntityAgentrunentryTableSectionU64SetInAttr) handleMembershipSupportColumns() {
 	var l int
 	var _ = l
-	l = inst.membershipContainerLength214
-	inst.membershipContainerLength214 = 0
-	inst.membershipSupportFieldBuilder219.Append(uint64(l))
-	l = inst.membershipContainerLength215
-	inst.membershipContainerLength215 = 0
-	inst.membershipSupportFieldBuilder220.Append(uint64(l))
-	l = inst.membershipContainerLength216
-	inst.membershipContainerLength216 = 0
-	inst.membershipSupportFieldBuilder221.Append(uint64(l))
-	l = inst.membershipContainerLength217
-	inst.membershipContainerLength217 = 0
-	inst.membershipSupportFieldBuilder222.Append(uint64(l))
+	l = inst.membershipContainerLength093
+	inst.membershipContainerLength093 = 0
+	inst.membershipSupportFieldBuilder098.Append(uint64(l))
+	l = inst.membershipContainerLength094
+	inst.membershipContainerLength094 = 0
+	inst.membershipSupportFieldBuilder099.Append(uint64(l))
+	l = inst.membershipContainerLength095
+	inst.membershipContainerLength095 = 0
+	inst.membershipSupportFieldBuilder100.Append(uint64(l))
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterTurnInAttr) handleNonScalarSupportColumns() {
+func (inst *InEntityAgentrunentryTableSectionU64SetInAttr) handleNonScalarSupportColumns() {
 	var l int
 	var _ = l
+	l = inst.setContainerLength092
+	inst.setContainerLength092 = 0
+	inst.setSupportFieldBuilder097.Append(uint64(l))
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterTurnInAttr) applyAmbientMemberships() {
+func (inst *InEntityAgentrunentryTableSectionU64SetInAttr) applyAmbientMemberships() {
 	if inst.state != runtime.EntityStateInAttribute {
 		return
 	}
@@ -10184,11 +6800,11 @@ func (inst *InEntityAgentrunentryTableSectionEntryWriterTurnInAttr) applyAmbient
 		inst.AddMembershipHighCardRefP(v)
 	}
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterTurnInAttr) completeAttribute() {
+func (inst *InEntityAgentrunentryTableSectionU64SetInAttr) completeAttribute() {
 	inst.handleMembershipSupportColumns()
 	inst.handleNonScalarSupportColumns()
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterTurnInAttr) EndSection() *InEntityAgentrunentryTable {
+func (inst *InEntityAgentrunentryTableSectionU64SetInAttr) EndSection() *InEntityAgentrunentryTable {
 	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
@@ -10204,7 +6820,7 @@ func (inst *InEntityAgentrunentryTableSectionEntryWriterTurnInAttr) EndSection()
 	inst.parent.EndSection()
 	return inst.parent.parent
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterTurnInAttr) EndAttribute() *InEntityAgentrunentryTableSectionEntryWriterTurn {
+func (inst *InEntityAgentrunentryTableSectionU64SetInAttr) EndAttribute() *InEntityAgentrunentryTableSectionU64Set {
 	inst.applyAmbientMemberships()
 	switch inst.state {
 	case runtime.EntityStateInAttribute:
@@ -10219,13 +6835,333 @@ func (inst *InEntityAgentrunentryTableSectionEntryWriterTurnInAttr) EndAttribute
 	inst.parent.endAttribute()
 	return inst.parent
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterTurnInAttr) EndAttributeP() {
+func (inst *InEntityAgentrunentryTableSectionU64SetInAttr) EndAttributeP() {
 	inst.EndAttribute()
 }
 
-func (inst *InEntityAgentrunentryTableSectionEntryWriterTurnInAttr) AppendError(err error) {
+func (inst *InEntityAgentrunentryTableSectionU64SetInAttr) AppendError(err error) {
 	inst.errs = eh.AppendError(inst.errs, err)
 }
-func (inst *InEntityAgentrunentryTableSectionEntryWriterTurnInAttr) clearErrors() {
+func (inst *InEntityAgentrunentryTableSectionU64SetInAttr) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityAgentrunentryTableSectionU8Array struct {
+	errs                           []error
+	inAttr                         *InEntityAgentrunentryTableSectionU8ArrayInAttr
+	state                          runtime.EntityStateE
+	attributeCount                 int
+	parent                         *InEntityAgentrunentryTable
+	homogenousArrayFieldBuilder047 *array.Uint8Builder
+	homogenousArrayListBuilder047  *array.ListBuilder
+}
+
+func NewInEntityAgentrunentryTableSectionU8Array(builder *array.RecordBuilder, parent *InEntityAgentrunentryTable) (inst *InEntityAgentrunentryTableSectionU8Array) {
+	inst = &InEntityAgentrunentryTableSectionU8Array{}
+	inAttr := NewInEntityAgentrunentryTableSectionU8ArrayInAttr(builder, inst)
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.inAttr = inAttr
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder047 = builder.Field(47).(*array.ListBuilder).ValueBuilder().(*array.Uint8Builder)
+	inst.homogenousArrayListBuilder047 = builder.Field(47).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionU8Array) endAttribute() {
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+}
+func (inst *InEntityAgentrunentryTableSectionU8Array) BeginAttribute() *InEntityAgentrunentryTableSectionU8ArrayInAttr {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInAttribute
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.inAttr
+	}
+	inst.attributeCount++
+
+	inst.inAttr.state = inst.state
+	return inst.inAttr
+}
+func (inst *InEntityAgentrunentryTableSectionU8Array) BeginAttributeSingle(value47 uint8) *InEntityAgentrunentryTableSectionU8ArrayInAttr {
+	return inst.BeginAttribute().AddToContainer(value47)
+}
+
+type InEntityAgentrunentryTableSectionU8ArrayAttr struct {
+	Value []uint8
+}
+
+func (inst *InEntityAgentrunentryTableSectionU8Array) Add(attr InEntityAgentrunentryTableSectionU8ArrayAttr) *InEntityAgentrunentryTableSectionU8ArrayInAttr {
+	a := inst.BeginAttribute()
+	for i := range attr.Value {
+		a.AddToContainerP(attr.Value[i])
+	}
+	return a
+}
+func (inst *InEntityAgentrunentryTableSectionU8Array) CheckErrors() (err error) {
+	err = eh.CheckErrors(slices.Concat(inst.errs, inst.inAttr.errs))
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionU8Array) EndSection() *InEntityAgentrunentryTable {
+	switch inst.state {
+	case runtime.EntityStateInSection:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	return inst.parent
+}
+
+func (inst *InEntityAgentrunentryTableSectionU8Array) beginSection() {
+	inst.state = runtime.EntityStateInSection
+	inst.attributeCount = 0
+	inst.inAttr.beginAttribute()
+}
+
+func (inst *InEntityAgentrunentryTableSectionU8Array) resetSection() {
+	inst.clearErrors()
+	inst.inAttr.clearErrors()
+	inst.attributeCount = 0
+	inst.state = runtime.EntityStateInitial
+}
+
+func (inst *InEntityAgentrunentryTableSectionU8Array) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityAgentrunentryTableSectionU8Array) clearErrors() {
+	inst.errs = eh.ClearErrors(inst.errs)
+}
+
+type InEntityAgentrunentryTableSectionU8ArrayInAttr struct {
+	errs                                  []error
+	state                                 runtime.EntityStateE
+	parent                                *InEntityAgentrunentryTableSectionU8Array
+	homogenousArrayFieldBuilder047        *array.Uint8Builder
+	homogenousArrayListBuilder047         *array.ListBuilder
+	membershipFieldBuilder048             *array.Uint64Builder
+	membershipListBuilder048              *array.ListBuilder
+	membershipFieldBuilder049             *array.Uint64Builder
+	membershipListBuilder049              *array.ListBuilder
+	membershipFieldBuilder050             *array.Uint64Builder
+	membershipListBuilder050              *array.ListBuilder
+	membershipFieldBuilder051             *array.BinaryBuilder
+	membershipListBuilder051              *array.ListBuilder
+	homogenousArraySupportFieldBuilder052 *array.Uint64Builder
+	homogenousArraySupportListBuilder052  *array.ListBuilder
+	membershipSupportFieldBuilder053      *array.Uint64Builder
+	membershipSupportListBuilder053       *array.ListBuilder
+	membershipSupportFieldBuilder054      *array.Uint64Builder
+	membershipSupportListBuilder054       *array.ListBuilder
+	membershipSupportFieldBuilder055      *array.Uint64Builder
+	membershipSupportListBuilder055       *array.ListBuilder
+
+	membershipContainerLength048 int
+
+	membershipContainerLength049 int
+
+	membershipContainerLength050 int
+
+	membershipContainerLength051 int
+
+	homogenousArrayContainerLength047 int
+}
+
+func NewInEntityAgentrunentryTableSectionU8ArrayInAttr(builder *array.RecordBuilder, parent *InEntityAgentrunentryTableSectionU8Array) (inst *InEntityAgentrunentryTableSectionU8ArrayInAttr) {
+	inst = &InEntityAgentrunentryTableSectionU8ArrayInAttr{}
+	inst.errs = make([]error, 0, 8)
+	inst.state = runtime.EntityStateInitial
+	inst.parent = parent
+	inst.homogenousArrayFieldBuilder047 = builder.Field(47).(*array.ListBuilder).ValueBuilder().(*array.Uint8Builder)
+	inst.homogenousArrayListBuilder047 = builder.Field(47).(*array.ListBuilder)
+	inst.membershipFieldBuilder048 = builder.Field(48).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder048 = builder.Field(48).(*array.ListBuilder)
+	inst.membershipFieldBuilder049 = builder.Field(49).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder049 = builder.Field(49).(*array.ListBuilder)
+	inst.membershipFieldBuilder050 = builder.Field(50).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipListBuilder050 = builder.Field(50).(*array.ListBuilder)
+	inst.membershipFieldBuilder051 = builder.Field(51).(*array.ListBuilder).ValueBuilder().(*array.BinaryBuilder)
+	inst.membershipListBuilder051 = builder.Field(51).(*array.ListBuilder)
+	inst.homogenousArraySupportFieldBuilder052 = builder.Field(52).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.homogenousArraySupportListBuilder052 = builder.Field(52).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder053 = builder.Field(53).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder053 = builder.Field(53).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder054 = builder.Field(54).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder054 = builder.Field(54).(*array.ListBuilder)
+	inst.membershipSupportFieldBuilder055 = builder.Field(55).(*array.ListBuilder).ValueBuilder().(*array.Uint64Builder)
+	inst.membershipSupportListBuilder055 = builder.Field(55).(*array.ListBuilder)
+
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionU8ArrayInAttr) beginAttribute() {
+	inst.homogenousArrayListBuilder047.Append(true)
+	inst.membershipListBuilder048.Append(true)
+	inst.membershipListBuilder049.Append(true)
+	inst.membershipListBuilder050.Append(true)
+	inst.membershipListBuilder051.Append(true)
+	inst.homogenousArrayContainerLength047 = 0
+	inst.membershipContainerLength048 = 0
+	inst.membershipContainerLength049 = 0
+	inst.membershipContainerLength050 = 0
+	inst.membershipContainerLength051 = 0
+	inst.homogenousArraySupportListBuilder052.Append(true)
+	inst.membershipSupportListBuilder053.Append(true)
+	inst.membershipSupportListBuilder054.Append(true)
+	inst.membershipSupportListBuilder055.Append(true)
+	inst.state = runtime.EntityStateInSection
+	inst.clearErrors()
+}
+func (inst *InEntityAgentrunentryTableSectionU8ArrayInAttr) AddToContainer(value47 uint8) *InEntityAgentrunentryTableSectionU8ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.homogenousArrayFieldBuilder047.Append(value47)
+	inst.homogenousArrayContainerLength047++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionU8ArrayInAttr) AddToContainerP(value47 uint8) {
+	inst.AddToContainer(value47)
+}
+func (inst *InEntityAgentrunentryTableSectionU8ArrayInAttr) AddMembershipHighCardRef(hr48 uint64) *InEntityAgentrunentryTableSectionU8ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder048.Append(hr48)
+	inst.membershipContainerLength048++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionU8ArrayInAttr) AddMembershipHighCardRefP(hr48 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder048.Append(hr48)
+	inst.membershipContainerLength048++
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionU8ArrayInAttr) AddMembershipLowCardRef(lr49 uint64) *InEntityAgentrunentryTableSectionU8ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder049.Append(lr49)
+	inst.membershipContainerLength049++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionU8ArrayInAttr) AddMembershipLowCardRefP(lr49 uint64) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder049.Append(lr49)
+	inst.membershipContainerLength049++
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionU8ArrayInAttr) AddMembershipMixedLowCardRef(lmr50 uint64, mrhp51 []byte) *InEntityAgentrunentryTableSectionU8ArrayInAttr {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst
+	}
+	inst.membershipFieldBuilder050.Append(lmr50)
+	inst.membershipFieldBuilder051.Append(mrhp51)
+	inst.membershipContainerLength050++
+	inst.membershipContainerLength051++
+	return inst
+}
+func (inst *InEntityAgentrunentryTableSectionU8ArrayInAttr) AddMembershipMixedLowCardRefP(lmr50 uint64, mrhp51 []byte) {
+	if inst.state != runtime.EntityStateInAttribute {
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return
+	}
+	inst.membershipFieldBuilder050.Append(lmr50)
+	inst.membershipFieldBuilder051.Append(mrhp51)
+	inst.membershipContainerLength050++
+	inst.membershipContainerLength051++
+	return
+}
+func (inst *InEntityAgentrunentryTableSectionU8ArrayInAttr) handleMembershipSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.membershipContainerLength048
+	inst.membershipContainerLength048 = 0
+	inst.membershipSupportFieldBuilder053.Append(uint64(l))
+	l = inst.membershipContainerLength049
+	inst.membershipContainerLength049 = 0
+	inst.membershipSupportFieldBuilder054.Append(uint64(l))
+	l = inst.membershipContainerLength050
+	inst.membershipContainerLength050 = 0
+	inst.membershipSupportFieldBuilder055.Append(uint64(l))
+}
+func (inst *InEntityAgentrunentryTableSectionU8ArrayInAttr) handleNonScalarSupportColumns() {
+	var l int
+	var _ = l
+	l = inst.homogenousArrayContainerLength047
+	inst.homogenousArrayContainerLength047 = 0
+	inst.homogenousArraySupportFieldBuilder052.Append(uint64(l))
+}
+func (inst *InEntityAgentrunentryTableSectionU8ArrayInAttr) applyAmbientMemberships() {
+	if inst.state != runtime.EntityStateInAttribute {
+		return
+	}
+	for _, v := range inst.parent.parent.ambientHighCardRef {
+		inst.AddMembershipHighCardRefP(v)
+	}
+}
+func (inst *InEntityAgentrunentryTableSectionU8ArrayInAttr) completeAttribute() {
+	inst.handleMembershipSupportColumns()
+	inst.handleNonScalarSupportColumns()
+}
+func (inst *InEntityAgentrunentryTableSectionU8ArrayInAttr) EndSection() *InEntityAgentrunentryTable {
+	inst.applyAmbientMemberships()
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInitial
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	inst.parent.EndSection()
+	return inst.parent.parent
+}
+func (inst *InEntityAgentrunentryTableSectionU8ArrayInAttr) EndAttribute() *InEntityAgentrunentryTableSectionU8Array {
+	inst.applyAmbientMemberships()
+	switch inst.state {
+	case runtime.EntityStateInAttribute:
+		inst.state = runtime.EntityStateInSection
+		break
+	default:
+		inst.AppendError(runtime.ErrInvalidStateTransition)
+		return inst.parent
+	}
+
+	inst.completeAttribute()
+	inst.parent.endAttribute()
+	return inst.parent
+}
+func (inst *InEntityAgentrunentryTableSectionU8ArrayInAttr) EndAttributeP() {
+	inst.EndAttribute()
+}
+
+func (inst *InEntityAgentrunentryTableSectionU8ArrayInAttr) AppendError(err error) {
+	inst.errs = eh.AppendError(inst.errs, err)
+}
+func (inst *InEntityAgentrunentryTableSectionU8ArrayInAttr) clearErrors() {
 	inst.errs = eh.ClearErrors(inst.errs)
 }

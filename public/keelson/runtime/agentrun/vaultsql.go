@@ -47,8 +47,8 @@ func (inst *SqlBodyStore) Put(ctx context.Context, bodies []Body) (err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	for _, b := range bodies {
-		row := agentrunstore.BodyRow{ID: b.Run, Ordinal: b.Ordinal, Opening: OpeningText(b.Opening), Body: b.Body, Calls: b.Calls}
-		if err = inst.st.Begin(b.Run, recordstore.SeqTs(uint64(b.Ordinal))).AddBodyRow(row).Commit(); err != nil {
+		row := agentrunstore.BodyRow{ID: b.Run, Opening: OpeningText(b.Opening), Body: b.Body, Calls: b.Calls}
+		if err = inst.st.Begin(b.Run, uint64(b.Ordinal)).AddBodyRow(row).Commit(); err != nil {
 			inst.st.DiscardPending()
 			return eb.Build().Str("run", b.Run).Uint32("ordinal", b.Ordinal).Errorf("buffer body: %w", err)
 		}
@@ -65,7 +65,7 @@ func (inst *SqlBodyStore) Get(ctx context.Context, run string, from uint32) (bod
 	defer inst.mu.Unlock()
 	predicate := agentrunstore.BodyRowColKey + " = " + marshalling.EscapeString(run)
 	if from > 0 {
-		predicate += " AND " + agentrunstore.BodyRowColOrder + " >= fromUnixTimestamp64Nano(" + strconv.FormatInt(recordstore.SeqTs(uint64(from)).UnixNano(), 10) + ")"
+		predicate += " AND " + agentrunstore.BodyRowColOrder + " >= " + strconv.FormatUint(uint64(from), 10)
 	}
 	if bodies, err = inst.scanLocked(ctx, predicate); err != nil {
 		err = eb.Build().Str("run", run).Errorf("read bodies: %w", err)
@@ -102,7 +102,7 @@ func (inst *SqlBodyStore) scanLocked(ctx context.Context, predicate string) (bod
 			continue
 		}
 		row := ent.BodyRow.Val
-		bodies = append(bodies, Body{Run: ent.ID, Ordinal: row.Ordinal, Opening: OpeningOf(row.Opening), Body: row.Body, Calls: row.Calls})
+		bodies = append(bodies, Body{Run: ent.ID, Ordinal: uint32(ent.Ord), Opening: OpeningOf(row.Opening), Body: row.Body, Calls: row.Calls})
 	}
 	slices.SortStableFunc(bodies, func(a, b Body) int {
 		if c := compareString(a.Run, b.Run); c != 0 {
@@ -154,7 +154,7 @@ func (inst *SqlBodyStore) mutateLocked(ctx context.Context, run string, where st
 func orderInstants(ordinals []uint32) (literals []string) {
 	literals = make([]string, 0, len(ordinals))
 	for _, o := range ordinals {
-		literals = append(literals, "fromUnixTimestamp64Nano("+strconv.FormatInt(recordstore.SeqTs(uint64(o)).UnixNano(), 10)+")")
+		literals = append(literals, strconv.FormatUint(uint64(o), 10))
 	}
 	return
 }

@@ -316,7 +316,7 @@ func TestAMarkWithACommaIsRefused(t *testing.T) {
 	assert.Nil(t, Label{}.Join(Label{Exposure: []string{"a,b"}}).Exposure)
 	written, err := w.Append(ctx, Entry{Kind: KindUser, Body: "x", Label: Label{Origin: []string{"b", "a"}}})
 	require.NoError(t, err)
-	back := entryOf(entryRow(written[0]), "r")
+	back := entryOf(entryRow(written[0]), "r", uint64(written[0].Ordinal))
 	// The ledger row carries neither content nor opening; the vault
 	// rejoins them (ADR-0320 §SD5).
 	back.Body, back.Opening = written[0].Body, written[0].Opening

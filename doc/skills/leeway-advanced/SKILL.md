@@ -51,6 +51,7 @@ in the membership array does not index the value array.
 ## Example: Mapping JSON to a equivalent Leeway representation
 
 The mapping below is implemented by `$(boxer-path)/public/semistructured/leeway/jsonshred`: `Explode` turns a document into (path, parameters, section, value) attributes and `Compose` rebuilds its canonical form. The package doc is the normative path grammar (JSON Pointer, `_` for an index, `~2` for a literal `_` key, `~n` for a number kept as text) and the fidelity rules; the walk-through here is the idea.
+
 Consider as a first illustrative example the mapping of json to a leeway table definition (using the leeway go sdk):
 ```go
 func LoadJsonMapping(manip common.TableManipulatorFluidI) {

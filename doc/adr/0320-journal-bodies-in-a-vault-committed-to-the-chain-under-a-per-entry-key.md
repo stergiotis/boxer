@@ -293,6 +293,12 @@ each row and keeps the one that opens the entry's commitments. It used to
 keep only the last row it read, so the entry could read as erased while the
 row that opened it was in the table.
 
+
+### 2026-10-11 — SD8's column drop landed
+
+The ledger no longer has body or calls columns: the entry table was
+rebuilt over the facts sections (ADR-0308 §SD1's Update of this date), and
+the drop went with it. The vault table is on the same sections.
 ## References
 
 - [ADR-0025](./0025-pushout-forget-architecture.md) — the legal context and the vault shape.

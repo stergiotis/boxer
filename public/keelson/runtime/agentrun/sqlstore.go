@@ -444,7 +444,7 @@ func revisionOf(e Entry, epoch uint32) (rev agentrunstore.EntryEnvelope) {
 
 func (inst *SqlStore) appendLocked(ctx context.Context, entries []Entry) (err error) {
 	for _, e := range entries {
-		if err = inst.st.Entry.Begin(e.Run, recordstore.SeqTs(uint64(e.Ordinal)), revisionOf(e, inst.epoch[e.Run])).AddEntry(entryRow(e)).Commit(); err != nil {
+		if err = inst.st.Entry.Begin(e.Run, uint64(e.Ordinal), revisionOf(e, inst.epoch[e.Run])).AddEntry(entryRow(e)).Commit(); err != nil {
 			inst.st.Entry.DiscardPending()
 			return eb.Build().Str("run", e.Run).Uint32("ordinal", e.Ordinal).Errorf("buffer entry: %w", err)
 		}
@@ -540,10 +540,10 @@ func bounded(entries []Entry, heads map[string]uint32) (kept []Entry) {
 func (inst *SqlStore) entriesLocked(ctx context.Context, run string, from uint32, upTo uint32) (entries []Entry, err error) {
 	predicate := agentrunstore.EntryColKey + " = " + marshalling.EscapeString(run)
 	if from > 0 {
-		predicate += " AND " + agentrunstore.EntryColOrder + " >= fromUnixTimestamp64Nano(" + strconv.FormatInt(recordstore.SeqTs(uint64(from)).UnixNano(), 10) + ")"
+		predicate += " AND " + agentrunstore.EntryColOrder + " >= " + strconv.FormatUint(uint64(from), 10)
 	}
 	if upTo > 0 {
-		predicate += " AND " + agentrunstore.EntryColOrder + " <= fromUnixTimestamp64Nano(" + strconv.FormatInt(recordstore.SeqTs(uint64(upTo)).UnixNano(), 10) + ")"
+		predicate += " AND " + agentrunstore.EntryColOrder + " <= " + strconv.FormatUint(uint64(upTo), 10)
 	}
 	entries, err = inst.scanEntriesLocked(ctx, predicate)
 	if err != nil {
@@ -587,7 +587,7 @@ func (inst *SqlStore) scanEntriesLocked(ctx context.Context, predicate string) (
 		if ent == nil || !ent.Entry.Has {
 			continue
 		}
-		entries = append(entries, entryOf(ent.Entry.Val, ent.ID))
+		entries = append(entries, entryOf(ent.Entry.Val, ent.ID, ent.Ord))
 	}
 	// The scan orders by (ordinal, run); a several-run read wants runs whole.
 	slices.SortStableFunc(entries, func(a, b Entry) int {
@@ -653,7 +653,7 @@ func (inst *SqlStore) Tombstone(ctx context.Context, run string) (err error) {
 		if (e.Body == "" && e.Calls == "") || e.Kind == KindHead {
 			continue
 		}
-		ordinals = append(ordinals, "fromUnixTimestamp64Nano("+strconv.FormatInt(recordstore.SeqTs(uint64(e.Ordinal)).UnixNano(), 10)+")")
+		ordinals = append(ordinals, strconv.FormatUint(uint64(e.Ordinal), 10))
 		e.Body, e.Calls = "", ""
 		blanked = append(blanked, e)
 	}
@@ -689,20 +689,24 @@ func runOf(row agentrunstore.Run) (r Run) {
 		DeletedBy: row.DeletedBy, DeletedAt: zeroed(row.DeletedAt), Holder: row.Holder, HolderPid: row.HolderPid, Epoch: row.Epoch}
 }
 
+// entryRow is the ledger row of an entry: everything but the content,
+// which is the vault's (ADR-0320 §SD1).
 func entryRow(e Entry) agentrunstore.Entry {
-	return agentrunstore.Entry{ID: e.Run, Ordinal: e.Ordinal, At: utc(e.At), Kind: e.Kind.String(), Key: e.Key, Role: e.Role, Body: e.Body, Calls: e.Calls,
+	return agentrunstore.Entry{ID: e.Run, At: utc(e.At), Kind: e.Kind.String(), Key: e.Key, Role: e.Role,
 		BodyDigest: e.BodyDigest, CallsDigest: e.CallsDigest,
 		Name: e.Name, Book: e.Book, Form: e.Form, Target: e.Target, From: e.From, Effect: e.Effect, Turn: e.Turn,
-		LabelLevel: uint32(e.Label.Level), LabelTier: uint32(e.Label.Tier), LabelExposure: MarksString(e.Label.Exposure), LabelOrigin: MarksString(e.Label.Origin),
+		LabelLevel: uint8(e.Label.Level), LabelTier: uint8(e.Label.Tier), LabelExposure: unionMarks(e.Label.Exposure, nil), LabelOrigin: unionMarks(e.Label.Origin, nil),
 		WriterRun: e.WriterRun, WriterTurn: e.WriterTurn, WriterOrdinal: e.WriterOrdinal, Prev: e.Prev, Digest: e.Digest, KeyId: e.KeyId, Parent: e.Parent, Attachments: e.Attachments}
 }
 
-func entryOf(row agentrunstore.Entry, run string) (e Entry) {
+// entryOf is the entry a ledger row holds, at its ordinal; it carries no
+// content until the vault's join gives it some.
+func entryOf(row agentrunstore.Entry, run string, ordinal uint64) (e Entry) {
 	k, _ := ParseKind(row.Kind)
-	return Entry{Run: run, Ordinal: row.Ordinal, At: zeroed(row.At), Kind: k, Key: row.Key, Role: row.Role, Body: row.Body, Calls: row.Calls,
+	return Entry{Run: run, Ordinal: uint32(ordinal), At: zeroed(row.At), Kind: k, Key: row.Key, Role: row.Role,
 		BodyDigest: row.BodyDigest, CallsDigest: row.CallsDigest,
 		Name: row.Name, Book: row.Book, Form: row.Form, Target: row.Target, From: row.From, Effect: row.Effect, Turn: row.Turn,
-		Label:     Label{Level: LevelE(row.LabelLevel), Tier: TierE(row.LabelTier), Exposure: ParseMarks(row.LabelExposure), Origin: ParseMarks(row.LabelOrigin)},
+		Label:     Label{Level: LevelE(row.LabelLevel), Tier: TierE(row.LabelTier), Exposure: unionMarks(row.LabelExposure, nil), Origin: unionMarks(row.LabelOrigin, nil)},
 		WriterRun: row.WriterRun, WriterTurn: row.WriterTurn, WriterOrdinal: row.WriterOrdinal, Prev: row.Prev, Digest: row.Digest, KeyId: row.KeyId, Parent: row.Parent, Attachments: row.Attachments}
 }
 

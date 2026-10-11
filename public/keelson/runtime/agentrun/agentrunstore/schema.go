@@ -1,6 +1,7 @@
 package agentrunstore
 
 import (
+	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
@@ -18,6 +19,10 @@ const (
 	TableNameRun   = "agentrun"
 	TableNameEntry = "agentrunentry"
 )
+
+// EntryOrdinalColumn is the ledger's and the vault's Order role column:
+// the entry's ordinal within its run.
+const EntryOrdinalColumn = "ordinal"
 
 // EntryRevisionColumn is the entry table's Revision role column
 // (gen.Roles.Revision): reads keep the highest revision of each ordinal.
@@ -72,10 +77,12 @@ func GetRunSchemaInManipulator() (manip *common.TableManipulator, err error) {
 	return
 }
 
-// GetEntrySchemaInManipulator builds the entry table: envelope id (the run
-// id), ts (the ordinal as an instant), revision (the Revision role: a
-// tombstone is the entry at its next revision, ADR-0308 §SD8), and the
-// entry's attributes.
+// GetEntrySchemaInManipulator builds the entry table, the ledger: an
+// envelope of its own — id (the run id, the Key), ordinal (the Order),
+// revision (the Revision role: a tombstone is the entry at its next
+// revision, ADR-0308 §SD8) — over the boxer.facts data sections, so the
+// ledger reads with the trail's read surface (plan002 B0). Bodies and
+// calls are the vault's (ADR-0320 §SD1).
 func GetEntrySchemaInManipulator() (manip *common.TableManipulator, err error) {
 	manip, err = common.NewTableManipulator()
 	if err != nil {
@@ -84,39 +91,18 @@ func GetEntrySchemaInManipulator() (manip *common.TableManipulator, err error) {
 	}
 	manip.SetTableName(TableNameEntry)
 	manip.SetTableComment("agent run journal entries, one row each, append-only (ADR-0308 §SD2)")
-	manip.PlainValueColumn(common.PlainItemTypeEntityId, "id", ctabb.S).AddColumnEncodingHints(plain...)
-	manip.PlainValueColumn(common.PlainItemTypeEntityTimestamp, "ts", ctabb.Z64).AddColumnEncodingHints(easp.AspectDeltaEncoding, easp.AspectLightGeneralCompression)
+	journalEnvelope(manip)
 	manip.PlainValueColumn(common.PlainItemTypeEntityLifecycle, EntryRevisionColumn, ctabb.U32).AddColumnEncodingHints(plain...)
-	sec := sectionOf(manip)
-	sec("entryOrdinal", ctabb.U32, plain...)
-	sec("entryAt", ctabb.Z64, plain...)
-	sec("entryKind", ctabb.S, low...)
-	sec("entryKey", ctabb.S, plain...)
-	sec("entryRole", ctabb.S, low...)
-	sec("entryBody", ctabb.S, plain...)
-	sec("entryCalls", ctabb.S, plain...)
-	sec("entryBodyDigest", ctabb.S, plain...)
-	sec("entryCallsDigest", ctabb.S, plain...)
-	sec("entryName", ctabb.S, low...)
-	sec("entryBook", ctabb.S, low...)
-	sec("entryForm", ctabb.S, low...)
-	sec("entryTarget", ctabb.U32, plain...)
-	sec("entryFrom", ctabb.U32, plain...)
-	sec("entryEffect", ctabb.S, low...)
-	sec("entryTurn", ctabb.S, low...)
-	sec("entryLabelLevel", ctabb.U32, plain...)
-	sec("entryLabelTier", ctabb.U32, plain...)
-	sec("entryLabelExposure", ctabb.S, low...)
-	sec("entryLabelOrigin", ctabb.S, low...)
-	sec("entryWriterRun", ctabb.S, low...)
-	sec("entryWriterTurn", ctabb.S, low...)
-	sec("entryWriterOrdinal", ctabb.U32, plain...)
-	sec("entryPrev", ctabb.U32, plain...)
-	sec("entryDigest", ctabb.S, plain...)
-	sec("entryKeyId", ctabb.S, low...)
-	sec("entryParent", ctabb.U32, plain...)
-	sec("entryAttachments", ctabb.S, plain...)
+	factsschema.LoadFactsDataSections(manip)
 	return
+}
+
+// journalEnvelope is the envelope the ledger and the vault share: the run
+// id as the Key and the entry's ordinal as the Order, so a run reads as
+// one range in ordinal order.
+func journalEnvelope(manip common.TableManipulatorFluidI) {
+	manip.PlainValueColumn(common.PlainItemTypeEntityId, "id", ctabb.S).AddColumnEncodingHints(plain...)
+	manip.PlainValueColumn(common.PlainItemTypeEntityId, EntryOrdinalColumn, ctabb.U64).AddColumnEncodingHints(easp.AspectDeltaEncoding, easp.AspectLightGeneralCompression)
 }
 
 // sectionOf returns the one-attribute section declarator the store-owned

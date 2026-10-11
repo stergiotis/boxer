@@ -45,11 +45,6 @@ type MembershipPackAgentrunentryTableShared1 struct {
 	AccelLowCardRef                            *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64]
 	ColumnIndexLowCardRef                      uint32
 	ColumnIndexLowCardRefAccel                 uint32
-	ValueLowCardVerbatim                       *array.List
-	ValueLowCardVerbatimElements               *array.Binary
-	AccelLowCardVerbatim                       *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64]
-	ColumnIndexLowCardVerbatim                 uint32
-	ColumnIndexLowCardVerbatimAccel            uint32
 	ValueMixedLowCardRef                       *array.List
 	ValueMixedLowCardRefElements               *array.Uint64
 	AccelMixedLowCardRef                       *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64]
@@ -62,23 +57,20 @@ type MembershipPackAgentrunentryTableShared1 struct {
 	ColumnIndexMixedRefHighCardParametersAccel uint32
 }
 
-func NewMembershipPackAgentrunentryTableShared1EntryOrdinal() (inst *MembershipPackAgentrunentryTableShared1) {
+func NewMembershipPackAgentrunentryTableShared1TextArray() (inst *MembershipPackAgentrunentryTableShared1) {
 	inst = &MembershipPackAgentrunentryTableShared1{}
 	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.ColumnIndexHighCardRef = 4
 	inst.ColumnIndexHighCardRefAccel = 9
 	inst.ColumnIndexLowCardRef = 5
 	inst.ColumnIndexLowCardRefAccel = 10
-	inst.ColumnIndexLowCardVerbatim = 6
-	inst.ColumnIndexLowCardVerbatimAccel = 11
-	inst.ColumnIndexMixedLowCardRef = 7
-	inst.ColumnIndexMixedLowCardRefAccel = 12
-	inst.ColumnIndexMixedRefHighCardParameters = 8
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 12
+	inst.ColumnIndexMixedLowCardRef = 6
+	inst.ColumnIndexMixedLowCardRefAccel = 11
+	inst.ColumnIndexMixedRefHighCardParameters = 7
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 11
 	return
 }
 
@@ -88,8 +80,6 @@ func (inst *MembershipPackAgentrunentryTableShared1) GetColumnIndices() (columnI
 		inst.ColumnIndexHighCardRefAccel,
 		inst.ColumnIndexLowCardRef,
 		inst.ColumnIndexLowCardRefAccel,
-		inst.ColumnIndexLowCardVerbatim,
-		inst.ColumnIndexLowCardVerbatimAccel,
 		inst.ColumnIndexMixedLowCardRef,
 		inst.ColumnIndexMixedLowCardRefAccel,
 		inst.ColumnIndexMixedRefHighCardParameters,
@@ -104,8 +94,6 @@ func (inst *MembershipPackAgentrunentryTableShared1) GetColumnIndexFieldNames() 
 		"MembershipPackAgentrunentryTableShared1.ColumnIndexHighCardRefAccel",
 		"MembershipPackAgentrunentryTableShared1.ColumnIndexLowCardRef",
 		"MembershipPackAgentrunentryTableShared1.ColumnIndexLowCardRefAccel",
-		"MembershipPackAgentrunentryTableShared1.ColumnIndexLowCardVerbatim",
-		"MembershipPackAgentrunentryTableShared1.ColumnIndexLowCardVerbatimAccel",
 		"MembershipPackAgentrunentryTableShared1.ColumnIndexMixedLowCardRef",
 		"MembershipPackAgentrunentryTableShared1.ColumnIndexMixedLowCardRefAccel",
 		"MembershipPackAgentrunentryTableShared1.ColumnIndexMixedRefHighCardParameters",
@@ -119,152 +107,146 @@ func (inst *MembershipPackAgentrunentryTableShared1) SetColumnIndices(indices []
 	inst.ColumnIndexHighCardRefAccel = indices[1]
 	inst.ColumnIndexLowCardRef = indices[2]
 	inst.ColumnIndexLowCardRefAccel = indices[3]
-	inst.ColumnIndexLowCardVerbatim = indices[4]
-	inst.ColumnIndexLowCardVerbatimAccel = indices[5]
-	inst.ColumnIndexMixedLowCardRef = indices[6]
-	inst.ColumnIndexMixedLowCardRefAccel = indices[7]
-	inst.ColumnIndexMixedRefHighCardParameters = indices[8]
-	inst.ColumnIndexMixedRefHighCardParametersAccel = indices[9]
+	inst.ColumnIndexMixedLowCardRef = indices[4]
+	inst.ColumnIndexMixedLowCardRefAccel = indices[5]
+	inst.ColumnIndexMixedRefHighCardParameters = indices[6]
+	inst.ColumnIndexMixedRefHighCardParametersAccel = indices[7]
 
-	rest = indices[10:]
+	rest = indices[8:]
 	return
 }
 
 var _ runtime.ColumnIndexHandlingI = (*MembershipPackAgentrunentryTableShared1)(nil)
 
-func NewMembershipPackAgentrunentryTableShared1EntryAt() (inst *MembershipPackAgentrunentryTableShared1) {
+func NewMembershipPackAgentrunentryTableShared1StringArray() (inst *MembershipPackAgentrunentryTableShared1) {
 	inst = &MembershipPackAgentrunentryTableShared1{}
 	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 14
-	inst.ColumnIndexHighCardRefAccel = 19
-	inst.ColumnIndexLowCardRef = 15
-	inst.ColumnIndexLowCardRefAccel = 20
-	inst.ColumnIndexLowCardVerbatim = 16
-	inst.ColumnIndexLowCardVerbatimAccel = 21
-	inst.ColumnIndexMixedLowCardRef = 17
-	inst.ColumnIndexMixedLowCardRefAccel = 22
-	inst.ColumnIndexMixedRefHighCardParameters = 18
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 22
+	inst.ColumnIndexHighCardRef = 13
+	inst.ColumnIndexHighCardRefAccel = 18
+	inst.ColumnIndexLowCardRef = 14
+	inst.ColumnIndexLowCardRefAccel = 19
+	inst.ColumnIndexMixedLowCardRef = 15
+	inst.ColumnIndexMixedLowCardRefAccel = 20
+	inst.ColumnIndexMixedRefHighCardParameters = 16
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 20
 	return
 }
 
-func NewMembershipPackAgentrunentryTableShared1EntryKind() (inst *MembershipPackAgentrunentryTableShared1) {
+func NewMembershipPackAgentrunentryTableShared1Symbol() (inst *MembershipPackAgentrunentryTableShared1) {
 	inst = &MembershipPackAgentrunentryTableShared1{}
 	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 24
-	inst.ColumnIndexHighCardRefAccel = 29
-	inst.ColumnIndexLowCardRef = 25
-	inst.ColumnIndexLowCardRefAccel = 30
-	inst.ColumnIndexLowCardVerbatim = 26
-	inst.ColumnIndexLowCardVerbatimAccel = 31
-	inst.ColumnIndexMixedLowCardRef = 27
-	inst.ColumnIndexMixedLowCardRefAccel = 32
-	inst.ColumnIndexMixedRefHighCardParameters = 28
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 32
+	inst.ColumnIndexHighCardRef = 22
+	inst.ColumnIndexHighCardRefAccel = 26
+	inst.ColumnIndexLowCardRef = 23
+	inst.ColumnIndexLowCardRefAccel = 27
+	inst.ColumnIndexMixedLowCardRef = 24
+	inst.ColumnIndexMixedLowCardRefAccel = 28
+	inst.ColumnIndexMixedRefHighCardParameters = 25
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 28
 	return
 }
 
-func NewMembershipPackAgentrunentryTableShared1EntryKey() (inst *MembershipPackAgentrunentryTableShared1) {
+func NewMembershipPackAgentrunentryTableShared1SymbolArray() (inst *MembershipPackAgentrunentryTableShared1) {
 	inst = &MembershipPackAgentrunentryTableShared1{}
 	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 34
-	inst.ColumnIndexHighCardRefAccel = 39
-	inst.ColumnIndexLowCardRef = 35
-	inst.ColumnIndexLowCardRefAccel = 40
-	inst.ColumnIndexLowCardVerbatim = 36
-	inst.ColumnIndexLowCardVerbatimAccel = 41
-	inst.ColumnIndexMixedLowCardRef = 37
-	inst.ColumnIndexMixedLowCardRefAccel = 42
-	inst.ColumnIndexMixedRefHighCardParameters = 38
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 42
+	inst.ColumnIndexHighCardRef = 30
+	inst.ColumnIndexHighCardRefAccel = 35
+	inst.ColumnIndexLowCardRef = 31
+	inst.ColumnIndexLowCardRefAccel = 36
+	inst.ColumnIndexMixedLowCardRef = 32
+	inst.ColumnIndexMixedLowCardRefAccel = 37
+	inst.ColumnIndexMixedRefHighCardParameters = 33
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 37
 	return
 }
 
-func NewMembershipPackAgentrunentryTableShared1EntryRole() (inst *MembershipPackAgentrunentryTableShared1) {
+func NewMembershipPackAgentrunentryTableShared1BlobArray() (inst *MembershipPackAgentrunentryTableShared1) {
 	inst = &MembershipPackAgentrunentryTableShared1{}
 	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 44
-	inst.ColumnIndexHighCardRefAccel = 49
-	inst.ColumnIndexLowCardRef = 45
-	inst.ColumnIndexLowCardRefAccel = 50
-	inst.ColumnIndexLowCardVerbatim = 46
-	inst.ColumnIndexLowCardVerbatimAccel = 51
-	inst.ColumnIndexMixedLowCardRef = 47
-	inst.ColumnIndexMixedLowCardRefAccel = 52
-	inst.ColumnIndexMixedRefHighCardParameters = 48
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 52
+	inst.ColumnIndexHighCardRef = 39
+	inst.ColumnIndexHighCardRefAccel = 44
+	inst.ColumnIndexLowCardRef = 40
+	inst.ColumnIndexLowCardRefAccel = 45
+	inst.ColumnIndexMixedLowCardRef = 41
+	inst.ColumnIndexMixedLowCardRefAccel = 46
+	inst.ColumnIndexMixedRefHighCardParameters = 42
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 46
 	return
 }
 
-func NewMembershipPackAgentrunentryTableShared1EntryBody() (inst *MembershipPackAgentrunentryTableShared1) {
+func NewMembershipPackAgentrunentryTableShared1U8Array() (inst *MembershipPackAgentrunentryTableShared1) {
 	inst = &MembershipPackAgentrunentryTableShared1{}
 	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 54
-	inst.ColumnIndexHighCardRefAccel = 59
-	inst.ColumnIndexLowCardRef = 55
-	inst.ColumnIndexLowCardRefAccel = 60
-	inst.ColumnIndexLowCardVerbatim = 56
-	inst.ColumnIndexLowCardVerbatimAccel = 61
-	inst.ColumnIndexMixedLowCardRef = 57
-	inst.ColumnIndexMixedLowCardRefAccel = 62
-	inst.ColumnIndexMixedRefHighCardParameters = 58
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 62
+	inst.ColumnIndexHighCardRef = 48
+	inst.ColumnIndexHighCardRefAccel = 53
+	inst.ColumnIndexLowCardRef = 49
+	inst.ColumnIndexLowCardRefAccel = 54
+	inst.ColumnIndexMixedLowCardRef = 50
+	inst.ColumnIndexMixedLowCardRefAccel = 55
+	inst.ColumnIndexMixedRefHighCardParameters = 51
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 55
 	return
 }
 
-func NewMembershipPackAgentrunentryTableShared1EntryCalls() (inst *MembershipPackAgentrunentryTableShared1) {
+func NewMembershipPackAgentrunentryTableShared1U16Array() (inst *MembershipPackAgentrunentryTableShared1) {
 	inst = &MembershipPackAgentrunentryTableShared1{}
 	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 64
-	inst.ColumnIndexHighCardRefAccel = 69
-	inst.ColumnIndexLowCardRef = 65
-	inst.ColumnIndexLowCardRefAccel = 70
-	inst.ColumnIndexLowCardVerbatim = 66
-	inst.ColumnIndexLowCardVerbatimAccel = 71
-	inst.ColumnIndexMixedLowCardRef = 67
-	inst.ColumnIndexMixedLowCardRefAccel = 72
-	inst.ColumnIndexMixedRefHighCardParameters = 68
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 72
+	inst.ColumnIndexHighCardRef = 57
+	inst.ColumnIndexHighCardRefAccel = 62
+	inst.ColumnIndexLowCardRef = 58
+	inst.ColumnIndexLowCardRefAccel = 63
+	inst.ColumnIndexMixedLowCardRef = 59
+	inst.ColumnIndexMixedLowCardRefAccel = 64
+	inst.ColumnIndexMixedRefHighCardParameters = 60
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 64
 	return
 }
 
-func NewMembershipPackAgentrunentryTableShared1EntryBodyDigest() (inst *MembershipPackAgentrunentryTableShared1) {
+func NewMembershipPackAgentrunentryTableShared1U32Array() (inst *MembershipPackAgentrunentryTableShared1) {
 	inst = &MembershipPackAgentrunentryTableShared1{}
 	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 74
-	inst.ColumnIndexHighCardRefAccel = 79
-	inst.ColumnIndexLowCardRef = 75
-	inst.ColumnIndexLowCardRefAccel = 80
-	inst.ColumnIndexLowCardVerbatim = 76
-	inst.ColumnIndexLowCardVerbatimAccel = 81
+	inst.ColumnIndexHighCardRef = 66
+	inst.ColumnIndexHighCardRefAccel = 71
+	inst.ColumnIndexLowCardRef = 67
+	inst.ColumnIndexLowCardRefAccel = 72
+	inst.ColumnIndexMixedLowCardRef = 68
+	inst.ColumnIndexMixedLowCardRefAccel = 73
+	inst.ColumnIndexMixedRefHighCardParameters = 69
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 73
+	return
+}
+
+func NewMembershipPackAgentrunentryTableShared1U32Set() (inst *MembershipPackAgentrunentryTableShared1) {
+	inst = &MembershipPackAgentrunentryTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 75
+	inst.ColumnIndexHighCardRefAccel = 80
+	inst.ColumnIndexLowCardRef = 76
+	inst.ColumnIndexLowCardRefAccel = 81
 	inst.ColumnIndexMixedLowCardRef = 77
 	inst.ColumnIndexMixedLowCardRefAccel = 82
 	inst.ColumnIndexMixedRefHighCardParameters = 78
@@ -272,179 +254,169 @@ func NewMembershipPackAgentrunentryTableShared1EntryBodyDigest() (inst *Membersh
 	return
 }
 
-func NewMembershipPackAgentrunentryTableShared1EntryCallsDigest() (inst *MembershipPackAgentrunentryTableShared1) {
+func NewMembershipPackAgentrunentryTableShared1U64Array() (inst *MembershipPackAgentrunentryTableShared1) {
 	inst = &MembershipPackAgentrunentryTableShared1{}
 	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.ColumnIndexHighCardRef = 84
 	inst.ColumnIndexHighCardRefAccel = 89
 	inst.ColumnIndexLowCardRef = 85
 	inst.ColumnIndexLowCardRefAccel = 90
-	inst.ColumnIndexLowCardVerbatim = 86
-	inst.ColumnIndexLowCardVerbatimAccel = 91
-	inst.ColumnIndexMixedLowCardRef = 87
-	inst.ColumnIndexMixedLowCardRefAccel = 92
-	inst.ColumnIndexMixedRefHighCardParameters = 88
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 92
+	inst.ColumnIndexMixedLowCardRef = 86
+	inst.ColumnIndexMixedLowCardRefAccel = 91
+	inst.ColumnIndexMixedRefHighCardParameters = 87
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 91
 	return
 }
 
-func NewMembershipPackAgentrunentryTableShared1EntryName() (inst *MembershipPackAgentrunentryTableShared1) {
+func NewMembershipPackAgentrunentryTableShared1U64Set() (inst *MembershipPackAgentrunentryTableShared1) {
 	inst = &MembershipPackAgentrunentryTableShared1{}
 	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 94
-	inst.ColumnIndexHighCardRefAccel = 99
-	inst.ColumnIndexLowCardRef = 95
-	inst.ColumnIndexLowCardRefAccel = 100
-	inst.ColumnIndexLowCardVerbatim = 96
-	inst.ColumnIndexLowCardVerbatimAccel = 101
-	inst.ColumnIndexMixedLowCardRef = 97
-	inst.ColumnIndexMixedLowCardRefAccel = 102
-	inst.ColumnIndexMixedRefHighCardParameters = 98
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 102
+	inst.ColumnIndexHighCardRef = 93
+	inst.ColumnIndexHighCardRefAccel = 98
+	inst.ColumnIndexLowCardRef = 94
+	inst.ColumnIndexLowCardRefAccel = 99
+	inst.ColumnIndexMixedLowCardRef = 95
+	inst.ColumnIndexMixedLowCardRefAccel = 100
+	inst.ColumnIndexMixedRefHighCardParameters = 96
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 100
 	return
 }
 
-func NewMembershipPackAgentrunentryTableShared1EntryBook() (inst *MembershipPackAgentrunentryTableShared1) {
+func NewMembershipPackAgentrunentryTableShared1I8Array() (inst *MembershipPackAgentrunentryTableShared1) {
 	inst = &MembershipPackAgentrunentryTableShared1{}
 	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 104
-	inst.ColumnIndexHighCardRefAccel = 109
-	inst.ColumnIndexLowCardRef = 105
-	inst.ColumnIndexLowCardRefAccel = 110
-	inst.ColumnIndexLowCardVerbatim = 106
-	inst.ColumnIndexLowCardVerbatimAccel = 111
-	inst.ColumnIndexMixedLowCardRef = 107
-	inst.ColumnIndexMixedLowCardRefAccel = 112
-	inst.ColumnIndexMixedRefHighCardParameters = 108
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 112
+	inst.ColumnIndexHighCardRef = 102
+	inst.ColumnIndexHighCardRefAccel = 107
+	inst.ColumnIndexLowCardRef = 103
+	inst.ColumnIndexLowCardRefAccel = 108
+	inst.ColumnIndexMixedLowCardRef = 104
+	inst.ColumnIndexMixedLowCardRefAccel = 109
+	inst.ColumnIndexMixedRefHighCardParameters = 105
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 109
 	return
 }
 
-func NewMembershipPackAgentrunentryTableShared1EntryForm() (inst *MembershipPackAgentrunentryTableShared1) {
+func NewMembershipPackAgentrunentryTableShared1I16Array() (inst *MembershipPackAgentrunentryTableShared1) {
 	inst = &MembershipPackAgentrunentryTableShared1{}
 	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 114
-	inst.ColumnIndexHighCardRefAccel = 119
-	inst.ColumnIndexLowCardRef = 115
-	inst.ColumnIndexLowCardRefAccel = 120
-	inst.ColumnIndexLowCardVerbatim = 116
-	inst.ColumnIndexLowCardVerbatimAccel = 121
-	inst.ColumnIndexMixedLowCardRef = 117
-	inst.ColumnIndexMixedLowCardRefAccel = 122
-	inst.ColumnIndexMixedRefHighCardParameters = 118
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 122
+	inst.ColumnIndexHighCardRef = 111
+	inst.ColumnIndexHighCardRefAccel = 116
+	inst.ColumnIndexLowCardRef = 112
+	inst.ColumnIndexLowCardRefAccel = 117
+	inst.ColumnIndexMixedLowCardRef = 113
+	inst.ColumnIndexMixedLowCardRefAccel = 118
+	inst.ColumnIndexMixedRefHighCardParameters = 114
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 118
 	return
 }
 
-func NewMembershipPackAgentrunentryTableShared1EntryTarget() (inst *MembershipPackAgentrunentryTableShared1) {
+func NewMembershipPackAgentrunentryTableShared1I32Array() (inst *MembershipPackAgentrunentryTableShared1) {
 	inst = &MembershipPackAgentrunentryTableShared1{}
 	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 124
-	inst.ColumnIndexHighCardRefAccel = 129
-	inst.ColumnIndexLowCardRef = 125
-	inst.ColumnIndexLowCardRefAccel = 130
-	inst.ColumnIndexLowCardVerbatim = 126
-	inst.ColumnIndexLowCardVerbatimAccel = 131
-	inst.ColumnIndexMixedLowCardRef = 127
-	inst.ColumnIndexMixedLowCardRefAccel = 132
-	inst.ColumnIndexMixedRefHighCardParameters = 128
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 132
+	inst.ColumnIndexHighCardRef = 120
+	inst.ColumnIndexHighCardRefAccel = 125
+	inst.ColumnIndexLowCardRef = 121
+	inst.ColumnIndexLowCardRefAccel = 126
+	inst.ColumnIndexMixedLowCardRef = 122
+	inst.ColumnIndexMixedLowCardRefAccel = 127
+	inst.ColumnIndexMixedRefHighCardParameters = 123
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 127
 	return
 }
 
-func NewMembershipPackAgentrunentryTableShared1EntryFrom() (inst *MembershipPackAgentrunentryTableShared1) {
+func NewMembershipPackAgentrunentryTableShared1I64Array() (inst *MembershipPackAgentrunentryTableShared1) {
 	inst = &MembershipPackAgentrunentryTableShared1{}
 	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 134
-	inst.ColumnIndexHighCardRefAccel = 139
-	inst.ColumnIndexLowCardRef = 135
-	inst.ColumnIndexLowCardRefAccel = 140
-	inst.ColumnIndexLowCardVerbatim = 136
-	inst.ColumnIndexLowCardVerbatimAccel = 141
-	inst.ColumnIndexMixedLowCardRef = 137
-	inst.ColumnIndexMixedLowCardRefAccel = 142
-	inst.ColumnIndexMixedRefHighCardParameters = 138
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 142
+	inst.ColumnIndexHighCardRef = 129
+	inst.ColumnIndexHighCardRefAccel = 134
+	inst.ColumnIndexLowCardRef = 130
+	inst.ColumnIndexLowCardRefAccel = 135
+	inst.ColumnIndexMixedLowCardRef = 131
+	inst.ColumnIndexMixedLowCardRefAccel = 136
+	inst.ColumnIndexMixedRefHighCardParameters = 132
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 136
 	return
 }
 
-func NewMembershipPackAgentrunentryTableShared1EntryEffect() (inst *MembershipPackAgentrunentryTableShared1) {
+func NewMembershipPackAgentrunentryTableShared1F32Array() (inst *MembershipPackAgentrunentryTableShared1) {
 	inst = &MembershipPackAgentrunentryTableShared1{}
 	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 144
-	inst.ColumnIndexHighCardRefAccel = 149
-	inst.ColumnIndexLowCardRef = 145
-	inst.ColumnIndexLowCardRefAccel = 150
-	inst.ColumnIndexLowCardVerbatim = 146
-	inst.ColumnIndexLowCardVerbatimAccel = 151
-	inst.ColumnIndexMixedLowCardRef = 147
-	inst.ColumnIndexMixedLowCardRefAccel = 152
-	inst.ColumnIndexMixedRefHighCardParameters = 148
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 152
+	inst.ColumnIndexHighCardRef = 138
+	inst.ColumnIndexHighCardRefAccel = 143
+	inst.ColumnIndexLowCardRef = 139
+	inst.ColumnIndexLowCardRefAccel = 144
+	inst.ColumnIndexMixedLowCardRef = 140
+	inst.ColumnIndexMixedLowCardRefAccel = 145
+	inst.ColumnIndexMixedRefHighCardParameters = 141
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 145
 	return
 }
 
-func NewMembershipPackAgentrunentryTableShared1EntryTurn() (inst *MembershipPackAgentrunentryTableShared1) {
+func NewMembershipPackAgentrunentryTableShared1F64Array() (inst *MembershipPackAgentrunentryTableShared1) {
 	inst = &MembershipPackAgentrunentryTableShared1{}
 	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 154
-	inst.ColumnIndexHighCardRefAccel = 159
-	inst.ColumnIndexLowCardRef = 155
-	inst.ColumnIndexLowCardRefAccel = 160
-	inst.ColumnIndexLowCardVerbatim = 156
-	inst.ColumnIndexLowCardVerbatimAccel = 161
-	inst.ColumnIndexMixedLowCardRef = 157
-	inst.ColumnIndexMixedLowCardRefAccel = 162
-	inst.ColumnIndexMixedRefHighCardParameters = 158
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 162
+	inst.ColumnIndexHighCardRef = 147
+	inst.ColumnIndexHighCardRefAccel = 152
+	inst.ColumnIndexLowCardRef = 148
+	inst.ColumnIndexLowCardRefAccel = 153
+	inst.ColumnIndexMixedLowCardRef = 149
+	inst.ColumnIndexMixedLowCardRefAccel = 154
+	inst.ColumnIndexMixedRefHighCardParameters = 150
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 154
 	return
 }
 
-func NewMembershipPackAgentrunentryTableShared1EntryLabelLevel() (inst *MembershipPackAgentrunentryTableShared1) {
+func NewMembershipPackAgentrunentryTableShared1U32Range() (inst *MembershipPackAgentrunentryTableShared1) {
 	inst = &MembershipPackAgentrunentryTableShared1{}
 	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 164
-	inst.ColumnIndexHighCardRefAccel = 169
-	inst.ColumnIndexLowCardRef = 165
-	inst.ColumnIndexLowCardRefAccel = 170
-	inst.ColumnIndexLowCardVerbatim = 166
-	inst.ColumnIndexLowCardVerbatimAccel = 171
+	inst.ColumnIndexHighCardRef = 157
+	inst.ColumnIndexHighCardRefAccel = 161
+	inst.ColumnIndexLowCardRef = 158
+	inst.ColumnIndexLowCardRefAccel = 162
+	inst.ColumnIndexMixedLowCardRef = 159
+	inst.ColumnIndexMixedLowCardRefAccel = 163
+	inst.ColumnIndexMixedRefHighCardParameters = 160
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 163
+	return
+}
+
+func NewMembershipPackAgentrunentryTableShared1TimeArray() (inst *MembershipPackAgentrunentryTableShared1) {
+	inst = &MembershipPackAgentrunentryTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 165
+	inst.ColumnIndexHighCardRefAccel = 170
+	inst.ColumnIndexLowCardRef = 166
+	inst.ColumnIndexLowCardRefAccel = 171
 	inst.ColumnIndexMixedLowCardRef = 167
 	inst.ColumnIndexMixedLowCardRefAccel = 172
 	inst.ColumnIndexMixedRefHighCardParameters = 168
@@ -452,223 +424,20 @@ func NewMembershipPackAgentrunentryTableShared1EntryLabelLevel() (inst *Membersh
 	return
 }
 
-func NewMembershipPackAgentrunentryTableShared1EntryLabelTier() (inst *MembershipPackAgentrunentryTableShared1) {
+func NewMembershipPackAgentrunentryTableShared1Bool() (inst *MembershipPackAgentrunentryTableShared1) {
 	inst = &MembershipPackAgentrunentryTableShared1{}
 	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.ColumnIndexHighCardRef = 174
-	inst.ColumnIndexHighCardRefAccel = 179
+	inst.ColumnIndexHighCardRefAccel = 178
 	inst.ColumnIndexLowCardRef = 175
-	inst.ColumnIndexLowCardRefAccel = 180
-	inst.ColumnIndexLowCardVerbatim = 176
-	inst.ColumnIndexLowCardVerbatimAccel = 181
-	inst.ColumnIndexMixedLowCardRef = 177
-	inst.ColumnIndexMixedLowCardRefAccel = 182
-	inst.ColumnIndexMixedRefHighCardParameters = 178
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 182
-	return
-}
-
-func NewMembershipPackAgentrunentryTableShared1EntryLabelExposure() (inst *MembershipPackAgentrunentryTableShared1) {
-	inst = &MembershipPackAgentrunentryTableShared1{}
-	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 184
-	inst.ColumnIndexHighCardRefAccel = 189
-	inst.ColumnIndexLowCardRef = 185
-	inst.ColumnIndexLowCardRefAccel = 190
-	inst.ColumnIndexLowCardVerbatim = 186
-	inst.ColumnIndexLowCardVerbatimAccel = 191
-	inst.ColumnIndexMixedLowCardRef = 187
-	inst.ColumnIndexMixedLowCardRefAccel = 192
-	inst.ColumnIndexMixedRefHighCardParameters = 188
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 192
-	return
-}
-
-func NewMembershipPackAgentrunentryTableShared1EntryLabelOrigin() (inst *MembershipPackAgentrunentryTableShared1) {
-	inst = &MembershipPackAgentrunentryTableShared1{}
-	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 194
-	inst.ColumnIndexHighCardRefAccel = 199
-	inst.ColumnIndexLowCardRef = 195
-	inst.ColumnIndexLowCardRefAccel = 200
-	inst.ColumnIndexLowCardVerbatim = 196
-	inst.ColumnIndexLowCardVerbatimAccel = 201
-	inst.ColumnIndexMixedLowCardRef = 197
-	inst.ColumnIndexMixedLowCardRefAccel = 202
-	inst.ColumnIndexMixedRefHighCardParameters = 198
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 202
-	return
-}
-
-func NewMembershipPackAgentrunentryTableShared1EntryWriterRun() (inst *MembershipPackAgentrunentryTableShared1) {
-	inst = &MembershipPackAgentrunentryTableShared1{}
-	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 204
-	inst.ColumnIndexHighCardRefAccel = 209
-	inst.ColumnIndexLowCardRef = 205
-	inst.ColumnIndexLowCardRefAccel = 210
-	inst.ColumnIndexLowCardVerbatim = 206
-	inst.ColumnIndexLowCardVerbatimAccel = 211
-	inst.ColumnIndexMixedLowCardRef = 207
-	inst.ColumnIndexMixedLowCardRefAccel = 212
-	inst.ColumnIndexMixedRefHighCardParameters = 208
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 212
-	return
-}
-
-func NewMembershipPackAgentrunentryTableShared1EntryWriterTurn() (inst *MembershipPackAgentrunentryTableShared1) {
-	inst = &MembershipPackAgentrunentryTableShared1{}
-	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 214
-	inst.ColumnIndexHighCardRefAccel = 219
-	inst.ColumnIndexLowCardRef = 215
-	inst.ColumnIndexLowCardRefAccel = 220
-	inst.ColumnIndexLowCardVerbatim = 216
-	inst.ColumnIndexLowCardVerbatimAccel = 221
-	inst.ColumnIndexMixedLowCardRef = 217
-	inst.ColumnIndexMixedLowCardRefAccel = 222
-	inst.ColumnIndexMixedRefHighCardParameters = 218
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 222
-	return
-}
-
-func NewMembershipPackAgentrunentryTableShared1EntryWriterOrdinal() (inst *MembershipPackAgentrunentryTableShared1) {
-	inst = &MembershipPackAgentrunentryTableShared1{}
-	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 224
-	inst.ColumnIndexHighCardRefAccel = 229
-	inst.ColumnIndexLowCardRef = 225
-	inst.ColumnIndexLowCardRefAccel = 230
-	inst.ColumnIndexLowCardVerbatim = 226
-	inst.ColumnIndexLowCardVerbatimAccel = 231
-	inst.ColumnIndexMixedLowCardRef = 227
-	inst.ColumnIndexMixedLowCardRefAccel = 232
-	inst.ColumnIndexMixedRefHighCardParameters = 228
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 232
-	return
-}
-
-func NewMembershipPackAgentrunentryTableShared1EntryPrev() (inst *MembershipPackAgentrunentryTableShared1) {
-	inst = &MembershipPackAgentrunentryTableShared1{}
-	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 234
-	inst.ColumnIndexHighCardRefAccel = 239
-	inst.ColumnIndexLowCardRef = 235
-	inst.ColumnIndexLowCardRefAccel = 240
-	inst.ColumnIndexLowCardVerbatim = 236
-	inst.ColumnIndexLowCardVerbatimAccel = 241
-	inst.ColumnIndexMixedLowCardRef = 237
-	inst.ColumnIndexMixedLowCardRefAccel = 242
-	inst.ColumnIndexMixedRefHighCardParameters = 238
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 242
-	return
-}
-
-func NewMembershipPackAgentrunentryTableShared1EntryDigest() (inst *MembershipPackAgentrunentryTableShared1) {
-	inst = &MembershipPackAgentrunentryTableShared1{}
-	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 244
-	inst.ColumnIndexHighCardRefAccel = 249
-	inst.ColumnIndexLowCardRef = 245
-	inst.ColumnIndexLowCardRefAccel = 250
-	inst.ColumnIndexLowCardVerbatim = 246
-	inst.ColumnIndexLowCardVerbatimAccel = 251
-	inst.ColumnIndexMixedLowCardRef = 247
-	inst.ColumnIndexMixedLowCardRefAccel = 252
-	inst.ColumnIndexMixedRefHighCardParameters = 248
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 252
-	return
-}
-
-func NewMembershipPackAgentrunentryTableShared1EntryKeyId() (inst *MembershipPackAgentrunentryTableShared1) {
-	inst = &MembershipPackAgentrunentryTableShared1{}
-	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 254
-	inst.ColumnIndexHighCardRefAccel = 259
-	inst.ColumnIndexLowCardRef = 255
-	inst.ColumnIndexLowCardRefAccel = 260
-	inst.ColumnIndexLowCardVerbatim = 256
-	inst.ColumnIndexLowCardVerbatimAccel = 261
-	inst.ColumnIndexMixedLowCardRef = 257
-	inst.ColumnIndexMixedLowCardRefAccel = 262
-	inst.ColumnIndexMixedRefHighCardParameters = 258
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 262
-	return
-}
-
-func NewMembershipPackAgentrunentryTableShared1EntryParent() (inst *MembershipPackAgentrunentryTableShared1) {
-	inst = &MembershipPackAgentrunentryTableShared1{}
-	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 264
-	inst.ColumnIndexHighCardRefAccel = 269
-	inst.ColumnIndexLowCardRef = 265
-	inst.ColumnIndexLowCardRefAccel = 270
-	inst.ColumnIndexLowCardVerbatim = 266
-	inst.ColumnIndexLowCardVerbatimAccel = 271
-	inst.ColumnIndexMixedLowCardRef = 267
-	inst.ColumnIndexMixedLowCardRefAccel = 272
-	inst.ColumnIndexMixedRefHighCardParameters = 268
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 272
-	return
-}
-
-func NewMembershipPackAgentrunentryTableShared1EntryAttachments() (inst *MembershipPackAgentrunentryTableShared1) {
-	inst = &MembershipPackAgentrunentryTableShared1{}
-	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 274
-	inst.ColumnIndexHighCardRefAccel = 279
-	inst.ColumnIndexLowCardRef = 275
-	inst.ColumnIndexLowCardRefAccel = 280
-	inst.ColumnIndexLowCardVerbatim = 276
-	inst.ColumnIndexLowCardVerbatimAccel = 281
-	inst.ColumnIndexMixedLowCardRef = 277
-	inst.ColumnIndexMixedLowCardRefAccel = 282
-	inst.ColumnIndexMixedRefHighCardParameters = 278
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 282
+	inst.ColumnIndexLowCardRefAccel = 179
+	inst.ColumnIndexMixedLowCardRef = 176
+	inst.ColumnIndexMixedLowCardRefAccel = 180
+	inst.ColumnIndexMixedRefHighCardParameters = 177
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 180
 	return
 }
 
@@ -677,8 +446,6 @@ func (inst *MembershipPackAgentrunentryTableShared1) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueHighCardRefElements)
 	runtime.ReleaseIfNotNil(inst.ValueLowCardRef)
 	runtime.ReleaseIfNotNil(inst.ValueLowCardRefElements)
-	runtime.ReleaseIfNotNil(inst.ValueLowCardVerbatim)
-	runtime.ReleaseIfNotNil(inst.ValueLowCardVerbatimElements)
 	runtime.ReleaseIfNotNil(inst.ValueMixedLowCardRef)
 	runtime.ReleaseIfNotNil(inst.ValueMixedLowCardRefElements)
 	runtime.ReleaseIfNotNil(inst.ValueMixedRefHighCardParameters)
@@ -690,8 +457,6 @@ func (inst *MembershipPackAgentrunentryTableShared1) Reset() {
 	inst.ValueHighCardRefElements = nil
 	inst.ValueLowCardRef = nil
 	inst.ValueLowCardRefElements = nil
-	inst.ValueLowCardVerbatim = nil
-	inst.ValueLowCardVerbatimElements = nil
 	inst.ValueMixedLowCardRef = nil
 	inst.ValueMixedLowCardRefElements = nil
 	inst.ValueMixedRefHighCardParameters = nil
@@ -712,14 +477,6 @@ func (inst *MembershipPackAgentrunentryTableShared1) LoadFromRecord(rec runtime.
 		return
 	}
 	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexLowCardRefAccel, rec, inst.AccelLowCardRef)
-	if err != nil {
-		return
-	}
-	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexLowCardVerbatim, arrow.BINARY, rec, &inst.ValueLowCardVerbatim, &inst.ValueLowCardVerbatimElements, array.NewBinaryData)
-	if err != nil {
-		return
-	}
-	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexLowCardVerbatimAccel, rec, inst.AccelLowCardVerbatim)
 	if err != nil {
 		return
 	}
@@ -752,7 +509,6 @@ func (inst *MembershipPackAgentrunentryTableShared1) Len() (nEntities int) {
 func (inst *MembershipPackAgentrunentryTableShared1) GetTotalNumberOfMemberItems(entityIdx runtime.EntityIdx) (nItems int64) {
 	nItems += inst.GetNumberOfMemberItemsHighCardRef(entityIdx)
 	nItems += inst.GetNumberOfMemberItemsLowCardRef(entityIdx)
-	nItems += inst.GetNumberOfMemberItemsLowCardVerbatim(entityIdx)
 	nItems += inst.GetNumberOfMemberItemsMixedLowCardRef(entityIdx)
 	return
 }
@@ -767,13 +523,6 @@ func (inst *MembershipPackAgentrunentryTableShared1) GetNumberOfMemberItemsHighC
 func (inst *MembershipPackAgentrunentryTableShared1) GetNumberOfMemberItemsLowCardRef(entityIdx runtime.EntityIdx) (nItems int64) {
 	if inst.ValueLowCardRef != nil {
 		b, e := inst.ValueLowCardRef.ValueOffsets(int(entityIdx))
-		nItems = e - b
-	}
-	return
-}
-func (inst *MembershipPackAgentrunentryTableShared1) GetNumberOfMemberItemsLowCardVerbatim(entityIdx runtime.EntityIdx) (nItems int64) {
-	if inst.ValueLowCardVerbatim != nil {
-		b, e := inst.ValueLowCardVerbatim.ValueOffsets(int(entityIdx))
 		nItems = e - b
 	}
 	return
@@ -806,20 +555,6 @@ func (inst *MembershipPackAgentrunentryTableShared1) GetMembValueLowCardRef(enti
 	b, _ := inst.ValueLowCardRef.ValueOffsets(int(entityIdx))
 	return func(yield func(uint64) bool) {
 		vs := inst.ValueLowCardRefElements
-		for i := r.BeginIncl; i < r.EndExcl; i++ {
-			if !yield(vs.Value(int(b) + int(i))) {
-				break
-			}
-		}
-	}
-}
-func (inst *MembershipPackAgentrunentryTableShared1) GetMembValueLowCardVerbatim(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[[]byte] {
-	accel := inst.AccelLowCardVerbatim
-	accel.SetCurrentEntityIdx(int(entityIdx))
-	r := accel.LookupForwardRange(attrIdx)
-	b, _ := inst.ValueLowCardVerbatim.ValueOffsets(int(entityIdx))
-	return func(yield func([]byte) bool) {
-		vs := inst.ValueLowCardVerbatimElements
 		for i := r.BeginIncl; i < r.EndExcl; i++ {
 			if !yield(vs.Value(int(b) + int(i))) {
 				break
@@ -883,12 +618,6 @@ func (inst *MembershipPackAgentrunentryTableShared1) GetNumberOfMemberItemsByAtt
 	nItems = int(accel.LookupForwardRange(attrIdx).CalcCardinality())
 	return
 }
-func (inst *MembershipPackAgentrunentryTableShared1) GetNumberOfMemberItemsByAttrLowCardVerbatim(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (nItems int) {
-	accel := inst.AccelLowCardVerbatim
-	accel.SetCurrentEntityIdx(int(entityIdx))
-	nItems = int(accel.LookupForwardRange(attrIdx).CalcCardinality())
-	return
-}
 func (inst *MembershipPackAgentrunentryTableShared1) GetNumberOfMemberItemsByAttrLowCardRefHighCardParams(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (nItems int) {
 	accel := inst.AccelMixedLowCardRef
 	accel.SetCurrentEntityIdx(int(entityIdx))
@@ -902,8 +631,10 @@ func (inst *MembershipPackAgentrunentryTableShared1) GetNumberOfMemberItemsByAtt
 // ./public/semistructured/leeway/readaccess/lw_ra_generator.go:930
 
 type ReadAccessAgentrunentryTablePlainEntityIdAttributes struct {
-	ValueId       *array.String
-	ColumnIndexId uint32
+	ValueId            *array.String
+	ColumnIndexId      uint32
+	ValueOrdinal       *array.Uint64
+	ColumnIndexOrdinal uint32
 }
 
 type ReadAccessAgentrunentryTablePlainEntityLifecycleAttributes struct {
@@ -911,188 +642,174 @@ type ReadAccessAgentrunentryTablePlainEntityLifecycleAttributes struct {
 	ColumnIndexRevision uint32
 }
 
-type ReadAccessAgentrunentryTablePlainEntityTimestampAttributes struct {
-	ValueTs       *array.Timestamp
-	ColumnIndexTs uint32
+type ReadAccessAgentrunentryTableTaggedBlobArrayAttributes struct {
+	ValueValue                 *array.List
+	ColumnIndexValue           uint32
+	ValueValueElements         *array.Binary
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
 }
 
-type ReadAccessAgentrunentryTableTaggedEntryAtAttributes struct {
+type ReadAccessAgentrunentryTableTaggedBoolAttributes struct {
 	ValueValue         *array.List
 	ColumnIndexValue   uint32
-	ValueValueElements *array.Timestamp
+	ValueValueElements *array.Boolean
 }
 
-type ReadAccessAgentrunentryTableTaggedEntryAttachmentsAttributes struct {
+type ReadAccessAgentrunentryTableTaggedF32ArrayAttributes struct {
+	ValueValue                 *array.List
+	ColumnIndexValue           uint32
+	ValueValueElements         *array.Float32
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
+}
+
+type ReadAccessAgentrunentryTableTaggedF64ArrayAttributes struct {
+	ValueValue                 *array.List
+	ColumnIndexValue           uint32
+	ValueValueElements         *array.Float64
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
+}
+
+type ReadAccessAgentrunentryTableTaggedI16ArrayAttributes struct {
+	ValueValue                 *array.List
+	ColumnIndexValue           uint32
+	ValueValueElements         *array.Int16
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
+}
+
+type ReadAccessAgentrunentryTableTaggedI32ArrayAttributes struct {
+	ValueValue                 *array.List
+	ColumnIndexValue           uint32
+	ValueValueElements         *array.Int32
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
+}
+
+type ReadAccessAgentrunentryTableTaggedI64ArrayAttributes struct {
+	ValueValue                 *array.List
+	ColumnIndexValue           uint32
+	ValueValueElements         *array.Int64
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
+}
+
+type ReadAccessAgentrunentryTableTaggedI8ArrayAttributes struct {
+	ValueValue                 *array.List
+	ColumnIndexValue           uint32
+	ValueValueElements         *array.Int8
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
+}
+
+type ReadAccessAgentrunentryTableTaggedStringArrayAttributes struct {
+	ValueValue                 *array.List
+	ColumnIndexValue           uint32
+	ValueValueElements         *array.String
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
+}
+
+type ReadAccessAgentrunentryTableTaggedSymbolArrayAttributes struct {
+	ValueValue                 *array.List
+	ColumnIndexValue           uint32
+	ValueValueElements         *array.String
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
+}
+
+type ReadAccessAgentrunentryTableTaggedSymbolAttributes struct {
 	ValueValue         *array.List
 	ColumnIndexValue   uint32
 	ValueValueElements *array.String
 }
 
-type ReadAccessAgentrunentryTableTaggedEntryBodyAttributes struct {
-	ValueValue         *array.List
-	ColumnIndexValue   uint32
-	ValueValueElements *array.String
+type ReadAccessAgentrunentryTableTaggedTextArrayAttributes struct {
+	ValueValue                 *array.List
+	ColumnIndexValue           uint32
+	ValueValueElements         *array.String
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
 }
 
-type ReadAccessAgentrunentryTableTaggedEntryBodyDigestAttributes struct {
-	ValueValue         *array.List
-	ColumnIndexValue   uint32
-	ValueValueElements *array.String
+type ReadAccessAgentrunentryTableTaggedTimeArrayAttributes struct {
+	ValueValue                 *array.List
+	ColumnIndexValue           uint32
+	ValueValueElements         *array.Timestamp
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
 }
 
-type ReadAccessAgentrunentryTableTaggedEntryBookAttributes struct {
-	ValueValue         *array.List
-	ColumnIndexValue   uint32
-	ValueValueElements *array.String
+type ReadAccessAgentrunentryTableTaggedU16ArrayAttributes struct {
+	ValueValue                 *array.List
+	ColumnIndexValue           uint32
+	ValueValueElements         *array.Uint16
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
 }
 
-type ReadAccessAgentrunentryTableTaggedEntryCallsAttributes struct {
-	ValueValue         *array.List
-	ColumnIndexValue   uint32
-	ValueValueElements *array.String
+type ReadAccessAgentrunentryTableTaggedU32ArrayAttributes struct {
+	ValueValue                 *array.List
+	ColumnIndexValue           uint32
+	ValueValueElements         *array.Uint32
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
 }
 
-type ReadAccessAgentrunentryTableTaggedEntryCallsDigestAttributes struct {
-	ValueValue         *array.List
-	ColumnIndexValue   uint32
-	ValueValueElements *array.String
+type ReadAccessAgentrunentryTableTaggedU32RangeAttributes struct {
+	ValueBeginIncl         *array.List
+	ColumnIndexBeginIncl   uint32
+	ValueBeginInclElements *array.Uint32
+	ValueEndExcl           *array.List
+	ColumnIndexEndExcl     uint32
+	ValueEndExclElements   *array.Uint32
 }
 
-type ReadAccessAgentrunentryTableTaggedEntryDigestAttributes struct {
-	ValueValue         *array.List
-	ColumnIndexValue   uint32
-	ValueValueElements *array.String
-}
-
-type ReadAccessAgentrunentryTableTaggedEntryEffectAttributes struct {
-	ValueValue         *array.List
-	ColumnIndexValue   uint32
-	ValueValueElements *array.String
-}
-
-type ReadAccessAgentrunentryTableTaggedEntryFormAttributes struct {
-	ValueValue         *array.List
-	ColumnIndexValue   uint32
-	ValueValueElements *array.String
-}
-
-type ReadAccessAgentrunentryTableTaggedEntryFromAttributes struct {
+type ReadAccessAgentrunentryTableTaggedU32SetAttributes struct {
 	ValueValue         *array.List
 	ColumnIndexValue   uint32
 	ValueValueElements *array.Uint32
+	AccelSet           *runtime.RandomAccessTwoLevelLookupAccel[runtime.SetIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexSet     uint32
 }
 
-type ReadAccessAgentrunentryTableTaggedEntryKeyAttributes struct {
-	ValueValue         *array.List
-	ColumnIndexValue   uint32
-	ValueValueElements *array.String
+type ReadAccessAgentrunentryTableTaggedU64ArrayAttributes struct {
+	ValueValue                 *array.List
+	ColumnIndexValue           uint32
+	ValueValueElements         *array.Uint64
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
 }
 
-type ReadAccessAgentrunentryTableTaggedEntryKeyIdAttributes struct {
+type ReadAccessAgentrunentryTableTaggedU64SetAttributes struct {
 	ValueValue         *array.List
 	ColumnIndexValue   uint32
-	ValueValueElements *array.String
+	ValueValueElements *array.Uint64
+	AccelSet           *runtime.RandomAccessTwoLevelLookupAccel[runtime.SetIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexSet     uint32
 }
 
-type ReadAccessAgentrunentryTableTaggedEntryKindAttributes struct {
-	ValueValue         *array.List
-	ColumnIndexValue   uint32
-	ValueValueElements *array.String
-}
-
-type ReadAccessAgentrunentryTableTaggedEntryLabelExposureAttributes struct {
-	ValueValue         *array.List
-	ColumnIndexValue   uint32
-	ValueValueElements *array.String
-}
-
-type ReadAccessAgentrunentryTableTaggedEntryLabelLevelAttributes struct {
-	ValueValue         *array.List
-	ColumnIndexValue   uint32
-	ValueValueElements *array.Uint32
-}
-
-type ReadAccessAgentrunentryTableTaggedEntryLabelOriginAttributes struct {
-	ValueValue         *array.List
-	ColumnIndexValue   uint32
-	ValueValueElements *array.String
-}
-
-type ReadAccessAgentrunentryTableTaggedEntryLabelTierAttributes struct {
-	ValueValue         *array.List
-	ColumnIndexValue   uint32
-	ValueValueElements *array.Uint32
-}
-
-type ReadAccessAgentrunentryTableTaggedEntryNameAttributes struct {
-	ValueValue         *array.List
-	ColumnIndexValue   uint32
-	ValueValueElements *array.String
-}
-
-type ReadAccessAgentrunentryTableTaggedEntryOrdinalAttributes struct {
-	ValueValue         *array.List
-	ColumnIndexValue   uint32
-	ValueValueElements *array.Uint32
-}
-
-type ReadAccessAgentrunentryTableTaggedEntryParentAttributes struct {
-	ValueValue         *array.List
-	ColumnIndexValue   uint32
-	ValueValueElements *array.Uint32
-}
-
-type ReadAccessAgentrunentryTableTaggedEntryPrevAttributes struct {
-	ValueValue         *array.List
-	ColumnIndexValue   uint32
-	ValueValueElements *array.Uint32
-}
-
-type ReadAccessAgentrunentryTableTaggedEntryRoleAttributes struct {
-	ValueValue         *array.List
-	ColumnIndexValue   uint32
-	ValueValueElements *array.String
-}
-
-type ReadAccessAgentrunentryTableTaggedEntryTargetAttributes struct {
-	ValueValue         *array.List
-	ColumnIndexValue   uint32
-	ValueValueElements *array.Uint32
-}
-
-type ReadAccessAgentrunentryTableTaggedEntryTurnAttributes struct {
-	ValueValue         *array.List
-	ColumnIndexValue   uint32
-	ValueValueElements *array.String
-}
-
-type ReadAccessAgentrunentryTableTaggedEntryWriterOrdinalAttributes struct {
-	ValueValue         *array.List
-	ColumnIndexValue   uint32
-	ValueValueElements *array.Uint32
-}
-
-type ReadAccessAgentrunentryTableTaggedEntryWriterRunAttributes struct {
-	ValueValue         *array.List
-	ColumnIndexValue   uint32
-	ValueValueElements *array.String
-}
-
-type ReadAccessAgentrunentryTableTaggedEntryWriterTurnAttributes struct {
-	ValueValue         *array.List
-	ColumnIndexValue   uint32
-	ValueValueElements *array.String
+type ReadAccessAgentrunentryTableTaggedU8ArrayAttributes struct {
+	ValueValue                 *array.List
+	ColumnIndexValue           uint32
+	ValueValueElements         *array.Uint8
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
 }
 
 func NewReadAccessAgentrunentryTablePlainEntityIdAttributes() (inst *ReadAccessAgentrunentryTablePlainEntityIdAttributes) {
 	inst = &ReadAccessAgentrunentryTablePlainEntityIdAttributes{}
 	inst.ColumnIndexId = 0
+	inst.ColumnIndexOrdinal = 1
 	return
 }
 
 func (inst *ReadAccessAgentrunentryTablePlainEntityIdAttributes) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = []uint32{
 		inst.ColumnIndexId,
+		inst.ColumnIndexOrdinal,
 	}
 	return
 }
@@ -1100,14 +817,16 @@ func (inst *ReadAccessAgentrunentryTablePlainEntityIdAttributes) GetColumnIndice
 func (inst *ReadAccessAgentrunentryTablePlainEntityIdAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = []string{
 		"ReadAccessAgentrunentryTablePlainEntityIdAttributes.ColumnIndexId",
+		"ReadAccessAgentrunentryTablePlainEntityIdAttributes.ColumnIndexOrdinal",
 	}
 	return
 }
 
 func (inst *ReadAccessAgentrunentryTablePlainEntityIdAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
 	inst.ColumnIndexId = indices[0]
+	inst.ColumnIndexOrdinal = indices[1]
 
-	rest = indices[1:]
+	rest = indices[2:]
 	return
 }
 
@@ -1142,846 +861,674 @@ func (inst *ReadAccessAgentrunentryTablePlainEntityLifecycleAttributes) SetColum
 
 var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTablePlainEntityLifecycleAttributes)(nil)
 
-func NewReadAccessAgentrunentryTablePlainEntityTimestampAttributes() (inst *ReadAccessAgentrunentryTablePlainEntityTimestampAttributes) {
-	inst = &ReadAccessAgentrunentryTablePlainEntityTimestampAttributes{}
-	inst.ColumnIndexTs = 1
+func NewReadAccessAgentrunentryTableTaggedBlobArrayAttributes() (inst *ReadAccessAgentrunentryTableTaggedBlobArrayAttributes) {
+	inst = &ReadAccessAgentrunentryTableTaggedBlobArrayAttributes{}
+	inst.ColumnIndexValue = 38
+	inst.ColumnIndexHomogenousArray = 43
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTablePlainEntityTimestampAttributes) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = []uint32{
-		inst.ColumnIndexTs,
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTablePlainEntityTimestampAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = []string{
-		"ReadAccessAgentrunentryTablePlainEntityTimestampAttributes.ColumnIndexTs",
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTablePlainEntityTimestampAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
-	inst.ColumnIndexTs = indices[0]
-
-	rest = indices[1:]
-	return
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTablePlainEntityTimestampAttributes)(nil)
-
-func NewReadAccessAgentrunentryTableTaggedEntryAtAttributes() (inst *ReadAccessAgentrunentryTableTaggedEntryAtAttributes) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryAtAttributes{}
-	inst.ColumnIndexValue = 13
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAtAttributes) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedBlobArrayAttributes) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = []uint32{
 		inst.ColumnIndexValue,
+		inst.ColumnIndexHomogenousArray,
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAtAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessAgentrunentryTableTaggedBlobArrayAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = []string{
-		"ReadAccessAgentrunentryTableTaggedEntryAtAttributes.ColumnIndexValue",
+		"ReadAccessAgentrunentryTableTaggedBlobArrayAttributes.ColumnIndexValue",
+		"ReadAccessAgentrunentryTableTaggedBlobArrayAttributes.ColumnIndexHomogenousArray",
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAtAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedBlobArrayAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
 	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexHomogenousArray = indices[1]
 
-	rest = indices[1:]
+	rest = indices[2:]
 	return
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryAtAttributes)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedBlobArrayAttributes)(nil)
 
-func NewReadAccessAgentrunentryTableTaggedEntryAttachmentsAttributes() (inst *ReadAccessAgentrunentryTableTaggedEntryAttachmentsAttributes) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryAttachmentsAttributes{}
-	inst.ColumnIndexValue = 273
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAttachmentsAttributes) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = []uint32{
-		inst.ColumnIndexValue,
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAttachmentsAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = []string{
-		"ReadAccessAgentrunentryTableTaggedEntryAttachmentsAttributes.ColumnIndexValue",
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAttachmentsAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
-	inst.ColumnIndexValue = indices[0]
-
-	rest = indices[1:]
-	return
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryAttachmentsAttributes)(nil)
-
-func NewReadAccessAgentrunentryTableTaggedEntryBodyAttributes() (inst *ReadAccessAgentrunentryTableTaggedEntryBodyAttributes) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryBodyAttributes{}
-	inst.ColumnIndexValue = 53
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBodyAttributes) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = []uint32{
-		inst.ColumnIndexValue,
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBodyAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = []string{
-		"ReadAccessAgentrunentryTableTaggedEntryBodyAttributes.ColumnIndexValue",
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBodyAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
-	inst.ColumnIndexValue = indices[0]
-
-	rest = indices[1:]
-	return
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryBodyAttributes)(nil)
-
-func NewReadAccessAgentrunentryTableTaggedEntryBodyDigestAttributes() (inst *ReadAccessAgentrunentryTableTaggedEntryBodyDigestAttributes) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryBodyDigestAttributes{}
-	inst.ColumnIndexValue = 73
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBodyDigestAttributes) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = []uint32{
-		inst.ColumnIndexValue,
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBodyDigestAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = []string{
-		"ReadAccessAgentrunentryTableTaggedEntryBodyDigestAttributes.ColumnIndexValue",
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBodyDigestAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
-	inst.ColumnIndexValue = indices[0]
-
-	rest = indices[1:]
-	return
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryBodyDigestAttributes)(nil)
-
-func NewReadAccessAgentrunentryTableTaggedEntryBookAttributes() (inst *ReadAccessAgentrunentryTableTaggedEntryBookAttributes) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryBookAttributes{}
-	inst.ColumnIndexValue = 103
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBookAttributes) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = []uint32{
-		inst.ColumnIndexValue,
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBookAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = []string{
-		"ReadAccessAgentrunentryTableTaggedEntryBookAttributes.ColumnIndexValue",
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBookAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
-	inst.ColumnIndexValue = indices[0]
-
-	rest = indices[1:]
-	return
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryBookAttributes)(nil)
-
-func NewReadAccessAgentrunentryTableTaggedEntryCallsAttributes() (inst *ReadAccessAgentrunentryTableTaggedEntryCallsAttributes) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryCallsAttributes{}
-	inst.ColumnIndexValue = 63
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCallsAttributes) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = []uint32{
-		inst.ColumnIndexValue,
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCallsAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = []string{
-		"ReadAccessAgentrunentryTableTaggedEntryCallsAttributes.ColumnIndexValue",
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCallsAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
-	inst.ColumnIndexValue = indices[0]
-
-	rest = indices[1:]
-	return
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryCallsAttributes)(nil)
-
-func NewReadAccessAgentrunentryTableTaggedEntryCallsDigestAttributes() (inst *ReadAccessAgentrunentryTableTaggedEntryCallsDigestAttributes) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryCallsDigestAttributes{}
-	inst.ColumnIndexValue = 83
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCallsDigestAttributes) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = []uint32{
-		inst.ColumnIndexValue,
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCallsDigestAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = []string{
-		"ReadAccessAgentrunentryTableTaggedEntryCallsDigestAttributes.ColumnIndexValue",
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCallsDigestAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
-	inst.ColumnIndexValue = indices[0]
-
-	rest = indices[1:]
-	return
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryCallsDigestAttributes)(nil)
-
-func NewReadAccessAgentrunentryTableTaggedEntryDigestAttributes() (inst *ReadAccessAgentrunentryTableTaggedEntryDigestAttributes) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryDigestAttributes{}
-	inst.ColumnIndexValue = 243
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryDigestAttributes) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = []uint32{
-		inst.ColumnIndexValue,
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryDigestAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = []string{
-		"ReadAccessAgentrunentryTableTaggedEntryDigestAttributes.ColumnIndexValue",
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryDigestAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
-	inst.ColumnIndexValue = indices[0]
-
-	rest = indices[1:]
-	return
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryDigestAttributes)(nil)
-
-func NewReadAccessAgentrunentryTableTaggedEntryEffectAttributes() (inst *ReadAccessAgentrunentryTableTaggedEntryEffectAttributes) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryEffectAttributes{}
-	inst.ColumnIndexValue = 143
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryEffectAttributes) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = []uint32{
-		inst.ColumnIndexValue,
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryEffectAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = []string{
-		"ReadAccessAgentrunentryTableTaggedEntryEffectAttributes.ColumnIndexValue",
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryEffectAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
-	inst.ColumnIndexValue = indices[0]
-
-	rest = indices[1:]
-	return
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryEffectAttributes)(nil)
-
-func NewReadAccessAgentrunentryTableTaggedEntryFormAttributes() (inst *ReadAccessAgentrunentryTableTaggedEntryFormAttributes) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryFormAttributes{}
-	inst.ColumnIndexValue = 113
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryFormAttributes) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = []uint32{
-		inst.ColumnIndexValue,
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryFormAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = []string{
-		"ReadAccessAgentrunentryTableTaggedEntryFormAttributes.ColumnIndexValue",
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryFormAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
-	inst.ColumnIndexValue = indices[0]
-
-	rest = indices[1:]
-	return
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryFormAttributes)(nil)
-
-func NewReadAccessAgentrunentryTableTaggedEntryFromAttributes() (inst *ReadAccessAgentrunentryTableTaggedEntryFromAttributes) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryFromAttributes{}
-	inst.ColumnIndexValue = 133
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryFromAttributes) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = []uint32{
-		inst.ColumnIndexValue,
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryFromAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = []string{
-		"ReadAccessAgentrunentryTableTaggedEntryFromAttributes.ColumnIndexValue",
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryFromAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
-	inst.ColumnIndexValue = indices[0]
-
-	rest = indices[1:]
-	return
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryFromAttributes)(nil)
-
-func NewReadAccessAgentrunentryTableTaggedEntryKeyAttributes() (inst *ReadAccessAgentrunentryTableTaggedEntryKeyAttributes) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryKeyAttributes{}
-	inst.ColumnIndexValue = 33
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKeyAttributes) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = []uint32{
-		inst.ColumnIndexValue,
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKeyAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = []string{
-		"ReadAccessAgentrunentryTableTaggedEntryKeyAttributes.ColumnIndexValue",
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKeyAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
-	inst.ColumnIndexValue = indices[0]
-
-	rest = indices[1:]
-	return
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryKeyAttributes)(nil)
-
-func NewReadAccessAgentrunentryTableTaggedEntryKeyIdAttributes() (inst *ReadAccessAgentrunentryTableTaggedEntryKeyIdAttributes) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryKeyIdAttributes{}
-	inst.ColumnIndexValue = 253
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKeyIdAttributes) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = []uint32{
-		inst.ColumnIndexValue,
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKeyIdAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = []string{
-		"ReadAccessAgentrunentryTableTaggedEntryKeyIdAttributes.ColumnIndexValue",
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKeyIdAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
-	inst.ColumnIndexValue = indices[0]
-
-	rest = indices[1:]
-	return
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryKeyIdAttributes)(nil)
-
-func NewReadAccessAgentrunentryTableTaggedEntryKindAttributes() (inst *ReadAccessAgentrunentryTableTaggedEntryKindAttributes) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryKindAttributes{}
-	inst.ColumnIndexValue = 23
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKindAttributes) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = []uint32{
-		inst.ColumnIndexValue,
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKindAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = []string{
-		"ReadAccessAgentrunentryTableTaggedEntryKindAttributes.ColumnIndexValue",
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKindAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
-	inst.ColumnIndexValue = indices[0]
-
-	rest = indices[1:]
-	return
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryKindAttributes)(nil)
-
-func NewReadAccessAgentrunentryTableTaggedEntryLabelExposureAttributes() (inst *ReadAccessAgentrunentryTableTaggedEntryLabelExposureAttributes) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryLabelExposureAttributes{}
-	inst.ColumnIndexValue = 183
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelExposureAttributes) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = []uint32{
-		inst.ColumnIndexValue,
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelExposureAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = []string{
-		"ReadAccessAgentrunentryTableTaggedEntryLabelExposureAttributes.ColumnIndexValue",
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelExposureAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
-	inst.ColumnIndexValue = indices[0]
-
-	rest = indices[1:]
-	return
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryLabelExposureAttributes)(nil)
-
-func NewReadAccessAgentrunentryTableTaggedEntryLabelLevelAttributes() (inst *ReadAccessAgentrunentryTableTaggedEntryLabelLevelAttributes) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryLabelLevelAttributes{}
-	inst.ColumnIndexValue = 163
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelLevelAttributes) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = []uint32{
-		inst.ColumnIndexValue,
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelLevelAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = []string{
-		"ReadAccessAgentrunentryTableTaggedEntryLabelLevelAttributes.ColumnIndexValue",
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelLevelAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
-	inst.ColumnIndexValue = indices[0]
-
-	rest = indices[1:]
-	return
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryLabelLevelAttributes)(nil)
-
-func NewReadAccessAgentrunentryTableTaggedEntryLabelOriginAttributes() (inst *ReadAccessAgentrunentryTableTaggedEntryLabelOriginAttributes) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryLabelOriginAttributes{}
-	inst.ColumnIndexValue = 193
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelOriginAttributes) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = []uint32{
-		inst.ColumnIndexValue,
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelOriginAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = []string{
-		"ReadAccessAgentrunentryTableTaggedEntryLabelOriginAttributes.ColumnIndexValue",
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelOriginAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
-	inst.ColumnIndexValue = indices[0]
-
-	rest = indices[1:]
-	return
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryLabelOriginAttributes)(nil)
-
-func NewReadAccessAgentrunentryTableTaggedEntryLabelTierAttributes() (inst *ReadAccessAgentrunentryTableTaggedEntryLabelTierAttributes) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryLabelTierAttributes{}
+func NewReadAccessAgentrunentryTableTaggedBoolAttributes() (inst *ReadAccessAgentrunentryTableTaggedBoolAttributes) {
+	inst = &ReadAccessAgentrunentryTableTaggedBoolAttributes{}
 	inst.ColumnIndexValue = 173
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelTierAttributes) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedBoolAttributes) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = []uint32{
 		inst.ColumnIndexValue,
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelTierAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessAgentrunentryTableTaggedBoolAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = []string{
-		"ReadAccessAgentrunentryTableTaggedEntryLabelTierAttributes.ColumnIndexValue",
+		"ReadAccessAgentrunentryTableTaggedBoolAttributes.ColumnIndexValue",
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelTierAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedBoolAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
 	inst.ColumnIndexValue = indices[0]
 
 	rest = indices[1:]
 	return
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryLabelTierAttributes)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedBoolAttributes)(nil)
 
-func NewReadAccessAgentrunentryTableTaggedEntryNameAttributes() (inst *ReadAccessAgentrunentryTableTaggedEntryNameAttributes) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryNameAttributes{}
-	inst.ColumnIndexValue = 93
+func NewReadAccessAgentrunentryTableTaggedF32ArrayAttributes() (inst *ReadAccessAgentrunentryTableTaggedF32ArrayAttributes) {
+	inst = &ReadAccessAgentrunentryTableTaggedF32ArrayAttributes{}
+	inst.ColumnIndexValue = 137
+	inst.ColumnIndexHomogenousArray = 142
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryNameAttributes) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedF32ArrayAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+		inst.ColumnIndexHomogenousArray,
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedF32ArrayAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessAgentrunentryTableTaggedF32ArrayAttributes.ColumnIndexValue",
+		"ReadAccessAgentrunentryTableTaggedF32ArrayAttributes.ColumnIndexHomogenousArray",
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedF32ArrayAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexHomogenousArray = indices[1]
+
+	rest = indices[2:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedF32ArrayAttributes)(nil)
+
+func NewReadAccessAgentrunentryTableTaggedF64ArrayAttributes() (inst *ReadAccessAgentrunentryTableTaggedF64ArrayAttributes) {
+	inst = &ReadAccessAgentrunentryTableTaggedF64ArrayAttributes{}
+	inst.ColumnIndexValue = 146
+	inst.ColumnIndexHomogenousArray = 151
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedF64ArrayAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+		inst.ColumnIndexHomogenousArray,
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedF64ArrayAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessAgentrunentryTableTaggedF64ArrayAttributes.ColumnIndexValue",
+		"ReadAccessAgentrunentryTableTaggedF64ArrayAttributes.ColumnIndexHomogenousArray",
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedF64ArrayAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexHomogenousArray = indices[1]
+
+	rest = indices[2:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedF64ArrayAttributes)(nil)
+
+func NewReadAccessAgentrunentryTableTaggedI16ArrayAttributes() (inst *ReadAccessAgentrunentryTableTaggedI16ArrayAttributes) {
+	inst = &ReadAccessAgentrunentryTableTaggedI16ArrayAttributes{}
+	inst.ColumnIndexValue = 110
+	inst.ColumnIndexHomogenousArray = 115
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedI16ArrayAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+		inst.ColumnIndexHomogenousArray,
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedI16ArrayAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessAgentrunentryTableTaggedI16ArrayAttributes.ColumnIndexValue",
+		"ReadAccessAgentrunentryTableTaggedI16ArrayAttributes.ColumnIndexHomogenousArray",
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedI16ArrayAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexHomogenousArray = indices[1]
+
+	rest = indices[2:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedI16ArrayAttributes)(nil)
+
+func NewReadAccessAgentrunentryTableTaggedI32ArrayAttributes() (inst *ReadAccessAgentrunentryTableTaggedI32ArrayAttributes) {
+	inst = &ReadAccessAgentrunentryTableTaggedI32ArrayAttributes{}
+	inst.ColumnIndexValue = 119
+	inst.ColumnIndexHomogenousArray = 124
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedI32ArrayAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+		inst.ColumnIndexHomogenousArray,
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedI32ArrayAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessAgentrunentryTableTaggedI32ArrayAttributes.ColumnIndexValue",
+		"ReadAccessAgentrunentryTableTaggedI32ArrayAttributes.ColumnIndexHomogenousArray",
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedI32ArrayAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexHomogenousArray = indices[1]
+
+	rest = indices[2:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedI32ArrayAttributes)(nil)
+
+func NewReadAccessAgentrunentryTableTaggedI64ArrayAttributes() (inst *ReadAccessAgentrunentryTableTaggedI64ArrayAttributes) {
+	inst = &ReadAccessAgentrunentryTableTaggedI64ArrayAttributes{}
+	inst.ColumnIndexValue = 128
+	inst.ColumnIndexHomogenousArray = 133
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedI64ArrayAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+		inst.ColumnIndexHomogenousArray,
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedI64ArrayAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessAgentrunentryTableTaggedI64ArrayAttributes.ColumnIndexValue",
+		"ReadAccessAgentrunentryTableTaggedI64ArrayAttributes.ColumnIndexHomogenousArray",
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedI64ArrayAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexHomogenousArray = indices[1]
+
+	rest = indices[2:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedI64ArrayAttributes)(nil)
+
+func NewReadAccessAgentrunentryTableTaggedI8ArrayAttributes() (inst *ReadAccessAgentrunentryTableTaggedI8ArrayAttributes) {
+	inst = &ReadAccessAgentrunentryTableTaggedI8ArrayAttributes{}
+	inst.ColumnIndexValue = 101
+	inst.ColumnIndexHomogenousArray = 106
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedI8ArrayAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+		inst.ColumnIndexHomogenousArray,
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedI8ArrayAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessAgentrunentryTableTaggedI8ArrayAttributes.ColumnIndexValue",
+		"ReadAccessAgentrunentryTableTaggedI8ArrayAttributes.ColumnIndexHomogenousArray",
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedI8ArrayAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexHomogenousArray = indices[1]
+
+	rest = indices[2:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedI8ArrayAttributes)(nil)
+
+func NewReadAccessAgentrunentryTableTaggedStringArrayAttributes() (inst *ReadAccessAgentrunentryTableTaggedStringArrayAttributes) {
+	inst = &ReadAccessAgentrunentryTableTaggedStringArrayAttributes{}
+	inst.ColumnIndexValue = 12
+	inst.ColumnIndexHomogenousArray = 17
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedStringArrayAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+		inst.ColumnIndexHomogenousArray,
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedStringArrayAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessAgentrunentryTableTaggedStringArrayAttributes.ColumnIndexValue",
+		"ReadAccessAgentrunentryTableTaggedStringArrayAttributes.ColumnIndexHomogenousArray",
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedStringArrayAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexHomogenousArray = indices[1]
+
+	rest = indices[2:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedStringArrayAttributes)(nil)
+
+func NewReadAccessAgentrunentryTableTaggedSymbolArrayAttributes() (inst *ReadAccessAgentrunentryTableTaggedSymbolArrayAttributes) {
+	inst = &ReadAccessAgentrunentryTableTaggedSymbolArrayAttributes{}
+	inst.ColumnIndexValue = 29
+	inst.ColumnIndexHomogenousArray = 34
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolArrayAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+		inst.ColumnIndexHomogenousArray,
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolArrayAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessAgentrunentryTableTaggedSymbolArrayAttributes.ColumnIndexValue",
+		"ReadAccessAgentrunentryTableTaggedSymbolArrayAttributes.ColumnIndexHomogenousArray",
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolArrayAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexHomogenousArray = indices[1]
+
+	rest = indices[2:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedSymbolArrayAttributes)(nil)
+
+func NewReadAccessAgentrunentryTableTaggedSymbolAttributes() (inst *ReadAccessAgentrunentryTableTaggedSymbolAttributes) {
+	inst = &ReadAccessAgentrunentryTableTaggedSymbolAttributes{}
+	inst.ColumnIndexValue = 21
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolAttributes) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = []uint32{
 		inst.ColumnIndexValue,
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryNameAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = []string{
-		"ReadAccessAgentrunentryTableTaggedEntryNameAttributes.ColumnIndexValue",
+		"ReadAccessAgentrunentryTableTaggedSymbolAttributes.ColumnIndexValue",
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryNameAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
 	inst.ColumnIndexValue = indices[0]
 
 	rest = indices[1:]
 	return
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryNameAttributes)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedSymbolAttributes)(nil)
 
-func NewReadAccessAgentrunentryTableTaggedEntryOrdinalAttributes() (inst *ReadAccessAgentrunentryTableTaggedEntryOrdinalAttributes) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryOrdinalAttributes{}
+func NewReadAccessAgentrunentryTableTaggedTextArrayAttributes() (inst *ReadAccessAgentrunentryTableTaggedTextArrayAttributes) {
+	inst = &ReadAccessAgentrunentryTableTaggedTextArrayAttributes{}
 	inst.ColumnIndexValue = 3
+	inst.ColumnIndexHomogenousArray = 8
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryOrdinalAttributes) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedTextArrayAttributes) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = []uint32{
 		inst.ColumnIndexValue,
+		inst.ColumnIndexHomogenousArray,
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryOrdinalAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessAgentrunentryTableTaggedTextArrayAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = []string{
-		"ReadAccessAgentrunentryTableTaggedEntryOrdinalAttributes.ColumnIndexValue",
+		"ReadAccessAgentrunentryTableTaggedTextArrayAttributes.ColumnIndexValue",
+		"ReadAccessAgentrunentryTableTaggedTextArrayAttributes.ColumnIndexHomogenousArray",
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryOrdinalAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedTextArrayAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
 	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexHomogenousArray = indices[1]
 
-	rest = indices[1:]
+	rest = indices[2:]
 	return
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryOrdinalAttributes)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedTextArrayAttributes)(nil)
 
-func NewReadAccessAgentrunentryTableTaggedEntryParentAttributes() (inst *ReadAccessAgentrunentryTableTaggedEntryParentAttributes) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryParentAttributes{}
-	inst.ColumnIndexValue = 263
+func NewReadAccessAgentrunentryTableTaggedTimeArrayAttributes() (inst *ReadAccessAgentrunentryTableTaggedTimeArrayAttributes) {
+	inst = &ReadAccessAgentrunentryTableTaggedTimeArrayAttributes{}
+	inst.ColumnIndexValue = 164
+	inst.ColumnIndexHomogenousArray = 169
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryParentAttributes) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedTimeArrayAttributes) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = []uint32{
 		inst.ColumnIndexValue,
+		inst.ColumnIndexHomogenousArray,
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryParentAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessAgentrunentryTableTaggedTimeArrayAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = []string{
-		"ReadAccessAgentrunentryTableTaggedEntryParentAttributes.ColumnIndexValue",
+		"ReadAccessAgentrunentryTableTaggedTimeArrayAttributes.ColumnIndexValue",
+		"ReadAccessAgentrunentryTableTaggedTimeArrayAttributes.ColumnIndexHomogenousArray",
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryParentAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedTimeArrayAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
 	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexHomogenousArray = indices[1]
 
-	rest = indices[1:]
+	rest = indices[2:]
 	return
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryParentAttributes)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedTimeArrayAttributes)(nil)
 
-func NewReadAccessAgentrunentryTableTaggedEntryPrevAttributes() (inst *ReadAccessAgentrunentryTableTaggedEntryPrevAttributes) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryPrevAttributes{}
-	inst.ColumnIndexValue = 233
+func NewReadAccessAgentrunentryTableTaggedU16ArrayAttributes() (inst *ReadAccessAgentrunentryTableTaggedU16ArrayAttributes) {
+	inst = &ReadAccessAgentrunentryTableTaggedU16ArrayAttributes{}
+	inst.ColumnIndexValue = 56
+	inst.ColumnIndexHomogenousArray = 61
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryPrevAttributes) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedU16ArrayAttributes) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = []uint32{
 		inst.ColumnIndexValue,
+		inst.ColumnIndexHomogenousArray,
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryPrevAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessAgentrunentryTableTaggedU16ArrayAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = []string{
-		"ReadAccessAgentrunentryTableTaggedEntryPrevAttributes.ColumnIndexValue",
+		"ReadAccessAgentrunentryTableTaggedU16ArrayAttributes.ColumnIndexValue",
+		"ReadAccessAgentrunentryTableTaggedU16ArrayAttributes.ColumnIndexHomogenousArray",
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryPrevAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedU16ArrayAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
 	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexHomogenousArray = indices[1]
 
-	rest = indices[1:]
+	rest = indices[2:]
 	return
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryPrevAttributes)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedU16ArrayAttributes)(nil)
 
-func NewReadAccessAgentrunentryTableTaggedEntryRoleAttributes() (inst *ReadAccessAgentrunentryTableTaggedEntryRoleAttributes) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryRoleAttributes{}
-	inst.ColumnIndexValue = 43
+func NewReadAccessAgentrunentryTableTaggedU32ArrayAttributes() (inst *ReadAccessAgentrunentryTableTaggedU32ArrayAttributes) {
+	inst = &ReadAccessAgentrunentryTableTaggedU32ArrayAttributes{}
+	inst.ColumnIndexValue = 65
+	inst.ColumnIndexHomogenousArray = 70
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryRoleAttributes) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedU32ArrayAttributes) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = []uint32{
 		inst.ColumnIndexValue,
+		inst.ColumnIndexHomogenousArray,
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryRoleAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessAgentrunentryTableTaggedU32ArrayAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = []string{
-		"ReadAccessAgentrunentryTableTaggedEntryRoleAttributes.ColumnIndexValue",
+		"ReadAccessAgentrunentryTableTaggedU32ArrayAttributes.ColumnIndexValue",
+		"ReadAccessAgentrunentryTableTaggedU32ArrayAttributes.ColumnIndexHomogenousArray",
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryRoleAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedU32ArrayAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
 	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexHomogenousArray = indices[1]
 
-	rest = indices[1:]
+	rest = indices[2:]
 	return
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryRoleAttributes)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedU32ArrayAttributes)(nil)
 
-func NewReadAccessAgentrunentryTableTaggedEntryTargetAttributes() (inst *ReadAccessAgentrunentryTableTaggedEntryTargetAttributes) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryTargetAttributes{}
-	inst.ColumnIndexValue = 123
+func NewReadAccessAgentrunentryTableTaggedU32RangeAttributes() (inst *ReadAccessAgentrunentryTableTaggedU32RangeAttributes) {
+	inst = &ReadAccessAgentrunentryTableTaggedU32RangeAttributes{}
+	inst.ColumnIndexBeginIncl = 155
+	inst.ColumnIndexEndExcl = 156
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTargetAttributes) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedU32RangeAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexBeginIncl,
+		inst.ColumnIndexEndExcl,
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedU32RangeAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessAgentrunentryTableTaggedU32RangeAttributes.ColumnIndexBeginIncl",
+		"ReadAccessAgentrunentryTableTaggedU32RangeAttributes.ColumnIndexEndExcl",
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedU32RangeAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexBeginIncl = indices[0]
+	inst.ColumnIndexEndExcl = indices[1]
+
+	rest = indices[2:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedU32RangeAttributes)(nil)
+
+func NewReadAccessAgentrunentryTableTaggedU32SetAttributes() (inst *ReadAccessAgentrunentryTableTaggedU32SetAttributes) {
+	inst = &ReadAccessAgentrunentryTableTaggedU32SetAttributes{}
+	inst.ColumnIndexValue = 74
+	inst.ColumnIndexSet = 79
+	inst.AccelSet = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.SetIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedU32SetAttributes) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = []uint32{
 		inst.ColumnIndexValue,
+		inst.ColumnIndexSet,
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTargetAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessAgentrunentryTableTaggedU32SetAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = []string{
-		"ReadAccessAgentrunentryTableTaggedEntryTargetAttributes.ColumnIndexValue",
+		"ReadAccessAgentrunentryTableTaggedU32SetAttributes.ColumnIndexValue",
+		"ReadAccessAgentrunentryTableTaggedU32SetAttributes.ColumnIndexSet",
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTargetAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedU32SetAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
 	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexSet = indices[1]
 
-	rest = indices[1:]
+	rest = indices[2:]
 	return
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryTargetAttributes)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedU32SetAttributes)(nil)
 
-func NewReadAccessAgentrunentryTableTaggedEntryTurnAttributes() (inst *ReadAccessAgentrunentryTableTaggedEntryTurnAttributes) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryTurnAttributes{}
-	inst.ColumnIndexValue = 153
+func NewReadAccessAgentrunentryTableTaggedU64ArrayAttributes() (inst *ReadAccessAgentrunentryTableTaggedU64ArrayAttributes) {
+	inst = &ReadAccessAgentrunentryTableTaggedU64ArrayAttributes{}
+	inst.ColumnIndexValue = 83
+	inst.ColumnIndexHomogenousArray = 88
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTurnAttributes) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedU64ArrayAttributes) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = []uint32{
 		inst.ColumnIndexValue,
+		inst.ColumnIndexHomogenousArray,
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTurnAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessAgentrunentryTableTaggedU64ArrayAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = []string{
-		"ReadAccessAgentrunentryTableTaggedEntryTurnAttributes.ColumnIndexValue",
+		"ReadAccessAgentrunentryTableTaggedU64ArrayAttributes.ColumnIndexValue",
+		"ReadAccessAgentrunentryTableTaggedU64ArrayAttributes.ColumnIndexHomogenousArray",
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTurnAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedU64ArrayAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
 	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexHomogenousArray = indices[1]
 
-	rest = indices[1:]
+	rest = indices[2:]
 	return
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryTurnAttributes)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedU64ArrayAttributes)(nil)
 
-func NewReadAccessAgentrunentryTableTaggedEntryWriterOrdinalAttributes() (inst *ReadAccessAgentrunentryTableTaggedEntryWriterOrdinalAttributes) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryWriterOrdinalAttributes{}
-	inst.ColumnIndexValue = 223
+func NewReadAccessAgentrunentryTableTaggedU64SetAttributes() (inst *ReadAccessAgentrunentryTableTaggedU64SetAttributes) {
+	inst = &ReadAccessAgentrunentryTableTaggedU64SetAttributes{}
+	inst.ColumnIndexValue = 92
+	inst.ColumnIndexSet = 97
+	inst.AccelSet = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.SetIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterOrdinalAttributes) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedU64SetAttributes) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = []uint32{
 		inst.ColumnIndexValue,
+		inst.ColumnIndexSet,
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterOrdinalAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessAgentrunentryTableTaggedU64SetAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = []string{
-		"ReadAccessAgentrunentryTableTaggedEntryWriterOrdinalAttributes.ColumnIndexValue",
+		"ReadAccessAgentrunentryTableTaggedU64SetAttributes.ColumnIndexValue",
+		"ReadAccessAgentrunentryTableTaggedU64SetAttributes.ColumnIndexSet",
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterOrdinalAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedU64SetAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
 	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexSet = indices[1]
 
-	rest = indices[1:]
+	rest = indices[2:]
 	return
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryWriterOrdinalAttributes)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedU64SetAttributes)(nil)
 
-func NewReadAccessAgentrunentryTableTaggedEntryWriterRunAttributes() (inst *ReadAccessAgentrunentryTableTaggedEntryWriterRunAttributes) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryWriterRunAttributes{}
-	inst.ColumnIndexValue = 203
+func NewReadAccessAgentrunentryTableTaggedU8ArrayAttributes() (inst *ReadAccessAgentrunentryTableTaggedU8ArrayAttributes) {
+	inst = &ReadAccessAgentrunentryTableTaggedU8ArrayAttributes{}
+	inst.ColumnIndexValue = 47
+	inst.ColumnIndexHomogenousArray = 52
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterRunAttributes) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedU8ArrayAttributes) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = []uint32{
 		inst.ColumnIndexValue,
+		inst.ColumnIndexHomogenousArray,
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterRunAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessAgentrunentryTableTaggedU8ArrayAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = []string{
-		"ReadAccessAgentrunentryTableTaggedEntryWriterRunAttributes.ColumnIndexValue",
+		"ReadAccessAgentrunentryTableTaggedU8ArrayAttributes.ColumnIndexValue",
+		"ReadAccessAgentrunentryTableTaggedU8ArrayAttributes.ColumnIndexHomogenousArray",
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterRunAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedU8ArrayAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
 	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexHomogenousArray = indices[1]
 
-	rest = indices[1:]
+	rest = indices[2:]
 	return
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryWriterRunAttributes)(nil)
-
-func NewReadAccessAgentrunentryTableTaggedEntryWriterTurnAttributes() (inst *ReadAccessAgentrunentryTableTaggedEntryWriterTurnAttributes) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryWriterTurnAttributes{}
-	inst.ColumnIndexValue = 213
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterTurnAttributes) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = []uint32{
-		inst.ColumnIndexValue,
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterTurnAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = []string{
-		"ReadAccessAgentrunentryTableTaggedEntryWriterTurnAttributes.ColumnIndexValue",
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterTurnAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
-	inst.ColumnIndexValue = indices[0]
-
-	rest = indices[1:]
-	return
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryWriterTurnAttributes)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedU8ArrayAttributes)(nil)
 
 ///////////////////////////////////////////////////////////////////
 // code generator
@@ -1990,154 +1537,164 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryWr
 
 func (inst *ReadAccessAgentrunentryTablePlainEntityIdAttributes) Reset() {
 	inst.ValueId = nil
+	inst.ValueOrdinal = nil
 }
 
 func (inst *ReadAccessAgentrunentryTablePlainEntityLifecycleAttributes) Reset() {
 	inst.ValueRevision = nil
 }
 
-func (inst *ReadAccessAgentrunentryTablePlainEntityTimestampAttributes) Reset() {
-	inst.ValueTs = nil
+func (inst *ReadAccessAgentrunentryTableTaggedBlobArrayAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAtAttributes) Reset() {
+func (inst *ReadAccessAgentrunentryTableTaggedBoolAttributes) Reset() {
 	inst.ValueValue = nil
 	inst.ValueValueElements = nil
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAttachmentsAttributes) Reset() {
+func (inst *ReadAccessAgentrunentryTableTaggedF32ArrayAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedF64ArrayAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedI16ArrayAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedI32ArrayAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedI64ArrayAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedI8ArrayAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedStringArrayAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolArrayAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolAttributes) Reset() {
 	inst.ValueValue = nil
 	inst.ValueValueElements = nil
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBodyAttributes) Reset() {
+func (inst *ReadAccessAgentrunentryTableTaggedTextArrayAttributes) Reset() {
 	inst.ValueValue = nil
 	inst.ValueValueElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBodyDigestAttributes) Reset() {
+func (inst *ReadAccessAgentrunentryTableTaggedTimeArrayAttributes) Reset() {
 	inst.ValueValue = nil
 	inst.ValueValueElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBookAttributes) Reset() {
+func (inst *ReadAccessAgentrunentryTableTaggedU16ArrayAttributes) Reset() {
 	inst.ValueValue = nil
 	inst.ValueValueElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCallsAttributes) Reset() {
+func (inst *ReadAccessAgentrunentryTableTaggedU32ArrayAttributes) Reset() {
 	inst.ValueValue = nil
 	inst.ValueValueElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCallsDigestAttributes) Reset() {
-	inst.ValueValue = nil
-	inst.ValueValueElements = nil
+func (inst *ReadAccessAgentrunentryTableTaggedU32RangeAttributes) Reset() {
+	inst.ValueBeginIncl = nil
+	inst.ValueBeginInclElements = nil
+	inst.ValueEndExcl = nil
+	inst.ValueEndExclElements = nil
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryDigestAttributes) Reset() {
+func (inst *ReadAccessAgentrunentryTableTaggedU32SetAttributes) Reset() {
 	inst.ValueValue = nil
 	inst.ValueValueElements = nil
+	if inst.AccelSet != nil {
+		inst.AccelSet.Reset()
+	}
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryEffectAttributes) Reset() {
+func (inst *ReadAccessAgentrunentryTableTaggedU64ArrayAttributes) Reset() {
 	inst.ValueValue = nil
 	inst.ValueValueElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryFormAttributes) Reset() {
+func (inst *ReadAccessAgentrunentryTableTaggedU64SetAttributes) Reset() {
 	inst.ValueValue = nil
 	inst.ValueValueElements = nil
+	if inst.AccelSet != nil {
+		inst.AccelSet.Reset()
+	}
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryFromAttributes) Reset() {
+func (inst *ReadAccessAgentrunentryTableTaggedU8ArrayAttributes) Reset() {
 	inst.ValueValue = nil
 	inst.ValueValueElements = nil
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKeyAttributes) Reset() {
-	inst.ValueValue = nil
-	inst.ValueValueElements = nil
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKeyIdAttributes) Reset() {
-	inst.ValueValue = nil
-	inst.ValueValueElements = nil
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKindAttributes) Reset() {
-	inst.ValueValue = nil
-	inst.ValueValueElements = nil
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelExposureAttributes) Reset() {
-	inst.ValueValue = nil
-	inst.ValueValueElements = nil
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelLevelAttributes) Reset() {
-	inst.ValueValue = nil
-	inst.ValueValueElements = nil
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelOriginAttributes) Reset() {
-	inst.ValueValue = nil
-	inst.ValueValueElements = nil
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelTierAttributes) Reset() {
-	inst.ValueValue = nil
-	inst.ValueValueElements = nil
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryNameAttributes) Reset() {
-	inst.ValueValue = nil
-	inst.ValueValueElements = nil
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryOrdinalAttributes) Reset() {
-	inst.ValueValue = nil
-	inst.ValueValueElements = nil
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryParentAttributes) Reset() {
-	inst.ValueValue = nil
-	inst.ValueValueElements = nil
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryPrevAttributes) Reset() {
-	inst.ValueValue = nil
-	inst.ValueValueElements = nil
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryRoleAttributes) Reset() {
-	inst.ValueValue = nil
-	inst.ValueValueElements = nil
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTargetAttributes) Reset() {
-	inst.ValueValue = nil
-	inst.ValueValueElements = nil
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTurnAttributes) Reset() {
-	inst.ValueValue = nil
-	inst.ValueValueElements = nil
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterOrdinalAttributes) Reset() {
-	inst.ValueValue = nil
-	inst.ValueValueElements = nil
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterRunAttributes) Reset() {
-	inst.ValueValue = nil
-	inst.ValueValueElements = nil
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterTurnAttributes) Reset() {
-	inst.ValueValue = nil
-	inst.ValueValueElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
 }
 
 ///////////////////////////////////////////////////////////////////
@@ -2149,6 +1706,7 @@ var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTablePlainEntityIdAttribute
 
 func (inst *ReadAccessAgentrunentryTablePlainEntityIdAttributes) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueId)
+	runtime.ReleaseIfNotNil(inst.ValueOrdinal)
 }
 
 var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTablePlainEntityLifecycleAttributes)(nil)
@@ -2157,206 +1715,163 @@ func (inst *ReadAccessAgentrunentryTablePlainEntityLifecycleAttributes) Release(
 	runtime.ReleaseIfNotNil(inst.ValueRevision)
 }
 
-var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTablePlainEntityTimestampAttributes)(nil)
+var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedBlobArrayAttributes)(nil)
 
-func (inst *ReadAccessAgentrunentryTablePlainEntityTimestampAttributes) Release() {
-	runtime.ReleaseIfNotNil(inst.ValueTs)
+func (inst *ReadAccessAgentrunentryTableTaggedBlobArrayAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
 }
 
-var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedEntryAtAttributes)(nil)
+var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedBoolAttributes)(nil)
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAtAttributes) Release() {
+func (inst *ReadAccessAgentrunentryTableTaggedBoolAttributes) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueValue)
 	runtime.ReleaseIfNotNil(inst.ValueValueElements)
 }
 
-var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedEntryAttachmentsAttributes)(nil)
+var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedF32ArrayAttributes)(nil)
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAttachmentsAttributes) Release() {
+func (inst *ReadAccessAgentrunentryTableTaggedF32ArrayAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedF64ArrayAttributes)(nil)
+
+func (inst *ReadAccessAgentrunentryTableTaggedF64ArrayAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedI16ArrayAttributes)(nil)
+
+func (inst *ReadAccessAgentrunentryTableTaggedI16ArrayAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedI32ArrayAttributes)(nil)
+
+func (inst *ReadAccessAgentrunentryTableTaggedI32ArrayAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedI64ArrayAttributes)(nil)
+
+func (inst *ReadAccessAgentrunentryTableTaggedI64ArrayAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedI8ArrayAttributes)(nil)
+
+func (inst *ReadAccessAgentrunentryTableTaggedI8ArrayAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedStringArrayAttributes)(nil)
+
+func (inst *ReadAccessAgentrunentryTableTaggedStringArrayAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedSymbolArrayAttributes)(nil)
+
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolArrayAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedSymbolAttributes)(nil)
+
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolAttributes) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueValue)
 	runtime.ReleaseIfNotNil(inst.ValueValueElements)
 }
 
-var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedEntryBodyAttributes)(nil)
+var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedTextArrayAttributes)(nil)
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBodyAttributes) Release() {
+func (inst *ReadAccessAgentrunentryTableTaggedTextArrayAttributes) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueValue)
 	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
 }
 
-var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedEntryBodyDigestAttributes)(nil)
+var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedTimeArrayAttributes)(nil)
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBodyDigestAttributes) Release() {
+func (inst *ReadAccessAgentrunentryTableTaggedTimeArrayAttributes) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueValue)
 	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
 }
 
-var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedEntryBookAttributes)(nil)
+var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedU16ArrayAttributes)(nil)
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBookAttributes) Release() {
+func (inst *ReadAccessAgentrunentryTableTaggedU16ArrayAttributes) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueValue)
 	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
 }
 
-var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedEntryCallsAttributes)(nil)
+var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedU32ArrayAttributes)(nil)
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCallsAttributes) Release() {
+func (inst *ReadAccessAgentrunentryTableTaggedU32ArrayAttributes) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueValue)
 	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
 }
 
-var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedEntryCallsDigestAttributes)(nil)
+var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedU32RangeAttributes)(nil)
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCallsDigestAttributes) Release() {
-	runtime.ReleaseIfNotNil(inst.ValueValue)
-	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+func (inst *ReadAccessAgentrunentryTableTaggedU32RangeAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueBeginIncl)
+	runtime.ReleaseIfNotNil(inst.ValueBeginInclElements)
+	runtime.ReleaseIfNotNil(inst.ValueEndExcl)
+	runtime.ReleaseIfNotNil(inst.ValueEndExclElements)
 }
 
-var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedEntryDigestAttributes)(nil)
+var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedU32SetAttributes)(nil)
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryDigestAttributes) Release() {
+func (inst *ReadAccessAgentrunentryTableTaggedU32SetAttributes) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueValue)
 	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelSet)
 }
 
-var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedEntryEffectAttributes)(nil)
+var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedU64ArrayAttributes)(nil)
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryEffectAttributes) Release() {
+func (inst *ReadAccessAgentrunentryTableTaggedU64ArrayAttributes) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueValue)
 	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
 }
 
-var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedEntryFormAttributes)(nil)
+var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedU64SetAttributes)(nil)
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryFormAttributes) Release() {
+func (inst *ReadAccessAgentrunentryTableTaggedU64SetAttributes) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueValue)
 	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelSet)
 }
 
-var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedEntryFromAttributes)(nil)
+var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedU8ArrayAttributes)(nil)
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryFromAttributes) Release() {
+func (inst *ReadAccessAgentrunentryTableTaggedU8ArrayAttributes) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueValue)
 	runtime.ReleaseIfNotNil(inst.ValueValueElements)
-}
-
-var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedEntryKeyAttributes)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKeyAttributes) Release() {
-	runtime.ReleaseIfNotNil(inst.ValueValue)
-	runtime.ReleaseIfNotNil(inst.ValueValueElements)
-}
-
-var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedEntryKeyIdAttributes)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKeyIdAttributes) Release() {
-	runtime.ReleaseIfNotNil(inst.ValueValue)
-	runtime.ReleaseIfNotNil(inst.ValueValueElements)
-}
-
-var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedEntryKindAttributes)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKindAttributes) Release() {
-	runtime.ReleaseIfNotNil(inst.ValueValue)
-	runtime.ReleaseIfNotNil(inst.ValueValueElements)
-}
-
-var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedEntryLabelExposureAttributes)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelExposureAttributes) Release() {
-	runtime.ReleaseIfNotNil(inst.ValueValue)
-	runtime.ReleaseIfNotNil(inst.ValueValueElements)
-}
-
-var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedEntryLabelLevelAttributes)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelLevelAttributes) Release() {
-	runtime.ReleaseIfNotNil(inst.ValueValue)
-	runtime.ReleaseIfNotNil(inst.ValueValueElements)
-}
-
-var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedEntryLabelOriginAttributes)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelOriginAttributes) Release() {
-	runtime.ReleaseIfNotNil(inst.ValueValue)
-	runtime.ReleaseIfNotNil(inst.ValueValueElements)
-}
-
-var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedEntryLabelTierAttributes)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelTierAttributes) Release() {
-	runtime.ReleaseIfNotNil(inst.ValueValue)
-	runtime.ReleaseIfNotNil(inst.ValueValueElements)
-}
-
-var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedEntryNameAttributes)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryNameAttributes) Release() {
-	runtime.ReleaseIfNotNil(inst.ValueValue)
-	runtime.ReleaseIfNotNil(inst.ValueValueElements)
-}
-
-var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedEntryOrdinalAttributes)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryOrdinalAttributes) Release() {
-	runtime.ReleaseIfNotNil(inst.ValueValue)
-	runtime.ReleaseIfNotNil(inst.ValueValueElements)
-}
-
-var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedEntryParentAttributes)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryParentAttributes) Release() {
-	runtime.ReleaseIfNotNil(inst.ValueValue)
-	runtime.ReleaseIfNotNil(inst.ValueValueElements)
-}
-
-var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedEntryPrevAttributes)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryPrevAttributes) Release() {
-	runtime.ReleaseIfNotNil(inst.ValueValue)
-	runtime.ReleaseIfNotNil(inst.ValueValueElements)
-}
-
-var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedEntryRoleAttributes)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryRoleAttributes) Release() {
-	runtime.ReleaseIfNotNil(inst.ValueValue)
-	runtime.ReleaseIfNotNil(inst.ValueValueElements)
-}
-
-var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedEntryTargetAttributes)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTargetAttributes) Release() {
-	runtime.ReleaseIfNotNil(inst.ValueValue)
-	runtime.ReleaseIfNotNil(inst.ValueValueElements)
-}
-
-var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedEntryTurnAttributes)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTurnAttributes) Release() {
-	runtime.ReleaseIfNotNil(inst.ValueValue)
-	runtime.ReleaseIfNotNil(inst.ValueValueElements)
-}
-
-var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedEntryWriterOrdinalAttributes)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterOrdinalAttributes) Release() {
-	runtime.ReleaseIfNotNil(inst.ValueValue)
-	runtime.ReleaseIfNotNil(inst.ValueValueElements)
-}
-
-var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedEntryWriterRunAttributes)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterRunAttributes) Release() {
-	runtime.ReleaseIfNotNil(inst.ValueValue)
-	runtime.ReleaseIfNotNil(inst.ValueValueElements)
-}
-
-var _ runtime.ReleasableI = (*ReadAccessAgentrunentryTableTaggedEntryWriterTurnAttributes)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterTurnAttributes) Release() {
-	runtime.ReleaseIfNotNil(inst.ValueValue)
-	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
 }
 
 ///////////////////////////////////////////////////////////////////
@@ -2378,203 +1893,140 @@ func (inst *ReadAccessAgentrunentryTablePlainEntityLifecycleAttributes) Len() (n
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTablePlainEntityTimestampAttributes) Len() (nEntities int) {
-	if inst.ValueTs != nil {
-		nEntities = inst.ValueTs.Len()
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAtAttributes) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedBlobArrayAttributes) Len() (nEntities int) {
 	if inst.ValueValue != nil {
 		nEntities = inst.ValueValue.Len()
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAttachmentsAttributes) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedBoolAttributes) Len() (nEntities int) {
 	if inst.ValueValue != nil {
 		nEntities = inst.ValueValue.Len()
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBodyAttributes) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedF32ArrayAttributes) Len() (nEntities int) {
 	if inst.ValueValue != nil {
 		nEntities = inst.ValueValue.Len()
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBodyDigestAttributes) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedF64ArrayAttributes) Len() (nEntities int) {
 	if inst.ValueValue != nil {
 		nEntities = inst.ValueValue.Len()
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBookAttributes) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedI16ArrayAttributes) Len() (nEntities int) {
 	if inst.ValueValue != nil {
 		nEntities = inst.ValueValue.Len()
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCallsAttributes) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedI32ArrayAttributes) Len() (nEntities int) {
 	if inst.ValueValue != nil {
 		nEntities = inst.ValueValue.Len()
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCallsDigestAttributes) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedI64ArrayAttributes) Len() (nEntities int) {
 	if inst.ValueValue != nil {
 		nEntities = inst.ValueValue.Len()
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryDigestAttributes) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedI8ArrayAttributes) Len() (nEntities int) {
 	if inst.ValueValue != nil {
 		nEntities = inst.ValueValue.Len()
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryEffectAttributes) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedStringArrayAttributes) Len() (nEntities int) {
 	if inst.ValueValue != nil {
 		nEntities = inst.ValueValue.Len()
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryFormAttributes) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolArrayAttributes) Len() (nEntities int) {
 	if inst.ValueValue != nil {
 		nEntities = inst.ValueValue.Len()
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryFromAttributes) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolAttributes) Len() (nEntities int) {
 	if inst.ValueValue != nil {
 		nEntities = inst.ValueValue.Len()
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKeyAttributes) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedTextArrayAttributes) Len() (nEntities int) {
 	if inst.ValueValue != nil {
 		nEntities = inst.ValueValue.Len()
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKeyIdAttributes) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedTimeArrayAttributes) Len() (nEntities int) {
 	if inst.ValueValue != nil {
 		nEntities = inst.ValueValue.Len()
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKindAttributes) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedU16ArrayAttributes) Len() (nEntities int) {
 	if inst.ValueValue != nil {
 		nEntities = inst.ValueValue.Len()
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelExposureAttributes) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedU32ArrayAttributes) Len() (nEntities int) {
 	if inst.ValueValue != nil {
 		nEntities = inst.ValueValue.Len()
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelLevelAttributes) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedU32RangeAttributes) Len() (nEntities int) {
+	if inst.ValueBeginIncl != nil {
+		nEntities = inst.ValueBeginIncl.Len()
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedU32SetAttributes) Len() (nEntities int) {
 	if inst.ValueValue != nil {
 		nEntities = inst.ValueValue.Len()
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelOriginAttributes) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedU64ArrayAttributes) Len() (nEntities int) {
 	if inst.ValueValue != nil {
 		nEntities = inst.ValueValue.Len()
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelTierAttributes) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedU64SetAttributes) Len() (nEntities int) {
 	if inst.ValueValue != nil {
 		nEntities = inst.ValueValue.Len()
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryNameAttributes) Len() (nEntities int) {
-	if inst.ValueValue != nil {
-		nEntities = inst.ValueValue.Len()
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryOrdinalAttributes) Len() (nEntities int) {
-	if inst.ValueValue != nil {
-		nEntities = inst.ValueValue.Len()
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryParentAttributes) Len() (nEntities int) {
-	if inst.ValueValue != nil {
-		nEntities = inst.ValueValue.Len()
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryPrevAttributes) Len() (nEntities int) {
-	if inst.ValueValue != nil {
-		nEntities = inst.ValueValue.Len()
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryRoleAttributes) Len() (nEntities int) {
-	if inst.ValueValue != nil {
-		nEntities = inst.ValueValue.Len()
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTargetAttributes) Len() (nEntities int) {
-	if inst.ValueValue != nil {
-		nEntities = inst.ValueValue.Len()
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTurnAttributes) Len() (nEntities int) {
-	if inst.ValueValue != nil {
-		nEntities = inst.ValueValue.Len()
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterOrdinalAttributes) Len() (nEntities int) {
-	if inst.ValueValue != nil {
-		nEntities = inst.ValueValue.Len()
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterRunAttributes) Len() (nEntities int) {
-	if inst.ValueValue != nil {
-		nEntities = inst.ValueValue.Len()
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterTurnAttributes) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedU8ArrayAttributes) Len() (nEntities int) {
 	if inst.ValueValue != nil {
 		nEntities = inst.ValueValue.Len()
 	}
@@ -2591,6 +2043,10 @@ func (inst *ReadAccessAgentrunentryTablePlainEntityIdAttributes) LoadFromRecord(
 	if err != nil {
 		return
 	}
+	err = runtime.LoadScalarValueFieldFromRecord(inst.ColumnIndexOrdinal, arrow.UINT64, rec, &inst.ValueOrdinal, array.NewUint64Data)
+	if err != nil {
+		return
+	}
 	return
 }
 
@@ -2602,455 +2058,824 @@ func (inst *ReadAccessAgentrunentryTablePlainEntityLifecycleAttributes) LoadFrom
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTablePlainEntityTimestampAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = runtime.LoadScalarValueFieldFromRecord(inst.ColumnIndexTs, arrow.TIMESTAMP, rec, &inst.ValueTs, array.NewTimestampData)
+func (inst *ReadAccessAgentrunentryTableTaggedBlobArrayAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.BINARY, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewBinaryData)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
 	if err != nil {
 		return
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAtAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+func (inst *ReadAccessAgentrunentryTableTaggedBoolAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.BOOL, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewBooleanData)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedF32ArrayAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.FLOAT32, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewFloat32Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedF64ArrayAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.FLOAT64, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewFloat64Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedI16ArrayAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.INT16, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewInt16Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedI32ArrayAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.INT32, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewInt32Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedI64ArrayAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.INT64, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewInt64Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedI8ArrayAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.INT8, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewInt8Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedStringArrayAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolArrayAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedTextArrayAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedTimeArrayAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.TIMESTAMP, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewTimestampData)
 	if err != nil {
 		return
 	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAttachmentsAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
 	if err != nil {
 		return
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBodyAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
+func (inst *ReadAccessAgentrunentryTableTaggedU16ArrayAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.UINT16, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewUint16Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
 	if err != nil {
 		return
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBodyDigestAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
-	if err != nil {
-		return
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBookAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
-	if err != nil {
-		return
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCallsAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
-	if err != nil {
-		return
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCallsDigestAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
-	if err != nil {
-		return
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryDigestAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
-	if err != nil {
-		return
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryEffectAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
-	if err != nil {
-		return
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryFormAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
-	if err != nil {
-		return
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryFromAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+func (inst *ReadAccessAgentrunentryTableTaggedU32ArrayAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.UINT32, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewUint32Data)
 	if err != nil {
 		return
 	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKeyAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
 	if err != nil {
 		return
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKeyIdAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
+func (inst *ReadAccessAgentrunentryTableTaggedU32RangeAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexBeginIncl, arrow.UINT32, rec, &inst.ValueBeginIncl, &inst.ValueBeginInclElements, array.NewUint32Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexEndExcl, arrow.UINT32, rec, &inst.ValueEndExcl, &inst.ValueEndExclElements, array.NewUint32Data)
 	if err != nil {
 		return
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKindAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
-	if err != nil {
-		return
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelExposureAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
-	if err != nil {
-		return
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelLevelAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+func (inst *ReadAccessAgentrunentryTableTaggedU32SetAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.UINT32, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewUint32Data)
 	if err != nil {
 		return
 	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelOriginAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexSet, rec, inst.AccelSet)
 	if err != nil {
 		return
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelTierAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.UINT32, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewUint32Data)
+func (inst *ReadAccessAgentrunentryTableTaggedU64ArrayAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.UINT64, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewUint64Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
 	if err != nil {
 		return
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryNameAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
+func (inst *ReadAccessAgentrunentryTableTaggedU64SetAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.UINT64, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewUint64Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexSet, rec, inst.AccelSet)
 	if err != nil {
 		return
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryOrdinalAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.UINT32, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewUint32Data)
+func (inst *ReadAccessAgentrunentryTableTaggedU8ArrayAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.UINT8, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewUint8Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
 	if err != nil {
 		return
 	}
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryParentAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.UINT32, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewUint32Data)
-	if err != nil {
+func (inst *ReadAccessAgentrunentryTableTaggedTextArrayAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[string] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(string) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *ReadAccessAgentrunentryTableTaggedTextArrayAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value string, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
+	}
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "textArray").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
 		return
 	}
+	bHA, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bHA) + int(rHA.BeginIncl))
 	return
 }
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryPrevAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.UINT32, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewUint32Data)
-	if err != nil {
+func (inst *ReadAccessAgentrunentryTableTaggedTextArrayAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value string) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedStringArrayAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[string] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(string) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *ReadAccessAgentrunentryTableTaggedStringArrayAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value string, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
+	}
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "stringArray").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
 		return
 	}
+	bHA, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bHA) + int(rHA.BeginIncl))
 	return
 }
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryRoleAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
-	if err != nil {
+func (inst *ReadAccessAgentrunentryTableTaggedStringArrayAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value string) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
+	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
+	if int64(attrIdx) >= (e - b) {
+		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+	}
+	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolArrayAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[string] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(string) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolArrayAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value string, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
+	}
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "symbolArray").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
 		return
 	}
+	bHA, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bHA) + int(rHA.BeginIncl))
 	return
 }
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTargetAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.UINT32, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewUint32Data)
-	if err != nil {
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolArrayAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value string) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedBlobArrayAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[[]byte] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func([]byte) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *ReadAccessAgentrunentryTableTaggedBlobArrayAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value []byte, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
+	}
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "blobArray").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
 		return
 	}
+	bHA, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bHA) + int(rHA.BeginIncl))
 	return
 }
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTurnAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
-	if err != nil {
+func (inst *ReadAccessAgentrunentryTableTaggedBlobArrayAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value []byte) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedU8ArrayAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[uint8] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(uint8) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *ReadAccessAgentrunentryTableTaggedU8ArrayAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value uint8, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
+	}
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "u8Array").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
 		return
 	}
+	bHA, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bHA) + int(rHA.BeginIncl))
 	return
 }
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterOrdinalAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.UINT32, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewUint32Data)
-	if err != nil {
+func (inst *ReadAccessAgentrunentryTableTaggedU8ArrayAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value uint8) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedU16ArrayAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[uint16] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(uint16) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *ReadAccessAgentrunentryTableTaggedU16ArrayAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value uint16, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
+	}
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "u16Array").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
 		return
 	}
+	bHA, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bHA) + int(rHA.BeginIncl))
 	return
 }
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterRunAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
-	if err != nil {
+func (inst *ReadAccessAgentrunentryTableTaggedU16ArrayAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value uint16) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedU32ArrayAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[uint32] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(uint32) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *ReadAccessAgentrunentryTableTaggedU32ArrayAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value uint32, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
+	}
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "u32Array").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
 		return
 	}
+	bHA, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bHA) + int(rHA.BeginIncl))
 	return
 }
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterTurnAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.STRING, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewStringData)
-	if err != nil {
+func (inst *ReadAccessAgentrunentryTableTaggedU32ArrayAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value uint32) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedU32SetAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[uint32] {
+	accel := inst.AccelSet
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(uint32) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *ReadAccessAgentrunentryTableTaggedU32SetAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value uint32, err error) {
+	var rSet runtime.Range[runtime.SetIdx]
+	{
+		accel := inst.AccelSet
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rSet = accel.LookupForwardRange(attrIdx)
+	}
+	if rSet.EndExcl-rSet.BeginIncl != 1 {
+		err = eb.Build().Str("section", "u32Set").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rSet.EndExcl-rSet.BeginIncl)).Errorf("expected exactly one element per Set column")
 		return
 	}
+	bSet, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bSet) + int(rSet.BeginIncl))
 	return
 }
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryOrdinalAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue uint32) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) >= (e - b) {
-		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+func (inst *ReadAccessAgentrunentryTableTaggedU32SetAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value uint32) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedU64ArrayAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[uint64] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(uint64) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
 	}
-	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
-	return
 }
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAtAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue time.Time) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) >= (e - b) {
-		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+func (inst *ReadAccessAgentrunentryTableTaggedU64ArrayAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value uint64, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
 	}
-	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx)).ToTime(arrow.Nanosecond)
-	return
-}
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKindAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) >= (e - b) {
-		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "u64Array").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
+		return
 	}
-	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
+	bHA, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bHA) + int(rHA.BeginIncl))
 	return
 }
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKeyAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) >= (e - b) {
-		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+func (inst *ReadAccessAgentrunentryTableTaggedU64ArrayAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value uint64) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedU64SetAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[uint64] {
+	accel := inst.AccelSet
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(uint64) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
 	}
-	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
-	return
 }
-func (inst *ReadAccessAgentrunentryTableTaggedEntryRoleAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) >= (e - b) {
-		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+func (inst *ReadAccessAgentrunentryTableTaggedU64SetAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value uint64, err error) {
+	var rSet runtime.Range[runtime.SetIdx]
+	{
+		accel := inst.AccelSet
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rSet = accel.LookupForwardRange(attrIdx)
 	}
-	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
-	return
-}
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBodyAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) >= (e - b) {
-		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+	if rSet.EndExcl-rSet.BeginIncl != 1 {
+		err = eb.Build().Str("section", "u64Set").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rSet.EndExcl-rSet.BeginIncl)).Errorf("expected exactly one element per Set column")
+		return
 	}
-	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
+	bSet, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bSet) + int(rSet.BeginIncl))
 	return
 }
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCallsAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) >= (e - b) {
-		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+func (inst *ReadAccessAgentrunentryTableTaggedU64SetAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value uint64) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedI8ArrayAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[int8] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(int8) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
 	}
-	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
-	return
 }
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBodyDigestAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) >= (e - b) {
-		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+func (inst *ReadAccessAgentrunentryTableTaggedI8ArrayAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value int8, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
 	}
-	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
-	return
-}
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCallsDigestAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) >= (e - b) {
-		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "i8Array").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
+		return
 	}
-	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
+	bHA, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bHA) + int(rHA.BeginIncl))
 	return
 }
-func (inst *ReadAccessAgentrunentryTableTaggedEntryNameAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) >= (e - b) {
-		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+func (inst *ReadAccessAgentrunentryTableTaggedI8ArrayAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value int8) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedI16ArrayAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[int16] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(int16) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
 	}
-	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
-	return
 }
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBookAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) >= (e - b) {
-		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+func (inst *ReadAccessAgentrunentryTableTaggedI16ArrayAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value int16, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
 	}
-	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
-	return
-}
-func (inst *ReadAccessAgentrunentryTableTaggedEntryFormAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) >= (e - b) {
-		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "i16Array").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
+		return
 	}
-	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
+	bHA, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bHA) + int(rHA.BeginIncl))
 	return
 }
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTargetAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue uint32) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) >= (e - b) {
-		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+func (inst *ReadAccessAgentrunentryTableTaggedI16ArrayAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value int16) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedI32ArrayAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[int32] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(int32) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
 	}
-	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
-	return
 }
-func (inst *ReadAccessAgentrunentryTableTaggedEntryFromAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue uint32) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) >= (e - b) {
-		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+func (inst *ReadAccessAgentrunentryTableTaggedI32ArrayAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value int32, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
 	}
-	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
-	return
-}
-func (inst *ReadAccessAgentrunentryTableTaggedEntryEffectAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) >= (e - b) {
-		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "i32Array").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
+		return
 	}
-	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
+	bHA, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bHA) + int(rHA.BeginIncl))
 	return
 }
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTurnAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) >= (e - b) {
-		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+func (inst *ReadAccessAgentrunentryTableTaggedI32ArrayAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value int32) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedI64ArrayAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[int64] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(int64) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
 	}
-	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
-	return
 }
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelLevelAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue uint32) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) >= (e - b) {
-		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+func (inst *ReadAccessAgentrunentryTableTaggedI64ArrayAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value int64, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
 	}
-	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
-	return
-}
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelTierAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue uint32) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) >= (e - b) {
-		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "i64Array").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
+		return
 	}
-	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
+	bHA, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bHA) + int(rHA.BeginIncl))
 	return
 }
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelExposureAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) >= (e - b) {
-		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+func (inst *ReadAccessAgentrunentryTableTaggedI64ArrayAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value int64) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedF32ArrayAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[float32] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(float32) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
 	}
-	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
-	return
 }
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelOriginAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) >= (e - b) {
-		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+func (inst *ReadAccessAgentrunentryTableTaggedF32ArrayAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value float32, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
 	}
-	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
-	return
-}
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterRunAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) >= (e - b) {
-		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "f32Array").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
+		return
 	}
-	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
+	bHA, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bHA) + int(rHA.BeginIncl))
 	return
 }
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterTurnAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) >= (e - b) {
-		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+func (inst *ReadAccessAgentrunentryTableTaggedF32ArrayAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value float32) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedF64ArrayAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[float64] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(float64) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
 	}
-	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
-	return
 }
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterOrdinalAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue uint32) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) >= (e - b) {
-		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+func (inst *ReadAccessAgentrunentryTableTaggedF64ArrayAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value float64, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
 	}
-	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
-	return
-}
-func (inst *ReadAccessAgentrunentryTableTaggedEntryPrevAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue uint32) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) >= (e - b) {
-		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "f64Array").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
+		return
 	}
-	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
+	bHA, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bHA) + int(rHA.BeginIncl))
 	return
 }
-func (inst *ReadAccessAgentrunentryTableTaggedEntryDigestAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
+func (inst *ReadAccessAgentrunentryTableTaggedF64ArrayAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value float64) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedU32RangeAttributes) GetAttrValueBeginIncl(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue uint32) {
+	b, e := inst.ValueBeginIncl.ValueOffsets(int(entityIdx))
 	if int64(attrIdx) >= (e - b) {
-		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+		log.Panic().Str("attribute", "BeginIncl").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
 	}
-	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
+	scalarAttrValue = inst.ValueBeginInclElements.Value(int(b) + int(attrIdx))
 	return
 }
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKeyIdAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
+func (inst *ReadAccessAgentrunentryTableTaggedU32RangeAttributes) GetAttrValueEndExcl(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue uint32) {
+	b, e := inst.ValueEndExcl.ValueOffsets(int(entityIdx))
 	if int64(attrIdx) >= (e - b) {
-		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+		log.Panic().Str("attribute", "EndExcl").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
 	}
-	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
+	scalarAttrValue = inst.ValueEndExclElements.Value(int(b) + int(attrIdx))
 	return
 }
-func (inst *ReadAccessAgentrunentryTableTaggedEntryParentAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue uint32) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	if int64(attrIdx) >= (e - b) {
-		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+func (inst *ReadAccessAgentrunentryTableTaggedTimeArrayAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[time.Time] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(time.Time) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i)).ToTime(arrow.Nanosecond)) {
+				break
+			}
+		}
 	}
-	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
+}
+func (inst *ReadAccessAgentrunentryTableTaggedTimeArrayAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value time.Time, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
+	}
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "timeArray").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
+		return
+	}
+	bHA, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bHA) + int(rHA.BeginIncl)).ToTime(arrow.Nanosecond)
 	return
 }
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAttachmentsAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue string) {
+func (inst *ReadAccessAgentrunentryTableTaggedTimeArrayAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value time.Time) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedBoolAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue bool) {
 	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
 	if int64(attrIdx) >= (e - b) {
 		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
@@ -3062,8 +2887,8 @@ func (inst *ReadAccessAgentrunentryTablePlainEntityIdAttributes) GetAttrValueId(
 	scalarAttrValue = inst.ValueId.Value(int(entityIdx))
 	return
 }
-func (inst *ReadAccessAgentrunentryTablePlainEntityTimestampAttributes) GetAttrValueTs(entityIdx runtime.EntityIdx) (scalarAttrValue time.Time) {
-	scalarAttrValue = inst.ValueTs.Value(int(entityIdx)).ToTime(arrow.Nanosecond)
+func (inst *ReadAccessAgentrunentryTablePlainEntityIdAttributes) GetAttrValueOrdinal(entityIdx runtime.EntityIdx) (scalarAttrValue uint64) {
+	scalarAttrValue = inst.ValueOrdinal.Value(int(entityIdx))
 	return
 }
 func (inst *ReadAccessAgentrunentryTablePlainEntityLifecycleAttributes) GetAttrValueRevision(entityIdx runtime.EntityIdx) (scalarAttrValue uint32) {
@@ -3076,142 +2901,85 @@ func (inst *ReadAccessAgentrunentryTablePlainEntityLifecycleAttributes) GetAttrV
 // readaccess.(*GoClassBuilder).composeSectionAttributeClasses
 // ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2037
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryOrdinalAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+func (inst *ReadAccessAgentrunentryTableTaggedTextArrayAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedStringArrayAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
 	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
 	nAttributes = e - b
 	return
 }
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAtAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolArrayAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedBlobArrayAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedU8ArrayAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedU16ArrayAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedU32ArrayAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedU32SetAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelSet.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedU64ArrayAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedU64SetAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelSet.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedI8ArrayAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedI16ArrayAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedI32ArrayAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedI64ArrayAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedF32ArrayAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedF64ArrayAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessAgentrunentryTableTaggedU32RangeAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	b, e := inst.ValueBeginIncl.ValueOffsets(int(entityIdx))
 	nAttributes = e - b
 	return
 }
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKindAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	nAttributes = e - b
+func (inst *ReadAccessAgentrunentryTableTaggedTimeArrayAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
 	return
 }
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKeyAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	nAttributes = e - b
-	return
-}
-func (inst *ReadAccessAgentrunentryTableTaggedEntryRoleAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	nAttributes = e - b
-	return
-}
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBodyAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	nAttributes = e - b
-	return
-}
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCallsAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	nAttributes = e - b
-	return
-}
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBodyDigestAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	nAttributes = e - b
-	return
-}
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCallsDigestAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	nAttributes = e - b
-	return
-}
-func (inst *ReadAccessAgentrunentryTableTaggedEntryNameAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	nAttributes = e - b
-	return
-}
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBookAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	nAttributes = e - b
-	return
-}
-func (inst *ReadAccessAgentrunentryTableTaggedEntryFormAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	nAttributes = e - b
-	return
-}
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTargetAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	nAttributes = e - b
-	return
-}
-func (inst *ReadAccessAgentrunentryTableTaggedEntryFromAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	nAttributes = e - b
-	return
-}
-func (inst *ReadAccessAgentrunentryTableTaggedEntryEffectAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	nAttributes = e - b
-	return
-}
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTurnAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	nAttributes = e - b
-	return
-}
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelLevelAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	nAttributes = e - b
-	return
-}
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelTierAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	nAttributes = e - b
-	return
-}
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelExposureAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	nAttributes = e - b
-	return
-}
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelOriginAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	nAttributes = e - b
-	return
-}
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterRunAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	nAttributes = e - b
-	return
-}
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterTurnAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	nAttributes = e - b
-	return
-}
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterOrdinalAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	nAttributes = e - b
-	return
-}
-func (inst *ReadAccessAgentrunentryTableTaggedEntryPrevAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	nAttributes = e - b
-	return
-}
-func (inst *ReadAccessAgentrunentryTableTaggedEntryDigestAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	nAttributes = e - b
-	return
-}
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKeyIdAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	nAttributes = e - b
-	return
-}
-func (inst *ReadAccessAgentrunentryTableTaggedEntryParentAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
-	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
-	nAttributes = e - b
-	return
-}
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAttachmentsAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+func (inst *ReadAccessAgentrunentryTableTaggedBoolAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
 	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
 	nAttributes = e - b
 	return
@@ -3222,1071 +2990,767 @@ func (inst *ReadAccessAgentrunentryTableTaggedEntryAttachmentsAttributes) GetNum
 // readaccess.(*GoClassBuilder).composeSectionClasses
 // ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2143
 
-type ReadAccessAgentrunentryTableTaggedEntryOrdinal struct {
-	Attributes  *ReadAccessAgentrunentryTableTaggedEntryOrdinalAttributes
+type ReadAccessAgentrunentryTableTaggedTextArray struct {
+	Attributes  *ReadAccessAgentrunentryTableTaggedTextArrayAttributes
 	Memberships *MembershipPackAgentrunentryTableShared1
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryOrdinal)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedTextArray)(nil)
 
-type ReadAccessAgentrunentryTableTaggedEntryAt struct {
-	Attributes  *ReadAccessAgentrunentryTableTaggedEntryAtAttributes
+type ReadAccessAgentrunentryTableTaggedStringArray struct {
+	Attributes  *ReadAccessAgentrunentryTableTaggedStringArrayAttributes
 	Memberships *MembershipPackAgentrunentryTableShared1
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryAt)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedStringArray)(nil)
 
-type ReadAccessAgentrunentryTableTaggedEntryKind struct {
-	Attributes  *ReadAccessAgentrunentryTableTaggedEntryKindAttributes
+type ReadAccessAgentrunentryTableTaggedSymbol struct {
+	Attributes  *ReadAccessAgentrunentryTableTaggedSymbolAttributes
 	Memberships *MembershipPackAgentrunentryTableShared1
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryKind)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedSymbol)(nil)
 
-type ReadAccessAgentrunentryTableTaggedEntryKey struct {
-	Attributes  *ReadAccessAgentrunentryTableTaggedEntryKeyAttributes
+type ReadAccessAgentrunentryTableTaggedSymbolArray struct {
+	Attributes  *ReadAccessAgentrunentryTableTaggedSymbolArrayAttributes
 	Memberships *MembershipPackAgentrunentryTableShared1
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryKey)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedSymbolArray)(nil)
 
-type ReadAccessAgentrunentryTableTaggedEntryRole struct {
-	Attributes  *ReadAccessAgentrunentryTableTaggedEntryRoleAttributes
+type ReadAccessAgentrunentryTableTaggedBlobArray struct {
+	Attributes  *ReadAccessAgentrunentryTableTaggedBlobArrayAttributes
 	Memberships *MembershipPackAgentrunentryTableShared1
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryRole)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedBlobArray)(nil)
 
-type ReadAccessAgentrunentryTableTaggedEntryBody struct {
-	Attributes  *ReadAccessAgentrunentryTableTaggedEntryBodyAttributes
+type ReadAccessAgentrunentryTableTaggedU8Array struct {
+	Attributes  *ReadAccessAgentrunentryTableTaggedU8ArrayAttributes
 	Memberships *MembershipPackAgentrunentryTableShared1
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryBody)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedU8Array)(nil)
 
-type ReadAccessAgentrunentryTableTaggedEntryCalls struct {
-	Attributes  *ReadAccessAgentrunentryTableTaggedEntryCallsAttributes
+type ReadAccessAgentrunentryTableTaggedU16Array struct {
+	Attributes  *ReadAccessAgentrunentryTableTaggedU16ArrayAttributes
 	Memberships *MembershipPackAgentrunentryTableShared1
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryCalls)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedU16Array)(nil)
 
-type ReadAccessAgentrunentryTableTaggedEntryBodyDigest struct {
-	Attributes  *ReadAccessAgentrunentryTableTaggedEntryBodyDigestAttributes
+type ReadAccessAgentrunentryTableTaggedU32Array struct {
+	Attributes  *ReadAccessAgentrunentryTableTaggedU32ArrayAttributes
 	Memberships *MembershipPackAgentrunentryTableShared1
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryBodyDigest)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedU32Array)(nil)
 
-type ReadAccessAgentrunentryTableTaggedEntryCallsDigest struct {
-	Attributes  *ReadAccessAgentrunentryTableTaggedEntryCallsDigestAttributes
+type ReadAccessAgentrunentryTableTaggedU32Set struct {
+	Attributes  *ReadAccessAgentrunentryTableTaggedU32SetAttributes
 	Memberships *MembershipPackAgentrunentryTableShared1
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryCallsDigest)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedU32Set)(nil)
 
-type ReadAccessAgentrunentryTableTaggedEntryName struct {
-	Attributes  *ReadAccessAgentrunentryTableTaggedEntryNameAttributes
+type ReadAccessAgentrunentryTableTaggedU64Array struct {
+	Attributes  *ReadAccessAgentrunentryTableTaggedU64ArrayAttributes
 	Memberships *MembershipPackAgentrunentryTableShared1
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryName)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedU64Array)(nil)
 
-type ReadAccessAgentrunentryTableTaggedEntryBook struct {
-	Attributes  *ReadAccessAgentrunentryTableTaggedEntryBookAttributes
+type ReadAccessAgentrunentryTableTaggedU64Set struct {
+	Attributes  *ReadAccessAgentrunentryTableTaggedU64SetAttributes
 	Memberships *MembershipPackAgentrunentryTableShared1
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryBook)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedU64Set)(nil)
 
-type ReadAccessAgentrunentryTableTaggedEntryForm struct {
-	Attributes  *ReadAccessAgentrunentryTableTaggedEntryFormAttributes
+type ReadAccessAgentrunentryTableTaggedI8Array struct {
+	Attributes  *ReadAccessAgentrunentryTableTaggedI8ArrayAttributes
 	Memberships *MembershipPackAgentrunentryTableShared1
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryForm)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedI8Array)(nil)
 
-type ReadAccessAgentrunentryTableTaggedEntryTarget struct {
-	Attributes  *ReadAccessAgentrunentryTableTaggedEntryTargetAttributes
+type ReadAccessAgentrunentryTableTaggedI16Array struct {
+	Attributes  *ReadAccessAgentrunentryTableTaggedI16ArrayAttributes
 	Memberships *MembershipPackAgentrunentryTableShared1
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryTarget)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedI16Array)(nil)
 
-type ReadAccessAgentrunentryTableTaggedEntryFrom struct {
-	Attributes  *ReadAccessAgentrunentryTableTaggedEntryFromAttributes
+type ReadAccessAgentrunentryTableTaggedI32Array struct {
+	Attributes  *ReadAccessAgentrunentryTableTaggedI32ArrayAttributes
 	Memberships *MembershipPackAgentrunentryTableShared1
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryFrom)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedI32Array)(nil)
 
-type ReadAccessAgentrunentryTableTaggedEntryEffect struct {
-	Attributes  *ReadAccessAgentrunentryTableTaggedEntryEffectAttributes
+type ReadAccessAgentrunentryTableTaggedI64Array struct {
+	Attributes  *ReadAccessAgentrunentryTableTaggedI64ArrayAttributes
 	Memberships *MembershipPackAgentrunentryTableShared1
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryEffect)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedI64Array)(nil)
 
-type ReadAccessAgentrunentryTableTaggedEntryTurn struct {
-	Attributes  *ReadAccessAgentrunentryTableTaggedEntryTurnAttributes
+type ReadAccessAgentrunentryTableTaggedF32Array struct {
+	Attributes  *ReadAccessAgentrunentryTableTaggedF32ArrayAttributes
 	Memberships *MembershipPackAgentrunentryTableShared1
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryTurn)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedF32Array)(nil)
 
-type ReadAccessAgentrunentryTableTaggedEntryLabelLevel struct {
-	Attributes  *ReadAccessAgentrunentryTableTaggedEntryLabelLevelAttributes
+type ReadAccessAgentrunentryTableTaggedF64Array struct {
+	Attributes  *ReadAccessAgentrunentryTableTaggedF64ArrayAttributes
 	Memberships *MembershipPackAgentrunentryTableShared1
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryLabelLevel)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedF64Array)(nil)
 
-type ReadAccessAgentrunentryTableTaggedEntryLabelTier struct {
-	Attributes  *ReadAccessAgentrunentryTableTaggedEntryLabelTierAttributes
+type ReadAccessAgentrunentryTableTaggedU32Range struct {
+	Attributes  *ReadAccessAgentrunentryTableTaggedU32RangeAttributes
 	Memberships *MembershipPackAgentrunentryTableShared1
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryLabelTier)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedU32Range)(nil)
 
-type ReadAccessAgentrunentryTableTaggedEntryLabelExposure struct {
-	Attributes  *ReadAccessAgentrunentryTableTaggedEntryLabelExposureAttributes
+type ReadAccessAgentrunentryTableTaggedTimeArray struct {
+	Attributes  *ReadAccessAgentrunentryTableTaggedTimeArrayAttributes
 	Memberships *MembershipPackAgentrunentryTableShared1
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryLabelExposure)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedTimeArray)(nil)
 
-type ReadAccessAgentrunentryTableTaggedEntryLabelOrigin struct {
-	Attributes  *ReadAccessAgentrunentryTableTaggedEntryLabelOriginAttributes
+type ReadAccessAgentrunentryTableTaggedBool struct {
+	Attributes  *ReadAccessAgentrunentryTableTaggedBoolAttributes
 	Memberships *MembershipPackAgentrunentryTableShared1
 }
 
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryLabelOrigin)(nil)
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedBool)(nil)
 
-type ReadAccessAgentrunentryTableTaggedEntryWriterRun struct {
-	Attributes  *ReadAccessAgentrunentryTableTaggedEntryWriterRunAttributes
-	Memberships *MembershipPackAgentrunentryTableShared1
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryWriterRun)(nil)
-
-type ReadAccessAgentrunentryTableTaggedEntryWriterTurn struct {
-	Attributes  *ReadAccessAgentrunentryTableTaggedEntryWriterTurnAttributes
-	Memberships *MembershipPackAgentrunentryTableShared1
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryWriterTurn)(nil)
-
-type ReadAccessAgentrunentryTableTaggedEntryWriterOrdinal struct {
-	Attributes  *ReadAccessAgentrunentryTableTaggedEntryWriterOrdinalAttributes
-	Memberships *MembershipPackAgentrunentryTableShared1
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryWriterOrdinal)(nil)
-
-type ReadAccessAgentrunentryTableTaggedEntryPrev struct {
-	Attributes  *ReadAccessAgentrunentryTableTaggedEntryPrevAttributes
-	Memberships *MembershipPackAgentrunentryTableShared1
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryPrev)(nil)
-
-type ReadAccessAgentrunentryTableTaggedEntryDigest struct {
-	Attributes  *ReadAccessAgentrunentryTableTaggedEntryDigestAttributes
-	Memberships *MembershipPackAgentrunentryTableShared1
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryDigest)(nil)
-
-type ReadAccessAgentrunentryTableTaggedEntryKeyId struct {
-	Attributes  *ReadAccessAgentrunentryTableTaggedEntryKeyIdAttributes
-	Memberships *MembershipPackAgentrunentryTableShared1
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryKeyId)(nil)
-
-type ReadAccessAgentrunentryTableTaggedEntryParent struct {
-	Attributes  *ReadAccessAgentrunentryTableTaggedEntryParentAttributes
-	Memberships *MembershipPackAgentrunentryTableShared1
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryParent)(nil)
-
-type ReadAccessAgentrunentryTableTaggedEntryAttachments struct {
-	Attributes  *ReadAccessAgentrunentryTableTaggedEntryAttachmentsAttributes
-	Memberships *MembershipPackAgentrunentryTableShared1
-}
-
-var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEntryAttachments)(nil)
-
-func NewReadAccessAgentrunentryTableTaggedEntryOrdinal() (inst *ReadAccessAgentrunentryTableTaggedEntryOrdinal) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryOrdinal{}
-	inst.Attributes = NewReadAccessAgentrunentryTableTaggedEntryOrdinalAttributes()
-	inst.Memberships = NewMembershipPackAgentrunentryTableShared1EntryOrdinal()
+func NewReadAccessAgentrunentryTableTaggedTextArray() (inst *ReadAccessAgentrunentryTableTaggedTextArray) {
+	inst = &ReadAccessAgentrunentryTableTaggedTextArray{}
+	inst.Attributes = NewReadAccessAgentrunentryTableTaggedTextArrayAttributes()
+	inst.Memberships = NewMembershipPackAgentrunentryTableShared1TextArray()
 	return
 }
 
-func NewReadAccessAgentrunentryTableTaggedEntryAt() (inst *ReadAccessAgentrunentryTableTaggedEntryAt) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryAt{}
-	inst.Attributes = NewReadAccessAgentrunentryTableTaggedEntryAtAttributes()
-	inst.Memberships = NewMembershipPackAgentrunentryTableShared1EntryAt()
+func NewReadAccessAgentrunentryTableTaggedStringArray() (inst *ReadAccessAgentrunentryTableTaggedStringArray) {
+	inst = &ReadAccessAgentrunentryTableTaggedStringArray{}
+	inst.Attributes = NewReadAccessAgentrunentryTableTaggedStringArrayAttributes()
+	inst.Memberships = NewMembershipPackAgentrunentryTableShared1StringArray()
 	return
 }
 
-func NewReadAccessAgentrunentryTableTaggedEntryKind() (inst *ReadAccessAgentrunentryTableTaggedEntryKind) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryKind{}
-	inst.Attributes = NewReadAccessAgentrunentryTableTaggedEntryKindAttributes()
-	inst.Memberships = NewMembershipPackAgentrunentryTableShared1EntryKind()
+func NewReadAccessAgentrunentryTableTaggedSymbol() (inst *ReadAccessAgentrunentryTableTaggedSymbol) {
+	inst = &ReadAccessAgentrunentryTableTaggedSymbol{}
+	inst.Attributes = NewReadAccessAgentrunentryTableTaggedSymbolAttributes()
+	inst.Memberships = NewMembershipPackAgentrunentryTableShared1Symbol()
 	return
 }
 
-func NewReadAccessAgentrunentryTableTaggedEntryKey() (inst *ReadAccessAgentrunentryTableTaggedEntryKey) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryKey{}
-	inst.Attributes = NewReadAccessAgentrunentryTableTaggedEntryKeyAttributes()
-	inst.Memberships = NewMembershipPackAgentrunentryTableShared1EntryKey()
+func NewReadAccessAgentrunentryTableTaggedSymbolArray() (inst *ReadAccessAgentrunentryTableTaggedSymbolArray) {
+	inst = &ReadAccessAgentrunentryTableTaggedSymbolArray{}
+	inst.Attributes = NewReadAccessAgentrunentryTableTaggedSymbolArrayAttributes()
+	inst.Memberships = NewMembershipPackAgentrunentryTableShared1SymbolArray()
 	return
 }
 
-func NewReadAccessAgentrunentryTableTaggedEntryRole() (inst *ReadAccessAgentrunentryTableTaggedEntryRole) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryRole{}
-	inst.Attributes = NewReadAccessAgentrunentryTableTaggedEntryRoleAttributes()
-	inst.Memberships = NewMembershipPackAgentrunentryTableShared1EntryRole()
+func NewReadAccessAgentrunentryTableTaggedBlobArray() (inst *ReadAccessAgentrunentryTableTaggedBlobArray) {
+	inst = &ReadAccessAgentrunentryTableTaggedBlobArray{}
+	inst.Attributes = NewReadAccessAgentrunentryTableTaggedBlobArrayAttributes()
+	inst.Memberships = NewMembershipPackAgentrunentryTableShared1BlobArray()
 	return
 }
 
-func NewReadAccessAgentrunentryTableTaggedEntryBody() (inst *ReadAccessAgentrunentryTableTaggedEntryBody) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryBody{}
-	inst.Attributes = NewReadAccessAgentrunentryTableTaggedEntryBodyAttributes()
-	inst.Memberships = NewMembershipPackAgentrunentryTableShared1EntryBody()
+func NewReadAccessAgentrunentryTableTaggedU8Array() (inst *ReadAccessAgentrunentryTableTaggedU8Array) {
+	inst = &ReadAccessAgentrunentryTableTaggedU8Array{}
+	inst.Attributes = NewReadAccessAgentrunentryTableTaggedU8ArrayAttributes()
+	inst.Memberships = NewMembershipPackAgentrunentryTableShared1U8Array()
 	return
 }
 
-func NewReadAccessAgentrunentryTableTaggedEntryCalls() (inst *ReadAccessAgentrunentryTableTaggedEntryCalls) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryCalls{}
-	inst.Attributes = NewReadAccessAgentrunentryTableTaggedEntryCallsAttributes()
-	inst.Memberships = NewMembershipPackAgentrunentryTableShared1EntryCalls()
+func NewReadAccessAgentrunentryTableTaggedU16Array() (inst *ReadAccessAgentrunentryTableTaggedU16Array) {
+	inst = &ReadAccessAgentrunentryTableTaggedU16Array{}
+	inst.Attributes = NewReadAccessAgentrunentryTableTaggedU16ArrayAttributes()
+	inst.Memberships = NewMembershipPackAgentrunentryTableShared1U16Array()
 	return
 }
 
-func NewReadAccessAgentrunentryTableTaggedEntryBodyDigest() (inst *ReadAccessAgentrunentryTableTaggedEntryBodyDigest) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryBodyDigest{}
-	inst.Attributes = NewReadAccessAgentrunentryTableTaggedEntryBodyDigestAttributes()
-	inst.Memberships = NewMembershipPackAgentrunentryTableShared1EntryBodyDigest()
+func NewReadAccessAgentrunentryTableTaggedU32Array() (inst *ReadAccessAgentrunentryTableTaggedU32Array) {
+	inst = &ReadAccessAgentrunentryTableTaggedU32Array{}
+	inst.Attributes = NewReadAccessAgentrunentryTableTaggedU32ArrayAttributes()
+	inst.Memberships = NewMembershipPackAgentrunentryTableShared1U32Array()
 	return
 }
 
-func NewReadAccessAgentrunentryTableTaggedEntryCallsDigest() (inst *ReadAccessAgentrunentryTableTaggedEntryCallsDigest) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryCallsDigest{}
-	inst.Attributes = NewReadAccessAgentrunentryTableTaggedEntryCallsDigestAttributes()
-	inst.Memberships = NewMembershipPackAgentrunentryTableShared1EntryCallsDigest()
+func NewReadAccessAgentrunentryTableTaggedU32Set() (inst *ReadAccessAgentrunentryTableTaggedU32Set) {
+	inst = &ReadAccessAgentrunentryTableTaggedU32Set{}
+	inst.Attributes = NewReadAccessAgentrunentryTableTaggedU32SetAttributes()
+	inst.Memberships = NewMembershipPackAgentrunentryTableShared1U32Set()
 	return
 }
 
-func NewReadAccessAgentrunentryTableTaggedEntryName() (inst *ReadAccessAgentrunentryTableTaggedEntryName) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryName{}
-	inst.Attributes = NewReadAccessAgentrunentryTableTaggedEntryNameAttributes()
-	inst.Memberships = NewMembershipPackAgentrunentryTableShared1EntryName()
+func NewReadAccessAgentrunentryTableTaggedU64Array() (inst *ReadAccessAgentrunentryTableTaggedU64Array) {
+	inst = &ReadAccessAgentrunentryTableTaggedU64Array{}
+	inst.Attributes = NewReadAccessAgentrunentryTableTaggedU64ArrayAttributes()
+	inst.Memberships = NewMembershipPackAgentrunentryTableShared1U64Array()
 	return
 }
 
-func NewReadAccessAgentrunentryTableTaggedEntryBook() (inst *ReadAccessAgentrunentryTableTaggedEntryBook) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryBook{}
-	inst.Attributes = NewReadAccessAgentrunentryTableTaggedEntryBookAttributes()
-	inst.Memberships = NewMembershipPackAgentrunentryTableShared1EntryBook()
+func NewReadAccessAgentrunentryTableTaggedU64Set() (inst *ReadAccessAgentrunentryTableTaggedU64Set) {
+	inst = &ReadAccessAgentrunentryTableTaggedU64Set{}
+	inst.Attributes = NewReadAccessAgentrunentryTableTaggedU64SetAttributes()
+	inst.Memberships = NewMembershipPackAgentrunentryTableShared1U64Set()
 	return
 }
 
-func NewReadAccessAgentrunentryTableTaggedEntryForm() (inst *ReadAccessAgentrunentryTableTaggedEntryForm) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryForm{}
-	inst.Attributes = NewReadAccessAgentrunentryTableTaggedEntryFormAttributes()
-	inst.Memberships = NewMembershipPackAgentrunentryTableShared1EntryForm()
+func NewReadAccessAgentrunentryTableTaggedI8Array() (inst *ReadAccessAgentrunentryTableTaggedI8Array) {
+	inst = &ReadAccessAgentrunentryTableTaggedI8Array{}
+	inst.Attributes = NewReadAccessAgentrunentryTableTaggedI8ArrayAttributes()
+	inst.Memberships = NewMembershipPackAgentrunentryTableShared1I8Array()
 	return
 }
 
-func NewReadAccessAgentrunentryTableTaggedEntryTarget() (inst *ReadAccessAgentrunentryTableTaggedEntryTarget) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryTarget{}
-	inst.Attributes = NewReadAccessAgentrunentryTableTaggedEntryTargetAttributes()
-	inst.Memberships = NewMembershipPackAgentrunentryTableShared1EntryTarget()
+func NewReadAccessAgentrunentryTableTaggedI16Array() (inst *ReadAccessAgentrunentryTableTaggedI16Array) {
+	inst = &ReadAccessAgentrunentryTableTaggedI16Array{}
+	inst.Attributes = NewReadAccessAgentrunentryTableTaggedI16ArrayAttributes()
+	inst.Memberships = NewMembershipPackAgentrunentryTableShared1I16Array()
 	return
 }
 
-func NewReadAccessAgentrunentryTableTaggedEntryFrom() (inst *ReadAccessAgentrunentryTableTaggedEntryFrom) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryFrom{}
-	inst.Attributes = NewReadAccessAgentrunentryTableTaggedEntryFromAttributes()
-	inst.Memberships = NewMembershipPackAgentrunentryTableShared1EntryFrom()
+func NewReadAccessAgentrunentryTableTaggedI32Array() (inst *ReadAccessAgentrunentryTableTaggedI32Array) {
+	inst = &ReadAccessAgentrunentryTableTaggedI32Array{}
+	inst.Attributes = NewReadAccessAgentrunentryTableTaggedI32ArrayAttributes()
+	inst.Memberships = NewMembershipPackAgentrunentryTableShared1I32Array()
 	return
 }
 
-func NewReadAccessAgentrunentryTableTaggedEntryEffect() (inst *ReadAccessAgentrunentryTableTaggedEntryEffect) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryEffect{}
-	inst.Attributes = NewReadAccessAgentrunentryTableTaggedEntryEffectAttributes()
-	inst.Memberships = NewMembershipPackAgentrunentryTableShared1EntryEffect()
+func NewReadAccessAgentrunentryTableTaggedI64Array() (inst *ReadAccessAgentrunentryTableTaggedI64Array) {
+	inst = &ReadAccessAgentrunentryTableTaggedI64Array{}
+	inst.Attributes = NewReadAccessAgentrunentryTableTaggedI64ArrayAttributes()
+	inst.Memberships = NewMembershipPackAgentrunentryTableShared1I64Array()
 	return
 }
 
-func NewReadAccessAgentrunentryTableTaggedEntryTurn() (inst *ReadAccessAgentrunentryTableTaggedEntryTurn) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryTurn{}
-	inst.Attributes = NewReadAccessAgentrunentryTableTaggedEntryTurnAttributes()
-	inst.Memberships = NewMembershipPackAgentrunentryTableShared1EntryTurn()
+func NewReadAccessAgentrunentryTableTaggedF32Array() (inst *ReadAccessAgentrunentryTableTaggedF32Array) {
+	inst = &ReadAccessAgentrunentryTableTaggedF32Array{}
+	inst.Attributes = NewReadAccessAgentrunentryTableTaggedF32ArrayAttributes()
+	inst.Memberships = NewMembershipPackAgentrunentryTableShared1F32Array()
 	return
 }
 
-func NewReadAccessAgentrunentryTableTaggedEntryLabelLevel() (inst *ReadAccessAgentrunentryTableTaggedEntryLabelLevel) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryLabelLevel{}
-	inst.Attributes = NewReadAccessAgentrunentryTableTaggedEntryLabelLevelAttributes()
-	inst.Memberships = NewMembershipPackAgentrunentryTableShared1EntryLabelLevel()
+func NewReadAccessAgentrunentryTableTaggedF64Array() (inst *ReadAccessAgentrunentryTableTaggedF64Array) {
+	inst = &ReadAccessAgentrunentryTableTaggedF64Array{}
+	inst.Attributes = NewReadAccessAgentrunentryTableTaggedF64ArrayAttributes()
+	inst.Memberships = NewMembershipPackAgentrunentryTableShared1F64Array()
 	return
 }
 
-func NewReadAccessAgentrunentryTableTaggedEntryLabelTier() (inst *ReadAccessAgentrunentryTableTaggedEntryLabelTier) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryLabelTier{}
-	inst.Attributes = NewReadAccessAgentrunentryTableTaggedEntryLabelTierAttributes()
-	inst.Memberships = NewMembershipPackAgentrunentryTableShared1EntryLabelTier()
+func NewReadAccessAgentrunentryTableTaggedU32Range() (inst *ReadAccessAgentrunentryTableTaggedU32Range) {
+	inst = &ReadAccessAgentrunentryTableTaggedU32Range{}
+	inst.Attributes = NewReadAccessAgentrunentryTableTaggedU32RangeAttributes()
+	inst.Memberships = NewMembershipPackAgentrunentryTableShared1U32Range()
 	return
 }
 
-func NewReadAccessAgentrunentryTableTaggedEntryLabelExposure() (inst *ReadAccessAgentrunentryTableTaggedEntryLabelExposure) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryLabelExposure{}
-	inst.Attributes = NewReadAccessAgentrunentryTableTaggedEntryLabelExposureAttributes()
-	inst.Memberships = NewMembershipPackAgentrunentryTableShared1EntryLabelExposure()
+func NewReadAccessAgentrunentryTableTaggedTimeArray() (inst *ReadAccessAgentrunentryTableTaggedTimeArray) {
+	inst = &ReadAccessAgentrunentryTableTaggedTimeArray{}
+	inst.Attributes = NewReadAccessAgentrunentryTableTaggedTimeArrayAttributes()
+	inst.Memberships = NewMembershipPackAgentrunentryTableShared1TimeArray()
 	return
 }
 
-func NewReadAccessAgentrunentryTableTaggedEntryLabelOrigin() (inst *ReadAccessAgentrunentryTableTaggedEntryLabelOrigin) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryLabelOrigin{}
-	inst.Attributes = NewReadAccessAgentrunentryTableTaggedEntryLabelOriginAttributes()
-	inst.Memberships = NewMembershipPackAgentrunentryTableShared1EntryLabelOrigin()
+func NewReadAccessAgentrunentryTableTaggedBool() (inst *ReadAccessAgentrunentryTableTaggedBool) {
+	inst = &ReadAccessAgentrunentryTableTaggedBool{}
+	inst.Attributes = NewReadAccessAgentrunentryTableTaggedBoolAttributes()
+	inst.Memberships = NewMembershipPackAgentrunentryTableShared1Bool()
 	return
 }
 
-func NewReadAccessAgentrunentryTableTaggedEntryWriterRun() (inst *ReadAccessAgentrunentryTableTaggedEntryWriterRun) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryWriterRun{}
-	inst.Attributes = NewReadAccessAgentrunentryTableTaggedEntryWriterRunAttributes()
-	inst.Memberships = NewMembershipPackAgentrunentryTableShared1EntryWriterRun()
-	return
-}
-
-func NewReadAccessAgentrunentryTableTaggedEntryWriterTurn() (inst *ReadAccessAgentrunentryTableTaggedEntryWriterTurn) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryWriterTurn{}
-	inst.Attributes = NewReadAccessAgentrunentryTableTaggedEntryWriterTurnAttributes()
-	inst.Memberships = NewMembershipPackAgentrunentryTableShared1EntryWriterTurn()
-	return
-}
-
-func NewReadAccessAgentrunentryTableTaggedEntryWriterOrdinal() (inst *ReadAccessAgentrunentryTableTaggedEntryWriterOrdinal) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryWriterOrdinal{}
-	inst.Attributes = NewReadAccessAgentrunentryTableTaggedEntryWriterOrdinalAttributes()
-	inst.Memberships = NewMembershipPackAgentrunentryTableShared1EntryWriterOrdinal()
-	return
-}
-
-func NewReadAccessAgentrunentryTableTaggedEntryPrev() (inst *ReadAccessAgentrunentryTableTaggedEntryPrev) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryPrev{}
-	inst.Attributes = NewReadAccessAgentrunentryTableTaggedEntryPrevAttributes()
-	inst.Memberships = NewMembershipPackAgentrunentryTableShared1EntryPrev()
-	return
-}
-
-func NewReadAccessAgentrunentryTableTaggedEntryDigest() (inst *ReadAccessAgentrunentryTableTaggedEntryDigest) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryDigest{}
-	inst.Attributes = NewReadAccessAgentrunentryTableTaggedEntryDigestAttributes()
-	inst.Memberships = NewMembershipPackAgentrunentryTableShared1EntryDigest()
-	return
-}
-
-func NewReadAccessAgentrunentryTableTaggedEntryKeyId() (inst *ReadAccessAgentrunentryTableTaggedEntryKeyId) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryKeyId{}
-	inst.Attributes = NewReadAccessAgentrunentryTableTaggedEntryKeyIdAttributes()
-	inst.Memberships = NewMembershipPackAgentrunentryTableShared1EntryKeyId()
-	return
-}
-
-func NewReadAccessAgentrunentryTableTaggedEntryParent() (inst *ReadAccessAgentrunentryTableTaggedEntryParent) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryParent{}
-	inst.Attributes = NewReadAccessAgentrunentryTableTaggedEntryParentAttributes()
-	inst.Memberships = NewMembershipPackAgentrunentryTableShared1EntryParent()
-	return
-}
-
-func NewReadAccessAgentrunentryTableTaggedEntryAttachments() (inst *ReadAccessAgentrunentryTableTaggedEntryAttachments) {
-	inst = &ReadAccessAgentrunentryTableTaggedEntryAttachments{}
-	inst.Attributes = NewReadAccessAgentrunentryTableTaggedEntryAttachmentsAttributes()
-	inst.Memberships = NewMembershipPackAgentrunentryTableShared1EntryAttachments()
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryOrdinal) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedTextArray) SetColumnIndices(indices []uint32) (restIndices []uint32) {
 	restIndices = indices
 	restIndices = inst.Attributes.SetColumnIndices(restIndices)
 	restIndices = inst.Memberships.SetColumnIndices(restIndices)
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAt) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedStringArray) SetColumnIndices(indices []uint32) (restIndices []uint32) {
 	restIndices = indices
 	restIndices = inst.Attributes.SetColumnIndices(restIndices)
 	restIndices = inst.Memberships.SetColumnIndices(restIndices)
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKind) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedSymbol) SetColumnIndices(indices []uint32) (restIndices []uint32) {
 	restIndices = indices
 	restIndices = inst.Attributes.SetColumnIndices(restIndices)
 	restIndices = inst.Memberships.SetColumnIndices(restIndices)
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKey) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolArray) SetColumnIndices(indices []uint32) (restIndices []uint32) {
 	restIndices = indices
 	restIndices = inst.Attributes.SetColumnIndices(restIndices)
 	restIndices = inst.Memberships.SetColumnIndices(restIndices)
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryRole) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedBlobArray) SetColumnIndices(indices []uint32) (restIndices []uint32) {
 	restIndices = indices
 	restIndices = inst.Attributes.SetColumnIndices(restIndices)
 	restIndices = inst.Memberships.SetColumnIndices(restIndices)
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBody) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedU8Array) SetColumnIndices(indices []uint32) (restIndices []uint32) {
 	restIndices = indices
 	restIndices = inst.Attributes.SetColumnIndices(restIndices)
 	restIndices = inst.Memberships.SetColumnIndices(restIndices)
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCalls) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedU16Array) SetColumnIndices(indices []uint32) (restIndices []uint32) {
 	restIndices = indices
 	restIndices = inst.Attributes.SetColumnIndices(restIndices)
 	restIndices = inst.Memberships.SetColumnIndices(restIndices)
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBodyDigest) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Array) SetColumnIndices(indices []uint32) (restIndices []uint32) {
 	restIndices = indices
 	restIndices = inst.Attributes.SetColumnIndices(restIndices)
 	restIndices = inst.Memberships.SetColumnIndices(restIndices)
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCallsDigest) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Set) SetColumnIndices(indices []uint32) (restIndices []uint32) {
 	restIndices = indices
 	restIndices = inst.Attributes.SetColumnIndices(restIndices)
 	restIndices = inst.Memberships.SetColumnIndices(restIndices)
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryName) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedU64Array) SetColumnIndices(indices []uint32) (restIndices []uint32) {
 	restIndices = indices
 	restIndices = inst.Attributes.SetColumnIndices(restIndices)
 	restIndices = inst.Memberships.SetColumnIndices(restIndices)
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBook) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedU64Set) SetColumnIndices(indices []uint32) (restIndices []uint32) {
 	restIndices = indices
 	restIndices = inst.Attributes.SetColumnIndices(restIndices)
 	restIndices = inst.Memberships.SetColumnIndices(restIndices)
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryForm) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedI8Array) SetColumnIndices(indices []uint32) (restIndices []uint32) {
 	restIndices = indices
 	restIndices = inst.Attributes.SetColumnIndices(restIndices)
 	restIndices = inst.Memberships.SetColumnIndices(restIndices)
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTarget) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedI16Array) SetColumnIndices(indices []uint32) (restIndices []uint32) {
 	restIndices = indices
 	restIndices = inst.Attributes.SetColumnIndices(restIndices)
 	restIndices = inst.Memberships.SetColumnIndices(restIndices)
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryFrom) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedI32Array) SetColumnIndices(indices []uint32) (restIndices []uint32) {
 	restIndices = indices
 	restIndices = inst.Attributes.SetColumnIndices(restIndices)
 	restIndices = inst.Memberships.SetColumnIndices(restIndices)
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryEffect) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedI64Array) SetColumnIndices(indices []uint32) (restIndices []uint32) {
 	restIndices = indices
 	restIndices = inst.Attributes.SetColumnIndices(restIndices)
 	restIndices = inst.Memberships.SetColumnIndices(restIndices)
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTurn) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedF32Array) SetColumnIndices(indices []uint32) (restIndices []uint32) {
 	restIndices = indices
 	restIndices = inst.Attributes.SetColumnIndices(restIndices)
 	restIndices = inst.Memberships.SetColumnIndices(restIndices)
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelLevel) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedF64Array) SetColumnIndices(indices []uint32) (restIndices []uint32) {
 	restIndices = indices
 	restIndices = inst.Attributes.SetColumnIndices(restIndices)
 	restIndices = inst.Memberships.SetColumnIndices(restIndices)
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelTier) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Range) SetColumnIndices(indices []uint32) (restIndices []uint32) {
 	restIndices = indices
 	restIndices = inst.Attributes.SetColumnIndices(restIndices)
 	restIndices = inst.Memberships.SetColumnIndices(restIndices)
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelExposure) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedTimeArray) SetColumnIndices(indices []uint32) (restIndices []uint32) {
 	restIndices = indices
 	restIndices = inst.Attributes.SetColumnIndices(restIndices)
 	restIndices = inst.Memberships.SetColumnIndices(restIndices)
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelOrigin) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedBool) SetColumnIndices(indices []uint32) (restIndices []uint32) {
 	restIndices = indices
 	restIndices = inst.Attributes.SetColumnIndices(restIndices)
 	restIndices = inst.Memberships.SetColumnIndices(restIndices)
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterRun) SetColumnIndices(indices []uint32) (restIndices []uint32) {
-	restIndices = indices
-	restIndices = inst.Attributes.SetColumnIndices(restIndices)
-	restIndices = inst.Memberships.SetColumnIndices(restIndices)
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterTurn) SetColumnIndices(indices []uint32) (restIndices []uint32) {
-	restIndices = indices
-	restIndices = inst.Attributes.SetColumnIndices(restIndices)
-	restIndices = inst.Memberships.SetColumnIndices(restIndices)
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterOrdinal) SetColumnIndices(indices []uint32) (restIndices []uint32) {
-	restIndices = indices
-	restIndices = inst.Attributes.SetColumnIndices(restIndices)
-	restIndices = inst.Memberships.SetColumnIndices(restIndices)
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryPrev) SetColumnIndices(indices []uint32) (restIndices []uint32) {
-	restIndices = indices
-	restIndices = inst.Attributes.SetColumnIndices(restIndices)
-	restIndices = inst.Memberships.SetColumnIndices(restIndices)
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryDigest) SetColumnIndices(indices []uint32) (restIndices []uint32) {
-	restIndices = indices
-	restIndices = inst.Attributes.SetColumnIndices(restIndices)
-	restIndices = inst.Memberships.SetColumnIndices(restIndices)
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKeyId) SetColumnIndices(indices []uint32) (restIndices []uint32) {
-	restIndices = indices
-	restIndices = inst.Attributes.SetColumnIndices(restIndices)
-	restIndices = inst.Memberships.SetColumnIndices(restIndices)
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryParent) SetColumnIndices(indices []uint32) (restIndices []uint32) {
-	restIndices = indices
-	restIndices = inst.Attributes.SetColumnIndices(restIndices)
-	restIndices = inst.Memberships.SetColumnIndices(restIndices)
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAttachments) SetColumnIndices(indices []uint32) (restIndices []uint32) {
-	restIndices = indices
-	restIndices = inst.Attributes.SetColumnIndices(restIndices)
-	restIndices = inst.Memberships.SetColumnIndices(restIndices)
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryOrdinal) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedTextArray) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAt) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedStringArray) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKind) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedSymbol) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKey) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolArray) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryRole) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedBlobArray) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBody) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedU8Array) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCalls) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedU16Array) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBodyDigest) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Array) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCallsDigest) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Set) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryName) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedU64Array) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBook) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedU64Set) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryForm) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedI8Array) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTarget) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedI16Array) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryFrom) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedI32Array) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryEffect) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedI64Array) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTurn) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedF32Array) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelLevel) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedF64Array) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelTier) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Range) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelExposure) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedTimeArray) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelOrigin) GetColumnIndices() (columnIndices []uint32) {
+func (inst *ReadAccessAgentrunentryTableTaggedBool) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterRun) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
-	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterTurn) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
-	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterOrdinal) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
-	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryPrev) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
-	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryDigest) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
-	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKeyId) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
-	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryParent) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
-	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAttachments) GetColumnIndices() (columnIndices []uint32) {
-	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
-	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryOrdinal) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessAgentrunentryTableTaggedTextArray) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
 	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAt) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessAgentrunentryTableTaggedStringArray) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
 	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKind) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessAgentrunentryTableTaggedSymbol) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
 	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKey) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolArray) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
 	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryRole) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessAgentrunentryTableTaggedBlobArray) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
 	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBody) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessAgentrunentryTableTaggedU8Array) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
 	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCalls) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessAgentrunentryTableTaggedU16Array) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
 	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBodyDigest) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Array) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
 	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCallsDigest) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Set) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
 	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryName) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessAgentrunentryTableTaggedU64Array) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
 	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBook) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessAgentrunentryTableTaggedU64Set) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
 	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryForm) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessAgentrunentryTableTaggedI8Array) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
 	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTarget) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessAgentrunentryTableTaggedI16Array) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
 	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryFrom) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessAgentrunentryTableTaggedI32Array) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
 	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryEffect) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessAgentrunentryTableTaggedI64Array) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
 	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTurn) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessAgentrunentryTableTaggedF32Array) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
 	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelLevel) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessAgentrunentryTableTaggedF64Array) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
 	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelTier) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Range) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
 	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelExposure) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessAgentrunentryTableTaggedTimeArray) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
 	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelOrigin) GetColumnIndexFieldNames() (fieldNames []string) {
+func (inst *ReadAccessAgentrunentryTableTaggedBool) GetColumnIndexFieldNames() (fieldNames []string) {
 	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
 	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterRun) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
-	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterTurn) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
-	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterOrdinal) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
-	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryPrev) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
-	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryDigest) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
-	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKeyId) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
-	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryParent) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
-	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAttachments) GetColumnIndexFieldNames() (fieldNames []string) {
-	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
-	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryOrdinal) Release() {
+func (inst *ReadAccessAgentrunentryTableTaggedTextArray) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAt) Release() {
+func (inst *ReadAccessAgentrunentryTableTaggedStringArray) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKind) Release() {
+func (inst *ReadAccessAgentrunentryTableTaggedSymbol) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKey) Release() {
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolArray) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryRole) Release() {
+func (inst *ReadAccessAgentrunentryTableTaggedBlobArray) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBody) Release() {
+func (inst *ReadAccessAgentrunentryTableTaggedU8Array) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCalls) Release() {
+func (inst *ReadAccessAgentrunentryTableTaggedU16Array) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBodyDigest) Release() {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Array) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCallsDigest) Release() {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Set) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryName) Release() {
+func (inst *ReadAccessAgentrunentryTableTaggedU64Array) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBook) Release() {
+func (inst *ReadAccessAgentrunentryTableTaggedU64Set) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryForm) Release() {
+func (inst *ReadAccessAgentrunentryTableTaggedI8Array) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTarget) Release() {
+func (inst *ReadAccessAgentrunentryTableTaggedI16Array) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryFrom) Release() {
+func (inst *ReadAccessAgentrunentryTableTaggedI32Array) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryEffect) Release() {
+func (inst *ReadAccessAgentrunentryTableTaggedI64Array) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTurn) Release() {
+func (inst *ReadAccessAgentrunentryTableTaggedF32Array) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelLevel) Release() {
+func (inst *ReadAccessAgentrunentryTableTaggedF64Array) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelTier) Release() {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Range) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelExposure) Release() {
+func (inst *ReadAccessAgentrunentryTableTaggedTimeArray) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelOrigin) Release() {
+func (inst *ReadAccessAgentrunentryTableTaggedBool) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterRun) Release() {
-	runtime.ReleaseIfNotNil(inst.Attributes)
-	runtime.ReleaseIfNotNil(inst.Memberships)
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterTurn) Release() {
-	runtime.ReleaseIfNotNil(inst.Attributes)
-	runtime.ReleaseIfNotNil(inst.Memberships)
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterOrdinal) Release() {
-	runtime.ReleaseIfNotNil(inst.Attributes)
-	runtime.ReleaseIfNotNil(inst.Memberships)
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryPrev) Release() {
-	runtime.ReleaseIfNotNil(inst.Attributes)
-	runtime.ReleaseIfNotNil(inst.Memberships)
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryDigest) Release() {
-	runtime.ReleaseIfNotNil(inst.Attributes)
-	runtime.ReleaseIfNotNil(inst.Memberships)
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKeyId) Release() {
-	runtime.ReleaseIfNotNil(inst.Attributes)
-	runtime.ReleaseIfNotNil(inst.Memberships)
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryParent) Release() {
-	runtime.ReleaseIfNotNil(inst.Attributes)
-	runtime.ReleaseIfNotNil(inst.Memberships)
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAttachments) Release() {
-	runtime.ReleaseIfNotNil(inst.Attributes)
-	runtime.ReleaseIfNotNil(inst.Memberships)
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryOrdinal) LoadFromRecord(rec runtime.RecordI) (err error) {
+func (inst *ReadAccessAgentrunentryTableTaggedTextArray) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = inst.Attributes.LoadFromRecord(rec)
 	if err != nil {
 		err = eb.Build().Errorf("unable to load from record: %w", err)
@@ -4300,7 +3764,7 @@ func (inst *ReadAccessAgentrunentryTableTaggedEntryOrdinal) LoadFromRecord(rec r
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAt) LoadFromRecord(rec runtime.RecordI) (err error) {
+func (inst *ReadAccessAgentrunentryTableTaggedStringArray) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = inst.Attributes.LoadFromRecord(rec)
 	if err != nil {
 		err = eb.Build().Errorf("unable to load from record: %w", err)
@@ -4314,7 +3778,7 @@ func (inst *ReadAccessAgentrunentryTableTaggedEntryAt) LoadFromRecord(rec runtim
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKind) LoadFromRecord(rec runtime.RecordI) (err error) {
+func (inst *ReadAccessAgentrunentryTableTaggedSymbol) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = inst.Attributes.LoadFromRecord(rec)
 	if err != nil {
 		err = eb.Build().Errorf("unable to load from record: %w", err)
@@ -4328,7 +3792,7 @@ func (inst *ReadAccessAgentrunentryTableTaggedEntryKind) LoadFromRecord(rec runt
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKey) LoadFromRecord(rec runtime.RecordI) (err error) {
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolArray) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = inst.Attributes.LoadFromRecord(rec)
 	if err != nil {
 		err = eb.Build().Errorf("unable to load from record: %w", err)
@@ -4342,7 +3806,7 @@ func (inst *ReadAccessAgentrunentryTableTaggedEntryKey) LoadFromRecord(rec runti
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryRole) LoadFromRecord(rec runtime.RecordI) (err error) {
+func (inst *ReadAccessAgentrunentryTableTaggedBlobArray) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = inst.Attributes.LoadFromRecord(rec)
 	if err != nil {
 		err = eb.Build().Errorf("unable to load from record: %w", err)
@@ -4356,7 +3820,7 @@ func (inst *ReadAccessAgentrunentryTableTaggedEntryRole) LoadFromRecord(rec runt
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBody) LoadFromRecord(rec runtime.RecordI) (err error) {
+func (inst *ReadAccessAgentrunentryTableTaggedU8Array) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = inst.Attributes.LoadFromRecord(rec)
 	if err != nil {
 		err = eb.Build().Errorf("unable to load from record: %w", err)
@@ -4370,7 +3834,7 @@ func (inst *ReadAccessAgentrunentryTableTaggedEntryBody) LoadFromRecord(rec runt
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCalls) LoadFromRecord(rec runtime.RecordI) (err error) {
+func (inst *ReadAccessAgentrunentryTableTaggedU16Array) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = inst.Attributes.LoadFromRecord(rec)
 	if err != nil {
 		err = eb.Build().Errorf("unable to load from record: %w", err)
@@ -4384,7 +3848,7 @@ func (inst *ReadAccessAgentrunentryTableTaggedEntryCalls) LoadFromRecord(rec run
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBodyDigest) LoadFromRecord(rec runtime.RecordI) (err error) {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Array) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = inst.Attributes.LoadFromRecord(rec)
 	if err != nil {
 		err = eb.Build().Errorf("unable to load from record: %w", err)
@@ -4398,7 +3862,7 @@ func (inst *ReadAccessAgentrunentryTableTaggedEntryBodyDigest) LoadFromRecord(re
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCallsDigest) LoadFromRecord(rec runtime.RecordI) (err error) {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Set) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = inst.Attributes.LoadFromRecord(rec)
 	if err != nil {
 		err = eb.Build().Errorf("unable to load from record: %w", err)
@@ -4412,7 +3876,7 @@ func (inst *ReadAccessAgentrunentryTableTaggedEntryCallsDigest) LoadFromRecord(r
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryName) LoadFromRecord(rec runtime.RecordI) (err error) {
+func (inst *ReadAccessAgentrunentryTableTaggedU64Array) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = inst.Attributes.LoadFromRecord(rec)
 	if err != nil {
 		err = eb.Build().Errorf("unable to load from record: %w", err)
@@ -4426,7 +3890,7 @@ func (inst *ReadAccessAgentrunentryTableTaggedEntryName) LoadFromRecord(rec runt
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBook) LoadFromRecord(rec runtime.RecordI) (err error) {
+func (inst *ReadAccessAgentrunentryTableTaggedU64Set) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = inst.Attributes.LoadFromRecord(rec)
 	if err != nil {
 		err = eb.Build().Errorf("unable to load from record: %w", err)
@@ -4440,7 +3904,7 @@ func (inst *ReadAccessAgentrunentryTableTaggedEntryBook) LoadFromRecord(rec runt
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryForm) LoadFromRecord(rec runtime.RecordI) (err error) {
+func (inst *ReadAccessAgentrunentryTableTaggedI8Array) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = inst.Attributes.LoadFromRecord(rec)
 	if err != nil {
 		err = eb.Build().Errorf("unable to load from record: %w", err)
@@ -4454,7 +3918,7 @@ func (inst *ReadAccessAgentrunentryTableTaggedEntryForm) LoadFromRecord(rec runt
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTarget) LoadFromRecord(rec runtime.RecordI) (err error) {
+func (inst *ReadAccessAgentrunentryTableTaggedI16Array) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = inst.Attributes.LoadFromRecord(rec)
 	if err != nil {
 		err = eb.Build().Errorf("unable to load from record: %w", err)
@@ -4468,7 +3932,7 @@ func (inst *ReadAccessAgentrunentryTableTaggedEntryTarget) LoadFromRecord(rec ru
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryFrom) LoadFromRecord(rec runtime.RecordI) (err error) {
+func (inst *ReadAccessAgentrunentryTableTaggedI32Array) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = inst.Attributes.LoadFromRecord(rec)
 	if err != nil {
 		err = eb.Build().Errorf("unable to load from record: %w", err)
@@ -4482,7 +3946,7 @@ func (inst *ReadAccessAgentrunentryTableTaggedEntryFrom) LoadFromRecord(rec runt
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryEffect) LoadFromRecord(rec runtime.RecordI) (err error) {
+func (inst *ReadAccessAgentrunentryTableTaggedI64Array) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = inst.Attributes.LoadFromRecord(rec)
 	if err != nil {
 		err = eb.Build().Errorf("unable to load from record: %w", err)
@@ -4496,7 +3960,7 @@ func (inst *ReadAccessAgentrunentryTableTaggedEntryEffect) LoadFromRecord(rec ru
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTurn) LoadFromRecord(rec runtime.RecordI) (err error) {
+func (inst *ReadAccessAgentrunentryTableTaggedF32Array) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = inst.Attributes.LoadFromRecord(rec)
 	if err != nil {
 		err = eb.Build().Errorf("unable to load from record: %w", err)
@@ -4510,7 +3974,7 @@ func (inst *ReadAccessAgentrunentryTableTaggedEntryTurn) LoadFromRecord(rec runt
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelLevel) LoadFromRecord(rec runtime.RecordI) (err error) {
+func (inst *ReadAccessAgentrunentryTableTaggedF64Array) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = inst.Attributes.LoadFromRecord(rec)
 	if err != nil {
 		err = eb.Build().Errorf("unable to load from record: %w", err)
@@ -4524,7 +3988,7 @@ func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelLevel) LoadFromRecord(re
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelTier) LoadFromRecord(rec runtime.RecordI) (err error) {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Range) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = inst.Attributes.LoadFromRecord(rec)
 	if err != nil {
 		err = eb.Build().Errorf("unable to load from record: %w", err)
@@ -4538,7 +4002,7 @@ func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelTier) LoadFromRecord(rec
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelExposure) LoadFromRecord(rec runtime.RecordI) (err error) {
+func (inst *ReadAccessAgentrunentryTableTaggedTimeArray) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = inst.Attributes.LoadFromRecord(rec)
 	if err != nil {
 		err = eb.Build().Errorf("unable to load from record: %w", err)
@@ -4552,7 +4016,7 @@ func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelExposure) LoadFromRecord
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelOrigin) LoadFromRecord(rec runtime.RecordI) (err error) {
+func (inst *ReadAccessAgentrunentryTableTaggedBool) LoadFromRecord(rec runtime.RecordI) (err error) {
 	err = inst.Attributes.LoadFromRecord(rec)
 	if err != nil {
 		err = eb.Build().Errorf("unable to load from record: %w", err)
@@ -4566,1096 +4030,704 @@ func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelOrigin) LoadFromRecord(r
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterRun) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = inst.Attributes.LoadFromRecord(rec)
-	if err != nil {
-		err = eb.Build().Errorf("unable to load from record: %w", err)
-		return
-	}
-	err = inst.Memberships.LoadFromRecord(rec)
-	if err != nil {
-		err = eb.Build().Errorf("unable to load from record: %w", err)
-		return
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterTurn) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = inst.Attributes.LoadFromRecord(rec)
-	if err != nil {
-		err = eb.Build().Errorf("unable to load from record: %w", err)
-		return
-	}
-	err = inst.Memberships.LoadFromRecord(rec)
-	if err != nil {
-		err = eb.Build().Errorf("unable to load from record: %w", err)
-		return
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterOrdinal) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = inst.Attributes.LoadFromRecord(rec)
-	if err != nil {
-		err = eb.Build().Errorf("unable to load from record: %w", err)
-		return
-	}
-	err = inst.Memberships.LoadFromRecord(rec)
-	if err != nil {
-		err = eb.Build().Errorf("unable to load from record: %w", err)
-		return
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryPrev) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = inst.Attributes.LoadFromRecord(rec)
-	if err != nil {
-		err = eb.Build().Errorf("unable to load from record: %w", err)
-		return
-	}
-	err = inst.Memberships.LoadFromRecord(rec)
-	if err != nil {
-		err = eb.Build().Errorf("unable to load from record: %w", err)
-		return
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryDigest) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = inst.Attributes.LoadFromRecord(rec)
-	if err != nil {
-		err = eb.Build().Errorf("unable to load from record: %w", err)
-		return
-	}
-	err = inst.Memberships.LoadFromRecord(rec)
-	if err != nil {
-		err = eb.Build().Errorf("unable to load from record: %w", err)
-		return
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKeyId) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = inst.Attributes.LoadFromRecord(rec)
-	if err != nil {
-		err = eb.Build().Errorf("unable to load from record: %w", err)
-		return
-	}
-	err = inst.Memberships.LoadFromRecord(rec)
-	if err != nil {
-		err = eb.Build().Errorf("unable to load from record: %w", err)
-		return
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryParent) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = inst.Attributes.LoadFromRecord(rec)
-	if err != nil {
-		err = eb.Build().Errorf("unable to load from record: %w", err)
-		return
-	}
-	err = inst.Memberships.LoadFromRecord(rec)
-	if err != nil {
-		err = eb.Build().Errorf("unable to load from record: %w", err)
-		return
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAttachments) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = inst.Attributes.LoadFromRecord(rec)
-	if err != nil {
-		err = eb.Build().Errorf("unable to load from record: %w", err)
-		return
-	}
-	err = inst.Memberships.LoadFromRecord(rec)
-	if err != nil {
-		err = eb.Build().Errorf("unable to load from record: %w", err)
-		return
-	}
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryOrdinal) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedTextArray) Len() (nEntities int) {
 	nEntities = inst.Memberships.Len()
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAt) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedStringArray) Len() (nEntities int) {
 	nEntities = inst.Memberships.Len()
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKind) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedSymbol) Len() (nEntities int) {
 	nEntities = inst.Memberships.Len()
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKey) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolArray) Len() (nEntities int) {
 	nEntities = inst.Memberships.Len()
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryRole) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedBlobArray) Len() (nEntities int) {
 	nEntities = inst.Memberships.Len()
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBody) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedU8Array) Len() (nEntities int) {
 	nEntities = inst.Memberships.Len()
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCalls) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedU16Array) Len() (nEntities int) {
 	nEntities = inst.Memberships.Len()
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBodyDigest) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Array) Len() (nEntities int) {
 	nEntities = inst.Memberships.Len()
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCallsDigest) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Set) Len() (nEntities int) {
 	nEntities = inst.Memberships.Len()
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryName) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedU64Array) Len() (nEntities int) {
 	nEntities = inst.Memberships.Len()
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBook) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedU64Set) Len() (nEntities int) {
 	nEntities = inst.Memberships.Len()
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryForm) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedI8Array) Len() (nEntities int) {
 	nEntities = inst.Memberships.Len()
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTarget) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedI16Array) Len() (nEntities int) {
 	nEntities = inst.Memberships.Len()
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryFrom) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedI32Array) Len() (nEntities int) {
 	nEntities = inst.Memberships.Len()
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryEffect) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedI64Array) Len() (nEntities int) {
 	nEntities = inst.Memberships.Len()
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTurn) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedF32Array) Len() (nEntities int) {
 	nEntities = inst.Memberships.Len()
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelLevel) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedF64Array) Len() (nEntities int) {
 	nEntities = inst.Memberships.Len()
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelTier) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Range) Len() (nEntities int) {
 	nEntities = inst.Memberships.Len()
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelExposure) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedTimeArray) Len() (nEntities int) {
 	nEntities = inst.Memberships.Len()
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelOrigin) Len() (nEntities int) {
+func (inst *ReadAccessAgentrunentryTableTaggedBool) Len() (nEntities int) {
 	nEntities = inst.Memberships.Len()
 	return
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterRun) Len() (nEntities int) {
-	nEntities = inst.Memberships.Len()
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterTurn) Len() (nEntities int) {
-	nEntities = inst.Memberships.Len()
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterOrdinal) Len() (nEntities int) {
-	nEntities = inst.Memberships.Len()
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryPrev) Len() (nEntities int) {
-	nEntities = inst.Memberships.Len()
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryDigest) Len() (nEntities int) {
-	nEntities = inst.Memberships.Len()
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKeyId) Len() (nEntities int) {
-	nEntities = inst.Memberships.Len()
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryParent) Len() (nEntities int) {
-	nEntities = inst.Memberships.Len()
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAttachments) Len() (nEntities int) {
-	nEntities = inst.Memberships.Len()
-	return
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryOrdinal) GetAttributes() *ReadAccessAgentrunentryTableTaggedEntryOrdinalAttributes {
+func (inst *ReadAccessAgentrunentryTableTaggedTextArray) GetAttributes() *ReadAccessAgentrunentryTableTaggedTextArrayAttributes {
 	return inst.Attributes
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAt) GetAttributes() *ReadAccessAgentrunentryTableTaggedEntryAtAttributes {
+func (inst *ReadAccessAgentrunentryTableTaggedStringArray) GetAttributes() *ReadAccessAgentrunentryTableTaggedStringArrayAttributes {
 	return inst.Attributes
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKind) GetAttributes() *ReadAccessAgentrunentryTableTaggedEntryKindAttributes {
+func (inst *ReadAccessAgentrunentryTableTaggedSymbol) GetAttributes() *ReadAccessAgentrunentryTableTaggedSymbolAttributes {
 	return inst.Attributes
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKey) GetAttributes() *ReadAccessAgentrunentryTableTaggedEntryKeyAttributes {
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolArray) GetAttributes() *ReadAccessAgentrunentryTableTaggedSymbolArrayAttributes {
 	return inst.Attributes
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryRole) GetAttributes() *ReadAccessAgentrunentryTableTaggedEntryRoleAttributes {
+func (inst *ReadAccessAgentrunentryTableTaggedBlobArray) GetAttributes() *ReadAccessAgentrunentryTableTaggedBlobArrayAttributes {
 	return inst.Attributes
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBody) GetAttributes() *ReadAccessAgentrunentryTableTaggedEntryBodyAttributes {
+func (inst *ReadAccessAgentrunentryTableTaggedU8Array) GetAttributes() *ReadAccessAgentrunentryTableTaggedU8ArrayAttributes {
 	return inst.Attributes
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCalls) GetAttributes() *ReadAccessAgentrunentryTableTaggedEntryCallsAttributes {
+func (inst *ReadAccessAgentrunentryTableTaggedU16Array) GetAttributes() *ReadAccessAgentrunentryTableTaggedU16ArrayAttributes {
 	return inst.Attributes
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBodyDigest) GetAttributes() *ReadAccessAgentrunentryTableTaggedEntryBodyDigestAttributes {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Array) GetAttributes() *ReadAccessAgentrunentryTableTaggedU32ArrayAttributes {
 	return inst.Attributes
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCallsDigest) GetAttributes() *ReadAccessAgentrunentryTableTaggedEntryCallsDigestAttributes {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Set) GetAttributes() *ReadAccessAgentrunentryTableTaggedU32SetAttributes {
 	return inst.Attributes
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryName) GetAttributes() *ReadAccessAgentrunentryTableTaggedEntryNameAttributes {
+func (inst *ReadAccessAgentrunentryTableTaggedU64Array) GetAttributes() *ReadAccessAgentrunentryTableTaggedU64ArrayAttributes {
 	return inst.Attributes
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBook) GetAttributes() *ReadAccessAgentrunentryTableTaggedEntryBookAttributes {
+func (inst *ReadAccessAgentrunentryTableTaggedU64Set) GetAttributes() *ReadAccessAgentrunentryTableTaggedU64SetAttributes {
 	return inst.Attributes
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryForm) GetAttributes() *ReadAccessAgentrunentryTableTaggedEntryFormAttributes {
+func (inst *ReadAccessAgentrunentryTableTaggedI8Array) GetAttributes() *ReadAccessAgentrunentryTableTaggedI8ArrayAttributes {
 	return inst.Attributes
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTarget) GetAttributes() *ReadAccessAgentrunentryTableTaggedEntryTargetAttributes {
+func (inst *ReadAccessAgentrunentryTableTaggedI16Array) GetAttributes() *ReadAccessAgentrunentryTableTaggedI16ArrayAttributes {
 	return inst.Attributes
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryFrom) GetAttributes() *ReadAccessAgentrunentryTableTaggedEntryFromAttributes {
+func (inst *ReadAccessAgentrunentryTableTaggedI32Array) GetAttributes() *ReadAccessAgentrunentryTableTaggedI32ArrayAttributes {
 	return inst.Attributes
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryEffect) GetAttributes() *ReadAccessAgentrunentryTableTaggedEntryEffectAttributes {
+func (inst *ReadAccessAgentrunentryTableTaggedI64Array) GetAttributes() *ReadAccessAgentrunentryTableTaggedI64ArrayAttributes {
 	return inst.Attributes
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTurn) GetAttributes() *ReadAccessAgentrunentryTableTaggedEntryTurnAttributes {
+func (inst *ReadAccessAgentrunentryTableTaggedF32Array) GetAttributes() *ReadAccessAgentrunentryTableTaggedF32ArrayAttributes {
 	return inst.Attributes
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelLevel) GetAttributes() *ReadAccessAgentrunentryTableTaggedEntryLabelLevelAttributes {
+func (inst *ReadAccessAgentrunentryTableTaggedF64Array) GetAttributes() *ReadAccessAgentrunentryTableTaggedF64ArrayAttributes {
 	return inst.Attributes
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelTier) GetAttributes() *ReadAccessAgentrunentryTableTaggedEntryLabelTierAttributes {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Range) GetAttributes() *ReadAccessAgentrunentryTableTaggedU32RangeAttributes {
 	return inst.Attributes
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelExposure) GetAttributes() *ReadAccessAgentrunentryTableTaggedEntryLabelExposureAttributes {
+func (inst *ReadAccessAgentrunentryTableTaggedTimeArray) GetAttributes() *ReadAccessAgentrunentryTableTaggedTimeArrayAttributes {
 	return inst.Attributes
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelOrigin) GetAttributes() *ReadAccessAgentrunentryTableTaggedEntryLabelOriginAttributes {
+func (inst *ReadAccessAgentrunentryTableTaggedBool) GetAttributes() *ReadAccessAgentrunentryTableTaggedBoolAttributes {
 	return inst.Attributes
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterRun) GetAttributes() *ReadAccessAgentrunentryTableTaggedEntryWriterRunAttributes {
-	return inst.Attributes
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterTurn) GetAttributes() *ReadAccessAgentrunentryTableTaggedEntryWriterTurnAttributes {
-	return inst.Attributes
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterOrdinal) GetAttributes() *ReadAccessAgentrunentryTableTaggedEntryWriterOrdinalAttributes {
-	return inst.Attributes
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryPrev) GetAttributes() *ReadAccessAgentrunentryTableTaggedEntryPrevAttributes {
-	return inst.Attributes
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryDigest) GetAttributes() *ReadAccessAgentrunentryTableTaggedEntryDigestAttributes {
-	return inst.Attributes
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKeyId) GetAttributes() *ReadAccessAgentrunentryTableTaggedEntryKeyIdAttributes {
-	return inst.Attributes
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryParent) GetAttributes() *ReadAccessAgentrunentryTableTaggedEntryParentAttributes {
-	return inst.Attributes
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAttachments) GetAttributes() *ReadAccessAgentrunentryTableTaggedEntryAttachmentsAttributes {
-	return inst.Attributes
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryOrdinal) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
+func (inst *ReadAccessAgentrunentryTableTaggedTextArray) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
 	return inst.Memberships
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAt) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
+func (inst *ReadAccessAgentrunentryTableTaggedStringArray) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
 	return inst.Memberships
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKind) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
+func (inst *ReadAccessAgentrunentryTableTaggedSymbol) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
 	return inst.Memberships
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKey) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolArray) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
 	return inst.Memberships
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryRole) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
+func (inst *ReadAccessAgentrunentryTableTaggedBlobArray) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
 	return inst.Memberships
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBody) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
+func (inst *ReadAccessAgentrunentryTableTaggedU8Array) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
 	return inst.Memberships
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCalls) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
+func (inst *ReadAccessAgentrunentryTableTaggedU16Array) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
 	return inst.Memberships
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBodyDigest) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Array) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
 	return inst.Memberships
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCallsDigest) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Set) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
 	return inst.Memberships
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryName) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
+func (inst *ReadAccessAgentrunentryTableTaggedU64Array) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
 	return inst.Memberships
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBook) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
+func (inst *ReadAccessAgentrunentryTableTaggedU64Set) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
 	return inst.Memberships
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryForm) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
+func (inst *ReadAccessAgentrunentryTableTaggedI8Array) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
 	return inst.Memberships
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTarget) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
+func (inst *ReadAccessAgentrunentryTableTaggedI16Array) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
 	return inst.Memberships
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryFrom) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
+func (inst *ReadAccessAgentrunentryTableTaggedI32Array) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
 	return inst.Memberships
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryEffect) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
+func (inst *ReadAccessAgentrunentryTableTaggedI64Array) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
 	return inst.Memberships
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTurn) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
+func (inst *ReadAccessAgentrunentryTableTaggedF32Array) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
 	return inst.Memberships
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelLevel) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
+func (inst *ReadAccessAgentrunentryTableTaggedF64Array) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
 	return inst.Memberships
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelTier) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Range) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
 	return inst.Memberships
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelExposure) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
+func (inst *ReadAccessAgentrunentryTableTaggedTimeArray) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
 	return inst.Memberships
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelOrigin) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
+func (inst *ReadAccessAgentrunentryTableTaggedBool) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
 	return inst.Memberships
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterRun) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
-	return inst.Memberships
+func (inst *ReadAccessAgentrunentryTableTaggedTextArray) GetSectionName() naming.StylableName {
+	return "text-array"
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterTurn) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
-	return inst.Memberships
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedTextArray)(nil)
+
+func (inst *ReadAccessAgentrunentryTableTaggedStringArray) GetSectionName() naming.StylableName {
+	return "string-array"
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterOrdinal) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
-	return inst.Memberships
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedStringArray)(nil)
+
+func (inst *ReadAccessAgentrunentryTableTaggedSymbol) GetSectionName() naming.StylableName {
+	return "symbol"
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryPrev) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
-	return inst.Memberships
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedSymbol)(nil)
+
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolArray) GetSectionName() naming.StylableName {
+	return "symbol-array"
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryDigest) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
-	return inst.Memberships
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedSymbolArray)(nil)
+
+func (inst *ReadAccessAgentrunentryTableTaggedBlobArray) GetSectionName() naming.StylableName {
+	return "blob-array"
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKeyId) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
-	return inst.Memberships
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedBlobArray)(nil)
+
+func (inst *ReadAccessAgentrunentryTableTaggedU8Array) GetSectionName() naming.StylableName {
+	return "u8-array"
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryParent) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
-	return inst.Memberships
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedU8Array)(nil)
+
+func (inst *ReadAccessAgentrunentryTableTaggedU16Array) GetSectionName() naming.StylableName {
+	return "u16-array"
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAttachments) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
-	return inst.Memberships
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedU16Array)(nil)
+
+func (inst *ReadAccessAgentrunentryTableTaggedU32Array) GetSectionName() naming.StylableName {
+	return "u32-array"
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryOrdinal) GetSectionName() naming.StylableName {
-	return "entry-ordinal"
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedU32Array)(nil)
+
+func (inst *ReadAccessAgentrunentryTableTaggedU32Set) GetSectionName() naming.StylableName {
+	return "u32-set"
 }
 
-var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedEntryOrdinal)(nil)
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedU32Set)(nil)
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAt) GetSectionName() naming.StylableName {
-	return "entry-at"
+func (inst *ReadAccessAgentrunentryTableTaggedU64Array) GetSectionName() naming.StylableName {
+	return "u64-array"
 }
 
-var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedEntryAt)(nil)
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedU64Array)(nil)
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKind) GetSectionName() naming.StylableName {
-	return "entry-kind"
+func (inst *ReadAccessAgentrunentryTableTaggedU64Set) GetSectionName() naming.StylableName {
+	return "u64-set"
 }
 
-var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedEntryKind)(nil)
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedU64Set)(nil)
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKey) GetSectionName() naming.StylableName {
-	return "entry-key"
+func (inst *ReadAccessAgentrunentryTableTaggedI8Array) GetSectionName() naming.StylableName {
+	return "i8-array"
 }
 
-var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedEntryKey)(nil)
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedI8Array)(nil)
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryRole) GetSectionName() naming.StylableName {
-	return "entry-role"
+func (inst *ReadAccessAgentrunentryTableTaggedI16Array) GetSectionName() naming.StylableName {
+	return "i16-array"
 }
 
-var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedEntryRole)(nil)
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedI16Array)(nil)
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBody) GetSectionName() naming.StylableName {
-	return "entry-body"
+func (inst *ReadAccessAgentrunentryTableTaggedI32Array) GetSectionName() naming.StylableName {
+	return "i32-array"
 }
 
-var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedEntryBody)(nil)
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedI32Array)(nil)
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCalls) GetSectionName() naming.StylableName {
-	return "entry-calls"
+func (inst *ReadAccessAgentrunentryTableTaggedI64Array) GetSectionName() naming.StylableName {
+	return "i64-array"
 }
 
-var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedEntryCalls)(nil)
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedI64Array)(nil)
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBodyDigest) GetSectionName() naming.StylableName {
-	return "entry-body-digest"
+func (inst *ReadAccessAgentrunentryTableTaggedF32Array) GetSectionName() naming.StylableName {
+	return "f32-array"
 }
 
-var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedEntryBodyDigest)(nil)
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedF32Array)(nil)
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCallsDigest) GetSectionName() naming.StylableName {
-	return "entry-calls-digest"
+func (inst *ReadAccessAgentrunentryTableTaggedF64Array) GetSectionName() naming.StylableName {
+	return "f64-array"
 }
 
-var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedEntryCallsDigest)(nil)
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedF64Array)(nil)
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryName) GetSectionName() naming.StylableName {
-	return "entry-name"
+func (inst *ReadAccessAgentrunentryTableTaggedU32Range) GetSectionName() naming.StylableName {
+	return "u32-range"
 }
 
-var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedEntryName)(nil)
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedU32Range)(nil)
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBook) GetSectionName() naming.StylableName {
-	return "entry-book"
+func (inst *ReadAccessAgentrunentryTableTaggedTimeArray) GetSectionName() naming.StylableName {
+	return "time-array"
 }
 
-var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedEntryBook)(nil)
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedTimeArray)(nil)
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryForm) GetSectionName() naming.StylableName {
-	return "entry-form"
+func (inst *ReadAccessAgentrunentryTableTaggedBool) GetSectionName() naming.StylableName {
+	return "bool"
 }
 
-var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedEntryForm)(nil)
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedBool)(nil)
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTarget) GetSectionName() naming.StylableName {
-	return "entry-target"
-}
-
-var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedEntryTarget)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryFrom) GetSectionName() naming.StylableName {
-	return "entry-from"
-}
-
-var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedEntryFrom)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryEffect) GetSectionName() naming.StylableName {
-	return "entry-effect"
-}
-
-var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedEntryEffect)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTurn) GetSectionName() naming.StylableName {
-	return "entry-turn"
-}
-
-var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedEntryTurn)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelLevel) GetSectionName() naming.StylableName {
-	return "entry-label-level"
-}
-
-var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedEntryLabelLevel)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelTier) GetSectionName() naming.StylableName {
-	return "entry-label-tier"
-}
-
-var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedEntryLabelTier)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelExposure) GetSectionName() naming.StylableName {
-	return "entry-label-exposure"
-}
-
-var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedEntryLabelExposure)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelOrigin) GetSectionName() naming.StylableName {
-	return "entry-label-origin"
-}
-
-var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedEntryLabelOrigin)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterRun) GetSectionName() naming.StylableName {
-	return "entry-writer-run"
-}
-
-var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedEntryWriterRun)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterTurn) GetSectionName() naming.StylableName {
-	return "entry-writer-turn"
-}
-
-var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedEntryWriterTurn)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterOrdinal) GetSectionName() naming.StylableName {
-	return "entry-writer-ordinal"
-}
-
-var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedEntryWriterOrdinal)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryPrev) GetSectionName() naming.StylableName {
-	return "entry-prev"
-}
-
-var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedEntryPrev)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryDigest) GetSectionName() naming.StylableName {
-	return "entry-digest"
-}
-
-var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedEntryDigest)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKeyId) GetSectionName() naming.StylableName {
-	return "entry-key-id"
-}
-
-var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedEntryKeyId)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryParent) GetSectionName() naming.StylableName {
-	return "entry-parent"
-}
-
-var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedEntryParent)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAttachments) GetSectionName() naming.StylableName {
-	return "entry-attachments"
-}
-
-var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedEntryAttachments)(nil)
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryOrdinal) GetSectionUseAspects() useaspects.AspectSet {
+func (inst *ReadAccessAgentrunentryTableTaggedTextArray) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAt) GetSectionUseAspects() useaspects.AspectSet {
+func (inst *ReadAccessAgentrunentryTableTaggedStringArray) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKind) GetSectionUseAspects() useaspects.AspectSet {
+func (inst *ReadAccessAgentrunentryTableTaggedSymbol) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKey) GetSectionUseAspects() useaspects.AspectSet {
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolArray) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryRole) GetSectionUseAspects() useaspects.AspectSet {
+func (inst *ReadAccessAgentrunentryTableTaggedBlobArray) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBody) GetSectionUseAspects() useaspects.AspectSet {
+func (inst *ReadAccessAgentrunentryTableTaggedU8Array) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCalls) GetSectionUseAspects() useaspects.AspectSet {
+func (inst *ReadAccessAgentrunentryTableTaggedU16Array) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBodyDigest) GetSectionUseAspects() useaspects.AspectSet {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Array) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCallsDigest) GetSectionUseAspects() useaspects.AspectSet {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Set) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryName) GetSectionUseAspects() useaspects.AspectSet {
+func (inst *ReadAccessAgentrunentryTableTaggedU64Array) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBook) GetSectionUseAspects() useaspects.AspectSet {
+func (inst *ReadAccessAgentrunentryTableTaggedU64Set) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryForm) GetSectionUseAspects() useaspects.AspectSet {
+func (inst *ReadAccessAgentrunentryTableTaggedI8Array) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTarget) GetSectionUseAspects() useaspects.AspectSet {
+func (inst *ReadAccessAgentrunentryTableTaggedI16Array) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryFrom) GetSectionUseAspects() useaspects.AspectSet {
+func (inst *ReadAccessAgentrunentryTableTaggedI32Array) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryEffect) GetSectionUseAspects() useaspects.AspectSet {
+func (inst *ReadAccessAgentrunentryTableTaggedI64Array) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTurn) GetSectionUseAspects() useaspects.AspectSet {
+func (inst *ReadAccessAgentrunentryTableTaggedF32Array) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelLevel) GetSectionUseAspects() useaspects.AspectSet {
+func (inst *ReadAccessAgentrunentryTableTaggedF64Array) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelTier) GetSectionUseAspects() useaspects.AspectSet {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Range) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelExposure) GetSectionUseAspects() useaspects.AspectSet {
+func (inst *ReadAccessAgentrunentryTableTaggedTimeArray) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelOrigin) GetSectionUseAspects() useaspects.AspectSet {
+func (inst *ReadAccessAgentrunentryTableTaggedBool) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterRun) GetSectionUseAspects() useaspects.AspectSet {
-	return ""
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterTurn) GetSectionUseAspects() useaspects.AspectSet {
-	return ""
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterOrdinal) GetSectionUseAspects() useaspects.AspectSet {
-	return ""
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryPrev) GetSectionUseAspects() useaspects.AspectSet {
-	return ""
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryDigest) GetSectionUseAspects() useaspects.AspectSet {
-	return ""
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKeyId) GetSectionUseAspects() useaspects.AspectSet {
-	return ""
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryParent) GetSectionUseAspects() useaspects.AspectSet {
-	return ""
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAttachments) GetSectionUseAspects() useaspects.AspectSet {
-	return ""
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryOrdinal) GetSectionStreamingGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedTextArray) GetSectionStreamingGroup() naming.Key {
 	return "data"
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAt) GetSectionStreamingGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedStringArray) GetSectionStreamingGroup() naming.Key {
 	return "data"
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKind) GetSectionStreamingGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedSymbol) GetSectionStreamingGroup() naming.Key {
 	return "data"
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKey) GetSectionStreamingGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolArray) GetSectionStreamingGroup() naming.Key {
 	return "data"
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryRole) GetSectionStreamingGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedBlobArray) GetSectionStreamingGroup() naming.Key {
 	return "data"
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBody) GetSectionStreamingGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedU8Array) GetSectionStreamingGroup() naming.Key {
 	return "data"
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCalls) GetSectionStreamingGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedU16Array) GetSectionStreamingGroup() naming.Key {
 	return "data"
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBodyDigest) GetSectionStreamingGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Array) GetSectionStreamingGroup() naming.Key {
 	return "data"
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCallsDigest) GetSectionStreamingGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Set) GetSectionStreamingGroup() naming.Key {
 	return "data"
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryName) GetSectionStreamingGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedU64Array) GetSectionStreamingGroup() naming.Key {
 	return "data"
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBook) GetSectionStreamingGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedU64Set) GetSectionStreamingGroup() naming.Key {
 	return "data"
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryForm) GetSectionStreamingGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedI8Array) GetSectionStreamingGroup() naming.Key {
 	return "data"
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTarget) GetSectionStreamingGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedI16Array) GetSectionStreamingGroup() naming.Key {
 	return "data"
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryFrom) GetSectionStreamingGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedI32Array) GetSectionStreamingGroup() naming.Key {
 	return "data"
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryEffect) GetSectionStreamingGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedI64Array) GetSectionStreamingGroup() naming.Key {
 	return "data"
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTurn) GetSectionStreamingGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedF32Array) GetSectionStreamingGroup() naming.Key {
 	return "data"
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelLevel) GetSectionStreamingGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedF64Array) GetSectionStreamingGroup() naming.Key {
 	return "data"
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelTier) GetSectionStreamingGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Range) GetSectionStreamingGroup() naming.Key {
 	return "data"
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelExposure) GetSectionStreamingGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedTimeArray) GetSectionStreamingGroup() naming.Key {
 	return "data"
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelOrigin) GetSectionStreamingGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedBool) GetSectionStreamingGroup() naming.Key {
 	return "data"
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterRun) GetSectionStreamingGroup() naming.Key {
-	return "data"
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterTurn) GetSectionStreamingGroup() naming.Key {
-	return "data"
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterOrdinal) GetSectionStreamingGroup() naming.Key {
-	return "data"
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryPrev) GetSectionStreamingGroup() naming.Key {
-	return "data"
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryDigest) GetSectionStreamingGroup() naming.Key {
-	return "data"
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKeyId) GetSectionStreamingGroup() naming.Key {
-	return "data"
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryParent) GetSectionStreamingGroup() naming.Key {
-	return "data"
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAttachments) GetSectionStreamingGroup() naming.Key {
-	return "data"
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryOrdinal) GetSectionCoSectionGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedTextArray) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAt) GetSectionCoSectionGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedStringArray) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKind) GetSectionCoSectionGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedSymbol) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKey) GetSectionCoSectionGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolArray) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryRole) GetSectionCoSectionGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedBlobArray) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBody) GetSectionCoSectionGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedU8Array) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCalls) GetSectionCoSectionGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedU16Array) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBodyDigest) GetSectionCoSectionGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Array) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCallsDigest) GetSectionCoSectionGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Set) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryName) GetSectionCoSectionGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedU64Array) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBook) GetSectionCoSectionGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedU64Set) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryForm) GetSectionCoSectionGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedI8Array) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTarget) GetSectionCoSectionGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedI16Array) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryFrom) GetSectionCoSectionGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedI32Array) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryEffect) GetSectionCoSectionGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedI64Array) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTurn) GetSectionCoSectionGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedF32Array) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelLevel) GetSectionCoSectionGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedF64Array) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelTier) GetSectionCoSectionGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedU32Range) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelExposure) GetSectionCoSectionGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedTimeArray) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelOrigin) GetSectionCoSectionGroup() naming.Key {
+func (inst *ReadAccessAgentrunentryTableTaggedBool) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterRun) GetSectionCoSectionGroup() naming.Key {
-	return ""
+func (inst *ReadAccessAgentrunentryTableTaggedTextArray) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b11001
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterTurn) GetSectionCoSectionGroup() naming.Key {
-	return ""
+func (inst *ReadAccessAgentrunentryTableTaggedStringArray) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b11001
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterOrdinal) GetSectionCoSectionGroup() naming.Key {
-	return ""
+func (inst *ReadAccessAgentrunentryTableTaggedSymbol) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b11001
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryPrev) GetSectionCoSectionGroup() naming.Key {
-	return ""
+func (inst *ReadAccessAgentrunentryTableTaggedSymbolArray) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b11001
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryDigest) GetSectionCoSectionGroup() naming.Key {
-	return ""
+func (inst *ReadAccessAgentrunentryTableTaggedBlobArray) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b11001
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKeyId) GetSectionCoSectionGroup() naming.Key {
-	return ""
+func (inst *ReadAccessAgentrunentryTableTaggedU8Array) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b11001
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryParent) GetSectionCoSectionGroup() naming.Key {
-	return ""
+func (inst *ReadAccessAgentrunentryTableTaggedU16Array) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b11001
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAttachments) GetSectionCoSectionGroup() naming.Key {
-	return ""
+func (inst *ReadAccessAgentrunentryTableTaggedU32Array) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b11001
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryOrdinal) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b111001
+func (inst *ReadAccessAgentrunentryTableTaggedU32Set) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b11001
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAt) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b111001
+func (inst *ReadAccessAgentrunentryTableTaggedU64Array) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b11001
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKind) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b111001
+func (inst *ReadAccessAgentrunentryTableTaggedU64Set) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b11001
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKey) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b111001
+func (inst *ReadAccessAgentrunentryTableTaggedI8Array) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b11001
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryRole) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b111001
+func (inst *ReadAccessAgentrunentryTableTaggedI16Array) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b11001
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBody) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b111001
+func (inst *ReadAccessAgentrunentryTableTaggedI32Array) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b11001
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCalls) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b111001
+func (inst *ReadAccessAgentrunentryTableTaggedI64Array) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b11001
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBodyDigest) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b111001
+func (inst *ReadAccessAgentrunentryTableTaggedF32Array) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b11001
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryCallsDigest) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b111001
+func (inst *ReadAccessAgentrunentryTableTaggedF64Array) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b11001
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryName) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b111001
+func (inst *ReadAccessAgentrunentryTableTaggedU32Range) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b11001
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryBook) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b111001
+func (inst *ReadAccessAgentrunentryTableTaggedTimeArray) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b11001
 }
 
-func (inst *ReadAccessAgentrunentryTableTaggedEntryForm) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b111001
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTarget) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b111001
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryFrom) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b111001
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryEffect) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b111001
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryTurn) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b111001
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelLevel) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b111001
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelTier) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b111001
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelExposure) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b111001
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryLabelOrigin) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b111001
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterRun) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b111001
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterTurn) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b111001
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryWriterOrdinal) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b111001
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryPrev) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b111001
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryDigest) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b111001
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryKeyId) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b111001
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryParent) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b111001
-}
-
-func (inst *ReadAccessAgentrunentryTableTaggedEntryAttachments) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b111001
+func (inst *ReadAccessAgentrunentryTableTaggedBool) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b11001
 }
 
 ///////////////////////////////////////////////////////////////////
@@ -5664,107 +4736,80 @@ func (inst *ReadAccessAgentrunentryTableTaggedEntryAttachments) GetSectionMember
 // ./public/semistructured/leeway/readaccess/lw_ra_generator.go:2528
 
 type ReadAccessAgentrunentryTable struct {
-	EntityId           *ReadAccessAgentrunentryTablePlainEntityIdAttributes
-	EntityTimestamp    *ReadAccessAgentrunentryTablePlainEntityTimestampAttributes
-	EntityLifecycle    *ReadAccessAgentrunentryTablePlainEntityLifecycleAttributes
-	EntryOrdinal       *ReadAccessAgentrunentryTableTaggedEntryOrdinal
-	EntryAt            *ReadAccessAgentrunentryTableTaggedEntryAt
-	EntryKind          *ReadAccessAgentrunentryTableTaggedEntryKind
-	EntryKey           *ReadAccessAgentrunentryTableTaggedEntryKey
-	EntryRole          *ReadAccessAgentrunentryTableTaggedEntryRole
-	EntryBody          *ReadAccessAgentrunentryTableTaggedEntryBody
-	EntryCalls         *ReadAccessAgentrunentryTableTaggedEntryCalls
-	EntryBodyDigest    *ReadAccessAgentrunentryTableTaggedEntryBodyDigest
-	EntryCallsDigest   *ReadAccessAgentrunentryTableTaggedEntryCallsDigest
-	EntryName          *ReadAccessAgentrunentryTableTaggedEntryName
-	EntryBook          *ReadAccessAgentrunentryTableTaggedEntryBook
-	EntryForm          *ReadAccessAgentrunentryTableTaggedEntryForm
-	EntryTarget        *ReadAccessAgentrunentryTableTaggedEntryTarget
-	EntryFrom          *ReadAccessAgentrunentryTableTaggedEntryFrom
-	EntryEffect        *ReadAccessAgentrunentryTableTaggedEntryEffect
-	EntryTurn          *ReadAccessAgentrunentryTableTaggedEntryTurn
-	EntryLabelLevel    *ReadAccessAgentrunentryTableTaggedEntryLabelLevel
-	EntryLabelTier     *ReadAccessAgentrunentryTableTaggedEntryLabelTier
-	EntryLabelExposure *ReadAccessAgentrunentryTableTaggedEntryLabelExposure
-	EntryLabelOrigin   *ReadAccessAgentrunentryTableTaggedEntryLabelOrigin
-	EntryWriterRun     *ReadAccessAgentrunentryTableTaggedEntryWriterRun
-	EntryWriterTurn    *ReadAccessAgentrunentryTableTaggedEntryWriterTurn
-	EntryWriterOrdinal *ReadAccessAgentrunentryTableTaggedEntryWriterOrdinal
-	EntryPrev          *ReadAccessAgentrunentryTableTaggedEntryPrev
-	EntryDigest        *ReadAccessAgentrunentryTableTaggedEntryDigest
-	EntryKeyId         *ReadAccessAgentrunentryTableTaggedEntryKeyId
-	EntryParent        *ReadAccessAgentrunentryTableTaggedEntryParent
-	EntryAttachments   *ReadAccessAgentrunentryTableTaggedEntryAttachments
+	EntityId        *ReadAccessAgentrunentryTablePlainEntityIdAttributes
+	EntityLifecycle *ReadAccessAgentrunentryTablePlainEntityLifecycleAttributes
+	TextArray       *ReadAccessAgentrunentryTableTaggedTextArray
+	StringArray     *ReadAccessAgentrunentryTableTaggedStringArray
+	Symbol          *ReadAccessAgentrunentryTableTaggedSymbol
+	SymbolArray     *ReadAccessAgentrunentryTableTaggedSymbolArray
+	BlobArray       *ReadAccessAgentrunentryTableTaggedBlobArray
+	U8Array         *ReadAccessAgentrunentryTableTaggedU8Array
+	U16Array        *ReadAccessAgentrunentryTableTaggedU16Array
+	U32Array        *ReadAccessAgentrunentryTableTaggedU32Array
+	U32Set          *ReadAccessAgentrunentryTableTaggedU32Set
+	U64Array        *ReadAccessAgentrunentryTableTaggedU64Array
+	U64Set          *ReadAccessAgentrunentryTableTaggedU64Set
+	I8Array         *ReadAccessAgentrunentryTableTaggedI8Array
+	I16Array        *ReadAccessAgentrunentryTableTaggedI16Array
+	I32Array        *ReadAccessAgentrunentryTableTaggedI32Array
+	I64Array        *ReadAccessAgentrunentryTableTaggedI64Array
+	F32Array        *ReadAccessAgentrunentryTableTaggedF32Array
+	F64Array        *ReadAccessAgentrunentryTableTaggedF64Array
+	U32Range        *ReadAccessAgentrunentryTableTaggedU32Range
+	TimeArray       *ReadAccessAgentrunentryTableTaggedTimeArray
+	Bool            *ReadAccessAgentrunentryTableTaggedBool
 }
 
 func NewReadAccessAgentrunentryTable() (inst *ReadAccessAgentrunentryTable) {
 	inst = &ReadAccessAgentrunentryTable{}
 	inst.EntityId = NewReadAccessAgentrunentryTablePlainEntityIdAttributes()
-	inst.EntityTimestamp = NewReadAccessAgentrunentryTablePlainEntityTimestampAttributes()
 	inst.EntityLifecycle = NewReadAccessAgentrunentryTablePlainEntityLifecycleAttributes()
-	inst.EntryOrdinal = NewReadAccessAgentrunentryTableTaggedEntryOrdinal()
-	inst.EntryAt = NewReadAccessAgentrunentryTableTaggedEntryAt()
-	inst.EntryKind = NewReadAccessAgentrunentryTableTaggedEntryKind()
-	inst.EntryKey = NewReadAccessAgentrunentryTableTaggedEntryKey()
-	inst.EntryRole = NewReadAccessAgentrunentryTableTaggedEntryRole()
-	inst.EntryBody = NewReadAccessAgentrunentryTableTaggedEntryBody()
-	inst.EntryCalls = NewReadAccessAgentrunentryTableTaggedEntryCalls()
-	inst.EntryBodyDigest = NewReadAccessAgentrunentryTableTaggedEntryBodyDigest()
-	inst.EntryCallsDigest = NewReadAccessAgentrunentryTableTaggedEntryCallsDigest()
-	inst.EntryName = NewReadAccessAgentrunentryTableTaggedEntryName()
-	inst.EntryBook = NewReadAccessAgentrunentryTableTaggedEntryBook()
-	inst.EntryForm = NewReadAccessAgentrunentryTableTaggedEntryForm()
-	inst.EntryTarget = NewReadAccessAgentrunentryTableTaggedEntryTarget()
-	inst.EntryFrom = NewReadAccessAgentrunentryTableTaggedEntryFrom()
-	inst.EntryEffect = NewReadAccessAgentrunentryTableTaggedEntryEffect()
-	inst.EntryTurn = NewReadAccessAgentrunentryTableTaggedEntryTurn()
-	inst.EntryLabelLevel = NewReadAccessAgentrunentryTableTaggedEntryLabelLevel()
-	inst.EntryLabelTier = NewReadAccessAgentrunentryTableTaggedEntryLabelTier()
-	inst.EntryLabelExposure = NewReadAccessAgentrunentryTableTaggedEntryLabelExposure()
-	inst.EntryLabelOrigin = NewReadAccessAgentrunentryTableTaggedEntryLabelOrigin()
-	inst.EntryWriterRun = NewReadAccessAgentrunentryTableTaggedEntryWriterRun()
-	inst.EntryWriterTurn = NewReadAccessAgentrunentryTableTaggedEntryWriterTurn()
-	inst.EntryWriterOrdinal = NewReadAccessAgentrunentryTableTaggedEntryWriterOrdinal()
-	inst.EntryPrev = NewReadAccessAgentrunentryTableTaggedEntryPrev()
-	inst.EntryDigest = NewReadAccessAgentrunentryTableTaggedEntryDigest()
-	inst.EntryKeyId = NewReadAccessAgentrunentryTableTaggedEntryKeyId()
-	inst.EntryParent = NewReadAccessAgentrunentryTableTaggedEntryParent()
-	inst.EntryAttachments = NewReadAccessAgentrunentryTableTaggedEntryAttachments()
+	inst.TextArray = NewReadAccessAgentrunentryTableTaggedTextArray()
+	inst.StringArray = NewReadAccessAgentrunentryTableTaggedStringArray()
+	inst.Symbol = NewReadAccessAgentrunentryTableTaggedSymbol()
+	inst.SymbolArray = NewReadAccessAgentrunentryTableTaggedSymbolArray()
+	inst.BlobArray = NewReadAccessAgentrunentryTableTaggedBlobArray()
+	inst.U8Array = NewReadAccessAgentrunentryTableTaggedU8Array()
+	inst.U16Array = NewReadAccessAgentrunentryTableTaggedU16Array()
+	inst.U32Array = NewReadAccessAgentrunentryTableTaggedU32Array()
+	inst.U32Set = NewReadAccessAgentrunentryTableTaggedU32Set()
+	inst.U64Array = NewReadAccessAgentrunentryTableTaggedU64Array()
+	inst.U64Set = NewReadAccessAgentrunentryTableTaggedU64Set()
+	inst.I8Array = NewReadAccessAgentrunentryTableTaggedI8Array()
+	inst.I16Array = NewReadAccessAgentrunentryTableTaggedI16Array()
+	inst.I32Array = NewReadAccessAgentrunentryTableTaggedI32Array()
+	inst.I64Array = NewReadAccessAgentrunentryTableTaggedI64Array()
+	inst.F32Array = NewReadAccessAgentrunentryTableTaggedF32Array()
+	inst.F64Array = NewReadAccessAgentrunentryTableTaggedF64Array()
+	inst.U32Range = NewReadAccessAgentrunentryTableTaggedU32Range()
+	inst.TimeArray = NewReadAccessAgentrunentryTableTaggedTimeArray()
+	inst.Bool = NewReadAccessAgentrunentryTableTaggedBool()
 	return
 }
 
 func (inst *ReadAccessAgentrunentryTable) Release() {
 	runtime.ReleaseIfNotNil(inst.EntityId)
-	runtime.ReleaseIfNotNil(inst.EntityTimestamp)
 	runtime.ReleaseIfNotNil(inst.EntityLifecycle)
-	runtime.ReleaseIfNotNil(inst.EntryOrdinal)
-	runtime.ReleaseIfNotNil(inst.EntryAt)
-	runtime.ReleaseIfNotNil(inst.EntryKind)
-	runtime.ReleaseIfNotNil(inst.EntryKey)
-	runtime.ReleaseIfNotNil(inst.EntryRole)
-	runtime.ReleaseIfNotNil(inst.EntryBody)
-	runtime.ReleaseIfNotNil(inst.EntryCalls)
-	runtime.ReleaseIfNotNil(inst.EntryBodyDigest)
-	runtime.ReleaseIfNotNil(inst.EntryCallsDigest)
-	runtime.ReleaseIfNotNil(inst.EntryName)
-	runtime.ReleaseIfNotNil(inst.EntryBook)
-	runtime.ReleaseIfNotNil(inst.EntryForm)
-	runtime.ReleaseIfNotNil(inst.EntryTarget)
-	runtime.ReleaseIfNotNil(inst.EntryFrom)
-	runtime.ReleaseIfNotNil(inst.EntryEffect)
-	runtime.ReleaseIfNotNil(inst.EntryTurn)
-	runtime.ReleaseIfNotNil(inst.EntryLabelLevel)
-	runtime.ReleaseIfNotNil(inst.EntryLabelTier)
-	runtime.ReleaseIfNotNil(inst.EntryLabelExposure)
-	runtime.ReleaseIfNotNil(inst.EntryLabelOrigin)
-	runtime.ReleaseIfNotNil(inst.EntryWriterRun)
-	runtime.ReleaseIfNotNil(inst.EntryWriterTurn)
-	runtime.ReleaseIfNotNil(inst.EntryWriterOrdinal)
-	runtime.ReleaseIfNotNil(inst.EntryPrev)
-	runtime.ReleaseIfNotNil(inst.EntryDigest)
-	runtime.ReleaseIfNotNil(inst.EntryKeyId)
-	runtime.ReleaseIfNotNil(inst.EntryParent)
-	runtime.ReleaseIfNotNil(inst.EntryAttachments)
+	runtime.ReleaseIfNotNil(inst.TextArray)
+	runtime.ReleaseIfNotNil(inst.StringArray)
+	runtime.ReleaseIfNotNil(inst.Symbol)
+	runtime.ReleaseIfNotNil(inst.SymbolArray)
+	runtime.ReleaseIfNotNil(inst.BlobArray)
+	runtime.ReleaseIfNotNil(inst.U8Array)
+	runtime.ReleaseIfNotNil(inst.U16Array)
+	runtime.ReleaseIfNotNil(inst.U32Array)
+	runtime.ReleaseIfNotNil(inst.U32Set)
+	runtime.ReleaseIfNotNil(inst.U64Array)
+	runtime.ReleaseIfNotNil(inst.U64Set)
+	runtime.ReleaseIfNotNil(inst.I8Array)
+	runtime.ReleaseIfNotNil(inst.I16Array)
+	runtime.ReleaseIfNotNil(inst.I32Array)
+	runtime.ReleaseIfNotNil(inst.I64Array)
+	runtime.ReleaseIfNotNil(inst.F32Array)
+	runtime.ReleaseIfNotNil(inst.F64Array)
+	runtime.ReleaseIfNotNil(inst.U32Range)
+	runtime.ReleaseIfNotNil(inst.TimeArray)
+	runtime.ReleaseIfNotNil(inst.Bool)
 }
 
 func (inst *ReadAccessAgentrunentryTable) LoadFromRecord(rec runtime.RecordI) (err error) {
@@ -5775,13 +4820,6 @@ func (inst *ReadAccessAgentrunentryTable) LoadFromRecord(rec runtime.RecordI) (e
 			return
 		}
 	}
-	if inst.EntityTimestamp != nil {
-		err = inst.EntityTimestamp.LoadFromRecord(rec)
-		if err != nil {
-			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "EntityTimestamp").Errorf("unable to load from record: %w", err)
-			return
-		}
-	}
 	if inst.EntityLifecycle != nil {
 		err = inst.EntityLifecycle.LoadFromRecord(rec)
 		if err != nil {
@@ -5789,199 +4827,143 @@ func (inst *ReadAccessAgentrunentryTable) LoadFromRecord(rec runtime.RecordI) (e
 			return
 		}
 	}
-	if inst.EntryOrdinal != nil {
-		err = inst.EntryOrdinal.LoadFromRecord(rec)
+	if inst.TextArray != nil {
+		err = inst.TextArray.LoadFromRecord(rec)
 		if err != nil {
-			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "EntryOrdinal").Errorf("unable to load from record: %w", err)
+			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "TextArray").Errorf("unable to load from record: %w", err)
 			return
 		}
 	}
-	if inst.EntryAt != nil {
-		err = inst.EntryAt.LoadFromRecord(rec)
+	if inst.StringArray != nil {
+		err = inst.StringArray.LoadFromRecord(rec)
 		if err != nil {
-			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "EntryAt").Errorf("unable to load from record: %w", err)
+			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "StringArray").Errorf("unable to load from record: %w", err)
 			return
 		}
 	}
-	if inst.EntryKind != nil {
-		err = inst.EntryKind.LoadFromRecord(rec)
+	if inst.Symbol != nil {
+		err = inst.Symbol.LoadFromRecord(rec)
 		if err != nil {
-			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "EntryKind").Errorf("unable to load from record: %w", err)
+			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "Symbol").Errorf("unable to load from record: %w", err)
 			return
 		}
 	}
-	if inst.EntryKey != nil {
-		err = inst.EntryKey.LoadFromRecord(rec)
+	if inst.SymbolArray != nil {
+		err = inst.SymbolArray.LoadFromRecord(rec)
 		if err != nil {
-			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "EntryKey").Errorf("unable to load from record: %w", err)
+			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "SymbolArray").Errorf("unable to load from record: %w", err)
 			return
 		}
 	}
-	if inst.EntryRole != nil {
-		err = inst.EntryRole.LoadFromRecord(rec)
+	if inst.BlobArray != nil {
+		err = inst.BlobArray.LoadFromRecord(rec)
 		if err != nil {
-			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "EntryRole").Errorf("unable to load from record: %w", err)
+			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "BlobArray").Errorf("unable to load from record: %w", err)
 			return
 		}
 	}
-	if inst.EntryBody != nil {
-		err = inst.EntryBody.LoadFromRecord(rec)
+	if inst.U8Array != nil {
+		err = inst.U8Array.LoadFromRecord(rec)
 		if err != nil {
-			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "EntryBody").Errorf("unable to load from record: %w", err)
+			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "U8Array").Errorf("unable to load from record: %w", err)
 			return
 		}
 	}
-	if inst.EntryCalls != nil {
-		err = inst.EntryCalls.LoadFromRecord(rec)
+	if inst.U16Array != nil {
+		err = inst.U16Array.LoadFromRecord(rec)
 		if err != nil {
-			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "EntryCalls").Errorf("unable to load from record: %w", err)
+			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "U16Array").Errorf("unable to load from record: %w", err)
 			return
 		}
 	}
-	if inst.EntryBodyDigest != nil {
-		err = inst.EntryBodyDigest.LoadFromRecord(rec)
+	if inst.U32Array != nil {
+		err = inst.U32Array.LoadFromRecord(rec)
 		if err != nil {
-			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "EntryBodyDigest").Errorf("unable to load from record: %w", err)
+			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "U32Array").Errorf("unable to load from record: %w", err)
 			return
 		}
 	}
-	if inst.EntryCallsDigest != nil {
-		err = inst.EntryCallsDigest.LoadFromRecord(rec)
+	if inst.U32Set != nil {
+		err = inst.U32Set.LoadFromRecord(rec)
 		if err != nil {
-			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "EntryCallsDigest").Errorf("unable to load from record: %w", err)
+			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "U32Set").Errorf("unable to load from record: %w", err)
 			return
 		}
 	}
-	if inst.EntryName != nil {
-		err = inst.EntryName.LoadFromRecord(rec)
+	if inst.U64Array != nil {
+		err = inst.U64Array.LoadFromRecord(rec)
 		if err != nil {
-			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "EntryName").Errorf("unable to load from record: %w", err)
+			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "U64Array").Errorf("unable to load from record: %w", err)
 			return
 		}
 	}
-	if inst.EntryBook != nil {
-		err = inst.EntryBook.LoadFromRecord(rec)
+	if inst.U64Set != nil {
+		err = inst.U64Set.LoadFromRecord(rec)
 		if err != nil {
-			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "EntryBook").Errorf("unable to load from record: %w", err)
+			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "U64Set").Errorf("unable to load from record: %w", err)
 			return
 		}
 	}
-	if inst.EntryForm != nil {
-		err = inst.EntryForm.LoadFromRecord(rec)
+	if inst.I8Array != nil {
+		err = inst.I8Array.LoadFromRecord(rec)
 		if err != nil {
-			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "EntryForm").Errorf("unable to load from record: %w", err)
+			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "I8Array").Errorf("unable to load from record: %w", err)
 			return
 		}
 	}
-	if inst.EntryTarget != nil {
-		err = inst.EntryTarget.LoadFromRecord(rec)
+	if inst.I16Array != nil {
+		err = inst.I16Array.LoadFromRecord(rec)
 		if err != nil {
-			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "EntryTarget").Errorf("unable to load from record: %w", err)
+			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "I16Array").Errorf("unable to load from record: %w", err)
 			return
 		}
 	}
-	if inst.EntryFrom != nil {
-		err = inst.EntryFrom.LoadFromRecord(rec)
+	if inst.I32Array != nil {
+		err = inst.I32Array.LoadFromRecord(rec)
 		if err != nil {
-			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "EntryFrom").Errorf("unable to load from record: %w", err)
+			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "I32Array").Errorf("unable to load from record: %w", err)
 			return
 		}
 	}
-	if inst.EntryEffect != nil {
-		err = inst.EntryEffect.LoadFromRecord(rec)
+	if inst.I64Array != nil {
+		err = inst.I64Array.LoadFromRecord(rec)
 		if err != nil {
-			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "EntryEffect").Errorf("unable to load from record: %w", err)
+			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "I64Array").Errorf("unable to load from record: %w", err)
 			return
 		}
 	}
-	if inst.EntryTurn != nil {
-		err = inst.EntryTurn.LoadFromRecord(rec)
+	if inst.F32Array != nil {
+		err = inst.F32Array.LoadFromRecord(rec)
 		if err != nil {
-			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "EntryTurn").Errorf("unable to load from record: %w", err)
+			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "F32Array").Errorf("unable to load from record: %w", err)
 			return
 		}
 	}
-	if inst.EntryLabelLevel != nil {
-		err = inst.EntryLabelLevel.LoadFromRecord(rec)
+	if inst.F64Array != nil {
+		err = inst.F64Array.LoadFromRecord(rec)
 		if err != nil {
-			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "EntryLabelLevel").Errorf("unable to load from record: %w", err)
+			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "F64Array").Errorf("unable to load from record: %w", err)
 			return
 		}
 	}
-	if inst.EntryLabelTier != nil {
-		err = inst.EntryLabelTier.LoadFromRecord(rec)
+	if inst.U32Range != nil {
+		err = inst.U32Range.LoadFromRecord(rec)
 		if err != nil {
-			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "EntryLabelTier").Errorf("unable to load from record: %w", err)
+			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "U32Range").Errorf("unable to load from record: %w", err)
 			return
 		}
 	}
-	if inst.EntryLabelExposure != nil {
-		err = inst.EntryLabelExposure.LoadFromRecord(rec)
+	if inst.TimeArray != nil {
+		err = inst.TimeArray.LoadFromRecord(rec)
 		if err != nil {
-			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "EntryLabelExposure").Errorf("unable to load from record: %w", err)
+			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "TimeArray").Errorf("unable to load from record: %w", err)
 			return
 		}
 	}
-	if inst.EntryLabelOrigin != nil {
-		err = inst.EntryLabelOrigin.LoadFromRecord(rec)
+	if inst.Bool != nil {
+		err = inst.Bool.LoadFromRecord(rec)
 		if err != nil {
-			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "EntryLabelOrigin").Errorf("unable to load from record: %w", err)
-			return
-		}
-	}
-	if inst.EntryWriterRun != nil {
-		err = inst.EntryWriterRun.LoadFromRecord(rec)
-		if err != nil {
-			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "EntryWriterRun").Errorf("unable to load from record: %w", err)
-			return
-		}
-	}
-	if inst.EntryWriterTurn != nil {
-		err = inst.EntryWriterTurn.LoadFromRecord(rec)
-		if err != nil {
-			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "EntryWriterTurn").Errorf("unable to load from record: %w", err)
-			return
-		}
-	}
-	if inst.EntryWriterOrdinal != nil {
-		err = inst.EntryWriterOrdinal.LoadFromRecord(rec)
-		if err != nil {
-			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "EntryWriterOrdinal").Errorf("unable to load from record: %w", err)
-			return
-		}
-	}
-	if inst.EntryPrev != nil {
-		err = inst.EntryPrev.LoadFromRecord(rec)
-		if err != nil {
-			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "EntryPrev").Errorf("unable to load from record: %w", err)
-			return
-		}
-	}
-	if inst.EntryDigest != nil {
-		err = inst.EntryDigest.LoadFromRecord(rec)
-		if err != nil {
-			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "EntryDigest").Errorf("unable to load from record: %w", err)
-			return
-		}
-	}
-	if inst.EntryKeyId != nil {
-		err = inst.EntryKeyId.LoadFromRecord(rec)
-		if err != nil {
-			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "EntryKeyId").Errorf("unable to load from record: %w", err)
-			return
-		}
-	}
-	if inst.EntryParent != nil {
-		err = inst.EntryParent.LoadFromRecord(rec)
-		if err != nil {
-			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "EntryParent").Errorf("unable to load from record: %w", err)
-			return
-		}
-	}
-	if inst.EntryAttachments != nil {
-		err = inst.EntryAttachments.LoadFromRecord(rec)
-		if err != nil {
-			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "EntryAttachments").Errorf("unable to load from record: %w", err)
+			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "Bool").Errorf("unable to load from record: %w", err)
 			return
 		}
 	}
@@ -5993,95 +4975,68 @@ func (inst *ReadAccessAgentrunentryTable) SetColumnIndices(indices []uint32) (re
 	if inst.EntityId != nil {
 		rest = inst.EntityId.SetColumnIndices(rest)
 	}
-	if inst.EntityTimestamp != nil {
-		rest = inst.EntityTimestamp.SetColumnIndices(rest)
-	}
 	if inst.EntityLifecycle != nil {
 		rest = inst.EntityLifecycle.SetColumnIndices(rest)
 	}
-	if inst.EntryOrdinal != nil {
-		rest = inst.EntryOrdinal.SetColumnIndices(rest)
+	if inst.TextArray != nil {
+		rest = inst.TextArray.SetColumnIndices(rest)
 	}
-	if inst.EntryAt != nil {
-		rest = inst.EntryAt.SetColumnIndices(rest)
+	if inst.StringArray != nil {
+		rest = inst.StringArray.SetColumnIndices(rest)
 	}
-	if inst.EntryKind != nil {
-		rest = inst.EntryKind.SetColumnIndices(rest)
+	if inst.Symbol != nil {
+		rest = inst.Symbol.SetColumnIndices(rest)
 	}
-	if inst.EntryKey != nil {
-		rest = inst.EntryKey.SetColumnIndices(rest)
+	if inst.SymbolArray != nil {
+		rest = inst.SymbolArray.SetColumnIndices(rest)
 	}
-	if inst.EntryRole != nil {
-		rest = inst.EntryRole.SetColumnIndices(rest)
+	if inst.BlobArray != nil {
+		rest = inst.BlobArray.SetColumnIndices(rest)
 	}
-	if inst.EntryBody != nil {
-		rest = inst.EntryBody.SetColumnIndices(rest)
+	if inst.U8Array != nil {
+		rest = inst.U8Array.SetColumnIndices(rest)
 	}
-	if inst.EntryCalls != nil {
-		rest = inst.EntryCalls.SetColumnIndices(rest)
+	if inst.U16Array != nil {
+		rest = inst.U16Array.SetColumnIndices(rest)
 	}
-	if inst.EntryBodyDigest != nil {
-		rest = inst.EntryBodyDigest.SetColumnIndices(rest)
+	if inst.U32Array != nil {
+		rest = inst.U32Array.SetColumnIndices(rest)
 	}
-	if inst.EntryCallsDigest != nil {
-		rest = inst.EntryCallsDigest.SetColumnIndices(rest)
+	if inst.U32Set != nil {
+		rest = inst.U32Set.SetColumnIndices(rest)
 	}
-	if inst.EntryName != nil {
-		rest = inst.EntryName.SetColumnIndices(rest)
+	if inst.U64Array != nil {
+		rest = inst.U64Array.SetColumnIndices(rest)
 	}
-	if inst.EntryBook != nil {
-		rest = inst.EntryBook.SetColumnIndices(rest)
+	if inst.U64Set != nil {
+		rest = inst.U64Set.SetColumnIndices(rest)
 	}
-	if inst.EntryForm != nil {
-		rest = inst.EntryForm.SetColumnIndices(rest)
+	if inst.I8Array != nil {
+		rest = inst.I8Array.SetColumnIndices(rest)
 	}
-	if inst.EntryTarget != nil {
-		rest = inst.EntryTarget.SetColumnIndices(rest)
+	if inst.I16Array != nil {
+		rest = inst.I16Array.SetColumnIndices(rest)
 	}
-	if inst.EntryFrom != nil {
-		rest = inst.EntryFrom.SetColumnIndices(rest)
+	if inst.I32Array != nil {
+		rest = inst.I32Array.SetColumnIndices(rest)
 	}
-	if inst.EntryEffect != nil {
-		rest = inst.EntryEffect.SetColumnIndices(rest)
+	if inst.I64Array != nil {
+		rest = inst.I64Array.SetColumnIndices(rest)
 	}
-	if inst.EntryTurn != nil {
-		rest = inst.EntryTurn.SetColumnIndices(rest)
+	if inst.F32Array != nil {
+		rest = inst.F32Array.SetColumnIndices(rest)
 	}
-	if inst.EntryLabelLevel != nil {
-		rest = inst.EntryLabelLevel.SetColumnIndices(rest)
+	if inst.F64Array != nil {
+		rest = inst.F64Array.SetColumnIndices(rest)
 	}
-	if inst.EntryLabelTier != nil {
-		rest = inst.EntryLabelTier.SetColumnIndices(rest)
+	if inst.U32Range != nil {
+		rest = inst.U32Range.SetColumnIndices(rest)
 	}
-	if inst.EntryLabelExposure != nil {
-		rest = inst.EntryLabelExposure.SetColumnIndices(rest)
+	if inst.TimeArray != nil {
+		rest = inst.TimeArray.SetColumnIndices(rest)
 	}
-	if inst.EntryLabelOrigin != nil {
-		rest = inst.EntryLabelOrigin.SetColumnIndices(rest)
-	}
-	if inst.EntryWriterRun != nil {
-		rest = inst.EntryWriterRun.SetColumnIndices(rest)
-	}
-	if inst.EntryWriterTurn != nil {
-		rest = inst.EntryWriterTurn.SetColumnIndices(rest)
-	}
-	if inst.EntryWriterOrdinal != nil {
-		rest = inst.EntryWriterOrdinal.SetColumnIndices(rest)
-	}
-	if inst.EntryPrev != nil {
-		rest = inst.EntryPrev.SetColumnIndices(rest)
-	}
-	if inst.EntryDigest != nil {
-		rest = inst.EntryDigest.SetColumnIndices(rest)
-	}
-	if inst.EntryKeyId != nil {
-		rest = inst.EntryKeyId.SetColumnIndices(rest)
-	}
-	if inst.EntryParent != nil {
-		rest = inst.EntryParent.SetColumnIndices(rest)
-	}
-	if inst.EntryAttachments != nil {
-		rest = inst.EntryAttachments.SetColumnIndices(rest)
+	if inst.Bool != nil {
+		rest = inst.Bool.SetColumnIndices(rest)
 	}
 	return
 }
@@ -6090,95 +5045,68 @@ func (inst *ReadAccessAgentrunentryTable) GetColumnIndices() (columnIndices []ui
 	if inst.EntityId != nil {
 		columnIndices = slices.Concat(columnIndices, inst.EntityId.GetColumnIndices())
 	}
-	if inst.EntityTimestamp != nil {
-		columnIndices = slices.Concat(columnIndices, inst.EntityTimestamp.GetColumnIndices())
-	}
 	if inst.EntityLifecycle != nil {
 		columnIndices = slices.Concat(columnIndices, inst.EntityLifecycle.GetColumnIndices())
 	}
-	if inst.EntryOrdinal != nil {
-		columnIndices = slices.Concat(columnIndices, inst.EntryOrdinal.GetColumnIndices())
+	if inst.TextArray != nil {
+		columnIndices = slices.Concat(columnIndices, inst.TextArray.GetColumnIndices())
 	}
-	if inst.EntryAt != nil {
-		columnIndices = slices.Concat(columnIndices, inst.EntryAt.GetColumnIndices())
+	if inst.StringArray != nil {
+		columnIndices = slices.Concat(columnIndices, inst.StringArray.GetColumnIndices())
 	}
-	if inst.EntryKind != nil {
-		columnIndices = slices.Concat(columnIndices, inst.EntryKind.GetColumnIndices())
+	if inst.Symbol != nil {
+		columnIndices = slices.Concat(columnIndices, inst.Symbol.GetColumnIndices())
 	}
-	if inst.EntryKey != nil {
-		columnIndices = slices.Concat(columnIndices, inst.EntryKey.GetColumnIndices())
+	if inst.SymbolArray != nil {
+		columnIndices = slices.Concat(columnIndices, inst.SymbolArray.GetColumnIndices())
 	}
-	if inst.EntryRole != nil {
-		columnIndices = slices.Concat(columnIndices, inst.EntryRole.GetColumnIndices())
+	if inst.BlobArray != nil {
+		columnIndices = slices.Concat(columnIndices, inst.BlobArray.GetColumnIndices())
 	}
-	if inst.EntryBody != nil {
-		columnIndices = slices.Concat(columnIndices, inst.EntryBody.GetColumnIndices())
+	if inst.U8Array != nil {
+		columnIndices = slices.Concat(columnIndices, inst.U8Array.GetColumnIndices())
 	}
-	if inst.EntryCalls != nil {
-		columnIndices = slices.Concat(columnIndices, inst.EntryCalls.GetColumnIndices())
+	if inst.U16Array != nil {
+		columnIndices = slices.Concat(columnIndices, inst.U16Array.GetColumnIndices())
 	}
-	if inst.EntryBodyDigest != nil {
-		columnIndices = slices.Concat(columnIndices, inst.EntryBodyDigest.GetColumnIndices())
+	if inst.U32Array != nil {
+		columnIndices = slices.Concat(columnIndices, inst.U32Array.GetColumnIndices())
 	}
-	if inst.EntryCallsDigest != nil {
-		columnIndices = slices.Concat(columnIndices, inst.EntryCallsDigest.GetColumnIndices())
+	if inst.U32Set != nil {
+		columnIndices = slices.Concat(columnIndices, inst.U32Set.GetColumnIndices())
 	}
-	if inst.EntryName != nil {
-		columnIndices = slices.Concat(columnIndices, inst.EntryName.GetColumnIndices())
+	if inst.U64Array != nil {
+		columnIndices = slices.Concat(columnIndices, inst.U64Array.GetColumnIndices())
 	}
-	if inst.EntryBook != nil {
-		columnIndices = slices.Concat(columnIndices, inst.EntryBook.GetColumnIndices())
+	if inst.U64Set != nil {
+		columnIndices = slices.Concat(columnIndices, inst.U64Set.GetColumnIndices())
 	}
-	if inst.EntryForm != nil {
-		columnIndices = slices.Concat(columnIndices, inst.EntryForm.GetColumnIndices())
+	if inst.I8Array != nil {
+		columnIndices = slices.Concat(columnIndices, inst.I8Array.GetColumnIndices())
 	}
-	if inst.EntryTarget != nil {
-		columnIndices = slices.Concat(columnIndices, inst.EntryTarget.GetColumnIndices())
+	if inst.I16Array != nil {
+		columnIndices = slices.Concat(columnIndices, inst.I16Array.GetColumnIndices())
 	}
-	if inst.EntryFrom != nil {
-		columnIndices = slices.Concat(columnIndices, inst.EntryFrom.GetColumnIndices())
+	if inst.I32Array != nil {
+		columnIndices = slices.Concat(columnIndices, inst.I32Array.GetColumnIndices())
 	}
-	if inst.EntryEffect != nil {
-		columnIndices = slices.Concat(columnIndices, inst.EntryEffect.GetColumnIndices())
+	if inst.I64Array != nil {
+		columnIndices = slices.Concat(columnIndices, inst.I64Array.GetColumnIndices())
 	}
-	if inst.EntryTurn != nil {
-		columnIndices = slices.Concat(columnIndices, inst.EntryTurn.GetColumnIndices())
+	if inst.F32Array != nil {
+		columnIndices = slices.Concat(columnIndices, inst.F32Array.GetColumnIndices())
 	}
-	if inst.EntryLabelLevel != nil {
-		columnIndices = slices.Concat(columnIndices, inst.EntryLabelLevel.GetColumnIndices())
+	if inst.F64Array != nil {
+		columnIndices = slices.Concat(columnIndices, inst.F64Array.GetColumnIndices())
 	}
-	if inst.EntryLabelTier != nil {
-		columnIndices = slices.Concat(columnIndices, inst.EntryLabelTier.GetColumnIndices())
+	if inst.U32Range != nil {
+		columnIndices = slices.Concat(columnIndices, inst.U32Range.GetColumnIndices())
 	}
-	if inst.EntryLabelExposure != nil {
-		columnIndices = slices.Concat(columnIndices, inst.EntryLabelExposure.GetColumnIndices())
+	if inst.TimeArray != nil {
+		columnIndices = slices.Concat(columnIndices, inst.TimeArray.GetColumnIndices())
 	}
-	if inst.EntryLabelOrigin != nil {
-		columnIndices = slices.Concat(columnIndices, inst.EntryLabelOrigin.GetColumnIndices())
-	}
-	if inst.EntryWriterRun != nil {
-		columnIndices = slices.Concat(columnIndices, inst.EntryWriterRun.GetColumnIndices())
-	}
-	if inst.EntryWriterTurn != nil {
-		columnIndices = slices.Concat(columnIndices, inst.EntryWriterTurn.GetColumnIndices())
-	}
-	if inst.EntryWriterOrdinal != nil {
-		columnIndices = slices.Concat(columnIndices, inst.EntryWriterOrdinal.GetColumnIndices())
-	}
-	if inst.EntryPrev != nil {
-		columnIndices = slices.Concat(columnIndices, inst.EntryPrev.GetColumnIndices())
-	}
-	if inst.EntryDigest != nil {
-		columnIndices = slices.Concat(columnIndices, inst.EntryDigest.GetColumnIndices())
-	}
-	if inst.EntryKeyId != nil {
-		columnIndices = slices.Concat(columnIndices, inst.EntryKeyId.GetColumnIndices())
-	}
-	if inst.EntryParent != nil {
-		columnIndices = slices.Concat(columnIndices, inst.EntryParent.GetColumnIndices())
-	}
-	if inst.EntryAttachments != nil {
-		columnIndices = slices.Concat(columnIndices, inst.EntryAttachments.GetColumnIndices())
+	if inst.Bool != nil {
+		columnIndices = slices.Concat(columnIndices, inst.Bool.GetColumnIndices())
 	}
 	return
 }
@@ -6187,95 +5115,68 @@ func (inst *ReadAccessAgentrunentryTable) GetColumnIndexFieldNames() (fieldNames
 	if inst.EntityId != nil {
 		fieldNames = slices.Concat(fieldNames, inst.EntityId.GetColumnIndexFieldNames())
 	}
-	if inst.EntityTimestamp != nil {
-		fieldNames = slices.Concat(fieldNames, inst.EntityTimestamp.GetColumnIndexFieldNames())
-	}
 	if inst.EntityLifecycle != nil {
 		fieldNames = slices.Concat(fieldNames, inst.EntityLifecycle.GetColumnIndexFieldNames())
 	}
-	if inst.EntryOrdinal != nil {
-		fieldNames = slices.Concat(fieldNames, inst.EntryOrdinal.GetColumnIndexFieldNames())
+	if inst.TextArray != nil {
+		fieldNames = slices.Concat(fieldNames, inst.TextArray.GetColumnIndexFieldNames())
 	}
-	if inst.EntryAt != nil {
-		fieldNames = slices.Concat(fieldNames, inst.EntryAt.GetColumnIndexFieldNames())
+	if inst.StringArray != nil {
+		fieldNames = slices.Concat(fieldNames, inst.StringArray.GetColumnIndexFieldNames())
 	}
-	if inst.EntryKind != nil {
-		fieldNames = slices.Concat(fieldNames, inst.EntryKind.GetColumnIndexFieldNames())
+	if inst.Symbol != nil {
+		fieldNames = slices.Concat(fieldNames, inst.Symbol.GetColumnIndexFieldNames())
 	}
-	if inst.EntryKey != nil {
-		fieldNames = slices.Concat(fieldNames, inst.EntryKey.GetColumnIndexFieldNames())
+	if inst.SymbolArray != nil {
+		fieldNames = slices.Concat(fieldNames, inst.SymbolArray.GetColumnIndexFieldNames())
 	}
-	if inst.EntryRole != nil {
-		fieldNames = slices.Concat(fieldNames, inst.EntryRole.GetColumnIndexFieldNames())
+	if inst.BlobArray != nil {
+		fieldNames = slices.Concat(fieldNames, inst.BlobArray.GetColumnIndexFieldNames())
 	}
-	if inst.EntryBody != nil {
-		fieldNames = slices.Concat(fieldNames, inst.EntryBody.GetColumnIndexFieldNames())
+	if inst.U8Array != nil {
+		fieldNames = slices.Concat(fieldNames, inst.U8Array.GetColumnIndexFieldNames())
 	}
-	if inst.EntryCalls != nil {
-		fieldNames = slices.Concat(fieldNames, inst.EntryCalls.GetColumnIndexFieldNames())
+	if inst.U16Array != nil {
+		fieldNames = slices.Concat(fieldNames, inst.U16Array.GetColumnIndexFieldNames())
 	}
-	if inst.EntryBodyDigest != nil {
-		fieldNames = slices.Concat(fieldNames, inst.EntryBodyDigest.GetColumnIndexFieldNames())
+	if inst.U32Array != nil {
+		fieldNames = slices.Concat(fieldNames, inst.U32Array.GetColumnIndexFieldNames())
 	}
-	if inst.EntryCallsDigest != nil {
-		fieldNames = slices.Concat(fieldNames, inst.EntryCallsDigest.GetColumnIndexFieldNames())
+	if inst.U32Set != nil {
+		fieldNames = slices.Concat(fieldNames, inst.U32Set.GetColumnIndexFieldNames())
 	}
-	if inst.EntryName != nil {
-		fieldNames = slices.Concat(fieldNames, inst.EntryName.GetColumnIndexFieldNames())
+	if inst.U64Array != nil {
+		fieldNames = slices.Concat(fieldNames, inst.U64Array.GetColumnIndexFieldNames())
 	}
-	if inst.EntryBook != nil {
-		fieldNames = slices.Concat(fieldNames, inst.EntryBook.GetColumnIndexFieldNames())
+	if inst.U64Set != nil {
+		fieldNames = slices.Concat(fieldNames, inst.U64Set.GetColumnIndexFieldNames())
 	}
-	if inst.EntryForm != nil {
-		fieldNames = slices.Concat(fieldNames, inst.EntryForm.GetColumnIndexFieldNames())
+	if inst.I8Array != nil {
+		fieldNames = slices.Concat(fieldNames, inst.I8Array.GetColumnIndexFieldNames())
 	}
-	if inst.EntryTarget != nil {
-		fieldNames = slices.Concat(fieldNames, inst.EntryTarget.GetColumnIndexFieldNames())
+	if inst.I16Array != nil {
+		fieldNames = slices.Concat(fieldNames, inst.I16Array.GetColumnIndexFieldNames())
 	}
-	if inst.EntryFrom != nil {
-		fieldNames = slices.Concat(fieldNames, inst.EntryFrom.GetColumnIndexFieldNames())
+	if inst.I32Array != nil {
+		fieldNames = slices.Concat(fieldNames, inst.I32Array.GetColumnIndexFieldNames())
 	}
-	if inst.EntryEffect != nil {
-		fieldNames = slices.Concat(fieldNames, inst.EntryEffect.GetColumnIndexFieldNames())
+	if inst.I64Array != nil {
+		fieldNames = slices.Concat(fieldNames, inst.I64Array.GetColumnIndexFieldNames())
 	}
-	if inst.EntryTurn != nil {
-		fieldNames = slices.Concat(fieldNames, inst.EntryTurn.GetColumnIndexFieldNames())
+	if inst.F32Array != nil {
+		fieldNames = slices.Concat(fieldNames, inst.F32Array.GetColumnIndexFieldNames())
 	}
-	if inst.EntryLabelLevel != nil {
-		fieldNames = slices.Concat(fieldNames, inst.EntryLabelLevel.GetColumnIndexFieldNames())
+	if inst.F64Array != nil {
+		fieldNames = slices.Concat(fieldNames, inst.F64Array.GetColumnIndexFieldNames())
 	}
-	if inst.EntryLabelTier != nil {
-		fieldNames = slices.Concat(fieldNames, inst.EntryLabelTier.GetColumnIndexFieldNames())
+	if inst.U32Range != nil {
+		fieldNames = slices.Concat(fieldNames, inst.U32Range.GetColumnIndexFieldNames())
 	}
-	if inst.EntryLabelExposure != nil {
-		fieldNames = slices.Concat(fieldNames, inst.EntryLabelExposure.GetColumnIndexFieldNames())
+	if inst.TimeArray != nil {
+		fieldNames = slices.Concat(fieldNames, inst.TimeArray.GetColumnIndexFieldNames())
 	}
-	if inst.EntryLabelOrigin != nil {
-		fieldNames = slices.Concat(fieldNames, inst.EntryLabelOrigin.GetColumnIndexFieldNames())
-	}
-	if inst.EntryWriterRun != nil {
-		fieldNames = slices.Concat(fieldNames, inst.EntryWriterRun.GetColumnIndexFieldNames())
-	}
-	if inst.EntryWriterTurn != nil {
-		fieldNames = slices.Concat(fieldNames, inst.EntryWriterTurn.GetColumnIndexFieldNames())
-	}
-	if inst.EntryWriterOrdinal != nil {
-		fieldNames = slices.Concat(fieldNames, inst.EntryWriterOrdinal.GetColumnIndexFieldNames())
-	}
-	if inst.EntryPrev != nil {
-		fieldNames = slices.Concat(fieldNames, inst.EntryPrev.GetColumnIndexFieldNames())
-	}
-	if inst.EntryDigest != nil {
-		fieldNames = slices.Concat(fieldNames, inst.EntryDigest.GetColumnIndexFieldNames())
-	}
-	if inst.EntryKeyId != nil {
-		fieldNames = slices.Concat(fieldNames, inst.EntryKeyId.GetColumnIndexFieldNames())
-	}
-	if inst.EntryParent != nil {
-		fieldNames = slices.Concat(fieldNames, inst.EntryParent.GetColumnIndexFieldNames())
-	}
-	if inst.EntryAttachments != nil {
-		fieldNames = slices.Concat(fieldNames, inst.EntryAttachments.GetColumnIndexFieldNames())
+	if inst.Bool != nil {
+		fieldNames = slices.Concat(fieldNames, inst.Bool.GetColumnIndexFieldNames())
 	}
 	return
 }

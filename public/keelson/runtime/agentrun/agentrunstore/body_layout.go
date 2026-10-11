@@ -37,5 +37,8 @@ func ProvisionBodyIn(ctx context.Context, exec recordstore.ExecutorI, layout Lay
 	if err = st.EnsureTable(ctx); err != nil {
 		return eh.Errorf("ensure body table: %w", err)
 	}
+	if err = st.VerifySchema(ctx); err != nil {
+		return eh.Errorf("body table: %w", err)
+	}
 	return
 }

@@ -47,7 +47,7 @@ const BodyRowTableName = "boxer.agentrunbody"
 // address them in ScanOpts.ExtraPredicate and their own SQL.
 const (
 	BodyRowColKey   = `"id:id:s:4::0:"`
-	BodyRowColOrder = `"ts:ts:z64:47::0:"`
+	BodyRowColOrder = `"id:ordinal:u64:47::0:"`
 )
 
 // Arrow output shape the read-access classes expect.
@@ -67,8 +67,8 @@ func agentrunbodyKeyPrefixPredicate(prefix string) string {
 // TableDesc authors, to its quoted physical name: what ScanOpts.OrderBy
 // may name.
 var agentrunbodyEnvelopeColumns = map[string]string{
-	"id": `"id:id:s:4::0:"`,
-	"ts": `"ts:ts:z64:47::0:"`,
+	"id":      `"id:id:s:4::0:"`,
+	"ordinal": `"id:ordinal:u64:47::0:"`,
 }
 
 // agentrunbodyOrderBy renders a scan's ORDER BY from opts: OrderBy names an
@@ -105,7 +105,6 @@ func agentrunbodyOrderBy(opts recordstore.ScanOpts) (clause string, err error) {
 // regenerated store at existing rows.
 var BodyRowMembershipIds = map[string]map[string]uint64{
 	"BodyRow": {
-		"agentrunBodyOrdinal": 9223372049739678066,
 		"agentrunBodyOpening": 9223372049739678067,
 		"agentrunBodyText":    9223372049739678068,
 		"agentrunBodyCalls":   9223372049739678069,
@@ -117,8 +116,10 @@ var BodyRowMembershipIds = map[string]map[string]uint64{
 // Entities returned by cached reads are shared with the cache (and
 // every later reader): treat them as immutable.
 type BodyRowEntity struct {
-	ID      string
-	Ts      time.Time
+	ID string
+	// Ord is the Order role value — the caller-supplied, per-key
+	// strictly monotonic sequence (ADR-0100 SD2).
+	Ord     uint64
 	BodyRow option.Option[BodyRow]
 }
 
@@ -177,7 +178,7 @@ type BodyRowStoreConfig struct {
 	// the batch id of that insert and its keys, or the keys DiscardPending
 	// dropped (ADR-0295 §SD7). It is notification-only and independent of
 	// attached cache views. Nil (the default) tracks nothing.
-	WriteObserver recordstore.WriteObserverI[string, time.Time]
+	WriteObserver recordstore.WriteObserverI[string, uint64]
 }
 
 // BodyRowStore is single-goroutine, like every part it composes. Batched
@@ -210,7 +211,7 @@ type BodyRowStore struct {
 	// written holds the rows the write observer was told were committed and
 	// has not yet been told are durable or discarded (ADR-0295 §SD7); empty
 	// without an observer.
-	written []recordstore.WrittenKey[string, time.Time]
+	written []recordstore.WrittenKey[string, uint64]
 }
 
 // NewBodyRowStore wires the store. A nil alloc selects the Go allocator.
@@ -290,7 +291,7 @@ func (inst *BodyRowStore) notifyFlush(key string) {
 
 // noteCommitted tells the write observer about a buffered row and keeps
 // it until the observer is told its fate (ADR-0295 §SD7).
-func (inst *BodyRowStore) noteCommitted(w recordstore.WrittenKey[string, time.Time]) {
+func (inst *BodyRowStore) noteCommitted(w recordstore.WrittenKey[string, uint64]) {
 	if inst.cfg.WriteObserver == nil {
 		return
 	}
@@ -302,10 +303,10 @@ func (inst *BodyRowStore) noteCommitted(w recordstore.WrittenKey[string, time.Ti
 // Detaching before the observer runs means a row it commits from its
 // callback lands in a fresh buffer, reported with a later flush, and a
 // panicking observer cannot have the same rows reported twice.
-func (inst *BodyRowStore) takeWritten() iter.Seq[recordstore.WrittenKey[string, time.Time]] {
+func (inst *BodyRowStore) takeWritten() iter.Seq[recordstore.WrittenKey[string, uint64]] {
 	written := inst.written
 	inst.written = nil
-	return func(yield func(recordstore.WrittenKey[string, time.Time]) bool) {
+	return func(yield func(recordstore.WrittenKey[string, uint64]) bool) {
 		for _, w := range written {
 			if !yield(w) {
 				return
@@ -456,14 +457,10 @@ type BodyRowEntityBuilder struct {
 // section, after every component that contributed to it has written.
 func (inst *BodyRowEntityBuilder) endSection(section string) error {
 	switch section {
-	case "bodyOrdinal":
-		inst.store.dml.GetSectionBodyOrdinal().EndSection()
-	case "bodyOpening":
-		inst.store.dml.GetSectionBodyOpening().EndSection()
-	case "bodyText":
-		inst.store.dml.GetSectionBodyText().EndSection()
-	case "bodyCalls":
-		inst.store.dml.GetSectionBodyCalls().EndSection()
+	case "stringArray":
+		inst.store.dml.GetSectionStringArray().EndSection()
+	case "textArray":
+		inst.store.dml.GetSectionTextArray().EndSection()
 	}
 	return nil
 }
@@ -471,18 +468,17 @@ func (inst *BodyRowEntityBuilder) endSection(section string) error {
 // Begin opens one entity with the envelope roles as typed arguments
 // (Key, Order), under context.Background(): a configured stamper
 // that reads a call identity off the context finds none. See BeginCtx.
-func (inst *BodyRowStore) Begin(id string, ts time.Time) *BodyRowEntityBuilder {
-	return inst.BeginCtx(context.Background(), id, ts)
+func (inst *BodyRowStore) Begin(id string, ord uint64) *BodyRowEntityBuilder {
+	return inst.BeginCtx(context.Background(), id, ord)
 }
 
 // BeginCtx is Begin with the context the configured stampers consult
 // (ADR-0295 §SD7) — where a call identity reaches an actor stamper. The
 // store stays single-goroutine; ctx is read during this call only.
-func (inst *BodyRowStore) BeginCtx(ctx context.Context, id string, ts time.Time) *BodyRowEntityBuilder {
+func (inst *BodyRowStore) BeginCtx(ctx context.Context, id string, ord uint64) *BodyRowEntityBuilder {
 	lowlevel.InEntityAgentrunbodyTableBeginEntity(inst.dml)
-	lowlevel.InEntityAgentrunbodyTableSetId(inst.dml, id)
-	lowlevel.InEntityAgentrunbodyTableSetTimestamp(inst.dml, ts)
-	b := &BodyRowEntityBuilder{store: inst, key: id, ent: BodyRowEntity{ID: id, Ts: ts}}
+	lowlevel.InEntityAgentrunbodyTableSetId(inst.dml, id, ord)
+	b := &BodyRowEntityBuilder{store: inst, key: id, ent: BodyRowEntity{ID: id, Ord: ord}}
 	b.ident, _ = callident.CallIdentityFrom(ctx)
 	b.pushed = inst.applyStampers(ctx)
 	return b
@@ -504,17 +500,11 @@ func (inst *BodyRowEntityBuilder) AddBodyRow(row BodyRow) *BodyRowEntityBuilder 
 		inst.store.dml.AppendError(err)
 		return inst
 	}
-	inst.buf.Enqueue("bodyOrdinal", "BodyRow", func() error {
-		return bodyRowEmitSectionBodyOrdinal(inst.store.dml.GetSectionBodyOrdinal(), row)
+	inst.buf.Enqueue("stringArray", "BodyRow", func() error {
+		return bodyRowEmitSectionStringArray(inst.store.dml.GetSectionStringArray(), row)
 	})
-	inst.buf.Enqueue("bodyOpening", "BodyRow", func() error {
-		return bodyRowEmitSectionBodyOpening(inst.store.dml.GetSectionBodyOpening(), row)
-	})
-	inst.buf.Enqueue("bodyText", "BodyRow", func() error {
-		return bodyRowEmitSectionBodyText(inst.store.dml.GetSectionBodyText(), row)
-	})
-	inst.buf.Enqueue("bodyCalls", "BodyRow", func() error {
-		return bodyRowEmitSectionBodyCalls(inst.store.dml.GetSectionBodyCalls(), row)
+	inst.buf.Enqueue("textArray", "BodyRow", func() error {
+		return bodyRowEmitSectionTextArray(inst.store.dml.GetSectionTextArray(), row)
 	})
 	inst.ent.BodyRow = option.Some(row)
 	return inst
@@ -560,7 +550,7 @@ func (inst *BodyRowEntityBuilder) Commit() (err error) {
 		ent := inst.ent
 		inst.store.notifyWrite(inst.key, &ent)
 	}
-	inst.store.noteCommitted(recordstore.WrittenKey[string, time.Time]{Key: inst.key, Order: inst.ent.Ts, Lifecycle: recordstore.LifecycleLive, Tombstone: false, Identity: inst.ident})
+	inst.store.noteCommitted(recordstore.WrittenKey[string, uint64]{Key: inst.key, Order: inst.ent.Ord, Lifecycle: recordstore.LifecycleLive, Tombstone: false, Identity: inst.ident})
 	return
 }
 
@@ -573,19 +563,19 @@ func (inst *BodyRowEntityBuilder) Rollback() (err error) {
 }
 
 // IngestBodyRow buffers one whole entity per row carrying only the
-// BodyRow component, all stamped with ts — rows ship on the next Flush,
+// BodyRow component, all stamped with ord — rows ship on the next Flush,
 // like every write. Keys must be distinct within one call (rows
-// share ts, so duplicates would tie on Order): a duplicate returns
+// share ord, so duplicates would tie on Order): a duplicate returns
 // recordstore.ErrDuplicateIngestKey. On any error the rows buffered
 // so far remain buffered — Flush ships them, DiscardPending drops
 // them.
-func (inst *BodyRowStore) IngestBodyRow(ts time.Time, rows []BodyRow) (err error) {
-	return inst.IngestBodyRowCtx(context.Background(), ts, rows)
+func (inst *BodyRowStore) IngestBodyRow(ord uint64, rows []BodyRow) (err error) {
+	return inst.IngestBodyRowCtx(context.Background(), ord, rows)
 }
 
 // IngestBodyRowCtx is IngestBodyRow with the context BeginCtx hands the
 // configured stampers (ADR-0295 §SD7).
-func (inst *BodyRowStore) IngestBodyRowCtx(ctx context.Context, ts time.Time, rows []BodyRow) (err error) {
+func (inst *BodyRowStore) IngestBodyRowCtx(ctx context.Context, ord uint64, rows []BodyRow) (err error) {
 	seen := make(map[string]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
@@ -593,7 +583,7 @@ func (inst *BodyRowStore) IngestBodyRowCtx(ctx context.Context, ts time.Time, ro
 			return
 		}
 		seen[rows[i].ID] = struct{}{}
-		err = inst.BeginCtx(ctx, rows[i].ID, ts).AddBodyRow(rows[i]).Commit()
+		err = inst.BeginCtx(ctx, rows[i].ID, ord).AddBodyRow(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest bodyRow row %d: %w", i, err)
 			return
@@ -742,7 +732,7 @@ type BodyRowCacheConfig struct {
 // as one IN (…) lookup, and local writes populate the view at Commit —
 // pinned until the store's Flush makes them durable — so reads after
 // writes hit immediately. Admission is version-gated on the entity's
-// Order timestamp: a raced refetch of an older row bounces off. Only
+// Order value: a raced refetch of an older row bounces off. Only
 // EXTERNAL writers can leave the view stale; they need a caller-
 // provided signal: MarkStale / Invalidate / InvalidateAll (a freshness
 // TTL option exists on the underlying cache). Raw() commits and
@@ -781,8 +771,11 @@ func NewBodyRowCache[W comparable](st *BodyRowStore, cfg BodyRowCacheConfig) (in
 func (inst *BodyRowCache[W]) rebuild() {
 	opts := []caching.CacheOption[string, *BodyRowEntity, W]{
 		// Admission mirrors the table's newest-row-per-key semantics:
-		// the Order timestamp is the entity's monotonic version.
-		caching.WithVersioning[string, *BodyRowEntity, W](func(e *BodyRowEntity) int64 { return e.Ts.UnixNano() }),
+		// the Order value is the entity's monotonic version. The int64
+		// reinterpretation preserves the per-key order as long as one
+		// key's values share their top bit — which a single writer
+		// stream per key (the SD2 contract) gives by construction.
+		caching.WithVersioning[string, *BodyRowEntity, W](func(e *BodyRowEntity) int64 { return int64(e.Ord) }),
 	}
 	if inst.cfg.FreshnessTTL > 0 {
 		opts = append(opts, caching.WithFreshnessTTL[string, *BodyRowEntity, W](inst.cfg.FreshnessTTL))
@@ -881,8 +874,8 @@ func (inst *BodyRowCache[W]) MarkStale(key string) {
 // it stales the cached entry only if its Order is below order, so a
 // redundant signal for a version the view already holds is free —
 // the natural sink for an invalidation stream carrying (key, Order).
-func (inst *BodyRowCache[W]) MarkStaleIfOlder(key string, order time.Time) {
-	inst.cache.MarkAsStaleIfOlder(key, order.UnixNano())
+func (inst *BodyRowCache[W]) MarkStaleIfOlder(key string, order uint64) {
+	inst.cache.MarkAsStaleIfOlder(key, int64(order))
 }
 
 // Invalidate drops the key's cached entry (L1 and stash).
@@ -956,7 +949,7 @@ func (inst *agentrunbodyFetcher) FetchItemSinglePartition(ctx context.Context, p
 // Baked ADR-0066 Filter artefacts: rows carrying a conforming
 // component. Generated from Plan ⋈ IR; membership ids are literals.
 const (
-	agentrunbodyScanBodyRowFilter = "has(\"tv:bodyOrdinal:lr:lr:u64:1247:::0::data\", 9223372049739678066) AND has(\"tv:bodyOpening:lr:lr:u64:1247:::0::data\", 9223372049739678067) AND has(\"tv:bodyText:lr:lr:u64:1247:::0::data\", 9223372049739678068) AND has(\"tv:bodyCalls:lr:lr:u64:1247:::0::data\", 9223372049739678069) AND countEqual(\"tv:bodyOrdinal:lr:lr:u64:1247:::0::data\", 9223372049739678066) = 1 AND countEqual(\"tv:bodyOpening:lr:lr:u64:1247:::0::data\", 9223372049739678067) = 1 AND countEqual(\"tv:bodyText:lr:lr:u64:1247:::0::data\", 9223372049739678068) = 1 AND countEqual(\"tv:bodyCalls:lr:lr:u64:1247:::0::data\", 9223372049739678069) = 1"
+	agentrunbodyScanBodyRowFilter = "hasAll(\"tv:stringArray:lr:lr:u64:1247:::0::data\", [9223372049739678067, 9223372049739678069]) AND has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068) AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678067) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678067), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678067), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068) = 1 AND if(has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068), \"tv:textArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068), arrayCumSum(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678069) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678069), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678069), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1"
 )
 
 // ScanBodyRow iterates the entities whose rows carry a conforming BodyRow
@@ -1016,22 +1009,22 @@ func (inst *BodyRowStore) Latest(ctx context.Context, key string) (ent *BodyRowE
 
 // Replay iterates the rows for key with the order column >= fromOrder
 // in ascending order — the event-replay primitive. A zero fromOrder
-// replays everything (zero time.Time has no defined UnixNano;
-// recordstore.SeqTs(0) is the equivalent explicit bound);
+// replays everything (0 is the replay-everything bound — a caller
+// whose Order values start at 0 must start them at 1 instead);
 // opts.To bounds the replay exclusively ("state as of To") and
 // opts.Limit caps the row count. The sequence is single-use; ctx
 // must stay valid until iteration completes; the query may execute
 // at call time or lazily during iteration (buffered in v1 — a
 // streaming executor changes nothing visible); an error ends the
 // sequence as a final (nil, err) pair. Reads see only flushed rows.
-func (inst *BodyRowStore) Replay(ctx context.Context, key string, fromOrder time.Time, opts recordstore.ReplayOpts) iter.Seq2[*BodyRowEntity, error] {
+func (inst *BodyRowStore) Replay(ctx context.Context, key string, fromOrder uint64, opts recordstore.ReplayOptsU64) iter.Seq2[*BodyRowEntity, error] {
 	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + BodyRowColKey + " = " + agentrunbodyKeyLiteral(key)
-	if !fromOrder.IsZero() {
-		sql += " AND " + BodyRowColOrder + " >= fromUnixTimestamp64Nano(" + strconv.FormatInt(fromOrder.UnixNano(), 10) + ")"
+	if fromOrder > 0 {
+		sql += " AND " + BodyRowColOrder + " >= " + strconv.FormatUint(fromOrder, 10)
 	}
-	if !opts.To.IsZero() {
-		sql += " AND " + BodyRowColOrder + " < fromUnixTimestamp64Nano(" + strconv.FormatInt(opts.To.UnixNano(), 10) + ")"
+	if opts.To > 0 {
+		sql += " AND " + BodyRowColOrder + " < " + strconv.FormatUint(opts.To, 10)
 	}
 	sql += " ORDER BY " + BodyRowColOrder + " ASC"
 	if opts.Limit > 0 {
@@ -1059,10 +1052,10 @@ var BodyRowComponentSQL = componentsql.Set{
 	Table: BodyRowTableName,
 	Kinds: map[string]componentsql.Artefacts{
 		"BodyRow": {
-			Presence:   "has(\"tv:bodyOrdinal:lr:lr:u64:1247:::0::data\", 9223372049739678066) AND has(\"tv:bodyOpening:lr:lr:u64:1247:::0::data\", 9223372049739678067) AND has(\"tv:bodyText:lr:lr:u64:1247:::0::data\", 9223372049739678068) AND has(\"tv:bodyCalls:lr:lr:u64:1247:::0::data\", 9223372049739678069)",
-			Validator:  "countEqual(\"tv:bodyOrdinal:lr:lr:u64:1247:::0::data\", 9223372049739678066) = 1 AND countEqual(\"tv:bodyOpening:lr:lr:u64:1247:::0::data\", 9223372049739678067) = 1 AND countEqual(\"tv:bodyText:lr:lr:u64:1247:::0::data\", 9223372049739678068) = 1 AND countEqual(\"tv:bodyCalls:lr:lr:u64:1247:::0::data\", 9223372049739678069) = 1",
+			Presence:   "hasAll(\"tv:stringArray:lr:lr:u64:1247:::0::data\", [9223372049739678067, 9223372049739678069]) AND has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068)",
+			Validator:  "countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678067) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678067), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678067), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068) = 1 AND if(has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068), \"tv:textArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068), arrayCumSum(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678069) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678069), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678069), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1",
 			Filter:     agentrunbodyScanBodyRowFilter,
-			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_VALUE_BY_TAG_EQUAL(\"tv:bodyOrdinal:value:val:u32:4:::0::data\", \"tv:bodyOrdinal:lr:lr:u64:1247:::0::data\", 9223372049739678066, LW_RAGGED_PARENT_IDS(\"tv:bodyOrdinal:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:bodyOpening:value:val:s:4:::0::data\", \"tv:bodyOpening:lr:lr:u64:1247:::0::data\", 9223372049739678067, LW_RAGGED_PARENT_IDS(\"tv:bodyOpening:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:bodyText:value:val:s:5:::0::data\", \"tv:bodyText:lr:lr:u64:1247:::0::data\", 9223372049739678068, LW_RAGGED_PARENT_IDS(\"tv:bodyText:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:bodyCalls:value:val:s:4:::0::data\", \"tv:bodyCalls:lr:lr:u64:1247:::0::data\", 9223372049739678069, LW_RAGGED_PARENT_IDS(\"tv:bodyCalls:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID String, Ordinal UInt32, Opening String, Body String, Calls String)')",
+			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678067, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:textArray:value:val:sh:5::7:0::data\", \"tv:textArray:len:len:u64:4D:::0::data\", \"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068, LW_RAGGED_PARENT_IDS(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678069, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1]), 'Tuple(ID String, Opening String, Body String, Calls String)')",
 		},
 	},
 }
@@ -1119,12 +1112,9 @@ func (inst *BodyRowStore) iterateEntities(ctx context.Context, sql string) iter.
 // kind-homogeneous helpers cannot decode them).
 func decodeBodyRowRecord(rec arrow.RecordBatch) (ents []*BodyRowEntity, err error) {
 	idR := lowlevel.NewReadAccessAgentrunbodyTablePlainEntityIdAttributes()
-	tsR := lowlevel.NewReadAccessAgentrunbodyTablePlainEntityTimestampAttributes()
-	bodyOrdinalR := lowlevel.NewReadAccessAgentrunbodyTableTaggedBodyOrdinal()
-	bodyOpeningR := lowlevel.NewReadAccessAgentrunbodyTableTaggedBodyOpening()
-	bodyTextR := lowlevel.NewReadAccessAgentrunbodyTableTaggedBodyText()
-	bodyCallsR := lowlevel.NewReadAccessAgentrunbodyTableTaggedBodyCalls()
-	readers := []agentrunbodySectionReaderI{idR, tsR, bodyOrdinalR, bodyOpeningR, bodyTextR, bodyCallsR}
+	stringArrayR := lowlevel.NewReadAccessAgentrunbodyTableTaggedStringArray()
+	textArrayR := lowlevel.NewReadAccessAgentrunbodyTableTaggedTextArray()
+	readers := []agentrunbodySectionReaderI{idR, stringArrayR, textArrayR}
 	for _, r := range readers {
 		err = r.LoadFromRecord(rec)
 		if err != nil {
@@ -1139,19 +1129,14 @@ func decodeBodyRowRecord(rec arrow.RecordBatch) (ents []*BodyRowEntity, err erro
 	}()
 
 	n := idR.ValueId.Len()
-	tsType, ok := tsR.ValueTs.DataType().(*arrow.TimestampType)
-	if !ok {
-		err = eh.Errorf("order column is not a timestamp (got %s)", tsR.ValueTs.DataType())
-		return
-	}
 	ents = make([]*BodyRowEntity, 0, n)
 	for i := range n {
 		ent := &BodyRowEntity{
-			ID: idR.ValueId.Value(i),
-			Ts: tsR.ValueTs.Value(i).ToTime(tsType.Unit).UTC(),
+			ID:  idR.ValueId.Value(i),
+			Ord: idR.ValueOrdinal.Value(i),
 		}
 		{
-			row, ok, e := bodyRowReadRow(i, bodyOrdinalR.GetAttributes(), bodyOrdinalR.GetMemberships(), bodyOpeningR.GetAttributes(), bodyOpeningR.GetMemberships(), bodyTextR.GetAttributes(), bodyTextR.GetMemberships(), bodyCallsR.GetAttributes(), bodyCallsR.GetMemberships())
+			row, ok, e := bodyRowReadRow(i, stringArrayR.GetAttributes(), stringArrayR.GetMemberships(), textArrayR.GetAttributes(), textArrayR.GetMemberships())
 			if e != nil {
 				err = eh.Errorf("read bodyRow component: %w", e)
 				return

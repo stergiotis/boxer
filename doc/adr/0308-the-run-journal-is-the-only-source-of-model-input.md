@@ -394,6 +394,20 @@ A second process can no longer write an open run its holder still runs,
 which closes the gap the previous Update left. Concurrent coordinators
 within one process stay serialised by the service's per-run lock.
 
+
+### 2026-10-11 — SD1: the ledger and the vault on the facts sections
+
+The entry table (the ledger) and ADR-0320's vault table are built over the
+`boxer.facts` data sections, with an envelope of their own: the run id as
+the Key and the entry's ordinal as a u64 Order, the ledger adding the
+Revision column (plan002 B0). The ledger's fields use the trail's
+spelling, are told apart by membership id, and carry their marks as
+arrays. The vault's sections also take the verbatim name + parameters
+channel, and add the shredder's value-less sections. The run table keeps
+one section per attribute: it is the row the compare-and-set rewrites in
+place, which needs a field alone in its section. Provisioning checks each
+table's shape after creating it, so a table left by an earlier schema
+fails provisioning instead of the first insert.
 ## References
 
 - [ADR-0303](./0303-a-conversation-outlives-its-process-a-run-journal-written-before-each-act.md) (superseded by this record) — the journal, resume fold, grant rule and pinning carried forward.

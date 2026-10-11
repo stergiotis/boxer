@@ -14,13 +14,10 @@ import (
 // --- Caller-assigned membership ids (registry-stable target). ---
 
 const (
-	kindAgentrunEntryOrdinal       uint64 = 9223372049739678023
 	kindAgentrunEntryAt            uint64 = 9223372049739678024
 	kindAgentrunEntryKind          uint64 = 9223372049739678025
 	kindAgentrunEntryKey           uint64 = 9223372049739678026
 	kindAgentrunEntryRole          uint64 = 9223372049739678027
-	kindAgentrunEntryBody          uint64 = 9223372049739678028
-	kindAgentrunEntryCalls         uint64 = 9223372049739678029
 	kindAgentrunEntryBodyDigest    uint64 = 9223372049739678049
 	kindAgentrunEntryCallsDigest   uint64 = 9223372049739678050
 	kindAgentrunEntryName          uint64 = 9223372049739678030
@@ -44,423 +41,94 @@ const (
 	kindAgentrunEntryAttachments   uint64 = 9223372049739678048
 )
 
-// entryEntryOrdinalAttrI is the InAttr-side view of the entryOrdinal section. P-variants only —
+// entryTimeArrayAttrI is the InAttr-side view of the timeArray section. P-variants only —
 // every method returns void so no F-bounded `[Self]` parameter is
 // needed.
-type entryEntryOrdinalAttrI interface {
+type entryTimeArrayAttrI interface {
 	dmlruntime.InAttributeMembershipLowCardRefPI
 	EndAttributeP()
 }
 
-// entryEntryOrdinalSecI is the Section-side view: opens an attribute and closes
+// entryTimeArraySecI is the Section-side view: opens an attribute and closes
 // the section. Attr and Ent are bound at the call site by inference.
-type entryEntryOrdinalSecI[Attr any, Ent any] interface {
-	BeginAttribute(value uint32) Attr
+type entryTimeArraySecI[Attr any, Ent any] interface {
+	BeginAttributeSingle(value time.Time) Attr
 	EndSection() Ent
 }
 
-// entryEntryAtAttrI is the InAttr-side view of the entryAt section. P-variants only —
+// entrySymbolAttrI is the InAttr-side view of the symbol section. P-variants only —
 // every method returns void so no F-bounded `[Self]` parameter is
 // needed.
-type entryEntryAtAttrI interface {
+type entrySymbolAttrI interface {
 	dmlruntime.InAttributeMembershipLowCardRefPI
 	EndAttributeP()
 }
 
-// entryEntryAtSecI is the Section-side view: opens an attribute and closes
+// entrySymbolSecI is the Section-side view: opens an attribute and closes
 // the section. Attr and Ent are bound at the call site by inference.
-type entryEntryAtSecI[Attr any, Ent any] interface {
-	BeginAttribute(value time.Time) Attr
-	EndSection() Ent
-}
-
-// entryEntryKindAttrI is the InAttr-side view of the entryKind section. P-variants only —
-// every method returns void so no F-bounded `[Self]` parameter is
-// needed.
-type entryEntryKindAttrI interface {
-	dmlruntime.InAttributeMembershipLowCardRefPI
-	EndAttributeP()
-}
-
-// entryEntryKindSecI is the Section-side view: opens an attribute and closes
-// the section. Attr and Ent are bound at the call site by inference.
-type entryEntryKindSecI[Attr any, Ent any] interface {
+type entrySymbolSecI[Attr any, Ent any] interface {
 	BeginAttribute(value string) Attr
 	EndSection() Ent
 }
 
-// entryEntryKeyAttrI is the InAttr-side view of the entryKey section. P-variants only —
+// entryStringArrayAttrI is the InAttr-side view of the stringArray section. P-variants only —
 // every method returns void so no F-bounded `[Self]` parameter is
 // needed.
-type entryEntryKeyAttrI interface {
+type entryStringArrayAttrI interface {
 	dmlruntime.InAttributeMembershipLowCardRefPI
 	EndAttributeP()
 }
 
-// entryEntryKeySecI is the Section-side view: opens an attribute and closes
+// entryStringArraySecI is the Section-side view: opens an attribute and closes
 // the section. Attr and Ent are bound at the call site by inference.
-type entryEntryKeySecI[Attr any, Ent any] interface {
-	BeginAttribute(value string) Attr
+type entryStringArraySecI[Attr any, Ent any] interface {
+	BeginAttributeSingle(value string) Attr
 	EndSection() Ent
 }
 
-// entryEntryRoleAttrI is the InAttr-side view of the entryRole section. P-variants only —
+// entryU32ArrayAttrI is the InAttr-side view of the u32Array section. P-variants only —
 // every method returns void so no F-bounded `[Self]` parameter is
 // needed.
-type entryEntryRoleAttrI interface {
+type entryU32ArrayAttrI interface {
 	dmlruntime.InAttributeMembershipLowCardRefPI
 	EndAttributeP()
 }
 
-// entryEntryRoleSecI is the Section-side view: opens an attribute and closes
+// entryU32ArraySecI is the Section-side view: opens an attribute and closes
 // the section. Attr and Ent are bound at the call site by inference.
-type entryEntryRoleSecI[Attr any, Ent any] interface {
-	BeginAttribute(value string) Attr
+type entryU32ArraySecI[Attr any, Ent any] interface {
+	BeginAttributeSingle(value uint32) Attr
 	EndSection() Ent
 }
 
-// entryEntryBodyAttrI is the InAttr-side view of the entryBody section. P-variants only —
+// entryU8ArrayAttrI is the InAttr-side view of the u8Array section. P-variants only —
 // every method returns void so no F-bounded `[Self]` parameter is
 // needed.
-type entryEntryBodyAttrI interface {
+type entryU8ArrayAttrI interface {
 	dmlruntime.InAttributeMembershipLowCardRefPI
 	EndAttributeP()
 }
 
-// entryEntryBodySecI is the Section-side view: opens an attribute and closes
+// entryU8ArraySecI is the Section-side view: opens an attribute and closes
 // the section. Attr and Ent are bound at the call site by inference.
-type entryEntryBodySecI[Attr any, Ent any] interface {
-	BeginAttribute(value string) Attr
+type entryU8ArraySecI[Attr any, Ent any] interface {
+	BeginAttributeSingle(value uint8) Attr
 	EndSection() Ent
 }
 
-// entryEntryCallsAttrI is the InAttr-side view of the entryCalls section. P-variants only —
+// entrySymbolArrayAttrI is the InAttr-side view of the symbolArray section. P-variants only —
 // every method returns void so no F-bounded `[Self]` parameter is
 // needed.
-type entryEntryCallsAttrI interface {
+type entrySymbolArrayAttrI interface {
 	dmlruntime.InAttributeMembershipLowCardRefPI
+	AddToContainerP(value string)
 	EndAttributeP()
 }
 
-// entryEntryCallsSecI is the Section-side view: opens an attribute and closes
+// entrySymbolArraySecI is the Section-side view: opens an attribute and closes
 // the section. Attr and Ent are bound at the call site by inference.
-type entryEntryCallsSecI[Attr any, Ent any] interface {
-	BeginAttribute(value string) Attr
-	EndSection() Ent
-}
-
-// entryEntryBodyDigestAttrI is the InAttr-side view of the entryBodyDigest section. P-variants only —
-// every method returns void so no F-bounded `[Self]` parameter is
-// needed.
-type entryEntryBodyDigestAttrI interface {
-	dmlruntime.InAttributeMembershipLowCardRefPI
-	EndAttributeP()
-}
-
-// entryEntryBodyDigestSecI is the Section-side view: opens an attribute and closes
-// the section. Attr and Ent are bound at the call site by inference.
-type entryEntryBodyDigestSecI[Attr any, Ent any] interface {
-	BeginAttribute(value string) Attr
-	EndSection() Ent
-}
-
-// entryEntryCallsDigestAttrI is the InAttr-side view of the entryCallsDigest section. P-variants only —
-// every method returns void so no F-bounded `[Self]` parameter is
-// needed.
-type entryEntryCallsDigestAttrI interface {
-	dmlruntime.InAttributeMembershipLowCardRefPI
-	EndAttributeP()
-}
-
-// entryEntryCallsDigestSecI is the Section-side view: opens an attribute and closes
-// the section. Attr and Ent are bound at the call site by inference.
-type entryEntryCallsDigestSecI[Attr any, Ent any] interface {
-	BeginAttribute(value string) Attr
-	EndSection() Ent
-}
-
-// entryEntryNameAttrI is the InAttr-side view of the entryName section. P-variants only —
-// every method returns void so no F-bounded `[Self]` parameter is
-// needed.
-type entryEntryNameAttrI interface {
-	dmlruntime.InAttributeMembershipLowCardRefPI
-	EndAttributeP()
-}
-
-// entryEntryNameSecI is the Section-side view: opens an attribute and closes
-// the section. Attr and Ent are bound at the call site by inference.
-type entryEntryNameSecI[Attr any, Ent any] interface {
-	BeginAttribute(value string) Attr
-	EndSection() Ent
-}
-
-// entryEntryBookAttrI is the InAttr-side view of the entryBook section. P-variants only —
-// every method returns void so no F-bounded `[Self]` parameter is
-// needed.
-type entryEntryBookAttrI interface {
-	dmlruntime.InAttributeMembershipLowCardRefPI
-	EndAttributeP()
-}
-
-// entryEntryBookSecI is the Section-side view: opens an attribute and closes
-// the section. Attr and Ent are bound at the call site by inference.
-type entryEntryBookSecI[Attr any, Ent any] interface {
-	BeginAttribute(value string) Attr
-	EndSection() Ent
-}
-
-// entryEntryFormAttrI is the InAttr-side view of the entryForm section. P-variants only —
-// every method returns void so no F-bounded `[Self]` parameter is
-// needed.
-type entryEntryFormAttrI interface {
-	dmlruntime.InAttributeMembershipLowCardRefPI
-	EndAttributeP()
-}
-
-// entryEntryFormSecI is the Section-side view: opens an attribute and closes
-// the section. Attr and Ent are bound at the call site by inference.
-type entryEntryFormSecI[Attr any, Ent any] interface {
-	BeginAttribute(value string) Attr
-	EndSection() Ent
-}
-
-// entryEntryTargetAttrI is the InAttr-side view of the entryTarget section. P-variants only —
-// every method returns void so no F-bounded `[Self]` parameter is
-// needed.
-type entryEntryTargetAttrI interface {
-	dmlruntime.InAttributeMembershipLowCardRefPI
-	EndAttributeP()
-}
-
-// entryEntryTargetSecI is the Section-side view: opens an attribute and closes
-// the section. Attr and Ent are bound at the call site by inference.
-type entryEntryTargetSecI[Attr any, Ent any] interface {
-	BeginAttribute(value uint32) Attr
-	EndSection() Ent
-}
-
-// entryEntryFromAttrI is the InAttr-side view of the entryFrom section. P-variants only —
-// every method returns void so no F-bounded `[Self]` parameter is
-// needed.
-type entryEntryFromAttrI interface {
-	dmlruntime.InAttributeMembershipLowCardRefPI
-	EndAttributeP()
-}
-
-// entryEntryFromSecI is the Section-side view: opens an attribute and closes
-// the section. Attr and Ent are bound at the call site by inference.
-type entryEntryFromSecI[Attr any, Ent any] interface {
-	BeginAttribute(value uint32) Attr
-	EndSection() Ent
-}
-
-// entryEntryEffectAttrI is the InAttr-side view of the entryEffect section. P-variants only —
-// every method returns void so no F-bounded `[Self]` parameter is
-// needed.
-type entryEntryEffectAttrI interface {
-	dmlruntime.InAttributeMembershipLowCardRefPI
-	EndAttributeP()
-}
-
-// entryEntryEffectSecI is the Section-side view: opens an attribute and closes
-// the section. Attr and Ent are bound at the call site by inference.
-type entryEntryEffectSecI[Attr any, Ent any] interface {
-	BeginAttribute(value string) Attr
-	EndSection() Ent
-}
-
-// entryEntryTurnAttrI is the InAttr-side view of the entryTurn section. P-variants only —
-// every method returns void so no F-bounded `[Self]` parameter is
-// needed.
-type entryEntryTurnAttrI interface {
-	dmlruntime.InAttributeMembershipLowCardRefPI
-	EndAttributeP()
-}
-
-// entryEntryTurnSecI is the Section-side view: opens an attribute and closes
-// the section. Attr and Ent are bound at the call site by inference.
-type entryEntryTurnSecI[Attr any, Ent any] interface {
-	BeginAttribute(value string) Attr
-	EndSection() Ent
-}
-
-// entryEntryLabelLevelAttrI is the InAttr-side view of the entryLabelLevel section. P-variants only —
-// every method returns void so no F-bounded `[Self]` parameter is
-// needed.
-type entryEntryLabelLevelAttrI interface {
-	dmlruntime.InAttributeMembershipLowCardRefPI
-	EndAttributeP()
-}
-
-// entryEntryLabelLevelSecI is the Section-side view: opens an attribute and closes
-// the section. Attr and Ent are bound at the call site by inference.
-type entryEntryLabelLevelSecI[Attr any, Ent any] interface {
-	BeginAttribute(value uint32) Attr
-	EndSection() Ent
-}
-
-// entryEntryLabelTierAttrI is the InAttr-side view of the entryLabelTier section. P-variants only —
-// every method returns void so no F-bounded `[Self]` parameter is
-// needed.
-type entryEntryLabelTierAttrI interface {
-	dmlruntime.InAttributeMembershipLowCardRefPI
-	EndAttributeP()
-}
-
-// entryEntryLabelTierSecI is the Section-side view: opens an attribute and closes
-// the section. Attr and Ent are bound at the call site by inference.
-type entryEntryLabelTierSecI[Attr any, Ent any] interface {
-	BeginAttribute(value uint32) Attr
-	EndSection() Ent
-}
-
-// entryEntryLabelExposureAttrI is the InAttr-side view of the entryLabelExposure section. P-variants only —
-// every method returns void so no F-bounded `[Self]` parameter is
-// needed.
-type entryEntryLabelExposureAttrI interface {
-	dmlruntime.InAttributeMembershipLowCardRefPI
-	EndAttributeP()
-}
-
-// entryEntryLabelExposureSecI is the Section-side view: opens an attribute and closes
-// the section. Attr and Ent are bound at the call site by inference.
-type entryEntryLabelExposureSecI[Attr any, Ent any] interface {
-	BeginAttribute(value string) Attr
-	EndSection() Ent
-}
-
-// entryEntryLabelOriginAttrI is the InAttr-side view of the entryLabelOrigin section. P-variants only —
-// every method returns void so no F-bounded `[Self]` parameter is
-// needed.
-type entryEntryLabelOriginAttrI interface {
-	dmlruntime.InAttributeMembershipLowCardRefPI
-	EndAttributeP()
-}
-
-// entryEntryLabelOriginSecI is the Section-side view: opens an attribute and closes
-// the section. Attr and Ent are bound at the call site by inference.
-type entryEntryLabelOriginSecI[Attr any, Ent any] interface {
-	BeginAttribute(value string) Attr
-	EndSection() Ent
-}
-
-// entryEntryWriterRunAttrI is the InAttr-side view of the entryWriterRun section. P-variants only —
-// every method returns void so no F-bounded `[Self]` parameter is
-// needed.
-type entryEntryWriterRunAttrI interface {
-	dmlruntime.InAttributeMembershipLowCardRefPI
-	EndAttributeP()
-}
-
-// entryEntryWriterRunSecI is the Section-side view: opens an attribute and closes
-// the section. Attr and Ent are bound at the call site by inference.
-type entryEntryWriterRunSecI[Attr any, Ent any] interface {
-	BeginAttribute(value string) Attr
-	EndSection() Ent
-}
-
-// entryEntryWriterTurnAttrI is the InAttr-side view of the entryWriterTurn section. P-variants only —
-// every method returns void so no F-bounded `[Self]` parameter is
-// needed.
-type entryEntryWriterTurnAttrI interface {
-	dmlruntime.InAttributeMembershipLowCardRefPI
-	EndAttributeP()
-}
-
-// entryEntryWriterTurnSecI is the Section-side view: opens an attribute and closes
-// the section. Attr and Ent are bound at the call site by inference.
-type entryEntryWriterTurnSecI[Attr any, Ent any] interface {
-	BeginAttribute(value string) Attr
-	EndSection() Ent
-}
-
-// entryEntryWriterOrdinalAttrI is the InAttr-side view of the entryWriterOrdinal section. P-variants only —
-// every method returns void so no F-bounded `[Self]` parameter is
-// needed.
-type entryEntryWriterOrdinalAttrI interface {
-	dmlruntime.InAttributeMembershipLowCardRefPI
-	EndAttributeP()
-}
-
-// entryEntryWriterOrdinalSecI is the Section-side view: opens an attribute and closes
-// the section. Attr and Ent are bound at the call site by inference.
-type entryEntryWriterOrdinalSecI[Attr any, Ent any] interface {
-	BeginAttribute(value uint32) Attr
-	EndSection() Ent
-}
-
-// entryEntryPrevAttrI is the InAttr-side view of the entryPrev section. P-variants only —
-// every method returns void so no F-bounded `[Self]` parameter is
-// needed.
-type entryEntryPrevAttrI interface {
-	dmlruntime.InAttributeMembershipLowCardRefPI
-	EndAttributeP()
-}
-
-// entryEntryPrevSecI is the Section-side view: opens an attribute and closes
-// the section. Attr and Ent are bound at the call site by inference.
-type entryEntryPrevSecI[Attr any, Ent any] interface {
-	BeginAttribute(value uint32) Attr
-	EndSection() Ent
-}
-
-// entryEntryDigestAttrI is the InAttr-side view of the entryDigest section. P-variants only —
-// every method returns void so no F-bounded `[Self]` parameter is
-// needed.
-type entryEntryDigestAttrI interface {
-	dmlruntime.InAttributeMembershipLowCardRefPI
-	EndAttributeP()
-}
-
-// entryEntryDigestSecI is the Section-side view: opens an attribute and closes
-// the section. Attr and Ent are bound at the call site by inference.
-type entryEntryDigestSecI[Attr any, Ent any] interface {
-	BeginAttribute(value string) Attr
-	EndSection() Ent
-}
-
-// entryEntryKeyIdAttrI is the InAttr-side view of the entryKeyId section. P-variants only —
-// every method returns void so no F-bounded `[Self]` parameter is
-// needed.
-type entryEntryKeyIdAttrI interface {
-	dmlruntime.InAttributeMembershipLowCardRefPI
-	EndAttributeP()
-}
-
-// entryEntryKeyIdSecI is the Section-side view: opens an attribute and closes
-// the section. Attr and Ent are bound at the call site by inference.
-type entryEntryKeyIdSecI[Attr any, Ent any] interface {
-	BeginAttribute(value string) Attr
-	EndSection() Ent
-}
-
-// entryEntryParentAttrI is the InAttr-side view of the entryParent section. P-variants only —
-// every method returns void so no F-bounded `[Self]` parameter is
-// needed.
-type entryEntryParentAttrI interface {
-	dmlruntime.InAttributeMembershipLowCardRefPI
-	EndAttributeP()
-}
-
-// entryEntryParentSecI is the Section-side view: opens an attribute and closes
-// the section. Attr and Ent are bound at the call site by inference.
-type entryEntryParentSecI[Attr any, Ent any] interface {
-	BeginAttribute(value uint32) Attr
-	EndSection() Ent
-}
-
-// entryEntryAttachmentsAttrI is the InAttr-side view of the entryAttachments section. P-variants only —
-// every method returns void so no F-bounded `[Self]` parameter is
-// needed.
-type entryEntryAttachmentsAttrI interface {
-	dmlruntime.InAttributeMembershipLowCardRefPI
-	EndAttributeP()
-}
-
-// entryEntryAttachmentsSecI is the Section-side view: opens an attribute and closes
-// the section. Attr and Ent are bound at the call site by inference.
-type entryEntryAttachmentsSecI[Attr any, Ent any] interface {
-	BeginAttribute(value string) Attr
+type entrySymbolArraySecI[Attr any, Ent any] interface {
+	BeginAttribute() Attr
 	EndSection() Ent
 }
 
@@ -472,511 +140,182 @@ type entryEntryAttachmentsSecI[Attr any, Ent any] interface {
 // store drive it with a builder whose frame control is unexported
 // (ADR-0100 SD6). Ent is the builder pointer.
 type entryEntityI[
-	EntryOrdinalAttr entryEntryOrdinalAttrI,
-	EntryOrdinalSec entryEntryOrdinalSecI[EntryOrdinalAttr, Ent],
-	EntryAtAttr entryEntryAtAttrI,
-	EntryAtSec entryEntryAtSecI[EntryAtAttr, Ent],
-	EntryKindAttr entryEntryKindAttrI,
-	EntryKindSec entryEntryKindSecI[EntryKindAttr, Ent],
-	EntryKeyAttr entryEntryKeyAttrI,
-	EntryKeySec entryEntryKeySecI[EntryKeyAttr, Ent],
-	EntryRoleAttr entryEntryRoleAttrI,
-	EntryRoleSec entryEntryRoleSecI[EntryRoleAttr, Ent],
-	EntryBodyAttr entryEntryBodyAttrI,
-	EntryBodySec entryEntryBodySecI[EntryBodyAttr, Ent],
-	EntryCallsAttr entryEntryCallsAttrI,
-	EntryCallsSec entryEntryCallsSecI[EntryCallsAttr, Ent],
-	EntryBodyDigestAttr entryEntryBodyDigestAttrI,
-	EntryBodyDigestSec entryEntryBodyDigestSecI[EntryBodyDigestAttr, Ent],
-	EntryCallsDigestAttr entryEntryCallsDigestAttrI,
-	EntryCallsDigestSec entryEntryCallsDigestSecI[EntryCallsDigestAttr, Ent],
-	EntryNameAttr entryEntryNameAttrI,
-	EntryNameSec entryEntryNameSecI[EntryNameAttr, Ent],
-	EntryBookAttr entryEntryBookAttrI,
-	EntryBookSec entryEntryBookSecI[EntryBookAttr, Ent],
-	EntryFormAttr entryEntryFormAttrI,
-	EntryFormSec entryEntryFormSecI[EntryFormAttr, Ent],
-	EntryTargetAttr entryEntryTargetAttrI,
-	EntryTargetSec entryEntryTargetSecI[EntryTargetAttr, Ent],
-	EntryFromAttr entryEntryFromAttrI,
-	EntryFromSec entryEntryFromSecI[EntryFromAttr, Ent],
-	EntryEffectAttr entryEntryEffectAttrI,
-	EntryEffectSec entryEntryEffectSecI[EntryEffectAttr, Ent],
-	EntryTurnAttr entryEntryTurnAttrI,
-	EntryTurnSec entryEntryTurnSecI[EntryTurnAttr, Ent],
-	EntryLabelLevelAttr entryEntryLabelLevelAttrI,
-	EntryLabelLevelSec entryEntryLabelLevelSecI[EntryLabelLevelAttr, Ent],
-	EntryLabelTierAttr entryEntryLabelTierAttrI,
-	EntryLabelTierSec entryEntryLabelTierSecI[EntryLabelTierAttr, Ent],
-	EntryLabelExposureAttr entryEntryLabelExposureAttrI,
-	EntryLabelExposureSec entryEntryLabelExposureSecI[EntryLabelExposureAttr, Ent],
-	EntryLabelOriginAttr entryEntryLabelOriginAttrI,
-	EntryLabelOriginSec entryEntryLabelOriginSecI[EntryLabelOriginAttr, Ent],
-	EntryWriterRunAttr entryEntryWriterRunAttrI,
-	EntryWriterRunSec entryEntryWriterRunSecI[EntryWriterRunAttr, Ent],
-	EntryWriterTurnAttr entryEntryWriterTurnAttrI,
-	EntryWriterTurnSec entryEntryWriterTurnSecI[EntryWriterTurnAttr, Ent],
-	EntryWriterOrdinalAttr entryEntryWriterOrdinalAttrI,
-	EntryWriterOrdinalSec entryEntryWriterOrdinalSecI[EntryWriterOrdinalAttr, Ent],
-	EntryPrevAttr entryEntryPrevAttrI,
-	EntryPrevSec entryEntryPrevSecI[EntryPrevAttr, Ent],
-	EntryDigestAttr entryEntryDigestAttrI,
-	EntryDigestSec entryEntryDigestSecI[EntryDigestAttr, Ent],
-	EntryKeyIdAttr entryEntryKeyIdAttrI,
-	EntryKeyIdSec entryEntryKeyIdSecI[EntryKeyIdAttr, Ent],
-	EntryParentAttr entryEntryParentAttrI,
-	EntryParentSec entryEntryParentSecI[EntryParentAttr, Ent],
-	EntryAttachmentsAttr entryEntryAttachmentsAttrI,
-	EntryAttachmentsSec entryEntryAttachmentsSecI[EntryAttachmentsAttr, Ent],
+	TimeArrayAttr entryTimeArrayAttrI,
+	TimeArraySec entryTimeArraySecI[TimeArrayAttr, Ent],
+	SymbolAttr entrySymbolAttrI,
+	SymbolSec entrySymbolSecI[SymbolAttr, Ent],
+	StringArrayAttr entryStringArrayAttrI,
+	StringArraySec entryStringArraySecI[StringArrayAttr, Ent],
+	U32ArrayAttr entryU32ArrayAttrI,
+	U32ArraySec entryU32ArraySecI[U32ArrayAttr, Ent],
+	U8ArrayAttr entryU8ArrayAttrI,
+	U8ArraySec entryU8ArraySecI[U8ArrayAttr, Ent],
+	SymbolArrayAttr entrySymbolArrayAttrI,
+	SymbolArraySec entrySymbolArraySecI[SymbolArrayAttr, Ent],
 	Ent any,
 ] interface {
-	GetSectionEntryOrdinal() EntryOrdinalSec
-	GetSectionEntryAt() EntryAtSec
-	GetSectionEntryKind() EntryKindSec
-	GetSectionEntryKey() EntryKeySec
-	GetSectionEntryRole() EntryRoleSec
-	GetSectionEntryBody() EntryBodySec
-	GetSectionEntryCalls() EntryCallsSec
-	GetSectionEntryBodyDigest() EntryBodyDigestSec
-	GetSectionEntryCallsDigest() EntryCallsDigestSec
-	GetSectionEntryName() EntryNameSec
-	GetSectionEntryBook() EntryBookSec
-	GetSectionEntryForm() EntryFormSec
-	GetSectionEntryTarget() EntryTargetSec
-	GetSectionEntryFrom() EntryFromSec
-	GetSectionEntryEffect() EntryEffectSec
-	GetSectionEntryTurn() EntryTurnSec
-	GetSectionEntryLabelLevel() EntryLabelLevelSec
-	GetSectionEntryLabelTier() EntryLabelTierSec
-	GetSectionEntryLabelExposure() EntryLabelExposureSec
-	GetSectionEntryLabelOrigin() EntryLabelOriginSec
-	GetSectionEntryWriterRun() EntryWriterRunSec
-	GetSectionEntryWriterTurn() EntryWriterTurnSec
-	GetSectionEntryWriterOrdinal() EntryWriterOrdinalSec
-	GetSectionEntryPrev() EntryPrevSec
-	GetSectionEntryDigest() EntryDigestSec
-	GetSectionEntryKeyId() EntryKeyIdSec
-	GetSectionEntryParent() EntryParentSec
-	GetSectionEntryAttachments() EntryAttachmentsSec
+	GetSectionTimeArray() TimeArraySec
+	GetSectionSymbol() SymbolSec
+	GetSectionStringArray() StringArraySec
+	GetSectionU32Array() U32ArraySec
+	GetSectionU8Array() U8ArraySec
+	GetSectionSymbolArray() SymbolArraySec
 }
 
-// entryEmitSectionEntryOrdinal writes this kind's entryOrdinal attributes into an
+// entryEmitSectionTimeArray writes this kind's timeArray attributes into an
 // ALREADY-OPEN section frame, and does not close it. The caller owns
 // the frame: one kind's AddSections, or a builder deferring the close
 // until every component that shares the section has written.
-func entryEmitSectionEntryOrdinal[
-	EntryOrdinalAttr entryEntryOrdinalAttrI,
-	EntryOrdinalSec entryEntryOrdinalSecI[EntryOrdinalAttr, Ent],
+func entryEmitSectionTimeArray[
+	TimeArrayAttr entryTimeArrayAttrI,
+	TimeArraySec entryTimeArraySecI[TimeArrayAttr, Ent],
 	Ent any,
-](entryOrdinalSec EntryOrdinalSec, row Entry) (err error) {
-	entryOrdinalSecAttr_Ordinal := entryOrdinalSec.BeginAttribute(row.Ordinal)
-	entryOrdinalSecAttr_Ordinal.AddMembershipLowCardRefP(kindAgentrunEntryOrdinal)
-	entryOrdinalSecAttr_Ordinal.EndAttributeP()
+](timeArraySec TimeArraySec, row Entry) (err error) {
+	timeArraySecAttr_At := timeArraySec.BeginAttributeSingle(row.At)
+	timeArraySecAttr_At.AddMembershipLowCardRefP(kindAgentrunEntryAt)
+	timeArraySecAttr_At.EndAttributeP()
 	return
 }
 
-// entryEmitSectionEntryAt writes this kind's entryAt attributes into an
+// entryEmitSectionSymbol writes this kind's symbol attributes into an
 // ALREADY-OPEN section frame, and does not close it. The caller owns
 // the frame: one kind's AddSections, or a builder deferring the close
 // until every component that shares the section has written.
-func entryEmitSectionEntryAt[
-	EntryAtAttr entryEntryAtAttrI,
-	EntryAtSec entryEntryAtSecI[EntryAtAttr, Ent],
+func entryEmitSectionSymbol[
+	SymbolAttr entrySymbolAttrI,
+	SymbolSec entrySymbolSecI[SymbolAttr, Ent],
 	Ent any,
-](entryAtSec EntryAtSec, row Entry) (err error) {
-	entryAtSecAttr_At := entryAtSec.BeginAttribute(row.At)
-	entryAtSecAttr_At.AddMembershipLowCardRefP(kindAgentrunEntryAt)
-	entryAtSecAttr_At.EndAttributeP()
+](symbolSec SymbolSec, row Entry) (err error) {
+	symbolSecAttr_Kind := symbolSec.BeginAttribute(row.Kind)
+	symbolSecAttr_Kind.AddMembershipLowCardRefP(kindAgentrunEntryKind)
+	symbolSecAttr_Kind.EndAttributeP()
+	symbolSecAttr_Role := symbolSec.BeginAttribute(row.Role)
+	symbolSecAttr_Role.AddMembershipLowCardRefP(kindAgentrunEntryRole)
+	symbolSecAttr_Role.EndAttributeP()
+	symbolSecAttr_Book := symbolSec.BeginAttribute(row.Book)
+	symbolSecAttr_Book.AddMembershipLowCardRefP(kindAgentrunEntryBook)
+	symbolSecAttr_Book.EndAttributeP()
+	symbolSecAttr_Form := symbolSec.BeginAttribute(row.Form)
+	symbolSecAttr_Form.AddMembershipLowCardRefP(kindAgentrunEntryForm)
+	symbolSecAttr_Form.EndAttributeP()
+	symbolSecAttr_Effect := symbolSec.BeginAttribute(row.Effect)
+	symbolSecAttr_Effect.AddMembershipLowCardRefP(kindAgentrunEntryEffect)
+	symbolSecAttr_Effect.EndAttributeP()
+	symbolSecAttr_Turn := symbolSec.BeginAttribute(row.Turn)
+	symbolSecAttr_Turn.AddMembershipLowCardRefP(kindAgentrunEntryTurn)
+	symbolSecAttr_Turn.EndAttributeP()
+	symbolSecAttr_WriterRun := symbolSec.BeginAttribute(row.WriterRun)
+	symbolSecAttr_WriterRun.AddMembershipLowCardRefP(kindAgentrunEntryWriterRun)
+	symbolSecAttr_WriterRun.EndAttributeP()
+	symbolSecAttr_WriterTurn := symbolSec.BeginAttribute(row.WriterTurn)
+	symbolSecAttr_WriterTurn.AddMembershipLowCardRefP(kindAgentrunEntryWriterTurn)
+	symbolSecAttr_WriterTurn.EndAttributeP()
+	symbolSecAttr_KeyId := symbolSec.BeginAttribute(row.KeyId)
+	symbolSecAttr_KeyId.AddMembershipLowCardRefP(kindAgentrunEntryKeyId)
+	symbolSecAttr_KeyId.EndAttributeP()
 	return
 }
 
-// entryEmitSectionEntryKind writes this kind's entryKind attributes into an
+// entryEmitSectionStringArray writes this kind's stringArray attributes into an
 // ALREADY-OPEN section frame, and does not close it. The caller owns
 // the frame: one kind's AddSections, or a builder deferring the close
 // until every component that shares the section has written.
-func entryEmitSectionEntryKind[
-	EntryKindAttr entryEntryKindAttrI,
-	EntryKindSec entryEntryKindSecI[EntryKindAttr, Ent],
+func entryEmitSectionStringArray[
+	StringArrayAttr entryStringArrayAttrI,
+	StringArraySec entryStringArraySecI[StringArrayAttr, Ent],
 	Ent any,
-](entryKindSec EntryKindSec, row Entry) (err error) {
-	entryKindSecAttr_Kind := entryKindSec.BeginAttribute(row.Kind)
-	entryKindSecAttr_Kind.AddMembershipLowCardRefP(kindAgentrunEntryKind)
-	entryKindSecAttr_Kind.EndAttributeP()
+](stringArraySec StringArraySec, row Entry) (err error) {
+	stringArraySecAttr_Key := stringArraySec.BeginAttributeSingle(row.Key)
+	stringArraySecAttr_Key.AddMembershipLowCardRefP(kindAgentrunEntryKey)
+	stringArraySecAttr_Key.EndAttributeP()
+	stringArraySecAttr_BodyDigest := stringArraySec.BeginAttributeSingle(row.BodyDigest)
+	stringArraySecAttr_BodyDigest.AddMembershipLowCardRefP(kindAgentrunEntryBodyDigest)
+	stringArraySecAttr_BodyDigest.EndAttributeP()
+	stringArraySecAttr_CallsDigest := stringArraySec.BeginAttributeSingle(row.CallsDigest)
+	stringArraySecAttr_CallsDigest.AddMembershipLowCardRefP(kindAgentrunEntryCallsDigest)
+	stringArraySecAttr_CallsDigest.EndAttributeP()
+	stringArraySecAttr_Name := stringArraySec.BeginAttributeSingle(row.Name)
+	stringArraySecAttr_Name.AddMembershipLowCardRefP(kindAgentrunEntryName)
+	stringArraySecAttr_Name.EndAttributeP()
+	stringArraySecAttr_Digest := stringArraySec.BeginAttributeSingle(row.Digest)
+	stringArraySecAttr_Digest.AddMembershipLowCardRefP(kindAgentrunEntryDigest)
+	stringArraySecAttr_Digest.EndAttributeP()
+	stringArraySecAttr_Attachments := stringArraySec.BeginAttributeSingle(row.Attachments)
+	stringArraySecAttr_Attachments.AddMembershipLowCardRefP(kindAgentrunEntryAttachments)
+	stringArraySecAttr_Attachments.EndAttributeP()
 	return
 }
 
-// entryEmitSectionEntryKey writes this kind's entryKey attributes into an
+// entryEmitSectionU32Array writes this kind's u32Array attributes into an
 // ALREADY-OPEN section frame, and does not close it. The caller owns
 // the frame: one kind's AddSections, or a builder deferring the close
 // until every component that shares the section has written.
-func entryEmitSectionEntryKey[
-	EntryKeyAttr entryEntryKeyAttrI,
-	EntryKeySec entryEntryKeySecI[EntryKeyAttr, Ent],
+func entryEmitSectionU32Array[
+	U32ArrayAttr entryU32ArrayAttrI,
+	U32ArraySec entryU32ArraySecI[U32ArrayAttr, Ent],
 	Ent any,
-](entryKeySec EntryKeySec, row Entry) (err error) {
-	entryKeySecAttr_Key := entryKeySec.BeginAttribute(row.Key)
-	entryKeySecAttr_Key.AddMembershipLowCardRefP(kindAgentrunEntryKey)
-	entryKeySecAttr_Key.EndAttributeP()
+](u32ArraySec U32ArraySec, row Entry) (err error) {
+	u32ArraySecAttr_Target := u32ArraySec.BeginAttributeSingle(row.Target)
+	u32ArraySecAttr_Target.AddMembershipLowCardRefP(kindAgentrunEntryTarget)
+	u32ArraySecAttr_Target.EndAttributeP()
+	u32ArraySecAttr_From := u32ArraySec.BeginAttributeSingle(row.From)
+	u32ArraySecAttr_From.AddMembershipLowCardRefP(kindAgentrunEntryFrom)
+	u32ArraySecAttr_From.EndAttributeP()
+	u32ArraySecAttr_WriterOrdinal := u32ArraySec.BeginAttributeSingle(row.WriterOrdinal)
+	u32ArraySecAttr_WriterOrdinal.AddMembershipLowCardRefP(kindAgentrunEntryWriterOrdinal)
+	u32ArraySecAttr_WriterOrdinal.EndAttributeP()
+	u32ArraySecAttr_Prev := u32ArraySec.BeginAttributeSingle(row.Prev)
+	u32ArraySecAttr_Prev.AddMembershipLowCardRefP(kindAgentrunEntryPrev)
+	u32ArraySecAttr_Prev.EndAttributeP()
+	u32ArraySecAttr_Parent := u32ArraySec.BeginAttributeSingle(row.Parent)
+	u32ArraySecAttr_Parent.AddMembershipLowCardRefP(kindAgentrunEntryParent)
+	u32ArraySecAttr_Parent.EndAttributeP()
 	return
 }
 
-// entryEmitSectionEntryRole writes this kind's entryRole attributes into an
+// entryEmitSectionU8Array writes this kind's u8Array attributes into an
 // ALREADY-OPEN section frame, and does not close it. The caller owns
 // the frame: one kind's AddSections, or a builder deferring the close
 // until every component that shares the section has written.
-func entryEmitSectionEntryRole[
-	EntryRoleAttr entryEntryRoleAttrI,
-	EntryRoleSec entryEntryRoleSecI[EntryRoleAttr, Ent],
+func entryEmitSectionU8Array[
+	U8ArrayAttr entryU8ArrayAttrI,
+	U8ArraySec entryU8ArraySecI[U8ArrayAttr, Ent],
 	Ent any,
-](entryRoleSec EntryRoleSec, row Entry) (err error) {
-	entryRoleSecAttr_Role := entryRoleSec.BeginAttribute(row.Role)
-	entryRoleSecAttr_Role.AddMembershipLowCardRefP(kindAgentrunEntryRole)
-	entryRoleSecAttr_Role.EndAttributeP()
+](u8ArraySec U8ArraySec, row Entry) (err error) {
+	u8ArraySecAttr_LabelLevel := u8ArraySec.BeginAttributeSingle(row.LabelLevel)
+	u8ArraySecAttr_LabelLevel.AddMembershipLowCardRefP(kindAgentrunEntryLabelLevel)
+	u8ArraySecAttr_LabelLevel.EndAttributeP()
+	u8ArraySecAttr_LabelTier := u8ArraySec.BeginAttributeSingle(row.LabelTier)
+	u8ArraySecAttr_LabelTier.AddMembershipLowCardRefP(kindAgentrunEntryLabelTier)
+	u8ArraySecAttr_LabelTier.EndAttributeP()
 	return
 }
 
-// entryEmitSectionEntryBody writes this kind's entryBody attributes into an
+// entryEmitSectionSymbolArray writes this kind's symbolArray attributes into an
 // ALREADY-OPEN section frame, and does not close it. The caller owns
 // the frame: one kind's AddSections, or a builder deferring the close
 // until every component that shares the section has written.
-func entryEmitSectionEntryBody[
-	EntryBodyAttr entryEntryBodyAttrI,
-	EntryBodySec entryEntryBodySecI[EntryBodyAttr, Ent],
+func entryEmitSectionSymbolArray[
+	SymbolArrayAttr entrySymbolArrayAttrI,
+	SymbolArraySec entrySymbolArraySecI[SymbolArrayAttr, Ent],
 	Ent any,
-](entryBodySec EntryBodySec, row Entry) (err error) {
-	entryBodySecAttr_Body := entryBodySec.BeginAttribute(row.Body)
-	entryBodySecAttr_Body.AddMembershipLowCardRefP(kindAgentrunEntryBody)
-	entryBodySecAttr_Body.EndAttributeP()
-	return
-}
-
-// entryEmitSectionEntryCalls writes this kind's entryCalls attributes into an
-// ALREADY-OPEN section frame, and does not close it. The caller owns
-// the frame: one kind's AddSections, or a builder deferring the close
-// until every component that shares the section has written.
-func entryEmitSectionEntryCalls[
-	EntryCallsAttr entryEntryCallsAttrI,
-	EntryCallsSec entryEntryCallsSecI[EntryCallsAttr, Ent],
-	Ent any,
-](entryCallsSec EntryCallsSec, row Entry) (err error) {
-	entryCallsSecAttr_Calls := entryCallsSec.BeginAttribute(row.Calls)
-	entryCallsSecAttr_Calls.AddMembershipLowCardRefP(kindAgentrunEntryCalls)
-	entryCallsSecAttr_Calls.EndAttributeP()
-	return
-}
-
-// entryEmitSectionEntryBodyDigest writes this kind's entryBodyDigest attributes into an
-// ALREADY-OPEN section frame, and does not close it. The caller owns
-// the frame: one kind's AddSections, or a builder deferring the close
-// until every component that shares the section has written.
-func entryEmitSectionEntryBodyDigest[
-	EntryBodyDigestAttr entryEntryBodyDigestAttrI,
-	EntryBodyDigestSec entryEntryBodyDigestSecI[EntryBodyDigestAttr, Ent],
-	Ent any,
-](entryBodyDigestSec EntryBodyDigestSec, row Entry) (err error) {
-	entryBodyDigestSecAttr_BodyDigest := entryBodyDigestSec.BeginAttribute(row.BodyDigest)
-	entryBodyDigestSecAttr_BodyDigest.AddMembershipLowCardRefP(kindAgentrunEntryBodyDigest)
-	entryBodyDigestSecAttr_BodyDigest.EndAttributeP()
-	return
-}
-
-// entryEmitSectionEntryCallsDigest writes this kind's entryCallsDigest attributes into an
-// ALREADY-OPEN section frame, and does not close it. The caller owns
-// the frame: one kind's AddSections, or a builder deferring the close
-// until every component that shares the section has written.
-func entryEmitSectionEntryCallsDigest[
-	EntryCallsDigestAttr entryEntryCallsDigestAttrI,
-	EntryCallsDigestSec entryEntryCallsDigestSecI[EntryCallsDigestAttr, Ent],
-	Ent any,
-](entryCallsDigestSec EntryCallsDigestSec, row Entry) (err error) {
-	entryCallsDigestSecAttr_CallsDigest := entryCallsDigestSec.BeginAttribute(row.CallsDigest)
-	entryCallsDigestSecAttr_CallsDigest.AddMembershipLowCardRefP(kindAgentrunEntryCallsDigest)
-	entryCallsDigestSecAttr_CallsDigest.EndAttributeP()
-	return
-}
-
-// entryEmitSectionEntryName writes this kind's entryName attributes into an
-// ALREADY-OPEN section frame, and does not close it. The caller owns
-// the frame: one kind's AddSections, or a builder deferring the close
-// until every component that shares the section has written.
-func entryEmitSectionEntryName[
-	EntryNameAttr entryEntryNameAttrI,
-	EntryNameSec entryEntryNameSecI[EntryNameAttr, Ent],
-	Ent any,
-](entryNameSec EntryNameSec, row Entry) (err error) {
-	entryNameSecAttr_Name := entryNameSec.BeginAttribute(row.Name)
-	entryNameSecAttr_Name.AddMembershipLowCardRefP(kindAgentrunEntryName)
-	entryNameSecAttr_Name.EndAttributeP()
-	return
-}
-
-// entryEmitSectionEntryBook writes this kind's entryBook attributes into an
-// ALREADY-OPEN section frame, and does not close it. The caller owns
-// the frame: one kind's AddSections, or a builder deferring the close
-// until every component that shares the section has written.
-func entryEmitSectionEntryBook[
-	EntryBookAttr entryEntryBookAttrI,
-	EntryBookSec entryEntryBookSecI[EntryBookAttr, Ent],
-	Ent any,
-](entryBookSec EntryBookSec, row Entry) (err error) {
-	entryBookSecAttr_Book := entryBookSec.BeginAttribute(row.Book)
-	entryBookSecAttr_Book.AddMembershipLowCardRefP(kindAgentrunEntryBook)
-	entryBookSecAttr_Book.EndAttributeP()
-	return
-}
-
-// entryEmitSectionEntryForm writes this kind's entryForm attributes into an
-// ALREADY-OPEN section frame, and does not close it. The caller owns
-// the frame: one kind's AddSections, or a builder deferring the close
-// until every component that shares the section has written.
-func entryEmitSectionEntryForm[
-	EntryFormAttr entryEntryFormAttrI,
-	EntryFormSec entryEntryFormSecI[EntryFormAttr, Ent],
-	Ent any,
-](entryFormSec EntryFormSec, row Entry) (err error) {
-	entryFormSecAttr_Form := entryFormSec.BeginAttribute(row.Form)
-	entryFormSecAttr_Form.AddMembershipLowCardRefP(kindAgentrunEntryForm)
-	entryFormSecAttr_Form.EndAttributeP()
-	return
-}
-
-// entryEmitSectionEntryTarget writes this kind's entryTarget attributes into an
-// ALREADY-OPEN section frame, and does not close it. The caller owns
-// the frame: one kind's AddSections, or a builder deferring the close
-// until every component that shares the section has written.
-func entryEmitSectionEntryTarget[
-	EntryTargetAttr entryEntryTargetAttrI,
-	EntryTargetSec entryEntryTargetSecI[EntryTargetAttr, Ent],
-	Ent any,
-](entryTargetSec EntryTargetSec, row Entry) (err error) {
-	entryTargetSecAttr_Target := entryTargetSec.BeginAttribute(row.Target)
-	entryTargetSecAttr_Target.AddMembershipLowCardRefP(kindAgentrunEntryTarget)
-	entryTargetSecAttr_Target.EndAttributeP()
-	return
-}
-
-// entryEmitSectionEntryFrom writes this kind's entryFrom attributes into an
-// ALREADY-OPEN section frame, and does not close it. The caller owns
-// the frame: one kind's AddSections, or a builder deferring the close
-// until every component that shares the section has written.
-func entryEmitSectionEntryFrom[
-	EntryFromAttr entryEntryFromAttrI,
-	EntryFromSec entryEntryFromSecI[EntryFromAttr, Ent],
-	Ent any,
-](entryFromSec EntryFromSec, row Entry) (err error) {
-	entryFromSecAttr_From := entryFromSec.BeginAttribute(row.From)
-	entryFromSecAttr_From.AddMembershipLowCardRefP(kindAgentrunEntryFrom)
-	entryFromSecAttr_From.EndAttributeP()
-	return
-}
-
-// entryEmitSectionEntryEffect writes this kind's entryEffect attributes into an
-// ALREADY-OPEN section frame, and does not close it. The caller owns
-// the frame: one kind's AddSections, or a builder deferring the close
-// until every component that shares the section has written.
-func entryEmitSectionEntryEffect[
-	EntryEffectAttr entryEntryEffectAttrI,
-	EntryEffectSec entryEntryEffectSecI[EntryEffectAttr, Ent],
-	Ent any,
-](entryEffectSec EntryEffectSec, row Entry) (err error) {
-	entryEffectSecAttr_Effect := entryEffectSec.BeginAttribute(row.Effect)
-	entryEffectSecAttr_Effect.AddMembershipLowCardRefP(kindAgentrunEntryEffect)
-	entryEffectSecAttr_Effect.EndAttributeP()
-	return
-}
-
-// entryEmitSectionEntryTurn writes this kind's entryTurn attributes into an
-// ALREADY-OPEN section frame, and does not close it. The caller owns
-// the frame: one kind's AddSections, or a builder deferring the close
-// until every component that shares the section has written.
-func entryEmitSectionEntryTurn[
-	EntryTurnAttr entryEntryTurnAttrI,
-	EntryTurnSec entryEntryTurnSecI[EntryTurnAttr, Ent],
-	Ent any,
-](entryTurnSec EntryTurnSec, row Entry) (err error) {
-	entryTurnSecAttr_Turn := entryTurnSec.BeginAttribute(row.Turn)
-	entryTurnSecAttr_Turn.AddMembershipLowCardRefP(kindAgentrunEntryTurn)
-	entryTurnSecAttr_Turn.EndAttributeP()
-	return
-}
-
-// entryEmitSectionEntryLabelLevel writes this kind's entryLabelLevel attributes into an
-// ALREADY-OPEN section frame, and does not close it. The caller owns
-// the frame: one kind's AddSections, or a builder deferring the close
-// until every component that shares the section has written.
-func entryEmitSectionEntryLabelLevel[
-	EntryLabelLevelAttr entryEntryLabelLevelAttrI,
-	EntryLabelLevelSec entryEntryLabelLevelSecI[EntryLabelLevelAttr, Ent],
-	Ent any,
-](entryLabelLevelSec EntryLabelLevelSec, row Entry) (err error) {
-	entryLabelLevelSecAttr_LabelLevel := entryLabelLevelSec.BeginAttribute(row.LabelLevel)
-	entryLabelLevelSecAttr_LabelLevel.AddMembershipLowCardRefP(kindAgentrunEntryLabelLevel)
-	entryLabelLevelSecAttr_LabelLevel.EndAttributeP()
-	return
-}
-
-// entryEmitSectionEntryLabelTier writes this kind's entryLabelTier attributes into an
-// ALREADY-OPEN section frame, and does not close it. The caller owns
-// the frame: one kind's AddSections, or a builder deferring the close
-// until every component that shares the section has written.
-func entryEmitSectionEntryLabelTier[
-	EntryLabelTierAttr entryEntryLabelTierAttrI,
-	EntryLabelTierSec entryEntryLabelTierSecI[EntryLabelTierAttr, Ent],
-	Ent any,
-](entryLabelTierSec EntryLabelTierSec, row Entry) (err error) {
-	entryLabelTierSecAttr_LabelTier := entryLabelTierSec.BeginAttribute(row.LabelTier)
-	entryLabelTierSecAttr_LabelTier.AddMembershipLowCardRefP(kindAgentrunEntryLabelTier)
-	entryLabelTierSecAttr_LabelTier.EndAttributeP()
-	return
-}
-
-// entryEmitSectionEntryLabelExposure writes this kind's entryLabelExposure attributes into an
-// ALREADY-OPEN section frame, and does not close it. The caller owns
-// the frame: one kind's AddSections, or a builder deferring the close
-// until every component that shares the section has written.
-func entryEmitSectionEntryLabelExposure[
-	EntryLabelExposureAttr entryEntryLabelExposureAttrI,
-	EntryLabelExposureSec entryEntryLabelExposureSecI[EntryLabelExposureAttr, Ent],
-	Ent any,
-](entryLabelExposureSec EntryLabelExposureSec, row Entry) (err error) {
-	entryLabelExposureSecAttr_LabelExposure := entryLabelExposureSec.BeginAttribute(row.LabelExposure)
-	entryLabelExposureSecAttr_LabelExposure.AddMembershipLowCardRefP(kindAgentrunEntryLabelExposure)
-	entryLabelExposureSecAttr_LabelExposure.EndAttributeP()
-	return
-}
-
-// entryEmitSectionEntryLabelOrigin writes this kind's entryLabelOrigin attributes into an
-// ALREADY-OPEN section frame, and does not close it. The caller owns
-// the frame: one kind's AddSections, or a builder deferring the close
-// until every component that shares the section has written.
-func entryEmitSectionEntryLabelOrigin[
-	EntryLabelOriginAttr entryEntryLabelOriginAttrI,
-	EntryLabelOriginSec entryEntryLabelOriginSecI[EntryLabelOriginAttr, Ent],
-	Ent any,
-](entryLabelOriginSec EntryLabelOriginSec, row Entry) (err error) {
-	entryLabelOriginSecAttr_LabelOrigin := entryLabelOriginSec.BeginAttribute(row.LabelOrigin)
-	entryLabelOriginSecAttr_LabelOrigin.AddMembershipLowCardRefP(kindAgentrunEntryLabelOrigin)
-	entryLabelOriginSecAttr_LabelOrigin.EndAttributeP()
-	return
-}
-
-// entryEmitSectionEntryWriterRun writes this kind's entryWriterRun attributes into an
-// ALREADY-OPEN section frame, and does not close it. The caller owns
-// the frame: one kind's AddSections, or a builder deferring the close
-// until every component that shares the section has written.
-func entryEmitSectionEntryWriterRun[
-	EntryWriterRunAttr entryEntryWriterRunAttrI,
-	EntryWriterRunSec entryEntryWriterRunSecI[EntryWriterRunAttr, Ent],
-	Ent any,
-](entryWriterRunSec EntryWriterRunSec, row Entry) (err error) {
-	entryWriterRunSecAttr_WriterRun := entryWriterRunSec.BeginAttribute(row.WriterRun)
-	entryWriterRunSecAttr_WriterRun.AddMembershipLowCardRefP(kindAgentrunEntryWriterRun)
-	entryWriterRunSecAttr_WriterRun.EndAttributeP()
-	return
-}
-
-// entryEmitSectionEntryWriterTurn writes this kind's entryWriterTurn attributes into an
-// ALREADY-OPEN section frame, and does not close it. The caller owns
-// the frame: one kind's AddSections, or a builder deferring the close
-// until every component that shares the section has written.
-func entryEmitSectionEntryWriterTurn[
-	EntryWriterTurnAttr entryEntryWriterTurnAttrI,
-	EntryWriterTurnSec entryEntryWriterTurnSecI[EntryWriterTurnAttr, Ent],
-	Ent any,
-](entryWriterTurnSec EntryWriterTurnSec, row Entry) (err error) {
-	entryWriterTurnSecAttr_WriterTurn := entryWriterTurnSec.BeginAttribute(row.WriterTurn)
-	entryWriterTurnSecAttr_WriterTurn.AddMembershipLowCardRefP(kindAgentrunEntryWriterTurn)
-	entryWriterTurnSecAttr_WriterTurn.EndAttributeP()
-	return
-}
-
-// entryEmitSectionEntryWriterOrdinal writes this kind's entryWriterOrdinal attributes into an
-// ALREADY-OPEN section frame, and does not close it. The caller owns
-// the frame: one kind's AddSections, or a builder deferring the close
-// until every component that shares the section has written.
-func entryEmitSectionEntryWriterOrdinal[
-	EntryWriterOrdinalAttr entryEntryWriterOrdinalAttrI,
-	EntryWriterOrdinalSec entryEntryWriterOrdinalSecI[EntryWriterOrdinalAttr, Ent],
-	Ent any,
-](entryWriterOrdinalSec EntryWriterOrdinalSec, row Entry) (err error) {
-	entryWriterOrdinalSecAttr_WriterOrdinal := entryWriterOrdinalSec.BeginAttribute(row.WriterOrdinal)
-	entryWriterOrdinalSecAttr_WriterOrdinal.AddMembershipLowCardRefP(kindAgentrunEntryWriterOrdinal)
-	entryWriterOrdinalSecAttr_WriterOrdinal.EndAttributeP()
-	return
-}
-
-// entryEmitSectionEntryPrev writes this kind's entryPrev attributes into an
-// ALREADY-OPEN section frame, and does not close it. The caller owns
-// the frame: one kind's AddSections, or a builder deferring the close
-// until every component that shares the section has written.
-func entryEmitSectionEntryPrev[
-	EntryPrevAttr entryEntryPrevAttrI,
-	EntryPrevSec entryEntryPrevSecI[EntryPrevAttr, Ent],
-	Ent any,
-](entryPrevSec EntryPrevSec, row Entry) (err error) {
-	entryPrevSecAttr_Prev := entryPrevSec.BeginAttribute(row.Prev)
-	entryPrevSecAttr_Prev.AddMembershipLowCardRefP(kindAgentrunEntryPrev)
-	entryPrevSecAttr_Prev.EndAttributeP()
-	return
-}
-
-// entryEmitSectionEntryDigest writes this kind's entryDigest attributes into an
-// ALREADY-OPEN section frame, and does not close it. The caller owns
-// the frame: one kind's AddSections, or a builder deferring the close
-// until every component that shares the section has written.
-func entryEmitSectionEntryDigest[
-	EntryDigestAttr entryEntryDigestAttrI,
-	EntryDigestSec entryEntryDigestSecI[EntryDigestAttr, Ent],
-	Ent any,
-](entryDigestSec EntryDigestSec, row Entry) (err error) {
-	entryDigestSecAttr_Digest := entryDigestSec.BeginAttribute(row.Digest)
-	entryDigestSecAttr_Digest.AddMembershipLowCardRefP(kindAgentrunEntryDigest)
-	entryDigestSecAttr_Digest.EndAttributeP()
-	return
-}
-
-// entryEmitSectionEntryKeyId writes this kind's entryKeyId attributes into an
-// ALREADY-OPEN section frame, and does not close it. The caller owns
-// the frame: one kind's AddSections, or a builder deferring the close
-// until every component that shares the section has written.
-func entryEmitSectionEntryKeyId[
-	EntryKeyIdAttr entryEntryKeyIdAttrI,
-	EntryKeyIdSec entryEntryKeyIdSecI[EntryKeyIdAttr, Ent],
-	Ent any,
-](entryKeyIdSec EntryKeyIdSec, row Entry) (err error) {
-	entryKeyIdSecAttr_KeyId := entryKeyIdSec.BeginAttribute(row.KeyId)
-	entryKeyIdSecAttr_KeyId.AddMembershipLowCardRefP(kindAgentrunEntryKeyId)
-	entryKeyIdSecAttr_KeyId.EndAttributeP()
-	return
-}
-
-// entryEmitSectionEntryParent writes this kind's entryParent attributes into an
-// ALREADY-OPEN section frame, and does not close it. The caller owns
-// the frame: one kind's AddSections, or a builder deferring the close
-// until every component that shares the section has written.
-func entryEmitSectionEntryParent[
-	EntryParentAttr entryEntryParentAttrI,
-	EntryParentSec entryEntryParentSecI[EntryParentAttr, Ent],
-	Ent any,
-](entryParentSec EntryParentSec, row Entry) (err error) {
-	entryParentSecAttr_Parent := entryParentSec.BeginAttribute(row.Parent)
-	entryParentSecAttr_Parent.AddMembershipLowCardRefP(kindAgentrunEntryParent)
-	entryParentSecAttr_Parent.EndAttributeP()
-	return
-}
-
-// entryEmitSectionEntryAttachments writes this kind's entryAttachments attributes into an
-// ALREADY-OPEN section frame, and does not close it. The caller owns
-// the frame: one kind's AddSections, or a builder deferring the close
-// until every component that shares the section has written.
-func entryEmitSectionEntryAttachments[
-	EntryAttachmentsAttr entryEntryAttachmentsAttrI,
-	EntryAttachmentsSec entryEntryAttachmentsSecI[EntryAttachmentsAttr, Ent],
-	Ent any,
-](entryAttachmentsSec EntryAttachmentsSec, row Entry) (err error) {
-	entryAttachmentsSecAttr_Attachments := entryAttachmentsSec.BeginAttribute(row.Attachments)
-	entryAttachmentsSecAttr_Attachments.AddMembershipLowCardRefP(kindAgentrunEntryAttachments)
-	entryAttachmentsSecAttr_Attachments.EndAttributeP()
+](symbolArraySec SymbolArraySec, row Entry) (err error) {
+	if len(row.LabelExposure) > 0 {
+		symbolArraySecAttr_LabelExposure := symbolArraySec.BeginAttribute()
+		for _, v := range row.LabelExposure {
+			symbolArraySecAttr_LabelExposure.AddToContainerP(v)
+		}
+		symbolArraySecAttr_LabelExposure.AddMembershipLowCardRefP(kindAgentrunEntryLabelExposure)
+		symbolArraySecAttr_LabelExposure.EndAttributeP()
+	}
+	if len(row.LabelOrigin) > 0 {
+		symbolArraySecAttr_LabelOrigin := symbolArraySec.BeginAttribute()
+		for _, v := range row.LabelOrigin {
+			symbolArraySecAttr_LabelOrigin.AddToContainerP(v)
+		}
+		symbolArraySecAttr_LabelOrigin.AddMembershipLowCardRefP(kindAgentrunEntryLabelOrigin)
+		symbolArraySecAttr_LabelOrigin.EndAttributeP()
+	}
 	return
 }
 
@@ -984,599 +323,137 @@ func entryEmitSectionEntryAttachments[
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
 func entryAddSections[
-	EntryOrdinalAttr entryEntryOrdinalAttrI,
-	EntryOrdinalSec entryEntryOrdinalSecI[EntryOrdinalAttr, Ent],
-	EntryAtAttr entryEntryAtAttrI,
-	EntryAtSec entryEntryAtSecI[EntryAtAttr, Ent],
-	EntryKindAttr entryEntryKindAttrI,
-	EntryKindSec entryEntryKindSecI[EntryKindAttr, Ent],
-	EntryKeyAttr entryEntryKeyAttrI,
-	EntryKeySec entryEntryKeySecI[EntryKeyAttr, Ent],
-	EntryRoleAttr entryEntryRoleAttrI,
-	EntryRoleSec entryEntryRoleSecI[EntryRoleAttr, Ent],
-	EntryBodyAttr entryEntryBodyAttrI,
-	EntryBodySec entryEntryBodySecI[EntryBodyAttr, Ent],
-	EntryCallsAttr entryEntryCallsAttrI,
-	EntryCallsSec entryEntryCallsSecI[EntryCallsAttr, Ent],
-	EntryBodyDigestAttr entryEntryBodyDigestAttrI,
-	EntryBodyDigestSec entryEntryBodyDigestSecI[EntryBodyDigestAttr, Ent],
-	EntryCallsDigestAttr entryEntryCallsDigestAttrI,
-	EntryCallsDigestSec entryEntryCallsDigestSecI[EntryCallsDigestAttr, Ent],
-	EntryNameAttr entryEntryNameAttrI,
-	EntryNameSec entryEntryNameSecI[EntryNameAttr, Ent],
-	EntryBookAttr entryEntryBookAttrI,
-	EntryBookSec entryEntryBookSecI[EntryBookAttr, Ent],
-	EntryFormAttr entryEntryFormAttrI,
-	EntryFormSec entryEntryFormSecI[EntryFormAttr, Ent],
-	EntryTargetAttr entryEntryTargetAttrI,
-	EntryTargetSec entryEntryTargetSecI[EntryTargetAttr, Ent],
-	EntryFromAttr entryEntryFromAttrI,
-	EntryFromSec entryEntryFromSecI[EntryFromAttr, Ent],
-	EntryEffectAttr entryEntryEffectAttrI,
-	EntryEffectSec entryEntryEffectSecI[EntryEffectAttr, Ent],
-	EntryTurnAttr entryEntryTurnAttrI,
-	EntryTurnSec entryEntryTurnSecI[EntryTurnAttr, Ent],
-	EntryLabelLevelAttr entryEntryLabelLevelAttrI,
-	EntryLabelLevelSec entryEntryLabelLevelSecI[EntryLabelLevelAttr, Ent],
-	EntryLabelTierAttr entryEntryLabelTierAttrI,
-	EntryLabelTierSec entryEntryLabelTierSecI[EntryLabelTierAttr, Ent],
-	EntryLabelExposureAttr entryEntryLabelExposureAttrI,
-	EntryLabelExposureSec entryEntryLabelExposureSecI[EntryLabelExposureAttr, Ent],
-	EntryLabelOriginAttr entryEntryLabelOriginAttrI,
-	EntryLabelOriginSec entryEntryLabelOriginSecI[EntryLabelOriginAttr, Ent],
-	EntryWriterRunAttr entryEntryWriterRunAttrI,
-	EntryWriterRunSec entryEntryWriterRunSecI[EntryWriterRunAttr, Ent],
-	EntryWriterTurnAttr entryEntryWriterTurnAttrI,
-	EntryWriterTurnSec entryEntryWriterTurnSecI[EntryWriterTurnAttr, Ent],
-	EntryWriterOrdinalAttr entryEntryWriterOrdinalAttrI,
-	EntryWriterOrdinalSec entryEntryWriterOrdinalSecI[EntryWriterOrdinalAttr, Ent],
-	EntryPrevAttr entryEntryPrevAttrI,
-	EntryPrevSec entryEntryPrevSecI[EntryPrevAttr, Ent],
-	EntryDigestAttr entryEntryDigestAttrI,
-	EntryDigestSec entryEntryDigestSecI[EntryDigestAttr, Ent],
-	EntryKeyIdAttr entryEntryKeyIdAttrI,
-	EntryKeyIdSec entryEntryKeyIdSecI[EntryKeyIdAttr, Ent],
-	EntryParentAttr entryEntryParentAttrI,
-	EntryParentSec entryEntryParentSecI[EntryParentAttr, Ent],
-	EntryAttachmentsAttr entryEntryAttachmentsAttrI,
-	EntryAttachmentsSec entryEntryAttachmentsSecI[EntryAttachmentsAttr, Ent],
+	TimeArrayAttr entryTimeArrayAttrI,
+	TimeArraySec entryTimeArraySecI[TimeArrayAttr, Ent],
+	SymbolAttr entrySymbolAttrI,
+	SymbolSec entrySymbolSecI[SymbolAttr, Ent],
+	StringArrayAttr entryStringArrayAttrI,
+	StringArraySec entryStringArraySecI[StringArrayAttr, Ent],
+	U32ArrayAttr entryU32ArrayAttrI,
+	U32ArraySec entryU32ArraySecI[U32ArrayAttr, Ent],
+	U8ArrayAttr entryU8ArrayAttrI,
+	U8ArraySec entryU8ArraySecI[U8ArrayAttr, Ent],
+	SymbolArrayAttr entrySymbolArrayAttrI,
+	SymbolArraySec entrySymbolArraySecI[SymbolArrayAttr, Ent],
 	Ent any,
 	DML entryEntityI[
-		EntryOrdinalAttr, EntryOrdinalSec,
-		EntryAtAttr, EntryAtSec,
-		EntryKindAttr, EntryKindSec,
-		EntryKeyAttr, EntryKeySec,
-		EntryRoleAttr, EntryRoleSec,
-		EntryBodyAttr, EntryBodySec,
-		EntryCallsAttr, EntryCallsSec,
-		EntryBodyDigestAttr, EntryBodyDigestSec,
-		EntryCallsDigestAttr, EntryCallsDigestSec,
-		EntryNameAttr, EntryNameSec,
-		EntryBookAttr, EntryBookSec,
-		EntryFormAttr, EntryFormSec,
-		EntryTargetAttr, EntryTargetSec,
-		EntryFromAttr, EntryFromSec,
-		EntryEffectAttr, EntryEffectSec,
-		EntryTurnAttr, EntryTurnSec,
-		EntryLabelLevelAttr, EntryLabelLevelSec,
-		EntryLabelTierAttr, EntryLabelTierSec,
-		EntryLabelExposureAttr, EntryLabelExposureSec,
-		EntryLabelOriginAttr, EntryLabelOriginSec,
-		EntryWriterRunAttr, EntryWriterRunSec,
-		EntryWriterTurnAttr, EntryWriterTurnSec,
-		EntryWriterOrdinalAttr, EntryWriterOrdinalSec,
-		EntryPrevAttr, EntryPrevSec,
-		EntryDigestAttr, EntryDigestSec,
-		EntryKeyIdAttr, EntryKeyIdSec,
-		EntryParentAttr, EntryParentSec,
-		EntryAttachmentsAttr, EntryAttachmentsSec,
+		TimeArrayAttr, TimeArraySec,
+		SymbolAttr, SymbolSec,
+		StringArrayAttr, StringArraySec,
+		U32ArrayAttr, U32ArraySec,
+		U8ArrayAttr, U8ArraySec,
+		SymbolArrayAttr, SymbolArraySec,
 		Ent,
 	],
 ](dml DML, row Entry) (err error) {
-	// --- entryOrdinal. ---
-	entryOrdinalSec := dml.GetSectionEntryOrdinal()
-	err = entryEmitSectionEntryOrdinal(entryOrdinalSec, row)
+	// --- timeArray. ---
+	timeArraySec := dml.GetSectionTimeArray()
+	err = entryEmitSectionTimeArray(timeArraySec, row)
 	if err != nil {
 		return
 	}
-	entryOrdinalSec.EndSection()
-	// --- entryAt. ---
-	entryAtSec := dml.GetSectionEntryAt()
-	err = entryEmitSectionEntryAt(entryAtSec, row)
+	timeArraySec.EndSection()
+	// --- symbol. ---
+	symbolSec := dml.GetSectionSymbol()
+	err = entryEmitSectionSymbol(symbolSec, row)
 	if err != nil {
 		return
 	}
-	entryAtSec.EndSection()
-	// --- entryKind. ---
-	entryKindSec := dml.GetSectionEntryKind()
-	err = entryEmitSectionEntryKind(entryKindSec, row)
+	symbolSec.EndSection()
+	// --- stringArray. ---
+	stringArraySec := dml.GetSectionStringArray()
+	err = entryEmitSectionStringArray(stringArraySec, row)
 	if err != nil {
 		return
 	}
-	entryKindSec.EndSection()
-	// --- entryKey. ---
-	entryKeySec := dml.GetSectionEntryKey()
-	err = entryEmitSectionEntryKey(entryKeySec, row)
+	stringArraySec.EndSection()
+	// --- u32Array. ---
+	u32ArraySec := dml.GetSectionU32Array()
+	err = entryEmitSectionU32Array(u32ArraySec, row)
 	if err != nil {
 		return
 	}
-	entryKeySec.EndSection()
-	// --- entryRole. ---
-	entryRoleSec := dml.GetSectionEntryRole()
-	err = entryEmitSectionEntryRole(entryRoleSec, row)
+	u32ArraySec.EndSection()
+	// --- u8Array. ---
+	u8ArraySec := dml.GetSectionU8Array()
+	err = entryEmitSectionU8Array(u8ArraySec, row)
 	if err != nil {
 		return
 	}
-	entryRoleSec.EndSection()
-	// --- entryBody. ---
-	entryBodySec := dml.GetSectionEntryBody()
-	err = entryEmitSectionEntryBody(entryBodySec, row)
+	u8ArraySec.EndSection()
+	// --- symbolArray. ---
+	symbolArraySec := dml.GetSectionSymbolArray()
+	err = entryEmitSectionSymbolArray(symbolArraySec, row)
 	if err != nil {
 		return
 	}
-	entryBodySec.EndSection()
-	// --- entryCalls. ---
-	entryCallsSec := dml.GetSectionEntryCalls()
-	err = entryEmitSectionEntryCalls(entryCallsSec, row)
-	if err != nil {
-		return
-	}
-	entryCallsSec.EndSection()
-	// --- entryBodyDigest. ---
-	entryBodyDigestSec := dml.GetSectionEntryBodyDigest()
-	err = entryEmitSectionEntryBodyDigest(entryBodyDigestSec, row)
-	if err != nil {
-		return
-	}
-	entryBodyDigestSec.EndSection()
-	// --- entryCallsDigest. ---
-	entryCallsDigestSec := dml.GetSectionEntryCallsDigest()
-	err = entryEmitSectionEntryCallsDigest(entryCallsDigestSec, row)
-	if err != nil {
-		return
-	}
-	entryCallsDigestSec.EndSection()
-	// --- entryName. ---
-	entryNameSec := dml.GetSectionEntryName()
-	err = entryEmitSectionEntryName(entryNameSec, row)
-	if err != nil {
-		return
-	}
-	entryNameSec.EndSection()
-	// --- entryBook. ---
-	entryBookSec := dml.GetSectionEntryBook()
-	err = entryEmitSectionEntryBook(entryBookSec, row)
-	if err != nil {
-		return
-	}
-	entryBookSec.EndSection()
-	// --- entryForm. ---
-	entryFormSec := dml.GetSectionEntryForm()
-	err = entryEmitSectionEntryForm(entryFormSec, row)
-	if err != nil {
-		return
-	}
-	entryFormSec.EndSection()
-	// --- entryTarget. ---
-	entryTargetSec := dml.GetSectionEntryTarget()
-	err = entryEmitSectionEntryTarget(entryTargetSec, row)
-	if err != nil {
-		return
-	}
-	entryTargetSec.EndSection()
-	// --- entryFrom. ---
-	entryFromSec := dml.GetSectionEntryFrom()
-	err = entryEmitSectionEntryFrom(entryFromSec, row)
-	if err != nil {
-		return
-	}
-	entryFromSec.EndSection()
-	// --- entryEffect. ---
-	entryEffectSec := dml.GetSectionEntryEffect()
-	err = entryEmitSectionEntryEffect(entryEffectSec, row)
-	if err != nil {
-		return
-	}
-	entryEffectSec.EndSection()
-	// --- entryTurn. ---
-	entryTurnSec := dml.GetSectionEntryTurn()
-	err = entryEmitSectionEntryTurn(entryTurnSec, row)
-	if err != nil {
-		return
-	}
-	entryTurnSec.EndSection()
-	// --- entryLabelLevel. ---
-	entryLabelLevelSec := dml.GetSectionEntryLabelLevel()
-	err = entryEmitSectionEntryLabelLevel(entryLabelLevelSec, row)
-	if err != nil {
-		return
-	}
-	entryLabelLevelSec.EndSection()
-	// --- entryLabelTier. ---
-	entryLabelTierSec := dml.GetSectionEntryLabelTier()
-	err = entryEmitSectionEntryLabelTier(entryLabelTierSec, row)
-	if err != nil {
-		return
-	}
-	entryLabelTierSec.EndSection()
-	// --- entryLabelExposure. ---
-	entryLabelExposureSec := dml.GetSectionEntryLabelExposure()
-	err = entryEmitSectionEntryLabelExposure(entryLabelExposureSec, row)
-	if err != nil {
-		return
-	}
-	entryLabelExposureSec.EndSection()
-	// --- entryLabelOrigin. ---
-	entryLabelOriginSec := dml.GetSectionEntryLabelOrigin()
-	err = entryEmitSectionEntryLabelOrigin(entryLabelOriginSec, row)
-	if err != nil {
-		return
-	}
-	entryLabelOriginSec.EndSection()
-	// --- entryWriterRun. ---
-	entryWriterRunSec := dml.GetSectionEntryWriterRun()
-	err = entryEmitSectionEntryWriterRun(entryWriterRunSec, row)
-	if err != nil {
-		return
-	}
-	entryWriterRunSec.EndSection()
-	// --- entryWriterTurn. ---
-	entryWriterTurnSec := dml.GetSectionEntryWriterTurn()
-	err = entryEmitSectionEntryWriterTurn(entryWriterTurnSec, row)
-	if err != nil {
-		return
-	}
-	entryWriterTurnSec.EndSection()
-	// --- entryWriterOrdinal. ---
-	entryWriterOrdinalSec := dml.GetSectionEntryWriterOrdinal()
-	err = entryEmitSectionEntryWriterOrdinal(entryWriterOrdinalSec, row)
-	if err != nil {
-		return
-	}
-	entryWriterOrdinalSec.EndSection()
-	// --- entryPrev. ---
-	entryPrevSec := dml.GetSectionEntryPrev()
-	err = entryEmitSectionEntryPrev(entryPrevSec, row)
-	if err != nil {
-		return
-	}
-	entryPrevSec.EndSection()
-	// --- entryDigest. ---
-	entryDigestSec := dml.GetSectionEntryDigest()
-	err = entryEmitSectionEntryDigest(entryDigestSec, row)
-	if err != nil {
-		return
-	}
-	entryDigestSec.EndSection()
-	// --- entryKeyId. ---
-	entryKeyIdSec := dml.GetSectionEntryKeyId()
-	err = entryEmitSectionEntryKeyId(entryKeyIdSec, row)
-	if err != nil {
-		return
-	}
-	entryKeyIdSec.EndSection()
-	// --- entryParent. ---
-	entryParentSec := dml.GetSectionEntryParent()
-	err = entryEmitSectionEntryParent(entryParentSec, row)
-	if err != nil {
-		return
-	}
-	entryParentSec.EndSection()
-	// --- entryAttachments. ---
-	entryAttachmentsSec := dml.GetSectionEntryAttachments()
-	err = entryEmitSectionEntryAttachments(entryAttachmentsSec, row)
-	if err != nil {
-		return
-	}
-	entryAttachmentsSec.EndSection()
+	symbolArraySec.EndSection()
 	return
 }
 
-// entryEntryOrdinalAttrsReadI is the Attributes-side view of the entryOrdinal section.
-type entryEntryOrdinalAttrsReadI interface {
-	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) uint32
+// entryTimeArrayAttrsReadI is the Attributes-side view of the timeArray section.
+type entryTimeArrayAttrsReadI interface {
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (time.Time, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
-// entryEntryOrdinalMembsReadI is the Memberships-side view of the entryOrdinal section.
-type entryEntryOrdinalMembsReadI interface {
+// entryTimeArrayMembsReadI is the Memberships-side view of the timeArray section.
+type entryTimeArrayMembsReadI interface {
 	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
-// entryEntryAtAttrsReadI is the Attributes-side view of the entryAt section.
-type entryEntryAtAttrsReadI interface {
-	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) time.Time
-	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
-}
-
-// entryEntryAtMembsReadI is the Memberships-side view of the entryAt section.
-type entryEntryAtMembsReadI interface {
-	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
-}
-
-// entryEntryKindAttrsReadI is the Attributes-side view of the entryKind section.
-type entryEntryKindAttrsReadI interface {
+// entrySymbolAttrsReadI is the Attributes-side view of the symbol section.
+type entrySymbolAttrsReadI interface {
 	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
-// entryEntryKindMembsReadI is the Memberships-side view of the entryKind section.
-type entryEntryKindMembsReadI interface {
+// entrySymbolMembsReadI is the Memberships-side view of the symbol section.
+type entrySymbolMembsReadI interface {
 	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
-// entryEntryKeyAttrsReadI is the Attributes-side view of the entryKey section.
-type entryEntryKeyAttrsReadI interface {
-	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
+// entryStringArrayAttrsReadI is the Attributes-side view of the stringArray section.
+type entryStringArrayAttrsReadI interface {
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (string, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
-// entryEntryKeyMembsReadI is the Memberships-side view of the entryKey section.
-type entryEntryKeyMembsReadI interface {
+// entryStringArrayMembsReadI is the Memberships-side view of the stringArray section.
+type entryStringArrayMembsReadI interface {
 	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
-// entryEntryRoleAttrsReadI is the Attributes-side view of the entryRole section.
-type entryEntryRoleAttrsReadI interface {
-	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
+// entryU32ArrayAttrsReadI is the Attributes-side view of the u32Array section.
+type entryU32ArrayAttrsReadI interface {
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (uint32, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
-// entryEntryRoleMembsReadI is the Memberships-side view of the entryRole section.
-type entryEntryRoleMembsReadI interface {
+// entryU32ArrayMembsReadI is the Memberships-side view of the u32Array section.
+type entryU32ArrayMembsReadI interface {
 	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
-// entryEntryBodyAttrsReadI is the Attributes-side view of the entryBody section.
-type entryEntryBodyAttrsReadI interface {
-	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
+// entryU8ArrayAttrsReadI is the Attributes-side view of the u8Array section.
+type entryU8ArrayAttrsReadI interface {
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (uint8, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
-// entryEntryBodyMembsReadI is the Memberships-side view of the entryBody section.
-type entryEntryBodyMembsReadI interface {
+// entryU8ArrayMembsReadI is the Memberships-side view of the u8Array section.
+type entryU8ArrayMembsReadI interface {
 	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
-// entryEntryCallsAttrsReadI is the Attributes-side view of the entryCalls section.
-type entryEntryCallsAttrsReadI interface {
-	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
+// entrySymbolArrayAttrsReadI is the Attributes-side view of the symbolArray section.
+type entrySymbolArrayAttrsReadI interface {
+	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[string]
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
-// entryEntryCallsMembsReadI is the Memberships-side view of the entryCalls section.
-type entryEntryCallsMembsReadI interface {
-	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
-}
-
-// entryEntryBodyDigestAttrsReadI is the Attributes-side view of the entryBodyDigest section.
-type entryEntryBodyDigestAttrsReadI interface {
-	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
-	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
-}
-
-// entryEntryBodyDigestMembsReadI is the Memberships-side view of the entryBodyDigest section.
-type entryEntryBodyDigestMembsReadI interface {
-	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
-}
-
-// entryEntryCallsDigestAttrsReadI is the Attributes-side view of the entryCallsDigest section.
-type entryEntryCallsDigestAttrsReadI interface {
-	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
-	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
-}
-
-// entryEntryCallsDigestMembsReadI is the Memberships-side view of the entryCallsDigest section.
-type entryEntryCallsDigestMembsReadI interface {
-	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
-}
-
-// entryEntryNameAttrsReadI is the Attributes-side view of the entryName section.
-type entryEntryNameAttrsReadI interface {
-	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
-	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
-}
-
-// entryEntryNameMembsReadI is the Memberships-side view of the entryName section.
-type entryEntryNameMembsReadI interface {
-	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
-}
-
-// entryEntryBookAttrsReadI is the Attributes-side view of the entryBook section.
-type entryEntryBookAttrsReadI interface {
-	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
-	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
-}
-
-// entryEntryBookMembsReadI is the Memberships-side view of the entryBook section.
-type entryEntryBookMembsReadI interface {
-	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
-}
-
-// entryEntryFormAttrsReadI is the Attributes-side view of the entryForm section.
-type entryEntryFormAttrsReadI interface {
-	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
-	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
-}
-
-// entryEntryFormMembsReadI is the Memberships-side view of the entryForm section.
-type entryEntryFormMembsReadI interface {
-	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
-}
-
-// entryEntryTargetAttrsReadI is the Attributes-side view of the entryTarget section.
-type entryEntryTargetAttrsReadI interface {
-	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) uint32
-	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
-}
-
-// entryEntryTargetMembsReadI is the Memberships-side view of the entryTarget section.
-type entryEntryTargetMembsReadI interface {
-	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
-}
-
-// entryEntryFromAttrsReadI is the Attributes-side view of the entryFrom section.
-type entryEntryFromAttrsReadI interface {
-	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) uint32
-	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
-}
-
-// entryEntryFromMembsReadI is the Memberships-side view of the entryFrom section.
-type entryEntryFromMembsReadI interface {
-	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
-}
-
-// entryEntryEffectAttrsReadI is the Attributes-side view of the entryEffect section.
-type entryEntryEffectAttrsReadI interface {
-	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
-	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
-}
-
-// entryEntryEffectMembsReadI is the Memberships-side view of the entryEffect section.
-type entryEntryEffectMembsReadI interface {
-	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
-}
-
-// entryEntryTurnAttrsReadI is the Attributes-side view of the entryTurn section.
-type entryEntryTurnAttrsReadI interface {
-	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
-	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
-}
-
-// entryEntryTurnMembsReadI is the Memberships-side view of the entryTurn section.
-type entryEntryTurnMembsReadI interface {
-	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
-}
-
-// entryEntryLabelLevelAttrsReadI is the Attributes-side view of the entryLabelLevel section.
-type entryEntryLabelLevelAttrsReadI interface {
-	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) uint32
-	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
-}
-
-// entryEntryLabelLevelMembsReadI is the Memberships-side view of the entryLabelLevel section.
-type entryEntryLabelLevelMembsReadI interface {
-	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
-}
-
-// entryEntryLabelTierAttrsReadI is the Attributes-side view of the entryLabelTier section.
-type entryEntryLabelTierAttrsReadI interface {
-	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) uint32
-	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
-}
-
-// entryEntryLabelTierMembsReadI is the Memberships-side view of the entryLabelTier section.
-type entryEntryLabelTierMembsReadI interface {
-	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
-}
-
-// entryEntryLabelExposureAttrsReadI is the Attributes-side view of the entryLabelExposure section.
-type entryEntryLabelExposureAttrsReadI interface {
-	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
-	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
-}
-
-// entryEntryLabelExposureMembsReadI is the Memberships-side view of the entryLabelExposure section.
-type entryEntryLabelExposureMembsReadI interface {
-	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
-}
-
-// entryEntryLabelOriginAttrsReadI is the Attributes-side view of the entryLabelOrigin section.
-type entryEntryLabelOriginAttrsReadI interface {
-	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
-	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
-}
-
-// entryEntryLabelOriginMembsReadI is the Memberships-side view of the entryLabelOrigin section.
-type entryEntryLabelOriginMembsReadI interface {
-	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
-}
-
-// entryEntryWriterRunAttrsReadI is the Attributes-side view of the entryWriterRun section.
-type entryEntryWriterRunAttrsReadI interface {
-	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
-	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
-}
-
-// entryEntryWriterRunMembsReadI is the Memberships-side view of the entryWriterRun section.
-type entryEntryWriterRunMembsReadI interface {
-	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
-}
-
-// entryEntryWriterTurnAttrsReadI is the Attributes-side view of the entryWriterTurn section.
-type entryEntryWriterTurnAttrsReadI interface {
-	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
-	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
-}
-
-// entryEntryWriterTurnMembsReadI is the Memberships-side view of the entryWriterTurn section.
-type entryEntryWriterTurnMembsReadI interface {
-	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
-}
-
-// entryEntryWriterOrdinalAttrsReadI is the Attributes-side view of the entryWriterOrdinal section.
-type entryEntryWriterOrdinalAttrsReadI interface {
-	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) uint32
-	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
-}
-
-// entryEntryWriterOrdinalMembsReadI is the Memberships-side view of the entryWriterOrdinal section.
-type entryEntryWriterOrdinalMembsReadI interface {
-	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
-}
-
-// entryEntryPrevAttrsReadI is the Attributes-side view of the entryPrev section.
-type entryEntryPrevAttrsReadI interface {
-	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) uint32
-	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
-}
-
-// entryEntryPrevMembsReadI is the Memberships-side view of the entryPrev section.
-type entryEntryPrevMembsReadI interface {
-	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
-}
-
-// entryEntryDigestAttrsReadI is the Attributes-side view of the entryDigest section.
-type entryEntryDigestAttrsReadI interface {
-	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
-	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
-}
-
-// entryEntryDigestMembsReadI is the Memberships-side view of the entryDigest section.
-type entryEntryDigestMembsReadI interface {
-	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
-}
-
-// entryEntryKeyIdAttrsReadI is the Attributes-side view of the entryKeyId section.
-type entryEntryKeyIdAttrsReadI interface {
-	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
-	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
-}
-
-// entryEntryKeyIdMembsReadI is the Memberships-side view of the entryKeyId section.
-type entryEntryKeyIdMembsReadI interface {
-	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
-}
-
-// entryEntryParentAttrsReadI is the Attributes-side view of the entryParent section.
-type entryEntryParentAttrsReadI interface {
-	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) uint32
-	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
-}
-
-// entryEntryParentMembsReadI is the Memberships-side view of the entryParent section.
-type entryEntryParentMembsReadI interface {
-	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
-}
-
-// entryEntryAttachmentsAttrsReadI is the Attributes-side view of the entryAttachments section.
-type entryEntryAttachmentsAttrsReadI interface {
-	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
-	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
-}
-
-// entryEntryAttachmentsMembsReadI is the Memberships-side view of the entryAttachments section.
-type entryEntryAttachmentsMembsReadI interface {
+// entrySymbolArrayMembsReadI is the Memberships-side view of the symbolArray section.
+type entrySymbolArrayMembsReadI interface {
 	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
@@ -1589,847 +466,587 @@ type entryEntryAttachmentsMembsReadI interface {
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
 func entryReadRow[
-	EntryOrdinalAttrs entryEntryOrdinalAttrsReadI,
-	EntryOrdinalMembs entryEntryOrdinalMembsReadI,
-	EntryAtAttrs entryEntryAtAttrsReadI,
-	EntryAtMembs entryEntryAtMembsReadI,
-	EntryKindAttrs entryEntryKindAttrsReadI,
-	EntryKindMembs entryEntryKindMembsReadI,
-	EntryKeyAttrs entryEntryKeyAttrsReadI,
-	EntryKeyMembs entryEntryKeyMembsReadI,
-	EntryRoleAttrs entryEntryRoleAttrsReadI,
-	EntryRoleMembs entryEntryRoleMembsReadI,
-	EntryBodyAttrs entryEntryBodyAttrsReadI,
-	EntryBodyMembs entryEntryBodyMembsReadI,
-	EntryCallsAttrs entryEntryCallsAttrsReadI,
-	EntryCallsMembs entryEntryCallsMembsReadI,
-	EntryBodyDigestAttrs entryEntryBodyDigestAttrsReadI,
-	EntryBodyDigestMembs entryEntryBodyDigestMembsReadI,
-	EntryCallsDigestAttrs entryEntryCallsDigestAttrsReadI,
-	EntryCallsDigestMembs entryEntryCallsDigestMembsReadI,
-	EntryNameAttrs entryEntryNameAttrsReadI,
-	EntryNameMembs entryEntryNameMembsReadI,
-	EntryBookAttrs entryEntryBookAttrsReadI,
-	EntryBookMembs entryEntryBookMembsReadI,
-	EntryFormAttrs entryEntryFormAttrsReadI,
-	EntryFormMembs entryEntryFormMembsReadI,
-	EntryTargetAttrs entryEntryTargetAttrsReadI,
-	EntryTargetMembs entryEntryTargetMembsReadI,
-	EntryFromAttrs entryEntryFromAttrsReadI,
-	EntryFromMembs entryEntryFromMembsReadI,
-	EntryEffectAttrs entryEntryEffectAttrsReadI,
-	EntryEffectMembs entryEntryEffectMembsReadI,
-	EntryTurnAttrs entryEntryTurnAttrsReadI,
-	EntryTurnMembs entryEntryTurnMembsReadI,
-	EntryLabelLevelAttrs entryEntryLabelLevelAttrsReadI,
-	EntryLabelLevelMembs entryEntryLabelLevelMembsReadI,
-	EntryLabelTierAttrs entryEntryLabelTierAttrsReadI,
-	EntryLabelTierMembs entryEntryLabelTierMembsReadI,
-	EntryLabelExposureAttrs entryEntryLabelExposureAttrsReadI,
-	EntryLabelExposureMembs entryEntryLabelExposureMembsReadI,
-	EntryLabelOriginAttrs entryEntryLabelOriginAttrsReadI,
-	EntryLabelOriginMembs entryEntryLabelOriginMembsReadI,
-	EntryWriterRunAttrs entryEntryWriterRunAttrsReadI,
-	EntryWriterRunMembs entryEntryWriterRunMembsReadI,
-	EntryWriterTurnAttrs entryEntryWriterTurnAttrsReadI,
-	EntryWriterTurnMembs entryEntryWriterTurnMembsReadI,
-	EntryWriterOrdinalAttrs entryEntryWriterOrdinalAttrsReadI,
-	EntryWriterOrdinalMembs entryEntryWriterOrdinalMembsReadI,
-	EntryPrevAttrs entryEntryPrevAttrsReadI,
-	EntryPrevMembs entryEntryPrevMembsReadI,
-	EntryDigestAttrs entryEntryDigestAttrsReadI,
-	EntryDigestMembs entryEntryDigestMembsReadI,
-	EntryKeyIdAttrs entryEntryKeyIdAttrsReadI,
-	EntryKeyIdMembs entryEntryKeyIdMembsReadI,
-	EntryParentAttrs entryEntryParentAttrsReadI,
-	EntryParentMembs entryEntryParentMembsReadI,
-	EntryAttachmentsAttrs entryEntryAttachmentsAttrsReadI,
-	EntryAttachmentsMembs entryEntryAttachmentsMembsReadI,
+	TimeArrayAttrs entryTimeArrayAttrsReadI,
+	TimeArrayMembs entryTimeArrayMembsReadI,
+	SymbolAttrs entrySymbolAttrsReadI,
+	SymbolMembs entrySymbolMembsReadI,
+	StringArrayAttrs entryStringArrayAttrsReadI,
+	StringArrayMembs entryStringArrayMembsReadI,
+	U32ArrayAttrs entryU32ArrayAttrsReadI,
+	U32ArrayMembs entryU32ArrayMembsReadI,
+	U8ArrayAttrs entryU8ArrayAttrsReadI,
+	U8ArrayMembs entryU8ArrayMembsReadI,
+	SymbolArrayAttrs entrySymbolArrayAttrsReadI,
+	SymbolArrayMembs entrySymbolArrayMembsReadI,
 ](
 	i int,
-	entryOrdinalAttrs EntryOrdinalAttrs,
-	entryOrdinalMembs EntryOrdinalMembs,
-	entryAtAttrs EntryAtAttrs,
-	entryAtMembs EntryAtMembs,
-	entryKindAttrs EntryKindAttrs,
-	entryKindMembs EntryKindMembs,
-	entryKeyAttrs EntryKeyAttrs,
-	entryKeyMembs EntryKeyMembs,
-	entryRoleAttrs EntryRoleAttrs,
-	entryRoleMembs EntryRoleMembs,
-	entryBodyAttrs EntryBodyAttrs,
-	entryBodyMembs EntryBodyMembs,
-	entryCallsAttrs EntryCallsAttrs,
-	entryCallsMembs EntryCallsMembs,
-	entryBodyDigestAttrs EntryBodyDigestAttrs,
-	entryBodyDigestMembs EntryBodyDigestMembs,
-	entryCallsDigestAttrs EntryCallsDigestAttrs,
-	entryCallsDigestMembs EntryCallsDigestMembs,
-	entryNameAttrs EntryNameAttrs,
-	entryNameMembs EntryNameMembs,
-	entryBookAttrs EntryBookAttrs,
-	entryBookMembs EntryBookMembs,
-	entryFormAttrs EntryFormAttrs,
-	entryFormMembs EntryFormMembs,
-	entryTargetAttrs EntryTargetAttrs,
-	entryTargetMembs EntryTargetMembs,
-	entryFromAttrs EntryFromAttrs,
-	entryFromMembs EntryFromMembs,
-	entryEffectAttrs EntryEffectAttrs,
-	entryEffectMembs EntryEffectMembs,
-	entryTurnAttrs EntryTurnAttrs,
-	entryTurnMembs EntryTurnMembs,
-	entryLabelLevelAttrs EntryLabelLevelAttrs,
-	entryLabelLevelMembs EntryLabelLevelMembs,
-	entryLabelTierAttrs EntryLabelTierAttrs,
-	entryLabelTierMembs EntryLabelTierMembs,
-	entryLabelExposureAttrs EntryLabelExposureAttrs,
-	entryLabelExposureMembs EntryLabelExposureMembs,
-	entryLabelOriginAttrs EntryLabelOriginAttrs,
-	entryLabelOriginMembs EntryLabelOriginMembs,
-	entryWriterRunAttrs EntryWriterRunAttrs,
-	entryWriterRunMembs EntryWriterRunMembs,
-	entryWriterTurnAttrs EntryWriterTurnAttrs,
-	entryWriterTurnMembs EntryWriterTurnMembs,
-	entryWriterOrdinalAttrs EntryWriterOrdinalAttrs,
-	entryWriterOrdinalMembs EntryWriterOrdinalMembs,
-	entryPrevAttrs EntryPrevAttrs,
-	entryPrevMembs EntryPrevMembs,
-	entryDigestAttrs EntryDigestAttrs,
-	entryDigestMembs EntryDigestMembs,
-	entryKeyIdAttrs EntryKeyIdAttrs,
-	entryKeyIdMembs EntryKeyIdMembs,
-	entryParentAttrs EntryParentAttrs,
-	entryParentMembs EntryParentMembs,
-	entryAttachmentsAttrs EntryAttachmentsAttrs,
-	entryAttachmentsMembs EntryAttachmentsMembs,
+	timeArrayAttrs TimeArrayAttrs,
+	timeArrayMembs TimeArrayMembs,
+	symbolAttrs SymbolAttrs,
+	symbolMembs SymbolMembs,
+	stringArrayAttrs StringArrayAttrs,
+	stringArrayMembs StringArrayMembs,
+	u32ArrayAttrs U32ArrayAttrs,
+	u32ArrayMembs U32ArrayMembs,
+	u8ArrayAttrs U8ArrayAttrs,
+	u8ArrayMembs U8ArrayMembs,
+	symbolArrayAttrs SymbolArrayAttrs,
+	symbolArrayMembs SymbolArrayMembs,
 ) (row Entry, present bool, err error) {
-	// --- entryOrdinal. ---
-	var entryOrdinalOrdinalVal uint32
-	var entryOrdinalOrdinalCount int
-	var entryOrdinalOrdinalLastAttr int64
-	nentryOrdinal := entryOrdinalAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-	for attrJ := int64(0); attrJ < nentryOrdinal; attrJ++ {
-		for membID := range entryOrdinalMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-			switch membID {
-			case kindAgentrunEntryOrdinal:
-				if entryOrdinalOrdinalLastAttr != attrJ+1 {
-					entryOrdinalOrdinalLastAttr = attrJ + 1
-					entryOrdinalOrdinalCount++
-				}
-				val := entryOrdinalAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				entryOrdinalOrdinalVal = val
-			}
-		}
-	}
-	if entryOrdinalOrdinalCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "entryOrdinal").Str("membership", "agentrunEntryOrdinal").Int("got", entryOrdinalOrdinalCount).Errorf("slot entryOrdinal@agentrunEntryOrdinal (field Ordinal) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", entryOrdinalOrdinalCount)
-		return
-	}
-	if entryOrdinalOrdinalCount == 1 {
-		row.Ordinal = entryOrdinalOrdinalVal
-		present = true
-	}
-	// --- entryAt. ---
-	var entryAtAtVal time.Time
-	var entryAtAtCount int
-	var entryAtAtLastAttr int64
-	nentryAt := entryAtAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-	for attrJ := int64(0); attrJ < nentryAt; attrJ++ {
-		for membID := range entryAtMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+	// --- timeArray. ---
+	var timeArrayAtVal time.Time
+	var timeArrayAtCount int
+	var timeArrayAtLastAttr int64
+	ntimeArray := timeArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < ntimeArray; attrJ++ {
+		for membID := range timeArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindAgentrunEntryAt:
-				if entryAtAtLastAttr != attrJ+1 {
-					entryAtAtLastAttr = attrJ + 1
-					entryAtAtCount++
+				if timeArrayAtLastAttr != attrJ+1 {
+					timeArrayAtLastAttr = attrJ + 1
+					timeArrayAtCount++
 				}
-				val := entryAtAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				entryAtAtVal = val
+				val, valErr := timeArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "timeArray").Str("membership", "agentrunEntryAt").Str("field", "At").Errorf("slot timeArray@agentrunEntryAt (field At) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				timeArrayAtVal = val
 			}
 		}
 	}
-	if entryAtAtCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "entryAt").Str("membership", "agentrunEntryAt").Int("got", entryAtAtCount).Errorf("slot entryAt@agentrunEntryAt (field At) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", entryAtAtCount)
+	if timeArrayAtCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "timeArray").Str("membership", "agentrunEntryAt").Int("got", timeArrayAtCount).Errorf("slot timeArray@agentrunEntryAt (field At) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", timeArrayAtCount)
 		return
 	}
-	if entryAtAtCount == 1 {
-		row.At = entryAtAtVal
+	if timeArrayAtCount == 1 {
+		row.At = timeArrayAtVal
 		present = true
 	}
-	// --- entryKind. ---
-	var entryKindKindVal string
-	var entryKindKindCount int
-	var entryKindKindLastAttr int64
-	nentryKind := entryKindAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-	for attrJ := int64(0); attrJ < nentryKind; attrJ++ {
-		for membID := range entryKindMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+	// --- symbol. ---
+	var symbolKindVal string
+	var symbolKindCount int
+	var symbolKindLastAttr int64
+	var symbolRoleVal string
+	var symbolRoleCount int
+	var symbolRoleLastAttr int64
+	var symbolBookVal string
+	var symbolBookCount int
+	var symbolBookLastAttr int64
+	var symbolFormVal string
+	var symbolFormCount int
+	var symbolFormLastAttr int64
+	var symbolEffectVal string
+	var symbolEffectCount int
+	var symbolEffectLastAttr int64
+	var symbolTurnVal string
+	var symbolTurnCount int
+	var symbolTurnLastAttr int64
+	var symbolWriterRunVal string
+	var symbolWriterRunCount int
+	var symbolWriterRunLastAttr int64
+	var symbolWriterTurnVal string
+	var symbolWriterTurnCount int
+	var symbolWriterTurnLastAttr int64
+	var symbolKeyIdVal string
+	var symbolKeyIdCount int
+	var symbolKeyIdLastAttr int64
+	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
+		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindAgentrunEntryKind:
-				if entryKindKindLastAttr != attrJ+1 {
-					entryKindKindLastAttr = attrJ + 1
-					entryKindKindCount++
+				if symbolKindLastAttr != attrJ+1 {
+					symbolKindLastAttr = attrJ + 1
+					symbolKindCount++
 				}
-				val := entryKindAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				entryKindKindVal = val
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolKindVal = val
+			case kindAgentrunEntryRole:
+				if symbolRoleLastAttr != attrJ+1 {
+					symbolRoleLastAttr = attrJ + 1
+					symbolRoleCount++
+				}
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolRoleVal = val
+			case kindAgentrunEntryBook:
+				if symbolBookLastAttr != attrJ+1 {
+					symbolBookLastAttr = attrJ + 1
+					symbolBookCount++
+				}
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolBookVal = val
+			case kindAgentrunEntryForm:
+				if symbolFormLastAttr != attrJ+1 {
+					symbolFormLastAttr = attrJ + 1
+					symbolFormCount++
+				}
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolFormVal = val
+			case kindAgentrunEntryEffect:
+				if symbolEffectLastAttr != attrJ+1 {
+					symbolEffectLastAttr = attrJ + 1
+					symbolEffectCount++
+				}
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolEffectVal = val
+			case kindAgentrunEntryTurn:
+				if symbolTurnLastAttr != attrJ+1 {
+					symbolTurnLastAttr = attrJ + 1
+					symbolTurnCount++
+				}
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolTurnVal = val
+			case kindAgentrunEntryWriterRun:
+				if symbolWriterRunLastAttr != attrJ+1 {
+					symbolWriterRunLastAttr = attrJ + 1
+					symbolWriterRunCount++
+				}
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolWriterRunVal = val
+			case kindAgentrunEntryWriterTurn:
+				if symbolWriterTurnLastAttr != attrJ+1 {
+					symbolWriterTurnLastAttr = attrJ + 1
+					symbolWriterTurnCount++
+				}
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolWriterTurnVal = val
+			case kindAgentrunEntryKeyId:
+				if symbolKeyIdLastAttr != attrJ+1 {
+					symbolKeyIdLastAttr = attrJ + 1
+					symbolKeyIdCount++
+				}
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolKeyIdVal = val
 			}
 		}
 	}
-	if entryKindKindCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "entryKind").Str("membership", "agentrunEntryKind").Int("got", entryKindKindCount).Errorf("slot entryKind@agentrunEntryKind (field Kind) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", entryKindKindCount)
+	if symbolKindCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "agentrunEntryKind").Int("got", symbolKindCount).Errorf("slot symbol@agentrunEntryKind (field Kind) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolKindCount)
 		return
 	}
-	if entryKindKindCount == 1 {
-		row.Kind = entryKindKindVal
+	if symbolKindCount == 1 {
+		row.Kind = symbolKindVal
 		present = true
 	}
-	// --- entryKey. ---
-	var entryKeyKeyVal string
-	var entryKeyKeyCount int
-	var entryKeyKeyLastAttr int64
-	nentryKey := entryKeyAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-	for attrJ := int64(0); attrJ < nentryKey; attrJ++ {
-		for membID := range entryKeyMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+	if symbolRoleCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "agentrunEntryRole").Int("got", symbolRoleCount).Errorf("slot symbol@agentrunEntryRole (field Role) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolRoleCount)
+		return
+	}
+	if symbolRoleCount == 1 {
+		row.Role = symbolRoleVal
+		present = true
+	}
+	if symbolBookCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "agentrunEntryBook").Int("got", symbolBookCount).Errorf("slot symbol@agentrunEntryBook (field Book) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolBookCount)
+		return
+	}
+	if symbolBookCount == 1 {
+		row.Book = symbolBookVal
+		present = true
+	}
+	if symbolFormCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "agentrunEntryForm").Int("got", symbolFormCount).Errorf("slot symbol@agentrunEntryForm (field Form) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolFormCount)
+		return
+	}
+	if symbolFormCount == 1 {
+		row.Form = symbolFormVal
+		present = true
+	}
+	if symbolEffectCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "agentrunEntryEffect").Int("got", symbolEffectCount).Errorf("slot symbol@agentrunEntryEffect (field Effect) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolEffectCount)
+		return
+	}
+	if symbolEffectCount == 1 {
+		row.Effect = symbolEffectVal
+		present = true
+	}
+	if symbolTurnCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "agentrunEntryTurn").Int("got", symbolTurnCount).Errorf("slot symbol@agentrunEntryTurn (field Turn) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolTurnCount)
+		return
+	}
+	if symbolTurnCount == 1 {
+		row.Turn = symbolTurnVal
+		present = true
+	}
+	if symbolWriterRunCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "agentrunEntryWriterRun").Int("got", symbolWriterRunCount).Errorf("slot symbol@agentrunEntryWriterRun (field WriterRun) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolWriterRunCount)
+		return
+	}
+	if symbolWriterRunCount == 1 {
+		row.WriterRun = symbolWriterRunVal
+		present = true
+	}
+	if symbolWriterTurnCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "agentrunEntryWriterTurn").Int("got", symbolWriterTurnCount).Errorf("slot symbol@agentrunEntryWriterTurn (field WriterTurn) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolWriterTurnCount)
+		return
+	}
+	if symbolWriterTurnCount == 1 {
+		row.WriterTurn = symbolWriterTurnVal
+		present = true
+	}
+	if symbolKeyIdCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "agentrunEntryKeyId").Int("got", symbolKeyIdCount).Errorf("slot symbol@agentrunEntryKeyId (field KeyId) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolKeyIdCount)
+		return
+	}
+	if symbolKeyIdCount == 1 {
+		row.KeyId = symbolKeyIdVal
+		present = true
+	}
+	// --- stringArray. ---
+	var stringArrayKeyVal string
+	var stringArrayKeyCount int
+	var stringArrayKeyLastAttr int64
+	var stringArrayBodyDigestVal string
+	var stringArrayBodyDigestCount int
+	var stringArrayBodyDigestLastAttr int64
+	var stringArrayCallsDigestVal string
+	var stringArrayCallsDigestCount int
+	var stringArrayCallsDigestLastAttr int64
+	var stringArrayNameVal string
+	var stringArrayNameCount int
+	var stringArrayNameLastAttr int64
+	var stringArrayDigestVal string
+	var stringArrayDigestCount int
+	var stringArrayDigestLastAttr int64
+	var stringArrayAttachmentsVal string
+	var stringArrayAttachmentsCount int
+	var stringArrayAttachmentsLastAttr int64
+	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
+		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindAgentrunEntryKey:
-				if entryKeyKeyLastAttr != attrJ+1 {
-					entryKeyKeyLastAttr = attrJ + 1
-					entryKeyKeyCount++
+				if stringArrayKeyLastAttr != attrJ+1 {
+					stringArrayKeyLastAttr = attrJ + 1
+					stringArrayKeyCount++
 				}
-				val := entryKeyAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				entryKeyKeyVal = val
-			}
-		}
-	}
-	if entryKeyKeyCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "entryKey").Str("membership", "agentrunEntryKey").Int("got", entryKeyKeyCount).Errorf("slot entryKey@agentrunEntryKey (field Key) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", entryKeyKeyCount)
-		return
-	}
-	if entryKeyKeyCount == 1 {
-		row.Key = entryKeyKeyVal
-		present = true
-	}
-	// --- entryRole. ---
-	var entryRoleRoleVal string
-	var entryRoleRoleCount int
-	var entryRoleRoleLastAttr int64
-	nentryRole := entryRoleAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-	for attrJ := int64(0); attrJ < nentryRole; attrJ++ {
-		for membID := range entryRoleMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-			switch membID {
-			case kindAgentrunEntryRole:
-				if entryRoleRoleLastAttr != attrJ+1 {
-					entryRoleRoleLastAttr = attrJ + 1
-					entryRoleRoleCount++
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunEntryKey").Str("field", "Key").Errorf("slot stringArray@agentrunEntryKey (field Key) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
 				}
-				val := entryRoleAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				entryRoleRoleVal = val
-			}
-		}
-	}
-	if entryRoleRoleCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "entryRole").Str("membership", "agentrunEntryRole").Int("got", entryRoleRoleCount).Errorf("slot entryRole@agentrunEntryRole (field Role) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", entryRoleRoleCount)
-		return
-	}
-	if entryRoleRoleCount == 1 {
-		row.Role = entryRoleRoleVal
-		present = true
-	}
-	// --- entryBody. ---
-	var entryBodyBodyVal string
-	var entryBodyBodyCount int
-	var entryBodyBodyLastAttr int64
-	nentryBody := entryBodyAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-	for attrJ := int64(0); attrJ < nentryBody; attrJ++ {
-		for membID := range entryBodyMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-			switch membID {
-			case kindAgentrunEntryBody:
-				if entryBodyBodyLastAttr != attrJ+1 {
-					entryBodyBodyLastAttr = attrJ + 1
-					entryBodyBodyCount++
-				}
-				val := entryBodyAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				entryBodyBodyVal = val
-			}
-		}
-	}
-	if entryBodyBodyCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "entryBody").Str("membership", "agentrunEntryBody").Int("got", entryBodyBodyCount).Errorf("slot entryBody@agentrunEntryBody (field Body) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", entryBodyBodyCount)
-		return
-	}
-	if entryBodyBodyCount == 1 {
-		row.Body = entryBodyBodyVal
-		present = true
-	}
-	// --- entryCalls. ---
-	var entryCallsCallsVal string
-	var entryCallsCallsCount int
-	var entryCallsCallsLastAttr int64
-	nentryCalls := entryCallsAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-	for attrJ := int64(0); attrJ < nentryCalls; attrJ++ {
-		for membID := range entryCallsMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-			switch membID {
-			case kindAgentrunEntryCalls:
-				if entryCallsCallsLastAttr != attrJ+1 {
-					entryCallsCallsLastAttr = attrJ + 1
-					entryCallsCallsCount++
-				}
-				val := entryCallsAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				entryCallsCallsVal = val
-			}
-		}
-	}
-	if entryCallsCallsCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "entryCalls").Str("membership", "agentrunEntryCalls").Int("got", entryCallsCallsCount).Errorf("slot entryCalls@agentrunEntryCalls (field Calls) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", entryCallsCallsCount)
-		return
-	}
-	if entryCallsCallsCount == 1 {
-		row.Calls = entryCallsCallsVal
-		present = true
-	}
-	// --- entryBodyDigest. ---
-	var entryBodyDigestBodyDigestVal string
-	var entryBodyDigestBodyDigestCount int
-	var entryBodyDigestBodyDigestLastAttr int64
-	nentryBodyDigest := entryBodyDigestAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-	for attrJ := int64(0); attrJ < nentryBodyDigest; attrJ++ {
-		for membID := range entryBodyDigestMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-			switch membID {
+				stringArrayKeyVal = val
 			case kindAgentrunEntryBodyDigest:
-				if entryBodyDigestBodyDigestLastAttr != attrJ+1 {
-					entryBodyDigestBodyDigestLastAttr = attrJ + 1
-					entryBodyDigestBodyDigestCount++
+				if stringArrayBodyDigestLastAttr != attrJ+1 {
+					stringArrayBodyDigestLastAttr = attrJ + 1
+					stringArrayBodyDigestCount++
 				}
-				val := entryBodyDigestAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				entryBodyDigestBodyDigestVal = val
-			}
-		}
-	}
-	if entryBodyDigestBodyDigestCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "entryBodyDigest").Str("membership", "agentrunEntryBodyDigest").Int("got", entryBodyDigestBodyDigestCount).Errorf("slot entryBodyDigest@agentrunEntryBodyDigest (field BodyDigest) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", entryBodyDigestBodyDigestCount)
-		return
-	}
-	if entryBodyDigestBodyDigestCount == 1 {
-		row.BodyDigest = entryBodyDigestBodyDigestVal
-		present = true
-	}
-	// --- entryCallsDigest. ---
-	var entryCallsDigestCallsDigestVal string
-	var entryCallsDigestCallsDigestCount int
-	var entryCallsDigestCallsDigestLastAttr int64
-	nentryCallsDigest := entryCallsDigestAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-	for attrJ := int64(0); attrJ < nentryCallsDigest; attrJ++ {
-		for membID := range entryCallsDigestMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-			switch membID {
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunEntryBodyDigest").Str("field", "BodyDigest").Errorf("slot stringArray@agentrunEntryBodyDigest (field BodyDigest) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				stringArrayBodyDigestVal = val
 			case kindAgentrunEntryCallsDigest:
-				if entryCallsDigestCallsDigestLastAttr != attrJ+1 {
-					entryCallsDigestCallsDigestLastAttr = attrJ + 1
-					entryCallsDigestCallsDigestCount++
+				if stringArrayCallsDigestLastAttr != attrJ+1 {
+					stringArrayCallsDigestLastAttr = attrJ + 1
+					stringArrayCallsDigestCount++
 				}
-				val := entryCallsDigestAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				entryCallsDigestCallsDigestVal = val
-			}
-		}
-	}
-	if entryCallsDigestCallsDigestCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "entryCallsDigest").Str("membership", "agentrunEntryCallsDigest").Int("got", entryCallsDigestCallsDigestCount).Errorf("slot entryCallsDigest@agentrunEntryCallsDigest (field CallsDigest) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", entryCallsDigestCallsDigestCount)
-		return
-	}
-	if entryCallsDigestCallsDigestCount == 1 {
-		row.CallsDigest = entryCallsDigestCallsDigestVal
-		present = true
-	}
-	// --- entryName. ---
-	var entryNameNameVal string
-	var entryNameNameCount int
-	var entryNameNameLastAttr int64
-	nentryName := entryNameAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-	for attrJ := int64(0); attrJ < nentryName; attrJ++ {
-		for membID := range entryNameMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-			switch membID {
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunEntryCallsDigest").Str("field", "CallsDigest").Errorf("slot stringArray@agentrunEntryCallsDigest (field CallsDigest) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				stringArrayCallsDigestVal = val
 			case kindAgentrunEntryName:
-				if entryNameNameLastAttr != attrJ+1 {
-					entryNameNameLastAttr = attrJ + 1
-					entryNameNameCount++
+				if stringArrayNameLastAttr != attrJ+1 {
+					stringArrayNameLastAttr = attrJ + 1
+					stringArrayNameCount++
 				}
-				val := entryNameAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				entryNameNameVal = val
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunEntryName").Str("field", "Name").Errorf("slot stringArray@agentrunEntryName (field Name) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				stringArrayNameVal = val
+			case kindAgentrunEntryDigest:
+				if stringArrayDigestLastAttr != attrJ+1 {
+					stringArrayDigestLastAttr = attrJ + 1
+					stringArrayDigestCount++
+				}
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunEntryDigest").Str("field", "Digest").Errorf("slot stringArray@agentrunEntryDigest (field Digest) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				stringArrayDigestVal = val
+			case kindAgentrunEntryAttachments:
+				if stringArrayAttachmentsLastAttr != attrJ+1 {
+					stringArrayAttachmentsLastAttr = attrJ + 1
+					stringArrayAttachmentsCount++
+				}
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunEntryAttachments").Str("field", "Attachments").Errorf("slot stringArray@agentrunEntryAttachments (field Attachments) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				stringArrayAttachmentsVal = val
 			}
 		}
 	}
-	if entryNameNameCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "entryName").Str("membership", "agentrunEntryName").Int("got", entryNameNameCount).Errorf("slot entryName@agentrunEntryName (field Name) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", entryNameNameCount)
+	if stringArrayKeyCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunEntryKey").Int("got", stringArrayKeyCount).Errorf("slot stringArray@agentrunEntryKey (field Key) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayKeyCount)
 		return
 	}
-	if entryNameNameCount == 1 {
-		row.Name = entryNameNameVal
+	if stringArrayKeyCount == 1 {
+		row.Key = stringArrayKeyVal
 		present = true
 	}
-	// --- entryBook. ---
-	var entryBookBookVal string
-	var entryBookBookCount int
-	var entryBookBookLastAttr int64
-	nentryBook := entryBookAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-	for attrJ := int64(0); attrJ < nentryBook; attrJ++ {
-		for membID := range entryBookMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-			switch membID {
-			case kindAgentrunEntryBook:
-				if entryBookBookLastAttr != attrJ+1 {
-					entryBookBookLastAttr = attrJ + 1
-					entryBookBookCount++
-				}
-				val := entryBookAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				entryBookBookVal = val
-			}
-		}
-	}
-	if entryBookBookCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "entryBook").Str("membership", "agentrunEntryBook").Int("got", entryBookBookCount).Errorf("slot entryBook@agentrunEntryBook (field Book) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", entryBookBookCount)
+	if stringArrayBodyDigestCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunEntryBodyDigest").Int("got", stringArrayBodyDigestCount).Errorf("slot stringArray@agentrunEntryBodyDigest (field BodyDigest) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayBodyDigestCount)
 		return
 	}
-	if entryBookBookCount == 1 {
-		row.Book = entryBookBookVal
+	if stringArrayBodyDigestCount == 1 {
+		row.BodyDigest = stringArrayBodyDigestVal
 		present = true
 	}
-	// --- entryForm. ---
-	var entryFormFormVal string
-	var entryFormFormCount int
-	var entryFormFormLastAttr int64
-	nentryForm := entryFormAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-	for attrJ := int64(0); attrJ < nentryForm; attrJ++ {
-		for membID := range entryFormMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-			switch membID {
-			case kindAgentrunEntryForm:
-				if entryFormFormLastAttr != attrJ+1 {
-					entryFormFormLastAttr = attrJ + 1
-					entryFormFormCount++
-				}
-				val := entryFormAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				entryFormFormVal = val
-			}
-		}
-	}
-	if entryFormFormCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "entryForm").Str("membership", "agentrunEntryForm").Int("got", entryFormFormCount).Errorf("slot entryForm@agentrunEntryForm (field Form) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", entryFormFormCount)
+	if stringArrayCallsDigestCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunEntryCallsDigest").Int("got", stringArrayCallsDigestCount).Errorf("slot stringArray@agentrunEntryCallsDigest (field CallsDigest) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayCallsDigestCount)
 		return
 	}
-	if entryFormFormCount == 1 {
-		row.Form = entryFormFormVal
+	if stringArrayCallsDigestCount == 1 {
+		row.CallsDigest = stringArrayCallsDigestVal
 		present = true
 	}
-	// --- entryTarget. ---
-	var entryTargetTargetVal uint32
-	var entryTargetTargetCount int
-	var entryTargetTargetLastAttr int64
-	nentryTarget := entryTargetAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-	for attrJ := int64(0); attrJ < nentryTarget; attrJ++ {
-		for membID := range entryTargetMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+	if stringArrayNameCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunEntryName").Int("got", stringArrayNameCount).Errorf("slot stringArray@agentrunEntryName (field Name) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayNameCount)
+		return
+	}
+	if stringArrayNameCount == 1 {
+		row.Name = stringArrayNameVal
+		present = true
+	}
+	if stringArrayDigestCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunEntryDigest").Int("got", stringArrayDigestCount).Errorf("slot stringArray@agentrunEntryDigest (field Digest) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayDigestCount)
+		return
+	}
+	if stringArrayDigestCount == 1 {
+		row.Digest = stringArrayDigestVal
+		present = true
+	}
+	if stringArrayAttachmentsCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunEntryAttachments").Int("got", stringArrayAttachmentsCount).Errorf("slot stringArray@agentrunEntryAttachments (field Attachments) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayAttachmentsCount)
+		return
+	}
+	if stringArrayAttachmentsCount == 1 {
+		row.Attachments = stringArrayAttachmentsVal
+		present = true
+	}
+	// --- u32Array. ---
+	var u32ArrayTargetVal uint32
+	var u32ArrayTargetCount int
+	var u32ArrayTargetLastAttr int64
+	var u32ArrayFromVal uint32
+	var u32ArrayFromCount int
+	var u32ArrayFromLastAttr int64
+	var u32ArrayWriterOrdinalVal uint32
+	var u32ArrayWriterOrdinalCount int
+	var u32ArrayWriterOrdinalLastAttr int64
+	var u32ArrayPrevVal uint32
+	var u32ArrayPrevCount int
+	var u32ArrayPrevLastAttr int64
+	var u32ArrayParentVal uint32
+	var u32ArrayParentCount int
+	var u32ArrayParentLastAttr int64
+	nu32Array := u32ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nu32Array; attrJ++ {
+		for membID := range u32ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindAgentrunEntryTarget:
-				if entryTargetTargetLastAttr != attrJ+1 {
-					entryTargetTargetLastAttr = attrJ + 1
-					entryTargetTargetCount++
+				if u32ArrayTargetLastAttr != attrJ+1 {
+					u32ArrayTargetLastAttr = attrJ + 1
+					u32ArrayTargetCount++
 				}
-				val := entryTargetAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				entryTargetTargetVal = val
-			}
-		}
-	}
-	if entryTargetTargetCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "entryTarget").Str("membership", "agentrunEntryTarget").Int("got", entryTargetTargetCount).Errorf("slot entryTarget@agentrunEntryTarget (field Target) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", entryTargetTargetCount)
-		return
-	}
-	if entryTargetTargetCount == 1 {
-		row.Target = entryTargetTargetVal
-		present = true
-	}
-	// --- entryFrom. ---
-	var entryFromFromVal uint32
-	var entryFromFromCount int
-	var entryFromFromLastAttr int64
-	nentryFrom := entryFromAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-	for attrJ := int64(0); attrJ < nentryFrom; attrJ++ {
-		for membID := range entryFromMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-			switch membID {
+				val, valErr := u32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "agentrunEntryTarget").Str("field", "Target").Errorf("slot u32Array@agentrunEntryTarget (field Target) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				u32ArrayTargetVal = val
 			case kindAgentrunEntryFrom:
-				if entryFromFromLastAttr != attrJ+1 {
-					entryFromFromLastAttr = attrJ + 1
-					entryFromFromCount++
+				if u32ArrayFromLastAttr != attrJ+1 {
+					u32ArrayFromLastAttr = attrJ + 1
+					u32ArrayFromCount++
 				}
-				val := entryFromAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				entryFromFromVal = val
+				val, valErr := u32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "agentrunEntryFrom").Str("field", "From").Errorf("slot u32Array@agentrunEntryFrom (field From) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				u32ArrayFromVal = val
+			case kindAgentrunEntryWriterOrdinal:
+				if u32ArrayWriterOrdinalLastAttr != attrJ+1 {
+					u32ArrayWriterOrdinalLastAttr = attrJ + 1
+					u32ArrayWriterOrdinalCount++
+				}
+				val, valErr := u32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "agentrunEntryWriterOrdinal").Str("field", "WriterOrdinal").Errorf("slot u32Array@agentrunEntryWriterOrdinal (field WriterOrdinal) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				u32ArrayWriterOrdinalVal = val
+			case kindAgentrunEntryPrev:
+				if u32ArrayPrevLastAttr != attrJ+1 {
+					u32ArrayPrevLastAttr = attrJ + 1
+					u32ArrayPrevCount++
+				}
+				val, valErr := u32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "agentrunEntryPrev").Str("field", "Prev").Errorf("slot u32Array@agentrunEntryPrev (field Prev) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				u32ArrayPrevVal = val
+			case kindAgentrunEntryParent:
+				if u32ArrayParentLastAttr != attrJ+1 {
+					u32ArrayParentLastAttr = attrJ + 1
+					u32ArrayParentCount++
+				}
+				val, valErr := u32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "agentrunEntryParent").Str("field", "Parent").Errorf("slot u32Array@agentrunEntryParent (field Parent) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				u32ArrayParentVal = val
 			}
 		}
 	}
-	if entryFromFromCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "entryFrom").Str("membership", "agentrunEntryFrom").Int("got", entryFromFromCount).Errorf("slot entryFrom@agentrunEntryFrom (field From) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", entryFromFromCount)
+	if u32ArrayTargetCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "agentrunEntryTarget").Int("got", u32ArrayTargetCount).Errorf("slot u32Array@agentrunEntryTarget (field Target) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u32ArrayTargetCount)
 		return
 	}
-	if entryFromFromCount == 1 {
-		row.From = entryFromFromVal
+	if u32ArrayTargetCount == 1 {
+		row.Target = u32ArrayTargetVal
 		present = true
 	}
-	// --- entryEffect. ---
-	var entryEffectEffectVal string
-	var entryEffectEffectCount int
-	var entryEffectEffectLastAttr int64
-	nentryEffect := entryEffectAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-	for attrJ := int64(0); attrJ < nentryEffect; attrJ++ {
-		for membID := range entryEffectMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-			switch membID {
-			case kindAgentrunEntryEffect:
-				if entryEffectEffectLastAttr != attrJ+1 {
-					entryEffectEffectLastAttr = attrJ + 1
-					entryEffectEffectCount++
-				}
-				val := entryEffectAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				entryEffectEffectVal = val
-			}
-		}
-	}
-	if entryEffectEffectCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "entryEffect").Str("membership", "agentrunEntryEffect").Int("got", entryEffectEffectCount).Errorf("slot entryEffect@agentrunEntryEffect (field Effect) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", entryEffectEffectCount)
+	if u32ArrayFromCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "agentrunEntryFrom").Int("got", u32ArrayFromCount).Errorf("slot u32Array@agentrunEntryFrom (field From) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u32ArrayFromCount)
 		return
 	}
-	if entryEffectEffectCount == 1 {
-		row.Effect = entryEffectEffectVal
+	if u32ArrayFromCount == 1 {
+		row.From = u32ArrayFromVal
 		present = true
 	}
-	// --- entryTurn. ---
-	var entryTurnTurnVal string
-	var entryTurnTurnCount int
-	var entryTurnTurnLastAttr int64
-	nentryTurn := entryTurnAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-	for attrJ := int64(0); attrJ < nentryTurn; attrJ++ {
-		for membID := range entryTurnMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-			switch membID {
-			case kindAgentrunEntryTurn:
-				if entryTurnTurnLastAttr != attrJ+1 {
-					entryTurnTurnLastAttr = attrJ + 1
-					entryTurnTurnCount++
-				}
-				val := entryTurnAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				entryTurnTurnVal = val
-			}
-		}
-	}
-	if entryTurnTurnCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "entryTurn").Str("membership", "agentrunEntryTurn").Int("got", entryTurnTurnCount).Errorf("slot entryTurn@agentrunEntryTurn (field Turn) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", entryTurnTurnCount)
+	if u32ArrayWriterOrdinalCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "agentrunEntryWriterOrdinal").Int("got", u32ArrayWriterOrdinalCount).Errorf("slot u32Array@agentrunEntryWriterOrdinal (field WriterOrdinal) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u32ArrayWriterOrdinalCount)
 		return
 	}
-	if entryTurnTurnCount == 1 {
-		row.Turn = entryTurnTurnVal
+	if u32ArrayWriterOrdinalCount == 1 {
+		row.WriterOrdinal = u32ArrayWriterOrdinalVal
 		present = true
 	}
-	// --- entryLabelLevel. ---
-	var entryLabelLevelLabelLevelVal uint32
-	var entryLabelLevelLabelLevelCount int
-	var entryLabelLevelLabelLevelLastAttr int64
-	nentryLabelLevel := entryLabelLevelAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-	for attrJ := int64(0); attrJ < nentryLabelLevel; attrJ++ {
-		for membID := range entryLabelLevelMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+	if u32ArrayPrevCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "agentrunEntryPrev").Int("got", u32ArrayPrevCount).Errorf("slot u32Array@agentrunEntryPrev (field Prev) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u32ArrayPrevCount)
+		return
+	}
+	if u32ArrayPrevCount == 1 {
+		row.Prev = u32ArrayPrevVal
+		present = true
+	}
+	if u32ArrayParentCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "agentrunEntryParent").Int("got", u32ArrayParentCount).Errorf("slot u32Array@agentrunEntryParent (field Parent) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u32ArrayParentCount)
+		return
+	}
+	if u32ArrayParentCount == 1 {
+		row.Parent = u32ArrayParentVal
+		present = true
+	}
+	// --- u8Array. ---
+	var u8ArrayLabelLevelVal uint8
+	var u8ArrayLabelLevelCount int
+	var u8ArrayLabelLevelLastAttr int64
+	var u8ArrayLabelTierVal uint8
+	var u8ArrayLabelTierCount int
+	var u8ArrayLabelTierLastAttr int64
+	nu8Array := u8ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nu8Array; attrJ++ {
+		for membID := range u8ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindAgentrunEntryLabelLevel:
-				if entryLabelLevelLabelLevelLastAttr != attrJ+1 {
-					entryLabelLevelLabelLevelLastAttr = attrJ + 1
-					entryLabelLevelLabelLevelCount++
+				if u8ArrayLabelLevelLastAttr != attrJ+1 {
+					u8ArrayLabelLevelLastAttr = attrJ + 1
+					u8ArrayLabelLevelCount++
 				}
-				val := entryLabelLevelAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				entryLabelLevelLabelLevelVal = val
-			}
-		}
-	}
-	if entryLabelLevelLabelLevelCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "entryLabelLevel").Str("membership", "agentrunEntryLabelLevel").Int("got", entryLabelLevelLabelLevelCount).Errorf("slot entryLabelLevel@agentrunEntryLabelLevel (field LabelLevel) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", entryLabelLevelLabelLevelCount)
-		return
-	}
-	if entryLabelLevelLabelLevelCount == 1 {
-		row.LabelLevel = entryLabelLevelLabelLevelVal
-		present = true
-	}
-	// --- entryLabelTier. ---
-	var entryLabelTierLabelTierVal uint32
-	var entryLabelTierLabelTierCount int
-	var entryLabelTierLabelTierLastAttr int64
-	nentryLabelTier := entryLabelTierAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-	for attrJ := int64(0); attrJ < nentryLabelTier; attrJ++ {
-		for membID := range entryLabelTierMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-			switch membID {
+				val, valErr := u8ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u8Array").Str("membership", "agentrunEntryLabelLevel").Str("field", "LabelLevel").Errorf("slot u8Array@agentrunEntryLabelLevel (field LabelLevel) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				u8ArrayLabelLevelVal = val
 			case kindAgentrunEntryLabelTier:
-				if entryLabelTierLabelTierLastAttr != attrJ+1 {
-					entryLabelTierLabelTierLastAttr = attrJ + 1
-					entryLabelTierLabelTierCount++
+				if u8ArrayLabelTierLastAttr != attrJ+1 {
+					u8ArrayLabelTierLastAttr = attrJ + 1
+					u8ArrayLabelTierCount++
 				}
-				val := entryLabelTierAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				entryLabelTierLabelTierVal = val
+				val, valErr := u8ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u8Array").Str("membership", "agentrunEntryLabelTier").Str("field", "LabelTier").Errorf("slot u8Array@agentrunEntryLabelTier (field LabelTier) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				u8ArrayLabelTierVal = val
 			}
 		}
 	}
-	if entryLabelTierLabelTierCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "entryLabelTier").Str("membership", "agentrunEntryLabelTier").Int("got", entryLabelTierLabelTierCount).Errorf("slot entryLabelTier@agentrunEntryLabelTier (field LabelTier) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", entryLabelTierLabelTierCount)
+	if u8ArrayLabelLevelCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u8Array").Str("membership", "agentrunEntryLabelLevel").Int("got", u8ArrayLabelLevelCount).Errorf("slot u8Array@agentrunEntryLabelLevel (field LabelLevel) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u8ArrayLabelLevelCount)
 		return
 	}
-	if entryLabelTierLabelTierCount == 1 {
-		row.LabelTier = entryLabelTierLabelTierVal
+	if u8ArrayLabelLevelCount == 1 {
+		row.LabelLevel = u8ArrayLabelLevelVal
 		present = true
 	}
-	// --- entryLabelExposure. ---
-	var entryLabelExposureLabelExposureVal string
-	var entryLabelExposureLabelExposureCount int
-	var entryLabelExposureLabelExposureLastAttr int64
-	nentryLabelExposure := entryLabelExposureAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-	for attrJ := int64(0); attrJ < nentryLabelExposure; attrJ++ {
-		for membID := range entryLabelExposureMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+	if u8ArrayLabelTierCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u8Array").Str("membership", "agentrunEntryLabelTier").Int("got", u8ArrayLabelTierCount).Errorf("slot u8Array@agentrunEntryLabelTier (field LabelTier) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u8ArrayLabelTierCount)
+		return
+	}
+	if u8ArrayLabelTierCount == 1 {
+		row.LabelTier = u8ArrayLabelTierVal
+		present = true
+	}
+	// --- symbolArray. ---
+	var symbolArrayLabelExposureSlice []string
+	var symbolArrayLabelExposureCount int
+	var symbolArrayLabelExposureLastAttr int64
+	var symbolArrayLabelOriginSlice []string
+	var symbolArrayLabelOriginCount int
+	var symbolArrayLabelOriginLastAttr int64
+	nsymbolArray := symbolArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nsymbolArray; attrJ++ {
+		for membID := range symbolArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 			switch membID {
 			case kindAgentrunEntryLabelExposure:
-				if entryLabelExposureLabelExposureLastAttr != attrJ+1 {
-					entryLabelExposureLabelExposureLastAttr = attrJ + 1
-					entryLabelExposureLabelExposureCount++
+				if symbolArrayLabelExposureLastAttr != attrJ+1 {
+					symbolArrayLabelExposureLastAttr = attrJ + 1
+					symbolArrayLabelExposureCount++
 				}
-				val := entryLabelExposureAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				entryLabelExposureLabelExposureVal = val
-			}
-		}
-	}
-	if entryLabelExposureLabelExposureCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "entryLabelExposure").Str("membership", "agentrunEntryLabelExposure").Int("got", entryLabelExposureLabelExposureCount).Errorf("slot entryLabelExposure@agentrunEntryLabelExposure (field LabelExposure) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", entryLabelExposureLabelExposureCount)
-		return
-	}
-	if entryLabelExposureLabelExposureCount == 1 {
-		row.LabelExposure = entryLabelExposureLabelExposureVal
-		present = true
-	}
-	// --- entryLabelOrigin. ---
-	var entryLabelOriginLabelOriginVal string
-	var entryLabelOriginLabelOriginCount int
-	var entryLabelOriginLabelOriginLastAttr int64
-	nentryLabelOrigin := entryLabelOriginAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-	for attrJ := int64(0); attrJ < nentryLabelOrigin; attrJ++ {
-		for membID := range entryLabelOriginMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-			switch membID {
+				for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					symbolArrayLabelExposureSlice = append(symbolArrayLabelExposureSlice, v)
+				}
 			case kindAgentrunEntryLabelOrigin:
-				if entryLabelOriginLabelOriginLastAttr != attrJ+1 {
-					entryLabelOriginLabelOriginLastAttr = attrJ + 1
-					entryLabelOriginLabelOriginCount++
+				if symbolArrayLabelOriginLastAttr != attrJ+1 {
+					symbolArrayLabelOriginLastAttr = attrJ + 1
+					symbolArrayLabelOriginCount++
 				}
-				val := entryLabelOriginAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				entryLabelOriginLabelOriginVal = val
+				for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					symbolArrayLabelOriginSlice = append(symbolArrayLabelOriginSlice, v)
+				}
 			}
 		}
 	}
-	if entryLabelOriginLabelOriginCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "entryLabelOrigin").Str("membership", "agentrunEntryLabelOrigin").Int("got", entryLabelOriginLabelOriginCount).Errorf("slot entryLabelOrigin@agentrunEntryLabelOrigin (field LabelOrigin) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", entryLabelOriginLabelOriginCount)
+	if symbolArrayLabelExposureCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbolArray").Str("membership", "agentrunEntryLabelExposure").Int("got", symbolArrayLabelExposureCount).Errorf("slot symbolArray@agentrunEntryLabelExposure (field LabelExposure) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolArrayLabelExposureCount)
 		return
 	}
-	if entryLabelOriginLabelOriginCount == 1 {
-		row.LabelOrigin = entryLabelOriginLabelOriginVal
+	if symbolArrayLabelExposureSlice != nil {
+		row.LabelExposure = symbolArrayLabelExposureSlice
 		present = true
 	}
-	// --- entryWriterRun. ---
-	var entryWriterRunWriterRunVal string
-	var entryWriterRunWriterRunCount int
-	var entryWriterRunWriterRunLastAttr int64
-	nentryWriterRun := entryWriterRunAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-	for attrJ := int64(0); attrJ < nentryWriterRun; attrJ++ {
-		for membID := range entryWriterRunMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-			switch membID {
-			case kindAgentrunEntryWriterRun:
-				if entryWriterRunWriterRunLastAttr != attrJ+1 {
-					entryWriterRunWriterRunLastAttr = attrJ + 1
-					entryWriterRunWriterRunCount++
-				}
-				val := entryWriterRunAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				entryWriterRunWriterRunVal = val
-			}
-		}
-	}
-	if entryWriterRunWriterRunCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "entryWriterRun").Str("membership", "agentrunEntryWriterRun").Int("got", entryWriterRunWriterRunCount).Errorf("slot entryWriterRun@agentrunEntryWriterRun (field WriterRun) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", entryWriterRunWriterRunCount)
+	if symbolArrayLabelOriginCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbolArray").Str("membership", "agentrunEntryLabelOrigin").Int("got", symbolArrayLabelOriginCount).Errorf("slot symbolArray@agentrunEntryLabelOrigin (field LabelOrigin) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolArrayLabelOriginCount)
 		return
 	}
-	if entryWriterRunWriterRunCount == 1 {
-		row.WriterRun = entryWriterRunWriterRunVal
-		present = true
-	}
-	// --- entryWriterTurn. ---
-	var entryWriterTurnWriterTurnVal string
-	var entryWriterTurnWriterTurnCount int
-	var entryWriterTurnWriterTurnLastAttr int64
-	nentryWriterTurn := entryWriterTurnAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-	for attrJ := int64(0); attrJ < nentryWriterTurn; attrJ++ {
-		for membID := range entryWriterTurnMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-			switch membID {
-			case kindAgentrunEntryWriterTurn:
-				if entryWriterTurnWriterTurnLastAttr != attrJ+1 {
-					entryWriterTurnWriterTurnLastAttr = attrJ + 1
-					entryWriterTurnWriterTurnCount++
-				}
-				val := entryWriterTurnAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				entryWriterTurnWriterTurnVal = val
-			}
-		}
-	}
-	if entryWriterTurnWriterTurnCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "entryWriterTurn").Str("membership", "agentrunEntryWriterTurn").Int("got", entryWriterTurnWriterTurnCount).Errorf("slot entryWriterTurn@agentrunEntryWriterTurn (field WriterTurn) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", entryWriterTurnWriterTurnCount)
-		return
-	}
-	if entryWriterTurnWriterTurnCount == 1 {
-		row.WriterTurn = entryWriterTurnWriterTurnVal
-		present = true
-	}
-	// --- entryWriterOrdinal. ---
-	var entryWriterOrdinalWriterOrdinalVal uint32
-	var entryWriterOrdinalWriterOrdinalCount int
-	var entryWriterOrdinalWriterOrdinalLastAttr int64
-	nentryWriterOrdinal := entryWriterOrdinalAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-	for attrJ := int64(0); attrJ < nentryWriterOrdinal; attrJ++ {
-		for membID := range entryWriterOrdinalMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-			switch membID {
-			case kindAgentrunEntryWriterOrdinal:
-				if entryWriterOrdinalWriterOrdinalLastAttr != attrJ+1 {
-					entryWriterOrdinalWriterOrdinalLastAttr = attrJ + 1
-					entryWriterOrdinalWriterOrdinalCount++
-				}
-				val := entryWriterOrdinalAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				entryWriterOrdinalWriterOrdinalVal = val
-			}
-		}
-	}
-	if entryWriterOrdinalWriterOrdinalCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "entryWriterOrdinal").Str("membership", "agentrunEntryWriterOrdinal").Int("got", entryWriterOrdinalWriterOrdinalCount).Errorf("slot entryWriterOrdinal@agentrunEntryWriterOrdinal (field WriterOrdinal) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", entryWriterOrdinalWriterOrdinalCount)
-		return
-	}
-	if entryWriterOrdinalWriterOrdinalCount == 1 {
-		row.WriterOrdinal = entryWriterOrdinalWriterOrdinalVal
-		present = true
-	}
-	// --- entryPrev. ---
-	var entryPrevPrevVal uint32
-	var entryPrevPrevCount int
-	var entryPrevPrevLastAttr int64
-	nentryPrev := entryPrevAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-	for attrJ := int64(0); attrJ < nentryPrev; attrJ++ {
-		for membID := range entryPrevMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-			switch membID {
-			case kindAgentrunEntryPrev:
-				if entryPrevPrevLastAttr != attrJ+1 {
-					entryPrevPrevLastAttr = attrJ + 1
-					entryPrevPrevCount++
-				}
-				val := entryPrevAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				entryPrevPrevVal = val
-			}
-		}
-	}
-	if entryPrevPrevCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "entryPrev").Str("membership", "agentrunEntryPrev").Int("got", entryPrevPrevCount).Errorf("slot entryPrev@agentrunEntryPrev (field Prev) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", entryPrevPrevCount)
-		return
-	}
-	if entryPrevPrevCount == 1 {
-		row.Prev = entryPrevPrevVal
-		present = true
-	}
-	// --- entryDigest. ---
-	var entryDigestDigestVal string
-	var entryDigestDigestCount int
-	var entryDigestDigestLastAttr int64
-	nentryDigest := entryDigestAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-	for attrJ := int64(0); attrJ < nentryDigest; attrJ++ {
-		for membID := range entryDigestMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-			switch membID {
-			case kindAgentrunEntryDigest:
-				if entryDigestDigestLastAttr != attrJ+1 {
-					entryDigestDigestLastAttr = attrJ + 1
-					entryDigestDigestCount++
-				}
-				val := entryDigestAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				entryDigestDigestVal = val
-			}
-		}
-	}
-	if entryDigestDigestCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "entryDigest").Str("membership", "agentrunEntryDigest").Int("got", entryDigestDigestCount).Errorf("slot entryDigest@agentrunEntryDigest (field Digest) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", entryDigestDigestCount)
-		return
-	}
-	if entryDigestDigestCount == 1 {
-		row.Digest = entryDigestDigestVal
-		present = true
-	}
-	// --- entryKeyId. ---
-	var entryKeyIdKeyIdVal string
-	var entryKeyIdKeyIdCount int
-	var entryKeyIdKeyIdLastAttr int64
-	nentryKeyId := entryKeyIdAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-	for attrJ := int64(0); attrJ < nentryKeyId; attrJ++ {
-		for membID := range entryKeyIdMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-			switch membID {
-			case kindAgentrunEntryKeyId:
-				if entryKeyIdKeyIdLastAttr != attrJ+1 {
-					entryKeyIdKeyIdLastAttr = attrJ + 1
-					entryKeyIdKeyIdCount++
-				}
-				val := entryKeyIdAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				entryKeyIdKeyIdVal = val
-			}
-		}
-	}
-	if entryKeyIdKeyIdCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "entryKeyId").Str("membership", "agentrunEntryKeyId").Int("got", entryKeyIdKeyIdCount).Errorf("slot entryKeyId@agentrunEntryKeyId (field KeyId) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", entryKeyIdKeyIdCount)
-		return
-	}
-	if entryKeyIdKeyIdCount == 1 {
-		row.KeyId = entryKeyIdKeyIdVal
-		present = true
-	}
-	// --- entryParent. ---
-	var entryParentParentVal uint32
-	var entryParentParentCount int
-	var entryParentParentLastAttr int64
-	nentryParent := entryParentAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-	for attrJ := int64(0); attrJ < nentryParent; attrJ++ {
-		for membID := range entryParentMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-			switch membID {
-			case kindAgentrunEntryParent:
-				if entryParentParentLastAttr != attrJ+1 {
-					entryParentParentLastAttr = attrJ + 1
-					entryParentParentCount++
-				}
-				val := entryParentAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				entryParentParentVal = val
-			}
-		}
-	}
-	if entryParentParentCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "entryParent").Str("membership", "agentrunEntryParent").Int("got", entryParentParentCount).Errorf("slot entryParent@agentrunEntryParent (field Parent) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", entryParentParentCount)
-		return
-	}
-	if entryParentParentCount == 1 {
-		row.Parent = entryParentParentVal
-		present = true
-	}
-	// --- entryAttachments. ---
-	var entryAttachmentsAttachmentsVal string
-	var entryAttachmentsAttachmentsCount int
-	var entryAttachmentsAttachmentsLastAttr int64
-	nentryAttachments := entryAttachmentsAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-	for attrJ := int64(0); attrJ < nentryAttachments; attrJ++ {
-		for membID := range entryAttachmentsMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-			switch membID {
-			case kindAgentrunEntryAttachments:
-				if entryAttachmentsAttachmentsLastAttr != attrJ+1 {
-					entryAttachmentsAttachmentsLastAttr = attrJ + 1
-					entryAttachmentsAttachmentsCount++
-				}
-				val := entryAttachmentsAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				entryAttachmentsAttachmentsVal = val
-			}
-		}
-	}
-	if entryAttachmentsAttachmentsCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "entryAttachments").Str("membership", "agentrunEntryAttachments").Int("got", entryAttachmentsAttachmentsCount).Errorf("slot entryAttachments@agentrunEntryAttachments (field Attachments) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", entryAttachmentsAttachmentsCount)
-		return
-	}
-	if entryAttachmentsAttachmentsCount == 1 {
-		row.Attachments = entryAttachmentsAttachmentsVal
+	if symbolArrayLabelOriginSlice != nil {
+		row.LabelOrigin = symbolArrayLabelOriginSlice
 		present = true
 	}
 	return

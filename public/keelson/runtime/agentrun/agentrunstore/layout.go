@@ -51,7 +51,10 @@ func (inst Stores) Close() {
 	}
 }
 
-// ProvisionIn creates both tables; idempotent.
+// ProvisionIn creates both tables and checks their shape; idempotent. A
+// table an earlier schema created (CREATE TABLE IF NOT EXISTS accepts
+// any shape) fails the check, naming the drift, rather than the first
+// insert.
 func ProvisionIn(ctx context.Context, exec recordstore.ExecutorI, layout Layout) (err error) {
 	st := NewStores(exec, layout)
 	defer st.Close()
@@ -60,6 +63,12 @@ func ProvisionIn(ctx context.Context, exec recordstore.ExecutorI, layout Layout)
 	}
 	if err = st.Entry.EnsureTable(ctx); err != nil {
 		return eh.Errorf("ensure entry table: %w", err)
+	}
+	if err = st.Run.VerifySchema(ctx); err != nil {
+		return eh.Errorf("run table: %w", err)
+	}
+	if err = st.Entry.VerifySchema(ctx); err != nil {
+		return eh.Errorf("entry table: %w", err)
 	}
 	return
 }

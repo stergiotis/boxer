@@ -403,3 +403,22 @@ func TestTheRunListIsNewestFirstAndBounded(t *testing.T) {
 	assert.Equal(t, []string{"r3", "r2"}, ids("chat", 2))
 	assert.Equal(t, []string{"r1"}, ids("other", 0))
 }
+
+// A journal table an earlier schema created is not accepted silently:
+// CREATE TABLE IF NOT EXISTS succeeds against any shape, so provisioning
+// checks the shape and names the drift, and the host falls back to the
+// in-process store instead of failing at the first insert.
+func TestProvisioningRefusesAnOldTableShape(t *testing.T) {
+	ctx := context.Background()
+	exec, err := chexec.NewLocalExecutor(filepath.Join(t.TempDir(), "chdb"), memory.NewGoAllocator())
+	if err != nil {
+		t.Skipf("clickhouse-local unavailable: %v", err)
+	}
+	layout := agentrunstore.Layout{Database: "artest"}
+	require.NoError(t, exec.Exec(ctx, "CREATE DATABASE IF NOT EXISTS artest"))
+	require.NoError(t, exec.Exec(ctx, "CREATE TABLE artest.agentrunentry (`id:id:s:4::0:` String, `ts:ts:z64:47::0:` DateTime64(9)) ENGINE = MergeTree ORDER BY tuple()"))
+	err = agentrunstore.ProvisionIn(ctx, exec, layout)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "entry table")
+	require.NoError(t, agentrunstore.ProvisionBodyIn(ctx, exec, layout), "a fresh vault table provisions")
+}

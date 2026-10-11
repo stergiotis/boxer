@@ -31,5 +31,6 @@ func TestGenerateAgentrunBodyStore(t *testing.T) {
 		PackageName: "agentrunstore", StoreName: "BodyRow", TableName: TableNameBody, Database: DatabaseName,
 		Table: td, RowConfig: TableRowConfig, ComponentPaths: []string{"./body_dto.go"}, OutDir: ".",
 		ImportPath: importPath, Wrapper: marshallgen.FixedIdsWrapper{Ids: ids},
+		Roles: gen.Roles{Key: "id", Order: EntryOrdinalColumn},
 	}.Generate())
 }
