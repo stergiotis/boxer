@@ -81,13 +81,17 @@ type wireEntry struct {
 	KeyId         string    `json:"key_id,omitempty"`
 	Parent        uint32    `json:"parent,omitempty"`
 	Attachments   string    `json:"attachments,omitempty"`
+	// Opening is the commitment opening, hex; it travels with the bodies
+	// and is held only by the vault (ADR-0320 §SD2).
+	Opening string `json:"opening,omitempty"`
 }
 
 func wireOfEntry(e Entry) wireEntry {
 	return wireEntry{Run: e.Run, Ordinal: e.Ordinal, At: e.At.UTC(), Kind: e.Kind.String(), Key: e.Key, Role: e.Role, Body: e.Body, Calls: e.Calls, BodyDigest: e.BodyDigest, CallsDigest: e.CallsDigest,
 		Name: e.Name, Book: e.Book, Form: e.Form, Target: e.Target, From: e.From, Effect: e.Effect, Turn: e.Turn,
 		LabelLevel: uint8(e.Label.Level), LabelTier: uint8(e.Label.Tier), LabelExposure: e.Label.Exposure, LabelOrigin: e.Label.Origin,
-		WriterRun: e.WriterRun, WriterTurn: e.WriterTurn, WriterOrdinal: e.WriterOrdinal, Prev: e.Prev, Digest: e.Digest, KeyId: e.KeyId, Parent: e.Parent, Attachments: e.Attachments}
+		WriterRun: e.WriterRun, WriterTurn: e.WriterTurn, WriterOrdinal: e.WriterOrdinal, Prev: e.Prev, Digest: e.Digest, KeyId: e.KeyId, Parent: e.Parent, Attachments: e.Attachments,
+		Opening: OpeningText(e.Opening)}
 }
 
 func entryOfWire(w wireEntry) Entry {
@@ -95,7 +99,8 @@ func entryOfWire(w wireEntry) Entry {
 	return Entry{Run: w.Run, Ordinal: w.Ordinal, At: zeroed(w.At), Kind: k, Key: w.Key, Role: w.Role, Body: w.Body, Calls: w.Calls, BodyDigest: w.BodyDigest, CallsDigest: w.CallsDigest,
 		Name: w.Name, Book: w.Book, Form: w.Form, Target: w.Target, From: w.From, Effect: w.Effect, Turn: w.Turn,
 		Label:     Label{Level: LevelE(w.LabelLevel), Tier: TierE(w.LabelTier), Exposure: unionMarks(w.LabelExposure, nil), Origin: unionMarks(w.LabelOrigin, nil)},
-		WriterRun: w.WriterRun, WriterTurn: w.WriterTurn, WriterOrdinal: w.WriterOrdinal, Prev: w.Prev, Digest: w.Digest, KeyId: w.KeyId, Parent: w.Parent, Attachments: w.Attachments}
+		WriterRun: w.WriterRun, WriterTurn: w.WriterTurn, WriterOrdinal: w.WriterOrdinal, Prev: w.Prev, Digest: w.Digest, KeyId: w.KeyId, Parent: w.Parent, Attachments: w.Attachments,
+		Opening: OpeningOf(w.Opening)}
 }
 
 type wireRunRequest struct {
@@ -108,6 +113,13 @@ type wireIdRequest struct {
 	Id    string `json:"id"`
 	From  uint32 `json:"from,omitempty"`
 	Limit int    `json:"limit,omitempty"`
+}
+
+// wireEraseRequest names the entries of a run whose content is erased.
+type wireEraseRequest struct {
+	V        uint8    `json:"v"`
+	Id       string   `json:"id"`
+	Ordinals []uint32 `json:"ordinals"`
 }
 
 type wireAppendRequest struct {

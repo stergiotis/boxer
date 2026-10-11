@@ -1071,16 +1071,27 @@ func (rt *Runtime) bootAgentRun(ctx context.Context) {
 			logger.Warn().Err(lerr).Msg("idlease: provisioning failed; no id stream can lease a block on this host")
 		}
 		cancel()
+		if err == nil {
+			// The vault beside the ledger (ADR-0320 §SD1): provisioned on
+			// its own, so a ledger another change is moving does not hold
+			// it back.
+			err = agentrunstore.ProvisionBodyIn(pctx, rt.PersistExec, layout)
+		}
 		if err != nil {
 			logger.Warn().Err(err).Msg("agentrun: provisioning failed; runs are kept in process only")
 		} else {
 			sql := agentrun.NewSqlStore(rt.PersistExec, layout)
-			rt.cleanups = append(rt.cleanups, sql.Close)
-			store = sql
+			vault := agentrun.NewSqlBodyStore(rt.PersistExec, layout)
+			rt.cleanups = append(rt.cleanups, sql.Close, vault.Close)
+			vaulted := agentrun.NewVaulted(sql, vault)
+			vaulted.Log = logger
+			store = vaulted
 		}
 	}
 	if store == nil {
-		store = agentrun.NewMemStore()
+		// In process the ledger and the vault are both memory; the
+		// separation holds all the same, so an erasure drops the row.
+		store = agentrun.NewVaulted(agentrun.NewMemStore(), agentrun.NewMemBodyStore())
 	}
 	svc, err := agentrun.NewService(rt.Bus, logger, store)
 	if err != nil {

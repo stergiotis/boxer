@@ -210,6 +210,30 @@ func (inst *Service) handle(msg *app.Msg) {
 		err = inst.store.Tombstone(ctx, req.Id)
 		unlock()
 		inst.ack(msg.Reply, err)
+	case SubjectErase:
+		req, err := decode[wireEraseRequest](msg.Payload)
+		if err != nil {
+			inst.reply(msg.Reply, wireAck{V: wireVersion, Reason: err.Error()})
+			return
+		}
+		eraser, ok := inst.store.(EraserI)
+		if !ok {
+			inst.reply(msg.Reply, wireAck{V: wireVersion, Reason: "the store does not erase"})
+			return
+		}
+		unlock := inst.lockRun(req.Id)
+		r, why := inst.owned(ctx, req.Id, owner)
+		if why == "" {
+			why = inst.erasable(ctx, r, req.Ordinals)
+		}
+		if why != "" {
+			unlock()
+			inst.reply(msg.Reply, wireAck{V: wireVersion, Reason: why})
+			return
+		}
+		err = eraser.Erase(ctx, req.Id, req.Ordinals)
+		unlock()
+		inst.ack(msg.Reply, err)
 	default:
 		inst.reply(msg.Reply, wireAck{V: wireVersion, Reason: "no such verb"})
 	}
@@ -285,6 +309,37 @@ func (inst *Service) headIs(ctx context.Context, r Run, kind KindE) bool {
 		return false
 	}
 	return entries[len(entries)-1].Kind == kind
+}
+
+// erasable is why the ordinals may not be erased, empty when they may:
+// the chain must hold an erased entry naming each, so the erasure is on
+// record before the content goes (ADR-0320 §SD4), and none may be a head
+// entry.
+func (inst *Service) erasable(ctx context.Context, r Run, ordinals []uint32) (why string) {
+	if len(ordinals) == 0 {
+		return "nothing to erase"
+	}
+	entries, err := inst.store.Entries(ctx, r.Id, 0)
+	if err != nil {
+		return err.Error()
+	}
+	named := make(map[uint32]bool)
+	for _, e := range entries {
+		if e.Kind == KindErased {
+			named[e.Target] = true
+		}
+	}
+	for _, ord := range ordinals {
+		switch {
+		case ord == 0 || ord > uint32(len(entries)):
+			return eb.Build().Uint32("ordinal", ord).Errorf("no such entry").Error()
+		case entries[ord-1].Kind == KindHead:
+			return eb.Build().Uint32("ordinal", ord).Errorf("a head entry is not content").Error()
+		case !named[ord]:
+			return eb.Build().Uint32("ordinal", ord).Errorf("an erasure follows the erased entry naming it").Error()
+		}
+	}
+	return
 }
 
 // appendable is why the batch may not be appended, empty when it may: one

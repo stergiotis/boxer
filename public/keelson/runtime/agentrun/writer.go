@@ -107,6 +107,28 @@ func Reopen(ctx context.Context, store StoreI, id string) (w *Writer, err error)
 			return nil, err
 		}
 	}
+	// An erasure the process did not finish, the erased entry written and
+	// the vault row not destroyed: finish it, for the same reason.
+	if pending := w.unfinishedErasures(); len(pending) > 0 {
+		eraser, ok := store.(EraserI)
+		if !ok {
+			return nil, eb.Build().Str("run", id).Errorf("the record holds erasures the store cannot finish")
+		}
+		if err = w.finishErase(ctx, eraser, pending); err != nil {
+			return nil, eb.Build().Str("run", id).Errorf("finish the erasures: %w", err)
+		}
+	}
+	return
+}
+
+// unfinishedErasures are the ordinals erased entries name whose content
+// the record still holds.
+func (inst *Writer) unfinishedErasures() (ordinals []uint32) {
+	for _, e := range inst.entries {
+		if e.Kind == KindErased && e.Target > 0 && e.Target <= uint32(len(inst.entries)) && inst.entries[e.Target-1].HasContent() {
+			ordinals = append(ordinals, e.Target)
+		}
+	}
 	return
 }
 
@@ -356,12 +378,77 @@ func (inst *Writer) finishDelete(ctx context.Context, by string) (err error) {
 		if emptied[i].Kind == KindHead {
 			continue
 		}
-		emptied[i].Body, emptied[i].Calls = "", ""
+		emptied[i] = emptied[i].Erased()
 	}
 	inst.entries = emptied
 	inst.mu.Unlock()
 	if err = inst.update(ctx, func(r *Run) { r.State, r.DeletedBy, r.DeletedAt = StateDeleted, by, Now() }); err != nil {
 		return eb.Build().Str("run", id).Errorf("mark deleted: %w", err)
 	}
+	return
+}
+
+// Erase destroys the content of the named entries (ADR-0320 §SD4): one
+// erased entry per ordinal, naming who and the ordinal, chained first;
+// then the vault rows destroyed through the store; then the writer's
+// copies emptied. It works on a closed run, which is where a data
+// subject's request usually finds one; it refuses an ordinal the run does
+// not hold, a head entry, and an entry without content. A failure after
+// the erased entries leaves the writer failed: the record holds erasures
+// it has not finished, which Reopen completes.
+func (inst *Writer) Erase(ctx context.Context, by string, ordinals ...uint32) (err error) {
+	inst.writeMu.Lock()
+	defer inst.writeMu.Unlock()
+	eraser, ok := inst.store.(EraserI)
+	if !ok {
+		return eb.Build().Str("run", inst.Run().Id).Errorf("the store does not erase")
+	}
+	inst.mu.Lock()
+	entries := inst.entries
+	inst.mu.Unlock()
+	marks := make([]Entry, 0, len(ordinals))
+	for _, ord := range ordinals {
+		if ord == 0 || ord > uint32(len(entries)) {
+			return eb.Build().Str("run", inst.Run().Id).Uint32("ordinal", ord).Errorf("no such entry")
+		}
+		e := entries[ord-1]
+		switch {
+		case e.Kind == KindHead:
+			return eb.Build().Str("run", inst.Run().Id).Uint32("ordinal", ord).Errorf("a head entry is a digest the anchor law reads, not content")
+		case e.Kind == KindErased || e.Kind == KindDeleted:
+			return eb.Build().Str("run", inst.Run().Id).Uint32("ordinal", ord).Errorf("an erasure is not content")
+		case !e.HasContent():
+			return eb.Build().Str("run", inst.Run().Id).Uint32("ordinal", ord).Errorf("the entry has no content to erase")
+		}
+		marks = append(marks, Entry{Kind: KindErased, Name: by, Target: ord, Label: Label{Level: LevelPerson}})
+	}
+	if len(marks) == 0 {
+		return
+	}
+	if _, err = inst.append(ctx, true, marks...); err != nil {
+		return
+	}
+	if err = inst.finishErase(ctx, eraser, ordinals); err != nil {
+		inst.mu.Lock()
+		inst.failed = err
+		inst.mu.Unlock()
+	}
+	return
+}
+
+// finishErase is the erasure after its entries, under the write lock:
+// the vault rows and the writer's copies.
+func (inst *Writer) finishErase(ctx context.Context, eraser EraserI, ordinals []uint32) (err error) {
+	id := inst.Run().Id
+	if err = eraser.Erase(ctx, id, ordinals); err != nil {
+		return eb.Build().Str("run", id).Errorf("erase: %w", err)
+	}
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	emptied := slices.Clone(inst.entries)
+	for _, ord := range ordinals {
+		emptied[ord-1] = emptied[ord-1].Erased()
+	}
+	inst.entries = emptied
 	return
 }

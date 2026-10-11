@@ -230,13 +230,20 @@ Accepted 2026-10-11.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
-<!--
 ## Updates
 
-Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
-claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
-YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
--->
+### 2026-10-11 — §SD1, §SD5: the chain commits to commitments
+
+Under [ADR-0320](./0320-journal-bodies-in-a-vault-committed-to-the-chain-under-a-per-entry-key.md)
+the body and calls digests the canonical form carries are commitments under
+a per-entry opening held only by the vault, so an erased body leaves nothing
+retained that reveals it; the digest name is `…/agentrun-chain/v2`, since a
+v1 verifier would read them as content digests and fail. L31 accepts an
+empty field whose commitment stands only when the chain explains it: the
+run's `deleted` entry at its end, or an `erased` entry naming the ordinal.
+Deletion still keeps the chain and the heads; so does the erasure of one
+entry.
+
 
 ## References
 

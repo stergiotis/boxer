@@ -375,6 +375,13 @@ and whose reply is a copy record
 §SD1, §SD3). Each is declared in the owning package's `ServiceCaps` and
 `ClientCaps`, and the chat's manifest requests the two runtime families.
 
+### 2026-10-11 — `runtime.agentrun.erase`
+
+The run journal's family gains `erase`: the content of named entries is
+destroyed after their `erased` entries are in the chain, scoped to the
+sender like the rest ([ADR-0320](./0320-journal-bodies-in-a-vault-committed-to-the-chain-under-a-per-entry-key.md)
+§SD4). The wildcard caps already cover it.
+
 ### 2026-10-11 — every copy goes through the broker; CS014 holds it
 
 The three places that still built the `CopyTextToClipboard` opcode

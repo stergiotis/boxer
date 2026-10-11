@@ -36,13 +36,20 @@ type Entry struct {
 	// Calls are an assistant reply's tool calls, as JSON, so the
 	// projection pairs results with calls (law L2); empty otherwise.
 	Calls string
-	// BodyDigest and CallsDigest are the content digests of Body and
-	// Calls as written, set by the writer. The chain commits to the
-	// digests, not the bodies, so a tombstone that empties the bodies
-	// leaves the chain verifying (law L31) and the anchored heads with it
-	// (law L32): ADR-0308 §SD8, ADR-0314 §SD5.
+	// BodyDigest and CallsDigest are the commitments to Body and Calls
+	// under the entry's Opening (ADR-0320 §SD2), set by the writer. The
+	// chain commits to them, not the bodies, so an erasure that destroys
+	// a body and its opening leaves the chain verifying (law L31) and
+	// the anchored heads with it (law L32), and leaves nothing retained
+	// that reveals the body: ADR-0308 §SD8, ADR-0314 §SD5, ADR-0320 §SD4.
 	BodyDigest  string
 	CallsDigest string
+	// Opening is the entry's commitment opening: drawn by the writer for
+	// an entry with content, carried on the bus, kept in the vault row
+	// beside the bodies and destroyed with them; never in the canonical
+	// form, a ledger column or an anchor. Empty for an entry without
+	// content, and for an erased one.
+	Opening []byte
 	// Name is what a section, tools or note entry is named by: the
 	// section slug, the tool set's digest, the note's source; a deleted
 	// entry names who deleted, outside the body a tombstone empties.
@@ -73,8 +80,9 @@ type Entry struct {
 	// entry chains to the run row's digest.
 	Prev   uint32
 	Digest string
-	// KeyId is reserved for per-run encryption, empty while it is
-	// deferred.
+	// KeyId names the commitment scheme (CommitScheme) on an entry that
+	// carries a commitment, so a verifier knows how to open it; empty
+	// otherwise. The column ADR-0308 §SD8 reserved.
 	KeyId string
 	// Parent is reserved for branching, zero until a consumer asks.
 	Parent uint32
@@ -87,9 +95,11 @@ type Entry struct {
 
 // canonical is the entry's canonical form: the fields that are content,
 // in a fixed order, as canonical CBOR (buscodec's deterministic encoding,
-// the record form of ADR-0201 being deferred), without the chain fields,
-// so a digest is a function of content alone. Bodies enter as their
-// content digests, marks as arrays, and the write instant as text.
+// the record form of ADR-0201 being deferred), without the chain fields
+// and without the opening, so a digest is a function of content alone.
+// Bodies and calls enter as their commitments (ADR-0320 §SD3),
+// attachments as the references they are, marks as arrays, and the write
+// instant as text.
 type canonical struct {
 	Run           string   `json:"run"`
 	Ordinal       uint32   `json:"ordinal"`
@@ -119,7 +129,8 @@ type canonical struct {
 }
 
 // CanonicalForm is the entry's canonical form as bytes. It commits to the
-// entry's BodyDigest and CallsDigest, which Digested sets from the bodies.
+// entry's BodyDigest and CallsDigest, which Digested sets from the bodies
+// under the opening.
 func (inst Entry) CanonicalForm() (b []byte, err error) {
 	b, err = buscodec.NewCBOR().Encode(canonical{
 		Run: inst.Run, Ordinal: inst.Ordinal, At: timeText(inst.At), Kind: uint8(inst.Kind), Key: inst.Key, Role: inst.Role,
@@ -135,25 +146,52 @@ func (inst Entry) CanonicalForm() (b []byte, err error) {
 	return
 }
 
-// Digested is the entry with BodyDigest and CallsDigest set from its
-// bodies: what the writer does before chaining.
+// HasContent says the entry carries a body or calls: what the vault
+// holds. Attachments are references to bytes the artefact store keeps,
+// not content, and stay on the ledger with the entry.
+func (inst Entry) HasContent() bool {
+	return inst.Body != "" || inst.Calls != ""
+}
+
+// Digested is the entry with its commitments set from its bodies under
+// its opening, drawing the opening when the entry has content and none
+// yet: what the writer does before chaining. An entry without content
+// has no opening and no commitments.
 func (inst Entry) Digested() (e Entry) {
 	e = inst
-	e.BodyDigest, e.CallsDigest = ContentDigest(inst.Body), ContentDigest(inst.Calls)
+	if !e.HasContent() {
+		e.Opening, e.BodyDigest, e.CallsDigest, e.KeyId = nil, "", "", ""
+		return
+	}
+	if len(e.Opening) != OpeningSize {
+		e.Opening = NewOpening()
+	}
+	e.BodyDigest = Commit(e.Opening, FieldBody, e.Body)
+	e.CallsDigest = Commit(e.Opening, FieldCalls, e.Calls)
+	e.KeyId = CommitScheme
 	return
 }
 
-// Tombstoned says the entry's bodies were emptied after it was written:
-// what a deleted run's entries are (ADR-0308 §SD8).
+// Tombstoned says the entry's content was erased after it was written: a
+// commitment stands where its field is empty. What a deleted run's
+// entries are (ADR-0308 §SD8), and an erased entry (ADR-0320 §SD4).
 func (inst Entry) Tombstoned() bool {
-	return (inst.Body == "" && inst.BodyDigest != emptyDigest) || (inst.Calls == "" && inst.CallsDigest != emptyDigest)
+	return (inst.Body == "" && inst.BodyDigest != "") || (inst.Calls == "" && inst.CallsDigest != "")
 }
 
-// BodiesMatch says the bodies the entry carries are the ones its digests
-// commit to, or were emptied by a tombstone.
+// Erased is the entry with its content and opening destroyed, the
+// commitments standing: what the vault's deletion leaves.
+func (inst Entry) Erased() (e Entry) {
+	e = inst
+	e.Body, e.Calls, e.Opening = "", "", nil
+	return
+}
+
+// BodiesMatch says every field the entry carries opens its commitment,
+// an empty field being either without commitment or erased.
 func (inst Entry) BodiesMatch() bool {
-	return (inst.Body == "" || ContentDigest(inst.Body) == inst.BodyDigest) &&
-		(inst.Calls == "" || ContentDigest(inst.Calls) == inst.CallsDigest)
+	return (inst.Body == "" || Opens(inst.Opening, FieldBody, inst.Body, inst.BodyDigest)) &&
+		(inst.Calls == "" || Opens(inst.Opening, FieldCalls, inst.Calls, inst.CallsDigest))
 }
 
 // digester keys the chain digests the way the canonical record form keys
@@ -161,8 +199,9 @@ func (inst Entry) BodiesMatch() bool {
 var digester = canonform.NewBlake3Digester()
 
 // DigestName names the hash construction every digest here uses; it
-// is recorded beside digests that outlive this build.
-func DigestName() string { return digester.Name() + "/agentrun-chain" }
+// is recorded beside digests that outlive this build. The form's second
+// version holds commitments, not content digests (ADR-0320 §SD3).
+func DigestName() string { return digester.Name() + "/agentrun-chain/v2" }
 
 // ChainDigest is the digest over the predecessor's digest and the entry's
 // canonical form (law L31).
@@ -196,13 +235,20 @@ func (inst Entry) chained(prevOrdinal uint32, prevDigest string) (e Entry, err e
 
 // Verify recomputes the chain over entries in order from the run row's
 // digest and returns the first ordinal whose digest does not match, or 0
-// when the chain holds (law L31). A body that is neither what its digest
-// commits to nor emptied by a tombstone breaks the chain at its entry;
-// an emptied body is a tombstone's only when the chain ends with the
-// deleted entry, so a body blanked in a live run breaks it too.
+// when the chain holds (law L31). A field that neither opens its
+// commitment nor was erased breaks the chain at its entry; an erased
+// field is an erasure's only when the chain says so, the run's deleted
+// entry at its end or an erased entry naming the ordinal (ADR-0320
+// §SD3), so content blanked in a live run breaks it too.
 func Verify(runDigest string, entries []Entry) (broken uint32, err error) {
 	prevOrd, prevDigest := uint32(0), runDigest
-	var tombstoned uint32
+	erased := make(map[uint32]bool)
+	for _, e := range entries {
+		if e.Kind == KindErased {
+			erased[e.Target] = true
+		}
+	}
+	deleted := len(entries) > 0 && entries[len(entries)-1].Kind == KindDeleted
 	for _, e := range entries {
 		form, ferr := e.CanonicalForm()
 		if ferr != nil {
@@ -211,13 +257,10 @@ func Verify(runDigest string, entries []Entry) (broken uint32, err error) {
 		if e.Prev != prevOrd || e.Digest != ChainDigest(prevDigest, form) || !e.BodiesMatch() {
 			return e.Ordinal, nil
 		}
-		if tombstoned == 0 && e.Tombstoned() {
-			tombstoned = e.Ordinal
+		if e.Tombstoned() && !deleted && !erased[e.Ordinal] {
+			return e.Ordinal, nil
 		}
 		prevOrd, prevDigest = e.Ordinal, e.Digest
-	}
-	if tombstoned != 0 && entries[len(entries)-1].Kind != KindDeleted {
-		return tombstoned, nil
 	}
 	return
 }
@@ -240,9 +283,6 @@ func RunDigestSeed(r Run) string {
 	_, _ = h.Write([]byte("run\x00" + r.Id + "\x00" + r.Conversation + "\x00" + r.OwnerApp + "\x00" + r.Coordinator + "\x00" + r.Cell + "\x00" + timeText(r.Created)))
 	return hex.EncodeToString(h.Sum(nil))
 }
-
-// emptyDigest is the content digest of an empty body.
-var emptyDigest = ContentDigest("")
 
 // timeText is the instant as the canonical form spells it; the zero time
 // is empty.

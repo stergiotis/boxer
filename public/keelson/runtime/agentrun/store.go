@@ -31,9 +31,11 @@ type StoreI interface {
 	Append(ctx context.Context, entries []Entry) (err error)
 	// Entries reads a run's entries from an ordinal on, in order.
 	Entries(ctx context.Context, run string, from uint32) (entries []Entry, err error)
-	// Tombstone empties every body of the run's entries, keeping their
-	// metadata, labels and digests (ADR-0308 §SD8); a head entry's body,
-	// a digest the anchor law reads, stays (ADR-0314 §SD5).
+	// Tombstone destroys the content and opening of every entry of the
+	// run, keeping metadata, labels and commitments (ADR-0308 §SD8,
+	// ADR-0320 §SD4); a head entry's body, a digest the anchor law reads,
+	// stays (ADR-0314 §SD5). A host's store is a VaultedStore, where the
+	// content never reached the ledger and the vault rows are destroyed.
 	Tombstone(ctx context.Context, run string) (err error)
 }
 
@@ -169,7 +171,7 @@ func (inst *MemStore) Tombstone(_ context.Context, run string) (err error) {
 		if es[i].Kind == KindHead {
 			continue
 		}
-		es[i].Body, es[i].Calls = "", ""
+		es[i] = es[i].Erased()
 	}
 	return
 }

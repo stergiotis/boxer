@@ -23,6 +23,9 @@ const (
 	SubjectAppend    = SubjectPrefix + "append"
 	SubjectEntries   = SubjectPrefix + "entries"
 	SubjectTombstone = SubjectPrefix + "tombstone"
+	// SubjectErase destroys the content of named entries of a run after
+	// their erased entries are in the chain (ADR-0320 §SD4).
+	SubjectErase = SubjectPrefix + "erase"
 )
 
 // TableRuns and TableEntries are the introspection tables (§SD10).

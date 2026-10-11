@@ -76,12 +76,16 @@ const (
 	KindKeyUse KindE = 25
 	// KindIgnorable is an extension-private entry the projection skips.
 	KindIgnorable KindE = 26
+	// KindErased records the erasure of one earlier entry's content: who
+	// in its name, the ordinal as its target; the vault row is destroyed
+	// with it (ADR-0320 §SD4).
+	KindErased KindE = 27
 )
 
 // AllKinds lists every kind in ordinal order; the golden pins it.
 var AllKinds = []KindE{KindUser, KindRequest, KindReply, KindIntent, KindOutcome, KindNote, KindSection, KindTools,
 	KindCompact, KindEdit, KindProfile, KindTurn, KindAsked, KindAnswered, KindCandidate, KindVerdict, KindSelect,
-	KindCompleted, KindEndorse, KindApproval, KindHead, KindCopy, KindIssued, KindDeleted, KindKeyUse, KindIgnorable}
+	KindCompleted, KindEndorse, KindApproval, KindHead, KindCopy, KindIssued, KindDeleted, KindKeyUse, KindIgnorable, KindErased}
 
 var kindNames = map[KindE]string{
 	KindUser: "user", KindRequest: "request", KindReply: "reply", KindIntent: "intent", KindOutcome: "outcome",
@@ -89,7 +93,7 @@ var kindNames = map[KindE]string{
 	KindProfile: "profile", KindTurn: "turn", KindAsked: "asked", KindAnswered: "answered", KindCandidate: "candidate",
 	KindVerdict: "verdict", KindSelect: "select", KindCompleted: "completed", KindEndorse: "endorse",
 	KindApproval: "approval", KindHead: "head", KindCopy: "copy", KindIssued: "issued", KindDeleted: "deleted",
-	KindKeyUse: "keyuse", KindIgnorable: "ignorable",
+	KindKeyUse: "keyuse", KindIgnorable: "ignorable", KindErased: "erased",
 }
 
 func (inst KindE) String() (s string) {

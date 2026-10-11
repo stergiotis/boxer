@@ -612,6 +612,15 @@ var (
 	MembLlmCallRoute    = NkRegistry.MustBegin("llmCallRoute", 358).End()
 	MembLlmCallTier     = NkRegistry.MustBegin("llmCallTier", 359).End()
 	MembLlmCallApproval = NkRegistry.MustBegin("llmCallApproval", 360).End()
+
+	// The vault table (ADR-0320 §SD1): the fields that could be personal,
+	// keyed like the entry table, with the opening the chain's
+	// commitments open under. Ids from 370 leave room under 361 for the
+	// revision role plan002 A1 adds on the entry table.
+	MembAgentrunBodyOrdinal = NkRegistry.MustBegin("agentrunBodyOrdinal", 370).End()
+	MembAgentrunBodyOpening = NkRegistry.MustBegin("agentrunBodyOpening", 371).End()
+	MembAgentrunBodyText    = NkRegistry.MustBegin("agentrunBodyText", 372).End()
+	MembAgentrunBodyCalls   = NkRegistry.MustBegin("agentrunBodyCalls", 373).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -705,4 +714,5 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembAgentrunEntryWriterRun, MembAgentrunEntryWriterTurn, MembAgentrunEntryWriterOrdinal, MembAgentrunEntryPrev,
 	MembAgentrunEntryDigest, MembAgentrunEntryKeyId, MembAgentrunEntryParent, MembAgentrunEntryAttachments,
 	MembAgentrunEntryBodyDigest, MembAgentrunEntryCallsDigest, MembAgentrunHead, MembAgentrunVersion,
+	MembAgentrunBodyOrdinal, MembAgentrunBodyOpening, MembAgentrunBodyText, MembAgentrunBodyCalls,
 }

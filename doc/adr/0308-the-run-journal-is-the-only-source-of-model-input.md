@@ -373,6 +373,19 @@ no longer holds only within one process, but this is not yet the writer
 lease of ADR-0319 §SD7: two coordinators can still interleave entries on
 one run until that lands.
 
+### 2026-10-11 — §SD1, §SD8: bodies in a vault, commitments on the ledger
+
+[ADR-0320](./0320-journal-bodies-in-a-vault-committed-to-the-chain-under-a-per-entry-key.md)
+adds a third table, `agentrunbody`, holding each entry's body, calls and a
+per-entry opening; the entry table's `BodyDigest` and `CallsDigest` are
+commitments under that opening, not content digests, and its body columns
+are written empty until a later schema change drops them. A tombstone
+therefore destroys vault rows rather than blanking ledger columns, head
+entries' rows excepted, and a new `erased` kind records the erasure of one
+entry's content without deleting the run. The `KeyId` column this section
+reserved names the scheme. The host runs a `VaultedStore` over the SQL store
+and the vault; a writer sees the entry as before.
+
 ## References
 
 - [ADR-0303](./0303-a-conversation-outlives-its-process-a-run-journal-written-before-each-act.md) (superseded by this record) — the journal, resume fold, grant rule and pinning carried forward.

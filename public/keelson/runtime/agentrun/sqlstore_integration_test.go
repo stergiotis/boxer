@@ -34,8 +34,14 @@ func TestTheSqlStoreUnderClickhouseLocal(t *testing.T) {
 	layout := agentrunstore.Layout{Database: "artest"}
 	require.NoError(t, agentrunstore.ProvisionIn(ctx, exec, layout))
 	require.NoError(t, agentrunstore.ProvisionIn(ctx, exec, layout), "idempotent")
-	st := NewSqlStore(exec, layout)
-	defer st.Close()
+	require.NoError(t, agentrunstore.ProvisionBodyIn(ctx, exec, layout))
+	// The host's shape (ADR-0320 §SD1): the SQL store is the ledger, the
+	// vault holds the content, the vaulted store is what a writer sees.
+	ledger := NewSqlStore(exec, layout)
+	defer ledger.Close()
+	vault := NewSqlBodyStore(exec, layout)
+	defer vault.Close()
+	st := NewVaulted(ledger, vault)
 
 	w, err := Open(ctx, st, Run{Id: "cell/r1", Cell: "cell", Conversation: "c1", OwnerApp: "chat", Coordinator: "w1", Label: Label{Tier: TierGreen}})
 	require.NoError(t, err)
@@ -98,8 +104,9 @@ func TestTheSqlStoreUnderClickhouseLocal(t *testing.T) {
 	// A fresh store over the same tables reads the record, not a cache:
 	// the tombstone's revisions win, the row is the latest version, the
 	// chain holds, and the deleted run reopens read-only.
-	fresh := NewSqlStore(exec, layout)
-	defer fresh.Close()
+	freshLedger := NewSqlStore(exec, layout)
+	defer freshLedger.Close()
+	fresh := NewVaulted(freshLedger, vault)
 	reopened, err := Reopen(ctx, fresh, "cell/r1")
 	require.NoError(t, err)
 	assert.Equal(t, StateDeleted, reopened.Run().State)
@@ -109,7 +116,8 @@ func TestTheSqlStoreUnderClickhouseLocal(t *testing.T) {
 	all, err := fresh.AllEntries(ctx)
 	require.NoError(t, err)
 	assert.Len(t, all, 5, "one entry per ordinal across the record")
-	assert.EqualValues(t, 5, rowCount(t, ctx, exec, layout, "cell/r1"), "the originals are deleted from the parts; the blanked revisions are the record")
+	assert.EqualValues(t, 5, rowCount(t, ctx, exec, layout, "cell/r1"), "the ledger never held content, so a deletion adds no row to it")
+	assert.EqualValues(t, 0, bodyCount(t, ctx, exec, layout, "cell/r1"), "the vault rows are destroyed")
 	of, err := fresh.EntriesOf(ctx, []string{"cell/r1", "none"})
 	require.NoError(t, err)
 	assert.Len(t, of, 5)
@@ -233,6 +241,19 @@ func TestASecondStoreLosesTheRunRow(t *testing.T) {
 func runRowCount(t *testing.T, ctx context.Context, exec recordstore.ExecutorI, layout agentrunstore.Layout, run string) (n uint64) {
 	t.Helper()
 	for rec, err := range exec.QueryArrow(ctx, "SELECT count() FROM "+layout.RunTable()+" WHERE "+agentrunstore.RunColKey+" = "+marshalling.EscapeString(run)) {
+		require.NoError(t, err)
+		if rec.NumRows() > 0 {
+			n = rec.Column(0).(*array.Uint64).Value(0)
+		}
+		rec.Release()
+	}
+	return
+}
+
+// bodyCount is the raw number of vault rows for a run.
+func bodyCount(t *testing.T, ctx context.Context, exec recordstore.ExecutorI, layout agentrunstore.Layout, run string) (n uint64) {
+	t.Helper()
+	for rec, err := range exec.QueryArrow(ctx, "SELECT count() FROM "+layout.BodyTable()+" WHERE "+agentrunstore.BodyRowColKey+" = "+marshalling.EscapeString(run)) {
 		require.NoError(t, err)
 		if rec.NumRows() > 0 {
 			n = rec.Column(0).(*array.Uint64).Value(0)

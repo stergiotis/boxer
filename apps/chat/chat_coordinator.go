@@ -208,7 +208,7 @@ type coordinator struct {
 // app replaces the store with the host's service before the first act.
 func newCoordinator(cli *agent.Client, kq *keelsonquery.Client, conversation string) (inst *coordinator) {
 	return &coordinator{cli: cli, kq: kq, conversation: conversation, opTools: OperationToolsSeed.Get(), ask: &asker{}, steps: &turnSteps{},
-		ceiling: defaultPermissions().ceiling(true), store: agentrun.NewMemStore(),
+		ceiling: defaultPermissions().ceiling(true), store: agentrun.NewVaulted(agentrun.NewMemStore(), agentrun.NewMemBodyStore()),
 		refused: make(map[string]string), typed: make(map[string]typedOp), opCache: make(map[string][]agent.Operation), windowApps: make(map[uint64]string),
 		opEffects: make(map[string]map[string]string), closed: make(chan struct{})}
 }

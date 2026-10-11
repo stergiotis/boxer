@@ -127,3 +127,10 @@ func (inst *Client) Tombstone(ctx context.Context, run string) (err error) {
 	a, err := roundTrip[wireIdRequest, wireAck](ctx, inst, SubjectTombstone, wireIdRequest{V: wireVersion, Id: run})
 	return ackOf(a, err)
 }
+
+// Erase destroys the content of the named entries after their erased
+// entries are in the chain (ADR-0320 §SD4).
+func (inst *Client) Erase(ctx context.Context, run string, ordinals []uint32) (err error) {
+	a, err := roundTrip[wireEraseRequest, wireAck](ctx, inst, SubjectErase, wireEraseRequest{V: wireVersion, Id: run, Ordinals: ordinals})
+	return ackOf(a, err)
+}

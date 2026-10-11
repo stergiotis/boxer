@@ -105,7 +105,7 @@ func TestDeletionKeepsTheChain(t *testing.T) {
 	st := NewMemStore()
 	w, err := Open(ctx, st, Run{Id: "r", OwnerApp: "chat"})
 	require.NoError(t, err)
-	_, err = w.Append(ctx, Entry{Kind: KindUser, Body: "secret"}, Entry{Kind: KindReply, Body: "answer", Calls: "[]"})
+	written, err := w.Append(ctx, Entry{Kind: KindUser, Body: "secret"}, Entry{Kind: KindReply, Body: "answer", Calls: "[]"})
 	require.NoError(t, err)
 	require.NoError(t, w.Close(ctx, StateClosed))
 	_, err = w.Append(ctx, Entry{Kind: KindUser, Body: "late"})
@@ -122,7 +122,8 @@ func TestDeletionKeepsTheChain(t *testing.T) {
 	require.Len(t, entries, 3)
 	assert.Empty(t, entries[0].Body)
 	assert.True(t, entries[0].Tombstoned())
-	assert.Equal(t, ContentDigest("secret"), entries[0].BodyDigest, "the digest stays")
+	assert.Equal(t, written[0].BodyDigest, entries[0].BodyDigest, "the commitment stays")
+	assert.Empty(t, entries[0].Opening, "the opening goes with the body")
 	assert.Equal(t, KindDeleted, entries[2].Kind)
 	assert.Equal(t, "person", entries[2].Name, "who deleted is outside the bodies")
 	assert.NotEmpty(t, entries[0].Digest, "digests stay")
@@ -316,6 +317,9 @@ func TestAMarkWithACommaIsRefused(t *testing.T) {
 	written, err := w.Append(ctx, Entry{Kind: KindUser, Body: "x", Label: Label{Origin: []string{"b", "a"}}})
 	require.NoError(t, err)
 	back := entryOf(entryRow(written[0]), "r")
+	// The ledger row carries neither content nor opening; the vault
+	// rejoins them (ADR-0320 §SD5).
+	back.Body, back.Opening = written[0].Body, written[0].Opening
 	assert.Equal(t, []string{"a", "b"}, back.Label.Origin)
 	broken, err := Verify(w.Run().Digest, []Entry{back})
 	require.NoError(t, err)
