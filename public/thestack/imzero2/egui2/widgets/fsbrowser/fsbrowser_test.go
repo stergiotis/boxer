@@ -77,6 +77,29 @@ func TestViewHidesDotNamesSortsDirsFirstAndFilters(t *testing.T) {
 		"descending flips within each group and directories stay first")
 }
 
+func TestFilterMatchesAnswersForAnyPath(t *testing.T) {
+	var st State
+	assert.False(t, st.FilterMatches("src/u.go", false, nil), "no filter, no match")
+
+	st.SetFilter(`\.GO$`)
+	assert.True(t, st.FilterMatches("src/util/u.go", false, nil), "case-insensitive over the path from the root")
+	assert.False(t, st.FilterMatches("src/util/u.md", false, nil))
+	assert.False(t, st.FilterMatches(".git/hooks/x.go", false, nil), "a dot-directory on the way")
+	assert.True(t, st.FilterMatches(".git/hooks/x.go", true, nil), "unless hidden names are shown")
+
+	noVendor := func(e Entry) bool { return !e.IsDir || e.Name != "vendor" }
+	assert.False(t, st.FilterMatches("vendor/x/a.go", false, noVendor), "a directory Keep refuses")
+	assert.True(t, st.FilterMatches("src/vendored.go", false, noVendor), "Keep sees the file as a file")
+
+	st.SetDir("src")
+	assert.True(t, st.FilterMatches("src/util/u.go", false, nil))
+	assert.False(t, st.FilterMatches("srcx/u.go", false, nil), "only under the current directory")
+	assert.False(t, st.FilterMatches("doc/u.go", false, nil))
+
+	st.SetFilter("u(")
+	assert.True(t, st.FilterMatches("src/u(1).go", false, nil), "a pattern that does not compile matches as a literal")
+}
+
 func TestFilterIsARegexOverThePath(t *testing.T) {
 	var st State
 	fsys := fixture()

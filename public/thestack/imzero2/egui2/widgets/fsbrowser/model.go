@@ -304,6 +304,35 @@ func (st *State) FilterLiteral() bool {
 	return st.filterLiteral
 }
 
+// FilterMatches reports whether the quick filter lists p, an io/fs path
+// from the root, as a match: p lies under the current directory, every
+// directory on the way there and p itself are rows (dot-names only with
+// showHidden, nothing keep refuses), and p matches the pattern as
+// [State.Filter] reads it. It is false while no filter is set. It answers
+// for any path, listed or not, so a host can hold paths it knows from
+// elsewhere to the filter the reader typed; the entries keep sees carry
+// Name, Path and IsDir only, p being taken for a file.
+func (st *State) FilterMatches(p string, showHidden bool, keep func(Entry) bool) bool {
+	re := st.matcher()
+	if re == nil {
+		return false
+	}
+	dir := st.Dir()
+	rel := relTo(dir, p)
+	if dir != "." && rel == p {
+		return false
+	}
+	segs := strings.Split(rel, "/")
+	cur := dir
+	for _, seg := range segs[:len(segs)-1] {
+		cur = joinPath(cur, seg)
+		if !shown(Entry{Name: seg, Path: cur, IsDir: true}, showHidden, keep) {
+			return false
+		}
+	}
+	return shown(Entry{Name: segs[len(segs)-1], Path: p}, showHidden, keep) && re.MatchString(p)
+}
+
 // matcher returns the compiled filter, nil for an empty one, rebuilding
 // only when the text changed since the previous call.
 func (st *State) matcher() *regexp.Regexp {
