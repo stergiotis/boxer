@@ -171,7 +171,11 @@ func writeSectionInterfaces(sb *strings.Builder, plan *mappingplan.Plan, g gopla
 		for _, p := range multiSubColScalars {
 			argDecls = append(argDecls, fmt.Sprintf("%s %s", p.Name, p.Type))
 		}
-		linef(sb, 1, "BeginAttribute(%s) Attr", strings.Join(argDecls, ", "))
+		beginMethod := "BeginAttribute"
+		if isTuple {
+			beginMethod, _ = g.TupleBeginMethod()
+		}
+		linef(sb, 1, "%s(%s) Attr", beginMethod, strings.Join(argDecls, ", "))
 	default:
 		if needContainerOpen {
 			line(sb, 1, "BeginAttribute() Attr")
@@ -537,7 +541,19 @@ func writeTupleSectionDriver(sb *strings.Builder, g goplan.SectionGroup, ts gopl
 	for _, sc := range scalars {
 		args = append(args, scalarValueExpr(sc.Fields[0], elemSrc))
 	}
-	linef(sb, depth, "%s := %s.BeginAttribute(%s)", attrVar, secVar, strings.Join(args, ", "))
+	paramsVar := attrVar + "Params"
+	if ts.ParamsField != "" {
+		// The parameters of the attribute's mixed-channel membership
+		// (ADR-0326 §SD1), encoded before the attribute opens so a failure
+		// leaves no half-written attribute.
+		linef(sb, depth, "%s, perr := membership.EncodeParams(%s...)", paramsVar, elemSrc.field(ts.ParamsField))
+		linef(sb, depth, "if perr != nil {")
+		linef(sb, depth+1, "err = eb.Build()%s.Str(\"section\", %q).Errorf(\"encode the membership parameters: %%w\", perr)", src.rowErrCtx, g.Section)
+		linef(sb, depth+1, "return")
+		linef(sb, depth, "}")
+	}
+	beginMethod, _ := g.TupleBeginMethod()
+	linef(sb, depth, "%s := %s.%s(%s)", attrVar, secVar, beginMethod, strings.Join(args, ", "))
 	if len(containers) > 0 {
 		elems := make([]string, 0, len(containers))
 		for _, sc := range containers {
@@ -548,11 +564,27 @@ func writeTupleSectionDriver(sb *strings.Builder, g goplan.SectionGroup, ts gopl
 		linef(sb, depth+1, "%s.%sP(%s)", attrVar, goplan.ContainerAddMethod(len(containers)), strings.Join(elems, ", "))
 		line(sb, depth, "}")
 	}
-	if len(ts.Memberships) == 0 {
+	switch {
+	case len(ts.Memberships) == 0 && ts.ParamsField != "":
+		// A static nested section on a mixed channel: the membership from
+		// the tag, the parameters from the element (ADR-0326 §SD1).
+		f := sectionMembership(g)
+		method := "AddMembership" + f.Flags.Channel.AddMethodSuffix() + "P"
+		if f.Flags.Channel.CarrierValueIsBytes() {
+			linef(sb, depth, "%s.%s([]byte(%q), %s)", attrVar, method, f.LWMembership, paramsVar)
+		} else {
+			linef(sb, depth, "%s.%s(%s, %s)", attrVar, method, f.KindVar(), paramsVar)
+		}
+	case len(ts.Memberships) == 0:
 		writeMembershipAdd(sb, strings.Repeat("\t", depth), attrVar, g.Memberships[0], elemSrc)
-	} else {
+	default:
 		for _, m := range ts.Memberships {
 			suffix := m.Channel.AddMethodSuffix()
+			if m.Channel.UsesCarrier() {
+				// The one mixed-channel membership, with its parameters.
+				linef(sb, depth, "%s.AddMembership%sP(%s, %s)", attrVar, suffix, tupleMembExpr(elemSrc.field(m.GoField), m), paramsVar)
+				continue
+			}
 			if m.IsSlice {
 				linef(sb, depth, "for _, mv := range %s {", elemSrc.field(m.GoField))
 				linef(sb, depth+1, "%s.AddMembership%sP(%s)", attrVar, suffix, tupleMembExpr("mv", m))
@@ -569,12 +601,21 @@ func writeTupleSectionDriver(sb *strings.Builder, g goplan.SectionGroup, ts gopl
 	line(sb, 2, "}")
 }
 
+// sectionMembership is a static section's one membership field: the
+// section group's, or a value-less tuple's marker field.
+func sectionMembership(g goplan.SectionGroup) mappingplan.TaggedField {
+	if len(g.Memberships) > 0 {
+		return g.Memberships[0]
+	}
+	return *g.Valueless
+}
+
 // tupleMembExpr renders the AddMembership<Channel>P argument from a tuple
 // element's membership value expression (a field access, or a slice-loop var):
 // `[]byte(x)` for a verbatim string field, the expression as-is for a []byte or
 // a ref uint64 field.
 func tupleMembExpr(valExpr string, m mappingplan.TupleMembership) string {
-	if m.Channel.EmbedsLiteralName() {
+	if m.Channel.EmbedsLiteralName() || m.Channel.CarrierValueIsBytes() {
 		// verbatim: []byte(name). A string field or an lw.Verbatim newtype both
 		// convert directly; a []byte field passes as-is.
 		if m.GoType == "string" {

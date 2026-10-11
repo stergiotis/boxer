@@ -2,7 +2,6 @@ package marshallreflect
 
 import (
 	"reflect"
-	"strings"
 	"sync"
 
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -248,7 +247,7 @@ func elemHasLwMembershipMarker(elemType reflect.Type) bool {
 
 func elemHasAtMembership(elemType reflect.Type) bool {
 	for field := range elemType.Fields() {
-		if strings.HasPrefix(strings.TrimSpace(field.Tag.Get("lw")), "@") {
+		if goplan.IsAtMembershipTag(field.Tag.Get("lw")) {
 			return true
 		}
 	}

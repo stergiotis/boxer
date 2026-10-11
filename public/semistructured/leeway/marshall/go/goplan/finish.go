@@ -93,7 +93,7 @@ func (b *PlanBuilder) checkRefMembershipsAreIdentifiers(fc *finishCtx) (err erro
 		if f.TupleField != "" && len(f.TupleMemberships) > 0 {
 			continue
 		}
-		if f.Flags.Channel.NeedsKindVar() && !mappingplan.IsIdentifierLike(f.LWMembership) {
+		if f.ResolvesMembershipId() && !mappingplan.IsIdentifierLike(f.LWMembership) {
 			err = eb.Build().Str("membership", f.LWMembership).Errorf("ref-channel membership must be a Go identifier (ASCII letters, digits, underscores) — it becomes the emitted kindXxx symbol; use a verbatim channel for an arbitrary wire label")
 			return
 		}
@@ -198,7 +198,9 @@ func (b *PlanBuilder) resolveCarriers(fc *finishCtx) (err error) {
 	// (id/params), so a second membership could not be disambiguated on read.
 	for i := range b.plan.Fields {
 		f := &b.plan.Fields[i]
-		if !f.Flags.Channel.UsesCarrier() {
+		// A tuple's mixed-channel membership carries its parameters in the
+		// element (ADR-0326 §SD1), not in a sibling carrier.
+		if !f.Flags.Channel.UsesCarrier() || f.TupleField != "" {
 			continue
 		}
 		if len(fc.membsBySection[f.LWSection]) > 1 {

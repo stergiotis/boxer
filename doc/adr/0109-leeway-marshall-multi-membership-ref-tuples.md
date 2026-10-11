@@ -244,6 +244,19 @@ single-membership rule.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers.
 
+## Updates
+
+### 2026-10-11 — D1, open question 2: parameters on a mixed channel, and ReadRow
+
+[ADR-0326](./0326-tuple-elements-carry-parameters-and-tuple-kinds-read-in-readrow.md)
+narrows D1's rejection of carrier channels. A `@membership` on
+`mixedLowCardVerbatim` or `mixedLowCardRef` is accepted when the element
+carries its parameters in a `@params` field (a `[]uint64`), and it is
+then the element's only membership. The parametrized channels stay
+rejected. Open question 2 is answered for `<Kind>ReadRow`: a tuple kind
+reads back by claiming its attributes by channel. The plan-derived DDL
+path still has no tuple mapping.
+
 ## References
 
 - [ADR-0103](0103-leeway-marshall-dynamic-membership-tuples.md) — dynamic-membership

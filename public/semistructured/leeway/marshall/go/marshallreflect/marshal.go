@@ -7,6 +7,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/goplan"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/membership"
 )
 
 // Marshal drives `dml`'s reflected method chain to emit one entity
@@ -309,7 +310,19 @@ func marshalTupleSection(sec, row reflect.Value, g goplan.SectionGroup, ts gopla
 		for _, sc := range scalars {
 			args = append(args, elem.FieldByName(sc.Fields[0].GoFieldName))
 		}
-		attr := mustCall(sec, "BeginAttribute", args...)[0]
+		// The parameters of a mixed-channel membership (ADR-0326 §SD1),
+		// encoded before the attribute opens, as the generated codec does.
+		var params reflect.Value
+		if ts.ParamsField != "" {
+			raw, perr := membership.EncodeParams(elem.FieldByName(ts.ParamsField).Interface().([]uint64)...)
+			if perr != nil {
+				err = eb.Build().Str("section", g.Section).Errorf("encode the membership parameters: %w", perr)
+				return
+			}
+			params = reflect.ValueOf(raw)
+		}
+		beginMethod, _ := g.TupleBeginMethod()
+		attr := mustCall(sec, beginMethod, args...)[0]
 		// n > 0 implies at least one container sub-column exists.
 		for k := 0; k < n; k++ {
 			for j := range containerVals {
@@ -317,17 +330,38 @@ func marshalTupleSection(sec, row reflect.Value, g goplan.SectionGroup, ts gopla
 			}
 			mustCall(attr, addMethod, elemArgs...)
 		}
-		if len(ts.Memberships) == 0 {
+		switch {
+		case len(ts.Memberships) == 0 && ts.ParamsField != "":
+			// STATIC nested section on a mixed channel: the membership from
+			// the tag, the parameters from the element (ADR-0326 §SD1).
+			f := g.Memberships[0]
+			method := "AddMembership" + f.Flags.Channel.AddMethodSuffix() + "P"
+			if f.Flags.Channel.CarrierValueIsBytes() {
+				mustCall(attr, method, reflect.ValueOf([]byte(f.LWMembership)), params)
+			} else {
+				id, lookupErr := lookup.LookupMembership(f.LWMembership)
+				if lookupErr != nil {
+					err = eb.Build().Str("membership", f.LWMembership).Errorf("%w", lookupErr)
+					return
+				}
+				mustCall(attr, method, reflect.ValueOf(id), params)
+			}
+		case len(ts.Memberships) == 0:
 			// STATIC nested section: one membership from the section tag,
 			// resolved (ref lookup / verbatim literal) exactly like a flat
 			// multi-sub-column section.
 			if err = addMembership(attr, row, g.Memberships[0], lookup); err != nil {
 				return
 			}
-		} else {
+		default:
 			for _, m := range ts.Memberships {
 				method := "AddMembership" + m.Channel.AddMethodSuffix() + "P"
 				mf := elem.FieldByName(m.GoField)
+				if m.Channel.UsesCarrier() {
+					// The one mixed-channel membership, with its parameters.
+					mustCall(attr, method, tupleMembArg(mf, m), params)
+					continue
+				}
 				if m.IsSlice {
 					for k := 0; k < mf.Len(); k++ {
 						mustCall(attr, method, tupleMembArg(mf.Index(k), m))
@@ -351,7 +385,7 @@ var uint64Type = reflect.TypeFor[uint64]()
 // repeated (slice) membership field. It bridges the nested-model marker newtypes
 // (lw.Ref / lw.Verbatim) whose Go type differs from the DML method's plain type.
 func tupleMembArg(v reflect.Value, m mappingplan.TupleMembership) reflect.Value {
-	if m.Channel.EmbedsLiteralName() {
+	if m.Channel.EmbedsLiteralName() || m.Channel.CarrierValueIsBytes() {
 		if m.GoType == "string" {
 			return reflect.ValueOf([]byte(v.String()))
 		}

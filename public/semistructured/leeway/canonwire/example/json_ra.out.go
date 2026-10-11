@@ -1480,6 +1480,38 @@ func (inst *ReadAccessJsonTaggedEmptyArray) GetSectionMembershipSpec() common.Me
 	return 0b10000000
 }
 
+// GetNumberOfAttributes counts a value-less section's attributes from the
+// cardinality column of its first membership channel, which holds one
+// entry per attribute.
+func (inst *ReadAccessJsonTaggedUndefined) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.Memberships.AccelMixedLowCardVerbatim.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+
+// GetNumberOfAttributes counts a value-less section's attributes from the
+// cardinality column of its first membership channel, which holds one
+// entry per attribute.
+func (inst *ReadAccessJsonTaggedNull) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.Memberships.AccelMixedLowCardVerbatim.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+
+// GetNumberOfAttributes counts a value-less section's attributes from the
+// cardinality column of its first membership channel, which holds one
+// entry per attribute.
+func (inst *ReadAccessJsonTaggedEmptyObject) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.Memberships.AccelMixedLowCardVerbatim.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+
+// GetNumberOfAttributes counts a value-less section's attributes from the
+// cardinality column of its first membership channel, which holds one
+// entry per attribute.
+func (inst *ReadAccessJsonTaggedEmptyArray) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.Memberships.AccelMixedLowCardVerbatim.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeEntityClasses

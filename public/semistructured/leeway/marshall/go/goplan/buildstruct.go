@@ -181,14 +181,15 @@ type TupleElem struct {
 // struct's type name (rendered by the codegen front-end); elems are the
 // element struct's fields in declaration order.
 //
-// Element grammar (SplitTupleElemLW): exactly one `@membership` field — a
-// string or []byte scalar with an explicit verbatim channel flag — plus
-// one value field per sub-column (`<section>:<column>`, scalars as T,
-// containers as []T, `,ct=` composes). Ref and carrier channels are
-// rejected: a dynamic membership embeds its value on the wire, while ref
-// ids resolve through compile-time kindXxx symbols the generated
-// BuildEntities cannot parameterise per element. Option / roaring / unit
-// / const are rejected like in any multi-sub-column section (ADR-0101 D2).
+// Element grammar (SplitTupleElemLW): one or more `@membership` fields
+// (ADR-0109) plus one value field per sub-column (`<section>:<column>`,
+// scalars as T, containers as []T, `,ct=` composes). A membership on a
+// mixed channel pairs with the element's `@params` field, a []uint64, and
+// is then the element's only membership (ADR-0326 §SD1). A single scalar
+// value field may take `,unit`, and an element may have no value field
+// at all for a section without a value column (ADR-0326 §SD2, §SD3).
+// Option / roaring / const are rejected like in any multi-sub-column
+// section (ADR-0101 D2), and so are the parametrized channels.
 func (b *PlanBuilder) AddTupleSliceField(goFieldName, lwTag, structTypeName string, elems []TupleElem) (err error) {
 	section, err := SplitTupleOuterLW(lwTag)
 	if err != nil {
@@ -206,6 +207,8 @@ func (b *PlanBuilder) AddTupleSliceField(goFieldName, lwTag, structTypeName stri
 
 	memberships := make([]mappingplan.TupleMembership, 0, len(elems))
 	subs := newAttrSubColumns(goFieldName, "tuple element", "inside a tuple element", len(elems))
+	paramsField := ""
+	unitFields := map[string]bool{}
 
 	for _, e := range elems {
 		ctx := eb.Build().Str("field", goFieldName).Str("elemField", e.GoFieldName)
@@ -231,6 +234,23 @@ func (b *PlanBuilder) AddTupleSliceField(goFieldName, lwTag, structTypeName stri
 			return
 		}
 
+		if pt.IsParams {
+			if pt.Flags != (mappingplan.FieldFlags{}) {
+				err = ctx.Errorf("`" + TupleParamsMarker + "` field takes no flag")
+				return
+			}
+			if goType != "uint64" || !isSlice || isRoaring {
+				err = ctx.Str("goType", goType).Errorf("`" + TupleParamsMarker + "` field must be a []uint64 — the parameters are encoded by membership.EncodeParams")
+				return
+			}
+			if paramsField != "" {
+				err = ctx.Str("first", paramsField).Errorf("tuple element declares `" + TupleParamsMarker + "` twice")
+				return
+			}
+			paramsField = e.GoFieldName
+			continue
+		}
+
 		if pt.IsMembership {
 			// A tuple element may declare MORE THAN ONE `@membership` field
 			// (repeated fixed fields and/or one repeated slice field per
@@ -246,22 +266,28 @@ func (b *PlanBuilder) AddTupleSliceField(goFieldName, lwTag, structTypeName stri
 				return
 			}
 			ch := pt.Flags.Channel
-			if ch.UsesCarrier() {
-				err = ctx.Str("channel", ch.String()).Errorf("`" + TupleMembershipMarker + "` cannot use a carrier / parametrized channel — its identity is per-row carrier data, not an element field; use a verbatim or ref channel")
+			mixed := ch.UsesCarrier() && ch.CarrierValueField() != ""
+			if ch.UsesCarrier() && !mixed {
+				err = ctx.Str("channel", ch.String()).Errorf("`" + TupleMembershipMarker + "` cannot use a parametrized channel — its whole identity is an opaque blob, not an element field; use a verbatim, ref or mixed channel")
+				return
+			}
+			if mixed && isSlice {
+				err = ctx.Str("channel", ch.String()).Errorf("`" + TupleMembershipMarker + "` on a mixed channel cannot be repeated — one membership pairs with the element's one `" + TupleParamsMarker + "`")
 				return
 			}
 			// Type ↔ channel: a verbatim channel embeds the literal name
 			// (string / []byte); a ref channel carries the id directly as a
 			// uint64 — no lookup, no compile-time kindXxx symbol (ADR-0109 (b)).
+			// A mixed channel does the same beside its parameters (ADR-0326).
 			// A repeated field ([]T) sets IsSlice; goType is then the element type.
 			switch goType {
 			case "string", "[]byte":
-				if !ch.EmbedsLiteralName() {
+				if !ch.EmbedsLiteralName() && !(mixed && ch.CarrierValueIsBytes()) {
 					err = ctx.Str("channel", ch.String()).Errorf("`" + TupleMembershipMarker + "` on a string / []byte field requires an explicit verbatim channel flag (`,verbatim` / `,lowCardVerbatim` / `,highCardVerbatim`) — the literal name embeds on the wire; a ref channel takes a uint64 id")
 					return
 				}
 			case "uint64":
-				if !ch.NeedsKindVar() {
+				if !ch.NeedsKindVar() && !(mixed && !ch.CarrierValueIsBytes()) {
 					err = ctx.Str("channel", ch.String()).Errorf("`" + TupleMembershipMarker + "` on a uint64 field requires a ref channel flag (`,lowCardRef` / `,highCardRef`) — the id is carried directly; a verbatim channel takes a string / []byte name")
 					return
 				}
@@ -285,9 +311,16 @@ func (b *PlanBuilder) AddTupleSliceField(goFieldName, lwTag, structTypeName stri
 			err = ctx.Str("tupleSection", section).Str("elemSection", pt.Section).Errorf("tuple element targets a different section than its tuple field")
 			return
 		}
-		if pt.Flags.Unit || pt.Flags.HasConst {
-			err = ctx.Errorf("`unit` / `const` not supported inside a tuple element — each element is one tuple attribute plus zipped co-containers")
+		if pt.Flags.HasConst {
+			err = ctx.Errorf("`const` not supported inside a tuple element — each element is one tuple attribute plus zipped co-containers")
 			return
+		}
+		if pt.Flags.Unit {
+			if isSlice || isRoaring {
+				err = ctx.Errorf("`unit` requires a scalar value field — the container shape has no per-element call to switch")
+				return
+			}
+			unitFields[e.GoFieldName] = true
 		}
 		if pt.Flags.Channel != mappingplan.MembershipChannelLowCardRef {
 			err = ctx.Str("flag", pt.Flags.Channel.String()).Errorf("channel flag belongs on the `" + TupleMembershipMarker + "` field, not on a tuple value field")
@@ -302,12 +335,29 @@ func (b *PlanBuilder) AddTupleSliceField(goFieldName, lwTag, structTypeName stri
 		err = eb.Build().Str("field", goFieldName).Errorf("tuple element struct needs at least one `" + TupleMembershipMarker + "` field carrying a per-attribute membership")
 		return
 	}
-	if len(subs.values) == 0 {
-		err = eb.Build().Str("field", goFieldName).Errorf("tuple element struct needs at least one value field (`<section>:<column>`)")
+	if err = checkTupleMembershipArity(goFieldName, memberships); err != nil {
+		return
+	}
+	if err = checkTupleParams(goFieldName, memberships, paramsField); err != nil {
+		return
+	}
+	if len(unitFields) > 0 && len(subs.values) != 1 {
+		err = eb.Build().Str("field", goFieldName).Errorf("`unit` is accepted on a tuple element's only value field — a multi-sub-column attribute has no single value")
 		return
 	}
 
-	if err = checkTupleMembershipArity(goFieldName, memberships); err != nil {
+	if len(subs.values) == 0 {
+		// No value column: the section carries memberships only (ADR-0326
+		// §SD3). One field records the tuple so the section groups.
+		b.plan.Fields = append(b.plan.Fields, mappingplan.TaggedField{
+			LWSection:        section,
+			Flags:            mappingplan.FieldFlags{Channel: memberships[0].Channel},
+			TupleField:       goFieldName,
+			TupleStructType:  structTypeName,
+			TupleMemberships: memberships,
+			TupleParamsField: paramsField,
+			TupleValueless:   true,
+		})
 		return
 	}
 
@@ -322,11 +372,34 @@ func (b *PlanBuilder) AddTupleSliceField(goFieldName, lwTag, structTypeName stri
 			// g.Channel() and the per-section channel-uniformity check stay
 			// well-defined; every tuple channel site dispatches on
 			// TupleMemberships instead (the memberships may be heterogeneous).
-			Flags:            mappingplan.FieldFlags{Channel: memberships[0].Channel, CanonicalType: v.ct},
+			Flags:            mappingplan.FieldFlags{Channel: memberships[0].Channel, CanonicalType: v.ct, Unit: unitFields[v.goField]},
 			TupleField:       goFieldName,
 			TupleStructType:  structTypeName,
 			TupleMemberships: memberships,
+			TupleParamsField: paramsField,
 		})
+	}
+	return
+}
+
+// checkTupleParams enforces the `@params` pairing (ADR-0326 §SD1): a
+// mixed-channel membership carries its parameters in the element, so it
+// needs the `@params` field and is the element's only membership, and a
+// `@params` field needs a mixed-channel membership to belong to.
+func checkTupleParams(goFieldName string, memberships []mappingplan.TupleMembership, paramsField string) (err error) {
+	mixed := 0
+	for _, m := range memberships {
+		if m.Channel.UsesCarrier() {
+			mixed++
+		}
+	}
+	switch {
+	case mixed > 0 && len(memberships) != 1:
+		err = eb.Build().Str("field", goFieldName).Errorf("a tuple element with a mixed-channel `" + TupleMembershipMarker + "` declares no other membership — its one `" + TupleParamsMarker + "` belongs to one membership")
+	case mixed > 0 && paramsField == "":
+		err = eb.Build().Str("field", goFieldName).Errorf("a mixed-channel `" + TupleMembershipMarker + "` needs the element's `" + TupleParamsMarker + "` field ([]uint64)")
+	case mixed == 0 && paramsField != "":
+		err = eb.Build().Str("field", goFieldName).Str("params", paramsField).Errorf("`" + TupleParamsMarker + "` needs a `" + TupleMembershipMarker + "` on a mixed channel (`,mixedLowCardRef` / `,mixedLowCardVerbatim`)")
 	}
 	return
 }
@@ -382,9 +455,30 @@ func (b *PlanBuilder) AddNestedSliceField(goFieldName, outerTag, structTypeName 
 	// single membership is on the outer tag).
 	memberships := make([]mappingplan.TupleMembership, 0, len(elems))
 	subs := newAttrSubColumns(goFieldName, "nested", "as a nested sub-column", len(elems))
+	paramsField := ""
 
 	for _, e := range elems {
 		ctx := eb.Build().Str("field", goFieldName).Str("elemField", e.GoFieldName)
+
+		if strings.TrimSpace(e.LWTag) == TupleParamsMarker {
+			// The parameters of the section's mixed-channel membership
+			// (ADR-0326 §SD1).
+			goType, isSlice, isRoaring, derr := mappingplan.DeriveGoShape(e.Shape.Canonical)
+			if derr != nil {
+				err = ctx.Errorf("derive Go type from canonical: %w", derr)
+				return
+			}
+			if goType != "uint64" || !isSlice || isRoaring || e.Shape.IsOption || e.Shape.IsMembership {
+				err = ctx.Str("goType", goType).Errorf("`" + TupleParamsMarker + "` field must be a []uint64 — the parameters are encoded by membership.EncodeParams")
+				return
+			}
+			if paramsField != "" {
+				err = ctx.Str("first", paramsField).Errorf("nested section struct declares `" + TupleParamsMarker + "` twice")
+				return
+			}
+			paramsField = e.GoFieldName
+			continue
+		}
 
 		if e.Shape.IsMembership {
 			// A per-attribute membership marker: the channel is the type, the
@@ -463,6 +557,10 @@ func (b *PlanBuilder) AddNestedSliceField(goFieldName, outerTag, structTypeName 
 		if err = checkTupleMembershipArity(goFieldName, memberships); err != nil {
 			return
 		}
+		if paramsField != "" {
+			err = eb.Build().Str("field", goFieldName).Errorf("`" + TupleParamsMarker + "` on a nested section with lw.* membership fields is not supported — the markers name no mixed channel; use the `@membership,mixedLowCardVerbatim` tuple spelling")
+			return
+		}
 	} else {
 		var pt ParsedLWTag
 		pt, err = SplitLW(outerTag)
@@ -486,11 +584,20 @@ func (b *PlanBuilder) AddNestedSliceField(goFieldName, outerTag, structTypeName 
 			err = eb.Build().Str("field", goFieldName).Errorf("nested section field tag takes only a channel flag (no unit / const / ct=)")
 			return
 		}
-		if pt.Flags.Channel.UsesCarrier() {
-			err = eb.Build().Str("field", goFieldName).Str("channel", pt.Flags.Channel.String()).Errorf("nested section cannot use a carrier / parametrized channel — a carrier's identity is per-row data, not a static membership")
+		ch := pt.Flags.Channel
+		mixed := ch.UsesCarrier() && ch.CarrierValueField() != ""
+		switch {
+		case ch.UsesCarrier() && !mixed:
+			err = eb.Build().Str("field", goFieldName).Str("channel", ch.String()).Errorf("nested section cannot use a parametrized channel — its identity is an opaque per-row blob, not a static membership")
+			return
+		case mixed && paramsField == "":
+			err = eb.Build().Str("field", goFieldName).Str("channel", ch.String()).Errorf("a nested section on a mixed channel needs a `" + TupleParamsMarker + "` field ([]uint64) in its struct")
+			return
+		case !mixed && paramsField != "":
+			err = eb.Build().Str("field", goFieldName).Str("params", paramsField).Errorf("`" + TupleParamsMarker + "` needs the section's membership on a mixed channel (`,mixedLowCardRef` / `,mixedLowCardVerbatim`)")
 			return
 		}
-		membership, section, channel = pt.Membership, pt.Section, pt.Flags.Channel
+		membership, section, channel = pt.Membership, pt.Section, ch
 	}
 
 	for _, v := range subs.values {
@@ -502,6 +609,7 @@ func (b *PlanBuilder) AddNestedSliceField(goFieldName, outerTag, structTypeName 
 			TupleField:       goFieldName,
 			TupleStructType:  structTypeName,
 			TupleCardinality: card,
+			TupleParamsField: paramsField,
 		}
 		if dynamic {
 			// Per-attribute memberships: the value fields carry no static

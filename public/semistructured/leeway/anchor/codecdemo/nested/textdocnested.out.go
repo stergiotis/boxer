@@ -208,6 +208,7 @@ type TextDocNestedTextAttrsReadI interface {
 
 // TextDocNestedTextMembsReadI is the Memberships-side view of the text section.
 type TextDocNestedTextMembsReadI interface {
+	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
 // TextDocNestedFillFromArrow walks rec row-by-row and appends each entity's
@@ -266,4 +267,59 @@ func TextDocNestedFillFromArrow[
 	return
 }
 
-// TextDocNestedReadRow is not emitted: field Body is a dynamic-membership tuple.
+// TextDocNestedReadRow reads row i as one optional TextDocNested component: presence-
+// gated (a row carrying none of the kind's memberships yields
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
+// bound fields stay zero — the caller owns the envelope. The
+// Attrs/Membs readers bind by type inference at the call site, as
+// with FillFromArrow.
+func TextDocNestedReadRow[
+	TextAttrs TextDocNestedTextAttrsReadI,
+	TextMembs TextDocNestedTextMembsReadI,
+](
+	i int,
+	textAttrs TextAttrs,
+	textMembs TextMembs,
+) (row TextDocNested, present bool, err error) {
+	// --- text. ---
+	var textBodyElems []proseAttrs
+	ntext := textAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < ntext; attrJ++ {
+		textClaimed := false
+		for mv := range textMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			if mv == kindProse {
+				textClaimed = true
+				break
+			}
+		}
+		if !textClaimed {
+			continue
+		}
+		var textTextLocal string
+		textTextLocal = textAttrs.GetAttrValueText(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+		var textWordLengthLocal []uint32
+		for v := range textAttrs.GetAttrValueWordLength(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			textWordLengthLocal = append(textWordLengthLocal, v)
+		}
+		var textWordBagLocal []string
+		for v := range textAttrs.GetAttrValueWordBag(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			textWordBagLocal = append(textWordBagLocal, v)
+		}
+		textBodyElems = append(textBodyElems, proseAttrs{
+			Text:       textTextLocal,
+			WordLength: textWordLengthLocal,
+			WordBag:    textWordBagLocal,
+		})
+	}
+	if len(textBodyElems) > 1 {
+		err = eb.Build().Int("row", i).Str("section", "text").Int("attrs", len(textBodyElems)).Errorf("a single nested section carries more than one attribute on the row")
+		return
+	}
+	if len(textBodyElems) == 1 {
+		row.Body = textBodyElems[0]
+		present = true
+	}
+	return
+}

@@ -19,7 +19,13 @@ func writeImports(sb *strings.Builder, plan *mappingplan.Plan, wrapper WrapperEm
 	needsTime := false
 	needsMarshalltypes := false
 	needsLw := false
+	needsMembership := false
 	for _, f := range plan.Fields {
+		// A tuple element's `@params` are encoded and decoded through the
+		// membership package (ADR-0326 §SD1).
+		if f.TupleParamsField != "" {
+			needsMembership = true
+		}
 		if f.IsRoaring() {
 			needsRoaring = true
 		}
@@ -99,6 +105,9 @@ func writeImports(sb *strings.Builder, plan *mappingplan.Plan, wrapper WrapperEm
 	}
 	if needsLw {
 		boxer = append(boxer, `"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/lw"`)
+	}
+	if needsMembership {
+		boxer = append(boxer, `"github.com/stergiotis/boxer/public/semistructured/leeway/membership"`)
 	}
 	imps.group(boxer...)
 

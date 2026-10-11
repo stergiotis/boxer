@@ -310,6 +310,14 @@ read ADR-0311.
   table, an agent-schema scope setting — it is the decimal form, and the
   scope compares its column as text.
 
+### 2026-10-11 — SD6: the generator owns the shredded attributes
+
+The vault's shredded attributes are the generated `Shredded` component
+([ADR-0326](./0326-tuple-elements-carry-parameters-and-tuple-kinds-read-in-readrow.md)),
+written and read by the generated vault store. `agentrunstore/semi.go`
+keeps only the conversion to and from `jsonshred`'s attributes, and the
+vault store no longer needs its contribution seam.
+
 ## References
 
 - [ADR-0210](./0210-leeway-canonical-wire-generator.md) — the canonical wire and its generated encoder.

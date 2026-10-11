@@ -265,4 +265,62 @@ func LabeledTextNestedFillFromArrow[
 	return
 }
 
-// LabeledTextNestedReadRow is not emitted: field Texts is a dynamic-membership tuple.
+// LabeledTextNestedReadRow reads row i as one optional LabeledTextNested component: presence-
+// gated (a row carrying none of the kind's memberships yields
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
+// bound fields stay zero — the caller owns the envelope. The
+// Attrs/Membs readers bind by type inference at the call site, as
+// with FillFromArrow.
+func LabeledTextNestedReadRow[
+	TextAttrs LabeledTextNestedTextAttrsReadI,
+	TextMembs LabeledTextNestedTextMembsReadI,
+](
+	i int,
+	textAttrs TextAttrs,
+	textMembs TextMembs,
+) (row LabeledTextNested, present bool, err error) {
+	// --- text. ---
+	var textTextsElems []labeledTextAttr
+	ntext := textAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < ntext; attrJ++ {
+		textClaimed := false
+		for range textMembs.GetMembValueLowCardVerbatim(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			textClaimed = true
+			break
+		}
+		if !textClaimed {
+			continue
+		}
+		var textTextLocal string
+		textTextLocal = textAttrs.GetAttrValueText(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+		var textWordLengthLocal []uint32
+		for v := range textAttrs.GetAttrValueWordLength(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			textWordLengthLocal = append(textWordLengthLocal, v)
+		}
+		var textWordBagLocal []string
+		for v := range textAttrs.GetAttrValueWordBag(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			textWordBagLocal = append(textWordBagLocal, v)
+		}
+		var textLowCardVerbatimMembs [][]byte
+		for mv := range textMembs.GetMembValueLowCardVerbatim(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			textLowCardVerbatimMembs = append(textLowCardVerbatimMembs, mv)
+		}
+		if len(textLowCardVerbatimMembs) != 1 {
+			err = eb.Build().Str("section", "text").Str("channel", "LowCardVerbatim").Int("got", len(textLowCardVerbatimMembs)).Int("want", 1).Errorf("membership count mismatch on read")
+			return
+		}
+		textTextsElems = append(textTextsElems, labeledTextAttr{
+			Label:      lw.Verbatim(string(textLowCardVerbatimMembs[0])),
+			Text:       textTextLocal,
+			WordLength: textWordLengthLocal,
+			WordBag:    textWordBagLocal,
+		})
+	}
+	if len(textTextsElems) > 0 {
+		row.Texts = textTextsElems
+		present = true
+	}
+	return
+}

@@ -34,6 +34,9 @@ type SectionGroup struct {
 	Section     string
 	SubColumns  []SubColumn
 	Memberships []mappingplan.TaggedField // one per distinct LWMembership, in first-seen order
+	// Valueless is the tuple field a value-less tuple section records
+	// (ADR-0326 §SD3) — the section has no sub-column — or nil.
+	Valueless *mappingplan.TaggedField
 }
 
 // Channel reports the (uniform per section) membership channel for
@@ -77,6 +80,11 @@ func ComputeGroups(plan *mappingplan.Plan) (out []SectionGroup) {
 			out = append(out, SectionGroup{Section: f.Section()})
 		}
 		g := &out[gIdx]
+		if f.TupleValueless {
+			vf := f
+			g.Valueless = &vf
+			continue
+		}
 
 		colName := f.LWColumn
 		if colName == "" {
@@ -189,6 +197,12 @@ type TupleSpec struct {
 	// When Memberships is empty the section carries a single STATIC membership
 	// (SectionGroup.Memberships[0]); the codec branches on len(Memberships)==0.
 	Cardinality mappingplan.AttrCardinalityE
+	// ParamsField is the element field holding the parameters of the
+	// attribute's one mixed-channel membership, or "" (ADR-0326 §SD1).
+	ParamsField string
+	// Valueless marks an element without a value field: every attribute
+	// is BeginAttribute() and its memberships (ADR-0326 §SD3).
+	Valueless bool
 }
 
 // Channels returns the distinct membership channels the tuple's elements
@@ -214,10 +228,15 @@ func (ts TupleSpec) Channels() (out []mappingplan.MembershipChannel) {
 // validate / read site must dispatch on this BEFORE the sub-column-count
 // shape split, so both front-ends route tuples identically.
 func (g SectionGroup) TupleSpec() (ts TupleSpec, ok bool) {
-	if len(g.SubColumns) == 0 || len(g.SubColumns[0].Fields) == 0 {
+	var f mappingplan.TaggedField
+	switch {
+	case g.Valueless != nil:
+		f = *g.Valueless
+	case len(g.SubColumns) == 0 || len(g.SubColumns[0].Fields) == 0:
 		return
+	default:
+		f = g.SubColumns[0].Fields[0]
 	}
-	f := g.SubColumns[0].Fields[0]
 	if f.TupleField == "" {
 		return
 	}
@@ -226,7 +245,23 @@ func (g SectionGroup) TupleSpec() (ts TupleSpec, ok bool) {
 		StructType:  f.TupleStructType,
 		Memberships: f.TupleMemberships,
 		Cardinality: f.TupleCardinality,
+		ParamsField: f.TupleParamsField,
+		Valueless:   f.TupleValueless,
 	}, true
+}
+
+// TupleBeginMethod is the section method a tuple element opens its
+// attribute with, and its argument count: BeginAttributeSingle with the
+// one value when the element's only value field is `,unit` (ADR-0326
+// §SD2), BeginAttribute with the scalar sub-columns otherwise — none for
+// a value-less element (§SD3) or an all-container one. Shared by the
+// codegen emitter, the reflect codec and Validate.
+func (g SectionGroup) TupleBeginMethod() (name string, args int) {
+	scalars := g.ScalarSubColumns()
+	if len(g.SubColumns) == 1 && len(scalars) == 1 && scalars[0].Fields[0].Flags.Unit {
+		return "BeginAttributeSingle", 1
+	}
+	return "BeginAttribute", len(scalars)
 }
 
 // ContainerAddMethod returns the DML container-append method name for a

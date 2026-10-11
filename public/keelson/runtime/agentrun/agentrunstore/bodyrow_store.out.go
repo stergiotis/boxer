@@ -154,6 +154,7 @@ var BodyRowMembershipIds = map[string]map[string]uint64{
 		"agentrunCopyReason":    9223372049739678142,
 		"agentrunCopyBytes":     9223372049739678143,
 	},
+	"Shredded": {},
 }
 
 // BodyRowEntity is the entity bag (ADR-0100 SD5): the envelope plus one option
@@ -172,6 +173,7 @@ type BodyRowEntity struct {
 	ExitAnswer      option.Option[ExitAnswer]
 	ApprovalContent option.Option[ApprovalContent]
 	CopyRecord      option.Option[CopyRecord]
+	Shredded        option.Option[Shredded]
 }
 
 // Archetype reports which components the entity carries, in schema order.
@@ -196,6 +198,9 @@ func (inst *BodyRowEntity) Archetype() (a []string) {
 	}
 	if inst.CopyRecord.Has {
 		a = append(a, "copyRecord")
+	}
+	if inst.Shredded.Has {
+		a = append(a, "shredded")
 	}
 	return
 }
@@ -545,30 +550,10 @@ func (inst *BodyRowEntityBuilder) endSection(section string) error {
 		inst.store.dml.GetSectionSymbol().EndSection()
 	case "u8Array":
 		inst.store.dml.GetSectionU8Array().EndSection()
-	case "blobArray":
-		inst.store.dml.GetSectionBlobArray().EndSection()
-	case "u16Array":
-		inst.store.dml.GetSectionU16Array().EndSection()
-	case "u32Set":
-		inst.store.dml.GetSectionU32Set().EndSection()
-	case "u64Array":
-		inst.store.dml.GetSectionU64Array().EndSection()
-	case "u64Set":
-		inst.store.dml.GetSectionU64Set().EndSection()
-	case "i8Array":
-		inst.store.dml.GetSectionI8Array().EndSection()
-	case "i16Array":
-		inst.store.dml.GetSectionI16Array().EndSection()
-	case "i32Array":
-		inst.store.dml.GetSectionI32Array().EndSection()
 	case "i64Array":
 		inst.store.dml.GetSectionI64Array().EndSection()
-	case "f32Array":
-		inst.store.dml.GetSectionF32Array().EndSection()
 	case "f64Array":
 		inst.store.dml.GetSectionF64Array().EndSection()
-	case "u32Range":
-		inst.store.dml.GetSectionU32Range().EndSection()
 	case "null":
 		inst.store.dml.GetSectionNull().EndSection()
 	case "emptyObject":
@@ -807,199 +792,47 @@ func (inst *BodyRowEntityBuilder) AddCopyRecord(row CopyRecord) *BodyRowEntityBu
 	return inst
 }
 
-// StartContribution records that kind contributes hand-written
-// attributes to the open entity: one contribution per kind, as a
-// component is one, followed by its Contribute<Section> calls. The
-// entity is then not mirrored into cache views.
-func (inst *BodyRowEntityBuilder) StartContribution(kind string) *BodyRowEntityBuilder {
-	if err := inst.buf.StartKind(kind); err != nil {
+// AddShredded contributes the Shredded component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
+func (inst *BodyRowEntityBuilder) AddShredded(row Shredded) *BodyRowEntityBuilder {
+	if err := inst.buf.StartKind("Shredded"); err != nil {
 		inst.store.dml.AppendError(err)
+		return inst
 	}
-	inst.raw = true
-	return inst
-}
-
-// ContributeTextArray has fn write kind's attributes into the open entity's
-// textArray section when Commit flushes it, with the section's frame open and
-// shared with the components; fn must not close the section.
-func (inst *BodyRowEntityBuilder) ContributeTextArray(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionTextArray) error) *BodyRowEntityBuilder {
-	inst.buf.Enqueue("textArray", kind, func() error { return fn(inst.store.dml.GetSectionTextArray()) })
-	return inst
-}
-
-// ContributeStringArray has fn write kind's attributes into the open entity's
-// stringArray section when Commit flushes it, with the section's frame open and
-// shared with the components; fn must not close the section.
-func (inst *BodyRowEntityBuilder) ContributeStringArray(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionStringArray) error) *BodyRowEntityBuilder {
-	inst.buf.Enqueue("stringArray", kind, func() error { return fn(inst.store.dml.GetSectionStringArray()) })
-	return inst
-}
-
-// ContributeSymbol has fn write kind's attributes into the open entity's
-// symbol section when Commit flushes it, with the section's frame open and
-// shared with the components; fn must not close the section.
-func (inst *BodyRowEntityBuilder) ContributeSymbol(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionSymbol) error) *BodyRowEntityBuilder {
-	inst.buf.Enqueue("symbol", kind, func() error { return fn(inst.store.dml.GetSectionSymbol()) })
-	return inst
-}
-
-// ContributeSymbolArray has fn write kind's attributes into the open entity's
-// symbolArray section when Commit flushes it, with the section's frame open and
-// shared with the components; fn must not close the section.
-func (inst *BodyRowEntityBuilder) ContributeSymbolArray(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionSymbolArray) error) *BodyRowEntityBuilder {
-	inst.buf.Enqueue("symbolArray", kind, func() error { return fn(inst.store.dml.GetSectionSymbolArray()) })
-	return inst
-}
-
-// ContributeBlobArray has fn write kind's attributes into the open entity's
-// blobArray section when Commit flushes it, with the section's frame open and
-// shared with the components; fn must not close the section.
-func (inst *BodyRowEntityBuilder) ContributeBlobArray(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionBlobArray) error) *BodyRowEntityBuilder {
-	inst.buf.Enqueue("blobArray", kind, func() error { return fn(inst.store.dml.GetSectionBlobArray()) })
-	return inst
-}
-
-// ContributeU8Array has fn write kind's attributes into the open entity's
-// u8Array section when Commit flushes it, with the section's frame open and
-// shared with the components; fn must not close the section.
-func (inst *BodyRowEntityBuilder) ContributeU8Array(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionU8Array) error) *BodyRowEntityBuilder {
-	inst.buf.Enqueue("u8Array", kind, func() error { return fn(inst.store.dml.GetSectionU8Array()) })
-	return inst
-}
-
-// ContributeU16Array has fn write kind's attributes into the open entity's
-// u16Array section when Commit flushes it, with the section's frame open and
-// shared with the components; fn must not close the section.
-func (inst *BodyRowEntityBuilder) ContributeU16Array(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionU16Array) error) *BodyRowEntityBuilder {
-	inst.buf.Enqueue("u16Array", kind, func() error { return fn(inst.store.dml.GetSectionU16Array()) })
-	return inst
-}
-
-// ContributeU32Array has fn write kind's attributes into the open entity's
-// u32Array section when Commit flushes it, with the section's frame open and
-// shared with the components; fn must not close the section.
-func (inst *BodyRowEntityBuilder) ContributeU32Array(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionU32Array) error) *BodyRowEntityBuilder {
-	inst.buf.Enqueue("u32Array", kind, func() error { return fn(inst.store.dml.GetSectionU32Array()) })
-	return inst
-}
-
-// ContributeU32Set has fn write kind's attributes into the open entity's
-// u32Set section when Commit flushes it, with the section's frame open and
-// shared with the components; fn must not close the section.
-func (inst *BodyRowEntityBuilder) ContributeU32Set(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionU32Set) error) *BodyRowEntityBuilder {
-	inst.buf.Enqueue("u32Set", kind, func() error { return fn(inst.store.dml.GetSectionU32Set()) })
-	return inst
-}
-
-// ContributeU64Array has fn write kind's attributes into the open entity's
-// u64Array section when Commit flushes it, with the section's frame open and
-// shared with the components; fn must not close the section.
-func (inst *BodyRowEntityBuilder) ContributeU64Array(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionU64Array) error) *BodyRowEntityBuilder {
-	inst.buf.Enqueue("u64Array", kind, func() error { return fn(inst.store.dml.GetSectionU64Array()) })
-	return inst
-}
-
-// ContributeU64Set has fn write kind's attributes into the open entity's
-// u64Set section when Commit flushes it, with the section's frame open and
-// shared with the components; fn must not close the section.
-func (inst *BodyRowEntityBuilder) ContributeU64Set(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionU64Set) error) *BodyRowEntityBuilder {
-	inst.buf.Enqueue("u64Set", kind, func() error { return fn(inst.store.dml.GetSectionU64Set()) })
-	return inst
-}
-
-// ContributeI8Array has fn write kind's attributes into the open entity's
-// i8Array section when Commit flushes it, with the section's frame open and
-// shared with the components; fn must not close the section.
-func (inst *BodyRowEntityBuilder) ContributeI8Array(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionI8Array) error) *BodyRowEntityBuilder {
-	inst.buf.Enqueue("i8Array", kind, func() error { return fn(inst.store.dml.GetSectionI8Array()) })
-	return inst
-}
-
-// ContributeI16Array has fn write kind's attributes into the open entity's
-// i16Array section when Commit flushes it, with the section's frame open and
-// shared with the components; fn must not close the section.
-func (inst *BodyRowEntityBuilder) ContributeI16Array(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionI16Array) error) *BodyRowEntityBuilder {
-	inst.buf.Enqueue("i16Array", kind, func() error { return fn(inst.store.dml.GetSectionI16Array()) })
-	return inst
-}
-
-// ContributeI32Array has fn write kind's attributes into the open entity's
-// i32Array section when Commit flushes it, with the section's frame open and
-// shared with the components; fn must not close the section.
-func (inst *BodyRowEntityBuilder) ContributeI32Array(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionI32Array) error) *BodyRowEntityBuilder {
-	inst.buf.Enqueue("i32Array", kind, func() error { return fn(inst.store.dml.GetSectionI32Array()) })
-	return inst
-}
-
-// ContributeI64Array has fn write kind's attributes into the open entity's
-// i64Array section when Commit flushes it, with the section's frame open and
-// shared with the components; fn must not close the section.
-func (inst *BodyRowEntityBuilder) ContributeI64Array(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionI64Array) error) *BodyRowEntityBuilder {
-	inst.buf.Enqueue("i64Array", kind, func() error { return fn(inst.store.dml.GetSectionI64Array()) })
-	return inst
-}
-
-// ContributeF32Array has fn write kind's attributes into the open entity's
-// f32Array section when Commit flushes it, with the section's frame open and
-// shared with the components; fn must not close the section.
-func (inst *BodyRowEntityBuilder) ContributeF32Array(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionF32Array) error) *BodyRowEntityBuilder {
-	inst.buf.Enqueue("f32Array", kind, func() error { return fn(inst.store.dml.GetSectionF32Array()) })
-	return inst
-}
-
-// ContributeF64Array has fn write kind's attributes into the open entity's
-// f64Array section when Commit flushes it, with the section's frame open and
-// shared with the components; fn must not close the section.
-func (inst *BodyRowEntityBuilder) ContributeF64Array(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionF64Array) error) *BodyRowEntityBuilder {
-	inst.buf.Enqueue("f64Array", kind, func() error { return fn(inst.store.dml.GetSectionF64Array()) })
-	return inst
-}
-
-// ContributeU32Range has fn write kind's attributes into the open entity's
-// u32Range section when Commit flushes it, with the section's frame open and
-// shared with the components; fn must not close the section.
-func (inst *BodyRowEntityBuilder) ContributeU32Range(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionU32Range) error) *BodyRowEntityBuilder {
-	inst.buf.Enqueue("u32Range", kind, func() error { return fn(inst.store.dml.GetSectionU32Range()) })
-	return inst
-}
-
-// ContributeTimeArray has fn write kind's attributes into the open entity's
-// timeArray section when Commit flushes it, with the section's frame open and
-// shared with the components; fn must not close the section.
-func (inst *BodyRowEntityBuilder) ContributeTimeArray(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionTimeArray) error) *BodyRowEntityBuilder {
-	inst.buf.Enqueue("timeArray", kind, func() error { return fn(inst.store.dml.GetSectionTimeArray()) })
-	return inst
-}
-
-// ContributeBool has fn write kind's attributes into the open entity's
-// bool section when Commit flushes it, with the section's frame open and
-// shared with the components; fn must not close the section.
-func (inst *BodyRowEntityBuilder) ContributeBool(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionBool) error) *BodyRowEntityBuilder {
-	inst.buf.Enqueue("bool", kind, func() error { return fn(inst.store.dml.GetSectionBool()) })
-	return inst
-}
-
-// ContributeNull has fn write kind's attributes into the open entity's
-// null section when Commit flushes it, with the section's frame open and
-// shared with the components; fn must not close the section.
-func (inst *BodyRowEntityBuilder) ContributeNull(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionNull) error) *BodyRowEntityBuilder {
-	inst.buf.Enqueue("null", kind, func() error { return fn(inst.store.dml.GetSectionNull()) })
-	return inst
-}
-
-// ContributeEmptyObject has fn write kind's attributes into the open entity's
-// emptyObject section when Commit flushes it, with the section's frame open and
-// shared with the components; fn must not close the section.
-func (inst *BodyRowEntityBuilder) ContributeEmptyObject(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionEmptyObject) error) *BodyRowEntityBuilder {
-	inst.buf.Enqueue("emptyObject", kind, func() error { return fn(inst.store.dml.GetSectionEmptyObject()) })
-	return inst
-}
-
-// ContributeEmptyArray has fn write kind's attributes into the open entity's
-// emptyArray section when Commit flushes it, with the section's frame open and
-// shared with the components; fn must not close the section.
-func (inst *BodyRowEntityBuilder) ContributeEmptyArray(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionEmptyArray) error) *BodyRowEntityBuilder {
-	inst.buf.Enqueue("emptyArray", kind, func() error { return fn(inst.store.dml.GetSectionEmptyArray()) })
+	inst.buf.Enqueue("stringArray", "Shredded", func() error {
+		return shreddedEmitSectionStringArray(inst.store.dml.GetSectionStringArray(), row)
+	})
+	inst.buf.Enqueue("symbol", "Shredded", func() error {
+		return shreddedEmitSectionSymbol(inst.store.dml.GetSectionSymbol(), row)
+	})
+	inst.buf.Enqueue("i64Array", "Shredded", func() error {
+		return shreddedEmitSectionI64Array(inst.store.dml.GetSectionI64Array(), row)
+	})
+	inst.buf.Enqueue("f64Array", "Shredded", func() error {
+		return shreddedEmitSectionF64Array(inst.store.dml.GetSectionF64Array(), row)
+	})
+	inst.buf.Enqueue("bool", "Shredded", func() error {
+		return shreddedEmitSectionBool(inst.store.dml.GetSectionBool(), row)
+	})
+	inst.buf.Enqueue("null", "Shredded", func() error {
+		return shreddedEmitSectionNull(inst.store.dml.GetSectionNull(), row)
+	})
+	inst.buf.Enqueue("emptyObject", "Shredded", func() error {
+		return shreddedEmitSectionEmptyObject(inst.store.dml.GetSectionEmptyObject(), row)
+	})
+	inst.buf.Enqueue("emptyArray", "Shredded", func() error {
+		return shreddedEmitSectionEmptyArray(inst.store.dml.GetSectionEmptyArray(), row)
+	})
+	inst.ent.Shredded = option.Some(row)
 	return inst
 }
 
@@ -1259,6 +1092,36 @@ func (inst *BodyRowStore) IngestCopyRecordCtx(ctx context.Context, ord uint64, r
 		err = inst.BeginCtx(ctx, rows[i].ID, ord).AddCopyRecord(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest copyRecord row %d: %w", i, err)
+			return
+		}
+	}
+	return
+}
+
+// IngestShredded buffers one whole entity per row carrying only the
+// Shredded component, all stamped with ord — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ord, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
+func (inst *BodyRowStore) IngestShredded(ord uint64, rows []Shredded) (err error) {
+	return inst.IngestShreddedCtx(context.Background(), ord, rows)
+}
+
+// IngestShreddedCtx is IngestShredded with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *BodyRowStore) IngestShreddedCtx(ctx context.Context, ord uint64, rows []Shredded) (err error) {
+	seen := make(map[uint64]struct{}, len(rows))
+	for i := range rows {
+		if _, dup := seen[rows[i].ID]; dup {
+			err = eh.Errorf("ingest shredded row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
+			return
+		}
+		seen[rows[i].ID] = struct{}{}
+		err = inst.BeginCtx(ctx, rows[i].ID, ord).AddShredded(rows[i]).Commit()
+		if err != nil {
+			err = eh.Errorf("ingest shredded row %d: %w", i, err)
 			return
 		}
 	}
@@ -2116,7 +1979,12 @@ func decodeBodyRowRecord(rec arrow.RecordBatch) (ents []*BodyRowEntity, err erro
 	timeArrayR := lowlevel.NewReadAccessAgentrunbodyTableTaggedTimeArray()
 	symbolR := lowlevel.NewReadAccessAgentrunbodyTableTaggedSymbol()
 	u8ArrayR := lowlevel.NewReadAccessAgentrunbodyTableTaggedU8Array()
-	readers := []agentrunbodySectionReaderI{idR, stringArrayR, textArrayR, symbolArrayR, boolR, u32ArrayR, timeArrayR, symbolR, u8ArrayR}
+	i64ArrayR := lowlevel.NewReadAccessAgentrunbodyTableTaggedI64Array()
+	f64ArrayR := lowlevel.NewReadAccessAgentrunbodyTableTaggedF64Array()
+	nullR := lowlevel.NewReadAccessAgentrunbodyTableTaggedNull()
+	emptyObjectR := lowlevel.NewReadAccessAgentrunbodyTableTaggedEmptyObject()
+	emptyArrayR := lowlevel.NewReadAccessAgentrunbodyTableTaggedEmptyArray()
+	readers := []agentrunbodySectionReaderI{idR, stringArrayR, textArrayR, symbolArrayR, boolR, u32ArrayR, timeArrayR, symbolR, u8ArrayR, i64ArrayR, f64ArrayR, nullR, emptyObjectR, emptyArrayR}
 	for _, r := range readers {
 		err = r.LoadFromRecord(rec)
 		if err != nil {
@@ -2212,6 +2080,17 @@ func decodeBodyRowRecord(rec arrow.RecordBatch) (ents []*BodyRowEntity, err erro
 			if ok {
 				row.ID = ent.ID
 				ent.CopyRecord = option.Some(row)
+			}
+		}
+		{
+			row, ok, e := shreddedReadRow(i, stringArrayR.GetAttributes(), stringArrayR.GetMemberships(), symbolR.GetAttributes(), symbolR.GetMemberships(), i64ArrayR.GetAttributes(), i64ArrayR.GetMemberships(), f64ArrayR.GetAttributes(), f64ArrayR.GetMemberships(), boolR.GetAttributes(), boolR.GetMemberships(), nullR, nullR.GetMemberships(), emptyObjectR, emptyObjectR.GetMemberships(), emptyArrayR, emptyArrayR.GetMemberships())
+			if e != nil {
+				err = eh.Errorf("read shredded component: %w", e)
+				return
+			}
+			if ok {
+				row.ID = ent.ID
+				ent.Shredded = option.Some(row)
 			}
 		}
 		ents = append(ents, ent)

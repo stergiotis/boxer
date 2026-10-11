@@ -30,7 +30,7 @@ func TestGenerateAgentrunBodyStore(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, gen.Input{
 		PackageName: "agentrunstore", StoreName: "BodyRow", TableName: TableNameBody, Database: DatabaseName,
-		Table: td, RowConfig: TableRowConfig, ComponentPaths: VaultComponentPaths, OutDir: ".", CanonWire: true, Contributions: true,
+		Table: td, RowConfig: TableRowConfig, ComponentPaths: VaultComponentPaths, OutDir: ".", CanonWire: true,
 		ImportPath: importPath, Wrapper: marshallgen.FixedIdsWrapper{Ids: ids},
 		Roles: gen.Roles{Key: "id", Order: EntryOrdinalColumn},
 		// The vault row is the commitment's subject: it is visible when

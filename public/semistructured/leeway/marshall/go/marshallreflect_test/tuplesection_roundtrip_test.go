@@ -624,7 +624,10 @@ func TestPlanFor_TupleRejections(t *testing.T) {
 		require.Error(t, err)
 		require.ErrorContains(t, err, "channel flag belongs on the `@membership` field")
 	})
-	t.Run("no value fields", func(t *testing.T) {
+	t.Run("no value fields on a section with a value column", func(t *testing.T) {
+		// An element without a value field maps a section without a value
+		// column (ADR-0326 §SD3): it plans, and the DML says whether the
+		// section has one.
 		type elem struct {
 			Label string `lw:"@membership,verbatim"`
 		}
@@ -634,8 +637,106 @@ func TestPlanFor_TupleRejections(t *testing.T) {
 			Texts []elem   `lw:"text"`
 		}
 		_, err := marshallreflect.PlanFor[bad]()
+		require.NoError(t, err)
+		err = marshallreflect.Validate[bad](anchor.NewInEntityTestTable(memory.NewGoAllocator(), 1))
 		require.Error(t, err)
-		require.ErrorContains(t, err, "needs at least one value field")
+		require.Contains(t, fieldList(t, err, "problems"), "BeginAttribute takes 1 arg(s), want 0")
+	})
+	// ADR-0326 §SD1: `@params` pairs with the one mixed-channel membership.
+	t.Run("params without a mixed channel", func(t *testing.T) {
+		type elem struct {
+			Label  string   `lw:"@membership,verbatim"`
+			Params []uint64 `lw:"@params"`
+			Value  string   `lw:"symbol"`
+		}
+		type bad struct {
+			_    struct{} `kind:"bad"`
+			ID   uint64   `lw:",id"`
+			Tags []elem   `lw:"symbol"`
+		}
+		_, err := marshallreflect.PlanFor[bad]()
+		require.ErrorContains(t, err, "needs a `@membership` on a mixed channel")
+	})
+	t.Run("mixed channel without params", func(t *testing.T) {
+		type elem struct {
+			Label string `lw:"@membership,mixedLowCardVerbatim"`
+			Value string `lw:"symbol"`
+		}
+		type bad struct {
+			_    struct{} `kind:"bad"`
+			ID   uint64   `lw:",id"`
+			Tags []elem   `lw:"symbol"`
+		}
+		_, err := marshallreflect.PlanFor[bad]()
+		require.ErrorContains(t, err, "needs the element's `@params` field")
+	})
+	t.Run("mixed channel beside another membership", func(t *testing.T) {
+		type elem struct {
+			Label  string   `lw:"@membership,mixedLowCardVerbatim"`
+			Other  string   `lw:"@membership,verbatim"`
+			Params []uint64 `lw:"@params"`
+			Value  string   `lw:"symbol"`
+		}
+		type bad struct {
+			_    struct{} `kind:"bad"`
+			ID   uint64   `lw:",id"`
+			Tags []elem   `lw:"symbol"`
+		}
+		_, err := marshallreflect.PlanFor[bad]()
+		require.ErrorContains(t, err, "declares no other membership")
+	})
+	t.Run("params that are not []uint64", func(t *testing.T) {
+		type elem struct {
+			Label  string `lw:"@membership,mixedLowCardVerbatim"`
+			Params []byte `lw:"@params"`
+			Value  string `lw:"symbol"`
+		}
+		type bad struct {
+			_    struct{} `kind:"bad"`
+			ID   uint64   `lw:",id"`
+			Tags []elem   `lw:"symbol"`
+		}
+		_, err := marshallreflect.PlanFor[bad]()
+		require.ErrorContains(t, err, "must be a []uint64")
+	})
+	t.Run("parametrized channel", func(t *testing.T) {
+		type elem struct {
+			Label string `lw:"@membership,lowCardRefParametrized"`
+			Value string `lw:"symbol"`
+		}
+		type bad struct {
+			_    struct{} `kind:"bad"`
+			ID   uint64   `lw:",id"`
+			Tags []elem   `lw:"symbol"`
+		}
+		_, err := marshallreflect.PlanFor[bad]()
+		require.ErrorContains(t, err, "cannot use a parametrized channel")
+	})
+	t.Run("unit beside a second value field", func(t *testing.T) {
+		type elem struct {
+			Label string   `lw:"@membership,verbatim"`
+			Text  string   `lw:"text:text,unit"`
+			WB    []string `lw:"text:wordBag"`
+		}
+		type bad struct {
+			_     struct{} `kind:"bad"`
+			ID    uint64   `lw:",id"`
+			Texts []elem   `lw:"text"`
+		}
+		_, err := marshallreflect.PlanFor[bad]()
+		require.ErrorContains(t, err, "`unit` is accepted on a tuple element's only value field")
+	})
+	t.Run("static nested section on a mixed channel without params", func(t *testing.T) {
+		type sec struct {
+			Text string
+		}
+		type bad struct {
+			_        struct{} `kind:"bad"`
+			ID       uint64   `lw:",id"`
+			Sections []sec    `lw:"noteSection,symbol,mixedLowCardRef"`
+		}
+		_, err := marshallreflect.PlanFor[bad]()
+		require.ErrorContains(t, err, "needs a `@params` field")
 	})
 	t.Run("static field shares the tuple's section", func(t *testing.T) {
 		type elem struct {

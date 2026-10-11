@@ -1226,6 +1226,19 @@ stream as `<Store>StoreConfig.Keys`, an `identifier.IdGeneratorI`, typically
 refused at generation. `recordstore/example`'s `minted` store is the
 reference.
 
+### 2026-10-11 — tuple components: decoded by ReadRow, no Scan verb
+
+`marshallgen.ReadRowSupported` no longer refuses tuple kinds
+([ADR-0326](./0326-tuple-elements-carry-parameters-and-tuple-kinds-read-in-readrow.md)
+§SD4), so a component with a tuple field — including one whose elements
+carry mixed-channel parameters — is decoded in the store's entity read.
+The read-back generator still maps one attribute per membership, so such
+a component gets no read-back artefacts: no `Scan<Kind>` verb, no entry
+in `<Store>ComponentSQL`, and a `Cas` store refuses it. Generation also
+refuses a store in which a dynamic tuple claims a section and channel
+another component uses. Flat fields on carrier channels stay outside
+`ReadRow`, as the Deferred list says.
+
 ## References
 
 - [ADR-0042: Keelson leeway codec SoA generator](0042-keelson-leeway-codec-soa-generator.md)

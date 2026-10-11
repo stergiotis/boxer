@@ -5176,6 +5176,30 @@ func (inst *ReadAccessAgentrunbodyTableTaggedEmptyArray) GetSectionMembershipSpe
 	return 0b10011001
 }
 
+// GetNumberOfAttributes counts a value-less section's attributes from the
+// cardinality column of its first membership channel, which holds one
+// entry per attribute.
+func (inst *ReadAccessAgentrunbodyTableTaggedNull) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.Memberships.AccelHighCardRef.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+
+// GetNumberOfAttributes counts a value-less section's attributes from the
+// cardinality column of its first membership channel, which holds one
+// entry per attribute.
+func (inst *ReadAccessAgentrunbodyTableTaggedEmptyObject) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.Memberships.AccelHighCardRef.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+
+// GetNumberOfAttributes counts a value-less section's attributes from the
+// cardinality column of its first membership channel, which holds one
+// entry per attribute.
+func (inst *ReadAccessAgentrunbodyTableTaggedEmptyArray) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.Memberships.AccelHighCardRef.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+
 ///////////////////////////////////////////////////////////////////
 // code generator
 // readaccess.(*GoClassBuilder).composeEntityClasses

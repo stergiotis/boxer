@@ -56,6 +56,7 @@ Part B so far, recorded by ADR-0325 and its Updates:
 | B1 | `jsonshred`: JSON to semi-structured attributes and back, lossless | — |
 | B2–B5 | typed components for the closed shapes, shredded arguments and calls, the preimage drained by the generated encoder (`gen.Input.CanonWire`), one commitment per vault row, the endorsement digest over the shredded arguments | One commit, as settled. There is no runtime encoder (ADR-0325's first Update). The run's settings stay JSON on the run row. The introspection tables render records as the JSON they used to be written as. |
 | SD5 | u64 run ids minted by the store before the row (the seed hashes the id), store-assigned entry ids, the run seed over the run row's canonical item, the trail's approval as a `foreignKey` to the entry id | Chat keeps its conversation id and finds the run through the owner's run list. L33 compares conversations, which the trail row names. |
+| B6 | the shredded attributes as a generated tuple component (ADR-0326): `@params` on a mixed-channel tuple membership, `,unit` and value-less tuple elements, tuple kinds read by `ReadRow` | `[]uint64` parameters only, so `capmapfacts`' text parameters are covered by a test shape, not by its own DTO. Tuple components get no `Scan` verb; the reflection `ReadComponent` keeps the section-owning rule. |
 
 Two parts, in order. Part A closes four `recordstore/gen` gaps the journal's
 SQL store worked around by hand. Part B, which depends on A's first step,

@@ -2504,7 +2504,7 @@ func (inst *GoClassBuilder) composeSectionClasses(clsNamer gocodegen.GoClassName
 		}
 	}
 
-	return
+	return inst.composeValuelessAttributeCounts(clsNamer, tableName, tblDesc)
 }
 func extractEffectivePlainItemTypes(tblDesc common.TableDesc) (ptsEff []common.PlainItemTypeE) {
 	ptsEff = slices.Clone(common.AllPlainItemTypes)
@@ -2909,3 +2909,48 @@ func (inst *GoClassBuilder) ComposeGoImports(ir *common.IntermediateTableReprese
 
 var _ gocodegen.CodeComposerI = (*GoClassBuilder)(nil)
 var _ common.CodeBuilderHolderI = (*GoClassBuilder)(nil)
+
+// composeValuelessAttributeCounts emits GetNumberOfAttributes on every
+// value-less section (ADR-0326 §SD3). Such a section has no attribute
+// class to count its attributes; every membership channel's cardinality
+// column carries one entry per attribute, so the first channel's accel
+// counts them. Kept at the end of the file so the source locations the
+// other emitted classes record do not move.
+func (inst *GoClassBuilder) composeValuelessAttributeCounts(clsNamer gocodegen.GoClassNamerI, tableName naming.StylableName, tblDesc common.TableDesc) (err error) {
+	b := inst.builder
+	arrowTech := arrow2.NewTechnologySpecificCodeGenerator()
+	for _, sec := range tblDesc.TaggedValuesSections {
+		if len(sec.ValueColumnNames) > 0 || sec.MembershipSpec == 0 {
+			continue
+		}
+		var outerClsName string
+		outerClsName, err = clsNamer.ComposeSectionReadAccessOuterClassName(tableName, common.PlainItemTypeNone, sec.Name)
+		if err != nil {
+			err = eh.Errorf("unable to generate outer class name: %w", err)
+			return
+		}
+		var role1 common.ColumnRoleE
+		for spec := range sec.MembershipSpec.Iterate() {
+			_, _, role1, _, _, _, _, err = arrowTech.ResolveMembership(spec)
+			if err != nil {
+				err = eh.Errorf("unable to resolve membership: %w", err)
+				return
+			}
+			break
+		}
+		name1 := naming.MustBeValidStylableName(role1.LongString()).Convert(naming.UpperCamelCase).String()
+		_, err = fmt.Fprintf(b, `// GetNumberOfAttributes counts a value-less section's attributes from the
+// cardinality column of its first membership channel, which holds one
+// entry per attribute.
+func (inst *%s%s) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.Memberships.%s.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+
+`, outerClsName, genericTypeParamsUse, clsNamer.ComposeAccelFieldName(name1))
+		if err != nil {
+			return
+		}
+	}
+	return
+}

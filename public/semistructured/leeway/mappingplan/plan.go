@@ -533,6 +533,21 @@ type TaggedField struct {
 	TupleStructType  string
 	TupleMemberships []TupleMembership
 
+	// TupleParamsField names the element field holding the parameters of
+	// the attribute's one mixed-channel membership (ADR-0326 §SD1): a
+	// []uint64, encoded by membership.EncodeParams on write and decoded by
+	// membership.DecodeParams on read. "" when the element carries none.
+	// All sub-fields of one tuple carry identical copies.
+	TupleParamsField string
+
+	// TupleValueless marks the one field a tuple records when its element
+	// declares no value field (ADR-0326 §SD3): the section has no value
+	// column, every element emits BeginAttribute() with no argument, and
+	// GoFieldName / LWColumn are "". The field carries the tuple's
+	// metadata (TupleField, TupleMemberships, ...) so the section groups
+	// like any other tuple section.
+	TupleValueless bool
+
 	// TupleCardinality is the attributes-per-row multiplicity of the tuple
 	// section this field belongs to: Many (`[]X`, the dynamic-membership
 	// tuple), One (`X`), or Optional (`option.Option[X]` / `*X`). The zero
@@ -560,9 +575,11 @@ type TupleMembership struct {
 	// slice element type.
 	GoType string
 	// Channel is one of the four simple channels — LowCardRef / HighCardRef
-	// (ref, uint64 id) or LowCardVerbatim / HighCardVerbatim (verbatim, name).
-	// Carrier / parametrized channels are rejected (AddTupleSliceField): their
-	// membership identity is per-row carrier data, not an element field.
+	// (ref, uint64 id) or LowCardVerbatim / HighCardVerbatim (verbatim, name)
+	// — or a mixed channel, MixedLowCardRef / MixedLowCardVerbatim, whose
+	// parameters the element carries in its TupleParamsField (ADR-0326
+	// §SD1). The parametrized channels are rejected (AddTupleSliceField):
+	// their whole identity is an opaque blob.
 	Channel MembershipChannel
 	// IsSlice is true for a repeated `@membership` field (`[]T`): one
 	// AddMembership<Channel>P call per slice element, in slice order. A slice
@@ -584,6 +601,9 @@ type TupleMembership struct {
 func (f TaggedField) GoType() string {
 	if f.IsConst {
 		return "string"
+	}
+	if f.TupleValueless {
+		return "" // a value-less tuple's marker field holds no value
 	}
 	goType, _, _, err := DeriveGoShape(f.Canonical)
 	if err != nil {
@@ -637,10 +657,23 @@ func (f TaggedField) IsMulti() bool {
 // Channels that do not consult the registry (Verbatim and Parametrized
 // non-mixed) return "" — no kindXxx is declared.
 func (f TaggedField) KindVar() string {
-	if !f.Flags.Channel.NeedsKindVar() {
+	if !f.ResolvesMembershipId() {
 		return ""
 	}
 	return "kind" + UpperFirst(f.LWMembership)
+}
+
+// ResolvesMembershipId reports whether the field's static membership is
+// a registry id the emitted code holds in a kindXxx symbol: a ref
+// channel, or a static nested section on the mixed ref channel, whose id
+// comes from the tag while the element carries the parameters (ADR-0326
+// §SD1). A carrier-paired flat field takes its id from the carrier row,
+// and a dynamic tuple from its elements, so neither resolves one.
+func (f TaggedField) ResolvesMembershipId() bool {
+	if f.Flags.Channel.NeedsKindVar() {
+		return true
+	}
+	return f.Flags.Channel == MembershipChannelMixedLowCardRef && f.TupleParamsField != "" && len(f.TupleMemberships) == 0
 }
 
 // Section returns the trusted section name from the lw: tag — the

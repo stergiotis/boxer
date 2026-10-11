@@ -3,6 +3,8 @@
 package nested
 
 import (
+	"iter"
+
 	"github.com/apache/arrow-go/v18/arrow/array"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -186,6 +188,7 @@ type ManyTagsDocSymbolAttrsReadI interface {
 
 // ManyTagsDocSymbolMembsReadI is the Memberships-side view of the symbol section.
 type ManyTagsDocSymbolMembsReadI interface {
+	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
 // ManyTagsDocFillFromArrow walks rec row-by-row and appends each entity's
@@ -226,4 +229,45 @@ func ManyTagsDocFillFromArrow[
 	return
 }
 
-// ManyTagsDocReadRow is not emitted: field Blocks is a dynamic-membership tuple.
+// ManyTagsDocReadRow reads row i as one optional ManyTagsDoc component: presence-
+// gated (a row carrying none of the kind's memberships yields
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
+// bound fields stay zero — the caller owns the envelope. The
+// Attrs/Membs readers bind by type inference at the call site, as
+// with FillFromArrow.
+func ManyTagsDocReadRow[
+	SymbolAttrs ManyTagsDocSymbolAttrsReadI,
+	SymbolMembs ManyTagsDocSymbolMembsReadI,
+](
+	i int,
+	symbolAttrs SymbolAttrs,
+	symbolMembs SymbolMembs,
+) (row ManyTagsDoc, present bool, err error) {
+	// --- symbol. ---
+	var symbolBlocksElems []symBlock
+	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
+		symbolClaimed := false
+		for mv := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			if mv == kindTags {
+				symbolClaimed = true
+				break
+			}
+		}
+		if !symbolClaimed {
+			continue
+		}
+		var symbolValLocal string
+		symbolValLocal = symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+		symbolBlocksElems = append(symbolBlocksElems, symBlock{
+			Val: symbolValLocal,
+		})
+	}
+	if len(symbolBlocksElems) > 0 {
+		row.Blocks = symbolBlocksElems
+		present = true
+	}
+	return
+}

@@ -7,208 +7,99 @@ import (
 	"sync"
 	"time"
 
-	"github.com/apache/arrow-go/v18/arrow"
-
-	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun/agentrunstore/internal/lowlevel"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/jsonshred"
-	"github.com/stergiotis/boxer/public/semistructured/leeway/membership"
-	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 )
 
 // The shredded attributes of a vault row (ADR-0325 §SD1): a tool call's
-// arguments and a reply's calls, exploded by jsonshred into the row's
-// facts sections on the verbatim name + parameters channel, the path as
-// the name and the array indices as parameters. The generated store reads
-// and writes the components; these attributes go through its contribution
-// seam on the way in and through the read-access classes on the way out.
-//
-// deferred: the generator owning them as a component of their own (plan002
-// B6); until then this file is the one place that knows their layout.
+// arguments and a reply's calls, exploded by jsonshred. The generated store
+// writes and reads them as the Shredded component (ADR-0326); this file
+// converts jsonshred's attributes to and from it.
 
-// ShreddedKind is the contribution kind the shredded attributes are
-// written under.
-const ShreddedKind = "agentrunShredded"
-
-// ContributeShredded adds attrs to the open vault entity through b's
-// contribution seam, one contribution for all of them.
+// ContributeShredded adds attrs to the open vault entity as its Shredded
+// component; no attribute adds none.
 func ContributeShredded(b *BodyRowEntityBuilder, attrs []jsonshred.Attr) (err error) {
 	if len(attrs) == 0 {
 		return
 	}
-	bySection := make(map[jsonshred.SectionE][]jsonshred.Attr, 8)
+	var s Shredded
 	for _, a := range attrs {
-		if _, perr := membership.EncodeParams(a.Params...); perr != nil {
-			return eb.Build().Str("path", a.Path).Errorf("encode the parameters: %w", perr)
-		}
-		bySection[a.Section] = append(bySection[a.Section], a)
-	}
-	b.StartContribution(ShreddedKind)
-	enc := func(a jsonshred.Attr) (name []byte, params []byte) {
-		params, _ = membership.EncodeParams(a.Params...)
-		return []byte(a.Path), params
-	}
-	for sec, as := range bySection {
-		switch sec {
+		ok := true
+		switch a.Section {
 		case jsonshred.SectionString:
-			b.ContributeStringArray(ShreddedKind, func(s *lowlevel.InEntityAgentrunbodyTableSectionStringArray) error {
-				for _, a := range as {
-					n, p := enc(a)
-					s.BeginAttributeSingle(a.Value.(string)).AddMembershipMixedLowCardVerbatim(n, p).EndAttribute()
-				}
-				return nil
-			})
+			var v string
+			if v, ok = a.Value.(string); ok {
+				s.Strings = append(s.Strings, ShreddedString{Path: a.Path, Params: a.Params, Value: v})
+			}
 		case jsonshred.SectionSymbol:
-			b.ContributeSymbol(ShreddedKind, func(s *lowlevel.InEntityAgentrunbodyTableSectionSymbol) error {
-				for _, a := range as {
-					n, p := enc(a)
-					s.BeginAttribute(a.Value.(string)).AddMembershipMixedLowCardVerbatim(n, p).EndAttribute()
-				}
-				return nil
-			})
+			var v string
+			if v, ok = a.Value.(string); ok {
+				s.Symbols = append(s.Symbols, ShreddedSymbol{Path: a.Path, Params: a.Params, Value: v})
+			}
 		case jsonshred.SectionI64:
-			b.ContributeI64Array(ShreddedKind, func(s *lowlevel.InEntityAgentrunbodyTableSectionI64Array) error {
-				for _, a := range as {
-					n, p := enc(a)
-					s.BeginAttributeSingle(a.Value.(int64)).AddMembershipMixedLowCardVerbatim(n, p).EndAttribute()
-				}
-				return nil
-			})
+			var v int64
+			if v, ok = a.Value.(int64); ok {
+				s.I64s = append(s.I64s, ShreddedI64{Path: a.Path, Params: a.Params, Value: v})
+			}
 		case jsonshred.SectionF64:
-			b.ContributeF64Array(ShreddedKind, func(s *lowlevel.InEntityAgentrunbodyTableSectionF64Array) error {
-				for _, a := range as {
-					n, p := enc(a)
-					s.BeginAttributeSingle(a.Value.(float64)).AddMembershipMixedLowCardVerbatim(n, p).EndAttribute()
-				}
-				return nil
-			})
+			var v float64
+			if v, ok = a.Value.(float64); ok {
+				s.F64s = append(s.F64s, ShreddedF64{Path: a.Path, Params: a.Params, Value: v})
+			}
 		case jsonshred.SectionBool:
-			b.ContributeBool(ShreddedKind, func(s *lowlevel.InEntityAgentrunbodyTableSectionBool) error {
-				for _, a := range as {
-					n, p := enc(a)
-					s.BeginAttribute(a.Value.(bool)).AddMembershipMixedLowCardVerbatim(n, p).EndAttribute()
-				}
-				return nil
-			})
+			var v bool
+			if v, ok = a.Value.(bool); ok {
+				s.Bools = append(s.Bools, ShreddedBool{Path: a.Path, Params: a.Params, Value: v})
+			}
 		case jsonshred.SectionNull:
-			b.ContributeNull(ShreddedKind, func(s *lowlevel.InEntityAgentrunbodyTableSectionNull) error {
-				for _, a := range as {
-					n, p := enc(a)
-					s.BeginAttribute().AddMembershipMixedLowCardVerbatim(n, p).EndAttribute()
-				}
-				return nil
-			})
+			s.Nulls = append(s.Nulls, ShreddedLeaf{Path: a.Path, Params: a.Params})
 		case jsonshred.SectionEmptyObject:
-			b.ContributeEmptyObject(ShreddedKind, func(s *lowlevel.InEntityAgentrunbodyTableSectionEmptyObject) error {
-				for _, a := range as {
-					n, p := enc(a)
-					s.BeginAttribute().AddMembershipMixedLowCardVerbatim(n, p).EndAttribute()
-				}
-				return nil
-			})
+			s.EmptyObjects = append(s.EmptyObjects, ShreddedLeaf{Path: a.Path, Params: a.Params})
 		case jsonshred.SectionEmptyArray:
-			b.ContributeEmptyArray(ShreddedKind, func(s *lowlevel.InEntityAgentrunbodyTableSectionEmptyArray) error {
-				for _, a := range as {
-					n, p := enc(a)
-					s.BeginAttribute().AddMembershipMixedLowCardVerbatim(n, p).EndAttribute()
-				}
-				return nil
-			})
+			s.EmptyArrays = append(s.EmptyArrays, ShreddedLeaf{Path: a.Path, Params: a.Params})
 		default:
-			return eb.Build().Stringer("section", sec).Errorf("no vault section for a shredded attribute")
+			return eb.Build().Stringer("section", a.Section).Str("path", a.Path).Errorf("no vault section for a shredded attribute")
+		}
+		if !ok {
+			return eb.Build().Stringer("section", a.Section).Str("path", a.Path).Errorf("a shredded attribute's value does not match its section")
+		}
+	}
+	b.AddShredded(s)
+	return
+}
+
+// AttrsOf is the jsonshred attributes of a Shredded component, section by
+// section in jsonshred's section order.
+func AttrsOf(s Shredded) (attrs []jsonshred.Attr) {
+	for _, a := range s.Strings {
+		attrs = append(attrs, jsonshred.Attr{Path: a.Path, Params: a.Params, Section: jsonshred.SectionString, Value: a.Value})
+	}
+	for _, a := range s.Symbols {
+		attrs = append(attrs, jsonshred.Attr{Path: a.Path, Params: a.Params, Section: jsonshred.SectionSymbol, Value: a.Value})
+	}
+	for _, a := range s.I64s {
+		attrs = append(attrs, jsonshred.Attr{Path: a.Path, Params: a.Params, Section: jsonshred.SectionI64, Value: a.Value})
+	}
+	for _, a := range s.F64s {
+		attrs = append(attrs, jsonshred.Attr{Path: a.Path, Params: a.Params, Section: jsonshred.SectionF64, Value: a.Value})
+	}
+	for _, a := range s.Bools {
+		attrs = append(attrs, jsonshred.Attr{Path: a.Path, Params: a.Params, Section: jsonshred.SectionBool, Value: a.Value})
+	}
+	for _, leaves := range []struct {
+		as  []ShreddedLeaf
+		sec jsonshred.SectionE
+	}{{s.Nulls, jsonshred.SectionNull}, {s.EmptyObjects, jsonshred.SectionEmptyObject}, {s.EmptyArrays, jsonshred.SectionEmptyArray}} {
+		for _, a := range leaves.as {
+			attrs = append(attrs, jsonshred.Attr{Path: a.Path, Params: a.Params, Section: leaves.sec})
 		}
 	}
 	return
 }
 
-// shreddedOf reads the shredded attributes of every entity of a vault
-// record, in entity order: the attributes that carry a verbatim name.
-func shreddedOf(rec arrow.RecordBatch) (perEntity [][]jsonshred.Attr, err error) {
-	str := lowlevel.NewReadAccessAgentrunbodyTableTaggedStringArray()
-	sym := lowlevel.NewReadAccessAgentrunbodyTableTaggedSymbol()
-	i64 := lowlevel.NewReadAccessAgentrunbodyTableTaggedI64Array()
-	f64 := lowlevel.NewReadAccessAgentrunbodyTableTaggedF64Array()
-	bl := lowlevel.NewReadAccessAgentrunbodyTableTaggedBool()
-	null := lowlevel.NewReadAccessAgentrunbodyTableTaggedNull()
-	eo := lowlevel.NewReadAccessAgentrunbodyTableTaggedEmptyObject()
-	ea := lowlevel.NewReadAccessAgentrunbodyTableTaggedEmptyArray()
-	type loader interface {
-		LoadFromRecord(rec raruntime.RecordI) error
-		Release()
-	}
-	for _, l := range []loader{str, sym, i64, f64, bl, null, eo, ea} {
-		if err = l.LoadFromRecord(rec); err != nil {
-			return nil, eh.Errorf("load the vault's sections: %w", err)
-		}
-		defer l.Release()
-	}
-	n := int(rec.NumRows())
-	perEntity = make([][]jsonshred.Attr, n)
-	named := func(pack *lowlevel.MembershipPackAgentrunbodyTableShared1, e raruntime.EntityIdx, i raruntime.AttributeIdx) (path string, params []uint64, ok bool, err error) {
-		for name, raw := range pack.GetMembValueLowCardVerbatimHighCardParams(e, i) {
-			if params, err = membership.DecodeParams(raw); err != nil {
-				return
-			}
-			return string(name), params, true, nil
-		}
-		return
-	}
-	for ei := range n {
-		e := raruntime.EntityIdx(ei)
-		var attrs []jsonshred.Attr
-		add := func(pack *lowlevel.MembershipPackAgentrunbodyTableShared1, i raruntime.AttributeIdx, sec jsonshred.SectionE, v func() any) (aerr error) {
-			path, params, ok, perr := named(pack, e, i)
-			if perr != nil || !ok {
-				return perr
-			}
-			attrs = append(attrs, jsonshred.Attr{Path: path, Params: params, Section: sec, Value: v()})
-			return
-		}
-		for i := range raruntime.AttributeIdx(str.GetAttributes().GetNumberOfAttributes(e)) {
-			if err = add(str.GetMemberships(), i, jsonshred.SectionString, func() any { return str.GetAttributes().GetAttrValueSingleOrDefault(e, i) }); err != nil {
-				return
-			}
-		}
-		for i := range raruntime.AttributeIdx(sym.GetAttributes().GetNumberOfAttributes(e)) {
-			if err = add(sym.GetMemberships(), i, jsonshred.SectionSymbol, func() any { return sym.GetAttributes().GetAttrValueValue(e, i) }); err != nil {
-				return
-			}
-		}
-		for i := range raruntime.AttributeIdx(i64.GetAttributes().GetNumberOfAttributes(e)) {
-			if err = add(i64.GetMemberships(), i, jsonshred.SectionI64, func() any { return i64.GetAttributes().GetAttrValueSingleOrDefault(e, i) }); err != nil {
-				return
-			}
-		}
-		for i := range raruntime.AttributeIdx(f64.GetAttributes().GetNumberOfAttributes(e)) {
-			if err = add(f64.GetMemberships(), i, jsonshred.SectionF64, func() any { return f64.GetAttributes().GetAttrValueSingleOrDefault(e, i) }); err != nil {
-				return
-			}
-		}
-		for i := range raruntime.AttributeIdx(bl.GetAttributes().GetNumberOfAttributes(e)) {
-			if err = add(bl.GetMemberships(), i, jsonshred.SectionBool, func() any { return bl.GetAttributes().GetAttrValueValue(e, i) }); err != nil {
-				return
-			}
-		}
-		for _, vl := range []struct {
-			pack *lowlevel.MembershipPackAgentrunbodyTableShared1
-			sec  jsonshred.SectionE
-		}{{null.GetMemberships(), jsonshred.SectionNull}, {eo.GetMemberships(), jsonshred.SectionEmptyObject}, {ea.GetMemberships(), jsonshred.SectionEmptyArray}} {
-			// A value-less section's attributes are its shredded ones, each
-			// with the one verbatim membership.
-			for i := range raruntime.AttributeIdx(vl.pack.GetNumberOfMemberItemsMixedLowCardVerbatim(e)) {
-				if err = add(vl.pack, i, vl.sec, func() any { return nil }); err != nil {
-					return
-				}
-			}
-		}
-		perEntity[ei] = attrs
-	}
-	return
-}
-
-// VaultRow is one vault row as read: its components and its shredded
-// attributes.
+// VaultRow is one vault row as read: its components, and its shredded
+// attributes as jsonshred's.
 type VaultRow struct {
 	Ent      *BodyRowEntity
 	Shredded []jsonshred.Attr
@@ -228,16 +119,16 @@ func (inst *BodyRowStore) ScanVault(ctx context.Context, predicate string) (rows
 			return nil, eh.Errorf("read the vault: %w", qerr)
 		}
 		ents, derr := decodeBodyRowRecord(rec)
-		var shredded [][]jsonshred.Attr
-		if derr == nil {
-			shredded, derr = shreddedOf(rec)
-		}
 		rec.Release()
 		if derr != nil {
 			return nil, derr
 		}
-		for i, ent := range ents {
-			rows = append(rows, VaultRow{Ent: ent, Shredded: shredded[i]})
+		for _, ent := range ents {
+			row := VaultRow{Ent: ent}
+			if ent.Shredded.Has {
+				row.Shredded = AttrsOf(ent.Shredded.Val)
+			}
+			rows = append(rows, row)
 		}
 	}
 	return

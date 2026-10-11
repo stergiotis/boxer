@@ -111,8 +111,12 @@ func checkSectionAttrContract(secType reflect.Type, ctx string, g goplan.Section
 		// container-class append when containers are present (ADR-0101 D3)
 		// — a container DTO against a scalar-tuple DML fails here instead
 		// of panicking mid-marshal.
-		needBegin["BeginAttribute"] = true
-		beginArgs = len(g.ScalarSubColumns())
+		name, args := g.TupleBeginMethod()
+		if !isTuple {
+			name, args = "BeginAttribute", len(g.ScalarSubColumns())
+		}
+		needBegin[name] = true
+		beginArgs = args
 		if containers := g.ContainerSubColumns(); len(containers) > 0 {
 			coContainerMethod = goplan.ContainerAddMethod(len(containers)) + "P"
 			coContainerArgs = len(containers)

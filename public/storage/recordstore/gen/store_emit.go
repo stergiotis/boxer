@@ -148,6 +148,11 @@ type storeComponent struct {
 	presence   string
 	validator  string
 	projection string
+	// bag marks a component with a tuple field (ADR-0326): the read-back
+	// generator maps one attribute per membership and cannot express it, so
+	// the component has no read-back artefacts, no Scan verb and no Cas
+	// sets, and is decoded in the entity read alone (§SD5).
+	bag bool
 }
 
 // secUse is one distinct tagged section a component set touches: the
@@ -241,6 +246,9 @@ func (inst Input) emitStore(ir *common.IntermediateTableRepresentation, conv com
 			return
 		}
 		comps = append(comps, sc)
+	}
+	if err = checkTupleClaims(comps); err != nil {
+		return
 	}
 	// Membership-id coherence gates. The kind<Name> symbols are declared
 	// once per generated package, so two kinds naming one membership would
@@ -847,6 +855,12 @@ func classifyComponent(plan *mappingplan.Plan, info *readback.InformationRetriev
 		err = eb.Build().Str("kind", sc.Kind).Errorf("component: resolve membership ids: %w", err)
 		return
 	}
+	for _, f := range plan.Fields {
+		if f.TupleField != "" {
+			sc.bag = true
+			return
+		}
+	}
 	g := readback.NewGenerator(info, readback.NewLookupResolver(marshallreflect.MapLookup(sc.ids)))
 	artefacts, err := g.Generate(plan)
 	if err != nil {
@@ -860,6 +874,43 @@ func classifyComponent(plan *mappingplan.Plan, info *readback.InformationRetriev
 	return
 }
 
+// checkTupleClaims refuses a store in which a dynamic tuple's claim is
+// ambiguous (ADR-0326 §SD4): <Kind>ReadRow lets a dynamic tuple claim
+// every attribute of its section carrying a membership on its channels,
+// so no other component may use that section on those channels — its
+// attributes would read as the tuple's elements.
+func checkTupleClaims(comps []storeComponent) (err error) {
+	type slot struct {
+		section string
+		channel mappingplan.MembershipChannel
+	}
+	claimer := map[slot]string{}
+	for _, c := range comps {
+		for _, f := range c.plan.Fields {
+			for _, m := range f.TupleMemberships {
+				claimer[slot{f.Section(), m.Channel}] = c.Kind
+			}
+		}
+	}
+	for _, c := range comps {
+		for _, f := range c.plan.Fields {
+			channels := []mappingplan.MembershipChannel{f.Flags.Channel}
+			if len(f.TupleMemberships) > 0 {
+				channels = channels[:0]
+				for _, m := range f.TupleMemberships {
+					channels = append(channels, m.Channel)
+				}
+			}
+			for _, ch := range channels {
+				if owner, ok := claimer[slot{f.Section(), ch}]; ok && owner != c.Kind {
+					return eb.Build().Str("component", c.Kind).Str("tupleComponent", owner).Str("section", f.Section()).Stringer("channel", ch).Errorf("a dynamic tuple claims every attribute of its section on its channel, and another component uses that section and channel")
+				}
+			}
+		}
+	}
+	return
+}
+
 // refBound reports whether a section group is bound through at least one
 // ref channel — a membership resolved by uint64 id, the only kind that can
 // alias across kinds under per-plan ids. A group without memberships is
@@ -869,7 +920,7 @@ func refBound(g goplan.SectionGroup) bool {
 		return true
 	}
 	for _, m := range g.Memberships {
-		if m.Flags.Channel.NeedsKindVar() {
+		if m.ResolvesMembershipId() {
 			return true
 		}
 	}
@@ -884,7 +935,7 @@ type verbatimSlot struct{ section, name string }
 func verbatimSlots(plan *mappingplan.Plan) (slots []verbatimSlot) {
 	seen := map[verbatimSlot]bool{}
 	for _, f := range plan.Fields {
-		if f.LWMembership == "" || f.Flags.Channel.NeedsKindVar() {
+		if f.LWMembership == "" || f.ResolvesMembershipId() {
 			continue
 		}
 		slot := verbatimSlot{section: f.Section(), name: f.LWMembership}
@@ -2322,11 +2373,18 @@ func (inst emitter) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, 
 	p("// component. Generated from Plan ⋈ IR; membership ids are literals.")
 	p("const (")
 	for _, c := range comps {
+		if c.bag {
+			continue
+		}
 		p("\t%sScan%sFilter = %q", inst.TableName, c.Kind, c.filter)
 	}
 	p(")")
 	p("")
 	for _, c := range comps {
+		if c.bag {
+			// No read-back artefacts, so no Scan verb (ADR-0326 §SD5).
+			continue
+		}
 		p("// Scan%s iterates the entities whose rows carry a conforming %s", c.Kind, c.Kind)
 		p("// component, ordered by (Order, Key) — or by opts.OrderBy's envelope")
 		p("// column, opts.Descending reversing either — so entities sharing an Order")
@@ -2544,6 +2602,9 @@ func (inst emitter) emitQueryVerbs(sb *strings.Builder, comps []storeComponent, 
 	p("}")
 	p("")
 	for _, c := range comps {
+		if c.bag {
+			continue
+		}
 		inst.emitScanLive(p, c)
 	}
 }
@@ -2691,6 +2752,9 @@ func (inst emitter) emitComponentSQL(sb *strings.Builder, comps []storeComponent
 	p("\tTable: %sTableName,", inst.StoreName)
 	p("\tKinds: map[string]componentsql.Artefacts{")
 	for _, c := range comps {
+		if c.bag {
+			continue
+		}
 		p("\t\t%q: {", c.Kind)
 		p("\t\t\tPresence:   %q,", c.presence)
 		p("\t\t\tValidator:  %q,", c.validator)
@@ -2844,6 +2908,12 @@ func (inst emitter) emitDecode(sb *strings.Builder, comps []storeComponent, stat
 		args = append(args, "i")
 		for _, g := range c.groups {
 			rv := seen[mappingplan.UpperFirst(g.Section)].varN
+			if g.Valueless != nil {
+				// A value-less section has no attribute class; its reader
+				// counts the attributes itself (ADR-0326 §SD3).
+				args = append(args, rv, rv+".GetMemberships()")
+				continue
+			}
 			args = append(args, rv+".GetAttributes()", rv+".GetMemberships()")
 		}
 		p("\t\t{")

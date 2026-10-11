@@ -242,7 +242,7 @@ func MembershipIds(plan *mappingplan.Plan) map[string]uint64 {
 func uniqueMemberships(plan *mappingplan.Plan) (out []mappingplan.TaggedField) {
 	seen := map[string]bool{}
 	for _, f := range plan.Fields {
-		if !f.Flags.Channel.NeedsKindVar() {
+		if !f.ResolvesMembershipId() {
 			continue
 		}
 		if seen[f.LWMembership] {

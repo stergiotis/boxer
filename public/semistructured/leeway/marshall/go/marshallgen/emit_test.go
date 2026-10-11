@@ -832,8 +832,10 @@ type MyDTO struct {
 	mustContain(t, out, "membership count mismatch on read")
 	mustContain(t, out, "Label: string(textLowCardVerbatimMembs[0]),")
 	mustContain(t, out, "c.Texts = append(c.Texts, textTextsElems)")
-	// ReadRow does not cover tuple kinds (like carriers).
-	mustContain(t, out, "MyDTOReadRow is not emitted: field Texts is a dynamic-membership tuple")
+	// ReadRow reads a tuple kind by claiming the attributes carrying a
+	// membership on its channel (ADR-0326 §SD4).
+	mustContain(t, out, "func MyDTOReadRow[")
+	mustContain(t, out, "for range textMembs.GetMembValueLowCardVerbatim(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {")
 	// No static membership emit leaks into the tuple driver.
 	mustNotContain(t, out, `AddMembershipLowCardVerbatimP([]byte(""))`)
 }

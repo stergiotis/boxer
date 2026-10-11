@@ -15,6 +15,7 @@ import (
 	raruntime "github.com/stergiotis/boxer/public/semistructured/leeway/readaccess/runtime"
 
 	"github.com/stergiotis/boxer/public/semistructured/leeway/mappingplan"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/membership"
 )
 
 // SectionReaders carries the read-side inputs Unmarshal needs: the Arrow array
@@ -766,40 +767,12 @@ func unmarshalTupleSection(row reflect.Value, g goplan.SectionGroup, ts goplan.T
 	default: // Many
 		elemType = outFld.Type().Elem()
 	}
-	static := len(ts.Memberships) == 0
-
 	n := mustCall(attrs, "GetNumberOfAttributes", reflect.ValueOf(entityIdx(i)))[0].Int()
 	elems := make([]reflect.Value, 0, n)
-	locals := make([]reflect.Value, len(g.SubColumns))
 	for attrJ := range n {
-		// One element per attribute (ADR-0109 D2). Read every sub-column value…
-		for k := range g.SubColumns {
-			sc := &g.SubColumns[k]
-			f := &sc.Fields[0]
-			v := mustCall(attrs, "GetAttrValue"+mappingplan.UpperFirst(sc.Name), reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0]
-			if f.IsSlice() {
-				// Container sub-column: drain the Seq; an N = 0 container
-				// leaves the local invalid so the element field stays nil.
-				locals[k] = sliceFromSeq(v, f)
-			} else {
-				locals[k] = copiedTupleScalar(v, f)
-			}
-		}
-		elem := reflect.New(elemType).Elem()
-		for k := range g.SubColumns {
-			if !locals[k].IsValid() {
-				continue
-			}
-			// setScalarField bridges lane newtypes (a nested sub-column may be an
-			// lw.IPv4 / lw.IPv6); a plain sub-column takes the fast path.
-			setScalarField(elem.FieldByName(g.SubColumns[k].Fields[0].GoFieldName), locals[k])
-		}
-		if !static {
-			// …then distribute the attribute's memberships into the element's
-			// `@membership` fields, one channel at a time.
-			if err = distributeTupleMemberships(elem, ts, g.Section, membs, i, attrJ); err != nil {
-				return
-			}
+		var elem reflect.Value
+		if elem, err = unmarshalTupleElem(elemType, g, ts, attrs, membs, i, attrJ); err != nil {
+			return
 		}
 		elems = append(elems, elem)
 	}
@@ -848,6 +821,73 @@ func unmarshalTupleSection(row reflect.Value, g goplan.SectionGroup, ts goplan.T
 	return
 }
 
+// unmarshalTupleElem decodes attribute attrJ of entity i into one tuple
+// element: the sub-column values positionally — a `,unit` value through the
+// single-value accessor (ADR-0326 §SD2), none for a value-less element
+// (§SD3) — then the memberships one channel at a time, a mixed channel's one
+// membership with its parameters decoded into `@params` (§SD1). Mirrors the
+// generated writeTupleElemDecode.
+func unmarshalTupleElem(elemType reflect.Type, g goplan.SectionGroup, ts goplan.TupleSpec, attrs, membs reflect.Value, i int, attrJ int64) (elem reflect.Value, err error) {
+	elem = reflect.New(elemType).Elem()
+	for k := range g.SubColumns {
+		sc := &g.SubColumns[k]
+		f := &sc.Fields[0]
+		var local reflect.Value
+		switch {
+		case f.Flags.Unit:
+			var v reflect.Value
+			if v, err = readSingleValue(attrs, *f, i, attrJ); err != nil {
+				return
+			}
+			local = copiedTupleScalar(v, f)
+		case f.IsSlice():
+			// Container sub-column: drain the Seq; an N = 0 container leaves
+			// the local invalid so the element field stays nil.
+			local = sliceFromSeq(mustCall(attrs, "GetAttrValue"+mappingplan.UpperFirst(sc.Name), reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0], f)
+		default:
+			local = copiedTupleScalar(mustCall(attrs, "GetAttrValue"+mappingplan.UpperFirst(sc.Name), reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0], f)
+		}
+		if !local.IsValid() {
+			continue
+		}
+		// setScalarField bridges lane newtypes (a nested sub-column may be an
+		// lw.IPv4 / lw.IPv6); a plain sub-column takes the fast path.
+		setScalarField(elem.FieldByName(f.GoFieldName), local)
+	}
+	if len(ts.Memberships) > 0 {
+		if err = distributeTupleMemberships(elem, ts, g.Section, membs, i, attrJ); err != nil {
+			return
+		}
+	} else if ts.ParamsField != "" {
+		// A static nested section on a mixed channel: only the parameters
+		// are the element's.
+		if _, err = readMixedTupleMembership(elem, ts, g.Section, g.Memberships[0].Flags.Channel, membs, i, attrJ); err != nil {
+			return
+		}
+	}
+	return
+}
+
+// readMixedTupleMembership reads a mixed channel's one membership of
+// attribute attrJ and its parameters, decoding the parameters into the
+// element's `@params` field; v is the membership's id or name.
+func readMixedTupleMembership(elem reflect.Value, ts goplan.TupleSpec, section string, ch mappingplan.MembershipChannel, membs reflect.Value, i int, attrJ int64) (v reflect.Value, err error) {
+	keys, raws := collectIterSeq2(mustCall(membs, "GetMembValue"+ch.CarrierReadMethodSuffix(), reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0])
+	if len(keys) != 1 {
+		err = eb.Build().Str("section", section).Str("channel", ch.AddMethodSuffix()).Int("got", len(keys)).Int("want", 1).Errorf("tuple attribute carries a different membership count than the element declares — membership count mismatch on read")
+		return
+	}
+	params, perr := membership.DecodeParams(raws[0].Bytes())
+	if perr != nil {
+		err = eb.Build().Str("section", section).Errorf("decode the membership parameters: %w", perr)
+		return
+	}
+	if params != nil {
+		elem.FieldByName(ts.ParamsField).Set(reflect.ValueOf(params))
+	}
+	return keys[0], nil
+}
+
 // distributeTupleMemberships reads each membership channel's per-attribute Seq
 // once and assigns the values to the element's `@membership` fields on that
 // channel (ADR-0109 D3): a channel carrying a single repeated (slice) field
@@ -857,6 +897,16 @@ func unmarshalTupleSection(row reflect.Value, g goplan.SectionGroup, ts goplan.T
 // verbatim and ref channels (ADR-0109 D4).
 func distributeTupleMemberships(elem reflect.Value, ts goplan.TupleSpec, section string, membs reflect.Value, i int, attrJ int64) (err error) {
 	for _, ch := range ts.Channels() {
+		if ch.UsesCarrier() {
+			// A mixed channel carries the element's one membership, paired
+			// with the parameters (ADR-0326 §SD1).
+			var v reflect.Value
+			if v, err = readMixedTupleMembership(elem, ts, section, ch, membs, i, attrJ); err != nil {
+				return
+			}
+			setTupleMembScalar(elem, ts.Memberships[0], v)
+			continue
+		}
 		vals := collectIterSeq(mustCall(membs, "GetMembValue"+ch.AddMethodSuffix(), reflect.ValueOf(entityIdx(i)), reflect.ValueOf(attributeIdx(attrJ)))[0])
 		fields := make([]mappingplan.TupleMembership, 0, len(ts.Memberships))
 		for _, m := range ts.Memberships {

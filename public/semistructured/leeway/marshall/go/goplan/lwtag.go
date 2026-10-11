@@ -171,6 +171,21 @@ func parseFlagTokens(tokens []string, flags *mappingplan.FieldFlags) (err error)
 // for a literal verbatim label (ADR-0103).
 const TupleMembershipMarker = "@membership"
 
+// TupleParamsMarker is the tag of a tuple element's parameters field
+// (`lw:"@params"`): a []uint64 holding the parameters of the attribute's
+// one mixed-channel membership (ADR-0326 §SD1).
+const TupleParamsMarker = "@params"
+
+// IsAtMembershipTag reports whether an element field's lw: tag marks the
+// flat tuple's per-attribute membership: an `@`-prefixed tag other than
+// `@params`, which both spellings carry. An unknown `@` marker routes to
+// the flat tuple too, whose parser names it.
+func IsAtMembershipTag(lw string) bool {
+	head, _, _ := strings.Cut(strings.TrimSpace(lw), ",")
+	head = strings.TrimSpace(head)
+	return strings.HasPrefix(head, "@") && head != TupleParamsMarker
+}
+
 // membershipMarkerChannel is the nested model's TYPE-based spelling of the
 // `@membership,<channel flag>` tag (ADR-0113): an lw.* marker type's bare name
 // to the channel it denotes. It lives here, beside the tag vocabulary, because
@@ -255,6 +270,8 @@ func SplitTupleOuterLW(tag string) (section string, err error) {
 //     sub-column of the tuple's section (column defaults to "value").
 type ParsedTupleElemTag struct {
 	IsMembership bool
+	// IsParams marks the `@params` field (ADR-0326 §SD1).
+	IsParams bool
 	Section      string
 	Column       string
 	Flags        mappingplan.FieldFlags
@@ -272,6 +289,8 @@ func SplitTupleElemLW(tag string) (out ParsedTupleElemTag, err error) {
 	switch {
 	case head == TupleMembershipMarker:
 		out.IsMembership = true
+	case head == TupleParamsMarker:
+		out.IsParams = true
 	case strings.HasPrefix(head, "@"):
 		err = eb.Build().Str("tag", tag).Str("token", head).Str("tupleMembershipMarker", TupleMembershipMarker).Errorf("unknown `@` marker in tuple element tag (recognised:)")
 		return

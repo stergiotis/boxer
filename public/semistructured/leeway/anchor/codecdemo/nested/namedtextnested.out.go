@@ -278,4 +278,75 @@ func NamedTextNestedFillFromArrow[
 	return
 }
 
-// NamedTextNestedReadRow is not emitted: field Notes is a dynamic-membership tuple.
+// NamedTextNestedReadRow reads row i as one optional NamedTextNested component: presence-
+// gated (a row carrying none of the kind's memberships yields
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
+// bound fields stay zero — the caller owns the envelope. The
+// Attrs/Membs readers bind by type inference at the call site, as
+// with FillFromArrow.
+func NamedTextNestedReadRow[
+	TextAttrs NamedTextNestedTextAttrsReadI,
+	TextMembs NamedTextNestedTextMembsReadI,
+](
+	i int,
+	textAttrs TextAttrs,
+	textMembs TextMembs,
+) (row NamedTextNested, present bool, err error) {
+	// --- text. ---
+	var textNotesElems []namedTextAttr
+	ntext := textAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < ntext; attrJ++ {
+		textClaimed := false
+		for range textMembs.GetMembValueLowCardVerbatim(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			textClaimed = true
+			break
+		}
+		for range textMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			textClaimed = true
+			break
+		}
+		if !textClaimed {
+			continue
+		}
+		var textTextLocal string
+		textTextLocal = textAttrs.GetAttrValueText(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+		var textWordLengthLocal []uint32
+		for v := range textAttrs.GetAttrValueWordLength(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			textWordLengthLocal = append(textWordLengthLocal, v)
+		}
+		var textWordBagLocal []string
+		for v := range textAttrs.GetAttrValueWordBag(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			textWordBagLocal = append(textWordBagLocal, v)
+		}
+		var textLowCardVerbatimMembs [][]byte
+		for mv := range textMembs.GetMembValueLowCardVerbatim(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			textLowCardVerbatimMembs = append(textLowCardVerbatimMembs, mv)
+		}
+		if len(textLowCardVerbatimMembs) != 1 {
+			err = eb.Build().Str("section", "text").Str("channel", "LowCardVerbatim").Int("got", len(textLowCardVerbatimMembs)).Int("want", 1).Errorf("membership count mismatch on read")
+			return
+		}
+		var textLowCardRefMembs []uint64
+		for mv := range textMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			textLowCardRefMembs = append(textLowCardRefMembs, mv)
+		}
+		if len(textLowCardRefMembs) != 1 {
+			err = eb.Build().Str("section", "text").Str("channel", "LowCardRef").Int("got", len(textLowCardRefMembs)).Int("want", 1).Errorf("membership count mismatch on read")
+			return
+		}
+		textNotesElems = append(textNotesElems, namedTextAttr{
+			Name:       lw.Verbatim(string(textLowCardVerbatimMembs[0])),
+			Kind:       lw.Ref(textLowCardRefMembs[0]),
+			Text:       textTextLocal,
+			WordLength: textWordLengthLocal,
+			WordBag:    textWordBagLocal,
+		})
+	}
+	if len(textNotesElems) > 0 {
+		row.Notes = textNotesElems
+		present = true
+	}
+	return
+}

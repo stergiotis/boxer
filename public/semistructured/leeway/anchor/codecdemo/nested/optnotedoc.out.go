@@ -3,6 +3,8 @@
 package nested
 
 import (
+	"iter"
+
 	"github.com/apache/arrow-go/v18/arrow/array"
 
 	"github.com/stergiotis/boxer/public/observability/eh"
@@ -192,6 +194,7 @@ type OptNoteDocSymbolAttrsReadI interface {
 
 // OptNoteDocSymbolMembsReadI is the Memberships-side view of the symbol section.
 type OptNoteDocSymbolMembsReadI interface {
+	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
 // OptNoteDocFillFromArrow walks rec row-by-row and appends each entity's
@@ -242,4 +245,50 @@ func OptNoteDocFillFromArrow[
 	return
 }
 
-// OptNoteDocReadRow is not emitted: field Note is a dynamic-membership tuple.
+// OptNoteDocReadRow reads row i as one optional OptNoteDoc component: presence-
+// gated (a row carrying none of the kind's memberships yields
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
+// bound fields stay zero — the caller owns the envelope. The
+// Attrs/Membs readers bind by type inference at the call site, as
+// with FillFromArrow.
+func OptNoteDocReadRow[
+	SymbolAttrs OptNoteDocSymbolAttrsReadI,
+	SymbolMembs OptNoteDocSymbolMembsReadI,
+](
+	i int,
+	symbolAttrs SymbolAttrs,
+	symbolMembs SymbolMembs,
+) (row OptNoteDoc, present bool, err error) {
+	// --- symbol. ---
+	var symbolNoteElems []noteAttr
+	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
+		symbolClaimed := false
+		for mv := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			if mv == kindNote {
+				symbolClaimed = true
+				break
+			}
+		}
+		if !symbolClaimed {
+			continue
+		}
+		var symbolValLocal string
+		symbolValLocal = symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+		symbolNoteElems = append(symbolNoteElems, noteAttr{
+			Val: symbolValLocal,
+		})
+	}
+	if len(symbolNoteElems) > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbol").Int("attrs", len(symbolNoteElems)).Errorf("a single nested section carries more than one attribute on the row")
+		return
+	}
+	if len(symbolNoteElems) == 1 {
+		row.Note.Val = symbolNoteElems[0]
+		row.Note.Has = true
+		present = true
+	}
+	return
+}

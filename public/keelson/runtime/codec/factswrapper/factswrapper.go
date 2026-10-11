@@ -560,7 +560,7 @@ func writeCodec(sb *strings.Builder, plan *mappingplan.Plan) {
 func uniqueMemberships(plan *mappingplan.Plan) (out []mappingplan.TaggedField) {
 	seen := map[string]bool{}
 	for _, f := range plan.Fields {
-		if !f.Flags.Channel.NeedsKindVar() {
+		if !f.ResolvesMembershipId() {
 			continue
 		}
 		if seen[f.LWMembership] {

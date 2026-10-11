@@ -84,6 +84,11 @@ func writeSectionReadInterfaces(sb *strings.Builder, plan *mappingplan.Plan, g g
 		// an iter.Seq (the RA generator emits exactly this pair of shapes).
 		for _, sc := range g.SubColumns {
 			f := sc.Fields[0]
+			if isTuple && f.Flags.Unit {
+				// A `,unit` tuple value on an array column (ADR-0326 §SD2).
+				linef(sb, 1, "GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (%s, error)", f.GoType())
+				continue
+			}
 			if f.IsSlice() {
 				linef(sb, 1, "GetAttrValue%s(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[%s]", mappingplan.UpperFirst(sc.Name), elemType(f))
 			} else {
@@ -116,8 +121,8 @@ func writeSectionReadInterfaces(sb *strings.Builder, plan *mappingplan.Plan, g g
 		// A tuple element may read memberships on several channels (ADR-0109
 		// D4); expose one GetMembValue<Channel> per channel (all simple
 		// channels — a plain Seq of the id / name).
-		for _, tch := range ts.Channels() {
-			linef(sb, 1, "GetMembValue%s(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[%s]", tch.AddMethodSuffix(), tch.ReadIterElemType())
+		for _, decl := range tupleMembReadDecls(g, ts) {
+			line(sb, 1, decl)
 		}
 		line(sb, 0, "}\n")
 		return
@@ -212,6 +217,28 @@ func writeFillFromArrowFunc(sb *strings.Builder, plan *mappingplan.Plan, groups 
 	return
 }
 
+// tupleMembReadDecls are the membership accessors a tuple section reads:
+// one GetMembValue<Channel> per simple channel of its elements (ADR-0109
+// D4), and the combined name-or-id + parameters accessor for a mixed
+// channel — the element's, or a static nested section's (ADR-0326 §SD1).
+func tupleMembReadDecls(g goplan.SectionGroup, ts goplan.TupleSpec) (decls []string) {
+	decl := func(ch mappingplan.MembershipChannel) string {
+		if ch.UsesCarrier() {
+			return fmt.Sprintf("GetMembValue%s(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq2[%s]", ch.CarrierReadMethodSuffix(), ch.CarrierReadSeq2Types())
+		}
+		return fmt.Sprintf("GetMembValue%s(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[%s]", ch.AddMethodSuffix(), ch.ReadIterElemType())
+	}
+	for _, ch := range ts.Channels() {
+		decls = append(decls, decl(ch))
+	}
+	if len(ts.Memberships) == 0 {
+		// A static section's membership: ReadRow matches it, and a mixed
+		// channel's accessor also carries the element's parameters.
+		decls = append(decls, decl(sectionMembership(g).Flags.Channel))
+	}
+	return
+}
+
 func writeSectionDecode(sb *strings.Builder, g goplan.SectionGroup) (err error) {
 	method := methodFor(g.Section)
 	attrsVar := lowerFirst(method) + "Attrs"
@@ -254,83 +281,10 @@ func writeTupleSectionDecode(sb *strings.Builder, g goplan.SectionGroup, ts gopl
 	linef(sb, 2, "var %s []%s", elemsVar, ts.StructType)
 	linef(sb, 2, "n%s := %s.GetNumberOfAttributes(raruntime.EntityIdx(i))", prefix, attrsVar)
 	linef(sb, 2, "for attrJ := int64(0); attrJ < n%s; attrJ++ {", prefix)
-	for _, sc := range g.SubColumns {
-		f := sc.Fields[0]
-		localVar := prefix + f.GoFieldName + "Local"
-		accessor := fmt.Sprintf("%s.GetAttrValue%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))", attrsVar, mappingplan.UpperFirst(sc.Name))
-		if !f.IsSlice() {
-			// Scalar sub-column: read with the field's copy strategy — the
-			// element is retained inside the tuple slice, so a []byte value
-			// must not alias the reused Arrow buffer.
-			linef(sb, 3, "var %s %s", localVar, f.GoType())
-			writeCarrierValueRead(sb, 3, f, localVar, accessor)
-			continue
-		}
-		// Container sub-column: drain the per-attribute Seq into a fresh
-		// slice (nil for an empty container — an N = 0 attribute reads
-		// back as a nil slice, ADR-0101 D5).
-		linef(sb, 3, "var %s []%s", localVar, f.GoType())
-		linef(sb, 3, "for v := range %s {", accessor)
-		if goplan.CopyStrategy(f.GoType()) == goplan.CopyBytes {
-			line(sb, 4, "cp := make([]byte, len(v))")
-			line(sb, 4, "copy(cp, v)")
-			linef(sb, 4, "%s = append(%s, cp)", localVar, localVar)
-		} else {
-			linef(sb, 4, "%s = append(%s, v)", localVar, localVar)
-		}
-		line(sb, 3, "}")
-	}
-
-	// Memberships, one channel at a time (ADR-0109 D3). membExpr[goField] is the
-	// element-literal expression for each `@membership` field.
-	membExpr := map[string]string{}
-	for _, ch := range ts.Channels() {
-		suffix := ch.AddMethodSuffix()
-		accessor := fmt.Sprintf("%s.GetMembValue%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))", membsVar, suffix)
-		var chFields []mappingplan.TupleMembership
-		for _, m := range ts.Memberships {
-			if m.Channel == ch {
-				chFields = append(chFields, m)
-			}
-		}
-		if len(chFields) == 1 && chFields[0].IsSlice {
-			// Slice-mode: the sole field on this channel takes the whole Seq.
-			f := chFields[0]
-			sliceVar := prefix + f.GoField + "Membs"
-			linef(sb, 3, "var %s []%s", sliceVar, membElemGoType(f))
-			linef(sb, 3, "for mv := range %s {", accessor)
-			linef(sb, 4, "%s = append(%s, %s)", sliceVar, sliceVar, tupleMembDecodeElem("mv", f))
-			line(sb, 3, "}")
-			membExpr[f.GoField] = sliceVar
-			continue
-		}
-		// Fixed-mode: collect the channel's values, require the exact count, then
-		// index one per field in declaration order.
-		rawVar := prefix + suffix + "Membs"
-		wireElem := "uint64"
-		if ch.EmbedsLiteralName() {
-			wireElem = "[]byte"
-		}
-		linef(sb, 3, "var %s []%s", rawVar, wireElem)
-		linef(sb, 3, "for mv := range %s {", accessor)
-		linef(sb, 4, "%s = append(%s, mv)", rawVar, rawVar)
-		line(sb, 3, "}")
-		linef(sb, 3, "if len(%s) != %d {", rawVar, len(chFields))
-		linef(sb, 4, `err = eb.Build().Str("section", %q).Str("channel", %q).Int("got", len(%s)).Int("want", %d).Errorf("membership count mismatch on read")`, g.Section, suffix, rawVar, len(chFields))
-		line(sb, 4, "return")
-		line(sb, 3, "}")
-		for idx, f := range chFields {
-			membExpr[f.GoField] = tupleMembDecodeElem(fmt.Sprintf("%s[%d]", rawVar, idx), f)
-		}
-	}
-
+	elemFields := writeTupleElemDecode(sb, 3, g, ts, attrsVar, membsVar, prefix)
 	linef(sb, 3, "%s = append(%s, %s{", elemsVar, elemsVar, ts.StructType)
-	for _, m := range ts.Memberships {
-		linef(sb, 4, "%s: %s,", m.GoField, membExpr[m.GoField])
-	}
-	for _, sc := range g.SubColumns {
-		f := sc.Fields[0]
-		linef(sb, 4, "%s: %s%sLocal,", f.GoFieldName, prefix, f.GoFieldName)
+	for _, f := range elemFields {
+		linef(sb, 4, "%s,", f)
 	}
 	line(sb, 3, "})")
 	line(sb, 2, "}")
@@ -372,6 +326,151 @@ func writeTupleSectionDecode(sb *strings.Builder, g goplan.SectionGroup, ts gopl
 	default: // Many
 		linef(sb, 2, "c.%s = append(c.%s, %s)", ts.GoField, ts.GoField, elemsVar)
 	}
+}
+
+// writeTupleElemDecode emits the decode of attribute attrJ of entity i into
+// one tuple element at depth, and returns the element literal's
+// "Field: expr" entries. Sub-column values are read positionally — a
+// `,unit` value through the single-value accessor (ADR-0326 §SD2), none
+// for a value-less element (§SD3) — and the memberships are distributed
+// one channel at a time (ADR-0109 D3). A mixed channel reads its one
+// membership and the parameters together, the parameters decoded into
+// the element's `@params` field; a static nested section on a mixed
+// channel reads only the parameters (ADR-0326 §SD1). Shared by
+// FillFromArrow and ReadRow; mirrors marshallreflect.unmarshalTupleElem.
+func writeTupleElemDecode(sb *strings.Builder, depth int, g goplan.SectionGroup, ts goplan.TupleSpec, attrsVar, membsVar, prefix string) (elemFields []string) {
+	for _, sc := range g.SubColumns {
+		f := sc.Fields[0]
+		localVar := prefix + f.GoFieldName + "Local"
+		accessor := fmt.Sprintf("%s.GetAttrValue%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))", attrsVar, mappingplan.UpperFirst(sc.Name))
+		if f.Flags.Unit {
+			linef(sb, depth, "var %s %s", localVar, f.GoType())
+			valRead, _ := writeSingleValueSource(sb, depth, f, attrsVar)
+			writeCarrierValueRead(sb, depth, f, localVar, valRead)
+			continue
+		}
+		if !f.IsSlice() {
+			// Scalar sub-column: read with the field's copy strategy — the
+			// element is retained inside the tuple slice, so a []byte value
+			// must not alias the reused Arrow buffer.
+			linef(sb, depth, "var %s %s", localVar, f.GoType())
+			writeCarrierValueRead(sb, depth, f, localVar, accessor)
+			continue
+		}
+		// Container sub-column: drain the per-attribute Seq into a fresh
+		// slice (nil for an empty container — an N = 0 attribute reads
+		// back as a nil slice, ADR-0101 D5).
+		linef(sb, depth, "var %s []%s", localVar, f.GoType())
+		linef(sb, depth, "for v := range %s {", accessor)
+		if goplan.CopyStrategy(f.GoType()) == goplan.CopyBytes {
+			line(sb, depth+1, "cp := make([]byte, len(v))")
+			line(sb, depth+1, "copy(cp, v)")
+			linef(sb, depth+1, "%s = append(%s, cp)", localVar, localVar)
+		} else {
+			linef(sb, depth+1, "%s = append(%s, v)", localVar, localVar)
+		}
+		line(sb, depth, "}")
+	}
+
+	// readMixed reads a mixed channel's one membership and its parameters,
+	// returning the membership value's variable — none when withValue is
+	// false, for a static section whose membership is the tag's.
+	paramsVar := prefix + "ParamsLocal"
+	readMixed := func(ch mappingplan.MembershipChannel, withValue bool) (valVar string) {
+		rawVar := prefix + "ParamsRaw"
+		nVar := prefix + ch.AddMethodSuffix() + "N"
+		accessor := fmt.Sprintf("%s.GetMembValue%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))", membsVar, ch.CarrierReadMethodSuffix())
+		linef(sb, depth, "var %s []byte", rawVar)
+		linef(sb, depth, "%s := 0", nVar)
+		if withValue {
+			valVar = prefix + ch.AddMethodSuffix() + "Memb"
+			wireElem := "uint64"
+			if ch.CarrierValueIsBytes() {
+				wireElem = "[]byte"
+			}
+			linef(sb, depth, "var %s %s", valVar, wireElem)
+			linef(sb, depth, "for mv, mp := range %s {", accessor)
+			linef(sb, depth+1, "%s, %s = mv, mp", valVar, rawVar)
+		} else {
+			linef(sb, depth, "for _, mp := range %s {", accessor)
+			linef(sb, depth+1, "%s = mp", rawVar)
+		}
+		linef(sb, depth+1, "%s++", nVar)
+		line(sb, depth, "}")
+		linef(sb, depth, "if %s != 1 {", nVar)
+		linef(sb, depth+1, `err = eb.Build().Str("section", %q).Str("channel", %q).Int("got", %s).Int("want", 1).Errorf("membership count mismatch on read")`, g.Section, ch.AddMethodSuffix(), nVar)
+		line(sb, depth+1, "return")
+		line(sb, depth, "}")
+		linef(sb, depth, "%s, perr := membership.DecodeParams(%s)", paramsVar, rawVar)
+		linef(sb, depth, "if perr != nil {")
+		linef(sb, depth+1, `err = eb.Build().Str("section", %q).Errorf("decode the membership parameters: %%w", perr)`, g.Section)
+		line(sb, depth+1, "return")
+		line(sb, depth, "}")
+		return
+	}
+
+	// Memberships, one channel at a time (ADR-0109 D3). membExpr[goField] is the
+	// element-literal expression for each `@membership` field.
+	membExpr := map[string]string{}
+	for _, ch := range ts.Channels() {
+		var chFields []mappingplan.TupleMembership
+		for _, m := range ts.Memberships {
+			if m.Channel == ch {
+				chFields = append(chFields, m)
+			}
+		}
+		if ch.UsesCarrier() {
+			valVar := readMixed(ch, true)
+			membExpr[chFields[0].GoField] = tupleMembDecodeElem(valVar, chFields[0])
+			continue
+		}
+		suffix := ch.AddMethodSuffix()
+		accessor := fmt.Sprintf("%s.GetMembValue%s(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))", membsVar, suffix)
+		if len(chFields) == 1 && chFields[0].IsSlice {
+			// Slice-mode: the sole field on this channel takes the whole Seq.
+			f := chFields[0]
+			sliceVar := prefix + f.GoField + "Membs"
+			linef(sb, depth, "var %s []%s", sliceVar, membElemGoType(f))
+			linef(sb, depth, "for mv := range %s {", accessor)
+			linef(sb, depth+1, "%s = append(%s, %s)", sliceVar, sliceVar, tupleMembDecodeElem("mv", f))
+			line(sb, depth, "}")
+			membExpr[f.GoField] = sliceVar
+			continue
+		}
+		// Fixed-mode: collect the channel's values, require the exact count, then
+		// index one per field in declaration order.
+		rawVar := prefix + suffix + "Membs"
+		wireElem := "uint64"
+		if ch.EmbedsLiteralName() {
+			wireElem = "[]byte"
+		}
+		linef(sb, depth, "var %s []%s", rawVar, wireElem)
+		linef(sb, depth, "for mv := range %s {", accessor)
+		linef(sb, depth+1, "%s = append(%s, mv)", rawVar, rawVar)
+		line(sb, depth, "}")
+		linef(sb, depth, "if len(%s) != %d {", rawVar, len(chFields))
+		linef(sb, depth+1, `err = eb.Build().Str("section", %q).Str("channel", %q).Int("got", len(%s)).Int("want", %d).Errorf("membership count mismatch on read")`, g.Section, suffix, rawVar, len(chFields))
+		line(sb, depth+1, "return")
+		line(sb, depth, "}")
+		for idx, f := range chFields {
+			membExpr[f.GoField] = tupleMembDecodeElem(fmt.Sprintf("%s[%d]", rawVar, idx), f)
+		}
+	}
+	if len(ts.Memberships) == 0 && ts.ParamsField != "" {
+		readMixed(sectionMembership(g).Flags.Channel, false)
+	}
+
+	for _, m := range ts.Memberships {
+		elemFields = append(elemFields, m.GoField+": "+membExpr[m.GoField])
+	}
+	if ts.ParamsField != "" {
+		elemFields = append(elemFields, ts.ParamsField+": "+paramsVar)
+	}
+	for _, sc := range g.SubColumns {
+		f := sc.Fields[0]
+		elemFields = append(elemFields, f.GoFieldName+": "+prefix+f.GoFieldName+"Local")
+	}
+	return
 }
 
 // tupleMembDecodeElem renders the expression converting one wire membership

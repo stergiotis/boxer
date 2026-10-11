@@ -239,4 +239,48 @@ func LineageNestedFillFromArrow[
 	return
 }
 
-// LineageNestedReadRow is not emitted: field Types is a dynamic-membership tuple.
+// LineageNestedReadRow reads row i as one optional LineageNested component: presence-
+// gated (a row carrying none of the kind's memberships yields
+// present=false), membership-matched. A slot carrying more
+// attributes than this kind's shape admits is an error, for every
+// shape including containers. Plain-
+// bound fields stay zero — the caller owns the envelope. The
+// Attrs/Membs readers bind by type inference at the call site, as
+// with FillFromArrow.
+func LineageNestedReadRow[
+	SymbolAttrs LineageNestedSymbolAttrsReadI,
+	SymbolMembs LineageNestedSymbolMembsReadI,
+](
+	i int,
+	symbolAttrs SymbolAttrs,
+	symbolMembs SymbolMembs,
+) (row LineageNested, present bool, err error) {
+	// --- symbol. ---
+	var symbolTypesElems []lineageAttr
+	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
+		symbolClaimed := false
+		for range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			symbolClaimed = true
+			break
+		}
+		if !symbolClaimed {
+			continue
+		}
+		var symbolKindLocal string
+		symbolKindLocal = symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+		var symbolAncestorsMembs []lw.Ref
+		for mv := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			symbolAncestorsMembs = append(symbolAncestorsMembs, lw.Ref(mv))
+		}
+		symbolTypesElems = append(symbolTypesElems, lineageAttr{
+			Ancestors: symbolAncestorsMembs,
+			Kind:      symbolKindLocal,
+		})
+	}
+	if len(symbolTypesElems) > 0 {
+		row.Types = symbolTypesElems
+		present = true
+	}
+	return
+}

@@ -560,13 +560,11 @@ type KindA struct {
 // TestGenerateStampLaneAsDataComponentRefused: a tuple `@membership` field on
 // the highCardRef channel reads the whole HighCardRef lane back as data
 // (ADR-0109), so an ambient stamp in that lane would decode as a spurious
-// ref id (ADR-0112 SD2 lane hygiene). Two walls stand in front of that:
-// today the ReadRow gate refuses any dynamic-membership tuple component
-// outright (ADR-0100 Deferred) — the refusal this test pins — and should
-// that deferral ever lift, the emitter's stampLaneAsData guard makes the
-// constructor panic on configured Stampers instead of letting stamps decode
-// as refs. Kind memberships riding the lane are id-matched on read and stay
-// allowed.
+// ref id (ADR-0112 SD2 lane hygiene). Since tuple components read back
+// through ReadRow (ADR-0326 §SD4) the store generates, and the emitter's
+// stampLaneAsData guard makes the constructor panic on configured Stampers
+// instead of letting stamps decode as refs — the wall this test pins. Kind
+// memberships riding the lane are id-matched on read and stay allowed.
 func TestGenerateStampLaneAsDataComponentRefused(t *testing.T) {
 	dir := t.TempDir()
 	a := writeDTO(t, dir, "ref_doc.go", `package tmp
@@ -591,8 +589,9 @@ type RefDoc struct {
 		SectionStreamingGroup("data").
 		AddSectionMembership(common.MembershipSpecLowCardRef, common.MembershipSpecHighCardRef)
 	sec.TaggedValueColumn("value", ctabb.S)
-	err = generateInto(t, manip, a)
-	assert.Contains(t, ebtest.Fields(t, err)["reason"], "dynamic-membership tuple")
+	outDir, err := generateIntoDir(t, manip, a)
+	require.NoError(t, err)
+	assert.Contains(t, readStore(t, outDir), "a component reads the HighCardRef membership lane back as data")
 }
 
 // --- Membership-id wrapper gates (ADR-0100 SD6 as corrected 2026-08-10;

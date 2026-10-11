@@ -60,6 +60,10 @@ func (inst Input) casComponents(comps []storeComponent, info *readback.Informati
 	}
 	sectionOwner := map[string]string{}
 	for _, c := range comps {
+		if c.bag {
+			err = eb.Build().Str("component", c.Kind).Errorf("Cas: a tuple component has no read-back artefacts to set in place (ADR-0326 §SD5)")
+			return
+		}
 		cc := casComponent{kind: c.Kind}
 		for _, g := range c.groups {
 			if owner, taken := sectionOwner[g.Section]; taken {

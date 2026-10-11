@@ -326,7 +326,7 @@ func elemHasAtMembershipAst(st *ast.StructType) bool {
 			continue
 		}
 		lw := reflect.StructTag(stripQuotes(field.Tag.Value)).Get("lw")
-		if strings.HasPrefix(strings.TrimSpace(lw), "@") {
+		if goplan.IsAtMembershipTag(lw) {
 			return true
 		}
 	}
