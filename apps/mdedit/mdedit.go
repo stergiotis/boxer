@@ -259,7 +259,7 @@ type App struct {
 
 	// winW / winH are the window's inner size, from a probe taken before the
 	// panels claim it. The width drives the source/preview split, the height
-	// the transform result pane.
+	// the proposal pane.
 	winW float32
 	winH float32
 
@@ -299,9 +299,9 @@ type App struct {
 	// find is the find-and-replace bar's own state (M3).
 	find findState
 
-	// xform is the LLM transformation surface's state (see
-	// mdedit_transform.go). Absent from the UI unless its env gate is open.
-	xform transformState
+	// prop is the proposal pane's state (see mdedit_proposal.go): a
+	// replacement an agent offered through propose_edit.
+	prop proposalState
 
 	// rebindSrc marks a buffer this app rewrote rather than the reader typed,
 	// so renderSource knows to drop the editor's cached copy after the emit.
@@ -391,10 +391,9 @@ type App struct {
 	exportErr    error
 	exportedText string
 	// exportCheckpoint marks a clipboard write that exports the DOCUMENT and
-	// so advances the dirty checkpoint on success. Copying a transformation
-	// result rides the same machinery with this false — that text never was
-	// the buffer, and moving `saved` for it would clear the dirty badge over
-	// nothing.
+	// so advances the dirty checkpoint on success. Copying a proposal rides
+	// the same machinery with this false — that text never was the buffer,
+	// and moving `saved` for it would clear the dirty badge over nothing.
 	exportCheckpoint bool
 
 	persisting    bool
@@ -446,6 +445,10 @@ func (inst *App) requestCaret(start, stop int, focus bool) {
 }
 
 var _ app.AppI = (*App)(nil)
+var _ app.OperationsAppI = (*App)(nil)
+
+// Operations serves the catalog for this window (mdedit_ops.go).
+func (inst *App) Operations() (h app.OperationsHandlerI) { return ops.Bind(inst) }
 
 func newApp() (inst *App) {
 	inst = &App{
@@ -470,10 +473,6 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.logger = ctx.Log()
 	inst.bus = ctx.Bus()
 	inst.store = ctx.Storage()
-	// The transform surface's gate (ADR-0254 §SD1, ADR-0216 §SD3's
-	// shape): the host is asked once whether it offers a model, off the
-	// frame, and the surface renders only once it said yes.
-	inst.startTransformDescribe()
 	if inst.handOver(ctx.LaunchConfig()) {
 		return
 	}
@@ -557,7 +556,6 @@ func (inst *App) Frame(ctx app.FrameContextI) (err error) {
 
 func (inst *App) renderBody() {
 	inst.drainAsync()
-	inst.drainTransform()
 	inst.drainFollow()
 	inst.drainSnapshotLoad()
 	// The host repaints reactively; while a follow is live, a low-rate tick
@@ -597,15 +595,15 @@ func (inst *App) renderBody() {
 	// them.
 	inst.refreshDerived()
 
-	// The transform result pane spans the window bottom, declared before the
-	// side panels for two reasons: full width (a rendered result wants room),
+	// The proposal pane spans the window bottom, declared before the side
+	// panels for two reasons: full width (a rendered proposal wants room),
 	// and ORDER — an Apply click in it rebinds the buffer, and the rebind's
 	// databinding override only lands if the editor's emit comes after it in
 	// the same frame.
-	if inst.transformPaneOpen() {
-		for range c.PanelBottomInside(inst.ids.PrepareStr("xformpane")).
-			ExactSize(inst.transformPaneHeight()).KeepIter() {
-			inst.renderTransformPane()
+	if inst.proposalPaneOpen() {
+		for range c.PanelBottomInside(inst.ids.PrepareStr("proposalpane")).
+			ExactSize(inst.proposalPaneHeight()).KeepIter() {
+			inst.renderProposalPane()
 		}
 	}
 
@@ -736,13 +734,6 @@ func (inst *App) renderBar() {
 				inst.pendingInsert = snippet
 			}
 		}
-
-		// The transform surface, only when the host offers a model — with
-		// none nothing here renders or hints (mdedit_transform.go).
-		if inst.xform.enabled {
-			c.AddSpace(styletokens.GapInline(styletokens.DensityStandard))
-			inst.renderTransformPicker()
-		}
 	}
 
 	// Row two — view state on the left, readouts on the right: the mode
@@ -828,10 +819,6 @@ func (inst *App) renderBar() {
 			inst.renderReplaceRow()
 		}
 	}
-
-	// Transient — a running transformation's progress and cancel, gone the
-	// frame the run ends.
-	inst.renderTransformProgress()
 }
 
 // statsLine renders the readout. Reading time is omitted below a minute rather
@@ -1094,7 +1081,7 @@ func (inst *App) renderPreview() {
 		return
 	}
 	// markdown.Render opens its own scope under ScopeKey, so the preview and
-	// the transform preview in the same window cannot collide.
+	// the proposal preview in the same window cannot collide.
 	in := markdown.Input{Ids: inst.ids, ScopeKey: "preview", Doc: inst.doc}
 	if slug, changed := inst.takeScrollTarget(); changed {
 		in.ScrollToSection = slug

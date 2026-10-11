@@ -8,7 +8,6 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
-	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 )
 
@@ -49,6 +48,9 @@ var manifest = app.Manifest{
 	Surface:  app.SurfaceWindowed,
 	// LaunchKind takes a document another app hands over (launchcfg).
 	LaunchKind: launchcfg.Kind,
+	// Operations are how the agentic harness reads the document and
+	// proposes changes to it; mdedit holds no model grant (ADR-0318).
+	Operations: ops.Catalog(),
 	SurfaceHints: app.SurfaceHints{
 		// Wide enough that the source and the preview both read comfortably
 		// at the default split, tall enough for a screenful of either.
@@ -76,9 +78,6 @@ var manifest = app.Manifest{
 			Direction: app.CapDirectionPub,
 			Reason:    "mdedit: Send to play — open the playground on the document persisted as a boxer.facts row",
 		},
-		// The model the transformations run through (ADR-0254 §SD1): one
-		// grant, not sticky, with the purpose in the reason.
-		llm.ClientCaps("mdedit: transform the selection or the document through the host's model")[0],
 	},
 	PersistedKeys: []string{docKey},
 }

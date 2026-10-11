@@ -236,7 +236,7 @@ the names code comments cite:
 | Step | What landed |
 | --- | --- |
 | 0 | the preservation harness and its golden in `apps/chat` |
-| 1 | `runTurn` takes `promptbook.CompleterI` |
+| 1 | `runTurn` takes a completer interface (`completerI` in `apps/chat`) |
 | 2 | a tool registry with a budget and a parallel-safe flag per tool replaces the dispatch chain; `call_operation` keeps budget 0 |
 | 3 | the prompt book with a fingerprint over its rendered sections and the tool schemas (SD6) |
 | 4 | one context injector over the mid-turn notes and their "told" watermarks |

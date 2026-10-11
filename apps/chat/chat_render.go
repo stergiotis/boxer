@@ -432,6 +432,7 @@ func (inst *App) renderComposer() {
 			}
 		}
 	}
+	inst.renderTransformPicker()
 	w, _, ok := c.CapturePaneSize(c.ProbeSeq("chat", "composer") ^ inst.ids.PrepareHighEntropy(composerProbeSalt).Derive())
 	if !ok || w <= 0 {
 		w = fallbackComposerW

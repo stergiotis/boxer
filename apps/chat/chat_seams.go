@@ -13,7 +13,6 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/anchorstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/harness"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
-	"github.com/stergiotis/boxer/public/keelson/runtime/llm/promptbook"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -117,6 +116,14 @@ func injectContext(s *injectState) {
 	}
 }
 
+// completerI is what a turn's rounds complete through: the host's model
+// over the bus (*llm.Client, ADR-0254), a fake in tests.
+type completerI interface {
+	Complete(ctx context.Context, req llm.Request) (res llm.Response, err error)
+}
+
+var _ completerI = (*llm.Client)(nil)
+
 // requestState is one round's request as the configuration chain shapes
 // it: the projected messages under the Pixels setting, the tools, the
 // label, and what the next turn declares left out.
@@ -125,7 +132,7 @@ type requestState struct {
 	// jctx is the context journal writes run under (journalCtx).
 	jctx    context.Context
 	coord   *coordinator
-	cli     promptbook.CompleterI
+	cli     completerI
 	w       *agentrun.Writer
 	req     llm.Request
 	round   int
@@ -364,7 +371,7 @@ var turnSeamsNow = sync.OnceValue(func() (s turnSeams) {
 // ids and the person's message as its last message; every message the
 // model receives is projected from the journal. progress, when set, hears
 // each round as it starts and each tool call, by its title, as it runs.
-func runTurn(ctx context.Context, cli promptbook.CompleterI, coord *coordinator, req llm.Request, progress func(round int, doing string)) (out *turnResult, err error) {
+func runTurn(ctx context.Context, cli completerI, coord *coordinator, req llm.Request, progress func(round int, doing string)) (out *turnResult, err error) {
 	seams := turnSeamsNow()
 	out = &turnResult{}
 	coord.steps.reset()

@@ -1,16 +1,11 @@
 package promptbook
 
 import (
-	"context"
-	"errors"
 	"testing"
 	"testing/fstest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
-	"github.com/stergiotis/boxer/public/llm/openaichat"
 )
 
 // ---------------------------------------------------------------------------
@@ -87,95 +82,10 @@ func TestParseBook_WalksOnlyMarkdown(t *testing.T) {
 	assert.Len(t, errs, 1)
 }
 
-// ---------------------------------------------------------------------------
-// Running
-// ---------------------------------------------------------------------------
-
-// fakeClient scripts one Complete answer and records the request it saw.
-type fakeClient struct {
-	resp llm.Response
-	err  error
-	req  llm.Request
-}
-
-func (f *fakeClient) Complete(_ context.Context, req llm.Request) (llm.Response, error) {
-	f.req = req
-	return f.resp, f.err
-}
-
-func TestRun_ComposesTheRoundTrip(t *testing.T) {
-	temp := float32(0.5)
-	fc := &fakeClient{resp: llm.Response{Content: "out", InputTokens: 10, OutputTokens: 20}}
-	def := PromptDef{BookId: "b", Slug: "p", System: "sys", Temperature: &temp}
-
-	res, err := Run(context.Background(), fc, def, "input text")
-	require.NoError(t, err)
-
-	require.Len(t, fc.req.Messages, 2)
-	assert.Equal(t, openaichat.ChatRoleSystem, fc.req.Messages[0].Role)
-	assert.Equal(t, "sys", fc.req.Messages[0].Content)
-	assert.Equal(t, openaichat.ChatRoleUser, fc.req.Messages[1].Role)
-	assert.Equal(t, "input text", fc.req.Messages[1].Content)
-	assert.Equal(t, "b/p", fc.req.Purpose, "book/slug names the call, the spelling keelson('llm_prompts') joins on")
-	assert.Equal(t, &temp, fc.req.Temperature)
-	assert.Equal(t, int32(0), fc.req.MaxTokens, "zero leaves the ceiling to the host")
-
-	assert.Equal(t, "out", res.Content)
-	assert.Equal(t, int32(10), res.InputTokens)
-	assert.Equal(t, int32(20), res.OutputTokens)
-	assert.False(t, res.Truncated)
-}
-
-func TestRun_PromptMaxTokensWins(t *testing.T) {
-	fc := &fakeClient{resp: llm.Response{Content: "out"}}
-	_, err := Run(context.Background(), fc, PromptDef{System: "sys", MaxTokens: 64}, "in")
-	require.NoError(t, err)
-	assert.Equal(t, int32(64), fc.req.MaxTokens)
-}
-
-func TestRun_TruncationIsAResultNotAnError(t *testing.T) {
-	fc := &fakeClient{resp: llm.Response{Content: "partial", Incomplete: true}}
-	res, err := Run(context.Background(), fc, PromptDef{System: "sys"}, "in")
-	require.NoError(t, err, "content the provider already produced is handed over, marked")
-	assert.True(t, res.Truncated)
-	assert.Equal(t, "partial", res.Content)
-}
-
-func TestRun_TruncationWithNothingIsAnError(t *testing.T) {
-	fc := &fakeClient{resp: llm.Response{Incomplete: true}}
-	_, err := Run(context.Background(), fc, PromptDef{System: "sys"}, "in")
-	assert.Error(t, err)
-}
-
-func TestRun_EmptyCompletionIsAnError(t *testing.T) {
-	fc := &fakeClient{resp: llm.Response{Content: ""}}
-	_, err := Run(context.Background(), fc, PromptDef{System: "sys"}, "in")
-	assert.Error(t, err)
-}
-
-func TestRun_HonoursTheContext(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	blocked := &blockingClient{}
-	_, err := Run(ctx, blocked, PromptDef{System: "sys"}, "in")
-	assert.Error(t, err)
-}
-
-// blockingClient waits for its context, the shape of a stalled host.
-type blockingClient struct{}
-
-func (b *blockingClient) Complete(ctx context.Context, _ llm.Request) (resp llm.Response, err error) {
-	<-ctx.Done()
-	err = ctx.Err()
-	return
-}
-
-func TestFailureLine_NamesTheSentinels(t *testing.T) {
-	assert.Equal(t, "", FailureLine(nil))
-	assert.Contains(t, FailureLine(context.DeadlineExceeded), "timeout")
-	assert.Contains(t, FailureLine(openaichat.ErrAuth), "key")
-	assert.Contains(t, FailureLine(openaichat.ErrModelNotFound), "model")
-	assert.Equal(t, "the request failed", FailureLine(errors.New("weird")))
+// Purpose is the spelling keelson('llm_calls').purpose carries, so a call
+// joins keelson('llm_prompts') on it.
+func TestPurposeIsBookSlashSlug(t *testing.T) {
+	assert.Equal(t, "b/p", PromptDef{BookId: "b", Slug: "p"}.Purpose())
 }
 
 // ---------------------------------------------------------------------------

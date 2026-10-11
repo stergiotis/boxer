@@ -1,22 +1,15 @@
 // Package promptbook is the transformation book (ADR-0216 §SD2, lifted
 // for ADR-0254 §SD6): a corpus of markdown documents whose body IS the
 // system prompt and whose frontmatter is the descriptor, parsed to zero
-// errors by a gate test, extensible without a rebuild through Register,
-// and run one at a time through the host's model (llm.Client).
+// errors by a gate test, and extensible without a rebuild through Register.
+// It holds and lists prompts; it does not run them. The harness, the one
+// app that calls a model (ADR-0318), reads its books and makes the calls.
 //
 // The mechanism is the applet book's: an embedded fs of documents, the
 // filename base as public slug, frontmatter as the descriptor, an open
-// Register seam for contributed corpora. mdedit's transformations and
-// play's model affordance are two books over the one mechanism.
-// Package transform is mdedit's pluggable LLM text transformations: a prompt
-// corpus (embedded markdown documents, one per transformation) and the one
-// call that runs a prompt over a piece of the buffer.
-//
-// It is a SIBLING package rather than part of mdedit for the reason the withdrawn ADR-0120
-// §SD2 records for play's Ask panel: the app package itself never imports the
-// LLM client, so the network dependency is one seam wide, and the capability
-// gate (capslock) attributes the egress to this package rather than to
-// everything mdedit touches.
+// Register seam for contributed corpora. The chat's system prompt and its
+// transformations are two books over the one mechanism (ADR-0310 §SD6,
+// ADR-0318).
 //
 // A transformation is a markdown document: YAML frontmatter naming it, and a
 // body that IS the system prompt — a prompt is prose, and unlike an applet's
@@ -29,20 +22,15 @@
 package promptbook
 
 import (
-	"context"
-	"errors"
 	"io/fs"
 	"regexp"
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/text"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
-	"github.com/stergiotis/boxer/public/llm/openaichat"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/markdown/obsidian"
@@ -98,8 +86,9 @@ type PromptDef struct {
 
 	Scope ScopeE
 
-	// Temperature overrides the provider default when non-nil; MaxTokens
-	// overrides Config.MaxTokens when non-zero.
+	// Temperature and MaxTokens are the document's requested settings,
+	// carried and listed (keelson('llm_prompts')); applying them is the
+	// caller's. Nil and zero mean none requested.
 	Temperature *float32
 	MaxTokens   int32
 
@@ -132,9 +121,8 @@ var (
 
 // Register contributes a prompt corpus: an fs.FS whose *.md files
 // each define one transformation. Packages call it from init (the
-// sqlapplet.RegisterBook shape); mdedit enumerates everything registered the
-// first time its transform surface renders. The id names the book in
-// diagnostics and must be unique.
+// sqlapplet.RegisterBook shape); keelson('llm_prompts') lists everything
+// registered. The id names the book in diagnostics and must be unique.
 func Register(id string, fsys fs.FS) (err error) {
 	if id == "" || fsys == nil {
 		err = eh.Errorf("promptbook: Register: empty id or nil fs")
@@ -357,102 +345,4 @@ func frontmatterEnd(src string) (end int) {
 		}
 	}
 	return
-}
-
-// ---------------------------------------------------------------------------
-// Running
-// ---------------------------------------------------------------------------
-
-// CompleterI is what a run completes through: the host's model over the
-// bus (*llm.Client, ADR-0254), a fake in tests.
-type CompleterI interface {
-	Complete(ctx context.Context, req llm.Request) (res llm.Response, err error)
-}
-
-var _ CompleterI = (*llm.Client)(nil)
-
-// Result is one completed run.
-type Result struct {
-	Content string
-	Elapsed time.Duration
-
-	InputTokens  int32
-	OutputTokens int32
-
-	// Truncated marks a completion that hit the token ceiling with content
-	// already produced. Shown, not hidden: the reader sees exactly what they
-	// would apply and decides.
-	Truncated bool
-}
-
-// Run is one prompt over one input: a system+user round-trip (the
-// commitdigest summarizeOnce shape) through the host's model. Blocks until
-// the host answers, the client's wait ends it, or ctx is cancelled — never
-// call it on the render goroutine. The model and the endpoint are the
-// host's (ADR-0254 §SD2); the prompt's own max-tokens wins over the host's
-// ceiling, and zero leaves the ceiling to the host.
-func Run(ctx context.Context, cli CompleterI, def PromptDef, input string) (res Result, err error) {
-	started := time.Now()
-	resp, cerr := cli.Complete(ctx, llm.Request{
-		Purpose: def.Purpose(),
-		Messages: []openaichat.Message{
-			{Role: openaichat.ChatRoleSystem, Content: def.System},
-			{Role: openaichat.ChatRoleUser, Content: input},
-		},
-		Temperature: def.Temperature,
-		MaxTokens:   def.MaxTokens,
-	})
-	res = Result{
-		Content:      resp.Content,
-		Elapsed:      time.Since(started),
-		InputTokens:  resp.InputTokens,
-		OutputTokens: resp.OutputTokens,
-	}
-	if cerr != nil {
-		err = eb.Build().Str("prompt", def.Slug).Errorf("promptbook: complete: %w", cerr)
-		return
-	}
-	if resp.Incomplete {
-		// A truncated completion still carries its content (the client's
-		// documented contract); hand it over marked rather than losing work
-		// the provider already did. With nothing produced it is a failure.
-		if res.Content == "" {
-			err = eb.Build().Str("prompt", def.Slug).Errorf("promptbook: complete: %w", openaichat.ErrIncompleteCompletion)
-			return
-		}
-		res.Truncated = true
-		return
-	}
-	if res.Content == "" {
-		err = eb.Build().Str("prompt", def.Slug).Errorf("promptbook: empty completion")
-		return
-	}
-	return
-}
-
-// FailureLine maps a Run error onto the one-line explanation the result pane
-// leads with; the wrapped detail stays underneath for whoever wants it.
-func FailureLine(err error) (s string) {
-	var refused *llm.RefusedError
-	switch {
-	case err == nil:
-		return ""
-	case errors.Is(err, context.DeadlineExceeded):
-		return "the endpoint did not answer within the timeout"
-	case errors.Is(err, context.Canceled):
-		return "cancelled"
-	case errors.As(err, &refused):
-		return "the host declined the request: " + refused.Reason
-	case errors.Is(err, openaichat.ErrAuth):
-		return "the endpoint refused the API key"
-	case errors.Is(err, openaichat.ErrModelNotFound):
-		return "the endpoint does not serve this model"
-	case errors.Is(err, openaichat.ErrRateLimited):
-		return "the endpoint is rate-limiting"
-	case errors.Is(err, openaichat.ErrServer):
-		return "the endpoint failed server-side"
-	case errors.Is(err, openaichat.ErrBadRequest):
-		return "the endpoint rejected the request"
-	}
-	return "the request failed"
 }

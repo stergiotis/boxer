@@ -130,7 +130,9 @@ func ModeratorCaps(reason string) (caps []app.SubjectFilter) {
 // ClientCaps is what an app declares in Manifest.Caps. Not sticky
 // (ADR-0254 §SD1): sending text off the box is a per-session consent the
 // day a Mount-time prompt exists. reason names the app's purpose, e.g.
-// "mdedit: transform the selection through a model".
+// "chat: send the conversation to the host's model". The agentic harness
+// is the one app that declares it (ADR-0318): another app exposes
+// operations the harness drives rather than calling a model itself.
 func ClientCaps(reason string) (caps []app.SubjectFilter) {
 	caps = []app.SubjectFilter{
 		{Pattern: SubjectAll, Direction: app.CapDirectionPub, Reason: reason},

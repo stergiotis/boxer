@@ -12,7 +12,6 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
-	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdown"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/markdownhighlight"
@@ -315,13 +314,13 @@ func TestDrainAsync_ExportCheckpointsWhatLanded(t *testing.T) {
 }
 
 // TestDrainAsync_ResultCopyDoesNotCheckpoint is the other half of the
-// exportCheckpoint flag: copying a transformation RESULT rides the same
+// exportCheckpoint flag: copying a PROPOSAL rides the same
 // clipboard machinery but never was the buffer, so it must not clear the
 // dirty badge.
 func TestDrainAsync_ResultCopyDoesNotCheckpoint(t *testing.T) {
 	inst := &App{src: "the document", saved: ""}
 	inst.exportDone = true
-	inst.exportedText = "an llm result"
+	inst.exportedText = "a proposed replacement"
 	inst.exportCheckpoint = false
 
 	inst.drainAsync()
@@ -699,14 +698,14 @@ func TestManifestRegisters(t *testing.T) {
 // authority. One subject through M3, three from M4, four with send-to-play —
 // and the list is asserted exactly rather than by presence: a cap the app
 // never exercises is the §SD10 gate's other failure mode, so growth has to be
-// deliberate enough to edit a test for.
-func TestManifestDeclaresExactlyTheFiveSubjects(t *testing.T) {
+// deliberate enough to edit a test for. No llm.* subject: mdedit reaches a
+// model only through the harness, over its operations (ADR-0318).
+func TestManifestDeclaresExactlyTheFourSubjects(t *testing.T) {
 	want := []string{
 		clipboardbroker.SubjectWrite,
 		fsbroker.SubjectDialogRead,
 		fsbroker.SubjectDialogWrite,
 		windowhost.OpenSubject,
-		llm.SubjectAll,
 	}
 	got := make([]string, 0, len(manifest.Caps))
 	for _, c := range manifest.Caps {
@@ -715,11 +714,6 @@ func TestManifestDeclaresExactlyTheFiveSubjects(t *testing.T) {
 		assert.NotEmpty(t, c.Reason, "a cap needs a reason: %q", c.Pattern)
 	}
 	assert.ElementsMatch(t, want, got)
-	for _, c := range manifest.Caps {
-		if c.Pattern == llm.SubjectAll {
-			assert.False(t, c.Sticky, "sending text to a model is a per-session consent (ADR-0254 §SD1)")
-		}
-	}
 }
 
 // TestManifestDoesNotDeclareAWildcardHandleCap is the one worth keeping

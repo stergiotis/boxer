@@ -15,11 +15,13 @@ model held its own client behind an environment variable, placed where the
 static capability gate saw the least of it; no manifest said so and no audit
 row named the app.
 
-An app declares the grant with its purpose and calls through the typed
-client:
+The agentic harness (`apps/chat`) is the one app that declares the grant
+([ADR-0318](../../../doc/adr/0318-model-inference-is-the-harnesss-apps-expose-operations.md)):
+another app exposes operations the harness drives instead. The harness
+declares the grant with its purpose and calls through the typed client:
 
 ```go
-Caps: llm.ClientCaps("mdedit: transform the selection through a model"),
+Caps: llm.ClientCaps("chat: send the conversation to the host's model"),
 
 func (inst *App) Mount(ctx app.MountContextI) error {
     inst.model = llm.NewClient(ctx.Bus())
@@ -28,7 +30,7 @@ func (inst *App) Mount(ctx app.MountContextI) error {
 
 d, err := inst.model.Describe(ctx)          // is a model offered, which, where
 res, err := inst.model.Complete(ctx, llm.Request{
-    Purpose:  "improve-style",
+    Purpose:  "chat/coordinator",
     Messages: []openaichat.Message{{Role: openaichat.ChatRoleUser, Content: text}},
 })
 ```

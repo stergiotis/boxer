@@ -1,12 +1,16 @@
 ---
 type: adr
-status: accepted
+status: superseded
 date: 2026-09-01
 reviewed-by: "p@stergiotis"
 reviewed-date: 2026-09-25
 ---
 
 # ADR-0216: mdedit — pluggable LLM text transformations behind an env gate
+
+Superseded by [ADR-0318](./0318-model-inference-is-the-harnesss-apps-expose-operations.md):
+mdedit holds no model grant; the harness does the model work through
+mdedit's operations, and the prompt book moved to the harness.
 
 ## Context
 
@@ -138,9 +142,8 @@ live endpoint and stays manual, driven with LM Studio or Ollama via
 
 ## Status
 
-Accepted (2026-09-25). Implemented in the same session as the record
-(2026-09-01); SD1 and SD3 are superseded by ADR-0254 (Updates, 2026-09-23).
-Not yet exercised against a live model.
+Superseded by ADR-0318 (2026-10-11). Accepted 2026-09-25; SD1 and SD3 were
+superseded earlier by ADR-0254 (Updates, 2026-09-23).
 
 ## Updates
 

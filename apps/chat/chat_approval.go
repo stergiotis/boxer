@@ -10,7 +10,6 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/cell"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
-	"github.com/stergiotis/boxer/public/keelson/runtime/llm/promptbook"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
@@ -56,7 +55,7 @@ type exitAnswer struct {
 
 // complete runs one model call, asking the person once when the route
 // wants their approval of the exit.
-func (inst *coordinator) complete(ctx context.Context, cli promptbook.CompleterI, w *agentrun.Writer, req llm.Request) (res llm.Response, err error) {
+func (inst *coordinator) complete(ctx context.Context, cli completerI, w *agentrun.Writer, req llm.Request) (res llm.Response, err error) {
 	res, err = cli.Complete(ctx, req)
 	var refused *llm.RefusedError
 	if err == nil || !errors.As(err, &refused) || !refused.NeedsApproval() || w == nil {

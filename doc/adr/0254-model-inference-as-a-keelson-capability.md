@@ -524,6 +524,15 @@ to run, as §SD5 decided; the loop that remains is the chat's
 other apps' operations run under a task grant
 ([ADR-0269](./0269-app-operations-a-command-query-contract-agents-drive-under-a-task-grant.md)).
 
+### 2026-10-11 — the client grant is the harness's
+
+[ADR-0318](./0318-model-inference-is-the-harnesss-apps-expose-operations.md)
+narrows SD1's "an app declares the grant": the agentic harness is the one
+app that holds `llm.ClientCaps`, and another app that wants model work done
+on its content exposes operations the harness drives. mdedit, the first
+consumer this record names, no longer holds the grant. The rule is not
+enforced; the service still answers any app whose manifest declares it.
+
 ## References
 
 - [ADR-0026](./0026-app-runtime-and-capability-subjects.md) — §SD3 the taxonomy this family joins, §SD7 the broker, §SD10 capslock.
