@@ -173,6 +173,18 @@ grant and widening, and a real model.
 
 ## Updates
 
+### 2026-10-11 — the classification is one decision table
+
+`ClassifyOperation`, `ClassifyLaunch`, `ClassifyArrange` and
+`ClassifyWindowVerb` (the 2026-10-08 entry) read one table in
+`runtime/agent/decide.go`: what is a cell, which window it is on, and how
+a refusal is phrased, the dispatcher and the launch path consulting the
+same rows the surface does. The rewrite is behaviour-preserving; a
+property test holds the table against the former classifiers. The
+harness that motivated it is
+[ADR-0310](./0310-harness-profile-and-registry-composition-declared-per-seam.md)
+(proposed).
+
 ### 2026-10-08 — cells, buckets and stopped turns
 
 - §SD1 names `agent.ClassifyCell`. No such function was written: the

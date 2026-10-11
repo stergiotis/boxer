@@ -91,20 +91,25 @@ func windowCheck(t *task, verb string, req wireWindowAct) (out opwire.Outcome) {
 	switch {
 	case t.callsUsed >= t.callsBudget:
 		out = phaseOutcome(opwire.PhaseInputRequired, "the task's call budget is spent; request more")
-	case verb == verbArrange && t.ceiling.refuseDesktop() != "":
-		out = phaseOutcome(opwire.PhaseRefused, t.ceiling.refuseDesktop())
 	case verb == verbArrange:
-		if t.desktop != ModeAct {
+		switch decideArrange(t.ceiling, t.desktop) {
+		case decisionAboveCeiling:
+			out = phaseOutcome(opwire.PhaseRefused, t.ceiling.refuseDesktop())
+		case decisionNotGranted, decisionObserveOnly:
 			out = phaseOutcome(opwire.PhaseInputRequired, "arranging windows needs the desktop in act mode; request it with desktop act")
 		}
 	case verb == verbRaise || verb == verbPlace:
 		e := t.entries[req.Instance]
-		switch {
-		case e == nil:
+		mode := ModeUnspecified
+		if e != nil {
+			mode = e.mode
+		}
+		switch decideWindowVerb(t.ceiling, e != nil, mode) {
+		case decisionNotGranted:
 			out = phaseOutcome(opwire.PhaseInputRequired, "the grant does not cover this instance")
-		case e.mode == ModeAct && t.modeOf(e) != ModeAct:
+		case decisionAboveCeiling:
 			out = phaseOutcome(opwire.PhaseRefused, t.ceiling.refuseMode(ModeAct))
-		case e.mode != ModeAct:
+		case decisionObserveOnly:
 			out = phaseOutcome(opwire.PhaseInputRequired, verb+" needs act mode on this window; request it")
 		}
 	default:

@@ -683,20 +683,29 @@ func (inst *Service) check(t *task, req wireCall) (out opwire.Outcome, spec app.
 			mode = min(mode, t.ceiling.normal().Mode)
 		}
 	}()
+	// The rows the surface shares (decide.go), then what the moment adds.
+	d := decisionGranted
+	if ok && spec.Agents {
+		f := operationFacts{covered: e != nil, effect: spec.Effect}
+		if e != nil {
+			f.coversOp, f.mode = e.covers(spec.Name), e.mode
+		}
+		d = decideOperation(t.ceiling, f)
+	}
 	switch {
 	case !ok:
 		out = phaseOutcome(opwire.PhaseRefused, "no such operation")
 	case !spec.Agents:
 		out = phaseOutcome(opwire.PhaseDenied, "the operation is not exposed to agents")
-	case t.ceiling.refuseEffect(spec.Effect) != "":
+	case d == decisionAboveCeiling:
 		// Above the ceiling the person set in the coordinator (ADR-0280):
 		// refused whatever the grant holds, and not a widening to ask for.
 		out = phaseOutcome(opwire.PhaseRefused, t.ceiling.refuseEffect(spec.Effect))
-	case e == nil:
+	case d == decisionNotGranted:
 		out, need = phaseOutcome(opwire.PhaseInputRequired, "the grant does not cover this instance; the person is asked"), needInstance
-	case !e.covers(spec.Name):
+	case d == decisionNotGrantedOperation:
 		out, need, mode = phaseOutcome(opwire.PhaseInputRequired, "the grant does not cover this operation; the person is asked"), needOperation, e.mode
-	case spec.Effect != app.OperationEffectNone && e.mode == ModeObserve:
+	case d == decisionObserveOnly:
 		out, need = phaseOutcome(opwire.PhaseInputRequired, "observe mode: the person is asked to raise the mode"), needMode
 	case spec.Effect != app.OperationEffectNone && inst.holder(req.Instance, t) != nil:
 		out = phaseOutcome(opwire.PhaseRefused, "busy: another task holds the instance")

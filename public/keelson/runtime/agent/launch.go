@@ -158,14 +158,15 @@ func (inst *Service) launch(msg *app.Msg) (rep wireLaunchReply) {
 		inst.mu.Unlock()
 		inst.record(t, rec, "final", out)
 	}()
+	d := decideLaunch(t.ceiling, le != nil, launchCount(le), launchUsed(le))
 	switch {
-	case t.ceiling.refuseLaunch() != "":
+	case d == decisionAboveCeiling:
 		rep.Reason = t.ceiling.refuseLaunch()
 	case !known:
 		rep.Reason = inst.unknownAppReason(req.App)
-	case le == nil:
+	case d == decisionNotGranted:
 		rep.Reason = "the grant does not let the task open windows of " + string(id)
-	case le.used >= le.count:
+	case d == decisionSpent:
 		rep.Reason = "the task opened every window of " + string(id) + " its grant allows"
 	}
 	if rep.Reason != "" {
@@ -323,4 +324,19 @@ func launchText(l wireLaunchEntry, display string) (s string) {
 		mode = ModeAct.String()
 	}
 	return "open up to " + strconv.FormatUint(uint64(l.Count), 10) + " window(s) of " + display + " in " + mode + " mode"
+}
+
+// launchCount and launchUsed read a launch entry that may be nil.
+func launchCount(le *launchEntry) (n int) {
+	if le != nil {
+		n = le.count
+	}
+	return
+}
+
+func launchUsed(le *launchEntry) (n int) {
+	if le != nil {
+		n = le.used
+	}
+	return
 }

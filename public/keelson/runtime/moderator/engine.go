@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/appops/opwire"
+	"github.com/stergiotis/boxer/public/keelson/runtime/llm/tokenmeter"
 )
 
 // SignalE is what a signal reports (ADR-0302 §SD3).
@@ -292,9 +293,9 @@ func (inst *Engine) Call(o CallObs) (signals []Signal, actions []Action) {
 			ts.inputs = ts.inputs[len(ts.inputs)-3:]
 		}
 	}
-	if !ts.context && inst.cfg.ContextTokens > 0 && len(ts.inputs) == 3 &&
+	if !ts.context && len(ts.inputs) == 3 &&
 		ts.inputs[0] < ts.inputs[1] && ts.inputs[1] < ts.inputs[2] &&
-		ts.inputs[2]*100 >= inst.cfg.ContextPercent*inst.cfg.ContextTokens {
+		tokenmeter.Over(ts.inputs[2], inst.cfg.ContextTokens, inst.cfg.ContextPercent) {
 		ts.context = true
 		raise(SignalContext, "a turn's input grew each round to "+strconv.FormatInt(ts.inputs[2], 10)+" of "+
 			strconv.FormatInt(inst.cfg.ContextTokens, 10)+" context tokens")

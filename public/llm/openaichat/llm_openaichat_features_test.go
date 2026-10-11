@@ -42,7 +42,7 @@ func TestEncodeRequestSeedAndStop(t *testing.T) {
 	r := userReq("m")
 	r.Seed = &seed
 	r.Stop = []string{";", "END"}
-	body, err := inst.encodeRequest(r)
+	body, err := inst.route.Encode(r)
 	require.NoError(t, err)
 	s := string(body)
 	assert.Contains(t, s, `"seed":42`)
@@ -50,7 +50,7 @@ func TestEncodeRequestSeedAndStop(t *testing.T) {
 	assert.Contains(t, s, `"END"`)
 
 	// unset seed/stop are omitted
-	bare, err := inst.encodeRequest(userReq("m"))
+	bare, err := inst.route.Encode(userReq("m"))
 	require.NoError(t, err)
 	assert.NotContains(t, string(bare), "seed")
 	assert.NotContains(t, string(bare), "stop")
@@ -62,12 +62,12 @@ func TestEncodeResponseFormat(t *testing.T) {
 
 	r := userReq("m")
 	r.ResponseFormat = JSONObjectFormat()
-	b1, err := inst.encodeRequest(r)
+	b1, err := inst.route.Encode(r)
 	require.NoError(t, err)
 	assert.Contains(t, string(b1), `"response_format":{"type":"json_object"}`)
 
 	r.ResponseFormat = JSONSchemaFormat("sql", jsontext.Value(`{"type":"object","properties":{"sql":{"type":"string"}}}`), true)
-	b2, err := inst.encodeRequest(r)
+	b2, err := inst.route.Encode(r)
 	require.NoError(t, err)
 	s := string(b2)
 	assert.Contains(t, s, `"type":"json_schema"`)
@@ -77,12 +77,12 @@ func TestEncodeResponseFormat(t *testing.T) {
 
 	// json_schema without name+schema is rejected
 	r.ResponseFormat = &ResponseFormat{Type: "json_schema"}
-	_, err = inst.encodeRequest(r)
+	_, err = inst.route.Encode(r)
 	require.Error(t, err)
 
 	// unknown type is rejected
 	r.ResponseFormat = &ResponseFormat{Type: "yaml"}
-	_, err = inst.encodeRequest(r)
+	_, err = inst.route.Encode(r)
 	require.Error(t, err)
 }
 
@@ -93,7 +93,7 @@ func TestEncodeTools(t *testing.T) {
 	r := userReq("m")
 	r.Tools = []Tool{{Name: "run_sql", Description: "run a query", Parameters: jsontext.Value(`{"type":"object"}`)}}
 	r.ToolChoice = "auto"
-	b, err := inst.encodeRequest(r)
+	b, err := inst.route.Encode(r)
 	require.NoError(t, err)
 	s := string(b)
 	assert.Contains(t, s, `"tools":[`)
@@ -103,14 +103,14 @@ func TestEncodeTools(t *testing.T) {
 
 	// a non-keyword ToolChoice forces that function by name
 	r.ToolChoice = "run_sql"
-	b2, err := inst.encodeRequest(r)
+	b2, err := inst.route.Encode(r)
 	require.NoError(t, err)
 	assert.Contains(t, string(b2), `"tool_choice":{`)
 
 	// ToolChoice without Tools is rejected
 	bad := userReq("m")
 	bad.ToolChoice = "auto"
-	_, err = inst.encodeRequest(bad)
+	_, err = inst.route.Encode(bad)
 	require.Error(t, err)
 }
 
@@ -122,7 +122,7 @@ func TestEncodeToolConversation(t *testing.T) {
 		{Role: ChatRoleAssistant, ToolCalls: []ToolCall{{Id: "call_1", Name: "run_sql", Arguments: `{"q":"select 1"}`}}},
 		{Role: ChatRoleTool, ToolCallId: "call_1", Content: "1"},
 	}}
-	b, err := inst.encodeRequest(r)
+	b, err := inst.route.Encode(r)
 	require.NoError(t, err)
 	s := string(b)
 	assert.Contains(t, s, `"tool_calls":[`)
@@ -173,7 +173,7 @@ func TestEncodeRequestSendsNoLateSystemRole(t *testing.T) {
 		{Role: ChatRoleSystem, Content: "the artefact moved"},
 		{Role: ChatRoleUser, Content: "and now?"},
 	}}
-	b, err := inst.encodeRequest(r)
+	b, err := inst.route.Encode(r)
 	require.NoError(t, err)
 	s := string(b)
 	assert.Equal(t, 1, strings.Count(s, `"role":"system"`))

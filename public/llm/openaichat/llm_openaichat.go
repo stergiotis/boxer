@@ -292,6 +292,9 @@ type Client struct {
 	retry            RetryPolicy
 	maxResponseBytes int64
 	observer         func(RequestStat)
+	// route is the endpoint's declared capabilities; the zero value is the
+	// package's unconditional behaviour.
+	route Route
 }
 
 var _ ClientI = (*Client)(nil)
@@ -545,7 +548,7 @@ func (inst *Client) Complete(ctx context.Context, req CompletionRequest) (resp C
 	}
 
 	var body []byte
-	body, err = inst.encodeRequest(req)
+	body, err = inst.route.Encode(req)
 	if err != nil {
 		err = eh.Errorf("encode request: %w", err)
 		return
@@ -594,10 +597,10 @@ func (inst *Client) Complete(ctx context.Context, req CompletionRequest) (resp C
 	}
 
 	choice := wresp.Choices[0]
-	cleanContent, inlineThought := extractInlineThought(choice.Message.Content)
+	cleanContent, thought := inst.route.reasoningOf(choice.Message.Content, choice.Message.ReasoningContent, choice.Message.Reasoning)
 	resp = CompletionResponse{
 		Content:      cleanContent,
-		Reasoning:    joinReasoning(joinReasoning(choice.Message.ReasoningContent, choice.Message.Reasoning), inlineThought),
+		Reasoning:    thought,
 		FinishReason: choice.FinishReason,
 		ToolCalls:    fromWireToolCalls(choice.Message.ToolCalls),
 		InputTokens:  wresp.Usage.PromptTokens,
@@ -898,7 +901,17 @@ func isIncompleteFinishReason(reason string) (incomplete bool) {
 	return
 }
 
-func (inst *Client) encodeRequest(req CompletionRequest) (body []byte, err error) {
+// EncodeRequest is the chat-completions request as the wire carries it
+// under the default route: the bytes Complete posts for req. A pure
+// function of req, so a harness can record what a provider would have
+// received without a client.
+func EncodeRequest(req CompletionRequest) (body []byte, err error) {
+	return DefaultRoute().Encode(req)
+}
+
+// Encode is the request as the wire carries it under the route: the late
+// system messages travel as the route declares.
+func (inst Route) Encode(req CompletionRequest) (body []byte, err error) {
 	wreq := wireRequest{
 		Model:       req.ModelId,
 		Messages:    make([]wireOutMessage, 0, len(req.Messages)),
@@ -937,14 +950,17 @@ func (inst *Client) encodeRequest(req CompletionRequest) (body []byte, err error
 		}
 		wreq.ToolChoice = toWireToolChoice(req.ToolChoice)
 	}
-	for _, m := range foldLateSystemMessages(req.Messages) {
+	for _, m := range inst.messagesForWire(req.Messages) {
 		var wm wireOutMessage
 		if wm, err = toWireMessage(m); err != nil {
 			return
 		}
 		wreq.Messages = append(wreq.Messages, wm)
 	}
-	body, err = json.Marshal(wreq)
+	// Deterministic: the bytes are what an exit budget reserves, what the
+	// canaries read and what an approval binds to, so the same request
+	// must give the same bytes (map keys in Extra sort).
+	body, err = json.Marshal(wreq, json.Deterministic(true))
 	if err != nil {
 		err = eh.Errorf("marshal: %w", err)
 		return

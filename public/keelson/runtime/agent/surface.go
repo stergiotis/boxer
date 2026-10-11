@@ -111,56 +111,38 @@ func ParseGrantedLaunch(s string) (l GrantLaunch, err error) {
 // ceiling down to the mode; what it leaves to the moment of the call — the
 // budget, another task's hold, a pause — is not the surface's.
 func ClassifyOperation(c *Ceiling, e *GrantedEntry, op string, effect app.OperationEffectE) (s CellStatusE) {
-	switch {
-	case c.refuseEffect(effect) != "":
-		return CellStatusAboveCeiling
-	case e == nil || !e.Covers(op):
-		return CellStatusNotGranted
-	case effect != app.OperationEffectNone && e.Mode == ModeObserve:
-		return CellStatusObserveOnly
+	f := operationFacts{covered: e != nil, effect: effect}
+	if e != nil {
+		f.coversOp, f.mode = e.Covers(op), e.Mode
 	}
-	return CellStatusGranted
+	return decideOperation(c, f).cellStatus()
 }
 
 // ClassifyLaunch is the status of opening a window of an app; l is the
 // task's launch for it, nil when the grant names none. A launch whose count
 // is spent stays granted: the surface shows the grant, the calls its use.
 func ClassifyLaunch(c *Ceiling, l *GrantLaunch) (s CellStatusE) {
-	switch {
-	case c.refuseLaunch() != "":
-		return CellStatusAboveCeiling
-	case l == nil || l.Count == 0:
-		return CellStatusNotGranted
+	count := 0
+	if l != nil {
+		count = int(l.Count)
 	}
-	return CellStatusGranted
+	return decideLaunch(c, l != nil, count, 0).cellStatus()
 }
 
 // ClassifyArrange is the status of arranging the desktop under the task's
 // desktop mode; the order is windowCheck's.
 func ClassifyArrange(c *Ceiling, desktop ModeE) (s CellStatusE) {
-	switch {
-	case c.refuseDesktop() != "":
-		return CellStatusAboveCeiling
-	case desktop == ModeUnspecified:
-		return CellStatusNotGranted
-	case desktop != ModeAct:
-		return CellStatusObserveOnly
-	}
-	return CellStatusGranted
+	return decideArrange(c, desktop).cellStatus()
 }
 
 // ClassifyWindowVerb is the status of raising or placing the window e
 // covers, nil when no grant names it; the order is windowCheck's.
 func ClassifyWindowVerb(c *Ceiling, e *GrantedEntry) (s CellStatusE) {
-	switch {
-	case e == nil:
-		return CellStatusNotGranted
-	case e.Mode == ModeAct && c.refuseMode(ModeAct) != "":
-		return CellStatusAboveCeiling
-	case e.Mode != ModeAct:
-		return CellStatusObserveOnly
+	mode := ModeUnspecified
+	if e != nil {
+		mode = e.Mode
 	}
-	return CellStatusGranted
+	return decideWindowVerb(c, e != nil, mode).cellStatus()
 }
 
 // The operation names the action record gives what is not an app's

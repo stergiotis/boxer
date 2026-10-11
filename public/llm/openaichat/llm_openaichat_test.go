@@ -44,7 +44,7 @@ func userReq(model string) CompletionRequest {
 func TestEncodeRequestOmitsZeroNumerics(t *testing.T) {
 	inst, err := NewClient("https://example.com/v1/", "")
 	require.NoError(t, err)
-	body, err := inst.encodeRequest(userReq("test-model"))
+	body, err := inst.route.Encode(userReq("test-model"))
 	require.NoError(t, err)
 	s := string(body)
 	assert.NotContains(t, s, "max_tokens", "max_tokens must be absent when zero")
@@ -56,7 +56,7 @@ func TestEncodeRequestOmitsZeroNumerics(t *testing.T) {
 func TestEncodeRequestEmitsPositiveNumerics(t *testing.T) {
 	inst, err := NewClient("https://example.com/v1/", "")
 	require.NoError(t, err)
-	body, err := inst.encodeRequest(CompletionRequest{
+	body, err := inst.route.Encode(CompletionRequest{
 		ModelId:     "test-model",
 		Messages:    []Message{{Role: ChatRoleUser, Content: "hi"}},
 		Temperature: new(float32(0.5)),
@@ -76,7 +76,7 @@ func TestEncodeRequestEmitsPositiveNumerics(t *testing.T) {
 func TestEncodeRequestEmitsExplicitZeroTemperature(t *testing.T) {
 	inst, err := NewClient("https://example.com/v1/", "")
 	require.NoError(t, err)
-	body, err := inst.encodeRequest(CompletionRequest{
+	body, err := inst.route.Encode(CompletionRequest{
 		ModelId:     "test-model",
 		Messages:    []Message{{Role: ChatRoleUser, Content: "hi"}},
 		Temperature: new(float32(0)),
@@ -88,7 +88,7 @@ func TestEncodeRequestEmitsExplicitZeroTemperature(t *testing.T) {
 func TestEncodeRequestThinkingFlag(t *testing.T) {
 	inst, err := NewClient("https://example.com/v1/", "")
 	require.NoError(t, err)
-	body, err := inst.encodeRequest(CompletionRequest{
+	body, err := inst.route.Encode(CompletionRequest{
 		ModelId:        "test-model",
 		Messages:       []Message{{Role: ChatRoleUser, Content: "hi"}},
 		EnableThinking: true,
@@ -105,7 +105,7 @@ func TestEncodeRequestThinkingFlag(t *testing.T) {
 func TestEncodeRequestInlinesExtra(t *testing.T) {
 	inst, err := NewClient("https://example.com/v1/", "")
 	require.NoError(t, err)
-	body, err := inst.encodeRequest(CompletionRequest{
+	body, err := inst.route.Encode(CompletionRequest{
 		ModelId:  "test-model",
 		Messages: []Message{{Role: ChatRoleUser, Content: "hi"}},
 		Extra:    map[string]any{"dry_multiplier": 0.0, "top_k": 1},
@@ -115,7 +115,7 @@ func TestEncodeRequestInlinesExtra(t *testing.T) {
 	assert.Contains(t, s, `"dry_multiplier":0`)
 	assert.Contains(t, s, `"top_k":1`)
 
-	body, err = inst.encodeRequest(userReq("test-model"))
+	body, err = inst.route.Encode(userReq("test-model"))
 	require.NoError(t, err)
 	assert.NotContains(t, string(body), "dry_multiplier", "nil Extra must add nothing")
 }
@@ -127,7 +127,7 @@ func TestEncodeRequestExtraCollisionFails(t *testing.T) {
 	require.NoError(t, err)
 	req := userReq("test-model")
 	req.Extra = map[string]any{"model": "other-model"}
-	_, err = inst.encodeRequest(req)
+	_, err = inst.route.Encode(req)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "duplicate")
 }
@@ -378,7 +378,7 @@ func TestLoadGeminiApiKeyMissing(t *testing.T) {
 func TestEncodeRequestImagesUseContentParts(t *testing.T) {
 	inst, err := NewClient("http://localhost/", "")
 	require.NoError(t, err)
-	body, err := inst.encodeRequest(CompletionRequest{
+	body, err := inst.route.Encode(CompletionRequest{
 		ModelId: "m",
 		Messages: []Message{
 			{Role: ChatRoleSystem, Content: "read the picture"},
@@ -391,7 +391,7 @@ func TestEncodeRequestImagesUseContentParts(t *testing.T) {
 	assert.Contains(t, s, `{"type":"text","text":"which is largest?"}`)
 	assert.Contains(t, s, `{"type":"image_url","image_url":{"url":"data:image/png;base64,AQID"}}`)
 
-	_, err = inst.encodeRequest(CompletionRequest{ModelId: "m", Messages: []Message{
+	_, err = inst.route.Encode(CompletionRequest{ModelId: "m", Messages: []Message{
 		{Role: ChatRoleUser, Content: "x", Images: []Image{{MediaType: "text/plain", Data: []byte{1}}}},
 	}})
 	assert.Error(t, err, "only image media types are attached")
