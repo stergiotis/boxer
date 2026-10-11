@@ -562,14 +562,16 @@ func (in Input) rowChrome(et c.EndETableFluid, rowIdx int, e Entry, rowH float32
 
 func (in Input) paddedCell(e Entry, col int, density styletokens.DensityE, body func(e Entry)) {
 	pad := cellInset(density)
+	// One ordinal for the (entry, column) pair, not an entry scope with a
+	// column seq inside it: the id stack composes by XOR, which is symmetric,
+	// so Seq(ord)^Seq(col) gives (a, b) and (b, a) one id and cancels outright
+	// when ord == col. See tree.paddedCell.
 	for range c.IdScope(in.Ids.PrepareStr("cell")) {
-		for range c.IdScope(in.Ids.PrepareSeq(uint64(e.Ord))) {
-			for range c.Frame(in.Ids.PrepareSeq(uint64(col))).
-				OuterMargin(0).
-				InnerMarginSides(pad, pad, 0, 0).
-				KeepIter() {
-				body(e)
-			}
+		for range c.Frame(in.Ids.PrepareSeq(uint64(uint32(e.Ord))<<32|uint64(uint32(col)))).
+			OuterMargin(0).
+			InnerMarginSides(pad, pad, 0, 0).
+			KeepIter() {
+			body(e)
 		}
 	}
 }
