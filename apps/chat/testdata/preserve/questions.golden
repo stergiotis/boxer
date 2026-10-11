@@ -1,0 +1,45 @@
+# turn 1: "write me the report"
+## request sha256=b6b69d32754d3803f932445bc79a4faaeb1b843f009bdf7068d22753449f5af5 bytes=2002 model=m max_tokens=0 tool_choice=""
+tools t1: [{"Name":"ask_user","Description":"Ask the person one to 4 questions as a form of options, shown inline in the conversation. Waits for the person's answer.","Parameters":{"additionalProperties":false,"properties":{"questions":{"items":{"additionalProperties":false,"properties":{"header":{"description":"a label of one or two words shown as a chip, e.g. \"Scope\"","type":"string"},"multi_select":{"description":"true when several options may be chosen","type":"boolean"},"options":{"items":{"additionalProperties":false,"properties":{"description":{"description":"one line: what choosing it means","type":"string"},"label":{"description":"a few words, the choice itself","type":"string"}},"required":["label"],"type":"object"},"maxItems":6,"minItems":2,"type":"array"},"question":{"description":"the question, a full sentence ending in a question mark","type":"string"}},"required":["question","options"],"type":"object"},"maxItems":4,"minItems":1,"type":"array"},"title":{"description":"a few words saying what this call does, for the person to read while it runs (e.g. \"Reading play's query\")","type":"string"}},"required":["questions"],"type":"object"}}]
+0 m2: system "You can ask the person structured questions with ask_user; it shows a small form and waits for the answer.\n- Ask when a choice is the person's to make and the answer changes what you do next: a preference, a scope, which of several readings they meant. When a sensible default exists, take it and say so instead.\n- Group related questions into one call, at most 4, each with 2 to 6 options; set multi_select when several options may apply. Put your recommendation first and say so in its description.\n- The person may add a note to a chosen option, write an answer of their own under other, or skip the form; after a skip, go on with your best judgement and say what you assumed."
+1 m3: user "write me the report"
+## request sha256=09698601d8c43bf56d3b962ddb0e9d6105b11e86c7951c8bab09194c08b84fa1 bytes=2707 model=m max_tokens=0 tool_choice=""
+tools: =t1
+0 =m2
+1 =m3
+2 m4: assistant tool_calls=[{"Id":"q1","Name":"ask_user","Arguments":"{\"questions\":[{\"question\":\"Which scope?\",\"header\":\"Scope\",\"options\":[{\"label\":\"Whole\",\"description\":\"everything\"},{\"label\":\"Part\"}]},{\"question\":\"Which tone?\",\"multi_select\":true,\"options\":[{\"label\":\"Formal\"},{\"label\":\"Brief\"},{\"label\":\"Warm\"}]}]}"}] ""
+3 m5: tool answers=q1 "{\"answers\":[{\"question\":\"Which scope?\",\"chosen\":[{\"label\":\"Part\",\"note\":\"the second half\"}]},{\"question\":\"Which tone?\",\"chosen\":[{\"label\":\"Formal\"},{\"label\":\"Warm\"}],\"other\":\"and short\"}],\"skipped\":false}"
+## request sha256=2cea529b31d50094aa2e6215dfdf39516f900f71d2190a52a607fe4c58cde089 bytes=3101 model=m max_tokens=0 tool_choice=""
+tools: =t1
+0 =m2
+1 =m3
+2 =m4
+3 =m5
+4 m6: assistant tool_calls=[{"Id":"q2","Name":"ask_user","Arguments":"{\"questions\":[{\"question\":\"Really?\",\"options\":[{\"label\":\"Yes\"},{\"label\":\"No\"}]}]}"}] ""
+5 m7: tool answers=q2 "{\"skipped\":true,\"then\":\"the person skipped these questions: go on with your best judgement and say what you assumed\"}"
+## request sha256=5310b41eeab25bbc8e6d15cf8f16f23e1533301ef14ec1f49ed5c32a98b5aa62 bytes=3339 model=m max_tokens=0 tool_choice=""
+tools: =t1
+0 =m2
+1 =m3
+2 =m4
+3 =m5
+4 =m6
+5 =m7
+6 m8: assistant tool_calls=[{"Id":"q3","Name":"ask_user","Arguments":"{\"questions\":[]}"}] ""
+7 m9: tool answers=q3 "error: ask 1 to 4 questions in one call, not 0"
+## turn 1 ended
+answer: "Here is the report."
+activity: asked 2 questions · Scope: Part (the second half); Which tone?: Formal, Warm, “and short”
+activity: asked 1 question · skipped
+activity: ask_user: ask 1 to 4 questions in one call, not 0
+calls: 4, omitTo: 0
+history: 9 messages, omitTo 0, parentSet true
+  0 system "You can ask the person structured questions with ask_user; it shows a small form…"
+  1 user "write me the report"
+  2 assistant tool_calls=1 ""
+  3 tool answers=q1 "{\"answers\":[{\"question\":\"Which scope?\",\"chosen\":[{\"label\":\"Part\",\"note\":\"the sec…"
+  4 assistant tool_calls=1 ""
+  5 tool answers=q2 "{\"skipped\":true,\"then\":\"the person skipped these questions: go on with your best…"
+  6 assistant tool_calls=1 ""
+  7 tool answers=q3 "error: ask 1 to 4 questions in one call, not 0"
+  8 assistant "Here is the report."

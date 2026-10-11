@@ -16,12 +16,9 @@ import (
 // no task; arrange_windows, raise_window and place_window change it under
 // the task's grant.
 
-// maxWindowRows bounds what query_windows hands the model, in bytes of JSON
-// lines; a desktop has tens of windows, so only a statement that ignores
-// the table's shape reaches it.
-const maxWindowRows = 16 << 10
-
-func (inst *coordinator) queryWindows(ctx context.Context, table string, sql string) (content string, activity string) {
+// queryWindows runs query_windows; the rows the model reads are cut at
+// limit bytes of JSON lines, the registry's budget for the tool.
+func (inst *coordinator) queryWindows(ctx context.Context, table string, sql string, limit int) (content string, activity string) {
 	if inst.kq == nil {
 		return "error: this window cannot read keelson tables", "query_windows: no client"
 	}
@@ -34,8 +31,8 @@ func (inst *coordinator) queryWindows(ctx context.Context, table string, sql str
 		return "error: " + err.Error(), "query_windows: " + err.Error()
 	}
 	body := string(res.Body)
-	if len(body) > maxWindowRows {
-		body = body[:maxWindowRows] + "\n… cut at " + strconv.Itoa(maxWindowRows) + " bytes; select fewer columns or rows"
+	if len(body) > limit {
+		body = body[:limit] + "\n… cut at " + strconv.Itoa(limit) + " bytes; select fewer columns or rows"
 	}
 	rows := strings.Count(strings.TrimSpace(body), "\n") + 1
 	if strings.TrimSpace(body) == "" {

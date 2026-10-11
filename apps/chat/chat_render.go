@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"github.com/stergiotis/boxer/public/keelson/runtime/llm/tokenmeter"
 	"strconv"
 	"strings"
 	"time"
@@ -60,10 +61,11 @@ const (
 	tipOpenCall   = "Open the call's row of keelson('llm_calls') in play"
 	tipMdedit     = "Open this conversation as a markdown document in mdedit — a document of its own, not autosaved: save it there to keep it"
 
-	// contextBarW is the context meter's width; contextWarnFrac how full
-	// the context is when the meter turns and the composer warns.
-	contextBarW     float32 = 180
-	contextWarnFrac float32 = 0.8
+	// contextBarW is the context meter's width; contextWarnPercent how
+	// full the context is, in percent of the model's size, when the meter
+	// turns and the composer warns — the one meter decides (tokenmeter).
+	contextBarW        float32 = 180
+	contextWarnPercent int64   = 80
 )
 
 var (
@@ -117,6 +119,7 @@ func (inst *App) render() {
 	inst.renderStatsPanel()
 	inst.renderSettingsPanel()
 	inst.renderArtefactPanel()
+	inst.renderRunsPanel()
 	for range c.PanelCentralInside().KeepIter() {
 		if len(inst.conv.entries) == 0 && inst.pending == nil {
 			inst.renderEmpty()
@@ -144,6 +147,7 @@ func (inst *App) renderBar() {
 		inst.renderSettingsToggle()
 		inst.renderStatsToggle()
 		inst.renderArtefactToggle()
+		inst.renderRunsToggle()
 		inst.renderTurnState()
 	}
 	// A row of its own for what the conversation is: the controls above
@@ -298,7 +302,7 @@ func (inst *App) renderRename() {
 // once the size is known, and a count without it.
 func (inst *App) renderContext() {
 	conv := inst.conv
-	used := int64(conv.lastIn) + int64(conv.lastOut)
+	used := tokenmeter.Used(conv.lastIn, conv.lastOut, nil)
 	if used <= 0 {
 		return
 	}
@@ -309,11 +313,11 @@ func (inst *App) renderContext() {
 		}
 		return
 	}
-	frac := float32(used) / float32(limit)
+	frac := tokenmeter.Fraction(used, limit)
 	tip := tipContext + " The size is " + strconv.FormatInt(limit, 10) + " tokens, from " + inst.model.ContextSource + "."
 	for range c.HoverText(tip).KeepIter() {
 		bar := c.ProgressBar(min(frac, 1)).DesiredWidth(contextBarW).Text("context " + tokens(used) + " / " + tokens(limit))
-		if frac >= contextWarnFrac {
+		if tokenmeter.Over(used, limit, contextWarnPercent) {
 			bar = bar.Fill(color.Hex(styletokens.WarningDefault.AsHex()))
 		}
 		bar.Send()
@@ -325,8 +329,8 @@ func (inst *App) renderContext() {
 func (inst *App) contextWarning() (line string, ok bool) {
 	conv := inst.conv
 	limit := int64(inst.model.ContextTokens)
-	used := int64(conv.lastIn) + int64(conv.lastOut)
-	if limit <= 0 || float32(used) < contextWarnFrac*float32(limit) {
+	used := tokenmeter.Used(conv.lastIn, conv.lastOut, nil)
+	if !tokenmeter.Over(used, limit, contextWarnPercent) {
 		return "", false
 	}
 	pct := strconv.FormatInt(used*100/limit, 10)

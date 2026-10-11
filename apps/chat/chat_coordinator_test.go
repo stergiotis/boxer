@@ -35,6 +35,13 @@ type noteSnap struct{ text string }
 type setNoteArgs struct{ Text string }
 type noteResult struct{ Text string }
 
+// publishNoteArgs names where publish_note publishes: a consequential
+// command a grant destination publish:<prefix> consents to (ADR-0288
+// §SD4).
+type publishNoteArgs struct {
+	Name string `json:"name"`
+}
+
 const notesId app.AppIdT = "github.com/x/apps/notes"
 
 var noteOps = func() *appops.Set[*note, noteSnap] {
@@ -48,6 +55,11 @@ var noteOps = func() *appops.Set[*note, noteSnap] {
 			n.text = in.Text
 			return appops.None{}, nil
 		})
+	appops.Command(s, app.OperationSpec{Name: "publish_note", Version: 1, Summary: "publish the note under a name", Effect: app.OperationEffectConsequential,
+		Reads: []string{"text"}, Agents: true, Consent: app.OperationConsent{Class: app.ConsentClassPublish, Arg: "name"}},
+		func(n *note, call app.OperationCall, in publishNoteArgs) (appops.None, error) {
+			return appops.None{}, nil
+		})
 	return s
 }()
 
@@ -58,6 +70,49 @@ type noteHost struct {
 	engines map[uint64]*opengine.Engine
 	notes   map[uint64]*note
 	scene   *inscribe.Scene
+	// frameMu holds the frame goroutine still while the person changes a
+	// note between frames.
+	frameMu sync.Mutex
+	// submitted are the operation calls the dispatcher handed the host, in
+	// order: what the preservation harness records (chat_preserve_test.go).
+	submitted []submittedOp
+}
+
+// submittedOp is one operation call as the host received it.
+type submittedOp struct {
+	window uint64
+	op     string
+	writer string
+	// args are the call's arguments as canonical JSON.
+	args string
+}
+
+// submit records the call and hands it to the window's engine.
+func (inst *noteHost) submit(key uint64, op string, req opwire.CallRequest) (out opwire.Outcome) {
+	args := "{}"
+	if len(req.Args) > 0 {
+		var v any
+		if buscodec.NewCBOR().Decode(req.Args, &v) == nil {
+			if b, err := json.Marshal(v, json.Deterministic(true)); err == nil {
+				args = string(b)
+			}
+		}
+	}
+	inst.mu.Lock()
+	inst.submitted = append(inst.submitted, submittedOp{window: key, op: op, writer: req.Writer, args: args})
+	inst.mu.Unlock()
+	return inst.eng(key).Submit(op, req)
+}
+
+// person changes a note as the person would, between two frames: the
+// engine sees it as an observed change by the person, not a command.
+func (inst *noteHost) person(key uint64, text string) {
+	inst.frameMu.Lock()
+	defer inst.frameMu.Unlock()
+	inst.mu.Lock()
+	n := inst.notes[key]
+	inst.mu.Unlock()
+	n.text = text
 }
 
 func (inst *noteHost) Marks() *inscribe.Scene {
@@ -137,12 +192,14 @@ func (inst *noteHost) frames(ctx context.Context) {
 			engs = append(engs, e)
 		}
 		inst.mu.Unlock()
+		inst.frameMu.Lock()
 		for _, e := range engs {
 			e.BeginFrame()
 			e.ApplyQueued()
 			e.TakeSnapshot()
 			e.EndFrame()
 		}
+		inst.frameMu.Unlock()
 		time.Sleep(5 * time.Millisecond)
 	}
 }
@@ -154,6 +211,8 @@ type scriptedModel struct {
 	replies   []openaichat.CompletionResponse
 	seen      []openaichat.CompletionRequest
 	failAfter int
+	// fail, when set, answers every call past the script's end.
+	fail error
 }
 
 func (inst *scriptedModel) Complete(_ context.Context, req openaichat.CompletionRequest) (openaichat.CompletionResponse, error) {
@@ -164,6 +223,9 @@ func (inst *scriptedModel) Complete(_ context.Context, req openaichat.Completion
 		return openaichat.CompletionResponse{}, context.Canceled
 	}
 	if len(inst.replies) == 0 {
+		if inst.fail != nil {
+			return openaichat.CompletionResponse{}, inst.fail
+		}
 		return openaichat.CompletionResponse{Content: "nothing more", FinishReason: "stop"}, nil
 	}
 	r := inst.replies[0]
@@ -223,8 +285,9 @@ func TestTheCoordinatorsToolLoop(t *testing.T) {
 }
 
 // A turn that called tools and stopped without an answer keeps its calls
-// in the transcript and marks the person's message unanswered; history
-// stays as it was, since an unanswered turn is not resent (ADR-0265 §SD3).
+// in the transcript and marks the person's message unanswered; the journal
+// drops it from the projection, since an unanswered turn is not resent
+// (ADR-0265 §SD3).
 func TestAStoppedTurnKeepsItsCallsShown(t *testing.T) {
 	conv := newConversation()
 	req := conv.request("go")
@@ -234,7 +297,6 @@ func TestAStoppedTurnKeepsItsCallsShown(t *testing.T) {
 	assert.True(t, conv.entries[0].failed)
 	assert.Contains(t, conv.entries[0].reason, "24 rounds")
 	assert.Equal(t, speakerTool, conv.entries[1].speaker)
-	assert.Empty(t, conv.history)
 }
 
 // coordRig wires a coordinator to a note host through the dispatcher under
@@ -261,7 +323,7 @@ func coordRig(t *testing.T, bus *inprocbus.Inst, model *scriptedModel, opTools b
 	_, err = hostClient.Subscribe(opwire.Pattern, func(msg *app.Msg) {
 		_, key, op, _ := opwire.ParseSubject(msg.Subject)
 		req, _ := buscodec.Decode[opwire.CallRequest](msg.Payload)
-		_ = buscodec.Reply(hostClient.Publish, msg.Reply, opwire.CallReply{V: opwire.WireVersion, Outcome: host.eng(key).Submit(op, req)})
+		_ = buscodec.Reply(hostClient.Publish, msg.Reply, opwire.CallReply{V: opwire.WireVersion, Outcome: host.submit(key, op, req)})
 	})
 	require.NoError(t, err)
 	asvc, err := agent.NewService(bus, zerolog.Nop(), agent.Config{Registry: reg, Host: host, TestGrants: true, Pace: time.Millisecond})

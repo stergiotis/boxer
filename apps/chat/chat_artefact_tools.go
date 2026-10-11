@@ -20,16 +20,6 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/markdown/mdspan"
 )
 
-// artefactPrompt is the system message's part for a conversation with an
-// artefact.
-const artefactPrompt = `This conversation has an artefact: one markdown document (Obsidian-flavoured: wikilinks, callouts, tags, frontmatter, footnotes) that you build with the person. They see it in a panel beside the conversation.
-- Put the document's content in the artefact, not in your answer; answer with a short account of what you changed and what is open.
-- Read before you write: artefact_read gives numbered lines and the revision, artefact_outline the headings with their line spans. Every write names base_revision, the revision you read; a write against an older one is refused — read again.
-- Prefer small writes: artefact_edit replaces a text that occurs exactly once, artefact_replace_section a section's body by heading path, artefact_insert adds lines; artefact_write replaces everything and suits a first draft.
-- Each write returns the lint findings for the lines it changed; fix what they report. artefact_lint checks the whole document and artefact_inspect lists its links, tags, callouts, code blocks and footnotes.
-- The frontmatter's chat_* properties (conversation, run, model, start time and more) are the chat's: it writes them into every revision; leave them as they are, keep the frontmatter valid YAML, and add your own properties beside them.
-- The person's settings decide whether you may write and whether each write waits for them; a rejected change is theirs to explain — ask, do not repeat it.`
-
 // maxReadLines bounds one artefact_read; maxFindMatches one artefact_find.
 const (
 	maxReadLines   = 1500
@@ -39,44 +29,18 @@ const (
 
 var artLinter = mdlint.NewDefaultLinter()
 
-// artefactTools are the tools for the artefact; write adds the writes.
+// artefactTools are the tools for the artefact as the registry declares
+// them; write adds the writes.
 func artefactTools(write bool) (out []openaichat.Tool) {
-	out = []openaichat.Tool{
-		{Name: "artefact_read", Description: "Read the artefact, or a range of its lines, with each line numbered, and its revision.",
-			Parameters: toolSchema(`{"type":"object","properties":{"from_line":{"type":"integer","minimum":1},"to_line":{"type":"integer","minimum":1}},"additionalProperties":false}`)},
-		{Name: "artefact_outline", Description: "List the artefact's headings: level, heading path, slug, and the line span of each section.",
-			Parameters: toolSchema(`{"type":"object","properties":{},"additionalProperties":false}`)},
-		{Name: "artefact_find", Description: "Find a text or a regular expression (RE2) in the artefact; returns line, column and the line of each match.",
-			Parameters: toolSchema(`{"type":"object","properties":{"pattern":{"type":"string"},"regex":{"type":"boolean"},"case_sensitive":{"type":"boolean"}},"required":["pattern"],"additionalProperties":false}`)},
-		{Name: "artefact_inspect", Description: "The artefact's parsed structure: frontmatter properties, links and wikilinks, embeds, tags, callouts, code blocks and footnotes, each with its line.",
-			Parameters: toolSchema(`{"type":"object","properties":{},"additionalProperties":false}`)},
-		{Name: "artefact_lint", Description: "Check the whole artefact for markdown that renders differently from what was meant: links to missing headings, skipped heading levels, unclosed fences, invalid frontmatter, footnotes without definitions.",
-			Parameters: toolSchema(`{"type":"object","properties":{},"additionalProperties":false}`)},
+	if write {
+		return toolsOfGroups(toolGroupArtefactRead, toolGroupArtefactWrite)
 	}
-	if !write {
-		return
-	}
-	base := `"base_revision":{"type":"integer","minimum":0,"description":"the revision you read"}`
-	heading := `"heading":{"type":"array","items":{"type":"string"},"minItems":1,"description":"heading path, outermost first; the last element names the heading, the ones before its nearest ancestors"}`
-	out = append(out,
-		openaichat.Tool{Name: "artefact_write", Description: "Replace the whole artefact with text.",
-			Parameters: toolSchema(`{"type":"object","properties":{` + base + `,"text":{"type":"string"}},"required":["base_revision","text"],"additionalProperties":false}`)},
-		openaichat.Tool{Name: "artefact_edit", Description: "Replace old_text, which must occur exactly once (or every occurrence with replace_all), with new_text.",
-			Parameters: toolSchema(`{"type":"object","properties":{` + base + `,"old_text":{"type":"string"},"new_text":{"type":"string"},"replace_all":{"type":"boolean"}},"required":["base_revision","old_text","new_text"],"additionalProperties":false}`)},
-		openaichat.Tool{Name: "artefact_insert", Description: "Insert lines before a line number (one past the last line appends), or at the start or end of a section named by heading path.",
-			Parameters: toolSchema(`{"type":"object","properties":{` + base + `,"text":{"type":"string"},"line":{"type":"integer","minimum":1},` + heading + `,"at":{"type":"string","enum":["start","end"],"description":"with heading: right after the heading line, or before the next heading"}},"required":["base_revision","text"],"additionalProperties":false}`)},
-		openaichat.Tool{Name: "artefact_replace_section", Description: "Replace the body of a section, named by heading path, keeping its heading; with_heading replaces the heading line too, and body must then start with the new heading.",
-			Parameters: toolSchema(`{"type":"object","properties":{` + base + `,` + heading + `,"body":{"type":"string"},"with_heading":{"type":"boolean"}},"required":["base_revision","heading","body"],"additionalProperties":false}`)},
-		openaichat.Tool{Name: "artefact_set_frontmatter", Description: "Set or delete top-level frontmatter properties; the others, their order and comments stay.",
-			Parameters: toolSchema(`{"type":"object","properties":{` + base + `,"set":{"type":"object"},"delete":{"type":"array","items":{"type":"string"}}},"required":["base_revision"],"additionalProperties":false}`)},
-	)
-	return
+	return toolsOfGroups(toolGroupArtefactRead)
 }
 
-// isArtefactTool says whether a tool name is one of the artefact's.
-func isArtefactTool(name string) bool { return strings.HasPrefix(name, "artefact_") }
-
-// isArtefactWrite says whether an artefact tool changes the document.
+// isArtefactWrite says whether an artefact tool changes the document: the
+// registry's write group, spelled out so the registry's initialisation does
+// not depend on the calls it dispatches.
 func isArtefactWrite(name string) bool {
 	switch name {
 	case "artefact_write", "artefact_edit", "artefact_insert", "artefact_replace_section", "artefact_set_frontmatter":
@@ -119,6 +83,11 @@ func (inst toolArgs) strs(k string) (out []string) {
 func (inst *coordinator) artefactCall(ctx context.Context, o toolOrigin, name string, raw map[string]any, art *artefact) (content string, activity string) {
 	args := toolArgs(raw)
 	n, text := art.head()
+	if !isArtefactWrite(name) {
+		// What a read returns is the head's text: a model's own earlier
+		// output when a model wrote it (ADR-0311 §SD4).
+		inst.noteArtefactWriter(art)
+	}
 	switch name {
 	case "artefact_read":
 		return artRead(n, text, args), name + " · revision " + strconv.Itoa(n)

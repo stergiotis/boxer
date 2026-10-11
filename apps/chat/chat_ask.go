@@ -34,26 +34,8 @@ const (
 	maxHeaderRunes = 16
 )
 
-// questionsPrompt is the system message's part for a conversation with
-// Questions on.
-const questionsPrompt = `You can ask the person structured questions with ask_user; it shows a small form and waits for the answer.
-- Ask when a choice is the person's to make and the answer changes what you do next: a preference, a scope, which of several readings they meant. When a sensible default exists, take it and say so instead.
-- Group related questions into one call, at most 4, each with 2 to 6 options; set multi_select when several options may apply. Put your recommendation first and say so in its description.
-- The person may add a note to a chosen option, write an answer of their own under other, or skip the form; after a skip, go on with your best judgement and say what you assumed.`
-
-// askTool is ask_user's definition.
-func askTool() (t openaichat.Tool) {
-	return openaichat.Tool{Name: "ask_user",
-		Description: "Ask the person one to " + strconv.Itoa(maxAskQuestions) + " questions as a form of options, shown inline in the conversation. Waits for the person's answer.",
-		Parameters: toolSchema(`{"type":"object","properties":{"questions":{"type":"array","minItems":1,"maxItems":` + strconv.Itoa(maxAskQuestions) + `,"items":{"type":"object","properties":{` +
-			`"question":{"type":"string","description":"the question, a full sentence ending in a question mark"},` +
-			`"header":{"type":"string","description":"a label of one or two words shown as a chip, e.g. \"Scope\""},` +
-			`"multi_select":{"type":"boolean","description":"true when several options may be chosen"},` +
-			`"options":{"type":"array","minItems":` + strconv.Itoa(minAskOptions) + `,"maxItems":` + strconv.Itoa(maxAskOptions) + `,"items":{"type":"object","properties":{` +
-			`"label":{"type":"string","description":"a few words, the choice itself"},` +
-			`"description":{"type":"string","description":"one line: what choosing it means"}},"required":["label"],"additionalProperties":false}}},` +
-			`"required":["question","options"],"additionalProperties":false}}},"required":["questions"],"additionalProperties":false}`)}
-}
+// askTool is ask_user's definition, as the registry declares it.
+func askTool() (t openaichat.Tool) { return lookupTool("ask_user").tool() }
 
 type askOption struct {
 	Label       string `json:"label"`
@@ -238,28 +220,6 @@ func plural(n int, noun string) (s string) {
 		s += "s"
 	}
 	return
-}
-
-// systemPrompt is the first message of a conversation with Apps or
-// Questions on.
-func systemPrompt(apps bool, questions bool) (s string) {
-	return systemPromptOf(apps, questions, false)
-}
-
-// systemPromptOf is the first message of a conversation with Apps,
-// Questions or the artefact on: each one's part, in that order.
-func systemPromptOf(apps bool, questions bool, artefact bool) (s string) {
-	parts := make([]string, 0, 3)
-	if apps {
-		parts = append(parts, coordinatorPrompt)
-	}
-	if questions {
-		parts = append(parts, questionsPrompt)
-	}
-	if artefact {
-		parts = append(parts, artefactPrompt+"\n"+imagePrompt)
-	}
-	return strings.Join(parts, "\n\n")
 }
 
 // askForm is the person's side of an open question: per question, which

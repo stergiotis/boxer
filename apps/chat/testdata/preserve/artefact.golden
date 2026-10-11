@@ -1,0 +1,263 @@
+# turn 1: "draft a plan"
+## request sha256=689224e02e409b396658d7982e456e95a5505688570e40c188f7355468b075e7 bytes=10509 model=m max_tokens=0 tool_choice=""
+tools t1: [{"Name":"artefact_read","Description":"Read the artefact, or a range of its lines, with each line numbered, and its revision.","Parameters":{"additionalProperties":false,"properties":{"from_line":{"minimum":1,"type":"integer"},"title":{"description":"a few words saying what this call does, for the person to read while it runs (e.g. \"Reading play's query\")","type":"string"},"to_line":{"minimum":1,"type":"integer"}},"type":"object"}},{"Name":"artefact_outline","Description":"List the artefact's headings: level, heading path, slug, and the line span of each section.","Parameters":{"additionalProperties":false,"properties":{"title":{"description":"a few words saying what this call does, for the person to read while it runs (e.g. \"Reading play's query\")","type":"string"}},"type":"object"}},{"Name":"artefact_find","Description":"Find a text or a regular expression (RE2) in the artefact; returns line, column and the line of each match.","Parameters":{"additionalProperties":false,"properties":{"case_sensitive":{"type":"boolean"},"pattern":{"type":"string"},"regex":{"type":"boolean"},"title":{"description":"a few words saying what this call does, for the person to read while it runs (e.g. \"Reading play's query\")","type":"string"}},"required":["pattern"],"type":"object"}},{"Name":"artefact_inspect","Description":"The artefact's parsed structure: frontmatter properties, links and wikilinks, embeds, tags, callouts, code blocks and footnotes, each with its line.","Parameters":{"additionalProperties":false,"properties":{"title":{"description":"a few words saying what this call does, for the person to read while it runs (e.g. \"Reading play's query\")","type":"string"}},"type":"object"}},{"Name":"artefact_lint","Description":"Check the whole artefact for markdown that renders differently from what was meant: links to missing headings, skipped heading levels, unclosed fences, invalid frontmatter, footnotes without definitions.","Parameters":{"additionalProperties":false,"properties":{"title":{"description":"a few words saying what this call does, for the person to read while it runs (e.g. \"Reading play's query\")","type":"string"}},"type":"object"}},{"Name":"artefact_write","Description":"Replace the whole artefact with text.","Parameters":{"additionalProperties":false,"properties":{"base_revision":{"description":"the revision you read","minimum":0,"type":"integer"},"text":{"type":"string"},"title":{"description":"a few words saying what this call does, for the person to read while it runs (e.g. \"Reading play's query\")","type":"string"}},"required":["base_revision","text"],"type":"object"}},{"Name":"artefact_edit","Description":"Replace old_text, which must occur exactly once (or every occurrence with replace_all), with new_text.","Parameters":{"additionalProperties":false,"properties":{"base_revision":{"description":"the revision you read","minimum":0,"type":"integer"},"new_text":{"type":"string"},"old_text":{"type":"string"},"replace_all":{"type":"boolean"},"title":{"description":"a few words saying what this call does, for the person to read while it runs (e.g. \"Reading play's query\")","type":"string"}},"required":["base_revision","old_text","new_text"],"type":"object"}},{"Name":"artefact_insert","Description":"Insert lines before a line number (one past the last line appends), or at the start or end of a section named by heading path.","Parameters":{"additionalProperties":false,"properties":{"at":{"description":"with heading: right after the heading line, or before the next heading","enum":["start","end"],"type":"string"},"base_revision":{"description":"the revision you read","minimum":0,"type":"integer"},"heading":{"description":"heading path, outermost first; the last element names the heading, the ones before its nearest ancestors","items":{"type":"string"},"minItems":1,"type":"array"},"line":{"minimum":1,"type":"integer"},"text":{"type":"string"},"title":{"description":"a few words saying what this call does, for the person to read while it runs (e.g. \"Reading play's query\")","type":"string"}},"required":["base_revision","text"],"type":"object"}},{"Name":"artefact_replace_section","Description":"Replace the body of a section, named by heading path, keeping its heading; with_heading replaces the heading line too, and body must then start with the new heading.","Parameters":{"additionalProperties":false,"properties":{"base_revision":{"description":"the revision you read","minimum":0,"type":"integer"},"body":{"type":"string"},"heading":{"description":"heading path, outermost first; the last element names the heading, the ones before its nearest ancestors","items":{"type":"string"},"minItems":1,"type":"array"},"title":{"description":"a few words saying what this call does, for the person to read while it runs (e.g. \"Reading play's query\")","type":"string"},"with_heading":{"type":"boolean"}},"required":["base_revision","heading","body"],"type":"object"}},{"Name":"artefact_set_frontmatter","Description":"Set or delete top-level frontmatter properties; the others, their order and comments stay.","Parameters":{"additionalProperties":false,"properties":{"base_revision":{"description":"the revision you read","minimum":0,"type":"integer"},"delete":{"items":{"type":"string"},"type":"array"},"set":{"type":"object"},"title":{"description":"a few words saying what this call does, for the person to read while it runs (e.g. \"Reading play's query\")","type":"string"}},"required":["base_revision"],"type":"object"}},{"Name":"artefact_images","Description":"List the artefact's screenshots: name, size, where each came from, whether its bytes were purged, and the budget's use.","Parameters":{"additionalProperties":false,"properties":{"title":{"description":"a few words saying what this call does, for the person to read while it runs (e.g. \"Reading play's query\")","type":"string"}},"type":"object"}},{"Name":"artefact_copy_image","Description":"Add a second name on an existing screenshot's bytes, e.g. to keep it before cropping.","Parameters":{"additionalProperties":false,"properties":{"base_revision":{"description":"the revision you read","minimum":0,"type":"integer"},"from":{"type":"string"},"name":{"description":"lower-case letters, digits, '.', '-' and '_', ending in .png; omitted, the chat picks screenshot-<n>.png","type":"string"},"title":{"description":"a few words saying what this call does, for the person to read while it runs (e.g. \"Reading play's query\")","type":"string"}},"required":["base_revision","from"],"type":"object"}},{"Name":"artefact_crop_image","Description":"Add a new screenshot cut out of an existing one, by a rect in its pixels (artefact_images gives each one's size).","Parameters":{"additionalProperties":false,"properties":{"base_revision":{"description":"the revision you read","minimum":0,"type":"integer"},"from":{"type":"string"},"h":{"minimum":1,"type":"integer"},"name":{"description":"lower-case letters, digits, '.', '-' and '_', ending in .png; omitted, the chat picks screenshot-<n>.png","type":"string"},"title":{"description":"a few words saying what this call does, for the person to read while it runs (e.g. \"Reading play's query\")","type":"string"},"w":{"minimum":1,"type":"integer"},"x":{"minimum":0,"type":"integer"},"y":{"minimum":0,"type":"integer"}},"required":["base_revision","from","x","y","w","h"],"type":"object"}},{"Name":"artefact_remove_image","Description":"Remove a screenshot's name. Its bytes stay while an earlier revision names them; purge frees them for good, and a revert cannot bring them back.","Parameters":{"additionalProperties":false,"properties":{"base_revision":{"description":"the revision you read","minimum":0,"type":"integer"},"name":{"type":"string"},"purge":{"type":"boolean"},"title":{"description":"a few words saying what this call does, for the person to read while it runs (e.g. \"Reading play's query\")","type":"string"}},"required":["base_revision","name"],"type":"object"}}]
+0 m2: system "This conversation has an artefact: one markdown document (Obsidian-flavoured: wikilinks, callouts, tags, frontmatter, footnotes) that you build with the person. They see it in a panel beside the conversation.\n- Put the document's content in the artefact, not in your answer; answer with a short account of what you changed and what is open.\n- Read before you write: artefact_read gives numbered lines and the revision, artefact_outline the headings with their line spans. Every write names base_revision, the revision you read; a write against an older one is refused — read again.\n- Prefer small writes: artefact_edit replaces a text that occurs exactly once, artefact_replace_section a section's body by heading path, artefact_insert adds lines; artefact_write replaces everything and suits a first draft.\n- Each write returns the lint findings for the lines it changed; fix what they report. artefact_lint checks the whole document and artefact_inspect lists its links, tags, callouts, code blocks and footnotes.\n- The frontmatter's chat_* properties (conversation, run, model, start time and more) are the chat's: it writes them into every revision; leave them as they are, keep the frontmatter valid YAML, and add your own properties beside them.\n- The person's settings decide whether you may write and whether each write waits for them; a rejected change is theirs to explain — ask, do not repeat it.\n- The artefact keeps screenshots beside the text: artefact_images lists them. artefact_capture takes a PNG of windows of your task (with Apps), artefact_crop_image cuts a part out as a new screenshot, artefact_copy_image adds a second name on the same bytes, artefact_remove_image removes a name (purge frees the bytes). The person sees the screenshots in the panel; you see one's pixels only through artefact_view_image, when the person's settings offer it. The screenshots have a budget; a change past it is refused."
+1 m3: system "The artefact is empty (revision 0)."
+2 m4: user "draft a plan"
+## request sha256=319a121ca4dc9685c7b6762367f7a251e362e031b946ac9a3733d21986ac7450 bytes=10736 model=m max_tokens=0 tool_choice=""
+tools: =t1
+0 =m2
+1 =m3
+2 =m4
+3 m5: assistant tool_calls=[{"Id":"a1","Name":"artefact_read","Arguments":"{}"}] ""
+4 m6: tool answers=a1 "revision 0 · 0 lines · the artefact is empty"
+## request sha256=258397ba1a95dbaaa60c60276eb6e71500c58f3230e5d7a88c4fc3e8a1829ea2 bytes=11101 model=m max_tokens=0 tool_choice=""
+tools: =t1
+0 =m2
+1 =m3
+2 =m4
+3 =m5
+4 =m6
+5 m7: assistant tool_calls=[{"Id":"a2","Name":"artefact_write","Arguments":"{\"base_revision\":0,\"text\":\"# Plan\\n\\nFirst.\\n\\n## Steps\\n\\n- one\\n\"}"}] ""
+6 m8: tool answers=a2 "{\"revision\":1,\"lines\":7,\"changed\":{\"first\":1,\"last\":7},\"unchanged\":false,\"rejected\":false}"
+## request sha256=51fe984b6632f698083b10fa77260cd746fc0468e1d933955a4474b3da803d18 bytes=11563 model=m max_tokens=0 tool_choice=""
+tools: =t1
+0 =m2
+1 =m3
+2 =m4
+3 =m5
+4 =m6
+5 =m7
+6 =m8
+7 m9: assistant tool_calls=[{"Id":"a3","Name":"artefact_outline","Arguments":"{}"}] ""
+8 m10: tool answers=a3 "<recalled source=\"self\" run=\"run-#1\" ord=\"0\">\n{\"revision\":1,\"lines\":7,\"headings\":[{\"level\":1,\"path\":[\"Plan\"],\"slug\":\"plan\",\"line\":1,\"last_line\":7},{\"level\":2,\"path\":[\"Plan\",\"Steps\"],\"slug\":\"steps\",\"line\":5,\"last_line\":7}]}\n</recalled>"
+## request sha256=788db3c20c84e5667dd4086575f7a49f351d4e21aea23249e3d7855cdcd6dd5f bytes=11928 model=m max_tokens=0 tool_choice=""
+tools: =t1
+0 =m2
+1 =m3
+2 =m4
+3 =m5
+4 =m6
+5 =m7
+6 =m8
+7 =m9
+8 =m10
+9 m11: assistant tool_calls=[{"Id":"a4","Name":"artefact_edit","Arguments":"{\"base_revision\":1,\"old_text\":\"First.\",\"new_text\":\"First, then second.\"}"}] ""
+10 m12: tool answers=a4 "{\"revision\":2,\"lines\":7,\"changed\":{\"first\":3,\"last\":3},\"unchanged\":false,\"rejected\":false}"
+## request sha256=0bda8fd8c3b31986b215862e9d2720d5cac329c7799ac6d26b978e59927bec1f bytes=12250 model=m max_tokens=0 tool_choice=""
+tools: =t1
+0 =m2
+1 =m3
+2 =m4
+3 =m5
+4 =m6
+5 =m7
+6 =m8
+7 =m9
+8 =m10
+9 =m11
+10 =m12
+11 m13: assistant tool_calls=[{"Id":"a5","Name":"artefact_edit","Arguments":"{\"base_revision\":1,\"old_text\":\"nowhere\",\"new_text\":\"x\"}"}] ""
+12 m14: tool answers=a5 "error: the artefact is at revision 2, not 1: read it again and redo the change"
+## request sha256=36bf7681245bb1d3b4ac71df0ae46095afafcd2ee4fcacb9394ca950d7ed58ea bytes=12623 model=m max_tokens=0 tool_choice=""
+tools: =t1
+0 =m2
+1 =m3
+2 =m4
+3 =m5
+4 =m6
+5 =m7
+6 =m8
+7 =m9
+8 =m10
+9 =m11
+10 =m12
+11 =m13
+12 =m14
+13 m15: assistant tool_calls=[{"Id":"a6","Name":"artefact_insert","Arguments":"{\"base_revision\":2,\"text\":\"- two\",\"heading\":[\"Plan\",\"Steps\"],\"at\":\"end\"}"}] ""
+14 m16: tool answers=a6 "{\"revision\":3,\"lines\":8,\"changed\":{\"first\":8,\"last\":8},\"unchanged\":false,\"rejected\":false}"
+## request sha256=c601a0abbf4fefdd9728997eee288b84a67b0e8906bd4c2b2e5beba50a3610b2 bytes=12981 model=m max_tokens=0 tool_choice=""
+tools: =t1
+0 =m2
+1 =m3
+2 =m4
+3 =m5
+4 =m6
+5 =m7
+6 =m8
+7 =m9
+8 =m10
+9 =m11
+10 =m12
+11 =m13
+12 =m14
+13 =m15
+14 =m16
+15 m17: assistant tool_calls=[{"Id":"a7","Name":"artefact_find","Arguments":"{\"pattern\":\"two\"}"}] ""
+16 m18: tool answers=a7 "<recalled source=\"self\" run=\"run-#1\" ord=\"0\">\n{\"revision\":3,\"matches\":[{\"line\":8,\"col\":3,\"text\":\"- two\"}],\"truncated\":false}\n</recalled>"
+## request sha256=b95914479fc7cd306c64d86eb30f4984235aee7d52abb07ec4679e59ed8dbd74 bytes=13260 model=m max_tokens=0 tool_choice=""
+tools: =t1
+0 =m2
+1 =m3
+2 =m4
+3 =m5
+4 =m6
+5 =m7
+6 =m8
+7 =m9
+8 =m10
+9 =m11
+10 =m12
+11 =m13
+12 =m14
+13 =m15
+14 =m16
+15 =m17
+16 =m18
+17 m19: assistant tool_calls=[{"Id":"a8","Name":"artefact_lint","Arguments":"{}"}] ""
+18 m20: tool answers=a8 "<recalled source=\"self\" run=\"run-#1\" ord=\"0\">\n{\"revision\":3,\"findings\":[]}\n</recalled>"
+## request sha256=7813a175bce7922da168f6d319366b212f5f151406f368494eb7f294b4a59f4c bytes=13555 model=m max_tokens=0 tool_choice=""
+tools: =t1
+0 =m2
+1 =m3
+2 =m4
+3 =m5
+4 =m6
+5 =m7
+6 =m8
+7 =m9
+8 =m10
+9 =m11
+10 =m12
+11 =m13
+12 =m14
+13 =m15
+14 =m16
+15 =m17
+16 =m18
+17 =m19
+18 =m20
+19 m21: assistant tool_calls=[{"Id":"a9","Name":"artefact_images","Arguments":"{}"}] ""
+20 m22: tool answers=a9 "{\"revision\":3,\"images\":[],\"budget\":{\"bytes\":0,\"bytes_limit\":268435456,\"names\":0,\"names_limit\":64}}"
+## turn 1 ended
+answer: "Drafted."
+activity: artefact_read · revision 0
+activity: artefact_write · revision 1 · lines 1–7
+activity: artefact_outline · revision 1
+activity: artefact_edit · revision 2 · line 3
+activity: artefact_edit: stale, at revision 2
+activity: artefact_insert · revision 3 · line 8
+activity: artefact_find · 1 match
+activity: artefact_lint · 0 findings
+activity: artefact_images · 0 screenshots
+calls: 10, omitTo: 0
+history: 22 messages, omitTo 0, parentSet true
+  0 system "This conversation has an artefact: one markdown document (Obsidian-flavoured: wi…"
+  1 system "The artefact is empty (revision 0)."
+  2 user "draft a plan"
+  3 assistant tool_calls=1 ""
+  4 tool answers=a1 "revision 0 · 0 lines · the artefact is empty"
+  5 assistant tool_calls=1 ""
+  6 tool answers=a2 "{\"revision\":1,\"lines\":7,\"changed\":{\"first\":1,\"last\":7},\"unchanged\":false,\"reject…"
+  7 assistant tool_calls=1 ""
+  8 tool answers=a3 "<recalled source=\"self\" run=\"run-#1\" ord=\"0\"> {\"revision\":1,\"lines…"
+  9 assistant tool_calls=1 ""
+  10 tool answers=a4 "{\"revision\":2,\"lines\":7,\"changed\":{\"first\":3,\"last\":3},\"unchanged\":false,\"reject…"
+  11 assistant tool_calls=1 ""
+  12 tool answers=a5 "error: the artefact is at revision 2, not 1: read it again and redo the change"
+  13 assistant tool_calls=1 ""
+  14 tool answers=a6 "{\"revision\":3,\"lines\":8,\"changed\":{\"first\":8,\"last\":8},\"unchanged\":false,\"reject…"
+  15 assistant tool_calls=1 ""
+  16 tool answers=a7 "<recalled source=\"self\" run=\"run-#1\" ord=\"0\"> {\"revision\":3,\"match…"
+  17 assistant tool_calls=1 ""
+  18 tool answers=a8 "<recalled source=\"self\" run=\"run-#1\" ord=\"0\"> {\"revision\":3,\"findi…"
+  19 assistant tool_calls=1 ""
+  20 tool answers=a9 "{\"revision\":3,\"images\":[],\"budget\":{\"bytes\":0,\"bytes_limit\":268435456,\"names\":0,…"
+  21 assistant "Drafted."
+# turn 2: "and now?"
+## request sha256=ca7caef8e17baaf17b07ca06b757fbd73493b11f2f5b74fc7eae97978b17ecdb bytes=13727 model=m max_tokens=0 tool_choice=""
+tools: =t1
+0 =m2
+1 =m3
+2 =m4
+3 =m5
+4 =m6
+5 =m7
+6 =m8
+7 =m9
+8 =m10
+9 =m11
+10 =m12
+11 =m13
+12 =m14
+13 =m15
+14 =m16
+15 =m17
+16 =m18
+17 =m19
+18 =m20
+19 =m21
+20 =m22
+21 m23: assistant "Drafted."
+22 m24: system "The artefact is at revision 4, 7 lines. Headings: # Plan (1); ## Steps (5)."
+23 m25: user "and now?"
+## request sha256=6946365c3e0650918049e41e1c41caf0b647662ae65c24358501e7db4214833d bytes=13991 model=m max_tokens=0 tool_choice=""
+tools: =t1
+0 =m2
+1 =m3
+2 =m4
+3 =m5
+4 =m6
+5 =m7
+6 =m8
+7 =m9
+8 =m10
+9 =m11
+10 =m12
+11 =m13
+12 =m14
+13 =m15
+14 =m16
+15 =m17
+16 =m18
+17 =m19
+18 =m20
+19 =m21
+20 =m22
+21 =m23
+22 =m24
+23 =m25
+24 m26: assistant tool_calls=[{"Id":"b1","Name":"artefact_read","Arguments":"{\"from_line\":1,\"to_line\":2}"}] ""
+25 m27: tool answers=b1 "revision 4 · 7 lines · lines 1–2\n1\t# Plan\n2\t\n"
+## turn 2 ended
+answer: "Back at the first draft."
+activity: artefact_read · revision 4
+calls: 2, omitTo: 0
+history: 27 messages, omitTo 0, parentSet true
+  0 system "This conversation has an artefact: one markdown document (Obsidian-flavoured: wi…"
+  1 system "The artefact is empty (revision 0)."
+  2 user "draft a plan"
+  3 assistant tool_calls=1 ""
+  4 tool answers=a1 "revision 0 · 0 lines · the artefact is empty"
+  5 assistant tool_calls=1 ""
+  6 tool answers=a2 "{\"revision\":1,\"lines\":7,\"changed\":{\"first\":1,\"last\":7},\"unchanged\":false,\"reject…"
+  7 assistant tool_calls=1 ""
+  8 tool answers=a3 "<recalled source=\"self\" run=\"run-#1\" ord=\"0\"> {\"revision\":1,\"lines…"
+  9 assistant tool_calls=1 ""
+  10 tool answers=a4 "{\"revision\":2,\"lines\":7,\"changed\":{\"first\":3,\"last\":3},\"unchanged\":false,\"reject…"
+  11 assistant tool_calls=1 ""
+  12 tool answers=a5 "error: the artefact is at revision 2, not 1: read it again and redo the change"
+  13 assistant tool_calls=1 ""
+  14 tool answers=a6 "{\"revision\":3,\"lines\":8,\"changed\":{\"first\":8,\"last\":8},\"unchanged\":false,\"reject…"
+  15 assistant tool_calls=1 ""
+  16 tool answers=a7 "<recalled source=\"self\" run=\"run-#1\" ord=\"0\"> {\"revision\":3,\"match…"
+  17 assistant tool_calls=1 ""
+  18 tool answers=a8 "<recalled source=\"self\" run=\"run-#1\" ord=\"0\"> {\"revision\":3,\"findi…"
+  19 assistant tool_calls=1 ""
+  20 tool answers=a9 "{\"revision\":3,\"images\":[],\"budget\":{\"bytes\":0,\"bytes_limit\":268435456,\"names\":0,…"
+  21 assistant "Drafted."
+  22 system "The artefact is at revision 4, 7 lines. Headings: # Plan (1); ## Steps (5)."
+  23 user "and now?"
+  24 assistant tool_calls=1 ""
+  25 tool answers=b1 "revision 4 · 7 lines · lines 1–2 1 # Plan 2"
+  26 assistant "Back at the first draft."

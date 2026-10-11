@@ -156,6 +156,11 @@ func (inst *coordinator) operationTools(ctx context.Context) (out []openaichat.T
 		return
 	}
 	typed := make(map[string]typedOp)
+	inst.mu.Lock()
+	for _, w := range windows {
+		inst.windowApps[w.Instance] = w.App
+	}
+	inst.mu.Unlock()
 	for _, w := range windows {
 		if !w.Ops || w.Load == "opening" || w.Load == "failed" {
 			continue
@@ -196,7 +201,27 @@ func (inst *coordinator) operationsOf(ctx context.Context, appId string) (ops []
 	inst.mu.Lock()
 	inst.opCache[appId] = ops
 	inst.mu.Unlock()
+	inst.noteEffects([]agent.AppOperations{{App: appId, Operations: ops}})
 	return
+}
+
+// noteEffects keeps the declared effect class of every operation a
+// describe_app answer names, by app, for effectOf.
+func (inst *coordinator) noteEffects(apps []agent.AppOperations) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	for _, a := range apps {
+		m := inst.opEffects[a.App]
+		if m == nil {
+			m = make(map[string]string)
+			inst.opEffects[a.App] = m
+		}
+		for _, o := range a.Operations {
+			if o.Effect != "" {
+				m[o.Name] = o.Effect
+			}
+		}
+	}
 }
 
 // withReason is an operation's argument schema with the one-line reason

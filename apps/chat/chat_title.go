@@ -11,6 +11,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
@@ -121,9 +122,40 @@ func (inst *App) maybeTitle() {
 	}
 	conv.titleAsked = true
 	req, cli, id := titleRequest(conv.id, conv.firstTurn, conv.keep, question, answer, sensitivity), inst.cli, conv.id
+	coord := inst.coord
+	if coord != nil {
+		// The call's row names the profile and route like the turn's
+		// (ADR-0310 §SD7).
+		req.Profile, req.Route = coord.profileRef()
+	}
 	inst.titleJob.Start(nil, bgjob.Spec{Kind: "chat-title", Title: "title the conversation"},
 		func(ctx context.Context) (out *titled, err error) {
+			// Journaled before it leaves (ADR-0308 §SD2): the intent names
+			// the call, the outcome its answer; neither is a message, and
+			// neither belongs to a turn, so the call reopens none.
+			var w *agentrun.Writer
+			if coord != nil {
+				w = coord.journalNow()
+			}
+			key := titlePurpose + "#" + req.Turn
+			if w != nil {
+				if _, err = coord.append(journalCtx(ctx), w, agentrun.Entry{Kind: agentrun.KindIntent, Key: key, Name: "title", Effect: agentrun.EffectNone,
+					Body: "ask the model for the conversation's title", Label: harnessLabel()}); err != nil {
+					return
+				}
+			}
 			res, err := cli.Complete(ctx, req)
+			if w != nil {
+				outcome := agentrun.Entry{Kind: agentrun.KindOutcome, Key: key, Name: res.CallId, Label: coord.replyLabel(), WriterRun: w.Run().Id, WriterTurn: req.Turn}
+				if err != nil {
+					outcome.Body = "error: " + err.Error()
+				} else {
+					outcome.Body, _ = jsonMarshal(replyBody{CallId: res.CallId, FinishReason: res.FinishReason, InputTokens: res.InputTokens, OutputTokens: res.OutputTokens})
+				}
+				if _, jerr := coord.append(journalCtx(ctx), w, outcome); jerr != nil && err == nil {
+					err = jerr
+				}
+			}
 			if err != nil {
 				return
 			}

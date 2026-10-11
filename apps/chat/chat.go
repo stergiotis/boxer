@@ -17,11 +17,12 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
+	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
+	"github.com/stergiotis/boxer/public/keelson/runtime/anchorstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
-	"github.com/stergiotis/boxer/public/llm/openaichat"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/chatview"
@@ -68,6 +69,16 @@ type App struct {
 	window uint64
 
 	conv *conversation
+	// journals is the host's run journal service (ADR-0308), the store the
+	// conversation's coordinator writes through; showRuns opens the
+	// Conversations panel (chat_resume.go), runs is its list, runsJob lists
+	// and resumeJob reopens a run.
+	journals  *agentrun.Client
+	anchors   anchorstore.StoreI
+	showRuns  bool
+	runs      []agentrun.Run
+	runsJob   bgjob.Runner[[]agentrun.Run]
+	resumeJob bgjob.Runner[resumed]
 	// turnMachine is where the turn stands, observed and mirrored each
 	// frame (chat_turnstate.go); turnChip draws it in the bar.
 	turnMachine *fsmview.Machine[turnStateE]
@@ -112,7 +123,16 @@ type App struct {
 	editing    *rewound
 	editedNext bool
 	action     bgjob.Runner[string]
-	note       status
+	// afterAction runs on the render thread once the action lands well;
+	// deleting is the run a delete in flight is tombstoning, which no turn
+	// starts over.
+	afterAction func()
+	deleting    string
+	note        status
+	// retiring are the coordinators of conversations this window moved on
+	// from, by run id, until their runs are closed: a resume of such a run
+	// waits for the close rather than racing it (ADR-0308 §SD9).
+	retiring map[string]*coordinator
 	// later holds the actions clicked while the transcript draws, run
 	// once it is drawn.
 	later []func()
@@ -179,7 +199,9 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	}
 	inst.agentCli = agent.NewClient(bus)
 	inst.kq = keelsonquery.NewClient(bus)
-	inst.coord = newCoordinator(inst.agentCli, inst.kq, inst.conv.id)
+	inst.journals = agentrun.NewClient(bus)
+	inst.anchors = anchorstore.NewClient(bus)
+	inst.coord = inst.newCoordinator(inst.conv.id)
 	inst.describe.Start(nil, bgjob.Spec{Kind: "chat-llm-describe", Title: "model"},
 		func(ctx context.Context) (d *llm.Description, err error) {
 			got, err := cli.Describe(ctx)
@@ -196,8 +218,15 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 // call (llm.cancel, ADR-0254).
 func (inst *App) Unmount(ctx app.MountContextI) (err error) {
 	inst.turn.Cancel()
+	if inst.coord != nil {
+		// The run closes with its last head (ADR-0314 §SD3), once the
+		// cancelled turn has written its tail.
+		inst.coord.retire()
+	}
 	inst.describe.Cancel()
 	inst.handover.Cancel()
+	inst.runsJob.Cancel()
+	inst.resumeJob.Cancel()
 	inst.action.Cancel()
 	inst.titleJob.Cancel()
 	inst.authJob.Cancel()
@@ -224,12 +253,16 @@ func (inst *App) drain() {
 	inst.drainHandover()
 	inst.drainAction()
 	inst.drainTitle()
+	inst.drainResume()
 	inst.syncAuthority()
 	// Mirrored at the end, whatever path drain leaves by: the state is what
 	// this frame's landing made of the turn.
 	defer inst.mirrorTurn()
 	if d, _, ok := inst.describe.TakeResult(); ok {
 		inst.model, inst.answered = *d, true
+		if inst.coord != nil {
+			inst.coord.setRoute(d.EndpointHost, d.Local, d.ContextTokens)
+		}
 	} else if snap := inst.describe.Snapshot(); snap.State == bgjob.StateFailed {
 		inst.describe.Invalidate()
 		reason := "the host did not answer llm.describe"
@@ -304,49 +337,45 @@ func (inst *App) startTurn(text string) (started bool) {
 	if inst.cli == nil || inst.pending != nil || strings.TrimSpace(text) == "" {
 		return false
 	}
+	if inst.conv.stranded {
+		inst.setNote("this conversation is read-only: it resumed under another prompt or tool set, or was deleted; New conversation starts over", true)
+		return false
+	}
+	if inst.deleting != "" && inst.deleting == inst.conv.id {
+		inst.setNote("this conversation is being deleted; New conversation starts over", true)
+		return false
+	}
 	conv := inst.conv
 	if !conv.started {
 		conv.keep, conv.apps, conv.questions, conv.artefact = inst.keep, inst.apps, inst.questions, inst.artefact
 	}
 	req := conv.request(text)
 	cli := inst.cli
-	var coord *coordinator
-	if conv.usesCoordinator() && inst.coord != nil {
-		coord = inst.coord
-		// The last turn's steps are not this one's.
-		coord.steps.reset()
-		coord.forgetRefusals()
-		coord.offer(conv.apps, conv.questions)
-		if conv.artefact {
-			coord.offerArtefact(conv.art)
-		}
-		if req.Messages[0].Role != openaichat.ChatRoleSystem {
-			req.Messages = append([]openaichat.Message{{Role: openaichat.ChatRoleSystem, Content: systemPromptOf(conv.apps, conv.questions, conv.artefact)}}, req.Messages...)
-		}
+	coord := inst.coord
+	if coord == nil {
+		return false
+	}
+	conv.coord = coord
+	// The last turn's steps are not this one's.
+	coord.steps.reset()
+	coord.forgetRefusals()
+	coord.offer(conv.apps, conv.questions)
+	if conv.artefact {
+		coord.offerArtefact(conv.art)
 	}
 	limit := clampRounds(int(inst.rounds))
-	if coord != nil {
-		// The limit the turn runs under, for its progress line.
-		coord.setRounds(limit)
-	}
+	// The limit the turn runs under, for its progress line.
+	coord.setRounds(limit)
+	logProfile()
 	ok := inst.turn.StartReporting(nil, bgjob.Spec{Kind: "chat-turn", Title: "answer"},
 		func(ctx context.Context, report bgjob.Reporter) (res *turnResult, err error) {
-			if coord != nil {
-				return runTurn(ctx, cli, coord, req, func(round int, doing string) {
-					note := "round " + strconv.Itoa(round+1) + " of " + strconv.Itoa(limit)
-					if doing != "" {
-						note += " · " + doing
-					}
-					report(uint64(round+1), uint64(limit), note)
-				})
-			}
-			got, err := cli.Complete(ctx, req)
-			if err != nil {
-				return
-			}
-			res = &turnResult{final: got, calls: []callStat{callStatOf(0, got)}, messages: append(append([]openaichat.Message(nil), req.Messages...),
-				openaichat.Message{Role: openaichat.ChatRoleAssistant, Content: got.Content, ToolCalls: got.ToolCalls})}
-			return
+			return runTurn(ctx, cli, coord, req, func(round int, doing string) {
+				note := "round " + strconv.Itoa(round+1) + " of " + strconv.Itoa(limit)
+				if doing != "" {
+					note += " · " + doing
+				}
+				report(uint64(round+1), uint64(limit), note)
+			})
 		})
 	if !ok {
 		return false
@@ -357,6 +386,30 @@ func (inst *App) startTurn(text string) (started bool) {
 	// The waiting bubble is at the end: follow it.
 	inst.view.SetFollow(true)
 	return true
+}
+
+// newCoordinator is a coordinator for a conversation, writing its journal
+// through the host's service and knowing its route.
+func (inst *App) newCoordinator(conversation string) (coord *coordinator) {
+	coord = newCoordinator(inst.agentCli, inst.kq, conversation)
+	switch {
+	case inst.journals != nil:
+		coord.store = inst.journals
+	case inst.coord != nil:
+		// Without the host's service the store is the window's own, kept
+		// across its conversations.
+		coord.store = inst.coord.store
+	}
+	coord.window = strconv.FormatUint(inst.window, 10)
+	if inst.anchors != nil {
+		coord.anchors = inst.anchors
+	} else if inst.coord != nil {
+		coord.anchors = inst.coord.anchors
+	}
+	if inst.answered {
+		coord.setRoute(inst.model.EndpointHost, inst.model.Local, inst.model.ContextTokens)
+	}
+	return
 }
 
 // newConversation stops a turn in flight — Invalidate cancels it and drops
@@ -378,10 +431,20 @@ func (inst *App) newConversation() {
 		}
 	}
 	inst.conv.art.close()
+	if inst.coord != nil {
+		// The run is closed once the turn it may still be writing has
+		// ended; the person's record of it stays, and a resume of it waits
+		// for the close.
+		if inst.retiring == nil {
+			inst.retiring = make(map[string]*coordinator)
+		}
+		inst.retiring[inst.coord.conversation] = inst.coord
+		inst.coord.retire()
+	}
 	inst.conv = newConversation()
 	inst.editing, inst.editedNext = nil, false
 	if inst.agentCli != nil {
-		inst.coord = newCoordinator(inst.agentCli, inst.kq, inst.conv.id)
+		inst.coord = inst.newCoordinator(inst.conv.id)
 	}
 	inst.view = chatview.State{}
 	inst.artView = artefactView{}

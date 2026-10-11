@@ -22,43 +22,17 @@ import (
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 )
 
-// imagePrompt is the system message's part for an artefact with screenshots.
-const imagePrompt = `- The artefact keeps screenshots beside the text: artefact_images lists them. artefact_capture takes a PNG of windows of your task (with Apps), artefact_crop_image cuts a part out as a new screenshot, artefact_copy_image adds a second name on the same bytes, artefact_remove_image removes a name (purge frees the bytes). The person sees the screenshots in the panel; you see one's pixels only through artefact_view_image, when the person's settings offer it. The screenshots have a budget; a change past it is refused.`
-
-// imageTools are the screenshot tools: the read always, the writes with
-// write, and the capture only with Apps too.
+// imageTools are the screenshot tools as the registry declares them: the
+// read always, the writes with write, and the capture only with Apps too.
 func imageTools(write bool, capture bool) (out []openaichat.Tool) {
-	out = []openaichat.Tool{
-		{Name: "artefact_images", Description: "List the artefact's screenshots: name, size, where each came from, whether its bytes were purged, and the budget's use.",
-			Parameters: toolSchema(`{"type":"object","properties":{},"additionalProperties":false}`)},
+	groups := []toolGroupE{toolGroupImageRead}
+	if write && capture {
+		groups = append(groups, toolGroupImageCapture)
 	}
-	if !write {
-		return
+	if write {
+		groups = append(groups, toolGroupImageWrite)
 	}
-	base := `"base_revision":{"type":"integer","minimum":0,"description":"the revision you read"}`
-	name := `"name":{"type":"string","description":"lower-case letters, digits, '.', '-' and '_', ending in .png; omitted, the chat picks screenshot-<n>.png"}`
-	if capture {
-		out = append(out, openaichat.Tool{Name: "artefact_capture", Description: "Capture windows of your task as a PNG and add it to the artefact's screenshots. The windows are drawn together, cut to their bounds; crop keeps a rect of the frame instead, in logical points.",
-			Parameters: toolSchema(`{"type":"object","properties":{` + base + `,"windows":{"type":"array","items":{"type":"integer"},"minItems":1},"crop":{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number"},"w":{"type":"number","exclusiveMinimum":0},"h":{"type":"number","exclusiveMinimum":0}},"required":["x","y","w","h"],"additionalProperties":false},` + name + `},"required":["base_revision","windows"],"additionalProperties":false}`)})
-	}
-	out = append(out,
-		openaichat.Tool{Name: "artefact_copy_image", Description: "Add a second name on an existing screenshot's bytes, e.g. to keep it before cropping.",
-			Parameters: toolSchema(`{"type":"object","properties":{` + base + `,"from":{"type":"string"},` + name + `},"required":["base_revision","from"],"additionalProperties":false}`)},
-		openaichat.Tool{Name: "artefact_crop_image", Description: "Add a new screenshot cut out of an existing one, by a rect in its pixels (artefact_images gives each one's size).",
-			Parameters: toolSchema(`{"type":"object","properties":{` + base + `,"from":{"type":"string"},"x":{"type":"integer","minimum":0},"y":{"type":"integer","minimum":0},"w":{"type":"integer","minimum":1},"h":{"type":"integer","minimum":1},` + name + `},"required":["base_revision","from","x","y","w","h"],"additionalProperties":false}`)},
-		openaichat.Tool{Name: "artefact_remove_image", Description: "Remove a screenshot's name. Its bytes stay while an earlier revision names them; purge frees them for good, and a revert cannot bring them back.",
-			Parameters: toolSchema(`{"type":"object","properties":{` + base + `,"name":{"type":"string"},"purge":{"type":"boolean"}},"required":["base_revision","name"],"additionalProperties":false}`)},
-	)
-	return
-}
-
-// isImageTool says whether a tool is one of the screenshot tools.
-func isImageTool(name string) bool {
-	switch name {
-	case "artefact_images", "artefact_capture", "artefact_copy_image", "artefact_crop_image", "artefact_remove_image", "artefact_view_image":
-		return true
-	}
-	return false
+	return toolsOfGroups(groups...)
 }
 
 type imageView struct {

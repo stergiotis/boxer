@@ -12,11 +12,13 @@ import (
 
 	"github.com/stergiotis/boxer/apps/play/launchcfg"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
+	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/windowhost"
 	"github.com/stergiotis/boxer/public/observability/eh"
+	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	c "github.com/stergiotis/boxer/public/thestack/imzero2/egui2/bindings"
 )
 
@@ -81,8 +83,22 @@ func (inst *App) regenerate() {
 		inst.busyNote()
 		return
 	}
-	if text, _, ok := inst.conv.rewind(); ok && !inst.startTurn(text) {
+	text, _, ok := inst.conv.rewind()
+	if !ok {
+		inst.rewindRefused()
+		return
+	}
+	if !inst.startTurn(text) {
 		inst.setDraft(text)
+	}
+}
+
+// rewindRefused says why a turn that could be taken back was not: the
+// journal refused to drop it, so the model would still see what the
+// transcript no longer shows.
+func (inst *App) rewindRefused() {
+	if inst.conv.canRewind() {
+		inst.setNote("the turn was not taken back: the journal refused to drop it", true)
 	}
 }
 
@@ -99,10 +115,13 @@ func (inst *App) edit() {
 		inst.editedNext = true
 		return
 	}
-	if text, undo, ok := inst.conv.rewind(); ok {
-		inst.setDraft(text)
-		inst.editing, inst.editedNext = undo, true
+	text, undo, ok := inst.conv.rewind()
+	if !ok {
+		inst.rewindRefused()
+		return
 	}
+	inst.setDraft(text)
+	inst.editing, inst.editedNext = undo, true
 }
 
 // cancelEdit puts back the turn edit took, and clears the composer.
@@ -116,14 +135,42 @@ func (inst *App) cancelEdit() {
 
 // copyText puts text on the clipboard; what names it on the status line.
 func (inst *App) copyText(what string, text string) {
-	bus := inst.bus
+	bus, coord := inst.bus, inst.coord
+	// What a chat copies is model-touched unless it is the conversation's
+	// own id: the run's label with the model's integrity, so the broker
+	// can apply the clipboard policy and the journal records the copy
+	// (ADR-0317 §SD1, §SD3).
+	label := agentrun.Label{Level: agentrun.LevelOwnModel}
+	if what == "the conversation's id" {
+		label = agentrun.Label{Level: agentrun.LevelSystem}
+	}
+	if coord != nil {
+		if w := coord.journalNow(); w != nil {
+			label = label.Join(w.Run().Label)
+		}
+	}
 	inst.runAction("chat-copy", "copy "+what, func(ctx context.Context) (note string, err error) {
-		if _, err = bus.Request(clipboardbroker.SubjectWrite, []byte(text)); err != nil {
-			err = eh.Errorf("copy %s: %w", what, err)
+		payload := clipboardbroker.Payload{Text: text, Label: label, Source: string(ManifestId) + ":" + what}
+		// Journaled before it is made (ADR-0308 §SD2): the record names
+		// the copy by its source and label; the broker's handle, when it
+		// gives one, is in the broker's own record.
+		if coord != nil {
+			if err = coord.copyEntry(ctx, clipboardbroker.CopyRecord{Digest: agentrun.ContentDigest(text), Label: label, Level: uint8(label.Level), Tier: uint8(label.Tier), Source: payload.Source}); err != nil {
+				err = eb.Build().Str("what", what).Errorf("copy: %w", err)
+				return
+			}
+		}
+		rec, err := clipboardbroker.Write(bus, payload)
+		if err != nil {
+			err = eb.Build().Str("what", what).Errorf("copy: %w", err)
 			return
 		}
-		return "copied " + what, nil
-	})
+		note = "copied " + what
+		if rec.Handle != "" {
+			note += " by reference (" + rec.Handle + "): paste it inside boxer"
+		}
+		return note, nil
+	}, nil)
 }
 
 // openSqlInPlay opens a play window with sql in its editor, not run: the
@@ -156,15 +203,17 @@ func (inst *App) openPlay(what string, l launchcfg.PlayLaunch) {
 			return
 		}
 		return "opened " + what + " in play", nil
-	})
+	}, nil)
 }
 
-// runAction runs one copy or open off the render thread; drainAction
-// lands its outcome on the status line.
-func (inst *App) runAction(kind string, title string, f func(ctx context.Context) (string, error)) {
+// runAction runs one copy, open or delete off the render thread;
+// drainAction lands its outcome on the status line, and runs after, when
+// given, once the action landed well. It reports whether the action
+// started: a refused one installs nothing.
+func (inst *App) runAction(kind string, title string, f func(ctx context.Context) (string, error), after func()) (started bool) {
 	if inst.bus == nil {
 		inst.setNote(title+": this host gives the app no bus", true)
-		return
+		return false
 	}
 	ok := inst.action.Start(nil, bgjob.Spec{Kind: kind, Title: title}, func(ctx context.Context) (note *string, err error) {
 		n, err := f(ctx)
@@ -176,14 +225,24 @@ func (inst *App) runAction(kind string, title string, f func(ctx context.Context
 	})
 	if !ok {
 		inst.setNote(title+": the previous copy or open is still running", true)
+		return false
 	}
+	inst.afterAction = after
+	return true
 }
 
 func (inst *App) drainAction() {
 	if note, _, ok := inst.action.TakeResult(); ok {
 		inst.setNote(*note, false)
+		inst.deleting = ""
+		if after := inst.afterAction; after != nil {
+			inst.afterAction = nil
+			after()
+		}
 	} else if snap := inst.action.Snapshot(); snap.State == bgjob.StateFailed {
 		inst.action.Invalidate()
+		// What was to follow a success does not follow a failure.
+		inst.afterAction, inst.deleting = nil, ""
 		text := "the action failed"
 		if snap.Err != nil {
 			text = snap.Err.Error()

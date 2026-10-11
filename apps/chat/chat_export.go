@@ -109,5 +109,5 @@ func (inst *App) openInMdedit() {
 			return
 		}
 		return "opened the conversation in mdedit", nil
-	})
+	}, nil)
 }

@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
+	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
+	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun/projection"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
@@ -88,14 +90,20 @@ func TestCapturesLevelShowsWithoutAsking(t *testing.T) {
 	assert.Equal(t, []int{32, 24}, []int{r.Width, r.Height})
 	r, _ = view(t, coord, "screenshot-1.png")
 	assert.Contains(t, r.Then, "already attached")
-	m, ok := coord.takeShown()
+	e, ok := coord.takeShownEntry("t1")
 	require.True(t, ok)
-	assert.Equal(t, openaichat.ChatRoleUser, m.Role)
-	require.Len(t, m.Images, 1)
-	assert.Equal(t, "image/png", m.Images[0].MediaType)
-	assert.Contains(t, m.Content, "untrusted content")
-	assert.Contains(t, m.Content, "screenshot-1.png (32×24, allowed by the person's setting: this chat's captures)")
-	_, ok = coord.takeShown()
+	assert.Equal(t, agentrun.KindUser, e.Kind)
+	assert.Equal(t, formPixels, e.Form)
+	atts := projection.ParseAttachments(e.Attachments)
+	require.Len(t, atts, 1)
+	assert.Equal(t, "image/png", atts[0].MediaType)
+	data, found := coord.resolveAttachment(atts[0])
+	assert.True(t, found)
+	assert.NotEmpty(t, data)
+	assert.Contains(t, e.Body, "untrusted content")
+	assert.Contains(t, e.Body, "screenshot-1.png (32×24, allowed by the person's setting: this chat's captures)")
+	assert.Equal(t, agentrun.LevelExternal, e.Label.Level)
+	_, ok = coord.takeShownEntry("t1")
 	assert.False(t, ok, "taken once")
 }
 
@@ -118,7 +126,7 @@ func TestAskEachTimeAsksEveryView(t *testing.T) {
 	done := viewAsync(t, coord, "screenshot-1.png")
 	waitPixelAsk(t, coord).decide(pixelDeclined)
 	assert.Equal(t, "declined", (<-done).Status)
-	_, ok := coord.takeShown()
+	_, ok := coord.takeShownEntry("t1")
 	assert.False(t, ok)
 }
 
@@ -134,8 +142,8 @@ func TestAskOnceRemembersTheContent(t *testing.T) {
 	coord.beginPixelTurn()
 	r, _ := view(t, coord, "copy.png")
 	assert.Equal(t, "shown", r.Status, "the same bytes under another name do not ask")
-	m, _ := coord.takeShown()
-	assert.Contains(t, m.Content, "allowed by the person once before")
+	m, _ := coord.takeShownEntry("t1")
+	assert.Contains(t, m.Body, "allowed by the person once before")
 
 	_, _ = callTool(t, coord, "artefact_crop_image", map[string]any{"base_revision": 2.0, "from": "screenshot-1.png", "x": 0.0, "y": 0.0, "w": 8.0, "h": 8.0})
 	done = viewAsync(t, coord, "screenshot-2.png")
@@ -172,8 +180,8 @@ func TestAWaitingViewFollowsTheSetting(t *testing.T) {
 	bySetting := (*got)[len(*got)-1]
 	assert.Equal(t, agent.DecidedBySetting, bySetting.DecidedBy, "the person did not allow it; the setting did")
 	assert.Equal(t, agent.PixelsCaptures, bySetting.Level)
-	m, _ := coord.takeShown()
-	assert.Contains(t, m.Content, "allowed by the person's setting")
+	m, _ := coord.takeShownEntry("t1")
+	assert.Contains(t, m.Body, "allowed by the person's setting")
 
 	coord.beginPixelTurn()
 	coord.setPixels(pixelPolicy{level: agent.PixelsAskEach, modelLocal: true})
@@ -209,45 +217,65 @@ func TestThePixelsNoteIsNewsOnly(t *testing.T) {
 // attaches them again rather than pointing at a placeholder.
 func TestAViewAfterAStripAttachesAgain(t *testing.T) {
 	coord, _ := pixelRig(t, agent.PixelsCaptures)
+	ctx := context.Background()
+	w, err := agentrun.Open(ctx, agentrun.NewMemStore(), agentrun.Run{Id: "r"})
+	require.NoError(t, err)
 	coord.beginPixelTurn()
 	view(t, coord, "screenshot-1.png")
-	m, _ := coord.takeShown()
+	e, _ := coord.takeShownEntry("t1")
+	_, err = w.Append(ctx, e)
+	require.NoError(t, err)
 	coord.setPixels(pixelPolicy{level: agent.PixelsNone})
-	coord.bindPixels([]openaichat.Message{m})
+	_, err = coord.bindPixelsJournal(ctx, w)
+	require.NoError(t, err)
 	coord.setPixels(pixelPolicy{level: agent.PixelsCaptures, modelLocal: true})
 	r, _ := view(t, coord, "screenshot-1.png")
 	assert.NotContains(t, r.Then, "already attached")
-	_, ok := coord.takeShown()
+	_, ok := coord.takeShownEntry("t1")
 	assert.True(t, ok)
 }
 
+// The setting binds the journal (ADR-0287 §SD4): kept to a local model, a
+// live pixels entry labels the request confined; dropped below, every
+// live pixels entry becomes its placeholder by an edit, and the
+// projection carries no image.
 func TestPixelsMessagesBecomePlaceholders(t *testing.T) {
 	coord, _ := pixelRig(t, agent.PixelsCaptures)
+	ctx := context.Background()
+	w, err := agentrun.Open(ctx, agentrun.NewMemStore(), agentrun.Run{Id: "r"})
+	require.NoError(t, err)
 	coord.beginPixelTurn()
 	view(t, coord, "screenshot-1.png")
-	m, _ := coord.takeShown()
-	ms := []openaichat.Message{{Role: openaichat.ChatRoleUser, Content: "look"}, m}
+	e, _ := coord.takeShownEntry("t1")
+	_, err = w.Append(ctx, agentrun.Entry{Kind: agentrun.KindUser, Role: "user", Body: "look"}, e)
+	require.NoError(t, err)
 
-	out, confine := coord.bindPixels(ms)
+	confine, err := coord.bindPixelsJournal(ctx, w)
+	require.NoError(t, err)
 	assert.False(t, confine)
-	assert.Len(t, out[1].Images, 1)
+	assert.Len(t, livePixels(w.Entries()), 1)
 
 	coord.setPixels(pixelPolicy{level: agent.PixelsCaptures, localOnly: true, modelLocal: true})
-	out, confine = coord.bindPixels(ms)
+	confine, err = coord.bindPixelsJournal(ctx, w)
+	require.NoError(t, err)
 	assert.True(t, confine, "kept to a local model: the request is labelled confined")
-	assert.Len(t, out[1].Images, 1)
 
 	coord.setPixels(pixelPolicy{level: agent.PixelsNone})
-	out, _ = coord.bindPixels(ms)
-	assert.Empty(t, out[1].Images, "the level dropped: the turn's pixels go")
-	assert.Len(t, ms[1].Images, 1, "the caller's messages are not changed")
+	_, err = coord.bindPixelsJournal(ctx, w)
+	require.NoError(t, err)
+	assert.Empty(t, livePixels(w.Entries()), "the level dropped: the turn's pixels go")
+	msgs, err := projection.Encode(projection.Fold(w.Entries(), sectionOrder()), coord.resolveAttachment)
+	require.NoError(t, err)
+	require.Len(t, msgs, 2)
+	assert.Empty(t, msgs[1].Images)
+	assert.Contains(t, msgs[1].Content, "no longer attached: screenshot-1.png (32×24")
+	assert.Equal(t, "look", msgs[0].Content)
 
+	ms := []openaichat.Message{{Role: openaichat.ChatRoleUser, Content: "look"}, {Role: openaichat.ChatRoleUser, Content: e.Body, Images: []openaichat.Image{{MediaType: "image/png", Data: []byte{1}}}}}
 	stripped, did := stripPixels(ms)
 	require.True(t, did)
 	assert.Empty(t, stripped[1].Images)
-	assert.Contains(t, stripped[1].Content, "no longer attached: screenshot-1.png (32×24")
 	assert.False(t, isPixelsMessage(stripped[1]))
-	assert.Equal(t, "look", stripped[0].Content)
 }
 
 // A turn through the host: the model views a capture, the next round sees
@@ -287,12 +315,12 @@ func TestAViewedScreenshotIsSentForItsTurnOnly(t *testing.T) {
 
 	conv.begin("look", time.Now().UnixMilli(), false)
 	conv.landTurn(req, res, nil, time.Now().UnixMilli())
-	for _, m := range conv.history {
-		assert.Empty(t, m.Images, "the history keeps no pixels")
-	}
-	next := conv.request("and now?")
+	assert.Empty(t, livePixels(coord.journalNow().Entries()), "the journal keeps no live pixels past the turn")
+	next, err := projection.Encode(projection.Fold(coord.journalNow().Entries(), sectionOrder()), coord.resolveAttachment)
+	require.NoError(t, err)
 	var placeholder bool
-	for _, m := range next.Messages {
+	for _, m := range next {
+		assert.Empty(t, m.Images)
 		placeholder = placeholder || strings.Contains(m.Content, "no longer attached: screenshot-1.png")
 	}
 	assert.True(t, placeholder)
@@ -387,7 +415,7 @@ func TestAViewTheHostCannotRecordIsNotShown(t *testing.T) {
 	coord.beginPixelTurn()
 	_, content := view(t, coord, "screenshot-1.png")
 	assert.Contains(t, content, "could not record this view")
-	_, ok := coord.takeShown()
+	_, ok := coord.takeShownEntry("t1")
 	assert.False(t, ok, "nothing is attached")
 	require.Len(t, *got, 1)
 }

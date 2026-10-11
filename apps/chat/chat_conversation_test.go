@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -15,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
+	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun/projection"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
@@ -65,17 +65,33 @@ func keeping() (conv *conversation) {
 	return
 }
 
-// turn runs one turn the way the app does: request, complete, land.
+// turn runs one turn the way the app does: the request, the turn loop
+// over the journal, the landing. A conversation without a coordinator
+// gets one over an in-process journal.
 func turn(t *testing.T, cli *llm.Client, conv *conversation, text string) (res llm.Response) {
 	t.Helper()
+	if conv.coord == nil {
+		conv.coord = newCoordinator(nil, nil, conv.id)
+		conv.coord.offer(false, false)
+	}
 	req := conv.request(text)
 	conv.begin(text, time.Now().UnixMilli(), false)
-	res, err := cli.Complete(context.Background(), req)
-	if err != nil {
-		conv.land(req, nil, err, time.Now().UnixMilli())
-		return
+	out, err := runTurn(context.Background(), cli, conv.coord, req, nil)
+	conv.landTurn(req, out, err, time.Now().UnixMilli())
+	if err == nil && out != nil {
+		res = out.final
 	}
-	conv.land(req, &res, nil, time.Now().UnixMilli())
+	return
+}
+
+// projected is what the journal projects now, as the next request would
+// send it.
+func projected(t *testing.T, conv *conversation) (msgs []openaichat.Message) {
+	t.Helper()
+	w := conv.coord.journalNow()
+	require.NotNil(t, w)
+	msgs, err := projection.Encode(projection.Fold(w.Entries(), sectionOrder()), nil)
+	require.NoError(t, err)
 	return
 }
 
@@ -103,25 +119,57 @@ func TestSecondTurnContinuesTheFirst(t *testing.T) {
 	assert.EqualValues(t, 15, conv.lastIn+conv.lastOut)
 }
 
-// A failed turn stays in the transcript and is never resent or a parent.
+// A failed turn stays in the transcript and is never resent or a parent:
+// the journal drops it from the projection.
 func TestFailedTurnIsNotAParent(t *testing.T) {
+	fm := &failingModel{failOn: 2}
+	cli, _, _ := hostWith(t, llm.Config{Retain: llm.RetainRing}, fm)
 	conv := keeping()
-	req := conv.request("q1")
-	conv.begin("q1", 1, false)
-	conv.land(req, &llm.Response{Content: "a1", CallId: "call-1"}, nil, 2)
-
-	req = conv.request("q2")
-	conv.begin("q2", 3, false)
-	conv.land(req, nil, errors.New("boom"), 4)
+	r1 := turn(t, cli, conv, "q1")
+	turn(t, cli, conv, "q2")
 	require.Len(t, conv.entries, 3)
 	assert.True(t, conv.entries[2].failed)
-	assert.Equal(t, "boom", conv.entries[2].reason)
+	assert.Contains(t, conv.entries[2].reason, "boom")
 
 	next := conv.request("q3")
-	assert.Equal(t, "call-1", next.ParentCallId, "continues from the last reply")
-	require.Len(t, next.Messages, 3, "q1, a1, q3 — the failed q2 is not resent")
-	assert.Equal(t, "q3", next.Messages[2].Content)
+	assert.Equal(t, r1.CallId, next.ParentCallId, "continues from the last reply")
+	msgs := projected(t, conv)
+	require.Len(t, msgs, 2, "q1, a1 — the failed q2 is not resent")
+	assert.Equal(t, "q1", msgs[0].Content)
 	assert.Equal(t, "cancelled", failureReason(context.Canceled))
+}
+
+// failingModel fails its failOn-th call and answers the others.
+type failingModel struct {
+	fakeModel
+	failOn int
+}
+
+func (f *failingModel) Complete(ctx context.Context, req openaichat.CompletionRequest) (openaichat.CompletionResponse, error) {
+	f.mu.Lock()
+	n := f.calls + 1
+	f.mu.Unlock()
+	if n == f.failOn {
+		f.mu.Lock()
+		f.calls++
+		f.mu.Unlock()
+		return openaichat.CompletionResponse{}, errors.New("boom")
+	}
+	return f.fakeModel.Complete(ctx, req)
+}
+
+// hostWith is host with a model of the caller's.
+func hostWith(t *testing.T, cfg llm.Config, model openaichat.ClientI) (cli *llm.Client, svc *llm.Service, fm openaichat.ClientI) {
+	t.Helper()
+	cfg.Endpoint, cfg.Model, cfg.Client = "http://127.0.0.1:1234/v1", "m", model
+	bus := inprocbus.NewInst(zerolog.Nop())
+	var err error
+	svc, err = llm.NewService(bus, zerolog.Nop(), cfg)
+	require.NoError(t, err)
+	t.Cleanup(svc.Close)
+	cli = llm.NewClient(bus.NewClient(ManifestId, manifest.Caps))
+	cli.Timeout = 5 * time.Second
+	return cli, svc, model
 }
 
 // Keep off sends on llm.complete: the text is not asked to be kept, and the
@@ -169,13 +217,13 @@ func TestTranscriptModel(t *testing.T) {
 // Regenerate and Edit take the last answered turn back: the next request
 // is the one that turn sent, from the same parent — a branch.
 func TestTheLastTurnCanBeTakenBack(t *testing.T) {
-	cli, _, _ := host(t, llm.Config{Retain: llm.RetainRing})
+	cli, _, fm := host(t, llm.Config{Retain: llm.RetainRing})
 	conv := keeping()
 	r1 := turn(t, cli, conv, "q1")
-	want := conv.request("q2")
 	turn(t, cli, conv, "q2")
 	require.Len(t, conv.entries, 4)
 	require.True(t, conv.canRewind())
+	want := fm.seen[1].Messages
 
 	text, undo, ok := conv.rewind()
 	require.True(t, ok)
@@ -184,16 +232,19 @@ func TestTheLastTurnCanBeTakenBack(t *testing.T) {
 	assert.False(t, conv.canRewind(), "one turn back, not two")
 	again := conv.request(text)
 	assert.Equal(t, r1.CallId, again.ParentCallId)
-	assert.Equal(t, want.Messages, again.Messages)
+	assert.Equal(t, want[:len(want)-1], projected(t, conv), "the projection stands as before the turn")
 
 	require.True(t, conv.restore(undo))
 	assert.Len(t, conv.entries, 4)
 	assert.True(t, conv.canRewind())
 	assert.Equal(t, "a2", conv.entries[3].text)
+	assert.Len(t, projected(t, conv), 4, "the turn is back in the projection")
 
 	_, undo, _ = conv.rewind()
 	turn(t, cli, conv, "q2 edited")
 	assert.False(t, conv.restore(undo), "a turn sent since leaves nothing to put back")
+	assert.Equal(t, want[:2], fm.seen[2].Messages[:2], "the edited turn was sent from the same prefix")
+	assert.Equal(t, "q2 edited", fm.seen[2].Messages[2].Content)
 }
 
 // A failed turn is taken back from the transcript alone; it is no
@@ -288,7 +339,7 @@ func TestKeptTurnsStoreOnlyWhatIsNew(t *testing.T) {
 }
 
 // A turn that ran out of rounds sent lastRoundNote on its last call only,
-// so the history the next turn resends lacks a message the host saw: the
+// so the projection the next turn sends lacks a message the host saw: the
 // next request declares it left out, and the host still keeps only what is
 // new instead of the whole conversation again (ADR-0264 §SD3).
 func TestTheLastRoundNoteIsDeclaredLeftOut(t *testing.T) {
@@ -306,29 +357,32 @@ func TestTheLastRoundNoteIsDeclaredLeftOut(t *testing.T) {
 	}
 	rec := trail.NewRecorder(exec, "run-test", zerolog.Nop())
 	t.Cleanup(rec.Close)
-	cli, svc, _ := host(t, llm.Config{Retain: llm.RetainDurable, Trail: rec})
+	model := &scriptedModel{replies: []openaichat.CompletionResponse{toolCall("l1", "list_windows", `{}`), {Content: "a1", FinishReason: "stop"}, {Content: "a2", FinishReason: "stop"}}}
+	cli, svc, _ := hostWith(t, llm.Config{Retain: llm.RetainDurable, Trail: rec}, model)
 	conv := keeping()
-
-	// The turn's last call, as runTurn sends it on the last round.
-	req := conv.request("q1")
-	conv.begin("q1", time.Now().UnixMilli(), false)
-	history := req.Messages
-	last := req
-	last.Messages = append(slices.Clip(history), openaichat.Message{Role: openaichat.ChatRoleSystem, Content: lastRoundNote})
-	res, err := cli.Complete(ctx, last)
-	require.NoError(t, err)
-	reply := openaichat.Message{Role: openaichat.ChatRoleAssistant, Content: res.Content, ToolCalls: res.ToolCalls}
-	conv.landTurn(req, &turnResult{final: res, messages: append(slices.Clip(history), reply), omitTo: len(history) + 1}, nil, time.Now().UnixMilli())
+	conv.coord = newCoordinator(nil, nil, conv.id)
+	conv.coord.offer(false, false)
+	// Two rounds: the first calls a tool it was not offered, the second is
+	// the last and carries the note.
+	RoundsMinEnv.SetForTest(t, "2")
+	conv.coord.setRounds(2)
+	turn(t, cli, conv, "q1")
+	require.Len(t, model.seen, 2)
+	last := model.seen[1].Messages
+	assert.Equal(t, lastRoundNote, last[len(last)-1].Content)
+	assert.Empty(t, model.seen[1].ToolChoice, "no tool was offered, so no choice is named; the wire form refuses one without tools")
 
 	next := conv.request("q2")
-	assert.Equal(t, len(history), next.OmitFrom)
-	assert.Equal(t, len(history)+1, next.OmitTo)
-	_, err = cli.Complete(ctx, next)
-	require.NoError(t, err)
+	assert.Equal(t, len(last)-1, next.OmitFrom)
+	assert.Equal(t, len(last), next.OmitTo)
+	turn(t, cli, conv, "q2")
 
 	calls := svc.Calls()
-	require.Len(t, calls, 2)
-	assert.Equal(t, len(history)+2, calls[1].MessagesFrom, "q1, the note and a1 were written by the first call; only q2 is new")
+	require.Len(t, calls, 3)
+	assert.Equal(t, len(last)+1, calls[2].MessagesFrom, "the second call's messages, the note and a1 were written already; only q2 is new")
+	for _, m := range projected(t, conv) {
+		assert.NotEqual(t, lastRoundNote, m.Content, "the note is not resent")
+	}
 }
 
 // appOn is the app mounted on a host whose model is fm, without a frame:
@@ -342,6 +396,7 @@ func appOn(t *testing.T, fm openaichat.ClientI) (inst *App) {
 	inst = newApp()
 	inst.cli = llm.NewClient(bus.NewClient(ManifestId, manifest.Caps))
 	inst.cli.Timeout = 5 * time.Second
+	inst.coord = inst.newCoordinator(inst.conv.id)
 	return
 }
 
@@ -371,7 +426,7 @@ func TestCancelLandsAndFreesTheComposer(t *testing.T) {
 	require.Len(t, inst.conv.entries, 1)
 	assert.True(t, inst.conv.entries[0].failed)
 	assert.Equal(t, "cancelled", inst.conv.entries[0].reason)
-	assert.Empty(t, inst.conv.history, "a cancelled turn is not resent")
+	assert.Empty(t, liveMessages(inst.coord.journalNow().Entries()), "a cancelled turn is not resent")
 }
 
 // The first send takes the Keep toggle; later changes do not reach the

@@ -96,13 +96,15 @@ func failureOf(err error) (f failure) {
 
 // turnMark is how the conversation stood before its last answered turn,
 // so the turn can be taken back — to answer it again, or to send it
-// edited. A taken-back turn stays on boxer.facts when it was kept; the
-// next one names the same parent, a branch the service keeps (ADR-0264).
+// edited. A taken-back turn stays in the journal and on boxer.facts when
+// it was kept: its entries are dropped from the projection by an edit,
+// and the next turn names the same parent, a branch the service keeps
+// (ADR-0264).
 type turnMark struct {
 	// user is the index of the turn's user entry; everything from it on
-	// is the turn.
+	// is the turn. turn is the turn's id in the journal.
 	user    int
-	history []openaichat.Message
+	turn    string
 	parent  string
 	omitTo  int
 	lastIn  int32
@@ -113,21 +115,26 @@ type turnMark struct {
 
 // rewound is a turn taken back for an edit, kept so the edit can be
 // abandoned and the turn put back as it was. artDropped are the artefact
-// revisions the turn made, and artAt the revision rewind left current.
+// revisions the turn made, artAt the revision rewind left current, and
+// dropped the journal entries the edit dropped, to restore.
 type rewound struct {
 	mark       turnMark
 	entries    []entry
 	artDropped []artRevision
 	artAt      int
+	dropped    []uint32
 }
 
-// conversation is the app's state for one conversation (ADR-0265 §SD2):
-// what the transcript shows, and what the model has seen. Only answered
-// turns reach history, so a failed turn is shown but never resent, and the
-// next turn continues from the last reply (§SD3). No method here touches
-// the UI.
+// conversation is the app's state for one conversation: what the
+// transcript shows. What the model has seen is the journal's (ADR-0308
+// §SD3), held by the coordinator; a failed turn is shown but dropped from
+// the projection, so never resent, and the next turn continues from the
+// last reply (ADR-0265 §SD3). No method here touches the UI.
 type conversation struct {
-	id string
+	// coord holds the journal's writer; nil in a conversation that never
+	// ran a turn.
+	coord *coordinator
+	id    string
 	// keep sends the turns on llm.retain.complete; set at the first send.
 	keep bool
 	// firstTurn is the id of the conversation's first turn, which the
@@ -151,13 +158,11 @@ type conversation struct {
 	// was not. Neither set means no verdict yet.
 	kept    bool
 	entries []entry
-	// history is what the next request resends: every answered turn, each
-	// reply exactly as it came back, so the host keeps only what is new.
-	history []openaichat.Message
 	// parent is the call id of the last reply, the next turn's parent.
 	parent string
-	// omitTo is one past the message parent carried that history leaves
-	// out — the last-round note; 0 when history resends parent whole.
+	// omitTo is one past the message the last request carried that the
+	// projection now leaves out — the last-round note; 0 when the next
+	// request extends the last one whole.
 	omitTo int
 	// notKept is the first reason a turn was not kept, shown until
 	// notKeptNoted.
@@ -178,6 +183,10 @@ type conversation struct {
 	titleNote   string
 	// startedAt is the first send, for the transcript's header.
 	startedAt int64
+	// stranded marks a resumed conversation that cannot continue: its
+	// fingerprint differs from this build's, or it was deleted (ADR-0308
+	// §SD5, §SD8).
+	stranded bool
 }
 
 // minted salts the conversation and turn ids minted in this process.
@@ -197,15 +206,13 @@ func newTurn() (id string) {
 	return "turn-" + strconv.FormatInt(time.Now().UTC().UnixNano(), 36) + "-" + strconv.FormatUint(minted.Add(1), 36)
 }
 
-// request is the call for a new user message: the history, then the
-// message, under this conversation's id, a fresh turn and the last reply as
-// parent — which the host records whether or not the text is kept; on the
-// retained subject when keep is on.
+// request is the call for a new user message: the message alone — every
+// earlier message is the journal's to project — under this conversation's
+// id, a fresh turn and the last reply as parent, which the host records
+// whether or not the text is kept; on the retained subject when keep is
+// on.
 func (inst *conversation) request(text string) (r llm.Request) {
-	msgs := make([]openaichat.Message, 0, len(inst.history)+1)
-	msgs = append(msgs, inst.history...)
-	msgs = append(msgs, openaichat.Message{Role: openaichat.ChatRoleUser, Content: text})
-	r = llm.Request{Purpose: purpose, Messages: msgs, Retain: inst.keep,
+	r = llm.Request{Purpose: purpose, Messages: []openaichat.Message{{Role: openaichat.ChatRoleUser, Content: text}}, Retain: inst.keep,
 		Conversation: inst.id, Turn: newTurn(), ParentCallId: inst.parent}
 	if inst.omitTo > 0 {
 		r.OmitFrom, r.OmitTo = inst.omitTo-1, inst.omitTo
@@ -251,21 +258,33 @@ func (inst *conversation) canRewind() bool {
 	return inst.mark != nil && inst.mark.user == inst.lastUser()
 }
 
-// rewind takes the last answered turn back: the transcript, the history
-// and the parent stand as they did before it. It returns the turn's text
-// and what an abandoned edit puts back.
+// rewind takes the last answered turn back: the transcript and the parent
+// stand as they did before it, and the turn's entries are dropped from
+// the projection. It returns the turn's text and what an abandoned edit
+// puts back.
 func (inst *conversation) rewind() (text string, undo *rewound, ok bool) {
 	if !inst.canRewind() {
 		return "", nil, false
 	}
 	m := *inst.mark
 	text = inst.entries[m.user].text
-	undo = &rewound{mark: turnMark{user: m.user, history: inst.history, parent: inst.parent, omitTo: inst.omitTo, lastIn: inst.lastIn, lastOut: inst.lastOut},
+	undo = &rewound{mark: turnMark{user: m.user, turn: m.turn, parent: inst.parent, omitTo: inst.omitTo, lastIn: inst.lastIn, lastOut: inst.lastOut},
 		entries: append([]entry(nil), inst.entries[m.user:]...)}
+	// The turn's entries leave the projection first: a drop the journal
+	// refuses leaves the turn standing, since the model would still see
+	// what the transcript no longer shows.
+	if inst.coord != nil {
+		if w := inst.coord.journalNow(); w != nil {
+			var err error
+			if undo.dropped, err = inst.coord.dropTurn(journalCtx(context.Background()), w, m.turn); err != nil {
+				return "", nil, false
+			}
+		}
+	}
 	// The turn's artefact revisions go with it.
 	undo.artDropped, undo.artAt = inst.art.truncate(m.artRev), m.artRev
 	inst.entries = inst.entries[:m.user:m.user]
-	inst.history, inst.parent, inst.omitTo, inst.lastIn, inst.lastOut = m.history, m.parent, m.omitTo, m.lastIn, m.lastOut
+	inst.parent, inst.omitTo, inst.lastIn, inst.lastOut = m.parent, m.omitTo, m.lastIn, m.lastOut
 	inst.mark = nil
 	return text, undo, true
 }
@@ -280,16 +299,25 @@ func (inst *conversation) restore(undo *rewound) (ok bool) {
 		// revisions cannot go back on top of it.
 		return false
 	}
-	before := turnMark{user: undo.mark.user, history: inst.history, parent: inst.parent, omitTo: inst.omitTo, lastIn: inst.lastIn, lastOut: inst.lastOut, artRev: undo.artAt}
+	if inst.coord != nil && len(undo.dropped) > 0 {
+		if w := inst.coord.journalNow(); w != nil {
+			if err := inst.coord.restoreEntries(journalCtx(context.Background()), w, undo.dropped); err != nil {
+				// The projection stays without the turn; the transcript
+				// does not show what the model will not see.
+				return false
+			}
+		}
+	}
+	before := turnMark{user: undo.mark.user, turn: undo.mark.turn, parent: inst.parent, omitTo: inst.omitTo, lastIn: inst.lastIn, lastOut: inst.lastOut, artRev: undo.artAt}
 	inst.entries = append(inst.entries, undo.entries...)
-	inst.history, inst.parent, inst.omitTo, inst.lastIn, inst.lastOut = undo.mark.history, undo.mark.parent, undo.mark.omitTo, undo.mark.lastIn, undo.mark.lastOut
+	inst.parent, inst.omitTo, inst.lastIn, inst.lastOut = undo.mark.parent, undo.mark.omitTo, undo.mark.lastIn, undo.mark.lastOut
 	inst.mark = &before
 	return true
 }
 
-// dropFailed takes back the last turn when it failed: a failed turn never
-// reached the history, so only the transcript changes. It returns the
-// turn's text, to send again or edit.
+// dropFailed takes back the last turn when it failed: a failed turn is
+// already dropped from the projection, so only the transcript changes. It
+// returns the turn's text, to send again or edit.
 func (inst *conversation) dropFailed() (text string, ok bool) {
 	i := inst.lastUser()
 	if i < 0 || !inst.entries[i].failed {
@@ -308,9 +336,7 @@ func (inst *conversation) land(req llm.Request, res *llm.Response, err error, at
 		inst.fail(asked, failureReason(err), failureOf(err))
 		return
 	}
-	inst.mark = &turnMark{user: asked, history: inst.history, parent: inst.parent, omitTo: inst.omitTo, lastIn: inst.lastIn, lastOut: inst.lastOut, artRev: inst.artBefore}
-	reply := openaichat.Message{Role: openaichat.ChatRoleAssistant, Content: res.Content, ToolCalls: res.ToolCalls}
-	inst.history = append(append(inst.history[:0:0], req.Messages...), reply)
+	inst.mark = &turnMark{user: asked, turn: req.Turn, parent: inst.parent, omitTo: inst.omitTo, lastIn: inst.lastIn, lastOut: inst.lastOut, artRev: inst.artBefore}
 	inst.parent, inst.omitTo = res.CallId, 0
 	inst.lastIn, inst.lastOut = res.InputTokens, res.OutputTokens
 	inst.entries = append(inst.entries, entry{speaker: speakerModel, text: res.Content, atMs: atMs})
@@ -328,8 +354,7 @@ func (inst *conversation) land(req llm.Request, res *llm.Response, err error, at
 }
 
 // landTurn applies a turn that ran the tool loop (ADR-0269 M5): the
-// activity lines first, as system entries, then the answer; the history
-// becomes every message the model saw.
+// activity lines first, as system entries, then the answer.
 func (inst *conversation) landTurn(req llm.Request, res *turnResult, err error, atMs int64) {
 	if err != nil || res == nil {
 		inst.land(req, nil, err, atMs)
@@ -357,11 +382,10 @@ func (inst *conversation) landTurn(req llm.Request, res *turnResult, err error, 
 		return
 	}
 	inst.land(req, &res.final, nil, atMs)
-	// A screenshot shown this turn stays for this turn: the next resends a
-	// placeholder in its place (ADR-0287 §SD5). The host then keeps that
-	// request in full, as a rewrite (ADR-0264 §SD3).
-	history, _ := stripPixels(res.messages)
-	inst.history, inst.omitTo = append(inst.history[:0:0], history...), res.omitTo
+	// A screenshot shown this turn stayed for this turn: the journal now
+	// carries a placeholder in its place (ADR-0287 §SD5), and the host
+	// keeps the next request in full, as a rewrite (ADR-0264 §SD3).
+	inst.omitTo = res.omitTo
 }
 
 // fail marks the user entry i as not answered. A failed turn after an

@@ -8,6 +8,8 @@ import (
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/runtime/adhocdata"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
+	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
+	"github.com/stergiotis/boxer/public/keelson/runtime/anchorstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/icons"
@@ -47,6 +49,11 @@ var manifest = app.Manifest{
 		// shares, each call checked by the host's dispatcher. The person
 		// registers the app as a coordinator (BOXER_AGENT_COORDINATORS).
 		agent.ClientCaps("chat: work in windows the person shares with the model"),
+		// The run journal (ADR-0308): the conversation's only input, written
+		// before each act through the host's service.
+		agentrun.ClientCaps("chat: write and read the conversation's run journal"),
+		// Chain heads to the anchor store at each turn's end (ADR-0314).
+		anchorstore.ClientCaps("chat: anchor the journal's chain heads"),
 		// The desktop as data (ADR-0276 §SD2): every window's state and the
 		// work area, for the coordinator's query_windows.
 		keelsonquery.ClientCaps(providersgui.TableWindows, providersgui.TableDesktop),

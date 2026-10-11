@@ -50,12 +50,13 @@ const (
 )
 
 var (
-	atomsArtefact  = c.Atoms().Text(icons.PhFileText + " Artefact").Keep()
-	atomsAccept    = c.Atoms().Text(icons.PhCheck + " Accept").Keep()
-	atomsReject    = c.Atoms().Text(icons.PhX + " Reject").Keep()
-	atomsRevert    = c.Atoms().Text(icons.PhArrowCounterClockwise + " Revert to this").Keep()
-	atomsArtCopy   = c.Atoms().Text(icons.PhCopy + " Copy").Keep()
-	atomsArtMdedit = c.Atoms().Text(icons.PhMarkdownLogo + " Open in mdedit").Keep()
+	atomsArtefact   = c.Atoms().Text(icons.PhFileText + " Artefact").Keep()
+	atomsAccept     = c.Atoms().Text(icons.PhCheck + " Accept").Keep()
+	atomsReject     = c.Atoms().Text(icons.PhX + " Reject").Keep()
+	atomsRevert     = c.Atoms().Text(icons.PhArrowCounterClockwise + " Revert to this").Keep()
+	atomsArtCopy    = c.Atoms().Text(icons.PhCopy + " Copy").Keep()
+	atomsArtEndorse = c.Atoms().Text(icons.PhSealCheck + " Endorse").Keep()
+	atomsArtMdedit  = c.Atoms().Text(icons.PhMarkdownLogo + " Open in mdedit").Keep()
 )
 
 // artefactView is the panel's state, all of it the render goroutine's. The
@@ -142,6 +143,7 @@ func (inst *App) renderArtefact() {
 			if c.Button(inst.ids.PrepareStr("art-copy"), atomsArtCopy).Small().SendResp().HasPrimaryClicked() {
 				inst.copyText("the artefact", text)
 			}
+			inst.renderEndorse(n, text)
 			for range c.HoverText(tipArtMdedit).KeepIter() {
 				if c.Button(inst.ids.PrepareStr("art-mdedit"), atomsArtMdedit).Small().SendResp().HasPrimaryClicked() {
 					inst.openArtefactInMdedit(text)
@@ -392,5 +394,31 @@ func (inst *App) openArtefactInMdedit(text string) {
 			return
 		}
 		return "opened the artefact in mdedit", nil
-	})
+	}, nil)
+}
+
+// tipEndorse is the Endorse button's word.
+const tipEndorse = "Record that you reviewed this revision and stand behind it for publishing (ADR-0311): the record names the revision and what changed since you last endorsed one. A later model edit voids it; your own edit does not."
+
+// renderEndorse is the deliberate gesture that endorses the artefact's
+// head; it shows whether the head is endorsed.
+func (inst *App) renderEndorse(n int, text string) {
+	coord := inst.coord
+	if coord == nil || coord.journalNow() == nil {
+		return
+	}
+	if coord.endorsedHead() {
+		c.Label(icons.PhSealCheck + " endorsed").Selectable(false).Send()
+		return
+	}
+	for range c.HoverText(tipEndorse).KeepIter() {
+		if c.Button(inst.ids.PrepareStr("art-endorse"), atomsArtEndorse).Small().SendResp().HasPrimaryClicked() {
+			inst.runAction("chat-endorse", "endorse the artefact", func(ctx context.Context) (note string, err error) {
+				if err = coord.endorseArtefact(ctx, n, text); err != nil {
+					return
+				}
+				return "endorsed revision " + strconv.Itoa(n), nil
+			}, nil)
+		}
+	}
 }

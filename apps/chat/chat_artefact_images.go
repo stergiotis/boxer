@@ -32,23 +32,30 @@ import (
 	"github.com/stergiotis/boxer/public/thestack/imzero2/egui2/widgets/imagedecode"
 )
 
-// The budget's ceilings (ADR-0284 §SD4), per conversation.
+// The budget's ceilings (ADR-0284 §SD4), per conversation, as the
+// profile records them (chat_profile.go).
+const (
+	defaultImageBudgetBytes = 256 << 20
+	defaultImageBudgetCount = 64
+	defaultImageMaxPixels   = 16_000_000
+)
+
 var (
 	ImageBudgetBytes = env.NewInt(env.Spec{
 		Name:        "BOXER_CHAT_IMAGE_BYTES",
-		Default:     "268435456",
+		Default:     strconv.Itoa(defaultImageBudgetBytes),
 		Description: "the most a chat conversation's screenshots may hold on disk, in bytes of their sealed files (ADR-0284); a capture, copy or crop past it is refused",
 		Category:    env.CategoryE("boxer-chat"),
 	})
 	ImageBudgetCount = env.NewInt(env.Spec{
 		Name:        "BOXER_CHAT_IMAGE_COUNT",
-		Default:     "64",
+		Default:     strconv.Itoa(defaultImageBudgetCount),
 		Description: "the most screenshots a chat conversation's artefact may name (ADR-0284)",
 		Category:    env.CategoryE("boxer-chat"),
 	})
 	ImageMaxPixels = env.NewInt(env.Spec{
 		Name:        "BOXER_CHAT_IMAGE_PIXELS",
-		Default:     "16000000",
+		Default:     strconv.Itoa(defaultImageMaxPixels),
 		Description: "the most pixels a chat screenshot may have; a PNG past it is refused from its header, before it is decoded (ADR-0284)",
 		Category:    env.CategoryE("boxer-chat"),
 	})

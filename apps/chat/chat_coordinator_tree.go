@@ -18,11 +18,9 @@ import (
 // per message of the stream that drew a visible widget, with the widgets it
 // drew, their roles, names and values. Every name is the apps' text.
 
-// maxTreeBytes bounds the outline the model reads; a busy window's tree is
-// tens of kilobytes.
-const maxTreeBytes = 24 << 10
-
-func (inst *coordinator) readWindowTree(ctx context.Context, o toolOrigin, windows []uint64) (content string, activity string) {
+// readWindowTree reads the trees of windows and hands the model their
+// outline, cut at limit bytes: the registry's budget for the tool.
+func (inst *coordinator) readWindowTree(ctx context.Context, o toolOrigin, windows []uint64, limit int) (content string, activity string) {
 	if apps, _ := inst.offers(); !apps {
 		return "error: a window tree needs Apps, which this conversation was started without", "window tree: no Apps"
 	}
@@ -65,7 +63,7 @@ func (inst *coordinator) readWindowTree(ctx context.Context, o toolOrigin, windo
 		return "error: " + err.Error(), "window tree: " + err.Error()
 	}
 	ref := inst.keepTree(t)
-	return wrapUntrusted("window tree of "+windowsText(windows), "tree "+ref+"\n"+treeOutline(t, maxTreeBytes)),
+	return wrapUntrusted("window tree of "+windowsText(windows), "tree "+ref+"\n"+treeOutline(t, limit)),
 		"read the window tree of " + windowsText(windows) + " (" + strconv.Itoa(len(t.Ops)) + " messages)"
 }
 
