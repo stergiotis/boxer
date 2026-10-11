@@ -54,7 +54,9 @@ func Open(ctx context.Context, store StoreI, r Run) (w *Writer, err error) {
 	if r.Digest, err = RunDigestSeed(r); err != nil {
 		return
 	}
-	r.Head = r.Digest
+	// A created run has no entry: its head is the seed, whatever the row
+	// handed in carried.
+	r.Head, r.LastOrdinal = r.Digest, 0
 	r.Version = 1
 	if err = store.CreateRun(ctx, r); err != nil {
 		err = eb.Build().Uint64("run", r.Id).Errorf("create run: %w", err)
@@ -219,17 +221,18 @@ func (inst *Writer) append(ctx context.Context, closing bool, entries ...Entry) 
 		if err = checkEntry(e, prevOrd+1); err != nil {
 			return nil, err
 		}
-		e.Run, e.Ordinal, e.At = run.Id, prevOrd+1, Now()
-		if e, err = e.chained(prevOrd, prevDigest); err != nil {
-			return nil, err
-		}
-		prevOrd, prevDigest = e.Ordinal, e.Digest
+		// The ordinal and the predecessor are the writer's expectation of
+		// the head; the store prepares the rest — ids, openings,
+		// commitments, digests — and refuses a head that moved.
+		e.Run, e.Ordinal, e.Prev, e.At = run.Id, prevOrd+1, prevOrd, Now()
+		e.Digest, e.Commitments, e.Openings, e.WrittenBy, e.EntryId = "", nil, nil, nil, 0
+		prevOrd++
 		written = append(written, e)
 	}
 	if err = ctx.Err(); err != nil {
 		return nil, eb.Build().Uint64("run", run.Id).Errorf("append: %w", err)
 	}
-	err = inst.store.Append(ctx, written)
+	err = inst.store.Append(expecting(ctx, prevDigest), written)
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	if err != nil {
@@ -239,6 +242,22 @@ func (inst *Writer) append(ctx context.Context, closing bool, entries ...Entry) 
 	}
 	inst.entries = append(slices.Clip(inst.entries), written...)
 	inst.run = advanced(inst.run, written)
+	return
+}
+
+// expectedHeadKey carries the head digest a writer expects on the context
+// of an Append, for a store that checks it (the bus client sends it; the
+// in-memory store trusts its single writer).
+type expectedHeadKey struct{}
+
+// expecting returns ctx carrying the head digest the writer expects.
+func expecting(ctx context.Context, head string) context.Context {
+	return context.WithValue(ctx, expectedHeadKey{}, head)
+}
+
+// expectedHead is the head digest on ctx, empty for none.
+func expectedHead(ctx context.Context) (head string) {
+	head, _ = ctx.Value(expectedHeadKey{}).(string)
 	return
 }
 

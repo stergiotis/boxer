@@ -928,7 +928,12 @@ func (inst emitter) emitEvidenceVerbs(p func(string, ...any)) {
 	p("}")
 	p("")
 	p("// chainItem is the canonical item of ent with the chain's Prev and Digest")
-	p("// at zero: what its chain digest is over.")
+	if inst.model.revision != nil {
+		p("// at zero, and the revision too — a superseding row at a later revision")
+		p("// is the same row to the chain: what its chain digest is over.")
+	} else {
+		p("// at zero: what its chain digest is over.")
+	}
 	p("func (inst *%s) chainItem(ent *%s) (item []byte, err error) {", st, ent)
 	p("\tc := *ent")
 	p("\tif c.%s.Has {", chain)
@@ -936,6 +941,9 @@ func (inst emitter) emitEvidenceVerbs(p func(string, ...any)) {
 	p("\t\tch.Prev, ch.Digest = 0, \"\"")
 	p("\t\tc.%s = option.Some(ch)", chain)
 	p("\t}")
+	if inst.model.revision != nil {
+		p("\tc.%sEnvelope.%s = 0", inst.StoreName, inst.model.revision.pascal)
+	}
 	p("\treturn inst.CanonicalItem(&c)")
 	p("}")
 	p("")

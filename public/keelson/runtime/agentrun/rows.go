@@ -4,58 +4,125 @@ import (
 	"encoding/json/v2"
 	"strings"
 
+	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun/agentrunstore"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/jsonshred"
+	"github.com/stergiotis/boxer/public/storage/recordstore/evidence"
 )
 
-// The rows an entry is stored as (ADR-0325 §SD1): the ledger row and its
-// record components, and, for an entry with content, the vault row with
-// its components and the shredded arguments and calls. The SQL stores and
-// the canonical forms share these mappings, so a row as stored and a row
-// as hashed are one row.
+// The rows an entry is stored as (ADR-0325 §SD1, ADR-0327 §SD9): the
+// ledger row with its record components, the chain and the written-by
+// component, and, for an entry with content, one vault row per content
+// component — the prose, the shredded arguments and calls, and the records
+// the vault keeps — each with its opening. The stores and the canonical
+// forms share these mappings, so a row as stored and a row as hashed are
+// one row.
 
-// hasher computes the canonical items of rows not stored (ADR-0325 §SD2).
-var hasher = agentrunstore.NewHasher()
+// The vault's component names: the kind tags of the vault store's
+// components, which name a vault row and key an entry's commitments.
+const (
+	componentBody            = "agentrunBody"
+	componentShredded        = agentrunstore.EvidenceShreddedKind
+	componentEndorse         = "agentrunEndorse"
+	componentGrant           = "agentrunGrant"
+	componentQuestion        = "agentrunQuestion"
+	componentAnswer          = "agentrunAnswer"
+	componentApprovalContent = "agentrunApprovalContent"
+	componentCopy            = "agentrunCopy"
+)
 
-// fillLedger composes e's ledger row on b.
-func fillLedger(b *agentrunstore.EntryEntityBuilder, e Entry) (err error) {
+// ledgerEntity is e's ledger row: the entry component, its records, the
+// chain component with the mark its kind implies and the commitments it
+// carries, and the written-by component when it has one.
+func ledgerEntity(e Entry) (ent *agentrunstore.EntryEntity, err error) {
 	types, digests, err := attachmentColumns(e.Attachments)
 	if err != nil {
 		return
 	}
-	b.AddEntry(agentrunstore.Entry{At: utc(e.At), Kind: e.Kind.String(), Key: e.Key, Role: e.Role,
-		EntryId: e.EntryId, VaultCommitment: e.VaultCommitment,
-		Name: e.Name, Book: e.Book, Form: e.Form, Target: e.Target, From: e.From, Effect: e.Effect, Turn: e.Turn,
+	ent = &agentrunstore.EntryEntity{ID: e.Run, Ord: uint64(e.Ordinal)}
+	ent.Entry = option.Some(agentrunstore.Entry{At: utc(e.At), Kind: e.Kind.String(), Key: e.Key, Role: e.Role,
+		EntryId: e.EntryId,
+		Name:    e.Name, Book: e.Book, Form: e.Form, Target: e.Target, From: e.From, Effect: e.Effect, Turn: e.Turn,
 		LabelLevel: uint8(e.Label.Level), LabelTier: uint8(e.Label.Tier), LabelExposure: unionMarks(e.Label.Exposure, nil), LabelOrigin: unionMarks(e.Label.Origin, nil),
-		WriterRun: e.WriterRun, WriterTurn: e.WriterTurn, WriterOrdinal: e.WriterOrdinal, Prev: e.Prev, Digest: e.Digest, KeyId: e.KeyId, Parent: e.Parent,
+		WriterRun: e.WriterRun, WriterTurn: e.WriterTurn, WriterOrdinal: e.WriterOrdinal, Parent: e.Parent,
 		AttachmentMediaTypes: types, AttachmentDigests: digests})
 	if r := e.Request; r != nil {
-		b.AddRequestMeta(agentrunstore.RequestMeta{Digest: r.Digest, Messages: r.Messages, Tools: r.Tools, Round: r.Round, Label: r.Label})
+		ent.RequestMeta = option.Some(agentrunstore.RequestMeta{Digest: r.Digest, Messages: r.Messages, Tools: r.Tools, Round: r.Round, Label: r.Label})
 	}
 	if r := e.Reply; r != nil {
-		b.AddReplyMeta(agentrunstore.ReplyMeta{CallId: r.CallId, FinishReason: r.FinishReason, InputTokens: r.InputTokens, OutputTokens: r.OutputTokens})
+		ent.ReplyMeta = option.Some(agentrunstore.ReplyMeta{CallId: r.CallId, FinishReason: r.FinishReason, InputTokens: r.InputTokens, OutputTokens: r.OutputTokens})
 	}
 	if c := e.Compact; c != nil {
-		b.AddCompactIntent(agentrunstore.CompactIntent{Cut: c.Cut, From: c.From, Span: c.Span})
+		ent.CompactIntent = option.Some(agentrunstore.CompactIntent{Cut: c.Cut, From: c.From, Span: c.Span})
 	}
 	if a := e.Approval; a != nil {
-		b.AddApprovalDecision(agentrunstore.ApprovalDecision{Channel: a.Channel, Edge: a.Edge, Tier: a.Tier, Path: a.Path, Approver: a.Approver, At: utc(a.At)})
+		ent.ApprovalDecision = option.Some(agentrunstore.ApprovalDecision{Channel: a.Channel, Edge: a.Edge, Tier: a.Tier, Path: a.Path, Approver: a.Approver, At: utc(a.At)})
 	}
 	if h := e.Head; h != nil {
-		b.AddHeadRecord(agentrunstore.HeadRecord{Ordinal: h.Ordinal, Digest: h.Digest, ReceiptId: h.ReceiptId, ReceiptAt: utc(h.ReceiptAt), Cadence: h.Cadence, Durable: h.Durable})
+		ent.HeadRecord = option.Some(agentrunstore.HeadRecord{Ordinal: h.Ordinal, Digest: h.Digest, ReceiptId: h.ReceiptId, ReceiptAt: utc(h.ReceiptAt), Cadence: h.Cadence, Durable: h.Durable})
 	}
 	if p := e.Profile; p != nil {
-		b.AddProfileRecord(agentrunstore.ProfileRecord{Fingerprint: p.Fingerprint})
+		ent.ProfileRecord = option.Some(agentrunstore.ProfileRecord{Fingerprint: p.Fingerprint})
 	}
 	if t := e.TurnEnd; t != nil {
-		b.AddTurnState(agentrunstore.TurnState{State: t.State, Reason: t.Reason})
+		ent.TurnState = option.Some(agentrunstore.TurnState{State: t.State, Reason: t.Reason})
 	}
 	if t := e.Tools; t != nil {
-		b.AddToolCatalog(agentrunstore.ToolCatalog{Names: t.Names})
+		ent.ToolCatalog = option.Some(agentrunstore.ToolCatalog{Names: t.Names})
+	}
+	ent.EvidenceChain = option.Some(chainOf(e))
+	if w := e.WrittenBy; w != nil {
+		ent.EvidenceWrittenBy = option.Some(writtenByRow(*w))
 	}
 	return
+}
+
+// chainOf is e's chain component: the chain fields, the mark its kind
+// implies (ADR-0327 §SD3), and its commitments in component order.
+func chainOf(e Entry) (ch agentrunstore.EvidenceChain) {
+	ch = agentrunstore.EvidenceChain{Kind: agentrunstore.EvidenceChainKind, Prev: uint64(e.Prev), Digest: e.Digest, Scheme: e.KeyId,
+		Mark: evidence.MarkNone.String()}
+	switch e.Kind {
+	case KindDeleted:
+		ch.Mark = evidence.MarkDeleted.String()
+	case KindErased:
+		ch.Mark, ch.MarkTarget = evidence.MarkErased.String(), uint64(e.Target)
+	case KindHead:
+		ch.Mark = evidence.MarkKeep.String()
+		if e.Head != nil {
+			ch.MarkTarget, ch.HeadDigest = uint64(e.Head.Ordinal), option.Some(e.Head.Digest)
+		}
+	}
+	for _, component := range componentOrder {
+		if c, ok := e.Commitments[component]; ok {
+			ch.CommitComponents = append(ch.CommitComponents, component)
+			ch.Commitments = append(ch.Commitments, c)
+		}
+	}
+	return
+}
+
+// componentOrder is the order content rows are made and commitments
+// listed in: fixed, so a row as prepared and a row as checked agree.
+var componentOrder = []string{componentBody, componentShredded, componentEndorse, componentGrant, componentQuestion, componentAnswer, componentApprovalContent, componentCopy}
+
+func writtenByRow(w WrittenBy) (row agentrunstore.EvidenceWrittenBy) {
+	row = agentrunstore.EvidenceWrittenBy{Kind: agentrunstore.EvidenceWrittenByKind, Instance: w.Instance, OriginBy: w.OriginBy, PrincipalBy: w.PrincipalBy}
+	some := func(s string) option.Option[string] {
+		if s == "" {
+			return option.None[string]()
+		}
+		return option.Some(s)
+	}
+	row.Run, row.App, row.Principal, row.Purpose, row.Correlation, row.Batch = some(w.Run), some(w.App), some(w.Principal), some(w.Purpose), some(w.Correlation), some(w.Batch)
+	return
+}
+
+func writtenByOf(row agentrunstore.EvidenceWrittenBy) *WrittenBy {
+	return &WrittenBy{Run: row.Run.Val, App: row.App.Val, Instance: row.Instance, OriginBy: row.OriginBy,
+		Principal: row.Principal.Val, PrincipalBy: row.PrincipalBy, Purpose: row.Purpose.Val, Correlation: row.Correlation.Val, Batch: row.Batch.Val}
 }
 
 // entryOfLedger is the entry a ledger row holds, without content: the
@@ -64,11 +131,26 @@ func entryOfLedger(ent *agentrunstore.EntryEntity) (e Entry) {
 	row := ent.Entry.Val
 	k, _ := ParseKind(row.Kind)
 	e = Entry{Run: ent.ID, Ordinal: uint32(ent.Ord), At: zeroed(row.At), Kind: k, Key: row.Key, Role: row.Role,
-		EntryId: row.EntryId, VaultCommitment: row.VaultCommitment,
-		Name: row.Name, Book: row.Book, Form: row.Form, Target: row.Target, From: row.From, Effect: row.Effect, Turn: row.Turn,
+		EntryId: row.EntryId,
+		Name:    row.Name, Book: row.Book, Form: row.Form, Target: row.Target, From: row.From, Effect: row.Effect, Turn: row.Turn,
 		Label:     Label{Level: LevelE(row.LabelLevel), Tier: TierE(row.LabelTier), Exposure: unionMarks(row.LabelExposure, nil), Origin: unionMarks(row.LabelOrigin, nil)},
-		WriterRun: row.WriterRun, WriterTurn: row.WriterTurn, WriterOrdinal: row.WriterOrdinal, Prev: row.Prev, Digest: row.Digest, KeyId: row.KeyId, Parent: row.Parent,
+		WriterRun: row.WriterRun, WriterTurn: row.WriterTurn, WriterOrdinal: row.WriterOrdinal, Parent: row.Parent,
 		Attachments: attachmentsText(row.AttachmentMediaTypes, row.AttachmentDigests)}
+	if ent.EvidenceChain.Has {
+		ch := ent.EvidenceChain.Val
+		e.Prev, e.Digest, e.KeyId = uint32(ch.Prev), ch.Digest, ch.Scheme
+		for i, component := range ch.CommitComponents {
+			if i < len(ch.Commitments) {
+				if e.Commitments == nil {
+					e.Commitments = make(map[string]string, len(ch.CommitComponents))
+				}
+				e.Commitments[component] = ch.Commitments[i]
+			}
+		}
+	}
+	if ent.EvidenceWrittenBy.Has {
+		e.WrittenBy = writtenByOf(ent.EvidenceWrittenBy.Val)
+	}
 	if ent.RequestMeta.Has {
 		c := ent.RequestMeta.Val
 		e.Request = &RequestMeta{Digest: c.Digest, Messages: c.Messages, Tools: c.Tools, Round: c.Round, Label: c.Label}
@@ -107,103 +189,193 @@ func entryOfLedger(ent *agentrunstore.EntryEntity) (e Entry) {
 	return
 }
 
-// fillVault composes b's vault row from body, the opening left out when
-// withOpening is false: what the commitment covers.
-func fillVault(b *agentrunstore.BodyRowEntityBuilder, body Body, withOpening bool) (err error) {
-	row := agentrunstore.BodyRow{Body: body.Body}
-	if withOpening {
-		row.Opening = OpeningText(body.Opening)
+// contentRows are e's vault rows, one per content component in
+// componentOrder, keyed by the entry's run and ordinal and named by the
+// component, each with e's opening for it when e has one. An entry
+// without content makes none.
+func contentRows(e Entry) (rows []*agentrunstore.EntryVaultEntity, err error) {
+	row := func(component string) (v *agentrunstore.EntryVaultEntity) {
+		v = &agentrunstore.EntryVaultEntity{ID: e.Run, Ord: uint64(e.Ordinal)}
+		v.Component = component
+		if o, ok := e.Openings[component]; ok && len(o) > 0 {
+			v.EvidenceOpening = option.Some(agentrunstore.EvidenceOpening{Kind: agentrunstore.EvidenceOpeningKind, Opening: evidence.OpeningText(o)})
+		}
+		rows = append(rows, v)
+		return
 	}
 	var shredded []jsonshred.Attr
-	if body.Arguments != "" {
-		attrs, xerr := shred(fieldArguments, body.Arguments)
+	body := agentrunstore.BodyRow{Body: e.Body}
+	if e.Arguments != "" {
+		attrs, xerr := shred(fieldArguments, e.Arguments)
 		if xerr != nil {
-			row.ArgumentsText = body.Arguments
+			body.ArgumentsText = e.Arguments
 		} else {
 			shredded = append(shredded, attrs...)
 		}
 	}
-	if body.Calls != "" {
-		attrs, xerr := shred(fieldCalls, body.Calls)
+	if e.Calls != "" {
+		attrs, xerr := shred(fieldCalls, e.Calls)
 		if xerr != nil {
-			return eb.Build().Uint64("run", body.Run).Uint32("ordinal", body.Ordinal).Errorf("the calls do not parse: %w", xerr)
+			return nil, eb.Build().Uint64("run", e.Run).Uint32("ordinal", e.Ordinal).Errorf("the calls do not parse: %w", xerr)
 		}
 		shredded = append(shredded, attrs...)
 	}
-	b.AddBodyRow(row)
-	if c := body.Endorse; c != nil {
-		b.AddEndorsement(agentrunstore.Endorsement{Digest: c.Digest, Epoch: c.Epoch, Classes: c.Classes, Previous: c.Previous, Diff: c.Diff})
+	if body.Body != "" || body.ArgumentsText != "" {
+		row(componentBody).BodyRow = option.Some(body)
 	}
-	if c := body.Grant; c != nil {
-		b.AddGrantRecord(agentrunstore.GrantRecord{Task: c.Task, Handle: c.Handle, HasTerms: c.HasTerms, CallsBudget: c.CallsBudget, CallsUsed: c.CallsUsed,
+	if len(shredded) > 0 {
+		s, serr := agentrunstore.EvidenceShreddedOf(shredded)
+		if serr != nil {
+			return nil, eb.Build().Uint64("run", e.Run).Uint32("ordinal", e.Ordinal).Errorf("shred: %w", serr)
+		}
+		row(componentShredded).EvidenceShredded = option.Some(s)
+	}
+	if c := e.Endorse; c != nil {
+		row(componentEndorse).Endorsement = option.Some(agentrunstore.Endorsement{Digest: c.Digest, Epoch: c.Epoch, Classes: c.Classes, Previous: c.Previous, Diff: c.Diff})
+	}
+	if c := e.Grant; c != nil {
+		row(componentGrant).GrantRecord = option.Some(agentrunstore.GrantRecord{Task: c.Task, Handle: c.Handle, HasTerms: c.HasTerms, CallsBudget: c.CallsBudget, CallsUsed: c.CallsUsed,
 			Deadline: utc(c.Deadline), Destinations: c.Destinations, Unattended: c.Unattended})
 	}
-	if c := body.Question; c != nil {
-		b.AddExitQuestion(agentrunstore.ExitQuestion{Question: c.Question, Sink: c.Sink, Tier: c.Tier, Path: c.Path})
+	if c := e.Question; c != nil {
+		row(componentQuestion).ExitQuestion = option.Some(agentrunstore.ExitQuestion{Question: c.Question, Sink: c.Sink, Tier: c.Tier, Path: c.Path})
 	}
-	if c := body.Answer; c != nil {
-		b.AddExitAnswer(agentrunstore.ExitAnswer{Sink: c.Sink, Tier: c.Tier, Approved: c.Approved, Justification: c.Justification})
+	if c := e.Answer; c != nil {
+		row(componentAnswer).ExitAnswer = option.Some(agentrunstore.ExitAnswer{Sink: c.Sink, Tier: c.Tier, Approved: c.Approved, Justification: c.Justification})
 	}
-	if c := body.Approval; c != nil {
-		b.AddApprovalContent(agentrunstore.ApprovalContent{Justification: c.Justification, Digest: c.Digest})
+	if c := e.Approval; c != nil && (c.Justification != "" || c.Digest != "") {
+		row(componentApprovalContent).ApprovalContent = option.Some(agentrunstore.ApprovalContent{Justification: c.Justification, Digest: c.Digest})
 	}
-	if c := body.Copy; c != nil {
-		b.AddCopyRecord(agentrunstore.CopyRecord{Digest: c.Digest, Level: c.Level, Tier: c.Tier, Source: c.Source, Handle: c.Handle, Plaintext: c.Plaintext,
+	if c := e.Copy; c != nil {
+		row(componentCopy).CopyRecord = option.Some(agentrunstore.CopyRecord{Digest: c.Digest, Level: c.Level, Tier: c.Tier, Source: c.Source, Handle: c.Handle, Plaintext: c.Plaintext,
 			Recorded: c.Recorded, Approval: c.Approval, Raw: c.Raw, Refused: c.Refused, Reason: c.Reason, Bytes: c.Bytes})
 	}
-	return agentrunstore.ContributeShredded(b, shredded)
+	return
 }
 
-// bodyOfVault is the content a vault row holds.
-func bodyOfVault(row agentrunstore.VaultRow) (body Body, err error) {
-	ent := row.Ent
-	body = Body{Run: ent.ID, Ordinal: uint32(ent.Ord)}
-	if ent.BodyRow.Has {
-		c := ent.BodyRow.Val
-		body.Opening, body.Body, body.Arguments = OpeningOf(c.Opening), c.Body, c.ArgumentsText
+// withPrepared is e with what the store's Prepare set on its ledger row
+// and content rows: the ordinal, the chain fields, the commitments, the
+// openings and the written-by identity.
+func withPrepared(e Entry, ent *agentrunstore.EntryEntity, rows []*agentrunstore.EntryVaultEntity) Entry {
+	e.Ordinal = uint32(ent.Ord)
+	ch := ent.EvidenceChain.Val
+	e.Prev, e.Digest, e.KeyId = uint32(ch.Prev), ch.Digest, ch.Scheme
+	e.Commitments, e.Openings = nil, nil
+	for i, component := range ch.CommitComponents {
+		if e.Commitments == nil {
+			e.Commitments = make(map[string]string, len(ch.CommitComponents))
+		}
+		if i < len(ch.Commitments) {
+			e.Commitments[component] = ch.Commitments[i]
+		}
 	}
-	if ent.Endorsement.Has {
-		c := ent.Endorsement.Val
-		body.Endorse = &Endorsement{Digest: c.Digest, Epoch: c.Epoch, Classes: c.Classes, Previous: c.Previous, Diff: c.Diff}
+	for _, v := range rows {
+		if v.EvidenceOpening.Has {
+			if o := evidence.OpeningOf(v.EvidenceOpening.Val.Opening); o != nil {
+				if e.Openings == nil {
+					e.Openings = make(map[string][]byte, len(rows))
+				}
+				e.Openings[v.Component] = o
+			}
+		}
 	}
-	if ent.GrantRecord.Has {
-		c := ent.GrantRecord.Val
-		body.Grant = &GrantRecord{Task: c.Task, Handle: c.Handle, HasTerms: c.HasTerms, CallsBudget: c.CallsBudget, CallsUsed: c.CallsUsed,
-			Deadline: zeroed(c.Deadline), Destinations: c.Destinations, Unattended: c.Unattended}
+	if ent.EvidenceWrittenBy.Has {
+		e.WrittenBy = writtenByOf(ent.EvidenceWrittenBy.Val)
 	}
-	if ent.ExitQuestion.Has {
-		c := ent.ExitQuestion.Val
-		body.Question = &ExitQuestion{Question: c.Question, Sink: c.Sink, Tier: c.Tier, Path: c.Path}
+	return e
+}
+
+// bodyOfRows is the content the vault rows of one entry hold, with their
+// openings: what the join takes and opens against the ledger row's
+// commitments. Of several rows for one component — a batch in flight when
+// another process took the run over, retried after its ledger write
+// failed — the one at the highest revision stands, as the ledger's row
+// does (ADR-0319 §SD7); whether it opens is the join's to check.
+func bodyOfRows(run uint64, ordinal uint32, rows []*agentrunstore.EntryVaultEntity) (b Body, err error) {
+	newest := make(map[string]*agentrunstore.EntryVaultEntity, len(rows))
+	for _, v := range rows {
+		if have, ok := newest[v.Component]; !ok || v.Revision > have.Revision {
+			newest[v.Component] = v
+		}
 	}
-	if ent.ExitAnswer.Has {
-		c := ent.ExitAnswer.Val
-		body.Answer = &ExitAnswer{Sink: c.Sink, Tier: c.Tier, Approved: c.Approved, Justification: c.Justification}
+	kept := make([]*agentrunstore.EntryVaultEntity, 0, len(newest))
+	for _, component := range componentOrder {
+		if v, ok := newest[component]; ok {
+			kept = append(kept, v)
+		}
 	}
-	if ent.ApprovalContent.Has {
-		c := ent.ApprovalContent.Val
-		body.Approval = &ApprovalPart{Justification: c.Justification, Digest: c.Digest}
+	e, err := withContent(Entry{Run: run, Ordinal: ordinal}, kept)
+	if err != nil {
+		return
 	}
-	if ent.CopyRecord.Has {
-		c := ent.CopyRecord.Val
-		body.Copy = &CopyRecord{Digest: c.Digest, Level: c.Level, Tier: c.Tier, Source: c.Source, Handle: c.Handle, Plaintext: c.Plaintext,
-			Recorded: c.Recorded, Approval: c.Approval, Raw: c.Raw, Refused: c.Refused, Reason: c.Reason, Bytes: c.Bytes}
-	}
+	b, _ = bodyOf(e)
+	b.Run, b.Ordinal, b.Openings = run, ordinal, e.Openings
+	return
+}
+
+// withContent is e joined with the content its vault rows hold and their
+// openings; whether the content opens e's commitments is the reader's to
+// check (BodiesMatch).
+func withContent(e Entry, rows []*agentrunstore.EntryVaultEntity) (out Entry, err error) {
+	out = e
+	out.Openings = nil
 	var args, calls []jsonshred.Attr
-	for _, a := range row.Shredded {
+	for _, v := range rows {
+		if v.EvidenceOpening.Has {
+			if o := evidence.OpeningOf(v.EvidenceOpening.Val.Opening); o != nil {
+				if out.Openings == nil {
+					out.Openings = make(map[string][]byte, len(rows))
+				}
+				out.Openings[v.Component] = o
+			}
+		}
 		switch {
-		case strings.HasPrefix(a.Path, "/"+fieldArguments):
-			args = append(args, a)
-		case strings.HasPrefix(a.Path, "/"+fieldCalls):
-			calls = append(calls, a)
+		case v.BodyRow.Has:
+			c := v.BodyRow.Val
+			out.Body, out.Arguments = c.Body, c.ArgumentsText
+		case v.EvidenceShredded.Has:
+			for _, a := range v.EvidenceShredded.Val.Attrs() {
+				switch {
+				case strings.HasPrefix(a.Path, "/"+fieldArguments):
+					args = append(args, a)
+				case strings.HasPrefix(a.Path, "/"+fieldCalls):
+					calls = append(calls, a)
+				}
+			}
+		case v.Endorsement.Has:
+			c := v.Endorsement.Val
+			out.Endorse = &Endorsement{Digest: c.Digest, Epoch: c.Epoch, Classes: c.Classes, Previous: c.Previous, Diff: c.Diff}
+		case v.GrantRecord.Has:
+			c := v.GrantRecord.Val
+			out.Grant = &GrantRecord{Task: c.Task, Handle: c.Handle, HasTerms: c.HasTerms, CallsBudget: c.CallsBudget, CallsUsed: c.CallsUsed,
+				Deadline: zeroed(c.Deadline), Destinations: c.Destinations, Unattended: c.Unattended}
+		case v.ExitQuestion.Has:
+			c := v.ExitQuestion.Val
+			out.Question = &ExitQuestion{Question: c.Question, Sink: c.Sink, Tier: c.Tier, Path: c.Path}
+		case v.ExitAnswer.Has:
+			c := v.ExitAnswer.Val
+			out.Answer = &ExitAnswer{Sink: c.Sink, Tier: c.Tier, Approved: c.Approved, Justification: c.Justification}
+		case v.ApprovalContent.Has:
+			c := v.ApprovalContent.Val
+			a := Approval{}
+			if out.Approval != nil {
+				a = *out.Approval
+			}
+			a.Justification, a.Digest = c.Justification, c.Digest
+			out.Approval = &a
+		case v.CopyRecord.Has:
+			c := v.CopyRecord.Val
+			out.Copy = &CopyRecord{Digest: c.Digest, Level: c.Level, Tier: c.Tier, Source: c.Source, Handle: c.Handle, Plaintext: c.Plaintext,
+				Recorded: c.Recorded, Approval: c.Approval, Raw: c.Raw, Refused: c.Refused, Reason: c.Reason, Bytes: c.Bytes}
 		}
 	}
 	if len(args) > 0 {
-		if body.Arguments, err = unshred(fieldArguments, args); err != nil {
+		if out.Arguments, err = unshred(fieldArguments, args); err != nil {
 			return
 		}
 	}
 	if len(calls) > 0 {
-		body.Calls, err = unshred(fieldCalls, calls)
+		out.Calls, err = unshred(fieldCalls, calls)
 	}
 	return
 }

@@ -124,7 +124,9 @@ func entriesTable(rows []Entry) *introspect.Table {
 		String("body", func(i int) string { return rows[i].RecordBody() }).
 		String("calls", func(i int) string { return rows[i].Calls }).
 		String("arguments", func(i int) string { return rows[i].Arguments }).
-		String("vault_commitment", func(i int) string { return rows[i].VaultCommitment }).
+		// The commitments to the entry's content, one per vaulted component,
+		// as "<component>:<commitment>" (ADR-0327 §SD4).
+		StringList("commitments", func(i int) []string { return commitmentsList(rows[i].Commitments) }).
 		Uint64("entry_id", func(i int) uint64 { return rows[i].EntryId }).
 		String("name", func(i int) string { return rows[i].Name }).
 		String("book", func(i int) string { return rows[i].Book }).
@@ -145,6 +147,16 @@ func entriesTable(rows []Entry) *introspect.Table {
 		String("key_id", func(i int) string { return rows[i].KeyId }).
 		Uint64("parent", func(i int) uint64 { return uint64(rows[i].Parent) }).
 		String("attachments", func(i int) string { return rows[i].Attachments })
+}
+
+// commitmentsList spells an entry's commitments in component order.
+func commitmentsList(commitments map[string]string) (out []string) {
+	for _, component := range componentOrder {
+		if c, ok := commitments[component]; ok {
+			out = append(out, component+":"+c)
+		}
+	}
+	return
 }
 
 func ms(t time.Time) int64 {

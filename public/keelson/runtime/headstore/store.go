@@ -10,6 +10,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/storage/recordstore/evidence"
 )
 
 // Head is one chain head shipped to the store: the ordinal it covers and
@@ -179,76 +180,23 @@ func Ship(ctx context.Context, store StoreI, w *agentrun.Writer, c Cadence) (e a
 // no head entry stands for it. An entry the chain itself breaks at (law
 // L31) breaks every head past it.
 func VerifyHeads(runDigest string, entries []agentrun.Entry, anchored []Anchored) (broken []uint32) {
-	sorted := slices.Clone(entries)
-	slices.SortFunc(sorted, func(a, b agentrun.Entry) int { return int(a.Ordinal) - int(b.Ordinal) })
-	// The chain as recomputed, ordinal by ordinal.
-	recomputed := make(map[uint32]string, len(sorted)+1)
-	recomputed[0] = runDigest
-	prevOrd, prevDigest, chainBrokenAt := uint32(0), runDigest, uint32(0)
-	for _, e := range sorted {
-		form, err := e.CanonicalForm()
-		if err != nil || e.Prev != prevOrd || !e.BodiesMatch() {
-			chainBrokenAt = e.Ordinal
-			break
+	rows, err := agentrun.Rows(entries)
+	if err != nil {
+		// A row whose form cannot be computed breaks at itself and every
+		// head past it: the generic law reports what it can over nothing.
+		for _, e := range entries {
+			broken = append(broken, e.Ordinal)
 		}
-		d := agentrun.ChainDigest(prevDigest, form)
-		recomputed[e.Ordinal] = d
-		if d != e.Digest {
-			chainBrokenAt = e.Ordinal
-			break
-		}
-		prevOrd, prevDigest = e.Ordinal, d
+		slices.Sort(broken)
+		return
 	}
-	chainHolds := func(ordinal uint32, digest string) bool {
-		d, ok := recomputed[ordinal]
-		return ok && (chainBrokenAt == 0 || ordinal < chainBrokenAt) && d == digest
+	heads := make([]evidence.AnchoredHead, 0, len(anchored))
+	for _, a := range anchored {
+		heads = append(heads, evidence.AnchoredHead{Ordinal: uint64(a.Ordinal), Digest: a.Digest, ReceiptAt: a.Receipt.At, ReceiptId: a.Receipt.Id})
 	}
-	// The store's heads, earliest receipt first; a conflicting later
-	// receipt breaks its ordinal.
-	byReceipt := slices.Clone(anchored)
-	slices.SortStableFunc(byReceipt, func(a, b Anchored) int {
-		if c := a.Receipt.At.Compare(b.Receipt.At); c != 0 {
-			return c
-		}
-		return strings.Compare(a.Receipt.Id, b.Receipt.Id)
-	})
-	stored := make(map[uint32]string, len(byReceipt))
-	bad := make(map[uint32]bool)
-	for _, a := range byReceipt {
-		if first, seen := stored[a.Ordinal]; seen {
-			if first != a.Digest {
-				bad[a.Ordinal] = true
-			}
-			continue
-		}
-		stored[a.Ordinal] = a.Digest
+	for _, o := range evidence.VerifyHeads(agentrun.ChainScheme, runDigest, rows, heads) {
+		broken = append(broken, uint32(o))
 	}
-	// Head entries against the chain and the store.
-	recorded := make(map[uint32]bool)
-	for _, e := range sorted {
-		if e.Kind != agentrun.KindHead {
-			continue
-		}
-		if e.Head == nil || e.Head.Ordinal != e.Target {
-			bad[e.Ordinal] = true
-			continue
-		}
-		rec := *e.Head
-		recorded[rec.Ordinal] = true
-		if !chainHolds(rec.Ordinal, rec.Digest) || stored[rec.Ordinal] != rec.Digest {
-			bad[e.Ordinal] = true
-		}
-	}
-	// Anchored heads against the chain and the head entries.
-	for ordinal, digest := range stored {
-		if !chainHolds(ordinal, digest) || !recorded[ordinal] {
-			bad[ordinal] = true
-		}
-	}
-	for ordinal := range bad {
-		broken = append(broken, ordinal)
-	}
-	slices.Sort(broken)
 	return
 }
 

@@ -13,25 +13,9 @@ import (
 // --- Caller-assigned membership ids (registry-stable target). ---
 
 const (
-	kindAgentrunBodyOpening       uint64 = 9223372049739678067
 	kindAgentrunBodyText          uint64 = 9223372049739678068
 	kindAgentrunBodyArgumentsText uint64 = 9223372049739678108
 )
-
-// bodyRowStringArrayAttrI is the InAttr-side view of the stringArray section. P-variants only —
-// every method returns void so no F-bounded `[Self]` parameter is
-// needed.
-type bodyRowStringArrayAttrI interface {
-	dmlruntime.InAttributeMembershipLowCardRefPI
-	EndAttributeP()
-}
-
-// bodyRowStringArraySecI is the Section-side view: opens an attribute and closes
-// the section. Attr and Ent are bound at the call site by inference.
-type bodyRowStringArraySecI[Attr any, Ent any] interface {
-	BeginAttributeSingle(value string) Attr
-	EndSection() Ent
-}
 
 // bodyRowTextArrayAttrI is the InAttr-side view of the textArray section. P-variants only —
 // every method returns void so no F-bounded `[Self]` parameter is
@@ -48,6 +32,21 @@ type bodyRowTextArraySecI[Attr any, Ent any] interface {
 	EndSection() Ent
 }
 
+// bodyRowStringArrayAttrI is the InAttr-side view of the stringArray section. P-variants only —
+// every method returns void so no F-bounded `[Self]` parameter is
+// needed.
+type bodyRowStringArrayAttrI interface {
+	dmlruntime.InAttributeMembershipLowCardRefPI
+	EndAttributeP()
+}
+
+// bodyRowStringArraySecI is the Section-side view: opens an attribute and closes
+// the section. Attr and Ent are bound at the call site by inference.
+type bodyRowStringArraySecI[Attr any, Ent any] interface {
+	BeginAttributeSingle(value string) Attr
+	EndSection() Ent
+}
+
 // bodyRowEntityI is the entity-builder surface bodyRowAddSections drives.
 // It always lists the per-section getters; the entity-frame methods
 // (BeginEntity / plain setters / CommitEntity) are added only for the
@@ -56,32 +55,14 @@ type bodyRowTextArraySecI[Attr any, Ent any] interface {
 // store drive it with a builder whose frame control is unexported
 // (ADR-0100 SD6). Ent is the builder pointer.
 type bodyRowEntityI[
-	StringArrayAttr bodyRowStringArrayAttrI,
-	StringArraySec bodyRowStringArraySecI[StringArrayAttr, Ent],
 	TextArrayAttr bodyRowTextArrayAttrI,
 	TextArraySec bodyRowTextArraySecI[TextArrayAttr, Ent],
-	Ent any,
-] interface {
-	GetSectionStringArray() StringArraySec
-	GetSectionTextArray() TextArraySec
-}
-
-// bodyRowEmitSectionStringArray writes this kind's stringArray attributes into an
-// ALREADY-OPEN section frame, and does not close it. The caller owns
-// the frame: one kind's AddSections, or a builder deferring the close
-// until every component that shares the section has written.
-func bodyRowEmitSectionStringArray[
 	StringArrayAttr bodyRowStringArrayAttrI,
 	StringArraySec bodyRowStringArraySecI[StringArrayAttr, Ent],
 	Ent any,
-](stringArraySec StringArraySec, row BodyRow) (err error) {
-	stringArraySecAttr_Opening := stringArraySec.BeginAttributeSingle(row.Opening)
-	stringArraySecAttr_Opening.AddMembershipLowCardRefP(kindAgentrunBodyOpening)
-	stringArraySecAttr_Opening.EndAttributeP()
-	stringArraySecAttr_ArgumentsText := stringArraySec.BeginAttributeSingle(row.ArgumentsText)
-	stringArraySecAttr_ArgumentsText.AddMembershipLowCardRefP(kindAgentrunBodyArgumentsText)
-	stringArraySecAttr_ArgumentsText.EndAttributeP()
-	return
+] interface {
+	GetSectionTextArray() TextArraySec
+	GetSectionStringArray() StringArraySec
 }
 
 // bodyRowEmitSectionTextArray writes this kind's textArray attributes into an
@@ -99,28 +80,36 @@ func bodyRowEmitSectionTextArray[
 	return
 }
 
+// bodyRowEmitSectionStringArray writes this kind's stringArray attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func bodyRowEmitSectionStringArray[
+	StringArrayAttr bodyRowStringArrayAttrI,
+	StringArraySec bodyRowStringArraySecI[StringArrayAttr, Ent],
+	Ent any,
+](stringArraySec StringArraySec, row BodyRow) (err error) {
+	stringArraySecAttr_ArgumentsText := stringArraySec.BeginAttributeSingle(row.ArgumentsText)
+	stringArraySecAttr_ArgumentsText.AddMembershipLowCardRefP(kindAgentrunBodyArgumentsText)
+	stringArraySecAttr_ArgumentsText.EndAttributeP()
+	return
+}
+
 // bodyRowAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
 func bodyRowAddSections[
-	StringArrayAttr bodyRowStringArrayAttrI,
-	StringArraySec bodyRowStringArraySecI[StringArrayAttr, Ent],
 	TextArrayAttr bodyRowTextArrayAttrI,
 	TextArraySec bodyRowTextArraySecI[TextArrayAttr, Ent],
+	StringArrayAttr bodyRowStringArrayAttrI,
+	StringArraySec bodyRowStringArraySecI[StringArrayAttr, Ent],
 	Ent any,
 	DML bodyRowEntityI[
-		StringArrayAttr, StringArraySec,
 		TextArrayAttr, TextArraySec,
+		StringArrayAttr, StringArraySec,
 		Ent,
 	],
 ](dml DML, row BodyRow) (err error) {
-	// --- stringArray. ---
-	stringArraySec := dml.GetSectionStringArray()
-	err = bodyRowEmitSectionStringArray(stringArraySec, row)
-	if err != nil {
-		return
-	}
-	stringArraySec.EndSection()
 	// --- textArray. ---
 	textArraySec := dml.GetSectionTextArray()
 	err = bodyRowEmitSectionTextArray(textArraySec, row)
@@ -128,18 +117,14 @@ func bodyRowAddSections[
 		return
 	}
 	textArraySec.EndSection()
+	// --- stringArray. ---
+	stringArraySec := dml.GetSectionStringArray()
+	err = bodyRowEmitSectionStringArray(stringArraySec, row)
+	if err != nil {
+		return
+	}
+	stringArraySec.EndSection()
 	return
-}
-
-// bodyRowStringArrayAttrsReadI is the Attributes-side view of the stringArray section.
-type bodyRowStringArrayAttrsReadI interface {
-	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (string, error)
-	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
-}
-
-// bodyRowStringArrayMembsReadI is the Memberships-side view of the stringArray section.
-type bodyRowStringArrayMembsReadI interface {
-	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
 // bodyRowTextArrayAttrsReadI is the Attributes-side view of the textArray section.
@@ -153,6 +138,17 @@ type bodyRowTextArrayMembsReadI interface {
 	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
+// bodyRowStringArrayAttrsReadI is the Attributes-side view of the stringArray section.
+type bodyRowStringArrayAttrsReadI interface {
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (string, error)
+	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
+}
+
+// bodyRowStringArrayMembsReadI is the Memberships-side view of the stringArray section.
+type bodyRowStringArrayMembsReadI interface {
+	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
+}
+
 // bodyRowReadRow reads row i as one optional BodyRow component: presence-
 // gated (a row carrying none of the kind's memberships yields
 // present=false), membership-matched. A slot carrying more
@@ -162,69 +158,17 @@ type bodyRowTextArrayMembsReadI interface {
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
 func bodyRowReadRow[
-	StringArrayAttrs bodyRowStringArrayAttrsReadI,
-	StringArrayMembs bodyRowStringArrayMembsReadI,
 	TextArrayAttrs bodyRowTextArrayAttrsReadI,
 	TextArrayMembs bodyRowTextArrayMembsReadI,
+	StringArrayAttrs bodyRowStringArrayAttrsReadI,
+	StringArrayMembs bodyRowStringArrayMembsReadI,
 ](
 	i int,
-	stringArrayAttrs StringArrayAttrs,
-	stringArrayMembs StringArrayMembs,
 	textArrayAttrs TextArrayAttrs,
 	textArrayMembs TextArrayMembs,
+	stringArrayAttrs StringArrayAttrs,
+	stringArrayMembs StringArrayMembs,
 ) (row BodyRow, present bool, err error) {
-	// --- stringArray. ---
-	var stringArrayOpeningVal string
-	var stringArrayOpeningCount int
-	var stringArrayOpeningLastAttr int64
-	var stringArrayArgumentsTextVal string
-	var stringArrayArgumentsTextCount int
-	var stringArrayArgumentsTextLastAttr int64
-	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
-	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
-		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
-			switch membID {
-			case kindAgentrunBodyOpening:
-				if stringArrayOpeningLastAttr != attrJ+1 {
-					stringArrayOpeningLastAttr = attrJ + 1
-					stringArrayOpeningCount++
-				}
-				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				if valErr != nil {
-					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunBodyOpening").Str("field", "Opening").Errorf("slot stringArray@agentrunBodyOpening (field Opening) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
-					return
-				}
-				stringArrayOpeningVal = val
-			case kindAgentrunBodyArgumentsText:
-				if stringArrayArgumentsTextLastAttr != attrJ+1 {
-					stringArrayArgumentsTextLastAttr = attrJ + 1
-					stringArrayArgumentsTextCount++
-				}
-				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				if valErr != nil {
-					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunBodyArgumentsText").Str("field", "ArgumentsText").Errorf("slot stringArray@agentrunBodyArgumentsText (field ArgumentsText) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
-					return
-				}
-				stringArrayArgumentsTextVal = val
-			}
-		}
-	}
-	if stringArrayOpeningCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunBodyOpening").Int("got", stringArrayOpeningCount).Errorf("slot stringArray@agentrunBodyOpening (field Opening) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayOpeningCount)
-		return
-	}
-	if stringArrayOpeningCount == 1 {
-		row.Opening = stringArrayOpeningVal
-		present = true
-	}
-	if stringArrayArgumentsTextCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunBodyArgumentsText").Int("got", stringArrayArgumentsTextCount).Errorf("slot stringArray@agentrunBodyArgumentsText (field ArgumentsText) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayArgumentsTextCount)
-		return
-	}
-	if stringArrayArgumentsTextCount == 1 {
-		row.ArgumentsText = stringArrayArgumentsTextVal
-		present = true
-	}
 	// --- textArray. ---
 	var textArrayBodyVal string
 	var textArrayBodyCount int
@@ -253,6 +197,36 @@ func bodyRowReadRow[
 	}
 	if textArrayBodyCount == 1 {
 		row.Body = textArrayBodyVal
+		present = true
+	}
+	// --- stringArray. ---
+	var stringArrayArgumentsTextVal string
+	var stringArrayArgumentsTextCount int
+	var stringArrayArgumentsTextLastAttr int64
+	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
+		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindAgentrunBodyArgumentsText:
+				if stringArrayArgumentsTextLastAttr != attrJ+1 {
+					stringArrayArgumentsTextLastAttr = attrJ + 1
+					stringArrayArgumentsTextCount++
+				}
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunBodyArgumentsText").Str("field", "ArgumentsText").Errorf("slot stringArray@agentrunBodyArgumentsText (field ArgumentsText) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				stringArrayArgumentsTextVal = val
+			}
+		}
+	}
+	if stringArrayArgumentsTextCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunBodyArgumentsText").Int("got", stringArrayArgumentsTextCount).Errorf("slot stringArray@agentrunBodyArgumentsText (field ArgumentsText) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayArgumentsTextCount)
+		return
+	}
+	if stringArrayArgumentsTextCount == 1 {
+		row.ArgumentsText = stringArrayArgumentsTextVal
 		present = true
 	}
 	return

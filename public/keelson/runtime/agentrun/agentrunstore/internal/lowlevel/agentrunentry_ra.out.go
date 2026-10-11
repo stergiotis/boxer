@@ -35,26 +35,36 @@ var _ = log.Logger
 // ./public/semistructured/leeway/readaccess/lw_ra_generator.go:291
 
 type MembershipPackAgentrunentryTableShared1 struct {
-	ValueHighCardRef                           *array.List
-	ValueHighCardRefElements                   *array.Uint64
-	AccelHighCardRef                           *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64]
-	ColumnIndexHighCardRef                     uint32
-	ColumnIndexHighCardRefAccel                uint32
-	ValueLowCardRef                            *array.List
-	ValueLowCardRefElements                    *array.Uint64
-	AccelLowCardRef                            *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64]
-	ColumnIndexLowCardRef                      uint32
-	ColumnIndexLowCardRefAccel                 uint32
-	ValueMixedLowCardRef                       *array.List
-	ValueMixedLowCardRefElements               *array.Uint64
-	AccelMixedLowCardRef                       *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64]
-	ColumnIndexMixedLowCardRef                 uint32
-	ColumnIndexMixedLowCardRefAccel            uint32
-	ValueMixedRefHighCardParameters            *array.List
-	ValueMixedRefHighCardParametersElements    *array.Binary
-	AccelMixedRefHighCardParameters            *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64]
-	ColumnIndexMixedRefHighCardParameters      uint32
-	ColumnIndexMixedRefHighCardParametersAccel uint32
+	ValueHighCardRef                                *array.List
+	ValueHighCardRefElements                        *array.Uint64
+	AccelHighCardRef                                *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHighCardRef                          uint32
+	ColumnIndexHighCardRefAccel                     uint32
+	ValueLowCardRef                                 *array.List
+	ValueLowCardRefElements                         *array.Uint64
+	AccelLowCardRef                                 *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexLowCardRef                           uint32
+	ColumnIndexLowCardRefAccel                      uint32
+	ValueMixedLowCardRef                            *array.List
+	ValueMixedLowCardRefElements                    *array.Uint64
+	AccelMixedLowCardRef                            *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexMixedLowCardRef                      uint32
+	ColumnIndexMixedLowCardRefAccel                 uint32
+	ValueMixedRefHighCardParameters                 *array.List
+	ValueMixedRefHighCardParametersElements         *array.Binary
+	AccelMixedRefHighCardParameters                 *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexMixedRefHighCardParameters           uint32
+	ColumnIndexMixedRefHighCardParametersAccel      uint32
+	ValueMixedLowCardVerbatim                       *array.List
+	ValueMixedLowCardVerbatimElements               *array.Binary
+	AccelMixedLowCardVerbatim                       *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexMixedLowCardVerbatim                 uint32
+	ColumnIndexMixedLowCardVerbatimAccel            uint32
+	ValueMixedVerbatimHighCardParameters            *array.List
+	ValueMixedVerbatimHighCardParametersElements    *array.Binary
+	AccelMixedVerbatimHighCardParameters            *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexMixedVerbatimHighCardParameters      uint32
+	ColumnIndexMixedVerbatimHighCardParametersAccel uint32
 }
 
 func NewMembershipPackAgentrunentryTableShared1TextArray() (inst *MembershipPackAgentrunentryTableShared1) {
@@ -63,14 +73,20 @@ func NewMembershipPackAgentrunentryTableShared1TextArray() (inst *MembershipPack
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.ColumnIndexHighCardRef = 4
-	inst.ColumnIndexHighCardRefAccel = 9
+	inst.ColumnIndexHighCardRefAccel = 11
 	inst.ColumnIndexLowCardRef = 5
-	inst.ColumnIndexLowCardRefAccel = 10
+	inst.ColumnIndexLowCardRefAccel = 12
 	inst.ColumnIndexMixedLowCardRef = 6
-	inst.ColumnIndexMixedLowCardRefAccel = 11
+	inst.ColumnIndexMixedLowCardRefAccel = 13
 	inst.ColumnIndexMixedRefHighCardParameters = 7
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 11
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 13
+	inst.ColumnIndexMixedLowCardVerbatim = 8
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 14
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 9
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 14
 	return
 }
 
@@ -84,6 +100,10 @@ func (inst *MembershipPackAgentrunentryTableShared1) GetColumnIndices() (columnI
 		inst.ColumnIndexMixedLowCardRefAccel,
 		inst.ColumnIndexMixedRefHighCardParameters,
 		inst.ColumnIndexMixedRefHighCardParametersAccel,
+		inst.ColumnIndexMixedLowCardVerbatim,
+		inst.ColumnIndexMixedLowCardVerbatimAccel,
+		inst.ColumnIndexMixedVerbatimHighCardParameters,
+		inst.ColumnIndexMixedVerbatimHighCardParametersAccel,
 	}
 	return
 }
@@ -98,6 +118,10 @@ func (inst *MembershipPackAgentrunentryTableShared1) GetColumnIndexFieldNames() 
 		"MembershipPackAgentrunentryTableShared1.ColumnIndexMixedLowCardRefAccel",
 		"MembershipPackAgentrunentryTableShared1.ColumnIndexMixedRefHighCardParameters",
 		"MembershipPackAgentrunentryTableShared1.ColumnIndexMixedRefHighCardParametersAccel",
+		"MembershipPackAgentrunentryTableShared1.ColumnIndexMixedLowCardVerbatim",
+		"MembershipPackAgentrunentryTableShared1.ColumnIndexMixedLowCardVerbatimAccel",
+		"MembershipPackAgentrunentryTableShared1.ColumnIndexMixedVerbatimHighCardParameters",
+		"MembershipPackAgentrunentryTableShared1.ColumnIndexMixedVerbatimHighCardParametersAccel",
 	}
 	return
 }
@@ -111,8 +135,12 @@ func (inst *MembershipPackAgentrunentryTableShared1) SetColumnIndices(indices []
 	inst.ColumnIndexMixedLowCardRefAccel = indices[5]
 	inst.ColumnIndexMixedRefHighCardParameters = indices[6]
 	inst.ColumnIndexMixedRefHighCardParametersAccel = indices[7]
+	inst.ColumnIndexMixedLowCardVerbatim = indices[8]
+	inst.ColumnIndexMixedLowCardVerbatimAccel = indices[9]
+	inst.ColumnIndexMixedVerbatimHighCardParameters = indices[10]
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = indices[11]
 
-	rest = indices[8:]
+	rest = indices[12:]
 	return
 }
 
@@ -124,14 +152,20 @@ func NewMembershipPackAgentrunentryTableShared1StringArray() (inst *MembershipPa
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 13
-	inst.ColumnIndexHighCardRefAccel = 18
-	inst.ColumnIndexLowCardRef = 14
-	inst.ColumnIndexLowCardRefAccel = 19
-	inst.ColumnIndexMixedLowCardRef = 15
-	inst.ColumnIndexMixedLowCardRefAccel = 20
-	inst.ColumnIndexMixedRefHighCardParameters = 16
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 20
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 16
+	inst.ColumnIndexHighCardRefAccel = 23
+	inst.ColumnIndexLowCardRef = 17
+	inst.ColumnIndexLowCardRefAccel = 24
+	inst.ColumnIndexMixedLowCardRef = 18
+	inst.ColumnIndexMixedLowCardRefAccel = 25
+	inst.ColumnIndexMixedRefHighCardParameters = 19
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 25
+	inst.ColumnIndexMixedLowCardVerbatim = 20
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 26
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 21
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 26
 	return
 }
 
@@ -141,14 +175,20 @@ func NewMembershipPackAgentrunentryTableShared1Symbol() (inst *MembershipPackAge
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 22
-	inst.ColumnIndexHighCardRefAccel = 26
-	inst.ColumnIndexLowCardRef = 23
-	inst.ColumnIndexLowCardRefAccel = 27
-	inst.ColumnIndexMixedLowCardRef = 24
-	inst.ColumnIndexMixedLowCardRefAccel = 28
-	inst.ColumnIndexMixedRefHighCardParameters = 25
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 28
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 28
+	inst.ColumnIndexHighCardRefAccel = 34
+	inst.ColumnIndexLowCardRef = 29
+	inst.ColumnIndexLowCardRefAccel = 35
+	inst.ColumnIndexMixedLowCardRef = 30
+	inst.ColumnIndexMixedLowCardRefAccel = 36
+	inst.ColumnIndexMixedRefHighCardParameters = 31
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 36
+	inst.ColumnIndexMixedLowCardVerbatim = 32
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 37
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 33
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 37
 	return
 }
 
@@ -158,14 +198,20 @@ func NewMembershipPackAgentrunentryTableShared1SymbolArray() (inst *MembershipPa
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 30
-	inst.ColumnIndexHighCardRefAccel = 35
-	inst.ColumnIndexLowCardRef = 31
-	inst.ColumnIndexLowCardRefAccel = 36
-	inst.ColumnIndexMixedLowCardRef = 32
-	inst.ColumnIndexMixedLowCardRefAccel = 37
-	inst.ColumnIndexMixedRefHighCardParameters = 33
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 37
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 39
+	inst.ColumnIndexHighCardRefAccel = 46
+	inst.ColumnIndexLowCardRef = 40
+	inst.ColumnIndexLowCardRefAccel = 47
+	inst.ColumnIndexMixedLowCardRef = 41
+	inst.ColumnIndexMixedLowCardRefAccel = 48
+	inst.ColumnIndexMixedRefHighCardParameters = 42
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 48
+	inst.ColumnIndexMixedLowCardVerbatim = 43
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 49
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 44
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 49
 	return
 }
 
@@ -175,14 +221,20 @@ func NewMembershipPackAgentrunentryTableShared1BlobArray() (inst *MembershipPack
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 39
-	inst.ColumnIndexHighCardRefAccel = 44
-	inst.ColumnIndexLowCardRef = 40
-	inst.ColumnIndexLowCardRefAccel = 45
-	inst.ColumnIndexMixedLowCardRef = 41
-	inst.ColumnIndexMixedLowCardRefAccel = 46
-	inst.ColumnIndexMixedRefHighCardParameters = 42
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 46
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 51
+	inst.ColumnIndexHighCardRefAccel = 58
+	inst.ColumnIndexLowCardRef = 52
+	inst.ColumnIndexLowCardRefAccel = 59
+	inst.ColumnIndexMixedLowCardRef = 53
+	inst.ColumnIndexMixedLowCardRefAccel = 60
+	inst.ColumnIndexMixedRefHighCardParameters = 54
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 60
+	inst.ColumnIndexMixedLowCardVerbatim = 55
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 61
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 56
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 61
 	return
 }
 
@@ -192,14 +244,20 @@ func NewMembershipPackAgentrunentryTableShared1U8Array() (inst *MembershipPackAg
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 48
-	inst.ColumnIndexHighCardRefAccel = 53
-	inst.ColumnIndexLowCardRef = 49
-	inst.ColumnIndexLowCardRefAccel = 54
-	inst.ColumnIndexMixedLowCardRef = 50
-	inst.ColumnIndexMixedLowCardRefAccel = 55
-	inst.ColumnIndexMixedRefHighCardParameters = 51
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 55
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 63
+	inst.ColumnIndexHighCardRefAccel = 70
+	inst.ColumnIndexLowCardRef = 64
+	inst.ColumnIndexLowCardRefAccel = 71
+	inst.ColumnIndexMixedLowCardRef = 65
+	inst.ColumnIndexMixedLowCardRefAccel = 72
+	inst.ColumnIndexMixedRefHighCardParameters = 66
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 72
+	inst.ColumnIndexMixedLowCardVerbatim = 67
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 73
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 68
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 73
 	return
 }
 
@@ -209,14 +267,20 @@ func NewMembershipPackAgentrunentryTableShared1U16Array() (inst *MembershipPackA
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 57
-	inst.ColumnIndexHighCardRefAccel = 62
-	inst.ColumnIndexLowCardRef = 58
-	inst.ColumnIndexLowCardRefAccel = 63
-	inst.ColumnIndexMixedLowCardRef = 59
-	inst.ColumnIndexMixedLowCardRefAccel = 64
-	inst.ColumnIndexMixedRefHighCardParameters = 60
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 64
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 75
+	inst.ColumnIndexHighCardRefAccel = 82
+	inst.ColumnIndexLowCardRef = 76
+	inst.ColumnIndexLowCardRefAccel = 83
+	inst.ColumnIndexMixedLowCardRef = 77
+	inst.ColumnIndexMixedLowCardRefAccel = 84
+	inst.ColumnIndexMixedRefHighCardParameters = 78
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 84
+	inst.ColumnIndexMixedLowCardVerbatim = 79
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 85
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 80
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 85
 	return
 }
 
@@ -226,14 +290,20 @@ func NewMembershipPackAgentrunentryTableShared1U32Array() (inst *MembershipPackA
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 66
-	inst.ColumnIndexHighCardRefAccel = 71
-	inst.ColumnIndexLowCardRef = 67
-	inst.ColumnIndexLowCardRefAccel = 72
-	inst.ColumnIndexMixedLowCardRef = 68
-	inst.ColumnIndexMixedLowCardRefAccel = 73
-	inst.ColumnIndexMixedRefHighCardParameters = 69
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 73
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 87
+	inst.ColumnIndexHighCardRefAccel = 94
+	inst.ColumnIndexLowCardRef = 88
+	inst.ColumnIndexLowCardRefAccel = 95
+	inst.ColumnIndexMixedLowCardRef = 89
+	inst.ColumnIndexMixedLowCardRefAccel = 96
+	inst.ColumnIndexMixedRefHighCardParameters = 90
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 96
+	inst.ColumnIndexMixedLowCardVerbatim = 91
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 97
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 92
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 97
 	return
 }
 
@@ -243,14 +313,20 @@ func NewMembershipPackAgentrunentryTableShared1U32Set() (inst *MembershipPackAge
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 75
-	inst.ColumnIndexHighCardRefAccel = 80
-	inst.ColumnIndexLowCardRef = 76
-	inst.ColumnIndexLowCardRefAccel = 81
-	inst.ColumnIndexMixedLowCardRef = 77
-	inst.ColumnIndexMixedLowCardRefAccel = 82
-	inst.ColumnIndexMixedRefHighCardParameters = 78
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 82
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 99
+	inst.ColumnIndexHighCardRefAccel = 106
+	inst.ColumnIndexLowCardRef = 100
+	inst.ColumnIndexLowCardRefAccel = 107
+	inst.ColumnIndexMixedLowCardRef = 101
+	inst.ColumnIndexMixedLowCardRefAccel = 108
+	inst.ColumnIndexMixedRefHighCardParameters = 102
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 108
+	inst.ColumnIndexMixedLowCardVerbatim = 103
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 109
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 104
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 109
 	return
 }
 
@@ -260,14 +336,20 @@ func NewMembershipPackAgentrunentryTableShared1U64Array() (inst *MembershipPackA
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 84
-	inst.ColumnIndexHighCardRefAccel = 89
-	inst.ColumnIndexLowCardRef = 85
-	inst.ColumnIndexLowCardRefAccel = 90
-	inst.ColumnIndexMixedLowCardRef = 86
-	inst.ColumnIndexMixedLowCardRefAccel = 91
-	inst.ColumnIndexMixedRefHighCardParameters = 87
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 91
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 111
+	inst.ColumnIndexHighCardRefAccel = 118
+	inst.ColumnIndexLowCardRef = 112
+	inst.ColumnIndexLowCardRefAccel = 119
+	inst.ColumnIndexMixedLowCardRef = 113
+	inst.ColumnIndexMixedLowCardRefAccel = 120
+	inst.ColumnIndexMixedRefHighCardParameters = 114
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 120
+	inst.ColumnIndexMixedLowCardVerbatim = 115
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 121
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 116
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 121
 	return
 }
 
@@ -277,14 +359,20 @@ func NewMembershipPackAgentrunentryTableShared1U64Set() (inst *MembershipPackAge
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 93
-	inst.ColumnIndexHighCardRefAccel = 98
-	inst.ColumnIndexLowCardRef = 94
-	inst.ColumnIndexLowCardRefAccel = 99
-	inst.ColumnIndexMixedLowCardRef = 95
-	inst.ColumnIndexMixedLowCardRefAccel = 100
-	inst.ColumnIndexMixedRefHighCardParameters = 96
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 100
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 123
+	inst.ColumnIndexHighCardRefAccel = 130
+	inst.ColumnIndexLowCardRef = 124
+	inst.ColumnIndexLowCardRefAccel = 131
+	inst.ColumnIndexMixedLowCardRef = 125
+	inst.ColumnIndexMixedLowCardRefAccel = 132
+	inst.ColumnIndexMixedRefHighCardParameters = 126
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 132
+	inst.ColumnIndexMixedLowCardVerbatim = 127
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 133
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 128
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 133
 	return
 }
 
@@ -294,14 +382,20 @@ func NewMembershipPackAgentrunentryTableShared1I8Array() (inst *MembershipPackAg
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 102
-	inst.ColumnIndexHighCardRefAccel = 107
-	inst.ColumnIndexLowCardRef = 103
-	inst.ColumnIndexLowCardRefAccel = 108
-	inst.ColumnIndexMixedLowCardRef = 104
-	inst.ColumnIndexMixedLowCardRefAccel = 109
-	inst.ColumnIndexMixedRefHighCardParameters = 105
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 109
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 135
+	inst.ColumnIndexHighCardRefAccel = 142
+	inst.ColumnIndexLowCardRef = 136
+	inst.ColumnIndexLowCardRefAccel = 143
+	inst.ColumnIndexMixedLowCardRef = 137
+	inst.ColumnIndexMixedLowCardRefAccel = 144
+	inst.ColumnIndexMixedRefHighCardParameters = 138
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 144
+	inst.ColumnIndexMixedLowCardVerbatim = 139
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 145
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 140
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 145
 	return
 }
 
@@ -311,14 +405,20 @@ func NewMembershipPackAgentrunentryTableShared1I16Array() (inst *MembershipPackA
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 111
-	inst.ColumnIndexHighCardRefAccel = 116
-	inst.ColumnIndexLowCardRef = 112
-	inst.ColumnIndexLowCardRefAccel = 117
-	inst.ColumnIndexMixedLowCardRef = 113
-	inst.ColumnIndexMixedLowCardRefAccel = 118
-	inst.ColumnIndexMixedRefHighCardParameters = 114
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 118
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 147
+	inst.ColumnIndexHighCardRefAccel = 154
+	inst.ColumnIndexLowCardRef = 148
+	inst.ColumnIndexLowCardRefAccel = 155
+	inst.ColumnIndexMixedLowCardRef = 149
+	inst.ColumnIndexMixedLowCardRefAccel = 156
+	inst.ColumnIndexMixedRefHighCardParameters = 150
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 156
+	inst.ColumnIndexMixedLowCardVerbatim = 151
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 157
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 152
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 157
 	return
 }
 
@@ -328,14 +428,20 @@ func NewMembershipPackAgentrunentryTableShared1I32Array() (inst *MembershipPackA
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 120
-	inst.ColumnIndexHighCardRefAccel = 125
-	inst.ColumnIndexLowCardRef = 121
-	inst.ColumnIndexLowCardRefAccel = 126
-	inst.ColumnIndexMixedLowCardRef = 122
-	inst.ColumnIndexMixedLowCardRefAccel = 127
-	inst.ColumnIndexMixedRefHighCardParameters = 123
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 127
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 159
+	inst.ColumnIndexHighCardRefAccel = 166
+	inst.ColumnIndexLowCardRef = 160
+	inst.ColumnIndexLowCardRefAccel = 167
+	inst.ColumnIndexMixedLowCardRef = 161
+	inst.ColumnIndexMixedLowCardRefAccel = 168
+	inst.ColumnIndexMixedRefHighCardParameters = 162
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 168
+	inst.ColumnIndexMixedLowCardVerbatim = 163
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 169
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 164
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 169
 	return
 }
 
@@ -345,14 +451,20 @@ func NewMembershipPackAgentrunentryTableShared1I64Array() (inst *MembershipPackA
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 129
-	inst.ColumnIndexHighCardRefAccel = 134
-	inst.ColumnIndexLowCardRef = 130
-	inst.ColumnIndexLowCardRefAccel = 135
-	inst.ColumnIndexMixedLowCardRef = 131
-	inst.ColumnIndexMixedLowCardRefAccel = 136
-	inst.ColumnIndexMixedRefHighCardParameters = 132
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 136
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 171
+	inst.ColumnIndexHighCardRefAccel = 178
+	inst.ColumnIndexLowCardRef = 172
+	inst.ColumnIndexLowCardRefAccel = 179
+	inst.ColumnIndexMixedLowCardRef = 173
+	inst.ColumnIndexMixedLowCardRefAccel = 180
+	inst.ColumnIndexMixedRefHighCardParameters = 174
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 180
+	inst.ColumnIndexMixedLowCardVerbatim = 175
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 181
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 176
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 181
 	return
 }
 
@@ -362,14 +474,20 @@ func NewMembershipPackAgentrunentryTableShared1F32Array() (inst *MembershipPackA
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 138
-	inst.ColumnIndexHighCardRefAccel = 143
-	inst.ColumnIndexLowCardRef = 139
-	inst.ColumnIndexLowCardRefAccel = 144
-	inst.ColumnIndexMixedLowCardRef = 140
-	inst.ColumnIndexMixedLowCardRefAccel = 145
-	inst.ColumnIndexMixedRefHighCardParameters = 141
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 145
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 183
+	inst.ColumnIndexHighCardRefAccel = 190
+	inst.ColumnIndexLowCardRef = 184
+	inst.ColumnIndexLowCardRefAccel = 191
+	inst.ColumnIndexMixedLowCardRef = 185
+	inst.ColumnIndexMixedLowCardRefAccel = 192
+	inst.ColumnIndexMixedRefHighCardParameters = 186
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 192
+	inst.ColumnIndexMixedLowCardVerbatim = 187
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 193
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 188
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 193
 	return
 }
 
@@ -379,14 +497,20 @@ func NewMembershipPackAgentrunentryTableShared1F64Array() (inst *MembershipPackA
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 147
-	inst.ColumnIndexHighCardRefAccel = 152
-	inst.ColumnIndexLowCardRef = 148
-	inst.ColumnIndexLowCardRefAccel = 153
-	inst.ColumnIndexMixedLowCardRef = 149
-	inst.ColumnIndexMixedLowCardRefAccel = 154
-	inst.ColumnIndexMixedRefHighCardParameters = 150
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 154
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 195
+	inst.ColumnIndexHighCardRefAccel = 202
+	inst.ColumnIndexLowCardRef = 196
+	inst.ColumnIndexLowCardRefAccel = 203
+	inst.ColumnIndexMixedLowCardRef = 197
+	inst.ColumnIndexMixedLowCardRefAccel = 204
+	inst.ColumnIndexMixedRefHighCardParameters = 198
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 204
+	inst.ColumnIndexMixedLowCardVerbatim = 199
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 205
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 200
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 205
 	return
 }
 
@@ -396,14 +520,20 @@ func NewMembershipPackAgentrunentryTableShared1U32Range() (inst *MembershipPackA
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 157
-	inst.ColumnIndexHighCardRefAccel = 161
-	inst.ColumnIndexLowCardRef = 158
-	inst.ColumnIndexLowCardRefAccel = 162
-	inst.ColumnIndexMixedLowCardRef = 159
-	inst.ColumnIndexMixedLowCardRefAccel = 163
-	inst.ColumnIndexMixedRefHighCardParameters = 160
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 163
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 208
+	inst.ColumnIndexHighCardRefAccel = 214
+	inst.ColumnIndexLowCardRef = 209
+	inst.ColumnIndexLowCardRefAccel = 215
+	inst.ColumnIndexMixedLowCardRef = 210
+	inst.ColumnIndexMixedLowCardRefAccel = 216
+	inst.ColumnIndexMixedRefHighCardParameters = 211
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 216
+	inst.ColumnIndexMixedLowCardVerbatim = 212
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 217
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 213
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 217
 	return
 }
 
@@ -413,14 +543,20 @@ func NewMembershipPackAgentrunentryTableShared1TimeArray() (inst *MembershipPack
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 165
-	inst.ColumnIndexHighCardRefAccel = 170
-	inst.ColumnIndexLowCardRef = 166
-	inst.ColumnIndexLowCardRefAccel = 171
-	inst.ColumnIndexMixedLowCardRef = 167
-	inst.ColumnIndexMixedLowCardRefAccel = 172
-	inst.ColumnIndexMixedRefHighCardParameters = 168
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 172
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 219
+	inst.ColumnIndexHighCardRefAccel = 226
+	inst.ColumnIndexLowCardRef = 220
+	inst.ColumnIndexLowCardRefAccel = 227
+	inst.ColumnIndexMixedLowCardRef = 221
+	inst.ColumnIndexMixedLowCardRefAccel = 228
+	inst.ColumnIndexMixedRefHighCardParameters = 222
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 228
+	inst.ColumnIndexMixedLowCardVerbatim = 223
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 229
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 224
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 229
 	return
 }
 
@@ -430,14 +566,89 @@ func NewMembershipPackAgentrunentryTableShared1Bool() (inst *MembershipPackAgent
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 174
-	inst.ColumnIndexHighCardRefAccel = 178
-	inst.ColumnIndexLowCardRef = 175
-	inst.ColumnIndexLowCardRefAccel = 179
-	inst.ColumnIndexMixedLowCardRef = 176
-	inst.ColumnIndexMixedLowCardRefAccel = 180
-	inst.ColumnIndexMixedRefHighCardParameters = 177
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 180
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 231
+	inst.ColumnIndexHighCardRefAccel = 237
+	inst.ColumnIndexLowCardRef = 232
+	inst.ColumnIndexLowCardRefAccel = 238
+	inst.ColumnIndexMixedLowCardRef = 233
+	inst.ColumnIndexMixedLowCardRefAccel = 239
+	inst.ColumnIndexMixedRefHighCardParameters = 234
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 239
+	inst.ColumnIndexMixedLowCardVerbatim = 235
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 240
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 236
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 240
+	return
+}
+
+func NewMembershipPackAgentrunentryTableShared1Null() (inst *MembershipPackAgentrunentryTableShared1) {
+	inst = &MembershipPackAgentrunentryTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 241
+	inst.ColumnIndexHighCardRefAccel = 247
+	inst.ColumnIndexLowCardRef = 242
+	inst.ColumnIndexLowCardRefAccel = 248
+	inst.ColumnIndexMixedLowCardRef = 243
+	inst.ColumnIndexMixedLowCardRefAccel = 249
+	inst.ColumnIndexMixedRefHighCardParameters = 244
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 249
+	inst.ColumnIndexMixedLowCardVerbatim = 245
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 250
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 246
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 250
+	return
+}
+
+func NewMembershipPackAgentrunentryTableShared1EmptyObject() (inst *MembershipPackAgentrunentryTableShared1) {
+	inst = &MembershipPackAgentrunentryTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 251
+	inst.ColumnIndexHighCardRefAccel = 257
+	inst.ColumnIndexLowCardRef = 252
+	inst.ColumnIndexLowCardRefAccel = 258
+	inst.ColumnIndexMixedLowCardRef = 253
+	inst.ColumnIndexMixedLowCardRefAccel = 259
+	inst.ColumnIndexMixedRefHighCardParameters = 254
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 259
+	inst.ColumnIndexMixedLowCardVerbatim = 255
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 260
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 256
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 260
+	return
+}
+
+func NewMembershipPackAgentrunentryTableShared1EmptyArray() (inst *MembershipPackAgentrunentryTableShared1) {
+	inst = &MembershipPackAgentrunentryTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 261
+	inst.ColumnIndexHighCardRefAccel = 267
+	inst.ColumnIndexLowCardRef = 262
+	inst.ColumnIndexLowCardRefAccel = 268
+	inst.ColumnIndexMixedLowCardRef = 263
+	inst.ColumnIndexMixedLowCardRefAccel = 269
+	inst.ColumnIndexMixedRefHighCardParameters = 264
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 269
+	inst.ColumnIndexMixedLowCardVerbatim = 265
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 270
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 266
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 270
 	return
 }
 
@@ -450,6 +661,10 @@ func (inst *MembershipPackAgentrunentryTableShared1) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueMixedLowCardRefElements)
 	runtime.ReleaseIfNotNil(inst.ValueMixedRefHighCardParameters)
 	runtime.ReleaseIfNotNil(inst.ValueMixedRefHighCardParametersElements)
+	runtime.ReleaseIfNotNil(inst.ValueMixedLowCardVerbatim)
+	runtime.ReleaseIfNotNil(inst.ValueMixedLowCardVerbatimElements)
+	runtime.ReleaseIfNotNil(inst.ValueMixedVerbatimHighCardParameters)
+	runtime.ReleaseIfNotNil(inst.ValueMixedVerbatimHighCardParametersElements)
 }
 
 func (inst *MembershipPackAgentrunentryTableShared1) Reset() {
@@ -461,6 +676,10 @@ func (inst *MembershipPackAgentrunentryTableShared1) Reset() {
 	inst.ValueMixedLowCardRefElements = nil
 	inst.ValueMixedRefHighCardParameters = nil
 	inst.ValueMixedRefHighCardParametersElements = nil
+	inst.ValueMixedLowCardVerbatim = nil
+	inst.ValueMixedLowCardVerbatimElements = nil
+	inst.ValueMixedVerbatimHighCardParameters = nil
+	inst.ValueMixedVerbatimHighCardParametersElements = nil
 }
 
 func (inst *MembershipPackAgentrunentryTableShared1) LoadFromRecord(rec runtime.RecordI) (err error) {
@@ -496,6 +715,22 @@ func (inst *MembershipPackAgentrunentryTableShared1) LoadFromRecord(rec runtime.
 	if err != nil {
 		return
 	}
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexMixedLowCardVerbatim, arrow.BINARY, rec, &inst.ValueMixedLowCardVerbatim, &inst.ValueMixedLowCardVerbatimElements, array.NewBinaryData)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexMixedLowCardVerbatimAccel, rec, inst.AccelMixedLowCardVerbatim)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexMixedVerbatimHighCardParameters, arrow.BINARY, rec, &inst.ValueMixedVerbatimHighCardParameters, &inst.ValueMixedVerbatimHighCardParametersElements, array.NewBinaryData)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexMixedVerbatimHighCardParametersAccel, rec, inst.AccelMixedVerbatimHighCardParameters)
+	if err != nil {
+		return
+	}
 	return
 }
 
@@ -510,6 +745,7 @@ func (inst *MembershipPackAgentrunentryTableShared1) GetTotalNumberOfMemberItems
 	nItems += inst.GetNumberOfMemberItemsHighCardRef(entityIdx)
 	nItems += inst.GetNumberOfMemberItemsLowCardRef(entityIdx)
 	nItems += inst.GetNumberOfMemberItemsMixedLowCardRef(entityIdx)
+	nItems += inst.GetNumberOfMemberItemsMixedLowCardVerbatim(entityIdx)
 	return
 }
 
@@ -530,6 +766,13 @@ func (inst *MembershipPackAgentrunentryTableShared1) GetNumberOfMemberItemsLowCa
 func (inst *MembershipPackAgentrunentryTableShared1) GetNumberOfMemberItemsMixedLowCardRef(entityIdx runtime.EntityIdx) (nItems int64) {
 	if inst.ValueMixedLowCardRef != nil {
 		b, e := inst.ValueMixedLowCardRef.ValueOffsets(int(entityIdx))
+		nItems = e - b
+	}
+	return
+}
+func (inst *MembershipPackAgentrunentryTableShared1) GetNumberOfMemberItemsMixedLowCardVerbatim(entityIdx runtime.EntityIdx) (nItems int64) {
+	if inst.ValueMixedLowCardVerbatim != nil {
+		b, e := inst.ValueMixedLowCardVerbatim.ValueOffsets(int(entityIdx))
 		nItems = e - b
 	}
 	return
@@ -606,6 +849,50 @@ func (inst *MembershipPackAgentrunentryTableShared1) GetMembValueLowCardRefHighC
 		}
 	}
 }
+func (inst *MembershipPackAgentrunentryTableShared1) GetMembValueMixedLowCardVerbatim(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[[]byte] {
+	accel := inst.AccelMixedLowCardVerbatim
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueMixedLowCardVerbatim.ValueOffsets(int(entityIdx))
+	return func(yield func([]byte) bool) {
+		vs := inst.ValueMixedLowCardVerbatimElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *MembershipPackAgentrunentryTableShared1) GetMembValueMixedVerbatimHighCardParameters(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[[]byte] {
+	accel := inst.AccelMixedVerbatimHighCardParameters
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueMixedVerbatimHighCardParameters.ValueOffsets(int(entityIdx))
+	return func(yield func([]byte) bool) {
+		vs := inst.ValueMixedVerbatimHighCardParametersElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *MembershipPackAgentrunentryTableShared1) GetMembValueLowCardVerbatimHighCardParams(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq2[[]byte, []byte] {
+	accel := inst.AccelMixedLowCardVerbatim
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueMixedLowCardVerbatim.ValueOffsets(int(entityIdx))
+	return func(yield func([]byte, []byte) bool) {
+		vs1 := inst.ValueMixedLowCardVerbatimElements
+		vs2 := inst.ValueMixedVerbatimHighCardParametersElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			idx := int(b) + int(i)
+			if !yield(vs1.Value(idx), vs2.Value(idx)) {
+				break
+			}
+		}
+	}
+}
 func (inst *MembershipPackAgentrunentryTableShared1) GetNumberOfMemberItemsByAttrHighCardRef(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (nItems int) {
 	accel := inst.AccelHighCardRef
 	accel.SetCurrentEntityIdx(int(entityIdx))
@@ -620,6 +907,12 @@ func (inst *MembershipPackAgentrunentryTableShared1) GetNumberOfMemberItemsByAtt
 }
 func (inst *MembershipPackAgentrunentryTableShared1) GetNumberOfMemberItemsByAttrLowCardRefHighCardParams(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (nItems int) {
 	accel := inst.AccelMixedLowCardRef
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	nItems = int(accel.LookupForwardRange(attrIdx).CalcCardinality())
+	return
+}
+func (inst *MembershipPackAgentrunentryTableShared1) GetNumberOfMemberItemsByAttrLowCardVerbatimHighCardParams(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (nItems int) {
+	accel := inst.AccelMixedLowCardVerbatim
 	accel.SetCurrentEntityIdx(int(entityIdx))
 	nItems = int(accel.LookupForwardRange(attrIdx).CalcCardinality())
 	return
@@ -863,8 +1156,8 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTablePlainEntityLi
 
 func NewReadAccessAgentrunentryTableTaggedBlobArrayAttributes() (inst *ReadAccessAgentrunentryTableTaggedBlobArrayAttributes) {
 	inst = &ReadAccessAgentrunentryTableTaggedBlobArrayAttributes{}
-	inst.ColumnIndexValue = 38
-	inst.ColumnIndexHomogenousArray = 43
+	inst.ColumnIndexValue = 50
+	inst.ColumnIndexHomogenousArray = 57
 	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	return
 }
@@ -897,7 +1190,7 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedBlobArr
 
 func NewReadAccessAgentrunentryTableTaggedBoolAttributes() (inst *ReadAccessAgentrunentryTableTaggedBoolAttributes) {
 	inst = &ReadAccessAgentrunentryTableTaggedBoolAttributes{}
-	inst.ColumnIndexValue = 173
+	inst.ColumnIndexValue = 230
 	return
 }
 
@@ -926,8 +1219,8 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedBoolAtt
 
 func NewReadAccessAgentrunentryTableTaggedF32ArrayAttributes() (inst *ReadAccessAgentrunentryTableTaggedF32ArrayAttributes) {
 	inst = &ReadAccessAgentrunentryTableTaggedF32ArrayAttributes{}
-	inst.ColumnIndexValue = 137
-	inst.ColumnIndexHomogenousArray = 142
+	inst.ColumnIndexValue = 182
+	inst.ColumnIndexHomogenousArray = 189
 	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	return
 }
@@ -960,8 +1253,8 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedF32Arra
 
 func NewReadAccessAgentrunentryTableTaggedF64ArrayAttributes() (inst *ReadAccessAgentrunentryTableTaggedF64ArrayAttributes) {
 	inst = &ReadAccessAgentrunentryTableTaggedF64ArrayAttributes{}
-	inst.ColumnIndexValue = 146
-	inst.ColumnIndexHomogenousArray = 151
+	inst.ColumnIndexValue = 194
+	inst.ColumnIndexHomogenousArray = 201
 	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	return
 }
@@ -994,8 +1287,8 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedF64Arra
 
 func NewReadAccessAgentrunentryTableTaggedI16ArrayAttributes() (inst *ReadAccessAgentrunentryTableTaggedI16ArrayAttributes) {
 	inst = &ReadAccessAgentrunentryTableTaggedI16ArrayAttributes{}
-	inst.ColumnIndexValue = 110
-	inst.ColumnIndexHomogenousArray = 115
+	inst.ColumnIndexValue = 146
+	inst.ColumnIndexHomogenousArray = 153
 	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	return
 }
@@ -1028,8 +1321,8 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedI16Arra
 
 func NewReadAccessAgentrunentryTableTaggedI32ArrayAttributes() (inst *ReadAccessAgentrunentryTableTaggedI32ArrayAttributes) {
 	inst = &ReadAccessAgentrunentryTableTaggedI32ArrayAttributes{}
-	inst.ColumnIndexValue = 119
-	inst.ColumnIndexHomogenousArray = 124
+	inst.ColumnIndexValue = 158
+	inst.ColumnIndexHomogenousArray = 165
 	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	return
 }
@@ -1062,8 +1355,8 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedI32Arra
 
 func NewReadAccessAgentrunentryTableTaggedI64ArrayAttributes() (inst *ReadAccessAgentrunentryTableTaggedI64ArrayAttributes) {
 	inst = &ReadAccessAgentrunentryTableTaggedI64ArrayAttributes{}
-	inst.ColumnIndexValue = 128
-	inst.ColumnIndexHomogenousArray = 133
+	inst.ColumnIndexValue = 170
+	inst.ColumnIndexHomogenousArray = 177
 	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	return
 }
@@ -1096,8 +1389,8 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedI64Arra
 
 func NewReadAccessAgentrunentryTableTaggedI8ArrayAttributes() (inst *ReadAccessAgentrunentryTableTaggedI8ArrayAttributes) {
 	inst = &ReadAccessAgentrunentryTableTaggedI8ArrayAttributes{}
-	inst.ColumnIndexValue = 101
-	inst.ColumnIndexHomogenousArray = 106
+	inst.ColumnIndexValue = 134
+	inst.ColumnIndexHomogenousArray = 141
 	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	return
 }
@@ -1130,8 +1423,8 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedI8Array
 
 func NewReadAccessAgentrunentryTableTaggedStringArrayAttributes() (inst *ReadAccessAgentrunentryTableTaggedStringArrayAttributes) {
 	inst = &ReadAccessAgentrunentryTableTaggedStringArrayAttributes{}
-	inst.ColumnIndexValue = 12
-	inst.ColumnIndexHomogenousArray = 17
+	inst.ColumnIndexValue = 15
+	inst.ColumnIndexHomogenousArray = 22
 	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	return
 }
@@ -1164,8 +1457,8 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedStringA
 
 func NewReadAccessAgentrunentryTableTaggedSymbolArrayAttributes() (inst *ReadAccessAgentrunentryTableTaggedSymbolArrayAttributes) {
 	inst = &ReadAccessAgentrunentryTableTaggedSymbolArrayAttributes{}
-	inst.ColumnIndexValue = 29
-	inst.ColumnIndexHomogenousArray = 34
+	inst.ColumnIndexValue = 38
+	inst.ColumnIndexHomogenousArray = 45
 	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	return
 }
@@ -1198,7 +1491,7 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedSymbolA
 
 func NewReadAccessAgentrunentryTableTaggedSymbolAttributes() (inst *ReadAccessAgentrunentryTableTaggedSymbolAttributes) {
 	inst = &ReadAccessAgentrunentryTableTaggedSymbolAttributes{}
-	inst.ColumnIndexValue = 21
+	inst.ColumnIndexValue = 27
 	return
 }
 
@@ -1228,7 +1521,7 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedSymbolA
 func NewReadAccessAgentrunentryTableTaggedTextArrayAttributes() (inst *ReadAccessAgentrunentryTableTaggedTextArrayAttributes) {
 	inst = &ReadAccessAgentrunentryTableTaggedTextArrayAttributes{}
 	inst.ColumnIndexValue = 3
-	inst.ColumnIndexHomogenousArray = 8
+	inst.ColumnIndexHomogenousArray = 10
 	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	return
 }
@@ -1261,8 +1554,8 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedTextArr
 
 func NewReadAccessAgentrunentryTableTaggedTimeArrayAttributes() (inst *ReadAccessAgentrunentryTableTaggedTimeArrayAttributes) {
 	inst = &ReadAccessAgentrunentryTableTaggedTimeArrayAttributes{}
-	inst.ColumnIndexValue = 164
-	inst.ColumnIndexHomogenousArray = 169
+	inst.ColumnIndexValue = 218
+	inst.ColumnIndexHomogenousArray = 225
 	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	return
 }
@@ -1295,8 +1588,8 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedTimeArr
 
 func NewReadAccessAgentrunentryTableTaggedU16ArrayAttributes() (inst *ReadAccessAgentrunentryTableTaggedU16ArrayAttributes) {
 	inst = &ReadAccessAgentrunentryTableTaggedU16ArrayAttributes{}
-	inst.ColumnIndexValue = 56
-	inst.ColumnIndexHomogenousArray = 61
+	inst.ColumnIndexValue = 74
+	inst.ColumnIndexHomogenousArray = 81
 	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	return
 }
@@ -1329,8 +1622,8 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedU16Arra
 
 func NewReadAccessAgentrunentryTableTaggedU32ArrayAttributes() (inst *ReadAccessAgentrunentryTableTaggedU32ArrayAttributes) {
 	inst = &ReadAccessAgentrunentryTableTaggedU32ArrayAttributes{}
-	inst.ColumnIndexValue = 65
-	inst.ColumnIndexHomogenousArray = 70
+	inst.ColumnIndexValue = 86
+	inst.ColumnIndexHomogenousArray = 93
 	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	return
 }
@@ -1363,8 +1656,8 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedU32Arra
 
 func NewReadAccessAgentrunentryTableTaggedU32RangeAttributes() (inst *ReadAccessAgentrunentryTableTaggedU32RangeAttributes) {
 	inst = &ReadAccessAgentrunentryTableTaggedU32RangeAttributes{}
-	inst.ColumnIndexBeginIncl = 155
-	inst.ColumnIndexEndExcl = 156
+	inst.ColumnIndexBeginIncl = 206
+	inst.ColumnIndexEndExcl = 207
 	return
 }
 
@@ -1396,8 +1689,8 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedU32Rang
 
 func NewReadAccessAgentrunentryTableTaggedU32SetAttributes() (inst *ReadAccessAgentrunentryTableTaggedU32SetAttributes) {
 	inst = &ReadAccessAgentrunentryTableTaggedU32SetAttributes{}
-	inst.ColumnIndexValue = 74
-	inst.ColumnIndexSet = 79
+	inst.ColumnIndexValue = 98
+	inst.ColumnIndexSet = 105
 	inst.AccelSet = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.SetIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	return
 }
@@ -1430,8 +1723,8 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedU32SetA
 
 func NewReadAccessAgentrunentryTableTaggedU64ArrayAttributes() (inst *ReadAccessAgentrunentryTableTaggedU64ArrayAttributes) {
 	inst = &ReadAccessAgentrunentryTableTaggedU64ArrayAttributes{}
-	inst.ColumnIndexValue = 83
-	inst.ColumnIndexHomogenousArray = 88
+	inst.ColumnIndexValue = 110
+	inst.ColumnIndexHomogenousArray = 117
 	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	return
 }
@@ -1464,8 +1757,8 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedU64Arra
 
 func NewReadAccessAgentrunentryTableTaggedU64SetAttributes() (inst *ReadAccessAgentrunentryTableTaggedU64SetAttributes) {
 	inst = &ReadAccessAgentrunentryTableTaggedU64SetAttributes{}
-	inst.ColumnIndexValue = 92
-	inst.ColumnIndexSet = 97
+	inst.ColumnIndexValue = 122
+	inst.ColumnIndexSet = 129
 	inst.AccelSet = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.SetIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	return
 }
@@ -1498,8 +1791,8 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedU64SetA
 
 func NewReadAccessAgentrunentryTableTaggedU8ArrayAttributes() (inst *ReadAccessAgentrunentryTableTaggedU8ArrayAttributes) {
 	inst = &ReadAccessAgentrunentryTableTaggedU8ArrayAttributes{}
-	inst.ColumnIndexValue = 47
-	inst.ColumnIndexHomogenousArray = 52
+	inst.ColumnIndexValue = 62
+	inst.ColumnIndexHomogenousArray = 69
 	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	return
 }
@@ -3130,6 +3423,24 @@ type ReadAccessAgentrunentryTableTaggedBool struct {
 
 var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedBool)(nil)
 
+type ReadAccessAgentrunentryTableTaggedNull struct {
+	Memberships *MembershipPackAgentrunentryTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedNull)(nil)
+
+type ReadAccessAgentrunentryTableTaggedEmptyObject struct {
+	Memberships *MembershipPackAgentrunentryTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEmptyObject)(nil)
+
+type ReadAccessAgentrunentryTableTaggedEmptyArray struct {
+	Memberships *MembershipPackAgentrunentryTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessAgentrunentryTableTaggedEmptyArray)(nil)
+
 func NewReadAccessAgentrunentryTableTaggedTextArray() (inst *ReadAccessAgentrunentryTableTaggedTextArray) {
 	inst = &ReadAccessAgentrunentryTableTaggedTextArray{}
 	inst.Attributes = NewReadAccessAgentrunentryTableTaggedTextArrayAttributes()
@@ -3267,6 +3578,24 @@ func NewReadAccessAgentrunentryTableTaggedBool() (inst *ReadAccessAgentrunentryT
 	inst = &ReadAccessAgentrunentryTableTaggedBool{}
 	inst.Attributes = NewReadAccessAgentrunentryTableTaggedBoolAttributes()
 	inst.Memberships = NewMembershipPackAgentrunentryTableShared1Bool()
+	return
+}
+
+func NewReadAccessAgentrunentryTableTaggedNull() (inst *ReadAccessAgentrunentryTableTaggedNull) {
+	inst = &ReadAccessAgentrunentryTableTaggedNull{}
+	inst.Memberships = NewMembershipPackAgentrunentryTableShared1Null()
+	return
+}
+
+func NewReadAccessAgentrunentryTableTaggedEmptyObject() (inst *ReadAccessAgentrunentryTableTaggedEmptyObject) {
+	inst = &ReadAccessAgentrunentryTableTaggedEmptyObject{}
+	inst.Memberships = NewMembershipPackAgentrunentryTableShared1EmptyObject()
+	return
+}
+
+func NewReadAccessAgentrunentryTableTaggedEmptyArray() (inst *ReadAccessAgentrunentryTableTaggedEmptyArray) {
+	inst = &ReadAccessAgentrunentryTableTaggedEmptyArray{}
+	inst.Memberships = NewMembershipPackAgentrunentryTableShared1EmptyArray()
 	return
 }
 
@@ -3410,6 +3739,24 @@ func (inst *ReadAccessAgentrunentryTableTaggedBool) SetColumnIndices(indices []u
 	return
 }
 
+func (inst *ReadAccessAgentrunentryTableTaggedNull) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedEmptyObject) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedEmptyArray) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
 func (inst *ReadAccessAgentrunentryTableTaggedTextArray) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
@@ -3526,6 +3873,21 @@ func (inst *ReadAccessAgentrunentryTableTaggedTimeArray) GetColumnIndices() (col
 
 func (inst *ReadAccessAgentrunentryTableTaggedBool) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedNull) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedEmptyObject) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedEmptyArray) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
 	return
 }
@@ -3650,6 +4012,21 @@ func (inst *ReadAccessAgentrunentryTableTaggedBool) GetColumnIndexFieldNames() (
 	return
 }
 
+func (inst *ReadAccessAgentrunentryTableTaggedNull) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedEmptyObject) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedEmptyArray) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
 func (inst *ReadAccessAgentrunentryTableTaggedTextArray) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
@@ -3747,6 +4124,18 @@ func (inst *ReadAccessAgentrunentryTableTaggedTimeArray) Release() {
 
 func (inst *ReadAccessAgentrunentryTableTaggedBool) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedNull) Release() {
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedEmptyObject) Release() {
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedEmptyArray) Release() {
 	runtime.ReleaseIfNotNil(inst.Memberships)
 }
 
@@ -4030,6 +4419,33 @@ func (inst *ReadAccessAgentrunentryTableTaggedBool) LoadFromRecord(rec runtime.R
 	return
 }
 
+func (inst *ReadAccessAgentrunentryTableTaggedNull) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedEmptyObject) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedEmptyArray) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
 func (inst *ReadAccessAgentrunentryTableTaggedTextArray) Len() (nEntities int) {
 	nEntities = inst.Memberships.Len()
 	return
@@ -4126,6 +4542,21 @@ func (inst *ReadAccessAgentrunentryTableTaggedTimeArray) Len() (nEntities int) {
 }
 
 func (inst *ReadAccessAgentrunentryTableTaggedBool) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedNull) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedEmptyObject) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedEmptyArray) Len() (nEntities int) {
 	nEntities = inst.Memberships.Len()
 	return
 }
@@ -4290,6 +4721,18 @@ func (inst *ReadAccessAgentrunentryTableTaggedBool) GetMemberships() *Membership
 	return inst.Memberships
 }
 
+func (inst *ReadAccessAgentrunentryTableTaggedNull) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedEmptyObject) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedEmptyArray) GetMemberships() *MembershipPackAgentrunentryTableShared1 {
+	return inst.Memberships
+}
+
 func (inst *ReadAccessAgentrunentryTableTaggedTextArray) GetSectionName() naming.StylableName {
 	return "text-array"
 }
@@ -4410,6 +4853,24 @@ func (inst *ReadAccessAgentrunentryTableTaggedBool) GetSectionName() naming.Styl
 
 var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedBool)(nil)
 
+func (inst *ReadAccessAgentrunentryTableTaggedNull) GetSectionName() naming.StylableName {
+	return "null"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedNull)(nil)
+
+func (inst *ReadAccessAgentrunentryTableTaggedEmptyObject) GetSectionName() naming.StylableName {
+	return "empty-object"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedEmptyObject)(nil)
+
+func (inst *ReadAccessAgentrunentryTableTaggedEmptyArray) GetSectionName() naming.StylableName {
+	return "empty-array"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessAgentrunentryTableTaggedEmptyArray)(nil)
+
 func (inst *ReadAccessAgentrunentryTableTaggedTextArray) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
@@ -4487,6 +4948,18 @@ func (inst *ReadAccessAgentrunentryTableTaggedTimeArray) GetSectionUseAspects() 
 }
 
 func (inst *ReadAccessAgentrunentryTableTaggedBool) GetSectionUseAspects() useaspects.AspectSet {
+	return ""
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedNull) GetSectionUseAspects() useaspects.AspectSet {
+	return ""
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedEmptyObject) GetSectionUseAspects() useaspects.AspectSet {
+	return ""
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedEmptyArray) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
 
@@ -4570,6 +5043,18 @@ func (inst *ReadAccessAgentrunentryTableTaggedBool) GetSectionStreamingGroup() n
 	return "data"
 }
 
+func (inst *ReadAccessAgentrunentryTableTaggedNull) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedEmptyObject) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedEmptyArray) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
 func (inst *ReadAccessAgentrunentryTableTaggedTextArray) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
@@ -4650,84 +5135,132 @@ func (inst *ReadAccessAgentrunentryTableTaggedBool) GetSectionCoSectionGroup() n
 	return ""
 }
 
+func (inst *ReadAccessAgentrunentryTableTaggedNull) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedEmptyObject) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedEmptyArray) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
 func (inst *ReadAccessAgentrunentryTableTaggedTextArray) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b11001
+	return 0b10011001
 }
 
 func (inst *ReadAccessAgentrunentryTableTaggedStringArray) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b11001
+	return 0b10011001
 }
 
 func (inst *ReadAccessAgentrunentryTableTaggedSymbol) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b11001
+	return 0b10011001
 }
 
 func (inst *ReadAccessAgentrunentryTableTaggedSymbolArray) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b11001
+	return 0b10011001
 }
 
 func (inst *ReadAccessAgentrunentryTableTaggedBlobArray) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b11001
+	return 0b10011001
 }
 
 func (inst *ReadAccessAgentrunentryTableTaggedU8Array) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b11001
+	return 0b10011001
 }
 
 func (inst *ReadAccessAgentrunentryTableTaggedU16Array) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b11001
+	return 0b10011001
 }
 
 func (inst *ReadAccessAgentrunentryTableTaggedU32Array) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b11001
+	return 0b10011001
 }
 
 func (inst *ReadAccessAgentrunentryTableTaggedU32Set) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b11001
+	return 0b10011001
 }
 
 func (inst *ReadAccessAgentrunentryTableTaggedU64Array) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b11001
+	return 0b10011001
 }
 
 func (inst *ReadAccessAgentrunentryTableTaggedU64Set) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b11001
+	return 0b10011001
 }
 
 func (inst *ReadAccessAgentrunentryTableTaggedI8Array) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b11001
+	return 0b10011001
 }
 
 func (inst *ReadAccessAgentrunentryTableTaggedI16Array) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b11001
+	return 0b10011001
 }
 
 func (inst *ReadAccessAgentrunentryTableTaggedI32Array) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b11001
+	return 0b10011001
 }
 
 func (inst *ReadAccessAgentrunentryTableTaggedI64Array) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b11001
+	return 0b10011001
 }
 
 func (inst *ReadAccessAgentrunentryTableTaggedF32Array) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b11001
+	return 0b10011001
 }
 
 func (inst *ReadAccessAgentrunentryTableTaggedF64Array) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b11001
+	return 0b10011001
 }
 
 func (inst *ReadAccessAgentrunentryTableTaggedU32Range) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b11001
+	return 0b10011001
 }
 
 func (inst *ReadAccessAgentrunentryTableTaggedTimeArray) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b11001
+	return 0b10011001
 }
 
 func (inst *ReadAccessAgentrunentryTableTaggedBool) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b11001
+	return 0b10011001
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedNull) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b10011001
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedEmptyObject) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b10011001
+}
+
+func (inst *ReadAccessAgentrunentryTableTaggedEmptyArray) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b10011001
+}
+
+// GetNumberOfAttributes counts a value-less section's attributes from the
+// cardinality column of its first membership channel, which holds one
+// entry per attribute.
+func (inst *ReadAccessAgentrunentryTableTaggedNull) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.Memberships.AccelHighCardRef.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+
+// GetNumberOfAttributes counts a value-less section's attributes from the
+// cardinality column of its first membership channel, which holds one
+// entry per attribute.
+func (inst *ReadAccessAgentrunentryTableTaggedEmptyObject) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.Memberships.AccelHighCardRef.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+
+// GetNumberOfAttributes counts a value-less section's attributes from the
+// cardinality column of its first membership channel, which holds one
+// entry per attribute.
+func (inst *ReadAccessAgentrunentryTableTaggedEmptyArray) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.Memberships.AccelHighCardRef.GetEntityAttributeCount(int(entityIdx))
+	return
 }
 
 ///////////////////////////////////////////////////////////////////
@@ -4758,6 +5291,9 @@ type ReadAccessAgentrunentryTable struct {
 	U32Range        *ReadAccessAgentrunentryTableTaggedU32Range
 	TimeArray       *ReadAccessAgentrunentryTableTaggedTimeArray
 	Bool            *ReadAccessAgentrunentryTableTaggedBool
+	Null            *ReadAccessAgentrunentryTableTaggedNull
+	EmptyObject     *ReadAccessAgentrunentryTableTaggedEmptyObject
+	EmptyArray      *ReadAccessAgentrunentryTableTaggedEmptyArray
 }
 
 func NewReadAccessAgentrunentryTable() (inst *ReadAccessAgentrunentryTable) {
@@ -4784,6 +5320,9 @@ func NewReadAccessAgentrunentryTable() (inst *ReadAccessAgentrunentryTable) {
 	inst.U32Range = NewReadAccessAgentrunentryTableTaggedU32Range()
 	inst.TimeArray = NewReadAccessAgentrunentryTableTaggedTimeArray()
 	inst.Bool = NewReadAccessAgentrunentryTableTaggedBool()
+	inst.Null = NewReadAccessAgentrunentryTableTaggedNull()
+	inst.EmptyObject = NewReadAccessAgentrunentryTableTaggedEmptyObject()
+	inst.EmptyArray = NewReadAccessAgentrunentryTableTaggedEmptyArray()
 	return
 }
 
@@ -4810,6 +5349,9 @@ func (inst *ReadAccessAgentrunentryTable) Release() {
 	runtime.ReleaseIfNotNil(inst.U32Range)
 	runtime.ReleaseIfNotNil(inst.TimeArray)
 	runtime.ReleaseIfNotNil(inst.Bool)
+	runtime.ReleaseIfNotNil(inst.Null)
+	runtime.ReleaseIfNotNil(inst.EmptyObject)
+	runtime.ReleaseIfNotNil(inst.EmptyArray)
 }
 
 func (inst *ReadAccessAgentrunentryTable) LoadFromRecord(rec runtime.RecordI) (err error) {
@@ -4967,6 +5509,27 @@ func (inst *ReadAccessAgentrunentryTable) LoadFromRecord(rec runtime.RecordI) (e
 			return
 		}
 	}
+	if inst.Null != nil {
+		err = inst.Null.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "Null").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.EmptyObject != nil {
+		err = inst.EmptyObject.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "EmptyObject").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.EmptyArray != nil {
+		err = inst.EmptyArray.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "agentrunentry-table").Str("fieldName", "EmptyArray").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
 	return
 }
 
@@ -5038,6 +5601,15 @@ func (inst *ReadAccessAgentrunentryTable) SetColumnIndices(indices []uint32) (re
 	if inst.Bool != nil {
 		rest = inst.Bool.SetColumnIndices(rest)
 	}
+	if inst.Null != nil {
+		rest = inst.Null.SetColumnIndices(rest)
+	}
+	if inst.EmptyObject != nil {
+		rest = inst.EmptyObject.SetColumnIndices(rest)
+	}
+	if inst.EmptyArray != nil {
+		rest = inst.EmptyArray.SetColumnIndices(rest)
+	}
 	return
 }
 
@@ -5108,6 +5680,15 @@ func (inst *ReadAccessAgentrunentryTable) GetColumnIndices() (columnIndices []ui
 	if inst.Bool != nil {
 		columnIndices = slices.Concat(columnIndices, inst.Bool.GetColumnIndices())
 	}
+	if inst.Null != nil {
+		columnIndices = slices.Concat(columnIndices, inst.Null.GetColumnIndices())
+	}
+	if inst.EmptyObject != nil {
+		columnIndices = slices.Concat(columnIndices, inst.EmptyObject.GetColumnIndices())
+	}
+	if inst.EmptyArray != nil {
+		columnIndices = slices.Concat(columnIndices, inst.EmptyArray.GetColumnIndices())
+	}
 	return
 }
 
@@ -5177,6 +5758,15 @@ func (inst *ReadAccessAgentrunentryTable) GetColumnIndexFieldNames() (fieldNames
 	}
 	if inst.Bool != nil {
 		fieldNames = slices.Concat(fieldNames, inst.Bool.GetColumnIndexFieldNames())
+	}
+	if inst.Null != nil {
+		fieldNames = slices.Concat(fieldNames, inst.Null.GetColumnIndexFieldNames())
+	}
+	if inst.EmptyObject != nil {
+		fieldNames = slices.Concat(fieldNames, inst.EmptyObject.GetColumnIndexFieldNames())
+	}
+	if inst.EmptyArray != nil {
+		fieldNames = slices.Concat(fieldNames, inst.EmptyArray.GetColumnIndexFieldNames())
 	}
 	return
 }

@@ -37,13 +37,10 @@ func TestTheSqlStoreUnderClickhouseLocal(t *testing.T) {
 	layout := agentrunstore.Layout{Database: "artest"}
 	require.NoError(t, agentrunstore.ProvisionIn(ctx, exec, layout))
 	require.NoError(t, agentrunstore.ProvisionIn(ctx, exec, layout), "idempotent")
-	// The host's shape (ADR-0320 §SD1): the SQL store is the ledger, the
-	// vault holds the content, the vaulted store is what a writer sees.
-	ledger := NewSqlStore(exec, layout)
-	defer ledger.Close()
-	vault := NewSqlBodyStore(exec, layout)
-	defer vault.Close()
-	st := NewVaulted(ledger, vault)
+	// The host's shape (ADR-0320 §SD1, ADR-0327 §SD9): the SQL store holds
+	// the ledger and its vault.
+	st := NewSqlStore(exec, layout)
+	defer st.Close()
 
 	w, err := Open(ctx, st, Run{Cell: "cell", Conversation: "c1", OwnerApp: "chat", Coordinator: "w1", Label: Label{Tier: TierGreen}})
 	require.NoError(t, err)
@@ -108,11 +105,10 @@ func TestTheSqlStoreUnderClickhouseLocal(t *testing.T) {
 	assert.Zero(t, broken, "the chain verifies after the tombstone (L31)")
 
 	// A fresh store over the same tables reads the record, not a cache:
-	// the tombstone's revisions win, the row is the latest version, the
-	// chain holds, and the deleted run reopens read-only.
-	freshLedger := NewSqlStore(exec, layout)
-	defer freshLedger.Close()
-	fresh := NewVaulted(freshLedger, vault)
+	// the vault rows are gone, the row is the latest version, the chain
+	// holds, and the deleted run reopens read-only.
+	fresh := NewSqlStore(exec, layout)
+	defer fresh.Close()
 	reopened, err := Reopen(ctx, fresh, id)
 	require.NoError(t, err)
 	assert.Equal(t, StateDeleted, reopened.Run().State)
@@ -180,10 +176,8 @@ func TestARunRowThatLagsItsEntriesIsRepaired(t *testing.T) {
 	layout := agentrunstore.Layout{Database: "artest"}
 	require.NoError(t, agentrunstore.ProvisionIn(ctx, local, layout))
 	exec := &laggingExecutor{ExecutorI: local, table: layout.RunTable()}
-	ledger, vault := NewSqlStore(exec, layout), NewSqlBodyStore(exec, layout)
-	defer ledger.Close()
-	defer vault.Close()
-	st := NewVaulted(ledger, vault)
+	st := NewSqlStore(exec, layout)
+	defer st.Close()
 	w, err := Open(ctx, st, Run{Id: 11, OwnerApp: "chat"})
 	require.NoError(t, err)
 	_, err = w.Append(ctx, Entry{Kind: KindUser, Body: "one", Label: Label{Tier: TierAmber}})
@@ -202,9 +196,8 @@ func TestARunRowThatLagsItsEntriesIsRepaired(t *testing.T) {
 	more, err := again.Append(ctx, Entry{Kind: KindUser, Body: "three"})
 	require.NoError(t, err)
 	assert.Equal(t, uint32(3), more[0].Ordinal)
-	freshLedger := NewSqlStore(local, layout)
-	defer freshLedger.Close()
-	fresh := NewVaulted(freshLedger, vault)
+	fresh := NewSqlStore(local, layout)
+	defer fresh.Close()
 	r, _, err = fresh.GetRun(ctx, 11)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(3), r.LastOrdinal, "the repaired row was written")
@@ -307,18 +300,11 @@ func (inst *takeoverBeforeInsert) InsertArrow(ctx context.Context, table string,
 func TestABatchInFlightAtATakeoverLosesItsOrdinals(t *testing.T) {
 	fixedOpenings(t)
 	ctx := context.Background()
-	local, layout, _, ledgerB := leaseStores(t)
+	local, layout, _, b := leaseStores(t)
 	exec := &takeoverBeforeInsert{ExecutorI: local, table: layout.EntryTable()}
-	ledgerA := NewSqlStore(exec, layout)
-	defer ledgerA.Close()
-	ledgerB.Liveness = deadLiveness{}
-	vault := func(e recordstore.ExecutorI) *SqlBodyStore {
-		v := NewSqlBodyStore(e, layout)
-		t.Cleanup(v.Close)
-		return v
-	}
-	// The host's shape (ADR-0320 §SD1): a ledger under a vault.
-	a, b := NewVaulted(ledgerA, vault(exec)), NewVaulted(ledgerB, vault(local))
+	a := NewSqlStore(exec, layout)
+	defer a.Close()
+	b.Liveness = deadLiveness{}
 
 	wa, err := Open(ctx, a, Run{Id: 11, OwnerApp: "chat"})
 	require.NoError(t, err)
@@ -334,12 +320,11 @@ func TestABatchInFlightAtATakeoverLosesItsOrdinals(t *testing.T) {
 	_, err = wa.Append(ctx, Entry{Kind: KindUser, Role: "user", Body: "two, from a"})
 	require.Error(t, err, "the old holder's confirm fails after the takeover")
 
-	freshLedger := NewSqlStore(local, layout)
-	defer freshLedger.Close()
-	fresh := NewVaulted(freshLedger, vault(local))
+	fresh := NewSqlStore(local, layout)
+	defer fresh.Close()
 	r, _, err := fresh.GetRun(ctx, 11)
 	require.NoError(t, err)
-	assert.Equal(t, ledgerB.Holder.Run, r.Holder)
+	assert.Equal(t, b.Holder.Run, r.Holder)
 	entries, err := fresh.Entries(ctx, 11, 0)
 	require.NoError(t, err)
 	require.Len(t, entries, 2)
@@ -365,7 +350,7 @@ func runRowCount(t *testing.T, ctx context.Context, exec recordstore.ExecutorI, 
 // bodyCount is the raw number of vault rows for a run.
 func bodyCount(t *testing.T, ctx context.Context, exec recordstore.ExecutorI, layout agentrunstore.Layout, run uint64) (n uint64) {
 	t.Helper()
-	for rec, err := range exec.QueryArrow(ctx, "SELECT count() FROM "+layout.BodyTable()+" WHERE "+agentrunstore.BodyRowColKey+" = "+strconv.FormatUint(run, 10)) {
+	for rec, err := range exec.QueryArrow(ctx, "SELECT count() FROM "+layout.EntryVaultTable()+" WHERE "+agentrunstore.EntryVaultColKey+" = "+strconv.FormatUint(run, 10)) {
 		require.NoError(t, err)
 		if rec.NumRows() > 0 {
 			n = rec.Column(0).(*array.Uint64).Value(0)

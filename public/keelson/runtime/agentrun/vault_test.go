@@ -8,36 +8,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// vaulted is the store a host runs, over memory.
-func vaulted() (st *VaultedStore, ledger *MemStore, vault *MemBodyStore) {
-	ledger, vault = NewMemStore(), NewMemBodyStore()
-	return NewVaulted(ledger, vault), ledger, vault
-}
-
 // Content goes to the vault and never to the ledger; a read joins the
-// two and the chain verifies over the join (ADR-0320 §SD1, §SD5).
+// two and the chain verifies over the join (ADR-0320 §SD1, §SD5; ADR-0327
+// §SD4).
 func TestTheVaultHoldsTheContentAndTheLedgerNone(t *testing.T) {
 	fixedClock(t)
 	fixedOpenings(t)
 	ctx := context.Background()
-	st, ledger, vault := vaulted()
+	st := NewMemStore()
 	w, err := Open(ctx, st, Run{Id: 7, OwnerApp: "chat"})
 	require.NoError(t, err)
 	written, err := w.Append(ctx, Entry{Kind: KindUser, Body: "a name"}, Entry{Kind: KindReply, Body: "hi", Calls: "[]"}, Entry{Kind: KindTurn})
 	require.NoError(t, err)
 
-	bare, err := ledger.Entries(ctx, 7, 0)
-	require.NoError(t, err)
+	bare := st.ledgerEntries(7, 0)
 	require.Len(t, bare, 3)
 	for _, e := range bare {
 		assert.Empty(t, e.Body, "the ledger holds no body")
 		assert.Empty(t, e.Calls)
-		assert.Nil(t, e.Opening, "nor an opening")
+		assert.Nil(t, e.Openings, "nor an opening")
 	}
-	assert.NotEmpty(t, bare[0].VaultCommitment, "it holds the commitment")
-	rows, err := vault.Get(ctx, 7, 0)
-	require.NoError(t, err)
-	assert.Len(t, rows, 2, "one vault row per entry with content")
+	assert.NotEmpty(t, bare[0].Commitments, "it holds the commitments")
+	assert.Len(t, bare[1].Commitments, 2, "one commitment per content component: the prose and the shredded calls")
+	assert.Len(t, st.vaultRows(7, 0), 2, "one vault row set per entry with content")
 
 	joined, err := st.Entries(ctx, 7, 0)
 	require.NoError(t, err)
@@ -58,12 +51,14 @@ func TestAVaultRowThatDoesNotOpenReadsAsErased(t *testing.T) {
 	fixedClock(t)
 	fixedOpenings(t)
 	ctx := context.Background()
-	st, _, vault := vaulted()
+	st := NewMemStore()
 	w, err := Open(ctx, st, Run{Id: 7})
 	require.NoError(t, err)
 	written, err := w.Append(ctx, Entry{Kind: KindUser, Body: "a name"})
 	require.NoError(t, err)
-	require.NoError(t, vault.Put(ctx, []Body{{Run: 7, Ordinal: 1, Opening: written[0].Opening, Body: "another name"}}))
+	st.mu.Lock()
+	st.bodies[7][1] = Body{Run: 7, Ordinal: 1, Openings: written[0].Openings, Body: "another name"}
+	st.mu.Unlock()
 	entries, err := st.Entries(ctx, 7, 0)
 	require.NoError(t, err)
 	assert.Empty(t, entries[0].Body)
@@ -82,7 +77,7 @@ func TestErasingOneEntryKeepsTheChain(t *testing.T) {
 	fixedClock(t)
 	fixedOpenings(t)
 	ctx := context.Background()
-	st, _, vault := vaulted()
+	st := NewMemStore()
 	w, err := Open(ctx, st, Run{Id: 7})
 	require.NoError(t, err)
 	written, err := w.Append(ctx,
@@ -102,15 +97,13 @@ func TestErasingOneEntryKeepsTheChain(t *testing.T) {
 	assert.Equal(t, "ask", entries[0].Body, "the rest stays")
 	assert.Empty(t, entries[1].Body)
 	assert.Empty(t, entries[2].Body)
-	assert.Nil(t, entries[1].Opening)
-	assert.Equal(t, written[1].VaultCommitment, entries[1].VaultCommitment, "the commitment stays")
+	assert.Nil(t, entries[1].Openings)
+	assert.Equal(t, written[1].Commitments, entries[1].Commitments, "the commitments stay")
 	assert.Equal(t, KindErased, entries[3].Kind)
 	assert.Equal(t, uint32(2), entries[3].Target)
 	assert.Equal(t, "person", entries[3].Name)
 	assert.Equal(t, uint32(3), entries[4].Target)
-	rows, err := vault.Get(ctx, 7, 0)
-	require.NoError(t, err)
-	assert.Len(t, rows, 1, "the vault rows are destroyed")
+	assert.Len(t, st.vaultRows(7, 0), 1, "the vault rows are destroyed")
 
 	broken, err := VerifyRun(w.Run(), entries)
 	require.NoError(t, err)
@@ -133,7 +126,7 @@ func TestAHeadEntryIsNotErasedAndSurvivesDeletion(t *testing.T) {
 	fixedClock(t)
 	fixedOpenings(t)
 	ctx := context.Background()
-	st, _, vault := vaulted()
+	st := NewMemStore()
 	w, err := Open(ctx, st, Run{Id: 7})
 	require.NoError(t, err)
 	_, err = w.Append(ctx, Entry{Kind: KindUser, Body: "a name"}, Entry{Kind: KindHead, Body: `{"ordinal":1}`})
@@ -144,9 +137,7 @@ func TestAHeadEntryIsNotErasedAndSurvivesDeletion(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, entries[0].Body)
 	assert.Equal(t, `{"ordinal":1}`, entries[1].Body, "the head's body stays")
-	rows, err := vault.Get(ctx, 7, 0)
-	require.NoError(t, err)
-	assert.Len(t, rows, 1)
+	assert.Len(t, st.vaultRows(7, 0), 1)
 	broken, err := VerifyRun(w.Run(), entries)
 	require.NoError(t, err)
 	assert.Zero(t, broken)
@@ -158,23 +149,19 @@ func TestReopenFinishesAnErasure(t *testing.T) {
 	fixedClock(t)
 	fixedOpenings(t)
 	ctx := context.Background()
-	st, _, vault := vaulted()
+	st := NewMemStore()
 	w, err := Open(ctx, st, Run{Id: 7})
 	require.NoError(t, err)
 	_, err = w.Append(ctx, Entry{Kind: KindUser, Body: "a name"})
 	require.NoError(t, err)
 	_, err = w.append(ctx, true, Entry{Kind: KindErased, Name: "person", Target: 1})
 	require.NoError(t, err, "the erased entry alone, as a crash leaves it")
-	rows, err := vault.Get(ctx, 7, 0)
-	require.NoError(t, err)
-	require.Len(t, rows, 1, "the content is still there")
+	require.Len(t, st.vaultRows(7, 0), 1, "the content is still there")
 
 	r, err := Reopen(ctx, st, 7)
 	require.NoError(t, err)
 	assert.Empty(t, r.Entries()[0].Body)
-	rows, err = vault.Get(ctx, 7, 0)
-	require.NoError(t, err)
-	assert.Empty(t, rows, "Reopen finished the erasure")
+	assert.Empty(t, st.vaultRows(7, 0), "Reopen finished the erasure")
 }
 
 // The service erases only what the chain names, through the bus.
@@ -182,7 +169,7 @@ func TestTheServiceErasesWhatTheChainNames(t *testing.T) {
 	fixedClock(t)
 	fixedOpenings(t)
 	ctx := context.Background()
-	st, _, _ := vaulted()
+	st := NewMemStore()
 	w, err := Open(ctx, st, Run{Id: 7, OwnerApp: "chat"})
 	require.NoError(t, err)
 	_, err = w.Append(ctx, Entry{Kind: KindUser, Body: "a name"})

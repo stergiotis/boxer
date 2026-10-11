@@ -42,11 +42,10 @@ func TestTwoVaultedStoresOverOneRecord(t *testing.T) {
 	require.NoError(t, err)
 	layout := agentrunstore.Layout{Database: "twotest"}
 	require.NoError(t, agentrunstore.ProvisionIn(ctx, execA, layout))
-	open := func(exec recordstore.ExecutorI) *VaultedStore {
-		ledger, vault := NewSqlStore(exec, layout), NewSqlBodyStore(exec, layout)
-		t.Cleanup(ledger.Close)
-		t.Cleanup(vault.Close)
-		return NewVaulted(ledger, vault)
+	open := func(exec recordstore.ExecutorI) *SqlStore {
+		st := NewSqlStore(exec, layout)
+		t.Cleanup(st.Close)
+		return st
 	}
 	a, b := open(execA), open(execB)
 
@@ -87,17 +86,15 @@ func TestAnErasureLeavesNoOutdatedPartOnTheServer(t *testing.T) {
 	require.NoError(t, err)
 	layout := agentrunstore.Layout{Database: "srvtest"}
 	require.NoError(t, agentrunstore.ProvisionIn(ctx, exec, layout))
-	ledger, vault := NewSqlStore(exec, layout), NewSqlBodyStore(exec, layout)
-	defer ledger.Close()
-	defer vault.Close()
-	st := NewVaulted(ledger, vault)
+	st := NewSqlStore(exec, layout)
+	defer st.Close()
 
 	w, err := Open(ctx, st, Run{Id: 31, Cell: "cell", OwnerApp: "chat"})
 	require.NoError(t, err)
 	_, err = w.Append(ctx, Entry{Kind: KindUser, Body: "a name"}, Entry{Kind: KindOutcome, Key: "c1", Role: "tool", Body: `{"customer":"a name"}`})
 	require.NoError(t, err)
 	parts := func(active bool) (n uint64) {
-		sql := "SELECT count() FROM system.parts WHERE database = 'srvtest' AND table = '" + agentrunstore.TableNameBody + "' AND active = " + strconv.FormatBool(active)
+		sql := "SELECT count() FROM system.parts WHERE database = 'srvtest' AND table = '" + agentrunstore.TableNameEntryVault + "' AND active = " + strconv.FormatBool(active)
 		for rec, qerr := range exec.QueryArrow(ctx, sql) {
 			require.NoError(t, qerr)
 			if rec.NumRows() > 0 {
@@ -115,8 +112,8 @@ func TestAnErasureLeavesNoOutdatedPartOnTheServer(t *testing.T) {
 	for parts(false) != 0 {
 		if time.Now().After(deadline) {
 			t.Fatalf("an outdated part still holds the erased bytes after the cleanup period:\n%s", describe(t, ctx, exec,
-				"SELECT name, active, remove_time, refcount FROM system.parts WHERE database = 'srvtest' AND table = '"+agentrunstore.TableNameBody+"'",
-				"SELECT engine_full FROM system.tables WHERE database = 'srvtest' AND name = '"+agentrunstore.TableNameBody+"'"))
+				"SELECT name, active, remove_time, refcount FROM system.parts WHERE database = 'srvtest' AND table = '"+agentrunstore.TableNameEntryVault+"'",
+				"SELECT engine_full FROM system.tables WHERE database = 'srvtest' AND name = '"+agentrunstore.TableNameEntryVault+"'"))
 		}
 		time.Sleep(250 * time.Millisecond)
 	}

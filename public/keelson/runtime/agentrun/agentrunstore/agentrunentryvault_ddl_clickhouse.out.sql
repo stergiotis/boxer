@@ -1,8 +1,10 @@
 CREATE DATABASE IF NOT EXISTS boxer;
 
-CREATE TABLE IF NOT EXISTS boxer.agentrunbody (
+CREATE TABLE IF NOT EXISTS boxer.agentrunentryvault (
 	"id:id:u64:4::0:" UInt64 CODEC(ZSTD(3)),
 	"id:ordinal:u64:47::0:" UInt64 CODEC(Delta,ZSTD(3)),
+	"id:component:s:::0:" String,
+	"lc:revision:u32:4::0:" UInt32 CODEC(ZSTD(3)),
 	"tv:textArray:value:val:sh:5::7:0::data" Array(String) CODEC(ZSTD(12)),
 	"tv:textArray:hr:hr:u64:47:::0::data" Array(UInt64) CODEC(Delta,ZSTD(3)),
 	"tv:textArray:lr:lr:u64:1247:::0::data" Array(LowCardinality(UInt64)) CODEC(Delta,ZSTD(3)),

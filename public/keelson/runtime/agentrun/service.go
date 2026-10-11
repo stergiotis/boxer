@@ -7,11 +7,13 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/stergiotis/boxer/public/identity/callident"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/storage/recordstore/evidence"
 )
 
 // Service answers `runtime.agentrun.*` over the store (ADR-0308 §SD10):
@@ -173,20 +175,22 @@ func (inst *Service) handle(msg *app.Msg) {
 			return
 		}
 		unlock := inst.lockRun(entries[0].Run)
-		if why := inst.appendable(ctx, entries, owner); why != "" {
+		if why := inst.appendable(ctx, entries, owner, req.Head); why != "" {
 			unlock()
 			inst.reply(msg.Reply, wireAppendReply{wireAck: wireAck{V: wireVersion, Reason: why}})
 			return
 		}
-		err = inst.store.Append(ctx, entries)
+		// The store prepares the entries under the sender's identity, which
+		// the envelope vouches for (ADR-0327 §SD6, §SD9).
+		err = inst.store.Append(vouched(ctx, owner), entries)
 		unlock()
 		if err != nil {
 			inst.reply(msg.Reply, wireAppendReply{wireAck: wireAck{V: wireVersion, Reason: err.Error()}})
 			return
 		}
-		rep := wireAppendReply{wireAck: wireAck{V: wireVersion, Ok: true}, EntryIds: make([]uint64, 0, len(entries))}
+		rep := wireAppendReply{wireAck: wireAck{V: wireVersion, Ok: true}, Entries: make([]wireEntry, 0, len(entries))}
 		for _, e := range entries {
-			rep.EntryIds = append(rep.EntryIds, e.EntryId)
+			rep.Entries = append(rep.Entries, wireOfEntry(e))
 		}
 		inst.reply(msg.Reply, rep)
 	case SubjectEntries:
@@ -360,12 +364,21 @@ func (inst *Service) erasable(ctx context.Context, r Run, ordinals []uint32) (wh
 	return
 }
 
+// vouched is ctx carrying the sender as the call identity's origin, which
+// the bus envelope vouches for, so the entries the store prepares under
+// it record the sender as who wrote them (ADR-0327 §SD6).
+func vouched(ctx context.Context, owner string) context.Context {
+	ctx = callident.WithCallIdentity(ctx, callident.CallIdentity{Origin: callident.Origin{App: owner}})
+	return evidence.WithAttestation(ctx, evidence.Attestation{OriginBy: evidence.OriginByEnvelope})
+}
+
 // appendable is why the batch may not be appended, empty when it may: one
 // run per batch, the sender's, open (or taking its deleted entry), the
-// ordinals contiguous from the row's last, each entry chained to the one
-// before from the row's head, of a known kind, aimed right, and with its
-// digests matching its bodies.
-func (inst *Service) appendable(ctx context.Context, entries []Entry, owner string) (why string) {
+// ordinals contiguous from the row's last and each naming the one before,
+// the head the writer expects the row's — a writer whose run another
+// writer moved since is refused — and every entry of a known kind, aimed
+// right. The store prepares what remains (ADR-0327 §SD9).
+func (inst *Service) appendable(ctx context.Context, entries []Entry, owner string, head string) (why string) {
 	if len(entries) == 0 {
 		return
 	}
@@ -377,10 +390,10 @@ func (inst *Service) appendable(ctx context.Context, entries []Entry, owner stri
 	if r.State == StateDeleted || inst.headIs(ctx, r, KindDeleted) {
 		return "the run is deleted"
 	}
-	prevOrd, prevDigest := r.LastOrdinal, r.Head
-	if prevDigest == "" {
-		prevDigest = r.Digest
+	if stored := headOf(r); head != "" && head != stored.Digest {
+		return "the run's head moved since the writer read it"
 	}
+	prevOrd := r.LastOrdinal
 	for _, e := range entries {
 		switch {
 		case e.Run != id:
@@ -389,20 +402,11 @@ func (inst *Service) appendable(ctx context.Context, entries []Entry, owner stri
 			return eb.Build().Uint32("ordinal", e.Ordinal).Uint32("last", prevOrd).Errorf("the entry does not follow the run's last").Error()
 		case r.State != StateOpen && e.Kind != KindDeleted:
 			return "the run is " + r.State.String()
-		case !e.BodiesMatch() || (e.HasContent() && e.VaultCommitment == ""):
-			return "the entry's digests are not its bodies'"
 		}
 		if err := checkEntry(e, e.Ordinal); err != nil {
 			return err.Error()
 		}
-		form, err := e.CanonicalForm()
-		if err != nil {
-			return err.Error()
-		}
-		if e.Digest != ChainDigest(prevDigest, form) {
-			return eb.Build().Uint32("ordinal", e.Ordinal).Errorf("the entry is not chained to the run's head").Error()
-		}
-		prevOrd, prevDigest = e.Ordinal, e.Digest
+		prevOrd = e.Ordinal
 	}
 	return
 }

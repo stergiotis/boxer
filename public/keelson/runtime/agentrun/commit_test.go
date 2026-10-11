@@ -1,87 +1,68 @@
 package agentrun
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/stergiotis/boxer/public/storage/recordstore/evidence"
 )
 
 // fixedOpenings replaces the opening with a counter, so a test's
 // commitments are reproducible; the cleanup restores the random one.
 func fixedOpenings(t *testing.T) {
 	t.Helper()
-	was := NewOpening
+	was := evidence.NewOpening
 	var n byte
-	NewOpening = func() (opening []byte) {
+	evidence.NewOpening = func() (opening []byte) {
 		n++
-		opening = make([]byte, OpeningSize)
+		opening = make([]byte, evidence.OpeningSize)
 		for i := range opening {
 			opening[i] = n
 		}
 		return
 	}
-	t.Cleanup(func() { NewOpening = was })
+	t.Cleanup(func() { evidence.NewOpening = was })
 }
 
-// A commitment opens under its opening and under no other, and the same
-// item under two openings commits to two values: hiding and binding, as
-// far as a test can say so (ADR-0325 §SD3).
-func TestACommitmentOpensUnderItsOpeningOnly(t *testing.T) {
-	a, b := NewOpening(), NewOpening()
-	require.Len(t, a, OpeningSize)
-	assert.NotEqual(t, a, b, "openings are random")
-	item := []byte("a vault row")
-	c := CommitVault(a, item)
-	assert.Len(t, c, 64)
-	assert.True(t, OpensVault(a, item, c))
-	assert.False(t, OpensVault(b, item, c), "another opening does not open it")
-	assert.False(t, OpensVault(a, []byte("another row"), c), "another item does not open it")
-	assert.False(t, OpensVault(nil, item, c), "no opening does not open it")
-	assert.False(t, OpensVault(a, item, ""), "no commitment is not opened")
-	assert.NotEqual(t, c, CommitVault(b, item), "the same item commits differently per opening")
-}
-
-// The opening's text form round-trips, and a malformed text is no
-// opening.
-func TestTheOpeningTextRoundTrips(t *testing.T) {
-	o := NewOpening()
-	assert.Equal(t, o, OpeningOf(OpeningText(o)))
-	assert.Nil(t, OpeningOf(""))
-	assert.Nil(t, OpeningOf("zz"))
-	assert.Nil(t, OpeningOf("00"), "the wrong length is no opening")
-}
-
-// Digested draws one opening per entry with content, commits the vault
-// row under it, names the scheme, and leaves an entry without content
-// bare; an erased entry keeps its commitment and its ledger records and
-// nothing else, and its canonical form is the one it had with content.
-func TestDigestedCommitsUnderOneOpening(t *testing.T) {
+// A prepared entry commits to its content one vault row per component,
+// each under an opening of its own, names the scheme, and leaves an entry
+// without content bare; an erased entry keeps its commitments and its
+// ledger records and nothing else, and its canonical form is the one it
+// had with content (ADR-0327 §SD4, §SD9).
+func TestPreparedCommitsPerComponent(t *testing.T) {
 	fixedOpenings(t)
-	e, err := Entry{Run: 7, Ordinal: 1, Kind: KindReply, Body: "hi", Calls: `[{"Id":"c1","Name":"t","Arguments":"{}"}]`, Reply: &ReplyMeta{CallId: "x"}}.Digested()
+	ctx := context.Background()
+	e, err := Entry{Run: 7, Kind: KindReply, Body: "hi", Calls: `[{"Id":"c1","Name":"t","Arguments":"{}"}]`, Reply: &ReplyMeta{CallId: "x"}}.prepared(ctx, evidence.Head{Digest: "seed"})
 	require.NoError(t, err)
-	require.Len(t, e.Opening, OpeningSize)
-	assert.Equal(t, CommitScheme, e.KeyId)
-	assert.Len(t, e.VaultCommitment, 64)
+	assert.Equal(t, uint32(1), e.Ordinal)
+	assert.Equal(t, ChainScheme.Name(), e.KeyId)
+	require.Len(t, e.Openings, 2, "the prose and the shredded calls are two components")
+	require.Len(t, e.Commitments, 2)
+	assert.Len(t, e.Openings[componentBody], evidence.OpeningSize)
+	assert.Len(t, e.Commitments[componentShredded], 64)
+	assert.NotEqual(t, e.Openings[componentBody], e.Openings[componentShredded], "one opening per component")
 	assert.Equal(t, `[{"Arguments":"{}","Id":"c1","Name":"t"}]`, e.Calls, "the calls are stored in canonical form")
 	assert.True(t, e.BodiesMatch())
 	assert.False(t, e.Tombstoned())
-	again, err := e.Digested()
-	require.NoError(t, err)
-	assert.Equal(t, e, again, "an entry with an opening keeps it")
+	require.NotNil(t, e.WrittenBy)
+	assert.Equal(t, "self", e.WrittenBy.OriginBy)
 
-	bare, err := Entry{Run: 7, Ordinal: 2, Kind: KindTurn, TurnEnd: &TurnState{State: "answered"}}.Digested()
+	bare, err := Entry{Run: 7, Kind: KindTurn, TurnEnd: &TurnState{State: "answered"}}.prepared(ctx, evidence.Head{Ordinal: 1, Digest: e.Digest})
 	require.NoError(t, err)
-	assert.Nil(t, bare.Opening, "a ledger record is not content")
-	assert.Empty(t, bare.VaultCommitment)
-	assert.Empty(t, bare.KeyId)
+	assert.Empty(t, bare.Openings, "a ledger record is not content")
+	assert.Empty(t, bare.Commitments)
+	assert.Equal(t, ChainScheme.Name(), bare.KeyId, "the scheme is on every entry")
+	assert.Equal(t, uint32(1), bare.Prev)
 	assert.True(t, bare.BodiesMatch())
 
 	erased := e.Erased()
 	assert.Empty(t, erased.Body)
 	assert.Empty(t, erased.Calls)
-	assert.Nil(t, erased.Opening)
-	assert.Equal(t, e.VaultCommitment, erased.VaultCommitment, "the commitment stays")
+	assert.Nil(t, erased.Openings)
+	assert.Equal(t, e.Commitments, erased.Commitments, "the commitments stay")
 	assert.Equal(t, e.Reply, erased.Reply, "the ledger's record stays")
 	assert.True(t, erased.Tombstoned())
 	assert.True(t, erased.BodiesMatch(), "an erased entry matches: there is nothing to open")
@@ -89,7 +70,8 @@ func TestDigestedCommitsUnderOneOpening(t *testing.T) {
 	require.NoError(t, err)
 	form2, err := erased.CanonicalForm()
 	require.NoError(t, err)
-	assert.Equal(t, form1, form2, "the canonical form is the same with and without the content: the opening is not in it")
+	assert.Equal(t, form1, form2, "the canonical form is the same with and without the content: the openings are not in it")
+	assert.Equal(t, e.Digest, ChainDigest("seed", form1))
 }
 
 // A vault record is content: it is committed to, and changing it breaks
@@ -97,9 +79,9 @@ func TestDigestedCommitsUnderOneOpening(t *testing.T) {
 // shredded attributes, so their spelling does not move the commitment.
 func TestVaultRecordsAndArgumentsAreCommitted(t *testing.T) {
 	fixedOpenings(t)
-	e, err := Entry{Run: 7, Ordinal: 3, Kind: KindEndorse, Endorse: &Endorsement{Digest: "d", Epoch: "t1", Classes: []string{"publish"}}}.Digested()
+	e, err := Entry{Run: 7, Kind: KindEndorse, Endorse: &Endorsement{Digest: "d", Epoch: "t1", Classes: []string{"publish"}}}.prepared(context.Background(), evidence.Head{Digest: "seed"})
 	require.NoError(t, err)
-	require.NotEmpty(t, e.VaultCommitment)
+	require.Contains(t, e.Commitments, componentEndorse)
 	tampered := e
 	tampered.Endorse = &Endorsement{Digest: "other", Epoch: "t1", Classes: []string{"publish"}}
 	assert.False(t, tampered.BodiesMatch(), "a changed record does not open the commitment")

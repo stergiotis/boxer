@@ -325,24 +325,48 @@ projection, the approval and head records, re-entry detection. It hands
 the profile:
 
 - the chain, the vault, the commitments and the openings — the ledger is
-  generated with `Chain` and `Vault`, its vaulted components the prose,
-  the shredded calls and arguments, and the vault's records;
+  generated with `Chain`, `Vault` and `Shredded`, its vaulted components
+  the prose, the shredded calls and arguments as one component, and the
+  vault's records, one vault row and one opening each;
 - the marks — `deleted`, `erased` and `head` entries carry `deleted`,
-  `erased` and `keep`; the verifier reads the mark;
-- the **chain-head row** — the run row becomes the agent run's components
-  on the profile's generic head row: a `Cas` + `KeyStream` table per
-  chained store holding the scope's last ordinal, head digest, state and
-  the writer lease (holder, pid, epoch). The agent run's own columns —
-  conversation, owner, coordinator, fingerprint, profile, settings,
-  label, deletion — are components on it;
-- the written-by component, so the lease holder at each ordinal is in the
-  chain (SD6);
-- head shipping (SD7).
+  `erased` and `keep`; the verifier reads the mark, and a deletion or an
+  erasure destroys vault rows and rewrites no ledger row;
+- the written-by component, so who committed each entry is in the chain
+  (SD6);
+- head shipping and law L32 (SD7).
+
+**The store that writes prepares.** The entry's tagged id is in the
+canonical item and is the store's to assign, so a client cannot compute
+the digest of a row it has not yet been given an id for. A writer hands
+the store entries with their ordinals and the head it expects; the store
+assigns the ids, draws the openings, commits to the content and chains
+each entry to the run's head, under the identity on its context — the
+host's service under the sender's, which the envelope vouches for
+(`originBy = envelope`) — and hands the prepared entries back. The
+service refuses an ordinal that does not follow the row's last and a head
+that moved since the writer read it; what it accepts it prepares, so a
+digest it holds is one it computed. The writer's worker still consumes
+only what the store returned before the act goes on (ADR-0314 §SD1's
+intent, with the store as the one computing). The generated
+`Prepare`/`Check`/`Write` form stays for a store whose writer can mint
+ids of its own.
+
+**The lease epoch's revision is outside the item.** A superseding row at
+a later revision is the same row to the chain, so a chained store with a
+`Revision` role zeroes it in the item it digests; the vault's rows carry
+the revision too, and of several rows for one component the join keeps
+the newest.
 
 The canonical item changes once — the mark and the written-by component
 enter it, the chain's scheme name becomes a parameter — so the digest
-name moves to `…/agentrun-chain/v4` and every golden with a digest in it
-is re-recorded in the same commit. No further digest move is scheduled.
+name moves to `…/agentrun-chain/v4`. The chat's preservation goldens pin
+what a provider and the apps see, not digests, and did not move.
+
+Deferred from this section: the **chain-head row** — the run row becomes
+the agent run's components on a profile-generic `Cas` + `KeyStream` head
+row per chained store holding the scope's last ordinal, head digest and
+the writer lease. The run row stays the journal's own compare-and-set
+row for now, and the ledger's `Head` reads the latest row.
 
 ### SD10 — What does not opt in
 
@@ -375,8 +399,8 @@ is re-recorded in the same commit. No further digest move is scheduled.
 ### Milestones
 
 - **M1 — The evidence package; the canonical wire under shared scaffolding; the canonical item of a stored row (SD1, SD2's first two generator changes).** ✓
-- **M2 — The profile: `Chain`, `Vault`, marks, `WrittenBy`, the shredded component, `storegen`'s options (SD2, SD3, SD4, SD6).**  ✓
-- **M3 — The journal on the profile; digests v4; goldens re-recorded (SD9).**
+- **M2 — The profile: `Chain`, `Vault`, marks, `WrittenBy`, the shredded component, `storegen`'s options (SD2, SD3, SD4, SD6).** ✓
+- **M3 — The journal on the profile; digests v4 (SD9).** ✓
 - **M4 — Seals; the audit event and the forwarder below the runtime; write-ahead for events; `runtime.audit.{app}`; `originBy` (SD5, SD8).**
 - **M5 — Anchors by scope; L32 generic; the verification relations served in-process (SD7).**
 - **M6 — The dated Updates on the ADRs this reshapes.**

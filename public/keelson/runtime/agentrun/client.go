@@ -111,8 +111,11 @@ func (inst *Client) ListRuns(ctx context.Context, _ string, limit int) (runs []R
 	return
 }
 
+// Append sends the entries with the head the writer expects and takes
+// back what the service's store prepared and wrote: ids, digests,
+// commitments, openings and the identity it vouched for.
 func (inst *Client) Append(ctx context.Context, entries []Entry) (err error) {
-	req := wireAppendRequest{V: wireVersion, Entries: make([]wireEntry, 0, len(entries))}
+	req := wireAppendRequest{V: wireVersion, Head: expectedHead(ctx), Entries: make([]wireEntry, 0, len(entries))}
 	for _, e := range entries {
 		req.Entries = append(req.Entries, wireOfEntry(e))
 	}
@@ -120,11 +123,11 @@ func (inst *Client) Append(ctx context.Context, entries []Entry) (err error) {
 	if err = ackOf(rep.wireAck, err); err != nil {
 		return
 	}
-	if len(rep.EntryIds) != len(entries) {
-		return eb.Build().Int("entries", len(entries)).Int("ids", len(rep.EntryIds)).Errorf("the service assigned another number of entry ids than it appended")
+	if len(rep.Entries) != len(entries) {
+		return eb.Build().Int("entries", len(entries)).Int("written", len(rep.Entries)).Errorf("the service wrote another number of entries than it was sent")
 	}
 	for i := range entries {
-		entries[i].EntryId = rep.EntryIds[i]
+		entries[i] = entryOfWire(rep.Entries[i])
 	}
 	return
 }

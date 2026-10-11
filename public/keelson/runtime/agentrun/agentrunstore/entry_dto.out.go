@@ -19,7 +19,6 @@ const (
 	kindAgentrunEntryKey                  uint64 = 9223372049739678026
 	kindAgentrunEntryRole                 uint64 = 9223372049739678027
 	kindAgentrunEntryId                   uint64 = 9223372049739678076
-	kindAgentrunEntryVaultCommitment      uint64 = 9223372049739678077
 	kindAgentrunEntryName                 uint64 = 9223372049739678030
 	kindAgentrunEntryBook                 uint64 = 9223372049739678031
 	kindAgentrunEntryForm                 uint64 = 9223372049739678032
@@ -34,9 +33,6 @@ const (
 	kindAgentrunEntryWriterRun            uint64 = 9223372049739678041
 	kindAgentrunEntryWriterTurn           uint64 = 9223372049739678042
 	kindAgentrunEntryWriterOrdinal        uint64 = 9223372049739678043
-	kindAgentrunEntryPrev                 uint64 = 9223372049739678044
-	kindAgentrunEntryDigest               uint64 = 9223372049739678045
-	kindAgentrunEntryKeyId                uint64 = 9223372049739678046
 	kindAgentrunEntryParent               uint64 = 9223372049739678047
 	kindAgentrunEntryAttachmentMediaTypes uint64 = 9223372049739678078
 	kindAgentrunEntryAttachmentDigests    uint64 = 9223372049739678079
@@ -228,9 +224,6 @@ func entryEmitSectionSymbol[
 	symbolSecAttr_WriterTurn := symbolSec.BeginAttribute(row.WriterTurn)
 	symbolSecAttr_WriterTurn.AddMembershipLowCardRefP(kindAgentrunEntryWriterTurn)
 	symbolSecAttr_WriterTurn.EndAttributeP()
-	symbolSecAttr_KeyId := symbolSec.BeginAttribute(row.KeyId)
-	symbolSecAttr_KeyId.AddMembershipLowCardRefP(kindAgentrunEntryKeyId)
-	symbolSecAttr_KeyId.EndAttributeP()
 	return
 }
 
@@ -246,15 +239,9 @@ func entryEmitSectionStringArray[
 	stringArraySecAttr_Key := stringArraySec.BeginAttributeSingle(row.Key)
 	stringArraySecAttr_Key.AddMembershipLowCardRefP(kindAgentrunEntryKey)
 	stringArraySecAttr_Key.EndAttributeP()
-	stringArraySecAttr_VaultCommitment := stringArraySec.BeginAttributeSingle(row.VaultCommitment)
-	stringArraySecAttr_VaultCommitment.AddMembershipLowCardRefP(kindAgentrunEntryVaultCommitment)
-	stringArraySecAttr_VaultCommitment.EndAttributeP()
 	stringArraySecAttr_Name := stringArraySec.BeginAttributeSingle(row.Name)
 	stringArraySecAttr_Name.AddMembershipLowCardRefP(kindAgentrunEntryName)
 	stringArraySecAttr_Name.EndAttributeP()
-	stringArraySecAttr_Digest := stringArraySec.BeginAttributeSingle(row.Digest)
-	stringArraySecAttr_Digest.AddMembershipLowCardRefP(kindAgentrunEntryDigest)
-	stringArraySecAttr_Digest.EndAttributeP()
 	if len(row.AttachmentDigests) > 0 {
 		stringArraySecAttr_AttachmentDigests := stringArraySec.BeginAttribute()
 		for _, v := range row.AttachmentDigests {
@@ -302,9 +289,6 @@ func entryEmitSectionU32Array[
 	u32ArraySecAttr_WriterOrdinal := u32ArraySec.BeginAttributeSingle(row.WriterOrdinal)
 	u32ArraySecAttr_WriterOrdinal.AddMembershipLowCardRefP(kindAgentrunEntryWriterOrdinal)
 	u32ArraySecAttr_WriterOrdinal.EndAttributeP()
-	u32ArraySecAttr_Prev := u32ArraySec.BeginAttributeSingle(row.Prev)
-	u32ArraySecAttr_Prev.AddMembershipLowCardRefP(kindAgentrunEntryPrev)
-	u32ArraySecAttr_Prev.EndAttributeP()
 	u32ArraySecAttr_Parent := u32ArraySec.BeginAttributeSingle(row.Parent)
 	u32ArraySecAttr_Parent.AddMembershipLowCardRefP(kindAgentrunEntryParent)
 	u32ArraySecAttr_Parent.EndAttributeP()
@@ -617,9 +601,6 @@ func entryReadRow[
 	var symbolWriterTurnVal string
 	var symbolWriterTurnCount int
 	var symbolWriterTurnLastAttr int64
-	var symbolKeyIdVal string
-	var symbolKeyIdCount int
-	var symbolKeyIdLastAttr int64
 	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -673,13 +654,6 @@ func entryReadRow[
 				}
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolWriterTurnVal = val
-			case kindAgentrunEntryKeyId:
-				if symbolKeyIdLastAttr != attrJ+1 {
-					symbolKeyIdLastAttr = attrJ + 1
-					symbolKeyIdCount++
-				}
-				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				symbolKeyIdVal = val
 			}
 		}
 	}
@@ -739,27 +713,13 @@ func entryReadRow[
 		row.WriterTurn = symbolWriterTurnVal
 		present = true
 	}
-	if symbolKeyIdCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "agentrunEntryKeyId").Int("got", symbolKeyIdCount).Errorf("slot symbol@agentrunEntryKeyId (field KeyId) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolKeyIdCount)
-		return
-	}
-	if symbolKeyIdCount == 1 {
-		row.KeyId = symbolKeyIdVal
-		present = true
-	}
 	// --- stringArray. ---
 	var stringArrayKeyVal string
 	var stringArrayKeyCount int
 	var stringArrayKeyLastAttr int64
-	var stringArrayVaultCommitmentVal string
-	var stringArrayVaultCommitmentCount int
-	var stringArrayVaultCommitmentLastAttr int64
 	var stringArrayNameVal string
 	var stringArrayNameCount int
 	var stringArrayNameLastAttr int64
-	var stringArrayDigestVal string
-	var stringArrayDigestCount int
-	var stringArrayDigestLastAttr int64
 	var stringArrayAttachmentDigestsSlice []string
 	var stringArrayAttachmentDigestsCount int
 	var stringArrayAttachmentDigestsLastAttr int64
@@ -778,17 +738,6 @@ func entryReadRow[
 					return
 				}
 				stringArrayKeyVal = val
-			case kindAgentrunEntryVaultCommitment:
-				if stringArrayVaultCommitmentLastAttr != attrJ+1 {
-					stringArrayVaultCommitmentLastAttr = attrJ + 1
-					stringArrayVaultCommitmentCount++
-				}
-				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				if valErr != nil {
-					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunEntryVaultCommitment").Str("field", "VaultCommitment").Errorf("slot stringArray@agentrunEntryVaultCommitment (field VaultCommitment) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
-					return
-				}
-				stringArrayVaultCommitmentVal = val
 			case kindAgentrunEntryName:
 				if stringArrayNameLastAttr != attrJ+1 {
 					stringArrayNameLastAttr = attrJ + 1
@@ -800,17 +749,6 @@ func entryReadRow[
 					return
 				}
 				stringArrayNameVal = val
-			case kindAgentrunEntryDigest:
-				if stringArrayDigestLastAttr != attrJ+1 {
-					stringArrayDigestLastAttr = attrJ + 1
-					stringArrayDigestCount++
-				}
-				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				if valErr != nil {
-					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunEntryDigest").Str("field", "Digest").Errorf("slot stringArray@agentrunEntryDigest (field Digest) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
-					return
-				}
-				stringArrayDigestVal = val
 			case kindAgentrunEntryAttachmentDigests:
 				if stringArrayAttachmentDigestsLastAttr != attrJ+1 {
 					stringArrayAttachmentDigestsLastAttr = attrJ + 1
@@ -830,28 +768,12 @@ func entryReadRow[
 		row.Key = stringArrayKeyVal
 		present = true
 	}
-	if stringArrayVaultCommitmentCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunEntryVaultCommitment").Int("got", stringArrayVaultCommitmentCount).Errorf("slot stringArray@agentrunEntryVaultCommitment (field VaultCommitment) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayVaultCommitmentCount)
-		return
-	}
-	if stringArrayVaultCommitmentCount == 1 {
-		row.VaultCommitment = stringArrayVaultCommitmentVal
-		present = true
-	}
 	if stringArrayNameCount > 1 {
 		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunEntryName").Int("got", stringArrayNameCount).Errorf("slot stringArray@agentrunEntryName (field Name) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayNameCount)
 		return
 	}
 	if stringArrayNameCount == 1 {
 		row.Name = stringArrayNameVal
-		present = true
-	}
-	if stringArrayDigestCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunEntryDigest").Int("got", stringArrayDigestCount).Errorf("slot stringArray@agentrunEntryDigest (field Digest) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayDigestCount)
-		return
-	}
-	if stringArrayDigestCount == 1 {
-		row.Digest = stringArrayDigestVal
 		present = true
 	}
 	if stringArrayAttachmentDigestsCount > 1 {
@@ -924,9 +846,6 @@ func entryReadRow[
 	var u32ArrayWriterOrdinalVal uint32
 	var u32ArrayWriterOrdinalCount int
 	var u32ArrayWriterOrdinalLastAttr int64
-	var u32ArrayPrevVal uint32
-	var u32ArrayPrevCount int
-	var u32ArrayPrevLastAttr int64
 	var u32ArrayParentVal uint32
 	var u32ArrayParentCount int
 	var u32ArrayParentLastAttr int64
@@ -967,17 +886,6 @@ func entryReadRow[
 					return
 				}
 				u32ArrayWriterOrdinalVal = val
-			case kindAgentrunEntryPrev:
-				if u32ArrayPrevLastAttr != attrJ+1 {
-					u32ArrayPrevLastAttr = attrJ + 1
-					u32ArrayPrevCount++
-				}
-				val, valErr := u32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				if valErr != nil {
-					err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "agentrunEntryPrev").Str("field", "Prev").Errorf("slot u32Array@agentrunEntryPrev (field Prev) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
-					return
-				}
-				u32ArrayPrevVal = val
 			case kindAgentrunEntryParent:
 				if u32ArrayParentLastAttr != attrJ+1 {
 					u32ArrayParentLastAttr = attrJ + 1
@@ -1014,14 +922,6 @@ func entryReadRow[
 	}
 	if u32ArrayWriterOrdinalCount == 1 {
 		row.WriterOrdinal = u32ArrayWriterOrdinalVal
-		present = true
-	}
-	if u32ArrayPrevCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "agentrunEntryPrev").Int("got", u32ArrayPrevCount).Errorf("slot u32Array@agentrunEntryPrev (field Prev) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u32ArrayPrevCount)
-		return
-	}
-	if u32ArrayPrevCount == 1 {
-		row.Prev = u32ArrayPrevVal
 		present = true
 	}
 	if u32ArrayParentCount > 1 {

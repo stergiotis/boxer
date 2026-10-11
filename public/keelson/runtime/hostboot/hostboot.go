@@ -1134,18 +1134,20 @@ func (rt *Runtime) bootAgentRun(ctx context.Context) {
 		if err != nil {
 			logger.Warn().Err(err).Msg("agentrun: provisioning failed; runs are kept in process only")
 		} else {
+			// The ledger and its vault, under the evidence profile
+			// (ADR-0327 §SD9); the SQL store holds both.
 			sql := agentrun.NewSqlStore(rt.PersistExec, layout)
-			vault := agentrun.NewSqlBodyStore(rt.PersistExec, layout)
-			rt.cleanups = append(rt.cleanups, sql.Close, vault.Close)
-			vaulted := agentrun.NewVaulted(sql, vault)
-			vaulted.Log = logger
-			store = vaulted
+			sql.Log = logger
+			rt.cleanups = append(rt.cleanups, sql.Close)
+			store = sql
 		}
 	}
 	if store == nil {
 		// In process the ledger and the vault are both memory; the
 		// separation holds all the same, so an erasure drops the row.
-		store = agentrun.NewVaulted(agentrun.NewMemStore(), agentrun.NewMemBodyStore())
+		mem := agentrun.NewMemStore()
+		mem.Log = logger
+		store = mem
 	}
 	svc, err := agentrun.NewService(rt.Bus, logger, store)
 	if err != nil {

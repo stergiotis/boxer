@@ -33,6 +33,15 @@ var (
 // thing on the wire that comes from agentrunentry-table's description: section names, column
 // names, aspects and hints are not.
 
+// CanonWireSignatureAgentrunentryTableNull keys the slot of section null.
+const CanonWireSignatureAgentrunentryTableNull = ""
+
+// CanonWireSignatureAgentrunentryTableEmptyObject keys the slot of section emptyObject.
+const CanonWireSignatureAgentrunentryTableEmptyObject = ""
+
+// CanonWireSignatureAgentrunentryTableEmptyArray keys the slot of section emptyArray.
+const CanonWireSignatureAgentrunentryTableEmptyArray = ""
+
 // CanonWireSignatureAgentrunentryTableBool keys the slot of section bool.
 const CanonWireSignatureAgentrunentryTableBool = "b"
 
@@ -100,7 +109,10 @@ const CanonWireSignatureAgentrunentryTableTimeArray = "z64h"
 type CanonWireSlotAgentrunentryTableE uint8
 
 const (
-	CanonWireSlotAgentrunentryTableBool CanonWireSlotAgentrunentryTableE = iota
+	CanonWireSlotAgentrunentryTableNull CanonWireSlotAgentrunentryTableE = iota
+	CanonWireSlotAgentrunentryTableEmptyObject
+	CanonWireSlotAgentrunentryTableEmptyArray
+	CanonWireSlotAgentrunentryTableBool
 	CanonWireSlotAgentrunentryTableF32Array
 	CanonWireSlotAgentrunentryTableF64Array
 	CanonWireSlotAgentrunentryTableI16Array
@@ -124,6 +136,12 @@ const (
 
 func (inst CanonWireSlotAgentrunentryTableE) String() string {
 	switch inst {
+	case CanonWireSlotAgentrunentryTableNull:
+		return "null"
+	case CanonWireSlotAgentrunentryTableEmptyObject:
+		return "emptyObject"
+	case CanonWireSlotAgentrunentryTableEmptyArray:
+		return "emptyArray"
 	case CanonWireSlotAgentrunentryTableBool:
 		return "bool"
 	case CanonWireSlotAgentrunentryTableF32Array:
@@ -172,6 +190,12 @@ func (inst CanonWireSlotAgentrunentryTableE) String() string {
 // entity's tagged map.
 func (inst CanonWireSlotAgentrunentryTableE) Signature() string {
 	switch inst {
+	case CanonWireSlotAgentrunentryTableNull:
+		return CanonWireSignatureAgentrunentryTableNull
+	case CanonWireSlotAgentrunentryTableEmptyObject:
+		return CanonWireSignatureAgentrunentryTableEmptyObject
+	case CanonWireSlotAgentrunentryTableEmptyArray:
+		return CanonWireSignatureAgentrunentryTableEmptyArray
 	case CanonWireSlotAgentrunentryTableBool:
 		return CanonWireSignatureAgentrunentryTableBool
 	case CanonWireSlotAgentrunentryTableF32Array:
@@ -222,6 +246,12 @@ func (inst CanonWireSlotAgentrunentryTableE) Signature() string {
 // no attribute of any other.
 func (inst CanonWireSlotAgentrunentryTableE) Ambiguous() bool {
 	switch inst {
+	case CanonWireSlotAgentrunentryTableNull:
+		return true
+	case CanonWireSlotAgentrunentryTableEmptyObject:
+		return true
+	case CanonWireSlotAgentrunentryTableEmptyArray:
+		return true
 	case CanonWireSlotAgentrunentryTableTextArray:
 		return true
 	case CanonWireSlotAgentrunentryTableStringArray:
@@ -254,6 +284,10 @@ var _ CanonWireTaggerAgentrunentryTableI = CanonWireOrdinalTaggerAgentrunentryTa
 
 func (inst CanonWireOrdinalTaggerAgentrunentryTable) Tag(slot CanonWireSlotAgentrunentryTableE, entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) uint64 {
 	switch slot {
+	case CanonWireSlotAgentrunentryTableEmptyObject:
+		return 1
+	case CanonWireSlotAgentrunentryTableEmptyArray:
+		return 2
 	case CanonWireSlotAgentrunentryTableStringArray:
 		return 1
 	case CanonWireSlotAgentrunentryTableSymbolArray:
@@ -272,6 +306,9 @@ type CanonWireEncoderAgentrunentryTable struct {
 	ra                              *ReadAccessAgentrunentryTable
 	tagger                          CanonWireTaggerAgentrunentryTableI
 	ew                              *cwruntime.EntityWriter
+	awAgentrunentryTableNull        *cwruntime.AttributeWriter
+	awAgentrunentryTableEmptyObject *cwruntime.AttributeWriter
+	awAgentrunentryTableEmptyArray  *cwruntime.AttributeWriter
 	awAgentrunentryTableBool        *cwruntime.AttributeWriter
 	awAgentrunentryTableF32Array    *cwruntime.AttributeWriter
 	awAgentrunentryTableF64Array    *cwruntime.AttributeWriter
@@ -328,6 +365,24 @@ func NewCanonWireEncoderAgentrunentryTable(ra *ReadAccessAgentrunentryTable, tag
 	if err != nil {
 		inst = nil
 		err = eb.Build().Str("tableName", "agentrunentry-table").Errorf("unable to create the entity writer: %w", err)
+		return
+	}
+	inst.awAgentrunentryTableNull, err = cwruntime.NewAttributeWriter(0, 1)
+	if err != nil {
+		inst = nil
+		err = eb.Build().Str("tableName", "agentrunentry-table").Str("slot", "null").Errorf("unable to create the attribute writer: %w", err)
+		return
+	}
+	inst.awAgentrunentryTableEmptyObject, err = cwruntime.NewAttributeWriter(0, 1)
+	if err != nil {
+		inst = nil
+		err = eb.Build().Str("tableName", "agentrunentry-table").Str("slot", "emptyObject").Errorf("unable to create the attribute writer: %w", err)
+		return
+	}
+	inst.awAgentrunentryTableEmptyArray, err = cwruntime.NewAttributeWriter(0, 1)
+	if err != nil {
+		inst = nil
+		err = eb.Build().Str("tableName", "agentrunentry-table").Str("slot", "emptyArray").Errorf("unable to create the attribute writer: %w", err)
 		return
 	}
 	inst.awAgentrunentryTableBool, err = cwruntime.NewAttributeWriter(1, 1)
@@ -487,6 +542,93 @@ func (inst *CanonWireEncoderAgentrunentryTable) EncodeEntity(entityIdx runtime.E
 		}
 		ew.EndPlain()
 	}
+	{ // slot null — ""
+		sw := ew.Slot(CanonWireSignatureAgentrunentryTableNull)
+		aw := inst.awAgentrunentryTableNull
+		n := inst.ra.Null.Memberships.AccelLowCardRef.GetEntityAttributeCount(int(entityIdx))
+		for attrIdx := runtime.AttributeIdx(0); int64(attrIdx) < n; attrIdx++ {
+			aw.Begin()
+			for v := range inst.ra.Null.Memberships.GetMembValueLowCardRef(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelLowCardRef, v, nil, nil)
+			}
+			for v := range inst.ra.Null.Memberships.GetMembValueHighCardRef(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelHighCardRef, v, nil, nil)
+			}
+			for v1, v2 := range inst.ra.Null.Memberships.GetMembValueLowCardRefHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardRef, v1, nil, v2)
+			}
+			for v1, v2 := range inst.ra.Null.Memberships.GetMembValueLowCardVerbatimHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
+			}
+			if inst.tagger != nil {
+				aw.Discriminator(inst.tagger.Tag(CanonWireSlotAgentrunentryTableNull, entityIdx, attrIdx))
+			}
+			attr, aerr := aw.End()
+			if aerr != nil {
+				err = eb.Build().Str("slot", "null").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Errorf("unable to finish the attribute: %w", aerr)
+				return
+			}
+			sw.Add(attr)
+		}
+	}
+	{ // slot emptyObject — ""
+		sw := ew.Slot(CanonWireSignatureAgentrunentryTableEmptyObject)
+		aw := inst.awAgentrunentryTableEmptyObject
+		n := inst.ra.EmptyObject.Memberships.AccelLowCardRef.GetEntityAttributeCount(int(entityIdx))
+		for attrIdx := runtime.AttributeIdx(0); int64(attrIdx) < n; attrIdx++ {
+			aw.Begin()
+			for v := range inst.ra.EmptyObject.Memberships.GetMembValueLowCardRef(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelLowCardRef, v, nil, nil)
+			}
+			for v := range inst.ra.EmptyObject.Memberships.GetMembValueHighCardRef(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelHighCardRef, v, nil, nil)
+			}
+			for v1, v2 := range inst.ra.EmptyObject.Memberships.GetMembValueLowCardRefHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardRef, v1, nil, v2)
+			}
+			for v1, v2 := range inst.ra.EmptyObject.Memberships.GetMembValueLowCardVerbatimHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
+			}
+			if inst.tagger != nil {
+				aw.Discriminator(inst.tagger.Tag(CanonWireSlotAgentrunentryTableEmptyObject, entityIdx, attrIdx))
+			}
+			attr, aerr := aw.End()
+			if aerr != nil {
+				err = eb.Build().Str("slot", "emptyObject").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Errorf("unable to finish the attribute: %w", aerr)
+				return
+			}
+			sw.Add(attr)
+		}
+	}
+	{ // slot emptyArray — ""
+		sw := ew.Slot(CanonWireSignatureAgentrunentryTableEmptyArray)
+		aw := inst.awAgentrunentryTableEmptyArray
+		n := inst.ra.EmptyArray.Memberships.AccelLowCardRef.GetEntityAttributeCount(int(entityIdx))
+		for attrIdx := runtime.AttributeIdx(0); int64(attrIdx) < n; attrIdx++ {
+			aw.Begin()
+			for v := range inst.ra.EmptyArray.Memberships.GetMembValueLowCardRef(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelLowCardRef, v, nil, nil)
+			}
+			for v := range inst.ra.EmptyArray.Memberships.GetMembValueHighCardRef(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelHighCardRef, v, nil, nil)
+			}
+			for v1, v2 := range inst.ra.EmptyArray.Memberships.GetMembValueLowCardRefHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardRef, v1, nil, v2)
+			}
+			for v1, v2 := range inst.ra.EmptyArray.Memberships.GetMembValueLowCardVerbatimHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
+			}
+			if inst.tagger != nil {
+				aw.Discriminator(inst.tagger.Tag(CanonWireSlotAgentrunentryTableEmptyArray, entityIdx, attrIdx))
+			}
+			attr, aerr := aw.End()
+			if aerr != nil {
+				err = eb.Build().Str("slot", "emptyArray").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Errorf("unable to finish the attribute: %w", aerr)
+				return
+			}
+			sw.Add(attr)
+		}
+	}
 	{ // slot bool — "b"
 		sw := ew.Slot(CanonWireSignatureAgentrunentryTableBool)
 		aw := inst.awAgentrunentryTableBool
@@ -501,6 +643,9 @@ func (inst *CanonWireEncoderAgentrunentryTable) EncodeEntity(entityIdx runtime.E
 			}
 			for v1, v2 := range inst.ra.Bool.Memberships.GetMembValueLowCardRefHighCardParams(entityIdx, attrIdx) {
 				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardRef, v1, nil, v2)
+			}
+			for v1, v2 := range inst.ra.Bool.Memberships.GetMembValueLowCardVerbatimHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
 			}
 			{
 				cw := aw.BeginValue()
@@ -530,6 +675,9 @@ func (inst *CanonWireEncoderAgentrunentryTable) EncodeEntity(entityIdx runtime.E
 			}
 			for v1, v2 := range inst.ra.F32Array.Memberships.GetMembValueLowCardRefHighCardParams(entityIdx, attrIdx) {
 				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardRef, v1, nil, v2)
+			}
+			for v1, v2 := range inst.ra.F32Array.Memberships.GetMembValueLowCardVerbatimHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
 			}
 			{
 				cw := aw.BeginValue()
@@ -567,6 +715,9 @@ func (inst *CanonWireEncoderAgentrunentryTable) EncodeEntity(entityIdx runtime.E
 			for v1, v2 := range inst.ra.F64Array.Memberships.GetMembValueLowCardRefHighCardParams(entityIdx, attrIdx) {
 				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardRef, v1, nil, v2)
 			}
+			for v1, v2 := range inst.ra.F64Array.Memberships.GetMembValueLowCardVerbatimHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
+			}
 			{
 				cw := aw.BeginValue()
 				s := inst.scratchTaggedF64ArrayValue[:0]
@@ -602,6 +753,9 @@ func (inst *CanonWireEncoderAgentrunentryTable) EncodeEntity(entityIdx runtime.E
 			}
 			for v1, v2 := range inst.ra.I16Array.Memberships.GetMembValueLowCardRefHighCardParams(entityIdx, attrIdx) {
 				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardRef, v1, nil, v2)
+			}
+			for v1, v2 := range inst.ra.I16Array.Memberships.GetMembValueLowCardVerbatimHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
 			}
 			{
 				cw := aw.BeginValue()
@@ -639,6 +793,9 @@ func (inst *CanonWireEncoderAgentrunentryTable) EncodeEntity(entityIdx runtime.E
 			for v1, v2 := range inst.ra.I32Array.Memberships.GetMembValueLowCardRefHighCardParams(entityIdx, attrIdx) {
 				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardRef, v1, nil, v2)
 			}
+			for v1, v2 := range inst.ra.I32Array.Memberships.GetMembValueLowCardVerbatimHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
+			}
 			{
 				cw := aw.BeginValue()
 				s := inst.scratchTaggedI32ArrayValue[:0]
@@ -674,6 +831,9 @@ func (inst *CanonWireEncoderAgentrunentryTable) EncodeEntity(entityIdx runtime.E
 			}
 			for v1, v2 := range inst.ra.I64Array.Memberships.GetMembValueLowCardRefHighCardParams(entityIdx, attrIdx) {
 				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardRef, v1, nil, v2)
+			}
+			for v1, v2 := range inst.ra.I64Array.Memberships.GetMembValueLowCardVerbatimHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
 			}
 			{
 				cw := aw.BeginValue()
@@ -711,6 +871,9 @@ func (inst *CanonWireEncoderAgentrunentryTable) EncodeEntity(entityIdx runtime.E
 			for v1, v2 := range inst.ra.I8Array.Memberships.GetMembValueLowCardRefHighCardParams(entityIdx, attrIdx) {
 				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardRef, v1, nil, v2)
 			}
+			for v1, v2 := range inst.ra.I8Array.Memberships.GetMembValueLowCardVerbatimHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
+			}
 			{
 				cw := aw.BeginValue()
 				s := inst.scratchTaggedI8ArrayValue[:0]
@@ -747,6 +910,9 @@ func (inst *CanonWireEncoderAgentrunentryTable) EncodeEntity(entityIdx runtime.E
 			for v1, v2 := range inst.ra.Symbol.Memberships.GetMembValueLowCardRefHighCardParams(entityIdx, attrIdx) {
 				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardRef, v1, nil, v2)
 			}
+			for v1, v2 := range inst.ra.Symbol.Memberships.GetMembValueLowCardVerbatimHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
+			}
 			{
 				cw := aw.BeginValue()
 				v := inst.ra.Symbol.Attributes.GetAttrValueValue(entityIdx, attrIdx)
@@ -775,6 +941,9 @@ func (inst *CanonWireEncoderAgentrunentryTable) EncodeEntity(entityIdx runtime.E
 			}
 			for v1, v2 := range inst.ra.TextArray.Memberships.GetMembValueLowCardRefHighCardParams(entityIdx, attrIdx) {
 				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardRef, v1, nil, v2)
+			}
+			for v1, v2 := range inst.ra.TextArray.Memberships.GetMembValueLowCardVerbatimHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
 			}
 			{
 				cw := aw.BeginValue()
@@ -815,6 +984,9 @@ func (inst *CanonWireEncoderAgentrunentryTable) EncodeEntity(entityIdx runtime.E
 			for v1, v2 := range inst.ra.StringArray.Memberships.GetMembValueLowCardRefHighCardParams(entityIdx, attrIdx) {
 				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardRef, v1, nil, v2)
 			}
+			for v1, v2 := range inst.ra.StringArray.Memberships.GetMembValueLowCardVerbatimHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
+			}
 			{
 				cw := aw.BeginValue()
 				s := inst.scratchTaggedStringArrayValue[:0]
@@ -853,6 +1025,9 @@ func (inst *CanonWireEncoderAgentrunentryTable) EncodeEntity(entityIdx runtime.E
 			}
 			for v1, v2 := range inst.ra.SymbolArray.Memberships.GetMembValueLowCardRefHighCardParams(entityIdx, attrIdx) {
 				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardRef, v1, nil, v2)
+			}
+			for v1, v2 := range inst.ra.SymbolArray.Memberships.GetMembValueLowCardVerbatimHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
 			}
 			{
 				cw := aw.BeginValue()
@@ -893,6 +1068,9 @@ func (inst *CanonWireEncoderAgentrunentryTable) EncodeEntity(entityIdx runtime.E
 			for v1, v2 := range inst.ra.U16Array.Memberships.GetMembValueLowCardRefHighCardParams(entityIdx, attrIdx) {
 				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardRef, v1, nil, v2)
 			}
+			for v1, v2 := range inst.ra.U16Array.Memberships.GetMembValueLowCardVerbatimHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
+			}
 			{
 				cw := aw.BeginValue()
 				s := inst.scratchTaggedU16ArrayValue[:0]
@@ -929,6 +1107,9 @@ func (inst *CanonWireEncoderAgentrunentryTable) EncodeEntity(entityIdx runtime.E
 			for v1, v2 := range inst.ra.U32Range.Memberships.GetMembValueLowCardRefHighCardParams(entityIdx, attrIdx) {
 				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardRef, v1, nil, v2)
 			}
+			for v1, v2 := range inst.ra.U32Range.Memberships.GetMembValueLowCardVerbatimHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
+			}
 			{
 				cw := aw.BeginValue()
 				v := inst.ra.U32Range.Attributes.GetAttrValueBeginIncl(entityIdx, attrIdx)
@@ -963,6 +1144,9 @@ func (inst *CanonWireEncoderAgentrunentryTable) EncodeEntity(entityIdx runtime.E
 			}
 			for v1, v2 := range inst.ra.U32Array.Memberships.GetMembValueLowCardRefHighCardParams(entityIdx, attrIdx) {
 				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardRef, v1, nil, v2)
+			}
+			for v1, v2 := range inst.ra.U32Array.Memberships.GetMembValueLowCardVerbatimHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
 			}
 			{
 				cw := aw.BeginValue()
@@ -1000,6 +1184,9 @@ func (inst *CanonWireEncoderAgentrunentryTable) EncodeEntity(entityIdx runtime.E
 			for v1, v2 := range inst.ra.U32Set.Memberships.GetMembValueLowCardRefHighCardParams(entityIdx, attrIdx) {
 				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardRef, v1, nil, v2)
 			}
+			for v1, v2 := range inst.ra.U32Set.Memberships.GetMembValueLowCardVerbatimHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
+			}
 			{
 				cw := aw.BeginValue()
 				inst.setWriter.Begin()
@@ -1032,6 +1219,9 @@ func (inst *CanonWireEncoderAgentrunentryTable) EncodeEntity(entityIdx runtime.E
 			}
 			for v1, v2 := range inst.ra.U64Array.Memberships.GetMembValueLowCardRefHighCardParams(entityIdx, attrIdx) {
 				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardRef, v1, nil, v2)
+			}
+			for v1, v2 := range inst.ra.U64Array.Memberships.GetMembValueLowCardVerbatimHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
 			}
 			{
 				cw := aw.BeginValue()
@@ -1069,6 +1259,9 @@ func (inst *CanonWireEncoderAgentrunentryTable) EncodeEntity(entityIdx runtime.E
 			for v1, v2 := range inst.ra.U64Set.Memberships.GetMembValueLowCardRefHighCardParams(entityIdx, attrIdx) {
 				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardRef, v1, nil, v2)
 			}
+			for v1, v2 := range inst.ra.U64Set.Memberships.GetMembValueLowCardVerbatimHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
+			}
 			{
 				cw := aw.BeginValue()
 				inst.setWriter.Begin()
@@ -1101,6 +1294,9 @@ func (inst *CanonWireEncoderAgentrunentryTable) EncodeEntity(entityIdx runtime.E
 			}
 			for v1, v2 := range inst.ra.U8Array.Memberships.GetMembValueLowCardRefHighCardParams(entityIdx, attrIdx) {
 				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardRef, v1, nil, v2)
+			}
+			for v1, v2 := range inst.ra.U8Array.Memberships.GetMembValueLowCardVerbatimHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
 			}
 			{
 				cw := aw.BeginValue()
@@ -1138,6 +1334,9 @@ func (inst *CanonWireEncoderAgentrunentryTable) EncodeEntity(entityIdx runtime.E
 			for v1, v2 := range inst.ra.BlobArray.Memberships.GetMembValueLowCardRefHighCardParams(entityIdx, attrIdx) {
 				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardRef, v1, nil, v2)
 			}
+			for v1, v2 := range inst.ra.BlobArray.Memberships.GetMembValueLowCardVerbatimHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
+			}
 			{
 				cw := aw.BeginValue()
 				s := inst.scratchTaggedBlobArrayValue[:0]
@@ -1173,6 +1372,9 @@ func (inst *CanonWireEncoderAgentrunentryTable) EncodeEntity(entityIdx runtime.E
 			}
 			for v1, v2 := range inst.ra.TimeArray.Memberships.GetMembValueLowCardRefHighCardParams(entityIdx, attrIdx) {
 				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardRef, v1, nil, v2)
+			}
+			for v1, v2 := range inst.ra.TimeArray.Memberships.GetMembValueLowCardVerbatimHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
 			}
 			{
 				cw := aw.BeginValue()

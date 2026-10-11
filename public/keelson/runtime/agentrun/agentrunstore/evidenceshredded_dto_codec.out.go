@@ -15,150 +15,150 @@ import (
 
 const ()
 
-// shreddedStringArrayAttrI is the InAttr-side view of the stringArray section. P-variants only —
+// evidenceShreddedStringArrayAttrI is the InAttr-side view of the stringArray section. P-variants only —
 // every method returns void so no F-bounded `[Self]` parameter is
 // needed.
-type shreddedStringArrayAttrI interface {
+type evidenceShreddedStringArrayAttrI interface {
 	dmlruntime.InAttributeMembershipMixedLowCardVerbatimPI
 	EndAttributeP()
 }
 
-// shreddedStringArraySecI is the Section-side view: opens an attribute and closes
+// evidenceShreddedStringArraySecI is the Section-side view: opens an attribute and closes
 // the section. Attr and Ent are bound at the call site by inference.
-type shreddedStringArraySecI[Attr any, Ent any] interface {
+type evidenceShreddedStringArraySecI[Attr any, Ent any] interface {
 	BeginAttributeSingle(value string) Attr
 	EndSection() Ent
 }
 
-// shreddedSymbolAttrI is the InAttr-side view of the symbol section. P-variants only —
+// evidenceShreddedSymbolAttrI is the InAttr-side view of the symbol section. P-variants only —
 // every method returns void so no F-bounded `[Self]` parameter is
 // needed.
-type shreddedSymbolAttrI interface {
+type evidenceShreddedSymbolAttrI interface {
 	dmlruntime.InAttributeMembershipMixedLowCardVerbatimPI
 	EndAttributeP()
 }
 
-// shreddedSymbolSecI is the Section-side view: opens an attribute and closes
+// evidenceShreddedSymbolSecI is the Section-side view: opens an attribute and closes
 // the section. Attr and Ent are bound at the call site by inference.
-type shreddedSymbolSecI[Attr any, Ent any] interface {
+type evidenceShreddedSymbolSecI[Attr any, Ent any] interface {
 	BeginAttribute(value string) Attr
 	EndSection() Ent
 }
 
-// shreddedI64ArrayAttrI is the InAttr-side view of the i64Array section. P-variants only —
+// evidenceShreddedI64ArrayAttrI is the InAttr-side view of the i64Array section. P-variants only —
 // every method returns void so no F-bounded `[Self]` parameter is
 // needed.
-type shreddedI64ArrayAttrI interface {
+type evidenceShreddedI64ArrayAttrI interface {
 	dmlruntime.InAttributeMembershipMixedLowCardVerbatimPI
 	EndAttributeP()
 }
 
-// shreddedI64ArraySecI is the Section-side view: opens an attribute and closes
+// evidenceShreddedI64ArraySecI is the Section-side view: opens an attribute and closes
 // the section. Attr and Ent are bound at the call site by inference.
-type shreddedI64ArraySecI[Attr any, Ent any] interface {
+type evidenceShreddedI64ArraySecI[Attr any, Ent any] interface {
 	BeginAttributeSingle(value int64) Attr
 	EndSection() Ent
 }
 
-// shreddedF64ArrayAttrI is the InAttr-side view of the f64Array section. P-variants only —
+// evidenceShreddedF64ArrayAttrI is the InAttr-side view of the f64Array section. P-variants only —
 // every method returns void so no F-bounded `[Self]` parameter is
 // needed.
-type shreddedF64ArrayAttrI interface {
+type evidenceShreddedF64ArrayAttrI interface {
 	dmlruntime.InAttributeMembershipMixedLowCardVerbatimPI
 	EndAttributeP()
 }
 
-// shreddedF64ArraySecI is the Section-side view: opens an attribute and closes
+// evidenceShreddedF64ArraySecI is the Section-side view: opens an attribute and closes
 // the section. Attr and Ent are bound at the call site by inference.
-type shreddedF64ArraySecI[Attr any, Ent any] interface {
+type evidenceShreddedF64ArraySecI[Attr any, Ent any] interface {
 	BeginAttributeSingle(value float64) Attr
 	EndSection() Ent
 }
 
-// shreddedBoolAttrI is the InAttr-side view of the bool section. P-variants only —
+// evidenceShreddedBoolAttrI is the InAttr-side view of the bool section. P-variants only —
 // every method returns void so no F-bounded `[Self]` parameter is
 // needed.
-type shreddedBoolAttrI interface {
+type evidenceShreddedBoolAttrI interface {
 	dmlruntime.InAttributeMembershipMixedLowCardVerbatimPI
 	EndAttributeP()
 }
 
-// shreddedBoolSecI is the Section-side view: opens an attribute and closes
+// evidenceShreddedBoolSecI is the Section-side view: opens an attribute and closes
 // the section. Attr and Ent are bound at the call site by inference.
-type shreddedBoolSecI[Attr any, Ent any] interface {
+type evidenceShreddedBoolSecI[Attr any, Ent any] interface {
 	BeginAttribute(value bool) Attr
 	EndSection() Ent
 }
 
-// shreddedNullAttrI is the InAttr-side view of the null section. P-variants only —
+// evidenceShreddedNullAttrI is the InAttr-side view of the null section. P-variants only —
 // every method returns void so no F-bounded `[Self]` parameter is
 // needed.
-type shreddedNullAttrI interface {
+type evidenceShreddedNullAttrI interface {
 	dmlruntime.InAttributeMembershipMixedLowCardVerbatimPI
 	EndAttributeP()
 }
 
-// shreddedNullSecI is the Section-side view: opens an attribute and closes
+// evidenceShreddedNullSecI is the Section-side view: opens an attribute and closes
 // the section. Attr and Ent are bound at the call site by inference.
-type shreddedNullSecI[Attr any, Ent any] interface {
+type evidenceShreddedNullSecI[Attr any, Ent any] interface {
 	BeginAttribute() Attr
 	EndSection() Ent
 }
 
-// shreddedEmptyObjectAttrI is the InAttr-side view of the emptyObject section. P-variants only —
+// evidenceShreddedEmptyObjectAttrI is the InAttr-side view of the emptyObject section. P-variants only —
 // every method returns void so no F-bounded `[Self]` parameter is
 // needed.
-type shreddedEmptyObjectAttrI interface {
+type evidenceShreddedEmptyObjectAttrI interface {
 	dmlruntime.InAttributeMembershipMixedLowCardVerbatimPI
 	EndAttributeP()
 }
 
-// shreddedEmptyObjectSecI is the Section-side view: opens an attribute and closes
+// evidenceShreddedEmptyObjectSecI is the Section-side view: opens an attribute and closes
 // the section. Attr and Ent are bound at the call site by inference.
-type shreddedEmptyObjectSecI[Attr any, Ent any] interface {
+type evidenceShreddedEmptyObjectSecI[Attr any, Ent any] interface {
 	BeginAttribute() Attr
 	EndSection() Ent
 }
 
-// shreddedEmptyArrayAttrI is the InAttr-side view of the emptyArray section. P-variants only —
+// evidenceShreddedEmptyArrayAttrI is the InAttr-side view of the emptyArray section. P-variants only —
 // every method returns void so no F-bounded `[Self]` parameter is
 // needed.
-type shreddedEmptyArrayAttrI interface {
+type evidenceShreddedEmptyArrayAttrI interface {
 	dmlruntime.InAttributeMembershipMixedLowCardVerbatimPI
 	EndAttributeP()
 }
 
-// shreddedEmptyArraySecI is the Section-side view: opens an attribute and closes
+// evidenceShreddedEmptyArraySecI is the Section-side view: opens an attribute and closes
 // the section. Attr and Ent are bound at the call site by inference.
-type shreddedEmptyArraySecI[Attr any, Ent any] interface {
+type evidenceShreddedEmptyArraySecI[Attr any, Ent any] interface {
 	BeginAttribute() Attr
 	EndSection() Ent
 }
 
-// shreddedEntityI is the entity-builder surface shreddedAddSections drives.
+// evidenceShreddedEntityI is the entity-builder surface evidenceShreddedAddSections drives.
 // It always lists the per-section getters; the entity-frame methods
 // (BeginEntity / plain setters / CommitEntity) are added only for the
 // full codec's BuildEntities. AddSections stacks sections onto a frame
 // the caller already owns, so it needs none of them — which lets a
 // store drive it with a builder whose frame control is unexported
 // (ADR-0100 SD6). Ent is the builder pointer.
-type shreddedEntityI[
-	StringArrayAttr shreddedStringArrayAttrI,
-	StringArraySec shreddedStringArraySecI[StringArrayAttr, Ent],
-	SymbolAttr shreddedSymbolAttrI,
-	SymbolSec shreddedSymbolSecI[SymbolAttr, Ent],
-	I64ArrayAttr shreddedI64ArrayAttrI,
-	I64ArraySec shreddedI64ArraySecI[I64ArrayAttr, Ent],
-	F64ArrayAttr shreddedF64ArrayAttrI,
-	F64ArraySec shreddedF64ArraySecI[F64ArrayAttr, Ent],
-	BoolAttr shreddedBoolAttrI,
-	BoolSec shreddedBoolSecI[BoolAttr, Ent],
-	NullAttr shreddedNullAttrI,
-	NullSec shreddedNullSecI[NullAttr, Ent],
-	EmptyObjectAttr shreddedEmptyObjectAttrI,
-	EmptyObjectSec shreddedEmptyObjectSecI[EmptyObjectAttr, Ent],
-	EmptyArrayAttr shreddedEmptyArrayAttrI,
-	EmptyArraySec shreddedEmptyArraySecI[EmptyArrayAttr, Ent],
+type evidenceShreddedEntityI[
+	StringArrayAttr evidenceShreddedStringArrayAttrI,
+	StringArraySec evidenceShreddedStringArraySecI[StringArrayAttr, Ent],
+	SymbolAttr evidenceShreddedSymbolAttrI,
+	SymbolSec evidenceShreddedSymbolSecI[SymbolAttr, Ent],
+	I64ArrayAttr evidenceShreddedI64ArrayAttrI,
+	I64ArraySec evidenceShreddedI64ArraySecI[I64ArrayAttr, Ent],
+	F64ArrayAttr evidenceShreddedF64ArrayAttrI,
+	F64ArraySec evidenceShreddedF64ArraySecI[F64ArrayAttr, Ent],
+	BoolAttr evidenceShreddedBoolAttrI,
+	BoolSec evidenceShreddedBoolSecI[BoolAttr, Ent],
+	NullAttr evidenceShreddedNullAttrI,
+	NullSec evidenceShreddedNullSecI[NullAttr, Ent],
+	EmptyObjectAttr evidenceShreddedEmptyObjectAttrI,
+	EmptyObjectSec evidenceShreddedEmptyObjectSecI[EmptyObjectAttr, Ent],
+	EmptyArrayAttr evidenceShreddedEmptyArrayAttrI,
+	EmptyArraySec evidenceShreddedEmptyArraySecI[EmptyArrayAttr, Ent],
 	Ent any,
 ] interface {
 	GetSectionStringArray() StringArraySec
@@ -171,15 +171,15 @@ type shreddedEntityI[
 	GetSectionEmptyArray() EmptyArraySec
 }
 
-// shreddedEmitSectionStringArray writes this kind's stringArray attributes into an
+// evidenceShreddedEmitSectionStringArray writes this kind's stringArray attributes into an
 // ALREADY-OPEN section frame, and does not close it. The caller owns
 // the frame: one kind's AddSections, or a builder deferring the close
 // until every component that shares the section has written.
-func shreddedEmitSectionStringArray[
-	StringArrayAttr shreddedStringArrayAttrI,
-	StringArraySec shreddedStringArraySecI[StringArrayAttr, Ent],
+func evidenceShreddedEmitSectionStringArray[
+	StringArrayAttr evidenceShreddedStringArrayAttrI,
+	StringArraySec evidenceShreddedStringArraySecI[StringArrayAttr, Ent],
 	Ent any,
-](stringArraySec StringArraySec, row Shredded) (err error) {
+](stringArraySec StringArraySec, row EvidenceShredded) (err error) {
 	for _, stringArraySecElem := range row.Strings {
 		stringArraySecAttrParams, perr := membership.EncodeParams(stringArraySecElem.Params...)
 		if perr != nil {
@@ -193,15 +193,15 @@ func shreddedEmitSectionStringArray[
 	return
 }
 
-// shreddedEmitSectionSymbol writes this kind's symbol attributes into an
+// evidenceShreddedEmitSectionSymbol writes this kind's symbol attributes into an
 // ALREADY-OPEN section frame, and does not close it. The caller owns
 // the frame: one kind's AddSections, or a builder deferring the close
 // until every component that shares the section has written.
-func shreddedEmitSectionSymbol[
-	SymbolAttr shreddedSymbolAttrI,
-	SymbolSec shreddedSymbolSecI[SymbolAttr, Ent],
+func evidenceShreddedEmitSectionSymbol[
+	SymbolAttr evidenceShreddedSymbolAttrI,
+	SymbolSec evidenceShreddedSymbolSecI[SymbolAttr, Ent],
 	Ent any,
-](symbolSec SymbolSec, row Shredded) (err error) {
+](symbolSec SymbolSec, row EvidenceShredded) (err error) {
 	for _, symbolSecElem := range row.Symbols {
 		symbolSecAttrParams, perr := membership.EncodeParams(symbolSecElem.Params...)
 		if perr != nil {
@@ -215,15 +215,15 @@ func shreddedEmitSectionSymbol[
 	return
 }
 
-// shreddedEmitSectionI64Array writes this kind's i64Array attributes into an
+// evidenceShreddedEmitSectionI64Array writes this kind's i64Array attributes into an
 // ALREADY-OPEN section frame, and does not close it. The caller owns
 // the frame: one kind's AddSections, or a builder deferring the close
 // until every component that shares the section has written.
-func shreddedEmitSectionI64Array[
-	I64ArrayAttr shreddedI64ArrayAttrI,
-	I64ArraySec shreddedI64ArraySecI[I64ArrayAttr, Ent],
+func evidenceShreddedEmitSectionI64Array[
+	I64ArrayAttr evidenceShreddedI64ArrayAttrI,
+	I64ArraySec evidenceShreddedI64ArraySecI[I64ArrayAttr, Ent],
 	Ent any,
-](i64ArraySec I64ArraySec, row Shredded) (err error) {
+](i64ArraySec I64ArraySec, row EvidenceShredded) (err error) {
 	for _, i64ArraySecElem := range row.I64s {
 		i64ArraySecAttrParams, perr := membership.EncodeParams(i64ArraySecElem.Params...)
 		if perr != nil {
@@ -237,15 +237,15 @@ func shreddedEmitSectionI64Array[
 	return
 }
 
-// shreddedEmitSectionF64Array writes this kind's f64Array attributes into an
+// evidenceShreddedEmitSectionF64Array writes this kind's f64Array attributes into an
 // ALREADY-OPEN section frame, and does not close it. The caller owns
 // the frame: one kind's AddSections, or a builder deferring the close
 // until every component that shares the section has written.
-func shreddedEmitSectionF64Array[
-	F64ArrayAttr shreddedF64ArrayAttrI,
-	F64ArraySec shreddedF64ArraySecI[F64ArrayAttr, Ent],
+func evidenceShreddedEmitSectionF64Array[
+	F64ArrayAttr evidenceShreddedF64ArrayAttrI,
+	F64ArraySec evidenceShreddedF64ArraySecI[F64ArrayAttr, Ent],
 	Ent any,
-](f64ArraySec F64ArraySec, row Shredded) (err error) {
+](f64ArraySec F64ArraySec, row EvidenceShredded) (err error) {
 	for _, f64ArraySecElem := range row.F64s {
 		f64ArraySecAttrParams, perr := membership.EncodeParams(f64ArraySecElem.Params...)
 		if perr != nil {
@@ -259,15 +259,15 @@ func shreddedEmitSectionF64Array[
 	return
 }
 
-// shreddedEmitSectionBool writes this kind's bool attributes into an
+// evidenceShreddedEmitSectionBool writes this kind's bool attributes into an
 // ALREADY-OPEN section frame, and does not close it. The caller owns
 // the frame: one kind's AddSections, or a builder deferring the close
 // until every component that shares the section has written.
-func shreddedEmitSectionBool[
-	BoolAttr shreddedBoolAttrI,
-	BoolSec shreddedBoolSecI[BoolAttr, Ent],
+func evidenceShreddedEmitSectionBool[
+	BoolAttr evidenceShreddedBoolAttrI,
+	BoolSec evidenceShreddedBoolSecI[BoolAttr, Ent],
 	Ent any,
-](boolSec BoolSec, row Shredded) (err error) {
+](boolSec BoolSec, row EvidenceShredded) (err error) {
 	for _, boolSecElem := range row.Bools {
 		boolSecAttrParams, perr := membership.EncodeParams(boolSecElem.Params...)
 		if perr != nil {
@@ -281,15 +281,15 @@ func shreddedEmitSectionBool[
 	return
 }
 
-// shreddedEmitSectionNull writes this kind's null attributes into an
+// evidenceShreddedEmitSectionNull writes this kind's null attributes into an
 // ALREADY-OPEN section frame, and does not close it. The caller owns
 // the frame: one kind's AddSections, or a builder deferring the close
 // until every component that shares the section has written.
-func shreddedEmitSectionNull[
-	NullAttr shreddedNullAttrI,
-	NullSec shreddedNullSecI[NullAttr, Ent],
+func evidenceShreddedEmitSectionNull[
+	NullAttr evidenceShreddedNullAttrI,
+	NullSec evidenceShreddedNullSecI[NullAttr, Ent],
 	Ent any,
-](nullSec NullSec, row Shredded) (err error) {
+](nullSec NullSec, row EvidenceShredded) (err error) {
 	for _, nullSecElem := range row.Nulls {
 		nullSecAttrParams, perr := membership.EncodeParams(nullSecElem.Params...)
 		if perr != nil {
@@ -303,15 +303,15 @@ func shreddedEmitSectionNull[
 	return
 }
 
-// shreddedEmitSectionEmptyObject writes this kind's emptyObject attributes into an
+// evidenceShreddedEmitSectionEmptyObject writes this kind's emptyObject attributes into an
 // ALREADY-OPEN section frame, and does not close it. The caller owns
 // the frame: one kind's AddSections, or a builder deferring the close
 // until every component that shares the section has written.
-func shreddedEmitSectionEmptyObject[
-	EmptyObjectAttr shreddedEmptyObjectAttrI,
-	EmptyObjectSec shreddedEmptyObjectSecI[EmptyObjectAttr, Ent],
+func evidenceShreddedEmitSectionEmptyObject[
+	EmptyObjectAttr evidenceShreddedEmptyObjectAttrI,
+	EmptyObjectSec evidenceShreddedEmptyObjectSecI[EmptyObjectAttr, Ent],
 	Ent any,
-](emptyObjectSec EmptyObjectSec, row Shredded) (err error) {
+](emptyObjectSec EmptyObjectSec, row EvidenceShredded) (err error) {
 	for _, emptyObjectSecElem := range row.EmptyObjects {
 		emptyObjectSecAttrParams, perr := membership.EncodeParams(emptyObjectSecElem.Params...)
 		if perr != nil {
@@ -325,15 +325,15 @@ func shreddedEmitSectionEmptyObject[
 	return
 }
 
-// shreddedEmitSectionEmptyArray writes this kind's emptyArray attributes into an
+// evidenceShreddedEmitSectionEmptyArray writes this kind's emptyArray attributes into an
 // ALREADY-OPEN section frame, and does not close it. The caller owns
 // the frame: one kind's AddSections, or a builder deferring the close
 // until every component that shares the section has written.
-func shreddedEmitSectionEmptyArray[
-	EmptyArrayAttr shreddedEmptyArrayAttrI,
-	EmptyArraySec shreddedEmptyArraySecI[EmptyArrayAttr, Ent],
+func evidenceShreddedEmitSectionEmptyArray[
+	EmptyArrayAttr evidenceShreddedEmptyArrayAttrI,
+	EmptyArraySec evidenceShreddedEmptyArraySecI[EmptyArrayAttr, Ent],
 	Ent any,
-](emptyArraySec EmptyArraySec, row Shredded) (err error) {
+](emptyArraySec EmptyArraySec, row EvidenceShredded) (err error) {
 	for _, emptyArraySecElem := range row.EmptyArrays {
 		emptyArraySecAttrParams, perr := membership.EncodeParams(emptyArraySecElem.Params...)
 		if perr != nil {
@@ -347,28 +347,28 @@ func shreddedEmitSectionEmptyArray[
 	return
 }
 
-// shreddedAddSections contributes this kind's tagged sections to the OPEN
+// evidenceShreddedAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
-func shreddedAddSections[
-	StringArrayAttr shreddedStringArrayAttrI,
-	StringArraySec shreddedStringArraySecI[StringArrayAttr, Ent],
-	SymbolAttr shreddedSymbolAttrI,
-	SymbolSec shreddedSymbolSecI[SymbolAttr, Ent],
-	I64ArrayAttr shreddedI64ArrayAttrI,
-	I64ArraySec shreddedI64ArraySecI[I64ArrayAttr, Ent],
-	F64ArrayAttr shreddedF64ArrayAttrI,
-	F64ArraySec shreddedF64ArraySecI[F64ArrayAttr, Ent],
-	BoolAttr shreddedBoolAttrI,
-	BoolSec shreddedBoolSecI[BoolAttr, Ent],
-	NullAttr shreddedNullAttrI,
-	NullSec shreddedNullSecI[NullAttr, Ent],
-	EmptyObjectAttr shreddedEmptyObjectAttrI,
-	EmptyObjectSec shreddedEmptyObjectSecI[EmptyObjectAttr, Ent],
-	EmptyArrayAttr shreddedEmptyArrayAttrI,
-	EmptyArraySec shreddedEmptyArraySecI[EmptyArrayAttr, Ent],
+func evidenceShreddedAddSections[
+	StringArrayAttr evidenceShreddedStringArrayAttrI,
+	StringArraySec evidenceShreddedStringArraySecI[StringArrayAttr, Ent],
+	SymbolAttr evidenceShreddedSymbolAttrI,
+	SymbolSec evidenceShreddedSymbolSecI[SymbolAttr, Ent],
+	I64ArrayAttr evidenceShreddedI64ArrayAttrI,
+	I64ArraySec evidenceShreddedI64ArraySecI[I64ArrayAttr, Ent],
+	F64ArrayAttr evidenceShreddedF64ArrayAttrI,
+	F64ArraySec evidenceShreddedF64ArraySecI[F64ArrayAttr, Ent],
+	BoolAttr evidenceShreddedBoolAttrI,
+	BoolSec evidenceShreddedBoolSecI[BoolAttr, Ent],
+	NullAttr evidenceShreddedNullAttrI,
+	NullSec evidenceShreddedNullSecI[NullAttr, Ent],
+	EmptyObjectAttr evidenceShreddedEmptyObjectAttrI,
+	EmptyObjectSec evidenceShreddedEmptyObjectSecI[EmptyObjectAttr, Ent],
+	EmptyArrayAttr evidenceShreddedEmptyArrayAttrI,
+	EmptyArraySec evidenceShreddedEmptyArraySecI[EmptyArrayAttr, Ent],
 	Ent any,
-	DML shreddedEntityI[
+	DML evidenceShreddedEntityI[
 		StringArrayAttr, StringArraySec,
 		SymbolAttr, SymbolSec,
 		I64ArrayAttr, I64ArraySec,
@@ -379,59 +379,59 @@ func shreddedAddSections[
 		EmptyArrayAttr, EmptyArraySec,
 		Ent,
 	],
-](dml DML, row Shredded) (err error) {
+](dml DML, row EvidenceShredded) (err error) {
 	// --- stringArray. ---
 	stringArraySec := dml.GetSectionStringArray()
-	err = shreddedEmitSectionStringArray(stringArraySec, row)
+	err = evidenceShreddedEmitSectionStringArray(stringArraySec, row)
 	if err != nil {
 		return
 	}
 	stringArraySec.EndSection()
 	// --- symbol. ---
 	symbolSec := dml.GetSectionSymbol()
-	err = shreddedEmitSectionSymbol(symbolSec, row)
+	err = evidenceShreddedEmitSectionSymbol(symbolSec, row)
 	if err != nil {
 		return
 	}
 	symbolSec.EndSection()
 	// --- i64Array. ---
 	i64ArraySec := dml.GetSectionI64Array()
-	err = shreddedEmitSectionI64Array(i64ArraySec, row)
+	err = evidenceShreddedEmitSectionI64Array(i64ArraySec, row)
 	if err != nil {
 		return
 	}
 	i64ArraySec.EndSection()
 	// --- f64Array. ---
 	f64ArraySec := dml.GetSectionF64Array()
-	err = shreddedEmitSectionF64Array(f64ArraySec, row)
+	err = evidenceShreddedEmitSectionF64Array(f64ArraySec, row)
 	if err != nil {
 		return
 	}
 	f64ArraySec.EndSection()
 	// --- bool. ---
 	boolSec := dml.GetSectionBool()
-	err = shreddedEmitSectionBool(boolSec, row)
+	err = evidenceShreddedEmitSectionBool(boolSec, row)
 	if err != nil {
 		return
 	}
 	boolSec.EndSection()
 	// --- null. ---
 	nullSec := dml.GetSectionNull()
-	err = shreddedEmitSectionNull(nullSec, row)
+	err = evidenceShreddedEmitSectionNull(nullSec, row)
 	if err != nil {
 		return
 	}
 	nullSec.EndSection()
 	// --- emptyObject. ---
 	emptyObjectSec := dml.GetSectionEmptyObject()
-	err = shreddedEmitSectionEmptyObject(emptyObjectSec, row)
+	err = evidenceShreddedEmitSectionEmptyObject(emptyObjectSec, row)
 	if err != nil {
 		return
 	}
 	emptyObjectSec.EndSection()
 	// --- emptyArray. ---
 	emptyArraySec := dml.GetSectionEmptyArray()
-	err = shreddedEmitSectionEmptyArray(emptyArraySec, row)
+	err = evidenceShreddedEmitSectionEmptyArray(emptyArraySec, row)
 	if err != nil {
 		return
 	}
@@ -439,92 +439,92 @@ func shreddedAddSections[
 	return
 }
 
-// shreddedStringArrayAttrsReadI is the Attributes-side view of the stringArray section.
-type shreddedStringArrayAttrsReadI interface {
+// evidenceShreddedStringArrayAttrsReadI is the Attributes-side view of the stringArray section.
+type evidenceShreddedStringArrayAttrsReadI interface {
 	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (string, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
-// shreddedStringArrayMembsReadI is the Memberships-side view of the stringArray section.
-type shreddedStringArrayMembsReadI interface {
+// evidenceShreddedStringArrayMembsReadI is the Memberships-side view of the stringArray section.
+type evidenceShreddedStringArrayMembsReadI interface {
 	GetMembValueLowCardVerbatimHighCardParams(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq2[[]byte, []byte]
 }
 
-// shreddedSymbolAttrsReadI is the Attributes-side view of the symbol section.
-type shreddedSymbolAttrsReadI interface {
+// evidenceShreddedSymbolAttrsReadI is the Attributes-side view of the symbol section.
+type evidenceShreddedSymbolAttrsReadI interface {
 	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) string
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
-// shreddedSymbolMembsReadI is the Memberships-side view of the symbol section.
-type shreddedSymbolMembsReadI interface {
+// evidenceShreddedSymbolMembsReadI is the Memberships-side view of the symbol section.
+type evidenceShreddedSymbolMembsReadI interface {
 	GetMembValueLowCardVerbatimHighCardParams(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq2[[]byte, []byte]
 }
 
-// shreddedI64ArrayAttrsReadI is the Attributes-side view of the i64Array section.
-type shreddedI64ArrayAttrsReadI interface {
+// evidenceShreddedI64ArrayAttrsReadI is the Attributes-side view of the i64Array section.
+type evidenceShreddedI64ArrayAttrsReadI interface {
 	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (int64, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
-// shreddedI64ArrayMembsReadI is the Memberships-side view of the i64Array section.
-type shreddedI64ArrayMembsReadI interface {
+// evidenceShreddedI64ArrayMembsReadI is the Memberships-side view of the i64Array section.
+type evidenceShreddedI64ArrayMembsReadI interface {
 	GetMembValueLowCardVerbatimHighCardParams(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq2[[]byte, []byte]
 }
 
-// shreddedF64ArrayAttrsReadI is the Attributes-side view of the f64Array section.
-type shreddedF64ArrayAttrsReadI interface {
+// evidenceShreddedF64ArrayAttrsReadI is the Attributes-side view of the f64Array section.
+type evidenceShreddedF64ArrayAttrsReadI interface {
 	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (float64, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
-// shreddedF64ArrayMembsReadI is the Memberships-side view of the f64Array section.
-type shreddedF64ArrayMembsReadI interface {
+// evidenceShreddedF64ArrayMembsReadI is the Memberships-side view of the f64Array section.
+type evidenceShreddedF64ArrayMembsReadI interface {
 	GetMembValueLowCardVerbatimHighCardParams(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq2[[]byte, []byte]
 }
 
-// shreddedBoolAttrsReadI is the Attributes-side view of the bool section.
-type shreddedBoolAttrsReadI interface {
+// evidenceShreddedBoolAttrsReadI is the Attributes-side view of the bool section.
+type evidenceShreddedBoolAttrsReadI interface {
 	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) bool
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
-// shreddedBoolMembsReadI is the Memberships-side view of the bool section.
-type shreddedBoolMembsReadI interface {
+// evidenceShreddedBoolMembsReadI is the Memberships-side view of the bool section.
+type evidenceShreddedBoolMembsReadI interface {
 	GetMembValueLowCardVerbatimHighCardParams(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq2[[]byte, []byte]
 }
 
-// shreddedNullAttrsReadI is the Attributes-side view of the null section.
-type shreddedNullAttrsReadI interface {
+// evidenceShreddedNullAttrsReadI is the Attributes-side view of the null section.
+type evidenceShreddedNullAttrsReadI interface {
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
-// shreddedNullMembsReadI is the Memberships-side view of the null section.
-type shreddedNullMembsReadI interface {
+// evidenceShreddedNullMembsReadI is the Memberships-side view of the null section.
+type evidenceShreddedNullMembsReadI interface {
 	GetMembValueLowCardVerbatimHighCardParams(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq2[[]byte, []byte]
 }
 
-// shreddedEmptyObjectAttrsReadI is the Attributes-side view of the emptyObject section.
-type shreddedEmptyObjectAttrsReadI interface {
+// evidenceShreddedEmptyObjectAttrsReadI is the Attributes-side view of the emptyObject section.
+type evidenceShreddedEmptyObjectAttrsReadI interface {
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
-// shreddedEmptyObjectMembsReadI is the Memberships-side view of the emptyObject section.
-type shreddedEmptyObjectMembsReadI interface {
+// evidenceShreddedEmptyObjectMembsReadI is the Memberships-side view of the emptyObject section.
+type evidenceShreddedEmptyObjectMembsReadI interface {
 	GetMembValueLowCardVerbatimHighCardParams(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq2[[]byte, []byte]
 }
 
-// shreddedEmptyArrayAttrsReadI is the Attributes-side view of the emptyArray section.
-type shreddedEmptyArrayAttrsReadI interface {
+// evidenceShreddedEmptyArrayAttrsReadI is the Attributes-side view of the emptyArray section.
+type evidenceShreddedEmptyArrayAttrsReadI interface {
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
-// shreddedEmptyArrayMembsReadI is the Memberships-side view of the emptyArray section.
-type shreddedEmptyArrayMembsReadI interface {
+// evidenceShreddedEmptyArrayMembsReadI is the Memberships-side view of the emptyArray section.
+type evidenceShreddedEmptyArrayMembsReadI interface {
 	GetMembValueLowCardVerbatimHighCardParams(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq2[[]byte, []byte]
 }
 
-// shreddedReadRow reads row i as one optional Shredded component: presence-
+// evidenceShreddedReadRow reads row i as one optional EvidenceShredded component: presence-
 // gated (a row carrying none of the kind's memberships yields
 // present=false), membership-matched. A slot carrying more
 // attributes than this kind's shape admits is an error, for every
@@ -532,23 +532,23 @@ type shreddedEmptyArrayMembsReadI interface {
 // bound fields stay zero — the caller owns the envelope. The
 // Attrs/Membs readers bind by type inference at the call site, as
 // with FillFromArrow.
-func shreddedReadRow[
-	StringArrayAttrs shreddedStringArrayAttrsReadI,
-	StringArrayMembs shreddedStringArrayMembsReadI,
-	SymbolAttrs shreddedSymbolAttrsReadI,
-	SymbolMembs shreddedSymbolMembsReadI,
-	I64ArrayAttrs shreddedI64ArrayAttrsReadI,
-	I64ArrayMembs shreddedI64ArrayMembsReadI,
-	F64ArrayAttrs shreddedF64ArrayAttrsReadI,
-	F64ArrayMembs shreddedF64ArrayMembsReadI,
-	BoolAttrs shreddedBoolAttrsReadI,
-	BoolMembs shreddedBoolMembsReadI,
-	NullAttrs shreddedNullAttrsReadI,
-	NullMembs shreddedNullMembsReadI,
-	EmptyObjectAttrs shreddedEmptyObjectAttrsReadI,
-	EmptyObjectMembs shreddedEmptyObjectMembsReadI,
-	EmptyArrayAttrs shreddedEmptyArrayAttrsReadI,
-	EmptyArrayMembs shreddedEmptyArrayMembsReadI,
+func evidenceShreddedReadRow[
+	StringArrayAttrs evidenceShreddedStringArrayAttrsReadI,
+	StringArrayMembs evidenceShreddedStringArrayMembsReadI,
+	SymbolAttrs evidenceShreddedSymbolAttrsReadI,
+	SymbolMembs evidenceShreddedSymbolMembsReadI,
+	I64ArrayAttrs evidenceShreddedI64ArrayAttrsReadI,
+	I64ArrayMembs evidenceShreddedI64ArrayMembsReadI,
+	F64ArrayAttrs evidenceShreddedF64ArrayAttrsReadI,
+	F64ArrayMembs evidenceShreddedF64ArrayMembsReadI,
+	BoolAttrs evidenceShreddedBoolAttrsReadI,
+	BoolMembs evidenceShreddedBoolMembsReadI,
+	NullAttrs evidenceShreddedNullAttrsReadI,
+	NullMembs evidenceShreddedNullMembsReadI,
+	EmptyObjectAttrs evidenceShreddedEmptyObjectAttrsReadI,
+	EmptyObjectMembs evidenceShreddedEmptyObjectMembsReadI,
+	EmptyArrayAttrs evidenceShreddedEmptyArrayAttrsReadI,
+	EmptyArrayMembs evidenceShreddedEmptyArrayMembsReadI,
 ](
 	i int,
 	stringArrayAttrs StringArrayAttrs,
@@ -567,9 +567,9 @@ func shreddedReadRow[
 	emptyObjectMembs EmptyObjectMembs,
 	emptyArrayAttrs EmptyArrayAttrs,
 	emptyArrayMembs EmptyArrayMembs,
-) (row Shredded, present bool, err error) {
+) (row EvidenceShredded, present bool, err error) {
 	// --- stringArray. ---
-	var stringArrayStringsElems []ShreddedString
+	var stringArrayStringsElems []EvidenceShreddedString
 	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 		stringArrayClaimed := false
@@ -603,7 +603,7 @@ func shreddedReadRow[
 			err = eb.Build().Str("section", "stringArray").Errorf("decode the membership parameters: %w", perr)
 			return
 		}
-		stringArrayStringsElems = append(stringArrayStringsElems, ShreddedString{
+		stringArrayStringsElems = append(stringArrayStringsElems, EvidenceShreddedString{
 			Path:   string(stringArrayMixedLowCardVerbatimMemb),
 			Params: stringArrayParamsLocal,
 			Value:  stringArrayValueLocal,
@@ -614,7 +614,7 @@ func shreddedReadRow[
 		present = true
 	}
 	// --- symbol. ---
-	var symbolSymbolsElems []ShreddedSymbol
+	var symbolSymbolsElems []EvidenceShreddedSymbol
 	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 		symbolClaimed := false
@@ -643,7 +643,7 @@ func shreddedReadRow[
 			err = eb.Build().Str("section", "symbol").Errorf("decode the membership parameters: %w", perr)
 			return
 		}
-		symbolSymbolsElems = append(symbolSymbolsElems, ShreddedSymbol{
+		symbolSymbolsElems = append(symbolSymbolsElems, EvidenceShreddedSymbol{
 			Path:   string(symbolMixedLowCardVerbatimMemb),
 			Params: symbolParamsLocal,
 			Value:  symbolValueLocal,
@@ -654,7 +654,7 @@ func shreddedReadRow[
 		present = true
 	}
 	// --- i64Array. ---
-	var i64ArrayI64sElems []ShreddedI64
+	var i64ArrayI64sElems []EvidenceShreddedI64
 	ni64Array := i64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < ni64Array; attrJ++ {
 		i64ArrayClaimed := false
@@ -688,7 +688,7 @@ func shreddedReadRow[
 			err = eb.Build().Str("section", "i64Array").Errorf("decode the membership parameters: %w", perr)
 			return
 		}
-		i64ArrayI64sElems = append(i64ArrayI64sElems, ShreddedI64{
+		i64ArrayI64sElems = append(i64ArrayI64sElems, EvidenceShreddedI64{
 			Path:   string(i64ArrayMixedLowCardVerbatimMemb),
 			Params: i64ArrayParamsLocal,
 			Value:  i64ArrayValueLocal,
@@ -699,7 +699,7 @@ func shreddedReadRow[
 		present = true
 	}
 	// --- f64Array. ---
-	var f64ArrayF64sElems []ShreddedF64
+	var f64ArrayF64sElems []EvidenceShreddedF64
 	nf64Array := f64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nf64Array; attrJ++ {
 		f64ArrayClaimed := false
@@ -733,7 +733,7 @@ func shreddedReadRow[
 			err = eb.Build().Str("section", "f64Array").Errorf("decode the membership parameters: %w", perr)
 			return
 		}
-		f64ArrayF64sElems = append(f64ArrayF64sElems, ShreddedF64{
+		f64ArrayF64sElems = append(f64ArrayF64sElems, EvidenceShreddedF64{
 			Path:   string(f64ArrayMixedLowCardVerbatimMemb),
 			Params: f64ArrayParamsLocal,
 			Value:  f64ArrayValueLocal,
@@ -744,7 +744,7 @@ func shreddedReadRow[
 		present = true
 	}
 	// --- bool. ---
-	var boolBoolsElems []ShreddedBool
+	var boolBoolsElems []EvidenceShreddedBool
 	nbool := boolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nbool; attrJ++ {
 		boolClaimed := false
@@ -773,7 +773,7 @@ func shreddedReadRow[
 			err = eb.Build().Str("section", "bool").Errorf("decode the membership parameters: %w", perr)
 			return
 		}
-		boolBoolsElems = append(boolBoolsElems, ShreddedBool{
+		boolBoolsElems = append(boolBoolsElems, EvidenceShreddedBool{
 			Path:   string(boolMixedLowCardVerbatimMemb),
 			Params: boolParamsLocal,
 			Value:  boolValueLocal,
@@ -784,7 +784,7 @@ func shreddedReadRow[
 		present = true
 	}
 	// --- null. ---
-	var nullNullsElems []ShreddedLeaf
+	var nullNullsElems []EvidenceShreddedLeaf
 	nnull := nullAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nnull; attrJ++ {
 		nullClaimed := false
@@ -811,7 +811,7 @@ func shreddedReadRow[
 			err = eb.Build().Str("section", "null").Errorf("decode the membership parameters: %w", perr)
 			return
 		}
-		nullNullsElems = append(nullNullsElems, ShreddedLeaf{
+		nullNullsElems = append(nullNullsElems, EvidenceShreddedLeaf{
 			Path:   string(nullMixedLowCardVerbatimMemb),
 			Params: nullParamsLocal,
 		})
@@ -821,7 +821,7 @@ func shreddedReadRow[
 		present = true
 	}
 	// --- emptyObject. ---
-	var emptyObjectEmptyObjectsElems []ShreddedLeaf
+	var emptyObjectEmptyObjectsElems []EvidenceShreddedLeaf
 	nemptyObject := emptyObjectAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nemptyObject; attrJ++ {
 		emptyObjectClaimed := false
@@ -848,7 +848,7 @@ func shreddedReadRow[
 			err = eb.Build().Str("section", "emptyObject").Errorf("decode the membership parameters: %w", perr)
 			return
 		}
-		emptyObjectEmptyObjectsElems = append(emptyObjectEmptyObjectsElems, ShreddedLeaf{
+		emptyObjectEmptyObjectsElems = append(emptyObjectEmptyObjectsElems, EvidenceShreddedLeaf{
 			Path:   string(emptyObjectMixedLowCardVerbatimMemb),
 			Params: emptyObjectParamsLocal,
 		})
@@ -858,7 +858,7 @@ func shreddedReadRow[
 		present = true
 	}
 	// --- emptyArray. ---
-	var emptyArrayEmptyArraysElems []ShreddedLeaf
+	var emptyArrayEmptyArraysElems []EvidenceShreddedLeaf
 	nemptyArray := emptyArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nemptyArray; attrJ++ {
 		emptyArrayClaimed := false
@@ -885,7 +885,7 @@ func shreddedReadRow[
 			err = eb.Build().Str("section", "emptyArray").Errorf("decode the membership parameters: %w", perr)
 			return
 		}
-		emptyArrayEmptyArraysElems = append(emptyArrayEmptyArraysElems, ShreddedLeaf{
+		emptyArrayEmptyArraysElems = append(emptyArrayEmptyArraysElems, EvidenceShreddedLeaf{
 			Path:   string(emptyArrayMixedLowCardVerbatimMemb),
 			Params: emptyArrayParamsLocal,
 		})

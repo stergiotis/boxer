@@ -2,16 +2,16 @@ package agentrunstore
 
 import "time"
 
-// Entry is one ledger entry (ADR-0308 §SD2): appended, never rewritten; a
-// tombstone appends the entry at its next revision, which the reads keep
-// over the original (§SD8). ID is the run id (ADR-0325 §SD5); the envelope's ordinal is
-// the entry's. The fields sit on the boxer.facts data sections in the
-// trail's spelling (plan002 B0), told apart by their membership ids. The
-// content is not here: it is the vault's (ADR-0320 §SD1), and
-// VaultCommitment is the one commitment its row opens (ADR-0325 §SD3).
-// EntryId is the entry's tagged id (ADR-0325 §SD5); the attachments are
-// references, a media type and the artefact store's digest, index for
-// index. The records an entry carries beside are components of their own.
+// Entry is one ledger entry (ADR-0308 §SD2): appended, never rewritten. ID
+// is the run id (ADR-0325 §SD5); the envelope's ordinal is the entry's.
+// The fields sit on the boxer.facts data sections in the trail's spelling
+// (plan002 B0), told apart by their membership ids. The content is not
+// here: it is the vault's (ADR-0320 §SD1), and the commitments its rows
+// open are on the row's chain component with the chain digest and the
+// mark (ADR-0327 §SD2, §SD4). EntryId is the entry's tagged id (ADR-0325
+// §SD5); the attachments are references, a media type and the artefact
+// store's digest, index for index. The records an entry carries beside are
+// components of their own.
 type Entry struct {
 	_                    struct{}  `kind:"agentrunEntry"`
 	ID                   uint64    `lw:",id"`
@@ -20,7 +20,6 @@ type Entry struct {
 	Key                  string    `lw:"agentrunEntryKey,stringArray,unit"`
 	Role                 string    `lw:"agentrunEntryRole,symbol"`
 	EntryId              uint64    `lw:"agentrunEntryId,u64Array,unit"`
-	VaultCommitment      string    `lw:"agentrunEntryVaultCommitment,stringArray,unit"`
 	Name                 string    `lw:"agentrunEntryName,stringArray,unit"`
 	Book                 string    `lw:"agentrunEntryBook,symbol"`
 	Form                 string    `lw:"agentrunEntryForm,symbol"`
@@ -35,9 +34,6 @@ type Entry struct {
 	WriterRun            uint64    `lw:"agentrunEntryWriterRun,u64Array,unit"`
 	WriterTurn           string    `lw:"agentrunEntryWriterTurn,symbol"`
 	WriterOrdinal        uint32    `lw:"agentrunEntryWriterOrdinal,u32Array,unit"`
-	Prev                 uint32    `lw:"agentrunEntryPrev,u32Array,unit"`
-	Digest               string    `lw:"agentrunEntryDigest,stringArray,unit"`
-	KeyId                string    `lw:"agentrunEntryKeyId,symbol"`
 	Parent               uint32    `lw:"agentrunEntryParent,u32Array,unit"`
 	AttachmentMediaTypes []string  `lw:"agentrunEntryAttachmentMediaTypes,symbolArray"`
 	AttachmentDigests    []string  `lw:"agentrunEntryAttachmentDigests,stringArray"`

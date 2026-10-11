@@ -711,6 +711,32 @@ var (
 	MembAgentrunCopyRefused   = NkRegistry.MustBegin("agentrunCopyRefused", 445).End()
 	MembAgentrunCopyReason    = NkRegistry.MustBegin("agentrunCopyReason", 446).End()
 	MembAgentrunCopyBytes     = NkRegistry.MustBegin("agentrunCopyBytes", 447).End()
+	// The evidence profile's components (ADR-0327 (proposed) §SD2): the
+	// chain with its mark and commitments, the written-by component, and
+	// the opening on a vault row. The shredded component binds verbatim
+	// names and needs no id.
+	MembEvidenceKindChain             = NkRegistry.MustBegin("evidenceKindChain", 460).End()
+	MembEvidenceChainPrev             = NkRegistry.MustBegin("evidenceChainPrev", 461).End()
+	MembEvidenceChainDigest           = NkRegistry.MustBegin("evidenceChainDigest", 462).End()
+	MembEvidenceChainScheme           = NkRegistry.MustBegin("evidenceChainScheme", 463).End()
+	MembEvidenceChainMark             = NkRegistry.MustBegin("evidenceChainMark", 464).End()
+	MembEvidenceChainMarkTarget       = NkRegistry.MustBegin("evidenceChainMarkTarget", 465).End()
+	MembEvidenceChainMarkComponent    = NkRegistry.MustBegin("evidenceChainMarkComponent", 466).End()
+	MembEvidenceChainHeadDigest       = NkRegistry.MustBegin("evidenceChainHeadDigest", 467).End()
+	MembEvidenceChainCommitComponents = NkRegistry.MustBegin("evidenceChainCommitComponents", 468).End()
+	MembEvidenceChainCommitments      = NkRegistry.MustBegin("evidenceChainCommitments", 469).End()
+	MembEvidenceKindWrittenBy         = NkRegistry.MustBegin("evidenceKindWrittenBy", 470).End()
+	MembEvidenceWrittenByRun          = NkRegistry.MustBegin("evidenceWrittenByRun", 471).End()
+	MembEvidenceWrittenByApp          = NkRegistry.MustBegin("evidenceWrittenByApp", 472).End()
+	MembEvidenceWrittenByInstance     = NkRegistry.MustBegin("evidenceWrittenByInstance", 473).End()
+	MembEvidenceWrittenByOriginBy     = NkRegistry.MustBegin("evidenceWrittenByOriginBy", 474).End()
+	MembEvidenceWrittenByPrincipal    = NkRegistry.MustBegin("evidenceWrittenByPrincipal", 475).End()
+	MembEvidenceWrittenByPrincipalBy  = NkRegistry.MustBegin("evidenceWrittenByPrincipalBy", 476).End()
+	MembEvidenceWrittenByPurpose      = NkRegistry.MustBegin("evidenceWrittenByPurpose", 477).End()
+	MembEvidenceWrittenByCorrelation  = NkRegistry.MustBegin("evidenceWrittenByCorrelation", 478).End()
+	MembEvidenceWrittenByBatch        = NkRegistry.MustBegin("evidenceWrittenByBatch", 479).End()
+	MembEvidenceKindOpening           = NkRegistry.MustBegin("evidenceKindOpening", 480).End()
+	MembEvidenceOpeningValue          = NkRegistry.MustBegin("evidenceOpeningValue", 481).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -823,4 +849,10 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembAgentrunCopyDigest, MembAgentrunCopyLevel, MembAgentrunCopyTier, MembAgentrunCopySource,
 	MembAgentrunCopyHandle, MembAgentrunCopyPlaintext, MembAgentrunCopyRecorded, MembAgentrunCopyApproval,
 	MembAgentrunCopyRaw, MembAgentrunCopyRefused, MembAgentrunCopyReason, MembAgentrunCopyBytes,
+	MembEvidenceKindChain, MembEvidenceChainPrev, MembEvidenceChainDigest, MembEvidenceChainScheme,
+	MembEvidenceChainMark, MembEvidenceChainMarkTarget, MembEvidenceChainMarkComponent, MembEvidenceChainHeadDigest,
+	MembEvidenceChainCommitComponents, MembEvidenceChainCommitments, MembEvidenceKindWrittenBy, MembEvidenceWrittenByRun,
+	MembEvidenceWrittenByApp, MembEvidenceWrittenByInstance, MembEvidenceWrittenByOriginBy, MembEvidenceWrittenByPrincipal,
+	MembEvidenceWrittenByPrincipalBy, MembEvidenceWrittenByPurpose, MembEvidenceWrittenByCorrelation, MembEvidenceWrittenByBatch,
+	MembEvidenceKindOpening, MembEvidenceOpeningValue,
 }

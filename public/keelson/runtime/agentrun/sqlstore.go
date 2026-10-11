@@ -16,6 +16,7 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
+	"github.com/stergiotis/boxer/public/storage/recordstore/evidence"
 )
 
 // SqlStore is StoreI over the generated stores (agentrunstore) and the
@@ -33,13 +34,18 @@ import (
 // state. Every act claims it first, from the row as the table holds it: a
 // run held by a live process is refused with [ErrHeldElsewhere], one that
 // is released or whose holder no longer runs is taken over by bumping the
-// lease epoch. The
-// act's entries are written at revision 2×epoch (a tombstone one above),
-// so a batch the dead holder still had in flight loses every ordinal the
-// new holder writes; the confirming rewrite is guarded on the holder and
-// the epoch as well as the version. Reads stop at the run row's head, so a
-// row past it is invisible, and a repair adopts only a tail that chains
-// from the head.
+// lease epoch. The act's entries are written at revision 2×epoch, so a
+// batch the dead holder still had in flight loses every ordinal the new
+// holder writes; the confirming rewrite is guarded on the holder and the
+// epoch as well as the version. Reads stop at the run row's head, so a row
+// past it is invisible, and a repair adopts only a tail that chains from
+// the head.
+//
+// The entries go through the evidence profile's vaulted store (ADR-0327
+// §SD9): this store prepares each entry after the run's head — the ids,
+// the openings, the commitments, the chain digest, the identity on the
+// context — and writes the content rows to the vault, then the ledger row.
+// A deletion or an erasure destroys vault rows and rewrites no ledger row.
 //
 // Journal inserts carry async_insert = 0 (ADR-0309 §SD4): the entry store
 // is generated with it and the Cas run table forces it, and an executor
@@ -54,8 +60,8 @@ type SqlStore struct {
 	// they could not be built, returned by every mint.
 	ids    agentrunstore.Ids
 	idsErr error
-	// Log takes what the store does best-effort and could not: the
-	// deletion of a tombstoned run's original rows.
+	// Log takes what a read found and could not use: a vault row that
+	// does not open its entry's commitments.
 	Log zerolog.Logger
 	// live are the run rows as last written or read, by id.
 	live map[uint64]Run
@@ -82,6 +88,7 @@ var ErrHeldElsewhere = errors.New("the run is open in another process")
 var _ StoreI = (*SqlStore)(nil)
 var _ AllEntriesI = (*SqlStore)(nil)
 var _ EntriesOfI = (*SqlStore)(nil)
+var _ EraserI = (*SqlStore)(nil)
 
 // NewSqlStore opens the stores over exec in layout; the caller provisions
 // first (agentrunstore.ProvisionIn) and closes afterwards.
@@ -446,18 +453,11 @@ func runsOf(entries []Entry) (ids []uint64) {
 	return
 }
 
-// revisionOf is the revision an entry row is written at under a lease
-// epoch: 2×epoch, and a tombstone one above, which every read keeps over
-// the original (ADR-0308 §SD8). A later epoch's rows win every ordinal an
-// earlier holder's in-flight batch also wrote (ADR-0319 §SD7).
-func revisionOf(e Entry, epoch uint32) (rev agentrunstore.EntryEnvelope) {
-	rev.Revision = 2 * epoch
-	if e.Tombstoned() {
-		rev.Revision++
-	}
-	return
-}
-
+// appendLocked prepares the entries after each run's head and writes them
+// through the vaulted store at the lease epoch's revision: 2×epoch, so a
+// later epoch's rows win every ordinal an earlier holder's in-flight batch
+// also wrote (ADR-0319 §SD7). One flush, vault first, so a failure leaves
+// nothing of the batch behind.
 func (inst *SqlStore) appendLocked(ctx context.Context, entries []Entry) (err error) {
 	// An entry retried with its id keeps it: one ordinal, one id.
 	for i := range entries {
@@ -471,20 +471,51 @@ func (inst *SqlStore) appendLocked(ctx context.Context, entries []Entry) (err er
 			return eb.Build().Uint64("run", entries[i].Run).Uint32("ordinal", entries[i].Ordinal).Errorf("entry id: %w", err)
 		}
 	}
-	for _, e := range entries {
-		b := inst.st.Entry.Begin(e.Run, uint64(e.Ordinal), revisionOf(e, inst.epoch[e.Run]))
-		if err = fillLedger(b, e); err == nil {
-			err = b.Commit()
-		} else {
-			_ = b.Rollback()
+	heads := make(map[uint64]evidence.Head)
+	for i := range entries {
+		id := entries[i].Run
+		head, ok := heads[id]
+		if !ok {
+			r, found, gerr := inst.getRunLocked(ctx, id)
+			if gerr != nil {
+				return gerr
+			}
+			if !found {
+				return eb.Build().Uint64("run", id).Errorf("no such run")
+			}
+			head = headOf(r)
 		}
-		if err != nil {
-			inst.st.Entry.DiscardPending()
+		if entries[i], err = entries[i].prepared(ctx, head); err != nil {
+			return
+		}
+		heads[id] = evidence.Head{Ordinal: uint64(entries[i].Ordinal), Digest: entries[i].Digest}
+	}
+	discard := func() {
+		inst.st.Vault.DiscardPending()
+		inst.st.Entry.DiscardPending()
+	}
+	for _, e := range entries {
+		ent, lerr := ledgerEntity(e)
+		if lerr != nil {
+			discard()
+			return eb.Build().Uint64("run", e.Run).Uint32("ordinal", e.Ordinal).Errorf("ledger row: %w", lerr)
+		}
+		rows, rerr := contentRows(e)
+		if rerr != nil {
+			discard()
+			return eb.Build().Uint64("run", e.Run).Uint32("ordinal", e.Ordinal).Errorf("vault rows: %w", rerr)
+		}
+		ent.Revision = 2 * inst.epoch[e.Run]
+		for _, v := range rows {
+			v.Revision = ent.Revision
+		}
+		if err = inst.st.Vaulted.Write(ctx, ent, rows); err != nil {
+			discard()
 			return eb.Build().Uint64("run", e.Run).Uint32("ordinal", e.Ordinal).Errorf("buffer entry: %w", err)
 		}
 	}
-	if _, err = inst.st.Entry.Flush(ctx); err != nil {
-		inst.st.Entry.DiscardPending()
+	if err = inst.st.Vaulted.Flush(ctx); err != nil {
+		discard()
 		return eh.Errorf("flush entries: %w", err)
 	}
 	return
@@ -569,8 +600,9 @@ func bounded(entries []Entry, heads map[uint64]uint32) (kept []Entry) {
 }
 
 // entriesLocked reads a run's entries from an ordinal on, through upTo
-// when it is not zero; the bounds are in the statement, over the order
-// column the ordinal is stored as, so a read of the tail costs the tail.
+// when it is not zero, joined with their vault rows; the bounds are in the
+// statement, over the order column the ordinal is stored as, so a read of
+// the tail costs the tail.
 func (inst *SqlStore) entriesLocked(ctx context.Context, run uint64, from uint32, upTo uint32) (entries []Entry, err error) {
 	predicate := agentrunstore.EntryColKey + " = " + strconv.FormatUint(run, 10)
 	if from > 0 {
@@ -583,7 +615,43 @@ func (inst *SqlStore) entriesLocked(ctx context.Context, run uint64, from uint32
 	if err != nil {
 		return nil, eb.Build().Uint64("run", run).Errorf("read entries: %w", err)
 	}
-	return
+	return inst.joinedLocked(ctx, entries, []uint64{run}, from)
+}
+
+// joinedLocked gives entries the content their vault rows hold: the vault
+// rows of runs from an ordinal on, read by run, grouped by ordinal, and
+// opened against each entry's commitments.
+func (inst *SqlStore) joinedLocked(ctx context.Context, entries []Entry, runs []uint64, from uint32) (out []Entry, err error) {
+	if len(entries) == 0 {
+		return entries, nil
+	}
+	type key struct {
+		run uint64
+		ord uint64
+	}
+	grouped := make(map[key][]*agentrunstore.EntryVaultEntity)
+	var order []key
+	for _, run := range runs {
+		for v, verr := range inst.st.Vault.Replay(ctx, run, uint64(from), recordstore.ReplayOptsU64{}) {
+			if verr != nil {
+				return nil, eb.Build().Uint64("run", run).Errorf("read the vault: %w", verr)
+			}
+			k := key{v.ID, v.Ord}
+			if _, seen := grouped[k]; !seen {
+				order = append(order, k)
+			}
+			grouped[k] = append(grouped[k], v)
+		}
+	}
+	bodies := make([]Body, 0, len(order))
+	for _, k := range order {
+		b, berr := bodyOfRows(k.run, uint32(k.ord), grouped[k])
+		if berr != nil {
+			return nil, eb.Build().Uint64("run", k.run).Uint64("ordinal", k.ord).Errorf("vault rows: %w", berr)
+		}
+		bodies = append(bodies, b)
+	}
+	return joined(inst.Log, entries, bodies), nil
 }
 
 func (inst *SqlStore) EntriesOf(ctx context.Context, runs []uint64) (entries []Entry, err error) {
@@ -605,14 +673,14 @@ func (inst *SqlStore) EntriesOf(ctx context.Context, runs []uint64) (entries []E
 		return nil, err
 	}
 	entries = bounded(entries, heads)
-	return
+	return inst.joinedLocked(ctx, entries, runs, 0)
 }
 
 // scanEntriesLocked reads the entry rows a predicate selects, in (run,
-// ordinal) order. The generated scan keeps one row per ordinal, its
-// highest revision, so a tombstone hides the entry it blanks (ADR-0308
-// §SD8); the predicate must select whole ordinals, as a run and an
-// ordinal bound do.
+// ordinal) order, without their content. The generated scan keeps one row
+// per ordinal, its highest revision, so a later lease epoch's row hides an
+// earlier holder's (ADR-0319 §SD7); the predicate must select whole
+// ordinals, as a run and an ordinal bound do.
 func (inst *SqlStore) scanEntriesLocked(ctx context.Context, predicate string) (entries []Entry, err error) {
 	for ent, serr := range inst.st.Entry.ScanEntry(ctx, recordstore.ScanOpts{ExtraPredicate: predicate}) {
 		if serr != nil {
@@ -645,18 +713,14 @@ func (inst *SqlStore) AllEntries(ctx context.Context) (entries []Entry, err erro
 		return nil, err
 	}
 	entries = bounded(entries, heads)
-	return
+	return inst.joinedLocked(ctx, entries, runsOf(entries), 0)
 }
 
-// Tombstone appends every entry of the run at its next revision with Body
-// and Calls empty, which the reads keep over the original at the same
-// ordinal, so the chain's digests and the metadata stay and no row is
-// removed first (ADR-0308 §SD8). One flush, so a failure leaves the run as
-// it was. The originals, their bodies still in the parts, are then deleted
-// best-effort by their revision: the blanked revisions are the record
-// either way, and a deletion that fails is logged and retried by nothing
-// until the next tombstone of the run. Head entries keep their body, a
-// digest the anchor law reads (ADR-0314 §SD5), not content.
+// Tombstone destroys the run's vault rows but the head entries', whose
+// content is a digest the anchor law reads (ADR-0314 §SD5): a rewrite of
+// the vault's part (ADR-0320 §SD4), and no ledger row touched — the
+// chain's digests, the commitments and the metadata stay, and the deleted
+// entry the writer appended first explains the absence (ADR-0327 §SD3).
 func (inst *SqlStore) Tombstone(ctx context.Context, run uint64) (err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
@@ -667,30 +731,41 @@ func (inst *SqlStore) Tombstone(ctx context.Context, run uint64) (err error) {
 	if err != nil || r.LastOrdinal == 0 {
 		return
 	}
-	entries, err := inst.entriesLocked(ctx, run, 0, r.LastOrdinal)
+	predicate := agentrunstore.EntryColKey + " = " + strconv.FormatUint(run, 10) +
+		" AND " + agentrunstore.EntryColOrder + " <= " + strconv.FormatUint(uint64(r.LastOrdinal), 10)
+	entries, err := inst.scanEntriesLocked(ctx, predicate)
 	if err != nil {
 		return
 	}
-	blanked := make([]Entry, 0, len(entries))
-	var ordinals []string
+	var keep []uint64
 	for _, e := range entries {
-		if !e.HasContent() || e.Kind == KindHead {
-			continue
+		if e.Kind == KindHead {
+			keep = append(keep, uint64(e.Ordinal))
 		}
-		ordinals = append(ordinals, strconv.FormatUint(uint64(e.Ordinal), 10))
-		blanked = append(blanked, e.Erased())
 	}
-	if len(blanked) == 0 {
+	if err = inst.st.Vaulted.Destroy(ctx, run, keep); err != nil {
+		return eb.Build().Uint64("run", run).Errorf("destroy the vault rows: %w", err)
+	}
+	return
+}
+
+// Erase destroys the vault rows at ordinals (ADR-0320 §SD4), after their
+// erased entries are in the chain, which the service checks.
+func (inst *SqlStore) Erase(ctx context.Context, run uint64, ordinals []uint32) (err error) {
+	if len(ordinals) == 0 {
 		return
 	}
-	if err = inst.appendLocked(ctx, blanked); err != nil {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if _, err = inst.leaseLocked(ctx, run); err != nil {
 		return
 	}
-	where := agentrunstore.EntryColKey + " = " + strconv.FormatUint(run, 10) +
-		" AND " + agentrunstore.EntryColOrder + " IN (" + strings.Join(ordinals, ", ") + ")" +
-		" AND " + agentrunstore.EntryColRevision + " % 2 = 0"
-	if derr := inst.exec.Exec(ctx, "DELETE FROM "+inst.layout.EntryTable()+" WHERE "+where); derr != nil {
-		inst.Log.Warn().Err(derr).Uint64("run", run).Msg("the tombstoned run's original rows were not deleted; the blanked revisions are the record")
+	ords := make([]uint64, 0, len(ordinals))
+	for _, o := range ordinals {
+		ords = append(ords, uint64(o))
+	}
+	if err = inst.st.Vaulted.Erase(ctx, run, ords, nil); err != nil {
+		return eb.Build().Uint64("run", run).Errorf("erase the vault rows: %w", err)
 	}
 	return
 }

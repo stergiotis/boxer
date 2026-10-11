@@ -212,7 +212,7 @@ func newCoordinator(cli *agent.Client, kq *keelsonquery.Client, conversation str
 // nil parent makes it a root the coordinator owns.
 func newCoordinatorIn(parent *lifetime.Scope, cli *agent.Client, kq *keelsonquery.Client, conversation string) (inst *coordinator) {
 	inst = &coordinator{cli: cli, kq: kq, conversation: conversation, opTools: OperationToolsSeed.Get(), ask: &asker{}, steps: &turnSteps{},
-		ceiling: defaultPermissions().ceiling(true), store: agentrun.NewVaulted(agentrun.NewMemStore(), agentrun.NewMemBodyStore()),
+		ceiling: defaultPermissions().ceiling(true), store: agentrun.NewMemStore(),
 		refused: make(map[string]string), typed: make(map[string]typedOp), opCache: make(map[string][]agent.Operation), windowApps: make(map[uint64]string),
 		opEffects: make(map[string]map[string]string), scope: lifetime.New(parent), confinedTier: fallbackConfinedTier()}
 	inst.scope.OnDrained(inst.closeJournal)

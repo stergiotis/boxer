@@ -131,8 +131,8 @@ func TestDeletionKeepsTheChain(t *testing.T) {
 	require.Len(t, entries, 3)
 	assert.Empty(t, entries[0].Body)
 	assert.True(t, entries[0].Tombstoned())
-	assert.Equal(t, written[0].VaultCommitment, entries[0].VaultCommitment, "the commitment stays")
-	assert.Empty(t, entries[0].Opening, "the opening goes with the body")
+	assert.Equal(t, written[0].Commitments, entries[0].Commitments, "the commitments stay")
+	assert.Empty(t, entries[0].Openings, "the openings go with the body")
 	assert.Equal(t, KindDeleted, entries[2].Kind)
 	assert.Equal(t, "person", entries[2].Name, "who deleted is outside the bodies")
 	assert.NotEmpty(t, entries[0].Digest, "digests stay")
@@ -167,9 +167,9 @@ func TestAChangedBodyBreaksTheChain(t *testing.T) {
 	broken, _ := Verify(w.Run().Digest, entries)
 	assert.Equal(t, uint32(2), broken)
 	entries = w.Entries()
-	entries[0].VaultCommitment = ContentDigest("z")
+	entries[0].Commitments = map[string]string{componentBody: ContentDigest("z")}
 	broken, _ = Verify(w.Run().Digest, entries)
-	assert.Equal(t, uint32(1), broken, "a changed digest breaks the chain digest")
+	assert.Equal(t, uint32(1), broken, "a changed commitment breaks the chain digest")
 }
 
 // A closed run resumes; the row's label is the join of its entries'

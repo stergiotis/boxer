@@ -81,9 +81,11 @@ func TestTheServiceScopesRunsToTheSender(t *testing.T) {
 
 // The service holds the journal's invariants against a client that has
 // them wrong (ADR-0308 §SD9): an append must continue the run's chain at
-// the next ordinal, with matching digests, into an open run; a run row
-// keeps its identity, seed and label; a deleted run is never written
-// again; a tombstone follows the deleted entry.
+// the next ordinal from the head the writer expects, into an open run,
+// and the service prepares it — ids, commitments, digests, the sender as
+// who wrote it (ADR-0327 §SD9); a run row keeps its identity, seed and
+// label; a deleted run is never written again; a tombstone follows the
+// deleted entry.
 func TestTheServiceHoldsTheInvariants(t *testing.T) {
 	ctx := context.Background()
 	bus := inprocbus.NewInst(zerolog.Nop())
@@ -97,29 +99,31 @@ func TestTheServiceHoldsTheInvariants(t *testing.T) {
 	written, err := w.Append(ctx, Entry{Kind: KindUser, Body: "hello", Label: Label{Tier: TierAmber}})
 	require.NoError(t, err)
 	head := written[0]
+	require.NotNil(t, head.WrittenBy)
+	assert.Equal(t, "app.chat", head.WrittenBy.App, "the service recorded the sender as who wrote it")
+	assert.Equal(t, "envelope", head.WrittenBy.OriginBy, "vouched by the envelope")
 
-	chained := func(e Entry) Entry {
-		e.Run = 11
-		e, err := e.chained(head.Ordinal, head.Digest)
-		require.NoError(t, err)
+	// next is an entry as the writer sends it: the next ordinal after the
+	// head and the head it expects, nothing prepared.
+	next := func(e Entry) Entry {
+		e.Run, e.Prev = 11, head.Ordinal
 		return e
 	}
-	assert.Error(t, chat.Append(ctx, []Entry{chained(Entry{Ordinal: 3, Kind: KindUser, Body: "skips"})}), "not the next ordinal")
-	assert.Error(t, chat.Append(ctx, []Entry{chained(Entry{Ordinal: 1, Kind: KindUser, Body: "repeats"})}), "a duplicate ordinal")
-	bad := chained(Entry{Ordinal: 2, Kind: KindUser, Body: "x"})
-	bad.Digest = "forged"
-	assert.Error(t, chat.Append(ctx, []Entry{bad}), "not chained to the head")
-	lying := chained(Entry{Ordinal: 2, Kind: KindUser, Body: "x"})
-	lying.Body = "y"
-	assert.Error(t, chat.Append(ctx, []Entry{lying}), "a body its digest does not commit to")
-	assert.Error(t, chat.Append(ctx, []Entry{chained(Entry{Ordinal: 2, Kind: KindE(200)})}), "no such kind")
-	assert.Error(t, chat.Append(ctx, []Entry{chained(Entry{Ordinal: 2, Kind: KindCompact, Target: 2})}), "a compaction aimed at itself")
+	at := expecting(ctx, head.Digest)
+	assert.Error(t, chat.Append(at, []Entry{next(Entry{Ordinal: 3, Kind: KindUser, Body: "skips"})}), "not the next ordinal")
+	assert.Error(t, chat.Append(at, []Entry{next(Entry{Ordinal: 1, Prev: 0, Kind: KindUser, Body: "repeats"})}), "a duplicate ordinal")
+	assert.Error(t, chat.Append(expecting(ctx, "stale"), []Entry{next(Entry{Ordinal: 2, Kind: KindUser, Body: "x"})}), "a head that moved")
+	assert.Error(t, chat.Append(at, []Entry{next(Entry{Ordinal: 2, Kind: KindE(200)})}), "no such kind")
+	assert.Error(t, chat.Append(at, []Entry{next(Entry{Ordinal: 2, Kind: KindCompact, Target: 2})}), "a compaction aimed at itself")
 	assert.Error(t, chat.Tombstone(ctx, 11), "no deleted entry at the head")
-	good := chained(Entry{Ordinal: 2, Kind: KindUser, Body: "x"})
-	require.NoError(t, chat.Append(ctx, []Entry{good}), "the next entry, chained")
+	good := []Entry{next(Entry{Ordinal: 2, Kind: KindUser, Body: "x"})}
+	require.NoError(t, chat.Append(at, good), "the next entry")
+	assert.NotEmpty(t, good[0].Digest, "the service prepared it")
+	assert.NotEmpty(t, good[0].Commitments)
+	assert.NotEmpty(t, good[0].Openings, "and handed the openings back")
 	r, _, _ := store.GetRun(ctx, 11)
 	assert.Equal(t, uint32(2), r.LastOrdinal)
-	assert.Equal(t, good.Digest, r.Head)
+	assert.Equal(t, good[0].Digest, r.Head)
 	assert.Equal(t, TierAmber, r.Label.Tier, "the row's label rose with the entries")
 
 	rewritten := r
@@ -139,7 +143,7 @@ func TestTheServiceHoldsTheInvariants(t *testing.T) {
 	reopened := stranded
 	reopened.State, reopened.Version = StateOpen, stranded.Version+1
 	assert.Error(t, chat.UpdateRun(ctx, reopened), "stranded does not move to open")
-	assert.Error(t, chat.Append(ctx, []Entry{chained(Entry{Ordinal: 3, Kind: KindUser, Body: "z"})}), "not open")
+	assert.Error(t, chat.Append(expecting(ctx, r.Head), []Entry{{Run: 11, Ordinal: 3, Prev: 2, Kind: KindUser, Body: "z"}}), "not open")
 	del := stranded
 	del.State, del.Version = StateDeleted, stranded.Version+1
 	assert.Error(t, chat.UpdateRun(ctx, del), "deleted needs the deleted entry at the head")
@@ -162,15 +166,10 @@ func TestTheServiceHoldsTheInvariants(t *testing.T) {
 	require.NoError(t, err)
 	first, err := w2.Append(ctx, Entry{Kind: KindUser, Body: "x"})
 	require.NoError(t, err)
-	deleted, err := Entry{Run: 12, Kind: KindDeleted, Name: "person"}.chained(first[0].Ordinal, first[0].Digest)
-	require.NoError(t, err)
-	deleted.Ordinal = 2
-	deleted, err = deleted.chained(first[0].Ordinal, first[0].Digest)
-	require.NoError(t, err)
-	require.NoError(t, chat.Append(ctx, []Entry{deleted}))
-	after, err := Entry{Run: 12, Ordinal: 3, Kind: KindUser, Body: "y"}.chained(deleted.Ordinal, deleted.Digest)
-	require.NoError(t, err)
-	assert.Error(t, chat.Append(ctx, []Entry{after}), "nothing follows the deleted entry")
+	deleted := []Entry{{Run: 12, Ordinal: 2, Prev: 1, Kind: KindDeleted, Name: "person"}}
+	require.NoError(t, chat.Append(expecting(ctx, first[0].Digest), deleted))
+	after := []Entry{{Run: 12, Ordinal: 3, Prev: 2, Kind: KindUser, Body: "y"}}
+	assert.Error(t, chat.Append(expecting(ctx, deleted[0].Digest), after), "nothing follows the deleted entry")
 }
 
 // delayedStore holds every append for a while: what lets two writers race
@@ -202,14 +201,11 @@ func TestTwoWritersOnOneRunAreSerialised(t *testing.T) {
 	require.NoError(t, err)
 	head := written[0]
 	second := func(body string) Entry {
-		e := Entry{Run: 11, Ordinal: 2, Kind: KindUser, Body: body}
-		e, cerr := e.chained(head.Ordinal, head.Digest)
-		require.NoError(t, cerr)
-		return e
+		return Entry{Run: 11, Ordinal: 2, Prev: head.Ordinal, Kind: KindUser, Body: body}
 	}
 	errs := make(chan error, 2)
 	for _, body := range []string{"a", "b"} {
-		go func() { errs <- chat.Append(ctx, []Entry{second(body)}) }()
+		go func() { errs <- chat.Append(expecting(ctx, head.Digest), []Entry{second(body)}) }()
 	}
 	var failed int
 	for range 2 {

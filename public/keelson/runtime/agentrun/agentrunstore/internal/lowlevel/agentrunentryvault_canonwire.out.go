@@ -30,157 +30,157 @@ var (
 
 // The slot keys of ADR-0210 SD2: a tagged section's CT group, or a co-section
 // group's CT signature. They key the entity item's tagged map and are the only
-// thing on the wire that comes from agentrunbody-table's description: section names, column
+// thing on the wire that comes from agentrunentryvault-table's description: section names, column
 // names, aspects and hints are not.
 
-// CanonWireSignatureAgentrunbodyTableNull keys the slot of section null.
-const CanonWireSignatureAgentrunbodyTableNull = ""
+// CanonWireSignatureAgentrunentryvaultTableNull keys the slot of section null.
+const CanonWireSignatureAgentrunentryvaultTableNull = ""
 
-// CanonWireSignatureAgentrunbodyTableEmptyObject keys the slot of section emptyObject.
-const CanonWireSignatureAgentrunbodyTableEmptyObject = ""
+// CanonWireSignatureAgentrunentryvaultTableEmptyObject keys the slot of section emptyObject.
+const CanonWireSignatureAgentrunentryvaultTableEmptyObject = ""
 
-// CanonWireSignatureAgentrunbodyTableEmptyArray keys the slot of section emptyArray.
-const CanonWireSignatureAgentrunbodyTableEmptyArray = ""
+// CanonWireSignatureAgentrunentryvaultTableEmptyArray keys the slot of section emptyArray.
+const CanonWireSignatureAgentrunentryvaultTableEmptyArray = ""
 
-// CanonWireSignatureAgentrunbodyTableBool keys the slot of section bool.
-const CanonWireSignatureAgentrunbodyTableBool = "b"
+// CanonWireSignatureAgentrunentryvaultTableBool keys the slot of section bool.
+const CanonWireSignatureAgentrunentryvaultTableBool = "b"
 
-// CanonWireSignatureAgentrunbodyTableF32Array keys the slot of section f32Array.
-const CanonWireSignatureAgentrunbodyTableF32Array = "f32h"
+// CanonWireSignatureAgentrunentryvaultTableF32Array keys the slot of section f32Array.
+const CanonWireSignatureAgentrunentryvaultTableF32Array = "f32h"
 
-// CanonWireSignatureAgentrunbodyTableF64Array keys the slot of section f64Array.
-const CanonWireSignatureAgentrunbodyTableF64Array = "f64h"
+// CanonWireSignatureAgentrunentryvaultTableF64Array keys the slot of section f64Array.
+const CanonWireSignatureAgentrunentryvaultTableF64Array = "f64h"
 
-// CanonWireSignatureAgentrunbodyTableI16Array keys the slot of section i16Array.
-const CanonWireSignatureAgentrunbodyTableI16Array = "i16h"
+// CanonWireSignatureAgentrunentryvaultTableI16Array keys the slot of section i16Array.
+const CanonWireSignatureAgentrunentryvaultTableI16Array = "i16h"
 
-// CanonWireSignatureAgentrunbodyTableI32Array keys the slot of section i32Array.
-const CanonWireSignatureAgentrunbodyTableI32Array = "i32h"
+// CanonWireSignatureAgentrunentryvaultTableI32Array keys the slot of section i32Array.
+const CanonWireSignatureAgentrunentryvaultTableI32Array = "i32h"
 
-// CanonWireSignatureAgentrunbodyTableI64Array keys the slot of section i64Array.
-const CanonWireSignatureAgentrunbodyTableI64Array = "i64h"
+// CanonWireSignatureAgentrunentryvaultTableI64Array keys the slot of section i64Array.
+const CanonWireSignatureAgentrunentryvaultTableI64Array = "i64h"
 
-// CanonWireSignatureAgentrunbodyTableI8Array keys the slot of section i8Array.
-const CanonWireSignatureAgentrunbodyTableI8Array = "i8h"
+// CanonWireSignatureAgentrunentryvaultTableI8Array keys the slot of section i8Array.
+const CanonWireSignatureAgentrunentryvaultTableI8Array = "i8h"
 
-// CanonWireSignatureAgentrunbodyTableSymbol keys the slot of section symbol.
-const CanonWireSignatureAgentrunbodyTableSymbol = "s"
+// CanonWireSignatureAgentrunentryvaultTableSymbol keys the slot of section symbol.
+const CanonWireSignatureAgentrunentryvaultTableSymbol = "s"
 
-// CanonWireSignatureAgentrunbodyTableTextArray keys the slot of section textArray.
-const CanonWireSignatureAgentrunbodyTableTextArray = "sh"
+// CanonWireSignatureAgentrunentryvaultTableTextArray keys the slot of section textArray.
+const CanonWireSignatureAgentrunentryvaultTableTextArray = "sh"
 
-// CanonWireSignatureAgentrunbodyTableStringArray keys the slot of section stringArray.
-const CanonWireSignatureAgentrunbodyTableStringArray = "sh"
+// CanonWireSignatureAgentrunentryvaultTableStringArray keys the slot of section stringArray.
+const CanonWireSignatureAgentrunentryvaultTableStringArray = "sh"
 
-// CanonWireSignatureAgentrunbodyTableSymbolArray keys the slot of section symbolArray.
-const CanonWireSignatureAgentrunbodyTableSymbolArray = "sh"
+// CanonWireSignatureAgentrunentryvaultTableSymbolArray keys the slot of section symbolArray.
+const CanonWireSignatureAgentrunentryvaultTableSymbolArray = "sh"
 
-// CanonWireSignatureAgentrunbodyTableU16Array keys the slot of section u16Array.
-const CanonWireSignatureAgentrunbodyTableU16Array = "u16h"
+// CanonWireSignatureAgentrunentryvaultTableU16Array keys the slot of section u16Array.
+const CanonWireSignatureAgentrunentryvaultTableU16Array = "u16h"
 
-// CanonWireSignatureAgentrunbodyTableU32Range keys the slot of section u32Range.
-const CanonWireSignatureAgentrunbodyTableU32Range = "u32-u32"
+// CanonWireSignatureAgentrunentryvaultTableU32Range keys the slot of section u32Range.
+const CanonWireSignatureAgentrunentryvaultTableU32Range = "u32-u32"
 
-// CanonWireSignatureAgentrunbodyTableU32Array keys the slot of section u32Array.
-const CanonWireSignatureAgentrunbodyTableU32Array = "u32h"
+// CanonWireSignatureAgentrunentryvaultTableU32Array keys the slot of section u32Array.
+const CanonWireSignatureAgentrunentryvaultTableU32Array = "u32h"
 
-// CanonWireSignatureAgentrunbodyTableU32Set keys the slot of section u32Set.
-const CanonWireSignatureAgentrunbodyTableU32Set = "u32m"
+// CanonWireSignatureAgentrunentryvaultTableU32Set keys the slot of section u32Set.
+const CanonWireSignatureAgentrunentryvaultTableU32Set = "u32m"
 
-// CanonWireSignatureAgentrunbodyTableU64Array keys the slot of section u64Array.
-const CanonWireSignatureAgentrunbodyTableU64Array = "u64h"
+// CanonWireSignatureAgentrunentryvaultTableU64Array keys the slot of section u64Array.
+const CanonWireSignatureAgentrunentryvaultTableU64Array = "u64h"
 
-// CanonWireSignatureAgentrunbodyTableU64Set keys the slot of section u64Set.
-const CanonWireSignatureAgentrunbodyTableU64Set = "u64m"
+// CanonWireSignatureAgentrunentryvaultTableU64Set keys the slot of section u64Set.
+const CanonWireSignatureAgentrunentryvaultTableU64Set = "u64m"
 
-// CanonWireSignatureAgentrunbodyTableU8Array keys the slot of section u8Array.
-const CanonWireSignatureAgentrunbodyTableU8Array = "u8h"
+// CanonWireSignatureAgentrunentryvaultTableU8Array keys the slot of section u8Array.
+const CanonWireSignatureAgentrunentryvaultTableU8Array = "u8h"
 
-// CanonWireSignatureAgentrunbodyTableBlobArray keys the slot of section blobArray.
-const CanonWireSignatureAgentrunbodyTableBlobArray = "yh"
+// CanonWireSignatureAgentrunentryvaultTableBlobArray keys the slot of section blobArray.
+const CanonWireSignatureAgentrunentryvaultTableBlobArray = "yh"
 
-// CanonWireSignatureAgentrunbodyTableTimeArray keys the slot of section timeArray.
-const CanonWireSignatureAgentrunbodyTableTimeArray = "z64h"
+// CanonWireSignatureAgentrunentryvaultTableTimeArray keys the slot of section timeArray.
+const CanonWireSignatureAgentrunentryvaultTableTimeArray = "z64h"
 
-// CanonWireSlotAgentrunbodyTableE names the table's tagged slots.
+// CanonWireSlotAgentrunentryvaultTableE names the table's tagged slots.
 //
 // They are in slot-table order — by signature, then by first section index —
 // so the ordinals do not depend on map iteration.
-type CanonWireSlotAgentrunbodyTableE uint8
+type CanonWireSlotAgentrunentryvaultTableE uint8
 
 const (
-	CanonWireSlotAgentrunbodyTableNull CanonWireSlotAgentrunbodyTableE = iota
-	CanonWireSlotAgentrunbodyTableEmptyObject
-	CanonWireSlotAgentrunbodyTableEmptyArray
-	CanonWireSlotAgentrunbodyTableBool
-	CanonWireSlotAgentrunbodyTableF32Array
-	CanonWireSlotAgentrunbodyTableF64Array
-	CanonWireSlotAgentrunbodyTableI16Array
-	CanonWireSlotAgentrunbodyTableI32Array
-	CanonWireSlotAgentrunbodyTableI64Array
-	CanonWireSlotAgentrunbodyTableI8Array
-	CanonWireSlotAgentrunbodyTableSymbol
-	CanonWireSlotAgentrunbodyTableTextArray
-	CanonWireSlotAgentrunbodyTableStringArray
-	CanonWireSlotAgentrunbodyTableSymbolArray
-	CanonWireSlotAgentrunbodyTableU16Array
-	CanonWireSlotAgentrunbodyTableU32Range
-	CanonWireSlotAgentrunbodyTableU32Array
-	CanonWireSlotAgentrunbodyTableU32Set
-	CanonWireSlotAgentrunbodyTableU64Array
-	CanonWireSlotAgentrunbodyTableU64Set
-	CanonWireSlotAgentrunbodyTableU8Array
-	CanonWireSlotAgentrunbodyTableBlobArray
-	CanonWireSlotAgentrunbodyTableTimeArray
+	CanonWireSlotAgentrunentryvaultTableNull CanonWireSlotAgentrunentryvaultTableE = iota
+	CanonWireSlotAgentrunentryvaultTableEmptyObject
+	CanonWireSlotAgentrunentryvaultTableEmptyArray
+	CanonWireSlotAgentrunentryvaultTableBool
+	CanonWireSlotAgentrunentryvaultTableF32Array
+	CanonWireSlotAgentrunentryvaultTableF64Array
+	CanonWireSlotAgentrunentryvaultTableI16Array
+	CanonWireSlotAgentrunentryvaultTableI32Array
+	CanonWireSlotAgentrunentryvaultTableI64Array
+	CanonWireSlotAgentrunentryvaultTableI8Array
+	CanonWireSlotAgentrunentryvaultTableSymbol
+	CanonWireSlotAgentrunentryvaultTableTextArray
+	CanonWireSlotAgentrunentryvaultTableStringArray
+	CanonWireSlotAgentrunentryvaultTableSymbolArray
+	CanonWireSlotAgentrunentryvaultTableU16Array
+	CanonWireSlotAgentrunentryvaultTableU32Range
+	CanonWireSlotAgentrunentryvaultTableU32Array
+	CanonWireSlotAgentrunentryvaultTableU32Set
+	CanonWireSlotAgentrunentryvaultTableU64Array
+	CanonWireSlotAgentrunentryvaultTableU64Set
+	CanonWireSlotAgentrunentryvaultTableU8Array
+	CanonWireSlotAgentrunentryvaultTableBlobArray
+	CanonWireSlotAgentrunentryvaultTableTimeArray
 )
 
-func (inst CanonWireSlotAgentrunbodyTableE) String() string {
+func (inst CanonWireSlotAgentrunentryvaultTableE) String() string {
 	switch inst {
-	case CanonWireSlotAgentrunbodyTableNull:
+	case CanonWireSlotAgentrunentryvaultTableNull:
 		return "null"
-	case CanonWireSlotAgentrunbodyTableEmptyObject:
+	case CanonWireSlotAgentrunentryvaultTableEmptyObject:
 		return "emptyObject"
-	case CanonWireSlotAgentrunbodyTableEmptyArray:
+	case CanonWireSlotAgentrunentryvaultTableEmptyArray:
 		return "emptyArray"
-	case CanonWireSlotAgentrunbodyTableBool:
+	case CanonWireSlotAgentrunentryvaultTableBool:
 		return "bool"
-	case CanonWireSlotAgentrunbodyTableF32Array:
+	case CanonWireSlotAgentrunentryvaultTableF32Array:
 		return "f32Array"
-	case CanonWireSlotAgentrunbodyTableF64Array:
+	case CanonWireSlotAgentrunentryvaultTableF64Array:
 		return "f64Array"
-	case CanonWireSlotAgentrunbodyTableI16Array:
+	case CanonWireSlotAgentrunentryvaultTableI16Array:
 		return "i16Array"
-	case CanonWireSlotAgentrunbodyTableI32Array:
+	case CanonWireSlotAgentrunentryvaultTableI32Array:
 		return "i32Array"
-	case CanonWireSlotAgentrunbodyTableI64Array:
+	case CanonWireSlotAgentrunentryvaultTableI64Array:
 		return "i64Array"
-	case CanonWireSlotAgentrunbodyTableI8Array:
+	case CanonWireSlotAgentrunentryvaultTableI8Array:
 		return "i8Array"
-	case CanonWireSlotAgentrunbodyTableSymbol:
+	case CanonWireSlotAgentrunentryvaultTableSymbol:
 		return "symbol"
-	case CanonWireSlotAgentrunbodyTableTextArray:
+	case CanonWireSlotAgentrunentryvaultTableTextArray:
 		return "textArray"
-	case CanonWireSlotAgentrunbodyTableStringArray:
+	case CanonWireSlotAgentrunentryvaultTableStringArray:
 		return "stringArray"
-	case CanonWireSlotAgentrunbodyTableSymbolArray:
+	case CanonWireSlotAgentrunentryvaultTableSymbolArray:
 		return "symbolArray"
-	case CanonWireSlotAgentrunbodyTableU16Array:
+	case CanonWireSlotAgentrunentryvaultTableU16Array:
 		return "u16Array"
-	case CanonWireSlotAgentrunbodyTableU32Range:
+	case CanonWireSlotAgentrunentryvaultTableU32Range:
 		return "u32Range"
-	case CanonWireSlotAgentrunbodyTableU32Array:
+	case CanonWireSlotAgentrunentryvaultTableU32Array:
 		return "u32Array"
-	case CanonWireSlotAgentrunbodyTableU32Set:
+	case CanonWireSlotAgentrunentryvaultTableU32Set:
 		return "u32Set"
-	case CanonWireSlotAgentrunbodyTableU64Array:
+	case CanonWireSlotAgentrunentryvaultTableU64Array:
 		return "u64Array"
-	case CanonWireSlotAgentrunbodyTableU64Set:
+	case CanonWireSlotAgentrunentryvaultTableU64Set:
 		return "u64Set"
-	case CanonWireSlotAgentrunbodyTableU8Array:
+	case CanonWireSlotAgentrunentryvaultTableU8Array:
 		return "u8Array"
-	case CanonWireSlotAgentrunbodyTableBlobArray:
+	case CanonWireSlotAgentrunentryvaultTableBlobArray:
 		return "blobArray"
-	case CanonWireSlotAgentrunbodyTableTimeArray:
+	case CanonWireSlotAgentrunentryvaultTableTimeArray:
 		return "timeArray"
 	}
 	return "<invalid>"
@@ -188,54 +188,54 @@ func (inst CanonWireSlotAgentrunbodyTableE) String() string {
 
 // Signature returns the slot's CT signature — the key it rides under in an
 // entity's tagged map.
-func (inst CanonWireSlotAgentrunbodyTableE) Signature() string {
+func (inst CanonWireSlotAgentrunentryvaultTableE) Signature() string {
 	switch inst {
-	case CanonWireSlotAgentrunbodyTableNull:
-		return CanonWireSignatureAgentrunbodyTableNull
-	case CanonWireSlotAgentrunbodyTableEmptyObject:
-		return CanonWireSignatureAgentrunbodyTableEmptyObject
-	case CanonWireSlotAgentrunbodyTableEmptyArray:
-		return CanonWireSignatureAgentrunbodyTableEmptyArray
-	case CanonWireSlotAgentrunbodyTableBool:
-		return CanonWireSignatureAgentrunbodyTableBool
-	case CanonWireSlotAgentrunbodyTableF32Array:
-		return CanonWireSignatureAgentrunbodyTableF32Array
-	case CanonWireSlotAgentrunbodyTableF64Array:
-		return CanonWireSignatureAgentrunbodyTableF64Array
-	case CanonWireSlotAgentrunbodyTableI16Array:
-		return CanonWireSignatureAgentrunbodyTableI16Array
-	case CanonWireSlotAgentrunbodyTableI32Array:
-		return CanonWireSignatureAgentrunbodyTableI32Array
-	case CanonWireSlotAgentrunbodyTableI64Array:
-		return CanonWireSignatureAgentrunbodyTableI64Array
-	case CanonWireSlotAgentrunbodyTableI8Array:
-		return CanonWireSignatureAgentrunbodyTableI8Array
-	case CanonWireSlotAgentrunbodyTableSymbol:
-		return CanonWireSignatureAgentrunbodyTableSymbol
-	case CanonWireSlotAgentrunbodyTableTextArray:
-		return CanonWireSignatureAgentrunbodyTableTextArray
-	case CanonWireSlotAgentrunbodyTableStringArray:
-		return CanonWireSignatureAgentrunbodyTableStringArray
-	case CanonWireSlotAgentrunbodyTableSymbolArray:
-		return CanonWireSignatureAgentrunbodyTableSymbolArray
-	case CanonWireSlotAgentrunbodyTableU16Array:
-		return CanonWireSignatureAgentrunbodyTableU16Array
-	case CanonWireSlotAgentrunbodyTableU32Range:
-		return CanonWireSignatureAgentrunbodyTableU32Range
-	case CanonWireSlotAgentrunbodyTableU32Array:
-		return CanonWireSignatureAgentrunbodyTableU32Array
-	case CanonWireSlotAgentrunbodyTableU32Set:
-		return CanonWireSignatureAgentrunbodyTableU32Set
-	case CanonWireSlotAgentrunbodyTableU64Array:
-		return CanonWireSignatureAgentrunbodyTableU64Array
-	case CanonWireSlotAgentrunbodyTableU64Set:
-		return CanonWireSignatureAgentrunbodyTableU64Set
-	case CanonWireSlotAgentrunbodyTableU8Array:
-		return CanonWireSignatureAgentrunbodyTableU8Array
-	case CanonWireSlotAgentrunbodyTableBlobArray:
-		return CanonWireSignatureAgentrunbodyTableBlobArray
-	case CanonWireSlotAgentrunbodyTableTimeArray:
-		return CanonWireSignatureAgentrunbodyTableTimeArray
+	case CanonWireSlotAgentrunentryvaultTableNull:
+		return CanonWireSignatureAgentrunentryvaultTableNull
+	case CanonWireSlotAgentrunentryvaultTableEmptyObject:
+		return CanonWireSignatureAgentrunentryvaultTableEmptyObject
+	case CanonWireSlotAgentrunentryvaultTableEmptyArray:
+		return CanonWireSignatureAgentrunentryvaultTableEmptyArray
+	case CanonWireSlotAgentrunentryvaultTableBool:
+		return CanonWireSignatureAgentrunentryvaultTableBool
+	case CanonWireSlotAgentrunentryvaultTableF32Array:
+		return CanonWireSignatureAgentrunentryvaultTableF32Array
+	case CanonWireSlotAgentrunentryvaultTableF64Array:
+		return CanonWireSignatureAgentrunentryvaultTableF64Array
+	case CanonWireSlotAgentrunentryvaultTableI16Array:
+		return CanonWireSignatureAgentrunentryvaultTableI16Array
+	case CanonWireSlotAgentrunentryvaultTableI32Array:
+		return CanonWireSignatureAgentrunentryvaultTableI32Array
+	case CanonWireSlotAgentrunentryvaultTableI64Array:
+		return CanonWireSignatureAgentrunentryvaultTableI64Array
+	case CanonWireSlotAgentrunentryvaultTableI8Array:
+		return CanonWireSignatureAgentrunentryvaultTableI8Array
+	case CanonWireSlotAgentrunentryvaultTableSymbol:
+		return CanonWireSignatureAgentrunentryvaultTableSymbol
+	case CanonWireSlotAgentrunentryvaultTableTextArray:
+		return CanonWireSignatureAgentrunentryvaultTableTextArray
+	case CanonWireSlotAgentrunentryvaultTableStringArray:
+		return CanonWireSignatureAgentrunentryvaultTableStringArray
+	case CanonWireSlotAgentrunentryvaultTableSymbolArray:
+		return CanonWireSignatureAgentrunentryvaultTableSymbolArray
+	case CanonWireSlotAgentrunentryvaultTableU16Array:
+		return CanonWireSignatureAgentrunentryvaultTableU16Array
+	case CanonWireSlotAgentrunentryvaultTableU32Range:
+		return CanonWireSignatureAgentrunentryvaultTableU32Range
+	case CanonWireSlotAgentrunentryvaultTableU32Array:
+		return CanonWireSignatureAgentrunentryvaultTableU32Array
+	case CanonWireSlotAgentrunentryvaultTableU32Set:
+		return CanonWireSignatureAgentrunentryvaultTableU32Set
+	case CanonWireSlotAgentrunentryvaultTableU64Array:
+		return CanonWireSignatureAgentrunentryvaultTableU64Array
+	case CanonWireSlotAgentrunentryvaultTableU64Set:
+		return CanonWireSignatureAgentrunentryvaultTableU64Set
+	case CanonWireSlotAgentrunentryvaultTableU8Array:
+		return CanonWireSignatureAgentrunentryvaultTableU8Array
+	case CanonWireSlotAgentrunentryvaultTableBlobArray:
+		return CanonWireSignatureAgentrunentryvaultTableBlobArray
+	case CanonWireSlotAgentrunentryvaultTableTimeArray:
+		return CanonWireSignatureAgentrunentryvaultTableTimeArray
 	}
 	return ""
 }
@@ -244,92 +244,92 @@ func (inst CanonWireSlotAgentrunbodyTableE) Signature() string {
 // slot of this table. Those are the slots ADR-0210 SD5's dispatch has to
 // resolve: the encoder consults its tagger for every attribute of one, and for
 // no attribute of any other.
-func (inst CanonWireSlotAgentrunbodyTableE) Ambiguous() bool {
+func (inst CanonWireSlotAgentrunentryvaultTableE) Ambiguous() bool {
 	switch inst {
-	case CanonWireSlotAgentrunbodyTableNull:
+	case CanonWireSlotAgentrunentryvaultTableNull:
 		return true
-	case CanonWireSlotAgentrunbodyTableEmptyObject:
+	case CanonWireSlotAgentrunentryvaultTableEmptyObject:
 		return true
-	case CanonWireSlotAgentrunbodyTableEmptyArray:
+	case CanonWireSlotAgentrunentryvaultTableEmptyArray:
 		return true
-	case CanonWireSlotAgentrunbodyTableTextArray:
+	case CanonWireSlotAgentrunentryvaultTableTextArray:
 		return true
-	case CanonWireSlotAgentrunbodyTableStringArray:
+	case CanonWireSlotAgentrunentryvaultTableStringArray:
 		return true
-	case CanonWireSlotAgentrunbodyTableSymbolArray:
+	case CanonWireSlotAgentrunentryvaultTableSymbolArray:
 		return true
 	}
 	return false
 }
 
-// CanonWireTaggerAgentrunbodyTableI is the encoder half of ADR-0210 SD5's dispatch pair.
+// CanonWireTaggerAgentrunentryvaultTableI is the encoder half of ADR-0210 SD5's dispatch pair.
 //
 // It is consulted for every attribute of a slot whose signature is ambiguous
 // in this table, and its small opaque integer rides as the attribute item's
 // trailing element for the decoding side's DispatcherI to read. Attributes of
 // an unambiguous slot never reach it and never carry a discriminator.
-type CanonWireTaggerAgentrunbodyTableI interface {
-	Tag(slot CanonWireSlotAgentrunbodyTableE, entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) uint64
+type CanonWireTaggerAgentrunentryvaultTableI interface {
+	Tag(slot CanonWireSlotAgentrunentryvaultTableE, entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) uint64
 }
 
-// CanonWireOrdinalTaggerAgentrunbodyTable is the built-in tagger of ADR-0210 SD5.
+// CanonWireOrdinalTaggerAgentrunentryvaultTable is the built-in tagger of ADR-0210 SD5.
 //
 // It returns the slot's ordinal within its ambiguity set, which round-trips
 // between two tables that declare the same sections in the same order and is
 // explicitly that declaration-order coupling — a consumer that wants
 // section-name independence supplies its own pair.
-type CanonWireOrdinalTaggerAgentrunbodyTable struct{}
+type CanonWireOrdinalTaggerAgentrunentryvaultTable struct{}
 
-var _ CanonWireTaggerAgentrunbodyTableI = CanonWireOrdinalTaggerAgentrunbodyTable{}
+var _ CanonWireTaggerAgentrunentryvaultTableI = CanonWireOrdinalTaggerAgentrunentryvaultTable{}
 
-func (inst CanonWireOrdinalTaggerAgentrunbodyTable) Tag(slot CanonWireSlotAgentrunbodyTableE, entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) uint64 {
+func (inst CanonWireOrdinalTaggerAgentrunentryvaultTable) Tag(slot CanonWireSlotAgentrunentryvaultTableE, entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) uint64 {
 	switch slot {
-	case CanonWireSlotAgentrunbodyTableEmptyObject:
+	case CanonWireSlotAgentrunentryvaultTableEmptyObject:
 		return 1
-	case CanonWireSlotAgentrunbodyTableEmptyArray:
+	case CanonWireSlotAgentrunentryvaultTableEmptyArray:
 		return 2
-	case CanonWireSlotAgentrunbodyTableStringArray:
+	case CanonWireSlotAgentrunentryvaultTableStringArray:
 		return 1
-	case CanonWireSlotAgentrunbodyTableSymbolArray:
+	case CanonWireSlotAgentrunentryvaultTableSymbolArray:
 		return 2
 	}
 	return 0
 }
 
-// CanonWireEncoderAgentrunbodyTable writes entities of a loaded ReadAccessAgentrunbodyTable as the leeway canonical wire (ADR-0210).
+// CanonWireEncoderAgentrunentryvaultTable writes entities of a loaded ReadAccessAgentrunentryvaultTable as the leeway canonical wire (ADR-0210).
 //
 // It reads the generated readaccess accessors directly: no reflection, no
 // arrow.Array type switch, one typed runtime call per column. The buffers are
 // held on the encoder and reused across entities, so it is not goroutine-safe;
 // one encoder per encoding goroutine.
-type CanonWireEncoderAgentrunbodyTable struct {
-	ra                             *ReadAccessAgentrunbodyTable
-	tagger                         CanonWireTaggerAgentrunbodyTableI
-	ew                             *cwruntime.EntityWriter
-	awAgentrunbodyTableNull        *cwruntime.AttributeWriter
-	awAgentrunbodyTableEmptyObject *cwruntime.AttributeWriter
-	awAgentrunbodyTableEmptyArray  *cwruntime.AttributeWriter
-	awAgentrunbodyTableBool        *cwruntime.AttributeWriter
-	awAgentrunbodyTableF32Array    *cwruntime.AttributeWriter
-	awAgentrunbodyTableF64Array    *cwruntime.AttributeWriter
-	awAgentrunbodyTableI16Array    *cwruntime.AttributeWriter
-	awAgentrunbodyTableI32Array    *cwruntime.AttributeWriter
-	awAgentrunbodyTableI64Array    *cwruntime.AttributeWriter
-	awAgentrunbodyTableI8Array     *cwruntime.AttributeWriter
-	awAgentrunbodyTableSymbol      *cwruntime.AttributeWriter
-	awAgentrunbodyTableTextArray   *cwruntime.AttributeWriter
-	awAgentrunbodyTableStringArray *cwruntime.AttributeWriter
-	awAgentrunbodyTableSymbolArray *cwruntime.AttributeWriter
-	awAgentrunbodyTableU16Array    *cwruntime.AttributeWriter
-	awAgentrunbodyTableU32Range    *cwruntime.AttributeWriter
-	awAgentrunbodyTableU32Array    *cwruntime.AttributeWriter
-	awAgentrunbodyTableU32Set      *cwruntime.AttributeWriter
-	awAgentrunbodyTableU64Array    *cwruntime.AttributeWriter
-	awAgentrunbodyTableU64Set      *cwruntime.AttributeWriter
-	awAgentrunbodyTableU8Array     *cwruntime.AttributeWriter
-	awAgentrunbodyTableBlobArray   *cwruntime.AttributeWriter
-	awAgentrunbodyTableTimeArray   *cwruntime.AttributeWriter
-	setWriter                      *cwruntime.SetWriter
+type CanonWireEncoderAgentrunentryvaultTable struct {
+	ra                                   *ReadAccessAgentrunentryvaultTable
+	tagger                               CanonWireTaggerAgentrunentryvaultTableI
+	ew                                   *cwruntime.EntityWriter
+	awAgentrunentryvaultTableNull        *cwruntime.AttributeWriter
+	awAgentrunentryvaultTableEmptyObject *cwruntime.AttributeWriter
+	awAgentrunentryvaultTableEmptyArray  *cwruntime.AttributeWriter
+	awAgentrunentryvaultTableBool        *cwruntime.AttributeWriter
+	awAgentrunentryvaultTableF32Array    *cwruntime.AttributeWriter
+	awAgentrunentryvaultTableF64Array    *cwruntime.AttributeWriter
+	awAgentrunentryvaultTableI16Array    *cwruntime.AttributeWriter
+	awAgentrunentryvaultTableI32Array    *cwruntime.AttributeWriter
+	awAgentrunentryvaultTableI64Array    *cwruntime.AttributeWriter
+	awAgentrunentryvaultTableI8Array     *cwruntime.AttributeWriter
+	awAgentrunentryvaultTableSymbol      *cwruntime.AttributeWriter
+	awAgentrunentryvaultTableTextArray   *cwruntime.AttributeWriter
+	awAgentrunentryvaultTableStringArray *cwruntime.AttributeWriter
+	awAgentrunentryvaultTableSymbolArray *cwruntime.AttributeWriter
+	awAgentrunentryvaultTableU16Array    *cwruntime.AttributeWriter
+	awAgentrunentryvaultTableU32Range    *cwruntime.AttributeWriter
+	awAgentrunentryvaultTableU32Array    *cwruntime.AttributeWriter
+	awAgentrunentryvaultTableU32Set      *cwruntime.AttributeWriter
+	awAgentrunentryvaultTableU64Array    *cwruntime.AttributeWriter
+	awAgentrunentryvaultTableU64Set      *cwruntime.AttributeWriter
+	awAgentrunentryvaultTableU8Array     *cwruntime.AttributeWriter
+	awAgentrunentryvaultTableBlobArray   *cwruntime.AttributeWriter
+	awAgentrunentryvaultTableTimeArray   *cwruntime.AttributeWriter
+	setWriter                            *cwruntime.SetWriter
 
 	// The readaccess container accessors are iterators and report no
 	// length, so an `h` column's elements are collected before the array
@@ -351,164 +351,164 @@ type CanonWireEncoderAgentrunbodyTable struct {
 	scratchTaggedTimeArrayValue   []time.Time
 }
 
-// NewCanonWireEncoderAgentrunbodyTable binds an encoder to ra, which must already be loaded from a batch.
+// NewCanonWireEncoderAgentrunentryvaultTable binds an encoder to ra, which must already be loaded from a batch.
 //
 // tagger may be nil: no attribute then carries an SD5 discriminator, and the
 // decoding side has to resolve an ambiguous signature from content alone.
-func NewCanonWireEncoderAgentrunbodyTable(ra *ReadAccessAgentrunbodyTable, tagger CanonWireTaggerAgentrunbodyTableI) (inst *CanonWireEncoderAgentrunbodyTable, err error) {
+func NewCanonWireEncoderAgentrunentryvaultTable(ra *ReadAccessAgentrunentryvaultTable, tagger CanonWireTaggerAgentrunentryvaultTableI) (inst *CanonWireEncoderAgentrunentryvaultTable, err error) {
 	if ra == nil {
-		err = eb.Build().Str("tableName", "agentrunbody-table").Errorf("no read access to encode from")
+		err = eb.Build().Str("tableName", "agentrunentryvault-table").Errorf("no read access to encode from")
 		return
 	}
-	inst = &CanonWireEncoderAgentrunbodyTable{ra: ra, tagger: tagger}
+	inst = &CanonWireEncoderAgentrunentryvaultTable{ra: ra, tagger: tagger}
 	inst.ew, err = cwruntime.NewEntityWriter()
 	if err != nil {
 		inst = nil
-		err = eb.Build().Str("tableName", "agentrunbody-table").Errorf("unable to create the entity writer: %w", err)
+		err = eb.Build().Str("tableName", "agentrunentryvault-table").Errorf("unable to create the entity writer: %w", err)
 		return
 	}
-	inst.awAgentrunbodyTableNull, err = cwruntime.NewAttributeWriter(0, 1)
+	inst.awAgentrunentryvaultTableNull, err = cwruntime.NewAttributeWriter(0, 1)
 	if err != nil {
 		inst = nil
-		err = eb.Build().Str("tableName", "agentrunbody-table").Str("slot", "null").Errorf("unable to create the attribute writer: %w", err)
+		err = eb.Build().Str("tableName", "agentrunentryvault-table").Str("slot", "null").Errorf("unable to create the attribute writer: %w", err)
 		return
 	}
-	inst.awAgentrunbodyTableEmptyObject, err = cwruntime.NewAttributeWriter(0, 1)
+	inst.awAgentrunentryvaultTableEmptyObject, err = cwruntime.NewAttributeWriter(0, 1)
 	if err != nil {
 		inst = nil
-		err = eb.Build().Str("tableName", "agentrunbody-table").Str("slot", "emptyObject").Errorf("unable to create the attribute writer: %w", err)
+		err = eb.Build().Str("tableName", "agentrunentryvault-table").Str("slot", "emptyObject").Errorf("unable to create the attribute writer: %w", err)
 		return
 	}
-	inst.awAgentrunbodyTableEmptyArray, err = cwruntime.NewAttributeWriter(0, 1)
+	inst.awAgentrunentryvaultTableEmptyArray, err = cwruntime.NewAttributeWriter(0, 1)
 	if err != nil {
 		inst = nil
-		err = eb.Build().Str("tableName", "agentrunbody-table").Str("slot", "emptyArray").Errorf("unable to create the attribute writer: %w", err)
+		err = eb.Build().Str("tableName", "agentrunentryvault-table").Str("slot", "emptyArray").Errorf("unable to create the attribute writer: %w", err)
 		return
 	}
-	inst.awAgentrunbodyTableBool, err = cwruntime.NewAttributeWriter(1, 1)
+	inst.awAgentrunentryvaultTableBool, err = cwruntime.NewAttributeWriter(1, 1)
 	if err != nil {
 		inst = nil
-		err = eb.Build().Str("tableName", "agentrunbody-table").Str("slot", "bool").Errorf("unable to create the attribute writer: %w", err)
+		err = eb.Build().Str("tableName", "agentrunentryvault-table").Str("slot", "bool").Errorf("unable to create the attribute writer: %w", err)
 		return
 	}
-	inst.awAgentrunbodyTableF32Array, err = cwruntime.NewAttributeWriter(1, 1)
+	inst.awAgentrunentryvaultTableF32Array, err = cwruntime.NewAttributeWriter(1, 1)
 	if err != nil {
 		inst = nil
-		err = eb.Build().Str("tableName", "agentrunbody-table").Str("slot", "f32Array").Errorf("unable to create the attribute writer: %w", err)
+		err = eb.Build().Str("tableName", "agentrunentryvault-table").Str("slot", "f32Array").Errorf("unable to create the attribute writer: %w", err)
 		return
 	}
-	inst.awAgentrunbodyTableF64Array, err = cwruntime.NewAttributeWriter(1, 1)
+	inst.awAgentrunentryvaultTableF64Array, err = cwruntime.NewAttributeWriter(1, 1)
 	if err != nil {
 		inst = nil
-		err = eb.Build().Str("tableName", "agentrunbody-table").Str("slot", "f64Array").Errorf("unable to create the attribute writer: %w", err)
+		err = eb.Build().Str("tableName", "agentrunentryvault-table").Str("slot", "f64Array").Errorf("unable to create the attribute writer: %w", err)
 		return
 	}
-	inst.awAgentrunbodyTableI16Array, err = cwruntime.NewAttributeWriter(1, 1)
+	inst.awAgentrunentryvaultTableI16Array, err = cwruntime.NewAttributeWriter(1, 1)
 	if err != nil {
 		inst = nil
-		err = eb.Build().Str("tableName", "agentrunbody-table").Str("slot", "i16Array").Errorf("unable to create the attribute writer: %w", err)
+		err = eb.Build().Str("tableName", "agentrunentryvault-table").Str("slot", "i16Array").Errorf("unable to create the attribute writer: %w", err)
 		return
 	}
-	inst.awAgentrunbodyTableI32Array, err = cwruntime.NewAttributeWriter(1, 1)
+	inst.awAgentrunentryvaultTableI32Array, err = cwruntime.NewAttributeWriter(1, 1)
 	if err != nil {
 		inst = nil
-		err = eb.Build().Str("tableName", "agentrunbody-table").Str("slot", "i32Array").Errorf("unable to create the attribute writer: %w", err)
+		err = eb.Build().Str("tableName", "agentrunentryvault-table").Str("slot", "i32Array").Errorf("unable to create the attribute writer: %w", err)
 		return
 	}
-	inst.awAgentrunbodyTableI64Array, err = cwruntime.NewAttributeWriter(1, 1)
+	inst.awAgentrunentryvaultTableI64Array, err = cwruntime.NewAttributeWriter(1, 1)
 	if err != nil {
 		inst = nil
-		err = eb.Build().Str("tableName", "agentrunbody-table").Str("slot", "i64Array").Errorf("unable to create the attribute writer: %w", err)
+		err = eb.Build().Str("tableName", "agentrunentryvault-table").Str("slot", "i64Array").Errorf("unable to create the attribute writer: %w", err)
 		return
 	}
-	inst.awAgentrunbodyTableI8Array, err = cwruntime.NewAttributeWriter(1, 1)
+	inst.awAgentrunentryvaultTableI8Array, err = cwruntime.NewAttributeWriter(1, 1)
 	if err != nil {
 		inst = nil
-		err = eb.Build().Str("tableName", "agentrunbody-table").Str("slot", "i8Array").Errorf("unable to create the attribute writer: %w", err)
+		err = eb.Build().Str("tableName", "agentrunentryvault-table").Str("slot", "i8Array").Errorf("unable to create the attribute writer: %w", err)
 		return
 	}
-	inst.awAgentrunbodyTableSymbol, err = cwruntime.NewAttributeWriter(1, 1)
+	inst.awAgentrunentryvaultTableSymbol, err = cwruntime.NewAttributeWriter(1, 1)
 	if err != nil {
 		inst = nil
-		err = eb.Build().Str("tableName", "agentrunbody-table").Str("slot", "symbol").Errorf("unable to create the attribute writer: %w", err)
+		err = eb.Build().Str("tableName", "agentrunentryvault-table").Str("slot", "symbol").Errorf("unable to create the attribute writer: %w", err)
 		return
 	}
-	inst.awAgentrunbodyTableTextArray, err = cwruntime.NewAttributeWriter(1, 1)
+	inst.awAgentrunentryvaultTableTextArray, err = cwruntime.NewAttributeWriter(1, 1)
 	if err != nil {
 		inst = nil
-		err = eb.Build().Str("tableName", "agentrunbody-table").Str("slot", "textArray").Errorf("unable to create the attribute writer: %w", err)
+		err = eb.Build().Str("tableName", "agentrunentryvault-table").Str("slot", "textArray").Errorf("unable to create the attribute writer: %w", err)
 		return
 	}
-	inst.awAgentrunbodyTableStringArray, err = cwruntime.NewAttributeWriter(1, 1)
+	inst.awAgentrunentryvaultTableStringArray, err = cwruntime.NewAttributeWriter(1, 1)
 	if err != nil {
 		inst = nil
-		err = eb.Build().Str("tableName", "agentrunbody-table").Str("slot", "stringArray").Errorf("unable to create the attribute writer: %w", err)
+		err = eb.Build().Str("tableName", "agentrunentryvault-table").Str("slot", "stringArray").Errorf("unable to create the attribute writer: %w", err)
 		return
 	}
-	inst.awAgentrunbodyTableSymbolArray, err = cwruntime.NewAttributeWriter(1, 1)
+	inst.awAgentrunentryvaultTableSymbolArray, err = cwruntime.NewAttributeWriter(1, 1)
 	if err != nil {
 		inst = nil
-		err = eb.Build().Str("tableName", "agentrunbody-table").Str("slot", "symbolArray").Errorf("unable to create the attribute writer: %w", err)
+		err = eb.Build().Str("tableName", "agentrunentryvault-table").Str("slot", "symbolArray").Errorf("unable to create the attribute writer: %w", err)
 		return
 	}
-	inst.awAgentrunbodyTableU16Array, err = cwruntime.NewAttributeWriter(1, 1)
+	inst.awAgentrunentryvaultTableU16Array, err = cwruntime.NewAttributeWriter(1, 1)
 	if err != nil {
 		inst = nil
-		err = eb.Build().Str("tableName", "agentrunbody-table").Str("slot", "u16Array").Errorf("unable to create the attribute writer: %w", err)
+		err = eb.Build().Str("tableName", "agentrunentryvault-table").Str("slot", "u16Array").Errorf("unable to create the attribute writer: %w", err)
 		return
 	}
-	inst.awAgentrunbodyTableU32Range, err = cwruntime.NewAttributeWriter(2, 1)
+	inst.awAgentrunentryvaultTableU32Range, err = cwruntime.NewAttributeWriter(2, 1)
 	if err != nil {
 		inst = nil
-		err = eb.Build().Str("tableName", "agentrunbody-table").Str("slot", "u32Range").Errorf("unable to create the attribute writer: %w", err)
+		err = eb.Build().Str("tableName", "agentrunentryvault-table").Str("slot", "u32Range").Errorf("unable to create the attribute writer: %w", err)
 		return
 	}
-	inst.awAgentrunbodyTableU32Array, err = cwruntime.NewAttributeWriter(1, 1)
+	inst.awAgentrunentryvaultTableU32Array, err = cwruntime.NewAttributeWriter(1, 1)
 	if err != nil {
 		inst = nil
-		err = eb.Build().Str("tableName", "agentrunbody-table").Str("slot", "u32Array").Errorf("unable to create the attribute writer: %w", err)
+		err = eb.Build().Str("tableName", "agentrunentryvault-table").Str("slot", "u32Array").Errorf("unable to create the attribute writer: %w", err)
 		return
 	}
-	inst.awAgentrunbodyTableU32Set, err = cwruntime.NewAttributeWriter(1, 1)
+	inst.awAgentrunentryvaultTableU32Set, err = cwruntime.NewAttributeWriter(1, 1)
 	if err != nil {
 		inst = nil
-		err = eb.Build().Str("tableName", "agentrunbody-table").Str("slot", "u32Set").Errorf("unable to create the attribute writer: %w", err)
+		err = eb.Build().Str("tableName", "agentrunentryvault-table").Str("slot", "u32Set").Errorf("unable to create the attribute writer: %w", err)
 		return
 	}
-	inst.awAgentrunbodyTableU64Array, err = cwruntime.NewAttributeWriter(1, 1)
+	inst.awAgentrunentryvaultTableU64Array, err = cwruntime.NewAttributeWriter(1, 1)
 	if err != nil {
 		inst = nil
-		err = eb.Build().Str("tableName", "agentrunbody-table").Str("slot", "u64Array").Errorf("unable to create the attribute writer: %w", err)
+		err = eb.Build().Str("tableName", "agentrunentryvault-table").Str("slot", "u64Array").Errorf("unable to create the attribute writer: %w", err)
 		return
 	}
-	inst.awAgentrunbodyTableU64Set, err = cwruntime.NewAttributeWriter(1, 1)
+	inst.awAgentrunentryvaultTableU64Set, err = cwruntime.NewAttributeWriter(1, 1)
 	if err != nil {
 		inst = nil
-		err = eb.Build().Str("tableName", "agentrunbody-table").Str("slot", "u64Set").Errorf("unable to create the attribute writer: %w", err)
+		err = eb.Build().Str("tableName", "agentrunentryvault-table").Str("slot", "u64Set").Errorf("unable to create the attribute writer: %w", err)
 		return
 	}
-	inst.awAgentrunbodyTableU8Array, err = cwruntime.NewAttributeWriter(1, 1)
+	inst.awAgentrunentryvaultTableU8Array, err = cwruntime.NewAttributeWriter(1, 1)
 	if err != nil {
 		inst = nil
-		err = eb.Build().Str("tableName", "agentrunbody-table").Str("slot", "u8Array").Errorf("unable to create the attribute writer: %w", err)
+		err = eb.Build().Str("tableName", "agentrunentryvault-table").Str("slot", "u8Array").Errorf("unable to create the attribute writer: %w", err)
 		return
 	}
-	inst.awAgentrunbodyTableBlobArray, err = cwruntime.NewAttributeWriter(1, 1)
+	inst.awAgentrunentryvaultTableBlobArray, err = cwruntime.NewAttributeWriter(1, 1)
 	if err != nil {
 		inst = nil
-		err = eb.Build().Str("tableName", "agentrunbody-table").Str("slot", "blobArray").Errorf("unable to create the attribute writer: %w", err)
+		err = eb.Build().Str("tableName", "agentrunentryvault-table").Str("slot", "blobArray").Errorf("unable to create the attribute writer: %w", err)
 		return
 	}
-	inst.awAgentrunbodyTableTimeArray, err = cwruntime.NewAttributeWriter(1, 1)
+	inst.awAgentrunentryvaultTableTimeArray, err = cwruntime.NewAttributeWriter(1, 1)
 	if err != nil {
 		inst = nil
-		err = eb.Build().Str("tableName", "agentrunbody-table").Str("slot", "timeArray").Errorf("unable to create the attribute writer: %w", err)
+		err = eb.Build().Str("tableName", "agentrunentryvault-table").Str("slot", "timeArray").Errorf("unable to create the attribute writer: %w", err)
 		return
 	}
 	inst.setWriter, err = cwruntime.NewSetWriter()
 	if err != nil {
 		inst = nil
-		err = eb.Build().Str("tableName", "agentrunbody-table").Errorf("unable to create the set writer: %w", err)
+		err = eb.Build().Str("tableName", "agentrunentryvault-table").Errorf("unable to create the set writer: %w", err)
 		return
 	}
 	return
@@ -519,11 +519,15 @@ func NewCanonWireEncoderAgentrunbodyTable(ra *ReadAccessAgentrunbodyTable, tagge
 // form fixes (ADR-0210 SD1–SD3). The attributes are held back only until the
 // item is complete, which is what lets the writer sort them into canonical
 // order.
-func (inst *CanonWireEncoderAgentrunbodyTable) EncodeEntity(entityIdx runtime.EntityIdx, w io.Writer) (err error) {
+func (inst *CanonWireEncoderAgentrunentryvaultTable) EncodeEntity(entityIdx runtime.EntityIdx, w io.Writer) (err error) {
 	ew := inst.ew
 	ew.Begin()
-	{ // plain section entity-id — u64-u64
-		cw := ew.BeginPlain(common.PlainItemTypeEntityId, 2)
+	{ // plain section entity-id — s-u64-u64
+		cw := ew.BeginPlain(common.PlainItemTypeEntityId, 3)
+		{
+			v := inst.ra.EntityId.GetAttrValueComponent(entityIdx)
+			cw.WriteTextString(v)
+		}
 		{
 			v := inst.ra.EntityId.GetAttrValueId(entityIdx)
 			cw.WriteUint(uint64(v))
@@ -534,9 +538,17 @@ func (inst *CanonWireEncoderAgentrunbodyTable) EncodeEntity(entityIdx runtime.En
 		}
 		ew.EndPlain()
 	}
+	{ // plain section entity-lifecycle — u32
+		cw := ew.BeginPlain(common.PlainItemTypeEntityLifecycle, 1)
+		{
+			v := inst.ra.EntityLifecycle.GetAttrValueRevision(entityIdx)
+			cw.WriteUint(uint64(v))
+		}
+		ew.EndPlain()
+	}
 	{ // slot null — ""
-		sw := ew.Slot(CanonWireSignatureAgentrunbodyTableNull)
-		aw := inst.awAgentrunbodyTableNull
+		sw := ew.Slot(CanonWireSignatureAgentrunentryvaultTableNull)
+		aw := inst.awAgentrunentryvaultTableNull
 		n := inst.ra.Null.Memberships.AccelLowCardRef.GetEntityAttributeCount(int(entityIdx))
 		for attrIdx := runtime.AttributeIdx(0); int64(attrIdx) < n; attrIdx++ {
 			aw.Begin()
@@ -553,7 +565,7 @@ func (inst *CanonWireEncoderAgentrunbodyTable) EncodeEntity(entityIdx runtime.En
 				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
 			}
 			if inst.tagger != nil {
-				aw.Discriminator(inst.tagger.Tag(CanonWireSlotAgentrunbodyTableNull, entityIdx, attrIdx))
+				aw.Discriminator(inst.tagger.Tag(CanonWireSlotAgentrunentryvaultTableNull, entityIdx, attrIdx))
 			}
 			attr, aerr := aw.End()
 			if aerr != nil {
@@ -564,8 +576,8 @@ func (inst *CanonWireEncoderAgentrunbodyTable) EncodeEntity(entityIdx runtime.En
 		}
 	}
 	{ // slot emptyObject — ""
-		sw := ew.Slot(CanonWireSignatureAgentrunbodyTableEmptyObject)
-		aw := inst.awAgentrunbodyTableEmptyObject
+		sw := ew.Slot(CanonWireSignatureAgentrunentryvaultTableEmptyObject)
+		aw := inst.awAgentrunentryvaultTableEmptyObject
 		n := inst.ra.EmptyObject.Memberships.AccelLowCardRef.GetEntityAttributeCount(int(entityIdx))
 		for attrIdx := runtime.AttributeIdx(0); int64(attrIdx) < n; attrIdx++ {
 			aw.Begin()
@@ -582,7 +594,7 @@ func (inst *CanonWireEncoderAgentrunbodyTable) EncodeEntity(entityIdx runtime.En
 				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
 			}
 			if inst.tagger != nil {
-				aw.Discriminator(inst.tagger.Tag(CanonWireSlotAgentrunbodyTableEmptyObject, entityIdx, attrIdx))
+				aw.Discriminator(inst.tagger.Tag(CanonWireSlotAgentrunentryvaultTableEmptyObject, entityIdx, attrIdx))
 			}
 			attr, aerr := aw.End()
 			if aerr != nil {
@@ -593,8 +605,8 @@ func (inst *CanonWireEncoderAgentrunbodyTable) EncodeEntity(entityIdx runtime.En
 		}
 	}
 	{ // slot emptyArray — ""
-		sw := ew.Slot(CanonWireSignatureAgentrunbodyTableEmptyArray)
-		aw := inst.awAgentrunbodyTableEmptyArray
+		sw := ew.Slot(CanonWireSignatureAgentrunentryvaultTableEmptyArray)
+		aw := inst.awAgentrunentryvaultTableEmptyArray
 		n := inst.ra.EmptyArray.Memberships.AccelLowCardRef.GetEntityAttributeCount(int(entityIdx))
 		for attrIdx := runtime.AttributeIdx(0); int64(attrIdx) < n; attrIdx++ {
 			aw.Begin()
@@ -611,7 +623,7 @@ func (inst *CanonWireEncoderAgentrunbodyTable) EncodeEntity(entityIdx runtime.En
 				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
 			}
 			if inst.tagger != nil {
-				aw.Discriminator(inst.tagger.Tag(CanonWireSlotAgentrunbodyTableEmptyArray, entityIdx, attrIdx))
+				aw.Discriminator(inst.tagger.Tag(CanonWireSlotAgentrunentryvaultTableEmptyArray, entityIdx, attrIdx))
 			}
 			attr, aerr := aw.End()
 			if aerr != nil {
@@ -622,8 +634,8 @@ func (inst *CanonWireEncoderAgentrunbodyTable) EncodeEntity(entityIdx runtime.En
 		}
 	}
 	{ // slot bool — "b"
-		sw := ew.Slot(CanonWireSignatureAgentrunbodyTableBool)
-		aw := inst.awAgentrunbodyTableBool
+		sw := ew.Slot(CanonWireSignatureAgentrunentryvaultTableBool)
+		aw := inst.awAgentrunentryvaultTableBool
 		n := inst.ra.Bool.Attributes.GetNumberOfAttributes(entityIdx)
 		for attrIdx := runtime.AttributeIdx(0); int64(attrIdx) < n; attrIdx++ {
 			aw.Begin()
@@ -654,8 +666,8 @@ func (inst *CanonWireEncoderAgentrunbodyTable) EncodeEntity(entityIdx runtime.En
 		}
 	}
 	{ // slot f32Array — "f32h"
-		sw := ew.Slot(CanonWireSignatureAgentrunbodyTableF32Array)
-		aw := inst.awAgentrunbodyTableF32Array
+		sw := ew.Slot(CanonWireSignatureAgentrunentryvaultTableF32Array)
+		aw := inst.awAgentrunentryvaultTableF32Array
 		n := inst.ra.F32Array.Attributes.GetNumberOfAttributes(entityIdx)
 		for attrIdx := runtime.AttributeIdx(0); int64(attrIdx) < n; attrIdx++ {
 			aw.Begin()
@@ -693,8 +705,8 @@ func (inst *CanonWireEncoderAgentrunbodyTable) EncodeEntity(entityIdx runtime.En
 		}
 	}
 	{ // slot f64Array — "f64h"
-		sw := ew.Slot(CanonWireSignatureAgentrunbodyTableF64Array)
-		aw := inst.awAgentrunbodyTableF64Array
+		sw := ew.Slot(CanonWireSignatureAgentrunentryvaultTableF64Array)
+		aw := inst.awAgentrunentryvaultTableF64Array
 		n := inst.ra.F64Array.Attributes.GetNumberOfAttributes(entityIdx)
 		for attrIdx := runtime.AttributeIdx(0); int64(attrIdx) < n; attrIdx++ {
 			aw.Begin()
@@ -732,8 +744,8 @@ func (inst *CanonWireEncoderAgentrunbodyTable) EncodeEntity(entityIdx runtime.En
 		}
 	}
 	{ // slot i16Array — "i16h"
-		sw := ew.Slot(CanonWireSignatureAgentrunbodyTableI16Array)
-		aw := inst.awAgentrunbodyTableI16Array
+		sw := ew.Slot(CanonWireSignatureAgentrunentryvaultTableI16Array)
+		aw := inst.awAgentrunentryvaultTableI16Array
 		n := inst.ra.I16Array.Attributes.GetNumberOfAttributes(entityIdx)
 		for attrIdx := runtime.AttributeIdx(0); int64(attrIdx) < n; attrIdx++ {
 			aw.Begin()
@@ -771,8 +783,8 @@ func (inst *CanonWireEncoderAgentrunbodyTable) EncodeEntity(entityIdx runtime.En
 		}
 	}
 	{ // slot i32Array — "i32h"
-		sw := ew.Slot(CanonWireSignatureAgentrunbodyTableI32Array)
-		aw := inst.awAgentrunbodyTableI32Array
+		sw := ew.Slot(CanonWireSignatureAgentrunentryvaultTableI32Array)
+		aw := inst.awAgentrunentryvaultTableI32Array
 		n := inst.ra.I32Array.Attributes.GetNumberOfAttributes(entityIdx)
 		for attrIdx := runtime.AttributeIdx(0); int64(attrIdx) < n; attrIdx++ {
 			aw.Begin()
@@ -810,8 +822,8 @@ func (inst *CanonWireEncoderAgentrunbodyTable) EncodeEntity(entityIdx runtime.En
 		}
 	}
 	{ // slot i64Array — "i64h"
-		sw := ew.Slot(CanonWireSignatureAgentrunbodyTableI64Array)
-		aw := inst.awAgentrunbodyTableI64Array
+		sw := ew.Slot(CanonWireSignatureAgentrunentryvaultTableI64Array)
+		aw := inst.awAgentrunentryvaultTableI64Array
 		n := inst.ra.I64Array.Attributes.GetNumberOfAttributes(entityIdx)
 		for attrIdx := runtime.AttributeIdx(0); int64(attrIdx) < n; attrIdx++ {
 			aw.Begin()
@@ -849,8 +861,8 @@ func (inst *CanonWireEncoderAgentrunbodyTable) EncodeEntity(entityIdx runtime.En
 		}
 	}
 	{ // slot i8Array — "i8h"
-		sw := ew.Slot(CanonWireSignatureAgentrunbodyTableI8Array)
-		aw := inst.awAgentrunbodyTableI8Array
+		sw := ew.Slot(CanonWireSignatureAgentrunentryvaultTableI8Array)
+		aw := inst.awAgentrunentryvaultTableI8Array
 		n := inst.ra.I8Array.Attributes.GetNumberOfAttributes(entityIdx)
 		for attrIdx := runtime.AttributeIdx(0); int64(attrIdx) < n; attrIdx++ {
 			aw.Begin()
@@ -888,8 +900,8 @@ func (inst *CanonWireEncoderAgentrunbodyTable) EncodeEntity(entityIdx runtime.En
 		}
 	}
 	{ // slot symbol — "s"
-		sw := ew.Slot(CanonWireSignatureAgentrunbodyTableSymbol)
-		aw := inst.awAgentrunbodyTableSymbol
+		sw := ew.Slot(CanonWireSignatureAgentrunentryvaultTableSymbol)
+		aw := inst.awAgentrunentryvaultTableSymbol
 		n := inst.ra.Symbol.Attributes.GetNumberOfAttributes(entityIdx)
 		for attrIdx := runtime.AttributeIdx(0); int64(attrIdx) < n; attrIdx++ {
 			aw.Begin()
@@ -920,8 +932,8 @@ func (inst *CanonWireEncoderAgentrunbodyTable) EncodeEntity(entityIdx runtime.En
 		}
 	}
 	{ // slot textArray — "sh"
-		sw := ew.Slot(CanonWireSignatureAgentrunbodyTableTextArray)
-		aw := inst.awAgentrunbodyTableTextArray
+		sw := ew.Slot(CanonWireSignatureAgentrunentryvaultTableTextArray)
+		aw := inst.awAgentrunentryvaultTableTextArray
 		n := inst.ra.TextArray.Attributes.GetNumberOfAttributes(entityIdx)
 		for attrIdx := runtime.AttributeIdx(0); int64(attrIdx) < n; attrIdx++ {
 			aw.Begin()
@@ -951,7 +963,7 @@ func (inst *CanonWireEncoderAgentrunbodyTable) EncodeEntity(entityIdx runtime.En
 				aw.EndValue()
 			}
 			if inst.tagger != nil {
-				aw.Discriminator(inst.tagger.Tag(CanonWireSlotAgentrunbodyTableTextArray, entityIdx, attrIdx))
+				aw.Discriminator(inst.tagger.Tag(CanonWireSlotAgentrunentryvaultTableTextArray, entityIdx, attrIdx))
 			}
 			attr, aerr := aw.End()
 			if aerr != nil {
@@ -962,8 +974,8 @@ func (inst *CanonWireEncoderAgentrunbodyTable) EncodeEntity(entityIdx runtime.En
 		}
 	}
 	{ // slot stringArray — "sh"
-		sw := ew.Slot(CanonWireSignatureAgentrunbodyTableStringArray)
-		aw := inst.awAgentrunbodyTableStringArray
+		sw := ew.Slot(CanonWireSignatureAgentrunentryvaultTableStringArray)
+		aw := inst.awAgentrunentryvaultTableStringArray
 		n := inst.ra.StringArray.Attributes.GetNumberOfAttributes(entityIdx)
 		for attrIdx := runtime.AttributeIdx(0); int64(attrIdx) < n; attrIdx++ {
 			aw.Begin()
@@ -993,7 +1005,7 @@ func (inst *CanonWireEncoderAgentrunbodyTable) EncodeEntity(entityIdx runtime.En
 				aw.EndValue()
 			}
 			if inst.tagger != nil {
-				aw.Discriminator(inst.tagger.Tag(CanonWireSlotAgentrunbodyTableStringArray, entityIdx, attrIdx))
+				aw.Discriminator(inst.tagger.Tag(CanonWireSlotAgentrunentryvaultTableStringArray, entityIdx, attrIdx))
 			}
 			attr, aerr := aw.End()
 			if aerr != nil {
@@ -1004,8 +1016,8 @@ func (inst *CanonWireEncoderAgentrunbodyTable) EncodeEntity(entityIdx runtime.En
 		}
 	}
 	{ // slot symbolArray — "sh"
-		sw := ew.Slot(CanonWireSignatureAgentrunbodyTableSymbolArray)
-		aw := inst.awAgentrunbodyTableSymbolArray
+		sw := ew.Slot(CanonWireSignatureAgentrunentryvaultTableSymbolArray)
+		aw := inst.awAgentrunentryvaultTableSymbolArray
 		n := inst.ra.SymbolArray.Attributes.GetNumberOfAttributes(entityIdx)
 		for attrIdx := runtime.AttributeIdx(0); int64(attrIdx) < n; attrIdx++ {
 			aw.Begin()
@@ -1035,7 +1047,7 @@ func (inst *CanonWireEncoderAgentrunbodyTable) EncodeEntity(entityIdx runtime.En
 				aw.EndValue()
 			}
 			if inst.tagger != nil {
-				aw.Discriminator(inst.tagger.Tag(CanonWireSlotAgentrunbodyTableSymbolArray, entityIdx, attrIdx))
+				aw.Discriminator(inst.tagger.Tag(CanonWireSlotAgentrunentryvaultTableSymbolArray, entityIdx, attrIdx))
 			}
 			attr, aerr := aw.End()
 			if aerr != nil {
@@ -1046,8 +1058,8 @@ func (inst *CanonWireEncoderAgentrunbodyTable) EncodeEntity(entityIdx runtime.En
 		}
 	}
 	{ // slot u16Array — "u16h"
-		sw := ew.Slot(CanonWireSignatureAgentrunbodyTableU16Array)
-		aw := inst.awAgentrunbodyTableU16Array
+		sw := ew.Slot(CanonWireSignatureAgentrunentryvaultTableU16Array)
+		aw := inst.awAgentrunentryvaultTableU16Array
 		n := inst.ra.U16Array.Attributes.GetNumberOfAttributes(entityIdx)
 		for attrIdx := runtime.AttributeIdx(0); int64(attrIdx) < n; attrIdx++ {
 			aw.Begin()
@@ -1085,8 +1097,8 @@ func (inst *CanonWireEncoderAgentrunbodyTable) EncodeEntity(entityIdx runtime.En
 		}
 	}
 	{ // slot u32Range — "u32-u32"
-		sw := ew.Slot(CanonWireSignatureAgentrunbodyTableU32Range)
-		aw := inst.awAgentrunbodyTableU32Range
+		sw := ew.Slot(CanonWireSignatureAgentrunentryvaultTableU32Range)
+		aw := inst.awAgentrunentryvaultTableU32Range
 		n := inst.ra.U32Range.Attributes.GetNumberOfAttributes(entityIdx)
 		for attrIdx := runtime.AttributeIdx(0); int64(attrIdx) < n; attrIdx++ {
 			aw.Begin()
@@ -1123,8 +1135,8 @@ func (inst *CanonWireEncoderAgentrunbodyTable) EncodeEntity(entityIdx runtime.En
 		}
 	}
 	{ // slot u32Array — "u32h"
-		sw := ew.Slot(CanonWireSignatureAgentrunbodyTableU32Array)
-		aw := inst.awAgentrunbodyTableU32Array
+		sw := ew.Slot(CanonWireSignatureAgentrunentryvaultTableU32Array)
+		aw := inst.awAgentrunentryvaultTableU32Array
 		n := inst.ra.U32Array.Attributes.GetNumberOfAttributes(entityIdx)
 		for attrIdx := runtime.AttributeIdx(0); int64(attrIdx) < n; attrIdx++ {
 			aw.Begin()
@@ -1162,8 +1174,8 @@ func (inst *CanonWireEncoderAgentrunbodyTable) EncodeEntity(entityIdx runtime.En
 		}
 	}
 	{ // slot u32Set — "u32m"
-		sw := ew.Slot(CanonWireSignatureAgentrunbodyTableU32Set)
-		aw := inst.awAgentrunbodyTableU32Set
+		sw := ew.Slot(CanonWireSignatureAgentrunentryvaultTableU32Set)
+		aw := inst.awAgentrunentryvaultTableU32Set
 		n := inst.ra.U32Set.Attributes.GetNumberOfAttributes(entityIdx)
 		for attrIdx := runtime.AttributeIdx(0); int64(attrIdx) < n; attrIdx++ {
 			aw.Begin()
@@ -1198,8 +1210,8 @@ func (inst *CanonWireEncoderAgentrunbodyTable) EncodeEntity(entityIdx runtime.En
 		}
 	}
 	{ // slot u64Array — "u64h"
-		sw := ew.Slot(CanonWireSignatureAgentrunbodyTableU64Array)
-		aw := inst.awAgentrunbodyTableU64Array
+		sw := ew.Slot(CanonWireSignatureAgentrunentryvaultTableU64Array)
+		aw := inst.awAgentrunentryvaultTableU64Array
 		n := inst.ra.U64Array.Attributes.GetNumberOfAttributes(entityIdx)
 		for attrIdx := runtime.AttributeIdx(0); int64(attrIdx) < n; attrIdx++ {
 			aw.Begin()
@@ -1237,8 +1249,8 @@ func (inst *CanonWireEncoderAgentrunbodyTable) EncodeEntity(entityIdx runtime.En
 		}
 	}
 	{ // slot u64Set — "u64m"
-		sw := ew.Slot(CanonWireSignatureAgentrunbodyTableU64Set)
-		aw := inst.awAgentrunbodyTableU64Set
+		sw := ew.Slot(CanonWireSignatureAgentrunentryvaultTableU64Set)
+		aw := inst.awAgentrunentryvaultTableU64Set
 		n := inst.ra.U64Set.Attributes.GetNumberOfAttributes(entityIdx)
 		for attrIdx := runtime.AttributeIdx(0); int64(attrIdx) < n; attrIdx++ {
 			aw.Begin()
@@ -1273,8 +1285,8 @@ func (inst *CanonWireEncoderAgentrunbodyTable) EncodeEntity(entityIdx runtime.En
 		}
 	}
 	{ // slot u8Array — "u8h"
-		sw := ew.Slot(CanonWireSignatureAgentrunbodyTableU8Array)
-		aw := inst.awAgentrunbodyTableU8Array
+		sw := ew.Slot(CanonWireSignatureAgentrunentryvaultTableU8Array)
+		aw := inst.awAgentrunentryvaultTableU8Array
 		n := inst.ra.U8Array.Attributes.GetNumberOfAttributes(entityIdx)
 		for attrIdx := runtime.AttributeIdx(0); int64(attrIdx) < n; attrIdx++ {
 			aw.Begin()
@@ -1312,8 +1324,8 @@ func (inst *CanonWireEncoderAgentrunbodyTable) EncodeEntity(entityIdx runtime.En
 		}
 	}
 	{ // slot blobArray — "yh"
-		sw := ew.Slot(CanonWireSignatureAgentrunbodyTableBlobArray)
-		aw := inst.awAgentrunbodyTableBlobArray
+		sw := ew.Slot(CanonWireSignatureAgentrunentryvaultTableBlobArray)
+		aw := inst.awAgentrunentryvaultTableBlobArray
 		n := inst.ra.BlobArray.Attributes.GetNumberOfAttributes(entityIdx)
 		for attrIdx := runtime.AttributeIdx(0); int64(attrIdx) < n; attrIdx++ {
 			aw.Begin()
@@ -1351,8 +1363,8 @@ func (inst *CanonWireEncoderAgentrunbodyTable) EncodeEntity(entityIdx runtime.En
 		}
 	}
 	{ // slot timeArray — "z64h"
-		sw := ew.Slot(CanonWireSignatureAgentrunbodyTableTimeArray)
-		aw := inst.awAgentrunbodyTableTimeArray
+		sw := ew.Slot(CanonWireSignatureAgentrunentryvaultTableTimeArray)
+		aw := inst.awAgentrunentryvaultTableTimeArray
 		n := inst.ra.TimeArray.Attributes.GetNumberOfAttributes(entityIdx)
 		for attrIdx := runtime.AttributeIdx(0); int64(attrIdx) < n; attrIdx++ {
 			aw.Begin()
@@ -1391,19 +1403,19 @@ func (inst *CanonWireEncoderAgentrunbodyTable) EncodeEntity(entityIdx runtime.En
 	}
 	err = ew.Flush(w)
 	if err != nil {
-		err = eb.Build().Str("tableName", "agentrunbody-table").Int("entityIdx", int(entityIdx)).Errorf("unable to flush the entity: %w", err)
+		err = eb.Build().Str("tableName", "agentrunentryvault-table").Int("entityIdx", int(entityIdx)).Errorf("unable to flush the entity: %w", err)
 	}
 	return
 }
 
 // EncodeAll writes every entity of the loaded batch to w as a CBOR sequence
 // (RFC 8742): one entity item after another, with no framing and no header.
-func (inst *CanonWireEncoderAgentrunbodyTable) EncodeAll(w io.Writer) (err error) {
+func (inst *CanonWireEncoderAgentrunentryvaultTable) EncodeAll(w io.Writer) (err error) {
 	n := inst.ra.GetNumberOfEntities()
 	for i := range n {
 		err = inst.EncodeEntity(runtime.EntityIdx(i), w)
 		if err != nil {
-			err = eb.Build().Str("tableName", "agentrunbody-table").Int("entityIdx", i).Errorf("unable to encode the entity: %w", err)
+			err = eb.Build().Str("tableName", "agentrunentryvault-table").Int("entityIdx", i).Errorf("unable to encode the entity: %w", err)
 			return
 		}
 	}
