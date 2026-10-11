@@ -546,6 +546,72 @@ var (
 	MembLlmCallAdmission         = NkRegistry.MustBegin("llmCallAdmission", 306).End()
 	MembLlmCallAdmissionRule     = NkRegistry.MustBegin("llmCallAdmissionRule", 307).End()
 	MembLlmCallQueuedMs          = NkRegistry.MustBegin("llmCallQueuedMs", 308).End()
+
+	// agent run journal (ADR-0308 §SD1) — the run row and its entries on
+	// the store-owned agentrun tables, one membership per attribute as the
+	// watchbill tables have, so a section is one attribute. The owner app
+	// reuses MembRuntimeApp; the label is ADR-0311's (level, tier, two
+	// marks) and the chain fields ADR-0314's.
+	MembAgentrunCell               = NkRegistry.MustBegin("agentrunCell", 309).End()
+	MembAgentrunConversation       = NkRegistry.MustBegin("agentrunConversation", 310).End()
+	MembAgentrunCoordinator        = NkRegistry.MustBegin("agentrunCoordinator", 311).End()
+	MembAgentrunState              = NkRegistry.MustBegin("agentrunState", 312).End()
+	MembAgentrunFingerprint        = NkRegistry.MustBegin("agentrunFingerprint", 313).End()
+	MembAgentrunBuild              = NkRegistry.MustBegin("agentrunBuild", 314).End()
+	MembAgentrunProfile            = NkRegistry.MustBegin("agentrunProfile", 315).End()
+	MembAgentrunSettings           = NkRegistry.MustBegin("agentrunSettings", 316).End()
+	MembAgentrunLabelLevel         = NkRegistry.MustBegin("agentrunLabelLevel", 317).End()
+	MembAgentrunLabelTier          = NkRegistry.MustBegin("agentrunLabelTier", 318).End()
+	MembAgentrunLabelExposure      = NkRegistry.MustBegin("agentrunLabelExposure", 319).End()
+	MembAgentrunLabelOrigin        = NkRegistry.MustBegin("agentrunLabelOrigin", 320).End()
+	MembAgentrunCreated            = NkRegistry.MustBegin("agentrunCreated", 321).End()
+	MembAgentrunLastOrdinal        = NkRegistry.MustBegin("agentrunLastOrdinal", 322).End()
+	MembAgentrunClosed             = NkRegistry.MustBegin("agentrunClosed", 323).End()
+	MembAgentrunDigest             = NkRegistry.MustBegin("agentrunDigest", 324).End()
+	MembAgentrunDeletedBy          = NkRegistry.MustBegin("agentrunDeletedBy", 325).End()
+	MembAgentrunDeletedAt          = NkRegistry.MustBegin("agentrunDeletedAt", 326).End()
+	MembAgentrunEntryOrdinal       = NkRegistry.MustBegin("agentrunEntryOrdinal", 327).End()
+	MembAgentrunEntryAt            = NkRegistry.MustBegin("agentrunEntryAt", 328).End()
+	MembAgentrunEntryKind          = NkRegistry.MustBegin("agentrunEntryKind", 329).End()
+	MembAgentrunEntryKey           = NkRegistry.MustBegin("agentrunEntryKey", 330).End()
+	MembAgentrunEntryRole          = NkRegistry.MustBegin("agentrunEntryRole", 331).End()
+	MembAgentrunEntryBody          = NkRegistry.MustBegin("agentrunEntryBody", 332).End()
+	MembAgentrunEntryCalls         = NkRegistry.MustBegin("agentrunEntryCalls", 333).End()
+	MembAgentrunEntryName          = NkRegistry.MustBegin("agentrunEntryName", 334).End()
+	MembAgentrunEntryBook          = NkRegistry.MustBegin("agentrunEntryBook", 335).End()
+	MembAgentrunEntryForm          = NkRegistry.MustBegin("agentrunEntryForm", 336).End()
+	MembAgentrunEntryTarget        = NkRegistry.MustBegin("agentrunEntryTarget", 337).End()
+	MembAgentrunEntryFrom          = NkRegistry.MustBegin("agentrunEntryFrom", 338).End()
+	MembAgentrunEntryEffect        = NkRegistry.MustBegin("agentrunEntryEffect", 339).End()
+	MembAgentrunEntryTurn          = NkRegistry.MustBegin("agentrunEntryTurn", 340).End()
+	MembAgentrunEntryLabelLevel    = NkRegistry.MustBegin("agentrunEntryLabelLevel", 341).End()
+	MembAgentrunEntryLabelTier     = NkRegistry.MustBegin("agentrunEntryLabelTier", 342).End()
+	MembAgentrunEntryLabelExposure = NkRegistry.MustBegin("agentrunEntryLabelExposure", 343).End()
+	MembAgentrunEntryLabelOrigin   = NkRegistry.MustBegin("agentrunEntryLabelOrigin", 344).End()
+	MembAgentrunEntryWriterRun     = NkRegistry.MustBegin("agentrunEntryWriterRun", 345).End()
+	MembAgentrunEntryWriterTurn    = NkRegistry.MustBegin("agentrunEntryWriterTurn", 346).End()
+	MembAgentrunEntryWriterOrdinal = NkRegistry.MustBegin("agentrunEntryWriterOrdinal", 347).End()
+	MembAgentrunEntryPrev          = NkRegistry.MustBegin("agentrunEntryPrev", 348).End()
+	MembAgentrunEntryDigest        = NkRegistry.MustBegin("agentrunEntryDigest", 349).End()
+	MembAgentrunEntryKeyId         = NkRegistry.MustBegin("agentrunEntryKeyId", 350).End()
+	MembAgentrunEntryParent        = NkRegistry.MustBegin("agentrunEntryParent", 351).End()
+	MembAgentrunEntryAttachments   = NkRegistry.MustBegin("agentrunEntryAttachments", 352).End()
+	// The chain commits to body digests, not bodies, so a tombstone keeps
+	// it verifying (ADR-0308 §SD8); the run row carries the chain head and
+	// a write version so latest-wins needs no clock.
+	MembAgentrunEntryBodyDigest  = NkRegistry.MustBegin("agentrunEntryBodyDigest", 353).End()
+	MembAgentrunEntryCallsDigest = NkRegistry.MustBegin("agentrunEntryCallsDigest", 354).End()
+	MembAgentrunHead             = NkRegistry.MustBegin("agentrunHead", 355).End()
+	MembAgentrunVersion          = NkRegistry.MustBegin("agentrunVersion", 356).End()
+
+	// What the model call adds for the harness (ADR-0310 §SD4) and the
+	// exits (ADR-0312 §SD3): the profile and route it ran under, the tier
+	// the wall saw, and the key of the approval an exit above the
+	// clearance went under.
+	MembLlmCallProfile  = NkRegistry.MustBegin("llmCallProfile", 357).End()
+	MembLlmCallRoute    = NkRegistry.MustBegin("llmCallRoute", 358).End()
+	MembLlmCallTier     = NkRegistry.MustBegin("llmCallTier", 359).End()
+	MembLlmCallApproval = NkRegistry.MustBegin("llmCallApproval", 360).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -591,6 +657,7 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembTrailConversation, MembTrailTurn, MembTrailRound, MembTrailTask, MembTrailTaskEpoch, MembTrailCall,
 	MembTrailCauseModelCall, MembTrailCauseToolCall, MembTrailCauseToolIndex,
 	MembLlmCallRetention, MembLlmCallProviderId, MembLlmCallReportedModel, MembLlmCallToolsDigest, MembLlmCallMaxTokens,
+	MembLlmCallProfile, MembLlmCallRoute, MembLlmCallTier, MembLlmCallApproval,
 	MembLlmMessageBytes, MembLlmMessageDigest, MembLlmMessageToolCallIds, MembLlmMessageToolNames,
 	MembAgentActionKey, MembKindAgentGrant, MembAgentGrantEvent, MembAgentGrantPlan, MembAgentGrantPlanDigest,
 	MembAgentGrantEntries, MembAgentGrantLaunches, MembAgentGrantDestinations, MembAgentGrantCallsBudget,
@@ -620,4 +687,22 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembAuditEventAttrKeys, MembAuditEventAttrValues,
 	MembLlmCallCachedInputTokens, MembLlmCallReasoningTokens, MembLlmCallAdmission, MembLlmCallAdmissionRule,
 	MembLlmCallQueuedMs,
+	MembWatchbillKind, MembWatchbillSubject, MembWatchbillQueue, MembWatchbillPriority,
+	MembWatchbillMaxAttempts, MembWatchbillBackoff, MembWatchbillBackoffBaseMs, MembWatchbillTimeoutMs,
+	MembWatchbillArgsKind, MembWatchbillArgs, MembWatchbillState, MembWatchbillAttempt,
+	MembWatchbillRunAfter, MembWatchbillWorkerRun, MembWatchbillFinishedAt, MembWatchbillLastError,
+	MembWatchbillEventState, MembWatchbillEventAttempt, MembWatchbillEventWorker, MembWatchbillEventError,
+	MembWatchbillEventNote,
+	MembAgentrunCell, MembAgentrunConversation, MembAgentrunCoordinator, MembAgentrunState,
+	MembAgentrunFingerprint, MembAgentrunBuild, MembAgentrunProfile, MembAgentrunSettings,
+	MembAgentrunLabelLevel, MembAgentrunLabelTier, MembAgentrunLabelExposure, MembAgentrunLabelOrigin,
+	MembAgentrunCreated, MembAgentrunLastOrdinal, MembAgentrunClosed, MembAgentrunDigest,
+	MembAgentrunDeletedBy, MembAgentrunDeletedAt, MembAgentrunEntryOrdinal, MembAgentrunEntryAt,
+	MembAgentrunEntryKind, MembAgentrunEntryKey, MembAgentrunEntryRole, MembAgentrunEntryBody,
+	MembAgentrunEntryCalls, MembAgentrunEntryName, MembAgentrunEntryBook, MembAgentrunEntryForm,
+	MembAgentrunEntryTarget, MembAgentrunEntryFrom, MembAgentrunEntryEffect, MembAgentrunEntryTurn,
+	MembAgentrunEntryLabelLevel, MembAgentrunEntryLabelTier, MembAgentrunEntryLabelExposure, MembAgentrunEntryLabelOrigin,
+	MembAgentrunEntryWriterRun, MembAgentrunEntryWriterTurn, MembAgentrunEntryWriterOrdinal, MembAgentrunEntryPrev,
+	MembAgentrunEntryDigest, MembAgentrunEntryKeyId, MembAgentrunEntryParent, MembAgentrunEntryAttachments,
+	MembAgentrunEntryBodyDigest, MembAgentrunEntryCallsDigest, MembAgentrunHead, MembAgentrunVersion,
 }
