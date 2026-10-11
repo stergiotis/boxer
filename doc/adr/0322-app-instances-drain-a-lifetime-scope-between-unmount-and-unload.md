@@ -253,7 +253,20 @@ not callbacks run from the goroutine that finished the work.
   it retires, and their bus closes synchronously at reap, as before.
 - Two windows resuming one run are still serialised only within a window.
   The host's drain does not order a resume in a new window against a close
-  still draining in the old one.
+  still draining in the old one. The writer lease of ADR-0319 §SD7 does not
+  either: it is held by the host process, which both windows share. What
+  keeps the record whole is the journal service's checks (ADR-0308 §SD9):
+  - A close made over a run row another writer has moved since is refused,
+    and the stale writer's `Close` takes the newer row as the run's state.
+  - An entry that does not follow the run's last entry is refused.
+
+  Checked against the service on 2026-10-11:
+  - If the resume reads the run before the close lands, the draining close
+    does nothing, and its late tail is refused.
+  - If the tail lands after the resume read the run, the resuming window's
+    first write is refused, the close then lands, and that window must
+    resume again.
+  In neither order is an entry lost or reordered.
 
 ## Migration — Tier 1
 
@@ -294,9 +307,10 @@ Deferred, each with its trigger:
 - **Showing draining instances** in the app center, and letting a person
   abandon one. Trigger: a drain observed to outlast a close by long enough
   for someone to notice.
-- **A writer lease on a run** in `agentrun`, so a resume in another window
-  waits for a close still draining. Trigger: a second window resuming a run
-  its first is still closing.
+- **Ordering a resume in one window against a close still draining in
+  another** (Neutral, above). The cost is a refused write, after which the
+  person resumes again; a lease per window rather than per process would
+  remove it. Trigger: a person meeting that refusal.
 - **`Post` and an off-thread wake** (SD5), `Post` as a queue polled on the
   render goroutine (Prior art). Trigger: an app whose waiting
   state does not repaint by itself needs a result to land faster than the
