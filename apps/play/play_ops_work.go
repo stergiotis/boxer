@@ -248,6 +248,7 @@ func addWorkOps(s *appops.Set[*PlayLauncher, opsSnap]) {
 	appops.Command(s, app.OperationSpec{Name: opDeleteSignal, Version: 1,
 		Summary: "delete one held signal, so a parameter reading it falls back to unfilled or its default",
 		Effect:  app.OperationEffectDocument, Writes: []string{opsResSignals}, Agents: true,
+		Rebuild: app.OperationRebuildRefold, Fork: app.OperationForkPerInstance,
 		Gesture: "the × of a signal in the Signals section",
 		Follows: []string{"Live reruns a query that reads the signal",
 			"a signal a pane publishes (tl_from, vp_min_x, gv_selection, …) is refused, as set_signal refuses it"}},

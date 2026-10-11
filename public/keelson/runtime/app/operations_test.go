@@ -62,11 +62,42 @@ func TestOperationsCatalogValidate(t *testing.T) {
 		"consent class not the platform's": func(c *OperationsCatalog) {
 			c.Operations[1].Effect, c.Operations[1].Consent = OperationEffectConsequential, OperationConsent{Class: "export", Arg: "text"}
 		},
+		"dry run names no query":   func(c *OperationsCatalog) { c.Operations[1].DryRun = "nope" },
+		"dry run names a command":  func(c *OperationsCatalog) { c.Operations[1].DryRun = c.Operations[1].Name },
+		"query declares a rebuild": func(c *OperationsCatalog) { c.Operations[0].Rebuild = OperationRebuildRefold },
+		"query is asynchronous":    func(c *OperationsCatalog) { c.Operations[0].Async = true },
+		"query has a dry-run twin": func(c *OperationsCatalog) { c.Operations[0].DryRun = "get_doc" },
+		"rebuild out of range":     func(c *OperationsCatalog) { c.Operations[1].Rebuild = OperationRebuildE(9) },
+		"fork out of range":        func(c *OperationsCatalog) { c.Operations[0].Fork = OperationForkE(9) },
+		"command read-shared":      func(c *OperationsCatalog) { c.Operations[1].Fork = OperationForkReadShared },
+		"query per-instance":       func(c *OperationsCatalog) { c.Operations[0].Fork = OperationForkPerInstance },
+		"rebuild without writes": func(c *OperationsCatalog) {
+			c.Operations[1].Effect, c.Operations[1].Writes, c.Operations[1].Rebuild = OperationEffectConsequential, nil, OperationRebuildDurable
+		},
+		"dry-run twin takes other arguments": func(c *OperationsCatalog) {
+			c.Operations[1].DryRun, c.Operations[0].Args = c.Operations[0].Name, reflect.TypeFor[struct{ Other string }]()
+		},
 	} {
 		c := validCatalog()
 		mutate(c)
 		assert.Error(t, c.Validate(), name)
 	}
+}
+
+// The stateful-tool contract (ADR-0315 §SD4–§SD7) is declared on a
+// command: its rebuild and fork classes, whether it settles later, and a
+// query of the catalog as its dry-run twin.
+func TestACommandDeclaresTheStatefulToolContract(t *testing.T) {
+	c := validCatalog()
+	c.Operations[1].Rebuild, c.Operations[1].Fork, c.Operations[1].Async, c.Operations[1].DryRun = OperationRebuildRefold, OperationForkPerInstance, true, c.Operations[0].Name
+	c.Operations[0].Args = c.Operations[1].Args
+	require.NoError(t, c.Validate())
+	c.Operations[0].Fork = OperationForkReadShared
+	require.NoError(t, c.Validate(), "a query fans out read-shared")
+	assert.Equal(t, "refold", c.Operations[1].Rebuild.String())
+	assert.Equal(t, "per-instance", c.Operations[1].Fork.String())
+	assert.Equal(t, "unspecified", OperationRebuildUnspecified.String())
+	assert.Equal(t, "unspecified", OperationForkUnspecified.String())
 }
 
 func TestAConsequentialCommandMayDeclareAConsent(t *testing.T) {

@@ -291,6 +291,28 @@ for the edit-policy tiers.
 
 ## Updates
 
+### 2026-10-11 — play declares rebuild and fork classes; the footprint test runs the pipeline
+
+`set_sql`, `set_param`, `set_signal`, `delete_signal`, `show_pane` and
+`bind_pane` declare `refold` and `per-instance`; `run` declares `volatile`
+and `per-instance` and not `Async`, since it records queuing as its outcome
+and nothing journals its completion
+([ADR-0315](./0315-coordinator-tools-as-operation-specs-and-a-contract-for-stateful-tools.md)
+(proposed) §SD6, §SD8). The declarations describe what resume may rely on
+and say nothing about forking play, which still restores an ambient
+workingset (§SD8).
+
+The footprint conformance test (law L9) now runs play's run pipeline per
+frame against a capture server, so Live re-runs happen and the allowlist's
+gaps are observed, and it fails on an allowlist entry the corpus does not
+observe, so the list can only shrink. The gaps the corpus reaches on this
+date: a signal write or deletion re-runs the live query (`result`), the
+parameter slots follow the buffer (`set_sql` → `params`), and a new result
+re-feeds the panes (`run` → `panes`). A bundle open that runs the buffer,
+which §SD8 also names, is not reached: the test has no bundle host, so
+`open_bundle` is refused before it writes. Each entry leaves the list with
+the dated entry that closes it.
+
 ### 2026-10-02 — an uncovered run is refused when asked for
 
 `run` checks the buffer against the agent limits before the command is

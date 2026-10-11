@@ -25,7 +25,13 @@ type View struct {
 	Gesture    string
 	// Consent is the grant destination that covers a call without a
 	// confirmation, as app.OperationConsent.Pattern writes it.
-	Consent      string
+	Consent string
+	// Rebuild, Fork, Async and DryRun are the stateful-tool contract as
+	// declared (ADR-0315).
+	Rebuild      string
+	Fork         string
+	Async        bool
+	DryRun       string
 	ArgsSchema   string
 	ResultSchema string
 	Diagnostic   string
@@ -58,6 +64,7 @@ func ViewOf(m app.Manifest, o app.OperationSpec) (v View) {
 		App: m.Id, AppDisplay: m.Display, Name: o.Name, Version: o.Version, Summary: o.Summary,
 		Class: o.Class, Effect: o.Effect, Reads: o.Reads, Writes: o.Writes, Refs: o.Refs, Follows: o.Follows,
 		Agents: o.Agents, Untrusted: o.Untrusted, Gesture: o.Gesture, Consent: o.Consent.Pattern(),
+		Rebuild: o.Rebuild.String(), Fork: o.Fork.String(), Async: o.Async, DryRun: o.DryRun,
 	}
 	if s, err := opjson.Schema(o.Args); err == nil {
 		v.ArgsSchema = string(s)

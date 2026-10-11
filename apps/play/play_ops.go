@@ -389,6 +389,7 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 		})
 	appops.Command(s, app.OperationSpec{Name: opSetSql, Version: 1, Summary: "replace the SQL buffer",
 		Effect: app.OperationEffectDocument, Writes: []string{opsResSql}, Agents: true, Gesture: "typing in the editor",
+		Rebuild: app.OperationRebuildRefold, Fork: app.OperationForkPerInstance,
 		Follows: []string{"the parameter slots follow the new buffer after a short debounce"}},
 		func(inst *PlayLauncher, call app.OperationCall, in SetSqlArgs) (appops.None, error) {
 			if inst.inner == nil {
@@ -400,6 +401,7 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 		})
 	appops.Command(s, app.OperationSpec{Name: opSetSignal, Version: 2, Summary: "set one signal, with the task as its writer",
 		Effect: app.OperationEffectDocument, Writes: []string{opsResSignals}, Agents: true, Gesture: "the Signals section of the Graph pane",
+		Rebuild: app.OperationRebuildRefold, Fork: app.OperationForkPerInstance,
 		Follows: []string{"Live reruns a query that reads the signal",
 			"selection is a row of a node's result; selection_node, selection_id and selection_key follow it from that row",
 			"a signal a pane publishes and does not take back (tl_from, vp_min_x, gv_selection, …) is refused, naming the pane's command"}},
@@ -442,7 +444,8 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 			return appops.None{}, nil
 		})
 	appops.Command(s, app.OperationSpec{Name: opShowPane, Version: 1, Summary: "raise a pane",
-		Effect: app.OperationEffectView, Writes: []string{opsResPanes}, Agents: true, Gesture: "clicking the pane's tab"},
+		Effect: app.OperationEffectView, Writes: []string{opsResPanes}, Agents: true, Gesture: "clicking the pane's tab",
+		Rebuild: app.OperationRebuildRefold, Fork: app.OperationForkPerInstance},
 		func(inst *PlayLauncher, call app.OperationCall, in ShowPaneArgs) (appops.None, error) {
 			if inst.inner == nil {
 				return appops.None{}, app.RefuseOperation("the window has not mounted")
@@ -465,6 +468,7 @@ var playOps = func() (s *appops.Set[*PlayLauncher, opsSnap]) {
 	appops.Command(s, app.OperationSpec{Name: opBindPane, Version: 1, Summary: "feed a panel from one split node, or from the main result again",
 		Effect: app.OperationEffectDocument, Writes: []string{opsResPanes}, Reads: []string{opsResSql}, Agents: true,
 		Gesture: "the fill tab buttons of a node in the Graph pane",
+		Rebuild: app.OperationRebuildRefold, Fork: app.OperationForkPerInstance,
 		Follows: []string{"the pane draws the node's result once the node has run"}},
 		func(inst *PlayLauncher, call app.OperationCall, in BindPaneArgs) (appops.None, error) {
 			p := inst.inner
@@ -807,6 +811,11 @@ func addRunOps(playOps *appops.Set[*PlayLauncher, opsSnap]) {
 	appops.Command(playOps, app.OperationSpec{Name: opRun, Version: 2, Summary: "run the buffer, or one statement of it, under the agent limits",
 		Effect: app.OperationEffectRun, Reads: []string{opsResSql, opsResParams, opsResSignals}, Writes: []string{opsResResult},
 		Agents: true, Gesture: "the Run button",
+		// deferred: run records queuing as its outcome and returns no
+		// handle, and nothing journals a completed entry when the result
+		// lands (ADR-0315 §SD6, §SD8), so it does not declare Async until
+		// it does.
+		Rebuild: app.OperationRebuildVolatile, Fork: app.OperationForkPerInstance,
 		Follows: []string{"the result replaces the main result; describe_result reads it",
 			"a new result drops the Projection pane's run over the old one; publish_projection keeps a run past it",
 			"a run the grant does not cover is refused, naming the destination the grant would have to list",
@@ -865,6 +874,7 @@ func addRunOps(playOps *appops.Set[*PlayLauncher, opsSnap]) {
 	})
 	appops.Command(playOps, app.OperationSpec{Name: opSetParam, Version: 2, Summary: "set one parameter, in its tier",
 		Effect: app.OperationEffectDocument, Writes: []string{opsResParams}, Agents: true, Gesture: "the parameter's field above the editor",
+		Rebuild: app.OperationRebuildRefold, Fork: app.OperationForkPerInstance,
 		Follows: []string{"a pinned parameter rewrites its SET line in the buffer; a live one writes its signal, and Live reruns",
 			"an enum parameter takes one of the options get_state lists; any other value is refused"}},
 		func(inst *PlayLauncher, call app.OperationCall, in SetParamArgs) (appops.None, error) {

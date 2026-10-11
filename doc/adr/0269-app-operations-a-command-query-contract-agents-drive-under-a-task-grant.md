@@ -847,6 +847,21 @@ for the edit-policy tiers.
 
 ## Updates
 
+### 2026-10-11 — the stateful-tool contract on an operation spec
+
+`OperationSpec` carries four declarations from
+[ADR-0315](./0315-coordinator-tools-as-operation-specs-and-a-contract-for-stateful-tools.md)
+(proposed): `Rebuild` (durable, refold, replay, volatile), `Fork`
+(read-shared, per-instance, none), `Async` and `DryRun`, the name of a
+query of the same catalog that runs the command's pure core without
+committing. Validation holds them to the contract — only a command
+rebuilds, settles later or has a twin, a rebuild class describes what the
+command writes, a command is never read-shared and a query never
+per-instance, the twin takes the command's arguments — and
+`keelson('app_operations')` shows them as `rebuild`, `fork`, `async` and
+`dry_run`. They are declared, not yet read: the resume fold does not
+consult the rebuild class, and nothing journals a `completed` entry.
+
 ### 2026-10-02 — a refusal names its remedy
 
 A refused outcome carries a **remedy** (`opwire.Remedy`): the destinations

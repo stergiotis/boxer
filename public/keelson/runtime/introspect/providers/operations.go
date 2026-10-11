@@ -53,6 +53,10 @@ func operationsTable(vs []appops.View) *introspect.Table {
 		// The grant destination that covers a consequential call without a
 		// confirmation, e.g. publish:<bundle prefix>; empty when none.
 		String("consent", func(i int) string { return v(i).Consent }).
+		String("rebuild", func(i int) string { return v(i).Rebuild }).
+		String("fork", func(i int) string { return v(i).Fork }).
+		Bool("async", func(i int) bool { return v(i).Async }).
+		String("dry_run", func(i int) string { return v(i).DryRun }).
 		String("args_schema", func(i int) string { return v(i).ArgsSchema }).
 		String("result_schema", func(i int) string { return v(i).ResultSchema }).
 		// Why the app's catalog was withdrawn; set only on that app's one

@@ -90,6 +90,75 @@ func (inst OperationEffectE) String() (s string) {
 	return
 }
 
+// OperationRebuildE is how a resource a command writes comes back after
+// the process that held it is gone (ADR-0315 §SD4): what a resumed agent
+// may rely on, and what resume tells it is lost.
+type OperationRebuildE uint8
+
+const (
+	OperationRebuildUnspecified OperationRebuildE = 0
+	// OperationRebuildDurable: survives a restart (facts, captured runs).
+	OperationRebuildDurable OperationRebuildE = 1
+	// OperationRebuildRefold: rebuilt by re-applying the latest journaled
+	// set-style command (a buffer, parameters, signals, bindings).
+	OperationRebuildRefold OperationRebuildE = 2
+	// OperationRebuildReplay: rebuilt by re-execution, its sources of
+	// nondeterminism declared.
+	OperationRebuildReplay OperationRebuildE = 3
+	// OperationRebuildVolatile: lost; resume tells the model (results,
+	// result ids, task refs).
+	OperationRebuildVolatile OperationRebuildE = 4
+)
+
+var AllOperationRebuilds = []OperationRebuildE{OperationRebuildDurable, OperationRebuildRefold, OperationRebuildReplay, OperationRebuildVolatile}
+
+func (inst OperationRebuildE) String() (s string) {
+	switch inst {
+	case OperationRebuildDurable:
+		s = "durable"
+	case OperationRebuildRefold:
+		s = "refold"
+	case OperationRebuildReplay:
+		s = "replay"
+	case OperationRebuildVolatile:
+		s = "volatile"
+	default:
+		s = "unspecified"
+	}
+	return
+}
+
+// OperationForkE is how an operation behaves under fan-out (ADR-0315
+// §SD5): explore read-only, commit once.
+type OperationForkE uint8
+
+const (
+	OperationForkUnspecified OperationForkE = 0
+	// OperationForkReadShared: queries fan out on one instance.
+	OperationForkReadShared OperationForkE = 1
+	// OperationForkPerInstance: isolate by opening a new instance from an
+	// explicit configuration, never from an ambient workingset.
+	OperationForkPerInstance OperationForkE = 2
+	// OperationForkNone: not forked.
+	OperationForkNone OperationForkE = 3
+)
+
+var AllOperationForks = []OperationForkE{OperationForkReadShared, OperationForkPerInstance, OperationForkNone}
+
+func (inst OperationForkE) String() (s string) {
+	switch inst {
+	case OperationForkReadShared:
+		s = "read-shared"
+	case OperationForkPerInstance:
+		s = "per-instance"
+	case OperationForkNone:
+		s = "none"
+	default:
+		s = "unspecified"
+	}
+	return
+}
+
 // ResourceSpec declares one unit of app state with its own revision: a
 // document, a parameter, a pane binding.
 type ResourceSpec struct {
@@ -135,6 +204,17 @@ type OperationSpec struct {
 	// standing consent instead of a confirmation per call; zero means
 	// every call is confirmed.
 	Consent OperationConsent
+	// The stateful-tool contract (ADR-0315): Rebuild is how what the
+	// command writes comes back after the process is gone (§SD4), Fork how
+	// the operation behaves under fan-out (§SD5), Async that the command
+	// returns a handle and the work settles later as a completed entry
+	// (§SD6), and DryRun names the catalog's query that runs the command's
+	// pure core without committing (§SD7). Each is declared, not enforced:
+	// unspecified is allowed and shown as such.
+	Rebuild OperationRebuildE
+	Fork    OperationForkE
+	Async   bool
+	DryRun  string
 }
 
 // OperationConsent names how a task's grant covers a consequential call
@@ -243,6 +323,7 @@ func (inst *OperationsCatalog) Validate() (err error) {
 		return &CatalogError{Problem: "a catalog declares no operation"}
 	}
 	names := make(map[string]bool, len(inst.Operations))
+	classes := make(map[string]OperationClassE, len(inst.Operations))
 	for _, o := range inst.Operations {
 		if problem := o.problem(resources); problem != "" {
 			return &CatalogError{Operation: o.Name, Problem: problem}
@@ -251,6 +332,21 @@ func (inst *OperationsCatalog) Validate() (err error) {
 			return &CatalogError{Operation: o.Name, Problem: "declared twice"}
 		}
 		names[o.Name] = true
+		classes[o.Name] = o.Class
+	}
+	for _, o := range inst.Operations {
+		// A dry-run twin is a query of the same catalog that takes the
+		// command's arguments (ADR-0315 §SD7).
+		if o.DryRun == "" {
+			continue
+		}
+		if classes[o.DryRun] != OperationClassQuery {
+			return &CatalogError{Operation: o.Name, Problem: "dry_run names no query of the catalog: " + o.DryRun}
+		}
+		twin, _ := inst.Lookup(o.DryRun)
+		if twin.Args != o.Args {
+			return &CatalogError{Operation: o.Name, Problem: "dry_run twin " + o.DryRun + " takes other arguments than the command"}
+		}
 	}
 	return
 }
@@ -269,9 +365,25 @@ func (inst OperationSpec) problem(resources map[string]bool) (problem string) {
 	case !slices.Contains(AllOperationEffects, inst.Effect):
 		return "unspecified effect"
 	}
+	// The stateful-tool contract (ADR-0315 §SD4–§SD7): each field is one
+	// of its enumerated values or unspecified; a rebuild class is a
+	// command's and describes what it writes; a query fans out read-shared
+	// and a command never does (§SD5).
+	if inst.Rebuild != OperationRebuildUnspecified && !slices.Contains(AllOperationRebuilds, inst.Rebuild) {
+		return "rebuild class out of range"
+	}
+	if inst.Fork != OperationForkUnspecified && !slices.Contains(AllOperationForks, inst.Fork) {
+		return "fork class out of range"
+	}
 	if inst.Class == OperationClassCommand {
 		if inst.Effect == OperationEffectNone {
 			return "a command declares an effect"
+		}
+		if inst.Rebuild != OperationRebuildUnspecified && len(inst.Writes) == 0 {
+			return "a rebuild class describes what the command writes; it writes nothing"
+		}
+		if inst.Fork == OperationForkReadShared {
+			return "a command is not read-shared under fan-out; explore read-only, commit once"
 		}
 	} else {
 		if inst.Effect != OperationEffectNone {
@@ -279,6 +391,12 @@ func (inst OperationSpec) problem(resources map[string]bool) (problem string) {
 		}
 		if len(inst.Writes) > 0 {
 			return "only a command writes"
+		}
+		if inst.Async || inst.Rebuild != OperationRebuildUnspecified || inst.DryRun != "" {
+			return "only a command is asynchronous, rebuilds, or has a dry-run twin"
+		}
+		if inst.Fork == OperationForkPerInstance {
+			return "only a command isolates per instance under fan-out"
 		}
 	}
 	if (inst.Effect == OperationEffectView || inst.Effect == OperationEffectDocument) && len(inst.Writes) == 0 {
