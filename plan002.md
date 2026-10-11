@@ -28,11 +28,25 @@ Part A has landed, each step a commit with its ADR Update:
 | A5 | — | Nothing was left to shrink; A1–A4 removed their own workarounds. |
 | A6 | `gen.Input.KeyStream` with `rowalloc.NewSequence`; the writer lease | Holder = run and pid, alive by a local check (there is no cross-host writer). The lease is claimed at a process's first act, not at reopen, and released when the run leaves the open state. |
 
-Part B is held. ADR-0320 (bodies in a vault, commitments in the chain)
-landed in the same tables and changes what B0–B5 start from: the bodies
-are already out of the ledger, and the chain commits to commitments. B
-waits for ADR-0320's review, and is then reconciled with it before B0
-starts.
+ADR-0320 (bodies in a vault, commitments in the chain) landed in the same
+tables and was accepted 2026-10-11. Part B is reconciled with it as
+follows (settled with the user, 2026-10-11):
+
+- **Vault or ledger.** ADR-0320 §SD8's classification: an attribute that
+  holds content, or a deterministic digest of content (§SD6), lives in the
+  vault, and everything else lives in the ledger. Ledger components: request
+  and reply metadata, the compaction intent, settings, the profile
+  fingerprint, the turn state, the tool catalog, the head record, and an
+  approval's decision and approver. Vault components: the endorsement, the
+  copy record, a grant's task and terms, the exit question and answer, and
+  the approval's request digest. B3's shredded arguments are vault
+  attributes.
+- **One commitment per vault row.** B5 commits to the vault row's
+  canonical wire item under the entry's opening, replacing the per-field
+  body and calls commitments; B5's ADR amends ADR-0320 §SD2.
+- **Chat.** The B2 and B5 call sites in `apps/chat` are edited narrowly by
+  this plan's session, each file checked for another session's
+  uncommitted work first.
 
 Two parts, in order. Part A closes four `recordstore/gen` gaps the journal's
 SQL store worked around by hand. Part B, which depends on A's first step,
