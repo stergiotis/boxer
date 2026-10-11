@@ -141,7 +141,6 @@ turn's cancellation, so that a stopped turn still records its tail.
 | `head` | a chain head shipped to the anchor store: ordinal covered, digest, receipt (ADR-0314) | no |
 | `copy`, `issued` | a clipboard write of labelled text with its digest; a watermark payload issued for a frame ([ADR-0317](./0317-clipboard-and-export-copy-by-reference-and-one-choke-point.md)) | no |
 | `deleted` | the tombstone of SD8 | no |
-| `keyuse` | reserved, unused while encryption is deferred | — |
 | `ignorable` | extension-private | no |
 
 ### SD3 — No history outside the journal
@@ -383,7 +382,8 @@ are written empty until a later schema change drops them. A tombstone
 therefore destroys vault rows rather than blanking ledger columns, head
 entries' rows excepted, and a new `erased` kind records the erasure of one
 entry's content without deleting the run. The `KeyId` column this section
-reserved names the scheme. The host runs a `VaultedStore` over the SQL store
+reserved names the scheme. The `keyuse` kind reserved beside it is
+retired; its ordinal stays unused so stored names never shift. The host runs a `VaultedStore` over the SQL store
 and the vault; a writer sees the entry as before.
 
 

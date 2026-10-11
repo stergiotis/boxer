@@ -37,7 +37,6 @@ func TestTheSqlStoreUnderClickhouseLocal(t *testing.T) {
 	layout := agentrunstore.Layout{Database: "artest"}
 	require.NoError(t, agentrunstore.ProvisionIn(ctx, exec, layout))
 	require.NoError(t, agentrunstore.ProvisionIn(ctx, exec, layout), "idempotent")
-	require.NoError(t, agentrunstore.ProvisionBodyIn(ctx, exec, layout))
 	// The host's shape (ADR-0320 §SD1): the SQL store is the ledger, the
 	// vault holds the content, the vaulted store is what a writer sees.
 	ledger := NewSqlStore(exec, layout)
@@ -180,7 +179,6 @@ func TestARunRowThatLagsItsEntriesIsRepaired(t *testing.T) {
 	}
 	layout := agentrunstore.Layout{Database: "artest"}
 	require.NoError(t, agentrunstore.ProvisionIn(ctx, local, layout))
-	require.NoError(t, agentrunstore.ProvisionBodyIn(ctx, local, layout))
 	exec := &laggingExecutor{ExecutorI: local, table: layout.RunTable()}
 	ledger, vault := NewSqlStore(exec, layout), NewSqlBodyStore(exec, layout)
 	defer ledger.Close()
@@ -310,7 +308,6 @@ func TestABatchInFlightAtATakeoverLosesItsOrdinals(t *testing.T) {
 	fixedOpenings(t)
 	ctx := context.Background()
 	local, layout, _, ledgerB := leaseStores(t)
-	require.NoError(t, agentrunstore.ProvisionBodyIn(ctx, local, layout))
 	exec := &takeoverBeforeInsert{ExecutorI: local, table: layout.EntryTable()}
 	ledgerA := NewSqlStore(exec, layout)
 	defer ledgerA.Close()
@@ -468,5 +465,4 @@ func TestProvisioningRefusesAnOldTableShape(t *testing.T) {
 	err = agentrunstore.ProvisionIn(ctx, exec, layout)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "entry table")
-	require.NoError(t, agentrunstore.ProvisionBodyIn(ctx, exec, layout), "a fresh vault table provisions")
 }

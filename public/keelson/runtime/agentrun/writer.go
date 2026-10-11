@@ -243,19 +243,14 @@ func (inst *Writer) append(ctx context.Context, closing bool, entries ...Entry) 
 }
 
 // checkEntry is what every entry must satisfy before it is chained at
-// ordinal: a known kind, a compaction or edit aimed at an earlier entry,
-// and marks the columns can hold (MarkValid).
+// ordinal: a known kind, and a compaction or edit aimed at an earlier
+// entry.
 func checkEntry(e Entry, ordinal uint32) (err error) {
 	if !e.Kind.IsValid() {
 		return eb.Build().Uint8("kind", uint8(e.Kind)).Errorf("no such entry kind")
 	}
 	if (e.Kind == KindCompact || e.Kind == KindEdit) && (e.Target == 0 || e.Target >= ordinal) {
 		return eb.Build().Str("kind", e.Kind.String()).Uint32("target", e.Target).Uint32("ordinal", ordinal).Errorf("a compaction or edit aims at an earlier entry")
-	}
-	for _, m := range append(slices.Clone(e.Label.Exposure), e.Label.Origin...) {
-		if m != "" && !MarkValid(m) {
-			return eb.Build().Str("mark", m).Errorf("a mark cannot carry a comma")
-		}
 	}
 	return
 }

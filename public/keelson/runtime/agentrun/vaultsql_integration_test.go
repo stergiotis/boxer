@@ -28,8 +28,6 @@ func TestTheVaultUnderClickhouseLocal(t *testing.T) {
 	}
 	layout := agentrunstore.Layout{Database: "vtest"}
 	require.NoError(t, agentrunstore.ProvisionIn(ctx, exec, layout))
-	require.NoError(t, agentrunstore.ProvisionBodyIn(ctx, exec, layout))
-	require.NoError(t, agentrunstore.ProvisionBodyIn(ctx, exec, layout), "idempotent")
 	ledger := NewSqlStore(exec, layout)
 	defer ledger.Close()
 	vault := NewSqlBodyStore(exec, layout)

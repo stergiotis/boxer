@@ -1131,12 +1131,6 @@ func (rt *Runtime) bootAgentRun(ctx context.Context) {
 			logger.Warn().Err(lerr).Msg("idlease: provisioning failed; no id stream can lease a block on this host")
 		}
 		cancel()
-		if err == nil {
-			// The vault beside the ledger (ADR-0320 §SD1): provisioned on
-			// its own, so a ledger another change is moving does not hold
-			// it back.
-			err = agentrunstore.ProvisionBodyIn(pctx, rt.PersistExec, layout)
-		}
 		if err != nil {
 			logger.Warn().Err(err).Msg("agentrun: provisioning failed; runs are kept in process only")
 		} else {

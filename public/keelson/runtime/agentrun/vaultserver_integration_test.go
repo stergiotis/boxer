@@ -42,7 +42,6 @@ func TestTwoVaultedStoresOverOneRecord(t *testing.T) {
 	require.NoError(t, err)
 	layout := agentrunstore.Layout{Database: "twotest"}
 	require.NoError(t, agentrunstore.ProvisionIn(ctx, execA, layout))
-	require.NoError(t, agentrunstore.ProvisionBodyIn(ctx, execA, layout))
 	open := func(exec recordstore.ExecutorI) *VaultedStore {
 		ledger, vault := NewSqlStore(exec, layout), NewSqlBodyStore(exec, layout)
 		t.Cleanup(ledger.Close)
@@ -88,7 +87,6 @@ func TestAnErasureLeavesNoOutdatedPartOnTheServer(t *testing.T) {
 	require.NoError(t, err)
 	layout := agentrunstore.Layout{Database: "srvtest"}
 	require.NoError(t, agentrunstore.ProvisionIn(ctx, exec, layout))
-	require.NoError(t, agentrunstore.ProvisionBodyIn(ctx, exec, layout))
 	ledger, vault := NewSqlStore(exec, layout), NewSqlBodyStore(exec, layout)
 	defer ledger.Close()
 	defer vault.Close()

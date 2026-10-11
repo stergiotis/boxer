@@ -442,12 +442,6 @@ func stripPixelEntries(ctx context.Context, w *agentrun.Writer) (stripped bool, 
 	return err == nil, err
 }
 
-// jsonMarshal is the journal's JSON for a record body.
-func jsonMarshal(v any) (string, error) {
-	b, err := json.Marshal(v, json.Deterministic(true))
-	return string(b), err
-}
-
 // effectOf is the declared effect class of a tool call (ADR-0269 §SD5):
 // the operation's for call_operation and a typed tool, read from the
 // window's app's catalog; for the coordinator's own tools, document for

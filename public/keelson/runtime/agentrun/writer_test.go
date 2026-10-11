@@ -313,26 +313,22 @@ func TestABlankedBodyInALiveRunBreaksTheChain(t *testing.T) {
 	assert.Error(t, err, "and the run does not reopen")
 }
 
-// A mark with a comma cannot be stored, so the writer refuses it, and a
-// label joined with one drops it; an entry with valid marks survives the
-// column round trip with its chain intact.
-func TestAMarkWithACommaIsRefused(t *testing.T) {
+// Marks are stored as symbol arrays, so any non-empty text is a mark,
+// commas included; a label joined with an empty mark drops it, and an
+// entry's marks survive the row round trip sorted and distinct, with
+// the chain intact.
+func TestMarksRoundTripAsArrays(t *testing.T) {
 	ctx := context.Background()
-	w, err := Open(ctx, NewMemStore(), Run{Id: 7})
+	w, err := Open(ctx, NewMemStore(), Run{Id: 1})
 	require.NoError(t, err)
-	_, err = w.Append(ctx, Entry{Kind: KindUser, Body: "x", Label: Label{Origin: []string{"a,b"}}})
-	require.Error(t, err)
-	assert.Nil(t, Label{}.Join(Label{Exposure: []string{"a,b"}}).Exposure)
-	written, err := w.Append(ctx, Entry{Kind: KindUser, Body: "x", Label: Label{Origin: []string{"b", "a"}}})
+	assert.Nil(t, Label{}.Join(Label{Exposure: []string{""}}).Exposure)
+	written, err := w.Append(ctx, Entry{Kind: KindUser, Body: "x", Label: Label{Origin: []string{"b", "a,c"}}})
 	require.NoError(t, err)
-	// The marks are a set: stored sorted, so the canonical form, which
-	// carries them as an array, has one spelling (the SQL round trip is
-	// the integration lane's).
-	back := written[0]
-	assert.Equal(t, []string{"a", "b"}, unionMarks(back.Label.Origin, nil))
-	broken, err := Verify(w.Run().Digest, []Entry{back})
+	assert.Contains(t, written[0].Label.Origin, "a,c", "a comma is just text in a mark")
+	assert.Equal(t, []string{"a,c", "b"}, Label{}.Join(written[0].Label).Origin, "joined marks are sorted and distinct")
+	broken, err := VerifyRun(w.Run(), w.Entries())
 	require.NoError(t, err)
-	assert.Zero(t, broken, "the chain holds")
+	assert.Zero(t, broken)
 }
 
 // blockingStore holds an append until released.

@@ -29,7 +29,7 @@ type SqlBodyStore struct {
 var _ BodyStoreI = (*SqlBodyStore)(nil)
 
 // NewSqlBodyStore opens the vault store over exec in layout; the caller
-// provisions first (agentrunstore.ProvisionBodyIn) and closes afterwards.
+// provisions first (agentrunstore.ProvisionIn) and closes afterwards.
 func NewSqlBodyStore(exec recordstore.ExecutorI, layout agentrunstore.Layout) (inst *SqlBodyStore) {
 	return &SqlBodyStore{exec: exec, layout: layout, st: agentrunstore.NewBodyStoreIn(exec, layout)}
 }

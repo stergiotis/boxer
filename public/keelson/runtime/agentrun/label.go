@@ -152,26 +152,17 @@ func (inst Label) String() (s string) {
 	return
 }
 
-// MarkValid says a mark can be stored: not empty, and without the comma
-// the columns join marks with, which would read back as two marks and
-// break the chain over the canonical form's mark arrays.
-func MarkValid(s string) bool {
-	return s != "" && !strings.Contains(s, ",")
-}
-
-// unionMarks is the sorted union without duplicates, empties or marks the
-// columns cannot hold (MarkValid); nil for none, so an empty mark reads
-// the same whichever way it was built. The writer refuses an entry with
-// such a mark (checkEntry); here it is dropped, so a label never carries
-// what the record cannot keep.
+// unionMarks is the sorted union without duplicates or empties; nil for
+// none, so an empty mark reads the same whichever way it was built. Marks
+// are stored as symbol arrays, so any non-empty text is a mark.
 func unionMarks(a []string, b []string) (out []string) {
 	for _, s := range a {
-		if MarkValid(s) {
+		if s != "" {
 			out = append(out, s)
 		}
 	}
 	for _, s := range b {
-		if MarkValid(s) {
+		if s != "" {
 			out = append(out, s)
 		}
 	}

@@ -78,5 +78,13 @@ func ProvisionIn(ctx context.Context, exec recordstore.ExecutorI, layout Layout)
 	if err = st.Entry.VerifySchema(ctx); err != nil {
 		return eh.Errorf("entry table: %w", err)
 	}
+	body := NewBodyStoreIn(exec, layout)
+	defer body.Close()
+	if err = body.EnsureTable(ctx); err != nil {
+		return eh.Errorf("ensure body table: %w", err)
+	}
+	if err = body.VerifySchema(ctx); err != nil {
+		return eh.Errorf("body table: %w", err)
+	}
 	return
 }

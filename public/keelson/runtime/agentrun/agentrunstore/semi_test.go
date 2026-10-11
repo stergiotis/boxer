@@ -33,7 +33,7 @@ func TestTheVaultRowRoundTrips(t *testing.T) {
 		t.Skipf("clickhouse-local unavailable: %v", err)
 	}
 	layout := Layout{Database: "semitest"}
-	require.NoError(t, ProvisionBodyIn(ctx, exec, layout))
+	require.NoError(t, ProvisionIn(ctx, exec, layout))
 	st := NewBodyStoreIn(exec, layout)
 	defer st.Close()
 
