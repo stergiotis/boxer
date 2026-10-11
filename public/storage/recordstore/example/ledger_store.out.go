@@ -941,21 +941,22 @@ func (inst *LedgerStore) writtenByOf(ctx context.Context) (row EvidenceWrittenBy
 	return
 }
 
-// AppendChained commits ent as the next row of its scope's chain (ADR-0327
-// (proposed) §SD2, law L31): the ordinal after head's, the chain component's
-// Prev, Digest and Scheme set by the store — the mark and the commitments
-// are the caller's — and the digest over the row's canonical item with Prev
-// and Digest at zero, chained to head's digest (the seed for an empty
-// scope). The written-by component is the context's, whatever ent carried.
-// The row is buffered as Commit buffers; Flush makes it durable. ent is
-// updated in place and digest is what its chain component now records.
-func (inst *LedgerStore) AppendChained(ctx context.Context, head evidence.Head, ent *LedgerEntity) (digest string, err error) {
+// PrepareChained makes ent the next row of its scope's chain without
+// writing it (ADR-0327 (proposed) §SD2, law L31): the ordinal after head's,
+// the chain component's Prev, Digest and Scheme set by the store — the mark
+// is the caller's — the written-by component the context's, whatever ent
+// carried, and the digest over the row's canonical item with Prev and
+// Digest at zero, chained to head's digest (the seed for an empty scope).
+// A writer that must know the digest before it acts prepares, acts, and
+// writes (ADR-0314 §SD1). ent is updated in place; digest is what its chain
+// component now records.
+func (inst *LedgerStore) PrepareChained(ctx context.Context, head evidence.Head, ent *LedgerEntity) (digest string, err error) {
 	if inst.cfg.Scheme.IsZero() {
-		err = eh.Errorf("append chained: the store has no scheme (LedgerStoreConfig.Scheme)")
+		err = eh.Errorf("prepare chained: the store has no scheme (LedgerStoreConfig.Scheme)")
 		return
 	}
 	if ent == nil {
-		err = eh.Errorf("append chained: nil entity")
+		err = eh.Errorf("prepare chained: nil entity")
 		return
 	}
 	ent.Ord = head.Ordinal + 1
@@ -968,12 +969,52 @@ func (inst *LedgerStore) AppendChained(ctx context.Context, head evidence.Head, 
 	ent.EvidenceWrittenBy = option.Some(inst.writtenByOf(ctx))
 	item, err := inst.chainItem(ent)
 	if err != nil {
-		err = eh.Errorf("append chained: %w", err)
+		err = eh.Errorf("prepare chained: %w", err)
 		return
 	}
 	digest = inst.cfg.Scheme.ChainDigest(head.Digest, item)
 	ch.Digest = digest
 	ent.EvidenceChain = option.Some(ch)
+	return
+}
+
+// CheckChained says ent is what PrepareChained makes of a row after the
+// predecessor at prevDigest: it names that predecessor, carries the scheme,
+// and its digest is the chain's over its canonical item. What a service
+// checks on a row a client prepared, before WriteChained; the written-by
+// component is checked as content, and whether its origin is the sender's
+// is the service's to compare.
+func (inst *LedgerStore) CheckChained(prevDigest string, ent *LedgerEntity) (err error) {
+	if inst.cfg.Scheme.IsZero() {
+		return eh.Errorf("check chained: the store has no scheme (LedgerStoreConfig.Scheme)")
+	}
+	if ent == nil || !ent.EvidenceChain.Has {
+		return eh.Errorf("check chained: the row carries no chain component")
+	}
+	ch := ent.EvidenceChain.Val
+	if ch.Scheme != inst.cfg.Scheme.Name() {
+		return eh.Errorf("check chained: the row is under another scheme")
+	}
+	if ch.Prev+1 != ent.Ord {
+		return eh.Errorf("check chained: the row does not follow its predecessor's ordinal")
+	}
+	item, err := inst.chainItem(ent)
+	if err != nil {
+		return eh.Errorf("check chained: %w", err)
+	}
+	if ch.Digest != inst.cfg.Scheme.ChainDigest(prevDigest, item) {
+		return eh.Errorf("check chained: the row's digest is not the chain's")
+	}
+	return
+}
+
+// WriteChained commits a prepared row as it stands: no field is set, no
+// digest recomputed. The row is buffered as Commit buffers; Flush makes it
+// durable.
+func (inst *LedgerStore) WriteChained(ctx context.Context, ent *LedgerEntity) (err error) {
+	if ent == nil || !ent.EvidenceChain.Has || ent.EvidenceChain.Val.Digest == "" {
+		return eh.Errorf("write chained: the row is not prepared")
+	}
 	b := inst.beginCtx(ctx, ent.ID, ent.Ord, false)
 	if ent.LedgerMeta.Has {
 		b.AddLedgerMeta(ent.LedgerMeta.Val)
@@ -985,8 +1026,18 @@ func (inst *LedgerStore) AppendChained(ctx context.Context, head evidence.Head, 
 		b.AddEvidenceWrittenBy(ent.EvidenceWrittenBy.Val)
 	}
 	if err = b.Commit(); err != nil {
+		err = eh.Errorf("write chained: %w", err)
+	}
+	return
+}
+
+// AppendChained is PrepareChained and WriteChained.
+func (inst *LedgerStore) AppendChained(ctx context.Context, head evidence.Head, ent *LedgerEntity) (digest string, err error) {
+	if digest, err = inst.PrepareChained(ctx, head, ent); err != nil {
+		return
+	}
+	if err = inst.WriteChained(ctx, ent); err != nil {
 		digest = ""
-		err = eh.Errorf("append chained: %w", err)
 	}
 	return
 }
@@ -1140,6 +1191,7 @@ func (inst *LedgerVaulted) Split(ent *LedgerEntity, ordinal uint64, content []*L
 	}
 	ch := ent.EvidenceChain.Val
 	ch.CommitComponents, ch.Commitments = nil, nil
+	seen := make(map[string]bool, len(content))
 	for _, v := range content {
 		component := ""
 		if v.LedgerNote.Has {
@@ -1160,6 +1212,11 @@ func (inst *LedgerVaulted) Split(ent *LedgerEntity, ordinal uint64, content []*L
 			err = eh.Errorf("split: a content row holds no vaulted component")
 			return
 		}
+		if seen[component] {
+			err = eh.Errorf("split: two content rows hold the same vaulted component; a row holds one of each at most")
+			return
+		}
+		seen[component] = true
 		v.ID, v.Ord = ent.ID, ordinal
 		v.LedgerVaultEnvelope.Component = component
 		v.EvidenceOpening = option.None[EvidenceOpening]()
@@ -1177,15 +1234,79 @@ func (inst *LedgerVaulted) Split(ent *LedgerEntity, ordinal uint64, content []*L
 	return
 }
 
-// Append is Split, the content rows into the vault, and the ledger row
-// through AppendChained, in that order: a ledger row whose content is
-// missing reads as erased and breaks law L31 unless the chain explains it,
-// while a vault row without its ledger row is dead weight nothing reads.
-// Both stores buffer; Flush makes the rows durable, vault first.
-func (inst *LedgerVaulted) Append(ctx context.Context, head evidence.Head, ent *LedgerEntity, content []*LedgerVaultEntity) (digest string, err error) {
+// Prepare is Split and the ledger's PrepareChained: the content rows named,
+// opened and committed to on ent's chain component, and ent made the next
+// row of its scope's chain, nothing written. A writer that must know the
+// digest before it acts prepares, acts, and writes (ADR-0314 §SD1).
+func (inst *LedgerVaulted) Prepare(ctx context.Context, head evidence.Head, ent *LedgerEntity, content []*LedgerVaultEntity) (digest string, err error) {
 	if err = inst.Split(ent, head.Ordinal+1, content); err != nil {
 		return
 	}
+	return inst.ledger.PrepareChained(ctx, head, ent)
+}
+
+// Check says ent and content are what Prepare makes of them after the
+// predecessor at prevDigest: each content row is keyed by ent's scope and
+// ordinal, holds the one component it is named by, opens the commitment
+// ent's chain component carries for it in order, and ent checks as a
+// chained row (CheckChained). What a service checks on rows a client
+// prepared, before Write.
+func (inst *LedgerVaulted) Check(prevDigest string, ent *LedgerEntity, content []*LedgerVaultEntity) (err error) {
+	if err = inst.ledger.CheckChained(prevDigest, ent); err != nil {
+		return
+	}
+	ch := ent.EvidenceChain.Val
+	if len(ch.CommitComponents) != len(content) || len(ch.Commitments) != len(content) {
+		return eh.Errorf("check: the content rows and the commitments differ in number")
+	}
+	seen := make(map[string]bool, len(content))
+	for i, v := range content {
+		if v.ID != ent.ID || v.Ord != ent.Ord {
+			return eh.Errorf("check: a content row is not the ledger row's")
+		}
+		component := ""
+		if v.LedgerNote.Has {
+			if component != "" {
+				return eh.Errorf("check: a content row holds more than one vaulted component")
+			}
+			component = "ledgerNote"
+		}
+		if v.EvidenceShredded.Has {
+			if component != "" {
+				return eh.Errorf("check: a content row holds more than one vaulted component")
+			}
+			component = "evidenceShredded"
+		}
+		if component == "" || component != v.LedgerVaultEnvelope.Component || component != ch.CommitComponents[i] {
+			return eh.Errorf("check: a content row is not named by the component it holds")
+		}
+		if seen[component] {
+			return eh.Errorf("check: two content rows hold the same vaulted component")
+		}
+		seen[component] = true
+		if !v.EvidenceOpening.Has {
+			return eh.Errorf("check: a content row carries no opening")
+		}
+		opening := evidence.OpeningOf(v.EvidenceOpening.Val.Opening)
+		c := *v
+		c.EvidenceOpening = option.None[EvidenceOpening]()
+		item, e := inst.vault.CanonicalItem(&c)
+		if e != nil {
+			return eh.Errorf("check: %w", e)
+		}
+		if !inst.ledger.cfg.Scheme.Opens(opening, item, ch.Commitments[i]) {
+			return eh.Errorf("check: a content row does not open its commitment")
+		}
+	}
+	return
+}
+
+// Write commits prepared rows: the content rows into the vault, then the
+// ledger row as it stands, in that order — a ledger row whose content is
+// missing reads as erased and breaks law L31 unless the chain explains it,
+// while a vault row without its ledger row is dead weight nothing reads.
+// Both stores buffer; Flush makes the rows durable, vault first.
+func (inst *LedgerVaulted) Write(ctx context.Context, ent *LedgerEntity, content []*LedgerVaultEntity) (err error) {
 	for _, v := range content {
 		b := inst.vault.BeginCtx(ctx, v.ID, v.Ord, v.LedgerVaultEnvelope)
 		if v.LedgerNote.Has {
@@ -1198,11 +1319,21 @@ func (inst *LedgerVaulted) Append(ctx context.Context, head evidence.Head, ent *
 			b.AddEvidenceOpening(v.EvidenceOpening.Val)
 		}
 		if err = b.Commit(); err != nil {
-			err = eh.Errorf("append: vault: %w", err)
-			return
+			return eh.Errorf("write: vault: %w", err)
 		}
 	}
-	return inst.ledger.AppendChained(ctx, head, ent)
+	return inst.ledger.WriteChained(ctx, ent)
+}
+
+// Append is Prepare and Write.
+func (inst *LedgerVaulted) Append(ctx context.Context, head evidence.Head, ent *LedgerEntity, content []*LedgerVaultEntity) (digest string, err error) {
+	if digest, err = inst.Prepare(ctx, head, ent, content); err != nil {
+		return
+	}
+	if err = inst.Write(ctx, ent, content); err != nil {
+		digest = ""
+	}
+	return
 }
 
 // Flush makes the buffered rows durable, the vault's before the ledger's.
