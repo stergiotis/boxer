@@ -1,6 +1,6 @@
 ---
 type: explanation
-audience: whoever decides whether the environment-variable registry (`public/config/env`, ADR-0009) gains scoped, persisted or structured values — a problem statement, read before any ADR that would add them
+audience: whoever decides how boxer, as a library, hands configuration to the agent harness — which values an integrating application supplies, and what boxer must guarantee about them; a problem statement, read before any ADR on the seams
 status: draft
 # reviewed-by: "@<handle>"     # fill in and uncomment when flipping to stable
 # reviewed-date: YYYY-MM-DD    # fill in and uncomment when flipping to stable
@@ -8,108 +8,134 @@ status: draft
 
 > **Status: draft — pre-human-review.** A problem statement, not a decision.
 > Written 2026-10-11 from how the agent harness (ADR-0307, ADR-0310,
-> ADR-0312) and the chat profile read their configuration. Nothing here
-> proposes an option.
+> ADR-0312) and the chat profile read their configuration. It names the
+> seams an option would need; it does not choose one.
 
-# The env registry is process-global and the harness needs per-run values
+# The harness reads configuration it should be handed
 
-## The registry today
+## The problem in short
 
-A variable is a package-level `env.New<Type>(env.Spec{Name, Default,
-Description, Category, Sensitive, ...})`, registered once per process and
-panicking on a duplicate name (ADR-0009). A value is read lazily on the first
-`Get()` and cached for the process. The layering is Override, Flag, Env,
-Default; `ValueSource()` says which tier supplied a variable's value. There is
-no file layer (ADR-0009 rejected a multi-source loader), no scope (the ADR
-says so: "a process-global singleton; specs cannot be locally scoped"), and no
-structured type: approval policies and canary lists are strings parsed by
-hand (`cell.ParseApprovalPolicy`, `cell.ParseCanaries`). `Category` is a
-documentation tag. `go generate` renders `doc/env-vars.md` from the registry.
+Boxer is a library. An integrating application boots a host from it — through
+`hostboot.Boot`, or by assembling the bus, the window host and the services
+itself — and owns its deployment: where its settings live, how many profiles it
+keeps, how a person picks one. Parts of the agent harness ignore that. They
+read the environment-variable registry (ADR-0009) directly, at a point of their
+own choosing, so a value the integrator supplies does not reach them, and a run
+cannot say which values it ran under.
 
-This is the single choke point the repo wants, and it holds: a lint test bans
-`os.Getenv` outside an allowlist.
+The registry is not the problem. It is process-global by design, and a
+process-global default is right for a library. What is missing is the
+alternative to it: a seam through which the integrator passes a value, and a
+rule that boxer's own code reads the value it was handed rather than the
+registry behind it.
 
-## What the harness needs from configuration
+## Where boxer reads instead of being handed
 
-A run is the unit the harness reasons about (ADR-0308): it has a profile, a
-fingerprint, settings, a cell declaration in force, and it can be resumed in
-a later process. Three needs follow:
+- **The cell declaration has two copies in a hostboot host.** Hostboot builds
+  one from `BOXER_CELL_*` and shares it as `Runtime.Cell` with the model
+  service, the egress service and the clipboard broker; its comment says the
+  services "never read the environment again". The chat app reads it a second
+  time (`confinedTierNow`, via `cell.FromEnv(nil)`), because `MountContextI`
+  carries no declaration. The two are not equal by construction — the host's
+  copy carries the trusted hosts and the egress destinations, the app's does
+  not — and only the confined tier is read from the app's copy.
+- **There is no way to supply a declaration at boot.** `hostboot.Options` lets
+  an integrator replace env-derived values elsewhere (`Facts` replaces the
+  store chosen from `CLICKHOUSE_*`; `ScreenshotDir` exists because env values
+  are cached process-wide), but not the cell. A host assembled without
+  hostboot can pass one to the model service (`llm.Config.Cell`), but
+  `llm.ConfigFromEnv` fills it from the environment by default.
+- **The profile describes values that are not in force.** `ProfileT` holds
+  rounds, pixels, image budgets and operation tools, and `Fingerprint` hashes
+  them, but `defaultProfile` fills them from compile-date constants and
+  nothing reads them back: the window and the coordinator read the env
+  variables (`RoundsEnv`, `PixelsMaxEnv`, `ImageBudgetBytes` and their
+  neighbours) directly. A run started under `BOXER_CHAT_ROUNDS_MAX=8` and
+  resumed under `96` fingerprints alike, so ADR-0308's read-only resume does
+  not fire. The journal's settings (`journalSettings`) record keep, apps,
+  questions, artefact and the ceiling, not the rest, nor the confined tier.
+- **Limits and starting values are mixed.** The chat's env variables are of
+  two kinds. Some are *limits* the person cannot move — the rounds range,
+  the pixels ceiling and whether pixels must stay local, the image budgets.
+  Others are *starting values* for a setting the person moves in the chat's
+  Settings — the rounds, the pixels, the operation tools, apps, questions,
+  artefact. A limit is a property of the profile; a starting value is only
+  where a conversation's own setting begins, and what governs a run is the
+  setting, not its seed. The profile holds both kinds, and the journal
+  records some of the settings.
+- **There is one profile, and only boxer can add one.** Profiles register in
+  the chat package's own `harness.Registry`; `BOXER_CHAT_PROFILE` admits
+  `"default"` only. An integrator that wants a second profile, or wants
+  profiles kept as data, has nowhere to put it.
 
-1. **Values resolved once and shared.** The cell declaration is built from
-   nine `BOXER_CELL_*` variables by `cell.FromEnv`. Hostboot builds it once
-   ("the services read it and never the environment again"), the llm
-   service builds it again in `ConfigFromEnv`, and the chat app builds it a
-   third time (`confinedTierNow` in `chat_journal.go`) because an app has
-   no handle on the host's copy. Three reads, no shared source record, and
-   nothing that says they agree.
+## What an integrator should be able to do
 
-2. **Values bound to a run and recorded.** The run row carries a profile
-   id, a fingerprint and journaled settings (`journalSettings`), and a
-   resume strands the run when the fingerprint moved. But the fingerprint
-   names compile-date constants only (`ProfileT`). The env-derived seeds
-   and caps that govern a chat (rounds, pixels, image budgets, operation
-   tools, the cell's confined tier) are read at window or coordinator
-   construction, process-cached, and not in the fingerprint. A run resumed
-   under different `BOXER_CHAT_ROUNDS` or a different confined tier is not
-   detected as changed.
+- Supply the cell declaration at boot, or let boxer build it from the
+  registry when it supplies none.
+- Supply profiles — from code, a record store, anywhere — and choose one per
+  run, with the registry's `BOXER_CHAT_PROFILE` as the default selector.
+- Read back, for a run, the values it ran under, so it can show or keep them.
 
-3. **Values that outlive the environment.** A profile is a Go literal plus
-   env seeds; the only persisted form is the journal's copy of the settings
-   the chat chose to write. There is no place to store a profile as data, so
-   there is one profile (`BOXER_CHAT_PROFILE` allows `"default"` only), and
-   a person cannot keep two.
+## What boxer must guarantee regardless
 
-## Where it hurts today
+These cannot be delegated, because an integrator who gets them wrong weakens
+the cell rather than its own application:
 
-- **Resume is less honest than it claims.** ADR-0308 says a resume under a
-  changed profile is read-only. The check sees the code, not the values.
-- **The cell declaration can disagree with itself.** Nothing stops the
-  host's and the app's copies from differing when an override is set after
-  boot, and no record says which copy a given exit was decided under. The
-  trail row for an llm call carries the tier and route but not the
-  declaration it was checked against.
-- **Structured policy as strings** means the approval map and the canary
-  list have their own parsers, their own error paths and no doc rendering
-  of their shape beyond the description text.
-- **Tests set process state.** `SetForTest` and `Override` are process-wide,
-  so tests that need two configurations serialise or fork.
-
-## What an extension would have to provide
-
-Stated as requirements, not as a design:
-
-- A **resolved snapshot**: a value type built once from the registry at a
-  known point (host boot), immutable, fingerprintable, carried to apps and
-  services on the mount context or the bus rather than re-read. The cell
-  declaration and the chat seeds are its first contents. `ValueSource` per
-  entry travels with it, so a run's journal can record not only the values
-  but where each came from.
-- **A run-scoped layer** above Env: a resolved snapshot can be overlaid by
-  values a run carries (its journaled settings), so a resumed run sees the
-  values it was started under, and the fingerprint covers them.
-- **A persisted layer**: a profile as a record (the journal, or a
-  recordstore kind), named, listable, chosen per run. The registry's
-  `Default` stays the compiled fallback.
-- **Structured specs**: a typed `New<Struct>` that parses once at
-  resolution, validates, and renders its shape into `doc/env-vars.md`.
-- **No second choke point.** Whatever is added resolves through the same
-  registry; the `os.Getenv` lint stays the only gate.
+- **One value, once.** A value supplied at a seam is the one every service
+  and app sees. No boxer package reads the registry behind a seam; otherwise
+  an integrator's declaration is silently ignored wherever that happens — the
+  chat app's confined tier is the instance this would create first.
+- **The fingerprint covers the limits in force.** The profile carries the
+  limits as resolved — supplied, or the registry's — and the chat reads them
+  from the profile, so a changed limit changes the fingerprint and a resume
+  under it is read-only.
+- **The journal carries the settings.** A conversation's settings are fixed
+  on the run at the first send and restored on resume; a changed starting
+  value changes only where a new conversation begins, and neither strands a
+  run nor is fingerprinted.
+- **Policy is checked on resume, never restored.** A run may resume with the
+  preferences it started under (rounds, pixels, budgets). It may not resume
+  with the policy it started under: a declaration tightened since must hold,
+  and a changed declaration is detected — the run resumes read-only, or the
+  stricter value wins — rather than overlaid from the run's record.
 
 ## What stays out of scope
 
-- Hot reload. Nothing in the harness needs a value to change mid-run, and a
+- **Changing the registry.** No scoped, run-level or persisted layers in
+  `public/config/env`; ADR-0009 stands, including its rejection of a file
+  loader. The registry remains the default a seam falls back to, and the
+  `os.Getenv` ban (codelint CS011) the only gate.
+- **Storing profiles.** Where a profile lives and how it is named or listed
+  is the integrator's decision; boxer needs only a way to ask for one by id.
+- **Hot reload.** Nothing in the harness needs a value to change mid-run; a
   changed value mid-run is what the fingerprint exists to refuse.
-- A file loader. ADR-0009's rejection stands; the persisted layer above is a
-  record, not a config file.
+- **Structured specs.** Approval policies and canary lists are strings with
+  hand-written parsers (`cell.ParseApprovalPolicy`, `cell.ParseCanaries`).
+  A typed spec would help, but it is independent of the seams and belongs in
+  its own note.
+
+## Open questions
+
+- How the declaration reaches an app: on `MountContextI`, on the bus as a
+  read-only service, or in the app's launch config.
+- Whether `ProfileT` grows to carry the cell's confined tier, so one
+  fingerprint covers both, or the run records the declaration's own digest
+  beside the profile's.
+- Whether the model service's trail rows should name the declaration a call
+  was checked against, not only its tier and route. (Not verified against
+  the trail's row shape.)
 
 ## What to read
 
-- `public/config/env/env.go`, `resolved.go`, `envdoc/render.go`; ADR-0009
-- `public/keelson/runtime/cell/env.go`, `decl.go` (`FromEnv`,
-  `FromEnvLogged`); `hostboot.go` where the declaration is built
-- `public/keelson/runtime/llm/service.go` (`ConfigFromEnv`)
-- `apps/chat/chat_profile.go` (`ProfileT`, `Fingerprint`), `chat_journal.go`
-  (`confinedTierNow`, `journalSettings`), `chat_resume.go` (the fingerprint
-  check)
-- `public/keelson/runtime/harness/profiles.go` (the published profile table)
+- `public/config/env/env.go`, `resolved.go`; ADR-0009
+- `public/keelson/runtime/hostboot/hostboot.go` (`Options`, `Runtime.Cell`,
+  where the declaration is built)
+- `public/keelson/runtime/cell/decl.go` (`FromEnv`, `FromEnvLogged`)
+- `public/keelson/runtime/llm/service.go` (`Config.Cell`, `ConfigFromEnv`)
+- `public/keelson/runtime/app/app.go` (`MountContextI`)
+- `apps/chat/chat_profile.go` (`ProfileT`, `Fingerprint`, `defaultProfile`,
+  `ProfileEnv`), `chat_journal.go` (`confinedTierNow`, `journalSettings`),
+  `chat_resume.go` (the fingerprint check), `chat_coordinator.go`
+  (`RoundsEnv`)
+- `public/keelson/runtime/harness/profiles.go` (the profile registry)
 - ADR-0308 §SD5 (profile and fingerprint), ADR-0310 (seams and profiles)
