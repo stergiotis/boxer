@@ -46,6 +46,10 @@ const (
 	kindLlmCallAdmission         uint64 = 9223372049739678002
 	kindLlmCallAdmissionRule     uint64 = 9223372049739678003
 	kindLlmCallQueuedMs          uint64 = 9223372049739678004
+	kindLlmCallProfile           uint64 = 9223372049739678053
+	kindLlmCallRoute             uint64 = 9223372049739678054
+	kindLlmCallTier              uint64 = 9223372049739678055
+	kindLlmCallApproval          uint64 = 9223372049739678056
 )
 
 // llmCallSymbolAttrI is the InAttr-side view of the symbol section. P-variants only —
@@ -197,6 +201,16 @@ func llmCallEmitSectionSymbol[
 		symbolSecAttr_AdmissionRule.AddMembershipLowCardRefP(kindLlmCallAdmissionRule)
 		symbolSecAttr_AdmissionRule.EndAttributeP()
 	}
+	if row.Profile.Has {
+		symbolSecAttr_Profile := symbolSec.BeginAttribute(row.Profile.Val)
+		symbolSecAttr_Profile.AddMembershipLowCardRefP(kindLlmCallProfile)
+		symbolSecAttr_Profile.EndAttributeP()
+	}
+	if row.Route.Has {
+		symbolSecAttr_Route := symbolSec.BeginAttribute(row.Route.Val)
+		symbolSecAttr_Route.AddMembershipLowCardRefP(kindLlmCallRoute)
+		symbolSecAttr_Route.EndAttributeP()
+	}
 	return
 }
 
@@ -230,6 +244,11 @@ func llmCallEmitSectionStringArray[
 	stringArraySecAttr_HistoryHash := stringArraySec.BeginAttributeSingle(row.HistoryHash)
 	stringArraySecAttr_HistoryHash.AddMembershipLowCardRefP(kindLlmCallHistoryHash)
 	stringArraySecAttr_HistoryHash.EndAttributeP()
+	if row.Approval.Has {
+		stringArraySecAttr_Approval := stringArraySec.BeginAttributeSingle(row.Approval.Val)
+		stringArraySecAttr_Approval.AddMembershipLowCardRefP(kindLlmCallApproval)
+		stringArraySecAttr_Approval.EndAttributeP()
+	}
 	if len(row.Error) > 0 {
 		stringArraySecAttr_Error := stringArraySec.BeginAttribute()
 		for _, v := range row.Error {
@@ -291,6 +310,9 @@ func llmCallEmitSectionU32Array[
 		u32ArraySecAttr_ReasoningTokens.AddMembershipLowCardRefP(kindLlmCallReasoningTokens)
 		u32ArraySecAttr_ReasoningTokens.EndAttributeP()
 	}
+	u32ArraySecAttr_Tier := u32ArraySec.BeginAttributeSingle(row.Tier)
+	u32ArraySecAttr_Tier.AddMembershipLowCardRefP(kindLlmCallTier)
+	u32ArraySecAttr_Tier.EndAttributeP()
 	return
 }
 
@@ -519,6 +541,12 @@ func llmCallReadRow[
 	var symbolAdmissionRuleVal string
 	var symbolAdmissionRuleCount int
 	var symbolAdmissionRuleLastAttr int64
+	var symbolProfileVal string
+	var symbolProfileCount int
+	var symbolProfileLastAttr int64
+	var symbolRouteVal string
+	var symbolRouteCount int
+	var symbolRouteLastAttr int64
 	nsymbol := symbolAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsymbol; attrJ++ {
 		for membID := range symbolMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -593,6 +621,20 @@ func llmCallReadRow[
 				}
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolAdmissionRuleVal = val
+			case kindLlmCallProfile:
+				if symbolProfileLastAttr != attrJ+1 {
+					symbolProfileLastAttr = attrJ + 1
+					symbolProfileCount++
+				}
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolProfileVal = val
+			case kindLlmCallRoute:
+				if symbolRouteLastAttr != attrJ+1 {
+					symbolRouteLastAttr = attrJ + 1
+					symbolRouteCount++
+				}
+				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				symbolRouteVal = val
 			}
 		}
 	}
@@ -679,6 +721,24 @@ func llmCallReadRow[
 		row.AdmissionRule.Has = true
 		present = true
 	}
+	if symbolProfileCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "llmCallProfile").Int("got", symbolProfileCount).Errorf("slot symbol@llmCallProfile (field Profile) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolProfileCount)
+		return
+	}
+	if symbolProfileCount == 1 {
+		row.Profile.Val = symbolProfileVal
+		row.Profile.Has = true
+		present = true
+	}
+	if symbolRouteCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "llmCallRoute").Int("got", symbolRouteCount).Errorf("slot symbol@llmCallRoute (field Route) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolRouteCount)
+		return
+	}
+	if symbolRouteCount == 1 {
+		row.Route.Val = symbolRouteVal
+		row.Route.Has = true
+		present = true
+	}
 	// --- stringArray. ---
 	var stringArrayCallIdVal string
 	var stringArrayCallIdCount int
@@ -695,6 +755,9 @@ func llmCallReadRow[
 	var stringArrayHistoryHashVal string
 	var stringArrayHistoryHashCount int
 	var stringArrayHistoryHashLastAttr int64
+	var stringArrayApprovalVal string
+	var stringArrayApprovalCount int
+	var stringArrayApprovalLastAttr int64
 	var stringArrayErrorSlice []string
 	var stringArrayErrorCount int
 	var stringArrayErrorLastAttr int64
@@ -757,6 +820,17 @@ func llmCallReadRow[
 					return
 				}
 				stringArrayHistoryHashVal = val
+			case kindLlmCallApproval:
+				if stringArrayApprovalLastAttr != attrJ+1 {
+					stringArrayApprovalLastAttr = attrJ + 1
+					stringArrayApprovalCount++
+				}
+				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "llmCallApproval").Str("field", "Approval").Errorf("slot stringArray@llmCallApproval (field Approval) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				stringArrayApprovalVal = val
 			case kindLlmCallError:
 				if stringArrayErrorLastAttr != attrJ+1 {
 					stringArrayErrorLastAttr = attrJ + 1
@@ -811,6 +885,15 @@ func llmCallReadRow[
 		row.HistoryHash = stringArrayHistoryHashVal
 		present = true
 	}
+	if stringArrayApprovalCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "llmCallApproval").Int("got", stringArrayApprovalCount).Errorf("slot stringArray@llmCallApproval (field Approval) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayApprovalCount)
+		return
+	}
+	if stringArrayApprovalCount == 1 {
+		row.Approval.Val = stringArrayApprovalVal
+		row.Approval.Has = true
+		present = true
+	}
 	if stringArrayErrorCount > 1 {
 		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "llmCallError").Int("got", stringArrayErrorCount).Errorf("slot stringArray@llmCallError (field Error) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayErrorCount)
 		return
@@ -853,6 +936,9 @@ func llmCallReadRow[
 	var u32ArrayReasoningTokensVal uint32
 	var u32ArrayReasoningTokensCount int
 	var u32ArrayReasoningTokensLastAttr int64
+	var u32ArrayTierVal uint32
+	var u32ArrayTierCount int
+	var u32ArrayTierLastAttr int64
 	nu32Array := u32ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nu32Array; attrJ++ {
 		for membID := range u32ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -978,6 +1064,17 @@ func llmCallReadRow[
 					return
 				}
 				u32ArrayReasoningTokensVal = val
+			case kindLlmCallTier:
+				if u32ArrayTierLastAttr != attrJ+1 {
+					u32ArrayTierLastAttr = attrJ + 1
+					u32ArrayTierCount++
+				}
+				val, valErr := u32ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "llmCallTier").Str("field", "Tier").Errorf("slot u32Array@llmCallTier (field Tier) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				u32ArrayTierVal = val
 			}
 		}
 	}
@@ -1071,6 +1168,14 @@ func llmCallReadRow[
 	if u32ArrayReasoningTokensCount == 1 {
 		row.ReasoningTokens.Val = u32ArrayReasoningTokensVal
 		row.ReasoningTokens.Has = true
+		present = true
+	}
+	if u32ArrayTierCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u32Array").Str("membership", "llmCallTier").Int("got", u32ArrayTierCount).Errorf("slot u32Array@llmCallTier (field Tier) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u32ArrayTierCount)
+		return
+	}
+	if u32ArrayTierCount == 1 {
+		row.Tier = u32ArrayTierVal
 		present = true
 	}
 	// --- u64Array. ---

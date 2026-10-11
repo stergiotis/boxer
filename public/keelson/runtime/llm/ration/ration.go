@@ -116,13 +116,18 @@ const (
 	QuantityReasoningTokens   QuantityE = "tokens.reasoning"
 	// QuantityWallMs is the wall time a call took, in milliseconds.
 	QuantityWallMs QuantityE = "wall_ms"
+	// QuantityBytesSent is the bytes of a request that left the cell for
+	// a remote route: the exit budget's quantity (ADR-0312 §SD5), charged
+	// only when the route is outside the cell, so a budget on it bounds
+	// what a task can move out.
+	QuantityBytesSent QuantityE = "bytes.sent"
 )
 
 // KnownQuantities lists the quantities the model service charges, in the
 // order tables show them.
 var KnownQuantities = []QuantityE{
 	QuantityCalls, QuantityInputTokens, QuantityOutputTokens, QuantityTotalTokens,
-	QuantityCachedInputTokens, QuantityReasoningTokens, QuantityWallMs,
+	QuantityCachedInputTokens, QuantityReasoningTokens, QuantityWallMs, QuantityBytesSent,
 }
 
 // Usage is what a call used, by quantity. A quantity the provider did not

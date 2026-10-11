@@ -23,6 +23,14 @@ type wireRequest struct {
 	V           uint8  `json:"v"`
 	Purpose     string `json:"purpose,omitempty"`
 	Sensitivity uint8  `json:"sensitivity,omitempty"`
+	// Tier is the content's TLP tier (ADR-0312 §SD2); 0 is CLEAR.
+	Tier uint8 `json:"tier,omitempty"`
+	// Profile and Route are the caller's harness profile and route ids
+	// (ADR-0310 §SD4); Approval the journal key of an approved exit
+	// (ADR-0312 §SD3).
+	Profile  string `json:"profile,omitempty"`
+	Route    string `json:"route,omitempty"`
+	Approval string `json:"approval,omitempty"`
 
 	Messages       []openaichat.Message       `json:"messages"`
 	Temperature    *float32                   `json:"temperature,omitempty"`
@@ -125,6 +133,14 @@ type wireReply struct {
 	RetryAfterNs int64           `json:"retry_after_ns,omitempty"`
 	QueuedNs     int64           `json:"queued_ns,omitempty"`
 	Remaining    []wireRemaining `json:"remaining,omitempty"`
+	// ApprovalPath, Sink and Tier say a refusal is an exit above the
+	// route's clearance that the named path may approve (ADR-0312 §SD3);
+	// Digest is the content digest of the request bytes the route
+	// refused, for the approval entry to record what was approved.
+	ApprovalPath string `json:"approval_path,omitempty"`
+	Sink         string `json:"sink,omitempty"`
+	Tier         string `json:"tier_name,omitempty"`
+	Digest       string `json:"digest,omitempty"`
 }
 
 // The failure kinds a reply can name, mapped back onto openaichat's

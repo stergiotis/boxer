@@ -15,9 +15,13 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/stergiotis/boxer/public/functional/option"
+	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/cell"
+	"github.com/stergiotis/boxer/public/keelson/runtime/harness"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm/ration"
+	"github.com/stergiotis/boxer/public/keelson/runtime/llm/tokenmeter"
 	"github.com/stergiotis/boxer/public/keelson/runtime/loopback"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
@@ -37,8 +41,12 @@ type Config struct {
 	MaxTokens int32
 	// ContextTokens is the model's context size as the deployment states
 	// it; zero asks the endpoint's model list once (ProbeContextTokens),
-	// unless Client replaces the endpoint.
+	// unless Client replaces the endpoint or Route declares one.
 	ContextTokens int32
+	// Route is the endpoint's declared capabilities (ADR-0310 §SD4); the
+	// zero value is the client's unconditional behaviour, and a route that
+	// declares no context size leaves the probe as the fallback.
+	Route openaichat.Route
 	// Timeout bounds one completion on the service side.
 	Timeout time.Duration
 	// TrustedHosts are endpoint hosts treated like loopback by the
@@ -69,6 +77,14 @@ type Config struct {
 	// Ledger, when set, replaces the ledger the service would build — a
 	// test's, with its own clock.
 	Ledger *ration.Ledger
+	// Cell is the deployment's declared boundary (ADR-0307 §SD1): the
+	// route's clearance and the tier confined content carries at the
+	// sensitivity wall (ADR-0312 §SD2). Nil is cell.Defaults, the
+	// compile-date walls in tiers.
+	Cell *cell.Declaration
+	// Approvals verifies the approval key of a resent exit against the
+	// run journal (ADR-0312 §SD3). Nil refuses every approved exit.
+	Approvals ApprovalCheckerI
 }
 
 // ConfigFromEnv resolves the config from the ADR-0009 registry.
@@ -79,8 +95,28 @@ func ConfigFromEnv() (cfg Config) {
 		TrustedHosts: ParseTrustedHosts(TrustedHosts.Get()),
 		Moderators:   ParseTrustedHosts(Moderators.Get()), Unruled: UnruledE(Unruled.Get()),
 	}
+	decl := cell.FromEnv(cfg.TrustedHosts)
+	cfg.Cell = &decl
 	return
 }
+
+// cellOf is the service's declaration: the config's, or the defaults, with
+// the route's host and locality filled in.
+func (inst *Service) cellOf() (d cell.Declaration) {
+	d = cell.Defaults()
+	if inst.cfg.Cell != nil {
+		d = *inst.cfg.Cell
+	}
+	if d.TrustedHosts == nil {
+		d.TrustedHosts = inst.cfg.TrustedHosts
+	}
+	d.ModelHost, d.ModelLocal = inst.host, inst.local
+	return
+}
+
+// Cell is the declaration the service enforces, with its route filled in,
+// for keelson('sinks').
+func (inst *Service) Cell() cell.Declaration { return inst.cellOf() }
 
 // ParseTrustedHosts splits TrustedHosts' value, and Moderators'.
 func ParseTrustedHosts(s string) (hosts []string) {
@@ -154,6 +190,10 @@ type Service struct {
 	// moderatorTasks are the agent tasks each moderator's own calls were
 	// charged to: rules on them hold the moderator too (ADR-0300 §SD7).
 	moderatorTasks map[app.AppIdT]map[string]bool
+	// pending holds the exits refused for the person's approval, by call
+	// id, for ApprovalTTL (approval.go).
+	pending          *pendingExits
+	approvalsUnwired sync.Once
 }
 
 // NewService constructs and subscribes a Service. The caller MUST invoke
@@ -170,7 +210,7 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 		cfg.Timeout = DefaultTimeout
 	}
 	s = &Service{cfg: cfg, log: log.With().Str("app", string(ServiceAppId)).Logger(), seen: map[string]seen{}, running: map[cancelKey]context.CancelFunc{},
-		active: map[string]activeCall{}, moderatorTasks: map[app.AppIdT]map[string]bool{}, ledger: cfg.Ledger}
+		active: map[string]activeCall{}, moderatorTasks: map[app.AppIdT]map[string]bool{}, ledger: cfg.Ledger, pending: newPendingExits()}
 	if s.ledger == nil {
 		s.ledger = ration.NewLedger()
 	}
@@ -198,7 +238,7 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 			// No retry policy on purpose: this backs interactive gestures,
 			// and a failed attempt should surface as a line the reader can
 			// act on rather than as half a minute of silent backoff.
-			s.client, err = openaichat.NewClient(cfg.Endpoint, cfg.ApiKey)
+			s.client, err = openaichat.NewClient(cfg.Endpoint, cfg.ApiKey, openaichat.WithRoute(cfg.Route))
 			if err != nil {
 				return nil, err
 			}
@@ -206,6 +246,8 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, cfg Config) (s *Service
 	}
 	if cfg.Configured() {
 		switch {
+		case cfg.Route.ContextTokens > 0:
+			s.context.Store(&contextSize{tokens: cfg.Route.ContextTokens, source: "route " + cfg.Route.Id})
 		case cfg.ContextTokens > 0:
 			s.context.Store(&contextSize{tokens: cfg.ContextTokens, source: "BOXER_LLM_CONTEXT_TOKENS"})
 		case cfg.Client == nil:
@@ -361,6 +403,10 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 		ToolsDigest:  toolsDigest(req.Tools),
 		Conversation: req.Conversation, Turn: req.Turn, Round: int(req.Round), ParentCallId: req.ParentCallId,
 		OmitFrom: int(req.OmitFrom), OmitTo: int(req.OmitTo), RetainAsked: retained,
+		Profile: req.Profile, Route: req.Route, Tier: req.Tier,
+	}
+	if rec.Route == "" {
+		rec.Route = inst.cfg.Route.Id
 	}
 	// The call's messages reach the trail whether it is answered, refused or
 	// fails (ADR-0277 §SD3); a retained request adds their text (ADR-0264).
@@ -370,13 +416,27 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 		inst.refuse(msg, "a retained request names its conversation", rec, t)
 		return
 	}
-	for _, m := range req.Messages {
-		rec.PromptBytes += len(m.Content)
-		// Attached images are prompt too, and usually most of its bytes.
-		for _, img := range m.Images {
-			rec.PromptBytes += len(img.Data)
-		}
+	maxTokens := req.MaxTokens
+	if maxTokens <= 0 {
+		maxTokens = inst.cfg.MaxTokens
 	}
+	rec.MaxTokens = maxTokens
+	creq := openaichat.CompletionRequest{
+		ModelId: inst.cfg.Model, Messages: req.Messages, Temperature: req.Temperature, MaxTokens: maxTokens,
+		Seed: req.Seed, Stop: req.Stop, EnableThinking: req.EnableThinking, Tools: req.Tools,
+		ToolChoice: req.ToolChoice, ResponseFormat: req.ResponseFormat, Extra: extra,
+	}
+	// The prompt's size is the request body as the route sends it: the
+	// messages and their images, the tool schemas, the arguments of earlier
+	// tool calls, the response format and the provider-specific extra. It
+	// is what the exit budget reserves (ADR-0312 §SD5), what the canaries
+	// read (§SD6) and what an approval binds to (§SD3).
+	body, berr := inst.encodeRequest(creq)
+	if berr != nil {
+		inst.refuse(msg, "malformed request: "+berr.Error(), rec, t)
+		return
+	}
+	rec.PromptBytes = len(body)
 	if inst.cfg.Retain.atLeast(RetainRing) {
 		rec.Prompt = joinMessages(req.Messages)
 	}
@@ -409,16 +469,72 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 		}
 	}
 	// The sensitivity wall (ADR-0254 §SD3, the ADR-0145 rule): confined
-	// content leaves for a loopback provider and nowhere else.
+	// content leaves for a loopback provider and nowhere else, whatever
+	// the declaration says. The tier wall below is the generalisation
+	// for labelled content; it does not loosen this one (ADR-0307 §SD6:
+	// a managed host is the stricter case), so no approval path opens
+	// sealed data to a remote route.
 	if rec.Sensitivity == queryengine.SensitivityConfined && !inst.local {
 		inst.refuse(msg, "the content derives from sealed data that must not leave this box, and "+inst.host+" is neither loopback nor a trusted host", rec, t)
 		return
 	}
-	maxTokens := req.MaxTokens
-	if maxTokens <= 0 {
-		maxTokens = inst.cfg.MaxTokens
+	// The same wall in tiers (ADR-0312 §SD2): the route is a sink with a
+	// clearance when it is outside the cell, a ceiling. The tier on the
+	// row is the one the wall saw, confined content raised to the
+	// confined tier.
+	decl := inst.cellOf()
+	tier := decl.TierOf(agentrun.TierE(req.Tier), rec.Sensitivity == queryengine.SensitivityConfined)
+	rec.Tier = uint8(tier)
+	clearance := decl.RouteClearance(inst.cfg.Endpoint)
+	// An approved resend holds its refused exit until the bytes leave or
+	// a check below the wall refuses it; a refusal gives it back, so the
+	// person is not asked again for a budget or a trail that recovers.
+	var claim approvalClaim
+	left := false
+	defer func() {
+		if claim.callId == "" {
+			return
+		}
+		if left {
+			inst.pending.consume(claim.callId)
+		} else {
+			inst.pending.release(claim.callId)
+		}
+	}()
+	if tier > clearance {
+		reason := "the content is " + tier.String() + ", above the clearance (" + clearance.String() + ") of the model route " + inst.host + ", a sink of the cell"
+		sink := cell.Sink{Kind: cell.SinkKindModelRoute, Edge: inst.host, Clearance: clearance}
+		d, path, why := cell.Decide(agentrun.Label{Tier: tier}, sink, decl.Approvals)
+		switch {
+		case d == harness.DecisionAsk && req.Approval != "":
+			// The caller journaled the approval before resending
+			// (ADR-0312 §SD3); the route verifies it names this call,
+			// this sink and these bytes before anything leaves, and the
+			// key goes on the row for law L33.
+			var verr error
+			if claim, verr = inst.verifyApproval(req.Approval, body, tier, sink, msg.Sender, msg.SenderInstance, req.Conversation); verr != nil {
+				inst.refuse(msg, reason+"; the approval "+req.Approval+" does not cover it: "+verr.Error(), rec, t)
+				return
+			}
+			rec.Approval = req.Approval
+		case d == harness.DecisionAsk:
+			digest := requestDigest(body)
+			inst.pending.remember(rec.CallId, pendingExit{digest: digest, tier: tier, sink: sink, sender: msg.Sender, instance: msg.SenderInstance, run: req.Conversation}, time.Now())
+			inst.refuseForApproval(msg, reason+"; "+why, path.String(), sink.Kind.String()+" "+sink.Edge, tier.String(), digest, rec, t)
+			return
+		default:
+			inst.refuse(msg, reason+"; "+why, rec, t)
+			return
+		}
 	}
-	rec.MaxTokens = maxTokens
+	// The canaries (ADR-0312 §SD6, law L10): a planted token or a protected
+	// body of a scope above the route's clearance in the bytes about to
+	// leave, or in the strings they encode, refuses the exit whatever the
+	// label said.
+	if leaks := decl.Leaks(leakSurface(body, creq), clearance); len(leaks) > 0 {
+		inst.refuse(msg, "the request carries a canary of scope "+strings.Join(leaks, ", ")+" above the clearance ("+clearance.String()+") of the model route "+inst.host, rec, t)
+		return
+	}
 	// The call's bound starts here, so time spent waiting in the queue
 	// counts against it, and a cancel reaches a call still waiting.
 	ctx, cancel := context.WithTimeout(inst.base, inst.cfg.Timeout)
@@ -454,8 +570,14 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 	defer cancelCause(nil)
 	inst.track(rec.CallId, activeCall{chain: chain, cancel: cancelCause})
 	defer inst.untrack(rec.CallId)
+	// The exit budget's quantity (ADR-0312 §SD5): the bytes that leave the
+	// cell, reserved exactly so the call that would cross it is refused.
+	var bytesOut int64
+	if !inst.local {
+		bytesOut = int64(len(body))
+	}
 	decision, ticket := inst.ledger.Admit(ctx, ration.Request{Chain: chain, Class: class,
-		EstimatedInput: estimateInput(req.Messages), MaxOutput: int64(maxTokens)})
+		EstimatedInput: tokenmeter.Estimate(req.Messages), MaxOutput: int64(maxTokens), BytesOut: bytesOut})
 	rec.Admission, rec.AdmissionRule, rec.Queued = decision.Outcome.String(), decision.Rule, decision.Queued
 	if decision.Outcome == ration.OutcomeRefused {
 		inst.refuseAdmission(msg, decision, rec, t, chain, class)
@@ -470,7 +592,7 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 	}()
 	if decision.MaxOutput > 0 && decision.MaxOutput < int64(maxTokens) {
 		maxTokens = int32(decision.MaxOutput)
-		rec.MaxTokens = maxTokens
+		rec.MaxTokens, creq.MaxTokens = maxTokens, maxTokens
 	}
 	// Written ahead: what the request adds to the conversation is on the
 	// trail before the request leaves the machine, so a process that dies
@@ -482,16 +604,17 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 		return
 	}
 	t.notAhead = !ahead
+	left = true
 	started := time.Now()
-	resp, cerr := inst.client.Complete(ctx, openaichat.CompletionRequest{
-		ModelId: inst.cfg.Model, Messages: req.Messages, Temperature: req.Temperature, MaxTokens: maxTokens,
-		Seed: req.Seed, Stop: req.Stop, EnableThinking: req.EnableThinking, Tools: req.Tools,
-		ToolChoice: req.ToolChoice, ResponseFormat: req.ResponseFormat, Extra: extra,
-	})
+	resp, cerr := inst.client.Complete(ctx, creq)
 	rec.Elapsed = time.Since(started)
 	rec.InputTokens, rec.OutputTokens = resp.InputTokens, resp.OutputTokens
 	rec.CachedInputTokens, rec.ReasoningTokens = resp.CachedInputTokens, resp.ReasoningTokens
 	used = usageOf(resp, rec.Elapsed)
+	if bytesOut > 0 {
+		// Settled as reserved: what left the cell.
+		used[ration.QuantityBytesSent] = bytesOut
+	}
 	settled = true
 	inst.publishThresholds(inst.ledger.Settle(ticket, used))
 	rec.CompletionBytes = len(resp.Content)
@@ -550,6 +673,18 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 // is a call the table should show, and a retained turn's messages are kept
 // with it (ADR-0264 §SD4).
 func (inst *Service) refuse(msg *app.Msg, reason string, rec CallRecord, t *turn) {
+	inst.refuseWith(msg, reason, rec, t, wireReply{}, "llm: refused")
+}
+
+// refuseForApproval is refuse for an exit above the route's clearance
+// that the named path may approve: the reply says so, typed.
+func (inst *Service) refuseForApproval(msg *app.Msg, reason string, path string, sink string, tier string, digest string, rec CallRecord, t *turn) {
+	inst.refuseWith(msg, reason, rec, t, wireReply{ApprovalPath: path, Sink: sink, Tier: tier, Digest: digest}, "llm: refused pending approval")
+}
+
+// refuseWith records the refusal and answers with rep, its reason, kind
+// and call id filled in.
+func (inst *Service) refuseWith(msg *app.Msg, reason string, rec CallRecord, t *turn, rep wireReply, logMsg string) {
 	rec.Refused, rec.Error = true, reason
 	if rec.At.IsZero() {
 		rec.At, rec.Sender, rec.SenderInstance = time.Now().UTC(), msg.Sender, msg.SenderInstance
@@ -558,8 +693,9 @@ func (inst *Service) refuse(msg *app.Msg, reason string, rec CallRecord, t *turn
 		rec.CallId = inst.mintCallId()
 	}
 	inst.record(rec, t)
-	inst.log.Warn().Str("sender", string(msg.Sender)).Str("purpose", rec.Purpose).Str("reason", reason).Msg("llm: refused")
-	inst.reply(msg.Reply, wireReply{ErrorKind: errKindRefused, Reason: reason, CallId: rec.CallId})
+	inst.log.Warn().Str("sender", string(msg.Sender)).Str("purpose", rec.Purpose).Str("reason", reason).Str("path", rep.ApprovalPath).Msg(logMsg)
+	rep.ErrorKind, rep.Reason, rep.CallId = errKindRefused, reason, rec.CallId
+	inst.reply(msg.Reply, rep)
 }
 
 // refuseAdmission is refuse for a call the metering rules refused: the

@@ -41,6 +41,13 @@ type Request struct {
 	// SensitivityConfined when the URL derives from a sealed dataset. The
 	// caller's declaration; the service cannot see provenance.
 	Sensitivity queryengine.SensitivityE
+	// Tier is the request's TLP tier (ADR-0312 §SD4, as agentrun.TierE),
+	// checked against the destination's clearance; zero is CLEAR, and
+	// confined content carries at least the confined tier. Declaring it
+	// is the caller's duty: the service cannot see provenance. No caller
+	// in the tree sets it yet, so every fetch is CLEAR at this wall and
+	// only the sensitivity bit refuses.
+	Tier uint8
 	// OnBehalfOf is set when the fetch is work an agent's call started: the
 	// service then refuses a destination the task's grant does not list
 	// (ADR-0269 §SD6). Carry OperationCall.OnBehalfOf here.
@@ -81,7 +88,7 @@ func (inst *Client) Fetch(ctx context.Context, destination string, r Request) (r
 	if !ValidDestinationName(destination) {
 		return res, eb.Build().Str("destination", destination).Errorf("httpegress: invalid destination name")
 	}
-	req := wireRequest{V: wireVersion, Method: r.Method, URL: r.URL, Purpose: r.Purpose, Sensitivity: uint8(r.Sensitivity)}
+	req := wireRequest{V: wireVersion, Method: r.Method, URL: r.URL, Purpose: r.Purpose, Sensitivity: uint8(r.Sensitivity), Tier: r.Tier}
 	if r.OnBehalfOf != nil {
 		req.OnBehalfTask, req.OnBehalfEpoch, req.OnBehalfCall = r.OnBehalfOf.Task, r.OnBehalfOf.Epoch, r.OnBehalfOf.Call
 	}

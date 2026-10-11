@@ -13,8 +13,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/audit"
+	"github.com/stergiotis/boxer/public/keelson/runtime/cell"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 )
@@ -270,4 +272,33 @@ func TestCloseDuringAFetch(t *testing.T) {
 	svc.Close()
 	close(release)
 	require.Error(t, <-done, "the reply cannot reach a closed service's inbox")
+}
+
+// The wall in tiers (ADR-0312 §SD4): a remote destination clears GREEN by
+// default, so an AMBER fetch is refused naming the sink and a GREEN one
+// goes; a loopback destination takes RED; a declared clearance opens it.
+func TestTheWallReadsATierAgainstTheDestinationsClearance(t *testing.T) {
+	srv, _ := origin(t)
+	remote := spec("remote", Destination{Prefixes: []string{"https://tiles.example/"}})
+	cli, svc, _ := serve(t, []DestinationSpec{spec("tiles", Destination{Prefixes: []string{srv.URL + "/tiles/"}}), remote}, "tiles", "remote")
+	_, err := cli.Fetch(context.Background(), "remote", Request{URL: "https://tiles.example/1", Tier: uint8(agentrun.TierAmber)})
+	var refused *RefusedError
+	require.True(t, errors.As(err, &refused), "%v", err)
+	assert.Contains(t, refused.Reason, "AMBER, above the clearance (GREEN) of destination remote")
+	_, err = cli.Fetch(context.Background(), "tiles", Request{URL: srv.URL + "/tiles/1", Tier: uint8(agentrun.TierRed)})
+	require.NoError(t, err, "inside the cell nothing is withheld")
+	require.Len(t, svc.Calls(), 2)
+	assert.True(t, svc.Calls()[0].Refused)
+
+	open := cell.Defaults()
+	open.Clearances.Egress = agentrun.TierAmber
+	bus := inprocbus.NewInst(zerolog.Nop())
+	osvc, err := NewService(bus, zerolog.Nop(), Config{Destinations: []DestinationSpec{spec("tiles", Destination{Prefixes: []string{srv.URL + "/tiles/"}}), remote}, Cell: &open})
+	require.NoError(t, err)
+	t.Cleanup(osvc.Close)
+	ocli := NewClient(bus.NewClient(appId, ClientCaps("remote", "test")))
+	ocli.Timeout = 5 * time.Second
+	_, err = ocli.Fetch(context.Background(), "remote", Request{URL: "https://tiles.example/1", Tier: uint8(agentrun.TierAmberStrict)})
+	require.True(t, errors.As(err, &refused), "%v", err)
+	assert.Contains(t, refused.Reason, "AMBER+STRICT, above the clearance (AMBER)")
 }

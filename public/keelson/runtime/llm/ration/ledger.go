@@ -78,6 +78,12 @@ type Request struct {
 	EstimatedInput int64
 	// MaxOutput is the call's output ceiling; what a clamp lowers.
 	MaxOutput int64
+	// BytesOut is the exact size of the request body that leaves the cell
+	// (ADR-0312 §SD5), reserved at admission as QuantityBytesSent so the
+	// call that would cross an exit budget is refused rather than
+	// admitted and overshooting (law L19); zero for a route inside the
+	// cell, which sends nothing out.
+	BytesOut int64
 }
 
 // Option configures a Ledger.
@@ -382,10 +388,14 @@ func (inst *Ledger) used(r Rule, a Account, now time.Time) (used int64) {
 
 // need is what a call is expected to use with output ceiling maxOut.
 func need(r Request, maxOut int64) (u Usage) {
-	return Usage{
+	u = Usage{
 		QuantityCalls: 1, QuantityInputTokens: r.EstimatedInput, QuantityOutputTokens: maxOut,
 		QuantityTotalTokens: r.EstimatedInput + maxOut,
 	}
+	if r.BytesOut > 0 {
+		u[QuantityBytesSent] = r.BytesOut
+	}
+	return
 }
 
 // check decides a call against the rules without changing anything.

@@ -92,6 +92,22 @@ type Request struct {
 	// SensitivityConfined when any of it derives from a sealed dataset.
 	// The caller's declaration; the service cannot see provenance.
 	Sensitivity queryengine.SensitivityE
+	// Tier is the content's TLP tier (ADR-0311 §SD1, as agentrun.TierE):
+	// the caller's declaration, checked against the route's clearance at
+	// the sensitivity wall (ADR-0312 §SD2). Zero is CLEAR; confined
+	// content carries at least the deployment's confined tier whatever is
+	// declared.
+	Tier uint8
+	// Profile names the harness profile the caller runs under and Route
+	// the model route it asks for, both recorded on the call's row
+	// (ADR-0310 §SD4, §SD7); empty is the host's one route. Approval is
+	// the key of the journal's approval entry when the content is above
+	// the route's clearance and the person approved the exit (ADR-0312
+	// §SD3); the service lets such a call through where its policy asks
+	// the person, and records the key.
+	Profile  string
+	Route    string
+	Approval string
 
 	Messages       []openaichat.Message
 	Temperature    *float32
@@ -202,9 +218,23 @@ type RefusedError struct {
 	Refusal    ration.RefusalE
 	Rule       string
 	RetryAfter time.Duration
+	// ApprovalPath is set when the content is above the route's clearance
+	// and the cell's policy names a path for the exit (ADR-0312 §SD3):
+	// "person", the one path the route can verify today (the organisation
+	// path denies until an approver outside the host is wired). Sink names
+	// the edge, Tier the content's tier and Digest the request bytes the
+	// route refused; a request resent, byte for byte, with Approval set to
+	// the journal key of the approval entry goes through once.
+	ApprovalPath string
+	Sink         string
+	Tier         string
+	Digest       string
 }
 
 func (inst *RefusedError) Error() string { return "llm: refused: " + inst.Reason }
+
+// NeedsApproval says the refusal is an exit the person may approve.
+func (inst *RefusedError) NeedsApproval() bool { return inst.ApprovalPath == "person" }
 
 // CallError is a provider failure: the call reached the endpoint and did
 // not come back answered. Kind is the failure class as the service named
@@ -284,7 +314,7 @@ func (inst *Client) Complete(ctx context.Context, r Request) (res Response, err 
 		return res, eh.Errorf("llm: before request: %w", err)
 	}
 	req := wireRequest{
-		V: wireVersion, Purpose: r.Purpose, Sensitivity: uint8(r.Sensitivity),
+		V: wireVersion, Purpose: r.Purpose, Sensitivity: uint8(r.Sensitivity), Tier: r.Tier, Profile: r.Profile, Route: r.Route, Approval: r.Approval,
 		Messages: r.Messages, Temperature: r.Temperature, MaxTokens: r.MaxTokens, Seed: r.Seed, Stop: r.Stop,
 		EnableThinking: r.EnableThinking, Tools: r.Tools, ToolChoice: r.ToolChoice, ResponseFormat: r.ResponseFormat,
 		CancelKey: strconv.FormatUint(rand.Uint64(), 36),
@@ -414,7 +444,7 @@ func failureOf(w wireReply) (err error) {
 	switch w.ErrorKind {
 	case errKindRefused, "":
 		return &RefusedError{Reason: w.Reason, CallId: w.CallId, Refusal: ration.ParseRefusal(w.Refusal), Rule: w.Rule,
-			RetryAfter: time.Duration(w.RetryAfterNs)}
+			RetryAfter: time.Duration(w.RetryAfterNs), ApprovalPath: w.ApprovalPath, Sink: w.Sink, Tier: w.Tier, Digest: w.Digest}
 	case errKindAuth:
 		sentinel = openaichat.ErrAuth
 	case errKindModelNotFound:

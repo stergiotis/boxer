@@ -50,6 +50,41 @@ type DestinationSpec struct {
 
 var destinationNameRe = regexp.MustCompile(`^[a-z0-9_-]+$`)
 
+// DeclaredDestination is a registered destination as the cell declaration
+// lists it (ADR-0312 §SD1): its name, and whether every prefix is
+// loopback, in which case it is inside the cell and no sink.
+type DeclaredDestination struct {
+	Name  string
+	Local bool
+}
+
+// DeclaredDestinations resolves every registered destination for the
+// cell declaration, before any service starts: a destination that fails
+// to resolve is listed as remote, the conservative reading, since the
+// service refuses it anyway.
+func DeclaredDestinations() (out []DeclaredDestination) {
+	for _, spec := range Registered() {
+		d := DeclaredDestination{Name: spec.Name}
+		if spec.Resolve != nil {
+			if dest, err := spec.Resolve(); err == nil {
+				var ps []prefix
+				ok := len(dest.Prefixes) > 0
+				for _, raw := range dest.Prefixes {
+					p, perr := parsePrefix(raw)
+					if perr != nil {
+						ok = false
+						break
+					}
+					ps = append(ps, p)
+				}
+				d.Local = ok && localPrefixes(ps)
+			}
+		}
+		out = append(out, d)
+	}
+	return
+}
+
 // ValidDestinationName says name can be a subject token.
 func ValidDestinationName(name string) (ok bool) { return destinationNameRe.MatchString(name) }
 

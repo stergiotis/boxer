@@ -18,6 +18,9 @@ type wireRequest struct {
 	URL         string `json:"url"`
 	Purpose     string `json:"purpose,omitempty"`
 	Sensitivity uint8  `json:"sensitivity,omitempty"`
+	// Tier is the request's TLP tier (ADR-0312 §SD4) as the caller
+	// declares it; 0 is CLEAR, which is what every caller sends today.
+	Tier uint8 `json:"tier,omitempty"`
 	// DeadlineUnixNanos carries the caller's ctx deadline, since the
 	// handler has no ctx of its own. 0 means none.
 	DeadlineUnixNanos int64 `json:"deadline_ns,omitempty"`

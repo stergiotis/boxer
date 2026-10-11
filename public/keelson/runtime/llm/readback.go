@@ -52,5 +52,6 @@ func RecordOf(ent *trail.TrailEntity) (rec CallRecord) {
 	}
 	rec.Admission, rec.AdmissionRule = row.Admission.Val, row.AdmissionRule.Val
 	rec.Queued = time.Duration(row.QueuedMs.Val) * time.Millisecond
+	rec.Profile, rec.Route, rec.Tier, rec.Approval = row.Profile.Val, row.Route.Val, uint8(min(row.Tier, 255)), row.Approval.Val
 	return
 }

@@ -73,4 +73,13 @@ type LlmCall struct {
 	Admission     option.Option[string] `lw:"llmCallAdmission,symbol"`
 	AdmissionRule option.Option[string] `lw:"llmCallAdmissionRule,symbol"`
 	QueuedMs      option.Option[uint64] `lw:"llmCallQueuedMs,u64Array,unit"`
+	// Profile and Route are the harness profile and route the call ran
+	// under (ADR-0310 §SD4), absent for a caller that declared none. Tier
+	// is the content's TLP tier as the wall saw it (ADR-0312 §SD2), and
+	// Approval the key of the journal's approval entry an exit above the
+	// route's clearance went under (§SD3), what law L33 joins on.
+	Profile  option.Option[string] `lw:"llmCallProfile,symbol"`
+	Route    option.Option[string] `lw:"llmCallRoute,symbol"`
+	Tier     uint32                `lw:"llmCallTier,u32Array,unit"`
+	Approval option.Option[string] `lw:"llmCallApproval,stringArray,unit"`
 }

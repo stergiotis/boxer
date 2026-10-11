@@ -108,22 +108,6 @@ func (inst *Service) classOf(instance uint64) (c ration.ClassE) {
 	return ration.ClassShown
 }
 
-// estimateInput is the input tokens a request is expected to use: about
-// four bytes of text a token, and a flat allowance per image.
-func estimateInput(ms []openaichat.Message) (n int64) {
-	var text int64
-	for _, m := range ms {
-		text += int64(len(m.Content))
-		n += int64(len(m.Images)) * imageTokenEstimate
-	}
-	n += text / 4
-	return
-}
-
-// imageTokenEstimate is what an attached image is reserved as; providers
-// count images in ways a byte size does not predict.
-const imageTokenEstimate = 1000
-
 // usageOf is what a finished call used, as the provider reported it.
 func usageOf(resp openaichat.CompletionResponse, elapsed time.Duration) (u ration.Usage) {
 	u = ration.Usage{

@@ -15,7 +15,9 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/cell"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
 	"github.com/stergiotis/boxer/public/keelson/runtime/trail"
@@ -34,6 +36,18 @@ type Config struct {
 	// as a row, beside the in-process record. Nil, or a recorder without a
 	// backend, keeps the record alone.
 	Trail *trail.Recorder
+	// Cell is the deployment's declared boundary (ADR-0307 §SD1): a
+	// destination outside it is a sink with the declared egress clearance
+	// (ADR-0312 §SD1). Nil is cell.Defaults.
+	Cell *cell.Declaration
+}
+
+// cellOf is the service's declaration, or the defaults.
+func (inst *Service) cellOf() (d cell.Declaration) {
+	if inst.cfg.Cell != nil {
+		return *inst.cfg.Cell
+	}
+	return cell.Defaults()
 }
 
 // DefaultKeepCalls bounds the in-process call record. A screenful of tiles
@@ -249,6 +263,19 @@ func (inst *Service) handleRequest(msg *app.Msg) {
 	// nowhere else.
 	if rec.Sensitivity == queryengine.SensitivityConfined && !r.local {
 		inst.refuse(msg, "the request derives from sealed data that must not leave this box, and destination "+name+" is not loopback", rec)
+		return
+	}
+	// The same wall in tiers (ADR-0312 §SD4): the destination is a sink
+	// with a clearance when it is outside the cell; the tier the caller
+	// declares must not exceed it. Sealed data never reaches this line
+	// for a remote destination (the wall above refused it), so the
+	// confined raising only matters for a loopback destination, where
+	// the clearance is RED and it never refuses: this wall is the
+	// labelled content's, the same shape as the model route's.
+	decl := inst.cellOf()
+	tier := decl.TierOf(agentrun.TierE(req.Tier), rec.Sensitivity == queryengine.SensitivityConfined)
+	if clearance := decl.EgressClearance(r.local); tier > clearance {
+		inst.refuse(msg, "the request is "+tier.String()+", above the clearance ("+clearance.String()+") of destination "+name+", a sink of the cell", rec)
 		return
 	}
 	if refuse := inst.cfg.Trail.Admit(); refuse != nil {
