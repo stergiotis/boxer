@@ -1125,6 +1125,7 @@ func (inst *LedgerVaulted) Vault() *LedgerVaultStore { return inst.vault }
 // names the ledger's commitments and the vault's component column carry.
 var LedgerVaultComponents = []string{
 	"ledgerNote",
+	"evidenceShredded",
 }
 
 // Split prepares content for the row at ordinal: for each content row the
@@ -1147,6 +1148,13 @@ func (inst *LedgerVaulted) Split(ent *LedgerEntity, ordinal uint64, content []*L
 				return
 			}
 			component = "ledgerNote"
+		}
+		if v.EvidenceShredded.Has {
+			if component != "" {
+				err = eh.Errorf("split: a content row holds more than one vaulted component")
+				return
+			}
+			component = "evidenceShredded"
 		}
 		if component == "" {
 			err = eh.Errorf("split: a content row holds no vaulted component")
@@ -1182,6 +1190,9 @@ func (inst *LedgerVaulted) Append(ctx context.Context, head evidence.Head, ent *
 		b := inst.vault.BeginCtx(ctx, v.ID, v.Ord, v.LedgerVaultEnvelope)
 		if v.LedgerNote.Has {
 			b.AddLedgerNote(v.LedgerNote.Val)
+		}
+		if v.EvidenceShredded.Has {
+			b.AddEvidenceShredded(v.EvidenceShredded.Val)
 		}
 		if v.EvidenceOpening.Has {
 			b.AddEvidenceOpening(v.EvidenceOpening.Val)

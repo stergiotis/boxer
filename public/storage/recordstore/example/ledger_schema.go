@@ -6,6 +6,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonicaltypes/ctabb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	easp "github.com/stergiotis/boxer/public/semistructured/leeway/encodingaspects"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
 )
 
 // GetLedgerSchemaInManipulator builds the evidence-profile reference
@@ -28,21 +29,38 @@ func GetLedgerSchemaInManipulator() (manip *common.TableManipulator, err error) 
 		AddColumnEncodingHints(easp.AspectDeltaEncoding, easp.AspectLightGeneralCompression)
 	manip.PlainValueColumn(common.PlainItemTypeEntityId, "ordinal", ctabb.U64).
 		AddColumnEncodingHints(easp.AspectDeltaEncoding, easp.AspectLightGeneralCompression)
+	// The facts membership specs, and the mixed verbatim name + parameters
+	// channel the shredded component's paths ride on (ADR-0326).
 	specs := []common.MembershipSpecE{
 		common.MembershipSpecLowCardRef,
 		common.MembershipSpecHighCardRef,
 		common.MembershipSpecMixedLowCardRefHighCardParameters,
+		common.MembershipSpecMixedLowCardVerbatimHighCardParameters,
 	}
-	strh := canonicaltypes.PromoteScalarPrim(ctabb.S, canonicaltypes.ScalarModifierHomogenousArray)
+	array := func(ct canonicaltypes.PrimitiveAstNodeI) canonicaltypes.PrimitiveAstNodeI {
+		return canonicaltypes.PromoteScalarPrim(ct, canonicaltypes.ScalarModifierHomogenousArray)
+	}
 	manip.TaggedValueSection("symbol").SectionStreamingGroup("data").AddSectionMembership(specs...).
 		TaggedValueColumn("value", ctabb.S).
 		AddColumnEncodingHints(easp.AspectInterRecordLowCardinality, easp.AspectIntraRecordLowCardinality, easp.AspectLightGeneralCompression)
 	manip.TaggedValueSection("stringArray").SectionStreamingGroup("data").AddSectionMembership(specs...).
-		TaggedValueColumn("value", strh).
+		TaggedValueColumn("value", array(ctabb.S)).
 		AddColumnEncodingHints(easp.AspectLightGeneralCompression)
 	manip.TaggedValueSection("u64Array").SectionStreamingGroup("data").AddSectionMembership(specs...).
-		TaggedValueColumn("value", canonicaltypes.PromoteScalarPrim(ctabb.U64, canonicaltypes.ScalarModifierHomogenousArray)).
+		TaggedValueColumn("value", array(ctabb.U64)).
 		AddColumnEncodingHints(easp.AspectLightGeneralCompression)
+	// The shredder's remaining sections (Evidence.Shredded).
+	manip.TaggedValueSection("i64Array").SectionStreamingGroup("data").AddSectionMembership(specs...).
+		TaggedValueColumn("value", array(ctabb.I64)).
+		AddColumnEncodingHints(easp.AspectLightGeneralCompression)
+	manip.TaggedValueSection("f64Array").SectionStreamingGroup("data").AddSectionMembership(specs...).
+		TaggedValueColumn("value", array(ctabb.F64)).
+		AddColumnEncodingHints(easp.AspectLightGeneralCompression)
+	manip.TaggedValueSection("bool").SectionStreamingGroup("data").AddSectionMembership(specs...).
+		TaggedValueColumn("value", ctabb.B)
+	for _, name := range []naming.StylableName{"null", "emptyObject", "emptyArray"} {
+		manip.TaggedValueSection(name).SectionStreamingGroup("data").AddSectionMembership(specs...)
+	}
 	return
 }
 

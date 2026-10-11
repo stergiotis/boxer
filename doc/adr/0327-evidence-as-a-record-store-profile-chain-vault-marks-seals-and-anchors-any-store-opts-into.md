@@ -375,7 +375,7 @@ is re-recorded in the same commit. No further digest move is scheduled.
 ### Milestones
 
 - **M1 — The evidence package; the canonical wire under shared scaffolding; the canonical item of a stored row (SD1, SD2's first two generator changes).** ✓
-- **M2 — The profile: `Chain`, `Vault`, marks, `WrittenBy`, the shredded component, `storegen`'s options (SD2, SD3, SD4, SD6).**
+- **M2 — The profile: `Chain`, `Vault`, marks, `WrittenBy`, the shredded component, `storegen`'s options (SD2, SD3, SD4, SD6).**  ✓
 - **M3 — The journal on the profile; digests v4; goldens re-recorded (SD9).**
 - **M4 — Seals; the audit event and the forwarder below the runtime; write-ahead for events; `runtime.audit.{app}`; `originBy` (SD5, SD8).**
 - **M5 — Anchors by scope; L32 generic; the verification relations served in-process (SD7).**

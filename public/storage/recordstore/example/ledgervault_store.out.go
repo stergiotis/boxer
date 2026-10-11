@@ -104,6 +104,7 @@ var LedgerVaultMembershipIds = map[string]map[string]uint64{
 	"LedgerNote": {
 		"ledgerNoteText": 9001,
 	},
+	"EvidenceShredded": {},
 	"EvidenceOpening": {
 		"evidenceKindOpening":  9301,
 		"evidenceOpeningValue": 9302,
@@ -130,14 +131,18 @@ type LedgerVaultEntity struct {
 	// LedgerVaultEnvelope is embedded: its pass-through columns read as
 	// promoted entity fields.
 	LedgerVaultEnvelope
-	LedgerNote      option.Option[LedgerNote]
-	EvidenceOpening option.Option[EvidenceOpening]
+	LedgerNote       option.Option[LedgerNote]
+	EvidenceShredded option.Option[EvidenceShredded]
+	EvidenceOpening  option.Option[EvidenceOpening]
 }
 
 // Archetype reports which components the entity carries, in schema order.
 func (inst *LedgerVaultEntity) Archetype() (a []string) {
 	if inst.LedgerNote.Has {
 		a = append(a, "ledgerNote")
+	}
+	if inst.EvidenceShredded.Has {
+		a = append(a, "evidenceShredded")
 	}
 	if inst.EvidenceOpening.Has {
 		a = append(a, "evidenceOpening")
@@ -481,6 +486,18 @@ func (inst *LedgerVaultEntityBuilder) endSection(section string) error {
 		inst.store.dml.GetSectionStringArray().EndSection()
 	case "symbol":
 		inst.store.dml.GetSectionSymbol().EndSection()
+	case "i64Array":
+		inst.store.dml.GetSectionI64Array().EndSection()
+	case "f64Array":
+		inst.store.dml.GetSectionF64Array().EndSection()
+	case "bool":
+		inst.store.dml.GetSectionBool().EndSection()
+	case "null":
+		inst.store.dml.GetSectionNull().EndSection()
+	case "emptyObject":
+		inst.store.dml.GetSectionEmptyObject().EndSection()
+	case "emptyArray":
+		inst.store.dml.GetSectionEmptyArray().EndSection()
 	}
 	return nil
 }
@@ -524,6 +541,50 @@ func (inst *LedgerVaultEntityBuilder) AddLedgerNote(row LedgerNote) *LedgerVault
 		return ledgerNoteEmitSectionStringArray(inst.store.dml.GetSectionStringArray(), row)
 	})
 	inst.ent.LedgerNote = option.Some(row)
+	return inst
+}
+
+// AddEvidenceShredded contributes the EvidenceShredded component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
+func (inst *LedgerVaultEntityBuilder) AddEvidenceShredded(row EvidenceShredded) *LedgerVaultEntityBuilder {
+	if err := inst.buf.StartKind("EvidenceShredded"); err != nil {
+		inst.store.dml.AppendError(err)
+		return inst
+	}
+	inst.buf.Enqueue("stringArray", "EvidenceShredded", func() error {
+		return evidenceShreddedEmitSectionStringArray(inst.store.dml.GetSectionStringArray(), row)
+	})
+	inst.buf.Enqueue("symbol", "EvidenceShredded", func() error {
+		return evidenceShreddedEmitSectionSymbol(inst.store.dml.GetSectionSymbol(), row)
+	})
+	inst.buf.Enqueue("i64Array", "EvidenceShredded", func() error {
+		return evidenceShreddedEmitSectionI64Array(inst.store.dml.GetSectionI64Array(), row)
+	})
+	inst.buf.Enqueue("f64Array", "EvidenceShredded", func() error {
+		return evidenceShreddedEmitSectionF64Array(inst.store.dml.GetSectionF64Array(), row)
+	})
+	inst.buf.Enqueue("bool", "EvidenceShredded", func() error {
+		return evidenceShreddedEmitSectionBool(inst.store.dml.GetSectionBool(), row)
+	})
+	inst.buf.Enqueue("null", "EvidenceShredded", func() error {
+		return evidenceShreddedEmitSectionNull(inst.store.dml.GetSectionNull(), row)
+	})
+	inst.buf.Enqueue("emptyObject", "EvidenceShredded", func() error {
+		return evidenceShreddedEmitSectionEmptyObject(inst.store.dml.GetSectionEmptyObject(), row)
+	})
+	inst.buf.Enqueue("emptyArray", "EvidenceShredded", func() error {
+		return evidenceShreddedEmitSectionEmptyArray(inst.store.dml.GetSectionEmptyArray(), row)
+	})
+	inst.ent.EvidenceShredded = option.Some(row)
 	return inst
 }
 
@@ -631,6 +692,38 @@ func (inst *LedgerVaultStore) IngestLedgerNoteCtx(ctx context.Context, ord uint6
 		err = inst.BeginCtx(ctx, rows[i].ID, ord, LedgerVaultEnvelope{}).AddLedgerNote(rows[i]).Commit()
 		if err != nil {
 			err = eh.Errorf("ingest ledgerNote row %d: %w", i, err)
+			return
+		}
+	}
+	return
+}
+
+// IngestEvidenceShredded buffers one whole entity per row carrying only the
+// EvidenceShredded component, all stamped with ord — rows ship on the next Flush,
+// like every write. The envelope carries the pass-through columns
+// the row binds; the others are written zero — use Begin with a
+// filled envelope to set them. Keys must be distinct within one call (rows
+// share ord, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
+func (inst *LedgerVaultStore) IngestEvidenceShredded(ord uint64, rows []EvidenceShredded) (err error) {
+	return inst.IngestEvidenceShreddedCtx(context.Background(), ord, rows)
+}
+
+// IngestEvidenceShreddedCtx is IngestEvidenceShredded with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *LedgerVaultStore) IngestEvidenceShreddedCtx(ctx context.Context, ord uint64, rows []EvidenceShredded) (err error) {
+	seen := make(map[uint64]struct{}, len(rows))
+	for i := range rows {
+		if _, dup := seen[rows[i].Id]; dup {
+			err = eh.Errorf("ingest evidenceShredded row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].Id)
+			return
+		}
+		seen[rows[i].Id] = struct{}{}
+		err = inst.BeginCtx(ctx, rows[i].Id, ord, LedgerVaultEnvelope{}).AddEvidenceShredded(rows[i]).Commit()
+		if err != nil {
+			err = eh.Errorf("ingest evidenceShredded row %d: %w", i, err)
 			return
 		}
 	}
@@ -802,6 +895,9 @@ func (inst *LedgerVaultStore) CanonicalItem(ent *LedgerVaultEntity) (item []byte
 	b := inst.scratch.Begin(ent.ID, ent.Ord, ent.LedgerVaultEnvelope)
 	if ent.LedgerNote.Has {
 		b.AddLedgerNote(ent.LedgerNote.Val)
+	}
+	if ent.EvidenceShredded.Has {
+		b.AddEvidenceShredded(ent.EvidenceShredded.Val)
 	}
 	if ent.EvidenceOpening.Has {
 		b.AddEvidenceOpening(ent.EvidenceOpening.Val)
@@ -1334,7 +1430,13 @@ func decodeLedgerVaultRecord(rec arrow.RecordBatch) (ents []*LedgerVaultEntity, 
 	idR := lowlevel.NewReadAccessLedgervaultTablePlainEntityIdAttributes()
 	stringArrayR := lowlevel.NewReadAccessLedgervaultTableTaggedStringArray()
 	symbolR := lowlevel.NewReadAccessLedgervaultTableTaggedSymbol()
-	readers := []ledgervaultSectionReaderI{idR, stringArrayR, symbolR}
+	i64ArrayR := lowlevel.NewReadAccessLedgervaultTableTaggedI64Array()
+	f64ArrayR := lowlevel.NewReadAccessLedgervaultTableTaggedF64Array()
+	boolR := lowlevel.NewReadAccessLedgervaultTableTaggedBool()
+	nullR := lowlevel.NewReadAccessLedgervaultTableTaggedNull()
+	emptyObjectR := lowlevel.NewReadAccessLedgervaultTableTaggedEmptyObject()
+	emptyArrayR := lowlevel.NewReadAccessLedgervaultTableTaggedEmptyArray()
+	readers := []ledgervaultSectionReaderI{idR, stringArrayR, symbolR, i64ArrayR, f64ArrayR, boolR, nullR, emptyObjectR, emptyArrayR}
 	for _, r := range readers {
 		err = r.LoadFromRecord(rec)
 		if err != nil {
@@ -1365,6 +1467,17 @@ func decodeLedgerVaultRecord(rec arrow.RecordBatch) (ents []*LedgerVaultEntity, 
 			if ok {
 				row.ID = ent.ID
 				ent.LedgerNote = option.Some(row)
+			}
+		}
+		{
+			row, ok, e := evidenceShreddedReadRow(i, stringArrayR.GetAttributes(), stringArrayR.GetMemberships(), symbolR.GetAttributes(), symbolR.GetMemberships(), i64ArrayR.GetAttributes(), i64ArrayR.GetMemberships(), f64ArrayR.GetAttributes(), f64ArrayR.GetMemberships(), boolR.GetAttributes(), boolR.GetMemberships(), nullR, nullR.GetMemberships(), emptyObjectR, emptyObjectR.GetMemberships(), emptyArrayR, emptyArrayR.GetMemberships())
+			if e != nil {
+				err = eh.Errorf("read evidenceShredded component: %w", e)
+				return
+			}
+			if ok {
+				row.Id = ent.ID
+				ent.EvidenceShredded = option.Some(row)
 			}
 		}
 		{

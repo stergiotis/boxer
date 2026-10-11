@@ -35,26 +35,36 @@ var _ = log.Logger
 // ./public/semistructured/leeway/readaccess/lw_ra_generator.go:291
 
 type MembershipPackLedgerTableShared1 struct {
-	ValueHighCardRef                           *array.List
-	ValueHighCardRefElements                   *array.Uint64
-	AccelHighCardRef                           *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64]
-	ColumnIndexHighCardRef                     uint32
-	ColumnIndexHighCardRefAccel                uint32
-	ValueLowCardRef                            *array.List
-	ValueLowCardRefElements                    *array.Uint64
-	AccelLowCardRef                            *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64]
-	ColumnIndexLowCardRef                      uint32
-	ColumnIndexLowCardRefAccel                 uint32
-	ValueMixedLowCardRef                       *array.List
-	ValueMixedLowCardRefElements               *array.Uint64
-	AccelMixedLowCardRef                       *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64]
-	ColumnIndexMixedLowCardRef                 uint32
-	ColumnIndexMixedLowCardRefAccel            uint32
-	ValueMixedRefHighCardParameters            *array.List
-	ValueMixedRefHighCardParametersElements    *array.Binary
-	AccelMixedRefHighCardParameters            *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64]
-	ColumnIndexMixedRefHighCardParameters      uint32
-	ColumnIndexMixedRefHighCardParametersAccel uint32
+	ValueHighCardRef                                *array.List
+	ValueHighCardRefElements                        *array.Uint64
+	AccelHighCardRef                                *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHighCardRef                          uint32
+	ColumnIndexHighCardRefAccel                     uint32
+	ValueLowCardRef                                 *array.List
+	ValueLowCardRefElements                         *array.Uint64
+	AccelLowCardRef                                 *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexLowCardRef                           uint32
+	ColumnIndexLowCardRefAccel                      uint32
+	ValueMixedLowCardRef                            *array.List
+	ValueMixedLowCardRefElements                    *array.Uint64
+	AccelMixedLowCardRef                            *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexMixedLowCardRef                      uint32
+	ColumnIndexMixedLowCardRefAccel                 uint32
+	ValueMixedRefHighCardParameters                 *array.List
+	ValueMixedRefHighCardParametersElements         *array.Binary
+	AccelMixedRefHighCardParameters                 *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexMixedRefHighCardParameters           uint32
+	ColumnIndexMixedRefHighCardParametersAccel      uint32
+	ValueMixedLowCardVerbatim                       *array.List
+	ValueMixedLowCardVerbatimElements               *array.Binary
+	AccelMixedLowCardVerbatim                       *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexMixedLowCardVerbatim                 uint32
+	ColumnIndexMixedLowCardVerbatimAccel            uint32
+	ValueMixedVerbatimHighCardParameters            *array.List
+	ValueMixedVerbatimHighCardParametersElements    *array.Binary
+	AccelMixedVerbatimHighCardParameters            *runtime.RandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexMixedVerbatimHighCardParameters      uint32
+	ColumnIndexMixedVerbatimHighCardParametersAccel uint32
 }
 
 func NewMembershipPackLedgerTableShared1Symbol() (inst *MembershipPackLedgerTableShared1) {
@@ -63,14 +73,20 @@ func NewMembershipPackLedgerTableShared1Symbol() (inst *MembershipPackLedgerTabl
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.ColumnIndexHighCardRef = 3
-	inst.ColumnIndexHighCardRefAccel = 7
+	inst.ColumnIndexHighCardRefAccel = 9
 	inst.ColumnIndexLowCardRef = 4
-	inst.ColumnIndexLowCardRefAccel = 8
+	inst.ColumnIndexLowCardRefAccel = 10
 	inst.ColumnIndexMixedLowCardRef = 5
-	inst.ColumnIndexMixedLowCardRefAccel = 9
+	inst.ColumnIndexMixedLowCardRefAccel = 11
 	inst.ColumnIndexMixedRefHighCardParameters = 6
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 9
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 11
+	inst.ColumnIndexMixedLowCardVerbatim = 7
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 12
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 8
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 12
 	return
 }
 
@@ -84,6 +100,10 @@ func (inst *MembershipPackLedgerTableShared1) GetColumnIndices() (columnIndices 
 		inst.ColumnIndexMixedLowCardRefAccel,
 		inst.ColumnIndexMixedRefHighCardParameters,
 		inst.ColumnIndexMixedRefHighCardParametersAccel,
+		inst.ColumnIndexMixedLowCardVerbatim,
+		inst.ColumnIndexMixedLowCardVerbatimAccel,
+		inst.ColumnIndexMixedVerbatimHighCardParameters,
+		inst.ColumnIndexMixedVerbatimHighCardParametersAccel,
 	}
 	return
 }
@@ -98,6 +118,10 @@ func (inst *MembershipPackLedgerTableShared1) GetColumnIndexFieldNames() (fieldN
 		"MembershipPackLedgerTableShared1.ColumnIndexMixedLowCardRefAccel",
 		"MembershipPackLedgerTableShared1.ColumnIndexMixedRefHighCardParameters",
 		"MembershipPackLedgerTableShared1.ColumnIndexMixedRefHighCardParametersAccel",
+		"MembershipPackLedgerTableShared1.ColumnIndexMixedLowCardVerbatim",
+		"MembershipPackLedgerTableShared1.ColumnIndexMixedLowCardVerbatimAccel",
+		"MembershipPackLedgerTableShared1.ColumnIndexMixedVerbatimHighCardParameters",
+		"MembershipPackLedgerTableShared1.ColumnIndexMixedVerbatimHighCardParametersAccel",
 	}
 	return
 }
@@ -111,8 +135,12 @@ func (inst *MembershipPackLedgerTableShared1) SetColumnIndices(indices []uint32)
 	inst.ColumnIndexMixedLowCardRefAccel = indices[5]
 	inst.ColumnIndexMixedRefHighCardParameters = indices[6]
 	inst.ColumnIndexMixedRefHighCardParametersAccel = indices[7]
+	inst.ColumnIndexMixedLowCardVerbatim = indices[8]
+	inst.ColumnIndexMixedLowCardVerbatimAccel = indices[9]
+	inst.ColumnIndexMixedVerbatimHighCardParameters = indices[10]
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = indices[11]
 
-	rest = indices[8:]
+	rest = indices[12:]
 	return
 }
 
@@ -124,14 +152,20 @@ func NewMembershipPackLedgerTableShared1StringArray() (inst *MembershipPackLedge
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 11
-	inst.ColumnIndexHighCardRefAccel = 16
-	inst.ColumnIndexLowCardRef = 12
-	inst.ColumnIndexLowCardRefAccel = 17
-	inst.ColumnIndexMixedLowCardRef = 13
-	inst.ColumnIndexMixedLowCardRefAccel = 18
-	inst.ColumnIndexMixedRefHighCardParameters = 14
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 18
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 14
+	inst.ColumnIndexHighCardRefAccel = 21
+	inst.ColumnIndexLowCardRef = 15
+	inst.ColumnIndexLowCardRefAccel = 22
+	inst.ColumnIndexMixedLowCardRef = 16
+	inst.ColumnIndexMixedLowCardRefAccel = 23
+	inst.ColumnIndexMixedRefHighCardParameters = 17
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 23
+	inst.ColumnIndexMixedLowCardVerbatim = 18
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 24
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 19
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 24
 	return
 }
 
@@ -141,14 +175,158 @@ func NewMembershipPackLedgerTableShared1U64Array() (inst *MembershipPackLedgerTa
 	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
-	inst.ColumnIndexHighCardRef = 20
-	inst.ColumnIndexHighCardRefAccel = 25
-	inst.ColumnIndexLowCardRef = 21
-	inst.ColumnIndexLowCardRefAccel = 26
-	inst.ColumnIndexMixedLowCardRef = 22
-	inst.ColumnIndexMixedLowCardRefAccel = 27
-	inst.ColumnIndexMixedRefHighCardParameters = 23
-	inst.ColumnIndexMixedRefHighCardParametersAccel = 27
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 26
+	inst.ColumnIndexHighCardRefAccel = 33
+	inst.ColumnIndexLowCardRef = 27
+	inst.ColumnIndexLowCardRefAccel = 34
+	inst.ColumnIndexMixedLowCardRef = 28
+	inst.ColumnIndexMixedLowCardRefAccel = 35
+	inst.ColumnIndexMixedRefHighCardParameters = 29
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 35
+	inst.ColumnIndexMixedLowCardVerbatim = 30
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 36
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 31
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 36
+	return
+}
+
+func NewMembershipPackLedgerTableShared1I64Array() (inst *MembershipPackLedgerTableShared1) {
+	inst = &MembershipPackLedgerTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 38
+	inst.ColumnIndexHighCardRefAccel = 45
+	inst.ColumnIndexLowCardRef = 39
+	inst.ColumnIndexLowCardRefAccel = 46
+	inst.ColumnIndexMixedLowCardRef = 40
+	inst.ColumnIndexMixedLowCardRefAccel = 47
+	inst.ColumnIndexMixedRefHighCardParameters = 41
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 47
+	inst.ColumnIndexMixedLowCardVerbatim = 42
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 48
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 43
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 48
+	return
+}
+
+func NewMembershipPackLedgerTableShared1F64Array() (inst *MembershipPackLedgerTableShared1) {
+	inst = &MembershipPackLedgerTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 50
+	inst.ColumnIndexHighCardRefAccel = 57
+	inst.ColumnIndexLowCardRef = 51
+	inst.ColumnIndexLowCardRefAccel = 58
+	inst.ColumnIndexMixedLowCardRef = 52
+	inst.ColumnIndexMixedLowCardRefAccel = 59
+	inst.ColumnIndexMixedRefHighCardParameters = 53
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 59
+	inst.ColumnIndexMixedLowCardVerbatim = 54
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 60
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 55
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 60
+	return
+}
+
+func NewMembershipPackLedgerTableShared1Bool() (inst *MembershipPackLedgerTableShared1) {
+	inst = &MembershipPackLedgerTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 62
+	inst.ColumnIndexHighCardRefAccel = 68
+	inst.ColumnIndexLowCardRef = 63
+	inst.ColumnIndexLowCardRefAccel = 69
+	inst.ColumnIndexMixedLowCardRef = 64
+	inst.ColumnIndexMixedLowCardRefAccel = 70
+	inst.ColumnIndexMixedRefHighCardParameters = 65
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 70
+	inst.ColumnIndexMixedLowCardVerbatim = 66
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 71
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 67
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 71
+	return
+}
+
+func NewMembershipPackLedgerTableShared1Null() (inst *MembershipPackLedgerTableShared1) {
+	inst = &MembershipPackLedgerTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 72
+	inst.ColumnIndexHighCardRefAccel = 78
+	inst.ColumnIndexLowCardRef = 73
+	inst.ColumnIndexLowCardRefAccel = 79
+	inst.ColumnIndexMixedLowCardRef = 74
+	inst.ColumnIndexMixedLowCardRefAccel = 80
+	inst.ColumnIndexMixedRefHighCardParameters = 75
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 80
+	inst.ColumnIndexMixedLowCardVerbatim = 76
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 81
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 77
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 81
+	return
+}
+
+func NewMembershipPackLedgerTableShared1EmptyObject() (inst *MembershipPackLedgerTableShared1) {
+	inst = &MembershipPackLedgerTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 82
+	inst.ColumnIndexHighCardRefAccel = 88
+	inst.ColumnIndexLowCardRef = 83
+	inst.ColumnIndexLowCardRefAccel = 89
+	inst.ColumnIndexMixedLowCardRef = 84
+	inst.ColumnIndexMixedLowCardRefAccel = 90
+	inst.ColumnIndexMixedRefHighCardParameters = 85
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 90
+	inst.ColumnIndexMixedLowCardVerbatim = 86
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 91
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 87
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 91
+	return
+}
+
+func NewMembershipPackLedgerTableShared1EmptyArray() (inst *MembershipPackLedgerTableShared1) {
+	inst = &MembershipPackLedgerTableShared1{}
+	inst.AccelHighCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipHighCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardRef = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardRefIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedRefHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedRefHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedLowCardVerbatim = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedLowCardVerbatimIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.AccelMixedVerbatimHighCardParameters = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.MembershipMixedVerbatimHighCardParametersIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	inst.ColumnIndexHighCardRef = 92
+	inst.ColumnIndexHighCardRefAccel = 98
+	inst.ColumnIndexLowCardRef = 93
+	inst.ColumnIndexLowCardRefAccel = 99
+	inst.ColumnIndexMixedLowCardRef = 94
+	inst.ColumnIndexMixedLowCardRefAccel = 100
+	inst.ColumnIndexMixedRefHighCardParameters = 95
+	inst.ColumnIndexMixedRefHighCardParametersAccel = 100
+	inst.ColumnIndexMixedLowCardVerbatim = 96
+	inst.ColumnIndexMixedLowCardVerbatimAccel = 101
+	inst.ColumnIndexMixedVerbatimHighCardParameters = 97
+	inst.ColumnIndexMixedVerbatimHighCardParametersAccel = 101
 	return
 }
 
@@ -161,6 +339,10 @@ func (inst *MembershipPackLedgerTableShared1) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueMixedLowCardRefElements)
 	runtime.ReleaseIfNotNil(inst.ValueMixedRefHighCardParameters)
 	runtime.ReleaseIfNotNil(inst.ValueMixedRefHighCardParametersElements)
+	runtime.ReleaseIfNotNil(inst.ValueMixedLowCardVerbatim)
+	runtime.ReleaseIfNotNil(inst.ValueMixedLowCardVerbatimElements)
+	runtime.ReleaseIfNotNil(inst.ValueMixedVerbatimHighCardParameters)
+	runtime.ReleaseIfNotNil(inst.ValueMixedVerbatimHighCardParametersElements)
 }
 
 func (inst *MembershipPackLedgerTableShared1) Reset() {
@@ -172,6 +354,10 @@ func (inst *MembershipPackLedgerTableShared1) Reset() {
 	inst.ValueMixedLowCardRefElements = nil
 	inst.ValueMixedRefHighCardParameters = nil
 	inst.ValueMixedRefHighCardParametersElements = nil
+	inst.ValueMixedLowCardVerbatim = nil
+	inst.ValueMixedLowCardVerbatimElements = nil
+	inst.ValueMixedVerbatimHighCardParameters = nil
+	inst.ValueMixedVerbatimHighCardParametersElements = nil
 }
 
 func (inst *MembershipPackLedgerTableShared1) LoadFromRecord(rec runtime.RecordI) (err error) {
@@ -207,6 +393,22 @@ func (inst *MembershipPackLedgerTableShared1) LoadFromRecord(rec runtime.RecordI
 	if err != nil {
 		return
 	}
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexMixedLowCardVerbatim, arrow.BINARY, rec, &inst.ValueMixedLowCardVerbatim, &inst.ValueMixedLowCardVerbatimElements, array.NewBinaryData)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexMixedLowCardVerbatimAccel, rec, inst.AccelMixedLowCardVerbatim)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexMixedVerbatimHighCardParameters, arrow.BINARY, rec, &inst.ValueMixedVerbatimHighCardParameters, &inst.ValueMixedVerbatimHighCardParametersElements, array.NewBinaryData)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexMixedVerbatimHighCardParametersAccel, rec, inst.AccelMixedVerbatimHighCardParameters)
+	if err != nil {
+		return
+	}
 	return
 }
 
@@ -221,6 +423,7 @@ func (inst *MembershipPackLedgerTableShared1) GetTotalNumberOfMemberItems(entity
 	nItems += inst.GetNumberOfMemberItemsHighCardRef(entityIdx)
 	nItems += inst.GetNumberOfMemberItemsLowCardRef(entityIdx)
 	nItems += inst.GetNumberOfMemberItemsMixedLowCardRef(entityIdx)
+	nItems += inst.GetNumberOfMemberItemsMixedLowCardVerbatim(entityIdx)
 	return
 }
 
@@ -241,6 +444,13 @@ func (inst *MembershipPackLedgerTableShared1) GetNumberOfMemberItemsLowCardRef(e
 func (inst *MembershipPackLedgerTableShared1) GetNumberOfMemberItemsMixedLowCardRef(entityIdx runtime.EntityIdx) (nItems int64) {
 	if inst.ValueMixedLowCardRef != nil {
 		b, e := inst.ValueMixedLowCardRef.ValueOffsets(int(entityIdx))
+		nItems = e - b
+	}
+	return
+}
+func (inst *MembershipPackLedgerTableShared1) GetNumberOfMemberItemsMixedLowCardVerbatim(entityIdx runtime.EntityIdx) (nItems int64) {
+	if inst.ValueMixedLowCardVerbatim != nil {
+		b, e := inst.ValueMixedLowCardVerbatim.ValueOffsets(int(entityIdx))
 		nItems = e - b
 	}
 	return
@@ -317,6 +527,50 @@ func (inst *MembershipPackLedgerTableShared1) GetMembValueLowCardRefHighCardPara
 		}
 	}
 }
+func (inst *MembershipPackLedgerTableShared1) GetMembValueMixedLowCardVerbatim(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[[]byte] {
+	accel := inst.AccelMixedLowCardVerbatim
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueMixedLowCardVerbatim.ValueOffsets(int(entityIdx))
+	return func(yield func([]byte) bool) {
+		vs := inst.ValueMixedLowCardVerbatimElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *MembershipPackLedgerTableShared1) GetMembValueMixedVerbatimHighCardParameters(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[[]byte] {
+	accel := inst.AccelMixedVerbatimHighCardParameters
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueMixedVerbatimHighCardParameters.ValueOffsets(int(entityIdx))
+	return func(yield func([]byte) bool) {
+		vs := inst.ValueMixedVerbatimHighCardParametersElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *MembershipPackLedgerTableShared1) GetMembValueLowCardVerbatimHighCardParams(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq2[[]byte, []byte] {
+	accel := inst.AccelMixedLowCardVerbatim
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueMixedLowCardVerbatim.ValueOffsets(int(entityIdx))
+	return func(yield func([]byte, []byte) bool) {
+		vs1 := inst.ValueMixedLowCardVerbatimElements
+		vs2 := inst.ValueMixedVerbatimHighCardParametersElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			idx := int(b) + int(i)
+			if !yield(vs1.Value(idx), vs2.Value(idx)) {
+				break
+			}
+		}
+	}
+}
 func (inst *MembershipPackLedgerTableShared1) GetNumberOfMemberItemsByAttrHighCardRef(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (nItems int) {
 	accel := inst.AccelHighCardRef
 	accel.SetCurrentEntityIdx(int(entityIdx))
@@ -335,6 +589,12 @@ func (inst *MembershipPackLedgerTableShared1) GetNumberOfMemberItemsByAttrLowCar
 	nItems = int(accel.LookupForwardRange(attrIdx).CalcCardinality())
 	return
 }
+func (inst *MembershipPackLedgerTableShared1) GetNumberOfMemberItemsByAttrLowCardVerbatimHighCardParams(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (nItems int) {
+	accel := inst.AccelMixedLowCardVerbatim
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	nItems = int(accel.LookupForwardRange(attrIdx).CalcCardinality())
+	return
+}
 
 ///////////////////////////////////////////////////////////////////
 // code generator
@@ -346,6 +606,28 @@ type ReadAccessLedgerTablePlainEntityIdAttributes struct {
 	ColumnIndexId      uint32
 	ValueOrdinal       *array.Uint64
 	ColumnIndexOrdinal uint32
+}
+
+type ReadAccessLedgerTableTaggedBoolAttributes struct {
+	ValueValue         *array.List
+	ColumnIndexValue   uint32
+	ValueValueElements *array.Boolean
+}
+
+type ReadAccessLedgerTableTaggedF64ArrayAttributes struct {
+	ValueValue                 *array.List
+	ColumnIndexValue           uint32
+	ValueValueElements         *array.Float64
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
+}
+
+type ReadAccessLedgerTableTaggedI64ArrayAttributes struct {
+	ValueValue                 *array.List
+	ColumnIndexValue           uint32
+	ValueValueElements         *array.Int64
+	AccelHomogenousArray       *runtime.RandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64]
+	ColumnIndexHomogenousArray uint32
 }
 
 type ReadAccessLedgerTableTaggedStringArrayAttributes struct {
@@ -403,10 +685,107 @@ func (inst *ReadAccessLedgerTablePlainEntityIdAttributes) SetColumnIndices(indic
 
 var _ runtime.ColumnIndexHandlingI = (*ReadAccessLedgerTablePlainEntityIdAttributes)(nil)
 
+func NewReadAccessLedgerTableTaggedBoolAttributes() (inst *ReadAccessLedgerTableTaggedBoolAttributes) {
+	inst = &ReadAccessLedgerTableTaggedBoolAttributes{}
+	inst.ColumnIndexValue = 61
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedBoolAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+	}
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedBoolAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessLedgerTableTaggedBoolAttributes.ColumnIndexValue",
+	}
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedBoolAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+
+	rest = indices[1:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessLedgerTableTaggedBoolAttributes)(nil)
+
+func NewReadAccessLedgerTableTaggedF64ArrayAttributes() (inst *ReadAccessLedgerTableTaggedF64ArrayAttributes) {
+	inst = &ReadAccessLedgerTableTaggedF64ArrayAttributes{}
+	inst.ColumnIndexValue = 49
+	inst.ColumnIndexHomogenousArray = 56
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedF64ArrayAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+		inst.ColumnIndexHomogenousArray,
+	}
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedF64ArrayAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessLedgerTableTaggedF64ArrayAttributes.ColumnIndexValue",
+		"ReadAccessLedgerTableTaggedF64ArrayAttributes.ColumnIndexHomogenousArray",
+	}
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedF64ArrayAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexHomogenousArray = indices[1]
+
+	rest = indices[2:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessLedgerTableTaggedF64ArrayAttributes)(nil)
+
+func NewReadAccessLedgerTableTaggedI64ArrayAttributes() (inst *ReadAccessLedgerTableTaggedI64ArrayAttributes) {
+	inst = &ReadAccessLedgerTableTaggedI64ArrayAttributes{}
+	inst.ColumnIndexValue = 37
+	inst.ColumnIndexHomogenousArray = 44
+	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedI64ArrayAttributes) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = []uint32{
+		inst.ColumnIndexValue,
+		inst.ColumnIndexHomogenousArray,
+	}
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedI64ArrayAttributes) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = []string{
+		"ReadAccessLedgerTableTaggedI64ArrayAttributes.ColumnIndexValue",
+		"ReadAccessLedgerTableTaggedI64ArrayAttributes.ColumnIndexHomogenousArray",
+	}
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedI64ArrayAttributes) SetColumnIndices(indices []uint32) (rest []uint32) {
+	inst.ColumnIndexValue = indices[0]
+	inst.ColumnIndexHomogenousArray = indices[1]
+
+	rest = indices[2:]
+	return
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessLedgerTableTaggedI64ArrayAttributes)(nil)
+
 func NewReadAccessLedgerTableTaggedStringArrayAttributes() (inst *ReadAccessLedgerTableTaggedStringArrayAttributes) {
 	inst = &ReadAccessLedgerTableTaggedStringArrayAttributes{}
-	inst.ColumnIndexValue = 10
-	inst.ColumnIndexHomogenousArray = 15
+	inst.ColumnIndexValue = 13
+	inst.ColumnIndexHomogenousArray = 20
 	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	return
 }
@@ -468,8 +847,8 @@ var _ runtime.ColumnIndexHandlingI = (*ReadAccessLedgerTableTaggedSymbolAttribut
 
 func NewReadAccessLedgerTableTaggedU64ArrayAttributes() (inst *ReadAccessLedgerTableTaggedU64ArrayAttributes) {
 	inst = &ReadAccessLedgerTableTaggedU64ArrayAttributes{}
-	inst.ColumnIndexValue = 19
-	inst.ColumnIndexHomogenousArray = 24
+	inst.ColumnIndexValue = 25
+	inst.ColumnIndexHomogenousArray = 32
 	inst.AccelHomogenousArray = runtime.NewRandomAccessTwoLevelLookupAccel[runtime.HomogenousArrayIdx, runtime.AttributeIdx, int, int64](runtime.AccelEstimatedInitialLength)
 	return
 }
@@ -510,6 +889,27 @@ func (inst *ReadAccessLedgerTablePlainEntityIdAttributes) Reset() {
 	inst.ValueOrdinal = nil
 }
 
+func (inst *ReadAccessLedgerTableTaggedBoolAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+}
+
+func (inst *ReadAccessLedgerTableTaggedF64ArrayAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
+}
+
+func (inst *ReadAccessLedgerTableTaggedI64ArrayAttributes) Reset() {
+	inst.ValueValue = nil
+	inst.ValueValueElements = nil
+	if inst.AccelHomogenousArray != nil {
+		inst.AccelHomogenousArray.Reset()
+	}
+}
+
 func (inst *ReadAccessLedgerTableTaggedStringArrayAttributes) Reset() {
 	inst.ValueValue = nil
 	inst.ValueValueElements = nil
@@ -541,6 +941,29 @@ var _ runtime.ReleasableI = (*ReadAccessLedgerTablePlainEntityIdAttributes)(nil)
 func (inst *ReadAccessLedgerTablePlainEntityIdAttributes) Release() {
 	runtime.ReleaseIfNotNil(inst.ValueId)
 	runtime.ReleaseIfNotNil(inst.ValueOrdinal)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessLedgerTableTaggedBoolAttributes)(nil)
+
+func (inst *ReadAccessLedgerTableTaggedBoolAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessLedgerTableTaggedF64ArrayAttributes)(nil)
+
+func (inst *ReadAccessLedgerTableTaggedF64ArrayAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
+}
+
+var _ runtime.ReleasableI = (*ReadAccessLedgerTableTaggedI64ArrayAttributes)(nil)
+
+func (inst *ReadAccessLedgerTableTaggedI64ArrayAttributes) Release() {
+	runtime.ReleaseIfNotNil(inst.ValueValue)
+	runtime.ReleaseIfNotNil(inst.ValueValueElements)
+	runtime.ReleaseIfNotNil(inst.AccelHomogenousArray)
 }
 
 var _ runtime.ReleasableI = (*ReadAccessLedgerTableTaggedStringArrayAttributes)(nil)
@@ -578,6 +1001,27 @@ func (inst *ReadAccessLedgerTablePlainEntityIdAttributes) Len() (nEntities int) 
 	return
 }
 
+func (inst *ReadAccessLedgerTableTaggedBoolAttributes) Len() (nEntities int) {
+	if inst.ValueValue != nil {
+		nEntities = inst.ValueValue.Len()
+	}
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedF64ArrayAttributes) Len() (nEntities int) {
+	if inst.ValueValue != nil {
+		nEntities = inst.ValueValue.Len()
+	}
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedI64ArrayAttributes) Len() (nEntities int) {
+	if inst.ValueValue != nil {
+		nEntities = inst.ValueValue.Len()
+	}
+	return
+}
+
 func (inst *ReadAccessLedgerTableTaggedStringArrayAttributes) Len() (nEntities int) {
 	if inst.ValueValue != nil {
 		nEntities = inst.ValueValue.Len()
@@ -610,6 +1054,38 @@ func (inst *ReadAccessLedgerTablePlainEntityIdAttributes) LoadFromRecord(rec run
 		return
 	}
 	err = runtime.LoadScalarValueFieldFromRecord(inst.ColumnIndexOrdinal, arrow.UINT64, rec, &inst.ValueOrdinal, array.NewUint64Data)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedBoolAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.BOOL, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewBooleanData)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedF64ArrayAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.FLOAT64, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewFloat64Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedI64ArrayAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = runtime.LoadNonScalarValueFieldFromRecord(inst.ColumnIndexValue, arrow.INT64, rec, &inst.ValueValue, &inst.ValueValueElements, array.NewInt64Data)
+	if err != nil {
+		return
+	}
+	err = runtime.LoadAccelFieldFromRecord(inst.ColumnIndexHomogenousArray, rec, inst.AccelHomogenousArray)
 	if err != nil {
 		return
 	}
@@ -722,6 +1198,80 @@ func (inst *ReadAccessLedgerTableTaggedU64ArrayAttributes) GetAttrValueSingleOrD
 	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
 	return
 }
+func (inst *ReadAccessLedgerTableTaggedI64ArrayAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[int64] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(int64) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *ReadAccessLedgerTableTaggedI64ArrayAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value int64, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
+	}
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "i64Array").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
+		return
+	}
+	bHA, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bHA) + int(rHA.BeginIncl))
+	return
+}
+func (inst *ReadAccessLedgerTableTaggedI64ArrayAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value int64) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessLedgerTableTaggedF64ArrayAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) iter.Seq[float64] {
+	accel := inst.AccelHomogenousArray
+	accel.SetCurrentEntityIdx(int(entityIdx))
+	r := accel.LookupForwardRange(attrIdx)
+	b, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	return func(yield func(float64) bool) {
+		vs := inst.ValueValueElements
+		for i := r.BeginIncl; i < r.EndExcl; i++ {
+			if !yield(vs.Value(int(b) + int(i))) {
+				break
+			}
+		}
+	}
+}
+func (inst *ReadAccessLedgerTableTaggedF64ArrayAttributes) GetAttrValueSingle(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value float64, err error) {
+	var rHA runtime.Range[runtime.HomogenousArrayIdx]
+	{
+		accel := inst.AccelHomogenousArray
+		accel.SetCurrentEntityIdx(int(entityIdx))
+		rHA = accel.LookupForwardRange(attrIdx)
+	}
+	if rHA.EndExcl-rHA.BeginIncl != 1 {
+		err = eb.Build().Str("section", "f64Array").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Int64("cardinality", int64(rHA.EndExcl-rHA.BeginIncl)).Errorf("expected exactly one element per HomogenousArray column")
+		return
+	}
+	bHA, _ := inst.ValueValue.ValueOffsets(int(entityIdx))
+	value = inst.ValueValueElements.Value(int(bHA) + int(rHA.BeginIncl))
+	return
+}
+func (inst *ReadAccessLedgerTableTaggedF64ArrayAttributes) GetAttrValueSingleOrDefault(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (value float64) {
+	value, _ = inst.GetAttrValueSingle(entityIdx, attrIdx)
+	return
+}
+func (inst *ReadAccessLedgerTableTaggedBoolAttributes) GetAttrValueValue(entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) (scalarAttrValue bool) {
+	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
+	if int64(attrIdx) >= (e - b) {
+		log.Panic().Str("attribute", "Value").Int("beginIncl", int(b)).Int("endExcl", int(e)).Int("attrIdx", int(attrIdx)).Msg("attribute index is out of range")
+	}
+	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
+	return
+}
 func (inst *ReadAccessLedgerTablePlainEntityIdAttributes) GetAttrValueId(entityIdx runtime.EntityIdx) (scalarAttrValue uint64) {
 	scalarAttrValue = inst.ValueId.Value(int(entityIdx))
 	return
@@ -747,6 +1297,19 @@ func (inst *ReadAccessLedgerTableTaggedStringArrayAttributes) GetNumberOfAttribu
 }
 func (inst *ReadAccessLedgerTableTaggedU64ArrayAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
 	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessLedgerTableTaggedI64ArrayAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessLedgerTableTaggedF64ArrayAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.AccelHomogenousArray.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+func (inst *ReadAccessLedgerTableTaggedBoolAttributes) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	b, e := inst.ValueValue.ValueOffsets(int(entityIdx))
+	nAttributes = e - b
 	return
 }
 
@@ -776,6 +1339,45 @@ type ReadAccessLedgerTableTaggedU64Array struct {
 
 var _ runtime.ColumnIndexHandlingI = (*ReadAccessLedgerTableTaggedU64Array)(nil)
 
+type ReadAccessLedgerTableTaggedI64Array struct {
+	Attributes  *ReadAccessLedgerTableTaggedI64ArrayAttributes
+	Memberships *MembershipPackLedgerTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessLedgerTableTaggedI64Array)(nil)
+
+type ReadAccessLedgerTableTaggedF64Array struct {
+	Attributes  *ReadAccessLedgerTableTaggedF64ArrayAttributes
+	Memberships *MembershipPackLedgerTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessLedgerTableTaggedF64Array)(nil)
+
+type ReadAccessLedgerTableTaggedBool struct {
+	Attributes  *ReadAccessLedgerTableTaggedBoolAttributes
+	Memberships *MembershipPackLedgerTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessLedgerTableTaggedBool)(nil)
+
+type ReadAccessLedgerTableTaggedNull struct {
+	Memberships *MembershipPackLedgerTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessLedgerTableTaggedNull)(nil)
+
+type ReadAccessLedgerTableTaggedEmptyObject struct {
+	Memberships *MembershipPackLedgerTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessLedgerTableTaggedEmptyObject)(nil)
+
+type ReadAccessLedgerTableTaggedEmptyArray struct {
+	Memberships *MembershipPackLedgerTableShared1
+}
+
+var _ runtime.ColumnIndexHandlingI = (*ReadAccessLedgerTableTaggedEmptyArray)(nil)
+
 func NewReadAccessLedgerTableTaggedSymbol() (inst *ReadAccessLedgerTableTaggedSymbol) {
 	inst = &ReadAccessLedgerTableTaggedSymbol{}
 	inst.Attributes = NewReadAccessLedgerTableTaggedSymbolAttributes()
@@ -794,6 +1396,45 @@ func NewReadAccessLedgerTableTaggedU64Array() (inst *ReadAccessLedgerTableTagged
 	inst = &ReadAccessLedgerTableTaggedU64Array{}
 	inst.Attributes = NewReadAccessLedgerTableTaggedU64ArrayAttributes()
 	inst.Memberships = NewMembershipPackLedgerTableShared1U64Array()
+	return
+}
+
+func NewReadAccessLedgerTableTaggedI64Array() (inst *ReadAccessLedgerTableTaggedI64Array) {
+	inst = &ReadAccessLedgerTableTaggedI64Array{}
+	inst.Attributes = NewReadAccessLedgerTableTaggedI64ArrayAttributes()
+	inst.Memberships = NewMembershipPackLedgerTableShared1I64Array()
+	return
+}
+
+func NewReadAccessLedgerTableTaggedF64Array() (inst *ReadAccessLedgerTableTaggedF64Array) {
+	inst = &ReadAccessLedgerTableTaggedF64Array{}
+	inst.Attributes = NewReadAccessLedgerTableTaggedF64ArrayAttributes()
+	inst.Memberships = NewMembershipPackLedgerTableShared1F64Array()
+	return
+}
+
+func NewReadAccessLedgerTableTaggedBool() (inst *ReadAccessLedgerTableTaggedBool) {
+	inst = &ReadAccessLedgerTableTaggedBool{}
+	inst.Attributes = NewReadAccessLedgerTableTaggedBoolAttributes()
+	inst.Memberships = NewMembershipPackLedgerTableShared1Bool()
+	return
+}
+
+func NewReadAccessLedgerTableTaggedNull() (inst *ReadAccessLedgerTableTaggedNull) {
+	inst = &ReadAccessLedgerTableTaggedNull{}
+	inst.Memberships = NewMembershipPackLedgerTableShared1Null()
+	return
+}
+
+func NewReadAccessLedgerTableTaggedEmptyObject() (inst *ReadAccessLedgerTableTaggedEmptyObject) {
+	inst = &ReadAccessLedgerTableTaggedEmptyObject{}
+	inst.Memberships = NewMembershipPackLedgerTableShared1EmptyObject()
+	return
+}
+
+func NewReadAccessLedgerTableTaggedEmptyArray() (inst *ReadAccessLedgerTableTaggedEmptyArray) {
+	inst = &ReadAccessLedgerTableTaggedEmptyArray{}
+	inst.Memberships = NewMembershipPackLedgerTableShared1EmptyArray()
 	return
 }
 
@@ -818,6 +1459,45 @@ func (inst *ReadAccessLedgerTableTaggedU64Array) SetColumnIndices(indices []uint
 	return
 }
 
+func (inst *ReadAccessLedgerTableTaggedI64Array) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedF64Array) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedBool) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Attributes.SetColumnIndices(restIndices)
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedNull) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedEmptyObject) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedEmptyArray) SetColumnIndices(indices []uint32) (restIndices []uint32) {
+	restIndices = indices
+	restIndices = inst.Memberships.SetColumnIndices(restIndices)
+	return
+}
+
 func (inst *ReadAccessLedgerTableTaggedSymbol) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
@@ -832,6 +1512,39 @@ func (inst *ReadAccessLedgerTableTaggedStringArray) GetColumnIndices() (columnIn
 
 func (inst *ReadAccessLedgerTableTaggedU64Array) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedI64Array) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedF64Array) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedBool) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Attributes.GetColumnIndices())
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedNull) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedEmptyObject) GetColumnIndices() (columnIndices []uint32) {
+	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedEmptyArray) GetColumnIndices() (columnIndices []uint32) {
 	columnIndices = slices.Concat(columnIndices, inst.Memberships.GetColumnIndices())
 	return
 }
@@ -854,6 +1567,39 @@ func (inst *ReadAccessLedgerTableTaggedU64Array) GetColumnIndexFieldNames() (fie
 	return
 }
 
+func (inst *ReadAccessLedgerTableTaggedI64Array) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedF64Array) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedBool) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Attributes.GetColumnIndexFieldNames())
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedNull) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedEmptyObject) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedEmptyArray) GetColumnIndexFieldNames() (fieldNames []string) {
+	fieldNames = slices.Concat(fieldNames, inst.Memberships.GetColumnIndexFieldNames())
+	return
+}
+
 func (inst *ReadAccessLedgerTableTaggedSymbol) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
 	runtime.ReleaseIfNotNil(inst.Memberships)
@@ -866,6 +1612,33 @@ func (inst *ReadAccessLedgerTableTaggedStringArray) Release() {
 
 func (inst *ReadAccessLedgerTableTaggedU64Array) Release() {
 	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessLedgerTableTaggedI64Array) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessLedgerTableTaggedF64Array) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessLedgerTableTaggedBool) Release() {
+	runtime.ReleaseIfNotNil(inst.Attributes)
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessLedgerTableTaggedNull) Release() {
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessLedgerTableTaggedEmptyObject) Release() {
+	runtime.ReleaseIfNotNil(inst.Memberships)
+}
+
+func (inst *ReadAccessLedgerTableTaggedEmptyArray) Release() {
 	runtime.ReleaseIfNotNil(inst.Memberships)
 }
 
@@ -911,6 +1684,75 @@ func (inst *ReadAccessLedgerTableTaggedU64Array) LoadFromRecord(rec runtime.Reco
 	return
 }
 
+func (inst *ReadAccessLedgerTableTaggedI64Array) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedF64Array) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedBool) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Attributes.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedNull) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedEmptyObject) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedEmptyArray) LoadFromRecord(rec runtime.RecordI) (err error) {
+	err = inst.Memberships.LoadFromRecord(rec)
+	if err != nil {
+		err = eb.Build().Errorf("unable to load from record: %w", err)
+		return
+	}
+	return
+}
+
 func (inst *ReadAccessLedgerTableTaggedSymbol) Len() (nEntities int) {
 	nEntities = inst.Memberships.Len()
 	return
@@ -922,6 +1764,36 @@ func (inst *ReadAccessLedgerTableTaggedStringArray) Len() (nEntities int) {
 }
 
 func (inst *ReadAccessLedgerTableTaggedU64Array) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedI64Array) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedF64Array) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedBool) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedNull) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedEmptyObject) Len() (nEntities int) {
+	nEntities = inst.Memberships.Len()
+	return
+}
+
+func (inst *ReadAccessLedgerTableTaggedEmptyArray) Len() (nEntities int) {
 	nEntities = inst.Memberships.Len()
 	return
 }
@@ -938,6 +1810,18 @@ func (inst *ReadAccessLedgerTableTaggedU64Array) GetAttributes() *ReadAccessLedg
 	return inst.Attributes
 }
 
+func (inst *ReadAccessLedgerTableTaggedI64Array) GetAttributes() *ReadAccessLedgerTableTaggedI64ArrayAttributes {
+	return inst.Attributes
+}
+
+func (inst *ReadAccessLedgerTableTaggedF64Array) GetAttributes() *ReadAccessLedgerTableTaggedF64ArrayAttributes {
+	return inst.Attributes
+}
+
+func (inst *ReadAccessLedgerTableTaggedBool) GetAttributes() *ReadAccessLedgerTableTaggedBoolAttributes {
+	return inst.Attributes
+}
+
 func (inst *ReadAccessLedgerTableTaggedSymbol) GetMemberships() *MembershipPackLedgerTableShared1 {
 	return inst.Memberships
 }
@@ -947,6 +1831,30 @@ func (inst *ReadAccessLedgerTableTaggedStringArray) GetMemberships() *Membership
 }
 
 func (inst *ReadAccessLedgerTableTaggedU64Array) GetMemberships() *MembershipPackLedgerTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessLedgerTableTaggedI64Array) GetMemberships() *MembershipPackLedgerTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessLedgerTableTaggedF64Array) GetMemberships() *MembershipPackLedgerTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessLedgerTableTaggedBool) GetMemberships() *MembershipPackLedgerTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessLedgerTableTaggedNull) GetMemberships() *MembershipPackLedgerTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessLedgerTableTaggedEmptyObject) GetMemberships() *MembershipPackLedgerTableShared1 {
+	return inst.Memberships
+}
+
+func (inst *ReadAccessLedgerTableTaggedEmptyArray) GetMemberships() *MembershipPackLedgerTableShared1 {
 	return inst.Memberships
 }
 
@@ -968,6 +1876,42 @@ func (inst *ReadAccessLedgerTableTaggedU64Array) GetSectionName() naming.Stylabl
 
 var _ fatruntime.SectionIntrospectionI = (*ReadAccessLedgerTableTaggedU64Array)(nil)
 
+func (inst *ReadAccessLedgerTableTaggedI64Array) GetSectionName() naming.StylableName {
+	return "i64-array"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessLedgerTableTaggedI64Array)(nil)
+
+func (inst *ReadAccessLedgerTableTaggedF64Array) GetSectionName() naming.StylableName {
+	return "f64-array"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessLedgerTableTaggedF64Array)(nil)
+
+func (inst *ReadAccessLedgerTableTaggedBool) GetSectionName() naming.StylableName {
+	return "bool"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessLedgerTableTaggedBool)(nil)
+
+func (inst *ReadAccessLedgerTableTaggedNull) GetSectionName() naming.StylableName {
+	return "null"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessLedgerTableTaggedNull)(nil)
+
+func (inst *ReadAccessLedgerTableTaggedEmptyObject) GetSectionName() naming.StylableName {
+	return "empty-object"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessLedgerTableTaggedEmptyObject)(nil)
+
+func (inst *ReadAccessLedgerTableTaggedEmptyArray) GetSectionName() naming.StylableName {
+	return "empty-array"
+}
+
+var _ fatruntime.SectionIntrospectionI = (*ReadAccessLedgerTableTaggedEmptyArray)(nil)
+
 func (inst *ReadAccessLedgerTableTaggedSymbol) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
@@ -977,6 +1921,30 @@ func (inst *ReadAccessLedgerTableTaggedStringArray) GetSectionUseAspects() useas
 }
 
 func (inst *ReadAccessLedgerTableTaggedU64Array) GetSectionUseAspects() useaspects.AspectSet {
+	return ""
+}
+
+func (inst *ReadAccessLedgerTableTaggedI64Array) GetSectionUseAspects() useaspects.AspectSet {
+	return ""
+}
+
+func (inst *ReadAccessLedgerTableTaggedF64Array) GetSectionUseAspects() useaspects.AspectSet {
+	return ""
+}
+
+func (inst *ReadAccessLedgerTableTaggedBool) GetSectionUseAspects() useaspects.AspectSet {
+	return ""
+}
+
+func (inst *ReadAccessLedgerTableTaggedNull) GetSectionUseAspects() useaspects.AspectSet {
+	return ""
+}
+
+func (inst *ReadAccessLedgerTableTaggedEmptyObject) GetSectionUseAspects() useaspects.AspectSet {
+	return ""
+}
+
+func (inst *ReadAccessLedgerTableTaggedEmptyArray) GetSectionUseAspects() useaspects.AspectSet {
 	return ""
 }
 
@@ -992,6 +1960,30 @@ func (inst *ReadAccessLedgerTableTaggedU64Array) GetSectionStreamingGroup() nami
 	return "data"
 }
 
+func (inst *ReadAccessLedgerTableTaggedI64Array) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
+func (inst *ReadAccessLedgerTableTaggedF64Array) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
+func (inst *ReadAccessLedgerTableTaggedBool) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
+func (inst *ReadAccessLedgerTableTaggedNull) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
+func (inst *ReadAccessLedgerTableTaggedEmptyObject) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
+func (inst *ReadAccessLedgerTableTaggedEmptyArray) GetSectionStreamingGroup() naming.Key {
+	return "data"
+}
+
 func (inst *ReadAccessLedgerTableTaggedSymbol) GetSectionCoSectionGroup() naming.Key {
 	return ""
 }
@@ -1004,16 +1996,88 @@ func (inst *ReadAccessLedgerTableTaggedU64Array) GetSectionCoSectionGroup() nami
 	return ""
 }
 
+func (inst *ReadAccessLedgerTableTaggedI64Array) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessLedgerTableTaggedF64Array) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessLedgerTableTaggedBool) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessLedgerTableTaggedNull) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessLedgerTableTaggedEmptyObject) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
+func (inst *ReadAccessLedgerTableTaggedEmptyArray) GetSectionCoSectionGroup() naming.Key {
+	return ""
+}
+
 func (inst *ReadAccessLedgerTableTaggedSymbol) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b11001
+	return 0b10011001
 }
 
 func (inst *ReadAccessLedgerTableTaggedStringArray) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b11001
+	return 0b10011001
 }
 
 func (inst *ReadAccessLedgerTableTaggedU64Array) GetSectionMembershipSpec() common.MembershipSpecE {
-	return 0b11001
+	return 0b10011001
+}
+
+func (inst *ReadAccessLedgerTableTaggedI64Array) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b10011001
+}
+
+func (inst *ReadAccessLedgerTableTaggedF64Array) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b10011001
+}
+
+func (inst *ReadAccessLedgerTableTaggedBool) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b10011001
+}
+
+func (inst *ReadAccessLedgerTableTaggedNull) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b10011001
+}
+
+func (inst *ReadAccessLedgerTableTaggedEmptyObject) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b10011001
+}
+
+func (inst *ReadAccessLedgerTableTaggedEmptyArray) GetSectionMembershipSpec() common.MembershipSpecE {
+	return 0b10011001
+}
+
+// GetNumberOfAttributes counts a value-less section's attributes from the
+// cardinality column of its first membership channel, which holds one
+// entry per attribute.
+func (inst *ReadAccessLedgerTableTaggedNull) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.Memberships.AccelHighCardRef.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+
+// GetNumberOfAttributes counts a value-less section's attributes from the
+// cardinality column of its first membership channel, which holds one
+// entry per attribute.
+func (inst *ReadAccessLedgerTableTaggedEmptyObject) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.Memberships.AccelHighCardRef.GetEntityAttributeCount(int(entityIdx))
+	return
+}
+
+// GetNumberOfAttributes counts a value-less section's attributes from the
+// cardinality column of its first membership channel, which holds one
+// entry per attribute.
+func (inst *ReadAccessLedgerTableTaggedEmptyArray) GetNumberOfAttributes(entityIdx runtime.EntityIdx) (nAttributes int64) {
+	nAttributes = inst.Memberships.AccelHighCardRef.GetEntityAttributeCount(int(entityIdx))
+	return
 }
 
 ///////////////////////////////////////////////////////////////////
@@ -1026,6 +2090,12 @@ type ReadAccessLedgerTable struct {
 	Symbol      *ReadAccessLedgerTableTaggedSymbol
 	StringArray *ReadAccessLedgerTableTaggedStringArray
 	U64Array    *ReadAccessLedgerTableTaggedU64Array
+	I64Array    *ReadAccessLedgerTableTaggedI64Array
+	F64Array    *ReadAccessLedgerTableTaggedF64Array
+	Bool        *ReadAccessLedgerTableTaggedBool
+	Null        *ReadAccessLedgerTableTaggedNull
+	EmptyObject *ReadAccessLedgerTableTaggedEmptyObject
+	EmptyArray  *ReadAccessLedgerTableTaggedEmptyArray
 }
 
 func NewReadAccessLedgerTable() (inst *ReadAccessLedgerTable) {
@@ -1034,6 +2104,12 @@ func NewReadAccessLedgerTable() (inst *ReadAccessLedgerTable) {
 	inst.Symbol = NewReadAccessLedgerTableTaggedSymbol()
 	inst.StringArray = NewReadAccessLedgerTableTaggedStringArray()
 	inst.U64Array = NewReadAccessLedgerTableTaggedU64Array()
+	inst.I64Array = NewReadAccessLedgerTableTaggedI64Array()
+	inst.F64Array = NewReadAccessLedgerTableTaggedF64Array()
+	inst.Bool = NewReadAccessLedgerTableTaggedBool()
+	inst.Null = NewReadAccessLedgerTableTaggedNull()
+	inst.EmptyObject = NewReadAccessLedgerTableTaggedEmptyObject()
+	inst.EmptyArray = NewReadAccessLedgerTableTaggedEmptyArray()
 	return
 }
 
@@ -1042,6 +2118,12 @@ func (inst *ReadAccessLedgerTable) Release() {
 	runtime.ReleaseIfNotNil(inst.Symbol)
 	runtime.ReleaseIfNotNil(inst.StringArray)
 	runtime.ReleaseIfNotNil(inst.U64Array)
+	runtime.ReleaseIfNotNil(inst.I64Array)
+	runtime.ReleaseIfNotNil(inst.F64Array)
+	runtime.ReleaseIfNotNil(inst.Bool)
+	runtime.ReleaseIfNotNil(inst.Null)
+	runtime.ReleaseIfNotNil(inst.EmptyObject)
+	runtime.ReleaseIfNotNil(inst.EmptyArray)
 }
 
 func (inst *ReadAccessLedgerTable) LoadFromRecord(rec runtime.RecordI) (err error) {
@@ -1073,6 +2155,48 @@ func (inst *ReadAccessLedgerTable) LoadFromRecord(rec runtime.RecordI) (err erro
 			return
 		}
 	}
+	if inst.I64Array != nil {
+		err = inst.I64Array.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "ledger-table").Str("fieldName", "I64Array").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.F64Array != nil {
+		err = inst.F64Array.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "ledger-table").Str("fieldName", "F64Array").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.Bool != nil {
+		err = inst.Bool.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "ledger-table").Str("fieldName", "Bool").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.Null != nil {
+		err = inst.Null.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "ledger-table").Str("fieldName", "Null").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.EmptyObject != nil {
+		err = inst.EmptyObject.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "ledger-table").Str("fieldName", "EmptyObject").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
+	if inst.EmptyArray != nil {
+		err = inst.EmptyArray.LoadFromRecord(rec)
+		if err != nil {
+			err = eb.Build().Str("tableName", "ledger-table").Str("fieldName", "EmptyArray").Errorf("unable to load from record: %w", err)
+			return
+		}
+	}
 	return
 }
 
@@ -1090,6 +2214,24 @@ func (inst *ReadAccessLedgerTable) SetColumnIndices(indices []uint32) (rest []ui
 	if inst.U64Array != nil {
 		rest = inst.U64Array.SetColumnIndices(rest)
 	}
+	if inst.I64Array != nil {
+		rest = inst.I64Array.SetColumnIndices(rest)
+	}
+	if inst.F64Array != nil {
+		rest = inst.F64Array.SetColumnIndices(rest)
+	}
+	if inst.Bool != nil {
+		rest = inst.Bool.SetColumnIndices(rest)
+	}
+	if inst.Null != nil {
+		rest = inst.Null.SetColumnIndices(rest)
+	}
+	if inst.EmptyObject != nil {
+		rest = inst.EmptyObject.SetColumnIndices(rest)
+	}
+	if inst.EmptyArray != nil {
+		rest = inst.EmptyArray.SetColumnIndices(rest)
+	}
 	return
 }
 
@@ -1106,6 +2248,24 @@ func (inst *ReadAccessLedgerTable) GetColumnIndices() (columnIndices []uint32) {
 	if inst.U64Array != nil {
 		columnIndices = slices.Concat(columnIndices, inst.U64Array.GetColumnIndices())
 	}
+	if inst.I64Array != nil {
+		columnIndices = slices.Concat(columnIndices, inst.I64Array.GetColumnIndices())
+	}
+	if inst.F64Array != nil {
+		columnIndices = slices.Concat(columnIndices, inst.F64Array.GetColumnIndices())
+	}
+	if inst.Bool != nil {
+		columnIndices = slices.Concat(columnIndices, inst.Bool.GetColumnIndices())
+	}
+	if inst.Null != nil {
+		columnIndices = slices.Concat(columnIndices, inst.Null.GetColumnIndices())
+	}
+	if inst.EmptyObject != nil {
+		columnIndices = slices.Concat(columnIndices, inst.EmptyObject.GetColumnIndices())
+	}
+	if inst.EmptyArray != nil {
+		columnIndices = slices.Concat(columnIndices, inst.EmptyArray.GetColumnIndices())
+	}
 	return
 }
 
@@ -1121,6 +2281,24 @@ func (inst *ReadAccessLedgerTable) GetColumnIndexFieldNames() (fieldNames []stri
 	}
 	if inst.U64Array != nil {
 		fieldNames = slices.Concat(fieldNames, inst.U64Array.GetColumnIndexFieldNames())
+	}
+	if inst.I64Array != nil {
+		fieldNames = slices.Concat(fieldNames, inst.I64Array.GetColumnIndexFieldNames())
+	}
+	if inst.F64Array != nil {
+		fieldNames = slices.Concat(fieldNames, inst.F64Array.GetColumnIndexFieldNames())
+	}
+	if inst.Bool != nil {
+		fieldNames = slices.Concat(fieldNames, inst.Bool.GetColumnIndexFieldNames())
+	}
+	if inst.Null != nil {
+		fieldNames = slices.Concat(fieldNames, inst.Null.GetColumnIndexFieldNames())
+	}
+	if inst.EmptyObject != nil {
+		fieldNames = slices.Concat(fieldNames, inst.EmptyObject.GetColumnIndexFieldNames())
+	}
+	if inst.EmptyArray != nil {
+		fieldNames = slices.Concat(fieldNames, inst.EmptyArray.GetColumnIndexFieldNames())
 	}
 	return
 }

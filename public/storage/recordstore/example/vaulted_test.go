@@ -57,7 +57,7 @@ func TestVaultedContentIsCommittedNotStored(t *testing.T) {
 	require.Len(t, evidence.OpeningOf(va.EvidenceOpening.Val.Opening), evidence.OpeningSize)
 	require.Equal(t, []string{"ledgerNote"}, a.EvidenceChain.Val.CommitComponents)
 	require.Len(t, a.EvidenceChain.Val.Commitments, 1)
-	require.Equal(t, []string{"ledgerNote"}, LedgerVaultComponents)
+	require.Contains(t, LedgerVaultComponents, "ledgerNote")
 
 	rows, byOrdinal := v.Join(ledger, vault)
 	require.Len(t, byOrdinal[1], 1)

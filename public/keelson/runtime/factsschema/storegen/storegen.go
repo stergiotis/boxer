@@ -45,6 +45,7 @@ import (
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallgen"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/namemint/registry"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/naming"
+	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/gen"
 )
 
@@ -156,6 +157,9 @@ type Input struct {
 	// Evidence is the evidence profile (ADR-0327 (proposed) §SD2). Its
 	// components' memberships must be in Ids, like every other component's.
 	Evidence *gen.Evidence
+	// Contributions and InsertSettings are gen.Input's, passed through.
+	Contributions  bool
+	InsertSettings recordstore.InsertSettings
 }
 
 // sharedRA is not an option either.
@@ -240,6 +244,8 @@ func (inst Input) Generate() (err error) {
 		DDL:            inst.DDL,
 		CanonWire:      inst.CanonWire,
 		Evidence:       inst.Evidence,
+		Contributions:  inst.Contributions,
+		InsertSettings: inst.InsertSettings,
 		// Not a parameter — see the externallyProvisioned doc.
 		ExternallyProvisioned: externallyProvisioned,
 	}.Generate()

@@ -33,6 +33,24 @@ var (
 // thing on the wire that comes from ledgervault-table's description: section names, column
 // names, aspects and hints are not.
 
+// CanonWireSignatureLedgervaultTableNull keys the slot of section null.
+const CanonWireSignatureLedgervaultTableNull = ""
+
+// CanonWireSignatureLedgervaultTableEmptyObject keys the slot of section emptyObject.
+const CanonWireSignatureLedgervaultTableEmptyObject = ""
+
+// CanonWireSignatureLedgervaultTableEmptyArray keys the slot of section emptyArray.
+const CanonWireSignatureLedgervaultTableEmptyArray = ""
+
+// CanonWireSignatureLedgervaultTableBool keys the slot of section bool.
+const CanonWireSignatureLedgervaultTableBool = "b"
+
+// CanonWireSignatureLedgervaultTableF64Array keys the slot of section f64Array.
+const CanonWireSignatureLedgervaultTableF64Array = "f64h"
+
+// CanonWireSignatureLedgervaultTableI64Array keys the slot of section i64Array.
+const CanonWireSignatureLedgervaultTableI64Array = "i64h"
+
 // CanonWireSignatureLedgervaultTableSymbol keys the slot of section symbol.
 const CanonWireSignatureLedgervaultTableSymbol = "s"
 
@@ -49,13 +67,31 @@ const CanonWireSignatureLedgervaultTableU64Array = "u64h"
 type CanonWireSlotLedgervaultTableE uint8
 
 const (
-	CanonWireSlotLedgervaultTableSymbol CanonWireSlotLedgervaultTableE = iota
+	CanonWireSlotLedgervaultTableNull CanonWireSlotLedgervaultTableE = iota
+	CanonWireSlotLedgervaultTableEmptyObject
+	CanonWireSlotLedgervaultTableEmptyArray
+	CanonWireSlotLedgervaultTableBool
+	CanonWireSlotLedgervaultTableF64Array
+	CanonWireSlotLedgervaultTableI64Array
+	CanonWireSlotLedgervaultTableSymbol
 	CanonWireSlotLedgervaultTableStringArray
 	CanonWireSlotLedgervaultTableU64Array
 )
 
 func (inst CanonWireSlotLedgervaultTableE) String() string {
 	switch inst {
+	case CanonWireSlotLedgervaultTableNull:
+		return "null"
+	case CanonWireSlotLedgervaultTableEmptyObject:
+		return "emptyObject"
+	case CanonWireSlotLedgervaultTableEmptyArray:
+		return "emptyArray"
+	case CanonWireSlotLedgervaultTableBool:
+		return "bool"
+	case CanonWireSlotLedgervaultTableF64Array:
+		return "f64Array"
+	case CanonWireSlotLedgervaultTableI64Array:
+		return "i64Array"
 	case CanonWireSlotLedgervaultTableSymbol:
 		return "symbol"
 	case CanonWireSlotLedgervaultTableStringArray:
@@ -70,6 +106,18 @@ func (inst CanonWireSlotLedgervaultTableE) String() string {
 // entity's tagged map.
 func (inst CanonWireSlotLedgervaultTableE) Signature() string {
 	switch inst {
+	case CanonWireSlotLedgervaultTableNull:
+		return CanonWireSignatureLedgervaultTableNull
+	case CanonWireSlotLedgervaultTableEmptyObject:
+		return CanonWireSignatureLedgervaultTableEmptyObject
+	case CanonWireSlotLedgervaultTableEmptyArray:
+		return CanonWireSignatureLedgervaultTableEmptyArray
+	case CanonWireSlotLedgervaultTableBool:
+		return CanonWireSignatureLedgervaultTableBool
+	case CanonWireSlotLedgervaultTableF64Array:
+		return CanonWireSignatureLedgervaultTableF64Array
+	case CanonWireSlotLedgervaultTableI64Array:
+		return CanonWireSignatureLedgervaultTableI64Array
 	case CanonWireSlotLedgervaultTableSymbol:
 		return CanonWireSignatureLedgervaultTableSymbol
 	case CanonWireSlotLedgervaultTableStringArray:
@@ -85,7 +133,14 @@ func (inst CanonWireSlotLedgervaultTableE) Signature() string {
 // resolve: the encoder consults its tagger for every attribute of one, and for
 // no attribute of any other.
 func (inst CanonWireSlotLedgervaultTableE) Ambiguous() bool {
-	_ = inst
+	switch inst {
+	case CanonWireSlotLedgervaultTableNull:
+		return true
+	case CanonWireSlotLedgervaultTableEmptyObject:
+		return true
+	case CanonWireSlotLedgervaultTableEmptyArray:
+		return true
+	}
 	return false
 }
 
@@ -110,7 +165,12 @@ type CanonWireOrdinalTaggerLedgervaultTable struct{}
 var _ CanonWireTaggerLedgervaultTableI = CanonWireOrdinalTaggerLedgervaultTable{}
 
 func (inst CanonWireOrdinalTaggerLedgervaultTable) Tag(slot CanonWireSlotLedgervaultTableE, entityIdx runtime.EntityIdx, attrIdx runtime.AttributeIdx) uint64 {
-	_ = slot
+	switch slot {
+	case CanonWireSlotLedgervaultTableEmptyObject:
+		return 1
+	case CanonWireSlotLedgervaultTableEmptyArray:
+		return 2
+	}
 	return 0
 }
 
@@ -124,6 +184,12 @@ type CanonWireEncoderLedgervaultTable struct {
 	ra                            *ReadAccessLedgervaultTable
 	tagger                        CanonWireTaggerLedgervaultTableI
 	ew                            *cwruntime.EntityWriter
+	awLedgervaultTableNull        *cwruntime.AttributeWriter
+	awLedgervaultTableEmptyObject *cwruntime.AttributeWriter
+	awLedgervaultTableEmptyArray  *cwruntime.AttributeWriter
+	awLedgervaultTableBool        *cwruntime.AttributeWriter
+	awLedgervaultTableF64Array    *cwruntime.AttributeWriter
+	awLedgervaultTableI64Array    *cwruntime.AttributeWriter
 	awLedgervaultTableSymbol      *cwruntime.AttributeWriter
 	awLedgervaultTableStringArray *cwruntime.AttributeWriter
 	awLedgervaultTableU64Array    *cwruntime.AttributeWriter
@@ -131,6 +197,8 @@ type CanonWireEncoderLedgervaultTable struct {
 	// The readaccess container accessors are iterators and report no
 	// length, so an `h` column's elements are collected before the array
 	// head can be written. One reusable slice per column.
+	scratchTaggedF64ArrayValue    []float64
+	scratchTaggedI64ArrayValue    []int64
 	scratchTaggedStringArrayValue []string
 	scratchTaggedU64ArrayValue    []uint64
 }
@@ -149,6 +217,42 @@ func NewCanonWireEncoderLedgervaultTable(ra *ReadAccessLedgervaultTable, tagger 
 	if err != nil {
 		inst = nil
 		err = eb.Build().Str("tableName", "ledgervault-table").Errorf("unable to create the entity writer: %w", err)
+		return
+	}
+	inst.awLedgervaultTableNull, err = cwruntime.NewAttributeWriter(0, 1)
+	if err != nil {
+		inst = nil
+		err = eb.Build().Str("tableName", "ledgervault-table").Str("slot", "null").Errorf("unable to create the attribute writer: %w", err)
+		return
+	}
+	inst.awLedgervaultTableEmptyObject, err = cwruntime.NewAttributeWriter(0, 1)
+	if err != nil {
+		inst = nil
+		err = eb.Build().Str("tableName", "ledgervault-table").Str("slot", "emptyObject").Errorf("unable to create the attribute writer: %w", err)
+		return
+	}
+	inst.awLedgervaultTableEmptyArray, err = cwruntime.NewAttributeWriter(0, 1)
+	if err != nil {
+		inst = nil
+		err = eb.Build().Str("tableName", "ledgervault-table").Str("slot", "emptyArray").Errorf("unable to create the attribute writer: %w", err)
+		return
+	}
+	inst.awLedgervaultTableBool, err = cwruntime.NewAttributeWriter(1, 1)
+	if err != nil {
+		inst = nil
+		err = eb.Build().Str("tableName", "ledgervault-table").Str("slot", "bool").Errorf("unable to create the attribute writer: %w", err)
+		return
+	}
+	inst.awLedgervaultTableF64Array, err = cwruntime.NewAttributeWriter(1, 1)
+	if err != nil {
+		inst = nil
+		err = eb.Build().Str("tableName", "ledgervault-table").Str("slot", "f64Array").Errorf("unable to create the attribute writer: %w", err)
+		return
+	}
+	inst.awLedgervaultTableI64Array, err = cwruntime.NewAttributeWriter(1, 1)
+	if err != nil {
+		inst = nil
+		err = eb.Build().Str("tableName", "ledgervault-table").Str("slot", "i64Array").Errorf("unable to create the attribute writer: %w", err)
 		return
 	}
 	inst.awLedgervaultTableSymbol, err = cwruntime.NewAttributeWriter(1, 1)
@@ -196,6 +300,203 @@ func (inst *CanonWireEncoderLedgervaultTable) EncodeEntity(entityIdx runtime.Ent
 		}
 		ew.EndPlain()
 	}
+	{ // slot null — ""
+		sw := ew.Slot(CanonWireSignatureLedgervaultTableNull)
+		aw := inst.awLedgervaultTableNull
+		n := inst.ra.Null.Memberships.AccelLowCardRef.GetEntityAttributeCount(int(entityIdx))
+		for attrIdx := runtime.AttributeIdx(0); int64(attrIdx) < n; attrIdx++ {
+			aw.Begin()
+			for v := range inst.ra.Null.Memberships.GetMembValueLowCardRef(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelLowCardRef, v, nil, nil)
+			}
+			for v := range inst.ra.Null.Memberships.GetMembValueHighCardRef(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelHighCardRef, v, nil, nil)
+			}
+			for v1, v2 := range inst.ra.Null.Memberships.GetMembValueLowCardRefHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardRef, v1, nil, v2)
+			}
+			for v1, v2 := range inst.ra.Null.Memberships.GetMembValueLowCardVerbatimHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
+			}
+			if inst.tagger != nil {
+				aw.Discriminator(inst.tagger.Tag(CanonWireSlotLedgervaultTableNull, entityIdx, attrIdx))
+			}
+			attr, aerr := aw.End()
+			if aerr != nil {
+				err = eb.Build().Str("slot", "null").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Errorf("unable to finish the attribute: %w", aerr)
+				return
+			}
+			sw.Add(attr)
+		}
+	}
+	{ // slot emptyObject — ""
+		sw := ew.Slot(CanonWireSignatureLedgervaultTableEmptyObject)
+		aw := inst.awLedgervaultTableEmptyObject
+		n := inst.ra.EmptyObject.Memberships.AccelLowCardRef.GetEntityAttributeCount(int(entityIdx))
+		for attrIdx := runtime.AttributeIdx(0); int64(attrIdx) < n; attrIdx++ {
+			aw.Begin()
+			for v := range inst.ra.EmptyObject.Memberships.GetMembValueLowCardRef(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelLowCardRef, v, nil, nil)
+			}
+			for v := range inst.ra.EmptyObject.Memberships.GetMembValueHighCardRef(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelHighCardRef, v, nil, nil)
+			}
+			for v1, v2 := range inst.ra.EmptyObject.Memberships.GetMembValueLowCardRefHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardRef, v1, nil, v2)
+			}
+			for v1, v2 := range inst.ra.EmptyObject.Memberships.GetMembValueLowCardVerbatimHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
+			}
+			if inst.tagger != nil {
+				aw.Discriminator(inst.tagger.Tag(CanonWireSlotLedgervaultTableEmptyObject, entityIdx, attrIdx))
+			}
+			attr, aerr := aw.End()
+			if aerr != nil {
+				err = eb.Build().Str("slot", "emptyObject").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Errorf("unable to finish the attribute: %w", aerr)
+				return
+			}
+			sw.Add(attr)
+		}
+	}
+	{ // slot emptyArray — ""
+		sw := ew.Slot(CanonWireSignatureLedgervaultTableEmptyArray)
+		aw := inst.awLedgervaultTableEmptyArray
+		n := inst.ra.EmptyArray.Memberships.AccelLowCardRef.GetEntityAttributeCount(int(entityIdx))
+		for attrIdx := runtime.AttributeIdx(0); int64(attrIdx) < n; attrIdx++ {
+			aw.Begin()
+			for v := range inst.ra.EmptyArray.Memberships.GetMembValueLowCardRef(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelLowCardRef, v, nil, nil)
+			}
+			for v := range inst.ra.EmptyArray.Memberships.GetMembValueHighCardRef(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelHighCardRef, v, nil, nil)
+			}
+			for v1, v2 := range inst.ra.EmptyArray.Memberships.GetMembValueLowCardRefHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardRef, v1, nil, v2)
+			}
+			for v1, v2 := range inst.ra.EmptyArray.Memberships.GetMembValueLowCardVerbatimHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
+			}
+			if inst.tagger != nil {
+				aw.Discriminator(inst.tagger.Tag(CanonWireSlotLedgervaultTableEmptyArray, entityIdx, attrIdx))
+			}
+			attr, aerr := aw.End()
+			if aerr != nil {
+				err = eb.Build().Str("slot", "emptyArray").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Errorf("unable to finish the attribute: %w", aerr)
+				return
+			}
+			sw.Add(attr)
+		}
+	}
+	{ // slot bool — "b"
+		sw := ew.Slot(CanonWireSignatureLedgervaultTableBool)
+		aw := inst.awLedgervaultTableBool
+		n := inst.ra.Bool.Attributes.GetNumberOfAttributes(entityIdx)
+		for attrIdx := runtime.AttributeIdx(0); int64(attrIdx) < n; attrIdx++ {
+			aw.Begin()
+			for v := range inst.ra.Bool.Memberships.GetMembValueLowCardRef(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelLowCardRef, v, nil, nil)
+			}
+			for v := range inst.ra.Bool.Memberships.GetMembValueHighCardRef(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelHighCardRef, v, nil, nil)
+			}
+			for v1, v2 := range inst.ra.Bool.Memberships.GetMembValueLowCardRefHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardRef, v1, nil, v2)
+			}
+			for v1, v2 := range inst.ra.Bool.Memberships.GetMembValueLowCardVerbatimHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
+			}
+			{
+				cw := aw.BeginValue()
+				v := inst.ra.Bool.Attributes.GetAttrValueValue(entityIdx, attrIdx)
+				cw.WriteBool(v)
+				aw.EndValue()
+			}
+			attr, aerr := aw.End()
+			if aerr != nil {
+				err = eb.Build().Str("slot", "bool").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Errorf("unable to finish the attribute: %w", aerr)
+				return
+			}
+			sw.Add(attr)
+		}
+	}
+	{ // slot f64Array — "f64h"
+		sw := ew.Slot(CanonWireSignatureLedgervaultTableF64Array)
+		aw := inst.awLedgervaultTableF64Array
+		n := inst.ra.F64Array.Attributes.GetNumberOfAttributes(entityIdx)
+		for attrIdx := runtime.AttributeIdx(0); int64(attrIdx) < n; attrIdx++ {
+			aw.Begin()
+			for v := range inst.ra.F64Array.Memberships.GetMembValueLowCardRef(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelLowCardRef, v, nil, nil)
+			}
+			for v := range inst.ra.F64Array.Memberships.GetMembValueHighCardRef(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelHighCardRef, v, nil, nil)
+			}
+			for v1, v2 := range inst.ra.F64Array.Memberships.GetMembValueLowCardRefHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardRef, v1, nil, v2)
+			}
+			for v1, v2 := range inst.ra.F64Array.Memberships.GetMembValueLowCardVerbatimHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
+			}
+			{
+				cw := aw.BeginValue()
+				s := inst.scratchTaggedF64ArrayValue[:0]
+				for v := range inst.ra.F64Array.Attributes.GetAttrValueValue(entityIdx, attrIdx) {
+					s = append(s, v)
+				}
+				inst.scratchTaggedF64ArrayValue = s
+				cw.ArrayHead(len(s))
+				for _, v := range s {
+					cw.WriteF64(v)
+				}
+				aw.EndValue()
+			}
+			attr, aerr := aw.End()
+			if aerr != nil {
+				err = eb.Build().Str("slot", "f64Array").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Errorf("unable to finish the attribute: %w", aerr)
+				return
+			}
+			sw.Add(attr)
+		}
+	}
+	{ // slot i64Array — "i64h"
+		sw := ew.Slot(CanonWireSignatureLedgervaultTableI64Array)
+		aw := inst.awLedgervaultTableI64Array
+		n := inst.ra.I64Array.Attributes.GetNumberOfAttributes(entityIdx)
+		for attrIdx := runtime.AttributeIdx(0); int64(attrIdx) < n; attrIdx++ {
+			aw.Begin()
+			for v := range inst.ra.I64Array.Memberships.GetMembValueLowCardRef(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelLowCardRef, v, nil, nil)
+			}
+			for v := range inst.ra.I64Array.Memberships.GetMembValueHighCardRef(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelHighCardRef, v, nil, nil)
+			}
+			for v1, v2 := range inst.ra.I64Array.Memberships.GetMembValueLowCardRefHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardRef, v1, nil, v2)
+			}
+			for v1, v2 := range inst.ra.I64Array.Memberships.GetMembValueLowCardVerbatimHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
+			}
+			{
+				cw := aw.BeginValue()
+				s := inst.scratchTaggedI64ArrayValue[:0]
+				for v := range inst.ra.I64Array.Attributes.GetAttrValueValue(entityIdx, attrIdx) {
+					s = append(s, v)
+				}
+				inst.scratchTaggedI64ArrayValue = s
+				cw.ArrayHead(len(s))
+				for _, v := range s {
+					cw.WriteInt(int64(v))
+				}
+				aw.EndValue()
+			}
+			attr, aerr := aw.End()
+			if aerr != nil {
+				err = eb.Build().Str("slot", "i64Array").Int("entityIdx", int(entityIdx)).Int("attrIdx", int(attrIdx)).Errorf("unable to finish the attribute: %w", aerr)
+				return
+			}
+			sw.Add(attr)
+		}
+	}
 	{ // slot symbol — "s"
 		sw := ew.Slot(CanonWireSignatureLedgervaultTableSymbol)
 		aw := inst.awLedgervaultTableSymbol
@@ -210,6 +511,9 @@ func (inst *CanonWireEncoderLedgervaultTable) EncodeEntity(entityIdx runtime.Ent
 			}
 			for v1, v2 := range inst.ra.Symbol.Memberships.GetMembValueLowCardRefHighCardParams(entityIdx, attrIdx) {
 				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardRef, v1, nil, v2)
+			}
+			for v1, v2 := range inst.ra.Symbol.Memberships.GetMembValueLowCardVerbatimHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
 			}
 			{
 				cw := aw.BeginValue()
@@ -239,6 +543,9 @@ func (inst *CanonWireEncoderLedgervaultTable) EncodeEntity(entityIdx runtime.Ent
 			}
 			for v1, v2 := range inst.ra.StringArray.Memberships.GetMembValueLowCardRefHighCardParams(entityIdx, attrIdx) {
 				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardRef, v1, nil, v2)
+			}
+			for v1, v2 := range inst.ra.StringArray.Memberships.GetMembValueLowCardVerbatimHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
 			}
 			{
 				cw := aw.BeginValue()
@@ -275,6 +582,9 @@ func (inst *CanonWireEncoderLedgervaultTable) EncodeEntity(entityIdx runtime.Ent
 			}
 			for v1, v2 := range inst.ra.U64Array.Memberships.GetMembValueLowCardRefHighCardParams(entityIdx, attrIdx) {
 				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardRef, v1, nil, v2)
+			}
+			for v1, v2 := range inst.ra.U64Array.Memberships.GetMembValueLowCardVerbatimHighCardParams(entityIdx, attrIdx) {
+				aw.Membership(0, mappingplan.MembershipChannelMixedLowCardVerbatim, 0, v1, v2)
 			}
 			{
 				cw := aw.BeginValue()

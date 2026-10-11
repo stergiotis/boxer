@@ -35,7 +35,8 @@ func TestGenerateLedgerStore(t *testing.T) {
 		ImportPath:     "github.com/stergiotis/boxer/public/storage/recordstore/example",
 		Roles:          gen.Roles{Order: "ordinal"},
 		Wrapper:        marshallgen.FixedIdsWrapper{Ids: ledgerGenIds},
-		// The note is the vault's: the ledger holds no content (§SD4).
-		Evidence: &gen.Evidence{Chain: true, WrittenBy: true, Vault: []string{"./ledgernote_dto.go"}},
+		// The note and the shredded document are the vault's: the ledger
+		// holds no content (§SD4).
+		Evidence: &gen.Evidence{Chain: true, WrittenBy: true, Vault: []string{"./ledgernote_dto.go"}, Shredded: true},
 	}.Generate())
 }
