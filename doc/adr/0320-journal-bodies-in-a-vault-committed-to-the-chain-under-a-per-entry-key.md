@@ -1,10 +1,10 @@
 ---
 type: adr
-status: proposed
+status: accepted
 date: 2026-10-11
+reviewed-by: "p@stergiotis"
+reviewed-date: 2026-10-11
 ---
-
-> **Status: proposed — pre-human-review.** Decision under consideration; do not implement as if accepted.
 
 # ADR-0320: Journal bodies in a vault, committed to the chain under a per-entry key, erased by destroying both
 
@@ -35,11 +35,12 @@ Two things make it return.
   blockchain guidance asks that an on-chain value be renderable anonymous by
   erasing off-chain data.
 
-Prior art in the tree: ADR-0025 for the pushout VCS, and, outside it, the
-dmdm vault, where personal values never enter the patch and live as salted
-commitment tokens in a vault table, erased by a synchronous mutation with a
-tombstone and a receipt. The journal has the same two halves already,
-ledger rows and bodies; what it lacks is the separation and the secret.
+Prior art in the tree: ADR-0025 for the pushout VCS, whose vault backs
+its commitments with per-occurrence nonces (§SD6) and forgets a subject by
+deleting the vault rows under a mutation-finality contract (§SD9, §SD11),
+so that destroying the nonces is what anonymises. The journal has the same
+two halves already, ledger rows and bodies; what it lacks is the
+separation and the secret.
 
 ## Design space (QOC)
 
@@ -276,18 +277,21 @@ O1, O2, O4 and O5 are weighed in the QOC. Two narrower choices:
 
 ## Status
 
-Proposed 2026-10-11.
+Accepted 2026-10-11.
 
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
-<!--
 ## Updates
 
-Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
-claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
-YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
--->
+### 2026-10-11 — SD5: of several vault rows at an ordinal, the one that opens
+
+An ordinal can hold more than one vault row: an append retried after its
+ledger write failed, or a batch that was in flight when another process
+took the run over (ADR-0319 §SD7's Update of this date). The join tries
+each row and keeps the one that opens the entry's commitments. It used to
+keep only the last row it read, so the entry could read as erased while the
+row that opened it was in the table.
 
 ## References
 
