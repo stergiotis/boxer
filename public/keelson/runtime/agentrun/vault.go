@@ -20,7 +20,7 @@ import (
 
 // Body is one vault row: an entry's content and its opening.
 type Body struct {
-	Run       string
+	Run       uint64
 	Ordinal   uint32
 	Opening   []byte
 	Body      string
@@ -75,33 +75,33 @@ type BodyStoreI interface {
 	// Put writes rows and flushes.
 	Put(ctx context.Context, bodies []Body) (err error)
 	// Get reads a run's rows from an ordinal on.
-	Get(ctx context.Context, run string, from uint32) (bodies []Body, err error)
+	Get(ctx context.Context, run uint64, from uint32) (bodies []Body, err error)
 	// GetOf reads the rows of several runs.
-	GetOf(ctx context.Context, runs []string) (bodies []Body, err error)
+	GetOf(ctx context.Context, runs []uint64) (bodies []Body, err error)
 	// Destroy removes a run's rows except those at keep, so that nothing
 	// of them remains in the table: a deletion that rewrites, not a
 	// mask, where the backend distinguishes the two.
-	Destroy(ctx context.Context, run string, keep []uint32) (err error)
+	Destroy(ctx context.Context, run uint64, keep []uint32) (err error)
 	// Erase removes the rows at ordinals.
-	Erase(ctx context.Context, run string, ordinals []uint32) (err error)
+	Erase(ctx context.Context, run uint64, ordinals []uint32) (err error)
 }
 
 // EraserI is a store that erases the content of named entries of a run
 // after their erased entries are in the chain (ADR-0320 §SD4).
 type EraserI interface {
-	Erase(ctx context.Context, run string, ordinals []uint32) (err error)
+	Erase(ctx context.Context, run uint64, ordinals []uint32) (err error)
 }
 
 // MemBodyStore is BodyStoreI with no server.
 type MemBodyStore struct {
 	mu   sync.Mutex
-	rows map[string]map[uint32]Body
+	rows map[uint64]map[uint32]Body
 }
 
 var _ BodyStoreI = (*MemBodyStore)(nil)
 
 // NewMemBodyStore is an empty vault.
-func NewMemBodyStore() *MemBodyStore { return &MemBodyStore{rows: make(map[string]map[uint32]Body)} }
+func NewMemBodyStore() *MemBodyStore { return &MemBodyStore{rows: make(map[uint64]map[uint32]Body)} }
 
 func (inst *MemBodyStore) Put(_ context.Context, bodies []Body) (err error) {
 	inst.mu.Lock()
@@ -118,7 +118,7 @@ func (inst *MemBodyStore) Put(_ context.Context, bodies []Body) (err error) {
 	return
 }
 
-func (inst *MemBodyStore) Get(_ context.Context, run string, from uint32) (bodies []Body, err error) {
+func (inst *MemBodyStore) Get(_ context.Context, run uint64, from uint32) (bodies []Body, err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	for _, b := range inst.rows[run] {
@@ -129,7 +129,7 @@ func (inst *MemBodyStore) Get(_ context.Context, run string, from uint32) (bodie
 	return
 }
 
-func (inst *MemBodyStore) GetOf(_ context.Context, runs []string) (bodies []Body, err error) {
+func (inst *MemBodyStore) GetOf(_ context.Context, runs []uint64) (bodies []Body, err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	for _, run := range runs {
@@ -140,7 +140,7 @@ func (inst *MemBodyStore) GetOf(_ context.Context, runs []string) (bodies []Body
 	return
 }
 
-func (inst *MemBodyStore) Destroy(_ context.Context, run string, keep []uint32) (err error) {
+func (inst *MemBodyStore) Destroy(_ context.Context, run uint64, keep []uint32) (err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	for ord := range inst.rows[run] {
@@ -151,7 +151,7 @@ func (inst *MemBodyStore) Destroy(_ context.Context, run string, keep []uint32) 
 	return
 }
 
-func (inst *MemBodyStore) Erase(_ context.Context, run string, ordinals []uint32) (err error) {
+func (inst *MemBodyStore) Erase(_ context.Context, run uint64, ordinals []uint32) (err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	for _, ord := range ordinals {
@@ -187,13 +187,16 @@ func NewVaulted(ledger StoreI, vault BodyStoreI) *VaultedStore {
 // the ledger: no content.
 func (inst *VaultedStore) Ledger() StoreI { return inst.ledger }
 
+func (inst *VaultedStore) MintRun(ctx context.Context) (id uint64, err error) {
+	return inst.ledger.MintRun(ctx)
+}
 func (inst *VaultedStore) CreateRun(ctx context.Context, r Run) (err error) {
 	return inst.ledger.CreateRun(ctx, r)
 }
 func (inst *VaultedStore) UpdateRun(ctx context.Context, r Run) (err error) {
 	return inst.ledger.UpdateRun(ctx, r)
 }
-func (inst *VaultedStore) GetRun(ctx context.Context, id string) (r Run, found bool, err error) {
+func (inst *VaultedStore) GetRun(ctx context.Context, id uint64) (r Run, found bool, err error) {
 	return inst.ledger.GetRun(ctx, id)
 }
 func (inst *VaultedStore) ListRuns(ctx context.Context, ownerApp string, limit int) (runs []Run, err error) {
@@ -210,7 +213,7 @@ func (inst *VaultedStore) Append(ctx context.Context, entries []Entry) (err erro
 	for _, e := range entries {
 		if b, ok := bodyOf(e); ok {
 			if !e.BodiesMatch() {
-				return eb.Build().Str("run", e.Run).Uint32("ordinal", e.Ordinal).Errorf("the entry's content does not open its commitments")
+				return eb.Build().Uint64("run", e.Run).Uint32("ordinal", e.Ordinal).Errorf("the entry's content does not open its commitments")
 			}
 			bodies = append(bodies, b)
 		}
@@ -221,10 +224,16 @@ func (inst *VaultedStore) Append(ctx context.Context, entries []Entry) (err erro
 			return eh.Errorf("vault: %w", err)
 		}
 	}
-	return inst.ledger.Append(ctx, stripped)
+	if err = inst.ledger.Append(ctx, stripped); err != nil {
+		return
+	}
+	for i := range entries {
+		entries[i].EntryId = stripped[i].EntryId
+	}
+	return
 }
 
-func (inst *VaultedStore) Entries(ctx context.Context, run string, from uint32) (entries []Entry, err error) {
+func (inst *VaultedStore) Entries(ctx context.Context, run uint64, from uint32) (entries []Entry, err error) {
 	if entries, err = inst.ledger.Entries(ctx, run, from); err != nil || len(entries) == 0 {
 		return
 	}
@@ -250,7 +259,7 @@ func (inst *VaultedStore) AllEntries(ctx context.Context) (entries []Entry, err 
 	return inst.joined(entries, bodies), nil
 }
 
-func (inst *VaultedStore) EntriesOf(ctx context.Context, runs []string) (entries []Entry, err error) {
+func (inst *VaultedStore) EntriesOf(ctx context.Context, runs []uint64) (entries []Entry, err error) {
 	if len(runs) == 0 {
 		return
 	}
@@ -280,7 +289,7 @@ func (inst *VaultedStore) EntriesOf(ctx context.Context, runs []string) (entries
 // logged, and the entry reads as erased (ADR-0320 §SD5).
 func (inst *VaultedStore) joined(entries []Entry, bodies []Body) (out []Entry) {
 	type key struct {
-		run string
+		run uint64
 		ord uint32
 	}
 	// An ordinal can hold more than one row — an append retried after its
@@ -304,7 +313,7 @@ func (inst *VaultedStore) joined(entries []Entry, bodies []Body) (out []Entry) {
 				}
 			}
 			if !opened {
-				inst.Log.Warn().Str("run", e.Run).Uint32("ordinal", e.Ordinal).Msg("a vault row does not open its entry's commitments; the entry reads as erased")
+				inst.Log.Warn().Uint64("run", e.Run).Uint32("ordinal", e.Ordinal).Msg("a vault row does not open its entry's commitments; the entry reads as erased")
 			}
 		}
 		out = append(out, e)
@@ -316,7 +325,7 @@ func (inst *VaultedStore) joined(entries []Entry, bodies []Body) (out []Entry) {
 // bodies are digests the anchor law reads (ADR-0314 §SD5), then lets the
 // ledger do what it does for a deleted run, which for a ledger without
 // content is nothing.
-func (inst *VaultedStore) Tombstone(ctx context.Context, run string) (err error) {
+func (inst *VaultedStore) Tombstone(ctx context.Context, run uint64) (err error) {
 	entries, err := inst.ledger.Entries(ctx, run, 0)
 	if err != nil {
 		return
@@ -334,7 +343,7 @@ func (inst *VaultedStore) Tombstone(ctx context.Context, run string) (err error)
 }
 
 // Erase destroys the vault rows at ordinals (ADR-0320 §SD4).
-func (inst *VaultedStore) Erase(ctx context.Context, run string, ordinals []uint32) (err error) {
+func (inst *VaultedStore) Erase(ctx context.Context, run uint64, ordinals []uint32) (err error) {
 	if len(ordinals) == 0 {
 		return
 	}

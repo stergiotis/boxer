@@ -11,36 +11,37 @@ import (
 // rows and as SQL for the integration lane: a law returns the rows that
 // break it. The exits are the outbound rows the trail records (ADR-0277
 // §SD7) joined on the sink they left by; the approvals are the journal's
-// approval entries, joined by the key the exit row carries (ApprovalKey).
-// An exit and its approval live in two records with two counters, the
-// trail's call id and the journal's ordinal, so "before" is a question of
-// time, never of one ordinal against the other.
+// approval entries, joined by the entry id the exit row carries (ADR-0325
+// §SD5). An exit and its approval live in two records with two counters,
+// the trail's call id and the journal's ordinal, so "before" is a question
+// of time, never of one ordinal against the other.
 
 // ExitRow is one row the trail records as leaving the cell: by which sink,
-// at which tier, under which approval key if any. Ordinal is the row's
-// own identity in the trail (the call's display id); At is when it left.
+// at which tier, in which conversation, under which approval entry if
+// any. Ordinal is the row's own identity in the trail (the call's display
+// id); At is when it left.
 type ExitRow struct {
-	Run      string
-	Ordinal  uint32
-	CallId   string
-	At       time.Time
-	Sink     SinkKindE
-	Edge     string
-	Tier     agentrun.TierE
-	Approval string
+	Conversation  string
+	Ordinal       uint32
+	CallId        string
+	At            time.Time
+	Sink          SinkKindE
+	Edge          string
+	Tier          agentrun.TierE
+	ApprovalEntry uint64
 }
 
 // ApprovalEntry is one approval entry of the journal, as the laws see it:
-// where it is (run, ordinal), when it was written, and what it says.
+// its id, where it is (run, ordinal) and the conversation its run is of,
+// when it was written, and what it says.
 type ApprovalEntry struct {
-	Run      string
-	Ordinal  uint32
-	At       time.Time
-	Approval Approval
+	EntryId      uint64
+	Run          uint64
+	Conversation string
+	Ordinal      uint32
+	At           time.Time
+	Approval     Approval
 }
-
-// Key is the entry's ApprovalKey.
-func (inst ApprovalEntry) Key() string { return ApprovalKey(inst.Run, inst.Ordinal) }
 
 func clearancesOf(sinks []Sink) (clearances map[string]agentrun.TierE) {
 	clearances = make(map[string]agentrun.TierE, len(sinks))
@@ -50,10 +51,10 @@ func clearancesOf(sinks []Sink) (clearances map[string]agentrun.TierE) {
 	return
 }
 
-func approvalsByKey(approvals []ApprovalEntry) (byKey map[string]ApprovalEntry) {
-	byKey = make(map[string]ApprovalEntry, len(approvals))
+func approvalsById(approvals []ApprovalEntry) (byId map[uint64]ApprovalEntry) {
+	byId = make(map[uint64]ApprovalEntry, len(approvals))
 	for _, a := range approvals {
-		byKey[a.Key()] = a
+		byId[a.EntryId] = a
 	}
 	return
 }
@@ -66,7 +67,7 @@ func approvalsByKey(approvals []ApprovalEntry) (byKey map[string]ApprovalEntry) 
 // exit (ExitsSQL joins the declared sinks for the same reason).
 func L14(sinks []Sink, exits []ExitRow, approvals []ApprovalEntry) (violations []ExitRow) {
 	clearances := clearancesOf(sinks)
-	byKey := approvalsByKey(approvals)
+	byId := approvalsById(approvals)
 	for _, e := range exits {
 		c, named := clearances[e.Sink.String()+"\x00"+e.Edge]
 		if !named {
@@ -76,7 +77,7 @@ func L14(sinks []Sink, exits []ExitRow, approvals []ApprovalEntry) (violations [
 		if e.Tier <= c {
 			continue
 		}
-		a, ok := byKey[e.Approval]
+		a, ok := byId[e.ApprovalEntry]
 		if path, parsed := ParseApprovalTier(a.Approval.Path); !ok || !parsed || path != ApprovalTierPerson {
 			violations = append(violations, e)
 		}
@@ -85,25 +86,25 @@ func L14(sinks []Sink, exits []ExitRow, approvals []ApprovalEntry) (violations [
 }
 
 // L33 is the approval law: the approval an exit above the clearance names
-// is an entry of the same run, written before the exit, for the same sink,
+// is an entry of the exit's conversation, written before the exit, for the same sink,
 // and on the path the policy requires for the payload's tier; a path the
 // policy never opens is a violation whatever the entry says. "Before" is
 // read off the two timestamps where both are known.
 func L33(policy ApprovalPolicy, sinks []Sink, exits []ExitRow, approvals []ApprovalEntry) (violations []ExitRow) {
 	clearances := clearancesOf(sinks)
-	byKey := approvalsByKey(approvals)
+	byId := approvalsById(approvals)
 	for _, e := range exits {
 		c := clearances[e.Sink.String()+"\x00"+e.Edge]
 		if e.Tier <= c {
 			continue
 		}
 		need := policy.Path(e.Tier)
-		a, ok := byKey[e.Approval]
+		a, ok := byId[e.ApprovalEntry]
 		got, parsed := ParseApprovalTier(a.Approval.Path)
 		sameSink := a.Approval.Channel == e.Sink.String() && (a.Approval.Edge == "" || a.Approval.Edge == e.Edge)
 		after := !a.At.IsZero() && !e.At.IsZero() && a.At.After(e.At)
 		if !ok || !parsed || need == ApprovalTierFree || need == ApprovalTierNever || got != need ||
-			a.Run != e.Run || after || !sameSink {
+			a.Conversation != e.Conversation || after || !sameSink {
 			violations = append(violations, e)
 		}
 	}
@@ -115,32 +116,34 @@ func L33(policy ApprovalPolicy, sinks []Sink, exits []ExitRow, approvals []Appro
 // as a sink, with the tier the wall saw and the approval key it went
 // under. A call refused never left; a call to a loopback or trusted route
 // stayed inside the cell and is no exit, which the join to keelson('sinks')
-// says. The run is the conversation the call belongs to; the ordinal is
-// the call's display id, an identity and not a position in any journal.
+// says. The ordinal is the call's display id, an identity and not a
+// position in any journal.
 const ExitsSQL = `
-SELECT c.conversation AS run, c.id AS ordinal, c.call_id AS call_id, c.at AS at,
-       'model-route' AS sink, c.endpoint_host AS edge, toUInt8(c.tier) AS tier, c.approval AS approval
+SELECT c.conversation AS conversation, c.id AS ordinal, c.call_id AS call_id, c.at AS at,
+       'model-route' AS sink, c.endpoint_host AS edge, toUInt8(c.tier) AS tier, c.approval_entry AS approval_entry
 FROM keelson('llm_calls') AS c
 INNER JOIN keelson('sinks') AS s ON s.kind = 'model-route' AND s.edge = c.endpoint_host
 WHERE NOT c.refused`
 
-// ApprovalsSQL is the approval entries of the journal with their key,
-// path, sink and time, over keelson('agent_run_entries').
+// ApprovalsSQL is the approval entries of the journal with their id, the
+// conversation of their run, path, sink and time, over
+// keelson('agent_run_entries') and keelson('agent_runs').
 const ApprovalsSQL = `
-SELECT run, ordinal, concat(run, '#', toString(ordinal)) AS key, at_ms,
-       JSONExtractString(body, 'path') AS path, JSONExtractString(body, 'channel') AS channel, JSONExtractString(body, 'edge') AS edge
-FROM keelson('agent_run_entries')
-WHERE kind = 'approval'`
+SELECT e.entry_id AS entry_id, e.run AS run, r.conversation AS conversation, e.ordinal AS ordinal, e.at_ms AS at_ms,
+       JSONExtractString(e.body, 'path') AS path, JSONExtractString(e.body, 'channel') AS channel, JSONExtractString(e.body, 'edge') AS edge
+FROM keelson('agent_run_entries') AS e
+INNER JOIN keelson('agent_runs') AS r ON r.id = e.run
+WHERE e.kind = 'approval'`
 
 // L14SQLOver is L14 over the named relations: exits with the ExitsSQL
 // columns, sinks with keelson('sinks')'s, approvals with ApprovalsSQL's.
 // The tier compares against the sink's rank, never its name.
 func L14SQLOver(exits string, sinks string, approvals string) string {
 	return strings.NewReplacer("{exits}", exits, "{sinks}", sinks, "{approvals}", approvals).Replace(`
-SELECT x.run AS run, x.ordinal AS ordinal, x.sink AS sink, x.edge AS edge, x.tier AS tier
+SELECT x.conversation AS conversation, x.ordinal AS ordinal, x.sink AS sink, x.edge AS edge, x.tier AS tier
 FROM {exits} AS x
 LEFT JOIN {sinks} AS s ON s.kind = x.sink AND s.edge = x.edge
-LEFT JOIN {approvals} AS a ON a.key = x.approval
+LEFT JOIN {approvals} AS a ON a.entry_id = x.approval_entry
 WHERE s.kind = '' OR (x.tier > s.clearance_rank AND a.path != 'person')`)
 }
 
@@ -150,13 +153,13 @@ WHERE s.kind = '' OR (x.tier > s.clearance_rank AND a.path != 'person')`)
 // epoch; the two are compared as times.
 func L33SQLOver(exits string, sinks string, approvals string, policy string) string {
 	return strings.NewReplacer("{exits}", exits, "{sinks}", sinks, "{approvals}", approvals, "{policy}", policy).Replace(`
-SELECT x.run AS run, x.ordinal AS ordinal, x.sink AS sink, x.edge AS edge, x.tier AS tier
+SELECT x.conversation AS conversation, x.ordinal AS ordinal, x.sink AS sink, x.edge AS edge, x.tier AS tier
 FROM {exits} AS x
 INNER JOIN {sinks} AS s ON s.kind = x.sink AND s.edge = x.edge
-LEFT JOIN {approvals} AS a ON a.key = x.approval
+LEFT JOIN {approvals} AS a ON a.entry_id = x.approval_entry
 LEFT JOIN {policy} AS p ON p.tier = x.tier
 WHERE x.tier > s.clearance_rank
-  AND (a.key = '' OR a.run != x.run OR fromUnixTimestamp64Milli(a.at_ms) > parseDateTime64BestEffort(x.at, 3)
+  AND (a.entry_id = 0 OR a.conversation != x.conversation OR fromUnixTimestamp64Milli(a.at_ms) > parseDateTime64BestEffort(x.at, 3)
        OR a.channel != x.sink OR (a.edge != '' AND a.edge != x.edge)
        OR p.path IN ('', 'free', 'never') OR a.path != p.path)`)
 }

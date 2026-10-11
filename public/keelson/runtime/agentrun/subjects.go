@@ -14,8 +14,11 @@ const ServiceAppId app.AppIdT = "runtime.agentrun"
 // per verb of the store seam, every call scoped to Msg.Sender — an app
 // reaches only the runs it owns.
 const (
-	SubjectPrefix    = "runtime.agentrun."
-	SubjectAll       = "runtime.agentrun.*"
+	SubjectPrefix = "runtime.agentrun."
+	SubjectAll    = "runtime.agentrun.*"
+	// SubjectMint draws a run id for a run about to be created (ADR-0325
+	// §SD5).
+	SubjectMint      = SubjectPrefix + "mint"
 	SubjectCreate    = SubjectPrefix + "create"
 	SubjectUpdate    = SubjectPrefix + "update"
 	SubjectGet       = SubjectPrefix + "get"

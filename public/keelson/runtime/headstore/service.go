@@ -41,7 +41,7 @@ const wireVersion = 1
 type wireHead struct {
 	V       uint8  `json:"v"`
 	Cell    string `json:"cell,omitempty"`
-	Run     string `json:"run"`
+	Run     uint64 `json:"run"`
 	Ordinal uint32 `json:"ordinal"`
 	Digest  string `json:"digest"`
 }
@@ -59,12 +59,12 @@ type wireReceipt struct {
 type wireRead struct {
 	V    uint8  `json:"v"`
 	Cell string `json:"cell,omitempty"`
-	Run  string `json:"run"`
+	Run  uint64 `json:"run"`
 }
 
 type wireAnchored struct {
 	Cell      string    `json:"cell,omitempty"`
-	Run       string    `json:"run"`
+	Run       uint64    `json:"run"`
 	Ordinal   uint32    `json:"ordinal"`
 	Digest    string    `json:"digest"`
 	ReceiptId string    `json:"receipt_id"`
@@ -110,7 +110,7 @@ type Service struct {
 
 // OwnerOfI resolves a run id to the app that owns it.
 type OwnerOfI interface {
-	OwnerOf(ctx context.Context, run string) (owner string, found bool, err error)
+	OwnerOf(ctx context.Context, run uint64) (owner string, found bool, err error)
 }
 
 // RunOwners is OwnerOfI over the journal store: the run row's owner app.
@@ -118,7 +118,7 @@ func RunOwners(st agentrun.StoreI) OwnerOfI { return runOwners{st: st} }
 
 type runOwners struct{ st agentrun.StoreI }
 
-func (inst runOwners) OwnerOf(ctx context.Context, run string) (owner string, found bool, err error) {
+func (inst runOwners) OwnerOf(ctx context.Context, run uint64) (owner string, found bool, err error) {
 	r, found, err := inst.st.GetRun(ctx, run)
 	if err != nil || !found {
 		return
@@ -130,11 +130,11 @@ func (inst runOwners) OwnerOf(ctx context.Context, run string) (owner string, fo
 // owner as the journal store names it, or, without a resolver, the
 // sender the run's first head came from (a run no one anchored is
 // anyone's to anchor first).
-func (inst *Service) allowed(ctx context.Context, cell string, run string, sender string) (ok bool, why string, err error) {
+func (inst *Service) allowed(ctx context.Context, cell string, run uint64, sender string) (ok bool, why string, err error) {
 	if inst.Owners != nil {
 		owner, found, oerr := inst.Owners.OwnerOf(ctx, run)
 		if oerr != nil {
-			return false, "", eb.Build().Str("run", run).Errorf("resolve the run's owner: %w", oerr)
+			return false, "", eb.Build().Uint64("run", run).Errorf("resolve the run's owner: %w", oerr)
 		}
 		if !found {
 			return false, "no such run", nil
@@ -146,7 +146,7 @@ func (inst *Service) allowed(ctx context.Context, cell string, run string, sende
 	}
 	heads, err := inst.store.Read(ctx, cell, run)
 	if err != nil {
-		return false, "", eb.Build().Str("run", run).Errorf("read heads: %w", err)
+		return false, "", eb.Build().Uint64("run", run).Errorf("read heads: %w", err)
 	}
 	for _, a := range heads {
 		if a.Receipt.By != "" && a.Receipt.By != sender {
@@ -196,7 +196,7 @@ func (inst *Service) handle(msg *app.Msg) {
 			inst.reply(msg.Reply, wireReceipt{V: wireVersion, Reason: err.Error()})
 			return
 		}
-		if req.Run == "" || req.Digest == "" {
+		if req.Run == 0 || req.Digest == "" {
 			inst.reply(msg.Reply, wireReceipt{V: wireVersion, Reason: "a head names its run and digest"})
 			return
 		}
@@ -259,7 +259,7 @@ func (inst *Service) handle(msg *app.Msg) {
 func (inst *Service) held(ctx context.Context, h Head) (r Receipt, held bool, err error) {
 	heads, err := inst.store.Read(ctx, h.Cell, h.Run)
 	if err != nil {
-		err = eb.Build().Str("run", h.Run).Errorf("read heads: %w", err)
+		err = eb.Build().Uint64("run", h.Run).Errorf("read heads: %w", err)
 		return
 	}
 	for _, a := range heads {
@@ -270,7 +270,7 @@ func (inst *Service) held(ctx context.Context, h Head) (r Receipt, held bool, er
 			continue
 		}
 		if a.Digest != h.Digest {
-			err = eb.Build().Str("run", h.Run).Uint32("ordinal", h.Ordinal).Errorf("another digest is anchored at the ordinal")
+			err = eb.Build().Uint64("run", h.Run).Uint32("ordinal", h.Ordinal).Errorf("another digest is anchored at the ordinal")
 			return
 		}
 		r, held = a.Receipt, true
@@ -352,7 +352,7 @@ func (inst *Client) Append(ctx context.Context, h Head) (r Receipt, err error) {
 	return Receipt{Id: rep.Id, At: rep.At, By: rep.By, Durable: rep.Durable}, nil
 }
 
-func (inst *Client) Read(ctx context.Context, cell string, run string) (heads []Anchored, err error) {
+func (inst *Client) Read(ctx context.Context, cell string, run uint64) (heads []Anchored, err error) {
 	rep, err := roundTrip[wireRead, wireReadReply](ctx, inst, SubjectRead, wireRead{V: wireVersion, Cell: cell, Run: run})
 	if err != nil {
 		return

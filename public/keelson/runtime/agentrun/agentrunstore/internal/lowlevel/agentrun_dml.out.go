@@ -23,7 +23,7 @@ import (
 
 func CreateSchemaAgentrunTable() (schema *arrow.Schema) {
 	schema = arrow.NewSchema([]arrow.Field{
-		/* 000 */ arrow.Field{Name: "id:id:s:4::0:", Nullable: false, Type: &arrow.StringType{}},
+		/* 000 */ arrow.Field{Name: "id:id:u64:4::0:", Nullable: false, Type: arrow.PrimitiveTypes.Uint64},
 		/* 001 */ arrow.Field{Name: "ts:ts:z64:47::0:", Nullable: false, Type: &arrow.TimestampType{Unit: arrow.Nanosecond}},
 		/* 002 */ arrow.Field{Name: "lc:lifecycle:u8:4::0:", Nullable: false, Type: arrow.PrimitiveTypes.Uint8},
 		/* 003 */ arrow.Field{Name: "tv:runCell:value:val:s:24:::0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
@@ -331,12 +331,12 @@ type InEntityAgentrunTable struct {
 	section23State     runtime.EntityStateE
 	activeSections     *[24]bool
 	ambientHighCardRef []uint64
-	plainId0           string
+	plainId0           uint64
 
 	plainTs1 time.Time
 
 	plainLifecycle2       uint8
-	scalarFieldBuilder000 *array.StringBuilder
+	scalarFieldBuilder000 *array.Uint64Builder
 
 	scalarFieldBuilder001 *array.TimestampBuilder
 
@@ -353,7 +353,7 @@ func NewInEntityAgentrunTable(allocator memory.Allocator, estimatedNumberOfRecor
 	builder := array.NewRecordBuilder(allocator, schema)
 	inst.builder = builder
 	inst.initSections(builder)
-	inst.scalarFieldBuilder000 = builder.Field(0).(*array.StringBuilder)
+	inst.scalarFieldBuilder000 = builder.Field(0).(*array.Uint64Builder)
 	inst.scalarFieldBuilder001 = builder.Field(1).(*array.TimestampBuilder)
 	inst.scalarFieldBuilder002 = builder.Field(2).(*array.Uint8Builder)
 
@@ -417,7 +417,7 @@ var InEntityAgentrunTableSectionIndices = map[string]int{
 // dml.(*GoClassBuilder).ComposeEntityCode
 // ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
 
-func (inst *InEntityAgentrunTable) setId(id0 string) *InEntityAgentrunTable {
+func (inst *InEntityAgentrunTable) setId(id0 uint64) *InEntityAgentrunTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
@@ -492,7 +492,7 @@ func (inst *InEntityAgentrunTable) appendPlainValues() {
 	inst.scalarFieldBuilder002.Append(inst.plainLifecycle2)
 }
 func (inst *InEntityAgentrunTable) resetPlainValues() {
-	inst.plainId0 = ""
+	inst.plainId0 = uint64(0)
 
 	inst.plainTs1 = time.Time{}
 
@@ -969,7 +969,7 @@ func InEntityAgentrunTableSetActiveSections(e *InEntityAgentrunTable, idxs []int
 	e.setActiveSections(idxs)
 }
 func InEntityAgentrunTableReleaseBuilder(e *InEntityAgentrunTable) { e.builder.Release() }
-func InEntityAgentrunTableSetId(e *InEntityAgentrunTable, id0 string) *InEntityAgentrunTable {
+func InEntityAgentrunTableSetId(e *InEntityAgentrunTable, id0 uint64) *InEntityAgentrunTable {
 	return e.setId(id0)
 }
 func InEntityAgentrunTableSetTimestamp(e *InEntityAgentrunTable, ts1 time.Time) *InEntityAgentrunTable {

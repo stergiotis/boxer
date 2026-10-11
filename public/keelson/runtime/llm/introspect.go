@@ -86,13 +86,14 @@ type CallRecord struct {
 	// Profile and Route are what the caller declared (ADR-0310 §SD4),
 	// Route the service's own route id when the caller named none; Tier
 	// the content's tier as the wall saw it, confined content raised to
-	// the confined tier, and Approval the verified journal key of the
-	// approval an exit above the clearance went out under (ADR-0312
-	// §SD3). All four land on the durable row.
-	Profile  string
-	Route    string
-	Tier     uint8
-	Approval string
+	// the confined tier, and ApprovalEntry the tagged id of the verified
+	// approval entry an exit above the clearance went out under (ADR-0312
+	// §SD3, ADR-0325 §SD5), zero for none. All four land on the durable
+	// row.
+	Profile       string
+	Route         string
+	Tier          uint8
+	ApprovalEntry uint64
 	Queued   time.Duration
 }
 
@@ -292,7 +293,10 @@ func RowOf(rec CallRecord, kept bool) (row trail.LlmCall) {
 		row.Admission, row.AdmissionRule = option.Some(rec.Admission), some(rec.AdmissionRule)
 		row.QueuedMs = option.Some(uint64(max(rec.Queued.Milliseconds(), 0)))
 	}
-	row.Profile, row.Route, row.Tier, row.Approval = some(rec.Profile), some(rec.Route), uint32(rec.Tier), some(rec.Approval)
+	row.Profile, row.Route, row.Tier = some(rec.Profile), some(rec.Route), uint32(rec.Tier)
+	if rec.ApprovalEntry != 0 {
+		row.Approval = option.Some(rec.ApprovalEntry)
+	}
 	return
 }
 
@@ -389,7 +393,7 @@ func callsTable(rows []CallRecord) *introspect.Table {
 		String("profile", func(i int) string { return rows[i].Profile }).
 		String("route", func(i int) string { return rows[i].Route }).
 		Uint64("tier", func(i int) uint64 { return uint64(rows[i].Tier) }).
-		String("approval", func(i int) string { return rows[i].Approval })
+		Uint64("approval_entry", func(i int) uint64 { return rows[i].ApprovalEntry })
 }
 
 // optionalCount is a count a provider may not report, -1 when it did not.

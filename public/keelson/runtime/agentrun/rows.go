@@ -126,7 +126,7 @@ func fillVault(b *agentrunstore.BodyRowEntityBuilder, body Body, withOpening boo
 	if body.Calls != "" {
 		attrs, xerr := shred(fieldCalls, body.Calls)
 		if xerr != nil {
-			return eb.Build().Str("run", body.Run).Uint32("ordinal", body.Ordinal).Errorf("the calls do not parse: %w", xerr)
+			return eb.Build().Uint64("run", body.Run).Uint32("ordinal", body.Ordinal).Errorf("the calls do not parse: %w", xerr)
 		}
 		shredded = append(shredded, attrs...)
 	}

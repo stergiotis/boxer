@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/apache/arrow-go/v18/arrow"
 
@@ -242,24 +243,38 @@ func (inst *BodyRowStore) ScanVault(ctx context.Context, predicate string) (rows
 	return
 }
 
-// Hasher computes the canonical wire items (ADR-0210) of ledger and vault
-// rows a writer has not stored (ADR-0325 §SD2, §SD3): it builds the row in
-// a store with no executor and drains it as its item. Safe for concurrent
-// use.
+// Hasher computes the canonical wire items (ADR-0210) of run, ledger and
+// vault rows a writer has not stored (ADR-0325 §SD2, §SD3): it builds the
+// row in a store with no executor and drains it as its item. Safe for
+// concurrent use.
 type Hasher struct {
 	mu    sync.Mutex
+	run   *RunStore
 	entry *EntryStore
 	body  *BodyRowStore
 }
 
 // NewHasher is a hasher with its scratch stores.
 func NewHasher() (inst *Hasher) {
-	return &Hasher{entry: NewEntryStore(nil, nil, EntryStoreConfig{}), body: NewBodyRowStore(nil, nil, BodyRowStoreConfig{})}
+	return &Hasher{run: NewRunStore(nil, nil, RunStoreConfig{}), entry: NewEntryStore(nil, nil, EntryStoreConfig{}), body: NewBodyRowStore(nil, nil, BodyRowStoreConfig{})}
+}
+
+// RunItem is the canonical item of the run row r at the zero instant: the
+// run's chain seed is taken over it with only the immutable attributes set
+// (ADR-0325 §SD2).
+func (inst *Hasher) RunItem(r Run) (item []byte, err error) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if err = inst.run.Begin(r.ID, time.Time{}).AddRun(r).Commit(); err != nil {
+		inst.run.DiscardPending()
+		return nil, eh.Errorf("compose the run row: %w", err)
+	}
+	return drain(inst.run.DrainCanonical)
 }
 
 // LedgerItem is the canonical item of the ledger row fill composes at
 // (run, ordinal), revision zero.
-func (inst *Hasher) LedgerItem(run string, ordinal uint64, fill func(b *EntryEntityBuilder)) (item []byte, err error) {
+func (inst *Hasher) LedgerItem(run uint64, ordinal uint64, fill func(b *EntryEntityBuilder)) (item []byte, err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	b := inst.entry.Begin(run, ordinal, EntryEnvelope{})
@@ -273,7 +288,7 @@ func (inst *Hasher) LedgerItem(run string, ordinal uint64, fill func(b *EntryEnt
 
 // VaultItem is the canonical item of the vault row fill composes at (run,
 // ordinal).
-func (inst *Hasher) VaultItem(run string, ordinal uint64, fill func(b *BodyRowEntityBuilder) error) (item []byte, err error) {
+func (inst *Hasher) VaultItem(run uint64, ordinal uint64, fill func(b *BodyRowEntityBuilder) error) (item []byte, err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	b := inst.body.Begin(run, ordinal)

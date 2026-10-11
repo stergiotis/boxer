@@ -176,22 +176,27 @@ func ParseApproval(body string) (a Approval, err error) {
 }
 
 // ApprovalKey is the key a resent exit carries for its approval entry
-// (ADR-0312 §SD3): the run and the entry's ordinal, "<run>#<ordinal>",
-// what the sink verifies against the journal and what law L33 joins on.
-func ApprovalKey(run string, ordinal uint32) string {
-	return run + "#" + strconv.FormatUint(uint64(ordinal), 10)
+// (ADR-0312 §SD3): the run's id in decimal and the entry's ordinal,
+// "<run>#<ordinal>", what the sink verifies against the journal. The laws
+// join on the entry's id, which the exit's trail row carries.
+func ApprovalKey(run uint64, ordinal uint32) string {
+	return strconv.FormatUint(run, 10) + "#" + strconv.FormatUint(uint64(ordinal), 10)
 }
 
 // ParseApprovalKey is ApprovalKey's inverse; ok is false for anything
 // else.
-func ParseApprovalKey(key string) (run string, ordinal uint32, ok bool) {
+func ParseApprovalKey(key string) (run uint64, ordinal uint32, ok bool) {
 	i := strings.LastIndexByte(key, '#')
 	if i <= 0 || i == len(key)-1 {
+		return
+	}
+	r, err := strconv.ParseUint(key[:i], 10, 64)
+	if err != nil || r == 0 {
 		return
 	}
 	n, err := strconv.ParseUint(key[i+1:], 10, 32)
 	if err != nil || n == 0 {
 		return
 	}
-	return key[:i], uint32(n), true
+	return r, uint32(n), true
 }

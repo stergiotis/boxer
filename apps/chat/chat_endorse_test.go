@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"encoding/json/v2"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -41,11 +42,12 @@ func TestAnArtefactReadAfterAModelWriteReentersMarked(t *testing.T) {
 	}
 	require.Len(t, reads, 2)
 	assert.Empty(t, reads[0].WriterRun, "an empty artefact is nobody's")
-	assert.Equal(t, coord.conversation, reads[1].WriterRun, "the head is the model's")
+	run := coord.journalNow().Run().Id
+	assert.Equal(t, run, reads[1].WriterRun, "the head is the model's: this conversation's run")
 	last := model.seen[3].Messages
 	wrapped := last[len(last)-1]
 	assert.Equal(t, openaichat.ChatRoleTool, wrapped.Role)
-	assert.True(t, strings.HasPrefix(wrapped.Content, `<recalled source="self" run="`+coord.conversation+`"`), wrapped.Content)
+	assert.True(t, strings.HasPrefix(wrapped.Content, `<recalled source="self" run="`+strconv.FormatUint(run, 10)+`"`), wrapped.Content)
 	assert.True(t, strings.HasSuffix(wrapped.Content, "</recalled>"))
 	b := projection.Fold(coord.journalNow().Entries(), sectionOrder())
 	for _, m := range b.Messages {

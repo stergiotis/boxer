@@ -110,14 +110,17 @@ func BackstopPredicate(r Relation) string {
 	return scopePredicate(r, serverValue, quote(r.Scope.Column))
 }
 
+// scopePredicate compares a column with a setting as text: a setting is a
+// string, and the journal's run column is a u64 id (ADR-0325 §SD5), whose
+// decimal form the single writer pins.
 func scopePredicate(r Relation, resolve resolver, col string) (pred string) {
 	if v := r.Scope.Via; v != nil {
 		pred = col + " IN (SELECT " + quote(v.Key) + " FROM " + quoteRef(v.Table) + " WHERE " + quote(v.Column) + " = " + resolve(r.Scope.Setting) + ")"
 	} else {
-		pred = col + " = " + resolve(r.Scope.Setting)
+		pred = "toString(" + col + ") = " + resolve(r.Scope.Setting)
 	}
 	if r.Scope.Except != "" {
-		pred = "(" + pred + ") AND " + col + " != " + resolve(r.Scope.Except)
+		pred = "(" + pred + ") AND toString(" + col + ") != " + resolve(r.Scope.Except)
 	}
 	return
 }

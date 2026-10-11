@@ -6,7 +6,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun/agentrunstore"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -54,7 +53,7 @@ func (inst *SqlBodyStore) Put(ctx context.Context, bodies []Body) (err error) {
 		}
 		if err != nil {
 			inst.st.DiscardPending()
-			return eb.Build().Str("run", b.Run).Uint32("ordinal", b.Ordinal).Errorf("buffer body: %w", err)
+			return eb.Build().Uint64("run", b.Run).Uint32("ordinal", b.Ordinal).Errorf("buffer body: %w", err)
 		}
 	}
 	if _, err = inst.st.Flush(ctx); err != nil {
@@ -64,20 +63,20 @@ func (inst *SqlBodyStore) Put(ctx context.Context, bodies []Body) (err error) {
 	return
 }
 
-func (inst *SqlBodyStore) Get(ctx context.Context, run string, from uint32) (bodies []Body, err error) {
+func (inst *SqlBodyStore) Get(ctx context.Context, run uint64, from uint32) (bodies []Body, err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	predicate := agentrunstore.BodyRowColKey + " = " + marshalling.EscapeString(run)
+	predicate := agentrunstore.BodyRowColKey + " = " + strconv.FormatUint(run, 10)
 	if from > 0 {
 		predicate += " AND " + agentrunstore.BodyRowColOrder + " >= " + strconv.FormatUint(uint64(from), 10)
 	}
 	if bodies, err = inst.scanLocked(ctx, predicate); err != nil {
-		err = eb.Build().Str("run", run).Errorf("read bodies: %w", err)
+		err = eb.Build().Uint64("run", run).Errorf("read bodies: %w", err)
 	}
 	return
 }
 
-func (inst *SqlBodyStore) GetOf(ctx context.Context, runs []string) (bodies []Body, err error) {
+func (inst *SqlBodyStore) GetOf(ctx context.Context, runs []uint64) (bodies []Body, err error) {
 	if len(runs) == 0 {
 		return
 	}
@@ -85,7 +84,7 @@ func (inst *SqlBodyStore) GetOf(ctx context.Context, runs []string) (bodies []Bo
 	defer inst.mu.Unlock()
 	ids := make([]string, 0, len(runs))
 	for _, id := range runs {
-		ids = append(ids, marshalling.EscapeString(id))
+		ids = append(ids, strconv.FormatUint(id, 10))
 	}
 	if bodies, err = inst.scanLocked(ctx, agentrunstore.BodyRowColKey+" IN ("+strings.Join(ids, ", ")+")"); err != nil {
 		err = eh.Errorf("read bodies: %w", err)
@@ -113,10 +112,10 @@ func (inst *SqlBodyStore) scanLocked(ctx context.Context, predicate string) (bod
 }
 
 // Destroy rewrites the run's rows out of the table but those at keep.
-func (inst *SqlBodyStore) Destroy(ctx context.Context, run string, keep []uint32) (err error) {
+func (inst *SqlBodyStore) Destroy(ctx context.Context, run uint64, keep []uint32) (err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	where := agentrunstore.BodyRowColKey + " = " + marshalling.EscapeString(run)
+	where := agentrunstore.BodyRowColKey + " = " + strconv.FormatUint(run, 10)
 	if len(keep) > 0 {
 		where += " AND " + agentrunstore.BodyRowColOrder + " NOT IN (" + strings.Join(orderInstants(keep), ", ") + ")"
 	}
@@ -124,13 +123,13 @@ func (inst *SqlBodyStore) Destroy(ctx context.Context, run string, keep []uint32
 }
 
 // Erase rewrites the rows at ordinals out of the table.
-func (inst *SqlBodyStore) Erase(ctx context.Context, run string, ordinals []uint32) (err error) {
+func (inst *SqlBodyStore) Erase(ctx context.Context, run uint64, ordinals []uint32) (err error) {
 	if len(ordinals) == 0 {
 		return
 	}
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	where := agentrunstore.BodyRowColKey + " = " + marshalling.EscapeString(run) +
+	where := agentrunstore.BodyRowColKey + " = " + strconv.FormatUint(run, 10) +
 		" AND " + agentrunstore.BodyRowColOrder + " IN (" + strings.Join(orderInstants(ordinals), ", ") + ")"
 	return inst.mutateLocked(ctx, run, where)
 }
@@ -142,9 +141,9 @@ func (inst *SqlBodyStore) Erase(ctx context.Context, run string, ordinals []uint
 // lightweight DELETE leaves them. The replaced part stays on disk as an
 // outdated part until the server's cleanup removes it, within seconds
 // under the table's settings (agentrunstore.BodyDDLTail).
-func (inst *SqlBodyStore) mutateLocked(ctx context.Context, run string, where string) (err error) {
+func (inst *SqlBodyStore) mutateLocked(ctx context.Context, run uint64, where string) (err error) {
 	if err = inst.exec.Exec(ctx, "ALTER TABLE "+inst.layout.BodyTable()+" DELETE WHERE "+where+" SETTINGS mutations_sync = 2"); err != nil {
-		return eb.Build().Str("run", run).Errorf("destroy bodies: %w", err)
+		return eb.Build().Uint64("run", run).Errorf("destroy bodies: %w", err)
 	}
 	return
 }

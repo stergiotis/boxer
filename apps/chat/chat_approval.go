@@ -37,6 +37,11 @@ const (
 // complete runs one model call, asking the person once when the route
 // wants their approval of the exit.
 func (inst *coordinator) complete(ctx context.Context, cli completerI, w *agentrun.Writer, req llm.Request) (res llm.Response, err error) {
+	// The call names its journal run, the run an approval key must be of
+	// (ADR-0325 §SD5).
+	if w != nil {
+		req.Run = w.Run().Id
+	}
 	res, err = cli.Complete(ctx, req)
 	var refused *llm.RefusedError
 	if err == nil || !errors.As(err, &refused) || !refused.NeedsApproval() || w == nil {

@@ -55,7 +55,7 @@ Part B so far, recorded by ADR-0325 and its Updates:
 | B0 | the ledger and the vault on the facts sections; `factsschema` loads the sections | The run table keeps its own layout; it is not facts-shaped. |
 | B1 | `jsonshred`: JSON to semi-structured attributes and back, lossless | — |
 | B2–B5 | typed components for the closed shapes, shredded arguments and calls, the preimage drained by the generated encoder (`gen.Input.CanonWire`), one commitment per vault row, the endorsement digest over the shredded arguments | One commit, as settled. There is no runtime encoder (ADR-0325's first Update). The run's settings stay JSON on the run row. The introspection tables render records as the JSON they used to be written as. |
-| SD5 | — | Ids follow as their own commit. |
+| SD5 | u64 run ids minted by the store before the row (the seed hashes the id), store-assigned entry ids, the run seed over the run row's canonical item, the trail's approval as a `foreignKey` to the entry id | Chat keeps its conversation id and finds the run through the owner's run list. L33 compares conversations, which the trail row names. |
 
 Two parts, in order. Part A closes four `recordstore/gen` gaps the journal's
 SQL store worked around by hand. Part B, which depends on A's first step,

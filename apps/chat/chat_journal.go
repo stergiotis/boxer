@@ -120,7 +120,7 @@ func (inst *coordinator) openJournal(ctx context.Context, keep bool) (w *agentru
 	p := profileNow()
 	settings, _ := json.Marshal(journalSettings{Keep: keep, Apps: apps, Questions: questions, Artefact: art, Ceiling: ceiling.Level().String(), CeilingSpec: &ceiling,
 		Rounds: clampRounds(rounds), Pixels: pixelsNameOf(pix.chosen), PixelsLocal: pix.localOnly, OperationTools: opTools})
-	w, err = agentrun.Open(ctx, store, agentrun.Run{Id: inst.conversation, Conversation: inst.conversation, OwnerApp: string(ManifestId),
+	w, err = agentrun.Open(ctx, store, agentrun.Run{Conversation: inst.conversation, OwnerApp: string(ManifestId),
 		Coordinator: inst.window, Profile: p.Id, Fingerprint: p.Fingerprint(), Settings: string(settings)})
 	if err != nil {
 		return
@@ -143,15 +143,15 @@ func (inst *coordinator) reopenJournal(ctx context.Context, old *agentrun.Writer
 	inst.mu.Unlock()
 	id := old.Run().Id
 	if w, err = agentrun.Reopen(ctx, store, id); err != nil {
-		return nil, eb.Build().Str("run", id).Errorf("the journal refused an earlier write and does not reopen: %w", err)
+		return nil, eb.Build().Uint64("run", id).Errorf("the journal refused an earlier write and does not reopen: %w", err)
 	}
 	if w.Run().State != agentrun.StateOpen {
-		return nil, eb.Build().Str("run", id).Str("state", w.Run().State.String()).Errorf("the journal refused an earlier write and the run is not open")
+		return nil, eb.Build().Uint64("run", id).Str("state", w.Run().State.String()).Errorf("the journal refused an earlier write and the run is not open")
 	}
 	if _, err = inst.append(ctx, w, agentrun.Entry{Kind: agentrun.KindIgnorable, Name: "journal", Form: "reopened", Body: "the writer refused a write earlier; the run was reopened from the store and its chain verified", Label: harnessLabel()}); err != nil {
 		return nil, err
 	}
-	log.Warn().Str("run", id).Msg("chat: the journal was reopened after a failed write")
+	log.Warn().Uint64("run", id).Msg("chat: the journal was reopened after a failed write")
 	inst.mu.Lock()
 	inst.journal, inst.journalFailed = w, false
 	inst.mu.Unlock()
@@ -565,19 +565,19 @@ func (inst *coordinator) shipHead(ctx context.Context, w *agentrun.Writer, at fu
 	head := headstore.Head{Cell: run.Cell, Run: run.Id, Ordinal: ordinal, Digest: digest}
 	r, err := anchors.Append(ctx, head)
 	if err != nil {
-		log.Warn().Err(err).Str("run", run.Id).Msg("chat: the chain head was not anchored")
+		log.Warn().Err(err).Uint64("run", run.Id).Msg("chat: the chain head was not anchored")
 		return
 	}
 	e, err := headstore.HeadEntry(head, r, cadence)
 	if err != nil {
-		log.Warn().Err(err).Str("run", run.Id).Msg("chat: the chain head was not recorded")
+		log.Warn().Err(err).Uint64("run", run.Id).Msg("chat: the chain head was not recorded")
 		return
 	}
 	if !r.Durable {
 		e.Form = headFormLocal
 	}
 	if _, err = inst.append(ctx, w, e); err != nil {
-		log.Warn().Err(err).Str("run", run.Id).Msg("chat: the chain head was not recorded")
+		log.Warn().Err(err).Uint64("run", run.Id).Msg("chat: the chain head was not recorded")
 	}
 }
 
@@ -626,7 +626,7 @@ func (inst *coordinator) closeJournal(tail context.Context) {
 	defer cancel()
 	inst.shipHead(ctx, w, func(c headstore.Cadence) bool { return c.PerRunClose })
 	if err := w.Close(ctx, agentrun.StateClosed); err != nil {
-		log.Warn().Err(err).Str("run", w.Run().Id).Msg("chat: the run was not closed")
+		log.Warn().Err(err).Uint64("run", w.Run().Id).Msg("chat: the run was not closed")
 	}
 }
 

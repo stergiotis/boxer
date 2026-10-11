@@ -82,7 +82,7 @@ func TestATurnOverTheTriggerIsSummarised(t *testing.T) {
 	assert.Equal(t, "q4", summariser.Messages[len(prefix)+1].Content)
 	w := inst.coord.journalNow()
 	require.Equal(t, openaichat.ChatRoleSystem, turn.Messages[0].Role)
-	assert.True(t, strings.HasPrefix(turn.Messages[0].Content, `<recalled source="self" run="`+w.Run().Id+`"`), "the summary is model output re-entering (L17): %s", turn.Messages[0].Content)
+	assert.True(t, strings.HasPrefix(turn.Messages[0].Content, `<recalled source="self" run="`+strconv.FormatUint(w.Run().Id, 10)+`"`), "the summary is model output re-entering (L17): %s", turn.Messages[0].Content)
 	assert.Contains(t, turn.Messages[0].Content, "SUMMARY of the earlier turns")
 	assert.Contains(t, turn.Messages[0].Content, "The person said:\nq1")
 	_, banded, _ := strings.Cut(turn.Messages[0].Content, ">\n")

@@ -141,7 +141,7 @@ func JournalTable(entries []agentrun.Entry) (b []byte, err error) {
 	slices.SortFunc(rows, func(a, b agentrun.Entry) int { return int(a.Ordinal) - int(b.Ordinal) })
 	t := introspect.NewTable().
 		Uint64("ord", func(i int) uint64 { return uint64(rows[i].Ordinal) }).
-		String("run", func(i int) string { return rows[i].Run }).
+		String("run", func(i int) string { return RunText(rows[i].Run) }).
 		String("kind", func(i int) string { return rows[i].Kind.String() }).
 		String("key", func(i int) string { return rows[i].Key }).
 		String("role", func(i int) string { return rows[i].Role }).
@@ -159,7 +159,7 @@ func JournalTable(entries []agentrun.Entry) (b []byte, err error) {
 		String("exposure", func(i int) string { return agentrun.MarksString(rows[i].Label.Exposure) }).
 		String("origin", func(i int) string { return agentrun.MarksString(rows[i].Label.Origin) }).
 		String("attachments", func(i int) string { return rows[i].Attachments }).
-		String("writer_run", func(i int) string { return rows[i].WriterRun }).
+		String("writer_run", func(i int) string { return RunText(rows[i].WriterRun) }).
 		Uint64("writer_ordinal", func(i int) uint64 { return uint64(rows[i].WriterOrdinal) })
 	rec := t.Build(introspect.Projection{}, len(rows))
 	defer rec.Release()

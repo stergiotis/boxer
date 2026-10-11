@@ -51,24 +51,24 @@ func TestTwoVaultedStoresOverOneRecord(t *testing.T) {
 	}
 	a, b := open(execA), open(execB)
 
-	wa, err := Open(ctx, a, Run{Id: "cell/two", Cell: "cell", OwnerApp: "chat"})
+	wa, err := Open(ctx, a, Run{Id: 32, Cell: "cell", OwnerApp: "chat"})
 	require.NoError(t, err)
 	written, err := wa.Append(ctx, Entry{Kind: KindUser, Body: "a name"}, Entry{Kind: KindOutcome, Key: "c1", Role: "tool", Body: `{"customer":"a name"}`})
 	require.NoError(t, err)
 	require.NoError(t, wa.Close(ctx, StateClosed))
 
-	wb, err := Reopen(ctx, b, "cell/two")
+	wb, err := Reopen(ctx, b, 32)
 	require.NoError(t, err, "the second store reads the first's record and the chain verifies")
 	assert.Equal(t, written, wb.Entries(), "bodies and openings included")
 	require.NoError(t, wb.Erase(ctx, "person", 2))
 
-	seen, err := a.Entries(ctx, "cell/two", 0)
+	seen, err := a.Entries(ctx, 32, 0)
 	require.NoError(t, err)
 	require.Len(t, seen, 3)
 	assert.Equal(t, "a name", seen[0].Body)
 	assert.Empty(t, seen[1].Body, "the first store no longer reads what the second erased")
 	assert.Equal(t, KindErased, seen[2].Kind)
-	r, found, err := b.GetRun(ctx, "cell/two")
+	r, found, err := b.GetRun(ctx, 32)
 	require.NoError(t, err)
 	require.True(t, found)
 	broken, err := VerifyRun(r, seen)
@@ -94,7 +94,7 @@ func TestAnErasureLeavesNoOutdatedPartOnTheServer(t *testing.T) {
 	defer vault.Close()
 	st := NewVaulted(ledger, vault)
 
-	w, err := Open(ctx, st, Run{Id: "cell/srv", Cell: "cell", OwnerApp: "chat"})
+	w, err := Open(ctx, st, Run{Id: 31, Cell: "cell", OwnerApp: "chat"})
 	require.NoError(t, err)
 	_, err = w.Append(ctx, Entry{Kind: KindUser, Body: "a name"}, Entry{Kind: KindOutcome, Key: "c1", Role: "tool", Body: `{"customer":"a name"}`})
 	require.NoError(t, err)
@@ -112,7 +112,7 @@ func TestAnErasureLeavesNoOutdatedPartOnTheServer(t *testing.T) {
 	require.NotZero(t, parts(true), "the vault has a part")
 
 	require.NoError(t, w.Erase(ctx, "person", 2))
-	assert.EqualValues(t, 1, bodyCount(t, ctx, exec, layout, "cell/srv"), "the mutation applied before the call returned")
+	assert.EqualValues(t, 1, bodyCount(t, ctx, exec, layout, 31), "the mutation applied before the call returned")
 	deadline := time.Now().Add(30 * time.Second)
 	for parts(false) != 0 {
 		if time.Now().After(deadline) {
@@ -123,9 +123,9 @@ func TestAnErasureLeavesNoOutdatedPartOnTheServer(t *testing.T) {
 		time.Sleep(250 * time.Millisecond)
 	}
 	assert.NotZero(t, parts(true), "the rewritten part is the only one")
-	entries, err := st.Entries(ctx, "cell/srv", 0)
+	entries, err := st.Entries(ctx, 31, 0)
 	require.NoError(t, err)
-	r, _, err := st.GetRun(ctx, "cell/srv")
+	r, _, err := st.GetRun(ctx, 31)
 	require.NoError(t, err)
 	broken, err := VerifyRun(r, entries)
 	require.NoError(t, err)

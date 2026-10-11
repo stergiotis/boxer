@@ -170,12 +170,12 @@ func seedJournal(t *testing.T, s scratchServer) {
 	s.exec(t, scratchAdmin,
 		"CREATE DATABASE IF NOT EXISTS harness",
 		"CREATE DATABASE IF NOT EXISTS scratch",
-		"CREATE TABLE agent_runs (id String, conversation String, owner_app String) ENGINE = MergeTree ORDER BY id",
-		"CREATE TABLE agent_run_entries (run String, ordinal UInt64, at_ms Int64, kind String, key String, role String, body String, calls String, arguments String, vault_commitment String, entry_id UInt64, name String, book String, form String, target UInt64, `from` UInt64, effect String, turn String, label_level String, label_tier String, label_exposure Array(String), label_origin Array(String), writer_run String, writer_turn String, writer_ordinal UInt64, prev UInt64, digest String, key_id String, parent UInt64, attachments String) ENGINE = MergeTree ORDER BY (run, ordinal)",
-		"INSERT INTO agent_runs VALUES ('r1', 'c1', 'chat'), ('r2', 'c1', 'chat'), ('r3', 'c2', 'other')",
-		"INSERT INTO agent_run_entries (run, ordinal, kind, body, digest) VALUES ('r1', 1, 'user', 'hello', 'd1'), ('r1', 2, 'reply', 'hi', 'd2'), ('r2', 1, 'user', 'other run', 'd3'), ('r3', 1, 'user', 'other conversation', 'd4')",
+		"CREATE TABLE agent_runs (id UInt64, conversation String, owner_app String) ENGINE = MergeTree ORDER BY id",
+		"CREATE TABLE agent_run_entries (run UInt64, ordinal UInt64, at_ms Int64, kind String, key String, role String, body String, calls String, arguments String, vault_commitment String, entry_id UInt64, name String, book String, form String, target UInt64, `from` UInt64, effect String, turn String, label_level String, label_tier String, label_exposure Array(String), label_origin Array(String), writer_run UInt64, writer_turn String, writer_ordinal UInt64, prev UInt64, digest String, key_id String, parent UInt64, attachments String) ENGINE = MergeTree ORDER BY (run, ordinal)",
+		"INSERT INTO agent_runs VALUES (11, 'c1', 'chat'), (12, 'c1', 'chat'), (13, 'c2', 'other')",
+		"INSERT INTO agent_run_entries (run, ordinal, kind, body, digest) VALUES (11, 1, 'user', 'hello', 'd1'), (11, 2, 'reply', 'hi', 'd2'), (12, 1, 'user', 'other run', 'd3'), (13, 1, 'user', 'other conversation', 'd4')",
 		"CREATE TABLE scratch.notes (run String, ord UInt64, note String, contact String, secret String, memberships Array(String)) ENGINE = MergeTree ORDER BY ord",
-		"INSERT INTO scratch.notes VALUES ('r1', 1, 'a', 'alice@x', 's', ['personal', 'public']), ('r1', 2, 'b', 'bob', 's', ['public']), ('r2', 3, 'c', 'carol', 's', ['credential'])",
+		"INSERT INTO scratch.notes VALUES ('11', 1, 'a', 'alice@x', 's', ['personal', 'public']), ('11', 2, 'b', 'bob', 's', ['public']), ('12', 3, 'c', 'carol', 's', ['credential'])",
 	)
 }
 
@@ -195,7 +195,7 @@ func TestTheServerPrincipalReadsEachRelationAtItsScope(t *testing.T) {
 	s.exec(t, scratchAdmin, teardown...)
 
 	relations := append(JournalRelations(), withholding())
-	scopes := Scopes{ScopeSetting: "r1", ScopeConversation: "c1", ScopeApp: "chat"}
+	scopes := Scopes{ScopeSetting: "11", ScopeConversation: "c1", ScopeApp: "chat"}
 	stmts, err := ServerDDL(Principal{User: scratchAgent, Profile: scratchAgent + "_p", Database: "harness"}, relations, scopes)
 	require.NoError(t, err)
 	s.exec(t, scratchAdmin, stmts...)
@@ -203,7 +203,7 @@ func TestTheServerPrincipalReadsEachRelationAtItsScope(t *testing.T) {
 	assert.EqualValues(t, 2, s.count(t, scratchAgent, "SELECT count() FROM harness.my_run"), "the pinned run's rows alone")
 	rows, err := s.query(scratchAgent, "SELECT DISTINCT run FROM harness.my_conversation")
 	require.NoError(t, err)
-	assert.Equal(t, [][]string{{"r2"}}, rows, "the conversation's other run, not the pinned one and not another conversation's")
+	assert.Equal(t, [][]string{{"12"}}, rows, "the conversation's other run, not the pinned one and not another conversation's")
 	assert.EqualValues(t, 3, s.count(t, scratchAgent, "SELECT count() FROM harness.agent_history"), "the app's runs, all three relations on one table")
 	rows, err = s.query(scratchAgent, "SELECT ord, contact FROM harness.notes ORDER BY ord")
 	require.NoError(t, err)
@@ -216,12 +216,12 @@ func TestTheServerPrincipalReadsEachRelationAtItsScope(t *testing.T) {
 	// it (law L18) and the agent still sees the pinned run alone.
 	s.exec(t, scratchAdmin, "CREATE OR REPLACE VIEW harness.my_run SQL SECURITY DEFINER DEFINER = `default` AS SELECT * FROM agent_run_entries SETTINGS `custom_agent_relation` = 'my_run'")
 	assert.EqualValues(t, 2, s.count(t, scratchAgent, "SELECT count() FROM harness.my_run"), "the backstop cuts a view written without its scope")
-	assert.EqualValues(t, 0, s.count(t, scratchAgent, "SELECT count() FROM harness.my_run WHERE run != 'r1'"))
+	assert.EqualValues(t, 0, s.count(t, scratchAgent, "SELECT count() FROM harness.my_run WHERE run != 11"))
 
 	// The scope is pinned READONLY: the agent cannot move it from its query
 	// or its session, and the marker set on the query does not reach the
 	// view's own.
-	_, err = s.query(scratchAgent, "SELECT count() FROM harness.my_run SETTINGS custom_agent_run = 'r2'")
+	_, err = s.query(scratchAgent, "SELECT count() FROM harness.my_run SETTINGS custom_agent_run = '12'")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "452", "SETTING_CONSTRAINT_VIOLATION")
 	assert.EqualValues(t, 1, s.count(t, scratchAgent, "SELECT count() FROM harness.my_conversation SETTINGS custom_agent_relation = 'my_run'"), "the view's marker wins over the query's")

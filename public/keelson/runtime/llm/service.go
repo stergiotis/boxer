@@ -510,16 +510,16 @@ func (inst *Service) handleComplete(msg *app.Msg, retained bool) {
 			// The caller journaled the approval before resending
 			// (ADR-0312 §SD3); the route verifies it names this call,
 			// this sink and these bytes before anything leaves, and the
-			// key goes on the row for law L33.
+			// entry's id goes on the row for laws L14 and L33.
 			var verr error
-			if claim, verr = inst.verifyApproval(req.Approval, body, tier, sink, msg.Sender, msg.SenderInstance, req.Conversation); verr != nil {
+			if claim, verr = inst.verifyApproval(req.Approval, body, tier, sink, msg.Sender, msg.SenderInstance, req.Run); verr != nil {
 				inst.refuse(msg, reason+"; the approval "+req.Approval+" does not cover it: "+verr.Error(), rec, t)
 				return
 			}
-			rec.Approval = req.Approval
+			rec.ApprovalEntry = claim.entry
 		case d == harness.DecisionAsk:
 			digest := requestDigest(body)
-			inst.pending.remember(rec.CallId, pendingExit{digest: digest, tier: tier, sink: sink, sender: msg.Sender, instance: msg.SenderInstance, run: req.Conversation}, time.Now())
+			inst.pending.remember(rec.CallId, pendingExit{digest: digest, tier: tier, sink: sink, sender: msg.Sender, instance: msg.SenderInstance, run: req.Run}, time.Now())
 			inst.refuseForApproval(msg, reason+"; "+why, path.String(), sink.Kind.String()+" "+sink.Edge, tier.String(), digest, rec, t)
 			return
 		default:

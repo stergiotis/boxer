@@ -1,6 +1,7 @@
 package agentrun
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"slices"
@@ -11,7 +12,6 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun/agentrunstore"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
@@ -50,21 +50,25 @@ type SqlStore struct {
 	exec   recordstore.ExecutorI
 	layout agentrunstore.Layout
 	st     agentrunstore.Stores
+	// ids are the run and entry streams (ADR-0325 §SD5); idsErr is why
+	// they could not be built, returned by every mint.
+	ids    agentrunstore.Ids
+	idsErr error
 	// Log takes what the store does best-effort and could not: the
 	// deletion of a tombstoned run's original rows.
 	Log zerolog.Logger
 	// live are the run rows as last written or read, by id.
-	live map[string]Run
+	live map[uint64]Run
 	// stored is the version the table holds for a run, as this store last
 	// wrote or read it: the guard of the next compare-and-set. It differs
 	// from live's when a repair rebuilt a row it could not write.
-	stored map[string]uint32
+	stored map[uint64]uint32
 	// dirty are the runs whose entries went to the record and whose row
 	// did not: the row is rebuilt from the entry tail at the next read.
-	dirty map[string]bool
+	dirty map[uint64]bool
 	// epoch is the lease epoch this store holds a run at; a run is in it
 	// exactly while this store holds the lease.
-	epoch map[string]uint32
+	epoch map[uint64]uint32
 	// Holder is who this store writes as, ThisProcess by default; Liveness
 	// says whether another holder still runs, LocalLiveness by default.
 	Holder   Holder
@@ -82,7 +86,8 @@ var _ EntriesOfI = (*SqlStore)(nil)
 // NewSqlStore opens the stores over exec in layout; the caller provisions
 // first (agentrunstore.ProvisionIn) and closes afterwards.
 func NewSqlStore(exec recordstore.ExecutorI, layout agentrunstore.Layout) (inst *SqlStore) {
-	return &SqlStore{exec: exec, layout: layout, st: agentrunstore.NewStores(exec, layout), live: make(map[string]Run), stored: make(map[string]uint32), dirty: make(map[string]bool), epoch: make(map[string]uint32),
+	ids, idsErr := agentrunstore.LeasedIds(exec, layout)
+	return &SqlStore{exec: exec, layout: layout, st: agentrunstore.NewStores(exec, layout, ids.Runs), ids: ids, idsErr: idsErr, live: make(map[uint64]Run), stored: make(map[uint64]uint32), dirty: make(map[uint64]bool), epoch: make(map[uint64]uint32),
 		Log: zerolog.Nop(), Holder: ThisProcess(), Liveness: LocalLiveness{}}
 }
 
@@ -93,6 +98,17 @@ func (inst *SqlStore) Close() {
 	inst.st.Close()
 }
 
+// MintRun draws the run id from the run store's KeyStream, leased through
+// the layout's lease table.
+func (inst *SqlStore) MintRun(ctx context.Context) (id uint64, err error) {
+	inst.mu.Lock()
+	defer inst.mu.Unlock()
+	if inst.idsErr != nil {
+		return 0, inst.idsErr
+	}
+	return inst.st.Run.MintKey(ctx)
+}
+
 func (inst *SqlStore) CreateRun(ctx context.Context, r Run) (err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
@@ -101,7 +117,7 @@ func (inst *SqlStore) CreateRun(ctx context.Context, r Run) (err error) {
 		return
 	}
 	if dup {
-		return eb.Build().Str("run", r.Id).Errorf("duplicate run id")
+		return eb.Build().Uint64("run", r.Id).Errorf("duplicate run id")
 	}
 	if r.Version == 0 {
 		r.Version = 1
@@ -125,10 +141,10 @@ func (inst *SqlStore) UpdateRun(ctx context.Context, r Run) (err error) {
 		return
 	}
 	if !found {
-		return eb.Build().Str("run", r.Id).Errorf("no such run")
+		return eb.Build().Uint64("run", r.Id).Errorf("no such run")
 	}
 	if r.Version <= was.Version {
-		return eb.Build().Str("run", r.Id).Uint32("version", r.Version).Uint32("stored", was.Version).Errorf("not a newer version of the run row")
+		return eb.Build().Uint64("run", r.Id).Uint32("version", r.Version).Uint32("stored", was.Version).Errorf("not a newer version of the run row")
 	}
 	return inst.writeRunLocked(ctx, r)
 }
@@ -137,7 +153,7 @@ func (inst *SqlStore) UpdateRun(ctx context.Context, r Run) (err error) {
 func (inst *SqlStore) insertRunLocked(ctx context.Context, r Run) (err error) {
 	if err = inst.st.Run.Begin(r.Id, versionTs(r)).AddRun(runRow(r)).Commit(); err != nil {
 		inst.st.Run.DiscardPending()
-		return eb.Build().Str("run", r.Id).Errorf("buffer run: %w", err)
+		return eb.Build().Uint64("run", r.Id).Errorf("buffer run: %w", err)
 	}
 	if _, err = inst.st.Run.Flush(ctx); err != nil {
 		inst.st.Run.DiscardPending()
@@ -156,11 +172,11 @@ func (inst *SqlStore) insertRunLocked(ctx context.Context, r Run) (err error) {
 func (inst *SqlStore) writeRunLocked(ctx context.Context, r Run) (err error) {
 	from, ok := inst.stored[r.Id]
 	if !ok {
-		return eb.Build().Str("run", r.Id).Errorf("the run row is rewritten before it was read")
+		return eb.Build().Uint64("run", r.Id).Errorf("the run row is rewritten before it was read")
 	}
 	epoch, held := inst.epoch[r.Id]
 	if !held {
-		return eb.Build().Str("run", r.Id).Errorf("the run row is rewritten without its lease")
+		return eb.Build().Uint64("run", r.Id).Errorf("the run row is rewritten without its lease")
 	}
 	guard := agentrunstore.RunGuardVersion(from) + " AND " + agentrunstore.RunGuardHolder(inst.Holder.Run) + " AND " + agentrunstore.RunGuardEpoch(epoch)
 	r.Holder, r.HolderPid, r.Epoch = inst.Holder.Run, uint32(inst.Holder.Pid), epoch
@@ -172,7 +188,7 @@ func (inst *SqlStore) writeRunLocked(ctx context.Context, r Run) (err error) {
 		r.Holder, r.HolderPid = "", 0
 	}
 	if err = inst.st.Run.UpdateIf(ctx, r.Id, guard, agentrunstore.RunSets(runRow(r))...); err != nil {
-		return eb.Build().Str("run", r.Id).Errorf("rewrite run: %w", err)
+		return eb.Build().Uint64("run", r.Id).Errorf("rewrite run: %w", err)
 	}
 	got, found, err := inst.readRunLocked(ctx, r.Id)
 	if err != nil {
@@ -182,7 +198,7 @@ func (inst *SqlStore) writeRunLocked(ctx context.Context, r Run) (err error) {
 		delete(inst.live, r.Id)
 		delete(inst.stored, r.Id)
 		delete(inst.epoch, r.Id)
-		return eb.Build().Str("run", r.Id).Uint32("from", from).Uint32("version", r.Version).Errorf("the run row moved since this store read it: another writer holds the run (ADR-0308 §SD9)")
+		return eb.Build().Uint64("run", r.Id).Uint32("from", from).Uint32("version", r.Version).Errorf("the run row moved since this store read it: another writer holds the run (ADR-0308 §SD9)")
 	}
 	inst.live[r.Id], inst.stored[r.Id] = r, r.Version
 	if release {
@@ -209,13 +225,13 @@ func nanos(t time.Time) time.Time { return time.Unix(0, t.UnixNano()).UTC() }
 // the takeover found the dead holder's last batch in the record past the
 // head and adopted what of it chains: the run moved under the act, which
 // its writer must reopen to see.
-func (inst *SqlStore) leaseLocked(ctx context.Context, id string) (adopted bool, err error) {
+func (inst *SqlStore) leaseLocked(ctx context.Context, id uint64) (adopted bool, err error) {
 	r, found, err := inst.readRunLocked(ctx, id)
 	if err != nil {
 		return
 	}
 	if !found {
-		return false, eb.Build().Str("run", id).Errorf("no such run")
+		return false, eb.Build().Uint64("run", id).Errorf("no such run")
 	}
 	inst.stored[id] = r.Version
 	if !inst.dirty[id] {
@@ -229,15 +245,15 @@ func (inst *SqlStore) leaseLocked(ctx context.Context, id string) (adopted bool,
 	if r.Holder != "" {
 		alive, lerr := inst.Liveness.Alive(ctx, Holder{Run: r.Holder, Pid: int(r.HolderPid)})
 		if lerr != nil {
-			return false, eb.Build().Str("run", id).Errorf("holder liveness: %w", lerr)
+			return false, eb.Build().Uint64("run", id).Errorf("holder liveness: %w", lerr)
 		}
 		if alive {
-			return false, eb.Build().Str("run", id).Str("holder", r.Holder).Uint32("pid", r.HolderPid).Errorf("%w", ErrHeldElsewhere)
+			return false, eb.Build().Uint64("run", id).Str("holder", r.Holder).Uint32("pid", r.HolderPid).Errorf("%w", ErrHeldElsewhere)
 		}
 	}
 	guard := agentrunstore.RunGuardHolder(r.Holder) + " AND " + agentrunstore.RunGuardEpoch(r.Epoch)
 	if err = inst.st.Run.UpdateIf(ctx, id, guard, agentrunstore.RunSetHolder(inst.Holder.Run), agentrunstore.RunSetHolderPid(uint32(inst.Holder.Pid)), agentrunstore.RunSetEpoch(r.Epoch+1)); err != nil {
-		return false, eb.Build().Str("run", id).Errorf("take over the run: %w", err)
+		return false, eb.Build().Uint64("run", id).Errorf("take over the run: %w", err)
 	}
 	got, found, err := inst.readRunLocked(ctx, id)
 	if err != nil {
@@ -245,7 +261,7 @@ func (inst *SqlStore) leaseLocked(ctx context.Context, id string) (adopted bool,
 	}
 	if !found || got.Holder != inst.Holder.Run || got.Epoch != r.Epoch+1 {
 		delete(inst.live, id)
-		return false, eb.Build().Str("run", id).Errorf("another process took the run over first: %w", ErrHeldElsewhere)
+		return false, eb.Build().Uint64("run", id).Errorf("another process took the run over first: %w", ErrHeldElsewhere)
 	}
 	inst.live[id], inst.stored[id], inst.epoch[id] = got, got.Version, got.Epoch
 	// The dead holder's last batch may be in the record past the head; the
@@ -265,7 +281,7 @@ func versionTs(r Run) time.Time {
 	return utc(r.Created).Add(time.Duration(r.Version))
 }
 
-func (inst *SqlStore) GetRun(ctx context.Context, id string) (r Run, found bool, err error) {
+func (inst *SqlStore) GetRun(ctx context.Context, id uint64) (r Run, found bool, err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	return inst.getRunLocked(ctx, id)
@@ -274,7 +290,7 @@ func (inst *SqlStore) GetRun(ctx context.Context, id string) (r Run, found bool,
 // getRunLocked is the run row: from the cache while this store holds the
 // run's lease or has a repair pending, since then no one else moves the
 // row; from the table otherwise, since its holder may have.
-func (inst *SqlStore) getRunLocked(ctx context.Context, id string) (r Run, found bool, err error) {
+func (inst *SqlStore) getRunLocked(ctx context.Context, id uint64) (r Run, found bool, err error) {
 	_, held := inst.epoch[id]
 	if r, found = inst.live[id]; found && (held || inst.dirty[id]) {
 		if inst.dirty[id] {
@@ -292,10 +308,10 @@ func (inst *SqlStore) getRunLocked(ctx context.Context, id string) (r Run, found
 }
 
 // readRunLocked reads one run row from the table, past the cache.
-func (inst *SqlStore) readRunLocked(ctx context.Context, id string) (r Run, found bool, err error) {
-	for ent, serr := range inst.st.Run.ScanLiveRun(ctx, recordstore.ScanOpts{ExtraPredicate: agentrunstore.RunColKey + " = " + marshalling.EscapeString(id)}) {
+func (inst *SqlStore) readRunLocked(ctx context.Context, id uint64) (r Run, found bool, err error) {
+	for ent, serr := range inst.st.Run.ScanLiveRun(ctx, recordstore.ScanOpts{ExtraPredicate: agentrunstore.RunColKey + " = " + strconv.FormatUint(id, 10)}) {
 		if serr != nil {
-			return r, false, eb.Build().Str("run", id).Errorf("read run: %w", serr)
+			return r, false, eb.Build().Uint64("run", id).Errorf("read run: %w", serr)
 		}
 		if ent != nil && ent.Run.Has {
 			r, found = runOf(ent.Run.Val), true
@@ -345,7 +361,7 @@ func (inst *SqlStore) Append(ctx context.Context, entries []Entry) (err error) {
 			return lerr
 		}
 		if adopted {
-			return eb.Build().Str("run", id).Errorf("the run's last holder left entries this one adopted; reopen the run")
+			return eb.Build().Uint64("run", id).Errorf("the run's last holder left entries this one adopted; reopen the run")
 		}
 	}
 	if err = inst.appendLocked(ctx, entries); err != nil {
@@ -370,7 +386,7 @@ func (inst *SqlStore) Append(ctx context.Context, entries []Entry) (err error) {
 		if werr := inst.writeRunLocked(ctx, r); werr != nil {
 			inst.dirty[id] = true
 			if err == nil {
-				err = eb.Build().Str("run", id).Errorf("the entries are recorded and the run row is not: %w", werr)
+				err = eb.Build().Uint64("run", id).Errorf("the entries are recorded and the run row is not: %w", werr)
 			}
 		}
 	}
@@ -421,7 +437,7 @@ func chained(r Run, tail []Entry) (prefix []Entry) {
 }
 
 // runsOf is the distinct run ids of entries, in first-seen order.
-func runsOf(entries []Entry) (ids []string) {
+func runsOf(entries []Entry) (ids []uint64) {
 	for _, e := range entries {
 		if !slices.Contains(ids, e.Run) {
 			ids = append(ids, e.Run)
@@ -443,6 +459,18 @@ func revisionOf(e Entry, epoch uint32) (rev agentrunstore.EntryEnvelope) {
 }
 
 func (inst *SqlStore) appendLocked(ctx context.Context, entries []Entry) (err error) {
+	// An entry retried with its id keeps it: one ordinal, one id.
+	for i := range entries {
+		if entries[i].EntryId != 0 {
+			continue
+		}
+		if inst.idsErr != nil {
+			return inst.idsErr
+		}
+		if entries[i].EntryId, err = agentrunstore.Mint(ctx, inst.ids.Entries); err != nil {
+			return eb.Build().Uint64("run", entries[i].Run).Uint32("ordinal", entries[i].Ordinal).Errorf("entry id: %w", err)
+		}
+	}
 	for _, e := range entries {
 		b := inst.st.Entry.Begin(e.Run, uint64(e.Ordinal), revisionOf(e, inst.epoch[e.Run]))
 		if err = fillLedger(b, e); err == nil {
@@ -452,7 +480,7 @@ func (inst *SqlStore) appendLocked(ctx context.Context, entries []Entry) (err er
 		}
 		if err != nil {
 			inst.st.Entry.DiscardPending()
-			return eb.Build().Str("run", e.Run).Uint32("ordinal", e.Ordinal).Errorf("buffer entry: %w", err)
+			return eb.Build().Uint64("run", e.Run).Uint32("ordinal", e.Ordinal).Errorf("buffer entry: %w", err)
 		}
 	}
 	if _, err = inst.st.Entry.Flush(ctx); err != nil {
@@ -462,10 +490,10 @@ func (inst *SqlStore) appendLocked(ctx context.Context, entries []Entry) (err er
 	return
 }
 
-func (inst *SqlStore) Entries(ctx context.Context, run string, from uint32) (entries []Entry, err error) {
+func (inst *SqlStore) Entries(ctx context.Context, run uint64, from uint32) (entries []Entry, err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
-	heads, err := inst.headsLocked(ctx, []string{run})
+	heads, err := inst.headsLocked(ctx, []uint64{run})
 	if err != nil {
 		return
 	}
@@ -480,9 +508,9 @@ func (inst *SqlStore) Entries(ctx context.Context, run string, from uint32) (ent
 // read stops at (ADR-0319 §SD7). A run this store holds reads its cached
 // row, repaired when dirty; any other run's row is read from the table,
 // since its holder may have moved it. A run with no row has no entry.
-func (inst *SqlStore) headsLocked(ctx context.Context, runs []string) (heads map[string]uint32, err error) {
-	heads = make(map[string]uint32, len(runs))
-	var others []string
+func (inst *SqlStore) headsLocked(ctx context.Context, runs []uint64) (heads map[uint64]uint32, err error) {
+	heads = make(map[uint64]uint32, len(runs))
+	var others []uint64
 	for _, id := range runs {
 		if _, held := inst.epoch[id]; held {
 			r, found, gerr := inst.getRunLocked(ctx, id)
@@ -503,7 +531,7 @@ func (inst *SqlStore) headsLocked(ctx context.Context, runs []string) (heads map
 	if runs != nil {
 		lits := make([]string, 0, len(others))
 		for _, id := range others {
-			lits = append(lits, marshalling.EscapeString(id))
+			lits = append(lits, strconv.FormatUint(id, 10))
 		}
 		opts.ExtraPredicate = agentrunstore.RunColKey + " IN (" + strings.Join(lits, ", ") + ")"
 	}
@@ -530,7 +558,7 @@ func (inst *SqlStore) headsLocked(ctx context.Context, runs []string) (heads map
 }
 
 // bounded drops the entries past their run's head.
-func bounded(entries []Entry, heads map[string]uint32) (kept []Entry) {
+func bounded(entries []Entry, heads map[uint64]uint32) (kept []Entry) {
 	kept = entries[:0]
 	for _, e := range entries {
 		if head, ok := heads[e.Run]; ok && e.Ordinal <= head {
@@ -543,8 +571,8 @@ func bounded(entries []Entry, heads map[string]uint32) (kept []Entry) {
 // entriesLocked reads a run's entries from an ordinal on, through upTo
 // when it is not zero; the bounds are in the statement, over the order
 // column the ordinal is stored as, so a read of the tail costs the tail.
-func (inst *SqlStore) entriesLocked(ctx context.Context, run string, from uint32, upTo uint32) (entries []Entry, err error) {
-	predicate := agentrunstore.EntryColKey + " = " + marshalling.EscapeString(run)
+func (inst *SqlStore) entriesLocked(ctx context.Context, run uint64, from uint32, upTo uint32) (entries []Entry, err error) {
+	predicate := agentrunstore.EntryColKey + " = " + strconv.FormatUint(run, 10)
 	if from > 0 {
 		predicate += " AND " + agentrunstore.EntryColOrder + " >= " + strconv.FormatUint(uint64(from), 10)
 	}
@@ -553,12 +581,12 @@ func (inst *SqlStore) entriesLocked(ctx context.Context, run string, from uint32
 	}
 	entries, err = inst.scanEntriesLocked(ctx, predicate)
 	if err != nil {
-		return nil, eb.Build().Str("run", run).Errorf("read entries: %w", err)
+		return nil, eb.Build().Uint64("run", run).Errorf("read entries: %w", err)
 	}
 	return
 }
 
-func (inst *SqlStore) EntriesOf(ctx context.Context, runs []string) (entries []Entry, err error) {
+func (inst *SqlStore) EntriesOf(ctx context.Context, runs []uint64) (entries []Entry, err error) {
 	if len(runs) == 0 {
 		return
 	}
@@ -566,7 +594,7 @@ func (inst *SqlStore) EntriesOf(ctx context.Context, runs []string) (entries []E
 	defer inst.mu.Unlock()
 	ids := make([]string, 0, len(runs))
 	for _, id := range runs {
-		ids = append(ids, marshalling.EscapeString(id))
+		ids = append(ids, strconv.FormatUint(id, 10))
 	}
 	if entries, err = inst.scanEntriesLocked(ctx, agentrunstore.EntryColKey+" IN ("+strings.Join(ids, ", ")+")"); err != nil {
 		err = eh.Errorf("read entries: %w", err)
@@ -597,22 +625,12 @@ func (inst *SqlStore) scanEntriesLocked(ctx context.Context, predicate string) (
 	}
 	// The scan orders by (ordinal, run); a several-run read wants runs whole.
 	slices.SortStableFunc(entries, func(a, b Entry) int {
-		if c := compareString(a.Run, b.Run); c != 0 {
+		if c := cmp.Compare(a.Run, b.Run); c != 0 {
 			return c
 		}
 		return int(a.Ordinal) - int(b.Ordinal)
 	})
 	return
-}
-
-func compareString(a, b string) int {
-	switch {
-	case a < b:
-		return -1
-	case a > b:
-		return 1
-	}
-	return 0
 }
 
 func (inst *SqlStore) AllEntries(ctx context.Context) (entries []Entry, err error) {
@@ -639,7 +657,7 @@ func (inst *SqlStore) AllEntries(ctx context.Context) (entries []Entry, err erro
 // either way, and a deletion that fails is logged and retried by nothing
 // until the next tombstone of the run. Head entries keep their body, a
 // digest the anchor law reads (ADR-0314 §SD5), not content.
-func (inst *SqlStore) Tombstone(ctx context.Context, run string) (err error) {
+func (inst *SqlStore) Tombstone(ctx context.Context, run uint64) (err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	if _, err = inst.leaseLocked(ctx, run); err != nil {
@@ -668,11 +686,11 @@ func (inst *SqlStore) Tombstone(ctx context.Context, run string) (err error) {
 	if err = inst.appendLocked(ctx, blanked); err != nil {
 		return
 	}
-	where := agentrunstore.EntryColKey + " = " + marshalling.EscapeString(run) +
+	where := agentrunstore.EntryColKey + " = " + strconv.FormatUint(run, 10) +
 		" AND " + agentrunstore.EntryColOrder + " IN (" + strings.Join(ordinals, ", ") + ")" +
 		" AND " + agentrunstore.EntryColRevision + " % 2 = 0"
 	if derr := inst.exec.Exec(ctx, "DELETE FROM "+inst.layout.EntryTable()+" WHERE "+where); derr != nil {
-		inst.Log.Warn().Err(derr).Str("run", run).Msg("the tombstoned run's original rows were not deleted; the blanked revisions are the record")
+		inst.Log.Warn().Err(derr).Uint64("run", run).Msg("the tombstoned run's original rows were not deleted; the blanked revisions are the record")
 	}
 	return
 }

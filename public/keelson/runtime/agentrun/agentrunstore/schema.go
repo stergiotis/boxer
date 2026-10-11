@@ -46,7 +46,7 @@ var low = []easp.AspectE{easp.AspectInterRecordLowCardinality, easp.AspectLightG
 var plain = []easp.AspectE{easp.AspectLightGeneralCompression}
 
 // GetRunSchemaInManipulator builds the run table: envelope id (the run
-// id), ts (the write instant), lifecycle for latest-wins, and one section
+// id, a tagged u64 of vocab.IdStreamAgentRun; ADR-0325 §SD5), ts (the write instant), lifecycle for latest-wins, and one section
 // per attribute.
 func GetRunSchemaInManipulator() (manip *common.TableManipulator, err error) {
 	manip, err = common.NewTableManipulator()
@@ -56,7 +56,7 @@ func GetRunSchemaInManipulator() (manip *common.TableManipulator, err error) {
 	}
 	manip.SetTableName(TableNameRun)
 	manip.SetTableComment("agent runs, one row each, latest-wins (ADR-0308 §SD1)")
-	manip.PlainValueColumn(common.PlainItemTypeEntityId, "id", ctabb.S).AddColumnEncodingHints(plain...)
+	manip.PlainValueColumn(common.PlainItemTypeEntityId, "id", ctabb.U64).AddColumnEncodingHints(plain...)
 	manip.PlainValueColumn(common.PlainItemTypeEntityTimestamp, "ts", ctabb.Z64).AddColumnEncodingHints(easp.AspectDeltaEncoding, easp.AspectLightGeneralCompression)
 	manip.PlainValueColumn(common.PlainItemTypeEntityLifecycle, "lifecycle", ctabb.U8).AddColumnEncodingHints(plain...)
 	sec := sectionOf(manip)
@@ -111,7 +111,7 @@ func GetEntrySchemaInManipulator() (manip *common.TableManipulator, err error) {
 // id as the Key and the entry's ordinal as the Order, so a run reads as
 // one range in ordinal order.
 func journalEnvelope(manip common.TableManipulatorFluidI) {
-	manip.PlainValueColumn(common.PlainItemTypeEntityId, "id", ctabb.S).AddColumnEncodingHints(plain...)
+	manip.PlainValueColumn(common.PlainItemTypeEntityId, "id", ctabb.U64).AddColumnEncodingHints(plain...)
 	manip.PlainValueColumn(common.PlainItemTypeEntityId, EntryOrdinalColumn, ctabb.U64).AddColumnEncodingHints(easp.AspectDeltaEncoding, easp.AspectLightGeneralCompression)
 }
 

@@ -20,7 +20,7 @@ tools: =t1
 4 =m6
 5 m7: assistant tool_calls=[{"Id":"a2","Name":"artefact_write","Arguments":"{\"base_revision\":0,\"text\":\"# Plan\\n\\nFirst.\\n\\n## Steps\\n\\n- one\\n\"}"}] ""
 6 m8: tool answers=a2 "{\"revision\":1,\"lines\":7,\"changed\":{\"first\":1,\"last\":7},\"unchanged\":false,\"rejected\":false}"
-## request sha256=51fe984b6632f698083b10fa77260cd746fc0468e1d933955a4474b3da803d18 bytes=11563 model=m max_tokens=0 tool_choice=""
+## request sha256=b01aaf723a7ba9b8b9e2b9b3ea304ff325c43aa57472e3cb35c27c190c0135fe bytes=11569 model=m max_tokens=0 tool_choice=""
 tools: =t1
 0 =m2
 1 =m3
@@ -30,8 +30,8 @@ tools: =t1
 5 =m7
 6 =m8
 7 m9: assistant tool_calls=[{"Id":"a3","Name":"artefact_outline","Arguments":"{}"}] ""
-8 m10: tool answers=a3 "<recalled source=\"self\" run=\"run-#1\" ord=\"0\">\n{\"revision\":1,\"lines\":7,\"headings\":[{\"level\":1,\"path\":[\"Plan\"],\"slug\":\"plan\",\"line\":1,\"last_line\":7},{\"level\":2,\"path\":[\"Plan\",\"Steps\"],\"slug\":\"steps\",\"line\":5,\"last_line\":7}]}\n</recalled>"
-## request sha256=788db3c20c84e5667dd4086575f7a49f351d4e21aea23249e3d7855cdcd6dd5f bytes=11928 model=m max_tokens=0 tool_choice=""
+8 m10: tool answers=a3 "<recalled source=\"self\" run=\"755914244097\" ord=\"0\">\n{\"revision\":1,\"lines\":7,\"headings\":[{\"level\":1,\"path\":[\"Plan\"],\"slug\":\"plan\",\"line\":1,\"last_line\":7},{\"level\":2,\"path\":[\"Plan\",\"Steps\"],\"slug\":\"steps\",\"line\":5,\"last_line\":7}]}\n</recalled>"
+## request sha256=a3aee158117e963e69e1d26883e568d587d7dc85a94d876421d6e65c445ddd89 bytes=11934 model=m max_tokens=0 tool_choice=""
 tools: =t1
 0 =m2
 1 =m3
@@ -44,7 +44,7 @@ tools: =t1
 8 =m10
 9 m11: assistant tool_calls=[{"Id":"a4","Name":"artefact_edit","Arguments":"{\"base_revision\":1,\"old_text\":\"First.\",\"new_text\":\"First, then second.\"}"}] ""
 10 m12: tool answers=a4 "{\"revision\":2,\"lines\":7,\"changed\":{\"first\":3,\"last\":3},\"unchanged\":false,\"rejected\":false}"
-## request sha256=0bda8fd8c3b31986b215862e9d2720d5cac329c7799ac6d26b978e59927bec1f bytes=12250 model=m max_tokens=0 tool_choice=""
+## request sha256=08a67a957acbd06e1d05a4bb91ac00e29d11fee88a054d918ae65b4870072d5b bytes=12256 model=m max_tokens=0 tool_choice=""
 tools: =t1
 0 =m2
 1 =m3
@@ -59,7 +59,7 @@ tools: =t1
 10 =m12
 11 m13: assistant tool_calls=[{"Id":"a5","Name":"artefact_edit","Arguments":"{\"base_revision\":1,\"old_text\":\"nowhere\",\"new_text\":\"x\"}"}] ""
 12 m14: tool answers=a5 "error: the artefact is at revision 2, not 1: read it again and redo the change"
-## request sha256=36bf7681245bb1d3b4ac71df0ae46095afafcd2ee4fcacb9394ca950d7ed58ea bytes=12623 model=m max_tokens=0 tool_choice=""
+## request sha256=2da7881f7b5197f4a932b2098db2e8337b8a3c821f95d32b2020e8e57c6e43fb bytes=12629 model=m max_tokens=0 tool_choice=""
 tools: =t1
 0 =m2
 1 =m3
@@ -76,7 +76,7 @@ tools: =t1
 12 =m14
 13 m15: assistant tool_calls=[{"Id":"a6","Name":"artefact_insert","Arguments":"{\"base_revision\":2,\"text\":\"- two\",\"heading\":[\"Plan\",\"Steps\"],\"at\":\"end\"}"}] ""
 14 m16: tool answers=a6 "{\"revision\":3,\"lines\":8,\"changed\":{\"first\":8,\"last\":8},\"unchanged\":false,\"rejected\":false}"
-## request sha256=c601a0abbf4fefdd9728997eee288b84a67b0e8906bd4c2b2e5beba50a3610b2 bytes=12981 model=m max_tokens=0 tool_choice=""
+## request sha256=8d7280edb93a31d5f7c99e8f8a6dfbcb2ec175d81ad9843922d6fecfd495ec0f bytes=12993 model=m max_tokens=0 tool_choice=""
 tools: =t1
 0 =m2
 1 =m3
@@ -94,8 +94,8 @@ tools: =t1
 13 =m15
 14 =m16
 15 m17: assistant tool_calls=[{"Id":"a7","Name":"artefact_find","Arguments":"{\"pattern\":\"two\"}"}] ""
-16 m18: tool answers=a7 "<recalled source=\"self\" run=\"run-#1\" ord=\"0\">\n{\"revision\":3,\"matches\":[{\"line\":8,\"col\":3,\"text\":\"- two\"}],\"truncated\":false}\n</recalled>"
-## request sha256=b95914479fc7cd306c64d86eb30f4984235aee7d52abb07ec4679e59ed8dbd74 bytes=13260 model=m max_tokens=0 tool_choice=""
+16 m18: tool answers=a7 "<recalled source=\"self\" run=\"755914244097\" ord=\"0\">\n{\"revision\":3,\"matches\":[{\"line\":8,\"col\":3,\"text\":\"- two\"}],\"truncated\":false}\n</recalled>"
+## request sha256=aca1cfe8bdc95145b72c2f56b15336c080c3cdb90a6cb2ab78ade22c2662ba7c bytes=13278 model=m max_tokens=0 tool_choice=""
 tools: =t1
 0 =m2
 1 =m3
@@ -115,8 +115,8 @@ tools: =t1
 15 =m17
 16 =m18
 17 m19: assistant tool_calls=[{"Id":"a8","Name":"artefact_lint","Arguments":"{}"}] ""
-18 m20: tool answers=a8 "<recalled source=\"self\" run=\"run-#1\" ord=\"0\">\n{\"revision\":3,\"findings\":[]}\n</recalled>"
-## request sha256=7813a175bce7922da168f6d319366b212f5f151406f368494eb7f294b4a59f4c bytes=13555 model=m max_tokens=0 tool_choice=""
+18 m20: tool answers=a8 "<recalled source=\"self\" run=\"755914244097\" ord=\"0\">\n{\"revision\":3,\"findings\":[]}\n</recalled>"
+## request sha256=ae127287f943e8c0f1f8fbdad4d5a85c0158cfad741999000194a4147b135496 bytes=13573 model=m max_tokens=0 tool_choice=""
 tools: =t1
 0 =m2
 1 =m3
@@ -160,7 +160,7 @@ history: 22 messages, omitTo 0, parentSet true
   5 assistant tool_calls=1 ""
   6 tool answers=a2 "{\"revision\":1,\"lines\":7,\"changed\":{\"first\":1,\"last\":7},\"unchanged\":false,\"reject…"
   7 assistant tool_calls=1 ""
-  8 tool answers=a3 "<recalled source=\"self\" run=\"run-#1\" ord=\"0\"> {\"revision\":1,\"lines…"
+  8 tool answers=a3 "<recalled source=\"self\" run=\"755914244097\" ord=\"0\"> {\"revision\":1,\"lines\":7,\"hea…"
   9 assistant tool_calls=1 ""
   10 tool answers=a4 "{\"revision\":2,\"lines\":7,\"changed\":{\"first\":3,\"last\":3},\"unchanged\":false,\"reject…"
   11 assistant tool_calls=1 ""
@@ -168,14 +168,14 @@ history: 22 messages, omitTo 0, parentSet true
   13 assistant tool_calls=1 ""
   14 tool answers=a6 "{\"revision\":3,\"lines\":8,\"changed\":{\"first\":8,\"last\":8},\"unchanged\":false,\"reject…"
   15 assistant tool_calls=1 ""
-  16 tool answers=a7 "<recalled source=\"self\" run=\"run-#1\" ord=\"0\"> {\"revision\":3,\"match…"
+  16 tool answers=a7 "<recalled source=\"self\" run=\"755914244097\" ord=\"0\"> {\"revision\":3,\"matches\":[{\"l…"
   17 assistant tool_calls=1 ""
-  18 tool answers=a8 "<recalled source=\"self\" run=\"run-#1\" ord=\"0\"> {\"revision\":3,\"findi…"
+  18 tool answers=a8 "<recalled source=\"self\" run=\"755914244097\" ord=\"0\"> {\"revision\":3,\"findings\":[]}…"
   19 assistant tool_calls=1 ""
   20 tool answers=a9 "{\"revision\":3,\"images\":[],\"budget\":{\"bytes\":0,\"bytes_limit\":268435456,\"names\":0,…"
   21 assistant "Drafted."
 # turn 2: "and now?"
-## request sha256=ca7caef8e17baaf17b07ca06b757fbd73493b11f2f5b74fc7eae97978b17ecdb bytes=13727 model=m max_tokens=0 tool_choice=""
+## request sha256=7df796c62a960f32fb0baf044dae9aa7bcb04448ad68a7100209edf057dea1ef bytes=13745 model=m max_tokens=0 tool_choice=""
 tools: =t1
 0 =m2
 1 =m3
@@ -201,7 +201,7 @@ tools: =t1
 21 m23: assistant "Drafted."
 22 m24: system "The artefact is at revision 4, 7 lines. Headings: # Plan (1); ## Steps (5)."
 23 m25: user "and now?"
-## request sha256=6946365c3e0650918049e41e1c41caf0b647662ae65c24358501e7db4214833d bytes=13991 model=m max_tokens=0 tool_choice=""
+## request sha256=05df761503e5f0c0ef07b20a32b12cb87b13e3dd0963c5ad514440a32b22bd8e bytes=14009 model=m max_tokens=0 tool_choice=""
 tools: =t1
 0 =m2
 1 =m3
@@ -242,7 +242,7 @@ history: 27 messages, omitTo 0, parentSet true
   5 assistant tool_calls=1 ""
   6 tool answers=a2 "{\"revision\":1,\"lines\":7,\"changed\":{\"first\":1,\"last\":7},\"unchanged\":false,\"reject…"
   7 assistant tool_calls=1 ""
-  8 tool answers=a3 "<recalled source=\"self\" run=\"run-#1\" ord=\"0\"> {\"revision\":1,\"lines…"
+  8 tool answers=a3 "<recalled source=\"self\" run=\"755914244097\" ord=\"0\"> {\"revision\":1,\"lines\":7,\"hea…"
   9 assistant tool_calls=1 ""
   10 tool answers=a4 "{\"revision\":2,\"lines\":7,\"changed\":{\"first\":3,\"last\":3},\"unchanged\":false,\"reject…"
   11 assistant tool_calls=1 ""
@@ -250,9 +250,9 @@ history: 27 messages, omitTo 0, parentSet true
   13 assistant tool_calls=1 ""
   14 tool answers=a6 "{\"revision\":3,\"lines\":8,\"changed\":{\"first\":8,\"last\":8},\"unchanged\":false,\"reject…"
   15 assistant tool_calls=1 ""
-  16 tool answers=a7 "<recalled source=\"self\" run=\"run-#1\" ord=\"0\"> {\"revision\":3,\"match…"
+  16 tool answers=a7 "<recalled source=\"self\" run=\"755914244097\" ord=\"0\"> {\"revision\":3,\"matches\":[{\"l…"
   17 assistant tool_calls=1 ""
-  18 tool answers=a8 "<recalled source=\"self\" run=\"run-#1\" ord=\"0\"> {\"revision\":3,\"findi…"
+  18 tool answers=a8 "<recalled source=\"self\" run=\"755914244097\" ord=\"0\"> {\"revision\":3,\"findings\":[]}…"
   19 assistant tool_calls=1 ""
   20 tool answers=a9 "{\"revision\":3,\"images\":[],\"budget\":{\"bytes\":0,\"bytes_limit\":268435456,\"names\":0,…"
   21 assistant "Drafted."

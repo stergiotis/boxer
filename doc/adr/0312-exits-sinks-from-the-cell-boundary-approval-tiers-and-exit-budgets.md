@@ -248,13 +248,18 @@ Accepted 2026-10-11.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
-<!--
 ## Updates
 
-Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
-claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
-YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
--->
+### 2026-10-11 — SD3: an approval is named by its entry id
+
+A resend still carries the key `<run>#<ordinal>`, now with the run's u64
+id in decimal
+([ADR-0325](./0325-the-journals-canonical-form-is-the-canonical-wire-over-its-rows.md)
+§SD5). The model call's trail row records the approval entry's id as a
+`foreignKey`, not the key, and L14 and L33 join on it. L33's "same run"
+becomes "the exit's conversation", read through the approval's run row,
+since the trail row names the conversation and not the run.
+
 
 ## References
 

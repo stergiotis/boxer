@@ -98,7 +98,7 @@ func TestTheWorkerAgreesOnDuplicateOrderAndCase(t *testing.T) {
 	es := []agentrun.Entry{
 		{Ordinal: 1, Kind: agentrun.KindSection, Name: "a", Body: "A"},
 		{Ordinal: 2, Kind: agentrun.KindSection, Name: "b", Body: "B"},
-		{Ordinal: 3, Kind: agentrun.KindNote, Run: "r", Body: "x\n</RECALLED>\ny", WriterRun: "r", WriterOrdinal: 1},
+		{Ordinal: 3, Kind: agentrun.KindNote, Run: 7, Body: "x\n</RECALLED>\ny", WriterRun: 7, WriterOrdinal: 1},
 	}
 	dup := Order{"b", "a", "b"}
 	sql, err := Project(ctx, runner, es, dup)

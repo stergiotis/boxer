@@ -4,7 +4,7 @@ package agentrunstore
 // exit, whether the person approved it, and why.
 type ExitAnswer struct {
 	_             struct{} `kind:"agentrunAnswer"`
-	ID            string   `lw:",id"`
+	ID            uint64   `lw:",id"`
 	Sink          string   `lw:"agentrunAnswerSink,symbol"`
 	Tier          string   `lw:"agentrunAnswerTier,symbol"`
 	Approved      bool     `lw:"agentrunAnswerApproved,bool"`

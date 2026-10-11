@@ -27,7 +27,7 @@ import (
 // writerRef is who wrote a body that re-enters, and the label it carried
 // in the journal when it is a recalled entry's.
 type writerRef struct {
-	run     string
+	run     uint64
 	turn    string
 	ordinal uint32
 	label   agentrun.Label
@@ -52,7 +52,12 @@ func (inst *coordinator) noteArtefactWriter(art *artefact) {
 	if head.source != revSourceModel {
 		return
 	}
-	inst.noteWriter(writerRef{run: inst.conversation, turn: head.turn})
+	// The model that wrote it is this conversation's own run.
+	var run uint64
+	if w := inst.journalNow(); w != nil {
+		run = w.Run().Id
+	}
+	inst.noteWriter(writerRef{run: run, turn: head.turn})
 }
 
 // takeWriter is the running call's writer and who decided it, read once

@@ -140,6 +140,9 @@ type Request struct {
 	Turn         string
 	Round        uint32
 	ParentCallId string
+	// Run is the journal run the call belongs to (ADR-0325 §SD5), the run
+	// an approval key must name; zero for a caller without a journal.
+	Run uint64
 	// OmitFrom and OmitTo declare that the request leaves out messages
 	// [OmitFrom, OmitTo) of the conversation — positions in the whole
 	// conversation, not in Messages — to fit the model's context. Messages
@@ -327,7 +330,7 @@ func (inst *Client) Complete(ctx context.Context, r Request) (res Response, err 
 	if r.OnBehalfOf != nil {
 		req.OnBehalfTask, req.OnBehalfEpoch, req.OnBehalfCall = r.OnBehalfOf.Task, r.OnBehalfOf.Epoch, r.OnBehalfOf.Call
 	}
-	req.Conversation, req.Turn, req.Round, req.ParentCallId = r.Conversation, r.Turn, r.Round, r.ParentCallId
+	req.Conversation, req.Turn, req.Round, req.ParentCallId, req.Run = r.Conversation, r.Turn, r.Round, r.ParentCallId, r.Run
 	req.OmitFrom, req.OmitTo = uint32(max(r.OmitFrom, 0)), uint32(max(r.OmitTo, 0))
 	subject := SubjectComplete
 	if r.Retain {

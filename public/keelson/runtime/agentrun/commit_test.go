@@ -58,7 +58,7 @@ func TestTheOpeningTextRoundTrips(t *testing.T) {
 // nothing else, and its canonical form is the one it had with content.
 func TestDigestedCommitsUnderOneOpening(t *testing.T) {
 	fixedOpenings(t)
-	e, err := Entry{Run: "r", Ordinal: 1, Kind: KindReply, Body: "hi", Calls: `[{"Id":"c1","Name":"t","Arguments":"{}"}]`, Reply: &ReplyMeta{CallId: "x"}}.Digested()
+	e, err := Entry{Run: 7, Ordinal: 1, Kind: KindReply, Body: "hi", Calls: `[{"Id":"c1","Name":"t","Arguments":"{}"}]`, Reply: &ReplyMeta{CallId: "x"}}.Digested()
 	require.NoError(t, err)
 	require.Len(t, e.Opening, OpeningSize)
 	assert.Equal(t, CommitScheme, e.KeyId)
@@ -70,7 +70,7 @@ func TestDigestedCommitsUnderOneOpening(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, e, again, "an entry with an opening keeps it")
 
-	bare, err := Entry{Run: "r", Ordinal: 2, Kind: KindTurn, TurnEnd: &TurnState{State: "answered"}}.Digested()
+	bare, err := Entry{Run: 7, Ordinal: 2, Kind: KindTurn, TurnEnd: &TurnState{State: "answered"}}.Digested()
 	require.NoError(t, err)
 	assert.Nil(t, bare.Opening, "a ledger record is not content")
 	assert.Empty(t, bare.VaultCommitment)
@@ -97,7 +97,7 @@ func TestDigestedCommitsUnderOneOpening(t *testing.T) {
 // shredded attributes, so their spelling does not move the commitment.
 func TestVaultRecordsAndArgumentsAreCommitted(t *testing.T) {
 	fixedOpenings(t)
-	e, err := Entry{Run: "r", Ordinal: 3, Kind: KindEndorse, Endorse: &Endorsement{Digest: "d", Epoch: "t1", Classes: []string{"publish"}}}.Digested()
+	e, err := Entry{Run: 7, Ordinal: 3, Kind: KindEndorse, Endorse: &Endorsement{Digest: "d", Epoch: "t1", Classes: []string{"publish"}}}.Digested()
 	require.NoError(t, err)
 	require.NotEmpty(t, e.VaultCommitment)
 	tampered := e

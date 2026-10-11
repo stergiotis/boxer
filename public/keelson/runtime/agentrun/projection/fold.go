@@ -156,15 +156,15 @@ func Fold(entries []agentrun.Entry, order Order) (b Batch) {
 			m.Content, m.Attachments = ed.Body, ed.Attachments
 			m.Sources = append(m.Sources, ed.Ordinal)
 			m.Label = m.Label.Join(ed.Label)
-			if ed.WriterRun != "" {
+			if ed.WriterRun != 0 {
 				writerRun, writerOrdinal = ed.WriterRun, ed.WriterOrdinal
 			}
 		}
-		if e.Kind != agentrun.KindReply && writerRun != "" {
+		if e.Kind != agentrun.KindReply && writerRun != 0 {
 			// Re-entry (ADR-0311 §SD4): a body a model run wrote comes
 			// back at the model's level, in band.
 			source, level := ReentrySource(e.Run, writerRun)
-			m.Content = Recalled(source, writerRun, writerOrdinal, m.Content)
+			m.Content = Recalled(source, RunText(writerRun), writerOrdinal, m.Content)
 			if m.Label.Level < level {
 				m.Label.Level = level
 			}
@@ -237,7 +237,7 @@ func callIds(calls string) (ids []string) {
 
 // ReentrySource says whose output a body is when it re-enters: the
 // reader's own run or another's, and the level it enters at (law L16).
-func ReentrySource(readerRun string, writerRun string) (source string, level agentrun.LevelE) {
+func ReentrySource(readerRun uint64, writerRun uint64) (source string, level agentrun.LevelE) {
 	if writerRun == readerRun {
 		return "self", agentrun.LevelOwnModel
 	}
@@ -248,7 +248,7 @@ func ReentrySource(readerRun string, writerRun string) (source string, level age
 // summary in band as the run's own earlier output, at the model's level
 // at least.
 func summaryMessage(e agentrun.Entry) (m Message) {
-	m = Message{Part: PartSummary, Ordinal: e.Ordinal, Role: RoleSystem, Content: Recalled("self", e.Run, e.Ordinal, e.Body),
+	m = Message{Part: PartSummary, Ordinal: e.Ordinal, Role: RoleSystem, Content: Recalled("self", RunText(e.Run), e.Ordinal, e.Body),
 		Sources: []uint32{e.Ordinal}, Label: e.Label}
 	if m.Label.Level < agentrun.LevelOwnModel {
 		m.Label.Level = agentrun.LevelOwnModel
@@ -261,7 +261,17 @@ func summaryMessage(e agentrun.Entry) (m Message) {
 // body cannot close the band early and the run cannot leave the
 // attribute: both are escaped, the same way the SQL escapes them.
 func Recalled(source string, run string, ordinal uint32, body string) string {
+	// run is RunText's spelling of the writer's run id.
 	return "<recalled source=\"" + source + "\" run=\"" + escapeAttribute(run) + "\" ord=\"" + strconv.FormatUint(uint64(ordinal), 10) + "\">\n" + escapeBand(body) + "\n</recalled>"
+}
+
+// RunText is a run id as the band and the journal table spell it: decimal,
+// and empty for no run (ADR-0325 §SD5).
+func RunText(id uint64) string {
+	if id == 0 {
+		return ""
+	}
+	return strconv.FormatUint(id, 10)
 }
 
 // escapeBand defuses a closing tag inside a band's body, whatever its

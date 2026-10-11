@@ -74,6 +74,14 @@ func ackOf(a wireAck, err error) error {
 	return nil
 }
 
+func (inst *Client) MintRun(ctx context.Context) (id uint64, err error) {
+	rep, err := roundTrip[wireIdRequest, wireMintReply](ctx, inst, SubjectMint, wireIdRequest{V: wireVersion})
+	if err = ackOf(rep.wireAck, err); err != nil {
+		return
+	}
+	return rep.Id, nil
+}
+
 func (inst *Client) CreateRun(ctx context.Context, r Run) (err error) {
 	a, err := roundTrip[wireRunRequest, wireAck](ctx, inst, SubjectCreate, wireRunRequest{V: wireVersion, Run: wireOfRun(r)})
 	return ackOf(a, err)
@@ -84,7 +92,7 @@ func (inst *Client) UpdateRun(ctx context.Context, r Run) (err error) {
 	return ackOf(a, err)
 }
 
-func (inst *Client) GetRun(ctx context.Context, id string) (r Run, found bool, err error) {
+func (inst *Client) GetRun(ctx context.Context, id uint64) (r Run, found bool, err error) {
 	rep, err := roundTrip[wireIdRequest, wireRunReply](ctx, inst, SubjectGet, wireIdRequest{V: wireVersion, Id: id})
 	if err = ackOf(rep.wireAck, err); err != nil {
 		return
@@ -108,11 +116,20 @@ func (inst *Client) Append(ctx context.Context, entries []Entry) (err error) {
 	for _, e := range entries {
 		req.Entries = append(req.Entries, wireOfEntry(e))
 	}
-	a, err := roundTrip[wireAppendRequest, wireAck](ctx, inst, SubjectAppend, req)
-	return ackOf(a, err)
+	rep, err := roundTrip[wireAppendRequest, wireAppendReply](ctx, inst, SubjectAppend, req)
+	if err = ackOf(rep.wireAck, err); err != nil {
+		return
+	}
+	if len(rep.EntryIds) != len(entries) {
+		return eb.Build().Int("entries", len(entries)).Int("ids", len(rep.EntryIds)).Errorf("the service assigned another number of entry ids than it appended")
+	}
+	for i := range entries {
+		entries[i].EntryId = rep.EntryIds[i]
+	}
+	return
 }
 
-func (inst *Client) Entries(ctx context.Context, run string, from uint32) (entries []Entry, err error) {
+func (inst *Client) Entries(ctx context.Context, run uint64, from uint32) (entries []Entry, err error) {
 	rep, err := roundTrip[wireIdRequest, wireEntriesReply](ctx, inst, SubjectEntries, wireIdRequest{V: wireVersion, Id: run, From: from})
 	if err = ackOf(rep.wireAck, err); err != nil {
 		return
@@ -123,14 +140,14 @@ func (inst *Client) Entries(ctx context.Context, run string, from uint32) (entri
 	return
 }
 
-func (inst *Client) Tombstone(ctx context.Context, run string) (err error) {
+func (inst *Client) Tombstone(ctx context.Context, run uint64) (err error) {
 	a, err := roundTrip[wireIdRequest, wireAck](ctx, inst, SubjectTombstone, wireIdRequest{V: wireVersion, Id: run})
 	return ackOf(a, err)
 }
 
 // Erase destroys the content of the named entries after their erased
 // entries are in the chain (ADR-0320 §SD4).
-func (inst *Client) Erase(ctx context.Context, run string, ordinals []uint32) (err error) {
+func (inst *Client) Erase(ctx context.Context, run uint64, ordinals []uint32) (err error) {
 	a, err := roundTrip[wireEraseRequest, wireAck](ctx, inst, SubjectErase, wireEraseRequest{V: wireVersion, Id: run, Ordinals: ordinals})
 	return ackOf(a, err)
 }

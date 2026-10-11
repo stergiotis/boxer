@@ -10,6 +10,7 @@ package agentrunstore
 import (
 	"context"
 	_ "embed"
+	"io"
 	"iter"
 	"strconv"
 	"strings"
@@ -24,6 +25,7 @@ import (
 	"github.com/stergiotis/boxer/public/functional"
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/identity/callident"
+	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun/agentrunstore/internal/lowlevel"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	dmlruntime "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime"
@@ -48,7 +50,7 @@ const RunTableName = "boxer.agentrun"
 // derived from the IR at generation time — exported so consumers can
 // address them in ScanOpts.ExtraPredicate and their own SQL.
 const (
-	RunColKey       = `"id:id:s:4::0:"`
+	RunColKey       = `"id:id:u64:4::0:"`
 	RunColOrder     = `"ts:ts:z64:47::0:"`
 	RunColLifecycle = `"lc:lifecycle:u8:4::0:"`
 )
@@ -61,20 +63,13 @@ var agentrunInsertSettings = recordstore.InsertSettings{AsyncInsert: recordstore
 const agentrunArrowOutputSettings = " SETTINGS output_format_arrow_string_as_string=1, output_format_arrow_low_cardinality_as_dictionary=0"
 
 // agentrunKeyLiteral renders a Key value as a ClickHouse SQL literal.
-func agentrunKeyLiteral(k string) string { return marshalling.EscapeString(k) }
-
-// agentrunKeyPrefixPredicate renders ScanOpts.KeyPrefix: keys starting with
-// prefix. startsWith on the leading sort-key column is a primary-key
-// range read, not a scan of every row.
-func agentrunKeyPrefixPredicate(prefix string) string {
-	return "startsWith(" + RunColKey + ", " + agentrunKeyLiteral(prefix) + ")"
-}
+func agentrunKeyLiteral(k uint64) string { return strconv.FormatUint(k, 10) }
 
 // agentrunEnvelopeColumns maps each envelope plain column, by the name the
 // TableDesc authors, to its quoted physical name: what ScanOpts.OrderBy
 // may name.
 var agentrunEnvelopeColumns = map[string]string{
-	"id":        `"id:id:s:4::0:"`,
+	"id":        `"id:id:u64:4::0:"`,
 	"ts":        `"ts:ts:z64:47::0:"`,
 	"lifecycle": `"lc:lifecycle:u8:4::0:"`,
 }
@@ -145,7 +140,7 @@ var RunMembershipIds = map[string]map[string]uint64{
 // Entities returned by cached reads are shared with the cache (and
 // every later reader): treat them as immutable.
 type RunEntity struct {
-	ID        string
+	ID        uint64
 	Ts        time.Time
 	Lifecycle uint8
 	Run       option.Option[Run]
@@ -216,7 +211,11 @@ type RunStoreConfig struct {
 	// the batch id of that insert and its keys, or the keys DiscardPending
 	// dropped (ADR-0295 §SD7). It is notification-only and independent of
 	// attached cache views. Nil (the default) tracks nothing.
-	WriteObserver recordstore.WriteObserverI[string, time.Time]
+	WriteObserver recordstore.WriteObserverI[uint64, time.Time]
+	// Keys is the tagged id stream MintKey draws from (ADR-0319 §SD2):
+	// ids unique across every process that leases from the same stream,
+	// never an order. Nil leaves MintKey refusing.
+	Keys identifier.IdGeneratorI
 	// TombstoneDetect is the read half of the state-view tombstone pair
 	// (ADR-0100 Update 2026-08-30): GetLive — the store's and the cache
 	// views' — reads a detected row as absent. It may consult any entity
@@ -257,7 +256,7 @@ type RunStore struct {
 	// pre-write row) and their fetchers refuse to cache them — the
 	// remaining guard for writes the views could not materialize (Raw
 	// commits) and for InvalidateAll inside a dirty window.
-	dirty map[string]struct{}
+	dirty map[uint64]struct{}
 	// insertSettingsUnapplied latches the one warning a store logs when
 	// its executor cannot carry the per-insert settings.
 	insertSettingsUnapplied bool
@@ -266,14 +265,14 @@ type RunStore struct {
 	// and pins the committed entity (nil = not materializable or a
 	// discarded write — invalidate instead); onFlush releases the pin
 	// once the row is durable.
-	onWrite []func(string, *RunEntity)
-	onFlush []func(string)
+	onWrite []func(uint64, *RunEntity)
+	onFlush []func(uint64)
 	// stampers is cfg.Stampers, consulted per Begin (ADR-0112 M1).
 	stampers []recordstore.ReferenceStamper
 	// written holds the rows the write observer was told were committed and
 	// has not yet been told are durable or discarded (ADR-0295 §SD7); empty
 	// without an observer.
-	written []recordstore.WrittenKey[string, time.Time]
+	written []recordstore.WrittenKey[uint64, time.Time]
 }
 
 // NewRunStore wires the store. A nil alloc selects the Go allocator.
@@ -294,7 +293,7 @@ func NewRunStore(exec recordstore.ExecutorI, alloc memory.Allocator, cfg RunStor
 	if alloc == nil {
 		alloc = memory.NewGoAllocator()
 	}
-	inst = &RunStore{exec: exec, alloc: alloc, cfg: cfg, dml: lowlevel.NewInEntityAgentrunTable(alloc, 64), dirty: make(map[string]struct{}), stampers: cfg.Stampers}
+	inst = &RunStore{exec: exec, alloc: alloc, cfg: cfg, dml: lowlevel.NewInEntityAgentrunTable(alloc, 64), dirty: make(map[uint64]struct{}), stampers: cfg.Stampers}
 	return
 }
 
@@ -350,7 +349,7 @@ func (inst *RunStore) applyStampers(ctx context.Context) (pushed int) {
 // or nil when the row is not faithfully materializable (Raw commits)
 // or a buffered write is being discarded — the views then invalidate
 // the key instead.
-func (inst *RunStore) notifyWrite(key string, ent *RunEntity) {
+func (inst *RunStore) notifyWrite(key uint64, ent *RunEntity) {
 	for _, f := range inst.onWrite {
 		f(key, ent)
 	}
@@ -358,7 +357,7 @@ func (inst *RunStore) notifyWrite(key string, ent *RunEntity) {
 
 // notifyFlush releases the attached views' dirty-window pins after a
 // successful Flush made the key durable.
-func (inst *RunStore) notifyFlush(key string) {
+func (inst *RunStore) notifyFlush(key uint64) {
 	for _, f := range inst.onFlush {
 		f(key)
 	}
@@ -366,7 +365,7 @@ func (inst *RunStore) notifyFlush(key string) {
 
 // noteCommitted tells the write observer about a buffered row and keeps
 // it until the observer is told its fate (ADR-0295 §SD7).
-func (inst *RunStore) noteCommitted(w recordstore.WrittenKey[string, time.Time]) {
+func (inst *RunStore) noteCommitted(w recordstore.WrittenKey[uint64, time.Time]) {
 	if inst.cfg.WriteObserver == nil {
 		return
 	}
@@ -378,10 +377,10 @@ func (inst *RunStore) noteCommitted(w recordstore.WrittenKey[string, time.Time])
 // Detaching before the observer runs means a row it commits from its
 // callback lands in a fresh buffer, reported with a later flush, and a
 // panicking observer cannot have the same rows reported twice.
-func (inst *RunStore) takeWritten() iter.Seq[recordstore.WrittenKey[string, time.Time]] {
+func (inst *RunStore) takeWritten() iter.Seq[recordstore.WrittenKey[uint64, time.Time]] {
 	written := inst.written
 	inst.written = nil
-	return func(yield func(recordstore.WrittenKey[string, time.Time]) bool) {
+	return func(yield func(recordstore.WrittenKey[uint64, time.Time]) bool) {
 		for _, w := range written {
 			if !yield(w) {
 				return
@@ -511,7 +510,7 @@ func OpenRunStore(ctx context.Context, exec recordstore.ExecutorI, alloc memory.
 // via Add*, direct attribute manipulation via Raw, then Commit.
 type RunEntityBuilder struct {
 	store *RunStore
-	key   string
+	key   uint64
 	// ent mirrors the typed Add* calls so Commit can write the entity
 	// through to attached cache views; raw marks commits that touched
 	// the DML directly — those cannot be materialized faithfully and
@@ -594,14 +593,14 @@ func (inst *RunEntityBuilder) endSection(section string) error {
 // Begin opens one entity with the envelope roles as typed arguments
 // (Key, Order) and a live lifecycle, under context.Background(): a configured stamper
 // that reads a call identity off the context finds none. See BeginCtx.
-func (inst *RunStore) Begin(id string, ts time.Time) *RunEntityBuilder {
+func (inst *RunStore) Begin(id uint64, ts time.Time) *RunEntityBuilder {
 	return inst.BeginCtx(context.Background(), id, ts)
 }
 
 // BeginCtx is Begin with the context the configured stampers consult
 // (ADR-0295 §SD7) — where a call identity reaches an actor stamper. The
 // store stays single-goroutine; ctx is read during this call only.
-func (inst *RunStore) BeginCtx(ctx context.Context, id string, ts time.Time) *RunEntityBuilder {
+func (inst *RunStore) BeginCtx(ctx context.Context, id uint64, ts time.Time) *RunEntityBuilder {
 	lowlevel.InEntityAgentrunTableBeginEntity(inst.dml)
 	lowlevel.InEntityAgentrunTableSetId(inst.dml, id)
 	lowlevel.InEntityAgentrunTableSetTimestamp(inst.dml, ts)
@@ -744,7 +743,7 @@ func (inst *RunEntityBuilder) Commit() (err error) {
 		ent := inst.ent
 		inst.store.notifyWrite(inst.key, &ent)
 	}
-	inst.store.noteCommitted(recordstore.WrittenKey[string, time.Time]{Key: inst.key, Order: inst.ent.Ts, Lifecycle: inst.ent.Lifecycle, Tombstone: inst.tombstone, Identity: inst.ident})
+	inst.store.noteCommitted(recordstore.WrittenKey[uint64, time.Time]{Key: inst.key, Order: inst.ent.Ts, Lifecycle: inst.ent.Lifecycle, Tombstone: inst.tombstone, Identity: inst.ident})
 	return
 }
 
@@ -770,7 +769,7 @@ func (inst *RunStore) IngestRun(ts time.Time, rows []Run) (err error) {
 // IngestRunCtx is IngestRun with the context BeginCtx hands the
 // configured stampers (ADR-0295 §SD7).
 func (inst *RunStore) IngestRunCtx(ctx context.Context, ts time.Time, rows []Run) (err error) {
-	seen := make(map[string]struct{}, len(rows))
+	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
 			err = eh.Errorf("ingest run row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
@@ -851,6 +850,54 @@ func (inst *RunStore) Flush(ctx context.Context) (n int, err error) {
 	clear(inst.dirty) // flushed — ClickHouse now serves the written state
 	if len(inst.written) > 0 {
 		inst.cfg.WriteObserver.Durable(bctx, batch, inst.takeWritten())
+	}
+	return
+}
+
+// DrainCanonical writes the rows buffered since the last Flush to w as
+// canonical wire items (ADR-0210), one per entity in commit order, as a
+// CBOR sequence, and discards them: nothing is inserted, and the store
+// is as DiscardPending leaves it. n is the number of items written. A
+// store opened for nothing else needs no executor (ADR-0325 §SD2).
+func (inst *RunStore) DrainCanonical(w io.Writer) (n int, err error) {
+	records, err := lowlevel.InEntityAgentrunTableTransferRecords(inst.dml, nil)
+	if err != nil {
+		err = eh.Errorf("transfer records: %w", err)
+		return
+	}
+	records = append(inst.pending, records...)
+	inst.pending = nil
+	defer func() {
+		for _, rec := range records {
+			rec.Release()
+		}
+		inst.buffered = 0
+		for k := range inst.dirty {
+			inst.notifyWrite(k, nil)
+		}
+		clear(inst.dirty)
+		if len(inst.written) > 0 {
+			inst.cfg.WriteObserver.Discarded(inst.takeWritten())
+		}
+	}()
+	ra := lowlevel.NewReadAccessAgentrunTable()
+	enc, err := lowlevel.NewCanonWireEncoderAgentrunTable(ra, lowlevel.CanonWireOrdinalTaggerAgentrunTable{})
+	if err != nil {
+		err = eh.Errorf("canonical wire encoder: %w", err)
+		return
+	}
+	for _, rec := range records {
+		if err = ra.LoadFromRecord(rec); err != nil {
+			err = eh.Errorf("load the buffered rows: %w", err)
+			return
+		}
+		err = enc.EncodeAll(w)
+		n += int(rec.NumRows())
+		ra.Release()
+		if err != nil {
+			err = eh.Errorf("encode the buffered rows: %w", err)
+			return
+		}
 	}
 	return
 }
@@ -941,7 +988,7 @@ type RunCacheConfig struct {
 type RunCache[W comparable] struct {
 	st    *RunStore
 	cfg   RunCacheConfig
-	cache *caching.ReadThroughCache[string, *RunEntity, W]
+	cache *caching.ReadThroughCache[uint64, *RunEntity, W]
 }
 
 // NewRunCache attaches a read-through, write-through cache view to st,
@@ -955,7 +1002,7 @@ func NewRunCache[W comparable](st *RunStore, cfg RunCacheConfig) (inst *RunCache
 	inst.rebuild()
 	// The hooks close over the view, not the cache instance, keeping
 	// them correct if the cache is ever swapped out.
-	st.onWrite = append(st.onWrite, func(k string, ent *RunEntity) {
+	st.onWrite = append(st.onWrite, func(k uint64, ent *RunEntity) {
 		if ent == nil {
 			inst.cache.Delete(k) // not materializable or discarded: invalidate
 			return
@@ -963,23 +1010,23 @@ func NewRunCache[W comparable](st *RunStore, cfg RunCacheConfig) (inst *RunCache
 		inst.cache.AddItem(k, ent) // version-gated write-through
 		inst.cache.Pin(k)          // dirty-window latch, released by Flush
 	})
-	st.onFlush = append(st.onFlush, func(k string) { inst.cache.Unpin(k) })
+	st.onFlush = append(st.onFlush, func(k uint64) { inst.cache.Unpin(k) })
 	return
 }
 
 func (inst *RunCache[W]) rebuild() {
-	opts := []caching.CacheOption[string, *RunEntity, W]{
+	opts := []caching.CacheOption[uint64, *RunEntity, W]{
 		// Admission mirrors the table's newest-row-per-key semantics:
 		// the Order timestamp is the entity's monotonic version.
-		caching.WithVersioning[string, *RunEntity, W](func(e *RunEntity) int64 { return e.Ts.UnixNano() }),
+		caching.WithVersioning[uint64, *RunEntity, W](func(e *RunEntity) int64 { return e.Ts.UnixNano() }),
 	}
 	if inst.cfg.FreshnessTTL > 0 {
-		opts = append(opts, caching.WithFreshnessTTL[string, *RunEntity, W](inst.cfg.FreshnessTTL))
+		opts = append(opts, caching.WithFreshnessTTL[uint64, *RunEntity, W](inst.cfg.FreshnessTTL))
 	}
 	if inst.cfg.NegativeTTL > 0 {
-		opts = append(opts, caching.WithNegativeCaching[string, *RunEntity, W](inst.cfg.NegativeTTL))
+		opts = append(opts, caching.WithNegativeCaching[uint64, *RunEntity, W](inst.cfg.NegativeTTL))
 	}
-	inst.cache = caching.NewReadThroughCache[string, *RunEntity, W](inst.cfg.Capacity, &agentrunFetcher{st: inst.st}, inst.cfg.FetchCriteria, opts...)
+	inst.cache = caching.NewReadThroughCache[uint64, *RunEntity, W](inst.cfg.Capacity, &agentrunFetcher{st: inst.st}, inst.cfg.FetchCriteria, opts...)
 }
 
 // Get retrieves an entity by Key through the cache; local writes are
@@ -989,7 +1036,7 @@ func (inst *RunCache[W]) rebuild() {
 // the circuit breaker backs off) — GetFetch surfaces the error
 // instead, and the store's Latest stays the authoritative check. The
 // returned entity is shared with the cache: treat it as immutable.
-func (inst *RunCache[W]) Get(key string) (ent *RunEntity, found bool) {
+func (inst *RunCache[W]) Get(key uint64) (ent *RunEntity, found bool) {
 	return inst.cache.Get(key)
 }
 
@@ -1001,7 +1048,7 @@ func (inst *RunCache[W]) Get(key string) (ent *RunEntity, found bool) {
 // Prefer Get plus the work-item protocol when batching lookups across a
 // frame; the initial miss here also queues the key, so a later batch
 // fetch may include it redundantly (harmless).
-func (inst *RunCache[W]) GetFetch(ctx context.Context, key string) (ent *RunEntity, found bool, err error) {
+func (inst *RunCache[W]) GetFetch(ctx context.Context, key uint64) (ent *RunEntity, found bool, err error) {
 	ent, found = inst.cache.Get(key)
 	if found {
 		return
@@ -1020,7 +1067,7 @@ func (inst *RunCache[W]) GetFetch(ctx context.Context, key string) (ent *RunEnti
 		err = eh.Errorf("get-fetch: key is in the dirty write window — written locally and not yet flushed, and the write was not materializable into the cache; Flush before reading it back")
 		return
 	}
-	ents, err := inst.st.queryEntities(ctx, inst.st.fetchLatestSQL([]string{key}))
+	ents, err := inst.st.queryEntities(ctx, inst.st.fetchLatestSQL([]uint64{key}))
 	if err != nil {
 		err = eh.Errorf("get-fetch: %w", err)
 		return
@@ -1062,7 +1109,7 @@ func (inst *RunCache[W]) AdvanceEpoch() {
 // MarkStale flags the key's cached entry as stale — the external-writer
 // signal: the next strict read misses and queues a refetch, while
 // accept-stale reads keep serving the old value until it lands.
-func (inst *RunCache[W]) MarkStale(key string) {
+func (inst *RunCache[W]) MarkStale(key uint64) {
 	inst.cache.MarkAsStale(key)
 }
 
@@ -1070,12 +1117,12 @@ func (inst *RunCache[W]) MarkStale(key string) {
 // it stales the cached entry only if its Order is below order, so a
 // redundant signal for a version the view already holds is free —
 // the natural sink for an invalidation stream carrying (key, Order).
-func (inst *RunCache[W]) MarkStaleIfOlder(key string, order time.Time) {
+func (inst *RunCache[W]) MarkStaleIfOlder(key uint64, order time.Time) {
 	inst.cache.MarkAsStaleIfOlder(key, order.UnixNano())
 }
 
 // Invalidate drops the key's cached entry (L1 and stash).
-func (inst *RunCache[W]) Invalidate(key string) {
+func (inst *RunCache[W]) Invalidate(key uint64) {
 	inst.cache.Delete(key)
 }
 
@@ -1095,7 +1142,7 @@ func (inst *RunCache[W]) InvalidateAll() {
 // process's single writer (local writes invalidate); external writers
 // need MarkStale / Invalidate. The store's uncached GetLive stays
 // the authoritative read. A miss queues the batch fetch like Get.
-func (inst *RunCache[W]) GetLive(key string) (ent *RunEntity, found bool) {
+func (inst *RunCache[W]) GetLive(key uint64) (ent *RunEntity, found bool) {
 	ent, found = inst.cache.Get(key)
 	if found && inst.st.isTombstone(ent) {
 		ent = nil
@@ -1109,7 +1156,7 @@ func (inst *RunCache[W]) GetLive(key string) (ent *RunEntity, found bool) {
 // queues in the background — pair with the work-item replay loop.
 // Tombstones read as absent; stale then reports whether that verdict
 // came from a stale entry.
-func (inst *RunCache[W]) GetLiveAcceptStale(key string) (ent *RunEntity, found bool, stale bool) {
+func (inst *RunCache[W]) GetLiveAcceptStale(key uint64) (ent *RunEntity, found bool, stale bool) {
 	ent, found, stale = inst.cache.GetAcceptStale(key)
 	if found && inst.st.isTombstone(ent) {
 		ent = nil
@@ -1120,7 +1167,7 @@ func (inst *RunCache[W]) GetLiveAcceptStale(key string) (ent *RunEntity, found b
 
 // fetchLatestSQL is the batched newest-row-per-key point lookup shared
 // by the cache fetcher and GetFetch.
-func (inst *RunStore) fetchLatestSQL(keys []string) string {
+func (inst *RunStore) fetchLatestSQL(keys []uint64) string {
 	var sb strings.Builder
 	sb.WriteString("SELECT * FROM ")
 	sb.WriteString(inst.readTable())
@@ -1141,11 +1188,11 @@ func (inst *RunStore) fetchLatestSQL(keys []string) string {
 // public method set.
 type agentrunFetcher struct{ st *RunStore }
 
-var _ caching.ItemFetcherI[string, *RunEntity] = (*agentrunFetcher)(nil)
+var _ caching.ItemFetcherI[uint64, *RunEntity] = (*agentrunFetcher)(nil)
 
 // DeterminePartition implements caching.ItemFetcherI. Single partition
 // in v1 (one table, one server).
-func (inst *agentrunFetcher) DeterminePartition(key string) uint64 { return 0 }
+func (inst *agentrunFetcher) DeterminePartition(key uint64) uint64 { return 0 }
 
 // FetchItemSinglePartition implements caching.ItemFetcherI: one batched
 // point lookup per fetch. Duplicate versions collapse newest-first.
@@ -1156,7 +1203,7 @@ func (inst *agentrunFetcher) DeterminePartition(key string) uint64 { return 0 }
 // (Raw commits, discarded writes) and for InvalidateAll inside a
 // dirty window, where the cache is cold and the gate has nothing to
 // compare against.
-func (inst *agentrunFetcher) FetchItemSinglePartition(ctx context.Context, partition uint64, keys []string, target caching.ItemTargetI[string, *RunEntity]) (err error) {
+func (inst *agentrunFetcher) FetchItemSinglePartition(ctx context.Context, partition uint64, keys []uint64, target caching.ItemTargetI[uint64, *RunEntity]) (err error) {
 	ents, err := inst.st.queryEntities(ctx, inst.st.fetchLatestSQL(keys))
 	if err != nil {
 		return
@@ -1183,8 +1230,8 @@ const (
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
-// opts.KeyPrefix restricts the scan to keys starting with it — a
-// primary-key range read, since the table sorts by (key, order).
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -1194,14 +1241,14 @@ const (
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *RunStore) ScanRun(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*RunEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*RunEntity]()
+	}
 	order, err := agentrunOrderBy(opts)
 	if err != nil {
 		return recordstore.FailScan[*RunEntity](err)
 	}
 	where := agentrunScanRunFilter
-	if opts.KeyPrefix != "" {
-		where = "(" + where + ") AND " + agentrunKeyPrefixPredicate(opts.KeyPrefix)
-	}
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
@@ -1218,7 +1265,7 @@ func (inst *RunStore) ScanRun(ctx context.Context, opts recordstore.ScanOpts) it
 // row-level primitive — a deleted key still returns its tombstone
 // row; GetLive is the interpreted state-view read). Reads see only
 // flushed rows.
-func (inst *RunStore) Latest(ctx context.Context, key string) (ent *RunEntity, found bool, err error) {
+func (inst *RunStore) Latest(ctx context.Context, key uint64) (ent *RunEntity, found bool, err error) {
 	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + RunColKey + " = " + agentrunKeyLiteral(key) +
 		" ORDER BY " + RunColOrder + " DESC LIMIT 1" + agentrunArrowOutputSettings
@@ -1241,7 +1288,7 @@ func (inst *RunStore) Latest(ctx context.Context, key string) (ent *RunEntity, f
 // at call time or lazily during iteration (buffered in v1 — a
 // streaming executor changes nothing visible); an error ends the
 // sequence as a final (nil, err) pair. Reads see only flushed rows.
-func (inst *RunStore) Replay(ctx context.Context, key string, fromOrder time.Time, opts recordstore.ReplayOpts) iter.Seq2[*RunEntity, error] {
+func (inst *RunStore) Replay(ctx context.Context, key uint64, fromOrder time.Time, opts recordstore.ReplayOpts) iter.Seq2[*RunEntity, error] {
 	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + RunColKey + " = " + agentrunKeyLiteral(key)
 	if !fromOrder.IsZero() {
@@ -1269,13 +1316,13 @@ func (inst *RunStore) Replay(ctx context.Context, key string, fromOrder time.Tim
 // pair is the marker). Either way the deletion writes through to
 // attached cache views like any commit — versioned, so GetLive reads
 // the key as absent immediately.
-func (inst *RunStore) Delete(id string, ts time.Time) (err error) {
+func (inst *RunStore) Delete(id uint64, ts time.Time) (err error) {
 	return inst.DeleteCtx(context.Background(), id, ts)
 }
 
 // DeleteCtx is Delete with the context BeginCtx hands the configured
 // stampers (ADR-0295 §SD7).
-func (inst *RunStore) DeleteCtx(ctx context.Context, id string, ts time.Time) (err error) {
+func (inst *RunStore) DeleteCtx(ctx context.Context, id uint64, ts time.Time) (err error) {
 	if inst.cfg.TombstoneWrite != nil {
 		b := inst.BeginCtx(ctx, id, ts)
 		b.tombstone = true
@@ -1300,7 +1347,7 @@ func (inst *RunStore) DeleteCtx(ctx context.Context, id string, ts time.Time) (e
 	inst.dirty[id] = struct{}{}
 	inst.notifyWrite(id, &RunEntity{ID: id, Ts: ts, Lifecycle: recordstore.LifecycleTombstone})
 	ci, _ := callident.CallIdentityFrom(ctx)
-	inst.noteCommitted(recordstore.WrittenKey[string, time.Time]{Key: id, Order: ts, Lifecycle: recordstore.LifecycleTombstone, Tombstone: true, Identity: ci})
+	inst.noteCommitted(recordstore.WrittenKey[uint64, time.Time]{Key: id, Order: ts, Lifecycle: recordstore.LifecycleTombstone, Tombstone: true, Identity: ci})
 	return
 }
 
@@ -1308,7 +1355,7 @@ func (inst *RunStore) DeleteCtx(ctx context.Context, id string, ts time.Time) (e
 // tombstone reads as absent — the state-view read (the cache view
 // carries the cached twin). Interpretation runs Go-side through the
 // tombstone pair's detect, on the one newest row this verb needs.
-func (inst *RunStore) GetLive(ctx context.Context, key string) (ent *RunEntity, found bool, err error) {
+func (inst *RunStore) GetLive(ctx context.Context, key uint64) (ent *RunEntity, found bool, err error) {
 	ent, found, err = inst.Latest(ctx, key)
 	if err != nil || !found {
 		return
@@ -1327,8 +1374,8 @@ func (inst *RunStore) GetLive(ctx context.Context, key string) (ent *RunEntity, 
 // the component test: a key whose newest row is a tombstone, or carries
 // only other components, is absent, never represented by an older row
 // it superseded.
-// opts.KeyPrefix restricts the scan to keys starting with it — a
-// primary-key range read, since the table sorts by (key, order).
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns)
 // applies to the collapsed rows, so it narrows the live set and cannot
 // uncover a superseded row. Entities come out ordered by key, unless
@@ -1339,10 +1386,10 @@ func (inst *RunStore) GetLive(ctx context.Context, key string) (ent *RunEntity, 
 // Reads see only flushed rows; the sequence is single-use, and an
 // error ends it as a final (nil, err) pair.
 func (inst *RunStore) ScanLiveRun(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*RunEntity, error] {
-	inner := "SELECT * FROM " + inst.readTable()
 	if opts.KeyPrefix != "" {
-		inner += " WHERE " + agentrunKeyPrefixPredicate(opts.KeyPrefix)
+		return recordstore.RefuseKeyPrefix[*RunEntity]()
 	}
+	inner := "SELECT * FROM " + inst.readTable()
 	inner += " ORDER BY " + RunColOrder + " DESC LIMIT 1 BY " + RunColKey
 	where := "(" + agentrunScanRunFilter + ")"
 	if opts.ExtraPredicate != "" {
@@ -1377,6 +1424,24 @@ func (inst *RunStore) ScanLiveRun(ctx context.Context, opts recordstore.ScanOpts
 	}
 }
 
+// MintKey draws the next Key from cfg.Keys (ADR-0319 §SD2): a tagged id
+// that says which stream it belongs to and is unique across every
+// process leasing from it. It identifies a row and orders nothing; pass
+// it to Begin as the id.
+func (inst *RunStore) MintKey(ctx context.Context) (key uint64, err error) {
+	if inst.cfg.Keys == nil {
+		err = eh.Errorf("mint key: the store has no key stream (RunStoreConfig.Keys)")
+		return
+	}
+	id, _, err := inst.cfg.Keys.GetId(ctx, nil)
+	if err != nil {
+		err = eh.Errorf("mint key: %w", err)
+		return
+	}
+	key = id.Value()
+	return
+}
+
 // UpdateIf is the compare-and-set on key's row (ADR-0223 §SD3): one
 // lightweight update, guarded by where on the row's current values, that
 // applies sets. It does not report whether it won — the caller reads the
@@ -1391,7 +1456,7 @@ func (inst *RunStore) ScanLiveRun(ctx context.Context, opts recordstore.ScanOpts
 // on every statement, the block-position settings (EnsureTable applies
 // them), no heavyweight mutation ever, an immutable key, no async_insert
 // on the claim path, and one server (ADR-0319 §SD1).
-func (inst *RunStore) UpdateIf(ctx context.Context, key string, where string, sets ...rowcas.Set) (err error) {
+func (inst *RunStore) UpdateIf(ctx context.Context, key uint64, where string, sets ...rowcas.Set) (err error) {
 	if strings.TrimSpace(where) == "" {
 		return eh.Errorf("compare-and-set without a guard")
 	}
@@ -1730,7 +1795,7 @@ var RunComponentSQL = componentsql.Set{
 			Presence:   "has(\"tv:runCell:lr:lr:u64:1247:::0::data\", 9223372049739678005) AND has(\"tv:runConversation:lr:lr:u64:1247:::0::data\", 9223372049739678006) AND has(\"tv:runOwnerApp:lr:lr:u64:1247:::0::data\", 9223372049739677701) AND has(\"tv:runCoordinator:lr:lr:u64:1247:::0::data\", 9223372049739678007) AND has(\"tv:runState:lr:lr:u64:1247:::0::data\", 9223372049739678008) AND has(\"tv:runFingerprint:lr:lr:u64:1247:::0::data\", 9223372049739678009) AND has(\"tv:runBuild:lr:lr:u64:1247:::0::data\", 9223372049739678010) AND has(\"tv:runProfile:lr:lr:u64:1247:::0::data\", 9223372049739678011) AND has(\"tv:runSettings:lr:lr:u64:1247:::0::data\", 9223372049739678012) AND has(\"tv:runLabelLevel:lr:lr:u64:1247:::0::data\", 9223372049739678013) AND has(\"tv:runLabelTier:lr:lr:u64:1247:::0::data\", 9223372049739678014) AND has(\"tv:runLabelExposure:lr:lr:u64:1247:::0::data\", 9223372049739678015) AND has(\"tv:runLabelOrigin:lr:lr:u64:1247:::0::data\", 9223372049739678016) AND has(\"tv:runCreated:lr:lr:u64:1247:::0::data\", 9223372049739678017) AND has(\"tv:runLastOrdinal:lr:lr:u64:1247:::0::data\", 9223372049739678018) AND has(\"tv:runClosed:lr:lr:u64:1247:::0::data\", 9223372049739678019) AND has(\"tv:runDigest:lr:lr:u64:1247:::0::data\", 9223372049739678020) AND has(\"tv:runHead:lr:lr:u64:1247:::0::data\", 9223372049739678051) AND has(\"tv:runVersion:lr:lr:u64:1247:::0::data\", 9223372049739678052) AND has(\"tv:runDeletedBy:lr:lr:u64:1247:::0::data\", 9223372049739678021) AND has(\"tv:runDeletedAt:lr:lr:u64:1247:::0::data\", 9223372049739678022) AND has(\"tv:runHolder:lr:lr:u64:1247:::0::data\", 9223372049739678057) AND has(\"tv:runHolderPid:lr:lr:u64:1247:::0::data\", 9223372049739678058) AND has(\"tv:runEpoch:lr:lr:u64:1247:::0::data\", 9223372049739678059)",
 			Validator:  "countEqual(\"tv:runCell:lr:lr:u64:1247:::0::data\", 9223372049739678005) = 1 AND countEqual(\"tv:runConversation:lr:lr:u64:1247:::0::data\", 9223372049739678006) = 1 AND countEqual(\"tv:runOwnerApp:lr:lr:u64:1247:::0::data\", 9223372049739677701) = 1 AND countEqual(\"tv:runCoordinator:lr:lr:u64:1247:::0::data\", 9223372049739678007) = 1 AND countEqual(\"tv:runState:lr:lr:u64:1247:::0::data\", 9223372049739678008) = 1 AND countEqual(\"tv:runFingerprint:lr:lr:u64:1247:::0::data\", 9223372049739678009) = 1 AND countEqual(\"tv:runBuild:lr:lr:u64:1247:::0::data\", 9223372049739678010) = 1 AND countEqual(\"tv:runProfile:lr:lr:u64:1247:::0::data\", 9223372049739678011) = 1 AND countEqual(\"tv:runSettings:lr:lr:u64:1247:::0::data\", 9223372049739678012) = 1 AND countEqual(\"tv:runLabelLevel:lr:lr:u64:1247:::0::data\", 9223372049739678013) = 1 AND countEqual(\"tv:runLabelTier:lr:lr:u64:1247:::0::data\", 9223372049739678014) = 1 AND countEqual(\"tv:runLabelExposure:lr:lr:u64:1247:::0::data\", 9223372049739678015) = 1 AND countEqual(\"tv:runLabelOrigin:lr:lr:u64:1247:::0::data\", 9223372049739678016) = 1 AND countEqual(\"tv:runCreated:lr:lr:u64:1247:::0::data\", 9223372049739678017) = 1 AND countEqual(\"tv:runLastOrdinal:lr:lr:u64:1247:::0::data\", 9223372049739678018) = 1 AND countEqual(\"tv:runClosed:lr:lr:u64:1247:::0::data\", 9223372049739678019) = 1 AND countEqual(\"tv:runDigest:lr:lr:u64:1247:::0::data\", 9223372049739678020) = 1 AND countEqual(\"tv:runHead:lr:lr:u64:1247:::0::data\", 9223372049739678051) = 1 AND countEqual(\"tv:runVersion:lr:lr:u64:1247:::0::data\", 9223372049739678052) = 1 AND countEqual(\"tv:runDeletedBy:lr:lr:u64:1247:::0::data\", 9223372049739678021) = 1 AND countEqual(\"tv:runDeletedAt:lr:lr:u64:1247:::0::data\", 9223372049739678022) = 1 AND countEqual(\"tv:runHolder:lr:lr:u64:1247:::0::data\", 9223372049739678057) = 1 AND countEqual(\"tv:runHolderPid:lr:lr:u64:1247:::0::data\", 9223372049739678058) = 1 AND countEqual(\"tv:runEpoch:lr:lr:u64:1247:::0::data\", 9223372049739678059) = 1",
 			Filter:     agentrunScanRunFilter,
-			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_VALUE_BY_TAG_EQUAL(\"tv:runCell:value:val:s:24:::0::data\", \"tv:runCell:lr:lr:u64:1247:::0::data\", 9223372049739678005, LW_RAGGED_PARENT_IDS(\"tv:runCell:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runConversation:value:val:s:4:::0::data\", \"tv:runConversation:lr:lr:u64:1247:::0::data\", 9223372049739678006, LW_RAGGED_PARENT_IDS(\"tv:runConversation:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runOwnerApp:value:val:s:24:::0::data\", \"tv:runOwnerApp:lr:lr:u64:1247:::0::data\", 9223372049739677701, LW_RAGGED_PARENT_IDS(\"tv:runOwnerApp:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runCoordinator:value:val:s:24:::0::data\", \"tv:runCoordinator:lr:lr:u64:1247:::0::data\", 9223372049739678007, LW_RAGGED_PARENT_IDS(\"tv:runCoordinator:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runState:value:val:s:24:::0::data\", \"tv:runState:lr:lr:u64:1247:::0::data\", 9223372049739678008, LW_RAGGED_PARENT_IDS(\"tv:runState:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runFingerprint:value:val:s:24:::0::data\", \"tv:runFingerprint:lr:lr:u64:1247:::0::data\", 9223372049739678009, LW_RAGGED_PARENT_IDS(\"tv:runFingerprint:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runBuild:value:val:s:24:::0::data\", \"tv:runBuild:lr:lr:u64:1247:::0::data\", 9223372049739678010, LW_RAGGED_PARENT_IDS(\"tv:runBuild:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runProfile:value:val:s:24:::0::data\", \"tv:runProfile:lr:lr:u64:1247:::0::data\", 9223372049739678011, LW_RAGGED_PARENT_IDS(\"tv:runProfile:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runSettings:value:val:s:4:::0::data\", \"tv:runSettings:lr:lr:u64:1247:::0::data\", 9223372049739678012, LW_RAGGED_PARENT_IDS(\"tv:runSettings:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runLabelLevel:value:val:u32:4:::0::data\", \"tv:runLabelLevel:lr:lr:u64:1247:::0::data\", 9223372049739678013, LW_RAGGED_PARENT_IDS(\"tv:runLabelLevel:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runLabelTier:value:val:u32:4:::0::data\", \"tv:runLabelTier:lr:lr:u64:1247:::0::data\", 9223372049739678014, LW_RAGGED_PARENT_IDS(\"tv:runLabelTier:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runLabelExposure:value:val:s:24:::0::data\", \"tv:runLabelExposure:lr:lr:u64:1247:::0::data\", 9223372049739678015, LW_RAGGED_PARENT_IDS(\"tv:runLabelExposure:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runLabelOrigin:value:val:s:24:::0::data\", \"tv:runLabelOrigin:lr:lr:u64:1247:::0::data\", 9223372049739678016, LW_RAGGED_PARENT_IDS(\"tv:runLabelOrigin:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runCreated:value:val:z64:4:::0::data\", \"tv:runCreated:lr:lr:u64:1247:::0::data\", 9223372049739678017, LW_RAGGED_PARENT_IDS(\"tv:runCreated:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runLastOrdinal:value:val:u32:4:::0::data\", \"tv:runLastOrdinal:lr:lr:u64:1247:::0::data\", 9223372049739678018, LW_RAGGED_PARENT_IDS(\"tv:runLastOrdinal:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runClosed:value:val:z64:4:::0::data\", \"tv:runClosed:lr:lr:u64:1247:::0::data\", 9223372049739678019, LW_RAGGED_PARENT_IDS(\"tv:runClosed:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runDigest:value:val:s:4:::0::data\", \"tv:runDigest:lr:lr:u64:1247:::0::data\", 9223372049739678020, LW_RAGGED_PARENT_IDS(\"tv:runDigest:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runHead:value:val:s:4:::0::data\", \"tv:runHead:lr:lr:u64:1247:::0::data\", 9223372049739678051, LW_RAGGED_PARENT_IDS(\"tv:runHead:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runVersion:value:val:u32:4:::0::data\", \"tv:runVersion:lr:lr:u64:1247:::0::data\", 9223372049739678052, LW_RAGGED_PARENT_IDS(\"tv:runVersion:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runDeletedBy:value:val:s:24:::0::data\", \"tv:runDeletedBy:lr:lr:u64:1247:::0::data\", 9223372049739678021, LW_RAGGED_PARENT_IDS(\"tv:runDeletedBy:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runDeletedAt:value:val:z64:4:::0::data\", \"tv:runDeletedAt:lr:lr:u64:1247:::0::data\", 9223372049739678022, LW_RAGGED_PARENT_IDS(\"tv:runDeletedAt:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runHolder:value:val:s:24:::0::data\", \"tv:runHolder:lr:lr:u64:1247:::0::data\", 9223372049739678057, LW_RAGGED_PARENT_IDS(\"tv:runHolder:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runHolderPid:value:val:u32:4:::0::data\", \"tv:runHolderPid:lr:lr:u64:1247:::0::data\", 9223372049739678058, LW_RAGGED_PARENT_IDS(\"tv:runHolderPid:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runEpoch:value:val:u32:4:::0::data\", \"tv:runEpoch:lr:lr:u64:1247:::0::data\", 9223372049739678059, LW_RAGGED_PARENT_IDS(\"tv:runEpoch:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID String, Cell String, Conversation String, OwnerApp String, Coordinator String, State String, Fingerprint String, Build String, Profile String, Settings String, LabelLevel UInt32, LabelTier UInt32, LabelExposure String, LabelOrigin String, Created DateTime64(9,\\'UTC\\'), LastOrdinal UInt32, Closed DateTime64(9,\\'UTC\\'), Digest String, Head String, Version UInt32, DeletedBy String, DeletedAt DateTime64(9,\\'UTC\\'), Holder String, HolderPid UInt32, Epoch UInt32)')",
+			Projection: "CAST(tuple(\"id:id:u64:4::0:\", LW_VALUE_BY_TAG_EQUAL(\"tv:runCell:value:val:s:24:::0::data\", \"tv:runCell:lr:lr:u64:1247:::0::data\", 9223372049739678005, LW_RAGGED_PARENT_IDS(\"tv:runCell:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runConversation:value:val:s:4:::0::data\", \"tv:runConversation:lr:lr:u64:1247:::0::data\", 9223372049739678006, LW_RAGGED_PARENT_IDS(\"tv:runConversation:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runOwnerApp:value:val:s:24:::0::data\", \"tv:runOwnerApp:lr:lr:u64:1247:::0::data\", 9223372049739677701, LW_RAGGED_PARENT_IDS(\"tv:runOwnerApp:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runCoordinator:value:val:s:24:::0::data\", \"tv:runCoordinator:lr:lr:u64:1247:::0::data\", 9223372049739678007, LW_RAGGED_PARENT_IDS(\"tv:runCoordinator:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runState:value:val:s:24:::0::data\", \"tv:runState:lr:lr:u64:1247:::0::data\", 9223372049739678008, LW_RAGGED_PARENT_IDS(\"tv:runState:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runFingerprint:value:val:s:24:::0::data\", \"tv:runFingerprint:lr:lr:u64:1247:::0::data\", 9223372049739678009, LW_RAGGED_PARENT_IDS(\"tv:runFingerprint:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runBuild:value:val:s:24:::0::data\", \"tv:runBuild:lr:lr:u64:1247:::0::data\", 9223372049739678010, LW_RAGGED_PARENT_IDS(\"tv:runBuild:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runProfile:value:val:s:24:::0::data\", \"tv:runProfile:lr:lr:u64:1247:::0::data\", 9223372049739678011, LW_RAGGED_PARENT_IDS(\"tv:runProfile:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runSettings:value:val:s:4:::0::data\", \"tv:runSettings:lr:lr:u64:1247:::0::data\", 9223372049739678012, LW_RAGGED_PARENT_IDS(\"tv:runSettings:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runLabelLevel:value:val:u32:4:::0::data\", \"tv:runLabelLevel:lr:lr:u64:1247:::0::data\", 9223372049739678013, LW_RAGGED_PARENT_IDS(\"tv:runLabelLevel:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runLabelTier:value:val:u32:4:::0::data\", \"tv:runLabelTier:lr:lr:u64:1247:::0::data\", 9223372049739678014, LW_RAGGED_PARENT_IDS(\"tv:runLabelTier:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runLabelExposure:value:val:s:24:::0::data\", \"tv:runLabelExposure:lr:lr:u64:1247:::0::data\", 9223372049739678015, LW_RAGGED_PARENT_IDS(\"tv:runLabelExposure:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runLabelOrigin:value:val:s:24:::0::data\", \"tv:runLabelOrigin:lr:lr:u64:1247:::0::data\", 9223372049739678016, LW_RAGGED_PARENT_IDS(\"tv:runLabelOrigin:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runCreated:value:val:z64:4:::0::data\", \"tv:runCreated:lr:lr:u64:1247:::0::data\", 9223372049739678017, LW_RAGGED_PARENT_IDS(\"tv:runCreated:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runLastOrdinal:value:val:u32:4:::0::data\", \"tv:runLastOrdinal:lr:lr:u64:1247:::0::data\", 9223372049739678018, LW_RAGGED_PARENT_IDS(\"tv:runLastOrdinal:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runClosed:value:val:z64:4:::0::data\", \"tv:runClosed:lr:lr:u64:1247:::0::data\", 9223372049739678019, LW_RAGGED_PARENT_IDS(\"tv:runClosed:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runDigest:value:val:s:4:::0::data\", \"tv:runDigest:lr:lr:u64:1247:::0::data\", 9223372049739678020, LW_RAGGED_PARENT_IDS(\"tv:runDigest:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runHead:value:val:s:4:::0::data\", \"tv:runHead:lr:lr:u64:1247:::0::data\", 9223372049739678051, LW_RAGGED_PARENT_IDS(\"tv:runHead:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runVersion:value:val:u32:4:::0::data\", \"tv:runVersion:lr:lr:u64:1247:::0::data\", 9223372049739678052, LW_RAGGED_PARENT_IDS(\"tv:runVersion:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runDeletedBy:value:val:s:24:::0::data\", \"tv:runDeletedBy:lr:lr:u64:1247:::0::data\", 9223372049739678021, LW_RAGGED_PARENT_IDS(\"tv:runDeletedBy:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runDeletedAt:value:val:z64:4:::0::data\", \"tv:runDeletedAt:lr:lr:u64:1247:::0::data\", 9223372049739678022, LW_RAGGED_PARENT_IDS(\"tv:runDeletedAt:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runHolder:value:val:s:24:::0::data\", \"tv:runHolder:lr:lr:u64:1247:::0::data\", 9223372049739678057, LW_RAGGED_PARENT_IDS(\"tv:runHolder:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runHolderPid:value:val:u32:4:::0::data\", \"tv:runHolderPid:lr:lr:u64:1247:::0::data\", 9223372049739678058, LW_RAGGED_PARENT_IDS(\"tv:runHolderPid:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:runEpoch:value:val:u32:4:::0::data\", \"tv:runEpoch:lr:lr:u64:1247:::0::data\", 9223372049739678059, LW_RAGGED_PARENT_IDS(\"tv:runEpoch:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID UInt64, Cell String, Conversation String, OwnerApp String, Coordinator String, State String, Fingerprint String, Build String, Profile String, Settings String, LabelLevel UInt32, LabelTier UInt32, LabelExposure String, LabelOrigin String, Created DateTime64(9,\\'UTC\\'), LastOrdinal UInt32, Closed DateTime64(9,\\'UTC\\'), Digest String, Head String, Version UInt32, DeletedBy String, DeletedAt DateTime64(9,\\'UTC\\'), Holder String, HolderPid UInt32, Epoch UInt32)')",
 		},
 	},
 }

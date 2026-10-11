@@ -43,7 +43,7 @@ func (inst anchorsProvider) Snapshot(proj introspect.Projection) (rec arrow.Reco
 func anchorsTable(rows []Anchored) *introspect.Table {
 	return introspect.NewTable().
 		String("cell", func(i int) string { return rows[i].Cell }).
-		String("run", func(i int) string { return rows[i].Run }).
+		Uint64("run", func(i int) uint64 { return rows[i].Run }).
 		Uint64("ordinal", func(i int) uint64 { return uint64(rows[i].Ordinal) }).
 		String("digest", func(i int) string { return rows[i].Digest }).
 		String("receipt", func(i int) string { return rows[i].Receipt.Id }).

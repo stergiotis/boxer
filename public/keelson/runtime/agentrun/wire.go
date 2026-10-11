@@ -7,11 +7,11 @@ import (
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
 
-const wireVersion = 1
+const wireVersion = 2
 
 // wireRun is a run row on the bus.
 type wireRun struct {
-	Id            string    `json:"id"`
+	Id            uint64    `json:"id"`
 	Cell          string    `json:"cell,omitempty"`
 	Conversation  string    `json:"conversation,omitempty"`
 	OwnerApp      string    `json:"owner_app,omitempty"`
@@ -52,7 +52,7 @@ func runOfWire(w wireRun) Run {
 
 // wireEntry is an entry on the bus.
 type wireEntry struct {
-	Run       string    `json:"run"`
+	Run       uint64    `json:"run"`
 	Ordinal   uint32    `json:"ordinal"`
 	At        time.Time `json:"at"`
 	Kind      string    `json:"kind"`
@@ -88,7 +88,7 @@ type wireEntry struct {
 	LabelTier       uint8          `json:"label_tier,omitempty"`
 	LabelExposure   []string       `json:"label_exposure,omitempty"`
 	LabelOrigin     []string       `json:"label_origin,omitempty"`
-	WriterRun       string         `json:"writer_run,omitempty"`
+	WriterRun       uint64         `json:"writer_run,omitempty"`
 	WriterTurn      string         `json:"writer_turn,omitempty"`
 	WriterOrdinal   uint32         `json:"writer_ordinal,omitempty"`
 	Prev            uint32         `json:"prev,omitempty"`
@@ -129,7 +129,7 @@ type wireRunRequest struct {
 
 type wireIdRequest struct {
 	V     uint8  `json:"v"`
-	Id    string `json:"id"`
+	Id    uint64 `json:"id"`
 	From  uint32 `json:"from,omitempty"`
 	Limit int    `json:"limit,omitempty"`
 }
@@ -137,7 +137,7 @@ type wireIdRequest struct {
 // wireEraseRequest names the entries of a run whose content is erased.
 type wireEraseRequest struct {
 	V        uint8    `json:"v"`
-	Id       string   `json:"id"`
+	Id       uint64   `json:"id"`
 	Ordinals []uint32 `json:"ordinals"`
 }
 
@@ -157,6 +157,18 @@ type wireRunReply struct {
 	Found bool      `json:"found,omitempty"`
 	Run   wireRun   `json:"run"`
 	Runs  []wireRun `json:"runs,omitempty"`
+}
+
+// wireMintReply carries a run id the service's store minted.
+type wireMintReply struct {
+	wireAck
+	Id uint64 `json:"id"`
+}
+
+// wireAppendReply carries the entry ids the store assigned, in order.
+type wireAppendReply struct {
+	wireAck
+	EntryIds []uint64 `json:"entry_ids,omitempty"`
 }
 
 type wireEntriesReply struct {

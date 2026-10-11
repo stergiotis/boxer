@@ -26,29 +26,29 @@ func TestTheServiceScopesRunsToTheSender(t *testing.T) {
 	chat := NewClient(bus.NewClient("app.chat", ClientCaps("test")))
 	other := NewClient(bus.NewClient("app.other", ClientCaps("test")))
 
-	w, err := Open(ctx, chat, Run{Id: "r1", Conversation: "c1", OwnerApp: "lies"})
+	w, err := Open(ctx, chat, Run{Id: 11, Conversation: "c1", OwnerApp: "lies"})
 	require.NoError(t, err)
-	stored, _, _ := store.GetRun(ctx, "r1")
+	stored, _, _ := store.GetRun(ctx, 11)
 	assert.Equal(t, "app.chat", stored.OwnerApp, "the owner is the sender, whatever the request said")
 	written, err := w.Append(ctx, Entry{Kind: KindUser, Body: "hello"})
 	require.NoError(t, err)
 	require.Len(t, written, 1)
 
-	entries, err := chat.Entries(ctx, "r1", 0)
+	entries, err := chat.Entries(ctx, 11, 0)
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
 	assert.Equal(t, written[0].Digest, entries[0].Digest)
-	_, found, err := chat.GetRun(ctx, "r1")
+	_, found, err := chat.GetRun(ctx, 11)
 	require.NoError(t, err)
 	assert.True(t, found)
 
-	_, found, err = other.GetRun(ctx, "r1")
+	_, found, err = other.GetRun(ctx, 11)
 	require.NoError(t, err)
 	assert.False(t, found, "another app's run is not found")
-	_, err = other.Entries(ctx, "r1", 0)
+	_, err = other.Entries(ctx, 11, 0)
 	assert.Error(t, err)
-	assert.Error(t, other.Append(ctx, []Entry{{Run: "r1", Ordinal: 2, Kind: KindUser}}))
-	assert.Error(t, other.Tombstone(ctx, "r1"))
+	assert.Error(t, other.Append(ctx, []Entry{{Run: 11, Ordinal: 2, Kind: KindUser}}))
+	assert.Error(t, other.Tombstone(ctx, 11))
 	runs, err := other.ListRuns(ctx, "", 0)
 	require.NoError(t, err)
 	assert.Empty(t, runs)
@@ -56,13 +56,15 @@ func TestTheServiceScopesRunsToTheSender(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, runs, 1)
 
-	again, err := Reopen(ctx, chat, "r1")
+	again, err := Reopen(ctx, chat, 11)
 	require.NoError(t, err)
-	assert.Equal(t, RunDigestSeed(again.Run()), again.Run().Digest, "the seed is over the row as stored")
+	seed, err := RunDigestSeed(again.Run())
+	require.NoError(t, err)
+	assert.Equal(t, seed, again.Run().Digest, "the seed is over the row as stored")
 	require.NoError(t, again.Delete(ctx, "person"))
-	r, _, _ := store.GetRun(ctx, "r1")
+	r, _, _ := store.GetRun(ctx, 11)
 	assert.Equal(t, StateDeleted, r.State)
-	deleted, err := Reopen(ctx, chat, "r1")
+	deleted, err := Reopen(ctx, chat, 11)
 	require.NoError(t, err, "a deleted run reopens over the bus")
 	assert.True(t, deleted.Entries()[0].Tombstoned())
 
@@ -90,14 +92,14 @@ func TestTheServiceHoldsTheInvariants(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 	chat := NewClient(bus.NewClient("app.chat", ClientCaps("test")))
-	w, err := Open(ctx, chat, Run{Id: "r1", Conversation: "c1"})
+	w, err := Open(ctx, chat, Run{Id: 11, Conversation: "c1"})
 	require.NoError(t, err)
 	written, err := w.Append(ctx, Entry{Kind: KindUser, Body: "hello", Label: Label{Tier: TierAmber}})
 	require.NoError(t, err)
 	head := written[0]
 
 	chained := func(e Entry) Entry {
-		e.Run = "r1"
+		e.Run = 11
 		e, err := e.chained(head.Ordinal, head.Digest)
 		require.NoError(t, err)
 		return e
@@ -112,21 +114,21 @@ func TestTheServiceHoldsTheInvariants(t *testing.T) {
 	assert.Error(t, chat.Append(ctx, []Entry{lying}), "a body its digest does not commit to")
 	assert.Error(t, chat.Append(ctx, []Entry{chained(Entry{Ordinal: 2, Kind: KindE(200)})}), "no such kind")
 	assert.Error(t, chat.Append(ctx, []Entry{chained(Entry{Ordinal: 2, Kind: KindCompact, Target: 2})}), "a compaction aimed at itself")
-	assert.Error(t, chat.Tombstone(ctx, "r1"), "no deleted entry at the head")
+	assert.Error(t, chat.Tombstone(ctx, 11), "no deleted entry at the head")
 	good := chained(Entry{Ordinal: 2, Kind: KindUser, Body: "x"})
 	require.NoError(t, chat.Append(ctx, []Entry{good}), "the next entry, chained")
-	r, _, _ := store.GetRun(ctx, "r1")
+	r, _, _ := store.GetRun(ctx, 11)
 	assert.Equal(t, uint32(2), r.LastOrdinal)
 	assert.Equal(t, good.Digest, r.Head)
 	assert.Equal(t, TierAmber, r.Label.Tier, "the row's label rose with the entries")
 
 	rewritten := r
-	rewritten.Id, rewritten.Digest, rewritten.Created, rewritten.LastOrdinal, rewritten.Label = "r1", "forged", Now(), 9, Label{}
+	rewritten.Id, rewritten.Digest, rewritten.Created, rewritten.LastOrdinal, rewritten.Label = 11, "forged", Now(), 9, Label{}
 	rewritten.Fingerprint = "fp"
 	assert.Error(t, chat.UpdateRun(ctx, rewritten), "a row at the stored version is a stale writer's")
 	rewritten.Version = r.Version + 1
 	require.NoError(t, chat.UpdateRun(ctx, rewritten))
-	r, _, _ = store.GetRun(ctx, "r1")
+	r, _, _ = store.GetRun(ctx, 11)
 	assert.Equal(t, "fp", r.Fingerprint, "the mutable field moved")
 	assert.NotEqual(t, "forged", r.Digest, "the seed did not")
 	assert.Equal(t, uint32(2), r.LastOrdinal)
@@ -142,31 +144,31 @@ func TestTheServiceHoldsTheInvariants(t *testing.T) {
 	del.State, del.Version = StateDeleted, stranded.Version+1
 	assert.Error(t, chat.UpdateRun(ctx, del), "deleted needs the deleted entry at the head")
 
-	again, err := Reopen(ctx, chat, "r1")
+	again, err := Reopen(ctx, chat, 11)
 	require.NoError(t, err)
 	require.NoError(t, again.Delete(ctx, "person"))
-	r, _, _ = store.GetRun(ctx, "r1")
+	r, _, _ = store.GetRun(ctx, 11)
 	assert.Equal(t, StateDeleted, r.State)
 	revived := r
 	revived.State = StateOpen
 	assert.Error(t, chat.UpdateRun(ctx, revived), "a deleted run is never written again")
 	revived.State = StateDeleted
 	assert.Error(t, chat.UpdateRun(ctx, revived))
-	assert.Error(t, chat.Append(ctx, []Entry{{Run: "r1", Ordinal: 4, Prev: 3, Kind: KindUser}}))
+	assert.Error(t, chat.Append(ctx, []Entry{{Run: 11, Ordinal: 4, Prev: 3, Kind: KindUser}}))
 
 	// A deleted entry at the head, the row still open (a deletion the
 	// process did not finish): nothing follows it through the service.
-	w2, err := Open(ctx, chat, Run{Id: "r2"})
+	w2, err := Open(ctx, chat, Run{Id: 12})
 	require.NoError(t, err)
 	first, err := w2.Append(ctx, Entry{Kind: KindUser, Body: "x"})
 	require.NoError(t, err)
-	deleted, err := Entry{Run: "r2", Kind: KindDeleted, Name: "person"}.chained(first[0].Ordinal, first[0].Digest)
+	deleted, err := Entry{Run: 12, Kind: KindDeleted, Name: "person"}.chained(first[0].Ordinal, first[0].Digest)
 	require.NoError(t, err)
 	deleted.Ordinal = 2
 	deleted, err = deleted.chained(first[0].Ordinal, first[0].Digest)
 	require.NoError(t, err)
 	require.NoError(t, chat.Append(ctx, []Entry{deleted}))
-	after, err := Entry{Run: "r2", Ordinal: 3, Kind: KindUser, Body: "y"}.chained(deleted.Ordinal, deleted.Digest)
+	after, err := Entry{Run: 12, Ordinal: 3, Kind: KindUser, Body: "y"}.chained(deleted.Ordinal, deleted.Digest)
 	require.NoError(t, err)
 	assert.Error(t, chat.Append(ctx, []Entry{after}), "nothing follows the deleted entry")
 }
@@ -194,13 +196,13 @@ func TestTwoWritersOnOneRunAreSerialised(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 	chat := NewClient(bus.NewClient("app.chat", ClientCaps("test")))
-	w, err := Open(ctx, chat, Run{Id: "r1"})
+	w, err := Open(ctx, chat, Run{Id: 11})
 	require.NoError(t, err)
 	written, err := w.Append(ctx, Entry{Kind: KindUser, Body: "hello"})
 	require.NoError(t, err)
 	head := written[0]
 	second := func(body string) Entry {
-		e := Entry{Run: "r1", Ordinal: 2, Kind: KindUser, Body: body}
+		e := Entry{Run: 11, Ordinal: 2, Kind: KindUser, Body: body}
 		e, cerr := e.chained(head.Ordinal, head.Digest)
 		require.NoError(t, cerr)
 		return e
@@ -216,10 +218,10 @@ func TestTwoWritersOnOneRunAreSerialised(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 1, failed, "one lands, one is refused")
-	entries, err := store.Entries(ctx, "r1", 0)
+	entries, err := store.Entries(ctx, 11, 0)
 	require.NoError(t, err)
 	require.Len(t, entries, 2)
-	again, err := Reopen(ctx, chat, "r1")
+	again, err := Reopen(ctx, chat, 11)
 	require.NoError(t, err, "the chain verifies")
 	assert.Equal(t, uint32(2), again.Len())
 }
@@ -235,16 +237,16 @@ func TestAStaleCloseDoesNotTakeAReopenedRun(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(svc.Close)
 	chat := NewClient(bus.NewClient("app.chat", ClientCaps("test")))
-	first, err := Open(ctx, chat, Run{Id: "r1"})
+	first, err := Open(ctx, chat, Run{Id: 11})
 	require.NoError(t, err)
 	_, err = first.Append(ctx, Entry{Kind: KindUser, Body: "hello"})
 	require.NoError(t, err)
 	require.NoError(t, first.Close(ctx, StateClosed))
-	second, err := Reopen(ctx, chat, "r1")
+	second, err := Reopen(ctx, chat, 11)
 	require.NoError(t, err)
 	require.NoError(t, second.Resume(ctx))
 	require.NoError(t, first.Close(ctx, StateClosed), "the late close stands down")
-	r, found, err := chat.GetRun(ctx, "r1")
+	r, found, err := chat.GetRun(ctx, 11)
 	require.NoError(t, err)
 	require.True(t, found)
 	assert.Equal(t, StateOpen, r.State, "the run stays open for the writer that resumed it")

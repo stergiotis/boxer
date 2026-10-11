@@ -4,6 +4,6 @@ package agentrunstore
 // fingerprint of the harness profile the run is pinned to.
 type ProfileRecord struct {
 	_           struct{} `kind:"agentrunProfile"`
-	ID          string   `lw:",id"`
+	ID          uint64   `lw:",id"`
 	Fingerprint string   `lw:"agentrunProfileFingerprint,stringArray,unit"`
 }

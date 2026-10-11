@@ -55,6 +55,8 @@ type wireRequest struct {
 	Turn         string `json:"turn,omitempty"`
 	Round        uint32 `json:"round,omitempty"`
 	ParentCallId string `json:"parent_call_id,omitempty"`
+	// Run is the caller's journal run (ADR-0325 §SD5).
+	Run uint64 `json:"run,omitempty"`
 	// OmitFrom and OmitTo declare the range of the logical conversation
 	// the request left out (ADR-0264 §SD3); OmitTo 0 is none.
 	OmitFrom uint32 `json:"omit_from,omitempty"`

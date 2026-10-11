@@ -4,7 +4,7 @@ package agentrunstore
 // question put to the person and the exit it concerns.
 type ExitQuestion struct {
 	_        struct{} `kind:"agentrunQuestion"`
-	ID       string   `lw:",id"`
+	ID       uint64   `lw:",id"`
 	Question string   `lw:"agentrunQuestionText,textArray,unit"`
 	Sink     string   `lw:"agentrunQuestionSink,symbol"`
 	Tier     string   `lw:"agentrunQuestionTier,symbol"`

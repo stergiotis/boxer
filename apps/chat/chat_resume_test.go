@@ -65,7 +65,7 @@ func TestAConversationResumesFromItsJournal(t *testing.T) {
 	second := appOver(t, &fakeModel{}, store)
 	second.listRuns()
 	require.Eventually(t, func() bool { second.renderRunsPanelData(); return len(second.runs) == 1 }, 5*time.Second, 5*time.Millisecond)
-	assert.Equal(t, id, second.runs[0].Id)
+	assert.Equal(t, id, second.runs[0].Conversation)
 	second.resumeRun(id)
 	require.Eventually(t, func() bool { second.drain(); return second.conv.id == id }, 5*time.Second, 5*time.Millisecond)
 	conv := second.conv
@@ -89,7 +89,7 @@ func TestAConversationResumesFromItsJournal(t *testing.T) {
 	assert.Equal(t, "q3", msgs[len(msgs)-2].Content)
 
 	// Under another fingerprint the run strands and does not continue.
-	run, _, _ := store.GetRun(context.Background(), id)
+	run, _, _ := conversationRun(store, id)
 	run.Fingerprint = "other"
 	run.Version++
 	require.NoError(t, store.UpdateRun(context.Background(), run))
@@ -98,16 +98,17 @@ func TestAConversationResumesFromItsJournal(t *testing.T) {
 	require.Eventually(t, func() bool { third.drain(); return third.conv.id == id }, 5*time.Second, 5*time.Millisecond, "resume: %s", third.note.text)
 	assert.True(t, third.conv.stranded)
 	assert.False(t, third.startTurn("q4"), "a stranded run does not continue")
-	run, _, _ = store.GetRun(context.Background(), id)
+	run, _, _ = conversationRun(store, id)
 	assert.Equal(t, agentrun.StateStranded, run.State)
 
 	third.deleteRun(id)
 	require.Eventually(t, func() bool {
 		third.drain()
-		r, _, _ := store.GetRun(context.Background(), id)
+		r, _, _ := conversationRun(store, id)
 		return r.State == agentrun.StateDeleted
 	}, 5*time.Second, 5*time.Millisecond, "delete: %s", third.note.text)
-	entries, _ := store.Entries(context.Background(), id, 0)
+	deleted, _, _ := conversationRun(store, id)
+	entries, _ := store.Entries(context.Background(), deleted.Id, 0)
 	for _, e := range entries {
 		assert.Empty(t, e.Body)
 	}
@@ -224,13 +225,13 @@ func TestAClosedRunResumesAndContinues(t *testing.T) {
 	id := first.conv.id
 	first.newConversation()
 	require.Eventually(t, func() bool {
-		r, _, _ := store.GetRun(context.Background(), id)
+		r, _, _ := conversationRun(store, id)
 		return r.State == agentrun.StateClosed
 	}, 5*time.Second, 5*time.Millisecond)
 
 	first.resumeRun(id)
 	require.Eventually(t, func() bool { first.drain(); return first.conv.id == id }, 5*time.Second, 5*time.Millisecond, "resume: %s", first.note.text)
-	r, _, _ := store.GetRun(context.Background(), id)
+	r, _, _ := conversationRun(store, id)
 	assert.Equal(t, agentrun.StateOpen, r.State, "the run is open again")
 	assert.False(t, first.conv.stranded)
 	assert.NotEmpty(t, first.conv.parent, "the next turn continues from the last reply")
@@ -251,7 +252,7 @@ func TestAResumeSettlesTheCallsTheProcessLeftOpen(t *testing.T) {
 	store := agentrun.NewMemStore()
 	p := profileNow()
 	settings, _ := json.Marshal(journalSettings{Keep: true, Apps: true})
-	w, err := agentrun.Open(context.Background(), store, agentrun.Run{Id: "chat-crashed-1", Conversation: "chat-crashed-1", OwnerApp: string(ManifestId),
+	w, err := agentrun.Open(context.Background(), store, agentrun.Run{Conversation: "chat-crashed-1", OwnerApp: string(ManifestId),
 		Profile: p.Id, Fingerprint: p.Fingerprint(), Settings: string(settings)})
 	require.NoError(t, err)
 	_, err = w.Append(context.Background(),
@@ -321,7 +322,7 @@ func TestADeletedRunResumesReadOnly(t *testing.T) {
 	first.deleteRun(id)
 	require.Eventually(t, func() bool { first.drain(); return first.conv.stranded }, 5*time.Second, 5*time.Millisecond, "delete: %s", first.note.text)
 	assert.False(t, first.startTurn("q2"), "a deleted conversation does not continue")
-	r, _, _ := store.GetRun(context.Background(), id)
+	r, _, _ := conversationRun(store, id)
 	assert.Equal(t, agentrun.StateDeleted, r.State)
 	assert.Equal(t, "person", r.DeletedBy)
 
@@ -349,7 +350,7 @@ func TestDeletingTheCurrentConversationWaitsForTheTurn(t *testing.T) {
 	drainUntil(t, inst)
 	inst.deleteRun(inst.conv.id)
 	require.Eventually(t, func() bool { inst.drain(); return inst.conv.stranded }, 5*time.Second, 5*time.Millisecond, "delete: %s", inst.note.text)
-	r, _, _ := store.GetRun(context.Background(), inst.conv.id)
+	r, _, _ := conversationRun(store, inst.conv.id)
 	assert.Equal(t, agentrun.StateDeleted, r.State)
 }
 

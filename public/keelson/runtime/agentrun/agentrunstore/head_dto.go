@@ -7,7 +7,7 @@ import "time"
 // whether it is durable.
 type HeadRecord struct {
 	_         struct{}  `kind:"agentrunHead"`
-	ID        string    `lw:",id"`
+	ID        uint64    `lw:",id"`
 	Ordinal   uint32    `lw:"agentrunHeadOrdinal,u32Array,unit"`
 	Digest    string    `lw:"agentrunHeadDigest,stringArray,unit"`
 	ReceiptId string    `lw:"agentrunHeadReceiptId,stringArray,unit"`

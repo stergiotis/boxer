@@ -924,7 +924,7 @@ func (inst *MembershipPackAgentrunbodyTableShared1) GetNumberOfMemberItemsByAttr
 // ./public/semistructured/leeway/readaccess/lw_ra_generator.go:930
 
 type ReadAccessAgentrunbodyTablePlainEntityIdAttributes struct {
-	ValueId            *array.String
+	ValueId            *array.Uint64
 	ColumnIndexId      uint32
 	ValueOrdinal       *array.Uint64
 	ColumnIndexOrdinal uint32
@@ -2281,7 +2281,7 @@ func (inst *ReadAccessAgentrunbodyTableTaggedU8ArrayAttributes) Len() (nEntities
 // ./public/semistructured/leeway/readaccess/lw_ra_generator.go:1353
 
 func (inst *ReadAccessAgentrunbodyTablePlainEntityIdAttributes) LoadFromRecord(rec runtime.RecordI) (err error) {
-	err = runtime.LoadScalarValueFieldFromRecord(inst.ColumnIndexId, arrow.STRING, rec, &inst.ValueId, array.NewStringData)
+	err = runtime.LoadScalarValueFieldFromRecord(inst.ColumnIndexId, arrow.UINT64, rec, &inst.ValueId, array.NewUint64Data)
 	if err != nil {
 		return
 	}
@@ -3117,7 +3117,7 @@ func (inst *ReadAccessAgentrunbodyTableTaggedBoolAttributes) GetAttrValueValue(e
 	scalarAttrValue = inst.ValueValueElements.Value(int(b) + int(attrIdx))
 	return
 }
-func (inst *ReadAccessAgentrunbodyTablePlainEntityIdAttributes) GetAttrValueId(entityIdx runtime.EntityIdx) (scalarAttrValue string) {
+func (inst *ReadAccessAgentrunbodyTablePlainEntityIdAttributes) GetAttrValueId(entityIdx runtime.EntityIdx) (scalarAttrValue uint64) {
 	scalarAttrValue = inst.ValueId.Value(int(entityIdx))
 	return
 }

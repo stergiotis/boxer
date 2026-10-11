@@ -34,6 +34,10 @@ func TestGenerateAgentrunStores(t *testing.T) {
 		Table: runTd, RowConfig: TableRowConfig, ComponentPaths: []string{"./run_dto.go"}, OutDir: ".",
 		ImportPath: importPath, Wrapper: marshallgen.FixedIdsWrapper{Ids: ids},
 		Cas: true,
+		// The run id is minted from vocab.IdStreamAgentRun, and the run's
+		// chain seed is the canonical item of its immutable attributes
+		// (ADR-0325 §SD2, §SD5).
+		KeyStream: true, CanonWire: true,
 	}.Generate())
 
 	entryManip, err := GetEntrySchemaInManipulator()

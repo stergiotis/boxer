@@ -39,13 +39,13 @@ func TestTheVaultRowRoundTrips(t *testing.T) {
 
 	attrs, err := jsonshred.Explode([]byte(args), jsonshred.Options{})
 	require.NoError(t, err)
-	b := st.Begin("r1", 3)
+	b := st.Begin(1, 3)
 	require.NoError(t, vaultFill(t, attrs)(b))
 	require.NoError(t, b.Commit())
 	_, err = st.Flush(ctx)
 	require.NoError(t, err)
 
-	rows, err := st.ScanVault(ctx, BodyRowColKey+" = 'r1'")
+	rows, err := st.ScanVault(ctx, BodyRowColKey+" = 1")
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, "hello", rows[0].Ent.BodyRow.Val.Body)
@@ -57,12 +57,12 @@ func TestTheVaultRowRoundTrips(t *testing.T) {
 	assert.Equal(t, string(want), string(doc))
 
 	h := NewHasher()
-	written, err := h.VaultItem("r1", 3, vaultFill(t, attrs))
+	written, err := h.VaultItem(1, 3, vaultFill(t, attrs))
 	require.NoError(t, err)
-	readBack, err := h.VaultItem("r1", 3, vaultFill(t, rows[0].Shredded))
+	readBack, err := h.VaultItem(1, 3, vaultFill(t, rows[0].Shredded))
 	require.NoError(t, err)
 	assert.Equal(t, written, readBack, "the row read back is the row written")
-	other, err := h.VaultItem("r1", 4, vaultFill(t, attrs))
+	other, err := h.VaultItem(1, 4, vaultFill(t, attrs))
 	require.NoError(t, err)
 	assert.NotEqual(t, written, other, "the ordinal is in the item")
 }
@@ -70,7 +70,7 @@ func TestTheVaultRowRoundTrips(t *testing.T) {
 func BenchmarkLedgerItem(b *testing.B) {
 	h := NewHasher()
 	for b.Loop() {
-		_, _ = h.LedgerItem("r1", 1, func(eb *EntryEntityBuilder) {
+		_, _ = h.LedgerItem(1, 1, func(eb *EntryEntityBuilder) {
 			eb.AddEntry(Entry{Kind: "user", Role: "user", Digest: "x", LabelExposure: []string{"a"}}).AddRequestMeta(RequestMeta{Digest: "d", Messages: 3})
 		})
 	}

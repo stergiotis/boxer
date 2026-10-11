@@ -21,7 +21,6 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/caching"
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/functional"
 	"github.com/stergiotis/boxer/public/functional/option"
 	"github.com/stergiotis/boxer/public/identity/callident"
@@ -48,7 +47,7 @@ const BodyRowTableName = "boxer.agentrunbody"
 // derived from the IR at generation time — exported so consumers can
 // address them in ScanOpts.ExtraPredicate and their own SQL.
 const (
-	BodyRowColKey   = `"id:id:s:4::0:"`
+	BodyRowColKey   = `"id:id:u64:4::0:"`
 	BodyRowColOrder = `"id:ordinal:u64:47::0:"`
 )
 
@@ -60,20 +59,13 @@ var agentrunbodyInsertSettings = recordstore.InsertSettings{AsyncInsert: records
 const agentrunbodyArrowOutputSettings = " SETTINGS output_format_arrow_string_as_string=1, output_format_arrow_low_cardinality_as_dictionary=0"
 
 // agentrunbodyKeyLiteral renders a Key value as a ClickHouse SQL literal.
-func agentrunbodyKeyLiteral(k string) string { return marshalling.EscapeString(k) }
-
-// agentrunbodyKeyPrefixPredicate renders ScanOpts.KeyPrefix: keys starting with
-// prefix. startsWith on the leading sort-key column is a primary-key
-// range read, not a scan of every row.
-func agentrunbodyKeyPrefixPredicate(prefix string) string {
-	return "startsWith(" + BodyRowColKey + ", " + agentrunbodyKeyLiteral(prefix) + ")"
-}
+func agentrunbodyKeyLiteral(k uint64) string { return strconv.FormatUint(k, 10) }
 
 // agentrunbodyEnvelopeColumns maps each envelope plain column, by the name the
 // TableDesc authors, to its quoted physical name: what ScanOpts.OrderBy
 // may name.
 var agentrunbodyEnvelopeColumns = map[string]string{
-	"id":      `"id:id:s:4::0:"`,
+	"id":      `"id:id:u64:4::0:"`,
 	"ordinal": `"id:ordinal:u64:47::0:"`,
 }
 
@@ -169,7 +161,7 @@ var BodyRowMembershipIds = map[string]map[string]uint64{
 // Entities returned by cached reads are shared with the cache (and
 // every later reader): treat them as immutable.
 type BodyRowEntity struct {
-	ID string
+	ID uint64
 	// Ord is the Order role value — the caller-supplied, per-key
 	// strictly monotonic sequence (ADR-0100 SD2).
 	Ord             uint64
@@ -255,7 +247,7 @@ type BodyRowStoreConfig struct {
 	// the batch id of that insert and its keys, or the keys DiscardPending
 	// dropped (ADR-0295 §SD7). It is notification-only and independent of
 	// attached cache views. Nil (the default) tracks nothing.
-	WriteObserver recordstore.WriteObserverI[string, uint64]
+	WriteObserver recordstore.WriteObserverI[uint64, uint64]
 }
 
 // BodyRowStore is single-goroutine, like every part it composes. Batched
@@ -275,7 +267,7 @@ type BodyRowStore struct {
 	// pre-write row) and their fetchers refuse to cache them — the
 	// remaining guard for writes the views could not materialize (Raw
 	// commits) and for InvalidateAll inside a dirty window.
-	dirty map[string]struct{}
+	dirty map[uint64]struct{}
 	// insertSettingsUnapplied latches the one warning a store logs when
 	// its executor cannot carry the per-insert settings.
 	insertSettingsUnapplied bool
@@ -284,14 +276,14 @@ type BodyRowStore struct {
 	// and pins the committed entity (nil = not materializable or a
 	// discarded write — invalidate instead); onFlush releases the pin
 	// once the row is durable.
-	onWrite []func(string, *BodyRowEntity)
-	onFlush []func(string)
+	onWrite []func(uint64, *BodyRowEntity)
+	onFlush []func(uint64)
 	// stampers is cfg.Stampers, consulted per Begin (ADR-0112 M1).
 	stampers []recordstore.ReferenceStamper
 	// written holds the rows the write observer was told were committed and
 	// has not yet been told are durable or discarded (ADR-0295 §SD7); empty
 	// without an observer.
-	written []recordstore.WrittenKey[string, uint64]
+	written []recordstore.WrittenKey[uint64, uint64]
 }
 
 // NewBodyRowStore wires the store. A nil alloc selects the Go allocator.
@@ -309,7 +301,7 @@ func NewBodyRowStore(exec recordstore.ExecutorI, alloc memory.Allocator, cfg Bod
 	if alloc == nil {
 		alloc = memory.NewGoAllocator()
 	}
-	inst = &BodyRowStore{exec: exec, alloc: alloc, cfg: cfg, dml: lowlevel.NewInEntityAgentrunbodyTable(alloc, 64), dirty: make(map[string]struct{}), stampers: cfg.Stampers}
+	inst = &BodyRowStore{exec: exec, alloc: alloc, cfg: cfg, dml: lowlevel.NewInEntityAgentrunbodyTable(alloc, 64), dirty: make(map[uint64]struct{}), stampers: cfg.Stampers}
 	return
 }
 
@@ -355,7 +347,7 @@ func (inst *BodyRowStore) applyStampers(ctx context.Context) (pushed int) {
 // or nil when the row is not faithfully materializable (Raw commits)
 // or a buffered write is being discarded — the views then invalidate
 // the key instead.
-func (inst *BodyRowStore) notifyWrite(key string, ent *BodyRowEntity) {
+func (inst *BodyRowStore) notifyWrite(key uint64, ent *BodyRowEntity) {
 	for _, f := range inst.onWrite {
 		f(key, ent)
 	}
@@ -363,7 +355,7 @@ func (inst *BodyRowStore) notifyWrite(key string, ent *BodyRowEntity) {
 
 // notifyFlush releases the attached views' dirty-window pins after a
 // successful Flush made the key durable.
-func (inst *BodyRowStore) notifyFlush(key string) {
+func (inst *BodyRowStore) notifyFlush(key uint64) {
 	for _, f := range inst.onFlush {
 		f(key)
 	}
@@ -371,7 +363,7 @@ func (inst *BodyRowStore) notifyFlush(key string) {
 
 // noteCommitted tells the write observer about a buffered row and keeps
 // it until the observer is told its fate (ADR-0295 §SD7).
-func (inst *BodyRowStore) noteCommitted(w recordstore.WrittenKey[string, uint64]) {
+func (inst *BodyRowStore) noteCommitted(w recordstore.WrittenKey[uint64, uint64]) {
 	if inst.cfg.WriteObserver == nil {
 		return
 	}
@@ -383,10 +375,10 @@ func (inst *BodyRowStore) noteCommitted(w recordstore.WrittenKey[string, uint64]
 // Detaching before the observer runs means a row it commits from its
 // callback lands in a fresh buffer, reported with a later flush, and a
 // panicking observer cannot have the same rows reported twice.
-func (inst *BodyRowStore) takeWritten() iter.Seq[recordstore.WrittenKey[string, uint64]] {
+func (inst *BodyRowStore) takeWritten() iter.Seq[recordstore.WrittenKey[uint64, uint64]] {
 	written := inst.written
 	inst.written = nil
-	return func(yield func(recordstore.WrittenKey[string, uint64]) bool) {
+	return func(yield func(recordstore.WrittenKey[uint64, uint64]) bool) {
 		for _, w := range written {
 			if !yield(w) {
 				return
@@ -512,7 +504,7 @@ func OpenBodyRowStore(ctx context.Context, exec recordstore.ExecutorI, alloc mem
 // via Add*, direct attribute manipulation via Raw, then Commit.
 type BodyRowEntityBuilder struct {
 	store *BodyRowStore
-	key   string
+	key   uint64
 	// ent mirrors the typed Add* calls so Commit can write the entity
 	// through to attached cache views; raw marks commits that touched
 	// the DML directly — those cannot be materialized faithfully and
@@ -590,14 +582,14 @@ func (inst *BodyRowEntityBuilder) endSection(section string) error {
 // Begin opens one entity with the envelope roles as typed arguments
 // (Key, Order), under context.Background(): a configured stamper
 // that reads a call identity off the context finds none. See BeginCtx.
-func (inst *BodyRowStore) Begin(id string, ord uint64) *BodyRowEntityBuilder {
+func (inst *BodyRowStore) Begin(id uint64, ord uint64) *BodyRowEntityBuilder {
 	return inst.BeginCtx(context.Background(), id, ord)
 }
 
 // BeginCtx is Begin with the context the configured stampers consult
 // (ADR-0295 §SD7) — where a call identity reaches an actor stamper. The
 // store stays single-goroutine; ctx is read during this call only.
-func (inst *BodyRowStore) BeginCtx(ctx context.Context, id string, ord uint64) *BodyRowEntityBuilder {
+func (inst *BodyRowStore) BeginCtx(ctx context.Context, id uint64, ord uint64) *BodyRowEntityBuilder {
 	lowlevel.InEntityAgentrunbodyTableBeginEntity(inst.dml)
 	lowlevel.InEntityAgentrunbodyTableSetId(inst.dml, id, ord)
 	b := &BodyRowEntityBuilder{store: inst, key: id, ent: BodyRowEntity{ID: id, Ord: ord}}
@@ -1051,7 +1043,7 @@ func (inst *BodyRowEntityBuilder) Commit() (err error) {
 		ent := inst.ent
 		inst.store.notifyWrite(inst.key, &ent)
 	}
-	inst.store.noteCommitted(recordstore.WrittenKey[string, uint64]{Key: inst.key, Order: inst.ent.Ord, Lifecycle: recordstore.LifecycleLive, Tombstone: false, Identity: inst.ident})
+	inst.store.noteCommitted(recordstore.WrittenKey[uint64, uint64]{Key: inst.key, Order: inst.ent.Ord, Lifecycle: recordstore.LifecycleLive, Tombstone: false, Identity: inst.ident})
 	return
 }
 
@@ -1077,7 +1069,7 @@ func (inst *BodyRowStore) IngestBodyRow(ord uint64, rows []BodyRow) (err error) 
 // IngestBodyRowCtx is IngestBodyRow with the context BeginCtx hands the
 // configured stampers (ADR-0295 §SD7).
 func (inst *BodyRowStore) IngestBodyRowCtx(ctx context.Context, ord uint64, rows []BodyRow) (err error) {
-	seen := make(map[string]struct{}, len(rows))
+	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
 			err = eh.Errorf("ingest bodyRow row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
@@ -1107,7 +1099,7 @@ func (inst *BodyRowStore) IngestEndorsement(ord uint64, rows []Endorsement) (err
 // IngestEndorsementCtx is IngestEndorsement with the context BeginCtx hands the
 // configured stampers (ADR-0295 §SD7).
 func (inst *BodyRowStore) IngestEndorsementCtx(ctx context.Context, ord uint64, rows []Endorsement) (err error) {
-	seen := make(map[string]struct{}, len(rows))
+	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
 			err = eh.Errorf("ingest endorsement row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
@@ -1137,7 +1129,7 @@ func (inst *BodyRowStore) IngestGrantRecord(ord uint64, rows []GrantRecord) (err
 // IngestGrantRecordCtx is IngestGrantRecord with the context BeginCtx hands the
 // configured stampers (ADR-0295 §SD7).
 func (inst *BodyRowStore) IngestGrantRecordCtx(ctx context.Context, ord uint64, rows []GrantRecord) (err error) {
-	seen := make(map[string]struct{}, len(rows))
+	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
 			err = eh.Errorf("ingest grantRecord row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
@@ -1167,7 +1159,7 @@ func (inst *BodyRowStore) IngestExitQuestion(ord uint64, rows []ExitQuestion) (e
 // IngestExitQuestionCtx is IngestExitQuestion with the context BeginCtx hands the
 // configured stampers (ADR-0295 §SD7).
 func (inst *BodyRowStore) IngestExitQuestionCtx(ctx context.Context, ord uint64, rows []ExitQuestion) (err error) {
-	seen := make(map[string]struct{}, len(rows))
+	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
 			err = eh.Errorf("ingest exitQuestion row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
@@ -1197,7 +1189,7 @@ func (inst *BodyRowStore) IngestExitAnswer(ord uint64, rows []ExitAnswer) (err e
 // IngestExitAnswerCtx is IngestExitAnswer with the context BeginCtx hands the
 // configured stampers (ADR-0295 §SD7).
 func (inst *BodyRowStore) IngestExitAnswerCtx(ctx context.Context, ord uint64, rows []ExitAnswer) (err error) {
-	seen := make(map[string]struct{}, len(rows))
+	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
 			err = eh.Errorf("ingest exitAnswer row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
@@ -1227,7 +1219,7 @@ func (inst *BodyRowStore) IngestApprovalContent(ord uint64, rows []ApprovalConte
 // IngestApprovalContentCtx is IngestApprovalContent with the context BeginCtx hands the
 // configured stampers (ADR-0295 §SD7).
 func (inst *BodyRowStore) IngestApprovalContentCtx(ctx context.Context, ord uint64, rows []ApprovalContent) (err error) {
-	seen := make(map[string]struct{}, len(rows))
+	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
 			err = eh.Errorf("ingest approvalContent row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
@@ -1257,7 +1249,7 @@ func (inst *BodyRowStore) IngestCopyRecord(ord uint64, rows []CopyRecord) (err e
 // IngestCopyRecordCtx is IngestCopyRecord with the context BeginCtx hands the
 // configured stampers (ADR-0295 §SD7).
 func (inst *BodyRowStore) IngestCopyRecordCtx(ctx context.Context, ord uint64, rows []CopyRecord) (err error) {
-	seen := make(map[string]struct{}, len(rows))
+	seen := make(map[uint64]struct{}, len(rows))
 	for i := range rows {
 		if _, dup := seen[rows[i].ID]; dup {
 			err = eh.Errorf("ingest copyRecord row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
@@ -1476,7 +1468,7 @@ type BodyRowCacheConfig struct {
 type BodyRowCache[W comparable] struct {
 	st    *BodyRowStore
 	cfg   BodyRowCacheConfig
-	cache *caching.ReadThroughCache[string, *BodyRowEntity, W]
+	cache *caching.ReadThroughCache[uint64, *BodyRowEntity, W]
 }
 
 // NewBodyRowCache attaches a read-through, write-through cache view to st,
@@ -1490,7 +1482,7 @@ func NewBodyRowCache[W comparable](st *BodyRowStore, cfg BodyRowCacheConfig) (in
 	inst.rebuild()
 	// The hooks close over the view, not the cache instance, keeping
 	// them correct if the cache is ever swapped out.
-	st.onWrite = append(st.onWrite, func(k string, ent *BodyRowEntity) {
+	st.onWrite = append(st.onWrite, func(k uint64, ent *BodyRowEntity) {
 		if ent == nil {
 			inst.cache.Delete(k) // not materializable or discarded: invalidate
 			return
@@ -1498,26 +1490,26 @@ func NewBodyRowCache[W comparable](st *BodyRowStore, cfg BodyRowCacheConfig) (in
 		inst.cache.AddItem(k, ent) // version-gated write-through
 		inst.cache.Pin(k)          // dirty-window latch, released by Flush
 	})
-	st.onFlush = append(st.onFlush, func(k string) { inst.cache.Unpin(k) })
+	st.onFlush = append(st.onFlush, func(k uint64) { inst.cache.Unpin(k) })
 	return
 }
 
 func (inst *BodyRowCache[W]) rebuild() {
-	opts := []caching.CacheOption[string, *BodyRowEntity, W]{
+	opts := []caching.CacheOption[uint64, *BodyRowEntity, W]{
 		// Admission mirrors the table's newest-row-per-key semantics:
 		// the Order value is the entity's monotonic version. The int64
 		// reinterpretation preserves the per-key order as long as one
 		// key's values share their top bit — which a single writer
 		// stream per key (the SD2 contract) gives by construction.
-		caching.WithVersioning[string, *BodyRowEntity, W](func(e *BodyRowEntity) int64 { return int64(e.Ord) }),
+		caching.WithVersioning[uint64, *BodyRowEntity, W](func(e *BodyRowEntity) int64 { return int64(e.Ord) }),
 	}
 	if inst.cfg.FreshnessTTL > 0 {
-		opts = append(opts, caching.WithFreshnessTTL[string, *BodyRowEntity, W](inst.cfg.FreshnessTTL))
+		opts = append(opts, caching.WithFreshnessTTL[uint64, *BodyRowEntity, W](inst.cfg.FreshnessTTL))
 	}
 	if inst.cfg.NegativeTTL > 0 {
-		opts = append(opts, caching.WithNegativeCaching[string, *BodyRowEntity, W](inst.cfg.NegativeTTL))
+		opts = append(opts, caching.WithNegativeCaching[uint64, *BodyRowEntity, W](inst.cfg.NegativeTTL))
 	}
-	inst.cache = caching.NewReadThroughCache[string, *BodyRowEntity, W](inst.cfg.Capacity, &agentrunbodyFetcher{st: inst.st}, inst.cfg.FetchCriteria, opts...)
+	inst.cache = caching.NewReadThroughCache[uint64, *BodyRowEntity, W](inst.cfg.Capacity, &agentrunbodyFetcher{st: inst.st}, inst.cfg.FetchCriteria, opts...)
 }
 
 // Get retrieves an entity by Key through the cache; local writes are
@@ -1527,7 +1519,7 @@ func (inst *BodyRowCache[W]) rebuild() {
 // the circuit breaker backs off) — GetFetch surfaces the error
 // instead, and the store's Latest stays the authoritative check. The
 // returned entity is shared with the cache: treat it as immutable.
-func (inst *BodyRowCache[W]) Get(key string) (ent *BodyRowEntity, found bool) {
+func (inst *BodyRowCache[W]) Get(key uint64) (ent *BodyRowEntity, found bool) {
 	return inst.cache.Get(key)
 }
 
@@ -1539,7 +1531,7 @@ func (inst *BodyRowCache[W]) Get(key string) (ent *BodyRowEntity, found bool) {
 // Prefer Get plus the work-item protocol when batching lookups across a
 // frame; the initial miss here also queues the key, so a later batch
 // fetch may include it redundantly (harmless).
-func (inst *BodyRowCache[W]) GetFetch(ctx context.Context, key string) (ent *BodyRowEntity, found bool, err error) {
+func (inst *BodyRowCache[W]) GetFetch(ctx context.Context, key uint64) (ent *BodyRowEntity, found bool, err error) {
 	ent, found = inst.cache.Get(key)
 	if found {
 		return
@@ -1558,7 +1550,7 @@ func (inst *BodyRowCache[W]) GetFetch(ctx context.Context, key string) (ent *Bod
 		err = eh.Errorf("get-fetch: key is in the dirty write window — written locally and not yet flushed, and the write was not materializable into the cache; Flush before reading it back")
 		return
 	}
-	ents, err := inst.st.queryEntities(ctx, inst.st.fetchLatestSQL([]string{key}))
+	ents, err := inst.st.queryEntities(ctx, inst.st.fetchLatestSQL([]uint64{key}))
 	if err != nil {
 		err = eh.Errorf("get-fetch: %w", err)
 		return
@@ -1600,7 +1592,7 @@ func (inst *BodyRowCache[W]) AdvanceEpoch() {
 // MarkStale flags the key's cached entry as stale — the external-writer
 // signal: the next strict read misses and queues a refetch, while
 // accept-stale reads keep serving the old value until it lands.
-func (inst *BodyRowCache[W]) MarkStale(key string) {
+func (inst *BodyRowCache[W]) MarkStale(key uint64) {
 	inst.cache.MarkAsStale(key)
 }
 
@@ -1608,12 +1600,12 @@ func (inst *BodyRowCache[W]) MarkStale(key string) {
 // it stales the cached entry only if its Order is below order, so a
 // redundant signal for a version the view already holds is free —
 // the natural sink for an invalidation stream carrying (key, Order).
-func (inst *BodyRowCache[W]) MarkStaleIfOlder(key string, order uint64) {
+func (inst *BodyRowCache[W]) MarkStaleIfOlder(key uint64, order uint64) {
 	inst.cache.MarkAsStaleIfOlder(key, int64(order))
 }
 
 // Invalidate drops the key's cached entry (L1 and stash).
-func (inst *BodyRowCache[W]) Invalidate(key string) {
+func (inst *BodyRowCache[W]) Invalidate(key uint64) {
 	inst.cache.Delete(key)
 }
 
@@ -1630,7 +1622,7 @@ func (inst *BodyRowCache[W]) InvalidateAll() {
 
 // fetchLatestSQL is the batched newest-row-per-key point lookup shared
 // by the cache fetcher and GetFetch.
-func (inst *BodyRowStore) fetchLatestSQL(keys []string) string {
+func (inst *BodyRowStore) fetchLatestSQL(keys []uint64) string {
 	var sb strings.Builder
 	sb.WriteString("SELECT * FROM ")
 	sb.WriteString(inst.readTable())
@@ -1651,11 +1643,11 @@ func (inst *BodyRowStore) fetchLatestSQL(keys []string) string {
 // public method set.
 type agentrunbodyFetcher struct{ st *BodyRowStore }
 
-var _ caching.ItemFetcherI[string, *BodyRowEntity] = (*agentrunbodyFetcher)(nil)
+var _ caching.ItemFetcherI[uint64, *BodyRowEntity] = (*agentrunbodyFetcher)(nil)
 
 // DeterminePartition implements caching.ItemFetcherI. Single partition
 // in v1 (one table, one server).
-func (inst *agentrunbodyFetcher) DeterminePartition(key string) uint64 { return 0 }
+func (inst *agentrunbodyFetcher) DeterminePartition(key uint64) uint64 { return 0 }
 
 // FetchItemSinglePartition implements caching.ItemFetcherI: one batched
 // point lookup per fetch. Duplicate versions collapse newest-first.
@@ -1666,7 +1658,7 @@ func (inst *agentrunbodyFetcher) DeterminePartition(key string) uint64 { return 
 // (Raw commits, discarded writes) and for InvalidateAll inside a
 // dirty window, where the cache is cold and the gate has nothing to
 // compare against.
-func (inst *agentrunbodyFetcher) FetchItemSinglePartition(ctx context.Context, partition uint64, keys []string, target caching.ItemTargetI[string, *BodyRowEntity]) (err error) {
+func (inst *agentrunbodyFetcher) FetchItemSinglePartition(ctx context.Context, partition uint64, keys []uint64, target caching.ItemTargetI[uint64, *BodyRowEntity]) (err error) {
 	ents, err := inst.st.queryEntities(ctx, inst.st.fetchLatestSQL(keys))
 	if err != nil {
 		return
@@ -1699,8 +1691,8 @@ const (
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
-// opts.KeyPrefix restricts the scan to keys starting with it — a
-// primary-key range read, since the table sorts by (key, order).
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -1710,14 +1702,14 @@ const (
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *BodyRowStore) ScanBodyRow(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*BodyRowEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*BodyRowEntity]()
+	}
 	order, err := agentrunbodyOrderBy(opts)
 	if err != nil {
 		return recordstore.FailScan[*BodyRowEntity](err)
 	}
 	where := agentrunbodyScanBodyRowFilter
-	if opts.KeyPrefix != "" {
-		where = "(" + where + ") AND " + agentrunbodyKeyPrefixPredicate(opts.KeyPrefix)
-	}
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
@@ -1737,8 +1729,8 @@ func (inst *BodyRowStore) ScanBodyRow(ctx context.Context, opts recordstore.Scan
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
-// opts.KeyPrefix restricts the scan to keys starting with it — a
-// primary-key range read, since the table sorts by (key, order).
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -1748,14 +1740,14 @@ func (inst *BodyRowStore) ScanBodyRow(ctx context.Context, opts recordstore.Scan
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *BodyRowStore) ScanEndorsement(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*BodyRowEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*BodyRowEntity]()
+	}
 	order, err := agentrunbodyOrderBy(opts)
 	if err != nil {
 		return recordstore.FailScan[*BodyRowEntity](err)
 	}
 	where := agentrunbodyScanEndorsementFilter
-	if opts.KeyPrefix != "" {
-		where = "(" + where + ") AND " + agentrunbodyKeyPrefixPredicate(opts.KeyPrefix)
-	}
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
@@ -1775,8 +1767,8 @@ func (inst *BodyRowStore) ScanEndorsement(ctx context.Context, opts recordstore.
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
-// opts.KeyPrefix restricts the scan to keys starting with it — a
-// primary-key range read, since the table sorts by (key, order).
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -1786,14 +1778,14 @@ func (inst *BodyRowStore) ScanEndorsement(ctx context.Context, opts recordstore.
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *BodyRowStore) ScanGrantRecord(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*BodyRowEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*BodyRowEntity]()
+	}
 	order, err := agentrunbodyOrderBy(opts)
 	if err != nil {
 		return recordstore.FailScan[*BodyRowEntity](err)
 	}
 	where := agentrunbodyScanGrantRecordFilter
-	if opts.KeyPrefix != "" {
-		where = "(" + where + ") AND " + agentrunbodyKeyPrefixPredicate(opts.KeyPrefix)
-	}
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
@@ -1813,8 +1805,8 @@ func (inst *BodyRowStore) ScanGrantRecord(ctx context.Context, opts recordstore.
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
-// opts.KeyPrefix restricts the scan to keys starting with it — a
-// primary-key range read, since the table sorts by (key, order).
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -1824,14 +1816,14 @@ func (inst *BodyRowStore) ScanGrantRecord(ctx context.Context, opts recordstore.
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *BodyRowStore) ScanExitQuestion(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*BodyRowEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*BodyRowEntity]()
+	}
 	order, err := agentrunbodyOrderBy(opts)
 	if err != nil {
 		return recordstore.FailScan[*BodyRowEntity](err)
 	}
 	where := agentrunbodyScanExitQuestionFilter
-	if opts.KeyPrefix != "" {
-		where = "(" + where + ") AND " + agentrunbodyKeyPrefixPredicate(opts.KeyPrefix)
-	}
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
@@ -1851,8 +1843,8 @@ func (inst *BodyRowStore) ScanExitQuestion(ctx context.Context, opts recordstore
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
-// opts.KeyPrefix restricts the scan to keys starting with it — a
-// primary-key range read, since the table sorts by (key, order).
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -1862,14 +1854,14 @@ func (inst *BodyRowStore) ScanExitQuestion(ctx context.Context, opts recordstore
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *BodyRowStore) ScanExitAnswer(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*BodyRowEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*BodyRowEntity]()
+	}
 	order, err := agentrunbodyOrderBy(opts)
 	if err != nil {
 		return recordstore.FailScan[*BodyRowEntity](err)
 	}
 	where := agentrunbodyScanExitAnswerFilter
-	if opts.KeyPrefix != "" {
-		where = "(" + where + ") AND " + agentrunbodyKeyPrefixPredicate(opts.KeyPrefix)
-	}
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
@@ -1889,8 +1881,8 @@ func (inst *BodyRowStore) ScanExitAnswer(ctx context.Context, opts recordstore.S
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
-// opts.KeyPrefix restricts the scan to keys starting with it — a
-// primary-key range read, since the table sorts by (key, order).
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -1900,14 +1892,14 @@ func (inst *BodyRowStore) ScanExitAnswer(ctx context.Context, opts recordstore.S
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *BodyRowStore) ScanApprovalContent(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*BodyRowEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*BodyRowEntity]()
+	}
 	order, err := agentrunbodyOrderBy(opts)
 	if err != nil {
 		return recordstore.FailScan[*BodyRowEntity](err)
 	}
 	where := agentrunbodyScanApprovalContentFilter
-	if opts.KeyPrefix != "" {
-		where = "(" + where + ") AND " + agentrunbodyKeyPrefixPredicate(opts.KeyPrefix)
-	}
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
@@ -1927,8 +1919,8 @@ func (inst *BodyRowStore) ScanApprovalContent(ctx context.Context, opts recordst
 // key written twice at the same Order) are not ordered against each
 // other by this clause; the table keeps newest-per-key, so which of
 // them survives is the engine's choice, not the scan's.
-// opts.KeyPrefix restricts the scan to keys starting with it — a
-// primary-key range read, since the table sorts by (key, order).
+// opts.KeyPrefix is refused (recordstore.ErrKeyPrefixNumericKey):
+// this store's key is not a string.
 // opts.ExtraPredicate (trusted raw SQL over the physical columns —
 // never untrusted input) further restricts the scan; opts.Limit
 // caps the row count. The Filter artefact uses ClickHouse
@@ -1938,14 +1930,14 @@ func (inst *BodyRowStore) ScanApprovalContent(ctx context.Context, opts recordst
 // error ends it as a final (nil, err) pair. Scans see only flushed
 // rows.
 func (inst *BodyRowStore) ScanCopyRecord(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*BodyRowEntity, error] {
+	if opts.KeyPrefix != "" {
+		return recordstore.RefuseKeyPrefix[*BodyRowEntity]()
+	}
 	order, err := agentrunbodyOrderBy(opts)
 	if err != nil {
 		return recordstore.FailScan[*BodyRowEntity](err)
 	}
 	where := agentrunbodyScanCopyRecordFilter
-	if opts.KeyPrefix != "" {
-		where = "(" + where + ") AND " + agentrunbodyKeyPrefixPredicate(opts.KeyPrefix)
-	}
 	if opts.ExtraPredicate != "" {
 		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
 	}
@@ -1962,7 +1954,7 @@ func (inst *BodyRowStore) ScanCopyRecord(ctx context.Context, opts recordstore.S
 // row-level primitive — a deleted key still returns its tombstone
 // row; GetLive is the interpreted state-view read). Reads see only
 // flushed rows.
-func (inst *BodyRowStore) Latest(ctx context.Context, key string) (ent *BodyRowEntity, found bool, err error) {
+func (inst *BodyRowStore) Latest(ctx context.Context, key uint64) (ent *BodyRowEntity, found bool, err error) {
 	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + BodyRowColKey + " = " + agentrunbodyKeyLiteral(key) +
 		" ORDER BY " + BodyRowColOrder + " DESC LIMIT 1" + agentrunbodyArrowOutputSettings
@@ -1985,7 +1977,7 @@ func (inst *BodyRowStore) Latest(ctx context.Context, key string) (ent *BodyRowE
 // at call time or lazily during iteration (buffered in v1 — a
 // streaming executor changes nothing visible); an error ends the
 // sequence as a final (nil, err) pair. Reads see only flushed rows.
-func (inst *BodyRowStore) Replay(ctx context.Context, key string, fromOrder uint64, opts recordstore.ReplayOptsU64) iter.Seq2[*BodyRowEntity, error] {
+func (inst *BodyRowStore) Replay(ctx context.Context, key uint64, fromOrder uint64, opts recordstore.ReplayOptsU64) iter.Seq2[*BodyRowEntity, error] {
 	sql := "SELECT * FROM " + inst.readTable() +
 		" WHERE " + BodyRowColKey + " = " + agentrunbodyKeyLiteral(key)
 	if fromOrder > 0 {
@@ -2023,43 +2015,43 @@ var BodyRowComponentSQL = componentsql.Set{
 			Presence:   "hasAll(\"tv:stringArray:lr:lr:u64:1247:::0::data\", [9223372049739678067, 9223372049739678108]) AND has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068)",
 			Validator:  "countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678067) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678067), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678067), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068) = 1 AND if(has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068), \"tv:textArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068), arrayCumSum(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678108) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678108), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678108), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1",
 			Filter:     agentrunbodyScanBodyRowFilter,
-			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678067, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:textArray:value:val:sh:5::7:0::data\", \"tv:textArray:len:len:u64:4D:::0::data\", \"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068, LW_RAGGED_PARENT_IDS(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678108, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1]), 'Tuple(ID String, Opening String, Body String, ArgumentsText String)')",
+			Projection: "CAST(tuple(\"id:id:u64:4::0:\", LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678067, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:textArray:value:val:sh:5::7:0::data\", \"tv:textArray:len:len:u64:4D:::0::data\", \"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068, LW_RAGGED_PARENT_IDS(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678108, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1]), 'Tuple(ID UInt64, Opening String, Body String, ArgumentsText String)')",
 		},
 		"Endorsement": {
 			Presence:   "hasAll(\"tv:stringArray:lr:lr:u64:1247:::0::data\", [9223372049739678109, 9223372049739678110, 9223372049739678112]) AND has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678113)",
 			Validator:  "countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678109) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678109), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678109), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678110) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678110), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678110), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 9223372049739678111) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678112) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678112), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678112), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678113) = 1 AND if(has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678113), \"tv:textArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678113), arrayCumSum(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1",
 			Filter:     agentrunbodyScanEndorsementFilter,
-			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678109, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678110, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:symbolArray:value:val:sh:124::I:0::data\", \"tv:symbolArray:len:len:u64:4D:::0::data\", \"tv:symbolArray:lr:lr:u64:1247:::0::data\", 9223372049739678111, LW_RAGGED_PARENT_IDS(\"tv:symbolArray:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678112, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:textArray:value:val:sh:5::7:0::data\", \"tv:textArray:len:len:u64:4D:::0::data\", \"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678113, LW_RAGGED_PARENT_IDS(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))[1]), 'Tuple(ID String, Digest String, Epoch String, Classes Array(String), Previous String, Diff String)')",
+			Projection: "CAST(tuple(\"id:id:u64:4::0:\", LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678109, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678110, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:symbolArray:value:val:sh:124::I:0::data\", \"tv:symbolArray:len:len:u64:4D:::0::data\", \"tv:symbolArray:lr:lr:u64:1247:::0::data\", 9223372049739678111, LW_RAGGED_PARENT_IDS(\"tv:symbolArray:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678112, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:textArray:value:val:sh:5::7:0::data\", \"tv:textArray:len:len:u64:4D:::0::data\", \"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678113, LW_RAGGED_PARENT_IDS(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))[1]), 'Tuple(ID UInt64, Digest String, Epoch String, Classes Array(String), Previous String, Diff String)')",
 		},
 		"GrantRecord": {
 			Presence:   "has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678114) AND has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678115) AND hasAll(\"tv:bool:lr:lr:u64:1247:::0::data\", [9223372049739678116, 9223372049739678121]) AND hasAll(\"tv:u32Array:lr:lr:u64:1247:::0::data\", [9223372049739678117, 9223372049739678118]) AND has(\"tv:timeArray:lr:lr:u64:1247:::0::data\", 9223372049739678119)",
 			Validator:  "countEqual(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678114) = 1 AND if(has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678114), \"tv:textArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678114), arrayCumSum(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678115) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678115), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678115), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678116) = 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678117) = 1 AND if(has(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678117), \"tv:u32Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678117), arrayCumSum(\"tv:u32Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678118) = 1 AND if(has(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678118), \"tv:u32Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678118), arrayCumSum(\"tv:u32Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:timeArray:lr:lr:u64:1247:::0::data\", 9223372049739678119) = 1 AND if(has(\"tv:timeArray:lr:lr:u64:1247:::0::data\", 9223372049739678119), \"tv:timeArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:timeArray:lr:lr:u64:1247:::0::data\", 9223372049739678119), arrayCumSum(\"tv:timeArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678120) <= 1 AND countEqual(\"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678121) = 1",
 			Filter:     agentrunbodyScanGrantRecordFilter,
-			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_LIST_BY_TAG_EQUAL(\"tv:textArray:value:val:sh:5::7:0::data\", \"tv:textArray:len:len:u64:4D:::0::data\", \"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678114, LW_RAGGED_PARENT_IDS(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678115, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_VALUE_BY_TAG_EQUAL(\"tv:bool:value:val:b:4:::0::data\", \"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678116, LW_RAGGED_PARENT_IDS(\"tv:bool:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:u32Array:value:val:u32h:4:::0::data\", \"tv:u32Array:len:len:u64:4D:::0::data\", \"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678117, LW_RAGGED_PARENT_IDS(\"tv:u32Array:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:u32Array:value:val:u32h:4:::0::data\", \"tv:u32Array:len:len:u64:4D:::0::data\", \"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678118, LW_RAGGED_PARENT_IDS(\"tv:u32Array:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:timeArray:value:val:z64h:4:::0::data\", \"tv:timeArray:len:len:u64:4D:::0::data\", \"tv:timeArray:lr:lr:u64:1247:::0::data\", 9223372049739678119, LW_RAGGED_PARENT_IDS(\"tv:timeArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678120, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:bool:value:val:b:4:::0::data\", \"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678121, LW_RAGGED_PARENT_IDS(\"tv:bool:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID String, Task String, Handle String, HasTerms Bool, CallsBudget UInt32, CallsUsed UInt32, Deadline DateTime64(9,\\'UTC\\'), Destinations Array(String), Unattended Bool)')",
+			Projection: "CAST(tuple(\"id:id:u64:4::0:\", LW_LIST_BY_TAG_EQUAL(\"tv:textArray:value:val:sh:5::7:0::data\", \"tv:textArray:len:len:u64:4D:::0::data\", \"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678114, LW_RAGGED_PARENT_IDS(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678115, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_VALUE_BY_TAG_EQUAL(\"tv:bool:value:val:b:4:::0::data\", \"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678116, LW_RAGGED_PARENT_IDS(\"tv:bool:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:u32Array:value:val:u32h:4:::0::data\", \"tv:u32Array:len:len:u64:4D:::0::data\", \"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678117, LW_RAGGED_PARENT_IDS(\"tv:u32Array:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:u32Array:value:val:u32h:4:::0::data\", \"tv:u32Array:len:len:u64:4D:::0::data\", \"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678118, LW_RAGGED_PARENT_IDS(\"tv:u32Array:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:timeArray:value:val:z64h:4:::0::data\", \"tv:timeArray:len:len:u64:4D:::0::data\", \"tv:timeArray:lr:lr:u64:1247:::0::data\", 9223372049739678119, LW_RAGGED_PARENT_IDS(\"tv:timeArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678120, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:bool:value:val:b:4:::0::data\", \"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678121, LW_RAGGED_PARENT_IDS(\"tv:bool:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID UInt64, Task String, Handle String, HasTerms Bool, CallsBudget UInt32, CallsUsed UInt32, Deadline DateTime64(9,\\'UTC\\'), Destinations Array(String), Unattended Bool)')",
 		},
 		"ExitQuestion": {
 			Presence:   "has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678122) AND hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [9223372049739678123, 9223372049739678124, 9223372049739678125])",
 			Validator:  "countEqual(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678122) = 1 AND if(has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678122), \"tv:textArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678122), arrayCumSum(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678123) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678124) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678125) = 1",
 			Filter:     agentrunbodyScanExitQuestionFilter,
-			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_LIST_BY_TAG_EQUAL(\"tv:textArray:value:val:sh:5::7:0::data\", \"tv:textArray:len:len:u64:4D:::0::data\", \"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678122, LW_RAGGED_PARENT_IDS(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678123, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678124, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678125, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID String, Question String, Sink String, Tier String, Path String)')",
+			Projection: "CAST(tuple(\"id:id:u64:4::0:\", LW_LIST_BY_TAG_EQUAL(\"tv:textArray:value:val:sh:5::7:0::data\", \"tv:textArray:len:len:u64:4D:::0::data\", \"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678122, LW_RAGGED_PARENT_IDS(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678123, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678124, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678125, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID UInt64, Question String, Sink String, Tier String, Path String)')",
 		},
 		"ExitAnswer": {
 			Presence:   "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [9223372049739678126, 9223372049739678127]) AND has(\"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678128) AND has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678129)",
 			Validator:  "countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678126) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678127) = 1 AND countEqual(\"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678128) = 1 AND countEqual(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678129) = 1 AND if(has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678129), \"tv:textArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678129), arrayCumSum(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1",
 			Filter:     agentrunbodyScanExitAnswerFilter,
-			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678126, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678127, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:bool:value:val:b:4:::0::data\", \"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678128, LW_RAGGED_PARENT_IDS(\"tv:bool:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:textArray:value:val:sh:5::7:0::data\", \"tv:textArray:len:len:u64:4D:::0::data\", \"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678129, LW_RAGGED_PARENT_IDS(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))[1]), 'Tuple(ID String, Sink String, Tier String, Approved Bool, Justification String)')",
+			Projection: "CAST(tuple(\"id:id:u64:4::0:\", LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678126, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678127, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:bool:value:val:b:4:::0::data\", \"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678128, LW_RAGGED_PARENT_IDS(\"tv:bool:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:textArray:value:val:sh:5::7:0::data\", \"tv:textArray:len:len:u64:4D:::0::data\", \"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678129, LW_RAGGED_PARENT_IDS(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))[1]), 'Tuple(ID UInt64, Sink String, Tier String, Approved Bool, Justification String)')",
 		},
 		"ApprovalContent": {
 			Presence:   "has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678130) AND has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678131)",
 			Validator:  "countEqual(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678130) = 1 AND if(has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678130), \"tv:textArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678130), arrayCumSum(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678131) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678131), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678131), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1",
 			Filter:     agentrunbodyScanApprovalContentFilter,
-			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_LIST_BY_TAG_EQUAL(\"tv:textArray:value:val:sh:5::7:0::data\", \"tv:textArray:len:len:u64:4D:::0::data\", \"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678130, LW_RAGGED_PARENT_IDS(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678131, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1]), 'Tuple(ID String, Justification String, Digest String)')",
+			Projection: "CAST(tuple(\"id:id:u64:4::0:\", LW_LIST_BY_TAG_EQUAL(\"tv:textArray:value:val:sh:5::7:0::data\", \"tv:textArray:len:len:u64:4D:::0::data\", \"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678130, LW_RAGGED_PARENT_IDS(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678131, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1]), 'Tuple(ID UInt64, Justification String, Digest String)')",
 		},
 		"CopyRecord": {
 			Presence:   "hasAll(\"tv:stringArray:lr:lr:u64:1247:::0::data\", [9223372049739678132, 9223372049739678136, 9223372049739678139]) AND hasAll(\"tv:u8Array:lr:lr:u64:1247:::0::data\", [9223372049739678133, 9223372049739678134]) AND has(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678135) AND hasAll(\"tv:bool:lr:lr:u64:1247:::0::data\", [9223372049739678137, 9223372049739678138, 9223372049739678140, 9223372049739678141]) AND has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678142) AND has(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678143)",
 			Validator:  "countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678132) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678132), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678132), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 9223372049739678133) = 1 AND if(has(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 9223372049739678133), \"tv:u8Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 9223372049739678133), arrayCumSum(\"tv:u8Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 9223372049739678134) = 1 AND if(has(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 9223372049739678134), \"tv:u8Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 9223372049739678134), arrayCumSum(\"tv:u8Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678135) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678136) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678136), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678136), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678137) = 1 AND countEqual(\"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678138) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678139) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678139), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678139), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678140) = 1 AND countEqual(\"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678141) = 1 AND countEqual(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678142) = 1 AND if(has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678142), \"tv:textArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678142), arrayCumSum(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678143) = 1 AND if(has(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678143), \"tv:u32Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678143), arrayCumSum(\"tv:u32Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1",
 			Filter:     agentrunbodyScanCopyRecordFilter,
-			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678132, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:u8Array:value:val:u8h:4:::0::data\", \"tv:u8Array:len:len:u64:4D:::0::data\", \"tv:u8Array:lr:lr:u64:1247:::0::data\", 9223372049739678133, LW_RAGGED_PARENT_IDS(\"tv:u8Array:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:u8Array:value:val:u8h:4:::0::data\", \"tv:u8Array:len:len:u64:4D:::0::data\", \"tv:u8Array:lr:lr:u64:1247:::0::data\", 9223372049739678134, LW_RAGGED_PARENT_IDS(\"tv:u8Array:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678135, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678136, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_VALUE_BY_TAG_EQUAL(\"tv:bool:value:val:b:4:::0::data\", \"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678137, LW_RAGGED_PARENT_IDS(\"tv:bool:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:bool:value:val:b:4:::0::data\", \"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678138, LW_RAGGED_PARENT_IDS(\"tv:bool:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678139, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_VALUE_BY_TAG_EQUAL(\"tv:bool:value:val:b:4:::0::data\", \"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678140, LW_RAGGED_PARENT_IDS(\"tv:bool:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:bool:value:val:b:4:::0::data\", \"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678141, LW_RAGGED_PARENT_IDS(\"tv:bool:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:textArray:value:val:sh:5::7:0::data\", \"tv:textArray:len:len:u64:4D:::0::data\", \"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678142, LW_RAGGED_PARENT_IDS(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:u32Array:value:val:u32h:4:::0::data\", \"tv:u32Array:len:len:u64:4D:::0::data\", \"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678143, LW_RAGGED_PARENT_IDS(\"tv:u32Array:lrcard:lrcard:u64:4E:::0::data\"))[1]), 'Tuple(ID String, Digest String, Level UInt8, Tier UInt8, Source String, Handle String, Plaintext Bool, Recorded Bool, Approval String, Raw Bool, Refused Bool, Reason String, Bytes UInt32)')",
+			Projection: "CAST(tuple(\"id:id:u64:4::0:\", LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678132, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:u8Array:value:val:u8h:4:::0::data\", \"tv:u8Array:len:len:u64:4D:::0::data\", \"tv:u8Array:lr:lr:u64:1247:::0::data\", 9223372049739678133, LW_RAGGED_PARENT_IDS(\"tv:u8Array:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:u8Array:value:val:u8h:4:::0::data\", \"tv:u8Array:len:len:u64:4D:::0::data\", \"tv:u8Array:lr:lr:u64:1247:::0::data\", 9223372049739678134, LW_RAGGED_PARENT_IDS(\"tv:u8Array:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678135, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678136, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_VALUE_BY_TAG_EQUAL(\"tv:bool:value:val:b:4:::0::data\", \"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678137, LW_RAGGED_PARENT_IDS(\"tv:bool:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:bool:value:val:b:4:::0::data\", \"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678138, LW_RAGGED_PARENT_IDS(\"tv:bool:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678139, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_VALUE_BY_TAG_EQUAL(\"tv:bool:value:val:b:4:::0::data\", \"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678140, LW_RAGGED_PARENT_IDS(\"tv:bool:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:bool:value:val:b:4:::0::data\", \"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678141, LW_RAGGED_PARENT_IDS(\"tv:bool:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:textArray:value:val:sh:5::7:0::data\", \"tv:textArray:len:len:u64:4D:::0::data\", \"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678142, LW_RAGGED_PARENT_IDS(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:u32Array:value:val:u32h:4:::0::data\", \"tv:u32Array:len:len:u64:4D:::0::data\", \"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678143, LW_RAGGED_PARENT_IDS(\"tv:u32Array:lrcard:lrcard:u64:4E:::0::data\"))[1]), 'Tuple(ID UInt64, Digest String, Level UInt8, Tier UInt8, Source String, Handle String, Plaintext Bool, Recorded Bool, Approval String, Raw Bool, Refused Bool, Reason String, Bytes UInt32)')",
 		},
 	},
 }

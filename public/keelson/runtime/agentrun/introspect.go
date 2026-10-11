@@ -44,7 +44,7 @@ func (inst runsProvider) Snapshot(proj introspect.Projection) (rec arrow.RecordB
 
 func runsTable(rows []Run) *introspect.Table {
 	return introspect.NewTable().
-		String("id", func(i int) string { return rows[i].Id }).
+		Uint64("id", func(i int) uint64 { return rows[i].Id }).
 		String("cell", func(i int) string { return rows[i].Cell }).
 		String("conversation", func(i int) string { return rows[i].Conversation }).
 		String("owner_app", func(i int) string { return rows[i].OwnerApp }).
@@ -94,7 +94,7 @@ func allEntries(ctx context.Context, store StoreI) (entries []Entry, err error) 
 		return
 	}
 	if of, ok := store.(EntriesOfI); ok {
-		ids := make([]string, 0, len(runs))
+		ids := make([]uint64, 0, len(runs))
 		for _, r := range runs {
 			ids = append(ids, r.Id)
 		}
@@ -112,7 +112,7 @@ func allEntries(ctx context.Context, store StoreI) (entries []Entry, err error) 
 
 func entriesTable(rows []Entry) *introspect.Table {
 	return introspect.NewTable().
-		String("run", func(i int) string { return rows[i].Run }).
+		Uint64("run", func(i int) uint64 { return rows[i].Run }).
 		Uint64("ordinal", func(i int) uint64 { return uint64(rows[i].Ordinal) }).
 		Int64("at_ms", func(i int) int64 { return ms(rows[i].At) }).
 		String("kind", func(i int) string { return rows[i].Kind.String() }).
@@ -137,7 +137,7 @@ func entriesTable(rows []Entry) *introspect.Table {
 		String("label_tier", func(i int) string { return rows[i].Label.Tier.String() }).
 		StringList("label_exposure", func(i int) []string { return rows[i].Label.Exposure }).
 		StringList("label_origin", func(i int) []string { return rows[i].Label.Origin }).
-		String("writer_run", func(i int) string { return rows[i].WriterRun }).
+		Uint64("writer_run", func(i int) uint64 { return rows[i].WriterRun }).
 		String("writer_turn", func(i int) string { return rows[i].WriterTurn }).
 		Uint64("writer_ordinal", func(i int) uint64 { return uint64(rows[i].WriterOrdinal) }).
 		Uint64("prev", func(i int) uint64 { return uint64(rows[i].Prev) }).

@@ -34,13 +34,16 @@ type Writer struct {
 	failed error
 }
 
-// Open creates the run row and returns its writer. The row the writer
-// holds is the row as stored: the service sets the owner, and the seed
-// digest follows it.
+// Open creates the run row and returns its writer, the store minting the
+// run's id when r carries none (ADR-0325 §SD5). The row the writer holds
+// is the row as stored: the service sets the owner, and the seed digest
+// follows it.
 func Open(ctx context.Context, store StoreI, r Run) (w *Writer, err error) {
-	if r.Id == "" {
-		err = eh.Errorf("a run needs an id")
-		return
+	if r.Id == 0 {
+		if r.Id, err = store.MintRun(ctx); err != nil {
+			err = eh.Errorf("mint the run id: %w", err)
+			return
+		}
 	}
 	if r.Created.IsZero() {
 		r.Created = Now()
@@ -48,20 +51,22 @@ func Open(ctx context.Context, store StoreI, r Run) (w *Writer, err error) {
 	if r.State == StateUnspecified {
 		r.State = StateOpen
 	}
-	r.Digest = RunDigestSeed(r)
+	if r.Digest, err = RunDigestSeed(r); err != nil {
+		return
+	}
 	r.Head = r.Digest
 	r.Version = 1
 	if err = store.CreateRun(ctx, r); err != nil {
-		err = eb.Build().Str("run", r.Id).Errorf("create run: %w", err)
+		err = eb.Build().Uint64("run", r.Id).Errorf("create run: %w", err)
 		return
 	}
 	stored, found, err := store.GetRun(ctx, r.Id)
 	if err != nil {
-		err = eb.Build().Str("run", r.Id).Errorf("read the run back: %w", err)
+		err = eb.Build().Uint64("run", r.Id).Errorf("read the run back: %w", err)
 		return
 	}
 	if !found {
-		err = eb.Build().Str("run", r.Id).Errorf("the run was created and is not found")
+		err = eb.Build().Uint64("run", r.Id).Errorf("the run was created and is not found")
 		return
 	}
 	w = &Writer{store: store, run: stored}
@@ -72,28 +77,28 @@ func Open(ctx context.Context, store StoreI, r Run) (w *Writer, err error) {
 // chain from the run row (law L31); the writer continues after the last
 // entry. A deleted run reopens: its chain verifies over the digests its
 // tombstone kept, and the writer refuses to append to it.
-func Reopen(ctx context.Context, store StoreI, id string) (w *Writer, err error) {
+func Reopen(ctx context.Context, store StoreI, id uint64) (w *Writer, err error) {
 	r, found, err := store.GetRun(ctx, id)
 	if err != nil {
-		err = eb.Build().Str("run", id).Errorf("read run: %w", err)
+		err = eb.Build().Uint64("run", id).Errorf("read run: %w", err)
 		return
 	}
 	if !found {
-		err = eb.Build().Str("run", id).Errorf("no such run")
+		err = eb.Build().Uint64("run", id).Errorf("no such run")
 		return
 	}
 	entries, err := store.Entries(ctx, id, 0)
 	if err != nil {
-		err = eb.Build().Str("run", id).Errorf("read entries: %w", err)
+		err = eb.Build().Uint64("run", id).Errorf("read entries: %w", err)
 		return
 	}
 	broken, err := VerifyRun(r, entries)
 	if err != nil {
-		err = eb.Build().Str("run", id).Errorf("verify: %w", err)
+		err = eb.Build().Uint64("run", id).Errorf("verify: %w", err)
 		return
 	}
 	if broken != 0 {
-		err = eb.Build().Str("run", id).Uint32("ordinal", broken).Errorf("the chain does not verify")
+		err = eb.Build().Uint64("run", id).Uint32("ordinal", broken).Errorf("the chain does not verify")
 		return
 	}
 	w = &Writer{store: store, run: r, entries: entries}
@@ -103,7 +108,7 @@ func Reopen(ctx context.Context, store StoreI, id string) (w *Writer, err error)
 	// holds a deleted entry with the bodies still behind it.
 	if last, ok := w.lastLocked(); ok && last.Kind == KindDeleted && r.State != StateDeleted {
 		if err = w.finishDelete(ctx, last.Name); err != nil {
-			err = eb.Build().Str("run", id).Errorf("finish the deletion: %w", err)
+			err = eb.Build().Uint64("run", id).Errorf("finish the deletion: %w", err)
 			return nil, err
 		}
 	}
@@ -112,10 +117,10 @@ func Reopen(ctx context.Context, store StoreI, id string) (w *Writer, err error)
 	if pending := w.unfinishedErasures(); len(pending) > 0 {
 		eraser, ok := store.(EraserI)
 		if !ok {
-			return nil, eb.Build().Str("run", id).Errorf("the record holds erasures the store cannot finish")
+			return nil, eb.Build().Uint64("run", id).Errorf("the record holds erasures the store cannot finish")
 		}
 		if err = w.finishErase(ctx, eraser, pending); err != nil {
-			return nil, eb.Build().Str("run", id).Errorf("finish the erasures: %w", err)
+			return nil, eb.Build().Uint64("run", id).Errorf("finish the erasures: %w", err)
 		}
 	}
 	return
@@ -198,15 +203,15 @@ func (inst *Writer) append(ctx context.Context, closing bool, entries ...Entry) 
 	failed := inst.failed
 	inst.mu.Unlock()
 	if failed != nil {
-		err = eb.Build().Str("run", run.Id).Errorf("the journal refused an earlier write: %w", failed)
+		err = eb.Build().Uint64("run", run.Id).Errorf("the journal refused an earlier write: %w", failed)
 		return
 	}
 	switch {
 	case run.State == StateDeleted || last.Kind == KindDeleted:
-		err = eb.Build().Str("run", run.Id).Errorf("the run is deleted")
+		err = eb.Build().Uint64("run", run.Id).Errorf("the run is deleted")
 		return
 	case run.State != StateOpen && !closing:
-		err = eb.Build().Str("run", run.Id).Str("state", run.State.String()).Errorf("the run is not open")
+		err = eb.Build().Uint64("run", run.Id).Str("state", run.State.String()).Errorf("the run is not open")
 		return
 	}
 	written = make([]Entry, 0, len(entries))
@@ -222,14 +227,14 @@ func (inst *Writer) append(ctx context.Context, closing bool, entries ...Entry) 
 		written = append(written, e)
 	}
 	if err = ctx.Err(); err != nil {
-		return nil, eb.Build().Str("run", run.Id).Errorf("append: %w", err)
+		return nil, eb.Build().Uint64("run", run.Id).Errorf("append: %w", err)
 	}
 	err = inst.store.Append(ctx, written)
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	if err != nil {
 		inst.failed = err
-		err = eb.Build().Str("run", run.Id).Errorf("append: %w", err)
+		err = eb.Build().Uint64("run", run.Id).Errorf("append: %w", err)
 		return nil, err
 	}
 	inst.entries = append(slices.Clip(inst.entries), written...)
@@ -288,7 +293,7 @@ func (inst *Writer) update(ctx context.Context, change func(r *Run)) (err error)
 	r.Label = was.Label.Join(r.Label)
 	r.Version = was.Version + 1
 	if err = inst.store.UpdateRun(ctx, r); err != nil {
-		err = eb.Build().Str("run", was.Id).Errorf("update run: %w", err)
+		err = eb.Build().Uint64("run", was.Id).Errorf("update run: %w", err)
 		return
 	}
 	inst.mu.Lock()
@@ -339,7 +344,7 @@ func (inst *Writer) Resume(ctx context.Context) (err error) {
 		return
 	case StateClosed:
 	default:
-		return eb.Build().Str("run", inst.Run().Id).Str("state", inst.Run().State.String()).Errorf("the run does not resume")
+		return eb.Build().Uint64("run", inst.Run().Id).Str("state", inst.Run().State.String()).Errorf("the run does not resume")
 	}
 	return inst.update(ctx, func(r *Run) { r.State, r.Closed = StateOpen, zeroTime })
 }
@@ -370,7 +375,7 @@ func (inst *Writer) Delete(ctx context.Context, by string) (err error) {
 func (inst *Writer) finishDelete(ctx context.Context, by string) (err error) {
 	id := inst.Run().Id
 	if err = inst.store.Tombstone(ctx, id); err != nil {
-		return eb.Build().Str("run", id).Errorf("tombstone: %w", err)
+		return eb.Build().Uint64("run", id).Errorf("tombstone: %w", err)
 	}
 	inst.mu.Lock()
 	emptied := slices.Clone(inst.entries)
@@ -383,7 +388,7 @@ func (inst *Writer) finishDelete(ctx context.Context, by string) (err error) {
 	inst.entries = emptied
 	inst.mu.Unlock()
 	if err = inst.update(ctx, func(r *Run) { r.State, r.DeletedBy, r.DeletedAt = StateDeleted, by, Now() }); err != nil {
-		return eb.Build().Str("run", id).Errorf("mark deleted: %w", err)
+		return eb.Build().Uint64("run", id).Errorf("mark deleted: %w", err)
 	}
 	return
 }
@@ -401,7 +406,7 @@ func (inst *Writer) Erase(ctx context.Context, by string, ordinals ...uint32) (e
 	defer inst.writeMu.Unlock()
 	eraser, ok := inst.store.(EraserI)
 	if !ok {
-		return eb.Build().Str("run", inst.Run().Id).Errorf("the store does not erase")
+		return eb.Build().Uint64("run", inst.Run().Id).Errorf("the store does not erase")
 	}
 	inst.mu.Lock()
 	entries := inst.entries
@@ -409,16 +414,16 @@ func (inst *Writer) Erase(ctx context.Context, by string, ordinals ...uint32) (e
 	marks := make([]Entry, 0, len(ordinals))
 	for _, ord := range ordinals {
 		if ord == 0 || ord > uint32(len(entries)) {
-			return eb.Build().Str("run", inst.Run().Id).Uint32("ordinal", ord).Errorf("no such entry")
+			return eb.Build().Uint64("run", inst.Run().Id).Uint32("ordinal", ord).Errorf("no such entry")
 		}
 		e := entries[ord-1]
 		switch {
 		case e.Kind == KindHead:
-			return eb.Build().Str("run", inst.Run().Id).Uint32("ordinal", ord).Errorf("a head entry is a digest the anchor law reads, not content")
+			return eb.Build().Uint64("run", inst.Run().Id).Uint32("ordinal", ord).Errorf("a head entry is a digest the anchor law reads, not content")
 		case e.Kind == KindErased || e.Kind == KindDeleted:
-			return eb.Build().Str("run", inst.Run().Id).Uint32("ordinal", ord).Errorf("an erasure is not content")
+			return eb.Build().Uint64("run", inst.Run().Id).Uint32("ordinal", ord).Errorf("an erasure is not content")
 		case !e.HasContent():
-			return eb.Build().Str("run", inst.Run().Id).Uint32("ordinal", ord).Errorf("the entry has no content to erase")
+			return eb.Build().Uint64("run", inst.Run().Id).Uint32("ordinal", ord).Errorf("the entry has no content to erase")
 		}
 		marks = append(marks, Entry{Kind: KindErased, Name: by, Target: ord, Label: Label{Level: LevelPerson}})
 	}
@@ -441,7 +446,7 @@ func (inst *Writer) Erase(ctx context.Context, by string, ordinals ...uint32) (e
 func (inst *Writer) finishErase(ctx context.Context, eraser EraserI, ordinals []uint32) (err error) {
 	id := inst.Run().Id
 	if err = eraser.Erase(ctx, id, ordinals); err != nil {
-		return eb.Build().Str("run", id).Errorf("erase: %w", err)
+		return eb.Build().Uint64("run", id).Errorf("erase: %w", err)
 	}
 	inst.mu.Lock()
 	defer inst.mu.Unlock()

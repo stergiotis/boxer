@@ -23,7 +23,7 @@ import (
 
 func CreateSchemaAgentrunentryTable() (schema *arrow.Schema) {
 	schema = arrow.NewSchema([]arrow.Field{
-		/* 000 */ arrow.Field{Name: "id:id:s:4::0:", Nullable: false, Type: &arrow.StringType{}},
+		/* 000 */ arrow.Field{Name: "id:id:u64:4::0:", Nullable: false, Type: arrow.PrimitiveTypes.Uint64},
 		/* 001 */ arrow.Field{Name: "id:ordinal:u64:47::0:", Nullable: false, Type: arrow.PrimitiveTypes.Uint64},
 		/* 002 */ arrow.Field{Name: "lc:revision:u32:4::0:", Nullable: false, Type: arrow.PrimitiveTypes.Uint32},
 		/* 003 */ arrow.Field{Name: "tv:textArray:value:val:sh:5::7:0::data", Nullable: false, Type: arrow.ListOfNonNullable(&arrow.StringType{})},
@@ -261,12 +261,12 @@ type InEntityAgentrunentryTable struct {
 	section19State     runtime.EntityStateE
 	activeSections     *[20]bool
 	ambientHighCardRef []uint64
-	plainId0           string
+	plainId0           uint64
 
 	plainOrdinal1 uint64
 
 	plainRevision2        uint32
-	scalarFieldBuilder000 *array.StringBuilder
+	scalarFieldBuilder000 *array.Uint64Builder
 
 	scalarFieldBuilder001 *array.Uint64Builder
 
@@ -283,7 +283,7 @@ func NewInEntityAgentrunentryTable(allocator memory.Allocator, estimatedNumberOf
 	builder := array.NewRecordBuilder(allocator, schema)
 	inst.builder = builder
 	inst.initSections(builder)
-	inst.scalarFieldBuilder000 = builder.Field(0).(*array.StringBuilder)
+	inst.scalarFieldBuilder000 = builder.Field(0).(*array.Uint64Builder)
 	inst.scalarFieldBuilder001 = builder.Field(1).(*array.Uint64Builder)
 	inst.scalarFieldBuilder002 = builder.Field(2).(*array.Uint32Builder)
 
@@ -343,7 +343,7 @@ var InEntityAgentrunentryTableSectionIndices = map[string]int{
 // dml.(*GoClassBuilder).ComposeEntityCode
 // ./public/semistructured/leeway/dml/lw_dml_generator.go:1691
 
-func (inst *InEntityAgentrunentryTable) setId(id0 string, ordinal1 uint64) *InEntityAgentrunentryTable {
+func (inst *InEntityAgentrunentryTable) setId(id0 uint64, ordinal1 uint64) *InEntityAgentrunentryTable {
 	if inst.state != runtime.EntityStateInEntity {
 		inst.AppendError(runtime.ErrInvalidStateTransition)
 		return inst
@@ -404,7 +404,7 @@ func (inst *InEntityAgentrunentryTable) appendPlainValues() {
 	inst.scalarFieldBuilder002.Append(inst.plainRevision2)
 }
 func (inst *InEntityAgentrunentryTable) resetPlainValues() {
-	inst.plainId0 = ""
+	inst.plainId0 = uint64(0)
 
 	inst.plainOrdinal1 = uint64(0)
 
@@ -825,7 +825,7 @@ func InEntityAgentrunentryTableSetActiveSections(e *InEntityAgentrunentryTable, 
 	e.setActiveSections(idxs)
 }
 func InEntityAgentrunentryTableReleaseBuilder(e *InEntityAgentrunentryTable) { e.builder.Release() }
-func InEntityAgentrunentryTableSetId(e *InEntityAgentrunentryTable, id0 string, ordinal1 uint64) *InEntityAgentrunentryTable {
+func InEntityAgentrunentryTableSetId(e *InEntityAgentrunentryTable, id0 uint64, ordinal1 uint64) *InEntityAgentrunentryTable {
 	return e.setId(id0, ordinal1)
 }
 func InEntityAgentrunentryTableSetLifecycle(e *InEntityAgentrunentryTable, revision2 uint32) *InEntityAgentrunentryTable {

@@ -16,7 +16,7 @@ import (
 // the chain digest at that ordinal (ADR-0314 §SD2).
 type Head struct {
 	Cell    string
-	Run     string
+	Run     uint64
 	Ordinal uint32
 	Digest  string
 }
@@ -43,7 +43,7 @@ type Anchored struct {
 // StoreI is the contract: append-only, read by (cell, run).
 type StoreI interface {
 	Append(ctx context.Context, h Head) (r Receipt, err error)
-	Read(ctx context.Context, cell string, run string) (heads []Anchored, err error)
+	Read(ctx context.Context, cell string, run uint64) (heads []Anchored, err error)
 }
 
 // Now is the store's clock; a test replaces it.
@@ -83,7 +83,7 @@ func (inst *MemStore) appendBy(h Head, by string) (r Receipt, err error) {
 	for _, a := range inst.rows {
 		if a.Cell == h.Cell && a.Run == h.Run && a.Ordinal == h.Ordinal {
 			if a.Digest != h.Digest {
-				return r, eb.Build().Str("run", h.Run).Uint32("ordinal", h.Ordinal).Errorf("another digest is anchored at the ordinal")
+				return r, eb.Build().Uint64("run", h.Run).Uint32("ordinal", h.Ordinal).Errorf("another digest is anchored at the ordinal")
 			}
 			return a.Receipt, nil
 		}
@@ -94,7 +94,7 @@ func (inst *MemStore) appendBy(h Head, by string) (r Receipt, err error) {
 	return
 }
 
-func (inst *MemStore) Read(_ context.Context, cell string, run string) (heads []Anchored, err error) {
+func (inst *MemStore) Read(_ context.Context, cell string, run uint64) (heads []Anchored, err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	for _, a := range inst.rows {

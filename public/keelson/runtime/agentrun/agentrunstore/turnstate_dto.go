@@ -4,7 +4,7 @@ package agentrunstore
 // ended, and why when it did not end answered.
 type TurnState struct {
 	_      struct{} `kind:"agentrunTurnState"`
-	ID     string   `lw:",id"`
+	ID     uint64   `lw:",id"`
 	State  string   `lw:"agentrunTurnState,symbol"`
 	Reason string   `lw:"agentrunTurnReason,stringArray,unit"`
 }

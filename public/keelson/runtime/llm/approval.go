@@ -35,7 +35,7 @@ import (
 // the app that owns its run; the host wires one over the run journal's
 // store.
 type ApprovalCheckerI interface {
-	ApprovalEntry(ctx context.Context, run string, ordinal uint32) (e agentrun.Entry, owner string, found bool, err error)
+	ApprovalEntry(ctx context.Context, run uint64, ordinal uint32) (e agentrun.Entry, owner string, found bool, err error)
 }
 
 // StoreApprovals is a checker over the run journal's store.
@@ -43,10 +43,10 @@ func StoreApprovals(store agentrun.StoreI) ApprovalCheckerI { return storeApprov
 
 type storeApprovals struct{ store agentrun.StoreI }
 
-func (inst storeApprovals) ApprovalEntry(ctx context.Context, run string, ordinal uint32) (e agentrun.Entry, owner string, found bool, err error) {
+func (inst storeApprovals) ApprovalEntry(ctx context.Context, run uint64, ordinal uint32) (e agentrun.Entry, owner string, found bool, err error) {
 	r, haveRun, err := inst.store.GetRun(ctx, run)
 	if err != nil {
-		err = eb.Build().Str("run", run).Errorf("load the approval's run: %w", err)
+		err = eb.Build().Uint64("run", run).Errorf("load the approval's run: %w", err)
 		return
 	}
 	if !haveRun {
@@ -55,7 +55,7 @@ func (inst storeApprovals) ApprovalEntry(ctx context.Context, run string, ordina
 	owner = r.OwnerApp
 	entries, err := inst.store.Entries(ctx, run, ordinal)
 	if err != nil {
-		err = eb.Build().Str("run", run).Uint32("ordinal", ordinal).Errorf("load the approval entry: %w", err)
+		err = eb.Build().Uint64("run", run).Uint32("ordinal", ordinal).Errorf("load the approval entry: %w", err)
 		return
 	}
 	for _, c := range entries {
@@ -84,7 +84,7 @@ type pendingExit struct {
 	sink     cell.Sink
 	sender   app.AppIdT
 	instance uint64
-	run      string
+	run      uint64
 	expires  time.Time
 	// claimed says a verified resend holds this exit while it goes
 	// through the checks below the wall; a second resend meanwhile is
@@ -194,6 +194,9 @@ func requestDigest(body []byte) string { return agentrun.ContentDigest(string(bo
 // settled: the call it covers.
 type approvalClaim struct {
 	callId string
+	// entry is the approval entry's tagged id, the reference the call's
+	// trail row carries (ADR-0325 §SD5).
+	entry uint64
 }
 
 // verifyApproval says whether the approval key lets a resent request go:
@@ -202,7 +205,7 @@ type approvalClaim struct {
 // written by the app that owns that run and sent the request, and the
 // request and tier are the refused ones. On success the refused exit is
 // claimed for this resend; the caller releases or consumes the claim.
-func (inst *Service) verifyApproval(key string, body []byte, tier agentrun.TierE, sink cell.Sink, sender app.AppIdT, instance uint64, run string) (claim approvalClaim, err error) {
+func (inst *Service) verifyApproval(key string, body []byte, tier agentrun.TierE, sink cell.Sink, sender app.AppIdT, instance uint64, run uint64) (claim approvalClaim, err error) {
 	if inst.cfg.Approvals == nil {
 		inst.approvalsUnwired.Do(func() {
 			inst.log.Error().Msg("llm: an approval key was offered and no journal store is wired to verify it; every approved exit is refused")
@@ -216,7 +219,7 @@ func (inst *Service) verifyApproval(key string, body []byte, tier agentrun.TierE
 		return
 	}
 	if keyRun != run {
-		err = eb.Build().Str("approval", keyRun).Str("request", run).Errorf("the approval is of another run than the request names")
+		err = eb.Build().Uint64("approval", keyRun).Uint64("request", run).Errorf("the approval is of another run than the request names")
 		return
 	}
 	ctx, cancel := context.WithTimeout(inst.base, approvalWait)
@@ -266,7 +269,7 @@ func (inst *Service) verifyApproval(key string, body []byte, tier agentrun.TierE
 	if err != nil {
 		return
 	}
-	claim = approvalClaim{callId: e.Key}
+	claim = approvalClaim{callId: e.Key, entry: e.EntryId}
 	return
 }
 

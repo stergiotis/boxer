@@ -4,6 +4,6 @@ package agentrunstore
 // of the tools offered, in order.
 type ToolCatalog struct {
 	_     struct{} `kind:"agentrunTools"`
-	ID    string   `lw:",id"`
+	ID    uint64   `lw:",id"`
 	Names []string `lw:"agentrunToolsNames,stringArray"`
 }

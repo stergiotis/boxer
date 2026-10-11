@@ -7,7 +7,7 @@ import "time"
 // path taken, who decided and when.
 type ApprovalDecision struct {
 	_        struct{}  `kind:"agentrunApprovalDecision"`
-	ID       string    `lw:",id"`
+	ID       uint64    `lw:",id"`
 	Channel  string    `lw:"agentrunApprovalChannel,symbol"`
 	Edge     string    `lw:"agentrunApprovalEdge,symbol"`
 	Tier     string    `lw:"agentrunApprovalTier,symbol"`

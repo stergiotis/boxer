@@ -8,6 +8,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/stergiotis/boxer/public/identity/identifier"
+	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 )
 
 func fixedClock(t *testing.T) {
@@ -25,8 +28,12 @@ func TestTheWriterChainsEntries(t *testing.T) {
 	fixedClock(t)
 	ctx := context.Background()
 	st := NewMemStore()
-	w, err := Open(ctx, st, Run{Id: "cell/run-1", Cell: "cell", Conversation: "c1", OwnerApp: "chat", Coordinator: "w7"})
+	w, err := Open(ctx, st, Run{Cell: "cell", Conversation: "c1", OwnerApp: "chat", Coordinator: "w7"})
 	require.NoError(t, err)
+	// The store minted the run id, in the in-memory stream (ADR-0325 §SD5).
+	id := identifier.TaggedId(w.Run().Id)
+	assert.Equal(t, vocab.IdStreamAgentRunMem.Value(), id.GetTag().GetValue())
+	assert.NotZero(t, id.RemoveTag().Value())
 	written, err := w.Append(ctx, Entry{Kind: KindUser, Role: "user", Body: "hello"}, Entry{Kind: KindRequest, Key: "llm-1", Body: "{}"})
 	require.NoError(t, err)
 	require.Len(t, written, 2)
@@ -35,7 +42,9 @@ func TestTheWriterChainsEntries(t *testing.T) {
 	assert.Equal(t, uint32(2), written[1].Ordinal)
 	assert.Equal(t, uint32(1), written[1].Prev)
 	assert.NotEqual(t, written[0].Digest, written[1].Digest)
-	assert.Equal(t, "cell/run-1", written[1].Run)
+	assert.Equal(t, w.Run().Id, written[1].Run)
+	assert.NotEqual(t, written[0].EntryId, written[1].EntryId, "the store assigns every entry its own id")
+	assert.Equal(t, vocab.IdStreamAgentRunEntryMem.Value(), identifier.TaggedId(written[0].EntryId).GetTag().GetValue())
 
 	entries := w.Entries()
 	broken, err := Verify(w.Run().Digest, entries)
@@ -45,7 +54,7 @@ func TestTheWriterChainsEntries(t *testing.T) {
 	broken, _ = Verify(w.Run().Digest, entries)
 	assert.Equal(t, uint32(1), broken, "a changed body breaks the chain at its entry")
 
-	again, err := Reopen(ctx, st, "cell/run-1")
+	again, err := Reopen(ctx, st, w.Run().Id)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), again.Len())
 	more, err := again.Append(ctx, Entry{Kind: KindReply, Key: "llm-1", Role: "assistant", Body: "hi"})
@@ -79,7 +88,7 @@ func (inst *failingStore) Append(ctx context.Context, entries []Entry) error {
 func TestAFailedWriteRefusesTheAct(t *testing.T) {
 	ctx := context.Background()
 	st := &failingStore{StoreI: NewMemStore()}
-	w, err := Open(ctx, st, Run{Id: "r"})
+	w, err := Open(ctx, st, Run{Id: 7})
 	require.NoError(t, err)
 	st.fail = true
 	_, err = w.Append(ctx, Entry{Kind: KindUser, Body: "x"})
@@ -88,7 +97,7 @@ func TestAFailedWriteRefusesTheAct(t *testing.T) {
 	_, err = w.Append(ctx, Entry{Kind: KindUser, Body: "y"})
 	require.Error(t, err, "refused until reopened")
 	assert.Zero(t, w.Len())
-	again, err := Reopen(ctx, st, "r")
+	again, err := Reopen(ctx, st, 7)
 	require.NoError(t, err)
 	_, err = again.Append(ctx, Entry{Kind: KindUser, Body: "y"})
 	require.NoError(t, err)
@@ -103,7 +112,7 @@ func TestAFailedWriteRefusesTheAct(t *testing.T) {
 func TestDeletionKeepsTheChain(t *testing.T) {
 	ctx := context.Background()
 	st := NewMemStore()
-	w, err := Open(ctx, st, Run{Id: "r", OwnerApp: "chat"})
+	w, err := Open(ctx, st, Run{Id: 7, OwnerApp: "chat"})
 	require.NoError(t, err)
 	written, err := w.Append(ctx, Entry{Kind: KindUser, Body: "secret"}, Entry{Kind: KindReply, Body: "answer", Calls: "[]"})
 	require.NoError(t, err)
@@ -112,12 +121,12 @@ func TestDeletionKeepsTheChain(t *testing.T) {
 	assert.Error(t, err, "a closed run takes no entry")
 	require.NoError(t, w.Delete(ctx, "person"), "but it can be deleted")
 	assert.Error(t, w.Delete(ctx, "person"), "once")
-	r, found, err := st.GetRun(ctx, "r")
+	r, found, err := st.GetRun(ctx, 7)
 	require.NoError(t, err)
 	require.True(t, found)
 	assert.Equal(t, StateDeleted, r.State)
 	assert.Equal(t, "person", r.DeletedBy)
-	entries, err := st.Entries(ctx, "r", 0)
+	entries, err := st.Entries(ctx, 7, 0)
 	require.NoError(t, err)
 	require.Len(t, entries, 3)
 	assert.Empty(t, entries[0].Body)
@@ -132,7 +141,7 @@ func TestDeletionKeepsTheChain(t *testing.T) {
 	assert.Zero(t, broken, "the chain verifies after the tombstone (L31)")
 	_, err = w.Append(ctx, Entry{Kind: KindUser, Body: "more"})
 	assert.Error(t, err, "a deleted run is not open")
-	again, err := Reopen(ctx, st, "r")
+	again, err := Reopen(ctx, st, 7)
 	require.NoError(t, err, "a deleted run reopens")
 	assert.Equal(t, StateDeleted, again.Run().State)
 	_, err = again.Append(ctx, Entry{Kind: KindUser, Body: "more"})
@@ -149,7 +158,7 @@ func TestDeletionKeepsTheChain(t *testing.T) {
 func TestAChangedBodyBreaksTheChain(t *testing.T) {
 	ctx := context.Background()
 	st := NewMemStore()
-	w, err := Open(ctx, st, Run{Id: "r"})
+	w, err := Open(ctx, st, Run{Id: 7})
 	require.NoError(t, err)
 	_, err = w.Append(ctx, Entry{Kind: KindUser, Body: "a"}, Entry{Kind: KindReply, Body: "b", Calls: "[]"})
 	require.NoError(t, err)
@@ -168,12 +177,12 @@ func TestAChangedBodyBreaksTheChain(t *testing.T) {
 func TestAClosedRunResumesAndTheLabelFloats(t *testing.T) {
 	ctx := context.Background()
 	st := NewMemStore()
-	w, err := Open(ctx, st, Run{Id: "r"})
+	w, err := Open(ctx, st, Run{Id: 7})
 	require.NoError(t, err)
 	v := w.Run().Version
 	_, err = w.Append(ctx, Entry{Kind: KindOutcome, Body: "x", Label: Label{Level: LevelExternal, Tier: TierAmber, Exposure: []string{"p"}}})
 	require.NoError(t, err)
-	r, _, _ := st.GetRun(ctx, "r")
+	r, _, _ := st.GetRun(ctx, 7)
 	assert.Equal(t, Label{Level: LevelExternal, Tier: TierAmber, Exposure: []string{"p"}}, r.Label, "the store raised the row's label")
 	assert.Equal(t, w.Run().Label, r.Label, "and the writer mirrors it")
 	assert.Equal(t, w.Run().Head, w.Entries()[0].Digest, "the head is the last digest")
@@ -199,7 +208,7 @@ func TestAClosedRunResumesAndTheLabelFloats(t *testing.T) {
 // reached the record, so the writer does not mark itself failed.
 func TestADoneContextDoesNotFailTheWriter(t *testing.T) {
 	ctx := context.Background()
-	w, err := Open(ctx, NewMemStore(), Run{Id: "r"})
+	w, err := Open(ctx, NewMemStore(), Run{Id: 7})
 	require.NoError(t, err)
 	done, cancel := context.WithCancel(ctx)
 	cancel()
@@ -213,7 +222,7 @@ func TestADoneContextDoesNotFailTheWriter(t *testing.T) {
 // past its own ordinal is refused at append.
 func TestACompactionAimsAtAnEarlierEntry(t *testing.T) {
 	ctx := context.Background()
-	w, err := Open(ctx, NewMemStore(), Run{Id: "r"})
+	w, err := Open(ctx, NewMemStore(), Run{Id: 7})
 	require.NoError(t, err)
 	_, err = w.Append(ctx, Entry{Kind: KindUser, Body: "x"})
 	require.NoError(t, err)
@@ -239,7 +248,7 @@ type tombstoneFailingStore struct {
 	fail bool
 }
 
-func (inst *tombstoneFailingStore) Tombstone(ctx context.Context, run string) error {
+func (inst *tombstoneFailingStore) Tombstone(ctx context.Context, run uint64) error {
 	if inst.fail {
 		inst.fail = false
 		return errors.New("disk gone")
@@ -253,25 +262,25 @@ func (inst *tombstoneFailingStore) Tombstone(ctx context.Context, run string) er
 func TestNothingFollowsTheDeletedEntry(t *testing.T) {
 	ctx := context.Background()
 	st := &tombstoneFailingStore{StoreI: NewMemStore(), fail: true}
-	w, err := Open(ctx, st, Run{Id: "r"})
+	w, err := Open(ctx, st, Run{Id: 7})
 	require.NoError(t, err)
 	_, err = w.Append(ctx, Entry{Kind: KindUser, Body: "secret"})
 	require.NoError(t, err)
 	require.Error(t, w.Delete(ctx, "person"), "the tombstone failed")
 	_, err = w.Append(ctx, Entry{Kind: KindUser, Body: "after deleted"})
 	require.Error(t, err, "the writer is failed and the run has its deleted entry")
-	entries, err := st.Entries(ctx, "r", 0)
+	entries, err := st.Entries(ctx, 7, 0)
 	require.NoError(t, err)
 	require.Len(t, entries, 2)
 	assert.Equal(t, "secret", entries[0].Body, "the bodies are still there")
-	r, _, _ := st.GetRun(ctx, "r")
+	r, _, _ := st.GetRun(ctx, 7)
 	assert.Equal(t, StateOpen, r.State, "and the row is not deleted")
 
-	again, err := Reopen(ctx, st, "r")
+	again, err := Reopen(ctx, st, 7)
 	require.NoError(t, err, "reopen finishes the deletion")
 	assert.Equal(t, StateDeleted, again.Run().State)
 	assert.Equal(t, "person", again.Run().DeletedBy)
-	entries, err = st.Entries(ctx, "r", 0)
+	entries, err = st.Entries(ctx, 7, 0)
 	require.NoError(t, err)
 	assert.Empty(t, entries[0].Body)
 	broken, err := VerifyRun(again.Run(), entries)
@@ -287,7 +296,7 @@ func TestNothingFollowsTheDeletedEntry(t *testing.T) {
 func TestABlankedBodyInALiveRunBreaksTheChain(t *testing.T) {
 	ctx := context.Background()
 	st := NewMemStore()
-	w, err := Open(ctx, st, Run{Id: "r"})
+	w, err := Open(ctx, st, Run{Id: 7})
 	require.NoError(t, err)
 	_, err = w.Append(ctx, Entry{Kind: KindUser, Body: "a"}, Entry{Kind: KindReply, Body: "b"})
 	require.NoError(t, err)
@@ -296,11 +305,11 @@ func TestABlankedBodyInALiveRunBreaksTheChain(t *testing.T) {
 	broken, err := VerifyRun(w.Run(), entries)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(1), broken, "an emptied body in an open run breaks the chain at its entry")
-	require.NoError(t, st.Tombstone(ctx, "r"), "a store-level tombstone without the deleted entry")
-	entries, _ = st.Entries(ctx, "r", 0)
+	require.NoError(t, st.Tombstone(ctx, 7), "a store-level tombstone without the deleted entry")
+	entries, _ = st.Entries(ctx, 7, 0)
 	broken, _ = VerifyRun(w.Run(), entries)
 	assert.Equal(t, uint32(1), broken)
-	_, err = Reopen(ctx, st, "r")
+	_, err = Reopen(ctx, st, 7)
 	assert.Error(t, err, "and the run does not reopen")
 }
 
@@ -309,7 +318,7 @@ func TestABlankedBodyInALiveRunBreaksTheChain(t *testing.T) {
 // column round trip with its chain intact.
 func TestAMarkWithACommaIsRefused(t *testing.T) {
 	ctx := context.Background()
-	w, err := Open(ctx, NewMemStore(), Run{Id: "r"})
+	w, err := Open(ctx, NewMemStore(), Run{Id: 7})
 	require.NoError(t, err)
 	_, err = w.Append(ctx, Entry{Kind: KindUser, Body: "x", Label: Label{Origin: []string{"a,b"}}})
 	require.Error(t, err)
@@ -342,7 +351,7 @@ func (inst *blockingStore) Append(ctx context.Context, entries []Entry) error {
 func TestReadersDoNotWaitBehindAnAppend(t *testing.T) {
 	ctx := context.Background()
 	st := &blockingStore{StoreI: NewMemStore(), release: make(chan struct{})}
-	w, err := Open(ctx, st, Run{Id: "r"})
+	w, err := Open(ctx, st, Run{Id: 7})
 	require.NoError(t, err)
 	done := make(chan error, 1)
 	go func() {

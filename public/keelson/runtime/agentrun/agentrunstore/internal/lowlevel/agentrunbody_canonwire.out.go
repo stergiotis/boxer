@@ -522,11 +522,11 @@ func NewCanonWireEncoderAgentrunbodyTable(ra *ReadAccessAgentrunbodyTable, tagge
 func (inst *CanonWireEncoderAgentrunbodyTable) EncodeEntity(entityIdx runtime.EntityIdx, w io.Writer) (err error) {
 	ew := inst.ew
 	ew.Begin()
-	{ // plain section entity-id — s-u64
+	{ // plain section entity-id — u64-u64
 		cw := ew.BeginPlain(common.PlainItemTypeEntityId, 2)
 		{
 			v := inst.ra.EntityId.GetAttrValueId(entityIdx)
-			cw.WriteTextString(v)
+			cw.WriteUint(uint64(v))
 		}
 		{
 			v := inst.ra.EntityId.GetAttrValueOrdinal(entityIdx)

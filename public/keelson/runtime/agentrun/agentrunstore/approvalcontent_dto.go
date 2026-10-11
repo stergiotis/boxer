@@ -4,7 +4,7 @@ package agentrunstore
 // §SD1, vault): the justification given and the payload's content digest.
 type ApprovalContent struct {
 	_             struct{} `kind:"agentrunApprovalContent"`
-	ID            string   `lw:",id"`
+	ID            uint64   `lw:",id"`
 	Justification string   `lw:"agentrunApprovalJustification,textArray,unit"`
 	Digest        string   `lw:"agentrunApprovalDigest,stringArray,unit"`
 }

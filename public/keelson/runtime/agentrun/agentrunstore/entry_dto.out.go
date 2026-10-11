@@ -225,9 +225,6 @@ func entryEmitSectionSymbol[
 	symbolSecAttr_Turn := symbolSec.BeginAttribute(row.Turn)
 	symbolSecAttr_Turn.AddMembershipLowCardRefP(kindAgentrunEntryTurn)
 	symbolSecAttr_Turn.EndAttributeP()
-	symbolSecAttr_WriterRun := symbolSec.BeginAttribute(row.WriterRun)
-	symbolSecAttr_WriterRun.AddMembershipLowCardRefP(kindAgentrunEntryWriterRun)
-	symbolSecAttr_WriterRun.EndAttributeP()
 	symbolSecAttr_WriterTurn := symbolSec.BeginAttribute(row.WriterTurn)
 	symbolSecAttr_WriterTurn.AddMembershipLowCardRefP(kindAgentrunEntryWriterTurn)
 	symbolSecAttr_WriterTurn.EndAttributeP()
@@ -281,6 +278,9 @@ func entryEmitSectionU64Array[
 	u64ArraySecAttr_EntryId := u64ArraySec.BeginAttributeSingle(row.EntryId)
 	u64ArraySecAttr_EntryId.AddMembershipLowCardRefP(kindAgentrunEntryId)
 	u64ArraySecAttr_EntryId.EndAttributeP()
+	u64ArraySecAttr_WriterRun := u64ArraySec.BeginAttributeSingle(row.WriterRun)
+	u64ArraySecAttr_WriterRun.AddMembershipLowCardRefP(kindAgentrunEntryWriterRun)
+	u64ArraySecAttr_WriterRun.EndAttributeP()
 	return
 }
 
@@ -614,9 +614,6 @@ func entryReadRow[
 	var symbolTurnVal string
 	var symbolTurnCount int
 	var symbolTurnLastAttr int64
-	var symbolWriterRunVal string
-	var symbolWriterRunCount int
-	var symbolWriterRunLastAttr int64
 	var symbolWriterTurnVal string
 	var symbolWriterTurnCount int
 	var symbolWriterTurnLastAttr int64
@@ -669,13 +666,6 @@ func entryReadRow[
 				}
 				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				symbolTurnVal = val
-			case kindAgentrunEntryWriterRun:
-				if symbolWriterRunLastAttr != attrJ+1 {
-					symbolWriterRunLastAttr = attrJ + 1
-					symbolWriterRunCount++
-				}
-				val := symbolAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				symbolWriterRunVal = val
 			case kindAgentrunEntryWriterTurn:
 				if symbolWriterTurnLastAttr != attrJ+1 {
 					symbolWriterTurnLastAttr = attrJ + 1
@@ -739,14 +729,6 @@ func entryReadRow[
 	}
 	if symbolTurnCount == 1 {
 		row.Turn = symbolTurnVal
-		present = true
-	}
-	if symbolWriterRunCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "symbol").Str("membership", "agentrunEntryWriterRun").Int("got", symbolWriterRunCount).Errorf("slot symbol@agentrunEntryWriterRun (field WriterRun) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolWriterRunCount)
-		return
-	}
-	if symbolWriterRunCount == 1 {
-		row.WriterRun = symbolWriterRunVal
 		present = true
 	}
 	if symbolWriterTurnCount > 1 {
@@ -884,6 +866,9 @@ func entryReadRow[
 	var u64ArrayEntryIdVal uint64
 	var u64ArrayEntryIdCount int
 	var u64ArrayEntryIdLastAttr int64
+	var u64ArrayWriterRunVal uint64
+	var u64ArrayWriterRunCount int
+	var u64ArrayWriterRunLastAttr int64
 	nu64Array := u64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
 		for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -899,6 +884,17 @@ func entryReadRow[
 					return
 				}
 				u64ArrayEntryIdVal = val
+			case kindAgentrunEntryWriterRun:
+				if u64ArrayWriterRunLastAttr != attrJ+1 {
+					u64ArrayWriterRunLastAttr = attrJ + 1
+					u64ArrayWriterRunCount++
+				}
+				val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "agentrunEntryWriterRun").Str("field", "WriterRun").Errorf("slot u64Array@agentrunEntryWriterRun (field WriterRun) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				u64ArrayWriterRunVal = val
 			}
 		}
 	}
@@ -908,6 +904,14 @@ func entryReadRow[
 	}
 	if u64ArrayEntryIdCount == 1 {
 		row.EntryId = u64ArrayEntryIdVal
+		present = true
+	}
+	if u64ArrayWriterRunCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "agentrunEntryWriterRun").Int("got", u64ArrayWriterRunCount).Errorf("slot u64Array@agentrunEntryWriterRun (field WriterRun) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u64ArrayWriterRunCount)
+		return
+	}
+	if u64ArrayWriterRunCount == 1 {
+		row.WriterRun = u64ArrayWriterRunVal
 		present = true
 	}
 	// --- u32Array. ---

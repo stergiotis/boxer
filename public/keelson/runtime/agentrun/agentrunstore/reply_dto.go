@@ -5,7 +5,7 @@ package agentrunstore
 // the tokens it took.
 type ReplyMeta struct {
 	_            struct{} `kind:"agentrunReply"`
-	ID           string   `lw:",id"`
+	ID           uint64   `lw:",id"`
 	CallId       string   `lw:"agentrunReplyCallId,stringArray,unit"`
 	FinishReason string   `lw:"agentrunReplyFinishReason,symbol"`
 	InputTokens  uint32   `lw:"agentrunReplyInputTokens,u32Array,unit"`

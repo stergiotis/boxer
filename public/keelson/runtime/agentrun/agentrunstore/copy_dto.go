@@ -5,7 +5,7 @@ package agentrunstore
 // whether it reached the clipboard.
 type CopyRecord struct {
 	_         struct{} `kind:"agentrunCopy"`
-	ID        string   `lw:",id"`
+	ID        uint64   `lw:",id"`
 	Digest    string   `lw:"agentrunCopyDigest,stringArray,unit"`
 	Level     uint8    `lw:"agentrunCopyLevel,u8Array,unit"`
 	Tier      uint8    `lw:"agentrunCopyTier,u8Array,unit"`

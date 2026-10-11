@@ -6,7 +6,7 @@ package agentrunstore
 // endorsement's digest and what changed since.
 type Endorsement struct {
 	_        struct{} `kind:"agentrunEndorse"`
-	ID       string   `lw:",id"`
+	ID       uint64   `lw:",id"`
 	Digest   string   `lw:"agentrunEndorseDigest,stringArray,unit"`
 	Epoch    string   `lw:"agentrunEndorseEpoch,stringArray,unit"`
 	Classes  []string `lw:"agentrunEndorseClasses,symbolArray"`

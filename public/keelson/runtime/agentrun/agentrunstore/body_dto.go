@@ -8,7 +8,7 @@ package agentrunstore
 // content are components beside it (ADR-0325 §SD1).
 type BodyRow struct {
 	_       struct{} `kind:"agentrunBody"`
-	ID      string   `lw:",id"`
+	ID      uint64   `lw:",id"`
 	Opening string   `lw:"agentrunBodyOpening,stringArray,unit"`
 	Body    string   `lw:"agentrunBodyText,textArray,unit"`
 	// ArgumentsText is a tool call's arguments when they do not parse as

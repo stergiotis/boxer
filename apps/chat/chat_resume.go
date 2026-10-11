@@ -105,10 +105,17 @@ func (inst *App) resumeRun(id string) {
 			closed := retiring.awaitClosed(wctx)
 			cancel()
 			if !closed {
-				return nil, eb.Build().Str("run", id).Errorf("the run is still being closed; resume it again in a moment")
+				return nil, eb.Build().Str("conversation", id).Errorf("the run is still being closed; resume it again in a moment")
 			}
 		}
-		w, err := agentrun.Reopen(ctx, store, id)
+		of, found, err := agentrun.RunOfConversation(ctx, store, string(ManifestId), id)
+		if err != nil {
+			return
+		}
+		if !found {
+			return nil, eb.Build().Str("conversation", id).Errorf("no run of the conversation")
+		}
+		w, err := agentrun.Reopen(ctx, store, of.Id)
 		if err != nil {
 			return
 		}
@@ -332,7 +339,14 @@ func (inst *App) deleteRun(id string) {
 		ctx = journalCtx(ctx)
 		w := live
 		if w == nil {
-			if w, err = agentrun.Reopen(ctx, store, id); err != nil {
+			of, found, ferr := agentrun.RunOfConversation(ctx, store, string(ManifestId), id)
+			if ferr != nil {
+				return "", ferr
+			}
+			if !found {
+				return "", eb.Build().Str("conversation", id).Errorf("no run of the conversation")
+			}
+			if w, err = agentrun.Reopen(ctx, store, of.Id); err != nil {
 				return
 			}
 		}
@@ -376,7 +390,7 @@ func (inst *App) drainResume() {
 func (inst *App) adopt(r *resumed) {
 	inst.newConversation()
 	conv := inst.conv
-	conv.id, conv.started, conv.startedAt = r.run.Id, true, r.run.Created.UnixMilli()
+	conv.id, conv.started, conv.startedAt = r.run.Conversation, true, r.run.Created.UnixMilli()
 	var settings journalSettings
 	_ = json.Unmarshal([]byte(r.run.Settings), &settings)
 	conv.keep, conv.apps, conv.questions, conv.artefact = settings.Keep, settings.Apps, settings.Questions, settings.Artefact
@@ -552,17 +566,17 @@ func (inst *App) renderRun(i int, r agentrun.Run) {
 		c.Label(r.Created.Local().Format("2006-01-02 15:04") + " · " + strconv.Itoa(int(r.LastOrdinal)) + " entries").Selectable(false).Send()
 	}
 	for range c.HorizontalTop().KeepIter() {
-		for range c.HoverText(r.Id + "\nprofile " + r.Profile + " · " + r.Label.String()).KeepIter() {
-			c.Label(clip(r.Id, 28)).Selectable(false).Send()
+		for range c.HoverText(r.Conversation + "\nrun " + strconv.FormatUint(r.Id, 10) + "\nprofile " + r.Profile + " · " + r.Label.String()).KeepIter() {
+			c.Label(clip(r.Conversation, 28)).Selectable(false).Send()
 		}
-		if r.State != agentrun.StateDeleted && r.Id != inst.conv.id {
+		if r.State != agentrun.StateDeleted && r.Conversation != inst.conv.id {
 			if c.Button(inst.ids.PrepareStr("run-resume-"+key), c.Atoms().Text("Resume").Keep()).Small().SendResp().HasPrimaryClicked() {
-				inst.resumeRun(r.Id)
+				inst.resumeRun(r.Conversation)
 			}
 		}
 		if r.State != agentrun.StateDeleted {
 			if c.Button(inst.ids.PrepareStr("run-delete-"+key), c.Atoms().Text("Delete").Keep()).Small().SendResp().HasPrimaryClicked() {
-				inst.deleteRun(r.Id)
+				inst.deleteRun(r.Conversation)
 			}
 		}
 	}

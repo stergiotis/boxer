@@ -7,7 +7,7 @@ import "time"
 // unattended.
 type GrantRecord struct {
 	_            struct{}  `kind:"agentrunGrant"`
-	ID           string    `lw:",id"`
+	ID           uint64    `lw:",id"`
 	Task         string    `lw:"agentrunGrantTask,textArray,unit"`
 	Handle       string    `lw:"agentrunGrantHandle,stringArray,unit"`
 	HasTerms     bool      `lw:"agentrunGrantHasTerms,bool"`

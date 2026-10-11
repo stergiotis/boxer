@@ -3,12 +3,12 @@ package agentrunstore
 import "time"
 
 // Run is the run row (ADR-0308 §SD1, §SD6): one per run, rewritten by a
-// new row the state view folds latest-wins. ID is the cell-qualified run
-// id. The memberships are the runtime vocabulary's, resolved at generation
+// new row the state view folds latest-wins. ID is the run's tagged id,
+// minted from vocab.IdStreamAgentRun (ADR-0325 §SD5). The memberships are the runtime vocabulary's, resolved at generation
 // time; adding a field means minting its membership first (ADR-0183 D0).
 type Run struct {
 	_             struct{}  `kind:"agentrun"`
-	ID            string    `lw:",id"`
+	ID            uint64    `lw:",id"`
 	Cell          string    `lw:"agentrunCell,runCell"`
 	Conversation  string    `lw:"agentrunConversation,runConversation"`
 	OwnerApp      string    `lw:"runtimeApp,runOwnerApp"`

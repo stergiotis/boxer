@@ -41,7 +41,7 @@ func TestADeleteRefusedWhileAnActionRunsStrandsNothing(t *testing.T) {
 	close(release)
 	require.Eventually(t, func() bool { inst.drain(); return inst.note.text == "copied" }, 5*time.Second, 5*time.Millisecond)
 	assert.False(t, inst.conv.stranded)
-	r, _, _ := store.GetRun(context.Background(), inst.conv.id)
+	r, _, _ := conversationRun(store, inst.conv.id)
 	assert.Equal(t, agentrun.StateOpen, r.State)
 }
 
@@ -50,7 +50,13 @@ type failingDeleteStore struct{ agentrun.StoreI }
 
 var errTombstone = errors.New("the store is read-only today")
 
-func (inst failingDeleteStore) Tombstone(context.Context, string) error { return errTombstone }
+func (inst failingDeleteStore) Tombstone(context.Context, uint64) error { return errTombstone }
+
+// conversationRun reads the run a conversation's id names: chat keys its
+// runs by conversation, the store by run id (ADR-0325 §SD5).
+func conversationRun(store agentrun.StoreI, conversation string) (r agentrun.Run, found bool, err error) {
+	return agentrun.RunOfConversation(context.Background(), store, string(ManifestId), conversation)
+}
 
 // A delete that fails runs nothing after it: the next action that lands
 // well does not strand the conversation, and a turn may start again.
@@ -144,14 +150,14 @@ func TestAResumeWaitsForTheLateClose(t *testing.T) {
 	inst.resumeRun(id)
 	assert.NotContains(t, inst.retiring, id, "the resume took the retired coordinator over")
 	require.Eventually(t, func() bool { inst.drain(); return inst.conv.id == id }, 5*time.Second, 5*time.Millisecond, "resume: %s", inst.note.text)
-	r, _, _ := store.GetRun(context.Background(), id)
+	r, _, _ := conversationRun(store, id)
 	assert.Equal(t, agentrun.StateOpen, r.State)
 	require.True(t, inst.startTurn("q2"))
 	drainUntil(t, inst)
 	last := inst.conv.entries[len(inst.conv.entries)-2]
 	assert.False(t, last.failed, last.reason)
 	time.Sleep(400 * time.Millisecond)
-	r, _, _ = store.GetRun(context.Background(), id)
+	r, _, _ = conversationRun(store, id)
 	assert.Equal(t, agentrun.StateOpen, r.State, "no close landed after the resume")
 }
 
@@ -260,7 +266,7 @@ func TestTheWindowDrainWaitsForTheRunsClose(t *testing.T) {
 	require.True(t, inst.startTurn("q1"))
 	id := inst.conv.id
 	require.Eventually(t, func() bool {
-		r, ok, _ := store.GetRun(context.Background(), id)
+		r, ok, _ := conversationRun(store, id)
 		return ok && r.State == agentrun.StateOpen
 	}, 5*time.Second, 5*time.Millisecond)
 	window.Retire()
@@ -268,6 +274,6 @@ func TestTheWindowDrainWaitsForTheRunsClose(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	require.NoError(t, window.Drain(ctx))
-	r, _, _ := store.GetRun(context.Background(), id)
+	r, _, _ := conversationRun(store, id)
 	assert.Equal(t, agentrun.StateClosed, r.State, "the close landed before the drain ended")
 }

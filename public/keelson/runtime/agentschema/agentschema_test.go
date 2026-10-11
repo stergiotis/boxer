@@ -121,7 +121,7 @@ func TestTheCompiledSQLMatchesItsGolden(t *testing.T) {
 	assert.NotContains(t, hist, "base.`body` AS", "agent_history carries no body")
 	conv, err := WorkerSelect(MyConversation(), scopes)
 	require.NoError(t, err)
-	assert.Contains(t, conv, "AND base.`run` != 'cell/run-1'", "my_conversation leaves the pinned run to my_run")
+	assert.Contains(t, conv, "AND toString(base.`run`) != 'cell/run-1'", "my_conversation leaves the pinned run to my_run")
 	_, err = ServerDDL(Principal{}, relations, scopes)
 	assert.Error(t, err)
 	_, err = ServerDDL(Principal{User: "u\n", Profile: "p"}, relations, scopes)
@@ -175,7 +175,7 @@ func TestEachBackstopIsKeyedOnItsRelation(t *testing.T) {
 		assert.NotContains(t, policies[i], "base.", "a row policy has no alias")
 		assert.True(t, strings.HasSuffix(views[i], " SETTINGS `custom_agent_relation` = '"+r.Name+"'"), views[i])
 	}
-	assert.Contains(t, policies[1], "`run` IN (SELECT `id` FROM `agent_runs` WHERE `conversation` = getSettingOrDefault('custom_agent_conversation', ''))) AND `run` != getSettingOrDefault('custom_agent_run', '')")
+	assert.Contains(t, policies[1], "`run` IN (SELECT `id` FROM `agent_runs` WHERE `conversation` = getSettingOrDefault('custom_agent_conversation', ''))) AND toString(`run`) != getSettingOrDefault('custom_agent_run', '')")
 }
 
 // A scope left unpinned is refused rather than compiled to ”: the view

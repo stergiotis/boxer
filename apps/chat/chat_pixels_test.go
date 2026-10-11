@@ -218,7 +218,7 @@ func TestThePixelsNoteIsNewsOnly(t *testing.T) {
 func TestAViewAfterAStripAttachesAgain(t *testing.T) {
 	coord, _ := pixelRig(t, agent.PixelsCaptures)
 	ctx := context.Background()
-	w, err := agentrun.Open(ctx, agentrun.NewMemStore(), agentrun.Run{Id: "r"})
+	w, err := agentrun.Open(ctx, agentrun.NewMemStore(), agentrun.Run{})
 	require.NoError(t, err)
 	coord.beginPixelTurn()
 	view(t, coord, "screenshot-1.png")
@@ -242,7 +242,7 @@ func TestAViewAfterAStripAttachesAgain(t *testing.T) {
 func TestPixelsMessagesBecomePlaceholders(t *testing.T) {
 	coord, _ := pixelRig(t, agent.PixelsCaptures)
 	ctx := context.Background()
-	w, err := agentrun.Open(ctx, agentrun.NewMemStore(), agentrun.Run{Id: "r"})
+	w, err := agentrun.Open(ctx, agentrun.NewMemStore(), agentrun.Run{})
 	require.NoError(t, err)
 	coord.beginPixelTurn()
 	view(t, coord, "screenshot-1.png")

@@ -281,6 +281,34 @@ The endorsement is [ADR-0311](./0311-labels-integrity-levels-tlp-tiers-marks-and
 §SD3's, not ADR-0316's. SD4, the Surfaces table and the References should
 read ADR-0311.
 
+### 2026-10-11 — SD5 landed, and SD2's run seed with it
+
+- The run id is minted before the row is written, because the seed
+  hashes it: `StoreI.MintRun`, which the SQL store serves from the run
+  store's `MintKey` over a `rowalloc` sequence, `MemStore` from the
+  in-memory stream, and the bus through a `mint` verb. `Open` mints when
+  the run carries no id.
+- `Append` sets each entry's `EntryId` from the entry stream. An entry
+  that already carries one keeps it, so a retried batch does not give one
+  ordinal two ids. The bus's append reply returns the ids.
+- The run seed is the canonical wire item of the run row with only its
+  immutable attributes set, drained by the run store's generated encoder.
+  B2–B5 left it a record digest over the fields, and that change's Update
+  did not say so.
+- The chat window keeps the conversation id as its own key. It finds a
+  conversation's run through `agentrun.RunOfConversation`, which reads the
+  owner's run list, so a conversation whose newest run is past the list
+  bound is not found.
+- A model request names its run (`llm.Request.Run`), and the approval key
+  spells the run in decimal. The `llmcall` trail row's approval is a
+  `foreignKey` to the approval entry's id. Laws L14 and L33 join on that
+  id, and L33 checks that the approval was written in the exit's
+  conversation, read through the approval's run row
+  ([ADR-0312](./0312-exits-sinks-from-the-cell-boundary-approval-tiers-and-exit-budgets.md)'s
+  Update of this date).
+- Where a run id is text — the recalled band, projection's journal
+  table, an agent-schema scope setting — it is the decimal form, and the
+  scope compares its column as text.
 
 ## References
 

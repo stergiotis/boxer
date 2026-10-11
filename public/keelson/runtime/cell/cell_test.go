@@ -100,11 +100,11 @@ func TestTheGuardTreatsTheClearanceAsACeiling(t *testing.T) {
 	_, err = ParseApproval("{")
 	assert.Error(t, err)
 
-	run, ord, ok := ParseApprovalKey(ApprovalKey("chat-a#b", 17))
+	run, ord, ok := ParseApprovalKey(ApprovalKey(1<<63|5, 17))
 	require.True(t, ok)
-	assert.Equal(t, "chat-a#b", run)
+	assert.EqualValues(t, uint64(1<<63|5), run, "a tagged id's high bits survive the key")
 	assert.EqualValues(t, 17, ord)
-	for _, bad := range []string{"", "17", "#17", "run#", "run#0", "run#x"} {
+	for _, bad := range []string{"", "17", "#17", "run#17", "0#17", "5#", "5#0", "5#x"} {
 		_, _, ok = ParseApprovalKey(bad)
 		assert.False(t, ok, bad)
 	}
@@ -112,35 +112,36 @@ func TestTheGuardTreatsTheClearanceAsACeiling(t *testing.T) {
 
 // The exits and approvals the law tests share: GREEN by the route is at
 // the clearance; AMBER by the route under a person's approval of the
-// same run and sink passes; AMBER by the clipboard under a free-path
-// approval does not; an unknown sink is unchecked; AMBER+STRICT under a
-// person's approval is on the wrong path; an approval of another run, or
-// written after the exit, does not count.
+// same conversation and sink passes; AMBER by the clipboard under a
+// free-path approval does not; an unknown sink is unchecked; AMBER+STRICT
+// under a person's approval is on the wrong path; an approval in another
+// conversation, or written after the exit, does not count.
 func lawFixture() (sinks []Sink, exits []ExitRow, approvals []ApprovalEntry) {
 	t0 := time.Date(2026, 10, 11, 9, 0, 0, 0, time.UTC)
 	at := func(minute int) time.Time { return t0.Add(time.Duration(minute) * time.Minute) }
 	sinks = []Sink{{Kind: SinkKindModelRoute, Edge: "r", Clearance: agentrun.TierGreen}, {Kind: SinkKindClipboard, Edge: "clipboard", Clearance: agentrun.TierGreen}}
 	exits = []ExitRow{
-		{Run: "x", Ordinal: 10, CallId: "c10", At: at(10), Sink: SinkKindModelRoute, Edge: "r", Tier: agentrun.TierGreen},
-		{Run: "x", Ordinal: 11, CallId: "c11", At: at(11), Sink: SinkKindModelRoute, Edge: "r", Tier: agentrun.TierAmber, Approval: ApprovalKey("x", 3)},
-		{Run: "x", Ordinal: 12, CallId: "c12", At: at(12), Sink: SinkKindClipboard, Edge: "clipboard", Tier: agentrun.TierAmber, Approval: ApprovalKey("x", 4)},
-		{Run: "x", Ordinal: 13, CallId: "c13", At: at(13), Sink: SinkKindEgress, Edge: "unknown", Tier: agentrun.TierClear},
-		{Run: "x", Ordinal: 14, CallId: "c14", At: at(14), Sink: SinkKindClipboard, Edge: "clipboard", Tier: agentrun.TierAmberStrict, Approval: ApprovalKey("x", 5)},
-		{Run: "x", Ordinal: 15, CallId: "c15", At: at(15), Sink: SinkKindModelRoute, Edge: "r", Tier: agentrun.TierAmber, Approval: ApprovalKey("y", 1)},
-		{Run: "x", Ordinal: 16, CallId: "c16", At: at(16), Sink: SinkKindModelRoute, Edge: "r", Tier: agentrun.TierAmber, Approval: ApprovalKey("x", 20)},
-		{Run: "x", Ordinal: 17, CallId: "c17", At: at(17), Sink: SinkKindModelRoute, Edge: "r", Tier: agentrun.TierAmber},
+		{Conversation: "x", Ordinal: 10, CallId: "c10", At: at(10), Sink: SinkKindModelRoute, Edge: "r", Tier: agentrun.TierGreen},
+		{Conversation: "x", Ordinal: 11, CallId: "c11", At: at(11), Sink: SinkKindModelRoute, Edge: "r", Tier: agentrun.TierAmber, ApprovalEntry: 103},
+		{Conversation: "x", Ordinal: 12, CallId: "c12", At: at(12), Sink: SinkKindClipboard, Edge: "clipboard", Tier: agentrun.TierAmber, ApprovalEntry: 104},
+		{Conversation: "x", Ordinal: 13, CallId: "c13", At: at(13), Sink: SinkKindEgress, Edge: "unknown", Tier: agentrun.TierClear},
+		{Conversation: "x", Ordinal: 14, CallId: "c14", At: at(14), Sink: SinkKindClipboard, Edge: "clipboard", Tier: agentrun.TierAmberStrict, ApprovalEntry: 105},
+		{Conversation: "x", Ordinal: 15, CallId: "c15", At: at(15), Sink: SinkKindModelRoute, Edge: "r", Tier: agentrun.TierAmber, ApprovalEntry: 201},
+		{Conversation: "x", Ordinal: 16, CallId: "c16", At: at(16), Sink: SinkKindModelRoute, Edge: "r", Tier: agentrun.TierAmber, ApprovalEntry: 120},
+		{Conversation: "x", Ordinal: 17, CallId: "c17", At: at(17), Sink: SinkKindModelRoute, Edge: "r", Tier: agentrun.TierAmber},
 		// The trail's counter and the journal's are two counters: a call
 		// whose display id is far below its approval's ordinal is fine
 		// when the approval was written first.
-		{Run: "x", Ordinal: 3, CallId: "c3", At: at(50), Sink: SinkKindModelRoute, Edge: "r", Tier: agentrun.TierAmber, Approval: ApprovalKey("x", 40)},
+		{Conversation: "x", Ordinal: 3, CallId: "c3", At: at(50), Sink: SinkKindModelRoute, Edge: "r", Tier: agentrun.TierAmber, ApprovalEntry: 140},
 	}
+	// Run 1 is conversation x's, run 2 conversation y's.
 	approvals = []ApprovalEntry{
-		{Run: "x", Ordinal: 3, At: at(2), Approval: Approval{Channel: "model-route", Edge: "r", Path: "person"}},
-		{Run: "x", Ordinal: 4, At: at(2), Approval: Approval{Channel: "clipboard", Path: "free"}},
-		{Run: "x", Ordinal: 5, At: at(2), Approval: Approval{Channel: "clipboard", Path: "person"}},
-		{Run: "y", Ordinal: 1, At: at(2), Approval: Approval{Channel: "model-route", Edge: "r", Path: "person"}},
-		{Run: "x", Ordinal: 20, At: at(30), Approval: Approval{Channel: "model-route", Edge: "r", Path: "person"}},
-		{Run: "x", Ordinal: 40, At: at(45), Approval: Approval{Channel: "model-route", Edge: "r", Path: "person"}},
+		{EntryId: 103, Run: 1, Conversation: "x", Ordinal: 3, At: at(2), Approval: Approval{Channel: "model-route", Edge: "r", Path: "person"}},
+		{EntryId: 104, Run: 1, Conversation: "x", Ordinal: 4, At: at(2), Approval: Approval{Channel: "clipboard", Path: "free"}},
+		{EntryId: 105, Run: 1, Conversation: "x", Ordinal: 5, At: at(2), Approval: Approval{Channel: "clipboard", Path: "person"}},
+		{EntryId: 201, Run: 2, Conversation: "y", Ordinal: 1, At: at(2), Approval: Approval{Channel: "model-route", Edge: "r", Path: "person"}},
+		{EntryId: 120, Run: 1, Conversation: "x", Ordinal: 20, At: at(30), Approval: Approval{Channel: "model-route", Edge: "r", Path: "person"}},
+		{EntryId: 140, Run: 1, Conversation: "x", Ordinal: 40, At: at(45), Approval: Approval{Channel: "model-route", Edge: "r", Path: "person"}},
 	}
 	return
 }
@@ -174,28 +175,30 @@ func TestTheExitLawsSQLAgreeWithTheGoChecks(t *testing.T) {
 	rfc := func(at time.Time) string { return at.UTC().Format(time.RFC3339Nano) }
 	var ddl strings.Builder
 	ddl.WriteString("CREATE TABLE sinks (kind String, edge String, clearance String, clearance_rank UInt64) ENGINE = Memory;\n")
-	ddl.WriteString("CREATE TABLE exits (run String, ordinal UInt32, call_id String, at String, sink String, edge String, tier UInt8, approval String) ENGINE = Memory;\n")
-	ddl.WriteString("CREATE TABLE approvals (run String, ordinal UInt32, key String, at_ms Int64, path String, channel String, edge String) ENGINE = Memory;\n")
-	ddl.WriteString("CREATE TABLE llm_calls (conversation String, id UInt32, call_id String, at String, endpoint_host String, tier UInt8, refused Bool, approval String) ENGINE = Memory;\n")
-	ddl.WriteString("CREATE TABLE agent_run_entries (run String, ordinal UInt32, at_ms Int64, kind String, body String) ENGINE = Memory;\n")
+	ddl.WriteString("CREATE TABLE exits (conversation String, ordinal UInt32, call_id String, at String, sink String, edge String, tier UInt8, approval_entry UInt64) ENGINE = Memory;\n")
+	ddl.WriteString("CREATE TABLE approvals (entry_id UInt64, run UInt64, conversation String, ordinal UInt32, at_ms Int64, path String, channel String, edge String) ENGINE = Memory;\n")
+	ddl.WriteString("CREATE TABLE llm_calls (conversation String, id UInt32, call_id String, at String, endpoint_host String, tier UInt8, refused Bool, approval_entry UInt64) ENGINE = Memory;\n")
+	ddl.WriteString("CREATE TABLE agent_run_entries (entry_id UInt64, run UInt64, ordinal UInt32, at_ms Int64, kind String, body String) ENGINE = Memory;\n")
+	ddl.WriteString("CREATE TABLE agent_runs (id UInt64, conversation String) ENGINE = Memory;\n")
+	ddl.WriteString("INSERT INTO agent_runs VALUES (1, 'x'), (2, 'y');\n")
 	for _, s := range sinks {
 		ddl.WriteString("INSERT INTO sinks VALUES ('" + s.Kind.String() + "', '" + s.Edge + "', '" + s.Clearance.String() + "', " + itoa(uint32(s.Clearance)) + ");\n")
 	}
 	for _, e := range exits {
-		ddl.WriteString("INSERT INTO exits VALUES ('" + e.Run + "', " + itoa(e.Ordinal) + ", '" + e.CallId + "', '" + rfc(e.At) + "', '" + e.Sink.String() + "', '" + e.Edge + "', " + itoa(uint32(e.Tier)) + ", '" + e.Approval + "');\n")
+		ddl.WriteString("INSERT INTO exits VALUES ('" + e.Conversation + "', " + itoa(e.Ordinal) + ", '" + e.CallId + "', '" + rfc(e.At) + "', '" + e.Sink.String() + "', '" + e.Edge + "', " + itoa(uint32(e.Tier)) + ", " + u64(e.ApprovalEntry) + ");\n")
 		if e.Sink == SinkKindModelRoute {
-			ddl.WriteString("INSERT INTO llm_calls VALUES ('" + e.Run + "', " + itoa(e.Ordinal) + ", '" + e.CallId + "', '" + rfc(e.At) + "', '" + e.Edge + "', " + itoa(uint32(e.Tier)) + ", false, '" + e.Approval + "');\n")
+			ddl.WriteString("INSERT INTO llm_calls VALUES ('" + e.Conversation + "', " + itoa(e.Ordinal) + ", '" + e.CallId + "', '" + rfc(e.At) + "', '" + e.Edge + "', " + itoa(uint32(e.Tier)) + ", false, " + u64(e.ApprovalEntry) + ");\n")
 		}
 	}
 	// A refused call never left, and a loopback call is inside the cell:
 	// neither is an exit.
-	ddl.WriteString("INSERT INTO llm_calls VALUES ('x', 90, 'c90', '" + rfc(exits[0].At) + "', 'r', 4, true, '');\n")
-	ddl.WriteString("INSERT INTO llm_calls VALUES ('x', 91, 'c91', '" + rfc(exits[0].At) + "', '127.0.0.1:1234', 4, false, '');\n")
+	ddl.WriteString("INSERT INTO llm_calls VALUES ('x', 90, 'c90', '" + rfc(exits[0].At) + "', 'r', 4, true, 0);\n")
+	ddl.WriteString("INSERT INTO llm_calls VALUES ('x', 91, 'c91', '" + rfc(exits[0].At) + "', '127.0.0.1:1234', 4, false, 0);\n")
 	for _, a := range approvals {
 		body, berr := a.Approval.Body()
 		require.NoError(t, berr)
-		ddl.WriteString("INSERT INTO approvals VALUES ('" + a.Run + "', " + itoa(a.Ordinal) + ", '" + a.Key() + "', " + strconv.FormatInt(a.At.UnixMilli(), 10) + ", '" + a.Approval.Path + "', '" + a.Approval.Channel + "', '" + a.Approval.Edge + "');\n")
-		ddl.WriteString("INSERT INTO agent_run_entries VALUES ('" + a.Run + "', " + itoa(a.Ordinal) + ", " + strconv.FormatInt(a.At.UnixMilli(), 10) + ", 'approval', '" + strings.ReplaceAll(body, "'", "\\'") + "');\n")
+		ddl.WriteString("INSERT INTO approvals VALUES (" + u64(a.EntryId) + ", " + u64(a.Run) + ", '" + a.Conversation + "', " + itoa(a.Ordinal) + ", " + strconv.FormatInt(a.At.UnixMilli(), 10) + ", '" + a.Approval.Path + "', '" + a.Approval.Channel + "', '" + a.Approval.Edge + "');\n")
+		ddl.WriteString("INSERT INTO agent_run_entries VALUES (" + u64(a.EntryId) + ", " + u64(a.Run) + ", " + itoa(a.Ordinal) + ", " + strconv.FormatInt(a.At.UnixMilli(), 10) + ", 'approval', '" + strings.ReplaceAll(body, "'", "\\'") + "');\n")
 	}
 	run := func(law string) (ords []string) {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -207,10 +210,12 @@ func TestTheExitLawsSQLAgreeWithTheGoChecks(t *testing.T) {
 	}
 	assert.Equal(t, []string{"12", "13", "17"}, run(L14SQLOver("exits", "sinks", "approvals")))
 	assert.Equal(t, []string{"12", "14", "15", "16", "17"}, run(L33SQLOver("exits", "sinks", "approvals", "("+PolicySQL(DefaultApprovalPolicy())+")")))
-	served := strings.NewReplacer("keelson('llm_calls')", "llm_calls", "keelson('sinks')", "sinks", "keelson('agent_run_entries')", "agent_run_entries")
+	served := strings.NewReplacer("keelson('llm_calls')", "llm_calls", "keelson('sinks')", "sinks", "keelson('agent_run_entries')", "agent_run_entries", "keelson('agent_runs')", "agent_runs")
 	assert.Equal(t, []string{"17"}, run(served.Replace(L14SQL)), "over the served shapes: model-route rows only")
 	assert.Equal(t, []string{"15", "16", "17"}, run(served.Replace(L33SQLFor(DefaultApprovalPolicy()))))
 }
+
+func u64(v uint64) string { return strconv.FormatUint(v, 10) }
 
 func ordinals(rows []ExitRow) (out []uint32) {
 	for _, r := range rows {

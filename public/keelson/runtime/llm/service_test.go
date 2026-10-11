@@ -639,10 +639,10 @@ func TestBytesSentAreTheExitBudgetsQuantity(t *testing.T) {
 // is the test app's unless owners says otherwise.
 type fakeApprovals struct {
 	entries map[string]agentrun.Entry
-	owners  map[string]string
+	owners  map[uint64]string
 }
 
-func (f *fakeApprovals) ApprovalEntry(_ context.Context, run string, ordinal uint32) (e agentrun.Entry, owner string, found bool, err error) {
+func (f *fakeApprovals) ApprovalEntry(_ context.Context, run uint64, ordinal uint32) (e agentrun.Entry, owner string, found bool, err error) {
 	e, found = f.entries[cell.ApprovalKey(run, ordinal)]
 	owner = string(appId)
 	if o, ok := f.owners[run]; ok {
@@ -651,14 +651,17 @@ func (f *fakeApprovals) ApprovalEntry(_ context.Context, run string, ordinal uin
 	return
 }
 
-// plant journals an approval of the refused call for the test.
-func (f *fakeApprovals) plant(t *testing.T, run string, ordinal uint32, callId string, sink string, path string) (key string) {
+// plant journals an approval of the refused call for the test; its entry
+// id is plantedId(run, ordinal).
+func (f *fakeApprovals) plant(t *testing.T, run uint64, ordinal uint32, callId string, sink string, path string) (key string) {
 	t.Helper()
 	rec := cell.Approval{Channel: "model-route", Tier: "AMBER", Path: path, Approver: "person", Justification: "for the report"}.Record()
 	key = cell.ApprovalKey(run, ordinal)
-	f.entries[key] = agentrun.Entry{Run: run, Ordinal: ordinal, Kind: agentrun.KindApproval, Key: callId, Name: sink, Approval: rec}
+	f.entries[key] = agentrun.Entry{Run: run, Ordinal: ordinal, EntryId: plantedId(run, ordinal), Kind: agentrun.KindApproval, Key: callId, Name: sink, Approval: rec}
 	return
 }
+
+func plantedId(run uint64, ordinal uint32) uint64 { return run<<32 | uint64(ordinal) }
 
 // An exit above the clearance that the person may approve comes back as a
 // typed refusal naming the path, the sink and the tier (ADR-0312 §SD3);
@@ -672,7 +675,7 @@ func TestAnApprovedExitGoesThroughAndIsRecorded(t *testing.T) {
 	remote := &fakeProvider{resp: openaichat.CompletionResponse{Content: "x"}}
 	journal := &fakeApprovals{entries: map[string]agentrun.Entry{}}
 	cli, svc, _ := serve(t, Config{Endpoint: "https://api.example.net/v1", Model: "m", Client: remote, Approvals: journal})
-	_, err := cli.Complete(context.Background(), Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Profile: "default@abc", Conversation: "chat-r"})
+	_, err := cli.Complete(context.Background(), Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Profile: "default@abc", Conversation: "chat-r", Run: 1})
 	var refused *RefusedError
 	require.True(t, errors.As(err, &refused), "%v", err)
 	assert.True(t, refused.NeedsApproval())
@@ -680,23 +683,23 @@ func TestAnApprovedExitGoesThroughAndIsRecorded(t *testing.T) {
 	assert.Equal(t, "AMBER", refused.Tier)
 	assert.Contains(t, refused.Reason, "person's recorded justification")
 	assert.Empty(t, remote.seen.Messages)
-	key := journal.plant(t, "chat-r", 17, refused.CallId, refused.Sink, "person")
-	res, err := cli.Complete(context.Background(), Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Approval: key, Profile: "default@abc", Route: "r1", Conversation: "chat-r"})
+	key := journal.plant(t, 1, 17, refused.CallId, refused.Sink, "person")
+	res, err := cli.Complete(context.Background(), Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Approval: key, Profile: "default@abc", Route: "r1", Conversation: "chat-r", Run: 1})
 	require.NoError(t, err)
 	assert.Equal(t, "x", res.Content)
 	calls := svc.Calls()
 	require.Len(t, calls, 2)
 	assert.True(t, calls[0].Refused)
-	assert.Equal(t, key, calls[1].Approval)
+	assert.Equal(t, plantedId(1, 17), calls[1].ApprovalEntry, "the call names the approval entry it went under")
 	assert.Equal(t, "default@abc", calls[1].Profile)
 	assert.Equal(t, "r1", calls[1].Route)
 	assert.EqualValues(t, agentrun.TierAmber, calls[1].Tier)
 	row := RowOf(calls[1], false)
-	assert.Equal(t, key, row.Approval.Val, "the key is on the durable row")
+	assert.Equal(t, plantedId(1, 17), row.Approval.Val, "the entry's id is on the durable row")
 	assert.Equal(t, "default@abc", row.Profile.Val)
 	assert.EqualValues(t, agentrun.TierAmber, row.Tier)
 
-	_, err = cli.Complete(context.Background(), Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Approval: key, Conversation: "chat-r"})
+	_, err = cli.Complete(context.Background(), Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Approval: key, Conversation: "chat-r", Run: 1})
 	require.True(t, errors.As(err, &refused), "%v", err)
 	assert.Contains(t, refused.Reason, "names no call this route refused", "one approval covers one exit")
 
@@ -725,12 +728,12 @@ func TestAManagedCellNeverOpensSealedDataToARemoteRoute(t *testing.T) {
 	managed.Clearances.ModelRoute = agentrun.TierAmber
 	cli, _, _ := serve(t, Config{Endpoint: "https://api.example.net/v1", Model: "m", Client: remote, Cell: &managed, Approvals: journal})
 	var refused *RefusedError
-	_, err := cli.Complete(context.Background(), Request{Sensitivity: queryengine.SensitivityConfined, Messages: msg, Conversation: "chat-r"})
+	_, err := cli.Complete(context.Background(), Request{Sensitivity: queryengine.SensitivityConfined, Messages: msg, Conversation: "chat-r", Run: 1})
 	require.True(t, errors.As(err, &refused), "%v", err)
 	assert.False(t, refused.NeedsApproval(), "the compile-date wall has no approval path")
 	assert.Contains(t, refused.Reason, "sealed data")
 	assert.Empty(t, remote.seen.Messages)
-	_, err = cli.Complete(context.Background(), Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Conversation: "chat-r"})
+	_, err = cli.Complete(context.Background(), Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Conversation: "chat-r", Run: 1})
 	require.NoError(t, err, "labelled AMBER is within the route's clearance")
 
 	trusted := &fakeProvider{resp: openaichat.CompletionResponse{Content: "x"}}
@@ -748,9 +751,9 @@ func TestOneApprovalLetsOutExactlyOneExit(t *testing.T) {
 	journal := &fakeApprovals{entries: map[string]agentrun.Entry{}}
 	cli, _, _ := serve(t, Config{Endpoint: "https://api.example.net/v1", Model: "m", Client: remote, Approvals: journal})
 	var refused *RefusedError
-	_, err := cli.Complete(context.Background(), Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Conversation: "chat-r"})
+	_, err := cli.Complete(context.Background(), Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Conversation: "chat-r", Run: 1})
 	require.True(t, errors.As(err, &refused), "%v", err)
-	key := journal.plant(t, "chat-r", 17, refused.CallId, refused.Sink, "person")
+	key := journal.plant(t, 1, 17, refused.CallId, refused.Sink, "person")
 	const n = 8
 	var wg sync.WaitGroup
 	var through atomic.Int32
@@ -758,7 +761,7 @@ func TestOneApprovalLetsOutExactlyOneExit(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if _, err := cli.Complete(context.Background(), Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Approval: key, Conversation: "chat-r"}); err == nil {
+			if _, err := cli.Complete(context.Background(), Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Approval: key, Conversation: "chat-r", Run: 1}); err == nil {
 				through.Add(1)
 			}
 		}()
@@ -774,7 +777,7 @@ func TestOneApprovalLetsOutExactlyOneExit(t *testing.T) {
 func TestAnApprovalIsBoundToItsRunAndSender(t *testing.T) {
 	msg := []openaichat.Message{{Role: openaichat.ChatRoleUser, Content: "twelve"}}
 	remote := &fakeProvider{resp: openaichat.CompletionResponse{Content: "x"}}
-	journal := &fakeApprovals{entries: map[string]agentrun.Entry{}, owners: map[string]string{"theirs": "other.app"}}
+	journal := &fakeApprovals{entries: map[string]agentrun.Entry{}, owners: map[uint64]string{4: "other.app"}}
 	cli, _, _ := serve(t, Config{Endpoint: "https://api.example.net/v1", Model: "m", Client: remote, Approvals: journal})
 	var refused *RefusedError
 	refuse := func(req Request) (reason string) {
@@ -784,17 +787,17 @@ func TestAnApprovalIsBoundToItsRunAndSender(t *testing.T) {
 		assert.Empty(t, remote.seen.Messages)
 		return refused.Reason
 	}
-	refuse(Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Conversation: "chat-a"})
+	refuse(Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Conversation: "chat-a", Run: 2})
 	callA, sinkA := refused.CallId, refused.Sink
 	assert.NotEmpty(t, refused.Digest, "the refusal names the bytes it refused")
-	elsewhere := journal.plant(t, "chat-b", 5, callA, sinkA, "person")
-	assert.Contains(t, refuse(Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Approval: elsewhere, Conversation: "chat-a"}), "another run")
-	mine := journal.plant(t, "chat-a", 6, callA, sinkA, "person")
-	assert.Contains(t, refuse(Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Approval: mine, Conversation: "chat-b"}), "another run")
-	refuse(Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Conversation: "theirs"})
-	theirs := journal.plant(t, "theirs", 2, refused.CallId, refused.Sink, "person")
-	assert.Contains(t, refuse(Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Approval: theirs, Conversation: "theirs"}), "another app owns")
-	_, err := cli.Complete(context.Background(), Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Approval: mine, Conversation: "chat-a"})
+	elsewhere := journal.plant(t, 3, 5, callA, sinkA, "person")
+	assert.Contains(t, refuse(Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Approval: elsewhere, Conversation: "chat-a", Run: 2}), "another run")
+	mine := journal.plant(t, 2, 6, callA, sinkA, "person")
+	assert.Contains(t, refuse(Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Approval: mine, Conversation: "chat-b", Run: 3}), "another run")
+	refuse(Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Conversation: "theirs", Run: 4})
+	theirs := journal.plant(t, 4, 2, refused.CallId, refused.Sink, "person")
+	assert.Contains(t, refuse(Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Approval: theirs, Conversation: "theirs", Run: 4}), "another app owns")
+	_, err := cli.Complete(context.Background(), Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Approval: mine, Conversation: "chat-a", Run: 2})
 	require.NoError(t, err, "the entry in the request's own run, owned by the sender, lets it go")
 }
 
@@ -853,27 +856,27 @@ func TestAnApprovalThatDoesNotCoverTheExitIsRefused(t *testing.T) {
 		assert.Empty(t, remote.seen.Messages, "nothing left")
 		return refused.Reason
 	}
-	first := refuse(Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Conversation: "chat-r"})
+	first := refuse(Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Conversation: "chat-r", Run: 1})
 	assert.Contains(t, first, "recorded justification")
 	var refused *RefusedError
-	_, err := cli.Complete(context.Background(), Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Conversation: "chat-r"})
+	_, err := cli.Complete(context.Background(), Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Conversation: "chat-r", Run: 1})
 	require.True(t, errors.As(err, &refused))
 
-	other := journal.plant(t, "chat-r", 1, "llm-not-this-call", refused.Sink, "person")
-	assert.Contains(t, refuse(Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Approval: other, Conversation: "chat-r"}), "names no call this route refused")
-	free := journal.plant(t, "chat-r", 2, refused.CallId, refused.Sink, "free")
-	assert.Contains(t, refuse(Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Approval: free, Conversation: "chat-r"}), "not on the person's path")
-	elsewhere := journal.plant(t, "chat-r", 3, refused.CallId, "model-route other.example.net", "person")
-	assert.Contains(t, refuse(Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Approval: elsewhere, Conversation: "chat-r"}), "another sink")
-	good := journal.plant(t, "chat-r", 4, refused.CallId, refused.Sink, "person")
+	other := journal.plant(t, 1, 1, "llm-not-this-call", refused.Sink, "person")
+	assert.Contains(t, refuse(Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Approval: other, Conversation: "chat-r", Run: 1}), "names no call this route refused")
+	free := journal.plant(t, 1, 2, refused.CallId, refused.Sink, "free")
+	assert.Contains(t, refuse(Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Approval: free, Conversation: "chat-r", Run: 1}), "not on the person's path")
+	elsewhere := journal.plant(t, 1, 3, refused.CallId, "model-route other.example.net", "person")
+	assert.Contains(t, refuse(Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Approval: elsewhere, Conversation: "chat-r", Run: 1}), "another sink")
+	good := journal.plant(t, 1, 4, refused.CallId, refused.Sink, "person")
 	changed := []openaichat.Message{{Role: openaichat.ChatRoleUser, Content: "thirteen"}}
-	assert.Contains(t, refuse(Request{Tier: uint8(agentrun.TierAmber), Messages: changed, Approval: good, Conversation: "chat-r"}), "bytes changed")
-	assert.Contains(t, refuse(Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Approval: "17", Conversation: "chat-r"}), "not <run>#<ordinal>")
-	assert.Contains(t, refuse(Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Approval: cell.ApprovalKey("chat-r", 99), Conversation: "chat-r"}), "names no approval entry")
-	assert.Contains(t, refuse(Request{Tier: uint8(agentrun.TierAmberStrict), Messages: msg, Approval: good, Conversation: "chat-r"}), "organisation", "the policy's path decides before the key is read")
+	assert.Contains(t, refuse(Request{Tier: uint8(agentrun.TierAmber), Messages: changed, Approval: good, Conversation: "chat-r", Run: 1}), "bytes changed")
+	assert.Contains(t, refuse(Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Approval: "17", Conversation: "chat-r", Run: 1}), "not <run>#<ordinal>")
+	assert.Contains(t, refuse(Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Approval: cell.ApprovalKey(1, 99), Conversation: "chat-r", Run: 1}), "names no approval entry")
+	assert.Contains(t, refuse(Request{Tier: uint8(agentrun.TierAmberStrict), Messages: msg, Approval: good, Conversation: "chat-r", Run: 1}), "organisation", "the policy's path decides before the key is read")
 
 	unwired, _, _ := serve(t, Config{Endpoint: "https://api.example.net/v1", Model: "m", Client: remote})
-	_, err = unwired.Complete(context.Background(), Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Approval: good, Conversation: "chat-r"})
+	_, err = unwired.Complete(context.Background(), Request{Tier: uint8(agentrun.TierAmber), Messages: msg, Approval: good, Conversation: "chat-r", Run: 1})
 	require.True(t, errors.As(err, &refused), "%v", err)
 	assert.Contains(t, refused.Reason, "cannot be verified")
 	assert.Empty(t, remote.seen.Messages)

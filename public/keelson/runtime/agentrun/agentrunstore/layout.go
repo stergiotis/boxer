@@ -3,6 +3,8 @@ package agentrunstore
 import (
 	"context"
 
+	"github.com/stergiotis/boxer/public/identity/identgen/leased/rowalloc"
+	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 )
@@ -34,9 +36,10 @@ type Stores struct {
 	Entry *EntryStore
 }
 
-// NewStores opens the pair over the layout's tables; the caller closes.
-func NewStores(exec recordstore.ExecutorI, layout Layout) (st Stores) {
-	st.Run = NewRunStore(exec, nil, RunStoreConfig{Table: layout.RunTable()})
+// NewStores opens the pair over the layout's tables, the run store minting
+// its Key from runKeys (nil: it refuses to mint); the caller closes.
+func NewStores(exec recordstore.ExecutorI, layout Layout, runKeys identifier.IdGeneratorI) (st Stores) {
+	st.Run = NewRunStore(exec, nil, RunStoreConfig{Table: layout.RunTable(), Keys: runKeys})
 	st.Entry = NewEntryStore(exec, nil, EntryStoreConfig{Table: layout.EntryTable()})
 	return
 }
@@ -51,12 +54,17 @@ func (inst Stores) Close() {
 	}
 }
 
-// ProvisionIn creates both tables and checks their shape; idempotent. A
-// table an earlier schema created (CREATE TABLE IF NOT EXISTS accepts
-// any shape) fails the check, naming the drift, rather than the first
-// insert.
+// ProvisionIn creates both tables, and the id lease table beside them, and
+// checks their shape; idempotent. A table an earlier schema created
+// (CREATE TABLE IF NOT EXISTS accepts any shape) fails the check, naming
+// the drift, rather than the first insert.
 func ProvisionIn(ctx context.Context, exec recordstore.ExecutorI, layout Layout) (err error) {
-	st := NewStores(exec, layout)
+	// The run and entry ids are leased from the layout database's lease
+	// table (ADR-0319 §SD2, ADR-0325 §SD5).
+	if err = rowalloc.ProvisionIn(ctx, exec, rowalloc.Layout{Database: layout.Database}); err != nil {
+		return eh.Errorf("provision the id lease table: %w", err)
+	}
+	st := NewStores(exec, layout, nil)
 	defer st.Close()
 	if err = st.Run.EnsureTable(ctx); err != nil {
 		return eh.Errorf("ensure run table: %w", err)

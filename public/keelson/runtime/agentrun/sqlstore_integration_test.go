@@ -17,8 +17,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
+	"github.com/stergiotis/boxer/public/identity/identifier"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun/agentrunstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/chexec"
 )
@@ -45,8 +46,12 @@ func TestTheSqlStoreUnderClickhouseLocal(t *testing.T) {
 	defer vault.Close()
 	st := NewVaulted(ledger, vault)
 
-	w, err := Open(ctx, st, Run{Id: "cell/r1", Cell: "cell", Conversation: "c1", OwnerApp: "chat", Coordinator: "w1", Label: Label{Tier: TierGreen}})
+	w, err := Open(ctx, st, Run{Cell: "cell", Conversation: "c1", OwnerApp: "chat", Coordinator: "w1", Label: Label{Tier: TierGreen}})
 	require.NoError(t, err)
+	// The run id is minted from the persisted stream, leased through the
+	// layout's lease table (ADR-0325 §SD5).
+	id := w.Run().Id
+	assert.Equal(t, vocab.IdStreamAgentRun.Value(), identifier.TaggedId(id).GetTag().GetValue())
 	_, err = w.Append(ctx,
 		Entry{Kind: KindUser, Role: "user", Body: "hello", Turn: "t1", Label: Label{Level: LevelPerson}},
 		Entry{Kind: KindRequest, Key: "llm-1", Body: `{"digest":"x"}`, Turn: "t1"},
@@ -54,7 +59,7 @@ func TestTheSqlStoreUnderClickhouseLocal(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, w.Update(ctx, func(r *Run) { r.Fingerprint = "fp"; r.Label = r.Label.Join(Label{Tier: TierAmber}) }))
 
-	got, found, err := st.GetRun(ctx, "cell/r1")
+	got, found, err := st.GetRun(ctx, id)
 	require.NoError(t, err)
 	require.True(t, found)
 	assert.Equal(t, "fp", got.Fingerprint)
@@ -65,7 +70,7 @@ func TestTheSqlStoreUnderClickhouseLocal(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, runs, 1, "latest-wins: one row per run")
 
-	entries, err := st.Entries(ctx, "cell/r1", 0)
+	entries, err := st.Entries(ctx, id, 0)
 	require.NoError(t, err)
 	require.Len(t, entries, 3)
 	assert.Equal(t, []string{"openai"}, entries[2].Label.Origin)
@@ -74,19 +79,19 @@ func TestTheSqlStoreUnderClickhouseLocal(t *testing.T) {
 	require.NoError(t, err)
 	assert.Zero(t, broken, "the chain reads back intact")
 
-	again, err := Reopen(ctx, st, "cell/r1")
+	again, err := Reopen(ctx, st, id)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(3), again.Len())
 	_, err = again.Append(ctx, Entry{Kind: KindTurn, Turn: "t1", Body: "answered"})
 	require.NoError(t, err)
-	from2, err := st.Entries(ctx, "cell/r1", 2)
+	from2, err := st.Entries(ctx, id, 2)
 	require.NoError(t, err)
 	assert.Len(t, from2, 3)
 
 	require.NoError(t, again.Close(ctx, StateClosed))
 	require.NoError(t, again.Resume(ctx))
 	require.NoError(t, again.Delete(ctx, "person"))
-	after, err := st.Entries(ctx, "cell/r1", 0)
+	after, err := st.Entries(ctx, id, 0)
 	require.NoError(t, err)
 	require.Len(t, after, 5)
 	assert.Empty(t, after[0].Body)
@@ -95,7 +100,7 @@ func TestTheSqlStoreUnderClickhouseLocal(t *testing.T) {
 	assert.Equal(t, entries[0].Digest, after[0].Digest)
 	assert.Equal(t, KindDeleted, after[4].Kind)
 	assert.Equal(t, "person", after[4].Name)
-	got, _, err = st.GetRun(ctx, "cell/r1")
+	got, _, err = st.GetRun(ctx, id)
 	require.NoError(t, err)
 	assert.Equal(t, StateDeleted, got.State)
 	assert.Equal(t, "person", got.DeletedBy)
@@ -109,7 +114,7 @@ func TestTheSqlStoreUnderClickhouseLocal(t *testing.T) {
 	freshLedger := NewSqlStore(exec, layout)
 	defer freshLedger.Close()
 	fresh := NewVaulted(freshLedger, vault)
-	reopened, err := Reopen(ctx, fresh, "cell/r1")
+	reopened, err := Reopen(ctx, fresh, id)
 	require.NoError(t, err)
 	assert.Equal(t, StateDeleted, reopened.Run().State)
 	assert.Equal(t, got.Version, reopened.Run().Version)
@@ -118,18 +123,18 @@ func TestTheSqlStoreUnderClickhouseLocal(t *testing.T) {
 	all, err := fresh.AllEntries(ctx)
 	require.NoError(t, err)
 	assert.Len(t, all, 5, "one entry per ordinal across the record")
-	assert.EqualValues(t, 5, rowCount(t, ctx, exec, layout, "cell/r1"), "the ledger never held content, so a deletion adds no row to it")
-	assert.EqualValues(t, 0, bodyCount(t, ctx, exec, layout, "cell/r1"), "the vault rows are destroyed")
-	of, err := fresh.EntriesOf(ctx, []string{"cell/r1", "none"})
+	assert.EqualValues(t, 5, rowCount(t, ctx, exec, layout, id), "the ledger never held content, so a deletion adds no row to it")
+	assert.EqualValues(t, 0, bodyCount(t, ctx, exec, layout, id), "the vault rows are destroyed")
+	of, err := fresh.EntriesOf(ctx, []uint64{id, 1})
 	require.NoError(t, err)
 	assert.Len(t, of, 5)
 }
 
 // rowCount is the raw number of rows the entry table holds for a run,
 // every revision alike.
-func rowCount(t *testing.T, ctx context.Context, exec recordstore.ExecutorI, layout agentrunstore.Layout, run string) (n uint64) {
+func rowCount(t *testing.T, ctx context.Context, exec recordstore.ExecutorI, layout agentrunstore.Layout, run uint64) (n uint64) {
 	t.Helper()
-	for rec, err := range exec.QueryArrow(ctx, "SELECT count() FROM "+layout.EntryTable()+" WHERE "+agentrunstore.EntryColKey+" = "+marshalling.EscapeString(run)) {
+	for rec, err := range exec.QueryArrow(ctx, "SELECT count() FROM "+layout.EntryTable()+" WHERE "+agentrunstore.EntryColKey+" = "+strconv.FormatUint(run, 10)) {
 		require.NoError(t, err)
 		if rec.NumRows() > 0 {
 			n = rec.Column(0).(*array.Uint64).Value(0)
@@ -181,19 +186,19 @@ func TestARunRowThatLagsItsEntriesIsRepaired(t *testing.T) {
 	defer ledger.Close()
 	defer vault.Close()
 	st := NewVaulted(ledger, vault)
-	w, err := Open(ctx, st, Run{Id: "r1", OwnerApp: "chat"})
+	w, err := Open(ctx, st, Run{Id: 11, OwnerApp: "chat"})
 	require.NoError(t, err)
 	_, err = w.Append(ctx, Entry{Kind: KindUser, Body: "one", Label: Label{Tier: TierAmber}})
 	require.NoError(t, err)
 	exec.fail = true
 	_, err = w.Append(ctx, Entry{Kind: KindUser, Body: "two"})
 	require.Error(t, err, "the entries landed and the row did not")
-	r, found, err := st.GetRun(ctx, "r1")
+	r, found, err := st.GetRun(ctx, 11)
 	require.NoError(t, err)
 	require.True(t, found)
 	assert.Equal(t, uint32(2), r.LastOrdinal, "the row is rebuilt from the entry tail")
 	assert.Equal(t, TierAmber, r.Label.Tier)
-	again, err := Reopen(ctx, st, "r1")
+	again, err := Reopen(ctx, st, 11)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(2), again.Len())
 	more, err := again.Append(ctx, Entry{Kind: KindUser, Body: "three"})
@@ -202,7 +207,7 @@ func TestARunRowThatLagsItsEntriesIsRepaired(t *testing.T) {
 	freshLedger := NewSqlStore(local, layout)
 	defer freshLedger.Close()
 	fresh := NewVaulted(freshLedger, vault)
-	r, _, err = fresh.GetRun(ctx, "r1")
+	r, _, err = fresh.GetRun(ctx, 11)
 	require.NoError(t, err)
 	assert.Equal(t, uint32(3), r.LastOrdinal, "the repaired row was written")
 	assert.Equal(t, more[0].Digest, r.Head)
@@ -235,8 +240,8 @@ func leaseStores(t *testing.T) (exec *chexec.LocalExecutor, layout agentrunstore
 func TestTheWriterLease(t *testing.T) {
 	ctx := context.Background()
 	exec, layout, a, b := leaseStores(t)
-	require.NoError(t, a.CreateRun(ctx, Run{Id: "r1", OwnerApp: "chat", State: StateOpen, Version: 1}))
-	r, _, err := b.GetRun(ctx, "r1")
+	require.NoError(t, a.CreateRun(ctx, Run{Id: 11, OwnerApp: "chat", State: StateOpen, Version: 1}))
+	r, _, err := b.GetRun(ctx, 11)
 	require.NoError(t, err)
 	assert.Equal(t, a.Holder.Run, r.Holder)
 	assert.EqualValues(t, 1, r.Epoch)
@@ -244,39 +249,39 @@ func TestTheWriterLease(t *testing.T) {
 	r.Fingerprint, r.Version = "from-b", r.Version+1
 	assert.ErrorIs(t, b.UpdateRun(ctx, r), ErrHeldElsewhere, "a live holder keeps an open run")
 
-	ra, _, err := a.GetRun(ctx, "r1")
+	ra, _, err := a.GetRun(ctx, 11)
 	require.NoError(t, err)
 	ra.State, ra.Version = StateClosed, ra.Version+1
 	require.NoError(t, a.UpdateRun(ctx, ra))
-	got, _, err := NewSqlStore(exec, layout).GetRun(ctx, "r1")
+	got, _, err := NewSqlStore(exec, layout).GetRun(ctx, 11)
 	require.NoError(t, err)
 	assert.Empty(t, got.Holder, "a closed run has no writer")
 
-	rb, _, err := b.GetRun(ctx, "r1")
+	rb, _, err := b.GetRun(ctx, 11)
 	require.NoError(t, err)
 	rb.State, rb.Version = StateOpen, rb.Version+1
 	require.NoError(t, b.UpdateRun(ctx, rb), "a released run is taken over")
-	got, _, err = NewSqlStore(exec, layout).GetRun(ctx, "r1")
+	got, _, err = NewSqlStore(exec, layout).GetRun(ctx, 11)
 	require.NoError(t, err)
 	assert.Equal(t, b.Holder.Run, got.Holder)
 	assert.EqualValues(t, 2, got.Epoch)
 
-	ra, _, err = a.GetRun(ctx, "r1")
+	ra, _, err = a.GetRun(ctx, 11)
 	require.NoError(t, err)
 	ra.Fingerprint, ra.Version = "from-a", ra.Version+1
 	assert.ErrorIs(t, a.UpdateRun(ctx, ra), ErrHeldElsewhere, "the first holder is now the one refused")
 
 	a.Liveness = deadLiveness{}
-	ra, _, err = a.GetRun(ctx, "r1")
+	ra, _, err = a.GetRun(ctx, 11)
 	require.NoError(t, err)
 	ra.Fingerprint, ra.Version = "from-a", ra.Version+1
 	require.NoError(t, a.UpdateRun(ctx, ra), "a holder that no longer runs is taken over")
-	got, _, err = NewSqlStore(exec, layout).GetRun(ctx, "r1")
+	got, _, err = NewSqlStore(exec, layout).GetRun(ctx, 11)
 	require.NoError(t, err)
 	assert.Equal(t, a.Holder.Run, got.Holder)
 	assert.EqualValues(t, 3, got.Epoch)
 	assert.Equal(t, "from-a", got.Fingerprint)
-	assert.EqualValues(t, 1, runRowCount(t, ctx, exec, layout, "r1"), "one row per run, rewritten in place")
+	assert.EqualValues(t, 1, runRowCount(t, ctx, exec, layout, 11), "one row per run, rewritten in place")
 }
 
 // takeoverBeforeInsert runs a takeover once, just before the next insert
@@ -318,13 +323,13 @@ func TestABatchInFlightAtATakeoverLosesItsOrdinals(t *testing.T) {
 	// The host's shape (ADR-0320 §SD1): a ledger under a vault.
 	a, b := NewVaulted(ledgerA, vault(exec)), NewVaulted(ledgerB, vault(local))
 
-	wa, err := Open(ctx, a, Run{Id: "r1", OwnerApp: "chat"})
+	wa, err := Open(ctx, a, Run{Id: 11, OwnerApp: "chat"})
 	require.NoError(t, err)
 	_, err = wa.Append(ctx, Entry{Kind: KindUser, Role: "user", Body: "one"})
 	require.NoError(t, err)
 
 	exec.run = func() {
-		wb, rerr := Reopen(ctx, b, "r1")
+		wb, rerr := Reopen(ctx, b, 11)
 		require.NoError(t, rerr)
 		_, aerr := wb.Append(ctx, Entry{Kind: KindUser, Role: "user", Body: "two, from b"})
 		require.NoError(t, aerr, "the dead holder's run is taken over and written")
@@ -335,10 +340,10 @@ func TestABatchInFlightAtATakeoverLosesItsOrdinals(t *testing.T) {
 	freshLedger := NewSqlStore(local, layout)
 	defer freshLedger.Close()
 	fresh := NewVaulted(freshLedger, vault(local))
-	r, _, err := fresh.GetRun(ctx, "r1")
+	r, _, err := fresh.GetRun(ctx, 11)
 	require.NoError(t, err)
 	assert.Equal(t, ledgerB.Holder.Run, r.Holder)
-	entries, err := fresh.Entries(ctx, "r1", 0)
+	entries, err := fresh.Entries(ctx, 11, 0)
 	require.NoError(t, err)
 	require.Len(t, entries, 2)
 	assert.Equal(t, "two, from b", entries[1].Body, "the new holder's revision wins the ordinal")
@@ -348,9 +353,9 @@ func TestABatchInFlightAtATakeoverLosesItsOrdinals(t *testing.T) {
 }
 
 // runRowCount is the raw number of rows the run table holds for a run.
-func runRowCount(t *testing.T, ctx context.Context, exec recordstore.ExecutorI, layout agentrunstore.Layout, run string) (n uint64) {
+func runRowCount(t *testing.T, ctx context.Context, exec recordstore.ExecutorI, layout agentrunstore.Layout, run uint64) (n uint64) {
 	t.Helper()
-	for rec, err := range exec.QueryArrow(ctx, "SELECT count() FROM "+layout.RunTable()+" WHERE "+agentrunstore.RunColKey+" = "+marshalling.EscapeString(run)) {
+	for rec, err := range exec.QueryArrow(ctx, "SELECT count() FROM "+layout.RunTable()+" WHERE "+agentrunstore.RunColKey+" = "+strconv.FormatUint(run, 10)) {
 		require.NoError(t, err)
 		if rec.NumRows() > 0 {
 			n = rec.Column(0).(*array.Uint64).Value(0)
@@ -361,9 +366,9 @@ func runRowCount(t *testing.T, ctx context.Context, exec recordstore.ExecutorI, 
 }
 
 // bodyCount is the raw number of vault rows for a run.
-func bodyCount(t *testing.T, ctx context.Context, exec recordstore.ExecutorI, layout agentrunstore.Layout, run string) (n uint64) {
+func bodyCount(t *testing.T, ctx context.Context, exec recordstore.ExecutorI, layout agentrunstore.Layout, run uint64) (n uint64) {
 	t.Helper()
-	for rec, err := range exec.QueryArrow(ctx, "SELECT count() FROM "+layout.BodyTable()+" WHERE "+agentrunstore.BodyRowColKey+" = "+marshalling.EscapeString(run)) {
+	for rec, err := range exec.QueryArrow(ctx, "SELECT count() FROM "+layout.BodyTable()+" WHERE "+agentrunstore.BodyRowColKey+" = "+strconv.FormatUint(run, 10)) {
 		require.NoError(t, err)
 		if rec.NumRows() > 0 {
 			n = rec.Column(0).(*array.Uint64).Value(0)
@@ -371,6 +376,49 @@ func bodyCount(t *testing.T, ctx context.Context, exec recordstore.ExecutorI, la
 		rec.Release()
 	}
 	return
+}
+
+// Two stores over one database, as two processes would hold them, mint
+// run and entry ids that never collide: each leases its own blocks
+// through the one lease table (ADR-0319 §SD3, ADR-0325 §SD5).
+func TestTwoStoresMintDistinctIds(t *testing.T) {
+	ctx := context.Background()
+	exec, err := chexec.NewLocalExecutor(filepath.Join(t.TempDir(), "chdb"), memory.NewGoAllocator())
+	if err != nil {
+		t.Skipf("clickhouse-local unavailable: %v", err)
+	}
+	layout := agentrunstore.Layout{Database: "artest"}
+	require.NoError(t, agentrunstore.ProvisionIn(ctx, exec, layout))
+	a, b := NewSqlStore(exec, layout), NewSqlStore(exec, layout)
+	defer a.Close()
+	defer b.Close()
+	runs := map[uint64]bool{}
+	entries := map[uint64]bool{}
+	var first uint64
+	for i := 0; i < 3; i++ {
+		for _, st := range []*SqlStore{a, b} {
+			w, oerr := Open(ctx, st, Run{OwnerApp: "chat", Conversation: "c" + strconv.Itoa(i)})
+			require.NoError(t, oerr)
+			require.False(t, runs[w.Run().Id], "run id %d minted twice", w.Run().Id)
+			runs[w.Run().Id] = true
+			if first == 0 {
+				first = w.Run().Id
+			}
+			written, aerr := w.Append(ctx, Entry{Kind: KindUser, Role: "user", Body: "x"}, Entry{Kind: KindTurn, TurnEnd: &TurnState{State: "answered"}})
+			require.NoError(t, aerr)
+			for _, e := range written {
+				require.NotZero(t, e.EntryId)
+				require.False(t, entries[e.EntryId], "entry id %d minted twice", e.EntryId)
+				entries[e.EntryId] = true
+			}
+		}
+	}
+	back, err := a.Entries(ctx, first, 0)
+	require.NoError(t, err)
+	require.Len(t, back, 2)
+	for _, e := range back {
+		assert.True(t, entries[e.EntryId], "an entry reads back with the id it was written under")
+	}
 }
 
 // The run list reads newest first and stops at the bound in the statement,
@@ -387,11 +435,11 @@ func TestTheRunListIsNewestFirstAndBounded(t *testing.T) {
 	defer st.Close()
 	base := time.Date(2026, 10, 11, 12, 0, 0, 0, time.UTC)
 	for i, owner := range []string{"chat", "other", "chat", "chat"} {
-		require.NoError(t, st.CreateRun(ctx, Run{Id: "r" + strconv.Itoa(i), OwnerApp: owner, State: StateOpen, Created: base.Add(time.Duration(i) * time.Minute)}))
+		require.NoError(t, st.CreateRun(ctx, Run{Id: uint64(10 + i), OwnerApp: owner, State: StateOpen, Created: base.Add(time.Duration(i) * time.Minute)}))
 	}
 	fresh := NewSqlStore(exec, layout)
 	defer fresh.Close()
-	ids := func(owner string, limit int) (out []string) {
+	ids := func(owner string, limit int) (out []uint64) {
 		runs, lerr := fresh.ListRuns(ctx, owner, limit)
 		require.NoError(t, lerr)
 		for _, r := range runs {
@@ -399,9 +447,9 @@ func TestTheRunListIsNewestFirstAndBounded(t *testing.T) {
 		}
 		return
 	}
-	assert.Equal(t, []string{"r3", "r2", "r1", "r0"}, ids("", 0))
-	assert.Equal(t, []string{"r3", "r2"}, ids("chat", 2))
-	assert.Equal(t, []string{"r1"}, ids("other", 0))
+	assert.Equal(t, []uint64{13, 12, 11, 10}, ids("", 0))
+	assert.Equal(t, []uint64{13, 12}, ids("chat", 2))
+	assert.Equal(t, []uint64{11}, ids("other", 0))
 }
 
 // A journal table an earlier schema created is not accepted silently:

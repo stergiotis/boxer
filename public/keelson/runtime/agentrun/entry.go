@@ -14,9 +14,9 @@ import (
 // its kind and what the kind carries, its label, and the chain digest that
 // commits it to everything before it (ADR-0314 §SD1).
 type Entry struct {
-	// Run is the cell-qualified run id and Ordinal the entry's place in
-	// it, assigned by the run's single writer, contiguous from 1.
-	Run     string
+	// Run is the run's tagged id (ADR-0325 §SD5) and Ordinal the entry's
+	// place in it, assigned by the run's single writer, contiguous from 1.
+	Run     uint64
 	Ordinal uint32
 	// At is when the entry was written, for the person; the ordinal is the
 	// order.
@@ -99,7 +99,7 @@ type Entry struct {
 	// Writer is the run, turn and ordinal that wrote a body a model
 	// produced, kept as plaintext metadata beside it so re-entry is
 	// detected (ADR-0311 §SD4); empty for the person's and the host's.
-	WriterRun     string
+	WriterRun     uint64
 	WriterTurn    string
 	WriterOrdinal uint32
 	// Prev is the predecessor's ordinal and Digest the chain digest over
@@ -166,7 +166,7 @@ func (inst Entry) Digested() (e Entry, err error) {
 	if e.Calls != "" {
 		var ok bool
 		if e.Calls, ok = canonicalJSON(e.Calls); !ok {
-			return e, eb.Build().Str("run", e.Run).Errorf("the calls are not JSON")
+			return e, eb.Build().Uint64("run", e.Run).Errorf("the calls are not JSON")
 		}
 	}
 	if e.Arguments != "" {
@@ -260,7 +260,7 @@ func ContentDigest(body string) string {
 // so two spellings of the same arguments are one digest. Arguments that do
 // not parse are hashed as the text they are.
 func ArgumentsDigest(args string) (digest string, err error) {
-	item, err := hasher.VaultItem("", 0, func(b *agentrunstore.BodyRowEntityBuilder) error {
+	item, err := hasher.VaultItem(0, 0, func(b *agentrunstore.BodyRowEntityBuilder) error {
 		return fillVault(b, Body{Arguments: args}, false)
 	})
 	if err != nil {
@@ -320,27 +320,29 @@ func Verify(runDigest string, entries []Entry) (broken uint32, err error) {
 // VerifyRun is Verify from the run row: the row's digest must be the seed
 // its canonical fields reproduce, and the chain must hold from it.
 func VerifyRun(r Run, entries []Entry) (broken uint32, err error) {
-	if r.Digest != RunDigestSeed(r) {
-		err = eb.Build().Str("run", r.Id).Errorf("the run row's digest is not its seed")
+	seed, err := RunDigestSeed(r)
+	if err != nil {
+		return
+	}
+	if r.Digest != seed {
+		err = eb.Build().Uint64("run", r.Id).Errorf("the run row's digest is not its seed")
 		return
 	}
 	return Verify(r.Digest, entries)
 }
 
 // RunDigestSeed is the run row's own digest, the first predecessor of its
-// chain: over the run's id and the run row's immutable fields, as the
-// store holds them (the owner is the sender the service saw).
-func RunDigestSeed(r Run) string {
-	h := digester.NewRecord()
-	_, _ = h.Write([]byte("run\x00" + r.Id + "\x00" + r.Conversation + "\x00" + r.OwnerApp + "\x00" + r.Coordinator + "\x00" + r.Cell + "\x00" + timeText(r.Created)))
-	return hex.EncodeToString(h.Sum(nil))
-}
-
-// timeText is the instant as the canonical form spells it; the zero time
-// is empty.
-func timeText(t time.Time) string {
-	if t.IsZero() {
-		return ""
+// chain: over the canonical wire item of the run row with only its
+// immutable attributes set — the id, the cell, the conversation, the
+// owner, the coordinator and the creation instant, as the store holds
+// them (the owner is the sender the service saw; ADR-0325 §SD2).
+func RunDigestSeed(r Run) (seed string, err error) {
+	item, err := hasher.RunItem(agentrunstore.Run{ID: r.Id, Cell: r.Cell, Conversation: r.Conversation, OwnerApp: r.OwnerApp,
+		Coordinator: r.Coordinator, Created: utc(r.Created)})
+	if err != nil {
+		return "", eb.Build().Uint64("run", r.Id).Errorf("run seed: %w", err)
 	}
-	return t.UTC().Format(time.RFC3339Nano)
+	h := digester.NewRecord()
+	_, _ = h.Write(item)
+	return hex.EncodeToString(h.Sum(nil)), nil
 }

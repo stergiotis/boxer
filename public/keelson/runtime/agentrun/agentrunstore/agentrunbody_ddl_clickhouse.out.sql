@@ -1,7 +1,7 @@
 CREATE DATABASE IF NOT EXISTS boxer;
 
 CREATE TABLE IF NOT EXISTS boxer.agentrunbody (
-	"id:id:s:4::0:" String CODEC(ZSTD(3)),
+	"id:id:u64:4::0:" UInt64 CODEC(ZSTD(3)),
 	"id:ordinal:u64:47::0:" UInt64 CODEC(Delta,ZSTD(3)),
 	"tv:textArray:value:val:sh:5::7:0::data" Array(String) CODEC(ZSTD(12)),
 	"tv:textArray:hr:hr:u64:47:::0::data" Array(UInt64) CODEC(Delta,ZSTD(3)),
@@ -272,5 +272,5 @@ CREATE TABLE IF NOT EXISTS boxer.agentrunbody (
 	"tv:emptyArray:lmrcard:lmrcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3)),
 	"tv:emptyArray:lmvcard:lmvcard:u64:4E:::0::data" Array(UInt64) CODEC(T64,ZSTD(3))
 ) ENGINE = MergeTree()
-ORDER BY ("id:id:s:4::0:", "id:ordinal:u64:47::0:")
+ORDER BY ("id:id:u64:4::0:", "id:ordinal:u64:47::0:")
 SETTINGS allow_suspicious_low_cardinality_types=1

@@ -110,7 +110,8 @@ func TestAnExitAboveTheClearanceAsksThePerson(t *testing.T) {
 	require.Len(t, refused, 1)
 	assert.Equal(t, refused[0].CallId, approvals[0].Key, "the approval names the refused call")
 	require.Len(t, sent, 1)
-	assert.Equal(t, cell.ApprovalKey(w.Run().Id, approvals[0].Ordinal), sent[0].Approval, "the row names the approval entry (L33)")
+	assert.Equal(t, approvals[0].EntryId, sent[0].ApprovalEntry, "the row names the approval entry (L33)")
+	assert.NotZero(t, sent[0].ApprovalEntry)
 	assert.EqualValues(t, agentrun.TierAmber, sent[0].Tier)
 	assert.Contains(t, sent[0].Profile, "default@")
 
@@ -166,7 +167,7 @@ func TestAnApprovalStandsForTheTurn(t *testing.T) {
 	for _, c := range svc.Calls() {
 		if c.Purpose == purpose && !c.Refused {
 			sent++
-			assert.NotEmpty(t, c.Approval)
+			assert.NotZero(t, c.ApprovalEntry)
 		}
 	}
 	assert.Equal(t, 2, sent)

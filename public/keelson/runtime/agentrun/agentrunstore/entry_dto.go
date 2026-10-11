@@ -4,7 +4,7 @@ import "time"
 
 // Entry is one ledger entry (ADR-0308 §SD2): appended, never rewritten; a
 // tombstone appends the entry at its next revision, which the reads keep
-// over the original (§SD8). ID is the run id; the envelope's ordinal is
+// over the original (§SD8). ID is the run id (ADR-0325 §SD5); the envelope's ordinal is
 // the entry's. The fields sit on the boxer.facts data sections in the
 // trail's spelling (plan002 B0), told apart by their membership ids. The
 // content is not here: it is the vault's (ADR-0320 §SD1), and
@@ -14,7 +14,7 @@ import "time"
 // index. The records an entry carries beside are components of their own.
 type Entry struct {
 	_                    struct{}  `kind:"agentrunEntry"`
-	ID                   string    `lw:",id"`
+	ID                   uint64    `lw:",id"`
 	At                   time.Time `lw:"agentrunEntryAt,timeArray,unit"`
 	Kind                 string    `lw:"agentrunEntryKind,symbol"`
 	Key                  string    `lw:"agentrunEntryKey,stringArray,unit"`
@@ -32,7 +32,7 @@ type Entry struct {
 	LabelTier            uint8     `lw:"agentrunEntryLabelTier,u8Array,unit"`
 	LabelExposure        []string  `lw:"agentrunEntryLabelExposure,symbolArray"`
 	LabelOrigin          []string  `lw:"agentrunEntryLabelOrigin,symbolArray"`
-	WriterRun            string    `lw:"agentrunEntryWriterRun,symbol"`
+	WriterRun            uint64    `lw:"agentrunEntryWriterRun,u64Array,unit"`
 	WriterTurn           string    `lw:"agentrunEntryWriterTurn,symbol"`
 	WriterOrdinal        uint32    `lw:"agentrunEntryWriterOrdinal,u32Array,unit"`
 	Prev                 uint32    `lw:"agentrunEntryPrev,u32Array,unit"`

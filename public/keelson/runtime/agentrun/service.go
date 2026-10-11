@@ -32,7 +32,7 @@ type Service struct {
 	// handlers on the publisher's goroutine, so two writers on one run
 	// would otherwise race through the invariant checks.
 	locksMu sync.Mutex
-	locks   map[string]*sync.Mutex
+	locks   map[uint64]*sync.Mutex
 }
 
 // DefaultTimeout bounds a store call behind the service and a client's
@@ -45,7 +45,7 @@ func NewService(bus *inprocbus.Inst, log zerolog.Logger, store StoreI) (s *Servi
 		err = eh.Errorf("nil bus or store")
 		return
 	}
-	s = &Service{store: store, log: log.With().Str("app", string(ServiceAppId)).Logger(), Timeout: DefaultTimeout, locks: make(map[string]*sync.Mutex)}
+	s = &Service{store: store, log: log.With().Str("app", string(ServiceAppId)).Logger(), Timeout: DefaultTimeout, locks: make(map[uint64]*sync.Mutex)}
 	s.busClient = bus.NewClient(ServiceAppId, ServiceCaps())
 	if s.unsub, err = s.busClient.Subscribe(SubjectAll, s.handle); err != nil {
 		_ = s.busClient.Close()
@@ -74,6 +74,13 @@ func (inst *Service) handle(msg *app.Msg) {
 	defer cancel()
 	owner := string(msg.Sender)
 	switch msg.Subject {
+	case SubjectMint:
+		id, err := inst.store.MintRun(ctx)
+		if err != nil {
+			inst.reply(msg.Reply, wireMintReply{wireAck: wireAck{V: wireVersion, Reason: err.Error()}})
+			return
+		}
+		inst.reply(msg.Reply, wireMintReply{wireAck: wireAck{V: wireVersion, Ok: true}, Id: id})
 	case SubjectCreate:
 		req, err := decode[wireRunRequest](msg.Payload)
 		if err != nil {
@@ -84,7 +91,10 @@ func (inst *Service) handle(msg *app.Msg) {
 		// The owner is the sender, whatever the request says, and the
 		// seed digest follows the row as stored.
 		r.OwnerApp = owner
-		r.Digest = RunDigestSeed(r)
+		if r.Digest, err = RunDigestSeed(r); err != nil {
+			inst.reply(msg.Reply, wireAck{V: wireVersion, Reason: err.Error()})
+			return
+		}
 		r.Head, r.LastOrdinal = r.Digest, 0
 		if r.State == StateUnspecified {
 			r.State = StateOpen
@@ -159,18 +169,26 @@ func (inst *Service) handle(msg *app.Msg) {
 			entries = append(entries, entryOfWire(w))
 		}
 		if len(entries) == 0 {
-			inst.ack(msg.Reply, nil)
+			inst.reply(msg.Reply, wireAppendReply{wireAck: wireAck{V: wireVersion, Ok: true}})
 			return
 		}
 		unlock := inst.lockRun(entries[0].Run)
 		if why := inst.appendable(ctx, entries, owner); why != "" {
 			unlock()
-			inst.reply(msg.Reply, wireAck{V: wireVersion, Reason: why})
+			inst.reply(msg.Reply, wireAppendReply{wireAck: wireAck{V: wireVersion, Reason: why}})
 			return
 		}
 		err = inst.store.Append(ctx, entries)
 		unlock()
-		inst.ack(msg.Reply, err)
+		if err != nil {
+			inst.reply(msg.Reply, wireAppendReply{wireAck: wireAck{V: wireVersion, Reason: err.Error()}})
+			return
+		}
+		rep := wireAppendReply{wireAck: wireAck{V: wireVersion, Ok: true}, EntryIds: make([]uint64, 0, len(entries))}
+		for _, e := range entries {
+			rep.EntryIds = append(rep.EntryIds, e.EntryId)
+		}
+		inst.reply(msg.Reply, rep)
 	case SubjectEntries:
 		req, err := decode[wireIdRequest](msg.Payload)
 		if err != nil {
@@ -240,7 +258,7 @@ func (inst *Service) handle(msg *app.Msg) {
 }
 
 // lockRun takes the run's lock and returns its release.
-func (inst *Service) lockRun(id string) (unlock func()) {
+func (inst *Service) lockRun(id uint64) (unlock func()) {
 	inst.locksMu.Lock()
 	l, ok := inst.locks[id]
 	if !ok {
@@ -254,7 +272,7 @@ func (inst *Service) lockRun(id string) (unlock func()) {
 
 // owned is the run row when the sender may touch it, else why not: it
 // does not exist or is another app's.
-func (inst *Service) owned(ctx context.Context, id string, owner string) (r Run, why string) {
+func (inst *Service) owned(ctx context.Context, id uint64, owner string) (r Run, why string) {
 	r, found, err := inst.store.GetRun(ctx, id)
 	switch {
 	case err != nil:

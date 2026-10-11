@@ -41,9 +41,11 @@ func ParseState(s string) (st StateE, ok bool) {
 // owner and state, the fingerprint it is pinned to, the settings fixed at
 // the first send, and its current label.
 type Run struct {
-	// Id is the cell-qualified run id; Cell names the cell that minted
-	// it, so a synced run keeps its writer's ordinals (§SD1).
-	Id   string
+	// Id is the run's tagged id, minted by the store from
+	// vocab.IdStreamAgentRun (ADR-0325 §SD5); zero until minted. Cell
+	// names the cell the run was written in, so a synced run keeps its
+	// writer's ordinals (§SD1).
+	Id   uint64
 	Cell string
 	// Conversation is the owner app's id for the conversation; OwnerApp
 	// the app and Coordinator the window that writes the run.

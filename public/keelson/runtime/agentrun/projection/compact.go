@@ -210,7 +210,7 @@ func PlanCompaction(entries []agentrun.Entry, order Order, c Constants, reported
 	// entry's; the summary as the entry holds it, not as the request
 	// carries it in band.
 	var cut uint32
-	run := ""
+	var run uint64
 	for _, e := range es {
 		run = e.Run
 		if e.Kind == agentrun.KindCompact {
@@ -269,7 +269,7 @@ func PlanCompaction(entries []agentrun.Entry, order Order, c Constants, reported
 			pieces[m.Ordinal] = elidePiece(m, c.ElideMinBytes)
 		}
 	}
-	band := messageTokens(Message{Content: Recalled("self", run, 0, "")})
+	band := messageTokens(Message{Content: Recalled("self", RunText(run), 0, "")})
 	var summarise Plan
 	for _, s := range starts {
 		q := Plan{Cut: s, From: cut, Previous: previous, Label: label, Estimated: p.Estimated}

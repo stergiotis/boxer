@@ -129,6 +129,21 @@ type llmCallBoolSecI[Attr any, Ent any] interface {
 	EndSection() Ent
 }
 
+// llmCallForeignKeyAttrI is the InAttr-side view of the foreignKey section. P-variants only —
+// every method returns void so no F-bounded `[Self]` parameter is
+// needed.
+type llmCallForeignKeyAttrI interface {
+	dmlruntime.InAttributeMembershipLowCardRefPI
+	EndAttributeP()
+}
+
+// llmCallForeignKeySecI is the Section-side view: opens an attribute and closes
+// the section. Attr and Ent are bound at the call site by inference.
+type llmCallForeignKeySecI[Attr any, Ent any] interface {
+	BeginAttribute(value uint64) Attr
+	EndSection() Ent
+}
+
 // llmCallEntityI is the entity-builder surface llmCallAddSections drives.
 // It always lists the per-section getters; the entity-frame methods
 // (BeginEntity / plain setters / CommitEntity) are added only for the
@@ -147,6 +162,8 @@ type llmCallEntityI[
 	U64ArraySec llmCallU64ArraySecI[U64ArrayAttr, Ent],
 	BoolAttr llmCallBoolAttrI,
 	BoolSec llmCallBoolSecI[BoolAttr, Ent],
+	ForeignKeyAttr llmCallForeignKeyAttrI,
+	ForeignKeySec llmCallForeignKeySecI[ForeignKeyAttr, Ent],
 	Ent any,
 ] interface {
 	GetSectionSymbol() SymbolSec
@@ -154,6 +171,7 @@ type llmCallEntityI[
 	GetSectionU32Array() U32ArraySec
 	GetSectionU64Array() U64ArraySec
 	GetSectionBool() BoolSec
+	GetSectionForeignKey() ForeignKeySec
 }
 
 // llmCallEmitSectionSymbol writes this kind's symbol attributes into an
@@ -244,11 +262,6 @@ func llmCallEmitSectionStringArray[
 	stringArraySecAttr_HistoryHash := stringArraySec.BeginAttributeSingle(row.HistoryHash)
 	stringArraySecAttr_HistoryHash.AddMembershipLowCardRefP(kindLlmCallHistoryHash)
 	stringArraySecAttr_HistoryHash.EndAttributeP()
-	if row.Approval.Has {
-		stringArraySecAttr_Approval := stringArraySec.BeginAttributeSingle(row.Approval.Val)
-		stringArraySecAttr_Approval.AddMembershipLowCardRefP(kindLlmCallApproval)
-		stringArraySecAttr_Approval.EndAttributeP()
-	}
 	if len(row.Error) > 0 {
 		stringArraySecAttr_Error := stringArraySec.BeginAttribute()
 		for _, v := range row.Error {
@@ -360,6 +373,23 @@ func llmCallEmitSectionBool[
 	return
 }
 
+// llmCallEmitSectionForeignKey writes this kind's foreignKey attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func llmCallEmitSectionForeignKey[
+	ForeignKeyAttr llmCallForeignKeyAttrI,
+	ForeignKeySec llmCallForeignKeySecI[ForeignKeyAttr, Ent],
+	Ent any,
+](foreignKeySec ForeignKeySec, row LlmCall) (err error) {
+	if row.Approval.Has {
+		foreignKeySecAttr_Approval := foreignKeySec.BeginAttribute(row.Approval.Val)
+		foreignKeySecAttr_Approval.AddMembershipLowCardRefP(kindLlmCallApproval)
+		foreignKeySecAttr_Approval.EndAttributeP()
+	}
+	return
+}
+
 // llmCallAddSections contributes this kind's tagged sections to the OPEN
 // entity on dml — the BuildEntities body without the entity frame.
 // The caller owns BeginEntity / plain setters / CommitEntity.
@@ -374,6 +404,8 @@ func llmCallAddSections[
 	U64ArraySec llmCallU64ArraySecI[U64ArrayAttr, Ent],
 	BoolAttr llmCallBoolAttrI,
 	BoolSec llmCallBoolSecI[BoolAttr, Ent],
+	ForeignKeyAttr llmCallForeignKeyAttrI,
+	ForeignKeySec llmCallForeignKeySecI[ForeignKeyAttr, Ent],
 	Ent any,
 	DML llmCallEntityI[
 		SymbolAttr, SymbolSec,
@@ -381,6 +413,7 @@ func llmCallAddSections[
 		U32ArrayAttr, U32ArraySec,
 		U64ArrayAttr, U64ArraySec,
 		BoolAttr, BoolSec,
+		ForeignKeyAttr, ForeignKeySec,
 		Ent,
 	],
 ](dml DML, row LlmCall) (err error) {
@@ -419,6 +452,13 @@ func llmCallAddSections[
 		return
 	}
 	boolSec.EndSection()
+	// --- foreignKey. ---
+	foreignKeySec := dml.GetSectionForeignKey()
+	err = llmCallEmitSectionForeignKey(foreignKeySec, row)
+	if err != nil {
+		return
+	}
+	foreignKeySec.EndSection()
 	return
 }
 
@@ -478,6 +518,17 @@ type llmCallBoolMembsReadI interface {
 	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
+// llmCallForeignKeyAttrsReadI is the Attributes-side view of the foreignKey section.
+type llmCallForeignKeyAttrsReadI interface {
+	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) uint64
+	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
+}
+
+// llmCallForeignKeyMembsReadI is the Memberships-side view of the foreignKey section.
+type llmCallForeignKeyMembsReadI interface {
+	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
+}
+
 // llmCallReadRow reads row i as one optional LlmCall component: presence-
 // gated (a row carrying none of the kind's memberships yields
 // present=false), membership-matched. A slot carrying more
@@ -497,6 +548,8 @@ func llmCallReadRow[
 	U64ArrayMembs llmCallU64ArrayMembsReadI,
 	BoolAttrs llmCallBoolAttrsReadI,
 	BoolMembs llmCallBoolMembsReadI,
+	ForeignKeyAttrs llmCallForeignKeyAttrsReadI,
+	ForeignKeyMembs llmCallForeignKeyMembsReadI,
 ](
 	i int,
 	symbolAttrs SymbolAttrs,
@@ -509,6 +562,8 @@ func llmCallReadRow[
 	u64ArrayMembs U64ArrayMembs,
 	boolAttrs BoolAttrs,
 	boolMembs BoolMembs,
+	foreignKeyAttrs ForeignKeyAttrs,
+	foreignKeyMembs ForeignKeyMembs,
 ) (row LlmCall, present bool, err error) {
 	// --- symbol. ---
 	var symbolKindVal string
@@ -755,9 +810,6 @@ func llmCallReadRow[
 	var stringArrayHistoryHashVal string
 	var stringArrayHistoryHashCount int
 	var stringArrayHistoryHashLastAttr int64
-	var stringArrayApprovalVal string
-	var stringArrayApprovalCount int
-	var stringArrayApprovalLastAttr int64
 	var stringArrayErrorSlice []string
 	var stringArrayErrorCount int
 	var stringArrayErrorLastAttr int64
@@ -820,17 +872,6 @@ func llmCallReadRow[
 					return
 				}
 				stringArrayHistoryHashVal = val
-			case kindLlmCallApproval:
-				if stringArrayApprovalLastAttr != attrJ+1 {
-					stringArrayApprovalLastAttr = attrJ + 1
-					stringArrayApprovalCount++
-				}
-				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				if valErr != nil {
-					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "llmCallApproval").Str("field", "Approval").Errorf("slot stringArray@llmCallApproval (field Approval) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
-					return
-				}
-				stringArrayApprovalVal = val
 			case kindLlmCallError:
 				if stringArrayErrorLastAttr != attrJ+1 {
 					stringArrayErrorLastAttr = attrJ + 1
@@ -883,15 +924,6 @@ func llmCallReadRow[
 	}
 	if stringArrayHistoryHashCount == 1 {
 		row.HistoryHash = stringArrayHistoryHashVal
-		present = true
-	}
-	if stringArrayApprovalCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "llmCallApproval").Int("got", stringArrayApprovalCount).Errorf("slot stringArray@llmCallApproval (field Approval) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayApprovalCount)
-		return
-	}
-	if stringArrayApprovalCount == 1 {
-		row.Approval.Val = stringArrayApprovalVal
-		row.Approval.Has = true
 		present = true
 	}
 	if stringArrayErrorCount > 1 {
@@ -1317,6 +1349,33 @@ func llmCallReadRow[
 	}
 	if boolRefusedCount == 1 {
 		row.Refused = boolRefusedVal
+		present = true
+	}
+	// --- foreignKey. ---
+	var foreignKeyApprovalVal uint64
+	var foreignKeyApprovalCount int
+	var foreignKeyApprovalLastAttr int64
+	nforeignKey := foreignKeyAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nforeignKey; attrJ++ {
+		for membID := range foreignKeyMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindLlmCallApproval:
+				if foreignKeyApprovalLastAttr != attrJ+1 {
+					foreignKeyApprovalLastAttr = attrJ + 1
+					foreignKeyApprovalCount++
+				}
+				val := foreignKeyAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				foreignKeyApprovalVal = val
+			}
+		}
+	}
+	if foreignKeyApprovalCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "foreignKey").Str("membership", "llmCallApproval").Int("got", foreignKeyApprovalCount).Errorf("slot foreignKey@llmCallApproval (field Approval) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", foreignKeyApprovalCount)
+		return
+	}
+	if foreignKeyApprovalCount == 1 {
+		row.Approval.Val = foreignKeyApprovalVal
+		row.Approval.Has = true
 		present = true
 	}
 	return
