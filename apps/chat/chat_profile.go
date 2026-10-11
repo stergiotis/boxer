@@ -11,8 +11,8 @@ import (
 
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun/projection"
-	"github.com/stergiotis/boxer/public/keelson/runtime/anchorstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/harness"
+	"github.com/stergiotis/boxer/public/keelson/runtime/headstore"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
@@ -86,7 +86,7 @@ type ProfileT struct {
 	// AnchorCadence is when the run's chain heads are shipped to the
 	// anchor store (ADR-0314 §SD3). It shapes the record, not what the
 	// model reads, so it is outside the fingerprint.
-	AnchorCadence anchorstore.Cadence
+	AnchorCadence headstore.Cadence
 }
 
 // Validate checks the profile against what this build registers: every
@@ -188,7 +188,7 @@ func defaultProfile() (p ProfileT) {
 		Pixels: "none", PixelsMax: "captures",
 		ImageBudgetBytes: defaultImageBudgetBytes, ImageBudgetCount: defaultImageBudgetCount, ImageMaxPixels: defaultImageMaxPixels,
 		Compact:               projection.Constants{KeepTurns: 2, PinBytes: 4096, ElideMinBytes: 512, SummaryTokens: 1024, TailTokens: 2048, RoundMarginTokens: 1024},
-		CompactTriggerPercent: 70, CompactContextFloor: 16384, AnchorCadence: anchorstore.DefaultCadence()}
+		CompactTriggerPercent: 70, CompactContextFloor: 16384, AnchorCadence: headstore.DefaultCadence()}
 	for i := range coordinatorTools {
 		p.Tools = append(p.Tools, coordinatorTools[i].name)
 	}

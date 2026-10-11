@@ -1,4 +1,4 @@
-package anchorstore
+package headstore
 
 import (
 	"context"
@@ -83,8 +83,8 @@ type wireReadReply struct {
 // ServiceCaps are the service's grants.
 func ServiceCaps() (caps []app.SubjectFilter) {
 	return []app.SubjectFilter{
-		{Pattern: SubjectAll, Direction: app.CapDirectionSub, Reason: "anchorstore: serve runtime.anchor requests"},
-		{Pattern: inprocbus.InboxPrefix + ">", Direction: app.CapDirectionPub, Reason: "anchorstore: reply to inboxes"},
+		{Pattern: SubjectAll, Direction: app.CapDirectionSub, Reason: "headstore: serve runtime.anchor requests"},
+		{Pattern: inprocbus.InboxPrefix + ">", Direction: app.CapDirectionPub, Reason: "headstore: reply to inboxes"},
 	}
 }
 

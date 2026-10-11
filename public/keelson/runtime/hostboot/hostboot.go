@@ -20,7 +20,6 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun/agentrunstore"
-	"github.com/stergiotis/boxer/public/keelson/runtime/anchorstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/appcenter"
 	appcenterlaunch "github.com/stergiotis/boxer/public/keelson/runtime/appcenter/launchcfg"
@@ -35,6 +34,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore/chstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker"
 	"github.com/stergiotis/boxer/public/keelson/runtime/fsbroker/pickerbridge"
+	"github.com/stergiotis/boxer/public/keelson/runtime/headstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/heartbeat"
 	"github.com/stergiotis/boxer/public/keelson/runtime/helphost"
 	"github.com/stergiotis/boxer/public/keelson/runtime/httpegress"
@@ -223,7 +223,7 @@ type Runtime struct {
 	// AgentRuns is the run journal's store (ADR-0308) and Anchors the
 	// chain heads' (ADR-0314); nil when the service did not start.
 	AgentRuns agentrun.StoreI
-	Anchors   anchorstore.StoreI
+	Anchors   headstore.StoreI
 	// Cell is the deployment's declared boundary (ADR-0307 §SD1), built
 	// once before any service starts and shared by the model service, the
 	// egress service, the clipboard broker and keelson('sinks'), so the
@@ -1105,15 +1105,15 @@ func (rt *Runtime) bootAgentRun(ctx context.Context) {
 	// setting that names an organisation store yet, so every receipt is
 	// non-durable, the journal marks such heads local, and the record
 	// says plainly that nothing outside the host anchors them.
-	anchors := anchorstore.NewMemStore()
-	asvc, aerr := anchorstore.NewService(rt.Bus, logger, anchors)
+	anchors := headstore.NewMemStore()
+	asvc, aerr := headstore.NewService(rt.Bus, logger, anchors)
 	if aerr != nil {
-		logger.Warn().Err(aerr).Msg("anchorstore: service start failed; runtime.anchor.* will be unbound")
+		logger.Warn().Err(aerr).Msg("headstore: service start failed; runtime.anchor.* will be unbound")
 		return
 	}
 	// Heads are scoped to the run's owner as the journal records it, so an
 	// app cannot read or pre-anchor another app's run.
-	asvc.Owners = anchorstore.RunOwners(store)
+	asvc.Owners = headstore.RunOwners(store)
 	rt.Anchors = anchors
 	rt.cleanups = append(rt.cleanups, asvc.Close)
 }

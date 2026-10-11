@@ -12,9 +12,9 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun/projection"
-	"github.com/stergiotis/boxer/public/keelson/runtime/anchorstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/cell"
 	"github.com/stergiotis/boxer/public/keelson/runtime/clipboardbroker"
+	"github.com/stergiotis/boxer/public/keelson/runtime/headstore"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
@@ -555,7 +555,7 @@ const headFormLocal = "local"
 // store, the default — is recorded as local, anchoring nothing; a
 // coordinator with no store at all, as in a test without a host, ships
 // none.
-func (inst *coordinator) shipHead(ctx context.Context, w *agentrun.Writer, at func(anchorstore.Cadence) bool) {
+func (inst *coordinator) shipHead(ctx context.Context, w *agentrun.Writer, at func(headstore.Cadence) bool) {
 	inst.mu.Lock()
 	anchors, cadence := inst.anchors, inst.profile.AnchorCadence
 	inst.mu.Unlock()
@@ -564,13 +564,13 @@ func (inst *coordinator) shipHead(ctx context.Context, w *agentrun.Writer, at fu
 	}
 	run := w.Run()
 	ordinal, digest := w.Head()
-	head := anchorstore.Head{Cell: run.Cell, Run: run.Id, Ordinal: ordinal, Digest: digest}
+	head := headstore.Head{Cell: run.Cell, Run: run.Id, Ordinal: ordinal, Digest: digest}
 	r, err := anchors.Append(ctx, head)
 	if err != nil {
 		log.Warn().Err(err).Str("run", run.Id).Msg("chat: the chain head was not anchored")
 		return
 	}
-	e, err := anchorstore.HeadEntry(head, r, cadence)
+	e, err := headstore.HeadEntry(head, r, cadence)
 	if err != nil {
 		log.Warn().Err(err).Str("run", run.Id).Msg("chat: the chain head was not recorded")
 		return
@@ -650,7 +650,7 @@ func (inst *coordinator) closeJournal() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), agentrun.DefaultTimeout)
 	defer cancel()
-	inst.shipHead(ctx, w, func(c anchorstore.Cadence) bool { return c.PerRunClose })
+	inst.shipHead(ctx, w, func(c headstore.Cadence) bool { return c.PerRunClose })
 	if err := w.Close(ctx, agentrun.StateClosed); err != nil {
 		log.Warn().Err(err).Str("run", w.Run().Id).Msg("chat: the run was not closed")
 	}

@@ -13,7 +13,7 @@ import (
 	"github.com/stergiotis/boxer/public/config/env"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
-	"github.com/stergiotis/boxer/public/keelson/runtime/anchorstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/headstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/keelson/runtime/queryengine"
@@ -181,7 +181,7 @@ type coordinator struct {
 	// nil when the host has none.
 	profile     ProfileT
 	fingerprint string
-	anchors     anchorstore.StoreI
+	anchors     headstore.StoreI
 	// lastUntrusted says the running call's result was untrusted text.
 	lastUntrusted bool
 	// compacted says the run's history was compacted (chat_compact.go).

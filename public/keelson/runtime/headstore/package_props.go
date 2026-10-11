@@ -1,4 +1,4 @@
-package anchorstore
+package headstore
 
 import "github.com/stergiotis/boxer/public/packageprops"
 
@@ -10,5 +10,5 @@ var PackageProps = packageprops.Props{
 }
 
 func init() {
-	packageprops.Register("github.com/stergiotis/boxer/public/keelson/runtime/anchorstore", PackageProps)
+	packageprops.Register("github.com/stergiotis/boxer/public/keelson/runtime/headstore", PackageProps)
 }

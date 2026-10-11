@@ -24,8 +24,8 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun/projection"
-	"github.com/stergiotis/boxer/public/keelson/runtime/anchorstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
+	"github.com/stergiotis/boxer/public/keelson/runtime/headstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
@@ -58,7 +58,7 @@ type preserveHarness struct {
 	cli   *llm.Client
 	// anchors is the run's anchor store: in memory, so the heads it
 	// receipts are local, and law L32 is checked over them in process.
-	anchors *anchorstore.MemStore
+	anchors *headstore.MemStore
 
 	mu  sync.Mutex
 	out strings.Builder
@@ -371,7 +371,7 @@ func runPreserveScenario(t *testing.T, sc preserveScenario) (recording string) {
 	host, coord, cli, _, ctx := coordRig(t, bus, model, sc.opTools)
 	conv := newConversation()
 	coord.conversation = conv.id
-	h := &preserveHarness{t: t, host: host, coord: coord, conv: conv, model: model, ctx: ctx, cli: cli, known: map[string]string{}, anchors: anchorstore.NewMemStore()}
+	h := &preserveHarness{t: t, host: host, coord: coord, conv: conv, model: model, ctx: ctx, cli: cli, known: map[string]string{}, anchors: headstore.NewMemStore()}
 	coord.anchors = h.anchors
 	conv.apps, conv.questions, conv.artefact = sc.apps, sc.questions, sc.artefact
 	if sc.setup != nil {
@@ -401,7 +401,7 @@ func (h *preserveHarness) checkL4() {
 	require.Zero(h.t, broken, "L31: the chain verifies")
 	anchored, err := h.anchors.Read(context.Background(), w.Run().Cell, w.Run().Id)
 	require.NoError(h.t, err)
-	require.Empty(h.t, anchorstore.VerifyHeads(w.Run().Digest, entries, anchored), "L32: the heads verify against the store")
+	require.Empty(h.t, headstore.VerifyHeads(w.Run().Digest, entries, anchored), "L32: the heads verify against the store")
 	require.Empty(h.t, projection.CheckCompaction(entries), "L22, L23, L25")
 	if c := h.coord.compactConstants(headTokens(projection.Fold(entries, sectionOrder()))); c.TriggerTokens > 0 {
 		require.Empty(h.t, projection.CheckBound(entries, sectionOrder(), c, lastReported), "L24")

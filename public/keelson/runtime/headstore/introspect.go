@@ -1,4 +1,4 @@
-package anchorstore
+package headstore
 
 import (
 	"time"

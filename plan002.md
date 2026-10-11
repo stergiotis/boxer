@@ -253,7 +253,7 @@ scripts/ci/gotest-integration.sh   # agentrun, agentschema, watchbillstore again
 go test -tags="$(cat ./tags)" -race ./public/keelson/runtime/agentrun/... ./apps/chat/...
 ```
 
-The L31/L32 checks (`agentrun.VerifyRun`, `anchorstore.VerifyHeads`) and the
+The L31/L32 checks (`agentrun.VerifyRun`, `headstore.VerifyHeads`) and the
 SQL twin golden under `agentrun/projection` are the proof the chain did not
 move.
 
@@ -319,7 +319,7 @@ stand:
 | Group | Bodies | Treatment |
 | --- | --- | --- |
 | **Prose the model reads verbatim** | user message, reply content, notes, prompt sections, tool outcomes, summaries and elisions, the ignorable records' text | one text attribute, as today; nothing to explode |
-| **Closed shapes the harness owns** | request meta `requestBody{Digest, Messages, Tools, Round, Label}`; reply meta `replyBody{CallId, FinishReason, InputTokens, OutputTokens}`; `compactIntent{Cut, From, Span}`; `endorseBody{Digest, Epoch, Classes, Previous, Diff}`; `grantBody{Task, Handle, Terms, Unattended}`; `exitQuestion` and its answer; `cell.Approval`; `anchorstore.HeadRecord`; the copy record; `journalSettings`; the profile fingerprint; the turn's terminal state; the tool catalog (`KindTools`, names and schema digests) | one component per shape, attributes under vocabulary ids |
+| **Closed shapes the harness owns** | request meta `requestBody{Digest, Messages, Tools, Round, Label}`; reply meta `replyBody{CallId, FinishReason, InputTokens, OutputTokens}`; `compactIntent{Cut, From, Span}`; `endorseBody{Digest, Epoch, Classes, Previous, Diff}`; `grantBody{Task, Handle, Terms, Unattended}`; `exitQuestion` and its answer; `cell.Approval`; `headstore.HeadRecord`; the copy record; `journalSettings`; the profile fingerprint; the turn's terminal state; the tool catalog (`KindTools`, names and schema digests) | one component per shape, attributes under vocabulary ids |
 | **Open shapes the model or a provider writes** | tool-call arguments (`KindIntent.Body`, schema per tool), the reply's call list (`Calls`), attachments (media type, digest, bytes reference), provider metadata if any | semi-structured attributes: path, parameters, value on the mixed channel, one section per canonical type; the raw text kept only when it does not parse |
 
 Strike from the second group anything you would rather keep as text, but
@@ -445,7 +445,7 @@ is how the trail's fourteen kinds already coexist on `boxer.facts`.
 The writer's API changes shape: `agentrun.Entry` gains typed optional fields
 (`Request *RequestMeta`, `Reply *ReplyMeta`, `Compact *CompactIntent`,
 `Endorse *Endorsement`, `Grant *Grant`, `Approval *cell.Approval`, `Head
-*anchorstore.HeadRecord`, `Copy *CopyRecord`, `Settings *Settings`, `Tools
+*headstore.HeadRecord`, `Copy *CopyRecord`, `Settings *Settings`, `Tools
 *ToolCatalog`, `Turn *TurnState`), each mapped to its component, and the
 chat's `jsonMarshal` call sites in `chat_journal.go`, `chat_seams.go`,
 `chat_compact.go`, `chat_endorse.go`, `chat_approval.go` set the field
@@ -546,7 +546,7 @@ here.
 
 **Where.** `agentrun/entry.go` (`canonical`, `CanonicalForm`, `Digested`,
 `BodiesMatch`, `Verify`), `agentrunstore` (generated encoder),
-`agentrun/service.go` and `anchorstore/store.go` (`VerifyHeads` re-verifies
+`agentrun/service.go` and `headstore/store.go` (`VerifyHeads` re-verifies
 through the same form), `projection/batch.go` (message digests over the
 same writer, order kept as an array). Every golden with a digest in it is
 re-recorded in this commit: `apps/chat/testdata/preserve/*`,

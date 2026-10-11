@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
-	"github.com/stergiotis/boxer/public/keelson/runtime/anchorstore"
+	"github.com/stergiotis/boxer/public/keelson/runtime/headstore"
 )
 
 // Every turn ends with a chain head shipped to the anchor store and
@@ -17,7 +17,7 @@ import (
 // the model's level, and the chain verifies end to end (L31).
 func TestATurnShipsItsChainHead(t *testing.T) {
 	store := agentrun.NewMemStore()
-	anchors := anchorstore.NewMemStore()
+	anchors := headstore.NewMemStore()
 	inst := appOver(t, &fakeModel{}, store)
 	inst.coord.anchors = anchors
 	require.True(t, inst.startTurn("q1"))
@@ -49,7 +49,7 @@ func TestATurnShipsItsChainHead(t *testing.T) {
 			require.Greater(t, i, 0)
 			assert.Equal(t, agentrun.KindTurn, entries[i-1].Kind, "the head covers the turn's end")
 			assert.Equal(t, headFormLocal, e.Form, "a head the process alone holds is recorded as local")
-			rec, perr := anchorstore.ParseHeadBody(e.Body)
+			rec, perr := headstore.ParseHeadBody(e.Body)
 			require.NoError(t, perr)
 			assert.False(t, rec.Durable)
 		}
@@ -57,8 +57,8 @@ func TestATurnShipsItsChainHead(t *testing.T) {
 	anchored, err := anchors.Read(context.Background(), w.Run().Cell, w.Run().Id)
 	require.NoError(t, err)
 	require.Len(t, anchored, 2)
-	assert.Empty(t, anchorstore.VerifyHeads(w.Run().Digest, entries, anchored), "L32 holds")
-	assert.Empty(t, anchorstore.VerifyHeads(w.Run().Digest, durableHeads(entries), nil), "L32 reads past local heads once their store is gone")
+	assert.Empty(t, headstore.VerifyHeads(w.Run().Digest, entries, anchored), "L32 holds")
+	assert.Empty(t, headstore.VerifyHeads(w.Run().Digest, durableHeads(entries), nil), "L32 reads past local heads once their store is gone")
 	broken, err := agentrun.Verify(w.Run().Digest, entries)
 	require.NoError(t, err)
 	assert.Zero(t, broken, "L31 holds")

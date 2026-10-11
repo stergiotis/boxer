@@ -22,11 +22,11 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentschema"
-	"github.com/stergiotis/boxer/public/keelson/runtime/anchorstore"
 	runtimeapp "github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/cell"
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/harness"
+	"github.com/stergiotis/boxer/public/keelson/runtime/headstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/httpegress"
 	"github.com/stergiotis/boxer/public/keelson/runtime/inprocbus"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect"
@@ -112,7 +112,7 @@ type Deps struct {
 	Cell func() cell.Declaration
 	// Anchors is the anchor store, backing keelson.anchors (ADR-0314); nil
 	// registers an empty table.
-	Anchors anchorstore.StoreI
+	Anchors headstore.StoreI
 	// AgentRuns is the run journal's store, backing keelson.agent_runs and
 	// keelson.agent_run_entries (ADR-0308 §SD10). nil leaves them empty
 	// rather than absent; same typed-nil trap: assign only a started store.
@@ -306,7 +306,7 @@ func Start(deps Deps) (stop func(context.Context) error, err error) {
 	if e := harness.RegisterIntrospect(reg); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: harness profiles provider registration failed")
 	}
-	if e := anchorstore.RegisterIntrospect(reg, deps.Anchors); e != nil {
+	if e := headstore.RegisterIntrospect(reg, deps.Anchors); e != nil {
 		deps.Log.Warn().Err(e).Msg("introspecthost: anchors provider registration failed")
 	}
 	// ADR-0269 §SD9: the task grants and the action record. Registered

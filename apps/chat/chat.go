@@ -18,9 +18,9 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
-	"github.com/stergiotis/boxer/public/keelson/runtime/anchorstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/app"
 	"github.com/stergiotis/boxer/public/keelson/runtime/bgjob"
+	"github.com/stergiotis/boxer/public/keelson/runtime/headstore"
 	"github.com/stergiotis/boxer/public/keelson/runtime/introspect/keelsonquery"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/thestack/fffi2/typed"
@@ -74,7 +74,7 @@ type App struct {
 	// Conversations panel (chat_resume.go), runs is its list, runsJob lists
 	// and resumeJob reopens a run.
 	journals  *agentrun.Client
-	anchors   anchorstore.StoreI
+	anchors   headstore.StoreI
 	showRuns  bool
 	runs      []agentrun.Run
 	runsJob   bgjob.Runner[[]agentrun.Run]
@@ -200,7 +200,7 @@ func (inst *App) Mount(ctx app.MountContextI) (err error) {
 	inst.agentCli = agent.NewClient(bus)
 	inst.kq = keelsonquery.NewClient(bus)
 	inst.journals = agentrun.NewClient(bus)
-	inst.anchors = anchorstore.NewClient(bus)
+	inst.anchors = headstore.NewClient(bus)
 	inst.coord = inst.newCoordinator(inst.conv.id)
 	inst.describe.Start(nil, bgjob.Spec{Kind: "chat-llm-describe", Title: "model"},
 		func(ctx context.Context) (d *llm.Description, err error) {
