@@ -118,10 +118,14 @@ func entriesTable(rows []Entry) *introspect.Table {
 		String("kind", func(i int) string { return rows[i].Kind.String() }).
 		String("key", func(i int) string { return rows[i].Key }).
 		String("role", func(i int) string { return rows[i].Role }).
-		String("body", func(i int) string { return rows[i].Body }).
+		// The body is the prose, or the entry's record rendered as the JSON
+		// its body used to be written as (Entry.RecordBody): a view for the
+		// laws and relations that read text (ADR-0325 §SD1).
+		String("body", func(i int) string { return rows[i].RecordBody() }).
 		String("calls", func(i int) string { return rows[i].Calls }).
-		String("body_digest", func(i int) string { return rows[i].BodyDigest }).
-		String("calls_digest", func(i int) string { return rows[i].CallsDigest }).
+		String("arguments", func(i int) string { return rows[i].Arguments }).
+		String("vault_commitment", func(i int) string { return rows[i].VaultCommitment }).
+		Uint64("entry_id", func(i int) uint64 { return rows[i].EntryId }).
 		String("name", func(i int) string { return rows[i].Name }).
 		String("book", func(i int) string { return rows[i].Book }).
 		String("form", func(i int) string { return rows[i].Form }).

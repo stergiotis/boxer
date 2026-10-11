@@ -188,8 +188,10 @@ func settleOpenCalls(ctx context.Context, w *agentrun.Writer) (err error) {
 		if e.Kind != agentrun.KindReply || e.Calls == "" {
 			continue
 		}
-		var meta replyBody
-		_ = json.Unmarshal([]byte(e.Name), &meta)
+		var meta agentrun.ReplyMeta
+		if e.Reply != nil {
+			meta = *e.Reply
+		}
 		for i, call := range projection.ParseCalls(e.Calls) {
 			if answered[call.Id] {
 				continue
@@ -199,7 +201,7 @@ func settleOpenCalls(ctx context.Context, w *agentrun.Writer) (err error) {
 			body := "outcome unknown: the process ended before the result was recorded"
 			if !intended[key] {
 				body = "never dispatched: the process ended before the call was made"
-				settling = append(settling, agentrun.Entry{Kind: agentrun.KindIntent, Key: key, Name: call.Name, Body: call.Arguments,
+				settling = append(settling, agentrun.Entry{Kind: agentrun.KindIntent, Key: key, Name: call.Name, Arguments: call.Arguments,
 					Effect: agentrun.EffectNone, Form: intentFormNeverDispatched, Turn: e.Turn, Label: harnessLabel()})
 			}
 			settling = append(settling, agentrun.Entry{Kind: agentrun.KindOutcome, Key: key, Name: call.Id, Role: projection.RoleTool,
@@ -282,7 +284,7 @@ func resumeLines(r *resumed) (lines []string) {
 		}
 		switch u.Resolution {
 		case agentrun.ResolutionListToPerson:
-			line = "a consequential command may have run before the host stopped, and its outcome is unknown: " + u.Entry.Name + " " + clip(u.Entry.Body, 120)
+			line = "a consequential command may have run before the host stopped, and its outcome is unknown: " + u.Entry.Name + " " + clip(u.Entry.Arguments, 120)
 		case agentrun.ResolutionUnknown:
 			line = "the command " + u.Entry.Name + " was sent and its outcome is unknown; read before you write there"
 		case agentrun.ResolutionNotCompleted:
@@ -425,9 +427,8 @@ func lastReplyOf(entries []agentrun.Entry) (parent string, lastIn int32, lastOut
 		if e.Kind != agentrun.KindReply {
 			continue
 		}
-		var meta replyBody
-		if json.Unmarshal([]byte(e.Name), &meta) == nil && meta.CallId != "" {
-			parent, lastIn, lastOut = meta.CallId, meta.InputTokens, meta.OutputTokens
+		if meta := e.Reply; meta != nil && meta.CallId != "" {
+			parent, lastIn, lastOut = meta.CallId, int32(meta.InputTokens), int32(meta.OutputTokens)
 		}
 	}
 	return

@@ -219,6 +219,9 @@ func (inst *GoClassBuilder) ComposeCodec(tableName naming.StylableName, tblDesc 
 	if err = emitEncoder(b, plan); err != nil {
 		return
 	}
+	if inst.encoderOnly {
+		return
+	}
 	if err = emitDispatcher(b, plan); err != nil {
 		return
 	}

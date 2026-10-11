@@ -81,15 +81,14 @@ func TestEndorsingTheArtefactIsVoidedByAModelEdit(t *testing.T) {
 	assert.False(t, coord.endorsedHead(), "a model edit voids it")
 	n, text = conv.art.head()
 	require.NoError(t, coord.endorseArtefact(ctx, n, text))
-	var endorsements []endorseBody
+	var endorsements []agentrun.Endorsement
 	for _, e := range coord.journalNow().Entries() {
 		if e.Kind == agentrun.KindEndorse {
 			assert.Equal(t, endorseKeyArtefact, e.Key)
 			assert.Equal(t, endorsedByPerson, e.Name)
 			assert.Equal(t, agentrun.LevelPerson, e.Label.Level)
-			var b endorseBody
-			require.NoError(t, jsonUnmarshal(e.Body, &b))
-			endorsements = append(endorsements, b)
+			require.NotNil(t, e.Endorse)
+			endorsements = append(endorsements, *e.Endorse)
 		}
 	}
 	require.Len(t, endorsements, 2)
@@ -108,12 +107,13 @@ func TestEndorsingTheArtefactIsVoidedByAModelEdit(t *testing.T) {
 // endorsement written after the outcome is not.
 func TestLawL15FindsAnUnendorsedConsequentialAct(t *testing.T) {
 	intent := func(ord uint32, key string) agentrun.Entry {
-		return agentrun.Entry{Ordinal: ord, Kind: agentrun.KindIntent, Key: key, Name: "call_operation", Effect: agentrun.EffectConsequential, Body: `{"operation":"publish_result"}`}
+		return agentrun.Entry{Ordinal: ord, Kind: agentrun.KindIntent, Key: key, Name: "call_operation", Effect: agentrun.EffectConsequential, Arguments: `{"operation":"publish_result"}`}
 	}
 	done := func(ord uint32, key string) agentrun.Entry {
 		return agentrun.Entry{Ordinal: ord, Kind: agentrun.KindOutcome, Key: key, Body: `{"phase":"completed"}`}
 	}
-	endorse := endorseEntry("k1", "t1", `{"operation":"publish_result"}`, agentrun.EffectConsequential)
+	endorse, err := endorseEntry("k1", "t1", `{"operation":"publish_result"}`, agentrun.EffectConsequential)
+	require.NoError(t, err)
 	assert.Equal(t, endorsedByPerson, endorse.Name)
 	assert.Equal(t, agentrun.KindEndorse, endorse.Kind)
 
@@ -130,7 +130,7 @@ func TestLawL15FindsAnUnendorsedConsequentialAct(t *testing.T) {
 	after.Ordinal = 3
 	assert.Len(t, checkEndorsed([]agentrun.Entry{intent(1, "k1"), done(2, "k1"), after}), 1, "an endorsement after the outcome is not consent")
 
-	grant := agentrun.Entry{Ordinal: 1, Kind: agentrun.KindAnswered, Key: "h1", Name: endorsedByPerson, Form: grantForm, Body: `{"task":"t","handle":"h1"}`}
+	grant := agentrun.Entry{Ordinal: 1, Kind: agentrun.KindAnswered, Key: "h1", Name: endorsedByPerson, Form: grantForm, Grant: &agentrun.GrantRecord{Task: "t", Handle: "h1"}}
 	under := func(ord uint32, key string, handle string) agentrun.Entry {
 		e := intent(ord, key)
 		e.Form = handle
@@ -144,7 +144,8 @@ func TestLawL15FindsAnUnendorsedConsequentialAct(t *testing.T) {
 	assert.Len(t, checkEndorsed([]agentrun.Entry{hostGrant, under(2, "k1", "h1"), done(3, "k1")}), 1, "a grant the host gave in the person's place consents to nothing")
 	assert.Len(t, checkEndorsed([]agentrun.Entry{under(1, "k1", "h1"), done(2, "k1"), {Ordinal: 3, Kind: agentrun.KindAnswered, Key: "h1", Name: endorsedByPerson, Form: grantForm}}), 1, "a grant given later is not")
 
-	other := endorseEntry("k1", "t1", `{"operation":"publish_result","name":"other"}`, agentrun.EffectConsequential)
+	other, err := endorseEntry("k1", "t1", `{"operation":"publish_result","name":"other"}`, agentrun.EffectConsequential)
+	require.NoError(t, err)
 	other.Ordinal = 2
 	broken = checkEndorsed([]agentrun.Entry{intent(1, "k1"), other, done(3, "k1")})
 	require.Len(t, broken, 1, "an endorsement over other arguments than the act ran with is not consent")

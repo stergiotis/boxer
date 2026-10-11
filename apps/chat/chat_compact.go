@@ -2,7 +2,6 @@ package chat
 
 import (
 	"context"
-	"encoding/json/v2"
 	"slices"
 	"strconv"
 	"sync"
@@ -188,20 +187,12 @@ func lastReported(entries []agentrun.Entry) (tokens int64, at uint32) {
 		if e.Kind != agentrun.KindReply {
 			continue
 		}
-		var meta replyBody
-		if json.Unmarshal([]byte(e.Name), &meta) == nil && meta.InputTokens > 0 {
-			return int64(meta.InputTokens), e.Ordinal
+		if e.Reply != nil && e.Reply.InputTokens > 0 {
+			return int64(e.Reply.InputTokens), e.Ordinal
 		}
 		return
 	}
 	return
-}
-
-// compactIntent is what the summariser's intent entry carries.
-type compactIntent struct {
-	Cut  uint32 `json:"cut"`
-	From uint32 `json:"from"`
-	Span int    `json:"span"`
 }
 
 // compact is the act: the compact entry, after the summariser's intent,
@@ -227,14 +218,14 @@ func (inst *coordinator) compact(s *requestState, plan projection.Plan, c projec
 		}
 		key := "compact#" + strconv.FormatUint(uint64(plan.Cut), 10)
 		rl := inst.requestLabel(s.batch)
-		intent, _ := jsonMarshal(compactIntent{Cut: plan.Cut, From: plan.From, Span: len(plan.Span)})
+		intent := &agentrun.CompactIntent{Cut: plan.Cut, From: plan.From, Span: uint32(len(plan.Span))}
 		sreq := req
 		sreq.Purpose, sreq.Tools, sreq.ToolChoice, sreq.MaxTokens = compactPurpose, nil, "", int32(c.SummaryTokens)
 		sreq.Messages = append(slices.Clip(msgs), openaichat.Message{Role: openaichat.ChatRoleUser, Content: summariserNote + "\n\nSummarise everything before the person's message that begins: " + strconv.Quote(clip(plan.CutText, 120))})
-		request, _ := jsonMarshal(requestBody{Digest: s.digest, Messages: len(sreq.Messages), Round: s.round, Label: rl.String()})
+		request := &agentrun.RequestMeta{Digest: s.digest, Messages: uint32(len(sreq.Messages)), Round: uint32(s.round), Label: rl.String()}
 		if _, err = inst.append(jctx, w,
-			agentrun.Entry{Kind: agentrun.KindIntent, Key: key, Name: "summarise", Effect: agentrun.EffectNone, Body: intent, Turn: req.Turn, Label: rl},
-			agentrun.Entry{Kind: agentrun.KindRequest, Key: key, Body: request, Turn: req.Turn, Label: rl}); err != nil {
+			agentrun.Entry{Kind: agentrun.KindIntent, Key: key, Name: "summarise", Effect: agentrun.EffectNone, Compact: intent, Turn: req.Turn, Label: rl},
+			agentrun.Entry{Kind: agentrun.KindRequest, Key: key, Request: request, Turn: req.Turn, Label: rl}); err != nil {
 			return
 		}
 		res, cerr := cli.Complete(ctx, sreq)
@@ -247,7 +238,7 @@ func (inst *coordinator) compact(s *requestState, plan projection.Plan, c projec
 			}
 			return inst.noteCompaction(jctx, w, req.Turn, compactNoteFailed, "the summariser failed: "+cerr.Error()+"; the request stays over the trigger")
 		}
-		outcome.Body, _ = jsonMarshal(replyBody{CallId: res.CallId, FinishReason: res.FinishReason, InputTokens: res.InputTokens, OutputTokens: res.OutputTokens})
+		outcome.Reply = replyMeta(res.CallId, res.FinishReason, res.InputTokens, res.OutputTokens)
 		entry.Form, entry.Key = projection.FormSummary, res.CallId
 		entry.Body = res.Content + projection.PersonVerbatim(plan.Person, c.PinBytes)
 		entry.Label = plan.Label.Join(inst.replyLabel(rl))

@@ -83,11 +83,12 @@ func TestAnExitAboveTheClearanceAsksThePerson(t *testing.T) {
 	byKind := kinds(w)
 	require.Len(t, byKind[agentrun.KindAsked], 1, "the question is journaled")
 	require.Len(t, byKind[agentrun.KindAnswered], 1, "and the answer")
-	assert.Contains(t, byKind[agentrun.KindAnswered][0].Body, `"approved":true`)
+	require.NotNil(t, byKind[agentrun.KindAnswered][0].Answer)
+	assert.True(t, byKind[agentrun.KindAnswered][0].Answer.Approved)
 	approvals := byKind[agentrun.KindApproval]
 	require.Len(t, approvals, 1)
-	a, err := cell.ParseApproval(approvals[0].Body)
-	require.NoError(t, err)
+	a := approvals[0].Approval
+	require.NotNil(t, a)
 	assert.Equal(t, "model-route", a.Channel)
 	assert.Equal(t, "api.example.net", a.Edge)
 	assert.Equal(t, "AMBER", a.Tier)
@@ -121,7 +122,8 @@ func TestAnExitAboveTheClearanceAsksThePerson(t *testing.T) {
 	drainUntil(t, inst)
 	last := inst.conv.entries[len(inst.conv.entries)-1]
 	assert.Contains(t, last.fail.detail, "above the clearance")
-	assert.Contains(t, kinds(w)[agentrun.KindAnswered][1].Body, `"approved":false`)
+	require.NotNil(t, kinds(w)[agentrun.KindAnswered][1].Answer)
+	assert.False(t, kinds(w)[agentrun.KindAnswered][1].Answer.Approved)
 }
 
 // One answer covers a turn: a second round's exit of the same tier to the
@@ -157,9 +159,8 @@ func TestAnApprovalStandsForTheTurn(t *testing.T) {
 	require.Len(t, approvals, 2, "one approval per exit")
 	assert.NotEqual(t, approvals[0].Key, approvals[1].Key, "each names its refused call")
 	for _, e := range approvals {
-		a, err := cell.ParseApproval(e.Body)
-		require.NoError(t, err)
-		assert.Equal(t, "needed for the report", a.Justification)
+		require.NotNil(t, e.Approval)
+		assert.Equal(t, "needed for the report", e.Approval.Justification)
 	}
 	var sent int
 	for _, c := range svc.Calls() {

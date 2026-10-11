@@ -10,6 +10,7 @@ package agentrunstore
 import (
 	"context"
 	_ "embed"
+	"io"
 	"iter"
 	"strconv"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
 	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/rs/zerolog/log"
 	"github.com/stergiotis/boxer/public/caching"
 	"github.com/stergiotis/boxer/public/db/clickhouse/dsl/marshalling"
 	"github.com/stergiotis/boxer/public/functional"
@@ -49,6 +51,10 @@ const (
 	BodyRowColKey   = `"id:id:s:4::0:"`
 	BodyRowColOrder = `"id:ordinal:u64:47::0:"`
 )
+
+// agentrunbodyInsertSettings are the settings every insert carries
+// (gen.Input.InsertSettings; async_insert is off on a Cas table).
+var agentrunbodyInsertSettings = recordstore.InsertSettings{AsyncInsert: recordstore.ToggleOff, WaitForAsyncInsert: recordstore.ToggleUnset}
 
 // Arrow output shape the read-access classes expect.
 const agentrunbodyArrowOutputSettings = " SETTINGS output_format_arrow_string_as_string=1, output_format_arrow_low_cardinality_as_dictionary=0"
@@ -105,9 +111,56 @@ func agentrunbodyOrderBy(opts recordstore.ScanOpts) (clause string, err error) {
 // regenerated store at existing rows.
 var BodyRowMembershipIds = map[string]map[string]uint64{
 	"BodyRow": {
-		"agentrunBodyOpening": 9223372049739678067,
-		"agentrunBodyText":    9223372049739678068,
-		"agentrunBodyCalls":   9223372049739678069,
+		"agentrunBodyOpening":       9223372049739678067,
+		"agentrunBodyText":          9223372049739678068,
+		"agentrunBodyArgumentsText": 9223372049739678108,
+	},
+	"Endorsement": {
+		"agentrunEndorseDigest":   9223372049739678109,
+		"agentrunEndorseEpoch":    9223372049739678110,
+		"agentrunEndorseClasses":  9223372049739678111,
+		"agentrunEndorsePrevious": 9223372049739678112,
+		"agentrunEndorseDiff":     9223372049739678113,
+	},
+	"GrantRecord": {
+		"agentrunGrantTask":         9223372049739678114,
+		"agentrunGrantHandle":       9223372049739678115,
+		"agentrunGrantHasTerms":     9223372049739678116,
+		"agentrunGrantCallsBudget":  9223372049739678117,
+		"agentrunGrantCallsUsed":    9223372049739678118,
+		"agentrunGrantDeadline":     9223372049739678119,
+		"agentrunGrantDestinations": 9223372049739678120,
+		"agentrunGrantUnattended":   9223372049739678121,
+	},
+	"ExitQuestion": {
+		"agentrunQuestionText": 9223372049739678122,
+		"agentrunQuestionSink": 9223372049739678123,
+		"agentrunQuestionTier": 9223372049739678124,
+		"agentrunQuestionPath": 9223372049739678125,
+	},
+	"ExitAnswer": {
+		"agentrunAnswerSink":          9223372049739678126,
+		"agentrunAnswerTier":          9223372049739678127,
+		"agentrunAnswerApproved":      9223372049739678128,
+		"agentrunAnswerJustification": 9223372049739678129,
+	},
+	"ApprovalContent": {
+		"agentrunApprovalJustification": 9223372049739678130,
+		"agentrunApprovalDigest":        9223372049739678131,
+	},
+	"CopyRecord": {
+		"agentrunCopyDigest":    9223372049739678132,
+		"agentrunCopyLevel":     9223372049739678133,
+		"agentrunCopyTier":      9223372049739678134,
+		"agentrunCopySource":    9223372049739678135,
+		"agentrunCopyHandle":    9223372049739678136,
+		"agentrunCopyPlaintext": 9223372049739678137,
+		"agentrunCopyRecorded":  9223372049739678138,
+		"agentrunCopyApproval":  9223372049739678139,
+		"agentrunCopyRaw":       9223372049739678140,
+		"agentrunCopyRefused":   9223372049739678141,
+		"agentrunCopyReason":    9223372049739678142,
+		"agentrunCopyBytes":     9223372049739678143,
 	},
 }
 
@@ -119,14 +172,38 @@ type BodyRowEntity struct {
 	ID string
 	// Ord is the Order role value — the caller-supplied, per-key
 	// strictly monotonic sequence (ADR-0100 SD2).
-	Ord     uint64
-	BodyRow option.Option[BodyRow]
+	Ord             uint64
+	BodyRow         option.Option[BodyRow]
+	Endorsement     option.Option[Endorsement]
+	GrantRecord     option.Option[GrantRecord]
+	ExitQuestion    option.Option[ExitQuestion]
+	ExitAnswer      option.Option[ExitAnswer]
+	ApprovalContent option.Option[ApprovalContent]
+	CopyRecord      option.Option[CopyRecord]
 }
 
 // Archetype reports which components the entity carries, in schema order.
 func (inst *BodyRowEntity) Archetype() (a []string) {
 	if inst.BodyRow.Has {
 		a = append(a, "bodyRow")
+	}
+	if inst.Endorsement.Has {
+		a = append(a, "endorsement")
+	}
+	if inst.GrantRecord.Has {
+		a = append(a, "grantRecord")
+	}
+	if inst.ExitQuestion.Has {
+		a = append(a, "exitQuestion")
+	}
+	if inst.ExitAnswer.Has {
+		a = append(a, "exitAnswer")
+	}
+	if inst.ApprovalContent.Has {
+		a = append(a, "approvalContent")
+	}
+	if inst.CopyRecord.Has {
+		a = append(a, "copyRecord")
 	}
 	return
 }
@@ -199,6 +276,9 @@ type BodyRowStore struct {
 	// remaining guard for writes the views could not materialize (Raw
 	// commits) and for InvalidateAll inside a dirty window.
 	dirty map[string]struct{}
+	// insertSettingsUnapplied latches the one warning a store logs when
+	// its executor cannot carry the per-insert settings.
+	insertSettingsUnapplied bool
 	// onWrite/onFlush hold the write-through hooks of attached cache
 	// views (NewBodyRowCache registers one pair per view): onWrite populates
 	// and pins the committed entity (nil = not materializable or a
@@ -461,6 +541,48 @@ func (inst *BodyRowEntityBuilder) endSection(section string) error {
 		inst.store.dml.GetSectionStringArray().EndSection()
 	case "textArray":
 		inst.store.dml.GetSectionTextArray().EndSection()
+	case "symbolArray":
+		inst.store.dml.GetSectionSymbolArray().EndSection()
+	case "bool":
+		inst.store.dml.GetSectionBool().EndSection()
+	case "u32Array":
+		inst.store.dml.GetSectionU32Array().EndSection()
+	case "timeArray":
+		inst.store.dml.GetSectionTimeArray().EndSection()
+	case "symbol":
+		inst.store.dml.GetSectionSymbol().EndSection()
+	case "u8Array":
+		inst.store.dml.GetSectionU8Array().EndSection()
+	case "blobArray":
+		inst.store.dml.GetSectionBlobArray().EndSection()
+	case "u16Array":
+		inst.store.dml.GetSectionU16Array().EndSection()
+	case "u32Set":
+		inst.store.dml.GetSectionU32Set().EndSection()
+	case "u64Array":
+		inst.store.dml.GetSectionU64Array().EndSection()
+	case "u64Set":
+		inst.store.dml.GetSectionU64Set().EndSection()
+	case "i8Array":
+		inst.store.dml.GetSectionI8Array().EndSection()
+	case "i16Array":
+		inst.store.dml.GetSectionI16Array().EndSection()
+	case "i32Array":
+		inst.store.dml.GetSectionI32Array().EndSection()
+	case "i64Array":
+		inst.store.dml.GetSectionI64Array().EndSection()
+	case "f32Array":
+		inst.store.dml.GetSectionF32Array().EndSection()
+	case "f64Array":
+		inst.store.dml.GetSectionF64Array().EndSection()
+	case "u32Range":
+		inst.store.dml.GetSectionU32Range().EndSection()
+	case "null":
+		inst.store.dml.GetSectionNull().EndSection()
+	case "emptyObject":
+		inst.store.dml.GetSectionEmptyObject().EndSection()
+	case "emptyArray":
+		inst.store.dml.GetSectionEmptyArray().EndSection()
 	}
 	return nil
 }
@@ -507,6 +629,385 @@ func (inst *BodyRowEntityBuilder) AddBodyRow(row BodyRow) *BodyRowEntityBuilder 
 		return bodyRowEmitSectionTextArray(inst.store.dml.GetSectionTextArray(), row)
 	})
 	inst.ent.BodyRow = option.Some(row)
+	return inst
+}
+
+// AddEndorsement contributes the Endorsement component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
+func (inst *BodyRowEntityBuilder) AddEndorsement(row Endorsement) *BodyRowEntityBuilder {
+	if err := inst.buf.StartKind("Endorsement"); err != nil {
+		inst.store.dml.AppendError(err)
+		return inst
+	}
+	inst.buf.Enqueue("stringArray", "Endorsement", func() error {
+		return endorsementEmitSectionStringArray(inst.store.dml.GetSectionStringArray(), row)
+	})
+	inst.buf.Enqueue("symbolArray", "Endorsement", func() error {
+		return endorsementEmitSectionSymbolArray(inst.store.dml.GetSectionSymbolArray(), row)
+	})
+	inst.buf.Enqueue("textArray", "Endorsement", func() error {
+		return endorsementEmitSectionTextArray(inst.store.dml.GetSectionTextArray(), row)
+	})
+	inst.ent.Endorsement = option.Some(row)
+	return inst
+}
+
+// AddGrantRecord contributes the GrantRecord component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
+func (inst *BodyRowEntityBuilder) AddGrantRecord(row GrantRecord) *BodyRowEntityBuilder {
+	if err := inst.buf.StartKind("GrantRecord"); err != nil {
+		inst.store.dml.AppendError(err)
+		return inst
+	}
+	inst.buf.Enqueue("textArray", "GrantRecord", func() error {
+		return grantRecordEmitSectionTextArray(inst.store.dml.GetSectionTextArray(), row)
+	})
+	inst.buf.Enqueue("stringArray", "GrantRecord", func() error {
+		return grantRecordEmitSectionStringArray(inst.store.dml.GetSectionStringArray(), row)
+	})
+	inst.buf.Enqueue("bool", "GrantRecord", func() error {
+		return grantRecordEmitSectionBool(inst.store.dml.GetSectionBool(), row)
+	})
+	inst.buf.Enqueue("u32Array", "GrantRecord", func() error {
+		return grantRecordEmitSectionU32Array(inst.store.dml.GetSectionU32Array(), row)
+	})
+	inst.buf.Enqueue("timeArray", "GrantRecord", func() error {
+		return grantRecordEmitSectionTimeArray(inst.store.dml.GetSectionTimeArray(), row)
+	})
+	inst.ent.GrantRecord = option.Some(row)
+	return inst
+}
+
+// AddExitQuestion contributes the ExitQuestion component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
+func (inst *BodyRowEntityBuilder) AddExitQuestion(row ExitQuestion) *BodyRowEntityBuilder {
+	if err := inst.buf.StartKind("ExitQuestion"); err != nil {
+		inst.store.dml.AppendError(err)
+		return inst
+	}
+	inst.buf.Enqueue("textArray", "ExitQuestion", func() error {
+		return exitQuestionEmitSectionTextArray(inst.store.dml.GetSectionTextArray(), row)
+	})
+	inst.buf.Enqueue("symbol", "ExitQuestion", func() error {
+		return exitQuestionEmitSectionSymbol(inst.store.dml.GetSectionSymbol(), row)
+	})
+	inst.ent.ExitQuestion = option.Some(row)
+	return inst
+}
+
+// AddExitAnswer contributes the ExitAnswer component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
+func (inst *BodyRowEntityBuilder) AddExitAnswer(row ExitAnswer) *BodyRowEntityBuilder {
+	if err := inst.buf.StartKind("ExitAnswer"); err != nil {
+		inst.store.dml.AppendError(err)
+		return inst
+	}
+	inst.buf.Enqueue("symbol", "ExitAnswer", func() error {
+		return exitAnswerEmitSectionSymbol(inst.store.dml.GetSectionSymbol(), row)
+	})
+	inst.buf.Enqueue("bool", "ExitAnswer", func() error {
+		return exitAnswerEmitSectionBool(inst.store.dml.GetSectionBool(), row)
+	})
+	inst.buf.Enqueue("textArray", "ExitAnswer", func() error {
+		return exitAnswerEmitSectionTextArray(inst.store.dml.GetSectionTextArray(), row)
+	})
+	inst.ent.ExitAnswer = option.Some(row)
+	return inst
+}
+
+// AddApprovalContent contributes the ApprovalContent component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
+func (inst *BodyRowEntityBuilder) AddApprovalContent(row ApprovalContent) *BodyRowEntityBuilder {
+	if err := inst.buf.StartKind("ApprovalContent"); err != nil {
+		inst.store.dml.AppendError(err)
+		return inst
+	}
+	inst.buf.Enqueue("textArray", "ApprovalContent", func() error {
+		return approvalContentEmitSectionTextArray(inst.store.dml.GetSectionTextArray(), row)
+	})
+	inst.buf.Enqueue("stringArray", "ApprovalContent", func() error {
+		return approvalContentEmitSectionStringArray(inst.store.dml.GetSectionStringArray(), row)
+	})
+	inst.ent.ApprovalContent = option.Some(row)
+	return inst
+}
+
+// AddCopyRecord contributes the CopyRecord component to the open entity.
+//
+// The attributes are buffered, not written: a section frame closes for
+// good, so a component that closed its own sections would shut out the
+// next component sharing one. Commit writes them, one frame per section
+// in first-seen order (ADR-0183 D4).
+//
+// A second Add of this component, or an Add on an entity already using
+// Raw(), is refused: both used to mark the row un-mirrorable and carry
+// on, which made its read-back shape depend on a call the writer had
+// probably made by accident.
+func (inst *BodyRowEntityBuilder) AddCopyRecord(row CopyRecord) *BodyRowEntityBuilder {
+	if err := inst.buf.StartKind("CopyRecord"); err != nil {
+		inst.store.dml.AppendError(err)
+		return inst
+	}
+	inst.buf.Enqueue("stringArray", "CopyRecord", func() error {
+		return copyRecordEmitSectionStringArray(inst.store.dml.GetSectionStringArray(), row)
+	})
+	inst.buf.Enqueue("u8Array", "CopyRecord", func() error {
+		return copyRecordEmitSectionU8Array(inst.store.dml.GetSectionU8Array(), row)
+	})
+	inst.buf.Enqueue("symbol", "CopyRecord", func() error {
+		return copyRecordEmitSectionSymbol(inst.store.dml.GetSectionSymbol(), row)
+	})
+	inst.buf.Enqueue("bool", "CopyRecord", func() error {
+		return copyRecordEmitSectionBool(inst.store.dml.GetSectionBool(), row)
+	})
+	inst.buf.Enqueue("textArray", "CopyRecord", func() error {
+		return copyRecordEmitSectionTextArray(inst.store.dml.GetSectionTextArray(), row)
+	})
+	inst.buf.Enqueue("u32Array", "CopyRecord", func() error {
+		return copyRecordEmitSectionU32Array(inst.store.dml.GetSectionU32Array(), row)
+	})
+	inst.ent.CopyRecord = option.Some(row)
+	return inst
+}
+
+// StartContribution records that kind contributes hand-written
+// attributes to the open entity: one contribution per kind, as a
+// component is one, followed by its Contribute<Section> calls. The
+// entity is then not mirrored into cache views.
+func (inst *BodyRowEntityBuilder) StartContribution(kind string) *BodyRowEntityBuilder {
+	if err := inst.buf.StartKind(kind); err != nil {
+		inst.store.dml.AppendError(err)
+	}
+	inst.raw = true
+	return inst
+}
+
+// ContributeTextArray has fn write kind's attributes into the open entity's
+// textArray section when Commit flushes it, with the section's frame open and
+// shared with the components; fn must not close the section.
+func (inst *BodyRowEntityBuilder) ContributeTextArray(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionTextArray) error) *BodyRowEntityBuilder {
+	inst.buf.Enqueue("textArray", kind, func() error { return fn(inst.store.dml.GetSectionTextArray()) })
+	return inst
+}
+
+// ContributeStringArray has fn write kind's attributes into the open entity's
+// stringArray section when Commit flushes it, with the section's frame open and
+// shared with the components; fn must not close the section.
+func (inst *BodyRowEntityBuilder) ContributeStringArray(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionStringArray) error) *BodyRowEntityBuilder {
+	inst.buf.Enqueue("stringArray", kind, func() error { return fn(inst.store.dml.GetSectionStringArray()) })
+	return inst
+}
+
+// ContributeSymbol has fn write kind's attributes into the open entity's
+// symbol section when Commit flushes it, with the section's frame open and
+// shared with the components; fn must not close the section.
+func (inst *BodyRowEntityBuilder) ContributeSymbol(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionSymbol) error) *BodyRowEntityBuilder {
+	inst.buf.Enqueue("symbol", kind, func() error { return fn(inst.store.dml.GetSectionSymbol()) })
+	return inst
+}
+
+// ContributeSymbolArray has fn write kind's attributes into the open entity's
+// symbolArray section when Commit flushes it, with the section's frame open and
+// shared with the components; fn must not close the section.
+func (inst *BodyRowEntityBuilder) ContributeSymbolArray(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionSymbolArray) error) *BodyRowEntityBuilder {
+	inst.buf.Enqueue("symbolArray", kind, func() error { return fn(inst.store.dml.GetSectionSymbolArray()) })
+	return inst
+}
+
+// ContributeBlobArray has fn write kind's attributes into the open entity's
+// blobArray section when Commit flushes it, with the section's frame open and
+// shared with the components; fn must not close the section.
+func (inst *BodyRowEntityBuilder) ContributeBlobArray(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionBlobArray) error) *BodyRowEntityBuilder {
+	inst.buf.Enqueue("blobArray", kind, func() error { return fn(inst.store.dml.GetSectionBlobArray()) })
+	return inst
+}
+
+// ContributeU8Array has fn write kind's attributes into the open entity's
+// u8Array section when Commit flushes it, with the section's frame open and
+// shared with the components; fn must not close the section.
+func (inst *BodyRowEntityBuilder) ContributeU8Array(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionU8Array) error) *BodyRowEntityBuilder {
+	inst.buf.Enqueue("u8Array", kind, func() error { return fn(inst.store.dml.GetSectionU8Array()) })
+	return inst
+}
+
+// ContributeU16Array has fn write kind's attributes into the open entity's
+// u16Array section when Commit flushes it, with the section's frame open and
+// shared with the components; fn must not close the section.
+func (inst *BodyRowEntityBuilder) ContributeU16Array(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionU16Array) error) *BodyRowEntityBuilder {
+	inst.buf.Enqueue("u16Array", kind, func() error { return fn(inst.store.dml.GetSectionU16Array()) })
+	return inst
+}
+
+// ContributeU32Array has fn write kind's attributes into the open entity's
+// u32Array section when Commit flushes it, with the section's frame open and
+// shared with the components; fn must not close the section.
+func (inst *BodyRowEntityBuilder) ContributeU32Array(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionU32Array) error) *BodyRowEntityBuilder {
+	inst.buf.Enqueue("u32Array", kind, func() error { return fn(inst.store.dml.GetSectionU32Array()) })
+	return inst
+}
+
+// ContributeU32Set has fn write kind's attributes into the open entity's
+// u32Set section when Commit flushes it, with the section's frame open and
+// shared with the components; fn must not close the section.
+func (inst *BodyRowEntityBuilder) ContributeU32Set(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionU32Set) error) *BodyRowEntityBuilder {
+	inst.buf.Enqueue("u32Set", kind, func() error { return fn(inst.store.dml.GetSectionU32Set()) })
+	return inst
+}
+
+// ContributeU64Array has fn write kind's attributes into the open entity's
+// u64Array section when Commit flushes it, with the section's frame open and
+// shared with the components; fn must not close the section.
+func (inst *BodyRowEntityBuilder) ContributeU64Array(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionU64Array) error) *BodyRowEntityBuilder {
+	inst.buf.Enqueue("u64Array", kind, func() error { return fn(inst.store.dml.GetSectionU64Array()) })
+	return inst
+}
+
+// ContributeU64Set has fn write kind's attributes into the open entity's
+// u64Set section when Commit flushes it, with the section's frame open and
+// shared with the components; fn must not close the section.
+func (inst *BodyRowEntityBuilder) ContributeU64Set(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionU64Set) error) *BodyRowEntityBuilder {
+	inst.buf.Enqueue("u64Set", kind, func() error { return fn(inst.store.dml.GetSectionU64Set()) })
+	return inst
+}
+
+// ContributeI8Array has fn write kind's attributes into the open entity's
+// i8Array section when Commit flushes it, with the section's frame open and
+// shared with the components; fn must not close the section.
+func (inst *BodyRowEntityBuilder) ContributeI8Array(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionI8Array) error) *BodyRowEntityBuilder {
+	inst.buf.Enqueue("i8Array", kind, func() error { return fn(inst.store.dml.GetSectionI8Array()) })
+	return inst
+}
+
+// ContributeI16Array has fn write kind's attributes into the open entity's
+// i16Array section when Commit flushes it, with the section's frame open and
+// shared with the components; fn must not close the section.
+func (inst *BodyRowEntityBuilder) ContributeI16Array(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionI16Array) error) *BodyRowEntityBuilder {
+	inst.buf.Enqueue("i16Array", kind, func() error { return fn(inst.store.dml.GetSectionI16Array()) })
+	return inst
+}
+
+// ContributeI32Array has fn write kind's attributes into the open entity's
+// i32Array section when Commit flushes it, with the section's frame open and
+// shared with the components; fn must not close the section.
+func (inst *BodyRowEntityBuilder) ContributeI32Array(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionI32Array) error) *BodyRowEntityBuilder {
+	inst.buf.Enqueue("i32Array", kind, func() error { return fn(inst.store.dml.GetSectionI32Array()) })
+	return inst
+}
+
+// ContributeI64Array has fn write kind's attributes into the open entity's
+// i64Array section when Commit flushes it, with the section's frame open and
+// shared with the components; fn must not close the section.
+func (inst *BodyRowEntityBuilder) ContributeI64Array(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionI64Array) error) *BodyRowEntityBuilder {
+	inst.buf.Enqueue("i64Array", kind, func() error { return fn(inst.store.dml.GetSectionI64Array()) })
+	return inst
+}
+
+// ContributeF32Array has fn write kind's attributes into the open entity's
+// f32Array section when Commit flushes it, with the section's frame open and
+// shared with the components; fn must not close the section.
+func (inst *BodyRowEntityBuilder) ContributeF32Array(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionF32Array) error) *BodyRowEntityBuilder {
+	inst.buf.Enqueue("f32Array", kind, func() error { return fn(inst.store.dml.GetSectionF32Array()) })
+	return inst
+}
+
+// ContributeF64Array has fn write kind's attributes into the open entity's
+// f64Array section when Commit flushes it, with the section's frame open and
+// shared with the components; fn must not close the section.
+func (inst *BodyRowEntityBuilder) ContributeF64Array(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionF64Array) error) *BodyRowEntityBuilder {
+	inst.buf.Enqueue("f64Array", kind, func() error { return fn(inst.store.dml.GetSectionF64Array()) })
+	return inst
+}
+
+// ContributeU32Range has fn write kind's attributes into the open entity's
+// u32Range section when Commit flushes it, with the section's frame open and
+// shared with the components; fn must not close the section.
+func (inst *BodyRowEntityBuilder) ContributeU32Range(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionU32Range) error) *BodyRowEntityBuilder {
+	inst.buf.Enqueue("u32Range", kind, func() error { return fn(inst.store.dml.GetSectionU32Range()) })
+	return inst
+}
+
+// ContributeTimeArray has fn write kind's attributes into the open entity's
+// timeArray section when Commit flushes it, with the section's frame open and
+// shared with the components; fn must not close the section.
+func (inst *BodyRowEntityBuilder) ContributeTimeArray(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionTimeArray) error) *BodyRowEntityBuilder {
+	inst.buf.Enqueue("timeArray", kind, func() error { return fn(inst.store.dml.GetSectionTimeArray()) })
+	return inst
+}
+
+// ContributeBool has fn write kind's attributes into the open entity's
+// bool section when Commit flushes it, with the section's frame open and
+// shared with the components; fn must not close the section.
+func (inst *BodyRowEntityBuilder) ContributeBool(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionBool) error) *BodyRowEntityBuilder {
+	inst.buf.Enqueue("bool", kind, func() error { return fn(inst.store.dml.GetSectionBool()) })
+	return inst
+}
+
+// ContributeNull has fn write kind's attributes into the open entity's
+// null section when Commit flushes it, with the section's frame open and
+// shared with the components; fn must not close the section.
+func (inst *BodyRowEntityBuilder) ContributeNull(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionNull) error) *BodyRowEntityBuilder {
+	inst.buf.Enqueue("null", kind, func() error { return fn(inst.store.dml.GetSectionNull()) })
+	return inst
+}
+
+// ContributeEmptyObject has fn write kind's attributes into the open entity's
+// emptyObject section when Commit flushes it, with the section's frame open and
+// shared with the components; fn must not close the section.
+func (inst *BodyRowEntityBuilder) ContributeEmptyObject(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionEmptyObject) error) *BodyRowEntityBuilder {
+	inst.buf.Enqueue("emptyObject", kind, func() error { return fn(inst.store.dml.GetSectionEmptyObject()) })
+	return inst
+}
+
+// ContributeEmptyArray has fn write kind's attributes into the open entity's
+// emptyArray section when Commit flushes it, with the section's frame open and
+// shared with the components; fn must not close the section.
+func (inst *BodyRowEntityBuilder) ContributeEmptyArray(kind string, fn func(sec *lowlevel.InEntityAgentrunbodyTableSectionEmptyArray) error) *BodyRowEntityBuilder {
+	inst.buf.Enqueue("emptyArray", kind, func() error { return fn(inst.store.dml.GetSectionEmptyArray()) })
 	return inst
 }
 
@@ -592,6 +1093,186 @@ func (inst *BodyRowStore) IngestBodyRowCtx(ctx context.Context, ord uint64, rows
 	return
 }
 
+// IngestEndorsement buffers one whole entity per row carrying only the
+// Endorsement component, all stamped with ord — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ord, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
+func (inst *BodyRowStore) IngestEndorsement(ord uint64, rows []Endorsement) (err error) {
+	return inst.IngestEndorsementCtx(context.Background(), ord, rows)
+}
+
+// IngestEndorsementCtx is IngestEndorsement with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *BodyRowStore) IngestEndorsementCtx(ctx context.Context, ord uint64, rows []Endorsement) (err error) {
+	seen := make(map[string]struct{}, len(rows))
+	for i := range rows {
+		if _, dup := seen[rows[i].ID]; dup {
+			err = eh.Errorf("ingest endorsement row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
+			return
+		}
+		seen[rows[i].ID] = struct{}{}
+		err = inst.BeginCtx(ctx, rows[i].ID, ord).AddEndorsement(rows[i]).Commit()
+		if err != nil {
+			err = eh.Errorf("ingest endorsement row %d: %w", i, err)
+			return
+		}
+	}
+	return
+}
+
+// IngestGrantRecord buffers one whole entity per row carrying only the
+// GrantRecord component, all stamped with ord — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ord, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
+func (inst *BodyRowStore) IngestGrantRecord(ord uint64, rows []GrantRecord) (err error) {
+	return inst.IngestGrantRecordCtx(context.Background(), ord, rows)
+}
+
+// IngestGrantRecordCtx is IngestGrantRecord with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *BodyRowStore) IngestGrantRecordCtx(ctx context.Context, ord uint64, rows []GrantRecord) (err error) {
+	seen := make(map[string]struct{}, len(rows))
+	for i := range rows {
+		if _, dup := seen[rows[i].ID]; dup {
+			err = eh.Errorf("ingest grantRecord row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
+			return
+		}
+		seen[rows[i].ID] = struct{}{}
+		err = inst.BeginCtx(ctx, rows[i].ID, ord).AddGrantRecord(rows[i]).Commit()
+		if err != nil {
+			err = eh.Errorf("ingest grantRecord row %d: %w", i, err)
+			return
+		}
+	}
+	return
+}
+
+// IngestExitQuestion buffers one whole entity per row carrying only the
+// ExitQuestion component, all stamped with ord — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ord, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
+func (inst *BodyRowStore) IngestExitQuestion(ord uint64, rows []ExitQuestion) (err error) {
+	return inst.IngestExitQuestionCtx(context.Background(), ord, rows)
+}
+
+// IngestExitQuestionCtx is IngestExitQuestion with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *BodyRowStore) IngestExitQuestionCtx(ctx context.Context, ord uint64, rows []ExitQuestion) (err error) {
+	seen := make(map[string]struct{}, len(rows))
+	for i := range rows {
+		if _, dup := seen[rows[i].ID]; dup {
+			err = eh.Errorf("ingest exitQuestion row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
+			return
+		}
+		seen[rows[i].ID] = struct{}{}
+		err = inst.BeginCtx(ctx, rows[i].ID, ord).AddExitQuestion(rows[i]).Commit()
+		if err != nil {
+			err = eh.Errorf("ingest exitQuestion row %d: %w", i, err)
+			return
+		}
+	}
+	return
+}
+
+// IngestExitAnswer buffers one whole entity per row carrying only the
+// ExitAnswer component, all stamped with ord — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ord, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
+func (inst *BodyRowStore) IngestExitAnswer(ord uint64, rows []ExitAnswer) (err error) {
+	return inst.IngestExitAnswerCtx(context.Background(), ord, rows)
+}
+
+// IngestExitAnswerCtx is IngestExitAnswer with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *BodyRowStore) IngestExitAnswerCtx(ctx context.Context, ord uint64, rows []ExitAnswer) (err error) {
+	seen := make(map[string]struct{}, len(rows))
+	for i := range rows {
+		if _, dup := seen[rows[i].ID]; dup {
+			err = eh.Errorf("ingest exitAnswer row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
+			return
+		}
+		seen[rows[i].ID] = struct{}{}
+		err = inst.BeginCtx(ctx, rows[i].ID, ord).AddExitAnswer(rows[i]).Commit()
+		if err != nil {
+			err = eh.Errorf("ingest exitAnswer row %d: %w", i, err)
+			return
+		}
+	}
+	return
+}
+
+// IngestApprovalContent buffers one whole entity per row carrying only the
+// ApprovalContent component, all stamped with ord — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ord, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
+func (inst *BodyRowStore) IngestApprovalContent(ord uint64, rows []ApprovalContent) (err error) {
+	return inst.IngestApprovalContentCtx(context.Background(), ord, rows)
+}
+
+// IngestApprovalContentCtx is IngestApprovalContent with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *BodyRowStore) IngestApprovalContentCtx(ctx context.Context, ord uint64, rows []ApprovalContent) (err error) {
+	seen := make(map[string]struct{}, len(rows))
+	for i := range rows {
+		if _, dup := seen[rows[i].ID]; dup {
+			err = eh.Errorf("ingest approvalContent row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
+			return
+		}
+		seen[rows[i].ID] = struct{}{}
+		err = inst.BeginCtx(ctx, rows[i].ID, ord).AddApprovalContent(rows[i]).Commit()
+		if err != nil {
+			err = eh.Errorf("ingest approvalContent row %d: %w", i, err)
+			return
+		}
+	}
+	return
+}
+
+// IngestCopyRecord buffers one whole entity per row carrying only the
+// CopyRecord component, all stamped with ord — rows ship on the next Flush,
+// like every write. Keys must be distinct within one call (rows
+// share ord, so duplicates would tie on Order): a duplicate returns
+// recordstore.ErrDuplicateIngestKey. On any error the rows buffered
+// so far remain buffered — Flush ships them, DiscardPending drops
+// them.
+func (inst *BodyRowStore) IngestCopyRecord(ord uint64, rows []CopyRecord) (err error) {
+	return inst.IngestCopyRecordCtx(context.Background(), ord, rows)
+}
+
+// IngestCopyRecordCtx is IngestCopyRecord with the context BeginCtx hands the
+// configured stampers (ADR-0295 §SD7).
+func (inst *BodyRowStore) IngestCopyRecordCtx(ctx context.Context, ord uint64, rows []CopyRecord) (err error) {
+	seen := make(map[string]struct{}, len(rows))
+	for i := range rows {
+		if _, dup := seen[rows[i].ID]; dup {
+			err = eh.Errorf("ingest copyRecord row %d: %w: key %v", i, recordstore.ErrDuplicateIngestKey, rows[i].ID)
+			return
+		}
+		seen[rows[i].ID] = struct{}{}
+		err = inst.BeginCtx(ctx, rows[i].ID, ord).AddCopyRecord(rows[i]).Commit()
+		if err != nil {
+			err = eh.Errorf("ingest copyRecord row %d: %w", i, err)
+			return
+		}
+	}
+	return
+}
+
 // Buffered reports the number of committed-but-unflushed rows.
 func (inst *BodyRowStore) Buffered() int { return inst.buffered }
 
@@ -634,7 +1315,12 @@ func (inst *BodyRowStore) Flush(ctx context.Context) (n int, err error) {
 	batch := recordstore.NewBatchId()
 	bctx := recordstore.WithBatchId(ctx, batch)
 	if len(records) > 0 {
-		err = inst.exec.InsertArrow(bctx, inst.writeTable(), records)
+		var applied bool
+		applied, err = recordstore.InsertArrowWith(bctx, inst.exec, inst.writeTable(), records, agentrunbodyInsertSettings)
+		if err == nil && !applied && !inst.insertSettingsUnapplied {
+			inst.insertSettingsUnapplied = true
+			log.Warn().Str("table", inst.writeTable()).Msg("deferred: the executor carries no per-insert settings, so this store's inserts run under the session's")
+		}
 		if err != nil {
 			inst.pending = records
 			err = eh.Errorf("insert into %s: %w", inst.writeTable(), err)
@@ -652,6 +1338,54 @@ func (inst *BodyRowStore) Flush(ctx context.Context) (n int, err error) {
 	clear(inst.dirty) // flushed — ClickHouse now serves the written state
 	if len(inst.written) > 0 {
 		inst.cfg.WriteObserver.Durable(bctx, batch, inst.takeWritten())
+	}
+	return
+}
+
+// DrainCanonical writes the rows buffered since the last Flush to w as
+// canonical wire items (ADR-0210), one per entity in commit order, as a
+// CBOR sequence, and discards them: nothing is inserted, and the store
+// is as DiscardPending leaves it. n is the number of items written. A
+// store opened for nothing else needs no executor (ADR-0325 §SD2).
+func (inst *BodyRowStore) DrainCanonical(w io.Writer) (n int, err error) {
+	records, err := lowlevel.InEntityAgentrunbodyTableTransferRecords(inst.dml, nil)
+	if err != nil {
+		err = eh.Errorf("transfer records: %w", err)
+		return
+	}
+	records = append(inst.pending, records...)
+	inst.pending = nil
+	defer func() {
+		for _, rec := range records {
+			rec.Release()
+		}
+		inst.buffered = 0
+		for k := range inst.dirty {
+			inst.notifyWrite(k, nil)
+		}
+		clear(inst.dirty)
+		if len(inst.written) > 0 {
+			inst.cfg.WriteObserver.Discarded(inst.takeWritten())
+		}
+	}()
+	ra := lowlevel.NewReadAccessAgentrunbodyTable()
+	enc, err := lowlevel.NewCanonWireEncoderAgentrunbodyTable(ra, lowlevel.CanonWireOrdinalTaggerAgentrunbodyTable{})
+	if err != nil {
+		err = eh.Errorf("canonical wire encoder: %w", err)
+		return
+	}
+	for _, rec := range records {
+		if err = ra.LoadFromRecord(rec); err != nil {
+			err = eh.Errorf("load the buffered rows: %w", err)
+			return
+		}
+		err = enc.EncodeAll(w)
+		n += int(rec.NumRows())
+		ra.Release()
+		if err != nil {
+			err = eh.Errorf("encode the buffered rows: %w", err)
+			return
+		}
 	}
 	return
 }
@@ -949,7 +1683,13 @@ func (inst *agentrunbodyFetcher) FetchItemSinglePartition(ctx context.Context, p
 // Baked ADR-0066 Filter artefacts: rows carrying a conforming
 // component. Generated from Plan ⋈ IR; membership ids are literals.
 const (
-	agentrunbodyScanBodyRowFilter = "hasAll(\"tv:stringArray:lr:lr:u64:1247:::0::data\", [9223372049739678067, 9223372049739678069]) AND has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068) AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678067) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678067), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678067), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068) = 1 AND if(has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068), \"tv:textArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068), arrayCumSum(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678069) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678069), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678069), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1"
+	agentrunbodyScanBodyRowFilter         = "hasAll(\"tv:stringArray:lr:lr:u64:1247:::0::data\", [9223372049739678067, 9223372049739678108]) AND has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068) AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678067) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678067), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678067), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068) = 1 AND if(has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068), \"tv:textArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068), arrayCumSum(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678108) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678108), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678108), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1"
+	agentrunbodyScanEndorsementFilter     = "hasAll(\"tv:stringArray:lr:lr:u64:1247:::0::data\", [9223372049739678109, 9223372049739678110, 9223372049739678112]) AND has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678113) AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678109) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678109), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678109), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678110) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678110), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678110), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 9223372049739678111) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678112) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678112), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678112), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678113) = 1 AND if(has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678113), \"tv:textArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678113), arrayCumSum(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1"
+	agentrunbodyScanGrantRecordFilter     = "has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678114) AND has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678115) AND hasAll(\"tv:bool:lr:lr:u64:1247:::0::data\", [9223372049739678116, 9223372049739678121]) AND hasAll(\"tv:u32Array:lr:lr:u64:1247:::0::data\", [9223372049739678117, 9223372049739678118]) AND has(\"tv:timeArray:lr:lr:u64:1247:::0::data\", 9223372049739678119) AND countEqual(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678114) = 1 AND if(has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678114), \"tv:textArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678114), arrayCumSum(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678115) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678115), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678115), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678116) = 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678117) = 1 AND if(has(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678117), \"tv:u32Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678117), arrayCumSum(\"tv:u32Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678118) = 1 AND if(has(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678118), \"tv:u32Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678118), arrayCumSum(\"tv:u32Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:timeArray:lr:lr:u64:1247:::0::data\", 9223372049739678119) = 1 AND if(has(\"tv:timeArray:lr:lr:u64:1247:::0::data\", 9223372049739678119), \"tv:timeArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:timeArray:lr:lr:u64:1247:::0::data\", 9223372049739678119), arrayCumSum(\"tv:timeArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678120) <= 1 AND countEqual(\"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678121) = 1"
+	agentrunbodyScanExitQuestionFilter    = "has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678122) AND hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [9223372049739678123, 9223372049739678124, 9223372049739678125]) AND countEqual(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678122) = 1 AND if(has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678122), \"tv:textArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678122), arrayCumSum(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678123) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678124) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678125) = 1"
+	agentrunbodyScanExitAnswerFilter      = "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [9223372049739678126, 9223372049739678127]) AND has(\"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678128) AND has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678129) AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678126) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678127) = 1 AND countEqual(\"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678128) = 1 AND countEqual(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678129) = 1 AND if(has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678129), \"tv:textArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678129), arrayCumSum(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1"
+	agentrunbodyScanApprovalContentFilter = "has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678130) AND has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678131) AND countEqual(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678130) = 1 AND if(has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678130), \"tv:textArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678130), arrayCumSum(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678131) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678131), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678131), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1"
+	agentrunbodyScanCopyRecordFilter      = "hasAll(\"tv:stringArray:lr:lr:u64:1247:::0::data\", [9223372049739678132, 9223372049739678136, 9223372049739678139]) AND hasAll(\"tv:u8Array:lr:lr:u64:1247:::0::data\", [9223372049739678133, 9223372049739678134]) AND has(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678135) AND hasAll(\"tv:bool:lr:lr:u64:1247:::0::data\", [9223372049739678137, 9223372049739678138, 9223372049739678140, 9223372049739678141]) AND has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678142) AND has(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678143) AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678132) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678132), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678132), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 9223372049739678133) = 1 AND if(has(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 9223372049739678133), \"tv:u8Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 9223372049739678133), arrayCumSum(\"tv:u8Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 9223372049739678134) = 1 AND if(has(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 9223372049739678134), \"tv:u8Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 9223372049739678134), arrayCumSum(\"tv:u8Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678135) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678136) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678136), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678136), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678137) = 1 AND countEqual(\"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678138) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678139) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678139), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678139), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678140) = 1 AND countEqual(\"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678141) = 1 AND countEqual(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678142) = 1 AND if(has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678142), \"tv:textArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678142), arrayCumSum(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678143) = 1 AND if(has(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678143), \"tv:u32Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678143), arrayCumSum(\"tv:u32Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1"
 )
 
 // ScanBodyRow iterates the entities whose rows carry a conforming BodyRow
@@ -975,6 +1715,234 @@ func (inst *BodyRowStore) ScanBodyRow(ctx context.Context, opts recordstore.Scan
 		return recordstore.FailScan[*BodyRowEntity](err)
 	}
 	where := agentrunbodyScanBodyRowFilter
+	if opts.KeyPrefix != "" {
+		where = "(" + where + ") AND " + agentrunbodyKeyPrefixPredicate(opts.KeyPrefix)
+	}
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM " + inst.readTable() +
+		" WHERE " + where + order
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += agentrunbodyArrowOutputSettings
+	return inst.iterateEntities(ctx, sql)
+}
+
+// ScanEndorsement iterates the entities whose rows carry a conforming Endorsement
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
+// still come out in a fixed sequence. Rows that tie on BOTH (the same
+// key written twice at the same Order) are not ordered against each
+// other by this clause; the table keeps newest-per-key, so which of
+// them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix restricts the scan to keys starting with it — a
+// primary-key range read, since the table sorts by (key, order).
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
+// built-ins only, so this is a single SELECT — no helper UDFs, no
+// multi-statement script (the ExecutorI contract). The sequence is
+// single-use; ctx must stay valid until iteration completes; an
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
+func (inst *BodyRowStore) ScanEndorsement(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*BodyRowEntity, error] {
+	order, err := agentrunbodyOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*BodyRowEntity](err)
+	}
+	where := agentrunbodyScanEndorsementFilter
+	if opts.KeyPrefix != "" {
+		where = "(" + where + ") AND " + agentrunbodyKeyPrefixPredicate(opts.KeyPrefix)
+	}
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM " + inst.readTable() +
+		" WHERE " + where + order
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += agentrunbodyArrowOutputSettings
+	return inst.iterateEntities(ctx, sql)
+}
+
+// ScanGrantRecord iterates the entities whose rows carry a conforming GrantRecord
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
+// still come out in a fixed sequence. Rows that tie on BOTH (the same
+// key written twice at the same Order) are not ordered against each
+// other by this clause; the table keeps newest-per-key, so which of
+// them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix restricts the scan to keys starting with it — a
+// primary-key range read, since the table sorts by (key, order).
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
+// built-ins only, so this is a single SELECT — no helper UDFs, no
+// multi-statement script (the ExecutorI contract). The sequence is
+// single-use; ctx must stay valid until iteration completes; an
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
+func (inst *BodyRowStore) ScanGrantRecord(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*BodyRowEntity, error] {
+	order, err := agentrunbodyOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*BodyRowEntity](err)
+	}
+	where := agentrunbodyScanGrantRecordFilter
+	if opts.KeyPrefix != "" {
+		where = "(" + where + ") AND " + agentrunbodyKeyPrefixPredicate(opts.KeyPrefix)
+	}
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM " + inst.readTable() +
+		" WHERE " + where + order
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += agentrunbodyArrowOutputSettings
+	return inst.iterateEntities(ctx, sql)
+}
+
+// ScanExitQuestion iterates the entities whose rows carry a conforming ExitQuestion
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
+// still come out in a fixed sequence. Rows that tie on BOTH (the same
+// key written twice at the same Order) are not ordered against each
+// other by this clause; the table keeps newest-per-key, so which of
+// them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix restricts the scan to keys starting with it — a
+// primary-key range read, since the table sorts by (key, order).
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
+// built-ins only, so this is a single SELECT — no helper UDFs, no
+// multi-statement script (the ExecutorI contract). The sequence is
+// single-use; ctx must stay valid until iteration completes; an
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
+func (inst *BodyRowStore) ScanExitQuestion(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*BodyRowEntity, error] {
+	order, err := agentrunbodyOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*BodyRowEntity](err)
+	}
+	where := agentrunbodyScanExitQuestionFilter
+	if opts.KeyPrefix != "" {
+		where = "(" + where + ") AND " + agentrunbodyKeyPrefixPredicate(opts.KeyPrefix)
+	}
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM " + inst.readTable() +
+		" WHERE " + where + order
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += agentrunbodyArrowOutputSettings
+	return inst.iterateEntities(ctx, sql)
+}
+
+// ScanExitAnswer iterates the entities whose rows carry a conforming ExitAnswer
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
+// still come out in a fixed sequence. Rows that tie on BOTH (the same
+// key written twice at the same Order) are not ordered against each
+// other by this clause; the table keeps newest-per-key, so which of
+// them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix restricts the scan to keys starting with it — a
+// primary-key range read, since the table sorts by (key, order).
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
+// built-ins only, so this is a single SELECT — no helper UDFs, no
+// multi-statement script (the ExecutorI contract). The sequence is
+// single-use; ctx must stay valid until iteration completes; an
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
+func (inst *BodyRowStore) ScanExitAnswer(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*BodyRowEntity, error] {
+	order, err := agentrunbodyOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*BodyRowEntity](err)
+	}
+	where := agentrunbodyScanExitAnswerFilter
+	if opts.KeyPrefix != "" {
+		where = "(" + where + ") AND " + agentrunbodyKeyPrefixPredicate(opts.KeyPrefix)
+	}
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM " + inst.readTable() +
+		" WHERE " + where + order
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += agentrunbodyArrowOutputSettings
+	return inst.iterateEntities(ctx, sql)
+}
+
+// ScanApprovalContent iterates the entities whose rows carry a conforming ApprovalContent
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
+// still come out in a fixed sequence. Rows that tie on BOTH (the same
+// key written twice at the same Order) are not ordered against each
+// other by this clause; the table keeps newest-per-key, so which of
+// them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix restricts the scan to keys starting with it — a
+// primary-key range read, since the table sorts by (key, order).
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
+// built-ins only, so this is a single SELECT — no helper UDFs, no
+// multi-statement script (the ExecutorI contract). The sequence is
+// single-use; ctx must stay valid until iteration completes; an
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
+func (inst *BodyRowStore) ScanApprovalContent(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*BodyRowEntity, error] {
+	order, err := agentrunbodyOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*BodyRowEntity](err)
+	}
+	where := agentrunbodyScanApprovalContentFilter
+	if opts.KeyPrefix != "" {
+		where = "(" + where + ") AND " + agentrunbodyKeyPrefixPredicate(opts.KeyPrefix)
+	}
+	if opts.ExtraPredicate != "" {
+		where = "(" + where + ") AND (" + opts.ExtraPredicate + ")"
+	}
+	sql := "SELECT * FROM " + inst.readTable() +
+		" WHERE " + where + order
+	if opts.Limit > 0 {
+		sql += " LIMIT " + strconv.Itoa(opts.Limit)
+	}
+	sql += agentrunbodyArrowOutputSettings
+	return inst.iterateEntities(ctx, sql)
+}
+
+// ScanCopyRecord iterates the entities whose rows carry a conforming CopyRecord
+// component, ordered by (Order, Key) — or by opts.OrderBy's envelope
+// column, opts.Descending reversing either — so entities sharing an Order
+// still come out in a fixed sequence. Rows that tie on BOTH (the same
+// key written twice at the same Order) are not ordered against each
+// other by this clause; the table keeps newest-per-key, so which of
+// them survives is the engine's choice, not the scan's.
+// opts.KeyPrefix restricts the scan to keys starting with it — a
+// primary-key range read, since the table sorts by (key, order).
+// opts.ExtraPredicate (trusted raw SQL over the physical columns —
+// never untrusted input) further restricts the scan; opts.Limit
+// caps the row count. The Filter artefact uses ClickHouse
+// built-ins only, so this is a single SELECT — no helper UDFs, no
+// multi-statement script (the ExecutorI contract). The sequence is
+// single-use; ctx must stay valid until iteration completes; an
+// error ends it as a final (nil, err) pair. Scans see only flushed
+// rows.
+func (inst *BodyRowStore) ScanCopyRecord(ctx context.Context, opts recordstore.ScanOpts) iter.Seq2[*BodyRowEntity, error] {
+	order, err := agentrunbodyOrderBy(opts)
+	if err != nil {
+		return recordstore.FailScan[*BodyRowEntity](err)
+	}
+	where := agentrunbodyScanCopyRecordFilter
 	if opts.KeyPrefix != "" {
 		where = "(" + where + ") AND " + agentrunbodyKeyPrefixPredicate(opts.KeyPrefix)
 	}
@@ -1052,10 +2020,46 @@ var BodyRowComponentSQL = componentsql.Set{
 	Table: BodyRowTableName,
 	Kinds: map[string]componentsql.Artefacts{
 		"BodyRow": {
-			Presence:   "hasAll(\"tv:stringArray:lr:lr:u64:1247:::0::data\", [9223372049739678067, 9223372049739678069]) AND has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068)",
-			Validator:  "countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678067) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678067), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678067), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068) = 1 AND if(has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068), \"tv:textArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068), arrayCumSum(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678069) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678069), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678069), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1",
+			Presence:   "hasAll(\"tv:stringArray:lr:lr:u64:1247:::0::data\", [9223372049739678067, 9223372049739678108]) AND has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068)",
+			Validator:  "countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678067) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678067), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678067), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068) = 1 AND if(has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068), \"tv:textArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068), arrayCumSum(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678108) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678108), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678108), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1",
 			Filter:     agentrunbodyScanBodyRowFilter,
-			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678067, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:textArray:value:val:sh:5::7:0::data\", \"tv:textArray:len:len:u64:4D:::0::data\", \"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068, LW_RAGGED_PARENT_IDS(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678069, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1]), 'Tuple(ID String, Opening String, Body String, Calls String)')",
+			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678067, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:textArray:value:val:sh:5::7:0::data\", \"tv:textArray:len:len:u64:4D:::0::data\", \"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678068, LW_RAGGED_PARENT_IDS(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678108, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1]), 'Tuple(ID String, Opening String, Body String, ArgumentsText String)')",
+		},
+		"Endorsement": {
+			Presence:   "hasAll(\"tv:stringArray:lr:lr:u64:1247:::0::data\", [9223372049739678109, 9223372049739678110, 9223372049739678112]) AND has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678113)",
+			Validator:  "countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678109) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678109), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678109), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678110) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678110), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678110), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:symbolArray:lr:lr:u64:1247:::0::data\", 9223372049739678111) <= 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678112) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678112), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678112), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678113) = 1 AND if(has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678113), \"tv:textArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678113), arrayCumSum(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1",
+			Filter:     agentrunbodyScanEndorsementFilter,
+			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678109, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678110, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:symbolArray:value:val:sh:124::I:0::data\", \"tv:symbolArray:len:len:u64:4D:::0::data\", \"tv:symbolArray:lr:lr:u64:1247:::0::data\", 9223372049739678111, LW_RAGGED_PARENT_IDS(\"tv:symbolArray:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678112, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:textArray:value:val:sh:5::7:0::data\", \"tv:textArray:len:len:u64:4D:::0::data\", \"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678113, LW_RAGGED_PARENT_IDS(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))[1]), 'Tuple(ID String, Digest String, Epoch String, Classes Array(String), Previous String, Diff String)')",
+		},
+		"GrantRecord": {
+			Presence:   "has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678114) AND has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678115) AND hasAll(\"tv:bool:lr:lr:u64:1247:::0::data\", [9223372049739678116, 9223372049739678121]) AND hasAll(\"tv:u32Array:lr:lr:u64:1247:::0::data\", [9223372049739678117, 9223372049739678118]) AND has(\"tv:timeArray:lr:lr:u64:1247:::0::data\", 9223372049739678119)",
+			Validator:  "countEqual(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678114) = 1 AND if(has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678114), \"tv:textArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678114), arrayCumSum(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678115) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678115), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678115), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678116) = 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678117) = 1 AND if(has(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678117), \"tv:u32Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678117), arrayCumSum(\"tv:u32Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678118) = 1 AND if(has(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678118), \"tv:u32Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678118), arrayCumSum(\"tv:u32Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:timeArray:lr:lr:u64:1247:::0::data\", 9223372049739678119) = 1 AND if(has(\"tv:timeArray:lr:lr:u64:1247:::0::data\", 9223372049739678119), \"tv:timeArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:timeArray:lr:lr:u64:1247:::0::data\", 9223372049739678119), arrayCumSum(\"tv:timeArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678120) <= 1 AND countEqual(\"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678121) = 1",
+			Filter:     agentrunbodyScanGrantRecordFilter,
+			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_LIST_BY_TAG_EQUAL(\"tv:textArray:value:val:sh:5::7:0::data\", \"tv:textArray:len:len:u64:4D:::0::data\", \"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678114, LW_RAGGED_PARENT_IDS(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678115, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_VALUE_BY_TAG_EQUAL(\"tv:bool:value:val:b:4:::0::data\", \"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678116, LW_RAGGED_PARENT_IDS(\"tv:bool:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:u32Array:value:val:u32h:4:::0::data\", \"tv:u32Array:len:len:u64:4D:::0::data\", \"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678117, LW_RAGGED_PARENT_IDS(\"tv:u32Array:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:u32Array:value:val:u32h:4:::0::data\", \"tv:u32Array:len:len:u64:4D:::0::data\", \"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678118, LW_RAGGED_PARENT_IDS(\"tv:u32Array:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:timeArray:value:val:z64h:4:::0::data\", \"tv:timeArray:len:len:u64:4D:::0::data\", \"tv:timeArray:lr:lr:u64:1247:::0::data\", 9223372049739678119, LW_RAGGED_PARENT_IDS(\"tv:timeArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678120, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:bool:value:val:b:4:::0::data\", \"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678121, LW_RAGGED_PARENT_IDS(\"tv:bool:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID String, Task String, Handle String, HasTerms Bool, CallsBudget UInt32, CallsUsed UInt32, Deadline DateTime64(9,\\'UTC\\'), Destinations Array(String), Unattended Bool)')",
+		},
+		"ExitQuestion": {
+			Presence:   "has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678122) AND hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [9223372049739678123, 9223372049739678124, 9223372049739678125])",
+			Validator:  "countEqual(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678122) = 1 AND if(has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678122), \"tv:textArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678122), arrayCumSum(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678123) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678124) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678125) = 1",
+			Filter:     agentrunbodyScanExitQuestionFilter,
+			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_LIST_BY_TAG_EQUAL(\"tv:textArray:value:val:sh:5::7:0::data\", \"tv:textArray:len:len:u64:4D:::0::data\", \"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678122, LW_RAGGED_PARENT_IDS(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678123, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678124, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678125, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\"))), 'Tuple(ID String, Question String, Sink String, Tier String, Path String)')",
+		},
+		"ExitAnswer": {
+			Presence:   "hasAll(\"tv:symbol:lr:lr:u64:1247:::0::data\", [9223372049739678126, 9223372049739678127]) AND has(\"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678128) AND has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678129)",
+			Validator:  "countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678126) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678127) = 1 AND countEqual(\"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678128) = 1 AND countEqual(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678129) = 1 AND if(has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678129), \"tv:textArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678129), arrayCumSum(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1",
+			Filter:     agentrunbodyScanExitAnswerFilter,
+			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678126, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678127, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:bool:value:val:b:4:::0::data\", \"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678128, LW_RAGGED_PARENT_IDS(\"tv:bool:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:textArray:value:val:sh:5::7:0::data\", \"tv:textArray:len:len:u64:4D:::0::data\", \"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678129, LW_RAGGED_PARENT_IDS(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))[1]), 'Tuple(ID String, Sink String, Tier String, Approved Bool, Justification String)')",
+		},
+		"ApprovalContent": {
+			Presence:   "has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678130) AND has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678131)",
+			Validator:  "countEqual(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678130) = 1 AND if(has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678130), \"tv:textArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678130), arrayCumSum(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678131) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678131), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678131), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1",
+			Filter:     agentrunbodyScanApprovalContentFilter,
+			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_LIST_BY_TAG_EQUAL(\"tv:textArray:value:val:sh:5::7:0::data\", \"tv:textArray:len:len:u64:4D:::0::data\", \"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678130, LW_RAGGED_PARENT_IDS(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678131, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1]), 'Tuple(ID String, Justification String, Digest String)')",
+		},
+		"CopyRecord": {
+			Presence:   "hasAll(\"tv:stringArray:lr:lr:u64:1247:::0::data\", [9223372049739678132, 9223372049739678136, 9223372049739678139]) AND hasAll(\"tv:u8Array:lr:lr:u64:1247:::0::data\", [9223372049739678133, 9223372049739678134]) AND has(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678135) AND hasAll(\"tv:bool:lr:lr:u64:1247:::0::data\", [9223372049739678137, 9223372049739678138, 9223372049739678140, 9223372049739678141]) AND has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678142) AND has(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678143)",
+			Validator:  "countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678132) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678132), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678132), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 9223372049739678133) = 1 AND if(has(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 9223372049739678133), \"tv:u8Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 9223372049739678133), arrayCumSum(\"tv:u8Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 9223372049739678134) = 1 AND if(has(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 9223372049739678134), \"tv:u8Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u8Array:lr:lr:u64:1247:::0::data\", 9223372049739678134), arrayCumSum(\"tv:u8Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678135) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678136) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678136), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678136), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678137) = 1 AND countEqual(\"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678138) = 1 AND countEqual(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678139) = 1 AND if(has(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678139), \"tv:stringArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678139), arrayCumSum(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678140) = 1 AND countEqual(\"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678141) = 1 AND countEqual(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678142) = 1 AND if(has(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678142), \"tv:textArray:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678142), arrayCumSum(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1 AND countEqual(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678143) = 1 AND if(has(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678143), \"tv:u32Array:len:len:u64:4D:::0::data\"[arrayFirstIndex(cum -> cum >= indexOf(\"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678143), arrayCumSum(\"tv:u32Array:lrcard:lrcard:u64:4E:::0::data\"))], 0) = 1",
+			Filter:     agentrunbodyScanCopyRecordFilter,
+			Projection: "CAST(tuple(\"id:id:s:4::0:\", LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678132, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:u8Array:value:val:u8h:4:::0::data\", \"tv:u8Array:len:len:u64:4D:::0::data\", \"tv:u8Array:lr:lr:u64:1247:::0::data\", 9223372049739678133, LW_RAGGED_PARENT_IDS(\"tv:u8Array:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:u8Array:value:val:u8h:4:::0::data\", \"tv:u8Array:len:len:u64:4D:::0::data\", \"tv:u8Array:lr:lr:u64:1247:::0::data\", 9223372049739678134, LW_RAGGED_PARENT_IDS(\"tv:u8Array:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_VALUE_BY_TAG_EQUAL(\"tv:symbol:value:val:s:124::I:0::data\", \"tv:symbol:lr:lr:u64:1247:::0::data\", 9223372049739678135, LW_RAGGED_PARENT_IDS(\"tv:symbol:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678136, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_VALUE_BY_TAG_EQUAL(\"tv:bool:value:val:b:4:::0::data\", \"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678137, LW_RAGGED_PARENT_IDS(\"tv:bool:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:bool:value:val:b:4:::0::data\", \"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678138, LW_RAGGED_PARENT_IDS(\"tv:bool:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:stringArray:value:val:sh:4::8:0::data\", \"tv:stringArray:len:len:u64:4D:::0::data\", \"tv:stringArray:lr:lr:u64:1247:::0::data\", 9223372049739678139, LW_RAGGED_PARENT_IDS(\"tv:stringArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_VALUE_BY_TAG_EQUAL(\"tv:bool:value:val:b:4:::0::data\", \"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678140, LW_RAGGED_PARENT_IDS(\"tv:bool:lrcard:lrcard:u64:4E:::0::data\")), LW_VALUE_BY_TAG_EQUAL(\"tv:bool:value:val:b:4:::0::data\", \"tv:bool:lr:lr:u64:1247:::0::data\", 9223372049739678141, LW_RAGGED_PARENT_IDS(\"tv:bool:lrcard:lrcard:u64:4E:::0::data\")), LW_LIST_BY_TAG_EQUAL(\"tv:textArray:value:val:sh:5::7:0::data\", \"tv:textArray:len:len:u64:4D:::0::data\", \"tv:textArray:lr:lr:u64:1247:::0::data\", 9223372049739678142, LW_RAGGED_PARENT_IDS(\"tv:textArray:lrcard:lrcard:u64:4E:::0::data\"))[1], LW_LIST_BY_TAG_EQUAL(\"tv:u32Array:value:val:u32h:4:::0::data\", \"tv:u32Array:len:len:u64:4D:::0::data\", \"tv:u32Array:lr:lr:u64:1247:::0::data\", 9223372049739678143, LW_RAGGED_PARENT_IDS(\"tv:u32Array:lrcard:lrcard:u64:4E:::0::data\"))[1]), 'Tuple(ID String, Digest String, Level UInt8, Tier UInt8, Source String, Handle String, Plaintext Bool, Recorded Bool, Approval String, Raw Bool, Refused Bool, Reason String, Bytes UInt32)')",
 		},
 	},
 }
@@ -1114,7 +2118,13 @@ func decodeBodyRowRecord(rec arrow.RecordBatch) (ents []*BodyRowEntity, err erro
 	idR := lowlevel.NewReadAccessAgentrunbodyTablePlainEntityIdAttributes()
 	stringArrayR := lowlevel.NewReadAccessAgentrunbodyTableTaggedStringArray()
 	textArrayR := lowlevel.NewReadAccessAgentrunbodyTableTaggedTextArray()
-	readers := []agentrunbodySectionReaderI{idR, stringArrayR, textArrayR}
+	symbolArrayR := lowlevel.NewReadAccessAgentrunbodyTableTaggedSymbolArray()
+	boolR := lowlevel.NewReadAccessAgentrunbodyTableTaggedBool()
+	u32ArrayR := lowlevel.NewReadAccessAgentrunbodyTableTaggedU32Array()
+	timeArrayR := lowlevel.NewReadAccessAgentrunbodyTableTaggedTimeArray()
+	symbolR := lowlevel.NewReadAccessAgentrunbodyTableTaggedSymbol()
+	u8ArrayR := lowlevel.NewReadAccessAgentrunbodyTableTaggedU8Array()
+	readers := []agentrunbodySectionReaderI{idR, stringArrayR, textArrayR, symbolArrayR, boolR, u32ArrayR, timeArrayR, symbolR, u8ArrayR}
 	for _, r := range readers {
 		err = r.LoadFromRecord(rec)
 		if err != nil {
@@ -1144,6 +2154,72 @@ func decodeBodyRowRecord(rec arrow.RecordBatch) (ents []*BodyRowEntity, err erro
 			if ok {
 				row.ID = ent.ID
 				ent.BodyRow = option.Some(row)
+			}
+		}
+		{
+			row, ok, e := endorsementReadRow(i, stringArrayR.GetAttributes(), stringArrayR.GetMemberships(), symbolArrayR.GetAttributes(), symbolArrayR.GetMemberships(), textArrayR.GetAttributes(), textArrayR.GetMemberships())
+			if e != nil {
+				err = eh.Errorf("read endorsement component: %w", e)
+				return
+			}
+			if ok {
+				row.ID = ent.ID
+				ent.Endorsement = option.Some(row)
+			}
+		}
+		{
+			row, ok, e := grantRecordReadRow(i, textArrayR.GetAttributes(), textArrayR.GetMemberships(), stringArrayR.GetAttributes(), stringArrayR.GetMemberships(), boolR.GetAttributes(), boolR.GetMemberships(), u32ArrayR.GetAttributes(), u32ArrayR.GetMemberships(), timeArrayR.GetAttributes(), timeArrayR.GetMemberships())
+			if e != nil {
+				err = eh.Errorf("read grantRecord component: %w", e)
+				return
+			}
+			if ok {
+				row.ID = ent.ID
+				ent.GrantRecord = option.Some(row)
+			}
+		}
+		{
+			row, ok, e := exitQuestionReadRow(i, textArrayR.GetAttributes(), textArrayR.GetMemberships(), symbolR.GetAttributes(), symbolR.GetMemberships())
+			if e != nil {
+				err = eh.Errorf("read exitQuestion component: %w", e)
+				return
+			}
+			if ok {
+				row.ID = ent.ID
+				ent.ExitQuestion = option.Some(row)
+			}
+		}
+		{
+			row, ok, e := exitAnswerReadRow(i, symbolR.GetAttributes(), symbolR.GetMemberships(), boolR.GetAttributes(), boolR.GetMemberships(), textArrayR.GetAttributes(), textArrayR.GetMemberships())
+			if e != nil {
+				err = eh.Errorf("read exitAnswer component: %w", e)
+				return
+			}
+			if ok {
+				row.ID = ent.ID
+				ent.ExitAnswer = option.Some(row)
+			}
+		}
+		{
+			row, ok, e := approvalContentReadRow(i, textArrayR.GetAttributes(), textArrayR.GetMemberships(), stringArrayR.GetAttributes(), stringArrayR.GetMemberships())
+			if e != nil {
+				err = eh.Errorf("read approvalContent component: %w", e)
+				return
+			}
+			if ok {
+				row.ID = ent.ID
+				ent.ApprovalContent = option.Some(row)
+			}
+		}
+		{
+			row, ok, e := copyRecordReadRow(i, stringArrayR.GetAttributes(), stringArrayR.GetMemberships(), u8ArrayR.GetAttributes(), u8ArrayR.GetMemberships(), symbolR.GetAttributes(), symbolR.GetMemberships(), boolR.GetAttributes(), boolR.GetMemberships(), textArrayR.GetAttributes(), textArrayR.GetMemberships(), u32ArrayR.GetAttributes(), u32ArrayR.GetMemberships())
+			if e != nil {
+				err = eh.Errorf("read copyRecord component: %w", e)
+				return
+			}
+			if ok {
+				row.ID = ent.ID
+				ent.CopyRecord = option.Some(row)
 			}
 		}
 		ents = append(ents, ent)

@@ -117,10 +117,12 @@ func TestATurnOverTheTriggerIsSummarised(t *testing.T) {
 			assert.Equal(t, agentrun.LevelOwnModel, e.Label.Level, "the summariser's call carries the request's label (L3)")
 		case agentrun.KindRequest:
 			requests++
-			assert.Contains(t, e.Body, `"digest"`)
+			require.NotNil(t, e.Request)
+			assert.NotEmpty(t, e.Request.Digest)
 		case agentrun.KindOutcome:
 			outcomes++
-			assert.Contains(t, e.Body, `"call_id"`)
+			require.NotNil(t, e.Reply)
+			assert.NotEmpty(t, e.Reply.CallId)
 			assert.Equal(t, agentrun.LevelOwnModel, e.Label.Level)
 		}
 	}

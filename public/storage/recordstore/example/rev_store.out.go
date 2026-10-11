@@ -10,6 +10,7 @@ package example
 import (
 	"context"
 	_ "embed"
+	"io"
 	"iter"
 	"strconv"
 	"strings"
@@ -520,6 +521,26 @@ func (inst *RevEntityBuilder) AddRevNote(row RevNote) *RevEntityBuilder {
 	return inst
 }
 
+// StartContribution records that kind contributes hand-written
+// attributes to the open entity: one contribution per kind, as a
+// component is one, followed by its Contribute<Section> calls. The
+// entity is then not mirrored into cache views.
+func (inst *RevEntityBuilder) StartContribution(kind string) *RevEntityBuilder {
+	if err := inst.buf.StartKind(kind); err != nil {
+		inst.store.dml.AppendError(err)
+	}
+	inst.raw = true
+	return inst
+}
+
+// ContributeNote has fn write kind's attributes into the open entity's
+// note section when Commit flushes it, with the section's frame open and
+// shared with the components; fn must not close the section.
+func (inst *RevEntityBuilder) ContributeNote(kind string, fn func(sec *lowlevel.InEntityRevTableSectionNote) error) *RevEntityBuilder {
+	inst.buf.Enqueue("note", kind, func() error { return fn(inst.store.dml.GetSectionNote()) })
+	return inst
+}
+
 // Raw exposes the underlying DML entity for direct attribute
 // manipulation within the same entity frame. The type lives in
 // internal/lowlevel: callers outside the generated package hold the
@@ -661,6 +682,54 @@ func (inst *RevStore) Flush(ctx context.Context) (n int, err error) {
 	clear(inst.dirty) // flushed — ClickHouse now serves the written state
 	if len(inst.written) > 0 {
 		inst.cfg.WriteObserver.Durable(bctx, batch, inst.takeWritten())
+	}
+	return
+}
+
+// DrainCanonical writes the rows buffered since the last Flush to w as
+// canonical wire items (ADR-0210), one per entity in commit order, as a
+// CBOR sequence, and discards them: nothing is inserted, and the store
+// is as DiscardPending leaves it. n is the number of items written. A
+// store opened for nothing else needs no executor (ADR-0325 §SD2).
+func (inst *RevStore) DrainCanonical(w io.Writer) (n int, err error) {
+	records, err := lowlevel.InEntityRevTableTransferRecords(inst.dml, nil)
+	if err != nil {
+		err = eh.Errorf("transfer records: %w", err)
+		return
+	}
+	records = append(inst.pending, records...)
+	inst.pending = nil
+	defer func() {
+		for _, rec := range records {
+			rec.Release()
+		}
+		inst.buffered = 0
+		for k := range inst.dirty {
+			inst.notifyWrite(k, nil)
+		}
+		clear(inst.dirty)
+		if len(inst.written) > 0 {
+			inst.cfg.WriteObserver.Discarded(inst.takeWritten())
+		}
+	}()
+	ra := lowlevel.NewReadAccessRevTable()
+	enc, err := lowlevel.NewCanonWireEncoderRevTable(ra, lowlevel.CanonWireOrdinalTaggerRevTable{})
+	if err != nil {
+		err = eh.Errorf("canonical wire encoder: %w", err)
+		return
+	}
+	for _, rec := range records {
+		if err = ra.LoadFromRecord(rec); err != nil {
+			err = eh.Errorf("load the buffered rows: %w", err)
+			return
+		}
+		err = enc.EncodeAll(w)
+		n += int(rec.NumRows())
+		ra.Release()
+		if err != nil {
+			err = eh.Errorf("encode the buffered rows: %w", err)
+			return
+		}
 	}
 	return
 }

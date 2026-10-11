@@ -145,7 +145,9 @@ func JournalTable(entries []agentrun.Entry) (b []byte, err error) {
 		String("kind", func(i int) string { return rows[i].Kind.String() }).
 		String("key", func(i int) string { return rows[i].Key }).
 		String("role", func(i int) string { return rows[i].Role }).
-		String("body", func(i int) string { return rows[i].Body }).
+		// The record kinds' body is their record as text (agentrun's
+		// RecordBody): the tools entry's names, which the tools pass reads.
+		String("body", func(i int) string { return rows[i].RecordBody() }).
 		String("calls", func(i int) string { return rows[i].Calls }).
 		String("name", func(i int) string { return rows[i].Name }).
 		String("book", func(i int) string { return rows[i].Book }).

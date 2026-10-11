@@ -14,31 +14,32 @@ import (
 // --- Caller-assigned membership ids (registry-stable target). ---
 
 const (
-	kindAgentrunEntryAt            uint64 = 9223372049739678024
-	kindAgentrunEntryKind          uint64 = 9223372049739678025
-	kindAgentrunEntryKey           uint64 = 9223372049739678026
-	kindAgentrunEntryRole          uint64 = 9223372049739678027
-	kindAgentrunEntryBodyDigest    uint64 = 9223372049739678049
-	kindAgentrunEntryCallsDigest   uint64 = 9223372049739678050
-	kindAgentrunEntryName          uint64 = 9223372049739678030
-	kindAgentrunEntryBook          uint64 = 9223372049739678031
-	kindAgentrunEntryForm          uint64 = 9223372049739678032
-	kindAgentrunEntryTarget        uint64 = 9223372049739678033
-	kindAgentrunEntryFrom          uint64 = 9223372049739678034
-	kindAgentrunEntryEffect        uint64 = 9223372049739678035
-	kindAgentrunEntryTurn          uint64 = 9223372049739678036
-	kindAgentrunEntryLabelLevel    uint64 = 9223372049739678037
-	kindAgentrunEntryLabelTier     uint64 = 9223372049739678038
-	kindAgentrunEntryLabelExposure uint64 = 9223372049739678039
-	kindAgentrunEntryLabelOrigin   uint64 = 9223372049739678040
-	kindAgentrunEntryWriterRun     uint64 = 9223372049739678041
-	kindAgentrunEntryWriterTurn    uint64 = 9223372049739678042
-	kindAgentrunEntryWriterOrdinal uint64 = 9223372049739678043
-	kindAgentrunEntryPrev          uint64 = 9223372049739678044
-	kindAgentrunEntryDigest        uint64 = 9223372049739678045
-	kindAgentrunEntryKeyId         uint64 = 9223372049739678046
-	kindAgentrunEntryParent        uint64 = 9223372049739678047
-	kindAgentrunEntryAttachments   uint64 = 9223372049739678048
+	kindAgentrunEntryAt                   uint64 = 9223372049739678024
+	kindAgentrunEntryKind                 uint64 = 9223372049739678025
+	kindAgentrunEntryKey                  uint64 = 9223372049739678026
+	kindAgentrunEntryRole                 uint64 = 9223372049739678027
+	kindAgentrunEntryId                   uint64 = 9223372049739678076
+	kindAgentrunEntryVaultCommitment      uint64 = 9223372049739678077
+	kindAgentrunEntryName                 uint64 = 9223372049739678030
+	kindAgentrunEntryBook                 uint64 = 9223372049739678031
+	kindAgentrunEntryForm                 uint64 = 9223372049739678032
+	kindAgentrunEntryTarget               uint64 = 9223372049739678033
+	kindAgentrunEntryFrom                 uint64 = 9223372049739678034
+	kindAgentrunEntryEffect               uint64 = 9223372049739678035
+	kindAgentrunEntryTurn                 uint64 = 9223372049739678036
+	kindAgentrunEntryLabelLevel           uint64 = 9223372049739678037
+	kindAgentrunEntryLabelTier            uint64 = 9223372049739678038
+	kindAgentrunEntryLabelExposure        uint64 = 9223372049739678039
+	kindAgentrunEntryLabelOrigin          uint64 = 9223372049739678040
+	kindAgentrunEntryWriterRun            uint64 = 9223372049739678041
+	kindAgentrunEntryWriterTurn           uint64 = 9223372049739678042
+	kindAgentrunEntryWriterOrdinal        uint64 = 9223372049739678043
+	kindAgentrunEntryPrev                 uint64 = 9223372049739678044
+	kindAgentrunEntryDigest               uint64 = 9223372049739678045
+	kindAgentrunEntryKeyId                uint64 = 9223372049739678046
+	kindAgentrunEntryParent               uint64 = 9223372049739678047
+	kindAgentrunEntryAttachmentMediaTypes uint64 = 9223372049739678078
+	kindAgentrunEntryAttachmentDigests    uint64 = 9223372049739678079
 )
 
 // entryTimeArrayAttrI is the InAttr-side view of the timeArray section. P-variants only —
@@ -76,13 +77,30 @@ type entrySymbolSecI[Attr any, Ent any] interface {
 // needed.
 type entryStringArrayAttrI interface {
 	dmlruntime.InAttributeMembershipLowCardRefPI
+	AddToContainerP(value string)
 	EndAttributeP()
 }
 
 // entryStringArraySecI is the Section-side view: opens an attribute and closes
 // the section. Attr and Ent are bound at the call site by inference.
 type entryStringArraySecI[Attr any, Ent any] interface {
+	BeginAttribute() Attr
 	BeginAttributeSingle(value string) Attr
+	EndSection() Ent
+}
+
+// entryU64ArrayAttrI is the InAttr-side view of the u64Array section. P-variants only —
+// every method returns void so no F-bounded `[Self]` parameter is
+// needed.
+type entryU64ArrayAttrI interface {
+	dmlruntime.InAttributeMembershipLowCardRefPI
+	EndAttributeP()
+}
+
+// entryU64ArraySecI is the Section-side view: opens an attribute and closes
+// the section. Attr and Ent are bound at the call site by inference.
+type entryU64ArraySecI[Attr any, Ent any] interface {
+	BeginAttributeSingle(value uint64) Attr
 	EndSection() Ent
 }
 
@@ -146,6 +164,8 @@ type entryEntityI[
 	SymbolSec entrySymbolSecI[SymbolAttr, Ent],
 	StringArrayAttr entryStringArrayAttrI,
 	StringArraySec entryStringArraySecI[StringArrayAttr, Ent],
+	U64ArrayAttr entryU64ArrayAttrI,
+	U64ArraySec entryU64ArraySecI[U64ArrayAttr, Ent],
 	U32ArrayAttr entryU32ArrayAttrI,
 	U32ArraySec entryU32ArraySecI[U32ArrayAttr, Ent],
 	U8ArrayAttr entryU8ArrayAttrI,
@@ -157,6 +177,7 @@ type entryEntityI[
 	GetSectionTimeArray() TimeArraySec
 	GetSectionSymbol() SymbolSec
 	GetSectionStringArray() StringArraySec
+	GetSectionU64Array() U64ArraySec
 	GetSectionU32Array() U32ArraySec
 	GetSectionU8Array() U8ArraySec
 	GetSectionSymbolArray() SymbolArraySec
@@ -228,21 +249,38 @@ func entryEmitSectionStringArray[
 	stringArraySecAttr_Key := stringArraySec.BeginAttributeSingle(row.Key)
 	stringArraySecAttr_Key.AddMembershipLowCardRefP(kindAgentrunEntryKey)
 	stringArraySecAttr_Key.EndAttributeP()
-	stringArraySecAttr_BodyDigest := stringArraySec.BeginAttributeSingle(row.BodyDigest)
-	stringArraySecAttr_BodyDigest.AddMembershipLowCardRefP(kindAgentrunEntryBodyDigest)
-	stringArraySecAttr_BodyDigest.EndAttributeP()
-	stringArraySecAttr_CallsDigest := stringArraySec.BeginAttributeSingle(row.CallsDigest)
-	stringArraySecAttr_CallsDigest.AddMembershipLowCardRefP(kindAgentrunEntryCallsDigest)
-	stringArraySecAttr_CallsDigest.EndAttributeP()
+	stringArraySecAttr_VaultCommitment := stringArraySec.BeginAttributeSingle(row.VaultCommitment)
+	stringArraySecAttr_VaultCommitment.AddMembershipLowCardRefP(kindAgentrunEntryVaultCommitment)
+	stringArraySecAttr_VaultCommitment.EndAttributeP()
 	stringArraySecAttr_Name := stringArraySec.BeginAttributeSingle(row.Name)
 	stringArraySecAttr_Name.AddMembershipLowCardRefP(kindAgentrunEntryName)
 	stringArraySecAttr_Name.EndAttributeP()
 	stringArraySecAttr_Digest := stringArraySec.BeginAttributeSingle(row.Digest)
 	stringArraySecAttr_Digest.AddMembershipLowCardRefP(kindAgentrunEntryDigest)
 	stringArraySecAttr_Digest.EndAttributeP()
-	stringArraySecAttr_Attachments := stringArraySec.BeginAttributeSingle(row.Attachments)
-	stringArraySecAttr_Attachments.AddMembershipLowCardRefP(kindAgentrunEntryAttachments)
-	stringArraySecAttr_Attachments.EndAttributeP()
+	if len(row.AttachmentDigests) > 0 {
+		stringArraySecAttr_AttachmentDigests := stringArraySec.BeginAttribute()
+		for _, v := range row.AttachmentDigests {
+			stringArraySecAttr_AttachmentDigests.AddToContainerP(v)
+		}
+		stringArraySecAttr_AttachmentDigests.AddMembershipLowCardRefP(kindAgentrunEntryAttachmentDigests)
+		stringArraySecAttr_AttachmentDigests.EndAttributeP()
+	}
+	return
+}
+
+// entryEmitSectionU64Array writes this kind's u64Array attributes into an
+// ALREADY-OPEN section frame, and does not close it. The caller owns
+// the frame: one kind's AddSections, or a builder deferring the close
+// until every component that shares the section has written.
+func entryEmitSectionU64Array[
+	U64ArrayAttr entryU64ArrayAttrI,
+	U64ArraySec entryU64ArraySecI[U64ArrayAttr, Ent],
+	Ent any,
+](u64ArraySec U64ArraySec, row Entry) (err error) {
+	u64ArraySecAttr_EntryId := u64ArraySec.BeginAttributeSingle(row.EntryId)
+	u64ArraySecAttr_EntryId.AddMembershipLowCardRefP(kindAgentrunEntryId)
+	u64ArraySecAttr_EntryId.EndAttributeP()
 	return
 }
 
@@ -316,6 +354,14 @@ func entryEmitSectionSymbolArray[
 		symbolArraySecAttr_LabelOrigin.AddMembershipLowCardRefP(kindAgentrunEntryLabelOrigin)
 		symbolArraySecAttr_LabelOrigin.EndAttributeP()
 	}
+	if len(row.AttachmentMediaTypes) > 0 {
+		symbolArraySecAttr_AttachmentMediaTypes := symbolArraySec.BeginAttribute()
+		for _, v := range row.AttachmentMediaTypes {
+			symbolArraySecAttr_AttachmentMediaTypes.AddToContainerP(v)
+		}
+		symbolArraySecAttr_AttachmentMediaTypes.AddMembershipLowCardRefP(kindAgentrunEntryAttachmentMediaTypes)
+		symbolArraySecAttr_AttachmentMediaTypes.EndAttributeP()
+	}
 	return
 }
 
@@ -329,6 +375,8 @@ func entryAddSections[
 	SymbolSec entrySymbolSecI[SymbolAttr, Ent],
 	StringArrayAttr entryStringArrayAttrI,
 	StringArraySec entryStringArraySecI[StringArrayAttr, Ent],
+	U64ArrayAttr entryU64ArrayAttrI,
+	U64ArraySec entryU64ArraySecI[U64ArrayAttr, Ent],
 	U32ArrayAttr entryU32ArrayAttrI,
 	U32ArraySec entryU32ArraySecI[U32ArrayAttr, Ent],
 	U8ArrayAttr entryU8ArrayAttrI,
@@ -340,6 +388,7 @@ func entryAddSections[
 		TimeArrayAttr, TimeArraySec,
 		SymbolAttr, SymbolSec,
 		StringArrayAttr, StringArraySec,
+		U64ArrayAttr, U64ArraySec,
 		U32ArrayAttr, U32ArraySec,
 		U8ArrayAttr, U8ArraySec,
 		SymbolArrayAttr, SymbolArraySec,
@@ -367,6 +416,13 @@ func entryAddSections[
 		return
 	}
 	stringArraySec.EndSection()
+	// --- u64Array. ---
+	u64ArraySec := dml.GetSectionU64Array()
+	err = entryEmitSectionU64Array(u64ArraySec, row)
+	if err != nil {
+		return
+	}
+	u64ArraySec.EndSection()
 	// --- u32Array. ---
 	u32ArraySec := dml.GetSectionU32Array()
 	err = entryEmitSectionU32Array(u32ArraySec, row)
@@ -415,12 +471,24 @@ type entrySymbolMembsReadI interface {
 
 // entryStringArrayAttrsReadI is the Attributes-side view of the stringArray section.
 type entryStringArrayAttrsReadI interface {
+	GetAttrValueValue(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[string]
 	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (string, error)
 	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
 }
 
 // entryStringArrayMembsReadI is the Memberships-side view of the stringArray section.
 type entryStringArrayMembsReadI interface {
+	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
+}
+
+// entryU64ArrayAttrsReadI is the Attributes-side view of the u64Array section.
+type entryU64ArrayAttrsReadI interface {
+	GetAttrValueSingle(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) (uint64, error)
+	GetNumberOfAttributes(entityIdx raruntime.EntityIdx) int64
+}
+
+// entryU64ArrayMembsReadI is the Memberships-side view of the u64Array section.
+type entryU64ArrayMembsReadI interface {
 	GetMembValueLowCardRef(entityIdx raruntime.EntityIdx, attrIdx raruntime.AttributeIdx) iter.Seq[uint64]
 }
 
@@ -472,6 +540,8 @@ func entryReadRow[
 	SymbolMembs entrySymbolMembsReadI,
 	StringArrayAttrs entryStringArrayAttrsReadI,
 	StringArrayMembs entryStringArrayMembsReadI,
+	U64ArrayAttrs entryU64ArrayAttrsReadI,
+	U64ArrayMembs entryU64ArrayMembsReadI,
 	U32ArrayAttrs entryU32ArrayAttrsReadI,
 	U32ArrayMembs entryU32ArrayMembsReadI,
 	U8ArrayAttrs entryU8ArrayAttrsReadI,
@@ -486,6 +556,8 @@ func entryReadRow[
 	symbolMembs SymbolMembs,
 	stringArrayAttrs StringArrayAttrs,
 	stringArrayMembs StringArrayMembs,
+	u64ArrayAttrs U64ArrayAttrs,
+	u64ArrayMembs U64ArrayMembs,
 	u32ArrayAttrs U32ArrayAttrs,
 	u32ArrayMembs U32ArrayMembs,
 	u8ArrayAttrs U8ArrayAttrs,
@@ -697,21 +769,18 @@ func entryReadRow[
 	var stringArrayKeyVal string
 	var stringArrayKeyCount int
 	var stringArrayKeyLastAttr int64
-	var stringArrayBodyDigestVal string
-	var stringArrayBodyDigestCount int
-	var stringArrayBodyDigestLastAttr int64
-	var stringArrayCallsDigestVal string
-	var stringArrayCallsDigestCount int
-	var stringArrayCallsDigestLastAttr int64
+	var stringArrayVaultCommitmentVal string
+	var stringArrayVaultCommitmentCount int
+	var stringArrayVaultCommitmentLastAttr int64
 	var stringArrayNameVal string
 	var stringArrayNameCount int
 	var stringArrayNameLastAttr int64
 	var stringArrayDigestVal string
 	var stringArrayDigestCount int
 	var stringArrayDigestLastAttr int64
-	var stringArrayAttachmentsVal string
-	var stringArrayAttachmentsCount int
-	var stringArrayAttachmentsLastAttr int64
+	var stringArrayAttachmentDigestsSlice []string
+	var stringArrayAttachmentDigestsCount int
+	var stringArrayAttachmentDigestsLastAttr int64
 	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -727,28 +796,17 @@ func entryReadRow[
 					return
 				}
 				stringArrayKeyVal = val
-			case kindAgentrunEntryBodyDigest:
-				if stringArrayBodyDigestLastAttr != attrJ+1 {
-					stringArrayBodyDigestLastAttr = attrJ + 1
-					stringArrayBodyDigestCount++
+			case kindAgentrunEntryVaultCommitment:
+				if stringArrayVaultCommitmentLastAttr != attrJ+1 {
+					stringArrayVaultCommitmentLastAttr = attrJ + 1
+					stringArrayVaultCommitmentCount++
 				}
 				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				if valErr != nil {
-					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunEntryBodyDigest").Str("field", "BodyDigest").Errorf("slot stringArray@agentrunEntryBodyDigest (field BodyDigest) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunEntryVaultCommitment").Str("field", "VaultCommitment").Errorf("slot stringArray@agentrunEntryVaultCommitment (field VaultCommitment) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
 					return
 				}
-				stringArrayBodyDigestVal = val
-			case kindAgentrunEntryCallsDigest:
-				if stringArrayCallsDigestLastAttr != attrJ+1 {
-					stringArrayCallsDigestLastAttr = attrJ + 1
-					stringArrayCallsDigestCount++
-				}
-				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				if valErr != nil {
-					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunEntryCallsDigest").Str("field", "CallsDigest").Errorf("slot stringArray@agentrunEntryCallsDigest (field CallsDigest) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
-					return
-				}
-				stringArrayCallsDigestVal = val
+				stringArrayVaultCommitmentVal = val
 			case kindAgentrunEntryName:
 				if stringArrayNameLastAttr != attrJ+1 {
 					stringArrayNameLastAttr = attrJ + 1
@@ -771,17 +829,14 @@ func entryReadRow[
 					return
 				}
 				stringArrayDigestVal = val
-			case kindAgentrunEntryAttachments:
-				if stringArrayAttachmentsLastAttr != attrJ+1 {
-					stringArrayAttachmentsLastAttr = attrJ + 1
-					stringArrayAttachmentsCount++
+			case kindAgentrunEntryAttachmentDigests:
+				if stringArrayAttachmentDigestsLastAttr != attrJ+1 {
+					stringArrayAttachmentDigestsLastAttr = attrJ + 1
+					stringArrayAttachmentDigestsCount++
 				}
-				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
-				if valErr != nil {
-					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunEntryAttachments").Str("field", "Attachments").Errorf("slot stringArray@agentrunEntryAttachments (field Attachments) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
-					return
+				for v := range stringArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					stringArrayAttachmentDigestsSlice = append(stringArrayAttachmentDigestsSlice, v)
 				}
-				stringArrayAttachmentsVal = val
 			}
 		}
 	}
@@ -793,20 +848,12 @@ func entryReadRow[
 		row.Key = stringArrayKeyVal
 		present = true
 	}
-	if stringArrayBodyDigestCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunEntryBodyDigest").Int("got", stringArrayBodyDigestCount).Errorf("slot stringArray@agentrunEntryBodyDigest (field BodyDigest) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayBodyDigestCount)
+	if stringArrayVaultCommitmentCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunEntryVaultCommitment").Int("got", stringArrayVaultCommitmentCount).Errorf("slot stringArray@agentrunEntryVaultCommitment (field VaultCommitment) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayVaultCommitmentCount)
 		return
 	}
-	if stringArrayBodyDigestCount == 1 {
-		row.BodyDigest = stringArrayBodyDigestVal
-		present = true
-	}
-	if stringArrayCallsDigestCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunEntryCallsDigest").Int("got", stringArrayCallsDigestCount).Errorf("slot stringArray@agentrunEntryCallsDigest (field CallsDigest) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayCallsDigestCount)
-		return
-	}
-	if stringArrayCallsDigestCount == 1 {
-		row.CallsDigest = stringArrayCallsDigestVal
+	if stringArrayVaultCommitmentCount == 1 {
+		row.VaultCommitment = stringArrayVaultCommitmentVal
 		present = true
 	}
 	if stringArrayNameCount > 1 {
@@ -825,12 +872,42 @@ func entryReadRow[
 		row.Digest = stringArrayDigestVal
 		present = true
 	}
-	if stringArrayAttachmentsCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunEntryAttachments").Int("got", stringArrayAttachmentsCount).Errorf("slot stringArray@agentrunEntryAttachments (field Attachments) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayAttachmentsCount)
+	if stringArrayAttachmentDigestsCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunEntryAttachmentDigests").Int("got", stringArrayAttachmentDigestsCount).Errorf("slot stringArray@agentrunEntryAttachmentDigests (field AttachmentDigests) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayAttachmentDigestsCount)
 		return
 	}
-	if stringArrayAttachmentsCount == 1 {
-		row.Attachments = stringArrayAttachmentsVal
+	if stringArrayAttachmentDigestsSlice != nil {
+		row.AttachmentDigests = stringArrayAttachmentDigestsSlice
+		present = true
+	}
+	// --- u64Array. ---
+	var u64ArrayEntryIdVal uint64
+	var u64ArrayEntryIdCount int
+	var u64ArrayEntryIdLastAttr int64
+	nu64Array := u64ArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
+	for attrJ := int64(0); attrJ < nu64Array; attrJ++ {
+		for membID := range u64ArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+			switch membID {
+			case kindAgentrunEntryId:
+				if u64ArrayEntryIdLastAttr != attrJ+1 {
+					u64ArrayEntryIdLastAttr = attrJ + 1
+					u64ArrayEntryIdCount++
+				}
+				val, valErr := u64ArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
+				if valErr != nil {
+					err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "agentrunEntryId").Str("field", "EntryId").Errorf("slot u64Array@agentrunEntryId (field EntryId) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					return
+				}
+				u64ArrayEntryIdVal = val
+			}
+		}
+	}
+	if u64ArrayEntryIdCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "u64Array").Str("membership", "agentrunEntryId").Int("got", u64ArrayEntryIdCount).Errorf("slot u64Array@agentrunEntryId (field EntryId) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", u64ArrayEntryIdCount)
+		return
+	}
+	if u64ArrayEntryIdCount == 1 {
+		row.EntryId = u64ArrayEntryIdVal
 		present = true
 	}
 	// --- u32Array. ---
@@ -1010,6 +1087,9 @@ func entryReadRow[
 	var symbolArrayLabelOriginSlice []string
 	var symbolArrayLabelOriginCount int
 	var symbolArrayLabelOriginLastAttr int64
+	var symbolArrayAttachmentMediaTypesSlice []string
+	var symbolArrayAttachmentMediaTypesCount int
+	var symbolArrayAttachmentMediaTypesLastAttr int64
 	nsymbolArray := symbolArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nsymbolArray; attrJ++ {
 		for membID := range symbolArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -1030,6 +1110,14 @@ func entryReadRow[
 				for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
 					symbolArrayLabelOriginSlice = append(symbolArrayLabelOriginSlice, v)
 				}
+			case kindAgentrunEntryAttachmentMediaTypes:
+				if symbolArrayAttachmentMediaTypesLastAttr != attrJ+1 {
+					symbolArrayAttachmentMediaTypesLastAttr = attrJ + 1
+					symbolArrayAttachmentMediaTypesCount++
+				}
+				for v := range symbolArrayAttrs.GetAttrValueValue(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
+					symbolArrayAttachmentMediaTypesSlice = append(symbolArrayAttachmentMediaTypesSlice, v)
+				}
 			}
 		}
 	}
@@ -1047,6 +1135,14 @@ func entryReadRow[
 	}
 	if symbolArrayLabelOriginSlice != nil {
 		row.LabelOrigin = symbolArrayLabelOriginSlice
+		present = true
+	}
+	if symbolArrayAttachmentMediaTypesCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "symbolArray").Str("membership", "agentrunEntryAttachmentMediaTypes").Int("got", symbolArrayAttachmentMediaTypesCount).Errorf("slot symbolArray@agentrunEntryAttachmentMediaTypes (field AttachmentMediaTypes) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", symbolArrayAttachmentMediaTypesCount)
+		return
+	}
+	if symbolArrayAttachmentMediaTypesSlice != nil {
+		row.AttachmentMediaTypes = symbolArrayAttachmentMediaTypesSlice
 		present = true
 	}
 	return

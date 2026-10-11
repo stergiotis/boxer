@@ -42,7 +42,7 @@ func TestGenerateAgentrunStores(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, gen.Input{
 		PackageName: "agentrunstore", StoreName: "Entry", TableName: TableNameEntry, Database: DatabaseName,
-		Table: entryTd, RowConfig: TableRowConfig, ComponentPaths: []string{"./entry_dto.go"}, OutDir: ".",
+		Table: entryTd, RowConfig: TableRowConfig, ComponentPaths: LedgerComponentPaths, OutDir: ".", CanonWire: true,
 		ImportPath: importPath, Wrapper: marshallgen.FixedIdsWrapper{Ids: ids},
 		Roles: gen.Roles{Key: "id", Order: EntryOrdinalColumn, Revision: EntryRevisionColumn},
 		// ADR-0309 §SD4: a journal insert is durable before the act leaves.

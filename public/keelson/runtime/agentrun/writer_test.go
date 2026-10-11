@@ -122,7 +122,7 @@ func TestDeletionKeepsTheChain(t *testing.T) {
 	require.Len(t, entries, 3)
 	assert.Empty(t, entries[0].Body)
 	assert.True(t, entries[0].Tombstoned())
-	assert.Equal(t, written[0].BodyDigest, entries[0].BodyDigest, "the commitment stays")
+	assert.Equal(t, written[0].VaultCommitment, entries[0].VaultCommitment, "the commitment stays")
 	assert.Empty(t, entries[0].Opening, "the opening goes with the body")
 	assert.Equal(t, KindDeleted, entries[2].Kind)
 	assert.Equal(t, "person", entries[2].Name, "who deleted is outside the bodies")
@@ -158,7 +158,7 @@ func TestAChangedBodyBreaksTheChain(t *testing.T) {
 	broken, _ := Verify(w.Run().Digest, entries)
 	assert.Equal(t, uint32(2), broken)
 	entries = w.Entries()
-	entries[0].BodyDigest = ContentDigest("z")
+	entries[0].VaultCommitment = ContentDigest("z")
 	broken, _ = Verify(w.Run().Digest, entries)
 	assert.Equal(t, uint32(1), broken, "a changed digest breaks the chain digest")
 }
@@ -316,14 +316,14 @@ func TestAMarkWithACommaIsRefused(t *testing.T) {
 	assert.Nil(t, Label{}.Join(Label{Exposure: []string{"a,b"}}).Exposure)
 	written, err := w.Append(ctx, Entry{Kind: KindUser, Body: "x", Label: Label{Origin: []string{"b", "a"}}})
 	require.NoError(t, err)
-	back := entryOf(entryRow(written[0]), "r", uint64(written[0].Ordinal))
-	// The ledger row carries neither content nor opening; the vault
-	// rejoins them (ADR-0320 §SD5).
-	back.Body, back.Opening = written[0].Body, written[0].Opening
-	assert.Equal(t, []string{"a", "b"}, back.Label.Origin)
+	// The marks are a set: stored sorted, so the canonical form, which
+	// carries them as an array, has one spelling (the SQL round trip is
+	// the integration lane's).
+	back := written[0]
+	assert.Equal(t, []string{"a", "b"}, unionMarks(back.Label.Origin, nil))
 	broken, err := Verify(w.Run().Digest, []Entry{back})
 	require.NoError(t, err)
-	assert.Zero(t, broken, "the row round trip keeps the chain")
+	assert.Zero(t, broken, "the chain holds")
 }
 
 // blockingStore holds an append until released.

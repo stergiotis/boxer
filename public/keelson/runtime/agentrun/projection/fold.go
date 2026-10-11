@@ -174,8 +174,8 @@ func Fold(entries []agentrun.Entry, order Order) (b Batch) {
 
 	// tools: the latest declaration.
 	for _, e := range es {
-		if e.Kind == agentrun.KindTools {
-			b.Tools = toolNames(e.Body)
+		if e.Kind == agentrun.KindTools && e.Tools != nil {
+			b.Tools = slices.Clone(e.Tools.Names)
 		}
 	}
 	return

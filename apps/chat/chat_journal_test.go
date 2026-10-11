@@ -34,7 +34,8 @@ func TestATurnShipsItsChainHead(t *testing.T) {
 			heads++
 		case agentrun.KindRequest:
 			requests++
-			assert.Contains(t, e.Body, `"digest":"`)
+			require.NotNil(t, e.Request)
+			assert.NotEmpty(t, e.Request.Digest)
 		case agentrun.KindReply:
 			replies++
 			assert.Equal(t, agentrun.LevelOwnModel, e.Label.Level)
@@ -49,9 +50,8 @@ func TestATurnShipsItsChainHead(t *testing.T) {
 			require.Greater(t, i, 0)
 			assert.Equal(t, agentrun.KindTurn, entries[i-1].Kind, "the head covers the turn's end")
 			assert.Equal(t, headFormLocal, e.Form, "a head the process alone holds is recorded as local")
-			rec, perr := headstore.ParseHeadBody(e.Body)
-			require.NoError(t, perr)
-			assert.False(t, rec.Durable)
+			require.NotNil(t, e.Head)
+			assert.False(t, e.Head.Durable)
 		}
 	}
 	anchored, err := anchors.Read(context.Background(), w.Run().Cell, w.Run().Id)

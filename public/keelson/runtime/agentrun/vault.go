@@ -20,11 +20,26 @@ import (
 
 // Body is one vault row: an entry's content and its opening.
 type Body struct {
-	Run     string
-	Ordinal uint32
-	Opening []byte
-	Body    string
-	Calls   string
+	Run       string
+	Ordinal   uint32
+	Opening   []byte
+	Body      string
+	Calls     string
+	Arguments string
+	// The vault's records (ADR-0325 §SD1), and an approval's content part.
+	Endorse  *Endorsement
+	Grant    *GrantRecord
+	Question *ExitQuestion
+	Answer   *ExitAnswer
+	Copy     *CopyRecord
+	Approval *ApprovalPart
+}
+
+// ApprovalPart is the part of an approval the vault holds: the
+// justification given and the payload's content digest.
+type ApprovalPart struct {
+	Justification string
+	Digest        string
 }
 
 // bodyOf is the vault row an entry's content makes; empty for an entry
@@ -33,7 +48,24 @@ func bodyOf(e Entry) (b Body, ok bool) {
 	if !e.HasContent() {
 		return
 	}
-	return Body{Run: e.Run, Ordinal: e.Ordinal, Opening: e.Opening, Body: e.Body, Calls: e.Calls}, true
+	b = Body{Run: e.Run, Ordinal: e.Ordinal, Opening: e.Opening, Body: e.Body, Calls: e.Calls, Arguments: e.Arguments,
+		Endorse: e.Endorse, Grant: e.Grant, Question: e.Question, Answer: e.Answer, Copy: e.Copy}
+	if e.Approval != nil {
+		b.Approval = &ApprovalPart{Justification: e.Approval.Justification, Digest: e.Approval.Digest}
+	}
+	return b, true
+}
+
+// withBody is the entry joined with its vault row.
+func withBody(e Entry, b Body) Entry {
+	e.Opening, e.Body, e.Calls, e.Arguments = b.Opening, b.Body, b.Calls, b.Arguments
+	e.Endorse, e.Grant, e.Question, e.Answer, e.Copy = b.Endorse, b.Grant, b.Question, b.Answer, b.Copy
+	if e.Approval != nil && b.Approval != nil {
+		a := *e.Approval
+		a.Justification, a.Digest = b.Approval.Justification, b.Approval.Digest
+		e.Approval = &a
+	}
+	return e
 }
 
 // BodyStoreI is the vault's seam (ADR-0320 §SD7): the one place a body
@@ -265,8 +297,7 @@ func (inst *VaultedStore) joined(entries []Entry, bodies []Body) (out []Entry) {
 		if rows, ok := byKey[key{e.Run, e.Ordinal}]; ok {
 			opened := false
 			for _, b := range rows {
-				with := e
-				with.Opening, with.Body, with.Calls = b.Opening, b.Body, b.Calls
+				with := withBody(e, b)
 				if with.BodiesMatch() {
 					e, opened = with, true
 					break

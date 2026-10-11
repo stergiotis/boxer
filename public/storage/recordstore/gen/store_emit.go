@@ -976,6 +976,9 @@ func (inst emitter) emitStoreHeader(sb *strings.Builder, key, order, lifecycle e
 	p("")
 	p("import (")
 	p("\t%q", "context")
+	if inst.CanonWire {
+		p("\t%q", "io")
+	}
 	if casNeedsHex(inst.cas) {
 		p("\t%q", "encoding/hex")
 	}
@@ -1594,6 +1597,17 @@ func (inst emitter) emitBuilderEndSection(sb *strings.Builder, comps []storeComp
 			sections = append(sections, g.Section)
 		}
 	}
+	if inst.Contributions {
+		// A contribution may open any section, so every one is closable.
+		for _, sec := range inst.Table.TaggedValuesSections {
+			name := string(sec.Name)
+			if _, has := seen[name]; has {
+				continue
+			}
+			seen[name] = struct{}{}
+			sections = append(sections, name)
+		}
+	}
 	p("// endSection closes one section's frame. The buffer calls it once per")
 	p("// section, after every component that contributed to it has written.")
 	p("func (inst *%s) endSection(section string) error {", inst.builderType())
@@ -1722,6 +1736,9 @@ func (inst emitter) emitBuilder(sb *strings.Builder, comps []storeComponent, sta
 		p("\treturn inst")
 		p("}")
 		p("")
+	}
+	if inst.Contributions {
+		inst.emitContributions(p)
 	}
 	p("// Raw exposes the underlying DML entity for direct attribute")
 	p("// manipulation within the same entity frame.%s", map[bool]string{true: "", false: " The type lives in"}[inst.Flat])
@@ -1944,6 +1961,9 @@ func (inst emitter) emitFlush(sb *strings.Builder) {
 	p("\treturn")
 	p("}")
 	p("")
+	if inst.CanonWire {
+		inst.emitDrainCanonical(p)
+	}
 	p("// FlushIfDue is Flush once cfg.FlushEvery rows are buffered, and a no-op")
 	p("// before that — or always, when FlushEvery is zero. Call it between")
 	p("// entities (after Commit): like Flush it errors on an open frame. A")
@@ -2888,4 +2908,85 @@ func (inst emitter) emitMintKey(sb *strings.Builder) {
 	p("\treturn")
 	p("}")
 	p("")
+}
+
+// emitDrainCanonical writes DrainCanonical, the CanonWire option's verb.
+func (inst emitter) emitDrainCanonical(p func(string, ...any)) {
+	tbl := upperFirst(inst.TableName) + "Table"
+	p("// DrainCanonical writes the rows buffered since the last Flush to w as")
+	p("// canonical wire items (ADR-0210), one per entity in commit order, as a")
+	p("// CBOR sequence, and discards them: nothing is inserted, and the store")
+	p("// is as DiscardPending leaves it. n is the number of items written. A")
+	p("// store opened for nothing else needs no executor (ADR-0325 §SD2).")
+	p("func (inst *%s) DrainCanonical(w io.Writer) (n int, err error) {", inst.storeType())
+	p("\trecords, err := %s", inst.ctrlCall("inst.dml", "TransferRecords", "nil"))
+	p("\tif err != nil {")
+	p("\t\terr = eh.Errorf(\"transfer records: %%w\", err)")
+	p("\t\treturn")
+	p("\t}")
+	p("\trecords = append(inst.pending, records...)")
+	p("\tinst.pending = nil")
+	p("\tdefer func() {")
+	p("\t\tfor _, rec := range records {")
+	p("\t\t\trec.Release()")
+	p("\t\t}")
+	p("\t\tinst.buffered = 0")
+	p("\t\tfor k := range inst.dirty {")
+	p("\t\t\tinst.notifyWrite(k, nil)")
+	p("\t\t}")
+	p("\t\tclear(inst.dirty)")
+	p("\t\tif len(inst.written) > 0 {")
+	p("\t\t\tinst.cfg.WriteObserver.Discarded(inst.takeWritten())")
+	p("\t\t}")
+	p("\t}()")
+	p("\tra := %sNewReadAccess%s()", inst.lowQ(), tbl)
+	p("\tenc, err := %sNewCanonWireEncoder%s(ra, %sCanonWireOrdinalTagger%s{})", inst.lowQ(), tbl, inst.lowQ(), tbl)
+	p("\tif err != nil {")
+	p("\t\terr = eh.Errorf(\"canonical wire encoder: %%w\", err)")
+	p("\t\treturn")
+	p("\t}")
+	p("\tfor _, rec := range records {")
+	p("\t\tif err = ra.LoadFromRecord(rec); err != nil {")
+	p("\t\t\terr = eh.Errorf(\"load the buffered rows: %%w\", err)")
+	p("\t\t\treturn")
+	p("\t\t}")
+	p("\t\terr = enc.EncodeAll(w)")
+	p("\t\tn += int(rec.NumRows())")
+	p("\t\tra.Release()")
+	p("\t\tif err != nil {")
+	p("\t\t\terr = eh.Errorf(\"encode the buffered rows: %%w\", err)")
+	p("\t\t\treturn")
+	p("\t\t}")
+	p("\t}")
+	p("\treturn")
+	p("}")
+	p("")
+}
+
+// emitContributions writes the Contributions option's builder methods.
+func (inst emitter) emitContributions(p func(string, ...any)) {
+	p("// StartContribution records that kind contributes hand-written")
+	p("// attributes to the open entity: one contribution per kind, as a")
+	p("// component is one, followed by its Contribute<Section> calls. The")
+	p("// entity is then not mirrored into cache views.")
+	p("func (inst *%s) StartContribution(kind string) *%s {", inst.builderType(), inst.builderType())
+	p("\tif err := inst.buf.StartKind(kind); err != nil {")
+	p("\t\tinst.store.dml.AppendError(err)")
+	p("\t}")
+	p("\tinst.raw = true")
+	p("\treturn inst")
+	p("}")
+	p("")
+	for _, sec := range inst.Table.TaggedValuesSections {
+		name := string(sec.Name)
+		method := mappingplan.UpperFirst(name)
+		p("// Contribute%s has fn write kind's attributes into the open entity's", method)
+		p("// %s section when Commit flushes it, with the section's frame open and", name)
+		p("// shared with the components; fn must not close the section.")
+		p("func (inst *%s) Contribute%s(kind string, fn func(sec *%sInEntity%sTableSection%s) error) *%s {", inst.builderType(), method, inst.lowQ(), upperFirst(inst.TableName), method, inst.builderType())
+		p("\tinst.buf.Enqueue(%q, kind, func() error { return fn(inst.store.dml.GetSection%s()) })", name, method)
+		p("\treturn inst")
+		p("}")
+		p("")
+	}
 }

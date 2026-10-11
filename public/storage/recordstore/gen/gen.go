@@ -16,6 +16,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/canonwire"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/common"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/ddl/clickhouse"
@@ -247,6 +248,27 @@ type Input struct {
 	// Key is refused at generation.
 	KeyStream bool
 
+	// CanonWire emits the table's canonical wire encoder (ADR-0210) beside
+	// the read-access scaffolding, and gives the store DrainCanonical,
+	// which encodes the rows buffered since the last Flush as canonical
+	// wire items instead of inserting them. A store opened for nothing
+	// else needs no executor: it is how a writer computes the canonical
+	// item of a row it has not stored (ADR-0325 §SD2). Requires the
+	// default scaffolding (no SharedRA), since the encoder reads the
+	// read-access classes by name.
+	CanonWire bool
+
+	// Contributions gives the builder StartContribution and one
+	// Contribute<Section> per tagged section: attributes the caller writes
+	// itself through the raw section, into the same deferred frame the
+	// components write into, so a hand-written attribute can share a
+	// section with a component on one entity (ADR-0183 D4's buffer). The
+	// section types live in internal/lowlevel, so the methods are for code
+	// in the generated package. An entity with a contribution is not
+	// mirrored into cache views. The narrow seam before the generator owns
+	// such attributes itself (plan002 B6).
+	Contributions bool
+
 	// DDL overrides the table-level clauses (ADR-0102 seam). nil derives
 	// the defaults: CREATE TABLE IF NOT EXISTS, ENGINE MergeTree(),
 	// ORDER BY (Key[, Order]) resolved to physical names, and the
@@ -338,6 +360,28 @@ func (inst Input) Generate() (err error) {
 			return
 		}
 		err = inst.write(inst.scaffoldFile(inst.TableName+"_ra.out.go"), code)
+		if err != nil {
+			return
+		}
+	}
+
+	// 3b. The canonical wire encoder over the read-access classes.
+	if inst.CanonWire {
+		if inst.SharedRA != nil {
+			err = eh.Errorf("CanonWire needs the store's own read-access scaffolding; SharedRA binds another package's")
+			return
+		}
+		cwSrc, wellFormed, cwErr := canonwire.NewGoCodeGeneratorDriver(conv, clickhouse.NewTechnologySpecificCodeGenerator()).EncoderOnly().
+			GenerateGoClasses(inst.scaffoldPkg(), tableStylable, inst.Table, inst.RowConfig, gocodegen.NewMultiTablePerPackageGoClassNamer())
+		if cwErr != nil {
+			err = eh.Errorf("generate canonwire: %w", cwErr)
+			return
+		}
+		if !wellFormed {
+			err = eh.Errorf("generate canonwire: the emitted source is not well-formed")
+			return
+		}
+		err = inst.write(inst.scaffoldFile(inst.TableName+"_canonwire.out.go"), cwSrc)
 		if err != nil {
 			return
 		}

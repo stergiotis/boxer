@@ -244,6 +244,13 @@ run's `deleted` entry at its end, or an `erased` entry naming the ordinal.
 Deletion still keeps the chain and the heads; so does the erasure of one
 entry.
 
+### 2026-10-11 — §SD1: the canonical form is the ledger row's canonical wire item
+
+The CBOR field list gives way to the ledger row's canonical wire item, with
+the chain columns at zero
+([ADR-0325](./0325-the-journals-canonical-form-is-the-canonical-wire-over-its-rows.md)
+§SD2). The digest name is `…/agentrun-chain/v3`. The chain construction,
+the run row as the first predecessor, and L31 do not change.
 
 ## References
 

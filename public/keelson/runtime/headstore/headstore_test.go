@@ -61,8 +61,8 @@ func TestLawL32(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, agentrun.KindHead, head1.Kind)
 	assert.Equal(t, uint32(2), head1.Target)
-	rec, err := ParseHeadBody(head1.Body)
-	require.NoError(t, err)
+	require.NotNil(t, head1.Head)
+	rec := *head1.Head
 	assert.Equal(t, "turn,close", rec.Cadence)
 	_, err = w.Append(ctx, agentrun.Entry{Kind: agentrun.KindUser, Body: "more", Turn: "t2"})
 	require.NoError(t, err)
@@ -92,8 +92,7 @@ func TestLawL32(t *testing.T) {
 	assert.Equal(t, []uint32{anchored[0].Ordinal, head1.Ordinal}, VerifyHeads(w.Run().Digest, entries, forged),
 		"the head entry is not what the store holds, and the store's head is not what the chain reproduces")
 	assert.Empty(t, VerifyHeads(w.Run().Digest, nil, nil))
-	rec, err = ParseHeadBody(head1.Body)
-	require.NoError(t, err)
+	rec = *head1.Head
 	assert.False(t, rec.Durable, "the head entry records that the anchor is the process's alone")
 }
 
@@ -157,7 +156,7 @@ func TestLawL32HoldsAfterDeletion(t *testing.T) {
 	entries, err := journal.Entries(ctx, "r1", 0)
 	require.NoError(t, err)
 	assert.Empty(t, entries[0].Body)
-	assert.NotEmpty(t, entries[2].Body, "the head entry keeps its record")
+	assert.NotNil(t, entries[2].Head, "the head entry keeps its record: a ledger component, which no erasure touches")
 	heads, err := anchors.Read(ctx, "c", "r1")
 	require.NoError(t, err)
 	assert.Empty(t, VerifyHeads(w.Run().Digest, entries, heads))

@@ -20,6 +20,16 @@ const (
 	TableNameEntry = "agentrunentry"
 )
 
+// LedgerComponentPaths are the ledger store's components: the entry and the
+// records that are metadata (ADR-0325 §SD1).
+var LedgerComponentPaths = []string{"./entry_dto.go", "./request_dto.go", "./reply_dto.go", "./compact_dto.go",
+	"./approvaldecision_dto.go", "./head_dto.go", "./profile_dto.go", "./turnstate_dto.go", "./tools_dto.go"}
+
+// VaultComponentPaths are the vault store's components: the body row and
+// the records that hold content (ADR-0325 §SD1).
+var VaultComponentPaths = []string{"./body_dto.go", "./endorse_dto.go", "./grant_dto.go", "./question_dto.go",
+	"./answer_dto.go", "./approvalcontent_dto.go", "./copy_dto.go"}
+
 // EntryOrdinalColumn is the ledger's and the vault's Order role column:
 // the entry's ordinal within its run.
 const EntryOrdinalColumn = "ordinal"

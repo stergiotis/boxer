@@ -654,10 +654,9 @@ func (f *fakeApprovals) ApprovalEntry(_ context.Context, run string, ordinal uin
 // plant journals an approval of the refused call for the test.
 func (f *fakeApprovals) plant(t *testing.T, run string, ordinal uint32, callId string, sink string, path string) (key string) {
 	t.Helper()
-	body, err := cell.Approval{Channel: "model-route", Tier: "AMBER", Path: path, Approver: "person", Justification: "for the report"}.Body()
-	require.NoError(t, err)
+	rec := cell.Approval{Channel: "model-route", Tier: "AMBER", Path: path, Approver: "person", Justification: "for the report"}.Record()
 	key = cell.ApprovalKey(run, ordinal)
-	f.entries[key] = agentrun.Entry{Run: run, Ordinal: ordinal, Kind: agentrun.KindApproval, Key: callId, Name: sink, Body: body}
+	f.entries[key] = agentrun.Entry{Run: run, Ordinal: ordinal, Kind: agentrun.KindApproval, Key: callId, Name: sink, Approval: rec}
 	return
 }
 

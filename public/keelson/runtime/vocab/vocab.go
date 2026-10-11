@@ -628,6 +628,89 @@ var (
 	MembAgentrunBodyOpening = NkRegistry.MustBegin("agentrunBodyOpening", 371).End()
 	MembAgentrunBodyText    = NkRegistry.MustBegin("agentrunBodyText", 372).End()
 	MembAgentrunBodyCalls   = NkRegistry.MustBegin("agentrunBodyCalls", 373).End()
+
+	// The journal's records as components (ADR-0325 §SD1). Ids from 380.
+	// The ledger entry's identity and vault commitment, and its attachment references (ADR-0325 §SD1, §SD3, §SD5).
+	MembAgentrunEntryId                   = NkRegistry.MustBegin("agentrunEntryId", 380).End()
+	MembAgentrunEntryVaultCommitment      = NkRegistry.MustBegin("agentrunEntryVaultCommitment", 381).End()
+	MembAgentrunEntryAttachmentMediaTypes = NkRegistry.MustBegin("agentrunEntryAttachmentMediaTypes", 382).End()
+	MembAgentrunEntryAttachmentDigests    = NkRegistry.MustBegin("agentrunEntryAttachmentDigests", 383).End()
+	// Request metadata (ledger).
+	MembAgentrunRequestDigest   = NkRegistry.MustBegin("agentrunRequestDigest", 384).End()
+	MembAgentrunRequestMessages = NkRegistry.MustBegin("agentrunRequestMessages", 385).End()
+	MembAgentrunRequestTools    = NkRegistry.MustBegin("agentrunRequestTools", 386).End()
+	MembAgentrunRequestRound    = NkRegistry.MustBegin("agentrunRequestRound", 387).End()
+	MembAgentrunRequestLabel    = NkRegistry.MustBegin("agentrunRequestLabel", 388).End()
+	// Reply metadata (ledger).
+	MembAgentrunReplyCallId       = NkRegistry.MustBegin("agentrunReplyCallId", 389).End()
+	MembAgentrunReplyFinishReason = NkRegistry.MustBegin("agentrunReplyFinishReason", 390).End()
+	MembAgentrunReplyInputTokens  = NkRegistry.MustBegin("agentrunReplyInputTokens", 391).End()
+	MembAgentrunReplyOutputTokens = NkRegistry.MustBegin("agentrunReplyOutputTokens", 392).End()
+	// A summariser's compaction intent (ledger).
+	MembAgentrunCompactCut  = NkRegistry.MustBegin("agentrunCompactCut", 393).End()
+	MembAgentrunCompactFrom = NkRegistry.MustBegin("agentrunCompactFrom", 394).End()
+	MembAgentrunCompactSpan = NkRegistry.MustBegin("agentrunCompactSpan", 395).End()
+	// An approval's decision and approver (ledger).
+	MembAgentrunApprovalChannel  = NkRegistry.MustBegin("agentrunApprovalChannel", 396).End()
+	MembAgentrunApprovalEdge     = NkRegistry.MustBegin("agentrunApprovalEdge", 397).End()
+	MembAgentrunApprovalTier     = NkRegistry.MustBegin("agentrunApprovalTier", 398).End()
+	MembAgentrunApprovalPath     = NkRegistry.MustBegin("agentrunApprovalPath", 399).End()
+	MembAgentrunApprovalApprover = NkRegistry.MustBegin("agentrunApprovalApprover", 400).End()
+	MembAgentrunApprovalAt       = NkRegistry.MustBegin("agentrunApprovalAt", 401).End()
+	// A head record (ledger).
+	MembAgentrunHeadOrdinal   = NkRegistry.MustBegin("agentrunHeadOrdinal", 402).End()
+	MembAgentrunHeadDigest    = NkRegistry.MustBegin("agentrunHeadDigest", 403).End()
+	MembAgentrunHeadReceiptId = NkRegistry.MustBegin("agentrunHeadReceiptId", 404).End()
+	MembAgentrunHeadReceiptAt = NkRegistry.MustBegin("agentrunHeadReceiptAt", 405).End()
+	MembAgentrunHeadCadence   = NkRegistry.MustBegin("agentrunHeadCadence", 406).End()
+	MembAgentrunHeadDurable   = NkRegistry.MustBegin("agentrunHeadDurable", 407).End()
+	// A profile entry, a turn's end and a tool catalog (ledger).
+	MembAgentrunProfileFingerprint = NkRegistry.MustBegin("agentrunProfileFingerprint", 408).End()
+	MembAgentrunTurnState          = NkRegistry.MustBegin("agentrunTurnState", 409).End()
+	MembAgentrunTurnReason         = NkRegistry.MustBegin("agentrunTurnReason", 410).End()
+	MembAgentrunToolsNames         = NkRegistry.MustBegin("agentrunToolsNames", 411).End()
+	// Tool-call arguments kept as text when they do not parse (vault).
+	MembAgentrunBodyArgumentsText = NkRegistry.MustBegin("agentrunBodyArgumentsText", 412).End()
+	// An endorsement (vault: it names content by digest, ADR-0320 §SD6).
+	MembAgentrunEndorseDigest   = NkRegistry.MustBegin("agentrunEndorseDigest", 413).End()
+	MembAgentrunEndorseEpoch    = NkRegistry.MustBegin("agentrunEndorseEpoch", 414).End()
+	MembAgentrunEndorseClasses  = NkRegistry.MustBegin("agentrunEndorseClasses", 415).End()
+	MembAgentrunEndorsePrevious = NkRegistry.MustBegin("agentrunEndorsePrevious", 416).End()
+	MembAgentrunEndorseDiff     = NkRegistry.MustBegin("agentrunEndorseDiff", 417).End()
+	// A grant's task and terms (vault).
+	MembAgentrunGrantTask         = NkRegistry.MustBegin("agentrunGrantTask", 418).End()
+	MembAgentrunGrantHandle       = NkRegistry.MustBegin("agentrunGrantHandle", 419).End()
+	MembAgentrunGrantHasTerms     = NkRegistry.MustBegin("agentrunGrantHasTerms", 420).End()
+	MembAgentrunGrantCallsBudget  = NkRegistry.MustBegin("agentrunGrantCallsBudget", 421).End()
+	MembAgentrunGrantCallsUsed    = NkRegistry.MustBegin("agentrunGrantCallsUsed", 422).End()
+	MembAgentrunGrantDeadline     = NkRegistry.MustBegin("agentrunGrantDeadline", 423).End()
+	MembAgentrunGrantDestinations = NkRegistry.MustBegin("agentrunGrantDestinations", 424).End()
+	MembAgentrunGrantUnattended   = NkRegistry.MustBegin("agentrunGrantUnattended", 425).End()
+	// An exit's question and its answer (vault).
+	MembAgentrunQuestionText        = NkRegistry.MustBegin("agentrunQuestionText", 426).End()
+	MembAgentrunQuestionSink        = NkRegistry.MustBegin("agentrunQuestionSink", 427).End()
+	MembAgentrunQuestionTier        = NkRegistry.MustBegin("agentrunQuestionTier", 428).End()
+	MembAgentrunQuestionPath        = NkRegistry.MustBegin("agentrunQuestionPath", 429).End()
+	MembAgentrunAnswerSink          = NkRegistry.MustBegin("agentrunAnswerSink", 430).End()
+	MembAgentrunAnswerTier          = NkRegistry.MustBegin("agentrunAnswerTier", 431).End()
+	MembAgentrunAnswerApproved      = NkRegistry.MustBegin("agentrunAnswerApproved", 432).End()
+	MembAgentrunAnswerJustification = NkRegistry.MustBegin("agentrunAnswerJustification", 433).End()
+	// An approval's justification and request digest (vault).
+	MembAgentrunApprovalJustification = NkRegistry.MustBegin("agentrunApprovalJustification", 434).End()
+	MembAgentrunApprovalDigest        = NkRegistry.MustBegin("agentrunApprovalDigest", 435).End()
+	// A copy record (vault: it names content by digest).
+	MembAgentrunCopyDigest    = NkRegistry.MustBegin("agentrunCopyDigest", 436).End()
+	MembAgentrunCopyLevel     = NkRegistry.MustBegin("agentrunCopyLevel", 437).End()
+	MembAgentrunCopyTier      = NkRegistry.MustBegin("agentrunCopyTier", 438).End()
+	MembAgentrunCopySource    = NkRegistry.MustBegin("agentrunCopySource", 439).End()
+	MembAgentrunCopyHandle    = NkRegistry.MustBegin("agentrunCopyHandle", 440).End()
+	MembAgentrunCopyPlaintext = NkRegistry.MustBegin("agentrunCopyPlaintext", 441).End()
+	MembAgentrunCopyRecorded  = NkRegistry.MustBegin("agentrunCopyRecorded", 442).End()
+	MembAgentrunCopyApproval  = NkRegistry.MustBegin("agentrunCopyApproval", 443).End()
+	MembAgentrunCopyRaw       = NkRegistry.MustBegin("agentrunCopyRaw", 444).End()
+	MembAgentrunCopyRefused   = NkRegistry.MustBegin("agentrunCopyRefused", 445).End()
+	MembAgentrunCopyReason    = NkRegistry.MustBegin("agentrunCopyReason", 446).End()
+	MembAgentrunCopyBytes     = NkRegistry.MustBegin("agentrunCopyBytes", 447).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -723,4 +806,21 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembAgentrunEntryBodyDigest, MembAgentrunEntryCallsDigest, MembAgentrunHead, MembAgentrunVersion,
 	MembAgentrunBodyOrdinal, MembAgentrunBodyOpening, MembAgentrunBodyText, MembAgentrunBodyCalls,
 	MembAgentrunHolder, MembAgentrunHolderPid, MembAgentrunEpoch,
+	MembAgentrunEntryId, MembAgentrunEntryVaultCommitment, MembAgentrunEntryAttachmentMediaTypes, MembAgentrunEntryAttachmentDigests,
+	MembAgentrunRequestDigest, MembAgentrunRequestMessages, MembAgentrunRequestTools, MembAgentrunRequestRound,
+	MembAgentrunRequestLabel, MembAgentrunReplyCallId, MembAgentrunReplyFinishReason, MembAgentrunReplyInputTokens,
+	MembAgentrunReplyOutputTokens, MembAgentrunCompactCut, MembAgentrunCompactFrom, MembAgentrunCompactSpan,
+	MembAgentrunApprovalChannel, MembAgentrunApprovalEdge, MembAgentrunApprovalTier, MembAgentrunApprovalPath,
+	MembAgentrunApprovalApprover, MembAgentrunApprovalAt, MembAgentrunHeadOrdinal, MembAgentrunHeadDigest,
+	MembAgentrunHeadReceiptId, MembAgentrunHeadReceiptAt, MembAgentrunHeadCadence, MembAgentrunHeadDurable,
+	MembAgentrunProfileFingerprint, MembAgentrunTurnState, MembAgentrunTurnReason, MembAgentrunToolsNames,
+	MembAgentrunBodyArgumentsText, MembAgentrunEndorseDigest, MembAgentrunEndorseEpoch, MembAgentrunEndorseClasses,
+	MembAgentrunEndorsePrevious, MembAgentrunEndorseDiff, MembAgentrunGrantTask, MembAgentrunGrantHandle,
+	MembAgentrunGrantHasTerms, MembAgentrunGrantCallsBudget, MembAgentrunGrantCallsUsed, MembAgentrunGrantDeadline,
+	MembAgentrunGrantDestinations, MembAgentrunGrantUnattended, MembAgentrunQuestionText, MembAgentrunQuestionSink,
+	MembAgentrunQuestionTier, MembAgentrunQuestionPath, MembAgentrunAnswerSink, MembAgentrunAnswerTier,
+	MembAgentrunAnswerApproved, MembAgentrunAnswerJustification, MembAgentrunApprovalJustification, MembAgentrunApprovalDigest,
+	MembAgentrunCopyDigest, MembAgentrunCopyLevel, MembAgentrunCopyTier, MembAgentrunCopySource,
+	MembAgentrunCopyHandle, MembAgentrunCopyPlaintext, MembAgentrunCopyRecorded, MembAgentrunCopyApproval,
+	MembAgentrunCopyRaw, MembAgentrunCopyRefused, MembAgentrunCopyReason, MembAgentrunCopyBytes,
 }

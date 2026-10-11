@@ -19,6 +19,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/lifetime"
 	"github.com/stergiotis/boxer/public/keelson/runtime/llm"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/jsonshred"
 )
 
 // A delete refused because another action runs installs nothing: when the
@@ -231,12 +232,18 @@ func TestTheEffectClassIsTheCatalogsInTheDefaultConfig(t *testing.T) {
 	effects := map[string]string{}
 	for _, e := range coord.journalNow().Entries() {
 		if e.Kind == agentrun.KindIntent && e.Name == "call_operation" {
-			effects[e.Body] = e.Effect
+			effects[e.Arguments] = e.Effect
 		}
 	}
-	assert.Equal(t, agentrun.EffectNone, effects[`{"window":100,"operation":"get_note","args":{}}`], "a query")
-	assert.Equal(t, agentrun.EffectDocument, effects[`{"window":100,"operation":"set_note","args":{"text":"tidied"}}`], "the catalog's class")
-	assert.Equal(t, agentrun.EffectConsequential, effects[`{"window":999,"operation":"set_note","args":{"text":"x"}}`], "a window nothing listed")
+	// The journal keeps arguments in their canonical form (ADR-0325 §SD1).
+	canonical := func(doc string) string {
+		c, cerr := jsonshred.Canonical([]byte(doc))
+		require.NoError(t, cerr)
+		return string(c)
+	}
+	assert.Equal(t, agentrun.EffectNone, effects[canonical(`{"window":100,"operation":"get_note","args":{}}`)], "a query")
+	assert.Equal(t, agentrun.EffectDocument, effects[canonical(`{"window":100,"operation":"set_note","args":{"text":"tidied"}}`)], "the catalog's class")
+	assert.Equal(t, agentrun.EffectConsequential, effects[canonical(`{"window":999,"operation":"set_note","args":{"text":"x"}}`)], "a window nothing listed")
 }
 
 // A window that closes while a turn runs keeps its bus until the run is
@@ -252,7 +259,10 @@ func TestTheWindowDrainWaitsForTheRunsClose(t *testing.T) {
 	inst.coord.store = store
 	require.True(t, inst.startTurn("q1"))
 	id := inst.conv.id
-	require.Eventually(t, func() bool { r, ok, _ := store.GetRun(context.Background(), id); return ok && r.State == agentrun.StateOpen }, 5*time.Second, 5*time.Millisecond)
+	require.Eventually(t, func() bool {
+		r, ok, _ := store.GetRun(context.Background(), id)
+		return ok && r.State == agentrun.StateOpen
+	}, 5*time.Second, 5*time.Millisecond)
 	window.Retire()
 	require.NoError(t, inst.Unmount(nil))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

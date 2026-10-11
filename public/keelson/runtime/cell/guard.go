@@ -159,6 +159,14 @@ func (inst Approval) Body() (body string, err error) {
 	return string(b), nil
 }
 
+// Record is the approval as the journal records it: an approval entry's
+// record (ADR-0325 §SD1), the decision on the ledger and the
+// justification and digest in the vault.
+func (inst Approval) Record() *agentrun.Approval {
+	return &agentrun.Approval{Channel: inst.Channel, Edge: inst.Edge, Tier: inst.Tier, Path: inst.Path, Approver: inst.Approver,
+		Justification: inst.Justification, At: inst.At, Digest: inst.Digest}
+}
+
 // ParseApproval reads an approval entry's body.
 func ParseApproval(body string) (a Approval, err error) {
 	if err = json.Unmarshal([]byte(body), &a); err != nil {

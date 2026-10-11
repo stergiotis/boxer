@@ -10,6 +10,7 @@ import (
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/storegen"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/marshall/go/marshallgen"
+	"github.com/stergiotis/boxer/public/storage/recordstore"
 	"github.com/stergiotis/boxer/public/storage/recordstore/gen"
 )
 
@@ -29,8 +30,11 @@ func TestGenerateAgentrunBodyStore(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, gen.Input{
 		PackageName: "agentrunstore", StoreName: "BodyRow", TableName: TableNameBody, Database: DatabaseName,
-		Table: td, RowConfig: TableRowConfig, ComponentPaths: []string{"./body_dto.go"}, OutDir: ".",
+		Table: td, RowConfig: TableRowConfig, ComponentPaths: VaultComponentPaths, OutDir: ".", CanonWire: true, Contributions: true,
 		ImportPath: importPath, Wrapper: marshallgen.FixedIdsWrapper{Ids: ids},
 		Roles: gen.Roles{Key: "id", Order: EntryOrdinalColumn},
+		// The vault row is the commitment's subject: it is visible when
+		// the append returns, as the ledger row is (ADR-0309 §SD4).
+		InsertSettings: recordstore.InsertSettings{AsyncInsert: recordstore.ToggleOff},
 	}.Generate())
 }

@@ -371,7 +371,7 @@ func (inst *Service) appendable(ctx context.Context, entries []Entry, owner stri
 			return eb.Build().Uint32("ordinal", e.Ordinal).Uint32("last", prevOrd).Errorf("the entry does not follow the run's last").Error()
 		case r.State != StateOpen && e.Kind != KindDeleted:
 			return "the run is " + r.State.String()
-		case !e.BodiesMatch() || (e.Body != "" && e.BodyDigest == "") || (e.Calls != "" && e.CallsDigest == ""):
+		case !e.BodiesMatch() || (e.HasContent() && e.VaultCommitment == ""):
 			return "the entry's digests are not its bodies'"
 		}
 		if err := checkEntry(e, e.Ordinal); err != nil {

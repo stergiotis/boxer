@@ -299,6 +299,17 @@ row that opened it was in the table.
 The ledger no longer has body or calls columns: the entry table was
 rebuilt over the facts sections (ADR-0308 §SD1's Update of this date), and
 the drop went with it. The vault table is on the same sections.
+
+### 2026-10-11 — SD2, SD3: one commitment per vault row
+
+[ADR-0325](./0325-the-journals-canonical-form-is-the-canonical-wire-over-its-rows.md)
+§SD3 replaces the per-field commitments. One commitment covers the vault
+row's canonical wire item, under the scheme `commit/blake3-keyed/v2`, and
+the ledger column `vaultCommitment` holds it. `BodyDigest` and
+`CallsDigest` are gone. The chain form is `…/agentrun-chain/v3`. The
+opening, erasure and L31's acceptance of an erased row do not change in
+kind.
+
 ## References
 
 - [ADR-0025](./0025-pushout-forget-architecture.md) — the legal context and the vault shape.

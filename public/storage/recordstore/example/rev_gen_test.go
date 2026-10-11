@@ -30,5 +30,7 @@ func TestGenerateRevStore(t *testing.T) {
 		OutDir:         ".",
 		ImportPath:     "github.com/stergiotis/boxer/public/storage/recordstore/example",
 		Roles:          gen.Roles{Order: "ord", Revision: "rev"},
+		CanonWire:      true,
+		Contributions:  true,
 	}.Generate())
 }

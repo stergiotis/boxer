@@ -34,7 +34,7 @@ func TestTheVaultHoldsTheContentAndTheLedgerNone(t *testing.T) {
 		assert.Empty(t, e.Calls)
 		assert.Nil(t, e.Opening, "nor an opening")
 	}
-	assert.NotEmpty(t, bare[0].BodyDigest, "it holds the commitment")
+	assert.NotEmpty(t, bare[0].VaultCommitment, "it holds the commitment")
 	rows, err := vault.Get(ctx, "r", 0)
 	require.NoError(t, err)
 	assert.Len(t, rows, 2, "one vault row per entry with content")
@@ -103,7 +103,7 @@ func TestErasingOneEntryKeepsTheChain(t *testing.T) {
 	assert.Empty(t, entries[1].Body)
 	assert.Empty(t, entries[2].Body)
 	assert.Nil(t, entries[1].Opening)
-	assert.Equal(t, written[1].BodyDigest, entries[1].BodyDigest, "the commitment stays")
+	assert.Equal(t, written[1].VaultCommitment, entries[1].VaultCommitment, "the commitment stays")
 	assert.Equal(t, KindErased, entries[3].Kind)
 	assert.Equal(t, uint32(2), entries[3].Target)
 	assert.Equal(t, "person", entries[3].Name)

@@ -24,7 +24,7 @@ Part A has landed, each step a commit with its ADR Update:
 | A2 | `gen.Input.Cas`, `UpdateIf`, and typed set and guard helpers; the run row is rewritten in place | A win is the row reading back as written, not a version match. |
 | A2b | the watchbill job table is generated Cas; `claim.go` uses the generated names | The pinned statements are run as written, not through `UpdateIf`, which brackets its guard and refuses the unguarded cancel request. |
 | A3 | `ScanOpts.OrderBy` and `Descending`; `ListRuns` is one bounded scan | The run table's Order is its creation instant, so `OrderBy` stays empty. |
-| A4 | `recordstore.InsertSettings` and `InsertSettingsI`; journal inserts carry `async_insert = 0` | The vault's body store is not configured; its generation is ADR-0320's. |
+| A4 | `recordstore.InsertSettings` and `InsertSettingsI`; journal inserts carry `async_insert = 0` | The vault's body store followed with B2–B5. |
 | A5 | — | Nothing was left to shrink; A1–A4 removed their own workarounds. |
 | A6 | `gen.Input.KeyStream` with `rowalloc.NewSequence`; the writer lease | Holder = run and pid, alive by a local check (there is no cross-host writer). The lease is claimed at a process's first act, not at reopen, and released when the run leaves the open state. |
 
@@ -47,6 +47,15 @@ follows (settled with the user, 2026-10-11):
 - **Chat.** The B2 and B5 call sites in `apps/chat` are edited narrowly by
   this plan's session, each file checked for another session's
   uncommitted work first.
+
+Part B so far, recorded by ADR-0325 and its Updates:
+
+| Step | Shipped as | Differs from the brief |
+| --- | --- | --- |
+| B0 | the ledger and the vault on the facts sections; `factsschema` loads the sections | The run table keeps its own layout; it is not facts-shaped. |
+| B1 | `jsonshred`: JSON to semi-structured attributes and back, lossless | — |
+| B2–B5 | typed components for the closed shapes, shredded arguments and calls, the preimage drained by the generated encoder (`gen.Input.CanonWire`), one commitment per vault row, the endorsement digest over the shredded arguments | One commit, as settled. There is no runtime encoder (ADR-0325's first Update). The run's settings stay JSON on the run row. The introspection tables render records as the JSON they used to be written as. |
+| SD5 | — | Ids follow as their own commit. |
 
 Two parts, in order. Part A closes four `recordstore/gen` gaps the journal's
 SQL store worked around by hand. Part B, which depends on A's first step,

@@ -3,28 +3,34 @@ package projection
 import (
 	"encoding/json/v2"
 
+	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/llm/openaichat"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
+	"github.com/stergiotis/boxer/public/semistructured/leeway/jsonshred"
 )
 
-// Attachment is one image of a message as the journal records it: the
-// media type and the digest the bytes are kept under.
-type Attachment struct {
-	MediaType string `json:"media_type"`
-	Digest    string `json:"digest"`
-}
-
-// AttachmentsBody is the attachments column for images.
-func AttachmentsBody(atts []Attachment) string {
+// AttachmentsBody is the attachments column for images, in the canonical
+// form the journal stores and reads it back in.
+func AttachmentsBody(atts []agentrun.Attachment) string {
 	if len(atts) == 0 {
 		return ""
 	}
 	b, _ := json.Marshal(atts)
-	return string(b)
+	return canonical(b)
+}
+
+// canonical is a JSON document in jsonshred's canonical form, the form
+// the journal stores calls and attachments in (ADR-0325 §SD1).
+func canonical(doc []byte) string {
+	c, err := jsonshred.Canonical(doc)
+	if err != nil {
+		return string(doc)
+	}
+	return string(c)
 }
 
 // ParseAttachments reads the column.
-func ParseAttachments(s string) (atts []Attachment) {
+func ParseAttachments(s string) (atts []agentrun.Attachment) {
 	if s == "" {
 		return
 	}
@@ -38,7 +44,7 @@ func CallsBody(calls []openaichat.ToolCall) string {
 		return ""
 	}
 	b, _ := json.Marshal(calls, json.Deterministic(true))
-	return string(b)
+	return canonical(b)
 }
 
 // ParseCalls reads the column.
@@ -51,7 +57,7 @@ func ParseCalls(s string) (calls []openaichat.ToolCall) {
 }
 
 // Resolver finds an attachment's bytes by digest; nil leaves images out.
-type Resolver func(a Attachment) (data []byte, ok bool)
+type Resolver func(a agentrun.Attachment) (data []byte, ok bool)
 
 // Encode is the batch as the chat-completions wire's messages (ADR-0309
 // §SD3: Go encodes, once, per route): the identity stays the batch's.

@@ -61,7 +61,7 @@ func TestTheVaultUnderClickhouseLocal(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, entries, 5)
 	assert.Empty(t, entries[1].Body)
-	assert.Equal(t, written[1].BodyDigest, entries[1].BodyDigest)
+	assert.Equal(t, written[1].VaultCommitment, entries[1].VaultCommitment)
 	assert.Equal(t, "hi", entries[2].Body, "the rest stays")
 	assert.Equal(t, KindErased, entries[4].Kind)
 	r, _, err := st.GetRun(ctx, "cell/v1")

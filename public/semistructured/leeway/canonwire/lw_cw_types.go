@@ -13,6 +13,17 @@ import (
 // inside it.
 type GoClassBuilder struct {
 	builder *strings.Builder
+	// encoderOnly leaves out the dispatcher and the decoder.
+	encoderOnly bool
+}
+
+// EncoderOnly makes the builder emit the slot keys, the slot enum, the
+// tagger and the encoder, and leave out the dispatcher and the decoder. A
+// consumer that only hashes rows needs no decoder, and a table whose dml
+// builder keeps its control surface unexported (the record store's
+// internal scaffolding, ADR-0100 SD6) cannot host one.
+func (inst *GoClassBuilder) EncoderOnly() {
+	inst.encoderOnly = true
 }
 
 // GeneratorDriver turns a table description into the source of one Go file.

@@ -4,7 +4,7 @@ import (
 	"encoding/hex"
 	"time"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/buscodec"
+	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun/agentrunstore"
 	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 	"github.com/stergiotis/boxer/public/semistructured/leeway/canonform"
@@ -29,27 +29,54 @@ type Entry struct {
 	// Role is the message role an entry projects as, where the kind has
 	// one: user, assistant, tool, system.
 	Role string
-	// Body is what the kind carries: the message text, the note, the tool
-	// result, the summary, the section text; for the kinds that are not
-	// messages, their record as JSON.
+	// Body is the prose the kind carries: the message text, the note, the
+	// tool result, the summary, the section text. The kinds that carry a
+	// record carry it in their record field instead (ADR-0325 §SD1).
 	Body string
 	// Calls are an assistant reply's tool calls, as JSON, so the
-	// projection pairs results with calls (law L2); empty otherwise.
+	// projection pairs results with calls (law L2); empty otherwise. The
+	// vault holds them shredded, and the writer stores them in jsonshred's
+	// canonical form, which is the form they read back in.
 	Calls string
-	// BodyDigest and CallsDigest are the commitments to Body and Calls
-	// under the entry's Opening (ADR-0320 §SD2), set by the writer. The
-	// chain commits to them, not the bodies, so an erasure that destroys
-	// a body and its opening leaves the chain verifying (law L31) and
-	// the anchored heads with it (law L32), and leaves nothing retained
-	// that reveals the body: ADR-0308 §SD8, ADR-0314 §SD5, ADR-0320 §SD4.
-	BodyDigest  string
-	CallsDigest string
+	// Arguments are a tool call's arguments as the model wrote them, in
+	// canonical form when they parse as JSON (an intent's; ADR-0325 §SD1).
+	// The vault holds parsed arguments shredded and others as text.
+	Arguments string
+	// The records (ADR-0325 §SD1): at most one per entry but an approval's,
+	// whose content part rides beside its decision. Request, Reply,
+	// Compact, Head, Profile, TurnEnd, Tools and an approval's decision are
+	// the ledger's; Endorse, Grant, Question, Answer, Copy and an
+	// approval's justification and digest are the vault's.
+	Request  *RequestMeta
+	Reply    *ReplyMeta
+	Compact  *CompactIntent
+	Approval *Approval
+	Head     *HeadRecord
+	Profile  *ProfileRecord
+	TurnEnd  *TurnState
+	Tools    *ToolCatalog
+	Endorse  *Endorsement
+	Grant    *GrantRecord
+	Question *ExitQuestion
+	Answer   *ExitAnswer
+	Copy     *CopyRecord
+	// VaultCommitment is the commitment to the entry's vault row under its
+	// Opening (ADR-0325 §SD3, amending ADR-0320 §SD2), set by the writer.
+	// The chain commits to it, not the content, so an erasure that
+	// destroys the row and its opening leaves the chain verifying (law
+	// L31) and the anchored heads with it (law L32), and leaves nothing
+	// retained that reveals the content.
+	VaultCommitment string
 	// Opening is the entry's commitment opening: drawn by the writer for
 	// an entry with content, carried on the bus, kept in the vault row
-	// beside the bodies and destroyed with them; never in the canonical
+	// beside the content and destroyed with it; never in the canonical
 	// form, a ledger column or an anchor. Empty for an entry without
 	// content, and for an erased one.
 	Opening []byte
+	// EntryId is the entry's tagged id (ADR-0325 §SD5), assigned by the
+	// store at append; identity, not content, so it is not in the
+	// canonical form. Zero until the store assigns one.
+	EntryId uint64
 	// Name is what a section, tools or note entry is named by: the
 	// section slug, the tool set's digest, the note's source; a deleted
 	// entry names who deleted, outside the body a tombstone empties.
@@ -93,105 +120,110 @@ type Entry struct {
 	Attachments string
 }
 
-// canonical is the entry's canonical form: the fields that are content,
-// in a fixed order, as canonical CBOR (buscodec's deterministic encoding,
-// the record form of ADR-0201 being deferred), without the chain fields
-// and without the opening, so a digest is a function of content alone.
-// Bodies and calls enter as their commitments (ADR-0320 §SD3),
-// attachments as the references they are, marks as arrays, and the write
-// instant as text.
-type canonical struct {
-	Run           string   `json:"run"`
-	Ordinal       uint32   `json:"ordinal"`
-	At            string   `json:"at"`
-	Kind          uint8    `json:"kind"`
-	Key           string   `json:"key"`
-	Role          string   `json:"role"`
-	BodyDigest    string   `json:"body_digest"`
-	CallsDigest   string   `json:"calls_digest"`
-	Name          string   `json:"name"`
-	Book          string   `json:"book"`
-	Form          string   `json:"form"`
-	Target        uint32   `json:"target"`
-	From          uint32   `json:"from"`
-	Effect        string   `json:"effect"`
-	Turn          string   `json:"turn"`
-	Level         uint8    `json:"level"`
-	Tier          uint8    `json:"tier"`
-	Exposure      []string `json:"exposure"`
-	Origin        []string `json:"origin"`
-	WriterRun     string   `json:"writer_run"`
-	WriterTurn    string   `json:"writer_turn"`
-	WriterOrdinal uint32   `json:"writer_ordinal"`
-	KeyId         string   `json:"key_id"`
-	Parent        uint32   `json:"parent"`
-	Attachments   string   `json:"attachments"`
-}
-
-// CanonicalForm is the entry's canonical form as bytes. It commits to the
-// entry's BodyDigest and CallsDigest, which Digested sets from the bodies
-// under the opening.
+// CanonicalForm is the entry's canonical form (ADR-0325 §SD2): the
+// canonical wire item of its ledger row, with the chain columns, the
+// revision and the entry id at their zero values, so the item is a
+// function of what the entry says, not of where the chain or the store put
+// it. Content enters as the vault commitment; marks as arrays; records as
+// their components.
 func (inst Entry) CanonicalForm() (b []byte, err error) {
-	b, err = buscodec.NewCBOR().Encode(canonical{
-		Run: inst.Run, Ordinal: inst.Ordinal, At: timeText(inst.At), Kind: uint8(inst.Kind), Key: inst.Key, Role: inst.Role,
-		BodyDigest: inst.BodyDigest, CallsDigest: inst.CallsDigest,
-		Name: inst.Name, Book: inst.Book, Form: inst.Form, Target: inst.Target, From: inst.From,
-		Effect: inst.Effect, Turn: inst.Turn, Level: uint8(inst.Label.Level), Tier: uint8(inst.Label.Tier),
-		Exposure: unionMarks(inst.Label.Exposure, nil), Origin: unionMarks(inst.Label.Origin, nil),
-		WriterRun: inst.WriterRun, WriterTurn: inst.WriterTurn, WriterOrdinal: inst.WriterOrdinal,
-		KeyId: inst.KeyId, Parent: inst.Parent, Attachments: inst.Attachments})
+	e := inst
+	e.Prev, e.Digest, e.EntryId = 0, "", 0
+	b, err = hasher.LedgerItem(e.Run, uint64(e.Ordinal), func(lb *agentrunstore.EntryEntityBuilder) {
+		if ferr := fillLedger(lb, e); ferr != nil {
+			err = ferr
+		}
+	})
 	if err != nil {
 		err = eh.Errorf("canonical form: %w", err)
 	}
 	return
 }
 
-// HasContent says the entry carries a body or calls: what the vault
-// holds. Attachments are references to bytes the artefact store keeps,
-// not content, and stay on the ledger with the entry.
+// HasContent says the entry carries something the vault holds: prose,
+// calls, arguments, or a record the vault keeps.
 func (inst Entry) HasContent() bool {
-	return inst.Body != "" || inst.Calls != ""
+	return inst.Body != "" || inst.Calls != "" || inst.Arguments != "" || inst.Endorse != nil || inst.Grant != nil ||
+		inst.Question != nil || inst.Answer != nil || inst.Copy != nil || inst.Approval != nil
 }
 
-// Digested is the entry with its commitments set from its bodies under
-// its opening, drawing the opening when the entry has content and none
-// yet: what the writer does before chaining. An entry without content
-// has no opening and no commitments.
-func (inst Entry) Digested() (e Entry) {
+// vaultItem is the canonical item of the entry's vault row without its
+// opening: what the commitment covers.
+func (inst Entry) vaultItem() (item []byte, err error) {
+	body, _ := bodyOf(inst)
+	return hasher.VaultItem(inst.Run, uint64(inst.Ordinal), func(b *agentrunstore.BodyRowEntityBuilder) error {
+		return fillVault(b, body, false)
+	})
+}
+
+// Digested is the entry as the writer chains it: calls, arguments and
+// attachments in the canonical form they read back in, and the vault
+// commitment set over the content under the opening, drawing the opening
+// when the entry has content and none yet. An entry without content has
+// no opening and no commitment.
+func (inst Entry) Digested() (e Entry, err error) {
 	e = inst
+	if e.Calls != "" {
+		var ok bool
+		if e.Calls, ok = canonicalJSON(e.Calls); !ok {
+			return e, eb.Build().Str("run", e.Run).Errorf("the calls are not JSON")
+		}
+	}
+	if e.Arguments != "" {
+		e.Arguments, _ = canonicalJSON(e.Arguments)
+	}
+	if e.Attachments, err = canonicalAttachments(e.Attachments); err != nil {
+		return
+	}
 	if !e.HasContent() {
-		e.Opening, e.BodyDigest, e.CallsDigest, e.KeyId = nil, "", "", ""
+		e.Opening, e.VaultCommitment, e.KeyId = nil, "", ""
 		return
 	}
 	if len(e.Opening) != OpeningSize {
 		e.Opening = NewOpening()
 	}
-	e.BodyDigest = Commit(e.Opening, FieldBody, e.Body)
-	e.CallsDigest = Commit(e.Opening, FieldCalls, e.Calls)
+	item, err := e.vaultItem()
+	if err != nil {
+		return
+	}
+	e.VaultCommitment = CommitVault(e.Opening, item)
 	e.KeyId = CommitScheme
 	return
 }
 
 // Tombstoned says the entry's content was erased after it was written: a
-// commitment stands where its field is empty. What a deleted run's
+// commitment stands and no vault row opened it. What a deleted run's
 // entries are (ADR-0308 §SD8), and an erased entry (ADR-0320 §SD4).
 func (inst Entry) Tombstoned() bool {
-	return (inst.Body == "" && inst.BodyDigest != "") || (inst.Calls == "" && inst.CallsDigest != "")
+	return inst.VaultCommitment != "" && len(inst.Opening) == 0
 }
 
 // Erased is the entry with its content and opening destroyed, the
-// commitments standing: what the vault's deletion leaves.
+// commitment and the ledger's records standing: what the vault's deletion
+// leaves.
 func (inst Entry) Erased() (e Entry) {
 	e = inst
-	e.Body, e.Calls, e.Opening = "", "", nil
+	e.Body, e.Calls, e.Arguments, e.Opening = "", "", "", nil
+	e.Endorse, e.Grant, e.Question, e.Answer, e.Copy = nil, nil, nil, nil, nil
+	if inst.Approval != nil {
+		a := *inst.Approval
+		a.Justification, a.Digest = "", ""
+		e.Approval = &a
+	}
 	return
 }
 
-// BodiesMatch says every field the entry carries opens its commitment,
-// an empty field being either without commitment or erased.
+// BodiesMatch says the entry's content opens its commitment: with an
+// opening, the vault row it describes commits to the commitment; without
+// one, the entry carries no content the commitment would have to cover.
 func (inst Entry) BodiesMatch() bool {
-	return (inst.Body == "" || Opens(inst.Opening, FieldBody, inst.Body, inst.BodyDigest)) &&
-		(inst.Calls == "" || Opens(inst.Opening, FieldCalls, inst.Calls, inst.CallsDigest))
+	if len(inst.Opening) == 0 {
+		return inst.Body == "" && inst.Calls == "" && inst.Arguments == "" && inst.Endorse == nil && inst.Grant == nil &&
+			inst.Question == nil && inst.Answer == nil && inst.Copy == nil &&
+			(inst.Approval == nil || inst.Approval.Justification == "" && inst.Approval.Digest == "")
+	}
+	item, err := inst.vaultItem()
+	return err == nil && OpensVault(inst.Opening, item, inst.VaultCommitment)
 }
 
 // digester keys the chain digests the way the canonical record form keys
@@ -199,9 +231,10 @@ func (inst Entry) BodiesMatch() bool {
 var digester = canonform.NewBlake3Digester()
 
 // DigestName names the hash construction every digest here uses; it
-// is recorded beside digests that outlive this build. The form's second
-// version holds commitments, not content digests (ADR-0320 §SD3).
-func DigestName() string { return digester.Name() + "/agentrun-chain/v2" }
+// is recorded beside digests that outlive this build. The form's third
+// version is the canonical wire item of the ledger row (ADR-0325 §SD2);
+// the second held per-field commitments (ADR-0320 §SD3).
+func DigestName() string { return digester.Name() + "/agentrun-chain/v3" }
 
 // ChainDigest is the digest over the predecessor's digest and the entry's
 // canonical form (law L31).
@@ -221,9 +254,28 @@ func ContentDigest(body string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
+// ArgumentsDigest is the digest an endorsement names a tool call's
+// arguments by (ADR-0325 §SD4): over the canonical wire item of the
+// arguments' shredded attributes, on a vault row that holds nothing else,
+// so two spellings of the same arguments are one digest. Arguments that do
+// not parse are hashed as the text they are.
+func ArgumentsDigest(args string) (digest string, err error) {
+	item, err := hasher.VaultItem("", 0, func(b *agentrunstore.BodyRowEntityBuilder) error {
+		return fillVault(b, Body{Arguments: args}, false)
+	})
+	if err != nil {
+		return "", eh.Errorf("arguments digest: %w", err)
+	}
+	h := digester.NewLeaf()
+	_, _ = h.Write(item)
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
 // chained is the entry with its digests and chain fields set from prev.
 func (inst Entry) chained(prevOrdinal uint32, prevDigest string) (e Entry, err error) {
-	e = inst.Digested()
+	if e, err = inst.Digested(); err != nil {
+		return
+	}
 	e.Prev = prevOrdinal
 	form, err := e.CanonicalForm()
 	if err != nil {

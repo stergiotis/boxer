@@ -52,42 +52,59 @@ func runOfWire(w wireRun) Run {
 
 // wireEntry is an entry on the bus.
 type wireEntry struct {
-	Run           string    `json:"run"`
-	Ordinal       uint32    `json:"ordinal"`
-	At            time.Time `json:"at"`
-	Kind          string    `json:"kind"`
-	Key           string    `json:"key,omitempty"`
-	Role          string    `json:"role,omitempty"`
-	Body          string    `json:"body,omitempty"`
-	Calls         string    `json:"calls,omitempty"`
-	BodyDigest    string    `json:"body_digest,omitempty"`
-	CallsDigest   string    `json:"calls_digest,omitempty"`
-	Name          string    `json:"name,omitempty"`
-	Book          string    `json:"book,omitempty"`
-	Form          string    `json:"form,omitempty"`
-	Target        uint32    `json:"target,omitempty"`
-	From          uint32    `json:"from,omitempty"`
-	Effect        string    `json:"effect,omitempty"`
-	Turn          string    `json:"turn,omitempty"`
-	LabelLevel    uint8     `json:"label_level,omitempty"`
-	LabelTier     uint8     `json:"label_tier,omitempty"`
-	LabelExposure []string  `json:"label_exposure,omitempty"`
-	LabelOrigin   []string  `json:"label_origin,omitempty"`
-	WriterRun     string    `json:"writer_run,omitempty"`
-	WriterTurn    string    `json:"writer_turn,omitempty"`
-	WriterOrdinal uint32    `json:"writer_ordinal,omitempty"`
-	Prev          uint32    `json:"prev,omitempty"`
-	Digest        string    `json:"digest,omitempty"`
-	KeyId         string    `json:"key_id,omitempty"`
-	Parent        uint32    `json:"parent,omitempty"`
-	Attachments   string    `json:"attachments,omitempty"`
+	Run       string    `json:"run"`
+	Ordinal   uint32    `json:"ordinal"`
+	At        time.Time `json:"at"`
+	Kind      string    `json:"kind"`
+	Key       string    `json:"key,omitempty"`
+	Role      string    `json:"role,omitempty"`
+	Body      string    `json:"body,omitempty"`
+	Calls     string    `json:"calls,omitempty"`
+	Arguments string    `json:"arguments,omitempty"`
+	// The records (ADR-0325 §SD1).
+	Request         *RequestMeta   `json:"request,omitempty"`
+	Reply           *ReplyMeta     `json:"reply,omitempty"`
+	Compact         *CompactIntent `json:"compact,omitempty"`
+	Approval        *Approval      `json:"approval,omitempty"`
+	Head            *HeadRecord    `json:"head,omitempty"`
+	Profile         *ProfileRecord `json:"profile,omitempty"`
+	TurnEnd         *TurnState     `json:"turn_end,omitempty"`
+	Tools           *ToolCatalog   `json:"tools,omitempty"`
+	Endorse         *Endorsement   `json:"endorse,omitempty"`
+	Grant           *GrantRecord   `json:"grant,omitempty"`
+	Question        *ExitQuestion  `json:"question,omitempty"`
+	Answer          *ExitAnswer    `json:"answer,omitempty"`
+	Copy            *CopyRecord    `json:"copy,omitempty"`
+	VaultCommitment string         `json:"vault_commitment,omitempty"`
+	EntryId         uint64         `json:"entry_id,omitempty"`
+	Name            string         `json:"name,omitempty"`
+	Book            string         `json:"book,omitempty"`
+	Form            string         `json:"form,omitempty"`
+	Target          uint32         `json:"target,omitempty"`
+	From            uint32         `json:"from,omitempty"`
+	Effect          string         `json:"effect,omitempty"`
+	Turn            string         `json:"turn,omitempty"`
+	LabelLevel      uint8          `json:"label_level,omitempty"`
+	LabelTier       uint8          `json:"label_tier,omitempty"`
+	LabelExposure   []string       `json:"label_exposure,omitempty"`
+	LabelOrigin     []string       `json:"label_origin,omitempty"`
+	WriterRun       string         `json:"writer_run,omitempty"`
+	WriterTurn      string         `json:"writer_turn,omitempty"`
+	WriterOrdinal   uint32         `json:"writer_ordinal,omitempty"`
+	Prev            uint32         `json:"prev,omitempty"`
+	Digest          string         `json:"digest,omitempty"`
+	KeyId           string         `json:"key_id,omitempty"`
+	Parent          uint32         `json:"parent,omitempty"`
+	Attachments     string         `json:"attachments,omitempty"`
 	// Opening is the commitment opening, hex; it travels with the bodies
 	// and is held only by the vault (ADR-0320 §SD2).
 	Opening string `json:"opening,omitempty"`
 }
 
 func wireOfEntry(e Entry) wireEntry {
-	return wireEntry{Run: e.Run, Ordinal: e.Ordinal, At: e.At.UTC(), Kind: e.Kind.String(), Key: e.Key, Role: e.Role, Body: e.Body, Calls: e.Calls, BodyDigest: e.BodyDigest, CallsDigest: e.CallsDigest,
+	return wireEntry{Run: e.Run, Ordinal: e.Ordinal, At: e.At.UTC(), Kind: e.Kind.String(), Key: e.Key, Role: e.Role, Body: e.Body, Calls: e.Calls, Arguments: e.Arguments,
+		Request: e.Request, Reply: e.Reply, Compact: e.Compact, Approval: e.Approval, Head: e.Head, Profile: e.Profile, TurnEnd: e.TurnEnd, Tools: e.Tools,
+		Endorse: e.Endorse, Grant: e.Grant, Question: e.Question, Answer: e.Answer, Copy: e.Copy, VaultCommitment: e.VaultCommitment, EntryId: e.EntryId,
 		Name: e.Name, Book: e.Book, Form: e.Form, Target: e.Target, From: e.From, Effect: e.Effect, Turn: e.Turn,
 		LabelLevel: uint8(e.Label.Level), LabelTier: uint8(e.Label.Tier), LabelExposure: e.Label.Exposure, LabelOrigin: e.Label.Origin,
 		WriterRun: e.WriterRun, WriterTurn: e.WriterTurn, WriterOrdinal: e.WriterOrdinal, Prev: e.Prev, Digest: e.Digest, KeyId: e.KeyId, Parent: e.Parent, Attachments: e.Attachments,
@@ -96,7 +113,9 @@ func wireOfEntry(e Entry) wireEntry {
 
 func entryOfWire(w wireEntry) Entry {
 	k, _ := ParseKind(w.Kind)
-	return Entry{Run: w.Run, Ordinal: w.Ordinal, At: zeroed(w.At), Kind: k, Key: w.Key, Role: w.Role, Body: w.Body, Calls: w.Calls, BodyDigest: w.BodyDigest, CallsDigest: w.CallsDigest,
+	return Entry{Run: w.Run, Ordinal: w.Ordinal, At: zeroed(w.At), Kind: k, Key: w.Key, Role: w.Role, Body: w.Body, Calls: w.Calls, Arguments: w.Arguments,
+		Request: w.Request, Reply: w.Reply, Compact: w.Compact, Approval: w.Approval, Head: w.Head, Profile: w.Profile, TurnEnd: w.TurnEnd, Tools: w.Tools,
+		Endorse: w.Endorse, Grant: w.Grant, Question: w.Question, Answer: w.Answer, Copy: w.Copy, VaultCommitment: w.VaultCommitment, EntryId: w.EntryId,
 		Name: w.Name, Book: w.Book, Form: w.Form, Target: w.Target, From: w.From, Effect: w.Effect, Turn: w.Turn,
 		Label:     Label{Level: LevelE(w.LabelLevel), Tier: TierE(w.LabelTier), Exposure: unionMarks(w.LabelExposure, nil), Origin: unionMarks(w.LabelOrigin, nil)},
 		WriterRun: w.WriterRun, WriterTurn: w.WriterTurn, WriterOrdinal: w.WriterOrdinal, Prev: w.Prev, Digest: w.Digest, KeyId: w.KeyId, Parent: w.Parent, Attachments: w.Attachments,

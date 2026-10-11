@@ -323,6 +323,17 @@ inserts plainly and logs a `deferred` warning once. The journal's entry store
 is generated with `async_insert = 0`, and its `Cas` run table forces it. The
 vault's body store (ADR-0320) is not configured yet.
 
+### 2026-10-11 — SD3: the calls and attachments fields are canonical text
+
+A message's tool-calls and attachments fields are in `jsonshred`'s
+canonical form, the form the journal stores them in
+([ADR-0325](./0325-the-journals-canonical-form-is-the-canonical-wire-over-its-rows.md)
+§SD1). The digests of messages that carry either moved once, and the
+corpus golden was re-recorded.
+
+The vault's body store is now generated with `async_insert = 0` as well,
+which the SD4 entry above left open.
+
 ## References
 
 - [ADR-0028](./0028-chlocal-low-latency-sql-cap.md) — the worker pool.

@@ -7,30 +7,23 @@ import (
 	"lukechampine.com/blake3"
 )
 
-// The commitments the chain holds in place of bodies (ADR-0320 §SD2): a
-// per-entry random opening, one key per field derived from it under a
-// field-scoped context, and keyed BLAKE3-256 of the field's bytes under
-// that key. Without the opening a commitment is a pseudorandom value, so
-// a vault row destroyed with its opening leaves nothing retained that
-// reveals the field; with it, the body that opens the commitment is the
-// body that was written.
+// The commitment the chain holds in place of content (ADR-0325 §SD3,
+// amending ADR-0320 §SD2): a per-entry random opening, a key derived from
+// it under the scheme's context, and keyed BLAKE3-256 under that key of
+// the canonical wire item of the entry's vault row without the opening.
+// Without the opening the commitment is a pseudorandom value, so a vault
+// row destroyed with its opening leaves nothing retained that reveals the
+// content; with it, the row that opens the commitment is the row that was
+// written.
 
 // CommitScheme names the construction; an entry that carries a
 // commitment records it in KeyId, so a verifier knows how to open.
-const CommitScheme = "commit/blake3-keyed/v1"
+const CommitScheme = "commit/blake3-keyed/v2"
 
 // OpeningSize is the opening's length in bytes.
 const OpeningSize = 32
 
-// The fields a commitment is scoped to; the context string a key is
-// derived under names the scheme and the field, so one opening yields
-// unrelated keys per field.
-const (
-	FieldBody  = "body"
-	FieldCalls = "calls"
-)
-
-const commitContextPrefix = "github.com/stergiotis/boxer agentrun " + CommitScheme + " "
+const commitContext = "github.com/stergiotis/boxer agentrun " + CommitScheme + " vault"
 
 // NewOpening draws an entry's opening; a test replaces it with a
 // deterministic one, the way it replaces Now.
@@ -42,27 +35,19 @@ var NewOpening = func() (opening []byte) {
 	return
 }
 
-// Commit is the commitment to content under opening for field; empty
-// content commits to the empty string, so an entry without a field has
-// no commitment for it.
-func Commit(opening []byte, field string, content string) (commitment string) {
-	if content == "" {
-		return ""
-	}
+// CommitVault is the commitment to a vault row's canonical item under
+// opening.
+func CommitVault(opening []byte, item []byte) (commitment string) {
 	var key [OpeningSize]byte
-	blake3.DeriveKey(key[:], commitContextPrefix+field, opening)
+	blake3.DeriveKey(key[:], commitContext, opening)
 	h := blake3.New(32, key[:])
-	_, _ = h.Write([]byte(content))
+	_, _ = h.Write(item)
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// Opens says content is what commitment commits to under opening for
-// field: both empty, or the commitment recomputes.
-func Opens(opening []byte, field string, content string, commitment string) bool {
-	if content == "" {
-		return commitment == ""
-	}
-	return len(opening) == OpeningSize && Commit(opening, field, content) == commitment
+// OpensVault says item is what commitment commits to under opening.
+func OpensVault(opening []byte, item []byte, commitment string) bool {
+	return len(opening) == OpeningSize && commitment != "" && CommitVault(opening, item) == commitment
 }
 
 // OpeningText is the opening as the wire and the vault carry it, hex;

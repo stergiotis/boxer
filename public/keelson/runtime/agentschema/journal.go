@@ -21,14 +21,14 @@ const (
 
 // entryColumns are the journal entry table's columns, in its order; a
 // test pins them to keelson('agent_run_entries') as agentrun serves it.
-var entryColumns = []string{"run", "ordinal", "at_ms", "kind", "key", "role", "body", "calls", "body_digest", "calls_digest", "name", "book", "form", "target", "from",
+var entryColumns = []string{"run", "ordinal", "at_ms", "kind", "key", "role", "body", "calls", "arguments", "vault_commitment", "entry_id", "name", "book", "form", "target", "from",
 	"effect", "turn", "label_level", "label_tier", "label_exposure", "label_origin", "writer_run", "writer_turn", "writer_ordinal",
 	"prev", "digest", "key_id", "parent", "attachments"}
 
 // contentColumns are the columns that carry content; agent_history
-// replaces them by sizes, and passes the digests the chain keeps of the
-// body and the calls (ADR-0314 §SD5).
-var contentColumns = map[string]bool{"body": true, "calls": true, "attachments": true}
+// replaces them by sizes, and passes the commitment the chain keeps of
+// the content (ADR-0314 §SD5, ADR-0325 §SD3).
+var contentColumns = map[string]bool{"body": true, "calls": true, "arguments": true, "attachments": true}
 
 func passAll() (rules []SectionRule) {
 	for _, c := range entryColumns {
@@ -47,6 +47,7 @@ func contentFree() (rules []SectionRule) {
 	rules = append(rules,
 		SectionRule{Name: "body_bytes", Pass: true, Expr: "length(base.`body`)"},
 		SectionRule{Name: "calls_bytes", Pass: true, Expr: "length(base.`calls`)"},
+		SectionRule{Name: "arguments_bytes", Pass: true, Expr: "length(base.`arguments`)"},
 		SectionRule{Name: "attachments_bytes", Pass: true, Expr: "length(base.`attachments`)"})
 	return
 }

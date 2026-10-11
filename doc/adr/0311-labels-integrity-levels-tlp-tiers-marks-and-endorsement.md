@@ -266,13 +266,17 @@ Accepted 2026-10-11.
 Status lifecycle: `Proposed → Accepted → (Deferred | Deprecated | Superseded by ADR-XXXX)`.
 See [DOCUMENTATION_STANDARD §1 ADR](../DOCUMENTATION_STANDARD.md#architecture-decision-records-why-it-is-this-way) for the edit-policy tiers (Tier 1 in-place / Tier 2 dated `## Updates` entry / Tier 3 new superseding ADR).
 
-<!--
 ## Updates
 
-Tier-2 dated entries land here when implementation reveals a refinement, an aspirational
-claim turns out false, or a milestone records what shipped. Single H2; add H3s dated
-YYYY-MM-DD. Remove this HTML comment when the section first gains a real entry.
--->
+### 2026-10-11 — SD3: a call's endorsement digest is over its shredded arguments
+
+The digest an `endorse` entry names for a call is taken over the vault
+item of the intent's shredded arguments (`agentrun.ArgumentsDigest`), so
+two spellings of the same arguments give one digest
+([ADR-0325](./0325-the-journals-canonical-form-is-the-canonical-wire-over-its-rows.md)
+§SD4). The artefact's endorsement still names the content digest of the
+text. The endorsement is now a vault component, not a JSON body.
+
 
 ## References
 

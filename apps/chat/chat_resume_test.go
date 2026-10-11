@@ -57,7 +57,7 @@ func TestAConversationResumesFromItsJournal(t *testing.T) {
 	// The host stopped mid-call: a consequential intent with no outcome,
 	// and a request with no reply, both left in the record.
 	_, err := w.Append(context.Background(),
-		agentrun.Entry{Kind: agentrun.KindIntent, Key: "k9", Name: "publish_result", Body: `{"name":"x"}`, Effect: agentrun.EffectConsequential, Turn: "t9"},
+		agentrun.Entry{Kind: agentrun.KindIntent, Key: "k9", Name: "publish_result", Arguments: `{"name":"x"}`, Effect: agentrun.EffectConsequential, Turn: "t9"},
 		agentrun.Entry{Kind: agentrun.KindRequest, Key: "t9#1", Turn: "t9"})
 	require.NoError(t, err)
 	before := projected(t, first.conv)
@@ -202,7 +202,8 @@ func TestAStopLeavesTheJournalWritable(t *testing.T) {
 	for _, e := range w.Entries() {
 		if e.Kind == agentrun.KindTurn {
 			turns++
-			assert.Contains(t, e.Body, "failed")
+			require.NotNil(t, e.TurnEnd)
+			assert.Contains(t, e.TurnEnd.Text(), "failed")
 		}
 	}
 	assert.Equal(t, 1, turns, "the cancelled turn's end is recorded")
@@ -253,13 +254,12 @@ func TestAResumeSettlesTheCallsTheProcessLeftOpen(t *testing.T) {
 	w, err := agentrun.Open(context.Background(), store, agentrun.Run{Id: "chat-crashed-1", Conversation: "chat-crashed-1", OwnerApp: string(ManifestId),
 		Profile: p.Id, Fingerprint: p.Fingerprint(), Settings: string(settings)})
 	require.NoError(t, err)
-	meta, _ := jsonMarshal(replyBody{CallId: "llm-1"})
 	_, err = w.Append(context.Background(),
 		agentrun.Entry{Kind: agentrun.KindSection, Name: "coordinator", Book: promptBookId, Body: promptText("coordinator"), Label: harnessLabel()},
 		agentrun.Entry{Kind: agentrun.KindUser, Role: projection.RoleUser, Body: "q1", Turn: "t1", Label: harnessLabel()},
 		agentrun.Entry{Kind: agentrun.KindRequest, Key: "t1#0", Turn: "t1"},
-		agentrun.Entry{Kind: agentrun.KindReply, Key: "t1#0", Role: projection.RoleAssistant, Name: meta, Calls: projection.CallsBody([]openaichat.ToolCall{{Id: "c1", Name: "set", Arguments: "{}"}}), Turn: "t1", Label: agentrun.Label{Level: agentrun.LevelOwnModel}},
-		agentrun.Entry{Kind: agentrun.KindIntent, Key: "llm-1#0", Name: "set", Body: "{}", Effect: agentrun.EffectRun, Turn: "t1"},
+		agentrun.Entry{Kind: agentrun.KindReply, Key: "t1#0", Role: projection.RoleAssistant, Reply: &agentrun.ReplyMeta{CallId: "llm-1"}, Calls: projection.CallsBody([]openaichat.ToolCall{{Id: "c1", Name: "set", Arguments: "{}"}}), Turn: "t1", Label: agentrun.Label{Level: agentrun.LevelOwnModel}},
+		agentrun.Entry{Kind: agentrun.KindIntent, Key: "llm-1#0", Name: "set", Arguments: "{}", Effect: agentrun.EffectRun, Turn: "t1"},
 		// The host stopped in the last round: the note for that call alone
 		// is still live.
 		agentrun.Entry{Kind: agentrun.KindNote, Name: "last-round", Form: "once", Body: lastRoundNote, Turn: "t1", Label: harnessLabel()})

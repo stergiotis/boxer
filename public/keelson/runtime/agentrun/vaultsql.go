@@ -2,7 +2,6 @@ package agentrun
 
 import (
 	"context"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -47,8 +46,13 @@ func (inst *SqlBodyStore) Put(ctx context.Context, bodies []Body) (err error) {
 	inst.mu.Lock()
 	defer inst.mu.Unlock()
 	for _, b := range bodies {
-		row := agentrunstore.BodyRow{ID: b.Run, Opening: OpeningText(b.Opening), Body: b.Body, Calls: b.Calls}
-		if err = inst.st.Begin(b.Run, uint64(b.Ordinal)).AddBodyRow(row).Commit(); err != nil {
+		bb := inst.st.Begin(b.Run, uint64(b.Ordinal))
+		if err = fillVault(bb, b, true); err == nil {
+			err = bb.Commit()
+		} else {
+			_ = bb.Rollback()
+		}
+		if err != nil {
 			inst.st.DiscardPending()
 			return eb.Build().Str("run", b.Run).Uint32("ordinal", b.Ordinal).Errorf("buffer body: %w", err)
 		}
@@ -94,22 +98,17 @@ func (inst *SqlBodyStore) GetOf(ctx context.Context, runs []string) (bodies []Bo
 // retried at the same ordinal), every row is returned and the reader
 // keeps the one that opens.
 func (inst *SqlBodyStore) scanLocked(ctx context.Context, predicate string) (bodies []Body, err error) {
-	for ent, serr := range inst.st.ScanBodyRow(ctx, recordstore.ScanOpts{ExtraPredicate: predicate}) {
-		if serr != nil {
-			return nil, serr
-		}
-		if ent == nil || !ent.BodyRow.Has {
-			continue
-		}
-		row := ent.BodyRow.Val
-		bodies = append(bodies, Body{Run: ent.ID, Ordinal: uint32(ent.Ord), Opening: OpeningOf(row.Opening), Body: row.Body, Calls: row.Calls})
+	rows, err := inst.st.ScanVault(ctx, predicate)
+	if err != nil {
+		return nil, err
 	}
-	slices.SortStableFunc(bodies, func(a, b Body) int {
-		if c := compareString(a.Run, b.Run); c != 0 {
-			return c
+	for _, row := range rows {
+		b, berr := bodyOfVault(row)
+		if berr != nil {
+			return nil, berr
 		}
-		return int(a.Ordinal) - int(b.Ordinal)
-	})
+		bodies = append(bodies, b)
+	}
 	return
 }
 

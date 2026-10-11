@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"encoding/json/v2"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -124,7 +125,7 @@ func (inst *coordinator) openJournal(ctx context.Context, keep bool) (w *agentru
 	if err != nil {
 		return
 	}
-	if _, err = inst.append(ctx, w, agentrun.Entry{Kind: agentrun.KindProfile, Name: p.Id, Body: p.Fingerprint(), Label: harnessLabel()}); err != nil {
+	if _, err = inst.append(ctx, w, agentrun.Entry{Kind: agentrun.KindProfile, Name: p.Id, Profile: &agentrun.ProfileRecord{Fingerprint: p.Fingerprint()}, Label: harnessLabel()}); err != nil {
 		return
 	}
 	inst.mu.Lock()
@@ -232,17 +233,18 @@ func (inst *coordinator) syncTools(ctx context.Context, w *agentrun.Writer, tool
 	for _, t := range tools {
 		names = append(names, t.Name)
 	}
-	body := projection.ToolsBody(names)
-	last := ""
+	var last []string
+	declared := false
 	for _, e := range w.Entries() {
-		if e.Kind == agentrun.KindTools {
-			last = e.Body
+		if e.Kind == agentrun.KindTools && e.Tools != nil {
+			last, declared = e.Tools.Names, true
 		}
 	}
-	if last == body || (last == "" && len(names) == 0) {
+	if slices.Equal(last, names) && (declared || len(names) == 0) {
 		return
 	}
-	_, err = inst.append(ctx, w, agentrun.Entry{Kind: agentrun.KindTools, Name: agentrun.ContentDigest(body), Body: body, Label: harnessLabel()})
+	_, err = inst.append(ctx, w, agentrun.Entry{Kind: agentrun.KindTools, Name: agentrun.ContentDigest(projection.ToolsBody(names)),
+		Tools: &agentrun.ToolCatalog{Names: names}, Label: harnessLabel()})
 	return
 }
 
@@ -265,7 +267,7 @@ func (inst *coordinator) project(ctx context.Context, w *agentrun.Writer) (batch
 
 // resolveAttachment reads a screenshot's bytes by the digest the artefact's
 // store keeps them under.
-func (inst *coordinator) resolveAttachment(a projection.Attachment) (data []byte, ok bool) {
+func (inst *coordinator) resolveAttachment(a agentrun.Attachment) (data []byte, ok bool) {
 	art := inst.artefactOf()
 	if art == nil {
 		return nil, false
@@ -318,22 +320,10 @@ func outcomeLabel(untrusted bool, confined bool) (l agentrun.Label) {
 	return
 }
 
-// requestBody is what a request entry carries beside its key.
-type requestBody struct {
-	Digest   string `json:"digest"`
-	Messages int    `json:"messages"`
-	Tools    int    `json:"tools"`
-	Round    int    `json:"round"`
-	Label    string `json:"label"`
-}
-
-// replyBody is what a reply entry carries beside the message: the call id
+// replyMeta is a model call's reply record (ADR-0325 §SD1): the call id
 // and the usage.
-type replyBody struct {
-	CallId       string `json:"call_id"`
-	FinishReason string `json:"finish_reason,omitempty"`
-	InputTokens  int32  `json:"input_tokens,omitempty"`
-	OutputTokens int32  `json:"output_tokens,omitempty"`
+func replyMeta(callId string, finish string, input int32, output int32) *agentrun.ReplyMeta {
+	return &agentrun.ReplyMeta{CallId: callId, FinishReason: finish, InputTokens: uint32(max(input, 0)), OutputTokens: uint32(max(output, 0))}
 }
 
 // requestKey keys a round's request and its reply in the journal.
@@ -547,12 +537,9 @@ func (inst *coordinator) lastResultLabel() (untrusted bool, confined bool) {
 	return inst.lastUntrusted, inst.confined
 }
 
-// turnBody is what a turn entry carries: how the turn ended.
-func turnBody(state string, reason string) string {
-	if reason == "" {
-		return state
-	}
-	return state + ": " + strings.Join(strings.Fields(reason), " ")
+// turnEnd is a turn entry's record: how the turn ended, and why.
+func turnEnd(state string, reason string) *agentrun.TurnState {
+	return &agentrun.TurnState{State: state, Reason: strings.Join(strings.Fields(reason), " ")}
 }
 
 // headFormLocal marks a head entry whose receipt came from a store the
@@ -664,11 +651,9 @@ func (inst *coordinator) copyEntry(ctx context.Context, rec clipboardbroker.Copy
 	if w == nil {
 		return
 	}
-	body, err := jsonMarshal(rec)
-	if err != nil {
-		return eb.Build().Errorf("copy record: %w", err)
-	}
-	if _, err = inst.append(ctx, w, agentrun.Entry{Kind: agentrun.KindCopy, Key: rec.Handle, Name: rec.Source, Body: body, Label: rec.Label}); err != nil {
+	cr := &agentrun.CopyRecord{Digest: rec.Digest, Level: rec.Level, Tier: rec.Tier, Source: rec.Source, Handle: rec.Handle, Plaintext: rec.Plaintext,
+		Recorded: rec.Recorded, Approval: rec.Approval, Raw: rec.Raw, Refused: rec.Refused, Reason: rec.Reason, Bytes: uint32(max(rec.Bytes, 0))}
+	if _, err = inst.append(ctx, w, agentrun.Entry{Kind: agentrun.KindCopy, Key: rec.Handle, Name: rec.Source, Copy: cr, Label: rec.Label}); err != nil {
 		return eb.Build().Errorf("the copy was not journaled: %w", err)
 	}
 	return

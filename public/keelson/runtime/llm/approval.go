@@ -234,9 +234,9 @@ func (inst *Service) verifyApproval(key string, body []byte, tier agentrun.TierE
 		err = eb.Build().Str("owner", owner).Str("sender", string(sender)).Errorf("the approval is in a run another app owns")
 		return
 	}
-	a, err := cell.ParseApproval(e.Body)
-	if err != nil {
-		err = eh.Errorf("the approval entry does not parse: %w", err)
+	a := e.Approval
+	if a == nil {
+		err = eh.Errorf("the approval entry carries no approval record")
 		return
 	}
 	if path, parsed := cell.ParseApprovalTier(a.Path); !parsed || path != cell.ApprovalTierPerson {

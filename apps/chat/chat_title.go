@@ -150,7 +150,7 @@ func (inst *App) maybeTitle() {
 				if err != nil {
 					outcome.Body = "error: " + err.Error()
 				} else {
-					outcome.Body, _ = jsonMarshal(replyBody{CallId: res.CallId, FinishReason: res.FinishReason, InputTokens: res.InputTokens, OutputTokens: res.OutputTokens})
+					outcome.Reply = replyMeta(res.CallId, res.FinishReason, res.InputTokens, res.OutputTokens)
 				}
 				if _, jerr := coord.append(journalCtx(ctx), w, outcome); jerr != nil && err == nil {
 					err = jerr

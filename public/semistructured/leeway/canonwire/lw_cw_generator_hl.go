@@ -25,6 +25,13 @@ func NewGoCodeGeneratorDriver(namingConvention common.NamingConventionI, tech co
 	}
 }
 
+// EncoderOnly makes the driver emit the encoder without the dispatcher and
+// the decoder (GoClassBuilder.EncoderOnly).
+func (inst *GeneratorDriver) EncoderOnly() *GeneratorDriver {
+	inst.builder.EncoderOnly()
+	return inst
+}
+
 // GenerateGoClasses emits the canonical-wire classes for one table into one Go
 // file: the slot signature constants, the slot enum, the tagger and dispatcher
 // interfaces with their built-in ordinal implementations, the encoder over the

@@ -294,7 +294,7 @@ func (sequentialTools) run(s *roundState) {
 		effect := coord.effectOf(s.ctx, tc.Name, tc.Arguments)
 		// The intent names the task the call runs under, so law L15 can
 		// match a grant to the calls it admitted.
-		if _, s.err = s.coord.append(s.jctx, s.w, agentrun.Entry{Kind: agentrun.KindIntent, Key: o.key(), Name: tc.Name, Body: tc.Arguments,
+		if _, s.err = s.coord.append(s.jctx, s.w, agentrun.Entry{Kind: agentrun.KindIntent, Key: o.key(), Name: tc.Name, Arguments: tc.Arguments,
 			Effect: effect, Form: coord.handle(), Turn: s.turn, Label: harnessLabel()}); s.err != nil {
 			return
 		}
@@ -312,7 +312,11 @@ func (sequentialTools) run(s *roundState) {
 			// before the outcome is. A call the grant admitted without
 			// asking has no entry of its own; the grant's answered entry is
 			// the consent in force.
-			if _, s.err = s.coord.append(s.jctx, s.w, endorseEntry(o.key(), s.turn, tc.Arguments, effect)); s.err != nil {
+			var en agentrun.Entry
+			if en, s.err = endorseEntry(o.key(), s.turn, tc.Arguments, effect); s.err != nil {
+				return
+			}
+			if _, s.err = s.coord.append(s.jctx, s.w, en); s.err != nil {
 				return
 			}
 		}
@@ -432,7 +436,7 @@ func runTurn(ctx context.Context, cli completerI, coord *coordinator, req llm.Re
 		if _, serr := coord.stripPixelsJournal(jctx, w); serr != nil && err == nil {
 			err = serr
 		}
-		if _, terr := coord.append(jctx, w, agentrun.Entry{Kind: agentrun.KindTurn, Turn: req.Turn, Body: turnBody(state, out.stopped), Label: harnessLabel()}); terr != nil && err == nil {
+		if _, terr := coord.append(jctx, w, agentrun.Entry{Kind: agentrun.KindTurn, Turn: req.Turn, TurnEnd: turnEnd(state, out.stopped), Label: harnessLabel()}); terr != nil && err == nil {
 			err = terr
 		}
 		// A chain head per turn end, covering the turn's end (ADR-0314
@@ -456,8 +460,8 @@ func runTurn(ctx context.Context, cli completerI, coord *coordinator, req llm.Re
 		}
 		key := requestKey(req.Turn, round)
 		reqLabel := coord.requestLabel(rs.batch)
-		body, _ := jsonMarshal(requestBody{Digest: rs.digest, Messages: len(rs.msgs), Tools: len(rs.req.Tools), Round: round, Label: reqLabel.String()})
-		if _, err = coord.append(jctx, w, agentrun.Entry{Kind: agentrun.KindRequest, Key: key, Body: body, Turn: req.Turn, Label: reqLabel}); err != nil {
+		meta := &agentrun.RequestMeta{Digest: rs.digest, Messages: uint32(len(rs.msgs)), Tools: uint32(len(rs.req.Tools)), Round: uint32(round), Label: reqLabel.String()}
+		if _, err = coord.append(jctx, w, agentrun.Entry{Kind: agentrun.KindRequest, Key: key, Request: meta, Turn: req.Turn, Label: reqLabel}); err != nil {
 			return
 		}
 		out.digest = rs.digest
@@ -487,9 +491,8 @@ func runTurn(ctx context.Context, cli completerI, coord *coordinator, req llm.Re
 		cs := callStatOf(round, res)
 		out.calls = append(out.calls, cs)
 		coord.noteAnswered(cs)
-		replyMeta, _ := jsonMarshal(replyBody{CallId: res.CallId, FinishReason: res.FinishReason, InputTokens: res.InputTokens, OutputTokens: res.OutputTokens})
 		if _, err = coord.append(jctx, w, agentrun.Entry{Kind: agentrun.KindReply, Key: key, Role: projection.RoleAssistant, Body: res.Content, Calls: projection.CallsBody(res.ToolCalls),
-			Name: replyMeta, Turn: req.Turn, Label: coord.replyLabel(reqLabel), WriterRun: w.Run().Id, WriterTurn: req.Turn}); err != nil {
+			Reply: replyMeta(res.CallId, res.FinishReason, res.InputTokens, res.OutputTokens), Turn: req.Turn, Label: coord.replyLabel(reqLabel), WriterRun: w.Run().Id, WriterTurn: req.Turn}); err != nil {
 			return
 		}
 		sent := rs.msgs

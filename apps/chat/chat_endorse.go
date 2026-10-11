@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/stergiotis/boxer/public/keelson/runtime/agent"
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
 	"github.com/stergiotis/boxer/public/observability/eh"
 )
@@ -85,28 +84,6 @@ const (
 	grantForm = "grant"
 )
 
-// endorseBody is what an endorse entry carries (ADR-0311 §SD3).
-type endorseBody struct {
-	// Digest is the body as shown; Epoch the rendering it was shown under
-	// (the turn for a call, the revision for the artefact).
-	Digest string `json:"digest"`
-	Epoch  string `json:"epoch"`
-	// Classes are the act classes the endorsement covers.
-	Classes []string `json:"classes"`
-	// Previous is the digest of the last endorsement of the same body, or
-	// "none"; Diff says what changed since it.
-	Previous string `json:"previous"`
-	Diff     string `json:"diff,omitempty"`
-}
-
-// grantBody is what the answered entry of a grant carries.
-type grantBody struct {
-	Task       string            `json:"task"`
-	Handle     string            `json:"handle"`
-	Terms      *agent.GrantTerms `json:"terms,omitempty"`
-	Unattended bool              `json:"unattended,omitempty"`
-}
-
 // callCompleted says a call_operation result reports the command done.
 func callCompleted(content string) bool {
 	var co callOutcome
@@ -115,10 +92,15 @@ func callCompleted(content string) bool {
 
 // endorseEntry is the person's endorsement of a consequential call they
 // decided in the dispatcher's dialog: the digest of the arguments as the
-// call showed them, under the turn as the epoch.
-func endorseEntry(key string, turn string, arguments string, effect string) agentrun.Entry {
-	body, _ := jsonMarshal(endorseBody{Digest: agentrun.ContentDigest(arguments), Epoch: turn, Classes: []string{effect}, Previous: "none"})
-	return agentrun.Entry{Kind: agentrun.KindEndorse, Key: key, Name: endorsedByPerson, Body: body, Turn: turn, Label: harnessLabel()}
+// call showed them — over their shredded attributes, so their spelling
+// does not move it (ADR-0325 §SD4) — under the turn as the epoch.
+func endorseEntry(key string, turn string, arguments string, effect string) (e agentrun.Entry, err error) {
+	digest, err := agentrun.ArgumentsDigest(arguments)
+	if err != nil {
+		return
+	}
+	return agentrun.Entry{Kind: agentrun.KindEndorse, Key: key, Name: endorsedByPerson, Turn: turn, Label: harnessLabel(),
+		Endorse: &agentrun.Endorsement{Digest: digest, Epoch: turn, Classes: []string{effect}, Previous: "none"}}, nil
 }
 
 // journalGrant records the task's grant as the person's answer once
@@ -132,15 +114,16 @@ func (inst *coordinator) journalGrant(ctx context.Context, turn string) (err err
 	if w == nil || g.Handle == "" {
 		return
 	}
-	body, err := jsonMarshal(grantBody{Task: g.Task, Handle: g.Handle, Terms: g.Terms, Unattended: g.Unattended})
-	if err != nil {
-		return eh.Errorf("grant body: %w", err)
+	rec := &agentrun.GrantRecord{Task: g.Task, Handle: g.Handle, Unattended: g.Unattended}
+	if t := g.Terms; t != nil {
+		rec.HasTerms, rec.CallsBudget, rec.CallsUsed = true, uint32(max(t.CallsBudget, 0)), uint32(max(t.CallsUsed, 0))
+		rec.Deadline, rec.Destinations = t.Deadline, t.Destinations
 	}
 	by := endorsedByPerson
 	if g.Unattended {
 		by = grantedByHost
 	}
-	_, err = inst.append(journalCtx(ctx), w, agentrun.Entry{Kind: agentrun.KindAnswered, Key: g.Handle, Name: by, Form: grantForm, Body: body, Turn: turn, Label: harnessLabel()})
+	_, err = inst.append(journalCtx(ctx), w, agentrun.Entry{Kind: agentrun.KindAnswered, Key: g.Handle, Name: by, Form: grantForm, Grant: rec, Turn: turn, Label: harnessLabel()})
 	return
 }
 
@@ -155,9 +138,8 @@ func (inst *coordinator) endorseArtefact(ctx context.Context, n int, text string
 	previous, prevText := "none", ""
 	for _, e := range w.Entries() {
 		if e.Kind == agentrun.KindEndorse && e.Key == endorseKeyArtefact {
-			var b endorseBody
-			if json.Unmarshal([]byte(e.Body), &b) == nil {
-				previous = b.Digest
+			if e.Endorse != nil {
+				previous = e.Endorse.Digest
 			}
 			if t, ok := inst.artefactOf().text(revisionOf(e)); ok {
 				prevText = t
@@ -172,18 +154,17 @@ func (inst *coordinator) endorseArtefact(ctx context.Context, n int, text string
 			diff = "unchanged"
 		}
 	}
-	body, _ := jsonMarshal(endorseBody{Digest: agentrun.ContentDigest(text), Epoch: "r" + strconv.Itoa(n), Classes: []string{"publish"}, Previous: previous, Diff: diff})
-	_, err = inst.append(journalCtx(ctx), w, agentrun.Entry{Kind: agentrun.KindEndorse, Key: endorseKeyArtefact, Name: endorsedByPerson, Body: body, Label: harnessLabel()})
+	rec := &agentrun.Endorsement{Digest: agentrun.ContentDigest(text), Epoch: "r" + strconv.Itoa(n), Classes: []string{"publish"}, Previous: previous, Diff: diff}
+	_, err = inst.append(journalCtx(ctx), w, agentrun.Entry{Kind: agentrun.KindEndorse, Key: endorseKeyArtefact, Name: endorsedByPerson, Endorse: rec, Label: harnessLabel()})
 	return
 }
 
 // revisionOf reads the revision an artefact endorsement named.
 func revisionOf(e agentrun.Entry) int {
-	var b endorseBody
-	if json.Unmarshal([]byte(e.Body), &b) != nil || !strings.HasPrefix(b.Epoch, "r") {
+	if e.Endorse == nil || !strings.HasPrefix(e.Endorse.Epoch, "r") {
 		return -1
 	}
-	n, _ := strconv.Atoi(b.Epoch[1:])
+	n, _ := strconv.Atoi(e.Endorse.Epoch[1:])
 	return n
 }
 
@@ -251,8 +232,7 @@ func checkEndorsed(entries []agentrun.Entry) (broken []string) {
 			continue
 		}
 		if en, endorsed := endorsements[e.Key]; endorsed && en.Ordinal < out.Ordinal {
-			var b endorseBody
-			if json.Unmarshal([]byte(en.Body), &b) == nil && b.Digest == agentrun.ContentDigest(e.Body) {
+			if digest, derr := agentrun.ArgumentsDigest(e.Arguments); derr == nil && en.Endorse != nil && en.Endorse.Digest == digest {
 				continue
 			}
 			broken = append(broken, "intent "+e.Key+" ("+e.Name+"): L15: the endorsement before its outcome is not over the arguments the act ran with")

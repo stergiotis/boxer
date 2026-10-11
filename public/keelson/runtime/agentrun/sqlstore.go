@@ -444,7 +444,13 @@ func revisionOf(e Entry, epoch uint32) (rev agentrunstore.EntryEnvelope) {
 
 func (inst *SqlStore) appendLocked(ctx context.Context, entries []Entry) (err error) {
 	for _, e := range entries {
-		if err = inst.st.Entry.Begin(e.Run, uint64(e.Ordinal), revisionOf(e, inst.epoch[e.Run])).AddEntry(entryRow(e)).Commit(); err != nil {
+		b := inst.st.Entry.Begin(e.Run, uint64(e.Ordinal), revisionOf(e, inst.epoch[e.Run]))
+		if err = fillLedger(b, e); err == nil {
+			err = b.Commit()
+		} else {
+			_ = b.Rollback()
+		}
+		if err != nil {
 			inst.st.Entry.DiscardPending()
 			return eb.Build().Str("run", e.Run).Uint32("ordinal", e.Ordinal).Errorf("buffer entry: %w", err)
 		}
@@ -587,7 +593,7 @@ func (inst *SqlStore) scanEntriesLocked(ctx context.Context, predicate string) (
 		if ent == nil || !ent.Entry.Has {
 			continue
 		}
-		entries = append(entries, entryOf(ent.Entry.Val, ent.ID, ent.Ord))
+		entries = append(entries, entryOfLedger(ent))
 	}
 	// The scan orders by (ordinal, run); a several-run read wants runs whole.
 	slices.SortStableFunc(entries, func(a, b Entry) int {
@@ -650,12 +656,11 @@ func (inst *SqlStore) Tombstone(ctx context.Context, run string) (err error) {
 	blanked := make([]Entry, 0, len(entries))
 	var ordinals []string
 	for _, e := range entries {
-		if (e.Body == "" && e.Calls == "") || e.Kind == KindHead {
+		if !e.HasContent() || e.Kind == KindHead {
 			continue
 		}
 		ordinals = append(ordinals, strconv.FormatUint(uint64(e.Ordinal), 10))
-		e.Body, e.Calls = "", ""
-		blanked = append(blanked, e)
+		blanked = append(blanked, e.Erased())
 	}
 	if len(blanked) == 0 {
 		return
@@ -687,27 +692,6 @@ func runOf(row agentrunstore.Run) (r Run) {
 		Label:   Label{Level: LevelE(row.LabelLevel), Tier: TierE(row.LabelTier), Exposure: ParseMarks(row.LabelExposure), Origin: ParseMarks(row.LabelOrigin)},
 		Created: zeroed(row.Created), LastOrdinal: row.LastOrdinal, Closed: zeroed(row.Closed), Digest: row.Digest, Head: row.Head, Version: row.Version,
 		DeletedBy: row.DeletedBy, DeletedAt: zeroed(row.DeletedAt), Holder: row.Holder, HolderPid: row.HolderPid, Epoch: row.Epoch}
-}
-
-// entryRow is the ledger row of an entry: everything but the content,
-// which is the vault's (ADR-0320 §SD1).
-func entryRow(e Entry) agentrunstore.Entry {
-	return agentrunstore.Entry{ID: e.Run, At: utc(e.At), Kind: e.Kind.String(), Key: e.Key, Role: e.Role,
-		BodyDigest: e.BodyDigest, CallsDigest: e.CallsDigest,
-		Name: e.Name, Book: e.Book, Form: e.Form, Target: e.Target, From: e.From, Effect: e.Effect, Turn: e.Turn,
-		LabelLevel: uint8(e.Label.Level), LabelTier: uint8(e.Label.Tier), LabelExposure: unionMarks(e.Label.Exposure, nil), LabelOrigin: unionMarks(e.Label.Origin, nil),
-		WriterRun: e.WriterRun, WriterTurn: e.WriterTurn, WriterOrdinal: e.WriterOrdinal, Prev: e.Prev, Digest: e.Digest, KeyId: e.KeyId, Parent: e.Parent, Attachments: e.Attachments}
-}
-
-// entryOf is the entry a ledger row holds, at its ordinal; it carries no
-// content until the vault's join gives it some.
-func entryOf(row agentrunstore.Entry, run string, ordinal uint64) (e Entry) {
-	k, _ := ParseKind(row.Kind)
-	return Entry{Run: run, Ordinal: uint32(ordinal), At: zeroed(row.At), Kind: k, Key: row.Key, Role: row.Role,
-		BodyDigest: row.BodyDigest, CallsDigest: row.CallsDigest,
-		Name: row.Name, Book: row.Book, Form: row.Form, Target: row.Target, From: row.From, Effect: row.Effect, Turn: row.Turn,
-		Label:     Label{Level: LevelE(row.LabelLevel), Tier: TierE(row.LabelTier), Exposure: unionMarks(row.LabelExposure, nil), Origin: unionMarks(row.LabelOrigin, nil)},
-		WriterRun: row.WriterRun, WriterTurn: row.WriterTurn, WriterOrdinal: row.WriterOrdinal, Prev: row.Prev, Digest: row.Digest, KeyId: row.KeyId, Parent: row.Parent, Attachments: row.Attachments}
 }
 
 // utc is t in UTC, the epoch for a zero time, so a DateTime64 column holds

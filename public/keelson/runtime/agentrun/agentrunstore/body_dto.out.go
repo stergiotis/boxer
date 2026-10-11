@@ -13,9 +13,9 @@ import (
 // --- Caller-assigned membership ids (registry-stable target). ---
 
 const (
-	kindAgentrunBodyOpening uint64 = 9223372049739678067
-	kindAgentrunBodyText    uint64 = 9223372049739678068
-	kindAgentrunBodyCalls   uint64 = 9223372049739678069
+	kindAgentrunBodyOpening       uint64 = 9223372049739678067
+	kindAgentrunBodyText          uint64 = 9223372049739678068
+	kindAgentrunBodyArgumentsText uint64 = 9223372049739678108
 )
 
 // bodyRowStringArrayAttrI is the InAttr-side view of the stringArray section. P-variants only —
@@ -78,9 +78,9 @@ func bodyRowEmitSectionStringArray[
 	stringArraySecAttr_Opening := stringArraySec.BeginAttributeSingle(row.Opening)
 	stringArraySecAttr_Opening.AddMembershipLowCardRefP(kindAgentrunBodyOpening)
 	stringArraySecAttr_Opening.EndAttributeP()
-	stringArraySecAttr_Calls := stringArraySec.BeginAttributeSingle(row.Calls)
-	stringArraySecAttr_Calls.AddMembershipLowCardRefP(kindAgentrunBodyCalls)
-	stringArraySecAttr_Calls.EndAttributeP()
+	stringArraySecAttr_ArgumentsText := stringArraySec.BeginAttributeSingle(row.ArgumentsText)
+	stringArraySecAttr_ArgumentsText.AddMembershipLowCardRefP(kindAgentrunBodyArgumentsText)
+	stringArraySecAttr_ArgumentsText.EndAttributeP()
 	return
 }
 
@@ -177,9 +177,9 @@ func bodyRowReadRow[
 	var stringArrayOpeningVal string
 	var stringArrayOpeningCount int
 	var stringArrayOpeningLastAttr int64
-	var stringArrayCallsVal string
-	var stringArrayCallsCount int
-	var stringArrayCallsLastAttr int64
+	var stringArrayArgumentsTextVal string
+	var stringArrayArgumentsTextCount int
+	var stringArrayArgumentsTextLastAttr int64
 	nstringArray := stringArrayAttrs.GetNumberOfAttributes(raruntime.EntityIdx(i))
 	for attrJ := int64(0); attrJ < nstringArray; attrJ++ {
 		for membID := range stringArrayMembs.GetMembValueLowCardRef(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ)) {
@@ -195,17 +195,17 @@ func bodyRowReadRow[
 					return
 				}
 				stringArrayOpeningVal = val
-			case kindAgentrunBodyCalls:
-				if stringArrayCallsLastAttr != attrJ+1 {
-					stringArrayCallsLastAttr = attrJ + 1
-					stringArrayCallsCount++
+			case kindAgentrunBodyArgumentsText:
+				if stringArrayArgumentsTextLastAttr != attrJ+1 {
+					stringArrayArgumentsTextLastAttr = attrJ + 1
+					stringArrayArgumentsTextCount++
 				}
 				val, valErr := stringArrayAttrs.GetAttrValueSingle(raruntime.EntityIdx(i), raruntime.AttributeIdx(attrJ))
 				if valErr != nil {
-					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunBodyCalls").Str("field", "Calls").Errorf("slot stringArray@agentrunBodyCalls (field Calls) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
+					err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunBodyArgumentsText").Str("field", "ArgumentsText").Errorf("slot stringArray@agentrunBodyArgumentsText (field ArgumentsText) has an attribute carrying other than one value, but the field's `,unit` shape admits exactly one: %w", valErr)
 					return
 				}
-				stringArrayCallsVal = val
+				stringArrayArgumentsTextVal = val
 			}
 		}
 	}
@@ -217,12 +217,12 @@ func bodyRowReadRow[
 		row.Opening = stringArrayOpeningVal
 		present = true
 	}
-	if stringArrayCallsCount > 1 {
-		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunBodyCalls").Int("got", stringArrayCallsCount).Errorf("slot stringArray@agentrunBodyCalls (field Calls) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayCallsCount)
+	if stringArrayArgumentsTextCount > 1 {
+		err = eb.Build().Int("row", i).Str("section", "stringArray").Str("membership", "agentrunBodyArgumentsText").Int("got", stringArrayArgumentsTextCount).Errorf("slot stringArray@agentrunBodyArgumentsText (field ArgumentsText) carries %d attributes but the DTO admits at most 1 — several producers claim this slot, so the reader cannot tell which attribute is this kind's", stringArrayArgumentsTextCount)
 		return
 	}
-	if stringArrayCallsCount == 1 {
-		row.Calls = stringArrayCallsVal
+	if stringArrayArgumentsTextCount == 1 {
+		row.ArgumentsText = stringArrayArgumentsTextVal
 		present = true
 	}
 	// --- textArray. ---

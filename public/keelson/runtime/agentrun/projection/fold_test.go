@@ -24,7 +24,7 @@ func corpus() []agentrun.Entry {
 	return []agentrun.Entry{
 		{Ordinal: 1, Kind: agentrun.KindSection, Name: "coordinator", Book: "chat", Body: "You can work in windows.", Label: l(0, 0)},
 		{Ordinal: 2, Kind: agentrun.KindSection, Name: "questions", Book: "chat", Body: "You can ask.", Label: l(0, 0)},
-		{Ordinal: 3, Kind: agentrun.KindTools, Name: "d1", Body: ToolsBody([]string{"ask_user", "request_access"})},
+		{Ordinal: 3, Kind: agentrun.KindTools, Name: "d1", Tools: &agentrun.ToolCatalog{Names: []string{"ask_user", "request_access"}}},
 		{Ordinal: 4, Kind: agentrun.KindProfile, Body: "default"},
 		{Ordinal: 5, Kind: agentrun.KindNote, Name: "ceiling", Form: "snapshot", Body: "The person's settings let you at most: run.", Label: l(0, 0)},
 		{Ordinal: 6, Kind: agentrun.KindUser, Role: RoleUser, Body: "tidy my note", Turn: "t1", Label: l(0, 0)},
@@ -43,8 +43,8 @@ func corpus() []agentrun.Entry {
 		{Ordinal: 19, Kind: agentrun.KindNote, Name: "last-round", Form: "notice", Body: "Answer now.", Label: l(0, 0)},
 		{Ordinal: 20, Kind: agentrun.KindEdit, Target: 19, Form: agentrun.FormDrop, Label: l(0, 0)},
 		{Ordinal: 21, Kind: agentrun.KindEdit, Target: 13, Body: "[edited: done]", Label: l(1, 0)},
-		{Ordinal: 22, Kind: agentrun.KindUser, Role: RoleUser, Body: "look", Turn: "t2", Attachments: AttachmentsBody([]Attachment{{MediaType: "image/png", Digest: "abc"}}), Label: l(0, 3)},
-		{Ordinal: 23, Kind: agentrun.KindTools, Name: "d2", Body: ToolsBody([]string{"ask_user"})},
+		{Ordinal: 22, Kind: agentrun.KindUser, Role: RoleUser, Body: "look", Turn: "t2", Attachments: AttachmentsBody([]agentrun.Attachment{{MediaType: "image/png", Digest: "abc"}}), Label: l(0, 3)},
+		{Ordinal: 23, Kind: agentrun.KindTools, Name: "d2", Tools: &agentrun.ToolCatalog{Names: []string{"ask_user"}}},
 	}
 }
 
@@ -96,7 +96,7 @@ func TestTheFoldProjectsTheCorpus(t *testing.T) {
 	d3, _ := b.Digest("other")
 	assert.NotEqual(t, d1, d3, "the profile is in the digest")
 
-	msgs, err := Encode(b, func(a Attachment) ([]byte, bool) { return []byte{1, 2}, a.Digest == "abc" })
+	msgs, err := Encode(b, func(a agentrun.Attachment) ([]byte, bool) { return []byte{1, 2}, a.Digest == "abc" })
 	require.NoError(t, err)
 	assert.Equal(t, openaichat.ChatRoleSystem, msgs[0].Role)
 	assert.Len(t, msgs[5].Images, 1)
@@ -232,14 +232,14 @@ func genEntries(t *rapid.T) (entries []agentrun.Entry) {
 		case agentrun.KindSection:
 			e.Name = rapid.SampledFrom(names).Draw(t, "name")
 		case agentrun.KindTools:
-			e.Body = ToolsBody(rapid.SliceOfN(rapid.SampledFrom([]string{"a", "b"}), 0, 2).Draw(t, "tools"))
+			e.Tools = &agentrun.ToolCatalog{Names: rapid.SliceOfN(rapid.SampledFrom([]string{"a", "b"}), 0, 2).Draw(t, "tools")}
 		case agentrun.KindCompact, agentrun.KindEdit:
 			e.Target = uint32(rapid.IntRange(0, i).Draw(t, "target"))
 			if kind == agentrun.KindEdit && rapid.Bool().Draw(t, "drop") {
 				e.Form = agentrun.FormDrop
 			}
 			if kind == agentrun.KindEdit && rapid.Bool().Draw(t, "attach") {
-				e.Attachments = AttachmentsBody([]Attachment{{MediaType: "image/png", Digest: "e" + strconv.Itoa(i)}})
+				e.Attachments = AttachmentsBody([]agentrun.Attachment{{MediaType: "image/png", Digest: "e" + strconv.Itoa(i)}})
 			}
 		case agentrun.KindOutcome:
 			if len(calls) > 0 && rapid.Bool().Draw(t, "answers") {
@@ -257,7 +257,7 @@ func genEntries(t *rapid.T) (entries []agentrun.Entry) {
 			}
 		case agentrun.KindUser:
 			if rapid.Bool().Draw(t, "attach") {
-				e.Attachments = AttachmentsBody([]Attachment{{MediaType: "image/png", Digest: "u" + strconv.Itoa(i)}})
+				e.Attachments = AttachmentsBody([]agentrun.Attachment{{MediaType: "image/png", Digest: "u" + strconv.Itoa(i)}})
 			}
 		}
 		e.Run = "r"

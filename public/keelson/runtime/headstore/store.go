@@ -2,7 +2,6 @@ package headstore
 
 import (
 	"context"
-	"encoding/json/v2"
 	"slices"
 	"strconv"
 	"strings"
@@ -10,7 +9,6 @@ import (
 	"time"
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/agentrun"
-	"github.com/stergiotis/boxer/public/observability/eh"
 	"github.com/stergiotis/boxer/public/observability/eh/eb"
 )
 
@@ -136,45 +134,17 @@ func (inst Cadence) String() (s string) {
 	return strings.Join(parts, ",")
 }
 
-// HeadRecord is the body of the journal's head entry (ADR-0308 §SD2): the
-// ordinal covered, the digest, the receipt, and the cadence it was shipped
-// under.
-type HeadRecord struct {
-	Ordinal   uint32    `json:"ordinal"`
-	Digest    string    `json:"digest"`
-	ReceiptId string    `json:"receipt_id"`
-	ReceiptAt time.Time `json:"receipt_at"`
-	Cadence   string    `json:"cadence"`
-	// Durable is the receipt's: false for a head the process alone
-	// holds, which anchors nothing (ADR-0314, Migration).
-	Durable bool `json:"durable"`
-}
-
-// HeadBody is the head entry's body for a shipped head.
-func HeadBody(h Head, r Receipt, c Cadence) (body string, err error) {
-	b, err := json.Marshal(HeadRecord{Ordinal: h.Ordinal, Digest: h.Digest, ReceiptId: r.Id, ReceiptAt: r.At.UTC(), Cadence: c.String(), Durable: r.Durable}, json.Deterministic(true))
-	if err != nil {
-		err = eh.Errorf("head body: %w", err)
-		return
-	}
-	return string(b), nil
-}
-
-// ParseHeadBody reads a head entry's body.
-func ParseHeadBody(body string) (rec HeadRecord, err error) {
-	if err = json.Unmarshal([]byte(body), &rec); err != nil {
-		err = eh.Errorf("head body: %w", err)
-	}
-	return
+// HeadRecordOf is the journal's head entry record for a shipped head
+// (ADR-0308 §SD2, a ledger component since ADR-0325 §SD1): the ordinal
+// covered, the digest, the receipt, and the cadence it was shipped under.
+func HeadRecordOf(h Head, r Receipt, c Cadence) agentrun.HeadRecord {
+	return agentrun.HeadRecord{Ordinal: h.Ordinal, Digest: h.Digest, ReceiptId: r.Id, ReceiptAt: r.At.UTC(), Cadence: c.String(), Durable: r.Durable}
 }
 
 // HeadEntry is the journal entry that records a shipped head.
 func HeadEntry(h Head, r Receipt, c Cadence) (e agentrun.Entry, err error) {
-	body, err := HeadBody(h, r, c)
-	if err != nil {
-		return
-	}
-	return agentrun.Entry{Kind: agentrun.KindHead, Key: r.Id, Target: h.Ordinal, Body: body, Label: agentrun.Label{Level: agentrun.LevelSystem}}, nil
+	rec := HeadRecordOf(h, r, c)
+	return agentrun.Entry{Kind: agentrun.KindHead, Key: r.Id, Target: h.Ordinal, Head: &rec, Label: agentrun.Label{Level: agentrun.LevelSystem}}, nil
 }
 
 // Ship appends the writer's current head to the store and journals the
@@ -259,11 +229,11 @@ func VerifyHeads(runDigest string, entries []agentrun.Entry, anchored []Anchored
 		if e.Kind != agentrun.KindHead {
 			continue
 		}
-		rec, err := ParseHeadBody(e.Body)
-		if err != nil || rec.Ordinal != e.Target {
+		if e.Head == nil || e.Head.Ordinal != e.Target {
 			bad[e.Ordinal] = true
 			continue
 		}
+		rec := *e.Head
 		recorded[rec.Ordinal] = true
 		if !chainHolds(rec.Ordinal, rec.Digest) || stored[rec.Ordinal] != rec.Digest {
 			bad[e.Ordinal] = true
