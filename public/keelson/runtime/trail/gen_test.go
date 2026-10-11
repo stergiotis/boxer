@@ -7,6 +7,7 @@ import (
 
 	"github.com/stergiotis/boxer/public/keelson/runtime/factsschema/storegen"
 	"github.com/stergiotis/boxer/public/keelson/runtime/vocab"
+	"github.com/stergiotis/boxer/public/storage/recordstore/gen"
 )
 
 //go:generate sh -c "go test -tags=\"$(cat ../../../../tags)\" -run TestGenerateTrailStore ."
@@ -39,5 +40,7 @@ func TestGenerateTrailStore(t *testing.T) {
 		ImportPath: "github.com/stergiotis/boxer/public/keelson/runtime/trail",
 		Ids:        ids,
 		CanonWire:  true,
+		// The recorder seals its flushes (ADR-0327 §SD5).
+		Evidence: &gen.Evidence{Seals: true},
 	}.Generate())
 }

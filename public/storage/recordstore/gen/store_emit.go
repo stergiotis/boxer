@@ -1092,7 +1092,7 @@ func (inst emitter) emitStoreHeader(sb *strings.Builder, key, order, lifecycle e
 	// and Raw marks it, whether or not any component is bound.
 	p("\tdmlruntime %q", "github.com/stergiotis/boxer/public/semistructured/leeway/dml/runtime")
 	p("\t%q", "github.com/stergiotis/boxer/public/storage/recordstore")
-	if inst.evidenceOn() {
+	if inst.evidenceVerbs() {
 		p("\t%q", "github.com/stergiotis/boxer/public/storage/recordstore/evidence")
 	}
 	if inst.Cas {
@@ -1865,6 +1865,14 @@ func (inst emitter) emitBuilder(sb *strings.Builder, comps []storeComponent, sta
 	p("\t}")
 	p("\tinst.raw = true // direct DML writes cannot be mirrored into the entity")
 	p("\treturn inst.store.dml")
+	p("}")
+	p("")
+	p("// Entity is the entity as the typed Add* calls built it so far, as Commit")
+	p("// mirrors it to the cache views: what a writer digests or forwards without")
+	p("// reading the row back. mirrored is false after Raw(), when the entity does")
+	p("// not have everything the row will.")
+	p("func (inst *%s) Entity() (ent %s, mirrored bool) {", inst.builderType(), inst.entityType())
+	p("\treturn inst.ent, !inst.raw")
 	p("}")
 	p("")
 	p("// Commit finishes the open entity, buffers the row, and writes it")

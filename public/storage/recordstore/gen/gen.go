@@ -322,6 +322,9 @@ func (inst Input) Generate() (err error) {
 	if err = inst.vaultPreconditions(); err != nil {
 		return
 	}
+	if err = inst.sealPreconditions(); err != nil {
+		return
+	}
 	// The store emitter derives the DML/RA class names by capitalizing
 	// TableName's first letter; a multi-word name would disagree with the
 	// generators' own style conversion and emit non-compiling references.

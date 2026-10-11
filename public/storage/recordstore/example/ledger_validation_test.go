@@ -77,3 +77,26 @@ func TestEvidenceRefusesAHandWrittenChainComponent(t *testing.T) {
 	}.Generate()
 	require.ErrorContains(t, err, "emits itself")
 }
+
+// The seal component needs the canonical wire: a seal names rows by the
+// digest of their canonical items (ADR-0327 §SD5).
+func TestSealsNeedCanonWire(t *testing.T) {
+	manip, err := GetLedgerSchemaInManipulator()
+	require.NoError(t, err)
+	td, err := manip.BuildTableDesc()
+	require.NoError(t, err)
+	err = gen.Input{
+		PackageName:    "tmp",
+		StoreName:      "Probe",
+		TableName:      "ledger",
+		Table:          td,
+		RowConfig:      TableRowConfig,
+		ComponentPaths: []string{"./ledgermeta_dto.go"},
+		OutDir:         t.TempDir(),
+		ImportPath:     "example.com/tmp",
+		Roles:          gen.Roles{Order: "ordinal"},
+		Wrapper:        marshallgen.FixedIdsWrapper{Ids: ledgerGenIds},
+		Evidence:       &gen.Evidence{Seals: true},
+	}.Generate()
+	require.ErrorContains(t, err, "Evidence.Seals needs CanonWire")
+}

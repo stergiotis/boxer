@@ -39,19 +39,19 @@ func TestGapRowAfterRecovery(t *testing.T) {
 	exec.open = true
 	exec.mu.Unlock()
 	require.NoError(t, rec.Flush(context.Background()), "the held batches land")
-	assert.EqualValues(t, 20, exec.landed())
+	assert.EqualValues(t, 22, exec.landed(), "twenty held rows and the two batches' seals")
 	rec.flushMu.Lock()
 	assert.Equal(t, 0, rec.gap.rows, "the gap is written back once")
 	rec.flushMu.Unlock()
 	require.NoError(t, rec.Flush(context.Background()), "the gap row lands with the next flush")
-	assert.EqualValues(t, 21, exec.landed(), "twenty held rows and one gap row")
+	assert.EqualValues(t, 24, exec.landed(), "twenty held rows, one gap row, three seals")
 	c = rec.Counts()
 	assert.EqualValues(t, batch*batches+1, c.Buffered, "the gap row is buffered like any row")
 	assert.EqualValues(t, 21, c.Written)
 	assert.EqualValues(t, 30, c.Dropped)
 	assert.EqualValues(t, 0, c.Invalid)
 	require.NoError(t, rec.Flush(context.Background()))
-	assert.EqualValues(t, 21, exec.landed(), "no second gap row")
+	assert.EqualValues(t, 24, exec.landed(), "no second gap row, and an empty flush seals nothing")
 }
 
 // Close under a server that stays down counts what it loses: the held
@@ -78,6 +78,6 @@ func TestCountsInvalidAndClean(t *testing.T) {
 	require.NoError(t, rec.Event(context.Background(), time.Now(), Context{}, event()))
 	rec.Close()
 	c := rec.Counts()
-	assert.Equal(t, Counts{Buffered: 2, Written: 2, Dropped: 0, Invalid: 1}, c)
+	assert.Equal(t, Counts{Buffered: 2, Written: 2, Dropped: 0, Invalid: 1, Seals: 1}, c)
 	assert.Equal(t, Counts{}, (*Recorder)(nil).Counts())
 }

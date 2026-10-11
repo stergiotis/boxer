@@ -740,6 +740,15 @@ var (
 	// How an audit event's origin was established (ADR-0327 (proposed)
 	// §SD6), beside PrincipalBy.
 	MembAuditEventOriginBy = NkRegistry.MustBegin("auditEventOriginBy", 482).End()
+	// The evidence profile's seal component (ADR-0327 (proposed) §SD5): one
+	// row per durable flush of a sealed store, naming the batch's rows.
+	MembEvidenceKindSeal       = NkRegistry.MustBegin("evidenceKindSeal", 490).End()
+	MembEvidenceSealStream     = NkRegistry.MustBegin("evidenceSealStream", 491).End()
+	MembEvidenceSealPrev       = NkRegistry.MustBegin("evidenceSealPrev", 492).End()
+	MembEvidenceSealDigest     = NkRegistry.MustBegin("evidenceSealDigest", 493).End()
+	MembEvidenceSealScheme     = NkRegistry.MustBegin("evidenceSealScheme", 494).End()
+	MembEvidenceSealRowIds     = NkRegistry.MustBegin("evidenceSealRowIds", 495).End()
+	MembEvidenceSealRowDigests = NkRegistry.MustBegin("evidenceSealRowDigests", 496).End()
 )
 
 // AllMembs is the enumerated set of registered runtime memberships. Tests
@@ -858,4 +867,5 @@ var AllMembs = []registry.RegisteredNaturalKey{
 	MembEvidenceWrittenByApp, MembEvidenceWrittenByInstance, MembEvidenceWrittenByOriginBy, MembEvidenceWrittenByPrincipal,
 	MembEvidenceWrittenByPrincipalBy, MembEvidenceWrittenByPurpose, MembEvidenceWrittenByCorrelation, MembEvidenceWrittenByBatch,
 	MembEvidenceKindOpening, MembEvidenceOpeningValue, MembAuditEventOriginBy,
+	MembEvidenceKindSeal, MembEvidenceSealStream, MembEvidenceSealPrev, MembEvidenceSealDigest, MembEvidenceSealScheme, MembEvidenceSealRowIds, MembEvidenceSealRowDigests,
 }

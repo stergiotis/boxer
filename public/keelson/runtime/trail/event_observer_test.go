@@ -75,11 +75,11 @@ func TestEventCommitsUnderTheCallIdentity(t *testing.T) {
 	require.NoError(t, rec.Event(ctx, time.Now(), Context{}, event()))
 	require.NoError(t, rec.LlmCall(time.Now(), Context{}, LlmCall{CallId: "c1"}))
 	require.NoError(t, rec.Flush(context.Background()))
-	require.Len(t, obs.committed, 2)
+	require.Len(t, obs.committed, 3, "the two rows and the batch's seal")
 	assert.Equal(t, ci, obs.committed[0].Identity, "the event's row carries the identity it was committed under")
 	assert.True(t, obs.committed[1].Identity.IsZero(), "a verb without a context commits under no identity")
 	n, batches := obs.durableKeys()
-	assert.Equal(t, 2, n)
+	assert.Equal(t, 3, n, "the two rows and the seal land together")
 	assert.Equal(t, 1, batches)
 }
 
@@ -100,7 +100,7 @@ func TestObserverSeesABatchOnceAcrossAFailedFlush(t *testing.T) {
 	exec.mu.Unlock()
 	require.NoError(t, rec.Flush(context.Background()))
 	n, batches := obs.durableKeys()
-	assert.Equal(t, 3, n, "every key once")
+	assert.Equal(t, 5, n, "every key once: three rows and two seals")
 	assert.Equal(t, 2, batches, "the held batch and the new one land under batch ids of their own")
 	assert.Empty(t, obs.discarded)
 	rec.Close()

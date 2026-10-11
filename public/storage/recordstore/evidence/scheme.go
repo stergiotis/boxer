@@ -65,6 +65,14 @@ func (inst Scheme) ContentDigest(content []byte) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
+// RowDigest is the digest of a row's canonical item alone, as a seal names
+// the row (ADR-0327 (proposed) §SD5).
+func (inst Scheme) RowDigest(item []byte) string {
+	h := inst.digester.NewRecord()
+	_, _ = h.Write(item)
+	return hex.EncodeToString(h.Sum(nil))
+}
+
 // Commit is the commitment to item under opening.
 func (inst Scheme) Commit(opening []byte, item []byte) (commitment string) {
 	var key [OpeningSize]byte

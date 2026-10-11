@@ -631,6 +631,14 @@ func (inst *JobEntityBuilder) Raw() *lowlevel.InEntityWatchbillTable {
 	return inst.store.dml
 }
 
+// Entity is the entity as the typed Add* calls built it so far, as Commit
+// mirrors it to the cache views: what a writer digests or forwards without
+// reading the row back. mirrored is false after Raw(), when the entity does
+// not have everything the row will.
+func (inst *JobEntityBuilder) Entity() (ent JobEntity, mirrored bool) {
+	return inst.ent, !inst.raw
+}
+
 // Commit finishes the open entity, buffers the row, and writes it
 // through to attached cache views: the entity is populated and pinned
 // until the store's Flush makes it durable — reads after writes hit

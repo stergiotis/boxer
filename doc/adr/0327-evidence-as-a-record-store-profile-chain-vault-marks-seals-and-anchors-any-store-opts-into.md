@@ -248,18 +248,26 @@ generated store emits that read.
 
 A store whose rows are written by many goroutines or processes — the
 trail, a facts lane — does not chain row by row, which would serialise
-its writers. It **seals its flushes**: each durable flush writes one seal
-row whose canonical item is the sorted list of the batch's row ids and
-their row digests, chained to the **last durable seal** of the same seal
-stream. A batch the server did not take has no seal; a batch dropped from
-the backlog yields an `audit-gap` event that the next flush seals. Law
-**L34**: every durable row of a sealed store is named by exactly one seal;
-every seal chains to the previous durable seal of its stream; a row no
-seal names is a gap the store reports.
+its writers. It **seals its flushes**: each batch carries one seal row,
+written into the batch as its flush begins, whose item is the sorted list
+of the batch's other rows' ids and row digests (the digest of each row's
+canonical item, computed when the row is buffered), chained to the **last
+durable seal** of the same seal stream; the stream is the writer's run,
+and its first seal chains from the empty seed. A batch the server did not
+take keeps its seal for the retry, since nothing lands ahead of it, and a
+batch dropped from the backlog takes its seal with it and yields an
+`audit-gap` event the next batch's seal names. Law **L34**: every durable
+row of a sealed store other than a seal is named by exactly one seal;
+every seal chains to the previous durable seal of its stream, so the
+stream is walked by predecessor, not by id; a row no seal names is a gap
+the store reports, not a break.
 
-Detection granularity on a sealed store is the flush, as it is the
-anchoring cadence on a chained one (ADR-0314 §SD3). Seals are what the
-anchor store receives for a sealed store.
+The generator binds the seal component (`Evidence.Seals`, `SealOf`, the
+component's `Seal`) and the evidence package verifies (`VerifySeals`);
+the writer decides the stream and when to seal, as the trail's recorder
+does per flush. Detection granularity on a sealed store is the flush, as
+it is the anchoring cadence on a chained one (ADR-0314 §SD3). Seals are
+what the anchor store receives for a sealed store.
 
 ### SD6 — The identity in the row
 
@@ -417,7 +425,7 @@ row for now, and the ledger's `Head` reads the latest row.
 - **M2 — The profile: `Chain`, `Vault`, marks, `WrittenBy`, the shredded component, `storegen`'s options (SD2, SD3, SD4, SD6).** ✓
 - **M3 — The journal on the profile; digests v4 (SD9).** ✓
 - **M4a — The audit event and the forwarder below the runtime; write-ahead for events; `runtime.audit.{app}`; `originBy` on audit events (SD8, SD6).** ✓
-- **M4b — Seals (SD5).**
+- **M4b — Seals (SD5).** ✓
 - **M5 — Anchors by scope; L32 generic; the verification relations served in-process (SD7).**
 - **M6 — The dated Updates on the ADRs this reshapes.**
 
@@ -425,7 +433,7 @@ row for now, and the ledger's `Head` reads the latest row.
 
 | Surface | Change | Moves with it |
 | --- | --- | --- |
-| `recordstore/gen.Input` | `Evidence` profile; `CanonWire` under `SharedRA`; `CanonicalItem`; the shredded component | every generated store's goldens; `storegen.Input` |
+| `recordstore/gen.Input` | `Evidence` profile; `CanonWire` under `SharedRA`; `CanonicalItem`; the shredded component; `<Store>EntityBuilder.Entity` | every generated store's goldens; `storegen.Input` |
 | `boxer.agentrunentry`, `boxer.agentrunbody`, `boxer.agentrun` DDL | the chain component replaces the entry's chain fields; the vault keyed by component; the run row over the head row | `agentrunstore` regeneration; chat's journal call sites; the preservation goldens |
 | journal digests | `…/agentrun-chain/v4` | every golden with a digest; `headstore`'s L32 relation |
 | runtime vocabulary | memberships for the profile's five components; the mark and `originBy` symbols | the vocabulary golden |
@@ -515,7 +523,7 @@ O1, O3 and O4 are weighed in the QOC. Narrower choices made on the way:
   three vaulted components; a test that changes one component and asserts
   the verifier names it and its component; a test that erases one
   component and asserts the others still open; a test that drops a
-  backlog batch and asserts the next seal names the gap; a test that
+  backlog batch and asserts the gap row lands sealed with the next flush; a test that
   sends an audit event on `runtime.audit.{app}` naming another app and
   asserts refusal. Integration: L31, L32, L34 and L35 as relations against
   `clickhouse-local`, each returning no rows over the corpus.

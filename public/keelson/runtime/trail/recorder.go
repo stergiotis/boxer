@@ -74,8 +74,14 @@ type Recorder struct {
 	cur *TrailStore
 	seq uint64
 	// curFirst and curLast are the earliest and latest row timestamps in
-	// cur, for the gap window should its batch be dropped. Under mu.
+	// cur, for the gap window should its batch be dropped; curRows the
+	// rows in cur with their row digests, for its seal (ADR-0327 §SD5).
+	// Under mu.
 	curFirst, curLast time.Time
+	curRows           []evidence.SealedRow
+	// canon is an executor-less store rows are re-entered into for their
+	// canonical items, by the writers and by VerifySeals.
+	canon *TrailStore
 
 	// flushMu serialises flushes; backlog is the batches a flush did not
 	// land, oldest first, with their row counts. Both under flushMu.
@@ -83,11 +89,14 @@ type Recorder struct {
 	backlog    []heldBatch
 	maxBacklog int
 	// gap is what the cap dropped since the last gap row: rows, and the
-	// earliest and latest row timestamps among them. Under flushMu.
-	gap gap
+	// earliest and latest row timestamps among them. lastSeal is the
+	// stream's last durable seal, zero before the first. Both under flushMu.
+	gap      gap
+	lastSeal evidence.SealedRow
 
-	// The counters of ADR-0296 §SD4 and §SD6, read through Counts.
-	buffered, written, dropped, invalid, forwarded, forwardDropped atomic.Uint64
+	// The counters of ADR-0296 §SD4 and §SD6 and the seals, read through
+	// Counts.
+	buffered, written, dropped, invalid, forwarded, forwardDropped, seals atomic.Uint64
 
 	readMu sync.Mutex
 	read   *TrailStore
@@ -109,12 +118,16 @@ type Recorder struct {
 	done chan struct{}
 }
 
-// heldBatch is one swapped-out store, the rows it holds, and the earliest
-// and latest row timestamps among them.
+// heldBatch is one swapped-out store, the rows it holds, the earliest and
+// latest row timestamps among them, the rows with their digests for its
+// seal, and the seal once it is in the store (sealId zero until then).
 type heldBatch struct {
 	store       *TrailStore
 	rows        int
 	first, last time.Time
+	sealed      []evidence.SealedRow
+	sealId      uint64
+	sealDigest  string
 }
 
 // gap is loss not yet written back as a row.
@@ -146,6 +159,9 @@ type Counts struct {
 	// refused batch — and left to the backstop.
 	Forwarded      uint64
 	ForwardDropped uint64
+	// Seals is the durable flushes, each sealed (ADR-0327 §SD5); a seal is
+	// not among the rows Written counts.
+	Seals uint64
 }
 
 // Counts reads the counters. Zero for a nil recorder.
@@ -154,7 +170,7 @@ func (inst *Recorder) Counts() (c Counts) {
 		return
 	}
 	return Counts{Buffered: inst.buffered.Load(), Written: inst.written.Load(), Dropped: inst.dropped.Load(), Invalid: inst.invalid.Load(),
-		Forwarded: inst.forwarded.Load(), ForwardDropped: inst.forwardDropped.Load()}
+		Forwarded: inst.forwarded.Load(), ForwardDropped: inst.forwardDropped.Load(), Seals: inst.seals.Load()}
 }
 
 // RecorderOption configures NewRecorder.
@@ -200,6 +216,7 @@ func NewRecorder(exec recordstore.ExecutorI, run string, log zerolog.Logger, opt
 	if exec != nil {
 		inst.cur = inst.newStore()
 		inst.read = NewTrailStore(inst.exec, nil, TrailStoreConfig{ReadTable: inst.readTable})
+		inst.canon = NewTrailStore(nil, nil, TrailStoreConfig{})
 	}
 	go inst.flusher()
 	if inst.fwd != nil {
@@ -260,6 +277,9 @@ func (inst *Recorder) Close() {
 		inst.read = nil
 	}
 	inst.readMu.Unlock()
+	if inst.canon != nil {
+		inst.canon.Close()
+	}
 }
 
 // Durable says rows land on boxer.facts.
@@ -330,6 +350,7 @@ func (inst *Recorder) write(ctx context.Context, key string, at time.Time, c Con
 		return
 	}
 	inst.buffered.Add(1)
+	inst.digestLocked(b, key)
 	at = at.UTC()
 	if inst.curFirst.IsZero() || at.Before(inst.curFirst) {
 		inst.curFirst = at
@@ -592,13 +613,18 @@ func (inst *Recorder) Flush(ctx context.Context) (err error) {
 	ctx, cancel := context.WithTimeout(ctx, flushTimeout)
 	defer cancel()
 	for len(inst.backlog) > 0 {
-		b := inst.backlog[0]
+		b := &inst.backlog[0]
+		if err = inst.seal(b); err != nil {
+			break
+		}
 		if _, ferr := b.store.Flush(ctx); ferr != nil {
 			err = eh.Errorf("trail: flush: %w", ferr)
 			break
 		}
 		b.store.Close()
 		inst.written.Add(uint64(b.rows))
+		inst.seals.Add(1)
+		inst.lastSeal = evidence.SealedRow{Id: b.sealId, Digest: b.sealDigest}
 		inst.backlog = inst.backlog[1:]
 	}
 	inst.capBacklog()
@@ -612,9 +638,10 @@ func (inst *Recorder) Flush(ctx context.Context) (err error) {
 // fresh one. The caller holds mu.
 func (inst *Recorder) swapLocked() {
 	if n := inst.cur.Buffered(); n > 0 {
-		inst.backlog = append(inst.backlog, heldBatch{store: inst.cur, rows: n, first: inst.curFirst, last: inst.curLast})
+		inst.backlog = append(inst.backlog, heldBatch{store: inst.cur, rows: n, first: inst.curFirst, last: inst.curLast, sealed: inst.curRows})
 		inst.cur = inst.newStore()
 		inst.curFirst, inst.curLast = time.Time{}, time.Time{}
+		inst.curRows = nil
 	}
 }
 

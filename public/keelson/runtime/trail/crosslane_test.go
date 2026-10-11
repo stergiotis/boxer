@@ -89,10 +89,13 @@ func TestRowsOfThreeLanesJoinByKey(t *testing.T) {
 	origins := scan(func(st *trail.TrailStore) iter.Seq2[*trail.TrailEntity, error] {
 		return st.ScanOrigin(ctx, recordstore.ScanOpts{})
 	})
-	require.Len(t, origins, 3, "the call, the action and the hand-written query run")
+	require.Len(t, origins, 4, "the call, the action, the hand-written query run and the batch's seal")
 	windows := map[uint64]string{}
 	for _, e := range origins {
 		assert.Equal(t, run, e.Origin.Val.Run)
+		if e.EvidenceSeal.Has {
+			continue
+		}
 		windows[e.Origin.Val.Instance] = e.Origin.Val.App
 	}
 	assert.Equal(t, map[uint64]string{4: chat, 9: play}, windows)

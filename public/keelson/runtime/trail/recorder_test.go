@@ -71,10 +71,10 @@ func TestFlushDoesNotBlockWriters(t *testing.T) {
 	}
 	close(exec.held)
 	require.NoError(t, <-flushed)
-	assert.EqualValues(t, 1, exec.landed())
+	assert.EqualValues(t, 2, exec.landed(), "the call and the batch's seal")
 	exec.held = nil
 	rec.Close()
-	assert.EqualValues(t, 2, exec.landed(), "Close lands what was written during the flush")
+	assert.EqualValues(t, 4, exec.landed(), "Close lands what was written during the flush, sealed")
 }
 
 // Rows a down server did not take are held and land, in order, with the
@@ -91,7 +91,7 @@ func TestHeldRowsLandOnRecovery(t *testing.T) {
 	exec.open = true
 	exec.mu.Unlock()
 	require.NoError(t, rec.Flush(context.Background()))
-	assert.EqualValues(t, 2, exec.landed())
+	assert.EqualValues(t, 4, exec.landed(), "two held batches, each with its seal")
 }
 
 // A server that stays down does not grow the recorder without bound.
